@@ -24,6 +24,186 @@ namespace yup
 
 //==============================================================================
 
+PathIterator::PathIterator (const rive::RawPath& rawPath, bool atEnd)
+    : rawPath (std::addressof (rawPath))
+    , verbIndex (0)
+    , pointIndex (0)
+    , isAtEnd (atEnd)
+{
+    if (! isAtEnd)
+        updateToValidPosition();
+}
+
+PathSegment PathIterator::operator*() const
+{
+    jassert (! isAtEnd);
+    return createCurrentSegment();
+}
+
+PathIterator& PathIterator::operator++()
+{
+    if (isAtEnd)
+        return *this;
+
+    const auto& verbs = rawPath->verbs();
+
+    if (verbIndex >= verbs.size())
+    {
+        isAtEnd = true;
+        return *this;
+    }
+
+    auto verb = verbs[verbIndex];
+
+    // Advance point index based on verb type
+    switch (verb)
+    {
+        case rive::PathVerb::move:
+        case rive::PathVerb::line:
+            pointIndex += 1;
+            break;
+
+        case rive::PathVerb::quad:
+            pointIndex += 2;
+            break;
+
+        case rive::PathVerb::cubic:
+            pointIndex += 3;
+            break;
+
+        case rive::PathVerb::close:
+            // Close doesn't consume points
+            break;
+    }
+
+    ++verbIndex;
+    updateToValidPosition();
+
+    return *this;
+}
+
+PathIterator PathIterator::operator++ (int)
+{
+    PathIterator temp = *this;
+    ++(*this);
+    return temp;
+}
+
+bool PathIterator::operator== (const PathIterator& other) const
+{
+    if (isAtEnd && other.isAtEnd)
+        return true;
+
+    return rawPath == other.rawPath
+        && verbIndex == other.verbIndex
+        && pointIndex == other.pointIndex
+        && isAtEnd == other.isAtEnd;
+}
+
+bool PathIterator::operator!= (const PathIterator& other) const
+{
+    return ! (*this == other);
+}
+
+void PathIterator::updateToValidPosition()
+{
+    const auto& verbs = rawPath->verbs();
+
+    if (verbIndex >= verbs.size())
+    {
+        isAtEnd = true;
+        return;
+    }
+
+    // Ensure we have enough points for the current verb
+    const auto& points = rawPath->points();
+    auto verb = verbs[verbIndex];
+
+    size_t requiredPoints = 0;
+    switch (verb)
+    {
+        case rive::PathVerb::move:
+        case rive::PathVerb::line:
+            requiredPoints = 1;
+            break;
+
+        case rive::PathVerb::quad:
+            requiredPoints = 2;
+            break;
+
+        case rive::PathVerb::cubic:
+            requiredPoints = 3;
+            break;
+
+        case rive::PathVerb::close:
+            requiredPoints = 0;
+            break;
+    }
+
+    if (pointIndex + requiredPoints > points.size() && requiredPoints > 0)
+    {
+        isAtEnd = true;
+        return;
+    }
+}
+
+PathSegment PathIterator::createCurrentSegment() const
+{
+    const auto& verbs = rawPath->verbs();
+    const auto& points = rawPath->points();
+
+    if (verbIndex >= verbs.size())
+        return PathSegment::close(); // Should not happen with proper usage
+
+    auto verb = verbs[verbIndex];
+
+    switch (verb)
+    {
+        case rive::PathVerb::move:
+            if (pointIndex < points.size())
+            {
+                return PathSegment (PathVerb::MoveTo,
+                    Point<float> (points[pointIndex].x, points[pointIndex].y));
+            }
+            break;
+
+        case rive::PathVerb::line:
+            if (pointIndex < points.size())
+            {
+                return PathSegment (PathVerb::LineTo,
+                    Point<float> (points[pointIndex].x, points[pointIndex].y));
+            }
+            break;
+
+        case rive::PathVerb::quad:
+            if (pointIndex + 1 < points.size())
+            {
+                return PathSegment (PathVerb::QuadTo,
+                    Point<float> (points[pointIndex + 1].x, points[pointIndex + 1].y), // end point
+                    Point<float> (points[pointIndex].x, points[pointIndex].y));       // control point
+            }
+            break;
+
+        case rive::PathVerb::cubic:
+            if (pointIndex + 2 < points.size())
+            {
+                return PathSegment (PathVerb::CubicTo,
+                    Point<float> (points[pointIndex + 2].x, points[pointIndex + 2].y), // end point
+                    Point<float> (points[pointIndex].x, points[pointIndex].y),         // control point 1
+                    Point<float> (points[pointIndex + 1].x, points[pointIndex + 1].y)); // control point 2
+            }
+            break;
+
+        case rive::PathVerb::close:
+            return PathSegment::close();
+    }
+
+    // Fallback for invalid states
+    return PathSegment::close();
+}
+
+//==============================================================================
+
 Path::Path()
     : path (rive::make_rcp<rive::RiveRenderPath>())
 {
@@ -387,6 +567,7 @@ Path& Path::addCenteredArc (const Point<float>& center, const Size<float>& diame
 }
 
 //==============================================================================
+
 Path& Path::addPolygon (Point<float> centre, int numberOfSides, float radius, float startAngle)
 {
     if (numberOfSides < 3)
@@ -419,6 +600,7 @@ Path& Path::addPolygon (Point<float> centre, int numberOfSides, float radius, fl
 }
 
 //==============================================================================
+
 Path& Path::addStar (Point<float> centre, int numberOfPoints, float innerRadius, float outerRadius, float startAngle)
 {
     if (numberOfPoints < 3)
@@ -453,6 +635,7 @@ Path& Path::addStar (Point<float> centre, int numberOfPoints, float innerRadius,
 }
 
 //==============================================================================
+
 Path& Path::addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, Point<float> arrowTipPosition, float cornerSize, float arrowBaseWidth)
 {
     if (bodyArea.isEmpty() || maximumArea.isEmpty() || arrowBaseWidth <= 0.0f)
@@ -639,6 +822,7 @@ Path& Path::addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, 
 }
 
 //==============================================================================
+
 Path& Path::appendPath (const Path& other)
 {
     path->addRenderPath (other.getRenderPath(), rive::Mat2D());
@@ -664,12 +848,14 @@ void Path::appendPath (rive::rcp<rive::RiveRenderPath> other, const AffineTransf
 }
 
 //==============================================================================
+
 void Path::swapWithPath (Path& other) noexcept
 {
     path.swap (other.path);
 }
 
 //==============================================================================
+
 Path& Path::transform (const AffineTransform& t)
 {
     auto newPath = rive::make_rcp<rive::RiveRenderPath>();
@@ -686,6 +872,7 @@ Path Path::transformed (const AffineTransform& t) const
 }
 
 //==============================================================================
+
 Rectangle<float> Path::getBounds() const
 {
     const auto& aabb = path->getBounds();
@@ -698,6 +885,7 @@ Rectangle<float> Path::getBoundsTransformed (const AffineTransform& transform) c
 }
 
 //==============================================================================
+
 void Path::scaleToFit (float x, float y, float width, float height, bool preserveProportions) noexcept
 {
     if (width <= 0.0f || height <= 0.0f)
@@ -728,12 +916,36 @@ void Path::scaleToFit (float x, float y, float width, float height, bool preserv
 }
 
 //==============================================================================
+
+PathIterator Path::begin()
+{
+    return PathIterator (path->getRawPath(), false);
+}
+
+PathIterator Path::begin() const
+{
+    return PathIterator (path->getRawPath(), false);
+}
+
+PathIterator Path::end()
+{
+    return PathIterator (path->getRawPath(), true);
+}
+
+PathIterator Path::end() const
+{
+    return PathIterator (path->getRawPath(), true);
+}
+
+//==============================================================================
+
 rive::RiveRenderPath* Path::getRenderPath() const
 {
     return path.get();
 }
 
 //==============================================================================
+
 String Path::toString() const
 {
     const auto& rawPath = path->getRawPath();
@@ -807,8 +1019,10 @@ String Path::toString() const
 }
 
 //==============================================================================
+
 namespace
 {
+
 bool isControlMarker (String::CharPointerType data)
 {
     return ! data.isEmpty() && String ("MmLlHhVvQqCcSsZz").containsChar (*data);
@@ -1346,6 +1560,7 @@ bool Path::fromString (const String& pathData)
 }
 
 //==============================================================================
+
 Point<float> Path::getPointAlongPath (float distance) const
 {
     // Clamp distance to valid range
@@ -1538,6 +1753,7 @@ Point<float> Path::getPointAlongPath (float distance) const
 }
 
 //==============================================================================
+
 Path Path::createStrokePolygon (float strokeWidth) const
 {
     // For now, create a simple approximation by offsetting the path

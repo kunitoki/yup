@@ -23,6 +23,90 @@ namespace yup
 {
 
 //==============================================================================
+/** Represents the type of operation in a path segment. */
+enum class PathVerb
+{
+    MoveTo,     /**< Move to a point without drawing. */
+    LineTo,     /**< Draw a line to a point. */
+    QuadTo,     /**< Draw a quadratic Bezier curve. */
+    CubicTo,    /**< Draw a cubic Bezier curve. */
+    Close       /**< Close the current sub-path. */
+};
+
+//==============================================================================
+/** Represents a segment in a path with its verb and associated points. */
+struct PathSegment
+{
+    PathVerb verb;              /**< The type of path operation. */
+    Point<float> point;         /**< The main point (end point for most operations). */
+    Point<float> controlPoint1; /**< First control point for curves. */
+    Point<float> controlPoint2; /**< Second control point for cubic curves. */
+
+    /** Creates a MoveTo or LineTo segment. */
+    PathSegment (PathVerb v, Point<float> p)
+        : verb (v), point (p), controlPoint1 (0.0f, 0.0f), controlPoint2 (0.0f, 0.0f)
+    {
+    }
+
+    /** Creates a QuadTo segment. */
+    PathSegment (PathVerb v, Point<float> p, Point<float> c1)
+        : verb (v), point (p), controlPoint1 (c1), controlPoint2 (0.0f, 0.0f)
+    {
+    }
+
+    /** Creates a CubicTo segment. */
+    PathSegment (PathVerb v, Point<float> p, Point<float> c1, Point<float> c2)
+        : verb (v), point (p), controlPoint1 (c1), controlPoint2 (c2)
+    {
+    }
+
+    /** Creates a Close segment. */
+    static PathSegment close()
+    {
+        return PathSegment (PathVerb::Close, Point<float> (0.0f, 0.0f));
+    }
+};
+
+//==============================================================================
+/** A forward iterator for iterating through path segments. */
+class PathIterator
+{
+public:
+    /** Creates an iterator for the given path. */
+    PathIterator (const rive::RawPath& rawPath, bool atEnd = false);
+
+    /** Copy constructor. */
+    PathIterator (const PathIterator& other) = default;
+
+    /** Assignment operator. */
+    PathIterator& operator= (const PathIterator& other) = default;
+
+    /** Dereference operator to get the current segment. */
+    PathSegment operator*() const;
+
+    /** Pre-increment operator. */
+    PathIterator& operator++();
+
+    /** Post-increment operator. */
+    PathIterator operator++ (int);
+
+    /** Equality comparison. */
+    bool operator== (const PathIterator& other) const;
+
+    /** Inequality comparison. */
+    bool operator!= (const PathIterator& other) const;
+
+private:
+    const rive::RawPath* rawPath;
+    size_t verbIndex;
+    size_t pointIndex;
+    bool isAtEnd;
+
+    void updateToValidPosition();
+    PathSegment createCurrentSegment() const;
+};
+
+//==============================================================================
 /** Represents a 2D geometric path.
 
     The Path class encapsulates a series of geometric operations and shapes that can be described
@@ -605,51 +689,39 @@ public:
     //==============================================================================
     /** Provides an iterator to the beginning of the path data.
 
-        This method returns an iterator pointing to the first segment in the path's internal data.
+        This method returns an iterator pointing to the first segment in the path's data.
         It allows for iteration over the path's segments from the beginning to the end.
 
-        @return An iterator to the beginning of the path data.
+        @return A PathIterator to the beginning of the path data.
     */
-    auto begin()
-    {
-        return path->getRawPath().begin();
-    }
+    PathIterator begin();
 
     /** Provides a constant iterator to the beginning of the path data.
 
         This method returns a constant iterator pointing to the first segment in the path's
-        internal data. It ensures that the path data cannot be modified during the iteration.
+        data. It ensures that the path data cannot be modified during the iteration.
 
-        @return A constant iterator to the beginning of the path data.
+        @return A constant PathIterator to the beginning of the path data.
     */
-    auto begin() const
-    {
-        return path->getRawPath().begin();
-    }
+    PathIterator begin() const;
 
     /** Provides an iterator to the end of the path data.
 
-        This method returns an iterator pointing just past the last segment in the path's internal data.
+        This method returns an iterator pointing just past the last segment in the path's data.
         It is used in conjunction with begin() for range-based iteration over the path's segments.
 
-        @return An iterator to the end of the path data.
+        @return A PathIterator to the end of the path data.
     */
-    auto end()
-    {
-        return path->getRawPath().end();
-    }
+    PathIterator end();
 
     /** Provides a constant iterator to the end of the path data.
 
         This method returns a constant iterator pointing just past the last segment in the path's
-        internal data. It ensures safe iteration over the path segments without modifying them.
+        data. It ensures safe iteration over the path segments without modifying them.
 
-        @return A constant iterator to the end of the path data.
+        @return A constant PathIterator to the end of the path data.
     */
-    auto end() const
-    {
-        return path->getRawPath().end();
-    }
+    PathIterator end() const;
 
     //==============================================================================
     /** @internal Constructs a path from a raw render path. */
