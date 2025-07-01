@@ -314,8 +314,8 @@ void paintComboBox (Graphics& g, const ApplicationTheme& theme, const ComboBox& 
     // Draw border
     const bool hasFocus = c.hasKeyboardFocus() || c.isPopupShown();
     auto outlineColor = hasFocus
-                         ? c.findColor (ComboBox::Style::focusedBorderColorId).value_or (Colors::cornflowerblue)
-                         : c.findColor (ComboBox::Style::borderColorId).value_or (Colors::dimgray);
+                          ? c.findColor (ComboBox::Style::focusedBorderColorId).value_or (Colors::cornflowerblue)
+                          : c.findColor (ComboBox::Style::borderColorId).value_or (Colors::dimgray);
 
     g.setStrokeColor (outlineColor);
     g.setStrokeWidth (hasFocus ? 2.0f : 1.0f);

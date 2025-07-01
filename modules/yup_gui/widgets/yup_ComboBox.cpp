@@ -248,7 +248,7 @@ void ComboBox::showPopup()
         if (selectedItemID != 0)
             setSelectedId (selectedItemID);
 
-         takeKeyboardFocus();
+        takeKeyboardFocus();
     });
 }
 
