@@ -1179,6 +1179,7 @@ bool parseCoordinates (String::CharPointerType& data, float& x, float& y)
 void handleMoveTo (String::CharPointerType& data, Path& path, float& currentX, float& currentY, float& startX, float& startY, bool relative)
 {
     float x, y;
+    bool isFirstCoordinate = true;
 
     while (! data.isEmpty()
            && ! isControlMarker (data)
@@ -1190,10 +1191,20 @@ void handleMoveTo (String::CharPointerType& data, Path& path, float& currentX, f
             y += currentY;
         }
 
-        path.moveTo (x, y);
-
-        currentX = startX = x;
-        currentY = startY = y;
+        if (isFirstCoordinate)
+        {
+            path.moveTo (x, y);
+            currentX = startX = x;
+            currentY = startY = y;
+            isFirstCoordinate = false;
+        }
+        else
+        {
+            // Subsequent coordinates are implicit line commands according to SVG spec
+            path.lineTo (x, y);
+            currentX = x;
+            currentY = y;
+        }
 
         skipWhitespace (data);
     }
