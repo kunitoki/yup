@@ -27,13 +27,51 @@ namespace yup
 class YUP_API Drawable
 {
 public:
+    //==============================================================================
     Drawable();
 
+    //==============================================================================
     bool parseSVG (const File& svgFile);
 
+    //==============================================================================
     void clear();
 
+    //==============================================================================
+    /** Sets a transform to be applied when painting the drawable.
+        
+        This transform is applied on top of any transforms defined within the SVG itself.
+        
+        @param newTransform The transform to apply when painting.
+    */
+    void setTransform (const AffineTransform& newTransform);
+    
+    /** Gets the current transform that will be applied when painting.
+        
+        @return The current transform.
+    */
+    AffineTransform getTransform() const;
+
+    //==============================================================================
+    /** Gets the bounds of the drawable content.
+        
+        @return The bounding rectangle of the drawable's content.
+    */
+    Rectangle<float> getBounds() const;
+
+    //==============================================================================
     void paint (Graphics& g);
+
+    /** Paints the drawable with the specified fitting and justification.
+
+        @param g The graphics context to paint to.
+        @param targetArea The rectangle to fit the drawable within.
+        @param fitting How to scale and fit the drawable to the target area.
+        @param justification How to position the drawable within the target area.
+    */
+    void paint (Graphics& g,
+                const Rectangle<float>& targetArea,
+                Fitting fitting = Fitting::scaleToFit,
+                Justification justification = Justification::center);
 
 private:
     struct Element
@@ -126,9 +164,14 @@ private:
     ClipPath* getClipPathById (const String& id);
     void parseCSSStyle (const String& styleString, Element& e);
     float parseUnit (const String& value, float defaultValue = 0.0f, float fontSize = 12.0f, float viewportSize = 100.0f);
+    
+    // Helper methods for layout and painting
+    Rectangle<float> calculateBounds() const;
+    AffineTransform calculateTransformForTarget (const Rectangle<float>& sourceBounds, const Rectangle<float>& targetArea, Fitting fitting, Justification justification) const;
 
     Rectangle<float> viewBox;
     Size<float> size;
+    Rectangle<float> bounds;
     AffineTransform transform;
     std::vector<std::shared_ptr<Element>> elements;
     HashMap<String, std::shared_ptr<Element>> elementsById;

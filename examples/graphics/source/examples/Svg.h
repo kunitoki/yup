@@ -51,7 +51,7 @@ public:
         g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
         g.fillAll();
 
-        drawable.paint (g);
+        drawable.paint (g, getLocalBounds());
     }
 
 private:

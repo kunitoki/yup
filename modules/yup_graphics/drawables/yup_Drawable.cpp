@@ -26,13 +26,14 @@ namespace yup
 
 Drawable::Drawable()
 {
-    // transform = AffineTransform::scaling (1.0f).translated (100.0f, 100.0f);
 }
 
 //==============================================================================
 
 bool Drawable::parseSVG (const File& svgFile)
 {
+    clear();
+
     XmlDocument svgDoc (svgFile);
     std::unique_ptr<XmlElement> svgRoot (svgDoc.getDocumentElement());
 
@@ -92,7 +93,12 @@ bool Drawable::parseSVG (const File& svgFile)
         */
     }
 
-    return parseElement (*svgRoot, true, {});
+    auto result = parseElement (*svgRoot, true, {});
+
+    if (result)
+        bounds = calculateBounds();
+
+    return result;
 }
 
 //==============================================================================
@@ -101,6 +107,7 @@ void Drawable::clear()
 {
     viewBox = { 0.0f, 0.0f, 0.0f, 0.0f };
     size = { 0.0f, 0.0f };
+    bounds = { 0.0f, 0.0f, 0.0f, 0.0f };
 
     elements.clear();
     elementsById.clear();
@@ -112,9 +119,46 @@ void Drawable::clear()
 
 //==============================================================================
 
+void Drawable::setTransform (const AffineTransform& newTransform)
+{
+    transform = newTransform;
+}
+
+AffineTransform Drawable::getTransform() const
+{
+    return transform;
+}
+
+//==============================================================================
+
+Rectangle<float> Drawable::getBounds() const
+{
+    return bounds;
+}
+
+//==============================================================================
+
 void Drawable::paint (Graphics& g)
 {
     g.setTransform (transform);
+
+    g.setStrokeWidth (1.0f);
+    g.setFillColor (Colors::black);
+
+    for (const auto& element : elements)
+        paintElement (g, *element, true, false);
+}
+
+void Drawable::paint (Graphics& g, const Rectangle<float>& targetArea, Fitting fitting, Justification justification)
+{
+    if (bounds.isEmpty())
+        return;
+        
+    const auto savedState = g.saveState();
+
+    auto finalTransform = calculateTransformForTarget (bounds, targetArea, fitting, justification);
+    g.setTransform (finalTransform);
+
     g.setStrokeWidth (1.0f);
     g.setFillColor (Colors::black);
 
@@ -131,8 +175,8 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
     bool isFillDefined = hasParentFillEnabled;
     bool isStrokeDefined = hasParentStrokeEnabled;
 
-    if (element.transform)
-        g.setTransform (element.transform->followedBy (g.getTransform()));
+    // Element transforms are now applied to path geometry during parsing
+    // so all elements exist in the same coordinate space
 
     if (element.opacity)
         g.setOpacity (g.getOpacity() * (*element.opacity));
@@ -324,9 +368,14 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
         if (pathData.isEmpty() || ! path.fromString (pathData))
             return false;
 
-        e->path = std::move (path);
-
         currentTransform = parseTransform (element, currentTransform, *e);
+        
+        // Apply accumulated transform (including parent group transforms) to path geometry
+        if (!currentTransform.isIdentity())
+            path.transform (currentTransform);
+        
+        e->path = std::move (path);
+        
         parseStyle (element, currentTransform, *e);
     }
     else if (element.hasTagName ("g"))
@@ -352,9 +401,14 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
 
         auto path = Path();
         path.addCenteredEllipse (cx, cy, rx, ry);
-        e->path = std::move (path);
-
         currentTransform = parseTransform (element, currentTransform, *e);
+        
+        // Apply accumulated transform (including parent group transforms) to path geometry
+        if (!currentTransform.isIdentity())
+            path.transform (currentTransform);
+        
+        e->path = std::move (path);
+        
         parseStyle (element, currentTransform, *e);
     }
     else if (element.hasTagName ("circle"))
@@ -365,9 +419,14 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
 
         auto path = Path();
         path.addCenteredEllipse (cx, cy, r, r);
-        e->path = std::move (path);
-
         currentTransform = parseTransform (element, currentTransform, *e);
+        
+        // Apply accumulated transform (including parent group transforms) to path geometry
+        if (!currentTransform.isIdentity())
+            path.transform (currentTransform);
+        
+        e->path = std::move (path);
+        
         parseStyle (element, currentTransform, *e);
     }
     else if (element.hasTagName ("rect"))
@@ -392,9 +451,14 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
         {
             path.addRectangle (x, y, width, height);
         }
-        e->path = std::move (path);
-
         currentTransform = parseTransform (element, currentTransform, *e);
+        
+        // Apply accumulated transform (including parent group transforms) to path geometry
+        if (!currentTransform.isIdentity())
+            path.transform (currentTransform);
+        
+        e->path = std::move (path);
+        
         parseStyle (element, currentTransform, *e);
     }
     else if (element.hasTagName ("line"))
@@ -407,9 +471,14 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
         auto path = Path();
         path.startNewSubPath (x1, y1);
         path.lineTo (x2, y2);
-        e->path = std::move (path);
-
         currentTransform = parseTransform (element, currentTransform, *e);
+        
+        // Apply accumulated transform (including parent group transforms) to path geometry
+        if (!currentTransform.isIdentity())
+            path.transform (currentTransform);
+        
+        e->path = std::move (path);
+        
         parseStyle (element, currentTransform, *e);
     }
     else if (element.hasTagName ("polygon"))
@@ -1074,6 +1143,127 @@ float Drawable::parseUnit (const String& value, float defaultValue, float fontSi
 
     else
         return numericValue; // Unknown unit, treat as user units
+}
+
+//==============================================================================
+
+Rectangle<float> Drawable::calculateBounds() const
+{
+    // Use viewBox if available, otherwise use size
+    if (!viewBox.isEmpty())
+        return viewBox;
+    
+    if (size.getWidth() > 0 && size.getHeight() > 0)
+        return Rectangle<float> (0, 0, size.getWidth(), size.getHeight());
+    
+    // Fallback: calculate bounds from all elements with their transforms applied
+    // This gives us the actual visual bounds of the rendered content
+    Rectangle<float> bounds;
+    bool hasValidBounds = false;
+    
+    for (const auto& element : elements)
+    {
+        if (element->path)
+        {
+            auto pathBounds = element->path->getBounds();
+            if (element->transform)
+                pathBounds = element->path->getBoundsTransformed (*element->transform);
+                
+            if (hasValidBounds)
+                bounds = bounds.unionWith (pathBounds);
+            else
+            {
+                bounds = pathBounds;
+                hasValidBounds = true;
+            }
+        }
+    }
+    
+    return hasValidBounds ? bounds : Rectangle<float> (0, 0, 100, 100);
+}
+
+//==============================================================================
+
+AffineTransform Drawable::calculateTransformForTarget (const Rectangle<float>& sourceBounds, const Rectangle<float>& targetArea, Fitting fitting, Justification justification) const
+{
+    if (sourceBounds.isEmpty() || targetArea.isEmpty())
+        return AffineTransform::identity();
+    
+    float scaleX = targetArea.getWidth() / sourceBounds.getWidth();
+    float scaleY = targetArea.getHeight() / sourceBounds.getHeight();
+    
+    // Apply scaling based on fitting mode
+    switch (fitting)
+    {
+        case Fitting::none:
+            scaleX = scaleY = 1.0f;
+            break;
+            
+        case Fitting::scaleToFit:
+            scaleX = scaleY = jmin (scaleX, scaleY);  // Scale to fit both dimensions
+            break;
+            
+        case Fitting::fitWidth:
+            scaleY = scaleX;  // Scale to fit width, preserve aspect ratio
+            break;
+            
+        case Fitting::fitHeight:
+            scaleX = scaleY;  // Scale to fit height, preserve aspect ratio
+            break;
+            
+        case Fitting::scaleToFill:
+        case Fitting::centerCrop:
+            scaleX = scaleY = jmax (scaleX, scaleY);  // Scale to fill, may crop
+            break;
+            
+        case Fitting::fill:
+            // Use calculated scales as-is (non-uniform scaling)
+            break;
+            
+        case Fitting::centerInside:
+            // Like scaleToFit but don't upscale beyond original size
+            scaleX = scaleY = jmin (1.0f, jmin (scaleX, scaleY));
+            break;
+            
+        case Fitting::stretchWidth:
+            scaleY = 1.0f;  // Stretch horizontally only
+            break;
+            
+        case Fitting::stretchHeight:
+            scaleX = 1.0f;  // Stretch vertically only
+            break;
+            
+        case Fitting::tile:
+            // For tile mode, use no scaling (tiling would be handled elsewhere)
+            scaleX = scaleY = 1.0f;
+            break;
+    }
+    
+    // Calculate scaled size
+    float scaledWidth = sourceBounds.getWidth() * scaleX;
+    float scaledHeight = sourceBounds.getHeight() * scaleY;
+    
+    // Calculate offset based on justification
+    float offsetX = targetArea.getX();
+    float offsetY = targetArea.getY();
+    
+    // Horizontal justification
+    if ((static_cast<int>(justification) & static_cast<int>(Justification::horizontalCenter)) != 0)
+        offsetX += (targetArea.getWidth() - scaledWidth) * 0.5f;
+    else if ((static_cast<int>(justification) & static_cast<int>(Justification::right)) != 0)
+        offsetX += targetArea.getWidth() - scaledWidth;
+    
+    // Vertical justification
+    if ((static_cast<int>(justification) & static_cast<int>(Justification::verticalCenter)) != 0)
+        offsetY += (targetArea.getHeight() - scaledHeight) * 0.5f;
+    else if ((static_cast<int>(justification) & static_cast<int>(Justification::bottom)) != 0)
+        offsetY += targetArea.getHeight() - scaledHeight;
+    
+    // Create transform: translate to origin, scale, then translate to target position
+    return AffineTransform::translation (-sourceBounds.getX(), -sourceBounds.getY())
+        .scaled (scaleX, scaleY)
+        .translated (offsetX, offsetY)
+        .followedBy (transform);  // Apply the drawable's own transform
 }
 
 } // namespace yup
