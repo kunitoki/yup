@@ -38,7 +38,7 @@ public:
 
     //==============================================================================
     /** Gets the bounds of the drawable content.
-        
+
         @return The bounding rectangle of the drawable's content.
     */
     Rectangle<float> getBounds() const;
@@ -59,21 +59,27 @@ public:
                 Justification justification = Justification::center);
 
 private:
-    struct Element
+    struct Element : public ReferenceCountedObject
     {
+        using Ptr = ReferenceCountedObjectPtr<Element>;
+
         std::optional<String> id;
 
         std::optional<AffineTransform> transform;
+        std::optional<AffineTransform> localTransform; // Transform from the element itself (not accumulated)
         std::optional<Path> path;
         std::optional<String> reference;
 
         std::optional<Color> fillColor;
         std::optional<Color> strokeColor;
+        std::optional<float> fillOpacity;
+        std::optional<float> strokeOpacity;
         std::optional<float> strokeWidth;
         std::optional<StrokeJoin> strokeJoin;
         std::optional<StrokeCap> strokeCap;
         std::optional<Array<float>> strokeDashArray;
         std::optional<float> strokeDashOffset;
+        std::optional<String> fillRule; // "evenodd" or "nonzero"
         bool noFill = false;
         bool noStroke = false;
 
@@ -97,7 +103,7 @@ private:
         // Clipping properties
         std::optional<String> clipPathUrl;
 
-        std::vector<std::shared_ptr<Element>> children;
+        std::vector<Element::Ptr> children;
     };
 
     struct GradientStop
@@ -107,16 +113,26 @@ private:
         float opacity = 1.0f;
     };
 
-    struct Gradient
+    struct Gradient : public ReferenceCountedObject
     {
+        using Ptr = ReferenceCountedObjectPtr<Gradient>;
+
         enum Type
         {
             Linear,
             Radial
         };
 
+        enum Units
+        {
+            UserSpaceOnUse,
+            ObjectBoundingBox
+        };
+
         Type type;
         String id;
+        Units units = ObjectBoundingBox; // Default per SVG spec
+        String href; // xlink:href reference to another gradient
 
         // Linear gradient properties
         Point<float> start;
@@ -131,10 +147,12 @@ private:
         AffineTransform transform;
     };
 
-    struct ClipPath
+    struct ClipPath : public ReferenceCountedObject
     {
+        using Ptr = ReferenceCountedObjectPtr<ClipPath>;
+
         String id;
-        std::vector<std::shared_ptr<Element>> elements;
+        std::vector<Element::Ptr> elements;
     };
 
     void paintElement (Graphics& g, const Element& element, bool hasParentFillEnabled, bool hasParentStrokeEnabled);
@@ -143,12 +161,15 @@ private:
     void parseStyle (const XmlElement& element, const AffineTransform& currentTransform, Element& e);
     AffineTransform parseTransform (const XmlElement& element, const AffineTransform& currentTransform, Element& e);
     void parseGradient (const XmlElement& element);
-    Gradient* getGradientById (const String& id);
-    ColorGradient createColorGradientFromSVG (const Gradient& gradient);
+    Gradient::Ptr getGradientById (const String& id);
+    Gradient::Ptr resolveGradient (Gradient::Ptr gradient);
+    ColorGradient createColorGradientFromSVG (const Gradient& gradient, const AffineTransform& currentTransform = AffineTransform::identity());
     void parseClipPath (const XmlElement& element);
-    ClipPath* getClipPathById (const String& id);
+    ClipPath::Ptr getClipPathById (const String& id);
     void parseCSSStyle (const String& styleString, Element& e);
     float parseUnit (const String& value, float defaultValue = 0.0f, float fontSize = 12.0f, float viewportSize = 100.0f);
+    AffineTransform parseTransform (const String& transformString);
+    String extractGradientUrl (const String& value);
 
     // SVG preserveAspectRatio parsing
     Fitting parsePreserveAspectRatio (const String& preserveAspectRatio);
@@ -162,12 +183,12 @@ private:
     Size<float> size;
     Rectangle<float> bounds;
     AffineTransform transform;
-    std::vector<std::shared_ptr<Element>> elements;
-    HashMap<String, std::shared_ptr<Element>> elementsById;
-    std::vector<Gradient> gradients;
-    HashMap<String, Gradient*> gradientsById;
-    std::vector<ClipPath> clipPaths;
-    HashMap<String, ClipPath*> clipPathsById;
+    std::vector<Element::Ptr> elements;
+    HashMap<String, Element::Ptr> elementsById;
+    std::vector<Gradient::Ptr> gradients;
+    HashMap<String, Gradient::Ptr> gradientsById;
+    std::vector<ClipPath::Ptr> clipPaths;
+    HashMap<String, ClipPath::Ptr> clipPathsById;
 };
 
 } // namespace yup
