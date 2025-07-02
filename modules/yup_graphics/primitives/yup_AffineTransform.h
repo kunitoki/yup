@@ -723,6 +723,15 @@ public:
     }
 
     //==============================================================================
+
+    String toString() const
+    {
+        String result;
+        result << m[0] << ", " << m[1] << ", " << m[2] << ", " << m[3] << ", " << m[4] << ", " << m[5];
+        return result;
+    }
+
+    //==============================================================================
     /** Equality operator
 
         Compares this AffineTransform with another AffineTransform for equality.

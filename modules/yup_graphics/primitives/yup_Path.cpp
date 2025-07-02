@@ -289,10 +289,13 @@ Path& Path::quadTo (float x, float y, float x1, float y1)
         moveTo (x, y);
 
     const rive::Vec2D& last = rawPath.points().back();
+    const rive::Vec2D control (x1, y1);
+    const rive::Vec2D end (x, y);
+    
+    const rive::Vec2D c1 = rive::Vec2D::lerp (last, control, 2.0f / 3.0f);
+    const rive::Vec2D c2 = rive::Vec2D::lerp (end, control, 2.0f / 3.0f);
 
-    path->cubic (rive::Vec2D::lerp (last, rive::Vec2D (x1, y1), 2 / 3.f),
-                 rive::Vec2D::lerp (rive::Vec2D (x, y), rive::Vec2D (x1, y1), 2 / 3.f),
-                 rive::Vec2D (x, y));
+    path->cubic (c1, c2, end);
 
     return *this;
 }
@@ -1288,7 +1291,7 @@ void handleQuadTo (String::CharPointerType& data, Path& path, float& currentX, f
             y += currentY;
         }
 
-        path.quadTo (x1, y1, x, y);
+        path.quadTo (x, y, x1, y1);
 
         currentX = x;
         currentY = y;
@@ -1330,7 +1333,7 @@ void handleSmoothQuadTo (String::CharPointerType& data, Path& path, float& curre
             y += currentY;
         }
 
-        path.quadTo (cx, cy, x, y);
+        path.quadTo (x, y, cx, cy);
 
         // Update the current position
         currentX = x;
@@ -1485,7 +1488,11 @@ void handleEllipticalArc (String::CharPointerType& data, Path& path, float& curr
 
             // Calculate the center point (cx, cy)
             float sign = (largeArc != sweep) ? 1.0f : -1.0f;
-            float sqrtFactor = std::sqrt ((rxSq * rySq - rxSq * y1PrimeSq - rySq * x1PrimeSq) / (rxSq * y1PrimeSq + rySq * x1PrimeSq));
+            float numerator = rxSq * rySq - rxSq * y1PrimeSq - rySq * x1PrimeSq;
+            float denominator = rxSq * y1PrimeSq + rySq * x1PrimeSq;
+            float sqrtFactor = 0.0f;
+            if (denominator > 0.0f && numerator >= 0.0f)
+                sqrtFactor = std::sqrt (numerator / denominator);
             float cxPrime = sign * sqrtFactor * (rx * y1Prime / ry);
             float cyPrime = sign * sqrtFactor * (-ry * x1Prime / rx);
 
@@ -1514,8 +1521,9 @@ void handleEllipticalArc (String::CharPointerType& data, Path& path, float& curr
             // Ensure the delta angle is within the range [-2π, 2π]
             deltaAngle = std::fmod (deltaAngle, MathConstants<float>::twoPi);
 
-            // Add the arc to the path
-            path.addCenteredArc (centreX, centreY, rx, ry, xAxisRotation, startAngle, startAngle + deltaAngle, true);
+            // Add the arc to the path (use angleRad which is already in radians)
+            // Don't start new subpath - SVG arcs continue from current position
+            path.addCenteredArc (centreX, centreY, rx, ry, angleRad, startAngle, startAngle + deltaAngle, false);
 
             // Update the current position
             currentX = x;

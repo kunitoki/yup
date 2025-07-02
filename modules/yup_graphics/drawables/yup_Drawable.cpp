@@ -58,40 +58,8 @@ bool Drawable::parseSVG (const File& svgFile)
     auto height = svgRoot->getDoubleAttribute ("height");
     size.setHeight (height == 0.0 ? viewBox.getHeight() : height);
 
-    // Calculate the viewBox to viewport transformation
-    if (! viewBox.isEmpty())
-    {
-        /*
-        // If no explicit width/height, use viewBox dimensions as size
-        if (size.getWidth() == viewBox.getWidth() && size.getHeight() == viewBox.getHeight())
-        {
-            // No scaling needed, just handle viewBox offset
-            if (!viewBox.getTopLeft().isOrigin())
-                transform = AffineTransform::translation (-viewBox.getX(), -viewBox.getY());
-        }
-        else if (size.getWidth() > 0 && size.getHeight() > 0)
-        {
-            // Calculate scale factors to fit viewBox into specified size
-            float scaleX = size.getWidth() / viewBox.getWidth();
-            float scaleY = size.getHeight() / viewBox.getHeight();
-            
-            // Use uniform scaling to preserve aspect ratio
-            float scale = jmin (scaleX, scaleY);
-            
-            // Calculate translation to center the scaled viewBox
-            float translateX = (size.getWidth() - viewBox.getWidth() * scale) * 0.5f - viewBox.getX() * scale;
-            float translateY = (size.getHeight() - viewBox.getHeight() * scale) * 0.5f - viewBox.getY() * scale;
-            
-            transform = AffineTransform::scaling (scale).translated (translateX, translateY);
-        }
-        else
-        {
-            // Just handle viewBox offset
-            if (!viewBox.getTopLeft().isOrigin())
-                transform = AffineTransform::translation (-viewBox.getX(), -viewBox.getY());
-        }
-        */
-    }
+    // ViewBox transform is now calculated at render-time based on actual target area
+    YUP_DBG("Parse complete - viewBox: " << viewBox.toString() << " size: " << size.getWidth() << "x" << size.getHeight());
 
     auto result = parseElement (*svgRoot, true, {});
 
@@ -108,6 +76,7 @@ void Drawable::clear()
     viewBox = { 0.0f, 0.0f, 0.0f, 0.0f };
     size = { 0.0f, 0.0f };
     bounds = { 0.0f, 0.0f, 0.0f, 0.0f };
+    transform = AffineTransform::identity();
 
     elements.clear();
     elementsById.clear();
@@ -115,18 +84,6 @@ void Drawable::clear()
     gradientsById.clear();
     clipPaths.clear();
     clipPathsById.clear();
-}
-
-//==============================================================================
-
-void Drawable::setTransform (const AffineTransform& newTransform)
-{
-    transform = newTransform;
-}
-
-AffineTransform Drawable::getTransform() const
-{
-    return transform;
 }
 
 //==============================================================================
@@ -140,10 +97,13 @@ Rectangle<float> Drawable::getBounds() const
 
 void Drawable::paint (Graphics& g)
 {
-    g.setTransform (transform);
-
+    const auto savedState = g.saveState();
+    
     g.setStrokeWidth (1.0f);
     g.setFillColor (Colors::black);
+
+    if (! transform.isIdentity())
+        g.addTransform (transform);
 
     for (const auto& element : elements)
         paintElement (g, *element, true, false);
@@ -151,13 +111,17 @@ void Drawable::paint (Graphics& g)
 
 void Drawable::paint (Graphics& g, const Rectangle<float>& targetArea, Fitting fitting, Justification justification)
 {
+    YUP_DBG("Fitted paint called - bounds: " << bounds.toString() << " targetArea: " << targetArea.toString());
+    
     if (bounds.isEmpty())
         return;
         
     const auto savedState = g.saveState();
 
-    auto finalTransform = calculateTransformForTarget (bounds, targetArea, fitting, justification);
-    g.setTransform (finalTransform);
+    auto finalBounds = viewBox.isEmpty() ? bounds : viewBox;
+    auto finalTransform = calculateTransformForTarget (finalBounds, targetArea, fitting, justification);
+    if (! finalTransform.isIdentity())
+        g.addTransform (finalTransform);
 
     g.setStrokeWidth (1.0f);
     g.setFillColor (Colors::black);
@@ -174,9 +138,18 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
 
     bool isFillDefined = hasParentFillEnabled;
     bool isStrokeDefined = hasParentStrokeEnabled;
+    
+    YUP_DBG("paintElement called - hasPath: " << (element.path ? "true" : "false") << " hasTransform: " << (element.transform ? "true" : "false"));
 
-    // Element transforms are now applied to path geometry during parsing
-    // so all elements exist in the same coordinate space
+    // Apply element transform if present - use proper composition for coordinate systems
+    if (element.transform)
+    {
+        YUP_DBG("Applying element transform - before: " << g.getTransform().toString() << " adding: " << element.transform->toString());
+        // For proper coordinate system handling, we need to apply element transform 
+        // in the element's local space, then transform to viewport space
+        g.setTransform (element.transform->followedBy (g.getTransform()));
+        YUP_DBG("After transform: " << g.getTransform().toString());
+    }
 
     if (element.opacity)
         g.setOpacity (g.getOpacity() * (*element.opacity));
@@ -235,6 +208,15 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
         {
             if (auto refElement = elementsById[*element.reference]; refElement != nullptr && refElement->path)
             {
+                /*
+                // For use elements, apply the referenced element's transform and render its path
+                // This ensures proper coordinate system handling for referenced elements
+                const auto referencedSavedState = g.saveState();
+                
+                if (refElement->transform)
+                    g.setTransform (*refElement->transform);
+                */
+
                 if (refElement->path->isClosed())
                     g.fillPath (*refElement->path);
             }
@@ -337,7 +319,17 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
         else if (element.reference)
         {
             if (auto refElement = elementsById[*element.reference]; refElement != nullptr && refElement->path)
+            {
+                /*
+                // For use elements, apply the referenced element's transform for stroke rendering
+                const auto referencedSavedState = g.saveState();
+                
+                if (refElement->transform)
+                    g.setTransform (*refElement->transform);
+                */
+
                 g.strokePath (*refElement->path);
+            }
         }
     }
 
@@ -368,14 +360,9 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
         if (pathData.isEmpty() || ! path.fromString (pathData))
             return false;
 
-        currentTransform = parseTransform (element, currentTransform, *e);
-        
-        // Apply accumulated transform (including parent group transforms) to path geometry
-        if (!currentTransform.isIdentity())
-            path.transform (currentTransform);
-        
         e->path = std::move (path);
-        
+
+        currentTransform = parseTransform (element, currentTransform, *e);
         parseStyle (element, currentTransform, *e);
     }
     else if (element.hasTagName ("g"))
@@ -389,7 +376,24 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
         if (href.isNotEmpty() && href.startsWith ("#"))
             e->reference = href.substring (1);
 
+        // Handle x,y positioning for use elements (SVG spec requirement)
+        auto x = element.getDoubleAttribute ("x");
+        auto y = element.getDoubleAttribute ("y");
+        AffineTransform useTransform;
+        if (x != 0.0 || y != 0.0)
+            useTransform = AffineTransform::translation (x, y);
+
         currentTransform = parseTransform (element, currentTransform, *e);
+        
+        // Combine use element positioning with any explicit transform
+        if (!useTransform.isIdentity())
+        {
+            if (e->transform.has_value())
+                e->transform = useTransform.followedBy (*e->transform);
+            else
+                e->transform = useTransform;
+        }
+        
         parseStyle (element, currentTransform, *e);
     }
     else if (element.hasTagName ("ellipse"))
@@ -401,14 +405,9 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
 
         auto path = Path();
         path.addCenteredEllipse (cx, cy, rx, ry);
-        currentTransform = parseTransform (element, currentTransform, *e);
-        
-        // Apply accumulated transform (including parent group transforms) to path geometry
-        if (!currentTransform.isIdentity())
-            path.transform (currentTransform);
-        
         e->path = std::move (path);
-        
+
+        currentTransform = parseTransform (element, currentTransform, *e);
         parseStyle (element, currentTransform, *e);
     }
     else if (element.hasTagName ("circle"))
@@ -419,14 +418,9 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
 
         auto path = Path();
         path.addCenteredEllipse (cx, cy, r, r);
-        currentTransform = parseTransform (element, currentTransform, *e);
-        
-        // Apply accumulated transform (including parent group transforms) to path geometry
-        if (!currentTransform.isIdentity())
-            path.transform (currentTransform);
-        
         e->path = std::move (path);
-        
+
+        currentTransform = parseTransform (element, currentTransform, *e);
         parseStyle (element, currentTransform, *e);
     }
     else if (element.hasTagName ("rect"))
@@ -445,20 +439,17 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
                 rx = ry;
             if (ry == 0.0)
                 ry = rx;
+
             path.addRoundedRectangle (x, y, width, height, rx, ry, rx, ry);
         }
         else
         {
             path.addRectangle (x, y, width, height);
         }
-        currentTransform = parseTransform (element, currentTransform, *e);
-        
-        // Apply accumulated transform (including parent group transforms) to path geometry
-        if (!currentTransform.isIdentity())
-            path.transform (currentTransform);
-        
+
         e->path = std::move (path);
-        
+
+        currentTransform = parseTransform (element, currentTransform, *e);
         parseStyle (element, currentTransform, *e);
     }
     else if (element.hasTagName ("line"))
@@ -471,14 +462,9 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
         auto path = Path();
         path.startNewSubPath (x1, y1);
         path.lineTo (x2, y2);
-        currentTransform = parseTransform (element, currentTransform, *e);
-        
-        // Apply accumulated transform (including parent group transforms) to path geometry
-        if (!currentTransform.isIdentity())
-            path.transform (currentTransform);
-        
         e->path = std::move (path);
-        
+
+        currentTransform = parseTransform (element, currentTransform, *e);
         parseStyle (element, currentTransform, *e);
     }
     else if (element.hasTagName ("polygon"))
@@ -498,6 +484,7 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
 
                 path.closeSubPath();
             }
+
             e->path = std::move (path);
         }
 
@@ -519,6 +506,7 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
                 for (int i = 2; i < coords.size(); i += 2)
                     path.lineTo (coords[i].getFloatValue(), coords[i + 1].getFloatValue());
             }
+
             e->path = std::move (path);
         }
 
@@ -781,6 +769,7 @@ AffineTransform Drawable::parseTransform (const XmlElement& element, const Affin
         }
 
         e.transform = result;
+        YUP_DBG("Parsed element transform: " << result.toString());
     }
 
     return currentTransform.followedBy (result);
@@ -1262,8 +1251,50 @@ AffineTransform Drawable::calculateTransformForTarget (const Rectangle<float>& s
     // Create transform: translate to origin, scale, then translate to target position
     return AffineTransform::translation (-sourceBounds.getX(), -sourceBounds.getY())
         .scaled (scaleX, scaleY)
-        .translated (offsetX, offsetY)
-        .followedBy (transform);  // Apply the drawable's own transform
+        .translated (offsetX, offsetY);
+}
+
+//==============================================================================
+
+Fitting Drawable::parsePreserveAspectRatio (const String& preserveAspectRatio)
+{
+    if (preserveAspectRatio.isEmpty() || preserveAspectRatio == "xMidYMid meet")
+        return Fitting::scaleToFit; // Default SVG behavior
+    
+    if (preserveAspectRatio.contains ("none"))
+        return Fitting::fill; // Non-uniform scaling allowed
+    
+    if (preserveAspectRatio.contains ("slice"))
+        return Fitting::scaleToFill; // Scale to fill, may crop
+    
+    // Default to uniform scaling (meet)
+    return Fitting::scaleToFit;
+}
+
+Justification Drawable::parseAspectRatioAlignment (const String& preserveAspectRatio)
+{
+    if (preserveAspectRatio.isEmpty())
+        return Justification::center; // Default SVG alignment
+    
+    Justification result = Justification::left;
+    
+    // Parse horizontal alignment
+    if (preserveAspectRatio.contains ("xMin"))
+        result = result | Justification::left;
+    else if (preserveAspectRatio.contains ("xMax"))
+        result = result | Justification::right;
+    else // xMid (default)
+        result = result | Justification::horizontalCenter;
+    
+    // Parse vertical alignment  
+    if (preserveAspectRatio.contains ("YMin"))
+        result = result | Justification::top;
+    else if (preserveAspectRatio.contains ("YMax"))
+        result = result | Justification::bottom;
+    else // YMid (default)
+        result = result | Justification::verticalCenter;
+    
+    return result;
 }
 
 } // namespace yup

@@ -392,6 +392,11 @@ Rectangle<float> Graphics::getDrawingArea() const
 //==============================================================================
 void Graphics::setTransform (const AffineTransform& transform)
 {
+    currentRenderOptions().transform = transform;
+}
+
+void Graphics::addTransform (const AffineTransform& transform)
+{
     currentRenderOptions().transform = currentRenderOptions().transform.followedBy (transform);
 }
 

@@ -37,21 +37,6 @@ public:
     void clear();
 
     //==============================================================================
-    /** Sets a transform to be applied when painting the drawable.
-        
-        This transform is applied on top of any transforms defined within the SVG itself.
-        
-        @param newTransform The transform to apply when painting.
-    */
-    void setTransform (const AffineTransform& newTransform);
-    
-    /** Gets the current transform that will be applied when painting.
-        
-        @return The current transform.
-    */
-    AffineTransform getTransform() const;
-
-    //==============================================================================
     /** Gets the bounds of the drawable content.
         
         @return The bounding rectangle of the drawable's content.
@@ -164,6 +149,10 @@ private:
     ClipPath* getClipPathById (const String& id);
     void parseCSSStyle (const String& styleString, Element& e);
     float parseUnit (const String& value, float defaultValue = 0.0f, float fontSize = 12.0f, float viewportSize = 100.0f);
+    
+    // SVG preserveAspectRatio parsing
+    Fitting parsePreserveAspectRatio (const String& preserveAspectRatio);
+    Justification parseAspectRatioAlignment (const String& preserveAspectRatio);
     
     // Helper methods for layout and painting
     Rectangle<float> calculateBounds() const;

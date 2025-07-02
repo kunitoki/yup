@@ -83,6 +83,8 @@ private:
 
         currentSvgFileIndex = index;
 
+        YUP_DBG ("Showing " << svgFiles[currentSvgFileIndex].getFullPathName());
+
         drawable.clear();
         drawable.parseSVG (svgFiles[currentSvgFileIndex]);
 

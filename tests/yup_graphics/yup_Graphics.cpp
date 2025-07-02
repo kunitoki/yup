@@ -446,7 +446,23 @@ TEST_F (GraphicsTest, Image_Drawing_Operations)
 
 TEST_F (GraphicsTest, Transform_Accumulation)
 {
-    // Test that transforms accumulate properly
+    // Test that transforms accumulate properly using addTransform
+    auto translation1 = AffineTransform::translation (10.0f, 20.0f);
+    auto translation2 = AffineTransform::translation (5.0f, 15.0f);
+
+    graphics->setTransform (translation1);
+    graphics->addTransform (translation2);
+
+    auto result = graphics->getTransform();
+
+    // The transforms should be combined
+    EXPECT_FLOAT_EQ (result.getTranslateX(), 15.0f); // 10 + 5
+    EXPECT_FLOAT_EQ (result.getTranslateY(), 35.0f); // 20 + 15
+}
+
+TEST_F (GraphicsTest, Transform_SetReplace)
+{
+    // Test that setTransform replaces instead of accumulates
     auto translation1 = AffineTransform::translation (10.0f, 20.0f);
     auto translation2 = AffineTransform::translation (5.0f, 15.0f);
 
@@ -455,9 +471,9 @@ TEST_F (GraphicsTest, Transform_Accumulation)
 
     auto result = graphics->getTransform();
 
-    // The transforms should be combined
-    EXPECT_FLOAT_EQ (result.getTranslateX(), 15.0f); // 10 + 5
-    EXPECT_FLOAT_EQ (result.getTranslateY(), 35.0f); // 20 + 15
+    // The second transform should replace the first
+    EXPECT_FLOAT_EQ (result.getTranslateX(), 5.0f);  // Only second transform
+    EXPECT_FLOAT_EQ (result.getTranslateY(), 15.0f); // Only second transform
 }
 
 TEST_F (GraphicsTest, Edge_Case_Values)

@@ -48,4 +48,19 @@ enum class Justification
     centerBottom = horizontalCenter | bottom    /**< Centers the content horizontally and aligns it to the bottom. */
 };
 
+constexpr Justification operator| (Justification lhs, Justification rhs) noexcept
+{
+    return static_cast<Justification> (static_cast<int> (lhs) | static_cast<int> (rhs));
+}
+
+constexpr Justification operator& (Justification lhs, Justification rhs) noexcept
+{
+    return static_cast<Justification> (static_cast<int> (lhs) & static_cast<int> (rhs));
+}
+
+constexpr Justification operator~ (Justification lhs) noexcept
+{
+    return static_cast<Justification> (~static_cast<int> (lhs));
+}
+
 } // namespace yup

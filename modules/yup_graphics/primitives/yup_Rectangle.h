@@ -1969,6 +1969,15 @@ public:
     }
 
     //==============================================================================
+
+    String toString() const
+    {
+        String result;
+        result << xy << ", " << size;
+        return result;
+    }
+
+    //==============================================================================
     /** Returns true if the two rectangles are approximately equal.
 
         This method checks if the position and size of this rectangle are approximately equal to those of another rectangle.
