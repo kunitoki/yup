@@ -49,6 +49,8 @@ private:
         std::optional<float> strokeWidth;
         std::optional<StrokeJoin> strokeJoin;
         std::optional<StrokeCap> strokeCap;
+        std::optional<Array<float>> strokeDashArray;
+        std::optional<float> strokeDashOffset;
         bool noFill = false;
         bool noStroke = false;
 
@@ -118,6 +120,7 @@ private:
     void parseClipPath (const XmlElement& element);
     ClipPath* getClipPathById (const String& id);
     void parseCSSStyle (const String& styleString, Element& e);
+    float parseUnit (const String& value, float defaultValue = 0.0f, float fontSize = 12.0f, float viewportSize = 100.0f);
 
     Rectangle<float> viewBox;
     Size<float> size;

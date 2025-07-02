@@ -1249,7 +1249,7 @@ void handleVerticalLineTo (String::CharPointerType& data, Path& path, float curr
     }
 }
 
-void handleQuadTo (String::CharPointerType& data, Path& path, float& currentX, float& currentY, bool relative)
+void handleQuadTo (String::CharPointerType& data, Path& path, float& currentX, float& currentY, float& lastQuadX, float& lastQuadY, bool relative)
 {
     float x1, y1, x, y;
 
@@ -1270,6 +1270,10 @@ void handleQuadTo (String::CharPointerType& data, Path& path, float& currentX, f
 
         currentX = x;
         currentY = y;
+        
+        // Update the last control point for smooth curves
+        lastQuadX = x1;
+        lastQuadY = y1;
 
         skipWhitespace (data);
     }
@@ -1318,7 +1322,7 @@ void handleSmoothQuadTo (String::CharPointerType& data, Path& path, float& curre
     }
 }
 
-void handleCubicTo (String::CharPointerType& data, Path& path, float& currentX, float& currentY, bool relative)
+void handleCubicTo (String::CharPointerType& data, Path& path, float& currentX, float& currentY, float& lastControlX, float& lastControlY, bool relative)
 {
     float x1, y1, x2, y2, x, y;
 
@@ -1342,6 +1346,10 @@ void handleCubicTo (String::CharPointerType& data, Path& path, float& currentX, 
 
         currentX = x;
         currentY = y;
+        
+        // Update the last control point for smooth curves (second control point)
+        lastControlX = x2;
+        lastControlY = y2;
 
         skipWhitespace (data);
     }
@@ -1526,50 +1534,83 @@ bool Path::fromString (const String& pathData)
             case 'M': // Move to absolute
             case 'm': // Move to relative
                 handleMoveTo (data, *this, currentX, currentY, startX, startY, command == 'm');
+                // Reset control points after move
+                lastControlX = currentX;
+                lastControlY = currentY;
+                lastQuadX = currentX;
+                lastQuadY = currentY;
                 break;
 
             case 'L': // Line to absolute
             case 'l': // Line to relative
                 handleLineTo (data, *this, currentX, currentY, command == 'l');
+                // Reset control points after line (non-curve command)
+                lastControlX = currentX;
+                lastControlY = currentY;
+                lastQuadX = currentX;
+                lastQuadY = currentY;
                 break;
 
             case 'H': // Horizontal line to absolute
             case 'h': // Horizontal line to relative
                 handleHorizontalLineTo (data, *this, currentX, currentY, command == 'h');
+                // Reset control points after line (non-curve command)
+                lastControlX = currentX;
+                lastControlY = currentY;
+                lastQuadX = currentX;
+                lastQuadY = currentY;
                 break;
 
             case 'V': // Vertical line to absolute
             case 'v': // Vertical line to relative
                 handleVerticalLineTo (data, *this, currentX, currentY, command == 'v');
-                break;
-
-            case 'Q': // Quadratic Bezier curve to absolute
-            case 'q': // Quadratic Bezier curve to relative
-                handleQuadTo (data, *this, currentX, currentY, command == 'q');
+                // Reset control points after line (non-curve command)
+                lastControlX = currentX;
+                lastControlY = currentY;
                 lastQuadX = currentX;
                 lastQuadY = currentY;
                 break;
 
+            case 'Q': // Quadratic Bezier curve to absolute
+            case 'q': // Quadratic Bezier curve to relative
+                handleQuadTo (data, *this, currentX, currentY, lastQuadX, lastQuadY, command == 'q');
+                // Reset cubic control points (quadratic doesn't affect cubic control points)
+                lastControlX = currentX;
+                lastControlY = currentY;
+                break;
+
             case 'T': // Quadratic Smooth Bezier curve to absolute
             case 't': // Quadratic Smooth Bezier curve to relative
-                handleSmoothQuadTo (data, *this, currentX, currentY, lastQuadX, lastQuadY, command == 'q');
+                handleSmoothQuadTo (data, *this, currentX, currentY, lastQuadX, lastQuadY, command == 't');
+                // Reset cubic control points (quadratic doesn't affect cubic control points)
+                lastControlX = currentX;
+                lastControlY = currentY;
                 break;
 
             case 'C': // Cubic Bezier curve to absolute
             case 'c': // Cubic Bezier curve to relative
-                handleCubicTo (data, *this, currentX, currentY, command == 'c');
-                lastControlX = currentX;
-                lastControlY = currentY;
+                handleCubicTo (data, *this, currentX, currentY, lastControlX, lastControlY, command == 'c');
+                // Reset quadratic control points (cubic doesn't affect quadratic control points)
+                lastQuadX = currentX;
+                lastQuadY = currentY;
                 break;
 
             case 'S': // Cubic Smooth Bezier curve to absolute
             case 's': // Cubic Smooth Bezier curve to relative
                 handleSmoothCubicTo (data, *this, currentX, currentY, lastControlX, lastControlY, command == 's');
+                // Reset quadratic control points (cubic doesn't affect quadratic control points)
+                lastQuadX = currentX;
+                lastQuadY = currentY;
                 break;
 
             case 'A': // Elliptical Arc to absolute
             case 'a': // Elliptical Arc to relative
                 handleEllipticalArc (data, *this, currentX, currentY, command == 'a');
+                // Reset control points after arc (non-curve command)
+                lastControlX = currentX;
+                lastControlY = currentY;
+                lastQuadX = currentX;
+                lastQuadY = currentY;
                 break;
 
             case 'Z': // Close path

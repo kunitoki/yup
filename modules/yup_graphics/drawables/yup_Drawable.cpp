@@ -57,9 +57,40 @@ bool Drawable::parseSVG (const File& svgFile)
     auto height = svgRoot->getDoubleAttribute ("height");
     size.setHeight (height == 0.0 ? viewBox.getHeight() : height);
 
-    //AffineTransform currentTransform;
-    //if (! viewBox.getTopLeft().isOrigin())
-    //    currentTransform = currentTransform.translated (-viewBox.getX(), -viewBox.getY());
+    // Calculate the viewBox to viewport transformation
+    if (!viewBox.isEmpty())
+    {
+        /*
+        // If no explicit width/height, use viewBox dimensions as size
+        if (size.getWidth() == viewBox.getWidth() && size.getHeight() == viewBox.getHeight())
+        {
+            // No scaling needed, just handle viewBox offset
+            if (!viewBox.getTopLeft().isOrigin())
+                transform = AffineTransform::translation (-viewBox.getX(), -viewBox.getY());
+        }
+        else if (size.getWidth() > 0 && size.getHeight() > 0)
+        {
+            // Calculate scale factors to fit viewBox into specified size
+            float scaleX = size.getWidth() / viewBox.getWidth();
+            float scaleY = size.getHeight() / viewBox.getHeight();
+            
+            // Use uniform scaling to preserve aspect ratio
+            float scale = jmin (scaleX, scaleY);
+            
+            // Calculate translation to center the scaled viewBox
+            float translateX = (size.getWidth() - viewBox.getWidth() * scale) * 0.5f - viewBox.getX() * scale;
+            float translateY = (size.getHeight() - viewBox.getHeight() * scale) * 0.5f - viewBox.getY() * scale;
+            
+            transform = AffineTransform::scaling (scale).translated (translateX, translateY);
+        }
+        else
+        {
+            // Just handle viewBox offset
+            if (!viewBox.getTopLeft().isOrigin())
+                transform = AffineTransform::translation (-viewBox.getX(), -viewBox.getY());
+        }
+        */
+    }
 
     return parseElement (*svgRoot, true, {});
 }
@@ -223,6 +254,21 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
 
     if (element.strokeWidth)
         g.setStrokeWidth (*element.strokeWidth);
+    
+    // Apply stroke dash patterns
+    if (element.strokeDashArray)
+    {
+        // Convert Array<float> to what Graphics expects
+        const auto& dashArray = *element.strokeDashArray;
+        if (!dashArray.isEmpty())
+        {
+            // TODO: Graphics class needs stroke dash pattern support
+            // For now, this is prepared for when Graphics supports it
+            // g.setStrokeDashPattern (dashArray.getRawDataPointer(), dashArray.size());
+            // if (element.strokeDashOffset)
+            //     g.setStrokeDashOffset (*element.strokeDashOffset);
+        }
+    }
 
     if (isStrokeDefined && ! element.noStroke)
     {
@@ -531,8 +577,7 @@ void Drawable::parseStyle (const XmlElement& element, const AffineTransform& cur
     float strokeWidth = element.getDoubleAttribute ("stroke-width", -1.0);
     if (strokeWidth > 0.0)
     {
-        auto transformScale = std::sqrtf (std::fabsf (currentTransform.followedBy (transform).getDeterminant()));
-        e.strokeWidth = transformScale * strokeWidth;
+        e.strokeWidth = strokeWidth;
     }
 
     float opacity = element.getDoubleAttribute ("opacity", -1.0);
@@ -543,6 +588,32 @@ void Drawable::parseStyle (const XmlElement& element, const AffineTransform& cur
     if (clipPath.isNotEmpty() && clipPath.startsWith ("url(#"))
     {
         e.clipPathUrl = clipPath.substring (5, clipPath.length() - 1);
+    }
+    
+    // Parse stroke-dasharray
+    String dashArray = element.getStringAttribute ("stroke-dasharray");
+    if (dashArray.isNotEmpty() && dashArray != "none")
+    {
+        auto dashValues = StringArray::fromTokens (dashArray, " ,", "");
+        if (!dashValues.isEmpty())
+        {
+            Array<float> dashes;
+            for (const auto& dash : dashValues)
+            {
+                float value = parseUnit (dash);
+                if (value >= 0.0f)
+                    dashes.add (value);
+            }
+            if (!dashes.isEmpty())
+                e.strokeDashArray = dashes;
+        }
+    }
+    
+    // Parse stroke-dashoffset
+    String dashOffset = element.getStringAttribute ("stroke-dashoffset");
+    if (dashOffset.isNotEmpty())
+    {
+        e.strokeDashOffset = parseUnit (dashOffset);
     }
 }
 
@@ -632,8 +703,12 @@ AffineTransform Drawable::parseTransform (const XmlElement& element, const Affin
             }
             else if (type == "matrix" && params.size() == 6)
             {
+                // SVG matrix(a,b,c,d,e,f) maps to different parameter order in YUP AffineTransform
+                // SVG: matrix(scaleX, shearY, shearX, scaleY, translateX, translateY)
+                // YUP: AffineTransform(scaleX, shearX, translateX, shearY, scaleY, translateY)
+                // Conversion: AffineTransform(a, c, e, b, d, f)
                 result = result.followedBy (AffineTransform (
-                    params[0], params[1], params[2], params[3], params[4], params[5]));
+                    params[0], params[2], params[4], params[1], params[3], params[5]));
             }
         }
 
@@ -922,8 +997,79 @@ void Drawable::parseCSSStyle (const String& styleString, Element& e)
                 if (value.startsWith ("url(#"))
                     e.clipPathUrl = value.substring (5, value.length() - 1);
             }
+            else if (property == "stroke-dasharray")
+            {
+                if (value != "none")
+                {
+                    auto dashValues = StringArray::fromTokens (value, " ,", "");
+                    if (!dashValues.isEmpty())
+                    {
+                        Array<float> dashes;
+                        for (const auto& dash : dashValues)
+                        {
+                            float dashValue = parseUnit (dash);
+                            if (dashValue >= 0.0f)
+                                dashes.add (dashValue);
+                        }
+                        if (!dashes.isEmpty())
+                            e.strokeDashArray = dashes;
+                    }
+                }
+            }
+            else if (property == "stroke-dashoffset")
+            {
+                e.strokeDashOffset = parseUnit (value);
+            }
         }
     }
+}
+
+//==============================================================================
+
+float Drawable::parseUnit (const String& value, float defaultValue, float fontSize, float viewportSize)
+{
+    if (value.isEmpty())
+        return defaultValue;
+    
+    String trimmed = value.trim();
+    if (trimmed.isEmpty())
+        return defaultValue;
+    
+    // Extract numeric part and unit
+    int unitStart = 0;
+    while (unitStart < trimmed.length() && 
+           (CharacterFunctions::isDigit (trimmed[unitStart]) || 
+            trimmed[unitStart] == '.' || 
+            trimmed[unitStart] == '-' || 
+            trimmed[unitStart] == '+'))
+    {
+        unitStart++;
+    }
+    
+    float numericValue = trimmed.substring (0, unitStart).getFloatValue();
+    String unit = trimmed.substring (unitStart).trim().toLowerCase();
+    
+    // Handle different SVG units
+    if (unit.isEmpty() || unit == "px")
+        return numericValue;  // Default user units or pixels
+    else if (unit == "pt")
+        return numericValue * 1.333333f;  // 1pt = 1.333px
+    else if (unit == "pc")
+        return numericValue * 16.0f;      // 1pc = 16px
+    else if (unit == "mm")
+        return numericValue * 3.779528f;  // 1mm = 3.779528px (96 DPI)
+    else if (unit == "cm")
+        return numericValue * 37.79528f;  // 1cm = 37.79528px (96 DPI)
+    else if (unit == "in")
+        return numericValue * 96.0f;      // 1in = 96px (96 DPI)
+    else if (unit == "em")
+        return numericValue * fontSize;   // Relative to font size
+    else if (unit == "ex")
+        return numericValue * fontSize * 0.5f;  // Approximately 0.5em
+    else if (unit == "%")
+        return numericValue * viewportSize * 0.01f;  // Percentage of viewport
+    else
+        return numericValue;  // Unknown unit, treat as user units
 }
 
 } // namespace yup
