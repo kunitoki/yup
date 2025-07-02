@@ -291,7 +291,7 @@ Path& Path::quadTo (float x, float y, float x1, float y1)
     const rive::Vec2D& last = rawPath.points().back();
     const rive::Vec2D control (x1, y1);
     const rive::Vec2D end (x, y);
-    
+
     const rive::Vec2D c1 = rive::Vec2D::lerp (last, control, 2.0f / 3.0f);
     const rive::Vec2D c2 = rive::Vec2D::lerp (end, control, 2.0f / 3.0f);
 
@@ -864,7 +864,7 @@ bool Path::isClosed (float tolerance) const
     auto last = end();
     if (first == last)
         return false;
-    
+
     Point<float> firstPoint (0.0f, 0.0f);
     Point<float> lastPoint (0.0f, 0.0f);
     bool hasFirstPoint = false;
@@ -877,16 +877,16 @@ bool Path::isClosed (float tolerance) const
             firstPoint = segment.point;
             hasFirstPoint = true;
         }
-        
+
         if (segment.verb != PathVerb::Close)
             lastPoint = segment.point;
         else
             return true;
     }
-    
+
     if (! hasFirstPoint)
         return false;
-    
+
     return firstPoint.distanceTo (lastPoint) <= tolerance;
 }
 

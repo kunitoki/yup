@@ -431,7 +431,7 @@ void MessageManager::runDispatchLoop()
 
     constexpr int millisecondsToRunFor = static_cast<int>(1000.0f / 60.0f); // TODO
 
-    //runNSApplication();
+    // runNSApplication();
 
     while (quitMessagePosted.get() == 0)
     {

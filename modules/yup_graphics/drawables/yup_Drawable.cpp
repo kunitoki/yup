@@ -59,7 +59,7 @@ bool Drawable::parseSVG (const File& svgFile)
     size.setHeight (height == 0.0 ? viewBox.getHeight() : height);
 
     // ViewBox transform is now calculated at render-time based on actual target area
-    YUP_DBG("Parse complete - viewBox: " << viewBox.toString() << " size: " << size.getWidth() << "x" << size.getHeight());
+    YUP_DBG ("Parse complete - viewBox: " << viewBox.toString() << " size: " << size.getWidth() << "x" << size.getHeight());
 
     auto result = parseElement (*svgRoot, true, {});
 
@@ -98,7 +98,7 @@ Rectangle<float> Drawable::getBounds() const
 void Drawable::paint (Graphics& g)
 {
     const auto savedState = g.saveState();
-    
+
     g.setStrokeWidth (1.0f);
     g.setFillColor (Colors::black);
 
@@ -111,11 +111,11 @@ void Drawable::paint (Graphics& g)
 
 void Drawable::paint (Graphics& g, const Rectangle<float>& targetArea, Fitting fitting, Justification justification)
 {
-    YUP_DBG("Fitted paint called - bounds: " << bounds.toString() << " targetArea: " << targetArea.toString());
-    
+    YUP_DBG ("Fitted paint called - bounds: " << bounds.toString() << " targetArea: " << targetArea.toString());
+
     if (bounds.isEmpty())
         return;
-        
+
     const auto savedState = g.saveState();
 
     auto finalBounds = viewBox.isEmpty() ? bounds : viewBox;
@@ -138,17 +138,17 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
 
     bool isFillDefined = hasParentFillEnabled;
     bool isStrokeDefined = hasParentStrokeEnabled;
-    
-    YUP_DBG("paintElement called - hasPath: " << (element.path ? "true" : "false") << " hasTransform: " << (element.transform ? "true" : "false"));
+
+    YUP_DBG ("paintElement called - hasPath: " << (element.path ? "true" : "false") << " hasTransform: " << (element.transform ? "true" : "false"));
 
     // Apply element transform if present - use proper composition for coordinate systems
     if (element.transform)
     {
-        YUP_DBG("Applying element transform - before: " << g.getTransform().toString() << " adding: " << element.transform->toString());
-        // For proper coordinate system handling, we need to apply element transform 
+        YUP_DBG ("Applying element transform - before: " << g.getTransform().toString() << " adding: " << element.transform->toString());
+        // For proper coordinate system handling, we need to apply element transform
         // in the element's local space, then transform to viewport space
         g.setTransform (element.transform->followedBy (g.getTransform()));
-        YUP_DBG("After transform: " << g.getTransform().toString());
+        YUP_DBG ("After transform: " << g.getTransform().toString());
     }
 
     if (element.opacity)
@@ -208,11 +208,11 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
         {
             if (auto refElement = elementsById[*element.reference]; refElement != nullptr && refElement->path)
             {
-                YUP_DBG("Rendering use element - reference: " << *element.reference);
-                YUP_DBG("Use element transform: " << (element.transform ? element.transform->toString() : "none"));
-                YUP_DBG("Referenced element transform: " << (refElement->transform ? refElement->transform->toString() : "none"));
-                YUP_DBG("Graphics transform during use fill: " << g.getTransform().toString());
-                
+                YUP_DBG ("Rendering use element - reference: " << *element.reference);
+                YUP_DBG ("Use element transform: " << (element.transform ? element.transform->toString() : "none"));
+                YUP_DBG ("Referenced element transform: " << (refElement->transform ? refElement->transform->toString() : "none"));
+                YUP_DBG ("Graphics transform during use fill: " << g.getTransform().toString());
+
                 if (refElement->path->isClosed())
                     g.fillPath (*refElement->path);
             }
@@ -316,8 +316,8 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
         {
             if (auto refElement = elementsById[*element.reference]; refElement != nullptr && refElement->path)
             {
-                YUP_DBG("Stroking use element - reference: " << *element.reference);
-                YUP_DBG("Graphics transform during stroke: " << g.getTransform().toString());
+                YUP_DBG ("Stroking use element - reference: " << *element.reference);
+                YUP_DBG ("Graphics transform during stroke: " << g.getTransform().toString());
                 g.strokePath (*refElement->path);
             }
         }
@@ -325,7 +325,7 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
 
     for (const auto& childElement : element.children)
     {
-        YUP_DBG("Rendering child element - current graphics transform: " << g.getTransform().toString());
+        YUP_DBG ("Rendering child element - current graphics transform: " << g.getTransform().toString());
         paintElement (g, *childElement, isFillDefined, isStrokeDefined);
     }
 
@@ -377,16 +377,16 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
             useTransform = AffineTransform::translation (x, y);
 
         currentTransform = parseTransform (element, currentTransform, *e);
-        
+
         // Combine use element positioning with any explicit transform
-        if (!useTransform.isIdentity())
+        if (! useTransform.isIdentity())
         {
             if (e->transform.has_value())
                 e->transform = useTransform.followedBy (*e->transform);
             else
                 e->transform = useTransform;
         }
-        
+
         parseStyle (element, currentTransform, *e);
     }
     else if (element.hasTagName ("ellipse"))
@@ -594,7 +594,7 @@ void Drawable::parseStyle (const XmlElement& element, const AffineTransform& cur
             else
             {
                 e.fillColor = Color::fromString (fill);
-                YUP_DBG("Parsed fill color: " << fill << " -> " << e.fillColor->toString());
+                YUP_DBG ("Parsed fill color: " << fill << " -> " << e.fillColor->toString());
             }
         }
         else
@@ -738,26 +738,26 @@ AffineTransform Drawable::parseTransform (const XmlElement& element, const Affin
             {
                 auto tx = params[0];
                 auto ty = (params.size() == 2) ? params[1] : 0.0f;
-                YUP_DBG("Applying translate(" << tx << ", " << ty << ")");
+                YUP_DBG ("Applying translate(" << tx << ", " << ty << ")");
                 result = result.translated (tx, ty);
             }
             else if (type == "scale" && (params.size() == 1 || params.size() == 2))
             {
                 auto sx = params[0];
                 auto sy = (params.size() == 2) ? params[1] : params[0];
-                YUP_DBG("Applying scale(" << sx << ", " << sy << ")");
+                YUP_DBG ("Applying scale(" << sx << ", " << sy << ")");
                 result = result.scaled (sx, sy);
             }
             else if (type == "rotate" && (params.size() == 1 || params.size() == 3))
             {
                 if (params.size() == 1)
                 {
-                    YUP_DBG("Applying rotate(" << params[0] << ")");
+                    YUP_DBG ("Applying rotate(" << params[0] << ")");
                     result = result.rotated (degreesToRadians (params[0]));
                 }
                 else
                 {
-                    YUP_DBG("Applying rotate(" << params[0] << ", " << params[1] << ", " << params[2] << ")");
+                    YUP_DBG ("Applying rotate(" << params[0] << ", " << params[1] << ", " << params[2] << ")");
                     result = result.rotated (degreesToRadians (params[0]), params[1], params[2]);
                 }
             }
@@ -765,26 +765,26 @@ AffineTransform Drawable::parseTransform (const XmlElement& element, const Affin
             {
                 auto angle = params[0];
                 auto factor = std::tanf (degreesToRadians (angle));
-                YUP_DBG("Applying skewX(" << angle << ") -> factor=" << factor);
+                YUP_DBG ("Applying skewX(" << angle << ") -> factor=" << factor);
                 result = result.sheared (factor, 0.0f);
             }
             else if (type == "skewY" && params.size() == 1)
             {
                 auto angle = params[0];
                 auto factor = std::tanf (degreesToRadians (angle));
-                YUP_DBG("Applying skewY(" << angle << ") -> factor=" << factor);
+                YUP_DBG ("Applying skewY(" << angle << ") -> factor=" << factor);
                 result = result.sheared (0.0f, factor);
             }
             else if (type == "matrix" && params.size() == 6)
             {
-                YUP_DBG("Applying matrix(" << params[0] << ", " << params[1] << ", " << params[2] << ", " << params[3] << ", " << params[4] << ", " << params[5] << ")");
+                YUP_DBG ("Applying matrix(" << params[0] << ", " << params[1] << ", " << params[2] << ", " << params[3] << ", " << params[4] << ", " << params[5] << ")");
                 result = result.followedBy (AffineTransform (
                     params[0], params[2], params[4], params[1], params[3], params[5]));
             }
         }
 
         e.transform = result;
-        YUP_DBG("Parsed element transform: " << result.toString());
+        YUP_DBG ("Parsed element transform: " << result.toString());
     }
 
     return currentTransform.followedBy (result);
@@ -1154,17 +1154,17 @@ float Drawable::parseUnit (const String& value, float defaultValue, float fontSi
 Rectangle<float> Drawable::calculateBounds() const
 {
     // Use viewBox if available, otherwise use size
-    if (!viewBox.isEmpty())
+    if (! viewBox.isEmpty())
         return viewBox;
-    
+
     if (size.getWidth() > 0 && size.getHeight() > 0)
         return Rectangle<float> (0, 0, size.getWidth(), size.getHeight());
-    
+
     // Fallback: calculate bounds from all elements with their transforms applied
     // This gives us the actual visual bounds of the rendered content
     Rectangle<float> bounds;
     bool hasValidBounds = false;
-    
+
     for (const auto& element : elements)
     {
         if (element->path)
@@ -1172,7 +1172,7 @@ Rectangle<float> Drawable::calculateBounds() const
             auto pathBounds = element->path->getBounds();
             if (element->transform)
                 pathBounds = element->path->getBoundsTransformed (*element->transform);
-                
+
             if (hasValidBounds)
                 bounds = bounds.unionWith (pathBounds);
             else
@@ -1182,7 +1182,7 @@ Rectangle<float> Drawable::calculateBounds() const
             }
         }
     }
-    
+
     return hasValidBounds ? bounds : Rectangle<float> (0, 0, 100, 100);
 }
 
@@ -1192,77 +1192,77 @@ AffineTransform Drawable::calculateTransformForTarget (const Rectangle<float>& s
 {
     if (sourceBounds.isEmpty() || targetArea.isEmpty())
         return AffineTransform::identity();
-    
+
     float scaleX = targetArea.getWidth() / sourceBounds.getWidth();
     float scaleY = targetArea.getHeight() / sourceBounds.getHeight();
-    
+
     // Apply scaling based on fitting mode
     switch (fitting)
     {
         case Fitting::none:
             scaleX = scaleY = 1.0f;
             break;
-            
+
         case Fitting::scaleToFit:
-            scaleX = scaleY = jmin (scaleX, scaleY);  // Scale to fit both dimensions
+            scaleX = scaleY = jmin (scaleX, scaleY); // Scale to fit both dimensions
             break;
-            
+
         case Fitting::fitWidth:
-            scaleY = scaleX;  // Scale to fit width, preserve aspect ratio
+            scaleY = scaleX; // Scale to fit width, preserve aspect ratio
             break;
-            
+
         case Fitting::fitHeight:
-            scaleX = scaleY;  // Scale to fit height, preserve aspect ratio
+            scaleX = scaleY; // Scale to fit height, preserve aspect ratio
             break;
-            
+
         case Fitting::scaleToFill:
         case Fitting::centerCrop:
-            scaleX = scaleY = jmax (scaleX, scaleY);  // Scale to fill, may crop
+            scaleX = scaleY = jmax (scaleX, scaleY); // Scale to fill, may crop
             break;
-            
+
         case Fitting::fill:
             // Use calculated scales as-is (non-uniform scaling)
             break;
-            
+
         case Fitting::centerInside:
             // Like scaleToFit but don't upscale beyond original size
             scaleX = scaleY = jmin (1.0f, jmin (scaleX, scaleY));
             break;
-            
+
         case Fitting::stretchWidth:
-            scaleY = 1.0f;  // Stretch horizontally only
+            scaleY = 1.0f; // Stretch horizontally only
             break;
-            
+
         case Fitting::stretchHeight:
-            scaleX = 1.0f;  // Stretch vertically only
+            scaleX = 1.0f; // Stretch vertically only
             break;
-            
+
         case Fitting::tile:
             // For tile mode, use no scaling (tiling would be handled elsewhere)
             scaleX = scaleY = 1.0f;
             break;
     }
-    
+
     // Calculate scaled size
     float scaledWidth = sourceBounds.getWidth() * scaleX;
     float scaledHeight = sourceBounds.getHeight() * scaleY;
-    
+
     // Calculate offset based on justification
     float offsetX = targetArea.getX();
     float offsetY = targetArea.getY();
-    
+
     // Horizontal justification
-    if ((static_cast<int>(justification) & static_cast<int>(Justification::horizontalCenter)) != 0)
+    if ((static_cast<int> (justification) & static_cast<int> (Justification::horizontalCenter)) != 0)
         offsetX += (targetArea.getWidth() - scaledWidth) * 0.5f;
-    else if ((static_cast<int>(justification) & static_cast<int>(Justification::right)) != 0)
+    else if ((static_cast<int> (justification) & static_cast<int> (Justification::right)) != 0)
         offsetX += targetArea.getWidth() - scaledWidth;
-    
+
     // Vertical justification
-    if ((static_cast<int>(justification) & static_cast<int>(Justification::verticalCenter)) != 0)
+    if ((static_cast<int> (justification) & static_cast<int> (Justification::verticalCenter)) != 0)
         offsetY += (targetArea.getHeight() - scaledHeight) * 0.5f;
-    else if ((static_cast<int>(justification) & static_cast<int>(Justification::bottom)) != 0)
+    else if ((static_cast<int> (justification) & static_cast<int> (Justification::bottom)) != 0)
         offsetY += targetArea.getHeight() - scaledHeight;
-    
+
     // Create transform: translate to origin, scale, then translate to target position
     return AffineTransform::translation (-sourceBounds.getX(), -sourceBounds.getY())
         .scaled (scaleX, scaleY)
@@ -1275,13 +1275,13 @@ Fitting Drawable::parsePreserveAspectRatio (const String& preserveAspectRatio)
 {
     if (preserveAspectRatio.isEmpty() || preserveAspectRatio == "xMidYMid meet")
         return Fitting::scaleToFit; // Default SVG behavior
-    
+
     if (preserveAspectRatio.contains ("none"))
         return Fitting::fill; // Non-uniform scaling allowed
-    
+
     if (preserveAspectRatio.contains ("slice"))
         return Fitting::scaleToFill; // Scale to fill, may crop
-    
+
     // Default to uniform scaling (meet)
     return Fitting::scaleToFit;
 }
@@ -1290,9 +1290,9 @@ Justification Drawable::parseAspectRatioAlignment (const String& preserveAspectR
 {
     if (preserveAspectRatio.isEmpty())
         return Justification::center; // Default SVG alignment
-    
+
     Justification result = Justification::left;
-    
+
     // Parse horizontal alignment
     if (preserveAspectRatio.contains ("xMin"))
         result = result | Justification::left;
@@ -1300,15 +1300,15 @@ Justification Drawable::parseAspectRatioAlignment (const String& preserveAspectR
         result = result | Justification::right;
     else // xMid (default)
         result = result | Justification::horizontalCenter;
-    
-    // Parse vertical alignment  
+
+    // Parse vertical alignment
     if (preserveAspectRatio.contains ("YMin"))
         result = result | Justification::top;
     else if (preserveAspectRatio.contains ("YMax"))
         result = result | Justification::bottom;
     else // YMid (default)
         result = result | Justification::verticalCenter;
-    
+
     return result;
 }
 

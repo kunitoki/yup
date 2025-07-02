@@ -58,7 +58,7 @@ constexpr Justification operator& (Justification lhs, Justification rhs) noexcep
     return static_cast<Justification> (static_cast<int> (lhs) & static_cast<int> (rhs));
 }
 
-constexpr Justification operator~ (Justification lhs) noexcept
+constexpr Justification operator~(Justification lhs) noexcept
 {
     return static_cast<Justification> (~static_cast<int> (lhs));
 }

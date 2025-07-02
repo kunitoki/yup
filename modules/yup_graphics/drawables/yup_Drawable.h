@@ -149,11 +149,11 @@ private:
     ClipPath* getClipPathById (const String& id);
     void parseCSSStyle (const String& styleString, Element& e);
     float parseUnit (const String& value, float defaultValue = 0.0f, float fontSize = 12.0f, float viewportSize = 100.0f);
-    
+
     // SVG preserveAspectRatio parsing
     Fitting parsePreserveAspectRatio (const String& preserveAspectRatio);
     Justification parseAspectRatioAlignment (const String& preserveAspectRatio);
-    
+
     // Helper methods for layout and painting
     Rectangle<float> calculateBounds() const;
     AffineTransform calculateTransformForTarget (const Rectangle<float>& sourceBounds, const Rectangle<float>& targetArea, Fitting fitting, Justification justification) const;

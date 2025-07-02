@@ -29,17 +29,17 @@ namespace yup
 */
 enum class Fitting
 {
-    none,             /**< Do not scale or fit at all. */
-    scaleToFit,       /**< Scale proportionally to fit within bounds (preserve aspect ratio, no cropping). */
-    fitWidth,         /**< Scale to match width, preserve aspect ratio. */
-    fitHeight,        /**< Scale to match height, preserve aspect ratio. */
-    scaleToFill,      /**< Scale proportionally to completely fill bounds (may crop, preserves aspect ratio). */
-    fill,             /**< Stretch to fill bounds completely (aspect ratio not preserved). */
-    tile,             /**< Repeat content to fill bounds (used in backgrounds, patterns). */
-    centerCrop,       /**< Like scaleToFill, but ensures the center remains visible (common in media). */
-    centerInside,     /**< Like scaleToFit, but does not upscale beyond original size. */
-    stretchWidth,     /**< Stretch horizontally, preserve vertical size. */
-    stretchHeight     /**< Stretch vertically, preserve horizontal size. */
+    none,         /**< Do not scale or fit at all. */
+    scaleToFit,   /**< Scale proportionally to fit within bounds (preserve aspect ratio, no cropping). */
+    fitWidth,     /**< Scale to match width, preserve aspect ratio. */
+    fitHeight,    /**< Scale to match height, preserve aspect ratio. */
+    scaleToFill,  /**< Scale proportionally to completely fill bounds (may crop, preserves aspect ratio). */
+    fill,         /**< Stretch to fill bounds completely (aspect ratio not preserved). */
+    tile,         /**< Repeat content to fill bounds (used in backgrounds, patterns). */
+    centerCrop,   /**< Like scaleToFill, but ensures the center remains visible (common in media). */
+    centerInside, /**< Like scaleToFit, but does not upscale beyond original size. */
+    stretchWidth, /**< Stretch horizontally, preserve vertical size. */
+    stretchHeight /**< Stretch vertically, preserve horizontal size. */
 };
 
 } // namespace yup
