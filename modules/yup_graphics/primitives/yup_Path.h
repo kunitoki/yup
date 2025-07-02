@@ -599,7 +599,8 @@ public:
 
     void closeSubPath();
 
-    bool isClosed() const;
+    bool isClosed (float tolerance = 0.001f) const;
+    bool isExplicitlyClosed() const;
 
     //==============================================================================
     /** Appends another path to this one.

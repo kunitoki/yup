@@ -208,15 +208,7 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
         {
             if (auto refElement = elementsById[*element.reference]; refElement != nullptr && refElement->path)
             {
-                /*
-                // For use elements, apply the referenced element's transform and render its path
-                // This ensures proper coordinate system handling for referenced elements
-                const auto referencedSavedState = g.saveState();
                 
-                if (refElement->transform)
-                    g.setTransform (*refElement->transform);
-                */
-
                 if (refElement->path->isClosed())
                     g.fillPath (*refElement->path);
             }
@@ -319,22 +311,15 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
         else if (element.reference)
         {
             if (auto refElement = elementsById[*element.reference]; refElement != nullptr && refElement->path)
-            {
-                /*
-                // For use elements, apply the referenced element's transform for stroke rendering
-                const auto referencedSavedState = g.saveState();
-                
-                if (refElement->transform)
-                    g.setTransform (*refElement->transform);
-                */
-
                 g.strokePath (*refElement->path);
-            }
         }
     }
 
     for (const auto& childElement : element.children)
+    {
+        YUP_DBG("Rendering child element - current graphics transform: " << g.getTransform().toString());
         paintElement (g, *childElement, isFillDefined, isStrokeDefined);
+    }
 
     // paintDebugElement (g, element);
 }
@@ -599,7 +584,10 @@ void Drawable::parseStyle (const XmlElement& element, const AffineTransform& cur
             if (fill.startsWith ("url(#"))
                 e.fillUrl = fill.substring (5, fill.length() - 1);
             else
+            {
                 e.fillColor = Color::fromString (fill);
+                YUP_DBG("Parsed fill color: " << fill << " -> " << e.fillColor->toString());
+            }
         }
         else
         {
@@ -740,29 +728,48 @@ AffineTransform Drawable::parseTransform (const XmlElement& element, const Affin
             // Apply the parsed transform
             if (type == "translate" && (params.size() == 1 || params.size() == 2))
             {
-                result = result.translated (params[0], (params.size() == 2) ? params[1] : 0.0f);
+                auto tx = params[0];
+                auto ty = (params.size() == 2) ? params[1] : 0.0f;
+                YUP_DBG("Applying translate(" << tx << ", " << ty << ")");
+                result = result.translated (tx, ty);
             }
             else if (type == "scale" && (params.size() == 1 || params.size() == 2))
             {
-                result = result.scaled (params[0], (params.size() == 2) ? params[1] : params[0]);
+                auto sx = params[0];
+                auto sy = (params.size() == 2) ? params[1] : params[0];
+                YUP_DBG("Applying scale(" << sx << ", " << sy << ")");
+                result = result.scaled (sx, sy);
             }
             else if (type == "rotate" && (params.size() == 1 || params.size() == 3))
             {
                 if (params.size() == 1)
+                {
+                    YUP_DBG("Applying rotate(" << params[0] << ")");
                     result = result.rotated (degreesToRadians (params[0]));
+                }
                 else
+                {
+                    YUP_DBG("Applying rotate(" << params[0] << ", " << params[1] << ", " << params[2] << ")");
                     result = result.rotated (degreesToRadians (params[0]), params[1], params[2]);
+                }
             }
             else if (type == "skewX" && params.size() == 1)
             {
-                result = result.sheared (std::tanf (degreesToRadians (params[0])), 0.0f);
+                auto angle = params[0];
+                auto factor = std::tanf (degreesToRadians (angle));
+                YUP_DBG("Applying skewX(" << angle << ") -> factor=" << factor);
+                result = result.sheared (factor, 0.0f);
             }
             else if (type == "skewY" && params.size() == 1)
             {
-                result = result.sheared (0.0f, std::tanf (degreesToRadians (params[0])));
+                auto angle = params[0];
+                auto factor = std::tanf (degreesToRadians (angle));
+                YUP_DBG("Applying skewY(" << angle << ") -> factor=" << factor);
+                result = result.sheared (0.0f, factor);
             }
             else if (type == "matrix" && params.size() == 6)
             {
+                YUP_DBG("Applying matrix(" << params[0] << ", " << params[1] << ", " << params[2] << ", " << params[3] << ", " << params[4] << ", " << params[5] << ")");
                 result = result.followedBy (AffineTransform (
                     params[0], params[2], params[4], params[1], params[3], params[5]));
             }

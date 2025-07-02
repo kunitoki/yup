@@ -858,7 +858,39 @@ void Path::closeSubPath()
     close();
 }
 
-bool Path::isClosed() const
+bool Path::isClosed (float tolerance) const
+{
+    auto first = begin();
+    auto last = end();
+    if (first == last)
+        return false;
+    
+    Point<float> firstPoint (0.0f, 0.0f);
+    Point<float> lastPoint (0.0f, 0.0f);
+    bool hasFirstPoint = false;
+
+    for (; first != last; ++first)
+    {
+        auto segment = *first;
+        if (segment.verb == PathVerb::MoveTo && ! hasFirstPoint)
+        {
+            firstPoint = segment.point;
+            hasFirstPoint = true;
+        }
+        
+        if (segment.verb != PathVerb::Close)
+            lastPoint = segment.point;
+        else
+            return true;
+    }
+    
+    if (! hasFirstPoint)
+        return false;
+    
+    return firstPoint.distanceTo (lastPoint) <= tolerance;
+}
+
+bool Path::isExplicitlyClosed() const
 {
     for (const auto& segment : *this)
     {
