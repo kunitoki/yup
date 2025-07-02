@@ -54,7 +54,57 @@ private:
 
         std::optional<float> opacity;
 
+        // Text properties
+        std::optional<String> text;
+        std::optional<Point<float>> textPosition;
+        std::optional<String> fontFamily;
+        std::optional<float> fontSize;
+        std::optional<String> textAnchor;
+
+        // Gradient properties
+        std::optional<String> fillUrl;
+        std::optional<String> strokeUrl;
+
+        // Image properties
+        std::optional<String> imageHref;
+        std::optional<Rectangle<float>> imageBounds;
+
+        // Clipping properties
+        std::optional<String> clipPathUrl;
+
         std::vector<std::shared_ptr<Element>> children;
+    };
+
+    struct GradientStop
+    {
+        float offset;
+        Color color;
+        float opacity = 1.0f;
+    };
+
+    struct Gradient
+    {
+        enum Type { Linear, Radial };
+        Type type;
+        String id;
+        
+        // Linear gradient properties
+        Point<float> start;
+        Point<float> end;
+        
+        // Radial gradient properties  
+        Point<float> center;
+        float radius = 0.0f;
+        Point<float> focal;
+        
+        std::vector<GradientStop> stops;
+        AffineTransform transform;
+    };
+
+    struct ClipPath
+    {
+        String id;
+        std::vector<std::shared_ptr<Element>> elements;
     };
 
     void paintElement (Graphics& g, const Element& element, bool hasParentFillEnabled, bool hasParentStrokeEnabled);
@@ -62,12 +112,22 @@ private:
     bool parseElement (const XmlElement& element, bool parentIsRoot, AffineTransform currentTransform, Element* parent = nullptr);
     void parseStyle (const XmlElement& element, const AffineTransform& currentTransform, Element& e);
     AffineTransform parseTransform (const XmlElement& element, const AffineTransform& currentTransform, Element& e);
+    void parseGradient (const XmlElement& element);
+    Gradient* getGradientById (const String& id);
+    ColorGradient createColorGradientFromSVG (const Gradient& gradient);
+    void parseClipPath (const XmlElement& element);
+    ClipPath* getClipPathById (const String& id);
+    void parseCSSStyle (const String& styleString, Element& e);
 
     Rectangle<float> viewBox;
     Size<float> size;
     AffineTransform transform;
     std::vector<std::shared_ptr<Element>> elements;
     HashMap<String, std::shared_ptr<Element>> elementsById;
+    std::vector<Gradient> gradients;
+    HashMap<String, Gradient*> gradientsById;
+    std::vector<ClipPath> clipPaths;
+    HashMap<String, ClipPath*> clipPathsById;
 };
 
 } // namespace yup
