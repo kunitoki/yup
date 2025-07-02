@@ -191,7 +191,7 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
         {
             if (auto refElement = elementsById[*element.reference]; refElement != nullptr && refElement->path)
             {
-                if (refElement.path->isClosed())
+                if (refElement->path->isClosed())
                     g.fillPath (*refElement->path);
             }
         }
