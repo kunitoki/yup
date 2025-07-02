@@ -180,6 +180,8 @@ public:
     */
     int size() const;
 
+    bool isEmpty() const { return size() == 0; }
+
     //==============================================================================
     /** Clears all the segments from the path.
 
@@ -521,6 +523,11 @@ public:
     Path& addCenteredArc (const Point<float>& center, const Size<float>& diameter, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath);
 
     //==============================================================================
+    void addTriangle (float x1, float y1, float x2, float y2, float x3, float y3);
+
+    void addTriangle (const Point<float>& p1, const Point<float>& p2, const Point<float>& p3);
+
+    //==============================================================================
     /** Adds a regular polygon to the path.
 
         This method appends a regular polygon with the specified number of sides, centered at the given point
@@ -531,7 +538,7 @@ public:
         @param radius The radius from the center to each vertex.
         @param startAngle The starting angle in radians (0.0f starts at the right).
     */
-    Path& addPolygon (Point<float> centre, int numberOfSides, float radius, float startAngle = 0.0f);
+    Path& addPolygon (const Point<float>& centre, int numberOfSides, float radius, float startAngle = 0.0f);
 
     //==============================================================================
     /** Adds a star shape to the path.
@@ -545,7 +552,7 @@ public:
         @param outerRadius The radius from the center to the outer vertices.
         @param startAngle The starting angle in radians (0.0f starts at the right).
     */
-    Path& addStar (Point<float> centre, int numberOfPoints, float innerRadius, float outerRadius, float startAngle = 0.0f);
+    Path& addStar (const Point<float>& centre, int numberOfPoints, float innerRadius, float outerRadius, float startAngle = 0.0f);
 
     //==============================================================================
     /** Adds a speech bubble shape to the path.
@@ -559,7 +566,7 @@ public:
         @param cornerSize The radius of the rounded corners.
         @param arrowBaseWidth The width of the arrow at its base.
     */
-    Path& addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, Point<float> arrowTipPosition, float cornerSize, float arrowBaseWidth);
+    Path& addBubble (const Rectangle<float>& bodyArea, const Rectangle<float>& maximumArea, const Point<float>& arrowTipPosition, float cornerSize, float arrowBaseWidth);
 
     //==============================================================================
     /** Converts the path to a stroke polygon with specified width.
@@ -584,6 +591,13 @@ public:
         @return A new Path with rounded corners applied.
     */
     Path withRoundedCorners (float cornerRadius) const;
+
+    //==============================================================================
+
+    void startNewSubPath (float x, float y);
+    void startNewSubPath (const Point<float>& p);
+
+    void closeSubPath();
 
     //==============================================================================
     /** Appends another path to this one.

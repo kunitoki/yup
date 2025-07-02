@@ -568,7 +568,24 @@ Path& Path::addCenteredArc (const Point<float>& center, const Size<float>& diame
 
 //==============================================================================
 
-Path& Path::addPolygon (Point<float> centre, int numberOfSides, float radius, float startAngle)
+void Path::addTriangle (float x1, float y1, float x2, float y2, float x3, float y3)
+{
+    addTriangle ({ x1, y1 }, { x2, y2 }, { x3, y3 });
+}
+
+void Path::addTriangle (const Point<float>& p1, const Point<float>& p2, const Point<float>& p3)
+{
+    reserveSpace (size() + 4);
+
+    moveTo (p1);
+    lineTo (p2);
+    lineTo (p3);
+    close();
+}
+
+//==============================================================================
+
+Path& Path::addPolygon (const Point<float>& centre, int numberOfSides, float radius, float startAngle)
 {
     if (numberOfSides < 3)
         return *this;
@@ -601,7 +618,7 @@ Path& Path::addPolygon (Point<float> centre, int numberOfSides, float radius, fl
 
 //==============================================================================
 
-Path& Path::addStar (Point<float> centre, int numberOfPoints, float innerRadius, float outerRadius, float startAngle)
+Path& Path::addStar (const Point<float>& centre, int numberOfPoints, float innerRadius, float outerRadius, float startAngle)
 {
     if (numberOfPoints < 3)
         return *this;
@@ -636,7 +653,7 @@ Path& Path::addStar (Point<float> centre, int numberOfPoints, float innerRadius,
 
 //==============================================================================
 
-Path& Path::addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, Point<float> arrowTipPosition, float cornerSize, float arrowBaseWidth)
+Path& Path::addBubble (const Rectangle<float>& bodyArea, const Rectangle<float>& maximumArea, const Point<float>& arrowTipPosition, float cornerSize, float arrowBaseWidth)
 {
     if (bodyArea.isEmpty() || maximumArea.isEmpty() || arrowBaseWidth <= 0.0f)
         return *this;
@@ -819,6 +836,23 @@ Path& Path::addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, 
     close();
 
     return *this;
+}
+
+//==============================================================================
+
+void Path::startNewSubPath (float x, float y)
+{
+    moveTo (x, y);
+}
+
+void Path::startNewSubPath (const Point<float>& p)
+{
+    moveTo (p.getX(), p.getY());
+}
+
+void Path::closeSubPath()
+{
+    close();
 }
 
 //==============================================================================
