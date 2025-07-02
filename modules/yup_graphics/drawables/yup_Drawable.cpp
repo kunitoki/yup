@@ -58,7 +58,7 @@ bool Drawable::parseSVG (const File& svgFile)
     size.setHeight (height == 0.0 ? viewBox.getHeight() : height);
 
     // Calculate the viewBox to viewport transformation
-    if (!viewBox.isEmpty())
+    if (! viewBox.isEmpty())
     {
         /*
         // If no explicit width/height, use viewBox dimensions as size
@@ -136,7 +136,7 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
 
     if (element.opacity)
         g.setOpacity (g.getOpacity() * (*element.opacity));
-    
+
     // Apply clipping path if specified
     bool hasClipping = false;
     if (element.clipPathUrl)
@@ -150,8 +150,8 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
                 if (clipElement->path)
                     combinedClipPath.appendPath (*clipElement->path);
             }
-            
-            if (!combinedClipPath.isEmpty())
+
+            if (! combinedClipPath.isEmpty())
             {
                 g.setClipPath (combinedClipPath);
                 hasClipping = true;
@@ -268,13 +268,13 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
 
     if (element.strokeWidth)
         g.setStrokeWidth (*element.strokeWidth);
-    
+
     // Apply stroke dash patterns
     if (element.strokeDashArray)
     {
         // Convert Array<float> to what Graphics expects
         const auto& dashArray = *element.strokeDashArray;
-        if (!dashArray.isEmpty())
+        if (! dashArray.isEmpty())
         {
             // TODO: Graphics class needs stroke dash pattern support
             // For now, this is prepared for when Graphics supports it
@@ -382,8 +382,10 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
         auto path = Path();
         if (rx > 0.0 || ry > 0.0)
         {
-            if (rx == 0.0) rx = ry;
-            if (ry == 0.0) ry = rx;
+            if (rx == 0.0)
+                rx = ry;
+            if (ry == 0.0)
+                ry = rx;
             path.addRoundedRectangle (x, y, width, height, rx, ry, rx, ry);
         }
         else
@@ -417,14 +419,14 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
         {
             auto path = Path();
             auto coords = StringArray::fromTokens (points, " ,", "");
-            
+
             if (coords.size() >= 4 && coords.size() % 2 == 0)
             {
                 path.startNewSubPath (coords[0].getFloatValue(), coords[1].getFloatValue());
-                
+
                 for (int i = 2; i < coords.size(); i += 2)
                     path.lineTo (coords[i].getFloatValue(), coords[i + 1].getFloatValue());
-                
+
                 path.closeSubPath();
             }
             e->path = std::move (path);
@@ -440,11 +442,11 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
         {
             auto path = Path();
             auto coords = StringArray::fromTokens (points, " ,", "");
-            
+
             if (coords.size() >= 4 && coords.size() % 2 == 0)
             {
                 path.startNewSubPath (coords[0].getFloatValue(), coords[1].getFloatValue());
-                
+
                 for (int i = 2; i < coords.size(); i += 2)
                     path.lineTo (coords[i].getFloatValue(), coords[i + 1].getFloatValue());
             }
@@ -461,15 +463,15 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
         e->textPosition = Point<float> (x, y);
 
         e->text = element.getAllSubText();
-        
+
         String fontFamily = element.getStringAttribute ("font-family");
         if (fontFamily.isNotEmpty())
             e->fontFamily = fontFamily;
-        
+
         auto fontSize = element.getDoubleAttribute ("font-size");
         if (fontSize > 0.0)
             e->fontSize = fontSize;
-        
+
         String textAnchor = element.getStringAttribute ("text-anchor");
         if (textAnchor.isNotEmpty())
             e->textAnchor = textAnchor;
@@ -483,13 +485,13 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
         auto y = element.getDoubleAttribute ("y");
         auto width = element.getDoubleAttribute ("width");
         auto height = element.getDoubleAttribute ("height");
-        
+
         e->imageBounds = Rectangle<float> (x, y, width, height);
-        
+
         String href = element.getStringAttribute ("href");
         if (href.isEmpty())
             href = element.getStringAttribute ("xlink:href");
-        
+
         if (href.isNotEmpty())
             e->imageHref = href;
 
@@ -530,7 +532,7 @@ void Drawable::parseStyle (const XmlElement& element, const AffineTransform& cur
     String styleAttr = element.getStringAttribute ("style");
     if (styleAttr.isNotEmpty())
         parseCSSStyle (styleAttr, e);
-    
+
     // Parse individual attributes (these override style attribute values)
     String fill = element.getStringAttribute ("fill");
     if (fill.isNotEmpty())
@@ -587,7 +589,7 @@ void Drawable::parseStyle (const XmlElement& element, const AffineTransform& cur
     float opacity = element.getDoubleAttribute ("opacity", -1.0);
     if (opacity >= 0.0 && opacity <= 1.0)
         e.opacity = opacity;
-    
+
     String clipPath = element.getStringAttribute ("clip-path");
     if (clipPath.isNotEmpty() && clipPath.startsWith ("url(#"))
         e.clipPathUrl = clipPath.substring (5, clipPath.length() - 1);
@@ -597,7 +599,7 @@ void Drawable::parseStyle (const XmlElement& element, const AffineTransform& cur
     if (dashArray.isNotEmpty() && dashArray != "none")
     {
         auto dashValues = StringArray::fromTokens (dashArray, " ,", "");
-        if (!dashValues.isEmpty())
+        if (! dashValues.isEmpty())
         {
             Array<float> dashes;
             for (const auto& dash : dashValues)
@@ -607,11 +609,11 @@ void Drawable::parseStyle (const XmlElement& element, const AffineTransform& cur
                     dashes.add (value);
             }
 
-            if (!dashes.isEmpty())
+            if (! dashes.isEmpty())
                 e.strokeDashArray = dashes;
         }
     }
-    
+
     // Parse stroke-dashoffset
     String dashOffset = element.getStringAttribute ("stroke-dashoffset");
     if (dashOffset.isNotEmpty())
@@ -749,13 +751,13 @@ void Drawable::paintDebugElement (Graphics& g, const Element& element)
 void Drawable::parseGradient (const XmlElement& element)
 {
     Gradient gradient;
-    
+
     String id = element.getStringAttribute ("id");
     if (id.isEmpty())
         return;
-    
+
     gradient.id = id;
-    
+
     if (element.hasTagName ("linearGradient"))
     {
         gradient.type = Gradient::Linear;
@@ -767,12 +769,12 @@ void Drawable::parseGradient (const XmlElement& element)
         gradient.type = Gradient::Radial;
         gradient.center = { (float) element.getDoubleAttribute ("cx"), (float) element.getDoubleAttribute ("cy") };
         gradient.radius = element.getDoubleAttribute ("r");
-        
+
         auto fx = element.getDoubleAttribute ("fx", gradient.center.getX());
         auto fy = element.getDoubleAttribute ("fy", gradient.center.getY());
         gradient.focal = { (float) fx, (float) fy };
     }
-    
+
     // Parse gradient stops
     for (auto* child = element.getFirstChildElement(); child != nullptr; child = child->getNextElement())
     {
@@ -780,17 +782,17 @@ void Drawable::parseGradient (const XmlElement& element)
         {
             GradientStop stop;
             stop.offset = child->getDoubleAttribute ("offset");
-            
+
             String stopColor = child->getStringAttribute ("stop-color");
             if (stopColor.isNotEmpty())
                 stop.color = Color::fromString (stopColor);
-            
+
             stop.opacity = child->getDoubleAttribute ("stop-opacity", 1.0);
-            
+
             gradient.stops.push_back (stop);
         }
     }
-    
+
     gradients.push_back (gradient);
     gradientsById.set (id, &gradients.back());
 }
@@ -808,21 +810,20 @@ ColorGradient Drawable::createColorGradientFromSVG (const Gradient& gradient)
 {
     if (gradient.stops.empty())
         return ColorGradient();
-        
+
     if (gradient.stops.size() == 1)
     {
         const auto& stop = gradient.stops[0];
         Color color = stop.color.withAlpha (stop.opacity);
-        return ColorGradient (color, 0, 0, color, 1, 0, 
-                              gradient.type == Gradient::Linear ? ColorGradient::Linear : ColorGradient::Radial);
+        return ColorGradient (color, 0, 0, color, 1, 0, gradient.type == Gradient::Linear ? ColorGradient::Linear : ColorGradient::Radial);
     }
-    
+
     // Create ColorStop vector for YUP ColorGradient
     std::vector<ColorGradient::ColorStop> colorStops;
     for (const auto& stop : gradient.stops)
     {
         Color color = stop.color.withAlpha (stop.opacity);
-        
+
         if (gradient.type == Gradient::Linear)
         {
             // For linear gradients, interpolate position based on offset
@@ -836,7 +837,7 @@ ColorGradient Drawable::createColorGradientFromSVG (const Gradient& gradient)
             colorStops.emplace_back (color, gradient.center.getX(), gradient.center.getY(), stop.offset);
         }
     }
-    
+
     ColorGradient::Type type = (gradient.type == Gradient::Linear) ? ColorGradient::Linear : ColorGradient::Radial;
     return ColorGradient (type, colorStops);
 }
@@ -846,18 +847,18 @@ ColorGradient Drawable::createColorGradientFromSVG (const Gradient& gradient)
 void Drawable::parseClipPath (const XmlElement& element)
 {
     ClipPath clipPath;
-    
+
     String id = element.getStringAttribute ("id");
     if (id.isEmpty())
         return;
-    
+
     clipPath.id = id;
-    
+
     // Parse child elements that make up the clipping path
     for (auto* child = element.getFirstChildElement(); child != nullptr; child = child->getNextElement())
     {
         auto clipElement = std::make_shared<Element>();
-        
+
         if (child->hasTagName ("path"))
         {
             auto path = Path();
@@ -871,7 +872,7 @@ void Drawable::parseClipPath (const XmlElement& element)
             auto y = child->getDoubleAttribute ("y");
             auto width = child->getDoubleAttribute ("width");
             auto height = child->getDoubleAttribute ("height");
-            
+
             auto path = Path();
             path.addRectangle (x, y, width, height);
             clipElement->path = std::move (path);
@@ -881,16 +882,16 @@ void Drawable::parseClipPath (const XmlElement& element)
             auto cx = child->getDoubleAttribute ("cx");
             auto cy = child->getDoubleAttribute ("cy");
             auto r = child->getDoubleAttribute ("r");
-            
+
             auto path = Path();
             path.addCenteredEllipse (cx, cy, r, r);
             clipElement->path = std::move (path);
         }
-        
+
         if (clipElement->path)
             clipPath.elements.push_back (clipElement);
     }
-    
+
     clipPaths.push_back (clipPath);
     clipPathsById.set (id, &clipPaths.back());
 }
@@ -908,7 +909,7 @@ void Drawable::parseCSSStyle (const String& styleString, Element& e)
 {
     // Parse CSS style declarations separated by semicolons
     auto declarations = StringArray::fromTokens (styleString, ";", "");
-    
+
     for (const auto& declaration : declarations)
     {
         auto colonPos = declaration.indexOf (":");
@@ -916,7 +917,7 @@ void Drawable::parseCSSStyle (const String& styleString, Element& e)
         {
             String property = declaration.substring (0, colonPos).trim();
             String value = declaration.substring (colonPos + 1).trim();
-            
+
             if (property == "fill")
             {
                 if (value != "none")
@@ -999,7 +1000,7 @@ void Drawable::parseCSSStyle (const String& styleString, Element& e)
                 if (value != "none")
                 {
                     auto dashValues = StringArray::fromTokens (value, " ,", "");
-                    if (!dashValues.isEmpty())
+                    if (! dashValues.isEmpty())
                     {
                         Array<float> dashes;
                         for (const auto& dash : dashValues)
@@ -1009,7 +1010,7 @@ void Drawable::parseCSSStyle (const String& styleString, Element& e)
                                 dashes.add (dashValue);
                         }
 
-                        if (!dashes.isEmpty())
+                        if (! dashes.isEmpty())
                             e.strokeDashArray = dashes;
                     }
                 }
@@ -1028,55 +1029,51 @@ float Drawable::parseUnit (const String& value, float defaultValue, float fontSi
 {
     if (value.isEmpty())
         return defaultValue;
-    
+
     String trimmed = value.trim();
     if (trimmed.isEmpty())
         return defaultValue;
-    
+
     // Extract numeric part and unit
     int unitStart = 0;
-    while (unitStart < trimmed.length() && 
-           (CharacterFunctions::isDigit (trimmed[unitStart]) || 
-            trimmed[unitStart] == '.' || 
-            trimmed[unitStart] == '-' || 
-            trimmed[unitStart] == '+'))
+    while (unitStart < trimmed.length() && (CharacterFunctions::isDigit (trimmed[unitStart]) || trimmed[unitStart] == '.' || trimmed[unitStart] == '-' || trimmed[unitStart] == '+'))
     {
         unitStart++;
     }
-    
+
     float numericValue = trimmed.substring (0, unitStart).getFloatValue();
     String unit = trimmed.substring (unitStart).trim().toLowerCase();
-    
+
     // Handle different SVG units
     if (unit.isEmpty() || unit == "px")
-        return numericValue;  // Default user units or pixels
+        return numericValue; // Default user units or pixels
 
     else if (unit == "pt")
-        return numericValue * 1.333333f;  // 1pt = 1.333px
+        return numericValue * 1.333333f; // 1pt = 1.333px
 
     else if (unit == "pc")
-        return numericValue * 16.0f;      // 1pc = 16px
+        return numericValue * 16.0f; // 1pc = 16px
 
     else if (unit == "mm")
-        return numericValue * 3.779528f;  // 1mm = 3.779528px (96 DPI)
+        return numericValue * 3.779528f; // 1mm = 3.779528px (96 DPI)
 
     else if (unit == "cm")
-        return numericValue * 37.79528f;  // 1cm = 37.79528px (96 DPI)
+        return numericValue * 37.79528f; // 1cm = 37.79528px (96 DPI)
 
     else if (unit == "in")
-        return numericValue * 96.0f;      // 1in = 96px (96 DPI)
+        return numericValue * 96.0f; // 1in = 96px (96 DPI)
 
     else if (unit == "em")
-        return numericValue * fontSize;   // Relative to font size
+        return numericValue * fontSize; // Relative to font size
 
     else if (unit == "ex")
-        return numericValue * fontSize * 0.5f;  // Approximately 0.5em
+        return numericValue * fontSize * 0.5f; // Approximately 0.5em
 
     else if (unit == "%")
-        return numericValue * viewportSize * 0.01f;  // Percentage of viewport
+        return numericValue * viewportSize * 0.01f; // Percentage of viewport
 
     else
-        return numericValue;  // Unknown unit, treat as user units
+        return numericValue; // Unknown unit, treat as user units
 }
 
 } // namespace yup

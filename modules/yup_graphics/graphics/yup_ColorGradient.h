@@ -87,7 +87,7 @@ public:
     {
         stops.emplace_back (color1, x1, y1, 0.0f);
         stops.emplace_back (color2, x2, y2, 1.0f);
-        
+
         if (type == Radial)
             radius = std::sqrt (square (x2 - x1) + square (y2 - y1));
     }
@@ -240,7 +240,8 @@ public:
     void addColorStop (Color color, float x, float y, float delta)
     {
         stops.emplace_back (color, x, y, delta);
-        std::sort (stops.begin(), stops.end(), [](const ColorStop& a, const ColorStop& b) {
+        std::sort (stops.begin(), stops.end(), [] (const ColorStop& a, const ColorStop& b)
+        {
             return a.delta < b.delta;
         });
     }

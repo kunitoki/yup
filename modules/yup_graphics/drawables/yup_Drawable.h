@@ -86,19 +86,24 @@ private:
 
     struct Gradient
     {
-        enum Type { Linear, Radial };
+        enum Type
+        {
+            Linear,
+            Radial
+        };
+
         Type type;
         String id;
-        
+
         // Linear gradient properties
         Point<float> start;
         Point<float> end;
-        
-        // Radial gradient properties  
+
+        // Radial gradient properties
         Point<float> center;
         float radius = 0.0f;
         Point<float> focal;
-        
+
         std::vector<GradientStop> stops;
         AffineTransform transform;
     };

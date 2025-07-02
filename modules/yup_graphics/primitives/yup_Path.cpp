@@ -1292,7 +1292,7 @@ void handleQuadTo (String::CharPointerType& data, Path& path, float& currentX, f
 
         currentX = x;
         currentY = y;
-        
+
         // Update the last control point for smooth curves
         lastQuadX = x1;
         lastQuadY = y1;
@@ -1368,7 +1368,7 @@ void handleCubicTo (String::CharPointerType& data, Path& path, float& currentX, 
 
         currentX = x;
         currentY = y;
-        
+
         // Update the last control point for smooth curves (second control point)
         lastControlX = x2;
         lastControlY = y2;

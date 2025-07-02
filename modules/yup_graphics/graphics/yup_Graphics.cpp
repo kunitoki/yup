@@ -123,10 +123,10 @@ void convertRawPathToRenderPath (const rive::RawPath& input, rive::RenderPath* o
 rive::rcp<rive::RenderShader> toColorGradient (rive::Factory& factory, const ColorGradient& gradient, const AffineTransform& transform)
 {
     const auto& colorStops = gradient.getStops();
-    
+
     if (colorStops.empty())
         return nullptr;
-    
+
     // Handle single color stop as solid color
     if (colorStops.size() == 1)
     {
@@ -138,10 +138,10 @@ rive::rcp<rive::RenderShader> toColorGradient (rive::Factory& factory, const Col
     // Create dynamic arrays for colors and stops
     std::vector<uint32> colors;
     std::vector<float> stops;
-    
+
     colors.reserve (colorStops.size());
     stops.reserve (colorStops.size());
-    
+
     for (const auto& stop : colorStops)
     {
         colors.push_back (stop.color);
