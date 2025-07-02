@@ -855,6 +855,17 @@ void Path::closeSubPath()
     close();
 }
 
+bool Path::isClosed() const
+{
+    for (const auto& segment : *this)
+    {
+        if (segment.verb == PathVerb::Close)
+            return true;
+    }
+
+    return false;
+}
+
 //==============================================================================
 
 Path& Path::appendPath (const Path& other)

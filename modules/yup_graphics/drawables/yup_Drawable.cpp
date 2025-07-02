@@ -174,17 +174,26 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
             isFillDefined = true;
         }
     }
+    else if (hasParentFillEnabled)
+    {
+        // Inherit parent fill - don't change graphics state, just mark as defined
+        isFillDefined = true;
+    }
 
     if (isFillDefined && ! element.noFill)
     {
         if (element.path)
         {
-            g.fillPath (*element.path);
+            if (element.path->isClosed())
+                g.fillPath (*element.path);
         }
         else if (element.reference)
         {
             if (auto refElement = elementsById[*element.reference]; refElement != nullptr && refElement->path)
-                g.fillPath (*refElement->path);
+            {
+                if (refElement.path->isClosed())
+                    g.fillPath (*refElement->path);
+            }
         }
         else if (element.text && element.textPosition)
         {
@@ -244,6 +253,11 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
             g.setStrokeColorGradient (colorGradient);
             isStrokeDefined = true;
         }
+    }
+    else if (hasParentStrokeEnabled)
+    {
+        // Inherit parent stroke - don't change graphics state, just mark as defined
+        isStrokeDefined = true;
     }
 
     if (element.strokeJoin)
@@ -524,13 +538,9 @@ void Drawable::parseStyle (const XmlElement& element, const AffineTransform& cur
         if (fill != "none")
         {
             if (fill.startsWith ("url(#"))
-            {
                 e.fillUrl = fill.substring (5, fill.length() - 1);
-            }
             else
-            {
                 e.fillColor = Color::fromString (fill);
-            }
         }
         else
         {
@@ -544,13 +554,9 @@ void Drawable::parseStyle (const XmlElement& element, const AffineTransform& cur
         if (stroke != "none")
         {
             if (stroke.startsWith ("url(#"))
-            {
                 e.strokeUrl = stroke.substring (5, stroke.length() - 1);
-            }
             else
-            {
                 e.strokeColor = Color::fromString (stroke);
-            }
         }
         else
         {
@@ -576,9 +582,7 @@ void Drawable::parseStyle (const XmlElement& element, const AffineTransform& cur
 
     float strokeWidth = element.getDoubleAttribute ("stroke-width", -1.0);
     if (strokeWidth > 0.0)
-    {
         e.strokeWidth = strokeWidth;
-    }
 
     float opacity = element.getDoubleAttribute ("opacity", -1.0);
     if (opacity >= 0.0 && opacity <= 1.0)
@@ -586,10 +590,8 @@ void Drawable::parseStyle (const XmlElement& element, const AffineTransform& cur
     
     String clipPath = element.getStringAttribute ("clip-path");
     if (clipPath.isNotEmpty() && clipPath.startsWith ("url(#"))
-    {
         e.clipPathUrl = clipPath.substring (5, clipPath.length() - 1);
-    }
-    
+
     // Parse stroke-dasharray
     String dashArray = element.getStringAttribute ("stroke-dasharray");
     if (dashArray.isNotEmpty() && dashArray != "none")
@@ -604,6 +606,7 @@ void Drawable::parseStyle (const XmlElement& element, const AffineTransform& cur
                 if (value >= 0.0f)
                     dashes.add (value);
             }
+
             if (!dashes.isEmpty())
                 e.strokeDashArray = dashes;
         }
@@ -612,9 +615,7 @@ void Drawable::parseStyle (const XmlElement& element, const AffineTransform& cur
     // Parse stroke-dashoffset
     String dashOffset = element.getStringAttribute ("stroke-dashoffset");
     if (dashOffset.isNotEmpty())
-    {
         e.strokeDashOffset = parseUnit (dashOffset);
-    }
 }
 
 //==============================================================================
@@ -703,10 +704,6 @@ AffineTransform Drawable::parseTransform (const XmlElement& element, const Affin
             }
             else if (type == "matrix" && params.size() == 6)
             {
-                // SVG matrix(a,b,c,d,e,f) maps to different parameter order in YUP AffineTransform
-                // SVG: matrix(scaleX, shearY, shearX, scaleY, translateX, translateY)
-                // YUP: AffineTransform(scaleX, shearX, translateX, shearY, scaleY, translateY)
-                // Conversion: AffineTransform(a, c, e, b, d, f)
                 result = result.followedBy (AffineTransform (
                     params[0], params[2], params[4], params[1], params[3], params[5]));
             }
@@ -817,7 +814,7 @@ ColorGradient Drawable::createColorGradientFromSVG (const Gradient& gradient)
         const auto& stop = gradient.stops[0];
         Color color = stop.color.withAlpha (stop.opacity);
         return ColorGradient (color, 0, 0, color, 1, 0, 
-                             gradient.type == Gradient::Linear ? ColorGradient::Linear : ColorGradient::Radial);
+                              gradient.type == Gradient::Linear ? ColorGradient::Linear : ColorGradient::Radial);
     }
     
     // Create ColorStop vector for YUP ColorGradient
@@ -1011,6 +1008,7 @@ void Drawable::parseCSSStyle (const String& styleString, Element& e)
                             if (dashValue >= 0.0f)
                                 dashes.add (dashValue);
                         }
+
                         if (!dashes.isEmpty())
                             e.strokeDashArray = dashes;
                     }
@@ -1052,22 +1050,31 @@ float Drawable::parseUnit (const String& value, float defaultValue, float fontSi
     // Handle different SVG units
     if (unit.isEmpty() || unit == "px")
         return numericValue;  // Default user units or pixels
+
     else if (unit == "pt")
         return numericValue * 1.333333f;  // 1pt = 1.333px
+
     else if (unit == "pc")
         return numericValue * 16.0f;      // 1pc = 16px
+
     else if (unit == "mm")
         return numericValue * 3.779528f;  // 1mm = 3.779528px (96 DPI)
+
     else if (unit == "cm")
         return numericValue * 37.79528f;  // 1cm = 37.79528px (96 DPI)
+
     else if (unit == "in")
         return numericValue * 96.0f;      // 1in = 96px (96 DPI)
+
     else if (unit == "em")
         return numericValue * fontSize;   // Relative to font size
+
     else if (unit == "ex")
         return numericValue * fontSize * 0.5f;  // Approximately 0.5em
+
     else if (unit == "%")
         return numericValue * viewportSize * 0.01f;  // Percentage of viewport
+
     else
         return numericValue;  // Unknown unit, treat as user units
 }

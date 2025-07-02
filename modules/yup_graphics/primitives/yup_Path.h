@@ -599,6 +599,8 @@ public:
 
     void closeSubPath();
 
+    bool isClosed() const;
+
     //==============================================================================
     /** Appends another path to this one.
 
