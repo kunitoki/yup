@@ -208,6 +208,10 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
         {
             if (auto refElement = elementsById[*element.reference]; refElement != nullptr && refElement->path)
             {
+                YUP_DBG("Rendering use element - reference: " << *element.reference);
+                YUP_DBG("Use element transform: " << (element.transform ? element.transform->toString() : "none"));
+                YUP_DBG("Referenced element transform: " << (refElement->transform ? refElement->transform->toString() : "none"));
+                YUP_DBG("Graphics transform during use fill: " << g.getTransform().toString());
                 
                 if (refElement->path->isClosed())
                     g.fillPath (*refElement->path);
@@ -311,7 +315,11 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
         else if (element.reference)
         {
             if (auto refElement = elementsById[*element.reference]; refElement != nullptr && refElement->path)
+            {
+                YUP_DBG("Stroking use element - reference: " << *element.reference);
+                YUP_DBG("Graphics transform during stroke: " << g.getTransform().toString());
                 g.strokePath (*refElement->path);
+            }
         }
     }
 
