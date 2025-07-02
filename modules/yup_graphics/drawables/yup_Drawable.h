@@ -132,7 +132,7 @@ private:
         Type type;
         String id;
         Units units = ObjectBoundingBox; // Default per SVG spec
-        String href; // xlink:href reference to another gradient
+        String href;                     // xlink:href reference to another gradient
 
         // Linear gradient properties
         Point<float> start;

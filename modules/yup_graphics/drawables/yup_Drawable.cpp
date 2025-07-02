@@ -729,17 +729,17 @@ void Drawable::parseStyle (const XmlElement& element, const AffineTransform& cur
     String dashOffset = element.getStringAttribute ("stroke-dashoffset");
     if (dashOffset.isNotEmpty())
         e.strokeDashOffset = parseUnit (dashOffset);
-    
+
     // Parse fill-opacity
     float fillOpacity = element.getDoubleAttribute ("fill-opacity", -1.0);
     if (fillOpacity >= 0.0 && fillOpacity <= 1.0)
         e.fillOpacity = fillOpacity;
-    
+
     // Parse stroke-opacity
     float strokeOpacity = element.getDoubleAttribute ("stroke-opacity", -1.0);
     if (strokeOpacity >= 0.0 && strokeOpacity <= 1.0)
         e.strokeOpacity = strokeOpacity;
-    
+
     // Parse fill-rule
     String fillRule = element.getStringAttribute ("fill-rule");
     if (fillRule == "evenodd" || fillRule == "nonzero")
@@ -774,7 +774,7 @@ AffineTransform Drawable::parseTransform (const String& transformString)
 
     AffineTransform result;
     auto data = transformString.getCharPointer();
-    
+
     while (! data.isEmpty())
     {
         // Skip whitespace
@@ -918,9 +918,8 @@ void Drawable::parseGradient (const XmlElement& element)
         gradient->type = Gradient::Linear;
         gradient->start = { (float) element.getDoubleAttribute ("x1"), (float) element.getDoubleAttribute ("y1") };
         gradient->end = { (float) element.getDoubleAttribute ("x2"), (float) element.getDoubleAttribute ("y2") };
-        
-        YUP_DBG ("Linear gradient - start: (" << gradient->start.getX() << ", " << gradient->start.getY() << 
-                 ") end: (" << gradient->end.getX() << ", " << gradient->end.getY() << ")");
+
+        YUP_DBG ("Linear gradient - start: (" << gradient->start.getX() << ", " << gradient->start.getY() << ") end: (" << gradient->end.getX() << ", " << gradient->end.getY() << ")");
     }
     else if (element.hasTagName ("radialGradient"))
     {
@@ -931,9 +930,8 @@ void Drawable::parseGradient (const XmlElement& element)
         auto fx = element.getDoubleAttribute ("fx", gradient->center.getX());
         auto fy = element.getDoubleAttribute ("fy", gradient->center.getY());
         gradient->focal = { (float) fx, (float) fy };
-        
-        YUP_DBG ("Radial gradient - center: (" << gradient->center.getX() << ", " << gradient->center.getY() << 
-                 ") radius: " << gradient->radius);
+
+        YUP_DBG ("Radial gradient - center: (" << gradient->center.getX() << ", " << gradient->center.getY() << ") radius: " << gradient->radius);
     }
 
     // Parse gradientUnits attribute
@@ -969,7 +967,7 @@ void Drawable::parseGradient (const XmlElement& element)
             // First try to get stop-color from attributes
             String stopColor = child->getStringAttribute ("stop-color");
             float stopOpacity = child->getDoubleAttribute ("stop-opacity", 1.0);
-            
+
             // If not found in attributes, parse from CSS style
             if (stopColor.isEmpty())
             {
@@ -977,7 +975,7 @@ void Drawable::parseGradient (const XmlElement& element)
                 if (styleAttr.isNotEmpty())
                 {
                     YUP_DBG ("Parsing CSS style for gradient stop: " << styleAttr);
-                    
+
                     // Parse CSS-style stop-color
                     auto declarations = StringArray::fromTokens (styleAttr, ";", "");
                     for (const auto& declaration : declarations)
@@ -987,7 +985,7 @@ void Drawable::parseGradient (const XmlElement& element)
                         {
                             String property = declaration.substring (0, colonPos).trim();
                             String value = declaration.substring (colonPos + 1).trim();
-                            
+
                             if (property == "stop-color")
                             {
                                 stopColor = value;
@@ -1007,8 +1005,7 @@ void Drawable::parseGradient (const XmlElement& element)
             {
                 YUP_DBG ("Parsing color string: '" << stopColor << "' (length: " << stopColor.length() << ")");
                 stop.color = Color::fromString (stopColor);
-                YUP_DBG ("Gradient stop - offset: " << stop.offset << " color: " << stopColor << 
-                         " parsed: " << stop.color.toString());
+                YUP_DBG ("Gradient stop - offset: " << stop.offset << " color: " << stopColor << " parsed: " << stop.color.toString());
             }
 
             stop.opacity = stopOpacity;
@@ -1049,7 +1046,7 @@ Drawable::Gradient::Ptr Drawable::resolveGradient (Gradient::Ptr gradient)
 
     // Create a new gradient that inherits from the referenced gradient
     Gradient::Ptr resolvedGradient = new Gradient;
-    
+
     // Copy properties from referenced gradient
     resolvedGradient->type = referencedGradient->type;
     resolvedGradient->id = gradient->id; // Keep the original ID
@@ -1086,11 +1083,8 @@ Drawable::Gradient::Ptr Drawable::resolveGradient (Gradient::Ptr gradient)
 
 ColorGradient Drawable::createColorGradientFromSVG (const Gradient& gradient, const AffineTransform& currentTransform)
 {
-    YUP_DBG ("Creating ColorGradient from SVG gradient ID: " << gradient.id << 
-             " type: " << (gradient.type == Gradient::Linear ? "Linear" : "Radial") <<
-             " units: " << (gradient.units == Gradient::UserSpaceOnUse ? "userSpaceOnUse" : "objectBoundingBox") <<
-             " currentTransform: " << currentTransform.toString());
-    
+    YUP_DBG ("Creating ColorGradient from SVG gradient ID: " << gradient.id << " type: " << (gradient.type == Gradient::Linear ? "Linear" : "Radial") << " units: " << (gradient.units == Gradient::UserSpaceOnUse ? "userSpaceOnUse" : "objectBoundingBox") << " currentTransform: " << currentTransform.toString());
+
     if (gradient.stops.empty())
     {
         YUP_DBG ("No stops in gradient, returning empty");
@@ -1116,7 +1110,7 @@ ColorGradient Drawable::createColorGradientFromSVG (const Gradient& gradient, co
             // For linear gradients, interpolate position based on offset
             float x = gradient.start.getX() + stop.offset * (gradient.end.getX() - gradient.start.getX());
             float y = gradient.start.getY() + stop.offset * (gradient.end.getY() - gradient.start.getY());
-            
+
             // Apply transformations: first gradient transform, then current viewport transform
             AffineTransform combinedTransform = gradient.transform;
             if (gradient.units == Gradient::UserSpaceOnUse && ! currentTransform.isIdentity())
@@ -1124,17 +1118,16 @@ ColorGradient Drawable::createColorGradientFromSVG (const Gradient& gradient, co
                 // For userSpaceOnUse, apply the current graphics transform to make gradient scale with viewport
                 combinedTransform = combinedTransform.followedBy (currentTransform);
             }
-            
+
             if (! combinedTransform.isIdentity())
             {
                 float originalX = x;
                 float originalY = y;
 
                 combinedTransform.transformPoint (x, y);
-                YUP_DBG ("Transformed gradient stop: offset=" << stop.offset << " original=(" << originalX << "," << originalY <<
-                         ") transformed=(" << x << "," << y << ")");
+                YUP_DBG ("Transformed gradient stop: offset=" << stop.offset << " original=(" << originalX << "," << originalY << ") transformed=(" << x << "," << y << ")");
             }
-            
+
             colorStops.emplace_back (color, x, y, stop.offset);
             YUP_DBG ("Linear gradient stop: offset=" << stop.offset << " pos=(" << x << "," << y << ") color=" << color.toString());
         }
@@ -1143,7 +1136,7 @@ ColorGradient Drawable::createColorGradientFromSVG (const Gradient& gradient, co
             // For radial gradients, use center as base position
             float x = gradient.center.getX();
             float y = gradient.center.getY();
-            
+
             // Apply transformations: first gradient transform, then current viewport transform
             AffineTransform combinedTransform = gradient.transform;
             if (gradient.units == Gradient::UserSpaceOnUse && ! currentTransform.isIdentity())
@@ -1151,7 +1144,7 @@ ColorGradient Drawable::createColorGradientFromSVG (const Gradient& gradient, co
                 // For userSpaceOnUse, apply the current graphics transform to make gradient scale with viewport
                 combinedTransform = combinedTransform.followedBy (currentTransform);
             }
-            
+
             if (! combinedTransform.isIdentity())
                 combinedTransform.transformPoint (x, y);
 
