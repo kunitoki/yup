@@ -170,6 +170,8 @@ jobs:
           CIBW_BUILD: cp${{ matrix.python }}-${{ matrix.platform_id }}
           #CIBW_TEST_SKIP: "*-macosx_universal2:arm64"
           CIBW_ENVIRONMENT: MACOSX_DEPLOYMENT_TARGET=11.0
+        with:
+          package-dir: python
 
       - name: Store failures artifacts
         if: failure()
