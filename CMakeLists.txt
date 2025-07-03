@@ -32,7 +32,7 @@ project (yup VERSION ${yup_version})
 set_property (GLOBAL PROPERTY USE_FOLDERS ON)
 
 # Dependencies modules
-if (NOT YUP_BUILD_WHEEL)
+if (YUP_EXPORT_MODULES)
     yup_add_default_modules (${CMAKE_CURRENT_LIST_DIR})
 endif()
 

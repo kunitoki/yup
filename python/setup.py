@@ -106,6 +106,7 @@ class CMakeBuildExtension(build_ext):
         config = "Debug" if self.debug or self.build_for_coverage else "Release"
         cmake_args = [
             f"-DYUP_BUILD_WHEEL=ON",
+            f"-DYUP_EXPORT_MODULES=OFF",
             f"-DYUP_BUILD_EXAMPLES=OFF",
             f"-DYUP_BUILD_TESTS=OFF",
             f"-DCMAKE_BUILD_TYPE={config}",
