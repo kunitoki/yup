@@ -23,17 +23,29 @@ namespace yup
 {
 
 //==============================================================================
+/** A class that can parse and paint SVG files.
 
+    The Drawable class is used to parse and paint SVG files.
+    It can be used to paint SVG files to a Graphics context.
+*/
 class YUP_API Drawable
 {
 public:
     //==============================================================================
+    /** Constructor. */
     Drawable();
 
     //==============================================================================
+    /** Parses an SVG file.
+
+        @param svgFile The SVG file to parse.
+
+        @return True if the SVG file was parsed successfully, false otherwise.
+    */
     bool parseSVG (const File& svgFile);
 
     //==============================================================================
+    /** Clears the drawable. */
     void clear();
 
     //==============================================================================
@@ -44,8 +56,13 @@ public:
     Rectangle<float> getBounds() const;
 
     //==============================================================================
+    /** Paints the drawable to a Graphics context.
+
+        @param g The graphics context to paint to.
+    */
     void paint (Graphics& g);
 
+    //==============================================================================
     /** Paints the drawable with the specified fitting and justification.
 
         @param g The graphics context to paint to.
