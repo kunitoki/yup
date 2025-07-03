@@ -169,7 +169,8 @@ jobs:
           CIBW_ARCHS: ${{matrix.cibw_archs}}
           CIBW_BUILD: cp${{ matrix.python }}-${{ matrix.platform_id }}
           CIBW_TEST_SKIP: "*-macosx_universal2:arm64"
-          CIBW_ENVIRONMENT: YUP_OSX_DEPLOYMENT_TARGET=11.0 YUP_OSX_ARCHITECTURES="x86_64;arm64"
+          CIBW_ENVIRONMENT: |
+            MACOSX_DEPLOYMENT_TARGET=11.0 YUP_OSX_DEPLOYMENT_TARGET=11.0 YUP_OSX_ARCHITECTURES="x86_64;arm64"
         with:
           package-dir: python
 
