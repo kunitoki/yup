@@ -44,6 +44,8 @@ option (YUP_BUILD_WHEEL "Build the wheel" OFF)
 
 # Dependencies modules
 if (YUP_EXPORT_MODULES)
+    _yup_message (STATUS "Exporting modules")
+
     if (YUP_PLATFORM_MAC OR YUP_PLATFORM_WINDOWS OR YUP_PLATFORM_LINUX)
         set (enable_python ON)
     else()
