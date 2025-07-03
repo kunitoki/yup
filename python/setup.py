@@ -86,8 +86,8 @@ class CMakeBuildExtension(build_ext):
     build_for_coverage = get_environment_option(int, "YUP_COVERAGE", 0)
     build_for_distribution = get_environment_option(int, "YUP_DISTRIBUTION", 0)
     build_with_lto = get_environment_option(int, "YUP_LTO", 0)
-    build_osx_architectures = get_environment_option(str, "YUP_OSX_ARCHITECTURES", "arm64;x86_64")
-    build_osx_deployment_target = get_environment_option(str, "YUP_OSX_DEPLOYMENT_TARGET", "10.15")
+    build_osx_architectures = get_environment_option(str, "YUP_OSX_ARCHITECTURES", "arm64")
+    build_osx_deployment_target = get_environment_option(str, "YUP_OSX_DEPLOYMENT_TARGET", "11.0")
 
     def build_extension(self, ext):
         log.info("building with cmake")
@@ -105,21 +105,25 @@ class CMakeBuildExtension(build_ext):
 
         config = "Debug" if self.debug or self.build_for_coverage else "Release"
         cmake_args = [
+            f"-DYUP_BUILD_WHEEL=ON",
+            f"-DYUP_BUILD_EXAMPLES=OFF",
+            f"-DYUP_BUILD_TESTS=OFF",
             f"-DCMAKE_BUILD_TYPE={config}",
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={output_path}",
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{config.upper()}={output_path}",
+            f"-DPython_ROOT_DIR={sys.exec_prefix}",
             f"-DPython_INCLUDE_DIRS={get_python_includes_path()}",
             f"-DPython_LIBRARY_DIRS={get_python_lib_path()}"
         ]
 
         if self.build_for_coverage:
-            cmake_args += ["-DENABLE_COVERAGE:BOOL=ON"]
+            cmake_args += ["-DYUP_ENABLE_COVERAGE:BOOL=ON"]
 
         if self.build_for_distribution:
-            cmake_args += ["-DENABLE_DISTRIBUTION:BOOL=ON"]
+            cmake_args += ["-DYUP_ENABLE_DISTRIBUTION:BOOL=ON"]
 
         if self.build_with_lto:
-            cmake_args += ["-DENABLE_LTO:BOOL=ON"]
+            cmake_args += ["-DYUP_ENABLE_LTO:BOOL=ON"]
 
         if platform.system() == 'Darwin':
             cmake_args += [
@@ -129,7 +133,7 @@ class CMakeBuildExtension(build_ext):
 
         try:
             os.chdir(str(build_temp))
-            make_command = ["cmake", str(cwd)] + cmake_args
+            make_command = ["cmake", str(os.path.join(cwd, ".."))] + cmake_args
             self.spawn(make_command)
 
             if getattr(self, "dry_run"): return
@@ -216,7 +220,7 @@ class CustomInstallScripts(install_scripts):
 
 
 def load_description(version):
-    with open("README.md", mode="r", encoding="utf-8") as f:
+    with open("../README.md", mode="r", encoding="utf-8") as f:
         long_description = f.read()
 
     """
@@ -240,15 +244,16 @@ def load_description(version):
 
 
 with open("../modules/yup_core/system/yup_StandardHeader.h", mode="r", encoding="utf-8") as f:
-    version_major = re.findall(r"YUP_MAJOR_VERSION\s+(\d+)", f.read())[0]
-    version_minor = re.findall(r"YUP_MINOR_VERSION\s+(\d+)", f.read())[0]
-    version_build = re.findall(r"YUP_BUILDNUMBER\s+(\d+)", f.read())[0]
+    content = f.read()
+    version_major = re.findall(r"YUP_MAJOR_VERSION\s+(\d+)", content)[0]
+    version_minor = re.findall(r"YUP_MINOR_VERSION\s+(\d+)", content)[0]
+    version_build = re.findall(r"YUP_BUILDNUMBER\s+(\d+)", content)[0]
     version = f"{version_major}.{version_minor}.{version_build}"
 
 
 if platform.system() == 'Darwin':
-    build_osx_architectures = get_environment_option(str, "YUP_OSX_ARCHITECTURES", "arm64;x86_64")
-    build_osx_deployment_target = get_environment_option(str, "YUP_OSX_DEPLOYMENT_TARGET", "10.15")
+    build_osx_architectures = get_environment_option(str, "YUP_OSX_ARCHITECTURES", "arm64")
+    build_osx_deployment_target = get_environment_option(str, "YUP_OSX_DEPLOYMENT_TARGET", "11.0")
     if "arm64" in build_osx_architectures and "x86_64" in build_osx_architectures:
         os.environ["_PYTHON_HOST_PLATFORM"] = f"macosx-{build_osx_deployment_target}-universal2"
     elif "arm64" in build_osx_architectures:
@@ -274,17 +279,17 @@ setuptools.setup(
     ext_modules=[CMakeExtension(project_name)],
     zip_safe=False,
     platforms=["macosx", "win32", "linux"],
-    python_requires=">=3.13",
+    python_requires=">=3.11",
     license="ISC",
     classifiers=[
         "Intended Audience :: Developers",
         "Development Status :: 4 - Beta",
         "Topic :: Software Development :: Libraries :: Application Frameworks",
-        "License :: Other/Proprietary License",
-        "License :: OSI Approved :: ISC License (ISCL)",
         "Programming Language :: C++",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
         "Programming Language :: Python :: 3.13",
         "Operating System :: MacOS :: MacOS X",
         "Operating System :: Microsoft :: Windows",

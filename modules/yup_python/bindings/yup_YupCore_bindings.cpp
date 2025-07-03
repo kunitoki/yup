@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#include "yup_YupCore_Bindings.h"
+#include "yup_YupCore_bindings.h"
 
 #define YUP_PYTHON_INCLUDE_PYBIND11_FUNCTIONAL
 #define YUP_PYTHON_INCLUDE_PYBIND11_STL

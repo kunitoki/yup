@@ -19,16 +19,25 @@
 
 cmake_minimum_required (VERSION 3.28)
 
-if (PROJECT_IS_TOP_LEVEL)
-    include (cmake/yup.cmake)
-    _yup_setup_platform()
-    _yup_get_project_version_string (${CMAKE_CURRENT_LIST_DIR}/modules yup_version)
-    _yup_message (STATUS "Building project version ${yup_version}")
-endif()
+_yup_get_project_version_string (${CMAKE_CURRENT_LIST_DIR}/../modules yup_version)
+_yup_message (STATUS "Building project version ${yup_version}")
 
 set (target_name yup)
-set (target_name ${yup_version})
+set (target_version ${yup_version})
 project (${target_name} VERSION ${target_version})
+
+yup_add_default_modules ("${CMAKE_CURRENT_LIST_DIR}/.." DEFINITIONS
+    YUP_STANDALONE_APPLICATION=1
+    YUP_DISABLE_JUCE_VERSION_PRINTING=1
+    YUP_MODAL_LOOPS_PERMITTED=1
+    YUP_CATCH_UNHANDLED_EXCEPTIONS=1
+    YUP_LOG_ASSERTIONS=1
+    YUP_ALLOW_STATIC_NULL_VARIABLES=0
+    YUP_STRICT_REFCOUNTEDPOINTER=1
+    YUP_LOAD_CURL_SYMBOLS_LAZILY=1
+    YUP_PYTHON_EMBEDDED_INTERPRETER=0
+    YUP_PYTHON_SCRIPT_CATCH_EXCEPTION=0
+    PYBIND11_DETAILED_ERROR_MESSAGES=1)
 
 yup_standalone_app (
     TARGET_NAME ${target_name}
@@ -37,18 +46,6 @@ yup_standalone_app (
     TARGET_APP_ID "org.yup.${target_name}"
     TARGET_APP_NAMESPACE "org.yup"
     TARGET_WHEEL ON
-    DEFINES
-        YUP_STANDALONE_APPLICATION=1
-        YUP_DISABLE_JUCE_VERSION_PRINTING=1
-        YUP_MODAL_LOOPS_PERMITTED=1
-        YUP_CATCH_UNHANDLED_EXCEPTIONS=1
-        YUP_LOG_ASSERTIONS=1
-        YUP_ALLOW_STATIC_NULL_VARIABLES=0
-        YUP_STRICT_REFCOUNTEDPOINTER=1
-        YUP_LOAD_CURL_SYMBOLS_LAZILY=1
-        YUP_PYTHON_EMBEDDED_INTERPRETER=0
-        YUP_PYTHON_SCRIPT_CATCH_EXCEPTION=0
-        PYBIND11_DETAILED_ERROR_MESSAGES=1
     MODULES
         yup::yup_audio_basics
         yup::yup_audio_devices
@@ -95,3 +92,6 @@ target_include_directories (${target_name} PRIVATE "${Python_INCLUDE_DIRS}")
 if (NOT "${Python_LIBRARY_DIRS}" STREQUAL "")
     target_link_directories (${target_name} PRIVATE "${Python_LIBRARY_DIRS}")
 endif()
+
+target_sources (${target_name} PRIVATE
+    "${CMAKE_CURRENT_LIST_DIR}/../modules/yup_core/system/yup_StandardHeader.h")

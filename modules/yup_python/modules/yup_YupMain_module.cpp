@@ -21,7 +21,7 @@
 
 #include "../utilities/yup_PyBind11Includes.h"
 
-#include "yup_YupCore_bindings.h"
+#include "../bindings/yup_YupCore_bindings.h"
 
 #if YUP_MODULE_AVAILABLE_juce_events
 #include "ScriptJuceEventsBindings.h"

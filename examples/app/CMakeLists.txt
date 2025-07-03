@@ -28,8 +28,7 @@ project (${target_name} VERSION ${target_version})
 # ==== Prepare Android build
 if (ANDROID)
     include (../../cmake/yup.cmake)
-    _yup_setup_platform()
-    _yup_add_default_modules ("${CMAKE_CURRENT_LIST_DIR}/../..")
+    yup_add_default_modules ("${CMAKE_CURRENT_LIST_DIR}/../..")
 endif()
 
 # ==== Prepare target

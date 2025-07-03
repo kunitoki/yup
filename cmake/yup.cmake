@@ -93,3 +93,8 @@ include (${CMAKE_CURRENT_LIST_DIR}/yup_standalone.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_embed_binary.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_android_java.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/yup_options.cmake)
+
+#==============================================================================
+
+_yup_setup_platform()

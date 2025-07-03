@@ -30,11 +30,24 @@
 
 #include "yup_python.h"
 
-// Scripting engine
+//==============================================================================
+
 #include "scripting/yup_ScriptEngine.cpp"
 #include "scripting/yup_ScriptBindings.cpp"
 #include "scripting/yup_ScriptUtilities.cpp"
 
-// Must be last as it includes the infamous <windows.h>
+//==============================================================================
+
+//#if YUP_MODULE_AVAILABLE_yup_core
+#include "bindings/yup_YupCore_bindings.cpp"
+//#endif
+
+//==============================================================================
+
+#include "modules/yup_YupMain_module.cpp"
+#include "modules/yup_YupInternal_module.cpp"
+
+//==============================================================================
+
 #include "utilities/yup_CrashHandling.cpp"
 #include "utilities/yup_ClassDemangling.cpp"

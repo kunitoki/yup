@@ -31,8 +31,7 @@ set (rive_file "data/alien.riv")
 set (link_libraries "")
 if (ANDROID)
     include (../../cmake/yup.cmake)
-    _yup_setup_platform()
-    _yup_add_default_modules ("${CMAKE_CURRENT_LIST_DIR}/../..")
+    yup_add_default_modules ("${CMAKE_CURRENT_LIST_DIR}/../..")
 
     yup_add_embedded_binary_resources (
         "${target_name}_binary_data"

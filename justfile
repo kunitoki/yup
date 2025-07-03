@@ -82,16 +82,15 @@ emscripten_serve:
 
 [working-directory: 'python']
 python_wheel:
-    python -m build --wheel -n && just python_install
+  python -m build --wheel && just python_install
 
 [working-directory: 'python']
 python_install:
-    pip install --force-reinstall dist/yup-*.whl
+  python -m pip install --force-reinstall dist/yup-*.whl
 
 [working-directory: 'python']
 python_uninstall:
-    pip uninstall -y yup
+  python -m pip uninstall -y yup
 
-[working-directory: 'python']
 python_test *TEST_OPTS:
-    pytest -s {{TEST_OPTS}}
+  python -m pytest -s {{TEST_OPTS}}

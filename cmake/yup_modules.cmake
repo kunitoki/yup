@@ -169,6 +169,7 @@ function (_yup_module_setup_target module_name
                                    module_defines
                                    module_sources
                                    module_libs
+                                   module_libs_paths
                                    module_link_options
                                    module_frameworks
                                    module_dependencies
@@ -208,6 +209,9 @@ function (_yup_module_setup_target module_name
 
     target_include_directories (${module_name} INTERFACE
         ${module_include_paths})
+
+    target_link_directories (${module_name} INTERFACE
+        ${module_libs_paths})
 
     target_link_libraries (${module_name} INTERFACE
         ${module_libs}
@@ -258,6 +262,7 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
     get_target_property (module_defines ${plugin_client_target} YUP_MODULE_DEFINES)
     get_target_property (module_options ${plugin_client_target} YUP_MODULE_OPTIONS)
     get_target_property (module_libs ${plugin_client_target} YUP_MODULE_LIBS)
+    get_target_property (module_libs_paths ${plugin_client_target} YUP_MODULE_LIBS_PATHS)
     get_target_property (module_link_options ${plugin_client_target} YUP_MODULE_LINK_OPTIONS)
     get_target_property (module_frameworks ${plugin_client_target} YUP_MODULE_FRAMEWORK)
     get_target_property (module_dependencies ${plugin_client_target} YUP_MODULE_DEPENDENCIES)
@@ -298,6 +303,7 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
                               "${module_defines}"
                               "${module_sources}"
                               "${module_libs}"
+                              "${module_libs_paths}"
                               "${module_link_options}"
                               "${module_frameworks}"
                               "${module_dependencies}"
@@ -312,7 +318,7 @@ endfunction()
 
 #==============================================================================
 
-function (yup_add_module module_path module_group)
+function (yup_add_module module_path modules_definitions module_group)
     get_filename_component (module_path ${module_path} ABSOLUTE)
     get_filename_component (module_name ${module_path} NAME)
 
@@ -499,6 +505,11 @@ function (yup_add_module module_path module_group)
         endif()
     endif()
 
+    # ==== Add module definitions
+    foreach (module_definition ${modules_definitions})
+        list (APPEND module_defines ${module_definition})
+    endforeach()
+
     # ==== Prepare include paths
     get_filename_component (module_include_path ${module_path} DIRECTORY)
     list (APPEND module_include_paths "${module_include_path}")
@@ -517,7 +528,7 @@ function (yup_add_module module_path module_group)
         list (APPEND module_libs Python::Python)
         list (APPEND module_include_paths "${Python_INCLUDE_DIRS}")
         if (NOT "${Python_LIBRARY_DIRS}" STREQUAL "")
-            list (APPEND module_libs "${Python_LIBRARY_DIRS}")
+            list (APPEND module_libs_paths "${Python_LIBRARY_DIRS}")
         endif()
     endif()
 
@@ -533,6 +544,7 @@ function (yup_add_module module_path module_group)
                               "${module_defines}"
                               "${module_sources}"
                               "${module_libs}"
+                              "${module_libs_paths}"
                               "${module_link_options}"
                               "${module_frameworks}"
                               "${module_dependencies}"
@@ -558,6 +570,7 @@ function (yup_add_module module_path module_group)
         YUP_MODULE_DEFINES "${module_defines}"
         YUP_MODULE_SOURCES "${module_sources}"
         YUP_MODULE_LIBS "${module_libs}"
+        YUP_MODULE_LIBS_PATHS "${module_libs_paths}"
         YUP_MODULE_LINK_OPTIONS "${module_link_options}"
         YUP_MODULE_FRAMEWORK "${module_frameworks}"
         YUP_MODULE_DEPENDENCIES "${module_dependencies}"
@@ -572,50 +585,61 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_add_default_modules modules_path)
-    # Thirdparty modules
-    set (thirdparty_group "Thirdparty")
-    yup_add_module (${modules_path}/thirdparty/zlib ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/glad ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/harfbuzz ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/libpng ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/libwebp ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/sheenbidi ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/yoga_library ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/rive ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/rive_decoders ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/rive_renderer ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/oboe_library ${thirdparty_group})
+function (yup_add_default_modules modules_path)
+    get_filename_component (modules_path "${modules_path}" ABSOLUTE)
+    _yup_message (STATUS "Adding default modules from ${modules_path}")
 
-    # Yup modules
+    # ==== Fetch options
+    set (options "")
+    set (one_value_args "")
+    set (multi_value_args DEFINITIONS)
+    cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
+    _yup_set_default (YUP_ARG_TARGET_DEFINITIONS "")
+    set (modules_definitions "${YUP_ARG_DEFINITIONS}")
+
+    # ==== Thirdparty modules
+    set (thirdparty_group "Thirdparty")
+    yup_add_module (${modules_path}/thirdparty/zlib "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/glad "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/harfbuzz "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/libpng "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/libwebp "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/sheenbidi "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/yoga_library "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/rive "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/rive_decoders "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/rive_renderer "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/oboe_library "${modules_definitions}" ${thirdparty_group})
+
+    # ==== Yup modules
     set (modules_group "Modules")
-    yup_add_module (${modules_path}/modules/yup_core ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_core "${modules_definitions}" ${modules_group})
     add_library (yup::yup_core ALIAS yup_core)
 
-    yup_add_module (${modules_path}/modules/yup_events ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_events "${modules_definitions}" ${modules_group})
     add_library (yup::yup_events ALIAS yup_events)
 
-    yup_add_module (${modules_path}/modules/yup_data_model ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_data_model "${modules_definitions}" ${modules_group})
     add_library (yup::yup_data_model ALIAS yup_data_model)
 
-    yup_add_module (${modules_path}/modules/yup_audio_basics ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_audio_basics "${modules_definitions}" ${modules_group})
     add_library (yup::yup_audio_basics ALIAS yup_audio_basics)
 
-    yup_add_module (${modules_path}/modules/yup_audio_devices ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_audio_devices "${modules_definitions}" ${modules_group})
     add_library (yup::yup_audio_devices ALIAS yup_audio_devices)
 
-    yup_add_module (${modules_path}/modules/yup_audio_processors ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_audio_processors "${modules_definitions}" ${modules_group})
     add_library (yup::yup_audio_processors ALIAS yup_audio_processors)
 
-    yup_add_module (${modules_path}/modules/yup_audio_plugin_client ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_audio_plugin_client "${modules_definitions}" ${modules_group})
     add_library (yup::yup_audio_plugin_client ALIAS yup_audio_plugin_client)
 
-    yup_add_module (${modules_path}/modules/yup_graphics ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_graphics "${modules_definitions}" ${modules_group})
     add_library (yup::yup_graphics ALIAS yup_graphics)
 
-    yup_add_module (${modules_path}/modules/yup_gui ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_gui "${modules_definitions}" ${modules_group})
     add_library (yup::yup_gui ALIAS yup_gui)
 
-    yup_add_module (${modules_path}/modules/yup_python ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_python "${modules_definitions}" ${modules_group})
     add_library (yup::yup_python ALIAS yup_python)
 endfunction()
