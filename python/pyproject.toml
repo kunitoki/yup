@@ -50,9 +50,9 @@ before-build = [
 ]
 
 test-command = [
-    "xvfb-run -a -s \"-screen 0 1024x768x24\" pytest -s {project}/tests"
-#    """xvfb-run -a -s \"-screen 0 1024x768x24\" pytest -s {project}/tests || \
-#        { (mkdir -p /output/compare_data && cp {project}/tests/compare_data/* /output/compare_data/) ; exit 1 ; }"""
+    "xvfb-run -a -s \"-screen 0 1024x768x24\" pytest -s {project}/python/tests"
+#    """xvfb-run -a -s \"-screen 0 1024x768x24\" pytest -s {project}/python/tests || \
+#        { (mkdir -p /output/compare_data && cp {project}/python/tests/compare_data/* /output/compare_data/) ; exit 1 ; }"""
 ]
 
 #repair-wheel-command = """
