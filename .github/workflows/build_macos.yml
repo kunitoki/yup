@@ -144,7 +144,7 @@ jobs:
     - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_plugin_standalone_plugin
 
   build_python:
-    name: Build cp${{matrix.python}}-${{ matrix.platform_id }}
+    name: build_cp${{matrix.python}}-${{ matrix.platform_id }}
     runs-on: ${{ matrix.os }}
     continue-on-error: false
 
