@@ -79,3 +79,19 @@ emscripten_test CONFIG="Debug":
 emscripten_serve:
   python3 -m http.server -d .
   #python3 tools/serve.py -p 8000 -d .
+
+[working-directory: 'python']
+python_wheel:
+    python -m build --wheel -n && just python_install
+
+[working-directory: 'python']
+python_install:
+    pip install --force-reinstall dist/yup-*.whl
+
+[working-directory: 'python']
+python_uninstall:
+    pip uninstall -y yup
+
+[working-directory: 'python']
+python_test *TEST_OPTS:
+    pytest -s {{TEST_OPTS}}

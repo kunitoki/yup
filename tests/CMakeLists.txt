@@ -58,7 +58,8 @@ set (target_modules
     yup_audio_devices
     yup_events
     yup_data_model
-    yup_graphics)
+    yup_graphics
+    yup_python)
 
 if (NOT YUP_PLATFORM_EMSCRIPTEN)
     list (APPEND target_modules

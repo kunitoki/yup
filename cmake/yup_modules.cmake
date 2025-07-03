@@ -515,6 +515,10 @@ function (yup_add_module module_path module_group)
     if (module_needs_python)
         _yup_fetch_python ("${Python_INCLUDE_DIRS}" "${Python_ROOT_DIR}")
         list (APPEND module_libs Python::Python)
+        list (APPEND module_include_paths "${Python_INCLUDE_DIRS}")
+        if (NOT "${Python_LIBRARY_DIRS}" STREQUAL "")
+            list (APPEND module_libs "${Python_LIBRARY_DIRS}")
+        endif()
     endif()
 
     # ==== Scan sources to include

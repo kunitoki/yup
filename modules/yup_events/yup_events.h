@@ -44,7 +44,7 @@
 
     ID:                 yup_events
     vendor:             yup
-    version:            7.0.12
+    version:            1.0.0
     name:               YUP message and event handling classes
     description:        Classes for running an application's main event loop and sending/receiving messages, timers, etc.
     website:            https://github.com/kunitoki/yup

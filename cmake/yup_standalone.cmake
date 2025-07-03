@@ -24,7 +24,7 @@ function (yup_standalone_app)
     set (options "")
     set (one_value_args
         # Globals
-        TARGET_NAME TARGET_VERSION TARGET_CONSOLE TARGET_IDE_GROUP TARGET_APP_NAMESPACE TARGET_ICON TARGET_CXX_STANDARD
+        TARGET_NAME TARGET_VERSION TARGET_CONSOLE TARGET_IDE_GROUP TARGET_APP_NAMESPACE TARGET_ICON TARGET_WHEEL TARGET_CXX_STANDARD
         # Emscripten
         INITIAL_MEMORY PTHREAD_POOL_SIZE CUSTOM_PLIST CUSTOM_SHELL)
     set (multi_value_args
@@ -44,6 +44,7 @@ function (yup_standalone_app)
     set (target_icon "${YUP_ARG_TARGET_ICON}")
     set (target_app_namespace "${YUP_ARG_TARGET_APP_NAMESPACE}")
     set (target_app_identifier "${target_app_namespace}.${target_name}")
+    set (target_wheel "${YUP_ARG_TARGET_WHEEL}")
     set (target_resources "")
     set (target_cxx_standard "${YUP_ARG_TARGET_CXX_STANDARD}")
     set (additional_definitions "")
@@ -52,6 +53,7 @@ function (yup_standalone_app)
     set (additional_link_options "")
 
     _yup_set_default (target_console OFF)
+    _yup_set_default (target_wheel OFF)
     _yup_make_short_version ("${target_version}" target_version_short)
 
     # ==== Output status
@@ -99,6 +101,8 @@ function (yup_standalone_app)
 
     if (YUP_PLATFORM_ANDROID)
         add_library (${target_name} SHARED)
+    elseif (target_wheel)
+        add_library (${target_name} MODULE)
     else()
         add_executable (${target_name} ${executable_options})
     endif()

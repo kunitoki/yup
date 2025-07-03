@@ -44,9 +44,9 @@
 
     See also SystemStats::getYUPVersion() for a string version.
 */
-#define YUP_MAJOR_VERSION 7
+#define YUP_MAJOR_VERSION 1
 #define YUP_MINOR_VERSION 0
-#define YUP_BUILDNUMBER 12
+#define YUP_BUILDNUMBER 0
 
 /** Current YUP version number.
 

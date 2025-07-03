@@ -44,7 +44,7 @@
 
     ID:                 yup_core
     vendor:             yup
-    version:            7.0.12
+    version:            1.0.0
     name:               YUP core classes
     description:        The essential set of basic YUP classes, as required by all the other YUP modules.
     website:            https://github.com/kunitoki/yup

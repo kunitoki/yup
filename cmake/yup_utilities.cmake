@@ -94,6 +94,17 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_get_project_version_string modules_path output_variable)
+    get_filename_component (root_modules_path "${modules_path}" ABSOLUTE)
+    file (STRINGS "${root_modules_path}/yup_core/system/yup_StandardHeader.h" YUP_CORE_MODULE)
+    string (REGEX REPLACE "(.*)(YUP_MAJOR_VERSION )([0-9]+)(.*)" "\\3" MAJOR_NUMBER ${YUP_CORE_MODULE})
+    string (REGEX REPLACE "(.*)(YUP_MINOR_VERSION )([0-9]+)(.*)" "\\3" MINOR_NUMBER ${YUP_CORE_MODULE})
+    string (REGEX REPLACE "(.*)(YUP_BUILDNUMBER )([0-9]+)(.*)" "\\3" BUILD_NUMBER ${YUP_CORE_MODULE})
+    set (${output_variable} "${MAJOR_NUMBER}.${MINOR_NUMBER}.${BUILD_NUMBER}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
 function (_yup_boolean_property input_bool output_variable)
     string (STRIP "${input_bool}" ${input_bool})
     string (TOLOWER "${input_bool}" ${input_bool})

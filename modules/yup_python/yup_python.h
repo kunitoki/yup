@@ -28,11 +28,9 @@
   name:               YUP Python Bindings
   description:        The python bindings to create and work on YUP apps.
   website:            https://github.com/kunitoki/yup
-  license:            DUAL
-  minimumCppStandard: 17
+  license:            ISC
 
   dependencies:       yup_core
-  libs:               Python::Python
   needsPython:        true
 
  END_YUP_MODULE_DECLARATION

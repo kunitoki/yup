@@ -44,7 +44,7 @@
 
     ID:                 yup_audio_basics
     vendor:             yup
-    version:            7.0.12
+    version:            1.0.0
     name:               YUP audio and MIDI data classes
     description:        Classes for audio buffer manipulation, midi message handling, synthesis, etc.
     website:            https://github.com/kunitoki/yup
