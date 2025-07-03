@@ -105,7 +105,10 @@ public:
         registerDemo<PopupMenuDemo> ("Popup Menu", counter++);
         registerDemo<FileChooserDemo> ("File Chooser", counter++);
         registerDemo<WidgetsDemo> ("Widgets", counter++);
-        registerDemo<ArtboardDemo> ("Artboard", counter++, [] (auto& artboard) { jassert (artboard.loadArtboard()); });
+        registerDemo<ArtboardDemo> ("Artboard", counter++, [] (auto& artboard)
+        {
+            jassert (artboard.loadArtboard());
+        });
         registerDemo<OpaqueDemo> ("Opaque Demo", counter++);
 
         selectComponent (0);

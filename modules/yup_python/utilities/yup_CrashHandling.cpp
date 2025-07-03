@@ -29,7 +29,8 @@
 #include "yup_WindowsIncludes.h"
 #endif
 
-namespace yup::Helpers {
+namespace yup::Helpers
+{
 
 // =================================================================================================
 
@@ -37,7 +38,7 @@ String getStackBacktrace()
 {
     String result;
 
-   #if YUP_WINDOWS
+#if YUP_WINDOWS
     HANDLE process = GetCurrentProcess();
     SymInitialize (process, nullptr, TRUE);
 
@@ -68,7 +69,7 @@ String getStackBacktrace()
         }
     }
 
-   #else
+#else
     void* stack[128];
     auto frames = backtrace (stack, numElementsInArray (stack));
     char** frameStrings = backtrace_symbols (stack, frames);
@@ -98,7 +99,7 @@ String getStackBacktrace()
     }
 
     ::free (frameStrings);
-   #endif
+#endif
 
     return result;
 }

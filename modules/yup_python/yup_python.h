@@ -45,7 +45,7 @@
     Enable externally provided pybind11 installation.
 */
 #ifndef YUP_PYTHON_USE_EXTERNAL_PYBIND11
- #define YUP_PYTHON_USE_EXTERNAL_PYBIND11 0
+#define YUP_PYTHON_USE_EXTERNAL_PYBIND11 0
 #endif
 
 //==============================================================================
@@ -54,7 +54,7 @@
     Enable or disable embedding the interpreter. This should be disabled when building standalone wheels.
 */
 #ifndef YUP_PYTHON_EMBEDDED_INTERPRETER
- #define YUP_PYTHON_EMBEDDED_INTERPRETER 1
+#define YUP_PYTHON_EMBEDDED_INTERPRETER 1
 #endif
 
 //==============================================================================
@@ -63,7 +63,7 @@
     Enable or disable catching script exceptions.
 */
 #ifndef YUP_PYTHON_SCRIPT_CATCH_EXCEPTION
- #define YUP_PYTHON_SCRIPT_CATCH_EXCEPTION 1
+#define YUP_PYTHON_SCRIPT_CATCH_EXCEPTION 1
 #endif
 
 //==============================================================================
@@ -72,7 +72,7 @@
     Enable or disable catching yup::Thread exceptions raised from python.
 */
 #ifndef YUP_PYTHON_THREAD_CATCH_EXCEPTION
- #define YUP_PYTHON_THREAD_CATCH_EXCEPTION 1
+#define YUP_PYTHON_THREAD_CATCH_EXCEPTION 1
 #endif
 
 //==============================================================================
@@ -83,13 +83,14 @@
  * @brief Custom module name, it's possible to change but beware to update your `import` statements !
  */
 #ifndef YUP_PYTHON_MODULE_NAME
- #define YUP_PYTHON_MODULE_NAME yup
+#define YUP_PYTHON_MODULE_NAME yup
 #endif
 
 /**
  * @brief Custom python module name as string.
  */
-namespace yup {
+namespace yup
+{
 
 static inline constexpr const char* const PythonModuleName = YUP_PYTHON_STRINGIFY (YUP_PYTHON_MODULE_NAME);
 
@@ -100,7 +101,7 @@ static inline constexpr const char* const PythonModuleName = YUP_PYTHON_STRINGIF
  * @brief Modal loops are required for yup python to work when built as a wheel.
  */
 #if ! YUP_PYTHON_EMBEDDED_INTERPRETER && ! YUP_MODAL_LOOPS_PERMITTED
- #error When building yup_python with YUP_PYTHON_EMBEDDED_INTERPRETER=0 it is mandatory to also set YUP_MODAL_LOOPS_PERMITTED=1
+#error When building yup_python with YUP_PYTHON_EMBEDDED_INTERPRETER=0 it is mandatory to also set YUP_MODAL_LOOPS_PERMITTED=1
 #endif
 
 //==============================================================================
