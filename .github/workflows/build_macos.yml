@@ -10,6 +10,7 @@ on:
       - "**/modules/**"
       - "**/tests/**"
       - "**/thirdparty/**"
+      - "**/python/**"
       - "!**/native/*_android.*"
       - "!**/native/*_emscripten.*"
       - "!**/native/*_linux.*"
@@ -20,7 +21,7 @@ on:
       - "**"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -141,3 +142,44 @@ jobs:
     - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_plugin_vst3_plugin
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_plugin_standalone_plugin
     - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_plugin_standalone_plugin
+
+  build_python:
+    name: Build cp${{matrix.python}}-${{ matrix.platform_id }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: false
+
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+        - { os: macos-latest, python: 311, platform_id: macosx_universal2, cibw_archs: universal2 }
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: seanmiddleditch/gha-setup-ninja@master
+
+      - name: Setup and install python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v3.0.0
+        env:
+          CIBW_ARCHS: ${{matrix.cibw_archs}}
+          CIBW_BUILD: cp${{ matrix.python }}-${{ matrix.platform_id }}
+          #CIBW_TEST_SKIP: "*-macosx_universal2:arm64"
+          CIBW_ENVIRONMENT: MACOSX_DEPLOYMENT_TARGET=11.0
+
+      - name: Store failures artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compare-data
+          path: |
+            python/tests/compare_data/
+            !python/tests/compare_data/.gitignore
+          if-no-files-found: ignore
+          retention-days: 5
+          compression-level: 0
+          overwrite: true
