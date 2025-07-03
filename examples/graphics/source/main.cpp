@@ -86,7 +86,7 @@ public:
         }
         */
 
-#if JUCE_WASM
+#if YUP_WASM
         yup::File dataPath = yup::File ("/data");
 #else
         yup::File dataPath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");

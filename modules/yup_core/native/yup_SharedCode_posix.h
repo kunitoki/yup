@@ -543,7 +543,7 @@ void FileInputStream::openHandle()
             permission |= S_IWGRP;
     }
 
-    auto f = open (file.getFullPathName().toUTF8(), O_RDWR | O_CREAT, permission);
+    auto f = open (file.getFullPathName().toUTF8(), O_RDONLY, permission);
     if (f != -1)
     {
         fchmod (f, permission);

@@ -53,16 +53,16 @@ def test_to_string_text_format():
 #==================================================================================================
 
 def test_tag_name_with_namespace():
-    a = yup.XmlElement("popsicle:root")
-    assert a.hasTagName("popsicle:root") == True
-    assert a.getTagName() == "popsicle:root"
+    a = yup.XmlElement("yup:root")
+    assert a.hasTagName("yup:root") == True
+    assert a.getTagName() == "yup:root"
 
-    assert a.getNamespace() == "popsicle"
+    assert a.getNamespace() == "yup"
     assert a.hasTagNameIgnoringNamespace("root") == True
     assert a.getTagNameWithoutNamespace() == "root"
 
     a.setTagName("other")
-    assert a.hasTagName("popsicle:root") == False
+    assert a.hasTagName("yup:root") == False
     assert a.hasTagName("other") == True
     assert a.getTagName() == "other"
 

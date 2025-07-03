@@ -11,7 +11,7 @@ def test_url_input_source_constructor():
 #==================================================================================================
 
 def test_create_stream():
-    url = yup.URL("https://github.com/kunitoki/popsicle")
+    url = yup.URL("https://github.com/kunitoki/yup")
     input_source = yup.URLInputSource(url)
     stream = input_source.createInputStream()
     assert stream is not None
@@ -21,5 +21,5 @@ def test_create_stream():
 def test_create_stream_with_post_data():
     url = yup.URL("https://github.com")
     input_source = yup.URLInputSource(url)
-    stream = input_source.createInputStreamFor("kunitoki/popsicle")
+    stream = input_source.createInputStreamFor("kunitoki/yup")
     assert stream is not None

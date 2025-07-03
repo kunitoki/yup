@@ -29,6 +29,8 @@ def remove_directory_recursively(directory, excluding_files = None, excluding_fo
 
 #==================================================================================================
 
+"""
+
 def equal_images(lhs: yup.Image, rhs: yup.Image) -> bool:
     if lhs.getFormat() != rhs.getFormat():
         return False
@@ -61,3 +63,5 @@ def save_component_snapshot_to_file(component: yup.Component, file: yup.File) ->
     out.flush()
 
     return True
+
+"""

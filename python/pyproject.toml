@@ -18,7 +18,7 @@ universal = false
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-testpaths = ["../tests/python"]
+testpaths = ["tests"]
 
 [tool.cibuildwheel]
 build-verbosity = 3

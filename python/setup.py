@@ -227,17 +227,17 @@ def load_description(version):
     """
     long_description = re.sub(
         r"`([^`>]+)\s<((?!https)[^`>]+)>`_",
-        fr"`\1 <https://github.com/kunitoki/popsicle/tree/v{version}/\2>`_",
+        fr"`\1 <https://github.com/kunitoki/yup/tree/v{version}/\2>`_",
         long_description)
 
     long_description = re.sub(
         r"image:: ((?!https).*)",
-        fr"image:: https://raw.githubusercontent.com/kunitoki/popsicle/v{version}/\1",
+        fr"image:: https://raw.githubusercontent.com/kunitoki/yup/v{version}/\1",
         long_description)
 
     long_description = re.sub(
         r":target: ((?!https).*)",
-        fr":target: https://github.com/kunitoki/popsicle/tree/v{version}/\1",
+        fr":target: https://github.com/kunitoki/yup/tree/v{version}/\1",
         long_description)
     """
 

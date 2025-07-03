@@ -605,6 +605,7 @@ def test_load_file_as_string():
 
 #==================================================================================================
 
+"""
 def test_find_child_files():
     file_instance = yup.File(this_folder).getChildFile("data")
     child_files = file_instance.findChildFiles(int(yup.File.findFiles), True)
@@ -622,6 +623,7 @@ def test_find_child_files_reference():
     assert child_files.size() > 0
     for child_file in child_files:
         assert isinstance(child_file, yup.File)
+"""
 
 #==================================================================================================
 

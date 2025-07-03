@@ -3,7 +3,7 @@ import sys
 import pytest
 
 import yup
-from popsicle import int64
+from yup import int64
 
 #==================================================================================================
 

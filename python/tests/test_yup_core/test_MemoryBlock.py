@@ -213,7 +213,7 @@ def test_load_from_hex_string():
 
 #==================================================================================================
 
-@pytest.mark.skip(reason="This produces wrong results, JUCE bug ?")
+@pytest.mark.skip(reason="This produces wrong results, YUP bug ?")
 def test_set_bit_range():
     memory_block = yup.MemoryBlock(4, initialiseToZero=True)
     assert memory_block.getData() == bytes(b'\x00\x00\x00\x00')
@@ -247,7 +247,7 @@ def test_from_base64_encoding():
 
 def test_repr():
     memory_block = yup.MemoryBlock([1, 2, 3, 4, 5])
-    assert repr(memory_block) == "popsicle.MemoryBlock(b'\\x01\\x02\\x03\\x04\\x05')"
+    assert repr(memory_block) == "yup.MemoryBlock(b'\\x01\\x02\\x03\\x04\\x05')"
 
 #==================================================================================================
 

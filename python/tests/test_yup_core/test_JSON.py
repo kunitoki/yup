@@ -98,7 +98,7 @@ def test_to_string_with_format_options_multi_line():
 
 #==================================================================================================
 
-@pytest.mark.skip(reason="Bug in JUCE")
+@pytest.mark.skip(reason="Bug in YUP")
 def test_to_string_with_format_options_max_decimal_places():
     obj_to_format = {"key": 0.123456789}
     format_options = yup.JSON.FormatOptions().withMaxDecimalPlaces(2)
