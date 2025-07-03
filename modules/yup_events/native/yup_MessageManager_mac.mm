@@ -69,8 +69,6 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
                                                                andSelector:@selector(handleQuitEvent:withReplyEvent:)
                                                              forEventClass:kCoreEventClass
                                                                 andEventID:kAEQuitApplication];
-
-            [NSApp stop:nil];
         });
 
         addMethod(@selector(applicationShouldTerminate:), [](id /*self*/, SEL, NSApplication*)
@@ -371,31 +369,7 @@ void initialiseNSApplication()
     }
 }
 
-static void runNSApplication()
-{
-    YUP_AUTORELEASEPOOL
-    {
-#if YUP_CATCH_UNHANDLED_EXCEPTIONS
-        @try
-        {
-            [NSApp run];
-        }
-        @catch (NSException* e)
-        {
-            // An AppKit exception will kill the app, but at least this provides a chance to log it.,
-            std::runtime_error ex(std::string("NSException: ") + [[e name] UTF8String] + ", Reason:" + [[e reason] UTF8String]);
-            YUPApplicationBase::sendUnhandledException(&ex, __FILE__, __LINE__);
-        }
-        @finally
-        {
-        }
-#else
-        [NSApp run];
-#endif
-    }
-}
-
-static bool runNSApplicationSlice(int millisecondsToRunFor, Atomic<int>& quitMessagePosted)
+static bool runNSApplication(int millisecondsToRunFor, Atomic<int>& quitMessagePosted)
 {
     jassert(millisecondsToRunFor >= 0);
 
@@ -409,7 +383,24 @@ static bool runNSApplicationSlice(int millisecondsToRunFor, Atomic<int>& quitMes
             if (msRemaining <= 0)
                 break;
 
-            CFRunLoopRunInMode(kCFRunLoopDefaultMode, jmin(1.0, msRemaining * 0.001), true);
+#if YUP_CATCH_UNHANDLED_EXCEPTIONS
+            @try
+            {
+#endif
+                CFRunLoopRunInMode(kCFRunLoopDefaultMode, jmin(1.0, msRemaining * 0.001), true);
+
+#if YUP_CATCH_UNHANDLED_EXCEPTIONS
+            }
+            @catch (NSException* e)
+            {
+                // An AppKit exception will kill the app, but at least this provides a chance to log it.,
+                std::runtime_error ex(std::string("NSException: ") + [[e name] UTF8String] + ", Reason:" + [[e reason] UTF8String]);
+                YUPApplicationBase::sendUnhandledException(&ex, __FILE__, __LINE__);
+            }
+            @finally
+            {
+            }
+#endif
         }
     }
 
@@ -431,11 +422,9 @@ void MessageManager::runDispatchLoop()
 
     constexpr int millisecondsToRunFor = static_cast<int>(1000.0f / 60.0f); // TODO
 
-    // runNSApplication();
-
     while (quitMessagePosted.get() == 0)
     {
-        if (runNSApplicationSlice(millisecondsToRunFor, quitMessagePosted))
+        if (runNSApplication(millisecondsToRunFor, quitMessagePosted))
         {
             if (loopCallback)
                 loopCallback();
@@ -475,7 +464,7 @@ bool MessageManager::runDispatchLoopUntil(int millisecondsToRunFor)
     jassert(millisecondsToRunFor >= 0);
     jassert(isThisTheMessageThread()); // must only be called by the message thread
 
-    return runNSApplicationSlice(millisecondsToRunFor, quitMessagePosted);
+    return runNSApplication(millisecondsToRunFor, quitMessagePosted);
 }
 #endif
 
