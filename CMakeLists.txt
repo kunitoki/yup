@@ -31,6 +31,17 @@ endif()
 project (yup VERSION ${yup_version})
 set_property (GLOBAL PROPERTY USE_FOLDERS ON)
 
+# Options
+option (YUP_TARGET_ANDROID "Target Android project" OFF)
+option (YUP_TARGET_ANDROID_BUILD_GRADLE "When building for Android, build the gradle infrastructure" OFF)
+option (YUP_ENABLE_PROFILING "Enable the profiling code using Perfetto SDK" OFF)
+option (YUP_ENABLE_COVERAGE "Enable code coverage collection for tests" OFF)
+option (YUP_EXPORT_MODULES "Export the modules to the parent project" ON)
+option (YUP_BUILD_JAVA_SUPPORT "Build the Java support" OFF)
+option (YUP_BUILD_EXAMPLES "Build the examples" ${PROJECT_IS_TOP_LEVEL})
+option (YUP_BUILD_TESTS "Build the tests" ${PROJECT_IS_TOP_LEVEL})
+option (YUP_BUILD_WHEEL "Build the wheel" OFF)
+
 # Dependencies modules
 if (YUP_EXPORT_MODULES)
     yup_add_default_modules (${CMAKE_CURRENT_LIST_DIR})
