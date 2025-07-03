@@ -58,12 +58,13 @@ set (target_modules
     yup_audio_devices
     yup_events
     yup_data_model
-    yup_graphics
-    yup_python)
+    yup_graphics)
 
 if (NOT YUP_PLATFORM_EMSCRIPTEN)
-    list (APPEND target_modules
-        yup_gui)
+    list (APPEND target_modules yup_gui)
+    if (YUP_PLATFORM_MAC OR YUP_PLATFORM_WINDOWS OR YUP_PLATFORM_LINUX)
+        list (APPEND target_modules yup_python)
+    endif()
     list (APPEND target_gtest_modules
         GTest::gtest
         GTest::gmock)
