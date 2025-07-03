@@ -92,5 +92,6 @@ python_install:
 python_uninstall:
   python -m pip uninstall -y yup
 
+[working-directory: 'python']
 python_test *TEST_OPTS:
   python -m pytest -s {{TEST_OPTS}}
