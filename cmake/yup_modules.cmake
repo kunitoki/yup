@@ -591,10 +591,11 @@ function (yup_add_default_modules modules_path)
 
     # ==== Fetch options
     set (options "")
-    set (one_value_args "")
+    set (one_value_args ENABLE_PYTHON)
     set (multi_value_args DEFINITIONS)
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
     _yup_set_default (YUP_ARG_TARGET_DEFINITIONS "")
+    _yup_set_default (YUP_ARG_ENABLE_PYTHON OFF)
     set (modules_definitions "${YUP_ARG_DEFINITIONS}")
 
     # ==== Thirdparty modules
@@ -640,7 +641,7 @@ function (yup_add_default_modules modules_path)
     yup_add_module (${modules_path}/modules/yup_gui "${modules_definitions}" ${modules_group})
     add_library (yup::yup_gui ALIAS yup_gui)
 
-    if (YUP_PLATFORM_MAC OR YUP_PLATFORM_WINDOWS OR YUP_PLATFORM_LINUX)
+    if (YUP_ARG_ENABLE_PYTHON)
         yup_add_module (${modules_path}/modules/yup_python "${modules_definitions}" ${modules_group})
         add_library (yup::yup_python ALIAS yup_python)
     endif()

@@ -44,7 +44,8 @@ option (YUP_BUILD_WHEEL "Build the wheel" OFF)
 
 # Dependencies modules
 if (YUP_EXPORT_MODULES)
-    yup_add_default_modules (${CMAKE_CURRENT_LIST_DIR})
+    yup_add_default_modules (${CMAKE_CURRENT_LIST_DIR}
+        ENABLE_PYTHON ${YUP_PLATFORM_MAC OR YUP_PLATFORM_WINDOWS OR YUP_PLATFORM_LINUX})
 endif()
 
 # Enable profiling
