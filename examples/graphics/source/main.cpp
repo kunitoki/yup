@@ -40,10 +40,13 @@
 #include "examples/OpaqueDemo.h"
 #include "examples/Paths.h"
 #include "examples/PopupMenu.h"
-#include "examples/Python.h"
 #include "examples/TextEditor.h"
 #include "examples/VariableFonts.h"
 #include "examples/Widgets.h"
+
+#if YUP_MODULE_AVAILABLE_yup_python
+#include "examples/Python.h"
+#endif
 
 //==============================================================================
 
@@ -96,7 +99,9 @@ public:
         registerDemo<VariableFontsExample> ("Variable Fonts", counter++);
         registerDemo<PathsExample> ("Paths", counter++);
         registerDemo<TextEditorDemo> ("Text Editor", counter++);
+#if YUP_MODULE_AVAILABLE_yup_python
         registerDemo<PythonDemo> ("Python", counter++);
+#endif
         registerDemo<PopupMenuDemo> ("Popup Menu", counter++);
         registerDemo<FileChooserDemo> ("File Chooser", counter++);
         registerDemo<WidgetsDemo> ("Widgets", counter++);

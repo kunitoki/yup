@@ -47,6 +47,11 @@ if (ANDROID)
 endif()
 
 # ==== Prepare target
+set (additional_modules "")
+if (YUP_PLATFORM_MAC OR YUP_PLATFORM_WINDOWS OR YUP_PLATFORM_LINUX)
+    set (additional_modules yup::yup_python)
+endif()
+
 yup_standalone_app (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}
@@ -65,9 +70,9 @@ yup_standalone_app (
         yup::yup_graphics
         yup::yup_gui
         yup::yup_audio_processors
-        yup::yup_python
         libpng
         libwebp
+        ${additional_modules}
         ${link_libraries})
 
 # ==== Prepare sources

@@ -69,7 +69,7 @@
 //==============================================================================
 /** Config: YUP_PYTHON_THREAD_CATCH_EXCEPTION
 
-    Enable or disable catching juce::Thread exceptions raised from python.
+    Enable or disable catching yup::Thread exceptions raised from python.
 */
 #ifndef YUP_PYTHON_THREAD_CATCH_EXCEPTION
  #define YUP_PYTHON_THREAD_CATCH_EXCEPTION 1

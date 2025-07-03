@@ -64,7 +64,7 @@ String getStackBacktrace()
             if (::SymGetModuleInfo64 (process, symbol->ModBase, &moduleInfo))
                 result << moduleInfo.ModuleName << ": ";
 
-            result << symbol->Name << " + 0x" << String::toHexString (static_cast<int64> (displacement)) << juce::newLine;
+            result << symbol->Name << " + 0x" << String::toHexString (static_cast<int64> (displacement)) << newLine;
         }
     }
 
