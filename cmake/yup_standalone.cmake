@@ -199,6 +199,9 @@ function (yup_standalone_app)
                 "${CMAKE_SOURCE_DIR}/cmake/platforms/${YUP_PLATFORM}/mini-coi.js"
                 "${target_copy_dest}/mini-coi.js")
 
+    elseif (YUP_PLATFORM_LINUX)
+        set_target_properties (${target_name} PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+
     endif()
 
     if (YUP_ARG_TARGET_IDE_GROUP)
