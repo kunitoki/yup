@@ -24,7 +24,10 @@
 #include <yup_events/yup_events.h>
 #include <yup_graphics/yup_graphics.h>
 #include <yup_gui/yup_gui.h>
+
+#if YUP_MODULE_AVAILABLE_yup_python
 #include <yup_python/yup_python.h>
+#endif
 
 #include <memory>
 #include <cmath> // For sine wave generation
