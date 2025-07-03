@@ -66,6 +66,7 @@ yup_standalone_app (
         yup::yup_graphics
         yup::yup_gui
         yup::yup_audio_processors
+        yup::yup_python
         libpng
         libwebp
         ${link_libraries})

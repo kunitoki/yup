@@ -336,7 +336,7 @@ function (yup_add_module module_path module_group)
     _yup_module_parse_config ("${module_header}" module_configs module_user_configs)
 
     # ==== Assign Configurations Dynamically
-    set (global_properties "dependencies|defines|options|searchpaths")
+    set (global_properties "dependencies|defines|libs|options|searchpaths")
     set (platform_properties "^(.*)Deps$|^(.*)Defines$|^(.*)Libs$|^(.*)Frameworks$|^(.*)WeakFrameworks$|^(.*)Options$|^(.*)LinkOptions$|^(.*)Packages$|^(.*)Searchpaths$|^(.*)CppStandard$")
 
     set (parsed_config "")
@@ -356,11 +356,14 @@ function (yup_add_module module_path module_group)
             set (module_cpp_standard "${value}")
         elseif (${key} MATCHES "^enableARC$")
             _yup_boolean_property ("${value}" module_arc_enabled)
+        elseif (${key} MATCHES "^needsPython$")
+            _yup_boolean_property ("${value}" module_needs_python)
         endif()
     endforeach()
 
     _yup_set_default (module_cpp_standard "17")
     _yup_set_default (module_arc_enabled OFF)
+    _yup_set_default (module_needs_python OFF)
     _yup_resolve_variable_paths ("${module_searchpaths}" module_searchpaths)
 
     # ==== Setup Platform-Specific Configurations
@@ -508,6 +511,12 @@ function (yup_add_module module_path module_group)
         endif()
     endforeach()
 
+    # ==== Fetch Python if needed
+    if (module_needs_python)
+        _yup_fetch_python ("${Python_INCLUDE_DIRS}" "${Python_ROOT_DIR}")
+        list (APPEND module_libs Python::Python)
+    endif()
+
     # ==== Scan sources to include
     _yup_module_collect_sources ("${module_path}" module_sources)
 
@@ -602,4 +611,7 @@ function (_yup_add_default_modules modules_path)
 
     yup_add_module (${modules_path}/modules/yup_gui ${modules_group})
     add_library (yup::yup_gui ALIAS yup_gui)
+
+    yup_add_module (${modules_path}/modules/yup_python ${modules_group})
+    add_library (yup::yup_python ALIAS yup_python)
 endfunction()

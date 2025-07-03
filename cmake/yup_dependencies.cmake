@@ -111,3 +111,22 @@ function (_yup_fetch_perfetto)
 
     add_library (perfetto::perfetto ALIAS perfetto)
 endfunction()
+
+#==============================================================================
+
+function (_yup_fetch_python include_dir root_dir)
+    if (TARGET Python::Python)
+        return()
+    endif()
+
+    if (NOT "${root_dir}" STREQUAL "")
+        set (Python_ROOT_DIR "${root_dir}")
+    endif()
+
+    if ("${include_dir}" STREQUAL "")
+        set (Python_USE_STATIC_LIBS TRUE)
+        find_package (Python REQUIRED Development Interpreter)
+    endif()
+
+endfunction()
+
