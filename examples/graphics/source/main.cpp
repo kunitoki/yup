@@ -40,6 +40,7 @@
 #include "examples/OpaqueDemo.h"
 #include "examples/Paths.h"
 #include "examples/PopupMenu.h"
+#include "examples/Python.h"
 #include "examples/TextEditor.h"
 #include "examples/VariableFonts.h"
 #include "examples/Widgets.h"
@@ -64,8 +65,6 @@ public:
         auto baseFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
 #endif
 
-        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
-
         /*
         // Load an image
         {
@@ -84,144 +83,25 @@ public:
         }
         */
 
-        int counter = 0;
-
-        {
-            auto button = std::make_unique<yup::TextButton> ("Audio");
-            button->onClick = [this, number = counter++]
-            {
-                selectComponent (number);
-            };
-            addAndMakeVisible (button.get());
-            buttons.add (std::move (button));
-
-            components.add (std::make_unique<AudioExample> (font));
-            addChildComponent (components.getLast());
-        }
-
 #if JUCE_WASM
         yup::File dataPath = yup::File ("/data");
 #else
         yup::File dataPath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
 #endif
-        {
-            auto button = std::make_unique<yup::TextButton> ("Layout Fonts");
-            button->onClick = [this, number = counter++]
-            {
-                selectComponent (number);
-            };
-            addAndMakeVisible (button.get());
-            buttons.add (std::move (button));
 
-            components.add (std::make_unique<LayoutFontsExample> (font));
-            addChildComponent (components.getLast());
-        }
+        int counter = 0;
 
-        {
-            auto button = std::make_unique<yup::TextButton> ("Variable Fonts");
-            button->onClick = [this, number = counter++]
-            {
-                selectComponent (number);
-            };
-            addAndMakeVisible (button.get());
-            buttons.add (std::move (button));
-
-            components.add (std::make_unique<VariableFontsExample> (font));
-            addChildComponent (components.getLast());
-        }
-
-        {
-            auto button = std::make_unique<yup::TextButton> ("Paths");
-            button->onClick = [this, number = counter++]
-            {
-                selectComponent (number);
-            };
-            addAndMakeVisible (button.get());
-            buttons.add (std::move (button));
-
-            components.add (std::make_unique<PathsExample>());
-            addChildComponent (components.getLast());
-        }
-
-        {
-            auto button = std::make_unique<yup::TextButton> ("Text Editor");
-            button->onClick = [this, number = counter++]
-            {
-                selectComponent (number);
-            };
-            addAndMakeVisible (button.get());
-            buttons.add (std::move (button));
-
-            components.add (std::make_unique<TextEditorDemo>());
-            addChildComponent (components.getLast());
-        }
-
-        {
-            auto button = std::make_unique<yup::TextButton> ("Popup Menu");
-            button->onClick = [this, number = counter++]
-            {
-                selectComponent (number);
-            };
-            addAndMakeVisible (button.get());
-            buttons.add (std::move (button));
-
-            components.add (std::make_unique<PopupMenuDemo>());
-            addChildComponent (components.getLast());
-        }
-
-        {
-            auto button = std::make_unique<yup::TextButton> ("File Chooser");
-            button->onClick = [this, number = counter++]
-            {
-                selectComponent (number);
-            };
-            addAndMakeVisible (button.get());
-            buttons.add (std::move (button));
-
-            components.add (std::make_unique<FileChooserDemo>());
-            addChildComponent (components.getLast());
-        }
-
-        {
-            auto button = std::make_unique<yup::TextButton> ("Widgets");
-            button->onClick = [this, number = counter++]
-            {
-                selectComponent (number);
-            };
-            addAndMakeVisible (button.get());
-            buttons.add (std::move (button));
-
-            components.add (std::make_unique<yup::WidgetsDemo>());
-            addChildComponent (components.getLast());
-        }
-
-        {
-            auto button = std::make_unique<yup::TextButton> ("Artboard");
-            button->onClick = [this, number = counter++]
-            {
-                selectComponent (number);
-            };
-            addAndMakeVisible (button.get());
-            buttons.add (std::move (button));
-
-            auto artboard = std::make_unique<yup::ArtboardDemo>();
-            addChildComponent (artboard.get());
-            jassert (artboard->loadArtboard());
-            components.add (std::move (artboard));
-        }
-
-        {
-            auto button = std::make_unique<yup::TextButton> ("Opaque Demo");
-            button->onClick = [this, number = counter++]
-            {
-                selectComponent (number);
-            };
-            addAndMakeVisible (button.get());
-            buttons.add (std::move (button));
-
-            components.add (std::make_unique<yup::OpaqueDemo>());
-            addChildComponent (components.getLast());
-        }
+        registerDemo<AudioExample> ("Audio", counter++);
+        registerDemo<LayoutFontsExample> ("Layout Fonts", counter++);
+        registerDemo<VariableFontsExample> ("Variable Fonts", counter++);
+        registerDemo<PathsExample> ("Paths", counter++);
+        registerDemo<TextEditorDemo> ("Text Editor", counter++);
+        registerDemo<PythonDemo> ("Python", counter++);
+        registerDemo<PopupMenuDemo> ("Popup Menu", counter++);
+        registerDemo<FileChooserDemo> ("File Chooser", counter++);
+        registerDemo<WidgetsDemo> ("Widgets", counter++);
+        registerDemo<ArtboardDemo> ("Artboard", counter++, [] (auto& artboard) { jassert (artboard.loadArtboard()); });
+        registerDemo<OpaqueDemo> ("Opaque Demo", counter++);
 
         selectComponent (0);
 
@@ -325,6 +205,27 @@ public:
     }
 
 private:
+    template <class Demo>
+    void registerDemo (const yup::String& name, int counter, std::function<void (Demo&)> setup = nullptr)
+    {
+        auto button = std::make_unique<yup::TextButton> (name);
+        button->onClick = [this, counter]
+        {
+            selectComponent (counter);
+        };
+        addAndMakeVisible (button.get());
+        buttons.add (std::move (button));
+
+        auto demo = std::make_unique<Demo>();
+        auto& demoInstance = *demo.get();
+
+        components.add (std::move (demo));
+        addChildComponent (components.getLast());
+
+        if (setup)
+            setup (demoInstance);
+    }
+
     void updateWindowTitle()
     {
         yup::String title;

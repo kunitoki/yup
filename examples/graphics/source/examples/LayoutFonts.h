@@ -26,9 +26,9 @@
 class LayoutFontsExample : public yup::Component
 {
 public:
-    LayoutFontsExample (const yup::Font& font)
+    LayoutFontsExample()
         : Component ("LayoutFontsExample")
-        , font (font)
+        , font (yup::ApplicationTheme::getGlobalTheme()->getDefaultFont())
     {
     }
 
