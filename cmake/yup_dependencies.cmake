@@ -114,13 +114,9 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_fetch_python root_dir use_static_libs modules)
+function (_yup_fetch_python use_static_libs modules)
     if (TARGET Python::Python OR TARGET Python::Module)
         return()
-    endif()
-
-    if (NOT "${root_dir}" STREQUAL "")
-        set (Python_ROOT_DIR "${root_dir}")
     endif()
 
     set (Python_USE_STATIC_LIBS "${use_static_libs}")
