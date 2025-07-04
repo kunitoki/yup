@@ -41,7 +41,7 @@ extern "C" char* __unDName (char*, const char*, int, malloc_func_t, free_func_t,
 
 namespace yup::Helpers {
 
-// =================================================================================================
+//==============================================================================
 
 String demangleClassName (StringRef className)
 {
@@ -67,7 +67,7 @@ String demangleClassName (StringRef className)
     return name;
 }
 
-// =================================================================================================
+//==============================================================================
 
 String pythonizeClassName (StringRef className, int maxTemplateArgs)
 {
@@ -98,7 +98,7 @@ String pythonizeClassName (StringRef className, int maxTemplateArgs)
         .replace (">", "]");
 }
 
-// =================================================================================================
+//==============================================================================
 
 String pythonizeCompoundClassName (StringRef prefixName, StringRef className, int maxTemplateArgs)
 {
@@ -114,7 +114,7 @@ String pythonizeCompoundClassName (StringRef prefixName, StringRef className, in
     return result;
 }
 
-// =================================================================================================
+//==============================================================================
 
 String pythonizeModuleClassName (StringRef moduleName, StringRef className, int maxTemplateArgs)
 {

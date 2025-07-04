@@ -27,7 +27,7 @@
 
 namespace yup::Helpers {
 
-// =================================================================================================
+//==============================================================================
 
 /**
  * @brief Demangle a C++ class name.
@@ -40,7 +40,7 @@ namespace yup::Helpers {
  */
 String demangleClassName (StringRef className);
 
-// =================================================================================================
+//==============================================================================
 
 /**
  * @brief Demangle a C++ class name and pythonize it.
@@ -53,7 +53,7 @@ String demangleClassName (StringRef className);
  */
 String pythonizeClassName (StringRef className, int maxTemplateArgs = -1);
 
-// =================================================================================================
+//==============================================================================
 
 /**
  * @brief Demangle a C++ class name and pythonize it by compunding to another class name.
@@ -65,7 +65,7 @@ String pythonizeClassName (StringRef className, int maxTemplateArgs = -1);
  */
 String pythonizeCompoundClassName (StringRef prefixName, StringRef className, int maxTemplateArgs = -1);
 
-// =================================================================================================
+//==============================================================================
 
 /**
  * @brief Demangle a C++ class name and pythonize it by making it part of a module.

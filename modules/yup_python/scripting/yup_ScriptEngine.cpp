@@ -32,7 +32,7 @@ namespace py = pybind11;
 
 namespace {
 
-// =================================================================================================
+//==============================================================================
 
 [[maybe_unused]] String replaceBrokenLineNumbers (const String& input, const String& code)
 {
@@ -67,7 +67,7 @@ namespace {
 
 } // namespace
 
-// =================================================================================================
+//==============================================================================
 
 std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
     const String& programName,
@@ -118,7 +118,7 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
     return config;
 }
 
-// =================================================================================================
+//==============================================================================
 
 ScriptEngine::ScriptEngine ()
     : ScriptEngine (StringArray{})
@@ -148,7 +148,7 @@ ScriptEngine::~ScriptEngine()
     pybind11::finalize_interpreter();
 }
 
-// =================================================================================================
+//==============================================================================
 
 Result ScriptEngine::runScript (const String& code, py::dict locals, py::dict globals)
 {
@@ -157,8 +157,6 @@ Result ScriptEngine::runScript (const String& code, py::dict locals, py::dict gl
 
     return runScriptInternal (currentScriptCode, std::move (globals), std::move (locals));
 }
-
-// =================================================================================================
 
 Result ScriptEngine::runScript (const File& script, py::dict locals, py::dict globals)
 {
@@ -174,7 +172,7 @@ Result ScriptEngine::runScript (const File& script, py::dict locals, py::dict gl
     return runScriptInternal (currentScriptCode, std::move (globals), std::move (locals));
 }
 
-// =================================================================================================
+//==============================================================================
 
 Result ScriptEngine::runScriptInternal (const String& code, py::dict locals, py::dict globals)
 {

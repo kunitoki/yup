@@ -28,13 +28,13 @@
 
 #include <functional>
 
-// =================================================================================================
+//==============================================================================
 
 PYBIND11_DECLARE_HOLDER_TYPE(T, yup::ReferenceCountedObjectPtr<T>, true)
 
 namespace yup::Helpers {
 
-// =================================================================================================
+//==============================================================================
 
 inline void printPythonException (const pybind11::error_already_set& e)
 {
@@ -45,7 +45,7 @@ inline void printPythonException (const pybind11::error_already_set& e)
     pybind11::print (e.what());
 }
 
-// =================================================================================================
+//==============================================================================
 
 template <class T, class F>
 auto makeRepr (F&& func)
@@ -64,7 +64,7 @@ auto makeRepr (F&& func)
     };
 }
 
-// =================================================================================================
+//==============================================================================
 
 template <class E>
 pybind11::enum_<E> makeArithmeticEnum (pybind11::object& parent, const char* name)
@@ -99,7 +99,7 @@ pybind11::enum_<E> makeArithmeticEnum (pybind11::object& parent, const char* nam
     return classEnum;
 }
 
-// =================================================================================================
+//==============================================================================
 
 template <class T, class F>
 auto makeVoidPointerAndSizeCallable (F&& func)

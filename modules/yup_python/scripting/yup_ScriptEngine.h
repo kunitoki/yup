@@ -31,85 +31,84 @@
 namespace yup
 {
 
-// =================================================================================================
+//==============================================================================
 
-/**
- * @brief The ScriptEngine class provides a C++ interface for running Python scripts
- *
- * The ScriptEngine class encapsulates the functionality to run Python scripts within a C++ application. It utilizes the pybind11 library to
- * interact with the Python interpreter and provides a way to run custom Python code within the C++ environment.
+/** The ScriptEngine class provides a C++ interface for running Python scripts
+
+    The ScriptEngine class encapsulates the functionality to run Python scripts within a C++ application.
+    It utilizes the pybind11 library to interact with the Python interpreter and provides a way to run
+    custom Python code within the C++ environment.
  */
 class YUP_API ScriptEngine
 {
 public:
-    /**
-     * @brief Construct a new ScriptEngine object.
-     *
-     * Initializes a ScriptEngine object.
+    //==============================================================================
+
+    /** Construct a new ScriptEngine object.
+
+        Initializes a ScriptEngine object.
      */
     ScriptEngine();
 
-    /**
-     * @brief Construct a new ScriptEngine object.
-     *
-     * @param config A custom python config to initialize the Python interpreter.
-     *
-     * Initializes a ScriptEngine object.
+    /** Construct a new ScriptEngine object.
+
+        @param config A custom python config to initialize the Python interpreter.
+
+        Initializes a ScriptEngine object.
      */
     ScriptEngine (std::unique_ptr<PyConfig> config);
 
-    /**
-     * @brief Construct a new ScriptEngine object.
-     *
-     * Initializes a ScriptEngine object with the specified custom modules.
-     *
-     * @param modules An array of module names to be imported in the Python interpreter.
-     * @param config A custom python config to initialize the Python interpreter.
-     *
-     * @warning Ensure that the provided modules are available and compatible with the Python interpreter.
+    /** Construct a new ScriptEngine object.
+
+        Initializes a ScriptEngine object with the specified custom modules.
+
+        @param modules An array of module names to be imported in the Python interpreter.
+        @param config A custom python config to initialize the Python interpreter.
+
+        @warning Ensure that the provided modules are available and compatible with the Python interpreter.
      */
     ScriptEngine (StringArray modules, std::unique_ptr<PyConfig> config = {});
 
-    /**
-     * @brief Destroy the ScriptEngine object.
-     *
-     * Cleans up resources associated with the ScriptEngine object.
+    /** Destroy the ScriptEngine object.
+
+        Cleans up resources associated with the ScriptEngine object.
      */
     ~ScriptEngine();
 
-    /**
-     * @brief Run a Python script.
-     *
-     * Executes the given Python code within the Python interpreter.
-     *
-     * @param code The Python code to be executed.
-     * @param locals A python dictionary containing local variables.
-     * @param globals A python dictionary containing global variables.
-     *
-     * @return A Result object indicating the success or failure of the script execution.
+    //==============================================================================
+
+    /** Run a Python script.
+
+        Executes the given Python code within the Python interpreter.
+
+        @param code The Python code to be executed.
+        @param locals A python dictionary containing local variables.
+        @param globals A python dictionary containing global variables.
+
+        @return A Result object indicating the success or failure of the script execution.
      */
     Result runScript (const String& code, pybind11::dict locals = {}, pybind11::dict globals = pybind11::globals());
 
-    /**
-     * @brief Run a Python script file.
-     *
-     * Executes the given Python file within the Python interpreter.
-     *
-     * @param script The Python file to be executed.
-     * @param locals A python dictionary containing local variables.
-     * @param globals A python dictionary containing global variables.
-     *
-     * @return A Result object indicating the success or failure of the script execution.
+    /** Run a Python script file.
+
+        Executes the given Python file within the Python interpreter.
+
+        @param script The Python file to be executed.
+        @param locals A python dictionary containing local variables.
+        @param globals A python dictionary containing global variables.
+
+        @return A Result object indicating the success or failure of the script execution.
      */
     Result runScript (const File& script, pybind11::dict locals = {}, pybind11::dict globals = pybind11::globals());
 
-    /**
-     * @brief Prepare a valid python home and return the config to use.
-     *
-     * @param programName The desired program name.
-     * @param destinationFolder The destination folder to use for preparing the home.
-     * @param standardLibraryCallback The callback to provide the standard library archive.
-     * @param forceInstall If true, the home will be fully rebuilt.
+    //==============================================================================
+
+    /** Prepare a valid python home and return the config to use.
+
+        @param programName The desired program name.
+        @param destinationFolder The destination folder to use for preparing the home.
+        @param standardLibraryCallback The callback to provide the standard library archive.
+        @param forceInstall If true, the home will be fully rebuilt.
      */
     static std::unique_ptr<PyConfig> prepareScriptingHome (
         const String& programName,

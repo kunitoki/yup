@@ -28,8 +28,13 @@
 namespace yup
 {
 
-/**
- * @brief
+//==============================================================================
+
+/** Cast a python object to a C++ type.
+
+    @param value The python object to cast.
+
+    @return The casted value, or std::nullopt if the cast failed.
  */
 template <class T>
 std::optional<T> python_cast (const pybind11::object& value)
@@ -44,8 +49,11 @@ std::optional<T> python_cast (const pybind11::object& value)
     }
 }
 
-/**
- * @brief
+//==============================================================================
+
+/** Redirect the standard output and error streams to the script engine.
+
+    @param scriptEngine The script engine to redirect the streams to.
  */
 struct YUP_API ScriptStreamRedirection
 {

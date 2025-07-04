@@ -21,14 +21,46 @@
 
 #pragma once
 
+//==============================================================================
+
+#ifndef VC_EXTRALEAN
 #define VC_EXTRALEAN
+#define VC_EXTRALEAN_DEFINED_HERE
+#endif
+
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN_DEFINED_HERE
+#endif
+
+#ifndef NOMINMAX
 #define NOMINMAX
+#define NOMINMAX_DEFINED_HERE
+#endif
+
+#ifndef NOGDI
 #define NOGDI
+#define NOGDI_DEFINED_HERE
+#endif
+
 #include <windows.h>
+
+#ifdef VC_EXTRALEAN_DEFINED_HERE
 #undef VC_EXTRALEAN
+#endif
+
+#ifdef WIN32_LEAN_AND_MEAN_DEFINED_HERE
 #undef WIN32_LEAN_AND_MEAN
+#endif
+
+#ifdef NOMINMAX_DEFINED_HERE
 #undef NOMINMAX
+#endif
+
+#ifdef NOGDI_DEFINED_HERE
 #undef NOGDI
+#endif
+
+//==============================================================================
 
 #include <dbghelp.h>

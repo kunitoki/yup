@@ -20,7 +20,6 @@
 */
 
 #include "../utilities/yup_PyBind11Includes.h"
-
 #include "../bindings/yup_YupCore_bindings.h"
 
 #if YUP_MODULE_AVAILABLE_juce_events
@@ -64,7 +63,8 @@
 #include "ScriptJuceAudioUtilsBindings.h"
 #endif
 
-// =================================================================================================
+//==============================================================================
+
 #if YUP_PYTHON_EMBEDDED_INTERPRETER
 PYBIND11_EMBEDDED_MODULE (YUP_PYTHON_MODULE_NAME, m)
 #else

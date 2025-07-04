@@ -25,7 +25,11 @@
 
 namespace yup {
 
+//==============================================================================
+
 namespace py = pybind11;
+
+//==============================================================================
 
 ScriptStreamRedirection::ScriptStreamRedirection() noexcept
 {

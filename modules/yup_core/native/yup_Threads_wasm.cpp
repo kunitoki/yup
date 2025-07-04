@@ -89,4 +89,13 @@ YUP_API void YUP_CALLTYPE Process::lowerPrivilege()
         swapUserAndEffectiveUser();
 }
 
+YUP_API bool YUP_CALLTYPE Process::isForegroundProcess()
+{
+    return true;
+}
+
+YUP_API void YUP_CALLTYPE Process::makeForegroundProcess() {}
+
+YUP_API void YUP_CALLTYPE Process::hide() {}
+
 } // namespace yup
