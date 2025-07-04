@@ -105,7 +105,7 @@ class CMakeBuildExtension(build_ext):
 
         python_root_dir = sys.exec_prefix
         if platform.system() == "Linux":
-            python_root_dir = str(pathlib.Path(get_python_lib_path()).parent.parent)
+            python_root_dir = str(pathlib.Path(get_python_lib_path()).parent.parent.parent)
 
         config = "Debug" if self.debug or self.build_for_coverage else "Release"
         cmake_args = [
