@@ -23,7 +23,7 @@ testpaths = ["tests"]
 [tool.cibuildwheel]
 build-verbosity = 3
 test-requires = "pytest numpy imageio"
-test-command = "pytest -s {project}/tests"
+test-command = "pytest -s {project}/python/tests"
 manylinux-i686-image = "manylinux_2_28"
 manylinux-x86_64-image = "manylinux_2_28"
 manylinux-aarch64-image = "manylinux_2_28"
