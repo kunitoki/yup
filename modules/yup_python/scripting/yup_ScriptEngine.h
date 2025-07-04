@@ -28,7 +28,8 @@
 #include <functional>
 #include <memory>
 
-namespace yup {
+namespace yup
+{
 
 // =================================================================================================
 

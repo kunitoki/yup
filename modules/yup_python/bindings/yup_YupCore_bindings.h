@@ -38,8 +38,10 @@
 #include <type_traits>
 #include <utility>
 
-namespace PYBIND11_NAMESPACE {
-namespace detail {
+namespace PYBIND11_NAMESPACE
+{
+namespace detail
+{
 
 // =================================================================================================
 
@@ -107,7 +109,8 @@ public:
 } // namespace detail
 } // namespace PYBIND11_NAMESPACE
 
-namespace yup::Bindings {
+namespace yup::Bindings
+{
 
 // =================================================================================================
 
@@ -116,10 +119,14 @@ void registerYupCoreBindings (pybind11::module_& m);
 // ============================================================================================
 
 template <class T, class = void>
-struct isEqualityComparable : std::false_type {};
+struct isEqualityComparable : std::false_type
+{
+};
 
 template <class T>
-struct isEqualityComparable<T, std::void_t<decltype(std::declval<T>() == std::declval<T>())>> : std::true_type {};
+struct isEqualityComparable<T, std::void_t<decltype (std::declval<T>() == std::declval<T>())>> : std::true_type
+{
+};
 
 // =================================================================================================
 
@@ -139,7 +146,7 @@ struct PyArrayElementComparator
             return result.template cast<int>();
         }
 
-        pybind11::pybind11_fail("Tried to call pure virtual function \"Array.Comparator.compareElements\"");
+        pybind11::pybind11_fail ("Tried to call pure virtual function \"Array.Comparator.compareElements\"");
     }
 };
 
@@ -153,7 +160,7 @@ void registerArray (pybind11::module_& m)
     namespace py = pybind11;
     using namespace py::literals;
 
-    auto type = py::hasattr (m, "Array") ? m.attr ("Array").cast<py::dict>() : py::dict{};
+    auto type = py::hasattr (m, "Array") ? m.attr ("Array").cast<py::dict>() : py::dict {};
 
     ([&]
     {
@@ -167,48 +174,45 @@ void registerArray (pybind11::module_& m)
 
         classComparator_
             .def (py::init<>())
-            .def ("compareElements", &PyArrayElementComparator<ValueType>::compareElements)
-        ;
+            .def ("compareElements", &PyArrayElementComparator<ValueType>::compareElements);
 
         class_
             .def (py::init<>())
             .def (py::init<const ValueType&>())
             .def (py::init<const T&>())
-            .def (py::init ([](py::list list)
+            .def (py::init ([] (py::list list)
+        {
+            auto result = T();
+            result.ensureStorageAllocated (static_cast<int> (list.size()));
+
+            for (auto item : list)
             {
-                auto result = T();
-                result.ensureStorageAllocated (static_cast<int> (list.size()));
+                py::detail::make_caster<ValueType> conv;
 
-                for (auto item : list)
-                {
-                    py::detail::make_caster<ValueType> conv;
+                if (! conv.load (item, true))
+                    py::pybind11_fail ("Invalid value type used to feed \"Array\" constructor");
 
-                    if (! conv.load (item, true))
-                        py::pybind11_fail("Invalid value type used to feed \"Array\" constructor");
+                result.add (py::detail::cast_op<ValueType&&> (std::move (conv)));
+            }
 
-                    result.add (py::detail::cast_op<ValueType&&> (std::move (conv)));
-                }
+            return result;
+        })).def (py::init ([] (py::args args)
+        {
+            auto result = T();
+            result.ensureStorageAllocated (static_cast<int> (args.size()));
 
-                return result;
-            }))
-            .def (py::init ([](py::args args)
+            for (auto item : args)
             {
-                auto result = T();
-                result.ensureStorageAllocated (static_cast<int> (args.size()));
+                py::detail::make_caster<ValueType> conv;
 
-                for (auto item : args)
-                {
-                    py::detail::make_caster<ValueType> conv;
+                if (! conv.load (item, true))
+                    py::pybind11_fail ("Invalid value type used to feed \"Array\" constructor");
 
-                    if (! conv.load (item, true))
-                        py::pybind11_fail("Invalid value type used to feed \"Array\" constructor");
+                result.add (py::detail::cast_op<ValueType&&> (std::move (conv)));
+            }
 
-                    result.add (py::detail::cast_op<ValueType&&> (std::move (conv)));
-                }
-
-                return result;
-            }))
-            .def ("clear", &T::clear)
+            return result;
+        })).def ("clear", &T::clear)
             .def ("clearQuick", &T::clearQuick)
             .def ("fill", &T::fill)
             .def ("size", &T::size)
@@ -219,75 +223,71 @@ void registerArray (pybind11::module_& m)
             .def ("getReference", py::overload_cast<int> (&T::getReference), py::return_value_policy::reference)
             .def ("getFirst", &T::getFirst)
             .def ("getLast", &T::getLast)
-        //.def ("getRawDataPointer", &T::getRawDataPointer)
-            .def("__iter__", [](T& self)
+            //.def ("getRawDataPointer", &T::getRawDataPointer)
+            .def ("__iter__", [] (T& self)
+        {
+            return py::make_iterator (self.begin(), self.end());
+        },
+                  py::keep_alive<0, 1>())
+            .def ("add", [] (T& self, const ValueType& arg)
+        {
+            self.add (arg);
+        }).def ("add", [] (T& self, py::list list)
+        {
+            self.ensureStorageAllocated (self.size() + static_cast<int> (list.size()));
+
+            for (auto item : list)
             {
-                return py::make_iterator (self.begin(), self.end());
-            }, py::keep_alive<0, 1>())
-            .def ("add", [](T& self, const ValueType& arg)
+                py::detail::make_caster<ValueType> conv;
+
+                if (! conv.load (item, true))
+                    py::pybind11_fail ("Invalid value type used to feed \"Array.add\"");
+
+                self.add (py::detail::cast_op<ValueType&&> (std::move (conv)));
+            }
+        }).def ("add", [] (T& self, py::args args)
+        {
+            self.ensureStorageAllocated (self.size() + static_cast<int> (args.size()));
+
+            for (auto item : args)
             {
-                self.add (arg);
-            })
-            .def ("add", [](T& self, py::list list)
-            {
-                self.ensureStorageAllocated (self.size() + static_cast<int> (list.size()));
+                py::detail::make_caster<ValueType> conv;
 
-                for (auto item : list)
-                {
-                    py::detail::make_caster<ValueType> conv;
+                if (! conv.load (item, true))
+                    py::pybind11_fail ("Invalid value type used to feed \"Array.add\"");
 
-                    if (! conv.load (item, true))
-                        py::pybind11_fail("Invalid value type used to feed \"Array.add\"");
-
-                    self.add (py::detail::cast_op<ValueType&&> (std::move (conv)));
-                }
-            })
-            .def ("add", [](T& self, py::args args)
-            {
-                self.ensureStorageAllocated (self.size() + static_cast<int> (args.size()));
-
-                for (auto item : args)
-                {
-                    py::detail::make_caster<ValueType> conv;
-
-                    if (! conv.load (item, true))
-                        py::pybind11_fail("Invalid value type used to feed \"Array.add\"");
-
-                    self.add (py::detail::cast_op<ValueType&&> (std::move (conv)));
-                }
-            })
-            .def ("insert", &T::insert)
+                self.add (py::detail::cast_op<ValueType&&> (std::move (conv)));
+            }
+        }).def ("insert", &T::insert)
             .def ("insertMultiple", &T::insertMultiple)
-        //.def ("insertArray", &T::insertArray)
+            //.def ("insertArray", &T::insertArray)
             .def ("set", &T::set)
             .def ("setUnchecked", &T::setUnchecked)
-        //.def ("addArray", &T::addArray)
-            .def ("addArray", [](T& self, py::list list)
+            //.def ("addArray", &T::addArray)
+            .def ("addArray", [] (T& self, py::list list)
+        {
+            for (auto item : list)
             {
-                for (auto item : list)
-                {
-                    py::detail::make_caster<ValueType> conv;
+                py::detail::make_caster<ValueType> conv;
 
-                    if (! conv.load (item, true))
-                        py::pybind11_fail("Invalid value type used to feed \"Array.addArray\"");
+                if (! conv.load (item, true))
+                    py::pybind11_fail ("Invalid value type used to feed \"Array.addArray\"");
 
-                    self.add (py::detail::cast_op<ValueType&&> (std::move (conv)));
-                }
-            })
-            .def ("swapWith", &T::template swapWith<T>)
+                self.add (py::detail::cast_op<ValueType&&> (std::move (conv)));
+            }
+        }).def ("swapWith", &T::template swapWith<T>)
             .def ("addArray", py::overload_cast<const T&> (&T::template addArray<T>))
             .def ("resize", &T::resize)
             .def ("remove", py::overload_cast<int> (&T::remove))
             .def ("removeAndReturn", &T::removeAndReturn)
             .def ("remove", py::overload_cast<const ValueType*> (&T::remove))
-            .def ("removeIf", [](T& self, py::function predicate)
+            .def ("removeIf", [] (T& self, py::function predicate)
+        {
+            return self.removeIf ([&predicate] (const ValueType& value)
             {
-                return self.removeIf ([&predicate](const ValueType& value)
-                {
-                    return predicate (py::cast (value)).template cast<bool>();
-                });
-            })
-            .def ("removeRange", &T::removeRange)
+                return predicate (py::cast (value)).template cast<bool>();
+            });
+        }).def ("removeRange", &T::removeRange)
             .def ("removeLast", &T::removeLast)
             .def ("swap", &T::swap)
             .def ("move", &T::move, "currentIndex"_a, "newIndex"_a)
@@ -295,18 +295,20 @@ void registerArray (pybind11::module_& m)
             .def ("ensureStorageAllocated", &T::ensureStorageAllocated, "minNumElements"_a)
             .def ("getLock", &T::getLock)
             .def ("__len__", &T::size)
-            .def ("__repr__", [className](T& self)
-            {
-                String result;
-                result
-                    << "<" << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (T).name(), 1)
-                    << " object at " << String::formatted ("%p", std::addressof (self)) << ">";
-                return result;
-            })
-        ;
+            .def ("__repr__", [className] (T& self)
+        {
+            String result;
+            result
+                << "<" << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (T).name(), 1)
+                << " object at " << String::formatted ("%p", std::addressof (self)) << ">";
+            return result;
+        });
 
         if constexpr (! std::is_same_v<ValueType, Types>)
-            class_.def (py::init ([](Types value) { return T (static_cast<ValueType> (value)); }));
+            class_.def (py::init ([] (Types value)
+            {
+                return T (static_cast<ValueType> (value));
+            }));
 
         if constexpr (isEqualityComparable<ValueType>::value)
         {
@@ -317,27 +319,28 @@ void registerArray (pybind11::module_& m)
                 .def ("contains", &T::contains)
                 .def ("addIfNotAlreadyThere", &T::addIfNotAlreadyThere)
                 .def ("addUsingDefaultSort", &T::addUsingDefaultSort)
-                .def ("addSorted", [](T& self, PyArrayElementComparator<ValueType>& comparator, ValueType value)
-                {
-                    self.addSorted (comparator, value);
-                })
-                .def ("indexOfSorted", [](const T& self, PyArrayElementComparator<ValueType>& comparator, ValueType value)
-                {
-                    return self.indexOfSorted (comparator, value);
-                })
-                .def ("removeValuesIn", &T::template removeValuesIn<T>)
+                .def ("addSorted", [] (T& self, PyArrayElementComparator<ValueType>& comparator, ValueType value)
+            {
+                self.addSorted (comparator, value);
+            }).def ("indexOfSorted", [] (const T& self, PyArrayElementComparator<ValueType>& comparator, ValueType value)
+            {
+                return self.indexOfSorted (comparator, value);
+            }).def ("removeValuesIn", &T::template removeValuesIn<T>)
                 .def ("removeValuesNotIn", &T::template removeValuesNotIn<T>)
                 .def ("removeFirstMatchingValue", &T::removeFirstMatchingValue)
                 .def ("removeAllInstancesOf", &T::removeAllInstancesOf)
-                .def ("sort", [](T& self) { self.sort(); })
-                .def ("sort", [](T& self, PyArrayElementComparator<ValueType>& comparator, int retainOrderOfEquivalentItems)
-                {
-                    self.sort (comparator, retainOrderOfEquivalentItems);
-                }, "comparator"_a, "retainOrderOfEquivalentItems"_a = false)
-            ;
+                .def ("sort", [] (T& self)
+            {
+                self.sort();
+            }).def ("sort", [] (T& self, PyArrayElementComparator<ValueType>& comparator, int retainOrderOfEquivalentItems)
+            {
+                self.sort (comparator, retainOrderOfEquivalentItems);
+            },
+                    "comparator"_a,
+                    "retainOrderOfEquivalentItems"_a = false);
         }
 
-        type[py::type::of (py::cast (Types{}))] = class_;
+        type[py::type::of (py::cast (Types {}))] = class_;
 
         return true;
     }() && ...);
@@ -359,12 +362,12 @@ struct PyThreadID
         return value;
     }
 
-    bool operator==(const PyThreadID& other) const noexcept
+    bool operator== (const PyThreadID& other) const noexcept
     {
         return value == other.value;
     }
 
-    bool operator!=(const PyThreadID& other) const noexcept
+    bool operator!= (const PyThreadID& other) const noexcept
     {
         return value != other.value;
     }
@@ -407,7 +410,7 @@ public:
             return result.cast<int>();
         }
 
-        pybind11::pybind11_fail("Tried to call pure virtual function \"InputStream.read\"");
+        pybind11::pybind11_fail ("Tried to call pure virtual function \"InputStream.read\"");
     }
 
     char readByte() override
@@ -568,7 +571,7 @@ public:
             return result.cast<bool>();
         }
 
-        pybind11::pybind11_fail("Tried to call pure virtual function \"OutputStream.write\"");
+        pybind11::pybind11_fail ("Tried to call pure virtual function \"OutputStream.write\"");
     }
 
     bool writeByte (char value) override
@@ -681,12 +684,12 @@ struct YUP_API PyURLDownloadTaskListener : public URL::DownloadTaskListener
 {
     void finished (URL::DownloadTask* task, bool success) override
     {
-        PYBIND11_OVERRIDE_PURE(void, URL::DownloadTaskListener, finished, task, success);
+        PYBIND11_OVERRIDE_PURE (void, URL::DownloadTaskListener, finished, task, success);
     }
 
     void progress (URL::DownloadTask* task, int64 bytesDownloaded, int64 totalLength) override
     {
-        PYBIND11_OVERRIDE_PURE(void, URL::DownloadTaskListener, progress, task, bytesDownloaded, totalLength);
+        PYBIND11_OVERRIDE_PURE (void, URL::DownloadTaskListener, progress, task, bytesDownloaded, totalLength);
     }
 };
 
@@ -707,13 +710,13 @@ struct YUP_API PyXmlElementComparator
             return result.cast<int>();
         }
 
-        pybind11::pybind11_fail("Tried to call pure virtual function \"XmlElement.Comparator.compareElements\"");
+        pybind11::pybind11_fail ("Tried to call pure virtual function \"XmlElement.Comparator.compareElements\"");
     }
 };
 
 struct YUP_API PyXmlElementCallableComparator
 {
-    explicit PyXmlElementCallableComparator(pybind11::function f)
+    explicit PyXmlElementCallableComparator (pybind11::function f)
         : fn (std::move (f))
     {
     }
@@ -729,7 +732,7 @@ struct YUP_API PyXmlElementCallableComparator
             return result.cast<int>();
         }
 
-        pybind11::pybind11_fail("Tried to call function \"XmlElement.Comparator.compareElements\" without a callable");
+        pybind11::pybind11_fail ("Tried to call function \"XmlElement.Comparator.compareElements\" without a callable");
     }
 
 private:
@@ -742,7 +745,7 @@ struct YUP_API PyHighResolutionTimer : public HighResolutionTimer
 {
     void hiResTimerCallback() override
     {
-        PYBIND11_OVERRIDE_PURE(void, HighResolutionTimer, hiResTimerCallback);
+        PYBIND11_OVERRIDE_PURE (void, HighResolutionTimer, hiResTimerCallback);
     }
 };
 

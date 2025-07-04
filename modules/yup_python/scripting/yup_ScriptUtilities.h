@@ -25,7 +25,8 @@
 
 #include <optional>
 
-namespace yup {
+namespace yup
+{
 
 /**
  * @brief

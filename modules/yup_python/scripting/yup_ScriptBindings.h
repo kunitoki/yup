@@ -31,7 +31,8 @@
 #include <typeinfo>
 #include <unordered_map>
 
-namespace yup {
+namespace yup
+{
 
 // =================================================================================================
 
@@ -51,11 +52,12 @@ namespace yup {
  * @return A constant pointer to void that can be interpreted as a pointer to an instance of the target type
  *         if the cast is successful. If the cast fails, it may return a null pointer.
  */
-using ComponentTypeCaster = std::function<const void* (const Component*, const std::type_info*&)>;
+using ComponentTypeCaster = std::function<const void*(const Component*, const std::type_info*&)>;
 
 // =================================================================================================
 
-namespace Bindings {
+namespace Bindings
+{
 
 /**
  * @brief A structure for managing component type mappings.
@@ -117,7 +119,7 @@ const void* ComponentType (const Component* src, const std::type_info*& type)
 
     if (auto result = dynamic_cast<const T*> (src))
     {
-        type = &typeid(T);
+        type = &typeid (T);
         return result;
     }
 
