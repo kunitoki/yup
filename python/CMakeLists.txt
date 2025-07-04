@@ -59,11 +59,13 @@ yup_standalone_app (
         yup::yup_gui
         yup::yup_python)
 
-set_target_properties (${target_name} PROPERTIES CXX_VISIBILITY_PRESET "hidden")
-set_target_properties (${target_name} PROPERTIES VISIBILITY_INLINES_HIDDEN TRUE)
-set_target_properties (${target_name} PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
-set_target_properties (${target_name} PROPERTIES OUTPUT_NAME "${target_name}")
-set_target_properties (${target_name} PROPERTIES PREFIX "")
+set_target_properties (${target_name} PROPERTIES
+    CXX_EXTENSIONS OFF
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN TRUE
+    POSITION_INDEPENDENT_CODE TRUE
+    OUTPUT_NAME "${target_name}"
+    PREFIX "")
 
 if (APPLE)
     set_target_properties (${target_name} PROPERTIES LINK_FLAGS "-undefined dynamic_lookup")
