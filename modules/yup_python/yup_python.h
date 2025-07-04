@@ -39,6 +39,8 @@
 #pragma once
 #define YUP_GUI_H_INCLUDED
 
+#include <yup_core/yup_core.h>
+
 //==============================================================================
 /** Config: YUP_PYTHON_USE_EXTERNAL_PYBIND11
 
