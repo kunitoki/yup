@@ -120,8 +120,12 @@ class CMakeBuildExtension(build_ext):
                 f"-DPython_INCLUDE_DIRS={get_python_includes_path()}",
                 f"-DPython_LIBRARY_DIRS={get_python_lib_path()}"
             ]
-        else:
-            cmake_args += [f"-DPYTHON_EXECUTABLE={sys.executable}"]
+
+        if platform.system() == 'Darwin':
+            cmake_args += [
+                f"-DCMAKE_OSX_ARCHITECTURES:STRING={self.build_osx_architectures}",
+                f"-DCMAKE_OSX_DEPLOYMENT_TARGET:STRING={self.build_osx_deployment_target}"
+            ]
 
         if self.build_for_coverage:
             cmake_args += ["-DYUP_ENABLE_COVERAGE:BOOL=ON"]
@@ -131,12 +135,6 @@ class CMakeBuildExtension(build_ext):
 
         if self.build_with_lto:
             cmake_args += ["-DYUP_ENABLE_LTO:BOOL=ON"]
-
-        if platform.system() == 'Darwin':
-            cmake_args += [
-                f"-DCMAKE_OSX_ARCHITECTURES:STRING={self.build_osx_architectures}",
-                f"-DCMAKE_OSX_DEPLOYMENT_TARGET:STRING={self.build_osx_deployment_target}"
-            ]
 
         try:
             os.chdir(str(build_temp))
