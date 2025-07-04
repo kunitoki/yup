@@ -103,10 +103,6 @@ class CMakeBuildExtension(build_ext):
         output_path = extdir.parent
         output_path.mkdir(parents=True, exist_ok=True)
 
-        python_root_dir = sys.exec_prefix
-        if platform.system() == "Linux":
-            python_root_dir = str(pathlib.Path(get_python_lib_path()).parent.parent.parent)
-
         config = "Debug" if self.debug or self.build_for_coverage else "Release"
         cmake_args = [
             f"-DYUP_BUILD_WHEEL=ON",
@@ -115,11 +111,15 @@ class CMakeBuildExtension(build_ext):
             f"-DYUP_BUILD_TESTS=OFF",
             f"-DCMAKE_BUILD_TYPE={config}",
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={output_path}",
-            f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{config.upper()}={output_path}",
-            f"-DPython_ROOT_DIR={python_root_dir}",
-            f"-DPython_INCLUDE_DIRS={get_python_includes_path()}",
-            f"-DPython_LIBRARY_DIRS={get_python_lib_path()}"
+            f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{config.upper()}={output_path}"
         ]
+
+        if platform.system() != "Linux":
+            cmake_args += [
+                f"-DPython_ROOT_DIR={sys.exec_prefix}",
+                f"-DPython_INCLUDE_DIRS={get_python_includes_path()}",
+                f"-DPython_LIBRARY_DIRS={get_python_lib_path()}"
+            ]
 
         if self.build_for_coverage:
             cmake_args += ["-DYUP_ENABLE_COVERAGE:BOOL=ON"]
