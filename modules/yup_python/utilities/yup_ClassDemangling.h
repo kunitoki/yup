@@ -25,7 +25,8 @@
 
 #include <functional>
 
-namespace yup::Helpers {
+namespace yup::Helpers
+{
 
 //==============================================================================
 

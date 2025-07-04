@@ -27,10 +27,10 @@
 #if YUP_WINDOWS
 #include "yup_WindowsIncludes.h"
 
-#pragma comment (lib, "dbghelp.lib")
+#pragma comment(lib, "dbghelp.lib")
 
-using malloc_func_t = void* (*)(size_t);
-using free_func_t = void (*)(void*);
+using malloc_func_t = void* (*) (size_t);
+using free_func_t = void (*) (void*);
 
 extern "C" char* __unDName (char*, const char*, int, malloc_func_t, free_func_t, unsigned short int);
 #endif
@@ -39,7 +39,8 @@ extern "C" char* __unDName (char*, const char*, int, malloc_func_t, free_func_t,
 #include <cxxabi.h>
 #endif
 
-namespace yup::Helpers {
+namespace yup::Helpers
+{
 
 //==============================================================================
 
@@ -48,12 +49,12 @@ String demangleClassName (StringRef className)
     String name = className;
 
 #if YUP_WINDOWS
-    if (name.startsWith("class "))
+    if (name.startsWith ("class "))
     {
         char demangledName[1024] = { 0 };
         auto offset = name.startsWithChar (L'?') ? 1 : 0;
-        __unDName(demangledName, name.toRawUTF8() + offset, numElementsInArray(demangledName), malloc, free, 0x2800);
-        name = String::fromUTF8(demangledName).replace("class ", "");
+        __unDName (demangledName, name.toRawUTF8() + offset, numElementsInArray (demangledName), malloc, free, 0x2800);
+        name = String::fromUTF8 (demangledName).replace ("class ", "");
     }
 
 #else
@@ -73,7 +74,7 @@ String pythonizeClassName (StringRef className, int maxTemplateArgs)
 {
     String name = demangleClassName (className);
 
-    if (maxTemplateArgs > 0 && name.contains("<"))
+    if (maxTemplateArgs > 0 && name.contains ("<"))
     {
         String tempName;
 
@@ -108,8 +109,8 @@ String pythonizeCompoundClassName (StringRef prefixName, StringRef className, in
 
     result
         << prefixName
-        << pythonizedName.substring(0, 1).toUpperCase()
-        << pythonizedName.substring(1);
+        << pythonizedName.substring (0, 1).toUpperCase()
+        << pythonizedName.substring (1);
 
     return result;
 }

@@ -26,4 +26,4 @@
  * Stringify utility macros.
  */
 #define YUP_PYTHON_STRINGIFY_HELPER(text) #text
-#define YUP_PYTHON_STRINGIFY(text) YUP_PYTHON_STRINGIFY_HELPER(text)
+#define YUP_PYTHON_STRINGIFY(text) YUP_PYTHON_STRINGIFY_HELPER (text)

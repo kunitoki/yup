@@ -30,9 +30,10 @@
 
 //==============================================================================
 
-PYBIND11_DECLARE_HOLDER_TYPE(T, yup::ReferenceCountedObjectPtr<T>, true)
+PYBIND11_DECLARE_HOLDER_TYPE (T, yup::ReferenceCountedObjectPtr<T>, true)
 
-namespace yup::Helpers {
+namespace yup::Helpers
+{
 
 //==============================================================================
 
@@ -52,7 +53,7 @@ auto makeRepr (F&& func)
 {
     static_assert (std::is_invocable_v<F, const T&>);
 
-    return [func](const T& instance)
+    return [func] (const T& instance)
     {
         String result;
 
@@ -76,25 +77,61 @@ pybind11::enum_<E> makeArithmeticEnum (pybind11::object& parent, const char* nam
     pybind11::enum_<E> classEnum (parent, name);
 
     classEnum
-        .def ("__and__", [](E lhs, E rhs) { return (static_cast<T> (lhs) & static_cast<T> (rhs)); })
-        .def ("__eq__", [](E lhs, E rhs) { return (static_cast<T> (lhs) == static_cast<T> (rhs)); })
-        .def ("__eq__", [](E lhs, T rhs) { return (static_cast<T> (lhs) == rhs); })
-        .def ("__ge__", [](E lhs, E rhs) { return (static_cast<T> (lhs) >= static_cast<T> (rhs)); })
-        .def ("__ge__", [](E lhs, T rhs) { return (static_cast<T> (lhs) >= rhs); })
-        .def ("__gt__", [](E lhs, E rhs) { return (static_cast<T> (lhs) > static_cast<T> (rhs)); })
-        .def ("__gt__", [](E lhs, T rhs) { return (static_cast<T> (lhs) > rhs); })
-        .def ("__hash__", [](E lhs) { return static_cast<T> (lhs); })
-        .def ("__int__", [](E lhs) { return static_cast<T> (lhs); })
-        .def ("__invert__", [](E lhs) { return ~static_cast<T> (lhs); })
-        .def ("__le__", [](E lhs, E rhs) { return (static_cast<T> (lhs) <= static_cast<T> (rhs)); })
-        .def ("__le__", [](E lhs, T rhs) { return (static_cast<T> (lhs) <= rhs); })
-        .def ("__lt__", [](E lhs, E rhs) { return (static_cast<T> (lhs) < static_cast<T> (rhs)); })
-        .def ("__lt__", [](E lhs, T rhs) { return (static_cast<T> (lhs) < rhs); })
-        .def ("__ne__", [](E lhs, E rhs) { return (static_cast<T> (lhs) != static_cast<T> (rhs)); })
-        .def ("__ne__", [](E lhs, T rhs) { return (static_cast<T> (lhs) != rhs); })
-        .def ("__or__", [](E lhs, E rhs) { return (static_cast<T> (lhs) | static_cast<T> (rhs)); })
-        .def ("__xor__", [](E lhs, E rhs) { return (static_cast<T> (lhs) ^ static_cast<T> (rhs)); })
-    ;
+        .def ("__and__", [] (E lhs, E rhs)
+    {
+        return (static_cast<T> (lhs) & static_cast<T> (rhs));
+    }).def ("__eq__", [] (E lhs, E rhs)
+    {
+        return (static_cast<T> (lhs) == static_cast<T> (rhs));
+    }).def ("__eq__", [] (E lhs, T rhs)
+    {
+        return (static_cast<T> (lhs) == rhs);
+    }).def ("__ge__", [] (E lhs, E rhs)
+    {
+        return (static_cast<T> (lhs) >= static_cast<T> (rhs));
+    }).def ("__ge__", [] (E lhs, T rhs)
+    {
+        return (static_cast<T> (lhs) >= rhs);
+    }).def ("__gt__", [] (E lhs, E rhs)
+    {
+        return (static_cast<T> (lhs) > static_cast<T> (rhs));
+    }).def ("__gt__", [] (E lhs, T rhs)
+    {
+        return (static_cast<T> (lhs) > rhs);
+    }).def ("__hash__", [] (E lhs)
+    {
+        return static_cast<T> (lhs);
+    }).def ("__int__", [] (E lhs)
+    {
+        return static_cast<T> (lhs);
+    }).def ("__invert__", [] (E lhs)
+    {
+        return ~static_cast<T> (lhs);
+    }).def ("__le__", [] (E lhs, E rhs)
+    {
+        return (static_cast<T> (lhs) <= static_cast<T> (rhs));
+    }).def ("__le__", [] (E lhs, T rhs)
+    {
+        return (static_cast<T> (lhs) <= rhs);
+    }).def ("__lt__", [] (E lhs, E rhs)
+    {
+        return (static_cast<T> (lhs) < static_cast<T> (rhs));
+    }).def ("__lt__", [] (E lhs, T rhs)
+    {
+        return (static_cast<T> (lhs) < rhs);
+    }).def ("__ne__", [] (E lhs, E rhs)
+    {
+        return (static_cast<T> (lhs) != static_cast<T> (rhs));
+    }).def ("__ne__", [] (E lhs, T rhs)
+    {
+        return (static_cast<T> (lhs) != rhs);
+    }).def ("__or__", [] (E lhs, E rhs)
+    {
+        return (static_cast<T> (lhs) | static_cast<T> (rhs));
+    }).def ("__xor__", [] (E lhs, E rhs)
+    {
+        return (static_cast<T> (lhs) ^ static_cast<T> (rhs));
+    });
 
     return classEnum;
 }
@@ -106,7 +143,7 @@ auto makeVoidPointerAndSizeCallable (F&& func)
 {
     if constexpr (std::is_invocable_v<F, T&, const void*, size_t>)
     {
-        return [func](T* self, pybind11::buffer data)
+        return [func] (T* self, pybind11::buffer data)
         {
             const auto info = data.request();
 
@@ -120,7 +157,7 @@ auto makeVoidPointerAndSizeCallable (F&& func)
     }
     else if constexpr (std::is_invocable_v<F, const T&, const void*, size_t>)
     {
-        return [func](const T* self, pybind11::buffer data)
+        return [func] (const T* self, pybind11::buffer data)
         {
             const auto info = data.request();
 
@@ -134,7 +171,7 @@ auto makeVoidPointerAndSizeCallable (F&& func)
     }
     else if constexpr (std::is_invocable_v<F, T&, void*, size_t>)
     {
-        return [func](T* self, pybind11::buffer data)
+        return [func] (T* self, pybind11::buffer data)
         {
             auto info = data.request (true);
 
@@ -148,7 +185,7 @@ auto makeVoidPointerAndSizeCallable (F&& func)
     }
     else if constexpr (std::is_invocable_v<F, const T&, void*, size_t>)
     {
-        return [func](const T* self, pybind11::buffer data)
+        return [func] (const T* self, pybind11::buffer data)
         {
             auto info = data.request (true);
 

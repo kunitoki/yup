@@ -26,11 +26,13 @@
 
 #include <regex>
 
-namespace yup {
+namespace yup
+{
 
 namespace py = pybind11;
 
-namespace {
+namespace
+{
 
 //==============================================================================
 
@@ -120,13 +122,13 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
 
 //==============================================================================
 
-ScriptEngine::ScriptEngine ()
-    : ScriptEngine (StringArray{})
+ScriptEngine::ScriptEngine()
+    : ScriptEngine (StringArray {})
 {
 }
 
 ScriptEngine::ScriptEngine (std::unique_ptr<PyConfig> config)
-    : ScriptEngine (StringArray{}, std::move (config))
+    : ScriptEngine (StringArray {}, std::move (config))
 {
 }
 
@@ -186,7 +188,7 @@ Result ScriptEngine::runScriptInternal (const String& code, py::dict locals, py:
         [[maybe_unused]] const auto redirectStreamsUntilExit = ScriptStreamRedirection();
 
         for (const auto& m : customModules)
-            globals [m.toRawUTF8()] = py::module_::import (m.toRawUTF8());
+            globals[m.toRawUTF8()] = py::module_::import (m.toRawUTF8());
 
         py::str pythonCode { code.toRawUTF8(), code.getNumBytesAsUTF8() };
 

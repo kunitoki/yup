@@ -23,7 +23,8 @@
 
 #include <yup_core/yup_core.h>
 
-namespace yup::Helpers {
+namespace yup::Helpers
+{
 
 //==============================================================================
 

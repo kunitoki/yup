@@ -29,7 +29,8 @@
 #include <string_view>
 #include <tuple>
 
-namespace yup::Bindings {
+namespace yup::Bindings
+{
 
 //==============================================================================
 
@@ -44,7 +45,7 @@ void registerComponentType (StringRef className, ComponentTypeCaster classCaster
     auto& map = getComponentTypeMap();
 
     auto lock = CriticalSection::ScopedLockType (map.mutex);
-    map.typeMap [className] = std::move (classCaster);
+    map.typeMap[className] = std::move (classCaster);
 }
 
 void clearComponentTypes()

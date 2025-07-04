@@ -24,7 +24,8 @@
 #include <cstdint>
 #include <functional>
 
-namespace yup {
+namespace yup
+{
 
 //==============================================================================
 
@@ -57,7 +58,7 @@ public:
     }
 
 private:
-    T value{};
+    T value {};
 };
 
 //==============================================================================
@@ -73,7 +74,6 @@ struct underlying_type<GenericInteger<T>>
 {
     using type = typename GenericInteger<T>::underlying_type;
 };
-
 
 template <class T>
 using underlying_type_t = typename underlying_type<T>::type;
