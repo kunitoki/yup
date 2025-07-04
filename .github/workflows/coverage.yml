@@ -145,7 +145,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: python-coverage
-        path: python/wheelhouse/lcov.info
+        path: wheelhouse/lcov.info
 
   combine-coverage:
     runs-on: ubuntu-latest
