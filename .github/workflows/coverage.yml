@@ -172,7 +172,7 @@ jobs:
 
     - name: Combine Coverage Reports
       run: |
-        lcov -a coverage/cpp.info "*" -a coverage/lcov.info "*" -o coverage/coverage_final.info --ignore-errors ${IGNORE_ERRORS}
+        lcov -a coverage/cpp.info -a coverage/lcov.info -o coverage/coverage_final.info --ignore-errors ${IGNORE_ERRORS}
         lcov --list coverage/coverage_final.info
 
     - name: Upload Combined Coverage to Codecov
