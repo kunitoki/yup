@@ -144,8 +144,8 @@ class CMakeBuildExtension(build_ext):
                 build_command += ["--", f"-j{os.cpu_count()}"]
             self.spawn(build_command)
 
-            if self.build_for_coverage:
-                self.generate_coverage(cwd)
+            #if self.build_for_coverage:
+            #    self.generate_coverage(cwd)
 
         finally:
             os.chdir(str(cwd))
