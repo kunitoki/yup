@@ -83,9 +83,9 @@ class CMakeExtension(Extension):
 
 
 class CMakeBuildExtension(build_ext):
-    build_for_coverage = get_environment_option(int, "YUP_COVERAGE", 0)
-    build_for_distribution = get_environment_option(int, "YUP_DISTRIBUTION", 0)
-    build_with_lto = get_environment_option(int, "YUP_LTO", 0)
+    build_for_coverage = get_environment_option(int, "YUP_ENABLE_COVERAGE", 0)
+    build_for_distribution = get_environment_option(int, "YUP_ENABLE_DISTRIBUTION", 0)
+    build_with_lto = get_environment_option(int, "YUP_ENABLE_LTO", 0)
     build_osx_architectures = get_environment_option(str, "YUP_OSX_ARCHITECTURES", "arm64")
     build_osx_deployment_target = get_environment_option(str, "YUP_OSX_DEPLOYMENT_TARGET", "11.0")
 
@@ -103,6 +103,10 @@ class CMakeBuildExtension(build_ext):
         output_path = extdir.parent
         output_path.mkdir(parents=True, exist_ok=True)
 
+        python_root_dir = sys.exec_prefix
+        if platform.system() == "Linux":
+            python_root_dir = str(pathlib.Path(get_python_lib_path()).parent.parent)
+
         config = "Debug" if self.debug or self.build_for_coverage else "Release"
         cmake_args = [
             f"-DYUP_BUILD_WHEEL=ON",
@@ -112,7 +116,7 @@ class CMakeBuildExtension(build_ext):
             f"-DCMAKE_BUILD_TYPE={config}",
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={output_path}",
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{config.upper()}={output_path}",
-            f"-DPython_ROOT_DIR={sys.exec_prefix}",
+            f"-DPython_ROOT_DIR={python_root_dir}",
             f"-DPython_INCLUDE_DIRS={get_python_includes_path()}",
             f"-DPython_LIBRARY_DIRS={get_python_lib_path()}"
         ]
@@ -224,22 +228,20 @@ def load_description(version):
     with open("../README.md", mode="r", encoding="utf-8") as f:
         long_description = f.read()
 
-    """
-    long_description = re.sub(
-        r"`([^`>]+)\s<((?!https)[^`>]+)>`_",
-        fr"`\1 <https://github.com/kunitoki/yup/tree/v{version}/\2>`_",
-        long_description)
+    #long_description = re.sub(
+    #    r"`([^`>]+)\s<((?!https)[^`>]+)>`_",
+    #    fr"`\1 <https://github.com/kunitoki/yup/tree/v{version}/\2>`_",
+    #    long_description)
 
-    long_description = re.sub(
-        r"image:: ((?!https).*)",
-        fr"image:: https://raw.githubusercontent.com/kunitoki/yup/v{version}/\1",
-        long_description)
+    #long_description = re.sub(
+    #    r"image:: ((?!https).*)",
+    #    fr"image:: https://raw.githubusercontent.com/kunitoki/yup/v{version}/\1",
+    #    long_description)
 
-    long_description = re.sub(
-        r":target: ((?!https).*)",
-        fr":target: https://github.com/kunitoki/yup/tree/v{version}/\1",
-        long_description)
-    """
+    #long_description = re.sub(
+    #    r":target: ((?!https).*)",
+    #    fr":target: https://github.com/kunitoki/yup/tree/v{version}/\1",
+    #    long_description)
 
     return long_description
 
