@@ -5,13 +5,14 @@ requires = [
     # pyi generation
     "mypy",
     # unit tests (for code coverage cmake target)
-    #"pytest",
+    "pytest",
     #"numpy",
     #"imageio",
     # defaults
     "setuptools",
     "wheel",
 ]
+build-backend = "setuptools.build_meta"
 
 [tool.distutils.bdist_wheel]
 universal = false
@@ -29,12 +30,17 @@ manylinux-x86_64-image = "manylinux_2_28"
 manylinux-aarch64-image = "manylinux_2_28"
 
 [tool.cibuildwheel.linux]
-build-frontend = { name = "pip", args = ["--no-build-isolation"] }
+build-frontend = { name = "build[uv]" }
 before-build = [
     """dnf install -y zlib-devel openssl-devel freetype-devel fontconfig-devel freeglut-devel alsa-lib-devel mesa-libGL-devel \
         xorg-x11-proto-devel xorg-x11-proto-devel libcurl-devel libpng-devel libX11-devel libXcursor-devel libXrandr-devel \
         libXinerama-devel libXrender-devel libXcomposite-devel libXinerama-devel libXcursor-devel xorg-x11-server-Xvfb \
-        gtk3-devel webkit2gtk3-devel wget"""
+        gtk3-devel webkit2gtk3-devel wget""",
+
+    #"uv add mypy",
+    #"uv add pytest",
+    #"uv add setuptools",
+    #"uv add wheel",
 
     #"wget https://github.com/linux-test-project/lcov/releases/download/v2.0/lcov-2.0-1.noarch.rpm",
     #"yum localinstall -y lcov-2.0-1.noarch.rpm",
