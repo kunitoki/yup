@@ -124,7 +124,7 @@ function (_yup_fetch_python root_dir use_static_libs modules)
     endif()
 
     set (Python_USE_STATIC_LIBS "${use_static_libs}")
-    find_package (Python COMPONENTS ${modules} REQUIRED)
+    find_package (Python REQUIRED COMPONENTS ${modules})
 
 endfunction()
 

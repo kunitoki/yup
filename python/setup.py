@@ -105,21 +105,23 @@ class CMakeBuildExtension(build_ext):
 
         config = "Debug" if self.debug or self.build_for_coverage else "Release"
         cmake_args = [
-            f"-DYUP_BUILD_WHEEL=ON",
-            f"-DYUP_EXPORT_MODULES=OFF",
-            f"-DYUP_BUILD_EXAMPLES=OFF",
-            f"-DYUP_BUILD_TESTS=OFF",
-            f"-DCMAKE_BUILD_TYPE={config}",
-            f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={output_path}",
-            f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{config.upper()}={output_path}"
+            f"-DYUP_BUILD_WHEEL:BOOL=ON",
+            f"-DYUP_EXPORT_MODULES:BOOL=OFF",
+            f"-DYUP_BUILD_EXAMPLES:BOOL=OFF",
+            f"-DYUP_BUILD_TESTS:BOOL=OFF",
+            f"-DCMAKE_BUILD_TYPE:STRING={config}",
+            f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY:PATH={output_path}",
+            f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{config.upper()}:PATH={output_path}"
         ]
 
         if platform.system() != "Linux":
             cmake_args += [
-                f"-DPython_ROOT_DIR={sys.exec_prefix}",
-                f"-DPython_INCLUDE_DIRS={get_python_includes_path()}",
-                f"-DPython_LIBRARY_DIRS={get_python_lib_path()}"
+                f"-DPython_ROOT_DIR:PATH={sys.exec_prefix}",
+                f"-DPython_INCLUDE_DIRS:PATH={get_python_includes_path()}",
+                f"-DPython_LIBRARY_DIRS:PATH={get_python_lib_path()}"
             ]
+        else:
+            cmake_args += [f"-DPYTHON_EXECUTABLE:FILEPATH={sys.executable}"]
 
         if platform.system() == 'Darwin':
             cmake_args += [
