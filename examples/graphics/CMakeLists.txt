@@ -48,7 +48,7 @@ endif()
 
 # ==== Prepare target
 set (additional_modules "")
-if (YUP_PLATFORM_MAC OR YUP_PLATFORM_WINDOWS OR YUP_PLATFORM_LINUX)
+if (YUP_PLATFORM_DESKTOP)
     set (additional_modules yup::yup_python)
 endif()
 

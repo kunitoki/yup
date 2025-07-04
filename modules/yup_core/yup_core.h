@@ -51,7 +51,7 @@
     license:            ISC
 
     dependencies:       zlib
-    osxFrameworks:      Cocoa Foundation IOKit Security
+    macFrameworks:      Cocoa Foundation IOKit Security
     iosFrameworks:      Foundation UIKit
     iosSimFrameworks:   Foundation UIKit
     linuxLibs:          rt dl pthread

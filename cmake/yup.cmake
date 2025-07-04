@@ -50,8 +50,8 @@ function (_yup_setup_platform)
         list (APPEND platforms "emscripten" "posix" "web")
 
     elseif (APPLE)
-        set (platform "osx")
-        list (APPEND platforms "osx" "apple" "posix" "desktop")
+        set (platform "mac")
+        list (APPEND platforms "mac" "apple" "posix" "desktop")
 
     elseif (WIN32)
         if (CMAKE_SYSTEM_NAME MATCHES "WindowsStore")

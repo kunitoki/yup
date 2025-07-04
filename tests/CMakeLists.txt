@@ -62,7 +62,7 @@ set (target_modules
 
 if (NOT YUP_PLATFORM_EMSCRIPTEN)
     list (APPEND target_modules yup_gui)
-    if (YUP_PLATFORM_MAC OR YUP_PLATFORM_WINDOWS OR YUP_PLATFORM_LINUX)
+    if (YUP_PLATFORM_DESKTOP)
         list (APPEND target_modules yup_python)
     endif()
     list (APPEND target_gtest_modules
@@ -94,7 +94,7 @@ foreach (module ${target_modules})
         "${CMAKE_CURRENT_LIST_DIR}/${module}/*.cpp")
     list (APPEND sources ${module_sources})
 
-    if (YUP_PLATFORM_OSX OR YUP_PLATFORM_IOS)
+    if (YUP_PLATFORM_APPLE)
         file (GLOB_RECURSE apple_sources
             "${CMAKE_CURRENT_LIST_DIR}/${module}/*.mm")
         list (APPEND sources ${apple_sources})

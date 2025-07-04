@@ -35,7 +35,7 @@
 
     dependencies:       rive rive_decoders glad
     searchpaths:        include source source/generated/shaders
-    osxFrameworks:      Metal QuartzCore
+    macFrameworks:      Metal QuartzCore
     defines:            WITH_RIVE_TEXT=1 RIVE_DECODERS=1
     iosDefines:         RIVE_IOS=1
     iosSimDefines:      RIVE_IOS_SIMULATOR=1
