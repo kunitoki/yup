@@ -1,20 +1,22 @@
-name: MacOS Python
+name: Windows Python
 
 on:
   push:
     paths:
       - "CMakeLists.txt"
-      - "**/workflows/python_macos.yml"
+      - "**/workflows/python_windows.yml"
       - "**/cmake/**"
       - "**/modules/**"
       - "**/thirdparty/**"
       - "**/python/**"
       - "!**/native/*_android.*"
+      - "!**/native/*_apple.*"
       - "!**/native/*_emscripten.*"
       - "!**/native/*_linux.*"
       - "!**/native/*_ios.*"
+      - "!**/native/*_mac.*"
+      - "!**/native/*_posix.*"
       - "!**/native/*_wasm.*"
-      - "!**/native/*_windows.*"
     branches:
       - "**"
 
@@ -32,7 +34,8 @@ jobs:
       fail-fast: true
       matrix:
         include:
-        - { os: macos-15, python: 311, platform_id: macosx_universal2, cibw_archs: universal2 }
+        - { os: windows-latest, python: 311, platform_id: win_amd64, cibw_archs: AMD64 }
+        - { os: windows-latest, python: 311, platform_id: win_arm64, cibw_archs: ARM64 }
 
     steps:
       - uses: actions/checkout@v4
@@ -47,10 +50,9 @@ jobs:
         env:
           CIBW_ARCHS: ${{matrix.cibw_archs}}
           CIBW_BUILD: cp${{ matrix.python }}-${{ matrix.platform_id }}
-          #CIBW_TEST_SKIP: "*-macosx_x86_64 *-macosx_universal2:x86_64"
+          CIBW_TEST_SKIP: "*-win_arm64"
           CIBW_DEBUG_TRACEBACK: TRUE
-          CIBW_ENVIRONMENT: |
-            CIBW_DEBUG_TRACEBACK=TRUE MACOSX_DEPLOYMENT_TARGET=11.0 YUP_OSX_DEPLOYMENT_TARGET=11.0 YUP_OSX_ARCHITECTURES="x86_64;arm64"
+          CIBW_ENVIRONMENT: CIBW_DEBUG_TRACEBACK=TRUE
         with:
           package-dir: python
 
