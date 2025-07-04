@@ -9,6 +9,8 @@ on:
       - "**/modules/**"
       - "**/thirdparty/**"
       - "**/python/**"
+      - "!**/native/generated/**"
+      - "!**/native/java*/**"
       - "!**/native/*_android.*"
       - "!**/native/*_apple.*"
       - "!**/native/*_emscripten.*"

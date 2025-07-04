@@ -10,6 +10,8 @@ on:
       - "**/modules/**"
       - "**/tests/**"
       - "**/thirdparty/**"
+      - "!**/native/generated/**"
+      - "!**/native/java*/**"
       - "!**/native/*_android.*"
       - "!**/native/*_emscripten.*"
       - "!**/native/*_linux.*"

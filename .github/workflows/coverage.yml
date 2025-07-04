@@ -9,6 +9,8 @@ on:
       - "**/cmake/**"
       - "**/modules/**"
       - "**/tests/**"
+      - "!**/native/generated/**"
+      - "!**/native/java*/**"
       - "!**/native/*_android.*"
       - "!**/native/*_apple.*"
       - "!**/native/*_emscripten.*"
