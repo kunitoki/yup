@@ -39,7 +39,7 @@ namespace yup {
  *
  * @param msg A string containing the error message to be associated with the exception.
  */
-class ScriptException : public std::exception
+class YUP_API ScriptException : public std::exception
 {
 public:
     /**

@@ -63,7 +63,7 @@ namespace Bindings {
  * This structure is used to store mappings between class names and ComponentTypeCaster functions, allowing for dynamic casting of
  * Component objects to their derived types.
  */
-struct ComponentTypeMap
+struct YUP_API ComponentTypeMap
 {
     CriticalSection mutex;
     std::unordered_map<String, ComponentTypeCaster> typeMap;

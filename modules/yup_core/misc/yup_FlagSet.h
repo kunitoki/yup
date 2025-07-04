@@ -55,7 +55,7 @@ namespace yup
     @endcode
 */
 template <class T, class... Ts>
-class FlagSet
+class YUP_API FlagSet
 {
     static_assert (std::is_integral_v<T>);
 

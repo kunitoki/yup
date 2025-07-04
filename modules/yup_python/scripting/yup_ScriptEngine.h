@@ -38,7 +38,7 @@ namespace yup {
  * The ScriptEngine class encapsulates the functionality to run Python scripts within a C++ application. It utilizes the pybind11 library to
  * interact with the Python interpreter and provides a way to run custom Python code within the C++ environment.
  */
-class ScriptEngine
+class YUP_API ScriptEngine
 {
 public:
     /**

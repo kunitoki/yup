@@ -46,7 +46,7 @@ std::optional<T> python_cast (const pybind11::object& value)
 /**
  * @brief
  */
-struct ScriptStreamRedirection
+struct YUP_API ScriptStreamRedirection
 {
     ScriptStreamRedirection() noexcept;
     ~ScriptStreamRedirection() noexcept;
