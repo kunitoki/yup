@@ -30,7 +30,7 @@ manylinux-x86_64-image = "manylinux_2_28"
 manylinux-aarch64-image = "manylinux_2_28"
 
 [tool.cibuildwheel.linux]
-build-frontend = { name = "pip", args = ["--no-build-isolation"] }
+#build-frontend = { name = "pip", args = ["--no-build-isolation"] }
 before-build = [
     """dnf install -y zlib-devel openssl-devel freetype-devel fontconfig-devel freeglut-devel alsa-lib-devel mesa-libGL-devel \
         xorg-x11-proto-devel xorg-x11-proto-devel libcurl-devel libpng-devel libX11-devel libXcursor-devel libXrandr-devel \
