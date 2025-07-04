@@ -114,7 +114,7 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_fetch_python include_dir root_dir)
+function (_yup_fetch_python root_dir use_static_libs)
     if (TARGET Python::Python)
         return()
     endif()
@@ -123,7 +123,7 @@ function (_yup_fetch_python include_dir root_dir)
         set (Python_ROOT_DIR "${root_dir}")
     endif()
 
-    set (Python_USE_STATIC_LIBS TRUE)
+    set (Python_USE_STATIC_LIBS "${use_static_libs}")
     find_package (Python REQUIRED Development Interpreter)
 
 endfunction()

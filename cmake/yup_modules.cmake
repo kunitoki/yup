@@ -523,9 +523,11 @@ function (yup_add_module module_path modules_definitions module_group)
 
     # ==== Fetch Python if needed
     if (module_needs_python)
-        _yup_fetch_python ("${Python_INCLUDE_DIRS}" "${Python_ROOT_DIR}")
+        _yup_fetch_python ("${Python_ROOT_DIR}" "${YUP_ENABLE_STATIC_PYTHON_LIBS}")
         list (APPEND module_libs Python::Python)
-        list (APPEND module_include_paths "${Python_INCLUDE_DIRS}")
+        if (NOT "${Python_INCLUDE_DIRS}" STREQUAL "")
+            list (APPEND module_include_paths "${Python_INCLUDE_DIRS}")
+        endif()
         if (NOT "${Python_LIBRARY_DIRS}" STREQUAL "")
             list (APPEND module_libs_paths "${Python_LIBRARY_DIRS}")
         endif()
