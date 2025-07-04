@@ -28,6 +28,8 @@ on:
       - "**/cmake/**"
       - "**/modules/**"
       - "**/tests/**"
+      - "!**/native/generated/**"
+      - "!**/native/java*/**"
       - "!**/native/*_android.*"
       - "!**/native/*_apple.*"
       - "!**/native/*_emscripten.*"
@@ -51,7 +53,7 @@ env:
   IGNORE_ERRORS: "mismatch,gcov,source,negative,unused,empty"
 
 jobs:
-  coverage:
+  cpp-coverage:
     runs-on: ubuntu-latest
 
     steps:
@@ -60,11 +62,6 @@ jobs:
 
     - name: Setup Ninja
       uses: seanmiddleditch/gha-setup-ninja@master
-
-    - name: Setup and install python
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.11"
 
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
@@ -90,6 +87,49 @@ jobs:
       working-directory: ${{ runner.workspace }}/build/tests/Debug
       run: ./yup_tests --gtest_output=xml:test_results.xml
 
+    - name: Generate C++ Coverage Report
+      working-directory: ${{ runner.workspace }}/build
+      run: |
+        mkdir -p coverage
+        lcov --directory . --capture --output-file coverage/coverage.info --ignore-errors ${IGNORE_ERRORS}
+        lcov -r coverage/coverage.info \
+          "*/thirdparty/*" \
+          "*/build/*" \
+          "*/tests/*" \
+          "*/usr/*" \
+          "*/opt/*" \
+          "*/CMakeFiles/*" \
+          -o coverage/cpp.info --ignore-errors ${IGNORE_ERRORS}
+        lcov --list coverage/cpp.info
+
+    - name: Upload C++ Coverage Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: cpp-coverage
+        path: ${{ runner.workspace }}/build/coverage/cpp.info
+
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: ${{ runner.workspace }}/build/tests/Debug/test_results.xml
+
+  python-coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup and install python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install Dependencies
+      run: sudo apt-get update && sudo apt-get install -y lcov
+
     - name: Build Python Wheels and Run Python Tests
       uses: pypa/cibuildwheel@v3.0.0
       env:
@@ -101,40 +141,52 @@ jobs:
       with:
         package-dir: python
 
-    - name: Generate Combined Coverage Report
-      working-directory: ${{ runner.workspace }}/build
+    - name: Upload Python Coverage Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: python-coverage
+        path: python/wheelhouse/lcov.info
+
+  combine-coverage:
+    runs-on: ubuntu-latest
+    needs: [cpp-coverage, python-coverage]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Dependencies
+      run: sudo apt-get update && sudo apt-get install -y lcov
+
+    - name: Download C++ Coverage Report
+      uses: actions/download-artifact@v4
+      with:
+        name: cpp-coverage
+        path: coverage/
+
+    - name: Download Python Coverage Report
+      uses: actions/download-artifact@v4
+      with:
+        name: python-coverage
+        path: coverage/
+
+    - name: Combine Coverage Reports
       run: |
-        lcov --directory . --capture --output-file coverage/coverage.info --ignore-errors ${IGNORE_ERRORS}
-        lcov -r coverage/coverage.info \
-          "*/thirdparty/*" \
-          "*/build/*" \
-          "*/tests/*" \
-          "*/usr/*" \
-          "*/opt/*" \
-          "*/CMakeFiles/*" \
-          -o coverage/cpp.info --ignore-errors ${IGNORE_ERRORS}
-        lcov -a ../python/wheelhouse/lcov.info "*" -a coverage/cpp.info "*" -o coverage/coverage_final.info --ignore-errors ${IGNORE_ERRORS}
+        lcov -a coverage/cpp.info "*" -a coverage/lcov.info "*" -o coverage/coverage_final.info --ignore-errors ${IGNORE_ERRORS}
         lcov --list coverage/coverage_final.info
 
-    - name: Upload Overall Coverage to Codecov
+    - name: Upload Combined Coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
-        file: ${{ runner.workspace }}/build/coverage/coverage_final.info
+        file: coverage/coverage_final.info
         name: overall-coverage
         fail_ci_if_error: false
         verbose: true
 
-    - name: Upload Test Results
+    - name: Upload Combined Coverage Reports
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: test-results
-        path: ${{ runner.workspace }}/build/tests/Debug/test_results.xml
-
-    - name: Upload Coverage Reports
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: coverage-reports
-        path: ${{ runner.workspace }}/build/coverage/
+        name: combined-coverage-reports
+        path: coverage/
