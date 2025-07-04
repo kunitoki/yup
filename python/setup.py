@@ -111,17 +111,11 @@ class CMakeBuildExtension(build_ext):
             f"-DYUP_BUILD_TESTS:BOOL=OFF",
             f"-DCMAKE_BUILD_TYPE:STRING={config}",
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY:PATH={output_path}",
-            f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{config.upper()}:PATH={output_path}"
+            f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{config.upper()}:PATH={output_path}",
+            f"-DPython_ROOT_DIR:PATH={sys.exec_prefix}",
+            f"-DPython_INCLUDE_DIRS:PATH={get_python_includes_path()}",
+            f"-DPython_LIBRARY_DIRS:PATH={get_python_lib_path()}"
         ]
-
-        if platform.system() != "Linux":
-            cmake_args += [
-                f"-DPython_ROOT_DIR:PATH={sys.exec_prefix}",
-                f"-DPython_INCLUDE_DIRS:PATH={get_python_includes_path()}",
-                f"-DPython_LIBRARY_DIRS:PATH={get_python_lib_path()}"
-            ]
-        else:
-            cmake_args += [f"-DPYTHON_EXECUTABLE:FILEPATH={sys.executable}"]
 
         if platform.system() == 'Darwin':
             cmake_args += [
