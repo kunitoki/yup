@@ -120,7 +120,26 @@ function (_yup_fetch_python use_static_libs modules)
     endif()
 
     set (Python_USE_STATIC_LIBS "${use_static_libs}")
-    find_package (Python REQUIRED COMPONENTS ${modules})
 
+    find_package (Python QUIET COMPONENTS ${modules})
+
+    if (NOT Python_FOUND)
+        string (REPLACE "Development.Module" "Development" fallback_modules "${modules}")
+        if (NOT "${fallback_modules}" STREQUAL "${modules}")
+            find_package (Python QUIET COMPONENTS ${fallback_modules})
+        endif()
+
+        if (NOT Python_FOUND)
+            find_package (Python QUIET COMPONENTS Interpreter Development)
+        endif()
+
+        if (NOT Python_FOUND)
+            find_package (Python QUIET COMPONENTS Interpreter)
+        endif()
+    endif()
+
+    if (NOT Python_FOUND)
+        find_package (Python REQUIRED COMPONENTS ${modules})
+    endif()
 endfunction()
 
