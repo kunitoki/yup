@@ -41,6 +41,6 @@ cmake-build*
 out/*
 
 # Ides
-.vscode/
+.vscode
 .idea
 .vs

@@ -59,6 +59,11 @@ jobs:
     - name: Setup Ninja
       uses: seanmiddleditch/gha-setup-ninja@master
 
+    - name: Setup and install python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
 
@@ -79,22 +84,34 @@ jobs:
       working-directory: ${{ runner.workspace }}/build
       run: cmake --build . --target coverage_clean
 
-    - name: Run Tests
+    - name: Run C++ Tests
       working-directory: ${{ runner.workspace }}/build/tests/Debug
       run: ./yup_tests --gtest_output=xml:test_results.xml
+
+    - name: Build Python Wheels and Run Python Tests
+      uses: pypa/cibuildwheel@v3.0.0
+      env:
+        CIBW_ARCHS: x86_64
+        CIBW_BUILD: cp311-manylinux_x86_64
+        CIBW_TEST_SKIP: "*manylinux*"
+        CIBW_DEBUG_TRACEBACK: TRUE
+        CIBW_ENVIRONMENT: CIBW_DEBUG_TRACEBACK=TRUE YUP_ENABLE_COVERAGE=1
+      with:
+        package-dir: python
 
     - name: Generate Combined Coverage Report
       working-directory: ${{ runner.workspace }}/build
       run: |
-        lcov --directory . --capture --output-file coverage/coverage.info --ignore-errors mismatch,gcov,source,negative,unused,empty
-        lcov --remove coverage/coverage.info \
+        lcov --directory . --capture --output-file coverage/coverage.info --ignore-errors ${IGNORE_ERRORS}
+        lcov -r coverage/coverage.info \
           "*/thirdparty/*" \
           "*/build/*" \
           "*/tests/*" \
           "*/usr/*" \
           "*/opt/*" \
           "*/CMakeFiles/*" \
-          --output-file coverage/coverage_final.info --ignore-errors mismatch,gcov,source,negative,unused,empty
+          -o coverage/cpp.info --ignore-errors ${IGNORE_ERRORS}
+        lcov -a ../python/wheelhouse/lcov.info "*" -a coverage/cpp.info "*" -o coverage/coverage_final.info --ignore-errors ${IGNORE_ERRORS}
         lcov --list coverage/coverage_final.info
 
     - name: Upload Overall Coverage to Codecov
