@@ -34,7 +34,7 @@ before-build = [
     """dnf install -y zlib-devel openssl-devel freetype-devel fontconfig-devel freeglut-devel alsa-lib-devel mesa-libGL-devel \
         xorg-x11-proto-devel xorg-x11-proto-devel libcurl-devel libpng-devel libX11-devel libXcursor-devel libXrandr-devel \
         libXinerama-devel libXrender-devel libXcomposite-devel libXinerama-devel libXcursor-devel xorg-x11-server-Xvfb \
-        gtk3-devel webkit2gtk3-devel wget""",
+        gtk3-devel webkit2gtk3-devel wget lcov""",
 
     # "uv add mypy pytest setuptools wheel",
 
