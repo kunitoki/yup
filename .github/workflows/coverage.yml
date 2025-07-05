@@ -172,7 +172,8 @@ jobs:
 
     - name: Combine Coverage Reports
       run: |
-        lcov -a coverage/cpp.info -a coverage/lcov.info -o coverage/coverage_final.info --ignore-errors ${IGNORE_ERRORS}
+        lcov -r coverage/lcov.info "*/pybind11/*" -o coverage/python.info --ignore-errors ${IGNORE_ERRORS}
+        lcov -a coverage/cpp.info -a coverage/python.info -o coverage/coverage_final.info --ignore-errors ${IGNORE_ERRORS}
         lcov --list coverage/coverage_final.info
 
     - name: Upload Combined Coverage to Codecov
