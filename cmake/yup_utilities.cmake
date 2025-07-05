@@ -170,11 +170,11 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_get_package_config_libs package_name output_variable)
+macro (_yup_get_package_config_libs package_name output_variable)
     find_package (PkgConfig REQUIRED)
     pkg_check_modules (${package_name} REQUIRED IMPORTED_TARGET ${package_name})
-    set (${output_variable} "PkgConfig::${package_name}" PARENT_SCOPE)
-endfunction()
+    set (${output_variable} "PkgConfig::${package_name}")
+endmacro()
 
 #==============================================================================
 

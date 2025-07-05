@@ -523,19 +523,14 @@ function (yup_add_module module_path modules_definitions module_group)
 
     # ==== Fetch Python if needed
     if (module_needs_python)
-        set (python_modules "")
         if (NOT YUP_BUILD_WHEEL)
-            set (python_modules "Interpreter;Development.Embed")
             list (APPEND module_libs Python::Python)
             if (YUP_PLATFORM_MAC)
                 list (APPEND module_link_options "-Wl,-weak_reference_mismatches,weak")
             endif()
         else()
-            set (python_modules "Interpreter;Development.Module")
             list (APPEND module_libs Python::Module)
         endif()
-
-        _yup_fetch_python ("${YUP_ENABLE_STATIC_PYTHON_LIBS}" "${python_modules}")
 
         if (NOT "${Python_INCLUDE_DIRS}" STREQUAL "")
             list (APPEND module_include_paths "${Python_INCLUDE_DIRS}")
@@ -598,7 +593,7 @@ endfunction()
 
 #==============================================================================
 
-function (yup_add_default_modules modules_path)
+macro (yup_add_default_modules modules_path)
     get_filename_component (modules_path "${modules_path}" ABSOLUTE)
     _yup_message (STATUS "Adding default modules from ${modules_path}")
 
@@ -655,7 +650,22 @@ function (yup_add_default_modules modules_path)
     add_library (yup::yup_gui ALIAS yup_gui)
 
     if (YUP_ARG_ENABLE_PYTHON)
+        if (NOT YUP_BUILD_WHEEL)
+            set (python_modules "Interpreter;Development.Embed")
+        else()
+            set (python_modules "Interpreter;Development.Module")
+        endif()
+
+        _yup_fetch_python ("${YUP_ENABLE_STATIC_PYTHON_LIBS}" "${python_modules}")
+        _yup_message (STATUS "Found python modules: ${python_modules}")
+        _yup_message (STATUS "* Python_EXECUTABLE: ${Python_EXECUTABLE}")
+        _yup_message (STATUS "* Python_VERSION_MAJOR: ${Python_VERSION_MAJOR}")
+        _yup_message (STATUS "* Python_VERSION_MINOR: ${Python_VERSION_MINOR}")
+        _yup_message (STATUS "* Python_INCLUDE_DIR: ${Python_INCLUDE_DIR}")
+        _yup_message (STATUS "* Python_LIBRARY_DIRS: ${Python_LIBRARY_DIRS}")
+        _yup_message (STATUS "* Python_ROOT_DIR: ${Python_ROOT_DIR}")
+
         yup_add_module (${modules_path}/modules/yup_python "${modules_definitions}" ${modules_group})
         add_library (yup::yup_python ALIAS yup_python)
     endif()
-endfunction()
+endmacro()

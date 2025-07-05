@@ -75,6 +75,24 @@ else()
         GTest::gmock_main)
 endif()
 
+if (YUP_PLATFORM_DESKTOP)
+    set (python_tools_path "${CMAKE_CURRENT_LIST_DIR}/../python/tools")
+    set (python_target_name "${target_name}_python_stdlib")
+    yup_prepare_python_stdlib (${python_target_name} ${python_tools_path} python_standard_library)
+
+    yup_add_embedded_binary_resources (
+        ${target_name}_python_stdlib_binary
+        OUT_DIR PythonStandardLibrary
+        HEADER PythonStandardLibrary.h
+        NAMESPACE yup
+        RESOURCE_NAMES
+            PythonStandardLibrary
+        RESOURCES
+            ${python_standard_library})
+
+    list (APPEND target_modules "${target_name}_python_stdlib_binary")
+endif()
+
 yup_standalone_app (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}

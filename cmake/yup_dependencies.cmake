@@ -114,7 +114,7 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_fetch_python use_static_libs modules)
+macro (_yup_fetch_python use_static_libs modules)
     if (TARGET Python::Python OR TARGET Python::Module)
         return()
     endif()
@@ -141,5 +141,4 @@ function (_yup_fetch_python use_static_libs modules)
     if (NOT Python_FOUND)
         find_package (Python REQUIRED COMPONENTS ${modules})
     endif()
-endfunction()
-
+endmacro()
