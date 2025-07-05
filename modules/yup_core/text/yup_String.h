@@ -869,7 +869,7 @@ public:
 
     //==============================================================================
     /** Reverse the string. */
-    String reverse() const;
+    String reversed() const;
 
     //==============================================================================
     /** Checks whether the string might be in quotation marks.
@@ -924,6 +924,7 @@ public:
     */
     String paddedRight (yup_wchar padCharacter, int minimumLength) const;
 
+    //==============================================================================
     /** Creates a string from data in an unknown format.
 
         This looks at some binary data and tries to guess whether it's Unicode

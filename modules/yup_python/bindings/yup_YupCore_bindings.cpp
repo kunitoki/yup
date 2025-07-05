@@ -654,10 +654,6 @@ void registerSparseSet (pybind11::module_& m)
 
 void registerYupCoreBindings (py::module_& m)
 {
-#if !YUP_PYTHON_EMBEDDED_INTERPRETER
-    yup::SystemStats::setApplicationCrashHandler (Helpers::applicationCrashHandler);
-#endif
-
     // ============================================================================================ GenericInteger<T>
 
     py::class_<GenericInteger<int8>> (m, "int8")

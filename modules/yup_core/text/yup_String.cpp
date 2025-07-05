@@ -2029,7 +2029,7 @@ bool String::containsNonWhitespaceChars() const noexcept
     return false;
 }
 
-String String::reverse() const
+String String::reversed() const
 {
     auto end = text.findTerminatingNull();
     String t;
