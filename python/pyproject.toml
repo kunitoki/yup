@@ -34,12 +34,10 @@ before-build = [
     """dnf install -y zlib-devel openssl-devel freetype-devel fontconfig-devel freeglut-devel alsa-lib-devel mesa-libGL-devel \
         xorg-x11-proto-devel xorg-x11-proto-devel libcurl-devel libpng-devel libX11-devel libXcursor-devel libXrandr-devel \
         libXinerama-devel libXrender-devel libXcomposite-devel libXinerama-devel libXcursor-devel xorg-x11-server-Xvfb \
-        gtk3-devel webkit2gtk3-devel wget lcov""",
+        gtk3-devel webkit2gtk3-devel wget""",
 
-    # "uv add mypy pytest setuptools wheel",
-
-    #"wget https://github.com/linux-test-project/lcov/releases/download/v2.0/lcov-2.0-1.noarch.rpm",
-    #"yum localinstall -y lcov-2.0-1.noarch.rpm",
+    "wget https://github.com/linux-test-project/lcov/releases/download/v2.3.1/lcov-2.3.1-1.noarch.rpm",
+    "yum localinstall -y lcov-2.3.1-1.noarch.rpm",
 
     #"wget https://rpmfind.net/linux/epel/7/x86_64/Packages/p/perl-JSON-XS-3.01-2.el7.x86_64.rpm",
     #"yum localinstall -y perl-JSON-XS-3.01-2.el7.x86_64.rpm",
