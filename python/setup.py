@@ -157,7 +157,7 @@ class CMakeBuildExtension(build_ext):
 
         self.spawn([sys.executable, "-m", "pytest", "-s", os.path.join(cwd, "tests")])
         self.spawn(["lcov", "--directory", cwd, "--capture", "--output-file", "coverage/coverage.info",
-                    "--ignore-errors", "gcov,source,inconsistent"])
+                    "--ignore-errors", "gcov,source"])
 
         if not os.path.isdir("/host"): # We are not running in cibuildwheel container
             return
