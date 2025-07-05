@@ -156,6 +156,8 @@ class CMakeBuildExtension(build_ext):
         log.info("generating coverage files")
 
         self.spawn([sys.executable, "-m", "pytest", "-s", os.path.join(cwd, "tests")])
+        self.spawn(["lcov", "--directory", cwd, "--capture", "--output-file", "coverage/coverage.info",
+                    "--ignore-errors", "mismatch,gcov,source,negative,unused,empty,format,corrupt"])
 
         if not os.path.isdir("/host"): # We are not running in cibuildwheel container
             return

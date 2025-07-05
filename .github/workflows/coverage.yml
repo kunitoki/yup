@@ -93,6 +93,7 @@ jobs:
         mkdir -p coverage
         lcov --directory . --capture --output-file coverage/coverage.info --ignore-errors ${IGNORE_ERRORS}
         lcov -r coverage/coverage.info \
+          "*/pybind11/*" \
           "*/thirdparty/*" \
           "*/build/*" \
           "*/tests/*" \
