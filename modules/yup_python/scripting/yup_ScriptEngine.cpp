@@ -136,7 +136,7 @@ ScriptEngine::ScriptEngine (StringArray modules, std::unique_ptr<PyConfig> confi
     : customModules (std::move (modules))
 {
     if (config)
-        pybind11::initialize_interpreter (config.get(), 0, nullptr, false);
+        pybind11::initialize_interpreter (config.get(), 0, nullptr, true);
     else
         pybind11::initialize_interpreter();
 
