@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2024 - kunitoki@gmail.com
+   Copyright (c) 2025 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -847,11 +847,11 @@ AffineTransform Drawable::parseTransform (const String& transformString)
         }
         else if (type == "skewX" && params.size() == 1)
         {
-            result = result.sheared (std::tanf (degreesToRadians (params[0])), 0.0f);
+            result = result.sheared (tanf (degreesToRadians (params[0])), 0.0f);
         }
         else if (type == "skewY" && params.size() == 1)
         {
-            result = result.sheared (0.0f, std::tanf (degreesToRadians (params[0])));
+            result = result.sheared (0.0f, tanf (degreesToRadians (params[0])));
         }
         else if (type == "matrix" && params.size() == 6)
         {
