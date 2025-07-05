@@ -162,7 +162,7 @@ class CMakeBuildExtension(build_ext):
         if not os.path.isdir("/host"): # We are not running in cibuildwheel container
             return
 
-        for m in glob.iglob(f"{cwd}/**/*.info", recursive=True):
+        for m in glob.iglob(f"{cwd}/**/coverage.info", recursive=True):
             log.info(f"found {m} coverage info file")
 
             self.spawn(["sed", "-i", "s:/project/::g", m])
