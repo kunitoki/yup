@@ -42,13 +42,12 @@ namespace yup::Bindings
 namespace py = pybind11;
 using namespace py::literals;
 
+// clang-format off
 // ============================================================================================
 
 template <template <class> class Class, class... Types>
 void registerPoint (py::module_& m)
 {
-    // clang-format off
-
     py::dict type;
 
     ([&]
@@ -201,8 +200,6 @@ void registerPoint (py::module_& m)
     }() && ...);
 
     m.add_object ("Point", type);
-
-    // clang-format on
 }
 
 // ============================================================================================
@@ -1757,5 +1754,7 @@ void registerYupGraphicsBindings (py::module_& m)
     submoduleColors.attr ("yellow") = Colors::yellow;
     submoduleColors.attr ("yellowgreen") = Colors::yellowgreen;
 }
+
+// clang-format on
 
 } // namespace yup::Bindings
