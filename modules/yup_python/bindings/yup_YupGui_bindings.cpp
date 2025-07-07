@@ -40,7 +40,8 @@
 
 // =================================================================================================
 
-namespace PYBIND11_NAMESPACE {
+namespace PYBIND11_NAMESPACE
+{
 
 template <>
 struct polymorphic_type_hook<yup::Component>
@@ -63,14 +64,16 @@ struct polymorphic_type_hook<yup::Component>
 
 } // namespace PYBIND11_NAMESPACE
 
-namespace yup {
+namespace yup
+{
 
 #if ! YUP_WINDOWS
 extern const char* const* yup_argv;
 extern int yup_argc;
 #endif
 
-namespace Bindings {
+namespace Bindings
+{
 
 namespace py = pybind11;
 using namespace py::literals;
@@ -86,7 +89,8 @@ Options& globalOptions() noexcept
 // ============================================================================================
 
 #if ! YUP_PYTHON_EMBEDDED_INTERPRETER
-namespace {
+namespace
+{
 void runApplication (YUPApplicationBase* application, int milliseconds)
 {
     {
@@ -151,11 +155,14 @@ void registerYupGuiBindings (py::module_& m)
         .def_static ("quit", &YUPApplication::quit)
         .def_static ("getCommandLineParameterArray", &YUPApplication::getCommandLineParameterArray)
         .def_static ("getCommandLineParameters", &YUPApplication::getCommandLineParameters)
-        .def ("setApplicationReturnValue", [](YUPApplication& self, int value) { self.setApplicationReturnValue (value); })
-        .def ("getApplicationReturnValue", [](const YUPApplication& self) { return self.getApplicationReturnValue(); })
-        .def_static ("isStandaloneApp", &YUPApplication::isStandaloneApp)
-        .def ("isInitialising", &YUPApplication::isInitialising)
-    ;
+        .def ("setApplicationReturnValue", [] (YUPApplication& self, int value)
+    {
+        self.setApplicationReturnValue (value);
+    }).def ("getApplicationReturnValue", [] (const YUPApplication& self)
+    {
+        return self.getApplicationReturnValue();
+    }).def_static ("isStandaloneApp", &YUPApplication::isStandaloneApp)
+        .def ("isInitialising", &YUPApplication::isInitialising);
 
     // ============================================================================================ yup::Component
 
@@ -168,8 +175,7 @@ void registerYupGuiBindings (py::module_& m)
         .def ("isVisible", &Component::isVisible)
         .def ("setVisible", &Component::setVisible)
         .def ("isEnabled", &Component::isEnabled)
-        .def ("setEnabled", &Component::setEnabled)
-    ;
+        .def ("setEnabled", &Component::setEnabled);
 
     // ============================================================================================ yup::DocumentWindow
 
@@ -179,7 +185,7 @@ void registerYupGuiBindings (py::module_& m)
 
     // =================================================================================================
 
-    m.def ("START_YUP_APPLICATION", [](py::handle applicationType, bool catchExceptionsAndContinue)
+    m.def ("START_YUP_APPLICATION", [] (py::handle applicationType, bool catchExceptionsAndContinue)
     {
         globalOptions().catchExceptionsAndContinue = catchExceptionsAndContinue;
         globalOptions().caughtKeyboardInterrupt = false;
@@ -187,7 +193,7 @@ void registerYupGuiBindings (py::module_& m)
         py::scoped_ostream_redirect output;
 
         if (! applicationType)
-            throw py::value_error("Argument must be a YUPApplication subclass");
+            throw py::value_error ("Argument must be a YUPApplication subclass");
 
         YUPApplicationBase* application = nullptr;
 
@@ -231,7 +237,9 @@ void registerYupGuiBindings (py::module_& m)
         }
 
         systemExit();
-    }, "applicationType"_a, "catchExceptionsAndContinue"_a = false);
+    },
+           "applicationType"_a,
+           "catchExceptionsAndContinue"_a = false);
 
     // =================================================================================================
 
@@ -242,11 +250,11 @@ void registerYupGuiBindings (py::module_& m)
             Scope (py::handle applicationType)
             {
                 if (! applicationType)
-                    throw py::value_error("Argument must be a YUPApplication subclass");
+                    throw py::value_error ("Argument must be a YUPApplication subclass");
 
                 YUPApplicationBase* application = nullptr;
 
- #if ! YUP_WINDOWS
+#if ! YUP_WINDOWS
                 for (auto arg : py::module_::import ("sys").attr ("argv"))
                     arguments.add (arg.cast<String>());
 
@@ -255,7 +263,7 @@ void registerYupGuiBindings (py::module_& m)
 
                 yup_argv = argv.getRawDataPointer();
                 yup_argc = argv.size();
- #endif
+#endif
 
                 auto pyApplication = applicationType();
 
@@ -283,7 +291,7 @@ void registerYupGuiBindings (py::module_& m)
         {
         }
 
-        void processEvents(int milliseconds = 20)
+        void processEvents (int milliseconds = 20)
         {
             try
             {
@@ -320,21 +328,21 @@ void registerYupGuiBindings (py::module_& m)
     classTestableApplication
         .def (py::init<py::handle>())
         .def ("processEvents", &PyTestableApplication::processEvents, "milliseconds"_a = 20)
-        .def ("__enter__", [](PyTestableApplication& self)
-        {
-            self.applicationScope = std::make_unique<PyTestableApplication::Scope> (self.applicationType);
-            return std::addressof (self);
-        }, py::return_value_policy::reference)
-        .def ("__exit__", [](PyTestableApplication& self, const std::optional<py::type>&, const std::optional<py::object>&, const std::optional<py::object>&)
-        {
-            self.applicationScope.reset();
-        })
-        .def ("__next__", [](PyTestableApplication& self)
-        {
-            self.processEvents();
-            return std::addressof (self);
-        }, py::return_value_policy::reference)
-    ;
+        .def ("__enter__", [] (PyTestableApplication& self)
+    {
+        self.applicationScope = std::make_unique<PyTestableApplication::Scope> (self.applicationType);
+        return std::addressof (self);
+    },
+              py::return_value_policy::reference)
+        .def ("__exit__", [] (PyTestableApplication& self, const std::optional<py::type>&, const std::optional<py::object>&, const std::optional<py::object>&)
+    {
+        self.applicationScope.reset();
+    }).def ("__next__", [] (PyTestableApplication& self)
+    {
+        self.processEvents();
+        return std::addressof (self);
+    },
+            py::return_value_policy::reference);
 
 #endif
 }
@@ -345,7 +353,7 @@ void registerYupGuiBindings (py::module_& m)
 // =================================================================================================
 
 #if ! YUP_PYTHON_EMBEDDED_INTERPRETER && YUP_WINDOWS
-BOOL APIENTRY DllMain(HANDLE instance, DWORD reason, LPVOID reserved)
+BOOL APIENTRY DllMain (HANDLE instance, DWORD reason, LPVOID reserved)
 {
     yup::ignoreUnused (reserved);
 

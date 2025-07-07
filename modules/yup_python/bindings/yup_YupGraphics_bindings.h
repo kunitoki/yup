@@ -21,7 +21,7 @@
 
 #pragma once
 
-#if !YUP_MODULE_AVAILABLE_yup_graphics
+#if ! YUP_MODULE_AVAILABLE_yup_graphics
 #error This binding file requires adding the yup_graphics module in the project
 #else
 //YUP_BEGIN_IGNORE_WARNINGS_MSVC(4244)
@@ -31,7 +31,8 @@
 
 #include "../utilities/yup_PyBind11Includes.h"
 
-namespace yup::Bindings {
+namespace yup::Bindings
+{
 
 // =================================================================================================
 

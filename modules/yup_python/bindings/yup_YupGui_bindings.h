@@ -21,7 +21,7 @@
 
 #pragma once
 
-#if !YUP_MODULE_AVAILABLE_yup_gui
+#if ! YUP_MODULE_AVAILABLE_yup_gui
 #error This binding file requires adding the yup_gui module in the project
 #else
 #include <yup_gui/yup_gui.h>
@@ -40,7 +40,8 @@
 #include <vector>
 #include <utility>
 
-namespace yup::Bindings {
+namespace yup::Bindings
+{
 
 // =================================================================================================
 
@@ -117,7 +118,7 @@ struct PyYUPApplication : yup::YUPApplication
         {
             if (pyEx != nullptr)
             {
-                auto newPyEx = pyEx->type()(pyEx->value());
+                auto newPyEx = pyEx->type() (pyEx->value());
                 PyException_SetTraceback (newPyEx.ptr(), pyEx->trace().ptr());
 
                 override_ (newPyEx, sourceFilename, lineNumber);
@@ -125,7 +126,7 @@ struct PyYUPApplication : yup::YUPApplication
             else
             {
                 auto runtimeError = pybind11::module_::import ("__builtins__").attr ("RuntimeError");
-                auto newPyEx = runtimeError(ex != nullptr ? ex->what() : "unknown exception");
+                auto newPyEx = runtimeError (ex != nullptr ? ex->what() : "unknown exception");
                 PyException_SetTraceback (newPyEx.ptr(), traceback.attr ("extract_stack")().ptr());
 
                 override_ (newPyEx, sourceFilename, lineNumber);
@@ -137,7 +138,7 @@ struct PyYUPApplication : yup::YUPApplication
         if (pyEx != nullptr)
         {
             pybind11::print (ex->what());
-            traceback.attr ("print_tb")(pyEx->trace());
+            traceback.attr ("print_tb") (pyEx->trace());
 
             if (pyEx->matches (PyExc_KeyboardInterrupt) || PyErr_CheckSignals() != 0)
             {
