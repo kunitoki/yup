@@ -21,17 +21,18 @@
 
 #pragma once
 
-#if !YUP_MODULE_AVAILABLE_yup_events
- #error This binding file requires adding the yup_events module in the project
+#if ! YUP_MODULE_AVAILABLE_yup_events
+#error This binding file requires adding the yup_events module in the project
 #else
- #include <yup_events/yup_events.h>
+#include <yup_events/yup_events.h>
 #endif
 
 #include "../utilities/yup_PyBind11Includes.h"
 
 #include <variant>
 
-namespace yup::Bindings {
+namespace yup::Bindings
+{
 
 // =================================================================================================
 
