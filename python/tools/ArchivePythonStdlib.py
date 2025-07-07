@@ -81,15 +81,15 @@ if __name__ == "__main__":
 
     ignored_files = shutil.ignore_patterns(*base_patterns)
 
-    print("cleaning up...")
+    print(f"cleaning up {final_location}...")
     if final_location.exists():
         shutil.rmtree(final_location)
 
-    print("copying library...")
+    print(f"copying library from {base_python} to {final_location}...")
     shutil.copytree(base_python, final_location, ignore=ignored_files, dirs_exist_ok=True)
     os.makedirs(site_packages, exist_ok=True)
 
-    print("making archive...")
+    print(f"making archive {temp_archive} to {final_archive}...")
     if os.path.exists(final_archive):
         make_archive(temp_archive, final_location)
         if file_hash(temp_archive) != file_hash(final_archive):
