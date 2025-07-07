@@ -41,7 +41,17 @@ public:
     */
     constexpr Rectangle() noexcept = default;
 
-    /** Constructs a rectangle with specified x, y, width, and height.
+    /** Constructs a rectangle with specified width and height.
+
+        @param width The width of the rectangle.
+        @param height The height of the rectangle.
+    */
+    constexpr Rectangle (ValueType width, ValueType height) noexcept
+        : size (width, height)
+    {
+    }
+
+    /** Constructs a rectangle with specified x, y, width and height.
 
         @param x The x-coordinate of the top-left corner.
         @param y The y-coordinate of the top-left corner.

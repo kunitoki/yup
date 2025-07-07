@@ -32,11 +32,13 @@
 #if YUP_MODULE_AVAILABLE_yup_data_model
 #include "../bindings/yup_YupDataModel_bindings.h"
 #endif
+*/
 
 #if YUP_MODULE_AVAILABLE_yup_graphics
 #include "../bindings/yup_YupGraphics_bindings.h"
 #endif
 
+/*
 #if YUP_MODULE_AVAILABLE_yup_gui
 #include "../bindings/yup_YupGui_bindings.h"
 #include "../bindings/yup_YupGuiEntryPoints_bindings.h"
@@ -94,11 +96,13 @@ PYBIND11_MODULE (YUP_PYTHON_MODULE_NAME, m)
 #if YUP_MODULE_AVAILABLE_yup_data_model
     yup::Bindings::registerYupDataModelBindings (m);
 #endif
+    */
 
 #if YUP_MODULE_AVAILABLE_yup_graphics
     yup::Bindings::registerYupGraphicsBindings (m);
 #endif
 
+    /*
 #if YUP_MODULE_AVAILABLE_yup_gui
     yup::Bindings::registerYupGuiBindings (m);
     yup::Bindings::registerYupGuiEntryPointsBindings (m);
