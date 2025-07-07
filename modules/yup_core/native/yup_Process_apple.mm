@@ -42,10 +42,10 @@ namespace yup
 #if YUP_MAC
 void Process::setDockIconVisible(bool isVisible)
 {
-    ProcessSerialNumber psn{ 0, kCurrentProcess };
+    ProcessSerialNumber psn{0, kCurrentProcess};
 
-    TransformProcessType (&psn, isVisible ? kProcessTransformToForegroundApplication
-                                          : kProcessTransformToUIElementApplication);
+    TransformProcessType(&psn, isVisible ? kProcessTransformToForegroundApplication
+                                         : kProcessTransformToUIElementApplication);
 }
 #endif
 

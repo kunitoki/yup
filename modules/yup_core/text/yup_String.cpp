@@ -2560,34 +2560,34 @@ String String::indentLines (StringRef prefix, bool indentBlankLines) const
     String result;
     auto t = text;
 
-    while (!t.isEmpty())
+    while (! t.isEmpty())
     {
         auto lineStart = t;
 
         // Find end of line content (excluding line ending)
-        while (!t.isEmpty() && *t != '\n' && *t != '\r')
+        while (! t.isEmpty() && *t != '\n' && *t != '\r')
             ++t;
 
         auto contentEnd = t;
 
         // Find end of line ending
-        if (!t.isEmpty() && *t == '\r')
+        if (! t.isEmpty() && *t == '\r')
             ++t;
 
-        if (!t.isEmpty() && *t == '\n')
+        if (! t.isEmpty() && *t == '\n')
             ++t;
 
         auto lineEnd = t;
 
         // Determine if we should indent this line
         bool shouldIndent = indentBlankLines;
-        if (!shouldIndent)
+        if (! shouldIndent)
         {
             // Check if line has non-whitespace content
             auto temp = lineStart;
             while (temp < contentEnd)
             {
-                if (!temp.isWhitespace())
+                if (! temp.isWhitespace())
                 {
                     shouldIndent = true;
                     break;
@@ -2601,7 +2601,7 @@ String String::indentLines (StringRef prefix, bool indentBlankLines) const
             result += prefix;
 
         // Add the line
-        result.appendCharPointer(lineStart, lineEnd);
+        result.appendCharPointer (lineStart, lineEnd);
     }
 
     return result;
@@ -2616,11 +2616,11 @@ String String::dedentLines() const
     int minIndent = 999999; // Large number as sentinel
     auto t = text;
 
-    while (!t.isEmpty())
+    while (! t.isEmpty())
     {
         // Count leading whitespace
         int indent = 0;
-        while (!t.isEmpty() && t.isWhitespace() && *t != '\n' && *t != '\r')
+        while (! t.isEmpty() && t.isWhitespace() && *t != '\n' && *t != '\r')
         {
             ++indent;
             ++t;
@@ -2628,22 +2628,22 @@ String String::dedentLines() const
 
         // Check if line has non-whitespace content
         bool hasNonWhitespace = false;
-        while (!t.isEmpty() && *t != '\n' && *t != '\r')
+        while (! t.isEmpty() && *t != '\n' && *t != '\r')
         {
-            if (!t.isWhitespace())
+            if (! t.isWhitespace())
                 hasNonWhitespace = true;
             ++t;
         }
 
         // Skip line ending
-        if (!t.isEmpty() && *t == '\r')
+        if (! t.isEmpty() && *t == '\r')
             ++t;
-        if (!t.isEmpty() && *t == '\n')
+        if (! t.isEmpty() && *t == '\n')
             ++t;
 
         // Update minimum indent only for lines with non-whitespace content
         if (hasNonWhitespace)
-            minIndent = jmin(minIndent, indent);
+            minIndent = jmin (minIndent, indent);
     }
 
     if (minIndent == 999999 || minIndent == 0)
@@ -2653,13 +2653,13 @@ String String::dedentLines() const
     String result;
     t = text;
 
-    while (!t.isEmpty())
+    while (! t.isEmpty())
     {
         auto lineStart = t;
 
         // Skip leading whitespace (up to minIndent)
         int skipped = 0;
-        while (!t.isEmpty() && t.isWhitespace() && *t != '\n' && *t != '\r' && skipped < minIndent)
+        while (! t.isEmpty() && t.isWhitespace() && *t != '\n' && *t != '\r' && skipped < minIndent)
         {
             ++skipped;
             ++t;
@@ -2669,9 +2669,9 @@ String String::dedentLines() const
 
         // Find end of line content
         bool hasNonWhitespace = false;
-        while (!t.isEmpty() && *t != '\n' && *t != '\r')
+        while (! t.isEmpty() && *t != '\n' && *t != '\r')
         {
-            if (!t.isWhitespace())
+            if (! t.isWhitespace())
                 hasNonWhitespace = true;
             ++t;
         }
@@ -2679,9 +2679,9 @@ String String::dedentLines() const
         auto contentEnd = t;
 
         // Find end of line (including line ending)
-        if (!t.isEmpty() && *t == '\r')
+        if (! t.isEmpty() && *t == '\r')
             ++t;
-        if (!t.isEmpty() && *t == '\n')
+        if (! t.isEmpty() && *t == '\n')
             ++t;
 
         auto lineEnd = t;
@@ -2690,12 +2690,12 @@ String String::dedentLines() const
         if (hasNonWhitespace)
         {
             // Add from content start to line end
-            result.appendCharPointer(contentStart, lineEnd);
+            result.appendCharPointer (contentStart, lineEnd);
         }
         else
         {
             // For whitespace-only lines, just add line ending
-            result.appendCharPointer(contentEnd, lineEnd);
+            result.appendCharPointer (contentEnd, lineEnd);
         }
     }
 

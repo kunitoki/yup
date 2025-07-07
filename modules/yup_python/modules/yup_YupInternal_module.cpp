@@ -27,7 +27,7 @@
 #include <iostream>
 #include <string>
 
-PYBIND11_EMBEDDED_MODULE(__yup__, m)
+PYBIND11_EMBEDDED_MODULE (__yup__, m)
 {
     namespace py = pybind11;
 
@@ -39,9 +39,18 @@ PYBIND11_EMBEDDED_MODULE(__yup__, m)
     };
 
     py::class_<CustomOutputStream> classCustomOutputStream (m, "__stdout__");
-    classCustomOutputStream.def_static ("write", [](py::object buffer) { std::cout << buffer.cast<std::string>(); });
-    classCustomOutputStream.def_static ("flush", [] { std::cout << std::flush; });
-    classCustomOutputStream.def_static ("isatty", [] { return true; });
+    classCustomOutputStream.def_static ("write", [] (py::object buffer)
+    {
+        std::cout << buffer.cast<std::string>();
+    });
+    classCustomOutputStream.def_static ("flush", []
+    {
+        std::cout << std::flush;
+    });
+    classCustomOutputStream.def_static ("isatty", []
+    {
+        return true;
+    });
 
     struct CustomErrorStream
     {
@@ -51,9 +60,18 @@ PYBIND11_EMBEDDED_MODULE(__yup__, m)
     };
 
     py::class_<CustomErrorStream> classCustomErrorStream (m, "__stderr__");
-    classCustomErrorStream.def_static ("write", [](py::object buffer) { std::cerr << buffer.cast<std::string>(); });
-    classCustomErrorStream.def_static ("flush", [] { std::cerr << std::flush; });
-    classCustomErrorStream.def_static ("isatty", [] { return true; });
+    classCustomErrorStream.def_static ("write", [] (py::object buffer)
+    {
+        std::cerr << buffer.cast<std::string>();
+    });
+    classCustomErrorStream.def_static ("flush", []
+    {
+        std::cerr << std::flush;
+    });
+    classCustomErrorStream.def_static ("isatty", []
+    {
+        return true;
+    });
 
     m.def ("__redirect__", []
     {

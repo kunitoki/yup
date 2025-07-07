@@ -71,7 +71,7 @@ PYBIND11_EMBEDDED_MODULE (YUP_PYTHON_MODULE_NAME, m)
 PYBIND11_MODULE (YUP_PYTHON_MODULE_NAME, m)
 #endif
 {
-#if !YUP_PYTHON_EMBEDDED_INTERPRETER
+#if ! YUP_PYTHON_EMBEDDED_INTERPRETER
     yup::SystemStats::setApplicationCrashHandler (Helpers::applicationCrashHandler);
 #endif
 
