@@ -101,6 +101,7 @@ TEST_F (ScriptPythonTest, RunPythonTests)
         import runpy
         import sys
 
+        sys.path.append('{{root_path}}')
         sys.path.append('{{root_path}}/lib/python{{version}}/site-packages')
 
         package = 'pytest'
