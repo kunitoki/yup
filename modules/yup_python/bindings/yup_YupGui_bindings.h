@@ -428,4 +428,27 @@ struct PyComponent : PyMouseListener<Base>
     //}
 };
 
+// ============================================================================================
+
+template <class Base = yup::DocumentWindow>
+struct PyDocumentWindow : PyComponent<Base>
+{
+    using PyComponent<Base>::PyComponent;
+
+    //void closeButtonPressed() override
+    //{
+    //    PYBIND11_OVERRIDE (void, Base, closeButtonPressed);
+    //}
+
+    //void minimiseButtonPressed() override
+    //{
+    //    PYBIND11_OVERRIDE (void, Base, minimiseButtonPressed);
+    //}
+
+    //void maximiseButtonPressed() override
+    //{
+    //    PYBIND11_OVERRIDE (void, Base, maximiseButtonPressed);
+    //}
+};
+
 } // namespace yup::Bindings

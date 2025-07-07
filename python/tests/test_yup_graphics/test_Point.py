@@ -3,26 +3,22 @@ from math import isclose
 
 import yup
 
-"""
 #==================================================================================================
 
 def test_empty_constructor():
     p = yup.Point[int]()
-    assert p.x == 0
-    assert p.y == 0
     assert p.getX() == 0
     assert p.getY() == 0
-    assert p.isOrigin()
-    assert p.isFinite()
+    #assert p.isOrigin()
+    #assert p.isFinite()
 
     p = yup.Point[float]()
-    assert isclose(p.x, 0.0)
-    assert isclose(p.y, 0.0)
     assert isclose(p.getX(), 0.0)
     assert isclose(p.getY(), 0.0)
-    assert p.isOrigin()
-    assert p.isFinite()
+    #assert p.isOrigin()
+    #assert p.isFinite()
 
+"""
 #==================================================================================================
 
 def test_value_constructor():

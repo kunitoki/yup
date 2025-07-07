@@ -171,6 +171,10 @@ void registerYupGuiBindings (py::module_& m)
         .def ("setEnabled", &Component::setEnabled)
     ;
 
+    // ============================================================================================ yup::DocumentWindow
+
+    py::class_<DocumentWindow, Component, PyDocumentWindow<>> classDocumentWindow (m, "DocumentWindow");
+
 #if ! YUP_PYTHON_EMBEDDED_INTERPRETER
 
     // =================================================================================================

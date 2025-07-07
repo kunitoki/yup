@@ -729,136 +729,6 @@ void registerYupGraphicsBindings (py::module_& m)
         .def (py::self == py::self)
         .def (py::self != py::self)
     ;
-
-    // ============================================================================================ yup::PixelARGB
-
-    py::class_<PixelARGB> classPixelARGB (m, "PixelARGB");
-
-    classPixelARGB
-        .def (py::init<>())
-        .def (py::init<uint8, uint8, uint8, uint8>())
-        .def ("getNativeARGB", &PixelARGB::getNativeARGB)
-        .def ("getInARGBMaskOrder", &PixelARGB::getInARGBMaskOrder)
-        .def ("getInARGBMemoryOrder", &PixelARGB::getInARGBMemoryOrder)
-        .def ("getEvenBytes", &PixelARGB::getEvenBytes)
-        .def ("getOddBytes", &PixelARGB::getOddBytes)
-        .def ("getAlpha", &PixelARGB::getAlpha)
-        .def ("getRed", &PixelARGB::getRed)
-        .def ("getGreen", &PixelARGB::getGreen)
-        .def ("getBlue", &PixelARGB::getBlue)
-        .def ("set", &PixelARGB::template set<PixelRGB>)
-        .def ("set", &PixelARGB::template set<PixelARGB>)
-        .def ("set", &PixelARGB::template set<PixelAlpha>)
-        .def ("setARGB", &PixelARGB::setARGB)
-        .def ("blend", static_cast<void (PixelARGB::*)(PixelRGB)> (&PixelARGB::blend))
-        .def ("blend", py::overload_cast<const PixelARGB&> (&PixelARGB::template blend<PixelARGB>))
-        .def ("blend", py::overload_cast<const PixelAlpha&> (&PixelARGB::template blend<PixelAlpha>))
-        .def ("blend", py::overload_cast<const PixelRGB&, uint32> (&PixelARGB::template blend<PixelRGB>))
-        .def ("blend", py::overload_cast<const PixelARGB&, uint32> (&PixelARGB::template blend<PixelARGB>))
-        .def ("blend", py::overload_cast<const PixelAlpha&, uint32> (&PixelARGB::template blend<PixelAlpha>))
-        .def ("tween", py::overload_cast<const PixelRGB&, uint32> (&PixelARGB::template tween<PixelRGB>))
-        .def ("tween", py::overload_cast<const PixelARGB&, uint32> (&PixelARGB::template tween<PixelARGB>))
-        .def ("tween", py::overload_cast<const PixelAlpha&, uint32> (&PixelARGB::template tween<PixelAlpha>))
-        .def ("setAlpha", &PixelARGB::setAlpha)
-        .def ("multiplyAlpha", py::overload_cast<int> (&PixelARGB::multiplyAlpha))
-        .def ("multiplyAlpha", py::overload_cast<float> (&PixelARGB::multiplyAlpha))
-        .def ("getUnpremultiplied", &PixelARGB::getUnpremultiplied)
-        .def ("premultiply", &PixelARGB::premultiply)
-        .def ("unpremultiply", &PixelARGB::unpremultiply)
-        .def ("desaturate", &PixelARGB::desaturate)
-    ;
-
-    classPixelARGB.attr ("indexA") = py::int_ (static_cast<int> (PixelARGB::indexA));
-    classPixelARGB.attr ("indexR") = py::int_ (static_cast<int> (PixelARGB::indexR));
-    classPixelARGB.attr ("indexG") = py::int_ (static_cast<int> (PixelARGB::indexG));
-    classPixelARGB.attr ("indexB") = py::int_ (static_cast<int> (PixelARGB::indexB));
-
-    py::class_<PixelRGB> classPixelRGB (m, "PixelRGB");
-
-    classPixelRGB
-        .def (py::init<>())
-        .def (py::init ([](uint8 red, uint8 green, uint8 blue)
-        {
-            auto c = PixelRGB();
-            c.setARGB (255, red, green, blue);
-            return c;
-        }))
-        .def ("getNativeARGB", &PixelRGB::getNativeARGB)
-        .def ("getInARGBMaskOrder", &PixelRGB::getInARGBMaskOrder)
-        .def ("getInARGBMemoryOrder", &PixelRGB::getInARGBMemoryOrder)
-        .def ("getEvenBytes", &PixelRGB::getEvenBytes)
-        .def ("getOddBytes", &PixelRGB::getOddBytes)
-        .def ("getAlpha", &PixelRGB::getAlpha)
-        .def ("getRed", &PixelRGB::getRed)
-        .def ("getGreen", &PixelRGB::getGreen)
-        .def ("getBlue", &PixelRGB::getBlue)
-        .def ("set", &PixelRGB::template set<PixelRGB>)
-        .def ("set", &PixelRGB::template set<PixelARGB>)
-        .def ("set", &PixelRGB::template set<PixelAlpha>)
-        .def ("setARGB", &PixelRGB::setARGB)
-        .def ("blend", static_cast<void (PixelRGB::*)(PixelRGB)> (&PixelRGB::blend))
-        .def ("blend", py::overload_cast<const PixelARGB&> (&PixelRGB::template blend<PixelARGB>))
-        .def ("blend", py::overload_cast<const PixelAlpha&> (&PixelRGB::template blend<PixelAlpha>))
-        .def ("blend", py::overload_cast<const PixelRGB&, uint32> (&PixelRGB::template blend<PixelRGB>))
-        .def ("blend", py::overload_cast<const PixelARGB&, uint32> (&PixelRGB::template blend<PixelARGB>))
-        .def ("blend", py::overload_cast<const PixelAlpha&, uint32> (&PixelRGB::template blend<PixelAlpha>))
-        .def ("blend", py::overload_cast<const PixelRGB&, uint32> (&PixelRGB::template tween<PixelRGB>))
-        .def ("blend", py::overload_cast<const PixelARGB&, uint32> (&PixelRGB::template tween<PixelARGB>))
-        .def ("blend", py::overload_cast<const PixelAlpha&, uint32> (&PixelRGB::template tween<PixelAlpha>))
-        .def ("tween", py::overload_cast<const PixelRGB&, uint32> (&PixelRGB::template tween<PixelRGB>))
-        .def ("tween", py::overload_cast<const PixelARGB&, uint32> (&PixelRGB::template tween<PixelARGB>))
-        .def ("tween", py::overload_cast<const PixelAlpha&, uint32> (&PixelRGB::template tween<PixelAlpha>))
-        .def ("setAlpha", &PixelRGB::setAlpha)
-        .def ("multiplyAlpha", py::overload_cast<int> (&PixelRGB::multiplyAlpha))
-        .def ("multiplyAlpha", py::overload_cast<float> (&PixelRGB::multiplyAlpha))
-        .def ("premultiply", &PixelRGB::premultiply)
-        .def ("unpremultiply", &PixelRGB::unpremultiply)
-        .def ("desaturate", &PixelRGB::desaturate)
-    ;
-
-    classPixelRGB.attr ("indexR") = py::int_ (static_cast<int> (PixelRGB::indexR));
-    classPixelRGB.attr ("indexG") = py::int_ (static_cast<int> (PixelRGB::indexG));
-    classPixelRGB.attr ("indexB") = py::int_ (static_cast<int> (PixelRGB::indexB));
-
-    py::class_<PixelAlpha> classPixelAlpha (m, "PixelAlpha");
-
-    classPixelAlpha
-        .def (py::init<>())
-        .def (py::init ([](uint8 alpha) { auto c = PixelAlpha(); c.setAlpha (alpha); return c; }))
-        .def ("getNativeARGB", &PixelAlpha::getNativeARGB)
-        .def ("getInARGBMaskOrder", &PixelAlpha::getInARGBMaskOrder)
-        .def ("getInARGBMemoryOrder", &PixelAlpha::getInARGBMemoryOrder)
-        .def ("getEvenBytes", &PixelAlpha::getEvenBytes)
-        .def ("getOddBytes", &PixelAlpha::getOddBytes)
-        .def ("getAlpha", &PixelAlpha::getAlpha)
-        .def ("getRed", &PixelAlpha::getRed)
-        .def ("getGreen", &PixelAlpha::getGreen)
-        .def ("getBlue", &PixelAlpha::getBlue)
-        .def ("set", &PixelAlpha::template set<PixelRGB>)
-        .def ("set", &PixelAlpha::template set<PixelARGB>)
-        .def ("set", &PixelAlpha::template set<PixelAlpha>)
-        .def ("setARGB", &PixelAlpha::setARGB)
-        .def ("blend", py::overload_cast<const PixelRGB&> (&PixelAlpha::template blend<PixelRGB>))
-        .def ("blend", py::overload_cast<const PixelARGB&> (&PixelAlpha::template blend<PixelARGB>))
-        .def ("blend", py::overload_cast<const PixelAlpha&> (&PixelAlpha::template blend<PixelAlpha>))
-        .def ("blend", py::overload_cast<const PixelRGB&, uint32> (&PixelAlpha::template blend<PixelRGB>))
-        .def ("blend", py::overload_cast<const PixelARGB&, uint32> (&PixelAlpha::template blend<PixelARGB>))
-        .def ("blend", py::overload_cast<const PixelAlpha&, uint32> (&PixelAlpha::template blend<PixelAlpha>))
-        .def ("blend", py::overload_cast<const PixelRGB&, uint32> (&PixelAlpha::template tween<PixelRGB>))
-        .def ("blend", py::overload_cast<const PixelARGB&, uint32> (&PixelAlpha::template tween<PixelARGB>))
-        .def ("blend", py::overload_cast<const PixelAlpha&, uint32> (&PixelAlpha::template tween<PixelAlpha>))
-        .def ("tween", py::overload_cast<const PixelRGB&, uint32> (&PixelAlpha::template tween<PixelRGB>))
-        .def ("tween", py::overload_cast<const PixelARGB&, uint32> (&PixelAlpha::template tween<PixelARGB>))
-        .def ("tween", py::overload_cast<const PixelAlpha&, uint32> (&PixelAlpha::template tween<PixelAlpha>))
-        .def ("setAlpha", &PixelAlpha::setAlpha)
-        .def ("multiplyAlpha", py::overload_cast<int> (&PixelAlpha::multiplyAlpha))
-        .def ("multiplyAlpha", py::overload_cast<float> (&PixelAlpha::multiplyAlpha))
-        .def ("premultiply", &PixelAlpha::premultiply)
-        .def ("unpremultiply", &PixelAlpha::unpremultiply)
-        .def ("desaturate", &PixelAlpha::desaturate)
-    ;
-
-    classPixelAlpha.attr ("indexA") = py::int_ (static_cast<int> (PixelAlpha::indexA));
     */
 
     // ============================================================================================ yup::Color
@@ -1467,17 +1337,42 @@ void registerYupGraphicsBindings (py::module_& m)
         .def (py::init<const Image&, Point<int>, const RectangleList<int>&>(), "imageToRenderOnto"_a, "origin"_a, "initialClip"_a)
     ;
 
+    */
+
     // ============================================================================================ yup::Graphics
 
     py::class_<Graphics> classGraphics (m, "Graphics");
 
-    py::enum_<Graphics::ResamplingQuality> (classGraphics, "ResamplingQuality")
-        .value("lowResamplingQuality", Graphics::ResamplingQuality::lowResamplingQuality)
-        .value("mediumResamplingQuality", Graphics::ResamplingQuality::mediumResamplingQuality)
-        .value("highResamplingQuality", Graphics::ResamplingQuality::highResamplingQuality)
-        .export_values();
-
     classGraphics
+        .def ("setFillColor", &Graphics::setFillColor)
+        .def ("getFillColor", &Graphics::getFillColor)
+        .def ("setStrokeColor", &Graphics::setStrokeColor)
+        .def ("getStrokeColor", &Graphics::getStrokeColor)
+        .def ("setFillColorGradient", &Graphics::setFillColorGradient)
+        .def ("getFillColorGradient", &Graphics::getFillColorGradient)
+        .def ("setStrokeColorGradient", &Graphics::setStrokeColorGradient)
+        .def ("getStrokeColorGradient", &Graphics::getStrokeColorGradient)
+        .def ("setStrokeWidth", &Graphics::setStrokeWidth)
+        .def ("getStrokeWidth", &Graphics::getStrokeWidth)
+        .def ("setFeather", &Graphics::setFeather)
+        .def ("getFeather", &Graphics::getFeather)
+        .def ("setOpacity", &Graphics::setOpacity)
+        .def ("getOpacity", &Graphics::getOpacity)
+        .def ("setStrokeJoin", &Graphics::setStrokeJoin)
+        .def ("getStrokeJoin", &Graphics::getStrokeJoin)
+        .def ("setStrokeCap", &Graphics::setStrokeCap)
+        .def ("getStrokeCap", &Graphics::getStrokeCap)
+        .def ("setBlendMode", &Graphics::setBlendMode)
+        .def ("getBlendMode", &Graphics::getBlendMode)
+        .def ("setDrawingArea", &Graphics::setDrawingArea)
+        .def ("getDrawingArea", &Graphics::getDrawingArea)
+        .def ("setTransform", &Graphics::setTransform)
+        .def ("getTransform", &Graphics::getTransform)
+        .def ("setClipPath", py::overload_cast<const Rectangle<float>&> (&Graphics::setClipPath))
+        .def ("setClipPath", py::overload_cast<const Path&> (&Graphics::setClipPath))
+        .def ("getClipPath", &Graphics::getClipPath)
+        .def ("fillAll", &Graphics::fillAll)
+        /*
         .def (py::init<const Image&>())
         .def (py::init<LowLevelGraphicsContext&>())
         .def ("setColor", &Graphics::setColor)
@@ -1616,37 +1511,36 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("addTransform", &Graphics::addTransform)
         .def ("resetToDefaultState", &Graphics::resetToDefaultState)
         .def ("isVectorDevice", &Graphics::isVectorDevice)
+        */
     ;
 
-    struct PyGraphicsScopedSaveState
+    struct PyGraphicsSaveState
     {
-        PyGraphicsScopedSaveState (Graphics& g)
+        PyGraphicsSaveState (Graphics& g)
             : g (g)
         {
         }
 
         Graphics& g;
-        std::variant<std::monostate, Graphics::ScopedSaveState> state;
+        std::variant<std::monostate, Graphics::SavedState> state;
     };
 
-    py::class_<PyGraphicsScopedSaveState> (classGraphics, "ScopedSaveState")
+    py::class_<PyGraphicsSaveState> (classGraphics, "SavedState")
         .def (py::init<Graphics&>())
-        .def ("__enter__", [](PyGraphicsScopedSaveState& self)
+        .def ("__enter__", [](PyGraphicsSaveState& self)
         {
-            self.state.emplace<Graphics::ScopedSaveState> (self.g);
+            self.state.emplace<Graphics::SavedState> (self.g.saveState());
         })
-        .def ("__exit__", [](PyGraphicsScopedSaveState& self, const std::optional<py::type>&, const std::optional<py::object>&, const std::optional<py::object>&)
+        .def ("__exit__", [](PyGraphicsSaveState& self, const std::optional<py::type>&, const std::optional<py::object>&, const std::optional<py::object>&)
         {
             self.state.emplace<std::monostate>();
         })
     ;
 
-    */
-
     // ============================================================================================ yup::Colors
 
     auto submoduleColors = m.def_submodule ("Colors");
-    //submoduleColors.def ("findColorForName", &Colors::findColorForName);
+    submoduleColors.def ("getNamedColor", &Colors::getNamedColor);
     submoduleColors.attr ("transparentBlack") = Colors::transparentBlack;
     submoduleColors.attr ("transparentWhite") = Colors::transparentWhite;
     submoduleColors.attr ("aliceblue") = Colors::aliceblue;
