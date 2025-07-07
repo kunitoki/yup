@@ -172,4 +172,286 @@ struct PyYUPApplication : yup::YUPApplication
     }
 };
 
+// =================================================================================================
+
+template <class Base = yup::MouseListener>
+struct PyMouseListener : Base
+{
+    using Base::Base;
+
+    void mouseMove (const yup::MouseEvent& event) override
+    {
+        PYBIND11_OVERRIDE (void, Base, mouseMove, event);
+    }
+
+    void mouseEnter (const yup::MouseEvent& event) override
+    {
+        {
+            pybind11::gil_scoped_acquire gil;
+
+            if (pybind11::function override_ = pybind11::get_override (static_cast<Base*> (this), "mouseEnter"))
+            {
+                override_ (event);
+                return;
+            }
+        }
+
+        //if constexpr (! std::is_same_v<Base, yup::TooltipWindow>)
+        //    Base::mouseEnter (event);
+    }
+
+    void mouseExit (const yup::MouseEvent& event) override
+    {
+        {
+            pybind11::gil_scoped_acquire gil;
+
+            if (pybind11::function override_ = pybind11::get_override (static_cast<Base*> (this), "mouseExit"))
+            {
+                override_ (event);
+                return;
+            }
+        }
+
+        //if constexpr (! std::is_same_v<Base, yup::TooltipWindow>)
+        //    Base::mouseExit (event);
+    }
+
+    void mouseDown (const yup::MouseEvent& event) override
+    {
+        {
+            pybind11::gil_scoped_acquire gil;
+
+            if (pybind11::function override_ = pybind11::get_override (static_cast<Base*> (this), "mouseDown"))
+            {
+                override_ (event);
+                return;
+            }
+        }
+
+        //if constexpr (! std::is_same_v<Base, yup::TooltipWindow>)
+        //    Base::mouseDown (event);
+    }
+
+    void mouseDrag (const yup::MouseEvent& event) override
+    {
+        PYBIND11_OVERRIDE (void, Base, mouseDrag, event);
+    }
+
+    void mouseUp (const yup::MouseEvent& event) override
+    {
+        PYBIND11_OVERRIDE (void, Base, mouseUp, event);
+    }
+
+    void mouseDoubleClick (const yup::MouseEvent& event) override
+    {
+        PYBIND11_OVERRIDE (void, Base, mouseDoubleClick, event);
+    }
+
+    void mouseWheelMove (const yup::MouseEvent& event, const yup::MouseWheelData& wheel) override
+    {
+        {
+            pybind11::gil_scoped_acquire gil;
+
+            if (pybind11::function override_ = pybind11::get_override (static_cast<Base*> (this), "mouseWheelMove"))
+            {
+                override_ (event, wheel);
+                return;
+            }
+        }
+
+        //if constexpr (! std::is_same_v<Base, yup::TooltipWindow>)
+        //    Base::mouseWheelMove (event, wheel);
+    }
+
+    void mouseMagnify (const yup::MouseEvent& event, float scaleFactor) override
+    {
+        PYBIND11_OVERRIDE (void, Base, mouseMagnify, event, scaleFactor);
+    }
+};
+
+// =================================================================================================
+
+template <class Base = yup::Component>
+struct PyComponent : PyMouseListener<Base>
+{
+    using PyMouseListener<Base>::PyMouseListener;
+
+    void setName (const yup::String& newName) override
+    {
+        PYBIND11_OVERRIDE (void, Base, setName, newName);
+    }
+
+    void setVisible (bool shouldBeVisible) override
+    {
+        PYBIND11_OVERRIDE (void, Base, setVisible, shouldBeVisible);
+    }
+
+    void visibilityChanged() override
+    {
+        PYBIND11_OVERRIDE (void, Base, visibilityChanged);
+    }
+
+    void userTriedToCloseWindow() override
+    {
+        PYBIND11_OVERRIDE (void, Base, userTriedToCloseWindow);
+    }
+
+    void minimisationStateChanged(bool isNowMinimised) override
+    {
+        PYBIND11_OVERRIDE (void, Base, minimisationStateChanged, isNowMinimised);
+    }
+
+    float getDesktopScaleFactor() const override
+    {
+        PYBIND11_OVERRIDE (float, Base, getDesktopScaleFactor);
+    }
+
+    void parentHierarchyChanged() override
+    {
+        PYBIND11_OVERRIDE (void, Base, parentHierarchyChanged);
+    }
+
+    void childrenChanged() override
+    {
+        PYBIND11_OVERRIDE (void, Base, childrenChanged);
+    }
+
+    bool hitTest (int x, int y) override
+    {
+        PYBIND11_OVERRIDE (bool, Base, hitTest, x, y);
+    }
+
+    void lookAndFeelChanged() override
+    {
+        PYBIND11_OVERRIDE (void, Base, lookAndFeelChanged);
+    }
+
+    void enablementChanged() override
+    {
+        PYBIND11_OVERRIDE (void, Base, enablementChanged);
+    }
+
+    void alphaChanged() override
+    {
+        PYBIND11_OVERRIDE (void, Base, alphaChanged);
+    }
+
+    void paint (yup::Graphics& g) override
+    {
+        {
+            pybind11::gil_scoped_acquire gil;
+
+            if (pybind11::function override_ = pybind11::get_override (static_cast<const Base*> (this), "paint"); override_)
+            {
+                override_ (std::addressof (g));
+                return;
+            }
+        }
+
+        //if constexpr (! std::is_same_v<Base, yup::TooltipWindow>)
+        //    Base::paint (g);
+    }
+
+    void paintOverChildren (yup::Graphics& g) override
+    {
+        {
+            pybind11::gil_scoped_acquire gil;
+
+            if (pybind11::function override_ = pybind11::get_override (static_cast<const Base*> (this), "paintOverChildren"); override_)
+            {
+                override_ (std::addressof (g));
+                return;
+            }
+        }
+
+        Base::paintOverChildren (g);
+    }
+
+    bool keyPressed (const yup::KeyPress& key) override
+    {
+        PYBIND11_OVERRIDE (bool, Base, keyPressed, key);
+    }
+
+    bool keyStateChanged (bool isDown) override
+    {
+        PYBIND11_OVERRIDE (bool, Base, keyStateChanged, isDown);
+    }
+
+    //void modifierKeysChanged (const yup::ModifierKeys& modifiers) override
+    //{
+    //    PYBIND11_OVERRIDE (void, Base, modifierKeysChanged, modifiers);
+    //}
+
+    void focusGained() override
+    {
+        PYBIND11_OVERRIDE (void, Base, focusGained);
+    }
+
+    void focusLost() override
+    {
+        PYBIND11_OVERRIDE (void, Base, focusLost);
+    }
+
+    //void focusOfChildComponentChanged (yup::Component::FocusChangeType cause) override
+    //{
+    //    PYBIND11_OVERRIDE (void, Base, focusOfChildComponentChanged, cause);
+    //}
+
+    void resized() override
+    {
+        PYBIND11_OVERRIDE (void, Base, resized);
+    }
+
+    void moved() override
+    {
+        PYBIND11_OVERRIDE (void, Base, moved);
+    }
+
+    void childBoundsChanged (yup::Component* child) override
+    {
+        PYBIND11_OVERRIDE (void, Base, childBoundsChanged, child);
+    }
+
+    void parentSizeChanged() override
+    {
+        PYBIND11_OVERRIDE (void, Base, parentSizeChanged);
+    }
+
+    void broughtToFront() override
+    {
+        PYBIND11_OVERRIDE (void, Base, broughtToFront);
+    }
+
+    void handleCommandMessage (int commandId) override
+    {
+        {
+            pybind11::gil_scoped_acquire gil;
+
+            if (pybind11::function override_ = pybind11::get_override (static_cast<Base*> (this), "handleCommandMessage"); override_)
+            {
+                override_ (commandId);
+                return;
+            }
+        }
+
+        //if constexpr (! std::is_same_v<Base, yup::TextEditor>)
+        //    Base::handleCommandMessage (commandId);
+    }
+
+    bool canModalEventBeSentToComponent (const yup::Component* targetComponent) override
+    {
+        PYBIND11_OVERRIDE (bool, Base, canModalEventBeSentToComponent, targetComponent);
+    }
+
+    void inputAttemptWhenModal () override
+    {
+        PYBIND11_OVERRIDE (void, Base, inputAttemptWhenModal);
+    }
+
+    void colourChanged () override
+    {
+        PYBIND11_OVERRIDE (void, Base, colourChanged);
+    }
+};
+
 } // namespace yup::Bindings
