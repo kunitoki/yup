@@ -23,7 +23,10 @@
 
 #include <gtest/gtest.h>
 
+#if __has_include(<PythonStandardLibrary.h>)
+#define YUP_HAS_EMBEDDED_PYTHON_STANDARD_LIBRARY 1
 #include <PythonStandardLibrary.h>
+#endif
 
 using namespace yup;
 
@@ -436,6 +439,7 @@ TEST_F (ScriptEngineTest, RunScriptWithLambdaFunctions)
     EXPECT_TRUE (result.wasOk());
 }
 
+#if YUP_HAS_EMBEDDED_PYTHON_STANDARD_LIBRARY
 TEST_F (ScriptEngineTest, RunScriptWithStdLibImports)
 {
     ScriptEngine engine (ScriptEngine::prepareScriptingHome (
@@ -446,9 +450,7 @@ TEST_F (ScriptEngineTest, RunScriptWithStdLibImports)
         return { PythonStandardLibrary_data, PythonStandardLibrary_size };
     }));
 
-    auto result = engine.runScript (String (R"(
-        import argparse
-    )")
-                                        .dedentLines());
+    auto result = engine.runScript ("import argparse");
     EXPECT_TRUE (result.wasOk());
 }
+#endif

@@ -23,7 +23,10 @@
 
 #include <gtest/gtest.h>
 
+#if __has_include(<PythonStandardLibrary.h>)
+#define YUP_HAS_EMBEDDED_PYTHON_STANDARD_LIBRARY 1
 #include <PythonStandardLibrary.h>
+#endif
 
 using namespace yup;
 
@@ -42,6 +45,7 @@ protected:
 
     void SetUp() override
     {
+#if YUP_HAS_EMBEDDED_PYTHON_STANDARD_LIBRARY
         engine = std::make_unique<ScriptEngine> (ScriptEngine::prepareScriptingHome (
             YUPApplication::getInstance()->getApplicationName(),
             File::getSpecialLocation (File::tempDirectory),
@@ -49,6 +53,9 @@ protected:
         {
             return { PythonStandardLibrary_data, PythonStandardLibrary_size };
         }));
+#else
+        engine = std::make_unique<ScriptEngine>();
+#endif
     }
 
     void TearDown() override
@@ -66,6 +73,25 @@ TEST_F (ScriptPythonTest, RunPythonTests)
     {
         currentWorkingDirectory.setAsCurrentWorkingDirectory();
     });
+
+    auto scriptingVersion = engine->getScriptingVersion();
+    auto scriptingVersionCompact = scriptingVersion.upToLastOccurrenceOf (".", false, false);
+
+    auto scriptingHome = engine->getScriptingHome();
+    if (scriptingHome == File())
+    {
+        scriptingHome = File::getSpecialLocation (File::userHomeDirectory).getChildFile ("yup_python");
+        scriptingHome.createDirectory();
+
+        auto binDirectory = scriptingHome.getChildFile ("bin");
+        binDirectory.createDirectory();
+
+        auto sitePackages = scriptingHome
+                                .getChildFile ("lib")
+                                .getChildFile ("python" + scriptingVersionCompact)
+                                .getChildFile ("site-packages");
+        sitePackages.createDirectory();
+    }
 
     auto baseFolder = getPytestTestFolder().getParentDirectory();
     baseFolder.setAsCurrentWorkingDirectory();
@@ -91,8 +117,8 @@ TEST_F (ScriptPythonTest, RunPythonTests)
 
     script = script
                  .dedentLines()
-                 .replace ("{{version}}", engine->getScriptingVersion().upToLastOccurrenceOf (".", false, false))
-                 .replace ("{{root_path}}", engine->getScriptingHome().getFullPathName())
+                 .replace ("{{version}}", scriptingVersionCompact)
+                 .replace ("{{root_path}}", scriptingHome.getFullPathName())
                  .replace ("{{test_path}}", getPytestTestFolder().getFullPathName());
 
     auto result = engine->runScript (script);

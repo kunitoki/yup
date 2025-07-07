@@ -1,7 +1,7 @@
-include README.md
-include LICENSE
+include ../README.md
+include ../LICENSE
 
 graft yup
 graft yup.pyi
 
-global-exclude *.py[cod] __pycache__ .DS_Store CMakeLists.txt
+global-exclude *.py[cod] __pycache__ tools .DS_Store CMakeLists.txt

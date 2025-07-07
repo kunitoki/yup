@@ -75,9 +75,10 @@ else()
         GTest::gmock_main)
 endif()
 
-if (YUP_PLATFORM_DESKTOP)
+if (YUP_PLATFORM_MACOS OR YUP_PLATFORM_WINDOWS)
     set (python_tools_path "${CMAKE_CURRENT_LIST_DIR}/../python/tools")
     set (python_target_name "${target_name}_python_stdlib")
+
     yup_prepare_python_stdlib (${python_target_name} ${python_tools_path} python_standard_library)
 
     yup_add_embedded_binary_resources (

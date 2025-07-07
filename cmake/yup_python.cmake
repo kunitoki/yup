@@ -31,6 +31,8 @@ function (yup_prepare_python_stdlib target_name python_tools_path output_variabl
     set (ignored_library_patterns ${default_ignored_library_patterns})
     list (APPEND ignored_library_patterns ${YUP_ARG_IGNORED_LIBRARY_PATTERNS})
 
+    get_filename_component (python_tools_path "${python_tools_path}" REALPATH)
+
     set (python_standard_library "${CMAKE_CURRENT_BINARY_DIR}/python${Python_VERSION_MAJOR}${Python_VERSION_MINOR}.zip")
 
     _yup_message (STATUS "Executing python stdlib archive generator tool")
