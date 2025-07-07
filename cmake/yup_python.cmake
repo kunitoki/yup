@@ -34,6 +34,13 @@ function (yup_prepare_python_stdlib target_name python_tools_path output_variabl
     set (python_standard_library "${CMAKE_CURRENT_BINARY_DIR}/python${Python_VERSION_MAJOR}${Python_VERSION_MINOR}.zip")
 
     _yup_message (STATUS "Executing python stdlib archive generator tool")
+    _yup_message (STATUS " * CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
+    _yup_message (STATUS " * Python_EXECUTABLE: ${Python_EXECUTABLE}")
+    _yup_message (STATUS " * Python_LIBRARY_DIRS: ${Python_LIBRARY_DIRS}")
+    _yup_message (STATUS " * Python_VERSION_MAJOR: ${Python_VERSION_MAJOR}")
+    _yup_message (STATUS " * Python_VERSION_MINOR: ${Python_VERSION_MINOR}")
+    _yup_message (STATUS " * python_tools_path: ${python_tools_path}")
+    _yup_message (STATUS " * ignored_library_patterns: ${ignored_library_patterns}")
 
     execute_process (
         COMMAND

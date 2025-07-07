@@ -36,6 +36,8 @@ def make_archive(file, directory):
 
 
 if __name__ == "__main__":
+    print(f"starting python standard lib archiving tool...")
+
     parser = ArgumentParser()
     parser.add_argument("-l", "--lib-folder", type=Path, help="Path to the lib folder.")
     parser.add_argument("-o", "--output-folder", type=Path, help="Path to the output folder.")
