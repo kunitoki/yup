@@ -115,5 +115,3 @@ static inline constexpr const char* const PythonModuleName = YUP_PYTHON_STRINGIF
 #include "utilities/yup_ClassDemangling.h"
 #include "utilities/yup_CrashHandling.h"
 #include "utilities/yup_PythonInterop.h"
-
-#include "bindings/yup_YupCore_bindings.h"

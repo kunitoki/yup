@@ -24,34 +24,34 @@
 
 #include "../bindings/yup_YupCore_bindings.h"
 
-/*
 #if YUP_MODULE_AVAILABLE_yup_events
-#include "yup_YupEvents_bindings.h"
+#include "../bindings/yup_YupEvents_bindings.h"
 #endif
 
+/*
 #if YUP_MODULE_AVAILABLE_yup_data_model
-#include "yup_YupDataModel_bindings.h"
+#include "../bindings/yup_YupDataModel_bindings.h"
 #endif
 
 #if YUP_MODULE_AVAILABLE_yup_graphics
-#include "yup_YupGraphics_bindings.h"
+#include "../bindings/yup_YupGraphics_bindings.h"
 #endif
 
 #if YUP_MODULE_AVAILABLE_yup_gui
-#include "yup_YupGui_bindings.h"
-#include "yup_YupGuiEntryPoints_bindings.h"
+#include "../bindings/yup_YupGui_bindings.h"
+#include "../bindings/yup_YupGuiEntryPoints_bindings.h"
 #endif
 
 #if YUP_MODULE_AVAILABLE_yup_audio_basics
-#include "yup_YupAudioBasics_bindings.h"
+#include "../bindings/yup_YupAudioBasics_bindings.h"
 #endif
 
 #if YUP_MODULE_AVAILABLE_yup_audio_devices
-#include "yup_YupAudioDevices_bindings.h"
+#include "../bindings/yup_YupAudioDevices_bindings.h"
 #endif
 
 #if YUP_MODULE_AVAILABLE_yup_audio_processors
-#include "yup_YupAudioProcessors_bindings.h"
+#include "../bindings/yup_YupAudioProcessors_bindings.h"
 #endif
 */
 
@@ -63,21 +63,34 @@ PYBIND11_EMBEDDED_MODULE (YUP_PYTHON_MODULE_NAME, m)
 PYBIND11_MODULE (YUP_PYTHON_MODULE_NAME, m)
 #endif
 {
+    namespace py = pybind11;
+
+    // ---- When running from wheel
 #if ! YUP_PYTHON_EMBEDDED_INTERPRETER
     yup::SystemStats::setApplicationCrashHandler (yup::Helpers::applicationCrashHandler);
-#endif
 
 #if YUP_MAC
     yup::Process::setDockIconVisible (false);
 #endif
+#endif
 
+    m.def ("__is_embedded__", []
+    {
+#if YUP_PYTHON_EMBEDDED_INTERPRETER
+        return true;
+#else
+        return false;
+#endif
+    });
+
+    // ---- Register bindings
     yup::Bindings::registerYupCoreBindings (m);
 
-    /*
 #if YUP_MODULE_AVAILABLE_yup_events
     yup::Bindings::registerYupEventsBindings (m);
 #endif
 
+    /*
 #if YUP_MODULE_AVAILABLE_yup_data_model
     yup::Bindings::registerYupDataModelBindings (m);
 #endif
