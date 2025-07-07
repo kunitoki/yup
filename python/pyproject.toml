@@ -32,22 +32,9 @@ manylinux-aarch64-image = "manylinux_2_28"
 [tool.cibuildwheel.linux]
 before-build = [
     """dnf install -y zlib-devel openssl-devel freetype-devel fontconfig-devel freeglut-devel alsa-lib-devel mesa-libGL-devel \
-        xorg-x11-proto-devel xorg-x11-proto-devel libcurl-devel libpng-devel libX11-devel libXcursor-devel libXrandr-devel \
-        libXinerama-devel libXrender-devel libXcomposite-devel libXinerama-devel libXcursor-devel xorg-x11-server-Xvfb \
-        gtk3-devel webkit2gtk3-devel wget lcov""",
-
-    #"wget https://github.com/linux-test-project/lcov/releases/download/v2.3.1/lcov-2.3.1-1.noarch.rpm",
-    #"yum localinstall -y lcov-2.3.1-1.noarch.rpm",
-
-    #"wget https://rpmfind.net/linux/epel/7/x86_64/Packages/p/perl-JSON-XS-3.01-2.el7.x86_64.rpm",
-    #"yum localinstall -y perl-JSON-XS-3.01-2.el7.x86_64.rpm",
-
-    #"wget https://repo.almalinux.org/almalinux/8/PowerTools/x86_64/os/Packages/perl-JSON-XS-3.04-3.el8.x86_64.rpm",
-    #"yum localinstall -y perl-JSON-XS-3.04-3.el8.x86_64.rpm",
-
-    #"sed -i \"s/use JSON::PP/use JSON::XS/g\" /usr/bin/geninfo"
-#    "ln -s /usr/include/freetype2/ft2build.h /usr/include/ft2build.h",
-#    "ln -s /usr/include/freetype2/freetype /usr/include/freetype"
+         xorg-x11-proto-devel xorg-x11-proto-devel libcurl-devel libpng-devel libX11-devel libXcursor-devel libXrandr-devel \
+         libXinerama-devel libXrender-devel libXcomposite-devel libXinerama-devel libXcursor-devel xorg-x11-server-Xvfb \
+         gtk3-devel webkit2gtk3-devel wget""",
 ]
 
 test-command = [
@@ -55,7 +42,3 @@ test-command = [
 #    """xvfb-run -a -s \"-screen 0 1024x768x24\" pytest -s {project}/python/tests || \
 #        { (mkdir -p /output/compare_data && cp {project}/python/tests/compare_data/* /output/compare_data/) ; exit 1 ; }"""
 ]
-
-#repair-wheel-command = """
-#pip install auditwheel-symbols && (auditwheel repair -w {dest_dir} {wheel} || auditwheel-symbols --manylinux 2014 {wheel})
-#"""

@@ -100,85 +100,10 @@ jobs:
           "*/usr/*" \
           "*/opt/*" \
           "*/CMakeFiles/*" \
-          -o coverage/cpp.info --ignore-errors ${IGNORE_ERRORS}
-        lcov --list coverage/cpp.info
-
-    - name: Upload C++ Coverage Report
-      uses: actions/upload-artifact@v4
-      with:
-        name: cpp-coverage
-        path: ${{ runner.workspace }}/build/coverage/cpp.info
-
-    - name: Upload Test Results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: test-results
-        path: ${{ runner.workspace }}/build/tests/Debug/test_results.xml
-
-  # python-coverage:
-  #   runs-on: ubuntu-latest
-
-  #   steps:
-  #   - name: Checkout repository
-  #     uses: actions/checkout@v4
-
-  #   - name: Setup and install python
-  #     uses: actions/setup-python@v5
-  #     with:
-  #       python-version: "3.11"
-
-  #   - name: Install Dependencies
-  #     run: sudo apt-get update && sudo apt-get install -y lcov
-
-  #   - name: Build Python Wheels and Run Python Tests
-  #     uses: pypa/cibuildwheel@v3.0.0
-  #     env:
-  #       CIBW_ARCHS: x86_64
-  #       CIBW_BUILD: cp311-manylinux_x86_64
-  #       CIBW_TEST_SKIP: "*manylinux*"
-  #       CIBW_DEBUG_TRACEBACK: TRUE
-  #       CIBW_ENVIRONMENT: CIBW_DEBUG_TRACEBACK=TRUE YUP_ENABLE_COVERAGE=1
-  #     with:
-  #       package-dir: python
-
-  #   - name: Upload Python Coverage Report
-  #     uses: actions/upload-artifact@v4
-  #     with:
-  #       name: python-coverage
-  #       path: wheelhouse/lcov.info
-
-  combine-coverage:
-    runs-on: ubuntu-latest
-    needs: [cpp-coverage]
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Install Dependencies
-      run: sudo apt-get update && sudo apt-get install -y lcov
-
-    - name: Download C++ Coverage Report
-      uses: actions/download-artifact@v4
-      with:
-        name: cpp-coverage
-        path: coverage/
-
-    #- name: Download Python Coverage Report
-    #  uses: actions/download-artifact@v4
-    #  with:
-    #    name: python-coverage
-    #    path: coverage/
-
-    - name: Combine Coverage Reports
-      run: |
-        #lcov -r coverage/lcov.info "*/pybind11/*" -o coverage/python.info --ignore-errors ${IGNORE_ERRORS}
-        #lcov -a coverage/cpp.info -a coverage/python.info -o coverage/coverage_final.info --ignore-errors ${IGNORE_ERRORS}
-        lcov -a coverage/cpp.info -o coverage/coverage_final.info --ignore-errors ${IGNORE_ERRORS}
+          -o coverage/coverage_final.info --ignore-errors ${IGNORE_ERRORS}
         lcov --list coverage/coverage_final.info
 
-    - name: Upload Combined Coverage to Codecov
+    - name: Upload Coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
@@ -187,7 +112,7 @@ jobs:
         fail_ci_if_error: false
         verbose: true
 
-    - name: Upload Combined Coverage Reports
+    - name: Upload Coverage Reports
       uses: actions/upload-artifact@v4
       if: always()
       with:

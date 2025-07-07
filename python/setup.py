@@ -83,7 +83,6 @@ class CMakeExtension(Extension):
 
 
 class CMakeBuildExtension(build_ext):
-    build_for_coverage = get_environment_option(int, "YUP_ENABLE_COVERAGE", 0)
     build_for_distribution = get_environment_option(int, "YUP_ENABLE_DISTRIBUTION", 0)
     build_with_lto = get_environment_option(int, "YUP_ENABLE_LTO", 0)
     build_osx_architectures = get_environment_option(str, "YUP_OSX_ARCHITECTURES", "arm64")
@@ -103,7 +102,7 @@ class CMakeBuildExtension(build_ext):
         output_path = extdir.parent
         output_path.mkdir(parents=True, exist_ok=True)
 
-        config = "Debug" if self.debug or self.build_for_coverage else "Release"
+        config = "Debug" if self.debug else "Release"
         cmake_args = [
             f"-DYUP_BUILD_WHEEL:BOOL=ON",
             f"-DYUP_EXPORT_MODULES:BOOL=OFF",
@@ -123,9 +122,6 @@ class CMakeBuildExtension(build_ext):
                 f"-DCMAKE_OSX_DEPLOYMENT_TARGET:STRING={self.build_osx_deployment_target}"
             ]
 
-        if self.build_for_coverage:
-            cmake_args += ["-DYUP_ENABLE_COVERAGE:BOOL=ON"]
-
         if self.build_for_distribution:
             cmake_args += ["-DYUP_ENABLE_DISTRIBUTION:BOOL=ON"]
 
@@ -144,33 +140,10 @@ class CMakeBuildExtension(build_ext):
                 build_command += ["--", f"-j{os.cpu_count()}"]
             self.spawn(build_command)
 
-            if self.build_for_coverage:
-                self.generate_coverage(cwd)
-
         finally:
             os.chdir(str(cwd))
 
         self.generate_pyi(cwd)
-
-    def generate_coverage(self, cwd):
-        log.info("generating coverage files")
-
-        self.spawn([sys.executable, "-m", "pytest", "-s", os.path.join(cwd, "tests")])
-        self.spawn(["lcov", "--directory", cwd, "--capture", "--output-file", "coverage/coverage.info",
-                    "--ignore-errors", "gcov,source"])
-
-        if not os.path.isdir("/host"): # We are not running in cibuildwheel container
-            return
-
-        for m in glob.iglob(f"{cwd}/**/coverage.info", recursive=True):
-            log.info(f"found {m} coverage info file")
-
-            self.spawn(["sed", "-i", "s:/project/::g", m])
-
-            os.makedirs("/output", exist_ok=True)
-            shutil.copyfile(m, f"/output/lcov.info")
-
-            break
 
     def generate_pyi(self, cwd):
         log.info("generating pyi files")
