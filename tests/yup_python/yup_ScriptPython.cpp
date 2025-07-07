@@ -118,6 +118,10 @@ TEST_F (ScriptPythonTest, RunPythonTests)
             finally:
                 sys.argv = old_argv
  
+            os.system('ls -la {{root_path}}/local')
+            os.system('ls -la {{root_path}}/local/*')
+            os.system('ls -la {{root_path}}/local/*/*')
+
             import pytest
 
         pytest.main(['-x', '{{test_path}}', '-vvv'])
