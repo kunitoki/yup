@@ -102,7 +102,6 @@ TEST_F (ScriptPythonTest, RunPythonTests)
         import sys
 
         sys.path.append('{{root_path}}/lib/python{{version}}/site-packages')
-        sys.path.append('{{root_path}}/local/lib/python{{version}}/site-packages')
 
         package = 'pytest'
 
@@ -118,9 +117,10 @@ TEST_F (ScriptPythonTest, RunPythonTests)
             finally:
                 sys.argv = old_argv
  
-            os.system('ls -la {{root_path}}/local')
-            os.system('ls -la {{root_path}}/local/*')
-            os.system('ls -la {{root_path}}/local/*/*')
+            os.system('ls -la {{root_path}}')
+            os.system('ls -la {{root_path}}/*')
+            os.system('ls -la {{root_path}}/*/*')
+            os.system('ls -la {{root_path}}/*/*/*')
 
             import pytest
 
