@@ -112,8 +112,8 @@ TEST_F (ScriptPythonTest, RunPythonTests)
             sys.argv = ['pip', 'install', package, '--prefix', '{{root_path}}']
             try:
                 runpy.run_module('pip', run_name='__main__')
-            except SystemExit as exeption:
-                print(str(exception))
+            except SystemExit as ex:
+                print(str(ex))
             finally:
                 sys.argv = old_argv
             import pytest
