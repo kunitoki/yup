@@ -38,12 +38,12 @@
 #include "../bindings/yup_YupGraphics_bindings.h"
 #endif
 
-/*
 #if YUP_MODULE_AVAILABLE_yup_gui
 #include "../bindings/yup_YupGui_bindings.h"
-#include "../bindings/yup_YupGuiEntryPoints_bindings.h"
+#include "../bindings/yup_YupGuiEntryPoint_bindings.h"
 #endif
 
+/*
 #if YUP_MODULE_AVAILABLE_yup_audio_basics
 #include "../bindings/yup_YupAudioBasics_bindings.h"
 #endif
@@ -76,7 +76,7 @@ PYBIND11_MODULE (YUP_PYTHON_MODULE_NAME, m)
 #endif
 #endif
 
-    m.def ("__is_embedded__", []
+    m.def ("__embedded_interpreter__", []
     {
 #if YUP_PYTHON_EMBEDDED_INTERPRETER
         return true;
@@ -102,12 +102,12 @@ PYBIND11_MODULE (YUP_PYTHON_MODULE_NAME, m)
     yup::Bindings::registerYupGraphicsBindings (m);
 #endif
 
-    /*
 #if YUP_MODULE_AVAILABLE_yup_gui
     yup::Bindings::registerYupGuiBindings (m);
     yup::Bindings::registerYupGuiEntryPointsBindings (m);
 #endif
 
+    /*
 #if YUP_MODULE_AVAILABLE_yup_audio_basics
     yup::Bindings::registerYupAudioBasicsBindings (m);
 #endif
