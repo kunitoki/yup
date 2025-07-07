@@ -73,7 +73,7 @@ PYBIND11_MODULE (YUP_PYTHON_MODULE_NAME, m)
 
     yup::Bindings::registerYupCoreBindings (m);
 
-/*
+    /*
 #if YUP_MODULE_AVAILABLE_yup_events
     yup::Bindings::registerYupEventsBindings (m);
 #endif
