@@ -40,7 +40,6 @@
 
 #if YUP_MODULE_AVAILABLE_yup_gui
 #include "../bindings/yup_YupGui_bindings.h"
-#include "../bindings/yup_YupGuiEntryPoint_bindings.h"
 #endif
 
 /*
@@ -104,7 +103,6 @@ PYBIND11_MODULE (YUP_PYTHON_MODULE_NAME, m)
 
 #if YUP_MODULE_AVAILABLE_yup_gui
     yup::Bindings::registerYupGuiBindings (m);
-    yup::Bindings::registerYupGuiEntryPointsBindings (m);
 #endif
 
     /*

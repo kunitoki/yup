@@ -247,7 +247,8 @@ setuptools.setup(
     long_description=load_description(version),
     long_description_content_type="text/markdown",
     url="https://github.com/kunitoki/yup",
-    packages=setuptools.find_packages(".", exclude=["*cmake*", "*docs*", "*examples*", "*modules*", "*standalone*", "*tests*", "*thirdparty*", "*tools*"]),
+    packages=setuptools.find_packages(".", exclude=[
+        "*cmake*", "*docs*", "*examples*", "*modules*", "*standalone*", "*demos*", "*tests*", "*thirdparty*", "*tools*"]),
     include_package_data=True,
     cmdclass={"build_ext": CMakeBuildExtension, "install_scripts": CustomInstallScripts},
     ext_modules=[CMakeExtension(project_name)],

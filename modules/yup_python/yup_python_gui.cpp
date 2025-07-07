@@ -20,4 +20,3 @@
 */
 
 #include "bindings/yup_YupGui_bindings.cpp"
-#include "bindings/yup_YupGuiEntryPoint_bindings.cpp"
