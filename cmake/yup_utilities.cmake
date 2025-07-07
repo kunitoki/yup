@@ -148,7 +148,7 @@ function (_yup_file_to_byte_array file_path output_variable)
     file (READ "${file_path}" hex_contents HEX)
     string (REGEX MATCHALL "([A-Fa-f0-9][A-Fa-f0-9])" separated_hex ${hex_contents})
 
-    list (JOIN separated_hex ", 0x" formatted_hex)
+    list (JOIN separated_hex ",0x" formatted_hex)
     string (PREPEND formatted_hex "0x")
     string (APPEND formatted_hex "")
 

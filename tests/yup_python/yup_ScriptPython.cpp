@@ -112,7 +112,7 @@ TEST_F (ScriptPythonTest, RunPythonTests)
             runpy.run_module('pip', run_name='__main__')
             import pytest
 
-        pytest.main(['-x', '{{test_path}}'])
+        pytest.main(['-x', '{{test_path}}', '-vvv'])
     )");
 
     script = script

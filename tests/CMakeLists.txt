@@ -75,7 +75,7 @@ else()
         GTest::gmock_main)
 endif()
 
-if (YUP_PLATFORM_MACOS OR YUP_PLATFORM_WINDOWS)
+if (YUP_PLATFORM_MAC OR YUP_PLATFORM_WINDOWS)
     set (python_tools_path "${CMAKE_CURRENT_LIST_DIR}/../python/tools")
     set (python_target_name "${target_name}_python_stdlib")
 
