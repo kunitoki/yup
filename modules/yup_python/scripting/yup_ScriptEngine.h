@@ -103,6 +103,14 @@ public:
 
     //==============================================================================
 
+    /** Get the version of the scripting engine.
+
+        This returns the version of python in form of major.minor.micro (3.13.5).
+
+        @return The version of the scripting engine.
+     */
+    String getScriptingVersion() const;
+
     /** Get the scripting home directory.
 
         When the scripting home is prepared using the prepareScriptingHome method,

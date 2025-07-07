@@ -38,12 +38,6 @@
 
 //==============================================================================
 
-//#if YUP_MODULE_AVAILABLE_yup_core
-#include "bindings/yup_YupCore_bindings.cpp"
-//#endif
-
-//==============================================================================
-
 #include "modules/yup_YupMain_module.cpp"
 #include "modules/yup_YupInternal_module.cpp"
 

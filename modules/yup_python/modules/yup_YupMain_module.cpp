@@ -20,48 +20,40 @@
 */
 
 #include "../utilities/yup_PyBind11Includes.h"
+#include "../utilities/yup_CrashHandling.h"
+
 #include "../bindings/yup_YupCore_bindings.h"
 
-#if YUP_MODULE_AVAILABLE_juce_events
-#include "ScriptJuceEventsBindings.h"
+/*
+#if YUP_MODULE_AVAILABLE_yup_events
+#include "yup_YupEvents_bindings.h"
 #endif
 
-#if YUP_MODULE_AVAILABLE_juce_data_structures
-#include "ScriptJuceDataStructuresBindings.h"
+#if YUP_MODULE_AVAILABLE_yup_data_model
+#include "yup_YupDataModel_bindings.h"
 #endif
 
-#if YUP_MODULE_AVAILABLE_juce_graphics
-#include "ScriptJuceGraphicsBindings.h"
+#if YUP_MODULE_AVAILABLE_yup_graphics
+#include "yup_YupGraphics_bindings.h"
 #endif
 
-#if YUP_MODULE_AVAILABLE_juce_gui_basics
-#include "ScriptJuceGuiBasicsBindings.h"
-#include "ScriptJuceGuiEntryPointsBindings.h"
+#if YUP_MODULE_AVAILABLE_yup_gui
+#include "yup_YupGui_bindings.h"
+#include "yup_YupGuiEntryPoints_bindings.h"
 #endif
 
-#if YUP_MODULE_AVAILABLE_juce_gui_extra
-#include "ScriptJuceGuiExtraBindings.h"
+#if YUP_MODULE_AVAILABLE_yup_audio_basics
+#include "yup_YupAudioBasics_bindings.h"
 #endif
 
-#if YUP_MODULE_AVAILABLE_juce_audio_basics
-#include "ScriptJuceAudioBasicsBindings.h"
+#if YUP_MODULE_AVAILABLE_yup_audio_devices
+#include "yup_YupAudioDevices_bindings.h"
 #endif
 
-#if YUP_MODULE_AVAILABLE_juce_audio_devices
-#include "ScriptJuceAudioDevicesBindings.h"
+#if YUP_MODULE_AVAILABLE_yup_audio_processors
+#include "yup_YupAudioProcessors_bindings.h"
 #endif
-
-#if YUP_MODULE_AVAILABLE_juce_audio_processors
-#include "ScriptJuceAudioProcessorsBindings.h"
-#endif
-
-#if YUP_MODULE_AVAILABLE_juce_audio_formats
-#include "ScriptJuceAudioFormatsBindings.h"
-#endif
-
-#if YUP_MODULE_AVAILABLE_juce_audio_utils
-#include "ScriptJuceAudioUtilsBindings.h"
-#endif
+*/
 
 //==============================================================================
 
@@ -81,44 +73,34 @@ PYBIND11_MODULE (YUP_PYTHON_MODULE_NAME, m)
 
     yup::Bindings::registerYupCoreBindings (m);
 
-#if YUP_MODULE_AVAILABLE_juce_events
-    yup::Bindings::registerJuceEventsBindings (m);
+/*
+#if YUP_MODULE_AVAILABLE_yup_events
+    yup::Bindings::registerYupEventsBindings (m);
 #endif
 
-#if YUP_MODULE_AVAILABLE_juce_data_structures
-    yup::Bindings::registerJuceDataStructuresBindings (m);
+#if YUP_MODULE_AVAILABLE_yup_data_model
+    yup::Bindings::registerYupDataModelBindings (m);
 #endif
 
-#if YUP_MODULE_AVAILABLE_juce_graphics
-    yup::Bindings::registerJuceGraphicsBindings (m);
+#if YUP_MODULE_AVAILABLE_yup_graphics
+    yup::Bindings::registerYupGraphicsBindings (m);
 #endif
 
-#if YUP_MODULE_AVAILABLE_juce_gui_basics
-    yup::Bindings::registerJuceGuiBasicsBindings (m);
-    yup::Bindings::registerJuceGuiEntryPointsBindings (m);
+#if YUP_MODULE_AVAILABLE_yup_gui
+    yup::Bindings::registerYupGuiBindings (m);
+    yup::Bindings::registerYupGuiEntryPointsBindings (m);
 #endif
 
-#if YUP_MODULE_AVAILABLE_juce_gui_extra
-    yup::Bindings::registerJuceGuiExtraBindings (m);
+#if YUP_MODULE_AVAILABLE_yup_audio_basics
+    yup::Bindings::registerYupAudioBasicsBindings (m);
 #endif
 
-#if YUP_MODULE_AVAILABLE_juce_audio_basics
-    yup::Bindings::registerJuceAudioBasicsBindings (m);
+#if YUP_MODULE_AVAILABLE_yup_audio_devices
+    yup::Bindings::registerYupAudioDevicesBindings (m);
 #endif
 
-#if YUP_MODULE_AVAILABLE_juce_audio_devices
-    yup::Bindings::registerJuceAudioDevicesBindings (m);
+#if YUP_MODULE_AVAILABLE_yup_audio_processors
+    yup::Bindings::registerYupAudioProcessorsBindings (m);
 #endif
-
-#if YUP_MODULE_AVAILABLE_juce_audio_processors
-    yup::Bindings::registerJuceAudioProcessorsBindings (m);
-#endif
-
-#if YUP_MODULE_AVAILABLE_juce_audio_formats
-    yup::Bindings::registerJuceAudioFormatsBindings (m);
-#endif
-
-#if YUP_MODULE_AVAILABLE_juce_audio_utils
-    yup::Bindings::registerJuceAudioUtilsBindings (m);
-#endif
+*/
 }

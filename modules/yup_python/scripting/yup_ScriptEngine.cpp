@@ -153,6 +153,13 @@ ScriptEngine::~ScriptEngine()
 
 //==============================================================================
 
+String ScriptEngine::getScriptingVersion() const
+{
+    String version;
+    version << PY_MAJOR_VERSION << "." << PY_MINOR_VERSION << "." << PY_MICRO_VERSION;
+    return version;
+}
+
 File ScriptEngine::getScriptingHome() const
 {
     if (currentConfig != nullptr)

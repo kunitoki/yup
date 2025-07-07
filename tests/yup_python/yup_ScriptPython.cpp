@@ -61,8 +61,20 @@ protected:
 
 TEST_F (ScriptPythonTest, RunPythonTests)
 {
+    auto currentWorkingDirectory = File::getCurrentWorkingDirectory();
+    auto restoreWorkingDirectoryAtScopeExit = ErasedScopeGuard ([&]
+    {
+        currentWorkingDirectory.setAsCurrentWorkingDirectory();
+    });
+
+    auto baseFolder = getPytestTestFolder().getParentDirectory();
+    baseFolder.setAsCurrentWorkingDirectory();
+
     auto script = String (R"(
         import importlib
+        import sys
+        
+        sys.path.append('{{root_path}}/lib/python{{version}}/site-packages')
 
         package = 'pytest'
 
@@ -74,11 +86,14 @@ TEST_F (ScriptPythonTest, RunPythonTests)
         finally:
             globals()[package] = importlib.import_module(package)
 
-        pytest.main(['-x', '{{test_path}}', '-vv'])
-    )")
-                      .dedentLines()
-                      .replace ("{{root_path}}", engine->getScriptingHome().getFullPathName())
-                      .replace ("{{test_path}}", getPytestTestFolder().getFullPathName());
+        pytest.main(['-x', '{{test_path}}'])
+    )");
+
+    script = script
+                 .dedentLines()
+                 .replace ("{{version}}", engine->getScriptingVersion().upToLastOccurrenceOf (".", false, false))
+                 .replace ("{{root_path}}", engine->getScriptingHome().getFullPathName())
+                 .replace ("{{test_path}}", getPytestTestFolder().getFullPathName());
 
     auto result = engine->runScript (script);
 
