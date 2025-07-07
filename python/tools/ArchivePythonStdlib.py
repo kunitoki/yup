@@ -71,6 +71,7 @@ if __name__ == "__main__":
         "site-packages",
         "test",
         "turtledemo",
+        "EXTERNALLY-MANAGED",
         "LICENSE.txt",
     ]
 

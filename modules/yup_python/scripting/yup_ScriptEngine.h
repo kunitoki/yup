@@ -103,6 +103,19 @@ public:
 
     //==============================================================================
 
+    /** Get the scripting home directory.
+
+        When the scripting home is prepared using the prepareScriptingHome method,
+        this method will return the destination folder used to prepare the home.
+        This home folder can be used as either `PYTHONHOME` or `--prefix` when installing
+        python packages using pip.
+
+        @return The scripting home directory if present, or an empty `File` if not.
+     */
+    File getScriptingHome() const;
+
+    //==============================================================================
+
     /** Prepare a valid python home and return the config to use.
 
         @param programName The desired program name.
@@ -119,6 +132,7 @@ public:
 private:
     Result runScriptInternal (const String& code, pybind11::dict locals, pybind11::dict globals);
 
+    std::unique_ptr<PyConfig> currentConfig;
     StringArray customModules;
     String currentScriptCode;
     File currentScriptFile;

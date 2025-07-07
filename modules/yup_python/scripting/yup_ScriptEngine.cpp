@@ -105,7 +105,7 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
         auto mis = MemoryInputStream (mb.getData(), mb.getSize(), false);
 
         auto zip = ZipFile (mis);
-        zip.uncompressTo (pythonFolder);
+        zip.uncompressTo (pythonFolder.getParentDirectory());
     }
 
     auto config = std::make_unique<PyConfig>();
@@ -133,10 +133,11 @@ ScriptEngine::ScriptEngine (std::unique_ptr<PyConfig> config)
 }
 
 ScriptEngine::ScriptEngine (StringArray modules, std::unique_ptr<PyConfig> config)
-    : customModules (std::move (modules))
+    : currentConfig (std::move (config))
+    , customModules (std::move (modules))
 {
     if (config)
-        pybind11::initialize_interpreter (config.get(), 0, nullptr, true);
+        pybind11::initialize_interpreter (currentConfig.get(), 0, nullptr, true);
     else
         pybind11::initialize_interpreter();
 
@@ -148,6 +149,16 @@ ScriptEngine::~ScriptEngine()
     py::set_shared_data ("_YUP_ENGINE", nullptr);
 
     pybind11::finalize_interpreter();
+}
+
+//==============================================================================
+
+File ScriptEngine::getScriptingHome() const
+{
+    if (currentConfig != nullptr)
+        return String (currentConfig->home);
+
+    return {};
 }
 
 //==============================================================================
