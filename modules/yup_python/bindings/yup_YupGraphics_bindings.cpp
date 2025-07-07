@@ -47,6 +47,8 @@ using namespace py::literals;
 template <template <class> class Class, class... Types>
 void registerPoint (py::module_& m)
 {
+    // clang-format off
+
     py::dict type;
 
     ([&]
@@ -57,69 +59,141 @@ void registerPoint (py::module_& m)
         const auto className = Helpers::pythonizeCompoundClassName ("Point", typeid (Types).name());
 
         auto class_ = py::class_<T> (m, className.toRawUTF8())
-                          .def (py::init<>())
-                          .def (py::init<ValueType, ValueType>())
-                          .def (py::self == py::self)
-                          .def (py::self != py::self)
-                          .def ("isOrigin", &T::isOrigin)
-                          //.def ("isFinite", &T::isFinite)
-                          .def ("getX", &T::getX)
-                          .def ("getY", &T::getY)
-                          .def ("setX", &T::setX)
-                          .def ("setY", &T::setY)
-                          .def ("withX", &T::withX)
-                          .def ("withY", &T::withY)
-                          //.def ("setXY", &T::setXY)
-                          //.def ("addXY", &T::addXY)
-                          //.def ("translated", &T::translated)
-                          .def (py::self + py::self)
-                          .def (py::self += py::self)
-                          .def (py::self - py::self)
-                          .def (py::self -= py::self)
-                          .def (py::self * py::self)
-                          .def (py::self *= py::self)
-                          .def (py::self * float())
-                          .def (py::self *= float())
-                          .def (py::self / py::self)
-                          .def (py::self /= py::self)
-                          .def (py::self / float())
-                          .def (py::self /= float())
-                          .def (-py::self)
-                          //.def ("getDistanceFromOrigin", &T::getDistanceFromOrigin)
-                          //.def ("getDistanceFrom", &T::getDistanceFrom)
-                          //.def ("getDistanceSquaredFromOrigin", &T::getDistanceSquaredFromOrigin)
-                          //.def ("getDistanceSquaredFrom", &T::getDistanceSquaredFrom)
-                          //.def ("getAngleToPoint", &T::getAngleToPoint)
-                          //.def ("getPointOnCircumference", py::overload_cast<float, float>(&T::getPointOnCircumference, py::const_))
-                          //.def ("getPointOnCircumference", py::overload_cast<float, float, float>(&T::getPointOnCircumference, py::const_))
-                          //.def ("getDotProduct", &T::getDotProduct)
-                          //.def ("applyTransform", &T::applyTransform)
-                          //.def ("transformedBy", &T::transformedBy)
-                          //.def ("toInt", &T::toInt)
-                          //.def ("toFloat", &T::toFloat)
-                          //.def ("toDouble", &T::toDouble)
-                          //.def ("roundToInt", &T::roundToInt)
-                          //.def ("toString", &T::toString)
-                          //.def_property("x", &T::getX, &T::setX)
-                          //.def_property("y", &T::getY, &T::setY)
-                          .def ("__repr__", [] (const T& self)
-        {
-            String result;
-            result
-                << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
-                << "(" << self.getX() << ", " << self.getY() << ")";
-            return result;
-        })
-            //.def ("__str__", &T::toString)
-            ;
+            // Constructors
+            .def (py::init<>())
+            .def (py::init<ValueType, ValueType>())
+            .def (py::init<const T&>())
 
-        /*
+            // Basic methods
+            .def ("isOrigin", &T::isOrigin)
+            .def ("isOnXAxis", &T::isOnXAxis)
+            .def ("isOnYAxis", &T::isOnYAxis)
+            .def ("getX", &T::getX)
+            .def ("getY", &T::getY)
+            .def ("setX", &T::setX)
+            .def ("setY", &T::setY)
+            .def ("withX", &T::withX)
+            .def ("withY", &T::withY)
+            .def ("withXY", &T::withXY)
+
+            // Distance methods
+            .def ("distanceTo", &T::distanceTo)
+            .def ("distanceToSquared", &T::distanceToSquared)
+            .def ("horizontalDistanceTo", &T::horizontalDistanceTo)
+            .def ("verticalDistanceTo", &T::verticalDistanceTo)
+            .def ("manhattanDistanceTo", &T::manhattanDistanceTo)
+
+            // Vector operations
+            .def ("magnitude", &T::magnitude)
+            .def ("dotProduct", &T::dotProduct)
+            .def ("crossProduct", &T::crossProduct)
+            .def ("angleTo", &T::angleTo)
+            .def ("normalize", &T::normalize)
+            .def ("normalized", &T::normalized)
+            .def ("isNormalized", &T::isNormalized)
+
+            // Geometric operations
+            .def ("translate", py::overload_cast<ValueType, ValueType>(&T::translate))
+            .def ("translate", py::overload_cast<const T&>(&T::translate))
+            .def ("translated", py::overload_cast<ValueType, ValueType>(&T::translated, py::const_))
+            .def ("translated", py::overload_cast<const T&>(&T::translated, py::const_))
+            .def ("rotateClockwise", &T::rotateClockwise)
+            .def ("rotatedClockwise", &T::rotatedClockwise)
+            .def ("rotateCounterClockwise", &T::rotateCounterClockwise)
+            .def ("rotatedCounterClockwise", &T::rotatedCounterClockwise)
+
+            // Utility methods
+            .def ("midpoint", &T::midpoint)
+            .def ("pointBetween", &T::pointBetween)
+            .def ("isCollinear", &T::isCollinear)
+            .def ("isWithinCircle", &T::isWithinCircle)
+            .def ("isWithinRectangle", &T::isWithinRectangle)
+
+            // Reflection methods
+            .def ("reflectOverXAxis", &T::reflectOverXAxis)
+            .def ("reflectedOverXAxis", &T::reflectedOverXAxis)
+            .def ("reflectOverYAxis", &T::reflectOverYAxis)
+            .def ("reflectedOverYAxis", &T::reflectedOverYAxis)
+            .def ("reflectOverOrigin", &T::reflectOverOrigin)
+            .def ("reflectedOverOrigin", &T::reflectedOverOrigin)
+
+            // Math operations
+            .def ("min", &T::min)
+            .def ("max", &T::max)
+            .def ("abs", &T::abs)
+            .def ("lerp", &T::lerp)
+
+            // Transformation
+            .def ("transform", &T::transform)
+            .def ("transformed", &T::transformed)
+
+            // Comparison
+            .def (py::self == py::self)
+            .def (py::self != py::self)
+            .def ("approximatelyEqualTo", &T::approximatelyEqualTo)
+
+            // Operators
+            .def (py::self + py::self)
+            .def (py::self += py::self)
+            .def (py::self - py::self)
+            .def (py::self -= py::self)
+            .def (py::self * py::self)
+            .def (py::self *= py::self)
+            .def (py::self / py::self)
+            .def (py::self /= py::self)
+            .def (py::self + ValueType())
+            .def (py::self += ValueType())
+            .def (py::self - ValueType())
+            .def (py::self -= ValueType())
+            .def (py::self * ValueType())
+            .def (py::self *= ValueType())
+            .def (py::self / ValueType())
+            .def (py::self /= ValueType())
+            .def (-py::self)
+
+            // Add conversion methods
+            .def ("toInt", [](const T& self) { return self.template to<int>(); })
+            .def ("toLong", [](const T& self) { return self.template to<long>(); })
+            .def ("toFloat", [](const T& self) { return self.template to<float>(); })
+            .def ("toDouble", [](const T& self) { return self.template to<double>(); })
+
+            // Add properties for more pythonic access
+            .def_property("x", &T::getX, &T::setX)
+            .def_property("y", &T::getY, &T::setY)
+
+            .def ("__repr__", [](const T& self)
+            {
+                String result;
+                result
+                    << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
+                    << "(" << self.getX() << ", " << self.getY() << ")";
+                return result;
+            })
+            .def ("__str__", [](const T& self)
+            {
+                String result;
+                result << "(" << self.getX() << ", " << self.getY() << ")";
+                return result;
+            })
+        ;
+
+        // Add floating-point specific methods
         if constexpr (std::is_floating_point_v<ValueType>)
         {
             class_
-                .def ("rotatedAboutOrigin", [](const T& self, float angleRadians) { return self.rotatedAboutOrigin (angleRadians); });
+                .def ("getPointOnCircumference", py::overload_cast<float, float>(&T::template getPointOnCircumference<ValueType>, py::const_))
+                .def ("getPointOnCircumference", py::overload_cast<float, float, float>(&T::template getPointOnCircumference<ValueType>, py::const_))
+                .def ("isFinite", [](const T& self) { return self.template isFinite<ValueType>(); })
+                .def ("floor", [](const T& self) { return self.template floor<ValueType>(); })
+                .def ("ceil", [](const T& self) { return self.template ceil<ValueType>(); })
+                .def ("scale", [](T& self, ValueType factor) -> T& { return self.template scale<ValueType>(factor); })
+                .def ("scale", [](T& self, ValueType factorX, ValueType factorY) -> T& { return self.template scale<ValueType>(factorX, factorY); })
+                .def ("scaled", [](const T& self, ValueType factor) { return self.template scaled<ValueType>(factor); })
+                .def ("scaled", [](const T& self, ValueType factorX, ValueType factorY) { return self.template scaled<ValueType>(factorX, factorY); })
+                .def ("roundToInt", [](const T& self) { return self.template roundToInt<ValueType>(); })
+                .def ("toNearestInt", [](const T& self) { return self.template toNearestInt<ValueType>(); })
+            ;
         }
-        */
 
         type[py::type::of (py::cast (Types {}))] = class_;
 
@@ -127,6 +201,8 @@ void registerPoint (py::module_& m)
     }() && ...);
 
     m.add_object ("Point", type);
+
+    // clang-format on
 }
 
 // ============================================================================================
