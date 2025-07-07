@@ -110,7 +110,7 @@ TEST_F (ScriptPythonTest, RunPythonTests)
             import pytest
         except ImportError:
             old_argv = [x for x in sys.argv]
-            sys.argv = ['pip', 'install', 'pytest', '--prefix', '{{root_path}}']
+            sys.argv = ['pip', 'install', 'pytest', '--root', '{{root_path}}']
             try:
                 runpy.run_module('pip', run_name='__main__')
             except SystemExit as ex:
