@@ -140,7 +140,7 @@ public:
 private:
     Result runScriptInternal (const String& code, pybind11::dict locals, pybind11::dict globals);
 
-    std::unique_ptr<PyConfig> currentConfig;
+    File scriptingHome;
     StringArray customModules;
     String currentScriptCode;
     File currentScriptFile;

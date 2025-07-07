@@ -72,19 +72,19 @@ TEST_F (ScriptPythonTest, RunPythonTests)
 
     auto script = String (R"(
         import importlib
+        import runpy
         import sys
-        
+
         sys.path.append('{{root_path}}/lib/python{{version}}/site-packages')
 
         package = 'pytest'
 
         try:
-            importlib.import_module(package)
+            import pytest
         except ImportError:
-            import pip
-            pip.main(['install', package, '--prefix', '{{root_path}}'])
-        finally:
-            globals()[package] = importlib.import_module(package)
+            sys.argv = ['pip', 'install', package, '--prefix', '{{root_path}}']
+            runpy.run_module('pip', run_name='__main__')
+            import pytest
 
         pytest.main(['-x', '{{test_path}}'])
     )");

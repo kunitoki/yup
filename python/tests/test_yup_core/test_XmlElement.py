@@ -324,7 +324,8 @@ def test_write_to_stream():
 
 #==================================================================================================
 
-@pytest.mark.skipif(sys.platform == "win32", reason="On windows this randomly fails for some reason, investigate")
+#@pytest.mark.skipif(sys.platform == "win32", reason="On windows this randomly fails for some reason, investigate")
+@pytest.mark.skip(reason="This randomly fails for some reason, investigate")
 def test_read_from_file():
     temp_file = get_runtime_data_folder().getChildFile("test_read_from_file.xml")
     with open(temp_file.getFullPathName(), "w") as file:

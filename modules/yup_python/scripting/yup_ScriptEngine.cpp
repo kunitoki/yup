@@ -133,13 +133,17 @@ ScriptEngine::ScriptEngine (std::unique_ptr<PyConfig> config)
 }
 
 ScriptEngine::ScriptEngine (StringArray modules, std::unique_ptr<PyConfig> config)
-    : currentConfig (std::move (config))
-    , customModules (std::move (modules))
+    : customModules (std::move (modules))
 {
-    if (config)
-        pybind11::initialize_interpreter (currentConfig.get(), 0, nullptr, true);
+    if (config != nullptr)
+    {
+        scriptingHome = String (config->home);
+        pybind11::initialize_interpreter (config.get(), 0, nullptr, true);
+    }
     else
+    {
         pybind11::initialize_interpreter();
+    }
 
     py::set_shared_data ("_YUP_ENGINE", this);
 }
@@ -162,10 +166,7 @@ String ScriptEngine::getScriptingVersion() const
 
 File ScriptEngine::getScriptingHome() const
 {
-    if (currentConfig != nullptr)
-        return String (currentConfig->home);
-
-    return {};
+    return scriptingHome;
 }
 
 //==============================================================================
