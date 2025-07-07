@@ -1,7 +1,11 @@
+import sys
+import pytest
+
 import yup
 
 #==================================================================================================
 
+@pytest.mark.skipif(sys.platform == "linux", reason="Linux doesn't always have a working libcurl in CI")
 def test_url_input_source_constructor():
     url = yup.URL("https://github.com")
     input_source = yup.URLInputSource(url)
@@ -10,6 +14,7 @@ def test_url_input_source_constructor():
 
 #==================================================================================================
 
+@pytest.mark.skipif(sys.platform == "linux", reason="Linux doesn't always have a working libcurl in CI")
 def test_create_stream():
     url = yup.URL("https://github.com/kunitoki/yup")
     input_source = yup.URLInputSource(url)
@@ -18,6 +23,7 @@ def test_create_stream():
 
 #==================================================================================================
 
+@pytest.mark.skipif(sys.platform == "linux", reason="Linux doesn't always have a working libcurl in CI")
 def test_create_stream_with_post_data():
     url = yup.URL("https://github.com")
     input_source = yup.URLInputSource(url)

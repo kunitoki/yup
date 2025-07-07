@@ -117,15 +117,9 @@ TEST_F (ScriptPythonTest, RunPythonTests)
                 print(str(ex))
             finally:
                 sys.argv = old_argv
- 
-            os.system('ls -la {{root_path}}')
-            os.system('ls -la {{root_path}}/*')
-            os.system('ls -la {{root_path}}/*/*')
-            os.system('ls -la {{root_path}}/*/*/*')
-
             import pytest
 
-        pytest.main(['-x', '{{test_path}}', '-vvv'])
+        assert pytest.main(['-x', '{{test_path}}', '-vvv']) == 0
     )");
 
     script = script
