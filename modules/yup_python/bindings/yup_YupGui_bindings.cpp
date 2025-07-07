@@ -157,6 +157,20 @@ void registerYupGuiBindings (py::module_& m)
         .def ("isInitialising", &YUPApplication::isInitialising)
     ;
 
+    // ============================================================================================ yup::Component
+
+    py::class_<Component, PyComponent<>> classComponent (m, "Component");
+
+    classComponent
+        .def (py::init_alias<>())
+        .def ("getTitle", &Component::getTitle)
+        .def ("setTitle", &Component::setTitle)
+        .def ("isVisible", &Component::isVisible)
+        .def ("setVisible", &Component::setVisible)
+        .def ("isEnabled", &Component::isEnabled)
+        .def ("setEnabled", &Component::setEnabled)
+    ;
+
 #if ! YUP_PYTHON_EMBEDDED_INTERPRETER
 
     // =================================================================================================

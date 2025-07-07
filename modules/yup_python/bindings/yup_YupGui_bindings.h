@@ -247,7 +247,7 @@ struct PyMouseListener : Base
         PYBIND11_OVERRIDE (void, Base, mouseDoubleClick, event);
     }
 
-    void mouseWheelMove (const yup::MouseEvent& event, const yup::MouseWheelData& wheel) override
+    void mouseWheel (const yup::MouseEvent& event, const yup::MouseWheelData& wheel) override
     {
         {
             pybind11::gil_scoped_acquire gil;
@@ -263,10 +263,10 @@ struct PyMouseListener : Base
         //    Base::mouseWheelMove (event, wheel);
     }
 
-    void mouseMagnify (const yup::MouseEvent& event, float scaleFactor) override
-    {
-        PYBIND11_OVERRIDE (void, Base, mouseMagnify, event, scaleFactor);
-    }
+    //void mouseMagnify (const yup::MouseEvent& event, float scaleFactor) override
+    //{
+    //    PYBIND11_OVERRIDE (void, Base, mouseMagnify, event, scaleFactor);
+    //}
 };
 
 // =================================================================================================
@@ -276,15 +276,15 @@ struct PyComponent : PyMouseListener<Base>
 {
     using PyMouseListener<Base>::PyMouseListener;
 
-    void setName (const yup::String& newName) override
-    {
-        PYBIND11_OVERRIDE (void, Base, setName, newName);
-    }
+    //void setTitle (const yup::String& newName) override
+    //{
+    //    PYBIND11_OVERRIDE (void, Base, setName, newName);
+    //}
 
-    void setVisible (bool shouldBeVisible) override
-    {
-        PYBIND11_OVERRIDE (void, Base, setVisible, shouldBeVisible);
-    }
+    //void setVisible (bool shouldBeVisible) override
+    //{
+    //    PYBIND11_OVERRIDE (void, Base, setVisible, shouldBeVisible);
+    //}
 
     void visibilityChanged() override
     {
@@ -296,15 +296,15 @@ struct PyComponent : PyMouseListener<Base>
         PYBIND11_OVERRIDE (void, Base, userTriedToCloseWindow);
     }
 
-    void minimisationStateChanged(bool isNowMinimised) override
-    {
-        PYBIND11_OVERRIDE (void, Base, minimisationStateChanged, isNowMinimised);
-    }
+    //void minimisationStateChanged(bool isNowMinimised) override
+    //{
+    //    PYBIND11_OVERRIDE (void, Base, minimisationStateChanged, isNowMinimised);
+    //}
 
-    float getDesktopScaleFactor() const override
-    {
-        PYBIND11_OVERRIDE (float, Base, getDesktopScaleFactor);
-    }
+    //float getDesktopScaleFactor() const override
+    //{
+    //    PYBIND11_OVERRIDE (float, Base, getDesktopScaleFactor);
+    //}
 
     void parentHierarchyChanged() override
     {
@@ -316,25 +316,25 @@ struct PyComponent : PyMouseListener<Base>
         PYBIND11_OVERRIDE (void, Base, childrenChanged);
     }
 
-    bool hitTest (int x, int y) override
-    {
-        PYBIND11_OVERRIDE (bool, Base, hitTest, x, y);
-    }
+    //bool hitTest (int x, int y) override
+    //{
+    //    PYBIND11_OVERRIDE (bool, Base, hitTest, x, y);
+    //}
 
-    void lookAndFeelChanged() override
-    {
-        PYBIND11_OVERRIDE (void, Base, lookAndFeelChanged);
-    }
+    //void lookAndFeelChanged() override
+    //{
+    //    PYBIND11_OVERRIDE (void, Base, lookAndFeelChanged);
+    //}
 
     void enablementChanged() override
     {
         PYBIND11_OVERRIDE (void, Base, enablementChanged);
     }
 
-    void alphaChanged() override
-    {
-        PYBIND11_OVERRIDE (void, Base, alphaChanged);
-    }
+    //void alphaChanged() override
+    //{
+    //    PYBIND11_OVERRIDE (void, Base, alphaChanged);
+    //}
 
     void paint (yup::Graphics& g) override
     {
@@ -367,15 +367,15 @@ struct PyComponent : PyMouseListener<Base>
         Base::paintOverChildren (g);
     }
 
-    bool keyPressed (const yup::KeyPress& key) override
-    {
-        PYBIND11_OVERRIDE (bool, Base, keyPressed, key);
-    }
+    //bool keyPressed (const yup::KeyPress& key) override
+    //{
+    //    PYBIND11_OVERRIDE (bool, Base, keyPressed, key);
+    //}
 
-    bool keyStateChanged (bool isDown) override
-    {
-        PYBIND11_OVERRIDE (bool, Base, keyStateChanged, isDown);
-    }
+    //bool keyStateChanged (bool isDown) override
+    //{
+    //    PYBIND11_OVERRIDE (bool, Base, keyStateChanged, isDown);
+    //}
 
     //void modifierKeysChanged (const yup::ModifierKeys& modifiers) override
     //{
@@ -407,51 +407,25 @@ struct PyComponent : PyMouseListener<Base>
         PYBIND11_OVERRIDE (void, Base, moved);
     }
 
-    void childBoundsChanged (yup::Component* child) override
-    {
-        PYBIND11_OVERRIDE (void, Base, childBoundsChanged, child);
-    }
+    //void childBoundsChanged (yup::Component* child) override
+    //{
+    //    PYBIND11_OVERRIDE (void, Base, childBoundsChanged, child);
+    //}
 
-    void parentSizeChanged() override
-    {
-        PYBIND11_OVERRIDE (void, Base, parentSizeChanged);
-    }
+    //void parentSizeChanged() override
+    //{
+    //    PYBIND11_OVERRIDE (void, Base, parentSizeChanged);
+    //}
 
-    void broughtToFront() override
-    {
-        PYBIND11_OVERRIDE (void, Base, broughtToFront);
-    }
+    //void broughtToFront() override
+    //{
+    //    PYBIND11_OVERRIDE (void, Base, broughtToFront);
+    //}
 
-    void handleCommandMessage (int commandId) override
-    {
-        {
-            pybind11::gil_scoped_acquire gil;
-
-            if (pybind11::function override_ = pybind11::get_override (static_cast<Base*> (this), "handleCommandMessage"); override_)
-            {
-                override_ (commandId);
-                return;
-            }
-        }
-
-        //if constexpr (! std::is_same_v<Base, yup::TextEditor>)
-        //    Base::handleCommandMessage (commandId);
-    }
-
-    bool canModalEventBeSentToComponent (const yup::Component* targetComponent) override
-    {
-        PYBIND11_OVERRIDE (bool, Base, canModalEventBeSentToComponent, targetComponent);
-    }
-
-    void inputAttemptWhenModal () override
-    {
-        PYBIND11_OVERRIDE (void, Base, inputAttemptWhenModal);
-    }
-
-    void colourChanged () override
-    {
-        PYBIND11_OVERRIDE (void, Base, colourChanged);
-    }
+    //void colourChanged () override
+    //{
+    //    PYBIND11_OVERRIDE (void, Base, colourChanged);
+    //}
 };
 
 } // namespace yup::Bindings
