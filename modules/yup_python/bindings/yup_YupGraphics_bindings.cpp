@@ -92,10 +92,10 @@ void registerPoint (py::module_& m)
             .def ("isNormalized", &T::isNormalized)
 
             // Geometric operations
-            .def ("translate", py::overload_cast<ValueType, ValueType>(&T::translate))
-            .def ("translate", py::overload_cast<const T&>(&T::translate))
-            .def ("translated", py::overload_cast<ValueType, ValueType>(&T::translated, py::const_))
-            .def ("translated", py::overload_cast<const T&>(&T::translated, py::const_))
+            .def ("translate", py::overload_cast<ValueType, ValueType> (&T::translate))
+            .def ("translate", py::overload_cast<const T&> (&T::translate))
+            .def ("translated", py::overload_cast<ValueType, ValueType> (&T::translated, py::const_))
+            .def ("translated", py::overload_cast<const T&> (&T::translated, py::const_))
             .def ("rotateClockwise", &T::rotateClockwise)
             .def ("rotatedClockwise", &T::rotatedClockwise)
             .def ("rotateCounterClockwise", &T::rotateCounterClockwise)
@@ -180,15 +180,15 @@ void registerPoint (py::module_& m)
         if constexpr (std::is_floating_point_v<ValueType>)
         {
             class_
-                .def ("getPointOnCircumference", py::overload_cast<float, float>(&T::template getPointOnCircumference<ValueType>, py::const_))
-                .def ("getPointOnCircumference", py::overload_cast<float, float, float>(&T::template getPointOnCircumference<ValueType>, py::const_))
+                .def ("getPointOnCircumference", py::overload_cast<float, float> (&T::template getPointOnCircumference<ValueType>, py::const_))
+                .def ("getPointOnCircumference", py::overload_cast<float, float, float> (&T::template getPointOnCircumference<ValueType>, py::const_))
                 .def ("isFinite", [](const T& self) { return self.template isFinite<ValueType>(); })
                 .def ("floor", [](const T& self) { return self.template floor<ValueType>(); })
                 .def ("ceil", [](const T& self) { return self.template ceil<ValueType>(); })
-                .def ("scale", [](T& self, ValueType factor) -> T& { return self.template scale<ValueType>(factor); })
-                .def ("scale", [](T& self, ValueType factorX, ValueType factorY) -> T& { return self.template scale<ValueType>(factorX, factorY); })
-                .def ("scaled", [](const T& self, ValueType factor) { return self.template scaled<ValueType>(factor); })
-                .def ("scaled", [](const T& self, ValueType factorX, ValueType factorY) { return self.template scaled<ValueType>(factorX, factorY); })
+                .def ("scale", [](T& self, ValueType factor) -> T& { return self.template scale<ValueType> (factor); })
+                .def ("scale", [](T& self, ValueType factorX, ValueType factorY) -> T& { return self.template scale<ValueType> (factorX, factorY); })
+                .def ("scaled", [](const T& self, ValueType factor) { return self.template scaled<ValueType> (factor); })
+                .def ("scaled", [](const T& self, ValueType factorX, ValueType factorY) { return self.template scaled<ValueType> (factorX, factorY); })
                 .def ("roundToInt", [](const T& self) { return self.template roundToInt<ValueType>(); })
                 .def ("toNearestInt", [](const T& self) { return self.template toNearestInt<ValueType>(); })
             ;
@@ -240,15 +240,15 @@ void registerLine (py::module_& m)
             .def ("reversed", &T::reversed)
             .def ("length", &T::length)
             .def ("slope", &T::slope)
-            .def ("contains", py::overload_cast<const Point<ValueType>&>(&T::contains, py::const_))
-            .def ("contains", py::overload_cast<const Point<ValueType>&, float>(&T::contains, py::const_))
+            .def ("contains", py::overload_cast<const Point<ValueType>&> (&T::contains, py::const_))
+            .def ("contains", py::overload_cast<const Point<ValueType>&, float> (&T::contains, py::const_))
             .def ("pointAlong", &T::pointAlong)
 
             // Translation
-            .def ("translate", py::overload_cast<ValueType, ValueType>(&T::translate))
-            .def ("translate", py::overload_cast<const Point<ValueType>&>(&T::translate))
-            .def ("translated", py::overload_cast<ValueType, ValueType>(&T::translated, py::const_))
-            .def ("translated", py::overload_cast<const Point<ValueType>&>(&T::translated, py::const_))
+            .def ("translate", py::overload_cast<ValueType, ValueType> (&T::translate))
+            .def ("translate", py::overload_cast<const Point<ValueType>&> (&T::translate))
+            .def ("translated", py::overload_cast<ValueType, ValueType> (&T::translated, py::const_))
+            .def ("translated", py::overload_cast<const Point<ValueType>&> (&T::translated, py::const_))
 
             // Extension methods
             .def ("extend", &T::extend)
@@ -276,10 +276,10 @@ void registerLine (py::module_& m)
             .def (py::self != py::self)
 
             // Properties for more pythonic access
-            .def_property("start_x", &T::getStartX, [](T& self, ValueType value) { self.setStart(self.getStart().withX(value)); })
-            .def_property("start_y", &T::getStartY, [](T& self, ValueType value) { self.setStart(self.getStart().withY(value)); })
-            .def_property("end_x", &T::getEndX, [](T& self, ValueType value) { self.setEnd(self.getEnd().withX(value)); })
-            .def_property("end_y", &T::getEndY, [](T& self, ValueType value) { self.setEnd(self.getEnd().withY(value)); })
+            .def_property("start_x", &T::getStartX, [](T& self, ValueType value) { self.setStart (self.getStart().withX(value)); })
+            .def_property("start_y", &T::getStartY, [](T& self, ValueType value) { self.setStart (self.getStart().withY(value)); })
+            .def_property("end_x", &T::getEndX, [](T& self, ValueType value) { self.setEnd (self.getEnd().withX(value)); })
+            .def_property("end_y", &T::getEndY, [](T& self, ValueType value) { self.setEnd (self.getEnd().withY(value)); })
             .def_property("start", &T::getStart, &T::setStart)
             .def_property("end", &T::getEnd, &T::setEnd)
 
@@ -378,14 +378,14 @@ void registerRectangle (py::module_& m)
             // Position and size
             .def ("getPosition", &T::getPosition)
             .def ("setPosition", &T::setPosition)
-            .def ("withPosition", py::overload_cast<const Point<ValueType>&>(&T::template withPosition<ValueType>, py::const_))
-            .def ("withPosition", py::overload_cast<ValueType, ValueType>(&T::template withPosition<ValueType>, py::const_))
+            .def ("withPosition", py::overload_cast<const Point<ValueType>&> (&T::template withPosition<ValueType>, py::const_))
+            .def ("withPosition", py::overload_cast<ValueType, ValueType> (&T::template withPosition<ValueType>, py::const_))
             .def ("withZeroPosition", &T::withZeroPosition)
             .def ("getSize", &T::getSize)
-            .def ("setSize", py::overload_cast<const Size<ValueType>&>(&T::template setSize<ValueType>))
-            .def ("setSize", py::overload_cast<ValueType, ValueType>(&T::template setSize<ValueType>))
-            .def ("withSize", py::overload_cast<const Size<ValueType>&>(&T::template withSize<ValueType>, py::const_))
-            .def ("withSize", py::overload_cast<ValueType, ValueType>(&T::template withSize<ValueType>, py::const_))
+            .def ("setSize", py::overload_cast<const Size<ValueType>&> (&T::template setSize<ValueType>))
+            .def ("setSize", py::overload_cast<ValueType, ValueType> (&T::template setSize<ValueType>))
+            .def ("withSize", py::overload_cast<const Size<ValueType>&> (&T::template withSize<ValueType>, py::const_))
+            .def ("withSize", py::overload_cast<ValueType, ValueType> (&T::template withSize<ValueType>, py::const_))
             .def ("withZeroSize", &T::withZeroSize)
             .def ("setBounds", &T::setBounds)
 
@@ -409,10 +409,10 @@ void registerRectangle (py::module_& m)
             .def ("getCenterY", &T::getCenterY)
             .def ("setCenterY", &T::setCenterY)
             .def ("getCenter", &T::getCenter)
-            .def ("setCenter", py::overload_cast<ValueType, ValueType>(&T::setCenter))
-            .def ("setCenter", py::overload_cast<const Point<ValueType>&>(&T::setCenter))
-            .def ("withCenter", py::overload_cast<ValueType, ValueType>(&T::withCenter))
-            .def ("withCenter", py::overload_cast<const Point<ValueType>&>(&T::withCenter))
+            .def ("setCenter", py::overload_cast<ValueType, ValueType> (&T::setCenter))
+            .def ("setCenter", py::overload_cast<const Point<ValueType>&> (&T::setCenter))
+            .def ("withCenter", py::overload_cast<ValueType, ValueType> (&T::withCenter))
+            .def ("withCenter", py::overload_cast<const Point<ValueType>&> (&T::withCenter))
             .def ("withCenterX", &T::withCenterX)
             .def ("withCenterY", &T::withCenterY)
 
@@ -425,16 +425,16 @@ void registerRectangle (py::module_& m)
             .def ("diagonalBottomToTop", &T::diagonalBottomToTop)
 
             // Translation
-            .def ("translate", py::overload_cast<ValueType, ValueType>(&T::translate))
-            .def ("translate", py::overload_cast<const Point<ValueType>&>(&T::translate))
-            .def ("translated", py::overload_cast<ValueType, ValueType>(&T::translated, py::const_))
-            .def ("translated", py::overload_cast<const Point<ValueType>&>(&T::translated, py::const_))
+            .def ("translate", py::overload_cast<ValueType, ValueType> (&T::translate))
+            .def ("translate", py::overload_cast<const Point<ValueType>&> (&T::translate))
+            .def ("translated", py::overload_cast<ValueType, ValueType> (&T::translated, py::const_))
+            .def ("translated", py::overload_cast<const Point<ValueType>&> (&T::translated, py::const_))
 
             // Scaling
-            .def ("scale", py::overload_cast<float>(&T::scale))
-            .def ("scale", py::overload_cast<float, float>(&T::scale))
-            .def ("scaled", py::overload_cast<float>(&T::scaled, py::const_))
-            .def ("scaled", py::overload_cast<float, float>(&T::scaled, py::const_))
+            .def ("scale", py::overload_cast<float> (&T::scale))
+            .def ("scale", py::overload_cast<float, float> (&T::scale))
+            .def ("scaled", py::overload_cast<float> (&T::scaled, py::const_))
+            .def ("scaled", py::overload_cast<float, float> (&T::scaled, py::const_))
 
             // RemoveFrom methods
             .def ("removeFromTop", &T::removeFromTop)
@@ -443,31 +443,31 @@ void registerRectangle (py::module_& m)
             .def ("removeFromRight", &T::removeFromRight)
 
             // Reduce/Enlarge methods
-            .def ("reduce", py::overload_cast<ValueType>(&T::reduce))
-            .def ("reduce", py::overload_cast<ValueType, ValueType>(&T::reduce))
-            .def ("reduce", py::overload_cast<ValueType, ValueType, ValueType, ValueType>(&T::reduce))
-            .def ("reduced", py::overload_cast<ValueType>(&T::reduced, py::const_))
-            .def ("reduced", py::overload_cast<ValueType, ValueType>(&T::reduced, py::const_))
-            .def ("reduced", py::overload_cast<ValueType, ValueType, ValueType, ValueType>(&T::reduced, py::const_))
+            .def ("reduce", py::overload_cast<ValueType> (&T::reduce))
+            .def ("reduce", py::overload_cast<ValueType, ValueType> (&T::reduce))
+            .def ("reduce", py::overload_cast<ValueType, ValueType, ValueType, ValueType> (&T::reduce))
+            .def ("reduced", py::overload_cast<ValueType> (&T::reduced, py::const_))
+            .def ("reduced", py::overload_cast<ValueType, ValueType> (&T::reduced, py::const_))
+            .def ("reduced", py::overload_cast<ValueType, ValueType, ValueType, ValueType> (&T::reduced, py::const_))
             .def ("reducedLeft", &T::reducedLeft)
             .def ("reducedTop", &T::reducedTop)
             .def ("reducedRight", &T::reducedRight)
             .def ("reducedBottom", &T::reducedBottom)
-            .def ("enlarge", py::overload_cast<ValueType>(&T::enlarge))
-            .def ("enlarge", py::overload_cast<ValueType, ValueType>(&T::enlarge))
-            .def ("enlarge", py::overload_cast<ValueType, ValueType, ValueType, ValueType>(&T::enlarge))
-            .def ("enlarged", py::overload_cast<ValueType>(&T::enlarged, py::const_))
-            .def ("enlarged", py::overload_cast<ValueType, ValueType>(&T::enlarged, py::const_))
+            .def ("enlarge", py::overload_cast<ValueType> (&T::enlarge))
+            .def ("enlarge", py::overload_cast<ValueType, ValueType> (&T::enlarge))
+            .def ("enlarge", py::overload_cast<ValueType, ValueType, ValueType, ValueType> (&T::enlarge))
+            .def ("enlarged", py::overload_cast<ValueType> (&T::enlarged, py::const_))
+            .def ("enlarged", py::overload_cast<ValueType, ValueType> (&T::enlarged, py::const_))
             .def ("enlargedLeft", &T::enlargedLeft)
             .def ("enlargedTop", &T::enlargedTop)
             .def ("enlargedRight", &T::enlargedRight)
             .def ("enlargedBottom", &T::enlargedBottom)
 
             // Contains and intersection
-            .def ("contains", py::overload_cast<ValueType, ValueType>(&T::contains, py::const_))
-            .def ("contains", py::overload_cast<const Point<ValueType>&>(&T::contains, py::const_))
-            .def ("contains", py::overload_cast<const Line<ValueType>&>(&T::contains, py::const_))
-            .def ("contains", py::overload_cast<const T&>(&T::contains, py::const_))
+            .def ("contains", py::overload_cast<ValueType, ValueType> (&T::contains, py::const_))
+            .def ("contains", py::overload_cast<const Point<ValueType>&> (&T::contains, py::const_))
+            .def ("contains", py::overload_cast<const Line<ValueType>&> (&T::contains, py::const_))
+            .def ("contains", py::overload_cast<const T&> (&T::contains, py::const_))
             .def ("intersects", &T::intersects)
             .def ("intersection", &T::intersection)
             .def ("unionWith", &T::unionWith)
@@ -529,7 +529,7 @@ void registerRectangle (py::module_& m)
         if constexpr (std::is_floating_point_v<ValueType>)
         {
             class_
-                .def ("withScaledSize", [](const T& self, ValueType scaleFactor) { return self.template withScaledSize<ValueType>(scaleFactor); })
+                .def ("withScaledSize", [](const T& self, ValueType scaleFactor) { return self.template withScaledSize<ValueType> (scaleFactor); })
                 .def (py::self * ValueType())
                 .def (py::self *= ValueType())
                 .def (py::self / ValueType())
@@ -579,23 +579,23 @@ void registerRectangleList (py::module_& m)
             .def ("remove", &T::remove)
 
             // Contains methods
-            .def ("contains", py::overload_cast<ValueType, ValueType>(&T::contains, py::const_))
-            .def ("contains", py::overload_cast<const Point<ValueType>&>(&T::contains, py::const_))
-            .def ("contains", py::overload_cast<ValueType, ValueType, ValueType, ValueType>(&T::contains, py::const_))
-            .def ("contains", py::overload_cast<const Rectangle<ValueType>&>(&T::contains, py::const_))
+            .def ("contains", py::overload_cast<ValueType, ValueType> (&T::contains, py::const_))
+            .def ("contains", py::overload_cast<const Point<ValueType>&> (&T::contains, py::const_))
+            .def ("contains", py::overload_cast<ValueType, ValueType, ValueType, ValueType> (&T::contains, py::const_))
+            .def ("contains", py::overload_cast<const Rectangle<ValueType>&> (&T::contains, py::const_))
 
             // Intersection methods
-            .def ("intersects", py::overload_cast<ValueType, ValueType, ValueType, ValueType>(&T::intersects, py::const_))
-            .def ("intersects", py::overload_cast<const Rectangle<ValueType>&>(&T::intersects, py::const_))
+            .def ("intersects", py::overload_cast<ValueType, ValueType, ValueType, ValueType> (&T::intersects, py::const_))
+            .def ("intersects", py::overload_cast<const Rectangle<ValueType>&> (&T::intersects, py::const_))
 
             // Bounds and utility methods
             .def ("getBoundingBox", &T::getBoundingBox)
 
             // Transformation methods
-            .def ("offset", py::overload_cast<ValueType, ValueType>(&T::offset))
-            .def ("offset", py::overload_cast<const Point<ValueType>&>(&T::offset))
-            .def ("scale", py::overload_cast<float>(&T::scale))
-            .def ("scale", py::overload_cast<float, float>(&T::scale))
+            .def ("offset", py::overload_cast<ValueType, ValueType> (&T::offset))
+            .def ("offset", py::overload_cast<const Point<ValueType>&> (&T::offset))
+            .def ("scale", py::overload_cast<float> (&T::scale))
+            .def ("scale", py::overload_cast<float, float> (&T::scale))
 
             // Iteration support
             .def ("__iter__", [] (const T& self)
@@ -606,8 +606,8 @@ void registerRectangleList (py::module_& m)
             .def ("__getitem__", [](const T& self, int index)
             {
                 if (index < 0 || index >= self.getNumRectangles())
-                    throw py::index_error("Rectangle index out of range");
-                return self.getRectangle(index);
+                    throw py::index_error ("Rectangle index out of range");
+                return self.getRectangle (index);
             })
             .def ("__bool__", [](const T& self) { return !self.isEmpty(); })
 
@@ -714,56 +714,56 @@ void registerYupGraphicsBindings (py::module_& m)
         // Point transformation
         .def ("transformPoint", [](const AffineTransform& self, int x, int y) {
             int tx = x, ty = y;
-            self.transformPoint(tx, ty);
-            return py::make_tuple(tx, ty);
+            self.transformPoint (tx, ty);
+            return py::make_tuple (tx, ty);
         })
         .def ("transformPoint", [](const AffineTransform& self, float x, float y) {
             float tx = x, ty = y;
-            self.transformPoint(tx, ty);
-            return py::make_tuple(tx, ty);
+            self.transformPoint (tx, ty);
+            return py::make_tuple (tx, ty);
         })
         .def ("transformPoints", [](const AffineTransform& self, int x1, int y1, int x2, int y2) {
             int tx1 = x1, ty1 = y1, tx2 = x2, ty2 = y2;
-            self.transformPoints(tx1, ty1, tx2, ty2);
-            return py::make_tuple(tx1, ty1, tx2, ty2);
+            self.transformPoints (tx1, ty1, tx2, ty2);
+            return py::make_tuple (tx1, ty1, tx2, ty2);
         })
         .def ("transformPoints", [](const AffineTransform& self, float x1, float y1, float x2, float y2) {
             float tx1 = x1, ty1 = y1, tx2 = x2, ty2 = y2;
-            self.transformPoints(tx1, ty1, tx2, ty2);
-            return py::make_tuple(tx1, ty1, tx2, ty2);
+            self.transformPoints (tx1, ty1, tx2, ty2);
+            return py::make_tuple (tx1, ty1, tx2, ty2);
         })
 
         // Translation
-        .def ("translated", py::overload_cast<float, float>(&AffineTransform::translated, py::const_))
-        .def ("translated", py::overload_cast<Point<float>>(&AffineTransform::translated, py::const_))
-        .def_static ("translation", py::overload_cast<float, float>(&AffineTransform::translation))
-        .def_static ("translation", py::overload_cast<Point<float>>(&AffineTransform::translation))
-        .def ("withAbsoluteTranslation", py::overload_cast<float, float>(&AffineTransform::withAbsoluteTranslation, py::const_))
-        .def ("withAbsoluteTranslation", py::overload_cast<Point<float>>(&AffineTransform::withAbsoluteTranslation, py::const_))
+        .def ("translated", py::overload_cast<float, float> (&AffineTransform::translated, py::const_))
+        .def ("translated", py::overload_cast<Point<float>> (&AffineTransform::translated, py::const_))
+        .def_static ("translation", py::overload_cast<float, float> (&AffineTransform::translation))
+        .def_static ("translation", py::overload_cast<Point<float>> (&AffineTransform::translation))
+        .def ("withAbsoluteTranslation", py::overload_cast<float, float> (&AffineTransform::withAbsoluteTranslation, py::const_))
+        .def ("withAbsoluteTranslation", py::overload_cast<Point<float>> (&AffineTransform::withAbsoluteTranslation, py::const_))
 
         // Rotation
-        .def ("rotated", py::overload_cast<float>(&AffineTransform::rotated, py::const_))
-        .def ("rotated", py::overload_cast<float, float, float>(&AffineTransform::rotated, py::const_))
-        .def ("rotated", py::overload_cast<float, Point<float>>(&AffineTransform::rotated, py::const_))
-        .def_static ("rotation", py::overload_cast<float>(&AffineTransform::rotation))
-        .def_static ("rotation", py::overload_cast<float, float, float>(&AffineTransform::rotation))
-        .def_static ("rotation", py::overload_cast<float, Point<float>>(&AffineTransform::rotation))
+        .def ("rotated", py::overload_cast<float> (&AffineTransform::rotated, py::const_))
+        .def ("rotated", py::overload_cast<float, float, float> (&AffineTransform::rotated, py::const_))
+        .def ("rotated", py::overload_cast<float, Point<float>> (&AffineTransform::rotated, py::const_))
+        .def_static ("rotation", py::overload_cast<float> (&AffineTransform::rotation))
+        .def_static ("rotation", py::overload_cast<float, float, float> (&AffineTransform::rotation))
+        .def_static ("rotation", py::overload_cast<float, Point<float>> (&AffineTransform::rotation))
 
         // Scaling
-        .def ("scaled", py::overload_cast<float>(&AffineTransform::scaled, py::const_))
-        .def ("scaled", py::overload_cast<float, float>(&AffineTransform::scaled, py::const_))
-        .def ("scaled", py::overload_cast<float, float, float, float>(&AffineTransform::scaled, py::const_))
-        .def ("scaled", py::overload_cast<float, float, Point<float>>(&AffineTransform::scaled, py::const_))
-        .def_static ("scaling", py::overload_cast<float>(&AffineTransform::scaling))
-        .def_static ("scaling", py::overload_cast<float, float>(&AffineTransform::scaling))
-        .def_static ("scaling", py::overload_cast<float, float, float, float>(&AffineTransform::scaling))
-        .def_static ("scaling", py::overload_cast<float, float, Point<float>>(&AffineTransform::scaling))
+        .def ("scaled", py::overload_cast<float> (&AffineTransform::scaled, py::const_))
+        .def ("scaled", py::overload_cast<float, float> (&AffineTransform::scaled, py::const_))
+        .def ("scaled", py::overload_cast<float, float, float, float> (&AffineTransform::scaled, py::const_))
+        .def ("scaled", py::overload_cast<float, float, Point<float>> (&AffineTransform::scaled, py::const_))
+        .def_static ("scaling", py::overload_cast<float> (&AffineTransform::scaling))
+        .def_static ("scaling", py::overload_cast<float, float> (&AffineTransform::scaling))
+        .def_static ("scaling", py::overload_cast<float, float, float, float> (&AffineTransform::scaling))
+        .def_static ("scaling", py::overload_cast<float, float, Point<float>> (&AffineTransform::scaling))
 
         // Shearing
         .def ("sheared", &AffineTransform::sheared)
-        .def_static ("shearing", py::overload_cast<float, float>(&AffineTransform::shearing))
-        .def_static ("shearing", py::overload_cast<float, float, float, float>(&AffineTransform::shearing))
-        .def_static ("shearing", py::overload_cast<float, float, Point<float>>(&AffineTransform::shearing))
+        .def_static ("shearing", py::overload_cast<float, float> (&AffineTransform::shearing))
+        .def_static ("shearing", py::overload_cast<float, float, float, float> (&AffineTransform::shearing))
+        .def_static ("shearing", py::overload_cast<float, float, Point<float>> (&AffineTransform::shearing))
 
         // Combination
         .def ("followedBy", &AffineTransform::followedBy)
@@ -991,76 +991,111 @@ void registerYupGraphicsBindings (py::module_& m)
     // ============================================================================================ yup::Color
 
     py::class_<Color> (m, "Color")
+        // Constructors
         .def (py::init<>())
         .def (py::init<uint32>(), "argb"_a.noconvert())
         .def (py::init<uint8, uint8, uint8>(), "red"_a.noconvert(), "green"_a.noconvert(), "blue"_a.noconvert())
         .def (py::init<uint8, uint8, uint8, uint8>(), "alpha"_a.noconvert(), "red"_a.noconvert(), "green"_a.noconvert(), "blue"_a.noconvert())
-        .def (py::init<float, uint8, uint8, uint8>(), "alpha"_a.noconvert(), "red"_a.noconvert(), "green"_a.noconvert(), "blue"_a.noconvert())
-        //.def (py::init<float, float, float, uint8>(), "hue"_a.noconvert(), "saturation"_a.noconvert(), "brightness"_a.noconvert(), "alpha"_a.noconvert())
-        //.def (py::init<float, float, float, float>(), "hue"_a.noconvert(), "saturation"_a.noconvert(), "brightness"_a.noconvert(), "alpha"_a.noconvert())
         .def (py::init<const Color&>())
-        //.def_static ("fromRGB", &Color::fromRGB)
-        //.def_static ("fromRGBA", &Color::fromRGBA)
-        //.def_static ("fromFloatRGBA", &Color::fromFloatRGBA)
+
+        // Static factory methods
         .def_static ("fromHSV", &Color::fromHSV)
         .def_static ("fromHSL", &Color::fromHSL)
-        .def (py::self == py::self)
-        .def (py::self != py::self)
-        .def ("getRed", &Color::getRed)
-        .def ("getGreen", &Color::getGreen)
-        .def ("getBlue", &Color::getBlue)
-        //.def ("getFloatRed", &Color::getFloatRed)
-        //.def ("getFloatGreen", &Color::getFloatGreen)
-        //.def ("getFloatBlue", &Color::getFloatBlue)
-        //.def ("getPixelARGB", &Color::getPixelARGB)
-        //.def ("getNonPremultipliedPixelARGB", &Color::getNonPremultipliedPixelARGB)
+        .def_static ("fromString", &Color::fromString)
+        .def_static ("opaqueRandom", &Color::opaqueRandom)
+
+        // Color data access
         .def ("getARGB", &Color::getARGB)
-        .def ("getAlpha", &Color::getAlpha)
-        //.def ("getFloatAlpha", &Color::getFloatAlpha)
-        .def ("isOpaque", &Color::isOpaque)
+        // .def (int() (py::self))  // implicit conversion to uint32
+
+        // Transparency checks
         .def ("isTransparent", &Color::isTransparent)
-        .def ("withAlpha", py::overload_cast<uint8> (&Color::withAlpha, py::const_), "alpha"_a.noconvert())
-        .def ("withAlpha", py::overload_cast<float> (&Color::withAlpha, py::const_), "alpha"_a.noconvert())
-        //.def ("withMultipliedAlpha", &Color::withMultipliedAlpha)
-        //.def ("overlaidWith", &Color::overlaidWith)
-        //.def ("interpolatedWith", &Color::interpolatedWith)
+        .def ("isSemiTransparent", &Color::isSemiTransparent)
+        .def ("isOpaque", &Color::isOpaque)
+
+        // Alpha component
+        .def ("getAlpha", &Color::getAlpha)
+        .def ("getAlphaFloat", &Color::getAlphaFloat)
+        .def ("setAlpha", py::overload_cast<uint8> (&Color::setAlpha))
+        .def ("setAlpha", py::overload_cast<float> (&Color::setAlpha))
+        .def ("withAlpha", py::overload_cast<uint8> (&Color::withAlpha, py::const_))
+        .def ("withAlpha", py::overload_cast<float> (&Color::withAlpha, py::const_))
+        .def ("withMultipliedAlpha", py::overload_cast<uint8> (&Color::withMultipliedAlpha, py::const_))
+        .def ("withMultipliedAlpha", py::overload_cast<float> (&Color::withMultipliedAlpha, py::const_))
+
+        // Red component
+        .def ("getRed", &Color::getRed)
+        .def ("getRedFloat", &Color::getRedFloat)
+        .def ("setRed", py::overload_cast<uint8> (&Color::setRed))
+        .def ("setRed", py::overload_cast<float> (&Color::setRed))
+        .def ("withRed", py::overload_cast<uint8> (&Color::withRed, py::const_))
+        .def ("withRed", py::overload_cast<float> (&Color::withRed, py::const_))
+
+        // Green component
+        .def ("getGreen", &Color::getGreen)
+        .def ("getGreenFloat", &Color::getGreenFloat)
+        .def ("setGreen", py::overload_cast<uint8> (&Color::setGreen))
+        .def ("setGreen", py::overload_cast<float> (&Color::setGreen))
+        .def ("withGreen", py::overload_cast<uint8> (&Color::withGreen, py::const_))
+        .def ("withGreen", py::overload_cast<float> (&Color::withGreen, py::const_))
+
+        // Blue component
+        .def ("getBlue", &Color::getBlue)
+        .def ("getBlueFloat", &Color::getBlueFloat)
+        .def ("setBlue", py::overload_cast<uint8> (&Color::setBlue))
+        .def ("setBlue", py::overload_cast<float> (&Color::setBlue))
+        .def ("withBlue", py::overload_cast<uint8> (&Color::withBlue, py::const_))
+        .def ("withBlue", py::overload_cast<float> (&Color::withBlue, py::const_))
+
+        // HSL color space
         .def ("getHue", &Color::getHue)
         .def ("getSaturation", &Color::getSaturation)
-        //.def ("getSaturationHSL", &Color::getSaturationHSL)
-        //.def ("getBrightness", &Color::getBrightness)
-        //.def ("getLightness", &Color::getLightness)
-        //.def ("getPerceivedBrightness", &Color::getPerceivedBrightness)
-        //.def ("getHSB", [](const Color& self) { float h, s, b; self.getHSB (h, s, b); return py::make_tuple(h, s, b); })
-        //.def ("getHSL", [](const Color& self) { float h, s, l; self.getHSL (h, s, l); return py::make_tuple(h, s, l); })
-        //.def ("withHue", &Color::withHue)
-        //.def ("withSaturation", &Color::withSaturation)
-        //.def ("withSaturationHSL", &Color::withSaturationHSL)
-        //.def ("withBrightness", &Color::withBrightness)
-        //.def ("withLightness", &Color::withLightness)
-        //.def ("withRotatedHue", &Color::withRotatedHue)
-        //.def ("withMultipliedSaturation", &Color::withMultipliedSaturation)
-        //.def ("withMultipliedSaturationHSL", &Color::withMultipliedSaturationHSL)
-        //.def ("withMultipliedBrightness", &Color::withMultipliedBrightness)
-        //.def ("withMultipliedLightness", &Color::withMultipliedLightness)
-        .def ("brighter", &Color::brighter)
-        .def ("darker", &Color::darker)
+        .def ("getLuminance", &Color::getLuminance)
+
+        // Color manipulation
+        .def ("brighter", &Color::brighter, "amount"_a = 0.4f)
+        .def ("darker", &Color::darker, "amount"_a = 0.4f)
+        .def ("contrasting", py::overload_cast<> (&Color::contrasting, py::const_))
         .def ("contrasting", py::overload_cast<float> (&Color::contrasting, py::const_))
-        //.def ("contrasting", py::overload_cast<Color, float> (&Color::contrasting, py::const_))
-        //.def_static ("contrasting", static_cast<Color (*)(Color, Color)>(&Color::contrasting)) // Not supported by pybind11
-        //.def_static ("greyLevel", &Color::greyLevel)
-        //.def ("toString", &Color::toString)
-        .def_static ("fromString", &Color::fromString)
-        //.def ("toDisplayString", &Color::toDisplayString)
+
+        // Color inversion
+        .def ("invert", &Color::invert)
+        .def ("inverted", &Color::inverted)
+        .def ("invertAlpha", &Color::invertAlpha)
+        .def ("invertedAlpha", &Color::invertedAlpha)
+
+        // String conversion
+        .def ("toString", &Color::toString)
+        .def ("toStringRGB", &Color::toStringRGB, "withAlpha"_a = true)
+
+        // Comparison
+        .def (py::self == py::self)
+        .def (py::self != py::self)
+
+        // Properties for more pythonic access
+        .def_property("red", &Color::getRed, py::overload_cast<uint8> (&Color::setRed))
+        .def_property("green", &Color::getGreen, py::overload_cast<uint8> (&Color::setGreen))
+        .def_property("blue", &Color::getBlue, py::overload_cast<uint8> (&Color::setBlue))
+        .def_property("alpha", &Color::getAlpha, py::overload_cast<uint8> (&Color::setAlpha))
+        .def_property_readonly("red_float", &Color::getRedFloat)
+        .def_property_readonly("green_float", &Color::getGreenFloat)
+        .def_property_readonly("blue_float", &Color::getBlueFloat)
+        .def_property_readonly("alpha_float", &Color::getAlphaFloat)
+        .def_property_readonly("hue", &Color::getHue)
+        .def_property_readonly("saturation", &Color::getSaturation)
+        .def_property_readonly("luminance", &Color::getLuminance)
+
+        // Representation
         .def ("__repr__", [] (const Color& self)
-    {
-        String repr;
-        repr
-            << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
-            << "(" << self.getRed() << ", " << self.getGreen() << ", " << self.getBlue() << ", " << self.getAlpha() << ")";
-        return repr;
-    })
-        //.def ("__str__", &Color::toString)
-        ;
+        {
+            String repr;
+            repr
+                << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
+                << "(" << self.getRed() << ", " << self.getGreen() << ", " << self.getBlue() << ", " << self.getAlpha() << ")";
+            return repr;
+        })
+        .def ("__str__", &Color::toString)
+    ;
 
     /*
     // ============================================================================================ yup::Color
@@ -1596,180 +1631,46 @@ void registerYupGraphicsBindings (py::module_& m)
 
     */
 
+    // ============================================================================================ yup::BlendMode
+
+    py::enum_<BlendMode> (m, "BlendMode")
+        .value ("SrcOver", BlendMode::SrcOver)
+        .value ("Screen", BlendMode::Screen)
+        .value ("Overlay", BlendMode::Overlay)
+        .value ("Darken", BlendMode::Darken)
+        .value ("Lighten", BlendMode::Lighten)
+        .value ("ColorDodge", BlendMode::ColorDodge)
+        .value ("ColorBurn", BlendMode::ColorBurn)
+        .value ("HardLight", BlendMode::HardLight)
+        .value ("SoftLight", BlendMode::SoftLight)
+        .value ("Difference", BlendMode::Difference)
+        .value ("Exclusion", BlendMode::Exclusion)
+        .value ("Multiply", BlendMode::Multiply)
+        .value ("Hue", BlendMode::Hue)
+        .value ("Saturation", BlendMode::Saturation)
+        .value ("Color", BlendMode::Color)
+        .value ("Luminosity", BlendMode::Luminosity)
+        .export_values();
+
+    // ============================================================================================ yup::StrokeCap
+
+    py::enum_<StrokeCap> (m, "StrokeCap")
+        .value ("Butt", StrokeCap::Butt)
+        .value ("Round", StrokeCap::Round)
+        .value ("Square", StrokeCap::Square)
+        .export_values();
+
+    // ============================================================================================ yup::StrokeJoin
+
+    py::enum_<StrokeJoin> (m, "StrokeJoin")
+        .value ("Miter", StrokeJoin::Miter)
+        .value ("Round", StrokeJoin::Round)
+        .value ("Bevel", StrokeJoin::Bevel)
+        .export_values();
+
     // ============================================================================================ yup::Graphics
 
     py::class_<Graphics> classGraphics (m, "Graphics");
-
-    classGraphics
-        .def ("setFillColor", &Graphics::setFillColor)
-        .def ("getFillColor", &Graphics::getFillColor)
-        .def ("setStrokeColor", &Graphics::setStrokeColor)
-        .def ("getStrokeColor", &Graphics::getStrokeColor)
-        .def ("setFillColorGradient", &Graphics::setFillColorGradient)
-        .def ("getFillColorGradient", &Graphics::getFillColorGradient)
-        .def ("setStrokeColorGradient", &Graphics::setStrokeColorGradient)
-        .def ("getStrokeColorGradient", &Graphics::getStrokeColorGradient)
-        .def ("setStrokeWidth", &Graphics::setStrokeWidth)
-        .def ("getStrokeWidth", &Graphics::getStrokeWidth)
-        .def ("setFeather", &Graphics::setFeather)
-        .def ("getFeather", &Graphics::getFeather)
-        .def ("setOpacity", &Graphics::setOpacity)
-        .def ("getOpacity", &Graphics::getOpacity)
-        .def ("setStrokeJoin", &Graphics::setStrokeJoin)
-        .def ("getStrokeJoin", &Graphics::getStrokeJoin)
-        .def ("setStrokeCap", &Graphics::setStrokeCap)
-        .def ("getStrokeCap", &Graphics::getStrokeCap)
-        .def ("setBlendMode", &Graphics::setBlendMode)
-        .def ("getBlendMode", &Graphics::getBlendMode)
-        .def ("setDrawingArea", &Graphics::setDrawingArea)
-        .def ("getDrawingArea", &Graphics::getDrawingArea)
-        .def ("setTransform", &Graphics::setTransform)
-        .def ("getTransform", &Graphics::getTransform)
-        .def ("setClipPath", py::overload_cast<const Rectangle<float>&> (&Graphics::setClipPath))
-        .def ("setClipPath", py::overload_cast<const Path&> (&Graphics::setClipPath))
-        .def ("getClipPath", &Graphics::getClipPath)
-        .def ("fillAll", &Graphics::fillAll)
-        /*
-        .def (py::init<const Image&>())
-        .def (py::init<LowLevelGraphicsContext&>())
-        .def ("setColor", &Graphics::setColor)
-        .def ("setOpacity", &Graphics::setOpacity)
-        .def ("setGradientFill", py::overload_cast<const ColorGradient&> (&Graphics::setGradientFill))
-        .def ("setTiledImageFill", &Graphics::setTiledImageFill)
-        .def ("setFillType", &Graphics::setFillType)
-        .def ("setFont", py::overload_cast<const Font&>(&Graphics::setFont))
-        .def ("setFont", py::overload_cast<float>(&Graphics::setFont))
-        .def ("getCurrentFont", &Graphics::getCurrentFont)
-        .def ("drawSingleLineText", &Graphics::drawSingleLineText,
-            "text"_a, "startX"_a, "baselineY"_a, "justification"_a = Justification::left)
-        .def ("drawSingleLineText", [](const Graphics& g, const String& text, int startX, int baselineY, Justification::Flags justification)
-            { g.drawSingleLineText (text, startX, baselineY, justification); },
-            "text"_a, "startX"_a, "baselineY"_a, "justification"_a = Justification::left)
-        .def ("drawSingleLineText", [](const Graphics& g, const String& text, int startX, int baselineY, int justification)
-            { g.drawSingleLineText (text, startX, baselineY, justification); },
-            "text"_a, "startX"_a, "baselineY"_a, "justification"_a = Justification::left)
-        .def ("drawMultiLineText", &Graphics::drawMultiLineText,
-            "text"_a, "startX"_a, "baselineY"_a, "maximumLineWidth"_a, "justification"_a = Justification::left, "loading"_a = 0.0f)
-        .def ("drawMultiLineText", [](const Graphics& g, const String& text, int startX, int baselineY, int maximumLineWidth, Justification::Flags justification, float leading)
-            { g.drawMultiLineText (text, startX, baselineY, maximumLineWidth, justification, leading); },
-            "text"_a, "startX"_a, "baselineY"_a, "maximumLineWidth"_a, "justification"_a = Justification::left, "loading"_a = 0.0f)
-        .def ("drawMultiLineText", [](const Graphics& g, const String& text, int startX, int baselineY, int maximumLineWidth, int justification, float leading)
-            { g.drawMultiLineText (text, startX, baselineY, maximumLineWidth, justification, leading); },
-            "text"_a, "startX"_a, "baselineY"_a, "maximumLineWidth"_a, "justification"_a = Justification::left, "loading"_a = 0.0f)
-        .def ("drawText", py::overload_cast<const String&, int, int, int, int, Justification, bool> (&Graphics::drawText, py::const_),
-            "text"_a, "x"_a, "y"_a, "width"_a, "height"_a, "justificationType"_a, "useEllipsesIfTooBig"_a = true)
-        .def ("drawText", [](const Graphics& g, const String& text, int x, int y, int width, int height, Justification::Flags justificationType, bool useEllipsesIfTooBig)
-            { g.drawText (text, x, y, width, height, justificationType, useEllipsesIfTooBig); },
-            "text"_a, "x"_a, "y"_a, "width"_a, "height"_a, "justificationType"_a, "useEllipsesIfTooBig"_a = true)
-        .def ("drawText", [](const Graphics& g, const String& text, int x, int y, int width, int height, int justificationType, bool useEllipsesIfTooBig)
-            { g.drawText (text, x, y, width, height, justificationType, useEllipsesIfTooBig); },
-            "text"_a, "x"_a, "y"_a, "width"_a, "height"_a, "justificationType"_a, "useEllipsesIfTooBig"_a = true)
-        .def ("drawText", py::overload_cast<const String&, Rectangle<int>, Justification, bool> (&Graphics::drawText, py::const_),
-            "text"_a, "area"_a, "justificationType"_a, "useEllipsesIfTooBig"_a = true)
-        .def ("drawText", [](const Graphics& g, const String& text, Rectangle<int> area, Justification::Flags justificationType, bool useEllipsesIfTooBig)
-            { g.drawText (text, area, justificationType, useEllipsesIfTooBig); },
-            "text"_a, "area"_a, "justificationType"_a, "useEllipsesIfTooBig"_a = true)
-        .def ("drawText", [](const Graphics& g, const String& text, Rectangle<int> area, int justificationType, bool useEllipsesIfTooBig)
-            { g.drawText (text, area, justificationType, useEllipsesIfTooBig); },
-            "text"_a, "area"_a, "justificationType"_a, "useEllipsesIfTooBig"_a = true)
-        .def ("drawText", py::overload_cast<const String&, Rectangle<float>, Justification, bool> (&Graphics::drawText, py::const_),
-            "text"_a, "area"_a, "justificationType"_a, "useEllipsesIfTooBig"_a = true)
-        .def ("drawText", [](const Graphics& g, const String& text, Rectangle<float> area, Justification::Flags justificationType, bool useEllipsesIfTooBig)
-            { g.drawText (text, area, justificationType, useEllipsesIfTooBig); },
-            "text"_a, "area"_a, "justificationType"_a, "useEllipsesIfTooBig"_a = true)
-        .def ("drawText", [](const Graphics& g, const String& text, Rectangle<float> area, int justificationType, bool useEllipsesIfTooBig)
-            { g.drawText (text, area, justificationType, useEllipsesIfTooBig); },
-            "text"_a, "area"_a, "justificationType"_a, "useEllipsesIfTooBig"_a = true)
-        .def ("drawFittedText", py::overload_cast<const String&, int, int, int, int, Justification, int, float> (&Graphics::drawFittedText, py::const_),
-            "text"_a, "x"_a, "y"_a, "width"_a, "height"_a, "justificationType"_a, "maximumNumberOfLines"_a, "minimumHorizontalScale"_a = 0.0f)
-        .def ("drawFittedText", [](const Graphics& g, const String& text, int x, int y, int width, int height, Justification::Flags justificationType, int maximumNumberOfLines, float minimumHorizontalScale)
-            { g.drawFittedText (text, x, y, width, height, justificationType, maximumNumberOfLines, minimumHorizontalScale); },
-            "text"_a, "x"_a, "y"_a, "width"_a, "height"_a, "justificationType"_a, "maximumNumberOfLines"_a, "minimumHorizontalScale"_a = 0.0f)
-        .def ("drawFittedText", [](const Graphics& g, const String& text, int x, int y, int width, int height, int justificationType, int maximumNumberOfLines, float minimumHorizontalScale)
-            { g.drawFittedText (text, x, y, width, height, justificationType, maximumNumberOfLines, minimumHorizontalScale); },
-            "text"_a, "x"_a, "y"_a, "width"_a, "height"_a, "justificationType"_a, "maximumNumberOfLines"_a, "minimumHorizontalScale"_a = 0.0f)
-        .def ("drawFittedText", py::overload_cast<const String&, Rectangle<int>, Justification, int, float> (&Graphics::drawFittedText, py::const_),
-            "text"_a, "area"_a, "justificationType"_a, "maximumNumberOfLines"_a, "minimumHorizontalScale"_a = 0.0f)
-        .def ("drawFittedText", [](const Graphics& g, const String& text, Rectangle<int> area, Justification::Flags justificationType, int maximumNumberOfLines, float minimumHorizontalScale)
-            { g.drawFittedText (text, area, justificationType, maximumNumberOfLines, minimumHorizontalScale); },
-            "text"_a, "area"_a, "justificationType"_a, "maximumNumberOfLines"_a, "minimumHorizontalScale"_a = 0.0f)
-        .def ("drawFittedText", [](const Graphics& g, const String& text, Rectangle<int> area, int justificationType, int maximumNumberOfLines, float minimumHorizontalScale)
-            { g.drawFittedText (text, area, justificationType, maximumNumberOfLines, minimumHorizontalScale); },
-            "text"_a, "area"_a, "justificationType"_a, "maximumNumberOfLines"_a, "minimumHorizontalScale"_a = 0.0f)
-        .def ("fillAll", py::overload_cast<> (&Graphics::fillAll, py::const_))
-        .def ("fillAll", py::overload_cast<Color> (&Graphics::fillAll, py::const_))
-        .def ("fillRect", py::overload_cast<Rectangle<int>> (&Graphics::fillRect, py::const_))
-        .def ("fillRect", py::overload_cast<Rectangle<float>> (&Graphics::fillRect, py::const_))
-        .def ("fillRect", py::overload_cast<int, int, int, int> (&Graphics::fillRect, py::const_))
-        .def ("fillRect", py::overload_cast<float, float, float, float> (&Graphics::fillRect, py::const_))
-        .def ("fillRectList", py::overload_cast<const RectangleList<float>&> (&Graphics::fillRectList, py::const_))
-        .def ("fillRectList", py::overload_cast<const RectangleList<int>&> (&Graphics::fillRectList, py::const_))
-        .def ("fillRoundedRectangle", py::overload_cast<float, float, float, float, float> (&Graphics::fillRoundedRectangle, py::const_))
-        .def ("fillRoundedRectangle", py::overload_cast<Rectangle<float>, float> (&Graphics::fillRoundedRectangle, py::const_))
-        .def ("fillCheckerBoard", &Graphics::fillCheckerBoard)
-        .def ("drawRect", py::overload_cast<int, int, int, int, int> (&Graphics::drawRect, py::const_), "x"_a, "y"_a, "width"_a, "height"_a, "lineThickness"_a = 1)
-        .def ("drawRect", py::overload_cast<float, float, float, float, float> (&Graphics::drawRect, py::const_), "x"_a, "y"_a, "width"_a, "height"_a, "lineThickness"_a = 1.0f)
-        .def ("drawRect", py::overload_cast<Rectangle<int>, int> (&Graphics::drawRect, py::const_), "rectangle"_a, "lineThickness"_a = 1)
-        .def ("drawRect", py::overload_cast<Rectangle<float>, float> (&Graphics::drawRect, py::const_), "rectangle"_a, "lineThickness"_a = 1.0f)
-        .def ("drawRoundedRectangle", py::overload_cast<float, float, float, float, float, float> (&Graphics::drawRoundedRectangle, py::const_))
-        .def ("drawRoundedRectangle", py::overload_cast<Rectangle<float>, float, float> (&Graphics::drawRoundedRectangle, py::const_))
-        .def ("fillEllipse", py::overload_cast<float, float, float, float> (&Graphics::fillEllipse, py::const_))
-        .def ("fillEllipse", py::overload_cast<Rectangle<float>> (&Graphics::fillEllipse, py::const_))
-        .def ("drawEllipse", py::overload_cast<float, float, float, float, float> (&Graphics::drawEllipse, py::const_))
-        .def ("drawEllipse", py::overload_cast<Rectangle<float>, float> (&Graphics::drawEllipse, py::const_))
-        .def ("drawLine", py::overload_cast<float, float, float, float> (&Graphics::drawLine, py::const_))
-        .def ("drawLine", py::overload_cast<float, float, float, float, float> (&Graphics::drawLine, py::const_))
-        .def ("drawLine", py::overload_cast<Line<float>> (&Graphics::drawLine, py::const_))
-        .def ("drawLine", py::overload_cast<Line<float>, float> (&Graphics::drawLine, py::const_))
-    //.def ("drawDashedLine", &Graphics::drawDashedLine
-    //, "line"_a, "dashLengths"_a, "numDashLengths"_a, "lineThickness"_a = 1.0f, "dashIndexToStartFrom"_a = 0)
-        .def ("drawVerticalLine", &Graphics::drawVerticalLine)
-        .def ("drawHorizontalLine", &Graphics::drawHorizontalLine)
-        .def ("fillPath", py::overload_cast<const Path&> (&Graphics::fillPath, py::const_))
-        .def ("fillPath", py::overload_cast<const Path&, const AffineTransform&> (&Graphics::fillPath, py::const_))
-        .def ("strokePath", &Graphics::strokePath, "path"_a, "strokeType"_a, "transform"_a = AffineTransform())
-        .def ("drawArrow", &Graphics::drawArrow)
-        .def ("setImageResamplingQuality", &Graphics::setImageResamplingQuality)
-        .def ("drawImageAt", &Graphics::drawImageAt, "imageToDraw"_a, "topLeftX"_a, "topLeftY"_a, "fillAlphaChannelWithCurrentBrush"_a = false)
-        .def ("drawImage", py::overload_cast<const Image&, int, int, int, int, int, int, int, int, bool> (&Graphics::drawImage, py::const_),
-            "imageToDraw"_a, "destX"_a, "destY"_a, "destWidth"_a, "destHeight"_a, "sourceX"_a, "sourceY"_a, "sourceWidth"_a, "sourceHeight"_a, "fillAlphaChannelWithCurrentBrush"_a = false)
-        .def ("drawImageTransformed", &Graphics::drawImageTransformed, "imageToDraw"_a, "transform"_a, "fillAlphaChannelWithCurrentBrush"_a = false)
-        .def ("drawImage", py::overload_cast<const Image&, Rectangle<float>, RectanglePlacement, bool> (&Graphics::drawImage, py::const_),
-            "imageToDraw"_a, "targetArea"_a, "placementWithinTarget"_a = RectanglePlacement::stretchToFit, "fillAlphaChannelWithCurrentBrush"_a = false)
-        .def ("drawImage", [](const Graphics& g, const Image& imageToDraw, Rectangle<float> targetArea, RectanglePlacement::Flags placementWithinTarget, bool fillAlphaChannelWithCurrentBrush)
-            { g.drawImage (imageToDraw, targetArea, placementWithinTarget, fillAlphaChannelWithCurrentBrush); },
-            "imageToDraw"_a, "targetArea"_a, "placementWithinTarget"_a = RectanglePlacement::stretchToFit, "fillAlphaChannelWithCurrentBrush"_a = false)
-        .def ("drawImage", [](const Graphics& g, const Image& imageToDraw, Rectangle<float> targetArea, int placementWithinTarget, bool fillAlphaChannelWithCurrentBrush)
-            { g.drawImage (imageToDraw, targetArea, placementWithinTarget, fillAlphaChannelWithCurrentBrush); },
-            "imageToDraw"_a, "targetArea"_a, "placementWithinTarget"_a = RectanglePlacement::stretchToFit, "fillAlphaChannelWithCurrentBrush"_a = false)
-        .def ("drawImageWithin", &Graphics::drawImageWithin,
-            "imageToDraw"_a, "destX"_a, "destY"_a, "destWidth"_a, "destHeight"_a, "placementWithinTarget"_a, "fillAlphaChannelWithCurrentBrush"_a = false)
-        .def ("drawImageWithin", [](const Graphics& g, const Image& imageToDraw, float destX, float destY, float destWidth, float destHeight, RectanglePlacement::Flags placementWithinTarget, bool fillAlphaChannelWithCurrentBrush)
-            { g.drawImageWithin (imageToDraw, destX, destY, destWidth, destHeight, placementWithinTarget, fillAlphaChannelWithCurrentBrush); },
-            "imageToDraw"_a, "destX"_a, "destY"_a, "destWidth"_a, "destHeight"_a, "placementWithinTarget"_a, "fillAlphaChannelWithCurrentBrush"_a = false)
-        .def ("drawImageWithin", [](const Graphics& g, const Image& imageToDraw, float destX, float destY, float destWidth, float destHeight, int placementWithinTarget, bool fillAlphaChannelWithCurrentBrush)
-            { g.drawImageWithin (imageToDraw, destX, destY, destWidth, destHeight, placementWithinTarget, fillAlphaChannelWithCurrentBrush); },
-            "imageToDraw"_a, "destX"_a, "destY"_a, "destWidth"_a, "destHeight"_a, "placementWithinTarget"_a, "fillAlphaChannelWithCurrentBrush"_a = false)
-        .def ("getClipBounds", &Graphics::getClipBounds)
-        .def ("clipRegionIntersects", &Graphics::clipRegionIntersects)
-        .def ("reduceClipRegion", py::overload_cast<int, int, int, int> (&Graphics::reduceClipRegion))
-        .def ("reduceClipRegion", py::overload_cast<Rectangle<int>> (&Graphics::reduceClipRegion))
-        .def ("reduceClipRegion", py::overload_cast<const RectangleList<int>&> (&Graphics::reduceClipRegion))
-        .def ("reduceClipRegion", py::overload_cast<const Path&, const AffineTransform&> (&Graphics::reduceClipRegion), "path"_a, "transform"_a = AffineTransform())
-        .def ("reduceClipRegion", py::overload_cast<const Image&, const AffineTransform&> (&Graphics::reduceClipRegion))
-        .def ("excludeClipRegion", &Graphics::excludeClipRegion)
-        .def ("isClipEmpty", &Graphics::isClipEmpty)
-        .def ("saveState", &Graphics::saveState)
-        .def ("restoreState", &Graphics::restoreState)
-        .def ("beginTransparencyLayer", &Graphics::beginTransparencyLayer)
-        .def ("endTransparencyLayer", &Graphics::endTransparencyLayer)
-        .def ("setOrigin", py::overload_cast<Point<int>> (&Graphics::setOrigin))
-        .def ("setOrigin", py::overload_cast<int, int> (&Graphics::setOrigin))
-        .def ("addTransform", &Graphics::addTransform)
-        .def ("resetToDefaultState", &Graphics::resetToDefaultState)
-        .def ("isVectorDevice", &Graphics::isVectorDevice)
-        */
-        ;
 
     struct PyGraphicsSaveState
     {
@@ -1785,12 +1686,118 @@ void registerYupGraphicsBindings (py::module_& m)
     py::class_<PyGraphicsSaveState> (classGraphics, "SavedState")
         .def (py::init<Graphics&>())
         .def ("__enter__", [] (PyGraphicsSaveState& self)
-    {
-        self.state.emplace<Graphics::SavedState> (self.g.saveState());
-    }).def ("__exit__", [] (PyGraphicsSaveState& self, const std::optional<py::type>&, const std::optional<py::object>&, const std::optional<py::object>&)
-    {
-        self.state.emplace<std::monostate>();
-    });
+        {
+            self.state.emplace<Graphics::SavedState> (self.g.saveState());
+        }).def ("__exit__", [] (PyGraphicsSaveState& self, const std::optional<py::type>&, const std::optional<py::object>&, const std::optional<py::object>&)
+        {
+            self.state.emplace<std::monostate>();
+        })
+        .def ("restore", [] (PyGraphicsSaveState& self)
+        {
+            if (auto* savedState = std::get_if<Graphics::SavedState> (std::addressof (self.state)))
+                savedState->restore();
+        })
+    ;
+
+    classGraphics
+        // Color and gradient properties
+        .def ("setFillColor", &Graphics::setFillColor)
+        .def ("getFillColor", &Graphics::getFillColor)
+        .def ("setStrokeColor", &Graphics::setStrokeColor)
+        .def ("getStrokeColor", &Graphics::getStrokeColor)
+        .def ("setFillColorGradient", &Graphics::setFillColorGradient)
+        .def ("getFillColorGradient", &Graphics::getFillColorGradient)
+        .def ("setStrokeColorGradient", &Graphics::setStrokeColorGradient)
+        .def ("getStrokeColorGradient", &Graphics::getStrokeColorGradient)
+
+        // Stroke properties
+        .def ("setStrokeWidth", &Graphics::setStrokeWidth)
+        .def ("getStrokeWidth", &Graphics::getStrokeWidth)
+        .def ("setStrokeJoin", &Graphics::setStrokeJoin)
+        .def ("getStrokeJoin", &Graphics::getStrokeJoin)
+        .def ("setStrokeCap", &Graphics::setStrokeCap)
+        .def ("getStrokeCap", &Graphics::getStrokeCap)
+
+        // Rendering properties
+        .def ("setFeather", &Graphics::setFeather)
+        .def ("getFeather", &Graphics::getFeather)
+        .def ("setOpacity", &Graphics::setOpacity)
+        .def ("getOpacity", &Graphics::getOpacity)
+        .def ("setBlendMode", &Graphics::setBlendMode)
+        .def ("getBlendMode", &Graphics::getBlendMode)
+
+        // Drawing area and transformations
+        .def ("setDrawingArea", &Graphics::setDrawingArea)
+        .def ("getDrawingArea", &Graphics::getDrawingArea)
+        .def ("setTransform", &Graphics::setTransform)
+        .def ("getTransform", &Graphics::getTransform)
+
+        // Clipping
+        .def ("setClipPath", py::overload_cast<const Rectangle<float>&> (&Graphics::setClipPath))
+        .def ("setClipPath", py::overload_cast<const Path&> (&Graphics::setClipPath))
+        .def ("getClipPath", &Graphics::getClipPath)
+
+        // Line drawing
+        .def ("strokeLine", py::overload_cast<float, float, float, float> (&Graphics::strokeLine))
+        .def ("strokeLine", py::overload_cast<const Point<float>&, const Point<float>&> (&Graphics::strokeLine))
+
+        // Fill operations
+        .def ("fillAll", &Graphics::fillAll)
+        .def ("fillRect", py::overload_cast<float, float, float, float> (&Graphics::fillRect))
+        .def ("fillRect", py::overload_cast<const Rectangle<float>&> (&Graphics::fillRect))
+
+        // Stroke operations
+        .def ("strokeRect", py::overload_cast<float, float, float, float> (&Graphics::strokeRect))
+        .def ("strokeRect", py::overload_cast<const Rectangle<float>&> (&Graphics::strokeRect))
+
+        // Rounded rectangle operations
+        .def ("fillRoundedRect", py::overload_cast<float, float, float, float, float, float, float, float> (&Graphics::fillRoundedRect))
+        .def ("fillRoundedRect", py::overload_cast<const Rectangle<float>&, float, float, float, float> (&Graphics::fillRoundedRect))
+        .def ("fillRoundedRect", py::overload_cast<float, float, float, float, float> (&Graphics::fillRoundedRect))
+        .def ("fillRoundedRect", py::overload_cast<const Rectangle<float>&, float> (&Graphics::fillRoundedRect))
+        .def ("strokeRoundedRect", py::overload_cast<float, float, float, float, float, float, float, float> (&Graphics::strokeRoundedRect))
+        .def ("strokeRoundedRect", py::overload_cast<const Rectangle<float>&, float, float, float, float> (&Graphics::strokeRoundedRect))
+        .def ("strokeRoundedRect", py::overload_cast<float, float, float, float, float> (&Graphics::strokeRoundedRect))
+        .def ("strokeRoundedRect", py::overload_cast<const Rectangle<float>&, float> (&Graphics::strokeRoundedRect))
+
+        // Ellipse operations
+        .def ("fillEllipse", &Graphics::fillEllipse)
+
+        // Path operations
+        .def ("strokePath", &Graphics::strokePath)
+        .def ("fillPath", &Graphics::fillPath)
+
+        // Image operations
+        .def ("drawImageAt", &Graphics::drawImageAt)
+
+        // Text operations
+        .def ("fillFittedText", &Graphics::fillFittedText)
+        .def ("strokeFittedText", &Graphics::strokeFittedText)
+
+        // State management
+        .def ("saveState", [](Graphics& self) { return PyGraphicsSaveState{self}; })
+
+        // Utility methods
+        .def ("getContextScale", &Graphics::getContextScale)
+        .def ("getFactory", &Graphics::getFactory, py::return_value_policy::reference_internal)
+        .def ("getRenderer", &Graphics::getRenderer, py::return_value_policy::reference_internal)
+
+        // Properties for more pythonic access
+        .def_property("fill_color", &Graphics::getFillColor, &Graphics::setFillColor)
+        .def_property("stroke_color", &Graphics::getStrokeColor, &Graphics::setStrokeColor)
+        .def_property("fill_color_gradient", &Graphics::getFillColorGradient, &Graphics::setFillColorGradient)
+        .def_property("stroke_color_gradient", &Graphics::getStrokeColorGradient, &Graphics::setStrokeColorGradient)
+        .def_property("stroke_width", &Graphics::getStrokeWidth, &Graphics::setStrokeWidth)
+        .def_property("feather", &Graphics::getFeather, &Graphics::setFeather)
+        .def_property("opacity", &Graphics::getOpacity, &Graphics::setOpacity)
+        .def_property("stroke_join", &Graphics::getStrokeJoin, &Graphics::setStrokeJoin)
+        .def_property("stroke_cap", &Graphics::getStrokeCap, &Graphics::setStrokeCap)
+        .def_property("blend_mode", &Graphics::getBlendMode, &Graphics::setBlendMode)
+        .def_property("drawing_area", &Graphics::getDrawingArea, &Graphics::setDrawingArea)
+        .def_property("transform", &Graphics::getTransform, &Graphics::setTransform)
+        .def_property("clip_path", &Graphics::getClipPath, py::overload_cast<const Rectangle<float>&>(&Graphics::setClipPath))
+        .def_property_readonly("context_scale", &Graphics::getContextScale)
+    ;
 
     // ============================================================================================ yup::Colors
 
