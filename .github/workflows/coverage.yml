@@ -92,7 +92,7 @@ jobs:
       run: |
         mkdir -p coverage
         lcov --directory . --capture --output-file coverage/coverage.info --ignore-errors ${IGNORE_ERRORS}
-        lcov -r coverage/coverage.info \
+        lcov --remove coverage/coverage.info \
           "*/pybind11/*" \
           "*/thirdparty/*" \
           "*/build/*" \
@@ -100,21 +100,28 @@ jobs:
           "*/usr/*" \
           "*/opt/*" \
           "*/CMakeFiles/*" \
-          -o coverage/coverage_final.info --ignore-errors ${IGNORE_ERRORS}
+          --output-file coverage/coverage_final.info --ignore-errors ${IGNORE_ERRORS}
         lcov --list coverage/coverage_final.info
 
     - name: Upload Coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
-        file: coverage/coverage_final.info
+        file: ${{ runner.workspace }}/build/coverage/coverage_final.info
         name: overall-coverage
         fail_ci_if_error: false
         verbose: true
+
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: ${{ runner.workspace }}/build/tests/Debug/test_results.xml
 
     - name: Upload Coverage Reports
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: combined-coverage-reports
-        path: coverage/
+        name: coverage-reports
+        path: ${{ runner.workspace }}/build/coverage/
