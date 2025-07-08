@@ -45,8 +45,6 @@ extern void initialiseNSApplication();
 namespace yup::Bindings
 {
 
-using namespace yup;
-
 namespace py = pybind11;
 using namespace py::literals;
 

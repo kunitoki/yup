@@ -389,8 +389,6 @@ handle type_caster<yup::var>::cast (const yup::var& src, return_value_policy pol
 namespace yup::Bindings
 {
 
-using namespace yup;
-
 namespace py = pybind11;
 using namespace py::literals;
 
