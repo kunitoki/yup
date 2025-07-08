@@ -161,7 +161,7 @@ public:
     */
     [[nodiscard]] bool contains (ValueType x, ValueType y, ValueType width, ValueType height) const
     {
-        return contains (RectangleType{ x, y, width, height });
+        return contains (RectangleType { x, y, width, height });
     }
 
     [[nodiscard]] bool contains (const RectangleType& rect) const
@@ -178,7 +178,7 @@ public:
     */
     [[nodiscard]] bool contains (ValueType x, ValueType y) const
     {
-        return contains (Point<ValueType>{ x, y });
+        return contains (Point<ValueType> { x, y });
     }
 
     [[nodiscard]] bool contains (const Point<ValueType>& point) const
@@ -201,7 +201,7 @@ public:
     */
     [[nodiscard]] bool intersects (ValueType x, ValueType y, ValueType width, ValueType height) const
     {
-        return intersects (RectangleType{ x, y, width, height });
+        return intersects (RectangleType { x, y, width, height });
     }
 
     [[nodiscard]] bool intersects (const RectangleType& rect) const
