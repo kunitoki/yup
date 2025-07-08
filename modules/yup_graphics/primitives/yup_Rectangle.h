@@ -757,9 +757,12 @@ public:
 
         @return A reference to this rectangle to allow method chaining.
     */
-    constexpr Rectangle& setSize (const Size<ValueType>& newSize) noexcept
+    template <class T = ValueType>
+    constexpr Rectangle& setSize (const Size<T>& newSize) noexcept
     {
-        size = newSize;
+        static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
+
+        size = newSize.template to<ValueType>();
 
         return *this;
     }
@@ -770,7 +773,7 @@ public:
 
         @return A reference to this rectangle to allow method chaining.
     */
-    template <class T>
+    template <class T = ValueType>
     constexpr Rectangle& setSize (T width, T height) noexcept
     {
         static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
@@ -790,7 +793,7 @@ public:
 
         @return A new rectangle with the updated size.
     */
-    template <class T>
+    template <class T = ValueType>
     [[nodiscard]] constexpr Rectangle withSize (const Size<T>& newSize) const noexcept
     {
         static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
@@ -809,7 +812,7 @@ public:
 
         @return A new rectangle with the updated size.
     */
-    template <class T>
+    template <class T = ValueType>
     [[nodiscard]] constexpr Rectangle withSize (T width, T height) const noexcept
     {
         static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
@@ -827,7 +830,7 @@ public:
 
         @return A new rectangle with the size scaled.
     */
-    template <class T>
+    template <class T = ValueType>
     [[nodiscard]] constexpr auto withScaledSize (T scaleFactor) const noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Rectangle>
     {

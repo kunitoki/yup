@@ -534,17 +534,17 @@ public:
     */
     constexpr Line& transform (const AffineTransform& t) noexcept
     {
-        auto x1 = static_cast<float> (p1.x);
-        auto y1 = static_cast<float> (p1.y);
-        auto x2 = static_cast<float> (p2.x);
-        auto y2 = static_cast<float> (p2.y);
+        auto x1 = static_cast<float> (p1.getX());
+        auto y1 = static_cast<float> (p1.getY());
+        auto x2 = static_cast<float> (p2.getX());
+        auto y2 = static_cast<float> (p2.getY());
 
         t.transformPoints (x1, y1, x2, y2);
 
-        p1.x = static_cast<ValueType> (x1);
-        p1.y = static_cast<ValueType> (y1);
-        p2.x = static_cast<ValueType> (x2);
-        p2.y = static_cast<ValueType> (y2);
+        p1.setX (static_cast<ValueType> (x1));
+        p1.setY (static_cast<ValueType> (y1));
+        p2.setX (static_cast<ValueType> (x2));
+        p2.setY (static_cast<ValueType> (y2));
 
         return *this;
     }

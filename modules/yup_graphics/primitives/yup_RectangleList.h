@@ -161,7 +161,7 @@ public:
     */
     [[nodiscard]] bool contains (ValueType x, ValueType y, ValueType width, ValueType height) const
     {
-        return rectangles.contains (x, y, width, height);
+        return contains (RectangleType{ x, y, width, height });
     }
 
     [[nodiscard]] bool contains (const RectangleType& rect) const
@@ -178,18 +178,18 @@ public:
     */
     [[nodiscard]] bool contains (ValueType x, ValueType y) const
     {
-        for (const auto& rect : rectangles)
-        {
-            if (rect.contains (x, y))
-                return true;
-        }
-
-        return false;
+        return contains (Point<ValueType>{ x, y });
     }
 
     [[nodiscard]] bool contains (const Point<ValueType>& point) const
     {
-        return contains (point.getX(), point.getY());
+        for (const auto& rect : rectangles)
+        {
+            if (rect.contains (point))
+                return true;
+        }
+
+        return false;
     }
 
     //==============================================================================
@@ -201,18 +201,18 @@ public:
     */
     [[nodiscard]] bool intersects (ValueType x, ValueType y, ValueType width, ValueType height) const
     {
-        for (const auto& rect : rectangles)
-        {
-            if (rect.intersects (x, y, width, height))
-                return true;
-        }
-
-        return false;
+        return intersects (RectangleType{ x, y, width, height });
     }
 
     [[nodiscard]] bool intersects (const RectangleType& rect) const
     {
-        return intersects (rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight());
+        for (const auto& rect : rectangles)
+        {
+            if (rect.intersects (rect))
+                return true;
+        }
+
+        return false;
     }
 
     //==============================================================================

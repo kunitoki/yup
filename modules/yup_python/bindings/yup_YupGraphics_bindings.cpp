@@ -217,59 +217,88 @@ void registerLine (py::module_& m)
         const auto className = Helpers::pythonizeCompoundClassName ("Line", typeid (Types).name());
 
         auto class_ = py::class_<T> (m, className.toRawUTF8())
-                          .def (py::init<>())
-                          .def (py::init<ValueType, ValueType, ValueType, ValueType>())
-                          .def (py::init<Point<ValueType>, Point<ValueType>>())
-                          .def (py::init<const T&>())
-                          .def ("getStartX", &T::getStartX)
-                          .def ("getStartY", &T::getStartY)
-                          .def ("getEndX", &T::getEndX)
-                          .def ("getEndY", &T::getEndY)
-                          .def ("getStart", &T::getStart)
-                          .def ("getEnd", &T::getEnd)
-                          //.def ("setStart", py::overload_cast<ValueType, ValueType> (&T::setStart))
-                          //.def ("setStart", py::overload_cast<const Point<ValueType>> (&T::setStart))
-                          //.def ("setEnd", py::overload_cast<ValueType, ValueType> (&T::setEnd))
-                          //.def ("setEnd", py::overload_cast<const Point<ValueType>> (&T::setEnd))
-                          .def ("reversed", &T::reversed)
-                          //.def ("applyTransform", &T::applyTransform)
-                          //.def ("getLength", &T::getLength)
-                          //.def ("getLengthSquared", &T::getLengthSquared)
-                          //.def ("isVertical", &T::isVertical)
-                          //.def ("isHorizontal", &T::isHorizontal)
-                          //.def ("getAngle", &T::getAngle)
-                          //.def_static ("fromStartAndAngle", &T::fromStartAndAngle) // Fails for int
-                          //.def ("toFloat", &T::toFloat)
-                          .def (py::self == py::self)
-                          .def (py::self != py::self)
-                          //.def ("getIntersection", &T::getIntersection)
-                          //.def ("intersects", py::overload_cast<T, Point<ValueType>&> (&T::intersects, py::const_))
-                          //.def ("intersects", py::overload_cast<T> (&T::intersects, py::const_))
-                          //.def ("getPointAlongLine", py::overload_cast<ValueType> (&T::getPointAlongLine, py::const_))
-                          //.def ("getPointAlongLine", py::overload_cast<ValueType, ValueType> (&T::getPointAlongLine, py::const_))
-                          //.def ("getPointAlongLineProportionally", &T::getPointAlongLineProportionally)
-                          //.def ("getDistanceFromPoint", &T::getDistanceFromPoint)
-                          //.def ("findNearestProportionalPositionTo", &T::findNearestProportionalPositionTo)
-                          //.def ("findNearestPointTo", &T::findNearestPointTo)
-                          //.def ("isPointAbove", &T::isPointAbove)
-                          //.def ("withLengthenedStart", &T::withLengthenedStart)
-                          //.def ("withShortenedStart", &T::withShortenedStart)
-                          //.def ("withLengthenedEnd", &T::withLengthenedEnd)
-                          //.def ("withShortenedEnd", &T::withShortenedEnd)
-                          .def ("__repr__", [] (const T& self)
-        {
-            String result;
-            result
-                << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
-                << "(" << self.getStartX() << ", " << self.getStartY() << ", " << self.getEndX() << ", " << self.getEndY() << ")";
-            return result;
-        }).def ("__str__", [] (const T& self)
-        {
-            String result;
-            result
-                << "(" << self.getStartX() << ", " << self.getStartY() << "), (" << self.getEndX() << ", " << self.getEndY() << ")";
-            return result;
-        });
+            // Constructors
+            .def (py::init<>())
+            .def (py::init<ValueType, ValueType, ValueType, ValueType>())
+            .def (py::init<Point<ValueType>, Point<ValueType>>())
+            .def (py::init<const T&>())
+
+            // Basic methods
+            .def ("getStartX", &T::getStartX)
+            .def ("getStartY", &T::getStartY)
+            .def ("getEndX", &T::getEndX)
+            .def ("getEndY", &T::getEndY)
+            .def ("getStart", &T::getStart)
+            .def ("getEnd", &T::getEnd)
+            .def ("setStart", &T::setStart)
+            .def ("setEnd", &T::setEnd)
+            .def ("withStart", &T::withStart)
+            .def ("withEnd", &T::withEnd)
+
+            // Line operations
+            .def ("reverse", &T::reverse)
+            .def ("reversed", &T::reversed)
+            .def ("length", &T::length)
+            .def ("slope", &T::slope)
+            .def ("contains", py::overload_cast<const Point<ValueType>&>(&T::contains, py::const_))
+            .def ("contains", py::overload_cast<const Point<ValueType>&, float>(&T::contains, py::const_))
+            .def ("pointAlong", &T::pointAlong)
+
+            // Translation
+            .def ("translate", py::overload_cast<ValueType, ValueType>(&T::translate))
+            .def ("translate", py::overload_cast<const Point<ValueType>&>(&T::translate))
+            .def ("translated", py::overload_cast<ValueType, ValueType>(&T::translated, py::const_))
+            .def ("translated", py::overload_cast<const Point<ValueType>&>(&T::translated, py::const_))
+
+            // Extension methods
+            .def ("extend", &T::extend)
+            .def ("extended", &T::extended)
+            .def ("extendBefore", &T::extendBefore)
+            .def ("extendedBefore", &T::extendedBefore)
+            .def ("extendAfter", &T::extendAfter)
+            .def ("extendedAfter", &T::extendedAfter)
+            .def ("keepOnlyStart", &T::keepOnlyStart)
+            .def ("keepOnlyEnd", &T::keepOnlyEnd)
+
+            // Rotation and transformation
+            .def ("rotateAtPoint", &T::rotateAtPoint)
+            .def ("transform", &T::transform)
+            .def ("transformed", &T::transformed)
+
+            // Conversion methods
+            .def ("toInt", [](const T& self) { return self.template to<int>(); })
+            .def ("toLong", [](const T& self) { return self.template to<long>(); })
+            .def ("toFloat", [](const T& self) { return self.template to<float>(); })
+            .def ("toDouble", [](const T& self) { return self.template to<double>(); })
+
+            // Comparison
+            .def (py::self == py::self)
+            .def (py::self != py::self)
+
+            // Properties for more pythonic access
+            .def_property("start_x", &T::getStartX, [](T& self, ValueType value) { self.setStart(self.getStart().withX(value)); })
+            .def_property("start_y", &T::getStartY, [](T& self, ValueType value) { self.setStart(self.getStart().withY(value)); })
+            .def_property("end_x", &T::getEndX, [](T& self, ValueType value) { self.setEnd(self.getEnd().withX(value)); })
+            .def_property("end_y", &T::getEndY, [](T& self, ValueType value) { self.setEnd(self.getEnd().withY(value)); })
+            .def_property("start", &T::getStart, &T::setStart)
+            .def_property("end", &T::getEnd, &T::setEnd)
+
+            // Operators
+            .def ("__repr__", [] (const T& self)
+            {
+                String result;
+                result
+                    << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
+                    << "(" << self.getStartX() << ", " << self.getStartY() << ", " << self.getEndX() << ", " << self.getEndY() << ")";
+                return result;
+            }).def ("__str__", [] (const T& self)
+            {
+                String result;
+                result
+                    << "(" << self.getStartX() << ", " << self.getStartY() << "), (" << self.getEndX() << ", " << self.getEndY() << ")";
+                return result;
+            })
+        ;
 
         type[py::type::of (py::cast (Types {}))] = class_;
 
@@ -294,129 +323,219 @@ void registerRectangle (py::module_& m)
         const auto className = Helpers::pythonizeCompoundClassName ("Rectangle", typeid (Types).name());
 
         auto class_ = py::class_<T> (m, className.toRawUTF8())
-                          .def (py::init<>())
-                          .def (py::init<ValueType, ValueType>())
-                          .def (py::init<ValueType, ValueType, ValueType, ValueType>())
-                          //.def (py::init<Point<ValueType>, Size<ValueType>>())
-                          .def (py::init<const T&>())
-                          //.def_static ("leftTopRightBottom", &T::leftTopRightBottom)
-                          .def ("isEmpty", &T::isEmpty)
-                          //.def ("isFinite", &T::isFinite)
-                          .def ("getX", &T::getX)
-                          .def ("getY", &T::getY)
-                          .def ("getWidth", &T::getWidth)
-                          .def ("getHeight", &T::getHeight)
-                          .def ("getRight", &T::getRight)
-                          .def ("getBottom", &T::getBottom)
-                          .def ("getCenterX", &T::getCenterX)
-                          .def ("getCenterY", &T::getCenterY)
-                          //.def ("getAspectRatio", &T::getAspectRatio)
-                          .def ("getPosition", &T::getPosition)
-                          //.def ("setPosition", py::overload_cast<Point<ValueType>> (&T::setPosition))
-                          //.def ("setPosition", py::overload_cast<ValueType, ValueType> (&T::setPosition))
-                          .def ("getTopLeft", &T::getTopLeft)
-                          .def ("getTopRight", &T::getTopRight)
-                          .def ("getBottomLeft", &T::getBottomLeft)
-                          .def ("getBottomRight", &T::getBottomRight)
-                          //.def ("getHorizontalRange", &T::getHorizontalRange)
-                          //.def ("getVerticalRange", &T::getVerticalRange)
-                          //.def ("setSize", &T::setSize)
-                          .def ("setBounds", &T::setBounds)
-                          .def ("setX", &T::setX)
-                          .def ("setY", &T::setY)
-                          .def ("setWidth", &T::setWidth)
-                          .def ("setHeight", &T::setHeight)
-                          //.def ("setCenter", py::overload_cast<Point<ValueType>> (&T::setCenter))
-                          //.def ("setCenter", py::overload_cast<ValueType, ValueType> (&T::setCenter))
-                          //.def ("setHorizontalRange", &T::setHorizontalRange)
-                          //.def ("setVerticalRange", &T::setVerticalRange)
-                          .def ("withX", &T::withX)
-                          .def ("withY", &T::withY)
-                          //.def ("withRightX", &T::withRightX)
-                          //.def ("withBottomY", &T::withBottomY)
-                          //.def ("withPosition", py::overload_cast<Point<ValueType>> (&T::withPosition, py::const_))
-                          //.def ("withPosition", py::overload_cast<ValueType, ValueType> (&T::withPosition, py::const_))
-                          //.def ("withZeroOrigin", &T::withZeroOrigin)
-                          //.def ("withCenter", &T::withCenter)
-                          .def ("withWidth", &T::withWidth)
-                          .def ("withHeight", &T::withHeight)
-                          //.def ("withSize", &T::withSize)
-                          //.def ("withSizeKeepingCentre", &T::withSizeKeepingCentre)
-                          .def ("setLeft", &T::setLeft)
-                          .def ("withLeft", &T::withLeft)
-                          .def ("setTop", &T::setTop)
-                          .def ("withTop", &T::withTop)
-                          .def ("setRight", &T::setRight)
-                          .def ("withRight", &T::withRight)
-                          .def ("setBottom", &T::setBottom)
-                          .def ("withBottom", &T::withBottom)
-                          .def ("withTrimmedLeft", &T::withTrimmedLeft)
-                          .def ("withTrimmedRight", &T::withTrimmedRight)
-                          .def ("withTrimmedTop", &T::withTrimmedTop)
-                          .def ("withTrimmedBottom", &T::withTrimmedBottom)
-                          //.def ("translate", &T::translate)
-                          //.def ("translated", &T::translated)
-                          //.def (py::self + Point<ValueType>())
-                          //.def (py::self += Point<ValueType>())
-                          //.def (py::self - Point<ValueType>())
-                          //.def (py::self -= Point<ValueType>())
-                          //.def (py::self * float())
-                          //.def (py::self *= float())
-                          //.def (py::self * Point<float>())
-                          //.def (py::self *= Point<float>())
-                          //.def (py::self / float())
-                          //.def (py::self /= float())
-                          //.def (py::self / Point<float>())
-                          //.def (py::self /= Point<float>())
-                          //.def ("enlarge", &T::enlarge)
-                          .def ("enlarged", py::overload_cast<ValueType> (&T::enlarged, py::const_))
-                          .def ("enlarged", py::overload_cast<ValueType, ValueType> (&T::enlarged, py::const_))
-                          //.def ("reduce", &T::reduce)
-                          .def ("reduced", py::overload_cast<ValueType> (&T::reduced, py::const_))
-                          .def ("reduced", py::overload_cast<ValueType, ValueType> (&T::reduced, py::const_))
-                          .def ("removeFromTop", &T::removeFromTop)
-                          .def ("removeFromLeft", &T::removeFromLeft)
-                          .def ("removeFromRight", &T::removeFromRight)
-                          .def ("removeFromBottom", &T::removeFromBottom)
-                          //.def ("getConstrainedPoint", &T::getConstrainedPoint)
-                          //.def ("getRelativePoint", &T::template getRelativePoint<float>)
-                          //.def ("proportionOfWidth", &T::template proportionOfWidth<float>)
-                          //.def ("proportionOfHeight", &T::template proportionOfHeight<float>)
-                          //.def ("getProportion", &T::template getProportion<float>)
-                          .def (py::self == py::self)
-                          .def (py::self != py::self)
-                          .def ("contains", py::overload_cast<ValueType, ValueType> (&T::contains, py::const_))
-                          //.def ("contains", py::overload_cast<Point<ValueType>> (&T::contains, py::const_))
-                          //.def ("contains", py::overload_cast<T> (&T::contains, py::const_))
-                          //.def ("intersects", py::overload_cast<T> (&T::intersects, py::const_))
-                          //.def ("intersects", py::overload_cast<const Line<ValueType>&> (&T::intersects, py::const_))
-                          //.def ("getIntersection", &T::getIntersection)
-                          //.def ("intersectRectangle", &T::intersectRectangle)
-                          //.def ("intersectRectangle",py::overload_cast<T&> (&T::intersectRectangle, py::const_))
-                          .def ("unionWith", &T::unionWith)
-                          //.def ("enlargeIfAdjacent", &T::enlargeIfAdjacent)
-                          //.def ("reduceIfPartlyContainedIn", &T::reduceIfPartlyContainedIn)
-                          //.def ("constrainedWithin", &T::constrainedWithin)
-                          //.def ("transformedBy", &T::transformedBy)
-                          //.def ("getSmallestIntegerContainer", &T::getSmallestIntegerContainer)
-                          //.def ("toNearestInt", &T::toNearestInt)
-                          //.def ("toNearestIntEdges", &T::toNearestIntEdges)
-                          //.def ("toFloat", &T::toFloat)
-                          //.def ("toType", ...)
-                          //.def_static ("findAreaContainingPoints", &T::findAreaContainingPoints)
-                          //.def_static ("intersectRectangles", &T::intersectRectangles)
-                          //.def ("toString", &T::toString)
-                          //.def_static ("fromString", &T::fromString)
-                          .def ("__repr__", [] (const T& self)
-        {
-            String result;
-            result
-                << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
-                << "(" << self.getX() << ", " << self.getY() << ", " << self.getWidth() << ", " << self.getHeight() << ")";
-            return result;
-        })
+            // Constructors
+            .def (py::init<>())
+            .def (py::init<ValueType, ValueType>())
+            .def (py::init<ValueType, ValueType, ValueType, ValueType>())
+            .def (py::init<ValueType, ValueType, const Size<ValueType>&>())
+            .def (py::init<const Point<ValueType>&, ValueType, ValueType>())
+            .def (py::init<const Point<ValueType>&, const Size<ValueType>&>())
+            .def (py::init<const T&>())
+
+            // Basic methods
+            .def ("isEmpty", &T::isEmpty)
+            .def ("isPoint", &T::isPoint)
+            .def ("isLine", &T::isLine)
+            .def ("isVerticalLine", &T::isVerticalLine)
+            .def ("isHorizontalLine", &T::isHorizontalLine)
+
+            // Position getters/setters
+            .def ("getX", &T::getX)
+            .def ("setX", &T::setX)
+            .def ("withX", &T::withX)
+            .def ("getY", &T::getY)
+            .def ("setY", &T::setY)
+            .def ("withY", &T::withY)
+            .def ("getLeft", &T::getLeft)
+            .def ("setLeft", &T::setLeft)
+            .def ("withLeft", &T::withLeft)
+            .def ("withTrimmedLeft", &T::withTrimmedLeft)
+            .def ("getTop", &T::getTop)
+            .def ("setTop", &T::setTop)
+            .def ("withTop", &T::withTop)
+            .def ("withTrimmedTop", &T::withTrimmedTop)
+            .def ("getRight", &T::getRight)
+            .def ("setRight", &T::setRight)
+            .def ("withRight", &T::withRight)
+            .def ("withTrimmedRight", &T::withTrimmedRight)
+            .def ("getBottom", &T::getBottom)
+            .def ("setBottom", &T::setBottom)
+            .def ("withBottom", &T::withBottom)
+            .def ("withTrimmedBottom", &T::withTrimmedBottom)
+
+            // Size getters/setters
+            .def ("getWidth", &T::getWidth)
+            .def ("setWidth", &T::setWidth)
+            .def ("withWidth", &T::withWidth)
+            .def ("withWidthKeepingAspectRatio", &T::withWidthKeepingAspectRatio)
+            .def ("proportionOfWidth", &T::proportionOfWidth)
+            .def ("getHeight", &T::getHeight)
+            .def ("setHeight", &T::setHeight)
+            .def ("withHeight", &T::withHeight)
+            .def ("withHeightKeepingAspectRatio", &T::withHeightKeepingAspectRatio)
+            .def ("proportionOfHeight", &T::proportionOfHeight)
+
+            // Position and size
+            .def ("getPosition", &T::getPosition)
+            .def ("setPosition", &T::setPosition)
+            .def ("withPosition", py::overload_cast<const Point<ValueType>&>(&T::template withPosition<ValueType>, py::const_))
+            .def ("withPosition", py::overload_cast<ValueType, ValueType>(&T::template withPosition<ValueType>, py::const_))
+            .def ("withZeroPosition", &T::withZeroPosition)
+            .def ("getSize", &T::getSize)
+            .def ("setSize", py::overload_cast<const Size<ValueType>&>(&T::template setSize<ValueType>))
+            .def ("setSize", py::overload_cast<ValueType, ValueType>(&T::template setSize<ValueType>))
+            .def ("withSize", py::overload_cast<const Size<ValueType>&>(&T::template withSize<ValueType>, py::const_))
+            .def ("withSize", py::overload_cast<ValueType, ValueType>(&T::template withSize<ValueType>, py::const_))
+            .def ("withZeroSize", &T::withZeroSize)
+            .def ("setBounds", &T::setBounds)
+
+            // Corner getters/setters
+            .def ("getTopLeft", &T::getTopLeft)
+            .def ("setTopLeft", &T::setTopLeft)
+            .def ("withTopLeft", &T::withTopLeft)
+            .def ("getTopRight", &T::getTopRight)
+            .def ("setTopRight", &T::setTopRight)
+            .def ("withTopRight", &T::withTopRight)
+            .def ("getBottomLeft", &T::getBottomLeft)
+            .def ("setBottomLeft", &T::setBottomLeft)
+            .def ("withBottomLeft", &T::withBottomLeft)
+            .def ("getBottomRight", &T::getBottomRight)
+            .def ("setBottomRight", &T::setBottomRight)
+            .def ("withBottomRight", &T::withBottomRight)
+
+            // Center methods
+            .def ("getCenterX", &T::getCenterX)
+            .def ("setCenterX", &T::setCenterX)
+            .def ("getCenterY", &T::getCenterY)
+            .def ("setCenterY", &T::setCenterY)
+            .def ("getCenter", &T::getCenter)
+            .def ("setCenter", py::overload_cast<ValueType, ValueType>(&T::setCenter))
+            .def ("setCenter", py::overload_cast<const Point<ValueType>&>(&T::setCenter))
+            .def ("withCenter", py::overload_cast<ValueType, ValueType>(&T::withCenter))
+            .def ("withCenter", py::overload_cast<const Point<ValueType>&>(&T::withCenter))
+            .def ("withCenterX", &T::withCenterX)
+            .def ("withCenterY", &T::withCenterY)
+
+            // Side line extraction
+            .def ("leftSide", &T::leftSide)
+            .def ("topSide", &T::topSide)
+            .def ("rightSide", &T::rightSide)
+            .def ("bottomSide", &T::bottomSide)
+            .def ("diagonalTopToBottom", &T::diagonalTopToBottom)
+            .def ("diagonalBottomToTop", &T::diagonalBottomToTop)
+
+            // Translation
+            .def ("translate", py::overload_cast<ValueType, ValueType>(&T::translate))
+            .def ("translate", py::overload_cast<const Point<ValueType>&>(&T::translate))
+            .def ("translated", py::overload_cast<ValueType, ValueType>(&T::translated, py::const_))
+            .def ("translated", py::overload_cast<const Point<ValueType>&>(&T::translated, py::const_))
+
+            // Scaling
+            .def ("scale", py::overload_cast<float>(&T::scale))
+            .def ("scale", py::overload_cast<float, float>(&T::scale))
+            .def ("scaled", py::overload_cast<float>(&T::scaled, py::const_))
+            .def ("scaled", py::overload_cast<float, float>(&T::scaled, py::const_))
+
+            // RemoveFrom methods
+            .def ("removeFromTop", &T::removeFromTop)
+            .def ("removeFromLeft", &T::removeFromLeft)
+            .def ("removeFromBottom", &T::removeFromBottom)
+            .def ("removeFromRight", &T::removeFromRight)
+
+            // Reduce/Enlarge methods
+            .def ("reduce", py::overload_cast<ValueType>(&T::reduce))
+            .def ("reduce", py::overload_cast<ValueType, ValueType>(&T::reduce))
+            .def ("reduce", py::overload_cast<ValueType, ValueType, ValueType, ValueType>(&T::reduce))
+            .def ("reduced", py::overload_cast<ValueType>(&T::reduced, py::const_))
+            .def ("reduced", py::overload_cast<ValueType, ValueType>(&T::reduced, py::const_))
+            .def ("reduced", py::overload_cast<ValueType, ValueType, ValueType, ValueType>(&T::reduced, py::const_))
+            .def ("reducedLeft", &T::reducedLeft)
+            .def ("reducedTop", &T::reducedTop)
+            .def ("reducedRight", &T::reducedRight)
+            .def ("reducedBottom", &T::reducedBottom)
+            .def ("enlarge", py::overload_cast<ValueType>(&T::enlarge))
+            .def ("enlarge", py::overload_cast<ValueType, ValueType>(&T::enlarge))
+            .def ("enlarge", py::overload_cast<ValueType, ValueType, ValueType, ValueType>(&T::enlarge))
+            .def ("enlarged", py::overload_cast<ValueType>(&T::enlarged, py::const_))
+            .def ("enlarged", py::overload_cast<ValueType, ValueType>(&T::enlarged, py::const_))
+            .def ("enlargedLeft", &T::enlargedLeft)
+            .def ("enlargedTop", &T::enlargedTop)
+            .def ("enlargedRight", &T::enlargedRight)
+            .def ("enlargedBottom", &T::enlargedBottom)
+
+            // Contains and intersection
+            .def ("contains", py::overload_cast<ValueType, ValueType>(&T::contains, py::const_))
+            .def ("contains", py::overload_cast<const Point<ValueType>&>(&T::contains, py::const_))
+            .def ("contains", py::overload_cast<const Line<ValueType>&>(&T::contains, py::const_))
+            .def ("contains", py::overload_cast<const T&>(&T::contains, py::const_))
+            .def ("intersects", &T::intersects)
+            .def ("intersection", &T::intersection)
+            .def ("unionWith", &T::unionWith)
+
+            // Utility methods
+            .def ("area", &T::area)
+            .def ("widthOverHeightRatio", &T::widthOverHeightRatio)
+            .def ("heightOverWidthRatio", &T::heightOverWidthRatio)
+            .def ("largestFittingSquare", &T::largestFittingSquare)
+            .def ("centeredRectangleWithSize", &T::centeredRectangleWithSize)
+
+            // Static methods
+            //.def_static ("fromTwoPoints", &T::fromTwoPoints)
+
+            // Transformation
+            .def ("transformed", &T::transformed)
+
+            // Conversion methods
+            .def ("toInt", [](const T& self) { return self.template to<int>(); })
+            .def ("toLong", [](const T& self) { return self.template to<long>(); })
+            .def ("toFloat", [](const T& self) { return self.template to<float>(); })
+            .def ("toDouble", [](const T& self) { return self.template to<double>(); })
+
+            // Comparison
+            .def (py::self == py::self)
+            .def (py::self != py::self)
+            .def ("approximatelyEqualTo", &T::approximatelyEqualTo)
+
+            // Operators with Points
+            //.def (py::self + Point<ValueType>())
+            //.def (py::self += Point<ValueType>())
+            //.def (py::self - Point<ValueType>())
+            //.def (py::self -= Point<ValueType>())
+
+            // Add properties for more pythonic access
+            .def_property("x", &T::getX, &T::setX)
+            .def_property("y", &T::getY, &T::setY)
+            .def_property("width", &T::getWidth, &T::setWidth)
+            .def_property("height", &T::getHeight, &T::setHeight)
+            .def_property("left", &T::getLeft, &T::setLeft)
+            .def_property("top", &T::getTop, &T::setTop)
+            .def_property("right", &T::getRight, &T::setRight)
+            .def_property("bottom", &T::getBottom, &T::setBottom)
+            .def_property("center_x", &T::getCenterX, &T::setCenterX)
+            .def_property("center_y", &T::getCenterY, &T::setCenterY)
+
+            .def ("__repr__", [] (const T& self)
+            {
+                String result;
+                result
+                    << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
+                    << "(" << self.getX() << ", " << self.getY() << ", " << self.getWidth() << ", " << self.getHeight() << ")";
+                return result;
+            })
             //.def ("__str__", &T::toString)
+        ;
+
+        // Add floating-point specific methods
+        if constexpr (std::is_floating_point_v<ValueType>)
+        {
+            class_
+                .def ("withScaledSize", [](const T& self, ValueType scaleFactor) { return self.template withScaledSize<ValueType>(scaleFactor); })
+                .def (py::self * ValueType())
+                .def (py::self *= ValueType())
+                .def (py::self / ValueType())
+                .def (py::self /= ValueType())
             ;
+        }
 
         type[py::type::of (py::cast (Types {}))] = class_;
 
@@ -441,43 +560,67 @@ void registerRectangleList (py::module_& m)
         const auto className = Helpers::pythonizeCompoundClassName ("RectangleList", typeid (Types).name());
 
         auto class_ = py::class_<T> (m, className.toRawUTF8())
-                          .def (py::init<>())
-                          .def (py::init<Rectangle<ValueType>>())
-                          .def (py::init<const T&>())
-                          .def ("isEmpty", &T::isEmpty)
-                          .def ("getNumRectangles", &T::getNumRectangles)
-                          .def ("getRectangle", &T::getRectangle)
-                          .def ("clear", &T::clear)
-                          //.def ("add", py::overload_cast<Rectangle<ValueType>> (&T::add))
-                          //.def ("add", py::overload_cast<ValueType, ValueType, ValueType, ValueType> (&T::add))
-                          //.def ("addWithoutMerging", &T::addWithoutMerging)
-                          //.def ("add", py::overload_cast<const T&> (&T::add))
-                          //.def ("subtract", py::overload_cast<const Rectangle<ValueType>> (&T::subtract))
-                          //.def ("subtract", py::overload_cast<const T&> (&T::subtract))
-                          //.def ("clipTo", static_cast<bool (T::*)(Rectangle<ValueType>)> (&T::clipTo))
-                          //.def ("clipTo", py::overload_cast<const Class<int>&> (&T::template clipTo<int>))
-                          //.def ("clipTo", py::overload_cast<const Class<float>&> (&T::template clipTo<float>))
-                          //.def ("getIntersectionWith", &T::getIntersectionWith)
-                          //.def ("swapWith", &T::swapWith)
-                          //.def ("containsPoint", py::overload_cast<Point<ValueType>> (&T::containsPoint, py::const_))
-                          //.def ("containsPoint", py::overload_cast<ValueType, ValueType> (&T::containsPoint, py::const_))
-                          //.def ("containsRectangle", &T::containsRectangle)
-                          //.def ("intersectsRectangle", &T::intersectsRectangle)
-                          //.def ("intersects", &T::intersects)
-                          //.def ("getBounds", &T::getBounds)
-                          //.def ("consolidate", &T::consolidate)
-                          //.def ("offsetAll", py::overload_cast<Point<ValueType>> (&T::offsetAll))
-                          //.def ("offsetAll", py::overload_cast<ValueType, ValueType> (&T::offsetAll))
-                          //.def ("scaleAll", py::overload_cast<int> (&T::template scaleAll<int>))
-                          //.def ("scaleAll", py::overload_cast<float> (&T::template scaleAll<float>))
-                          //.def ("transformAll", &T::transformAll)
-                          //.def ("toPath", &T::toPath)
-                          //.def ("ensureStorageAllocated", &T::ensureStorageAllocated)
-                          .def ("__iter__", [] (const T& self)
-        {
-            return py::make_iterator (self.begin(), self.end());
-        },
-                                py::keep_alive<0, 1>());
+            // Constructors
+            .def (py::init<>())
+            .def (py::init<std::initializer_list<Rectangle<ValueType>>>())
+            .def (py::init<const T&>())
+
+            // Basic methods
+            .def ("isEmpty", &T::isEmpty)
+            .def ("getNumRectangles", &T::getNumRectangles)
+            .def ("getRectangle", &T::getRectangle)
+            .def ("getRectangles", &T::getRectangles)
+            .def ("clear", &T::clear)
+            .def ("clearQuick", &T::clearQuick)
+
+            // Add and remove methods
+            .def ("add", &T::add)
+            .def ("addWithoutMerge", &T::addWithoutMerge)
+            .def ("remove", &T::remove)
+
+            // Contains methods
+            .def ("contains", py::overload_cast<ValueType, ValueType>(&T::contains, py::const_))
+            .def ("contains", py::overload_cast<const Point<ValueType>&>(&T::contains, py::const_))
+            .def ("contains", py::overload_cast<ValueType, ValueType, ValueType, ValueType>(&T::contains, py::const_))
+            .def ("contains", py::overload_cast<const Rectangle<ValueType>&>(&T::contains, py::const_))
+
+            // Intersection methods
+            .def ("intersects", py::overload_cast<ValueType, ValueType, ValueType, ValueType>(&T::intersects, py::const_))
+            .def ("intersects", py::overload_cast<const Rectangle<ValueType>&>(&T::intersects, py::const_))
+
+            // Bounds and utility methods
+            .def ("getBoundingBox", &T::getBoundingBox)
+
+            // Transformation methods
+            .def ("offset", py::overload_cast<ValueType, ValueType>(&T::offset))
+            .def ("offset", py::overload_cast<const Point<ValueType>&>(&T::offset))
+            .def ("scale", py::overload_cast<float>(&T::scale))
+            .def ("scale", py::overload_cast<float, float>(&T::scale))
+
+            // Iteration support
+            .def ("__iter__", [] (const T& self)
+            {
+                return py::make_iterator (self.begin(), self.end());
+            }, py::keep_alive<0, 1>())
+            .def ("__len__", &T::getNumRectangles)
+            .def ("__getitem__", [](const T& self, int index)
+            {
+                if (index < 0 || index >= self.getNumRectangles())
+                    throw py::index_error("Rectangle index out of range");
+                return self.getRectangle(index);
+            })
+            .def ("__bool__", [](const T& self) { return !self.isEmpty(); })
+
+            // Representation
+            .def ("__repr__", [] (const T& self)
+            {
+                String result;
+                result
+                    << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
+                    << "(" << self.getNumRectangles() << " rectangles)";
+                return result;
+            })
+        ;
 
         type[py::type::of (py::cast (Types {}))] = class_;
 
@@ -538,80 +681,122 @@ void registerYupGraphicsBindings (py::module_& m)
     ;
 
     //py::implicitly_convertible<Justification::Flags, Justification>();
+    */
 
     // ============================================================================================ yup::AffineTransform
 
     py::class_<AffineTransform> classAffineTransform (m, "AffineTransform");
 
     classAffineTransform
+        // Constructors
         .def (py::init<>())
         .def (py::init<float, float, float, float, float, float>())
         .def (py::init<const AffineTransform&>())
+
+        // Matrix component access
+        .def ("getScaleX", &AffineTransform::getScaleX)
+        .def ("getShearX", &AffineTransform::getShearX)
+        .def ("getTranslateX", &AffineTransform::getTranslateX)
+        .def ("getShearY", &AffineTransform::getShearY)
+        .def ("getScaleY", &AffineTransform::getScaleY)
+        .def ("getTranslateY", &AffineTransform::getTranslateY)
+        .def ("getTranslation", &AffineTransform::getTranslation)
+        .def ("getMatrixPoints", &AffineTransform::getMatrixPoints)
+
+        // Identity and utility checks
+        .def ("isIdentity", &AffineTransform::isIdentity)
+        .def ("resetToIdentity", &AffineTransform::resetToIdentity)
+        .def_static ("identity", &AffineTransform::identity)
+
+        // Inversion
+        .def ("inverted", &AffineTransform::inverted)
+
+        // Point transformation
+        .def ("transformPoint", [](const AffineTransform& self, int x, int y) {
+            int tx = x, ty = y;
+            self.transformPoint(tx, ty);
+            return py::make_tuple(tx, ty);
+        })
+        .def ("transformPoint", [](const AffineTransform& self, float x, float y) {
+            float tx = x, ty = y;
+            self.transformPoint(tx, ty);
+            return py::make_tuple(tx, ty);
+        })
+        .def ("transformPoints", [](const AffineTransform& self, int x1, int y1, int x2, int y2) {
+            int tx1 = x1, ty1 = y1, tx2 = x2, ty2 = y2;
+            self.transformPoints(tx1, ty1, tx2, ty2);
+            return py::make_tuple(tx1, ty1, tx2, ty2);
+        })
+        .def ("transformPoints", [](const AffineTransform& self, float x1, float y1, float x2, float y2) {
+            float tx1 = x1, ty1 = y1, tx2 = x2, ty2 = y2;
+            self.transformPoints(tx1, ty1, tx2, ty2);
+            return py::make_tuple(tx1, ty1, tx2, ty2);
+        })
+
+        // Translation
+        .def ("translated", py::overload_cast<float, float>(&AffineTransform::translated, py::const_))
+        .def ("translated", py::overload_cast<Point<float>>(&AffineTransform::translated, py::const_))
+        .def_static ("translation", py::overload_cast<float, float>(&AffineTransform::translation))
+        .def_static ("translation", py::overload_cast<Point<float>>(&AffineTransform::translation))
+        .def ("withAbsoluteTranslation", py::overload_cast<float, float>(&AffineTransform::withAbsoluteTranslation, py::const_))
+        .def ("withAbsoluteTranslation", py::overload_cast<Point<float>>(&AffineTransform::withAbsoluteTranslation, py::const_))
+
+        // Rotation
+        .def ("rotated", py::overload_cast<float>(&AffineTransform::rotated, py::const_))
+        .def ("rotated", py::overload_cast<float, float, float>(&AffineTransform::rotated, py::const_))
+        .def ("rotated", py::overload_cast<float, Point<float>>(&AffineTransform::rotated, py::const_))
+        .def_static ("rotation", py::overload_cast<float>(&AffineTransform::rotation))
+        .def_static ("rotation", py::overload_cast<float, float, float>(&AffineTransform::rotation))
+        .def_static ("rotation", py::overload_cast<float, Point<float>>(&AffineTransform::rotation))
+
+        // Scaling
+        .def ("scaled", py::overload_cast<float>(&AffineTransform::scaled, py::const_))
+        .def ("scaled", py::overload_cast<float, float>(&AffineTransform::scaled, py::const_))
+        .def ("scaled", py::overload_cast<float, float, float, float>(&AffineTransform::scaled, py::const_))
+        .def ("scaled", py::overload_cast<float, float, Point<float>>(&AffineTransform::scaled, py::const_))
+        .def_static ("scaling", py::overload_cast<float>(&AffineTransform::scaling))
+        .def_static ("scaling", py::overload_cast<float, float>(&AffineTransform::scaling))
+        .def_static ("scaling", py::overload_cast<float, float, float, float>(&AffineTransform::scaling))
+        .def_static ("scaling", py::overload_cast<float, float, Point<float>>(&AffineTransform::scaling))
+
+        // Shearing
+        .def ("sheared", &AffineTransform::sheared)
+        .def_static ("shearing", py::overload_cast<float, float>(&AffineTransform::shearing))
+        .def_static ("shearing", py::overload_cast<float, float, float, float>(&AffineTransform::shearing))
+        .def_static ("shearing", py::overload_cast<float, float, Point<float>>(&AffineTransform::shearing))
+
+        // Combination
+        .def ("followedBy", &AffineTransform::followedBy)
+        .def ("prependedBy", &AffineTransform::prependedBy)
+
+        // Utility methods
+        .def ("getDeterminant", &AffineTransform::getDeterminant)
+        .def ("getScaleFactor", &AffineTransform::getScaleFactor)
+
+        // Comparison
         .def (py::self == py::self)
         .def (py::self != py::self)
-        .def ("transformPoint", [](const AffineTransform& self, int x, int y) { self.transformPoint (x, y); return py::make_tuple(x, y); })
-        .def ("transformPoint", [](const AffineTransform& self, float x, float y) { self.transformPoint (x, y); return py::make_tuple(x, y); })
-        .def ("transformPoints", [](const AffineTransform& self, int x1, int y1, int x2, int y2) { self.transformPoints (x1, y1, x2, y2); return py::make_tuple(x1, y1, x2, y2); })
-        .def ("transformPoints", [](const AffineTransform& self, float x1, float y1, float x2, float y2) { self.transformPoints (x1, y1, x2, y2); return py::make_tuple(x1, y1, x2, y2); })
-        .def ("transformPoints", [](const AffineTransform& self, int x1, int y1, int x2, int y2, int x3, int y3) { self.transformPoints (x1, y1, x2, y2, x3, y3); return py::make_tuple(x1, y1, x2, y2, x3, y3); })
-        .def ("transformPoints", [](const AffineTransform& self, float x1, float y1, float x2, float y2, float x3, float y3) { self.transformPoints (x1, y1, x2, y2, x3, y3); return py::make_tuple(x1, y1, x2, y2, x3, y3); })
-        .def ("translated", static_cast<AffineTransform (AffineTransform::*)(float, float) const> (&AffineTransform::translated))
-        .def ("translated", &AffineTransform::template translated<Point<int>>)
-        .def ("translated", &AffineTransform::template translated<Point<float>>)
-        .def_static ("translation", static_cast<AffineTransform (*)(float, float)> (&AffineTransform::translation))
-        .def ("withAbsoluteTranslation", &AffineTransform::withAbsoluteTranslation)
-        .def ("rotated", py::overload_cast<float> (&AffineTransform::rotated, py::const_))
-        .def ("rotated", py::overload_cast<float, float, float> (&AffineTransform::rotated, py::const_))
-        .def_static ("rotation", py::overload_cast<float> (&AffineTransform::rotation))
-        .def_static ("rotation", py::overload_cast<float, float, float> (&AffineTransform::rotation))
-        .def ("scaled", py::overload_cast<float, float> (&AffineTransform::scaled, py::const_))
-        .def ("scaled", py::overload_cast<float> (&AffineTransform::scaled, py::const_))
-        .def ("scaled", py::overload_cast<float, float, float, float> (&AffineTransform::scaled, py::const_))
-        .def_static ("scale", py::overload_cast<float, float> (&AffineTransform::scale))
-        .def_static ("scale", py::overload_cast<float> (&AffineTransform::scale))
-        .def_static ("scale", py::overload_cast<float, float, float, float> (&AffineTransform::scale))
-        .def ("sheared", &AffineTransform::sheared)
-        .def_static ("shear", &AffineTransform::shear)
-        .def_static ("verticalFlip", &AffineTransform::verticalFlip)
-        .def ("inverted", &AffineTransform::inverted)
-        .def_static ("fromTargetPoints", [](float x00, float y00, float x10, float y10, float x01, float y01)
-        {
-            return AffineTransform::fromTargetPoints (x00, y00, x10, y10, x01, y01);
-        })
-        .def_static ("fromTargetPoints", [](float sourceX1, float sourceY1, float targetX1, float targetY1,
-                                            float sourceX2, float sourceY2, float targetX2, float targetY2,
-                                            float sourceX3, float sourceY3, float targetX3, float targetY3)
-        {
-            return AffineTransform::fromTargetPoints (sourceX1, sourceY1, targetX1, targetY1,
-                                                      sourceX2, sourceY2, targetX2, targetY2,
-                                                      sourceX3, sourceY3, targetX3, targetY3);
-        })
-        .def_static ("fromTargetPoints", &AffineTransform::template fromTargetPoints<Point<int>>)
-        .def_static ("fromTargetPoints", &AffineTransform::template fromTargetPoints<Point<float>>)
-        .def ("followedBy", &AffineTransform::followedBy)
-        .def ("isIdentity", &AffineTransform::isIdentity)
-        .def ("isSingularity", &AffineTransform::isSingularity)
-        .def ("isOnlyTranslation", &AffineTransform::isOnlyTranslation)
-        .def ("getTranslationX", &AffineTransform::getTranslationX)
-        .def ("getTranslationY", &AffineTransform::getTranslationY)
-        .def ("getDeterminant", &AffineTransform::getDeterminant)
-        .def_readwrite ("mat00", &AffineTransform::mat00)
-        .def_readwrite ("mat01", &AffineTransform::mat01)
-        .def_readwrite ("mat02", &AffineTransform::mat02)
-        .def_readwrite ("mat10", &AffineTransform::mat10)
-        .def_readwrite ("mat11", &AffineTransform::mat11)
-        .def_readwrite ("mat12", &AffineTransform::mat12)
+        .def ("approximatelyEqualTo", &AffineTransform::approximatelyEqualTo)
+
+                // Matrix component access as read-only properties
+        .def_property_readonly("scale_x", &AffineTransform::getScaleX)
+        .def_property_readonly("shear_x", &AffineTransform::getShearX)
+        .def_property_readonly("translate_x", &AffineTransform::getTranslateX)
+        .def_property_readonly("shear_y", &AffineTransform::getShearY)
+        .def_property_readonly("scale_y", &AffineTransform::getScaleY)
+        .def_property_readonly("translate_y", &AffineTransform::getTranslateY)
+
+        // Representation
         .def ("__repr__", [](const AffineTransform& self)
         {
             String repr;
             repr
                 << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
-                << "(" << self.mat00 << ", " << self.mat01 << ", " << self.mat02 << ", " << self.mat10 << ", " << self.mat11 << ", " << self.mat12 << ")";
+                << "(" << self.getScaleX() << ", " << self.getShearX() << ", " << self.getTranslateX()
+                << ", " << self.getShearY() << ", " << self.getScaleY() << ", " << self.getTranslateY() << ")";
             return repr;
         })
     ;
-
-    */
 
     // ============================================================================================ yup::Point<>
 

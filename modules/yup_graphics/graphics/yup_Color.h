@@ -550,10 +550,10 @@ public:
         }
 
         return {
+            static_cast<uint8> (a * 255),
             static_cast<uint8> (r * 255),
             static_cast<uint8> (g * 255),
-            static_cast<uint8> (b * 255),
-            static_cast<uint8> (a * 255)
+            static_cast<uint8> (b * 255)
         };
     }
 
@@ -653,10 +653,10 @@ public:
         }
 
         return {
+            static_cast<uint8> (a * 255),
             static_cast<uint8> (r * 255),
             static_cast<uint8> (g * 255),
             static_cast<uint8> (b * 255),
-            static_cast<uint8> (a * 255)
         };
     }
 
