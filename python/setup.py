@@ -168,7 +168,7 @@ class CMakeBuildExtension(build_ext):
             shutil.rmtree(temp_pyi_dir, ignore_errors=True)
             shutil.rmtree(final_pyi_dir, ignore_errors=True)
 
-            self.spawn(["stubgen", "--output", library_dir, "-p", project_name])
+            self.spawn(["stubgen", "--ignore-errors", "--output", library_dir, "-p", project_name])
 
             if os.path.isdir(project_name):
                 shutil.copytree(project_name, final_pyi_dir)
