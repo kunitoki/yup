@@ -639,8 +639,8 @@ constexpr auto roundToInt (const FloatType value) noexcept
     if (isConstantEvaluated())
     {
         return static_cast<int> (value > 0
-            ? value + MathConstants<FloatType>::half
-            : value - MathConstants<FloatType>::half);
+                                     ? value + MathConstants<FloatType>::half
+                                     : value - MathConstants<FloatType>::half);
     }
     else
     {
