@@ -85,7 +85,7 @@ Color parseHexColor (const String& hexString)
         uint8 blue = static_cast<uint8> (hexCharToInt (data[5]) * 16 + hexCharToInt (data[6]));
         uint8 alpha = static_cast<uint8> (hexCharToInt (data[7]) * 16 + hexCharToInt (data[8]));
 
-        return { red, green, blue, alpha };
+        return { alpha, red, green, blue };
     }
     else
     {

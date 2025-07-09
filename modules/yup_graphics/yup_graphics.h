@@ -66,6 +66,7 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 //==============================================================================
 
 #include "layout/yup_Justification.h"
+#include "layout/yup_Fitting.h"
 #include "primitives/yup_AffineTransform.h"
 #include "primitives/yup_Size.h"
 #include "primitives/yup_Point.h"
@@ -83,3 +84,4 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "graphics/yup_StrokeCap.h"
 #include "graphics/yup_Graphics.h"
 #include "context/yup_GraphicsContext.h"
+#include "drawables/yup_Drawable.h"
