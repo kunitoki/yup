@@ -189,7 +189,7 @@ inline double ByteOrder::swap (double v) noexcept
     return n.asFloat;
 }
 
-#if YUP_MSVC && ! defined(__INTEL_COMPILER)
+#if YUP_MSVC
 #pragma intrinsic(_byteswap_ulong)
 #endif
 

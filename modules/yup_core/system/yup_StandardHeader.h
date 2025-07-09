@@ -117,14 +117,6 @@ YUP_BEGIN_IGNORE_WARNINGS_MSVC (4514 4245 4100)
 #if YUP_LINUX || YUP_BSD || YUP_WASM
 #include <cstring>
 #include <signal.h>
-
-#if __INTEL_COMPILER
-#if __ia64__
-#include <ia64intrin.h>
-#else
-#include <ia32intrin.h>
-#endif
-#endif
 #endif
 
 #if YUP_MSVC && YUP_DEBUG
@@ -155,9 +147,6 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #elif defined(YUP_DLL)
 #define YUP_API __declspec (dllimport)
 #pragma warning(disable : 4251)
-#endif
-#ifdef __INTEL_COMPILER
-#pragma warning(disable : 1125) // (virtual override warning)
 #endif
 #elif defined(YUP_DLL) || defined(YUP_DLL_BUILD)
 #define YUP_API __attribute__ ((visibility ("default")))

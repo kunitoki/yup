@@ -71,9 +71,6 @@
 #pragma warning(push)
 // Disable warnings for long class names, padding, and undefined preprocessor definitions.
 #pragma warning(disable : 4251 4786 4668 4820)
-#ifdef __INTEL_COMPILER
-#pragma warning(disable : 1125)
-#endif
 #endif
 
 #include "system/yup_TargetPlatform.h"

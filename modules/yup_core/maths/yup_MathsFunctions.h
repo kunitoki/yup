@@ -617,9 +617,6 @@ constexpr bool isWithin (Type a, Type b, Type tolerance) noexcept
 //==============================================================================
 #if YUP_MSVC
 #pragma optimize("t", off)
-#ifndef __INTEL_COMPILER
-#pragma float_control(precise, on, push)
-#endif
 #endif
 
 /** Fast floating-point-to-integer conversion.
@@ -633,36 +630,36 @@ constexpr bool isWithin (Type a, Type b, Type tolerance) noexcept
     even numbers will be rounded up or down differently.
 */
 template <typename FloatType>
-int roundToInt (const FloatType value) noexcept
+constexpr int roundToInt (const FloatType value) noexcept
 {
-#ifdef __INTEL_COMPILER
-#pragma float_control(precise, on, push)
-#endif
-
-    union
+    if (isConstantEvaluated())
     {
-        int asInt[2];
-        double asDouble;
-    } n;
+        return static_cast<int> (value > FloatType (0) ? value + FloatType (0.5) : value - FloatType (0.5));
+    }
+    else
+    {
+        union
+        {
+            int asInt[2];
+            double asDouble;
+        } n;
 
-    n.asDouble = ((double) value) + 6755399441055744.0;
+        n.asDouble = ((double) value) + 6755399441055744.0;
 
 #if YUP_BIG_ENDIAN
-    return n.asInt[1];
+        return n.asInt[1];
 #else
-    return n.asInt[0];
+        return n.asInt[0];
 #endif
+    }
 }
 
-inline int roundToInt (int value) noexcept
+constexpr int roundToInt (int value) noexcept
 {
     return value;
 }
 
 #if YUP_MSVC
-#ifndef __INTEL_COMPILER
-#pragma float_control(pop)
-#endif
 #pragma optimize("", on) // resets optimisations to the project defaults
 #endif
 
@@ -671,12 +668,8 @@ inline int roundToInt (int value) noexcept
     This is a slightly slower and slightly more accurate version of roundToInt(). It works
     fine for values above zero, but negative numbers are rounded the wrong way.
 */
-inline int roundToIntAccurate (double value) noexcept
+constexpr int roundToIntAccurate (double value) noexcept
 {
-#ifdef __INTEL_COMPILER
-#pragma float_control(pop)
-#endif
-
     return roundToInt (value + 1.5e-8);
 }
 

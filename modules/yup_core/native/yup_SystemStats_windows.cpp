@@ -84,7 +84,7 @@ static int findNumberOfPhysicalCores() noexcept
 
 //==============================================================================
 #if YUP_INTEL
-#if YUP_MSVC && ! defined(__INTEL_COMPILER)
+#if YUP_MSVC
 #pragma intrinsic(__cpuid)
 #pragma intrinsic(__rdtsc)
 #endif
