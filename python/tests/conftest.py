@@ -1,9 +1,10 @@
 import sys
 import pytest
 
-import yup
-
+from . import common
 from .utilities import get_runtime_data_folder, remove_directory_recursively
+
+import yup
 
 #==================================================================================================
 
