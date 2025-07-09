@@ -732,7 +732,7 @@ void registerYupCoreBindings (py::module_& m)
     //m.def ("isPositiveAndBelow", &isPositiveAndBelow<?>);
     //m.def ("isPositiveAndNotGreaterThan", &isPositiveAndNotGreaterThan<?>);
     //m.def ("isWithin", &isWithin<?>);
-    m.def ("roundToInt", &roundToInt<int>);
+    m.def ("roundToInt", static_cast<int (*)(int) noexcept> (&roundToInt));
     m.def ("roundToInt", &roundToInt<float>);
     m.def ("roundToInt", &roundToInt<double>);
     m.def ("roundToIntAccurate", &roundToIntAccurate);

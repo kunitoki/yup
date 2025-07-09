@@ -176,19 +176,22 @@ struct MathConstants
     static_assert (std::is_floating_point_v<FloatType>, "FloatType can only be a floating point type.");
 
     /** A predefined value for Pi */
-    static constexpr FloatType pi = static_cast<FloatType> (3.141592653589793238L);
+    static inline constexpr FloatType pi = static_cast<FloatType> (3.141592653589793238L);
 
     /** A predefined value for 2 * Pi */
-    static constexpr FloatType twoPi = static_cast<FloatType> (2.0L * 3.141592653589793238L);
+    static inline constexpr FloatType twoPi = static_cast<FloatType> (2.0L * 3.141592653589793238L);
 
     /** A predefined value for Pi / 2 */
-    static constexpr FloatType halfPi = static_cast<FloatType> (3.141592653589793238L / 2.0L);
+    static inline constexpr FloatType halfPi = static_cast<FloatType> (3.141592653589793238L / 2.0L);
 
     /** A predefined value for Euler's number */
-    static constexpr FloatType euler = static_cast<FloatType> (2.71828182845904523536L);
+    static inline constexpr FloatType euler = static_cast<FloatType> (2.71828182845904523536L);
 
     /** A predefined value for sqrt (2) */
-    static constexpr FloatType sqrt2 = static_cast<FloatType> (1.4142135623730950488L);
+    static inline constexpr FloatType sqrt2 = static_cast<FloatType> (1.4142135623730950488L);
+
+    /** A predefined value for 0.5 */
+    static inline constexpr FloatType half = static_cast<FloatType> (0.5L);
 };
 
 /** Converts an angle in degrees to radians. */
@@ -630,11 +633,14 @@ constexpr bool isWithin (Type a, Type b, Type tolerance) noexcept
     even numbers will be rounded up or down differently.
 */
 template <typename FloatType>
-constexpr int roundToInt (const FloatType value) noexcept
+constexpr auto roundToInt (const FloatType value) noexcept
+    -> std::enable_if_t<std::is_floating_point_v<FloatType>, int>
 {
     if (isConstantEvaluated())
     {
-        return static_cast<int> (value > FloatType (0) ? value + FloatType (0.5) : value - FloatType (0.5));
+        return static_cast<int> (value > 0
+            ? value + MathConstants<FloatType>::half
+            : value - MathConstants<FloatType>::half);
     }
     else
     {
