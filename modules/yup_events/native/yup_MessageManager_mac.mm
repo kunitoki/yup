@@ -387,7 +387,7 @@ static bool runNSApplication(int millisecondsToRunFor, Atomic<int>& quitMessageP
             @try
             {
 #endif
-                CFRunLoopRunInMode(kCFRunLoopDefaultMode, jmin(1.0, msRemaining * 0.001), true);
+                CFRunLoopRunInMode(kCFRunLoopCommonModes, jmin(1.0, msRemaining * 0.001), true);
 
 #if YUP_CATCH_UNHANDLED_EXCEPTIONS
             }

@@ -810,7 +810,7 @@ private:
 
     constexpr static uint8 normalizedToComponent (float normalized) noexcept
     {
-        return static_cast<uint8> (jlimit (0.0f, 1.0f, normalized) * 255.0f);
+        return static_cast<uint8> (roundToInt (jlimit (0.0f, 1.0f, normalized) * 255.0f));
     }
 
     union

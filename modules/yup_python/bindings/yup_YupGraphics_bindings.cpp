@@ -1038,7 +1038,7 @@ void registerYupGraphicsBindings (py::module_& m)
             String repr;
             repr
                 << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
-                << "(" << self.getRed() << ", " << self.getGreen() << ", " << self.getBlue() << ", " << self.getAlpha() << ")";
+                << "(" << self.getAlpha() << ", " << self.getRed() << ", " << self.getGreen() << ", " << self.getBlue() << ")";
             return repr;
         })
         .def ("__str__", &Color::toString)
@@ -1596,24 +1596,21 @@ void registerYupGraphicsBindings (py::module_& m)
         .value ("Hue", BlendMode::Hue)
         .value ("Saturation", BlendMode::Saturation)
         .value ("Color", BlendMode::Color)
-        .value ("Luminosity", BlendMode::Luminosity)
-        .export_values();
+        .value ("Luminosity", BlendMode::Luminosity);
 
     // ============================================================================================ yup::StrokeCap
 
     py::enum_<StrokeCap> (m, "StrokeCap")
         .value ("Butt", StrokeCap::Butt)
         .value ("Round", StrokeCap::Round)
-        .value ("Square", StrokeCap::Square)
-        .export_values();
+        .value ("Square", StrokeCap::Square);
 
     // ============================================================================================ yup::StrokeJoin
 
     py::enum_<StrokeJoin> (m, "StrokeJoin")
         .value ("Miter", StrokeJoin::Miter)
         .value ("Round", StrokeJoin::Round)
-        .value ("Bevel", StrokeJoin::Bevel)
-        .export_values();
+        .value ("Bevel", StrokeJoin::Bevel);
 
     // ============================================================================================ yup::Graphics
 

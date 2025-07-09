@@ -2,311 +2,285 @@ import pytest
 
 import yup
 
-"""
 #==================================================================================================
 
 def test_construct_default():
-    c = yup.Colour()
-    assert c.getARGB() == 0x00000000
+    c = yup.Color()
+    assert c.getARGB() == 0xFF000000
 
 def test_construct_copy():
-    c1 = yup.Colour(0xFF112233)
-    c2 = yup.Colour(c1)
+    c1 = yup.Color(0xFF112233)
+    c2 = yup.Color(c1)
     assert c1 == c2
 
 def test_construct_rgb():
-    c = yup.Colour(0x11, 0x22, 0x33)
+    c = yup.Color(0x11, 0x22, 0x33)
     assert c.getARGB() == 0xFF112233
 
-def test_construct_rgba():
-    c = yup.Colour(0x11, 0x22, 0x33, 0x44)
+def test_construct_argb():
+    c = yup.Color(0x44, 0x11, 0x22, 0x33)
     assert c.getARGB() == 0x44112233
-
-def test_construct_hsb_int_alpha():
-    c = yup.Colour(0.5, 0.6, 0.7, 0xFF)
-    assert c.getARGB() == 0xFF47B2B2
-
-def test_construct_hsb():
-    c = yup.Colour(0.5, 0.6, 0.7, 1.0)
-    assert c.getARGB() == 0xFF47B2B2
-
-def test_construct_rgba_float_alpha():
-    c = yup.Colour(0x11, 0x22, 0x33, 0.4)
-    assert c.getARGB() == 0x66112233
 
 def test_construct_from_argb():
-    c = yup.Colour(0xFF112233)
+    c = yup.Color(0xFF112233)
     assert c.getARGB() == 0xFF112233
-
-def test_construct_from_rgb():
-    c = yup.Colour.fromRGB(0x11, 0x22, 0x33)
-    assert c.getARGB() == 0xFF112233
-
-def test_construct_from_rgba():
-    c = yup.Colour.fromRGBA(0x11, 0x22, 0x33, 0x44)
-    assert c.getARGB() == 0x44112233
-
-def test_construct_from_float_rgba():
-    c = yup.Colour.fromFloatRGBA(0.1, 0.2, 0.3, 0.4)
-    assert c.getARGB() == 0x661A334C
-
-def test_construct_from_hsv():
-    c = yup.Colour.fromHSV(0.5, 0.6, 0.7, 0.8)
-    assert c.getARGB() == 0xCC47B2B2
-
-def test_construct_from_hsl():
-    c = yup.Colour.fromHSL(0.5, 0.6, 0.7, 0.8)
-    assert c.getARGB() == 0xCC85E0E0
-
-def test_construct_with_pixel_argb():
-    pixel_argb = yup.PixelARGB(255, 0, 255, 0)
-    color = yup.Colour(pixel_argb)
-    assert color.getARGB() == 0xFF00FF00
-
-def test_construct_with_pixel_rgb():
-    pixel_rgb = yup.PixelRGB(0, 255, 0)
-    color = yup.Colour(pixel_rgb)
-    assert color.getARGB() == 0xFF00FF00
-
-def test_construct_with_pixel_alpha():
-    pixel_alpha = yup.PixelAlpha(255)
-    color = yup.Colour(pixel_alpha)
-    assert color.getARGB() == 0xFFFFFFFF
 
 #==================================================================================================
 
-def test_getters():
-    c = yup.Colour(0xFF112233)
-    assert c.getRed() == 0x11
-    assert c.getGreen() == 0x22
-    assert c.getBlue() == 0x33
+def test_static_factory_methods():
+    # Test fromHSV
+    c = yup.Color.fromHSV(0.5, 0.6, 0.7, 0.8)
+    assert isinstance(c, yup.Color)
+
+    # Test fromHSL
+    c = yup.Color.fromHSL(0.5, 0.6, 0.7, 0.8)
+    assert isinstance(c, yup.Color)
+
+    # Test fromString
+    c = yup.Color.fromString("#FF0000")
+    assert isinstance(c, yup.Color)
+
+    # Test opaqueRandom
+    c = yup.Color.opaqueRandom()
+    assert isinstance(c, yup.Color)
+    assert c.isOpaque()
+
+#==================================================================================================
+
+def test_transparency_checks():
+    transparent_color = yup.Color(0x00000000)
+    semi_transparent_color = yup.Color(0x80FF0000)
+    opaque_color = yup.Color(0xFF00FF00)
+
+    assert transparent_color.isTransparent()
+    assert transparent_color.isSemiTransparent()
+    assert not transparent_color.isOpaque()
+
+    assert not semi_transparent_color.isTransparent()
+    assert semi_transparent_color.isSemiTransparent()
+    assert not semi_transparent_color.isOpaque()
+
+    assert not opaque_color.isTransparent()
+    assert not opaque_color.isSemiTransparent()
+    assert opaque_color.isOpaque()
+
+#==================================================================================================
+
+def test_alpha_component():
+    c = yup.Color(0xFF112233)
+
+    # Test getters
     assert c.getAlpha() == 0xFF
-    assert c.getFloatRed() == pytest.approx(0.0666667)
-    assert c.getFloatGreen() == pytest.approx(0.1333333)
-    assert c.getFloatBlue() == pytest.approx(0.2)
-    assert c.getFloatAlpha() == pytest.approx(1.0)
+    assert c.getAlphaFloat() == pytest.approx(1.0)
+
+    # Test setters
+    c.setAlpha(0x80)
+    assert c.getAlpha() == 0x80
+
+    c.setAlpha(0.5)
+    assert c.getAlpha() == 0x80
+
+    # Test withAlpha
+    c1 = yup.Color(0xFF112233)
+    c2 = c1.withAlpha(0x80)
+    assert c2.getAlpha() == 0x80
+    assert c1.getAlpha() == 0xFF  # Original unchanged
+
+    c3 = c1.withAlpha(0.5)
+    assert c3.getAlpha() == 0x80
+
+    # Test withMultipliedAlpha
+    c4 = c1.withMultipliedAlpha(0x80)
+    assert isinstance(c4, yup.Color)
+
+    c5 = c1.withMultipliedAlpha(0.5)
+    assert isinstance(c5, yup.Color)
 
 #==================================================================================================
 
-def test_get_pixel_argb():
-    c = yup.Colour(0xFFAABBCC)
-    pixel_argb = c.getPixelARGB()
-    assert pixel_argb.getNativeARGB() == 0xFFAABBCC
+def test_red_component():
+    c = yup.Color(0xFF112233)
+
+    # Test getters
+    assert c.getRed() == 0x11
+    assert c.getRedFloat() == pytest.approx(0.0666667, rel=1e-6)
+
+    # Test setters
+    c.setRed(0x80)
+    assert c.getRed() == 0x80
+
+    c.setRed(0.5)
+    assert c.getRed() == 0x80
+
+    # Test withRed
+    c1 = yup.Color(0xFF112233)
+    c2 = c1.withRed(0x80)
+    assert c2.getRed() == 0x80
+    assert c1.getRed() == 0x11  # Original unchanged
+
+    c3 = c1.withRed(0.5)
+    assert c3.getRed() == 0x80
 
 #==================================================================================================
 
-def test_get_non_premultiplied_pixel_argb():
-    c = yup.Colour(0x80AABBCC)
-    non_premultiplied_pixel_argb = c.getNonPremultipliedPixelARGB()
-    assert non_premultiplied_pixel_argb.getNativeARGB() == 0x80AABBCC
+def test_green_component():
+    c = yup.Color(0xFF112233)
+
+    # Test getters
+    assert c.getGreen() == 0x22
+    assert c.getGreenFloat() == pytest.approx(0.1333333, rel=1e-6)
+
+    # Test setters
+    c.setGreen(0x80)
+    assert c.getGreen() == 0x80
+
+    c.setGreen(0.5)
+    assert c.getGreen() == 0x80
+
+    # Test withGreen
+    c1 = yup.Color(0xFF112233)
+    c2 = c1.withGreen(0x80)
+    assert c2.getGreen() == 0x80
+    assert c1.getGreen() == 0x22  # Original unchanged
+
+    c3 = c1.withGreen(0.5)
+    assert c3.getGreen() == 0x80
+
+#==================================================================================================
+
+def test_blue_component():
+    c = yup.Color(0xFF112233)
+
+    # Test getters
+    assert c.getBlue() == 0x33
+    assert c.getBlueFloat() == pytest.approx(0.2, rel=1e-6)
+
+    # Test setters
+    c.setBlue(0x80)
+    assert c.getBlue() == 0x80
+
+    c.setBlue(0.5)
+    assert c.getBlue() == 0x80
+
+    # Test withBlue
+    c1 = yup.Color(0xFF112233)
+    c2 = c1.withBlue(0x80)
+    assert c2.getBlue() == 0x80
+    assert c1.getBlue() == 0x33  # Original unchanged
+
+    c3 = c1.withBlue(0.5)
+    assert c3.getBlue() == 0x80
+
+#==================================================================================================
+
+def test_hsl_color_space():
+    c = yup.Color(0xFF0000FF)  # Blue
+
+    # Test HSL getters
+    hue = c.getHue()
+    assert isinstance(hue, float)
+
+    saturation = c.getSaturation()
+    assert isinstance(saturation, float)
+
+    luminance = c.getLuminance()
+    assert isinstance(luminance, float)
+
+#==================================================================================================
+
+def test_color_manipulation():
+    c = yup.Color(0xFF808080)  # Gray
+
+    # Test brighter
+    brighter_c = c.brighter()
+    assert isinstance(brighter_c, yup.Color)
+
+    brighter_c2 = c.brighter(0.5)
+    assert isinstance(brighter_c2, yup.Color)
+
+    # Test darker
+    darker_c = c.darker()
+    assert isinstance(darker_c, yup.Color)
+
+    darker_c2 = c.darker(0.5)
+    assert isinstance(darker_c2, yup.Color)
+
+    # Test contrasting
+    contrasting_c = c.contrasting()
+    assert isinstance(contrasting_c, yup.Color)
+
+    contrasting_c2 = c.contrasting(0.5)
+    assert isinstance(contrasting_c2, yup.Color)
+
+#==================================================================================================
+
+def test_color_inversion():
+    c = yup.Color(0xFF112233)
+
+    # Test invert (mutating)
+    original_argb = c.getARGB()
+    c.invert()
+    assert c.getARGB() != original_argb
+
+    # Test inverted (non-mutating)
+    c2 = yup.Color(0xFF112233)
+    inverted_c = c2.inverted()
+    assert isinstance(inverted_c, yup.Color)
+    assert c2.getARGB() == 0xFF112233  # Original unchanged
+
+    # Test invertAlpha (mutating)
+    c3 = yup.Color(0xFF112233)
+    original_alpha = c3.getAlpha()
+    c3.invertAlpha()
+    assert c3.getAlpha() != original_alpha
+
+    # Test invertedAlpha (non-mutating)
+    c4 = yup.Color(0xFF112233)
+    inverted_alpha_c = c4.invertedAlpha()
+    assert isinstance(inverted_alpha_c, yup.Color)
+    assert c4.getAlpha() == 0xFF  # Original unchanged
+
+#==================================================================================================
+
+def test_string_conversion():
+    c = yup.Color(0xFF112233)
+
+    # Test toString
+    str_repr = c.toString()
+    assert isinstance(str_repr, str)
+
+    # Test toStringRGB
+    rgb_str = c.toStringRGB()
+    assert isinstance(rgb_str, str)
+
+    rgb_str_with_alpha = c.toStringRGB(True)
+    assert isinstance(rgb_str_with_alpha, str)
+
+    rgb_str_without_alpha = c.toStringRGB(False)
+    assert isinstance(rgb_str_without_alpha, str)
 
 #==================================================================================================
 
 def test_equality():
-    color1 = yup.Colour(0xFF00FF00)
-    color2 = yup.Colour(0xFF00FF00)
+    color1 = yup.Color(0xFF00FF00)
+    color2 = yup.Color(0xFF00FF00)
+    color3 = yup.Color(0xFFFF0000)
+
     assert color1 == color2
-
-def test_inequality():
-    color1 = yup.Colour(0xFF00FF00)
-    color2 = yup.Colour(0xFFFF0000)
-    assert color1 != color2
+    assert color1 != color3
+    assert not (color1 == color3)
+    assert not (color1 != color2)
 
 #==================================================================================================
 
-def test_is_opaque():
-    opaque_color = yup.Colour(0xFF00FF00)
-    transparent_color = yup.Colour(0x00000000)
-    assert opaque_color.isOpaque()
-    assert not transparent_color.isOpaque()
+def test_repr_and_str():
+    c = yup.Color(0xFF112233)
 
-#==================================================================================================
+    # Test __repr__
+    repr_str = repr(c)
+    assert isinstance(repr_str, str)
+    assert "Color" in repr_str
 
-def test_with_alpha_uint8():
-    color = yup.Colour(0xFF00FF00)
-    new_color = color.withAlpha(128)
-    assert new_color.getAlpha() == 0x80
-    assert new_color.getARGB() == 0x8000FF00
-
-def test_with_alpha_float():
-    color = yup.Colour(0xFF00FF00)
-    new_color = color.withAlpha(0.5)
-    assert new_color.getAlpha() == 0x80
-    assert new_color.getARGB() == 0x8000FF00
-
-#==================================================================================================
-
-def test_with_multiplied_alpha():
-    c = yup.Colour(0xFFAABBCC)
-    new_colour = c.withMultipliedAlpha(0.5)
-    assert new_colour.getARGB() == 0x80AABBCC
-
-#==================================================================================================
-
-def test_get_hue():
-    c = yup.Colour(0xFFAABBCC)
-    assert c.getHue() == pytest.approx(0.5833333)
-
-def test_get_saturation():
-    color = yup.Colour(0xFF00FF00)
-    assert color.getSaturation() == pytest.approx(1.0)
-
-def test_get_saturation_hsl():
-    color = yup.Colour(0xFF00FFFF)
-    assert color.getSaturationHSL() == pytest.approx(1.0)
-
-def test_get_brightness():
-    color = yup.Colour(0xFF0000FF)
-    assert color.getBrightness() == pytest.approx(1.0)
-
-def test_get_lightness():
-    color = yup.Colour(0xFF0000FF)
-    assert color.getLightness() == pytest.approx(0.5)
-
-def test_get_perceived_brightness():
-    color = yup.Colour(0xFF0000FF)
-    assert color.getPerceivedBrightness() == pytest.approx(0.260768)
-
-#==================================================================================================
-
-def test_get_hsb():
-    color = yup.Colour(0xFF0000FF)
-    hue, saturation, brightness = color.getHSB()
-    assert hue == pytest.approx(0.6666666666)
-    assert saturation == pytest.approx(1.0)
-    assert brightness == pytest.approx(1.0)
-
-def test_get_hsl():
-    color = yup.Colour(0xFF0000FF)
-    hue, saturation, lightness = color.getHSL()
-    assert hue == pytest.approx(0.6666666666)
-    assert saturation == pytest.approx(1.0)
-    assert lightness == pytest.approx(0.5)
-
-#==================================================================================================
-
-def test_with_hue():
-    original_color = yup.Colour(0xFFFF0000)
-    new_color = original_color.withHue(0.5)
-    assert new_color.getARGB() == 0xFF00FFFF
-
-def test_with_saturation():
-    original_color = yup.Colour(0xFF0000FF)
-    new_color = original_color.withSaturation(0.5)
-    assert new_color.getARGB() == 0xFF8080FF
-
-def test_with_brightness():
-    original_color = yup.Colour(0xFF808080)
-    new_color = original_color.withBrightness(0.5)
-    assert new_color.getARGB() == 0xFF808080
-
-def test_with_saturation_hsl():
-    colour = yup.Colour(0xFF0000FF)
-    new_colour = colour.withSaturationHSL(0.5)
-    assert new_colour.getARGB() == 0xFF4040BF
-
-def test_with_lightness():
-    colour = yup.Colour(0xFF0000FF)
-    new_colour = colour.withLightness(0.5)
-    assert new_colour.getARGB() == 0xFF0000FF
-
-def test_with_rotated_hue():
-    colour = yup.Colour(0xFF0000FF)
-    new_colour = colour.withRotatedHue(0.1)
-    assert new_colour.getARGB() == 0xFF9900FF
-
-#==================================================================================================
-
-def test_with_multiplied_saturation():
-    colour = yup.Colour(0xFF0000FF)
-    new_colour = colour.withMultipliedSaturation(0.5)
-    assert new_colour.getARGB() == 0xFF8080FF
-
-def test_with_multiplied_saturation_hsl():
-    colour = yup.Colour(0xFF0000FF)
-    new_colour = colour.withMultipliedSaturationHSL(0.5)
-    assert new_colour.getARGB() == 0xFF4040BF
-
-def test_with_multiplied_brightness():
-    colour = yup.Colour(0xFF0000FF)
-    new_colour = colour.withMultipliedBrightness(0.5)
-    assert new_colour.getARGB() == 0xFF000080
-
-def test_with_multiplied_lightness():
-    colour = yup.Colour(0xFF0000FF)
-    new_colour = colour.withMultipliedLightness(0.5)
-    assert new_colour.getARGB() == 0xFF000080
-
-#==================================================================================================
-
-def test_brighter():
-    colour = yup.Colour(0xFF0000FF)
-    brighter_colour = colour.brighter(1.5)
-    assert brighter_colour.getARGB() == 0xFF9999FF
-
-def test_darker():
-    colour = yup.Colour(0xFF0000FF)
-    darker_colour = colour.darker(1.5)
-    assert darker_colour.getARGB() == 0xFF000066
-
-#==================================================================================================
-
-def test_contrasting():
-    colour = yup.Colour(0xFF0000FF)
-    contrasting_colour = colour.contrasting(1.0)
-    assert isinstance(contrasting_colour, yup.Colour)
-
-def test_contrasting_with_min_luminosity_diff():
-    colour = yup.Colour(0xFF0000FF)
-    contrasting_colour = colour.contrasting(yup.Colour(0xFFFFFFFF), 0.5)
-    assert contrasting_colour.getARGB() == 0xFFFFFFFF
-
-def test_contrasting_static():
-    colour1 = yup.Colour(0xFF0000FF)
-    colour2 = yup.Colour(0xFFFFFFFF)
-    contrasting_colour = yup.Colour.contrasting(colour1, 0.5)
-    assert isinstance(contrasting_colour, yup.Colour)
-    contrasting_colour = yup.Colour.contrasting(colour1, colour2, 0.5)
-    assert isinstance(contrasting_colour, yup.Colour)
-
-#==================================================================================================
-
-def test_grey_level():
-    grey_colour = yup.Colour.greyLevel(0.5)
-    assert grey_colour.getARGB() == 0xFF808080
-
-#==================================================================================================
-
-def test_overlaid_with():
-    c1 = yup.Colour(0xFFFF0000)  # Red
-    c2 = yup.Colour(0xFF00FF00)  # Green
-    c3 = yup.Colour(0x7F00FF00)  # Green
-    overlaid = c1.overlaidWith(c2)
-    assert overlaid.getARGB() == 0xFF00FF00
-    overlaid = c1.overlaidWith(c3)
-    assert overlaid.getARGB() == 0xFF7F7F00
-    overlaid = c3.overlaidWith(c1)
-    assert overlaid.getARGB() == 0xFFFF0000
-
-#==================================================================================================
-
-def test_interpolated_with():
-    c1 = yup.Colour(0xFFFF0000)  # Red
-    c2 = yup.Colour(0xFF0000FF)  # Blue
-    interpolated = c1.interpolatedWith(c2, 0.0)
-    assert interpolated == c1
-    interpolated = c1.interpolatedWith(c2, 0.5)
-    assert interpolated.getARGB() == 0xFF7F007F
-    interpolated = c1.interpolatedWith(c2, 1.0)
-    assert interpolated == c2
-
-#==================================================================================================
-
-def test_to_string():
-    colour = yup.Colour(0xFF0000FF)
-    assert isinstance(colour.toString(), str)
-
-def test_to_display_string():
-    colour = yup.Colour(0xFF0000FF)
-    assert isinstance(colour.toDisplayString(True), str)
-"""
+    # Test __str__
+    str_str = str(c)
+    assert isinstance(str_str, str)
