@@ -156,10 +156,6 @@ void registerPoint (py::module_& m)
             .def ("toFloat", [](const T& self) { return self.template to<float>(); })
             .def ("toDouble", [](const T& self) { return self.template to<double>(); })
 
-            // Add properties for more pythonic access
-            .def_property("x", &T::getX, &T::setX)
-            .def_property("y", &T::getY, &T::setY)
-
             .def ("__repr__", [](const T& self)
             {
                 String result;
@@ -274,14 +270,6 @@ void registerLine (py::module_& m)
             // Comparison
             .def (py::self == py::self)
             .def (py::self != py::self)
-
-            // Properties for more pythonic access
-            .def_property("start_x", &T::getStartX, [](T& self, ValueType value) { self.setStart (self.getStart().withX(value)); })
-            .def_property("start_y", &T::getStartY, [](T& self, ValueType value) { self.setStart (self.getStart().withY(value)); })
-            .def_property("end_x", &T::getEndX, [](T& self, ValueType value) { self.setEnd (self.getEnd().withX(value)); })
-            .def_property("end_y", &T::getEndY, [](T& self, ValueType value) { self.setEnd (self.getEnd().withY(value)); })
-            .def_property("start", &T::getStart, &T::setStart)
-            .def_property("end", &T::getEnd, &T::setEnd)
 
             // Operators
             .def ("__repr__", [] (const T& self)
@@ -501,18 +489,6 @@ void registerRectangle (py::module_& m)
             //.def (py::self += Point<ValueType>())
             //.def (py::self - Point<ValueType>())
             //.def (py::self -= Point<ValueType>())
-
-            // Add properties for more pythonic access
-            .def_property("x", &T::getX, &T::setX)
-            .def_property("y", &T::getY, &T::setY)
-            .def_property("width", &T::getWidth, &T::setWidth)
-            .def_property("height", &T::getHeight, &T::setHeight)
-            .def_property("left", &T::getLeft, &T::setLeft)
-            .def_property("top", &T::getTop, &T::setTop)
-            .def_property("right", &T::getRight, &T::setRight)
-            .def_property("bottom", &T::getBottom, &T::setBottom)
-            .def_property("center_x", &T::getCenterX, &T::setCenterX)
-            .def_property("center_y", &T::getCenterY, &T::setCenterY)
 
             .def ("__repr__", [] (const T& self)
             {
@@ -778,14 +754,6 @@ void registerYupGraphicsBindings (py::module_& m)
         .def (py::self != py::self)
         .def ("approximatelyEqualTo", &AffineTransform::approximatelyEqualTo)
 
-                // Matrix component access as read-only properties
-        .def_property_readonly("scale_x", &AffineTransform::getScaleX)
-        .def_property_readonly("shear_x", &AffineTransform::getShearX)
-        .def_property_readonly("translate_x", &AffineTransform::getTranslateX)
-        .def_property_readonly("shear_y", &AffineTransform::getShearY)
-        .def_property_readonly("scale_y", &AffineTransform::getScaleY)
-        .def_property_readonly("translate_y", &AffineTransform::getTranslateY)
-
         // Representation
         .def ("__repr__", [](const AffineTransform& self)
         {
@@ -923,13 +891,6 @@ void registerYupGraphicsBindings (py::module_& m)
         }, py::keep_alive<0, 1>())
         .def ("__len__", &Path::size)
         .def ("__bool__", [](const Path& self) { return self.size() > 0; })
-
-        // Operators
-        .def (py::self += py::self)
-        .def (py::self + py::self)
-
-        // Properties for more pythonic access
-        .def_property_readonly("bounds", &Path::getBounds)
 
         // Representation
         .def ("__repr__", [](const Path& self) {
@@ -1070,19 +1031,6 @@ void registerYupGraphicsBindings (py::module_& m)
         // Comparison
         .def (py::self == py::self)
         .def (py::self != py::self)
-
-        // Properties for more pythonic access
-        .def_property("red", &Color::getRed, py::overload_cast<uint8> (&Color::setRed))
-        .def_property("green", &Color::getGreen, py::overload_cast<uint8> (&Color::setGreen))
-        .def_property("blue", &Color::getBlue, py::overload_cast<uint8> (&Color::setBlue))
-        .def_property("alpha", &Color::getAlpha, py::overload_cast<uint8> (&Color::setAlpha))
-        .def_property_readonly("red_float", &Color::getRedFloat)
-        .def_property_readonly("green_float", &Color::getGreenFloat)
-        .def_property_readonly("blue_float", &Color::getBlueFloat)
-        .def_property_readonly("alpha_float", &Color::getAlphaFloat)
-        .def_property_readonly("hue", &Color::getHue)
-        .def_property_readonly("saturation", &Color::getSaturation)
-        .def_property_readonly("luminance", &Color::getLuminance)
 
         // Representation
         .def ("__repr__", [] (const Color& self)
@@ -1780,22 +1728,6 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("getContextScale", &Graphics::getContextScale)
         .def ("getFactory", &Graphics::getFactory, py::return_value_policy::reference_internal)
         .def ("getRenderer", &Graphics::getRenderer, py::return_value_policy::reference_internal)
-
-        // Properties for more pythonic access
-        .def_property("fill_color", &Graphics::getFillColor, &Graphics::setFillColor)
-        .def_property("stroke_color", &Graphics::getStrokeColor, &Graphics::setStrokeColor)
-        .def_property("fill_color_gradient", &Graphics::getFillColorGradient, &Graphics::setFillColorGradient)
-        .def_property("stroke_color_gradient", &Graphics::getStrokeColorGradient, &Graphics::setStrokeColorGradient)
-        .def_property("stroke_width", &Graphics::getStrokeWidth, &Graphics::setStrokeWidth)
-        .def_property("feather", &Graphics::getFeather, &Graphics::setFeather)
-        .def_property("opacity", &Graphics::getOpacity, &Graphics::setOpacity)
-        .def_property("stroke_join", &Graphics::getStrokeJoin, &Graphics::setStrokeJoin)
-        .def_property("stroke_cap", &Graphics::getStrokeCap, &Graphics::setStrokeCap)
-        .def_property("blend_mode", &Graphics::getBlendMode, &Graphics::setBlendMode)
-        .def_property("drawing_area", &Graphics::getDrawingArea, &Graphics::setDrawingArea)
-        .def_property("transform", &Graphics::getTransform, &Graphics::setTransform)
-        .def_property("clip_path", &Graphics::getClipPath, py::overload_cast<const Rectangle<float>&>(&Graphics::setClipPath))
-        .def_property_readonly("context_scale", &Graphics::getContextScale)
     ;
 
     // ============================================================================================ yup::Colors
