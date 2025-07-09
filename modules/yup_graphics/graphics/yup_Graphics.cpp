@@ -339,7 +339,7 @@ void Graphics::setStrokeType (StrokeType strokeType)
 {
     auto& options = currentRenderOptions();
 
-    options.strokeWidth = strokeType.getWidth();
+    options.strokeWidth = jmax (0.0f, strokeType.getWidth());
     options.join = strokeType.getJoin();
     options.cap = strokeType.getCap();
 }
