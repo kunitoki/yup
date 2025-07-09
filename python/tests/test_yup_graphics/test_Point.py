@@ -375,7 +375,7 @@ def test_angle_to_point():
 
 #==================================================================================================
 
-@pytest.mark.skip(reason="The integer version of this is actually broken in JUCE")
+@pytest.mark.skip(reason="The integer version of this is actually broken in YUP")
 def test_rotated_about_origin_int():
     a = yup.Point[int](10, 0)
     assert a.rotatedAboutOrigin(int(yup.degreesToRadians(90))) == yup.Point[int](10, 0)

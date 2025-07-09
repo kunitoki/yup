@@ -112,7 +112,7 @@ def test_add_remove_colour():
 
 #==================================================================================================
 
-@pytest.mark.skip(reason="JUCE bug, assert raises when removing index 0")
+@pytest.mark.skip(reason="YUP bug, assert raises when removing index 0")
 def test_remove_colour():
     c = yup.ColourGradient()
     assert c.getNumColours() == 0

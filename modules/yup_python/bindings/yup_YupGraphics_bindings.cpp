@@ -814,136 +814,135 @@ void registerYupGraphicsBindings (py::module_& m)
 
     registerRectangleList<RectangleList, int, float> (m);
 
-    /*
-
     // ============================================================================================ yup::Path
 
     py::class_<Path> classPath (m, "Path");
 
-    py::class_<Path::Iterator> classPathIterator (classPath, "Iterator");
-
-    py::enum_<Path::Iterator::PathElementType> (classPathIterator, "PathElementType")
-        .value ("startNewSubPath", Path::Iterator::PathElementType::startNewSubPath)
-        .value ("lineTo", Path::Iterator::PathElementType::lineTo)
-        .value ("quadraticTo", Path::Iterator::PathElementType::quadraticTo)
-        .value ("cubicTo", Path::Iterator::PathElementType::cubicTo)
-        .value ("closePath", Path::Iterator::PathElementType::closePath)
-        .export_values();
-
-    classPathIterator
-        .def (py::init<const Path&>())
-        .def ("next", &Path::Iterator::next)
-        .def_readwrite ("elementType", &Path::Iterator::elementType)
-        .def_readwrite ("x1", &Path::Iterator::x1)
-        .def_readwrite ("y1", &Path::Iterator::y1)
-        .def_readwrite ("x2", &Path::Iterator::x2)
-        .def_readwrite ("y2", &Path::Iterator::y2)
-        .def_readwrite ("x3", &Path::Iterator::x3)
-        .def_readwrite ("y3", &Path::Iterator::y3)
-    ;
-
     classPath
+        // Constructors
         .def (py::init<>())
-        .def (py::init ([](py::str data) { Path result; result.restoreFromString (data.cast<std::string>().c_str()); return result; }))
+        .def (py::init<float, float>(), "x"_a, "y"_a)
+        .def (py::init<const Point<float>&>(), "point"_a)
         .def (py::init<const Path&>())
-        .def (py::self == py::self)
-        .def (py::self != py::self)
-        .def ("isEmpty", &Path::isEmpty)
+
+        // Basic operations
+        .def ("reserveSpace", &Path::reserveSpace, "numSegments"_a)
+        .def ("size", &Path::size)
+        .def ("clear", &Path::clear)
+
+        // Path construction
+        .def ("moveTo", py::overload_cast<float, float> (&Path::moveTo), "x"_a, "y"_a)
+        .def ("moveTo", py::overload_cast<const Point<float>&> (&Path::moveTo), "point"_a)
+        .def ("lineTo", py::overload_cast<float, float> (&Path::lineTo), "x"_a, "y"_a)
+        .def ("lineTo", py::overload_cast<const Point<float>&> (&Path::lineTo), "point"_a)
+        .def ("quadTo", py::overload_cast<float, float, float, float> (&Path::quadTo), "x"_a, "y"_a, "x1"_a, "y1"_a)
+        .def ("quadTo", py::overload_cast<const Point<float>&, float, float> (&Path::quadTo), "controlPoint"_a, "x1"_a, "y1"_a)
+        .def ("cubicTo", py::overload_cast<float, float, float, float, float, float> (&Path::cubicTo),
+              "x"_a, "y"_a, "x1"_a, "y1"_a, "x2"_a, "y2"_a)
+        .def ("cubicTo", py::overload_cast<const Point<float>&, float, float, float, float> (&Path::cubicTo),
+              "controlPoint1"_a, "x1"_a, "y1"_a, "x2"_a, "y2"_a)
+        .def ("close", &Path::close)
+
+        // Line additions
+        .def ("addLine", py::overload_cast<const Point<float>&, const Point<float>&> (&Path::addLine), "p1"_a, "p2"_a)
+        .def ("addLine", py::overload_cast<const Line<float>&> (&Path::addLine), "line"_a)
+
+        // Rectangle additions
+        .def ("addRectangle", py::overload_cast<float, float, float, float> (&Path::addRectangle),
+              "x"_a, "y"_a, "width"_a, "height"_a)
+        .def ("addRectangle", py::overload_cast<const Rectangle<float>&> (&Path::addRectangle), "rect"_a)
+
+        // Rounded rectangle additions
+        .def ("addRoundedRectangle", py::overload_cast<float, float, float, float, float, float, float, float> (&Path::addRoundedRectangle),
+              "x"_a, "y"_a, "width"_a, "height"_a, "radiusTopLeft"_a, "radiusTopRight"_a, "radiusBottomLeft"_a, "radiusBottomRight"_a)
+        .def ("addRoundedRectangle", py::overload_cast<float, float, float, float, float> (&Path::addRoundedRectangle),
+              "x"_a, "y"_a, "width"_a, "height"_a, "radius"_a)
+        .def ("addRoundedRectangle", py::overload_cast<const Rectangle<float>&, float, float, float, float> (&Path::addRoundedRectangle),
+              "rect"_a, "radiusTopLeft"_a, "radiusTopRight"_a, "radiusBottomLeft"_a, "radiusBottomRight"_a)
+        .def ("addRoundedRectangle", py::overload_cast<const Rectangle<float>&, float> (&Path::addRoundedRectangle),
+              "rect"_a, "radius"_a)
+
+        // Ellipse additions
+        .def ("addEllipse", py::overload_cast<float, float, float, float> (&Path::addEllipse),
+              "x"_a, "y"_a, "width"_a, "height"_a)
+        .def ("addEllipse", py::overload_cast<const Rectangle<float>&> (&Path::addEllipse), "rect"_a)
+
+        // Centered ellipse additions
+        .def ("addCenteredEllipse", py::overload_cast<float, float, float, float> (&Path::addCenteredEllipse),
+              "centerX"_a, "centerY"_a, "radiusX"_a, "radiusY"_a)
+        .def ("addCenteredEllipse", py::overload_cast<const Point<float>&, float, float> (&Path::addCenteredEllipse),
+              "center"_a, "radiusX"_a, "radiusY"_a)
+        .def ("addCenteredEllipse", py::overload_cast<const Point<float>&, const Size<float>&> (&Path::addCenteredEllipse),
+              "center"_a, "diameter"_a)
+
+        // Arc additions
+        .def ("addArc", py::overload_cast<float, float, float, float, float, float, bool> (&Path::addArc),
+              "x"_a, "y"_a, "width"_a, "height"_a, "fromRadians"_a, "toRadians"_a, "startAsNewSubPath"_a)
+        .def ("addArc", py::overload_cast<const Rectangle<float>&, float, float, bool> (&Path::addArc),
+              "rect"_a, "fromRadians"_a, "toRadians"_a, "startAsNewSubPath"_a)
+
+        // Centered arc additions
+        .def ("addCenteredArc", py::overload_cast<float, float, float, float, float, float, float, bool> (&Path::addCenteredArc),
+              "centerX"_a, "centerY"_a, "radiusX"_a, "radiusY"_a, "rotationOfEllipse"_a, "fromRadians"_a, "toRadians"_a, "startAsNewSubPath"_a)
+        .def ("addCenteredArc", py::overload_cast<const Point<float>&, float, float, float, float, float, bool> (&Path::addCenteredArc),
+              "center"_a, "radiusX"_a, "radiusY"_a, "rotationOfEllipse"_a, "fromRadians"_a, "toRadians"_a, "startAsNewSubPath"_a)
+        .def ("addCenteredArc", py::overload_cast<const Point<float>&, const Size<float>&, float, float, float, bool> (&Path::addCenteredArc),
+              "center"_a, "diameter"_a, "rotationOfEllipse"_a, "fromRadians"_a, "toRadians"_a, "startAsNewSubPath"_a)
+
+        // Polygon and star additions
+        .def ("addPolygon", &Path::addPolygon, "centre"_a, "numberOfSides"_a, "radius"_a, "startAngle"_a = 0.0f)
+        .def ("addStar", &Path::addStar, "centre"_a, "numberOfPoints"_a, "innerRadius"_a, "outerRadius"_a, "startAngle"_a = 0.0f)
+
+        // Bubble addition
+        .def ("addBubble", &Path::addBubble, "bodyArea"_a, "maximumArea"_a, "arrowTipPosition"_a, "cornerSize"_a, "arrowBaseWidth"_a)
+
+        // Path operations
+        .def ("createStrokePolygon", &Path::createStrokePolygon, "strokeWidth"_a)
+        .def ("withRoundedCorners", &Path::withRoundedCorners, "cornerRadius"_a)
+        .def ("appendPath", py::overload_cast<const Path&> (&Path::appendPath), "other"_a)
+        .def ("appendPath", py::overload_cast<const Path&, const AffineTransform&> (&Path::appendPath), "other"_a, "transform"_a)
+        .def ("swapWithPath", &Path::swapWithPath, "other"_a)
+
+        // Transformations
+        .def ("transform", &Path::transform, "transform"_a)
+        .def ("transformed", &Path::transformed, "transform"_a)
+        .def ("scaleToFit", &Path::scaleToFit, "x"_a, "y"_a, "width"_a, "height"_a, "preserveProportions"_a)
+
+        // Bounds and utility
         .def ("getBounds", &Path::getBounds)
         .def ("getBoundsTransformed", &Path::getBoundsTransformed, "transform"_a)
-        .def ("contains", py::overload_cast<float, float, float> (&Path::contains, py::const_), "x"_a, "y"_a, "tolerance"_a = Path::defaultToleranceForTesting)
-        .def ("contains", py::overload_cast<Point<float>, float> (&Path::contains, py::const_), "point"_a, "tolerance"_a = Path::defaultToleranceForTesting)
-        .def ("intersectsLine", &Path::intersectsLine, "line"_a, "tolerance"_a = Path::defaultToleranceForTesting)
-        .def ("getClippedLine", &Path::getClippedLine, "line"_a, "keepSectionOutsidePath"_a)
-        .def ("getLength", &Path::getLength, "transform"_a = AffineTransform(), "tolerance"_a = Path::defaultToleranceForMeasurement)
-        .def ("getPointAlongPath", &Path::getPointAlongPath, "distanceFromStart"_a, "transform"_a = AffineTransform(), "tolerance"_a = Path::defaultToleranceForMeasurement)
-        .def ("getNearestPoint", &Path::getNearestPoint, "targetPoint"_a, "pointOnPath"_a, "transform"_a = AffineTransform(), "tolerance"_a = Path::defaultToleranceForMeasurement)
-        .def ("clear", &Path::clear)
-        .def ("startNewSubPath", py::overload_cast<float, float> (&Path::startNewSubPath), "startX"_a, "startY"_a)
-        .def ("startNewSubPath", py::overload_cast<Point<float>> (&Path::startNewSubPath), "start"_a)
-        .def ("closeSubPath", &Path::closeSubPath)
-        .def ("lineTo", py::overload_cast<float, float> (&Path::lineTo), "endX"_a, "endY"_a)
-        .def ("lineTo", py::overload_cast<Point<float>> (&Path::lineTo), "end"_a)
-        .def ("quadraticTo", py::overload_cast<float, float, float, float> (&Path::quadraticTo), "controlPointX"_a, "controlPointY"_a, "endPointX"_a, "endPointX"_a)
-        .def ("quadraticTo", py::overload_cast<Point<float>, Point<float>> (&Path::quadraticTo), "controlPoint"_a, "endPoint"_a)
-        .def ("cubicTo", py::overload_cast<float, float, float, float, float, float> (&Path::cubicTo))
-        .def ("cubicTo", py::overload_cast<Point<float>, Point<float>, Point<float>> (&Path::cubicTo))
-        .def ("getCurrentPosition", &Path::getCurrentPosition)
-        .def ("addRectangle", static_cast<void (Path::*)(float, float, float, float)> (&Path::addRectangle))
-        .def ("addRectangle", static_cast<void (Path::*)(Rectangle<int>)> (&Path::template addRectangle<int>))
-        .def ("addRectangle", static_cast<void (Path::*)(Rectangle<float>)> (&Path::template addRectangle<float>))
-        .def ("addRoundedRectangle", static_cast<void (Path::*)(float, float, float, float, float)> (&Path::addRoundedRectangle))
-        .def ("addRoundedRectangle", static_cast<void (Path::*)(float, float, float, float, float, float)> (&Path::addRoundedRectangle))
-        .def ("addRoundedRectangle", static_cast<void (Path::*)(float, float, float, float, float, float, bool, bool, bool, bool)> (&Path::addRoundedRectangle))
-        .def ("addRoundedRectangle", static_cast<void (Path::*)(Rectangle<int>, float)> (&Path::template addRoundedRectangle<int>))
-        .def ("addRoundedRectangle", static_cast<void (Path::*)(Rectangle<float>, float)> (&Path::template addRoundedRectangle<float>))
-        .def ("addRoundedRectangle", static_cast<void (Path::*)(Rectangle<int>, float, float)> (&Path::template addRoundedRectangle<int>))
-        .def ("addRoundedRectangle", static_cast<void (Path::*)(Rectangle<float>, float, float)> (&Path::template addRoundedRectangle<float>))
-        .def ("addTriangle", py::overload_cast<float, float, float, float, float, float> (&Path::addTriangle))
-        .def ("addTriangle", py::overload_cast<Point<float>, Point<float>, Point<float>> (&Path::addTriangle))
-        .def ("addQuadrilateral", &Path::addQuadrilateral)
-        .def ("addEllipse", py::overload_cast<float, float, float, float> (&Path::addEllipse))
-        .def ("addEllipse", py::overload_cast<Rectangle<float>> (&Path::addEllipse))
-        .def ("addArc", &Path::addArc,
-            "x"_a, "y"_a, "width"_a, "height"_a, "fromRadians"_a, "toRadians"_a, "startAsNewSubPath"_a = false)
-        .def ("addCentredArc", &Path::addCentredArc,
-            "centreX"_a, "centreY"_a, "radiusX"_a, "radiusY"_a, "rotationOfEllipse"_a, "fromRadians"_a, "toRadians"_a, "startAsNewSubPath"_a = false)
-        .def ("addPieSegment", py::overload_cast<float, float, float, float, float, float, float> (&Path::addPieSegment))
-        .def ("addPieSegment", py::overload_cast<Rectangle<float>, float, float, float> (&Path::addPieSegment))
-        .def ("addLineSegment", &Path::addLineSegment)
-        .def ("addArrow", &Path::addArrow)
-        .def ("addPolygon", &Path::addPolygon)
-        .def ("addStar", &Path::addStar)
-        .def ("addBubble", &Path::addBubble)
-        .def ("addPath", py::overload_cast<const Path&> (&Path::addPath))
-        .def ("addPath", py::overload_cast<const Path&, const AffineTransform&> (&Path::addPath))
-        .def ("swapWithPath", &Path::swapWithPath)
-        .def ("preallocateSpace", &Path::preallocateSpace)
-        .def ("applyTransform", &Path::applyTransform)
-        .def ("scaleToFit", &Path::scaleToFit)
-    //.def ("getTransformToScaleToFit", py::overload_cast<float, float, float, float, bool, Justification> (&Path::getTransformToScaleToFit))
-    //.def ("getTransformToScaleToFit", py::overload_cast<Rectangle<float>, bool, Justification> (&Path::getTransformToScaleToFit))
-        .def ("createPathWithRoundedCorners", &Path::createPathWithRoundedCorners)
-        .def ("setUsingNonZeroWinding", &Path::setUsingNonZeroWinding)
-        .def ("isUsingNonZeroWinding", &Path::isUsingNonZeroWinding)
-        .def ("loadPathFromStream", &Path::loadPathFromStream)
-        .def ("loadPathFromData", [](Path& self, py::buffer data)
-        {
-            auto info = data.request();
-            self.loadPathFromData (info.ptr, static_cast<size_t> (info.size));
-        })
-        .def ("writePathToStream", &Path::writePathToStream)
+        .def ("getPointAlongPath", &Path::getPointAlongPath, "distance"_a)
+
+        // String conversion
         .def ("toString", &Path::toString)
-        .def ("restoreFromString", &Path::restoreFromString)
-        .def ("__repr__", [](const Path& self)
-        {
-            String repr;
-            repr << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name()) << "('" << self.toString() << "')";
-            return repr;
+        .def ("fromString", &Path::fromString, "pathData"_a)
+
+        // Iterator support
+        .def ("__iter__", [](const Path& self) {
+            return py::make_iterator (self.begin(), self.end());
+        }, py::keep_alive<0, 1>())
+        .def ("__len__", &Path::size)
+        .def ("__bool__", [](const Path& self) { return self.size() > 0; })
+
+        // Operators
+        .def (py::self += py::self)
+        .def (py::self + py::self)
+
+        // Properties for more pythonic access
+        .def_property_readonly("bounds", &Path::getBounds)
+
+        // Representation
+        .def ("__repr__", [](const Path& self) {
+            String result;
+            result << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
+                   << "(" << self.size() << " segments)";
+            return result;
         })
         .def ("__str__", &Path::toString)
     ;
 
-    classPath.attr ("defaultToleranceForTesting") = py::float_ (Path::defaultToleranceForTesting);
-    classPath.attr ("defaultToleranceForMeasurement") = py::float_ (Path::defaultToleranceForMeasurement);
-
-    // ============================================================================================ yup::PathFlatteningIterator
-
-    py::class_<PathFlatteningIterator> classPathFlatteningIterator (m, "PathFlatteningIterator");
-
-    classPathFlatteningIterator
-        .def (py::init<const Path&, const AffineTransform&, float>(), "path"_a, "transform"_a = AffineTransform(), "tolerance"_a = Path::defaultToleranceForMeasurement)
-        .def ("next", &PathFlatteningIterator::next)
-        .def ("isLastInSubpath", &PathFlatteningIterator::isLastInSubpath)
-        .def_readwrite ("x1", &PathFlatteningIterator::x1)
-        .def_readwrite ("y1", &PathFlatteningIterator::y1)
-        .def_readwrite ("x2", &PathFlatteningIterator::x2)
-        .def_readwrite ("y2", &PathFlatteningIterator::y2)
-        .def_readwrite ("closesSubPath", &PathFlatteningIterator::closesSubPath)
-        .def_readwrite ("subPathIndex", &PathFlatteningIterator::subPathIndex)
-    ;
-
-    // ============================================================================================ yup::Path
+    /*
+    // ============================================================================================ yup::PathStrokeType
 
     py::class_<PathStrokeType> classPathStrokeType (m, "PathStrokeType");
 
