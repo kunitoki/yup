@@ -22,6 +22,4 @@
 namespace yup
 {
 
-
-
 } // namespace yup

@@ -361,7 +361,6 @@ float Graphics::getStrokeWidth() const
     return currentRenderOptions().strokeWidth;
 }
 
-
 void Graphics::setStrokeJoin (StrokeJoin join)
 {
     currentRenderOptions().join = join;
