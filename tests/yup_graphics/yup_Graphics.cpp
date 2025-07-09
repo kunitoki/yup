@@ -48,7 +48,7 @@ TEST_F (GraphicsTest, Default_Constructor)
 {
     EXPECT_FLOAT_EQ (graphics->getContextScale(), 1.0f);
     EXPECT_EQ (graphics->getStrokeJoin(), StrokeJoin::Miter);
-    EXPECT_EQ (graphics->getStrokeCap(), StrokeCap::Square);
+    EXPECT_EQ (graphics->getStrokeCap(), StrokeCap::Butt);
     EXPECT_EQ (graphics->getFillColor(), Color (0xff000000));
     EXPECT_EQ (graphics->getStrokeColor(), Color (0xff000000));
     EXPECT_FLOAT_EQ (graphics->getStrokeWidth(), 1.0f);

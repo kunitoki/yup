@@ -1614,6 +1614,26 @@ void registerYupGraphicsBindings (py::module_& m)
 
     // ============================================================================================ yup::Graphics
 
+    py::class_<StrokeType> classStrokeType (m, "StrokeType");
+    classStrokeType
+        .def (py::init<>())
+        .def (py::init<float>())
+        .def (py::init<float, StrokeCap>())
+        .def (py::init<float, StrokeJoin>())
+        .def (py::init<float, StrokeJoin, StrokeCap>())
+        .def (py::init<const StrokeType&>())
+        .def ("getWidth", &StrokeType::getWidth)
+        .def ("withWidth", &StrokeType::withWidth)
+        .def ("getCap", &StrokeType::getCap)
+        .def ("withCap", &StrokeType::withCap)
+        .def ("getJoin", &StrokeType::getJoin)
+        .def ("withJoin", &StrokeType::withJoin)
+        .def (py::self == py::self)
+        .def (py::self != py::self)
+    ;
+
+    // ============================================================================================ yup::Graphics
+
     py::class_<Graphics> classGraphics (m, "Graphics");
 
     struct PyGraphicsSaveState
@@ -1655,6 +1675,8 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("getStrokeColorGradient", &Graphics::getStrokeColorGradient)
 
         // Stroke properties
+        .def ("setStrokeType", &Graphics::setStrokeType)
+        .def ("getStrokeType", &Graphics::getStrokeType)
         .def ("setStrokeWidth", &Graphics::setStrokeWidth)
         .def ("getStrokeWidth", &Graphics::getStrokeWidth)
         .def ("setStrokeJoin", &Graphics::setStrokeJoin)

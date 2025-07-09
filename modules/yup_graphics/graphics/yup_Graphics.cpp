@@ -313,17 +313,6 @@ ColorGradient Graphics::getStrokeColorGradient() const
 }
 
 //==============================================================================
-void Graphics::setStrokeWidth (float strokeWidth)
-{
-    currentRenderOptions().strokeWidth = jmax (0.0f, strokeWidth);
-}
-
-float Graphics::getStrokeWidth() const
-{
-    return currentRenderOptions().strokeWidth;
-}
-
-//==============================================================================
 void Graphics::setFeather (float feather)
 {
     currentRenderOptions().feather = jmax (0.0f, feather);
@@ -346,6 +335,33 @@ float Graphics::getOpacity() const
 }
 
 //==============================================================================
+void Graphics::setStrokeType (StrokeType strokeType)
+{
+    auto& options = currentRenderOptions();
+
+    options.strokeWidth = strokeType.getWidth();
+    options.join = strokeType.getJoin();
+    options.cap = strokeType.getCap();
+}
+
+StrokeType Graphics::getStrokeType() const
+{
+    auto& options = currentRenderOptions();
+
+    return StrokeType (options.strokeWidth, options.join, options.cap);
+}
+
+void Graphics::setStrokeWidth (float strokeWidth)
+{
+    currentRenderOptions().strokeWidth = jmax (0.0f, strokeWidth);
+}
+
+float Graphics::getStrokeWidth() const
+{
+    return currentRenderOptions().strokeWidth;
+}
+
+
 void Graphics::setStrokeJoin (StrokeJoin join)
 {
     currentRenderOptions().join = join;
@@ -356,7 +372,6 @@ StrokeJoin Graphics::getStrokeJoin() const
     return currentRenderOptions().join;
 }
 
-//==============================================================================
 void Graphics::setStrokeCap (StrokeCap cap)
 {
     currentRenderOptions().cap = cap;

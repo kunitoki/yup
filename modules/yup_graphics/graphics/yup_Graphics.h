@@ -26,27 +26,6 @@ namespace yup
 class GraphicsContext;
 
 //==============================================================================
-enum class BlendMode : uint8
-{
-    SrcOver,
-    Screen,
-    Overlay,
-    Darken,
-    Lighten,
-    ColorDodge,
-    ColorBurn,
-    HardLight,
-    SoftLight,
-    Difference,
-    Exclusion,
-    Multiply,
-    Hue,
-    Saturation,
-    Color,
-    Luminosity
-};
-
-//==============================================================================
 /** A graphical interface for drawing operations within a defined rendering context.
 
     This class provides a high-level drawing interface to perform various graphical
@@ -106,6 +85,32 @@ public:
     [[nodiscard]] SavedState saveState();
 
     //==============================================================================
+    /** Sets the feather for subsequent drawing operations.
+
+        @param feather The new feather level.
+    */
+    void setFeather (float feather);
+
+    /** Retrieves the current feather setting.
+
+       @return The current feather level.
+    */
+    float getFeather() const;
+
+    //==============================================================================
+    /** Sets the opacity for subsequent drawing operations.
+
+       @param opacity The new opacity level (0.0-1.0).
+    */
+    void setOpacity (float opacity);
+
+    /** Retrieves the current opacity setting.
+
+       @return The current opacity level.
+    */
+    float getOpacity() const;
+
+    //==============================================================================
     /** Sets the current drawing fill color.
 
         @param color The new color to use for subsequent fill drawing operations.
@@ -117,6 +122,18 @@ public:
         @return The current color for fill drawing.
     */
     Color getFillColor() const;
+
+    /** Sets the current color gradient for fills.
+
+        @param gradient The new color gradient to use for subsequent fill drawing operations.
+    */
+    void setFillColorGradient (ColorGradient gradient);
+
+    /** Retrieves the current color gradient for fills.
+
+        @return The current color gradient for fill drawing.
+    */
+    ColorGradient getFillColorGradient() const;
 
     //==============================================================================
     /** Sets the current drawing stroke color.
@@ -131,20 +148,6 @@ public:
     */
     Color getStrokeColor() const;
 
-    //==============================================================================
-    /** Sets the current color gradient for fills.
-
-        @param gradient The new color gradient to use for subsequent fill drawing operations.
-    */
-    void setFillColorGradient (ColorGradient gradient);
-
-    /** Retrieves the current color gradient for fills.
-
-        @return The current color gradient for fill drawing.
-    */
-    ColorGradient getFillColorGradient() const;
-
-    //==============================================================================
     /** Sets the current color gradient for strokes.
 
         @param gradient The new color gradient to use for subsequent stroke drawing operations.
@@ -158,33 +161,30 @@ public:
     ColorGradient getStrokeColorGradient() const;
 
     //==============================================================================
-    // TODO - doxygen
+    /** Sets the stroke type for subsequent drawing operations.
+
+        @param strokeType The new stroke type.
+    */
+    void setStrokeType (StrokeType strokeType);
+
+    /** Retrieves the current stroke type.
+
+        @return The current stroke type.
+    */
+    StrokeType getStrokeType() const;
+
+    /** Sets the stroke width for subsequent drawing operations.
+
+        @param strokeWidth The new stroke width.
+    */
     void setStrokeWidth (float strokeWidth);
 
-    // TODO - doxygen
+    /** Retrieves the current stroke width.
+
+        @return The current stroke width.
+    */
     float getStrokeWidth() const;
 
-    //==============================================================================
-    // TODO - doxygen
-    void setFeather (float feather);
-
-    // TODO - doxygen
-    float getFeather() const;
-
-    //==============================================================================
-    /** Sets the opacity for subsequent drawing operations.
-
-        @param opacity The new opacity level (0.0-1.0).
-    */
-    void setOpacity (float opacity);
-
-    /** Retrieves the current opacity setting.
-
-        @return The current opacity level.
-    */
-    float getOpacity() const;
-
-    //==============================================================================
     /** Sets the stroke join style for drawing lines and paths.
 
         @param join The join style to use.
@@ -197,7 +197,6 @@ public:
     */
     StrokeJoin getStrokeJoin() const;
 
-    //==============================================================================
     /** Sets the stroke cap style for drawing lines and paths.
 
         @param cap The cap style to use.
@@ -211,12 +210,16 @@ public:
     StrokeCap getStrokeCap() const;
 
     //==============================================================================
-    /**
-     */
+    /** Sets the blend mode for subsequent drawing operations.
+
+        @param blendMode The new blend mode.
+    */
     void setBlendMode (BlendMode blendMode);
 
-    /**
-     */
+    /** Retrieves the current blend mode.
+
+        @return The current blend mode.
+    */
     BlendMode getBlendMode() const;
 
     //==============================================================================
@@ -253,8 +256,22 @@ public:
     AffineTransform getTransform() const;
 
     //==============================================================================
+    /** Sets the clip path for subsequent drawing operations.
+
+        @param clipRect The rectangle to clip to.
+    */
     void setClipPath (const Rectangle<float>& clipRect);
+
+    /** Sets the clip path for subsequent drawing operations.
+
+        @param clipPath The path to clip to.
+    */
     void setClipPath (const Path& clipPath);
+
+    /** Retrieves the current clip path.
+
+        @return The current clip path.
+    */
     Path getClipPath() const;
 
     //==============================================================================
@@ -277,8 +294,7 @@ public:
     void strokeLine (const Point<float>& p1, const Point<float>& p2);
 
     //==============================================================================
-    /** Fills the entire drawing area with the current color or gradient.
-    */
+    /** Fills the entire drawing area with the current color or gradient. */
     void fillAll();
 
     //==============================================================================
@@ -400,7 +416,10 @@ public:
     void strokeRoundedRect (const Rectangle<float>& r, float radius);
 
     //==============================================================================
+    /** Fills an ellipse with the current color or gradient.
 
+        @param r The rectangle that defines the ellipse.
+    */
     void fillEllipse (const Rectangle<float>& r);
 
     //==============================================================================
@@ -418,13 +437,26 @@ public:
     void fillPath (const Path& path);
 
     //==============================================================================
+    /** Draws an image at a specific position.
 
+        @param image The image to draw.
+        @param pos The position to draw the image at.
+    */
     void drawImageAt (const Image& image, const Point<float>& pos);
 
     //==============================================================================
     /** Draws an attributed text.
+
+        @param text The text to draw.
+        @param rect The rectangle that defines the text.
     */
     void fillFittedText (const StyledText& text, const Rectangle<float>& rect);
+
+    /** Draws an attributed text.
+
+        @param text The text to draw.
+        @param rect The rectangle that defines the text.
+    */
     void strokeFittedText (const StyledText& text, const Rectangle<float>& rect);
 
     //==============================================================================
@@ -533,7 +565,7 @@ private:
 
         float scale = 1.0f;
         StrokeJoin join = StrokeJoin::Miter;
-        StrokeCap cap = StrokeCap::Square;
+        StrokeCap cap = StrokeCap::Butt;
         Color fillColor = 0xff000000;
         Color strokeColor = 0xff000000;
         ColorGradient fillGradient;
