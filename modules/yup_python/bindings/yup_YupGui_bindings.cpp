@@ -67,6 +67,8 @@ struct polymorphic_type_hook<yup::Component>
 namespace yup
 {
 
+// clang-format off
+
 #if ! YUP_WINDOWS
 extern const char* const* yup_argv;
 extern int yup_argc;
@@ -155,35 +157,203 @@ void registerYupGuiBindings (py::module_& m)
         .def_static ("quit", &YUPApplication::quit)
         .def_static ("getCommandLineParameterArray", &YUPApplication::getCommandLineParameterArray)
         .def_static ("getCommandLineParameters", &YUPApplication::getCommandLineParameters)
-        .def ("setApplicationReturnValue", [] (YUPApplication& self, int value)
-    {
-        self.setApplicationReturnValue (value);
-    }).def ("getApplicationReturnValue", [] (const YUPApplication& self)
-    {
-        return self.getApplicationReturnValue();
-    }).def_static ("isStandaloneApp", &YUPApplication::isStandaloneApp)
+        .def ("setApplicationReturnValue", [] (YUPApplication& self, int value) { self.setApplicationReturnValue (value); })
+        .def ("getApplicationReturnValue", [] (const YUPApplication& self) { return self.getApplicationReturnValue(); })
+        .def_static ("isStandaloneApp", &YUPApplication::isStandaloneApp)
         .def ("isInitialising", &YUPApplication::isInitialising);
+
+    // ============================================================================================ yup::MouseCursor
+
+    py::class_<MouseCursor> classMouseCursor (m, "MouseCursor");
+
+    py::enum_<MouseCursor::Type> (classMouseCursor, "Type")
+        .value ("None", MouseCursor::Type::None)
+        .value ("Default", MouseCursor::Type::Default)
+        .value ("Arrow", MouseCursor::Type::Arrow)
+        .value ("Text", MouseCursor::Type::Text)
+        .value ("Wait", MouseCursor::Type::Wait)
+        .value ("WaitArrow", MouseCursor::Type::WaitArrow)
+        .value ("Hand", MouseCursor::Type::Hand)
+        .value ("Crosshair", MouseCursor::Type::Crosshair)
+        .value ("Crossbones", MouseCursor::Type::Crossbones)
+        .value ("ResizeLeftRight", MouseCursor::Type::ResizeLeftRight)
+        .value ("ResizeUpDown", MouseCursor::Type::ResizeUpDown)
+        .value ("ResizeTopLeftRightBottom", MouseCursor::Type::ResizeTopLeftRightBottom)
+        .value ("ResizeBottomLeftRightTop", MouseCursor::Type::ResizeBottomLeftRightTop)
+        .value ("ResizeAll", MouseCursor::Type::ResizeAll)
+        .export_values();
+
+    classMouseCursor
+        .def (py::init<>())
+        .def (py::init<MouseCursor::Type>(), "type"_a);
+
+    // ============================================================================================ yup::ComponentNative
 
     // ============================================================================================ yup::Component
 
     py::class_<Component, PyComponent<>> classComponent (m, "Component");
 
     classComponent
+        // Construction and identification
         .def (py::init_alias<>())
-        .def ("getTitle", &Component::getTitle)
-        .def ("setTitle", &Component::setTitle)
+        .def (py::init_alias<StringRef>(), "componentID"_a)
+        .def ("getComponentID", &Component::getComponentID)
+
+        // Basic state properties
+        .def ("isEnabled", &Component::isEnabled)
+        .def ("setEnabled", &Component::setEnabled)
         .def ("isVisible", &Component::isVisible)
         .def ("setVisible", &Component::setVisible)
-        .def ("isEnabled", &Component::isEnabled)
-        .def ("setEnabled", &Component::setEnabled);
+        .def ("isShowing", &Component::isShowing)
+        .def ("getTitle", &Component::getTitle)
+        .def ("setTitle", &Component::setTitle)
+
+        // Position and size
+        .def ("getPosition", &Component::getPosition)
+        .def ("setPosition", &Component::setPosition)
+        .def ("getScreenPosition", &Component::getScreenPosition)
+        .def ("getX", &Component::getX)
+        .def ("getY", &Component::getY)
+        .def ("getLeft", &Component::getLeft)
+        .def ("getTop", &Component::getTop)
+        .def ("getRight", &Component::getRight)
+        .def ("getBottom", &Component::getBottom)
+        .def ("getTopLeft", &Component::getTopLeft)
+        .def ("setTopLeft", &Component::setTopLeft)
+        .def ("getBottomLeft", &Component::getBottomLeft)
+        .def ("setBottomLeft", &Component::setBottomLeft)
+        .def ("getTopRight", &Component::getTopRight)
+        .def ("setTopRight", &Component::setTopRight)
+        .def ("getBottomRight", &Component::getBottomRight)
+        .def ("setBottomRight", &Component::setBottomRight)
+        .def ("getCenter", &Component::getCenter)
+        .def ("setCenter", &Component::setCenter)
+        .def ("getCenterX", &Component::getCenterX)
+        .def ("setCenterX", &Component::setCenterX)
+        .def ("getCenterY", &Component::getCenterY)
+        .def ("setCenterY", &Component::setCenterY)
+        .def ("getSize", &Component::getSize)
+        .def ("setSize", py::overload_cast<float, float>(&Component::setSize))
+        .def ("setSize", py::overload_cast<const Size<float>&>(&Component::setSize))
+        .def ("getWidth", &Component::getWidth)
+        .def ("getHeight", &Component::getHeight)
+        .def ("proportionOfWidth", &Component::proportionOfWidth)
+        .def ("proportionOfHeight", &Component::proportionOfHeight)
+
+        // Bounds
+        .def ("setBounds", py::overload_cast<float, float, float, float>(&Component::setBounds))
+        .def ("setBounds", py::overload_cast<const Rectangle<float>&>(&Component::setBounds))
+        .def ("getBounds", &Component::getBounds)
+        .def ("getLocalBounds", &Component::getLocalBounds)
+        .def ("getBoundsRelativeToTopLevelComponent", &Component::getBoundsRelativeToTopLevelComponent)
+        .def ("getScreenBounds", &Component::getScreenBounds)
+
+        // Coordinate conversion
+        .def ("localToScreen", py::overload_cast<const Point<float>&>(&Component::localToScreen, py::const_))
+        .def ("screenToLocal", py::overload_cast<const Point<float>&>(&Component::screenToLocal, py::const_))
+        .def ("localToScreen", py::overload_cast<const Rectangle<float>&>(&Component::localToScreen, py::const_))
+        .def ("screenToLocal", py::overload_cast<const Rectangle<float>&>(&Component::screenToLocal, py::const_))
+        .def ("getLocalPoint", &Component::getLocalPoint)
+        .def ("getLocalArea", &Component::getLocalArea)
+        .def ("getRelativePoint", &Component::getRelativePoint)
+        .def ("getRelativeArea", &Component::getRelativeArea)
+
+        // Transform
+        .def ("setTransform", &Component::setTransform)
+        .def ("getTransform", &Component::getTransform)
+        .def ("isTransformed", &Component::isTransformed)
+        .def ("getTransformToComponent", &Component::getTransformToComponent)
+        .def ("getTransformFromComponent", &Component::getTransformFromComponent)
+        .def ("getTransformToScreen", &Component::getTransformToScreen)
+
+        // Full screen
+        .def ("setFullScreen", &Component::setFullScreen)
+        .def ("isFullScreen", &Component::isFullScreen)
+
+        // Scale and display
+        .def ("getScaleDpi", &Component::getScaleDpi)
+
+        // Opacity and rendering
+        .def ("getOpacity", &Component::getOpacity)
+        .def ("setOpacity", &Component::setOpacity)
+        .def ("isOpaque", &Component::isOpaque)
+        .def ("setOpaque", &Component::setOpaque)
+        .def ("enableRenderingUnclipped", &Component::enableRenderingUnclipped)
+        .def ("isRenderingUnclipped", &Component::isRenderingUnclipped)
+        .def ("repaint", py::overload_cast<>(&Component::repaint))
+        .def ("repaint", py::overload_cast<const Rectangle<float>&>(&Component::repaint))
+        .def ("repaint", py::overload_cast<float, float, float, float>(&Component::repaint))
+
+        // Native component
+        .def ("getNativeHandle", &Component::getNativeHandle, py::return_value_policy::reference_internal)
+        .def ("getNativeComponent", py::overload_cast<>(&Component::getNativeComponent), py::return_value_policy::reference_internal)
+        .def ("isOnDesktop", &Component::isOnDesktop)
+        .def ("addToDesktop", &Component::addToDesktop, "nativeOptions"_a, "parent"_a = nullptr)
+        .def ("removeFromDesktop", &Component::removeFromDesktop)
+
+        // Z-order
+        .def ("toFront", &Component::toFront)
+        .def ("toBack", &Component::toBack)
+        .def ("raiseAbove", &Component::raiseAbove, py::return_value_policy::reference_internal)
+        .def ("lowerBelow", &Component::lowerBelow, py::return_value_policy::reference_internal)
+        .def ("raiseBy", &Component::raiseBy)
+        .def ("lowerBy", &Component::lowerBy)
+
+        // Mouse cursor
+        .def ("setMouseCursor", &Component::setMouseCursor)
+        .def ("getMouseCursor", &Component::getMouseCursor)
+
+        // Keyboard focus
+        .def ("setWantsKeyboardFocus", &Component::setWantsKeyboardFocus)
+        .def ("takeKeyboardFocus", &Component::takeKeyboardFocus)
+        .def ("leaveKeyboardFocus", &Component::leaveKeyboardFocus)
+        .def ("hasKeyboardFocus", &Component::hasKeyboardFocus)
+
+        // Hierarchy
+        .def ("hasParent", &Component::hasParent)
+        .def ("getParentComponent", py::overload_cast<>(&Component::getParentComponent), py::return_value_policy::reference_internal)
+        .def ("addChildComponent", py::overload_cast<Component&, int>(&Component::addChildComponent), "component"_a, "index"_a = -1, py::return_value_policy::reference_internal)
+        .def ("addChildComponent", py::overload_cast<Component*, int>(&Component::addChildComponent), "component"_a, "index"_a = -1, py::return_value_policy::reference_internal)
+        .def ("addAndMakeVisible", py::overload_cast<Component&, int>(&Component::addAndMakeVisible), "component"_a, "index"_a = -1, py::return_value_policy::reference_internal)
+        .def ("addAndMakeVisible", py::overload_cast<Component*, int>(&Component::addAndMakeVisible), "component"_a, "index"_a = -1, py::return_value_policy::reference_internal)
+        .def ("removeChildComponent", py::overload_cast<Component&>(&Component::removeChildComponent))
+        .def ("removeChildComponent", py::overload_cast<Component*>(&Component::removeChildComponent))
+        .def ("removeChildComponent", py::overload_cast<int>(&Component::removeChildComponent))
+        .def ("removeAllChildren", &Component::removeAllChildren)
+        .def ("getNumChildComponents", &Component::getNumChildComponents)
+        .def ("getChildComponent", &Component::getChildComponent, py::return_value_policy::reference_internal)
+        .def ("getIndexOfChildComponent", &Component::getIndexOfChildComponent)
+        .def ("findComponentAt", &Component::findComponentAt, py::return_value_policy::reference_internal)
+        .def ("getTopLevelComponent", &Component::getTopLevelComponent, py::return_value_policy::reference_internal)
+
+        // Properties
+        .def ("getProperties", py::overload_cast<>(&Component::getProperties), py::return_value_policy::reference_internal)
+
+        // Mouse events
+        .def ("setWantsMouseEvents", &Component::setWantsMouseEvents)
+        .def ("doesWantSelfMouseEvents", &Component::doesWantSelfMouseEvents)
+        .def ("doesWantChildrenMouseEvents", &Component::doesWantChildrenMouseEvents)
+        .def ("addMouseListener", &Component::addMouseListener, py::return_value_policy::reference_internal)
+        .def ("removeMouseListener", &Component::removeMouseListener)
+
+        // Style system
+        .def ("setStyle", &Component::setStyle)
+        .def ("getStyle", &Component::getStyle)
+        .def ("setColor", &Component::setColor)
+        .def ("getColor", &Component::getColor)
+        .def ("findColor", &Component::findColor)
+        .def ("setStyleProperty", &Component::setStyleProperty)
+        .def ("getStyleProperty", &Component::getStyleProperty)
+        .def ("findStyleProperty", &Component::findStyleProperty)
+    ;
 
     // ============================================================================================ yup::DocumentWindow
 
     py::class_<DocumentWindow, Component, PyDocumentWindow<>> classDocumentWindow (m, "DocumentWindow");
 
-#if ! YUP_PYTHON_EMBEDDED_INTERPRETER
-
     // =================================================================================================
+
+#if ! YUP_PYTHON_EMBEDDED_INTERPRETER
 
     m.def ("START_YUP_APPLICATION", [] (py::handle applicationType, bool catchExceptionsAndContinue)
     {
@@ -237,9 +407,7 @@ void registerYupGuiBindings (py::module_& m)
         }
 
         systemExit();
-    },
-           "applicationType"_a,
-           "catchExceptionsAndContinue"_a = false);
+    }, "applicationType"_a, "catchExceptionsAndContinue"_a = false);
 
     // =================================================================================================
 
@@ -329,25 +497,26 @@ void registerYupGuiBindings (py::module_& m)
         .def (py::init<py::handle>())
         .def ("processEvents", &PyTestableApplication::processEvents, "milliseconds"_a = 20)
         .def ("__enter__", [] (PyTestableApplication& self)
-    {
-        self.applicationScope = std::make_unique<PyTestableApplication::Scope> (self.applicationType);
-        return std::addressof (self);
-    },
-              py::return_value_policy::reference)
+        {
+            self.applicationScope = std::make_unique<PyTestableApplication::Scope> (self.applicationType);
+            return std::addressof (self);
+        }, py::return_value_policy::reference)
         .def ("__exit__", [] (PyTestableApplication& self, const std::optional<py::type>&, const std::optional<py::object>&, const std::optional<py::object>&)
-    {
-        self.applicationScope.reset();
-    }).def ("__next__", [] (PyTestableApplication& self)
-    {
-        self.processEvents();
-        return std::addressof (self);
-    },
-            py::return_value_policy::reference);
-
+        {
+            self.applicationScope.reset();
+        })
+        .def ("__next__", [] (PyTestableApplication& self)
+        {
+            self.processEvents();
+            return std::addressof (self);
+        }, py::return_value_policy::reference);
 #endif
 }
 
 } // namespace Bindings
+
+// clang-format on
+
 } // namespace yup
 
 // =================================================================================================

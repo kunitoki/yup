@@ -40,7 +40,7 @@ void registerYupEventsBindings (pybind11::module_& m);
 
 // =================================================================================================
 
-struct PyActionListener : public yup::ActionListener
+struct YUP_API PyActionListener : public yup::ActionListener
 {
     void actionListenerCallback (const yup::String& message) override
     {
@@ -50,7 +50,7 @@ struct PyActionListener : public yup::ActionListener
 
 // =================================================================================================
 
-struct PyAsyncUpdater : public yup::AsyncUpdater
+struct YUP_API PyAsyncUpdater : public yup::AsyncUpdater
 {
     void handleAsyncUpdate() override
     {
@@ -96,7 +96,7 @@ struct PyCallbackMessage : public PyMessageBase<Base>
 
 // =================================================================================================
 
-struct PyMessageListener : public yup::MessageListener
+struct YUP_API PyMessageListener : public yup::MessageListener
 {
     void handleMessage (const yup::Message& message) override
     {
@@ -106,7 +106,7 @@ struct PyMessageListener : public yup::MessageListener
 
 // =================================================================================================
 
-struct PyMessageManagerLock
+struct YUP_API PyMessageManagerLock
 {
     explicit PyMessageManagerLock (yup::Thread* thread)
         : thread (thread)
@@ -125,7 +125,7 @@ struct PyMessageManagerLock
 
 // =================================================================================================
 
-struct PyTimer : public yup::Timer
+struct YUP_API PyTimer : public yup::Timer
 {
     using yup::Timer::Timer;
 
@@ -137,7 +137,7 @@ struct PyTimer : public yup::Timer
 
 // =================================================================================================
 
-struct PyMultiTimer : public yup::MultiTimer
+struct YUP_API PyMultiTimer : public yup::MultiTimer
 {
     using yup::MultiTimer::MultiTimer;
 
