@@ -128,7 +128,7 @@ public:
         g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
         g.fillAll();
 
-        g.setTransform (yup::AffineTransform::rotation (
+        g.addTransform (yup::AffineTransform::rotation (
             yup::degreesToRadians (-rotation), getLocalBounds().getCenterX(), 100.0f));
 
         if (feather > 0.0f)

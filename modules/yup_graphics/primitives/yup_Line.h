@@ -597,6 +597,15 @@ public:
     }
 
     //==============================================================================
+
+    String toString() const
+    {
+        String result;
+        result << p1 << ", " << p2;
+        return result;
+    }
+
+    //==============================================================================
     /** Unary minus operator to negate both points of the line.
 
         This operator creates a new line where both the start and end points have their coordinates negated,

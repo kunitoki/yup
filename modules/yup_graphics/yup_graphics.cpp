@@ -109,3 +109,4 @@
 #include "graphics/yup_Color.cpp"
 #include "graphics/yup_Colors.cpp"
 #include "graphics/yup_Graphics.cpp"
+#include "drawables/yup_Drawable.cpp"

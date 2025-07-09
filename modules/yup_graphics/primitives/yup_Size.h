@@ -636,6 +636,15 @@ public:
     }
 
     //==============================================================================
+
+    String toString() const
+    {
+        String result;
+        result << width << ", " << height;
+        return result;
+    }
+
+    //==============================================================================
     /** Returns true if the two sizes are approximately equal. */
     constexpr bool approximatelyEqualTo (const Size& other) const noexcept
     {

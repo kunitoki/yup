@@ -24,6 +24,186 @@ namespace yup
 
 //==============================================================================
 
+PathIterator::PathIterator (const rive::RawPath& rawPath, bool atEnd)
+    : rawPath (std::addressof (rawPath))
+    , verbIndex (0)
+    , pointIndex (0)
+    , isAtEnd (atEnd)
+{
+    if (! isAtEnd)
+        updateToValidPosition();
+}
+
+PathSegment PathIterator::operator*() const
+{
+    jassert (! isAtEnd);
+    return createCurrentSegment();
+}
+
+PathIterator& PathIterator::operator++()
+{
+    if (isAtEnd)
+        return *this;
+
+    const auto& verbs = rawPath->verbs();
+
+    if (verbIndex >= verbs.size())
+    {
+        isAtEnd = true;
+        return *this;
+    }
+
+    auto verb = verbs[verbIndex];
+
+    // Advance point index based on verb type
+    switch (verb)
+    {
+        case rive::PathVerb::move:
+        case rive::PathVerb::line:
+            pointIndex += 1;
+            break;
+
+        case rive::PathVerb::quad:
+            pointIndex += 2;
+            break;
+
+        case rive::PathVerb::cubic:
+            pointIndex += 3;
+            break;
+
+        case rive::PathVerb::close:
+            // Close doesn't consume points
+            break;
+    }
+
+    ++verbIndex;
+    updateToValidPosition();
+
+    return *this;
+}
+
+PathIterator PathIterator::operator++ (int)
+{
+    PathIterator temp = *this;
+    ++(*this);
+    return temp;
+}
+
+bool PathIterator::operator== (const PathIterator& other) const
+{
+    if (isAtEnd && other.isAtEnd)
+        return true;
+
+    return rawPath == other.rawPath
+        && verbIndex == other.verbIndex
+        && pointIndex == other.pointIndex
+        && isAtEnd == other.isAtEnd;
+}
+
+bool PathIterator::operator!= (const PathIterator& other) const
+{
+    return ! (*this == other);
+}
+
+void PathIterator::updateToValidPosition()
+{
+    const auto& verbs = rawPath->verbs();
+
+    if (verbIndex >= verbs.size())
+    {
+        isAtEnd = true;
+        return;
+    }
+
+    // Ensure we have enough points for the current verb
+    const auto& points = rawPath->points();
+    auto verb = verbs[verbIndex];
+
+    size_t requiredPoints = 0;
+    switch (verb)
+    {
+        case rive::PathVerb::move:
+        case rive::PathVerb::line:
+            requiredPoints = 1;
+            break;
+
+        case rive::PathVerb::quad:
+            requiredPoints = 2;
+            break;
+
+        case rive::PathVerb::cubic:
+            requiredPoints = 3;
+            break;
+
+        case rive::PathVerb::close:
+            requiredPoints = 0;
+            break;
+    }
+
+    if (pointIndex + requiredPoints > points.size() && requiredPoints > 0)
+    {
+        isAtEnd = true;
+        return;
+    }
+}
+
+PathSegment PathIterator::createCurrentSegment() const
+{
+    const auto& verbs = rawPath->verbs();
+    const auto& points = rawPath->points();
+
+    if (verbIndex >= verbs.size())
+        return PathSegment::close(); // Should not happen with proper usage
+
+    auto verb = verbs[verbIndex];
+
+    switch (verb)
+    {
+        case rive::PathVerb::move:
+            if (pointIndex < points.size())
+            {
+                return PathSegment (PathVerb::MoveTo,
+                                    Point<float> (points[pointIndex].x, points[pointIndex].y));
+            }
+            break;
+
+        case rive::PathVerb::line:
+            if (pointIndex < points.size())
+            {
+                return PathSegment (PathVerb::LineTo,
+                                    Point<float> (points[pointIndex].x, points[pointIndex].y));
+            }
+            break;
+
+        case rive::PathVerb::quad:
+            if (pointIndex + 1 < points.size())
+            {
+                return PathSegment (PathVerb::QuadTo,
+                                    Point<float> (points[pointIndex + 1].x, points[pointIndex + 1].y), // end point
+                                    Point<float> (points[pointIndex].x, points[pointIndex].y));        // control point
+            }
+            break;
+
+        case rive::PathVerb::cubic:
+            if (pointIndex + 2 < points.size())
+            {
+                return PathSegment (PathVerb::CubicTo,
+                                    Point<float> (points[pointIndex + 2].x, points[pointIndex + 2].y),  // end point
+                                    Point<float> (points[pointIndex].x, points[pointIndex].y),          // control point 1
+                                    Point<float> (points[pointIndex + 1].x, points[pointIndex + 1].y)); // control point 2
+            }
+            break;
+
+        case rive::PathVerb::close:
+            return PathSegment::close();
+    }
+
+    // Fallback for invalid states
+    return PathSegment::close();
+}
+
+//==============================================================================
+
 Path::Path()
     : path (rive::make_rcp<rive::RiveRenderPath>())
 {
@@ -109,10 +289,13 @@ Path& Path::quadTo (float x, float y, float x1, float y1)
         moveTo (x, y);
 
     const rive::Vec2D& last = rawPath.points().back();
+    const rive::Vec2D control (x1, y1);
+    const rive::Vec2D end (x, y);
 
-    path->cubic (rive::Vec2D::lerp (last, rive::Vec2D (x1, y1), 2 / 3.f),
-                 rive::Vec2D::lerp (rive::Vec2D (x, y), rive::Vec2D (x1, y1), 2 / 3.f),
-                 rive::Vec2D (x, y));
+    const rive::Vec2D c1 = rive::Vec2D::lerp (last, control, 2.0f / 3.0f);
+    const rive::Vec2D c2 = rive::Vec2D::lerp (end, control, 2.0f / 3.0f);
+
+    path->cubic (c1, c2, end);
 
     return *this;
 }
@@ -387,7 +570,25 @@ Path& Path::addCenteredArc (const Point<float>& center, const Size<float>& diame
 }
 
 //==============================================================================
-Path& Path::addPolygon (Point<float> centre, int numberOfSides, float radius, float startAngle)
+
+void Path::addTriangle (float x1, float y1, float x2, float y2, float x3, float y3)
+{
+    addTriangle ({ x1, y1 }, { x2, y2 }, { x3, y3 });
+}
+
+void Path::addTriangle (const Point<float>& p1, const Point<float>& p2, const Point<float>& p3)
+{
+    reserveSpace (size() + 4);
+
+    moveTo (p1);
+    lineTo (p2);
+    lineTo (p3);
+    close();
+}
+
+//==============================================================================
+
+Path& Path::addPolygon (const Point<float>& centre, int numberOfSides, float radius, float startAngle)
 {
     if (numberOfSides < 3)
         return *this;
@@ -419,7 +620,8 @@ Path& Path::addPolygon (Point<float> centre, int numberOfSides, float radius, fl
 }
 
 //==============================================================================
-Path& Path::addStar (Point<float> centre, int numberOfPoints, float innerRadius, float outerRadius, float startAngle)
+
+Path& Path::addStar (const Point<float>& centre, int numberOfPoints, float innerRadius, float outerRadius, float startAngle)
 {
     if (numberOfPoints < 3)
         return *this;
@@ -453,7 +655,8 @@ Path& Path::addStar (Point<float> centre, int numberOfPoints, float innerRadius,
 }
 
 //==============================================================================
-Path& Path::addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, Point<float> arrowTipPosition, float cornerSize, float arrowBaseWidth)
+
+Path& Path::addBubble (const Rectangle<float>& bodyArea, const Rectangle<float>& maximumArea, const Point<float>& arrowTipPosition, float cornerSize, float arrowBaseWidth)
 {
     if (bodyArea.isEmpty() || maximumArea.isEmpty() || arrowBaseWidth <= 0.0f)
         return *this;
@@ -639,6 +842,67 @@ Path& Path::addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, 
 }
 
 //==============================================================================
+
+void Path::startNewSubPath (float x, float y)
+{
+    moveTo (x, y);
+}
+
+void Path::startNewSubPath (const Point<float>& p)
+{
+    moveTo (p.getX(), p.getY());
+}
+
+void Path::closeSubPath()
+{
+    close();
+}
+
+bool Path::isClosed (float tolerance) const
+{
+    auto first = begin();
+    auto last = end();
+    if (first == last)
+        return false;
+
+    Point<float> firstPoint (0.0f, 0.0f);
+    Point<float> lastPoint (0.0f, 0.0f);
+    bool hasFirstPoint = false;
+
+    for (; first != last; ++first)
+    {
+        auto segment = *first;
+        if (segment.verb == PathVerb::MoveTo && ! hasFirstPoint)
+        {
+            firstPoint = segment.point;
+            hasFirstPoint = true;
+        }
+
+        if (segment.verb != PathVerb::Close)
+            lastPoint = segment.point;
+        else
+            return true;
+    }
+
+    if (! hasFirstPoint)
+        return false;
+
+    return firstPoint.distanceTo (lastPoint) <= tolerance;
+}
+
+bool Path::isExplicitlyClosed() const
+{
+    for (const auto& segment : *this)
+    {
+        if (segment.verb == PathVerb::Close)
+            return true;
+    }
+
+    return false;
+}
+
+//==============================================================================
+
 Path& Path::appendPath (const Path& other)
 {
     path->addRenderPath (other.getRenderPath(), rive::Mat2D());
@@ -664,12 +928,14 @@ void Path::appendPath (rive::rcp<rive::RiveRenderPath> other, const AffineTransf
 }
 
 //==============================================================================
+
 void Path::swapWithPath (Path& other) noexcept
 {
     path.swap (other.path);
 }
 
 //==============================================================================
+
 Path& Path::transform (const AffineTransform& t)
 {
     auto newPath = rive::make_rcp<rive::RiveRenderPath>();
@@ -686,6 +952,7 @@ Path Path::transformed (const AffineTransform& t) const
 }
 
 //==============================================================================
+
 Rectangle<float> Path::getBounds() const
 {
     const auto& aabb = path->getBounds();
@@ -698,6 +965,7 @@ Rectangle<float> Path::getBoundsTransformed (const AffineTransform& transform) c
 }
 
 //==============================================================================
+
 void Path::scaleToFit (float x, float y, float width, float height, bool preserveProportions) noexcept
 {
     if (width <= 0.0f || height <= 0.0f)
@@ -728,12 +996,36 @@ void Path::scaleToFit (float x, float y, float width, float height, bool preserv
 }
 
 //==============================================================================
+
+PathIterator Path::begin()
+{
+    return PathIterator (path->getRawPath(), false);
+}
+
+PathIterator Path::begin() const
+{
+    return PathIterator (path->getRawPath(), false);
+}
+
+PathIterator Path::end()
+{
+    return PathIterator (path->getRawPath(), true);
+}
+
+PathIterator Path::end() const
+{
+    return PathIterator (path->getRawPath(), true);
+}
+
+//==============================================================================
+
 rive::RiveRenderPath* Path::getRenderPath() const
 {
     return path.get();
 }
 
 //==============================================================================
+
 String Path::toString() const
 {
     const auto& rawPath = path->getRawPath();
@@ -807,8 +1099,10 @@ String Path::toString() const
 }
 
 //==============================================================================
+
 namespace
 {
+
 bool isControlMarker (String::CharPointerType data)
 {
     return ! data.isEmpty() && String ("MmLlHhVvQqCcSsZz").containsChar (*data);
@@ -920,6 +1214,7 @@ bool parseCoordinates (String::CharPointerType& data, float& x, float& y)
 void handleMoveTo (String::CharPointerType& data, Path& path, float& currentX, float& currentY, float& startX, float& startY, bool relative)
 {
     float x, y;
+    bool isFirstCoordinate = true;
 
     while (! data.isEmpty()
            && ! isControlMarker (data)
@@ -931,10 +1226,20 @@ void handleMoveTo (String::CharPointerType& data, Path& path, float& currentX, f
             y += currentY;
         }
 
-        path.moveTo (x, y);
-
-        currentX = startX = x;
-        currentY = startY = y;
+        if (isFirstCoordinate)
+        {
+            path.moveTo (x, y);
+            currentX = startX = x;
+            currentY = startY = y;
+            isFirstCoordinate = false;
+        }
+        else
+        {
+            // Subsequent coordinates are implicit line commands according to SVG spec
+            path.lineTo (x, y);
+            currentX = x;
+            currentY = y;
+        }
 
         skipWhitespace (data);
     }
@@ -1001,7 +1306,7 @@ void handleVerticalLineTo (String::CharPointerType& data, Path& path, float curr
     }
 }
 
-void handleQuadTo (String::CharPointerType& data, Path& path, float& currentX, float& currentY, bool relative)
+void handleQuadTo (String::CharPointerType& data, Path& path, float& currentX, float& currentY, float& lastQuadX, float& lastQuadY, bool relative)
 {
     float x1, y1, x, y;
 
@@ -1018,10 +1323,14 @@ void handleQuadTo (String::CharPointerType& data, Path& path, float& currentX, f
             y += currentY;
         }
 
-        path.quadTo (x1, y1, x, y);
+        path.quadTo (x, y, x1, y1);
 
         currentX = x;
         currentY = y;
+
+        // Update the last control point for smooth curves
+        lastQuadX = x1;
+        lastQuadY = y1;
 
         skipWhitespace (data);
     }
@@ -1056,7 +1365,7 @@ void handleSmoothQuadTo (String::CharPointerType& data, Path& path, float& curre
             y += currentY;
         }
 
-        path.quadTo (cx, cy, x, y);
+        path.quadTo (x, y, cx, cy);
 
         // Update the current position
         currentX = x;
@@ -1070,7 +1379,7 @@ void handleSmoothQuadTo (String::CharPointerType& data, Path& path, float& curre
     }
 }
 
-void handleCubicTo (String::CharPointerType& data, Path& path, float& currentX, float& currentY, bool relative)
+void handleCubicTo (String::CharPointerType& data, Path& path, float& currentX, float& currentY, float& lastControlX, float& lastControlY, bool relative)
 {
     float x1, y1, x2, y2, x, y;
 
@@ -1094,6 +1403,10 @@ void handleCubicTo (String::CharPointerType& data, Path& path, float& currentX, 
 
         currentX = x;
         currentY = y;
+
+        // Update the last control point for smooth curves (second control point)
+        lastControlX = x2;
+        lastControlY = y2;
 
         skipWhitespace (data);
     }
@@ -1207,7 +1520,11 @@ void handleEllipticalArc (String::CharPointerType& data, Path& path, float& curr
 
             // Calculate the center point (cx, cy)
             float sign = (largeArc != sweep) ? 1.0f : -1.0f;
-            float sqrtFactor = std::sqrt ((rxSq * rySq - rxSq * y1PrimeSq - rySq * x1PrimeSq) / (rxSq * y1PrimeSq + rySq * x1PrimeSq));
+            float numerator = rxSq * rySq - rxSq * y1PrimeSq - rySq * x1PrimeSq;
+            float denominator = rxSq * y1PrimeSq + rySq * x1PrimeSq;
+            float sqrtFactor = 0.0f;
+            if (denominator > 0.0f && numerator >= 0.0f)
+                sqrtFactor = std::sqrt (numerator / denominator);
             float cxPrime = sign * sqrtFactor * (rx * y1Prime / ry);
             float cyPrime = sign * sqrtFactor * (-ry * x1Prime / rx);
 
@@ -1236,8 +1553,9 @@ void handleEllipticalArc (String::CharPointerType& data, Path& path, float& curr
             // Ensure the delta angle is within the range [-2π, 2π]
             deltaAngle = std::fmod (deltaAngle, MathConstants<float>::twoPi);
 
-            // Add the arc to the path
-            path.addCenteredArc (centreX, centreY, rx, ry, xAxisRotation, startAngle, startAngle + deltaAngle, true);
+            // Add the arc to the path (use angleRad which is already in radians)
+            // Don't start new subpath - SVG arcs continue from current position
+            path.addCenteredArc (centreX, centreY, rx, ry, angleRad, startAngle, startAngle + deltaAngle, false);
 
             // Update the current position
             currentX = x;
@@ -1278,50 +1596,83 @@ bool Path::fromString (const String& pathData)
             case 'M': // Move to absolute
             case 'm': // Move to relative
                 handleMoveTo (data, *this, currentX, currentY, startX, startY, command == 'm');
+                // Reset control points after move
+                lastControlX = currentX;
+                lastControlY = currentY;
+                lastQuadX = currentX;
+                lastQuadY = currentY;
                 break;
 
             case 'L': // Line to absolute
             case 'l': // Line to relative
                 handleLineTo (data, *this, currentX, currentY, command == 'l');
+                // Reset control points after line (non-curve command)
+                lastControlX = currentX;
+                lastControlY = currentY;
+                lastQuadX = currentX;
+                lastQuadY = currentY;
                 break;
 
             case 'H': // Horizontal line to absolute
             case 'h': // Horizontal line to relative
                 handleHorizontalLineTo (data, *this, currentX, currentY, command == 'h');
+                // Reset control points after line (non-curve command)
+                lastControlX = currentX;
+                lastControlY = currentY;
+                lastQuadX = currentX;
+                lastQuadY = currentY;
                 break;
 
             case 'V': // Vertical line to absolute
             case 'v': // Vertical line to relative
                 handleVerticalLineTo (data, *this, currentX, currentY, command == 'v');
-                break;
-
-            case 'Q': // Quadratic Bezier curve to absolute
-            case 'q': // Quadratic Bezier curve to relative
-                handleQuadTo (data, *this, currentX, currentY, command == 'q');
+                // Reset control points after line (non-curve command)
+                lastControlX = currentX;
+                lastControlY = currentY;
                 lastQuadX = currentX;
                 lastQuadY = currentY;
                 break;
 
+            case 'Q': // Quadratic Bezier curve to absolute
+            case 'q': // Quadratic Bezier curve to relative
+                handleQuadTo (data, *this, currentX, currentY, lastQuadX, lastQuadY, command == 'q');
+                // Reset cubic control points (quadratic doesn't affect cubic control points)
+                lastControlX = currentX;
+                lastControlY = currentY;
+                break;
+
             case 'T': // Quadratic Smooth Bezier curve to absolute
             case 't': // Quadratic Smooth Bezier curve to relative
-                handleSmoothQuadTo (data, *this, currentX, currentY, lastQuadX, lastQuadY, command == 'q');
+                handleSmoothQuadTo (data, *this, currentX, currentY, lastQuadX, lastQuadY, command == 't');
+                // Reset cubic control points (quadratic doesn't affect cubic control points)
+                lastControlX = currentX;
+                lastControlY = currentY;
                 break;
 
             case 'C': // Cubic Bezier curve to absolute
             case 'c': // Cubic Bezier curve to relative
-                handleCubicTo (data, *this, currentX, currentY, command == 'c');
-                lastControlX = currentX;
-                lastControlY = currentY;
+                handleCubicTo (data, *this, currentX, currentY, lastControlX, lastControlY, command == 'c');
+                // Reset quadratic control points (cubic doesn't affect quadratic control points)
+                lastQuadX = currentX;
+                lastQuadY = currentY;
                 break;
 
             case 'S': // Cubic Smooth Bezier curve to absolute
             case 's': // Cubic Smooth Bezier curve to relative
                 handleSmoothCubicTo (data, *this, currentX, currentY, lastControlX, lastControlY, command == 's');
+                // Reset quadratic control points (cubic doesn't affect quadratic control points)
+                lastQuadX = currentX;
+                lastQuadY = currentY;
                 break;
 
             case 'A': // Elliptical Arc to absolute
             case 'a': // Elliptical Arc to relative
                 handleEllipticalArc (data, *this, currentX, currentY, command == 'a');
+                // Reset control points after arc (non-curve command)
+                lastControlX = currentX;
+                lastControlY = currentY;
+                lastQuadX = currentX;
+                lastQuadY = currentY;
                 break;
 
             case 'Z': // Close path
@@ -1346,6 +1697,7 @@ bool Path::fromString (const String& pathData)
 }
 
 //==============================================================================
+
 Point<float> Path::getPointAlongPath (float distance) const
 {
     // Clamp distance to valid range
@@ -1538,6 +1890,7 @@ Point<float> Path::getPointAlongPath (float distance) const
 }
 
 //==============================================================================
+
 Path Path::createStrokePolygon (float strokeWidth) const
 {
     // For now, create a simple approximation by offsetting the path

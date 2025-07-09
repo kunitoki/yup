@@ -239,6 +239,13 @@ public:
     */
     void setTransform (const AffineTransform& transform);
 
+    /** Adds a transformation to the current transformation matrix.
+        The new transform is applied on top of the existing transform.
+
+        @param transform The transformation to add to the current transform.
+    */
+    void addTransform (const AffineTransform& transform);
+
     /** Retrieves the current affine transformation.
 
         @return The current affine transformation.

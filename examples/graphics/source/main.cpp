@@ -44,6 +44,7 @@
 #include "examples/Paths.h"
 #include "examples/PopupMenu.h"
 #include "examples/TextEditor.h"
+#include "examples/Svg.h"
 #include "examples/VariableFonts.h"
 #include "examples/Widgets.h"
 
@@ -113,6 +114,19 @@ public:
             jassert (artboard.loadArtboard());
         });
         registerDemo<OpaqueDemo> ("Opaque Demo", counter++);
+
+        {
+            auto button = std::make_unique<yup::TextButton> ("SVG");
+            button->onClick = [this, number = counter++]
+            {
+                selectComponent (number);
+            };
+            addAndMakeVisible (button.get());
+            buttons.add (std::move (button));
+
+            components.add (std::make_unique<yup::SvgDemo>());
+            addChildComponent (components.getLast());
+        }
 
         selectComponent (0);
 

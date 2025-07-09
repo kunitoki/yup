@@ -1261,6 +1261,15 @@ public:
     }
 
     //==============================================================================
+
+    String toString() const
+    {
+        String result;
+        result << x << ", " << y;
+        return result;
+    }
+
+    //==============================================================================
     /** Returns true if the two points are approximately equal. */
     constexpr bool approximatelyEqualTo (const Point& other) const noexcept
     {

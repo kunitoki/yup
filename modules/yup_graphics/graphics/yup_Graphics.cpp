@@ -122,10 +122,31 @@ void convertRawPathToRenderPath (const rive::RawPath& input, rive::RenderPath* o
 
 rive::rcp<rive::RenderShader> toColorGradient (rive::Factory& factory, const ColorGradient& gradient, const AffineTransform& transform)
 {
-    const uint32 colors[] = { gradient.getStartColor(), gradient.getFinishColor() };
+    const auto& colorStops = gradient.getStops();
 
-    float stops[] = { gradient.getStartDelta(), gradient.getFinishDelta() };
-    transform.transformPoints (stops[0], stops[1]);
+    if (colorStops.empty())
+        return nullptr;
+
+    // Handle single color stop as solid color
+    if (colorStops.size() == 1)
+    {
+        uint32 color = colorStops[0].color;
+        float stops[] = { 0.0f };
+        return factory.makeLinearGradient (0.0f, 0.0f, 1.0f, 0.0f, &color, stops, 1);
+    }
+
+    // Create dynamic arrays for colors and stops
+    std::vector<uint32> colors;
+    std::vector<float> stops;
+
+    colors.reserve (colorStops.size());
+    stops.reserve (colorStops.size());
+
+    for (const auto& stop : colorStops)
+    {
+        colors.push_back (stop.color);
+        stops.push_back (stop.delta);
+    }
 
     if (gradient.getType() == ColorGradient::Linear)
     {
@@ -135,7 +156,7 @@ rive::rcp<rive::RenderShader> toColorGradient (rive::Factory& factory, const Col
         float y2 = gradient.getFinishY();
         transform.transformPoints (x1, y1, x2, y2);
 
-        return factory.makeLinearGradient (x1, y1, x2, y2, colors, stops, sizeof (colors));
+        return factory.makeLinearGradient (x1, y1, x2, y2, colors.data(), stops.data(), colors.size());
     }
     else
     {
@@ -145,7 +166,7 @@ rive::rcp<rive::RenderShader> toColorGradient (rive::Factory& factory, const Col
         [[maybe_unused]] float radiusY = gradient.getRadius();
         transform.transformPoints (x1, y1, radiusX, radiusY);
 
-        return factory.makeRadialGradient (x1, y1, radiusX, colors, stops, sizeof (colors));
+        return factory.makeRadialGradient (x1, y1, radiusX, colors.data(), stops.data(), colors.size());
     }
 }
 
@@ -370,6 +391,11 @@ Rectangle<float> Graphics::getDrawingArea() const
 
 //==============================================================================
 void Graphics::setTransform (const AffineTransform& transform)
+{
+    currentRenderOptions().transform = transform;
+}
+
+void Graphics::addTransform (const AffineTransform& transform)
 {
     currentRenderOptions().transform = currentRenderOptions().transform.followedBy (transform);
 }
