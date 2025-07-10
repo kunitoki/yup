@@ -24,7 +24,7 @@ testpaths = ["tests"]
 [tool.cibuildwheel]
 build-verbosity = 3
 test-requires = "pytest" # mypy numpy imageio
-test-command = "pytest -s {project}/python/tests"
+test-command = "pytest -s {project}/python/tests -vvv"
 manylinux-i686-image = "manylinux_2_28"
 manylinux-x86_64-image = "manylinux_2_28"
 manylinux-aarch64-image = "manylinux_2_28"
@@ -38,7 +38,7 @@ before-build = [
 ]
 
 test-command = [
-    "xvfb-run -a -s \"-screen 0 1024x768x24\" pytest -s {project}/python/tests"
+    "xvfb-run -a -s \"-screen 0 1024x768x24\" pytest -s {project}/python/tests -vvv"
 #    """xvfb-run -a -s \"-screen 0 1024x768x24\" pytest -s {project}/python/tests || \
 #        { (mkdir -p /output/compare_data && cp {project}/python/tests/compare_data/* /output/compare_data/) ; exit 1 ; }"""
 ]
