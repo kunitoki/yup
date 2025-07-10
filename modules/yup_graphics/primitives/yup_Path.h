@@ -53,7 +53,7 @@ public:
     /** Represents a segment in a path with its verb and associated points. */
     struct Segment
     {
-        Verb verb;              /**< The type of path operation. */
+        Verb verb;                  /**< The type of path operation. */
         Point<float> point;         /**< The main point (end point for most operations). */
         Point<float> controlPoint1; /**< First control point for curves. */
         Point<float> controlPoint2; /**< Second control point for cubic curves. */
