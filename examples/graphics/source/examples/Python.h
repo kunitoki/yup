@@ -39,17 +39,16 @@ public:
             locals["yup"] = pybind11::module_::import (yup::PythonModuleName);
             locals["this"] = pybind11::cast (this);
 
-            auto result = engine.runScript (yup::String (R"(
+            auto script = yup::String (R"(
                 import sys
                 print("Scripting YUP!")
                 this.backgroundColor = yup.Color.opaqueRandom()
                 this.repaint();
-            )")
-                                                .dedentLines(),
-                                            locals);
+            )");
 
+            auto result = engine.runScript (script.dedentLines(), locals);
             if (result.failed())
-                std::cout << result.getErrorMessage();
+                YUP_DBG (result.getErrorMessage());
         };
         addAndMakeVisible (runPython);
     }
