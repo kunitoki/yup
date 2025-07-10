@@ -34,7 +34,20 @@ public:
         runPython.setButtonText("Run Python!");
         runPython.onClick = [this]
         {
-            engine.runScript("print ('Hello, World!')");
+            pybind11::dict locals;
+            locals["custom"] = pybind11::module_::import ("custom");
+            locals["yup"] = pybind11::module_::import (yup::PythonModuleName);
+            locals["this"] = pybind11::cast (this);
+
+            auto result = engine.runScript (yup::String (R"(
+                import sys
+                print("Scripting YUP!")
+                this.backgroundColor = yup.Color.opaqueRandom()
+                this.repaint();
+            )").dedentLines(), locals);
+
+            if (result.failed())
+                std::cout << result.getErrorMessage();
         };
         addAndMakeVisible (runPython);
     }
@@ -53,11 +66,25 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.setFillColor (backgroundColor);
         g.fillAll();
     }
+
+    yup::Color backgroundColor = yup::Colors::transparentBlack;
 
 private:
     yup::TextButton runPython;
     yup::ScriptEngine engine;
 };
+
+//==============================================================================
+
+PYBIND11_EMBEDDED_MODULE(custom, m)
+{
+    namespace py = pybind11;
+
+    py::module_::import (yup::PythonModuleName);
+
+    py::class_<PythonDemo, yup::Component> (m, "PythonDemo")
+        .def_readwrite ("backgroundColor", &PythonDemo::backgroundColor);
+}
