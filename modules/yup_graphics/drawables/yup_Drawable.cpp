@@ -881,7 +881,7 @@ void Drawable::paintDebugElement (Graphics& g, const Element& element)
         g.setStrokeWidth (2.0f);
         g.strokeRect (segment.point.getX() - 4, segment.point.getY() - 4, 8, 8);
 
-        if (segment.verb == PathVerb::CubicTo)
+        if (segment.verb == Path::Verb::CubicTo)
         {
             g.setFillColor (color.brighter (0.05f));
             g.fillRect (segment.controlPoint1.getX() - 4, segment.controlPoint1.getY() - 4, 8, 8);

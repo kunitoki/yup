@@ -23,99 +23,6 @@ namespace yup
 {
 
 //==============================================================================
-/** Represents the type of operation in a path segment. */
-enum class PathVerb
-{
-    MoveTo,  /**< Move to a point without drawing. */
-    LineTo,  /**< Draw a line to a point. */
-    QuadTo,  /**< Draw a quadratic Bezier curve. */
-    CubicTo, /**< Draw a cubic Bezier curve. */
-    Close    /**< Close the current sub-path. */
-};
-
-//==============================================================================
-/** Represents a segment in a path with its verb and associated points. */
-struct PathSegment
-{
-    PathVerb verb;              /**< The type of path operation. */
-    Point<float> point;         /**< The main point (end point for most operations). */
-    Point<float> controlPoint1; /**< First control point for curves. */
-    Point<float> controlPoint2; /**< Second control point for cubic curves. */
-
-    /** Creates a MoveTo or LineTo segment. */
-    PathSegment (PathVerb v, Point<float> p)
-        : verb (v)
-        , point (p)
-        , controlPoint1 (0.0f, 0.0f)
-        , controlPoint2 (0.0f, 0.0f)
-    {
-    }
-
-    /** Creates a QuadTo segment. */
-    PathSegment (PathVerb v, Point<float> p, Point<float> c1)
-        : verb (v)
-        , point (p)
-        , controlPoint1 (c1)
-        , controlPoint2 (0.0f, 0.0f)
-    {
-    }
-
-    /** Creates a CubicTo segment. */
-    PathSegment (PathVerb v, Point<float> p, Point<float> c1, Point<float> c2)
-        : verb (v)
-        , point (p)
-        , controlPoint1 (c1)
-        , controlPoint2 (c2)
-    {
-    }
-
-    /** Creates a Close segment. */
-    static PathSegment close()
-    {
-        return PathSegment (PathVerb::Close, Point<float> (0.0f, 0.0f));
-    }
-};
-
-//==============================================================================
-/** A forward iterator for iterating through path segments. */
-class PathIterator
-{
-public:
-    /** Creates an iterator for the given path. */
-    PathIterator (const rive::RawPath& rawPath, bool atEnd = false);
-
-    /** Copy constructor. */
-    PathIterator (const PathIterator& other) = default;
-
-    /** Assignment operator. */
-    PathIterator& operator= (const PathIterator& other) = default;
-
-    /** Dereference operator to get the current segment. */
-    PathSegment operator*() const;
-
-    /** Pre-increment operator. */
-    PathIterator& operator++();
-
-    /** Post-increment operator. */
-    PathIterator operator++ (int);
-
-    /** Equality comparison. */
-    bool operator== (const PathIterator& other) const;
-
-    /** Inequality comparison. */
-    bool operator!= (const PathIterator& other) const;
-
-private:
-    const rive::RawPath* rawPath;
-    size_t verbIndex;
-    size_t pointIndex;
-    bool isAtEnd;
-
-    void updateToValidPosition();
-    PathSegment createCurrentSegment() const;
-};
-
-//==============================================================================
 /** Represents a 2D geometric path.
 
     The Path class encapsulates a series of geometric operations and shapes that can be described
@@ -131,6 +38,60 @@ private:
 class YUP_API Path
 {
 public:
+    //==============================================================================
+    /** Represents the type of operation in a path segment. */
+    enum class Verb
+    {
+        MoveTo,  /**< Move to a point without drawing. */
+        LineTo,  /**< Draw a line to a point. */
+        QuadTo,  /**< Draw a quadratic Bezier curve. */
+        CubicTo, /**< Draw a cubic Bezier curve. */
+        Close    /**< Close the current sub-path. */
+    };
+
+    //==============================================================================
+    /** Represents a segment in a path with its verb and associated points. */
+    struct Segment
+    {
+        Verb verb;              /**< The type of path operation. */
+        Point<float> point;         /**< The main point (end point for most operations). */
+        Point<float> controlPoint1; /**< First control point for curves. */
+        Point<float> controlPoint2; /**< Second control point for cubic curves. */
+
+        /** Creates a MoveTo or LineTo segment. */
+        Segment (Verb v, Point<float> p)
+            : verb (v)
+            , point (p)
+            , controlPoint1 (0.0f, 0.0f)
+            , controlPoint2 (0.0f, 0.0f)
+        {
+        }
+
+        /** Creates a QuadTo segment. */
+        Segment (Verb v, Point<float> p, Point<float> c1)
+            : verb (v)
+            , point (p)
+            , controlPoint1 (c1)
+            , controlPoint2 (0.0f, 0.0f)
+        {
+        }
+
+        /** Creates a CubicTo segment. */
+        Segment (Verb v, Point<float> p, Point<float> c1, Point<float> c2)
+            : verb (v)
+            , point (p)
+            , controlPoint1 (c1)
+            , controlPoint2 (c2)
+        {
+        }
+
+        /** Creates a Close segment. */
+        static Segment close()
+        {
+            return Segment (Verb::Close, Point<float> (0.0f, 0.0f));
+        }
+    };
+
     //==============================================================================
     /** Constructs an empty path. */
     Path();
@@ -523,8 +484,27 @@ public:
     Path& addCenteredArc (const Point<float>& center, const Size<float>& diameter, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath);
 
     //==============================================================================
+    /** Adds a triangle to the path.
+
+        This method appends a triangle with the specified vertices to the path.
+
+        @param x1 The x-coordinate of the first vertex.
+        @param y1 The y-coordinate of the first vertex.
+        @param x2 The x-coordinate of the second vertex.
+        @param y2 The y-coordinate of the second vertex.
+        @param x3 The x-coordinate of the third vertex.
+        @param y3 The y-coordinate of the third vertex.
+    */
     void addTriangle (float x1, float y1, float x2, float y2, float x3, float y3);
 
+    /** Adds a triangle to the path.
+
+        This method appends a triangle with the specified vertices to the path.
+
+        @param p1 The first vertex of the triangle.
+        @param p2 The second vertex of the triangle.
+        @param p3 The third vertex of the triangle.
+    */
     void addTriangle (const Point<float>& p1, const Point<float>& p2, const Point<float>& p3);
 
     //==============================================================================
@@ -594,12 +574,47 @@ public:
 
     //==============================================================================
 
+    /** Starts a new sub-path at the specified point.
+
+        This method starts a new sub-path at the given point, which becomes the current point.
+        Sub-paths are used to create multiple disconnected shapes within a single path.
+
+        @param x The x-coordinate of the starting point.
+        @param y The y-coordinate of the starting point.
+    */
     void startNewSubPath (float x, float y);
+
+    /** Starts a new sub-path at the specified point.
+
+        This method starts a new sub-path at the given point, which becomes the current point.
+        Sub-paths are used to create multiple disconnected shapes within a single path.
+
+        @param p The starting point of the sub-path.
+    */
     void startNewSubPath (const Point<float>& p);
 
+    /** Closes the current sub-path.
+
+        This method closes the current sub-path by adding a line segment from the current point
+        to the starting point of the sub-path. The current point is updated to the starting point.
+    */
     void closeSubPath();
 
+    //==============================================================================
+    /** Checks if the current sub-path is closed.
+
+        This method checks if the current sub-path is closed by comparing the current point
+        to the starting point of the sub-path.
+
+        @param tolerance The tolerance for the comparison.
+    */
     bool isClosed (float tolerance = 0.001f) const;
+
+    /** Checks if the current sub-path is explicitly closed.
+
+        This method checks if the current sub-path is explicitly closed by checking if the
+        last segment is a Close segment.
+    */
     bool isExplicitlyClosed() const;
 
     //==============================================================================
@@ -629,6 +644,10 @@ public:
         @param other The path to swap with.
     */
     void swapWithPath (Path& other) noexcept;
+
+    //==============================================================================
+    /** */
+    Path createCopy() const;
 
     //==============================================================================
     /** Transforms the path by applying an affine transformation.
@@ -713,6 +732,44 @@ public:
     bool fromString (const String& pathData);
 
     //==============================================================================
+    /** A forward iterator for iterating through path segments. */
+    class Iterator
+    {
+    public:
+        /** Creates an iterator for the given path. */
+        Iterator (const rive::RawPath& rawPath, bool atEnd = false);
+
+        /** Copy constructor. */
+        Iterator (const Iterator& other) = default;
+
+        /** Assignment operator. */
+        Iterator& operator= (const Iterator& other) = default;
+
+        /** Dereference operator to get the current segment. */
+        Segment operator*() const;
+
+        /** Pre-increment operator. */
+        Iterator& operator++();
+
+        /** Post-increment operator. */
+        Iterator operator++ (int);
+
+        /** Equality comparison. */
+        bool operator== (const Iterator& other) const;
+
+        /** Inequality comparison. */
+        bool operator!= (const Iterator& other) const;
+
+    private:
+        void updateToValidPosition();
+        Segment createCurrentSegment() const;
+
+        const rive::RawPath* rawPath;
+        size_t verbIndex;
+        size_t pointIndex;
+        bool isAtEnd;
+    };
+
     /** Provides an iterator to the beginning of the path data.
 
         This method returns an iterator pointing to the first segment in the path's data.
@@ -720,7 +777,7 @@ public:
 
         @return A PathIterator to the beginning of the path data.
     */
-    PathIterator begin();
+    Iterator begin();
 
     /** Provides a constant iterator to the beginning of the path data.
 
@@ -729,7 +786,7 @@ public:
 
         @return A constant PathIterator to the beginning of the path data.
     */
-    PathIterator begin() const;
+    Iterator begin() const;
 
     /** Provides an iterator to the end of the path data.
 
@@ -738,7 +795,7 @@ public:
 
         @return A PathIterator to the end of the path data.
     */
-    PathIterator end();
+    Iterator end();
 
     /** Provides a constant iterator to the end of the path data.
 
@@ -747,7 +804,12 @@ public:
 
         @return A constant PathIterator to the end of the path data.
     */
-    PathIterator end() const;
+    Iterator end() const;
+
+    //==============================================================================
+
+    friend bool operator== (const Path& lhs, const Path& rhs) noexcept;
+    friend bool operator!= (const Path& lhs, const Path& rhs) noexcept;
 
     //==============================================================================
     /** @internal Constructs a path from a raw render path. */

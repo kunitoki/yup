@@ -164,10 +164,11 @@ void registerPoint (py::module_& m)
                     << "(" << self.getX() << ", " << self.getY() << ")";
                 return result;
             })
+            //.def ("__str__", &T::toString)
             .def ("__str__", [](const T& self)
             {
                 String result;
-                result << "(" << self.getX() << ", " << self.getY() << ")";
+                result << self.getX() << ", " << self.getY();
                 return result;
             })
         ;
@@ -279,11 +280,12 @@ void registerLine (py::module_& m)
                     << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
                     << "(" << self.getStartX() << ", " << self.getStartY() << ", " << self.getEndX() << ", " << self.getEndY() << ")";
                 return result;
-            }).def ("__str__", [] (const T& self)
+            })
+            //.def ("__str__", &T::toString)
+            .def ("__str__", [] (const T& self)
             {
                 String result;
-                result
-                    << "(" << self.getStartX() << ", " << self.getStartY() << "), (" << self.getEndX() << ", " << self.getEndY() << ")";
+                result << self.getStartX() << ", " << self.getStartY() << ", " << self.getEndX() << ", " << self.getEndY();
                 return result;
             })
         ;
@@ -294,6 +296,122 @@ void registerLine (py::module_& m)
     }() && ...);
 
     m.add_object ("Line", type);
+}
+
+// ============================================================================================
+
+template <template <class> class Class, class... Types>
+void registerSize (py::module_& m)
+{
+    py::dict type;
+
+    ([&]
+    {
+        using ValueType = Types;
+        using T = Class<ValueType>;
+
+        const auto className = Helpers::pythonizeCompoundClassName ("Size", typeid (Types).name());
+
+        auto class_ = py::class_<T> (m, className.toRawUTF8())
+            // Constructors
+            .def (py::init<>())
+            .def (py::init<ValueType, ValueType>())
+            .def (py::init<const T&>())
+
+            // Width accessors
+            .def ("getWidth", &T::getWidth)
+            .def ("setWidth", &T::setWidth)
+            .def ("withWidth", &T::withWidth)
+
+            // Height accessors
+            .def ("getHeight", &T::getHeight)
+            .def ("setHeight", &T::setHeight)
+            .def ("withHeight", &T::withHeight)
+
+            // State checking methods
+            .def ("isZero", &T::isZero)
+            .def ("isEmpty", &T::isEmpty)
+            .def ("isVerticallyEmpty", &T::isVerticallyEmpty)
+            .def ("isHorizontallyEmpty", &T::isHorizontallyEmpty)
+            .def ("isSquare", &T::isSquare)
+
+            // Utility methods
+            .def ("area", &T::area)
+            .def ("reverse", &T::reverse)
+            .def ("reversed", &T::reversed)
+
+            // Enlarge methods
+            .def ("enlarge", py::overload_cast<ValueType> (&T::enlarge))
+            .def ("enlarge", py::overload_cast<ValueType, ValueType> (&T::enlarge))
+            .def ("enlarged", py::overload_cast<ValueType> (&T::enlarged, py::const_))
+            .def ("enlarged", py::overload_cast<ValueType, ValueType> (&T::enlarged, py::const_))
+
+            // Reduce methods
+            .def ("reduce", py::overload_cast<ValueType> (&T::reduce))
+            .def ("reduce", py::overload_cast<ValueType, ValueType> (&T::reduce))
+            .def ("reduced", py::overload_cast<ValueType> (&T::reduced, py::const_))
+            .def ("reduced", py::overload_cast<ValueType, ValueType> (&T::reduced, py::const_))
+
+            // Conversion methods
+            .def ("toInt", [](const T& self) { return self.template to<int>(); })
+            .def ("toLong", [](const T& self) { return self.template to<long>(); })
+            .def ("toFloat", [](const T& self) { return self.template to<float>(); })
+            .def ("toDouble", [](const T& self) { return self.template to<double>(); })
+            .def ("toPoint", [](const T& self) { return self.template toPoint<ValueType>(); })
+            .def ("toRectangle", [](const T& self) { return self.template toRectangle<ValueType>(); })
+            .def ("toRectangle", [](const T& self, ValueType x, ValueType y) { return self.template toRectangle<ValueType> (x, y); })
+            .def ("toRectangle", [](const T& self, Point<ValueType> xy) { return self.template toRectangle<ValueType> (xy); })
+
+            // String conversion
+            .def ("toString", &T::toString)
+
+            // Comparison
+            .def (py::self == py::self)
+            .def (py::self != py::self)
+            .def ("approximatelyEqualTo", &T::approximatelyEqualTo)
+
+            // Operators
+            .def (py::self * ValueType())
+            .def (py::self *= ValueType())
+            .def (py::self / ValueType())
+            .def (py::self /= ValueType())
+
+            .def ("__repr__", [](const T& self)
+            {
+                String result;
+                result
+                    << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
+                    << "(" << self.getWidth() << ", " << self.getHeight() << ")";
+                return result;
+            })
+            //.def ("__str__", &T::toString)
+            .def ("__str__", [](const T& self)
+            {
+                String result;
+                result << self.getWidth() << ", " << self.getHeight();
+                return result;
+            })
+        ;
+
+        // Add floating-point specific methods
+        if constexpr (std::is_floating_point_v<ValueType>)
+        {
+            class_
+                .def ("scale", [](T& self, ValueType scaleFactor) -> T& { return self.template scale<ValueType> (scaleFactor); })
+                .def ("scale", [](T& self, ValueType scaleFactorX, ValueType scaleFactorY) -> T& { return self.template scale<ValueType> (scaleFactorX, scaleFactorY); })
+                .def ("scaled", [](const T& self, ValueType scaleFactor) { return self.template scaled<ValueType> (scaleFactor); })
+                .def ("scaled", [](const T& self, ValueType scaleFactorX, ValueType scaleFactorY) { return self.template scaled<ValueType> (scaleFactorX, scaleFactorY); })
+                .def ("roundToInt", [](const T& self) { return self.template roundToInt<ValueType>(); })
+                .def ("toNearestInt", [](const T& self) { return self.template toNearestInt<ValueType>(); })
+            ;
+        }
+
+        type[py::type::of (py::cast (Types {}))] = class_;
+
+        return true;
+    }() && ...);
+
+    m.add_object ("Size", type);
 }
 
 // ============================================================================================
@@ -499,6 +617,12 @@ void registerRectangle (py::module_& m)
                 return result;
             })
             //.def ("__str__", &T::toString)
+            .def ("__str__", [](const T& self)
+            {
+                String result;
+                result << self.getX() << ", " << self.getY() << ", " << self.getWidth() << ", " << self.getHeight();
+                return result;
+            })
         ;
 
         // Add floating-point specific methods
@@ -506,6 +630,7 @@ void registerRectangle (py::module_& m)
         {
             class_
                 .def ("withScaledSize", [](const T& self, ValueType scaleFactor) { return self.template withScaledSize<ValueType> (scaleFactor); })
+                .def ("toNearestInt", [](const T& self) { return self.template toNearestInt<ValueType>(); })
                 .def (py::self * ValueType())
                 .def (py::self *= ValueType())
                 .def (py::self / ValueType())
@@ -596,6 +721,7 @@ void registerRectangleList (py::module_& m)
                     << "(" << self.getNumRectangles() << " rectangles)";
                 return result;
             })
+            //.def ("__str__", &T::toString)
         ;
 
         type[py::type::of (py::cast (Types {}))] = class_;
@@ -610,8 +736,6 @@ void registerRectangleList (py::module_& m)
 
 void registerYupGraphicsBindings (py::module_& m)
 {
-    /*
-
     // ============================================================================================ yup::Justification
 
     py::class_<Justification> classJustification (m, "Justification");
@@ -619,45 +743,43 @@ void registerYupGraphicsBindings (py::module_& m)
     Helpers::makeArithmeticEnum<Justification::Flags> (classJustification, "Flags")
         .value ("left", Justification::Flags::left)
         .value ("right", Justification::Flags::right)
-        .value ("horizontallyCentred", Justification::Flags::horizontallyCentred)
+        .value ("horizontalCenter", Justification::Flags::horizontalCenter)
         .value ("top", Justification::Flags::top)
         .value ("bottom", Justification::Flags::bottom)
-        .value ("verticallyCentred", Justification::Flags::verticallyCentred)
-        .value ("horizontallyJustified", Justification::Flags::horizontallyJustified)
-        .value ("centred", Justification::Flags::centred)
-        .value ("centredLeft", Justification::Flags::centredLeft)
-        .value ("centredRight", Justification::Flags::centredRight)
-        .value ("centredTop", Justification::Flags::centredTop)
-        .value ("centredBottom", Justification::Flags::centredBottom)
+        .value ("verticalCenter", Justification::Flags::verticalCenter)
         .value ("topLeft", Justification::Flags::topLeft)
         .value ("topRight", Justification::Flags::topRight)
         .value ("bottomLeft", Justification::Flags::bottomLeft)
         .value ("bottomRight", Justification::Flags::bottomRight)
+        .value ("centerLeft", Justification::Flags::centerLeft)
+        .value ("centerTop", Justification::Flags::centerTop)
+        .value ("center", Justification::Flags::center)
+        .value ("centerRight", Justification::Flags::centerRight)
+        .value ("centerBottom", Justification::Flags::centerBottom)
         .export_values();
 
     classJustification
-        .def (py::init<int>())
-        .def (py::init ([](Justification::Flags flags) { return Justification (static_cast<int> (flags)); }))
+        .def (py::init<Justification::Flags>())
+        .def (py::init ([](int flags) { return Justification (static_cast<Justification::Flags> (flags)); }))
         .def (py::init<const Justification&>())
         .def (py::self == py::self)
         .def (py::self != py::self)
         .def (py::self == Justification::Flags())
         .def (py::self != Justification::Flags())
-        .def (py::self == int())
-        .def (py::self != int())
         .def ("getFlags", &Justification::getFlags)
-        .def ("testFlags", &Justification::testFlags)
-        .def ("testFlags", [](const Justification& self, Justification::Flags flags) { return self.testFlags (static_cast<int> (flags)); })
-        .def ("getOnlyVerticalFlags", &Justification::getOnlyVerticalFlags)
-        .def ("getOnlyHorizontalFlags", &Justification::getOnlyHorizontalFlags)
-    //.def ("applyToRectangle", &Justification::template applyToRectangle<int>)
-    //.def ("applyToRectangle", &Justification::template applyToRectangle<float>)
-        .def ("appliedToRectangle", &Justification::template appliedToRectangle<int>)
-        .def ("appliedToRectangle", &Justification::template appliedToRectangle<float>)
+        .def ("testFlags", [](const Justification& self, Justification flags) { return self.testFlags (flags); })
+        .def ("testFlags", [](const Justification& self, Justification::Flags flags) { return self.testFlags (flags); })
+        .def ("withAddedFlags", &Justification::withAddedFlags)
+        .def ("withRemovedFlags", &Justification::withRemovedFlags)
+        //.def ("getOnlyVerticalFlags", &Justification::getOnlyVerticalFlags)
+        //.def ("getOnlyHorizontalFlags", &Justification::getOnlyHorizontalFlags)
+        //.def ("applyToRectangle", &Justification::template applyToRectangle<int>)
+        //.def ("applyToRectangle", &Justification::template applyToRectangle<float>)
+        //.def ("appliedToRectangle", &Justification::template appliedToRectangle<int>)
+        //.def ("appliedToRectangle", &Justification::template appliedToRectangle<float>)
     ;
 
-    //py::implicitly_convertible<Justification::Flags, Justification>();
-    */
+    // py::implicitly_convertible<Justification::Flags, Justification>();
 
     // ============================================================================================ yup::AffineTransform
 
@@ -774,6 +896,10 @@ void registerYupGraphicsBindings (py::module_& m)
 
     registerLine<Line, int, float> (m);
 
+    // ============================================================================================ yup::Size<>
+
+    registerSize<Size, int, float> (m);
+
     // ============================================================================================ yup::Rectangle<>
 
     registerRectangle<Rectangle, int, float> (m);
@@ -782,9 +908,35 @@ void registerYupGraphicsBindings (py::module_& m)
 
     registerRectangleList<RectangleList, int, float> (m);
 
+
     // ============================================================================================ yup::Path
 
     py::class_<Path> classPath (m, "Path");
+
+    // Path::Verb enum
+    py::enum_<Path::Verb> (classPath, "Verb")
+        .value ("MoveTo", Path::Verb::MoveTo)
+        .value ("LineTo", Path::Verb::LineTo)
+        .value ("QuadTo", Path::Verb::QuadTo)
+        .value ("CubicTo", Path::Verb::CubicTo)
+        .value ("Close", Path::Verb::Close)
+        .export_values();
+
+    // Path::Segment struct
+    py::class_<Path::Segment> (classPath, "Segment")
+        .def (py::init<Path::Verb, Point<float>>())
+        .def (py::init<Path::Verb, Point<float>, Point<float>>())
+        .def (py::init<Path::Verb, Point<float>, Point<float>, Point<float>>())
+        .def_static ("close", &Path::Segment::close)
+        .def_readwrite ("verb", &Path::Segment::verb)
+        .def_readwrite ("point", &Path::Segment::point)
+        .def_readwrite ("controlPoint1", &Path::Segment::controlPoint1)
+        .def_readwrite ("controlPoint2", &Path::Segment::controlPoint2)
+        .def ("__repr__", [](const Path::Segment& self) {
+            String result;
+            result << "Path.Segment(" << (int)self.verb << ", " << self.point.getX() << ", " << self.point.getY() << ")";
+            return result;
+        });
 
     classPath
         // Constructors
@@ -796,6 +948,7 @@ void registerYupGraphicsBindings (py::module_& m)
         // Basic operations
         .def ("reserveSpace", &Path::reserveSpace, "numSegments"_a)
         .def ("size", &Path::size)
+        .def ("isEmpty", &Path::isEmpty)
         .def ("clear", &Path::clear)
 
         // Path construction
@@ -857,6 +1010,12 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("addCenteredArc", py::overload_cast<const Point<float>&, const Size<float>&, float, float, float, bool> (&Path::addCenteredArc),
               "center"_a, "diameter"_a, "rotationOfEllipse"_a, "fromRadians"_a, "toRadians"_a, "startAsNewSubPath"_a)
 
+        // Triangle additions
+        .def ("addTriangle", py::overload_cast<float, float, float, float, float, float> (&Path::addTriangle),
+              "x1"_a, "y1"_a, "x2"_a, "y2"_a, "x3"_a, "y3"_a)
+        .def ("addTriangle", py::overload_cast<const Point<float>&, const Point<float>&, const Point<float>&> (&Path::addTriangle),
+              "p1"_a, "p2"_a, "p3"_a)
+
         // Polygon and star additions
         .def ("addPolygon", &Path::addPolygon, "centre"_a, "numberOfSides"_a, "radius"_a, "startAngle"_a = 0.0f)
         .def ("addStar", &Path::addStar, "centre"_a, "numberOfPoints"_a, "innerRadius"_a, "outerRadius"_a, "startAngle"_a = 0.0f)
@@ -870,6 +1029,13 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("appendPath", py::overload_cast<const Path&> (&Path::appendPath), "other"_a)
         .def ("appendPath", py::overload_cast<const Path&, const AffineTransform&> (&Path::appendPath), "other"_a, "transform"_a)
         .def ("swapWithPath", &Path::swapWithPath, "other"_a)
+
+        // Sub-path operations
+        .def ("startNewSubPath", py::overload_cast<float, float> (&Path::startNewSubPath), "x"_a, "y"_a)
+        .def ("startNewSubPath", py::overload_cast<const Point<float>&> (&Path::startNewSubPath), "point"_a)
+        .def ("closeSubPath", &Path::closeSubPath)
+        .def ("isClosed", &Path::isClosed, "tolerance"_a = 0.001f)
+        .def ("isExplicitlyClosed", &Path::isExplicitlyClosed)
 
         // Transformations
         .def ("transform", &Path::transform, "transform"_a)
@@ -885,68 +1051,26 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("toString", &Path::toString)
         .def ("fromString", &Path::fromString, "pathData"_a)
 
+        // Comparison support
+        .def (py::self == py::self)
+        .def (py::self != py::self)
+
         // Iterator support
         .def ("__iter__", [](const Path& self) {
             return py::make_iterator (self.begin(), self.end());
         }, py::keep_alive<0, 1>())
         .def ("__len__", &Path::size)
-        .def ("__bool__", [](const Path& self) { return self.size() > 0; })
+        .def ("__bool__", [](const Path& self) { return !self.isEmpty(); })
 
         // Representation
         .def ("__repr__", [](const Path& self) {
             String result;
             result << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
-                   << "(" << self.size() << " segments)";
+                   << "('" << self.toString() << "')";
             return result;
         })
         .def ("__str__", &Path::toString)
     ;
-
-    /*
-    // ============================================================================================ yup::PathStrokeType
-
-    py::class_<PathStrokeType> classPathStrokeType (m, "PathStrokeType");
-
-    py::enum_<PathStrokeType::JointStyle> (classPathStrokeType, "JointStyle")
-        .value ("mitered", PathStrokeType::mitered)
-        .value ("curved", PathStrokeType::curved)
-        .value ("beveled", PathStrokeType::beveled)
-        .export_values();
-
-    py::enum_<PathStrokeType::EndCapStyle> (classPathStrokeType, "EndCapStyle")
-        .value ("butt", PathStrokeType::butt)
-        .value ("square", PathStrokeType::square)
-        .value ("rounded", PathStrokeType::rounded)
-        .export_values();
-
-    classPathStrokeType
-        .def (py::init<float>(), "strokeThickness"_a)
-        .def (py::init<float, PathStrokeType::JointStyle, PathStrokeType::EndCapStyle>(), "strokeThickness"_a, "jointStyle"_a, "endStyle"_a = PathStrokeType::butt)
-        .def (py::init<const PathStrokeType&>())
-        .def ("createStrokedPath", &PathStrokeType::createStrokedPath,
-            "destPath"_a, "sourcePath"_a, "transform"_a = AffineTransform(), "extraAccuracy"_a = 1.0f)
-        .def ("createDashedStroke", [](const PathStrokeType& self, Path* destPath, const Path& sourcePath, py::list dashLengths, const AffineTransform& transform, float extraAccuracy)
-        {
-            std::vector<float> dashes;
-            dashes.reserve (static_cast<size_t> (dashLengths.size()));
-
-            for (const auto& item : dashLengths)
-                dashes.push_back (item.cast<float>());
-
-            self.createDashedStroke (*destPath, sourcePath, dashes.data(), static_cast<int> (dashes.size()), transform, extraAccuracy);
-        }, "destPath"_a, "sourcePath"_a, "dashLengths"_a, "transform"_a = AffineTransform(), "extraAccuracy"_a = 1.0f)
-        .def ("createStrokeWithArrowheads", &PathStrokeType::createStrokeWithArrowheads,
-            "destPath"_a, "sourcePath"_a, "arrowheadStartWidth"_a, "arrowheadStartLength"_a, "arrowheadEndWidth"_a, "arrowheadEndLength"_a, "transform"_a = AffineTransform(), "extraAccuracy"_a = 1.0f)
-        .def ("getStrokeThickness", &PathStrokeType::getStrokeThickness)
-        .def ("setStrokeThickness", &PathStrokeType::setStrokeThickness)
-        .def ("getJointStyle", &PathStrokeType::getJointStyle)
-        .def ("setJointStyle", &PathStrokeType::setJointStyle)
-        .def ("getEndStyle", &PathStrokeType::getEndStyle)
-        .def ("setEndStyle", &PathStrokeType::setEndStyle)
-        .def (py::self == py::self)
-        .def (py::self != py::self)
-    ;
-    */
 
     // ============================================================================================ yup::Color
 
