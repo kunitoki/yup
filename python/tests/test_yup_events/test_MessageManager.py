@@ -15,6 +15,7 @@ def test_message_manager_instance():
 
 #==================================================================================================
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_message_manager_run_dispatch_loop_until():
     mm = yup.MessageManager.getInstance()
 
@@ -36,6 +37,7 @@ class ActionListener(yup.ActionListener):
     def actionListenerCallback(self, message: str):
         self.message = message
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_message_manager_broadcast_listener():
     mm = yup.MessageManager.getInstance()
     listener = ActionListener()
