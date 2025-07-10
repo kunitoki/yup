@@ -69,10 +69,6 @@ PYBIND11_MODULE (YUP_PYTHON_MODULE_NAME, m)
     // ---- When running from wheel
 #if ! YUP_PYTHON_EMBEDDED_INTERPRETER
     yup::SystemStats::setApplicationCrashHandler (yup::Helpers::applicationCrashHandler);
-
-#if YUP_MAC
-    yup::Process::setDockIconVisible (false);
-#endif
 #endif
 
     m.def ("__embedded_interpreter__", []

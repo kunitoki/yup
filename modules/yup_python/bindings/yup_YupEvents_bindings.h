@@ -27,6 +27,8 @@
 #include <yup_events/yup_events.h>
 #endif
 
+#include "yup_YupCore_bindings.h"
+
 #include "../utilities/yup_PyBind11Includes.h"
 
 #include <variant>

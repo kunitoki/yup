@@ -137,9 +137,7 @@ public:
     static void YUP_CALLTYPE callAfterDelay (int milliseconds, std::function<void()> functionToCall);
 
     //==============================================================================
-    /** For internal use only: invokes any timers that need callbacks.
-        Don't call this unless you really know what you're doing!
-    */
+    /** @internal Invokes any timers that need callbacks. Don't call this unless you really know what you're doing! */
     static void YUP_CALLTYPE callPendingTimersSynchronously();
 
 private:

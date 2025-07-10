@@ -19,7 +19,6 @@
   ==============================================================================
 */
 
-#include "yup_YupCore_bindings.h"
 #include "yup_YupEvents_bindings.h"
 
 #define YUP_PYTHON_INCLUDE_PYBIND11_OPERATORS
@@ -50,6 +49,8 @@ using namespace py::literals;
 
 void registerYupEventsBindings (py::module_& m)
 {
+    // clang-format off
+
     // ============================================================================================ yup::NotificationType
 
     py::enum_<NotificationType> (m, "NotificationType")
@@ -132,9 +133,9 @@ void registerYupEventsBindings (py::module_& m)
         .def (py::init<>())
         .def ("messageCallback", &MessageManager::MessageBase::messageCallback)
         .def ("post", [] (py::object self)
-    {
-        return self.release().cast<MessageManager::MessageBase*>()->post();
-    });
+        {
+            return self.release().cast<MessageManager::MessageBase*>()->post();
+        });
 
     classMessageManagerInnerLock
         .def (py::init<>())
@@ -155,36 +156,35 @@ void registerYupEventsBindings (py::module_& m)
 #endif
         .def_static ("callAsync", &MessageManager::callAsync)
         .def ("callFunctionOnMessageThread", [] (MessageManager& self, py::function func) -> py::object
-    {
-        void* result = nullptr;
-
-        if (func.is_none())
-            py::pybind11_fail ("Invalid specified function to \"MessageManager::callFunctionOnMessageThread\"");
-
         {
-            py::gil_scoped_release release;
+            void* result = nullptr;
 
-            result = self.callFunctionOnMessageThread (+[] (void* data) -> void*
+            if (func.is_none())
+                py::pybind11_fail ("Invalid specified function to \"MessageManager::callFunctionOnMessageThread\"");
+
             {
-                py::gil_scoped_acquire acquire;
+                py::gil_scoped_release release;
 
-                auto func = *reinterpret_cast<py::function*> (data);
+                result = self.callFunctionOnMessageThread (+[] (void* data) -> void*
+                {
+                    py::gil_scoped_acquire acquire;
 
-                return func().ptr();
-            },
-                                                       std::addressof (func));
-        }
+                    auto func = *reinterpret_cast<py::function*> (data);
 
-        if (result == nullptr)
-            return py::none();
+                    return func().ptr();
+                },
+                                                           std::addressof (func));
+            }
 
-        return py::reinterpret_borrow<py::object> (reinterpret_cast<PyObject*> (result));
-    }).def ("isThisTheMessageThread", &MessageManager::isThisTheMessageThread)
+            if (result == nullptr)
+                return py::none();
+
+            return py::reinterpret_borrow<py::object> (reinterpret_cast<PyObject*> (result));
+        })
+        .def ("isThisTheMessageThread", &MessageManager::isThisTheMessageThread)
         .def ("setCurrentThreadAsMessageThread", &MessageManager::setCurrentThreadAsMessageThread)
-        .def ("getCurrentMessageThread", [] (const MessageManager& self)
-    {
-        return PyThreadID (self.getCurrentMessageThread());
-    }).def ("currentThreadHasLockedMessageManager", &MessageManager::currentThreadHasLockedMessageManager)
+        .def ("getCurrentMessageThread", [] (const MessageManager& self) { return PyThreadID (self.getCurrentMessageThread()); })
+        .def ("currentThreadHasLockedMessageManager", &MessageManager::currentThreadHasLockedMessageManager)
         .def_static ("existsAndIsLockedByCurrentThread", &MessageManager::existsAndIsLockedByCurrentThread)
         .def_static ("existsAndIsCurrentThread", &MessageManager::existsAndIsCurrentThread)
         .def_static ("broadcastMessage", &MessageManager::broadcastMessage)
@@ -213,13 +213,12 @@ void registerYupEventsBindings (py::module_& m)
         .def (py::init<>())
         .def ("handleMessage", &MessageListener::handleMessage)
         .def ("postMessage", [] (MessageListener& self, py::object message)
-    {
-        if (message.is_none() || ! py::isinstance<Message> (message))
-            py::pybind11_fail ("Invalid specified message type in \"MessageListener::postMessage\"");
+        {
+            if (message.is_none() || ! py::isinstance<Message> (message))
+                py::pybind11_fail ("Invalid specified message type in \"MessageListener::postMessage\"");
 
-        return self.postMessage (message.release().cast<Message*>());
-    },
-              "message"_a);
+            return self.postMessage (message.release().cast<Message*>());
+        }, "message"_a);
 
     // ============================================================================================ yup::MessageManagerLock
 
@@ -229,29 +228,29 @@ void registerYupEventsBindings (py::module_& m)
         .def (py::init<Thread*>(), "threadToCheckForExitSignal"_a = nullptr)
         .def (py::init<ThreadPoolJob*>())
         .def ("__enter__", [] (PyMessageManagerLock& self)
-    {
-        if (self.thread != nullptr)
-            self.state.emplace<MessageManagerLock> (self.thread);
+        {
+            if (self.thread != nullptr)
+                self.state.emplace<MessageManagerLock> (self.thread);
 
-        else if (self.threadPoolJob != nullptr)
-            self.state.emplace<MessageManagerLock> (self.threadPoolJob);
+            else if (self.threadPoolJob != nullptr)
+                self.state.emplace<MessageManagerLock> (self.threadPoolJob);
 
-        else
-            py::pybind11_fail ("Invalid constructed \"MessageManagerLock\", either \"Thread\" or \"ThreadPoolJob\" must be provided");
+            else
+                py::pybind11_fail ("Invalid constructed \"MessageManagerLock\", either \"Thread\" or \"ThreadPoolJob\" must be provided");
 
-        return std::addressof (std::as_const (self));
-    },
-              py::return_value_policy::reference)
+            return std::addressof (std::as_const (self));
+        }, py::return_value_policy::reference)
         .def ("__exit__", [] (PyMessageManagerLock& self, const std::optional<py::type>&, const std::optional<py::object>&, const std::optional<py::object>&)
-    {
-        self.state.emplace<std::monostate>();
-    }).def ("lockWasGained", [] (const PyMessageManagerLock& self)
-    {
-        if (auto lock = std::get_if<MessageManagerLock> (std::addressof (self.state)))
-            return lock->lockWasGained();
+        {
+            self.state.emplace<std::monostate>();
+        })
+        .def ("lockWasGained", [] (const PyMessageManagerLock& self)
+        {
+            if (auto lock = std::get_if<MessageManagerLock> (std::addressof (self.state)))
+                return lock->lockWasGained();
 
-        return false;
-    });
+            return false;
+        });
 
     // ============================================================================================ yup::Timer
 
@@ -287,16 +286,16 @@ void registerYupEventsBindings (py::module_& m)
 
     if (numScopedInitInstances.fetch_add (1) == 0)
     {
+#if YUP_MAC
+        initialiseNSApplication();
+#endif
+
         initialiseYup_GUI();
 
         YUPApplicationBase::createInstance = +[]() -> YUPApplicationBase*
         {
             return nullptr;
         };
-
-#if YUP_MAC
-        initialiseNSApplication();
-#endif
     }
 
 #if 1
@@ -320,6 +319,8 @@ void registerYupEventsBindings (py::module_& m)
 
 #endif
 #endif
+
+    // clang-format on
 }
 
 } // namespace yup::Bindings

@@ -27,6 +27,8 @@
 #include <yup_gui/yup_gui.h>
 #endif
 
+#include "yup_YupCore_bindings.h"
+
 #define YUP_PYTHON_INCLUDE_PYBIND11_FUNCTIONAL
 #define YUP_PYTHON_INCLUDE_PYBIND11_IOSTREAM
 #define YUP_PYTHON_INCLUDE_PYBIND11_OPERATORS
@@ -336,6 +338,11 @@ struct PyComponent : PyMouseListener<Base>
     //{
     //    PYBIND11_OVERRIDE (void, Base, alphaChanged);
     //}
+
+    void refreshDisplay (double lastFrameTimeSeconds) override
+    {
+        PYBIND11_OVERRIDE (void, Base, refreshDisplay, lastFrameTimeSeconds);
+    }
 
     void paint (yup::Graphics& g) override
     {

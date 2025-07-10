@@ -40,8 +40,7 @@
 namespace yup
 {
 
-class Timer::TimerThread final : private Thread
-    , private DeletedAtShutdown
+class Timer::TimerThread final : private Thread, private DeletedAtShutdown
 {
     static inline constexpr int maxTimeoutMilliseconds = 10;
 

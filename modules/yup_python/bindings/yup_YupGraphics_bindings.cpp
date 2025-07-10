@@ -19,7 +19,6 @@
   ==============================================================================
 */
 
-#include "yup_YupCore_bindings.h"
 #include "yup_YupGraphics_bindings.h"
 
 #include "../utilities/yup_ClassDemangling.h"
@@ -1086,6 +1085,10 @@ void registerYupGraphicsBindings (py::module_& m)
         .def_static ("fromHSV", &Color::fromHSV)
         .def_static ("fromHSL", &Color::fromHSL)
         .def_static ("fromString", &Color::fromString)
+        .def_static ("fromRGB", &Color::fromRGB)
+        .def_static ("fromRGBA", &Color::fromRGBA)
+        .def_static ("fromARGB", &Color::fromARGB)
+        .def_static ("fromBGRA", &Color::fromBGRA)
         .def_static ("opaqueRandom", &Color::opaqueRandom)
 
         // Color data access

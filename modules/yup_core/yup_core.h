@@ -106,6 +106,18 @@
 #endif
 
 //==============================================================================
+/** Config: YUP_ASSERT_INCLUDE_STACKTRACE
+
+    If this flag is enabled, the jassert and jassertfalse macros will include
+    a stack trace when an assertion happens.
+
+    @see YUP_LOG_ASSERTIONS, jassert, jassertfalse
+*/
+#ifndef YUP_ASSERT_INCLUDE_STACKTRACE
+#define YUP_ASSERT_INCLUDE_STACKTRACE 1
+#endif
+
+//==============================================================================
 /** Config: YUP_CHECK_MEMORY_LEAKS
 
     Enables a memory-leak check for certain objects when the app terminates. See the LeakedObjectDetector

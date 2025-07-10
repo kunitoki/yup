@@ -24,10 +24,10 @@
 #if ! YUP_MODULE_AVAILABLE_yup_graphics
 #error This binding file requires adding the yup_graphics module in the project
 #else
-//YUP_BEGIN_IGNORE_WARNINGS_MSVC(4244)
 #include <yup_graphics/yup_graphics.h>
-//YUP_END_IGNORE_WARNINGS_MSVC
 #endif
+
+#include "yup_YupCore_bindings.h"
 
 #include "../utilities/yup_PyBind11Includes.h"
 

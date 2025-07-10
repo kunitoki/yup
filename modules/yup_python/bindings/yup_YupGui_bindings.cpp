@@ -95,39 +95,32 @@ namespace
 {
 void runApplication (YUPApplicationBase* application, int milliseconds)
 {
+    try
     {
         py::gil_scoped_release release;
 
         if (! application->initialiseApp())
             return;
-    }
 
-    while (! MessageManager::getInstance()->hasStopMessageBeenSent())
+        MessageManager::getInstance()->runDispatchLoop();
+    }
+    catch (const py::error_already_set& e)
     {
-        try
-        {
-            py::gil_scoped_release release;
-
-            MessageManager::getInstance()->runDispatchLoopUntil (milliseconds);
-        }
-        catch (const py::error_already_set& e)
-        {
-            if (globalOptions().catchExceptionsAndContinue)
-            {
-                Helpers::printPythonException (e);
-            }
-            else
-            {
-                throw e;
-            }
-        }
-
         if (globalOptions().caughtKeyboardInterrupt)
-            break;
+            return;
 
-        if (PyErr_CheckSignals() != 0)
-            throw py::error_already_set();
+        if (globalOptions().catchExceptionsAndContinue)
+        {
+            Helpers::printPythonException (e);
+        }
+        else
+        {
+            throw e;
+        }
     }
+
+    if (PyErr_CheckSignals() != 0)
+        throw py::error_already_set();
 }
 } // namespace
 #endif
@@ -188,6 +181,59 @@ void registerYupGuiBindings (py::module_& m)
         .def (py::init<MouseCursor::Type>(), "type"_a);
 
     // ============================================================================================ yup::ComponentNative
+
+    py::class_<ComponentNative> classComponentNative (m, "ComponentNative");
+
+    py::class_<ComponentNative::Options> classComponentNativeOptions (classComponentNative, "Options");
+
+    classComponentNativeOptions
+        .def (py::init<>())
+        .def ("withFlags", &ComponentNative::Options::withFlags)
+        .def ("withDecoration", &ComponentNative::Options::withDecoration)
+        .def ("withResizableWindow", &ComponentNative::Options::withResizableWindow)
+        .def ("withRenderContinuous", &ComponentNative::Options::withRenderContinuous)
+        .def ("withAllowedHighDensityDisplay", &ComponentNative::Options::withAllowedHighDensityDisplay)
+        //.def ("withGraphicsApi", &ComponentNative::Options::withGraphicsApi)
+        .def ("withFramerateRedraw", &ComponentNative::Options::withFramerateRedraw)
+        .def ("withClearColor", &ComponentNative::Options::withClearColor)
+        .def ("withDoubleClickTime", &ComponentNative::Options::withDoubleClickTime)
+        .def ("withUpdateOnlyFocused", &ComponentNative::Options::withUpdateOnlyFocused)
+    ;
+
+    classComponentNative
+        .def ("setTitle", &ComponentNative::setTitle)
+        .def ("getTitle", &ComponentNative::getTitle)
+        .def ("setVisible", &ComponentNative::setVisible)
+        .def ("isVisible", &ComponentNative::isVisible)
+        .def ("setSize", &ComponentNative::setSize)
+        .def ("getSize", &ComponentNative::getSize)
+        .def ("getContentSize", &ComponentNative::getContentSize)
+        .def ("getPosition", &ComponentNative::getPosition)
+        .def ("setPosition", &ComponentNative::setPosition)
+        .def ("getBounds", &ComponentNative::getBounds)
+        .def ("setBounds", &ComponentNative::setBounds)
+        .def ("setFullScreen", &ComponentNative::setFullScreen)
+        .def ("isFullScreen", &ComponentNative::isFullScreen)
+        .def ("isDecorated", &ComponentNative::isDecorated)
+        .def ("setOpacity", &ComponentNative::setOpacity)
+        .def ("getOpacity", &ComponentNative::getOpacity)
+        .def ("setFocusedComponent", &ComponentNative::setFocusedComponent)
+        .def ("getFocusedComponent", &ComponentNative::getFocusedComponent)
+        .def ("isContinuousRepaintingEnabled", &ComponentNative::isContinuousRepaintingEnabled)
+        .def ("enableContinuousRepainting", &ComponentNative::enableContinuousRepainting)
+        .def ("isAtomicModeEnabled", &ComponentNative::isAtomicModeEnabled)
+        .def ("enableAtomicMode", &ComponentNative::enableAtomicMode)
+        .def ("isWireframeEnabled", &ComponentNative::isWireframeEnabled)
+        .def ("enableWireframe", &ComponentNative::enableWireframe)
+        .def ("repaint", py::overload_cast<> (&ComponentNative::repaint))
+        .def ("repaint", py::overload_cast<const Rectangle<float>&> (&ComponentNative::repaint))
+        .def ("getRepaintAreas", &ComponentNative::getRepaintAreas)
+        .def ("getScaleDpi", &ComponentNative::getScaleDpi)
+        .def ("getCurrentFrameRate", &ComponentNative::getCurrentFrameRate)
+        .def ("getDesiredFrameRate", &ComponentNative::getDesiredFrameRate)
+        .def ("getNativeHandle", &ComponentNative::getNativeHandle, py::return_value_policy::reference_internal)
+        .def_static ("createFor", &ComponentNative::createFor, "component"_a, "options"_a, "parent"_a = nullptr)
+    ;
 
     // ============================================================================================ yup::Component
 
@@ -280,6 +326,7 @@ void registerYupGuiBindings (py::module_& m)
         .def ("setOpaque", &Component::setOpaque)
         .def ("enableRenderingUnclipped", &Component::enableRenderingUnclipped)
         .def ("isRenderingUnclipped", &Component::isRenderingUnclipped)
+        .def ("refreshDisplay", &Component::refreshDisplay, "lastFrameTimeSeconds"_a)
         .def ("repaint", py::overload_cast<>(&Component::repaint))
         .def ("repaint", py::overload_cast<const Rectangle<float>&>(&Component::repaint))
         .def ("repaint", py::overload_cast<float, float, float, float>(&Component::repaint))
@@ -290,6 +337,7 @@ void registerYupGuiBindings (py::module_& m)
         .def ("isOnDesktop", &Component::isOnDesktop)
         .def ("addToDesktop", &Component::addToDesktop, "nativeOptions"_a, "parent"_a = nullptr)
         .def ("removeFromDesktop", &Component::removeFromDesktop)
+        .def ("userTriedToCloseWindow", &Component::userTriedToCloseWindow)
 
         // Z-order
         .def ("toFront", &Component::toFront)
@@ -351,10 +399,16 @@ void registerYupGuiBindings (py::module_& m)
 
     py::class_<DocumentWindow, Component, PyDocumentWindow<>> classDocumentWindow (m, "DocumentWindow");
 
+    classDocumentWindow
+        .def (py::init<>())
+        .def (py::init<const ComponentNative::Options&>())
+        .def (py::init<const ComponentNative::Options&, const std::optional<Color>&>())
+        .def ("centreWithSize", &DocumentWindow::centreWithSize)
+    ;
+
     // =================================================================================================
 
 #if ! YUP_PYTHON_EMBEDDED_INTERPRETER
-
     m.def ("START_YUP_APPLICATION", [] (py::handle applicationType, bool catchExceptionsAndContinue)
     {
         globalOptions().catchExceptionsAndContinue = catchExceptionsAndContinue;
@@ -370,7 +424,14 @@ void registerYupGuiBindings (py::module_& m)
         auto sys = py::module_::import ("sys");
         auto systemExit = [sys, &application]
         {
-            const int returnValue = application != nullptr ? application->shutdownApp() : 255;
+            int returnValue = 255;
+
+            {
+                py::gil_scoped_release release;
+
+                if (application != nullptr)
+                    returnValue = application->shutdownApp();
+            }
 
             sys.attr ("exit") (returnValue);
         };
@@ -391,19 +452,16 @@ void registerYupGuiBindings (py::module_& m)
         auto pyApplication = applicationType(); // TODO - error checking (python)
 
         application = pyApplication.cast<YUPApplication*>();
-        if (application == nullptr)
+        if (application != nullptr)
         {
-            systemExit();
-            return;
-        }
-
-        try
-        {
-            runApplication (application, globalOptions().messageManagerGranularityMilliseconds);
-        }
-        catch (const py::error_already_set& e)
-        {
-            Helpers::printPythonException (e);
+            try
+            {
+                runApplication (application, globalOptions().messageManagerGranularityMilliseconds);
+            }
+            catch (const py::error_already_set& e)
+            {
+                Helpers::printPythonException (e);
+            }
         }
 
         systemExit();

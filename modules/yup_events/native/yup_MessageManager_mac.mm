@@ -387,7 +387,7 @@ static bool runNSApplication(int millisecondsToRunFor, Atomic<int>& quitMessageP
             @try
             {
 #endif
-                CFRunLoopRunInMode(kCFRunLoopCommonModes, jmin(1.0, msRemaining * 0.001), true);
+                CFRunLoopRunInMode(kCFRunLoopDefaultMode, jmin(1.0, msRemaining * 0.001), true);
 
 #if YUP_CATCH_UNHANDLED_EXCEPTIONS
             }
@@ -444,7 +444,9 @@ void MessageManager::stopDispatchLoop()
         for (const auto& func : shutdownCallbacks)
             func();
 
+#if YUP_SHUTDOWN_APP_ON_MESSAGEMANAGER_QUIT
         shutdownNSApp();
+#endif
     }
     else
     {

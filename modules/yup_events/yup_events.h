@@ -71,6 +71,15 @@
 #define YUP_EXECUTE_APP_SUSPEND_ON_BACKGROUND_TASK 0
 #endif
 
+//==============================================================================
+/** Config: YUP_SHUTDOWN_APP_ON_MESSAGEMANAGER_QUIT
+
+    Will shutdown the application when the MessageManager is quit.
+*/
+#ifndef YUP_SHUTDOWN_APP_ON_MESSAGEMANAGER_QUIT
+#define YUP_SHUTDOWN_APP_ON_MESSAGEMANAGER_QUIT 1
+#endif
+
 #if YUP_WINDOWS && YUP_EVENTS_INCLUDE_WINRT_WRAPPER
 // If this header file is missing then you are probably attempting to use WinRT
 // functionality without the WinRT libraries installed on your system. Try installing
