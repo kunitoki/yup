@@ -563,6 +563,14 @@ int XmlElement::getIntAttribute (StringRef attributeName, const int defaultRetur
     return defaultReturnValue;
 }
 
+float XmlElement::getFloatAttribute (StringRef attributeName, const float defaultReturnValue) const
+{
+    if (auto* att = getAttribute (attributeName))
+        return static_cast<float> (att->value.getDoubleValue());
+
+    return defaultReturnValue;
+}
+
 double XmlElement::getDoubleAttribute (StringRef attributeName, const double defaultReturnValue) const
 {
     if (auto* att = getAttribute (attributeName))
