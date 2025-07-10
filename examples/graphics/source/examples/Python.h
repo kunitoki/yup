@@ -31,7 +31,7 @@ public:
     {
         setOpaque (false);
 
-        runPython.setButtonText("Run Python!");
+        runPython.setButtonText ("Run Python!");
         runPython.onClick = [this]
         {
             pybind11::dict locals;
@@ -44,7 +44,9 @@ public:
                 print("Scripting YUP!")
                 this.backgroundColor = yup.Color.opaqueRandom()
                 this.repaint();
-            )").dedentLines(), locals);
+            )")
+                                                .dedentLines(),
+                                            locals);
 
             if (result.failed())
                 std::cout << result.getErrorMessage();
@@ -79,7 +81,7 @@ private:
 
 //==============================================================================
 
-PYBIND11_EMBEDDED_MODULE(custom, m)
+PYBIND11_EMBEDDED_MODULE (custom, m)
 {
     namespace py = pybind11;
 
