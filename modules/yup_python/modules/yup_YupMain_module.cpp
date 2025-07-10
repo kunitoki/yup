@@ -69,16 +69,11 @@ PYBIND11_MODULE (YUP_PYTHON_MODULE_NAME, m)
     // ---- When running from wheel
 #if ! YUP_PYTHON_EMBEDDED_INTERPRETER
     yup::SystemStats::setApplicationCrashHandler (yup::Helpers::applicationCrashHandler);
-#endif
 
-    m.def ("__embedded_interpreter__", []
-    {
-#if YUP_PYTHON_EMBEDDED_INTERPRETER
-        return true;
+    m.attr ("__embedded_interpreter__") = false;
 #else
-        return false;
+    m.attr ("__embedded_interpreter__") = true;
 #endif
-    });
 
     // ---- Register bindings
     yup::Bindings::registerYupCoreBindings (m);

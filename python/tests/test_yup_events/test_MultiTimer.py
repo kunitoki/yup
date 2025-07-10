@@ -1,4 +1,5 @@
 from collections import defaultdict
+import pytest
 
 import yup
 
@@ -12,6 +13,7 @@ class CustomMultiTimer(yup.MultiTimer):
 
 #==================================================================================================
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_multi_timer(juce_app):
     t = CustomMultiTimer()
     assert not t.isTimerRunning(1)

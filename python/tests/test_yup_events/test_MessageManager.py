@@ -1,3 +1,5 @@
+import pytest
+
 import yup
 
 #==================================================================================================
@@ -74,6 +76,7 @@ class Thread(yup.Thread):
         self.wasRunSuccesfully = True
         return 42
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_message_manager_lock(juce_app):
     t = Thread("backgrounder")
     t.startThread()

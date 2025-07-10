@@ -1,4 +1,5 @@
 import time
+import pytest
 
 import yup
 
@@ -12,6 +13,7 @@ class CustomTimer(yup.Timer):
 
 #==================================================================================================
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_single_timer(juce_app):
     t = CustomTimer()
     assert not t.isTimerRunning()
@@ -35,6 +37,7 @@ def test_single_timer(juce_app):
 
 #==================================================================================================
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_call_pending_timers_synchronously(juce_app):
     t = CustomTimer()
 
@@ -52,6 +55,7 @@ def test_call_pending_timers_synchronously(juce_app):
 
 #==================================================================================================
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_call_after_delay(juce_app):
     milliseconds = 100
     called = False

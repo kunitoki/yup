@@ -1,3 +1,5 @@
+import pytest
+
 import yup
 
 #==================================================================================================
@@ -12,6 +14,7 @@ class ActionListener(yup.ActionListener):
 
 #==================================================================================================
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_single_send(juce_app):
     b = yup.ActionBroadcaster()
 
@@ -27,6 +30,7 @@ def test_single_send(juce_app):
 
 #==================================================================================================
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_multi_send(juce_app):
     b = yup.ActionBroadcaster()
 
@@ -44,6 +48,7 @@ def test_multi_send(juce_app):
 
 #==================================================================================================
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_remove_listener(juce_app):
     b = yup.ActionBroadcaster()
 
@@ -63,6 +68,7 @@ def test_remove_listener(juce_app):
 
 #==================================================================================================
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_remove_all_listeners(juce_app):
     b = yup.ActionBroadcaster()
 

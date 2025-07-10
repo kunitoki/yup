@@ -1,3 +1,5 @@
+import pytest
+
 import yup
 
 #==================================================================================================
@@ -11,6 +13,7 @@ class Message(yup.Message):
 
 #==================================================================================================
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_construct_and_post(juce_app):
     global timesCalled
 

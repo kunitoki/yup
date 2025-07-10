@@ -1,3 +1,5 @@
+import pytest
+
 import yup
 
 #==================================================================================================
@@ -12,6 +14,7 @@ class ChangeListener(yup.ChangeListener):
 
 #==================================================================================================
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_single_send(juce_app):
     b = yup.ChangeBroadcaster()
 
@@ -27,6 +30,7 @@ def test_single_send(juce_app):
 
 #==================================================================================================
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_multi_send(juce_app):
     b = yup.ChangeBroadcaster()
 
@@ -44,6 +48,7 @@ def test_multi_send(juce_app):
 
 #==================================================================================================
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_multi_send_separate_broadcasters(juce_app):
     a = yup.ChangeBroadcaster()
     b = yup.ChangeBroadcaster()
@@ -65,6 +70,7 @@ def test_multi_send_separate_broadcasters(juce_app):
 
 #==================================================================================================
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_remove_listener(juce_app):
     a = yup.ChangeBroadcaster()
     b = yup.ChangeBroadcaster()
@@ -93,6 +99,7 @@ def test_remove_listener(juce_app):
 
 #==================================================================================================
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_remove_all_listeners(juce_app):
     b = yup.ChangeBroadcaster()
 
@@ -118,6 +125,7 @@ def test_remove_all_listeners(juce_app):
 
 #==================================================================================================
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_synchronous_send(juce_app):
     b = yup.ChangeBroadcaster()
 
@@ -141,6 +149,7 @@ def test_synchronous_send(juce_app):
 
 #==================================================================================================
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_dispatch_pending_messages(juce_app):
     b = yup.ChangeBroadcaster()
 

@@ -1,3 +1,5 @@
+import pytest
+
 import yup
 
 #==================================================================================================
@@ -10,6 +12,7 @@ class AsyncUpdater(yup.AsyncUpdater):
 
 #==================================================================================================
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_single_trigger(juce_app):
     a = AsyncUpdater()
     assert not a.isUpdatePending()
@@ -22,6 +25,7 @@ def test_single_trigger(juce_app):
 
 #==================================================================================================
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_multiple_trigger(juce_app):
     a = AsyncUpdater()
 
@@ -37,6 +41,7 @@ def test_multiple_trigger(juce_app):
 
 #==================================================================================================
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_cancel_single_trigger(juce_app):
     a = AsyncUpdater()
 
@@ -51,6 +56,7 @@ def test_cancel_single_trigger(juce_app):
 
 #==================================================================================================
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_handle_update_now(juce_app):
     a = AsyncUpdater()
 
