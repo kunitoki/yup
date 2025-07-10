@@ -1514,15 +1514,15 @@ AffineTransform Drawable::calculateTransformForTarget (const Rectangle<float>& s
     float offsetY = targetArea.getY();
 
     // Horizontal justification
-    if ((static_cast<int> (justification) & static_cast<int> (Justification::horizontalCenter)) != 0)
+    if (justification.testFlags (Justification::horizontalCenter))
         offsetX += (targetArea.getWidth() - scaledWidth) * 0.5f;
-    else if ((static_cast<int> (justification) & static_cast<int> (Justification::right)) != 0)
+    else if (justification.testFlags (Justification::right))
         offsetX += targetArea.getWidth() - scaledWidth;
 
     // Vertical justification
-    if ((static_cast<int> (justification) & static_cast<int> (Justification::verticalCenter)) != 0)
+    if (justification.testFlags (Justification::verticalCenter))
         offsetY += (targetArea.getHeight() - scaledHeight) * 0.5f;
-    else if ((static_cast<int> (justification) & static_cast<int> (Justification::bottom)) != 0)
+    else if (justification.testFlags (Justification::bottom))
         offsetY += targetArea.getHeight() - scaledHeight;
 
     // Create transform: translate to origin, scale, then translate to target position
