@@ -701,12 +701,15 @@ constexpr unsigned int truncatePositiveToUnsignedInt (FloatType value) noexcept
 template <typename IntegerType>
 constexpr bool isPowerOfTwo (IntegerType value)
 {
-    return (value & (value - 1)) == 0;
+    return value != 0 && (value & (value - 1)) == 0;
 }
 
 /** Returns the smallest power-of-two which is equal to or greater than the given integer. */
 constexpr int nextPowerOfTwo (int n) noexcept
 {
+    if (n <= 0)
+        return 1;
+
     --n;
     n |= (n >> 1);
     n |= (n >> 2);
