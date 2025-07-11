@@ -161,7 +161,7 @@ public:
     */
     [[nodiscard]] bool contains (ValueType x, ValueType y, ValueType width, ValueType height) const
     {
-        return rectangles.contains (x, y, width, height);
+        return contains (RectangleType { x, y, width, height });
     }
 
     [[nodiscard]] bool contains (const RectangleType& rect) const
@@ -178,18 +178,18 @@ public:
     */
     [[nodiscard]] bool contains (ValueType x, ValueType y) const
     {
-        for (const auto& rect : rectangles)
-        {
-            if (rect.contains (x, y))
-                return true;
-        }
-
-        return false;
+        return contains (Point<ValueType> { x, y });
     }
 
     [[nodiscard]] bool contains (const Point<ValueType>& point) const
     {
-        return contains (point.getX(), point.getY());
+        for (const auto& r : rectangles)
+        {
+            if (r.contains (point))
+                return true;
+        }
+
+        return false;
     }
 
     //==============================================================================
@@ -201,18 +201,18 @@ public:
     */
     [[nodiscard]] bool intersects (ValueType x, ValueType y, ValueType width, ValueType height) const
     {
-        for (const auto& rect : rectangles)
-        {
-            if (rect.intersects (x, y, width, height))
-                return true;
-        }
-
-        return false;
+        return intersects (RectangleType { x, y, width, height });
     }
 
     [[nodiscard]] bool intersects (const RectangleType& rect) const
     {
-        return intersects (rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight());
+        for (const auto& r : rectangles)
+        {
+            if (rect.intersects (r))
+                return true;
+        }
+
+        return false;
     }
 
     //==============================================================================
@@ -256,21 +256,20 @@ public:
     */
     [[nodiscard]] RectangleType getBoundingBox() const
     {
+        if (rectangles.isEmpty())
+            return {};
+
         ValueType minX = std::numeric_limits<ValueType>::max();
         ValueType maxX = std::numeric_limits<ValueType>::min();
         ValueType minY = std::numeric_limits<ValueType>::max();
         ValueType maxY = std::numeric_limits<ValueType>::min();
 
-        for (const auto& rect : rectangles)
+        for (const auto& r : rectangles)
         {
-            if (minX > rect.getX())
-                minX = rect.getX();
-            if (minY > rect.getY())
-                minY = rect.getY();
-            if (maxX > rect.getX() + rect.getWidth())
-                maxX = rect.getX() + rect.getWidth();
-            if (maxY > rect.getY() + rect.getHeight())
-                maxY = rect.getY() + rect.getHeight();
+            minX = jmin (minX, r.getX());
+            minY = jmin (minY, r.getY());
+            maxX = jmax (maxX, r.getX() + r.getWidth());
+            maxY = jmax (maxY, r.getY() + r.getHeight());
         }
 
         return { minX, minY, maxX - minX, maxY - minY };

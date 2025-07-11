@@ -444,7 +444,9 @@ void MessageManager::stopDispatchLoop()
         for (const auto& func : shutdownCallbacks)
             func();
 
+#if YUP_SHUTDOWN_APP_ON_MESSAGEMANAGER_QUIT
         shutdownNSApp();
+#endif
     }
     else
     {

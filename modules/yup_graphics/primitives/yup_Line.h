@@ -277,7 +277,12 @@ public:
     */
     constexpr bool contains (const Point<ValueType>& point, float tolerance) const noexcept
     {
-        return std::abs ((point.getY() - p1.getY()) * (p2.getX() - p1.getX()) - (point.getX() - p1.getX()) * (p2.getY() - p1.getY())) < tolerance;
+        const auto lineLength = p1.distanceTo (p2);
+        if (lineLength == 0.0f)
+            return p1.distanceTo (point) <= tolerance;
+
+        const auto area = yup_abs ((point.getY() - p1.getY()) * (p2.getX() - p1.getX()) - (point.getX() - p1.getX()) * (p2.getY() - p1.getY()));
+        return (area / lineLength) <= tolerance;
     }
 
     //==============================================================================
@@ -534,17 +539,17 @@ public:
     */
     constexpr Line& transform (const AffineTransform& t) noexcept
     {
-        auto x1 = static_cast<float> (p1.x);
-        auto y1 = static_cast<float> (p1.y);
-        auto x2 = static_cast<float> (p2.x);
-        auto y2 = static_cast<float> (p2.y);
+        auto x1 = static_cast<float> (p1.getX());
+        auto y1 = static_cast<float> (p1.getY());
+        auto x2 = static_cast<float> (p2.getX());
+        auto y2 = static_cast<float> (p2.getY());
 
         t.transformPoints (x1, y1, x2, y2);
 
-        p1.x = static_cast<ValueType> (x1);
-        p1.y = static_cast<ValueType> (y1);
-        p2.x = static_cast<ValueType> (x2);
-        p2.y = static_cast<ValueType> (y2);
+        p1.setX (static_cast<ValueType> (x1));
+        p1.setY (static_cast<ValueType> (y1));
+        p2.setX (static_cast<ValueType> (x2));
+        p2.setY (static_cast<ValueType> (y2));
 
         return *this;
     }

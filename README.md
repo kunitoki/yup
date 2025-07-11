@@ -142,7 +142,7 @@ Available recipes:
     ios PLATFORM="OS64"                     # generate and open project for iOS using Xcode
     ios_simulator PLATFORM="SIMULATORARM64" # generate and open project for iOS Simulator macOS using Xcode
     linux PROFILING="OFF"                   # generate project in Linux using Ninja
-    osx PROFILING="OFF"                     # generate and open project in macOS using Xcode
+    mac PROFILING="OFF"                     # generate and open project in macOS using Xcode
     win PROFILING="OFF"                     # generate and open project in Windows using Visual Studio
 ```
 

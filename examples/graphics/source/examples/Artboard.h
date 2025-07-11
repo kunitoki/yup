@@ -21,8 +21,7 @@
 
 #pragma once
 
-namespace yup
-{
+//==============================================================================
 
 class ArtboardDemo : public yup::Component
 {
@@ -38,7 +37,7 @@ public:
         if (factory == nullptr)
             return false;
 
-#if JUCE_ANDROID
+#if YUP_ANDROID
         yup::MemoryInputStream is (yup::RiveFile_data, yup::RiveFile_size, false);
         auto artboardFile = yup::ArtboardFile::load (is, *factory);
 
@@ -100,7 +99,7 @@ public:
         }
     }
 
-    void paint (Graphics& g) override
+    void paint (yup::Graphics& g) override
     {
         g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
         g.fillAll();
@@ -111,5 +110,3 @@ private:
     int totalRows = 1;
     int totalColumns = 1;
 };
-
-} // namespace yup

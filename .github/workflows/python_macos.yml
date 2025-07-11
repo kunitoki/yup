@@ -1,0 +1,70 @@
+name: MacOS Python
+
+on:
+  push:
+    paths:
+      - "CMakeLists.txt"
+      - "**/workflows/python_macos.yml"
+      - "**/cmake/**"
+      - "**/modules/**"
+      - "**/thirdparty/**"
+      - "**/python/**"
+      - "!**/native/generated/**"
+      - "!**/native/java*/**"
+      - "!**/native/*_android.*"
+      - "!**/native/*_emscripten.*"
+      - "!**/native/*_linux.*"
+      - "!**/native/*_ios.*"
+      - "!**/native/*_wasm.*"
+      - "!**/native/*_windows.*"
+    branches:
+      - "**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_python:
+    name: build_cp${{matrix.python}}-${{ matrix.platform_id }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: false
+
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+        - { os: macos-15, python: 311, platform_id: macosx_universal2, cibw_archs: universal2 }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup and install python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v3.0.0
+        env:
+          CIBW_ARCHS: ${{matrix.cibw_archs}}
+          CIBW_BUILD: cp${{ matrix.python }}-${{ matrix.platform_id }}
+          #CIBW_TEST_SKIP: "*-macosx_x86_64 *-macosx_universal2:x86_64"
+          CIBW_DEBUG_TRACEBACK: TRUE
+          CIBW_ENVIRONMENT: |
+            CIBW_DEBUG_TRACEBACK=TRUE MACOSX_DEPLOYMENT_TARGET=11.0 YUP_OSX_DEPLOYMENT_TARGET=11.0 YUP_OSX_ARCHITECTURES="x86_64;arm64"
+        with:
+          package-dir: python
+
+      - name: Store failures artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compare-data
+          path: |
+            python/tests/compare_data/
+            !python/tests/compare_data/.gitignore
+          if-no-files-found: ignore
+          retention-days: 5
+          compression-level: 0
+          overwrite: true

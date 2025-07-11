@@ -90,8 +90,7 @@ function (_yup_module_collect_sources folder output_variable)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_ios${extension}")
         endif()
 
-        if (NOT YUP_PLATFORM_OSX)
-            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_osx${extension}")
+        if (NOT YUP_PLATFORM_MAC)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_mac${extension}")
         endif()
 
@@ -169,6 +168,7 @@ function (_yup_module_setup_target module_name
                                    module_defines
                                    module_sources
                                    module_libs
+                                   module_libs_paths
                                    module_link_options
                                    module_frameworks
                                    module_dependencies
@@ -191,7 +191,7 @@ function (_yup_module_setup_target module_name
         CXX_VISIBILITY_PRESET hidden
         VISIBILITY_INLINES_HIDDEN ON)
 
-    if (YUP_PLATFORM_OSX OR YUP_PLATFORM_IOS)
+    if (YUP_PLATFORM_APPLE)
         set_target_properties (${module_name} PROPERTIES
             XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC ${module_arc_enabled}
             XCODE_GENERATE_SCHEME OFF)
@@ -208,6 +208,9 @@ function (_yup_module_setup_target module_name
 
     target_include_directories (${module_name} INTERFACE
         ${module_include_paths})
+
+    target_link_directories (${module_name} INTERFACE
+        ${module_libs_paths})
 
     target_link_libraries (${module_name} INTERFACE
         ${module_libs}
@@ -258,6 +261,7 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
     get_target_property (module_defines ${plugin_client_target} YUP_MODULE_DEFINES)
     get_target_property (module_options ${plugin_client_target} YUP_MODULE_OPTIONS)
     get_target_property (module_libs ${plugin_client_target} YUP_MODULE_LIBS)
+    get_target_property (module_libs_paths ${plugin_client_target} YUP_MODULE_LIBS_PATHS)
     get_target_property (module_link_options ${plugin_client_target} YUP_MODULE_LINK_OPTIONS)
     get_target_property (module_frameworks ${plugin_client_target} YUP_MODULE_FRAMEWORK)
     get_target_property (module_dependencies ${plugin_client_target} YUP_MODULE_DEPENDENCIES)
@@ -298,6 +302,7 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
                               "${module_defines}"
                               "${module_sources}"
                               "${module_libs}"
+                              "${module_libs_paths}"
                               "${module_link_options}"
                               "${module_frameworks}"
                               "${module_dependencies}"
@@ -312,7 +317,7 @@ endfunction()
 
 #==============================================================================
 
-function (yup_add_module module_path module_group)
+function (yup_add_module module_path modules_definitions module_group)
     get_filename_component (module_path ${module_path} ABSOLUTE)
     get_filename_component (module_name ${module_path} NAME)
 
@@ -336,7 +341,7 @@ function (yup_add_module module_path module_group)
     _yup_module_parse_config ("${module_header}" module_configs module_user_configs)
 
     # ==== Assign Configurations Dynamically
-    set (global_properties "dependencies|defines|options|searchpaths")
+    set (global_properties "dependencies|defines|libs|options|searchpaths")
     set (platform_properties "^(.*)Deps$|^(.*)Defines$|^(.*)Libs$|^(.*)Frameworks$|^(.*)WeakFrameworks$|^(.*)Options$|^(.*)LinkOptions$|^(.*)Packages$|^(.*)Searchpaths$|^(.*)CppStandard$")
 
     set (parsed_config "")
@@ -356,11 +361,14 @@ function (yup_add_module module_path module_group)
             set (module_cpp_standard "${value}")
         elseif (${key} MATCHES "^enableARC$")
             _yup_boolean_property ("${value}" module_arc_enabled)
+        elseif (${key} MATCHES "^needsPython$")
+            _yup_boolean_property ("${value}" module_needs_python)
         endif()
     endforeach()
 
     _yup_set_default (module_cpp_standard "17")
     _yup_set_default (module_arc_enabled OFF)
+    _yup_set_default (module_needs_python OFF)
     _yup_resolve_variable_paths ("${module_searchpaths}" module_searchpaths)
 
     # ==== Setup Platform-Specific Configurations
@@ -407,30 +415,30 @@ function (yup_add_module module_path module_group)
         _yup_module_prepare_frameworks ("${module_appleFrameworks}" "${module_appleWeakFrameworks}" module_appleFrameworks)
         list (APPEND module_frameworks ${module_appleFrameworks})
 
-    elseif (YUP_PLATFORM_OSX)
+    elseif (YUP_PLATFORM_MAC)
         if (module_appleCppStandard)
             set (module_cpp_standard "${module_appleCppStandard}")
         endif()
-        list (APPEND module_dependencies ${module_osxDeps})
+        list (APPEND module_dependencies ${module_macDeps})
         list (APPEND module_dependencies ${module_appleDeps})
-        list (APPEND module_defines ${module_osxDefines})
+        list (APPEND module_defines ${module_macDefines})
         list (APPEND module_defines ${module_appleDefines})
-        list (APPEND module_options ${module_osxOptions})
+        list (APPEND module_options ${module_macOptions})
         list (APPEND module_options ${module_appleOptions})
-        list (APPEND module_libs ${module_osxLibs})
-        list (APPEND module_link_options ${module_osxLinkOptions})
+        list (APPEND module_libs ${module_macLibs})
+        list (APPEND module_link_options ${module_macLinkOptions})
         list (APPEND module_libs ${module_appleLibs})
         list (APPEND module_link_options ${module_appleLinkOptions})
-        _yup_resolve_variable_paths ("${module_osxSearchpaths}" module_osxSearchpaths)
-        list (APPEND module_searchpaths ${module_osxSearchpaths})
+        _yup_resolve_variable_paths ("${module_macSearchpaths}" module_macSearchpaths)
+        list (APPEND module_searchpaths ${module_macSearchpaths})
         _yup_resolve_variable_paths ("${module_appleSearchpaths}" module_appleSearchpaths)
         list (APPEND module_searchpaths ${module_appleSearchpaths})
-        _yup_module_prepare_frameworks ("${module_osxFrameworks}" "${module_osxWeakFrameworks}" module_osxFrameworks)
-        list (APPEND module_frameworks ${module_osxFrameworks})
+        _yup_module_prepare_frameworks ("${module_macFrameworks}" "${module_macWeakFrameworks}" module_macFrameworks)
+        list (APPEND module_frameworks ${module_macFrameworks})
         _yup_module_prepare_frameworks ("${module_appleFrameworks}" "${module_appleWeakFrameworks}" module_appleFrameworks)
         list (APPEND module_frameworks ${module_appleFrameworks})
-        if (module_osxCppStandard)
-            set (module_cpp_standard "${module_osxCppStandard}")
+        if (module_macCppStandard)
+            set (module_cpp_standard "${module_macCppStandard}")
         endif()
 
     elseif (YUP_PLATFORM_LINUX)
@@ -496,6 +504,11 @@ function (yup_add_module module_path module_group)
         endif()
     endif()
 
+    # ==== Add module definitions
+    foreach (module_definition ${modules_definitions})
+        list (APPEND module_defines ${module_definition})
+    endforeach()
+
     # ==== Prepare include paths
     get_filename_component (module_include_path ${module_path} DIRECTORY)
     list (APPEND module_include_paths "${module_include_path}")
@@ -507,6 +520,25 @@ function (yup_add_module module_path module_group)
             list (APPEND module_include_paths "${module_path}/${searchpath}")
         endif()
     endforeach()
+
+    # ==== Fetch Python if needed
+    if (module_needs_python)
+        if (NOT YUP_BUILD_WHEEL)
+            list (APPEND module_libs Python::Python)
+            if (YUP_PLATFORM_MAC)
+                list (APPEND module_link_options "-Wl,-weak_reference_mismatches,weak")
+            endif()
+        else()
+            list (APPEND module_libs Python::Module)
+        endif()
+
+        if (NOT "${Python_INCLUDE_DIRS}" STREQUAL "")
+            list (APPEND module_include_paths "${Python_INCLUDE_DIRS}")
+        endif()
+        if (NOT "${Python_LIBRARY_DIRS}" STREQUAL "")
+            list (APPEND module_libs_paths "${Python_LIBRARY_DIRS}")
+        endif()
+    endif()
 
     # ==== Scan sources to include
     _yup_module_collect_sources ("${module_path}" module_sources)
@@ -520,6 +552,7 @@ function (yup_add_module module_path module_group)
                               "${module_defines}"
                               "${module_sources}"
                               "${module_libs}"
+                              "${module_libs_paths}"
                               "${module_link_options}"
                               "${module_frameworks}"
                               "${module_dependencies}"
@@ -545,6 +578,7 @@ function (yup_add_module module_path module_group)
         YUP_MODULE_DEFINES "${module_defines}"
         YUP_MODULE_SOURCES "${module_sources}"
         YUP_MODULE_LIBS "${module_libs}"
+        YUP_MODULE_LIBS_PATHS "${module_libs_paths}"
         YUP_MODULE_LINK_OPTIONS "${module_link_options}"
         YUP_MODULE_FRAMEWORK "${module_frameworks}"
         YUP_MODULE_DEPENDENCIES "${module_dependencies}"
@@ -559,47 +593,79 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_add_default_modules modules_path)
-    # Thirdparty modules
-    set (thirdparty_group "Thirdparty")
-    yup_add_module (${modules_path}/thirdparty/zlib ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/glad ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/harfbuzz ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/libpng ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/libwebp ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/sheenbidi ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/yoga_library ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/rive ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/rive_decoders ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/rive_renderer ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/oboe_library ${thirdparty_group})
+macro (yup_add_default_modules modules_path)
+    get_filename_component (modules_path "${modules_path}" ABSOLUTE)
+    _yup_message (STATUS "Adding default modules from ${modules_path}")
 
-    # Yup modules
+    # ==== Fetch options
+    set (options "")
+    set (one_value_args ENABLE_PYTHON)
+    set (multi_value_args DEFINITIONS)
+    cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
+    _yup_set_default (YUP_ARG_TARGET_DEFINITIONS "")
+    _yup_set_default (YUP_ARG_ENABLE_PYTHON OFF)
+    set (modules_definitions "${YUP_ARG_DEFINITIONS}")
+
+    # ==== Thirdparty modules
+    set (thirdparty_group "Thirdparty")
+    yup_add_module (${modules_path}/thirdparty/zlib "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/glad "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/harfbuzz "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/libpng "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/libwebp "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/sheenbidi "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/yoga_library "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/rive "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/rive_decoders "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/rive_renderer "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/oboe_library "${modules_definitions}" ${thirdparty_group})
+
+    # ==== Yup modules
     set (modules_group "Modules")
-    yup_add_module (${modules_path}/modules/yup_core ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_core "${modules_definitions}" ${modules_group})
     add_library (yup::yup_core ALIAS yup_core)
 
-    yup_add_module (${modules_path}/modules/yup_events ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_events "${modules_definitions}" ${modules_group})
     add_library (yup::yup_events ALIAS yup_events)
 
-    yup_add_module (${modules_path}/modules/yup_data_model ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_data_model "${modules_definitions}" ${modules_group})
     add_library (yup::yup_data_model ALIAS yup_data_model)
 
-    yup_add_module (${modules_path}/modules/yup_audio_basics ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_audio_basics "${modules_definitions}" ${modules_group})
     add_library (yup::yup_audio_basics ALIAS yup_audio_basics)
 
-    yup_add_module (${modules_path}/modules/yup_audio_devices ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_audio_devices "${modules_definitions}" ${modules_group})
     add_library (yup::yup_audio_devices ALIAS yup_audio_devices)
 
-    yup_add_module (${modules_path}/modules/yup_audio_processors ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_audio_processors "${modules_definitions}" ${modules_group})
     add_library (yup::yup_audio_processors ALIAS yup_audio_processors)
 
-    yup_add_module (${modules_path}/modules/yup_audio_plugin_client ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_audio_plugin_client "${modules_definitions}" ${modules_group})
     add_library (yup::yup_audio_plugin_client ALIAS yup_audio_plugin_client)
 
-    yup_add_module (${modules_path}/modules/yup_graphics ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_graphics "${modules_definitions}" ${modules_group})
     add_library (yup::yup_graphics ALIAS yup_graphics)
 
-    yup_add_module (${modules_path}/modules/yup_gui ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_gui "${modules_definitions}" ${modules_group})
     add_library (yup::yup_gui ALIAS yup_gui)
-endfunction()
+
+    if (YUP_ARG_ENABLE_PYTHON)
+        if (NOT YUP_BUILD_WHEEL)
+            set (python_modules "Interpreter;Development.Embed")
+        else()
+            set (python_modules "Interpreter;Development.Module")
+        endif()
+
+        _yup_fetch_python ("${YUP_ENABLE_STATIC_PYTHON_LIBS}" "${python_modules}")
+        _yup_message (STATUS "Found python modules: ${python_modules}")
+        _yup_message (STATUS "* Python_EXECUTABLE: ${Python_EXECUTABLE}")
+        _yup_message (STATUS "* Python_VERSION_MAJOR: ${Python_VERSION_MAJOR}")
+        _yup_message (STATUS "* Python_VERSION_MINOR: ${Python_VERSION_MINOR}")
+        _yup_message (STATUS "* Python_INCLUDE_DIR: ${Python_INCLUDE_DIR}")
+        _yup_message (STATUS "* Python_LIBRARY_DIRS: ${Python_LIBRARY_DIRS}")
+        _yup_message (STATUS "* Python_ROOT_DIR: ${Python_ROOT_DIR}")
+
+        yup_add_module (${modules_path}/modules/yup_python "${modules_definitions}" ${modules_group})
+        add_library (yup::yup_python ALIAS yup_python)
+    endif()
+endmacro()

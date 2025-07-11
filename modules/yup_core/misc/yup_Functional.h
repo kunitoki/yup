@@ -99,7 +99,7 @@ using DisableIfSameOrDerived = std::enable_if_t<! std::is_base_of_v<A, std::remo
 
 /** Copies an object, sets one of the copy's members to the specified value, and then returns the copy. */
 template <typename Object, typename OtherObject, typename Member, typename Other>
-[[nodiscard]] Object withMember (Object copy, Member OtherObject::* member, Other&& value)
+[[nodiscard]] constexpr Object withMember (Object copy, Member OtherObject::* member, Other&& value)
 {
     copy.*member = std::forward<Other> (value);
     return copy;
@@ -124,13 +124,13 @@ static constexpr auto toFnPtr (Functor functor)
 }
 
 template <typename T, typename... Args>
-static auto tuplePrepend (T&& t, Args&&... args)
+static constexpr auto tuplePrepend (T&& t, Args&&... args)
 {
     return std::tuple_cat (std::forward<T> (t), std::forward_as_tuple (args...));
 }
 
 template <typename T, typename... Args>
-static auto tupleAppend (T&& t, Args&&... args)
+static constexpr auto tupleAppend (T&& t, Args&&... args)
 {
     return std::tuple_cat (std::forward_as_tuple (args...), std::forward<T> (t));
 }

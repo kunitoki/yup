@@ -62,6 +62,10 @@ TEST (PointTests, GetSet_Coordinates)
     p.setY (4.0f);
     EXPECT_FLOAT_EQ (p.getX(), 3.0f);
     EXPECT_FLOAT_EQ (p.getY(), 4.0f);
+
+    auto p2 = p.withXY (5.0f, 6.0f);
+    EXPECT_FLOAT_EQ (p2.getX(), 5.0f);
+    EXPECT_FLOAT_EQ (p2.getY(), 6.0f);
 }
 
 TEST (PointTests, With_Coordinates)
@@ -179,6 +183,14 @@ TEST (PointTests, Rotation)
     }
 }
 
+TEST (PointTests, AngleTo)
+{
+    Point<float> p1 (0.0f, 0.0f);
+    Point<float> p2 (1.0f, 1.0f);
+
+    EXPECT_FLOAT_EQ (p1.angleTo (p2), yup::degreesToRadians (45.0f));
+}
+
 TEST (PointTests, Midpoint)
 {
     Point<float> p1 (0.0f, 0.0f);
@@ -234,6 +246,20 @@ TEST (PointTests, Reflection)
     Point<float> pO = p.reflectedOverOrigin();
     EXPECT_FLOAT_EQ (pO.getX(), -1.0f);
     EXPECT_FLOAT_EQ (pO.getY(), -2.0f);
+
+    Point<float> p0 (1.0f, 2.0f);
+
+    p0.reflectOverXAxis();
+    EXPECT_FLOAT_EQ (p0.getX(), 1.0f);
+    EXPECT_FLOAT_EQ (p0.getY(), -2.0f);
+
+    p0.reflectOverYAxis();
+    EXPECT_FLOAT_EQ (p0.getX(), -1.0f);
+    EXPECT_FLOAT_EQ (p0.getY(), -2.0f);
+
+    p0.reflectOverOrigin();
+    EXPECT_FLOAT_EQ (p0.getX(), 1.0f);
+    EXPECT_FLOAT_EQ (p0.getY(), 2.0f);
 }
 
 TEST (PointTests, MinMax_Abs)
@@ -263,18 +289,42 @@ TEST (PointTests, Arithmetic_Operators)
     Point<float> sum = p1 + p2;
     EXPECT_FLOAT_EQ (sum.getX(), 4.0f);
     EXPECT_FLOAT_EQ (sum.getY(), 6.0f);
+    sum = sum + 1.0f;
+    EXPECT_FLOAT_EQ (sum.getX(), 5.0f);
+    EXPECT_FLOAT_EQ (sum.getY(), 7.0f);
+    sum += 1.0f;
+    EXPECT_FLOAT_EQ (sum.getX(), 6.0f);
+    EXPECT_FLOAT_EQ (sum.getY(), 8.0f);
 
     Point<float> diff = p2 - p1;
     EXPECT_FLOAT_EQ (diff.getX(), 2.0f);
     EXPECT_FLOAT_EQ (diff.getY(), 2.0f);
+    diff = diff - 1.0f;
+    EXPECT_FLOAT_EQ (diff.getX(), 1.0f);
+    EXPECT_FLOAT_EQ (diff.getY(), 1.0f);
+    diff -= 1.0f;
+    EXPECT_FLOAT_EQ (diff.getX(), 0.0f);
+    EXPECT_FLOAT_EQ (diff.getY(), 0.0f);
 
-    Point<float> scaled = p1 * 2.0f;
-    EXPECT_FLOAT_EQ (scaled.getX(), 2.0f);
-    EXPECT_FLOAT_EQ (scaled.getY(), 4.0f);
+    Point<float> mul = p2 * p1;
+    EXPECT_FLOAT_EQ (mul.getX(), 3.0f);
+    EXPECT_FLOAT_EQ (mul.getY(), 8.0f);
+    mul = mul * 2.0f;
+    EXPECT_FLOAT_EQ (mul.getX(), 6.0f);
+    EXPECT_FLOAT_EQ (mul.getY(), 16.0f);
+    mul *= 0.5f;
+    EXPECT_FLOAT_EQ (mul.getX(), 3.0f);
+    EXPECT_FLOAT_EQ (mul.getY(), 8.0f);
 
-    Point<float> divided = scaled / 2.0f;
-    EXPECT_FLOAT_EQ (divided.getX(), 1.0f);
-    EXPECT_FLOAT_EQ (divided.getY(), 2.0f);
+    Point<float> div = p2 / p1;
+    EXPECT_FLOAT_EQ (div.getX(), 3.0f);
+    EXPECT_FLOAT_EQ (div.getY(), 2.0f);
+    div = div / 2.0f;
+    EXPECT_FLOAT_EQ (div.getX(), 1.5f);
+    EXPECT_FLOAT_EQ (div.getY(), 1.0f);
+    div /= 0.5f;
+    EXPECT_FLOAT_EQ (div.getX(), 3.0f);
+    EXPECT_FLOAT_EQ (div.getY(), 2.0f);
 }
 
 TEST (PointTests, Equality_Operators)
@@ -627,4 +677,292 @@ TEST (PointTests, IsWithinRectangle_Invalid)
     // Test with single-point rectangle
     Point<float> samePoint (2.0f, 3.0f);
     EXPECT_TRUE (p.isWithinRectangle (samePoint, samePoint));
+}
+
+// Additional edge cases and method combinations
+TEST (PointTests, DistanceCalculations_EdgeCases)
+{
+    Point<float> origin (0.0f, 0.0f);
+    Point<float> same (0.0f, 0.0f);
+
+    // Test distance to same point
+    EXPECT_FLOAT_EQ (origin.distanceTo (same), 0.0f);
+    EXPECT_FLOAT_EQ (origin.distanceToSquared (same), 0.0f);
+    EXPECT_FLOAT_EQ (origin.manhattanDistanceTo (same), 0.0f);
+
+    // Test with negative coordinates
+    Point<float> negative (-3.0f, -4.0f);
+    EXPECT_FLOAT_EQ (origin.distanceTo (negative), 5.0f);
+    EXPECT_FLOAT_EQ (origin.horizontalDistanceTo (negative), 3.0f);
+    EXPECT_FLOAT_EQ (origin.verticalDistanceTo (negative), 4.0f);
+
+    // Test with infinity
+    Point<float> inf (std::numeric_limits<float>::infinity(), 0.0f);
+    EXPECT_TRUE (std::isinf (origin.distanceTo (inf)));
+    EXPECT_TRUE (std::isinf (origin.distanceToSquared (inf)));
+}
+
+TEST (PointTests, VectorOperations_EdgeCases)
+{
+    Point<float> zero (0.0f, 0.0f);
+    Point<float> p (3.0f, 4.0f);
+
+    // Test dot product with zero vector
+    EXPECT_FLOAT_EQ (zero.dotProduct (p), 0.0f);
+    EXPECT_FLOAT_EQ (p.dotProduct (zero), 0.0f);
+
+    // Test cross product with zero vector
+    EXPECT_FLOAT_EQ (zero.crossProduct (p), 0.0f);
+    EXPECT_FLOAT_EQ (p.crossProduct (zero), 0.0f);
+
+    // Test dot product with self
+    EXPECT_FLOAT_EQ (p.dotProduct (p), 25.0f); // 3*3 + 4*4
+
+    // Test cross product with self (should be zero)
+    EXPECT_FLOAT_EQ (p.crossProduct (p), 0.0f);
+
+    // Test perpendicular vectors
+    Point<float> perp (4.0f, -3.0f);
+    EXPECT_FLOAT_EQ (p.dotProduct (perp), 0.0f);
+    EXPECT_FLOAT_EQ (p.crossProduct (perp), -25.0f);
+}
+
+TEST (PointTests, NormalizationEdgeCases)
+{
+    // Test already normalized vector
+    Point<float> normalized (0.6f, 0.8f); // magnitude = 1.0
+    EXPECT_TRUE (normalized.isNormalized());
+
+    auto stillNormalized = normalized.normalized();
+    EXPECT_NEAR (stillNormalized.magnitude(), 1.0f, tol);
+
+    // Test very small vector
+    Point<float> tiny (1e-10f, 1e-10f);
+    auto normalizedTiny = tiny.normalized();
+    EXPECT_NEAR (normalizedTiny.magnitude(), 1.0f, tol);
+
+    // Test with NaN
+    Point<float> nanPoint (std::numeric_limits<float>::quiet_NaN(), 1.0f);
+    EXPECT_FALSE (nanPoint.isNormalized());
+
+    // Test with infinity
+    Point<float> infPoint (std::numeric_limits<float>::infinity(), 1.0f);
+    EXPECT_FALSE (infPoint.isNormalized());
+}
+
+TEST (PointTests, ArithmeticOperators_EdgeCases)
+{
+    Point<float> p1 (1.0f, 2.0f);
+    Point<float> zero (0.0f, 0.0f);
+
+    // Test operations with zero
+    EXPECT_EQ (p1 + zero, p1);
+    EXPECT_EQ (p1 - zero, p1);
+    EXPECT_EQ (p1 * zero, zero);
+
+    // Test division by zero point (should not modify)
+    Point<float> p2 = p1 / zero;
+    EXPECT_EQ (p2, p1);
+
+    // Test with negative scalars
+    Point<float> scaled = p1 * -2.0f;
+    EXPECT_EQ (scaled, Point<float> (-2.0f, -4.0f));
+
+    // Test compound assignment with zero
+    Point<float> p3 = p1;
+    p3 += zero;
+    EXPECT_EQ (p3, p1);
+
+    p3 -= zero;
+    EXPECT_EQ (p3, p1);
+
+    p3 *= 0.0f;
+    EXPECT_EQ (p3, zero);
+}
+
+TEST (PointTests, LerpAndMidpoint_EdgeCases)
+{
+    Point<float> p1 (0.0f, 0.0f);
+    Point<float> p2 (10.0f, 20.0f);
+
+    // Test lerp with values outside [0,1]
+    Point<float> lerped = p1.lerp (p2, -0.5f);
+    EXPECT_EQ (lerped, Point<float> (-5.0f, -10.0f));
+
+    lerped = p1.lerp (p2, 2.0f);
+    EXPECT_EQ (lerped, Point<float> (20.0f, 40.0f));
+
+    // Test lerp with same points
+    Point<float> same = p1.lerp (p1, 0.5f);
+    EXPECT_EQ (same, p1);
+
+    // Test midpoint with same points
+    Point<float> midSame = p1.midpoint (p1);
+    EXPECT_EQ (midSame, p1);
+}
+
+TEST (PointTests, RotationWithOrigin)
+{
+    Point<float> p (1.0f, 0.0f);
+
+    // Test rotation around origin
+    auto rotated90 = p.rotatedCounterClockwise (MathConstants<float>::halfPi);
+    EXPECT_NEAR (rotated90.getX(), 0.0f, tol);
+    EXPECT_NEAR (rotated90.getY(), 1.0f, tol);
+
+    // Test multiple rotations
+    auto rotated180 = rotated90.rotatedCounterClockwise (MathConstants<float>::halfPi);
+    EXPECT_NEAR (rotated180.getX(), -1.0f, tol);
+    EXPECT_NEAR (rotated180.getY(), 0.0f, tol);
+
+    // Test rotation by 2π (should return to original)
+    auto rotated360 = p.rotatedCounterClockwise (MathConstants<float>::twoPi);
+    EXPECT_NEAR (rotated360.getX(), 1.0f, tol);
+    EXPECT_NEAR (rotated360.getY(), 0.0f, tol);
+}
+
+TEST (PointTests, AngleTo_EdgeCases)
+{
+    Point<float> origin (0.0f, 0.0f);
+    Point<float> right (1.0f, 0.0f);
+    Point<float> up (0.0f, 1.0f);
+    Point<float> left (-1.0f, 0.0f);
+    Point<float> down (0.0f, -1.0f);
+
+    // Test angles to cardinal directions
+    EXPECT_NEAR (origin.angleTo (right), MathConstants<float>::halfPi, tol);
+    EXPECT_NEAR (origin.angleTo (up), 0.0f, tol);
+    EXPECT_NEAR (origin.angleTo (left), -MathConstants<float>::halfPi, tol);
+    EXPECT_NEAR (origin.angleTo (down), MathConstants<float>::pi, tol);
+
+    // Test angle to same point
+    EXPECT_FLOAT_EQ (origin.angleTo (origin), 0.0f);
+}
+
+TEST (PointTests, ScalingWithDifferentFactors)
+{
+    Point<float> p (2.0f, 3.0f);
+
+    // Test scaling by zero
+    auto scaled = p.scaled (0.0f, 0.0f);
+    EXPECT_EQ (scaled, Point<float> (0.0f, 0.0f));
+
+    // Test scaling by negative values
+    auto scaledNeg = p.scaled (-1.0f, -2.0f);
+    EXPECT_EQ (scaledNeg, Point<float> (-2.0f, -6.0f));
+
+    // Test scaling by one
+    auto scaledOne = p.scaled (1.0f, 1.0f);
+    EXPECT_EQ (scaledOne, p);
+
+    // Test non-uniform scaling
+    auto scaledNonUniform = p.scaled (2.0f, 0.5f);
+    EXPECT_EQ (scaledNonUniform, Point<float> (4.0f, 1.5f));
+}
+
+TEST (PointTests, TransformWithComplexTransforms)
+{
+    Point<float> p (1.0f, 1.0f);
+
+    // Test with identity transform
+    AffineTransform identity;
+    auto transformed = p.transformed (identity);
+    EXPECT_EQ (transformed, p);
+
+    // Test with combined transforms
+    AffineTransform combined = AffineTransform::translation (2.0f, 3.0f)
+                                   .scaled (2.0f)
+                                   .rotated (MathConstants<float>::pi / 4.0f);
+
+    auto transformedComplex = p.transformed (combined);
+    EXPECT_FALSE (transformedComplex == p);
+
+    // Test that original point is unchanged
+    EXPECT_EQ (p, Point<float> (1.0f, 1.0f));
+}
+
+TEST (PointTests, CollinearityEdgeCases)
+{
+    Point<float> origin (0.0f, 0.0f);
+    Point<float> p1 (1.0f, 1.0f);
+    Point<float> p2 (2.0f, 2.0f);
+    Point<float> p3 (-1.0f, -1.0f);
+    Point<float> offLine (1.0f, 2.0f);
+
+    // Test collinearity with origin
+    EXPECT_TRUE (origin.isCollinear (p1));
+    EXPECT_TRUE (p1.isCollinear (p2));
+    EXPECT_TRUE (p1.isCollinear (p3));
+    EXPECT_FALSE (p1.isCollinear (offLine));
+
+    // Test with same point
+    EXPECT_TRUE (p1.isCollinear (p1));
+
+    // Test with zero vector
+    EXPECT_TRUE (origin.isCollinear (origin));
+}
+
+TEST (PointTests, WithinCircle_EdgeCases)
+{
+    Point<float> center (5.0f, 5.0f);
+    Point<float> p (5.0f, 5.0f);
+
+    // Test with zero radius
+    EXPECT_TRUE (p.isWithinCircle (center, 0.0f));
+
+    // Test with negative radius (should behave like positive)
+    EXPECT_TRUE (p.isWithinCircle (center, -1.0f));
+
+    // Test with very large radius
+    EXPECT_TRUE (p.isWithinCircle (center, 1000.0f));
+
+    // Test point exactly on circumference
+    Point<float> onCircumference (center.getX() + 3.0f, center.getY());
+    EXPECT_TRUE (onCircumference.isWithinCircle (center, 3.0f));
+
+    // Test point just outside circumference
+    Point<float> justOutside (center.getX() + 3.1f, center.getY());
+    EXPECT_FALSE (justOutside.isWithinCircle (center, 3.0f));
+}
+
+TEST (PointTests, FloorCeilWithNegativeNumbers)
+{
+    Point<float> p (-1.5f, -2.3f);
+
+    Point<float> floored = p.floor();
+    EXPECT_FLOAT_EQ (floored.getX(), -2.0f);
+    EXPECT_FLOAT_EQ (floored.getY(), -3.0f);
+
+    Point<float> ceiled = p.ceil();
+    EXPECT_FLOAT_EQ (ceiled.getX(), -1.0f);
+    EXPECT_FLOAT_EQ (ceiled.getY(), -2.0f);
+
+    // Test with exact integers
+    Point<float> exact (-2.0f, 3.0f);
+    Point<float> flooredExact = exact.floor();
+    Point<float> ceiledExact = exact.ceil();
+    EXPECT_EQ (flooredExact, exact);
+    EXPECT_EQ (ceiledExact, exact);
+}
+
+TEST (PointTests, ReflectionCombinations)
+{
+    Point<float> p (3.0f, 4.0f);
+
+    // Test double reflection over X axis (should return original)
+    auto reflected = p.reflectedOverXAxis().reflectedOverXAxis();
+    EXPECT_EQ (reflected, p);
+
+    // Test double reflection over Y axis (should return original)
+    reflected = p.reflectedOverYAxis().reflectedOverYAxis();
+    EXPECT_EQ (reflected, p);
+
+    // Test double reflection over origin (should return original)
+    reflected = p.reflectedOverOrigin().reflectedOverOrigin();
+    EXPECT_EQ (reflected, p);
+
+    // Test reflection over origin vs. reflection over both axes
+    auto overOrigin = p.reflectedOverOrigin();
+    auto overBothAxes = p.reflectedOverXAxis().reflectedOverYAxis();
+    EXPECT_EQ (overOrigin, overBothAxes);
 }

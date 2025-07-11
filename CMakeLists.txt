@@ -20,15 +20,15 @@
 cmake_minimum_required (VERSION 3.28)
 
 include (cmake/yup.cmake)
-_yup_setup_platform()
+_yup_get_project_version_string (${CMAKE_CURRENT_LIST_DIR}/modules yup_version)
+_yup_message (STATUS "Building project version ${yup_version}")
 
-if (YUP_PLATFORM_OSX)
+if (YUP_PLATFORM_MAC)
     set (CMAKE_OSX_DEPLOYMENT_TARGET 11.0)
     set (CMAKE_XCODE_GENERATE_SCHEME OFF)
 endif()
 
-project (yup VERSION 1.0)
-
+project (yup VERSION ${yup_version})
 set_property (GLOBAL PROPERTY USE_FOLDERS ON)
 
 # Options
@@ -36,12 +36,30 @@ option (YUP_TARGET_ANDROID "Target Android project" OFF)
 option (YUP_TARGET_ANDROID_BUILD_GRADLE "When building for Android, build the gradle infrastructure" OFF)
 option (YUP_ENABLE_PROFILING "Enable the profiling code using Perfetto SDK" OFF)
 option (YUP_ENABLE_COVERAGE "Enable code coverage collection for tests" OFF)
+option (YUP_EXPORT_MODULES "Export the modules to the parent project" ON)
+option (YUP_ENABLE_STATIC_PYTHON_LIBS "Use static Python libraries" OFF)
 option (YUP_BUILD_JAVA_SUPPORT "Build the Java support" OFF)
 option (YUP_BUILD_EXAMPLES "Build the examples" ${PROJECT_IS_TOP_LEVEL})
 option (YUP_BUILD_TESTS "Build the tests" ${PROJECT_IS_TOP_LEVEL})
+option (YUP_BUILD_WHEEL "Build the wheel" OFF)
 
 # Dependencies modules
-_yup_add_default_modules (${CMAKE_CURRENT_LIST_DIR})
+if (YUP_EXPORT_MODULES)
+    _yup_message (STATUS "Exporting modules")
+
+    if (YUP_PLATFORM_DESKTOP)
+        _yup_message (STATUS "Enabling python module support")
+        set (enable_python ON)
+        if (YUP_PLATFORM_LINUX)
+            set (YUP_ENABLE_STATIC_PYTHON_LIBS OFF)
+        endif()
+    else()
+        _yup_message (STATUS "Disabling python module support")
+        set (enable_python OFF)
+    endif()
+
+    yup_add_default_modules (${CMAKE_CURRENT_LIST_DIR} ENABLE_PYTHON ${enable_python})
+endif()
 
 # Enable profiling
 if (YUP_ENABLE_PROFILING)
@@ -63,4 +81,9 @@ endif()
 if (YUP_BUILD_TESTS AND NOT YUP_PLATFORM_MOBILE)
     _yup_message (STATUS "Building tests")
     add_subdirectory (tests)
+endif()
+
+if (YUP_BUILD_WHEEL)
+    _yup_message (STATUS "Building wheel")
+    add_subdirectory (python)
 endif()

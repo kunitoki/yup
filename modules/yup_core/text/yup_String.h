@@ -869,7 +869,7 @@ public:
 
     //==============================================================================
     /** Reverse the string. */
-    String reverse() const;
+    String reversed() const;
 
     //==============================================================================
     /** Checks whether the string might be in quotation marks.
@@ -924,6 +924,32 @@ public:
     */
     String paddedRight (yup_wchar padCharacter, int minimumLength) const;
 
+    //==============================================================================
+    /** Adds a prefix to the beginning of each line in the string.
+
+        Lines are separated by line endings (\\n, \\r\\n, or \\r).
+        By default, the prefix is only added to lines that contain non-whitespace characters.
+
+        @param prefix                 the text to add to the beginning of each line
+        @param indentBlankLines       if true, blank lines will also be indented
+
+        @returns                      a new string with the prefix added to appropriate lines
+    */
+    String indentLines (StringRef prefix, bool indentBlankLines = false) const;
+
+    /** Removes common leading whitespace from every line in the string.
+
+        This can be used to make triple-quoted strings line up with the left edge of the
+        display, while still presenting them in the source code in indented form.
+
+        Note that tabs and spaces are both treated as whitespace, but they are not equal.
+        Lines containing only whitespace are normalized to just their line ending in the output.
+
+        @returns    a new string with common leading whitespace removed
+    */
+    String dedentLines() const;
+
+    //==============================================================================
     /** Creates a string from data in an unknown format.
 
         This looks at some binary data and tries to guess whether it's Unicode

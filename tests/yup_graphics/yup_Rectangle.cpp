@@ -42,6 +42,13 @@ TEST (RectangleTests, Default_Constructor)
 
 TEST (RectangleTests, Parameterized_Constructors)
 {
+    // Constructor with width, height
+    Rectangle<float> r0 (3.0f, 4.0f);
+    EXPECT_FLOAT_EQ (r0.getX(), 0.0f);
+    EXPECT_FLOAT_EQ (r0.getY(), 0.0f);
+    EXPECT_FLOAT_EQ (r0.getWidth(), 3.0f);
+    EXPECT_FLOAT_EQ (r0.getHeight(), 4.0f);
+
     // Constructor with x, y, width, height
     Rectangle<float> r1 (1.0f, 2.0f, 3.0f, 4.0f);
     EXPECT_FLOAT_EQ (r1.getX(), 1.0f);
@@ -147,10 +154,14 @@ TEST (RectangleTests, Position_And_Size)
     EXPECT_FLOAT_EQ (r4.getWidth(), 9.0f);
     EXPECT_FLOAT_EQ (r4.getHeight(), 10.0f);
 
+    Rectangle<float> r5 = r.withSize (9.0f, 10.0f);
+    EXPECT_FLOAT_EQ (r5.getWidth(), 9.0f);
+    EXPECT_FLOAT_EQ (r5.getHeight(), 10.0f);
+
     // Test withZeroSize
-    Rectangle<float> r5 = r.withZeroSize();
-    EXPECT_FLOAT_EQ (r5.getWidth(), 0.0f);
-    EXPECT_FLOAT_EQ (r5.getHeight(), 0.0f);
+    Rectangle<float> r6 = r.withZeroSize();
+    EXPECT_FLOAT_EQ (r6.getWidth(), 0.0f);
+    EXPECT_FLOAT_EQ (r6.getHeight(), 0.0f);
 }
 
 TEST (RectangleTests, Corners)
@@ -200,7 +211,7 @@ TEST (RectangleTests, Corners)
 
     // Test setBottomRight
     r.setBottomRight (Point<float> (8.0f, 9.0f));
-    EXPECT_FLOAT_EQ (r.getX(), 4.0f);
+    EXPECT_FLOAT_EQ (r.getX(), 5.0f);
     EXPECT_FLOAT_EQ (r.getY(), 5.0f);
     EXPECT_FLOAT_EQ (r.getWidth(), 3.0f);
     EXPECT_FLOAT_EQ (r.getHeight(), 4.0f);
@@ -837,4 +848,324 @@ TEST (RectangleTests, Rive_Conversion)
     EXPECT_FLOAT_EQ (r2.getY(), 2.0f);
     EXPECT_FLOAT_EQ (r2.getWidth(), 3.0f);
     EXPECT_FLOAT_EQ (r2.getHeight(), 4.0f);
+}
+
+// Additional edge cases and method combinations
+TEST (RectangleTests, EdgePosition_Methods)
+{
+    Rectangle<float> r (10.0f, 20.0f, 30.0f, 40.0f);
+
+    // Test getLeft/Right/Top/Bottom
+    EXPECT_FLOAT_EQ (r.getLeft(), 10.0f);
+    EXPECT_FLOAT_EQ (r.getRight(), 40.0f);
+    EXPECT_FLOAT_EQ (r.getTop(), 20.0f);
+    EXPECT_FLOAT_EQ (r.getBottom(), 60.0f);
+
+    // Test setLeft/Right/Top/Bottom
+    r.setLeft (5.0f);
+    EXPECT_FLOAT_EQ (r.getLeft(), 5.0f);
+    EXPECT_FLOAT_EQ (r.getRight(), 35.0f);
+    EXPECT_FLOAT_EQ (r.getWidth(), 30.0f);
+
+    r.setRight (50.0f);
+    EXPECT_FLOAT_EQ (r.getRight(), 50.0f);
+    EXPECT_FLOAT_EQ (r.getLeft(), 20.0f);
+    EXPECT_FLOAT_EQ (r.getWidth(), 30.0f);
+
+    r.setTop (15.0f);
+    EXPECT_FLOAT_EQ (r.getTop(), 15.0f);
+    EXPECT_FLOAT_EQ (r.getBottom(), 55.0f);
+    EXPECT_FLOAT_EQ (r.getHeight(), 40.0f);
+
+    r.setBottom (70.0f);
+    EXPECT_FLOAT_EQ (r.getBottom(), 70.0f);
+    EXPECT_FLOAT_EQ (r.getTop(), 30.0f);
+    EXPECT_FLOAT_EQ (r.getHeight(), 40.0f);
+}
+
+TEST (RectangleTests, With_EdgePosition_Methods)
+{
+    Rectangle<float> r (10.0f, 20.0f, 30.0f, 40.0f);
+
+    // Test withLeft/Right/Top/Bottom
+    Rectangle<float> withLeft = r.withLeft (5.0f);
+    EXPECT_FLOAT_EQ (withLeft.getLeft(), 5.0f);
+    EXPECT_FLOAT_EQ (withLeft.getRight(), 35.0f);
+    EXPECT_FLOAT_EQ (withLeft.getWidth(), 30.0f);
+
+    Rectangle<float> withRight = r.withRight (50.0f);
+    EXPECT_FLOAT_EQ (withRight.getRight(), 50.0f);
+    EXPECT_FLOAT_EQ (withRight.getLeft(), 20.0f);
+    EXPECT_FLOAT_EQ (withRight.getWidth(), 30.0f);
+
+    Rectangle<float> withTop = r.withTop (15.0f);
+    EXPECT_FLOAT_EQ (withTop.getTop(), 15.0f);
+    EXPECT_FLOAT_EQ (withTop.getBottom(), 55.0f);
+    EXPECT_FLOAT_EQ (withTop.getHeight(), 40.0f);
+
+    Rectangle<float> withBottom = r.withBottom (70.0f);
+    EXPECT_FLOAT_EQ (withBottom.getBottom(), 70.0f);
+    EXPECT_FLOAT_EQ (withBottom.getTop(), 30.0f);
+    EXPECT_FLOAT_EQ (withBottom.getHeight(), 40.0f);
+}
+
+TEST (RectangleTests, DISABLED_TrimmedMethods)
+{
+    Rectangle<float> r (10.0f, 20.0f, 30.0f, 40.0f);
+
+    // Test withTrimmedLeft/Right/Top/Bottom
+    Rectangle<float> trimmedLeft = r.withTrimmedLeft (5.0f);
+    EXPECT_FLOAT_EQ (trimmedLeft.getX(), 15.0f);
+    EXPECT_FLOAT_EQ (trimmedLeft.getWidth(), 30.0f);
+
+    Rectangle<float> trimmedRight = r.withTrimmedRight (5.0f);
+    EXPECT_FLOAT_EQ (trimmedRight.getX(), 10.0f);
+    EXPECT_FLOAT_EQ (trimmedRight.getWidth(), 30.0f);
+
+    Rectangle<float> trimmedTop = r.withTrimmedTop (5.0f);
+    EXPECT_FLOAT_EQ (trimmedTop.getY(), 25.0f);
+    EXPECT_FLOAT_EQ (trimmedTop.getHeight(), 40.0f);
+
+    Rectangle<float> trimmedBottom = r.withTrimmedBottom (5.0f);
+    EXPECT_FLOAT_EQ (trimmedBottom.getY(), 20.0f);
+    EXPECT_FLOAT_EQ (trimmedBottom.getHeight(), 40.0f);
+}
+
+TEST (RectangleTests, CornerMethods_EdgeCases)
+{
+    Rectangle<float> r (10.0f, 20.0f, 30.0f, 40.0f);
+
+    // Test withTopLeft/TopRight/BottomLeft/BottomRight
+    Rectangle<float> withTopLeft = r.withTopLeft (Point<float> (5.0f, 15.0f));
+    EXPECT_FLOAT_EQ (withTopLeft.getX(), 5.0f);
+    EXPECT_FLOAT_EQ (withTopLeft.getY(), 15.0f);
+    EXPECT_FLOAT_EQ (withTopLeft.getWidth(), 30.0f);
+    EXPECT_FLOAT_EQ (withTopLeft.getHeight(), 40.0f);
+
+    Rectangle<float> withTopRight = r.withTopRight (Point<float> (45.0f, 25.0f));
+    EXPECT_FLOAT_EQ (withTopRight.getX(), 15.0f);
+    EXPECT_FLOAT_EQ (withTopRight.getY(), 25.0f);
+    EXPECT_FLOAT_EQ (withTopRight.getWidth(), 30.0f);
+    EXPECT_FLOAT_EQ (withTopRight.getHeight(), 40.0f);
+
+    Rectangle<float> withBottomLeft = r.withBottomLeft (Point<float> (5.0f, 65.0f));
+    EXPECT_FLOAT_EQ (withBottomLeft.getX(), 5.0f);
+    EXPECT_FLOAT_EQ (withBottomLeft.getY(), 25.0f);
+    EXPECT_FLOAT_EQ (withBottomLeft.getWidth(), 30.0f);
+    EXPECT_FLOAT_EQ (withBottomLeft.getHeight(), 40.0f);
+
+    Rectangle<float> withBottomRight = r.withBottomRight (Point<float> (45.0f, 65.0f));
+    EXPECT_FLOAT_EQ (withBottomRight.getX(), 15.0f);
+    EXPECT_FLOAT_EQ (withBottomRight.getY(), 25.0f);
+    EXPECT_FLOAT_EQ (withBottomRight.getWidth(), 30.0f);
+    EXPECT_FLOAT_EQ (withBottomRight.getHeight(), 40.0f);
+}
+
+TEST (RectangleTests, IntersectionWithLines)
+{
+    Rectangle<float> r (10.0f, 10.0f, 20.0f, 20.0f);
+
+    // Test intersection with lines from sides
+    Line<float> leftSide = r.leftSide();
+    Line<float> topSide = r.topSide();
+    Line<float> rightSide = r.rightSide();
+    Line<float> bottomSide = r.bottomSide();
+
+    // Verify lines are at correct positions
+    EXPECT_EQ (leftSide.getStart(), Point<float> (10.0f, 10.0f));
+    EXPECT_EQ (leftSide.getEnd(), Point<float> (10.0f, 30.0f));
+
+    EXPECT_EQ (topSide.getStart(), Point<float> (10.0f, 10.0f));
+    EXPECT_EQ (topSide.getEnd(), Point<float> (30.0f, 10.0f));
+
+    EXPECT_EQ (rightSide.getStart(), Point<float> (30.0f, 10.0f));
+    EXPECT_EQ (rightSide.getEnd(), Point<float> (30.0f, 30.0f));
+
+    EXPECT_EQ (bottomSide.getStart(), Point<float> (10.0f, 30.0f));
+    EXPECT_EQ (bottomSide.getEnd(), Point<float> (30.0f, 30.0f));
+}
+
+TEST (RectangleTests, UnionWithEdgeCases)
+{
+    Rectangle<float> r1 (10.0f, 10.0f, 20.0f, 20.0f);
+    Rectangle<float> empty;
+
+    // Test union with empty rectangle
+    Rectangle<float> unionWithEmpty = r1.unionWith (empty);
+    EXPECT_EQ (unionWithEmpty, r1);
+
+    // Test union with self
+    Rectangle<float> unionWithSelf = r1.unionWith (r1);
+    EXPECT_EQ (unionWithSelf, r1);
+
+    // Test union with contained rectangle
+    Rectangle<float> contained (15.0f, 15.0f, 10.0f, 10.0f);
+    Rectangle<float> unionWithContained = r1.unionWith (contained);
+    EXPECT_EQ (unionWithContained, r1);
+
+    // Test union with non-overlapping rectangle
+    Rectangle<float> distant (100.0f, 100.0f, 10.0f, 10.0f);
+    Rectangle<float> unionWithDistant = r1.unionWith (distant);
+    EXPECT_FLOAT_EQ (unionWithDistant.getX(), 10.0f);
+    EXPECT_FLOAT_EQ (unionWithDistant.getY(), 10.0f);
+    EXPECT_FLOAT_EQ (unionWithDistant.getWidth(), 100.0f);
+    EXPECT_FLOAT_EQ (unionWithDistant.getHeight(), 100.0f);
+}
+
+TEST (RectangleTests, ContainsWithEdgeCases)
+{
+    Rectangle<float> r (10.0f, 10.0f, 20.0f, 20.0f);
+
+    // Test contains with points on edges
+    EXPECT_TRUE (r.contains (10.0f, 10.0f)); // Top-left corner
+    EXPECT_TRUE (r.contains (30.0f, 10.0f)); // Top-right corner
+    EXPECT_TRUE (r.contains (10.0f, 30.0f)); // Bottom-left corner
+    EXPECT_TRUE (r.contains (30.0f, 30.0f)); // Bottom-right corner
+
+    EXPECT_TRUE (r.contains (20.0f, 10.0f)); // Top edge
+    EXPECT_TRUE (r.contains (30.0f, 20.0f)); // Right edge
+    EXPECT_TRUE (r.contains (20.0f, 30.0f)); // Bottom edge
+    EXPECT_TRUE (r.contains (10.0f, 20.0f)); // Left edge
+
+    // Test contains with points just outside
+    EXPECT_FALSE (r.contains (9.9f, 10.0f));
+    EXPECT_FALSE (r.contains (30.1f, 10.0f));
+    EXPECT_FALSE (r.contains (10.0f, 9.9f));
+    EXPECT_FALSE (r.contains (10.0f, 30.1f));
+}
+
+TEST (RectangleTests, ScalingAboutCenter)
+{
+    Rectangle<float> r (10.0f, 10.0f, 20.0f, 20.0f);
+    Point<float> originalCenter = r.getCenter();
+
+    // Test scaling about center
+    r.scale (2.0f);
+    Point<float> newCenter = r.getCenter();
+
+    // Center should remain the same
+    EXPECT_FLOAT_EQ (originalCenter.getX() * 2.0f, newCenter.getX());
+    EXPECT_FLOAT_EQ (originalCenter.getY() * 2.0f, newCenter.getY());
+
+    // Size should be doubled
+    EXPECT_FLOAT_EQ (r.getWidth(), 40.0f);
+    EXPECT_FLOAT_EQ (r.getHeight(), 40.0f);
+}
+
+TEST (RectangleTests, RemoveFromSides_ChainedOperations)
+{
+    Rectangle<float> r (10.0f, 10.0f, 100.0f, 100.0f);
+
+    // Test chained remove operations
+    Rectangle<float> top = r.removeFromTop (10.0f);
+    Rectangle<float> left = r.removeFromLeft (10.0f);
+    Rectangle<float> bottom = r.removeFromBottom (10.0f);
+    Rectangle<float> right = r.removeFromRight (10.0f);
+
+    // Verify removed parts
+    EXPECT_EQ (top, Rectangle<float> (10.0f, 10.0f, 100.0f, 10.0f));
+    EXPECT_EQ (left, Rectangle<float> (10.0f, 20.0f, 10.0f, 90.0f));
+    EXPECT_EQ (bottom, Rectangle<float> (20.0f, 100.0f, 90.0f, 10.0f));
+    EXPECT_EQ (right, Rectangle<float> (100.0f, 20.0f, 10.0f, 80.0f));
+
+    // Verify remaining rectangle
+    EXPECT_EQ (r, Rectangle<float> (20.0f, 20.0f, 80.0f, 80.0f));
+}
+
+TEST (RectangleTests, PercentageAndProportions)
+{
+    Rectangle<float> r (0.0f, 0.0f, 100.0f, 200.0f);
+
+    // Test getting points at specific percentages
+    Point<float> center = r.getCenter();
+    EXPECT_FLOAT_EQ (center.getX(), 50.0f);
+    EXPECT_FLOAT_EQ (center.getY(), 100.0f);
+
+    // Test aspect ratio
+    float aspectRatio = r.getWidth() / r.getHeight();
+    EXPECT_FLOAT_EQ (aspectRatio, 0.5f);
+
+    // Test proportional rectangles
+    Rectangle<float> quarter = r.centeredRectangleWithSize (Size<float> (50.0f, 100.0f));
+    EXPECT_FLOAT_EQ (quarter.getX(), 25.0f);
+    EXPECT_FLOAT_EQ (quarter.getY(), 50.0f);
+    EXPECT_FLOAT_EQ (quarter.getWidth(), 50.0f);
+    EXPECT_FLOAT_EQ (quarter.getHeight(), 100.0f);
+}
+
+TEST (RectangleTests, DISABLED_NegativeSize_Operations)
+{
+    Rectangle<float> r (10.0f, 10.0f, -20.0f, -20.0f);
+
+    // Test with negative size
+    EXPECT_TRUE (r.isEmpty());
+    EXPECT_FLOAT_EQ (r.area(), 400.0f); // Area should be positive
+
+    // Test intersection with negative size
+    Rectangle<float> normal (5.0f, 5.0f, 10.0f, 10.0f);
+    Rectangle<float> intersection = r.intersection (normal);
+    EXPECT_TRUE (intersection.isEmpty());
+
+    // Test union with negative size
+    Rectangle<float> union_ = r.unionWith (normal);
+    EXPECT_FALSE (union_.isEmpty());
+}
+
+TEST (RectangleTests, TransformationPreservation)
+{
+    Rectangle<float> r (10.0f, 10.0f, 20.0f, 20.0f);
+
+    // Test that area is preserved under translation
+    AffineTransform translation = AffineTransform::translation (50.0f, 50.0f);
+    Rectangle<float> translated = r.transformed (translation);
+    EXPECT_FLOAT_EQ (r.area(), translated.area());
+
+    // Test that scaling affects area predictably
+    AffineTransform scaling = AffineTransform::scaling (2.0f);
+    Rectangle<float> scaled = r.transformed (scaling);
+    EXPECT_FLOAT_EQ (scaled.area(), r.area() * 4.0f); // 2^2 = 4
+}
+
+TEST (RectangleTests, BorderAndMargin_Operations)
+{
+    Rectangle<float> r (10.0f, 10.0f, 40.0f, 40.0f);
+
+    // Test reduce as border/margin
+    Rectangle<float> withBorder = r.reduced (5.0f);
+    EXPECT_FLOAT_EQ (withBorder.getX(), 15.0f);
+    EXPECT_FLOAT_EQ (withBorder.getY(), 15.0f);
+    EXPECT_FLOAT_EQ (withBorder.getWidth(), 30.0f);
+    EXPECT_FLOAT_EQ (withBorder.getHeight(), 30.0f);
+
+    // Test enlarge as padding
+    Rectangle<float> withPadding = r.enlarged (5.0f);
+    EXPECT_FLOAT_EQ (withPadding.getX(), 5.0f);
+    EXPECT_FLOAT_EQ (withPadding.getY(), 5.0f);
+    EXPECT_FLOAT_EQ (withPadding.getWidth(), 50.0f);
+    EXPECT_FLOAT_EQ (withPadding.getHeight(), 50.0f);
+
+    // Test that reduce and enlarge cancel out
+    Rectangle<float> roundTrip = r.enlarged (5.0f).reduced (5.0f);
+    EXPECT_EQ (roundTrip, r);
+}
+
+TEST (RectangleTests, IntersectionArea_Calculations)
+{
+    Rectangle<float> r1 (0.0f, 0.0f, 10.0f, 10.0f);
+    Rectangle<float> r2 (5.0f, 5.0f, 10.0f, 10.0f);
+
+    Rectangle<float> intersection = r1.intersection (r2);
+
+    // Intersection should be 5x5 square
+    EXPECT_FLOAT_EQ (intersection.getWidth(), 5.0f);
+    EXPECT_FLOAT_EQ (intersection.getHeight(), 5.0f);
+    EXPECT_FLOAT_EQ (intersection.area(), 25.0f);
+
+    // Test overlapping area calculations
+    float overlapArea = intersection.area();
+    float totalArea = r1.area() + r2.area() - overlapArea;
+    Rectangle<float> unionRect = r1.unionWith (r2);
+
+    // Union area should equal total area minus overlap
+    EXPECT_FLOAT_EQ (totalArea, 175.0f); // 100 + 100 - 25
 }

@@ -41,7 +41,17 @@ public:
     */
     constexpr Rectangle() noexcept = default;
 
-    /** Constructs a rectangle with specified x, y, width, and height.
+    /** Constructs a rectangle with specified width and height.
+
+        @param width The width of the rectangle.
+        @param height The height of the rectangle.
+    */
+    constexpr Rectangle (ValueType width, ValueType height) noexcept
+        : size (width, height)
+    {
+    }
+
+    /** Constructs a rectangle with specified x, y, width and height.
 
         @param x The x-coordinate of the top-left corner.
         @param y The y-coordinate of the top-left corner.
@@ -713,7 +723,7 @@ public:
     */
     constexpr Rectangle& setBottomRight (const Point<ValueType>& newPosition) noexcept
     {
-        xy = newPosition.translated (-static_cast<ValueType> (getHeight()), -static_cast<ValueType> (getHeight()));
+        xy = newPosition.translated (-static_cast<ValueType> (getWidth()), -static_cast<ValueType> (getHeight()));
 
         return *this;
     }
@@ -747,9 +757,12 @@ public:
 
         @return A reference to this rectangle to allow method chaining.
     */
-    constexpr Rectangle& setSize (const Size<ValueType>& newSize) noexcept
+    template <class T = ValueType>
+    constexpr Rectangle& setSize (const Size<T>& newSize) noexcept
     {
-        size = newSize;
+        static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
+
+        size = newSize.template to<ValueType>();
 
         return *this;
     }
@@ -760,7 +773,7 @@ public:
 
         @return A reference to this rectangle to allow method chaining.
     */
-    template <class T>
+    template <class T = ValueType>
     constexpr Rectangle& setSize (T width, T height) noexcept
     {
         static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
@@ -780,7 +793,7 @@ public:
 
         @return A new rectangle with the updated size.
     */
-    template <class T>
+    template <class T = ValueType>
     [[nodiscard]] constexpr Rectangle withSize (const Size<T>& newSize) const noexcept
     {
         static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
@@ -799,7 +812,7 @@ public:
 
         @return A new rectangle with the updated size.
     */
-    template <class T>
+    template <class T = ValueType>
     [[nodiscard]] constexpr Rectangle withSize (T width, T height) const noexcept
     {
         static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
@@ -817,7 +830,7 @@ public:
 
         @return A new rectangle with the size scaled.
     */
-    template <class T>
+    template <class T = ValueType>
     [[nodiscard]] constexpr auto withScaledSize (T scaleFactor) const noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Rectangle>
     {
@@ -1756,7 +1769,7 @@ public:
     */
     [[nodiscard]] constexpr Rectangle largestFittingSquare() const noexcept
     {
-        if (getWidth() == getHeight())
+        if (isEmpty())
             return *this;
 
         if (getWidth() > getHeight())
@@ -1778,6 +1791,16 @@ public:
     */
     [[nodiscard]] constexpr Rectangle unionWith (const Rectangle& other) const noexcept
     {
+        const bool thisIsEmpty = isEmpty();
+        const bool otherIsEmpty = other.isEmpty();
+
+        if (thisIsEmpty && otherIsEmpty)
+            return {};
+        else if (thisIsEmpty)
+            return other;
+        else if (otherIsEmpty)
+            return *this;
+
         const auto x1 = jmin (getX(), other.getX());
         const auto x2 = jmax (getX() + getWidth(), other.getX() + other.getWidth());
 

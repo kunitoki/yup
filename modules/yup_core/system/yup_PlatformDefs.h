@@ -101,9 +101,7 @@ namespace yup
 #elif YUP_WASM
 #define YUP_BREAK_IN_DEBUGGER
 #elif YUP_MSVC
-#ifndef __INTEL_COMPILER
 #pragma intrinsic(__debugbreak)
-#endif
 #define YUP_BREAK_IN_DEBUGGER __debugbreak();
 #elif YUP_INTEL && (YUP_GCC || YUP_CLANG || YUP_MAC)
 #if YUP_NO_INLINE_ASM

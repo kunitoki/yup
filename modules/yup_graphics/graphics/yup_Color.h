@@ -550,10 +550,10 @@ public:
         }
 
         return {
+            static_cast<uint8> (a * 255),
             static_cast<uint8> (r * 255),
             static_cast<uint8> (g * 255),
-            static_cast<uint8> (b * 255),
-            static_cast<uint8> (a * 255)
+            static_cast<uint8> (b * 255)
         };
     }
 
@@ -653,10 +653,10 @@ public:
         }
 
         return {
+            static_cast<uint8> (a * 255),
             static_cast<uint8> (r * 255),
             static_cast<uint8> (g * 255),
             static_cast<uint8> (b * 255),
-            static_cast<uint8> (a * 255)
         };
     }
 
@@ -793,6 +793,28 @@ public:
     }
 
     //==============================================================================
+
+    static Color fromRGB (uint8 r, uint8 g, uint8 b) noexcept
+    {
+        return { 255, r, g, b };
+    }
+
+    static Color fromRGBA (uint8 r, uint8 g, uint8 b, uint8 a) noexcept
+    {
+        return { a, r, g, b };
+    }
+
+    static Color fromARGB (uint8 a, uint8 r, uint8 g, uint8 b) noexcept
+    {
+        return { a, r, g, b };
+    }
+
+    static Color fromBGRA (uint8 b, uint8 g, uint8 r, uint8 a) noexcept
+    {
+        return { a, r, g, b };
+    }
+
+    //==============================================================================
     // TODO - doxygen
     String toString() const;
 
@@ -810,7 +832,7 @@ private:
 
     constexpr static uint8 normalizedToComponent (float normalized) noexcept
     {
-        return static_cast<uint8> (jlimit (0.0f, 1.0f, normalized) * 255.0f);
+        return static_cast<uint8> (roundToInt (jlimit (0.0f, 1.0f, normalized) * 255.0f));
     }
 
     union

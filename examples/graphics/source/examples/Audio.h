@@ -158,7 +158,7 @@ class AudioExample
     , public yup::AudioIODeviceCallback
 {
 public:
-    AudioExample (const yup::Font& font)
+    AudioExample()
         : Component ("AudioExample")
     {
         // Initialize the audio device

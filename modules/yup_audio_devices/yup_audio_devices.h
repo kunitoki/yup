@@ -44,7 +44,7 @@
 
     ID:                 yup_audio_devices
     vendor:             yup
-    version:            7.0.12
+    version:            1.0.0
     name:               YUP audio and MIDI I/O device classes
     description:        Classes to play and record from audio and MIDI I/O devices
     website:            https://github.com/kunitoki/yup

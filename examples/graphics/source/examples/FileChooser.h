@@ -21,6 +21,8 @@
 
 #pragma once
 
+//==============================================================================
+
 class FileChooserDemo : public yup::Component
 {
 public:

@@ -107,4 +107,17 @@ YUP_API void YUP_CALLTYPE Process::lowerPrivilege()
         swapUserAndEffectiveUser();
 }
 
+//#if YUP_MODULE_AVAILABLE_yup_gui
+// TODO: This might require the GUI layer
+YUP_API bool YUP_CALLTYPE Process::isForegroundProcess()
+{
+    return true;
+}
+
+YUP_API void YUP_CALLTYPE Process::makeForegroundProcess() {}
+
+YUP_API void YUP_CALLTYPE Process::hide() {}
+
+//#endif
+
 } // namespace yup

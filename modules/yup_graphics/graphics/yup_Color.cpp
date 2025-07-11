@@ -57,6 +57,47 @@ int parseNextInt (String::CharPointerType& data)
     return isNegative ? -result : result;
 }
 
+float parseNextFloat (String::CharPointerType& data)
+{
+    float result = 0;
+    bool isNegative = false;
+
+    while (*data != '\0' && (*data == ' ' || *data == ','))
+        ++data;
+
+    if (*data == '-')
+        ++data;
+
+    while (*data >= '0' && *data <= '9')
+    {
+        result = result * 10 + (*data - '0');
+        ++data;
+    }
+
+    if (*data == '.')
+    {
+        ++data;
+        float decimalPart = 0;
+        float decimalFactor = 10;
+
+        while (*data >= '0' && *data <= '9')
+        {
+            decimalPart = decimalPart * 10 + (*data - '0');
+            ++data;
+        }
+
+        result += decimalPart / decimalFactor;
+    }
+
+    if (*data == '%')
+    {
+        result /= 100.0f;
+        ++data;
+    }
+
+    return isNegative ? -result : result;
+}
+
 Color parseHexColor (const String& hexString)
 {
     const int length = hexString.length();
@@ -89,7 +130,7 @@ Color parseHexColor (const String& hexString)
     }
     else
     {
-        return {};
+        return Colors::transparentBlack;
     }
 }
 
@@ -102,7 +143,7 @@ Color parseRGBColor (const String& rgbString)
     bool isRGB = rgbString.startsWithIgnoreCase ("rgb(");
 
     if (! isRGBA && ! isRGB)
-        return {};
+        return Colors::transparentBlack;
 
     while (*data != '(' && *data != '\0')
         ++data;
@@ -117,7 +158,33 @@ Color parseRGBColor (const String& rgbString)
     if (isRGBA)
         a = parseNextInt (data);
 
-    return { static_cast<uint8> (r), static_cast<uint8> (g), static_cast<uint8> (b), static_cast<uint8> (a) };
+    return Color::fromRGBA (static_cast<uint8> (r), static_cast<uint8> (g), static_cast<uint8> (b), static_cast<uint8> (a));
+}
+
+Color parseHSLColor (const String& hslString)
+{
+    auto data = hslString.getCharPointer();
+    bool isHSL = hslString.startsWithIgnoreCase ("hsl(");
+    bool isHSLA = hslString.startsWithIgnoreCase ("hsla(");
+
+    if (! isHSL && ! isHSLA)
+        return Colors::transparentBlack;
+
+    while (*data != '(' && *data != '\0')
+        ++data;
+
+    if (*data == '(')
+        ++data;
+
+    float h = 0, s = 0, l = 0, a = 1;
+    h = parseNextFloat (data);
+    s = parseNextFloat (data);
+    l = parseNextFloat (data);
+
+    if (isHSLA)
+        a = parseNextFloat (data);
+
+    return Color::fromHSL (h, s, l, a);
 }
 
 Color parseNamedColor (const String& name)
@@ -125,7 +192,7 @@ Color parseNamedColor (const String& name)
     if (auto color = Colors::getNamedColor (name))
         return *color;
 
-    return {};
+    return Colors::transparentBlack;
 }
 } // namespace
 
@@ -160,6 +227,9 @@ Color Color::fromString (const String& colorString)
 
     else if (colorString.startsWithIgnoreCase ("rgb"))
         return parseRGBColor (colorString);
+
+    else if (colorString.startsWithIgnoreCase ("hsl"))
+        return parseHSLColor (colorString);
 
     else
         return parseNamedColor (colorString);

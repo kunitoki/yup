@@ -2029,19 +2029,26 @@ bool String::containsNonWhitespaceChars() const noexcept
     return false;
 }
 
-String String::reverse() const
+String String::reversed() const
 {
-    auto end = text.findTerminatingNull();
-    String t;
+    const int numChars = length();
+    if (numChars <= 0)
+        return *this;
 
-    while (end > text)
-    {
-        --end;
+    HeapBlock<CharPointerType> positions (numChars);
 
-        t.append (end, 1);
-    }
+    StringCreationHelper builder (text);
 
-    return t;
+    int index = 0;
+    for (auto it = text; ! it.isEmpty() && index < numChars; ++it, ++index)
+        positions[index] = it;
+
+    for (int i = index - 1; i >= 0; --i)
+        builder.write (*positions[i]);
+
+    builder.write (0); // null terminator
+
+    return String (std::move (builder.result));
 }
 
 String String::formattedRaw (const char* pf, ...)
@@ -2549,6 +2556,157 @@ String serialiseDouble (double input, int maxDecimalPlaces = 0)
     }();
 
     return reduceLengthOfFloatString (String (input, numberOfDecimalPlaces));
+}
+
+//==============================================================================
+String String::indentLines (StringRef prefix, bool indentBlankLines) const
+{
+    if (isEmpty())
+        return *this;
+
+    String result;
+    auto t = text;
+
+    while (! t.isEmpty())
+    {
+        auto lineStart = t;
+
+        // Find end of line content (excluding line ending)
+        while (! t.isEmpty() && *t != '\n' && *t != '\r')
+            ++t;
+
+        auto contentEnd = t;
+
+        // Find end of line ending
+        if (! t.isEmpty() && *t == '\r')
+            ++t;
+
+        if (! t.isEmpty() && *t == '\n')
+            ++t;
+
+        auto lineEnd = t;
+
+        // Determine if we should indent this line
+        bool shouldIndent = indentBlankLines;
+        if (! shouldIndent)
+        {
+            // Check if line has non-whitespace content
+            auto temp = lineStart;
+            while (temp < contentEnd)
+            {
+                if (! temp.isWhitespace())
+                {
+                    shouldIndent = true;
+                    break;
+                }
+                ++temp;
+            }
+        }
+
+        // Add prefix if needed
+        if (shouldIndent)
+            result += prefix;
+
+        // Add the line
+        result.appendCharPointer (lineStart, lineEnd);
+    }
+
+    return result;
+}
+
+String String::dedentLines() const
+{
+    if (isEmpty())
+        return *this;
+
+    // First pass: find minimum indentation
+    int minIndent = 999999; // Large number as sentinel
+    auto t = text;
+
+    while (! t.isEmpty())
+    {
+        // Count leading whitespace
+        int indent = 0;
+        while (! t.isEmpty() && t.isWhitespace() && *t != '\n' && *t != '\r')
+        {
+            ++indent;
+            ++t;
+        }
+
+        // Check if line has non-whitespace content
+        bool hasNonWhitespace = false;
+        while (! t.isEmpty() && *t != '\n' && *t != '\r')
+        {
+            if (! t.isWhitespace())
+                hasNonWhitespace = true;
+            ++t;
+        }
+
+        // Skip line ending
+        if (! t.isEmpty() && *t == '\r')
+            ++t;
+        if (! t.isEmpty() && *t == '\n')
+            ++t;
+
+        // Update minimum indent only for lines with non-whitespace content
+        if (hasNonWhitespace)
+            minIndent = jmin (minIndent, indent);
+    }
+
+    if (minIndent == 999999 || minIndent == 0)
+        return *this;
+
+    // Second pass: build result
+    String result;
+    t = text;
+
+    while (! t.isEmpty())
+    {
+        auto lineStart = t;
+
+        // Skip leading whitespace (up to minIndent)
+        int skipped = 0;
+        while (! t.isEmpty() && t.isWhitespace() && *t != '\n' && *t != '\r' && skipped < minIndent)
+        {
+            ++skipped;
+            ++t;
+        }
+
+        auto contentStart = t;
+
+        // Find end of line content
+        bool hasNonWhitespace = false;
+        while (! t.isEmpty() && *t != '\n' && *t != '\r')
+        {
+            if (! t.isWhitespace())
+                hasNonWhitespace = true;
+            ++t;
+        }
+
+        auto contentEnd = t;
+
+        // Find end of line (including line ending)
+        if (! t.isEmpty() && *t == '\r')
+            ++t;
+        if (! t.isEmpty() && *t == '\n')
+            ++t;
+
+        auto lineEnd = t;
+
+        // Add line to result
+        if (hasNonWhitespace)
+        {
+            // Add from content start to line end
+            result.appendCharPointer (contentStart, lineEnd);
+        }
+        else
+        {
+            // For whitespace-only lines, just add line ending
+            result.appendCharPointer (contentEnd, lineEnd);
+        }
+    }
+
+    return result;
 }
 
 } // namespace yup

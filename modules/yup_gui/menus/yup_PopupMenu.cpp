@@ -93,7 +93,7 @@ Point<int> calculatePositionAtPoint (Point<int> targetPoint, Size<int> menuSize,
 {
     Point<int> position = targetPoint;
 
-    switch (alignment)
+    switch (alignment.getFlags())
     {
         default:
         case Justification::topLeft:

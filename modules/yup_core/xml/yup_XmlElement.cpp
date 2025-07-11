@@ -467,7 +467,9 @@ bool XmlElement::hasTagName (StringRef possibleTagName) const noexcept
 
 String XmlElement::getNamespace() const
 {
-    return tagName.upToFirstOccurrenceOf (":", false, false);
+    return tagName.contains (":")
+             ? tagName.upToFirstOccurrenceOf (":", false, false)
+             : String();
 }
 
 String XmlElement::getTagNameWithoutNamespace() const
@@ -559,6 +561,14 @@ int XmlElement::getIntAttribute (StringRef attributeName, const int defaultRetur
 {
     if (auto* att = getAttribute (attributeName))
         return att->value.getIntValue();
+
+    return defaultReturnValue;
+}
+
+float XmlElement::getFloatAttribute (StringRef attributeName, const float defaultReturnValue) const
+{
+    if (auto* att = getAttribute (attributeName))
+        return static_cast<float> (att->value.getDoubleValue());
 
     return defaultReturnValue;
 }

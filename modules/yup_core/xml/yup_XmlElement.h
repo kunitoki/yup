@@ -270,24 +270,34 @@ public:
 
     /** Returns the value of a named attribute as an integer.
 
-        This will try to find the attribute and convert it to an integer (using
-        the String::getIntValue() method).
+        This will try to find the attribute and convert it to an integer (using the String::getIntValue() method).
 
         @param attributeName        the name of the attribute to look up
-        @param defaultReturnValue   a value to return if the element doesn't have an attribute
-                                    with this name
+        @param defaultReturnValue   a value to return if the element doesn't have an attribute with this name
+
         @see setAttribute
     */
     int getIntAttribute (StringRef attributeName, int defaultReturnValue = 0) const;
 
-    /** Returns the value of a named attribute as floating-point.
+    /** Returns the value of a named attribute as single floating-point.
 
-        This will try to find the attribute and convert it to a double (using
-        the String::getDoubleValue() method).
+        This will try to find the attribute and convert it to a double (using the String::getDoubleValue() method
+        casted to a float).
 
         @param attributeName        the name of the attribute to look up
-        @param defaultReturnValue   a value to return if the element doesn't have an attribute
-                                    with this name
+        @param defaultReturnValue   a value to return if the element doesn't have an attribute with this name
+
+        @see setAttribute
+    */
+    float getFloatAttribute (StringRef attributeName, float defaultReturnValue = 0.0f) const;
+
+    /** Returns the value of a named attribute as double floating-point.
+
+        This will try to find the attribute and convert it to a double (using the String::getDoubleValue() method).
+
+        @param attributeName        the name of the attribute to look up
+        @param defaultReturnValue   a value to return if the element doesn't have an attribute with this name
+
         @see setAttribute
     */
     double getDoubleAttribute (StringRef attributeName, double defaultReturnValue = 0.0) const;
@@ -299,8 +309,7 @@ public:
         values.
 
         @param attributeName        the name of the attribute to look up
-        @param defaultReturnValue   a value to return if the element doesn't have an attribute
-                                    with this name
+        @param defaultReturnValue   a value to return if the element doesn't have an attribute with this name
     */
     bool getBoolAttribute (StringRef attributeName, bool defaultReturnValue = false) const;
 

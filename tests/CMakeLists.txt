@@ -61,8 +61,10 @@ set (target_modules
     yup_graphics)
 
 if (NOT YUP_PLATFORM_EMSCRIPTEN)
-    list (APPEND target_modules
-        yup_gui)
+    list (APPEND target_modules yup_gui)
+    if (YUP_PLATFORM_DESKTOP)
+        list (APPEND target_modules yup_python)
+    endif()
     list (APPEND target_gtest_modules
         GTest::gtest
         GTest::gmock)
@@ -71,6 +73,25 @@ else()
     list (APPEND target_gtest_modules
         GTest::gtest_main
         GTest::gmock_main)
+endif()
+
+if (YUP_PLATFORM_MAC OR YUP_PLATFORM_WINDOWS)
+    set (python_tools_path "${CMAKE_CURRENT_LIST_DIR}/../python/tools")
+    set (python_target_name "${target_name}_python_stdlib")
+
+    yup_prepare_python_stdlib (${python_target_name} ${python_tools_path} python_standard_library)
+
+    yup_add_embedded_binary_resources (
+        ${target_name}_python_stdlib_binary
+        OUT_DIR PythonStandardLibrary
+        HEADER PythonStandardLibrary.h
+        NAMESPACE yup
+        RESOURCE_NAMES
+            PythonStandardLibrary
+        RESOURCES
+            ${python_standard_library})
+
+    list (APPEND target_modules "${target_name}_python_stdlib_binary")
 endif()
 
 yup_standalone_app (
@@ -92,7 +113,7 @@ foreach (module ${target_modules})
         "${CMAKE_CURRENT_LIST_DIR}/${module}/*.cpp")
     list (APPEND sources ${module_sources})
 
-    if (YUP_PLATFORM_OSX OR YUP_PLATFORM_IOS)
+    if (YUP_PLATFORM_APPLE)
         file (GLOB_RECURSE apple_sources
             "${CMAKE_CURRENT_LIST_DIR}/${module}/*.mm")
         list (APPEND sources ${apple_sources})

@@ -319,6 +319,15 @@ void YUP_CALLTYPE Process::terminate()
     ExitProcess (1);
 }
 
+bool YUP_CALLTYPE Process::isForegroundProcess()
+{
+    return true;
+}
+
+void YUP_CALLTYPE Process::makeForegroundProcess() {}
+
+void YUP_CALLTYPE Process::hide() {}
+
 bool yup_isRunningInWine();
 
 bool yup_isRunningInWine()

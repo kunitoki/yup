@@ -79,7 +79,7 @@ function (yup_add_embedded_binary_resources library_name)
         file (APPEND "${full_resource_unit_path}"
             "const uint8_t ${resource_name}_data[] = \n"
             "{\n"
-            "#include \"${resource_name}.inc\"\n"
+            "    #include \"${resource_name}.inc\"\n"
             "};\n"
             "\n"
             "const std::size_t ${resource_name}_size = sizeof (${resource_name}_data);\n"

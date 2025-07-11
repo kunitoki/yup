@@ -1,0 +1,77 @@
+name: Linux Python
+
+on:
+  push:
+    paths:
+      - "CMakeLists.txt"
+      - "**/workflows/python_linux.yml"
+      - "**/cmake/**"
+      - "**/modules/**"
+      - "**/thirdparty/**"
+      - "**/python/**"
+      - "!**/native/generated/**"
+      - "!**/native/java*/**"
+      - "!**/native/*_android.*"
+      - "!**/native/*_apple.*"
+      - "!**/native/*_emscripten.*"
+      - "!**/native/*_ios.*"
+      - "!**/native/*_mac.*"
+      - "!**/native/*_wasm.*"
+      - "!**/native/*_windows.*"
+    branches:
+      - "**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_python:
+    name: build_cp${{matrix.python}}-${{ matrix.platform_id }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: false
+
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+        - { os: ubuntu-latest, python: 311, platform_id: manylinux_x86_64, cibw_archs: x86_64 }
+        #- { os: ubuntu-latest, python: 311, platform_id: manylinux_aarch64, cibw_archs: aarch64 }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        if: matrix.cibw_archs == 'aarch64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Setup and install python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v3.0.0
+        env:
+          CIBW_ARCHS: ${{matrix.cibw_archs}}
+          CIBW_BUILD: cp${{ matrix.python }}-${{ matrix.platform_id }}
+          CIBW_TEST_SKIP: "*-manylinux_aarch64"
+          CIBW_DEBUG_TRACEBACK: TRUE
+          CIBW_ENVIRONMENT: CIBW_DEBUG_TRACEBACK=TRUE
+        with:
+          package-dir: python
+
+      - name: Store failures artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compare-data
+          path: |
+            ./python/wheelhouse/compare_data/
+            !./python/wheelhouse/compare_data/.gitignore
+          if-no-files-found: ignore
+          retention-days: 5
+          compression-level: 0
+          overwrite: true

@@ -44,8 +44,10 @@ public:
     /** Represents a single color stop in a gradient. */
     struct ColorStop
     {
+        /** Constructs a default color stop with zero values. */
         constexpr ColorStop() = default;
 
+        /** Constructs a color stop with the given color, x, y, and delta. */
         constexpr ColorStop (Color color, float x, float y, float delta)
             : color (color)
             , x (x)
@@ -225,7 +227,7 @@ public:
 
         @return A const reference to the vector of color stops.
     */
-    const std::vector<ColorStop>& getStops() const
+    Span<const ColorStop> getStops() const
     {
         return stops;
     }

@@ -143,7 +143,7 @@ function (yup_audio_plugin)
         set (SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF)
         set (SMTG_ENABLE_VSTGUI_SUPPORT OFF)
         set (SMTG_CREATE_PLUGIN_LINK OFF)
-        if (NOT YUP_PLATFORM_OSX OR XCODE)
+        if (NOT YUP_PLATFORM_MAC OR XCODE)
             set (SMTG_RUN_VST_VALIDATOR ON)
         else()
             set (SMTG_RUN_VST_VALIDATOR OFF)
@@ -183,7 +183,7 @@ function (yup_audio_plugin)
             ${additional_libraries}
             ${YUP_ARG_MODULES})
 
-        if (YUP_PLATFORM_OSX)
+        if (YUP_PLATFORM_MAC)
             smtg_target_set_bundle (${target_name}_vst3_plugin
                 BUNDLE_IDENTIFIER org.kunitoki.yup.${target_name}
                 COMPANY_NAME "kunitoki")
@@ -246,7 +246,7 @@ endfunction()
 #==============================================================================
 
 function (yup_audio_plugin_copy_bundle target_name plugin_type)
-    if (NOT YUP_PLATFORM_OSX)
+    if (NOT YUP_PLATFORM_MAC)
         return()
     endif()
 

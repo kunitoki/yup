@@ -52,11 +52,11 @@ bool Drawable::parseSVG (const File& svgFile)
         }
     }
 
-    auto width = svgRoot->getDoubleAttribute ("width");
-    size.setWidth (width == 0.0 ? viewBox.getWidth() : width);
+    auto width = svgRoot->getFloatAttribute ("width");
+    size.setWidth (width == 0.0f ? viewBox.getWidth() : width);
 
-    auto height = svgRoot->getDoubleAttribute ("height");
-    size.setHeight (height == 0.0 ? viewBox.getHeight() : height);
+    auto height = svgRoot->getFloatAttribute ("height");
+    size.setHeight (height == 0.0f ? viewBox.getHeight() : height);
 
     // ViewBox transform is now calculated at render-time based on actual target area
     YUP_DBG ("Parse complete - viewBox: " << viewBox.toString() << " size: " << size.getWidth() << "x" << size.getHeight());
@@ -414,10 +414,10 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
             e->reference = href.substring (1);
 
         // Handle x,y positioning for use elements (SVG spec requirement)
-        auto x = element.getDoubleAttribute ("x");
-        auto y = element.getDoubleAttribute ("y");
+        auto x = element.getFloatAttribute ("x");
+        auto y = element.getFloatAttribute ("y");
         AffineTransform useTransform;
-        if (x != 0.0 || y != 0.0)
+        if (x != 0.0f || y != 0.0f)
             useTransform = AffineTransform::translation (x, y);
 
         currentTransform = parseTransform (element, currentTransform, *e);
@@ -435,10 +435,10 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
     }
     else if (element.hasTagName ("ellipse"))
     {
-        auto cx = element.getDoubleAttribute ("cx");
-        auto cy = element.getDoubleAttribute ("cy");
-        auto rx = element.getDoubleAttribute ("rx");
-        auto ry = element.getDoubleAttribute ("ry");
+        auto cx = element.getFloatAttribute ("cx");
+        auto cy = element.getFloatAttribute ("cy");
+        auto rx = element.getFloatAttribute ("rx");
+        auto ry = element.getFloatAttribute ("ry");
 
         auto path = Path();
         path.addCenteredEllipse (cx, cy, rx, ry);
@@ -449,9 +449,9 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
     }
     else if (element.hasTagName ("circle"))
     {
-        auto cx = element.getDoubleAttribute ("cx");
-        auto cy = element.getDoubleAttribute ("cy");
-        auto r = element.getDoubleAttribute ("r");
+        auto cx = element.getFloatAttribute ("cx");
+        auto cy = element.getFloatAttribute ("cy");
+        auto r = element.getFloatAttribute ("r");
 
         auto path = Path();
         path.addCenteredEllipse (cx, cy, r, r);
@@ -462,19 +462,19 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
     }
     else if (element.hasTagName ("rect"))
     {
-        auto x = element.getDoubleAttribute ("x");
-        auto y = element.getDoubleAttribute ("y");
-        auto width = element.getDoubleAttribute ("width");
-        auto height = element.getDoubleAttribute ("height");
-        auto rx = element.getDoubleAttribute ("rx");
-        auto ry = element.getDoubleAttribute ("ry");
+        auto x = element.getFloatAttribute ("x");
+        auto y = element.getFloatAttribute ("y");
+        auto width = element.getFloatAttribute ("width");
+        auto height = element.getFloatAttribute ("height");
+        auto rx = element.getFloatAttribute ("rx");
+        auto ry = element.getFloatAttribute ("ry");
 
         auto path = Path();
-        if (rx > 0.0 || ry > 0.0)
+        if (rx > 0.0f || ry > 0.0f)
         {
-            if (rx == 0.0)
+            if (rx == 0.0f)
                 rx = ry;
-            if (ry == 0.0)
+            if (ry == 0.0f)
                 ry = rx;
 
             path.addRoundedRectangle (x, y, width, height, rx, ry, rx, ry);
@@ -491,10 +491,10 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
     }
     else if (element.hasTagName ("line"))
     {
-        auto x1 = element.getDoubleAttribute ("x1");
-        auto y1 = element.getDoubleAttribute ("y1");
-        auto x2 = element.getDoubleAttribute ("x2");
-        auto y2 = element.getDoubleAttribute ("y2");
+        auto x1 = element.getFloatAttribute ("x1");
+        auto y1 = element.getFloatAttribute ("y1");
+        auto x2 = element.getFloatAttribute ("x2");
+        auto y2 = element.getFloatAttribute ("y2");
 
         auto path = Path();
         path.startNewSubPath (x1, y1);
@@ -552,8 +552,8 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
     }
     else if (element.hasTagName ("text"))
     {
-        auto x = (float) element.getDoubleAttribute ("x");
-        auto y = (float) element.getDoubleAttribute ("y");
+        float x = element.getFloatAttribute ("x");
+        float y = element.getFloatAttribute ("y");
         e->textPosition = Point<float> (x, y);
 
         e->text = element.getAllSubText();
@@ -562,8 +562,8 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
         if (fontFamily.isNotEmpty())
             e->fontFamily = fontFamily;
 
-        auto fontSize = element.getDoubleAttribute ("font-size");
-        if (fontSize > 0.0)
+        float fontSize = element.getFloatAttribute ("font-size");
+        if (fontSize > 0.0f)
             e->fontSize = fontSize;
 
         String textAnchor = element.getStringAttribute ("text-anchor");
@@ -575,10 +575,10 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
     }
     else if (element.hasTagName ("image"))
     {
-        auto x = element.getDoubleAttribute ("x");
-        auto y = element.getDoubleAttribute ("y");
-        auto width = element.getDoubleAttribute ("width");
-        auto height = element.getDoubleAttribute ("height");
+        auto x = element.getFloatAttribute ("x");
+        auto y = element.getFloatAttribute ("y");
+        auto width = element.getFloatAttribute ("width");
+        auto height = element.getFloatAttribute ("height");
 
         e->imageBounds = Rectangle<float> (x, y, width, height);
 
@@ -689,12 +689,12 @@ void Drawable::parseStyle (const XmlElement& element, const AffineTransform& cur
     else if (strokeCap == "butt")
         e.strokeCap = StrokeCap::Butt;
 
-    float strokeWidth = element.getDoubleAttribute ("stroke-width", -1.0);
-    if (strokeWidth > 0.0)
+    float strokeWidth = element.getFloatAttribute ("stroke-width", -1.0f);
+    if (strokeWidth > 0.0f)
         e.strokeWidth = strokeWidth;
 
-    float opacity = element.getDoubleAttribute ("opacity", -1.0);
-    if (opacity >= 0.0 && opacity <= 1.0)
+    float opacity = element.getFloatAttribute ("opacity", -1.0f);
+    if (opacity >= 0.0f && opacity <= 1.0f)
         e.opacity = opacity;
 
     String clipPath = element.getStringAttribute ("clip-path");
@@ -731,13 +731,13 @@ void Drawable::parseStyle (const XmlElement& element, const AffineTransform& cur
         e.strokeDashOffset = parseUnit (dashOffset);
 
     // Parse fill-opacity
-    float fillOpacity = element.getDoubleAttribute ("fill-opacity", -1.0);
-    if (fillOpacity >= 0.0 && fillOpacity <= 1.0)
+    float fillOpacity = element.getFloatAttribute ("fill-opacity", -1.0f);
+    if (fillOpacity >= 0.0f && fillOpacity <= 1.0f)
         e.fillOpacity = fillOpacity;
 
     // Parse stroke-opacity
-    float strokeOpacity = element.getDoubleAttribute ("stroke-opacity", -1.0);
-    if (strokeOpacity >= 0.0 && strokeOpacity <= 1.0)
+    float strokeOpacity = element.getFloatAttribute ("stroke-opacity", -1.0f);
+    if (strokeOpacity >= 0.0f && strokeOpacity <= 1.0f)
         e.strokeOpacity = strokeOpacity;
 
     // Parse fill-rule
@@ -881,7 +881,7 @@ void Drawable::paintDebugElement (Graphics& g, const Element& element)
         g.setStrokeWidth (2.0f);
         g.strokeRect (segment.point.getX() - 4, segment.point.getY() - 4, 8, 8);
 
-        if (segment.verb == PathVerb::CubicTo)
+        if (segment.verb == Path::Verb::CubicTo)
         {
             g.setFillColor (color.brighter (0.05f));
             g.fillRect (segment.controlPoint1.getX() - 4, segment.controlPoint1.getY() - 4, 8, 8);
@@ -916,20 +916,20 @@ void Drawable::parseGradient (const XmlElement& element)
     if (element.hasTagName ("linearGradient"))
     {
         gradient->type = Gradient::Linear;
-        gradient->start = { (float) element.getDoubleAttribute ("x1"), (float) element.getDoubleAttribute ("y1") };
-        gradient->end = { (float) element.getDoubleAttribute ("x2"), (float) element.getDoubleAttribute ("y2") };
+        gradient->start = { element.getFloatAttribute ("x1"), element.getFloatAttribute ("y1") };
+        gradient->end = { element.getFloatAttribute ("x2"), element.getFloatAttribute ("y2") };
 
         YUP_DBG ("Linear gradient - start: (" << gradient->start.getX() << ", " << gradient->start.getY() << ") end: (" << gradient->end.getX() << ", " << gradient->end.getY() << ")");
     }
     else if (element.hasTagName ("radialGradient"))
     {
         gradient->type = Gradient::Radial;
-        gradient->center = { (float) element.getDoubleAttribute ("cx"), (float) element.getDoubleAttribute ("cy") };
-        gradient->radius = element.getDoubleAttribute ("r");
+        gradient->center = { element.getFloatAttribute ("cx"), element.getFloatAttribute ("cy") };
+        gradient->radius = element.getFloatAttribute ("r");
 
-        auto fx = element.getDoubleAttribute ("fx", gradient->center.getX());
-        auto fy = element.getDoubleAttribute ("fy", gradient->center.getY());
-        gradient->focal = { (float) fx, (float) fy };
+        auto fx = element.getFloatAttribute ("fx", gradient->center.getX());
+        auto fy = element.getFloatAttribute ("fy", gradient->center.getY());
+        gradient->focal = { fx, fy };
 
         YUP_DBG ("Radial gradient - center: (" << gradient->center.getX() << ", " << gradient->center.getY() << ") radius: " << gradient->radius);
     }
@@ -962,11 +962,11 @@ void Drawable::parseGradient (const XmlElement& element)
         if (child->hasTagName ("stop"))
         {
             GradientStop stop;
-            stop.offset = child->getDoubleAttribute ("offset");
+            stop.offset = child->getFloatAttribute ("offset");
 
             // First try to get stop-color from attributes
             String stopColor = child->getStringAttribute ("stop-color");
-            float stopOpacity = child->getDoubleAttribute ("stop-opacity", 1.0);
+            float stopOpacity = child->getFloatAttribute ("stop-opacity", 1.0f);
 
             // If not found in attributes, parse from CSS style
             if (stopColor.isEmpty())
@@ -1183,10 +1183,10 @@ void Drawable::parseClipPath (const XmlElement& element)
         }
         else if (child->hasTagName ("rect"))
         {
-            auto x = child->getDoubleAttribute ("x");
-            auto y = child->getDoubleAttribute ("y");
-            auto width = child->getDoubleAttribute ("width");
-            auto height = child->getDoubleAttribute ("height");
+            auto x = child->getFloatAttribute ("x");
+            auto y = child->getFloatAttribute ("y");
+            auto width = child->getFloatAttribute ("width");
+            auto height = child->getFloatAttribute ("height");
 
             auto path = Path();
             path.addRectangle (x, y, width, height);
@@ -1194,9 +1194,9 @@ void Drawable::parseClipPath (const XmlElement& element)
         }
         else if (child->hasTagName ("circle"))
         {
-            auto cx = child->getDoubleAttribute ("cx");
-            auto cy = child->getDoubleAttribute ("cy");
-            auto r = child->getDoubleAttribute ("r");
+            auto cx = child->getFloatAttribute ("cx");
+            auto cy = child->getFloatAttribute ("cy");
+            auto r = child->getFloatAttribute ("r");
 
             auto path = Path();
             path.addCenteredEllipse (cx, cy, r, r);
@@ -1514,15 +1514,15 @@ AffineTransform Drawable::calculateTransformForTarget (const Rectangle<float>& s
     float offsetY = targetArea.getY();
 
     // Horizontal justification
-    if ((static_cast<int> (justification) & static_cast<int> (Justification::horizontalCenter)) != 0)
+    if (justification.testFlags (Justification::horizontalCenter))
         offsetX += (targetArea.getWidth() - scaledWidth) * 0.5f;
-    else if ((static_cast<int> (justification) & static_cast<int> (Justification::right)) != 0)
+    else if (justification.testFlags (Justification::right))
         offsetX += targetArea.getWidth() - scaledWidth;
 
     // Vertical justification
-    if ((static_cast<int> (justification) & static_cast<int> (Justification::verticalCenter)) != 0)
+    if (justification.testFlags (Justification::verticalCenter))
         offsetY += (targetArea.getHeight() - scaledHeight) * 0.5f;
-    else if ((static_cast<int> (justification) & static_cast<int> (Justification::bottom)) != 0)
+    else if (justification.testFlags (Justification::bottom))
         offsetY += targetArea.getHeight() - scaledHeight;
 
     // Create transform: translate to origin, scale, then translate to target position

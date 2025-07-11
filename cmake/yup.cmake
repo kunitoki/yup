@@ -50,8 +50,8 @@ function (_yup_setup_platform)
         list (APPEND platforms "emscripten" "posix" "web")
 
     elseif (APPLE)
-        set (platform "osx")
-        list (APPEND platforms "osx" "apple" "posix" "desktop")
+        set (platform "mac")
+        list (APPEND platforms "mac" "apple" "posix" "desktop")
 
     elseif (WIN32)
         if (CMAKE_SYSTEM_NAME MATCHES "WindowsStore")
@@ -93,3 +93,8 @@ include (${CMAKE_CURRENT_LIST_DIR}/yup_standalone.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_embed_binary.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_android_java.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/yup_python.cmake)
+
+#==============================================================================
+
+_yup_setup_platform()

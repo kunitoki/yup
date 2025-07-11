@@ -260,7 +260,7 @@ public:
     */
     [[nodiscard]] constexpr ValueType horizontalDistanceTo (const Point& other) const noexcept
     {
-        return other.x - x;
+        return yup_abs (other.x - x);
     }
 
     /** Calculates the vertical distance between this point and another point.
@@ -274,7 +274,7 @@ public:
     */
     [[nodiscard]] constexpr ValueType verticalDistanceTo (const Point& other) const noexcept
     {
-        return other.y - y;
+        return yup_abs (other.y - y);
     }
 
     /** Calculates the Manhattan distance between this point and another point.
@@ -288,7 +288,7 @@ public:
     */
     [[nodiscard]] constexpr ValueType manhattanDistanceTo (const Point& other) const noexcept
     {
-        return std::abs (x - other.x) + std::abs (y - other.y);
+        return yup_abs (x - other.x) + yup_abs (y - other.y);
     }
 
     //==============================================================================
@@ -315,9 +315,14 @@ public:
 
         @return A new point on the specified circle.
     */
-    [[nodiscard]] constexpr Point getPointOnCircumference (float radius, float angleRadians) const noexcept
+    template <class T = ValueType>
+    [[nodiscard]] constexpr auto getPointOnCircumference (float radius, float angleRadians) const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Point>
     {
-        return { x + (std::cos (angleRadians) * radius), y + std::sin (angleRadians) * radius };
+        return {
+            static_cast<ValueType> (x + (std::cos (angleRadians) * radius)),
+            static_cast<ValueType> (y + std::sin (angleRadians) * radius)
+        };
     }
 
     /** Returns a new point located on the circumference of an ellipse centered at this point, given radii and an angle.
@@ -331,9 +336,14 @@ public:
 
         @return A new point on the specified ellipse.
     */
-    [[nodiscard]] constexpr Point getPointOnCircumference (float radiusX, float radiusY, float angleRadians) const noexcept
+    template <class T = ValueType>
+    [[nodiscard]] constexpr auto getPointOnCircumference (float radiusX, float radiusY, float angleRadians) const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Point>
     {
-        return { x + (std::cos (angleRadians) * radiusX), y + std::sin (angleRadians) * radiusY };
+        return {
+            static_cast<ValueType> (x + (std::cos (angleRadians) * radiusX)),
+            static_cast<ValueType> (y + std::sin (angleRadians) * radiusY)
+        };
     }
 
     //==============================================================================
@@ -632,11 +642,9 @@ public:
 
         @return The angle in radians between this point and the other point.
     */
-    [[nodiscard]] constexpr float angleTo (const Point& other) const noexcept
+    [[nodiscard]] float angleTo (const Point& other) const noexcept
     {
-        const auto magProduct = magnitude() * other.magnitude();
-
-        return magProduct == 0.0f ? 0.0f : std::acos (dotProduct (other) / magProduct);
+        return std::atan2 (other.x - x, other.y - y);
     }
 
     //==============================================================================
@@ -713,7 +721,7 @@ public:
     */
     [[nodiscard]] constexpr bool isWithinCircle (const Point& center, float radius) const noexcept
     {
-        return distanceTo (center) <= radius;
+        return distanceTo (center) <= jmax (0.0f, radius);
     }
 
     /** Checks if this point is within a rectangular area defined by two corner points.

@@ -26,9 +26,9 @@
 class VariableFontsExample : public yup::Component
 {
 public:
-    VariableFontsExample (const yup::Font& font)
+    VariableFontsExample()
         : Component ("VariableFontsExample")
-        , font (font)
+        , font (yup::ApplicationTheme::getGlobalTheme()->getDefaultFont())
     {
         text =
             "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed non aliquam risus, eu molestie sem. "

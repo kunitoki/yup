@@ -31,8 +31,7 @@ set (rive_file "data/alien.riv")
 set (link_libraries "")
 if (ANDROID)
     include (../../cmake/yup.cmake)
-    _yup_setup_platform()
-    _yup_add_default_modules ("${CMAKE_CURRENT_LIST_DIR}/../..")
+    yup_add_default_modules ("${CMAKE_CURRENT_LIST_DIR}/../..")
 
     yup_add_embedded_binary_resources (
         "${target_name}_binary_data"
@@ -48,6 +47,11 @@ if (ANDROID)
 endif()
 
 # ==== Prepare target
+set (additional_modules "")
+if (YUP_PLATFORM_DESKTOP)
+    set (additional_modules yup::yup_python)
+endif()
+
 yup_standalone_app (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}
@@ -68,6 +72,7 @@ yup_standalone_app (
         yup::yup_audio_processors
         libpng
         libwebp
+        ${additional_modules}
         ${link_libraries})
 
 # ==== Prepare sources

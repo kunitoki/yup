@@ -94,6 +94,17 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_get_project_version_string modules_path output_variable)
+    get_filename_component (root_modules_path "${modules_path}" ABSOLUTE)
+    file (STRINGS "${root_modules_path}/yup_core/system/yup_StandardHeader.h" YUP_CORE_MODULE)
+    string (REGEX REPLACE "(.*)(YUP_MAJOR_VERSION )([0-9]+)(.*)" "\\3" MAJOR_NUMBER ${YUP_CORE_MODULE})
+    string (REGEX REPLACE "(.*)(YUP_MINOR_VERSION )([0-9]+)(.*)" "\\3" MINOR_NUMBER ${YUP_CORE_MODULE})
+    string (REGEX REPLACE "(.*)(YUP_BUILDNUMBER )([0-9]+)(.*)" "\\3" BUILD_NUMBER ${YUP_CORE_MODULE})
+    set (${output_variable} "${MAJOR_NUMBER}.${MINOR_NUMBER}.${BUILD_NUMBER}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
 function (_yup_boolean_property input_bool output_variable)
     string (STRIP "${input_bool}" ${input_bool})
     string (TOLOWER "${input_bool}" ${input_bool})
@@ -137,7 +148,7 @@ function (_yup_file_to_byte_array file_path output_variable)
     file (READ "${file_path}" hex_contents HEX)
     string (REGEX MATCHALL "([A-Fa-f0-9][A-Fa-f0-9])" separated_hex ${hex_contents})
 
-    list (JOIN separated_hex ", 0x" formatted_hex)
+    list (JOIN separated_hex ",0x" formatted_hex)
     string (PREPEND formatted_hex "0x")
     string (APPEND formatted_hex "")
 
@@ -159,11 +170,11 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_get_package_config_libs package_name output_variable)
+macro (_yup_get_package_config_libs package_name output_variable)
     find_package (PkgConfig REQUIRED)
     pkg_check_modules (${package_name} REQUIRED IMPORTED_TARGET ${package_name})
-    set (${output_variable} "PkgConfig::${package_name}" PARENT_SCOPE)
-endfunction()
+    set (${output_variable} "PkgConfig::${package_name}")
+endmacro()
 
 #==============================================================================
 

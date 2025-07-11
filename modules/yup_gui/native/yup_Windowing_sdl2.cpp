@@ -1649,7 +1649,8 @@ void shutdownYup_Windowing()
 
     // Shutdown desktop
     SDL_DelEventWatch (displayEventDispatcher, Desktop::getInstance());
-    Desktop::getInstance()->deleteInstance();
+    if (auto desktop = Desktop::getInstanceWithoutCreating())
+        desktop->deleteInstance();
 
     // Unregister theme
     {
@@ -1658,7 +1659,8 @@ void shutdownYup_Windowing()
     }
 
     // Unregister event loop
-    MessageManager::getInstance()->registerEventLoopCallback (nullptr);
+    if (auto messageManager = MessageManager::getInstanceWithoutCreating())
+        messageManager->registerEventLoopCallback (nullptr);
 
     // Quit SDL
     SDL_Quit();

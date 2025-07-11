@@ -44,14 +44,14 @@
 
     ID:                 yup_core
     vendor:             yup
-    version:            7.0.12
+    version:            1.0.0
     name:               YUP core classes
     description:        The essential set of basic YUP classes, as required by all the other YUP modules.
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
     dependencies:       zlib
-    osxFrameworks:      Cocoa Foundation IOKit Security
+    macFrameworks:      Cocoa Foundation IOKit Security
     iosFrameworks:      Foundation UIKit
     iosSimFrameworks:   Foundation UIKit
     linuxLibs:          rt dl pthread
@@ -71,9 +71,6 @@
 #pragma warning(push)
 // Disable warnings for long class names, padding, and undefined preprocessor definitions.
 #pragma warning(disable : 4251 4786 4668 4820)
-#ifdef __INTEL_COMPILER
-#pragma warning(disable : 1125)
-#endif
 #endif
 
 #include "system/yup_TargetPlatform.h"
@@ -106,6 +103,18 @@
 #else
 #define YUP_LOG_ASSERTIONS 0
 #endif
+#endif
+
+//==============================================================================
+/** Config: YUP_ASSERT_INCLUDE_STACKTRACE
+
+    If this flag is enabled, the jassert and jassertfalse macros will include
+    a stack trace when an assertion happens.
+
+    @see YUP_LOG_ASSERTIONS, jassert, jassertfalse
+*/
+#ifndef YUP_ASSERT_INCLUDE_STACKTRACE
+#define YUP_ASSERT_INCLUDE_STACKTRACE 1
 #endif
 
 //==============================================================================

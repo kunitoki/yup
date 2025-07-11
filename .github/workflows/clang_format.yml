@@ -36,6 +36,7 @@ jobs:
             **/*.hpp
             **/*.mm
             **/*.m
+            !**/pybind11/**
             !**/thirdparty/**
 
       - name: Run clang-format

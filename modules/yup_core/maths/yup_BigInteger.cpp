@@ -392,7 +392,7 @@ void BigInteger::negate() noexcept
     negative = (! negative) && ! isZero();
 }
 
-#if YUP_MSVC && ! defined(__INTEL_COMPILER)
+#if YUP_MSVC
 #pragma intrinsic(_BitScanReverse)
 #endif
 

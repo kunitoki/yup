@@ -22,7 +22,7 @@ test CONFIG="Debug":
   build/tests/{{CONFIG}}/yup_tests --gtest_filter={{gtest_filter}}
 
 [doc("generate and open project in macOS using Xcode")]
-osx PROFILING="OFF":
+mac PROFILING="OFF":
   cmake -G Xcode -B build -DYUP_ENABLE_PROFILING={{PROFILING}}
   -open build/yup.xcodeproj
 
@@ -79,3 +79,21 @@ emscripten_test CONFIG="Debug":
 emscripten_serve:
   python3 -m http.server -d .
   #python3 tools/serve.py -p 8000 -d .
+
+[working-directory: 'python']
+python_wheel:
+  python -m build --wheel
+  @just python_install
+  @just python_test
+
+[working-directory: 'python']
+python_install:
+  python -m pip install --force-reinstall dist/yup-*.whl
+
+[working-directory: 'python']
+python_uninstall:
+  python -m pip uninstall -y yup
+
+[working-directory: 'python']
+python_test *TEST_OPTS:
+  python -m pytest -s {{TEST_OPTS}}
