@@ -34,9 +34,10 @@ set_property (GLOBAL PROPERTY USE_FOLDERS ON)
 # Options
 option (YUP_TARGET_ANDROID "Target Android project" OFF)
 option (YUP_TARGET_ANDROID_BUILD_GRADLE "When building for Android, build the gradle infrastructure" OFF)
+option (YUP_EXPORT_MODULES "Export the modules to the parent project" ON)
 option (YUP_ENABLE_PROFILING "Enable the profiling code using Perfetto SDK" OFF)
 option (YUP_ENABLE_COVERAGE "Enable code coverage collection for tests" OFF)
-option (YUP_EXPORT_MODULES "Export the modules to the parent project" ON)
+option (YUP_ENABLE_PLUGINVAL "Enable pluginval validation for VST3 plugins" OFF)
 option (YUP_ENABLE_STATIC_PYTHON_LIBS "Use static Python libraries" OFF)
 option (YUP_BUILD_JAVA_SUPPORT "Build the Java support" OFF)
 option (YUP_BUILD_EXAMPLES "Build the examples" ${PROJECT_IS_TOP_LEVEL})
@@ -65,6 +66,12 @@ endif()
 if (YUP_ENABLE_PROFILING)
     _yup_message (STATUS "Enabling profiling")
     _yup_fetch_perfetto()
+endif()
+
+# Setup pluginval
+if (YUP_ENABLE_PLUGINVAL)
+    _yup_message (STATUS "Setting up pluginval")
+    yup_setup_pluginval()
 endif()
 
 # Targets

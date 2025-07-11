@@ -209,6 +209,11 @@ function (yup_audio_plugin)
             FOLDER "${YUP_ARG_TARGET_IDE_GROUP}"
             XCODE_GENERATE_SCHEME ON)
 
+        # Add pluginval validation if enabled
+        if (YUP_ENABLE_PLUGINVAL)
+            yup_validate_plugin (${target_name}_vst3_plugin "$<TARGET_FILE:${target_name}_vst3_plugin>")
+        endif()
+
         yup_audio_plugin_copy_bundle (${target_name} vst3)
     endif()
 
