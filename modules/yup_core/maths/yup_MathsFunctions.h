@@ -646,11 +646,9 @@ constexpr auto roundToInt (const FloatType value) noexcept
     {
         union
         {
-            int asInt[2];
             double asDouble;
-        } n;
-
-        n.asDouble = ((double) value) + 6755399441055744.0;
+            int asInt[2];
+        } n = { ((double) value) + 6755399441055744.0 };
 
 #if YUP_BIG_ENDIAN
         return n.asInt[1];
