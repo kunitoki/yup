@@ -277,7 +277,12 @@ public:
     */
     constexpr bool contains (const Point<ValueType>& point, float tolerance) const noexcept
     {
-        return std::abs ((point.getY() - p1.getY()) * (p2.getX() - p1.getX()) - (point.getX() - p1.getX()) * (p2.getY() - p1.getY())) < tolerance;
+        const auto lineLength = p1.distanceTo (p2);
+        if (lineLength == 0.0f)
+            return p1.distanceTo (point) <= tolerance;
+
+        const auto area = yup_abs ((point.getY() - p1.getY()) * (p2.getX() - p1.getX()) - (point.getX() - p1.getX()) * (p2.getY() - p1.getY()));
+        return (area / lineLength) <= tolerance;
     }
 
     //==============================================================================

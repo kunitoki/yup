@@ -723,7 +723,7 @@ public:
     */
     constexpr Rectangle& setBottomRight (const Point<ValueType>& newPosition) noexcept
     {
-        xy = newPosition.translated (-static_cast<ValueType> (getHeight()), -static_cast<ValueType> (getHeight()));
+        xy = newPosition.translated (-static_cast<ValueType> (getWidth()), -static_cast<ValueType> (getHeight()));
 
         return *this;
     }
@@ -1769,7 +1769,7 @@ public:
     */
     [[nodiscard]] constexpr Rectangle largestFittingSquare() const noexcept
     {
-        if (getWidth() == getHeight())
+        if (isEmpty())
             return *this;
 
         if (getWidth() > getHeight())
@@ -1791,6 +1791,16 @@ public:
     */
     [[nodiscard]] constexpr Rectangle unionWith (const Rectangle& other) const noexcept
     {
+        const bool thisIsEmpty = isEmpty();
+        const bool otherIsEmpty = other.isEmpty();
+
+        if (thisIsEmpty && otherIsEmpty)
+            return {};
+        else if (thisIsEmpty)
+            return other;
+        else if (otherIsEmpty)
+            return *this;
+
         const auto x1 = jmin (getX(), other.getX());
         const auto x2 = jmax (getX() + getWidth(), other.getX() + other.getWidth());
 

@@ -183,9 +183,9 @@ public:
 
     [[nodiscard]] bool contains (const Point<ValueType>& point) const
     {
-        for (const auto& rect : rectangles)
+        for (const auto& r : rectangles)
         {
-            if (rect.contains (point))
+            if (r.contains (point))
                 return true;
         }
 
@@ -206,9 +206,9 @@ public:
 
     [[nodiscard]] bool intersects (const RectangleType& rect) const
     {
-        for (const auto& rect : rectangles)
+        for (const auto& r : rectangles)
         {
-            if (rect.intersects (rect))
+            if (rect.intersects (r))
                 return true;
         }
 
@@ -256,21 +256,20 @@ public:
     */
     [[nodiscard]] RectangleType getBoundingBox() const
     {
+        if (rectangles.isEmpty())
+            return {};
+
         ValueType minX = std::numeric_limits<ValueType>::max();
         ValueType maxX = std::numeric_limits<ValueType>::min();
         ValueType minY = std::numeric_limits<ValueType>::max();
         ValueType maxY = std::numeric_limits<ValueType>::min();
 
-        for (const auto& rect : rectangles)
+        for (const auto& r : rectangles)
         {
-            if (minX > rect.getX())
-                minX = rect.getX();
-            if (minY > rect.getY())
-                minY = rect.getY();
-            if (maxX > rect.getX() + rect.getWidth())
-                maxX = rect.getX() + rect.getWidth();
-            if (maxY > rect.getY() + rect.getHeight())
-                maxY = rect.getY() + rect.getHeight();
+            minX = jmin (minX, r.getX());
+            minY = jmin (minY, r.getY());
+            maxX = jmax (maxX, r.getX() + r.getWidth());
+            maxY = jmax (maxY, r.getY() + r.getHeight());
         }
 
         return { minX, minY, maxX - minX, maxY - minY };

@@ -260,7 +260,7 @@ public:
     */
     [[nodiscard]] constexpr ValueType horizontalDistanceTo (const Point& other) const noexcept
     {
-        return other.x - x;
+        return yup_abs (other.x - x);
     }
 
     /** Calculates the vertical distance between this point and another point.
@@ -274,7 +274,7 @@ public:
     */
     [[nodiscard]] constexpr ValueType verticalDistanceTo (const Point& other) const noexcept
     {
-        return other.y - y;
+        return yup_abs (other.y - y);
     }
 
     /** Calculates the Manhattan distance between this point and another point.
@@ -288,7 +288,7 @@ public:
     */
     [[nodiscard]] constexpr ValueType manhattanDistanceTo (const Point& other) const noexcept
     {
-        return std::abs (x - other.x) + std::abs (y - other.y);
+        return yup_abs (x - other.x) + yup_abs (y - other.y);
     }
 
     //==============================================================================
@@ -721,7 +721,7 @@ public:
     */
     [[nodiscard]] constexpr bool isWithinCircle (const Point& center, float radius) const noexcept
     {
-        return distanceTo (center) <= radius;
+        return distanceTo (center) <= jmax (0.0f, radius);
     }
 
     /** Checks if this point is within a rectangular area defined by two corner points.
