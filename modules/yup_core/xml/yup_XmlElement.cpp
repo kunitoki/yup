@@ -467,7 +467,9 @@ bool XmlElement::hasTagName (StringRef possibleTagName) const noexcept
 
 String XmlElement::getNamespace() const
 {
-    return tagName.upToFirstOccurrenceOf (":", false, false);
+    return tagName.contains(":")
+        ? tagName.upToFirstOccurrenceOf (":", false, false)
+        : String();
 }
 
 String XmlElement::getTagNameWithoutNamespace() const

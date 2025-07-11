@@ -29,13 +29,6 @@ namespace yup::Helpers
 //==============================================================================
 
 /**
- * @brief Obtain stack traces.
- */
-String getStackBacktrace();
-
-//==============================================================================
-
-/**
  * @brief Crash handler.
  */
 void applicationCrashHandler (void* stackFrame);

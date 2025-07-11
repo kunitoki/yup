@@ -2031,26 +2031,18 @@ bool String::containsNonWhitespaceChars() const noexcept
 
 String String::reversed() const
 {
-    if (isEmpty())
+    const int numChars = length();
+    if (numChars <= 0)
         return *this;
 
-    // Count characters first to know how much space we need
-    int numChars = length();
-    if (numChars <= 0)
-        return {};
-
-    // Create array to store character positions
     HeapBlock<CharPointerType> positions (numChars);
 
-    // Build the result by iterating backwards through characters
     StringCreationHelper builder (text);
 
-    // Store the start position of each character
     int index = 0;
     for (auto it = text; ! it.isEmpty() && index < numChars; ++it, ++index)
         positions[index] = it;
 
-    // Now write characters in reverse order
     for (int i = index - 1; i >= 0; --i)
         builder.write (*positions[i]);
 

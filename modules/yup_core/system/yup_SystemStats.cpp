@@ -214,7 +214,7 @@ uint64 SystemStats::getCompileUniqueId()
 }
 
 //==============================================================================
-#if YUP_ANDROID
+#if YUP_ANDROID && __ANDROID_API__ < 33
 struct BacktraceState
 {
     BacktraceState (void** current, void** end)
@@ -295,26 +295,11 @@ String SystemStats::getStackBacktrace()
     _Unwind_Backtrace (unwindCallback, &state);
 
     auto frames = static_cast<size_t> (state.current - &stack[0]);
-    for (auto i = (decltype (frames)) 0; i < frames; ++i)
-    {
-        Dl_info info;
-        if (dladdr (stack[i], &info))
-        {
-            int status = 0;
-            std::unique_ptr<char, decltype (::free)*> demangled (abi::__cxa_demangle (info.dli_sname, nullptr, 0, &status), ::free);
-
-            result
-                << yup::String (i).paddedRight (' ', 3)
-                << " " << yup::File (yup::String (info.dli_fname)).getFileName().paddedRight (' ', 35)
-                << " 0x" << yup::String::toHexString ((size_t) stack[i]).paddedLeft ('0', sizeof (void*) * 2)
-                << " " << demangled.get()
-                << " + " << ((char*) stack[i] - (char*) info.dli_saddr) << newLine;
-        }
-    }
-
+    char** frameStrings = nullptr;
 #else
     auto frames = backtrace (stack, numElementsInArray (stack));
     char** frameStrings = backtrace_symbols (stack, frames);
+#endif
 
     for (auto i = (decltype (frames)) 0; i < frames; ++i)
     {
@@ -336,9 +321,9 @@ String SystemStats::getStackBacktrace()
             }
         }
 
-        result << frameStrings[i] << newLine;
+        if (frameStrings != nullptr)
+            result << frameStrings[i] << newLine;
     }
-#endif
 #endif
 
     return result;
