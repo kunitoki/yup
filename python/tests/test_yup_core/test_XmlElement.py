@@ -66,7 +66,7 @@ def test_tag_name_with_namespace():
     assert a.hasTagName("other") == True
     assert a.getTagName() == "other"
 
-    assert a.getNamespace() == "other"
+    assert a.getNamespace() == ""
     assert a.hasTagNameIgnoringNamespace("root") == False
     assert a.hasTagNameIgnoringNamespace("other") == True
     assert a.getTagNameWithoutNamespace() == "other"
