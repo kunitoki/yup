@@ -62,6 +62,10 @@ TEST (PointTests, GetSet_Coordinates)
     p.setY (4.0f);
     EXPECT_FLOAT_EQ (p.getX(), 3.0f);
     EXPECT_FLOAT_EQ (p.getY(), 4.0f);
+
+    auto p2 = p.withXY (5.0f, 6.0f);
+    EXPECT_FLOAT_EQ (p2.getX(), 5.0f);
+    EXPECT_FLOAT_EQ (p2.getY(), 6.0f);
 }
 
 TEST (PointTests, With_Coordinates)
@@ -179,6 +183,14 @@ TEST (PointTests, Rotation)
     }
 }
 
+TEST (PointTests, AngleTo)
+{
+    Point<float> p1 (0.0f, 0.0f);
+    Point<float> p2 (1.0f, 1.0f);
+
+    EXPECT_FLOAT_EQ (p1.angleTo (p2), yup::degreesToRadians (45.0f));
+}
+
 TEST (PointTests, Midpoint)
 {
     Point<float> p1 (0.0f, 0.0f);
@@ -234,6 +246,20 @@ TEST (PointTests, Reflection)
     Point<float> pO = p.reflectedOverOrigin();
     EXPECT_FLOAT_EQ (pO.getX(), -1.0f);
     EXPECT_FLOAT_EQ (pO.getY(), -2.0f);
+
+    Point<float> p0 (1.0f, 2.0f);
+
+    p0.reflectOverXAxis();
+    EXPECT_FLOAT_EQ (p0.getX(), 1.0f);
+    EXPECT_FLOAT_EQ (p0.getY(), -2.0f);
+
+    p0.reflectOverYAxis();
+    EXPECT_FLOAT_EQ (p0.getX(), -1.0f);
+    EXPECT_FLOAT_EQ (p0.getY(), -2.0f);
+
+    p0.reflectOverOrigin();
+    EXPECT_FLOAT_EQ (p0.getX(), 1.0f);
+    EXPECT_FLOAT_EQ (p0.getY(), 2.0f);
 }
 
 TEST (PointTests, MinMax_Abs)
@@ -263,18 +289,42 @@ TEST (PointTests, Arithmetic_Operators)
     Point<float> sum = p1 + p2;
     EXPECT_FLOAT_EQ (sum.getX(), 4.0f);
     EXPECT_FLOAT_EQ (sum.getY(), 6.0f);
+    sum = sum + 1.0f;
+    EXPECT_FLOAT_EQ (sum.getX(), 5.0f);
+    EXPECT_FLOAT_EQ (sum.getY(), 7.0f);
+    sum += 1.0f;
+    EXPECT_FLOAT_EQ (sum.getX(), 6.0f);
+    EXPECT_FLOAT_EQ (sum.getY(), 8.0f);
 
     Point<float> diff = p2 - p1;
     EXPECT_FLOAT_EQ (diff.getX(), 2.0f);
     EXPECT_FLOAT_EQ (diff.getY(), 2.0f);
+    diff = diff - 1.0f;
+    EXPECT_FLOAT_EQ (diff.getX(), 1.0f);
+    EXPECT_FLOAT_EQ (diff.getY(), 1.0f);
+    diff -= 1.0f;
+    EXPECT_FLOAT_EQ (diff.getX(), 0.0f);
+    EXPECT_FLOAT_EQ (diff.getY(), 0.0f);
 
-    Point<float> scaled = p1 * 2.0f;
-    EXPECT_FLOAT_EQ (scaled.getX(), 2.0f);
-    EXPECT_FLOAT_EQ (scaled.getY(), 4.0f);
+    Point<float> mul = p2 * p1;
+    EXPECT_FLOAT_EQ (mul.getX(), 3.0f);
+    EXPECT_FLOAT_EQ (mul.getY(), 8.0f);
+    mul = mul * 2.0f;
+    EXPECT_FLOAT_EQ (mul.getX(), 6.0f);
+    EXPECT_FLOAT_EQ (mul.getY(), 16.0f);
+    mul *= 0.5f;
+    EXPECT_FLOAT_EQ (mul.getX(), 3.0f);
+    EXPECT_FLOAT_EQ (mul.getY(), 8.0f);
 
-    Point<float> divided = scaled / 2.0f;
-    EXPECT_FLOAT_EQ (divided.getX(), 1.0f);
-    EXPECT_FLOAT_EQ (divided.getY(), 2.0f);
+    Point<float> div = p2 / p1;
+    EXPECT_FLOAT_EQ (div.getX(), 3.0f);
+    EXPECT_FLOAT_EQ (div.getY(), 2.0f);
+    div = div / 2.0f;
+    EXPECT_FLOAT_EQ (div.getX(), 1.5f);
+    EXPECT_FLOAT_EQ (div.getY(), 1.0f);
+    div /= 0.5f;
+    EXPECT_FLOAT_EQ (div.getX(), 3.0f);
+    EXPECT_FLOAT_EQ (div.getY(), 2.0f);
 }
 
 TEST (PointTests, Equality_Operators)

@@ -42,6 +42,13 @@ TEST (RectangleTests, Default_Constructor)
 
 TEST (RectangleTests, Parameterized_Constructors)
 {
+    // Constructor with width, height
+    Rectangle<float> r0 (3.0f, 4.0f);
+    EXPECT_FLOAT_EQ (r0.getX(), 0.0f);
+    EXPECT_FLOAT_EQ (r0.getY(), 0.0f);
+    EXPECT_FLOAT_EQ (r0.getWidth(), 3.0f);
+    EXPECT_FLOAT_EQ (r0.getHeight(), 4.0f);
+
     // Constructor with x, y, width, height
     Rectangle<float> r1 (1.0f, 2.0f, 3.0f, 4.0f);
     EXPECT_FLOAT_EQ (r1.getX(), 1.0f);
@@ -147,10 +154,14 @@ TEST (RectangleTests, Position_And_Size)
     EXPECT_FLOAT_EQ (r4.getWidth(), 9.0f);
     EXPECT_FLOAT_EQ (r4.getHeight(), 10.0f);
 
+    Rectangle<float> r5 = r.withSize (9.0f, 10.0f);
+    EXPECT_FLOAT_EQ (r5.getWidth(), 9.0f);
+    EXPECT_FLOAT_EQ (r5.getHeight(), 10.0f);
+
     // Test withZeroSize
-    Rectangle<float> r5 = r.withZeroSize();
-    EXPECT_FLOAT_EQ (r5.getWidth(), 0.0f);
-    EXPECT_FLOAT_EQ (r5.getHeight(), 0.0f);
+    Rectangle<float> r6 = r.withZeroSize();
+    EXPECT_FLOAT_EQ (r6.getWidth(), 0.0f);
+    EXPECT_FLOAT_EQ (r6.getHeight(), 0.0f);
 }
 
 TEST (RectangleTests, Corners)

@@ -642,11 +642,9 @@ public:
 
         @return The angle in radians between this point and the other point.
     */
-    [[nodiscard]] constexpr float angleTo (const Point& other) const noexcept
+    [[nodiscard]] float angleTo (const Point& other) const noexcept
     {
-        const auto magProduct = magnitude() * other.magnitude();
-
-        return magProduct == 0.0f ? 0.0f : std::acos (dotProduct (other) / magProduct);
+        return std::atan2 (other.x - x, other.y - y);
     }
 
     //==============================================================================
