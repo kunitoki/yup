@@ -67,18 +67,23 @@ void YUPApplicationBase::setApplicationReturnValue (const int newReturnValue) no
 // This is called on the Mac and iOS where the OS doesn't allow the stack to unwind on shutdown..
 void YUPApplicationBase::appWillTerminateByForce()
 {
+    int appReturnValue = 0;
+
     YUP_AUTORELEASEPOOL
     {
         {
             const std::unique_ptr<YUPApplicationBase> app (appInstance);
 
             if (app != nullptr)
-                app->shutdownApp();
+                appReturnValue = app->shutdownApp();
         }
 
         DeletedAtShutdown::deleteAll();
         MessageManager::deleteInstance();
     }
+
+    if (appReturnValue != 0)
+        exit (appReturnValue);
 }
 
 void YUPApplicationBase::quit()
