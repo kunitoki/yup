@@ -48,7 +48,7 @@ YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
     @tags{Core}
 */
-class DirectoryEntry final
+class YUP_API DirectoryEntry final
 {
 public:
     /** The path to a file or folder. */
@@ -112,7 +112,7 @@ inline const DirectoryEntry& operator* (const DirectoryEntry& e) noexcept { retu
 
     @tags{Core}
 */
-class RangedDirectoryIterator final
+class YUP_API RangedDirectoryIterator final
 {
 public:
     using difference_type = std::ptrdiff_t;
