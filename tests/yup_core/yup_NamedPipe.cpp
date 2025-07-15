@@ -41,6 +41,8 @@
 
 #include <yup_core/yup_core.h>
 
+#if ! YUP_WASM
+
 using namespace yup;
 
 namespace
@@ -237,3 +239,5 @@ TEST_F (NamedPipeTests, SendMessageExistingPipe)
     EXPECT_EQ (receiver.result, (int) sizeof (receiver.recvData));
     EXPECT_EQ (receiver.recvData, sendData);
 }
+
+#endif
