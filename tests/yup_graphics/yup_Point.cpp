@@ -106,7 +106,9 @@ TEST (PointTests, Distance_Calculations)
     EXPECT_FLOAT_EQ (p1.distanceTo (p2), 5.0f);
     EXPECT_FLOAT_EQ (p1.distanceToSquared (p2), 25.0f);
     EXPECT_FLOAT_EQ (p1.horizontalDistanceTo (p2), 3.0f);
+    EXPECT_FLOAT_EQ (p2.horizontalDistanceTo (p1), -3.0f);
     EXPECT_FLOAT_EQ (p1.verticalDistanceTo (p2), 4.0f);
+    EXPECT_FLOAT_EQ (p2.verticalDistanceTo (p1), -4.0f);
     EXPECT_FLOAT_EQ (p1.manhattanDistanceTo (p2), 7.0f);
 }
 
@@ -693,8 +695,10 @@ TEST (PointTests, DistanceCalculations_EdgeCases)
     // Test with negative coordinates
     Point<float> negative (-3.0f, -4.0f);
     EXPECT_FLOAT_EQ (origin.distanceTo (negative), 5.0f);
-    EXPECT_FLOAT_EQ (origin.horizontalDistanceTo (negative), 3.0f);
-    EXPECT_FLOAT_EQ (origin.verticalDistanceTo (negative), 4.0f);
+    EXPECT_FLOAT_EQ (origin.horizontalDistanceTo (negative), -3.0f);
+    EXPECT_FLOAT_EQ (negative.horizontalDistanceTo (origin), 3.0f);
+    EXPECT_FLOAT_EQ (origin.verticalDistanceTo (negative), -4.0f);
+    EXPECT_FLOAT_EQ (negative.verticalDistanceTo (origin), 4.0f);
 
     // Test with infinity
     Point<float> inf (std::numeric_limits<float>::infinity(), 0.0f);

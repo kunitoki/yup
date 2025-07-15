@@ -375,7 +375,6 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "network/yup_WebInputStream.h"
 #include "streams/yup_URLInputSource.h"
 #include "time/yup_PerformanceCounter.h"
-#include "unit_tests/yup_UnitTest.h"
 #include "xml/yup_XmlDocument.h"
 #include "xml/yup_XmlElement.h"
 #include "zip/yup_GZIPCompressorOutputStream.h"
@@ -403,10 +402,6 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #if YUP_CORE_INCLUDE_JNI_HELPERS && YUP_ANDROID
 #include <jni.h>
 #include "native/yup_JNIHelpers_android.h"
-#endif
-
-#if YUP_UNIT_TESTS
-#include "unit_tests/yup_UnitTestCategories.h"
 #endif
 
 #if YUP_ENABLE_PROFILING

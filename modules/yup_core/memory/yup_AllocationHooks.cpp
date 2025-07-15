@@ -94,24 +94,4 @@ void operator delete[] (void* p, size_t) noexcept
     std::free (p);
 }
 
-namespace yup
-{
-
-//==============================================================================
-UnitTestAllocationChecker::UnitTestAllocationChecker (UnitTest& test)
-    : unitTest (test)
-{
-    getAllocationHooksForThread().addListener (this);
-}
-
-UnitTestAllocationChecker::~UnitTestAllocationChecker() noexcept
-{
-    getAllocationHooksForThread().removeListener (this);
-    unitTest.expectEquals ((int) calls, 0, "new or delete was incorrectly called while allocation checker was active");
-}
-
-void UnitTestAllocationChecker::newOrDeleteCalled() noexcept { ++calls; }
-
-} // namespace yup
-
 #endif

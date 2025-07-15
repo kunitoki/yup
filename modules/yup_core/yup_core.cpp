@@ -215,7 +215,6 @@ extern char** environ;
 #include "time/yup_PerformanceCounter.cpp"
 #include "time/yup_RelativeTime.cpp"
 #include "time/yup_Time.cpp"
-#include "unit_tests/yup_UnitTest.cpp"
 #include "containers/yup_Variant.cpp"
 #include "javascript/yup_JSON.cpp"
 #include "javascript/yup_JSONUtils.cpp"
@@ -323,11 +322,6 @@ extern char** environ;
 #include "threads/yup_ChildProcess.cpp"
 #include "network/yup_WebInputStream.cpp"
 #include "streams/yup_URLInputSource.cpp"
-#endif
-
-//==============================================================================
-#if YUP_UNIT_TESTS
-#include "maths/yup_MathsFunctions_test.cpp"
 #endif
 
 //==============================================================================

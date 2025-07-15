@@ -260,7 +260,7 @@ public:
     */
     [[nodiscard]] constexpr ValueType horizontalDistanceTo (const Point& other) const noexcept
     {
-        return yup_abs (other.x - x);
+        return other.x - x;
     }
 
     /** Calculates the vertical distance between this point and another point.
@@ -274,7 +274,7 @@ public:
     */
     [[nodiscard]] constexpr ValueType verticalDistanceTo (const Point& other) const noexcept
     {
-        return yup_abs (other.y - y);
+        return other.y - y;
     }
 
     /** Calculates the Manhattan distance between this point and another point.
