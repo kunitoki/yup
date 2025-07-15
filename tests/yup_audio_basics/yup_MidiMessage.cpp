@@ -45,7 +45,10 @@ using namespace yup;
 
 namespace
 {
-const std::vector<uint8> metaEvents[] {
+
+// clang-format off
+const std::vector<uint8> metaEvents[]
+{
     // Format is 0xff, followed by a 'kind' byte, followed by a variable-length
     // 'data-length' value, followed by that many data bytes
     { 0xff, 0x00, 0x02, 0x00, 0x00 },                   // Sequence number
@@ -64,6 +67,8 @@ const std::vector<uint8> metaEvents[] {
     { 0xff, 0x59, 0x02, 0x01, 0x02 },                   // Key signature
     { 0xff, 0x7f, 0x00 },                               // Sequencer-specific
 };
+// clang-format on
+
 } // namespace
 
 TEST (MidiMessageTests, ReadVariableLengthValueShouldReturnCompatibleResults)

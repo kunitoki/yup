@@ -101,44 +101,4 @@ bool MPENote::operator!= (const MPENote& other) const noexcept
     return noteID != other.noteID;
 }
 
-//==============================================================================
-//==============================================================================
-#if YUP_UNIT_TESTS
-
-class MPENoteTests final : public UnitTest
-{
-public:
-    MPENoteTests()
-        : UnitTest ("MPENote class", UnitTestCategories::midi)
-    {
-    }
-
-    //==============================================================================
-    void runTest() override
-    {
-        beginTest ("getFrequencyInHertz");
-        {
-            MPENote note;
-            note.initialNote = 60;
-            note.totalPitchbendInSemitones = -0.5;
-            expectEqualsWithinOneCent (note.getFrequencyInHertz(), 254.178);
-        }
-    }
-
-private:
-    //==============================================================================
-    void expectEqualsWithinOneCent (double frequencyInHertzActual,
-                                    double frequencyInHertzExpected)
-    {
-        double ratio = frequencyInHertzActual / frequencyInHertzExpected;
-        double oneCent = 1.0005946;
-        expect (ratio < oneCent);
-        expect (ratio > 1.0 / oneCent);
-    }
-};
-
-static MPENoteTests MPENoteUnitTests;
-
-#endif
-
 } // namespace yup

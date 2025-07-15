@@ -130,11 +130,11 @@ struct ZipFile::ZipEntryHolder
     static Time parseFileTime (uint32 time, uint32 date) noexcept
     {
         auto year = (int) (1980 + (date >> 9));
-        auto month = (int) (((date >> 5) & 15) - 1);
+        auto month = jlimit (0, 11, (int) (((date >> 5) & 15) - 1));
         auto day = (int) (date & 31);
-        auto hours = (int) time >> 11;
-        auto minutes = (int) ((time >> 5) & 63);
-        auto seconds = (int) ((time & 31) << 1);
+        auto hours = jlimit (0, 23, (int) time >> 11);
+        auto minutes = jlimit (0, 59, (int) ((time >> 5) & 63));
+        auto seconds = jlimit (0, 59, (int) ((time & 31) << 1));
 
         return { year, month, day, hours, minutes, seconds };
     }

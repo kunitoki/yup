@@ -193,6 +193,12 @@ TEST (TimeTests, ToISO8601)
 {
     Time time (1625000000000);
     EXPECT_FALSE (time.toISO8601 (true).isEmpty());
+
+    if (Time {}.getTimeZone() == "GMT")
+    {
+        EXPECT_EQ (Time (2025, 2, 30, 0, 59, 59, 999, false).toISO8601 (true), "2025-03-30T00:59:59.999Z");
+        EXPECT_EQ (Time (2025, 2, 30, 1, 00, 00, 000, false).toISO8601 (true), "2025-03-30T02:00:00.000+01:00");
+    }
 }
 
 TEST (TimeTests, FromISO8601)
@@ -201,6 +207,15 @@ TEST (TimeTests, FromISO8601)
     EXPECT_EQ (time.getYear(), 2021);
     EXPECT_EQ (time.getMonth(), 5); // June
     EXPECT_EQ (time.getDayOfMonth(), 29);
+
+    EXPECT_EQ (Time::fromISO8601 (Time (0).toISO8601 (true)), Time (0));
+}
+
+TEST (TimeTests, BackAndForthISO8601)
+{
+    Time zero (0);
+    auto t1 = zero.toISO8601 (true);
+    EXPECT_EQ (t1, Time::fromISO8601 (t1).toISO8601 (true));
 }
 
 TEST (TimeTests, AddRelativeTime)
@@ -301,7 +316,7 @@ TEST (TimeTests, DISABLED_SetSystemTimeToThisTime)
     EXPECT_TRUE (now.setSystemTimeToThisTime());
 }
 
-TEST (TimeTests, xxx)
+TEST (TimeTests, StockTests)
 {
     Time t = Time::getCurrentTime();
     EXPECT_TRUE (t > Time());

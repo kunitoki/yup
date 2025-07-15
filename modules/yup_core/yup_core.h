@@ -405,10 +405,6 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "native/yup_JNIHelpers_android.h"
 #endif
 
-#if YUP_UNIT_TESTS
-#include "unit_tests/yup_UnitTestCategories.h"
-#endif
-
 #if YUP_ENABLE_PROFILING
 YUP_BEGIN_IGNORE_WARNINGS_MSVC (4267)
 #include <perfetto.h>

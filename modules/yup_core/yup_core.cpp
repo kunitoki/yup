@@ -326,11 +326,6 @@ extern char** environ;
 #endif
 
 //==============================================================================
-#if YUP_UNIT_TESTS
-#include "maths/yup_MathsFunctions_test.cpp"
-#endif
-
-//==============================================================================
 #include <zlib/zlib.h>
 
 #include "zip/yup_GZIPDecompressorInputStream.cpp"

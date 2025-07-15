@@ -78,8 +78,6 @@
 #include "utilities/yup_IIRFilter.cpp"
 #include "utilities/yup_LagrangeInterpolator.cpp"
 #include "utilities/yup_WindowedSincInterpolator.cpp"
-#include "utilities/yup_Interpolators.cpp"
-#include "utilities/yup_SmoothedValue.cpp"
 #include "midi/yup_MidiBuffer.cpp"
 #include "midi/yup_MidiFile.cpp"
 #include "midi/yup_MidiKeyboardState.cpp"
@@ -114,8 +112,3 @@
 #include "midi/ump/yup_UMPMidi1ToMidi2DefaultTranslator.cpp"
 #include "midi/ump/yup_UMPIterator.cpp"
 #include "utilities/yup_AudioWorkgroup.cpp"
-
-#if YUP_UNIT_TESTS
-#include "utilities/yup_ADSR_test.cpp"
-#include "midi/ump/yup_UMP_test.cpp"
-#endif
