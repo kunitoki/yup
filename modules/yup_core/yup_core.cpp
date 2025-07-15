@@ -215,7 +215,6 @@ extern char** environ;
 #include "time/yup_PerformanceCounter.cpp"
 #include "time/yup_RelativeTime.cpp"
 #include "time/yup_Time.cpp"
-#include "unit_tests/yup_UnitTest.cpp"
 #include "containers/yup_Variant.cpp"
 #include "javascript/yup_JSON.cpp"
 #include "javascript/yup_JSONUtils.cpp"

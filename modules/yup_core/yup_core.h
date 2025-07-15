@@ -375,7 +375,6 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "network/yup_WebInputStream.h"
 #include "streams/yup_URLInputSource.h"
 #include "time/yup_PerformanceCounter.h"
-#include "unit_tests/yup_UnitTest.h"
 #include "xml/yup_XmlDocument.h"
 #include "xml/yup_XmlElement.h"
 #include "zip/yup_GZIPCompressorOutputStream.h"
