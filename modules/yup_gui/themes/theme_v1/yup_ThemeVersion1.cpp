@@ -665,14 +665,29 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
                 int noteInOctave = note % 12;
                 switch (noteInOctave)
                 {
-                    case 0:  noteText = "C"; break;
-                    case 2:  noteText = "D"; break;
-                    case 4:  noteText = "E"; break;
-                    case 5:  noteText = "F"; break;
-                    case 7:  noteText = "G"; break;
-                    case 9:  noteText = "A"; break;
-                    case 11: noteText = "B"; break;
-                    default: break;
+                    case 0:
+                        noteText = "C";
+                        break;
+                    case 2:
+                        noteText = "D";
+                        break;
+                    case 4:
+                        noteText = "E";
+                        break;
+                    case 5:
+                        noteText = "F";
+                        break;
+                    case 7:
+                        noteText = "G";
+                        break;
+                    case 9:
+                        noteText = "A";
+                        break;
+                    case 11:
+                        noteText = "B";
+                        break;
+                    default:
+                        break;
                 }
 
                 if (noteText.isNotEmpty())
@@ -793,4 +808,3 @@ ApplicationTheme::Ptr createThemeVersion1()
 }
 
 } // namespace yup
-

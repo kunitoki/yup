@@ -168,7 +168,8 @@ public:
 
     bool isPlaying() const
     {
-        if (!isNoteOn) return false;
+        if (! isNoteOn)
+            return false;
 
         for (const auto& generator : harmonicGenerators)
         {
@@ -358,7 +359,7 @@ public:
             auto slider = sliders.add (std::make_unique<yup::Slider> (yup::String (i)));
 
             // Configure slider range and default value
-            slider->setRange ({0.0f, 1.0f});
+            slider->setRange ({ 0.0f, 1.0f });
             slider->setDefaultValue (0.0f);
 
             slider->onValueChanged = [this, i] (float value)
@@ -403,7 +404,7 @@ public:
         volumeSlider = std::make_unique<yup::Slider> ("Volume");
 
         // Configure slider range and default value
-        volumeSlider->setRange ({0.0f, 1.0f});
+        volumeSlider->setRange ({ 0.0f, 1.0f });
         volumeSlider->setDefaultValue (0.5f);
 
         volumeSlider->onValueChanged = [this] (float value)
@@ -524,7 +525,7 @@ public:
         // Update note indicator
         if (harmonicSynth.isPlaying())
         {
-            if (!noteIndicatorLabel->isVisible())
+            if (! noteIndicatorLabel->isVisible())
             {
                 noteIndicatorLabel->setVisible (true);
             }
