@@ -19,6 +19,10 @@
   ==============================================================================
 */
 
+#if YUP_MODULE_AVAILABLE_yup_audio_gui
+#include <yup_audio_gui/yup_audio_gui.h>
+#endif
+
 namespace yup
 {
 
@@ -568,6 +572,127 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
 }
 
 //==============================================================================
+#if YUP_MODULE_AVAILABLE_yup_audio_gui
+void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKeyboardComponent& keyboard)
+{
+    auto bounds = keyboard.getLocalBounds();
+
+    if (bounds.isEmpty())
+        return;
+
+    auto getNumWhiteKeysInRange = [](int rangeStart, int rangeEnd)
+    {
+        int numWhiteKeys = 0;
+
+        for (int i = rangeStart; i < rangeEnd; ++i)
+            if (! MidiMessage::isMidiNoteBlack (i))
+                ++numWhiteKeys;
+
+        return numWhiteKeys;
+    };
+
+    auto keyWidth = keyboard.getKeyStartRange().getLength() / getNumWhiteKeysInRange (keyboard.getLowestVisibleKey(),
+                                                                                      keyboard.getHighestVisibleKey() + 1);
+
+    // Paint white keys first
+    for (int note = keyboard.getLowestVisibleKey(); note <= keyboard.getHighestVisibleKey(); ++note)
+    {
+        if (! keyboard.isBlackKey (note))
+        {
+            bool isBlack;
+            Rectangle<float> keyArea;
+            keyboard.getKeyPosition (note, keyWidth, keyArea, isBlack);
+
+            auto isPressed = keyboard.isNoteOn (note);
+            auto isOver = keyboard.isMouseOverNote (note);
+
+            // Use theme colors
+            auto fillColor = isPressed ? ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyPressedColorId)
+                                       : ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyColorId);
+
+            auto shadowColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyShadowColorId);
+            auto outlineColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::keyOutlineColorId);
+
+            // Draw 3D effect
+            auto shadowArea = keyArea.reduced (1.0f);
+            shadowArea.translate (2.0f, 2.0f);
+
+            g.setFillColor (shadowColor);
+            g.fillRoundedRect (shadowArea, 2.0f);
+
+            // Main key
+            g.setFillColor (fillColor);
+            g.fillRoundedRect (keyArea.reduced (0.5f), 1.5f);
+
+            // Highlight for 3D effect
+            if (! isPressed)
+            {
+                g.setFillColor (fillColor.brighter (0.3f));
+                g.fillRoundedRect (keyArea.reduced (1.0f).removeFromTop (keyArea.getHeight() * 0.3f), 1.5f);
+            }
+
+            // Outline
+            g.setStrokeColor (outlineColor);
+            g.setStrokeWidth (1.0f);
+            g.strokeRoundedRect (keyArea.reduced (0.5f), 1.5f);
+
+            // Note text
+            /*
+            if (keyboard.getWidth() > 20 && keyArea.getWidth() > 20.0f)
+            {
+                auto noteText = MidiKeyboardComponent::getWhiteNoteText (note);
+                if (noteText.isNotEmpty())
+                {
+                    g.setFillColor (outlineColor);
+                    g.drawText (noteText, keyArea.reduced (2.0f).removeFromBottom (15.0f),
+                               Justification::centred, false);
+                }
+            }
+            */
+        }
+    }
+
+    // Paint black keys on top
+    for (int note = keyboard.getLowestVisibleKey(); note <= keyboard.getHighestVisibleKey(); ++note)
+    {
+        if (keyboard.isBlackKey (note))
+        {
+            bool isBlack;
+            Rectangle<float> keyArea;
+            keyboard.getKeyPosition (note, keyWidth, keyArea, isBlack);
+
+            auto isPressed = keyboard.isNoteOn (note);
+            auto isOver = keyboard.isMouseOverNote (note);
+
+            // Use theme colors
+            auto fillColor = isPressed ? ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyPressedColorId)
+                                       : ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyColorId);
+
+            auto shadowColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyShadowColorId);
+
+            // Draw 3D effect
+            auto shadowArea = keyArea.reduced (0.5f);
+            shadowArea.translate (1.5f, 1.5f);
+
+            g.setFillColor (shadowColor);
+            g.fillRoundedRect (shadowArea, 2.0f);
+
+            // Main key
+            g.setFillColor (fillColor);
+            g.fillRoundedRect (keyArea.reduced (0.25f), 1.5f);
+
+            // Highlight for 3D effect
+            if (! isPressed)
+            {
+                g.setFillColor (fillColor.brighter (0.2f));
+                g.fillRoundedRect (keyArea.reduced (1.0f).removeFromTop (keyArea.getHeight() * 0.2f), 1.5f);
+            }
+        }
+    }
+}
+#endif
+
+//==============================================================================
 
 ApplicationTheme::Ptr createThemeVersion1()
 {
@@ -593,6 +718,17 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setColor (Label::Style::strokeColorId, Colors::transparentBlack);
 
     theme->setComponentStyle<PopupMenu> (ComponentStyle::createStyle<PopupMenu> (paintPopupMenu));
+
+#if YUP_MODULE_AVAILABLE_yup_audio_gui
+    theme->setComponentStyle<MidiKeyboardComponent> (ComponentStyle::createStyle<MidiKeyboardComponent> (paintMidiKeyboard));
+    theme->setColor (MidiKeyboardComponent::Style::whiteKeyColorId, Color (0xfff0f0f0));
+    theme->setColor (MidiKeyboardComponent::Style::whiteKeyPressedColorId, Color (0xff4ebfff));
+    theme->setColor (MidiKeyboardComponent::Style::whiteKeyShadowColorId, Color (0x40000000));
+    theme->setColor (MidiKeyboardComponent::Style::blackKeyColorId, Color (0xff2a2a2a));
+    theme->setColor (MidiKeyboardComponent::Style::blackKeyPressedColorId, Color (0xff7a7aff));
+    theme->setColor (MidiKeyboardComponent::Style::blackKeyShadowColorId, Color (0x80000000));
+    theme->setColor (MidiKeyboardComponent::Style::keyOutlineColorId, Color (0xff888888));
+#endif
 
     return theme;
 }
