@@ -492,3 +492,136 @@ TEST_F (UniversalMidiPacketTest, WideningConversionsWork)
         EXPECT_EQ (Conversion::scaleTo16 (rand), baselineScale7To16 (rand));
     }
 }
+
+// ==============================================================================
+// UMPUtils Tests
+
+TEST (UMPUtilsTests, GetNumWordsForMessageType)
+{
+    using namespace yup::universal_midi_packets;
+
+    // Test 1-word message types
+    EXPECT_EQ (1, Utils::getNumWordsForMessageType (0x00000000)); // Message type 0x0
+    EXPECT_EQ (1, Utils::getNumWordsForMessageType (0x10000000)); // Message type 0x1
+    EXPECT_EQ (1, Utils::getNumWordsForMessageType (0x20000000)); // Message type 0x2
+    EXPECT_EQ (1, Utils::getNumWordsForMessageType (0x60000000)); // Message type 0x6
+    EXPECT_EQ (1, Utils::getNumWordsForMessageType (0x70000000)); // Message type 0x7
+
+    // Test 2-word message types
+    EXPECT_EQ (2, Utils::getNumWordsForMessageType (0x30000000)); // Message type 0x3
+    EXPECT_EQ (2, Utils::getNumWordsForMessageType (0x40000000)); // Message type 0x4
+    EXPECT_EQ (2, Utils::getNumWordsForMessageType (0x80000000)); // Message type 0x8
+    EXPECT_EQ (2, Utils::getNumWordsForMessageType (0x90000000)); // Message type 0x9
+    EXPECT_EQ (2, Utils::getNumWordsForMessageType (0xA0000000)); // Message type 0xA
+
+    // Test 3-word message types
+    EXPECT_EQ (3, Utils::getNumWordsForMessageType (0xB0000000)); // Message type 0xB
+    EXPECT_EQ (3, Utils::getNumWordsForMessageType (0xC0000000)); // Message type 0xC
+
+    // Test 4-word message types
+    EXPECT_EQ (4, Utils::getNumWordsForMessageType (0x50000000)); // Message type 0x5
+    EXPECT_EQ (4, Utils::getNumWordsForMessageType (0xD0000000)); // Message type 0xD
+    EXPECT_EQ (4, Utils::getNumWordsForMessageType (0xE0000000)); // Message type 0xE
+    EXPECT_EQ (4, Utils::getNumWordsForMessageType (0xF0000000)); // Message type 0xF
+}
+
+TEST (UMPUtilsTests, UtilityFunctionsGetMessageTypeGroupStatusChannel)
+{
+    using namespace yup::universal_midi_packets;
+
+    // Test a word with all nibbles set to different values
+    uint32_t testWord = 0x12345678;
+
+    EXPECT_EQ (0x1, Utils::getMessageType (testWord));
+    EXPECT_EQ (0x2, Utils::getGroup (testWord));
+    EXPECT_EQ (0x3, Utils::getStatus (testWord));
+    EXPECT_EQ (0x4, Utils::getChannel (testWord));
+}
+
+TEST (UMPUtilsTests, U4TemplateHelpers)
+{
+    using namespace yup::universal_midi_packets;
+
+    // Test setting and getting 4-bit values at different positions
+    uint32_t word = 0x00000000;
+
+    // Set value at index 0 (most significant nibble)
+    word = Utils::U4<0>::set (word, 0xA);
+    EXPECT_EQ (0xA0000000, word);
+    EXPECT_EQ (0xA, Utils::U4<0>::get (word));
+
+    // Set value at index 1
+    word = Utils::U4<1>::set (word, 0xB);
+    EXPECT_EQ (0xAB000000, word);
+    EXPECT_EQ (0xB, Utils::U4<1>::get (word));
+
+    // Set value at index 7 (least significant nibble)
+    word = Utils::U4<7>::set (word, 0xF);
+    EXPECT_EQ (0xAB00000F, word);
+    EXPECT_EQ (0xF, Utils::U4<7>::get (word));
+
+    // Test overwriting existing values
+    word = Utils::U4<0>::set (word, 0x3);
+    EXPECT_EQ (0x3B00000F, word);
+    EXPECT_EQ (0x3, Utils::U4<0>::get (word));
+}
+
+TEST (UMPUtilsTests, U8TemplateHelpers)
+{
+    using namespace yup::universal_midi_packets;
+
+    uint32_t word = 0x00000000;
+
+    // Set byte at index 0 (most significant byte)
+    word = Utils::U8<0>::set (word, 0xAB);
+    EXPECT_EQ (0xAB000000, word);
+    EXPECT_EQ (0xAB, Utils::U8<0>::get (word));
+
+    // Set byte at index 3 (least significant byte)
+    word = Utils::U8<3>::set (word, 0xCD);
+    EXPECT_EQ (0xAB0000CD, word);
+    EXPECT_EQ (0xCD, Utils::U8<3>::get (word));
+
+    // Test overwriting
+    word = Utils::U8<1>::set (word, 0xEF);
+    EXPECT_EQ (0xABEF00CD, word);
+    EXPECT_EQ (0xEF, Utils::U8<1>::get (word));
+}
+
+TEST (UMPUtilsTests, U16TemplateHelpers)
+{
+    using namespace yup::universal_midi_packets;
+
+    uint32_t word = 0x00000000;
+
+    // Set 16-bit value at index 0 (most significant 16 bits)
+    word = Utils::U16<0>::set (word, 0xABCD);
+    EXPECT_EQ (0xABCD0000, word);
+    EXPECT_EQ (0xABCD, Utils::U16<0>::get (word));
+
+    // Set 16-bit value at index 1 (least significant 16 bits)
+    word = Utils::U16<1>::set (word, 0xEF12);
+    EXPECT_EQ (0xABCDEF12, word);
+    EXPECT_EQ (0xEF12, Utils::U16<1>::get (word));
+
+    // Test overwriting
+    word = Utils::U16<0>::set (word, 0x3456);
+    EXPECT_EQ (0x3456EF12, word);
+    EXPECT_EQ (0x3456, Utils::U16<0>::get (word));
+}
+
+TEST (UMPUtilsTests, BytesToWordFunction)
+{
+    using namespace yup::universal_midi_packets;
+
+    auto result = Utils::bytesToWord (std::byte { 0x12 }, std::byte { 0x34 }, std::byte { 0x56 }, std::byte { 0x78 });
+    EXPECT_EQ (0x12345678, result);
+
+    // Test with zeros
+    result = Utils::bytesToWord (std::byte { 0x00 }, std::byte { 0x00 }, std::byte { 0x00 }, std::byte { 0x00 });
+    EXPECT_EQ (0x00000000, result);
+
+    // Test with 0xFF values
+    result = Utils::bytesToWord (std::byte { 0xFF }, std::byte { 0xFF }, std::byte { 0xFF }, std::byte { 0xFF });
+    EXPECT_EQ (0xFFFFFFFF, result);
+}
