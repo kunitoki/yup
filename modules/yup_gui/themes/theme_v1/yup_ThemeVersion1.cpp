@@ -580,19 +580,8 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
     if (bounds.isEmpty())
         return;
 
-    auto getNumWhiteKeysInRange = [](int rangeStart, int rangeEnd)
-    {
-        int numWhiteKeys = 0;
-
-        for (int i = rangeStart; i < rangeEnd; ++i)
-            if (! MidiMessage::isMidiNoteBlack (i))
-                ++numWhiteKeys;
-
-        return numWhiteKeys;
-    };
-
-    auto keyWidth = keyboard.getKeyStartRange().getLength() / getNumWhiteKeysInRange (keyboard.getLowestVisibleKey(),
-                                                                                      keyboard.getHighestVisibleKey() + 1);
+    auto keyWidth = keyboard.getKeyStartRange().getLength();
+    keyWidth /= keyboard.getNumWhiteKeysInRange (keyboard.getLowestVisibleKey(), keyboard.getHighestVisibleKey() + 1);
 
     // Draw keyboard background with subtle gradient shadow
     auto keyboardWidth = keyboard.getKeyStartRange().getEnd();
@@ -653,9 +642,7 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
 
                 // Draw right edge for the last key
                 if (note == keyboard.getHighestVisibleKey())
-                {
                     g.fillRect (keyArea.removeFromRight (1.0f).translated (keyArea.getWidth(), 0.0f));
-                }
             }
 
             // Draw note text if there's space
@@ -782,7 +769,7 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setColor (MidiKeyboardComponent::Style::whiteKeyPressedColorId, Color (0xff4ebfff));
     theme->setColor (MidiKeyboardComponent::Style::whiteKeyShadowColorId, Color (0x40000000));
     theme->setColor (MidiKeyboardComponent::Style::blackKeyColorId, Color (0xff2a2a2a));
-    theme->setColor (MidiKeyboardComponent::Style::blackKeyPressedColorId, Color (0xff7a7aff));
+    theme->setColor (MidiKeyboardComponent::Style::blackKeyPressedColorId, Color (0xff4ebfff));
     theme->setColor (MidiKeyboardComponent::Style::blackKeyShadowColorId, Color (0x80000000));
     theme->setColor (MidiKeyboardComponent::Style::keyOutlineColorId, Color (0xff888888));
 #endif

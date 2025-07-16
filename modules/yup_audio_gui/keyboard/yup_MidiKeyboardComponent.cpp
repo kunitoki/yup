@@ -151,35 +151,49 @@ void MidiKeyboardComponent::mouseUp (const MouseEvent& e)
     if (! isEnabled())
         return;
 
+    // Always release all notes that were triggered by mouse interaction
+    for (auto noteDown : mouseDownNotes)
+        state.noteOff (midiChannel, noteDown, velocity);
+
+    mouseDownNotes.clear();
+
+    // Update visual state to show keys are no longer pressed
     updateNoteUnderMouse (e, false);
-
-    for (int i = mouseDownNotes.size(); --i >= 0;)
-    {
-        const int noteDown = mouseDownNotes.getUnchecked (i);
-
-        if (mouseDraggedToKey (noteDown, e))
-        {
-            mouseDownNotes.remove (i);
-        }
-        else
-        {
-            state.noteOff (midiChannel, noteDown, velocity);
-            mouseDownNotes.remove (i);
-        }
-    }
-
     updateShadowNoteUnderMouse (e);
     shouldCheckState = true;
+}
+
+void MidiKeyboardComponent::mouseMove (const MouseEvent& e)
+{
+    if (! isEnabled())
+        return;
+
+    updateShadowNoteUnderMouse (e);
 }
 
 void MidiKeyboardComponent::mouseEnter (const MouseEvent& e)
 {
     updateShadowNoteUnderMouse (e);
+
+    // If we're entering while dragging, trigger the note under the mouse
+    if (e.isAnyButtonDown())
+    {
+        updateNoteUnderMouse (e, true);
+    }
 }
 
 void MidiKeyboardComponent::mouseExit (const MouseEvent& e)
 {
     updateShadowNoteUnderMouse (e);
+
+    // If we're dragging and leaving the component, release all notes
+    if (e.isAnyButtonDown() && ! mouseDownNotes.isEmpty())
+    {
+        for (auto noteDown : mouseDownNotes)
+            state.noteOff (midiChannel, noteDown, velocity);
+
+        mouseDownNotes.clear();
+    }
 }
 
 void MidiKeyboardComponent::mouseWheel (const MouseEvent&, const MouseWheelData& wheel)
@@ -429,6 +443,7 @@ void MidiKeyboardComponent::updateNoteUnderMouse (Point<float> pos, bool isDown,
     auto newNote = xyToNote (pos, mousePositionVelocity);
     auto oldNote = mouseOverNote;
 
+    // Always update hover visual state when the note under mouse changes
     if (oldNote != newNote)
     {
         repaintNote (oldNote);
@@ -438,19 +453,24 @@ void MidiKeyboardComponent::updateNoteUnderMouse (Point<float> pos, bool isDown,
 
     if (isDown)
     {
-        if (newNote != oldNote)
-        {
-            if (oldNote >= 0)
-            {
-                mouseDownNotes.removeFirstMatchingValue (oldNote);
-                state.noteOff (midiChannel, oldNote, mousePositionVelocity);
-            }
+        // Handle note triggering - this should work regardless of hover state
 
-            if (newNote >= 0 && ! mouseDownNotes.contains (newNote))
+        // First, release any previously pressed notes that are no longer under the mouse
+        for (int i = mouseDownNotes.size(); --i >= 0;)
+        {
+            auto pressedNote = mouseDownNotes.getUnchecked (i);
+            if (pressedNote != newNote)
             {
-                state.noteOn (midiChannel, newNote, mousePositionVelocity);
-                mouseDownNotes.add (newNote);
+                state.noteOff (midiChannel, pressedNote, mousePositionVelocity);
+                mouseDownNotes.remove (i);
             }
+        }
+
+        // Then, trigger the new note if it's valid and not already pressed
+        if (newNote >= 0 && ! mouseDownNotes.contains (newNote))
+        {
+            state.noteOn (midiChannel, newNote, mousePositionVelocity);
+            mouseDownNotes.add (newNote);
         }
     }
 }
@@ -458,13 +478,6 @@ void MidiKeyboardComponent::updateNoteUnderMouse (Point<float> pos, bool isDown,
 void MidiKeyboardComponent::updateNoteUnderMouse (const MouseEvent& e, bool isDown)
 {
     updateNoteUnderMouse (e.getPosition(), isDown, 0);
-}
-
-bool MidiKeyboardComponent::mouseDraggedToKey (int midiNoteNumber, const MouseEvent& e)
-{
-    jassert (midiNoteNumber >= 0 && midiNoteNumber < 128);
-
-    return getRectangleForKey (midiNoteNumber).contains (e.getPosition());
 }
 
 void MidiKeyboardComponent::resetAnyKeysInUse()

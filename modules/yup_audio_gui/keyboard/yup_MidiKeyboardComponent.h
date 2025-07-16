@@ -163,6 +163,8 @@ public:
     /** @internal */
     void mouseUp (const MouseEvent& e) override;
     /** @internal */
+    void mouseMove (const MouseEvent& e) override;
+    /** @internal */
     void mouseEnter (const MouseEvent& e) override;
     /** @internal */
     void mouseExit (const MouseEvent& e) override;
@@ -209,7 +211,6 @@ private:
     void repaintNote (int midiNoteNumber);
     void updateNoteUnderMouse (Point<float> pos, bool isDown, int fingerNum);
     void updateNoteUnderMouse (const MouseEvent& e, bool isDown);
-    bool mouseDraggedToKey (int midiNoteNumber, const MouseEvent& e);
     void resetAnyKeysInUse();
     void updateShadowNoteUnderMouse (const MouseEvent& e);
 
