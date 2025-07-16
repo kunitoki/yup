@@ -364,7 +364,20 @@ void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
     auto& styledText = l.getStyledText();
     const auto bounds = l.getLocalBounds();
 
-    if (const auto strokeColor = l.findColor (Label::Style::strokeColorId); strokeColor && ! strokeColor->isTransparent())
+    if (const auto backgroundColor = l.findColor (Label::Style::backgroundColorId); backgroundColor && ! backgroundColor->isTransparent())
+    {
+        g.setFillColor (*backgroundColor);
+        g.fillRoundedRect (bounds, 4.0f);
+    }
+
+    if (const auto outlineColor = l.findColor (Label::Style::outlineColorId); outlineColor && ! outlineColor->isTransparent())
+    {
+        g.setStrokeColor (*outlineColor);
+        g.setStrokeWidth (2.0f);
+        g.strokeRoundedRect (bounds, 4.0f);
+    }
+
+    if (const auto strokeColor = l.findColor (Label::Style::textStrokeColorId); strokeColor && ! strokeColor->isTransparent())
     {
         g.setStrokeColor (*strokeColor);
         g.setStrokeWidth (l.getStrokeWidth());
@@ -373,7 +386,7 @@ void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
 
     if (! styledText.isEmpty())
     {
-        const auto fillColor = l.findColor (Label::Style::fillColorId).value_or (Colors::white);
+        const auto fillColor = l.findColor (Label::Style::textFillColorId).value_or (Colors::white);
         g.setFillColor (fillColor);
         g.fillFittedText (styledText, bounds);
     }
@@ -758,8 +771,10 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setComponentStyle<ComboBox> (ComponentStyle::createStyle<ComboBox> (paintComboBox));
 
     theme->setComponentStyle<Label> (ComponentStyle::createStyle<Label> (paintLabel));
-    theme->setColor (Label::Style::fillColorId, Colors::white);
-    theme->setColor (Label::Style::strokeColorId, Colors::transparentBlack);
+    theme->setColor (Label::Style::textFillColorId, Colors::white);
+    theme->setColor (Label::Style::textStrokeColorId, Colors::transparentBlack);
+    theme->setColor (Label::Style::backgroundColorId, Colors::transparentBlack);
+    theme->setColor (Label::Style::outlineColorId, Colors::transparentBlack);
 
     theme->setComponentStyle<PopupMenu> (ComponentStyle::createStyle<PopupMenu> (paintPopupMenu));
 

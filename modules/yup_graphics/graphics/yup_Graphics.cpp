@@ -170,6 +170,31 @@ rive::rcp<rive::RenderShader> toColorGradient (rive::Factory& factory, const Col
     }
 }
 
+//==============================================================================
+StyledText::HorizontalAlign toHorizontalAlign (Justification justification)
+{
+    if (justification.testFlags (Justification::left))
+        return StyledText::left;
+    else if (justification.testFlags (Justification::right))
+        return StyledText::right;
+    else if (justification.testFlags (Justification::horizontalCenter))
+        return StyledText::center;
+    else
+        return StyledText::center;
+}
+
+StyledText::VerticalAlign toVerticalAlign (Justification justification)
+{
+    if (justification.testFlags (Justification::top))
+        return StyledText::top;
+    else if (justification.testFlags (Justification::bottom))
+        return StyledText::bottom;
+    else if (justification.testFlags (Justification::verticalCenter))
+        return StyledText::middle;
+    else
+        return StyledText::middle;
+}
+
 } // namespace
 
 //==============================================================================
@@ -679,6 +704,20 @@ void Graphics::fillFittedText (const StyledText& text, const Rectangle<float>& r
     renderFittedText (text, rect, std::addressof (paint));
 }
 
+void Graphics::fillFittedText (const String& text, const Font& font, float fontSize, const Rectangle<float>& rect, Justification justification)
+{
+    StyledText styledText;
+    {
+        auto modifier = styledText.startUpdate();
+        modifier.setMaxSize (rect.getSize());
+        modifier.appendText (text, font, fontSize);
+        modifier.setHorizontalAlign (toHorizontalAlign (justification));
+        modifier.setVerticalAlign (toVerticalAlign (justification));
+    }
+
+    fillFittedText (styledText, rect);
+}
+
 void Graphics::strokeFittedText (const StyledText& text, const Rectangle<float>& rect)
 {
     jassert (! text.needsUpdate());
@@ -700,6 +739,20 @@ void Graphics::strokeFittedText (const StyledText& text, const Rectangle<float>&
         paint.shader (toColorGradient (factory, options.getStrokeColorGradient(), options.getTransform()));
 
     renderFittedText (text, rect, std::addressof (paint));
+}
+
+void Graphics::strokeFittedText (const String& text, const Font& font, float fontSize, const Rectangle<float>& rect, Justification justification)
+{
+    StyledText styledText;
+    {
+        auto modifier = styledText.startUpdate();
+        modifier.setMaxSize (rect.getSize());
+        modifier.appendText (text, font, fontSize);
+        modifier.setHorizontalAlign (toHorizontalAlign (justification));
+        modifier.setVerticalAlign (toVerticalAlign (justification));
+    }
+
+    strokeFittedText (styledText, rect);
 }
 
 void Graphics::renderFittedText (const StyledText& text, const Rectangle<float>& rect, rive::RiveRenderPaint* paint)

@@ -26,10 +26,10 @@
 
 //==============================================================================
 
-class SineWaveGenerator
+class HarmonicSineGenerator
 {
 public:
-    SineWaveGenerator()
+    HarmonicSineGenerator()
         : sampleRate (44100.0)
         , currentAngle (0.0)
         , frequency (0.0)
@@ -40,17 +40,13 @@ public:
     void setSampleRate (double newSampleRate)
     {
         sampleRate = newSampleRate;
-
-        frequency.reset (newSampleRate, 0.1);
-        amplitude.reset (newSampleRate, 0.1);
+        frequency.reset (newSampleRate, 0.05);
+        amplitude.reset (newSampleRate, 0.02);
     }
 
-    void setFrequency (double newFrequency, bool immediate = false)
+    void setFrequency (double newFrequency)
     {
-        if (immediate)
-            frequency.setCurrentAndTargetValue ((yup::MathConstants<double>::twoPi * newFrequency) / sampleRate);
-        else
-            frequency.setTargetValue ((yup::MathConstants<double>::twoPi * newFrequency) / sampleRate);
+        frequency.setTargetValue ((yup::MathConstants<double>::twoPi * newFrequency) / sampleRate);
     }
 
     void setAmplitude (float newAmplitude)
@@ -58,7 +54,7 @@ public:
         amplitude.setTargetValue (newAmplitude);
     }
 
-    float getAmplitude() const
+    float getCurrentAmplitude() const
     {
         return amplitude.getCurrentValue();
     }
@@ -79,6 +75,160 @@ private:
     double currentAngle;
     yup::SmoothedValue<float> frequency;
     yup::SmoothedValue<float> amplitude;
+};
+
+//==============================================================================
+
+class HarmonicSynth
+{
+public:
+    HarmonicSynth()
+        : isNoteOn (false)
+        , currentNote (-1)
+        , fundamentalFrequency (0.0)
+        , masterAmplitude (0.5f)
+    {
+        // Initialize harmonic generators
+        const int numHarmonics = 16; // 4x4 grid
+        harmonicGenerators.resize (numHarmonics);
+        harmonicMultipliers.resize (numHarmonics);
+        harmonicAmplitudes.resize (numHarmonics);
+
+        for (int i = 0; i < numHarmonics; ++i)
+        {
+            harmonicGenerators[i] = std::make_unique<HarmonicSineGenerator>();
+
+            // Set up harmonic relationships (1st, 2nd, 3rd harmonic, etc., plus some non-integer ratios)
+            if (i < 8)
+                harmonicMultipliers[i] = (i + 1); // 1x, 2x, 3x, 4x, 5x, 6x, 7x, 8x
+            else
+                harmonicMultipliers[i] = (i - 7) * 0.5 + 0.5; // 0.5x, 1x, 1.5x, 2x, 2.5x, 3x, 3.5x, 4x
+
+            harmonicAmplitudes[i] = 0.0f; // Start silent
+        }
+    }
+
+    void setSampleRate (double newSampleRate)
+    {
+        for (auto& generator : harmonicGenerators)
+            generator->setSampleRate (newSampleRate);
+    }
+
+    void noteOn (int midiNoteNumber, float velocity)
+    {
+        currentNote = midiNoteNumber;
+        isNoteOn = true;
+
+        // Convert MIDI note to frequency: f = 440 * 2^((n-69)/12)
+        fundamentalFrequency = 440.0 * std::pow (2.0, (midiNoteNumber - 69) / 12.0);
+
+        updateHarmonicFrequencies();
+        updateHarmonicAmplitudes (velocity);
+    }
+
+    void noteOff (int midiNoteNumber)
+    {
+        if (currentNote == midiNoteNumber)
+        {
+            isNoteOn = false;
+            for (auto& generator : harmonicGenerators)
+                generator->setAmplitude (0.0f);
+        }
+    }
+
+    void allNotesOff()
+    {
+        isNoteOn = false;
+        currentNote = -1;
+        for (auto& generator : harmonicGenerators)
+            generator->setAmplitude (0.0f);
+    }
+
+    void setHarmonicAmplitude (int harmonicIndex, float amplitude)
+    {
+        if (harmonicIndex >= 0 && harmonicIndex < harmonicAmplitudes.size())
+        {
+            harmonicAmplitudes[harmonicIndex] = amplitude;
+            if (isNoteOn)
+                updateHarmonicAmplitudes (1.0f); // Use current velocity
+        }
+    }
+
+    void setMasterAmplitude (float newAmplitude)
+    {
+        masterAmplitude = newAmplitude;
+        if (isNoteOn)
+            updateHarmonicAmplitudes (1.0f);
+    }
+
+    float getMasterAmplitude() const
+    {
+        return masterAmplitude;
+    }
+
+    bool isPlaying() const
+    {
+        if (!isNoteOn) return false;
+
+        for (const auto& generator : harmonicGenerators)
+        {
+            if (generator->getCurrentAmplitude() > 0.001f)
+                return true;
+        }
+        return false;
+    }
+
+    int getCurrentNote() const
+    {
+        return currentNote;
+    }
+
+    float getNextSample()
+    {
+        float mixedSample = 0.0f;
+
+        for (auto& generator : harmonicGenerators)
+        {
+            mixedSample += generator->getNextSample();
+        }
+
+        return mixedSample * masterAmplitude;
+    }
+
+    double getHarmonicMultiplier (int index) const
+    {
+        if (index >= 0 && index < harmonicMultipliers.size())
+            return harmonicMultipliers[index];
+        return 1.0;
+    }
+
+private:
+    void updateHarmonicFrequencies()
+    {
+        for (size_t i = 0; i < harmonicGenerators.size(); ++i)
+        {
+            double harmonicFreq = fundamentalFrequency * harmonicMultipliers[i];
+            harmonicGenerators[i]->setFrequency (harmonicFreq);
+        }
+    }
+
+    void updateHarmonicAmplitudes (float velocity)
+    {
+        for (size_t i = 0; i < harmonicGenerators.size(); ++i)
+        {
+            float amplitude = harmonicAmplitudes[i] * velocity * masterAmplitude;
+            harmonicGenerators[i]->setAmplitude (amplitude);
+        }
+    }
+
+    std::vector<std::unique_ptr<HarmonicSineGenerator>> harmonicGenerators;
+    std::vector<double> harmonicMultipliers;
+    std::vector<float> harmonicAmplitudes;
+
+    bool isNoteOn;
+    int currentNote;
+    double fundamentalFrequency;
+    float masterAmplitude;
 };
 
 //==============================================================================
@@ -166,18 +316,9 @@ public:
         // Initialize the audio device
         deviceManager.initialiseWithDefaultDevices (0, 2);
 
-        // Initialize sine wave generators for MIDI notes (128 possible notes)
+        // Initialize harmonic synthesizer
         double sampleRate = deviceManager.getAudioDeviceSetup().sampleRate;
-        sineWaveGenerators.resize (128);
-        for (int i = 0; i < 128; ++i)
-        {
-            sineWaveGenerators[i] = std::make_unique<SineWaveGenerator>();
-            sineWaveGenerators[i]->setSampleRate (sampleRate);
-            // Convert MIDI note to frequency: f = 440 * 2^((n-69)/12)
-            double frequency = 440.0 * std::pow (2.0, (i - 69) / 12.0);
-            sineWaveGenerators[i]->setFrequency (frequency, true);
-            sineWaveGenerators[i]->setAmplitude (0.0f); // Start silent
-        }
+        harmonicSynth.setSampleRate (sampleRate);
 
         // Set up MIDI keyboard
         keyboardState.addListener (this);
@@ -187,54 +328,102 @@ public:
         keyboardComponent.setVelocity (0.7f);
         addAndMakeVisible (keyboardComponent);
 
-        // Add sliders for manual control (reduced number for layout)
+        // Create title and subtitle labels
+        titleLabel = std::make_unique<yup::Label> ("Title");
+        titleLabel->setText ("YUP Harmonic Synthesizer");
+        //titleLabel->setJustification (yup::Justification::centred);
+        //titleLabel->setFont (16.0f);
+        titleLabel->setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
+        addAndMakeVisible (*titleLabel);
+
+        subtitleLabel = std::make_unique<yup::Label> ("Subtitle");
+        subtitleLabel->setText ("Each knob controls a harmonic of the played note - experiment to create rich tones!");
+        //subtitleLabel->setJustification (yup::Justification::centred);
+        //subtitleLabel->setFont (12.0f);
+        subtitleLabel->setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
+        addAndMakeVisible (*subtitleLabel);
+
+        // Create note indicator label
+        noteIndicatorLabel = std::make_unique<yup::Label> ("NoteIndicator");
+        noteIndicatorLabel->setText ("");
+        //noteIndicatorLabel->setJustification (yup::Justification::centred);
+        //noteIndicatorLabel->setFont (12.0f);
+        noteIndicatorLabel->setColor (yup::Label::Style::textFillColorId, yup::Colors::black);
+        noteIndicatorLabel->setColor (yup::Label::Style::backgroundColorId, yup::Colors::yellow.withAlpha (0.8f));
+        addChildComponent (*noteIndicatorLabel);
+
+        // Add harmonic control sliders (4x4 grid)
         for (int i = 0; i < totalRows * totalColumns; ++i)
         {
             auto slider = sliders.add (std::make_unique<yup::Slider> (yup::String (i)));
 
-            slider->onValueChanged = [this, i, sampleRate] (float value)
+            // Configure slider range and default value
+            slider->setRange ({0.0f, 1.0f});
+            slider->setDefaultValue (0.0f);
+
+            slider->onValueChanged = [this, i] (float value)
             {
-                // Map sliders to a specific range of notes for demonstration
-                int noteNumber = 60 + i; // Start from middle C
-                if (noteNumber < 128)
-                {
-                    double baseFreq = 440.0 * std::pow (2.0, (noteNumber - 69) / 12.0);
-                    sineWaveGenerators[noteNumber]->setFrequency (baseFreq * (1.0 + value * 0.5));
-                    sineWaveGenerators[noteNumber]->setAmplitude (value * 0.3f);
-                }
+                harmonicSynth.setHarmonicAmplitude (i, value * 0.4f); // Scale down to prevent clipping
             };
 
             addAndMakeVisible (slider);
+
+            // Create harmonic labels for each slider
+            auto label = harmonicLabels.add (std::make_unique<yup::Label> (yup::String ("HarmonicLabel") + yup::String (i)));
+            //label->setJustificationType (yup::Justification::centred);
+            //label->setFont (10.0f);
+            label->setColor (yup::Label::Style::textFillColorId, yup::Colors::lightgray);
+
+            // Set the harmonic multiplier text
+            auto multiplier = harmonicSynth.getHarmonicMultiplier (i);
+            label->setText (yup::String (multiplier, 1) + "x", yup::dontSendNotification);
+
+            addAndMakeVisible (*label);
         }
 
         // Add buttons
-        button = std::make_unique<yup::TextButton> ("Randomize");
-        button->onClick = [this]
+        randomizeButton = std::make_unique<yup::TextButton> ("Randomize");
+        randomizeButton->onClick = [this]
         {
             for (int i = 0; i < sliders.size(); ++i)
                 sliders[i]->setValue (yup::Random::getSystemRandom().nextFloat());
         };
-        addAndMakeVisible (*button);
+        addAndMakeVisible (*randomizeButton);
 
         // Add clear all notes button
-        clearButton = std::make_unique<yup::TextButton> ("Clear All Notes");
+        clearButton = std::make_unique<yup::TextButton> ("All Notes Off");
         clearButton->onClick = [this]
         {
             keyboardState.allNotesOff (0); // Turn off all notes on all channels
+            harmonicSynth.allNotesOff();
         };
         addAndMakeVisible (*clearButton);
 
-        // Add the oscilloscope
-        addAndMakeVisible (oscilloscope);
-
         // Add volume control
         volumeSlider = std::make_unique<yup::Slider> ("Volume");
+
+        // Configure slider range and default value
+        volumeSlider->setRange ({0.0f, 1.0f});
+        volumeSlider->setDefaultValue (0.5f);
+
         volumeSlider->onValueChanged = [this] (float value)
         {
             masterVolume = value;
         };
         volumeSlider->setValue (0.5f); // Set initial volume to 50%
         addAndMakeVisible (*volumeSlider);
+
+        // Add the oscilloscope
+        addAndMakeVisible (oscilloscope);
+
+        // Set some initial harmonic values for a nice sound
+        if (sliders.size() >= 4)
+        {
+            sliders[0]->setValue (0.8f); // Fundamental
+            sliders[1]->setValue (0.4f); // 2nd harmonic
+            sliders[2]->setValue (0.2f); // 3rd harmonic
+            sliders[3]->setValue (0.1f); // 4th harmonic
+        }
     }
 
     ~AudioExample() override
@@ -248,6 +437,16 @@ public:
     {
         auto bounds = getLocalBounds();
 
+        // Title area at the top
+        auto titleHeight = proportionOfHeight (0.05f);
+        auto titleBounds = bounds.removeFromTop (titleHeight);
+        titleLabel->setBounds (titleBounds);
+
+        // Subtitle area
+        auto subtitleHeight = proportionOfHeight (0.03f);
+        auto subtitleBounds = bounds.removeFromTop (subtitleHeight);
+        subtitleLabel->setBounds (subtitleBounds);
+
         // Reserve space for MIDI keyboard at the bottom
         auto keyboardHeight = proportionOfHeight (0.20f);
         auto keyboardBounds = bounds.removeFromBottom (keyboardHeight);
@@ -258,14 +457,13 @@ public:
         auto oscilloscopeBounds = bounds.removeFromBottom (oscilloscopeHeight);
         oscilloscope.setBounds (oscilloscopeBounds.reduced (proportionOfWidth (0.01f), proportionOfHeight (0.01f)));
 
-        // Reserve space for buttons at the top
-        bounds.removeFromTop (proportionOfHeight (0.1f));
-        auto buttonHeight = proportionOfHeight (0.10f);
-        auto buttonArea = bounds.removeFromTop (buttonHeight);
+        // Reserve space for buttons area
+        auto buttonHeight = proportionOfHeight (0.08f);
+        auto buttonArea = bounds.removeFromBottom (buttonHeight);
 
         auto buttonWidth = buttonArea.getWidth() / 3;
-        if (button != nullptr)
-            button->setBounds (buttonArea.removeFromLeft (buttonWidth).reduced (proportionOfWidth (0.01f), proportionOfHeight (0.01f)));
+        if (randomizeButton != nullptr)
+            randomizeButton->setBounds (buttonArea.removeFromLeft (buttonWidth).reduced (proportionOfWidth (0.01f), proportionOfHeight (0.01f)));
 
         if (clearButton != nullptr)
             clearButton->setBounds (buttonArea.removeFromLeft (buttonWidth).reduced (proportionOfWidth (0.01f), proportionOfHeight (0.01f)));
@@ -273,53 +471,39 @@ public:
         if (volumeSlider != nullptr)
             volumeSlider->setBounds (buttonArea.removeFromLeft (buttonWidth).reduced (proportionOfWidth (0.01f), proportionOfHeight (0.01f)));
 
-        // Use remaining space for sliders
-        auto sliderBounds = bounds.reduced (proportionOfWidth (0.1f), proportionOfHeight (0.05f));
+        // Use remaining space for harmonic control sliders with labels
+        auto sliderBounds = bounds.reduced (proportionOfWidth (0.05f), proportionOfHeight (0.02f));
         auto width = sliderBounds.getWidth() / totalColumns;
         auto height = sliderBounds.getHeight() / totalRows;
 
-        for (int i = 0; i < totalRows && sliders.size(); ++i)
+        for (int i = 0; i < totalRows && i * totalColumns < sliders.size(); ++i)
         {
             auto row = sliderBounds.removeFromTop (height);
-            for (int j = 0; j < totalColumns; ++j)
+            for (int j = 0; j < totalColumns && i * totalColumns + j < sliders.size(); ++j)
             {
                 auto col = row.removeFromLeft (width);
-                sliders.getUnchecked (i * totalColumns + j)->setBounds (col.largestFittingSquare());
+                auto harmonicIndex = i * totalColumns + j;
+
+                // Reserve space for label at bottom of column
+                auto labelHeight = 20;
+                auto labelBounds = col.removeFromBottom (labelHeight);
+                harmonicLabels[harmonicIndex]->setBounds (labelBounds);
+
+                // Use remaining space for slider - make it rectangular for slider appearance
+                auto sliderArea = col.largestFittingSquare();
+                sliders.getUnchecked (harmonicIndex)->setBounds (sliderArea);
             }
         }
+
+        // Position note indicator at bottom left
+        auto noteIndicatorBounds = yup::Rectangle<int> (10, getHeight() - 40, 200, 30);
+        noteIndicatorLabel->setBounds (noteIndicatorBounds);
     }
 
     void paint (yup::Graphics& g) override
     {
         g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
         g.fillAll();
-
-        // Draw some labels
-        auto bounds = getLocalBounds();
-        auto titleArea = bounds.removeFromTop (proportionOfHeight (0.05f));
-        auto subtitleArea = bounds.removeFromTop (proportionOfHeight (0.03f));
-
-        yup::StyledText titleText;
-        {
-            auto modifier = titleText.startUpdate();
-            modifier.setMaxSize (titleArea.getSize());
-            modifier.setHorizontalAlign (yup::StyledText::center);
-            modifier.appendText ("YUP Audio Synthesis Example with MIDI Keyboard",
-                               yup::ApplicationTheme::getGlobalTheme()->getDefaultFont(), 16.0f);
-        }
-
-        yup::StyledText subtitleText;
-        {
-            auto modifier = subtitleText.startUpdate();
-            modifier.setMaxSize (subtitleArea.getSize());
-            modifier.setHorizontalAlign (yup::StyledText::center);
-            modifier.appendText ("Use the MIDI keyboard below or adjust sliders to generate tones",
-                               yup::ApplicationTheme::getGlobalTheme()->getDefaultFont(), 12.0f);
-        }
-
-        g.setFillColor (yup::Colors::white);
-        g.fillFittedText (titleText, titleArea);
-        g.fillFittedText (subtitleText, subtitleArea);
     }
 
     void mouseDown (const yup::MouseEvent& event) override
@@ -336,23 +520,32 @@ public:
 
         if (oscilloscope.isVisible())
             oscilloscope.repaint();
+
+        // Update note indicator
+        if (harmonicSynth.isPlaying())
+        {
+            if (!noteIndicatorLabel->isVisible())
+            {
+                noteIndicatorLabel->setVisible (true);
+            }
+            auto noteText = yup::String ("Playing Note: ") + yup::String (harmonicSynth.getCurrentNote());
+            noteIndicatorLabel->setText (noteText, yup::dontSendNotification);
+        }
+        else
+        {
+            noteIndicatorLabel->setVisible (false);
+        }
     }
 
     // MIDI keyboard event handlers
     void handleNoteOn (yup::MidiKeyboardState* source, int midiChannel, int midiNoteNumber, float velocity) override
     {
-        if (midiNoteNumber >= 0 && midiNoteNumber < 128)
-        {
-            sineWaveGenerators[midiNoteNumber]->setAmplitude (velocity * 0.5f);
-        }
+        harmonicSynth.noteOn (midiNoteNumber, velocity);
     }
 
     void handleNoteOff (yup::MidiKeyboardState* source, int midiChannel, int midiNoteNumber, float velocity) override
     {
-        if (midiNoteNumber >= 0 && midiNoteNumber < 128)
-        {
-            sineWaveGenerators[midiNoteNumber]->setAmplitude (0.0f);
-        }
+        harmonicSynth.noteOff (midiNoteNumber);
     }
 
     void audioDeviceIOCallbackWithContext (const float* const* inputChannelData,
@@ -364,37 +557,22 @@ public:
     {
         for (int sample = 0; sample < numSamples; ++sample)
         {
-            float mixedSample = 0.0f;
-            int activeNotes = 0;
+            // Generate the next sample from the harmonic synth
+            float synthSample = harmonicSynth.getNextSample();
 
-            // Mix all active MIDI notes
-            for (int i = 0; i < 128; ++i)
-            {
-                float amplitude = sineWaveGenerators[i]->getAmplitude();
-                if (amplitude > 0.001f) // Only process notes that are actually sounding
-                {
-                    mixedSample += sineWaveGenerators[i]->getNextSample();
-                    activeNotes++;
-                }
-            }
-
-            // Apply master volume and normalize if multiple notes are playing
-            if (activeNotes > 0)
-            {
-                mixedSample *= masterVolume;
-                if (activeNotes > 1)
-                    mixedSample /= std::sqrt (static_cast<float> (activeNotes)); // Gentle normalization
-            }
+            // Apply master volume
+            synthSample *= masterVolume;
 
             // Apply soft limiting to prevent clipping
-            mixedSample = std::tanh (mixedSample);
+            synthSample = std::tanh (synthSample);
 
+            // Output to all channels
             for (int channel = 0; channel < numOutputChannels; ++channel)
-                outputChannelData[channel][sample] = mixedSample;
+                outputChannelData[channel][sample] = synthSample;
 
             // Store for oscilloscope display
             auto pos = readPos.fetch_add (1);
-            inputData[pos] = mixedSample;
+            inputData[pos] = synthSample;
             readPos = readPos % inputData.size();
         }
 
@@ -423,7 +601,7 @@ public:
 
 private:
     yup::AudioDeviceManager deviceManager;
-    std::vector<std::unique_ptr<SineWaveGenerator>> sineWaveGenerators;
+    HarmonicSynth harmonicSynth;
 
     // MIDI keyboard components
     yup::MidiKeyboardState keyboardState;
@@ -434,11 +612,17 @@ private:
     yup::CriticalSection renderMutex;
     std::atomic_int readPos = 0;
 
+    // UI Components
+    std::unique_ptr<yup::Label> titleLabel;
+    std::unique_ptr<yup::Label> subtitleLabel;
+    std::unique_ptr<yup::Label> noteIndicatorLabel;
+
     yup::OwnedArray<yup::Slider> sliders;
-    int totalRows = 3;
+    yup::OwnedArray<yup::Label> harmonicLabels;
+    int totalRows = 4;
     int totalColumns = 4;
 
-    std::unique_ptr<yup::TextButton> button;
+    std::unique_ptr<yup::TextButton> randomizeButton;
     std::unique_ptr<yup::TextButton> clearButton;
     std::unique_ptr<yup::Slider> volumeSlider;
     Oscilloscope oscilloscope;

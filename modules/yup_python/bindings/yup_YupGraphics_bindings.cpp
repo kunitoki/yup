@@ -1779,7 +1779,8 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("__enter__", [] (PyGraphicsSaveState& self)
         {
             self.state.emplace<Graphics::SavedState> (self.g.saveState());
-        }).def ("__exit__", [] (PyGraphicsSaveState& self, const std::optional<py::type>&, const std::optional<py::object>&, const std::optional<py::object>&)
+        })
+        .def ("__exit__", [] (PyGraphicsSaveState& self, const std::optional<py::type>&, const std::optional<py::object>&, const std::optional<py::object>&)
         {
             self.state.emplace<std::monostate>();
         })
@@ -1864,8 +1865,8 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("drawImageAt", &Graphics::drawImageAt)
 
         // Text operations
-        .def ("fillFittedText", &Graphics::fillFittedText)
-        .def ("strokeFittedText", &Graphics::strokeFittedText)
+        .def ("fillFittedText", py::overload_cast<const String&, const Font&, float, const Rectangle<float>&, Justification> (&Graphics::fillFittedText))
+        .def ("strokeFittedText", py::overload_cast<const String&, const Font&, float, const Rectangle<float>&, Justification> (&Graphics::strokeFittedText))
 
         // State management
         .def ("saveState", [](Graphics& self) { return PyGraphicsSaveState{self}; })
