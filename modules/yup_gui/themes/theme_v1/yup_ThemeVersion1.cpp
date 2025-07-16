@@ -594,6 +594,29 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
     auto keyWidth = keyboard.getKeyStartRange().getLength() / getNumWhiteKeysInRange (keyboard.getLowestVisibleKey(),
                                                                                       keyboard.getHighestVisibleKey() + 1);
 
+    // Draw keyboard background with subtle gradient shadow
+    auto keyboardWidth = keyboard.getKeyStartRange().getEnd();
+    auto shadowColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyShadowColorId);
+
+    if (! shadowColor.isTransparent())
+    {
+        // Draw subtle top shadow gradient for depth
+        ColorGradient shadowGradient;
+        shadowGradient.addColorStop (shadowColor, Point<float> (0.0f, 0.0f), 0.0f);
+        shadowGradient.addColorStop (shadowColor.withAlpha (0.0f), Point<float> (0.0f, 5.0f), 1.0f);
+
+        g.setFillColorGradient (shadowGradient);
+        g.fillRect (Rectangle<float> (0.0f, 0.0f, keyboardWidth, 5.0f));
+    }
+
+    // Draw separator line at bottom
+    auto lineColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::keyOutlineColorId);
+    if (! lineColor.isTransparent())
+    {
+        g.setFillColor (lineColor);
+        g.fillRect (Rectangle<float> (0.0f, bounds.getHeight() - 1.0f, keyboardWidth, 1.0f));
+    }
+
     // Paint white keys first
     for (int note = keyboard.getLowestVisibleKey(); note <= keyboard.getHighestVisibleKey(); ++note)
     {
@@ -606,49 +629,71 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
             auto isPressed = keyboard.isNoteOn (note);
             auto isOver = keyboard.isMouseOverNote (note);
 
-            // Use theme colors
-            auto fillColor = isPressed ? ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyPressedColorId)
-                                       : ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyColorId);
-
-            auto shadowColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyShadowColorId);
+            // Base colors from theme
+            auto whiteKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyColorId);
+            auto pressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyPressedColorId);
             auto outlineColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::keyOutlineColorId);
 
-            // Draw 3D effect
-            auto shadowArea = keyArea.reduced (1.0f);
-            shadowArea.translate (2.0f, 2.0f);
+            // Determine fill color based on state
+            Color fillColor = whiteKeyColor;
+            if (isPressed)
+                fillColor = pressedColor;
+            if (isOver && ! isPressed)
+                fillColor = whiteKeyColor.overlaidWith (pressedColor.withAlpha (0.3f));
 
-            g.setFillColor (shadowColor);
-            g.fillRoundedRect (shadowArea, 2.0f);
-
-            // Main key
+            // Fill the key
             g.setFillColor (fillColor);
-            g.fillRoundedRect (keyArea.reduced (0.5f), 1.5f);
+            g.fillRect (keyArea);
 
-            // Highlight for 3D effect
-            if (! isPressed)
+            // Draw key separator line on the left edge
+            if (! outlineColor.isTransparent())
             {
-                g.setFillColor (fillColor.brighter (0.3f));
-                g.fillRoundedRect (keyArea.reduced (1.0f).removeFromTop (keyArea.getHeight() * 0.3f), 1.5f);
-            }
+                g.setFillColor (outlineColor);
+                g.fillRect (keyArea.removeFromLeft (1.0f));
 
-            // Outline
-            g.setStrokeColor (outlineColor);
-            g.setStrokeWidth (1.0f);
-            g.strokeRoundedRect (keyArea.reduced (0.5f), 1.5f);
-
-            // Note text
-            /*
-            if (keyboard.getWidth() > 20 && keyArea.getWidth() > 20.0f)
-            {
-                auto noteText = MidiKeyboardComponent::getWhiteNoteText (note);
-                if (noteText.isNotEmpty())
+                // Draw right edge for the last key
+                if (note == keyboard.getHighestVisibleKey())
                 {
-                    g.setFillColor (outlineColor);
-                    g.drawText (noteText, keyArea.reduced (2.0f).removeFromBottom (15.0f),
-                               Justification::centred, false);
+                    g.fillRect (keyArea.removeFromRight (1.0f).translated (keyArea.getWidth(), 0.0f));
                 }
             }
-            */
+
+            // Draw note text if there's space
+            if (keyboard.getWidth() > 100 && keyArea.getWidth() > 15.0f)
+            {
+                auto noteText = String();
+                int noteInOctave = note % 12;
+                switch (noteInOctave)
+                {
+                    case 0:  noteText = "C"; break;
+                    case 2:  noteText = "D"; break;
+                    case 4:  noteText = "E"; break;
+                    case 5:  noteText = "F"; break;
+                    case 7:  noteText = "G"; break;
+                    case 9:  noteText = "A"; break;
+                    case 11: noteText = "B"; break;
+                    default: break;
+                }
+
+                if (noteText.isNotEmpty())
+                {
+                    auto textColor = outlineColor.contrasting (0.8f);
+                    if (isPressed)
+                        textColor = pressedColor.contrasting (0.8f);
+
+                    g.setFillColor (textColor);
+
+                    StyledText styledText;
+                    {
+                        auto modifier = styledText.startUpdate();
+                        modifier.appendText (noteText, theme.getDefaultFont(), 11.0f);
+                        modifier.setHorizontalAlign (StyledText::center);
+                    }
+
+                    auto textArea = keyArea.reduced (2.0f).removeFromBottom (16.0f);
+                    g.fillFittedText (styledText, textArea);
+                }
+            }
         }
     }
 
@@ -664,28 +709,40 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
             auto isPressed = keyboard.isNoteOn (note);
             auto isOver = keyboard.isMouseOverNote (note);
 
-            // Use theme colors
-            auto fillColor = isPressed ? ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyPressedColorId)
-                                       : ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyColorId);
+            // Base colors from theme
+            auto blackKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyColorId);
+            auto blackPressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyPressedColorId);
 
-            auto shadowColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyShadowColorId);
+            // Determine fill color based on state
+            Color fillColor = blackKeyColor;
+            if (isPressed)
+                fillColor = blackPressedColor;
+            if (isOver && ! isPressed)
+                fillColor = blackKeyColor.overlaidWith (blackPressedColor.withAlpha (0.3f));
 
-            // Draw 3D effect
-            auto shadowArea = keyArea.reduced (0.5f);
-            shadowArea.translate (1.5f, 1.5f);
-
-            g.setFillColor (shadowColor);
-            g.fillRoundedRect (shadowArea, 2.0f);
-
-            // Main key
+            // Fill the key
             g.setFillColor (fillColor);
-            g.fillRoundedRect (keyArea.reduced (0.25f), 1.5f);
+            g.fillRect (keyArea);
 
-            // Highlight for 3D effect
-            if (! isPressed)
+            if (isPressed)
             {
-                g.setFillColor (fillColor.brighter (0.2f));
-                g.fillRoundedRect (keyArea.reduced (1.0f).removeFromTop (keyArea.getHeight() * 0.2f), 1.5f);
+                // Draw pressed outline
+                g.setStrokeColor (blackKeyColor);
+                g.setStrokeWidth (1.0f);
+                g.strokeRect (keyArea);
+            }
+            else
+            {
+                // Draw 3D highlight effect for unpressed keys
+                auto highlightColor = fillColor.brighter (0.4f);
+                g.setFillColor (highlightColor);
+
+                // Create highlight area - top portion and side edges
+                auto sideIndent = keyArea.getWidth() * 0.125f;
+                auto topIndent = keyArea.getHeight() * 0.875f;
+                auto highlightArea = keyArea.reduced (sideIndent, 0).removeFromTop (topIndent);
+
+                g.fillRect (highlightArea);
             }
         }
     }
@@ -734,3 +791,4 @@ ApplicationTheme::Ptr createThemeVersion1()
 }
 
 } // namespace yup
+

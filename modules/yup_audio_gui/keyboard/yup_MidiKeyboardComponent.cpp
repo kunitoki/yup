@@ -284,7 +284,9 @@ void MidiKeyboardComponent::getKeyPosition (int midiNoteNumber, float keyWidth, 
 {
     jassert (midiNoteNumber >= 0 && midiNoteNumber < 128);
 
-    static const float blackKeyOffsets[] = { 0.0f, 0.6f, 0.0f, 0.7f, 0.0f, 0.0f, 0.6f, 0.0f, 0.65f, 0.0f, 0.7f, 0.0f };
+    // Fixed black key offsets for proper positioning
+    // static const float blackKeyOffsets[] = { 0.0f, 0.25f, 0.0f, 0.35f, 0.0f, 0.0f, 0.25f, 0.0f, 0.3f, 0.0f, 0.35f, 0.0f };
+    static const float blackKeyOffsets[] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
     auto octave = midiNoteNumber / 12;
     auto note = midiNoteNumber % 12;

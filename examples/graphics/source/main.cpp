@@ -24,6 +24,7 @@
 #include <yup_events/yup_events.h>
 #include <yup_graphics/yup_graphics.h>
 #include <yup_gui/yup_gui.h>
+#include <yup_audio_gui/yup_audio_gui.h>
 
 #if YUP_MODULE_AVAILABLE_yup_python
 #include <yup_python/yup_python.h>

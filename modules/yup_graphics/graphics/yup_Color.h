@@ -778,6 +778,25 @@ public:
     }
 
     //==============================================================================
+    constexpr Color overlaidWith (Color src) const noexcept
+    {
+        auto destAlpha = getAlpha();
+        if (destAlpha <= 0)
+            return src;
+
+        auto invA = 0xff - static_cast<int> (src.getAlpha());
+        auto resA = 0xff - (((0xff - destAlpha) * invA) >> 8);
+        if (resA <= 0)
+            return *this;
+
+        auto da = (invA * destAlpha) / resA;
+        return Color ((uint8) resA,
+                      (uint8) (src.getRed() + ((((int) getRed() - src.getRed()) * da) >> 8)),
+                      (uint8) (src.getGreen() + ((((int) getGreen() - src.getGreen()) * da) >> 8)),
+                      (uint8) (src.getBlue() + ((((int) getBlue() - src.getBlue()) * da) >> 8)));
+    }
+
+    //==============================================================================
     // TODO - doxygen
     static Color opaqueRandom() noexcept
     {

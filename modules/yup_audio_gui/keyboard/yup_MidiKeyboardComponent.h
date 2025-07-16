@@ -34,8 +34,9 @@ namespace yup
 
     @tags{AudioGUI}
 */
-class YUP_API MidiKeyboardComponent : public Component,
-                                      public MidiKeyboardState::Listener
+class YUP_API MidiKeyboardComponent
+    : public Component
+    , public MidiKeyboardState::Listener
 {
 public:
     //==============================================================================
