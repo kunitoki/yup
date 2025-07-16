@@ -32,7 +32,7 @@ struct TestApplication : yup::YUPApplication
 
     yup::String getApplicationName() override
     {
-        return "yup! tests";
+        return "yup_tests";
     }
 
     yup::String getApplicationVersion() override
@@ -44,7 +44,7 @@ struct TestApplication : yup::YUPApplication
     {
         yup::Array<char*> argv;
 
-        auto applicationName = yup::String ("yup_tests");
+        auto applicationName = getApplicationName();
         argv.add (const_cast<char*> (applicationName.toRawUTF8()));
 
         auto commandLineArgs = yup::StringArray::fromTokens (commandLineParameters, true);
@@ -59,15 +59,29 @@ struct TestApplication : yup::YUPApplication
         int argc = argv.size() - 1;
         testing::InitGoogleMock (&argc, argv.data());
 
-        // Add our custom minimalist listener
+        parseCommandLineSettings (commandLineParameters);
+
         testing::TestEventListeners& listeners = testing::UnitTest::GetInstance()->listeners();
         delete listeners.Release (listeners.default_result_printer());
         listeners.Append (new CompactPrinter (*this));
 
         programStart = std::chrono::steady_clock::now();
 
-        // Start running suites one by one
-        runNextSuite (0);
+        if (shouldUseSingleCall)
+        {
+            // Run all tests with the custom filter in a single call
+            yup::MessageManager::callAsync ([this]
+            {
+                (void) RUN_ALL_TESTS();
+                generateXmlReport();
+                reportSummary();
+            });
+        }
+        else
+        {
+            // Run suites individually
+            runNextSuite (0);
+        }
     }
 
     void shutdown() override {}
@@ -83,6 +97,65 @@ private:
     std::vector<FailedTest> failedTests;
     int totalTests = 0;
     int passedTests = 0;
+    yup::File originalXmlOutputPath;
+    bool shouldUseSingleCall = false;
+
+    void parseCommandLineSettings (const yup::String& commandLineParameters)
+    {
+        auto args = yup::StringArray::fromTokens (commandLineParameters, true);
+        for (auto& arg : args)
+        {
+            if (arg.startsWith ("--gtest_output=xml:"))
+            {
+                auto originalXmlPath = arg.fromFirstOccurrenceOf (":", false, false);
+                if (yup::File::isAbsolutePath (originalXmlPath))
+                    originalXmlOutputPath = yup::File (originalXmlPath);
+                else
+                    originalXmlOutputPath = yup::File::getCurrentWorkingDirectory().getChildFile (originalXmlPath);
+
+                std::cout << "Will generate XML report to: " << originalXmlOutputPath.getFullPathName() << std::endl;
+            }
+            else if (arg.startsWith ("--gtest_filter=") && arg != "--gtest_filter=*")
+            {
+                shouldUseSingleCall = true;
+                std::cout << "Filter specified: " << arg << std::endl;
+            }
+            else if (arg.startsWith ("--gtest_repeat="))
+            {
+                shouldUseSingleCall = true;
+                std::cout << "Repeat specified: " << arg << std::endl;
+            }
+            else if (arg == "--gtest_shuffle")
+            {
+                shouldUseSingleCall = true;
+                std::cout << "Shuffle mode enabled" << std::endl;
+            }
+            else if (arg.startsWith ("--gtest_random_seed="))
+            {
+                shouldUseSingleCall = true;
+                std::cout << "Random seed specified: " << arg << std::endl;
+            }
+            else if (arg == "--gtest_break_on_failure")
+            {
+                shouldUseSingleCall = true;
+                std::cout << "Break on failure enabled" << std::endl;
+            }
+            else if (arg.startsWith ("--gtest_catch_exceptions="))
+            {
+                shouldUseSingleCall = true;
+                std::cout << "Exception handling specified: " << arg << std::endl;
+            }
+            else if (arg.startsWith ("--gtest_color="))
+            {
+                std::cout << "Color output specified: " << arg << std::endl;
+            }
+            else if (arg == "--gtest_list_tests")
+            {
+                shouldUseSingleCall = true;
+                std::cout << "List tests mode enabled" << std::endl;
+            }
+        }
+    }
 
     void runNextSuite (int suiteIndex)
     {
@@ -90,13 +163,13 @@ private:
 
         if (suiteIndex >= unitTest->total_test_suite_count())
         {
+            generateXmlReport();
             reportSummary();
             return;
         }
 
         auto* testSuite = unitTest->GetTestSuite (suiteIndex);
         std::string suiteName = testSuite->name();
-
         ::testing::GTEST_FLAG (filter) = suiteName + ".*";
 
         yup::MessageManager::callAsync ([this, suiteIndex, suiteName]
@@ -107,19 +180,85 @@ private:
         });
     }
 
+    void generateXmlReport()
+    {
+        if (originalXmlOutputPath == yup::File())
+            return;
+
+        std::cout << "\n========================================\n";
+
+        try
+        {
+            auto testsuites = std::make_unique<yup::XmlElement> ("testsuites");
+
+            int totalTests = 0;
+            int totalFailures = 0;
+            int totalErrors = 0;
+            double totalTime = 0.0;
+
+            for (const auto& suiteResult : allSuiteResults)
+            {
+                auto testsuite = new yup::XmlElement ("testsuite");
+                testsuite->setAttribute ("name", yup::String (suiteResult.name));
+                testsuite->setAttribute ("tests", suiteResult.tests);
+                testsuite->setAttribute ("failures", suiteResult.failures);
+                testsuite->setAttribute ("errors", suiteResult.errors);
+                testsuite->setAttribute ("time", suiteResult.timeSeconds);
+
+                for (const auto& testCase : suiteResult.testCases)
+                {
+                    auto testcase = new yup::XmlElement ("testcase");
+                    testcase->setAttribute ("name", yup::String (testCase.name));
+                    testcase->setAttribute ("classname", yup::String (testCase.className));
+                    testcase->setAttribute ("time", testCase.timeSeconds);
+
+                    if (! testCase.passed && ! testCase.failureMessage.empty())
+                    {
+                        auto failure = new yup::XmlElement ("failure");
+                        failure->setAttribute ("message", "Test failed");
+                        failure->setAttribute ("type", "");
+                        failure->addTextElement (yup::String (testCase.failureMessage));
+                        testcase->addChildElement (failure);
+                    }
+
+                    testsuite->addChildElement (testcase);
+                }
+
+                testsuites->addChildElement (testsuite);
+
+                totalTests += suiteResult.tests;
+                totalFailures += suiteResult.failures;
+                totalErrors += suiteResult.errors;
+                totalTime += suiteResult.timeSeconds;
+            }
+
+            testsuites->setAttribute ("tests", totalTests);
+            testsuites->setAttribute ("failures", totalFailures);
+            testsuites->setAttribute ("errors", totalErrors);
+            testsuites->setAttribute ("time", totalTime);
+            testsuites->setAttribute ("name", "AllTests");
+            testsuites->writeTo (originalXmlOutputPath);
+
+            std::cout << "Generating XML report (" << allSuiteResults.size()
+                      << " suites): " << originalXmlOutputPath.getFullPathName() << std::endl;
+        }
+        catch (...)
+        {
+            std::cout << "Warning: Failed to generate XML report" << std::endl;
+        }
+    }
+
     void reportSummary()
     {
         auto totalElapsed = std::chrono::steady_clock::now() - programStart;
-        std::cout << "\n========================================\n";
 
         if (! failedTests.empty())
         {
+            std::cout << "\n========================================\n";
             std::cout << "*** FAILURES (" << failedTests.size() << "):\n";
             for (const auto& fail : failedTests)
-            {
                 std::cout << "\n--- " << fail.name << "\n"
                           << fail.failureDetails << "\n";
-            }
         }
 
         std::cout << "\n========================================\n";
@@ -134,7 +273,28 @@ private:
         quit();
     }
 
-    // --- Custom Compact Printer ---
+    struct TestCaseResult
+    {
+        std::string name;
+        std::string className;
+        bool passed;
+        double timeSeconds;
+        std::string failureMessage;
+    };
+
+    struct TestSuiteResult
+    {
+        std::string name;
+        int tests = 0;
+        int failures = 0;
+        int errors = 0;
+        double timeSeconds = 0.0;
+        std::vector<TestCaseResult> testCases;
+    };
+
+    std::vector<TestSuiteResult> allSuiteResults;
+    TestSuiteResult* currentSuite = nullptr;
+
     struct CompactPrinter : testing::EmptyTestEventListener
     {
         explicit CompactPrinter (TestApplication& app)
@@ -142,10 +302,28 @@ private:
         {
         }
 
+        void OnTestSuiteStart (const testing::TestSuite& test_suite) override
+        {
+            owner.allSuiteResults.emplace_back();
+            owner.currentSuite = &owner.allSuiteResults.back();
+            owner.currentSuite->name = test_suite.name();
+
+            suiteStartTime = std::chrono::steady_clock::now();
+        }
+
+        void OnTestSuiteEnd (const testing::TestSuite& test_suite) override
+        {
+            if (owner.currentSuite)
+            {
+                auto suiteElapsed = std::chrono::steady_clock::now() - suiteStartTime;
+                owner.currentSuite->timeSeconds = std::chrono::duration<double> (suiteElapsed).count();
+                owner.currentSuite = nullptr;
+            }
+        }
+
         void OnTestStart (const testing::TestInfo& info) override
         {
             testStart = std::chrono::steady_clock::now();
-
             failureStream.str ("");
             failureStream.clear();
         }
@@ -162,32 +340,49 @@ private:
         void OnTestEnd (const testing::TestInfo& info) override
         {
             auto elapsed = std::chrono::steady_clock::now() - testStart;
+            auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds> (elapsed).count();
+            auto elapsedSeconds = std::chrono::duration<double> (elapsed).count();
+
             owner.totalTests++;
 
             std::ostringstream line;
             line << (std::string (info.test_suite_name()) + "." + info.name());
 
-            if (info.result()->Failed())
-            {
-                std::cout << "*** FAIL - " << line.str()
-                          << " (" << std::chrono::duration_cast<std::chrono::milliseconds> (elapsed).count() << " ms)\n";
+            bool testPassed = ! info.result()->Failed();
 
+            if (testPassed)
+            {
+                std::cout << "--- PASS - " << line.str() << " (" << elapsedMs << " ms)\n";
+                owner.passedTests++;
+            }
+            else
+            {
+                std::cout << "*** FAIL - " << line.str() << " (" << elapsedMs << " ms)\n";
                 owner.failedTests.push_back (
                     { std::string (info.test_suite_name()) + "." + info.name(),
                       failureStream.str() });
             }
-            else
-            {
-                std::cout << "--- PASS - " << line.str()
-                          << " (" << std::chrono::duration_cast<std::chrono::milliseconds> (elapsed).count() << " ms)\n";
 
-                owner.passedTests++;
+            if (owner.currentSuite)
+            {
+                TestCaseResult testCase;
+                testCase.name = info.name();
+                testCase.className = info.test_suite_name();
+                testCase.passed = testPassed;
+                testCase.timeSeconds = elapsedSeconds;
+                testCase.failureMessage = testPassed ? "" : failureStream.str();
+
+                owner.currentSuite->testCases.push_back (testCase);
+                owner.currentSuite->tests++;
+                if (! testPassed)
+                    owner.currentSuite->failures++;
             }
         }
 
     private:
         TestApplication& owner;
         std::chrono::steady_clock::time_point testStart;
+        std::chrono::steady_clock::time_point suiteStartTime;
         std::stringstream failureStream;
     };
 };

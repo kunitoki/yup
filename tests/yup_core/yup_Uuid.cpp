@@ -48,7 +48,7 @@ TEST (UuidTests, CopyConstructor)
 TEST (UuidTests, CopyAssignment)
 {
     Uuid uuid1;
-    Uuid uuid2;
+    Uuid uuid2 = Uuid::null();
     uuid2 = uuid1;
     EXPECT_EQ (uuid1, uuid2);
 }
@@ -63,7 +63,7 @@ TEST (UuidTests, MoveConstructor)
 TEST (UuidTests, MoveAssignment)
 {
     Uuid uuid1;
-    Uuid uuid2;
+    Uuid uuid2 = Uuid::null();
     uuid2 = std::move (uuid1);
     EXPECT_FALSE (uuid2.isNull());
 }
@@ -90,6 +90,29 @@ TEST (UuidTests, ToString)
     EXPECT_EQ (uuidStr.length(), 32);
 }
 
+TEST (UuidTests, ToArrayString)
+{
+    Uuid uuid;
+    String dashedStr = uuid.toArrayString();
+    EXPECT_EQ (dashedStr.length(), 98);
+    EXPECT_EQ (dashedStr[0], '{');
+    EXPECT_EQ (dashedStr[1], ' ');
+    EXPECT_EQ (dashedStr[2], '0');
+    EXPECT_EQ (dashedStr[3], 'x');
+    // ...
+    EXPECT_EQ (dashedStr[6], ',');
+    EXPECT_EQ (dashedStr[12], ',');
+    EXPECT_EQ (dashedStr[18], ',');
+    EXPECT_EQ (dashedStr[24], ',');
+    EXPECT_EQ (dashedStr[30], ',');
+    EXPECT_EQ (dashedStr[36], ',');
+    EXPECT_EQ (dashedStr[42], ',');
+    EXPECT_EQ (dashedStr[48], ',');
+    EXPECT_EQ (dashedStr[54], ',');
+    // ...
+    EXPECT_EQ (dashedStr[97], '}');
+}
+
 TEST (UuidTests, ToDashedString)
 {
     Uuid uuid;
@@ -99,6 +122,21 @@ TEST (UuidTests, ToDashedString)
     EXPECT_EQ (dashedStr[13], '-');
     EXPECT_EQ (dashedStr[18], '-');
     EXPECT_EQ (dashedStr[23], '-');
+}
+
+TEST (UuidTests, Comparison)
+{
+    Uuid uuid1;
+    Uuid uuid2 = uuid1;
+    Uuid uuid3;
+
+    EXPECT_EQ (uuid1, uuid1);
+    EXPECT_EQ (uuid1, uuid2);
+    EXPECT_EQ (uuid2, uuid1);
+    EXPECT_NE (uuid1, uuid3);
+    EXPECT_NE (uuid3, uuid1);
+    EXPECT_NE (uuid2, uuid3);
+    EXPECT_NE (uuid3, uuid2);
 }
 
 TEST (UuidTests, ComparisonOperators)

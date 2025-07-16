@@ -48,7 +48,7 @@ namespace yup::universal_midi_packets
 
     @tags{Audio}
 */
-class Midi1ToMidi2DefaultTranslator
+class YUP_API Midi1ToMidi2DefaultTranslator
 {
 public:
     Midi1ToMidi2DefaultTranslator() = default;

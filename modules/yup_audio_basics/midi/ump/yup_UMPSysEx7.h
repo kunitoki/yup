@@ -48,7 +48,7 @@ namespace yup::universal_midi_packets
 
     @tags{Audio}
 */
-struct SysEx7
+struct YUP_API SysEx7
 {
     /** Returns the number of 64-bit packets required to hold a series of
         SysEx bytes.
