@@ -47,7 +47,7 @@ namespace yup
 
     @tags{Audio}
 */
-class MidiDataConcatenator
+class YUP_API MidiDataConcatenator
 {
 public:
     MidiDataConcatenator (int initialBufferSize)

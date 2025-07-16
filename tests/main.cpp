@@ -59,7 +59,7 @@ struct TestApplication : yup::YUPApplication
         int argc = argv.size() - 1;
         testing::InitGoogleMock (&argc, argv.data());
 
-        parseXmlOutputSettings (commandLineParameters);
+        parseCommandLineSettings (commandLineParameters);
 
         testing::TestEventListeners& listeners = testing::UnitTest::GetInstance()->listeners();
         delete listeners.Release (listeners.default_result_printer());
@@ -67,7 +67,21 @@ struct TestApplication : yup::YUPApplication
 
         programStart = std::chrono::steady_clock::now();
 
-        runNextSuite (0);
+        if (shouldUseSingleCall)
+        {
+            // Run all tests with the custom filter in a single call
+            yup::MessageManager::callAsync ([this]
+            {
+                (void) RUN_ALL_TESTS();
+                generateXmlReport();
+                reportSummary();
+            });
+        }
+        else
+        {
+            // Run suites individually
+            runNextSuite (0);
+        }
     }
 
     void shutdown() override {}
@@ -84,23 +98,62 @@ private:
     int totalTests = 0;
     int passedTests = 0;
     yup::File originalXmlOutputPath;
+    bool shouldUseSingleCall = false;
 
-    void parseXmlOutputSettings (const yup::String& commandLineParameters)
+    void parseCommandLineSettings (const yup::String& commandLineParameters)
     {
         auto args = yup::StringArray::fromTokens (commandLineParameters, true);
         for (auto& arg : args)
         {
-            if (! arg.startsWith ("--gtest_output=xml:"))
-                continue;
+            if (arg.startsWith ("--gtest_output=xml:"))
+            {
+                auto originalXmlPath = arg.fromFirstOccurrenceOf (":", false, false);
+                if (yup::File::isAbsolutePath (originalXmlPath))
+                    originalXmlOutputPath = yup::File (originalXmlPath);
+                else
+                    originalXmlOutputPath = yup::File::getCurrentWorkingDirectory().getChildFile (originalXmlPath);
 
-            auto originalXmlPath = arg.fromFirstOccurrenceOf (":", false, false);
-            if (yup::File::isAbsolutePath (originalXmlPath))
-                originalXmlOutputPath = yup::File (originalXmlPath);
-            else
-                originalXmlOutputPath = yup::File::getCurrentWorkingDirectory().getChildFile (originalXmlPath);
-
-            std::cout << "Will generate XML report to: " << originalXmlOutputPath.getFullPathName() << std::endl;
-            break;
+                std::cout << "Will generate XML report to: " << originalXmlOutputPath.getFullPathName() << std::endl;
+            }
+            else if (arg.startsWith ("--gtest_filter=") && arg != "--gtest_filter=*")
+            {
+                shouldUseSingleCall = true;
+                std::cout << "Filter specified: " << arg << std::endl;
+            }
+            else if (arg.startsWith ("--gtest_repeat="))
+            {
+                shouldUseSingleCall = true;
+                std::cout << "Repeat specified: " << arg << std::endl;
+            }
+            else if (arg == "--gtest_shuffle")
+            {
+                shouldUseSingleCall = true;
+                std::cout << "Shuffle mode enabled" << std::endl;
+            }
+            else if (arg.startsWith ("--gtest_random_seed="))
+            {
+                shouldUseSingleCall = true;
+                std::cout << "Random seed specified: " << arg << std::endl;
+            }
+            else if (arg == "--gtest_break_on_failure")
+            {
+                shouldUseSingleCall = true;
+                std::cout << "Break on failure enabled" << std::endl;
+            }
+            else if (arg.startsWith ("--gtest_catch_exceptions="))
+            {
+                shouldUseSingleCall = true;
+                std::cout << "Exception handling specified: " << arg << std::endl;
+            }
+            else if (arg.startsWith ("--gtest_color="))
+            {
+                std::cout << "Color output specified: " << arg << std::endl;
+            }
+            else if (arg == "--gtest_list_tests")
+            {
+                shouldUseSingleCall = true;
+                std::cout << "List tests mode enabled" << std::endl;
+            }
         }
     }
 
@@ -129,13 +182,10 @@ private:
 
     void generateXmlReport()
     {
-        std::cout << "\n========================================\n";
-
         if (originalXmlOutputPath == yup::File())
-        {
-            std::cout << "No XML output path specified, skipping XML generation" << std::endl;
             return;
-        }
+
+        std::cout << "\n========================================\n";
 
         try
         {

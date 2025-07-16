@@ -51,7 +51,7 @@ namespace yup::universal_midi_packets
 
     @tags{Audio}
 */
-class Iterator
+class YUP_API Iterator
 {
 public:
     /** Creates an invalid (singular) iterator. */

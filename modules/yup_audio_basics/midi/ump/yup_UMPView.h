@@ -57,7 +57,7 @@ namespace yup::universal_midi_packets
 
     @tags{Audio}
 */
-class View
+class YUP_API View
 {
 public:
     /** Create an invalid view. */
