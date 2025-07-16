@@ -53,7 +53,7 @@ namespace yup::universal_midi_packets
 
     @tags{Audio}
 */
-class Packets
+class YUP_API Packets
 {
 public:
     /** Adds a single packet to the collection.

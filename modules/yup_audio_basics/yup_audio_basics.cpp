@@ -104,8 +104,6 @@
 #include "sources/yup_PositionableAudioSource.cpp"
 #include "synthesisers/yup_Synthesiser.cpp"
 #include "audio_play_head/yup_AudioPlayHead.cpp"
-#include "midi/yup_MidiDataConcatenator.h"
-#include "midi/ump/yup_UMP.h"
 #include "midi/ump/yup_UMPUtils.cpp"
 #include "midi/ump/yup_UMPView.cpp"
 #include "midi/ump/yup_UMPSysEx7.cpp"

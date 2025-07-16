@@ -108,6 +108,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "midi/yup_MidiFile.h"
 #include "midi/yup_MidiKeyboardState.h"
 #include "midi/yup_MidiRPN.h"
+#include "midi/yup_MidiDataConcatenator.h"
 #include "mpe/yup_MPEValue.h"
 #include "mpe/yup_MPENote.h"
 #include "mpe/yup_MPEZoneLayout.h"
@@ -132,6 +133,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "utilities/yup_AudioWorkgroup.h"
 #include "midi/ump/yup_UMPBytesOnGroup.h"
 #include "midi/ump/yup_UMPDeviceInfo.h"
+#include "midi/ump/yup_UMP.h"
 
 namespace yup
 {
