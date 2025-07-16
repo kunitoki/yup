@@ -138,7 +138,6 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #endif
 // clang-format on
 
-#include <yup_audio_basics/midi/yup_MidiDataConcatenator.h>
 #include "native/yup_Midi_windows.cpp"
 
 // clang-format off
@@ -192,7 +191,6 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 */
 #include <Bela.h>
 #include <Midi.h>
-#include <yup_audio_basics/midi/yup_MidiDataConcatenator.h>
 #include "native/yup_Bela_linux.cpp"
 #endif
 // clang-format on
@@ -200,7 +198,6 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #undef SIZEOF
 
 #if ! YUP_BELA
-#include <yup_audio_basics/midi/yup_MidiDataConcatenator.h>
 #include "native/yup_Midi_linux.cpp"
 #endif
 
@@ -215,7 +212,6 @@ RealtimeThreadFactory getAndroidRealtimeThreadFactory();
 
 #include "native/yup_Audio_android.cpp"
 
-#include <yup_audio_basics/midi/yup_MidiDataConcatenator.h>
 #include "native/yup_Midi_android.cpp"
 
 #if YUP_USE_ANDROID_OPENSLES || YUP_USE_ANDROID_OBOE
