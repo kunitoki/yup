@@ -43,6 +43,9 @@ Slider::Slider (SliderType sliderType, StringRef componentID)
     setWantsKeyboardFocus (true);
     setOpaque (false);
 
+    if (sliderType == Rotary || sliderType == RotaryHorizontalDrag || sliderType == RotaryVerticalDrag)
+        setMouseDragSensitivity (0.3f);
+
     setValue (defaultValue, dontSendNotification);
 }
 
@@ -325,6 +328,57 @@ void Slider::mouseDown (const MouseEvent& event)
 
     if (dragMode != notDragging)
     {
+        // For linear sliders, implement improved click behavior
+        bool shouldJumpToClickPosition = false;
+
+        switch (sliderType)
+        {
+            case LinearHorizontal:
+            case LinearBarHorizontal:
+            case LinearVertical:
+            case LinearBarVertical:
+            {
+                // Check if mouse is over thumb - if not, jump to click position
+                if (! isMouseOverThumb (mouseDownPosition))
+                {
+                    shouldJumpToClickPosition = true;
+
+                    // Calculate new value based on click position
+                    const auto sliderBounds = getSliderBounds();
+                    const float thumbSize = getThumbSize();
+
+                    double newNormalizedValue = 0.0;
+
+                    if (sliderType == LinearHorizontal || sliderType == LinearBarHorizontal)
+                    {
+                        const float clickX = mouseDownPosition.getX();
+                        const float availableWidth = sliderBounds.getWidth() - thumbSize;
+                        const float relativeX = clickX - sliderBounds.getX() - (thumbSize * 0.5f);
+                        newNormalizedValue = std::clamp (static_cast<double>(relativeX / availableWidth), 0.0, 1.0);
+                    }
+                    else // Vertical sliders
+                    {
+                        const float clickY = mouseDownPosition.getY();
+                        const float availableHeight = sliderBounds.getHeight() - thumbSize;
+                        const float relativeY = sliderBounds.getBottom() - clickY - (thumbSize * 0.5f);
+                        newNormalizedValue = std::clamp (static_cast<double>(relativeY / availableHeight), 0.0, 1.0);
+                    }
+
+                    // Set the new value (this will move the thumb to the click position)
+                    setValueNormalised (newNormalizedValue, sendNotification);
+
+                    // Update the drag start position to the new thumb center for smooth dragging
+                    const auto newThumbBounds = getThumbBounds();
+                    mouseDragStartPosition = Point<float> (newThumbBounds.getCenterX(), newThumbBounds.getCenterY());
+                }
+                break;
+            }
+
+            default:
+                // For non-linear sliders, use existing behavior
+                break;
+        }
+
         valueOnMouseDown = currentValue;
         minValueOnMouseDown = minValue;
         maxValueOnMouseDown = maxValue;
@@ -467,23 +521,55 @@ void Slider::sendMaxValueChanged (NotificationType notification)
 
 void Slider::updateValueFromMousePosition (Point<float> mousePos, DragMode dragMode)
 {
-    // Convert Rectangle<int> to Rectangle<float> manually
-    const auto sliderBoundsInt = getSliderBounds();
-    const Rectangle<float> sliderBounds (static_cast<float>(sliderBoundsInt.getX()),
-                                        static_cast<float>(sliderBoundsInt.getY()),
-                                        static_cast<float>(sliderBoundsInt.getWidth()),
-                                        static_cast<float>(sliderBoundsInt.getHeight()));
+    const auto sliderBounds = getSliderBounds();
 
     if (sliderBounds.isEmpty())
         return;
 
-    const float mouseDelta = (sliderType == LinearVertical || sliderType == LinearBarVertical)
-                           ? mouseDragStartPosition.getY() - mousePos.getY() // Use getY() instead of .y
-                           : mousePos.getX() - mouseDragStartPosition.getX(); // Use getX() instead of .x
+    float mouseDelta = 0.0f;
+    float totalRange = 1.0f;
 
-    const float totalRange = (sliderType == LinearVertical || sliderType == LinearBarVertical)
-                           ? sliderBounds.getHeight()
-                           : sliderBounds.getWidth();
+    // Calculate mouse delta based on slider type
+    switch (sliderType)
+    {
+        case LinearVertical:
+        case LinearBarVertical:
+            mouseDelta = mouseDragStartPosition.getY() - mousePos.getY();
+            totalRange = sliderBounds.getHeight();
+            break;
+
+        case LinearHorizontal:
+        case LinearBarHorizontal:
+            mouseDelta = mousePos.getX() - mouseDragStartPosition.getX();
+            totalRange = sliderBounds.getWidth();
+            break;
+
+        case RotaryVerticalDrag:
+            mouseDelta = mouseDragStartPosition.getY() - mousePos.getY();
+            totalRange = sliderBounds.getHeight();
+            break;
+
+        case RotaryHorizontalDrag:
+            mouseDelta = mousePos.getX() - mouseDragStartPosition.getX();
+            totalRange = sliderBounds.getWidth();
+            break;
+
+        case Rotary:
+        {
+            // For regular rotary, use both horizontal and vertical movement
+            const float deltaX = mousePos.getX() - mouseDragStartPosition.getX();
+            const float deltaY = mouseDragStartPosition.getY() - mousePos.getY();
+            mouseDelta = deltaX + deltaY; // Combine both axes
+            totalRange = std::max(sliderBounds.getWidth(), sliderBounds.getHeight());
+            break;
+        }
+
+        default:
+            // For other slider types, default to horizontal behavior
+            mouseDelta = mousePos.getX() - mouseDragStartPosition.getX();
+            totalRange = sliderBounds.getWidth();
+            break;
+    }
 
     if (totalRange <= 0.0f)
         return;
@@ -498,18 +584,21 @@ void Slider::updateValueFromMousePosition (Point<float> mousePos, DragMode dragM
             setValueNormalised (newNormalisedValue);
             break;
         }
+
         case draggingForMinValue:
         {
             const double newNormalisedValue = range.convertTo0to1 (minValueOnMouseDown) + normalizedDelta;
             setMinValue (range.convertFrom0to1 (std::clamp (newNormalisedValue, 0.0, 1.0)));
             break;
         }
+
         case draggingForMaxValue:
         {
             const double newNormalisedValue = range.convertTo0to1 (maxValueOnMouseDown) + normalizedDelta;
             setMaxValue (range.convertFrom0to1 (std::clamp (newNormalisedValue, 0.0, 1.0)));
             break;
         }
+
         default:
             break;
     }
@@ -581,8 +670,35 @@ Rectangle<float> Slider::getSliderBounds() const
         }
     }
 
-    return Rectangle<float> (bounds.getX() + 2, bounds.getY() + 2,
-                             bounds.getWidth() - 4, bounds.getHeight() - 4); // Small margin
+    // Add margin and account for thumb size to prevent clipping
+    float margin = 2.0f;
+
+    // For linear sliders, add extra margin based on thumb size to prevent clipping
+    switch (sliderType)
+    {
+        case LinearHorizontal:
+        case LinearBarHorizontal:
+        {
+            const float thumbSize = std::min (20.0f, bounds.getHeight() * 0.8f);
+            const float thumbMargin = thumbSize * 0.5f;
+            return Rectangle<float> (bounds.getX() + thumbMargin, bounds.getY() + margin,
+                                   bounds.getWidth() - (thumbMargin * 2), bounds.getHeight() - (margin * 2));
+        }
+
+        case LinearVertical:
+        case LinearBarVertical:
+        {
+            const float thumbSize = std::min (20.0f, bounds.getWidth() * 0.8f);
+            const float thumbMargin = thumbSize * 0.5f;
+            return Rectangle<float> (bounds.getX() + margin, bounds.getY() + thumbMargin,
+                                   bounds.getWidth() - (margin * 2), bounds.getHeight() - (thumbMargin * 2));
+        }
+
+        default:
+            // For rotary and other types, use smaller margin
+            return Rectangle<float> (bounds.getX() + margin, bounds.getY() + margin,
+                                   bounds.getWidth() - (margin * 2), bounds.getHeight() - (margin * 2));
+    }
 }
 
 Rectangle<float> Slider::getTextBoxBounds() const
@@ -609,19 +725,92 @@ Rectangle<float> Slider::getTextBoxBounds() const
 
 //==============================================================================
 
+float Slider::getThumbSize() const
+{
+    // Return a reasonable thumb size based on slider type and bounds
+    const auto bounds = getSliderBounds();
+
+    switch (sliderType)
+    {
+        case LinearHorizontal:
+        case LinearBarHorizontal:
+            return std::min (20.0f, bounds.getHeight() * 0.8f);
+
+        case LinearVertical:
+        case LinearBarVertical:
+            return std::min (20.0f, bounds.getWidth() * 0.8f);
+
+        default:
+            return 16.0f; // Default for rotary and other types
+    }
+}
+
+Rectangle<float> Slider::getThumbBounds() const
+{
+    const auto sliderBounds = getSliderBounds();
+    const float thumbSize = getThumbSize();
+    const double normalizedValue = getValueNormalised();
+
+    switch (sliderType)
+    {
+        case LinearHorizontal:
+        case LinearBarHorizontal:
+        {
+            const float thumbX = sliderBounds.getX() + (normalizedValue * (sliderBounds.getWidth() - thumbSize));
+            const float thumbY = sliderBounds.getY() + (sliderBounds.getHeight() - thumbSize) * 0.5f;
+            return Rectangle<float> (thumbX, thumbY, thumbSize, thumbSize);
+        }
+
+        case LinearVertical:
+        case LinearBarVertical:
+        {
+            const float thumbX = sliderBounds.getX() + (sliderBounds.getWidth() - thumbSize) * 0.5f;
+            const float thumbY = sliderBounds.getBottom() - thumbSize - (normalizedValue * (sliderBounds.getHeight() - thumbSize));
+            return Rectangle<float> (thumbX, thumbY, thumbSize, thumbSize);
+        }
+
+        default:
+            // For non-linear sliders, return empty bounds
+            return Rectangle<float>();
+    }
+}
+
+bool Slider::isMouseOverThumb (Point<float> mousePos) const
+{
+    // Only apply thumb hit detection for linear sliders
+    switch (sliderType)
+    {
+        case LinearHorizontal:
+        case LinearBarHorizontal:
+        case LinearVertical:
+        case LinearBarVertical:
+            return getThumbBounds().contains (mousePos);
+
+        default:
+            // For other slider types, use existing behavior
+            return isMouseOverSliderArea (mousePos);
+    }
+}
+
 Slider::DragMode Slider::getDragModeForMousePosition (Point<float> mousePos) const
 {
     switch (sliderType)
     {
+        case LinearHorizontal:
+        case LinearBarHorizontal:
+        case LinearVertical:
+        case LinearBarVertical:
+        {
+            // For linear sliders, allow dragging if mouse is over slider area
+            // The improved click behavior is handled in mouseDown()
+            return isMouseOverSliderArea (mousePos) ? draggingForValue : notDragging;
+        }
+
         case TwoValueHorizontal:
         case TwoValueVertical:
         {
             // Determine which thumb is closer to the mouse position
-            const auto sliderBoundsInt = getSliderBounds();
-            const Rectangle<float> sliderBounds (static_cast<float>(sliderBoundsInt.getX()),
-                                                static_cast<float>(sliderBoundsInt.getY()),
-                                                static_cast<float>(sliderBoundsInt.getWidth()),
-                                                static_cast<float>(sliderBoundsInt.getHeight()));
+            const auto sliderBounds = getSliderBounds();
             const bool isHorizontal = (sliderType == TwoValueHorizontal);
 
             const float minPos = isHorizontal
@@ -640,17 +829,14 @@ Slider::DragMode Slider::getDragModeForMousePosition (Point<float> mousePos) con
         }
 
         default:
-            return draggingForValue;
+            // For rotary and other slider types, use existing behavior
+            return isMouseOverSliderArea (mousePos) ? draggingForValue : notDragging;
     }
 }
 
 bool Slider::isMouseOverSliderArea (Point<float> mousePos) const
 {
-    const auto sliderBoundsInt = getSliderBounds();
-    const Rectangle<float> sliderBounds (static_cast<float>(sliderBoundsInt.getX()),
-                                        static_cast<float>(sliderBoundsInt.getY()),
-                                        static_cast<float>(sliderBoundsInt.getWidth()),
-                                        static_cast<float>(sliderBoundsInt.getHeight()));
+    const auto sliderBounds = getSliderBounds();
     return sliderBounds.contains (mousePos);
 }
 

@@ -363,7 +363,6 @@ public:
             // Configure slider range and default value
             slider->setRange (0.0f, 1.0f);
             slider->setDefaultValue (0.0f);
-            slider->setMouseDragSensitivity (0.3f);
 
             slider->onValueChanged = [this, i] (float value)
             {

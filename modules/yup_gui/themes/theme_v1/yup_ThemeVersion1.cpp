@@ -173,7 +173,7 @@ void paintLinearSlider (Graphics& g, const ApplicationTheme& theme, const Slider
     {
         g.setStrokeColor (Colors::cornflowerblue);
         g.setStrokeWidth (2.0f);
-        g.strokeRoundedRect (sliderBounds.reduced (1.0f), 2.0f);
+        g.strokeRoundedRect (slider.getLocalBounds().reduced (2), 2.0f);
     }
 }
 
@@ -223,18 +223,13 @@ void paintTwoValueSlider (Graphics& g, const ApplicationTheme& theme, const Slid
     {
         g.setStrokeColor (Colors::cornflowerblue);
         g.setStrokeWidth (2.0f);
-        g.strokeRoundedRect (sliderBounds.reduced (1.0f), 2.0f);
+        g.strokeRoundedRect (slider.getLocalBounds().reduced (2), 2.0f);
     }
 }
 
 void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
 {
     auto sliderBounds = s.getSliderBounds();
-    const Rectangle<float> sliderBoundsFloat (static_cast<float>(sliderBounds.getX()),
-                                              static_cast<float>(sliderBounds.getY()),
-                                              static_cast<float>(sliderBounds.getWidth()),
-                                              static_cast<float>(sliderBounds.getHeight()));
-
     const auto sliderType = s.getSliderType();
     const bool isMouseOver = s.isMouseOver();
     const bool isMouseDown = false; // s.isMouseButtonDown();
@@ -248,7 +243,7 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
         {
             constexpr float rotaryStartAngle = degreesToRadians (135.0f);
             constexpr float rotaryEndAngle = rotaryStartAngle + degreesToRadians (270.0f);
-            paintRotarySlider (g, theme, s, sliderBoundsFloat, rotaryStartAngle, rotaryEndAngle,
+            paintRotarySlider (g, theme, s, sliderBounds, rotaryStartAngle, rotaryEndAngle,
                                static_cast<float>(s.getValueNormalised()), isMouseOver, isMouseDown);
             break;
         }
@@ -264,16 +259,16 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
 
             if (isHorizontal)
             {
-                const float thumbX = sliderBoundsFloat.getX() + (sliderValue * sliderBoundsFloat.getWidth()) - 8.0f;
-                thumbBounds = Rectangle<float> (thumbX, sliderBoundsFloat.getCenterY() - 8.0f, 16.0f, 16.0f);
+                const float thumbX = sliderBounds.getX() + (sliderValue * sliderBounds.getWidth()) - 8.0f;
+                thumbBounds = Rectangle<float> (thumbX, sliderBounds.getCenterY() - 8.0f, 16.0f, 16.0f);
             }
             else
             {
-                const float thumbY = sliderBoundsFloat.getBottom() - (sliderValue * sliderBoundsFloat.getHeight()) - 8.0f;
-                thumbBounds = Rectangle<float> (sliderBoundsFloat.getCenterX() - 8.0f, thumbY, 16.0f, 16.0f);
+                const float thumbY = sliderBounds.getBottom() - (sliderValue * sliderBounds.getHeight()) - 8.0f;
+                thumbBounds = Rectangle<float> (sliderBounds.getCenterX() - 8.0f, thumbY, 16.0f, 16.0f);
             }
 
-            paintLinearSlider (g, theme, s, sliderBoundsFloat, thumbBounds, isHorizontal,
+            paintLinearSlider (g, theme, s, sliderBounds, thumbBounds, isHorizontal,
                                sliderValue, isMouseOver, isMouseDown);
             break;
         }
@@ -288,17 +283,17 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
 
             if (isHorizontal)
             {
-                const float minThumbX = sliderBoundsFloat.getX() + (minNorm * sliderBoundsFloat.getWidth()) - 8.0f;
-                const float maxThumbX = sliderBoundsFloat.getX() + (maxNorm * sliderBoundsFloat.getWidth()) - 8.0f;
-                minThumbBounds = Rectangle<float> (minThumbX, sliderBoundsFloat.getCenterY() - 8.0f, 16.0f, 16.0f);
-                maxThumbBounds = Rectangle<float> (maxThumbX, sliderBoundsFloat.getCenterY() - 8.0f, 16.0f, 16.0f);
+                const float minThumbX = sliderBounds.getX() + (minNorm * sliderBounds.getWidth()) - 8.0f;
+                const float maxThumbX = sliderBounds.getX() + (maxNorm * sliderBounds.getWidth()) - 8.0f;
+                minThumbBounds = Rectangle<float> (minThumbX, sliderBounds.getCenterY() - 8.0f, 16.0f, 16.0f);
+                maxThumbBounds = Rectangle<float> (maxThumbX, sliderBounds.getCenterY() - 8.0f, 16.0f, 16.0f);
             }
             else
             {
-                const float minThumbY = sliderBoundsFloat.getBottom() - (minNorm * sliderBoundsFloat.getHeight()) - 8.0f;
-                const float maxThumbY = sliderBoundsFloat.getBottom() - (maxNorm * sliderBoundsFloat.getHeight()) - 8.0f;
-                minThumbBounds = Rectangle<float> (sliderBoundsFloat.getCenterX() - 8.0f, minThumbY, 16.0f, 16.0f);
-                maxThumbBounds = Rectangle<float> (sliderBoundsFloat.getCenterX() - 8.0f, maxThumbY, 16.0f, 16.0f);
+                const float minThumbY = sliderBounds.getBottom() - (minNorm * sliderBounds.getHeight()) - 8.0f;
+                const float maxThumbY = sliderBounds.getBottom() - (maxNorm * sliderBounds.getHeight()) - 8.0f;
+                minThumbBounds = Rectangle<float> (sliderBounds.getCenterX() - 8.0f, minThumbY, 16.0f, 16.0f);
+                maxThumbBounds = Rectangle<float> (sliderBounds.getCenterX() - 8.0f, maxThumbY, 16.0f, 16.0f);
             }
 
             // For two-value sliders, check which thumb the mouse is over
@@ -312,7 +307,7 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
                 isMouseOverMaxThumb = maxThumbBounds.contains (mousePosFloat);
             }
 
-            paintTwoValueSlider (g, theme, s, sliderBoundsFloat, minThumbBounds, maxThumbBounds,
+            paintTwoValueSlider (g, theme, s, sliderBounds, minThumbBounds, maxThumbBounds,
                                  isHorizontal, minNorm, maxNorm, isMouseOverMinThumb, isMouseOverMaxThumb, isMouseDown);
             break;
         }

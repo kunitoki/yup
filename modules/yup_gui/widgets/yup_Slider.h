@@ -316,6 +316,11 @@ private:
     DragMode getDragModeForMousePosition (Point<float> mousePos) const;
     bool isMouseOverSliderArea (Point<float> mousePos) const;
 
+    // New methods for improved linear slider handling
+    Rectangle<float> getThumbBounds() const;
+    bool isMouseOverThumb (Point<float> mousePos) const;
+    float getThumbSize() const;
+
     void showPopupMenu();
     void createTextEditor();
     void hideTextEditor (bool discardCurrentEditorContents);
