@@ -353,14 +353,17 @@ public:
         noteIndicatorLabel->setColor (yup::Label::Style::backgroundColorId, yup::Colors::yellow.withAlpha (0.8f));
         addChildComponent (*noteIndicatorLabel);
 
+        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
+
         // Add harmonic control sliders (4x4 grid)
         for (int i = 0; i < totalRows * totalColumns; ++i)
         {
             auto slider = sliders.add (std::make_unique<yup::Slider> (yup::Slider::RotaryVerticalDrag));
 
             // Configure slider range and default value
-            slider->setRange ({ 0.0f, 1.0f });
+            slider->setRange (0.0f, 1.0f);
             slider->setDefaultValue (0.0f);
+            slider->setMouseDragSensitivity (0.3f);
 
             slider->onValueChanged = [this, i] (float value)
             {
@@ -374,6 +377,7 @@ public:
             //label->setJustificationType (yup::Justification::centred);
             //label->setFont (10.0f);
             label->setColor (yup::Label::Style::textFillColorId, yup::Colors::lightgray);
+            label->setFont (font.withHeight (8.0f));
 
             // Set the harmonic multiplier text
             auto multiplier = harmonicSynth.getHarmonicMultiplier (i);
@@ -486,7 +490,7 @@ public:
                 auto harmonicIndex = i * totalColumns + j;
 
                 // Reserve space for label at bottom of column
-                auto labelHeight = 20;
+                auto labelHeight = 10;
                 auto labelBounds = col.removeFromBottom (labelHeight);
                 harmonicLabels[harmonicIndex]->setBounds (labelBounds);
 
