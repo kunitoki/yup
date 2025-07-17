@@ -356,7 +356,7 @@ public:
         // Add harmonic control sliders (4x4 grid)
         for (int i = 0; i < totalRows * totalColumns; ++i)
         {
-            auto slider = sliders.add (std::make_unique<yup::Slider> (yup::String (i)));
+            auto slider = sliders.add (std::make_unique<yup::Slider> (yup::Slider::RotaryVerticalDrag));
 
             // Configure slider range and default value
             slider->setRange ({ 0.0f, 1.0f });
@@ -401,7 +401,7 @@ public:
         addAndMakeVisible (*clearButton);
 
         // Add volume control
-        volumeSlider = std::make_unique<yup::Slider> ("Volume");
+        volumeSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Volume");
 
         // Configure slider range and default value
         volumeSlider->setRange ({ 0.0f, 1.0f });

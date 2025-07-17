@@ -131,7 +131,7 @@ void Label::prepareText()
         modifier.clear();
 
         if (text.isNotEmpty())
-            modifier.appendText (text, font->getFont(), fontSize);
+            modifier.appendText (text, font->withHeight (fontSize));
     }
 
     needsUpdate = false;

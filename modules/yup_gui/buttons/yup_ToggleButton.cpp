@@ -91,7 +91,7 @@ void ToggleButton::resized()
             modifier.setHorizontalAlign (StyledText::center);
             modifier.setVerticalAlign (StyledText::middle);
             modifier.clear();
-            modifier.appendText (buttonText, font, getHeight() * 0.35f);
+            modifier.appendText (buttonText, font.withHeight (getHeight() * 0.35f));
         }
     }
 }

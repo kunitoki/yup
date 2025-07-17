@@ -1865,8 +1865,8 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("drawImageAt", &Graphics::drawImageAt)
 
         // Text operations
-        .def ("fillFittedText", py::overload_cast<const String&, const Font&, float, const Rectangle<float>&, Justification> (&Graphics::fillFittedText))
-        .def ("strokeFittedText", py::overload_cast<const String&, const Font&, float, const Rectangle<float>&, Justification> (&Graphics::strokeFittedText))
+        .def ("fillFittedText", py::overload_cast<const String&, const Font&, const Rectangle<float>&, Justification> (&Graphics::fillFittedText))
+        .def ("strokeFittedText", py::overload_cast<const String&, const Font&, const Rectangle<float>&, Justification> (&Graphics::strokeFittedText))
 
         // State management
         .def ("saveState", [](Graphics& self) { return PyGraphicsSaveState{self}; })

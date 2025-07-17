@@ -704,13 +704,13 @@ void Graphics::fillFittedText (const StyledText& text, const Rectangle<float>& r
     renderFittedText (text, rect, std::addressof (paint));
 }
 
-void Graphics::fillFittedText (const String& text, const Font& font, float fontSize, const Rectangle<float>& rect, Justification justification)
+void Graphics::fillFittedText (const String& text, const Font& font, const Rectangle<float>& rect, Justification justification)
 {
     StyledText styledText;
     {
         auto modifier = styledText.startUpdate();
         modifier.setMaxSize (rect.getSize());
-        modifier.appendText (text, font, fontSize);
+        modifier.appendText (text, font);
         modifier.setHorizontalAlign (toHorizontalAlign (justification));
         modifier.setVerticalAlign (toVerticalAlign (justification));
     }
@@ -741,13 +741,13 @@ void Graphics::strokeFittedText (const StyledText& text, const Rectangle<float>&
     renderFittedText (text, rect, std::addressof (paint));
 }
 
-void Graphics::strokeFittedText (const String& text, const Font& font, float fontSize, const Rectangle<float>& rect, Justification justification)
+void Graphics::strokeFittedText (const String& text, const Font& font, const Rectangle<float>& rect, Justification justification)
 {
     StyledText styledText;
     {
         auto modifier = styledText.startUpdate();
         modifier.setMaxSize (rect.getSize());
-        modifier.appendText (text, font, fontSize);
+        modifier.appendText (text, font);
         modifier.setHorizontalAlign (toHorizontalAlign (justification));
         modifier.setVerticalAlign (toVerticalAlign (justification));
     }

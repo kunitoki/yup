@@ -44,6 +44,7 @@
 #include "examples/OpaqueDemo.h"
 #include "examples/Paths.h"
 #include "examples/PopupMenu.h"
+#include "examples/SliderDemo.h"
 #include "examples/TextEditor.h"
 #include "examples/Svg.h"
 #include "examples/VariableFonts.h"
@@ -109,6 +110,7 @@ public:
 #endif
         registerDemo<PopupMenuDemo> ("Popup Menu", counter++);
         registerDemo<FileChooserDemo> ("File Chooser", counter++);
+        registerDemo<SliderDemo> ("Sliders", counter++);
         registerDemo<WidgetsDemo> ("Widgets", counter++);
         registerDemo<ArtboardDemo> ("Artboard", counter++, [] (auto& artboard)
         {
