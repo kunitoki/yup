@@ -209,8 +209,7 @@ Slider::SliderType Slider::getSliderType() const
     return sliderType;
 }
 
-void Slider::setTextBoxStyle (TextEntryBoxPosition position, bool isReadOnly,
-                              int textEntryBoxWidth, int textEntryBoxHeight)
+void Slider::setTextBoxStyle (TextEntryBoxPosition position, bool isReadOnly, int textEntryBoxWidth, int textEntryBoxHeight)
 {
     textBoxPosition = position;
     textBoxIsReadOnly = isReadOnly;
@@ -354,14 +353,14 @@ void Slider::mouseDown (const MouseEvent& event)
                         const float clickX = mouseDownPosition.getX();
                         const float availableWidth = sliderBounds.getWidth() - thumbSize;
                         const float relativeX = clickX - sliderBounds.getX() - (thumbSize * 0.5f);
-                        newNormalizedValue = std::clamp (static_cast<double>(relativeX / availableWidth), 0.0, 1.0);
+                        newNormalizedValue = std::clamp (static_cast<double> (relativeX / availableWidth), 0.0, 1.0);
                     }
                     else // Vertical sliders
                     {
                         const float clickY = mouseDownPosition.getY();
                         const float availableHeight = sliderBounds.getHeight() - thumbSize;
                         const float relativeY = sliderBounds.getBottom() - clickY - (thumbSize * 0.5f);
-                        newNormalizedValue = std::clamp (static_cast<double>(relativeY / availableHeight), 0.0, 1.0);
+                        newNormalizedValue = std::clamp (static_cast<double> (relativeY / availableHeight), 0.0, 1.0);
                     }
 
                     // Set the new value (this will move the thumb to the click position)
@@ -560,7 +559,7 @@ void Slider::updateValueFromMousePosition (Point<float> mousePos, DragMode dragM
             const float deltaX = mousePos.getX() - mouseDragStartPosition.getX();
             const float deltaY = mouseDragStartPosition.getY() - mousePos.getY();
             mouseDelta = deltaX + deltaY; // Combine both axes
-            totalRange = std::max(sliderBounds.getWidth(), sliderBounds.getHeight());
+            totalRange = std::max (sliderBounds.getWidth(), sliderBounds.getHeight());
             break;
         }
 
@@ -662,11 +661,20 @@ Rectangle<float> Slider::getSliderBounds() const
 
         switch (textBoxPosition)
         {
-            case TextBoxLeft:   bounds.removeFromLeft (textBounds.getWidth()); break;
-            case TextBoxRight:  bounds.removeFromRight (textBounds.getWidth()); break;
-            case TextBoxAbove:  bounds.removeFromTop (textBounds.getHeight()); break;
-            case TextBoxBelow:  bounds.removeFromBottom (textBounds.getHeight()); break;
-            default: break;
+            case TextBoxLeft:
+                bounds.removeFromLeft (textBounds.getWidth());
+                break;
+            case TextBoxRight:
+                bounds.removeFromRight (textBounds.getWidth());
+                break;
+            case TextBoxAbove:
+                bounds.removeFromTop (textBounds.getHeight());
+                break;
+            case TextBoxBelow:
+                bounds.removeFromBottom (textBounds.getHeight());
+                break;
+            default:
+                break;
         }
     }
 
@@ -681,8 +689,7 @@ Rectangle<float> Slider::getSliderBounds() const
         {
             const float thumbSize = std::min (20.0f, bounds.getHeight() * 0.8f);
             const float thumbMargin = thumbSize * 0.5f;
-            return Rectangle<float> (bounds.getX() + thumbMargin, bounds.getY() + margin,
-                                   bounds.getWidth() - (thumbMargin * 2), bounds.getHeight() - (margin * 2));
+            return Rectangle<float> (bounds.getX() + thumbMargin, bounds.getY() + margin, bounds.getWidth() - (thumbMargin * 2), bounds.getHeight() - (margin * 2));
         }
 
         case LinearVertical:
@@ -690,14 +697,12 @@ Rectangle<float> Slider::getSliderBounds() const
         {
             const float thumbSize = std::min (20.0f, bounds.getWidth() * 0.8f);
             const float thumbMargin = thumbSize * 0.5f;
-            return Rectangle<float> (bounds.getX() + margin, bounds.getY() + thumbMargin,
-                                   bounds.getWidth() - (margin * 2), bounds.getHeight() - (thumbMargin * 2));
+            return Rectangle<float> (bounds.getX() + margin, bounds.getY() + thumbMargin, bounds.getWidth() - (margin * 2), bounds.getHeight() - (thumbMargin * 2));
         }
 
         default:
             // For rotary and other types, use smaller margin
-            return Rectangle<float> (bounds.getX() + margin, bounds.getY() + margin,
-                                   bounds.getWidth() - (margin * 2), bounds.getHeight() - (margin * 2));
+            return Rectangle<float> (bounds.getX() + margin, bounds.getY() + margin, bounds.getWidth() - (margin * 2), bounds.getHeight() - (margin * 2));
     }
 }
 
@@ -814,12 +819,12 @@ Slider::DragMode Slider::getDragModeForMousePosition (Point<float> mousePos) con
             const bool isHorizontal = (sliderType == TwoValueHorizontal);
 
             const float minPos = isHorizontal
-                ? sliderBounds.getX() + (range.convertTo0to1 (minValue) * sliderBounds.getWidth())
-                : sliderBounds.getBottom() - (range.convertTo0to1 (minValue) * sliderBounds.getHeight());
+                                   ? sliderBounds.getX() + (range.convertTo0to1 (minValue) * sliderBounds.getWidth())
+                                   : sliderBounds.getBottom() - (range.convertTo0to1 (minValue) * sliderBounds.getHeight());
 
             const float maxPos = isHorizontal
-                ? sliderBounds.getX() + (range.convertTo0to1 (maxValue) * sliderBounds.getWidth())
-                : sliderBounds.getBottom() - (range.convertTo0to1 (maxValue) * sliderBounds.getHeight());
+                                   ? sliderBounds.getX() + (range.convertTo0to1 (maxValue) * sliderBounds.getWidth())
+                                   : sliderBounds.getBottom() - (range.convertTo0to1 (maxValue) * sliderBounds.getHeight());
 
             const float mouseCoord = isHorizontal ? mousePos.getX() : mousePos.getY(); // Use getX() and getY()
             const float distToMin = std::abs (mouseCoord - minPos);
@@ -864,7 +869,5 @@ void Slider::hideTextEditor (bool discardCurrentEditorContents)
         textEditor.reset();
     }
 }
-
-
 
 } // namespace yup

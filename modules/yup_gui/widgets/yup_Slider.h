@@ -40,28 +40,28 @@ public:
     /** Defines the different types of slider that can be created. */
     enum SliderType
     {
-        LinearHorizontal,           /**< A horizontal linear slider. */
-        LinearVertical,             /**< A vertical linear slider. */
-        LinearBarHorizontal,        /**< A horizontal linear slider with a filled bar. */
-        LinearBarVertical,          /**< A vertical linear slider with a filled bar. */
-        Rotary,                     /**< A rotary knob slider. */
-        RotaryHorizontalDrag,       /**< A rotary knob that responds to horizontal dragging. */
-        RotaryVerticalDrag,         /**< A rotary knob that responds to vertical dragging. */
-        IncDecButtons,              /**< A slider with increment/decrement buttons. */
-        TwoValueHorizontal,         /**< A horizontal two-value range slider. */
-        TwoValueVertical,           /**< A vertical two-value range slider. */
-        ThreeValueHorizontal,       /**< A horizontal three-value slider (min, mid, max). */
-        ThreeValueVertical          /**< A vertical three-value slider (min, mid, max). */
+        LinearHorizontal,     /**< A horizontal linear slider. */
+        LinearVertical,       /**< A vertical linear slider. */
+        LinearBarHorizontal,  /**< A horizontal linear slider with a filled bar. */
+        LinearBarVertical,    /**< A vertical linear slider with a filled bar. */
+        Rotary,               /**< A rotary knob slider. */
+        RotaryHorizontalDrag, /**< A rotary knob that responds to horizontal dragging. */
+        RotaryVerticalDrag,   /**< A rotary knob that responds to vertical dragging. */
+        IncDecButtons,        /**< A slider with increment/decrement buttons. */
+        TwoValueHorizontal,   /**< A horizontal two-value range slider. */
+        TwoValueVertical,     /**< A vertical two-value range slider. */
+        ThreeValueHorizontal, /**< A horizontal three-value slider (min, mid, max). */
+        ThreeValueVertical    /**< A vertical three-value slider (min, mid, max). */
     };
 
     /** Defines the text entry box position for sliders with text boxes. */
     enum TextEntryBoxPosition
     {
-        NoTextBox,                  /**< No text entry box. */
-        TextBoxLeft,                /**< Text box positioned to the left. */
-        TextBoxRight,               /**< Text box positioned to the right. */
-        TextBoxAbove,               /**< Text box positioned above. */
-        TextBoxBelow                /**< Text box positioned below. */
+        NoTextBox,    /**< No text entry box. */
+        TextBoxLeft,  /**< Text box positioned to the left. */
+        TextBoxRight, /**< Text box positioned to the right. */
+        TextBoxAbove, /**< Text box positioned above. */
+        TextBoxBelow  /**< Text box positioned below. */
     };
 
     //==============================================================================
@@ -244,12 +244,12 @@ public:
     */
     struct Style
     {
-        static const Identifier backgroundColorId;     /**< Background color for slider track/circle */
-        static const Identifier trackColorId;          /**< Color for active track or value indicator */
-        static const Identifier thumbColorId;          /**< Color for slider thumb/knob */
-        static const Identifier thumbOverColorId;      /**< Color for thumb when mouse is over */
-        static const Identifier thumbDownColorId;      /**< Color for thumb when pressed */
-        static const Identifier textColorId;           /**< Color for text labels */
+        static const Identifier backgroundColorId; /**< Background color for slider track/circle */
+        static const Identifier trackColorId;      /**< Color for active track or value indicator */
+        static const Identifier thumbColorId;      /**< Color for slider thumb/knob */
+        static const Identifier thumbOverColorId;  /**< Color for thumb when mouse is over */
+        static const Identifier thumbDownColorId;  /**< Color for thumb when pressed */
+        static const Identifier textColorId;       /**< Color for text labels */
     };
 
     //==============================================================================
