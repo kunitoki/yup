@@ -127,99 +127,47 @@ private:
     void resized() override
     {
         auto bounds = getLocalBounds();
-        auto margin = 20;
-        auto sliderHeight = 60;
-        auto labelHeight = 25;
-        auto spacing = 10;
+        auto margin = 20.0f;
+        auto sliderHeight = 60.0f;
+        auto labelHeight = 25.0f;
+        auto spacing = 10.0f;
 
-        int y = margin;
+        auto y = margin;
 
         // Title
-        titleLabel->setBounds(yup::Rectangle<float>(
-            static_cast<float>(margin),
-            static_cast<float>(y),
-            static_cast<float>(bounds.getWidth() - 2 * margin),
-            30.0f));
-        y += 40;
+        titleLabel->setBounds(margin, y, bounds.getWidth() - 2 * margin, 30.0f);
+        y += 40.0f;
 
         // Layout in a 2x3 grid
-        auto sliderWidth = (bounds.getWidth() - 3 * margin) / 2;
+        auto sliderWidth = (bounds.getWidth() - 3.0f * margin) / 2.0f;
         auto columnHeight = sliderHeight + labelHeight + spacing;
 
         // Left column
-        horizontalSlider->setBounds(yup::Rectangle<float>(
-            static_cast<float>(margin),
-            static_cast<float>(y),
-            static_cast<float>(sliderWidth),
-            static_cast<float>(sliderHeight)));
-        horizontalLabel->setBounds(yup::Rectangle<float>(
-            static_cast<float>(margin),
-            static_cast<float>(y + sliderHeight + 5),
-            static_cast<float>(sliderWidth),
-            static_cast<float>(labelHeight)));
+        horizontalSlider->setBounds(margin, y, sliderWidth, sliderHeight);
+        horizontalLabel->setBounds(margin, y + sliderHeight + 5.0f, sliderWidth, labelHeight);
 
-        barHorizontalSlider->setBounds(yup::Rectangle<float>(
-            static_cast<float>(margin),
-            static_cast<float>(y + columnHeight),
-            static_cast<float>(sliderWidth),
-            static_cast<float>(sliderHeight)));
-        barHorizontalLabel->setBounds(yup::Rectangle<float>(
-            static_cast<float>(margin),
-            static_cast<float>(y + columnHeight + sliderHeight + 5),
-            static_cast<float>(sliderWidth),
-            static_cast<float>(labelHeight)));
+        barHorizontalSlider->setBounds(margin, y + columnHeight, sliderWidth, sliderHeight);
+        barHorizontalLabel->setBounds(margin, y + columnHeight + sliderHeight + 5.0f, sliderWidth, labelHeight);
 
-        twoValueSlider->setBounds(yup::Rectangle<float>(
-            static_cast<float>(margin),
-            static_cast<float>(y + 2 * columnHeight),
-            static_cast<float>(sliderWidth),
-            static_cast<float>(sliderHeight)));
-        twoValueLabel->setBounds(yup::Rectangle<float>(
-            static_cast<float>(margin),
-            static_cast<float>(y + 2 * columnHeight + sliderHeight + 5),
-            static_cast<float>(sliderWidth),
-            static_cast<float>(labelHeight)));
+        twoValueSlider->setBounds(margin, y + 2.0f * columnHeight, sliderWidth, sliderHeight);
+        twoValueLabel->setBounds(margin, y + 2.0f * columnHeight + sliderHeight + 5.0f, sliderWidth, labelHeight);
 
         // Right column
         auto rightX = margin + sliderWidth + margin;
 
-        verticalSlider->setBounds(yup::Rectangle<float>(
-            static_cast<float>(rightX),
-            static_cast<float>(y),
-            80.0f,
-            static_cast<float>(columnHeight)));
-        verticalLabel->setBounds(yup::Rectangle<float>(
-            static_cast<float>(rightX + 90),
-            static_cast<float>(y),
-            static_cast<float>(sliderWidth - 90),
-            static_cast<float>(labelHeight)));
+        verticalSlider->setBounds(rightX, y, 80.0f, columnHeight);
+        verticalLabel->setBounds(rightX + 90.0f, y, sliderWidth - 90.0f, labelHeight);
 
-        rotarySlider->setBounds(yup::Rectangle<float>(
-            static_cast<float>(rightX),
-            static_cast<float>(y + columnHeight),
-            80.0f,
-            80.0f));
-        rotaryLabel->setBounds(yup::Rectangle<float>(
-            static_cast<float>(rightX + 90),
-            static_cast<float>(y + columnHeight),
-            static_cast<float>(sliderWidth - 90),
-            static_cast<float>(labelHeight)));
+        rotarySlider->setBounds(rightX, y + columnHeight, 80.0f, 80.0f);
+        rotaryLabel->setBounds(rightX + 90.0f, y + columnHeight, sliderWidth - 90.0f, labelHeight);
 
-        barVerticalSlider->setBounds(yup::Rectangle<float>(
-            static_cast<float>(rightX),
-            static_cast<float>(y + 2 * columnHeight),
-            60.0f,
-            static_cast<float>(columnHeight)));
-        barVerticalLabel->setBounds(yup::Rectangle<float>(
-            static_cast<float>(rightX + 70),
-            static_cast<float>(y + 2 * columnHeight),
-            static_cast<float>(sliderWidth - 70),
-            static_cast<float>(labelHeight)));
+        barVerticalSlider->setBounds(rightX, y + 2.0f * columnHeight, 60.0f, columnHeight);
+        barVerticalLabel->setBounds(rightX + 70.0f, y + 2.0f * columnHeight, sliderWidth - 70.0f, labelHeight);
     }
 
     void paint(yup::Graphics& g) override
     {
-        g.setFillColor(yup::Colors::dimgray);
+        g.setFillColor(yup::Color (0xff404040));
         g.fillAll();
 
         // Draw section dividers
@@ -230,11 +178,11 @@ private:
         auto margin = 20;
 
         // Horizontal line under title
-        g.strokeLine(static_cast<float>(margin), 70.0f, static_cast<float>(bounds.getWidth() - margin), 70.0f);
+        g.strokeLine(margin, 70.0f, bounds.getWidth() - margin, 70.0f);
 
         // Vertical line separating columns
         auto centerX = bounds.getWidth() / 2;
-        g.strokeLine(static_cast<float>(centerX), 80.0f, static_cast<float>(centerX), static_cast<float>(bounds.getHeight() - margin));
+        g.strokeLine(centerX, 80.0f, centerX, bounds.getHeight() - margin);
     }
 
 private:

@@ -121,7 +121,7 @@ void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider
 
     g.setStrokeCap (StrokeCap::Round);
     g.setStrokeColor (thumbColor);
-    g.setStrokeWidth (slider.proportionOfWidth (0.035f));
+    g.setStrokeWidth (slider.proportionOfWidth (0.075f));
     g.strokePath (foregroundArc);
 
     if (slider.hasKeyboardFocus())

@@ -404,7 +404,7 @@ public:
         addAndMakeVisible (*clearButton);
 
         // Add volume control
-        volumeSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Volume");
+        volumeSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Volume");
 
         // Configure slider range and default value
         volumeSlider->setRange ({ 0.0f, 1.0f });
