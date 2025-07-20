@@ -331,7 +331,7 @@ private:
     /** Updates the filter coefficients based on current parameters */
     void updateCoefficients() noexcept
     {
-        const auto coeffs = FilterDesigner::designKorgMs20<CoeffType> (cutoffFreq, resonanceAmount, this->sampleRate);
+        const auto coeffs = FilterDesigner<CoeffType>::designKorgMs20 (cutoffFreq, resonanceAmount, this->sampleRate);
         
         // Extract coefficients from designer
         g = coeffs[0];

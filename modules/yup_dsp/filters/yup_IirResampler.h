@@ -380,7 +380,7 @@ private:
     {
         // Generic elliptic allpass design for arbitrary orders
         const auto sections = Order / 2;
-        const auto pi = Math::Constants<CoeffType>::pi;
+        const auto pi = MathConstants<CoeffType>::pi;
         
         for (int i = 0; i < sections; ++i)
         {

@@ -169,7 +169,13 @@ struct BiquadCoefficients
     BiquadCoefficients() = default;
 
     BiquadCoefficients (CoeffType b0_, CoeffType b1_, CoeffType b2_,
-                       CoeffType a0_, CoeffType a1_, CoeffType a2_) noexcept
+                        CoeffType a0_, CoeffType a1_) noexcept
+        : a0 (a0_), a1 (a1_), a2 (0.0f), b0 (b0_), b1 (b1_), b2 (b2_)
+    {
+    }
+
+    BiquadCoefficients (CoeffType b0_, CoeffType b1_, CoeffType b2_,
+                        CoeffType a0_, CoeffType a1_, CoeffType a2_) noexcept
         : a0 (a0_), a1 (a1_), a2 (a2_), b0 (b0_), b1 (b1_), b2 (b2_)
     {
     }

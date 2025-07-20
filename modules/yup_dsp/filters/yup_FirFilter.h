@@ -267,25 +267,25 @@ private:
     /** Designs lowpass filter coefficients */
     void designLowpass() noexcept
     {
-        FilterDesigner::designFirLowpass (coefficients, cutoff, this->sampleRate, "kaiser", kaiserBeta);
+        FilterDesigner<CoeffType>::designFirLowpass (coefficients, cutoff, this->sampleRate, "kaiser", kaiserBeta);
     }
 
     /** Designs highpass filter coefficients */
     void designHighpass() noexcept
     {
-        FilterDesigner::designFirHighpass (coefficients, cutoff, this->sampleRate, "kaiser", kaiserBeta);
+        FilterDesigner<CoeffType>::designFirHighpass (coefficients, cutoff, this->sampleRate, "kaiser", kaiserBeta);
     }
 
     /** Designs bandpass filter coefficients */
     void designBandpass() noexcept
     {
-        FilterDesigner::designFirBandpass (coefficients, cutoff, cutoff2, this->sampleRate, "kaiser", kaiserBeta);
+        FilterDesigner<CoeffType>::designFirBandpass (coefficients, cutoff, cutoff2, this->sampleRate, "kaiser", kaiserBeta);
     }
 
     /** Designs bandstop filter coefficients */
     void designBandstop() noexcept
     {
-        FilterDesigner::designFirBandstop (coefficients, cutoff, cutoff2, this->sampleRate, "kaiser", kaiserBeta);
+        FilterDesigner<CoeffType>::designFirBandstop (coefficients, cutoff, cutoff2, this->sampleRate, "kaiser", kaiserBeta);
     }
 
     /** Designs Hilbert transformer coefficients */

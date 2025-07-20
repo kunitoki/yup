@@ -31,5 +31,5 @@
 #include "yup_dsp.h"
 
 //==============================================================================
-// Most DSP filters are header-only template implementations, but any
-// implementation files would be included here:
+
+#include "designers/yup_FilterDesigner.cpp"

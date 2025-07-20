@@ -227,16 +227,16 @@ private:
         switch (filterType)
         {
             case FilterType::lowpass:
-                coeffs = FilterDesigner::designBesselLowpass<CoeffType> (filterOrder, cutoffFreq, this->sampleRate);
+                coeffs = FilterDesigner<CoeffType>::designBesselLowpass (filterOrder, cutoffFreq, this->sampleRate);
                 break;
                 
             case FilterType::highpass:
-                coeffs = FilterDesigner::designBesselHighpass<CoeffType> (filterOrder, cutoffFreq, this->sampleRate);
+                coeffs = FilterDesigner<CoeffType>::designBesselHighpass (filterOrder, cutoffFreq, this->sampleRate);
                 break;
                 
             default:
                 // For now, only lowpass and highpass are implemented
-                coeffs = FilterDesigner::designBesselLowpass<CoeffType> (filterOrder, cutoffFreq, this->sampleRate);
+                coeffs = FilterDesigner<CoeffType>::designBesselLowpass (filterOrder, cutoffFreq, this->sampleRate);
                 break;
         }
         

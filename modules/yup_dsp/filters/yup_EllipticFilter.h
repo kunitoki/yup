@@ -293,20 +293,20 @@ private:
         switch (filterType)
         {
             case FilterType::lowpass:
-                coeffs = FilterDesigner::designEllipticLowpass<CoeffType> (filterOrder, cutoffFreq, this->sampleRate, rippleAmount, stopbandAtten);
+                coeffs = FilterDesigner<CoeffType>::designEllipticLowpass (filterOrder, cutoffFreq, this->sampleRate, rippleAmount, stopbandAtten);
                 break;
                 
             case FilterType::highpass:
-                coeffs = FilterDesigner::designEllipticHighpass<CoeffType> (filterOrder, cutoffFreq, this->sampleRate, rippleAmount, stopbandAtten);
+                coeffs = FilterDesigner<CoeffType>::designEllipticHighpass (filterOrder, cutoffFreq, this->sampleRate, rippleAmount, stopbandAtten);
                 break;
                 
             case FilterType::allpass:
-                coeffs = FilterDesigner::designEllipticAllpass<CoeffType> (filterOrder, this->sampleRate, rippleAmount, stopbandAtten);
+                coeffs = FilterDesigner<CoeffType>::designEllipticAllpass (filterOrder, this->sampleRate, rippleAmount, stopbandAtten);
                 break;
                 
             default:
                 // For now, only lowpass, highpass, and allpass are implemented
-                coeffs = FilterDesigner::designEllipticLowpass<CoeffType> (filterOrder, cutoffFreq, this->sampleRate, rippleAmount, stopbandAtten);
+                coeffs = FilterDesigner<CoeffType>::designEllipticLowpass (filterOrder, cutoffFreq, this->sampleRate, rippleAmount, stopbandAtten);
                 break;
         }
         

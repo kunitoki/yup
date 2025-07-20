@@ -493,8 +493,7 @@ private:
             const auto q = formant.frequency / jmax (formant.bandwidth, static_cast<CoeffType> (10.0));
             
             // Design bandpass filter for this formant
-            const auto coeffs = FilterDesigner::designRbjBandpass<CoeffType> (
-                formant.frequency, q, this->sampleRate);
+            const auto coeffs = FilterDesigner<CoeffType>::designRbjBandpass (formant.frequency, q, this->sampleRate);
             
             formantFilters[i]->setCoefficients (coeffs);
         }

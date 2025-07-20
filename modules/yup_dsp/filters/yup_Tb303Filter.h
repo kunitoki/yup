@@ -315,7 +315,7 @@ private:
     /** Updates the filter coefficients based on current parameters */
     void updateCoefficients() noexcept
     {
-        const auto coeffs = FilterDesigner::designTb303<CoeffType> (cutoffFreq, resonanceAmount, this->sampleRate);
+        const auto coeffs = FilterDesigner<CoeffType>::designTb303 (cutoffFreq, resonanceAmount, this->sampleRate);
         
         // Extract coefficients from designer
         g1 = coeffs[0];
@@ -330,7 +330,7 @@ private:
     /** Updates coefficients dynamically during processing */
     void updateDynamicCoefficients (CoeffType frequency) noexcept
     {
-        const auto coeffs = FilterDesigner::designTb303<CoeffType> (frequency, resonanceAmount, this->sampleRate);
+        const auto coeffs = FilterDesigner<CoeffType>::designTb303 (frequency, resonanceAmount, this->sampleRate);
         
         // Smooth coefficient updates to avoid clicks
         const auto smoothing = static_cast<CoeffType> (0.1);
@@ -352,7 +352,7 @@ private:
         @returns           The stage output
     */
     CoeffType processNonlinearStage (CoeffType input, CoeffType& state, CoeffType gain, 
-                                    CoeffType& diodeVoltage, CoeffType threshold) noexcept
+                                     CoeffType& diodeVoltage, CoeffType threshold) noexcept
     {
         // Linear integrator part
         const auto linearOutput = input * gain + state;

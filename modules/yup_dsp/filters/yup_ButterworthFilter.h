@@ -114,6 +114,10 @@ public:
         const auto numSections = calculateNumSections (filterOrder);
         if (cascade.getNumSections() != static_cast<size_t> (numSections))
             cascade.setNumSections (numSections);
+        
+        // Pre-size coefficient storage to avoid allocation during updateCoefficients
+        if (coefficientsStorage.size() != static_cast<size_t> (numSections))
+            coefficientsStorage.resize (numSections);
 
         updateCoefficients();
     }
@@ -142,6 +146,11 @@ public:
             filterOrder = newOrder;
             const auto numSections = calculateNumSections (filterOrder);
             cascade.setNumSections (numSections);
+            
+            // Pre-size coefficient storage to avoid allocation during updateCoefficients
+            if (coefficientsStorage.size() != static_cast<size_t> (numSections))
+                coefficientsStorage.resize (numSections);
+            
             updateCoefficients();
         }
     }
@@ -185,36 +194,39 @@ private:
 
     void updateCoefficients() noexcept
     {
-        std::vector<BiquadCoefficients<CoeffType>> coeffs;
-        
+        // Use vector reference versions to write to pre-allocated storage
         switch (filterType)
         {
             case FilterType::lowpass:
-                coeffs = FilterDesigner::designButterworthLowpass<CoeffType> (filterOrder, cutoffFreq, this->sampleRate);
+                FilterDesigner<CoeffType>::designButterworthLowpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate);
                 break;
+
             case FilterType::highpass:
-                coeffs = FilterDesigner::designButterworthHighpass<CoeffType> (filterOrder, cutoffFreq, this->sampleRate);
+                FilterDesigner<CoeffType>::designButterworthHighpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate);
                 break;
+
+            /* TODO - Keep this for future implementation
             case FilterType::bandpass:
-                coeffs = FilterDesigner::designButterworthBandpass<CoeffType> (filterOrder, cutoffFreq, bandwidthOctaves, this->sampleRate);
+                FilterDesigner<CoeffType>::designButterworthBandpass (coefficientsStorage, filterOrder, cutoffFreq, bandwidthOctaves, this->sampleRate);
                 break;
+
             case FilterType::bandstop:
-                coeffs = FilterDesigner::designButterworthBandstop<CoeffType> (filterOrder, cutoffFreq, bandwidthOctaves, this->sampleRate);
+                FilterDesigner<CoeffType>::designButterworthBandstop (coefficientsStorage, filterOrder, cutoffFreq, bandwidthOctaves, this->sampleRate);
                 break;
+            */
+
             case FilterType::allpass:
-                coeffs = FilterDesigner::designButterworthAllpass<CoeffType> (filterOrder, this->sampleRate);
+                FilterDesigner<CoeffType>::designButterworthAllpass (coefficientsStorage, filterOrder, this->sampleRate);
                 break;
+
             default:
-                coeffs = FilterDesigner::designButterworthLowpass<CoeffType> (filterOrder, cutoffFreq, this->sampleRate);
+                FilterDesigner<CoeffType>::designButterworthLowpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate);
                 break;
         }
         
         // Apply coefficients to cascade
-        const auto numSections = coeffs.size();
-        for (size_t i = 0; i < numSections; ++i)
-        {
-            cascade.setSectionCoefficients (i, coeffs[i]);
-        }
+        for (size_t i = 0; i < coefficientsStorage.size(); ++i)
+            cascade.setSectionCoefficients (i, coefficientsStorage[i]);
     }
 
 
@@ -225,6 +237,9 @@ private:
     int filterOrder = 2;
     CoeffType cutoffFreq = static_cast<CoeffType> (1000.0);
     CoeffType bandwidthOctaves = static_cast<CoeffType> (1.0);
+    
+    // Pre-allocated coefficient storage for real-time safe operation
+    std::vector<BiquadCoefficients<CoeffType>> coefficientsStorage;
 
     //==============================================================================
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ButterworthFilter)

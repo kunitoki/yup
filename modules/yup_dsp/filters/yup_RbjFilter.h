@@ -217,29 +217,36 @@ private:
         switch (filterType)
         {
             case Type::lowpass:
-                coeffs = FilterDesigner::designRbjLowpass<CoeffType> (centerFreq, qFactor, this->sampleRate);
+                coeffs = FilterDesigner<CoeffType>::designRbjLowpass (centerFreq, qFactor, this->sampleRate);
                 break;
+
             case Type::highpass:
-                coeffs = FilterDesigner::designRbjHighpass<CoeffType> (centerFreq, qFactor, this->sampleRate);
+                coeffs = FilterDesigner<CoeffType>::designRbjHighpass (centerFreq, qFactor, this->sampleRate);
                 break;
+
             case Type::bandpassCsg:
             case Type::bandpassCpg:
-                coeffs = FilterDesigner::designRbjBandpass<CoeffType> (centerFreq, qFactor, this->sampleRate);
+                coeffs = FilterDesigner<CoeffType>::designRbjBandpass (centerFreq, qFactor, this->sampleRate);
                 break;
+
             case Type::notch:
-                coeffs = FilterDesigner::designRbjBandstop<CoeffType> (centerFreq, qFactor, this->sampleRate);
+                coeffs = FilterDesigner<CoeffType>::designRbjBandstop (centerFreq, qFactor, this->sampleRate);
                 break;
+
             case Type::allpass:
-                coeffs = FilterDesigner::designRbjAllpass<CoeffType> (centerFreq, qFactor, this->sampleRate);
+                coeffs = FilterDesigner<CoeffType>::designRbjAllpass (centerFreq, qFactor, this->sampleRate);
                 break;
+
             case Type::peaking:
-                coeffs = FilterDesigner::designRbjPeak<CoeffType> (centerFreq, qFactor, gain, this->sampleRate);
+                coeffs = FilterDesigner<CoeffType>::designRbjPeak (centerFreq, qFactor, gain, this->sampleRate);
                 break;
+
             case Type::lowshelf:
-                coeffs = FilterDesigner::designRbjLowShelf<CoeffType> (centerFreq, qFactor, gain, this->sampleRate);
+                coeffs = FilterDesigner<CoeffType>::designRbjLowShelf (centerFreq, qFactor, gain, this->sampleRate);
                 break;
+
             case Type::highshelf:
-                coeffs = FilterDesigner::designRbjHighShelf<CoeffType> (centerFreq, qFactor, gain, this->sampleRate);
+                coeffs = FilterDesigner<CoeffType>::designRbjHighShelf (centerFreq, qFactor, gain, this->sampleRate);
                 break;
         }
 

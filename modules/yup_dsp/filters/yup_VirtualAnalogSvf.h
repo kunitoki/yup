@@ -365,7 +365,7 @@ private:
     /** Updates the filter coefficients based on current parameters */
     void updateCoefficients() noexcept
     {
-        const auto coeffs = FilterDesigner::designTptSvf<CoeffType> (cutoffFreq, resonanceAmount, this->sampleRate);
+        const auto coeffs = FilterDesigner<CoeffType>::designTptSvf (cutoffFreq, resonanceAmount, this->sampleRate);
         
         // Extract coefficients from designer
         g = coeffs[0];

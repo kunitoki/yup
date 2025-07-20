@@ -579,14 +579,6 @@ public:
 
 private:
     //==============================================================================
-    int upsampleRatio;
-    int downsampleRatio;
-    int filterLength;
-    Quality quality;
-    
-    std::vector<CoeffType> coefficients;
-
-    //==============================================================================
     void designFilter() noexcept
     {
         if (this->sampleRate <= 0.0)
@@ -595,8 +587,11 @@ private:
         // Design Kaiser-windowed lowpass filter
         const auto cutoffFreq = static_cast<CoeffType> (0.4) * this->sampleRate / static_cast<CoeffType> (jmax (upsampleRatio, downsampleRatio));
         const auto stopbandAttenuation = getAttenuationForQuality (quality);
-        
-        coefficients = FilterDesigner::designFirLowpass<CoeffType> (
+
+        coefficients.resize (static_cast<std::size_t> (filterLength));
+
+        FilterDesigner<CoeffType>::designFirLowpass (
+            coefficients,
             filterLength,
             cutoffFreq,
             this->sampleRate * static_cast<double> (upsampleRatio),
@@ -628,6 +623,13 @@ private:
         }
         return static_cast<CoeffType> (60.0);
     }
+
+    //==============================================================================
+    int upsampleRatio;
+    int downsampleRatio;
+    int filterLength;
+    Quality quality;
+    std::vector<CoeffType> coefficients;
 
     //==============================================================================
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FirResampler)

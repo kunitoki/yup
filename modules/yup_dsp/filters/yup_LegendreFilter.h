@@ -245,19 +245,23 @@ private:
         switch (filterType)
         {
             case FilterType::lowpass:
-                coeffs = FilterDesigner::designLegendreLowpass<CoeffType> (filterOrder, cutoffFreq, this->sampleRate);
+                coeffs = FilterDesigner<CoeffType>::designLegendreLowpass (filterOrder, cutoffFreq, this->sampleRate);
                 break;
+
             case FilterType::highpass:
-                coeffs = FilterDesigner::designLegendreHighpass<CoeffType> (filterOrder, cutoffFreq, this->sampleRate);
+                coeffs = FilterDesigner<CoeffType>::designLegendreHighpass (filterOrder, cutoffFreq, this->sampleRate);
                 break;
+
             case FilterType::bandpass:
-                coeffs = FilterDesigner::designLegendreBandpass<CoeffType> (filterOrder, cutoffFreq, bandwidthOctaves, this->sampleRate);
+                coeffs = FilterDesigner<CoeffType>::designLegendreBandpass (filterOrder, cutoffFreq, bandwidthOctaves, this->sampleRate);
                 break;
+
             case FilterType::bandstop:
-                coeffs = FilterDesigner::designLegendreBandstop<CoeffType> (filterOrder, cutoffFreq, bandwidthOctaves, this->sampleRate);
+                coeffs = FilterDesigner<CoeffType>::designLegendreBandstop (filterOrder, cutoffFreq, bandwidthOctaves, this->sampleRate);
                 break;
+
             default:
-                coeffs = FilterDesigner::designLegendreLowpass<CoeffType> (filterOrder, cutoffFreq, this->sampleRate);
+                coeffs = FilterDesigner<CoeffType>::designLegendreLowpass (filterOrder, cutoffFreq, this->sampleRate);
                 break;
         }
         

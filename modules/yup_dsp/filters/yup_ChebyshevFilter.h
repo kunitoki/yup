@@ -304,24 +304,24 @@ private:
         {
             case FilterType::lowpass:
                 if (chebyshevType == Type::Type1)
-                    coeffs = FilterDesigner::designChebyshev1Lowpass<CoeffType> (filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
+                    coeffs = FilterDesigner<CoeffType>::designChebyshev1Lowpass (filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
                 else
-                    coeffs = FilterDesigner::designChebyshev2Lowpass<CoeffType> (filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
+                    coeffs = FilterDesigner<CoeffType>::designChebyshev2Lowpass (filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
                 break;
                 
             case FilterType::highpass:
                 if (chebyshevType == Type::Type1)
-                    coeffs = FilterDesigner::designChebyshev1Highpass<CoeffType> (filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
+                    coeffs = FilterDesigner<CoeffType>::designChebyshev1Highpass (filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
                 else
-                    coeffs = FilterDesigner::designChebyshev2Highpass<CoeffType> (filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
+                    coeffs = FilterDesigner<CoeffType>::designChebyshev2Highpass (filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
                 break;
                 
             default:
                 // For now, only lowpass and highpass are implemented
                 if (chebyshevType == Type::Type1)
-                    coeffs = FilterDesigner::designChebyshev1Lowpass<CoeffType> (filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
+                    coeffs = FilterDesigner<CoeffType>::designChebyshev1Lowpass (filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
                 else
-                    coeffs = FilterDesigner::designChebyshev2Lowpass<CoeffType> (filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
+                    coeffs = FilterDesigner<CoeffType>::designChebyshev2Lowpass (filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
                 break;
         }
         
