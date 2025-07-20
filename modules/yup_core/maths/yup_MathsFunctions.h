@@ -187,8 +187,20 @@ struct MathConstants
     /** A predefined value for Euler's number */
     static inline constexpr FloatType euler = static_cast<FloatType> (2.71828182845904523536L);
 
+    /** A predefined value for Pi / 4 */
+    static inline constexpr FloatType quarterPi = static_cast<FloatType> (3.141592653589793238L / 4.0L);
+
     /** A predefined value for sqrt (2) */
     static inline constexpr FloatType sqrt2 = static_cast<FloatType> (1.4142135623730950488L);
+
+    /** A predefined value for 1 / sqrt (2) */
+    static inline constexpr FloatType invSqrt2 = static_cast<FloatType> (1.0L / 1.4142135623730950488L);
+
+    /** A predefined value for natural logarithm of 2 */
+    static inline constexpr FloatType ln2 = static_cast<FloatType> (0.693147180559945309417232121458176568075500134360255254120680L);
+
+    /** A predefined value for natural logarithm of 10 */
+    static inline constexpr FloatType ln10 = static_cast<FloatType> (2.302585092994045684017991454684364207601101488628772976033327L);
 
     /** A predefined value for 0.5 */
     static inline constexpr FloatType half = static_cast<FloatType> (0.5L);

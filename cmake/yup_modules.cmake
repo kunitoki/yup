@@ -649,6 +649,9 @@ macro (yup_add_default_modules modules_path)
     yup_add_module (${modules_path}/modules/yup_gui "${modules_definitions}" ${modules_group})
     add_library (yup::yup_gui ALIAS yup_gui)
 
+    yup_add_module (${modules_path}/modules/yup_dsp "${modules_definitions}" ${modules_group})
+    add_library (yup::yup_dsp ALIAS yup_dsp)
+
     if (YUP_ARG_ENABLE_PYTHON)
         if (NOT YUP_BUILD_WHEEL)
             set (python_modules "Interpreter;Development.Embed")
