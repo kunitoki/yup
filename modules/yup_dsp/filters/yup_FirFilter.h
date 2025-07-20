@@ -267,25 +267,25 @@ private:
     /** Designs lowpass filter coefficients */
     void designLowpass() noexcept
     {
-        FilterDesigner<CoeffType>::designFirLowpass (coefficients, cutoff, this->sampleRate, "kaiser", kaiserBeta);
+        FilterDesigner<CoeffType>::designFirLowpass (coefficients, cutoff, this->sampleRate, WindowType::kaiser, kaiserBeta);
     }
 
     /** Designs highpass filter coefficients */
     void designHighpass() noexcept
     {
-        FilterDesigner<CoeffType>::designFirHighpass (coefficients, cutoff, this->sampleRate, "kaiser", kaiserBeta);
+        FilterDesigner<CoeffType>::designFirHighpass (coefficients, cutoff, this->sampleRate, WindowType::kaiser, kaiserBeta);
     }
 
     /** Designs bandpass filter coefficients */
     void designBandpass() noexcept
     {
-        FilterDesigner<CoeffType>::designFirBandpass (coefficients, cutoff, cutoff2, this->sampleRate, "kaiser", kaiserBeta);
+        FilterDesigner<CoeffType>::designFirBandpass (coefficients, cutoff, cutoff2, this->sampleRate, WindowType::kaiser, kaiserBeta);
     }
 
     /** Designs bandstop filter coefficients */
     void designBandstop() noexcept
     {
-        FilterDesigner<CoeffType>::designFirBandstop (coefficients, cutoff, cutoff2, this->sampleRate, "kaiser", kaiserBeta);
+        FilterDesigner<CoeffType>::designFirBandstop (coefficients, cutoff, cutoff2, this->sampleRate, WindowType::kaiser, kaiserBeta);
     }
 
     /** Designs Hilbert transformer coefficients */
@@ -303,8 +303,8 @@ private:
             }
             else
             {
-                coefficients[static_cast<size_t> (n)] = (static_cast<CoeffType> (1.0) - std::cos (MathConstants<CoeffType>::pi * nOffset)) /
-                                                       (MathConstants<CoeffType>::pi * nOffset);
+                coefficients[static_cast<size_t> (n)] =
+                    (static_cast<CoeffType> (1.0) - std::cos (MathConstants<CoeffType>::pi * nOffset)) / (MathConstants<CoeffType>::pi * nOffset);
             }
         }
     }
@@ -325,12 +325,12 @@ private:
             else
             {
                 coefficients[static_cast<size_t> (n)] = std::cos (MathConstants<CoeffType>::pi * nOffset) / nOffset;
+
                 if ((static_cast<int> (n) - static_cast<int> (center)) % 2 == 1)
                     coefficients[static_cast<size_t> (n)] = -coefficients[static_cast<size_t> (n)];
             }
         }
     }
-
 
     //==============================================================================
     Type type = Type::lowpass;

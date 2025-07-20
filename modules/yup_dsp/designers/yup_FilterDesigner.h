@@ -433,18 +433,18 @@ public:
         @param cutoff        The cutoff frequency in Hz
         @param sampleRate    The sample rate in Hz
         @param windowType    The window function to use
-        @param beta          Kaiser window beta parameter
+        @param parameter     Window parameter (Kaiser beta, Gaussian sigma, etc.)
     */
     static void designFirLowpass (
         std::vector<CoeffType>& coeffs,
         CoeffType cutoff,
         double sampleRate,
-        const std::string& windowType = "kaiser",
-        CoeffType beta = static_cast<CoeffType> (6.0)
+        WindowType windowType = WindowType::kaiser,
+        CoeffType parameter = static_cast<CoeffType> (6.0)
     ) noexcept
     {
         designFIRLowpassImpl (coeffs, cutoff, sampleRate);
-        applyWindow (coeffs, windowType, beta);
+        WindowFunctions<CoeffType>::applyWindow (windowType, coeffs, parameter);
     }
 
     /**
@@ -454,18 +454,18 @@ public:
         @param cutoff        The cutoff frequency in Hz
         @param sampleRate    The sample rate in Hz
         @param windowType    The window function to use
-        @param beta          Kaiser window beta parameter
+        @param parameter     Window parameter (Kaiser beta, Gaussian sigma, etc.)
     */
     static void designFirHighpass (
         std::vector<CoeffType>& coeffs,
         CoeffType cutoff,
         double sampleRate,
-        const std::string& windowType = "kaiser",
-        CoeffType beta = static_cast<CoeffType> (6.0)
+        WindowType windowType = WindowType::kaiser,
+        CoeffType parameter = static_cast<CoeffType> (6.0)
     ) noexcept
     {
         designFIRHighpassImpl (coeffs, cutoff, sampleRate);
-        applyWindow (coeffs, windowType, beta);
+        WindowFunctions<CoeffType>::applyWindow (windowType, coeffs, parameter);
     }
 
     /**
@@ -476,19 +476,19 @@ public:
         @param highCutoff    The high cutoff frequency in Hz
         @param sampleRate    The sample rate in Hz
         @param windowType    The window function to use
-        @param beta          Kaiser window beta parameter
+        @param parameter     Window parameter (Kaiser beta, Gaussian sigma, etc.)
     */
     static void designFirBandpass (
         std::vector<CoeffType>& coeffs,
         CoeffType lowCutoff,
         CoeffType highCutoff,
         double sampleRate,
-        const std::string& windowType = "kaiser",
-        CoeffType beta = static_cast<CoeffType> (6.0)
+        WindowType windowType = WindowType::kaiser,
+        CoeffType parameter = static_cast<CoeffType> (6.0)
     ) noexcept
     {
         designFIRBandpassImpl (coeffs, lowCutoff, highCutoff, sampleRate);
-        applyWindow (coeffs, windowType, beta);
+        WindowFunctions<CoeffType>::applyWindow (windowType, coeffs, parameter);
     }
 
     /**
@@ -499,19 +499,19 @@ public:
         @param highCutoff    The high cutoff frequency in Hz
         @param sampleRate    The sample rate in Hz
         @param windowType    The window function to use
-        @param beta          Kaiser window beta parameter
+        @param parameter     Window parameter (Kaiser beta, Gaussian sigma, etc.)
     */
     static void designFirBandstop (
         std::vector<CoeffType>& coeffs,
         CoeffType lowCutoff,
         CoeffType highCutoff,
         double sampleRate,
-        const std::string& windowType = "kaiser",
-        CoeffType beta = static_cast<CoeffType> (6.0)
+        WindowType windowType = WindowType::kaiser,
+        CoeffType parameter = static_cast<CoeffType> (6.0)
     ) noexcept
     {
         designFIRBandstopImpl (coeffs, lowCutoff, highCutoff, sampleRate);
-        applyWindow (coeffs, windowType, beta);
+        WindowFunctions<CoeffType>::applyWindow (windowType, coeffs, parameter);
     }
 
     //==============================================================================
@@ -956,42 +956,6 @@ private:
 
     /** Designs FIR bandstop coefficients */
     static void designFIRBandstopImpl (std::vector<CoeffType>& coeffs, CoeffType lowCutoff, CoeffType highCutoff, double sampleRate) noexcept;
-
-    /** Applies window function to FIR coefficients */
-    static void applyWindow (std::vector<CoeffType>& coeffs, const std::string& windowType, CoeffType beta) noexcept
-    {
-        const auto length = static_cast<int> (coeffs.size());
-
-        if (windowType == "kaiser")
-        {
-            const auto window = DspMath::kaiserWindow (length, beta);
-            for (int n = 0; n < length; ++n)
-            {
-                coeffs[static_cast<size_t> (n)] *= window[static_cast<size_t> (n)];
-            }
-        }
-        else if (windowType == "hann")
-        {
-            for (int n = 0; n < length; ++n)
-            {
-                coeffs[static_cast<size_t> (n)] *= DspMath::Windows::hann<CoeffType> (n, length);
-            }
-        }
-        else if (windowType == "hamming")
-        {
-            for (int n = 0; n < length; ++n)
-            {
-                coeffs[static_cast<size_t> (n)] *= DspMath::Windows::hamming<CoeffType> (n, length);
-            }
-        }
-        else if (windowType == "blackman")
-        {
-            for (int n = 0; n < length; ++n)
-            {
-                coeffs[static_cast<size_t> (n)] *= DspMath::Windows::blackman<CoeffType> (n, length);
-            }
-        }
-    }
 
     //==============================================================================
     // Notch Filter Design Methods

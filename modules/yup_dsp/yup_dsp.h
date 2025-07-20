@@ -56,6 +56,9 @@
 // DSP utilities and mathematical functions
 #include "utilities/yup_DspMath.h"
 
+// Windowing functions
+#include "windowing/yup_WindowFunctions.h"
+
 // Base filter interfaces and common structures
 #include "base/yup_FilterBase.h"
 
