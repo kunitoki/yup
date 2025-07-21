@@ -44,8 +44,10 @@ namespace yup
     @see Biquad, FilterBase
 */
 template <typename SampleType, typename CoeffType = double>
-class RbjFilter : public FilterBase<SampleType, CoeffType>
+class RbjFilter : public Biquad<SampleType, CoeffType>
 {
+    using BaseFilterType = Biquad<SampleType, CoeffType>;
+
 public:
     //==============================================================================
     /** Filter type enumeration specific to RBJ cookbook */
@@ -74,34 +76,33 @@ public:
     /** @internal */
     void reset() noexcept override
     {
-        biquad.reset();
+        BaseFilterType::reset();
     }
 
     /** @internal */
     void prepare (double sampleRate, int maximumBlockSize) noexcept override
     {
-        this->sampleRate = sampleRate;
-        this->maximumBlockSize = maximumBlockSize;
-        biquad.prepare (sampleRate, maximumBlockSize);
+        BaseFilterType::prepare (sampleRate, maximumBlockSize);
+
         updateCoefficients();
     }
 
     /** @internal */
     SampleType processSample (SampleType inputSample) noexcept override
     {
-        return biquad.processSample (inputSample);
+        return BaseFilterType::processSample (inputSample);
     }
 
     /** @internal */
     void processBlock (const SampleType* inputBuffer, SampleType* outputBuffer, int numSamples) noexcept override
     {
-        biquad.processBlock (inputBuffer, outputBuffer, numSamples);
+        BaseFilterType::processBlock (inputBuffer, outputBuffer, numSamples);
     }
 
     /** @internal */
     DspMath::Complex<CoeffType> getComplexResponse (CoeffType frequency) const noexcept override
     {
-        return biquad.getComplexResponse (frequency);
+        return BaseFilterType::getComplexResponse (frequency);
     }
 
     //==============================================================================
@@ -120,7 +121,9 @@ public:
         centerFreq = frequency;
         qFactor = q;
         gain = gainDb;
-        this->sampleRate = sampleRate;
+
+        BaseFilterType::sampleRate = sampleRate;
+
         updateCoefficients();
     }
 
@@ -250,12 +253,10 @@ private:
                 break;
         }
 
-        biquad.setCoefficients (coeffs);
+        BaseFilterType::setCoefficients (coeffs);
     }
 
     //==============================================================================
-    Biquad<SampleType> biquad;
-    
     Type filterType = Type::peaking;
     CoeffType centerFreq = static_cast<CoeffType> (1000.0);
     CoeffType qFactor = static_cast<CoeffType> (0.707);

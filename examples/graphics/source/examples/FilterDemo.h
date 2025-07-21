@@ -727,7 +727,7 @@ private:
             else
                 label = yup::String (freq, 0);
 
-            g.fillFittedText (label, font, { x - 20, bounds.getBottom() - 15, 40, 15 }, yup::Justification::center);
+            g.fillFittedText (label, font, { x - 20, bounds.getBottom() - 15, 40, 15 }, yup::Justification::center);
         }
 
         // dB labels
@@ -768,6 +768,42 @@ public:
     const std::vector<yup::Point<float>>& getGroupDelayData() const { return groupDelayData; }
 
     const std::vector<yup::Point<float>>& getStepResponseData() const { return stepResponseData; }
+};
+
+//==============================================================================
+
+class FilterOscilloscope : public yup::Component
+{
+public:
+    void setRenderData (const std::vector<float>& data, int newReadPos)
+    {
+        renderData = data;
+    }
+
+    void paint (yup::Graphics& g) override
+    {
+        auto bounds = getLocalBounds();
+
+        g.setFillColor (yup::Color (0xff101010));
+        g.fillAll();
+
+        if (renderData.empty()) return;
+
+        yup::Path path;
+        float xStep = static_cast<float> (bounds.getWidth()) / renderData.size();
+        float centerY = bounds.getHeight() * 0.5f;
+
+        path.moveTo (0, centerY + renderData[0] * centerY);
+        for (size_t i = 1; i < renderData.size(); ++i)
+            path.lineTo (i * xStep, centerY + renderData[i] * centerY);
+
+        g.setStrokeColor (yup::Color (0xff4fc3f7));
+        g.setStrokeWidth (2.0f);
+        g.strokePath (path);
+    }
+
+private:
+    std::vector<float> renderData;
 };
 
 //==============================================================================
@@ -1269,10 +1305,10 @@ private:
         std::vector<std::complex<double>> zeros;
 
         // Extract poles and zeros based on filter type
-        if (auto biquad = std::dynamic_pointer_cast<yup::Biquad<float>> (currentFilter))
+        if (auto rbj = std::dynamic_pointer_cast<yup::RbjFilter<float>> (currentFilter))
         {
             // For biquad filters, calculate poles and zeros from coefficients
-            calculateBiquadPolesZeros (biquad, poles, zeros);
+            calculateBiquadPolesZeros (rbj->getCoefficients(), poles, zeros);
         }
         else if (auto butter = std::dynamic_pointer_cast<yup::ButterworthFilter<float>> (currentFilter))
         {
@@ -1284,17 +1320,14 @@ private:
         polesZerosDisplay.updatePolesZeros (poles, zeros);
     }
 
-    void calculateBiquadPolesZeros (std::shared_ptr<yup::Biquad<float>> biquad,
+    void calculateBiquadPolesZeros (yup::BiquadCoefficients<double> biquad,
                                     std::vector<std::complex<double>>& poles,
                                     std::vector<std::complex<double>>& zeros)
     {
-        if (! biquad)
-            return;
-
         // Get biquad coefficients (assuming they're accessible)
         // This is a simplified version - you might need to access coefficients differently
-        double a1 = 0.0, a2 = 0.0;           // Denominator coefficients
-        double b0 = 1.0, b1 = 0.0, b2 = 0.0; // Numerator coefficients
+        double a1 = biquad.a1, a2 = biquad.a2; // Denominator coefficients
+        double b0 = biquad.b0, b1 = biquad.b1, b2 = biquad.b2; // Numerator coefficients
 
         // Calculate poles from denominator: 1 + a1*z^-1 + a2*z^-2 = 0
         // Rearranged: z^2 + a1*z + a2 = 0
@@ -1473,41 +1506,7 @@ private:
     GroupDelayDisplay groupDelayDisplay;
     StepResponseDisplay stepResponseDisplay;
     PolesZerosDisplay polesZerosDisplay;
-
-    class Oscilloscope : public yup::Component
-    {
-    public:
-        void setRenderData (const std::vector<float>& data, int newReadPos)
-        {
-            renderData = data;
-        }
-
-        void paint (yup::Graphics& g) override
-        {
-            auto bounds = getLocalBounds();
-
-            g.setFillColor (yup::Color (0xff101010));
-            g.fillAll();
-
-            if (renderData.empty())
-                return;
-
-            yup::Path path;
-            float xStep = static_cast<float> (bounds.getWidth()) / renderData.size();
-            float centerY = bounds.getHeight() * 0.5f;
-
-            path.moveTo (0, centerY + renderData[0] * centerY);
-            for (size_t i = 1; i < renderData.size(); ++i)
-                path.lineTo (i * xStep, centerY + renderData[i] * centerY);
-
-            g.setStrokeColor (yup::Color (0xff4fc3f7));
-            g.setStrokeWidth (2.0f);
-            g.strokePath (path);
-        }
-
-    private:
-        std::vector<float> renderData;
-    } oscilloscope;
+    FilterOscilloscope oscilloscope;
 
     // Audio buffer management
     std::vector<float> inputData;
