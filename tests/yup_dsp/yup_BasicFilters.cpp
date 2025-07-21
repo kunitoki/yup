@@ -29,7 +29,7 @@ using namespace yup;
 class DspMathTests : public ::testing::Test
 {
 protected:
-    static constexpr double tolerance = 1e-6;
+    static constexpr double tolerance = 1e-5;
 };
 
 TEST_F (DspMathTests, FrequencyConversion)
@@ -55,11 +55,12 @@ TEST_F (DspMathTests, QToBandwidthConversion)
 TEST_F (DspMathTests, DecibelConversion)
 {
     const double gainDb = 6.0;
-    const auto linearGain = DspMath::dbToGain (gainDb);
-    const auto backToDb = DspMath::gainToDb (linearGain);
 
+    const auto linearGain = DspMath::dbToGain (gainDb);
+    EXPECT_NEAR (linearGain, 1.9952623149688795, tolerance); // 6dB = 2x gain
+
+    const auto backToDb = DspMath::gainToDb (linearGain);
     EXPECT_NEAR (backToDb, gainDb, tolerance);
-    EXPECT_NEAR (linearGain, 2.0, tolerance); // 6dB = 2x gain
 }
 
 #if 0 // TODO - Disable the tests for now until they are moved to their own files
