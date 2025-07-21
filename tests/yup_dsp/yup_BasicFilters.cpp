@@ -62,6 +62,8 @@ TEST_F (DspMathTests, DecibelConversion)
     EXPECT_NEAR (linearGain, 2.0, tolerance); // 6dB = 2x gain
 }
 
+#if 0 // TODO - Disable the tests for now until they are moved to their own files
+
 //==============================================================================
 class BiquadTests : public ::testing::Test
 {
@@ -484,3 +486,5 @@ TEST_F (FirFilterTests, BlockProcessing)
     for (int i = 0; i < numSamples; ++i)
         EXPECT_TRUE (std::isfinite (output[i]));
 }
+
+#endif

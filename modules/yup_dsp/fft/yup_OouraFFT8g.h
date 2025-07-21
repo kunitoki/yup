@@ -17,21 +17,26 @@
    DISCLAIMED.
 
   ==============================================================================
+
+    Copyright(C) 1996-2001 Takuya OOURA
+    email: ooura@mmm.t.u-tokyo.ac.jp
+    download: http://momonga.t.u-tokyo.ac.jp/~ooura/fft.html
+    You may use, copy, modify this code for any purpose and
+    without fee. You may distribute this ORIGINAL package.
+
+  ==============================================================================
 */
 
-#ifdef YUP_DSP_H_INCLUDED
-/* When you add this cpp file to your project, you mustn't include it in a file where you've
-   already included any other headers - just put it inside a file on its own, possibly with your config
-   flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
-   header files that the compiler may be using.
-*/
-#error "Incorrect use of YUP cpp file"
-#endif
+#pragma once
 
-#include "yup_dsp.h"
+namespace yup
+{
 
-//==============================================================================
+void cdft(int n, int isgn, float *a, int *ip, float *w);
+void rdft(int n, int isgn, float *a, int *ip, float *w);
+void ddct(int n, int isgn, float *a, int *ip, float *w);
+void ddst(int n, int isgn, float *a, int *ip, float *w);
+void dfct(int n, float *a, float *t, int *ip, float *w);
+void dfst(int n, float *a, float *t, int *ip, float *w);
 
-#include "fft/yup_OouraFFT8g.cpp"
-#include "fft/yup_FFTProcessor.cpp"
-#include "designers/yup_FilterDesigner.cpp"
+} // namespace yup

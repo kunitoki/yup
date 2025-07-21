@@ -33,6 +33,7 @@
     license:              ISC
 
     dependencies:         yup_core yup_audio_basics
+    appleFrameworks:      Accelerate
 
   END_YUP_MODULE_DECLARATION
 
@@ -59,13 +60,17 @@
 // Windowing functions
 #include "windowing/yup_WindowFunctions.h"
 
+// FFT
+#include "fft/yup_OouraFFT8g.h"
+#include "fft/yup_FFTProcessor.h"
+
 // Base filter interfaces and common structures
 #include "base/yup_FilterBase.h"
 
 // Filter designers and coefficient calculators
 #include "designers/yup_FilterDesigner.h"
 
-// Core filter implementations  
+// Core filter implementations
 #include "filters/yup_AllpassFilter.h"
 #include "filters/yup_AllpassCascade.h"
 #include "filters/yup_Biquad.h"
@@ -92,5 +97,12 @@
 #include "filters/yup_CicFilter.h"
 #include "filters/yup_FirResampler.h"
 #include "filters/yup_IirResampler.h"
+
+// Specialized filters
+#include "filters/yup_SoapFilter.h"
+
+// Advanced delay lines and processors
+#include "delays/yup_InterpolatedDelayLine.h"
+#include "processors/yup_ConvolutionProcessor.h"
 
 //==============================================================================

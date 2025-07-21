@@ -165,7 +165,7 @@ public:
         @param beta        Kaiser window beta parameter (controls stopband attenuation)
     */
     void setParameters (Type filterType, int filterLength, CoeffType cutoffFreq, double sampleRate,
-                       CoeffType beta = static_cast<CoeffType> (6.0)) noexcept
+                        CoeffType beta = static_cast<CoeffType> (6.0)) noexcept
     {
         type = filterType;
         length = filterLength;
@@ -194,7 +194,7 @@ public:
         @param beta           Kaiser window beta parameter
     */
     void setBandParameters (Type filterType, int filterLength, CoeffType lowCutoffFreq, CoeffType highCutoffFreq,
-                           double sampleRate, CoeffType beta = static_cast<CoeffType> (6.0)) noexcept
+                            double sampleRate, CoeffType beta = static_cast<CoeffType> (6.0)) noexcept
     {
         type = filterType;
         length = filterLength;
