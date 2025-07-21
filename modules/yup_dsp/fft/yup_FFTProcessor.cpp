@@ -146,24 +146,6 @@ const char* FFTProcessor::getBackendName()
 #endif
 }
 
-bool FFTProcessor::isPowerOfTwo (int value) noexcept
-{
-    return value > 0 && (value & (value - 1)) == 0;
-}
-
-int FFTProcessor::nextPowerOfTwo (int value) noexcept
-{
-    if (value <= 1) return 1;
-    
-    --value;
-    value |= value >> 1;
-    value |= value >> 2;
-    value |= value >> 4;
-    value |= value >> 8;
-    value |= value >> 16;
-    return ++value;
-}
-
 //==============================================================================
 // Private implementation
 void FFTProcessor::initialize()

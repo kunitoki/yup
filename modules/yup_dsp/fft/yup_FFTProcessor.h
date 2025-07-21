@@ -143,12 +143,6 @@ public:
     /** Returns a string describing the active FFT backend */
     static const char* getBackendName();
     
-    /** Returns true if the given size is a valid power of 2 */
-    static bool isPowerOfTwo (int value) noexcept;
-    
-    /** Returns the next power of 2 >= the given value */
-    static int nextPowerOfTwo (int value) noexcept;
-
 private:
     //==============================================================================
     void initialize();
