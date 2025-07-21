@@ -47,11 +47,20 @@ public:
         /** Constructs a default color stop with zero values. */
         constexpr ColorStop() = default;
 
-        /** Constructs a color stop with the given color, x, y, and delta. */
+        /** Constructs a color stop with the given color, x, y and delta. */
         constexpr ColorStop (Color color, float x, float y, float delta)
             : color (color)
             , x (x)
             , y (y)
+            , delta (delta)
+        {
+        }
+
+        /** Constructs a color stop with the given color, point and delta. */
+        constexpr ColorStop (Color color, const Point<float>& p, float delta)
+            : color (color)
+            , x (p.getX())
+            , y (p.getY())
             , delta (delta)
         {
         }
@@ -92,6 +101,11 @@ public:
 
         if (type == Radial)
             radius = std::sqrt (square (x2 - x1) + square (y2 - y1));
+    }
+
+    ColorGradient (Color color1, const Point<float>& p1, Color color2, const Point<float>& p2, Type type) noexcept
+        : ColorGradient (color1, p1.getX(), p1.getY(), color2, p2.getX(), p2.getY(), type)
+    {
     }
 
     /** Constructs a gradient with multiple color stops.
@@ -246,6 +260,11 @@ public:
         {
             return a.delta < b.delta;
         });
+    }
+
+    void addColorStop (Color color, const Point<float>& p, float delta)
+    {
+        addColorStop (color, p.getX(), p.getY(), delta);
     }
 
     /** Clears all color stops. */

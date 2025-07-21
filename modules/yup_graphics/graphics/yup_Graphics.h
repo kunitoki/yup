@@ -452,12 +452,32 @@ public:
     */
     void fillFittedText (const StyledText& text, const Rectangle<float>& rect);
 
+    /** Fills a text with a specified font and size.
+
+        @param text The text to fill.
+        @param rect The rectangle that defines the text.
+        @param font The font to use.
+        @param fontSize The size of the font.
+        @param justification The justification of the text.
+    */
+    void fillFittedText (const String& text, const Font& font, const Rectangle<float>& rect, Justification justification = Justification::center);
+
     /** Draws an attributed text.
 
         @param text The text to draw.
         @param rect The rectangle that defines the text.
     */
     void strokeFittedText (const StyledText& text, const Rectangle<float>& rect);
+
+    /** Draws a text with a specified font and size.
+
+        @param text The text to draw.
+        @param rect The rectangle that defines the text.
+        @param font The font to use.
+        @param fontSize The size of the font.
+        @param justification The justification of the text.
+    */
+    void strokeFittedText (const String& text, const Font& font, const Rectangle<float>& rect, Justification justification = Justification::center);
 
     //==============================================================================
     /** Retrieves the global context scale, the one used to construct the graphics instance. */

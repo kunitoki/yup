@@ -71,6 +71,14 @@ public:
     bool isItalic() const;
 
     //==============================================================================
+
+    float getHeight() const noexcept;
+
+    void setHeight (float newHeight);
+
+    Font withHeight (float height) const;
+
+    //==============================================================================
     /** Axis.
 
         This struct represents an axis of the font.
@@ -244,10 +252,13 @@ public:
     /** @internal */
     Font (rive::rcp<rive::Font> font);
     /** @internal */
+    Font (rive::rcp<rive::Font> font, float height);
+    /** @internal */
     rive::rcp<rive::Font> getFont() const;
 
 private:
     rive::rcp<rive::Font> font;
+    float height = 12.0f;
 };
 
 } // namespace yup

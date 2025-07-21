@@ -81,7 +81,7 @@ private:
             auto modifier = text.startUpdate();
             modifier.setMaxSize (area.getSize());
             modifier.setHorizontalAlign (yup::StyledText::center);
-            modifier.appendText (title, yup::ApplicationTheme::getGlobalTheme()->getDefaultFont(), 12.0f);
+            modifier.appendText (title, yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f));
         }
 
         g.setFillColor (yup::Colors::white);

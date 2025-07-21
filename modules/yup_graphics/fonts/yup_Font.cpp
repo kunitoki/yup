@@ -55,6 +55,12 @@ Font::Font (rive::rcp<rive::Font> font)
 {
 }
 
+Font::Font (rive::rcp<rive::Font> font, float height)
+    : font (std::move (font))
+    , height (height)
+{
+}
+
 //==============================================================================
 
 Result Font::loadFromData (const MemoryBlock& fontBytes)
@@ -110,6 +116,25 @@ bool Font::isItalic() const
         return font->isItalic();
 
     return 0;
+}
+
+//==============================================================================
+
+float Font::getHeight() const noexcept
+{
+    return height;
+}
+
+void Font::setHeight (float newHeight)
+{
+    height = newHeight;
+}
+
+Font Font::withHeight (float height) const
+{
+    Font result (*this);
+    result.setHeight (height);
+    return result;
 }
 
 //==============================================================================

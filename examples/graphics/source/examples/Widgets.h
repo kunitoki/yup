@@ -102,8 +102,8 @@ private:
         */
 
         // Slider
-        slider = std::make_unique<yup::Slider> ("slider");
-        slider->setRange (yup::Range<float> (0.0f, 100.0f));
+        slider = std::make_unique<yup::Slider> (yup::Slider::Rotary, "slider");
+        slider->setRange (yup::Range<double> (0.0, 100.0));
         slider->setValue (50.0);
         slider->onValueChanged = [this] (float value)
         {
