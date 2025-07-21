@@ -223,16 +223,7 @@ private:
     
     const CoeffType* coefficients;
     std::array<SampleType, BufferSize> buffer;
-    int bufferIndex;
-    
-    //==============================================================================
-    static constexpr int nextPowerOfTwo (int value)
-    {
-        int result = 1;
-        while (result < value)
-            result <<= 1;
-        return result;
-    }
+    int bufferIndex;   
 };
 
 //==============================================================================
