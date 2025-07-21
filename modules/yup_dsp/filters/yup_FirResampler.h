@@ -32,10 +32,9 @@ namespace yup
 /** 
     FIR-based upsampler for high-quality sample rate conversion.
     
-    This implementation provides efficient upsampling using FIR filters with
-    optimized polyphase structure. It avoids computing zero-stuffed samples
-    by using a specialized algorithm that only calculates non-zero coefficients.
-    
+    This implementation provides efficient upsampling using FIR filters with optimized polyphase structure. It avoids
+    computing zero-stuffed samples by using a specialized algorithm that only calculates non-zero coefficients.
+
     Key Features:
     - **Template-based optimization**: Compile-time constants for maximum performance
     - **Polyphase structure**: Efficient implementation avoiding zero computation
@@ -230,10 +229,9 @@ private:
 /** 
     FIR-based downsampler for high-quality sample rate conversion.
     
-    This implementation provides efficient downsampling using FIR anti-aliasing
-    filters. It processes input samples continuously but only computes outputs
-    at the decimation intervals for maximum efficiency.
-    
+    This implementation provides efficient downsampling using FIR anti-aliasing filters. It processes input samples
+    continuously but only computes outputs at the decimation intervals for maximum efficiency.
+
     Key Features:
     - **Anti-aliasing filtering**: Prevents aliasing artifacts during decimation
     - **Efficient decimation**: Only computes outputs when needed
@@ -421,24 +419,14 @@ private:
     int bufferIndex;
     int decimationPhase;
     int decimationRate;
-
-    //==============================================================================
-    static constexpr int nextPowerOfTwo (int value)
-    {
-        int result = 1;
-        while (result < value)
-            result <<= 1;
-        return result;
-    }
 };
 
 //==============================================================================
 /** 
     Complete FIR-based resampling system with upsampling and downsampling.
     
-    This class combines FIR upsampling and downsampling to provide arbitrary
-    rational sample rate conversion (L/M where L and M are integers). It
-    automatically designs Kaiser-windowed anti-aliasing filters and manages
+    This class combines FIR upsampling and downsampling to provide arbitrary rational sample rate conversion
+    (L/M where L and M are integers). It automatically designs Kaiser-windowed anti-aliasing filters and manages
     the coefficient storage.
     
     Features:
@@ -586,7 +574,7 @@ private:
             filterLength,
             cutoffFreq,
             this->sampleRate * static_cast<double> (upsampleRatio),
-            "kaiser",
+            WindowType::kaiser,
             stopbandAttenuation);
     }
 
@@ -596,13 +584,17 @@ private:
         {
             case Quality::draft:
                 return 32;
+
             case Quality::normal:
                 return 64;
+
             case Quality::high:
                 return 128;
+
             case Quality::perfect:
                 return 256;
         }
+
         return 64;
     }
 
@@ -612,13 +604,17 @@ private:
         {
             case Quality::draft:
                 return static_cast<CoeffType> (40.0);
+
             case Quality::normal:
                 return static_cast<CoeffType> (60.0);
+
             case Quality::high:
                 return static_cast<CoeffType> (80.0);
+
             case Quality::perfect:
                 return static_cast<CoeffType> (100.0);
         }
+
         return static_cast<CoeffType> (60.0);
     }
 
