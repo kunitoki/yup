@@ -39,6 +39,7 @@
 
 #include "examples/Artboard.h"
 #include "examples/Audio.h"
+#include "examples/FilterDemo.h"
 #include "examples/LayoutFonts.h"
 #include "examples/FileChooser.h"
 #include "examples/OpaqueDemo.h"
@@ -101,6 +102,7 @@ public:
         int counter = 0;
 
         registerDemo<AudioExample> ("Audio", counter++);
+        registerDemo<FilterDemo> ("Filter Demo", counter++);
         registerDemo<LayoutFontsExample> ("Layout Fonts", counter++);
         registerDemo<VariableFontsExample> ("Variable Fonts", counter++);
         registerDemo<PathsExample> ("Paths", counter++);

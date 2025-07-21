@@ -240,37 +240,35 @@ private:
 
     void updateCoefficients() noexcept
     {
-        std::vector<BiquadCoefficients<CoeffType>> coeffs;
-        
         switch (filterType)
         {
             case FilterType::lowpass:
-                coeffs = FilterDesigner<CoeffType>::designLegendreLowpass (filterOrder, cutoffFreq, this->sampleRate);
+                FilterDesigner<CoeffType>::designLegendreLowpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate);
                 break;
 
             case FilterType::highpass:
-                coeffs = FilterDesigner<CoeffType>::designLegendreHighpass (filterOrder, cutoffFreq, this->sampleRate);
+                FilterDesigner<CoeffType>::designLegendreHighpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate);
                 break;
 
+            /*
             case FilterType::bandpass:
-                coeffs = FilterDesigner<CoeffType>::designLegendreBandpass (filterOrder, cutoffFreq, bandwidthOctaves, this->sampleRate);
+                FilterDesigner<CoeffType>::designLegendreBandpass (coefficientsStorage, filterOrder, cutoffFreq, bandwidthOctaves, this->sampleRate);
                 break;
 
             case FilterType::bandstop:
-                coeffs = FilterDesigner<CoeffType>::designLegendreBandstop (filterOrder, cutoffFreq, bandwidthOctaves, this->sampleRate);
+                FilterDesigner<CoeffType>::designLegendreBandstop (coefficientsStorage, filterOrder, cutoffFreq, bandwidthOctaves, this->sampleRate);
                 break;
+            */
 
             default:
-                coeffs = FilterDesigner<CoeffType>::designLegendreLowpass (filterOrder, cutoffFreq, this->sampleRate);
+                FilterDesigner<CoeffType>::designLegendreLowpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate);
                 break;
         }
         
         // Apply coefficients to cascade
-        const auto numSections = coeffs.size();
+        const auto numSections = coefficientsStorage.size();
         for (size_t i = 0; i < numSections; ++i)
-        {
-            cascade.setSectionCoefficients (i, coeffs[i]);
-        }
+            cascade.setSectionCoefficients (i, coefficientsStorage[i]);
     }
 
     //==============================================================================
@@ -280,6 +278,8 @@ private:
     int filterOrder = 2;
     CoeffType cutoffFreq = static_cast<CoeffType> (1000.0);
     CoeffType bandwidthOctaves = static_cast<CoeffType> (1.0);
+
+    std::vector<BiquadCoefficients<CoeffType>> coefficientsStorage;
 
     //==============================================================================
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LegendreFilter)

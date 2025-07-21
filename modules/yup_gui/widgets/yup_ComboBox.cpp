@@ -156,8 +156,13 @@ void ComboBox::setSelectedId (int newItemId, NotificationType notification)
             selectedItemId = newItemId;
             updateDisplayText();
 
-            if (notification != dontSendNotification)
-                comboBoxChanged();
+            sendChangeNotification (notification, [this]
+            {
+                selectedItemChanged();
+
+                if (onSelectedItemChanged)
+                    onSelectedItemChanged();
+            });
 
             repaint();
         }

@@ -422,19 +422,29 @@ public:
     */
     void fillEllipse (const Rectangle<float>& r);
 
+    void fillEllipse (float x, float y, float width, float height);
+
+    /** Stroke an ellipse with the current color or gradient.
+
+        @param r The rectangle that defines the ellipse.
+    */
+    void strokeEllipse (const Rectangle<float>& r);
+
+    void strokeEllipse (float x, float y, float width, float height);
+
     //==============================================================================
+    /** Fills a path with the current color or gradient.
+
+        @param path The path to fill.
+    */
+    void fillPath (const Path& path);
+
     /** Draws a path with a specified thickness.
 
         @param path The path to draw.
         @param thickness The thickness of the line used to draw the path.
     */
     void strokePath (const Path& path);
-
-    /** Fills a path with the current color or gradient.
-
-        @param path The path to fill.
-    */
-    void fillPath (const Path& path);
 
     //==============================================================================
     /** Draws an image at a specific position.

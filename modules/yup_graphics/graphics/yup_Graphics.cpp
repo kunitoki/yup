@@ -595,6 +595,30 @@ void Graphics::fillEllipse (const Rectangle<float>& r)
     fillPath (path);
 }
 
+void Graphics::fillEllipse (float x, float y, float width, float height)
+{
+    Path path;
+    path.addEllipse (x, y, width, height);
+
+    fillPath (path);
+}
+
+void Graphics::strokeEllipse (const Rectangle<float>& r)
+{
+    Path path;
+    path.addEllipse (r);
+
+    strokePath (path);
+}
+
+void Graphics::strokeEllipse (float x, float y, float width, float height)
+{
+    Path path;
+    path.addEllipse (x, y, width, height);
+
+    strokePath (path);
+}
+
 //==============================================================================
 void Graphics::strokePath (const Path& path)
 {

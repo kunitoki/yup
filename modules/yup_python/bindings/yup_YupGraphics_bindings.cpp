@@ -1855,11 +1855,14 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("strokeRoundedRect", py::overload_cast<const Rectangle<float>&, float> (&Graphics::strokeRoundedRect))
 
         // Ellipse operations
-        .def ("fillEllipse", &Graphics::fillEllipse)
+        .def ("fillEllipse", py::overload_cast<const Rectangle<float>&> (&Graphics::fillEllipse))
+        .def ("fillEllipse", py::overload_cast<float, float, float, float> (&Graphics::fillEllipse))
+        .def ("strokeEllipse", py::overload_cast<const Rectangle<float>&> (&Graphics::strokeEllipse))
+        .def ("strokeEllipse", py::overload_cast<float, float, float, float> (&Graphics::strokeEllipse))
 
         // Path operations
-        .def ("strokePath", &Graphics::strokePath)
         .def ("fillPath", &Graphics::fillPath)
+        .def ("strokePath", &Graphics::strokePath)
 
         // Image operations
         .def ("drawImageAt", &Graphics::drawImageAt)

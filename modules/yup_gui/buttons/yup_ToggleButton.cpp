@@ -47,13 +47,13 @@ void ToggleButton::setToggleState (bool shouldBeToggled, NotificationType notifi
     {
         toggleState = shouldBeToggled;
 
-        if (notification != dontSendNotification)
+        sendChangeNotification (notification, [this]
         {
             toggleStateChanged();
 
             if (onClick)
                 onClick();
-        }
+        });
 
         repaint();
     }

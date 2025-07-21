@@ -145,9 +145,12 @@ public:
 
     //==============================================================================
     /** Called when the selected item changes.
+
         Override this to respond to selection changes.
     */
-    virtual void comboBoxChanged() {}
+    virtual void selectedItemChanged() {}
+
+    std::function<void()> onSelectedItemChanged;
 
     //==============================================================================
     struct Style

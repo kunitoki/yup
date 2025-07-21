@@ -452,68 +452,35 @@ void Slider::focusLost()
 
 void Slider::sendValueChanged (NotificationType notification)
 {
-    if (notification == dontSendNotification)
-        return;
-
-    auto notificationSender = [this, bailOutChecker = BailOutChecker (this)]
+    sendChangeNotification (notification, [this]
     {
-        if (bailOutChecker.shouldBailOut())
-            return;
-
         valueChanged();
 
         if (onValueChanged)
             onValueChanged (getValue());
-    };
-
-    if (notification == sendNotificationAsync || ! MessageManager::getInstance()->isThisTheMessageThread())
-        MessageManager::callAsync (std::move (notificationSender));
-    else
-        notificationSender();
+    });
 }
 
 void Slider::sendMinValueChanged (NotificationType notification)
 {
-    if (notification == dontSendNotification)
-        return;
-
-    auto notificationSender = [this, bailOutChecker = BailOutChecker (this)]
+    sendChangeNotification (notification, [this]
     {
-        if (bailOutChecker.shouldBailOut())
-            return;
-
         minValueChanged();
 
         if (onMinValueChanged)
             onMinValueChanged (getMinValue());
-    };
-
-    if (notification == sendNotificationAsync || ! MessageManager::getInstance()->isThisTheMessageThread())
-        MessageManager::callAsync (std::move (notificationSender));
-    else
-        notificationSender();
+    });
 }
 
 void Slider::sendMaxValueChanged (NotificationType notification)
 {
-    if (notification == dontSendNotification)
-        return;
-
-    auto notificationSender = [this, bailOutChecker = BailOutChecker (this)]
+    sendChangeNotification (notification, [this]
     {
-        if (bailOutChecker.shouldBailOut())
-            return;
-
         maxValueChanged();
 
         if (onMaxValueChanged)
             onMaxValueChanged (getMaxValue());
-    };
-
-    if (notification == sendNotificationAsync || ! MessageManager::getInstance()->isThisTheMessageThread())
-        MessageManager::callAsync (std::move (notificationSender));
-    else
-        notificationSender();
+    });
 }
 
 //==============================================================================
