@@ -48,7 +48,7 @@ public:
     enum class Topology
     {
         directFormI,           /**< Direct Form I - separate input and output delay lines */
-        directFormII,         /**< Direct Form II - shared delay line (canonical form) */
+        directFormII,          /**< Direct Form II - shared delay line (canonical form) */
         transposedDirectFormII /**< Transposed Direct Form II - parallel structure */
     };
 
@@ -63,18 +63,7 @@ public:
     /** @internal */
     void reset() noexcept override
     {
-        switch (filterTopology)
-        {
-            case Topology::directFormI:
-                directFormIState.reset();
-                break;
-            case Topology::directFormII:
-                directFormIIState.reset();
-                break;
-            case Topology::transposedDirectFormII:
-                transposedFormIIState.reset();
-                break;
-        }
+        topologyState.reset();
     }
 
     /** @internal */
@@ -82,6 +71,7 @@ public:
     {
         this->sampleRate = sampleRate;
         this->maximumBlockSize = maximumBlockSize;
+
         reset();
     }
 
@@ -92,10 +82,13 @@ public:
         {
             case Topology::directFormI:
                 return processDirectFormI (inputSample);
+
             case Topology::directFormII:
                 return processDirectFormII (inputSample);
+
             case Topology::transposedDirectFormII:
                 return processTransposedDirectFormII (inputSample);
+
             default:
                 return inputSample;
         }
@@ -109,9 +102,11 @@ public:
             case Topology::directFormI:
                 processBlockDirectFormI (inputBuffer, outputBuffer, numSamples);
                 break;
+
             case Topology::directFormII:
                 processBlockDirectFormII (inputBuffer, outputBuffer, numSamples);
                 break;
+
             case Topology::transposedDirectFormII:
                 processBlockTransposedDirectFormII (inputBuffer, outputBuffer, numSamples);
                 break;
@@ -172,8 +167,13 @@ public:
 
 private:
     //==============================================================================
-    /** State structures for different topologies - using CoeffType for precision */
-    struct DirectFormIState
+    /** State structures for different topologies - using CoeffType for precision
+
+        DirectFormIState: uses x1, x2, y1, y2
+        DirectFormIIState: uses x1 = w1 and x2 = w2
+        TransposedDirectFormIIState: uses x1 = s1 and x2 = s2
+    */
+    struct TopologyState
     {
         CoeffType x1 = 0, x2 = 0;  // Input delay line
         CoeffType y1 = 0, y2 = 0;  // Output delay line
@@ -184,26 +184,6 @@ private:
         }
     };
 
-    struct DirectFormIIState
-    {
-        CoeffType w1 = 0, w2 = 0;  // Internal state variables
-
-        void reset() noexcept
-        {
-            w1 = w2 = static_cast<CoeffType> (0.0);
-        }
-    };
-
-    struct TransposedDirectFormIIState
-    {
-        CoeffType s1 = 0, s2 = 0;  // State variables
-
-        void reset() noexcept
-        {
-            s1 = s2 = static_cast<CoeffType> (0.0);
-        }
-    };
-
     //==============================================================================
     /** Direct Form I processing */
     SampleType processDirectFormI (SampleType input) noexcept
@@ -211,14 +191,14 @@ private:
         // Promote input to CoeffType precision
         const auto inputCoeff = static_cast<CoeffType> (input);
         
-        const auto outputCoeff = coefficients.b0 * inputCoeff + coefficients.b1 * directFormIState.x1 + coefficients.b2 * directFormIState.x2
-                               - coefficients.a1 * directFormIState.y1 - coefficients.a2 * directFormIState.y2;
+        const auto outputCoeff = coefficients.b0 * inputCoeff + coefficients.b1 * topologyState.x1 + coefficients.b2 * topologyState.x2
+                               - coefficients.a1 * topologyState.y1 - coefficients.a2 * topologyState.y2;
 
         // Update state in CoeffType precision
-        directFormIState.x2 = directFormIState.x1;
-        directFormIState.x1 = inputCoeff;
-        directFormIState.y2 = directFormIState.y1;
-        directFormIState.y1 = outputCoeff;
+        topologyState.x2 = topologyState.x1;
+        topologyState.x1 = inputCoeff;
+        topologyState.y2 = topologyState.y1;
+        topologyState.y1 = outputCoeff;
 
         // Convert back to SampleType for return
         return static_cast<SampleType> (outputCoeff);
@@ -230,12 +210,12 @@ private:
         // Promote input to CoeffType precision
         const auto inputCoeff = static_cast<CoeffType> (input);
         
-        const auto w = inputCoeff - coefficients.a1 * directFormIIState.w1 - coefficients.a2 * directFormIIState.w2;
-        const auto outputCoeff = coefficients.b0 * w + coefficients.b1 * directFormIIState.w1 + coefficients.b2 * directFormIIState.w2;
+        const auto w = inputCoeff - coefficients.a1 * topologyState.x1 - coefficients.a2 * topologyState.x2;
+        const auto outputCoeff = coefficients.b0 * w + coefficients.b1 * topologyState.x1 + coefficients.b2 * topologyState.x2;
 
         // Update state in CoeffType precision
-        directFormIIState.w2 = directFormIIState.w1;
-        directFormIIState.w1 = w;
+        topologyState.x2 = topologyState.x1;
+        topologyState.x1 = w;
 
         // Convert back to SampleType for return
         return static_cast<SampleType> (outputCoeff);
@@ -247,11 +227,11 @@ private:
         // Promote input to CoeffType precision
         const auto inputCoeff = static_cast<CoeffType> (input);
         
-        const auto outputCoeff = coefficients.b0 * inputCoeff + transposedFormIIState.s1;
+        const auto outputCoeff = coefficients.b0 * inputCoeff + topologyState.x1;
 
         // Update state in CoeffType precision
-        transposedFormIIState.s1 = coefficients.b1 * inputCoeff - coefficients.a1 * outputCoeff + transposedFormIIState.s2;
-        transposedFormIIState.s2 = coefficients.b2 * inputCoeff - coefficients.a2 * outputCoeff;
+        topologyState.x1 = coefficients.b1 * inputCoeff - coefficients.a1 * outputCoeff + topologyState.x2;
+        topologyState.x2 = coefficients.b2 * inputCoeff - coefficients.a2 * outputCoeff;
 
         // Convert back to SampleType for return
         return static_cast<SampleType> (outputCoeff);
@@ -267,8 +247,8 @@ private:
 
     void processBlockDirectFormII (const SampleType* input, SampleType* output, int numSamples) noexcept
     {
-        auto w1 = directFormIIState.w1;
-        auto w2 = directFormIIState.w2;
+        auto w1 = topologyState.x1;
+        auto w2 = topologyState.x2;
         const auto b0 = coefficients.b0;
         const auto b1 = coefficients.b1;
         const auto b2 = coefficients.b2;
@@ -290,14 +270,14 @@ private:
             w1 = w;
         }
 
-        directFormIIState.w1 = w1;
-        directFormIIState.w2 = w2;
+        topologyState.x1 = w1;
+        topologyState.x2 = w2;
     }
 
     void processBlockTransposedDirectFormII (const SampleType* input, SampleType* output, int numSamples) noexcept
     {
-        auto s1 = transposedFormIIState.s1;
-        auto s2 = transposedFormIIState.s2;
+        auto s1 = topologyState.x1;
+        auto s2 = topologyState.x2;
         const auto b0 = coefficients.b0;
         const auto b1 = coefficients.b1;
         const auto b2 = coefficients.b2;
@@ -318,17 +298,14 @@ private:
             s2 = b2 * inputCoeff - a2 * outputCoeff;
         }
 
-        transposedFormIIState.s1 = s1;
-        transposedFormIIState.s2 = s2;
+        topologyState.x1 = s1;
+        topologyState.x2 = s2;
     }
 
     //==============================================================================
     BiquadCoefficients<CoeffType> coefficients;
+    TopologyState topologyState;
     Topology filterTopology = Topology::directFormII;
-
-    DirectFormIState directFormIState;
-    DirectFormIIState directFormIIState;
-    TransposedDirectFormIIState transposedFormIIState;
 
     //==============================================================================
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Biquad)
@@ -351,7 +328,7 @@ public:
     //==============================================================================
     /** Constructor with specified number of sections */
     explicit BiquadCascade (int numSections = 1, 
-                           typename Biquad<SampleType, CoeffType>::Topology topology = Biquad<SampleType, CoeffType>::Topology::directFormII)
+                            typename Biquad<SampleType, CoeffType>::Topology topology = Biquad<SampleType, CoeffType>::Topology::directFormII)
     {
         setNumSections (numSections, topology);
     }
@@ -453,7 +430,7 @@ public:
         @param topology       The topology to use for new sections
     */
     void setNumSections (int newNumSections, 
-                        typename Biquad<SampleType, CoeffType>::Topology topology = Biquad<SampleType, CoeffType>::Topology::directFormII)
+                         typename Biquad<SampleType, CoeffType>::Topology topology = Biquad<SampleType, CoeffType>::Topology::directFormII)
     {
         sections.clear();
         sections.reserve (static_cast<size_t> (newNumSections));

@@ -119,151 +119,6 @@ static void calculateBesselPoles (int order, std::vector<std::complex<CoeffType>
     }
 }
 
-//==============================================================================
-
-/** Approximation of complete elliptic integral K(k) */
-template <typename CoeffType>
-CoeffType ellipticIntegralK (CoeffType k) noexcept
-{
-    if (k > static_cast<CoeffType> (0.99))
-    {
-        // Use logarithmic approximation for k close to 1
-        const auto k_prime = std::sqrt (static_cast<CoeffType> (1.0) - k * k);
-        return std::log (static_cast<CoeffType> (4.0) / k_prime);
-    }
-
-    // AGM (Arithmetic-Geometric Mean) method approximation
-    const auto a0 = static_cast<CoeffType> (1.0);
-    const auto b0 = std::sqrt (static_cast<CoeffType> (1.0) - k * k);
-
-    auto a = a0;
-    auto b = b0;
-
-    for (int n = 0; n < 10; ++n)  // Usually converges quickly
-    {
-        const auto a_new = (a + b) / static_cast<CoeffType> (2.0);
-        const auto b_new = std::sqrt (a * b);
-
-        if (std::abs (a - b) < static_cast<CoeffType> (1e-12))
-            break;
-
-        a = a_new;
-        b = b_new;
-    }
-
-    return MathConstants<CoeffType>::pi / (static_cast<CoeffType> (2.0) * a);
-}
-
-/** Jacobi elliptic functions sn, cn, dn */
-template <typename CoeffType>
-void jacobianElliptic (CoeffType u, CoeffType k, CoeffType& cn, CoeffType& sn, CoeffType& dn) noexcept
-{
-    // Simplified approximation using series expansion
-    // For production code, a full implementation would be needed
-
-    const auto k2 = k * k;
-
-    if (std::abs (u) < static_cast<CoeffType> (1e-8))
-    {
-        // Small angle approximation
-        sn = u;
-        cn = static_cast<CoeffType> (1.0);
-        dn = static_cast<CoeffType> (1.0);
-        return;
-    }
-
-    // Use trigonometric approximation for moderate values
-    const auto sin_u = std::sin (u);
-    const auto cos_u = std::cos (u);
-
-    sn = sin_u / std::sqrt (static_cast<CoeffType> (1.0) + k2 * sin_u * sin_u);
-    cn = cos_u / std::sqrt (static_cast<CoeffType> (1.0) + k2 * sin_u * sin_u);
-    dn = std::sqrt (static_cast<CoeffType> (1.0) - k2 * sn * sn);
-}
-
-/** Inverse Jacobi sn function for real argument */
-template <typename CoeffType>
-CoeffType jacobianInverseSnReal (CoeffType x, CoeffType k) noexcept
-{
-    // Simplified approximation
-    if (std::abs (x) > static_cast<CoeffType> (0.99))
-        return static_cast<CoeffType> (0.5) * std::log ((static_cast<CoeffType> (1.0) + x) / (static_cast<CoeffType> (1.0) - x));
-
-    // Use series approximation for moderate values
-    return std::asin (x * std::sqrt (static_cast<CoeffType> (1.0) + k * k * x * x));
-}
-
-/** Calculates poles and zeros for Elliptic filter of given order */
-template <typename CoeffType>
-static void calculateEllipticPoles (int order, CoeffType epsilon, CoeffType k,
-                                    std::vector<std::complex<CoeffType>>& poles,
-                                    std::vector<CoeffType>& zeros) noexcept
-{
-    poles.clear();
-    zeros.clear();
-    poles.reserve (static_cast<size_t> (order));
-
-    // Calculate the modular angle for elliptic integrals
-    const auto k1 = k;
-    const auto k1_prime = std::sqrt (static_cast<CoeffType> (1.0) - k1 * k1);
-
-    // Calculate elliptic integral K(k) approximation
-    const auto K = ellipticIntegralK<CoeffType> (k1);
-    const auto K_prime = ellipticIntegralK<CoeffType> (k1_prime);
-
-    // Calculate v0 (location of real pole for odd orders)
-    const auto v0 = -jacobianInverseSnReal<CoeffType> (static_cast<CoeffType> (1.0) / epsilon, k1_prime) / static_cast<CoeffType> (order);
-
-    // Generate poles using Jacobi elliptic functions
-    for (int i = 1; i <= order; ++i)
-    {
-        const auto u = static_cast<CoeffType> (2 * i - 1) * K / static_cast<CoeffType> (order);
-
-        CoeffType cd, sd, nd;
-        jacobianElliptic<CoeffType> (u, k1, cd, sd, nd);
-
-        const auto denominator = static_cast<CoeffType> (1.0) - std::pow (k1 * sd, 2);
-
-        if (i <= (order + 1) / 2)  // Only compute half, use conjugate symmetry
-        {
-            if (order % 2 == 1 && i == (order + 1) / 2)
-            {
-                // Real pole for odd-order filters
-                CoeffType sn_v0, cn_v0, dn_v0;
-                jacobianElliptic<CoeffType> (v0, k1_prime, cn_v0, sn_v0, dn_v0);
-
-                const auto realPole = -sn_v0 / cn_v0;
-                poles.emplace_back (realPole, static_cast<CoeffType> (0.0));
-            }
-            else
-            {
-                // Complex conjugate pole pair
-                CoeffType sn_v0, cn_v0, dn_v0;
-                jacobianElliptic<CoeffType> (v0, k1_prime, cn_v0, sn_v0, dn_v0);
-
-                const auto realPart = -(cd * sn_v0 * cn_v0) / denominator;
-                const auto imagPart = (sd * nd * dn_v0) / denominator;
-
-                poles.emplace_back (realPart, imagPart);
-                poles.emplace_back (realPart, -imagPart);
-            }
-        }
-    }
-
-    // Calculate zeros (for finite transmission zeros)
-    const auto numZeros = order / 2;
-    for (int i = 1; i <= numZeros; ++i)
-    {
-        const auto u = static_cast<CoeffType> (2 * i - 1) * K / static_cast<CoeffType> (order);
-
-        CoeffType cd, sd, nd;
-        jacobianElliptic<CoeffType> (u, k1, cd, sd, nd);
-
-        const auto zero_freq = static_cast<CoeffType> (1.0) / (k1 * sd);
-        zeros.push_back (zero_freq);
-    }
-}
-
 } // namespace
 
 //==============================================================================
@@ -556,99 +411,196 @@ void FilterDesigner<CoeffType>::designBesselImpl (
 
 //==============================================================================
 
+namespace
+{
+
+template <typename T>
+T ellipticK (T k) noexcept
+{
+    if (k < static_cast<T> (0.0) || k > static_cast<T> (1.0))
+        return static_cast<T> (0.0);
+    
+    const T m = k * k;
+    T a = static_cast<T> (1.0);
+    T b = std::sqrt (static_cast<T> (1.0) - m);
+    T c = a - b;
+    T co;
+    
+    do
+    {
+        co = c;
+        c = (a - b) / static_cast<T> (2.0);
+        const T ao = (a + b) / static_cast<T> (2.0);
+        b = std::sqrt (a * b);
+        a = ao;
+    }
+    while (c < co);
+    
+    return MathConstants<T>::pi / (a + a);
+}
+
+template <typename T>
+T calculateEllipticSn (T u, T K, T Kprime) noexcept
+{
+    if (K <= static_cast<T> (0.0) || Kprime <= static_cast<T> (0.0))
+        return std::sin (u);
+    
+    T sn = static_cast<T> (0.0);
+    const T q = std::exp (-MathConstants<T>::pi * Kprime / K);
+    const T v = MathConstants<T>::pi * static_cast<T> (0.5) * u / K;
+    
+    for (int j = 0; j < 100; ++j)
+    {
+        const T w = std::pow (q, static_cast<T> (j) + static_cast<T> (0.5));
+        if (w < static_cast<T> (1e-7))
+            break;
+            
+        const T denom = static_cast<T> (1.0) - w * w;
+        if (std::abs (denom) > static_cast<T> (1e-12))
+            sn += w * std::sin (static_cast<T> (2 * j + 1) * v) / denom;
+    }
+    
+    return sn;
+}
+
+} // namespace
+
 template <typename CoeffType>
 void FilterDesigner<CoeffType>::designEllipticImpl (
     std::vector<BiquadCoefficients<CoeffType>>& sections,
     bool isHighpass, int order, CoeffType frequency, double sampleRate, CoeffType ripple, CoeffType stopbandAtten) noexcept
 {
-    const auto numSections = (order + 1) / 2;
-    sections.resize (numSections);
-
-    // Convert ripple and attenuation to linear scale
-    const auto epsilon = std::sqrt (std::pow (static_cast<CoeffType> (10.0), ripple / static_cast<CoeffType> (10.0)) - static_cast<CoeffType> (1.0));
-    const auto a = std::pow (static_cast<CoeffType> (10.0), stopbandAtten / static_cast<CoeffType> (20.0));
-
-    // Calculate selectivity factor k
-    const auto k = epsilon / std::sqrt (a * a - static_cast<CoeffType> (1.0));
-
-    // Pre-warp frequency for bilinear transform
-    const auto omega = MathConstants<CoeffType>::twoPi * frequency / static_cast<CoeffType> (sampleRate);
-    const auto warped = std::tan (omega / static_cast<CoeffType> (2.0));
-
-    // Calculate elliptic poles using Jacobi elliptic functions (approximation)
-    std::vector<std::complex<CoeffType>> poles;
+    const int numSections = (order + 1) / 2;
+    sections.resize (static_cast<size_t> (numSections));
+    
+    const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+    const auto k = std::tan (omega / static_cast<CoeffType> (2.0));
+    
+    const CoeffType epsilon = std::sqrt (std::pow (static_cast<CoeffType> (10.0), ripple / static_cast<CoeffType> (10.0)) - static_cast<CoeffType> (1.0));
+    
+    const CoeffType rolloff = (stopbandAtten - ripple) / static_cast<CoeffType> (20.0);
+    const CoeffType xi = static_cast<CoeffType> (5.0) * std::exp (rolloff - static_cast<CoeffType> (1.0)) + static_cast<CoeffType> (1.0);
+    
+    const CoeffType k1 = static_cast<CoeffType> (1.0) / xi;
+    const CoeffType K = ellipticK (k1);
+    const CoeffType Kprime = ellipticK (std::sqrt (static_cast<CoeffType> (1.0) - k1 * k1));
+    
+    const int nin = order % 2;
+    const int n2 = order / 2;
+    
     std::vector<CoeffType> zeros;
-
-    calculateEllipticPoles<CoeffType> (order, epsilon, k, poles, zeros);
-
-    // Scale poles for desired frequency
-    for (auto& pole : poles)
-        pole *= warped;
-
-    // Convert poles and zeros to biquad sections
-    int poleIndex = 0;
-    int sectionIndex = 0;
-
-    // Handle odd-order case (real pole)
+    std::vector<std::complex<CoeffType>> poles;
+    
+    zeros.reserve (static_cast<size_t> (n2));
+    poles.reserve (static_cast<size_t> (order));
+    
+    for (int i = 1; i <= n2; ++i)
+    {
+        const CoeffType u = static_cast<CoeffType> (2 * i - ((nin == 1) ? 0 : 1)) * K / static_cast<CoeffType> (order);
+        const CoeffType sn = calculateEllipticSn (u, K, Kprime);
+        
+        if (std::abs (sn) > static_cast<CoeffType> (1e-12))
+        {
+            const CoeffType zeroFreq = static_cast<CoeffType> (1.0) / (k1 * sn);
+            zeros.push_back (zeroFreq);
+        }
+    }
+    
+    for (int i = 1; i <= order / 2; ++i)
+    {
+        const CoeffType ui = static_cast<CoeffType> (2 * i - 1) * K / static_cast<CoeffType> (order);
+        const CoeffType v0 = -K * std::asinh (static_cast<CoeffType> (1.0) / epsilon) / static_cast<CoeffType> (order);
+        
+        const CoeffType sni = calculateEllipticSn (ui, K, Kprime);
+        const CoeffType cni = std::sqrt (static_cast<CoeffType> (1.0) - sni * sni);
+        const CoeffType dni = std::sqrt (static_cast<CoeffType> (1.0) - k1 * k1 * sni * sni);
+        
+        const CoeffType snv = calculateEllipticSn (v0, K, Kprime);
+        const CoeffType cnv = std::sqrt (static_cast<CoeffType> (1.0) - snv * snv);
+        const CoeffType dnv = std::sqrt (static_cast<CoeffType> (1.0) - k1 * k1 * snv * snv);
+        
+        const CoeffType realPart = -epsilon * snv * cni * dni;
+        const CoeffType imagPart = epsilon * cnv * dnv * sni;
+        
+        poles.emplace_back (realPart, imagPart);
+        poles.emplace_back (realPart, -imagPart);
+    }
+    
     if (order % 2 == 1)
     {
-        const auto realPole = poles[poleIndex++].real();
-        const auto a1_s = -realPole;
-
-        // Bilinear transform for first-order section
-        const auto norm = static_cast<CoeffType> (1.0) / (static_cast<CoeffType> (1.0) + a1_s);
-
-        BiquadCoefficients<CoeffType>& coeffs = sections[sectionIndex++];
-
-        if (isHighpass)
-        {
-            coeffs.b0 = norm;
-            coeffs.b1 = -norm;
-            coeffs.b2 = static_cast<CoeffType> (0.0);
-        }
-        else
-        {
-            coeffs.b0 = a1_s * norm;
-            coeffs.b1 = a1_s * norm;
-            coeffs.b2 = static_cast<CoeffType> (0.0);
-        }
-
-        coeffs.a0 = static_cast<CoeffType> (1.0);
-        coeffs.a1 = (a1_s - static_cast<CoeffType> (1.0)) * norm;
-        coeffs.a2 = static_cast<CoeffType> (0.0);
+        const CoeffType v0 = -K * std::asinh (static_cast<CoeffType> (1.0) / epsilon) / static_cast<CoeffType> (order);
+        const CoeffType snv = calculateEllipticSn (v0, K, Kprime);
+        poles.emplace_back (-epsilon * snv, static_cast<CoeffType> (0.0));
     }
-
-    // Process complex pole pairs
-    while (poleIndex < static_cast<int> (poles.size()))
+    
+    int sectionIndex = 0;
+    
+    for (size_t i = 0; i < poles.size() && sectionIndex < numSections; i += 2)
     {
-        const auto pole1 = poles[poleIndex++];
-        const auto pole2 = poles[poleIndex++];
-
-        // Second-order section from complex conjugate pair
-        const auto b1_s = -static_cast<CoeffType> (2.0) * pole1.real();
-        const auto b0_s = std::norm (pole1);
-
-        // Bilinear transform
-        const auto norm = static_cast<CoeffType> (1.0) / (static_cast<CoeffType> (1.0) + b1_s + b0_s);
-
-        BiquadCoefficients<CoeffType>& coeffs = sections[static_cast<size_t> (sectionIndex++)];
-
+        auto& coeffs = sections[static_cast<size_t> (sectionIndex)];
+        
+        if (i + 1 < poles.size() && std::abs (poles[i].imag()) > static_cast<CoeffType> (1e-12))
+        {
+            const auto pole = poles[i];
+            const CoeffType a1_s = -static_cast<CoeffType> (2.0) * pole.real();
+            const CoeffType a0_s = std::norm (pole);
+            
+            const CoeffType k2 = k * k;
+            const CoeffType norm = static_cast<CoeffType> (1.0) / (a0_s + a1_s * k + k2);
+            
+            if (sectionIndex < static_cast<int> (zeros.size()))
+            {
+                const CoeffType zeroFreq = zeros[static_cast<size_t> (sectionIndex)];
+                const CoeffType b0_s = static_cast<CoeffType> (1.0);
+                const CoeffType b2_s = zeroFreq * zeroFreq;
+                
+                coeffs.b0 = (b0_s + b2_s * k2) * norm;
+                coeffs.b1 = static_cast<CoeffType> (2.0) * (b0_s - b2_s) * k2 * norm;
+                coeffs.b2 = (b0_s + b2_s * k2) * norm;
+            }
+            else
+            {
+                coeffs.b0 = k2 * norm;
+                coeffs.b1 = static_cast<CoeffType> (2.0) * k2 * norm;
+                coeffs.b2 = k2 * norm;
+            }
+            
+            coeffs.a0 = static_cast<CoeffType> (1.0);
+            coeffs.a1 = static_cast<CoeffType> (2.0) * (k2 - a0_s) * norm;
+            coeffs.a2 = (a0_s - a1_s * k + k2) * norm;
+        }
+        else if (i < poles.size())
+        {
+            const auto pole = poles[i];
+            const CoeffType a = -pole.real();
+            const CoeffType norm = static_cast<CoeffType> (1.0) / (static_cast<CoeffType> (1.0) + a * k);
+            
+            coeffs.b0 = k * norm;
+            coeffs.b1 = k * norm;
+            coeffs.b2 = static_cast<CoeffType> (0.0);
+            coeffs.a0 = static_cast<CoeffType> (1.0);
+            coeffs.a1 = (k - static_cast<CoeffType> (1.0)) * norm;
+            coeffs.a2 = static_cast<CoeffType> (0.0);
+            
+            i--;
+        }
+        
         if (isHighpass)
-        {
-            coeffs.b0 = norm;
-            coeffs.b1 = static_cast<CoeffType> (-2.0) * norm;
-            coeffs.b2 = norm;
-        }
-        else
-        {
-            coeffs.b0 = b0_s * norm;
-            coeffs.b1 = static_cast<CoeffType> (2.0) * b0_s * norm;
-            coeffs.b2 = b0_s * norm;
-        }
-
+            transformLowpassToHighpass (coeffs);
+            
+        ++sectionIndex;
+    }
+    
+    while (sectionIndex < numSections)
+    {
+        auto& coeffs = sections[static_cast<size_t> (sectionIndex)];
+        coeffs.b0 = static_cast<CoeffType> (1.0);
+        coeffs.b1 = static_cast<CoeffType> (0.0);
+        coeffs.b2 = static_cast<CoeffType> (0.0);
         coeffs.a0 = static_cast<CoeffType> (1.0);
-        coeffs.a1 = (static_cast<CoeffType> (2.0) * (b0_s - static_cast<CoeffType> (1.0))) * norm;
-        coeffs.a2 = (static_cast<CoeffType> (1.0) - b1_s + b0_s) * norm;
+        coeffs.a1 = static_cast<CoeffType> (0.0);
+        coeffs.a2 = static_cast<CoeffType> (0.0);
+        ++sectionIndex;
     }
 }
 

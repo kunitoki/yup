@@ -71,6 +71,7 @@ public:
     /** Default constructor */
     EllipticFilter() 
         : cascade (1)
+        , coefficientsStorage (1)
     {
         setParameters (FilterType::lowpass, 2, static_cast<CoeffType> (1000.0), 44100.0, 
                       static_cast<CoeffType> (0.5), static_cast<CoeffType> (40.0));
@@ -81,6 +82,7 @@ public:
                    CoeffType passbandRipple = static_cast<CoeffType> (0.5), 
                    CoeffType stopbandAttenuation = static_cast<CoeffType> (40.0))
         : cascade (calculateNumSections (order))
+        , coefficientsStorage (calculateNumSections (order))
     {
         setParameters (filterType, order, frequency, sampleRate, passbandRipple, stopbandAttenuation);
     }
@@ -288,34 +290,31 @@ private:
 
     void updateCoefficients() noexcept
     {
-        std::vector<BiquadCoefficients<CoeffType>> coeffs;
-        
+
         switch (filterType)
         {
             case FilterType::lowpass:
-                coeffs = FilterDesigner<CoeffType>::designEllipticLowpass (filterOrder, cutoffFreq, this->sampleRate, rippleAmount, stopbandAtten);
+                FilterDesigner<CoeffType>::designEllipticLowpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate, rippleAmount, stopbandAtten);
                 break;
                 
             case FilterType::highpass:
-                coeffs = FilterDesigner<CoeffType>::designEllipticHighpass (filterOrder, cutoffFreq, this->sampleRate, rippleAmount, stopbandAtten);
+                FilterDesigner<CoeffType>::designEllipticHighpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate, rippleAmount, stopbandAtten);
                 break;
                 
             case FilterType::allpass:
-                coeffs = FilterDesigner<CoeffType>::designEllipticAllpass (filterOrder, this->sampleRate, rippleAmount, stopbandAtten);
+                FilterDesigner<CoeffType>::designEllipticAllpass (coefficientsStorage, filterOrder, this->sampleRate, rippleAmount, stopbandAtten);
                 break;
                 
             default:
                 // For now, only lowpass, highpass, and allpass are implemented
-                coeffs = FilterDesigner<CoeffType>::designEllipticLowpass (filterOrder, cutoffFreq, this->sampleRate, rippleAmount, stopbandAtten);
+                FilterDesigner<CoeffType>::designEllipticLowpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate, rippleAmount, stopbandAtten);
                 break;
         }
         
         // Apply coefficients to cascade
-        const auto numSections = coeffs.size();
+        const auto numSections = coefficientsStorage.size();
         for (size_t i = 0; i < numSections; ++i)
-        {
-            cascade.setSectionCoefficients (i, coeffs[i]);
-        }
+            cascade.setSectionCoefficients (i, coefficientsStorage[i]);
     }
 
     //==============================================================================
@@ -326,6 +325,8 @@ private:
     CoeffType cutoffFreq = static_cast<CoeffType> (1000.0);
     CoeffType rippleAmount = static_cast<CoeffType> (0.5);
     CoeffType stopbandAtten = static_cast<CoeffType> (40.0);
+
+    std::vector<BiquadCoefficients<CoeffType>> coefficientsStorage;
 
     //==============================================================================
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EllipticFilter)

@@ -217,8 +217,8 @@ public:
         @param accent     The accent amount (0.0 to 1.0)
     */
     void setParameters (CoeffType frequency, CoeffType resonance, 
-                       CoeffType envMod = static_cast<CoeffType> (0.5), 
-                       CoeffType accent = static_cast<CoeffType> (0.0)) noexcept
+                        CoeffType envMod = static_cast<CoeffType> (0.5),
+                        CoeffType accent = static_cast<CoeffType> (0.0)) noexcept
     {
         setCutoffFrequency (frequency);
         setResonance (resonance);
@@ -278,39 +278,6 @@ public:
     }
 
 private:
-    //==============================================================================
-    CoeffType cutoffFreq = static_cast<CoeffType> (1000.0);
-    CoeffType resonanceAmount = static_cast<CoeffType> (0.1);
-    CoeffType envelopeAmount = static_cast<CoeffType> (0.5);
-    CoeffType accentAmount = static_cast<CoeffType> (0.0);
-
-    // Filter coefficients per stage
-    CoeffType g1 = static_cast<CoeffType> (0.0);  // Stage 1 gain
-    CoeffType g2 = static_cast<CoeffType> (0.0);  // Stage 2 gain  
-    CoeffType g3 = static_cast<CoeffType> (0.0);  // Stage 3 gain
-    CoeffType g4 = static_cast<CoeffType> (0.0);  // Stage 4 gain
-    
-    CoeffType feedbackGain = static_cast<CoeffType> (0.0);  // Feedback amount
-    CoeffType inputGain = static_cast<CoeffType> (1.0);     // Input level
-    CoeffType outputGain = static_cast<CoeffType> (1.0);    // Output compensation
-
-    // Filter state variables (integrator states)
-    CoeffType s1 = static_cast<CoeffType> (0.0);  // Stage 1 state
-    CoeffType s2 = static_cast<CoeffType> (0.0);  // Stage 2 state
-    CoeffType s3 = static_cast<CoeffType> (0.0);  // Stage 3 state
-    CoeffType s4 = static_cast<CoeffType> (0.0);  // Stage 4 state
-
-    // Diode voltage states for nonlinear modeling
-    CoeffType diodeV1 = static_cast<CoeffType> (0.0);  // Diode 1 voltage
-    CoeffType diodeV2 = static_cast<CoeffType> (0.0);  // Diode 2 voltage
-    CoeffType diodeV3 = static_cast<CoeffType> (0.0);  // Diode 3 voltage
-    CoeffType diodeV4 = static_cast<CoeffType> (0.0);  // Diode 4 voltage
-
-    // Envelope follower
-    CoeffType envelopeState = static_cast<CoeffType> (0.0);
-    CoeffType envelopeCoeff = static_cast<CoeffType> (0.01);
-    CoeffType lastFreq = static_cast<CoeffType> (1000.0);
-
     //==============================================================================
     /** Updates the filter coefficients based on current parameters */
     void updateCoefficients() noexcept
@@ -433,6 +400,39 @@ private:
         
         return feedbackGain * (fb1 + fb2 + fb3 + fb4);
     }
+
+    //==============================================================================
+    CoeffType cutoffFreq = static_cast<CoeffType> (1000.0);
+    CoeffType resonanceAmount = static_cast<CoeffType> (0.1);
+    CoeffType envelopeAmount = static_cast<CoeffType> (0.5);
+    CoeffType accentAmount = static_cast<CoeffType> (0.0);
+
+    // Filter coefficients per stage
+    CoeffType g1 = static_cast<CoeffType> (0.0);  // Stage 1 gain
+    CoeffType g2 = static_cast<CoeffType> (0.0);  // Stage 2 gain  
+    CoeffType g3 = static_cast<CoeffType> (0.0);  // Stage 3 gain
+    CoeffType g4 = static_cast<CoeffType> (0.0);  // Stage 4 gain
+    
+    CoeffType feedbackGain = static_cast<CoeffType> (0.0);  // Feedback amount
+    CoeffType inputGain = static_cast<CoeffType> (1.0);     // Input level
+    CoeffType outputGain = static_cast<CoeffType> (1.0);    // Output compensation
+
+    // Filter state variables (integrator states)
+    CoeffType s1 = static_cast<CoeffType> (0.0);  // Stage 1 state
+    CoeffType s2 = static_cast<CoeffType> (0.0);  // Stage 2 state
+    CoeffType s3 = static_cast<CoeffType> (0.0);  // Stage 3 state
+    CoeffType s4 = static_cast<CoeffType> (0.0);  // Stage 4 state
+
+    // Diode voltage states for nonlinear modeling
+    CoeffType diodeV1 = static_cast<CoeffType> (0.0);  // Diode 1 voltage
+    CoeffType diodeV2 = static_cast<CoeffType> (0.0);  // Diode 2 voltage
+    CoeffType diodeV3 = static_cast<CoeffType> (0.0);  // Diode 3 voltage
+    CoeffType diodeV4 = static_cast<CoeffType> (0.0);  // Diode 4 voltage
+
+    // Envelope follower
+    CoeffType envelopeState = static_cast<CoeffType> (0.0);
+    CoeffType envelopeCoeff = static_cast<CoeffType> (0.01);
+    CoeffType lastFreq = static_cast<CoeffType> (1000.0);
 
     //==============================================================================
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Tb303Filter)

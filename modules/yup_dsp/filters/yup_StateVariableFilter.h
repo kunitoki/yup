@@ -25,22 +25,22 @@ namespace yup
 {
 
 //==============================================================================
-/** 
+/**
     State Variable Filter (SVF) implementation.
-    
+
     This filter simultaneously produces lowpass, bandpass, highpass, and notch
     outputs from a single input. It's particularly useful for real-time parameter
     changes as it maintains stability and smooth response updates.
-    
+
     The SVF uses a topology based on integrators that mimics analog filter behavior,
     providing excellent frequency response characteristics and efficient computation.
-    
+
     Features:
     - Simultaneous LP/BP/HP/Notch outputs
     - Smooth parameter updates
     - Stable across the full frequency range
     - Resonance control via Q parameter
-    
+
     @see FilterBase
 */
 template <typename SampleType, typename CoeffType = double>
@@ -94,7 +94,7 @@ public:
     SampleType processSample (SampleType inputSample) noexcept override
     {
         const auto outputs = processAllOutputs (inputSample);
-        
+
         switch (mode)
         {
             case Mode::lowpass:  return outputs.lowpass;
@@ -133,9 +133,9 @@ public:
         const auto s2 = s * s;
         const auto wc = DspMath::frequencyToAngular (cutoffFreq, static_cast<CoeffType> (this->sampleRate));
         const auto wc2 = wc * wc;
-        
+
         auto denominator = s2 + DspMath::Complex<CoeffType> (wc / qFactor) * s + DspMath::Complex<CoeffType> (wc2);
-        
+
         switch (mode)
         {
             case Mode::lowpass:
@@ -152,9 +152,9 @@ public:
     }
 
     //==============================================================================
-    /** 
+    /**
         Sets the filter parameters.
-        
+
         @param frequency   The cutoff frequency in Hz
         @param q          The Q factor (resonance)
         @param sampleRate The sample rate in Hz
@@ -167,9 +167,9 @@ public:
         updateCoefficients();
     }
 
-    /** 
+    /**
         Sets just the cutoff frequency.
-        
+
         @param frequency  The new cutoff frequency in Hz
     */
     void setCutoffFrequency (CoeffType frequency) noexcept
@@ -178,9 +178,9 @@ public:
         updateCoefficients();
     }
 
-    /** 
+    /**
         Sets just the Q factor.
-        
+
         @param q  The new Q factor
     */
     void setQFactor (CoeffType q) noexcept
@@ -189,9 +189,9 @@ public:
         updateCoefficients();
     }
 
-    /** 
+    /**
         Sets the filter mode for single-output processing.
-        
+
         @param newMode  The new filter mode
     */
     void setMode (Mode newMode) noexcept
@@ -199,9 +199,9 @@ public:
         mode = newMode;
     }
 
-    /** 
+    /**
         Gets the current cutoff frequency.
-        
+
         @returns  The cutoff frequency in Hz
     */
     CoeffType getCutoffFrequency() const noexcept
@@ -209,9 +209,9 @@ public:
         return cutoffFreq;
     }
 
-    /** 
+    /**
         Gets the current Q factor.
-        
+
         @returns  The Q factor
     */
     CoeffType getQFactor() const noexcept
@@ -219,9 +219,9 @@ public:
         return qFactor;
     }
 
-    /** 
+    /**
         Gets the current filter mode.
-        
+
         @returns  The current filter mode
     */
     Mode getMode() const noexcept
@@ -230,30 +230,30 @@ public:
     }
 
     //==============================================================================
-    /** 
+    /**
         Processes a sample and returns all outputs.
-        
+
         @param inputSample  The input sample
         @returns           Structure containing all filter outputs
     */
     Outputs processAllOutputs (SampleType inputSample) noexcept
     {
         Outputs outputs;
-        
+
         outputs.highpass = (inputSample - damping * state1 - state2) * g;
         outputs.bandpass = outputs.highpass * k + state1;
         outputs.lowpass = outputs.bandpass * k + state2;
-        outputs.notch = inputSample - damping * state1;
-        
+        outputs.notch = outputs.highpass + outputs.lowpass;
+
         state1 = outputs.bandpass;
         state2 = outputs.lowpass;
-        
+
         return outputs;
     }
 
-    /** 
+    /**
         Processes a block and fills separate buffers for each output.
-        
+
         @param inputBuffer    The input buffer
         @param lowpassBuffer  Buffer for lowpass output (can be nullptr)
         @param bandpassBuffer Buffer for bandpass output (can be nullptr)
@@ -271,7 +271,7 @@ public:
         for (int i = 0; i < numSamples; ++i)
         {
             const auto outputs = processAllOutputs (inputBuffer[i]);
-            
+
             if (lowpassBuffer)  lowpassBuffer[i] = outputs.lowpass;
             if (bandpassBuffer) bandpassBuffer[i] = outputs.bandpass;
             if (highpassBuffer) highpassBuffer[i] = outputs.highpass;
@@ -294,18 +294,18 @@ private:
     {
         auto s1 = state1;
         auto s2 = state2;
-        
+
         for (int i = 0; i < numSamples; ++i)
         {
             const auto hp = (input[i] - damping * s1 - s2) * g;
             const auto bp = hp * k + s1;
             const auto lp = bp * k + s2;
-            
+
             s1 = bp;
             s2 = lp;
             output[i] = lp;
         }
-        
+
         state1 = s1;
         state2 = s2;
     }
@@ -314,18 +314,18 @@ private:
     {
         auto s1 = state1;
         auto s2 = state2;
-        
+
         for (int i = 0; i < numSamples; ++i)
         {
             const auto hp = (input[i] - damping * s1 - s2) * g;
             const auto bp = hp * k + s1;
             const auto lp = bp * k + s2;
-            
+
             s1 = bp;
             s2 = lp;
             output[i] = bp;
         }
-        
+
         state1 = s1;
         state2 = s2;
     }
@@ -334,18 +334,18 @@ private:
     {
         auto s1 = state1;
         auto s2 = state2;
-        
+
         for (int i = 0; i < numSamples; ++i)
         {
             const auto hp = (input[i] - damping * s1 - s2) * g;
             const auto bp = hp * k + s1;
             const auto lp = bp * k + s2;
-            
+
             s1 = bp;
             s2 = lp;
             output[i] = hp;
         }
-        
+
         state1 = s1;
         state2 = s2;
     }
@@ -354,19 +354,19 @@ private:
     {
         auto s1 = state1;
         auto s2 = state2;
-        
+
         for (int i = 0; i < numSamples; ++i)
         {
             const auto inputSample = input[i];
             const auto hp = (inputSample - damping * s1 - s2) * g;
             const auto bp = hp * k + s1;
             const auto lp = bp * k + s2;
-            
+
             s1 = bp;
             s2 = lp;
             output[i] = inputSample - damping * s1;
         }
-        
+
         state1 = s1;
         state2 = s2;
     }

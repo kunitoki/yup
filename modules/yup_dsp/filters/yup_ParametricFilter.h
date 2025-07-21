@@ -221,7 +221,7 @@ public:
         // Convert bandwidth to Q: Q = 1 / (2 * sinh(ln(2)/2 * BW))
         const auto bw = jmax (static_cast<CoeffType> (0.1), bandwidth);
         qFactor = static_cast<CoeffType> (1.0) / (static_cast<CoeffType> (2.0) * 
-                   std::sinh (MathConstants<CoeffType>::loge2 * bw * static_cast<CoeffType> (0.5)));
+                   std::sinh (MathConstants<CoeffType>::ln2 * bw * static_cast<CoeffType> (0.5)));
         updateCoefficients();
     }
 
@@ -254,7 +254,7 @@ public:
     CoeffType getBandwidth() const noexcept
     {
         // Convert Q to bandwidth: BW = (2 / ln(2)) * asinh(1 / (2*Q))
-        return (static_cast<CoeffType> (2.0) / MathConstants<CoeffType>::loge2) * 
+        return (static_cast<CoeffType> (2.0) / MathConstants<CoeffType>::ln2) * 
                std::asinh (static_cast<CoeffType> (1.0) / (static_cast<CoeffType> (2.0) * qFactor));
     }
 

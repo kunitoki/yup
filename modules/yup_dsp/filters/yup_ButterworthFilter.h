@@ -238,7 +238,6 @@ private:
     CoeffType cutoffFreq = static_cast<CoeffType> (1000.0);
     CoeffType bandwidthOctaves = static_cast<CoeffType> (1.0);
     
-    // Pre-allocated coefficient storage for real-time safe operation
     std::vector<BiquadCoefficients<CoeffType>> coefficientsStorage;
 
     //==============================================================================

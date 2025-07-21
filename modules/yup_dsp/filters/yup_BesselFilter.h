@@ -62,6 +62,9 @@ template <typename SampleType, typename CoeffType = double>
 class BesselFilter : public FilterBase<SampleType, CoeffType>
 {
 public:
+    using CoefficientsType = CoeffType;
+    using SamplesType = SampleType;
+
     //==============================================================================
     /** Default constructor */
     BesselFilter() 
@@ -222,30 +225,26 @@ private:
 
     void updateCoefficients() noexcept
     {
-        std::vector<BiquadCoefficients<CoeffType>> coeffs;
-        
         switch (filterType)
         {
             case FilterType::lowpass:
-                coeffs = FilterDesigner<CoeffType>::designBesselLowpass (filterOrder, cutoffFreq, this->sampleRate);
+                FilterDesigner<CoeffType>::designBesselLowpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate);
                 break;
                 
             case FilterType::highpass:
-                coeffs = FilterDesigner<CoeffType>::designBesselHighpass (filterOrder, cutoffFreq, this->sampleRate);
+                FilterDesigner<CoeffType>::designBesselHighpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate);
                 break;
                 
             default:
                 // For now, only lowpass and highpass are implemented
-                coeffs = FilterDesigner<CoeffType>::designBesselLowpass (filterOrder, cutoffFreq, this->sampleRate);
+                FilterDesigner<CoeffType>::designBesselLowpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate);
                 break;
         }
         
         // Apply coefficients to cascade
-        const auto numSections = coeffs.size();
+        const auto numSections = coefficientsStorage.size();
         for (size_t i = 0; i < numSections; ++i)
-        {
-            cascade.setSectionCoefficients (i, coeffs[i]);
-        }
+            cascade.setSectionCoefficients (i, coefficientsStorage[i]);
     }
 
     //==============================================================================
@@ -254,6 +253,8 @@ private:
     FilterType filterType = FilterType::lowpass;
     int filterOrder = 2;
     CoeffType cutoffFreq = static_cast<CoeffType> (1000.0);
+
+    std::vector<BiquadCoefficients<CoeffType>> coefficientsStorage;
 
     //==============================================================================
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BesselFilter)

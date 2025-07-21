@@ -298,39 +298,35 @@ private:
 
     void updateCoefficients() noexcept
     {
-        std::vector<BiquadCoefficients<CoeffType>> coeffs;
-        
         switch (filterType)
         {
             case FilterType::lowpass:
                 if (chebyshevType == Type::Type1)
-                    coeffs = FilterDesigner<CoeffType>::designChebyshev1Lowpass (filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
+                    FilterDesigner<CoeffType>::designChebyshev1Lowpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
                 else
-                    coeffs = FilterDesigner<CoeffType>::designChebyshev2Lowpass (filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
+                    FilterDesigner<CoeffType>::designChebyshev2Lowpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
                 break;
                 
             case FilterType::highpass:
                 if (chebyshevType == Type::Type1)
-                    coeffs = FilterDesigner<CoeffType>::designChebyshev1Highpass (filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
+                    FilterDesigner<CoeffType>::designChebyshev1Highpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
                 else
-                    coeffs = FilterDesigner<CoeffType>::designChebyshev2Highpass (filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
+                    FilterDesigner<CoeffType>::designChebyshev2Highpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
                 break;
                 
             default:
                 // For now, only lowpass and highpass are implemented
                 if (chebyshevType == Type::Type1)
-                    coeffs = FilterDesigner<CoeffType>::designChebyshev1Lowpass (filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
+                    FilterDesigner<CoeffType>::designChebyshev1Lowpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
                 else
-                    coeffs = FilterDesigner<CoeffType>::designChebyshev2Lowpass (filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
+                    FilterDesigner<CoeffType>::designChebyshev2Lowpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate, rippleAmount);
                 break;
         }
         
         // Apply coefficients to cascade
-        const auto numSections = coeffs.size();
+        const auto numSections = coefficientsStorage.size();
         for (size_t i = 0; i < numSections; ++i)
-        {
-            cascade.setSectionCoefficients (i, coeffs[i]);
-        }
+            cascade.setSectionCoefficients (i, coefficientsStorage[i]);
     }
 
     //==============================================================================
@@ -341,6 +337,8 @@ private:
     int filterOrder = 2;
     CoeffType cutoffFreq = static_cast<CoeffType> (1000.0);
     CoeffType rippleAmount = static_cast<CoeffType> (0.5);
+
+    std::vector<BiquadCoefficients<CoeffType>> coefficientsStorage;
 
     //==============================================================================
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChebyshevFilter)
