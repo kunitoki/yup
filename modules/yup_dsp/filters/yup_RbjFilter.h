@@ -268,7 +268,7 @@ private:
 
 //==============================================================================
 /** Type aliases for convenience */
-using RbjFilterFloat = RbjFilter<float>;      // float samples, double coefficients (default)
-using RbjFilterDouble = RbjFilter<double>;    // double samples, double coefficients (default)
+using RbjFilterFloat = RbjFilter<float>;   // float samples, double coefficients (default)
+using RbjFilterDouble = RbjFilter<double>; // double samples, double coefficients (default)
 
 } // namespace yup

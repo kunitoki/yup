@@ -787,7 +787,8 @@ public:
         g.setFillColor (yup::Color (0xff101010));
         g.fillAll();
 
-        if (renderData.empty()) return;
+        if (renderData.empty())
+            return;
 
         yup::Path path;
         float xStep = static_cast<float> (bounds.getWidth()) / renderData.size();
@@ -1326,7 +1327,7 @@ private:
     {
         // Get biquad coefficients (assuming they're accessible)
         // This is a simplified version - you might need to access coefficients differently
-        double a1 = biquad.a1, a2 = biquad.a2; // Denominator coefficients
+        double a1 = biquad.a1, a2 = biquad.a2;                 // Denominator coefficients
         double b0 = biquad.b0, b1 = biquad.b1, b2 = biquad.b2; // Numerator coefficients
 
         // Calculate poles from denominator: 1 + a1*z^-1 + a2*z^-2 = 0
