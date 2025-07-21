@@ -72,7 +72,7 @@ class LegendreFilter : public FilterBase<SampleType, CoeffType>
 public:
     //==============================================================================
     /** Default constructor */
-    LegendreFilter() 
+    LegendreFilter()
         : cascade (1)
     {
         setParameters (FilterType::lowpass, 2, static_cast<CoeffType> (1000.0), 44100.0);
@@ -226,7 +226,7 @@ public:
     {
         if (filterType == FilterType::bandpass || filterType == FilterType::bandstop)
         {
-            return cutoffFreq * bandwidthOctaves * static_cast<CoeffType> (0.693);  // Convert octaves to linear
+            return cutoffFreq * bandwidthOctaves * static_cast<CoeffType> (0.693); // Convert octaves to linear
         }
         return cutoffFreq;
     }
@@ -250,7 +250,7 @@ private:
                 FilterDesigner<CoeffType>::designLegendreHighpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate);
                 break;
 
-            /*
+                /*
             case FilterType::bandpass:
                 FilterDesigner<CoeffType>::designLegendreBandpass (coefficientsStorage, filterOrder, cutoffFreq, bandwidthOctaves, this->sampleRate);
                 break;
@@ -264,7 +264,7 @@ private:
                 FilterDesigner<CoeffType>::designLegendreLowpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate);
                 break;
         }
-        
+
         // Apply coefficients to cascade
         const auto numSections = coefficientsStorage.size();
         for (size_t i = 0; i < numSections; ++i)
@@ -273,7 +273,7 @@ private:
 
     //==============================================================================
     BiquadCascade<SampleType, CoeffType> cascade;
-    
+
     FilterType filterType = FilterType::lowpass;
     int filterOrder = 2;
     CoeffType cutoffFreq = static_cast<CoeffType> (1000.0);
@@ -287,7 +287,7 @@ private:
 
 //==============================================================================
 /** Type aliases for convenience */
-using LegendreFilterFloat = LegendreFilter<float>;       // float samples, double coefficients (default)
-using LegendreFilterDouble = LegendreFilter<double>;     // double samples, double coefficients (default)
+using LegendreFilterFloat = LegendreFilter<float>;   // float samples, double coefficients (default)
+using LegendreFilterDouble = LegendreFilter<double>; // double samples, double coefficients (default)
 
 } // namespace yup

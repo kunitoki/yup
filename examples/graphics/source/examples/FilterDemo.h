@@ -104,7 +104,7 @@ private:
         g.strokeLine ({ bounds.getX(), y0 }, { bounds.getRight(), y0 });
 
         // Plot phase response
-        if (!phaseData.empty())
+        if (! phaseData.empty())
         {
             yup::Path path;
             bool firstPoint = true;
@@ -215,7 +215,7 @@ private:
         }
 
         // Plot group delay
-        if (!groupDelayData.empty())
+        if (! groupDelayData.empty())
         {
             yup::Path path;
             bool firstPoint = true;
@@ -339,7 +339,7 @@ private:
         g.strokeLine ({ bounds.getX(), y1 }, { bounds.getRight(), y1 });
 
         // Plot step response
-        if (!stepData.empty())
+        if (! stepData.empty())
         {
             yup::Path path;
             bool firstPoint = true;
@@ -410,7 +410,7 @@ class PolesZerosDisplay : public yup::Component
 {
 public:
     void updatePolesZeros (const std::vector<std::complex<double>>& poles,
-                          const std::vector<std::complex<double>>& zeros)
+                           const std::vector<std::complex<double>>& zeros)
     {
         this->poles = poles;
         this->zeros = zeros;
@@ -457,8 +457,8 @@ private:
 
         for (const auto& zero : zeros)
         {
-            float x = center.getX() + static_cast<float>(zero.real()) * radius;
-            float y = center.getY() - static_cast<float>(zero.imag()) * radius;
+            float x = center.getX() + static_cast<float> (zero.real()) * radius;
+            float y = center.getY() - static_cast<float> (zero.imag()) * radius;
 
             g.strokeEllipse (x - 4, y - 4, 8, 8);
         }
@@ -469,8 +469,8 @@ private:
 
         for (const auto& pole : poles)
         {
-            float x = center.getX() + static_cast<float>(pole.real()) * radius;
-            float y = center.getY() - static_cast<float>(pole.imag()) * radius;
+            float x = center.getX() + static_cast<float> (pole.real()) * radius;
+            float y = center.getY() - static_cast<float> (pole.imag()) * radius;
 
             g.strokeLine ({ x - 5, y - 5 }, { x + 5, y + 5 });
             g.strokeLine ({ x - 5, y + 5 }, { x + 5, y - 5 });
@@ -581,8 +581,10 @@ public:
 
                 // Unwrap phase difference
                 double phaseDiff = phaseHigh - phaseLow;
-                while (phaseDiff > yup::MathConstants<double>::pi) phaseDiff -= 2.0 * yup::MathConstants<double>::pi;
-                while (phaseDiff < -yup::MathConstants<double>::pi) phaseDiff += 2.0 * yup::MathConstants<double>::pi;
+                while (phaseDiff > yup::MathConstants<double>::pi)
+                    phaseDiff -= 2.0 * yup::MathConstants<double>::pi;
+                while (phaseDiff < -yup::MathConstants<double>::pi)
+                    phaseDiff += 2.0 * yup::MathConstants<double>::pi;
 
                 groupDelay = -phaseDiff / (2.0 * deltaFreq * 2.0 * yup::MathConstants<double>::pi) * sampleRate;
             }
@@ -762,7 +764,9 @@ private:
 public:
     // Accessor methods for the new display widgets
     const std::vector<yup::Point<float>>& getPhaseData() const { return phaseData; }
+
     const std::vector<yup::Point<float>>& getGroupDelayData() const { return groupDelayData; }
+
     const std::vector<yup::Point<float>>& getStepResponseData() const { return stepResponseData; }
 };
 
@@ -819,29 +823,35 @@ public:
         // Top row: Frequency Response and Phase Response
         frequencyResponsePlot.setBounds (analysisArea.getX() + margin,
                                          analysisArea.getY() + margin,
-                                         displayWidth, displayHeight);
+                                         displayWidth,
+                                         displayHeight);
 
         phaseResponseDisplay.setBounds (analysisArea.getX() + displayWidth + 2 * margin,
                                         analysisArea.getY() + margin,
-                                        displayWidth, displayHeight);
+                                        displayWidth,
+                                        displayHeight);
 
         // Middle row: Group Delay and Step Response
         groupDelayDisplay.setBounds (analysisArea.getX() + margin,
                                      analysisArea.getY() + displayHeight + 2 * margin,
-                                     displayWidth, displayHeight);
+                                     displayWidth,
+                                     displayHeight);
 
         stepResponseDisplay.setBounds (analysisArea.getX() + displayWidth + 2 * margin,
                                        analysisArea.getY() + displayHeight + 2 * margin,
-                                       displayWidth, displayHeight);
+                                       displayWidth,
+                                       displayHeight);
 
         // Bottom row: Poles/Zeros and Oscilloscope
         polesZerosDisplay.setBounds (analysisArea.getX() + margin,
                                      analysisArea.getY() + 2 * displayHeight + 3 * margin,
-                                     displayWidth, displayHeight);
+                                     displayWidth,
+                                     displayHeight);
 
         oscilloscope.setBounds (analysisArea.getX() + displayWidth + 2 * margin,
                                 analysisArea.getY() + 2 * displayHeight + 3 * margin,
-                                displayWidth, displayHeight);
+                                displayWidth,
+                                displayHeight);
     }
 
     void paint (yup::Graphics& g) override
@@ -962,7 +972,10 @@ private:
         filterTypeCombo->addItem ("State Variable", 8);
         filterTypeCombo->addItem ("Moog Ladder", 9);
         filterTypeCombo->setSelectedId (1);
-        filterTypeCombo->onSelectedItemChanged = [this] { updateCurrentFilter(); };
+        filterTypeCombo->onSelectedItemChanged = [this]
+        {
+            updateCurrentFilter();
+        };
         addAndMakeVisible (*filterTypeCombo);
 
         // Response type selector
@@ -976,7 +989,10 @@ private:
         responseTypeCombo->addItem ("Low Shelf", 7);
         responseTypeCombo->addItem ("High Shelf", 8);
         responseTypeCombo->setSelectedId (1);
-        responseTypeCombo->onSelectedItemChanged = [this] { updateCurrentFilter(); };
+        responseTypeCombo->onSelectedItemChanged = [this]
+        {
+            updateCurrentFilter();
+        };
         addAndMakeVisible (*responseTypeCombo);
 
         // Parameter controls
@@ -984,39 +1000,57 @@ private:
         frequencySlider->setRange ({ 20.0, 20000.0 });
         //frequencySlider->setSkewFactor (0.3); // Logarithmic scale
         frequencySlider->setValue (1000.0);
-        frequencySlider->onValueChanged = [this] (float) { updateFilterParameters(); };
+        frequencySlider->onValueChanged = [this] (float)
+        {
+            updateFilterParameters();
+        };
         addAndMakeVisible (*frequencySlider);
 
         qSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Q / Resonance");
         qSlider->setRange ({ 0.1, 20.0 });
         qSlider->setValue (0.707);
-        qSlider->onValueChanged = [this] (float) { updateFilterParameters(); };
+        qSlider->onValueChanged = [this] (float)
+        {
+            updateFilterParameters();
+        };
         addAndMakeVisible (*qSlider);
 
         gainSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Gain (dB)");
         gainSlider->setRange ({ -20.0, 20.0 });
         gainSlider->setValue (0.0);
-        gainSlider->onValueChanged = [this] (float) { updateFilterParameters(); };
+        gainSlider->onValueChanged = [this] (float)
+        {
+            updateFilterParameters();
+        };
         addAndMakeVisible (*gainSlider);
 
         orderSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Order");
         orderSlider->setRange ({ 1.0, 10.0 });
         orderSlider->setValue (2.0);
-        orderSlider->onValueChanged = [this] (float) { updateFilterParameters(); };
+        orderSlider->onValueChanged = [this] (float)
+        {
+            updateFilterParameters();
+        };
         addAndMakeVisible (*orderSlider);
 
         // Noise gain control
         noiseGainSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Noise Level");
         noiseGainSlider->setRange ({ 0.0, 1.0 });
         noiseGainSlider->setValue (0.1);
-        noiseGainSlider->onValueChanged = [this] (float value) { noiseGenerator.setAmplitude (value); };
+        noiseGainSlider->onValueChanged = [this] (float value)
+        {
+            noiseGenerator.setAmplitude (value);
+        };
         addAndMakeVisible (*noiseGainSlider);
 
         // Output gain control
         outputGainSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Output Level");
         outputGainSlider->setRange ({ 0.0, 1.0 });
         outputGainSlider->setValue (0.5);
-        outputGainSlider->onValueChanged = [this] (float value) { outputGain.setTargetValue (value); };
+        outputGainSlider->onValueChanged = [this] (float value)
+        {
+            outputGain.setTargetValue (value);
+        };
         addAndMakeVisible (*outputGainSlider);
 
         // Frequency response plot
@@ -1052,7 +1086,7 @@ private:
         int labelHeight = 15;
         int spacing = 5;
 
-        auto layouts = std::vector<std::pair<yup::Label*, yup::Component*>>{
+        auto layouts = std::vector<std::pair<yup::Label*, yup::Component*>> {
             { parameterLabels[0], filterTypeCombo.get() },
             { parameterLabels[1], responseTypeCombo.get() },
             { parameterLabels[2], frequencySlider.get() },
@@ -1088,8 +1122,7 @@ private:
 
         // Store in array for easy management
         allFilters = {
-            butterworthFilter, rbjFilter, besselFilter, chebyshev1Filter, chebyshev2Filter,
-            ellipticFilter, legendreFilter, svfFilter, moogFilter
+            butterworthFilter, rbjFilter, besselFilter, chebyshev1Filter, chebyshev2Filter, ellipticFilter, legendreFilter, svfFilter, moogFilter
         };
 
         // Set default filter
@@ -1111,28 +1144,48 @@ private:
         // Map combo box selection to filter instance
         switch (filterTypeId)
         {
-            case 1: currentFilter = butterworthFilter; break;
-            case 2: currentFilter = rbjFilter; break;
-            case 3: currentFilter = besselFilter; break;
+            case 1:
+                currentFilter = butterworthFilter;
+                break;
+            case 2:
+                currentFilter = rbjFilter;
+                break;
+            case 3:
+                currentFilter = besselFilter;
+                break;
             case 4:
                 currentFilter = chebyshev1Filter;
                 chebyshev1Filter->setParameters (yup::ChebyshevFilter<float>::Type::Type1,
-                                                getFilterType (responseTypeId),
-                                                static_cast<int> (orderSlider->getValue()),
-                                                frequencySlider->getValue(), 44100.0, 0.5);
+                                                 getFilterType (responseTypeId),
+                                                 static_cast<int> (orderSlider->getValue()),
+                                                 frequencySlider->getValue(),
+                                                 44100.0,
+                                                 0.5);
                 break;
             case 5:
                 currentFilter = chebyshev2Filter;
                 chebyshev2Filter->setParameters (yup::ChebyshevFilter<float>::Type::Type2,
-                                                getFilterType (responseTypeId),
-                                                static_cast<int> (orderSlider->getValue()),
-                                                frequencySlider->getValue(), 44100.0, 40.0);
+                                                 getFilterType (responseTypeId),
+                                                 static_cast<int> (orderSlider->getValue()),
+                                                 frequencySlider->getValue(),
+                                                 44100.0,
+                                                 40.0);
                 break;
-            case 6: currentFilter = ellipticFilter; break;
-            case 7: currentFilter = legendreFilter; break;
-            case 8: currentFilter = svfFilter; break;
-            case 9: currentFilter = moogFilter; break;
-            default: currentFilter = butterworthFilter; break;
+            case 6:
+                currentFilter = ellipticFilter;
+                break;
+            case 7:
+                currentFilter = legendreFilter;
+                break;
+            case 8:
+                currentFilter = svfFilter;
+                break;
+            case 9:
+                currentFilter = moogFilter;
+                break;
+            default:
+                currentFilter = butterworthFilter;
+                break;
         }
 
         updateFilterParameters();
@@ -1240,7 +1293,7 @@ private:
 
         // Get biquad coefficients (assuming they're accessible)
         // This is a simplified version - you might need to access coefficients differently
-        double a1 = 0.0, a2 = 0.0; // Denominator coefficients
+        double a1 = 0.0, a2 = 0.0;           // Denominator coefficients
         double b0 = 1.0, b1 = 0.0, b2 = 0.0; // Numerator coefficients
 
         // Calculate poles from denominator: 1 + a1*z^-1 + a2*z^-2 = 0
@@ -1302,7 +1355,7 @@ private:
         for (int i = 0; i < 2; ++i) // 2 complex conjugate pairs for 4th order
         {
             double angle = yup::MathConstants<double>::pi * (2.0 * i + 1.0) / 4.0; // Butterworth pole angles
-            double radius = 0.9; // Adjust based on actual filter design
+            double radius = 0.9;                                                   // Adjust based on actual filter design
 
             poles.push_back (std::complex<double> (radius * std::cos (angle), radius * std::sin (angle)));
             poles.push_back (std::complex<double> (radius * std::cos (angle), -radius * std::sin (angle)));
@@ -1320,15 +1373,24 @@ private:
     {
         switch (responseTypeId)
         {
-            case 1: return yup::FilterType::lowpass;
-            case 2: return yup::FilterType::highpass;
-            case 3: return yup::FilterType::bandpass;
-            case 4: return yup::FilterType::bandstop;
-            case 5: return yup::FilterType::allpass;
-            case 6: return yup::FilterType::peak;
-            case 7: return yup::FilterType::lowshelf;
-            case 8: return yup::FilterType::highshelf;
-            default: return yup::FilterType::lowpass;
+            case 1:
+                return yup::FilterType::lowpass;
+            case 2:
+                return yup::FilterType::highpass;
+            case 3:
+                return yup::FilterType::bandpass;
+            case 4:
+                return yup::FilterType::bandstop;
+            case 5:
+                return yup::FilterType::allpass;
+            case 6:
+                return yup::FilterType::peak;
+            case 7:
+                return yup::FilterType::lowshelf;
+            case 8:
+                return yup::FilterType::highshelf;
+            default:
+                return yup::FilterType::lowpass;
         }
     }
 
@@ -1336,15 +1398,24 @@ private:
     {
         switch (responseTypeId)
         {
-            case 1: return yup::RbjFilter<float>::Type::lowpass;
-            case 2: return yup::RbjFilter<float>::Type::highpass;
-            case 3: return yup::RbjFilter<float>::Type::bandpassCsg;
-            case 4: return yup::RbjFilter<float>::Type::notch;
-            case 5: return yup::RbjFilter<float>::Type::allpass;
-            case 6: return yup::RbjFilter<float>::Type::peaking;
-            case 7: return yup::RbjFilter<float>::Type::lowshelf;
-            case 8: return yup::RbjFilter<float>::Type::highshelf;
-            default: return yup::RbjFilter<float>::Type::lowpass;
+            case 1:
+                return yup::RbjFilter<float>::Type::lowpass;
+            case 2:
+                return yup::RbjFilter<float>::Type::highpass;
+            case 3:
+                return yup::RbjFilter<float>::Type::bandpassCsg;
+            case 4:
+                return yup::RbjFilter<float>::Type::notch;
+            case 5:
+                return yup::RbjFilter<float>::Type::allpass;
+            case 6:
+                return yup::RbjFilter<float>::Type::peaking;
+            case 7:
+                return yup::RbjFilter<float>::Type::lowshelf;
+            case 8:
+                return yup::RbjFilter<float>::Type::highshelf;
+            default:
+                return yup::RbjFilter<float>::Type::lowpass;
         }
     }
 
@@ -1352,11 +1423,16 @@ private:
     {
         switch (responseTypeId)
         {
-            case 1: return yup::StateVariableFilter<float>::Mode::lowpass;
-            case 2: return yup::StateVariableFilter<float>::Mode::highpass;
-            case 3: return yup::StateVariableFilter<float>::Mode::bandpass;
-            case 4: return yup::StateVariableFilter<float>::Mode::notch;
-            default: return yup::StateVariableFilter<float>::Mode::lowpass;
+            case 1:
+                return yup::StateVariableFilter<float>::Mode::lowpass;
+            case 2:
+                return yup::StateVariableFilter<float>::Mode::highpass;
+            case 3:
+                return yup::StateVariableFilter<float>::Mode::bandpass;
+            case 4:
+                return yup::StateVariableFilter<float>::Mode::notch;
+            default:
+                return yup::StateVariableFilter<float>::Mode::lowpass;
         }
     }
 
@@ -1413,7 +1489,8 @@ private:
             g.setFillColor (yup::Color (0xff101010));
             g.fillAll();
 
-            if (renderData.empty()) return;
+            if (renderData.empty())
+                return;
 
             yup::Path path;
             float xStep = static_cast<float> (bounds.getWidth()) / renderData.size();
