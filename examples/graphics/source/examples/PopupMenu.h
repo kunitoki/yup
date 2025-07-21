@@ -72,7 +72,7 @@ public:
         auto styledText = yup::StyledText();
         {
             auto modifier = styledText.startUpdate();
-            modifier.appendText ("PopupMenu Features: Placement, Submenus, Scrolling", yup::ApplicationTheme::getGlobalTheme()->getDefaultFont());
+            modifier.appendText ("PopupMenu Features: Placement, Submenus, Scrolling", yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (16.0f));
         }
 
         g.setFillColor (yup::Color (0xffffffff));

@@ -62,7 +62,7 @@ set (target_modules
     yup_graphics)
 
 if (NOT YUP_PLATFORM_EMSCRIPTEN)
-    list (APPEND target_modules yup_gui)
+    list (APPEND target_modules yup_gui yup_audio_gui)
     if (YUP_PLATFORM_DESKTOP)
         list (APPEND target_modules yup_python)
     endif()

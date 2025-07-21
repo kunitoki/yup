@@ -28,7 +28,7 @@ class LayoutFontsExample : public yup::Component
 public:
     LayoutFontsExample()
         : Component ("LayoutFontsExample")
-        , font (yup::ApplicationTheme::getGlobalTheme()->getDefaultFont())
+        , font (yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (16.0f))
     {
     }
 
@@ -126,7 +126,7 @@ private:
             modifier.setWrap (wrap);
 
             modifier.clear();
-            modifier.appendText (text, nullptr, font.getFont(), fontSize);
+            modifier.appendText (text, nullptr, font.withHeight (fontSize));
         }
     };
 

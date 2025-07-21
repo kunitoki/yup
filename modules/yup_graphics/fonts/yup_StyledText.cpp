@@ -73,21 +73,19 @@ void StyledText::TextModifier::clear()
 
 void StyledText::TextModifier::appendText (StringRef text,
                                            const Font& font,
-                                           float fontSize,
                                            float lineHeight,
                                            float letterSpacing)
 {
-    styledText.appendText (text, nullptr, font, fontSize, lineHeight, letterSpacing);
+    styledText.appendText (text, nullptr, font, lineHeight, letterSpacing);
 }
 
 void StyledText::TextModifier::appendText (StringRef text,
                                            rive::rcp<rive::RenderPaint> paint,
                                            const Font& font,
-                                           float fontSize,
                                            float lineHeight,
                                            float letterSpacing)
 {
-    styledText.appendText (text, paint, font, fontSize, lineHeight, letterSpacing);
+    styledText.appendText (text, paint, font, lineHeight, letterSpacing);
 }
 
 void StyledText::TextModifier::setOverflow (StyledText::TextOverflow value)
@@ -256,7 +254,6 @@ void StyledText::setWrap (TextWrap value)
 void StyledText::appendText (StringRef text,
                              rive::rcp<rive::RenderPaint> paint,
                              const Font& font,
-                             float fontSize,
                              float lineHeight,
                              float letterSpacing)
 {
@@ -276,6 +273,7 @@ void StyledText::appendText (StringRef text,
         styles.emplace_back (paint, std::move (path), true);
     }
 
+    float fontSize = font.getHeight();
     styledTexts.append (font.getFont(), fontSize, lineHeight, letterSpacing, (const char*) text, styleIndex);
 
     isDirty = true;

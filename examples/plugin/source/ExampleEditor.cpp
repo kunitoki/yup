@@ -26,7 +26,10 @@
 class ExampleSlider : public yup::Slider
 {
 public:
-    using yup::Slider::Slider;
+    ExampleSlider()
+        : yup::Slider (yup::Slider::RotaryVerticalDrag)
+    {
+    }
 };
 
 //==============================================================================
@@ -35,7 +38,7 @@ ExampleEditor::ExampleEditor (ExamplePlugin& processor)
     : audioProcessor (processor)
     , gainParameter (audioProcessor.getParameters()[0])
 {
-    x = std::make_unique<ExampleSlider> ("Slider");
+    x = std::make_unique<ExampleSlider>();
     x->setMouseCursor (yup::MouseCursor::Hand);
     x->setValue (gainParameter->getValue());
     x->onDragStart = [this] (const yup::MouseEvent&)

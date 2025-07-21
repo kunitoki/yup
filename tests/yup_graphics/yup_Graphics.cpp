@@ -424,7 +424,9 @@ TEST_F (GraphicsTest, Text_Rendering_Operations)
     // These should not crash even with empty text
     EXPECT_NO_THROW ({
         graphics->fillFittedText (styledText, textRect);
+        graphics->fillFittedText ("abcdefg", Font().withHeight (14.0f), textRect);
         graphics->strokeFittedText (styledText, textRect);
+        graphics->strokeFittedText ("abcdefg", Font().withHeight (14.0f), textRect);
     });
 }
 

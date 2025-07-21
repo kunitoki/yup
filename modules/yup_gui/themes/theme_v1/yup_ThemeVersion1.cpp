@@ -19,6 +19,10 @@
   ==============================================================================
 */
 
+#if YUP_MODULE_AVAILABLE_yup_audio_gui
+#include <yup_audio_gui/yup_audio_gui.h>
+#endif
+
 namespace yup
 {
 
@@ -29,23 +33,62 @@ extern const std::size_t RobotoFlexFont_size;
 
 //==============================================================================
 
-void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
+struct SliderColors
 {
-    auto bounds = s.getLocalBounds().reduced (s.proportionOfWidth (0.1f));
+    Color background;
+    Color track;
+    Color thumb;
+    Color thumbOver;
+    Color thumbDown;
+    Color text;
+};
+
+SliderColors getSliderColors (const ApplicationTheme& theme, const Slider& slider)
+{
+    SliderColors colors;
+    colors.background = slider.findColor (Slider::Style::backgroundColorId).value_or (Color (0xff3d3d3d));
+    colors.track = slider.findColor (Slider::Style::trackColorId).value_or (Color (0xff636363));
+    colors.thumb = slider.findColor (Slider::Style::thumbColorId).value_or (Color (0xff4ebfff));
+    colors.thumbOver = slider.findColor (Slider::Style::thumbOverColorId).value_or (colors.thumb.brighter (0.3f));
+    colors.thumbDown = slider.findColor (Slider::Style::thumbDownColorId).value_or (colors.thumb.darker (0.2f));
+    colors.text = slider.findColor (Slider::Style::textColorId).value_or (Colors::white);
+    return colors;
+}
+
+void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider& slider, Rectangle<float> sliderBounds, float rotaryStartAngle, float rotaryEndAngle, float sliderValue, bool isMouseOver, bool isMouseDown)
+{
+    const auto colors = getSliderColors (theme, slider);
+
+    auto bounds = sliderBounds.reduced (slider.proportionOfWidth (0.1f));
     const auto center = bounds.getCenter();
 
-    constexpr auto fromRadians = degreesToRadians (135.0f);
-    constexpr auto toRadians = fromRadians + degreesToRadians (270.0f);
+    const auto fromRadians = rotaryStartAngle;
+    const auto toRadians = rotaryEndAngle;
+    const auto toCurrentRadians = fromRadians + (toRadians - fromRadians) * sliderValue;
 
     Path backgroundPath;
-    backgroundPath.addEllipse (bounds.reduced (s.proportionOfWidth (0.105f)));
+    backgroundPath.addEllipse (bounds.reduced (slider.proportionOfWidth (0.105f)));
 
-    g.setFillColor (Color (0xff3d3d3d)); // TODO - findColor
+    g.setFillColor (colors.background);
     g.fillPath (backgroundPath);
 
-    g.setStrokeColor (Color (0xff2b2b2b)); // TODO - findColor
-    g.setStrokeWidth (s.proportionOfWidth (0.0175f));
+    g.setStrokeColor (colors.background.darker (0.3f));
+    g.setStrokeWidth (slider.proportionOfWidth (0.0175f));
     g.strokePath (backgroundPath);
+
+    const auto reducedBounds = bounds.reduced (slider.proportionOfWidth (0.175f));
+    const auto pos = center.getPointOnCircumference (
+        reducedBounds.getWidth() / 2.0f,
+        reducedBounds.getHeight() / 2.0f,
+        toCurrentRadians);
+
+    Path foregroundLine;
+    foregroundLine.addLine (Line<float> (pos, center).keepOnlyStart (0.25f));
+
+    g.setStrokeCap (StrokeCap::Round);
+    g.setStrokeColor (colors.text);
+    g.setStrokeWidth (slider.proportionOfWidth (0.03f));
+    g.strokePath (foregroundLine);
 
     Path backgroundArc;
     backgroundArc.addCenteredArc (center,
@@ -57,11 +100,9 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
                                   true);
 
     g.setStrokeCap (StrokeCap::Round);
-    g.setStrokeColor (Color (0xff636363)); // TODO - findColor
-    g.setStrokeWidth (s.proportionOfWidth (0.075f));
+    g.setStrokeColor (colors.track);
+    g.setStrokeWidth (slider.proportionOfWidth (0.075f));
     g.strokePath (backgroundArc);
-
-    const auto toCurrentRadians = fromRadians + degreesToRadians (270.0f) * s.getValueNormalised();
 
     Path foregroundArc;
     foregroundArc.addCenteredArc (center,
@@ -72,43 +113,189 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
                                   toCurrentRadians,
                                   true);
 
+    auto thumbColor = slider.isMouseOver() ? colors.thumbOver : colors.thumb;
+    if (! slider.isEnabled())
+        thumbColor = thumbColor.withAlpha (0.3f);
+
     g.setStrokeCap (StrokeCap::Round);
-    g.setStrokeColor (s.isMouseOver() ? Color (0xff4ebfff).brighter (0.3f) : Color (0xff4ebfff)); // TODO - findColor
-    g.setStrokeWidth (s.proportionOfWidth (0.075f));
+    g.setStrokeColor (thumbColor);
+    g.setStrokeWidth (slider.proportionOfWidth (0.075f));
     g.strokePath (foregroundArc);
 
-    const auto reducedBounds = bounds.reduced (s.proportionOfWidth (0.175f));
-    const auto pos = center.getPointOnCircumference (
-        reducedBounds.getWidth() / 2.0f,
-        reducedBounds.getHeight() / 2.0f,
-        toCurrentRadians);
-
-    Path foregroundLine;
-    foregroundLine.addLine (Line<float> (pos, center).keepOnlyStart (0.25f));
-
-    g.setStrokeCap (StrokeCap::Round);
-    g.setStrokeColor (Color (0xffffffff)); // TODO - findColor
-    g.setStrokeWidth (s.proportionOfWidth (0.03f));
-    g.strokePath (foregroundLine);
-
-    /*
-    const auto& font = theme.getDefaultFont();
-    StyledText text;
-    text.appendText (font, s.proportionOfHeight (0.1f), s.proportionOfHeight (0.1f), String (s.getValue(), 3).toRawUTF8());
-    text.layout (s.getLocalBounds().reduced (5).removeFromBottom (s.proportionOfWidth (0.1f)), StyledText::center);
-
-    g.setStrokeColor (Color (0xffffffff));
-    g.strokeFittedText (text, s.getLocalBounds().reduced (5).removeFromBottom (s.proportionOfWidth (0.1f)));
-    */
-
-    if (s.hasKeyboardFocus())
+    if (slider.hasKeyboardFocus())
     {
         Path focusPath;
-        focusPath.addEllipse (s.getLocalBounds().reduced (2));
+        focusPath.addEllipse (slider.getLocalBounds().reduced (2));
 
         g.setStrokeColor (Colors::cornflowerblue); // TODO - findColor
         g.setStrokeWidth (2.0f);
         g.strokePath (focusPath);
+    }
+}
+
+void paintLinearSlider (Graphics& g, const ApplicationTheme& theme, const Slider& slider, Rectangle<float> sliderBounds, Rectangle<float> thumbBounds, bool isHorizontal, float sliderValue, bool isMouseOver, bool isMouseDown)
+{
+    const auto colors = getSliderColors (theme, slider);
+
+    // Draw track background
+    g.setFillColor (colors.background);
+    if (isHorizontal)
+        g.fillRoundedRect (sliderBounds.getX(), sliderBounds.getCenterY() - 2.0f, sliderBounds.getWidth(), 4.0f, 2.0f);
+    else
+        g.fillRoundedRect (sliderBounds.getCenterX() - 2.0f, sliderBounds.getY(), 4.0f, sliderBounds.getHeight(), 2.0f);
+
+    // Draw value track for bar sliders
+    const auto sliderType = slider.getSliderType();
+    if (sliderType == Slider::LinearBarHorizontal || sliderType == Slider::LinearBarVertical)
+    {
+        g.setFillColor (colors.track);
+        if (isHorizontal)
+            g.fillRoundedRect (sliderBounds.getX(), sliderBounds.getCenterY() - 2.0f, sliderValue * sliderBounds.getWidth(), 4.0f, 2.0f);
+        else
+            g.fillRoundedRect (sliderBounds.getCenterX() - 2.0f,
+                               sliderBounds.getBottom() - (sliderValue * sliderBounds.getHeight()),
+                               4.0f,
+                               sliderValue * sliderBounds.getHeight(),
+                               2.0f);
+    }
+
+    // Draw thumb
+    g.setFillColor (isMouseDown ? colors.thumbDown : (isMouseOver ? colors.thumbOver : colors.thumb));
+    g.fillEllipse (thumbBounds);
+
+    // Draw focus outline if needed
+    if (slider.hasKeyboardFocus())
+    {
+        g.setStrokeColor (Colors::cornflowerblue);
+        g.setStrokeWidth (2.0f);
+        g.strokeRoundedRect (slider.getLocalBounds().reduced (2), 2.0f);
+    }
+}
+
+void paintTwoValueSlider (Graphics& g, const ApplicationTheme& theme, const Slider& slider, Rectangle<float> sliderBounds, Rectangle<float> minThumbBounds, Rectangle<float> maxThumbBounds, bool isHorizontal, float minValue, float maxValue, bool isMouseOverMinThumb, bool isMouseOverMaxThumb, bool isMouseDown)
+{
+    const auto colors = getSliderColors (theme, slider);
+
+    // Draw track background
+    g.setFillColor (colors.background);
+    if (isHorizontal)
+        g.fillRoundedRect (sliderBounds.getX(), sliderBounds.getCenterY() - 2.0f, sliderBounds.getWidth(), 4.0f, 2.0f);
+    else
+        g.fillRoundedRect (sliderBounds.getCenterX() - 2.0f, sliderBounds.getY(), 4.0f, sliderBounds.getHeight(), 2.0f);
+
+    // Draw selected range
+    g.setFillColor (colors.track);
+    if (isHorizontal)
+    {
+        const float startX = sliderBounds.getX() + (minValue * sliderBounds.getWidth());
+        const float endX = sliderBounds.getX() + (maxValue * sliderBounds.getWidth());
+        g.fillRoundedRect (startX, sliderBounds.getCenterY() - 2.0f, endX - startX, 4.0f, 2.0f);
+    }
+    else
+    {
+        const float startY = sliderBounds.getBottom() - (minValue * sliderBounds.getHeight());
+        const float endY = sliderBounds.getBottom() - (maxValue * sliderBounds.getHeight());
+        g.fillRoundedRect (sliderBounds.getCenterX() - 2.0f, endY, 4.0f, startY - endY, 2.0f);
+    }
+
+    // Draw min thumb
+    g.setFillColor (isMouseDown ? colors.thumbDown : (isMouseOverMinThumb ? colors.thumbOver : colors.thumb));
+    g.fillEllipse (minThumbBounds);
+
+    // Draw max thumb
+    g.setFillColor (isMouseDown ? colors.thumbDown : (isMouseOverMaxThumb ? colors.thumbOver : colors.thumb));
+    g.fillEllipse (maxThumbBounds);
+
+    // Draw focus outline if needed
+    if (slider.hasKeyboardFocus())
+    {
+        g.setStrokeColor (Colors::cornflowerblue);
+        g.setStrokeWidth (2.0f);
+        g.strokeRoundedRect (slider.getLocalBounds().reduced (2), 2.0f);
+    }
+}
+
+void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
+{
+    auto sliderBounds = s.getSliderBounds();
+    const auto sliderType = s.getSliderType();
+    const bool isMouseOver = s.isMouseOver();
+    const bool isMouseDown = false; // s.isMouseButtonDown();
+
+    switch (sliderType)
+    {
+        case Slider::RotaryHorizontalDrag:
+        case Slider::RotaryVerticalDrag:
+        case Slider::Rotary:
+        default:
+        {
+            constexpr float rotaryStartAngle = degreesToRadians (135.0f);
+            constexpr float rotaryEndAngle = rotaryStartAngle + degreesToRadians (270.0f);
+            paintRotarySlider (g, theme, s, sliderBounds, rotaryStartAngle, rotaryEndAngle, static_cast<float> (s.getValueNormalised()), isMouseOver, isMouseDown);
+            break;
+        }
+
+        case Slider::LinearHorizontal:
+        case Slider::LinearVertical:
+        case Slider::LinearBarHorizontal:
+        case Slider::LinearBarVertical:
+        {
+            Rectangle<float> thumbBounds;
+            const bool isHorizontal = (sliderType == Slider::LinearHorizontal || sliderType == Slider::LinearBarHorizontal);
+            const float sliderValue = static_cast<float> (s.getValueNormalised());
+
+            if (isHorizontal)
+            {
+                const float thumbX = sliderBounds.getX() + (sliderValue * sliderBounds.getWidth()) - 8.0f;
+                thumbBounds = Rectangle<float> (thumbX, sliderBounds.getCenterY() - 8.0f, 16.0f, 16.0f);
+            }
+            else
+            {
+                const float thumbY = sliderBounds.getBottom() - (sliderValue * sliderBounds.getHeight()) - 8.0f;
+                thumbBounds = Rectangle<float> (sliderBounds.getCenterX() - 8.0f, thumbY, 16.0f, 16.0f);
+            }
+
+            paintLinearSlider (g, theme, s, sliderBounds, thumbBounds, isHorizontal, sliderValue, isMouseOver, isMouseDown);
+            break;
+        }
+
+        case Slider::TwoValueHorizontal:
+        case Slider::TwoValueVertical:
+        {
+            Rectangle<float> minThumbBounds, maxThumbBounds;
+            const bool isHorizontal = (sliderType == Slider::TwoValueHorizontal);
+            const float minNorm = 0.0f; // static_cast<float>(s.getMinValueNormalised());
+            const float maxNorm = 1.0f; // static_cast<float>(s.getMaxValueNormalised());
+
+            if (isHorizontal)
+            {
+                const float minThumbX = sliderBounds.getX() + (minNorm * sliderBounds.getWidth()) - 8.0f;
+                const float maxThumbX = sliderBounds.getX() + (maxNorm * sliderBounds.getWidth()) - 8.0f;
+                minThumbBounds = Rectangle<float> (minThumbX, sliderBounds.getCenterY() - 8.0f, 16.0f, 16.0f);
+                maxThumbBounds = Rectangle<float> (maxThumbX, sliderBounds.getCenterY() - 8.0f, 16.0f, 16.0f);
+            }
+            else
+            {
+                const float minThumbY = sliderBounds.getBottom() - (minNorm * sliderBounds.getHeight()) - 8.0f;
+                const float maxThumbY = sliderBounds.getBottom() - (maxNorm * sliderBounds.getHeight()) - 8.0f;
+                minThumbBounds = Rectangle<float> (sliderBounds.getCenterX() - 8.0f, minThumbY, 16.0f, 16.0f);
+                maxThumbBounds = Rectangle<float> (sliderBounds.getCenterX() - 8.0f, maxThumbY, 16.0f, 16.0f);
+            }
+
+            // For two-value sliders, check which thumb the mouse is over
+            bool isMouseOverMinThumb = false;
+            bool isMouseOverMaxThumb = false;
+            if (isMouseOver)
+            {
+                const auto mousePos = Point<float>(); // s.getMousePosition();
+                const Point<float> mousePosFloat (static_cast<float> (mousePos.getX()), static_cast<float> (mousePos.getY()));
+                isMouseOverMinThumb = minThumbBounds.contains (mousePosFloat);
+                isMouseOverMaxThumb = maxThumbBounds.contains (mousePosFloat);
+            }
+
+            paintTwoValueSlider (g, theme, s, sliderBounds, minThumbBounds, maxThumbBounds, isHorizontal, minNorm, maxNorm, isMouseOverMinThumb, isMouseOverMaxThumb, isMouseDown);
+            break;
+        }
     }
 }
 
@@ -360,7 +547,20 @@ void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
     auto& styledText = l.getStyledText();
     const auto bounds = l.getLocalBounds();
 
-    if (const auto strokeColor = l.findColor (Label::Style::strokeColorId); strokeColor && ! strokeColor->isTransparent())
+    if (const auto backgroundColor = l.findColor (Label::Style::backgroundColorId); backgroundColor && ! backgroundColor->isTransparent())
+    {
+        g.setFillColor (*backgroundColor);
+        g.fillRoundedRect (bounds, 4.0f);
+    }
+
+    if (const auto outlineColor = l.findColor (Label::Style::outlineColorId); outlineColor && ! outlineColor->isTransparent())
+    {
+        g.setStrokeColor (*outlineColor);
+        g.setStrokeWidth (2.0f);
+        g.strokeRoundedRect (bounds, 4.0f);
+    }
+
+    if (const auto strokeColor = l.findColor (Label::Style::textStrokeColorId); strokeColor && ! strokeColor->isTransparent())
     {
         g.setStrokeColor (*strokeColor);
         g.setStrokeWidth (l.getStrokeWidth());
@@ -369,7 +569,7 @@ void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
 
     if (! styledText.isEmpty())
     {
-        const auto fillColor = l.findColor (Label::Style::fillColorId).value_or (Colors::white);
+        const auto fillColor = l.findColor (Label::Style::textFillColorId).value_or (Colors::white);
         g.setFillColor (fillColor);
         g.fillFittedText (styledText, bounds);
     }
@@ -482,7 +682,7 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
                 auto styledText = yup::StyledText();
                 {
                     auto modifier = styledText.startUpdate();
-                    modifier.appendText (item->text, itemFont, 14.0f);
+                    modifier.appendText (item->text, itemFont.withHeight (14.0f));
                 }
 
                 g.fillFittedText (styledText, textRect);
@@ -507,7 +707,7 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
                 {
                     auto modifier = styledText.startUpdate();
                     modifier.setHorizontalAlign (yup::StyledText::right);
-                    modifier.appendText (item->shortcutKeyText, itemFont, 13.0f);
+                    modifier.appendText (item->shortcutKeyText, itemFont.withHeight (13.0f));
                 }
 
                 g.setOpacity (0.7f);
@@ -568,6 +768,186 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
 }
 
 //==============================================================================
+#if YUP_MODULE_AVAILABLE_yup_audio_gui
+void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKeyboardComponent& keyboard)
+{
+    auto bounds = keyboard.getLocalBounds();
+
+    if (bounds.isEmpty())
+        return;
+
+    auto keyWidth = keyboard.getKeyStartRange().getLength();
+    keyWidth /= keyboard.getNumWhiteKeysInRange (keyboard.getLowestVisibleKey(), keyboard.getHighestVisibleKey() + 1);
+
+    // Draw keyboard background with subtle gradient shadow
+    auto keyboardWidth = keyboard.getKeyStartRange().getEnd();
+    auto shadowColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyShadowColorId);
+
+    if (! shadowColor.isTransparent())
+    {
+        // Draw subtle top shadow gradient for depth
+        ColorGradient shadowGradient;
+        shadowGradient.addColorStop (shadowColor, Point<float> (0.0f, 0.0f), 0.0f);
+        shadowGradient.addColorStop (shadowColor.withAlpha (0.0f), Point<float> (0.0f, 5.0f), 1.0f);
+
+        g.setFillColorGradient (shadowGradient);
+        g.fillRect (Rectangle<float> (0.0f, 0.0f, keyboardWidth, 5.0f));
+    }
+
+    // Draw separator line at bottom
+    auto lineColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::keyOutlineColorId);
+    if (! lineColor.isTransparent())
+    {
+        g.setFillColor (lineColor);
+        g.fillRect (Rectangle<float> (0.0f, bounds.getHeight() - 1.0f, keyboardWidth, 1.0f));
+    }
+
+    // Paint white keys first
+    for (int note = keyboard.getLowestVisibleKey(); note <= keyboard.getHighestVisibleKey(); ++note)
+    {
+        if (! keyboard.isBlackKey (note))
+        {
+            bool isBlack;
+            Rectangle<float> keyArea;
+            keyboard.getKeyPosition (note, keyWidth, keyArea, isBlack);
+
+            auto isPressed = keyboard.isNoteOn (note);
+            auto isOver = keyboard.isMouseOverNote (note);
+
+            // Base colors from theme
+            auto whiteKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyColorId);
+            auto pressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyPressedColorId);
+            auto outlineColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::keyOutlineColorId);
+
+            // Determine fill color based on state
+            Color fillColor = whiteKeyColor;
+            if (isPressed)
+                fillColor = pressedColor;
+            if (isOver && ! isPressed)
+                fillColor = whiteKeyColor.overlaidWith (pressedColor.withAlpha (0.3f));
+
+            // Fill the key
+            g.setFillColor (fillColor);
+            g.fillRect (keyArea);
+
+            // Draw key separator line on the left edge
+            if (! outlineColor.isTransparent())
+            {
+                g.setFillColor (outlineColor);
+                g.fillRect (keyArea.removeFromLeft (1.0f));
+
+                // Draw right edge for the last key
+                if (note == keyboard.getHighestVisibleKey())
+                    g.fillRect (keyArea.removeFromRight (1.0f).translated (keyArea.getWidth(), 0.0f));
+            }
+
+            // Draw note text if there's space
+            if (keyboard.getWidth() > 100 && keyArea.getWidth() > 15.0f)
+            {
+                auto noteText = String();
+                int noteInOctave = note % 12;
+                switch (noteInOctave)
+                {
+                    case 0:
+                        noteText = "C";
+                        break;
+                    case 2:
+                        noteText = "D";
+                        break;
+                    case 4:
+                        noteText = "E";
+                        break;
+                    case 5:
+                        noteText = "F";
+                        break;
+                    case 7:
+                        noteText = "G";
+                        break;
+                    case 9:
+                        noteText = "A";
+                        break;
+                    case 11:
+                        noteText = "B";
+                        break;
+                    default:
+                        break;
+                }
+
+                if (noteText.isNotEmpty())
+                {
+                    auto textColor = outlineColor.contrasting (0.8f);
+                    if (isPressed)
+                        textColor = pressedColor.contrasting (0.8f);
+
+                    g.setFillColor (textColor);
+
+                    StyledText styledText;
+                    {
+                        auto modifier = styledText.startUpdate();
+                        modifier.appendText (noteText, theme.getDefaultFont().withHeight (11.0f));
+                        modifier.setHorizontalAlign (StyledText::center);
+                    }
+
+                    auto textArea = keyArea.reduced (2.0f).removeFromBottom (16.0f);
+                    g.fillFittedText (styledText, textArea);
+                }
+            }
+        }
+    }
+
+    // Paint black keys on top
+    for (int note = keyboard.getLowestVisibleKey(); note <= keyboard.getHighestVisibleKey(); ++note)
+    {
+        if (keyboard.isBlackKey (note))
+        {
+            bool isBlack;
+            Rectangle<float> keyArea;
+            keyboard.getKeyPosition (note, keyWidth, keyArea, isBlack);
+
+            auto isPressed = keyboard.isNoteOn (note);
+            auto isOver = keyboard.isMouseOverNote (note);
+
+            // Base colors from theme
+            auto blackKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyColorId);
+            auto blackPressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyPressedColorId);
+
+            // Determine fill color based on state
+            Color fillColor = blackKeyColor;
+            if (isPressed)
+                fillColor = blackPressedColor;
+            if (isOver && ! isPressed)
+                fillColor = blackKeyColor.overlaidWith (blackPressedColor.withAlpha (0.3f));
+
+            // Fill the key
+            g.setFillColor (fillColor);
+            g.fillRect (keyArea);
+
+            if (isPressed)
+            {
+                // Draw pressed outline
+                g.setStrokeColor (blackKeyColor);
+                g.setStrokeWidth (1.0f);
+                g.strokeRect (keyArea);
+            }
+            else
+            {
+                // Draw 3D highlight effect for unpressed keys
+                auto highlightColor = fillColor.brighter (0.4f);
+                g.setFillColor (highlightColor);
+
+                // Create highlight area - top portion and side edges
+                auto sideIndent = keyArea.getWidth() * 0.125f;
+                auto topIndent = keyArea.getHeight() * 0.875f;
+                auto highlightArea = keyArea.reduced (sideIndent, 0).removeFromTop (topIndent);
+
+                g.fillRect (highlightArea);
+            }
+        }
+    }
+}
+#endif
+
+//==============================================================================
 
 ApplicationTheme::Ptr createThemeVersion1()
 {
@@ -582,6 +962,13 @@ ApplicationTheme::Ptr createThemeVersion1()
     }
 
     theme->setComponentStyle<Slider> (ComponentStyle::createStyle<Slider> (paintSlider));
+    theme->setColor (Slider::Style::backgroundColorId, Color (0xff3d3d3d));
+    theme->setColor (Slider::Style::trackColorId, Color (0xff636363));
+    theme->setColor (Slider::Style::thumbColorId, Color (0xff4ebfff));
+    theme->setColor (Slider::Style::thumbOverColorId, Color (0xff4ebfff).brighter (0.3f));
+    theme->setColor (Slider::Style::thumbDownColorId, Color (0xff4ebfff).darker (0.2f));
+    theme->setColor (Slider::Style::textColorId, Colors::white);
+
     theme->setComponentStyle<TextButton> (ComponentStyle::createStyle<TextButton> (paintTextButton));
     theme->setComponentStyle<ToggleButton> (ComponentStyle::createStyle<ToggleButton> (paintToggleButton));
     theme->setComponentStyle<SwitchButton> (ComponentStyle::createStyle<SwitchButton> (paintSwitchButton));
@@ -589,10 +976,23 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setComponentStyle<ComboBox> (ComponentStyle::createStyle<ComboBox> (paintComboBox));
 
     theme->setComponentStyle<Label> (ComponentStyle::createStyle<Label> (paintLabel));
-    theme->setColor (Label::Style::fillColorId, Colors::white);
-    theme->setColor (Label::Style::strokeColorId, Colors::transparentBlack);
+    theme->setColor (Label::Style::textFillColorId, Colors::white);
+    theme->setColor (Label::Style::textStrokeColorId, Colors::transparentBlack);
+    theme->setColor (Label::Style::backgroundColorId, Colors::transparentBlack);
+    theme->setColor (Label::Style::outlineColorId, Colors::transparentBlack);
 
     theme->setComponentStyle<PopupMenu> (ComponentStyle::createStyle<PopupMenu> (paintPopupMenu));
+
+#if YUP_MODULE_AVAILABLE_yup_audio_gui
+    theme->setComponentStyle<MidiKeyboardComponent> (ComponentStyle::createStyle<MidiKeyboardComponent> (paintMidiKeyboard));
+    theme->setColor (MidiKeyboardComponent::Style::whiteKeyColorId, Color (0xfff0f0f0));
+    theme->setColor (MidiKeyboardComponent::Style::whiteKeyPressedColorId, Color (0xff4ebfff));
+    theme->setColor (MidiKeyboardComponent::Style::whiteKeyShadowColorId, Color (0x40000000));
+    theme->setColor (MidiKeyboardComponent::Style::blackKeyColorId, Color (0xff2a2a2a));
+    theme->setColor (MidiKeyboardComponent::Style::blackKeyPressedColorId, Color (0xff4ebfff));
+    theme->setColor (MidiKeyboardComponent::Style::blackKeyShadowColorId, Color (0x80000000));
+    theme->setColor (MidiKeyboardComponent::Style::keyOutlineColorId, Color (0xff888888));
+#endif
 
     return theme;
 }

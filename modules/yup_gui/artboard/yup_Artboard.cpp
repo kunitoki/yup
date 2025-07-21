@@ -27,6 +27,7 @@ namespace yup
 Artboard::Artboard (StringRef componentID)
     : Component (componentID)
 {
+    setOpaque (true);
 }
 
 Artboard::Artboard (StringRef componentID, std::shared_ptr<ArtboardFile> file)
@@ -279,12 +280,7 @@ void Artboard::resized()
 {
     auto scaleDpi = getScaleDpi();
     auto scaledBounds = getBounds() * scaleDpi;
-
-    auto frameBounds = rive::AABB (
-        scaledBounds.getX(),
-        scaledBounds.getY(),
-        scaledBounds.getX() + scaledBounds.getWidth(),
-        scaledBounds.getY() + scaledBounds.getHeight());
+    auto frameBounds = scaledBounds.toAABB();
 
     rive::AABB artboardBounds;
     if (artboard != nullptr)

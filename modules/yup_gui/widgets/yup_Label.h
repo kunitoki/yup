@@ -87,8 +87,10 @@ public:
 
     struct Style
     {
-        static const Identifier fillColorId;
-        static const Identifier strokeColorId;
+        static const Identifier textFillColorId;
+        static const Identifier textStrokeColorId;
+        static const Identifier backgroundColorId;
+        static const Identifier outlineColorId;
     };
 
     //==============================================================================

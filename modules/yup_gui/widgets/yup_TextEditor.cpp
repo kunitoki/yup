@@ -507,7 +507,7 @@ void TextEditor::updateStyledTextIfNeeded()
         modifier.setWrap (/*multiLine ? StyledText::wrap :*/ StyledText::noWrap);
         modifier.setOverflow (StyledText::visible);
 
-        modifier.appendText (text, currentFont, fontSize.value_or (14.0f));
+        modifier.appendText (text, currentFont.withHeight (fontSize.value_or (14.0f)));
     }
 
     needsUpdate = false;

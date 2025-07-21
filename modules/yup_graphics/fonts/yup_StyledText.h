@@ -83,14 +83,12 @@ public:
 
         void appendText (StringRef text,
                          const Font& font,
-                         float fontSize = 16.0f,
                          float lineHeight = -1.0f,
                          float letterSpacing = 0.0f);
 
         void appendText (StringRef text,
                          rive::rcp<rive::RenderPaint> paint,
                          const Font& font,
-                         float fontSize = 16.0f,
                          float lineHeight = -1.0f,
                          float letterSpacing = 0.0f);
 
@@ -140,10 +138,7 @@ public:
 
     struct RenderStyle
     {
-        RenderStyle (
-            rive::rcp<rive::RenderPaint> paint,
-            rive::rcp<rive::RenderPath> path,
-            bool isEmpty)
+        RenderStyle (rive::rcp<rive::RenderPaint> paint, rive::rcp<rive::RenderPath> path, bool isEmpty)
             : paint (std::move (paint))
             , path (std::move (path))
             , isEmpty (isEmpty)
@@ -198,7 +193,6 @@ private:
     void appendText (StringRef text,
                      rive::rcp<rive::RenderPaint> paint,
                      const Font& font,
-                     float fontSize,
                      float lineHeight,
                      float letterSpacing);
 

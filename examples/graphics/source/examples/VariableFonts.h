@@ -59,7 +59,7 @@ public:
             label->setFont (font);
             addAndMakeVisible (label);
 
-            auto slider = sliders.add (std::make_unique<yup::Slider> (axisInfo->tagName));
+            auto slider = sliders.add (std::make_unique<yup::Slider> (yup::Slider::Rotary, axisInfo->tagName));
             slider->setDefaultValue (axisInfo->defaultValue);
             slider->setRange ({ axisInfo->minimumValue, axisInfo->maximumValue });
             slider->setValue (axisInfo->defaultValue);
@@ -92,7 +92,7 @@ public:
             modifier.setOverflow (yup::StyledText::visible);
             modifier.setWrap (yup::StyledText::wrap);
             modifier.clear();
-            modifier.appendText (text, font.getFont(), fontSize);
+            modifier.appendText (text, font.withHeight (fontSize));
         }
 
         bounds = bounds.reduced (10);
@@ -164,7 +164,7 @@ private:
         label->setFont (font);
         addAndMakeVisible (label);
 
-        auto slider = sliders.add (std::make_unique<yup::Slider> (name));
+        auto slider = sliders.add (std::make_unique<yup::Slider> (yup::Slider::Rotary, name));
         slider->setDefaultValue (defaultValue);
         slider->setRange ({ minValue, maxValue });
         slider->setValue (defaultValue);

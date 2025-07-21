@@ -76,7 +76,7 @@ void TextButton::resized()
     modifier.clear();
 
     if (buttonText.isNotEmpty())
-        modifier.appendText (buttonText, font, getHeight() * 0.35f);
+        modifier.appendText (buttonText, font.withHeight (getHeight() * 0.35f));
 }
 
 //==============================================================================
