@@ -27,7 +27,7 @@ class ExampleSlider : public yup::Slider
 {
 public:
     ExampleSlider()
-        : yup::Slider(yup::Slider::RotaryVerticalDrag)
+        : yup::Slider (yup::Slider::RotaryVerticalDrag)
     {
     }
 };
