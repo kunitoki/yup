@@ -60,9 +60,9 @@ namespace yup
 template <int FirSize, int Ratio, typename SampleType, typename CoeffType = double>
 class FirUpsampler
 {
-    static_assert(FirSize > 0, "FirSize must be positive");
-    static_assert(Ratio > 1, "Ratio must be greater than 1");
-    static_assert((FirSize % 4) == 0, "FirSize should be multiple of 4 for optimal performance");
+    static_assert (FirSize > 0, "FirSize must be positive");
+    static_assert (Ratio > 1, "Ratio must be greater than 1");
+    static_assert ((FirSize % 4) == 0, "FirSize should be multiple of 4 for optimal performance");
 
 public:
     //==============================================================================
@@ -119,15 +119,15 @@ public:
     SampleType processSample (SampleType inputSample) noexcept
     {
         jassert (coefficients != nullptr);
-        
+
         // Store input sample in circular buffer
         buffer[bufferIndex] = inputSample;
-        
+
         // Calculate first upsampled output (at phase 0)
         auto output = static_cast<SampleType> (0.0);
         int coeffIndex = 0;
         int bufferPos = bufferIndex;
-        
+
         // Process in groups of 4 for better optimization
         for (int i = 0; i < FirSize; i += 4 * Ratio)
         {
@@ -137,7 +137,7 @@ public:
                 output += static_cast<SampleType> (coefficients[coeffIndex + 1 * Ratio]) * buffer[(bufferPos + BufferSize - 1) & BufferMask];
                 output += static_cast<SampleType> (coefficients[coeffIndex + 2 * Ratio]) * buffer[(bufferPos + BufferSize - 2) & BufferMask];
                 output += static_cast<SampleType> (coefficients[coeffIndex + 3 * Ratio]) * buffer[(bufferPos + BufferSize - 3) & BufferMask];
-                
+
                 bufferPos -= 4;
                 coeffIndex += 4 * Ratio;
             }
@@ -153,10 +153,10 @@ public:
                 break;
             }
         }
-        
+
         // Advance buffer index
         bufferIndex = (bufferIndex + 1) & BufferMask;
-        
+
         return output;
     }
 
@@ -170,11 +170,11 @@ public:
     {
         jassert (phase >= 1 && phase < Ratio);
         jassert (coefficients != nullptr);
-        
+
         auto output = static_cast<SampleType> (0.0);
         int coeffIndex = phase;
         int bufferPos = (bufferIndex - 1 + BufferSize) & BufferMask; // Previous input position
-        
+
         // Process coefficients at the specified phase
         for (int i = phase; i < FirSize; i += Ratio)
         {
@@ -182,7 +182,7 @@ public:
             --bufferPos;
             coeffIndex += Ratio;
         }
-        
+
         return output;
     }
 
@@ -199,7 +199,7 @@ public:
         {
             // First upsampled output
             outputBuffer[i * Ratio] = processSample (inputBuffer[i]);
-            
+
             // Remaining interpolated outputs
             for (int phase = 1; phase < Ratio; ++phase)
             {
@@ -220,10 +220,10 @@ private:
     // Use power-of-2 buffer size for efficient wrapping
     static constexpr int BufferSize = nextPowerOfTwo (FirSize);
     static constexpr int BufferMask = BufferSize - 1;
-    
+
     const CoeffType* coefficients;
     std::array<SampleType, BufferSize> buffer;
-    int bufferIndex;   
+    int bufferIndex;
 };
 
 //==============================================================================
@@ -257,8 +257,8 @@ private:
 template <int FirSize, typename SampleType, typename CoeffType = double>
 class FirDownsampler
 {
-    static_assert(FirSize > 0, "FirSize must be positive");
-    static_assert((FirSize % 4) == 0, "FirSize should be multiple of 4 for optimal performance");
+    static_assert (FirSize > 0, "FirSize must be positive");
+    static_assert ((FirSize % 4) == 0, "FirSize should be multiple of 4 for optimal performance");
 
 public:
     //==============================================================================
@@ -333,22 +333,22 @@ public:
     SampleType processSample (SampleType inputSample, bool& hasOutput) noexcept
     {
         jassert (coefficients != nullptr);
-        
+
         // Store input sample in circular buffer
         buffer[bufferIndex] = inputSample;
         bufferIndex = (bufferIndex + 1) & BufferMask;
-        
+
         // Check if we should produce an output
         ++decimationPhase;
         if (decimationPhase >= decimationRate)
         {
             decimationPhase = 0;
             hasOutput = true;
-            
+
             // Calculate filtered output
             auto output = static_cast<SampleType> (0.0);
             int bufferPos = (bufferIndex - 1 + BufferSize) & BufferMask;
-            
+
             // Process in groups of 4 for optimization
             int i = 0;
             for (; i <= FirSize - 4; i += 4)
@@ -359,14 +359,14 @@ public:
                 output += static_cast<SampleType> (coefficients[i + 3]) * buffer[(bufferPos - 3 + BufferSize) & BufferMask];
                 bufferPos -= 4;
             }
-            
+
             // Handle remaining coefficients
             for (; i < FirSize; ++i)
             {
                 output += static_cast<SampleType> (coefficients[i]) * buffer[bufferPos & BufferMask];
                 bufferPos = (bufferPos - 1 + BufferSize) & BufferMask;
             }
-            
+
             return output;
         }
         else
@@ -387,18 +387,18 @@ public:
     int processBlock (const SampleType* inputBuffer, SampleType* outputBuffer, int numSamples) noexcept
     {
         int outputCount = 0;
-        
+
         for (int i = 0; i < numSamples; ++i)
         {
             bool hasOutput;
             const auto output = processSample (inputBuffer[i], hasOutput);
-            
+
             if (hasOutput)
             {
                 outputBuffer[outputCount++] = output;
             }
         }
-        
+
         return outputCount;
     }
 
@@ -415,13 +415,13 @@ private:
     // Use power-of-2 buffer size for efficient wrapping
     static constexpr int BufferSize = nextPowerOfTwo (FirSize);
     static constexpr int BufferMask = BufferSize - 1;
-    
+
     const CoeffType* coefficients;
     std::array<SampleType, BufferSize> buffer;
     int bufferIndex;
     int decimationPhase;
     int decimationRate;
-    
+
     //==============================================================================
     static constexpr int nextPowerOfTwo (int value)
     {
@@ -458,10 +458,10 @@ public:
     /** Quality presets for automatic filter design */
     enum class Quality
     {
-        draft,      /** Fast processing, basic quality (32 taps) */
-        normal,     /** Balanced quality and performance (64 taps) */
-        high,       /** High quality, more computation (128 taps) */
-        perfect     /** Maximum quality, highest computation (256 taps) */
+        draft,  /** Fast processing, basic quality (32 taps) */
+        normal, /** Balanced quality and performance (64 taps) */
+        high,   /** High quality, more computation (128 taps) */
+        perfect /** Maximum quality, highest computation (256 taps) */
     };
 
     //==============================================================================
@@ -587,18 +587,21 @@ private:
             cutoffFreq,
             this->sampleRate * static_cast<double> (upsampleRatio),
             "kaiser",
-            stopbandAttenuation
-        );
+            stopbandAttenuation);
     }
 
     static int getFilterLengthForQuality (Quality qualityLevel) noexcept
     {
         switch (qualityLevel)
         {
-            case Quality::draft:   return 32;
-            case Quality::normal:  return 64;
-            case Quality::high:    return 128;
-            case Quality::perfect: return 256;
+            case Quality::draft:
+                return 32;
+            case Quality::normal:
+                return 64;
+            case Quality::high:
+                return 128;
+            case Quality::perfect:
+                return 256;
         }
         return 64;
     }
@@ -607,10 +610,14 @@ private:
     {
         switch (qualityLevel)
         {
-            case Quality::draft:   return static_cast<CoeffType> (40.0);
-            case Quality::normal:  return static_cast<CoeffType> (60.0);
-            case Quality::high:    return static_cast<CoeffType> (80.0);
-            case Quality::perfect: return static_cast<CoeffType> (100.0);
+            case Quality::draft:
+                return static_cast<CoeffType> (40.0);
+            case Quality::normal:
+                return static_cast<CoeffType> (60.0);
+            case Quality::high:
+                return static_cast<CoeffType> (80.0);
+            case Quality::perfect:
+                return static_cast<CoeffType> (100.0);
         }
         return static_cast<CoeffType> (60.0);
     }
@@ -628,19 +635,19 @@ private:
 
 //==============================================================================
 /** Type aliases for common upsampler configurations */
-using FirUpsampler2x64 = FirUpsampler<64, 2, float>;      // 2x upsampling, 64 taps
-using FirUpsampler4x64 = FirUpsampler<64, 4, float>;      // 4x upsampling, 64 taps
-using FirUpsampler8x64 = FirUpsampler<64, 8, float>;      // 8x upsampling, 64 taps
+using FirUpsampler2x64 = FirUpsampler<64, 2, float>; // 2x upsampling, 64 taps
+using FirUpsampler4x64 = FirUpsampler<64, 4, float>; // 4x upsampling, 64 taps
+using FirUpsampler8x64 = FirUpsampler<64, 8, float>; // 8x upsampling, 64 taps
 
-using FirUpsampler2x128 = FirUpsampler<128, 2, float>;    // 2x upsampling, 128 taps (high quality)
-using FirUpsampler4x128 = FirUpsampler<128, 4, float>;    // 4x upsampling, 128 taps (high quality)
+using FirUpsampler2x128 = FirUpsampler<128, 2, float>; // 2x upsampling, 128 taps (high quality)
+using FirUpsampler4x128 = FirUpsampler<128, 4, float>; // 4x upsampling, 128 taps (high quality)
 
 /** Type aliases for common downsampler configurations */
-using FirDownsampler64 = FirDownsampler<64, float>;       // 64 taps downsampler
-using FirDownsampler128 = FirDownsampler<128, float>;     // 128 taps downsampler (high quality)
+using FirDownsampler64 = FirDownsampler<64, float>;   // 64 taps downsampler
+using FirDownsampler128 = FirDownsampler<128, float>; // 128 taps downsampler (high quality)
 
 /** Type aliases for complete resampler */
-using FirResamplerFloat = FirResampler<float>;             // float samples, double coefficients (default)
-using FirResamplerDouble = FirResampler<double>;           // double samples, double coefficients (default)
+using FirResamplerFloat = FirResampler<float>;   // float samples, double coefficients (default)
+using FirResamplerDouble = FirResampler<double>; // double samples, double coefficients (default)
 
 } // namespace yup
