@@ -148,7 +148,7 @@ private:
             else
                 label = yup::String (freq, 0);
 
-            g.fillFittedText (label, font, { x - 20, bounds.getBottom() - 15, 40, 15 }, yup::Justification::center);
+            g.fillFittedText (label, font.withHeight (10.0f), { x - 20, bounds.getBottom() - 15, 40, 15 }, yup::Justification::center);
         }
 
         // Phase labels
@@ -156,7 +156,7 @@ private:
         {
             float y = phaseToY (phase, bounds);
             yup::String label = yup::String (phase, 0) + "°";
-            g.fillFittedText (label, font, { bounds.getX() + 5, y - 8, 60, 16 }, yup::Justification::left);
+            g.fillFittedText (label, font.withHeight (10.0f), { bounds.getX() + 5, y - 8, 60, 16 }, yup::Justification::left);
         }
     }
 
@@ -259,7 +259,7 @@ private:
             else
                 label = yup::String (freq, 0);
 
-            g.fillFittedText (label, font, { x - 20, bounds.getBottom() - 15, 40, 15 }, yup::Justification::center);
+            g.fillFittedText (label, font.withHeight (10.0f), { x - 20, bounds.getBottom() - 15, 40, 15 }, yup::Justification::center);
         }
 
         // Delay labels
@@ -267,7 +267,7 @@ private:
         {
             float y = delayToY (delay, bounds);
             yup::String label = yup::String (delay, 1) + " smp";
-            g.fillFittedText (label, font, { bounds.getX() + 5, y - 8, 60, 16 }, yup::Justification::left);
+            g.fillFittedText (label, font.withHeight (10.0f), { bounds.getX() + 5, y - 8, 60, 16 }, yup::Justification::left);
         }
     }
 
@@ -378,7 +378,7 @@ private:
         {
             float x = bounds.getX() + i * bounds.getWidth() / 5.0f;
             yup::String label = yup::String (i * 20.0f, 0) + " smp"; // 20 samples per division
-            g.fillFittedText (label, font, { x - 20, bounds.getBottom() - 15, 40, 15 }, yup::Justification::center);
+            g.fillFittedText (label, font.withHeight (10.0f), { x - 20, bounds.getBottom() - 15, 40, 15 }, yup::Justification::center);
         }
 
         // Amplitude labels
@@ -386,7 +386,7 @@ private:
         {
             float y = amplitudeToY (amp, bounds);
             yup::String label = yup::String (amp, 1);
-            g.fillFittedText (label, font, { bounds.getX() + 5, y - 8, 40, 16 }, yup::Justification::left);
+            g.fillFittedText (label, font.withHeight (10.0f), { bounds.getX() + 5, y - 8, 40, 16 }, yup::Justification::left);
         }
     }
 
@@ -484,22 +484,22 @@ private:
         g.fillFittedText ("Poles & Zeros", font, bounds.removeFromTop (20), yup::Justification::center);
 
         // Axis labels
-        g.fillFittedText ("Real", font, { bounds.getRight() - 40, center.getY() - 8, 35, 16 }, yup::Justification::right);
-        g.fillFittedText ("Imag", font, { center.getX() - 20, bounds.getY() + 5, 40, 16 }, yup::Justification::center);
+        g.fillFittedText ("Real", font.withHeight (10.0f), { bounds.getRight() - 40, center.getY() - 8, 35, 16 }, yup::Justification::right);
+        g.fillFittedText ("Imag", font.withHeight (10.0f), { center.getX() - 20, bounds.getY() + 5, 40, 16 }, yup::Justification::center);
 
         // Legend
         auto legendY = bounds.getY() + 30;
         g.setStrokeColor (yup::Color (0xFF00FF88));
         g.setStrokeWidth (2.0f);
         g.strokeEllipse (bounds.getX() + 10, legendY, 8, 8);
-        g.fillFittedText ("Zeros", font, { bounds.getX() + 25, legendY - 2, 40, 16 }, yup::Justification::left);
+        g.fillFittedText ("Zeros", font.withHeight (10.0f), { bounds.getX() + 25, legendY - 2, 40, 16 }, yup::Justification::left);
 
         g.setStrokeColor (yup::Color (0xFFFF4444));
         g.setStrokeWidth (3.0f);
         legendY += 20;
         g.strokeLine ({ bounds.getX() + 9, legendY + 1 }, { bounds.getX() + 17, legendY + 9 });
         g.strokeLine ({ bounds.getX() + 9, legendY + 9 }, { bounds.getX() + 17, legendY + 1 });
-        g.fillFittedText ("Poles", font, { bounds.getX() + 25, legendY + 1, 40, 16 }, yup::Justification::left);
+        g.fillFittedText ("Poles", font.withHeight (10.0f), { bounds.getX() + 25, legendY + 1, 40, 16 }, yup::Justification::left);
     }
 
     std::vector<std::complex<double>> poles;
@@ -534,6 +534,12 @@ public:
         filter = newFilter;
         updateResponseData();
     }
+
+    const std::vector<yup::Point<float>>& getPhaseData() const { return phaseData; }
+
+    const std::vector<yup::Point<float>>& getGroupDelayData() const { return groupDelayData; }
+
+    const std::vector<yup::Point<float>>& getStepResponseData() const { return stepResponseData; }
 
     void updateResponseData()
     {
@@ -735,7 +741,7 @@ private:
         {
             float y = dbToY (db, bounds);
             yup::String label = yup::String (db, 0) + " dB";
-            g.fillFittedText (label, font, { bounds.getX() + 5, y - 8, 60, 16 }, yup::Justification::left);
+            g.fillFittedText (label, font.withHeight (10.0f), { bounds.getX() + 5, y - 8, 60, 16 }, yup::Justification::left);
         }
     }
 
@@ -760,14 +766,6 @@ private:
     double sampleRate;
     double minFreq, maxFreq;
     double minDb, maxDb;
-
-public:
-    // Accessor methods for the new display widgets
-    const std::vector<yup::Point<float>>& getPhaseData() const { return phaseData; }
-
-    const std::vector<yup::Point<float>>& getGroupDelayData() const { return groupDelayData; }
-
-    const std::vector<yup::Point<float>>& getStepResponseData() const { return stepResponseData; }
 };
 
 //==============================================================================
@@ -981,6 +979,9 @@ public:
         inputData.resize (device->getCurrentBufferSizeSamples());
         renderData.resize (inputData.size());
         readPos = 0;
+
+        // Store sample rate for parameter updates
+        currentSampleRate = sampleRate;
     }
 
     void audioDeviceStopped() override
@@ -1249,15 +1250,15 @@ private:
         // Update parameters based on filter type
         if (auto bf = std::dynamic_pointer_cast<yup::ButterworthFilter<float>> (currentFilter))
         {
-            bf->setParameters (getFilterType (responseTypeId), order, freq, 44100.0);
+            bf->setParameters (getFilterType (responseTypeId), order, freq, currentSampleRate);
         }
         else if (auto rf = std::dynamic_pointer_cast<yup::RbjFilter<float>> (currentFilter))
         {
-            rf->setParameters (getRbjType (responseTypeId), freq, q, gain, 44100.0);
+            rf->setParameters (getRbjType (responseTypeId), freq, q, gain, currentSampleRate);
         }
         else if (auto svf = std::dynamic_pointer_cast<yup::StateVariableFilter<float>> (currentFilter))
         {
-            svf->setParameters (freq, q, 44100.0);
+            svf->setParameters (freq, q, currentSampleRate);
             svf->setMode (getSvfMode (responseTypeId));
         }
         else if (auto moog = std::dynamic_pointer_cast<yup::MoogLadder<float>> (currentFilter))
@@ -1475,6 +1476,7 @@ private:
     WhiteNoiseGenerator noiseGenerator;
     yup::SmoothedValue<float> outputGain { 0.5f };
 
+    double currentSampleRate = 44100.0;
     // Filter instances
     std::shared_ptr<yup::ButterworthFilter<float>> butterworthFilter;
     std::shared_ptr<yup::RbjFilter<float>> rbjFilter;
