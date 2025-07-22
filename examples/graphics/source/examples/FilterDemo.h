@@ -79,6 +79,10 @@ private:
         g.setFillColor (yup::Color (0xFF1E1E1E));
         g.fillRect (bounds);
 
+        // Reserve space for labels
+        auto titleBounds = bounds.removeFromTop (20);
+        auto bottomLabelSpace = bounds.removeFromBottom (20);
+
         // Grid
         g.setStrokeColor (yup::Color (0xFF333333));
         g.setStrokeWidth (1.0f);
@@ -136,7 +140,7 @@ private:
         auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
 
         // Title
-        g.fillFittedText ("Phase Response", font, bounds.removeFromTop (20), yup::Justification::center);
+        g.fillFittedText ("Phase Response", font, titleBounds, yup::Justification::center);
 
         // Frequency labels
         for (double freq : { 100.0, 1000.0, 10000.0 })
@@ -148,7 +152,7 @@ private:
             else
                 label = yup::String (freq, 0);
 
-            g.fillFittedText (label, font.withHeight (10.0f), { x - 20, bounds.getBottom() - 15, 40, 15 }, yup::Justification::center);
+            g.fillFittedText (label, font.withHeight (10.0f), { x - 20, bottomLabelSpace.getY(), 40, 15 }, yup::Justification::center);
         }
 
         // Phase labels
@@ -195,6 +199,10 @@ private:
         // Background
         g.setFillColor (yup::Color (0xFF1E1E1E));
         g.fillRect (bounds);
+
+        // Reserve space for labels
+        auto titleBounds = bounds.removeFromTop (20);
+        auto bottomLabelSpace = bounds.removeFromBottom (20);
 
         // Grid
         g.setStrokeColor (yup::Color (0xFF333333));
@@ -247,7 +255,7 @@ private:
         auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
 
         // Title
-        g.fillFittedText ("Group Delay", font, bounds.removeFromTop (20), yup::Justification::center);
+        g.fillFittedText ("Group Delay", font, titleBounds, yup::Justification::center);
 
         // Frequency labels
         for (double freq : { 100.0, 1000.0, 10000.0 })
@@ -259,7 +267,7 @@ private:
             else
                 label = yup::String (freq, 0);
 
-            g.fillFittedText (label, font.withHeight (10.0f), { x - 20, bounds.getBottom() - 15, 40, 15 }, yup::Justification::center);
+            g.fillFittedText (label, font.withHeight (10.0f), { x - 20, bottomLabelSpace.getY(), 40, 15 }, yup::Justification::center);
         }
 
         // Delay labels
@@ -430,6 +438,10 @@ private:
         g.setFillColor (yup::Color (0xFF1E1E1E));
         g.fillRect (bounds);
 
+        // Reserve space for labels
+        auto titleBounds = bounds.removeFromTop (20);
+        bounds.removeFromBottom (10); // Just a small margin at bottom
+
         // Unit circle
         auto center = bounds.getCenter();
         float radius = std::min (bounds.getWidth(), bounds.getHeight()) * 0.4f;
@@ -485,7 +497,7 @@ private:
         auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
 
         // Title
-        g.fillFittedText ("Poles & Zeros", font, bounds.removeFromTop (20), yup::Justification::center);
+        g.fillFittedText ("Poles & Zeros", font, titleBounds, yup::Justification::center);
 
         // Axis labels
         g.fillFittedText ("Real", font.withHeight (10.0f), { bounds.getRight() - 40, center.getY() - 8, 35, 16 }, yup::Justification::right);
@@ -643,6 +655,10 @@ public:
         g.setFillColor (yup::Color (0xff1a1a1a));
         g.fillAll();
 
+        // Reserve space for labels
+        auto titleBounds = bounds.removeFromTop (20);
+        auto bottomLabelSpace = bounds.removeFromBottom (20);
+
         // Grid
         drawGrid (g, bounds);
 
@@ -653,7 +669,7 @@ public:
         }
 
         // Labels and title
-        drawLabels (g, bounds);
+        drawLabels (g, bounds, titleBounds, bottomLabelSpace);
     }
 
 private:
@@ -718,13 +734,13 @@ private:
         g.strokePath (path);
     }
 
-    void drawLabels (yup::Graphics& g, yup::Rectangle<float> bounds)
+    void drawLabels (yup::Graphics& g, yup::Rectangle<float> bounds, yup::Rectangle<float> titleBounds, yup::Rectangle<float> bottomLabelSpace)
     {
         g.setFillColor (yup::Colors::white);
         auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
 
         // Title
-        g.fillFittedText ("Filter Frequency Response", font, bounds.removeFromTop (20), yup::Justification::center);
+        g.fillFittedText ("Filter Frequency Response", font, titleBounds, yup::Justification::center);
 
         // Frequency labels
         for (double freq = 100.0; freq <= maxFreq; freq *= 10.0)
@@ -737,7 +753,7 @@ private:
             else
                 label = yup::String (freq, 0);
 
-            g.fillFittedText (label, font, { x - 20, bounds.getBottom() - 15, 40, 15 }, yup::Justification::center);
+            g.fillFittedText (label, font, { x - 20, bottomLabelSpace.getY(), 40, 15 }, yup::Justification::center);
         }
 
         // dB labels
@@ -1062,7 +1078,7 @@ private:
         // Parameter controls with smoothed parameter updates
         frequencySlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Frequency");
         frequencySlider->setRange ({ 20.0, 20000.0 });
-        frequencySlider->setSkewFactor (0.3); // Logarithmic scale
+        frequencySlider->setSkewFactorFromMidpoint (1000.0); // 1kHz at midpoint
         frequencySlider->setValue (1000.0);
         frequencySlider->onValueChanged = [this] (float value)
         {
@@ -1073,7 +1089,7 @@ private:
 
         qSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Q / Resonance");
         qSlider->setRange ({ 0.0, 1.0 });
-        qSlider->setSkewFactor (0.5);
+        qSlider->setSkewFactorFromMidpoint (0.3); // More resolution at lower Q values
         qSlider->setValue (0.0);
         qSlider->onValueChanged = [this] (float value)
         {
@@ -1083,7 +1099,8 @@ private:
         addAndMakeVisible (*qSlider);
 
         gainSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Gain (dB)");
-        gainSlider->setRange ({ -20.0, 20.0 });
+        gainSlider->setRange ({ -48.0, 20.0 });
+        gainSlider->setSkewFactorFromMidpoint (0.0); // 0 dB at midpoint
         gainSlider->setValue (0.0);
         gainSlider->onValueChanged = [this] (float value)
         {

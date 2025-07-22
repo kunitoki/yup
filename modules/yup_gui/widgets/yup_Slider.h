@@ -178,6 +178,8 @@ public:
     */
     void setSkewFactor (double skewFactor);
 
+    void setSkewFactorFromMidpoint (double midpointValue);
+
     /** Returns the current skew factor for the slider's range. */
     double getSkewFactor() const;
 
