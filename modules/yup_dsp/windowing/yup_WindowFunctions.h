@@ -159,7 +159,6 @@ public:
         @param buffer    The signal buffer to window (modified in-place)
         @param parameter Optional parameter for parameterizable windows
     */
-    template <typename ForwardIt>
     static void apply (WindowType type, Span<FloatType> input, FloatType param = FloatType (8))
     {
         const int N = static_cast<int> (input.size());
