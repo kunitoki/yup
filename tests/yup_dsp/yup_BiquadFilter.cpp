@@ -34,7 +34,7 @@ constexpr int blockSize = 256;
 } // namespace
 
 //==============================================================================
-class BiquadTests : public ::testing::Test
+class BiquadFilterTests : public ::testing::Test
 {
 protected:
     void SetUp() override
@@ -68,7 +68,7 @@ protected:
 // Biquad Basic Functionality Tests
 //==============================================================================
 
-TEST_F (BiquadTests, DefaultConstruction)
+TEST_F (BiquadFilterTests, DefaultConstruction)
 {
     BiquadFloat filter;
     EXPECT_EQ (filter.getTopology(), BiquadFloat::Topology::directFormII);
@@ -82,7 +82,7 @@ TEST_F (BiquadTests, DefaultConstruction)
     EXPECT_FLOAT_EQ (coeffs.a2, 0.0f);
 }
 
-TEST_F (BiquadTests, TopologyConstruction)
+TEST_F (BiquadFilterTests, TopologyConstruction)
 {
     BiquadFloat filter1 (BiquadFloat::Topology::directFormI);
     BiquadFloat filter2 (BiquadFloat::Topology::directFormII);
@@ -93,7 +93,7 @@ TEST_F (BiquadTests, TopologyConstruction)
     EXPECT_EQ (filter3.getTopology(), BiquadFloat::Topology::transposedDirectFormII);
 }
 
-TEST_F (BiquadTests, CoefficientSetAndGet)
+TEST_F (BiquadFilterTests, CoefficientSetAndGet)
 {
     BiquadCoefficients<double> coeffs (1.0, 0.5, 0.25, 1.0, -0.5, 0.125);
 
@@ -107,7 +107,7 @@ TEST_F (BiquadTests, CoefficientSetAndGet)
     EXPECT_DOUBLE_EQ (retrievedCoeffs.a2, 0.125);
 }
 
-TEST_F (BiquadTests, TopologySwitch)
+TEST_F (BiquadFilterTests, TopologySwitch)
 {
     // Set initial topology
     filterFloat.setTopology (BiquadFloat::Topology::directFormI);
@@ -122,7 +122,7 @@ TEST_F (BiquadTests, TopologySwitch)
 // Coefficient Normalization Tests
 //==============================================================================
 
-TEST_F (BiquadTests, CoefficientNormalization)
+TEST_F (BiquadFilterTests, CoefficientNormalization)
 {
     // Create coefficients with a0 != 1
     BiquadCoefficients<double> coeffs (2.0, 1.0, 0.5, 2.0, -1.0, 0.25);
@@ -143,7 +143,7 @@ TEST_F (BiquadTests, CoefficientNormalization)
 // Processing Tests
 //==============================================================================
 
-TEST_F (BiquadTests, SampleProcessing)
+TEST_F (BiquadFilterTests, SampleProcessing)
 {
     // Set up a simple lowpass filter
     auto coeffs = FilterDesigner<double>::designRbjLowpass (1000.0, 0.707, sampleRate);
@@ -156,7 +156,7 @@ TEST_F (BiquadTests, SampleProcessing)
     }
 }
 
-TEST_F (BiquadTests, BlockProcessing)
+TEST_F (BiquadFilterTests, BlockProcessing)
 {
     // Set up a bandpass filter
     auto coeffs = FilterDesigner<double>::designRbjBandpass (1000.0, 2.0, sampleRate);
@@ -170,7 +170,7 @@ TEST_F (BiquadTests, BlockProcessing)
     }
 }
 
-TEST_F (BiquadTests, InPlaceProcessing)
+TEST_F (BiquadFilterTests, InPlaceProcessing)
 {
     auto coeffs = FilterDesigner<double>::designRbjHighpass (500.0, 0.707, sampleRate);
     filterFloat.setCoefficients (coeffs);
@@ -188,7 +188,7 @@ TEST_F (BiquadTests, InPlaceProcessing)
 // Topology Equivalence Tests
 //==============================================================================
 
-TEST_F (BiquadTests, TopologyEquivalence)
+TEST_F (BiquadFilterTests, TopologyEquivalence)
 {
     // Test that all topologies produce equivalent results for the same coefficients
     auto coeffs = FilterDesigner<double>::designRbjPeak (1000.0, 1.0, 6.0, sampleRate);
@@ -225,7 +225,7 @@ TEST_F (BiquadTests, TopologyEquivalence)
 // State Reset Tests
 //==============================================================================
 
-TEST_F (BiquadTests, StateReset)
+TEST_F (BiquadFilterTests, StateReset)
 {
     auto coeffs = FilterDesigner<double>::designRbjLowpass (1000.0, 0.707, sampleRate);
     filterFloat.setCoefficients (coeffs);
@@ -247,7 +247,7 @@ TEST_F (BiquadTests, StateReset)
 // Frequency Response Tests
 //==============================================================================
 
-TEST_F (BiquadTests, FrequencyResponse)
+TEST_F (BiquadFilterTests, FrequencyResponse)
 {
     // Test lowpass filter response
     auto coeffs = FilterDesigner<double>::designRbjLowpass (1000.0, 0.707, sampleRate);
@@ -266,7 +266,7 @@ TEST_F (BiquadTests, FrequencyResponse)
     EXPECT_LT (highFreqResponse, 0.5);
 }
 
-TEST_F (BiquadTests, HighpassFrequencyResponse)
+TEST_F (BiquadFilterTests, HighpassFrequencyResponse)
 {
     auto coeffs = FilterDesigner<double>::designRbjHighpass (1000.0, 0.707, sampleRate);
     filterFloat.setCoefficients (coeffs);
@@ -284,7 +284,7 @@ TEST_F (BiquadTests, HighpassFrequencyResponse)
 // Poles and Zeros Tests
 //==============================================================================
 
-TEST_F (BiquadTests, PolesAndZeros)
+TEST_F (BiquadFilterTests, PolesAndZeros)
 {
     auto coeffs = FilterDesigner<double>::designRbjLowpass (1000.0, 0.707, sampleRate);
     filterDouble.setCoefficients (coeffs);
@@ -307,7 +307,7 @@ TEST_F (BiquadTests, PolesAndZeros)
 // Precision Tests
 //==============================================================================
 
-TEST_F (BiquadTests, FloatVsDoublePrecision)
+TEST_F (BiquadFilterTests, FloatVsDoublePrecision)
 {
     auto coeffs = FilterDesigner<double>::designRbjPeak (1000.0, 1.0, 3.0, sampleRate);
 
@@ -331,7 +331,7 @@ TEST_F (BiquadTests, FloatVsDoublePrecision)
 // Edge Cases Tests
 //==============================================================================
 
-TEST_F (BiquadTests, ZeroInput)
+TEST_F (BiquadFilterTests, ZeroInput)
 {
     auto coeffs = FilterDesigner<double>::designRbjPeak (1000.0, 1.0, 6.0, sampleRate);
     filterFloat.setCoefficients (coeffs);
@@ -343,7 +343,7 @@ TEST_F (BiquadTests, ZeroInput)
     }
 }
 
-TEST_F (BiquadTests, ImpulseResponse)
+TEST_F (BiquadFilterTests, ImpulseResponse)
 {
     auto coeffs = FilterDesigner<double>::designRbjLowpass (1000.0, 0.707, sampleRate);
     filterFloat.setCoefficients (coeffs);
@@ -365,7 +365,7 @@ TEST_F (BiquadTests, ImpulseResponse)
 // BiquadCascade Tests
 //==============================================================================
 
-class BiquadCascadeTests : public ::testing::Test
+class BiquadCascadeFilterTests : public ::testing::Test
 {
 protected:
     void SetUp() override
@@ -389,19 +389,19 @@ protected:
     std::vector<float> outputData;
 };
 
-TEST_F (BiquadCascadeTests, DefaultConstruction)
+TEST_F (BiquadCascadeFilterTests, DefaultConstruction)
 {
     BiquadCascadeFloat cascade;
     EXPECT_EQ (cascade.getNumSections(), 1u);
 }
 
-TEST_F (BiquadCascadeTests, MultiSectionConstruction)
+TEST_F (BiquadCascadeFilterTests, MultiSectionConstruction)
 {
     BiquadCascadeFloat cascade (4);
     EXPECT_EQ (cascade.getNumSections(), 4u);
 }
 
-TEST_F (BiquadCascadeTests, SectionManagement)
+TEST_F (BiquadCascadeFilterTests, SectionManagement)
 {
     cascadeFloat.setNumSections (3);
     EXPECT_EQ (cascadeFloat.getNumSections(), 3u);
@@ -421,7 +421,7 @@ TEST_F (BiquadCascadeTests, SectionManagement)
     EXPECT_FLOAT_EQ (retrievedCoeffs1.a1, coeffs1.a1);
 }
 
-TEST_F (BiquadCascadeTests, InvalidSectionAccess)
+TEST_F (BiquadCascadeFilterTests, InvalidSectionAccess)
 {
     cascadeFloat.setNumSections (2);
 
@@ -431,7 +431,7 @@ TEST_F (BiquadCascadeTests, InvalidSectionAccess)
     EXPECT_TRUE (std::isfinite (coeffs.b0));
 }
 
-TEST_F (BiquadCascadeTests, ProcessingThroughCascade)
+TEST_F (BiquadCascadeFilterTests, ProcessingThroughCascade)
 {
     cascadeFloat.setNumSections (3);
 
@@ -452,7 +452,7 @@ TEST_F (BiquadCascadeTests, ProcessingThroughCascade)
     }
 }
 
-TEST_F (BiquadCascadeTests, SingleSampleProcessing)
+TEST_F (BiquadCascadeFilterTests, SingleSampleProcessing)
 {
     cascadeFloat.setNumSections (2);
 
@@ -467,7 +467,7 @@ TEST_F (BiquadCascadeTests, SingleSampleProcessing)
     }
 }
 
-TEST_F (BiquadCascadeTests, EmptyCascade)
+TEST_F (BiquadCascadeFilterTests, EmptyCascade)
 {
     cascadeFloat.setNumSections (0);
     EXPECT_EQ (cascadeFloat.getNumSections(), 0u);
@@ -481,7 +481,7 @@ TEST_F (BiquadCascadeTests, EmptyCascade)
     }
 }
 
-TEST_F (BiquadCascadeTests, CascadeFrequencyResponse)
+TEST_F (BiquadCascadeFilterTests, CascadeFrequencyResponse)
 {
     cascadeFloat.setNumSections (2);
 
@@ -502,7 +502,7 @@ TEST_F (BiquadCascadeTests, CascadeFrequencyResponse)
     EXPECT_NEAR (cascadeResponse, expectedResponse, 0.1f);
 }
 
-TEST_F (BiquadCascadeTests, CascadeStateReset)
+TEST_F (BiquadCascadeFilterTests, CascadeStateReset)
 {
     cascadeFloat.setNumSections (2);
 
@@ -523,7 +523,7 @@ TEST_F (BiquadCascadeTests, CascadeStateReset)
     EXPECT_LT (std::abs (outputAfterReset), std::abs (outputBeforeReset));
 }
 
-TEST_F (BiquadCascadeTests, DynamicSectionResize)
+TEST_F (BiquadCascadeFilterTests, DynamicSectionResize)
 {
     // Start with 1 section
     cascadeFloat.setNumSections (1);
@@ -550,7 +550,7 @@ TEST_F (BiquadCascadeTests, DynamicSectionResize)
 // Integration Tests
 //==============================================================================
 
-TEST_F (BiquadCascadeTests, CascadeVsManualChaining)
+TEST_F (BiquadCascadeFilterTests, CascadeVsManualChaining)
 {
     // Compare cascade processing with manual chaining of individual biquads
     auto coeffs1 = FilterDesigner<double>::designRbjLowpass (1000.0, 0.707, sampleRate);
@@ -590,7 +590,7 @@ TEST_F (BiquadCascadeTests, CascadeVsManualChaining)
 // Performance and Stability Tests
 //==============================================================================
 
-TEST_F (BiquadTests, HighQStability)
+TEST_F (BiquadFilterTests, HighQStability)
 {
     // Test with very high Q factor
     auto coeffs = FilterDesigner<double>::designRbjBandpass (1000.0, 50.0, sampleRate);
@@ -604,7 +604,7 @@ TEST_F (BiquadTests, HighQStability)
     }
 }
 
-TEST_F (BiquadTests, ExtremeCoefficientValues)
+TEST_F (BiquadFilterTests, ExtremeCoefficientValues)
 {
     // Test with very small coefficients
     BiquadCoefficients<double> smallCoeffs (1e-6, 1e-7, 1e-8, 1.0, 1e-6, 1e-7);
@@ -614,7 +614,7 @@ TEST_F (BiquadTests, ExtremeCoefficientValues)
     EXPECT_TRUE (std::isfinite (output));
 }
 
-TEST_F (BiquadCascadeTests, LargeCascade)
+TEST_F (BiquadCascadeFilterTests, LargeCascade)
 {
     // Test with many sections
     const int numSections = 10;
