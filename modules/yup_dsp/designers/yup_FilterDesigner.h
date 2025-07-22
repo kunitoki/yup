@@ -28,9 +28,10 @@ namespace yup
 /**
     Centralized filter coefficient designer for all filter types.
 
-    This class provides static methods to design coefficients for various filter types, separating the coefficient
-    calculation logic from the filter implementation classes. This allows for reusability and easier testing of
-    coefficient generation algorithms.
+    This class provides static methods to design coefficients for various filter
+    types, separating the coefficient calculation logic from the filter implementation
+    classes. This allows for reusability and easier testing of coefficient generation
+    algorithms.
 
     @see BiquadCoefficients, FilterBase
 */
