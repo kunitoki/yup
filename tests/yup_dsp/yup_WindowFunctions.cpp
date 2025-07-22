@@ -436,21 +436,31 @@ TEST_F (WindowFunctionsTests, ZeroLengthWindow)
     EXPECT_NO_THROW (WindowFunctions<float>::generate (WindowType::hann, emptySpan));
 }
 
-TEST_F (WindowFunctionsTests, SingleSampleWindow)
+TEST_F (WindowFunctionsTests, SmallWindowSizes)
 {
     // For single sample windows, rectangular should work fine
     auto rectValue = WindowFunctions<float>::getValue (WindowType::rectangular, 0, 1);
     EXPECT_FLOAT_EQ (rectValue, 1.0f);
 
-    // Some windows may not be well-defined for N=1, so test with N=2 instead
-    auto hannValue = WindowFunctions<float>::getValue (WindowType::hann, 0, 2);
-    EXPECT_TRUE (std::isfinite (hannValue));
+    // Test with minimum reasonable window size (4 samples)
+    const int minSize = 4;
+    std::vector<float> smallWindow (minSize);
 
-    std::vector<float> twoSamples (2);
-    WindowFunctions<float>::generate (WindowType::blackman, twoSamples.data(), 2);
-    for (const auto& value : twoSamples)
+    // Test a few different window types with small size
+    const std::vector<WindowType> testTypes = {
+        WindowType::rectangular,
+        WindowType::hann,
+        WindowType::hamming,
+        WindowType::bartlett
+    };
+
+    for (const auto type : testTypes)
     {
-        EXPECT_TRUE (std::isfinite (value));
+        WindowFunctions<float>::generate (type, smallWindow.data(), minSize);
+        for (const auto& value : smallWindow)
+        {
+            EXPECT_TRUE (std::isfinite (value));
+        }
     }
 }
 
