@@ -932,8 +932,7 @@ public:
         for (int sample = 0; sample < numSamples; ++sample)
         {
             // Check if any parameters are changing and update filter coefficients if needed
-            if (smoothedFrequency.isSmoothing() || smoothedQ.isSmoothing() ||
-                smoothedGain.isSmoothing() || smoothedOrder.isSmoothing())
+            if (smoothedFrequency.isSmoothing() || smoothedQ.isSmoothing() || smoothedGain.isSmoothing() || smoothedOrder.isSmoothing())
             {
                 updateAudioFilterParametersSmooth();
             }
@@ -1204,13 +1203,11 @@ private:
 
         // Store in arrays for easy management
         allAudioFilters = {
-            audioButterworth, audioRbj, audioBessel, audioChebyshev1, audioChebyshev2,
-            audioElliptic, audioLegendre, audioSvf, audioMoog
+            audioButterworth, audioRbj, audioBessel, audioChebyshev1, audioChebyshev2, audioElliptic, audioLegendre, audioSvf, audioMoog
         };
 
         allUIFilters = {
-            uiButterworth, uiRbj, uiBessel, uiChebyshev1, uiChebyshev2,
-            uiElliptic, uiLegendre, uiSvf, uiMoog
+            uiButterworth, uiRbj, uiBessel, uiChebyshev1, uiChebyshev2, uiElliptic, uiLegendre, uiSvf, uiMoog
         };
 
         // Set default filters
@@ -1218,7 +1215,7 @@ private:
         currentUIFilter = uiButterworth;
 
         // Set default filter type settings
-        currentFilterTypeId = 1; // Butterworth
+        currentFilterTypeId = 1;   // Butterworth
         currentResponseTypeId = 1; // Lowpass
     }
 
@@ -1238,16 +1235,36 @@ private:
         // Map combo box selection to UI filter instance
         switch (currentFilterTypeId)
         {
-            case 1: currentUIFilter = uiButterworth; break;
-            case 2: currentUIFilter = uiRbj; break;
-            case 3: currentUIFilter = uiBessel; break;
-            case 4: currentUIFilter = uiChebyshev1; break;
-            case 5: currentUIFilter = uiChebyshev2; break;
-            case 6: currentUIFilter = uiElliptic; break;
-            case 7: currentUIFilter = uiLegendre; break;
-            case 8: currentUIFilter = uiSvf; break;
-            case 9: currentUIFilter = uiMoog; break;
-            default: currentUIFilter = uiButterworth; break;
+            case 1:
+                currentUIFilter = uiButterworth;
+                break;
+            case 2:
+                currentUIFilter = uiRbj;
+                break;
+            case 3:
+                currentUIFilter = uiBessel;
+                break;
+            case 4:
+                currentUIFilter = uiChebyshev1;
+                break;
+            case 5:
+                currentUIFilter = uiChebyshev2;
+                break;
+            case 6:
+                currentUIFilter = uiElliptic;
+                break;
+            case 7:
+                currentUIFilter = uiLegendre;
+                break;
+            case 8:
+                currentUIFilter = uiSvf;
+                break;
+            case 9:
+                currentUIFilter = uiMoog;
+                break;
+            default:
+                currentUIFilter = uiButterworth;
+                break;
         }
 
         // Synchronize smoothed values with current UI values when switching filters
@@ -1305,20 +1322,20 @@ private:
             if (currentFilterTypeId == 4) // Chebyshev I
             {
                 cheby1->setParameters (yup::ChebyshevFilter<float>::Type::Type1,
-                                      getFilterType (currentResponseTypeId),
-                                      order,
-                                      freq,
-                                      currentSampleRate,
-                                      0.5); // Ripple
+                                       getFilterType (currentResponseTypeId),
+                                       order,
+                                       freq,
+                                       currentSampleRate,
+                                       0.5); // Ripple
             }
             else if (currentFilterTypeId == 5) // Chebyshev II
             {
                 cheby1->setParameters (yup::ChebyshevFilter<float>::Type::Type2,
-                                      getFilterType (currentResponseTypeId),
-                                      order,
-                                      freq,
-                                      currentSampleRate,
-                                      40.0); // Stopband attenuation
+                                       getFilterType (currentResponseTypeId),
+                                       order,
+                                       freq,
+                                       currentSampleRate,
+                                       40.0); // Stopband attenuation
             }
         }
         else if (auto elliptic = std::dynamic_pointer_cast<yup::EllipticFilter<float>> (currentAudioFilter))
@@ -1368,20 +1385,20 @@ private:
             if (currentFilterTypeId == 4) // Chebyshev I
             {
                 cheby1->setParameters (yup::ChebyshevFilter<float>::Type::Type1,
-                                      getFilterType (currentResponseTypeId),
-                                      order,
-                                      freq,
-                                      currentSampleRate,
-                                      0.5); // Ripple
+                                       getFilterType (currentResponseTypeId),
+                                       order,
+                                       freq,
+                                       currentSampleRate,
+                                       0.5); // Ripple
             }
             else if (currentFilterTypeId == 5) // Chebyshev II
             {
                 cheby1->setParameters (yup::ChebyshevFilter<float>::Type::Type2,
-                                      getFilterType (currentResponseTypeId),
-                                      order,
-                                      freq,
-                                      currentSampleRate,
-                                      40.0); // Stopband attenuation
+                                       getFilterType (currentResponseTypeId),
+                                       order,
+                                       freq,
+                                       currentSampleRate,
+                                       40.0); // Stopband attenuation
             }
         }
         else if (auto elliptic = std::dynamic_pointer_cast<yup::EllipticFilter<float>> (currentUIFilter))
@@ -1399,16 +1416,36 @@ private:
         // Map filter type to audio filter instance (using stored filter type, not UI)
         switch (currentFilterTypeId)
         {
-            case 1: currentAudioFilter = audioButterworth; break;
-            case 2: currentAudioFilter = audioRbj; break;
-            case 3: currentAudioFilter = audioBessel; break;
-            case 4: currentAudioFilter = audioChebyshev1; break;
-            case 5: currentAudioFilter = audioChebyshev2; break;
-            case 6: currentAudioFilter = audioElliptic; break;
-            case 7: currentAudioFilter = audioLegendre; break;
-            case 8: currentAudioFilter = audioSvf; break;
-            case 9: currentAudioFilter = audioMoog; break;
-            default: currentAudioFilter = audioButterworth; break;
+            case 1:
+                currentAudioFilter = audioButterworth;
+                break;
+            case 2:
+                currentAudioFilter = audioRbj;
+                break;
+            case 3:
+                currentAudioFilter = audioBessel;
+                break;
+            case 4:
+                currentAudioFilter = audioChebyshev1;
+                break;
+            case 5:
+                currentAudioFilter = audioChebyshev2;
+                break;
+            case 6:
+                currentAudioFilter = audioElliptic;
+                break;
+            case 7:
+                currentAudioFilter = audioLegendre;
+                break;
+            case 8:
+                currentAudioFilter = audioSvf;
+                break;
+            case 9:
+                currentAudioFilter = audioMoog;
+                break;
+            default:
+                currentAudioFilter = audioButterworth;
+                break;
         }
 
         // Synchronize smoothed values with current UI values when switching filters
