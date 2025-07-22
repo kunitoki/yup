@@ -54,7 +54,7 @@ protected:
 TEST_F (RbjFilterTests, DefaultConstruction)
 {
     RbjFilterFloat filter;
-    EXPECT_EQ (filter.getType(), RbjFilter<float>::Type::peaking);
+    EXPECT_EQ (filter.getMode(), RbjFilter<float>::Mode::lowpass);
     EXPECT_FLOAT_EQ (filter.getFrequency(), 1000.0f);
     EXPECT_FLOAT_EQ (filter.getQ(), 0.707f);
     EXPECT_FLOAT_EQ (filter.getGain(), 0.0f);
@@ -62,9 +62,9 @@ TEST_F (RbjFilterTests, DefaultConstruction)
 
 TEST_F (RbjFilterTests, ParameterInitialization)
 {
-    filterFloat.setParameters (RbjFilter<float>::Type::peaking, 2000.0f, 1.5f, 6.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::peaking, 2000.0f, 1.5f, 6.0f, sampleRate);
 
-    EXPECT_EQ (filterFloat.getType(), RbjFilter<float>::Type::peaking);
+    EXPECT_EQ (filterFloat.getMode(), RbjFilter<float>::Mode::peaking);
     EXPECT_FLOAT_EQ (filterFloat.getFrequency(), 2000.0f);
     EXPECT_FLOAT_EQ (filterFloat.getQ(), 1.5f);
     EXPECT_FLOAT_EQ (filterFloat.getGain(), 6.0f);
@@ -75,22 +75,22 @@ TEST_F (RbjFilterTests, FrequencyLimits)
     const float nyquist = static_cast<float> (sampleRate) * 0.5f;
 
     // Test near-zero frequency
-    filterFloat.setParameters (RbjFilter<float>::Type::lowpass, 1.0f, 0.707f, 0.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::lowpass, 1.0f, 0.707f, 0.0f, sampleRate);
     EXPECT_GE (filterFloat.getFrequency(), 1.0f);
 
     // Test near-Nyquist frequency
-    filterFloat.setParameters (RbjFilter<float>::Type::lowpass, nyquist * 0.99f, 0.707f, 0.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::lowpass, nyquist * 0.99f, 0.707f, 0.0f, sampleRate);
     EXPECT_LE (filterFloat.getFrequency(), nyquist);
 }
 
 TEST_F (RbjFilterTests, QFactorLimits)
 {
     // Test minimum Q
-    filterFloat.setParameters (RbjFilter<float>::Type::lowpass, 1000.0f, 0.01f, 0.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::lowpass, 1000.0f, 0.01f, 0.0f, sampleRate);
     EXPECT_GE (filterFloat.getQ(), 0.01f);
 
     // Test very high Q
-    filterFloat.setParameters (RbjFilter<float>::Type::lowpass, 1000.0f, 100.0f, 0.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::lowpass, 1000.0f, 100.0f, 0.0f, sampleRate);
     EXPECT_LE (filterFloat.getQ(), 100.0f);
 }
 
@@ -100,7 +100,7 @@ TEST_F (RbjFilterTests, QFactorLimits)
 
 TEST_F (RbjFilterTests, LowpassFilter)
 {
-    filterFloat.setParameters (RbjFilter<float>::Type::lowpass, 1000.0f, 0.707f, 0.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::lowpass, 1000.0f, 0.707f, 0.0f, sampleRate);
 
     // DC should pass through
     filterFloat.reset();
@@ -117,7 +117,7 @@ TEST_F (RbjFilterTests, LowpassFilter)
 
 TEST_F (RbjFilterTests, HighpassFilter)
 {
-    filterFloat.setParameters (RbjFilter<float>::Type::highpass, 1000.0f, 0.707f, 0.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::highpass, 1000.0f, 0.707f, 0.0f, sampleRate);
 
     // DC should be blocked
     filterFloat.reset();
@@ -134,7 +134,7 @@ TEST_F (RbjFilterTests, HighpassFilter)
 
 TEST_F (RbjFilterTests, BandpassFilter)
 {
-    filterFloat.setParameters (RbjFilter<float>::Type::bandpassCpg, 1000.0f, 2.0f, 0.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::bandpassCpg, 1000.0f, 2.0f, 0.0f, sampleRate);
 
     // Center frequency should have good response
     const auto centerResponse = filterFloat.getMagnitudeResponse (1000.0f);
@@ -149,7 +149,7 @@ TEST_F (RbjFilterTests, BandpassFilter)
 
 TEST_F (RbjFilterTests, NotchFilter)
 {
-    filterFloat.setParameters (RbjFilter<float>::Type::notch, 1000.0f, 2.0f, 0.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::notch, 1000.0f, 2.0f, 0.0f, sampleRate);
 
     // Center frequency should be attenuated
     const auto centerResponse = filterFloat.getMagnitudeResponse (1000.0f);
@@ -164,7 +164,7 @@ TEST_F (RbjFilterTests, NotchFilter)
 
 TEST_F (RbjFilterTests, PeakingFilter)
 {
-    filterFloat.setParameters (RbjFilter<float>::Type::peaking, 1000.0f, 1.0f, 6.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::peaking, 1000.0f, 1.0f, 6.0f, sampleRate);
 
     // At center frequency, should provide the specified gain
     const auto centerResponse = filterFloat.getMagnitudeResponse (1000.0f);
@@ -179,7 +179,7 @@ TEST_F (RbjFilterTests, PeakingFilter)
 
 TEST_F (RbjFilterTests, LowShelfFilter)
 {
-    filterFloat.setParameters (RbjFilter<float>::Type::lowshelf, 1000.0f, 0.707f, 6.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::lowshelf, 1000.0f, 0.707f, 6.0f, sampleRate);
 
     // Low frequencies should have the specified gain
     const auto lowResponse = filterFloat.getMagnitudeResponse (100.0f);
@@ -194,7 +194,7 @@ TEST_F (RbjFilterTests, LowShelfFilter)
 
 TEST_F (RbjFilterTests, HighShelfFilter)
 {
-    filterFloat.setParameters (RbjFilter<float>::Type::highshelf, 1000.0f, 0.707f, 6.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::highshelf, 1000.0f, 0.707f, 6.0f, sampleRate);
 
     // High frequencies should have the specified gain
     const auto highResponse = filterFloat.getMagnitudeResponse (10000.0f);
@@ -209,7 +209,7 @@ TEST_F (RbjFilterTests, HighShelfFilter)
 
 TEST_F (RbjFilterTests, AllpassFilter)
 {
-    filterFloat.setParameters (RbjFilter<float>::Type::allpass, 1000.0f, 0.707f, 0.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::allpass, 1000.0f, 0.707f, 0.0f, sampleRate);
 
     // All frequencies should pass with unity magnitude
     const std::vector<float> testFreqs = { 100.0f, 500.0f, 1000.0f, 2000.0f, 5000.0f };
@@ -227,7 +227,7 @@ TEST_F (RbjFilterTests, AllpassFilter)
 
 TEST_F (RbjFilterTests, CutoffFrequencyResponse)
 {
-    filterFloat.setParameters (RbjFilter<float>::Type::lowpass, 1000.0f, 0.707f, 0.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::lowpass, 1000.0f, 0.707f, 0.0f, sampleRate);
 
     const auto responseAtCutoff = filterFloat.getMagnitudeResponse (1000.0f);
     const auto expected3dB = std::pow (10.0f, -3.0f / 20.0f); // -3dB in linear
@@ -238,11 +238,11 @@ TEST_F (RbjFilterTests, CutoffFrequencyResponse)
 TEST_F (RbjFilterTests, QFactorEffect)
 {
     // Test low Q (broad response)
-    filterFloat.setParameters (RbjFilter<float>::Type::bandpassCpg, 1000.0f, 0.5f, 0.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::bandpassCpg, 1000.0f, 0.5f, 0.0f, sampleRate);
     const auto lowQResponse = filterFloat.getMagnitudeResponse (1414.0f); // sqrt(2) * 1000
 
     // Test high Q (narrow response)
-    filterFloat.setParameters (RbjFilter<float>::Type::bandpassCpg, 1000.0f, 5.0f, 0.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::bandpassCpg, 1000.0f, 5.0f, 0.0f, sampleRate);
     const auto highQResponse = filterFloat.getMagnitudeResponse (1414.0f);
 
     // High Q should have more attenuation away from center
@@ -252,11 +252,11 @@ TEST_F (RbjFilterTests, QFactorEffect)
 TEST_F (RbjFilterTests, GainParameterEffect)
 {
     // Positive gain
-    filterFloat.setParameters (RbjFilter<float>::Type::peaking, 1000.0f, 1.0f, 6.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::peaking, 1000.0f, 1.0f, 6.0f, sampleRate);
     const auto positiveGainResponse = filterFloat.getMagnitudeResponse (1000.0f);
 
     // Negative gain
-    filterFloat.setParameters (RbjFilter<float>::Type::peaking, 1000.0f, 1.0f, -6.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::peaking, 1000.0f, 1.0f, -6.0f, sampleRate);
     const auto negativeGainResponse = filterFloat.getMagnitudeResponse (1000.0f);
 
     EXPECT_GT (positiveGainResponse, 1.0f);
@@ -273,7 +273,7 @@ TEST_F (RbjFilterTests, GainParameterEffect)
 
 TEST_F (RbjFilterTests, SampleProcessing)
 {
-    filterFloat.setParameters (RbjFilter<float>::Type::lowpass, 1000.0f, 0.707f, 0.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::lowpass, 1000.0f, 0.707f, 0.0f, sampleRate);
 
     const std::vector<float> testInputs = { 0.0f, 0.5f, -0.5f, 1.0f, -1.0f };
 
@@ -286,7 +286,7 @@ TEST_F (RbjFilterTests, SampleProcessing)
 
 TEST_F (RbjFilterTests, BlockProcessing)
 {
-    filterFloat.setParameters (RbjFilter<float>::Type::peaking, 1000.0f, 1.0f, 3.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::peaking, 1000.0f, 1.0f, 3.0f, sampleRate);
 
     const int numSamples = 128;
     std::vector<float> input (numSamples);
@@ -306,7 +306,7 @@ TEST_F (RbjFilterTests, BlockProcessing)
 
 TEST_F (RbjFilterTests, ImpulseResponse)
 {
-    filterFloat.setParameters (RbjFilter<float>::Type::lowpass, 1000.0f, 0.707f, 0.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::lowpass, 1000.0f, 0.707f, 0.0f, sampleRate);
     filterFloat.reset();
 
     std::vector<float> impulseResponse (128);
@@ -327,7 +327,7 @@ TEST_F (RbjFilterTests, ImpulseResponse)
 
 TEST_F (RbjFilterTests, DoublePrecision)
 {
-    filterDouble.setParameters (RbjFilter<double>::Type::peaking, 1000.0, 0.707, 6.0, sampleRate);
+    filterDouble.setParameters (RbjFilter<double>::Mode::peaking, 1000.0, 0.707, 6.0, sampleRate);
 
     const double smallSignal = 1e-10;
     const auto output = filterDouble.processSample (smallSignal);
@@ -337,8 +337,8 @@ TEST_F (RbjFilterTests, DoublePrecision)
 
 TEST_F (RbjFilterTests, FloatVsDoublePrecision)
 {
-    filterFloat.setParameters (RbjFilter<float>::Type::lowpass, 1000.0f, 0.707f, 0.0f, sampleRate);
-    filterDouble.setParameters (RbjFilter<double>::Type::lowpass, 1000.0, 0.707, 0.0, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::lowpass, 1000.0f, 0.707f, 0.0f, sampleRate);
+    filterDouble.setParameters (RbjFilter<double>::Mode::lowpass, 1000.0, 0.707, 0.0, sampleRate);
 
     const int numSamples = 100;
     std::vector<float> inputF (numSamples, 0.1f);
@@ -362,7 +362,7 @@ TEST_F (RbjFilterTests, FloatVsDoublePrecision)
 TEST_F (RbjFilterTests, StabilityWithHighQ)
 {
     // Very high Q can cause instability
-    filterFloat.setParameters (RbjFilter<float>::Type::bandpassCsg, 1000.0f, 50.0f, 0.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::bandpassCsg, 1000.0f, 50.0f, 0.0f, sampleRate);
 
     for (int i = 0; i < 1000; ++i)
     {
@@ -375,13 +375,13 @@ TEST_F (RbjFilterTests, StabilityWithHighQ)
 TEST_F (RbjFilterTests, StabilityWithExtremeGain)
 {
     // Very high gain
-    filterFloat.setParameters (RbjFilter<float>::Type::peaking, 1000.0f, 0.707f, 40.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::peaking, 1000.0f, 0.707f, 40.0f, sampleRate);
 
     const auto output1 = filterFloat.processSample (0.001f);
     EXPECT_TRUE (std::isfinite (output1));
 
     // Very negative gain
-    filterFloat.setParameters (RbjFilter<float>::Type::peaking, 1000.0f, 0.707f, -40.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::peaking, 1000.0f, 0.707f, -40.0f, sampleRate);
 
     const auto output2 = filterFloat.processSample (0.001f);
     EXPECT_TRUE (std::isfinite (output2));
@@ -393,7 +393,7 @@ TEST_F (RbjFilterTests, StabilityWithExtremeGain)
 
 TEST_F (RbjFilterTests, ResetClearsState)
 {
-    filterFloat.setParameters (RbjFilter<float>::Type::lowpass, 1000.0f, 0.707f, 0.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::lowpass, 1000.0f, 0.707f, 0.0f, sampleRate);
 
     // Build up state
     for (int i = 0; i < 100; ++i)
@@ -409,14 +409,14 @@ TEST_F (RbjFilterTests, ResetClearsState)
 
 TEST_F (RbjFilterTests, ParameterChangesHandledSafely)
 {
-    filterFloat.setParameters (RbjFilter<float>::Type::lowpass, 1000.0f, 0.707f, 0.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::lowpass, 1000.0f, 0.707f, 0.0f, sampleRate);
 
     // Process some samples
     for (int i = 0; i < 50; ++i)
         filterFloat.processSample (0.5f);
 
     // Change parameters mid-stream
-    filterFloat.setParameters (RbjFilter<float>::Type::peaking, 2000.0f, 2.0f, 6.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::peaking, 2000.0f, 2.0f, 6.0f, sampleRate);
 
     // Should continue processing without issues
     for (int i = 0; i < 50; ++i)
@@ -432,7 +432,7 @@ TEST_F (RbjFilterTests, ParameterChangesHandledSafely)
 
 TEST_F (RbjFilterTests, ZeroInput)
 {
-    filterFloat.setParameters (RbjFilter<float>::Type::peaking, 1000.0f, 1.0f, 6.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::peaking, 1000.0f, 1.0f, 6.0f, sampleRate);
 
     for (int i = 0; i < 100; ++i)
     {
@@ -443,7 +443,7 @@ TEST_F (RbjFilterTests, ZeroInput)
 
 TEST_F (RbjFilterTests, ConstantInputLowpass)
 {
-    filterFloat.setParameters (RbjFilter<float>::Type::lowpass, 1000.0f, 0.707f, 0.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::lowpass, 1000.0f, 0.707f, 0.0f, sampleRate);
 
     const float constantInput = 0.7f;
     float output = 0.0f;
@@ -457,7 +457,7 @@ TEST_F (RbjFilterTests, ConstantInputLowpass)
 
 TEST_F (RbjFilterTests, ConstantInputHighpass)
 {
-    filterFloat.setParameters (RbjFilter<float>::Type::highpass, 1000.0f, 0.707f, 0.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::highpass, 1000.0f, 0.707f, 0.0f, sampleRate);
 
     const float constantInput = 0.7f;
     float output = 0.0f;
@@ -471,7 +471,7 @@ TEST_F (RbjFilterTests, ConstantInputHighpass)
 
 TEST_F (RbjFilterTests, SinusoidalInput)
 {
-    filterFloat.setParameters (RbjFilter<float>::Type::bandpassCpg, 1000.0f, 2.0f, 0.0f, sampleRate);
+    filterFloat.setParameters (RbjFilter<float>::Mode::bandpassCpg, 1000.0f, 2.0f, 0.0f, sampleRate);
 
     // Test with sinusoid at center frequency
     const float freq = 1000.0f;
@@ -495,16 +495,16 @@ TEST_F (RbjFilterTests, SinusoidalInput)
 
 TEST_F (RbjFilterTests, AllFilterTypesBasicFunctionality)
 {
-    const std::vector<typename RbjFilter<float>::Type> allTypes = {
-        RbjFilter<float>::Type::lowpass,
-        RbjFilter<float>::Type::highpass,
-        RbjFilter<float>::Type::bandpassCpg,
-        RbjFilter<float>::Type::bandpassCsg,
-        RbjFilter<float>::Type::notch,
-        RbjFilter<float>::Type::peaking,
-        RbjFilter<float>::Type::lowshelf,
-        RbjFilter<float>::Type::highshelf,
-        RbjFilter<float>::Type::allpass
+    const std::vector<typename RbjFilter<float>::Mode> allTypes = {
+        RbjFilter<float>::Mode::lowpass,
+        RbjFilter<float>::Mode::highpass,
+        RbjFilter<float>::Mode::bandpassCpg,
+        RbjFilter<float>::Mode::bandpassCsg,
+        RbjFilter<float>::Mode::notch,
+        RbjFilter<float>::Mode::peaking,
+        RbjFilter<float>::Mode::lowshelf,
+        RbjFilter<float>::Mode::highshelf,
+        RbjFilter<float>::Mode::allpass
     };
 
     for (const auto type : allTypes)

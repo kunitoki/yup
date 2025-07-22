@@ -178,7 +178,7 @@ public:
 
         @returns  The RBJ filter mode
     */
-    Mode geMode() const noexcept
+    Mode getMode() const noexcept
     {
         return filterMode;
     }
