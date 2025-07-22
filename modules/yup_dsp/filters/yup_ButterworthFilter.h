@@ -205,7 +205,7 @@ private:
                 FilterDesigner<CoeffType>::designButterworthHighpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate);
                 break;
 
-            /* TODO - Keep this for future implementation
+                /* TODO - Keep this for future implementation
             case FilterType::bandpass:
                 FilterDesigner<CoeffType>::designButterworthBandpass (coefficientsStorage, filterOrder, cutoffFreq, bandwidthOctaves, this->sampleRate);
                 break;
@@ -229,7 +229,6 @@ private:
             cascade.setSectionCoefficients (i, coefficientsStorage[i]);
     }
 
-
     //==============================================================================
     BiquadCascade<SampleType, CoeffType> cascade;
 
@@ -246,7 +245,7 @@ private:
 
 //==============================================================================
 /** Type aliases for convenience */
-using ButterworthFilterFloat = ButterworthFilter<float>;      // float samples, double coefficients (default)
-using ButterworthFilterDouble = ButterworthFilter<double>;    // double samples, double coefficients (default)
+using ButterworthFilterFloat = ButterworthFilter<float>;   // float samples, double coefficients (default)
+using ButterworthFilterDouble = ButterworthFilter<double>; // double samples, double coefficients (default)
 
 } // namespace yup

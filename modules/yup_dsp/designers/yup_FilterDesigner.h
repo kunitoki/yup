@@ -68,8 +68,7 @@ public:
         CoeffType cutoff,
         double sampleRate,
         WindowType windowType = WindowType::kaiser,
-        CoeffType parameter = static_cast<CoeffType> (6.0)
-    ) noexcept
+        CoeffType parameter = static_cast<CoeffType> (6.0)) noexcept
     {
         designFIRLowpassImpl (coeffs, cutoff, sampleRate);
         WindowFunctions<CoeffType>::applyWindow (windowType, coeffs, parameter);
@@ -89,8 +88,7 @@ public:
         CoeffType cutoff,
         double sampleRate,
         WindowType windowType = WindowType::kaiser,
-        CoeffType parameter = static_cast<CoeffType> (6.0)
-    ) noexcept
+        CoeffType parameter = static_cast<CoeffType> (6.0)) noexcept
     {
         designFIRHighpassImpl (coeffs, cutoff, sampleRate);
         WindowFunctions<CoeffType>::applyWindow (windowType, coeffs, parameter);
@@ -112,8 +110,7 @@ public:
         CoeffType highCutoff,
         double sampleRate,
         WindowType windowType = WindowType::kaiser,
-        CoeffType parameter = static_cast<CoeffType> (6.0)
-    ) noexcept
+        CoeffType parameter = static_cast<CoeffType> (6.0)) noexcept
     {
         designFIRBandpassImpl (coeffs, lowCutoff, highCutoff, sampleRate);
         WindowFunctions<CoeffType>::applyWindow (windowType, coeffs, parameter);
@@ -135,8 +132,7 @@ public:
         CoeffType highCutoff,
         double sampleRate,
         WindowType windowType = WindowType::kaiser,
-        CoeffType parameter = static_cast<CoeffType> (6.0)
-    ) noexcept
+        CoeffType parameter = static_cast<CoeffType> (6.0)) noexcept
     {
         designFIRBandstopImpl (coeffs, lowCutoff, highCutoff, sampleRate);
         WindowFunctions<CoeffType>::applyWindow (windowType, coeffs, parameter);
@@ -158,8 +154,7 @@ public:
         std::vector<BiquadCoefficients<CoeffType>>& coeffs,
         int order,
         CoeffType frequency,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         designButterworthImpl (coeffs, false, order, frequency, sampleRate);
     }
@@ -176,8 +171,7 @@ public:
         std::vector<BiquadCoefficients<CoeffType>>& coeffs,
         int order,
         CoeffType frequency,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         designButterworthImpl (coeffs, true, order, frequency, sampleRate);
     }
@@ -192,8 +186,7 @@ public:
     static void designButterworthAllpass (
         std::vector<BiquadCoefficients<CoeffType>>& coeffs,
         int order,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         designButterworthAllpassImpl (coeffs, order, sampleRate);
     }
@@ -258,8 +251,7 @@ public:
         int order,
         CoeffType frequency,
         double sampleRate,
-        CoeffType ripple = static_cast<CoeffType> (0.5)
-    ) noexcept
+        CoeffType ripple = static_cast<CoeffType> (0.5)) noexcept
     {
         designChebyshev1Impl (coeffs, false, order, frequency, sampleRate, ripple);
     }
@@ -278,8 +270,7 @@ public:
         int order,
         CoeffType frequency,
         double sampleRate,
-        CoeffType ripple = static_cast<CoeffType> (0.5)
-    ) noexcept
+        CoeffType ripple = static_cast<CoeffType> (0.5)) noexcept
     {
         designChebyshev1Impl (coeffs, true, order, frequency, sampleRate, ripple);
     }
@@ -298,8 +289,7 @@ public:
         int order,
         CoeffType frequency,
         double sampleRate,
-        CoeffType stopbandAtten = static_cast<CoeffType> (40.0)
-    ) noexcept
+        CoeffType stopbandAtten = static_cast<CoeffType> (40.0)) noexcept
     {
         designChebyshev2Impl (coeffs, false, order, frequency, sampleRate, stopbandAtten);
     }
@@ -318,8 +308,7 @@ public:
         int order,
         CoeffType frequency,
         double sampleRate,
-        CoeffType stopbandAtten = static_cast<CoeffType> (40.0)
-    ) noexcept
+        CoeffType stopbandAtten = static_cast<CoeffType> (40.0)) noexcept
     {
         designChebyshev2Impl (coeffs, true, order, frequency, sampleRate, stopbandAtten);
     }
@@ -340,8 +329,7 @@ public:
         std::vector<BiquadCoefficients<CoeffType>>& coeffs,
         int order,
         CoeffType frequency,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         designBesselImpl (coeffs, false, order, frequency, sampleRate);
     }
@@ -358,8 +346,7 @@ public:
         std::vector<BiquadCoefficients<CoeffType>>& coeffs,
         int order,
         CoeffType frequency,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         designBesselImpl (coeffs, true, order, frequency, sampleRate);
     }
@@ -384,8 +371,7 @@ public:
         CoeffType frequency,
         double sampleRate,
         CoeffType ripple = static_cast<CoeffType> (0.5),
-        CoeffType stopbandAtten = static_cast<CoeffType> (40.0)
-    ) noexcept
+        CoeffType stopbandAtten = static_cast<CoeffType> (40.0)) noexcept
     {
         designEllipticImpl (coeffs, false, order, frequency, sampleRate, ripple, stopbandAtten);
     }
@@ -406,8 +392,7 @@ public:
         CoeffType frequency,
         double sampleRate,
         CoeffType ripple = static_cast<CoeffType> (0.5),
-        CoeffType stopbandAtten = static_cast<CoeffType> (40.0)
-    ) noexcept
+        CoeffType stopbandAtten = static_cast<CoeffType> (40.0)) noexcept
     {
         designEllipticImpl (coeffs, true, order, frequency, sampleRate, ripple, stopbandAtten);
     }
@@ -426,8 +411,7 @@ public:
         int order,
         double sampleRate,
         CoeffType ripple = static_cast<CoeffType> (0.5),
-        CoeffType stopbandAtten = static_cast<CoeffType> (40.0)
-    ) noexcept
+        CoeffType stopbandAtten = static_cast<CoeffType> (40.0)) noexcept
     {
         designEllipticAllpassImpl (coeffs, order, sampleRate, ripple, stopbandAtten);
     }
@@ -448,8 +432,7 @@ public:
         std::vector<BiquadCoefficients<CoeffType>>& coeffs,
         int order,
         CoeffType frequency,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         designLegendreImpl (coeffs, false, order, frequency, sampleRate);
     }
@@ -466,8 +449,7 @@ public:
         std::vector<BiquadCoefficients<CoeffType>>& coeffs,
         int order,
         CoeffType frequency,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         designLegendreImpl (coeffs, true, order, frequency, sampleRate);
     }
@@ -529,8 +511,7 @@ public:
     static BiquadCoefficients<CoeffType> designRbjLowpass (
         CoeffType frequency,
         CoeffType q,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         return designRbjImpl (0, frequency, q, static_cast<CoeffType> (0.0), sampleRate);
     }
@@ -546,8 +527,7 @@ public:
     static BiquadCoefficients<CoeffType> designRbjHighpass (
         CoeffType frequency,
         CoeffType q,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         return designRbjImpl (1, frequency, q, static_cast<CoeffType> (0.0), sampleRate);
     }
@@ -563,8 +543,7 @@ public:
     static BiquadCoefficients<CoeffType> designRbjBandpass (
         CoeffType frequency,
         CoeffType q,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         return designRbjImpl (2, frequency, q, static_cast<CoeffType> (0.0), sampleRate);
     }
@@ -580,8 +559,7 @@ public:
     static BiquadCoefficients<CoeffType> designRbjBandstop (
         CoeffType frequency,
         CoeffType q,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         return designRbjImpl (3, frequency, q, static_cast<CoeffType> (0.0), sampleRate);
     }
@@ -599,8 +577,7 @@ public:
         CoeffType frequency,
         CoeffType q,
         CoeffType gain,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         return designRbjImpl (4, frequency, q, gain, sampleRate);
     }
@@ -616,8 +593,7 @@ public:
     static BiquadCoefficients<CoeffType> designRbjAllpass (
         CoeffType frequency,
         CoeffType q,
-        double sampleRate
-    ) noexcept;
+        double sampleRate) noexcept;
 
     /**
         Designs RBJ low shelf filter coefficients.
@@ -632,8 +608,7 @@ public:
         CoeffType frequency,
         CoeffType q,
         CoeffType gain,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         return designRbjImpl (5, frequency, q, gain, sampleRate);
     }
@@ -651,8 +626,7 @@ public:
         CoeffType frequency,
         CoeffType q,
         CoeffType gain,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         return designRbjImpl (6, frequency, q, gain, sampleRate);
     }
@@ -670,8 +644,7 @@ public:
     */
     static std::array<CoeffType, 2> designTptLowpass (
         CoeffType frequency,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
         const auto g = std::tan (omega / static_cast<CoeffType> (2.0));
@@ -687,8 +660,7 @@ public:
     */
     static std::array<CoeffType, 2> designTptHighpass (
         CoeffType frequency,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
         const auto g = std::tan (omega / static_cast<CoeffType> (2.0));
@@ -706,8 +678,7 @@ public:
     static std::array<CoeffType, 3> designTptSvf (
         CoeffType frequency,
         CoeffType resonance,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
         const auto g = std::tan (omega / static_cast<CoeffType> (2.0));
@@ -727,8 +698,7 @@ public:
     static std::array<CoeffType, 3> designMoogLadder (
         CoeffType frequency,
         CoeffType resonance,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
         const auto g = std::tan (omega / static_cast<CoeffType> (2.0));
@@ -748,8 +718,7 @@ public:
     static std::array<CoeffType, 4> designKorgMs20 (
         CoeffType frequency,
         CoeffType resonance,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
         const auto g = std::tan (omega / static_cast<CoeffType> (2.0));
@@ -777,17 +746,16 @@ public:
     static std::array<CoeffType, 7> designTb303 (
         CoeffType frequency,
         CoeffType resonance,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
         const auto g = std::tan (omega / static_cast<CoeffType> (2.0));
 
         // TB-303 uses asymmetric stage gains to model diode ladder behavior
-        const auto g1 = g * static_cast<CoeffType> (1.0);    // First stage (strongest)
-        const auto g2 = g * static_cast<CoeffType> (0.9);    // Second stage
-        const auto g3 = g * static_cast<CoeffType> (0.8);    // Third stage
-        const auto g4 = g * static_cast<CoeffType> (0.7);    // Fourth stage (weakest)
+        const auto g1 = g * static_cast<CoeffType> (1.0); // First stage (strongest)
+        const auto g2 = g * static_cast<CoeffType> (0.9); // Second stage
+        const auto g3 = g * static_cast<CoeffType> (0.8); // Third stage
+        const auto g4 = g * static_cast<CoeffType> (0.7); // Fourth stage (weakest)
 
         // TB-303 feedback is more aggressive than Moog
         const auto feedbackGain = resonance * static_cast<CoeffType> (4.8) + static_cast<CoeffType> (0.2);
@@ -806,42 +774,68 @@ private:
     /** Design Butterworth filter coefficients into pre-allocated vector */
     static void designButterworthImpl (
         std::vector<BiquadCoefficients<CoeffType>>& sections,
-        bool isHighpass, int order, CoeffType frequency, double sampleRate) noexcept;
+        bool isHighpass,
+        int order,
+        CoeffType frequency,
+        double sampleRate) noexcept;
 
     /** Designs Chebyshev Type I filter coefficients */
     static void designChebyshev1Impl (
         std::vector<BiquadCoefficients<CoeffType>>& sections,
-        bool isHighpass, int order, CoeffType frequency, double sampleRate, CoeffType ripple) noexcept;
+        bool isHighpass,
+        int order,
+        CoeffType frequency,
+        double sampleRate,
+        CoeffType ripple) noexcept;
 
     /** Designs Chebyshev Type II filter coefficients */
     static void designChebyshev2Impl (
         std::vector<BiquadCoefficients<CoeffType>>& sections,
-        bool isHighpass, int order, CoeffType frequency, double sampleRate, CoeffType stopbandAtten) noexcept;
+        bool isHighpass,
+        int order,
+        CoeffType frequency,
+        double sampleRate,
+        CoeffType stopbandAtten) noexcept;
 
     /** Designs Bessel filter coefficients */
     static void designBesselImpl (
         std::vector<BiquadCoefficients<CoeffType>>& sections,
-        bool isHighpass, int order, CoeffType frequency, double sampleRate) noexcept;
+        bool isHighpass,
+        int order,
+        CoeffType frequency,
+        double sampleRate) noexcept;
 
     /** Designs Elliptic filter coefficients */
     static void designEllipticImpl (
         std::vector<BiquadCoefficients<CoeffType>>& sections,
-        bool isHighpass, int order, CoeffType frequency, double sampleRate, CoeffType ripple, CoeffType stopbandAtten) noexcept;
+        bool isHighpass,
+        int order,
+        CoeffType frequency,
+        double sampleRate,
+        CoeffType ripple,
+        CoeffType stopbandAtten) noexcept;
 
     /** Designs Elliptic allpass filter coefficients */
     static void designEllipticAllpassImpl (
         std::vector<BiquadCoefficients<CoeffType>>& sections,
-        int order, double sampleRate, CoeffType ripple, CoeffType stopbandAtten) noexcept;
+        int order,
+        double sampleRate,
+        CoeffType ripple,
+        CoeffType stopbandAtten) noexcept;
 
     /** Designs Butterworth allpass filter coefficients */
     static void designButterworthAllpassImpl (
         std::vector<BiquadCoefficients<CoeffType>>& sections,
-        int order, double sampleRate) noexcept;
+        int order,
+        double sampleRate) noexcept;
 
     /** Designs Legendre filter coefficients */
     static void designLegendreImpl (
         std::vector<BiquadCoefficients<CoeffType>>& sections,
-        bool isHighpass, int order, CoeffType frequency, double sampleRate) noexcept;
+        bool isHighpass,
+        int order,
+        CoeffType frequency,
+        double sampleRate) noexcept;
 
 #if 0
     /** Designs Legendre bandpass filter coefficients */
@@ -942,8 +936,7 @@ private:
         CoeffType frequency,
         CoeffType q,
         CoeffType gain,
-        double sampleRate
-    ) noexcept;
+        double sampleRate) noexcept;
 
     /** Designs FIR lowpass coefficients */
     static void designFIRLowpassImpl (std::vector<CoeffType>& coeffs, CoeffType cutoff, double sampleRate) noexcept;
@@ -1000,7 +993,7 @@ private:
     static BiquadCoefficients<CoeffType> designNotchBiquad (CoeffType frequency, CoeffType depth, double sampleRate) noexcept
     {
         const auto normalizedFreq = frequency / sampleRate;
-        const auto Y = depth * static_cast<CoeffType> (0.9); // Depth control
+        const auto Y = depth * static_cast<CoeffType> (0.9);                         // Depth control
         const auto B = -std::cos (MathConstants<CoeffType>::twoPi * normalizedFreq); // Frequency control
         const auto gain = (static_cast<CoeffType> (1.0) + B) * static_cast<CoeffType> (0.5);
 
@@ -1086,8 +1079,7 @@ private:
         CoeffType fundamentalFreq,
         int numHarmonics,
         CoeffType depth,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         std::vector<BiquadCoefficients<CoeffType>> coeffs;
         coeffs.reserve (static_cast<size_t> (numHarmonics));
@@ -1234,8 +1226,7 @@ private:
     */
     static std::vector<BiquadCoefficients<CoeffType>> designMultiBandEQ (
         const std::vector<std::tuple<CoeffType, CoeffType, CoeffType>>& bands,
-        double sampleRate
-    ) noexcept
+        double sampleRate) noexcept
     {
         std::vector<BiquadCoefficients<CoeffType>> coeffs;
         coeffs.reserve (bands.size());
