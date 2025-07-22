@@ -308,7 +308,7 @@ private:
     Topology filterTopology = Topology::directFormII;
 
     //==============================================================================
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Biquad)
+    YUP_LEAK_DETECTOR(Biquad)
 };
 
 //==============================================================================
@@ -338,7 +338,7 @@ public:
     void reset() noexcept override
     {
         for (auto& section : sections)
-            section->reset();
+            section.reset();
     }
 
     /** @internal */
@@ -348,7 +348,7 @@ public:
         this->maximumBlockSize = maximumBlockSize;
 
         for (auto& section : sections)
-            section->prepare (sampleRate, maximumBlockSize);
+            section.prepare (sampleRate, maximumBlockSize);
     }
 
     /** @internal */
@@ -356,7 +356,7 @@ public:
     {
         auto output = inputSample;
         for (auto& section : sections)
-            output = section->processSample (output);
+            output = section.processSample (output);
         return output;
     }
 
@@ -367,13 +367,14 @@ public:
         {
             if (inputBuffer != outputBuffer)
                 std::copy (inputBuffer, inputBuffer + numSamples, outputBuffer);
+
             return;
         }
 
-        sections[0]->processBlock (inputBuffer, outputBuffer, numSamples);
+        sections[0].processBlock (inputBuffer, outputBuffer, numSamples);
 
         for (size_t i = 1; i < sections.size(); ++i)
-            sections[i]->processInPlace (outputBuffer, numSamples);
+            sections[i].processInPlace (outputBuffer, numSamples);
     }
 
     /** @internal */
@@ -381,7 +382,7 @@ public:
     {
         auto response = DspMath::Complex<CoeffType> (1.0, 0.0);
         for (const auto& section : sections)
-            response = response * section->getComplexResponse (frequency);
+            response = response * section.getComplexResponse (frequency);
         return response;
     }
 
@@ -395,7 +396,7 @@ public:
     void setSectionCoefficients (size_t sectionIndex, const BiquadCoefficients<CoeffType>& coefficients) noexcept
     {
         if (sectionIndex < sections.size())
-            sections[sectionIndex]->setCoefficients (coefficients);
+            sections[sectionIndex].setCoefficients (coefficients);
     }
 
     /** 
@@ -407,8 +408,8 @@ public:
     const BiquadCoefficients<CoeffType>& getSectionCoefficients (size_t sectionIndex) const noexcept
     {
         if (sectionIndex < sections.size())
-            return sections[sectionIndex]->getCoefficients();
-        
+            return sections[sectionIndex].getCoefficients();
+
         static BiquadCoefficients<CoeffType> empty;
         return empty;
     }
@@ -437,17 +438,17 @@ public:
         
         for (int i = 0; i < newNumSections; ++i)
         {
-            sections.emplace_back (std::make_unique<Biquad<SampleType, CoeffType>> (topology));
-            sections.back()->prepare (this->sampleRate, this->maximumBlockSize);
+            sections.push_back (Biquad<SampleType, CoeffType> (topology));
+            sections.back().prepare (this->sampleRate, this->maximumBlockSize);
         }
     }
 
 private:
     //==============================================================================
-    std::vector<std::unique_ptr<Biquad<SampleType, CoeffType>>> sections;
+    std::vector<Biquad<SampleType, CoeffType>> sections;
 
     //==============================================================================
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BiquadCascade)
+    YUP_LEAK_DETECTOR (BiquadCascade)
 };
 
 //==============================================================================

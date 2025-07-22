@@ -223,7 +223,7 @@ private:
             g.setStrokeColor (yup::Color (0xFFFF8800));
             g.setStrokeWidth (2.0f);
 
-            for (const auto& point : groupDelayData)
+            for (const auto& point : yup::Span (groupDelayData.data() + 1, groupDelayData.size() - 1))
             {
                 float x = frequencyToX (point.getX(), bounds);
                 float y = delayToY (point.getY(), bounds);
@@ -1038,6 +1038,11 @@ private:
         filterTypeCombo->addItem ("Legendre", 7);
         filterTypeCombo->addItem ("State Variable", 8);
         filterTypeCombo->addItem ("Moog Ladder", 9);
+        filterTypeCombo->addItem ("FIR Filter", 10);
+        filterTypeCombo->addItem ("Korg MS-20", 11);
+        filterTypeCombo->addItem ("VA SVF", 12);
+        filterTypeCombo->addItem ("TB-303", 13);
+        filterTypeCombo->addItem ("Vowel Filter", 14);
         filterTypeCombo->setSelectedId (1);
         filterTypeCombo->onSelectedItemChanged = [this]
         {
@@ -1190,6 +1195,11 @@ private:
         audioLegendre = std::make_shared<yup::LegendreFilter<float>>();
         audioSvf = std::make_shared<yup::StateVariableFilter<float>>();
         audioMoog = std::make_shared<yup::MoogLadder<float>>();
+        audioFir = std::make_shared<yup::FirFilter<float>>();
+        audioKorg = std::make_shared<yup::KorgMs20<float>>();
+        audioVaSvf = std::make_shared<yup::VirtualAnalogSvf<float>>();
+        audioTb303 = std::make_shared<yup::Tb303Filter<float>>();
+        audioVowel = std::make_shared<yup::VowelFilter<float>>();
 
         // Create instances of all filter types for UI thread
         uiButterworth = std::make_shared<yup::ButterworthFilter<float>>();
@@ -1201,16 +1211,23 @@ private:
         uiLegendre = std::make_shared<yup::LegendreFilter<float>>();
         uiSvf = std::make_shared<yup::StateVariableFilter<float>>();
         uiMoog = std::make_shared<yup::MoogLadder<float>>();
+        uiFir = std::make_shared<yup::FirFilter<float>>();
+        uiKorg = std::make_shared<yup::KorgMs20<float>>();
+        uiVaSvf = std::make_shared<yup::VirtualAnalogSvf<float>>();
+        uiTb303 = std::make_shared<yup::Tb303Filter<float>>();
+        uiVowel = std::make_shared<yup::VowelFilter<float>>();
 
         // Store in arrays for easy management
         allAudioFilters = {
             audioButterworth, audioRbj, audioBessel, audioChebyshev1, audioChebyshev2,
-            audioElliptic, audioLegendre, audioSvf, audioMoog
+            audioElliptic, audioLegendre, audioSvf, audioMoog, audioFir, audioKorg,
+            audioVaSvf, audioTb303, audioVowel
         };
 
         allUIFilters = {
             uiButterworth, uiRbj, uiBessel, uiChebyshev1, uiChebyshev2,
-            uiElliptic, uiLegendre, uiSvf, uiMoog
+            uiElliptic, uiLegendre, uiSvf, uiMoog, uiFir, uiKorg,
+            uiVaSvf, uiTb303, uiVowel
         };
 
         // Set default filters
@@ -1247,6 +1264,11 @@ private:
             case 7: currentUIFilter = uiLegendre; break;
             case 8: currentUIFilter = uiSvf; break;
             case 9: currentUIFilter = uiMoog; break;
+            case 10: currentUIFilter = uiFir; break;
+            case 11: currentUIFilter = uiKorg; break;
+            case 12: currentUIFilter = uiVaSvf; break;
+            case 13: currentUIFilter = uiTb303; break;
+            case 14: currentUIFilter = uiVowel; break;
             default: currentUIFilter = uiButterworth; break;
         }
 
@@ -1329,6 +1351,30 @@ private:
         {
             legendre->setParameters (getFilterType (currentResponseTypeId), order, freq, currentSampleRate);
         }
+        else if (auto fir = std::dynamic_pointer_cast<yup::FirFilter<float>> (currentAudioFilter))
+        {
+            auto firType = getFirType (currentResponseTypeId);
+            fir->setParameters (firType, order * 32, freq, currentSampleRate); // Scale order for FIR length
+        }
+        else if (auto korg = std::dynamic_pointer_cast<yup::KorgMs20<float>> (currentAudioFilter))
+        {
+            auto korgMode = getKorgMode (currentResponseTypeId);
+            korg->setParameters (freq, yup::jlimit (0.0, 0.99, q / 20.0), korgMode);
+        }
+        else if (auto vaSvf = std::dynamic_pointer_cast<yup::VirtualAnalogSvf<float>> (currentAudioFilter))
+        {
+            auto vaSvfMode = getVaSvfMode (currentResponseTypeId);
+            vaSvf->setParameters (freq, yup::jlimit (0.0, 0.99, q / 20.0), vaSvfMode);
+        }
+        else if (auto tb303 = std::dynamic_pointer_cast<yup::Tb303Filter<float>> (currentAudioFilter))
+        {
+            tb303->setParameters (freq, yup::jlimit (0.0, 0.99, q / 20.0), gain / 20.0, 0.0);
+        }
+        else if (auto vowel = std::dynamic_pointer_cast<yup::VowelFilter<float>> (currentAudioFilter))
+        {
+            auto vowelType = getVowelType (currentResponseTypeId);
+            vowel->setParameters (vowelType, yup::VowelFilter<float>::Gender::Male, 3);
+        }
     }
 
     void updateUIFilterParameters()
@@ -1392,6 +1438,30 @@ private:
         {
             legendre->setParameters (getFilterType (currentResponseTypeId), order, freq, currentSampleRate);
         }
+        else if (auto fir = std::dynamic_pointer_cast<yup::FirFilter<float>> (currentUIFilter))
+        {
+            auto firType = getFirType (currentResponseTypeId);
+            fir->setParameters (firType, order * 32, freq, currentSampleRate); // Scale order for FIR length
+        }
+        else if (auto korg = std::dynamic_pointer_cast<yup::KorgMs20<float>> (currentUIFilter))
+        {
+            auto korgMode = getKorgMode (currentResponseTypeId);
+            korg->setParameters (freq, yup::jlimit (0.0, 0.99, q / 20.0), korgMode);
+        }
+        else if (auto vaSvf = std::dynamic_pointer_cast<yup::VirtualAnalogSvf<float>> (currentUIFilter))
+        {
+            auto vaSvfMode = getVaSvfMode (currentResponseTypeId);
+            vaSvf->setParameters (freq, yup::jlimit (0.0, 0.99, q / 20.0), vaSvfMode);
+        }
+        else if (auto tb303 = std::dynamic_pointer_cast<yup::Tb303Filter<float>> (currentUIFilter))
+        {
+            tb303->setParameters (freq, yup::jlimit (0.0, 0.99, q / 20.0), gain / 20.0, 0.0);
+        }
+        else if (auto vowel = std::dynamic_pointer_cast<yup::VowelFilter<float>> (currentUIFilter))
+        {
+            auto vowelType = getVowelType (currentResponseTypeId);
+            vowel->setParameters (vowelType, yup::VowelFilter<float>::Gender::Male, 3);
+        }
     }
 
     void updateCurrentAudioFilter()
@@ -1408,6 +1478,11 @@ private:
             case 7: currentAudioFilter = audioLegendre; break;
             case 8: currentAudioFilter = audioSvf; break;
             case 9: currentAudioFilter = audioMoog; break;
+            case 10: currentAudioFilter = audioFir; break;
+            case 11: currentAudioFilter = audioKorg; break;
+            case 12: currentAudioFilter = audioVaSvf; break;
+            case 13: currentAudioFilter = audioTb303; break;
+            case 14: currentAudioFilter = audioVowel; break;
             default: currentAudioFilter = audioButterworth; break;
         }
 
@@ -1476,7 +1551,7 @@ private:
         std::vector<std::complex<double>> zeros;
 
         // Extract poles and zeros based on filter type
-        if (auto rbj = std::dynamic_pointer_cast<yup::RbjFilter<float>> (currentUIFilter))
+        if (auto rbj = std::dynamic_pointer_cast<yup::Biquad<float>> (currentUIFilter))
         {
             // For biquad filters, calculate poles and zeros from coefficients
             calculateBiquadPolesZeros (rbj->getCoefficients(), poles, zeros);
@@ -1640,6 +1715,72 @@ private:
         }
     }
 
+    yup::FirFilter<float>::Type getFirType (int responseTypeId)
+    {
+        switch (responseTypeId)
+        {
+            case 1:
+                return yup::FirFilter<float>::Type::lowpass;
+            case 2:
+                return yup::FirFilter<float>::Type::highpass;
+            case 3:
+                return yup::FirFilter<float>::Type::bandpass;
+            case 4:
+                return yup::FirFilter<float>::Type::bandstop;
+            default:
+                return yup::FirFilter<float>::Type::lowpass;
+        }
+    }
+
+    yup::KorgMs20<float>::Mode getKorgMode (int responseTypeId)
+    {
+        switch (responseTypeId)
+        {
+            case 1:
+                return yup::KorgMs20<float>::Mode::lowpass;
+            case 2:
+                return yup::KorgMs20<float>::Mode::highpass;
+            default:
+                return yup::KorgMs20<float>::Mode::lowpass;
+        }
+    }
+
+    yup::VirtualAnalogSvf<float>::Mode getVaSvfMode (int responseTypeId)
+    {
+        switch (responseTypeId)
+        {
+            case 1:
+                return yup::VirtualAnalogSvf<float>::Mode::lowpass;
+            case 2:
+                return yup::VirtualAnalogSvf<float>::Mode::highpass;
+            case 3:
+                return yup::VirtualAnalogSvf<float>::Mode::bandpass;
+            case 4:
+                return yup::VirtualAnalogSvf<float>::Mode::notch;
+            default:
+                return yup::VirtualAnalogSvf<float>::Mode::lowpass;
+        }
+    }
+
+    yup::VowelFilter<float>::Vowel getVowelType (int responseTypeId)
+    {
+        switch (responseTypeId)
+        {
+            case 1:
+                return yup::VowelFilter<float>::Vowel::A;
+            case 2:
+                return yup::VowelFilter<float>::Vowel::E;
+            case 3:
+                return yup::VowelFilter<float>::Vowel::I;
+            case 4:
+                return yup::VowelFilter<float>::Vowel::O;
+            case 5:
+                return yup::VowelFilter<float>::Vowel::U;
+            default:
+                return yup::VowelFilter<float>::Vowel::A;
+        }
+    }
+
     // Audio components
     yup::AudioDeviceManager deviceManager;
     WhiteNoiseGenerator noiseGenerator;
@@ -1669,6 +1810,11 @@ private:
     std::shared_ptr<yup::LegendreFilter<float>> audioLegendre;
     std::shared_ptr<yup::StateVariableFilter<float>> audioSvf;
     std::shared_ptr<yup::MoogLadder<float>> audioMoog;
+    std::shared_ptr<yup::FirFilter<float>> audioFir;
+    std::shared_ptr<yup::KorgMs20<float>> audioKorg;
+    std::shared_ptr<yup::VirtualAnalogSvf<float>> audioVaSvf;
+    std::shared_ptr<yup::Tb303Filter<float>> audioTb303;
+    std::shared_ptr<yup::VowelFilter<float>> audioVowel;
 
     // UI thread filter instances
     std::shared_ptr<yup::ButterworthFilter<float>> uiButterworth;
@@ -1680,6 +1826,11 @@ private:
     std::shared_ptr<yup::LegendreFilter<float>> uiLegendre;
     std::shared_ptr<yup::StateVariableFilter<float>> uiSvf;
     std::shared_ptr<yup::MoogLadder<float>> uiMoog;
+    std::shared_ptr<yup::FirFilter<float>> uiFir;
+    std::shared_ptr<yup::KorgMs20<float>> uiKorg;
+    std::shared_ptr<yup::VirtualAnalogSvf<float>> uiVaSvf;
+    std::shared_ptr<yup::Tb303Filter<float>> uiTb303;
+    std::shared_ptr<yup::VowelFilter<float>> uiVowel;
 
     std::vector<std::shared_ptr<yup::FilterBase<float>>> allAudioFilters;
     std::vector<std::shared_ptr<yup::FilterBase<float>>> allUIFilters;

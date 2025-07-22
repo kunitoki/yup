@@ -30,38 +30,38 @@ namespace yup
 {
 
 //==============================================================================
-/** 
+/**
     IIR Halfband filter for efficient 2:1 decimation and interpolation.
-    
+
     This implementation uses a two-path allpass polyphase structure that provides
     very sharp transition bands with minimal computational cost. The design is
     based on elliptic allpass sections for optimal efficiency.
-    
+
     Key Features:
     - **5-10x more efficient** than equivalent FIR halfband filters
     - **Sharp transition bands** with minimal coefficients
     - **Automatic mode switching** between decimation and interpolation
     - **Stable design** with poles inside unit circle
     - **Complementary outputs** for perfect reconstruction
-    
+
     Applications:
     - Multi-stage sample rate conversion
-    - Efficient 2:1 up/downsampling  
+    - Efficient 2:1 up/downsampling
     - Building blocks for higher ratio converters
     - Real-time audio processing with minimal CPU
     - Oversampling for distortion/saturation effects
-    
+
     Design Principles (based on MusicDSP research):
     - **Noble Identity**: Decimation and filtering can be interchanged for efficiency
     - **Polyphase Decomposition**: Two-path allpass structure provides perfect reconstruction
     - **Phase Relationships**: Complementary allpass paths create sharp transition bands
     - **Coefficient Optimization**: Pre-computed elliptic coefficients avoid runtime calculation
-    
+
     Template Parameters:
     - Order: Number of allpass sections (2, 4, 6, 8 recommended)
     - SampleType: Sample data type (float, double)
     - CoeffType: Coefficient precision (defaults to double)
-    
+
     @see IirResamplerCascade, CicFilter, FirResampler
 */
 template <int Order, typename SampleType, typename CoeffType = double>
@@ -117,8 +117,8 @@ public:
     /** @internal */
     SampleType processSample (SampleType inputSample) noexcept override
     {
-        return (mode == Mode::decimation) ? 
-               processDecimation (inputSample) : 
+        return (mode == Mode::decimation) ?
+               processDecimation (inputSample) :
                processInterpolation (inputSample);
     }
 
@@ -145,9 +145,9 @@ public:
     }
 
     //==============================================================================
-    /** 
+    /**
         Sets the resampling mode.
-        
+
         @param resamplingMode  The desired mode (decimation or interpolation)
     */
     void setMode (Mode resamplingMode) noexcept
@@ -169,10 +169,10 @@ public:
     static constexpr int getRatio() noexcept { return 2; }
 
     //==============================================================================
-    /** 
+    /**
         Processes decimation (2:1 downsampling).
         Call this for every input sample, but it only produces output every second call.
-        
+
         @param inputSample  The input sample
         @param hasOutput   Reference to bool indicating if output is valid
         @returns          The downsampled output (only valid when hasOutput is true)
@@ -182,15 +182,15 @@ public:
         // Process through both allpass paths
         const auto path0Output = processAllpassPath (inputSample, path0State, 0);
         const auto path1Output = processAllpassPath (inputSample, path1State, 1);
-        
+
         // Increment phase
         ++phaseIndex;
-        
+
         if (phaseIndex >= 2)
         {
             phaseIndex = 0;
             hasOutput = true;
-            
+
             // Combine outputs for lowpass characteristic
             return (path0Output + path1Output) * static_cast<SampleType> (0.5);
         }
@@ -201,9 +201,9 @@ public:
         }
     }
 
-    /** 
+    /**
         Simplified decimation interface that returns output when available.
-        
+
         @param inputSample  The input sample
         @returns           The downsampled output (zero when no output available)
     */
@@ -213,11 +213,11 @@ public:
         return processDecimation (inputSample, hasOutput);
     }
 
-    /** 
+    /**
         Processes interpolation (1:2 upsampling).
         Call this once per input sample and it will return the first upsampled output.
         Use getInterpolatedSample() to get the second output.
-        
+
         @param inputSample  The input sample
         @returns           The first upsampled output
     */
@@ -225,18 +225,18 @@ public:
     {
         // Store input for both outputs
         lastInput = inputSample;
-        
+
         // Process through both allpass paths
         const auto path0Output = processAllpassPath (inputSample, path0State, 0);
         const auto path1Output = processAllpassPath (inputSample, path1State, 1);
-        
+
         // First output: lowpass combination
         return (path0Output + path1Output) * static_cast<SampleType> (0.5);
     }
 
-    /** 
+    /**
         Gets the second interpolated sample after calling processInterpolation().
-        
+
         @returns  The second upsampled output sample
     */
     SampleType getInterpolatedSample() noexcept
@@ -244,15 +244,15 @@ public:
         // Process zero input through both paths for second output
         const auto path0Output = processAllpassPath (static_cast<SampleType> (0.0), path0State, 0);
         const auto path1Output = processAllpassPath (static_cast<SampleType> (0.0), path1State, 1);
-        
+
         // Second output: highpass combination with delay compensation
         return (path0Output - path1Output) * static_cast<SampleType> (0.5);
     }
 
     //==============================================================================
-    /** 
+    /**
         Processes a block for decimation mode.
-        
+
         @param inputBuffer   Input sample buffer
         @param outputBuffer  Output buffer (size should be numSamples/2)
         @param numSamples    Number of input samples
@@ -261,24 +261,24 @@ public:
     int processDecimationBlock (const SampleType* inputBuffer, SampleType* outputBuffer, int numSamples) noexcept
     {
         int outputCount = 0;
-        
+
         for (int i = 0; i < numSamples; ++i)
         {
             bool hasOutput;
             const auto output = processDecimation (inputBuffer[i], hasOutput);
-            
+
             if (hasOutput)
             {
                 outputBuffer[outputCount++] = output;
             }
         }
-        
+
         return outputCount;
     }
 
-    /** 
+    /**
         Processes a block for interpolation mode.
-        
+
         @param inputBuffer   Input sample buffer
         @param outputBuffer  Output buffer (size should be numSamples*2)
         @param numSamples    Number of input samples
@@ -294,25 +294,12 @@ public:
 
 private:
     //==============================================================================
-    Mode mode;
-    int phaseIndex;
-    SampleType lastInput;
-    
-    // Allpass coefficients for each path
-    std::array<CoeffType, Order / 2> path0Coefficients;
-    std::array<CoeffType, Order / 2> path1Coefficients;
-    
-    // State variables for allpass sections
-    std::array<SampleType, Order> path0State;
-    std::array<SampleType, Order> path1State;
-
-    //==============================================================================
     void designCoefficients() noexcept
     {
         // Pre-computed elliptic allpass coefficients optimized for halfband response
         // These coefficients are based on proven designs from MusicDSP and HIIR library
         // They provide excellent transition band sharpness with minimal computation
-        
+
         if constexpr (Order == 2)
         {
             // Simple 2nd-order design for basic applications
@@ -381,16 +368,16 @@ private:
         // Generic elliptic allpass design for arbitrary orders
         const auto sections = Order / 2;
         const auto pi = MathConstants<CoeffType>::pi;
-        
+
         for (int i = 0; i < sections; ++i)
         {
             // Calculate elliptic allpass coefficient for this section
             const auto k = static_cast<CoeffType> (i + 1);
             const auto theta = pi * k / static_cast<CoeffType> (sections + 1);
-            
+
             // Simplified coefficient calculation (production code would use full elliptic design)
             const auto coefficient = static_cast<CoeffType> (0.5) * std::cos (theta);
-            
+
             path0Coefficients[i] = coefficient;
             path1Coefficients[i] = -coefficient;
         }
@@ -400,49 +387,62 @@ private:
     {
         const auto& coefficients = (pathIndex == 0) ? path0Coefficients : path1Coefficients;
         const auto sections = Order / 2;
-        
+
         auto signal = input;
-        
+
         // Process through each allpass section
         for (int i = 0; i < sections; ++i)
         {
             const auto stateIndex = pathIndex * sections + i;
             const auto coefficient = static_cast<SampleType> (coefficients[i]);
-            
+
             // First-order allpass section: H(z) = (c + z^-1) / (1 + c*z^-1)
             const auto output = -coefficient * signal + state[stateIndex];
             state[stateIndex] = signal + coefficient * output;
             signal = output;
         }
-        
+
         return signal;
     }
+
+    //==============================================================================
+    Mode mode;
+    int phaseIndex;
+    SampleType lastInput;
+
+    // Allpass coefficients for each path
+    std::array<CoeffType, Order / 2> path0Coefficients;
+    std::array<CoeffType, Order / 2> path1Coefficients;
+
+    // State variables for allpass sections
+    std::array<SampleType, Order> path0State;
+    std::array<SampleType, Order> path1State;
 
     //==============================================================================
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (IirHalfband)
 };
 
 //==============================================================================
-/** 
+/**
     Multi-stage IIR resampler cascade for efficient arbitrary rate conversion.
-    
+
     This class combines multiple IIR halfband stages with optional CIC pre-filtering
     to achieve efficient sample rate conversion for arbitrary integer and rational
     ratios. It automatically configures the optimal filter chain based on the
     desired conversion ratio.
-    
+
     Key Features:
     - **Automatic architecture selection** based on rate ratio
     - **Multi-stage optimization** for computational efficiency
     - **CIC pre-filtering** for large integer rate changes
     - **Quality scaling** with computational trade-offs
     - **Real-time safe operation** with no dynamic allocation during processing
-    
+
     Architecture Modes:
     - **Power-of-2 ratios**: Pure IIR halfband cascade (2:1, 4:1, 8:1, etc.)
     - **Large integer ratios**: CIC + IIR halfband combination
     - **Arbitrary ratios**: Multi-stage with fractional interpolation
-    
+
     @see IirHalfband, CicFilter, FirResampler
 */
 template <typename SampleType, typename CoeffType = double>
@@ -497,7 +497,7 @@ public:
             if (filter)
                 filter->reset();
         }
-        
+
         if (cicStage)
             cicStage->reset();
     }
@@ -507,13 +507,13 @@ public:
     {
         this->sampleRate = sampleRate;
         this->maximumBlockSize = maximumBlockSize;
-        
+
         for (auto& filter : halfbandStages)
         {
             if (filter)
                 filter->prepare (sampleRate, maximumBlockSize);
         }
-        
+
         if (cicStage)
             cicStage->prepare (sampleRate, maximumBlockSize);
     }
@@ -522,9 +522,9 @@ public:
     SampleType processSample (SampleType inputSample) noexcept override
     {
         jassert (isConfigured);
-        
+
         auto signal = inputSample;
-        
+
         if (mode == Mode::decimation)
         {
             // Process through CIC first if present
@@ -535,7 +535,7 @@ public:
                 if (!hasOutput)
                     return static_cast<SampleType> (0.0);
             }
-            
+
             // Process through halfband stages
             for (auto& filter : halfbandStages)
             {
@@ -558,14 +558,14 @@ public:
                     signal = halfbandStages[i]->processInterpolation (signal);
                 }
             }
-            
+
             // Process through CIC last if present
             if (cicStage)
             {
                 signal = cicStage->processSample (signal);
             }
         }
-        
+
         return signal;
     }
 
@@ -585,23 +585,23 @@ public:
     {
         // Combined response of all stages
         auto response = DspMath::Complex<CoeffType> (static_cast<CoeffType> (1.0), static_cast<CoeffType> (0.0));
-        
+
         for (const auto& filter : halfbandStages)
         {
             if (filter)
                 response *= filter->getComplexResponse (frequency);
         }
-        
+
         if (cicStage)
             response *= cicStage->getComplexResponse (frequency);
-        
+
         return response;
     }
 
     //==============================================================================
-    /** 
+    /**
         Sets the conversion ratio.
-        
+
         @param upsampleFactor    Upsampling factor (L)
         @param downsampleFactor  Downsampling factor (M)
     */
@@ -609,14 +609,14 @@ public:
     {
         upsampleRatio = jmax (1, upsampleFactor);
         downsampleRatio = jmax (1, downsampleFactor);
-        
+
         determineMode();
         configureFilterChain();
     }
 
-    /** 
+    /**
         Sets the quality level.
-        
+
         @param qualityLevel  The desired quality mode
     */
     void setQuality (Quality qualityLevel) noexcept
@@ -647,29 +647,18 @@ public:
     int getNumberOfStages() const noexcept
     {
         int count = 0;
+
         for (const auto& filter : halfbandStages)
         {
             if (filter) ++count;
         }
+
         if (cicStage) ++count;
+
         return count;
     }
 
 private:
-    //==============================================================================
-    int upsampleRatio;
-    int downsampleRatio;
-    Quality quality;
-    Mode mode;
-    bool isConfigured;
-    
-    // Maximum number of halfband stages
-    static constexpr int MaxStages = 12;
-    
-    // Filter stages
-    std::array<std::unique_ptr<IirHalfband<8, SampleType, CoeffType>>, MaxStages> halfbandStages;
-    std::unique_ptr<CicFilter<SampleType, CoeffType>> cicStage;
-
     //==============================================================================
     void determineMode() noexcept
     {
@@ -691,11 +680,11 @@ private:
             filter.reset();
         }
         cicStage.reset();
-        
-        const auto ratio = (mode == Mode::decimation) ? 
-                          downsampleRatio / upsampleRatio : 
+
+        const auto ratio = (mode == Mode::decimation) ?
+                          downsampleRatio / upsampleRatio :
                           upsampleRatio / downsampleRatio;
-        
+
         // Determine optimal architecture
         if (ratio >= 8 && isPowerOfTwo (ratio))
         {
@@ -709,7 +698,7 @@ private:
         {
             configureSmallRatioChain (ratio);
         }
-        
+
         isConfigured = true;
     }
 
@@ -719,7 +708,7 @@ private:
         const auto stages = getLog2 (ratio);
         const auto maxStages = getMaxStagesForQuality (quality);
         const auto actualStages = jmin (stages, maxStages);
-        
+
         for (int i = 0; i < actualStages; ++i)
         {
             halfbandStages[i] = std::make_unique<IirHalfband<8, SampleType, CoeffType>> (
@@ -734,7 +723,7 @@ private:
         // Use CIC for large integer decimation, then halfband stages for fine adjustment
         const auto cicRatio = findBestCicRatio (ratio);
         const auto remainingRatio = ratio / cicRatio;
-        
+
         // Configure CIC stage
         cicStage = std::make_unique<CicFilter<SampleType, CoeffType>>();
         cicStage->setParameters (
@@ -743,7 +732,7 @@ private:
             getStagesForQuality (quality),
             cicRatio
         );
-        
+
         // Configure remaining halfband stages
         if (remainingRatio > 1 && isPowerOfTwo (remainingRatio))
         {
@@ -796,7 +785,7 @@ private:
         int power = 1;
         while (power < value)
             power <<= 1;
-        
+
         // Return closest power of 2
         const auto lower = power >> 1;
         return (value - lower < power - value) ? lower : power;
@@ -834,10 +823,24 @@ private:
             if (totalRatio % cicRatio == 0)
                 return cicRatio;
         }
-        
+
         // Fallback to largest factor that works well with CIC
         return jmin (totalRatio, 32);
     }
+
+    //==============================================================================
+    int upsampleRatio;
+    int downsampleRatio;
+    Quality quality;
+    Mode mode;
+    bool isConfigured;
+
+    // Maximum number of halfband stages
+    static constexpr int MaxStages = 12;
+
+    // Filter stages
+    std::array<std::unique_ptr<IirHalfband<8, SampleType, CoeffType>>, MaxStages> halfbandStages;
+    std::unique_ptr<CicFilter<SampleType, CoeffType>> cicStage;
 
     //==============================================================================
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (IirResamplerCascade)
@@ -851,7 +854,7 @@ using IirHalfband8 = IirHalfband<8, float>;      // 8th-order IIR halfband (reco
 using IirHalfband12 = IirHalfband<12, float>;    // 12th-order IIR halfband (maximum quality)
 
 /** Type aliases for IIR resampler cascades */
-using IirResamplerFloat = IirResamplerCascade<float>;             // float samples, double coefficients
-using IirResamplerDouble = IirResamplerCascade<double>;           // double samples, double coefficients
+using IirResamplerFloat = IirResamplerCascade<float>;
+using IirResamplerDouble = IirResamplerCascade<double>;
 
 } // namespace yup

@@ -246,18 +246,23 @@ private:
             case Type::lowpass:
                 designLowpass();
                 break;
+
             case Type::highpass:
                 designHighpass();
                 break;
+
             case Type::bandpass:
                 designBandpass();
                 break;
+
             case Type::bandstop:
                 designBandstop();
                 break;
+
             case Type::hilbert:
                 designHilbert();
                 break;
+
             case Type::differentiator:
                 designDifferentiator();
                 break;

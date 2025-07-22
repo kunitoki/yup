@@ -28,43 +28,43 @@ namespace yup
 {
 
 //==============================================================================
-/** 
+/**
     Cascaded Integrator-Comb (CIC) filter for efficient sample rate conversion.
-    
+
     CIC filters are computationally efficient digital filters used for sample
     rate conversion, particularly effective for large integer conversion ratios.
     They require no multiplications, only additions and subtractions, making them
     ideal for FPGA implementations and real-time processing with limited resources.
-    
+
     Key Characteristics:
     - **No multipliers required**: Only additions, subtractions, and delays
     - **Linear phase response**: Constant group delay across frequency
     - **Efficient for large rate changes**: Particularly effective for factors ≥ 8
     - **Cascaded structure**: Multiple stages improve stopband attenuation
     - **Configurable stages**: Typically 3-5 stages for good performance
-    
+
     Mathematical Foundation:
     CIC filters implement a (sin(x)/x)^N frequency response, where N is the number
     of stages. For decimation, the order is: Integrators → Downsampler → Combs.
     For interpolation, the order is: Combs → Upsampler → Integrators.
-    
+
     Applications:
     - Digital down converters (DDC) and up converters (DUC)
     - Anti-aliasing for high decimation ratios (≥ 8x)
     - Multi-stage sample rate conversion (CIC + FIR compensation)
     - Software defined radio (SDR) applications
     - FPGA-based signal processing
-    
+
     Limitations:
     - Significant droop in passband (compensated with FIR equalizer)
     - Limited stopband attenuation compared to FIR filters
     - Fixed frequency response shape
     - Potential for arithmetic overflow with high decimation ratios
-    
+
     The filter uses a dual-precision architecture where:
     - SampleType: for audio buffer processing (float/double)
     - CoeffType: for internal calculations (defaults to double for precision)
-    
+
     @see FilterDesigner, FirFilter, ButterworthFilter
 */
 template <typename SampleType, typename CoeffType = double>
@@ -127,9 +127,11 @@ public:
         {
             case Mode::decimation:
                 return processDecimation (inputSample);
+
             case Mode::interpolation:
                 return processInterpolation (inputSample);
         }
+
         return static_cast<SampleType> (0.0);
     }
 
@@ -155,24 +157,24 @@ public:
 
         const auto normalizedFreq = frequency / this->sampleRate;
         const auto x = MathConstants<CoeffType>::pi * normalizedFreq * static_cast<CoeffType> (rate);
-        
+
         if (std::abs (x) < static_cast<CoeffType> (1e-10))
         {
             // Use limit as x approaches 0: sinc(x) = 1
             return DspMath::Complex<CoeffType> (static_cast<CoeffType> (1.0), static_cast<CoeffType> (0.0));
         }
-        
+
         const auto sinc = std::sin (x) / x;
         const auto magnitude = std::pow (sinc, static_cast<CoeffType> (stages));
-        
+
         // CIC filters have linear phase (real-valued response)
         return DspMath::Complex<CoeffType> (magnitude, static_cast<CoeffType> (0.0));
     }
 
     //==============================================================================
-    /** 
+    /**
         Sets all filter parameters.
-        
+
         @param filterMode      The operation mode (decimation or interpolation)
         @param numStages       The number of CIC stages (typically 3-5)
         @param conversionRate  The integer conversion rate (≥ 2)
@@ -181,24 +183,24 @@ public:
     {
         jassert (numStages >= 1 && numStages <= 10);
         jassert (conversionRate >= 2);
-        
+
         const auto newStages = jlimit (1, 10, numStages);
         const auto newRate = jmax (2, conversionRate);
-        
+
         if (stages != newStages)
         {
             stages = newStages;
             resize (stages);
         }
-        
+
         mode = filterMode;
         rate = newRate;
         reset();
     }
 
-    /** 
+    /**
         Sets the number of CIC stages.
-        
+
         @param numStages  The number of stages (1-10, typically 3-5)
     */
     void setStages (int numStages) noexcept
@@ -212,9 +214,9 @@ public:
         }
     }
 
-    /** 
+    /**
         Sets the conversion rate.
-        
+
         @param conversionRate  The integer conversion rate (≥ 2)
     */
     void setRate (int conversionRate) noexcept
@@ -223,9 +225,9 @@ public:
         reset();
     }
 
-    /** 
+    /**
         Sets the operation mode.
-        
+
         @param filterMode  The operation mode
     */
     void setMode (Mode filterMode) noexcept
@@ -244,9 +246,9 @@ public:
     /** Gets the current operation mode */
     Mode getMode() const noexcept { return mode; }
 
-    /** 
+    /**
         Calculates the DC gain of the CIC filter.
-        
+
         @returns The DC gain (rate^stages)
     */
     CoeffType getDcGain() const noexcept
@@ -254,9 +256,9 @@ public:
         return std::pow (static_cast<CoeffType> (rate), static_cast<CoeffType> (stages));
     }
 
-    /** 
+    /**
         Calculates the passband droop at a given frequency.
-        
+
         @param frequency  The frequency in Hz
         @returns         The magnitude response (0.0 to 1.0)
     */
@@ -269,9 +271,9 @@ public:
         return std::abs (response);
     }
 
-    /** 
+    /**
         Estimates the equivalent noise bandwidth of the CIC filter.
-        
+
         @returns The noise bandwidth factor relative to sample rate
     */
     CoeffType getEquivalentNoiseBandwidth() const noexcept
@@ -281,16 +283,6 @@ public:
     }
 
 private:
-    //==============================================================================
-    Mode mode;
-    int stages;
-    int rate;
-    int sampleCount;
-    
-    std::vector<CoeffType> accumulators;
-    std::vector<CoeffType> differentiators;
-    std::vector<CoeffType> previousValues;
-
     //==============================================================================
     void resize (int numStages) noexcept
     {
@@ -303,53 +295,53 @@ private:
     SampleType processDecimation (SampleType input) noexcept
     {
         // Decimation: Integrate → Downsample → Differentiate
-        
+
         // Integrator stages (run at high sample rate)
         accumulators[0] += static_cast<CoeffType> (input);
         for (int i = 1; i < stages; ++i)
         {
             accumulators[i] += accumulators[i - 1];
         }
-        
+
         ++sampleCount;
-        
+
         // Downsample: only output every 'rate' samples
         if (sampleCount >= rate)
         {
             sampleCount = 0;
-            
+
             // Differentiator stages (run at low sample rate)
             differentiators[0] = accumulators[stages - 1] - previousValues[0];
             previousValues[0] = accumulators[stages - 1];
-            
+
             for (int i = 1; i < stages; ++i)
             {
                 differentiators[i] = differentiators[i - 1] - previousValues[i];
                 previousValues[i] = differentiators[i - 1];
             }
-            
+
             return static_cast<SampleType> (differentiators[stages - 1]);
         }
-        
+
         return static_cast<SampleType> (0.0);
     }
 
     SampleType processInterpolation (SampleType input) noexcept
     {
         // Interpolation: Differentiate → Upsample → Integrate
-        
+
         if (sampleCount == 0)
         {
             // Process input through differentiator stages (run at low sample rate)
             differentiators[0] = static_cast<CoeffType> (input) - previousValues[0];
             previousValues[0] = static_cast<CoeffType> (input);
-            
+
             for (int i = 1; i < stages; ++i)
             {
                 differentiators[i] = differentiators[i - 1] - previousValues[i];
                 previousValues[i] = differentiators[i - 1];
             }
-            
+
             accumulators[0] += differentiators[stages - 1];
         }
         else
@@ -357,17 +349,17 @@ private:
             // Zero-stuff (no new input during upsampling)
             accumulators[0] += static_cast<CoeffType> (0.0);
         }
-        
+
         // Integrator stages (run at high sample rate)
         for (int i = 1; i < stages; ++i)
         {
             accumulators[i] += accumulators[i - 1];
         }
-        
+
         ++sampleCount;
         if (sampleCount >= rate)
             sampleCount = 0;
-        
+
         return static_cast<SampleType> (accumulators[stages - 1]);
     }
 
@@ -375,18 +367,18 @@ private:
     void processDecimationBlock (const SampleType* inputBuffer, SampleType* outputBuffer, int numSamples) noexcept
     {
         int outputIndex = 0;
-        
+
         for (int i = 0; i < numSamples; ++i)
         {
             const auto output = processDecimation (inputBuffer[i]);
-            
+
             // Only store output when decimation produces a sample
             if (sampleCount == 0) // Just reset, meaning we produced an output
             {
                 outputBuffer[outputIndex++] = output;
             }
         }
-        
+
         // Note: outputBuffer should be sized appropriately by caller
         // Output length ≈ numSamples / rate
     }
@@ -394,7 +386,7 @@ private:
     void processInterpolationBlock (const SampleType* inputBuffer, SampleType* outputBuffer, int numSamples) noexcept
     {
         int outputIndex = 0;
-        
+
         for (int i = 0; i < numSamples; ++i)
         {
             for (int j = 0; j < rate; ++j)
@@ -403,9 +395,19 @@ private:
                 outputBuffer[outputIndex++] = processInterpolation (input);
             }
         }
-        
+
         // Note: outputBuffer should be sized as numSamples * rate
     }
+
+    //==============================================================================
+    Mode mode;
+    int stages;
+    int rate;
+    int sampleCount;
+
+    std::vector<CoeffType> accumulators;
+    std::vector<CoeffType> differentiators;
+    std::vector<CoeffType> previousValues;
 
     //==============================================================================
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CicFilter)

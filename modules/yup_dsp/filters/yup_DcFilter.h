@@ -25,18 +25,18 @@ namespace yup
 {
 
 //==============================================================================
-/** 
+/**
     DC removal high-pass filter for eliminating DC bias.
-    
+
     This filter implements a high-pass filter specifically designed to remove
     DC offsets from audio signals while preserving the audio content. It uses
     a single-pole high-pass filter with configurable response characteristics.
-    
+
     The filter provides three response modes:
     - Slow: Gentle DC removal, preserves very low frequencies (< 10 Hz cutoff)
     - Default: Balanced response for most applications (~ 20 Hz cutoff)
     - Fast: Aggressive DC removal, may affect low frequencies (~ 50 Hz cutoff)
-    
+
     Key features:
     - Extremely efficient single-pole implementation
     - Configurable response speed/aggressiveness
@@ -44,11 +44,11 @@ namespace yup
     - Separate processing channels for stereo
     - Zero-latency processing
     - Stable for all sample rates
-    
+
     The filter uses a leaky integrator topology that automatically adapts
     to the signal characteristics, providing smooth DC removal without
     introducing artifacts or clicks.
-    
+
     @see FilterBase, FirstOrderFilter
 */
 template <typename SampleType, typename CoeffType = double>
@@ -91,18 +91,18 @@ public:
     SampleType processSample (SampleType inputSample) noexcept override
     {
         const auto input = static_cast<CoeffType> (inputSample);
-        
+
         // Single-pole high-pass filter: y[n] = x[n] - x[n-1] + a * y[n-1]
         const auto output = input - x1 + coefficient * y1;
-        
+
         // Update state variables
         x1 = input;
         y1 = output;
-        
+
         // Denormal protection
         if (std::abs (y1) < static_cast<CoeffType> (1e-25))
             y1 = static_cast<CoeffType> (0.0);
-            
+
         return static_cast<SampleType> (output);
     }
 
@@ -120,18 +120,18 @@ public:
     {
         const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (this->sampleRate));
         const auto z = DspMath::Complex<CoeffType> (std::cos (omega), std::sin (omega));
-        
+
         // H(z) = (1 - z^-1) / (1 - a * z^-1)
         const auto numerator = static_cast<CoeffType> (1.0) - (static_cast<CoeffType> (1.0) / z);
         const auto denominator = static_cast<CoeffType> (1.0) - (coefficient / z);
-        
+
         return numerator / denominator;
     }
 
     //==============================================================================
-    /** 
+    /**
         Sets the DC filter mode.
-        
+
         @param mode  The new filter mode
     */
     void setMode (Mode mode) noexcept
@@ -143,9 +143,9 @@ public:
         }
     }
 
-    /** 
+    /**
         Gets the current DC filter mode.
-        
+
         @returns  The current filter mode
     */
     Mode getMode() const noexcept
@@ -153,23 +153,23 @@ public:
         return filterMode;
     }
 
-    /** 
+    /**
         Sets a custom cutoff frequency for the DC filter.
-        
+
         This overrides the mode-based frequency selection and allows
         for precise control over the DC removal characteristics.
-        
+
         @param frequency  The cutoff frequency in Hz
     */
     void setCutoffFrequency (CoeffType frequency) noexcept
     {
-        customCutoff = jmax (static_cast<CoeffType> (0.1), 
+        customCutoff = jmax (static_cast<CoeffType> (0.1),
                            jmin (frequency, static_cast<CoeffType> (this->sampleRate * 0.45)));
         useCustomCutoff = true;
         updateCoefficients();
     }
 
-    /** 
+    /**
         Resets to use mode-based frequency selection.
     */
     void useDefaultCutoff() noexcept
@@ -178,22 +178,22 @@ public:
         updateCoefficients();
     }
 
-    /** 
+    /**
         Gets the current effective cutoff frequency.
-        
+
         @returns  The cutoff frequency in Hz
     */
     CoeffType getCutoffFrequency() const noexcept
     {
         if (useCustomCutoff)
             return customCutoff;
-            
+
         return getModeBasedCutoff();
     }
 
-    /** 
+    /**
         Gets the current filter coefficient.
-        
+
         @returns  The filter coefficient (0-1)
     */
     CoeffType getCoefficient() const noexcept
@@ -203,16 +203,6 @@ public:
 
 private:
     //==============================================================================
-    Mode filterMode = Mode::Default;
-    CoeffType coefficient = static_cast<CoeffType> (0.999);
-    CoeffType customCutoff = static_cast<CoeffType> (20.0);
-    bool useCustomCutoff = false;
-
-    // Filter state variables
-    CoeffType x1 = static_cast<CoeffType> (0.0);  // Previous input
-    CoeffType y1 = static_cast<CoeffType> (0.0);  // Previous output
-
-    //==============================================================================
     CoeffType getModeBasedCutoff() const noexcept
     {
         switch (filterMode)
@@ -221,7 +211,7 @@ private:
             case Mode::Default: return static_cast<CoeffType> (20.0);
             case Mode::Fast:    return static_cast<CoeffType> (50.0);
         }
-        
+
         return static_cast<CoeffType> (20.0);
     }
 
@@ -229,17 +219,27 @@ private:
     {
         if (this->sampleRate <= 0.0)
             return;
-            
+
         const auto cutoff = useCustomCutoff ? customCutoff : getModeBasedCutoff();
         const auto omega = MathConstants<CoeffType>::twoPi * cutoff / static_cast<CoeffType> (this->sampleRate);
-        
+
         // Calculate coefficient for single-pole high-pass filter
         // a = 1 / (1 + omega_c)
         coefficient = static_cast<CoeffType> (1.0) / (static_cast<CoeffType> (1.0) + omega);
-        
+
         // Ensure coefficient stays in valid range
         coefficient = jlimit (static_cast<CoeffType> (0.5), static_cast<CoeffType> (0.9999), coefficient);
     }
+
+    //==============================================================================
+    Mode filterMode = Mode::Default;
+    CoeffType coefficient = static_cast<CoeffType> (0.999);
+    CoeffType customCutoff = static_cast<CoeffType> (20.0);
+    bool useCustomCutoff = false;
+
+    // Filter state variables
+    CoeffType x1 = static_cast<CoeffType> (0.0);  // Previous input
+    CoeffType y1 = static_cast<CoeffType> (0.0);  // Previous output
 
     //==============================================================================
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DcFilter)

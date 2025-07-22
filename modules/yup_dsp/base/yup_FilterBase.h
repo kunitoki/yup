@@ -147,7 +147,7 @@ protected:
 
 private:
     //==============================================================================
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FilterBase)
+    YUP_LEAK_DETECTOR (FilterBase)
 };
 
 //==============================================================================
