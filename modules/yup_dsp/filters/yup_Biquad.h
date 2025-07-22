@@ -21,22 +21,20 @@
 
 #pragma once
 
-#include <memory>
-
 namespace yup
 {
 
 //==============================================================================
-/** 
+/**
     Second-order IIR filter implementation (biquad).
-    
+
     This class implements a general-purpose biquad filter supporting multiple
     topologies including Direct Form I, Direct Form II, and Transposed Direct Form II.
     It provides both per-sample and block processing with SIMD optimizations.
-    
+
     The filter implements the difference equation:
     y[n] = b0*x[n] + b1*x[n-1] + b2*x[n-2] - a1*y[n-1] - a2*y[n-2]
-    
+
     @see FilterBase, BiquadCoefficients, BiquadState
 */
 template <typename SampleType, typename CoeffType = double>
@@ -53,10 +51,62 @@ public:
     };
 
     //==============================================================================
+    /** Default constructor */
+    Biquad () noexcept
+        : filterTopology (Topology::directFormII)
+    {
+    }
+
     /** Constructor with optional topology selection */
-    explicit Biquad (Topology topology = Topology::directFormII) noexcept
+    explicit Biquad (Topology topology) noexcept
         : filterTopology (topology)
     {
+    }
+
+    //==============================================================================
+    /**
+        Sets the filter coefficients.
+
+        @param newCoefficients  The new biquad coefficients
+    */
+    void setCoefficients (const BiquadCoefficients<CoeffType>& newCoefficients) noexcept
+    {
+        coefficients = newCoefficients;
+        coefficients.normalize();
+    }
+
+    /**
+        Gets the current filter coefficients.
+
+        @returns  The current biquad coefficients
+    */
+    const BiquadCoefficients<CoeffType>& getCoefficients() const noexcept
+    {
+        return coefficients;
+    }
+
+    /**
+        Sets the filter topology.
+
+        @param newTopology  The new filter topology
+    */
+    void setTopology (Topology newTopology) noexcept
+    {
+        if (filterTopology != newTopology)
+        {
+            filterTopology = newTopology;
+            reset();
+        }
+    }
+
+    /**
+        Gets the current filter topology.
+
+        @returns  The current filter topology
+    */
+    Topology getTopology() const noexcept
+    {
+        return filterTopology;
     }
 
     //==============================================================================
@@ -119,52 +169,6 @@ public:
         return coefficients.getComplexResponse (frequency, this->sampleRate);
     }
 
-    //==============================================================================
-    /** 
-        Sets the filter coefficients.
-        
-        @param newCoefficients  The new biquad coefficients
-    */
-    void setCoefficients (const BiquadCoefficients<CoeffType>& newCoefficients) noexcept
-    {
-        coefficients = newCoefficients;
-        coefficients.normalize();
-    }
-
-    /** 
-        Gets the current filter coefficients.
-        
-        @returns  The current biquad coefficients
-    */
-    const BiquadCoefficients<CoeffType>& getCoefficients() const noexcept
-    {
-        return coefficients;
-    }
-
-    /** 
-        Sets the filter topology.
-        
-        @param newTopology  The new filter topology
-    */
-    void setTopology (Topology newTopology) noexcept
-    {
-        if (filterTopology != newTopology)
-        {
-            filterTopology = newTopology;
-            reset();
-        }
-    }
-
-    /** 
-        Gets the current filter topology.
-        
-        @returns  The current filter topology
-    */
-    Topology getTopology() const noexcept
-    {
-        return filterTopology;
-    }
-
 private:
     //==============================================================================
     /** State structures for different topologies - using CoeffType for precision
@@ -190,7 +194,7 @@ private:
     {
         // Promote input to CoeffType precision
         const auto inputCoeff = static_cast<CoeffType> (input);
-        
+
         const auto outputCoeff = coefficients.b0 * inputCoeff + coefficients.b1 * topologyState.x1 + coefficients.b2 * topologyState.x2
                                - coefficients.a1 * topologyState.y1 - coefficients.a2 * topologyState.y2;
 
@@ -209,7 +213,7 @@ private:
     {
         // Promote input to CoeffType precision
         const auto inputCoeff = static_cast<CoeffType> (input);
-        
+
         const auto w = inputCoeff - coefficients.a1 * topologyState.x1 - coefficients.a2 * topologyState.x2;
         const auto outputCoeff = coefficients.b0 * w + coefficients.b1 * topologyState.x1 + coefficients.b2 * topologyState.x2;
 
@@ -226,7 +230,7 @@ private:
     {
         // Promote input to CoeffType precision
         const auto inputCoeff = static_cast<CoeffType> (input);
-        
+
         const auto outputCoeff = coefficients.b0 * inputCoeff + topologyState.x1;
 
         // Update state in CoeffType precision
@@ -259,7 +263,7 @@ private:
         {
             // Promote input to CoeffType precision
             const auto inputCoeff = static_cast<CoeffType> (input[i]);
-            
+
             const auto w = inputCoeff - a1 * w1 - a2 * w2;
             const auto outputCoeff = b0 * w + b1 * w1 + b2 * w2;
 
@@ -288,9 +292,9 @@ private:
         {
             // Promote input to CoeffType precision
             const auto inputCoeff = static_cast<CoeffType> (input[i]);
-            
+
             const auto outputCoeff = b0 * inputCoeff + s1;
-            
+
             // Convert back to SampleType for output
             output[i] = static_cast<SampleType> (outputCoeff);
 
@@ -312,13 +316,13 @@ private:
 };
 
 //==============================================================================
-/** 
+/**
     Cascaded biquad filter implementation.
-    
+
     Allows chaining multiple biquad sections together to create higher-order filters.
     Each section processes the output of the previous section, creating an overall
     filter response that is the product of all individual section responses.
-    
+
     @see Biquad
 */
 template <typename SampleType, typename CoeffType = double>
@@ -327,10 +331,64 @@ class BiquadCascade : public FilterBase<SampleType, CoeffType>
 public:
     //==============================================================================
     /** Constructor with specified number of sections */
-    explicit BiquadCascade (int numSections = 1, 
+    explicit BiquadCascade (int numSections = 1,
                             typename Biquad<SampleType, CoeffType>::Topology topology = Biquad<SampleType, CoeffType>::Topology::directFormII)
     {
         setNumSections (numSections, topology);
+    }
+
+    //==============================================================================
+    /**
+        Sets the coefficients for a specific section.
+
+        @param sectionIndex  The index of the section (0-based)
+        @param coefficients  The new coefficients for this section
+    */
+    void setSectionCoefficients (size_t sectionIndex, const BiquadCoefficients<CoeffType>& coefficients) noexcept
+    {
+        if (sectionIndex < sections.size())
+            sections[sectionIndex].setCoefficients (coefficients);
+    }
+
+    /**
+        Gets the coefficients for a specific section.
+
+        @param sectionIndex  The index of the section (0-based)
+        @returns            The coefficients for this section
+    */
+    const BiquadCoefficients<CoeffType>& getSectionCoefficients (size_t sectionIndex) const noexcept
+    {
+        if (sectionIndex < sections.size())
+            return sections[sectionIndex].getCoefficients();
+
+        static BiquadCoefficients<CoeffType> empty;
+        return empty;
+    }
+
+    /**
+        Gets the number of cascaded sections.
+
+        @returns  The number of biquad sections
+    */
+    size_t getNumSections() const noexcept
+    {
+        return sections.size();
+    }
+
+    /**
+        Resizes the cascade to have a different number of sections.
+
+        @param newNumSections  The new number of sections
+        @param topology       The topology to use for new sections
+    */
+    void setNumSections (int newNumSections,
+                         typename Biquad<SampleType, CoeffType>::Topology topology = Biquad<SampleType, CoeffType>::Topology::directFormII)
+    {
+        sections.clear();
+        sections.resize (static_cast<size_t> (newNumSections), Biquad<SampleType, CoeffType> (topology));
+
+        for (int i = 0; i < newNumSections; ++i)
+            sections[i].prepare (this->sampleRate, this->maximumBlockSize);
     }
 
     //==============================================================================
@@ -384,63 +442,6 @@ public:
         for (const auto& section : sections)
             response = response * section.getComplexResponse (frequency);
         return response;
-    }
-
-    //==============================================================================
-    /** 
-        Sets the coefficients for a specific section.
-        
-        @param sectionIndex  The index of the section (0-based)
-        @param coefficients  The new coefficients for this section
-    */
-    void setSectionCoefficients (size_t sectionIndex, const BiquadCoefficients<CoeffType>& coefficients) noexcept
-    {
-        if (sectionIndex < sections.size())
-            sections[sectionIndex].setCoefficients (coefficients);
-    }
-
-    /** 
-        Gets the coefficients for a specific section.
-        
-        @param sectionIndex  The index of the section (0-based)
-        @returns            The coefficients for this section
-    */
-    const BiquadCoefficients<CoeffType>& getSectionCoefficients (size_t sectionIndex) const noexcept
-    {
-        if (sectionIndex < sections.size())
-            return sections[sectionIndex].getCoefficients();
-
-        static BiquadCoefficients<CoeffType> empty;
-        return empty;
-    }
-
-    /** 
-        Gets the number of cascaded sections.
-        
-        @returns  The number of biquad sections
-    */
-    size_t getNumSections() const noexcept
-    {
-        return sections.size();
-    }
-
-    /** 
-        Resizes the cascade to have a different number of sections.
-        
-        @param newNumSections  The new number of sections
-        @param topology       The topology to use for new sections
-    */
-    void setNumSections (int newNumSections, 
-                         typename Biquad<SampleType, CoeffType>::Topology topology = Biquad<SampleType, CoeffType>::Topology::directFormII)
-    {
-        sections.clear();
-        sections.reserve (static_cast<size_t> (newNumSections));
-        
-        for (int i = 0; i < newNumSections; ++i)
-        {
-            sections.push_back (Biquad<SampleType, CoeffType> (topology));
-            sections.back().prepare (this->sampleRate, this->maximumBlockSize);
-        }
     }
 
 private:

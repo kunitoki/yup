@@ -48,8 +48,10 @@
 
 //==============================================================================
 
+#include <array>
 #include <cmath>
 #include <complex>
+#include <memory>
 #include <vector>
 
 //==============================================================================
@@ -60,10 +62,6 @@
 // Windowing functions
 #include "windowing/yup_WindowFunctions.h"
 
-// FFT
-#include "fft/yup_OouraFFT8g.h"
-#include "fft/yup_FFTProcessor.h"
-
 // Base filter interfaces and common structures
 #include "base/yup_FilterBase.h"
 
@@ -71,38 +69,8 @@
 #include "designers/yup_FilterDesigner.h"
 
 // Core filter implementations
-#include "filters/yup_AllpassFilter.h"
-#include "filters/yup_AllpassCascade.h"
 #include "filters/yup_Biquad.h"
-#include "filters/yup_BesselFilter.h"
-#include "filters/yup_ButterworthFilter.h"
-#include "filters/yup_ChebyshevFilter.h"
-#include "filters/yup_DcFilter.h"
-#include "filters/yup_EllipticFilter.h"
-#include "filters/yup_FirFilter.h"
-#include "filters/yup_FirstOrderFilter.h"
-#include "filters/yup_KorgMs20.h"
-#include "filters/yup_LegendreFilter.h"
-#include "filters/yup_LinkwitzRileyFilter.h"
-#include "filters/yup_MoogLadder.h"
-#include "filters/yup_NotchFilter.h"
-#include "filters/yup_ParametricFilter.h"
 #include "filters/yup_RbjFilter.h"
 #include "filters/yup_StateVariableFilter.h"
-#include "filters/yup_Tb303Filter.h"
-#include "filters/yup_VirtualAnalogSvf.h"
-#include "filters/yup_VowelFilter.h"
-
-// Resampling and rate conversion filters
-#include "filters/yup_CicFilter.h"
-#include "filters/yup_FirResampler.h"
-#include "filters/yup_IirResampler.h"
-
-// Specialized filters
-#include "filters/yup_SoapFilter.h"
-
-// Advanced delay lines and processors
-#include "delays/yup_InterpolatedDelayLine.h"
-#include "processors/yup_ConvolutionProcessor.h"
 
 //==============================================================================

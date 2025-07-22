@@ -21,10 +21,6 @@
 
 #pragma once
 
-#include <cmath>
-#include <complex>
-#include <vector>
-
 namespace yup
 {
 

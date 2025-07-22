@@ -1029,20 +1029,8 @@ private:
 
         // Filter type selector
         filterTypeCombo = std::make_unique<yup::ComboBox> ("FilterType");
-        filterTypeCombo->addItem ("Butterworth", 1);
-        filterTypeCombo->addItem ("RBJ", 2);
-        filterTypeCombo->addItem ("Bessel", 3);
-        filterTypeCombo->addItem ("Chebyshev I", 4);
-        filterTypeCombo->addItem ("Chebyshev II", 5);
-        filterTypeCombo->addItem ("Elliptic", 6);
-        filterTypeCombo->addItem ("Legendre", 7);
-        filterTypeCombo->addItem ("State Variable", 8);
-        filterTypeCombo->addItem ("Moog Ladder", 9);
-        filterTypeCombo->addItem ("FIR Filter", 10);
-        filterTypeCombo->addItem ("Korg MS-20", 11);
-        filterTypeCombo->addItem ("VA SVF", 12);
-        filterTypeCombo->addItem ("TB-303", 13);
-        filterTypeCombo->addItem ("Vowel Filter", 14);
+        filterTypeCombo->addItem ("RBJ", 1);
+        filterTypeCombo->addItem ("State Variable", 2);
         filterTypeCombo->setSelectedId (1);
         filterTypeCombo->onSelectedItemChanged = [this]
         {
@@ -1056,10 +1044,10 @@ private:
         responseTypeCombo->addItem ("Highpass", 2);
         responseTypeCombo->addItem ("Bandpass", 3);
         responseTypeCombo->addItem ("Bandstop", 4);
-        responseTypeCombo->addItem ("Allpass", 5);
-        responseTypeCombo->addItem ("Peak", 6);
-        responseTypeCombo->addItem ("Low Shelf", 7);
-        responseTypeCombo->addItem ("High Shelf", 8);
+        responseTypeCombo->addItem ("Peak", 5);
+        responseTypeCombo->addItem ("Low Shelf", 6);
+        responseTypeCombo->addItem ("High Shelf", 7);
+        responseTypeCombo->addItem ("Allpass", 8);
         responseTypeCombo->setSelectedId (1);
         responseTypeCombo->onSelectedItemChanged = [this]
         {
@@ -1186,56 +1174,28 @@ private:
     void initializeFilters()
     {
         // Create instances of all filter types for audio thread
-        audioButterworth = std::make_shared<yup::ButterworthFilter<float>>();
         audioRbj = std::make_shared<yup::RbjFilter<float>>();
-        audioBessel = std::make_shared<yup::BesselFilter<float>>();
-        audioChebyshev1 = std::make_shared<yup::ChebyshevFilter<float>>();
-        audioChebyshev2 = std::make_shared<yup::ChebyshevFilter<float>>();
-        audioElliptic = std::make_shared<yup::EllipticFilter<float>>();
-        audioLegendre = std::make_shared<yup::LegendreFilter<float>>();
         audioSvf = std::make_shared<yup::StateVariableFilter<float>>();
-        audioMoog = std::make_shared<yup::MoogLadder<float>>();
-        audioFir = std::make_shared<yup::FirFilter<float>>();
-        audioKorg = std::make_shared<yup::KorgMs20<float>>();
-        audioVaSvf = std::make_shared<yup::VirtualAnalogSvf<float>>();
-        audioTb303 = std::make_shared<yup::Tb303Filter<float>>();
-        audioVowel = std::make_shared<yup::VowelFilter<float>>();
 
         // Create instances of all filter types for UI thread
-        uiButterworth = std::make_shared<yup::ButterworthFilter<float>>();
         uiRbj = std::make_shared<yup::RbjFilter<float>>();
-        uiBessel = std::make_shared<yup::BesselFilter<float>>();
-        uiChebyshev1 = std::make_shared<yup::ChebyshevFilter<float>>();
-        uiChebyshev2 = std::make_shared<yup::ChebyshevFilter<float>>();
-        uiElliptic = std::make_shared<yup::EllipticFilter<float>>();
-        uiLegendre = std::make_shared<yup::LegendreFilter<float>>();
         uiSvf = std::make_shared<yup::StateVariableFilter<float>>();
-        uiMoog = std::make_shared<yup::MoogLadder<float>>();
-        uiFir = std::make_shared<yup::FirFilter<float>>();
-        uiKorg = std::make_shared<yup::KorgMs20<float>>();
-        uiVaSvf = std::make_shared<yup::VirtualAnalogSvf<float>>();
-        uiTb303 = std::make_shared<yup::Tb303Filter<float>>();
-        uiVowel = std::make_shared<yup::VowelFilter<float>>();
 
         // Store in arrays for easy management
         allAudioFilters = {
-            audioButterworth, audioRbj, audioBessel, audioChebyshev1, audioChebyshev2,
-            audioElliptic, audioLegendre, audioSvf, audioMoog, audioFir, audioKorg,
-            audioVaSvf, audioTb303, audioVowel
+            audioRbj, audioSvf
         };
 
         allUIFilters = {
-            uiButterworth, uiRbj, uiBessel, uiChebyshev1, uiChebyshev2,
-            uiElliptic, uiLegendre, uiSvf, uiMoog, uiFir, uiKorg,
-            uiVaSvf, uiTb303, uiVowel
+            uiRbj, uiSvf
         };
 
         // Set default filters
-        currentAudioFilter = audioButterworth;
-        currentUIFilter = uiButterworth;
+        currentAudioFilter = audioRbj;
+        currentUIFilter = uiRbj;
 
         // Set default filter type settings
-        currentFilterTypeId = 1; // Butterworth
+        currentFilterTypeId = 1; // RBJ
         currentResponseTypeId = 1; // Lowpass
     }
 
@@ -1255,21 +1215,9 @@ private:
         // Map combo box selection to UI filter instance
         switch (currentFilterTypeId)
         {
-            case 1: currentUIFilter = uiButterworth; break;
-            case 2: currentUIFilter = uiRbj; break;
-            case 3: currentUIFilter = uiBessel; break;
-            case 4: currentUIFilter = uiChebyshev1; break;
-            case 5: currentUIFilter = uiChebyshev2; break;
-            case 6: currentUIFilter = uiElliptic; break;
-            case 7: currentUIFilter = uiLegendre; break;
-            case 8: currentUIFilter = uiSvf; break;
-            case 9: currentUIFilter = uiMoog; break;
-            case 10: currentUIFilter = uiFir; break;
-            case 11: currentUIFilter = uiKorg; break;
-            case 12: currentUIFilter = uiVaSvf; break;
-            case 13: currentUIFilter = uiTb303; break;
-            case 14: currentUIFilter = uiVowel; break;
-            default: currentUIFilter = uiButterworth; break;
+            case 1: currentUIFilter = uiRbj; break;
+            case 2: currentUIFilter = uiSvf; break;
+            default: currentUIFilter = uiRbj; break;
         }
 
         // Synchronize smoothed values with current UI values when switching filters
@@ -1301,79 +1249,13 @@ private:
         int order = static_cast<int> (smoothedOrder.getNextValue());
 
         // Update parameters based on filter type using smoothed values and stored filter type
-        if (auto bf = std::dynamic_pointer_cast<yup::ButterworthFilter<float>> (currentAudioFilter))
+        if (auto rf = std::dynamic_pointer_cast<yup::RbjFilter<float>> (currentAudioFilter))
         {
-            bf->setParameters (getFilterType (currentResponseTypeId), order, freq, currentSampleRate);
-        }
-        else if (auto rf = std::dynamic_pointer_cast<yup::RbjFilter<float>> (currentAudioFilter))
-        {
-            rf->setParameters (getRbjType (currentResponseTypeId), freq, q, gain, currentSampleRate);
+            rf->setParameters (getRbjMode (currentResponseTypeId), freq, q, gain, currentSampleRate);
         }
         else if (auto svf = std::dynamic_pointer_cast<yup::StateVariableFilter<float>> (currentAudioFilter))
         {
-            svf->setParameters (freq, q, currentSampleRate);
-            svf->setMode (getSvfMode (currentResponseTypeId));
-        }
-        else if (auto moog = std::dynamic_pointer_cast<yup::MoogLadder<float>> (currentAudioFilter))
-        {
-            moog->setParameters (freq, yup::jlimit (0.0, 0.99, q / 20.0)); // Scale Q to resonance
-        }
-        else if (auto bessel = std::dynamic_pointer_cast<yup::BesselFilter<float>> (currentAudioFilter))
-        {
-            bessel->setParameters (getFilterType (currentResponseTypeId), order, freq, currentSampleRate);
-        }
-        else if (auto cheby1 = std::dynamic_pointer_cast<yup::ChebyshevFilter<float>> (currentAudioFilter))
-        {
-            if (currentFilterTypeId == 4) // Chebyshev I
-            {
-                cheby1->setParameters (yup::ChebyshevFilter<float>::Type::Type1,
-                                      getFilterType (currentResponseTypeId),
-                                      order,
-                                      freq,
-                                      currentSampleRate,
-                                      0.5); // Ripple
-            }
-            else if (currentFilterTypeId == 5) // Chebyshev II
-            {
-                cheby1->setParameters (yup::ChebyshevFilter<float>::Type::Type2,
-                                      getFilterType (currentResponseTypeId),
-                                      order,
-                                      freq,
-                                      currentSampleRate,
-                                      40.0); // Stopband attenuation
-            }
-        }
-        else if (auto elliptic = std::dynamic_pointer_cast<yup::EllipticFilter<float>> (currentAudioFilter))
-        {
-            elliptic->setParameters (getFilterType (currentResponseTypeId), order, freq, currentSampleRate, 0.5, 40.0);
-        }
-        else if (auto legendre = std::dynamic_pointer_cast<yup::LegendreFilter<float>> (currentAudioFilter))
-        {
-            legendre->setParameters (getFilterType (currentResponseTypeId), order, freq, currentSampleRate);
-        }
-        else if (auto fir = std::dynamic_pointer_cast<yup::FirFilter<float>> (currentAudioFilter))
-        {
-            auto firType = getFirType (currentResponseTypeId);
-            fir->setParameters (firType, order * 32, freq, currentSampleRate); // Scale order for FIR length
-        }
-        else if (auto korg = std::dynamic_pointer_cast<yup::KorgMs20<float>> (currentAudioFilter))
-        {
-            auto korgMode = getKorgMode (currentResponseTypeId);
-            korg->setParameters (freq, yup::jlimit (0.0, 0.99, q / 20.0), korgMode);
-        }
-        else if (auto vaSvf = std::dynamic_pointer_cast<yup::VirtualAnalogSvf<float>> (currentAudioFilter))
-        {
-            auto vaSvfMode = getVaSvfMode (currentResponseTypeId);
-            vaSvf->setParameters (freq, yup::jlimit (0.0, 0.99, q / 20.0), vaSvfMode);
-        }
-        else if (auto tb303 = std::dynamic_pointer_cast<yup::Tb303Filter<float>> (currentAudioFilter))
-        {
-            tb303->setParameters (freq, yup::jlimit (0.0, 0.99, q / 20.0), gain / 20.0, 0.0);
-        }
-        else if (auto vowel = std::dynamic_pointer_cast<yup::VowelFilter<float>> (currentAudioFilter))
-        {
-            auto vowelType = getVowelType (currentResponseTypeId);
-            vowel->setParameters (vowelType, yup::VowelFilter<float>::Gender::Male, 3);
+            svf->setParameters (getSvfMode (currentResponseTypeId), freq, q, currentSampleRate);
         }
     }
 
@@ -1388,79 +1270,13 @@ private:
         int order = static_cast<int> (orderSlider->getValue());
 
         // Update parameters based on filter type using direct UI values
-        if (auto bf = std::dynamic_pointer_cast<yup::ButterworthFilter<float>> (currentUIFilter))
+        if (auto rf = std::dynamic_pointer_cast<yup::RbjFilter<float>> (currentUIFilter))
         {
-            bf->setParameters (getFilterType (currentResponseTypeId), order, freq, currentSampleRate);
-        }
-        else if (auto rf = std::dynamic_pointer_cast<yup::RbjFilter<float>> (currentUIFilter))
-        {
-            rf->setParameters (getRbjType (currentResponseTypeId), freq, q, gain, currentSampleRate);
+            rf->setParameters (getRbjMode (currentResponseTypeId), freq, q, gain, currentSampleRate);
         }
         else if (auto svf = std::dynamic_pointer_cast<yup::StateVariableFilter<float>> (currentUIFilter))
         {
-            svf->setParameters (freq, q, currentSampleRate);
-            svf->setMode (getSvfMode (currentResponseTypeId));
-        }
-        else if (auto moog = std::dynamic_pointer_cast<yup::MoogLadder<float>> (currentUIFilter))
-        {
-            moog->setParameters (freq, yup::jlimit (0.0, 0.99, q / 20.0)); // Scale Q to resonance
-        }
-        else if (auto bessel = std::dynamic_pointer_cast<yup::BesselFilter<float>> (currentUIFilter))
-        {
-            bessel->setParameters (getFilterType (currentResponseTypeId), order, freq, currentSampleRate);
-        }
-        else if (auto cheby1 = std::dynamic_pointer_cast<yup::ChebyshevFilter<float>> (currentUIFilter))
-        {
-            if (currentFilterTypeId == 4) // Chebyshev I
-            {
-                cheby1->setParameters (yup::ChebyshevFilter<float>::Type::Type1,
-                                      getFilterType (currentResponseTypeId),
-                                      order,
-                                      freq,
-                                      currentSampleRate,
-                                      0.5); // Ripple
-            }
-            else if (currentFilterTypeId == 5) // Chebyshev II
-            {
-                cheby1->setParameters (yup::ChebyshevFilter<float>::Type::Type2,
-                                      getFilterType (currentResponseTypeId),
-                                      order,
-                                      freq,
-                                      currentSampleRate,
-                                      40.0); // Stopband attenuation
-            }
-        }
-        else if (auto elliptic = std::dynamic_pointer_cast<yup::EllipticFilter<float>> (currentUIFilter))
-        {
-            elliptic->setParameters (getFilterType (currentResponseTypeId), order, freq, currentSampleRate, 0.5, 40.0);
-        }
-        else if (auto legendre = std::dynamic_pointer_cast<yup::LegendreFilter<float>> (currentUIFilter))
-        {
-            legendre->setParameters (getFilterType (currentResponseTypeId), order, freq, currentSampleRate);
-        }
-        else if (auto fir = std::dynamic_pointer_cast<yup::FirFilter<float>> (currentUIFilter))
-        {
-            auto firType = getFirType (currentResponseTypeId);
-            fir->setParameters (firType, order * 32, freq, currentSampleRate); // Scale order for FIR length
-        }
-        else if (auto korg = std::dynamic_pointer_cast<yup::KorgMs20<float>> (currentUIFilter))
-        {
-            auto korgMode = getKorgMode (currentResponseTypeId);
-            korg->setParameters (freq, yup::jlimit (0.0, 0.99, q / 20.0), korgMode);
-        }
-        else if (auto vaSvf = std::dynamic_pointer_cast<yup::VirtualAnalogSvf<float>> (currentUIFilter))
-        {
-            auto vaSvfMode = getVaSvfMode (currentResponseTypeId);
-            vaSvf->setParameters (freq, yup::jlimit (0.0, 0.99, q / 20.0), vaSvfMode);
-        }
-        else if (auto tb303 = std::dynamic_pointer_cast<yup::Tb303Filter<float>> (currentUIFilter))
-        {
-            tb303->setParameters (freq, yup::jlimit (0.0, 0.99, q / 20.0), gain / 20.0, 0.0);
-        }
-        else if (auto vowel = std::dynamic_pointer_cast<yup::VowelFilter<float>> (currentUIFilter))
-        {
-            auto vowelType = getVowelType (currentResponseTypeId);
-            vowel->setParameters (vowelType, yup::VowelFilter<float>::Gender::Male, 3);
+            svf->setParameters (getSvfMode (currentResponseTypeId), freq, q, currentSampleRate);
         }
     }
 
@@ -1469,21 +1285,9 @@ private:
         // Map filter type to audio filter instance (using stored filter type, not UI)
         switch (currentFilterTypeId)
         {
-            case 1: currentAudioFilter = audioButterworth; break;
-            case 2: currentAudioFilter = audioRbj; break;
-            case 3: currentAudioFilter = audioBessel; break;
-            case 4: currentAudioFilter = audioChebyshev1; break;
-            case 5: currentAudioFilter = audioChebyshev2; break;
-            case 6: currentAudioFilter = audioElliptic; break;
-            case 7: currentAudioFilter = audioLegendre; break;
+            case 1: currentAudioFilter = audioRbj; break;
             case 8: currentAudioFilter = audioSvf; break;
-            case 9: currentAudioFilter = audioMoog; break;
-            case 10: currentAudioFilter = audioFir; break;
-            case 11: currentAudioFilter = audioKorg; break;
-            case 12: currentAudioFilter = audioVaSvf; break;
-            case 13: currentAudioFilter = audioTb303; break;
-            case 14: currentAudioFilter = audioVowel; break;
-            default: currentAudioFilter = audioButterworth; break;
+            default: currentAudioFilter = audioRbj; break;
         }
 
         // Synchronize smoothed values with current UI values when switching filters
@@ -1556,11 +1360,6 @@ private:
             // For biquad filters, calculate poles and zeros from coefficients
             calculateBiquadPolesZeros (rbj->getCoefficients(), poles, zeros);
         }
-        else if (auto butter = std::dynamic_pointer_cast<yup::ButterworthFilter<float>> (currentUIFilter))
-        {
-            // For higher-order filters, get poles and zeros from each section
-            calculateHighOrderPolesZeros (butter, poles, zeros);
-        }
         // Add other filter types as needed...
 
         polesZerosDisplay.updatePolesZeros (poles, zeros);
@@ -1617,84 +1416,53 @@ private:
         }
     }
 
-    void calculateHighOrderPolesZeros (std::shared_ptr<yup::FilterBase<float>> filter,
-                                       std::vector<std::complex<double>>& poles,
-                                       std::vector<std::complex<double>>& zeros)
-    {
-        // For high-order filters implemented as cascaded biquads,
-        // we would iterate through each section and extract poles/zeros
-        // This is a placeholder implementation
-
-        // Example: For a 4th order Butterworth lowpass at 1000Hz
-        double freq = frequencySlider->getValue();
-        double sampleRate = 44100.0;
-        double omega = 2.0 * yup::MathConstants<double>::pi * freq / sampleRate;
-
-        // Simplified pole calculation for demonstration
-        for (int i = 0; i < 2; ++i) // 2 complex conjugate pairs for 4th order
-        {
-            double angle = yup::MathConstants<double>::pi * (2.0 * i + 1.0) / 4.0; // Butterworth pole angles
-            double radius = 0.9;                                                   // Adjust based on actual filter design
-
-            poles.push_back (std::complex<double> (radius * std::cos (angle), radius * std::sin (angle)));
-            poles.push_back (std::complex<double> (radius * std::cos (angle), -radius * std::sin (angle)));
-        }
-
-        // For lowpass filters, zeros are typically at z = -1 (Nyquist frequency)
-        int filterOrder = static_cast<int> (orderSlider->getValue());
-        for (int i = 0; i < filterOrder; ++i)
-        {
-            zeros.push_back (std::complex<double> (-1.0, 0.0));
-        }
-    }
-
-    yup::FilterType getFilterType (int responseTypeId)
+    yup::FilterMode getFilterType (int responseTypeId)
     {
         switch (responseTypeId)
         {
             case 1:
-                return yup::FilterType::lowpass;
+                return yup::FilterMode::lowpass;
             case 2:
-                return yup::FilterType::highpass;
+                return yup::FilterMode::highpass;
             case 3:
-                return yup::FilterType::bandpass;
+                return yup::FilterMode::bandpass;
             case 4:
-                return yup::FilterType::bandstop;
+                return yup::FilterMode::bandstop;
             case 5:
-                return yup::FilterType::allpass;
+                return yup::FilterMode::peak;
             case 6:
-                return yup::FilterType::peak;
+                return yup::FilterMode::lowshelf;
             case 7:
-                return yup::FilterType::lowshelf;
+                return yup::FilterMode::highshelf;
             case 8:
-                return yup::FilterType::highshelf;
+                return yup::FilterMode::allpass;
             default:
-                return yup::FilterType::lowpass;
+                return yup::FilterMode::lowpass;
         }
     }
 
-    yup::RbjFilter<float, double>::Type getRbjType (int responseTypeId)
+    yup::RbjFilter<float>::Mode getRbjMode (int responseTypeId)
     {
         switch (responseTypeId)
         {
             case 1:
-                return yup::RbjFilter<float>::Type::lowpass;
+                return yup::RbjFilter<float>::Mode::lowpass;
             case 2:
-                return yup::RbjFilter<float>::Type::highpass;
+                return yup::RbjFilter<float>::Mode::highpass;
             case 3:
-                return yup::RbjFilter<float>::Type::bandpassCsg;
+                return yup::RbjFilter<float>::Mode::bandpassCsg;
             case 4:
-                return yup::RbjFilter<float>::Type::notch;
+                return yup::RbjFilter<float>::Mode::notch;
             case 5:
-                return yup::RbjFilter<float>::Type::allpass;
+                return yup::RbjFilter<float>::Mode::peaking;
             case 6:
-                return yup::RbjFilter<float>::Type::peaking;
+                return yup::RbjFilter<float>::Mode::lowshelf;
             case 7:
-                return yup::RbjFilter<float>::Type::lowshelf;
+                return yup::RbjFilter<float>::Mode::highshelf;
             case 8:
-                return yup::RbjFilter<float>::Type::highshelf;
+                return yup::RbjFilter<float>::Mode::allpass;
             default:
-                return yup::RbjFilter<float>::Type::lowpass;
+                return yup::RbjFilter<float>::Mode::lowpass;
         }
     }
 
@@ -1712,72 +1480,6 @@ private:
                 return yup::StateVariableFilter<float>::Mode::notch;
             default:
                 return yup::StateVariableFilter<float>::Mode::lowpass;
-        }
-    }
-
-    yup::FirFilter<float>::Type getFirType (int responseTypeId)
-    {
-        switch (responseTypeId)
-        {
-            case 1:
-                return yup::FirFilter<float>::Type::lowpass;
-            case 2:
-                return yup::FirFilter<float>::Type::highpass;
-            case 3:
-                return yup::FirFilter<float>::Type::bandpass;
-            case 4:
-                return yup::FirFilter<float>::Type::bandstop;
-            default:
-                return yup::FirFilter<float>::Type::lowpass;
-        }
-    }
-
-    yup::KorgMs20<float>::Mode getKorgMode (int responseTypeId)
-    {
-        switch (responseTypeId)
-        {
-            case 1:
-                return yup::KorgMs20<float>::Mode::lowpass;
-            case 2:
-                return yup::KorgMs20<float>::Mode::highpass;
-            default:
-                return yup::KorgMs20<float>::Mode::lowpass;
-        }
-    }
-
-    yup::VirtualAnalogSvf<float>::Mode getVaSvfMode (int responseTypeId)
-    {
-        switch (responseTypeId)
-        {
-            case 1:
-                return yup::VirtualAnalogSvf<float>::Mode::lowpass;
-            case 2:
-                return yup::VirtualAnalogSvf<float>::Mode::highpass;
-            case 3:
-                return yup::VirtualAnalogSvf<float>::Mode::bandpass;
-            case 4:
-                return yup::VirtualAnalogSvf<float>::Mode::notch;
-            default:
-                return yup::VirtualAnalogSvf<float>::Mode::lowpass;
-        }
-    }
-
-    yup::VowelFilter<float>::Vowel getVowelType (int responseTypeId)
-    {
-        switch (responseTypeId)
-        {
-            case 1:
-                return yup::VowelFilter<float>::Vowel::A;
-            case 2:
-                return yup::VowelFilter<float>::Vowel::E;
-            case 3:
-                return yup::VowelFilter<float>::Vowel::I;
-            case 4:
-                return yup::VowelFilter<float>::Vowel::O;
-            case 5:
-                return yup::VowelFilter<float>::Vowel::U;
-            default:
-                return yup::VowelFilter<float>::Vowel::A;
         }
     }
 
@@ -1801,36 +1503,12 @@ private:
     std::atomic<int> currentResponseTypeId { 1 };
 
     // Audio thread filter instances
-    std::shared_ptr<yup::ButterworthFilter<float>> audioButterworth;
     std::shared_ptr<yup::RbjFilter<float>> audioRbj;
-    std::shared_ptr<yup::BesselFilter<float>> audioBessel;
-    std::shared_ptr<yup::ChebyshevFilter<float>> audioChebyshev1;
-    std::shared_ptr<yup::ChebyshevFilter<float>> audioChebyshev2;
-    std::shared_ptr<yup::EllipticFilter<float>> audioElliptic;
-    std::shared_ptr<yup::LegendreFilter<float>> audioLegendre;
     std::shared_ptr<yup::StateVariableFilter<float>> audioSvf;
-    std::shared_ptr<yup::MoogLadder<float>> audioMoog;
-    std::shared_ptr<yup::FirFilter<float>> audioFir;
-    std::shared_ptr<yup::KorgMs20<float>> audioKorg;
-    std::shared_ptr<yup::VirtualAnalogSvf<float>> audioVaSvf;
-    std::shared_ptr<yup::Tb303Filter<float>> audioTb303;
-    std::shared_ptr<yup::VowelFilter<float>> audioVowel;
 
     // UI thread filter instances
-    std::shared_ptr<yup::ButterworthFilter<float>> uiButterworth;
     std::shared_ptr<yup::RbjFilter<float>> uiRbj;
-    std::shared_ptr<yup::BesselFilter<float>> uiBessel;
-    std::shared_ptr<yup::ChebyshevFilter<float>> uiChebyshev1;
-    std::shared_ptr<yup::ChebyshevFilter<float>> uiChebyshev2;
-    std::shared_ptr<yup::EllipticFilter<float>> uiElliptic;
-    std::shared_ptr<yup::LegendreFilter<float>> uiLegendre;
     std::shared_ptr<yup::StateVariableFilter<float>> uiSvf;
-    std::shared_ptr<yup::MoogLadder<float>> uiMoog;
-    std::shared_ptr<yup::FirFilter<float>> uiFir;
-    std::shared_ptr<yup::KorgMs20<float>> uiKorg;
-    std::shared_ptr<yup::VirtualAnalogSvf<float>> uiVaSvf;
-    std::shared_ptr<yup::Tb303Filter<float>> uiTb303;
-    std::shared_ptr<yup::VowelFilter<float>> uiVowel;
 
     std::vector<std::shared_ptr<yup::FilterBase<float>>> allAudioFilters;
     std::vector<std::shared_ptr<yup::FilterBase<float>>> allUIFilters;

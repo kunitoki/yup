@@ -32,6 +32,4 @@
 
 //==============================================================================
 
-#include "fft/yup_OouraFFT8g.cpp"
-#include "fft/yup_FFTProcessor.cpp"
 #include "designers/yup_FilterDesigner.cpp"

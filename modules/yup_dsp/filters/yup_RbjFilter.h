@@ -51,7 +51,7 @@ class RbjFilter : public Biquad<SampleType, CoeffType>
 public:
     //==============================================================================
     /** Filter type enumeration specific to RBJ cookbook */
-    enum class Type
+    enum class Mode
     {
         lowpass,     /**< Low-pass filter */
         highpass,    /**< High-pass filter */
@@ -65,59 +65,31 @@ public:
     };
 
     //==============================================================================
+    /** Default constructor */
+    RbjFilter() noexcept
+    {
+        setParameters (Mode::lowpass, static_cast<CoeffType> (1000.0), static_cast<CoeffType> (0.707), static_cast<CoeffType> (0.0), 44100.0);
+    }
+
     /** Constructor with optional initial parameters */
-    explicit RbjFilter (Type type = Type::peaking) noexcept
-        : filterType (type)
+    explicit RbjFilter (Mode mode) noexcept
     {
-        setParameters (type, static_cast<CoeffType> (1000.0), static_cast<CoeffType> (0.707), static_cast<CoeffType> (0.0), 44100.0);
-    }
-
-    //==============================================================================
-    /** @internal */
-    void reset() noexcept override
-    {
-        BaseFilterType::reset();
-    }
-
-    /** @internal */
-    void prepare (double sampleRate, int maximumBlockSize) noexcept override
-    {
-        BaseFilterType::prepare (sampleRate, maximumBlockSize);
-
-        updateCoefficients();
-    }
-
-    /** @internal */
-    SampleType processSample (SampleType inputSample) noexcept override
-    {
-        return BaseFilterType::processSample (inputSample);
-    }
-
-    /** @internal */
-    void processBlock (const SampleType* inputBuffer, SampleType* outputBuffer, int numSamples) noexcept override
-    {
-        BaseFilterType::processBlock (inputBuffer, outputBuffer, numSamples);
-    }
-
-    /** @internal */
-    DspMath::Complex<CoeffType> getComplexResponse (CoeffType frequency) const noexcept override
-    {
-        return BaseFilterType::getComplexResponse (frequency);
+        setParameters (mode, static_cast<CoeffType> (1000.0), static_cast<CoeffType> (0.707), static_cast<CoeffType> (0.0), 44100.0);
     }
 
     //==============================================================================
     /** 
         Sets all filter parameters.
         
-        @param type        The RBJ filter type
+        @param mode        The RBJ filter mode
         @param frequency   The center/cutoff frequency in Hz
         @param q          The Q factor (resonance/bandwidth control)
         @param gainDb     The gain in decibels (for peaking and shelving filters)
         @param sampleRate The sample rate in Hz
     */
-    void setParameters (Type type, CoeffType frequency, CoeffType q, CoeffType gainDb, double sampleRate) noexcept
+    void setParameters (Mode mode, CoeffType frequency, CoeffType q, CoeffType gainDb, double sampleRate) noexcept
     {
-        filterType = type;
+        filterMode = mode;
         centerFreq = frequency;
         qFactor = q;
         gain = gainDb;
@@ -161,13 +133,13 @@ public:
     }
 
     /** 
-        Sets the filter type.
-        
-        @param type  The new RBJ filter type
+        Sets the filter mode.
+
+        @param mode  The new RBJ filter mode
     */
-    void setType (Type type) noexcept
+    void setMode (Mode mode) noexcept
     {
-        filterType = type;
+        filterMode = mode;
         updateCoefficients();
     }
 
@@ -202,13 +174,46 @@ public:
     }
 
     /** 
-        Gets the current filter type.
-        
-        @returns  The RBJ filter type
+        Gets the current filter mode.
+
+        @returns  The RBJ filter mode
     */
-    Type getType() const noexcept
+    Mode geMode() const noexcept
     {
-        return filterType;
+        return filterMode;
+    }
+
+    //==============================================================================
+    /** @internal */
+    void reset() noexcept override
+    {
+        BaseFilterType::reset();
+    }
+
+    /** @internal */
+    void prepare (double sampleRate, int maximumBlockSize) noexcept override
+    {
+        BaseFilterType::prepare (sampleRate, maximumBlockSize);
+
+        updateCoefficients();
+    }
+
+    /** @internal */
+    SampleType processSample (SampleType inputSample) noexcept override
+    {
+        return BaseFilterType::processSample (inputSample);
+    }
+
+    /** @internal */
+    void processBlock (const SampleType* inputBuffer, SampleType* outputBuffer, int numSamples) noexcept override
+    {
+        BaseFilterType::processBlock (inputBuffer, outputBuffer, numSamples);
+    }
+
+    /** @internal */
+    DspMath::Complex<CoeffType> getComplexResponse (CoeffType frequency) const noexcept override
+    {
+        return BaseFilterType::getComplexResponse (frequency);
     }
 
 private:
@@ -217,39 +222,39 @@ private:
     {
         BiquadCoefficients<CoeffType> coeffs;
 
-        switch (filterType)
+        switch (filterMode)
         {
-            case Type::lowpass:
+            case Mode::lowpass:
                 coeffs = FilterDesigner<CoeffType>::designRbjLowpass (centerFreq, qFactor, this->sampleRate);
                 break;
 
-            case Type::highpass:
+            case Mode::highpass:
                 coeffs = FilterDesigner<CoeffType>::designRbjHighpass (centerFreq, qFactor, this->sampleRate);
                 break;
 
-            case Type::bandpassCsg:
-            case Type::bandpassCpg:
+            case Mode::bandpassCsg:
+            case Mode::bandpassCpg:
                 coeffs = FilterDesigner<CoeffType>::designRbjBandpass (centerFreq, qFactor, this->sampleRate);
                 break;
 
-            case Type::notch:
+            case Mode::notch:
                 coeffs = FilterDesigner<CoeffType>::designRbjBandstop (centerFreq, qFactor, this->sampleRate);
                 break;
 
-            case Type::allpass:
-                coeffs = FilterDesigner<CoeffType>::designRbjAllpass (centerFreq, qFactor, this->sampleRate);
-                break;
-
-            case Type::peaking:
+            case Mode::peaking:
                 coeffs = FilterDesigner<CoeffType>::designRbjPeak (centerFreq, qFactor, gain, this->sampleRate);
                 break;
 
-            case Type::lowshelf:
+            case Mode::lowshelf:
                 coeffs = FilterDesigner<CoeffType>::designRbjLowShelf (centerFreq, qFactor, gain, this->sampleRate);
                 break;
 
-            case Type::highshelf:
+            case Mode::highshelf:
                 coeffs = FilterDesigner<CoeffType>::designRbjHighShelf (centerFreq, qFactor, gain, this->sampleRate);
+                break;
+
+            case Mode::allpass:
+                coeffs = FilterDesigner<CoeffType>::designRbjAllpass (centerFreq, qFactor, this->sampleRate);
                 break;
         }
 
@@ -257,13 +262,13 @@ private:
     }
 
     //==============================================================================
-    Type filterType = Type::peaking;
     CoeffType centerFreq = static_cast<CoeffType> (1000.0);
     CoeffType qFactor = static_cast<CoeffType> (0.707);
     CoeffType gain = static_cast<CoeffType> (0.0);
+    Mode filterMode = Mode::lowpass;
 
     //==============================================================================
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RbjFilter)
+    YUP_LEAK_DETECTOR (RbjFilter)
 };
 
 //==============================================================================
