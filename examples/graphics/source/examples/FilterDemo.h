@@ -931,13 +931,20 @@ public:
     {
         for (int sample = 0; sample < numSamples; ++sample)
         {
+            // Check if any parameters are changing and update filter coefficients if needed
+            if (smoothedFrequency.isSmoothing() || smoothedQ.isSmoothing() ||
+                smoothedGain.isSmoothing() || smoothedOrder.isSmoothing())
+            {
+                updateAudioFilterParametersSmooth();
+            }
+
             // Generate white noise
             float noiseSample = noiseGenerator.getNextSample();
 
-            // Apply current filter
+            // Apply current audio filter
             float filteredSample = noiseSample;
-            if (currentFilter)
-                filteredSample = currentFilter->processSample (noiseSample);
+            if (currentAudioFilter)
+                filteredSample = currentAudioFilter->processSample (noiseSample);
 
             // Apply output gain
             filteredSample *= outputGain.getNextValue();
@@ -965,15 +972,31 @@ public:
         noiseGenerator.setSampleRate (sampleRate);
         outputGain.reset (sampleRate, 0.02);
 
-        // Prepare all filters
-        for (auto& filter : allFilters)
+        // Initialize smoothed parameter values
+        smoothedFrequency.reset (sampleRate, 0.05); // 50ms smoothing time
+        smoothedQ.reset (sampleRate, 0.05);
+        smoothedGain.reset (sampleRate, 0.05);
+        smoothedOrder.reset (sampleRate, 0.1); // Slower for order changes
+
+        // Set initial values
+        smoothedFrequency.setCurrentAndTargetValue (static_cast<float> (frequencySlider->getValue()));
+        smoothedQ.setCurrentAndTargetValue (static_cast<float> (qSlider->getValue()));
+        smoothedGain.setCurrentAndTargetValue (static_cast<float> (gainSlider->getValue()));
+        smoothedOrder.setCurrentAndTargetValue (static_cast<float> (orderSlider->getValue()));
+
+        // Prepare all audio filters
+        for (auto& filter : allAudioFilters)
         {
             if (filter)
                 filter->prepare (sampleRate, device->getCurrentBufferSizeSamples());
         }
 
-        // Setup frequency response plot
-        frequencyResponsePlot.setSampleRate (sampleRate);
+        // Prepare all UI filters
+        for (auto& filter : allUIFilters)
+        {
+            if (filter)
+                filter->prepare (sampleRate, device->getCurrentBufferSizeSamples());
+        }
 
         // Initialize audio buffers
         inputData.resize (device->getCurrentBufferSizeSamples());
@@ -982,6 +1005,12 @@ public:
 
         // Store sample rate for parameter updates
         currentSampleRate = sampleRate;
+
+        // Setup frequency response plot
+        frequencyResponsePlot.setSampleRate (sampleRate);
+
+        // Update current audio filter based on stored settings
+        updateCurrentAudioFilter();
     }
 
     void audioDeviceStopped() override
@@ -1033,41 +1062,45 @@ private:
         };
         addAndMakeVisible (*responseTypeCombo);
 
-        // Parameter controls
+        // Parameter controls with smoothed parameter updates
         frequencySlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Frequency");
         frequencySlider->setRange ({ 20.0, 20000.0 });
         frequencySlider->setSkewFactor (0.3); // Logarithmic scale
         frequencySlider->setValue (1000.0);
-        frequencySlider->onValueChanged = [this] (float)
+        frequencySlider->onValueChanged = [this] (float value)
         {
-            updateFilterParameters();
+            smoothedFrequency.setTargetValue (value);
+            updateAnalysisDisplays();
         };
         addAndMakeVisible (*frequencySlider);
 
         qSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Q / Resonance");
         qSlider->setRange ({ 0.1, 20.0 });
         qSlider->setValue (0.707);
-        qSlider->onValueChanged = [this] (float)
+        qSlider->onValueChanged = [this] (float value)
         {
-            updateFilterParameters();
+            smoothedQ.setTargetValue (value);
+            updateAnalysisDisplays();
         };
         addAndMakeVisible (*qSlider);
 
         gainSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Gain (dB)");
         gainSlider->setRange ({ -20.0, 20.0 });
         gainSlider->setValue (0.0);
-        gainSlider->onValueChanged = [this] (float)
+        gainSlider->onValueChanged = [this] (float value)
         {
-            updateFilterParameters();
+            smoothedGain.setTargetValue (value);
+            updateAnalysisDisplays();
         };
         addAndMakeVisible (*gainSlider);
 
         orderSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Order");
         orderSlider->setRange ({ 1.0, 10.0 });
         orderSlider->setValue (2.0);
-        orderSlider->onValueChanged = [this] (float)
+        orderSlider->onValueChanged = [this] (float value)
         {
-            updateFilterParameters();
+            smoothedOrder.setTargetValue (value);
+            updateAnalysisDisplays();
         };
         addAndMakeVisible (*orderSlider);
 
@@ -1147,24 +1180,46 @@ private:
 
     void initializeFilters()
     {
-        // Create instances of all filter types
-        butterworthFilter = std::make_shared<yup::ButterworthFilter<float>>();
-        rbjFilter = std::make_shared<yup::RbjFilter<float>>();
-        besselFilter = std::make_shared<yup::BesselFilter<float>>();
-        chebyshev1Filter = std::make_shared<yup::ChebyshevFilter<float>>();
-        chebyshev2Filter = std::make_shared<yup::ChebyshevFilter<float>>();
-        ellipticFilter = std::make_shared<yup::EllipticFilter<float>>();
-        legendreFilter = std::make_shared<yup::LegendreFilter<float>>();
-        svfFilter = std::make_shared<yup::StateVariableFilter<float>>();
-        moogFilter = std::make_shared<yup::MoogLadder<float>>();
+        // Create instances of all filter types for audio thread
+        audioButterworth = std::make_shared<yup::ButterworthFilter<float>>();
+        audioRbj = std::make_shared<yup::RbjFilter<float>>();
+        audioBessel = std::make_shared<yup::BesselFilter<float>>();
+        audioChebyshev1 = std::make_shared<yup::ChebyshevFilter<float>>();
+        audioChebyshev2 = std::make_shared<yup::ChebyshevFilter<float>>();
+        audioElliptic = std::make_shared<yup::EllipticFilter<float>>();
+        audioLegendre = std::make_shared<yup::LegendreFilter<float>>();
+        audioSvf = std::make_shared<yup::StateVariableFilter<float>>();
+        audioMoog = std::make_shared<yup::MoogLadder<float>>();
 
-        // Store in array for easy management
-        allFilters = {
-            butterworthFilter, rbjFilter, besselFilter, chebyshev1Filter, chebyshev2Filter, ellipticFilter, legendreFilter, svfFilter, moogFilter
+        // Create instances of all filter types for UI thread
+        uiButterworth = std::make_shared<yup::ButterworthFilter<float>>();
+        uiRbj = std::make_shared<yup::RbjFilter<float>>();
+        uiBessel = std::make_shared<yup::BesselFilter<float>>();
+        uiChebyshev1 = std::make_shared<yup::ChebyshevFilter<float>>();
+        uiChebyshev2 = std::make_shared<yup::ChebyshevFilter<float>>();
+        uiElliptic = std::make_shared<yup::EllipticFilter<float>>();
+        uiLegendre = std::make_shared<yup::LegendreFilter<float>>();
+        uiSvf = std::make_shared<yup::StateVariableFilter<float>>();
+        uiMoog = std::make_shared<yup::MoogLadder<float>>();
+
+        // Store in arrays for easy management
+        allAudioFilters = {
+            audioButterworth, audioRbj, audioBessel, audioChebyshev1, audioChebyshev2,
+            audioElliptic, audioLegendre, audioSvf, audioMoog
         };
 
-        // Set default filter
-        currentFilter = butterworthFilter;
+        allUIFilters = {
+            uiButterworth, uiRbj, uiBessel, uiChebyshev1, uiChebyshev2,
+            uiElliptic, uiLegendre, uiSvf, uiMoog
+        };
+
+        // Set default filters
+        currentAudioFilter = audioButterworth;
+        currentUIFilter = uiButterworth;
+
+        // Set default filter type settings
+        currentFilterTypeId = 1; // Butterworth
+        currentResponseTypeId = 1; // Lowpass
     }
 
     void setDefaultParameters()
@@ -1176,67 +1231,109 @@ private:
 
     void updateCurrentFilter()
     {
-        int filterTypeId = filterTypeCombo->getSelectedId();
-        int responseTypeId = responseTypeCombo->getSelectedId();
+        // Store filter type settings for audio thread
+        currentFilterTypeId = filterTypeCombo->getSelectedId();
+        currentResponseTypeId = responseTypeCombo->getSelectedId();
 
-        // Map combo box selection to filter instance
-        switch (filterTypeId)
+        // Map combo box selection to UI filter instance
+        switch (currentFilterTypeId)
         {
-            case 1:
-                currentFilter = butterworthFilter;
-                break;
-            case 2:
-                currentFilter = rbjFilter;
-                break;
-            case 3:
-                currentFilter = besselFilter;
-                break;
-            case 4:
-                currentFilter = chebyshev1Filter;
-                chebyshev1Filter->setParameters (yup::ChebyshevFilter<float>::Type::Type1,
-                                                 getFilterType (responseTypeId),
-                                                 static_cast<int> (orderSlider->getValue()),
-                                                 frequencySlider->getValue(),
-                                                 44100.0,
-                                                 0.5);
-                break;
-            case 5:
-                currentFilter = chebyshev2Filter;
-                chebyshev2Filter->setParameters (yup::ChebyshevFilter<float>::Type::Type2,
-                                                 getFilterType (responseTypeId),
-                                                 static_cast<int> (orderSlider->getValue()),
-                                                 frequencySlider->getValue(),
-                                                 44100.0,
-                                                 40.0);
-                break;
-            case 6:
-                currentFilter = ellipticFilter;
-                break;
-            case 7:
-                currentFilter = legendreFilter;
-                break;
-            case 8:
-                currentFilter = svfFilter;
-                break;
-            case 9:
-                currentFilter = moogFilter;
-                break;
-            default:
-                currentFilter = butterworthFilter;
-                break;
+            case 1: currentUIFilter = uiButterworth; break;
+            case 2: currentUIFilter = uiRbj; break;
+            case 3: currentUIFilter = uiBessel; break;
+            case 4: currentUIFilter = uiChebyshev1; break;
+            case 5: currentUIFilter = uiChebyshev2; break;
+            case 6: currentUIFilter = uiElliptic; break;
+            case 7: currentUIFilter = uiLegendre; break;
+            case 8: currentUIFilter = uiSvf; break;
+            case 9: currentUIFilter = uiMoog; break;
+            default: currentUIFilter = uiButterworth; break;
         }
 
-        updateFilterParameters();
-        frequencyResponsePlot.setFilter (currentFilter);
-        frequencyResponsePlot.updateResponseData();
+        // Synchronize smoothed values with current UI values when switching filters
+        smoothedFrequency.setCurrentAndTargetValue (static_cast<float> (frequencySlider->getValue()));
+        smoothedQ.setCurrentAndTargetValue (static_cast<float> (qSlider->getValue()));
+        smoothedGain.setCurrentAndTargetValue (static_cast<float> (gainSlider->getValue()));
+        smoothedOrder.setCurrentAndTargetValue (static_cast<float> (orderSlider->getValue()));
 
-        // Update all analysis displays
+        // Update audio filter selection (thread-safe since we're just changing a pointer)
+        updateCurrentAudioFilter();
+
+        // Update UI filter with current parameters
+        updateUIFilterParameters();
+
+        // Update displays using UI filter
+        frequencyResponsePlot.setFilter (currentUIFilter);
+        frequencyResponsePlot.updateResponseData();
         updateAnalysisDisplays();
     }
 
-    void updateFilterParameters()
+    void updateAudioFilterParametersSmooth()
     {
-        if (! currentFilter)
+        if (! currentAudioFilter)
+            return;
+
+        double freq = smoothedFrequency.getNextValue();
+        double q = smoothedQ.getNextValue();
+        double gain = smoothedGain.getNextValue();
+        int order = static_cast<int> (smoothedOrder.getNextValue());
+
+        // Update parameters based on filter type using smoothed values and stored filter type
+        if (auto bf = std::dynamic_pointer_cast<yup::ButterworthFilter<float>> (currentAudioFilter))
+        {
+            bf->setParameters (getFilterType (currentResponseTypeId), order, freq, currentSampleRate);
+        }
+        else if (auto rf = std::dynamic_pointer_cast<yup::RbjFilter<float>> (currentAudioFilter))
+        {
+            rf->setParameters (getRbjType (currentResponseTypeId), freq, q, gain, currentSampleRate);
+        }
+        else if (auto svf = std::dynamic_pointer_cast<yup::StateVariableFilter<float>> (currentAudioFilter))
+        {
+            svf->setParameters (freq, q, currentSampleRate);
+            svf->setMode (getSvfMode (currentResponseTypeId));
+        }
+        else if (auto moog = std::dynamic_pointer_cast<yup::MoogLadder<float>> (currentAudioFilter))
+        {
+            moog->setParameters (freq, yup::jlimit (0.0, 0.99, q / 20.0)); // Scale Q to resonance
+        }
+        else if (auto bessel = std::dynamic_pointer_cast<yup::BesselFilter<float>> (currentAudioFilter))
+        {
+            bessel->setParameters (getFilterType (currentResponseTypeId), order, freq, currentSampleRate);
+        }
+        else if (auto cheby1 = std::dynamic_pointer_cast<yup::ChebyshevFilter<float>> (currentAudioFilter))
+        {
+            if (currentFilterTypeId == 4) // Chebyshev I
+            {
+                cheby1->setParameters (yup::ChebyshevFilter<float>::Type::Type1,
+                                      getFilterType (currentResponseTypeId),
+                                      order,
+                                      freq,
+                                      currentSampleRate,
+                                      0.5); // Ripple
+            }
+            else if (currentFilterTypeId == 5) // Chebyshev II
+            {
+                cheby1->setParameters (yup::ChebyshevFilter<float>::Type::Type2,
+                                      getFilterType (currentResponseTypeId),
+                                      order,
+                                      freq,
+                                      currentSampleRate,
+                                      40.0); // Stopband attenuation
+            }
+        }
+        else if (auto elliptic = std::dynamic_pointer_cast<yup::EllipticFilter<float>> (currentAudioFilter))
+        {
+            elliptic->setParameters (getFilterType (currentResponseTypeId), order, freq, currentSampleRate, 0.5, 40.0);
+        }
+        else if (auto legendre = std::dynamic_pointer_cast<yup::LegendreFilter<float>> (currentAudioFilter))
+        {
+            legendre->setParameters (getFilterType (currentResponseTypeId), order, freq, currentSampleRate);
+        }
+    }
+
+    void updateUIFilterParameters()
+    {
+        if (! currentUIFilter)
             return;
 
         double freq = frequencySlider->getValue();
@@ -1244,37 +1341,97 @@ private:
         double gain = gainSlider->getValue();
         int order = static_cast<int> (orderSlider->getValue());
 
-        int filterTypeId = filterTypeCombo->getSelectedId();
-        int responseTypeId = responseTypeCombo->getSelectedId();
-
-        // Update parameters based on filter type
-        if (auto bf = std::dynamic_pointer_cast<yup::ButterworthFilter<float>> (currentFilter))
+        // Update parameters based on filter type using direct UI values
+        if (auto bf = std::dynamic_pointer_cast<yup::ButterworthFilter<float>> (currentUIFilter))
         {
-            bf->setParameters (getFilterType (responseTypeId), order, freq, currentSampleRate);
+            bf->setParameters (getFilterType (currentResponseTypeId), order, freq, currentSampleRate);
         }
-        else if (auto rf = std::dynamic_pointer_cast<yup::RbjFilter<float>> (currentFilter))
+        else if (auto rf = std::dynamic_pointer_cast<yup::RbjFilter<float>> (currentUIFilter))
         {
-            rf->setParameters (getRbjType (responseTypeId), freq, q, gain, currentSampleRate);
+            rf->setParameters (getRbjType (currentResponseTypeId), freq, q, gain, currentSampleRate);
         }
-        else if (auto svf = std::dynamic_pointer_cast<yup::StateVariableFilter<float>> (currentFilter))
+        else if (auto svf = std::dynamic_pointer_cast<yup::StateVariableFilter<float>> (currentUIFilter))
         {
             svf->setParameters (freq, q, currentSampleRate);
-            svf->setMode (getSvfMode (responseTypeId));
+            svf->setMode (getSvfMode (currentResponseTypeId));
         }
-        else if (auto moog = std::dynamic_pointer_cast<yup::MoogLadder<float>> (currentFilter))
+        else if (auto moog = std::dynamic_pointer_cast<yup::MoogLadder<float>> (currentUIFilter))
         {
             moog->setParameters (freq, yup::jlimit (0.0, 0.99, q / 20.0)); // Scale Q to resonance
         }
-        // Add other filter parameter updates as needed...
+        else if (auto bessel = std::dynamic_pointer_cast<yup::BesselFilter<float>> (currentUIFilter))
+        {
+            bessel->setParameters (getFilterType (currentResponseTypeId), order, freq, currentSampleRate);
+        }
+        else if (auto cheby1 = std::dynamic_pointer_cast<yup::ChebyshevFilter<float>> (currentUIFilter))
+        {
+            if (currentFilterTypeId == 4) // Chebyshev I
+            {
+                cheby1->setParameters (yup::ChebyshevFilter<float>::Type::Type1,
+                                      getFilterType (currentResponseTypeId),
+                                      order,
+                                      freq,
+                                      currentSampleRate,
+                                      0.5); // Ripple
+            }
+            else if (currentFilterTypeId == 5) // Chebyshev II
+            {
+                cheby1->setParameters (yup::ChebyshevFilter<float>::Type::Type2,
+                                      getFilterType (currentResponseTypeId),
+                                      order,
+                                      freq,
+                                      currentSampleRate,
+                                      40.0); // Stopband attenuation
+            }
+        }
+        else if (auto elliptic = std::dynamic_pointer_cast<yup::EllipticFilter<float>> (currentUIFilter))
+        {
+            elliptic->setParameters (getFilterType (currentResponseTypeId), order, freq, currentSampleRate, 0.5, 40.0);
+        }
+        else if (auto legendre = std::dynamic_pointer_cast<yup::LegendreFilter<float>> (currentUIFilter))
+        {
+            legendre->setParameters (getFilterType (currentResponseTypeId), order, freq, currentSampleRate);
+        }
+    }
 
-        frequencyResponsePlot.updateResponseData();
-        updateAnalysisDisplays();
+    void updateCurrentAudioFilter()
+    {
+        // Map filter type to audio filter instance (using stored filter type, not UI)
+        switch (currentFilterTypeId)
+        {
+            case 1: currentAudioFilter = audioButterworth; break;
+            case 2: currentAudioFilter = audioRbj; break;
+            case 3: currentAudioFilter = audioBessel; break;
+            case 4: currentAudioFilter = audioChebyshev1; break;
+            case 5: currentAudioFilter = audioChebyshev2; break;
+            case 6: currentAudioFilter = audioElliptic; break;
+            case 7: currentAudioFilter = audioLegendre; break;
+            case 8: currentAudioFilter = audioSvf; break;
+            case 9: currentAudioFilter = audioMoog; break;
+            default: currentAudioFilter = audioButterworth; break;
+        }
+
+        // Synchronize smoothed values with current UI values when switching filters
+        smoothedFrequency.setCurrentAndTargetValue (static_cast<float> (frequencySlider->getValue()));
+        smoothedQ.setCurrentAndTargetValue (static_cast<float> (qSlider->getValue()));
+        smoothedGain.setCurrentAndTargetValue (static_cast<float> (gainSlider->getValue()));
+        smoothedOrder.setCurrentAndTargetValue (static_cast<float> (orderSlider->getValue()));
+
+        // Update audio filter with current smoothed parameters
+        updateAudioFilterParametersSmooth();
     }
 
     void updateAnalysisDisplays()
     {
-        if (! currentFilter)
+        if (! currentUIFilter)
             return;
+
+        // Update UI filter parameters first
+        updateUIFilterParameters();
+
+        // Update frequency response plot
+        frequencyResponsePlot.setFilter (currentUIFilter);
+        frequencyResponsePlot.updateResponseData();
 
         // Update phase response
         auto phaseData = frequencyResponsePlot.getPhaseData();
@@ -1301,18 +1458,30 @@ private:
         updatePolesZerosDisplay();
     }
 
+    void updateDisplayParameters()
+    {
+        if (! currentUIFilter)
+            return;
+
+        // Update UI filter parameters and displays
+        updateUIFilterParameters();
+        frequencyResponsePlot.setFilter (currentUIFilter);
+        frequencyResponsePlot.updateResponseData();
+        updateAnalysisDisplays();
+    }
+
     void updatePolesZerosDisplay()
     {
         std::vector<std::complex<double>> poles;
         std::vector<std::complex<double>> zeros;
 
         // Extract poles and zeros based on filter type
-        if (auto rbj = std::dynamic_pointer_cast<yup::RbjFilter<float>> (currentFilter))
+        if (auto rbj = std::dynamic_pointer_cast<yup::RbjFilter<float>> (currentUIFilter))
         {
             // For biquad filters, calculate poles and zeros from coefficients
             calculateBiquadPolesZeros (rbj->getCoefficients(), poles, zeros);
         }
-        else if (auto butter = std::dynamic_pointer_cast<yup::ButterworthFilter<float>> (currentFilter))
+        else if (auto butter = std::dynamic_pointer_cast<yup::ButterworthFilter<float>> (currentUIFilter))
         {
             // For higher-order filters, get poles and zeros from each section
             calculateHighOrderPolesZeros (butter, poles, zeros);
@@ -1373,7 +1542,7 @@ private:
         }
     }
 
-    void calculateHighOrderPolesZeros (std::shared_ptr<yup::FilterBase<float, double>> filter,
+    void calculateHighOrderPolesZeros (std::shared_ptr<yup::FilterBase<float>> filter,
                                        std::vector<std::complex<double>>& poles,
                                        std::vector<std::complex<double>>& zeros)
     {
@@ -1476,20 +1645,46 @@ private:
     WhiteNoiseGenerator noiseGenerator;
     yup::SmoothedValue<float> outputGain { 0.5f };
 
-    double currentSampleRate = 44100.0;
-    // Filter instances
-    std::shared_ptr<yup::ButterworthFilter<float>> butterworthFilter;
-    std::shared_ptr<yup::RbjFilter<float>> rbjFilter;
-    std::shared_ptr<yup::BesselFilter<float>> besselFilter;
-    std::shared_ptr<yup::ChebyshevFilter<float>> chebyshev1Filter;
-    std::shared_ptr<yup::ChebyshevFilter<float>> chebyshev2Filter;
-    std::shared_ptr<yup::EllipticFilter<float>> ellipticFilter;
-    std::shared_ptr<yup::LegendreFilter<float>> legendreFilter;
-    std::shared_ptr<yup::StateVariableFilter<float>> svfFilter;
-    std::shared_ptr<yup::MoogLadder<float>> moogFilter;
+    // Smoothed parameter values for interpolation
+    yup::SmoothedValue<float> smoothedFrequency { 1000.0f };
+    yup::SmoothedValue<float> smoothedQ { 0.707f };
+    yup::SmoothedValue<float> smoothedGain { 0.0f };
+    yup::SmoothedValue<float> smoothedOrder { 2.0f };
 
-    std::vector<std::shared_ptr<yup::FilterBase<float>>> allFilters;
-    std::shared_ptr<yup::FilterBase<float>> currentFilter;
+    double currentSampleRate = 44100.0;
+    std::atomic<bool> needsDisplayUpdate { false };
+    int displayUpdateCounter = 0;
+
+    // Filter type settings (thread-safe storage)
+    std::atomic<int> currentFilterTypeId { 1 };
+    std::atomic<int> currentResponseTypeId { 1 };
+
+    // Audio thread filter instances
+    std::shared_ptr<yup::ButterworthFilter<float>> audioButterworth;
+    std::shared_ptr<yup::RbjFilter<float>> audioRbj;
+    std::shared_ptr<yup::BesselFilter<float>> audioBessel;
+    std::shared_ptr<yup::ChebyshevFilter<float>> audioChebyshev1;
+    std::shared_ptr<yup::ChebyshevFilter<float>> audioChebyshev2;
+    std::shared_ptr<yup::EllipticFilter<float>> audioElliptic;
+    std::shared_ptr<yup::LegendreFilter<float>> audioLegendre;
+    std::shared_ptr<yup::StateVariableFilter<float>> audioSvf;
+    std::shared_ptr<yup::MoogLadder<float>> audioMoog;
+
+    // UI thread filter instances
+    std::shared_ptr<yup::ButterworthFilter<float>> uiButterworth;
+    std::shared_ptr<yup::RbjFilter<float>> uiRbj;
+    std::shared_ptr<yup::BesselFilter<float>> uiBessel;
+    std::shared_ptr<yup::ChebyshevFilter<float>> uiChebyshev1;
+    std::shared_ptr<yup::ChebyshevFilter<float>> uiChebyshev2;
+    std::shared_ptr<yup::EllipticFilter<float>> uiElliptic;
+    std::shared_ptr<yup::LegendreFilter<float>> uiLegendre;
+    std::shared_ptr<yup::StateVariableFilter<float>> uiSvf;
+    std::shared_ptr<yup::MoogLadder<float>> uiMoog;
+
+    std::vector<std::shared_ptr<yup::FilterBase<float>>> allAudioFilters;
+    std::vector<std::shared_ptr<yup::FilterBase<float>>> allUIFilters;
+    std::shared_ptr<yup::FilterBase<float>> currentAudioFilter;
+    std::shared_ptr<yup::FilterBase<float>> currentUIFilter;
 
     // UI Components
     std::unique_ptr<yup::Label> titleLabel;
