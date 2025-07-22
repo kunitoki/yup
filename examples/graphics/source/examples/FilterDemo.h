@@ -266,7 +266,7 @@ private:
         for (double delay : { 0.0, 1.0, 5.0, 10.0, 50.0 })
         {
             float y = delayToY (delay, bounds);
-            yup::String label = yup::String (delay, 1) + " smp";
+            yup::String label = yup::String (delay, 1) + "s";
             g.fillFittedText (label, font.withHeight (10.0f), { bounds.getX() + 5, y - 8, 60, 16 }, yup::Justification::left);
         }
     }
@@ -308,6 +308,10 @@ private:
         g.setFillColor (yup::Color (0xFF1E1E1E));
         g.fillRect (bounds);
 
+        // Reserve space for labels
+        auto titleBounds = bounds.removeFromTop (20);
+        auto bottomLabelSpace = bounds.removeFromBottom (20);
+
         // Grid
         g.setStrokeColor (yup::Color (0xFF333333));
         g.setStrokeWidth (1.0f);
@@ -320,7 +324,7 @@ private:
         }
 
         // Amplitude grid lines
-        for (double amp : { -0.5, 0.0, 0.5, 1.0, 1.5 })
+        for (double amp : { -1.0, -0.5, 0.0, 0.5, 1.0 })
         {
             float y = amplitudeToY (amp, bounds);
             g.strokeLine ({ bounds.getX(), y }, { bounds.getRight(), y });
@@ -371,18 +375,18 @@ private:
         auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
 
         // Title
-        g.fillFittedText ("Step Response", font, bounds.removeFromTop (20), yup::Justification::center);
+        g.fillFittedText ("Step Response", font, titleBounds, yup::Justification::center);
 
         // Time labels
         for (int i = 0; i <= 5; ++i)
         {
             float x = bounds.getX() + i * bounds.getWidth() / 5.0f;
-            yup::String label = yup::String (i * 20.0f, 0) + " smp"; // 20 samples per division
-            g.fillFittedText (label, font.withHeight (10.0f), { x - 20, bounds.getBottom() - 15, 40, 15 }, yup::Justification::center);
+            yup::String label = yup::String (i * 20.0f, 0) + "s"; // 20 samples per division
+            g.fillFittedText (label, font.withHeight (10.0f), { x - 20, bottomLabelSpace.getY(), 40, 15 }, yup::Justification::center);
         }
 
         // Amplitude labels
-        for (double amp : { 0.0, 0.5, 1.0 })
+        for (double amp : { -1.0, -0.5, 0.0, 0.5, 1.0 })
         {
             float y = amplitudeToY (amp, bounds);
             yup::String label = yup::String (amp, 1);
@@ -398,7 +402,7 @@ private:
 
     float amplitudeToY (double amplitude, yup::Rectangle<float> bounds) const
     {
-        return bounds.getBottom() - yup::jlimit (0.0, 1.0, (amplitude + 0.5) / 2.0) * bounds.getHeight();
+        return bounds.getBottom() - yup::jlimit (0.0, 1.0, (amplitude + 1.0) / 2.0) * bounds.getHeight();
     }
 
     std::vector<yup::Point<double>> stepData;
@@ -1068,8 +1072,9 @@ private:
         addAndMakeVisible (*frequencySlider);
 
         qSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Q / Resonance");
-        qSlider->setRange ({ 0.1, 20.0 });
-        qSlider->setValue (0.707);
+        qSlider->setRange ({ 0.0, 1.0 });
+        qSlider->setSkewFactor (0.5);
+        qSlider->setValue (0.0);
         qSlider->onValueChanged = [this] (float value)
         {
             smoothedQ.setTargetValue (value);
@@ -1251,11 +1256,11 @@ private:
         // Update parameters based on filter type using smoothed values and stored filter type
         if (auto rf = std::dynamic_pointer_cast<yup::RbjFilter<float>> (currentAudioFilter))
         {
-            rf->setParameters (getRbjMode (currentResponseTypeId), freq, q, gain, currentSampleRate);
+            rf->setParameters (getRbjMode (currentResponseTypeId), freq, 0.1f + q * 10.0f, gain, currentSampleRate);
         }
         else if (auto svf = std::dynamic_pointer_cast<yup::StateVariableFilter<float>> (currentAudioFilter))
         {
-            svf->setParameters (getSvfMode (currentResponseTypeId), freq, q, currentSampleRate);
+            svf->setParameters (getSvfMode (currentResponseTypeId), freq, 0.707 + q * (10.0f - 0.707), currentSampleRate);
         }
     }
 
@@ -1272,11 +1277,11 @@ private:
         // Update parameters based on filter type using direct UI values
         if (auto rf = std::dynamic_pointer_cast<yup::RbjFilter<float>> (currentUIFilter))
         {
-            rf->setParameters (getRbjMode (currentResponseTypeId), freq, q, gain, currentSampleRate);
+            rf->setParameters (getRbjMode (currentResponseTypeId), freq, 0.1f + q * 10.0f, gain, currentSampleRate);
         }
         else if (auto svf = std::dynamic_pointer_cast<yup::StateVariableFilter<float>> (currentUIFilter))
         {
-            svf->setParameters (getSvfMode (currentResponseTypeId), freq, q, currentSampleRate);
+            svf->setParameters (getSvfMode (currentResponseTypeId), freq, 0.707 + q * (10.0f - 0.707), currentSampleRate);
         }
     }
 
@@ -1286,7 +1291,7 @@ private:
         switch (currentFilterTypeId)
         {
             case 1: currentAudioFilter = audioRbj; break;
-            case 8: currentAudioFilter = audioSvf; break;
+            case 2: currentAudioFilter = audioSvf; break;
             default: currentAudioFilter = audioRbj; break;
         }
 
@@ -1355,65 +1360,17 @@ private:
         std::vector<std::complex<double>> zeros;
 
         // Extract poles and zeros based on filter type
-        if (auto rbj = std::dynamic_pointer_cast<yup::Biquad<float>> (currentUIFilter))
+        if (auto biquad = std::dynamic_pointer_cast<yup::Biquad<float>> (currentUIFilter))
         {
-            // For biquad filters, calculate poles and zeros from coefficients
-            calculateBiquadPolesZeros (rbj->getCoefficients(), poles, zeros);
+            biquad->getPolesZeros (poles, zeros);
+        }
+        else if (auto svf = std::dynamic_pointer_cast<yup::StateVariableFilter<float>> (currentUIFilter))
+        {
+            svf->getPolesZeros (poles, zeros);
         }
         // Add other filter types as needed...
 
         polesZerosDisplay.updatePolesZeros (poles, zeros);
-    }
-
-    void calculateBiquadPolesZeros (yup::BiquadCoefficients<double> biquad,
-                                    std::vector<std::complex<double>>& poles,
-                                    std::vector<std::complex<double>>& zeros)
-    {
-        // Get biquad coefficients (assuming they're accessible)
-        // This is a simplified version - you might need to access coefficients differently
-        double a1 = biquad.a1, a2 = biquad.a2;                 // Denominator coefficients
-        double b0 = biquad.b0, b1 = biquad.b1, b2 = biquad.b2; // Numerator coefficients
-
-        // Calculate poles from denominator: 1 + a1*z^-1 + a2*z^-2 = 0
-        // Rearranged: z^2 + a1*z + a2 = 0
-        if (std::abs (a2) > 1e-12)
-        {
-            double discriminant = a1 * a1 - 4.0 * a2;
-            if (discriminant >= 0)
-            {
-                // Real poles
-                double sqrt_disc = std::sqrt (discriminant);
-                poles.push_back (std::complex<double> ((-a1 + sqrt_disc) / 2.0, 0.0));
-                poles.push_back (std::complex<double> ((-a1 - sqrt_disc) / 2.0, 0.0));
-            }
-            else
-            {
-                // Complex conjugate poles
-                double real_part = -a1 / 2.0;
-                double imag_part = std::sqrt (-discriminant) / 2.0;
-                poles.push_back (std::complex<double> (real_part, imag_part));
-                poles.push_back (std::complex<double> (real_part, -imag_part));
-            }
-        }
-
-        // Calculate zeros from numerator: b0 + b1*z^-1 + b2*z^-2 = 0
-        if (std::abs (b2) > 1e-12)
-        {
-            double discriminant = b1 * b1 - 4.0 * b0 * b2;
-            if (discriminant >= 0)
-            {
-                double sqrt_disc = std::sqrt (discriminant);
-                zeros.push_back (std::complex<double> ((-b1 + sqrt_disc) / (2.0 * b2), 0.0));
-                zeros.push_back (std::complex<double> ((-b1 - sqrt_disc) / (2.0 * b2), 0.0));
-            }
-            else
-            {
-                double real_part = -b1 / (2.0 * b2);
-                double imag_part = std::sqrt (-discriminant) / (2.0 * b2);
-                zeros.push_back (std::complex<double> (real_part, imag_part));
-                zeros.push_back (std::complex<double> (real_part, -imag_part));
-            }
-        }
     }
 
     yup::FilterMode getFilterType (int responseTypeId)
@@ -1490,7 +1447,7 @@ private:
 
     // Smoothed parameter values for interpolation
     yup::SmoothedValue<float> smoothedFrequency { 1000.0f };
-    yup::SmoothedValue<float> smoothedQ { 0.707f };
+    yup::SmoothedValue<float> smoothedQ { 0.1f };
     yup::SmoothedValue<float> smoothedGain { 0.0f };
     yup::SmoothedValue<float> smoothedOrder { 2.0f };
 

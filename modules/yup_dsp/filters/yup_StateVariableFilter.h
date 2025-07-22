@@ -160,6 +160,60 @@ public:
     }
 
     //==============================================================================
+
+    void getPolesZeros (std::vector<std::complex<double>>& poles,
+                        std::vector<std::complex<double>>& zeros)
+    {
+        double f0 = getCutoffFrequency();
+        double q  = yup::jlimit (0.707, 20.0, getQFactor());
+        double fs = yup::jmax (0.1, this->sampleRate);
+        double T = 1.0 / fs;
+        double wc = 2.0 * yup::MathConstants<double>::pi * f0;
+
+        // Analog prototype poles: s^2 + (wc/Q) s + wc^2 = 0
+        double realPart = -wc / (2.0 * q);
+        double imagPart = wc * std::sqrt (std::max (0.0, 1.0 - 1.0 / (4.0 * q * q)));
+        std::complex<double> pa (realPart, imagPart);
+        std::complex<double> pb (realPart, -imagPart);
+
+        // Bilinear map helper: z = (2 + s T) / (2 - s T)
+        auto bilinear = [T](const std::complex<double>& s) -> std::complex<double> { return (2.0 + s * T) / (2.0 - s * T); };
+
+        // Map poles
+        poles.clear();
+        poles.reserve (2);
+        poles.push_back (bilinear(pa));
+        poles.push_back (bilinear(pb));
+
+        // Map zeros depending on filter mode
+        zeros.clear();
+        zeros.reserve(2);
+
+        switch (filterMode)
+        {
+            case Mode::lowpass: // analog zeros at s = ∞ (=> z = -1 double)
+                zeros.push_back (-1.0);
+                zeros.push_back (-1.0);
+                break;
+
+            case Mode::highpass: // analog zeros at s = 0 => z = (2+0)/(2-0) = +1 (double)
+                zeros.push_back (1.0);
+                zeros.push_back (1.0);
+                break;
+
+            case Mode::bandpass: // zeros at s = 0 => z=+1, and s=∞=>z=-1
+                zeros.push_back (1.0);
+                zeros.push_back (-1.0);
+                break;
+
+            case Mode::notch: // analog zeros at s = ±j wc
+                zeros.push_back (bilinear (std::complex<double> (0.0, wc)));
+                zeros.push_back (bilinear (std::complex<double> (0.0, -wc)));
+                break;
+        }
+    }
+
+    //==============================================================================
     /**
         Processes a sample and returns all outputs.
 
@@ -278,8 +332,9 @@ public:
         const auto s2 = s * s;
         const auto wc = DspMath::frequencyToAngular (cutoffFreq, static_cast<CoeffType> (this->sampleRate));
         const auto wc2 = wc * wc;
+        const auto k = jlimit (0.707, 20.0, qFactor);
 
-        auto denominator = s2 + DspMath::Complex<CoeffType> (wc / qFactor) * s + DspMath::Complex<CoeffType> (wc2);
+        auto denominator = s2 + DspMath::Complex<CoeffType> (wc / k) * s + DspMath::Complex<CoeffType> (wc2) + 1e-6;
 
         switch (filterMode)
         {
@@ -304,7 +359,7 @@ private:
     //==============================================================================
     void updateCoefficients() noexcept
     {
-        k = static_cast<CoeffType> (1.0) / qFactor;
+        k = static_cast<CoeffType> (1.0) / jlimit (0.707, 20.0, qFactor);
         const auto omega = DspMath::frequencyToAngular (cutoffFreq, static_cast<CoeffType> (this->sampleRate));
         g = std::tan (omega / static_cast<CoeffType> (2.0));
         damping = k + g;

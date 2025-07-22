@@ -110,6 +110,60 @@ public:
     }
 
     //==============================================================================
+    /** Get poles and zeros */
+    void getPolesZeros (std::vector<std::complex<double>>& poles,
+                        std::vector<std::complex<double>>& zeros)
+    {
+        poles.clear();
+        zeros.clear();
+        poles.reserve(2);
+        zeros.reserve(2);
+
+        double a1 = coefficients.a1, a2 = coefficients.a2;
+        double b0 = coefficients.b0, b1 = coefficients.b1, b2 = coefficients.b2;
+
+        // Calculate poles from denominator: 1 + a1*z^-1 + a2*z^-2 = 0 rearranged: z^2 + a1*z + a2 = 0
+        if (std::abs (a2) > 1e-12)
+        {
+            double discriminant = a1 * a1 - 4.0 * a2;
+            if (discriminant >= 0)
+            {
+                // Real poles
+                double sqrt_disc = std::sqrt (discriminant);
+                poles.push_back (std::complex<double> ((-a1 + sqrt_disc) / 2.0, 0.0));
+                poles.push_back (std::complex<double> ((-a1 - sqrt_disc) / 2.0, 0.0));
+            }
+            else
+            {
+                // Complex conjugate poles
+                double real_part = -a1 / 2.0;
+                double imag_part = std::sqrt (-discriminant) / 2.0;
+                poles.push_back (std::complex<double> (real_part, imag_part));
+                poles.push_back (std::complex<double> (real_part, -imag_part));
+            }
+        }
+
+        // Calculate zeros from numerator: b0 + b1*z^-1 + b2*z^-2 = 0
+        if (std::abs (b2) > 1e-12)
+        {
+            double discriminant = b1 * b1 - 4.0 * b0 * b2;
+            if (discriminant >= 0)
+            {
+                double sqrt_disc = std::sqrt (discriminant);
+                zeros.push_back (std::complex<double> ((-b1 + sqrt_disc) / (2.0 * b2), 0.0));
+                zeros.push_back (std::complex<double> ((-b1 - sqrt_disc) / (2.0 * b2), 0.0));
+            }
+            else
+            {
+                double real_part = -b1 / (2.0 * b2);
+                double imag_part = std::sqrt (-discriminant) / (2.0 * b2);
+                zeros.push_back (std::complex<double> (real_part, imag_part));
+                zeros.push_back (std::complex<double> (real_part, -imag_part));
+            }
+        }
+    }
+
+    //==============================================================================
     /** @internal */
     void reset() noexcept override
     {
