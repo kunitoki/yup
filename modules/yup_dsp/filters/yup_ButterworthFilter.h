@@ -25,19 +25,19 @@ namespace yup
 {
 
 //==============================================================================
-/** 
+/**
     Butterworth filter coefficient calculator and implementation.
-    
+
     Butterworth filters provide maximally flat passband response with no ripple
     in either passband or stopband. They offer the best phase response among
     classical filter types but have the gentlest rolloff.
-    
+
     Features:
     - Orders 1-20 supported
     - Lowpass, highpass, bandpass, bandstop configurations
     - Automatic biquad cascade generation
     - Stable coefficient calculation using analog prototypes
-    
+
     @see BiquadCascade, FilterBase
 */
 template <typename SampleType, typename CoeffType = double>
@@ -46,7 +46,7 @@ class ButterworthFilter : public FilterBase<SampleType, CoeffType>
 public:
     //==============================================================================
     /** Default constructor */
-    ButterworthFilter() 
+    ButterworthFilter()
         : cascade (1)
     {
         setParameters (FilterType::lowpass, 2, static_cast<CoeffType> (1000.0), 44100.0);
@@ -94,9 +94,9 @@ public:
     }
 
     //==============================================================================
-    /** 
+    /**
         Sets all filter parameters.
-        
+
         @param type        The filter type (lowpass, highpass, etc.)
         @param order       The filter order (1-20)
         @param frequency   The cutoff frequency in Hz (or center frequency for bandpass/bandstop)
@@ -114,7 +114,7 @@ public:
         const auto numSections = calculateNumSections (filterOrder);
         if (cascade.getNumSections() != static_cast<size_t> (numSections))
             cascade.setNumSections (numSections);
-        
+
         // Pre-size coefficient storage to avoid allocation during updateCoefficients
         if (coefficientsStorage.size() != static_cast<size_t> (numSections))
             coefficientsStorage.resize (numSections);
@@ -122,9 +122,9 @@ public:
         updateCoefficients();
     }
 
-    /** 
+    /**
         Sets just the cutoff frequency.
-        
+
         @param frequency  The new cutoff frequency in Hz
     */
     void setCutoffFrequency (CoeffType frequency) noexcept
@@ -133,9 +133,9 @@ public:
         updateCoefficients();
     }
 
-    /** 
+    /**
         Sets just the filter order.
-        
+
         @param order  The new filter order (1-20)
     */
     void setOrder (int order) noexcept
@@ -146,18 +146,18 @@ public:
             filterOrder = newOrder;
             const auto numSections = calculateNumSections (filterOrder);
             cascade.setNumSections (numSections);
-            
+
             // Pre-size coefficient storage to avoid allocation during updateCoefficients
             if (coefficientsStorage.size() != static_cast<size_t> (numSections))
                 coefficientsStorage.resize (numSections);
-            
+
             updateCoefficients();
         }
     }
 
-    /** 
+    /**
         Gets the current cutoff frequency.
-        
+
         @returns  The cutoff frequency in Hz
     */
     CoeffType getCutoffFrequency() const noexcept
@@ -165,9 +165,9 @@ public:
         return cutoffFreq;
     }
 
-    /** 
+    /**
         Gets the current filter order.
-        
+
         @returns  The filter order
     */
     int getOrder() const noexcept
@@ -175,9 +175,9 @@ public:
         return filterOrder;
     }
 
-    /** 
+    /**
         Gets the current filter type.
-        
+
         @returns  The filter type
     */
     FilterType getFilterType() const noexcept
@@ -223,23 +223,21 @@ private:
                 FilterDesigner<CoeffType>::designButterworthLowpass (coefficientsStorage, filterOrder, cutoffFreq, this->sampleRate);
                 break;
         }
-        
+
         // Apply coefficients to cascade
         for (size_t i = 0; i < coefficientsStorage.size(); ++i)
             cascade.setSectionCoefficients (i, coefficientsStorage[i]);
-
-        cascade.reset();
     }
 
 
     //==============================================================================
     BiquadCascade<SampleType, CoeffType> cascade;
-    
+
     FilterType filterType = FilterType::lowpass;
     int filterOrder = 2;
     CoeffType cutoffFreq = static_cast<CoeffType> (1000.0);
     CoeffType bandwidthOctaves = static_cast<CoeffType> (1.0);
-    
+
     std::vector<BiquadCoefficients<CoeffType>> coefficientsStorage;
 
     //==============================================================================
