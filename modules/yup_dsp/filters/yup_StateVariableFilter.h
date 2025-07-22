@@ -224,13 +224,13 @@ public:
     {
         Outputs outputs;
 
-        outputs.highpass = (inputSample - damping * state1 - state2) * g;
-        outputs.bandpass = outputs.highpass * k + state1;
-        outputs.lowpass = outputs.bandpass * k + state2;
+        outputs.highpass = (inputSample - coefficients.damping * state.s1 - state.s2) * coefficients.g;
+        outputs.bandpass = outputs.highpass * coefficients.k + state.s1;
+        outputs.lowpass = outputs.bandpass * coefficients.k + state.s2;
         outputs.notch = outputs.highpass + outputs.lowpass;
 
-        state1 = outputs.bandpass;
-        state2 = outputs.lowpass;
+        state.s1 = outputs.bandpass;
+        state.s2 = outputs.lowpass;
 
         return outputs;
     }
@@ -274,7 +274,7 @@ public:
     /** @internal */
     void reset() noexcept override
     {
-        state1 = state2 = static_cast<CoeffType> (0.0);
+        state.reset();
     }
 
     /** @internal */
@@ -357,94 +357,107 @@ public:
 
 private:
     //==============================================================================
+    struct StateVariableState
+    {
+        CoeffType s1 = static_cast<CoeffType> (0.0);
+        CoeffType s2 = static_cast<CoeffType> (0.0);
+
+        /** Resets all state variables to zero */
+        void reset() noexcept
+        {
+            s1 = s2 = static_cast<CoeffType> (0.0);
+        }
+    };
+
+    //==============================================================================
     void updateCoefficients() noexcept
     {
-        k = static_cast<CoeffType> (1.0) / jlimit (0.707, 20.0, qFactor);
+        coefficients.k = static_cast<CoeffType> (1.0) / jlimit (0.707, 20.0, qFactor);
         const auto omega = DspMath::frequencyToAngular (cutoffFreq, static_cast<CoeffType> (this->sampleRate));
-        g = std::tan (omega / static_cast<CoeffType> (2.0));
-        damping = k + g;
-        g = g / (static_cast<CoeffType> (1.0) + g * damping);
+        coefficients.g = std::tan (omega / static_cast<CoeffType> (2.0));
+        coefficients.damping = coefficients.k + coefficients.g;
+        coefficients.g = coefficients.g / (static_cast<CoeffType> (1.0) + coefficients.g * coefficients.damping);
     }
 
     void processBlockLowpass (const SampleType* input, SampleType* output, int numSamples) noexcept
     {
-        auto s1 = state1;
-        auto s2 = state2;
+        auto s1 = state.s1;
+        auto s2 = state.s2;
 
         for (int i = 0; i < numSamples; ++i)
         {
-            const auto hp = (input[i] - damping * s1 - s2) * g;
-            const auto bp = hp * k + s1;
-            const auto lp = bp * k + s2;
+            const auto hp = (input[i] - coefficients.damping * s1 - s2) * coefficients.g;
+            const auto bp = hp * coefficients.k + s1;
+            const auto lp = bp * coefficients.k + s2;
 
             s1 = bp;
             s2 = lp;
             output[i] = lp;
         }
 
-        state1 = s1;
-        state2 = s2;
+        state.s1 = s1;
+        state.s2 = s2;
     }
 
     void processBlockBandpass (const SampleType* input, SampleType* output, int numSamples) noexcept
     {
-        auto s1 = state1;
-        auto s2 = state2;
+        auto s1 = state.s1;
+        auto s2 = state.s2;
 
         for (int i = 0; i < numSamples; ++i)
         {
-            const auto hp = (input[i] - damping * s1 - s2) * g;
-            const auto bp = hp * k + s1;
-            const auto lp = bp * k + s2;
+            const auto hp = (input[i] - coefficients.damping * s1 - s2) * coefficients.g;
+            const auto bp = hp * coefficients.k + s1;
+            const auto lp = bp * coefficients.k + s2;
 
             s1 = bp;
             s2 = lp;
             output[i] = bp;
         }
 
-        state1 = s1;
-        state2 = s2;
+        state.s1 = s1;
+        state.s2 = s2;
     }
 
     void processBlockHighpass (const SampleType* input, SampleType* output, int numSamples) noexcept
     {
-        auto s1 = state1;
-        auto s2 = state2;
+        auto s1 = state.s1;
+        auto s2 = state.s2;
 
         for (int i = 0; i < numSamples; ++i)
         {
-            const auto hp = (input[i] - damping * s1 - s2) * g;
-            const auto bp = hp * k + s1;
-            const auto lp = bp * k + s2;
+            const auto hp = (input[i] - coefficients.damping * s1 - s2) * coefficients.g;
+            const auto bp = hp * coefficients.k + s1;
+            const auto lp = bp * coefficients.k + s2;
 
             s1 = bp;
             s2 = lp;
             output[i] = hp;
         }
 
-        state1 = s1;
-        state2 = s2;
+        state.s1 = s1;
+        state.s2 = s2;
     }
 
     void processBlockNotch (const SampleType* input, SampleType* output, int numSamples) noexcept
     {
-        auto s1 = state1;
-        auto s2 = state2;
+        auto s1 = state.s1;
+        auto s2 = state.s2;
 
         for (int i = 0; i < numSamples; ++i)
         {
             const auto inputSample = input[i];
-            const auto hp = (inputSample - damping * s1 - s2) * g;
-            const auto bp = hp * k + s1;
-            const auto lp = bp * k + s2;
+            const auto hp = (inputSample - coefficients.damping * s1 - s2) * coefficients.g;
+            const auto bp = hp * coefficients.k + s1;
+            const auto lp = bp * coefficients.k + s2;
 
             s1 = bp;
             s2 = lp;
-            output[i] = inputSample - damping * s1;
+            output[i] = inputSample - coefficients.damping * s1;
         }
 
-        state1 = s1;
-        state2 = s2;
+        state.s1 = s1;
+        state.s2 = s2;
     }
 
     //==============================================================================
@@ -452,12 +465,8 @@ private:
     CoeffType qFactor = static_cast<CoeffType> (0.707);
     Mode filterMode = Mode::lowpass;
 
-    CoeffType k = static_cast<CoeffType> (1.0);
-    CoeffType g = static_cast<CoeffType> (1.0);
-    CoeffType damping = static_cast<CoeffType> (1.0);
-
-    CoeffType state1 = static_cast<CoeffType> (0.0);
-    CoeffType state2 = static_cast<CoeffType> (0.0);
+    StateVariableCoefficients<CoeffType> coefficients;
+    StateVariableState state;
 
     //==============================================================================
     YUP_LEAK_DETECTOR (StateVariableFilter)

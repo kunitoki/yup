@@ -148,7 +148,7 @@ private:
             float x = frequencyToX (freq, bounds);
             yup::String label;
             if (freq >= 1000.0)
-                label = yup::String (freq / 1000.0, 1) + "k";
+                label = yup::String (freq / 1000.0, 0) + "k";
             else
                 label = yup::String (freq, 0);
 
@@ -263,7 +263,7 @@ private:
             float x = frequencyToX (freq, bounds);
             yup::String label;
             if (freq >= 1000.0)
-                label = yup::String (freq / 1000.0, 1) + "k";
+                label = yup::String (freq / 1000.0, 0) + "k";
             else
                 label = yup::String (freq, 0);
 
@@ -271,10 +271,10 @@ private:
         }
 
         // Delay labels
-        for (double delay : { 0.0, 1.0, 5.0, 10.0, 50.0 })
+        for (double delay : { 0.0, 5.0, 10.0, 50.0 })
         {
             float y = delayToY (delay, bounds);
-            yup::String label = yup::String (delay, 1) + "s";
+            yup::String label = yup::String (delay, 0) + "s";
             g.fillFittedText (label, font.withHeight (10.0f), { bounds.getX() + 5, y - 8, 60, 16 }, yup::Justification::left);
         }
     }
@@ -504,18 +504,18 @@ private:
         g.fillFittedText ("Imag", font.withHeight (10.0f), { center.getX() - 20, bounds.getY() + 5, 40, 16 }, yup::Justification::center);
 
         // Legend
-        auto legendY = bounds.getY() + 30;
+        auto legendY = bounds.getY();
         g.setStrokeColor (yup::Color (0xFF00FF88));
         g.setStrokeWidth (2.0f);
-        g.strokeEllipse (bounds.getX() + 10, legendY, 8, 8);
-        g.fillFittedText ("Zeros", font.withHeight (10.0f), { bounds.getX() + 25, legendY - 2, 40, 16 }, yup::Justification::left);
+        g.strokeEllipse (bounds.getX() + 10, legendY, 10, 10);
+        g.fillFittedText ("Zeros", font.withHeight (10.0f), { bounds.getX() + 25, legendY, 40, 10 }, yup::Justification::centerLeft);
 
         g.setStrokeColor (yup::Color (0xFFFF4444));
         g.setStrokeWidth (3.0f);
-        legendY += 20;
-        g.strokeLine ({ bounds.getX() + 9, legendY + 1 }, { bounds.getX() + 17, legendY + 9 });
-        g.strokeLine ({ bounds.getX() + 9, legendY + 9 }, { bounds.getX() + 17, legendY + 1 });
-        g.fillFittedText ("Poles", font.withHeight (10.0f), { bounds.getX() + 25, legendY + 1, 40, 16 }, yup::Justification::left);
+        legendY += 16;
+        g.strokeLine ({ bounds.getX() + 11, legendY + 1 }, { bounds.getX() + 19, legendY + 9 });
+        g.strokeLine ({ bounds.getX() + 11, legendY + 9 }, { bounds.getX() + 19, legendY + 1 });
+        g.fillFittedText ("Poles", font.withHeight (10.0f), { bounds.getX() + 25, legendY, 40, 10 }, yup::Justification::centerLeft);
     }
 
     std::vector<std::complex<double>> poles;
@@ -753,7 +753,7 @@ private:
             else
                 label = yup::String (freq, 0);
 
-            g.fillFittedText (label, font, { x - 20, bottomLabelSpace.getY(), 40, 15 }, yup::Justification::center);
+            g.fillFittedText (label, font.withHeight (10.0f), { x - 20, bottomLabelSpace.getY(), 40, 15 }, yup::Justification::center);
         }
 
         // dB labels
@@ -911,14 +911,8 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (yup::Color (0xff2e2e2e));
+        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
         g.fillAll();
-
-        // Draw separator line between controls and plots
-        g.setStrokeColor (yup::Color (0xff555555));
-        g.setStrokeWidth (1.0f);
-        float separatorX = proportionOfWidth (0.25f);
-        g.strokeLine ({ separatorX, 0.0f }, { separatorX, static_cast<float> (getHeight()) });
     }
 
     void refreshDisplay (double lastFrameTimeSeconds) override
@@ -1051,6 +1045,7 @@ private:
         filterTypeCombo = std::make_unique<yup::ComboBox> ("FilterType");
         filterTypeCombo->addItem ("RBJ", 1);
         filterTypeCombo->addItem ("State Variable", 2);
+        filterTypeCombo->addItem ("First Order", 3);
         filterTypeCombo->setSelectedId (1);
         filterTypeCombo->onSelectedItemChanged = [this]
         {
@@ -1198,18 +1193,20 @@ private:
         // Create instances of all filter types for audio thread
         audioRbj = std::make_shared<yup::RbjFilter<float>>();
         audioSvf = std::make_shared<yup::StateVariableFilter<float>>();
+        audioFirstOrder = std::make_shared<yup::FirstOrderFilter<float>>();
 
         // Create instances of all filter types for UI thread
         uiRbj = std::make_shared<yup::RbjFilter<float>>();
         uiSvf = std::make_shared<yup::StateVariableFilter<float>>();
+        uiFirstOrder = std::make_shared<yup::FirstOrderFilter<float>>();
 
         // Store in arrays for easy management
         allAudioFilters = {
-            audioRbj, audioSvf
+            audioRbj, audioSvf, audioFirstOrder
         };
 
         allUIFilters = {
-            uiRbj, uiSvf
+            uiRbj, uiSvf, uiFirstOrder
         };
 
         // Set default filters
@@ -1239,6 +1236,7 @@ private:
         {
             case 1: currentUIFilter = uiRbj; break;
             case 2: currentUIFilter = uiSvf; break;
+            case 3: currentUIFilter = uiFirstOrder; break;
             default: currentUIFilter = uiRbj; break;
         }
 
@@ -1279,6 +1277,12 @@ private:
         {
             svf->setParameters (getSvfMode (currentResponseTypeId), freq, 0.707 + q * (10.0f - 0.707), currentSampleRate);
         }
+        else if (auto fof = std::dynamic_pointer_cast<yup::FirstOrderFilter<float>> (currentAudioFilter))
+        {
+            yup::FilterDesigner<double> designer;
+            auto coeffs = getFirstOrderCoefficients (designer, currentResponseTypeId, freq, gain, currentSampleRate);
+            fof->setCoefficients (coeffs);
+        }
     }
 
     void updateUIFilterParameters()
@@ -1300,6 +1304,12 @@ private:
         {
             svf->setParameters (getSvfMode (currentResponseTypeId), freq, 0.707 + q * (10.0f - 0.707), currentSampleRate);
         }
+        else if (auto fof = std::dynamic_pointer_cast<yup::FirstOrderFilter<float>> (currentUIFilter))
+        {
+            yup::FilterDesigner<double> designer;
+            auto coeffs = getFirstOrderCoefficients (designer, currentResponseTypeId, freq, gain, currentSampleRate);
+            fof->setCoefficients (coeffs);
+        }
     }
 
     void updateCurrentAudioFilter()
@@ -1309,6 +1319,7 @@ private:
         {
             case 1: currentAudioFilter = audioRbj; break;
             case 2: currentAudioFilter = audioSvf; break;
+            case 3: currentAudioFilter = audioFirstOrder; break;
             default: currentAudioFilter = audioRbj; break;
         }
 
@@ -1385,6 +1396,19 @@ private:
         {
             svf->getPolesZeros (poles, zeros);
         }
+        else if (auto fof = std::dynamic_pointer_cast<yup::FirstOrderFilter<float>> (currentUIFilter))
+        {
+            // For first-order filters, calculate poles and zeros from coefficients
+            auto coeffs = fof->getCoefficients();
+
+            // Single pole at -a1
+            if (std::abs (coeffs.a1) > 1e-12)
+                poles.push_back (std::complex<double> (-coeffs.a1, 0.0));
+
+            // Single zero at -b1/b0 (if b1 != 0)
+            if (std::abs (coeffs.b1) > 1e-12 && std::abs (coeffs.b0) > 1e-12)
+                zeros.push_back (std::complex<double> (-coeffs.b1 / coeffs.b0, 0.0));
+        }
         // Add other filter types as needed...
 
         polesZerosDisplay.updatePolesZeros (poles, zeros);
@@ -1457,6 +1481,25 @@ private:
         }
     }
 
+    yup::FirstOrderCoefficients<double> getFirstOrderCoefficients (yup::FilterDesigner<double>& designer, int responseTypeId, double freq, double gain, double sampleRate)
+    {
+        switch (responseTypeId)
+        {
+            case 1:
+                return designer.designFirstOrderLowpass (freq, sampleRate);
+            case 2:
+                return designer.designFirstOrderHighpass (freq, sampleRate);
+            case 6:
+                return designer.designFirstOrderLowShelf (freq, gain, sampleRate);
+            case 7:
+                return designer.designFirstOrderHighShelf (freq, gain, sampleRate);
+            case 8:
+                return designer.designFirstOrderAllpass (freq, sampleRate);
+            default:
+                return designer.designFirstOrderLowpass (freq, sampleRate);
+        }
+    }
+
     // Audio components
     yup::AudioDeviceManager deviceManager;
     WhiteNoiseGenerator noiseGenerator;
@@ -1479,10 +1522,12 @@ private:
     // Audio thread filter instances
     std::shared_ptr<yup::RbjFilter<float>> audioRbj;
     std::shared_ptr<yup::StateVariableFilter<float>> audioSvf;
+    std::shared_ptr<yup::FirstOrderFilter<float>> audioFirstOrder;
 
     // UI thread filter instances
     std::shared_ptr<yup::RbjFilter<float>> uiRbj;
     std::shared_ptr<yup::StateVariableFilter<float>> uiSvf;
+    std::shared_ptr<yup::FirstOrderFilter<float>> uiFirstOrder;
 
     std::vector<std::shared_ptr<yup::FilterBase<float>>> allAudioFilters;
     std::vector<std::shared_ptr<yup::FilterBase<float>>> allUIFilters;

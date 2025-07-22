@@ -69,7 +69,9 @@
 #include "designers/yup_FilterDesigner.h"
 
 // Core filter implementations
+#include "filters/yup_FirstOrderFilter.h"
 #include "filters/yup_Biquad.h"
+#include "filters/yup_BiquadCascade.h"
 #include "filters/yup_RbjFilter.h"
 #include "filters/yup_StateVariableFilter.h"
 

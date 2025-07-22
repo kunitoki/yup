@@ -28,11 +28,9 @@ namespace yup
 /**
     Centralized filter coefficient designer for all filter types.
 
-    This class provides static methods to design coefficients for various
-    filter types, separating the coefficient calculation logic from the
-    filter implementation classes. This allows for reusability and easier
-    testing of coefficient generation algorithms.
-
+    This class provides static methods to design coefficients for various filter types, separating the coefficient
+    calculation logic from the filter implementation classes. This allows for reusability and easier testing of
+    coefficient generation algorithms.
 
     @see BiquadCoefficients, FilterBase
 */
@@ -40,6 +38,61 @@ template <typename CoeffType>
 class FilterDesigner
 {
 public:
+    //==============================================================================
+    /**
+        Configures the filter as a one-pole lowpass.
+
+        @param frequency   The cutoff frequency in Hz
+        @param sampleRate  The sample rate in Hz
+    */
+    static FirstOrderCoefficients<CoeffType> designFirstOrderLowpass (
+        CoeffType frequency,
+        double sampleRate) noexcept;
+
+    /**
+       Configures the filter as a one-pole highpass.
+
+       @param frequency   The cutoff frequency in Hz
+       @param sampleRate  The sample rate in Hz
+    */
+    static FirstOrderCoefficients<CoeffType> designFirstOrderHighpass (
+        CoeffType frequency,
+        double sampleRate) noexcept;
+
+    /**
+       Configures the filter as a low-shelf.
+
+       @param frequency   The shelf frequency in Hz
+       @param gainDb      The shelf gain in decibels
+       @param sampleRate  The sample rate in Hz
+    */
+    static FirstOrderCoefficients<CoeffType> designFirstOrderLowShelf (
+        CoeffType frequency,
+        CoeffType gainDb,
+        double sampleRate) noexcept;
+
+    /**
+       Configures the filter as a high-shelf.
+
+       @param frequency   The shelf frequency in Hz
+       @param gainDb      The shelf gain in decibels
+       @param sampleRate  The sample rate in Hz
+    */
+    static FirstOrderCoefficients<CoeffType> designFirstOrderHighShelf (
+        CoeffType frequency,
+        CoeffType gainDb,
+        double sampleRate) noexcept;
+
+    /**
+       Configures the filter as a first-order allpass.
+
+       @param frequency   The characteristic frequency in Hz
+       @param sampleRate  The sample rate in Hz
+    */
+    static FirstOrderCoefficients<CoeffType> designFirstOrderAllpass (
+        CoeffType frequency,
+        double sampleRate) noexcept;
+
     //==============================================================================
     // RBJ (Audio EQ Cookbook) Filter Design
     //==============================================================================

@@ -151,6 +151,42 @@ private:
 };
 
 //==============================================================================
+/** 
+    First-order filter coefficient storage.
+    
+    Stores coefficients for first-order IIR filters in the form:
+    y[n] = b0*x[n] + b1*x[n-1] - a1*y[n-1]
+    
+    Uses CoeffType for internal precision (default double) while supporting 
+    different SampleType for audio processing.
+*/
+template <typename CoeffType = double>
+struct FirstOrderCoefficients
+{
+    CoeffType a1 = 0;  // Feedback coefficient
+    CoeffType b0 = 1, b1 = 0;  // Feedforward coefficients
+
+    FirstOrderCoefficients() = default;
+
+    FirstOrderCoefficients (CoeffType b0_, CoeffType b1_, CoeffType a1_) noexcept
+        : a1 (a1_), b0 (b0_), b1 (b1_)
+    {
+    }
+
+    /** Returns the complex frequency response for these coefficients */
+    DspMath::Complex<CoeffType> getComplexResponse (CoeffType frequency, double sampleRate) const noexcept
+    {
+        const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+        const auto z = DspMath::polar (static_cast<CoeffType> (1.0), -omega);
+
+        auto numerator = DspMath::Complex<CoeffType> (b0) + DspMath::Complex<CoeffType> (b1) * z;
+        auto denominator = DspMath::Complex<CoeffType> (1.0) + DspMath::Complex<CoeffType> (a1) * z;
+
+        return numerator / denominator;
+    }
+};
+
+//==============================================================================
 /**
     Filter coefficient storage for biquad filters.
 
@@ -218,41 +254,22 @@ struct BiquadCoefficients
 
 //==============================================================================
 /**
-    Filter state storage for biquad filters.
-
-    Maintains the delay line state for a single channel biquad filter.
-    Uses CoeffType for state storage to maintain precision and avoid conversions.
+    Filter coefficient storage for state variable filters.
 */
 template <typename CoeffType = double>
-struct BiquadState
+struct StateVariableCoefficients
 {
-    CoeffType x1 = 0, x2 = 0;  // Input delay line
-    CoeffType y1 = 0, y2 = 0;  // Output delay line
+    CoeffType k = static_cast<CoeffType> (1.0);
+    CoeffType g = static_cast<CoeffType> (1.0);
+    CoeffType damping = static_cast<CoeffType> (1.0);
 
-    /** Resets all state variables to zero */
-    void reset() noexcept
+    StateVariableCoefficients() = default;
+
+    StateVariableCoefficients (CoeffType k_, CoeffType g_, CoeffType damping_) noexcept
+        : k (k_)
+        , g (g_)
+        , damping (damping_)
     {
-        x1 = x2 = y1 = y2 = static_cast<CoeffType> (0.0);
-    }
-
-    /** Processes a single sample with the given coefficients */
-    template <typename SampleType>
-    SampleType processSample (SampleType input, const BiquadCoefficients<CoeffType>& coeffs) noexcept
-    {
-        // Promote input to CoeffType precision
-        const auto inputCoeff = static_cast<CoeffType> (input);
-
-        const auto outputCoeff = coeffs.b0 * inputCoeff + coeffs.b1 * x1 + coeffs.b2 * x2
-                               - coeffs.a1 * y1 - coeffs.a2 * y2;
-
-        // Update state in CoeffType precision
-        x2 = x1;
-        x1 = inputCoeff;
-        y2 = y1;
-        y1 = outputCoeff;
-
-        // Convert back to SampleType for return
-        return static_cast<SampleType> (outputCoeff);
     }
 };
 

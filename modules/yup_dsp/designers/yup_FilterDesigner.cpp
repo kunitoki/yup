@@ -25,6 +25,109 @@ namespace yup
 //==============================================================================
 
 template <typename CoeffType>
+FirstOrderCoefficients<CoeffType> FilterDesigner<CoeffType>::designFirstOrderLowpass (CoeffType frequency, double sampleRate) noexcept
+{
+    const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+    const auto alpha = std::exp (-omega);
+
+    FirstOrderCoefficients<CoeffType> coefficients;
+
+    coefficients.b0 = static_cast<CoeffType> (1.0) - alpha;
+    coefficients.b1 = static_cast<CoeffType> (0.0);
+    coefficients.a1 = -alpha;
+
+    return coefficients;
+}
+
+template <typename CoeffType>
+FirstOrderCoefficients<CoeffType> FilterDesigner<CoeffType>::designFirstOrderHighpass (CoeffType frequency, double sampleRate) noexcept
+{
+    const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+    const auto alpha = std::exp (-omega);
+
+    FirstOrderCoefficients<CoeffType> coefficients;
+
+    coefficients.b0 = (static_cast<CoeffType> (1.0) + alpha) / static_cast<CoeffType> (2.0);
+    coefficients.b1 = -(static_cast<CoeffType> (1.0) + alpha) / static_cast<CoeffType> (2.0);
+    coefficients.a1 = -alpha;
+
+    return coefficients;
+}
+
+template <typename CoeffType>
+FirstOrderCoefficients<CoeffType> FilterDesigner<CoeffType>::designFirstOrderLowShelf (CoeffType frequency, CoeffType gainDb, double sampleRate) noexcept
+{
+    const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+    const auto gain = DspMath::dbToGain (gainDb);
+    const auto k = std::tan (omega / static_cast<CoeffType> (2.0));
+
+    FirstOrderCoefficients<CoeffType> coefficients;
+
+    if (gainDb >= static_cast<CoeffType> (0.0))
+    {
+        const auto norm = static_cast<CoeffType> (1.0) / (static_cast<CoeffType> (1.0) + k);
+        coefficients.b0 = (static_cast<CoeffType> (1.0) + gain * k) * norm;
+        coefficients.b1 = (gain * k - static_cast<CoeffType> (1.0)) * norm;
+        coefficients.a1 = (k - static_cast<CoeffType> (1.0)) * norm;
+    }
+    else
+    {
+        const auto norm = static_cast<CoeffType> (1.0) / (static_cast<CoeffType> (1.0) + k / gain);
+        coefficients.b0 = (static_cast<CoeffType> (1.0) + k) * norm;
+        coefficients.b1 = (k - static_cast<CoeffType> (1.0)) * norm;
+        coefficients.a1 = (k / gain - static_cast<CoeffType> (1.0)) * norm;
+    }
+
+    return coefficients;
+}
+
+template <typename CoeffType>
+FirstOrderCoefficients<CoeffType> FilterDesigner<CoeffType>::designFirstOrderHighShelf (CoeffType frequency, CoeffType gainDb, double sampleRate) noexcept
+{
+    const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+    const auto A = DspMath::dbToGain (gainDb);
+    const auto k = std::tan (omega / static_cast<CoeffType> (2.0));
+
+    FirstOrderCoefficients<CoeffType> coefficients;
+
+    if (gainDb >= static_cast<CoeffType> (0.0))
+    {
+        const auto norm = static_cast<CoeffType> (1.0) / (static_cast<CoeffType> (1.0) + k);
+        coefficients.b0 = (A + k) * norm;
+        coefficients.b1 = (k - A) * norm;
+        coefficients.a1 = (k - static_cast<CoeffType> (1.0)) * norm;
+    }
+    else
+    {
+        const auto invA = static_cast<CoeffType> (1.0) / A;
+        const auto norm = static_cast<CoeffType> (1.0) / (static_cast<CoeffType> (1.0) + k * invA);
+        coefficients.b0 = (static_cast<CoeffType> (1.0) + k) * norm;
+        coefficients.b1 = (k - static_cast<CoeffType> (1.0)) * norm;
+        coefficients.a1 = (k * invA - static_cast<CoeffType> (1.0)) * norm;
+    }
+
+    return coefficients;
+}
+
+template <typename CoeffType>
+FirstOrderCoefficients<CoeffType> FilterDesigner<CoeffType>::designFirstOrderAllpass (CoeffType frequency, double sampleRate) noexcept
+{
+    const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+    const auto alpha = (static_cast<CoeffType> (1.0) - std::tan (omega / static_cast<CoeffType> (2.0)))
+        / (static_cast<CoeffType> (1.0) + std::tan (omega / static_cast<CoeffType> (2.0)));
+
+    FirstOrderCoefficients<CoeffType> coefficients;
+
+    coefficients.b0 = alpha;
+    coefficients.b1 = static_cast<CoeffType> (1.0);
+    coefficients.a1 = alpha;
+
+    return coefficients;
+}
+
+//==============================================================================
+
+template <typename CoeffType>
 BiquadCoefficients<CoeffType> FilterDesigner<CoeffType>::designRbjImpl (
     FilterMode filterMode,
     CoeffType frequency,
