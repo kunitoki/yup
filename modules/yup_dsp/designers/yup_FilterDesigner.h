@@ -51,6 +51,98 @@ class FilterDesigner
 {
 public:
     //==============================================================================
+    // FIR Filter Design
+    //==============================================================================
+
+    /**
+        Designs FIR lowpass filter coefficients using windowing method.
+
+        @param coeffs        Pre-allocated vector to store coefficients (size determines filter length)
+        @param cutoff        The cutoff frequency in Hz
+        @param sampleRate    The sample rate in Hz
+        @param windowType    The window function to use
+        @param parameter     Window parameter (Kaiser beta, Gaussian sigma, etc.)
+    */
+    static void designFirLowpass (
+        std::vector<CoeffType>& coeffs,
+        CoeffType cutoff,
+        double sampleRate,
+        WindowType windowType = WindowType::kaiser,
+        CoeffType parameter = static_cast<CoeffType> (6.0)
+    ) noexcept
+    {
+        designFIRLowpassImpl (coeffs, cutoff, sampleRate);
+        WindowFunctions<CoeffType>::applyWindow (windowType, coeffs, parameter);
+    }
+
+    /**
+        Designs FIR highpass filter coefficients using windowing method.
+
+        @param coeffs        Pre-allocated vector to store coefficients (size determines filter length)
+        @param cutoff        The cutoff frequency in Hz
+        @param sampleRate    The sample rate in Hz
+        @param windowType    The window function to use
+        @param parameter     Window parameter (Kaiser beta, Gaussian sigma, etc.)
+    */
+    static void designFirHighpass (
+        std::vector<CoeffType>& coeffs,
+        CoeffType cutoff,
+        double sampleRate,
+        WindowType windowType = WindowType::kaiser,
+        CoeffType parameter = static_cast<CoeffType> (6.0)
+    ) noexcept
+    {
+        designFIRHighpassImpl (coeffs, cutoff, sampleRate);
+        WindowFunctions<CoeffType>::applyWindow (windowType, coeffs, parameter);
+    }
+
+    /**
+        Designs FIR bandpass filter coefficients using windowing method.
+
+        @param coeffs        Pre-allocated vector to store coefficients (size determines filter length)
+        @param lowCutoff     The low cutoff frequency in Hz
+        @param highCutoff    The high cutoff frequency in Hz
+        @param sampleRate    The sample rate in Hz
+        @param windowType    The window function to use
+        @param parameter     Window parameter (Kaiser beta, Gaussian sigma, etc.)
+    */
+    static void designFirBandpass (
+        std::vector<CoeffType>& coeffs,
+        CoeffType lowCutoff,
+        CoeffType highCutoff,
+        double sampleRate,
+        WindowType windowType = WindowType::kaiser,
+        CoeffType parameter = static_cast<CoeffType> (6.0)
+    ) noexcept
+    {
+        designFIRBandpassImpl (coeffs, lowCutoff, highCutoff, sampleRate);
+        WindowFunctions<CoeffType>::applyWindow (windowType, coeffs, parameter);
+    }
+
+    /**
+        Designs FIR bandstop filter coefficients using windowing method.
+
+        @param coeffs        Pre-allocated vector to store coefficients (size determines filter length)
+        @param lowCutoff     The low cutoff frequency in Hz
+        @param highCutoff    The high cutoff frequency in Hz
+        @param sampleRate    The sample rate in Hz
+        @param windowType    The window function to use
+        @param parameter     Window parameter (Kaiser beta, Gaussian sigma, etc.)
+    */
+    static void designFirBandstop (
+        std::vector<CoeffType>& coeffs,
+        CoeffType lowCutoff,
+        CoeffType highCutoff,
+        double sampleRate,
+        WindowType windowType = WindowType::kaiser,
+        CoeffType parameter = static_cast<CoeffType> (6.0)
+    ) noexcept
+    {
+        designFIRBandstopImpl (coeffs, lowCutoff, highCutoff, sampleRate);
+        WindowFunctions<CoeffType>::applyWindow (windowType, coeffs, parameter);
+    }
+
+    //==============================================================================
     // Butterworth Filter Design
     //==============================================================================
 
@@ -421,98 +513,6 @@ public:
         designLegendreBandstopImpl (coeffs, order, centerFreq, bandwidth, sampleRate);
     }
 #endif
-
-    //==============================================================================
-    // FIR Filter Design
-    //==============================================================================
-
-    /**
-        Designs FIR lowpass filter coefficients using windowing method.
-
-        @param coeffs        Pre-allocated vector to store coefficients (size determines filter length)
-        @param cutoff        The cutoff frequency in Hz
-        @param sampleRate    The sample rate in Hz
-        @param windowType    The window function to use
-        @param parameter     Window parameter (Kaiser beta, Gaussian sigma, etc.)
-    */
-    static void designFirLowpass (
-        std::vector<CoeffType>& coeffs,
-        CoeffType cutoff,
-        double sampleRate,
-        WindowType windowType = WindowType::kaiser,
-        CoeffType parameter = static_cast<CoeffType> (6.0)
-    ) noexcept
-    {
-        designFIRLowpassImpl (coeffs, cutoff, sampleRate);
-        WindowFunctions<CoeffType>::applyWindow (windowType, coeffs, parameter);
-    }
-
-    /**
-        Designs FIR highpass filter coefficients using windowing method.
-
-        @param coeffs        Pre-allocated vector to store coefficients (size determines filter length)
-        @param cutoff        The cutoff frequency in Hz
-        @param sampleRate    The sample rate in Hz
-        @param windowType    The window function to use
-        @param parameter     Window parameter (Kaiser beta, Gaussian sigma, etc.)
-    */
-    static void designFirHighpass (
-        std::vector<CoeffType>& coeffs,
-        CoeffType cutoff,
-        double sampleRate,
-        WindowType windowType = WindowType::kaiser,
-        CoeffType parameter = static_cast<CoeffType> (6.0)
-    ) noexcept
-    {
-        designFIRHighpassImpl (coeffs, cutoff, sampleRate);
-        WindowFunctions<CoeffType>::applyWindow (windowType, coeffs, parameter);
-    }
-
-    /**
-        Designs FIR bandpass filter coefficients using windowing method.
-
-        @param coeffs        Pre-allocated vector to store coefficients (size determines filter length)
-        @param lowCutoff     The low cutoff frequency in Hz
-        @param highCutoff    The high cutoff frequency in Hz
-        @param sampleRate    The sample rate in Hz
-        @param windowType    The window function to use
-        @param parameter     Window parameter (Kaiser beta, Gaussian sigma, etc.)
-    */
-    static void designFirBandpass (
-        std::vector<CoeffType>& coeffs,
-        CoeffType lowCutoff,
-        CoeffType highCutoff,
-        double sampleRate,
-        WindowType windowType = WindowType::kaiser,
-        CoeffType parameter = static_cast<CoeffType> (6.0)
-    ) noexcept
-    {
-        designFIRBandpassImpl (coeffs, lowCutoff, highCutoff, sampleRate);
-        WindowFunctions<CoeffType>::applyWindow (windowType, coeffs, parameter);
-    }
-
-    /**
-        Designs FIR bandstop filter coefficients using windowing method.
-
-        @param coeffs        Pre-allocated vector to store coefficients (size determines filter length)
-        @param lowCutoff     The low cutoff frequency in Hz
-        @param highCutoff    The high cutoff frequency in Hz
-        @param sampleRate    The sample rate in Hz
-        @param windowType    The window function to use
-        @param parameter     Window parameter (Kaiser beta, Gaussian sigma, etc.)
-    */
-    static void designFirBandstop (
-        std::vector<CoeffType>& coeffs,
-        CoeffType lowCutoff,
-        CoeffType highCutoff,
-        double sampleRate,
-        WindowType windowType = WindowType::kaiser,
-        CoeffType parameter = static_cast<CoeffType> (6.0)
-    ) noexcept
-    {
-        designFIRBandstopImpl (coeffs, lowCutoff, highCutoff, sampleRate);
-        WindowFunctions<CoeffType>::applyWindow (windowType, coeffs, parameter);
-    }
 
     //==============================================================================
     // RBJ (Audio EQ Cookbook) Filter Design

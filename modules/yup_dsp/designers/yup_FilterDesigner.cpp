@@ -33,9 +33,21 @@ namespace
 template <typename CoeffType>
 static void transformLowpassToHighpass (BiquadCoefficients<CoeffType>& coeffs) noexcept
 {
-    // Spectral inversion: negate odd-indexed coefficients
-    coeffs.b1 = -coeffs.b1;
-    coeffs.a1 = -coeffs.a1;
+    // Spectral inversion: H_hp(z) = [A(z) - B(z)] / A(z)
+    auto old_b0 = coeffs.b0;
+    auto old_b1 = coeffs.b1;
+    auto old_b2 = coeffs.b2;
+    auto old_a1 = coeffs.a1;
+    auto old_a2 = coeffs.a2;
+
+    // new numerator = A(z) - B(z)
+    coeffs.b0 = static_cast<CoeffType>(1) - old_b0;
+    coeffs.b1 = old_a1 - old_b1;
+    coeffs.b2 = old_a2 - old_b2;
+
+    // denominator stays the same
+    // coeffs.a1 = old_a1;
+    // coeffs.a2 = old_a2;
 }
 
 //==============================================================================

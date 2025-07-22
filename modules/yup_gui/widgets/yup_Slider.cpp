@@ -181,6 +181,37 @@ double Slider::getInterval() const
     return range.interval;
 }
 
+//==============================================================================
+
+void Slider::setSkewFactor (double skewFactor)
+{
+    if (skewFactor <= 0.0)
+    {
+        jassertfalse; // Skew factor must be positive
+        return;
+    }
+
+    if (! approximatelyEqual (range.skew, skewFactor))
+    {
+        range.skew = skewFactor;
+
+        // Reapply constraints to current values with new skew
+        setDefaultValue (constrainValue (defaultValue));
+        setValue (constrainValue (currentValue), dontSendNotification);
+        setMinValue (constrainValue (minValue), dontSendNotification);
+        setMaxValue (constrainValue (maxValue), dontSendNotification);
+
+        repaint();
+    }
+}
+
+double Slider::getSkewFactor() const
+{
+    return range.skew;
+}
+
+//==============================================================================
+
 void Slider::setNumDecimalPlacesToDisplay (int decimalPlaces)
 {
     numDecimalPlaces = decimalPlaces;

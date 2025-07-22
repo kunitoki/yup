@@ -1035,7 +1035,7 @@ private:
         // Parameter controls
         frequencySlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Frequency");
         frequencySlider->setRange ({ 20.0, 20000.0 });
-        //frequencySlider->setSkewFactor (0.3); // Logarithmic scale
+        frequencySlider->setSkewFactor (0.3); // Logarithmic scale
         frequencySlider->setValue (1000.0);
         frequencySlider->onValueChanged = [this] (float)
         {

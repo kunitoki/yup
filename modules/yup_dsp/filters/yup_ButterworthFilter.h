@@ -227,6 +227,8 @@ private:
         // Apply coefficients to cascade
         for (size_t i = 0; i < coefficientsStorage.size(); ++i)
             cascade.setSectionCoefficients (i, coefficientsStorage[i]);
+
+        cascade.reset();
     }
 
 
