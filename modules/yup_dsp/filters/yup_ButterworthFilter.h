@@ -58,7 +58,6 @@ class ButterworthFilter : public FilterBase<SampleType, CoeffType>
     static constexpr int maxOrder = 32; // Valid orders: 1, 2, 4, 8, 16, 32
 
 public:
-
     //==============================================================================
     /** Default constructor */
     ButterworthFilter() noexcept
@@ -376,18 +375,17 @@ private:
     //==============================================================================
     void designHighpass() noexcept
     {
-        // Highpass transformation: s → wc²/s
+        // Highpass transformation: s → wc/s
         // Convert Hz to rad/s and apply prewarping: ωc = 2*tan(π*f/fs)
         const auto digitalFreq = MathConstants<CoeffType>::twoPi * frequency / this->sampleRate;
         const auto wc = static_cast<CoeffType> (2.0) * std::tan (digitalFreq * static_cast<CoeffType> (0.5));
-        const auto wc2 = wc * wc;
 
         DspMath::ComplexVector<CoeffType> transformedPoles;
         transformedPoles.reserve (order);
 
         // Apply highpass transformation
         for (const auto& pole : analogPoles)
-            transformedPoles.emplace_back (wc2 / pole);
+            transformedPoles.emplace_back (wc / pole);
 
         // Apply bilinear transform
         applyBilinearTransform (transformedPoles);
@@ -464,11 +462,11 @@ private:
         digitalPoles.clear();
         digitalPoles.reserve (order * 2);
 
-        // Add highpass poles
+        // Add highpass poles first (they handle the low-frequency rolloff)
         for (const auto& pole : highpassDigitalPoles)
             digitalPoles.emplace_back (pole);
 
-        // Add lowpass poles
+        // Add lowpass poles second (they handle the high-frequency rolloff)
         for (const auto& pole : lowpassDigitalPoles)
             digitalPoles.emplace_back (pole);
 
@@ -477,8 +475,8 @@ private:
         digitalZeros.reserve (order * 2);
         for (int i = 0; i < order; ++i)
         {
-            digitalZeros.emplace_back (static_cast<CoeffType> (1.0), static_cast<CoeffType> (0.0));   // z = 1 (DC, from highpass)
-            digitalZeros.emplace_back (static_cast<CoeffType> (-1.0), static_cast<CoeffType> (0.0));  // z = -1 (Nyquist, from lowpass)
+            digitalZeros.emplace_back (static_cast<CoeffType> (1.0), static_cast<CoeffType> (0.0));  // z = 1 (DC, from highpass)
+            digitalZeros.emplace_back (static_cast<CoeffType> (-1.0), static_cast<CoeffType> (0.0)); // z = -1 (Nyquist, from lowpass)
         }
 
         // Restore original parameters
@@ -566,8 +564,8 @@ private:
         for (int i = 0; i < order; ++i)
         {
             // Place zeros at the geometric mean frequency (center of stopband)
-            digitalZeros.emplace_back (std::cos (w0_digital), std::sin (w0_digital));   // z = exp(+jω₀T)
-            digitalZeros.emplace_back (std::cos (w0_digital), -std::sin (w0_digital));  // z = exp(-jω₀T)
+            digitalZeros.emplace_back (std::cos (w0_digital), std::sin (w0_digital));  // z = exp(+jω₀T)
+            digitalZeros.emplace_back (std::cos (w0_digital), -std::sin (w0_digital)); // z = exp(-jω₀T)
         }
 
         // Restore original parameters
@@ -743,7 +741,7 @@ private:
         for (auto& pole : digitalPoles)
         {
             const auto magnitude = std::abs (pole);
-            if (magnitude >= static_cast<CoeffType> (0.999))  // Leave small margin for stability
+            if (magnitude >= static_cast<CoeffType> (0.999)) // Leave small margin for stability
             {
                 // Move pole inside unit circle while preserving angle
                 const auto safeRadius = static_cast<CoeffType> (0.995);
@@ -758,7 +756,8 @@ private:
 
     void pairComplexConjugatePoles() noexcept
     {
-        if (digitalPoles.size() < 2) return;
+        if (digitalPoles.size() < 2)
+            return;
 
         DspMath::ComplexVector<CoeffType> pairedPoles;
         pairedPoles.reserve (digitalPoles.size());
@@ -767,7 +766,8 @@ private:
 
         for (std::size_t i = 0; i < digitalPoles.size(); ++i)
         {
-            if (used[i]) continue;
+            if (used[i])
+                continue;
 
             const auto& pole1 = digitalPoles[i];
             used[i] = true;
@@ -778,7 +778,8 @@ private:
 
             for (std::size_t j = i + 1; j < digitalPoles.size(); ++j)
             {
-                if (used[j]) continue;
+                if (used[j])
+                    continue;
 
                 const auto& pole2 = digitalPoles[j];
                 const auto expectedConj = std::conj (pole1);
