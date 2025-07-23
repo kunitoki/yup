@@ -153,6 +153,18 @@ public:
         return response;
     }
 
+    /** @internal */
+    void getPolesZeros (
+        std::vector<DspMath::Complex<CoeffType>>& poles,
+        std::vector<DspMath::Complex<CoeffType>>& zeros) const override
+    {
+        poles.reserve (sections.size() * 2);
+        zeros.reserve (sections.size() * 2);
+
+        for (const auto& section : sections)
+            section.getPolesZeros (poles, zeros);
+    }
+
 private:
     //==============================================================================
     std::vector<Biquad<SampleType, CoeffType>> sections;

@@ -1279,8 +1279,7 @@ private:
         }
         else if (auto fof = std::dynamic_pointer_cast<yup::FirstOrderFilter<float>> (currentAudioFilter))
         {
-            yup::FilterDesigner<double> designer;
-            auto coeffs = getFirstOrderCoefficients (designer, currentResponseTypeId, freq, gain, currentSampleRate);
+            auto coeffs = getFirstOrderCoefficients (currentResponseTypeId, freq, gain, currentSampleRate);
             fof->setCoefficients (coeffs);
         }
     }
@@ -1306,8 +1305,7 @@ private:
         }
         else if (auto fof = std::dynamic_pointer_cast<yup::FirstOrderFilter<float>> (currentUIFilter))
         {
-            yup::FilterDesigner<double> designer;
-            auto coeffs = getFirstOrderCoefficients (designer, currentResponseTypeId, freq, gain, currentSampleRate);
+            auto coeffs = getFirstOrderCoefficients (currentResponseTypeId, freq, gain, currentSampleRate);
             fof->setCoefficients (coeffs);
         }
     }
@@ -1384,32 +1382,11 @@ private:
 
     void updatePolesZerosDisplay()
     {
-        std::vector<std::complex<double>> poles;
-        std::vector<std::complex<double>> zeros;
+        poles.clear();
+        zeros.clear();
 
-        // Extract poles and zeros based on filter type
-        if (auto biquad = std::dynamic_pointer_cast<yup::Biquad<float>> (currentUIFilter))
-        {
-            biquad->getPolesZeros (poles, zeros);
-        }
-        else if (auto svf = std::dynamic_pointer_cast<yup::StateVariableFilter<float>> (currentUIFilter))
-        {
-            svf->getPolesZeros (poles, zeros);
-        }
-        else if (auto fof = std::dynamic_pointer_cast<yup::FirstOrderFilter<float>> (currentUIFilter))
-        {
-            // For first-order filters, calculate poles and zeros from coefficients
-            auto coeffs = fof->getCoefficients();
-
-            // Single pole at -a1
-            if (std::abs (coeffs.a1) > 1e-12)
-                poles.push_back (std::complex<double> (-coeffs.a1, 0.0));
-
-            // Single zero at -b1/b0 (if b1 != 0)
-            if (std::abs (coeffs.b1) > 1e-12 && std::abs (coeffs.b0) > 1e-12)
-                zeros.push_back (std::complex<double> (-coeffs.b1 / coeffs.b0, 0.0));
-        }
-        // Add other filter types as needed...
+        if (currentUIFilter != nullptr)
+            currentUIFilter->getPolesZeros (poles, zeros);
 
         polesZerosDisplay.updatePolesZeros (poles, zeros);
     }
@@ -1481,22 +1458,23 @@ private:
         }
     }
 
-    yup::FirstOrderCoefficients<double> getFirstOrderCoefficients (yup::FilterDesigner<double>& designer, int responseTypeId, double freq, double gain, double sampleRate)
+    yup::FirstOrderCoefficients<double> getFirstOrderCoefficients (int responseTypeId, double freq, double gain, double sampleRate)
     {
         switch (responseTypeId)
         {
             case 1:
-                return designer.designFirstOrderLowpass (freq, sampleRate);
+                return yup::FilterDesigner<double>::designFirstOrderLowpass (freq, sampleRate);
             case 2:
-                return designer.designFirstOrderHighpass (freq, sampleRate);
+                return yup::FilterDesigner<double>::designFirstOrderHighpass (freq, sampleRate);
             case 6:
-                return designer.designFirstOrderLowShelf (freq, gain, sampleRate);
+                return yup::FilterDesigner<double>::designFirstOrderLowShelf (freq, gain, sampleRate);
             case 7:
-                return designer.designFirstOrderHighShelf (freq, gain, sampleRate);
+                return yup::FilterDesigner<double>::designFirstOrderHighShelf (freq, gain, sampleRate);
             case 8:
-                return designer.designFirstOrderAllpass (freq, sampleRate);
+                return yup::FilterDesigner<double>::designFirstOrderAllpass (freq, sampleRate);
             default:
-                return designer.designFirstOrderLowpass (freq, sampleRate);
+                return yup::FilterDesigner<double>::designFirstOrderLowpass (freq, sampleRate);
+            default:
         }
     }
 
@@ -1514,6 +1492,9 @@ private:
     double currentSampleRate = 44100.0;
     std::atomic<bool> needsDisplayUpdate { false };
     int displayUpdateCounter = 0;
+
+    std::vector<std::complex<double>> poles;
+    std::vector<std::complex<double>> zeros;
 
     // Filter type settings (thread-safe storage)
     std::atomic<int> currentFilterTypeId { 1 };

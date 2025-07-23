@@ -118,6 +118,21 @@ public:
         return coefficients.getComplexResponse (frequency, this->sampleRate);
     }
 
+    /** @internal */
+    void getPolesZeros (
+        std::vector<DspMath::Complex<CoeffType>>& poles,
+        std::vector<DspMath::Complex<CoeffType>>& zeros) const override
+    {
+        poles.reserve (1);
+        zeros.reserve (1);
+
+        if (std::abs (coefficients.a1) > 1e-12) // Single pole at -a1
+            poles.push_back (DspMath::Complex<CoeffType> (-coefficients.a1, 0.0));
+
+        if (std::abs (coefficients.b1) > 1e-12 && std::abs (coefficients.b0) > 1e-12) // Single zero at -b1/b0 (if b1 != 0)
+            zeros.push_back (DspMath::Complex<CoeffType> (-coefficients.b1 / coefficients.b0, 0.0));
+    }
+
 private:
     //==============================================================================
     struct FirstOrderState

@@ -185,35 +185,11 @@ public:
 
     //==============================================================================
     /** @internal */
-    void reset() noexcept override
-    {
-        BaseFilterType::reset();
-    }
-
-    /** @internal */
     void prepare (double sampleRate, int maximumBlockSize) noexcept override
     {
         BaseFilterType::prepare (sampleRate, maximumBlockSize);
 
         updateCoefficients();
-    }
-
-    /** @internal */
-    SampleType processSample (SampleType inputSample) noexcept override
-    {
-        return BaseFilterType::processSample (inputSample);
-    }
-
-    /** @internal */
-    void processBlock (const SampleType* inputBuffer, SampleType* outputBuffer, int numSamples) noexcept override
-    {
-        BaseFilterType::processBlock (inputBuffer, outputBuffer, numSamples);
-    }
-
-    /** @internal */
-    DspMath::Complex<CoeffType> getComplexResponse (CoeffType frequency) const noexcept override
-    {
-        return BaseFilterType::getComplexResponse (frequency);
     }
 
 private:

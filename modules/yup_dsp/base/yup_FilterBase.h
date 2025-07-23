@@ -140,6 +140,21 @@ public:
     */
     virtual DspMath::Complex<CoeffType> getComplexResponse (CoeffType frequency) const noexcept = 0;
 
+    //==============================================================================
+    /**
+        Returns the poles and zeros of this filter.
+
+        @param poles  The poles.
+        @param zeros  The zeros.
+    */
+    virtual void getPolesZeros (
+        std::vector<DspMath::Complex<CoeffType>>& poles,
+        std::vector<DspMath::Complex<CoeffType>>& zeros) const
+    {
+        poles.clear();
+        zeros.clear();
+    }
+
 protected:
     //==============================================================================
     double sampleRate = 44100.0;
