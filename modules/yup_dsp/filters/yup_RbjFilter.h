@@ -89,14 +89,21 @@ public:
     */
     void setParameters (Mode mode, CoeffType frequency, CoeffType q, CoeffType gainDb, double sampleRate) noexcept
     {
-        filterMode = mode;
-        centerFreq = frequency;
-        qFactor = q;
-        gain = gainDb;
+        if (filterMode != mode
+            || ! approximatelyEqual (centerFreq, frequency)
+            || ! approximatelyEqual (qFactor, q)
+            || ! approximatelyEqual (gain, gainDb)
+            || ! approximatelyEqual (this->sampleRate, sampleRate))
+        {
+            filterMode = mode;
+            centerFreq = frequency;
+            qFactor = q;
+            gain = gainDb;
 
-        this->sampleRate = sampleRate;
+            this->sampleRate = sampleRate;
 
-        updateCoefficients();
+            updateCoefficients();
+        }
     }
 
     /**
@@ -106,8 +113,12 @@ public:
     */
     void setFrequency (CoeffType frequency) noexcept
     {
-        centerFreq = frequency;
-        updateCoefficients();
+        if (! approximatelyEqual (centerFreq, frequency))
+        {
+            centerFreq = frequency;
+
+            updateCoefficients();
+        }
     }
 
     /**
@@ -117,8 +128,12 @@ public:
     */
     void setQ (CoeffType q) noexcept
     {
-        qFactor = q;
-        updateCoefficients();
+        if (! approximatelyEqual (qFactor, q))
+        {
+            qFactor = q;
+
+            updateCoefficients();
+        }
     }
 
     /**
@@ -128,8 +143,12 @@ public:
     */
     void setGain (CoeffType gainDb) noexcept
     {
-        gain = gainDb;
-        updateCoefficients();
+        if (! approximatelyEqual (gain, gainDb))
+        {
+            gain = gainDb;
+
+            updateCoefficients();
+        }
     }
 
     /**
@@ -139,8 +158,12 @@ public:
     */
     void setMode (Mode mode) noexcept
     {
-        filterMode = mode;
-        updateCoefficients();
+        if (filterMode != mode)
+        {
+            filterMode = mode;
+
+            updateCoefficients();
+        }
     }
 
     /**
@@ -238,10 +261,10 @@ private:
     }
 
     //==============================================================================
+    Mode filterMode = Mode::lowpass;
     CoeffType centerFreq = static_cast<CoeffType> (1000.0);
     CoeffType qFactor = static_cast<CoeffType> (0.707);
     CoeffType gain = static_cast<CoeffType> (0.0);
-    Mode filterMode = Mode::lowpass;
 
     //==============================================================================
     YUP_LEAK_DETECTOR (RbjFilter)

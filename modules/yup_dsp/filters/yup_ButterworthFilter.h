@@ -85,29 +85,39 @@ public:
         @param filterOrder    The filter order (1 to maxOrder)
         @param freq           The primary frequency (cutoff, center, etc.)
         @param freq2          Secondary frequency for bandpass/bandstop filters
-        @param gain           Gain in dB for peak/shelf filters
+        @param gainDb           Gain in dB for peak/shelf filters
     */
     void setParameters (FilterMode mode,
                         int filterOrder,
                         CoeffType freq,
                         CoeffType freq2,
-                        CoeffType gain,
+                        CoeffType gainDb,
                         double sampleRate) noexcept
     {
         //jassert (filterOrder == 1 || (isPowerOfTwo (filterOrder) && filterOrder >= 2 && filterOrder <= maxOrder));
         jassert (freq > static_cast<CoeffType> (0.0));
-
         if (mode == FilterMode::bandpass || mode == FilterMode::bandstop)
             jassert (freq2 > freq && freq2 > static_cast<CoeffType> (0.0));
 
-        filterMode = mode;
-        order = filterOrder == 1 ? filterOrder : jlimit (2, maxOrder, nextPowerOfTwo (filterOrder));
-        frequency = freq;
-        frequency2 = freq2;
-        gainDb = gain;
-        this->sampleRate = sampleRate;
+        filterOrder = filterOrder == 1 ? filterOrder : jlimit (2, maxOrder, nextPowerOfTwo (filterOrder));
 
-        updateCoefficients();
+        if (filterMode != mode
+            || order != filterOrder
+            || ! approximatelyEqual (frequency, freq)
+            || ! approximatelyEqual (frequency2, freq2)
+            || ! approximatelyEqual (gain, gainDb)
+            || ! approximatelyEqual (this->sampleRate, sampleRate))
+        {
+            filterMode = mode;
+            order = filterOrder;
+            frequency = freq;
+            frequency2 = freq2;
+            gain = gainDb;
+
+            this->sampleRate = sampleRate;
+
+            updateCoefficients();
+        }
     }
 
     /**
@@ -128,15 +138,15 @@ public:
     /**
         Sets the filter order.
 
-        @param newOrder  The new filter order (1 to maxOrder)
+        @param filterOrder  The new filter order (1 to maxOrder)
     */
-    void setOrder (int newOrder) noexcept
+    void setOrder (int filterOrder) noexcept
     {
-        jassert (newOrder == 1 || (isPowerOfTwo (newOrder) && newOrder >= 2 && newOrder <= maxOrder));
+        filterOrder = filterOrder == 1 ? filterOrder : jlimit (2, maxOrder, nextPowerOfTwo (filterOrder));
 
-        if (order != newOrder)
+        if (order != filterOrder)
         {
-            order = newOrder;
+            order = filterOrder;
 
             updateCoefficients();
         }
@@ -151,7 +161,7 @@ public:
     {
         jassert (freq > static_cast<CoeffType> (0.0));
 
-        if (! isApproximatelyEqual (frequency, freq))
+        if (! approximatelyEqual (frequency, freq))
         {
             frequency = freq;
 
@@ -168,7 +178,7 @@ public:
     {
         jassert (freq2 > static_cast<CoeffType> (0.0));
 
-        if (! isApproximatelyEqual (frequency2, freq2))
+        if (! approximatelyEqual (frequency2, freq2))
         {
             frequency2 = freq2;
 
@@ -181,11 +191,11 @@ public:
 
         @param gain  The gain in dB
     */
-    void setGain (CoeffType gain) noexcept
+    void setGain (CoeffType gainDb) noexcept
     {
-        if (! isApproximatelyEqual (gainDb, gain))
+        if (! approximatelyEqual (gain, gainDb))
         {
-            gainDb = gain;
+            gain = gainDb;
 
             updateCoefficients();
         }
@@ -261,7 +271,7 @@ public:
     /**
         Returns the gain in dB.
     */
-    CoeffType getGain() const noexcept { return gainDb; }
+    CoeffType getGain() const noexcept { return gain; }
 
 private:
     //==============================================================================
@@ -585,7 +595,7 @@ private:
     {
         // Peak filter is implemented as a combination of allpass and gain stages
         // This is a simplified implementation - full peak would require more complex pole placement
-        const auto linearGain = DspMath::dbToGain (gainDb);
+        const auto linearGain = DspMath::dbToGain (gain);
 
         designAllpass(); // Start with allpass response
 
@@ -603,7 +613,7 @@ private:
     {
         // Low shelf implementation using first-order pole-zero placement
         const auto wc = static_cast<CoeffType> (2.0) * this->sampleRate * std::tan (MathConstants<CoeffType>::pi * frequency / this->sampleRate);
-        const auto linearGain = DspMath::dbToGain (gainDb);
+        const auto linearGain = DspMath::dbToGain (gain);
         const auto alpha = std::sqrt (linearGain);
 
         // Create single biquad for low shelf
@@ -612,7 +622,7 @@ private:
 
         BiquadCoefficients<CoeffType> coeffs;
 
-        if (gainDb >= static_cast<CoeffType> (0.0))
+        if (gain >= static_cast<CoeffType> (0.0))
         {
             // Boost case
             const auto wc2 = wc * wc;
@@ -650,7 +660,7 @@ private:
     {
         // High shelf implementation
         const auto wc = static_cast<CoeffType> (2.0) * this->sampleRate * std::tan (MathConstants<CoeffType>::pi * frequency / this->sampleRate);
-        const auto linearGain = DspMath::dbToGain (gainDb);
+        const auto linearGain = DspMath::dbToGain (gain);
         const auto alpha = std::sqrt (linearGain);
 
         biquadCoefficients.clear();
@@ -658,7 +668,7 @@ private:
 
         BiquadCoefficients<CoeffType> coeffs;
 
-        if (gainDb >= static_cast<CoeffType> (0.0))
+        if (gain >= static_cast<CoeffType> (0.0))
         {
             // Boost case
             const auto wc2 = wc * wc;
@@ -1051,7 +1061,7 @@ private:
     int order = 2; // Default to 2nd order
     CoeffType frequency = static_cast<CoeffType> (1000.0);
     CoeffType frequency2 = static_cast<CoeffType> (2000.0);
-    CoeffType gainDb = static_cast<CoeffType> (0.0);
+    CoeffType gain = static_cast<CoeffType> (0.0);
 
     // Pre-allocated storage for realtime coefficient calculation
     BiquadCascade<SampleType, CoeffType> biquadCascade;

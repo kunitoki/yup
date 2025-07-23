@@ -95,6 +95,7 @@ public:
         if (filterTopology != newTopology)
         {
             filterTopology = newTopology;
+
             reset();
         }
     }

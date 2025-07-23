@@ -89,12 +89,19 @@ public:
     */
     void setParameters (Mode mode, CoeffType frequency, CoeffType q, double sampleRate) noexcept
     {
-        cutoffFreq = frequency;
-        qFactor = q;
-        filterMode = mode;
-        this->sampleRate = sampleRate;
+        if (filterMode != mode
+            || ! approximatelyEqual (centerFreq, frequency)
+            || ! approximatelyEqual (qFactor, q)
+            || ! approximatelyEqual (this->sampleRate, sampleRate))
+        {
+            filterMode = mode;
+            centerFreq = frequency;
+            qFactor = q;
 
-        updateCoefficients();
+            this->sampleRate = sampleRate;
+
+            updateCoefficients();
+        }
     }
 
     /**
@@ -104,8 +111,12 @@ public:
     */
     void setCutoffFrequency (CoeffType frequency) noexcept
     {
-        cutoffFreq = frequency;
-        updateCoefficients();
+        if (! approximatelyEqual (centerFreq, frequency))
+        {
+            centerFreq = frequency;
+
+            updateCoefficients();
+        }
     }
 
     /**
@@ -113,10 +124,14 @@ public:
 
         @param q  The new Q factor
     */
-    void setQFactor (CoeffType q) noexcept
+    void setQ (CoeffType q) noexcept
     {
-        qFactor = q;
-        updateCoefficients();
+        if (! approximatelyEqual (qFactor, q))
+        {
+            qFactor = q;
+
+            updateCoefficients();
+        }
     }
 
     /**
@@ -124,9 +139,14 @@ public:
 
         @param newMode  The new filter mode
     */
-    void setMode (Mode newMode) noexcept
+    void setMode (Mode mode) noexcept
     {
-        filterMode = newMode;
+        if (filterMode != mode)
+        {
+            filterMode = mode;
+
+            updateCoefficients();
+        }
     }
 
     /**
@@ -134,9 +154,9 @@ public:
 
         @returns  The cutoff frequency in Hz
     */
-    CoeffType getCutoffFrequency() const noexcept
+    CoeffType getFrequency() const noexcept
     {
-        return cutoffFreq;
+        return centerFreq;
     }
 
     /**
@@ -144,7 +164,7 @@ public:
 
         @returns  The Q factor
     */
-    CoeffType getQFactor() const noexcept
+    CoeffType getQ() const noexcept
     {
         return qFactor;
     }
@@ -276,7 +296,7 @@ public:
         const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (this->sampleRate));
         const auto s = DspMath::Complex<CoeffType> (static_cast<SampleType> (0.0), omega);
         const auto s2 = s * s;
-        const auto wc = DspMath::frequencyToAngular (cutoffFreq, static_cast<CoeffType> (this->sampleRate));
+        const auto wc = DspMath::frequencyToAngular (centerFreq, static_cast<CoeffType> (this->sampleRate));
         const auto wc2 = wc * wc;
         const auto k = jlimit (0.707, 20.0, qFactor);
 
@@ -306,8 +326,8 @@ public:
         DspMath::ComplexVector<CoeffType>& poles,
         DspMath::ComplexVector<CoeffType>& zeros) const override
     {
-        CoeffType f0 = getCutoffFrequency();
-        CoeffType q  = yup::jlimit (0.707, 20.0, getQFactor());
+        CoeffType f0 = centerFreq;
+        CoeffType q  = yup::jlimit (0.707, 20.0, qFactor);
         CoeffType fs = yup::jmax (0.1, this->sampleRate);
         CoeffType T = 1.0 / fs;
         CoeffType wc = 2.0 * yup::MathConstants<CoeffType>::pi * f0;
@@ -371,7 +391,7 @@ private:
     void updateCoefficients() noexcept
     {
         coefficients.k = static_cast<CoeffType> (1.0) / jlimit (0.707, 20.0, qFactor);
-        const auto omega = DspMath::frequencyToAngular (cutoffFreq, static_cast<CoeffType> (this->sampleRate));
+        const auto omega = DspMath::frequencyToAngular (centerFreq, static_cast<CoeffType> (this->sampleRate));
         coefficients.g = std::tan (omega / static_cast<CoeffType> (2.0));
         coefficients.damping = coefficients.k + coefficients.g;
         coefficients.g = coefficients.g / (static_cast<CoeffType> (1.0) + coefficients.g * coefficients.damping);
@@ -459,9 +479,9 @@ private:
     }
 
     //==============================================================================
-    CoeffType cutoffFreq = static_cast<CoeffType> (1000.0);
-    CoeffType qFactor = static_cast<CoeffType> (0.707);
     Mode filterMode = Mode::lowpass;
+    CoeffType centerFreq = static_cast<CoeffType> (1000.0);
+    CoeffType qFactor = static_cast<CoeffType> (0.707);
 
     StateVariableCoefficients<CoeffType> coefficients;
     StateVariableState state;
