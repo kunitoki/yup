@@ -1046,6 +1046,7 @@ private:
         filterTypeCombo->addItem ("RBJ", 1);
         filterTypeCombo->addItem ("State Variable", 2);
         filterTypeCombo->addItem ("First Order", 3);
+        filterTypeCombo->addItem ("Butterworth", 4);
         filterTypeCombo->setSelectedId (1);
         filterTypeCombo->onSelectedItemChanged = [this]
         {
@@ -1194,19 +1195,21 @@ private:
         audioRbj = std::make_shared<yup::RbjFilter<float>>();
         audioSvf = std::make_shared<yup::StateVariableFilter<float>>();
         audioFirstOrder = std::make_shared<yup::FirstOrderFilter<float>>();
+        audioButterworthFilter = std::make_shared<yup::ButterworthFilter<float>>();
 
         // Create instances of all filter types for UI thread
         uiRbj = std::make_shared<yup::RbjFilter<float>>();
         uiSvf = std::make_shared<yup::StateVariableFilter<float>>();
         uiFirstOrder = std::make_shared<yup::FirstOrderFilter<float>>();
+        uiButterworthFilter = std::make_shared<yup::ButterworthFilter<float>>();
 
         // Store in arrays for easy management
         allAudioFilters = {
-            audioRbj, audioSvf, audioFirstOrder
+            audioRbj, audioSvf, audioFirstOrder, audioButterworthFilter
         };
 
         allUIFilters = {
-            uiRbj, uiSvf, uiFirstOrder
+            uiRbj, uiSvf, uiFirstOrder, uiButterworthFilter
         };
 
         // Set default filters
@@ -1237,6 +1240,7 @@ private:
             case 1: currentUIFilter = uiRbj; break;
             case 2: currentUIFilter = uiSvf; break;
             case 3: currentUIFilter = uiFirstOrder; break;
+            case 4: currentUIFilter = uiButterworthFilter; break;
             default: currentUIFilter = uiRbj; break;
         }
 
@@ -1282,6 +1286,10 @@ private:
             auto coeffs = getFirstOrderCoefficients (currentResponseTypeId, freq, gain, currentSampleRate);
             fof->setCoefficients (coeffs);
         }
+        else if (auto bf = std::dynamic_pointer_cast<yup::ButterworthFilter<float>> (currentAudioFilter))
+        {
+            bf->setParameters (getFilterType (currentResponseTypeId), order, freq, freq * 2.0, gain, currentSampleRate);
+        }
     }
 
     void updateUIFilterParameters()
@@ -1308,6 +1316,10 @@ private:
             auto coeffs = getFirstOrderCoefficients (currentResponseTypeId, freq, gain, currentSampleRate);
             fof->setCoefficients (coeffs);
         }
+        else if (auto bf = std::dynamic_pointer_cast<yup::ButterworthFilter<float>> (currentUIFilter))
+        {
+            bf->setParameters (getFilterType (currentResponseTypeId), order, freq, freq * 2.0, gain, currentSampleRate);
+        }
     }
 
     void updateCurrentAudioFilter()
@@ -1318,6 +1330,7 @@ private:
             case 1: currentAudioFilter = audioRbj; break;
             case 2: currentAudioFilter = audioSvf; break;
             case 3: currentAudioFilter = audioFirstOrder; break;
+            case 4: currentAudioFilter = audioButterworthFilter; break;
             default: currentAudioFilter = audioRbj; break;
         }
 
@@ -1503,11 +1516,13 @@ private:
     std::shared_ptr<yup::RbjFilter<float>> audioRbj;
     std::shared_ptr<yup::StateVariableFilter<float>> audioSvf;
     std::shared_ptr<yup::FirstOrderFilter<float>> audioFirstOrder;
+    std::shared_ptr<yup::ButterworthFilter<float>> audioButterworthFilter;
 
     // UI thread filter instances
     std::shared_ptr<yup::RbjFilter<float>> uiRbj;
     std::shared_ptr<yup::StateVariableFilter<float>> uiSvf;
     std::shared_ptr<yup::FirstOrderFilter<float>> uiFirstOrder;
+    std::shared_ptr<yup::ButterworthFilter<float>> uiButterworthFilter;
 
     std::vector<std::shared_ptr<yup::FilterBase<float>>> allAudioFilters;
     std::vector<std::shared_ptr<yup::FilterBase<float>>> allUIFilters;

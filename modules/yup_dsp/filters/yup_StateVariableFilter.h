@@ -303,8 +303,8 @@ public:
 
     /** @internal */
     void getPolesZeros (
-        std::vector<DspMath::Complex<CoeffType>>& poles,
-        std::vector<DspMath::Complex<CoeffType>>& zeros) const override
+        DspMath::ComplexVector<CoeffType>& poles,
+        DspMath::ComplexVector<CoeffType>& zeros) const override
     {
         CoeffType f0 = getCutoffFrequency();
         CoeffType q  = yup::jlimit (0.707, 20.0, getQFactor());

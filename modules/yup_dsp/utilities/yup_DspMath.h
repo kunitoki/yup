@@ -45,6 +45,11 @@ constexpr Complex<FloatType> polar (FloatType magnitude, FloatType phase) noexce
 
 //==============================================================================
 
+template <typename FloatType>
+using ComplexVector = std::vector<DspMath::Complex<FloatType>>;
+
+//==============================================================================
+
 /** Converts frequency to angular frequency (radians per sample) */
 template <typename FloatType>
 constexpr FloatType frequencyToAngular (FloatType frequency, FloatType sampleRate) noexcept
@@ -143,8 +148,8 @@ void bilinearTransform (FloatType& a0, FloatType& a1, FloatType& a2,
 template <typename FloatType>
 void extractPolesZerosFromSecondOrderBiquad (FloatType b0, FloatType b1, FloatType b2,
                                              FloatType a0, FloatType a1, FloatType a2,
-                                             std::vector<DspMath::Complex<FloatType>>& poles,
-                                             std::vector<DspMath::Complex<FloatType>>& zeros)
+                                             DspMath::ComplexVector<FloatType>& poles,
+                                             DspMath::ComplexVector<FloatType>& zeros)
 {
     const auto epsilon = static_cast<FloatType> (1e-12);
 
@@ -217,8 +222,8 @@ void extractPolesZerosFromSecondOrderBiquad (FloatType b0, FloatType b1, FloatTy
 template <typename FloatType>
 void extractPolesZerosFromFourthOrderBiquad (FloatType b0, FloatType b1, FloatType b2, FloatType b3, FloatType b4,
                                              FloatType a0, FloatType a1, FloatType a2, FloatType a3, FloatType a4,
-                                             std::vector<DspMath::Complex<FloatType>>& poles,
-                                             std::vector<DspMath::Complex<FloatType>>& zeros)
+                                             DspMath::ComplexVector<FloatType>& poles,
+                                             DspMath::ComplexVector<FloatType>& zeros)
 {
     // For fourth-order polynomials, we can try to factor them into quadratic pairs
     // This is a simplified approach - for full accuracy, a robust polynomial root finder would be needed

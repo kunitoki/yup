@@ -25,22 +25,22 @@ namespace yup
 {
 
 //==============================================================================
-/** 
+/**
     Robert Bristow-Johnson (RBJ) cookbook filters.
-    
+
     This class implements the classic "Audio EQ Cookbook" biquad filters,
     widely used in audio applications for equalization and filtering.
-    
+
     Features:
     - Peaking/bell filters with adjustable gain and Q
     - Low-shelf and high-shelf filters
     - Lowpass, highpass, bandpass, and notch filters
     - All filters based on analog prototypes with bilinear transform
     - Frequency, Q, and gain controls
-    
+
     Reference: "Cookbook formulae for audio EQ biquad filter coefficients"
     by Robert Bristow-Johnson
-    
+
     @see Biquad, FilterBase
 */
 template <typename SampleType, typename CoeffType = double>
@@ -78,9 +78,9 @@ public:
     }
 
     //==============================================================================
-    /** 
+    /**
         Sets all filter parameters.
-        
+
         @param mode        The RBJ filter mode
         @param frequency   The center/cutoff frequency in Hz
         @param q          The Q factor (resonance/bandwidth control)
@@ -94,14 +94,14 @@ public:
         qFactor = q;
         gain = gainDb;
 
-        BaseFilterType::sampleRate = sampleRate;
+        this->sampleRate = sampleRate;
 
         updateCoefficients();
     }
 
-    /** 
+    /**
         Sets just the center/cutoff frequency.
-        
+
         @param frequency  The new frequency in Hz
     */
     void setFrequency (CoeffType frequency) noexcept
@@ -110,9 +110,9 @@ public:
         updateCoefficients();
     }
 
-    /** 
+    /**
         Sets just the Q factor.
-        
+
         @param q  The new Q factor
     */
     void setQ (CoeffType q) noexcept
@@ -121,9 +121,9 @@ public:
         updateCoefficients();
     }
 
-    /** 
+    /**
         Sets just the gain (for peaking and shelving filters).
-        
+
         @param gainDb  The new gain in decibels
     */
     void setGain (CoeffType gainDb) noexcept
@@ -132,7 +132,7 @@ public:
         updateCoefficients();
     }
 
-    /** 
+    /**
         Sets the filter mode.
 
         @param mode  The new RBJ filter mode
@@ -143,9 +143,9 @@ public:
         updateCoefficients();
     }
 
-    /** 
+    /**
         Gets the current frequency.
-        
+
         @returns  The center/cutoff frequency in Hz
     */
     CoeffType getFrequency() const noexcept
@@ -153,9 +153,9 @@ public:
         return centerFreq;
     }
 
-    /** 
+    /**
         Gets the current Q factor.
-        
+
         @returns  The Q factor
     */
     CoeffType getQ() const noexcept
@@ -163,9 +163,9 @@ public:
         return qFactor;
     }
 
-    /** 
+    /**
         Gets the current gain.
-        
+
         @returns  The gain in decibels
     */
     CoeffType getGain() const noexcept
@@ -173,7 +173,7 @@ public:
         return gain;
     }
 
-    /** 
+    /**
         Gets the current filter mode.
 
         @returns  The RBJ filter mode

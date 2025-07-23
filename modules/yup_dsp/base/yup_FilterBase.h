@@ -148,8 +148,8 @@ public:
         @param zeros  The zeros.
     */
     virtual void getPolesZeros (
-        std::vector<DspMath::Complex<CoeffType>>& poles,
-        std::vector<DspMath::Complex<CoeffType>>& zeros) const
+        DspMath::ComplexVector<CoeffType>& poles,
+        DspMath::ComplexVector<CoeffType>& zeros) const
     {
         poles.clear();
         zeros.clear();
@@ -166,13 +166,13 @@ private:
 };
 
 //==============================================================================
-/** 
+/**
     First-order filter coefficient storage.
-    
+
     Stores coefficients for first-order IIR filters in the form:
     y[n] = b0*x[n] + b1*x[n-1] - a1*y[n-1]
-    
-    Uses CoeffType for internal precision (default double) while supporting 
+
+    Uses CoeffType for internal precision (default double) while supporting
     different SampleType for audio processing.
 */
 template <typename CoeffType = double>

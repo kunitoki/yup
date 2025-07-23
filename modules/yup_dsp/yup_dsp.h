@@ -74,5 +74,6 @@
 #include "filters/yup_BiquadCascade.h"
 #include "filters/yup_RbjFilter.h"
 #include "filters/yup_StateVariableFilter.h"
+#include "filters/yup_ButterworthFilter.h"
 
 //==============================================================================

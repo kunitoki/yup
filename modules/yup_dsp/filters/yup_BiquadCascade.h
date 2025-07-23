@@ -155,8 +155,8 @@ public:
 
     /** @internal */
     void getPolesZeros (
-        std::vector<DspMath::Complex<CoeffType>>& poles,
-        std::vector<DspMath::Complex<CoeffType>>& zeros) const override
+        DspMath::ComplexVector<CoeffType>& poles,
+        DspMath::ComplexVector<CoeffType>& zeros) const override
     {
         poles.reserve (sections.size() * 2);
         zeros.reserve (sections.size() * 2);
