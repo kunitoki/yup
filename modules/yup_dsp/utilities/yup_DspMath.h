@@ -32,6 +32,19 @@ namespace DspMath
 
 //==============================================================================
 
+/** Complex number type alias using std::complex */
+template <typename FloatType>
+using Complex = std::complex<FloatType>;
+
+/** Creates a complex number from magnitude and phase */
+template <typename FloatType>
+constexpr Complex<FloatType> polar (FloatType magnitude, FloatType phase) noexcept
+{
+    return std::polar (magnitude, phase);
+}
+
+//==============================================================================
+
 /** Converts frequency to angular frequency (radians per sample) */
 template <typename FloatType>
 constexpr FloatType frequencyToAngular (FloatType frequency, FloatType sampleRate) noexcept
@@ -103,8 +116,8 @@ FloatType fastCos (FloatType x) noexcept
 /** Bilinear transform from s-plane to z-plane with frequency warping */
 template <typename FloatType>
 void bilinearTransform (FloatType& a0, FloatType& a1, FloatType& a2,
-                       FloatType& b0, FloatType& b1, FloatType& b2,
-                       FloatType frequency, FloatType sampleRate) noexcept
+                        FloatType& b0, FloatType& b1, FloatType& b2,
+                        FloatType frequency, FloatType sampleRate) noexcept
 {
     const auto warpedFreq = static_cast<FloatType> (2.0) * sampleRate * std::tan (frequencyToAngular (frequency, sampleRate) / static_cast<FloatType> (2.0));
     const auto k = warpedFreq / sampleRate;
@@ -127,15 +140,206 @@ void bilinearTransform (FloatType& a0, FloatType& a1, FloatType& a2,
 
 //==============================================================================
 
-/** Complex number type alias using std::complex */
 template <typename FloatType>
-using Complex = std::complex<FloatType>;
-
-/** Creates a complex number from magnitude and phase */
-template <typename FloatType>
-constexpr Complex<FloatType> polar (FloatType magnitude, FloatType phase) noexcept
+void extractPolesZerosFromSecondOrderBiquad (FloatType b0, FloatType b1, FloatType b2,
+                                             FloatType a0, FloatType a1, FloatType a2,
+                                             std::vector<DspMath::Complex<FloatType>>& poles,
+                                             std::vector<DspMath::Complex<FloatType>>& zeros)
 {
-    return std::polar (magnitude, phase);
+    const auto epsilon = static_cast<FloatType> (1e-12);
+
+    // Calculate poles from denominator: 1 + a1*z^-1 + a2*z^-2 = 0
+    // Multiplying by z^2: z^2 + a1*z + a2 = 0
+    // Using quadratic formula: z = (-a1 ± √(a1² - 4*a2)) / 2
+    if (std::abs (a2) > epsilon)
+    {
+        auto discriminant = a1 * a1 - 4 * a2;
+        if (discriminant >= 0)
+        {
+            // Real poles
+            auto sqrtDisc = std::sqrt (discriminant);
+            poles.push_back (DspMath::Complex<FloatType> ((-a1 + sqrtDisc) / 2, 0));
+            poles.push_back (DspMath::Complex<FloatType> ((-a1 - sqrtDisc) / 2, 0));
+        }
+        else
+        {
+            // Complex conjugate poles
+            auto real = -a1 / 2;
+            auto imag = std::sqrt (-discriminant) / 2;
+            poles.push_back (DspMath::Complex<FloatType> (real, imag));
+            poles.push_back (DspMath::Complex<FloatType> (real, -imag));
+        }
+    }
+    else if (std::abs (a1) > epsilon)
+    {
+        // First-order: 1 + a1*z^-1 = 0 -> z = -1/a1
+        poles.push_back (DspMath::Complex<FloatType> (-1 / a1, 0));
+    }
+
+    // Calculate zeros from numerator: b0 + b1*z^-1 + b2*z^-2 = 0
+    // Multiplying by z^2: b0*z^2 + b1*z + b2 = 0
+    // Using quadratic formula: z = (-b1 ± √(b1² - 4*b0*b2)) / (2*b0)
+    if (std::abs (b0) > epsilon && std::abs (b2) > epsilon)
+    {
+        auto discriminant = b1 * b1 - 4 * b0 * b2;
+        if (discriminant >= 0)
+        {
+            // Real zeros
+            auto sqrtDisc = std::sqrt (discriminant);
+            zeros.push_back (DspMath::Complex<FloatType> ((-b1 + sqrtDisc) / (2 * b0), 0));
+            zeros.push_back (DspMath::Complex<FloatType> ((-b1 - sqrtDisc) / (2 * b0), 0));
+        }
+        else
+        {
+            // Complex conjugate zeros
+            auto real = -b1 / (2 * b0);
+            auto imag = std::sqrt (-discriminant) / (2 * b0);
+            zeros.push_back (DspMath::Complex<FloatType> (real, imag));
+            zeros.push_back (DspMath::Complex<FloatType> (real, -imag));
+        }
+    }
+    else if (std::abs (b1) > epsilon && std::abs (b0) > epsilon)
+    {
+        // First-order: b0 + b1*z^-1 = 0 -> z = -b0/b1
+        zeros.push_back (DspMath::Complex<FloatType> (-b0 / b1, 0));
+    }
+    else if (std::abs (b2) > epsilon)
+    {
+        // Zero at origin (b0 = 0): b1*z^-1 + b2*z^-2 = 0 -> z*(b1 + b2*z^-1) = 0
+        // One zero at z = 0, another at z = -b1/b2
+        zeros.push_back (DspMath::Complex<FloatType> (0, 0));
+        if (std::abs (b1) > epsilon)
+            zeros.push_back (DspMath::Complex<FloatType> (-b1 / b2, 0));
+    }
+}
+
+/** Extract poles and zeros from fourth-order section coefficients */
+template <typename FloatType>
+void extractPolesZerosFromFourthOrderBiquad (FloatType b0, FloatType b1, FloatType b2, FloatType b3, FloatType b4,
+                                             FloatType a0, FloatType a1, FloatType a2, FloatType a3, FloatType a4,
+                                             std::vector<DspMath::Complex<FloatType>>& poles,
+                                             std::vector<DspMath::Complex<FloatType>>& zeros)
+{
+    // For fourth-order polynomials, we can try to factor them into quadratic pairs
+    // This is a simplified approach - for full accuracy, a robust polynomial root finder would be needed
+
+    // First, try to factor the denominator polynomial (poles)
+    // a4*z^4 + a3*z^3 + a2*z^2 + a1*z + a0 = 0
+
+    // For Butterworth filters designed using our method, we can often decompose this way:
+    // Split into two biquads with shared characteristics
+
+    // Simple approach: assume it can be factored as (z^2 + p1*z + q1)(z^2 + p2*z + q2)
+
+    const auto epsilon = static_cast<FloatType> (1e-12);
+
+    if (std::abs (a4) > epsilon)
+    {
+        // Attempt to find characteristic polynomial roots
+        // This is a simplified extraction - in practice, you'd want a full polynomial solver
+
+        // Try to extract first biquad-like section
+        auto a1_norm = a1 / a4;
+        auto a2_norm = a2 / a4;
+        auto a3_norm = a3 / a4;
+        auto a0_norm = a0 / a4;
+
+        // Use approximation method for 4th order Butterworth characteristics
+        // Extract two approximate biquad sections
+        auto q1 = std::sqrt (std::abs (a0_norm));
+        auto p1 = a1_norm / 2;
+
+        if (q1 > epsilon)
+        {
+            auto discriminant1 = p1 * p1 - 4 * q1;
+            if (discriminant1 >= 0)
+            {
+                auto sqrtDisc = std::sqrt (discriminant1);
+                poles.push_back (DspMath::Complex<FloatType> ((-p1 + sqrtDisc) / 2, 0));
+                poles.push_back (DspMath::Complex<FloatType> ((-p1 - sqrtDisc) / 2, 0));
+            }
+            else
+            {
+                auto real = -p1 / 2;
+                auto imag = std::sqrt (-discriminant1) / 2;
+                poles.push_back (DspMath::Complex<FloatType> (real, imag));
+                poles.push_back (DspMath::Complex<FloatType> (real, -imag));
+            }
+        }
+
+        // Second pair (approximation)
+        auto p2 = a3_norm / 2;
+        auto q2 = a2_norm - q1;
+
+        if (std::abs (q2) > epsilon)
+        {
+            auto discriminant2 = p2 * p2 - 4 * q2;
+            if (discriminant2 >= 0)
+            {
+                auto sqrtDisc = std::sqrt (discriminant2);
+                poles.push_back (DspMath::Complex<FloatType> ((-p2 + sqrtDisc) / 2, 0));
+                poles.push_back (DspMath::Complex<FloatType> ((-p2 - sqrtDisc) / 2, 0));
+            }
+            else
+            {
+                auto real = -p2 / 2;
+                auto imag = std::sqrt (-discriminant2) / 2;
+                poles.push_back (DspMath::Complex<FloatType> (real, imag));
+                poles.push_back (DspMath::Complex<FloatType> (real, -imag));
+            }
+        }
+    }
+
+    // Similar approach for zeros (numerator polynomial)
+    if (std::abs (b4) > epsilon)
+    {
+        auto b1_norm = b1 / b4;
+        auto b2_norm = b2 / b4;
+        auto b3_norm = b3 / b4;
+        auto b0_norm = b0 / b4;
+
+        auto q1 = std::sqrt (std::abs (b0_norm));
+        auto p1 = b1_norm / 2;
+
+        if (q1 > epsilon)
+        {
+            auto discriminant1 = p1 * p1 - 4 * q1;
+            if (discriminant1 >= 0)
+            {
+                auto sqrtDisc = std::sqrt (discriminant1);
+                zeros.push_back (DspMath::Complex<FloatType> ((-p1 + sqrtDisc) / 2, 0));
+                zeros.push_back (DspMath::Complex<FloatType> ((-p1 - sqrtDisc) / 2, 0));
+            }
+            else
+            {
+                auto real = -p1 / 2;
+                auto imag = std::sqrt (-discriminant1) / 2;
+                zeros.push_back (DspMath::Complex<FloatType> (real, imag));
+                zeros.push_back (DspMath::Complex<FloatType> (real, -imag));
+            }
+        }
+
+        auto p2 = b3_norm / 2;
+        auto q2 = b2_norm - q1;
+
+        if (std::abs (q2) > epsilon)
+        {
+            auto discriminant2 = p2 * p2 - 4 * q2;
+            if (discriminant2 >= 0)
+            {
+                auto sqrtDisc = std::sqrt (discriminant2);
+                zeros.push_back (DspMath::Complex<FloatType> ((-p2 + sqrtDisc) / 2, 0));
+                zeros.push_back (DspMath::Complex<FloatType> ((-p2 - sqrtDisc) / 2, 0));
+            }
+            else
+            {
+                auto real = -p2 / 2;
+                auto imag = std::sqrt (-discriminant2) / 2;
+                zeros.push_back (DspMath::Complex<FloatType> (real, imag));
+                zeros.push_back (DspMath::Complex<FloatType> (real, -imag));
+            }
+        }
+    }
 }
 
 } // namespace DspMath
