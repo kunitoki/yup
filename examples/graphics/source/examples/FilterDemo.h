@@ -1474,7 +1474,6 @@ private:
                 return yup::FilterDesigner<double>::designFirstOrderAllpass (freq, sampleRate);
             default:
                 return yup::FilterDesigner<double>::designFirstOrderLowpass (freq, sampleRate);
-            default:
         }
     }
 
