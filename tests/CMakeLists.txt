@@ -107,6 +107,9 @@ yup_standalone_app (
         ${target_modules}
         ${target_gtest_modules})
 
+# ==== Setup FFTW3
+_yup_find_fftw3 (${target_name})
+
 # ==== Setup sources
 set (sources "")
 foreach (module ${target_modules})

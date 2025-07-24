@@ -20,12 +20,6 @@
 */
 
 // Conditional includes based on available FFT backends
-#if YUP_MODULE_AVAILABLE_pffft_library && YUP_ENABLE_PFFFT
-#include <pffft_library/pffft_library.h>
-#define YUP_FFT_USING_PFFFT 1
-#define YUP_FFT_FOUND_BACKEND 1
-#endif
-
 #if !YUP_FFT_FOUND_BACKEND && YUP_ENABLE_VDSP && (YUP_MAC || YUP_IOS) && __has_include(<Accelerate/Accelerate.h>)
 #include <Accelerate/Accelerate.h>
 #define YUP_FFT_USING_VDSP 1
@@ -41,6 +35,12 @@
 #if !YUP_FFT_FOUND_BACKEND && YUP_ENABLE_FFTW3 && __has_include(<fftw3.h>)
 #include <fftw3.h>
 #define YUP_FFT_USING_FFTW3 1
+#define YUP_FFT_FOUND_BACKEND 1
+#endif
+
+#if !YUP_FFT_FOUND_BACKEND && YUP_ENABLE_PFFFT && YUP_MODULE_AVAILABLE_pffft_library
+#include <pffft_library/pffft_library.h>
+#define YUP_FFT_USING_PFFFT 1
 #define YUP_FFT_FOUND_BACKEND 1
 #endif
 
@@ -332,7 +332,7 @@ public:
     void performRealFFTForward (const float* realInput, float* complexOutput) override
     {
         // Copy input to output buffer to work in-place
-        std::memcpy (complexOutput, realInput, fftSize * sizeof (float));
+        std::copy_n (realInput, fftSize, complexOutput);
         complexOutput[fftSize] = 0.0f;
 
         // Perform vDSP real FFT
@@ -351,7 +351,7 @@ public:
     void performRealFFTInverse (const float* complexInput, float* realOutput) override
     {
         // Copy input to temp buffer for processing
-        std::memcpy (tempBuffer.data(), complexInput, fftSize * 2 * sizeof (float));
+        std::copy_n (complexInput, fftSize * 2, tempBuffer.data());
 
         // Pack Nyquist real into DC imaginary for vDSP
         auto* complexData = reinterpret_cast<ComplexFloat*> (tempBuffer.data());
@@ -364,12 +364,12 @@ public:
         // Clear upper half and extract real parts
         vDSP_vclr (tempBuffer.data() + fftSize, 1, static_cast<size_t> (fftSize));
 
-        std::memcpy (realOutput, tempBuffer.data(), fftSize * sizeof (float));
+        std::copy_n (tempBuffer.data(), fftSize, realOutput);
     }
 
     void performComplexFFTForward (const float* complexInput, float* complexOutput) override
     {
-        std::memcpy (tempBuffer.data(), complexInput, fftSize * 2 * sizeof (float));
+        std::copy_n (complexInput, fftSize * 2, tempBuffer.data());
 
         DSPSplitComplex splitInput = { tempBuffer.data(), tempBuffer.data() + 1 };
         DSPSplitComplex splitOutput = { complexOutput, complexOutput + 1 };
@@ -507,15 +507,14 @@ public:
     void initialize (int newFftSize) override
     {
         cleanup();
+
         fftSize = newFftSize;
 
-        // Allocate buffers
-        tempComplexBuffer.resize (static_cast<size_t> (fftSize));
-        tempRealBuffer.resize (static_cast<size_t> (fftSize));
+        tempComplexBuffer = static_cast<fftwf_complex*> (fftwf_malloc (sizeof (fftwf_complex) * fftSize));
+        tempRealBuffer = static_cast<float*> (fftwf_malloc (sizeof (float) * fftSize));
 
-        // Create plans
-        auto* complexData = tempComplexBuffer.data();
-        auto* realData = tempRealBuffer.data();
+        auto* complexData = tempComplexBuffer;
+        auto* realData = tempRealBuffer;
 
         planComplexForward = fftwf_plan_dft_1d (fftSize, complexData, complexData, FFTW_FORWARD, FFTW_ESTIMATE);
         planComplexInverse = fftwf_plan_dft_1d (fftSize, complexData, complexData, FFTW_BACKWARD, FFTW_ESTIMATE);
@@ -530,31 +529,44 @@ public:
             fftwf_destroy_plan (planComplexForward);
             planComplexForward = nullptr;
         }
+
         if (planComplexInverse != nullptr)
         {
             fftwf_destroy_plan (planComplexInverse);
             planComplexInverse = nullptr;
         }
+
         if (planRealForward != nullptr)
         {
             fftwf_destroy_plan (planRealForward);
             planRealForward = nullptr;
         }
+
         if (planRealInverse != nullptr)
         {
             fftwf_destroy_plan (planRealInverse);
             planRealInverse = nullptr;
         }
-        tempComplexBuffer.clear();
-        tempRealBuffer.clear();
+
+        if (tempComplexBuffer != nullptr)
+        {
+            fftwf_free (tempComplexBuffer);
+            tempComplexBuffer = nullptr;
+        }
+
+        if (tempRealBuffer != nullptr)
+        {
+            fftwf_free (tempRealBuffer);
+            tempRealBuffer = nullptr;
+        }
     }
 
     void performRealFFTForward (const float* realInput, float* complexOutput) override
     {
-        std::copy (realInput, realInput + fftSize, tempRealBuffer.begin());
+        std::copy_n (realInput, fftSize, tempRealBuffer);
+
         fftwf_execute (planRealForward);
 
-        // Convert FFTW format to interleaved format
         const auto halfSize = fftSize / 2 + 1;
         for (int i = 0; i < halfSize; ++i)
         {
@@ -574,12 +586,12 @@ public:
         }
 
         fftwf_execute (planRealInverse);
-        std::copy (tempRealBuffer.begin(), tempRealBuffer.begin() + fftSize, realOutput);
+
+        std::copy_n (tempRealBuffer, fftSize, realOutput);
     }
 
     void performComplexFFTForward (const float* complexInput, float* complexOutput) override
     {
-        // Convert interleaved to FFTW format
         for (int i = 0; i < fftSize; ++i)
         {
             tempComplexBuffer[i][0] = complexInput[i * 2];     // real
@@ -588,7 +600,6 @@ public:
 
         fftwf_execute (planComplexForward);
 
-        // Convert FFTW format to interleaved
         for (int i = 0; i < fftSize; ++i)
         {
             complexOutput[i * 2] = tempComplexBuffer[i][0];     // real
@@ -598,7 +609,6 @@ public:
 
     void performComplexFFTInverse (const float* complexInput, float* complexOutput) override
     {
-        // Convert interleaved to FFTW format
         for (int i = 0; i < fftSize; ++i)
         {
             tempComplexBuffer[i][0] = complexInput[i * 2];     // real
@@ -607,7 +617,6 @@ public:
 
         fftwf_execute (planComplexInverse);
 
-        // Convert FFTW format to interleaved
         for (int i = 0; i < fftSize; ++i)
         {
             complexOutput[i * 2] = tempComplexBuffer[i][0];     // real
@@ -622,8 +631,8 @@ private:
     fftwf_plan planComplexInverse = nullptr;
     fftwf_plan planRealForward = nullptr;
     fftwf_plan planRealInverse = nullptr;
-    std::vector<fftwf_complex> tempComplexBuffer;
-    std::vector<float> tempRealBuffer;
+    fftwf_complex* tempComplexBuffer = nullptr;
+    float* tempRealBuffer = nullptr;
 };
 
 #endif
