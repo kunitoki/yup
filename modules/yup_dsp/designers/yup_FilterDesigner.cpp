@@ -114,7 +114,7 @@ FirstOrderCoefficients<CoeffType> FilterDesigner<CoeffType>::designFirstOrderAll
 {
     const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
     const auto alpha = (static_cast<CoeffType> (1.0) - std::tan (omega / static_cast<CoeffType> (2.0)))
-        / (static_cast<CoeffType> (1.0) + std::tan (omega / static_cast<CoeffType> (2.0)));
+                     / (static_cast<CoeffType> (1.0) + std::tan (omega / static_cast<CoeffType> (2.0)));
 
     FirstOrderCoefficients<CoeffType> coefficients;
 

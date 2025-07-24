@@ -51,19 +51,19 @@ public:
     /** Filter mode enumeration for single-output processing */
     enum class Mode
     {
-        lowpass,   /**< Low-pass output only */
-        bandpass,  /**< Band-pass output only */
-        highpass,  /**< High-pass output only */
-        notch      /**< Notch (band-stop) output only */
+        lowpass,  /**< Low-pass output only */
+        bandpass, /**< Band-pass output only */
+        highpass, /**< High-pass output only */
+        notch     /**< Notch (band-stop) output only */
     };
 
     /** Structure containing all filter outputs */
     struct Outputs
     {
-        SampleType lowpass = 0;   /**< Low-pass output */
-        SampleType bandpass = 0;  /**< Band-pass output */
-        SampleType highpass = 0;  /**< High-pass output */
-        SampleType notch = 0;     /**< Notch output */
+        SampleType lowpass = 0;  /**< Low-pass output */
+        SampleType bandpass = 0; /**< Band-pass output */
+        SampleType highpass = 0; /**< High-pass output */
+        SampleType notch = 0;    /**< Notch output */
     };
 
     //==============================================================================
@@ -259,11 +259,16 @@ public:
 
         switch (filterMode)
         {
-            case Mode::lowpass:  return outputs.lowpass;
-            case Mode::bandpass: return outputs.bandpass;
-            case Mode::highpass: return outputs.highpass;
-            case Mode::notch:    return outputs.notch;
-            default:             return outputs.lowpass;
+            case Mode::lowpass:
+                return outputs.lowpass;
+            case Mode::bandpass:
+                return outputs.bandpass;
+            case Mode::highpass:
+                return outputs.highpass;
+            case Mode::notch:
+                return outputs.notch;
+            default:
+                return outputs.lowpass;
         }
     }
 
@@ -327,7 +332,7 @@ public:
         DspMath::ComplexVector<CoeffType>& zeros) const override
     {
         CoeffType f0 = centerFreq;
-        CoeffType q  = yup::jlimit (0.707, 20.0, qFactor);
+        CoeffType q = yup::jlimit (0.707, 20.0, qFactor);
         CoeffType fs = yup::jmax (0.1, this->sampleRate);
         CoeffType T = 1.0 / fs;
         CoeffType wc = 2.0 * yup::MathConstants<CoeffType>::pi * f0;
@@ -339,7 +344,10 @@ public:
         DspMath::Complex<CoeffType> pb (realPart, -imagPart);
 
         // Bilinear map helper: z = (2 + s T) / (2 - s T)
-        auto bilinear = [T](const DspMath::Complex<CoeffType>& s) -> DspMath::Complex<CoeffType> { return (2.0 + s * T) / (2.0 - s * T); };
+        auto bilinear = [T] (const DspMath::Complex<CoeffType>& s) -> DspMath::Complex<CoeffType>
+        {
+            return (2.0 + s * T) / (2.0 - s * T);
+        };
 
         // Map poles
         poles.reserve (2);
@@ -492,7 +500,7 @@ private:
 
 //==============================================================================
 /** Type aliases for convenience */
-using StateVariableFilterFloat = StateVariableFilter<float>;      // float samples, double coefficients (default)
-using StateVariableFilterDouble = StateVariableFilter<double>;    // double samples, double coefficients (default)
+using StateVariableFilterFloat = StateVariableFilter<float>;   // float samples, double coefficients (default)
+using StateVariableFilterDouble = StateVariableFilter<double>; // double samples, double coefficients (default)
 
 } // namespace yup

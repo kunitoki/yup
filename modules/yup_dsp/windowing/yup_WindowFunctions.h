@@ -36,20 +36,20 @@ namespace yup
 enum class WindowType
 {
     rectangular,    /**< Rectangular (no windowing) */
-    hann,          /**< Hann window (raised cosine) */
-    hamming,       /**< Hamming window */
-    blackman,      /**< Blackman window */
-    blackmanHarris,/**< Blackman-Harris window (4-term) */
-    kaiser,        /**< Kaiser window (parameterizable) */
-    gaussian,      /**< Gaussian window */
-    tukey,         /**< Tukey window (tapered cosine) */
-    bartlett,      /**< Bartlett window (triangular) */
-    welch,         /**< Welch window (parabolic) */
-    flattop,       /**< Flat-top window */
-    cosine,        /**< Cosine window */
-    lanczos,       /**< Lanczos window (sinc) */
-    nuttall,       /**< Nuttall window */
-    blackmanNuttall/**< Blackman-Nuttall window */
+    hann,           /**< Hann window (raised cosine) */
+    hamming,        /**< Hamming window */
+    blackman,       /**< Blackman window */
+    blackmanHarris, /**< Blackman-Harris window (4-term) */
+    kaiser,         /**< Kaiser window (parameterizable) */
+    gaussian,       /**< Gaussian window */
+    tukey,          /**< Tukey window (tapered cosine) */
+    bartlett,       /**< Bartlett window (triangular) */
+    welch,          /**< Welch window (parabolic) */
+    flattop,        /**< Flat-top window */
+    cosine,         /**< Cosine window */
+    lanczos,        /**< Lanczos window (sinc) */
+    nuttall,        /**< Nuttall window */
+    blackmanNuttall /**< Blackman-Nuttall window */
 };
 
 //==============================================================================
@@ -101,22 +101,38 @@ public:
 
         switch (type)
         {
-            case WindowType::rectangular:     return rectangular (n, N);
-            case WindowType::hann:            return hann (n, N);
-            case WindowType::hamming:         return hamming (n, N);
-            case WindowType::blackman:        return blackman (n, N);
-            case WindowType::blackmanHarris:  return blackmanHarris (n, N);
-            case WindowType::kaiser:          return kaiser (n, N, parameter);
-            case WindowType::gaussian:        return gaussian (n, N, parameter);
-            case WindowType::tukey:           return tukey (n, N, parameter);
-            case WindowType::bartlett:        return bartlett (n, N);
-            case WindowType::welch:           return welch (n, N);
-            case WindowType::flattop:         return flattop (n, N);
-            case WindowType::cosine:          return cosine (n, N);
-            case WindowType::lanczos:         return lanczos (n, N);
-            case WindowType::nuttall:         return nuttall (n, N);
-            case WindowType::blackmanNuttall: return blackmanNuttall (n, N);
-            default:                          return rectangular (n, N);
+            case WindowType::rectangular:
+                return rectangular (n, N);
+            case WindowType::hann:
+                return hann (n, N);
+            case WindowType::hamming:
+                return hamming (n, N);
+            case WindowType::blackman:
+                return blackman (n, N);
+            case WindowType::blackmanHarris:
+                return blackmanHarris (n, N);
+            case WindowType::kaiser:
+                return kaiser (n, N, parameter);
+            case WindowType::gaussian:
+                return gaussian (n, N, parameter);
+            case WindowType::tukey:
+                return tukey (n, N, parameter);
+            case WindowType::bartlett:
+                return bartlett (n, N);
+            case WindowType::welch:
+                return welch (n, N);
+            case WindowType::flattop:
+                return flattop (n, N);
+            case WindowType::cosine:
+                return cosine (n, N);
+            case WindowType::lanczos:
+                return lanczos (n, N);
+            case WindowType::nuttall:
+                return nuttall (n, N);
+            case WindowType::blackmanNuttall:
+                return blackmanNuttall (n, N);
+            default:
+                return rectangular (n, N);
         }
     }
 
@@ -223,17 +239,39 @@ public:
         float windowCompensation = 1.0f;
         switch (type)
         {
-            case WindowType::rectangular:      windowCompensation = 1.0f; break;
-            case WindowType::hann:             windowCompensation = 2.0f; break; // Hann has 0.5 coherent gain
-            case WindowType::hamming:          windowCompensation = 1.85f; break;
-            case WindowType::blackman:         windowCompensation = 2.8f; break;
-            case WindowType::blackmanHarris:   windowCompensation = 4.0f; break;
-            case WindowType::kaiser:           windowCompensation = 2.2f; break;
-            case WindowType::gaussian:         windowCompensation = 2.5f; break;
-            case WindowType::tukey:            windowCompensation = 1.5f; break;
-            case WindowType::bartlett:         windowCompensation = 2.0f; break;
-            case WindowType::welch:            windowCompensation = 1.5f; break;
-            case WindowType::flattop:          windowCompensation = 4.6f; break;
+            case WindowType::rectangular:
+                windowCompensation = 1.0f;
+                break;
+            case WindowType::hann:
+                windowCompensation = 2.0f;
+                break; // Hann has 0.5 coherent gain
+            case WindowType::hamming:
+                windowCompensation = 1.85f;
+                break;
+            case WindowType::blackman:
+                windowCompensation = 2.8f;
+                break;
+            case WindowType::blackmanHarris:
+                windowCompensation = 4.0f;
+                break;
+            case WindowType::kaiser:
+                windowCompensation = 2.2f;
+                break;
+            case WindowType::gaussian:
+                windowCompensation = 2.5f;
+                break;
+            case WindowType::tukey:
+                windowCompensation = 1.5f;
+                break;
+            case WindowType::bartlett:
+                windowCompensation = 2.0f;
+                break;
+            case WindowType::welch:
+                windowCompensation = 1.5f;
+                break;
+            case WindowType::flattop:
+                windowCompensation = 4.6f;
+                break;
             default:
                 break;
         }
@@ -328,7 +366,7 @@ public:
         const auto factor = MathConstants<FloatType>::twoPi * n / (N - 1);
 
         return a0 - a1 * std::cos (factor) + a2 * std::cos (FloatType (2) * factor)
-               - a3 * std::cos (FloatType (3) * factor) + a4 * std::cos (FloatType (4) * factor);
+             - a3 * std::cos (FloatType (3) * factor) + a4 * std::cos (FloatType (4) * factor);
     }
 
     static FloatType cosine (int n, int N) noexcept

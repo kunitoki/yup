@@ -76,15 +76,13 @@ void SpectrumAnalyzerState::pushSamples (const float* samples, int numSamples) n
     // Copy first block
     if (writeScope.blockSize1 > 0)
     {
-        std::copy_n (samples, writeScope.blockSize1,
-                    &sampleBuffer[static_cast<size_t> (writeScope.startIndex1)]);
+        std::copy_n (samples, writeScope.blockSize1, &sampleBuffer[static_cast<size_t> (writeScope.startIndex1)]);
     }
 
     // Copy second block (wrap-around case)
     if (writeScope.blockSize2 > 0)
     {
-        std::copy_n (samples + writeScope.blockSize1, writeScope.blockSize2,
-                    &sampleBuffer[static_cast<size_t> (writeScope.startIndex2)]);
+        std::copy_n (samples + writeScope.blockSize1, writeScope.blockSize2, &sampleBuffer[static_cast<size_t> (writeScope.startIndex2)]);
     }
 
     // Check if we have enough samples for FFT processing
@@ -102,7 +100,7 @@ bool SpectrumAnalyzerState::getFFTData (float* destBuffer) noexcept
 {
     jassert (destBuffer != nullptr);
 
-    if (destBuffer == nullptr || !isFFTDataReady())
+    if (destBuffer == nullptr || ! isFFTDataReady())
         return false;
 
     // Lock-free read from FIFO - safe for UI thread
@@ -112,14 +110,16 @@ bool SpectrumAnalyzerState::getFFTData (float* destBuffer) noexcept
     if (readScope.blockSize1 > 0)
     {
         std::copy_n (&sampleBuffer[static_cast<size_t> (readScope.startIndex1)],
-                    readScope.blockSize1, destBuffer);
+                     readScope.blockSize1,
+                     destBuffer);
     }
 
     // Copy second block (wrap-around case)
     if (readScope.blockSize2 > 0)
     {
         std::copy_n (&sampleBuffer[static_cast<size_t> (readScope.startIndex2)],
-                    readScope.blockSize2, destBuffer + readScope.blockSize1);
+                     readScope.blockSize2,
+                     destBuffer + readScope.blockSize1);
     }
 
     // Reset the ready flag since we've consumed the data
@@ -142,7 +142,7 @@ void SpectrumAnalyzerState::reset() noexcept
 void SpectrumAnalyzerState::setFftSize (int newSize)
 {
     jassert (isPowerOfTwo (newSize) && newSize >= 64 && newSize <= 16384);
-    
+
     if (fftSize != newSize)
     {
         fftSize = newSize;

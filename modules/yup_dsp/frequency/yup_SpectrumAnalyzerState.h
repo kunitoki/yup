@@ -119,10 +119,10 @@ public:
 private:
     //==============================================================================
     void initializeFifo();
-    
+
     int fftSize = 2048;
-    int fifoSize = 8192;  // Will be updated in initializeFifo()
-    
+    int fifoSize = 8192; // Will be updated in initializeFifo()
+
     std::unique_ptr<AbstractFifo> audioFifo;
     std::vector<float> sampleBuffer;
     std::atomic<bool> fftDataReady { false };

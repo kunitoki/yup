@@ -103,8 +103,7 @@ template <typename FloatType>
 FloatType fastSin (FloatType x) noexcept
 {
     const auto x2 = x * x;
-    return x * (static_cast<FloatType> (1.0) - x2 / static_cast<FloatType> (6.0) *
-               (static_cast<FloatType> (1.0) - x2 / static_cast<FloatType> (20.0)));
+    return x * (static_cast<FloatType> (1.0) - x2 / static_cast<FloatType> (6.0) * (static_cast<FloatType> (1.0) - x2 / static_cast<FloatType> (20.0)));
 }
 
 /** Fast approximation of cos(x) using Taylor series for small angles */
@@ -112,17 +111,14 @@ template <typename FloatType>
 FloatType fastCos (FloatType x) noexcept
 {
     const auto x2 = x * x;
-    return static_cast<FloatType> (1.0) - x2 / static_cast<FloatType> (2.0) *
-           (static_cast<FloatType> (1.0) - x2 / static_cast<FloatType> (12.0));
+    return static_cast<FloatType> (1.0) - x2 / static_cast<FloatType> (2.0) * (static_cast<FloatType> (1.0) - x2 / static_cast<FloatType> (12.0));
 }
 
 //==============================================================================
 
 /** Bilinear transform from s-plane to z-plane with frequency warping */
 template <typename FloatType>
-void bilinearTransform (FloatType& a0, FloatType& a1, FloatType& a2,
-                        FloatType& b0, FloatType& b1, FloatType& b2,
-                        FloatType frequency, FloatType sampleRate) noexcept
+void bilinearTransform (FloatType& a0, FloatType& a1, FloatType& a2, FloatType& b0, FloatType& b1, FloatType& b2, FloatType frequency, FloatType sampleRate) noexcept
 {
     const auto warpedFreq = static_cast<FloatType> (2.0) * sampleRate * std::tan (frequencyToAngular (frequency, sampleRate) / static_cast<FloatType> (2.0));
     const auto k = warpedFreq / sampleRate;
@@ -146,10 +142,7 @@ void bilinearTransform (FloatType& a0, FloatType& a1, FloatType& a2,
 //==============================================================================
 
 template <typename FloatType>
-void extractPolesZerosFromSecondOrderBiquad (FloatType b0, FloatType b1, FloatType b2,
-                                             FloatType a0, FloatType a1, FloatType a2,
-                                             DspMath::ComplexVector<FloatType>& poles,
-                                             DspMath::ComplexVector<FloatType>& zeros)
+void extractPolesZerosFromSecondOrderBiquad (FloatType b0, FloatType b1, FloatType b2, FloatType a0, FloatType a1, FloatType a2, DspMath::ComplexVector<FloatType>& poles, DspMath::ComplexVector<FloatType>& zeros)
 {
     const auto epsilon = static_cast<FloatType> (1e-12);
 
@@ -220,10 +213,7 @@ void extractPolesZerosFromSecondOrderBiquad (FloatType b0, FloatType b1, FloatTy
 
 /** Extract poles and zeros from fourth-order section coefficients */
 template <typename FloatType>
-void extractPolesZerosFromFourthOrderBiquad (FloatType b0, FloatType b1, FloatType b2, FloatType b3, FloatType b4,
-                                             FloatType a0, FloatType a1, FloatType a2, FloatType a3, FloatType a4,
-                                             DspMath::ComplexVector<FloatType>& poles,
-                                             DspMath::ComplexVector<FloatType>& zeros)
+void extractPolesZerosFromFourthOrderBiquad (FloatType b0, FloatType b1, FloatType b2, FloatType b3, FloatType b4, FloatType a0, FloatType a1, FloatType a2, FloatType a3, FloatType a4, DspMath::ComplexVector<FloatType>& poles, DspMath::ComplexVector<FloatType>& zeros)
 {
     // For fourth-order polynomials, we can try to factor them into quadratic pairs
     // This is a simplified approach - for full accuracy, a robust polynomial root finder would be needed

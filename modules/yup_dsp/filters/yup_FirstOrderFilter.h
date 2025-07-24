@@ -137,8 +137,8 @@ private:
     //==============================================================================
     struct FirstOrderState
     {
-        CoeffType x1 = 0;  // Input delay
-        CoeffType y1 = 0;  // Output delay
+        CoeffType x1 = 0; // Input delay
+        CoeffType y1 = 0; // Output delay
 
         /** Resets all state variables to zero */
         void reset() noexcept
@@ -157,7 +157,7 @@ private:
 
 //==============================================================================
 /** Type aliases for convenience */
-using FirstOrderFilterFloat = FirstOrderFilter<float>;      // float samples, double coefficients (default)
-using FirstOrderFilterDouble = FirstOrderFilter<double>;    // double samples, double coefficients (default)
+using FirstOrderFilterFloat = FirstOrderFilter<float>;   // float samples, double coefficients (default)
+using FirstOrderFilterDouble = FirstOrderFilter<double>; // double samples, double coefficients (default)
 
 } // namespace yup

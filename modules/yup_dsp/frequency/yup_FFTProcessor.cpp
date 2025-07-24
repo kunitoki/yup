@@ -20,37 +20,37 @@
 */
 
 // Conditional includes based on available FFT backends
-#if !YUP_FFT_FOUND_BACKEND && YUP_ENABLE_VDSP && (YUP_MAC || YUP_IOS) && __has_include(<Accelerate/Accelerate.h>)
+#if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_VDSP && (YUP_MAC || YUP_IOS) && __has_include(<Accelerate/Accelerate.h>)
 #include <Accelerate/Accelerate.h>
 #define YUP_FFT_USING_VDSP 1
 #define YUP_FFT_FOUND_BACKEND 1
 #endif
 
-#if !YUP_FFT_FOUND_BACKEND && YUP_ENABLE_INTEL_IPP && __has_include(<ipp.h>)
+#if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_INTEL_IPP && __has_include(<ipp.h>)
 #include <ipp.h>
 #define YUP_FFT_USING_IPP 1
 #define YUP_FFT_FOUND_BACKEND 1
 #endif
 
-#if !YUP_FFT_FOUND_BACKEND && YUP_ENABLE_FFTW3 && __has_include(<fftw3.h>)
+#if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_FFTW3 && __has_include(<fftw3.h>)
 #include <fftw3.h>
 #define YUP_FFT_USING_FFTW3 1
 #define YUP_FFT_FOUND_BACKEND 1
 #endif
 
-#if !YUP_FFT_FOUND_BACKEND && YUP_ENABLE_PFFFT && YUP_MODULE_AVAILABLE_pffft_library
+#if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_PFFFT && YUP_MODULE_AVAILABLE_pffft_library
 #include <pffft_library/pffft_library.h>
 #define YUP_FFT_USING_PFFFT 1
 #define YUP_FFT_FOUND_BACKEND 1
 #endif
 
-#if !YUP_FFT_FOUND_BACKEND && YUP_ENABLE_OOURA
+#if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_OOURA
 #include "yup_OouraFFT8g.h"
 #define YUP_FFT_USING_OOURA 1
 #define YUP_FFT_FOUND_BACKEND 1
 #endif
 
-#if !defined (YUP_FFT_FOUND_BACKEND)
+#if ! defined(YUP_FFT_FOUND_BACKEND)
 #error "Unable to find a proper FFT backend !"
 #endif
 
@@ -160,8 +160,8 @@ private:
         // PFFFT packed: [DC_real, Nyquist_real, bin1_real, bin1_imag, bin2_real, bin2_imag, ...]
         // Standard: [DC_real, DC_imag, bin1_real, bin1_imag, ..., Nyquist_real, Nyquist_imag]
 
-        interleaved[size] = std::exchange (interleaved[1], 0.0f);  // Nyquist real (from packed[1])
-        interleaved[size + 1] = 0.0f;                              // Nyquist imaginary (always 0)
+        interleaved[size] = std::exchange (interleaved[1], 0.0f); // Nyquist real (from packed[1])
+        interleaved[size + 1] = 0.0f;                             // Nyquist imaginary (always 0)
     }
 
     // Convert from standard interleaved format to PFFFT packed format
@@ -170,8 +170,8 @@ private:
         // Standard: [DC_real, DC_imag, bin1_real, bin1_imag, ..., Nyquist_real, Nyquist_imag]
         // PFFFT packed: [DC_real, Nyquist_real, bin1_real, bin1_imag, bin2_real, bin2_imag, ...]
 
-        packed[0] = interleaved[0];      // DC real
-        packed[1] = interleaved[size];   // Nyquist real (to packed[1])
+        packed[0] = interleaved[0];    // DC real
+        packed[1] = interleaved[size]; // Nyquist real (to packed[1])
         std::memcpy (&packed[2], &interleaved[2], (size - 2) * sizeof (float));
     }
 
@@ -199,7 +199,7 @@ public:
         fftSize = newFftSize;
 
         const int workSize = 2 + static_cast<int> (std::sqrt (fftSize / 2));
-        workBuffer.resize (static_cast<size_t> (fftSize * 2));  // Need space for complex data
+        workBuffer.resize (static_cast<size_t> (fftSize * 2)); // Need space for complex data
         tempBuffer.resize (static_cast<size_t> (fftSize));
         intBuffer.resize (static_cast<size_t> (workSize));
         intBuffer[0] = 0; // Initialization flag
@@ -226,14 +226,14 @@ public:
         complexOutput[1] = 0.0f;          // DC imaginary
 
         // Nyquist frequency - Ooura stores it at position 1
-        complexOutput[fftSize] = workBuffer[1];   // Nyquist real
-        complexOutput[fftSize + 1] = 0.0f;        // Nyquist imaginary
+        complexOutput[fftSize] = workBuffer[1]; // Nyquist real
+        complexOutput[fftSize + 1] = 0.0f;      // Nyquist imaginary
 
         // Handle frequencies 1 to n/2-1
         // Ooura stores them as alternating real/imag starting at index 2
         for (int i = 1; i < fftSize / 2; ++i)
         {
-            complexOutput[i * 2] = workBuffer[i * 2];           // real part
+            complexOutput[i * 2] = workBuffer[i * 2];          // real part
             complexOutput[i * 2 + 1] = -workBuffer[i * 2 + 1]; // imaginary part (negate)
         }
     }
@@ -241,12 +241,12 @@ public:
     void performRealFFTInverse (const float* complexInput, float* realOutput) override
     {
         // Convert standard interleaved format to Ooura format
-        workBuffer[0] = complexInput[0];                 // DC real
-        workBuffer[1] = complexInput[fftSize];           // Nyquist real
+        workBuffer[0] = complexInput[0];       // DC real
+        workBuffer[1] = complexInput[fftSize]; // Nyquist real
 
         for (int i = 1; i < fftSize / 2; ++i)
         {
-            workBuffer[i * 2] = complexInput[i * 2];           // real part
+            workBuffer[i * 2] = complexInput[i * 2];          // real part
             workBuffer[i * 2 + 1] = -complexInput[i * 2 + 1]; // imaginary part (negate back)
         }
 
@@ -769,7 +769,7 @@ void FFTProcessor::applyScaling (float* data, int numElements, bool isForward)
     {
         scale = 1.0f / std::sqrt (static_cast<float> (fftSize));
     }
-    else if (scaling == FFTScaling::asymmetric && !isForward)
+    else if (scaling == FFTScaling::asymmetric && ! isForward)
     {
         scale = 1.0f / static_cast<float> (fftSize);
     }

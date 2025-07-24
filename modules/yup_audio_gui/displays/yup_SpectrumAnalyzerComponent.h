@@ -63,15 +63,15 @@ public:
     /** Display type for the spectrum visualization. */
     enum class DisplayType
     {
-        lines,       ///< Draw spectrum as smooth connected lines
-        filled       ///< Draw spectrum as smooth filled area
+        lines, ///< Draw spectrum as smooth connected lines
+        filled ///< Draw spectrum as smooth filled area
     };
 
     //==============================================================================
     /** Display constants */
     enum
     {
-        scopeSize = 512                   ///< Number of display points
+        scopeSize = 512 ///< Number of display points
     };
 
     //==============================================================================
@@ -198,7 +198,7 @@ public:
 private:
     //==============================================================================
     void processFFT();
-    void updateDisplay(bool hasNewFFTData);
+    void updateDisplay (bool hasNewFFTData);
     void generateWindow();
     void initializeFFTBuffers();
     void computeSpectrumPath (Path spectrumPath, const Rectangle<float>& bounds, bool closePath);
@@ -216,10 +216,10 @@ private:
 
     // FFT processing (performed on UI thread)
     std::unique_ptr<FFTProcessor> fftProcessor;
-    std::vector<float> fftInputBuffer;      // Real input samples
-    std::vector<float> fftOutputBuffer;     // Complex FFT output
-    std::vector<float> windowBuffer;        // Window function
-    std::vector<float> magnitudeBuffer;     // Pre-computed magnitudes to avoid allocation
+    std::vector<float> fftInputBuffer;  // Real input samples
+    std::vector<float> fftOutputBuffer; // Complex FFT output
+    std::vector<float> windowBuffer;    // Window function
+    std::vector<float> magnitudeBuffer; // Pre-computed magnitudes to avoid allocation
 
     // Display data
     std::vector<float> scopeData;
@@ -237,7 +237,7 @@ private:
     float maxDecibels = 0.0f;
     double sampleRate = 44100.0;
     float releaseTimeSeconds = 1.0f;
-    
+
     // Window compensation
     float windowGain = 1.0f;
     bool needsWindowUpdate = true;

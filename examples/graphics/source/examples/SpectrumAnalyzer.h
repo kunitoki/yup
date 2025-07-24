@@ -252,7 +252,7 @@ public:
 
     void visibilityChanged() override
     {
-        if (!isVisible())
+        if (! isVisible())
         {
             deviceManager.removeAudioCallback (this);
             stopTimer();
@@ -288,7 +288,7 @@ public:
         }
     }
 
-        // AudioIODeviceCallback methods
+    // AudioIODeviceCallback methods
     void audioDeviceIOCallbackWithContext (const float* const* inputChannelData,
                                            int numInputChannels,
                                            float* const* outputChannelData,
@@ -474,8 +474,7 @@ private:
         // Create parameter labels with proper font sizing
         auto labelFont = font.withHeight (12.0f);
 
-        for (const auto& labelText : { "Signal Type:", "Frequency:", "Amplitude:", "Sweep Duration:",
-                                       "FFT Size:", "Window:", "Display:", "Release:" })
+        for (const auto& labelText : { "Signal Type:", "Frequency:", "Amplitude:", "Sweep Duration:", "FFT Size:", "Window:", "Display:", "Release:" })
         {
             auto label = parameterLabels.add (std::make_unique<yup::Label> (labelText));
             label->setText (labelText);
@@ -555,18 +554,27 @@ private:
 
         switch (signalTypeCombo->getSelectedId())
         {
-            case 1: signalType = SignalGenerator::SignalType::singleTone; break;
-            case 2: signalType = SignalGenerator::SignalType::frequencySweep; break;
-            case 3: signalType = SignalGenerator::SignalType::whiteNoise; break;
-            case 4: signalType = SignalGenerator::SignalType::pinkNoise; break;
-            case 5: signalType = SignalGenerator::SignalType::brownNoise; break;
+            case 1:
+                signalType = SignalGenerator::SignalType::singleTone;
+                break;
+            case 2:
+                signalType = SignalGenerator::SignalType::frequencySweep;
+                break;
+            case 3:
+                signalType = SignalGenerator::SignalType::whiteNoise;
+                break;
+            case 4:
+                signalType = SignalGenerator::SignalType::pinkNoise;
+                break;
+            case 5:
+                signalType = SignalGenerator::SignalType::brownNoise;
+                break;
         }
 
         signalGenerator.setSignalType (signalType);
 
         // Enable/disable frequency and sweep controls based on signal type
-        bool isToneOrSweep = (signalType == SignalGenerator::SignalType::singleTone ||
-                             signalType == SignalGenerator::SignalType::frequencySweep);
+        bool isToneOrSweep = (signalType == SignalGenerator::SignalType::singleTone || signalType == SignalGenerator::SignalType::frequencySweep);
         frequencySlider->setEnabled (signalType == SignalGenerator::SignalType::singleTone);
         sweepDurationSlider->setEnabled (signalType == SignalGenerator::SignalType::frequencySweep);
     }
@@ -575,7 +583,7 @@ private:
     {
         int selectedId = fftSizeCombo->getSelectedId();
         currentFFTSize = 32 << (selectedId - 1); // 32, 64, 128, 256, ..., 16384
-        
+
         // Update the analyzer component (which will update the state)
         analyzerComponent.setFFTSize (currentFFTSize);
     }
@@ -586,17 +594,39 @@ private:
 
         switch (windowTypeCombo->getSelectedId())
         {
-            case 1: windowType = yup::WindowType::rectangular; break;
-            case 2: windowType = yup::WindowType::hann; break;
-            case 3: windowType = yup::WindowType::hamming; break;
-            case 4: windowType = yup::WindowType::blackman; break;
-            case 5: windowType = yup::WindowType::blackmanHarris; break;
-            case 6: windowType = yup::WindowType::kaiser; break;
-            case 7: windowType = yup::WindowType::gaussian; break;
-            case 8: windowType = yup::WindowType::tukey; break;
-            case 9: windowType = yup::WindowType::bartlett; break;
-            case 10: windowType = yup::WindowType::welch; break;
-            case 11: windowType = yup::WindowType::flattop; break;
+            case 1:
+                windowType = yup::WindowType::rectangular;
+                break;
+            case 2:
+                windowType = yup::WindowType::hann;
+                break;
+            case 3:
+                windowType = yup::WindowType::hamming;
+                break;
+            case 4:
+                windowType = yup::WindowType::blackman;
+                break;
+            case 5:
+                windowType = yup::WindowType::blackmanHarris;
+                break;
+            case 6:
+                windowType = yup::WindowType::kaiser;
+                break;
+            case 7:
+                windowType = yup::WindowType::gaussian;
+                break;
+            case 8:
+                windowType = yup::WindowType::tukey;
+                break;
+            case 9:
+                windowType = yup::WindowType::bartlett;
+                break;
+            case 10:
+                windowType = yup::WindowType::welch;
+                break;
+            case 11:
+                windowType = yup::WindowType::flattop;
+                break;
         }
 
         analyzerComponent.setWindowType (windowType);
@@ -608,8 +638,12 @@ private:
 
         switch (displayTypeCombo->getSelectedId())
         {
-            case 1: displayType = yup::SpectrumAnalyzerComponent::DisplayType::filled; break;
-            case 2: displayType = yup::SpectrumAnalyzerComponent::DisplayType::lines; break;
+            case 1:
+                displayType = yup::SpectrumAnalyzerComponent::DisplayType::filled;
+                break;
+            case 2:
+                displayType = yup::SpectrumAnalyzerComponent::DisplayType::lines;
+                break;
         }
 
         analyzerComponent.setDisplayType (displayType);

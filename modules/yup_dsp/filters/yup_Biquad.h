@@ -176,9 +176,7 @@ public:
         DspMath::ComplexVector<CoeffType>& zeros) const override
     {
         DspMath::extractPolesZerosFromSecondOrderBiquad (
-            coefficients.b0, coefficients.b1, coefficients.b2,
-            coefficients.a0, coefficients.a1, coefficients.a2,
-            poles, zeros);
+            coefficients.b0, coefficients.b1, coefficients.b2, coefficients.a0, coefficients.a1, coefficients.a2, poles, zeros);
     }
 
 private:
@@ -191,8 +189,8 @@ private:
     */
     struct TopologyState
     {
-        CoeffType x1 = 0, x2 = 0;  // Input delay line
-        CoeffType y1 = 0, y2 = 0;  // Output delay line
+        CoeffType x1 = 0, x2 = 0; // Input delay line
+        CoeffType y1 = 0, y2 = 0; // Output delay line
 
         void reset() noexcept
         {
@@ -324,12 +322,12 @@ private:
     Topology filterTopology = Topology::directFormII;
 
     //==============================================================================
-    YUP_LEAK_DETECTOR(Biquad)
+    YUP_LEAK_DETECTOR (Biquad)
 };
 
 //==============================================================================
 /** Type aliases for convenience */
-using BiquadFloat = Biquad<float>;                    // float samples, double coefficients (default)
-using BiquadDouble = Biquad<double>;                  // double samples, double coefficients (default)
+using BiquadFloat = Biquad<float>;   // float samples, double coefficients (default)
+using BiquadDouble = Biquad<double>; // double samples, double coefficients (default)
 
 } // namespace yup

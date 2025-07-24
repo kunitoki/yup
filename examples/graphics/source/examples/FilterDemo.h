@@ -946,8 +946,7 @@ public:
         for (int sample = 0; sample < numSamples; ++sample)
         {
             // Check if any parameters are changing and update filter coefficients if needed
-            if (smoothedFrequency.isSmoothing() || smoothedQ.isSmoothing() ||
-                smoothedGain.isSmoothing() || smoothedOrder.isSmoothing())
+            if (smoothedFrequency.isSmoothing() || smoothedQ.isSmoothing() || smoothedGain.isSmoothing() || smoothedOrder.isSmoothing())
             {
                 updateAudioFilterParametersSmooth();
             }
@@ -1217,7 +1216,7 @@ private:
         currentUIFilter = uiRbj;
 
         // Set default filter type settings
-        currentFilterTypeId = 1; // RBJ
+        currentFilterTypeId = 1;   // RBJ
         currentResponseTypeId = 1; // Lowpass
     }
 
@@ -1237,11 +1236,21 @@ private:
         // Map combo box selection to UI filter instance
         switch (currentFilterTypeId)
         {
-            case 1: currentUIFilter = uiRbj; break;
-            case 2: currentUIFilter = uiSvf; break;
-            case 3: currentUIFilter = uiFirstOrder; break;
-            case 4: currentUIFilter = uiButterworthFilter; break;
-            default: currentUIFilter = uiRbj; break;
+            case 1:
+                currentUIFilter = uiRbj;
+                break;
+            case 2:
+                currentUIFilter = uiSvf;
+                break;
+            case 3:
+                currentUIFilter = uiFirstOrder;
+                break;
+            case 4:
+                currentUIFilter = uiButterworthFilter;
+                break;
+            default:
+                currentUIFilter = uiRbj;
+                break;
         }
 
         // Synchronize smoothed values with current UI values when switching filters
@@ -1327,11 +1336,21 @@ private:
         // Map filter type to audio filter instance (using stored filter type, not UI)
         switch (currentFilterTypeId)
         {
-            case 1: currentAudioFilter = audioRbj; break;
-            case 2: currentAudioFilter = audioSvf; break;
-            case 3: currentAudioFilter = audioFirstOrder; break;
-            case 4: currentAudioFilter = audioButterworthFilter; break;
-            default: currentAudioFilter = audioRbj; break;
+            case 1:
+                currentAudioFilter = audioRbj;
+                break;
+            case 2:
+                currentAudioFilter = audioSvf;
+                break;
+            case 3:
+                currentAudioFilter = audioFirstOrder;
+                break;
+            case 4:
+                currentAudioFilter = audioButterworthFilter;
+                break;
+            default:
+                currentAudioFilter = audioRbj;
+                break;
         }
 
         // Synchronize smoothed values with current UI values when switching filters

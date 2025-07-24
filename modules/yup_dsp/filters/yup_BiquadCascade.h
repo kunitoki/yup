@@ -175,7 +175,7 @@ private:
 
 //==============================================================================
 /** Type aliases for convenience */
-using BiquadCascadeFloat = BiquadCascade<float>;      // float samples, double coefficients (default)
-using BiquadCascadeDouble = BiquadCascade<double>;    // double samples, double coefficients (default)
+using BiquadCascadeFloat = BiquadCascade<float>;   // float samples, double coefficients (default)
+using BiquadCascadeDouble = BiquadCascade<double>; // double samples, double coefficients (default)
 
 } // namespace yup

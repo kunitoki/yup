@@ -131,11 +131,11 @@ public:
     /** Returns a string describing the active FFT backend */
     String getBackendName() const;
 
-    //==============================================================================
-    #ifndef DOXYGEN
+//==============================================================================
+#ifndef DOXYGEN
     /** @internal */
     class Engine;
-    #endif
+#endif
 
 private:
     //==============================================================================

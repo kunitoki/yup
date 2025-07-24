@@ -28,14 +28,14 @@ namespace yup
 /** Common filter modes enumeration */
 enum class FilterMode
 {
-    lowpass,      /**< Low-pass filter */
-    highpass,     /**< High-pass filter */
-    bandpass,     /**< Band-pass filter */
-    bandstop,     /**< Band-stop (notch) filter */
-    peak,         /**< Peaking filter */
-    lowshelf,     /**< Low-shelf filter */
-    highshelf,    /**< High-shelf filter */
-    allpass       /**< All-pass filter */
+    lowpass,   /**< Low-pass filter */
+    highpass,  /**< High-pass filter */
+    bandpass,  /**< Band-pass filter */
+    bandstop,  /**< Band-stop (notch) filter */
+    peak,      /**< Peaking filter */
+    lowshelf,  /**< Low-shelf filter */
+    highshelf, /**< High-shelf filter */
+    allpass    /**< All-pass filter */
 };
 
 //==============================================================================
@@ -93,8 +93,8 @@ public:
         @param numSamples    Number of samples to process
     */
     virtual void processBlock (const SampleType* inputBuffer,
-                              SampleType* outputBuffer,
-                              int numSamples) noexcept = 0;
+                               SampleType* outputBuffer,
+                               int numSamples) noexcept = 0;
 
     /**
         Processes a block of samples in-place.
@@ -178,13 +178,15 @@ private:
 template <typename CoeffType = double>
 struct FirstOrderCoefficients
 {
-    CoeffType a1 = 0;  // Feedback coefficient
-    CoeffType b0 = 1, b1 = 0;  // Feedforward coefficients
+    CoeffType a1 = 0;         // Feedback coefficient
+    CoeffType b0 = 1, b1 = 0; // Feedforward coefficients
 
     FirstOrderCoefficients() = default;
 
     FirstOrderCoefficients (CoeffType b0_, CoeffType b1_, CoeffType a1_) noexcept
-        : a1 (a1_), b0 (b0_), b1 (b1_)
+        : a1 (a1_)
+        , b0 (b0_)
+        , b1 (b1_)
     {
     }
 
@@ -214,8 +216,8 @@ struct FirstOrderCoefficients
 template <typename CoeffType = double>
 struct BiquadCoefficients
 {
-    CoeffType a0 = 1, a1 = 0, a2 = 0;  // Denominator coefficients (a0 is typically normalized to 1)
-    CoeffType b0 = 1, b1 = 0, b2 = 0;  // Numerator coefficients
+    CoeffType a0 = 1, a1 = 0, a2 = 0; // Denominator coefficients (a0 is typically normalized to 1)
+    CoeffType b0 = 1, b1 = 0, b2 = 0; // Numerator coefficients
 
     BiquadCoefficients() = default;
 
