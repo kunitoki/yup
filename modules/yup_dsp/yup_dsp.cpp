@@ -32,6 +32,7 @@
 
 //==============================================================================
 #include "frequency/yup_FFTProcessor.cpp"
+#include "frequency/yup_SpectrumAnalyzerState.cpp"
 
 #if YUP_ENABLE_OOURA && YUP_FFT_USING_OOURA
 #include "frequency/yup_OouraFFT8g.cpp"

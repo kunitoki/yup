@@ -109,6 +109,7 @@
 
 // Frequency domain functions
 #include "frequency/yup_FFTProcessor.h"
+#include "frequency/yup_SpectrumAnalyzerState.h"
 
 // Base filter interfaces and common structures
 #include "base/yup_FilterBase.h"

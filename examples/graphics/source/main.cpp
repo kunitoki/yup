@@ -46,6 +46,7 @@
 #include "examples/Paths.h"
 #include "examples/PopupMenu.h"
 #include "examples/SliderDemo.h"
+#include "examples/SpectrumAnalyzer.h"
 #include "examples/TextEditor.h"
 #include "examples/Svg.h"
 #include "examples/VariableFonts.h"
@@ -102,6 +103,7 @@ public:
         int counter = 0;
 
         registerDemo<AudioExample> ("Audio", counter++);
+        registerDemo<SpectrumAnalyzerDemo> ("FFT Analyzer", counter++);
         registerDemo<FilterDemo> ("Filter Demo", counter++);
         registerDemo<LayoutFontsExample> ("Layout Fonts", counter++);
         registerDemo<VariableFontsExample> ("Variable Fonts", counter++);
