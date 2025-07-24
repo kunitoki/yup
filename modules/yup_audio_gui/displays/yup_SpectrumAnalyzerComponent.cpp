@@ -32,6 +32,7 @@ SpectrumAnalyzerComponent::SpectrumAnalyzerComponent (SpectrumAnalyzerState& sta
 
     initializeFFTBuffers();
     generateWindow();
+
     startTimerHz (30); // 30 FPS updates by default
 }
 
@@ -56,15 +57,21 @@ void SpectrumAnalyzerComponent::initializeFFTBuffers()
 //==============================================================================
 void SpectrumAnalyzerComponent::timerCallback()
 {
+    if (! isShowing())
+        return;
+
     bool hasNewData = false;
     int fftCount = 0;
-    const int maxFFTsPerFrame = 8; // Limit to prevent blocking UI thread
+
+    constexpr int maxFFTsPerFrame = 4; // Limit to prevent blocking UI thread
 
     // Process multiple FFT frames with overlap for better responsiveness
     while (analyzerState.isFFTDataReady() && fftCount < maxFFTsPerFrame)
     {
         processFFT();
+
         hasNewData = true;
+
         ++fftCount;
     }
 
@@ -281,9 +288,29 @@ void SpectrumAnalyzerComponent::drawLinesSpectrum (Graphics& g, const Rectangle<
     spectrumPath.startNewSubPath (bounds.getX(), firstY);
     computeSpectrumPath (spectrumPath, bounds, false);
 
-    g.setStrokeColor (Color (0xFF00ff40));
-    g.setStrokeWidth (2.0f);
+    auto filledPath = spectrumPath.createStrokePolygon (4.0f);
+    auto lineColor = Color (0xFF00a840);
+
     g.setStrokeJoin (StrokeJoin::Round);
+
+    g.setFillColor (lineColor);
+    g.setFeather (8.0f);
+    g.fillPath (filledPath);
+
+    g.setFillColor (lineColor.brighter (0.2f));
+    g.setFeather (4.0f);
+    g.fillPath (filledPath);
+
+    g.setStrokeColor (lineColor.withAlpha (0.8f));
+    g.setStrokeWidth (2.0f);
+    g.strokePath (spectrumPath);
+
+    g.setStrokeColor (lineColor.brighter (0.3f));
+    g.setStrokeWidth (1.0f);
+    g.strokePath (spectrumPath);
+
+    g.setStrokeColor (yup::Colors::white.withAlpha (0.9f));
+    g.setStrokeWidth (0.5f);
     g.strokePath (spectrumPath);
 }
 
