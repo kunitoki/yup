@@ -72,6 +72,7 @@ yup_standalone_app (
         yup::yup_gui
         yup::yup_audio_gui
         yup::yup_audio_processors
+        pffft_library
         libpng
         libwebp
         ${additional_modules}

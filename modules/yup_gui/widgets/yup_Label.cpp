@@ -117,8 +117,9 @@ void Label::prepareText()
         return;
 
     auto fontSize = getHeight() * 0.8f; // TODO - needs config
-    if (! font)
-        font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
+    auto fontToUse = ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (fontSize);
+    if (font)
+        fontToUse = *font;
 
     {
         auto modifier = styledText.startUpdate();
@@ -131,7 +132,7 @@ void Label::prepareText()
         modifier.clear();
 
         if (text.isNotEmpty())
-            modifier.appendText (text, font->withHeight (fontSize));
+            modifier.appendText (text, fontToUse);
     }
 
     needsUpdate = false;

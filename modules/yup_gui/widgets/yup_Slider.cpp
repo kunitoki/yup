@@ -205,6 +205,21 @@ void Slider::setSkewFactor (double skewFactor)
     }
 }
 
+void Slider::setSkewFactorFromMidpoint (double midpointValue)
+{
+    midpointValue = jlimit (range.getRange().getStart(), range.getRange().getEnd(), midpointValue);
+
+    range.setSkewForCentre (midpointValue);
+
+    // Reapply constraints to current values with new skew
+    setDefaultValue (constrainValue (defaultValue));
+    setValue (constrainValue (currentValue), dontSendNotification);
+    setMinValue (constrainValue (minValue), dontSendNotification);
+    setMaxValue (constrainValue (maxValue), dontSendNotification);
+
+    repaint();
+}
+
 double Slider::getSkewFactor() const
 {
     return range.skew;

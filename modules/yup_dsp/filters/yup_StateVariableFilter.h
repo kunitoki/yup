@@ -67,88 +67,16 @@ public:
     };
 
     //==============================================================================
-    /** Constructor with optional initial mode */
-    explicit StateVariableFilter (Mode initialMode = Mode::lowpass) noexcept
-        : mode (initialMode)
+    /** Default constructor */
+    StateVariableFilter() noexcept
     {
-        setParameters (static_cast<CoeffType> (1000.0), static_cast<CoeffType> (0.707), 44100.0);
+        setParameters (Mode::lowpass, static_cast<CoeffType> (1000.0), static_cast<CoeffType> (0.707), 44100.0);
     }
 
-    //==============================================================================
-    /** @internal */
-    void reset() noexcept override
+    /** Constructor with initial mode */
+    explicit StateVariableFilter (Mode initialMode) noexcept
     {
-        state1 = state2 = static_cast<CoeffType> (0.0);
-    }
-
-    /** @internal */
-    void prepare (double sampleRate, int maximumBlockSize) noexcept override
-    {
-        this->sampleRate = sampleRate;
-        this->maximumBlockSize = maximumBlockSize;
-        updateCoefficients();
-        reset();
-    }
-
-    /** @internal */
-    SampleType processSample (SampleType inputSample) noexcept override
-    {
-        const auto outputs = processAllOutputs (inputSample);
-
-        switch (mode)
-        {
-            case Mode::lowpass:  return outputs.lowpass;
-            case Mode::bandpass: return outputs.bandpass;
-            case Mode::highpass: return outputs.highpass;
-            case Mode::notch:    return outputs.notch;
-            default:             return outputs.lowpass;
-        }
-    }
-
-    /** @internal */
-    void processBlock (const SampleType* inputBuffer, SampleType* outputBuffer, int numSamples) noexcept override
-    {
-        switch (mode)
-        {
-            case Mode::lowpass:
-                processBlockLowpass (inputBuffer, outputBuffer, numSamples);
-                break;
-            case Mode::bandpass:
-                processBlockBandpass (inputBuffer, outputBuffer, numSamples);
-                break;
-            case Mode::highpass:
-                processBlockHighpass (inputBuffer, outputBuffer, numSamples);
-                break;
-            case Mode::notch:
-                processBlockNotch (inputBuffer, outputBuffer, numSamples);
-                break;
-        }
-    }
-
-    /** @internal */
-    DspMath::Complex<CoeffType> getComplexResponse (CoeffType frequency) const noexcept override
-    {
-        const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (this->sampleRate));
-        const auto s = DspMath::Complex<CoeffType> (static_cast<SampleType> (0.0), omega);
-        const auto s2 = s * s;
-        const auto wc = DspMath::frequencyToAngular (cutoffFreq, static_cast<CoeffType> (this->sampleRate));
-        const auto wc2 = wc * wc;
-
-        auto denominator = s2 + DspMath::Complex<CoeffType> (wc / qFactor) * s + DspMath::Complex<CoeffType> (wc2);
-
-        switch (mode)
-        {
-            case Mode::lowpass:
-                return DspMath::Complex<CoeffType> (wc2) / denominator;
-            case Mode::bandpass:
-                return (DspMath::Complex<CoeffType> (wc / qFactor) * s) / denominator;
-            case Mode::highpass:
-                return s2 / denominator;
-            case Mode::notch:
-                return (s2 + DspMath::Complex<CoeffType> (wc2)) / denominator;
-            default:
-                return DspMath::Complex<CoeffType> (1.0);
-        }
+        setParameters (initialMode, static_cast<CoeffType> (1000.0), static_cast<CoeffType> (0.707), 44100.0);
     }
 
     //==============================================================================
@@ -159,12 +87,21 @@ public:
         @param q          The Q factor (resonance)
         @param sampleRate The sample rate in Hz
     */
-    void setParameters (CoeffType frequency, CoeffType q, double sampleRate) noexcept
+    void setParameters (Mode mode, CoeffType frequency, CoeffType q, double sampleRate) noexcept
     {
-        cutoffFreq = frequency;
-        qFactor = q;
-        this->sampleRate = sampleRate;
-        updateCoefficients();
+        if (filterMode != mode
+            || ! approximatelyEqual (centerFreq, frequency)
+            || ! approximatelyEqual (qFactor, q)
+            || ! approximatelyEqual (this->sampleRate, sampleRate))
+        {
+            filterMode = mode;
+            centerFreq = frequency;
+            qFactor = q;
+
+            this->sampleRate = sampleRate;
+
+            updateCoefficients();
+        }
     }
 
     /**
@@ -174,8 +111,12 @@ public:
     */
     void setCutoffFrequency (CoeffType frequency) noexcept
     {
-        cutoffFreq = frequency;
-        updateCoefficients();
+        if (! approximatelyEqual (centerFreq, frequency))
+        {
+            centerFreq = frequency;
+
+            updateCoefficients();
+        }
     }
 
     /**
@@ -183,10 +124,14 @@ public:
 
         @param q  The new Q factor
     */
-    void setQFactor (CoeffType q) noexcept
+    void setQ (CoeffType q) noexcept
     {
-        qFactor = q;
-        updateCoefficients();
+        if (! approximatelyEqual (qFactor, q))
+        {
+            qFactor = q;
+
+            updateCoefficients();
+        }
     }
 
     /**
@@ -194,9 +139,14 @@ public:
 
         @param newMode  The new filter mode
     */
-    void setMode (Mode newMode) noexcept
+    void setMode (Mode mode) noexcept
     {
-        mode = newMode;
+        if (filterMode != mode)
+        {
+            filterMode = mode;
+
+            updateCoefficients();
+        }
     }
 
     /**
@@ -204,9 +154,9 @@ public:
 
         @returns  The cutoff frequency in Hz
     */
-    CoeffType getCutoffFrequency() const noexcept
+    CoeffType getFrequency() const noexcept
     {
-        return cutoffFreq;
+        return centerFreq;
     }
 
     /**
@@ -214,7 +164,7 @@ public:
 
         @returns  The Q factor
     */
-    CoeffType getQFactor() const noexcept
+    CoeffType getQ() const noexcept
     {
         return qFactor;
     }
@@ -226,7 +176,7 @@ public:
     */
     Mode getMode() const noexcept
     {
-        return mode;
+        return filterMode;
     }
 
     //==============================================================================
@@ -240,13 +190,13 @@ public:
     {
         Outputs outputs;
 
-        outputs.highpass = (inputSample - damping * state1 - state2) * g;
-        outputs.bandpass = outputs.highpass * k + state1;
-        outputs.lowpass = outputs.bandpass * k + state2;
+        outputs.highpass = (inputSample - coefficients.damping * state.s1 - state.s2) * coefficients.g;
+        outputs.bandpass = outputs.highpass * coefficients.k + state.s1;
+        outputs.lowpass = outputs.bandpass * coefficients.k + state.s2;
         outputs.notch = outputs.highpass + outputs.lowpass;
 
-        state1 = outputs.bandpass;
-        state2 = outputs.lowpass;
+        state.s1 = outputs.bandpass;
+        state.s2 = outputs.lowpass;
 
         return outputs;
     }
@@ -272,119 +222,272 @@ public:
         {
             const auto outputs = processAllOutputs (inputBuffer[i]);
 
-            if (lowpassBuffer)  lowpassBuffer[i] = outputs.lowpass;
-            if (bandpassBuffer) bandpassBuffer[i] = outputs.bandpass;
-            if (highpassBuffer) highpassBuffer[i] = outputs.highpass;
-            if (notchBuffer)    notchBuffer[i] = outputs.notch;
+            if (lowpassBuffer)
+                lowpassBuffer[i] = outputs.lowpass;
+
+            if (bandpassBuffer)
+                bandpassBuffer[i] = outputs.bandpass;
+
+            if (highpassBuffer)
+                highpassBuffer[i] = outputs.highpass;
+
+            if (notchBuffer)
+                notchBuffer[i] = outputs.notch;
+        }
+    }
+
+    //==============================================================================
+    /** @internal */
+    void reset() noexcept override
+    {
+        state.reset();
+    }
+
+    /** @internal */
+    void prepare (double sampleRate, int maximumBlockSize) noexcept override
+    {
+        this->sampleRate = sampleRate;
+        this->maximumBlockSize = maximumBlockSize;
+        updateCoefficients();
+        reset();
+    }
+
+    /** @internal */
+    SampleType processSample (SampleType inputSample) noexcept override
+    {
+        const auto outputs = processAllOutputs (inputSample);
+
+        switch (filterMode)
+        {
+            case Mode::lowpass:  return outputs.lowpass;
+            case Mode::bandpass: return outputs.bandpass;
+            case Mode::highpass: return outputs.highpass;
+            case Mode::notch:    return outputs.notch;
+            default:             return outputs.lowpass;
+        }
+    }
+
+    /** @internal */
+    void processBlock (const SampleType* inputBuffer, SampleType* outputBuffer, int numSamples) noexcept override
+    {
+        switch (filterMode)
+        {
+            case Mode::lowpass:
+                processBlockLowpass (inputBuffer, outputBuffer, numSamples);
+                break;
+
+            case Mode::bandpass:
+                processBlockBandpass (inputBuffer, outputBuffer, numSamples);
+                break;
+
+            case Mode::highpass:
+                processBlockHighpass (inputBuffer, outputBuffer, numSamples);
+                break;
+
+            case Mode::notch:
+                processBlockNotch (inputBuffer, outputBuffer, numSamples);
+                break;
+        }
+    }
+
+    /** @internal */
+    DspMath::Complex<CoeffType> getComplexResponse (CoeffType frequency) const noexcept override
+    {
+        const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (this->sampleRate));
+        const auto s = DspMath::Complex<CoeffType> (static_cast<SampleType> (0.0), omega);
+        const auto s2 = s * s;
+        const auto wc = DspMath::frequencyToAngular (centerFreq, static_cast<CoeffType> (this->sampleRate));
+        const auto wc2 = wc * wc;
+        const auto k = jlimit (0.707, 20.0, qFactor);
+
+        auto denominator = s2 + DspMath::Complex<CoeffType> (wc / k) * s + DspMath::Complex<CoeffType> (wc2) + 1e-6;
+
+        switch (filterMode)
+        {
+            case Mode::lowpass:
+                return DspMath::Complex<CoeffType> (wc2) / denominator;
+
+            case Mode::bandpass:
+                return (DspMath::Complex<CoeffType> (wc / qFactor) * s) / denominator;
+
+            case Mode::highpass:
+                return s2 / denominator;
+
+            case Mode::notch:
+                return (s2 + DspMath::Complex<CoeffType> (wc2)) / denominator;
+
+            default:
+                return DspMath::Complex<CoeffType> (1.0);
+        }
+    }
+
+    /** @internal */
+    void getPolesZeros (
+        DspMath::ComplexVector<CoeffType>& poles,
+        DspMath::ComplexVector<CoeffType>& zeros) const override
+    {
+        CoeffType f0 = centerFreq;
+        CoeffType q  = yup::jlimit (0.707, 20.0, qFactor);
+        CoeffType fs = yup::jmax (0.1, this->sampleRate);
+        CoeffType T = 1.0 / fs;
+        CoeffType wc = 2.0 * yup::MathConstants<CoeffType>::pi * f0;
+
+        // Analog prototype poles: s^2 + (wc/Q) s + wc^2 = 0
+        CoeffType realPart = -wc / (2.0 * q);
+        CoeffType imagPart = wc * std::sqrt (std::max (0.0, 1.0 - 1.0 / (4.0 * q * q)));
+        DspMath::Complex<CoeffType> pa (realPart, imagPart);
+        DspMath::Complex<CoeffType> pb (realPart, -imagPart);
+
+        // Bilinear map helper: z = (2 + s T) / (2 - s T)
+        auto bilinear = [T](const DspMath::Complex<CoeffType>& s) -> DspMath::Complex<CoeffType> { return (2.0 + s * T) / (2.0 - s * T); };
+
+        // Map poles
+        poles.reserve (2);
+        poles.push_back (bilinear (pa));
+        poles.push_back (bilinear (pb));
+
+        // Map zeros depending on filter mode
+        zeros.reserve (2);
+
+        switch (filterMode)
+        {
+            case Mode::lowpass: // analog zeros at s = ∞ (=> z = -1 double)
+                zeros.push_back (-1.0);
+                zeros.push_back (-1.0);
+                break;
+
+            case Mode::highpass: // analog zeros at s = 0 => z = (2+0)/(2-0) = +1 (double)
+                zeros.push_back (1.0);
+                zeros.push_back (1.0);
+                break;
+
+            case Mode::bandpass: // zeros at s = 0 => z=+1, and s=∞=>z=-1
+                zeros.push_back (1.0);
+                zeros.push_back (-1.0);
+                break;
+
+            case Mode::notch: // analog zeros at s = ±j wc
+                zeros.push_back (bilinear (DspMath::Complex<CoeffType> (0.0, wc)));
+                zeros.push_back (bilinear (DspMath::Complex<CoeffType> (0.0, -wc)));
+                break;
         }
     }
 
 private:
     //==============================================================================
+    struct StateVariableState
+    {
+        CoeffType s1 = static_cast<CoeffType> (0.0);
+        CoeffType s2 = static_cast<CoeffType> (0.0);
+
+        /** Resets all state variables to zero */
+        void reset() noexcept
+        {
+            s1 = s2 = static_cast<CoeffType> (0.0);
+        }
+    };
+
+    //==============================================================================
     void updateCoefficients() noexcept
     {
-        k = static_cast<CoeffType> (1.0) / qFactor;
-        const auto omega = DspMath::frequencyToAngular (cutoffFreq, static_cast<CoeffType> (this->sampleRate));
-        g = std::tan (omega / static_cast<CoeffType> (2.0));
-        damping = k + g;
-        g = g / (static_cast<CoeffType> (1.0) + g * damping);
+        coefficients.k = static_cast<CoeffType> (1.0) / jlimit (0.707, 20.0, qFactor);
+        const auto omega = DspMath::frequencyToAngular (centerFreq, static_cast<CoeffType> (this->sampleRate));
+        coefficients.g = std::tan (omega / static_cast<CoeffType> (2.0));
+        coefficients.damping = coefficients.k + coefficients.g;
+        coefficients.g = coefficients.g / (static_cast<CoeffType> (1.0) + coefficients.g * coefficients.damping);
     }
 
     void processBlockLowpass (const SampleType* input, SampleType* output, int numSamples) noexcept
     {
-        auto s1 = state1;
-        auto s2 = state2;
+        auto s1 = state.s1;
+        auto s2 = state.s2;
 
         for (int i = 0; i < numSamples; ++i)
         {
-            const auto hp = (input[i] - damping * s1 - s2) * g;
-            const auto bp = hp * k + s1;
-            const auto lp = bp * k + s2;
+            const auto hp = (input[i] - coefficients.damping * s1 - s2) * coefficients.g;
+            const auto bp = hp * coefficients.k + s1;
+            const auto lp = bp * coefficients.k + s2;
 
             s1 = bp;
             s2 = lp;
             output[i] = lp;
         }
 
-        state1 = s1;
-        state2 = s2;
+        state.s1 = s1;
+        state.s2 = s2;
     }
 
     void processBlockBandpass (const SampleType* input, SampleType* output, int numSamples) noexcept
     {
-        auto s1 = state1;
-        auto s2 = state2;
+        auto s1 = state.s1;
+        auto s2 = state.s2;
 
         for (int i = 0; i < numSamples; ++i)
         {
-            const auto hp = (input[i] - damping * s1 - s2) * g;
-            const auto bp = hp * k + s1;
-            const auto lp = bp * k + s2;
+            const auto hp = (input[i] - coefficients.damping * s1 - s2) * coefficients.g;
+            const auto bp = hp * coefficients.k + s1;
+            const auto lp = bp * coefficients.k + s2;
 
             s1 = bp;
             s2 = lp;
             output[i] = bp;
         }
 
-        state1 = s1;
-        state2 = s2;
+        state.s1 = s1;
+        state.s2 = s2;
     }
 
     void processBlockHighpass (const SampleType* input, SampleType* output, int numSamples) noexcept
     {
-        auto s1 = state1;
-        auto s2 = state2;
+        auto s1 = state.s1;
+        auto s2 = state.s2;
 
         for (int i = 0; i < numSamples; ++i)
         {
-            const auto hp = (input[i] - damping * s1 - s2) * g;
-            const auto bp = hp * k + s1;
-            const auto lp = bp * k + s2;
+            const auto hp = (input[i] - coefficients.damping * s1 - s2) * coefficients.g;
+            const auto bp = hp * coefficients.k + s1;
+            const auto lp = bp * coefficients.k + s2;
 
             s1 = bp;
             s2 = lp;
             output[i] = hp;
         }
 
-        state1 = s1;
-        state2 = s2;
+        state.s1 = s1;
+        state.s2 = s2;
     }
 
     void processBlockNotch (const SampleType* input, SampleType* output, int numSamples) noexcept
     {
-        auto s1 = state1;
-        auto s2 = state2;
+        auto s1 = state.s1;
+        auto s2 = state.s2;
 
         for (int i = 0; i < numSamples; ++i)
         {
             const auto inputSample = input[i];
-            const auto hp = (inputSample - damping * s1 - s2) * g;
-            const auto bp = hp * k + s1;
-            const auto lp = bp * k + s2;
+            const auto hp = (inputSample - coefficients.damping * s1 - s2) * coefficients.g;
+            const auto bp = hp * coefficients.k + s1;
+            const auto lp = bp * coefficients.k + s2;
 
             s1 = bp;
             s2 = lp;
-            output[i] = inputSample - damping * s1;
+            output[i] = inputSample - coefficients.damping * s1;
         }
 
-        state1 = s1;
-        state2 = s2;
+        state.s1 = s1;
+        state.s2 = s2;
     }
 
     //==============================================================================
-    CoeffType cutoffFreq = static_cast<CoeffType> (1000.0);
+    Mode filterMode = Mode::lowpass;
+    CoeffType centerFreq = static_cast<CoeffType> (1000.0);
     CoeffType qFactor = static_cast<CoeffType> (0.707);
-    Mode mode = Mode::lowpass;
 
-    CoeffType k = static_cast<CoeffType> (1.0);
-    CoeffType g = static_cast<CoeffType> (1.0);
-    CoeffType damping = static_cast<CoeffType> (1.0);
-
-    CoeffType state1 = static_cast<CoeffType> (0.0);
-    CoeffType state2 = static_cast<CoeffType> (0.0);
+    StateVariableCoefficients<CoeffType> coefficients;
+    StateVariableState state;
 
     //==============================================================================
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StateVariableFilter)
+    YUP_LEAK_DETECTOR (StateVariableFilter)
 };
 
 //==============================================================================

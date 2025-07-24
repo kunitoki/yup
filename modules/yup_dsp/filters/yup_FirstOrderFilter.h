@@ -1,21 +1,16 @@
 /*
   ==============================================================================
-
    This file is part of the YUP library.
    Copyright (c) 2025 - kunitoki@gmail.com
-
    YUP is an open source library subject to open-source licensing.
-
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
    to use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
-
    YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
-
   ==============================================================================
 */
 
@@ -25,17 +20,17 @@ namespace yup
 {
 
 //==============================================================================
-/** 
+/**
     First-order IIR filter implementation.
-    
+
     This class implements various first-order filters including:
     - One-pole lowpass and highpass filters
     - First-order shelving filters
     - Allpass filters
-    
+
     The filter implements the difference equation:
     y[n] = b0*x[n] + b1*x[n-1] - a1*y[n-1]
-    
+
     @see FilterBase, FirstOrderCoefficients, FirstOrderState
 */
 template <typename SampleType, typename CoeffType = double>
@@ -45,6 +40,27 @@ public:
     //==============================================================================
     /** Default constructor */
     FirstOrderFilter() = default;
+
+    //==============================================================================
+    /**
+        Sets the filter coefficients.
+
+        @param newCoefficients  The new first-order coefficients
+    */
+    void setCoefficients (const FirstOrderCoefficients<CoeffType>& newCoefficients) noexcept
+    {
+        coefficients = newCoefficients;
+    }
+
+    /**
+        Gets the current filter coefficients.
+
+        @returns  The current first-order coefficients
+    */
+    const FirstOrderCoefficients<CoeffType>& getCoefficients() const noexcept
+    {
+        return coefficients;
+    }
 
     //==============================================================================
     /** @internal */
@@ -64,7 +80,13 @@ public:
     /** @internal */
     SampleType processSample (SampleType inputSample) noexcept override
     {
-        return state.processSample (inputSample, coefficients);
+        const auto inputCoeff = static_cast<CoeffType> (inputSample);
+        const auto outputCoeff = coefficients.b0 * inputCoeff + coefficients.b1 * state.x1 - coefficients.a1 * state.y1;
+
+        state.x1 = inputCoeff;
+        state.y1 = outputCoeff;
+
+        return static_cast<SampleType> (outputCoeff);
     }
 
     /** @internal */
@@ -96,142 +118,41 @@ public:
         return coefficients.getComplexResponse (frequency, this->sampleRate);
     }
 
-    //==============================================================================
-    /** 
-        Sets the filter coefficients.
-        
-        @param newCoefficients  The new first-order coefficients
-    */
-    void setCoefficients (const FirstOrderCoefficients<CoeffType>& newCoefficients) noexcept
+    /** @internal */
+    void getPolesZeros (
+        DspMath::ComplexVector<CoeffType>& poles,
+        DspMath::ComplexVector<CoeffType>& zeros) const override
     {
-        coefficients = newCoefficients;
-    }
+        poles.reserve (1);
+        zeros.reserve (1);
 
-    /** 
-        Gets the current filter coefficients.
-        
-        @returns  The current first-order coefficients
-    */
-    const FirstOrderCoefficients<CoeffType>& getCoefficients() const noexcept
-    {
-        return coefficients;
-    }
+        if (std::abs (coefficients.a1) > 1e-12) // Single pole at -a1
+            poles.push_back (DspMath::Complex<CoeffType> (-coefficients.a1, 0.0));
 
-    //==============================================================================
-    /** 
-        Configures the filter as a one-pole lowpass.
-        
-        @param frequency   The cutoff frequency in Hz
-        @param sampleRate  The sample rate in Hz
-    */
-    void makeLowpass (CoeffType frequency, double sampleRate) noexcept
-    {
-        const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
-        const auto alpha = std::exp (-omega);
-        
-        coefficients.b0 = static_cast<CoeffType> (1.0) - alpha;
-        coefficients.b1 = static_cast<CoeffType> (0.0);
-        coefficients.a1 = -alpha;
-    }
-
-    /** 
-        Configures the filter as a one-pole highpass.
-        
-        @param frequency   The cutoff frequency in Hz
-        @param sampleRate  The sample rate in Hz
-    */
-    void makeHighpass (CoeffType frequency, double sampleRate) noexcept
-    {
-        const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
-        const auto alpha = std::exp (-omega);
-        
-        coefficients.b0 = (static_cast<CoeffType> (1.0) + alpha) / static_cast<CoeffType> (2.0);
-        coefficients.b1 = -(static_cast<CoeffType> (1.0) + alpha) / static_cast<CoeffType> (2.0);
-        coefficients.a1 = -alpha;
-    }
-
-    /** 
-        Configures the filter as a first-order allpass.
-        
-        @param frequency   The characteristic frequency in Hz
-        @param sampleRate  The sample rate in Hz
-    */
-    void makeAllpass (CoeffType frequency, double sampleRate) noexcept
-    {
-        const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
-        const auto alpha = (static_cast<CoeffType> (1.0) - std::tan (omega / static_cast<CoeffType> (2.0))) /
-                          (static_cast<CoeffType> (1.0) + std::tan (omega / static_cast<CoeffType> (2.0)));
-        
-        coefficients.b0 = alpha;
-        coefficients.b1 = static_cast<CoeffType> (1.0);
-        coefficients.a1 = alpha;
-    }
-
-    /** 
-        Configures the filter as a low-shelf.
-        
-        @param frequency   The shelf frequency in Hz
-        @param gainDb      The shelf gain in decibels
-        @param sampleRate  The sample rate in Hz
-    */
-    void makeLowShelf (CoeffType frequency, CoeffType gainDb, double sampleRate) noexcept
-    {
-        const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
-        const auto gain = DspMath::dbToGain (gainDb);
-        const auto k = std::tan (omega / static_cast<CoeffType> (2.0));
-        
-        if (gainDb >= static_cast<CoeffType> (0.0))
-        {
-            const auto norm = static_cast<CoeffType> (1.0) / (static_cast<CoeffType> (1.0) + k);
-            coefficients.b0 = (static_cast<CoeffType> (1.0) + gain * k) * norm;
-            coefficients.b1 = (gain * k - static_cast<CoeffType> (1.0)) * norm;
-            coefficients.a1 = (k - static_cast<CoeffType> (1.0)) * norm;
-        }
-        else
-        {
-            const auto norm = static_cast<CoeffType> (1.0) / (static_cast<CoeffType> (1.0) + k / gain);
-            coefficients.b0 = (static_cast<CoeffType> (1.0) + k) * norm;
-            coefficients.b1 = (k - static_cast<CoeffType> (1.0)) * norm;
-            coefficients.a1 = (k / gain - static_cast<CoeffType> (1.0)) * norm;
-        }
-    }
-
-    /** 
-        Configures the filter as a high-shelf.
-        
-        @param frequency   The shelf frequency in Hz
-        @param gainDb      The shelf gain in decibels
-        @param sampleRate  The sample rate in Hz
-    */
-    void makeHighShelf (CoeffType frequency, CoeffType gainDb, double sampleRate) noexcept
-    {
-        const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
-        const auto gain = DspMath::dbToGain (gainDb);
-        const auto k = std::tan (omega / static_cast<CoeffType> (2.0));
-        
-        if (gainDb >= static_cast<CoeffType> (0.0))
-        {
-            const auto norm = static_cast<CoeffType> (1.0) / (static_cast<CoeffType> (1.0) + k);
-            coefficients.b0 = (gain + k) * norm;
-            coefficients.b1 = (k - gain) * norm;
-            coefficients.a1 = (k - static_cast<CoeffType> (1.0)) * norm;
-        }
-        else
-        {
-            const auto norm = static_cast<CoeffType> (1.0) / (gain + k);
-            coefficients.b0 = (static_cast<CoeffType> (1.0) + k) * norm;
-            coefficients.b1 = (k - static_cast<CoeffType> (1.0)) * norm;
-            coefficients.a1 = (k - gain) * norm;
-        }
+        if (std::abs (coefficients.b1) > 1e-12 && std::abs (coefficients.b0) > 1e-12) // Single zero at -b1/b0 (if b1 != 0)
+            zeros.push_back (DspMath::Complex<CoeffType> (-coefficients.b1 / coefficients.b0, 0.0));
     }
 
 private:
     //==============================================================================
-    FirstOrderCoefficients<CoeffType> coefficients;
-    FirstOrderState<CoeffType> state;
+    struct FirstOrderState
+    {
+        CoeffType x1 = 0;  // Input delay
+        CoeffType y1 = 0;  // Output delay
+
+        /** Resets all state variables to zero */
+        void reset() noexcept
+        {
+            x1 = y1 = static_cast<CoeffType> (0.0);
+        }
+    };
 
     //==============================================================================
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FirstOrderFilter)
+    FirstOrderCoefficients<CoeffType> coefficients;
+    FirstOrderState state;
+
+    //==============================================================================
+    YUP_LEAK_DETECTOR (FirstOrderFilter)
 };
 
 //==============================================================================

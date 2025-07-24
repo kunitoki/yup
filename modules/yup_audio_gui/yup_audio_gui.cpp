@@ -33,3 +33,4 @@
 //==============================================================================
 
 #include "keyboard/yup_MidiKeyboardComponent.cpp"
+#include "displays/yup_SpectrumAnalyzerComponent.cpp"

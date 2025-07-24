@@ -619,6 +619,7 @@ macro (yup_add_default_modules modules_path)
     yup_add_module (${modules_path}/thirdparty/rive_decoders "${modules_definitions}" ${thirdparty_group})
     yup_add_module (${modules_path}/thirdparty/rive_renderer "${modules_definitions}" ${thirdparty_group})
     yup_add_module (${modules_path}/thirdparty/oboe_library "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/pffft_library "${modules_definitions}" ${thirdparty_group})
 
     # ==== Yup modules
     set (modules_group "Modules")

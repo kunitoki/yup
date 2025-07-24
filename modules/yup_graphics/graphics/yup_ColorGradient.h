@@ -93,7 +93,7 @@ public:
         @param y2 The y-coordinate of the ending color.
         @param type The type of gradient (Linear or Radial).
     */
-    ColorGradient (Color color1, float x1, float y1, Color color2, float x2, float y2, Type type) noexcept
+    ColorGradient (Color color1, float x1, float y1, Color color2, float x2, float y2, Type type = Type::Linear) noexcept
         : type (type)
     {
         stops.emplace_back (color1, x1, y1, 0.0f);
@@ -103,7 +103,7 @@ public:
             radius = std::sqrt (square (x2 - x1) + square (y2 - y1));
     }
 
-    ColorGradient (Color color1, const Point<float>& p1, Color color2, const Point<float>& p2, Type type) noexcept
+    ColorGradient (Color color1, const Point<float>& p1, Color color2, const Point<float>& p2, Type type = Type::Linear) noexcept
         : ColorGradient (color1, p1.getX(), p1.getY(), color2, p2.getX(), p2.getY(), type)
     {
     }
@@ -265,6 +265,18 @@ public:
     void addColorStop (Color color, const Point<float>& p, float delta)
     {
         addColorStop (color, p.getX(), p.getY(), delta);
+    }
+
+    void addColorStop (Color color, float delta)
+    {
+        if (stops.size() <= 1)
+            return;
+
+        auto start = stops.front();
+        auto end = stops.back();
+        auto line = Line<float> (start.x, start.y, end.x, end.y);
+
+        addColorStop (color, line.pointAlong (delta), delta);
     }
 
     /** Clears all color stops. */

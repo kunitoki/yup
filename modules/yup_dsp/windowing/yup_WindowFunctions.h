@@ -21,20 +21,16 @@
 
 #pragma once
 
-#include <vector>
-#include <array>
-#include <cmath>
-
 namespace yup
 {
 
 //==============================================================================
-/** 
+/**
     Window function types for spectral analysis and FIR filter design.
-    
+
     This enumeration provides all commonly used window functions with
     optimal frequency and time domain characteristics for different applications.
-    
+
     @see WindowFunctions
 */
 enum class WindowType
@@ -57,32 +53,32 @@ enum class WindowType
 };
 
 //==============================================================================
-/** 
+/**
     Comprehensive window function implementation with optimized single-value
     and buffer processing capabilities.
-    
+
     Features:
     - Single sample window value calculation
     - In-place and out-of-place buffer windowing
     - Enum-based and method-based APIs
     - All standard window functions for audio DSP
     - Optimized implementations with minimal overhead
-    
+
     Usage Examples:
     @code
     // Single value access
-    auto value = WindowFunctions<float>::getValue(WindowType::hann, 128, 64);
-    
+    auto value = WindowFunctions<float>::getValue(WindowType::hann, 64, 128);
+
     // Generate window buffer
     std::vector<float> window(512);
-    WindowFunctions<float>::generateWindow(WindowType::kaiser, window, 8.0f);
-    
+    WindowFunctions<float>::generate(WindowType::kaiser, window, 8.0f);
+
     // Apply window to signal (in-place)
-    WindowFunctions<float>::applyWindow(WindowType::blackman, signal);
-    
+    WindowFunctions<float>::apply(WindowType::blackman, signal.begin(), signal.end());
+
     // Apply window to signal (out-of-place)
     std::vector<float> windowed(512);
-    WindowFunctions<float>::applyWindow(WindowType::hann, signal, windowed);
+    WindowFunctions<float>::apply(WindowType::hann, signal.data(), windowed.data(), windowed.size());
     @endcode
 */
 template <typename FloatType = double>
@@ -90,9 +86,9 @@ class WindowFunctions
 {
 public:
     //==============================================================================
-    /** 
+    /**
         Calculates a single window function value.
-        
+
         @param type      The window type to calculate
         @param n         The sample index (0 to N-1)
         @param N         The window length
@@ -102,138 +98,152 @@ public:
     static FloatType getValue (WindowType type, int n, int N, FloatType parameter = FloatType (8)) noexcept
     {
         jassert (n >= 0 && n < N && N > 0);
-        
+
         switch (type)
         {
-            case WindowType::rectangular:    return rectangular (n, N);
-            case WindowType::hann:          return hann (n, N);
-            case WindowType::hamming:       return hamming (n, N);
-            case WindowType::blackman:      return blackman (n, N);
-            case WindowType::blackmanHarris: return blackmanHarris (n, N);
-            case WindowType::kaiser:        return kaiser (n, N, parameter);
-            case WindowType::gaussian:      return gaussian (n, N, parameter);
-            case WindowType::tukey:         return tukey (n, N, parameter);
-            case WindowType::bartlett:      return bartlett (n, N);
-            case WindowType::welch:         return welch (n, N);
-            case WindowType::flattop:       return flattop (n, N);
-            case WindowType::cosine:        return cosine (n, N);
-            case WindowType::lanczos:       return lanczos (n, N);
-            case WindowType::nuttall:       return nuttall (n, N);
+            case WindowType::rectangular:     return rectangular (n, N);
+            case WindowType::hann:            return hann (n, N);
+            case WindowType::hamming:         return hamming (n, N);
+            case WindowType::blackman:        return blackman (n, N);
+            case WindowType::blackmanHarris:  return blackmanHarris (n, N);
+            case WindowType::kaiser:          return kaiser (n, N, parameter);
+            case WindowType::gaussian:        return gaussian (n, N, parameter);
+            case WindowType::tukey:           return tukey (n, N, parameter);
+            case WindowType::bartlett:        return bartlett (n, N);
+            case WindowType::welch:           return welch (n, N);
+            case WindowType::flattop:         return flattop (n, N);
+            case WindowType::cosine:          return cosine (n, N);
+            case WindowType::lanczos:         return lanczos (n, N);
+            case WindowType::nuttall:         return nuttall (n, N);
             case WindowType::blackmanNuttall: return blackmanNuttall (n, N);
-            default:                        return rectangular (n, N);
+            default:                          return rectangular (n, N);
         }
     }
 
     //==============================================================================
-    /** 
+    /**
         Generates a complete window function into a buffer.
-        
+
         @param type      The window type to generate
-        @param buffer    The output buffer to fill
+        @param output    The output buffer to fill
         @param parameter Optional parameter for parameterizable windows
     */
-    static void generateWindow (WindowType type, std::vector<FloatType>& buffer, FloatType parameter = FloatType (8)) noexcept
+    static void generate (WindowType type, Span<FloatType> output, FloatType parameter = FloatType (8)) noexcept
     {
-        const auto N = static_cast<int> (buffer.size());
+        const auto N = static_cast<int> (output.size());
+
         for (int n = 0; n < N; ++n)
-            buffer[static_cast<size_t> (n)] = getValue (type, n, N, parameter);
+            output[static_cast<std::size_t> (n)] = getValue (type, n, N, parameter);
     }
 
-    /** 
-        Generates a complete window function and returns it as a vector.
-        
+    /**
+        Generates a complete window function into a buffer.
+
         @param type      The window type to generate
-        @param length    The window length
+        @param output    The output buffer to fill
         @param parameter Optional parameter for parameterizable windows
-        @returns         Vector containing the window values
     */
-    static std::vector<FloatType> generateWindow (WindowType type, int length, FloatType parameter = FloatType (8)) noexcept
+    static void generate (WindowType type, FloatType* output, std::size_t length, FloatType parameter = FloatType (8)) noexcept
     {
-        std::vector<FloatType> window (static_cast<size_t> (length));
-        generateWindow (type, window, parameter);
-        return window;
+        const auto N = static_cast<int> (length);
+
+        for (int n = 0; n < N; ++n)
+            *output++ = getValue (type, n, N, parameter);
     }
 
     //==============================================================================
-    /** 
+    /**
         Applies a window function to a signal buffer (in-place).
-        
+
         @param type      The window type to apply
         @param buffer    The signal buffer to window (modified in-place)
         @param parameter Optional parameter for parameterizable windows
     */
-    static void applyWindow (WindowType type, std::vector<FloatType>& buffer, FloatType parameter = FloatType (8)) noexcept
+    static void apply (WindowType type, Span<FloatType> input, FloatType param = FloatType (8))
     {
-        const auto N = static_cast<int> (buffer.size());
+        const int N = static_cast<int> (input.size());
+
+        FloatType* inputData = input.data();
+
         for (int n = 0; n < N; ++n)
-        {
-            const auto windowValue = getValue (type, n, N, parameter);
-            buffer[static_cast<size_t> (n)] *= windowValue;
-        }
+            *inputData++ *= getValue (type, n, N, param);
     }
 
-    /** 
-        Applies a window function to a signal buffer (out-of-place).
-        
+    /**
+        Applies a window function to raw arrays (out-of-place).
+
         @param type      The window type to apply
         @param input     The input signal buffer
         @param output    The output windowed buffer
+        @param length    The buffer length
         @param parameter Optional parameter for parameterizable windows
     */
-    static void applyWindow (WindowType type, const std::vector<FloatType>& input, std::vector<FloatType>& output, FloatType parameter = FloatType (8)) noexcept
+    static void apply (WindowType type, Span<const FloatType> input, Span<FloatType> output, FloatType parameter = FloatType (8)) noexcept
     {
         jassert (input.size() == output.size());
-        
-        const auto N = static_cast<int> (input.size());
+
+        const int N = static_cast<int> (jmin (input.size(), output.size()));
+
+        const FloatType* inputData = input.data();
+        FloatType* outputData = output.data();
+
         for (int n = 0; n < N; ++n)
-        {
-            const auto windowValue = getValue (type, n, N, parameter);
-            output[static_cast<size_t> (n)] = input[static_cast<size_t> (n)] * windowValue;
-        }
+            *outputData++ = *inputData++ * getValue (type, n, N, parameter);
     }
 
-    /** 
-        Applies a window function to raw arrays (in-place).
-        
-        @param type      The window type to apply
-        @param buffer    The signal buffer to window (modified in-place)
-        @param length    The buffer length
-        @param parameter Optional parameter for parameterizable windows
-    */
-    static void applyWindow (WindowType type, FloatType* buffer, int length, FloatType parameter = FloatType (8)) noexcept
-    {
-        jassert (buffer != nullptr && length > 0);
-        
-        for (int n = 0; n < length; ++n)
-        {
-            const auto windowValue = getValue (type, n, length, parameter);
-            buffer[n] *= windowValue;
-        }
-    }
-
-    /** 
+    /**
         Applies a window function to raw arrays (out-of-place).
-        
+
         @param type      The window type to apply
         @param input     The input signal buffer
         @param output    The output windowed buffer
         @param length    The buffer length
         @param parameter Optional parameter for parameterizable windows
     */
-    static void applyWindow (WindowType type, const FloatType* input, FloatType* output, int length, FloatType parameter = FloatType (8)) noexcept
+    static void apply (WindowType type, const FloatType* input, FloatType* output, std::size_t length, FloatType parameter = FloatType (8)) noexcept
     {
-        jassert (input != nullptr && output != nullptr && length > 0);
-        
-        for (int n = 0; n < length; ++n)
+        jassert (input != nullptr && output != nullptr);
+
+        const int N = static_cast<int> (length);
+
+        for (int n = 0; n < N && input != nullptr && output != nullptr; ++n)
+            *output++ = *input++ * getValue (type, n, N, parameter);
+    }
+
+    //==============================================================================
+    /**
+        Returns the compensation gain for a window function.
+
+        @param type The window type to get the compensation gain for
+
+        @returns The compensation gain for the window function
+    */
+    static constexpr float getCompensationGain (WindowType type)
+    {
+        float windowCompensation = 1.0f;
+        switch (type)
         {
-            const auto windowValue = getValue (type, n, length, parameter);
-            output[n] = input[n] * windowValue;
+            case WindowType::rectangular:      windowCompensation = 1.0f; break;
+            case WindowType::hann:             windowCompensation = 2.0f; break; // Hann has 0.5 coherent gain
+            case WindowType::hamming:          windowCompensation = 1.85f; break;
+            case WindowType::blackman:         windowCompensation = 2.8f; break;
+            case WindowType::blackmanHarris:   windowCompensation = 4.0f; break;
+            case WindowType::kaiser:           windowCompensation = 2.2f; break;
+            case WindowType::gaussian:         windowCompensation = 2.5f; break;
+            case WindowType::tukey:            windowCompensation = 1.5f; break;
+            case WindowType::bartlett:         windowCompensation = 2.0f; break;
+            case WindowType::welch:            windowCompensation = 1.5f; break;
+            case WindowType::flattop:          windowCompensation = 4.6f; break;
+            default:
+                break;
         }
+
+        return windowCompensation;
     }
 
     //==============================================================================
     /** Method-based API for backwards compatibility and direct access */
-    
+
     static FloatType rectangular (int n, int N) noexcept
     {
         ignoreUnused (n, N);
@@ -256,7 +266,7 @@ public:
         const auto a1 = FloatType (0.5);
         const auto a2 = FloatType (0.08);
         const auto factor = MathConstants<FloatType>::twoPi * n / (N - 1);
-        
+
         return a0 - a1 * std::cos (factor) + a2 * std::cos (FloatType (2) * factor);
     }
 
@@ -267,7 +277,7 @@ public:
         const auto a2 = FloatType (0.14128);
         const auto a3 = FloatType (0.01168);
         const auto factor = MathConstants<FloatType>::twoPi * n / (N - 1);
-        
+
         return a0 - a1 * std::cos (factor) + a2 * std::cos (FloatType (2) * factor) - a3 * std::cos (FloatType (3) * factor);
     }
 
@@ -275,7 +285,7 @@ public:
     {
         const auto arg = FloatType (2) * n / (N - 1) - FloatType (1);
         const auto x = beta * std::sqrt (FloatType (1) - arg * arg);
-        
+
         return modifiedBesselI0 (x) / modifiedBesselI0 (beta);
     }
 
@@ -288,7 +298,7 @@ public:
     static FloatType tukey (int n, int N, FloatType alpha = FloatType (0.5)) noexcept
     {
         const auto halfAlphaN = alpha * (N - 1) / FloatType (2);
-        
+
         if (n < halfAlphaN)
             return FloatType (0.5) * (FloatType (1) + std::cos (MathConstants<FloatType>::pi * (n / halfAlphaN - FloatType (1))));
         else if (n > (N - 1) - halfAlphaN)
@@ -316,8 +326,8 @@ public:
         const auto a3 = FloatType (0.083578947);
         const auto a4 = FloatType (0.006947368);
         const auto factor = MathConstants<FloatType>::twoPi * n / (N - 1);
-        
-        return a0 - a1 * std::cos (factor) + a2 * std::cos (FloatType (2) * factor) 
+
+        return a0 - a1 * std::cos (factor) + a2 * std::cos (FloatType (2) * factor)
                - a3 * std::cos (FloatType (3) * factor) + a4 * std::cos (FloatType (4) * factor);
     }
 
@@ -331,7 +341,7 @@ public:
         const auto x = FloatType (2) * n / (N - 1) - FloatType (1);
         if (std::abs (x) < FloatType (1e-10))
             return FloatType (1);
-        
+
         const auto px = MathConstants<FloatType>::pi * x;
         return std::sin (px) / px;
     }
@@ -343,7 +353,7 @@ public:
         const auto a2 = FloatType (0.144232);
         const auto a3 = FloatType (0.012604);
         const auto factor = MathConstants<FloatType>::twoPi * n / (N - 1);
-        
+
         return a0 - a1 * std::cos (factor) + a2 * std::cos (FloatType (2) * factor) - a3 * std::cos (FloatType (3) * factor);
     }
 
@@ -354,27 +364,27 @@ public:
         const auto a2 = FloatType (0.1365995);
         const auto a3 = FloatType (0.0106411);
         const auto factor = MathConstants<FloatType>::twoPi * n / (N - 1);
-        
+
         return a0 - a1 * std::cos (factor) + a2 * std::cos (FloatType (2) * factor) - a3 * std::cos (FloatType (3) * factor);
     }
 
 private:
     //==============================================================================
     /** Modified Bessel function of the first kind, order 0 */
-    static FloatType modifiedBesselI0 (FloatType x) noexcept
+    static constexpr FloatType modifiedBesselI0 (FloatType x) noexcept
     {
         auto result = FloatType (1);
         auto term = FloatType (1);
-        
+
         for (int k = 1; k < 25; ++k)
         {
             term *= (x / (FloatType (2) * k)) * (x / (FloatType (2) * k));
             result += term;
-            
+
             if (term < result * FloatType (1e-12))
                 break;
         }
-        
+
         return result;
     }
 };
