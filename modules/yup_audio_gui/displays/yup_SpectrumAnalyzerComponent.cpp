@@ -57,12 +57,15 @@ void SpectrumAnalyzerComponent::initializeFFTBuffers()
 void SpectrumAnalyzerComponent::timerCallback()
 {
     bool hasNewData = false;
+    int fftCount = 0;
+    const int maxFFTsPerFrame = 8; // Limit to prevent blocking UI thread
 
-    // Process FFT frames with proper overlap
-    while (analyzerState.getNumAvailableSamples() >= fftSize && analyzerState.isFFTDataReady())
+    // Process multiple FFT frames with overlap for better responsiveness
+    while (analyzerState.isFFTDataReady() && fftCount < maxFFTsPerFrame)
     {
         processFFT();
         hasNewData = true;
+        ++fftCount;
     }
 
     // Always update display to maintain smooth animation
@@ -556,6 +559,16 @@ float SpectrumAnalyzerComponent::decibelToY (float decibel, const Rectangle<floa
 void SpectrumAnalyzerComponent::setReleaseTimeSeconds (float timeSeconds)
 {
     releaseTimeSeconds = jmax (0.1f, timeSeconds);
+}
+
+void SpectrumAnalyzerComponent::setOverlapFactor (float overlapFactor)
+{
+    analyzerState.setOverlapFactor (overlapFactor);
+}
+
+float SpectrumAnalyzerComponent::getOverlapFactor() const noexcept
+{
+    return analyzerState.getOverlapFactor();
 }
 
 void SpectrumAnalyzerComponent::setFFTSize (int size)

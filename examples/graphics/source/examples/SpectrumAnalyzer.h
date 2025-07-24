@@ -441,6 +441,16 @@ private:
             analyzerComponent.setReleaseTimeSeconds (value);
         };
         addAndMakeVisible (*releaseSlider);
+        
+        // Overlap control for responsiveness
+        overlapSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Overlap");
+        overlapSlider->setRange ({ 0.0, 0.95 });
+        overlapSlider->setValue (0.75);
+        overlapSlider->onValueChanged = [this] (float value)
+        {
+            analyzerComponent.setOverlapFactor (value);
+        };
+        addAndMakeVisible (*overlapSlider);
 
         // Status labels with appropriate font size
         auto statusFont = font.withHeight (11.0f);
@@ -469,12 +479,13 @@ private:
         analyzerComponent.setDecibelRange (-100.0f, 10.0f);
         analyzerComponent.setUpdateRate (30);
         analyzerComponent.setSampleRate (44100.0);
+        analyzerComponent.setOverlapFactor (0.75f); // 75% overlap for better responsiveness
         addAndMakeVisible (analyzerComponent);
 
         // Create parameter labels with proper font sizing
         auto labelFont = font.withHeight (12.0f);
 
-        for (const auto& labelText : { "Signal Type:", "Frequency:", "Amplitude:", "Sweep Duration:", "FFT Size:", "Window:", "Display:", "Release:" })
+        for (const auto& labelText : { "Signal Type:", "Frequency:", "Amplitude:", "Sweep Duration:", "FFT Size:", "Window:", "Display:", "Release:", "Overlap:" })
         {
             auto label = parameterLabels.add (std::make_unique<yup::Label> (labelText));
             label->setText (labelText);
@@ -526,7 +537,7 @@ private:
         auto fftSizeSection = row2.removeFromLeft (colWidth);
         auto windowSection = row2.removeFromLeft (colWidth);
         auto displaySection = row2.removeFromLeft (colWidth);
-        row2.removeFromLeft (colWidth); // Skip unused column
+        auto overlapSection = row2.removeFromLeft (colWidth);
 
         parameterLabels[4]->setBounds (fftSizeSection.removeFromTop (labelHeight));
         fftSizeCombo->setBounds (fftSizeSection.removeFromTop (controlHeight));
@@ -536,6 +547,9 @@ private:
 
         parameterLabels[6]->setBounds (displaySection.removeFromTop (labelHeight));
         displayTypeCombo->setBounds (displaySection.removeFromTop (controlHeight));
+        
+        parameterLabels[8]->setBounds (overlapSection.removeFromTop (labelHeight));
+        overlapSlider->setBounds (overlapSection.removeFromTop (controlHeight));
 
         // Third row: Status labels
         auto row3 = bounds.removeFromTop (30);
@@ -671,6 +685,7 @@ private:
     std::unique_ptr<yup::ComboBox> windowTypeCombo;
     std::unique_ptr<yup::ComboBox> displayTypeCombo;
     std::unique_ptr<yup::Slider> releaseSlider;
+    std::unique_ptr<yup::Slider> overlapSlider;
 
     // Status labels
     std::unique_ptr<yup::Label> frequencyLabel;
