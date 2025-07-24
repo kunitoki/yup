@@ -130,10 +130,10 @@ bool SpectrumAnalyzerState::getFFTData (float* destBuffer) noexcept
     {
         // Advance read position by hopSize (not full FFT size) for overlap processing
         audioFifo->finishedRead (hopSize);
-        
+
         // Check if we still have enough samples for next FFT
         fftDataReady = (audioFifo->getNumReady() >= fftSize);
-        
+
         return true;
     }
 
@@ -178,7 +178,7 @@ int SpectrumAnalyzerState::getFreeSpace() const noexcept
 void SpectrumAnalyzerState::setOverlapFactor (float newOverlapFactor)
 {
     jassert (newOverlapFactor >= 0.0f && newOverlapFactor < 1.0f);
-    
+
     if (overlapFactor != newOverlapFactor)
     {
         overlapFactor = jlimit (0.0f, 0.95f, newOverlapFactor);

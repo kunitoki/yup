@@ -115,17 +115,17 @@ public:
 
     /** Returns the amount of free space in the FIFO. */
     int getFreeSpace() const noexcept;
-    
+
     //==============================================================================
     /** Sets the overlap factor for more responsive spectrum analysis.
     
         @param overlapFactor    overlap factor (0.0 = no overlap, 0.75 = 75% overlap)
     */
     void setOverlapFactor (float overlapFactor);
-    
+
     /** Returns the current overlap factor. */
     float getOverlapFactor() const noexcept { return overlapFactor; }
-    
+
     /** Returns the hop size (samples between FFT frames). */
     int getHopSize() const noexcept;
 
@@ -134,9 +134,9 @@ private:
     void initializeFifo();
 
     int fftSize = 2048;
-    int fifoSize = 8192; // Will be updated in initializeFifo()
+    int fifoSize = 8192;         // Will be updated in initializeFifo()
     float overlapFactor = 0.75f; // 75% overlap by default
-    int hopSize = 512; // Will be computed from overlap factor
+    int hopSize = 512;           // Will be computed from overlap factor
 
     std::unique_ptr<AbstractFifo> audioFifo;
     std::vector<float> sampleBuffer;

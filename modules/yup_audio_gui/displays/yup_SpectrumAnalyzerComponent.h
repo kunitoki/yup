@@ -168,14 +168,14 @@ public:
 
     /** Returns the current release time in seconds. */
     float getReleaseTimeSeconds() const noexcept { return releaseTimeSeconds; }
-    
+
     //==============================================================================
     /** Sets the overlap factor for more responsive spectrum analysis.
     
         @param overlapFactor    overlap factor (0.0 = no overlap, 0.75 = 75% overlap)
     */
     void setOverlapFactor (float overlapFactor);
-    
+
     /** Returns the current overlap factor. */
     float getOverlapFactor() const noexcept;
 

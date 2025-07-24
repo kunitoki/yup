@@ -441,7 +441,7 @@ private:
             analyzerComponent.setReleaseTimeSeconds (value);
         };
         addAndMakeVisible (*releaseSlider);
-        
+
         // Overlap control for responsiveness
         overlapSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Overlap");
         overlapSlider->setRange ({ 0.0, 0.95 });
@@ -547,7 +547,7 @@ private:
 
         parameterLabels[6]->setBounds (displaySection.removeFromTop (labelHeight));
         displayTypeCombo->setBounds (displaySection.removeFromTop (controlHeight));
-        
+
         parameterLabels[8]->setBounds (overlapSection.removeFromTop (labelHeight));
         overlapSlider->setBounds (overlapSection.removeFromTop (controlHeight));
 
