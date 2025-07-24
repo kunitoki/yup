@@ -133,7 +133,7 @@ public:
         if (sections.empty())
         {
             if (inputBuffer != outputBuffer)
-                std::copy (inputBuffer, inputBuffer + numSamples, outputBuffer);
+                std::copy_n (inputBuffer, numSamples, outputBuffer);
 
             return;
         }
