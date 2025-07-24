@@ -26,33 +26,30 @@ namespace yup
 /**
     A component that displays a real-time spectrum analyzer.
 
-    This component performs FFT processing on audio data collected by a
-    SpectrumAnalyzerState and renders the frequency spectrum as a visual display.
-    The FFT processing is performed on the UI thread using a timer, following
-    the pattern from the JUCE spectrum analyzer tutorial.
+    This component performs FFT processing on audio data collected by a SpectrumAnalyzerState and renders
+    the frequency spectrum as a visual display. The FFT processing is performed on the UI thread using a timer,
+    following the pattern from the JUCE spectrum analyzer tutorial.
 
-    The component can be configured with different window functions, display
-    types, frequency ranges, and update rates. It automatically handles
-    logarithmic frequency scaling for natural spectrum visualization.
+    The component can be configured with different window functions, display types, frequency ranges, and update
+    rates. It automatically handles logarithmic frequency scaling for natural spectrum visualization.
 
     Example usage:
+
     @code
-    SpectrumAnalyzerState analyzerState;
-    SpectrumAnalyzerComponent analyzerComponent(analyzerState);
+        SpectrumAnalyzerState analyzerState;
+        SpectrumAnalyzerComponent analyzerComponent(analyzerState);
 
-    // Configure the display
-    analyzerComponent.setWindowType(WindowType::hann);
-    analyzerComponent.setFrequencyRange(20.0f, 20000.0f);
-    analyzerComponent.setDecibelRange(-100.0f, 0.0f);
-    analyzerComponent.setUpdateRate(30);
+        // Configure the display
+        analyzerComponent.setWindowType(WindowType::hann);
+        analyzerComponent.setFrequencyRange(20.0f, 20000.0f);
+        analyzerComponent.setDecibelRange(-100.0f, 0.0f);
+        analyzerComponent.setUpdateRate(30);
 
-    // In audio callback:
-    analyzerState.pushSamples(audioData, numSamples);
+        // In audio callback:
+        analyzerState.pushSamples(audioData, numSamples);
     @endcode
 
     @see SpectrumAnalyzerState, FFTProcessor, WindowFunctions
-
-    @tags{AudioGUI}
 */
 class YUP_API SpectrumAnalyzerComponent
     : public Component
