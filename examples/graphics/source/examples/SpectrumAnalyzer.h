@@ -247,8 +247,6 @@ public:
 
         // Spectrum analyzer takes the rest with proper margins for labels
         auto analyzerBounds = bounds.reduced (margin);
-        analyzerBounds.removeFromLeft (35);  // Space for dB labels
-        analyzerBounds.removeFromBottom (20); // Space for Hz labels
         analyzerComponent.setBounds (analyzerBounds);
     }
 
@@ -578,8 +576,8 @@ private:
         int selectedId = fftSizeCombo->getSelectedId();
         currentFFTSize = 32 << (selectedId - 1); // 32, 64, 128, 256, ..., 16384
         
-        // Update the analyzer state with the new FFT size
-        analyzerState.setFftSize (currentFFTSize);
+        // Update the analyzer component (which will update the state)
+        analyzerComponent.setFFTSize (currentFFTSize);
     }
 
     void updateWindowType()

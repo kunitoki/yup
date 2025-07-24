@@ -564,8 +564,9 @@ void SpectrumAnalyzerComponent::setFFTSize (int size)
     if (fftSize != size)
     {
         fftSize = size;
-
-        analyzerState.setFftSize (size);  // Update the state as well
+        
+        // Update the state - this reinitializes the FIFO
+        analyzerState.setFftSize (size);
 
         initializeFFTBuffers();
         generateWindow();

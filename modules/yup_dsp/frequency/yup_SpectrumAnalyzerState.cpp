@@ -36,10 +36,12 @@ SpectrumAnalyzerState::SpectrumAnalyzerState (int fftSizeToUse)
 
 void SpectrumAnalyzerState::initializeFifo()
 {
-    fifoSize = fftSize * 4;
-    audioFifo = std::make_unique<AbstractFifo> (fifoSize);
-    sampleBuffer.resize (fifoSize, 0.0f);
     fftDataReady = false;
+    fifoSize = fftSize * 4;
+
+    audioFifo = std::make_unique<AbstractFifo> (fifoSize);
+
+    sampleBuffer.resize (fifoSize, 0.0f);
 }
 
 SpectrumAnalyzerState::~SpectrumAnalyzerState()
@@ -130,6 +132,7 @@ bool SpectrumAnalyzerState::getFFTData (float* destBuffer) noexcept
 void SpectrumAnalyzerState::reset() noexcept
 {
     audioFifo->reset();
+
     fftDataReady = false;
 
     // Clear the sample buffer
@@ -143,6 +146,7 @@ void SpectrumAnalyzerState::setFftSize (int newSize)
     if (fftSize != newSize)
     {
         fftSize = newSize;
+
         initializeFifo();
     }
 }
