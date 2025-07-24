@@ -26,22 +26,17 @@ namespace yup
 /**
     Real-time safe spectrum analyzer data collection class.
 
-    This class handles the collection of audio samples from the audio thread
-    and provides a lock-free interface for UI components to retrieve FFT-ready
-    data. It uses AbstractFifo for thread-safe communication between the audio
-    and UI threads.
+    This class handles the collection of audio samples from the audio thread and provides a lock-free interface
+    for UI components to retrieve FFT-ready data. It uses AbstractFifo for thread-safe communication between
+    the audio and UI threads.
 
-    The audio thread should call pushSample() or pushSamples() to feed audio data.
-    The UI thread should check isFFTDataReady() and call getFFTData() to retrieve
-    samples for FFT processing.
+    The audio thread should call pushSample() or pushSamples() to feed audio data. The UI thread should check
+    isFFTDataReady() and call getFFTData() to retrieve samples for FFT processing.
 
-    This class follows the same pattern as MidiKeyboardState - it handles the
-    real-time safe data collection while leaving the processing and visualization
-    to companion classes.
+    This class follows the same pattern as MidiKeyboardState - it handles the real-time safe data collection while
+    leaving the processing and visualization to companion classes.
 
     @see SpectrumAnalyzerComponent, FFTProcessor
-
-    @tags{DSP}
 */
 class YUP_API SpectrumAnalyzerState
 {
@@ -49,9 +44,9 @@ public:
     //==============================================================================
     /** Creates a SpectrumAnalyzerState with default settings (2048 FFT size). */
     SpectrumAnalyzerState();
-    
+
     /** Creates a SpectrumAnalyzerState with specified FFT size.
-    
+
         @param fftSize    FFT size (must be a power of 2, between 64 and 16384)
     */
     explicit SpectrumAnalyzerState (int fftSize);
@@ -93,6 +88,7 @@ public:
         the read position.
 
         @param destBuffer   buffer to copy samples into (must be at least fftSize elements)
+
         @returns           true if data was successfully retrieved
     */
     bool getFFTData (float* destBuffer) noexcept;
@@ -104,11 +100,12 @@ public:
     */
     void reset() noexcept;
 
+    //==============================================================================
     /** Returns the FFT size used by this analyzer. */
     int getFftSize() const noexcept { return fftSize; }
-    
+
     /** Sets a new FFT size for the analyzer.
-    
+
         @param newSize    FFT size (must be a power of 2, between 64 and 16384)
     */
     void setFftSize (int newSize);

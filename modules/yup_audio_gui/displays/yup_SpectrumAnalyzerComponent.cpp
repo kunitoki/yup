@@ -43,21 +43,14 @@ SpectrumAnalyzerComponent::~SpectrumAnalyzerComponent()
 //==============================================================================
 void SpectrumAnalyzerComponent::initializeFFTBuffers()
 {
-    hopSize = fftSize / 2;  // 50% overlap
-    
     fftProcessor = std::make_unique<FFTProcessor> (fftSize);
     fftInputBuffer.resize (fftSize, 0.0f);
     fftOutputBuffer.resize (fftSize * 2, 0.0f);  // Complex output needs 2x space
     windowBuffer.resize (fftSize, 0.0f);
-    overlapBuffer.resize (fftSize, 0.0f);
-    
+
     // Pre-allocate magnitude buffer to avoid allocations during processing
     const int numBins = fftSize / 2 + 1;
     magnitudeBuffer.resize (numBins, 0.0f);
-    accumulatedSpectrum.resize (numBins, 0.0f);
-    
-    overlapBufferPos = 0;
-    spectrumAccumCount = 0;
 }
 
 //==============================================================================
@@ -66,7 +59,7 @@ void SpectrumAnalyzerComponent::timerCallback()
     bool hasNewData = false;
     
     // Process FFT frames with proper overlap
-    while (analyzerState.getNumAvailableSamples() >= hopSize && analyzerState.isFFTDataReady())
+    while (analyzerState.getNumAvailableSamples() >= fftSize && analyzerState.isFFTDataReady())
     {
         processFFT();
         hasNewData = true;
@@ -97,41 +90,16 @@ void SpectrumAnalyzerComponent::processFFT()
     // Perform FFT
     fftProcessor->performRealFFTForward (fftInputBuffer.data(), fftOutputBuffer.data());
     
-    // Pre-compute magnitudes and accumulate spectrum
+    // Pre-compute magnitudes with window gain compensation
     const int numBins = fftSize / 2 + 1;
     
-    // If this is the first spectrum or we want to reset accumulation
-    if (spectrumAccumCount == 0)
+    for (int binIndex = 0; binIndex < numBins; ++binIndex)
     {
-        // Start fresh accumulation
-        for (int binIndex = 0; binIndex < numBins; ++binIndex)
-        {
-            const float real = fftOutputBuffer[static_cast<size_t> (binIndex * 2)];
-            const float imag = fftOutputBuffer[static_cast<size_t> (binIndex * 2 + 1)];
-            const float magnitude = std::sqrt (real * real + imag * imag);
-            accumulatedSpectrum[static_cast<size_t> (binIndex)] = magnitude;
-            magnitudeBuffer[static_cast<size_t> (binIndex)] = magnitude;
-        }
-        spectrumAccumCount = 1;
-    }
-    else
-    {
-        // Accumulate with existing spectrum using exponential moving average
-        const float overlapFactor = getOverlapFactor();
-        const float alpha = overlapFactor > 0.0f ? 0.7f : 0.3f; // More averaging with higher overlap
-        
-        for (int binIndex = 0; binIndex < numBins; ++binIndex)
-        {
-            const float real = fftOutputBuffer[static_cast<size_t> (binIndex * 2)];
-            const float imag = fftOutputBuffer[static_cast<size_t> (binIndex * 2 + 1)];
-            const float magnitude = std::sqrt (real * real + imag * imag);
-            
-            // Update exponential moving average - this reduces pulsation
-            accumulatedSpectrum[static_cast<size_t> (binIndex)] = 
-                alpha * accumulatedSpectrum[static_cast<size_t> (binIndex)] + (1.0f - alpha) * magnitude;
-            magnitudeBuffer[static_cast<size_t> (binIndex)] = accumulatedSpectrum[static_cast<size_t> (binIndex)];
-        }
-        spectrumAccumCount = jmin (spectrumAccumCount + 1, 20); // Limit accumulation count
+        const float real = fftOutputBuffer[static_cast<size_t> (binIndex * 2)];
+        const float imag = fftOutputBuffer[static_cast<size_t> (binIndex * 2 + 1)];
+        const float magnitude = std::sqrt (real * real + imag * imag) * windowGain;
+
+        magnitudeBuffer[static_cast<size_t> (binIndex)] = magnitude;
     }
 }
 
@@ -139,8 +107,6 @@ void SpectrumAnalyzerComponent::updateDisplay(bool hasNewFFTData)
 {
     // Always apply consistent smoothing to prevent pulsating
     const int numBins = fftSize / 2 + 1;
-    const float logMin = std::log10 (minFrequency);
-    const float logMax = std::log10 (maxFrequency);
 
     // Process display bins
     for (int i = 0; i < scopeSize; ++i)
@@ -151,7 +117,7 @@ void SpectrumAnalyzerComponent::updateDisplay(bool hasNewFFTData)
         {
             // Calculate frequency range for this display bin
             const float proportion = float (i) / float (scopeSize - 1);
-            const float logFreq = logMin + proportion * (logMax - logMin);
+            const float logFreq = logMinFrequency + proportion * (logMaxFrequency - logMinFrequency);
             const float centerFreq = std::pow (10.0f, logFreq);
             
             // Calculate the frequency range that this display bin represents
@@ -159,21 +125,21 @@ void SpectrumAnalyzerComponent::updateDisplay(bool hasNewFFTData)
             if (i == 0)
             {
                 freqRangeStart = minFrequency;
-                const float nextLogFreq = logMin + (float (i + 1) / float (scopeSize - 1)) * (logMax - logMin);
+                const float nextLogFreq = logMinFrequency + (float (i + 1) / float (scopeSize - 1)) * (logMaxFrequency - logMinFrequency);
                 const float nextFreq = std::pow (10.0f, nextLogFreq);
                 freqRangeEnd = (centerFreq + nextFreq) * 0.5f;
             }
             else if (i == scopeSize - 1)
             {
-                const float prevLogFreq = logMin + (float (i - 1) / float (scopeSize - 1)) * (logMax - logMin);
+                const float prevLogFreq = logMinFrequency + (float (i - 1) / float (scopeSize - 1)) * (logMaxFrequency - logMinFrequency);
                 const float prevFreq = std::pow (10.0f, prevLogFreq);
                 freqRangeStart = (prevFreq + centerFreq) * 0.5f;
                 freqRangeEnd = maxFrequency;
             }
             else
             {
-                const float prevLogFreq = logMin + (float (i - 1) / float (scopeSize - 1)) * (logMax - logMin);
-                const float nextLogFreq = logMin + (float (i + 1) / float (scopeSize - 1)) * (logMax - logMin);
+                const float prevLogFreq = logMinFrequency + (float (i - 1) / float (scopeSize - 1)) * (logMaxFrequency - logMinFrequency);
+                const float nextLogFreq = logMinFrequency + (float (i + 1) / float (scopeSize - 1)) * (logMaxFrequency - logMinFrequency);
                 const float prevFreq = std::pow (10.0f, prevLogFreq);
                 const float nextFreq = std::pow (10.0f, nextLogFreq);
                 freqRangeStart = (prevFreq + centerFreq) * 0.5f;
@@ -208,14 +174,15 @@ void SpectrumAnalyzerComponent::updateDisplay(bool hasNewFFTData)
                 const int binEnd = jlimit (0, numBins - 1, static_cast<int> (endBin + 0.5f));
                 
                 for (int binIndex = binStart; binIndex <= binEnd; ++binIndex)
-                {
                     magnitude = jmax (magnitude, magnitudeBuffer[static_cast<size_t> (binIndex)]);
-                }
             }
 
-            // Convert to decibels with proper normalization
+            // Convert to decibels with proper calibration
+            // Account for window function coherent gain losses
+            const float windowCompensation = WindowFunctions<float>::getCompensationGain (currentWindowType);
+
             const float magnitudeDb = magnitude > 0.0f
-                ? 20.0f * std::log10 (magnitude / float (fftSize))
+                ? 20.0f * std::log10 ((magnitude * windowCompensation) / float (fftSize))
                 : minDecibels;
 
             // Map to display range [0.0, 1.0]
@@ -227,12 +194,12 @@ void SpectrumAnalyzerComponent::updateDisplay(bool hasNewFFTData)
         
         if (hasNewFFTData && targetLevel > currentValue)
         {
-            // INSTANT ATTACK: Immediately use new peak values for zero latency
+            // Immediately use new peak values for zero latency
             currentValue = targetLevel;
         }
         else
         {
-            // TIME-BASED RELEASE: Calculate release rate based on time
+            // Calculate release rate based on time
             if (releaseTimeSeconds <= 0.0f)
             {
                 // Immediate falloff - use target directly or fast decay
@@ -267,6 +234,14 @@ void SpectrumAnalyzerComponent::updateDisplay(bool hasNewFFTData)
 void SpectrumAnalyzerComponent::generateWindow()
 {
     WindowFunctions<float>::generate (currentWindowType, windowBuffer.data(), windowBuffer.size());
+    
+    // Calculate window gain compensation
+    float windowSum = 0.0f;
+    for (int i = 0; i < fftSize; ++i)
+        windowSum += windowBuffer[static_cast<size_t> (i)];
+    
+    // Gain compensation factor to restore energy after windowing
+    windowGain = windowSum > 0.0f ? float (fftSize) / windowSum : 1.0f;
 }
 
 //==============================================================================
@@ -589,25 +564,12 @@ void SpectrumAnalyzerComponent::setFFTSize (int size)
     if (fftSize != size)
     {
         fftSize = size;
+
         analyzerState.setFftSize (size);  // Update the state as well
+
         initializeFFTBuffers();
         generateWindow();
-        spectrumAccumCount = 0; // Reset accumulation
-        repaint();
-    }
-}
 
-void SpectrumAnalyzerComponent::setOverlapFactor (float factor)
-{
-    jassert (factor >= 0.0f && factor < 1.0f);
-    
-    const int newHopSize = roundToInt (float (fftSize) * (1.0f - factor));
-    
-    if (hopSize != newHopSize)
-    {
-        hopSize = jmax (1, newHopSize);
-        initializeFFTBuffers();
-        spectrumAccumCount = 0; // Reset accumulation
         repaint();
     }
 }

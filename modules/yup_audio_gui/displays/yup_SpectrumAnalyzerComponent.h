@@ -85,6 +85,16 @@ public:
     ~SpectrumAnalyzerComponent() override;
 
     //==============================================================================
+    /** Sets the FFT size for analysis.
+
+        @param size    FFT size (must be a power of 2)
+    */
+    void setFFTSize (int size);
+
+    /** Returns the current FFT size from the analyzer state. */
+    int getFFTSize() const noexcept { return analyzerState.getFftSize(); }
+
+    //==============================================================================
     /** Sets the window function used for FFT processing.
 
         @param type    the window function type to use
@@ -163,25 +173,6 @@ public:
     float getReleaseTimeSeconds() const noexcept { return releaseTimeSeconds; }
 
     //==============================================================================
-    /** Sets the FFT size for analysis.
-
-        @param size    FFT size (must be a power of 2)
-    */
-    void setFFTSize (int size);
-
-    /** Returns the current FFT size. */
-    int getFFTSize() const noexcept { return fftSize; }
-
-    /** Sets the overlap factor for FFT analysis.
-
-        @param factor    overlap factor (0.0 = no overlap, 0.5 = 50% overlap, 0.75 = 75% overlap)
-    */
-    void setOverlapFactor (float factor);
-
-    /** Returns the current overlap factor. */
-    float getOverlapFactor() const noexcept { return float (fftSize - hopSize) / float (fftSize); }
-
-    //==============================================================================
     /** Returns the frequency for a given bin index.
 
         @param binIndex    the FFT bin index
@@ -228,11 +219,7 @@ private:
     std::vector<float> fftInputBuffer;      // Real input samples
     std::vector<float> fftOutputBuffer;     // Complex FFT output
     std::vector<float> windowBuffer;        // Window function
-    std::vector<float> overlapBuffer;       // For overlap-add processing
     std::vector<float> magnitudeBuffer;     // Pre-computed magnitudes to avoid allocation
-    std::vector<float> accumulatedSpectrum; // Accumulated spectrum for averaging overlaps
-    int overlapBufferPos = 0;               // Current position in overlap buffer
-    int spectrumAccumCount = 0;             // Number of spectra accumulated
 
     // Display data
     std::vector<float> scopeData;
@@ -241,6 +228,7 @@ private:
     // Configuration
     WindowType currentWindowType = WindowType::hann;
     DisplayType displayType = DisplayType::filled;
+    int fftSize = 4096;
     float minFrequency = 20.0f;
     float maxFrequency = 20000.0f;
     float logMinFrequency = std::log10 (minFrequency);
@@ -250,11 +238,8 @@ private:
     double sampleRate = 44100.0;
     float releaseTimeSeconds = 1.0f;
     
-    // FFT configuration
-    int fftSize = 2048;
-    int hopSize = 1024;  // 50% overlap by default
-
-    // State
+    // Window compensation
+    float windowGain = 1.0f;
     bool needsWindowUpdate = true;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SpectrumAnalyzerComponent)

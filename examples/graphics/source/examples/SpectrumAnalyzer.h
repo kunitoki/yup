@@ -285,7 +285,7 @@ public:
         // Update FFT info display
         if (fftInfoLabel)
         {
-            yup::String fftText = "FFT: " + yup::String (currentFFTSize) + ", Overlap: " + yup::String (currentOverlapPercent) + "%";
+            yup::String fftText = "FFT: " + yup::String (currentFFTSize);
             fftInfoLabel->setText (fftText, yup::dontSendNotification);
         }
     }
@@ -302,10 +302,7 @@ public:
         for (int sample = 0; sample < numSamples; ++sample)
         {
             // Generate audio sample using signal generator
-            float audioSample = signalGenerator.getNextSample();
-
-            // Scale final output
-            audioSample *= masterVolume;
+            const float audioSample = signalGenerator.getNextSample();
 
             // Output to all channels
             for (int channel = 0; channel < numOutputChannels; ++channel)
@@ -316,7 +313,7 @@ public:
         }
     }
 
-        void audioDeviceAboutToStart (yup::AudioIODevice* device) override
+    void audioDeviceAboutToStart (yup::AudioIODevice* device) override
     {
         double sampleRate = device->getCurrentSampleRate();
 
@@ -349,7 +346,7 @@ private:
         // Signal type selector
         signalTypeCombo = std::make_unique<yup::ComboBox> ("SignalType");
         signalTypeCombo->addItem ("Single Tone", 1);
-        signalTypeCombo->addItem ("Frequency Sweep", 2);
+        signalTypeCombo->addItem ("Sweep", 2);
         signalTypeCombo->addItem ("White Noise", 3);
         signalTypeCombo->addItem ("Pink Noise", 4);
         signalTypeCombo->addItem ("Brown Noise", 5);
@@ -398,28 +395,13 @@ private:
         fftSizeCombo = std::make_unique<yup::ComboBox> ("FFTSize");
         int fftSizeId = 1;
         for (int size = 32; size <= 16384; size *= 2)
-        {
             fftSizeCombo->addItem (yup::String (size), fftSizeId++);
-        }
-        fftSizeCombo->setSelectedId (9); // 2048 (default)
+        fftSizeCombo->setSelectedId (8);
         fftSizeCombo->onSelectedItemChanged = [this]
         {
             updateFFTSize();
         };
         addAndMakeVisible (*fftSizeCombo);
-
-        // Overlap selector
-        overlapCombo = std::make_unique<yup::ComboBox> ("Overlap");
-        overlapCombo->addItem ("0%", 1);
-        overlapCombo->addItem ("25%", 2);
-        overlapCombo->addItem ("50%", 3);
-        overlapCombo->addItem ("75%", 4);
-        overlapCombo->setSelectedId (4); // 75% default
-        overlapCombo->onSelectedItemChanged = [this]
-        {
-            updateOverlap();
-        };
-        addAndMakeVisible (*overlapCombo);
 
         // Window type selector
         windowTypeCombo = std::make_unique<yup::ComboBox> ("WindowType");
@@ -427,14 +409,14 @@ private:
         windowTypeCombo->addItem ("Hann", 2);
         windowTypeCombo->addItem ("Hamming", 3);
         windowTypeCombo->addItem ("Blackman", 4);
-        windowTypeCombo->addItem ("Blackman-Harris", 5);
+        windowTypeCombo->addItem ("B-Harris", 5);
         windowTypeCombo->addItem ("Kaiser", 6);
         windowTypeCombo->addItem ("Gaussian", 7);
         windowTypeCombo->addItem ("Tukey", 8);
         windowTypeCombo->addItem ("Bartlett", 9);
         windowTypeCombo->addItem ("Welch", 10);
         windowTypeCombo->addItem ("Flat-top", 11);
-        windowTypeCombo->setSelectedId (2); // Hann
+        windowTypeCombo->setSelectedId (4);
         windowTypeCombo->onSelectedItemChanged = [this]
         {
             updateWindowType();
@@ -478,7 +460,7 @@ private:
         addAndMakeVisible (*amplitudeLabel);
 
         fftInfoLabel = std::make_unique<yup::Label> ("FFTInfoLabel");
-        fftInfoLabel->setText ("FFT: 2048, Overlap: 75%");
+        fftInfoLabel->setText ("FFT: 2048");
         fftInfoLabel->setColor (yup::Label::Style::textFillColorId, yup::Colors::lightgray);
         fftInfoLabel->setFont (statusFont);
         addAndMakeVisible (*fftInfoLabel);
@@ -494,8 +476,8 @@ private:
         // Create parameter labels with proper font sizing
         auto labelFont = font.withHeight (12.0f);
 
-                for (const auto& labelText : { "Signal Type:", "Frequency:", "Amplitude:", "Sweep Duration:",
-                                       "FFT Size:", "Overlap:", "Window:", "Display:", "Release:" })
+        for (const auto& labelText : { "Signal Type:", "Frequency:", "Amplitude:", "Sweep Duration:",
+                                       "FFT Size:", "Window:", "Display:", "Release:" })
         {
             auto label = parameterLabels.add (std::make_unique<yup::Label> (labelText));
             label->setText (labelText);
@@ -503,14 +485,6 @@ private:
             label->setFont (labelFont);
             addAndMakeVisible (*label);
         }
-
-        // Initialize parameters
-        currentFrequency = 440.0;
-        currentAmplitude = 0.5f;
-        sweepDurationSeconds = 10.0;
-        masterVolume = 0.3f;
-        currentFFTSize = 2048;
-        currentOverlapPercent = 75;
     }
 
     void setupAudio()
@@ -547,26 +521,23 @@ private:
         parameterLabels[3]->setBounds (sweepSection.removeFromTop (labelHeight));
         sweepDurationSlider->setBounds (sweepSection.removeFromTop (controlHeight));
 
-        parameterLabels[8]->setBounds (smoothingSection.removeFromTop (labelHeight));
+        parameterLabels[7]->setBounds (smoothingSection.removeFromTop (labelHeight));
         releaseSlider->setBounds (smoothingSection.removeFromTop (controlHeight));
 
         // Second row: FFT controls
         auto row2 = bounds.removeFromTop (rowHeight);
         auto fftSizeSection = row2.removeFromLeft (colWidth);
-        auto overlapSection = row2.removeFromLeft (colWidth);
         auto windowSection = row2.removeFromLeft (colWidth);
         auto displaySection = row2.removeFromLeft (colWidth);
+        row2.removeFromLeft (colWidth); // Skip unused column
 
         parameterLabels[4]->setBounds (fftSizeSection.removeFromTop (labelHeight));
         fftSizeCombo->setBounds (fftSizeSection.removeFromTop (controlHeight));
 
-        parameterLabels[5]->setBounds (overlapSection.removeFromTop (labelHeight));
-        overlapCombo->setBounds (overlapSection.removeFromTop (controlHeight));
-
-        parameterLabels[6]->setBounds (windowSection.removeFromTop (labelHeight));
+        parameterLabels[5]->setBounds (windowSection.removeFromTop (labelHeight));
         windowTypeCombo->setBounds (windowSection.removeFromTop (controlHeight));
 
-        parameterLabels[7]->setBounds (displaySection.removeFromTop (labelHeight));
+        parameterLabels[6]->setBounds (displaySection.removeFromTop (labelHeight));
         displayTypeCombo->setBounds (displaySection.removeFromTop (controlHeight));
 
         // Third row: Status labels
@@ -607,23 +578,8 @@ private:
         int selectedId = fftSizeCombo->getSelectedId();
         currentFFTSize = 32 << (selectedId - 1); // 32, 64, 128, 256, ..., 16384
         
-        // Update the analyzer component with the new FFT size
-        analyzerComponent.setFFTSize (currentFFTSize);
-    }
-
-    void updateOverlap()
-    {
-        switch (overlapCombo->getSelectedId())
-        {
-            case 1: currentOverlapPercent = 0; break;
-            case 2: currentOverlapPercent = 25; break;
-            case 3: currentOverlapPercent = 50; break;
-            case 4: currentOverlapPercent = 75; break;
-        }
-        
-        // Update the analyzer component with the new overlap factor
-        float overlapFactor = float (currentOverlapPercent) / 100.0f;
-        analyzerComponent.setOverlapFactor (overlapFactor);
+        // Update the analyzer state with the new FFT size
+        analyzerState.setFftSize (currentFFTSize);
     }
 
     void updateWindowType()
@@ -680,7 +636,6 @@ private:
 
     // FFT controls
     std::unique_ptr<yup::ComboBox> fftSizeCombo;
-    std::unique_ptr<yup::ComboBox> overlapCombo;
     std::unique_ptr<yup::ComboBox> windowTypeCombo;
     std::unique_ptr<yup::ComboBox> displayTypeCombo;
     std::unique_ptr<yup::Slider> releaseSlider;
@@ -696,7 +651,5 @@ private:
     double currentFrequency = 440.0;
     float currentAmplitude = 0.5f;
     double sweepDurationSeconds = 10.0;
-    float masterVolume = 0.3f;
-    int currentFFTSize = 2048;
-    int currentOverlapPercent = 75;
+    int currentFFTSize = 4096;
 };
