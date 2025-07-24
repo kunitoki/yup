@@ -220,6 +220,8 @@ private:
     DisplayType displayType = DisplayType::filled;
     float minFrequency = 20.0f;
     float maxFrequency = 20000.0f;
+    float logMinFrequency = std::log10 (minFrequency);
+    float logMaxFrequency = std::log10 (maxFrequency);
     float minDecibels = -100.0f;
     float maxDecibels = 0.0f;
     double sampleRate = 44100.0;

@@ -88,14 +88,25 @@ void SpectrumAnalyzerComponent::updateDisplay()
         const float logFreq = logMin + proportion * (logMax - logMin);
         const float frequency = std::pow (10.0f, logFreq);
 
-        // Find the corresponding FFT bin
-        const int fftBin = getBinForFrequency (frequency);
-        const int fftDataIndex = jlimit (0, numBins - 1, fftBin);
+        // Find the corresponding FFT bin with interpolation
+        const float exactBin = (frequency * float (fftSize)) / float (sampleRate);
+        const int bin1 = jlimit (0, numBins - 1, static_cast<int> (exactBin));
+        const int bin2 = jlimit (0, numBins - 1, bin1 + 1);
+        const float fraction = exactBin - float (bin1);
 
-        // Calculate magnitude from complex FFT output
-        const float real = fftOutputBuffer[static_cast<size_t> (fftDataIndex * 2)];
-        const float imag = fftOutputBuffer[static_cast<size_t> (fftDataIndex * 2 + 1)];
-        const float magnitude = std::sqrt (real * real + imag * imag);
+        // Get magnitudes from both bins
+        auto getMagnitude = [this] (int binIndex) -> float
+        {
+            const float real = fftOutputBuffer[static_cast<size_t> (binIndex * 2)];
+            const float imag = fftOutputBuffer[static_cast<size_t> (binIndex * 2 + 1)];
+            return std::sqrt (real * real + imag * imag);
+        };
+
+        const float mag1 = getMagnitude (bin1);
+        const float mag2 = getMagnitude (bin2);
+        
+        // Interpolate between the two bins
+        const float magnitude = mag1 + fraction * (mag2 - mag1);
 
         // Convert to decibels with proper normalization
         const float magnitudeDb = magnitude > 0.0f
@@ -179,11 +190,7 @@ void SpectrumAnalyzerComponent::drawFilledSpectrum (Graphics& g, const Rectangle
 {
     if (scopeSize < 3) return;
 
-    const float height = bounds.getHeight();
-    const float logMin = std::log10 (minFrequency);
-    const float logMax = std::log10 (maxFrequency);
-
-    const float firstX = frequencyToX (std::pow (10.0f, logMin), bounds);
+    const float firstX = frequencyToX (std::pow (10.0f, logMinFrequency), bounds);
     const float firstY = binToY (0, bounds.getHeight());
 
     // Create filled path that starts and ends properly at baseline
@@ -210,43 +217,24 @@ void SpectrumAnalyzerComponent::drawFilledSpectrum (Graphics& g, const Rectangle
 
 void SpectrumAnalyzerComponent::computeSpectrumPath (Path spectrumPath, const Rectangle<float>& bounds, bool closePath)
 {
-    const float width = bounds.getWidth();
-    const float height = bounds.getHeight();
-    const float logMin = std::log10 (minFrequency);
-    const float logMax = std::log10 (maxFrequency);
-    float prevFrequency = 0.0f;
+    float lastX = 0.0f;
 
     // Draw the spectrum curve
     for (int i = 0; i < scopeSize; ++i)
     {
         const float proportion = float (i) / float (scopeSize - 1);
-        const float frequency = std::pow (10.0f, logMin + proportion * (logMax - logMin));
+        const float frequency = std::pow (10.0f, logMinFrequency + proportion * (logMaxFrequency - logMinFrequency));
         const float x = frequencyToX (frequency, bounds);
-        const float y = binToY (i, height);
+        const float y = binToY (i, bounds.getHeight());
         
-        if (i == 0)
-        {
-            spectrumPath.lineTo (x, y);
-        }
-        else
-        {
-            /*
-            const float prevX = frequencyToX (prevFrequency, bounds);
-            const float prevY = binToY (i - 1, height);
-            const float controlX = (prevX + x) * 0.5f;
-            const float controlY = (prevY + y) * 0.5f;
-            spectrumPath.quadTo (controlX, controlY, x, y);
-            */
-            spectrumPath.lineTo (x, y);
-        }
+        spectrumPath.lineTo (x, y);
 
-        prevFrequency = frequency;
+        lastX = x;
     }
     
     // End at baseline at the last spectrum frequency
     if (closePath)
     {
-        const float lastX = frequencyToX (std::pow (10.0f, logMax), bounds);
         spectrumPath.lineTo (lastX, bounds.getBottom());
         spectrumPath.closeSubPath();
     }
@@ -342,6 +330,9 @@ void SpectrumAnalyzerComponent::drawDecibelGrid (Graphics& g, const Rectangle<fl
 
     for (float db = minDecibels; db <= maxDecibels; db += 20.0f)
     {
+        if (approximatelyEqual (db, minDecibels))
+            continue;
+
         const float y = decibelToY (db, bounds);
         g.strokeLine (bounds.getX(), y, bounds.getRight(), y);
 
@@ -385,23 +376,43 @@ int SpectrumAnalyzerComponent::getUpdateRate() const noexcept
 void SpectrumAnalyzerComponent::setFrequencyRange (float minFreq, float maxFreq)
 {
     jassert (minFreq > 0.0f && maxFreq > minFreq);
-    minFrequency = minFreq;
-    maxFrequency = maxFreq;
-    repaint();
+
+    if (! approximatelyEqual (minFrequency, minFreq)
+        || ! approximatelyEqual (maxFrequency, maxFreq))
+    {
+        minFrequency = minFreq;
+        maxFrequency = maxFreq;
+        logMinFrequency = std::log10 (minFreq);
+        logMaxFrequency = std::log10 (maxFreq);
+
+        repaint();
+    }
 }
 
 void SpectrumAnalyzerComponent::setDecibelRange (float minDb, float maxDb)
 {
     jassert (maxDb > minDb);
-    minDecibels = minDb;
-    maxDecibels = maxDb;
-    repaint();
+
+    if (! approximatelyEqual (minDecibels, minDb)
+        || ! approximatelyEqual (maxDecibels, maxDb))
+    {
+        minDecibels = minDb;
+        maxDecibels = maxDb;
+
+        repaint();
+    }
 }
 
 void SpectrumAnalyzerComponent::setSampleRate (double sampleRateToUse)
 {
     jassert (sampleRateToUse > 0.0);
-    sampleRate = sampleRateToUse;
+
+    if (! approximatelyEqual (sampleRate, sampleRateToUse))
+    {
+        sampleRate = sampleRateToUse;
+
+        repaint();
+    }
 }
 
 void SpectrumAnalyzerComponent::setDisplayType (DisplayType type)
@@ -426,12 +437,7 @@ int SpectrumAnalyzerComponent::getBinForFrequency (float frequency) const noexce
 
 float SpectrumAnalyzerComponent::frequencyToX (float frequency, const Rectangle<float>& bounds) const noexcept
 {
-    // Use logarithmic mapping for frequency
-    const float logMin = std::log10 (minFrequency);
-    const float logMax = std::log10 (maxFrequency);
-    const float logFreq = std::log10 (frequency);
-
-    return jmap (logFreq, logMin, logMax, bounds.getX(), bounds.getRight());
+    return jmap (std::log10 (frequency), logMinFrequency, logMaxFrequency, bounds.getX(), bounds.getRight());
 }
 
 float SpectrumAnalyzerComponent::binToY (int binIndex, float height) const noexcept
