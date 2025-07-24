@@ -59,7 +59,8 @@ set (target_modules
     yup_dsp
     yup_events
     yup_data_model
-    yup_graphics)
+    yup_graphics
+    pffft_library)
 
 if (NOT YUP_PLATFORM_EMSCRIPTEN)
     list (APPEND target_modules yup_gui yup_audio_gui)

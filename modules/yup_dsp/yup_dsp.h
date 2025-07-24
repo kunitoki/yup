@@ -62,6 +62,9 @@
 // Windowing functions
 #include "windowing/yup_WindowFunctions.h"
 
+// Frequency domain functions
+#include "frequency/yup_FFTProcessor.h"
+
 // Base filter interfaces and common structures
 #include "base/yup_FilterBase.h"
 

@@ -19,22 +19,26 @@
   ==============================================================================
 */
 
-#ifdef YUP_DSP_H_INCLUDED
-/* When you add this cpp file to your project, you mustn't include it in a file where you've
-   already included any other headers - just put it inside a file on its own, possibly with your config
-   flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
-   header files that the compiler may be using.
+/*
+  ==============================================================================
+
+  BEGIN_YUP_MODULE_DECLARATION
+
+    ID:               pffft_library
+    vendor:           Julien Pommier & Others
+    version:          1.2.3
+    name:             A pretty fast FFT and fast convolution with PFFASTCONV
+    description:      A pretty fast FFT and fast convolution with PFFASTCONV.
+    website:          https://github.com/marton78/pffft
+    license:          BSD
+
+    defines:          PFFFT_ENABLE_FLOAT=1 PFFFT_ENABLE_DOUBLE=1 PFFFT_ENABLE_NEON=1 _USE_MATH_DEFINES=1
+ 
+  END_YUP_MODULE_DECLARATION
+
+  ==============================================================================
 */
-#error "Incorrect use of YUP cpp file"
-#endif
 
-#include "yup_dsp.h"
+#pragma once
 
-//==============================================================================
-#include "frequency/yup_FFTProcessor.cpp"
-#if YUP_FFT_USING_OOURA
-#include "frequency/yup_OouraFFT8g.cpp"
-#endif
-
-//==============================================================================
-#include "designers/yup_FilterDesigner.cpp"
+#include "upstream/pffft.h"
