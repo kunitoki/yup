@@ -303,3 +303,125 @@ TEST_F (ComboBoxTest, BoundsAndSizeWork)
     EXPECT_EQ (150, comboBox->getWidth());
     EXPECT_EQ (25, comboBox->getHeight());
 }
+
+TEST_F (ComboBoxTest, FunctionalCallbackIsInvoked)
+{
+    comboBox->addItem (kTestText1, kTestId1);
+    comboBox->addItem (kTestText2, kTestId2);
+    comboBox->addItem (kTestText3, kTestId3);
+
+    bool callbackInvoked = false;
+    int callbackCount = 0;
+
+    // Set the functional callback
+    comboBox->onSelectedItemChanged = [&callbackInvoked, &callbackCount]()
+    {
+        callbackInvoked = true;
+        ++callbackCount;
+    };
+
+    // Initially should not be invoked
+    EXPECT_FALSE (callbackInvoked);
+    EXPECT_EQ (0, callbackCount);
+
+    // Select first item
+    comboBox->setSelectedItemIndex (0);
+    EXPECT_TRUE (callbackInvoked);
+    EXPECT_EQ (1, callbackCount);
+
+    // Reset for next test
+    callbackInvoked = false;
+
+    // Select second item
+    comboBox->setSelectedItemIndex (1);
+    EXPECT_TRUE (callbackInvoked);
+    EXPECT_EQ (2, callbackCount);
+
+    // Select same item again (may or may not trigger callback depending on implementation)
+    callbackInvoked = false;
+    comboBox->setSelectedItemIndex (1);
+    // The callback behavior when selecting the same item is implementation-dependent
+    // Just verify the count didn't decrease
+    EXPECT_GE (callbackCount, 2);
+}
+
+TEST_F (ComboBoxTest, FunctionalCallbackCanBeCleared)
+{
+    comboBox->addItem (kTestText1, kTestId1);
+    comboBox->addItem (kTestText2, kTestId2);
+
+    bool callbackInvoked = false;
+
+    // Set the functional callback
+    comboBox->onSelectedItemChanged = [&callbackInvoked]()
+    {
+        callbackInvoked = true;
+    };
+
+    // Select item to verify callback works
+    comboBox->setSelectedItemIndex (0);
+    EXPECT_TRUE (callbackInvoked);
+
+    // Clear the callback
+    callbackInvoked = false;
+    comboBox->onSelectedItemChanged = nullptr;
+
+    // Select different item - callback should not be invoked
+    comboBox->setSelectedItemIndex (1);
+    EXPECT_FALSE (callbackInvoked);
+}
+
+TEST_F (ComboBoxTest, FunctionalCallbackWithMultipleAssignments)
+{
+    comboBox->addItem (kTestText1, kTestId1);
+    comboBox->addItem (kTestText2, kTestId2);
+
+    int callback1Count = 0;
+    int callback2Count = 0;
+
+    // Set first callback
+    comboBox->onSelectedItemChanged = [&callback1Count]()
+    {
+        ++callback1Count;
+    };
+
+    comboBox->setSelectedItemIndex (0);
+    EXPECT_EQ (1, callback1Count);
+    EXPECT_EQ (0, callback2Count);
+
+    // Replace with second callback
+    comboBox->onSelectedItemChanged = [&callback2Count]()
+    {
+        ++callback2Count;
+    };
+
+    comboBox->setSelectedItemIndex (1);
+    EXPECT_EQ (1, callback1Count); // Should not increment
+    EXPECT_EQ (1, callback2Count); // Should increment
+}
+
+TEST_F (ComboBoxTest, FunctionalCallbackWithIdSelection)
+{
+    comboBox->addItem (kTestText1, kTestId1);
+    comboBox->addItem (kTestText2, kTestId2);
+    comboBox->addItem (kTestText3, kTestId3);
+
+    int selectedId = 0;
+    int selectedIndex = -1;
+
+    comboBox->onSelectedItemChanged = [&]()
+    {
+        selectedId = comboBox->getSelectedId();
+        selectedIndex = comboBox->getSelectedItemIndex();
+    };
+
+    // Select by ID
+    comboBox->setSelectedId (kTestId2);
+    EXPECT_EQ (kTestId2, selectedId);
+    EXPECT_EQ (1, selectedIndex); // Should be index 1
+
+    // Select by different ID
+    comboBox->setSelectedId (kTestId3);
+    EXPECT_EQ (kTestId3, selectedId);
+    EXPECT_EQ (2, selectedIndex); // Should be index 2
+}
