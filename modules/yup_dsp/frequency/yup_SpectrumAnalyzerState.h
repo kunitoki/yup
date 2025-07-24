@@ -47,17 +47,14 @@ class YUP_API SpectrumAnalyzerState
 {
 public:
     //==============================================================================
-    /** FFT constants */
-    enum
-    {
-        fftOrder = 11,                    ///< 2^11 = 2048 samples
-        fftSize = 1 << fftOrder,          ///< 2048
-        fifoSize = fftSize * 4            ///< Quadruple buffer for safety
-    };
-
-    //==============================================================================
-    /** Creates a SpectrumAnalyzerState with default settings. */
+    /** Creates a SpectrumAnalyzerState with default settings (2048 FFT size). */
     SpectrumAnalyzerState();
+    
+    /** Creates a SpectrumAnalyzerState with specified FFT size.
+    
+        @param fftSize    FFT size (must be a power of 2, between 64 and 16384)
+    */
+    explicit SpectrumAnalyzerState (int fftSize);
 
     /** Destructor. */
     ~SpectrumAnalyzerState();
@@ -109,6 +106,12 @@ public:
 
     /** Returns the FFT size used by this analyzer. */
     int getFftSize() const noexcept { return fftSize; }
+    
+    /** Sets a new FFT size for the analyzer.
+    
+        @param newSize    FFT size (must be a power of 2, between 64 and 16384)
+    */
+    void setFftSize (int newSize);
 
     /** Returns the number of samples currently available in the FIFO. */
     int getNumAvailableSamples() const noexcept;
@@ -118,7 +121,12 @@ public:
 
 private:
     //==============================================================================
-    AbstractFifo audioFifo;
+    void initializeFifo();
+    
+    int fftSize = 2048;
+    int fifoSize = 8192;  // Will be updated in initializeFifo()
+    
+    std::unique_ptr<AbstractFifo> audioFifo;
     std::vector<float> sampleBuffer;
     std::atomic<bool> fftDataReady { false };
 

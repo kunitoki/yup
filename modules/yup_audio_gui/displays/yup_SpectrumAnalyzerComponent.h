@@ -68,11 +68,9 @@ public:
     };
 
     //==============================================================================
-    /** FFT constants (must match SpectrumAnalyzerState) */
+    /** Display constants */
     enum
     {
-        fftOrder = 11,                    ///< 2^11 = 2048 samples
-        fftSize = 1 << fftOrder,          ///< 2048
         scopeSize = 512                   ///< Number of display points
     };
 
@@ -155,14 +153,33 @@ public:
     DisplayType getDisplayType() const noexcept { return displayType; }
 
     //==============================================================================
-    /** Sets the smoothing factor for spectrum falloff.
+    /** Sets the release time for spectrum falloff.
 
-        @param factor    smoothing factor between 0.0 (no smoothing) and 1.0 (maximum smoothing)
+        @param timeSeconds    release time in seconds (0.0 = immediate falloff, 5.0 = 5 second falloff)
     */
-    void setSmoothingFactor (float factor);
+    void setReleaseTimeSeconds (float timeSeconds);
 
-    /** Returns the current smoothing factor. */
-    float getSmoothingFactor() const noexcept { return smoothingFactor; }
+    /** Returns the current release time in seconds. */
+    float getReleaseTimeSeconds() const noexcept { return releaseTimeSeconds; }
+
+    //==============================================================================
+    /** Sets the FFT size for analysis.
+
+        @param size    FFT size (must be a power of 2)
+    */
+    void setFFTSize (int size);
+
+    /** Returns the current FFT size. */
+    int getFFTSize() const noexcept { return fftSize; }
+
+    /** Sets the overlap factor for FFT analysis.
+
+        @param factor    overlap factor (0.0 = no overlap, 0.5 = 50% overlap, 0.75 = 75% overlap)
+    */
+    void setOverlapFactor (float factor);
+
+    /** Returns the current overlap factor. */
+    float getOverlapFactor() const noexcept { return float (fftSize - hopSize) / float (fftSize); }
 
     //==============================================================================
     /** Returns the frequency for a given bin index.
@@ -190,8 +207,9 @@ public:
 private:
     //==============================================================================
     void processFFT();
-    void updateDisplay();
+    void updateDisplay(bool hasNewFFTData);
     void generateWindow();
+    void initializeFFTBuffers();
     void computeSpectrumPath (Path spectrumPath, const Rectangle<float>& bounds, bool closePath);
     void drawLinesSpectrum (Graphics& g, const Rectangle<float>& bounds);
     void drawFilledSpectrum (Graphics& g, const Rectangle<float>& bounds);
@@ -206,10 +224,15 @@ private:
     SpectrumAnalyzerState& analyzerState;
 
     // FFT processing (performed on UI thread)
-    FFTProcessor fftProcessor;
+    std::unique_ptr<FFTProcessor> fftProcessor;
     std::vector<float> fftInputBuffer;      // Real input samples
     std::vector<float> fftOutputBuffer;     // Complex FFT output
     std::vector<float> windowBuffer;        // Window function
+    std::vector<float> overlapBuffer;       // For overlap-add processing
+    std::vector<float> magnitudeBuffer;     // Pre-computed magnitudes to avoid allocation
+    std::vector<float> accumulatedSpectrum; // Accumulated spectrum for averaging overlaps
+    int overlapBufferPos = 0;               // Current position in overlap buffer
+    int spectrumAccumCount = 0;             // Number of spectra accumulated
 
     // Display data
     std::vector<float> scopeData;
@@ -225,7 +248,11 @@ private:
     float minDecibels = -100.0f;
     float maxDecibels = 0.0f;
     double sampleRate = 44100.0;
-    float smoothingFactor = 0.8f;
+    float releaseTimeSeconds = 1.0f;
+    
+    // FFT configuration
+    int fftSize = 2048;
+    int hopSize = 1024;  // 50% overlap by default
 
     // State
     bool needsWindowUpdate = true;

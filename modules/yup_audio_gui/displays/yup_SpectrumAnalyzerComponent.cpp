@@ -25,12 +25,12 @@ namespace yup
 //==============================================================================
 SpectrumAnalyzerComponent::SpectrumAnalyzerComponent (SpectrumAnalyzerState& state)
     : analyzerState (state)
-    , fftProcessor (fftSize)
-    , fftInputBuffer (fftSize, 0.0f)
-    , fftOutputBuffer (fftSize * 2, 0.0f)  // Complex output needs 2x space
-    , windowBuffer (fftSize, 0.0f)
     , scopeData (scopeSize, 0.0f)
 {
+    // Sync FFT size with the analyzer state
+    fftSize = analyzerState.getFftSize();
+    
+    initializeFFTBuffers();
     generateWindow();
     startTimerHz (30);  // 30 FPS updates by default
 }
@@ -41,18 +41,45 @@ SpectrumAnalyzerComponent::~SpectrumAnalyzerComponent()
 }
 
 //==============================================================================
+void SpectrumAnalyzerComponent::initializeFFTBuffers()
+{
+    hopSize = fftSize / 2;  // 50% overlap
+    
+    fftProcessor = std::make_unique<FFTProcessor> (fftSize);
+    fftInputBuffer.resize (fftSize, 0.0f);
+    fftOutputBuffer.resize (fftSize * 2, 0.0f);  // Complex output needs 2x space
+    windowBuffer.resize (fftSize, 0.0f);
+    overlapBuffer.resize (fftSize, 0.0f);
+    
+    // Pre-allocate magnitude buffer to avoid allocations during processing
+    const int numBins = fftSize / 2 + 1;
+    magnitudeBuffer.resize (numBins, 0.0f);
+    accumulatedSpectrum.resize (numBins, 0.0f);
+    
+    overlapBufferPos = 0;
+    spectrumAccumCount = 0;
+}
+
+//==============================================================================
 void SpectrumAnalyzerComponent::timerCallback()
 {
-    if (analyzerState.isFFTDataReady())
+    bool hasNewData = false;
+    
+    // Process FFT frames with proper overlap
+    while (analyzerState.getNumAvailableSamples() >= hopSize && analyzerState.isFFTDataReady())
     {
         processFFT();
-        repaint();
+        hasNewData = true;
     }
+    
+    // Always update display to maintain smooth animation
+    updateDisplay(hasNewData);
+    repaint();
 }
 
 void SpectrumAnalyzerComponent::processFFT()
 {
-    // Get samples from the audio thread FIFO
+    // Get FFT frame from analyzer state
     if (!analyzerState.getFFTData (fftInputBuffer.data()))
         return;
 
@@ -65,79 +92,128 @@ void SpectrumAnalyzerComponent::processFFT()
 
     // Apply window function
     for (int i = 0; i < fftSize; ++i)
-        fftInputBuffer[i] *= windowBuffer[static_cast<size_t> (i)];
+        fftInputBuffer[static_cast<size_t> (i)] *= windowBuffer[static_cast<size_t> (i)];
 
     // Perform FFT
-    fftProcessor.performRealFFTForward (fftInputBuffer.data(), fftOutputBuffer.data());
-
-    // Convert to magnitude spectrum and map to display
-    updateDisplay();
+    fftProcessor->performRealFFTForward (fftInputBuffer.data(), fftOutputBuffer.data());
+    
+    // Pre-compute magnitudes and accumulate spectrum
+    const int numBins = fftSize / 2 + 1;
+    
+    // If this is the first spectrum or we want to reset accumulation
+    if (spectrumAccumCount == 0)
+    {
+        // Start fresh accumulation
+        for (int binIndex = 0; binIndex < numBins; ++binIndex)
+        {
+            const float real = fftOutputBuffer[static_cast<size_t> (binIndex * 2)];
+            const float imag = fftOutputBuffer[static_cast<size_t> (binIndex * 2 + 1)];
+            const float magnitude = std::sqrt (real * real + imag * imag);
+            accumulatedSpectrum[static_cast<size_t> (binIndex)] = magnitude;
+            magnitudeBuffer[static_cast<size_t> (binIndex)] = magnitude;
+        }
+        spectrumAccumCount = 1;
+    }
+    else
+    {
+        // Accumulate with existing spectrum using exponential moving average
+        const float overlapFactor = getOverlapFactor();
+        const float alpha = overlapFactor > 0.0f ? 0.7f : 0.3f; // More averaging with higher overlap
+        
+        for (int binIndex = 0; binIndex < numBins; ++binIndex)
+        {
+            const float real = fftOutputBuffer[static_cast<size_t> (binIndex * 2)];
+            const float imag = fftOutputBuffer[static_cast<size_t> (binIndex * 2 + 1)];
+            const float magnitude = std::sqrt (real * real + imag * imag);
+            
+            // Update exponential moving average - this reduces pulsation
+            accumulatedSpectrum[static_cast<size_t> (binIndex)] = 
+                alpha * accumulatedSpectrum[static_cast<size_t> (binIndex)] + (1.0f - alpha) * magnitude;
+            magnitudeBuffer[static_cast<size_t> (binIndex)] = accumulatedSpectrum[static_cast<size_t> (binIndex)];
+        }
+        spectrumAccumCount = jmin (spectrumAccumCount + 1, 20); // Limit accumulation count
+    }
 }
 
-void SpectrumAnalyzerComponent::updateDisplay()
+void SpectrumAnalyzerComponent::updateDisplay(bool hasNewFFTData)
 {
+    // Always apply consistent smoothing to prevent pulsating
     const int numBins = fftSize / 2 + 1;
     const float logMin = std::log10 (minFrequency);
     const float logMax = std::log10 (maxFrequency);
 
-    // Process FFT data into logarithmically spaced frequency bins
+    // Process display bins
     for (int i = 0; i < scopeSize; ++i)
     {
-        // Calculate the frequency for this display bin using logarithmic spacing
-        const float proportion = float (i) / float (scopeSize - 1);
-        const float logFreq = logMin + proportion * (logMax - logMin);
-        const float frequency = std::pow (10.0f, logFreq);
-
-        // Find the corresponding FFT bin with interpolation
-        const float exactBin = (frequency * float (fftSize)) / float (sampleRate);
-        const int bin1 = jlimit (0, numBins - 1, static_cast<int> (exactBin));
-        const int bin2 = jlimit (0, numBins - 1, bin1 + 1);
-        const float fraction = exactBin - float (bin1);
-
-        // Get magnitudes from both bins
-        auto getMagnitude = [this] (int binIndex) -> float
-        {
-            const float real = fftOutputBuffer[static_cast<size_t> (binIndex * 2)];
-            const float imag = fftOutputBuffer[static_cast<size_t> (binIndex * 2 + 1)];
-            return std::sqrt (real * real + imag * imag);
-        };
-
-        const float mag1 = getMagnitude (bin1);
-        const float mag2 = getMagnitude (bin2);
+        float targetLevel = 0.0f;
         
-        // Interpolate between the two bins
-        const float magnitude = mag1 + fraction * (mag2 - mag1);
+        if (hasNewFFTData)
+        {
+            // Calculate the frequency for this display bin using logarithmic spacing
+            const float proportion = float (i) / float (scopeSize - 1);
+            const float logFreq = logMin + proportion * (logMax - logMin);
+            const float frequency = std::pow (10.0f, logFreq);
 
-        // Convert to decibels with proper normalization
-        const float magnitudeDb = magnitude > 0.0f
-            ? 20.0f * std::log10 (magnitude / float (fftSize))
-            : minDecibels;
+            // Find the corresponding FFT bin with interpolation
+            const float exactBin = (frequency * float (fftSize)) / float (sampleRate);
+            const int bin1 = jlimit (0, numBins - 1, static_cast<int> (exactBin));
+            const int bin2 = jlimit (0, numBins - 1, bin1 + 1);
+            const float fraction = exactBin - float (bin1);
 
-        // Map to display range [0.0, 1.0]
-        const float level = jmap (jlimit (minDecibels, maxDecibels, magnitudeDb), minDecibels, maxDecibels, 0.0f, 1.0f);
+            // Get pre-computed magnitudes from both bins
+            const float mag1 = magnitudeBuffer[static_cast<size_t> (bin1)];
+            const float mag2 = magnitudeBuffer[static_cast<size_t> (bin2)];
+            
+            // Interpolate between the two bins
+            const float magnitude = mag1 + fraction * (mag2 - mag1);
 
-        // Apply smoothing with leaky integrator
+            // Convert to decibels with proper normalization
+            const float magnitudeDb = magnitude > 0.0f
+                ? 20.0f * std::log10 (magnitude / float (fftSize))
+                : minDecibels;
+
+            // Map to display range [0.0, 1.0]
+            targetLevel = jmap (jlimit (minDecibels, maxDecibels, magnitudeDb), minDecibels, maxDecibels, 0.0f, 1.0f);
+        }
+        
+        // Apply peak-hold with time-based release: instant attack, controlled release
         float& currentValue = scopeData[static_cast<size_t> (i)];
         
-        if (smoothingFactor <= 0.0f)
+        if (hasNewFFTData && targetLevel > currentValue)
         {
-            // No smoothing - use current level directly
-            currentValue = level;
-        }
-        else if (smoothingFactor >= 1.0f)
-        {
-            // Maximum smoothing - pure leaky integrator
-            const float alpha = 0.05f; // Low-pass cutoff for very smooth response
-            currentValue = alpha * level + (1.0f - alpha) * currentValue;
+            // INSTANT ATTACK: Immediately use new peak values for zero latency
+            currentValue = targetLevel;
         }
         else
         {
-            // Blend between peak-hold and leaky integrator
-            const float alpha = jmap (smoothingFactor, 0.0f, 1.0f, 1.0f, 0.05f);
-            const float smoothedLevel = alpha * level + (1.0f - alpha) * currentValue;
-            
-            // For rising signals, use immediate response; for falling signals, use smoothing
-            currentValue = jmax (level, smoothedLevel);
+            // TIME-BASED RELEASE: Calculate release rate based on time
+            if (releaseTimeSeconds <= 0.0f)
+            {
+                // Immediate falloff - use target directly or fast decay
+                if (hasNewFFTData)
+                    currentValue = targetLevel; // Use new lower value immediately
+                else
+                    currentValue = 0.0f; // Immediate decay when no data
+            }
+            else
+            {
+                // Calculate release rate for desired time constant
+                // Rate = exp(-1 / (release_time * update_rate))
+                // Use actual timer rate from getUpdateRate()
+                const float updateRate = float (getUpdateRate());
+                const float releaseRate = std::exp (-1.0f / (releaseTimeSeconds * updateRate));
+                
+                if (hasNewFFTData)
+                {
+                    // New data available but level is lower - decay toward new level
+                    currentValue = releaseRate * currentValue + (1.0f - releaseRate) * targetLevel;
+                }
+                else
+                {
+                    // No new data - decay toward zero
+                    currentValue *= releaseRate;
+                }
+            }
         }
     }
 }
@@ -183,6 +259,7 @@ void SpectrumAnalyzerComponent::drawLinesSpectrum (Graphics& g, const Rectangle<
 
     g.setStrokeColor (Color (0xFF00ff40));
     g.setStrokeWidth (2.0f);
+    g.setStrokeJoin (StrokeJoin::Round);
     g.strokePath (spectrumPath);
 }
 
@@ -212,6 +289,7 @@ void SpectrumAnalyzerComponent::drawFilledSpectrum (Graphics& g, const Rectangle
 
     g.setStrokeColor (Color (0xFF00ff40));
     g.setStrokeWidth (1.5f);
+    g.setStrokeJoin (StrokeJoin::Round);
     g.strokePath (spectrumPath);
 }
 
@@ -378,7 +456,7 @@ void SpectrumAnalyzerComponent::setFrequencyRange (float minFreq, float maxFreq)
     jassert (minFreq > 0.0f && maxFreq > minFreq);
 
     if (! approximatelyEqual (minFrequency, minFreq)
-        || ! approximatelyEqual (maxFrequency, maxFreq))
+        || ! approximatelyEqual (maxFrequency, maxFreq))
     {
         minFrequency = minFreq;
         maxFrequency = maxFreq;
@@ -394,7 +472,7 @@ void SpectrumAnalyzerComponent::setDecibelRange (float minDb, float maxDb)
     jassert (maxDb > minDb);
 
     if (! approximatelyEqual (minDecibels, minDb)
-        || ! approximatelyEqual (maxDecibels, maxDb))
+        || ! approximatelyEqual (maxDecibels, maxDb))
     {
         minDecibels = minDb;
         maxDecibels = maxDb;
@@ -453,9 +531,39 @@ float SpectrumAnalyzerComponent::decibelToY (float decibel, const Rectangle<floa
     return jmap (decibel, minDecibels, maxDecibels, bounds.getBottom(), bounds.getY());
 }
 
-void SpectrumAnalyzerComponent::setSmoothingFactor (float factor)
+void SpectrumAnalyzerComponent::setReleaseTimeSeconds (float timeSeconds)
 {
-    smoothingFactor = jlimit (0.0f, 1.0f, factor);
+    releaseTimeSeconds = jmax (0.1f, timeSeconds);
+}
+
+void SpectrumAnalyzerComponent::setFFTSize (int size)
+{
+    jassert (isPowerOfTwo (size) && size >= 64 && size <= 16384);
+    
+    if (fftSize != size)
+    {
+        fftSize = size;
+        analyzerState.setFftSize (size);  // Update the state as well
+        initializeFFTBuffers();
+        generateWindow();
+        spectrumAccumCount = 0; // Reset accumulation
+        repaint();
+    }
+}
+
+void SpectrumAnalyzerComponent::setOverlapFactor (float factor)
+{
+    jassert (factor >= 0.0f && factor < 1.0f);
+    
+    const int newHopSize = roundToInt (float (fftSize) * (1.0f - factor));
+    
+    if (hopSize != newHopSize)
+    {
+        hopSize = jmax (1, newHopSize);
+        initializeFFTBuffers();
+        spectrumAccumCount = 0; // Reset accumulation
+        repaint();
+    }
 }
 
 } // namespace yup

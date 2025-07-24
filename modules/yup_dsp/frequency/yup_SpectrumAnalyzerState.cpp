@@ -24,9 +24,22 @@ namespace yup
 
 //==============================================================================
 SpectrumAnalyzerState::SpectrumAnalyzerState()
-    : audioFifo (fifoSize)
-    , sampleBuffer (fifoSize, 0.0f)
 {
+    initializeFifo();
+}
+
+SpectrumAnalyzerState::SpectrumAnalyzerState (int fftSizeToUse)
+    : fftSize (fftSizeToUse)
+{
+    initializeFifo();
+}
+
+void SpectrumAnalyzerState::initializeFifo()
+{
+    fifoSize = fftSize * 4;
+    audioFifo = std::make_unique<AbstractFifo> (fifoSize);
+    sampleBuffer.resize (fifoSize, 0.0f);
+    fftDataReady = false;
 }
 
 SpectrumAnalyzerState::~SpectrumAnalyzerState()
@@ -37,13 +50,13 @@ SpectrumAnalyzerState::~SpectrumAnalyzerState()
 void SpectrumAnalyzerState::pushSample (float sample) noexcept
 {
     // Lock-free write to FIFO - safe for audio thread
-    const auto writeScope = audioFifo.write (1);
+    const auto writeScope = audioFifo->write (1);
 
     if (writeScope.blockSize1 > 0)
         sampleBuffer[static_cast<size_t> (writeScope.startIndex1)] = sample;
 
     // Check if we have enough samples for FFT processing
-    if (audioFifo.getNumReady() >= fftSize)
+    if (audioFifo->getNumReady() >= fftSize)
         fftDataReady = true;
 }
 
@@ -56,7 +69,7 @@ void SpectrumAnalyzerState::pushSamples (const float* samples, int numSamples) n
         return;
 
     // Lock-free write to FIFO - safe for audio thread
-    const auto writeScope = audioFifo.write (numSamples);
+    const auto writeScope = audioFifo->write (numSamples);
 
     // Copy first block
     if (writeScope.blockSize1 > 0)
@@ -73,14 +86,14 @@ void SpectrumAnalyzerState::pushSamples (const float* samples, int numSamples) n
     }
 
     // Check if we have enough samples for FFT processing
-    if (audioFifo.getNumReady() >= fftSize)
+    if (audioFifo->getNumReady() >= fftSize)
         fftDataReady = true;
 }
 
 //==============================================================================
 bool SpectrumAnalyzerState::isFFTDataReady() const noexcept
 {
-    return fftDataReady.load() && (audioFifo.getNumReady() >= fftSize);
+    return fftDataReady.load() && (audioFifo->getNumReady() >= fftSize);
 }
 
 bool SpectrumAnalyzerState::getFFTData (float* destBuffer) noexcept
@@ -91,7 +104,7 @@ bool SpectrumAnalyzerState::getFFTData (float* destBuffer) noexcept
         return false;
 
     // Lock-free read from FIFO - safe for UI thread
-    const auto readScope = audioFifo.read (fftSize);
+    const auto readScope = audioFifo->read (fftSize);
 
     // Copy first block
     if (readScope.blockSize1 > 0)
@@ -116,21 +129,32 @@ bool SpectrumAnalyzerState::getFFTData (float* destBuffer) noexcept
 //==============================================================================
 void SpectrumAnalyzerState::reset() noexcept
 {
-    audioFifo.reset();
+    audioFifo->reset();
     fftDataReady = false;
 
     // Clear the sample buffer
     std::fill (sampleBuffer.begin(), sampleBuffer.end(), 0.0f);
 }
 
+void SpectrumAnalyzerState::setFftSize (int newSize)
+{
+    jassert (isPowerOfTwo (newSize) && newSize >= 64 && newSize <= 16384);
+    
+    if (fftSize != newSize)
+    {
+        fftSize = newSize;
+        initializeFifo();
+    }
+}
+
 int SpectrumAnalyzerState::getNumAvailableSamples() const noexcept
 {
-    return audioFifo.getNumReady();
+    return audioFifo->getNumReady();
 }
 
 int SpectrumAnalyzerState::getFreeSpace() const noexcept
 {
-    return audioFifo.getFreeSpace();
+    return audioFifo->getFreeSpace();
 }
 
 } // namespace yup

@@ -452,15 +452,15 @@ private:
         };
         addAndMakeVisible (*displayTypeCombo);
 
-        // Smoothing control
-        smoothingSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Smoothing");
-        smoothingSlider->setRange ({ 0.0, 1.0 });
-        smoothingSlider->setValue (0.8);
-        smoothingSlider->onValueChanged = [this] (float value)
+        // Release control
+        releaseSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Release");
+        releaseSlider->setRange ({ 0.0, 5.0 });
+        releaseSlider->setValue (1.0);
+        releaseSlider->onValueChanged = [this] (float value)
         {
-            analyzerComponent.setSmoothingFactor (value);
+            analyzerComponent.setReleaseTimeSeconds (value);
         };
-        addAndMakeVisible (*smoothingSlider);
+        addAndMakeVisible (*releaseSlider);
 
         // Status labels with appropriate font size
         auto statusFont = font.withHeight (11.0f);
@@ -495,7 +495,7 @@ private:
         auto labelFont = font.withHeight (12.0f);
 
                 for (const auto& labelText : { "Signal Type:", "Frequency:", "Amplitude:", "Sweep Duration:",
-                                       "FFT Size:", "Overlap:", "Window:", "Display:", "Smoothing:" })
+                                       "FFT Size:", "Overlap:", "Window:", "Display:", "Release:" })
         {
             auto label = parameterLabels.add (std::make_unique<yup::Label> (labelText));
             label->setText (labelText);
@@ -548,7 +548,7 @@ private:
         sweepDurationSlider->setBounds (sweepSection.removeFromTop (controlHeight));
 
         parameterLabels[8]->setBounds (smoothingSection.removeFromTop (labelHeight));
-        smoothingSlider->setBounds (smoothingSection.removeFromTop (controlHeight));
+        releaseSlider->setBounds (smoothingSection.removeFromTop (controlHeight));
 
         // Second row: FFT controls
         auto row2 = bounds.removeFromTop (rowHeight);
@@ -604,10 +604,11 @@ private:
 
     void updateFFTSize()
     {
-        // Note: Dynamic FFT size change would require modifying SpectrumAnalyzerState
-        // For now, just update the display value
         int selectedId = fftSizeCombo->getSelectedId();
         currentFFTSize = 32 << (selectedId - 1); // 32, 64, 128, 256, ..., 16384
+        
+        // Update the analyzer component with the new FFT size
+        analyzerComponent.setFFTSize (currentFFTSize);
     }
 
     void updateOverlap()
@@ -619,7 +620,10 @@ private:
             case 3: currentOverlapPercent = 50; break;
             case 4: currentOverlapPercent = 75; break;
         }
-        // Note: Overlap implementation would require modifying SpectrumAnalyzerComponent
+        
+        // Update the analyzer component with the new overlap factor
+        float overlapFactor = float (currentOverlapPercent) / 100.0f;
+        analyzerComponent.setOverlapFactor (overlapFactor);
     }
 
     void updateWindowType()
@@ -679,7 +683,7 @@ private:
     std::unique_ptr<yup::ComboBox> overlapCombo;
     std::unique_ptr<yup::ComboBox> windowTypeCombo;
     std::unique_ptr<yup::ComboBox> displayTypeCombo;
-    std::unique_ptr<yup::Slider> smoothingSlider;
+    std::unique_ptr<yup::Slider> releaseSlider;
 
     // Status labels
     std::unique_ptr<yup::Label> frequencyLabel;
