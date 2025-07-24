@@ -703,8 +703,7 @@ FFTProcessor& FFTProcessor::operator= (FFTProcessor&& other) noexcept
 // Public interface
 void FFTProcessor::setSize (int newSize)
 {
-    jassert (isPowerOfTwo (newSize));
-    jassert (newSize >= 32 && newSize <= 65536);
+    jassert (isPowerOfTwo (newSize) && newSize >= 64 && newSize <= 65536);
 
     if (newSize != fftSize)
     {

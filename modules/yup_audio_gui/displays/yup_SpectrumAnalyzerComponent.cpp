@@ -600,7 +600,7 @@ float SpectrumAnalyzerComponent::getOverlapFactor() const noexcept
 
 void SpectrumAnalyzerComponent::setFFTSize (int size)
 {
-    jassert (isPowerOfTwo (size) && size >= 64 && size <= 16384);
+    jassert (isPowerOfTwo (size) && size >= 64 && size <= 65536);
 
     if (fftSize != size)
     {

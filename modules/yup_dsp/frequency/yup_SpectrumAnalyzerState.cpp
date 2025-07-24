@@ -155,7 +155,7 @@ void SpectrumAnalyzerState::reset() noexcept
 
 void SpectrumAnalyzerState::setFftSize (int newSize)
 {
-    jassert (isPowerOfTwo (newSize) && newSize >= 64 && newSize <= 16384);
+    jassert (isPowerOfTwo (newSize) && newSize >= 64 && newSize <= 65536);
 
     if (fftSize != newSize)
     {

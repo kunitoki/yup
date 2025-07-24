@@ -392,9 +392,9 @@ private:
         // FFT size selector
         fftSizeCombo = std::make_unique<yup::ComboBox> ("FFTSize");
         int fftSizeId = 1;
-        for (int size = 32; size <= 16384; size *= 2)
+        for (int size = 64; size <= 16384; size *= 2)
             fftSizeCombo->addItem (yup::String (size), fftSizeId++);
-        fftSizeCombo->setSelectedId (8);
+        fftSizeCombo->setSelectedId (7);
         fftSizeCombo->onSelectedItemChanged = [this]
         {
             updateFFTSize();
@@ -596,7 +596,7 @@ private:
     void updateFFTSize()
     {
         int selectedId = fftSizeCombo->getSelectedId();
-        currentFFTSize = 32 << (selectedId - 1); // 32, 64, 128, 256, ..., 16384
+        currentFFTSize = 64 << (selectedId - 1); // 64, 128, 256, ..., 16384
 
         // Update the analyzer component (which will update the state)
         analyzerComponent.setFFTSize (currentFFTSize);

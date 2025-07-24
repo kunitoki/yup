@@ -209,7 +209,7 @@ protected:
 TEST_F (FFTProcessorValidation, FormatDiagnostic)
 {
     // Debug test to understand the actual FFT output format
-    const int size = 32; // Minimum supported size
+    const int size = 64;
     FFTProcessor processor (size);
 
     // Test with impulse signal
@@ -255,7 +255,7 @@ TEST_F (FFTProcessorValidation, FormatDiagnostic)
 
 TEST_F (FFTProcessorValidation, StandardFormatValidation)
 {
-    const int size = 32;
+    const int size = 64;
     FFTProcessor processor (size);
 
     // Test 1: Impulse should produce flat spectrum
@@ -325,7 +325,7 @@ TEST_F (FFTProcessorValidation, StandardFormatValidation)
 
 TEST_F (FFTProcessorValidation, RealForwardTransformAccuracy)
 {
-    for (int order = 5; order <= 8; ++order) // Reduced range for debugging
+    for (int order = 6; order <= 8; ++order) // Reduced range for debugging
     {
         const int size = 1 << order;
         FFTProcessor processor (size);
@@ -348,7 +348,7 @@ TEST_F (FFTProcessorValidation, RealForwardTransformAccuracy)
 
 TEST_F (FFTProcessorValidation, RealInverseTransformAccuracy)
 {
-    for (int order = 5; order <= 8; ++order) // Reduced range for debugging
+    for (int order = 6; order <= 8; ++order) // Reduced range for debugging
     {
         const int size = 1 << order;
         FFTProcessor processor (size);
@@ -427,7 +427,7 @@ TEST_F (FFTProcessorValidation, ComplexInverseTransformAccuracy)
 
 TEST_F (FFTProcessorValidation, RealRoundtripConsistency)
 {
-    for (int order = 5; order <= 8; ++order)
+    for (int order = 6; order <= 8; ++order)
     {
         const int size = 1 << order;
         FFTProcessor processor (size);
@@ -450,7 +450,7 @@ TEST_F (FFTProcessorValidation, RealRoundtripConsistency)
 
 TEST_F (FFTProcessorValidation, ComplexRoundtripConsistency)
 {
-    for (int order = 5; order <= 8; ++order)
+    for (int order = 6; order <= 8; ++order)
     {
         const int size = 1 << order;
         FFTProcessor processor (size);
@@ -608,8 +608,8 @@ TEST_F (FFTProcessorValidation, BackendIdentification)
 
 TEST_F (FFTProcessorValidation, EdgeCaseSizes)
 {
-    // Test minimum size (32) and some larger sizes
-    for (int size : { 32, 64, 128, 1024, 2048, 4096 })
+    // Test minimum size (64) and some larger sizes
+    for (int size : { 64, 128, 1024, 2048, 4096 })
     {
         EXPECT_NO_THROW ({
             FFTProcessor processor (size);
