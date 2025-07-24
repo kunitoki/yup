@@ -20,31 +20,31 @@
 */
 
 // Conditional includes based on available FFT backends
-#if YUP_MODULE_AVAILABLE_pffft_library
+#if YUP_MODULE_AVAILABLE_pffft_library && YUP_ENABLE_PFFFT
 #include <pffft_library/pffft_library.h>
 #define YUP_FFT_USING_PFFFT 1
 #define YUP_FFT_FOUND_BACKEND 1
 #endif
 
-#if !YUP_FFT_FOUND_BACKEND && (YUP_MAC || YUP_IOS) && __has_include(<Accelerate/Accelerate.h>)
+#if !YUP_FFT_FOUND_BACKEND && YUP_ENABLE_VDSP && (YUP_MAC || YUP_IOS) && __has_include(<Accelerate/Accelerate.h>)
 #include <Accelerate/Accelerate.h>
 #define YUP_FFT_USING_VDSP 1
 #define YUP_FFT_FOUND_BACKEND 1
 #endif
 
-#if !YUP_FFT_FOUND_BACKEND && defined(YUP_USE_INTEL_IPP) && __has_include(<ipp.h>)
+#if !YUP_FFT_FOUND_BACKEND && YUP_ENABLE_INTEL_IPP && __has_include(<ipp.h>)
 #include <ipp.h>
 #define YUP_FFT_USING_IPP 1
 #define YUP_FFT_FOUND_BACKEND 1
 #endif
 
-#if !YUP_FFT_FOUND_BACKEND && defined(YUP_USE_FFTW3) && __has_include(<fftw3.h>)
+#if !YUP_FFT_FOUND_BACKEND && YUP_ENABLE_FFTW3 && __has_include(<fftw3.h>)
 #include <fftw3.h>
 #define YUP_FFT_USING_FFTW3 1
 #define YUP_FFT_FOUND_BACKEND 1
 #endif
 
-#if !YUP_FFT_FOUND_BACKEND
+#if !YUP_FFT_FOUND_BACKEND && YUP_ENABLE_OOURA
 #include "yup_OouraFFT8g.h"
 #define YUP_FFT_USING_OOURA 1
 #define YUP_FFT_FOUND_BACKEND 1
@@ -229,11 +229,11 @@ public:
         complexOutput[fftSize] = workBuffer[1];   // Nyquist real
         complexOutput[fftSize + 1] = 0.0f;        // Nyquist imaginary
 
-        // Handle frequencies 1 to n/2-1  
+        // Handle frequencies 1 to n/2-1
         // Ooura stores them as alternating real/imag starting at index 2
         for (int i = 1; i < fftSize / 2; ++i)
         {
-            complexOutput[i * 2] = workBuffer[i * 2];           // real part 
+            complexOutput[i * 2] = workBuffer[i * 2];           // real part
             complexOutput[i * 2 + 1] = -workBuffer[i * 2 + 1]; // imaginary part (negate)
         }
     }
@@ -353,7 +353,7 @@ public:
         // Copy input to temp buffer for processing
         std::memcpy (tempBuffer.data(), complexInput, fftSize * 2 * sizeof (float));
 
-        // Pack Nyquist real into DC imaginary for vDSP  
+        // Pack Nyquist real into DC imaginary for vDSP
         auto* complexData = reinterpret_cast<ComplexFloat*> (tempBuffer.data());
         complexData[0] = ComplexFloat (complexData[0].real(), complexData[fftSize >> 1].real());
 

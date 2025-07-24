@@ -47,6 +47,51 @@
 #include <yup_audio_basics/yup_audio_basics.h>
 
 //==============================================================================
+/** Config: YUP_ENABLE_FFTW3
+
+    Enable FFTW3 backend.
+*/
+#ifndef YUP_ENABLE_FFTW3
+#define YUP_ENABLE_FFTW3 0
+#endif
+
+/** Config: YUP_USE_INTEL_IPP
+
+    Use Intel IPP backend.
+*/
+#ifndef YUP_ENABLE_INTEL_IPP
+#define YUP_ENABLE_INTEL_IPP 0
+#endif
+
+/** Config: YUP_ENABLE_VDSP
+
+    Enable Apple's vDSP backend.
+*/
+#ifndef YUP_ENABLE_VDSP
+#if (YUP_MAC || YUP_IOS)
+#define YUP_ENABLE_VDSP 1
+#else
+#define YUP_ENABLE_VDSP 0
+#endif
+#endif
+
+/** Config: YUP_ENABLE_PFFFT
+
+    Enable PFFFT backend.
+*/
+#ifndef YUP_ENABLE_PFFFT
+#define YUP_ENABLE_PFFFT 1
+#endif
+
+/** Config: YUP_ENABLE_OOURA
+
+    Enable OOURA backend.
+*/
+#ifndef YUP_ENABLE_OOURA
+#define YUP_ENABLE_OOURA 1
+#endif
+
+//==============================================================================
 
 #include <array>
 #include <cmath>

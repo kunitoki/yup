@@ -32,7 +32,8 @@
 
 //==============================================================================
 #include "frequency/yup_FFTProcessor.cpp"
-#if YUP_FFT_USING_OOURA
+
+#if YUP_ENABLE_OOURA && YUP_FFT_USING_OOURA
 #include "frequency/yup_OouraFFT8g.cpp"
 #endif
 
