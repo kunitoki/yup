@@ -193,7 +193,10 @@ protected:
         for (int i = 0; i < size; ++i)
         {
             if (std::abs (a[i] - b[i]) > tolerance)
+            {
+                std::cout << "Different: " << a[i] << " " << b[i] << " exceeds " << tolerance << "\n";
                 return false;
+            }
         }
         return true;
     }
@@ -343,7 +346,7 @@ TEST_F (FFTProcessorValidation, RealForwardTransformAccuracy)
     }
 }
 
-TEST_F (FFTProcessorValidation, DISABLED_RealInverseTransformAccuracy)
+TEST_F (FFTProcessorValidation, RealInverseTransformAccuracy)
 {
     for (int order = 5; order <= 8; ++order) // Reduced range for debugging
     {
@@ -376,7 +379,7 @@ TEST_F (FFTProcessorValidation, DISABLED_RealInverseTransformAccuracy)
     }
 }
 
-TEST_F (FFTProcessorValidation, DISABLED_ComplexForwardTransformAccuracy)
+TEST_F (FFTProcessorValidation, ComplexForwardTransformAccuracy)
 {
     // Test with simple known cases first
     const int size = 64;

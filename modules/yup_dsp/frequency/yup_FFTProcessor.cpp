@@ -20,25 +20,25 @@
 */
 
 // Conditional includes based on available FFT backends
-#if 0 // YUP_MODULE_AVAILABLE_pffft_library
+#if YUP_MODULE_AVAILABLE_pffft_library
 #include <pffft_library/pffft_library.h>
 #define YUP_FFT_USING_PFFFT 1
 #define YUP_FFT_FOUND_BACKEND 1
 #endif
 
-#if 1 && !YUP_FFT_FOUND_BACKEND && (YUP_MAC || YUP_IOS) // && defined(YUP_USE_APPLE_VDSP)
+#if !YUP_FFT_FOUND_BACKEND && (YUP_MAC || YUP_IOS) && __has_include(<Accelerate/Accelerate.h>)
 #include <Accelerate/Accelerate.h>
 #define YUP_FFT_USING_VDSP 1
 #define YUP_FFT_FOUND_BACKEND 1
 #endif
 
-#if !YUP_FFT_FOUND_BACKEND && defined(YUP_USE_INTEL_IPP)
+#if !YUP_FFT_FOUND_BACKEND && defined(YUP_USE_INTEL_IPP) && __has_include(<ipp.h>)
 #include <ipp.h>
 #define YUP_FFT_USING_IPP 1
 #define YUP_FFT_FOUND_BACKEND 1
 #endif
 
-#if !YUP_FFT_FOUND_BACKEND && defined(YUP_USE_FFTW3)
+#if !YUP_FFT_FOUND_BACKEND && defined(YUP_USE_FFTW3) && __has_include(<fftw3.h>)
 #include <fftw3.h>
 #define YUP_FFT_USING_FFTW3 1
 #define YUP_FFT_FOUND_BACKEND 1
@@ -199,7 +199,7 @@ public:
         fftSize = newFftSize;
 
         const int workSize = 2 + static_cast<int> (std::sqrt (fftSize / 2));
-        workBuffer.resize (static_cast<size_t> (fftSize));
+        workBuffer.resize (static_cast<size_t> (fftSize * 2));  // Need space for complex data
         tempBuffer.resize (static_cast<size_t> (fftSize));
         intBuffer.resize (static_cast<size_t> (workSize));
         intBuffer[0] = 0; // Initialization flag
@@ -221,36 +221,43 @@ public:
         rdft (fftSize, 1, workBuffer.data(), intBuffer.data(), tempBuffer.data());
 
         // Convert Ooura format to standard interleaved complex format
+        // Ooura rdft output: a[0]=DC, a[1]=Nyquist, a[2k]=Re[k], a[2k+1]=Im[k] for k=1..n/2-1
         complexOutput[0] = workBuffer[0]; // DC real
         complexOutput[1] = 0.0f;          // DC imaginary
 
+        // Nyquist frequency - Ooura stores it at position 1
+        complexOutput[fftSize] = workBuffer[1];   // Nyquist real
+        complexOutput[fftSize + 1] = 0.0f;        // Nyquist imaginary
+
+        // Handle frequencies 1 to n/2-1  
+        // Ooura stores them as alternating real/imag starting at index 2
         for (int i = 1; i < fftSize / 2; ++i)
         {
-            complexOutput[i * 2] = workBuffer[i];               // real
-            complexOutput[i * 2 + 1] = workBuffer[fftSize - i]; // imaginary
+            complexOutput[i * 2] = workBuffer[i * 2];           // real part 
+            complexOutput[i * 2 + 1] = -workBuffer[i * 2 + 1]; // imaginary part (negate)
         }
-
-        complexOutput[fftSize] = workBuffer[fftSize / 2]; // Nyquist real
-        complexOutput[fftSize + 1] = 0.0f;                // Nyquist imaginary
     }
 
     void performRealFFTInverse (const float* complexInput, float* realOutput) override
     {
         // Convert standard interleaved format to Ooura format
         workBuffer[0] = complexInput[0];                 // DC real
-        workBuffer[fftSize / 2] = complexInput[fftSize]; // Nyquist real
+        workBuffer[1] = complexInput[fftSize];           // Nyquist real
 
         for (int i = 1; i < fftSize / 2; ++i)
         {
-            workBuffer[i] = complexInput[i * 2];               // real
-            workBuffer[fftSize - i] = complexInput[i * 2 + 1]; // imaginary
+            workBuffer[i * 2] = complexInput[i * 2];           // real part
+            workBuffer[i * 2 + 1] = -complexInput[i * 2 + 1]; // imaginary part (negate back)
         }
 
         // Complex-to-real inverse transform
         rdft (fftSize, -1, workBuffer.data(), intBuffer.data(), tempBuffer.data());
 
-        // Copy result
-        std::copy (workBuffer.begin(), workBuffer.begin() + fftSize, realOutput);
+        // Apply Ooura-specific scaling for real inverse: needs 2x factor
+        for (int i = 0; i < fftSize; ++i)
+        {
+            realOutput[i] = workBuffer[i] * 2.0f;
+        }
     }
 
     void performComplexFFTForward (const float* complexInput, float* complexOutput) override
@@ -273,7 +280,7 @@ public:
         // Complex inverse transform
         cdft (fftSize * 2, -1, workBuffer.data(), intBuffer.data(), tempBuffer.data());
 
-        // Copy result
+        // Copy result - let framework handle scaling
         std::copy (workBuffer.begin(), workBuffer.begin() + fftSize * 2, complexOutput);
     }
 
@@ -325,108 +332,71 @@ public:
     void performRealFFTForward (const float* realInput, float* complexOutput) override
     {
         // Copy input to output buffer to work in-place
-        std::copy (realInput, realInput + fftSize, complexOutput);
-
-        auto* inout = reinterpret_cast<ComplexFloat*> (complexOutput);
-        auto splitInOut = toSplitComplex (inout);
-
-        // Clear imaginary part for vDSP
+        std::memcpy (complexOutput, realInput, fftSize * sizeof (float));
         complexOutput[fftSize] = 0.0f;
 
         // Perform vDSP real FFT
+        DSPSplitComplex splitInOut = { complexOutput, complexOutput + 1 };
         vDSP_fft_zrip (fftSetup, &splitInOut, 2, order, kFFTDirection_Forward);
 
-        // Apply forward normalization
+        // Normalize vDSP output to match other engines (vDSP outputs 2x expected)
         vDSP_vsmul (complexOutput, 1, &forwardNormalisation, complexOutput, 1, static_cast<size_t> (fftSize << 1));
 
-        // Convert to standard interleaved format
-        mirrorResult (inout, false);
+        // Set Nyquist bin (real only, imaginary = 0), set DC bin (real only, imaginary = 0)
+        auto* complexData = reinterpret_cast<ComplexFloat*> (complexOutput);
+        complexData[fftSize >> 1] = ComplexFloat (complexData[0].imag(), 0.0f);
+        complexData[0] = ComplexFloat (complexData[0].real(), 0.0f);
     }
 
     void performRealFFTInverse (const float* complexInput, float* realOutput) override
     {
-        std::copy (complexInput, complexInput + fftSize, tempBuffer.data());
+        // Copy input to temp buffer for processing
+        std::memcpy (tempBuffer.data(), complexInput, fftSize * 2 * sizeof (float));
 
-        auto* inout = reinterpret_cast<ComplexFloat*> (tempBuffer.data());
-        auto splitInOut = toSplitComplex (inout);
-
-        if (fftSize != 1)
-            inout[0] = ComplexFloat (inout[0].real(), inout[fftSize >> 1].real());
+        // Pack Nyquist real into DC imaginary for vDSP  
+        auto* complexData = reinterpret_cast<ComplexFloat*> (tempBuffer.data());
+        complexData[0] = ComplexFloat (complexData[0].real(), complexData[fftSize >> 1].real());
 
         // Perform vDSP real inverse FFT
+        DSPSplitComplex splitInOut = { tempBuffer.data(), tempBuffer.data() + 1 };
         vDSP_fft_zrip (fftSetup, &splitInOut, 2, order, kFFTDirection_Inverse);
 
-        // Apply inverse normalization
-        vDSP_vsmul (tempBuffer.data(), 1, &inverseNormalisation, tempBuffer.data(), 1, static_cast<size_t> (fftSize << 1));
+        // Clear upper half and extract real parts
+        vDSP_vclr (tempBuffer.data() + fftSize, 1, static_cast<size_t> (fftSize));
 
-        std::copy_n (tempBuffer.begin(), fftSize / 2, realOutput);
+        std::memcpy (realOutput, tempBuffer.data(), fftSize * sizeof (float));
     }
 
     void performComplexFFTForward (const float* complexInput, float* complexOutput) override
     {
-        auto splitInput = toSplitComplex (const_cast<ComplexFloat*> (reinterpret_cast<const ComplexFloat*> (complexInput)));
-        auto splitOutput = toSplitComplex (reinterpret_cast<ComplexFloat*> (complexOutput));
+        std::memcpy (tempBuffer.data(), complexInput, fftSize * 2 * sizeof (float));
+
+        DSPSplitComplex splitInput = { tempBuffer.data(), tempBuffer.data() + 1 };
+        DSPSplitComplex splitOutput = { complexOutput, complexOutput + 1 };
 
         // Perform complex FFT
         vDSP_fft_zop (fftSetup, &splitInput, 2, &splitOutput, 2, order, kFFTDirection_Forward);
 
-        // Apply forward normalization
-        const float scale = forwardNormalisation * 2.0f;
+        // Normalization
+        float scale = forwardNormalisation * 2.0f;
         vDSP_vsmul (complexOutput, 1, &scale, complexOutput, 1, static_cast<size_t> (fftSize << 1));
     }
 
     void performComplexFFTInverse (const float* complexInput, float* complexOutput) override
     {
-        auto splitInput = toSplitComplex (const_cast<ComplexFloat*> (reinterpret_cast<const ComplexFloat*> (complexInput)));
-        auto splitOutput = toSplitComplex (reinterpret_cast<ComplexFloat*> (complexOutput));
+        std::memcpy (tempBuffer.data(), complexInput, fftSize * 2 * sizeof (float));
+
+        DSPSplitComplex splitInput = { tempBuffer.data(), tempBuffer.data() + 1 };
+        DSPSplitComplex splitOutput = { complexOutput, complexOutput + 1 };
 
         // Perform complex FFT
         vDSP_fft_zop (fftSetup, &splitInput, 2, &splitOutput, 2, order, kFFTDirection_Inverse);
-
-        // Apply inverse normalization
-        vDSP_vsmul (complexOutput, 1, &inverseNormalisation, complexOutput, 1, static_cast<size_t> (fftSize << 1));
     }
 
     String getBackendName() const override { return "Apple vDSP"; }
 
 private:
-    // Helper struct to represent complex numbers
-    struct ComplexFloat
-    {
-        float real() const noexcept { return re; }
-        float imag() const noexcept { return im; }
-        void real (float newReal) noexcept { re = newReal; }
-        void imag (float newImag) noexcept { im = newImag; }
-
-        ComplexFloat() = default;
-        ComplexFloat (float r, float i) : re (r), im (i) {}
-
-        float re = 0.0f, im = 0.0f;
-    };
-
-    void mirrorResult (ComplexFloat* out, bool ignoreNegativeFreqs) const noexcept
-    {
-        auto halfSize = fftSize >> 1;
-
-        out[halfSize] = ComplexFloat (out[0].imag(), 0.0f);  // Nyquist bin
-        out[0] = ComplexFloat (out[0].real(), 0.0f);         // DC bin
-
-        // Mirror negative frequencies if requested
-        if (! ignoreNegativeFreqs)
-        {
-            for (int i = halfSize + 1; i < fftSize; ++i)
-            {
-                // Conjugate: real stays same, imaginary gets negated
-                out[i] = ComplexFloat (out[fftSize - i].real(), -out[fftSize - i].imag());
-            }
-        }
-    }
-
-    static DSPSplitComplex toSplitComplex (ComplexFloat* data) noexcept
-    {
-        // Assumes ComplexFloat interleaves real and imaginary parts and is tightly packed
-        return { reinterpret_cast<float*> (data), reinterpret_cast<float*> (data) + 1 };
-    }
+    using ComplexFloat = std::complex<float>;
 
     FFTSetup fftSetup = nullptr;
     vDSP_Length order = 0;
@@ -796,10 +766,7 @@ void FFTProcessor::applyScaling (float* data, int numElements, bool isForward)
     }
 
     if (scale != 1.0f)
-    {
-        for (int i = 0; i < numElements; ++i)
-            data[i] *= scale;
-    }
+        FloatVectorOperations::multiply (data, scale, numElements);
 }
 
 } // namespace yup
