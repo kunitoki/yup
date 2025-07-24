@@ -79,8 +79,9 @@ void SpectrumAnalyzerComponent::processFFT()
     // Update window if needed
     if (needsWindowUpdate)
     {
-        generateWindow();
         needsWindowUpdate = false;
+
+        generateWindow();
     }
 
     // Apply window function
@@ -312,31 +313,6 @@ void SpectrumAnalyzerComponent::drawFilledSpectrum (Graphics& g, const Rectangle
     g.strokePath (spectrumPath);
 }
 
-void SpectrumAnalyzerComponent::computeSpectrumPath (Path spectrumPath, const Rectangle<float>& bounds, bool closePath)
-{
-    float lastX = 0.0f;
-
-    // Draw the spectrum curve
-    for (int i = 0; i < scopeSize; ++i)
-    {
-        const float proportion = float (i) / float (scopeSize - 1);
-        const float frequency = std::pow (10.0f, logMinFrequency + proportion * (logMaxFrequency - logMinFrequency));
-        const float x = frequencyToX (frequency, bounds);
-        const float y = binToY (i, bounds.getHeight());
-
-        spectrumPath.lineTo (x, y);
-
-        lastX = x;
-    }
-
-    // End at baseline at the last spectrum frequency
-    if (closePath)
-    {
-        spectrumPath.lineTo (lastX, bounds.getBottom());
-        spectrumPath.closeSubPath();
-    }
-}
-
 void SpectrumAnalyzerComponent::drawFrequencyGrid (Graphics& g, const Rectangle<float>& bounds)
 {
     auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (10.0f);
@@ -451,11 +427,38 @@ void SpectrumAnalyzerComponent::resized()
 }
 
 //==============================================================================
+void SpectrumAnalyzerComponent::computeSpectrumPath (Path spectrumPath, const Rectangle<float>& bounds, bool closePath)
+{
+    float lastX = 0.0f;
+
+    // Draw the spectrum curve
+    for (int i = 0; i < scopeSize; ++i)
+    {
+        const float proportion = float (i) / float (scopeSize - 1);
+        const float frequency = std::pow (10.0f, logMinFrequency + proportion * (logMaxFrequency - logMinFrequency));
+        const float x = frequencyToX (frequency, bounds);
+        const float y = binToY (i, bounds.getHeight());
+
+        spectrumPath.lineTo (x, y);
+
+        lastX = x;
+    }
+
+    // End at baseline at the last spectrum frequency
+    if (closePath)
+    {
+        spectrumPath.lineTo (lastX, bounds.getBottom());
+        spectrumPath.closeSubPath();
+    }
+}
+
+//==============================================================================
 void SpectrumAnalyzerComponent::setWindowType (WindowType type)
 {
     if (currentWindowType != type)
     {
         currentWindowType = type;
+
         needsWindowUpdate = true;
     }
 }
