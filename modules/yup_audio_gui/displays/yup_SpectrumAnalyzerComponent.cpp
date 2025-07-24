@@ -149,23 +149,69 @@ void SpectrumAnalyzerComponent::updateDisplay(bool hasNewFFTData)
         
         if (hasNewFFTData)
         {
-            // Calculate the frequency for this display bin using logarithmic spacing
+            // Calculate frequency range for this display bin
             const float proportion = float (i) / float (scopeSize - 1);
             const float logFreq = logMin + proportion * (logMax - logMin);
-            const float frequency = std::pow (10.0f, logFreq);
-
-            // Find the corresponding FFT bin with interpolation
-            const float exactBin = (frequency * float (fftSize)) / float (sampleRate);
-            const int bin1 = jlimit (0, numBins - 1, static_cast<int> (exactBin));
-            const int bin2 = jlimit (0, numBins - 1, bin1 + 1);
-            const float fraction = exactBin - float (bin1);
-
-            // Get pre-computed magnitudes from both bins
-            const float mag1 = magnitudeBuffer[static_cast<size_t> (bin1)];
-            const float mag2 = magnitudeBuffer[static_cast<size_t> (bin2)];
+            const float centerFreq = std::pow (10.0f, logFreq);
             
-            // Interpolate between the two bins
-            const float magnitude = mag1 + fraction * (mag2 - mag1);
+            // Calculate the frequency range that this display bin represents
+            float freqRangeStart, freqRangeEnd;
+            if (i == 0)
+            {
+                freqRangeStart = minFrequency;
+                const float nextLogFreq = logMin + (float (i + 1) / float (scopeSize - 1)) * (logMax - logMin);
+                const float nextFreq = std::pow (10.0f, nextLogFreq);
+                freqRangeEnd = (centerFreq + nextFreq) * 0.5f;
+            }
+            else if (i == scopeSize - 1)
+            {
+                const float prevLogFreq = logMin + (float (i - 1) / float (scopeSize - 1)) * (logMax - logMin);
+                const float prevFreq = std::pow (10.0f, prevLogFreq);
+                freqRangeStart = (prevFreq + centerFreq) * 0.5f;
+                freqRangeEnd = maxFrequency;
+            }
+            else
+            {
+                const float prevLogFreq = logMin + (float (i - 1) / float (scopeSize - 1)) * (logMax - logMin);
+                const float nextLogFreq = logMin + (float (i + 1) / float (scopeSize - 1)) * (logMax - logMin);
+                const float prevFreq = std::pow (10.0f, prevLogFreq);
+                const float nextFreq = std::pow (10.0f, nextLogFreq);
+                freqRangeStart = (prevFreq + centerFreq) * 0.5f;
+                freqRangeEnd = (centerFreq + nextFreq) * 0.5f;
+            }
+            
+            // Convert frequency range to bin range
+            const float startBin = (freqRangeStart * float (fftSize)) / float (sampleRate);
+            const float endBin = (freqRangeEnd * float (fftSize)) / float (sampleRate);
+            const float binSpan = endBin - startBin;
+            
+            float magnitude = 0.0f;
+            
+            if (binSpan <= 1.5f)
+            {
+                // Low frequencies: Use interpolation for smooth transitions
+                const float exactBin = (centerFreq * float (fftSize)) / float (sampleRate);
+                const int bin1 = jlimit (0, numBins - 1, static_cast<int> (exactBin));
+                const int bin2 = jlimit (0, numBins - 1, bin1 + 1);
+                const float fraction = exactBin - float (bin1);
+
+                const float mag1 = magnitudeBuffer[static_cast<size_t> (bin1)];
+                const float mag2 = magnitudeBuffer[static_cast<size_t> (bin2)];
+                
+                // Linear interpolation for smooth low-frequency response
+                magnitude = mag1 + fraction * (mag2 - mag1);
+            }
+            else
+            {
+                // High frequencies: Aggregate multiple bins using peak-hold
+                const int binStart = jlimit (0, numBins - 1, static_cast<int> (startBin));
+                const int binEnd = jlimit (0, numBins - 1, static_cast<int> (endBin + 0.5f));
+                
+                for (int binIndex = binStart; binIndex <= binEnd; ++binIndex)
+                {
+                    magnitude = jmax (magnitude, magnitudeBuffer[static_cast<size_t> (binIndex)]);
+                }
+            }
 
             // Convert to decibels with proper normalization
             const float magnitudeDb = magnitude > 0.0f
