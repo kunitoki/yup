@@ -44,7 +44,7 @@ public:
     }
 
     /** Constructor with optional initial parameters */
-    explicit BiquadFilter (FilterMode mode)
+    explicit BiquadFilter (FilterModeType mode)
     {
         setParameters (mode, static_cast<CoeffType> (1000.0), static_cast<CoeffType> (0.707), static_cast<CoeffType> (0.0), 44100.0);
     }
@@ -59,7 +59,7 @@ public:
         @param gainDb      The gain in decibels (for peaking and shelving filters)
         @param sampleRate  The sample rate in Hz
     */
-    void setParameters (FilterMode mode, CoeffType frequency, CoeffType q, CoeffType gainDb, double sampleRate) noexcept
+    void setParameters (FilterModeType mode, CoeffType frequency, CoeffType q, CoeffType gainDb, double sampleRate) noexcept
     {
         if (filterMode != mode
             || ! approximatelyEqual (centerFreq, frequency)
@@ -128,7 +128,7 @@ public:
 
         @param mode  The filter mode
     */
-    void setMode (FilterMode mode) noexcept
+    void setMode (FilterModeType mode) noexcept
     {
         if (filterMode != mode)
         {
@@ -173,7 +173,7 @@ public:
 
         @returns  The filter mode
     */
-    FilterMode getMode() const noexcept
+    FilterModeType getMode() const noexcept
     {
         return filterMode;
     }
@@ -192,7 +192,7 @@ protected:
     virtual void updateCoefficients() = 0;
 
     //==============================================================================
-    FilterMode filterMode = FilterMode::lowpass;
+    FilterModeType filterMode = FilterMode::lowpass;
     CoeffType centerFreq = static_cast<CoeffType> (1000.0);
     CoeffType qFactor = static_cast<CoeffType> (0.707);
     CoeffType gain = static_cast<CoeffType> (0.0);

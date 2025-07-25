@@ -71,7 +71,7 @@ public:
     }
 
     /** Constructor with initial parameters */
-    ButterworthFilter (FilterMode mode, int filterOrder, CoeffType freq)
+    ButterworthFilter (FilterModeType mode, int filterOrder, CoeffType freq)
         : ButterworthFilter()
     {
         setParameters (mode, filterOrder, freq);
@@ -87,7 +87,7 @@ public:
         @param freq2          Secondary frequency for bandpass/bandstop filters
         @param gainDb           Gain in dB for peak/shelf filters
     */
-    void setParameters (FilterMode mode,
+    void setParameters (FilterModeType mode,
                         int filterOrder,
                         CoeffType freq,
                         CoeffType freq2,
@@ -125,7 +125,7 @@ public:
 
         @param mode  The new filter mode
     */
-    void setMode (FilterMode mode) noexcept
+    void setMode (FilterModeType mode) noexcept
     {
         if (filterMode != mode)
         {
@@ -205,7 +205,7 @@ public:
     /**
         Returns the current filter mode.
     */
-    FilterMode getMode() const noexcept { return filterMode; }
+    FilterModeType getMode() const noexcept { return filterMode; }
 
     /**
         Returns the current filter order.
@@ -290,40 +290,29 @@ private:
         calculateAnalogPrototypePoles();
 
         // Apply frequency transformations and bilinear transform
-        switch (filterMode)
-        {
-            case FilterMode::lowpass:
-                designLowpass();
-                break;
+        if (filterMode.test (FilterMode::lowpass))
+            designLowpass();
 
-            case FilterMode::highpass:
-                designHighpass();
-                break;
+        else if (filterMode.test (FilterMode::highpass))
+            designHighpass();
 
-            case FilterMode::bandpass:
-                designBandpass();
-                break;
+        else if (filterMode.test (FilterMode::bandpass))
+            designBandpass();
 
-            case FilterMode::bandstop:
-                designBandstop();
-                break;
+        else if (filterMode.test (FilterMode::bandstop))
+            designBandstop();
 
-            case FilterMode::lowshelf:
-                designLowshelf();
-                break;
+        else if (filterMode.test (FilterMode::lowshelf))
+            designLowshelf();
 
-            case FilterMode::highshelf:
-                designHighshelf();
-                break;
+        else if (filterMode.test (FilterMode::highshelf))
+            designHighshelf();
 
-            case FilterMode::peak:
-                designPeak();
-                break;
+        else if (filterMode.test (FilterMode::peak))
+            designPeak();
 
-            case FilterMode::allpass:
-                designAllpass();
-                break;
-        }
+        else if (filterMode.test (FilterMode::allpass))
+            designAllpass();
 
         // Update biquad cascade - preserve state when possible
         updateBiquadCascadePreservingState();
@@ -1057,7 +1046,7 @@ private:
     }
 
     //==============================================================================
-    FilterMode filterMode = FilterMode::lowpass;
+    FilterModeType filterMode = FilterMode::lowpass;
     int order = 2; // Default to 2nd order
     CoeffType frequency = static_cast<CoeffType> (1000.0);
     CoeffType frequency2 = static_cast<CoeffType> (2000.0);

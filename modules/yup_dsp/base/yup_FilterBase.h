@@ -25,17 +25,19 @@ namespace yup
 {
 
 //==============================================================================
-/** Common filter modes enumeration */
-enum class FilterMode
+/**
+    Filter capabilities trait to specify which modes a filter type supports.
+
+    This allows compile-time checking of filter capabilities and runtime
+    validation of mode compatibility.
+*/
+template <typename FilterType>
+struct FilterCapabilities
 {
-    lowpass,   /**< Low-pass filter */
-    highpass,  /**< High-pass filter */
-    bandpass,  /**< Band-pass filter */
-    bandstop,  /**< Band-stop (notch) filter */
-    peak,      /**< Peaking filter */
-    lowshelf,  /**< Low-shelf filter */
-    highshelf, /**< High-shelf filter */
-    allpass    /**< All-pass filter */
+    static constexpr auto supportedModes =
+        FilterMode::lowpass | FilterMode::highpass | FilterMode::bandpass | FilterMode::bandstop |
+        FilterMode::peak | FilterMode::lowshelf | FilterMode::highshelf |
+        FilterMode::allpass;
 };
 
 //==============================================================================

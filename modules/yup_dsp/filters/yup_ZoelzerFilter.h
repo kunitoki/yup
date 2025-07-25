@@ -55,7 +55,7 @@ public:
     ZoelzerFilter() noexcept = default;
 
     /** Constructor with optional initial parameters */
-    explicit ZoelzerFilter (FilterMode mode) noexcept
+    explicit ZoelzerFilter (FilterModeType mode) noexcept
         : BaseFilterType (mode)
     {
     }
@@ -66,43 +66,50 @@ private:
     {
         BiquadCoefficients<CoeffType> coeffs;
 
-        switch (this->filterMode)
+        if (this->filterMode.test (FilterMode::lowpass))
         {
-            case FilterMode::lowpass:
-                coeffs = FilterDesigner<CoeffType>::designZoelzerLowpass (this->centerFreq, this->qFactor, this->sampleRate);
-                break;
-
-            case FilterMode::highpass:
-                coeffs = FilterDesigner<CoeffType>::designZoelzerHighpass (this->centerFreq, this->qFactor, this->sampleRate);
-                break;
-
-            case FilterMode::bandpass:
+            coeffs = FilterDesigner<CoeffType>::designZoelzerLowpass (this->centerFreq, this->qFactor, this->sampleRate);
+        }
+        else if (this->filterMode.test (FilterMode::highpass))
+        {
+            coeffs = FilterDesigner<CoeffType>::designZoelzerHighpass (this->centerFreq, this->qFactor, this->sampleRate);
+        }
+        else if (this->filterMode.test (FilterMode::bandpassCsg))
+        {
+            coeffs = FilterDesigner<CoeffType>::designZoelzerBandpassCsg (this->centerFreq, this->qFactor, this->sampleRate);
+        }
+        else if (this->filterMode.test (FilterMode::bandpassCpg))
+        {
+            coeffs = FilterDesigner<CoeffType>::designZoelzerBandpassCpg (this->centerFreq, this->qFactor, this->sampleRate);
+        }
+        else if (this->filterMode.test (FilterMode::bandstop))
+        {
+            coeffs = FilterDesigner<CoeffType>::designZoelzerNotch (this->centerFreq, this->qFactor, this->sampleRate);
+        }
+        else if (this->filterMode.test (FilterMode::peak))
+        {
+            coeffs = FilterDesigner<CoeffType>::designZoelzerPeaking (this->centerFreq, this->qFactor, this->gain, this->sampleRate);
+        }
+        else if (this->filterMode.test (FilterMode::lowshelf))
+        {
+            coeffs = FilterDesigner<CoeffType>::designZoelzerLowShelf (this->centerFreq, this->qFactor, this->gain, this->sampleRate);
+        }
+        else if (this->filterMode.test (FilterMode::highshelf))
+        {
+            coeffs = FilterDesigner<CoeffType>::designZoelzerHighShelf (this->centerFreq, this->qFactor, this->gain, this->sampleRate);
+        }
+        else if (this->filterMode.test (FilterMode::allpass))
+        {
+            coeffs = FilterDesigner<CoeffType>::designZoelzerAllpass (this->centerFreq, this->qFactor, this->sampleRate);
+        }
+        else if (this->filterMode.test (FilterMode::bandpass))
+        {
+            // Handle composite bandpass mode by defaulting to CSG variant
+            // Choose the most appropriate bandpass variant
+            if (FilterCapabilities<ZoelzerFilter>::supportedModes.test (FilterMode::bandpassCsg))
                 coeffs = FilterDesigner<CoeffType>::designZoelzerBandpassCsg (this->centerFreq, this->qFactor, this->sampleRate);
-                break;
-
-            //case Mode::bandpassCpg:
-            //    coeffs = FilterDesigner<CoeffType>::designZoelzerBandpassCpg (this->centerFreq, this->qFactor, this->sampleRate);
-            //    break;
-
-            case FilterMode::bandstop:
-                coeffs = FilterDesigner<CoeffType>::designZoelzerNotch (this->centerFreq, this->qFactor, this->sampleRate);
-                break;
-
-            case FilterMode::peak:
-                coeffs = FilterDesigner<CoeffType>::designZoelzerPeaking (this->centerFreq, this->qFactor, this->gain, this->sampleRate);
-                break;
-
-            case FilterMode::lowshelf:
-                coeffs = FilterDesigner<CoeffType>::designZoelzerLowShelf (this->centerFreq, this->qFactor, this->gain, this->sampleRate);
-                break;
-
-            case FilterMode::highshelf:
-                coeffs = FilterDesigner<CoeffType>::designZoelzerHighShelf (this->centerFreq, this->qFactor, this->gain, this->sampleRate);
-                break;
-
-            case FilterMode::allpass:
-                coeffs = FilterDesigner<CoeffType>::designZoelzerAllpass (this->centerFreq, this->qFactor, this->sampleRate);
-                break;
+            else
+                coeffs = FilterDesigner<CoeffType>::designZoelzerBandpassCpg (this->centerFreq, this->qFactor, this->sampleRate);
         }
 
         BaseFilterType::setCoefficients (coeffs);
@@ -116,5 +123,23 @@ private:
 /** Type aliases for convenience */
 using ZoelzerFilterFloat = ZoelzerFilter<float>;   // float samples, double coefficients (default)
 using ZoelzerFilterDouble = ZoelzerFilter<double>; // double samples, double coefficients (default)
+
+//==============================================================================
+/** Zoelzer Filter capabilities specialization - supports both bandpass variants */
+template <>
+struct FilterCapabilities<ZoelzerFilter<float>>
+{
+    static constexpr auto supportedModes =
+        FilterMode::lowpass | FilterMode::highpass | FilterMode::bandpassCsg | FilterMode::bandpassCpg | FilterMode::bandstop |
+        FilterMode::peak | FilterMode::lowshelf | FilterMode::highshelf | FilterMode::allpass;
+};
+
+template <>
+struct FilterCapabilities<ZoelzerFilter<double>>
+{
+    static constexpr auto supportedModes = 
+        FilterMode::lowpass | FilterMode::highpass | FilterMode::bandpassCsg | FilterMode::bandpassCpg | FilterMode::bandstop |
+        FilterMode::peak | FilterMode::lowshelf | FilterMode::highshelf | FilterMode::allpass;
+};
 
 } // namespace yup

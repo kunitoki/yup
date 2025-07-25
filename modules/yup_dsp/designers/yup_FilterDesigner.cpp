@@ -129,7 +129,7 @@ FirstOrderCoefficients<CoeffType> FilterDesigner<CoeffType>::designFirstOrderAll
 
 template <typename CoeffType>
 BiquadCoefficients<CoeffType> FilterDesigner<CoeffType>::designRbj (
-    FilterMode filterMode,
+    FilterModeType filterMode,
     CoeffType frequency,
     CoeffType q,
     CoeffType gain,
@@ -143,92 +143,103 @@ BiquadCoefficients<CoeffType> FilterDesigner<CoeffType>::designRbj (
 
     BiquadCoefficients<CoeffType> coeffs;
 
-    switch (filterMode)
+    if (filterMode.test (FilterMode::lowpass))
     {
-        case FilterMode::lowpass:
-            coeffs.b0 = (static_cast<CoeffType> (1.0) - cosOmega) / static_cast<CoeffType> (2.0);
-            coeffs.b1 = static_cast<CoeffType> (1.0) - cosOmega;
-            coeffs.b2 = (static_cast<CoeffType> (1.0) - cosOmega) / static_cast<CoeffType> (2.0);
-            coeffs.a0 = static_cast<CoeffType> (1.0) + alpha;
-            coeffs.a1 = static_cast<CoeffType> (-2.0) * cosOmega;
-            coeffs.a2 = static_cast<CoeffType> (1.0) - alpha;
-            break;
+        coeffs.b0 = (static_cast<CoeffType> (1.0) - cosOmega) / static_cast<CoeffType> (2.0);
+        coeffs.b1 = static_cast<CoeffType> (1.0) - cosOmega;
+        coeffs.b2 = (static_cast<CoeffType> (1.0) - cosOmega) / static_cast<CoeffType> (2.0);
+        coeffs.a0 = static_cast<CoeffType> (1.0) + alpha;
+        coeffs.a1 = static_cast<CoeffType> (-2.0) * cosOmega;
+        coeffs.a2 = static_cast<CoeffType> (1.0) - alpha;
+    }
+    else if (filterMode.test (FilterMode::highpass))
+    {
+        coeffs.b0 = (static_cast<CoeffType> (1.0) + cosOmega) / static_cast<CoeffType> (2.0);
+        coeffs.b1 = -(static_cast<CoeffType> (1.0) + cosOmega);
+        coeffs.b2 = (static_cast<CoeffType> (1.0) + cosOmega) / static_cast<CoeffType> (2.0);
+        coeffs.a0 = static_cast<CoeffType> (1.0) + alpha;
+        coeffs.a1 = static_cast<CoeffType> (-2.0) * cosOmega;
+        coeffs.a2 = static_cast<CoeffType> (1.0) - alpha;
+    }
+    else if (filterMode.test (FilterMode::bandpassCsg))
+    {
+        // RBJ bandpass (constant skirt gain, peak gain = Q)
+        coeffs.b0 = alpha;
+        coeffs.b1 = static_cast<CoeffType> (0.0);
+        coeffs.b2 = -alpha;
+        coeffs.a0 = static_cast<CoeffType> (1.0) + alpha;
+        coeffs.a1 = static_cast<CoeffType> (-2.0) * cosOmega;
+        coeffs.a2 = static_cast<CoeffType> (1.0) - alpha;
+    }
+    else if (filterMode.test (FilterMode::bandpassCpg))
+    {
+        // RBJ doesn't have a separate CPG variant, so use same as CSG
+        coeffs.b0 = alpha;
+        coeffs.b1 = static_cast<CoeffType> (0.0);
+        coeffs.b2 = -alpha;
+        coeffs.a0 = static_cast<CoeffType> (1.0) + alpha;
+        coeffs.a1 = static_cast<CoeffType> (-2.0) * cosOmega;
+        coeffs.a2 = static_cast<CoeffType> (1.0) - alpha;
+    }
+    else if (filterMode.test (FilterMode::bandstop))
+    {
+        coeffs.b0 = static_cast<CoeffType> (1.0);
+        coeffs.b1 = static_cast<CoeffType> (-2.0) * cosOmega;
+        coeffs.b2 = static_cast<CoeffType> (1.0);
+        coeffs.a0 = static_cast<CoeffType> (1.0) + alpha;
+        coeffs.a1 = static_cast<CoeffType> (-2.0) * cosOmega;
+        coeffs.a2 = static_cast<CoeffType> (1.0) - alpha;
+    }
+    else if (filterMode.test (FilterMode::peak))
+    {
+        coeffs.b0 = static_cast<CoeffType> (1.0) + alpha * A;
+        coeffs.b1 = static_cast<CoeffType> (-2.0) * cosOmega;
+        coeffs.b2 = static_cast<CoeffType> (1.0) - alpha * A;
+        coeffs.a0 = static_cast<CoeffType> (1.0) + alpha / A;
+        coeffs.a1 = static_cast<CoeffType> (-2.0) * cosOmega;
+        coeffs.a2 = static_cast<CoeffType> (1.0) - alpha / A;
+    }
+    else if (filterMode.test (FilterMode::lowshelf))
+    {
+        const auto S = static_cast<CoeffType> (1.0);
+        const auto beta = std::sqrt (A) / q;
 
-        case FilterMode::highpass:
-            coeffs.b0 = (static_cast<CoeffType> (1.0) + cosOmega) / static_cast<CoeffType> (2.0);
-            coeffs.b1 = -(static_cast<CoeffType> (1.0) + cosOmega);
-            coeffs.b2 = (static_cast<CoeffType> (1.0) + cosOmega) / static_cast<CoeffType> (2.0);
-            coeffs.a0 = static_cast<CoeffType> (1.0) + alpha;
-            coeffs.a1 = static_cast<CoeffType> (-2.0) * cosOmega;
-            coeffs.a2 = static_cast<CoeffType> (1.0) - alpha;
-            break;
+        coeffs.b0 = A * ((A + static_cast<CoeffType> (1.0)) - (A - static_cast<CoeffType> (1.0)) * cosOmega + beta * sinOmega);
+        coeffs.b1 = static_cast<CoeffType> (2.0) * A * ((A - static_cast<CoeffType> (1.0)) - (A + static_cast<CoeffType> (1.0)) * cosOmega);
+        coeffs.b2 = A * ((A + static_cast<CoeffType> (1.0)) - (A - static_cast<CoeffType> (1.0)) * cosOmega - beta * sinOmega);
+        coeffs.a0 = (A + static_cast<CoeffType> (1.0)) + (A - static_cast<CoeffType> (1.0)) * cosOmega + beta * sinOmega;
+        coeffs.a1 = static_cast<CoeffType> (-2.0) * ((A - static_cast<CoeffType> (1.0)) + (A + static_cast<CoeffType> (1.0)) * cosOmega);
+        coeffs.a2 = (A + static_cast<CoeffType> (1.0)) + (A - static_cast<CoeffType> (1.0)) * cosOmega - beta * sinOmega;
+    }
+    else if (filterMode.test (FilterMode::highshelf))
+    {
+        const auto S = static_cast<CoeffType> (1.0);
+        const auto beta = std::sqrt (A) / q;
 
-        case FilterMode::bandpass:
-            coeffs.b0 = alpha;
-            coeffs.b1 = static_cast<CoeffType> (0.0);
-            coeffs.b2 = -alpha;
-            coeffs.a0 = static_cast<CoeffType> (1.0) + alpha;
-            coeffs.a1 = static_cast<CoeffType> (-2.0) * cosOmega;
-            coeffs.a2 = static_cast<CoeffType> (1.0) - alpha;
-            break;
-
-        case FilterMode::bandstop:
-            coeffs.b0 = static_cast<CoeffType> (1.0);
-            coeffs.b1 = static_cast<CoeffType> (-2.0) * cosOmega;
-            coeffs.b2 = static_cast<CoeffType> (1.0);
-            coeffs.a0 = static_cast<CoeffType> (1.0) + alpha;
-            coeffs.a1 = static_cast<CoeffType> (-2.0) * cosOmega;
-            coeffs.a2 = static_cast<CoeffType> (1.0) - alpha;
-            break;
-
-        case FilterMode::peak:
-            coeffs.b0 = static_cast<CoeffType> (1.0) + alpha * A;
-            coeffs.b1 = static_cast<CoeffType> (-2.0) * cosOmega;
-            coeffs.b2 = static_cast<CoeffType> (1.0) - alpha * A;
-            coeffs.a0 = static_cast<CoeffType> (1.0) + alpha / A;
-            coeffs.a1 = static_cast<CoeffType> (-2.0) * cosOmega;
-            coeffs.a2 = static_cast<CoeffType> (1.0) - alpha / A;
-            break;
-
-        case FilterMode::lowshelf:
-        {
-            const auto S = static_cast<CoeffType> (1.0);
-            const auto beta = std::sqrt (A) / q;
-
-            coeffs.b0 = A * ((A + static_cast<CoeffType> (1.0)) - (A - static_cast<CoeffType> (1.0)) * cosOmega + beta * sinOmega);
-            coeffs.b1 = static_cast<CoeffType> (2.0) * A * ((A - static_cast<CoeffType> (1.0)) - (A + static_cast<CoeffType> (1.0)) * cosOmega);
-            coeffs.b2 = A * ((A + static_cast<CoeffType> (1.0)) - (A - static_cast<CoeffType> (1.0)) * cosOmega - beta * sinOmega);
-            coeffs.a0 = (A + static_cast<CoeffType> (1.0)) + (A - static_cast<CoeffType> (1.0)) * cosOmega + beta * sinOmega;
-            coeffs.a1 = static_cast<CoeffType> (-2.0) * ((A - static_cast<CoeffType> (1.0)) + (A + static_cast<CoeffType> (1.0)) * cosOmega);
-            coeffs.a2 = (A + static_cast<CoeffType> (1.0)) + (A - static_cast<CoeffType> (1.0)) * cosOmega - beta * sinOmega;
-        }
-        break;
-
-        case FilterMode::highshelf:
-        {
-            const auto S = static_cast<CoeffType> (1.0);
-            const auto beta = std::sqrt (A) / q;
-
-            coeffs.b0 = A * ((A + static_cast<CoeffType> (1.0)) + (A - static_cast<CoeffType> (1.0)) * cosOmega + beta * sinOmega);
-            coeffs.b1 = static_cast<CoeffType> (-2.0) * A * ((A - static_cast<CoeffType> (1.0)) + (A + static_cast<CoeffType> (1.0)) * cosOmega);
-            coeffs.b2 = A * ((A + static_cast<CoeffType> (1.0)) + (A - static_cast<CoeffType> (1.0)) * cosOmega - beta * sinOmega);
-            coeffs.a0 = (A + static_cast<CoeffType> (1.0)) - (A - static_cast<CoeffType> (1.0)) * cosOmega + beta * sinOmega;
-            coeffs.a1 = static_cast<CoeffType> (2.0) * ((A - static_cast<CoeffType> (1.0)) - (A + static_cast<CoeffType> (1.0)) * cosOmega);
-            coeffs.a2 = (A + static_cast<CoeffType> (1.0)) - (A - static_cast<CoeffType> (1.0)) * cosOmega - beta * sinOmega;
-        }
-        break;
-
-        case FilterMode::allpass:
-            coeffs.b0 = static_cast<CoeffType> (1.0) - alpha;
-            coeffs.b1 = static_cast<CoeffType> (-2.0) * cosOmega;
-            coeffs.b2 = static_cast<CoeffType> (1.0) + alpha;
-            coeffs.a0 = static_cast<CoeffType> (1.0) + alpha;
-            coeffs.a1 = static_cast<CoeffType> (-2.0) * cosOmega;
-            coeffs.a2 = static_cast<CoeffType> (1.0) - alpha;
-            break;
-
-        default:
-            break;
+        coeffs.b0 = A * ((A + static_cast<CoeffType> (1.0)) + (A - static_cast<CoeffType> (1.0)) * cosOmega + beta * sinOmega);
+        coeffs.b1 = static_cast<CoeffType> (-2.0) * A * ((A - static_cast<CoeffType> (1.0)) + (A + static_cast<CoeffType> (1.0)) * cosOmega);
+        coeffs.b2 = A * ((A + static_cast<CoeffType> (1.0)) + (A - static_cast<CoeffType> (1.0)) * cosOmega - beta * sinOmega);
+        coeffs.a0 = (A + static_cast<CoeffType> (1.0)) - (A - static_cast<CoeffType> (1.0)) * cosOmega + beta * sinOmega;
+        coeffs.a1 = static_cast<CoeffType> (2.0) * ((A - static_cast<CoeffType> (1.0)) - (A + static_cast<CoeffType> (1.0)) * cosOmega);
+        coeffs.a2 = (A + static_cast<CoeffType> (1.0)) - (A - static_cast<CoeffType> (1.0)) * cosOmega - beta * sinOmega;
+    }
+    else if (filterMode.test (FilterMode::allpass))
+    {
+        coeffs.b0 = static_cast<CoeffType> (1.0) - alpha;
+        coeffs.b1 = static_cast<CoeffType> (-2.0) * cosOmega;
+        coeffs.b2 = static_cast<CoeffType> (1.0) + alpha;
+        coeffs.a0 = static_cast<CoeffType> (1.0) + alpha;
+        coeffs.a1 = static_cast<CoeffType> (-2.0) * cosOmega;
+        coeffs.a2 = static_cast<CoeffType> (1.0) - alpha;
+    }
+    else if (filterMode.test (FilterMode::bandpassCsg) || filterMode.test (FilterMode::bandpassCpg))
+    {
+        coeffs.b0 = alpha;
+        coeffs.b1 = static_cast<CoeffType> (0.0);
+        coeffs.b2 = -alpha;
+        coeffs.a0 = static_cast<CoeffType> (1.0) + alpha;
+        coeffs.a1 = static_cast<CoeffType> (-2.0) * cosOmega;
+        coeffs.a2 = static_cast<CoeffType> (1.0) - alpha;
     }
 
     coeffs.normalize();

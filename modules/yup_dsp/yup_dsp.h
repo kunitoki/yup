@@ -112,14 +112,15 @@
 #include "frequency/yup_SpectrumAnalyzerState.h"
 
 // Base filter interfaces and common structures
+#include "base/yup_FilterMode.h"
 #include "base/yup_FilterBase.h"
+#include "base/yup_FilterCharacteristics.h"
 #include "base/yup_FirstOrderCoefficients.h"
 #include "base/yup_BiquadCoefficients.h"
 #include "base/yup_StateVariableCoefficients.h"
 #include "base/yup_FirstOrder.h"
 #include "base/yup_Biquad.h"
 #include "base/yup_BiquadCascade.h"
-#include "base/yup_FilterCharacteristics.h"
 
 // Filter designers and coefficient calculators
 #include "designers/yup_FilterDesigner.h"

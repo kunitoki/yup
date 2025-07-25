@@ -495,7 +495,7 @@ TEST_F (RbjFilterTests, SinusoidalInput)
 
 TEST_F (RbjFilterTests, AllFilterTypesBasicFunctionality)
 {
-    const std::vector<FilterMode> allTypes = {
+    const std::vector<FilterModeType> allTypes = {
         FilterMode::lowpass,
         FilterMode::highpass,
         FilterMode::bandpass,

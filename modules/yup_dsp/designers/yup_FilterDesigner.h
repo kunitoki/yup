@@ -100,7 +100,7 @@ public:
 
     /** RBJ implementation with type selection */
     static BiquadCoefficients<CoeffType> designRbj (
-        FilterMode filterMode,
+        FilterModeType filterMode,
         CoeffType frequency,
         CoeffType q,
         CoeffType gain,

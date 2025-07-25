@@ -995,12 +995,13 @@ private:
         responseTypeCombo = std::make_unique<yup::ComboBox> ("ResponseType");
         responseTypeCombo->addItem ("Lowpass", 1);
         responseTypeCombo->addItem ("Highpass", 2);
-        responseTypeCombo->addItem ("Bandpass", 3);
-        responseTypeCombo->addItem ("Bandstop", 4);
-        responseTypeCombo->addItem ("Peak", 5);
-        responseTypeCombo->addItem ("Low Shelf", 6);
-        responseTypeCombo->addItem ("High Shelf", 7);
-        responseTypeCombo->addItem ("Allpass", 8);
+        responseTypeCombo->addItem ("Bandpass CSG", 3);
+        responseTypeCombo->addItem ("Bandpass CPG", 4);
+        responseTypeCombo->addItem ("Bandstop", 5);
+        responseTypeCombo->addItem ("Peak", 6);
+        responseTypeCombo->addItem ("Low Shelf", 7);
+        responseTypeCombo->addItem ("High Shelf", 8);
+        responseTypeCombo->addItem ("Allpass", 9);
         responseTypeCombo->setSelectedId (1);
         responseTypeCombo->onSelectedItemChanged = [this]
         {
@@ -1377,7 +1378,7 @@ private:
         polesZerosDisplay.updatePolesZeros (poles, zeros);
     }
 
-    yup::FilterMode getFilterMode (int responseTypeId)
+    yup::FilterModeType getFilterMode (int responseTypeId)
     {
         switch (responseTypeId)
         {
@@ -1386,16 +1387,18 @@ private:
             case 2:
                 return yup::FilterMode::highpass;
             case 3:
-                return yup::FilterMode::bandpass;
+                return yup::FilterMode::bandpassCsg;
             case 4:
-                return yup::FilterMode::bandstop;
+                return yup::FilterMode::bandpassCpg;
             case 5:
-                return yup::FilterMode::peak;
+                return yup::FilterMode::bandstop;
             case 6:
-                return yup::FilterMode::lowshelf;
+                return yup::FilterMode::peak;
             case 7:
-                return yup::FilterMode::highshelf;
+                return yup::FilterMode::lowshelf;
             case 8:
+                return yup::FilterMode::highshelf;
+            case 9:
                 return yup::FilterMode::allpass;
             default:
                 return yup::FilterMode::lowpass;
@@ -1411,8 +1414,10 @@ private:
             case 2:
                 return yup::StateVariableFilter<float>::Mode::highpass;
             case 3:
-                return yup::StateVariableFilter<float>::Mode::bandpass;
             case 4:
+                // SVF only has one bandpass mode, use it for both CSG and CPG
+                return yup::StateVariableFilter<float>::Mode::bandpass;
+            case 5:
                 return yup::StateVariableFilter<float>::Mode::notch;
             default:
                 return yup::StateVariableFilter<float>::Mode::lowpass;
@@ -1427,11 +1432,11 @@ private:
                 return yup::FilterDesigner<double>::designFirstOrderLowpass (freq, sampleRate);
             case 2:
                 return yup::FilterDesigner<double>::designFirstOrderHighpass (freq, sampleRate);
-            case 6:
-                return yup::FilterDesigner<double>::designFirstOrderLowShelf (freq, gain, sampleRate);
             case 7:
-                return yup::FilterDesigner<double>::designFirstOrderHighShelf (freq, gain, sampleRate);
+                return yup::FilterDesigner<double>::designFirstOrderLowShelf (freq, gain, sampleRate);
             case 8:
+                return yup::FilterDesigner<double>::designFirstOrderHighShelf (freq, gain, sampleRate);
+            case 9:
                 return yup::FilterDesigner<double>::designFirstOrderAllpass (freq, sampleRate);
             default:
                 return yup::FilterDesigner<double>::designFirstOrderLowpass (freq, sampleRate);

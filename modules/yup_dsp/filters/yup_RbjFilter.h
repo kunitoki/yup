@@ -54,7 +54,7 @@ public:
     RbjFilter() noexcept = default;
 
     /** Constructor with optional initial parameters */
-    explicit RbjFilter (FilterMode mode) noexcept
+    explicit RbjFilter (FilterModeType mode) noexcept
         : BaseFilterType (mode)
     {
     }
@@ -77,5 +77,25 @@ private:
 /** Type aliases for convenience */
 using RbjFilterFloat = RbjFilter<float>;   // float samples, double coefficients (default)
 using RbjFilterDouble = RbjFilter<double>; // double samples, double coefficients (default)
+
+//==============================================================================
+/** RBJ Filter capabilities specialization - supports standard bandpass only */
+template <>
+struct FilterCapabilities<RbjFilter<float>>
+{
+    static constexpr auto supportedModes =
+        FilterMode::lowpass | FilterMode::highpass | FilterMode::bandpassCsg |
+        FilterMode::bandstop | FilterMode::peak | FilterMode::lowshelf |
+        FilterMode::highshelf | FilterMode::allpass;
+};
+
+template <>
+struct FilterCapabilities<RbjFilter<double>>
+{
+    static constexpr auto supportedModes = 
+        FilterMode::lowpass | FilterMode::highpass | FilterMode::bandpassCsg | 
+        FilterMode::bandstop | FilterMode::peak | FilterMode::lowshelf | 
+        FilterMode::highshelf | FilterMode::allpass;
+};
 
 } // namespace yup
