@@ -64,10 +64,6 @@ protected:
     std::vector<double> doubleOutputData;
 };
 
-//==============================================================================
-// Biquad Basic Functionality Tests
-//==============================================================================
-
 TEST_F (BiquadFilterTests, DefaultConstruction)
 {
     BiquadFloat filter;
@@ -118,10 +114,6 @@ TEST_F (BiquadFilterTests, TopologySwitch)
     EXPECT_EQ (filterFloat.getTopology(), BiquadFloat::Topology::transposedDirectFormII);
 }
 
-//==============================================================================
-// Coefficient Normalization Tests
-//==============================================================================
-
 TEST_F (BiquadFilterTests, CoefficientNormalization)
 {
     // Create coefficients with a0 != 1
@@ -138,10 +130,6 @@ TEST_F (BiquadFilterTests, CoefficientNormalization)
     EXPECT_DOUBLE_EQ (normalizedCoeffs.a1, -0.5);  // -1.0/2.0
     EXPECT_DOUBLE_EQ (normalizedCoeffs.a2, 0.125); // 0.25/2.0
 }
-
-//==============================================================================
-// Processing Tests
-//==============================================================================
 
 TEST_F (BiquadFilterTests, SampleProcessing)
 {
@@ -184,10 +172,6 @@ TEST_F (BiquadFilterTests, InPlaceProcessing)
     }
 }
 
-//==============================================================================
-// Topology Equivalence Tests
-//==============================================================================
-
 TEST_F (BiquadFilterTests, TopologyEquivalence)
 {
     // Test that all topologies produce equivalent results for the same coefficients
@@ -221,10 +205,6 @@ TEST_F (BiquadFilterTests, TopologyEquivalence)
     }
 }
 
-//==============================================================================
-// State Reset Tests
-//==============================================================================
-
 TEST_F (BiquadFilterTests, StateReset)
 {
     auto coeffs = FilterDesigner<double>::designRbjLowpass (1000.0, 0.707, sampleRate);
@@ -242,10 +222,6 @@ TEST_F (BiquadFilterTests, StateReset)
     // After reset, the output should be closer to zero
     EXPECT_LT (std::abs (outputAfterReset), std::abs (outputBeforeReset));
 }
-
-//==============================================================================
-// Frequency Response Tests
-//==============================================================================
 
 TEST_F (BiquadFilterTests, FrequencyResponse)
 {
@@ -280,10 +256,6 @@ TEST_F (BiquadFilterTests, HighpassFrequencyResponse)
     EXPECT_GT (highFreqResponse, 0.7);
 }
 
-//==============================================================================
-// Poles and Zeros Tests
-//==============================================================================
-
 TEST_F (BiquadFilterTests, PolesAndZeros)
 {
     auto coeffs = FilterDesigner<double>::designRbjLowpass (1000.0, 0.707, sampleRate);
@@ -302,10 +274,6 @@ TEST_F (BiquadFilterTests, PolesAndZeros)
         EXPECT_LT (std::abs (pole), 1.0 + tolerance);
     }
 }
-
-//==============================================================================
-// Precision Tests
-//==============================================================================
 
 TEST_F (BiquadFilterTests, FloatVsDoublePrecision)
 {
@@ -326,10 +294,6 @@ TEST_F (BiquadFilterTests, FloatVsDoublePrecision)
         EXPECT_NEAR (outputFloat[i], static_cast<float> (outputDouble[i]), 1e-4f);
     }
 }
-
-//==============================================================================
-// Edge Cases Tests
-//==============================================================================
 
 TEST_F (BiquadFilterTests, ZeroInput)
 {
@@ -361,235 +325,6 @@ TEST_F (BiquadFilterTests, ImpulseResponse)
     EXPECT_GT (std::abs (impulseResponse[0]), std::abs (impulseResponse[50]));
 }
 
-//==============================================================================
-// BiquadCascade Tests
-//==============================================================================
-
-class BiquadCascadeFilterTests : public ::testing::Test
-{
-protected:
-    void SetUp() override
-    {
-        cascadeFloat.prepare (sampleRate, blockSize);
-        cascadeDouble.prepare (sampleRate, blockSize);
-
-        // Initialize test vectors
-        testData.resize (blockSize);
-        outputData.resize (blockSize);
-
-        for (int i = 0; i < blockSize; ++i)
-        {
-            testData[i] = 0.1f * std::sin (2.0f * MathConstants<float>::pi * 1000.0f * i / static_cast<float> (sampleRate));
-        }
-    }
-
-    BiquadCascadeFloat cascadeFloat;
-    BiquadCascadeDouble cascadeDouble;
-    std::vector<float> testData;
-    std::vector<float> outputData;
-};
-
-TEST_F (BiquadCascadeFilterTests, DefaultConstruction)
-{
-    BiquadCascadeFloat cascade;
-    EXPECT_EQ (cascade.getNumSections(), 1u);
-}
-
-TEST_F (BiquadCascadeFilterTests, MultiSectionConstruction)
-{
-    BiquadCascadeFloat cascade (4);
-    EXPECT_EQ (cascade.getNumSections(), 4u);
-}
-
-TEST_F (BiquadCascadeFilterTests, SectionManagement)
-{
-    cascadeFloat.setNumSections (3);
-    EXPECT_EQ (cascadeFloat.getNumSections(), 3u);
-
-    // Set coefficients for each section
-    auto coeffs1 = FilterDesigner<double>::designRbjLowpass (500.0, 0.707, sampleRate);
-    auto coeffs2 = FilterDesigner<double>::designRbjBandpass (1000.0, 2.0, sampleRate);
-    auto coeffs3 = FilterDesigner<double>::designRbjHighpass (2000.0, 0.707, sampleRate);
-
-    cascadeFloat.setSectionCoefficients (0, coeffs1);
-    cascadeFloat.setSectionCoefficients (1, coeffs2);
-    cascadeFloat.setSectionCoefficients (2, coeffs3);
-
-    // Verify coefficients were set correctly
-    auto retrievedCoeffs1 = cascadeFloat.getSectionCoefficients (0);
-    EXPECT_FLOAT_EQ (retrievedCoeffs1.b0, coeffs1.b0);
-    EXPECT_FLOAT_EQ (retrievedCoeffs1.a1, coeffs1.a1);
-}
-
-TEST_F (BiquadCascadeFilterTests, InvalidSectionAccess)
-{
-    cascadeFloat.setNumSections (2);
-
-    // Trying to access section 5 when only 2 sections exist should not crash
-    auto coeffs = cascadeFloat.getSectionCoefficients (5);
-    // Should return default/empty coefficients
-    EXPECT_TRUE (std::isfinite (coeffs.b0));
-}
-
-TEST_F (BiquadCascadeFilterTests, ProcessingThroughCascade)
-{
-    cascadeFloat.setNumSections (3);
-
-    // Set up a multi-stage filter
-    auto lowpass = FilterDesigner<double>::designRbjLowpass (2000.0, 0.707, sampleRate);
-    auto peak = FilterDesigner<double>::designRbjPeak (1000.0, 2.0, 6.0, sampleRate);
-    auto highpass = FilterDesigner<double>::designRbjHighpass (500.0, 0.707, sampleRate);
-
-    cascadeFloat.setSectionCoefficients (0, lowpass);
-    cascadeFloat.setSectionCoefficients (1, peak);
-    cascadeFloat.setSectionCoefficients (2, highpass);
-
-    cascadeFloat.processBlock (testData.data(), outputData.data(), blockSize);
-
-    for (int i = 0; i < blockSize; ++i)
-    {
-        EXPECT_TRUE (std::isfinite (outputData[i]));
-    }
-}
-
-TEST_F (BiquadCascadeFilterTests, SingleSampleProcessing)
-{
-    cascadeFloat.setNumSections (2);
-
-    auto coeffs = FilterDesigner<double>::designRbjLowpass (1000.0, 0.707, sampleRate);
-    cascadeFloat.setSectionCoefficients (0, coeffs);
-    cascadeFloat.setSectionCoefficients (1, coeffs);
-
-    for (int i = 0; i < 10; ++i)
-    {
-        auto output = cascadeFloat.processSample (testData[i]);
-        EXPECT_TRUE (std::isfinite (output));
-    }
-}
-
-TEST_F (BiquadCascadeFilterTests, EmptyCascade)
-{
-    cascadeFloat.setNumSections (0);
-    EXPECT_EQ (cascadeFloat.getNumSections(), 0u);
-
-    // Processing through empty cascade should pass signal through unchanged
-    cascadeFloat.processBlock (testData.data(), outputData.data(), blockSize);
-
-    for (int i = 0; i < blockSize; ++i)
-    {
-        EXPECT_FLOAT_EQ (outputData[i], testData[i]);
-    }
-}
-
-TEST_F (BiquadCascadeFilterTests, CascadeFrequencyResponse)
-{
-    cascadeFloat.setNumSections (2);
-
-    // Two identical lowpass filters in cascade
-    auto coeffs = FilterDesigner<double>::designRbjLowpass (1000.0, 0.707, sampleRate);
-    cascadeFloat.setSectionCoefficients (0, coeffs);
-    cascadeFloat.setSectionCoefficients (1, coeffs);
-
-    // Overall response should be the product of individual responses
-    auto singleResponse = std::abs (BiquadFloat (BiquadFloat::Topology::directFormII).getComplexResponse (1000.0));
-    BiquadFloat singleFilter;
-    singleFilter.setCoefficients (coeffs);
-    singleResponse = std::abs (singleFilter.getComplexResponse (1000.0));
-
-    auto cascadeResponse = std::abs (cascadeFloat.getComplexResponse (1000.0));
-    auto expectedResponse = singleResponse * singleResponse;
-
-    EXPECT_NEAR (cascadeResponse, expectedResponse, 0.1f);
-}
-
-TEST_F (BiquadCascadeFilterTests, CascadeStateReset)
-{
-    cascadeFloat.setNumSections (2);
-
-    auto coeffs = FilterDesigner<double>::designRbjLowpass (1000.0, 0.707, sampleRate);
-    cascadeFloat.setSectionCoefficients (0, coeffs);
-    cascadeFloat.setSectionCoefficients (1, coeffs);
-
-    // Build up internal state
-    for (int i = 0; i < 50; ++i)
-        cascadeFloat.processSample (1.0f);
-
-    auto outputBeforeReset = cascadeFloat.processSample (0.0f);
-
-    cascadeFloat.reset();
-    auto outputAfterReset = cascadeFloat.processSample (0.0f);
-
-    // After reset, the output should be closer to zero
-    EXPECT_LT (std::abs (outputAfterReset), std::abs (outputBeforeReset));
-}
-
-TEST_F (BiquadCascadeFilterTests, DynamicSectionResize)
-{
-    // Start with 1 section
-    cascadeFloat.setNumSections (1);
-    EXPECT_EQ (cascadeFloat.getNumSections(), 1u);
-
-    // Expand to 4 sections
-    cascadeFloat.setNumSections (4);
-    EXPECT_EQ (cascadeFloat.getNumSections(), 4u);
-
-    // Shrink to 2 sections
-    cascadeFloat.setNumSections (2);
-    EXPECT_EQ (cascadeFloat.getNumSections(), 2u);
-
-    // Should still process correctly after resize
-    cascadeFloat.processBlock (testData.data(), outputData.data(), blockSize);
-
-    for (int i = 0; i < blockSize; ++i)
-    {
-        EXPECT_TRUE (std::isfinite (outputData[i]));
-    }
-}
-
-//==============================================================================
-// Integration Tests
-//==============================================================================
-
-TEST_F (BiquadCascadeFilterTests, CascadeVsManualChaining)
-{
-    // Compare cascade processing with manual chaining of individual biquads
-    auto coeffs1 = FilterDesigner<double>::designRbjLowpass (1000.0, 0.707, sampleRate);
-    auto coeffs2 = FilterDesigner<double>::designRbjHighpass (500.0, 0.707, sampleRate);
-
-    // Set up cascade
-    cascadeFloat.setNumSections (2);
-    cascadeFloat.setSectionCoefficients (0, coeffs1);
-    cascadeFloat.setSectionCoefficients (1, coeffs2);
-
-    // Set up manual chain
-    BiquadFloat filter1, filter2;
-    filter1.prepare (sampleRate, blockSize);
-    filter2.prepare (sampleRate, blockSize);
-    filter1.setCoefficients (coeffs1);
-    filter2.setCoefficients (coeffs2);
-
-    std::vector<float> cascadeOutput (blockSize);
-    std::vector<float> manualOutput (blockSize);
-    std::vector<float> tempOutput (blockSize);
-
-    // Process through cascade
-    cascadeFloat.processBlock (testData.data(), cascadeOutput.data(), blockSize);
-
-    // Process through manual chain
-    filter1.processBlock (testData.data(), tempOutput.data(), blockSize);
-    filter2.processBlock (tempOutput.data(), manualOutput.data(), blockSize);
-
-    // Results should be identical
-    for (int i = 0; i < blockSize; ++i)
-    {
-        EXPECT_NEAR (cascadeOutput[i], manualOutput[i], toleranceF);
-    }
-}
-
-//==============================================================================
-// Performance and Stability Tests
-//==============================================================================
-
 TEST_F (BiquadFilterTests, HighQStability)
 {
     // Test with very high Q factor
@@ -612,26 +347,4 @@ TEST_F (BiquadFilterTests, ExtremeCoefficientValues)
 
     auto output = filterFloat.processSample (1.0f);
     EXPECT_TRUE (std::isfinite (output));
-}
-
-TEST_F (BiquadCascadeFilterTests, LargeCascade)
-{
-    // Test with many sections
-    const int numSections = 10;
-    cascadeFloat.setNumSections (numSections);
-    EXPECT_EQ (cascadeFloat.getNumSections(), static_cast<size_t> (numSections));
-
-    // Set mild filtering on each section
-    auto coeffs = FilterDesigner<double>::designRbjLowpass (5000.0, 0.707, sampleRate);
-    for (int i = 0; i < numSections; ++i)
-    {
-        cascadeFloat.setSectionCoefficients (static_cast<size_t> (i), coeffs);
-    }
-
-    cascadeFloat.processBlock (testData.data(), outputData.data(), blockSize);
-
-    for (int i = 0; i < blockSize; ++i)
-    {
-        EXPECT_TRUE (std::isfinite (outputData[i]));
-    }
 }
