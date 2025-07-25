@@ -23,6 +23,7 @@
 
 #include <yup_dsp/yup_dsp.h>
 #include <yup_audio_gui/yup_audio_gui.h>
+#include <yup_audio_basics/yup_audio_basics.h>
 
 //==============================================================================
 
@@ -50,27 +51,39 @@ public:
         , sweepProgress (0.0)
         , pinkState (0.0)
         , brownState (0.0)
+        , smoothedFrequency (440.0)
+        , smoothedAmplitude (0.5f)
     {
         // Initialize pink noise filter state
         for (int i = 0; i < 7; ++i)
             pinkFilters[i] = 0.0;
+        
+        // Set default smoothing time (50ms)
+        smoothedFrequency.reset (sampleRate, 0.05);
+        smoothedAmplitude.reset (sampleRate, 0.05);
     }
 
     void setSampleRate (double newSampleRate)
     {
         sampleRate = newSampleRate;
         updatePhaseIncrement();
+        
+        // Update smoothing times with new sample rate
+        smoothedFrequency.reset (sampleRate, 0.05);
+        smoothedAmplitude.reset (sampleRate, 0.05);
     }
 
     void setFrequency (double newFrequency)
     {
         frequency = newFrequency;
+        smoothedFrequency.setTargetValue (newFrequency);
         updatePhaseIncrement();
     }
 
     void setAmplitude (float newAmplitude)
     {
         amplitude = newAmplitude;
+        smoothedAmplitude.setTargetValue (newAmplitude);
     }
 
     void setSignalType (SignalType type)
@@ -88,14 +101,24 @@ public:
         sweepProgress = 0.0;
     }
 
+    void setSmoothingTime (float timeInSeconds)
+    {
+        smoothedFrequency.reset (sampleRate, timeInSeconds);
+        smoothedAmplitude.reset (sampleRate, timeInSeconds);
+    }
+
     float getNextSample()
     {
+        // Get smoothed parameter values for this sample
+        double currentFreq = smoothedFrequency.getNextValue();
+        float currentAmp = smoothedAmplitude.getNextValue();
+        
         float sample = 0.0f;
 
         switch (signalType)
         {
             case SignalType::singleTone:
-                sample = generateSine();
+                sample = generateSine (currentFreq);
                 break;
             case SignalType::frequencySweep:
                 sample = generateSweep();
@@ -111,14 +134,17 @@ public:
                 break;
         }
 
-        return sample * amplitude;
+        return sample * currentAmp;
     }
 
 private:
-    float generateSine()
+    float generateSine (double freq)
     {
+        // Calculate phase increment for the smoothed frequency
+        double currentPhaseIncrement = yup::MathConstants<double>::twoPi * freq / sampleRate;
+        
         float sample = std::sin (phase);
-        phase += phaseIncrement;
+        phase += currentPhaseIncrement;
 
         if (phase >= yup::MathConstants<double>::twoPi)
             phase -= yup::MathConstants<double>::twoPi;
@@ -198,6 +224,10 @@ private:
     double pinkFilters[7];
     double pinkState;
     double brownState;
+    
+    // Smoothed parameter values
+    yup::SmoothedValue<double> smoothedFrequency;
+    yup::SmoothedValue<float> smoothedAmplitude;
 };
 
 //==============================================================================
@@ -452,6 +482,16 @@ private:
         };
         addAndMakeVisible (*overlapSlider);
 
+        // Smoothing time control
+        smoothingSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Smoothing");
+        smoothingSlider->setRange ({ 0.001, 0.5 });
+        smoothingSlider->setValue (0.05);
+        smoothingSlider->onValueChanged = [this] (float value)
+        {
+            setSmoothingTime (value);
+        };
+        addAndMakeVisible (*smoothingSlider);
+
         // Status labels with appropriate font size
         auto statusFont = font.withHeight (11.0f);
 
@@ -485,7 +525,7 @@ private:
         // Create parameter labels with proper font sizing
         auto labelFont = font.withHeight (12.0f);
 
-        for (const auto& labelText : { "Signal Type:", "Frequency:", "Amplitude:", "Sweep Duration:", "FFT Size:", "Window:", "Display:", "Release:", "Overlap:" })
+        for (const auto& labelText : { "Signal Type:", "Frequency:", "Amplitude:", "Sweep Duration:", "FFT Size:", "Window:", "Display:", "Release:", "Overlap:", "Smoothing:" })
         {
             auto label = parameterLabels.add (std::make_unique<yup::Label> (labelText));
             label->setText (labelText);
@@ -515,7 +555,7 @@ private:
         auto freqSection = row1.removeFromLeft (colWidth);
         auto ampSection = row1.removeFromLeft (colWidth);
         auto sweepSection = row1.removeFromLeft (colWidth);
-        auto smoothingSection = row1.removeFromLeft (colWidth);
+        auto smoothingParamSection = row1.removeFromLeft (colWidth);
 
         parameterLabels[0]->setBounds (signalTypeSection.removeFromTop (labelHeight));
         signalTypeCombo->setBounds (signalTypeSection.removeFromTop (controlHeight));
@@ -529,14 +569,15 @@ private:
         parameterLabels[3]->setBounds (sweepSection.removeFromTop (labelHeight));
         sweepDurationSlider->setBounds (sweepSection.removeFromTop (controlHeight));
 
-        parameterLabels[7]->setBounds (smoothingSection.removeFromTop (labelHeight));
-        releaseSlider->setBounds (smoothingSection.removeFromTop (controlHeight));
+        parameterLabels[9]->setBounds (smoothingParamSection.removeFromTop (labelHeight));
+        smoothingSlider->setBounds (smoothingParamSection.removeFromTop (controlHeight));
 
         // Second row: FFT controls
         auto row2 = bounds.removeFromTop (rowHeight);
         auto fftSizeSection = row2.removeFromLeft (colWidth);
         auto windowSection = row2.removeFromLeft (colWidth);
         auto displaySection = row2.removeFromLeft (colWidth);
+        auto releaseSection = row2.removeFromLeft (colWidth);
         auto overlapSection = row2.removeFromLeft (colWidth);
 
         parameterLabels[4]->setBounds (fftSizeSection.removeFromTop (labelHeight));
@@ -547,6 +588,9 @@ private:
 
         parameterLabels[6]->setBounds (displaySection.removeFromTop (labelHeight));
         displayTypeCombo->setBounds (displaySection.removeFromTop (controlHeight));
+
+        parameterLabels[7]->setBounds (releaseSection.removeFromTop (labelHeight));
+        releaseSlider->setBounds (releaseSection.removeFromTop (controlHeight));
 
         parameterLabels[8]->setBounds (overlapSection.removeFromTop (labelHeight));
         overlapSlider->setBounds (overlapSection.removeFromTop (controlHeight));
@@ -663,6 +707,11 @@ private:
         analyzerComponent.setDisplayType (displayType);
     }
 
+    void setSmoothingTime (float timeInSeconds)
+    {
+        signalGenerator.setSmoothingTime (timeInSeconds);
+    }
+
     // Audio components
     yup::AudioDeviceManager deviceManager;
     SignalGenerator signalGenerator;
@@ -686,6 +735,7 @@ private:
     std::unique_ptr<yup::ComboBox> displayTypeCombo;
     std::unique_ptr<yup::Slider> releaseSlider;
     std::unique_ptr<yup::Slider> overlapSlider;
+    std::unique_ptr<yup::Slider> smoothingSlider;
 
     // Status labels
     std::unique_ptr<yup::Label> frequencyLabel;
