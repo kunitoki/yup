@@ -383,7 +383,6 @@ BiquadCoefficients<CoeffType> FilterDesigner<CoeffType>::designZoelzer (
     return coeffs;
 }
 
-
 //==============================================================================
 
 // Explicit instantiations for FilterDesigner
