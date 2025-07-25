@@ -57,7 +57,7 @@ public:
         // Initialize pink noise filter state
         for (int i = 0; i < 7; ++i)
             pinkFilters[i] = 0.0;
-        
+
         // Set default smoothing time (50ms)
         smoothedFrequency.reset (sampleRate, 0.05);
         smoothedAmplitude.reset (sampleRate, 0.05);
@@ -67,7 +67,7 @@ public:
     {
         sampleRate = newSampleRate;
         updatePhaseIncrement();
-        
+
         // Update smoothing times with new sample rate
         smoothedFrequency.reset (sampleRate, 0.05);
         smoothedAmplitude.reset (sampleRate, 0.05);
@@ -112,7 +112,7 @@ public:
         // Get smoothed parameter values for this sample
         double currentFreq = smoothedFrequency.getNextValue();
         float currentAmp = smoothedAmplitude.getNextValue();
-        
+
         float sample = 0.0f;
 
         switch (signalType)
@@ -142,7 +142,7 @@ private:
     {
         // Calculate phase increment for the smoothed frequency
         double currentPhaseIncrement = yup::MathConstants<double>::twoPi * freq / sampleRate;
-        
+
         float sample = std::sin (phase);
         phase += currentPhaseIncrement;
 
@@ -224,7 +224,7 @@ private:
     double pinkFilters[7];
     double pinkState;
     double brownState;
-    
+
     // Smoothed parameter values
     yup::SmoothedValue<double> smoothedFrequency;
     yup::SmoothedValue<float> smoothedAmplitude;
