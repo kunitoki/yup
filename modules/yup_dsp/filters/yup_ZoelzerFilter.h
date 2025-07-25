@@ -64,53 +64,8 @@ private:
     //==============================================================================
     void updateCoefficients() override
     {
-        BiquadCoefficients<CoeffType> coeffs;
-
-        if (this->filterMode.test (FilterMode::lowpass))
-        {
-            coeffs = FilterDesigner<CoeffType>::designZoelzerLowpass (this->centerFreq, this->qFactor, this->sampleRate);
-        }
-        else if (this->filterMode.test (FilterMode::highpass))
-        {
-            coeffs = FilterDesigner<CoeffType>::designZoelzerHighpass (this->centerFreq, this->qFactor, this->sampleRate);
-        }
-        else if (this->filterMode.test (FilterMode::bandpassCsg))
-        {
-            coeffs = FilterDesigner<CoeffType>::designZoelzerBandpassCsg (this->centerFreq, this->qFactor, this->sampleRate);
-        }
-        else if (this->filterMode.test (FilterMode::bandpassCpg))
-        {
-            coeffs = FilterDesigner<CoeffType>::designZoelzerBandpassCpg (this->centerFreq, this->qFactor, this->sampleRate);
-        }
-        else if (this->filterMode.test (FilterMode::bandstop))
-        {
-            coeffs = FilterDesigner<CoeffType>::designZoelzerNotch (this->centerFreq, this->qFactor, this->sampleRate);
-        }
-        else if (this->filterMode.test (FilterMode::peak))
-        {
-            coeffs = FilterDesigner<CoeffType>::designZoelzerPeaking (this->centerFreq, this->qFactor, this->gain, this->sampleRate);
-        }
-        else if (this->filterMode.test (FilterMode::lowshelf))
-        {
-            coeffs = FilterDesigner<CoeffType>::designZoelzerLowShelf (this->centerFreq, this->qFactor, this->gain, this->sampleRate);
-        }
-        else if (this->filterMode.test (FilterMode::highshelf))
-        {
-            coeffs = FilterDesigner<CoeffType>::designZoelzerHighShelf (this->centerFreq, this->qFactor, this->gain, this->sampleRate);
-        }
-        else if (this->filterMode.test (FilterMode::allpass))
-        {
-            coeffs = FilterDesigner<CoeffType>::designZoelzerAllpass (this->centerFreq, this->qFactor, this->sampleRate);
-        }
-        else if (this->filterMode.test (FilterMode::bandpass))
-        {
-            // Handle composite bandpass mode by defaulting to CSG variant
-            // Choose the most appropriate bandpass variant
-            if (this->filterMode.test (FilterMode::bandpassCsg))
-                coeffs = FilterDesigner<CoeffType>::designZoelzerBandpassCsg (this->centerFreq, this->qFactor, this->sampleRate);
-            else
-                coeffs = FilterDesigner<CoeffType>::designZoelzerBandpassCpg (this->centerFreq, this->qFactor, this->sampleRate);
-        }
+        auto coeffs = FilterDesigner<CoeffType>::designZoelzer (
+            this->filterMode, this->centerFreq, this->qFactor, this->gain, this->sampleRate);
 
         BaseFilterType::setCoefficients (coeffs);
     }

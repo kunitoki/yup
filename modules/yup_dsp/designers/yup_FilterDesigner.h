@@ -40,6 +40,16 @@ class FilterDesigner
 {
 public:
     //==============================================================================
+    // First Order Filter Design
+    //==============================================================================
+
+    /** First order implementation with mode selection */
+    static FirstOrderCoefficients<CoeffType> designFirstOrder (
+        FilterModeType filterMode,
+        CoeffType frequency,
+        CoeffType gain,
+        double sampleRate) noexcept;
+
     /**
         Configures the filter as a one-pole lowpass.
 
@@ -48,7 +58,10 @@ public:
     */
     static FirstOrderCoefficients<CoeffType> designFirstOrderLowpass (
         CoeffType frequency,
-        double sampleRate) noexcept;
+        double sampleRate) noexcept
+    {
+        return designFirstOrder (FilterMode::lowpass, frequency, static_cast<CoeffType> (0.0), sampleRate);
+    }
 
     /**
        Configures the filter as a one-pole highpass.
@@ -58,7 +71,10 @@ public:
     */
     static FirstOrderCoefficients<CoeffType> designFirstOrderHighpass (
         CoeffType frequency,
-        double sampleRate) noexcept;
+        double sampleRate) noexcept
+    {
+        return designFirstOrder (FilterMode::highpass, frequency, static_cast<CoeffType> (0.0), sampleRate);
+    }
 
     /**
        Configures the filter as a low-shelf.
@@ -70,7 +86,10 @@ public:
     static FirstOrderCoefficients<CoeffType> designFirstOrderLowShelf (
         CoeffType frequency,
         CoeffType gainDb,
-        double sampleRate) noexcept;
+        double sampleRate) noexcept
+    {
+        return designFirstOrder (FilterMode::lowshelf, frequency, gainDb, sampleRate);
+    }
 
     /**
        Configures the filter as a high-shelf.
@@ -82,7 +101,10 @@ public:
     static FirstOrderCoefficients<CoeffType> designFirstOrderHighShelf (
         CoeffType frequency,
         CoeffType gainDb,
-        double sampleRate) noexcept;
+        double sampleRate) noexcept
+    {
+        return designFirstOrder (FilterMode::highshelf, frequency, gainDb, sampleRate);
+    }
 
     /**
        Configures the filter as a first-order allpass.
@@ -92,7 +114,10 @@ public:
     */
     static FirstOrderCoefficients<CoeffType> designFirstOrderAllpass (
         CoeffType frequency,
-        double sampleRate) noexcept;
+        double sampleRate) noexcept
+    {
+        return designFirstOrder (FilterMode::allpass, frequency, static_cast<CoeffType> (0.0), sampleRate);
+    }
 
     //==============================================================================
     // RBJ (Audio EQ Cookbook) Filter Design
@@ -244,6 +269,14 @@ public:
     // Zoelzer Filter Design
     //==============================================================================
 
+    /** Zoelzer implementation with mode selection */
+    static BiquadCoefficients<CoeffType> designZoelzer (
+        FilterModeType filterMode,
+        CoeffType frequency,
+        CoeffType q,
+        CoeffType gain,
+        double sampleRate) noexcept;
+
     /**
         Designs Zoelzer lowpass filter coefficients.
 
@@ -255,7 +288,10 @@ public:
     static BiquadCoefficients<CoeffType> designZoelzerLowpass (
         CoeffType frequency,
         CoeffType q,
-        double sampleRate) noexcept;
+        double sampleRate) noexcept
+    {
+        return designZoelzer (FilterMode::lowpass, frequency, q, static_cast<CoeffType> (0.0), sampleRate);
+    }
 
     /**
         Designs Zoelzer highpass filter coefficients.
@@ -268,7 +304,10 @@ public:
     static BiquadCoefficients<CoeffType> designZoelzerHighpass (
         CoeffType frequency,
         CoeffType q,
-        double sampleRate) noexcept;
+        double sampleRate) noexcept
+    {
+        return designZoelzer (FilterMode::highpass, frequency, q, static_cast<CoeffType> (0.0), sampleRate);
+    }
 
     /**
         Designs Zoelzer bandpass filter coefficients (constant skirt gain, peak gain = Q).
@@ -281,7 +320,10 @@ public:
     static BiquadCoefficients<CoeffType> designZoelzerBandpassCsg (
         CoeffType frequency,
         CoeffType q,
-        double sampleRate) noexcept;
+        double sampleRate) noexcept
+    {
+        return designZoelzer (FilterMode::bandpassCsg, frequency, q, static_cast<CoeffType> (0.0), sampleRate);
+    }
 
     /**
         Designs Zoelzer bandpass filter coefficients (constant peak gain = 0dB).
@@ -294,7 +336,10 @@ public:
     static BiquadCoefficients<CoeffType> designZoelzerBandpassCpg (
         CoeffType frequency,
         CoeffType q,
-        double sampleRate) noexcept;
+        double sampleRate) noexcept
+    {
+        return designZoelzer (FilterMode::bandpassCpg, frequency, q, static_cast<CoeffType> (0.0), sampleRate);
+    }
 
     /**
         Designs Zoelzer notch filter coefficients.
@@ -307,7 +352,10 @@ public:
     static BiquadCoefficients<CoeffType> designZoelzerNotch (
         CoeffType frequency,
         CoeffType q,
-        double sampleRate) noexcept;
+        double sampleRate) noexcept
+    {
+        return designZoelzer (FilterMode::bandstop, frequency, q, static_cast<CoeffType> (0.0), sampleRate);
+    }
 
     /**
         Designs Zoelzer peaking filter coefficients.
@@ -322,7 +370,10 @@ public:
         CoeffType frequency,
         CoeffType q,
         CoeffType gain,
-        double sampleRate) noexcept;
+        double sampleRate) noexcept
+    {
+        return designZoelzer (FilterMode::peak, frequency, q, gain, sampleRate);
+    }
 
     /**
         Designs Zoelzer low shelf filter coefficients.
@@ -337,7 +388,10 @@ public:
         CoeffType frequency,
         CoeffType q,
         CoeffType gain,
-        double sampleRate) noexcept;
+        double sampleRate) noexcept
+    {
+        return designZoelzer (FilterMode::lowshelf, frequency, q, gain, sampleRate);
+    }
 
     /**
         Designs Zoelzer high shelf filter coefficients.
@@ -352,7 +406,10 @@ public:
         CoeffType frequency,
         CoeffType q,
         CoeffType gain,
-        double sampleRate) noexcept;
+        double sampleRate) noexcept
+    {
+        return designZoelzer (FilterMode::highshelf, frequency, q, gain, sampleRate);
+    }
 
     /**
         Designs Zoelzer allpass filter coefficients.
@@ -365,7 +422,10 @@ public:
     static BiquadCoefficients<CoeffType> designZoelzerAllpass (
         CoeffType frequency,
         CoeffType q,
-        double sampleRate) noexcept;
+        double sampleRate) noexcept
+    {
+        return designZoelzer (FilterMode::allpass, frequency, q, static_cast<CoeffType> (0.0), sampleRate);
+    }
 };
 
 } // namespace yup

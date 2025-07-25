@@ -158,25 +158,8 @@ protected:
     //==============================================================================
     virtual void updateCoefficients()
     {
-        FirstOrderCoefficients<CoeffType> coeffs;
-
-        if (this->filterMode.test (FilterMode::lowpass))
-            coeffs = FilterDesigner<CoeffType>::designFirstOrderLowpass (centerFreq, this->sampleRate);
-
-        else if (this->filterMode.test (FilterMode::highpass))
-            coeffs = FilterDesigner<CoeffType>::designFirstOrderHighpass (centerFreq, this->sampleRate);
-
-        else if (this->filterMode.test (FilterMode::lowshelf))
-            coeffs = FilterDesigner<CoeffType>::designFirstOrderLowShelf (centerFreq, gain, this->sampleRate);
-
-        else if (this->filterMode.test (FilterMode::highshelf))
-            coeffs = FilterDesigner<CoeffType>::designFirstOrderHighShelf (centerFreq, gain, this->sampleRate);
-
-        else if (this->filterMode.test (FilterMode::allpass))
-            coeffs = FilterDesigner<CoeffType>::designFirstOrderAllpass (centerFreq, this->sampleRate);
-
-        else
-            coeffs = FilterDesigner<CoeffType>::designFirstOrderLowpass (centerFreq, this->sampleRate);
+        auto coeffs = FilterDesigner<CoeffType>::designFirstOrder (
+            this->filterMode, centerFreq, gain, this->sampleRate);
 
         BaseFilterType::setCoefficients (coeffs);
     }
