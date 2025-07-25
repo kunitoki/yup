@@ -58,10 +58,10 @@ public:
         bandpassCsg, /**< Band-pass filter (constant skirt gain) */
         bandpassCpg, /**< Band-pass filter (constant peak gain) */
         notch,       /**< Notch filter */
-        allpass,     /**< All-pass filter */
         peaking,     /**< Peaking filter */
         lowshelf,    /**< Low-shelf filter */
-        highshelf    /**< High-shelf filter */
+        highshelf,   /**< High-shelf filter */
+        allpass      /**< All-pass filter */
     };
 
     //==============================================================================

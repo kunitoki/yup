@@ -142,6 +142,18 @@ void bilinearTransform (FloatType& a0, FloatType& a1, FloatType& a2, FloatType& 
 //==============================================================================
 
 template <typename FloatType>
+void extractPolesZerosFromFirstOrder (FloatType b0, FloatType b1, FloatType a1, DspMath::ComplexVector<FloatType>& poles, DspMath::ComplexVector<FloatType>& zeros)
+{
+    if (std::abs (a1) > 1e-12) // Single pole at -a1
+        poles.push_back (DspMath::Complex<FloatType> (-a1, 0.0));
+
+    if (std::abs (b1) > 1e-12 && std::abs (b0) > 1e-12) // Single zero at -b1/b0 (if b1 != 0)
+        zeros.push_back (DspMath::Complex<FloatType> (-b1 / b0, 0.0));
+}
+
+//==============================================================================
+
+template <typename FloatType>
 void extractPolesZerosFromSecondOrderBiquad (FloatType b0, FloatType b1, FloatType b2, FloatType a0, FloatType a1, FloatType a2, DspMath::ComplexVector<FloatType>& poles, DspMath::ComplexVector<FloatType>& zeros)
 {
     const auto epsilon = static_cast<FloatType> (1e-12);
