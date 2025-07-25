@@ -42,17 +42,6 @@ class FirstOrderFilter : public FirstOrder<SampleType, CoeffType>
 
 public:
     //==============================================================================
-    /** Filter mode enumeration for single-output processing */
-    enum class Mode
-    {
-        lowpass,   /**< Low-pass output only */
-        highpass,  /**< High-pass output only */
-        lowshelf,  /**< Low-shelf filter */
-        highshelf, /**< High-shelf filter */
-        allpass    /**< All-pass filter */
-    };
-
-    //==============================================================================
     /** Default constructor */
     FirstOrderFilter() = default;
 
@@ -64,8 +53,10 @@ public:
         @param q          The Q factor (resonance)
         @param sampleRate The sample rate in Hz
     */
-    void setParameters (Mode mode, CoeffType frequency, CoeffType gainDb, double sampleRate) noexcept
+    void setParameters (FilterModeType mode, CoeffType frequency, CoeffType gainDb, double sampleRate) noexcept
     {
+        mode = resolveFilterMode (mode, getSupportedModes());
+
         if (filterMode != mode
             || ! approximatelyEqual (centerFreq, frequency)
             || ! approximatelyEqual (gain, gainDb)
@@ -116,7 +107,7 @@ public:
 
         @param mode  The new RBJ filter mode
     */
-    void setMode (Mode mode) noexcept
+    void setMode (FilterModeType mode) noexcept
     {
         if (filterMode != mode)
         {
@@ -151,9 +142,16 @@ public:
 
         @returns  The RBJ filter mode
     */
-    Mode getMode() const noexcept
+    FilterModeType getMode() const noexcept
     {
         return filterMode;
+    }
+
+    //==============================================================================
+    /** @internal */
+    FilterModeType getSupportedModes() const noexcept override
+    {
+        return FilterMode::lowpass | FilterMode::highpass | FilterMode::lowshelf | FilterMode::highshelf | FilterMode::allpass;
     }
 
 protected:
@@ -162,34 +160,29 @@ protected:
     {
         FirstOrderCoefficients<CoeffType> coeffs;
 
-        switch (filterMode)
-        {
-            case Mode::lowpass:
-                coeffs = FilterDesigner<CoeffType>::designFirstOrderLowpass (centerFreq, this->sampleRate);
-                break;
+        if (this->filterMode.test (FilterMode::lowpass))
+            coeffs = FilterDesigner<CoeffType>::designFirstOrderLowpass (centerFreq, this->sampleRate);
 
-            case Mode::highpass:
-                coeffs = FilterDesigner<CoeffType>::designFirstOrderHighpass (centerFreq, this->sampleRate);
-                break;
+        else if (this->filterMode.test (FilterMode::highpass))
+            coeffs = FilterDesigner<CoeffType>::designFirstOrderHighpass (centerFreq, this->sampleRate);
 
-            case Mode::lowshelf:
-                coeffs = FilterDesigner<CoeffType>::designFirstOrderLowShelf (centerFreq, gain, this->sampleRate);
-                break;
+        else if (this->filterMode.test (FilterMode::lowshelf))
+            coeffs = FilterDesigner<CoeffType>::designFirstOrderLowShelf (centerFreq, gain, this->sampleRate);
 
-            case Mode::highshelf:
-                coeffs = FilterDesigner<CoeffType>::designFirstOrderHighShelf (centerFreq, gain, this->sampleRate);
-                break;
+        else if (this->filterMode.test (FilterMode::highshelf))
+            coeffs = FilterDesigner<CoeffType>::designFirstOrderHighShelf (centerFreq, gain, this->sampleRate);
 
-            case Mode::allpass:
-                coeffs = FilterDesigner<CoeffType>::designFirstOrderAllpass (centerFreq, this->sampleRate);
-                break;
-        }
+        else if (this->filterMode.test (FilterMode::allpass))
+            coeffs = FilterDesigner<CoeffType>::designFirstOrderAllpass (centerFreq, this->sampleRate);
+
+        else
+            coeffs = FilterDesigner<CoeffType>::designFirstOrderLowpass (centerFreq, this->sampleRate);
 
         BaseFilterType::setCoefficients (coeffs);
     }
 
     //==============================================================================
-    Mode filterMode = Mode::lowpass;
+    FilterModeType filterMode = FilterMode::lowpass;
     CoeffType centerFreq = static_cast<CoeffType> (1000.0);
     CoeffType gain = static_cast<CoeffType> (0.0);
 

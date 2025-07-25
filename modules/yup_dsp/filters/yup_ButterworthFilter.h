@@ -51,8 +51,10 @@ namespace yup
     @see FilterBase, BiquadCascade
 */
 template <typename SampleType, typename CoeffType = double>
-class ButterworthFilter : public FilterBase<SampleType, CoeffType>
+class ButterworthFilter : public BiquadCascade<SampleType, CoeffType>
 {
+    using BaseFilterType = BiquadCascade<SampleType, CoeffType>;
+
     //==============================================================================
     /** Maximum supported filter order (must be 1 or a power of 2) */
     static constexpr int maxOrder = 32; // Valid orders: 1, 2, 4, 8, 16, 32
@@ -94,9 +96,11 @@ public:
                         CoeffType gainDb,
                         double sampleRate) noexcept
     {
+        mode = resolveFilterMode (mode, this->getSupportedModes());
+
         //jassert (filterOrder == 1 || (isPowerOfTwo (filterOrder) && filterOrder >= 2 && filterOrder <= maxOrder));
         jassert (freq > static_cast<CoeffType> (0.0));
-        if (mode == FilterMode::bandpass || mode == FilterMode::bandstop)
+        if (mode.test (FilterMode::bandpass) || mode.test (FilterMode::bandstop))
             jassert (freq2 > freq && freq2 > static_cast<CoeffType> (0.0));
 
         filterOrder = filterOrder == 1 ? filterOrder : jlimit (2, maxOrder, nextPowerOfTwo (filterOrder));
@@ -127,6 +131,8 @@ public:
     */
     void setMode (FilterModeType mode) noexcept
     {
+        mode = resolveFilterMode (mode, this->getSupportedModes());
+
         if (filterMode != mode)
         {
             filterMode = mode;
@@ -228,44 +234,18 @@ public:
     CoeffType getGain() const noexcept { return gain; }
 
     //==============================================================================
-    /** @inheritdoc */
-    void reset() noexcept override
-    {
-        biquadCascade.reset();
-    }
-
-    /** @inheritdoc */
+    /** @internal */
     void prepare (double sampleRate, int maximumBlockSize) override
     {
         this->sampleRate = sampleRate;
         this->maximumBlockSize = maximumBlockSize;
 
-        biquadCascade.prepare (sampleRate, maximumBlockSize);
+        BaseFilterType::prepare (sampleRate, maximumBlockSize);
 
         updateCoefficients();
     }
 
-    /** @inheritdoc */
-    SampleType processSample (SampleType inputSample) noexcept override
-    {
-        return biquadCascade.processSample (inputSample);
-    }
-
-    /** @inheritdoc */
-    void processBlock (const SampleType* inputBuffer,
-                       SampleType* outputBuffer,
-                       int numSamples) noexcept override
-    {
-        biquadCascade.processBlock (inputBuffer, outputBuffer, numSamples);
-    }
-
-    /** @inheritdoc */
-    Complex<CoeffType> getComplexResponse (CoeffType freq) const override
-    {
-        return biquadCascade.getComplexResponse (freq);
-    }
-
-    /** @inheritdoc */
+    /** @internal */
     void getPolesZeros (ComplexVector<CoeffType>& poles,
                         ComplexVector<CoeffType>& zeros) const override
     {
@@ -278,7 +258,7 @@ private:
     void updateCoefficients()
     {
         // Store current section count to avoid unnecessary reinitialization
-        const auto previousSectionCount = biquadCascade.getNumSections();
+        const auto previousSectionCount = BaseFilterType::getNumSections();
 
         // Clear previous coefficients
         biquadCoefficients.clear();
@@ -1024,13 +1004,13 @@ private:
     void updateBiquadCascadePreservingState()
     {
         const auto newSectionCount = static_cast<int> (biquadCoefficients.size());
-        const auto currentSectionCount = static_cast<int> (biquadCascade.getNumSections());
+        const auto currentSectionCount = static_cast<int> (BaseFilterType::getNumSections());
 
         if (newSectionCount == currentSectionCount)
         {
             // Case 1: Same number of sections - just update coefficients (no state loss)
             for (std::size_t i = 0; i < biquadCoefficients.size(); ++i)
-                biquadCascade.setSectionCoefficients (i, biquadCoefficients[i]);
+                BaseFilterType::setSectionCoefficients (i, biquadCoefficients[i]);
 
             return;
         }
@@ -1039,9 +1019,9 @@ private:
             // Case 2: Different number of sections - need to resize but minimize disruption
             // For now, we have to accept the brief state reset when filter order changes
             // This is unavoidable when going from e.g. 2nd order to 4th order
-            biquadCascade.setNumSections (newSectionCount);
+            BaseFilterType::setNumSections (newSectionCount);
             for (std::size_t i = 0; i < biquadCoefficients.size(); ++i)
-                biquadCascade.setSectionCoefficients (i, biquadCoefficients[i]);
+                BaseFilterType::setSectionCoefficients (i, biquadCoefficients[i]);
         }
     }
 
@@ -1053,7 +1033,6 @@ private:
     CoeffType gain = static_cast<CoeffType> (0.0);
 
     // Pre-allocated storage for realtime coefficient calculation
-    BiquadCascade<SampleType, CoeffType> biquadCascade;
     std::vector<BiquadCoefficients<CoeffType>> biquadCoefficients;
     ComplexVector<CoeffType> analogPoles;
     ComplexVector<CoeffType> digitalPoles;

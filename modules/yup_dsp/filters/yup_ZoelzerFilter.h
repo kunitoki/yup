@@ -106,7 +106,7 @@ private:
         {
             // Handle composite bandpass mode by defaulting to CSG variant
             // Choose the most appropriate bandpass variant
-            if (FilterCapabilities<ZoelzerFilter>::supportedModes.test (FilterMode::bandpassCsg))
+            if (this->filterMode.test (FilterMode::bandpassCsg))
                 coeffs = FilterDesigner<CoeffType>::designZoelzerBandpassCsg (this->centerFreq, this->qFactor, this->sampleRate);
             else
                 coeffs = FilterDesigner<CoeffType>::designZoelzerBandpassCpg (this->centerFreq, this->qFactor, this->sampleRate);
@@ -123,23 +123,5 @@ private:
 /** Type aliases for convenience */
 using ZoelzerFilterFloat = ZoelzerFilter<float>;   // float samples, double coefficients (default)
 using ZoelzerFilterDouble = ZoelzerFilter<double>; // double samples, double coefficients (default)
-
-//==============================================================================
-/** Zoelzer Filter capabilities specialization - supports both bandpass variants */
-template <>
-struct FilterCapabilities<ZoelzerFilter<float>>
-{
-    static constexpr auto supportedModes =
-        FilterMode::lowpass | FilterMode::highpass | FilterMode::bandpassCsg | FilterMode::bandpassCpg | FilterMode::bandstop |
-        FilterMode::peak | FilterMode::lowshelf | FilterMode::highshelf | FilterMode::allpass;
-};
-
-template <>
-struct FilterCapabilities<ZoelzerFilter<double>>
-{
-    static constexpr auto supportedModes = 
-        FilterMode::lowpass | FilterMode::highpass | FilterMode::bandpassCsg | FilterMode::bandpassCpg | FilterMode::bandstop |
-        FilterMode::peak | FilterMode::lowshelf | FilterMode::highshelf | FilterMode::allpass;
-};
 
 } // namespace yup

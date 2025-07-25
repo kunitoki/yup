@@ -48,33 +48,24 @@ class StateVariableFilter : public FilterBase<SampleType, CoeffType>
 {
 public:
     //==============================================================================
-    /** Filter mode enumeration for single-output processing */
-    enum class Mode
-    {
-        lowpass,  /**< Low-pass output only */
-        bandpass, /**< Band-pass output only */
-        highpass, /**< High-pass output only */
-        notch     /**< Notch (band-stop) output only */
-    };
-
     /** Structure containing all filter outputs */
     struct Outputs
     {
         SampleType lowpass = 0;  /**< Low-pass output */
-        SampleType bandpass = 0; /**< Band-pass output */
         SampleType highpass = 0; /**< High-pass output */
-        SampleType notch = 0;    /**< Notch output */
+        SampleType bandpass = 0; /**< Band-pass output */
+        SampleType bandstop = 0; /**< Notch output */
     };
 
     //==============================================================================
     /** Default constructor */
     StateVariableFilter()
     {
-        setParameters (Mode::lowpass, static_cast<CoeffType> (1000.0), static_cast<CoeffType> (0.707), 44100.0);
+        setParameters (FilterMode::lowpass, static_cast<CoeffType> (1000.0), static_cast<CoeffType> (0.707), 44100.0);
     }
 
     /** Constructor with initial mode */
-    explicit StateVariableFilter (Mode initialMode)
+    explicit StateVariableFilter (FilterModeType initialMode)
     {
         setParameters (initialMode, static_cast<CoeffType> (1000.0), static_cast<CoeffType> (0.707), 44100.0);
     }
@@ -87,8 +78,10 @@ public:
         @param q          The Q factor (resonance)
         @param sampleRate The sample rate in Hz
     */
-    void setParameters (Mode mode, CoeffType frequency, CoeffType q, double sampleRate) noexcept
+    void setParameters (FilterModeType mode, CoeffType frequency, CoeffType q, double sampleRate) noexcept
     {
+        mode = resolveFilterMode (mode, this->getSupportedModes());
+
         if (filterMode != mode
             || ! approximatelyEqual (centerFreq, frequency)
             || ! approximatelyEqual (qFactor, q)
@@ -139,8 +132,10 @@ public:
 
         @param newMode  The new filter mode
     */
-    void setMode (Mode mode) noexcept
+    void setMode (FilterModeType mode) noexcept
     {
+        mode = resolveFilterMode (mode, this->getSupportedModes());
+
         if (filterMode != mode)
         {
             filterMode = mode;
@@ -174,7 +169,7 @@ public:
 
         @returns  The current filter mode
     */
-    Mode getMode() const noexcept
+    FilterModeType getMode() const noexcept
     {
         return filterMode;
     }
@@ -193,7 +188,7 @@ public:
         outputs.highpass = (inputSample - coefficients.damping * state.s1 - state.s2) * coefficients.g;
         outputs.bandpass = outputs.highpass * coefficients.k + state.s1;
         outputs.lowpass = outputs.bandpass * coefficients.k + state.s2;
-        outputs.notch = outputs.highpass + outputs.lowpass;
+        outputs.bandstop = outputs.highpass + outputs.lowpass;
 
         state.s1 = outputs.bandpass;
         state.s2 = outputs.lowpass;
@@ -206,16 +201,16 @@ public:
 
         @param inputBuffer    The input buffer
         @param lowpassBuffer  Buffer for lowpass output (can be nullptr)
-        @param bandpassBuffer Buffer for bandpass output (can be nullptr)
         @param highpassBuffer Buffer for highpass output (can be nullptr)
-        @param notchBuffer    Buffer for notch output (can be nullptr)
+        @param bandpassBuffer Buffer for bandpass output (can be nullptr)
+        @param bandstopBuffer    Buffer for notch output (can be nullptr)
         @param numSamples     Number of samples to process
     */
     void processMultipleOutputs (const SampleType* inputBuffer,
                                  SampleType* lowpassBuffer,
-                                 SampleType* bandpassBuffer,
                                  SampleType* highpassBuffer,
-                                 SampleType* notchBuffer,
+                                 SampleType* bandpassBuffer,
+                                 SampleType* bandstopBuffer,
                                  int numSamples) noexcept
     {
         for (int i = 0; i < numSamples; ++i)
@@ -225,14 +220,14 @@ public:
             if (lowpassBuffer)
                 lowpassBuffer[i] = outputs.lowpass;
 
-            if (bandpassBuffer)
-                bandpassBuffer[i] = outputs.bandpass;
-
             if (highpassBuffer)
                 highpassBuffer[i] = outputs.highpass;
 
-            if (notchBuffer)
-                notchBuffer[i] = outputs.notch;
+            if (bandpassBuffer)
+                bandpassBuffer[i] = outputs.bandpass;
+
+            if (bandstopBuffer)
+                bandstopBuffer[i] = outputs.bandstop;
         }
     }
 
@@ -248,7 +243,9 @@ public:
     {
         this->sampleRate = sampleRate;
         this->maximumBlockSize = maximumBlockSize;
+
         updateCoefficients();
+
         reset();
     }
 
@@ -257,42 +254,35 @@ public:
     {
         const auto outputs = processAllOutputs (inputSample);
 
-        switch (filterMode)
-        {
-            case Mode::lowpass:
-                return outputs.lowpass;
-            case Mode::bandpass:
-                return outputs.bandpass;
-            case Mode::highpass:
-                return outputs.highpass;
-            case Mode::notch:
-                return outputs.notch;
-            default:
-                return outputs.lowpass;
-        }
+        if (filterMode.test (FilterMode::lowpass))
+            return outputs.lowpass;
+
+        if (filterMode.test (FilterMode::highpass))
+            return outputs.highpass;
+
+        if (filterMode.test (FilterMode::bandpass))
+            return outputs.bandpass;
+
+        if (filterMode.test (FilterMode::bandstop))
+            return outputs.bandstop;
+
+        return outputs.lowpass;
     }
 
     /** @internal */
     void processBlock (const SampleType* inputBuffer, SampleType* outputBuffer, int numSamples) noexcept override
     {
-        switch (filterMode)
-        {
-            case Mode::lowpass:
-                processBlockLowpass (inputBuffer, outputBuffer, numSamples);
-                break;
+        if (filterMode.test (FilterMode::lowpass))
+            processBlockLowpass (inputBuffer, outputBuffer, numSamples);
 
-            case Mode::bandpass:
-                processBlockBandpass (inputBuffer, outputBuffer, numSamples);
-                break;
+        else if (filterMode.test (FilterMode::highpass))
+            processBlockHighpass (inputBuffer, outputBuffer, numSamples);
 
-            case Mode::highpass:
-                processBlockHighpass (inputBuffer, outputBuffer, numSamples);
-                break;
+        else if (filterMode.test (FilterMode::bandpass))
+            processBlockBandpass (inputBuffer, outputBuffer, numSamples);
 
-            case Mode::notch:
-                processBlockNotch (inputBuffer, outputBuffer, numSamples);
-                break;
-        }
+        else if (filterMode.test (FilterMode::bandstop))
+            processBlockBandstop (inputBuffer, outputBuffer, numSamples);
     }
 
     /** @internal */
@@ -307,23 +297,19 @@ public:
 
         auto denominator = s2 + Complex<CoeffType> (wc / k) * s + Complex<CoeffType> (wc2) + 1e-6;
 
-        switch (filterMode)
-        {
-            case Mode::lowpass:
-                return Complex<CoeffType> (wc2) / denominator;
+        if (filterMode.test (FilterMode::lowpass))
+            return Complex<CoeffType> (wc2) / denominator;
 
-            case Mode::bandpass:
-                return (Complex<CoeffType> (wc / qFactor) * s) / denominator;
+        if (filterMode.test (FilterMode::highpass))
+            return s2 / denominator;
 
-            case Mode::highpass:
-                return s2 / denominator;
+        if (filterMode.test (FilterMode::bandpass))
+            return (Complex<CoeffType> (wc / qFactor) * s) / denominator;
 
-            case Mode::notch:
-                return (s2 + Complex<CoeffType> (wc2)) / denominator;
+        if (filterMode.test (FilterMode::bandstop))
+            return (s2 + Complex<CoeffType> (wc2)) / denominator;
 
-            default:
-                return Complex<CoeffType> (1.0);
-        }
+        return Complex<CoeffType> (1.0);
     }
 
     /** @internal */
@@ -357,27 +343,25 @@ public:
         // Map zeros depending on filter mode
         zeros.reserve (2);
 
-        switch (filterMode)
+        if (filterMode.test (FilterMode::lowpass)) // analog zeros at s = ∞ (=> z = -1 double)
         {
-            case Mode::lowpass: // analog zeros at s = ∞ (=> z = -1 double)
-                zeros.push_back (-1.0);
-                zeros.push_back (-1.0);
-                break;
-
-            case Mode::highpass: // analog zeros at s = 0 => z = (2+0)/(2-0) = +1 (double)
-                zeros.push_back (1.0);
-                zeros.push_back (1.0);
-                break;
-
-            case Mode::bandpass: // zeros at s = 0 => z=+1, and s=∞=>z=-1
-                zeros.push_back (1.0);
-                zeros.push_back (-1.0);
-                break;
-
-            case Mode::notch: // analog zeros at s = ±j wc
-                zeros.push_back (bilinear (Complex<CoeffType> (0.0, wc)));
-                zeros.push_back (bilinear (Complex<CoeffType> (0.0, -wc)));
-                break;
+            zeros.push_back (-1.0);
+            zeros.push_back (-1.0);
+        }
+        else if (filterMode.test (FilterMode::highpass)) // analog zeros at s = 0 => z = (2+0)/(2-0) = +1 (double)
+        {
+            zeros.push_back (1.0);
+            zeros.push_back (1.0);
+        }
+        else if (filterMode.test (FilterMode::bandpass)) // zeros at s = 0 => z=+1, and s=∞=>z=-1
+        {
+            zeros.push_back (1.0);
+            zeros.push_back (-1.0);
+        }
+        else if (filterMode.test (FilterMode::bandstop)) // analog zeros at s = ±j wc
+        {
+            zeros.push_back (bilinear (Complex<CoeffType> (0.0, wc)));
+            zeros.push_back (bilinear (Complex<CoeffType> (0.0, -wc)));
         }
     }
 
@@ -425,26 +409,6 @@ private:
         state.s2 = s2;
     }
 
-    void processBlockBandpass (const SampleType* input, SampleType* output, int numSamples) noexcept
-    {
-        auto s1 = state.s1;
-        auto s2 = state.s2;
-
-        for (int i = 0; i < numSamples; ++i)
-        {
-            const auto hp = (input[i] - coefficients.damping * s1 - s2) * coefficients.g;
-            const auto bp = hp * coefficients.k + s1;
-            const auto lp = bp * coefficients.k + s2;
-
-            s1 = bp;
-            s2 = lp;
-            output[i] = bp;
-        }
-
-        state.s1 = s1;
-        state.s2 = s2;
-    }
-
     void processBlockHighpass (const SampleType* input, SampleType* output, int numSamples) noexcept
     {
         auto s1 = state.s1;
@@ -465,7 +429,27 @@ private:
         state.s2 = s2;
     }
 
-    void processBlockNotch (const SampleType* input, SampleType* output, int numSamples) noexcept
+    void processBlockBandpass (const SampleType* input, SampleType* output, int numSamples) noexcept
+    {
+        auto s1 = state.s1;
+        auto s2 = state.s2;
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const auto hp = (input[i] - coefficients.damping * s1 - s2) * coefficients.g;
+            const auto bp = hp * coefficients.k + s1;
+            const auto lp = bp * coefficients.k + s2;
+
+            s1 = bp;
+            s2 = lp;
+            output[i] = bp;
+        }
+
+        state.s1 = s1;
+        state.s2 = s2;
+    }
+
+    void processBlockBandstop (const SampleType* input, SampleType* output, int numSamples) noexcept
     {
         auto s1 = state.s1;
         auto s2 = state.s2;
@@ -487,7 +471,7 @@ private:
     }
 
     //==============================================================================
-    Mode filterMode = Mode::lowpass;
+    FilterModeType filterMode = FilterMode::lowpass;
     CoeffType centerFreq = static_cast<CoeffType> (1000.0);
     CoeffType qFactor = static_cast<CoeffType> (0.707);
 

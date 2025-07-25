@@ -1236,12 +1236,11 @@ private:
         }
         else if (auto svf = std::dynamic_pointer_cast<yup::StateVariableFilter<float>> (currentAudioFilter))
         {
-            svf->setParameters (getSvfMode (currentResponseTypeId), freq, 0.707 + q * (10.0f - 0.707), currentSampleRate);
+            svf->setParameters (getFilterMode (currentResponseTypeId), freq, 0.707 + q * (10.0f - 0.707), currentSampleRate);
         }
         else if (auto fof = std::dynamic_pointer_cast<yup::FirstOrderFilter<float>> (currentAudioFilter))
         {
-            auto coeffs = getFirstOrderCoefficients (currentResponseTypeId, freq, gain, currentSampleRate);
-            fof->setCoefficients (coeffs);
+            fof->setParameters (getFilterMode (currentResponseTypeId), freq, gain, currentSampleRate);
         }
         else if (auto bf = std::dynamic_pointer_cast<yup::ButterworthFilter<float>> (currentAudioFilter))
         {
@@ -1270,12 +1269,11 @@ private:
         }
         else if (auto svf = std::dynamic_pointer_cast<yup::StateVariableFilter<float>> (currentUIFilter))
         {
-            svf->setParameters (getSvfMode (currentResponseTypeId), freq, 0.707 + q * (10.0f - 0.707), currentSampleRate);
+            svf->setParameters (getFilterMode (currentResponseTypeId), freq, 0.707 + q * (10.0f - 0.707), currentSampleRate);
         }
         else if (auto fof = std::dynamic_pointer_cast<yup::FirstOrderFilter<float>> (currentUIFilter))
         {
-            auto coeffs = getFirstOrderCoefficients (currentResponseTypeId, freq, gain, currentSampleRate);
-            fof->setCoefficients (coeffs);
+            fof->setParameters (getFilterMode (currentResponseTypeId), freq, gain, currentSampleRate);
         }
         else if (auto bf = std::dynamic_pointer_cast<yup::ButterworthFilter<float>> (currentUIFilter))
         {
@@ -1402,44 +1400,6 @@ private:
                 return yup::FilterMode::allpass;
             default:
                 return yup::FilterMode::lowpass;
-        }
-    }
-
-    yup::StateVariableFilter<float>::Mode getSvfMode (int responseTypeId)
-    {
-        switch (responseTypeId)
-        {
-            case 1:
-                return yup::StateVariableFilter<float>::Mode::lowpass;
-            case 2:
-                return yup::StateVariableFilter<float>::Mode::highpass;
-            case 3:
-            case 4:
-                // SVF only has one bandpass mode, use it for both CSG and CPG
-                return yup::StateVariableFilter<float>::Mode::bandpass;
-            case 5:
-                return yup::StateVariableFilter<float>::Mode::notch;
-            default:
-                return yup::StateVariableFilter<float>::Mode::lowpass;
-        }
-    }
-
-    yup::FirstOrderCoefficients<double> getFirstOrderCoefficients (int responseTypeId, double freq, double gain, double sampleRate)
-    {
-        switch (responseTypeId)
-        {
-            case 1:
-                return yup::FilterDesigner<double>::designFirstOrderLowpass (freq, sampleRate);
-            case 2:
-                return yup::FilterDesigner<double>::designFirstOrderHighpass (freq, sampleRate);
-            case 7:
-                return yup::FilterDesigner<double>::designFirstOrderLowShelf (freq, gain, sampleRate);
-            case 8:
-                return yup::FilterDesigner<double>::designFirstOrderHighShelf (freq, gain, sampleRate);
-            case 9:
-                return yup::FilterDesigner<double>::designFirstOrderAllpass (freq, sampleRate);
-            default:
-                return yup::FilterDesigner<double>::designFirstOrderLowpass (freq, sampleRate);
         }
     }
 

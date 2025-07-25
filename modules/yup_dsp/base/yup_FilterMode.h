@@ -33,16 +33,16 @@ namespace yup
 */
 namespace FilterModeFlags
 {
-    struct lowpass;      /**< Low-pass filter */
-    struct highpass;     /**< High-pass filter */
-    struct bandpassCsg;  /**< Band-pass filter (constant skirt gain, peak gain = Q) */
-    struct bandpassCpg;  /**< Band-pass filter (constant peak gain = 0dB) */
-    struct bandstop;     /**< Band-stop (notch) filter */
-    struct peak;         /**< Peaking filter */
-    struct lowshelf;     /**< Low-shelf filter */
-    struct highshelf;    /**< High-shelf filter */
-    struct allpass;      /**< All-pass filter */
-}
+struct lowpass;     /**< Low-pass filter */
+struct highpass;    /**< High-pass filter */
+struct bandpassCsg; /**< Band-pass filter (constant skirt gain, peak gain = Q) */
+struct bandpassCpg; /**< Band-pass filter (constant peak gain = 0dB) */
+struct bandstop;    /**< Band-stop (notch) filter */
+struct peak;        /**< Peaking filter */
+struct lowshelf;    /**< Low-shelf filter */
+struct highshelf;   /**< High-shelf filter */
+struct allpass;     /**< All-pass filter */
+} // namespace FilterModeFlags
 
 /**
     Type-safe filter mode using FlagSet.
@@ -51,19 +51,20 @@ namespace FilterModeFlags
     while maintaining type safety and enabling compile-time capability checking.
 */
 using FilterModeType = FlagSet<uint32_t,
-    FilterModeFlags::lowpass,
-    FilterModeFlags::highpass,
-    FilterModeFlags::bandpassCsg,
-    FilterModeFlags::bandpassCpg,
-    FilterModeFlags::bandstop,
-    FilterModeFlags::peak,
-    FilterModeFlags::lowshelf,
-    FilterModeFlags::highshelf,
-    FilterModeFlags::allpass>;
+                               FilterModeFlags::lowpass,
+                               FilterModeFlags::highpass,
+                               FilterModeFlags::bandpassCsg,
+                               FilterModeFlags::bandpassCpg,
+                               FilterModeFlags::bandstop,
+                               FilterModeFlags::peak,
+                               FilterModeFlags::lowshelf,
+                               FilterModeFlags::highshelf,
+                               FilterModeFlags::allpass>;
 
 //==============================================================================
 /** Pre-defined filter modes for convenience */
-namespace FilterMode {
+namespace FilterMode
+{
 static inline constexpr auto lowpass = FilterModeType::declareValue<FilterModeFlags::lowpass>();
 static inline constexpr auto highpass = FilterModeType::declareValue<FilterModeFlags::highpass>();
 static inline constexpr auto bandpassCsg = FilterModeType::declareValue<FilterModeFlags::bandpassCsg>();
@@ -75,7 +76,39 @@ static inline constexpr auto highshelf = FilterModeType::declareValue<FilterMode
 static inline constexpr auto allpass = FilterModeType::declareValue<FilterModeFlags::allpass>();
 
 /** Composite modes */
-static inline constexpr auto bandpass = bandpassCsg | bandpassCpg;  /**< Any band-pass filter variant */
+static inline constexpr auto bandpass = bandpassCsg | bandpassCpg; /**< Any band-pass filter variant */
 } // namespace FilterMode
+
+//==============================================================================
+/**
+    Resolves a composite filter mode to the best supported variant for a specific filter.
+
+    @param requestedMode    The mode requested (could be composite like 'bandpass')
+    @param supportedModes   The modes actually supported by the filter
+    @returns               The resolved specific mode, or empty FilterMode if none supported
+*/
+constexpr FilterModeType resolveFilterMode (FilterModeType requestedMode, FilterModeType supportedModes) noexcept
+{
+    // If the exact mode is supported, use it
+    if (supportedModes.test (requestedMode))
+        return requestedMode;
+
+    // Handle composite mode resolution
+    if (requestedMode.test (FilterMode::bandpass))
+    {
+        // Priority order: CSG first, then CPG
+        if (supportedModes.test (FilterMode::bandpassCsg))
+            return FilterMode::bandpassCsg;
+
+        else if (supportedModes.test (FilterMode::bandpassCpg))
+            return FilterMode::bandpassCpg;
+    }
+
+    // Could add more composite mode logic here in the future
+    // e.g., if we had FilterMode::shelf = lowshelf | highshelf
+
+    // No supported variant found
+    return FilterMode::lowpass; // Empty/null mode
+}
 
 } // namespace yup

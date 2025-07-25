@@ -61,6 +61,8 @@ public:
     */
     void setParameters (FilterModeType mode, CoeffType frequency, CoeffType q, CoeffType gainDb, double sampleRate) noexcept
     {
+        mode = resolveFilterMode (mode, this->getSupportedModes());
+
         if (filterMode != mode
             || ! approximatelyEqual (centerFreq, frequency)
             || ! approximatelyEqual (qFactor, q)
@@ -130,6 +132,8 @@ public:
     */
     void setMode (FilterModeType mode) noexcept
     {
+        mode = resolveFilterMode (mode, this->getSupportedModes());
+
         if (filterMode != mode)
         {
             filterMode = mode;

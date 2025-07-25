@@ -26,6 +26,14 @@ namespace yup
 
 //==============================================================================
 
+/**
+    Calculate the magnitude response of a filter.
+
+    @param filter  The filter to calculate the magnitude response of.
+    @param buffer  The buffer to store the magnitude response in.
+    @param minFreq The minimum frequency to calculate the response at.
+    @param maxFreq The maximum frequency to calculate the response at.
+*/
 template <typename FloatType, typename FilterType>
 void calculateFilterMagnitudeResponse (FilterType& filter, Span<Complex<FloatType>> buffer, double minFreq, double maxFreq)
 {
@@ -36,10 +44,9 @@ void calculateFilterMagnitudeResponse (FilterType& filter, Span<Complex<FloatTyp
         const double freq = minFreq * std::pow (maxFreq / minFreq, ratio);
 
         // Get complex response
-        auto response = filter.getComplexResponse (freq);
+        auto magnitude = filter.getMagnitudeResponse (freq);
 
         // Calculate magnitude in dB
-        double magnitude = std::abs (response);
         double magnitudeDb = 20.0 * std::log10 (yup::jmax (magnitude, 1e-12));
 
         buffer[i] = { static_cast<FloatType> (freq), static_cast<FloatType> (magnitudeDb) };
@@ -47,6 +54,15 @@ void calculateFilterMagnitudeResponse (FilterType& filter, Span<Complex<FloatTyp
 }
 
 //==============================================================================
+
+/**
+    Calculate the phase response of a filter.
+
+    @param filter  The filter to calculate the phase response of.
+    @param buffer  The buffer to store the phase response in.
+    @param minFreq The minimum frequency to calculate the response at.
+    @param maxFreq The maximum frequency to calculate the response at.
+*/
 
 template <typename FloatType, typename FilterType>
 void calculateFilterPhaseResponse (FilterType& filter, Span<Complex<FloatType>> buffer, double minFreq, double maxFreq)
@@ -58,10 +74,9 @@ void calculateFilterPhaseResponse (FilterType& filter, Span<Complex<FloatType>> 
         const double freq = minFreq * std::pow (maxFreq / minFreq, ratio);
 
         // Get complex response
-        auto response = filter.getComplexResponse (freq);
+        auto phaseRad = filter.getPhaseResponse (freq);
 
         // Calculate phase in degrees
-        double phaseRad = std::arg (response);
         double phaseDeg = phaseRad * 180.0 / yup::MathConstants<double>::pi;
 
         buffer[i] = { static_cast<FloatType> (freq), static_cast<FloatType> (phaseDeg) };
@@ -70,6 +85,15 @@ void calculateFilterPhaseResponse (FilterType& filter, Span<Complex<FloatType>> 
 
 //==============================================================================
 
+/**
+    Calculate the group delay of a filter.
+
+    @param filter  The filter to calculate the group delay of.
+    @param buffer  The buffer to store the group delay in.
+    @param minFreq The minimum frequency to calculate the response at.
+    @param maxFreq The maximum frequency to calculate the response at.
+    @param sampleRate The sample rate of the filter.
+*/
 template <typename FloatType, typename FilterType>
 void calculateFilterGroupDelay (FilterType& filter, Span<Complex<FloatType>> buffer, double minFreq, double maxFreq, double sampleRate)
 {
@@ -78,26 +102,23 @@ void calculateFilterGroupDelay (FilterType& filter, Span<Complex<FloatType>> buf
         // Logarithmic frequency sweep
         const double ratio = static_cast<double> (i) / (buffer.size() - 1);
         const double freq = minFreq * std::pow (maxFreq / minFreq, ratio);
+        const double deltaFreq = freq * 0.01; // Small frequency step
 
         // Calculate group delay (numerical derivative of phase)
         double groupDelay = 0.0;
         if (i > 0 && i < buffer.size() - 1)
         {
-            const double deltaFreq = freq * 0.01; // Small frequency step
-            auto responseLow = filter.getComplexResponse (freq - deltaFreq);
-            auto responseHigh = filter.getComplexResponse (freq + deltaFreq);
-
-            double phaseLow = std::arg (responseLow);
-            double phaseHigh = std::arg (responseHigh);
+            auto phaseLow = filter.getPhaseResponse (freq - deltaFreq);
+            auto phaseHigh = filter.getPhaseResponse (freq + deltaFreq);
 
             // Unwrap phase difference
             double phaseDiff = phaseHigh - phaseLow;
             while (phaseDiff > yup::MathConstants<double>::pi)
-                phaseDiff -= 2.0 * yup::MathConstants<double>::pi;
+                phaseDiff -= yup::MathConstants<double>::twoPi;
             while (phaseDiff < -yup::MathConstants<double>::pi)
-                phaseDiff += 2.0 * yup::MathConstants<double>::pi;
+                phaseDiff += yup::MathConstants<double>::twoPi;
 
-            groupDelay = -phaseDiff / (2.0 * deltaFreq * 2.0 * yup::MathConstants<double>::pi) * sampleRate;
+            groupDelay = -phaseDiff / (2.0 * deltaFreq * yup::MathConstants<double>::twoPi) * sampleRate;
         }
 
         buffer[i] = { static_cast<FloatType> (freq), static_cast<FloatType> (groupDelay) };

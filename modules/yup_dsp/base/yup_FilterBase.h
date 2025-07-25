@@ -26,22 +26,6 @@ namespace yup
 
 //==============================================================================
 /**
-    Filter capabilities trait to specify which modes a filter type supports.
-
-    This allows compile-time checking of filter capabilities and runtime
-    validation of mode compatibility.
-*/
-template <typename FilterType>
-struct FilterCapabilities
-{
-    static constexpr auto supportedModes =
-        FilterMode::lowpass | FilterMode::highpass | FilterMode::bandpass | FilterMode::bandstop |
-        FilterMode::peak | FilterMode::lowshelf | FilterMode::highshelf |
-        FilterMode::allpass;
-};
-
-//==============================================================================
-/**
     Base interface for all digital filters.
 
     Provides a common interface for filter processing with both per-sample and block processing capabilities.
@@ -73,6 +57,19 @@ public:
     virtual ~FilterBase() = default;
 
     //==============================================================================
+    virtual FilterModeType getSupportedModes() const noexcept
+    {
+        return FilterMode::lowpass | FilterMode::highpass | FilterMode::bandpass | FilterMode::bandstop |
+            FilterMode::peak | FilterMode::lowshelf | FilterMode::highshelf | FilterMode::allpass;
+    }
+
+
+    virtual bool supportsMode (FilterModeType mode) const noexcept
+    {
+        return getSupportedModes().test (mode);
+    }
+
+    //==============================================================================
     /** Resets the filter's internal state to zero */
     virtual void reset() noexcept = 0;
 
@@ -84,6 +81,7 @@ public:
     */
     virtual void prepare (double sampleRate, int maximumBlockSize) = 0;
 
+    //==============================================================================
     /**
         Processes a single sample.
 
@@ -116,6 +114,14 @@ public:
 
     //==============================================================================
     /**
+        Returns the complex frequency response at the given frequency.
+
+        @param frequency  The frequency in Hz
+        @returns         The complex frequency response
+    */
+    virtual Complex<CoeffType> getComplexResponse (CoeffType frequency) const = 0;
+
+    /**
         Returns the magnitude response at the given frequency.
 
         @param frequency  The frequency in Hz
@@ -138,14 +144,6 @@ public:
         auto response = getComplexResponse (frequency);
         return std::arg (response);
     }
-
-    /**
-        Returns the complex frequency response at the given frequency.
-
-        @param frequency  The frequency in Hz
-        @returns         The complex frequency response
-    */
-    virtual Complex<CoeffType> getComplexResponse (CoeffType frequency) const = 0;
 
     //==============================================================================
     /**

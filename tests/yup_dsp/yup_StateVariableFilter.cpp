@@ -73,13 +73,13 @@ TEST_F (StateVariableFilterTests, DefaultConstructorInitializes)
 
 TEST_F (StateVariableFilterTests, ModeConstructorInitializes)
 {
-    StateVariableFilter<float> bandpassFilter (StateVariableFilter<float>::Mode::bandpass);
+    StateVariableFilter<float> bandpassFilter (FilterMode::bandpass);
     EXPECT_NO_THROW (bandpassFilter.prepare (sampleRate, blockSize));
 }
 
 TEST_F (StateVariableFilterTests, SetParametersUpdatesFilter)
 {
-    filterFloat.setParameters (StateVariableFilter<float>::Mode::lowpass, 1000.0f, 0.707f, sampleRate);
+    filterFloat.setParameters (FilterMode::lowpass, 1000.0f, 0.707f, sampleRate);
 
     // Should not throw and should be ready to process
     EXPECT_NO_THROW (filterFloat.processBlock (testData.data(), outputData.data(), blockSize));
@@ -87,7 +87,7 @@ TEST_F (StateVariableFilterTests, SetParametersUpdatesFilter)
 
 TEST_F (StateVariableFilterTests, LowpassModeFiltersCorrectly)
 {
-    filterFloat.setParameters (StateVariableFilter<float>::Mode::lowpass, 1000.0f, 0.707f, sampleRate);
+    filterFloat.setParameters (FilterMode::lowpass, 1000.0f, 0.707f, sampleRate);
 
     filterFloat.processBlock (testData.data(), outputData.data(), blockSize);
 
@@ -112,7 +112,7 @@ TEST_F (StateVariableFilterTests, LowpassModeFiltersCorrectly)
 
 TEST_F (StateVariableFilterTests, HighpassModeFiltersCorrectly)
 {
-    filterFloat.setParameters (StateVariableFilter<float>::Mode::highpass, 1000.0f, 0.707f, sampleRate);
+    filterFloat.setParameters (FilterMode::highpass, 1000.0f, 0.707f, sampleRate);
 
     filterFloat.processBlock (testData.data(), outputData.data(), blockSize);
 
@@ -137,7 +137,7 @@ TEST_F (StateVariableFilterTests, HighpassModeFiltersCorrectly)
 
 TEST_F (StateVariableFilterTests, BandpassModeFiltersCorrectly)
 {
-    filterFloat.setParameters (StateVariableFilter<float>::Mode::bandpass, 1000.0f, 2.0f, sampleRate);
+    filterFloat.setParameters (FilterMode::bandpass, 1000.0f, 2.0f, sampleRate);
 
     filterFloat.processBlock (testData.data(), outputData.data(), blockSize);
 
@@ -162,7 +162,7 @@ TEST_F (StateVariableFilterTests, BandpassModeFiltersCorrectly)
 
 TEST_F (StateVariableFilterTests, NotchModeFiltersCorrectly)
 {
-    filterFloat.setParameters (StateVariableFilter<float>::Mode::notch, 1000.0f, 2.0f, sampleRate);
+    filterFloat.setParameters (FilterMode::bandstop, 1000.0f, 2.0f, sampleRate);
 
     filterFloat.processBlock (testData.data(), outputData.data(), blockSize);
 
@@ -187,7 +187,7 @@ TEST_F (StateVariableFilterTests, NotchModeFiltersCorrectly)
 
 TEST_F (StateVariableFilterTests, SimultaneousOutputsWork)
 {
-    filterFloat.setParameters (StateVariableFilter<float>::Mode::lowpass, 1000.0f, 0.707f, sampleRate);
+    filterFloat.setParameters (FilterMode::lowpass, 1000.0f, 0.707f, sampleRate);
 
     // Process and get all outputs simultaneously
     std::vector<StateVariableFilter<float>::Outputs> allOutputs (blockSize);
@@ -203,14 +203,14 @@ TEST_F (StateVariableFilterTests, SimultaneousOutputsWork)
         EXPECT_TRUE (std::isfinite (allOutputs[i].lowpass));
         EXPECT_TRUE (std::isfinite (allOutputs[i].bandpass));
         EXPECT_TRUE (std::isfinite (allOutputs[i].highpass));
-        EXPECT_TRUE (std::isfinite (allOutputs[i].notch));
+        EXPECT_TRUE (std::isfinite (allOutputs[i].bandstop));
     }
 
     // For a typical input, outputs should generally be different
     bool someOutputsDiffer = false;
     for (int i = 10; i < blockSize - 10; ++i) // Skip initial transient
     {
-        if (std::abs (allOutputs[i].lowpass - allOutputs[i].highpass) > toleranceF || std::abs (allOutputs[i].bandpass - allOutputs[i].notch) > toleranceF)
+        if (std::abs (allOutputs[i].lowpass - allOutputs[i].highpass) > toleranceF || std::abs (allOutputs[i].bandpass - allOutputs[i].bandstop) > toleranceF)
         {
             someOutputsDiffer = true;
             break;
@@ -221,7 +221,7 @@ TEST_F (StateVariableFilterTests, SimultaneousOutputsWork)
 
 TEST_F (StateVariableFilterTests, DoublePrecisionProcessing)
 {
-    filterDouble.setParameters (StateVariableFilter<double>::Mode::lowpass, 1000.0, 0.707, sampleRate);
+    filterDouble.setParameters (FilterMode::bandstop, 1000.0, 0.707, sampleRate);
 
     filterDouble.processBlock (doubleTestData.data(), doubleOutputData.data(), blockSize);
 
@@ -246,7 +246,7 @@ TEST_F (StateVariableFilterTests, DoublePrecisionProcessing)
 
 TEST_F (StateVariableFilterTests, InPlaceProcessing)
 {
-    filterFloat.setParameters (StateVariableFilter<float>::Mode::lowpass, 1000.0f, 0.707f, sampleRate);
+    filterFloat.setParameters (FilterMode::lowpass, 1000.0f, 0.707f, sampleRate);
 
     // Make a copy for comparison
     std::vector<float> originalData = testData;
@@ -269,7 +269,7 @@ TEST_F (StateVariableFilterTests, InPlaceProcessing)
 
 TEST_F (StateVariableFilterTests, ResetClearsState)
 {
-    filterFloat.setParameters (StateVariableFilter<float>::Mode::lowpass, 1000.0f, 0.707f, sampleRate);
+    filterFloat.setParameters (FilterMode::lowpass, 1000.0f, 0.707f, sampleRate);
 
     // Process some data to build up state
     filterFloat.processBlock (testData.data(), outputData.data(), blockSize);
@@ -290,7 +290,7 @@ TEST_F (StateVariableFilterTests, ResetClearsState)
 TEST_F (StateVariableFilterTests, HighQStability)
 {
     // Test with very high Q that could cause instability
-    filterFloat.setParameters (StateVariableFilter<float>::Mode::bandpass, 1000.0f, 50.0f, sampleRate);
+    filterFloat.setParameters (FilterMode::bandpass, 1000.0f, 50.0f, sampleRate);
 
     // Process white noise-like signal
     std::vector<float> noiseInput (blockSize);
@@ -310,36 +310,36 @@ TEST_F (StateVariableFilterTests, HighQStability)
 TEST_F (StateVariableFilterTests, FrequencyRangeHandling)
 {
     // Test low frequency
-    filterFloat.setParameters (StateVariableFilter<float>::Mode::lowpass, 10.0f, 0.707f, sampleRate);
+    filterFloat.setParameters (FilterMode::lowpass, 10.0f, 0.707f, sampleRate);
     EXPECT_NO_THROW (filterFloat.processBlock (testData.data(), outputData.data(), blockSize));
 
     // Test high frequency (near Nyquist)
-    filterFloat.setParameters (StateVariableFilter<float>::Mode::lowpass, 20000.0f, 0.707f, sampleRate);
+    filterFloat.setParameters (FilterMode::lowpass, 20000.0f, 0.707f, sampleRate);
     EXPECT_NO_THROW (filterFloat.processBlock (testData.data(), outputData.data(), blockSize));
 
     // Test mid frequency
-    filterFloat.setParameters (StateVariableFilter<float>::Mode::lowpass, 5000.0f, 0.707f, sampleRate);
+    filterFloat.setParameters (FilterMode::lowpass, 5000.0f, 0.707f, sampleRate);
     EXPECT_NO_THROW (filterFloat.processBlock (testData.data(), outputData.data(), blockSize));
 }
 
 TEST_F (StateVariableFilterTests, QFactorRangeHandling)
 {
     // Test very low Q
-    filterFloat.setParameters (StateVariableFilter<float>::Mode::lowpass, 1000.0f, 0.1f, sampleRate);
+    filterFloat.setParameters (FilterMode::lowpass, 1000.0f, 0.1f, sampleRate);
     EXPECT_NO_THROW (filterFloat.processBlock (testData.data(), outputData.data(), blockSize));
 
     // Test moderate Q
-    filterFloat.setParameters (StateVariableFilter<float>::Mode::lowpass, 1000.0f, 2.0f, sampleRate);
+    filterFloat.setParameters (FilterMode::lowpass, 1000.0f, 2.0f, sampleRate);
     EXPECT_NO_THROW (filterFloat.processBlock (testData.data(), outputData.data(), blockSize));
 
     // Test high Q
-    filterFloat.setParameters (StateVariableFilter<float>::Mode::lowpass, 1000.0f, 10.0f, sampleRate);
+    filterFloat.setParameters (FilterMode::lowpass, 1000.0f, 10.0f, sampleRate);
     EXPECT_NO_THROW (filterFloat.processBlock (testData.data(), outputData.data(), blockSize));
 }
 
 TEST_F (StateVariableFilterTests, ImpulseResponseCharacteristics)
 {
-    filterFloat.setParameters (StateVariableFilter<float>::Mode::lowpass, 1000.0f, 0.707f, sampleRate);
+    filterFloat.setParameters (FilterMode::lowpass, 1000.0f, 0.707f, sampleRate);
 
     // Create impulse
     std::vector<float> impulse (blockSize, 0.0f);
@@ -373,7 +373,7 @@ TEST_F (StateVariableFilterTests, ImpulseResponseCharacteristics)
 TEST_F (StateVariableFilterTests, ParameterUpdateStability)
 {
     // Start with one set of parameters
-    filterFloat.setParameters (StateVariableFilter<float>::Mode::lowpass, 500.0f, 0.5f, sampleRate);
+    filterFloat.setParameters (FilterMode::lowpass, 500.0f, 0.5f, sampleRate);
 
     // Process some data
     for (int block = 0; block < 10; ++block)
@@ -381,7 +381,7 @@ TEST_F (StateVariableFilterTests, ParameterUpdateStability)
         // Change parameters each block
         float freq = 500.0f + block * 200.0f;
         float q = 0.5f + block * 0.2f;
-        filterFloat.setParameters (StateVariableFilter<float>::Mode::lowpass, freq, q, sampleRate);
+        filterFloat.setParameters (FilterMode::lowpass, freq, q, sampleRate);
 
         filterFloat.processBlock (testData.data(), outputData.data(), blockSize);
 
@@ -407,19 +407,19 @@ TEST_F (StateVariableFilterTests, ModeComparisonConsistency)
 
     // Test each mode separately
     filterFloat.reset();
-    filterFloat.setParameters (StateVariableFilter<float>::Mode::lowpass, frequency, q, sampleRate);
+    filterFloat.setParameters (FilterMode::lowpass, frequency, q, sampleRate);
     filterFloat.processBlock (testData.data(), lowpassOutput.data(), blockSize);
 
     filterFloat.reset();
-    filterFloat.setParameters (StateVariableFilter<float>::Mode::highpass, frequency, q, sampleRate);
+    filterFloat.setParameters (FilterMode::highpass, frequency, q, sampleRate);
     filterFloat.processBlock (testData.data(), highpassOutput.data(), blockSize);
 
     filterFloat.reset();
-    filterFloat.setParameters (StateVariableFilter<float>::Mode::bandpass, frequency, q, sampleRate);
+    filterFloat.setParameters (FilterMode::bandpass, frequency, q, sampleRate);
     filterFloat.processBlock (testData.data(), bandpassOutput.data(), blockSize);
 
     filterFloat.reset();
-    filterFloat.setParameters (StateVariableFilter<float>::Mode::notch, frequency, q, sampleRate);
+    filterFloat.setParameters (FilterMode::bandstop, frequency, q, sampleRate);
     filterFloat.processBlock (testData.data(), notchOutput.data(), blockSize);
 
     // Outputs should generally be different (at least some should differ significantly)
