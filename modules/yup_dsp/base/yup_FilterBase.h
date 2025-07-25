@@ -59,10 +59,8 @@ public:
     //==============================================================================
     virtual FilterModeType getSupportedModes() const noexcept
     {
-        return FilterMode::lowpass | FilterMode::highpass | FilterMode::bandpass | FilterMode::bandstop |
-            FilterMode::peak | FilterMode::lowshelf | FilterMode::highshelf | FilterMode::allpass;
+        return FilterMode::lowpass | FilterMode::highpass | FilterMode::bandpass | FilterMode::bandstop | FilterMode::peak | FilterMode::lowshelf | FilterMode::highshelf | FilterMode::allpass;
     }
-
 
     virtual bool supportsMode (FilterModeType mode) const noexcept
     {
