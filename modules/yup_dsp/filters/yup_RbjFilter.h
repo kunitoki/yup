@@ -44,227 +44,30 @@ namespace yup
     @see Biquad, FilterBase
 */
 template <typename SampleType, typename CoeffType = double>
-class RbjFilter : public Biquad<SampleType, CoeffType>
+class RbjFilter : public BiquadFilter<SampleType, CoeffType>
 {
-    using BaseFilterType = Biquad<SampleType, CoeffType>;
+    using BaseFilterType = BiquadFilter<SampleType, CoeffType>;
 
 public:
     //==============================================================================
-    /** Filter type enumeration specific to RBJ cookbook */
-    enum class Mode
-    {
-        lowpass,     /**< Low-pass filter */
-        highpass,    /**< High-pass filter */
-        bandpassCsg, /**< Band-pass filter (constant skirt gain) */
-        bandpassCpg, /**< Band-pass filter (constant peak gain) */
-        notch,       /**< Notch filter */
-        peaking,     /**< Peaking filter */
-        lowshelf,    /**< Low-shelf filter */
-        highshelf,   /**< High-shelf filter */
-        allpass      /**< All-pass filter */
-    };
-
-    //==============================================================================
     /** Default constructor */
-    RbjFilter() noexcept
-    {
-        setParameters (Mode::lowpass, static_cast<CoeffType> (1000.0), static_cast<CoeffType> (0.707), static_cast<CoeffType> (0.0), 44100.0);
-    }
+    RbjFilter() noexcept = default;
 
     /** Constructor with optional initial parameters */
-    explicit RbjFilter (Mode mode) noexcept
+    explicit RbjFilter (FilterMode mode) noexcept
+        : BaseFilterType (mode)
     {
-        setParameters (mode, static_cast<CoeffType> (1000.0), static_cast<CoeffType> (0.707), static_cast<CoeffType> (0.0), 44100.0);
-    }
-
-    //==============================================================================
-    /**
-        Sets all filter parameters.
-
-        @param mode        The RBJ filter mode
-        @param frequency   The center/cutoff frequency in Hz
-        @param q          The Q factor (resonance/bandwidth control)
-        @param gainDb     The gain in decibels (for peaking and shelving filters)
-        @param sampleRate The sample rate in Hz
-    */
-    void setParameters (Mode mode, CoeffType frequency, CoeffType q, CoeffType gainDb, double sampleRate) noexcept
-    {
-        if (filterMode != mode
-            || ! approximatelyEqual (centerFreq, frequency)
-            || ! approximatelyEqual (qFactor, q)
-            || ! approximatelyEqual (gain, gainDb)
-            || ! approximatelyEqual (this->sampleRate, sampleRate))
-        {
-            filterMode = mode;
-            centerFreq = frequency;
-            qFactor = q;
-            gain = gainDb;
-
-            this->sampleRate = sampleRate;
-
-            updateCoefficients();
-        }
-    }
-
-    /**
-        Sets just the center/cutoff frequency.
-
-        @param frequency  The new frequency in Hz
-    */
-    void setFrequency (CoeffType frequency) noexcept
-    {
-        if (! approximatelyEqual (centerFreq, frequency))
-        {
-            centerFreq = frequency;
-
-            updateCoefficients();
-        }
-    }
-
-    /**
-        Sets just the Q factor.
-
-        @param q  The new Q factor
-    */
-    void setQ (CoeffType q) noexcept
-    {
-        if (! approximatelyEqual (qFactor, q))
-        {
-            qFactor = q;
-
-            updateCoefficients();
-        }
-    }
-
-    /**
-        Sets just the gain (for peaking and shelving filters).
-
-        @param gainDb  The new gain in decibels
-    */
-    void setGain (CoeffType gainDb) noexcept
-    {
-        if (! approximatelyEqual (gain, gainDb))
-        {
-            gain = gainDb;
-
-            updateCoefficients();
-        }
-    }
-
-    /**
-        Sets the filter mode.
-
-        @param mode  The new RBJ filter mode
-    */
-    void setMode (Mode mode) noexcept
-    {
-        if (filterMode != mode)
-        {
-            filterMode = mode;
-
-            updateCoefficients();
-        }
-    }
-
-    /**
-        Gets the current frequency.
-
-        @returns  The center/cutoff frequency in Hz
-    */
-    CoeffType getFrequency() const noexcept
-    {
-        return centerFreq;
-    }
-
-    /**
-        Gets the current Q factor.
-
-        @returns  The Q factor
-    */
-    CoeffType getQ() const noexcept
-    {
-        return qFactor;
-    }
-
-    /**
-        Gets the current gain.
-
-        @returns  The gain in decibels
-    */
-    CoeffType getGain() const noexcept
-    {
-        return gain;
-    }
-
-    /**
-        Gets the current filter mode.
-
-        @returns  The RBJ filter mode
-    */
-    Mode getMode() const noexcept
-    {
-        return filterMode;
-    }
-
-    //==============================================================================
-    /** @internal */
-    void prepare (double sampleRate, int maximumBlockSize) noexcept override
-    {
-        BaseFilterType::prepare (sampleRate, maximumBlockSize);
-
-        updateCoefficients();
     }
 
 private:
     //==============================================================================
-    void updateCoefficients() noexcept
+    void updateCoefficients() override
     {
-        BiquadCoefficients<CoeffType> coeffs;
-
-        switch (filterMode)
-        {
-            case Mode::lowpass:
-                coeffs = FilterDesigner<CoeffType>::designRbjLowpass (centerFreq, qFactor, this->sampleRate);
-                break;
-
-            case Mode::highpass:
-                coeffs = FilterDesigner<CoeffType>::designRbjHighpass (centerFreq, qFactor, this->sampleRate);
-                break;
-
-            case Mode::bandpassCsg:
-            case Mode::bandpassCpg:
-                coeffs = FilterDesigner<CoeffType>::designRbjBandpass (centerFreq, qFactor, this->sampleRate);
-                break;
-
-            case Mode::notch:
-                coeffs = FilterDesigner<CoeffType>::designRbjBandstop (centerFreq, qFactor, this->sampleRate);
-                break;
-
-            case Mode::peaking:
-                coeffs = FilterDesigner<CoeffType>::designRbjPeak (centerFreq, qFactor, gain, this->sampleRate);
-                break;
-
-            case Mode::lowshelf:
-                coeffs = FilterDesigner<CoeffType>::designRbjLowShelf (centerFreq, qFactor, gain, this->sampleRate);
-                break;
-
-            case Mode::highshelf:
-                coeffs = FilterDesigner<CoeffType>::designRbjHighShelf (centerFreq, qFactor, gain, this->sampleRate);
-                break;
-
-            case Mode::allpass:
-                coeffs = FilterDesigner<CoeffType>::designRbjAllpass (centerFreq, qFactor, this->sampleRate);
-                break;
-        }
+        auto coeffs = FilterDesigner<CoeffType>::designRbj (
+            this->filterMode, this->centerFreq, this->qFactor, this->gain, this->sampleRate);
 
         BaseFilterType::setCoefficients (coeffs);
     }
-
-    //==============================================================================
-    Mode filterMode = Mode::lowpass;
-    CoeffType centerFreq = static_cast<CoeffType> (1000.0);
-    CoeffType qFactor = static_cast<CoeffType> (0.707);
-    CoeffType gain = static_cast<CoeffType> (0.0);
 
     //==============================================================================
     YUP_LEAK_DETECTOR (RbjFilter)

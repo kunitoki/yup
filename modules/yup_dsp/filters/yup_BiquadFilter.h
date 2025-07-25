@@ -26,53 +26,50 @@ namespace yup
 
 //==============================================================================
 /**
-    First-order IIR filter implementation.
+    Biquad filter base.
 
-    This class implements various first-order filters including:
-    - One-pole lowpass and highpass filters
-    - First-order shelving filters
-    - Allpass filters
-
-    @see FirstOrder
+    @see Biquad, FilterBase
 */
 template <typename SampleType, typename CoeffType = double>
-class FirstOrderFilter : public FirstOrder<SampleType, CoeffType>
+class BiquadFilter : public Biquad<SampleType, CoeffType>
 {
-    using BaseFilterType = FirstOrder<SampleType, CoeffType>;
+    using BaseFilterType = Biquad<SampleType, CoeffType>;
 
 public:
     //==============================================================================
-    /** Filter mode enumeration for single-output processing */
-    enum class Mode
-    {
-        lowpass,   /**< Low-pass output only */
-        highpass,  /**< High-pass output only */
-        lowshelf,  /**< Low-shelf filter */
-        highshelf, /**< High-shelf filter */
-        allpass    /**< All-pass filter */
-    };
-
-    //==============================================================================
     /** Default constructor */
-    FirstOrderFilter() = default;
+    BiquadFilter()
+    {
+        setParameters (FilterMode::lowpass, static_cast<CoeffType> (1000.0), static_cast<CoeffType> (0.707), static_cast<CoeffType> (0.0), 44100.0);
+    }
+
+    /** Constructor with optional initial parameters */
+    explicit BiquadFilter (FilterMode mode)
+    {
+        setParameters (mode, static_cast<CoeffType> (1000.0), static_cast<CoeffType> (0.707), static_cast<CoeffType> (0.0), 44100.0);
+    }
 
     //==============================================================================
     /**
-        Sets the filter parameters.
+        Sets all filter parameters.
 
-        @param frequency   The cutoff frequency in Hz
-        @param q          The Q factor (resonance)
-        @param sampleRate The sample rate in Hz
+        @param mode        The filter mode
+        @param frequency   The center/cutoff frequency in Hz
+        @param q           The Q factor (resonance/bandwidth control)
+        @param gainDb      The gain in decibels (for peaking and shelving filters)
+        @param sampleRate  The sample rate in Hz
     */
-    void setParameters (Mode mode, CoeffType frequency, CoeffType gainDb, double sampleRate) noexcept
+    void setParameters (FilterMode mode, CoeffType frequency, CoeffType q, CoeffType gainDb, double sampleRate) noexcept
     {
         if (filterMode != mode
             || ! approximatelyEqual (centerFreq, frequency)
+            || ! approximatelyEqual (qFactor, q)
             || ! approximatelyEqual (gain, gainDb)
             || ! approximatelyEqual (this->sampleRate, sampleRate))
         {
             filterMode = mode;
             centerFreq = frequency;
+            qFactor = q;
             gain = gainDb;
 
             this->sampleRate = sampleRate;
@@ -82,15 +79,30 @@ public:
     }
 
     /**
-        Sets just the cutoff frequency.
+        Sets just the center/cutoff frequency.
 
-        @param frequency  The new cutoff frequency in Hz
+        @param frequency  The new frequency in Hz
     */
-    void setCutoffFrequency (CoeffType frequency) noexcept
+    void setFrequency (CoeffType frequency) noexcept
     {
         if (! approximatelyEqual (centerFreq, frequency))
         {
             centerFreq = frequency;
+
+            updateCoefficients();
+        }
+    }
+
+    /**
+        Sets just the Q factor.
+
+        @param q  The new Q factor
+    */
+    void setQ (CoeffType q) noexcept
+    {
+        if (! approximatelyEqual (qFactor, q))
+        {
+            qFactor = q;
 
             updateCoefficients();
         }
@@ -114,9 +126,9 @@ public:
     /**
         Sets the filter mode.
 
-        @param mode  The new RBJ filter mode
+        @param mode  The filter mode
     */
-    void setMode (Mode mode) noexcept
+    void setMode (FilterMode mode) noexcept
     {
         if (filterMode != mode)
         {
@@ -137,6 +149,16 @@ public:
     }
 
     /**
+        Gets the current Q factor.
+
+        @returns  The Q factor
+    */
+    CoeffType getQ() const noexcept
+    {
+        return qFactor;
+    }
+
+    /**
         Gets the current gain.
 
         @returns  The gain in decibels
@@ -149,58 +171,40 @@ public:
     /**
         Gets the current filter mode.
 
-        @returns  The RBJ filter mode
+        @returns  The filter mode
     */
-    Mode getMode() const noexcept
+    FilterMode getMode() const noexcept
     {
         return filterMode;
     }
 
-protected:
     //==============================================================================
-    virtual void updateCoefficients()
+    /** @internal */
+    void prepare (double sampleRate, int maximumBlockSize) override
     {
-        FirstOrderCoefficients<CoeffType> coeffs;
+        BaseFilterType::prepare (sampleRate, maximumBlockSize);
 
-        switch (filterMode)
-        {
-            case Mode::lowpass:
-                coeffs = FilterDesigner<CoeffType>::designFirstOrderLowpass (centerFreq, this->sampleRate);
-                break;
-
-            case Mode::highpass:
-                coeffs = FilterDesigner<CoeffType>::designFirstOrderHighpass (centerFreq, this->sampleRate);
-                break;
-
-            case Mode::lowshelf:
-                coeffs = FilterDesigner<CoeffType>::designFirstOrderLowShelf (centerFreq, gain, this->sampleRate);
-                break;
-
-            case Mode::highshelf:
-                coeffs = FilterDesigner<CoeffType>::designFirstOrderHighShelf (centerFreq, gain, this->sampleRate);
-                break;
-
-            case Mode::allpass:
-                coeffs = FilterDesigner<CoeffType>::designFirstOrderAllpass (centerFreq, this->sampleRate);
-                break;
-        }
-
-        BaseFilterType::setCoefficients (coeffs);
+        updateCoefficients();
     }
 
+protected:
     //==============================================================================
-    Mode filterMode = Mode::lowpass;
+    virtual void updateCoefficients() = 0;
+
+    //==============================================================================
+    FilterMode filterMode = FilterMode::lowpass;
     CoeffType centerFreq = static_cast<CoeffType> (1000.0);
+    CoeffType qFactor = static_cast<CoeffType> (0.707);
     CoeffType gain = static_cast<CoeffType> (0.0);
 
 private:
     //==============================================================================
-    YUP_LEAK_DETECTOR (FirstOrderFilter)
+    YUP_LEAK_DETECTOR (BiquadFilter)
 };
 
 //==============================================================================
 /** Type aliases for convenience */
-using FirstOrderFilterFloat = FirstOrderFilter<float>;   // float samples, double coefficients (default)
-using FirstOrderFilterDouble = FirstOrderFilter<double>; // double samples, double coefficients (default)
+using BiquadFilterFloat = BiquadFilter<float>;   // float samples, double coefficients (default)
+using BiquadFilterDouble = BiquadFilter<double>; // double samples, double coefficients (default)
 
 } // namespace yup

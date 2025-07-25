@@ -109,7 +109,7 @@ public:
     }
 
     /** @internal */
-    void prepare (double sampleRate, int maximumBlockSize) noexcept override
+    void prepare (double sampleRate, int maximumBlockSize) override
     {
         this->sampleRate = sampleRate;
         this->maximumBlockSize = maximumBlockSize;
@@ -145,9 +145,9 @@ public:
     }
 
     /** @internal */
-    DspMath::Complex<CoeffType> getComplexResponse (CoeffType frequency) const noexcept override
+    Complex<CoeffType> getComplexResponse (CoeffType frequency) const override
     {
-        auto response = DspMath::Complex<CoeffType> (1.0, 0.0);
+        auto response = Complex<CoeffType> (1.0, 0.0);
         for (const auto& section : sections)
             response = response * section.getComplexResponse (frequency);
         return response;
@@ -155,8 +155,8 @@ public:
 
     /** @internal */
     void getPolesZeros (
-        DspMath::ComplexVector<CoeffType>& poles,
-        DspMath::ComplexVector<CoeffType>& zeros) const override
+        ComplexVector<CoeffType>& poles,
+        ComplexVector<CoeffType>& zeros) const override
     {
         poles.reserve (sections.size() * 2);
         zeros.reserve (sections.size() * 2);

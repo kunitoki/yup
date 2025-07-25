@@ -113,18 +113,22 @@
 
 // Base filter interfaces and common structures
 #include "base/yup_FilterBase.h"
+#include "base/yup_FirstOrderCoefficients.h"
+#include "base/yup_BiquadCoefficients.h"
+#include "base/yup_StateVariableCoefficients.h"
+#include "base/yup_FirstOrder.h"
+#include "base/yup_Biquad.h"
+#include "base/yup_BiquadCascade.h"
+#include "base/yup_FilterCharacteristics.h"
 
 // Filter designers and coefficient calculators
 #include "designers/yup_FilterDesigner.h"
 
-// Core filter implementations
-#include "filters/yup_FirstOrder.h"
-#include "filters/yup_Biquad.h"
-#include "filters/yup_BiquadCascade.h"
-
 // Filter implementations
 #include "filters/yup_FirstOrderFilter.h"
+#include "filters/yup_BiquadFilter.h"
 #include "filters/yup_RbjFilter.h"
+#include "filters/yup_ZoelzerFilter.h"
 #include "filters/yup_StateVariableFilter.h"
 #include "filters/yup_ButterworthFilter.h"
 

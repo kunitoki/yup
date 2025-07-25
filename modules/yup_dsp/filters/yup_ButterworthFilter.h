@@ -60,7 +60,7 @@ class ButterworthFilter : public FilterBase<SampleType, CoeffType>
 public:
     //==============================================================================
     /** Default constructor */
-    ButterworthFilter() noexcept
+    ButterworthFilter()
     {
         // Pre-allocate maximum required storage
         biquadCoefficients.reserve (maxOrder / 2 + 1);
@@ -71,7 +71,7 @@ public:
     }
 
     /** Constructor with initial parameters */
-    ButterworthFilter (FilterMode mode, int filterOrder, CoeffType freq) noexcept
+    ButterworthFilter (FilterMode mode, int filterOrder, CoeffType freq)
         : ButterworthFilter()
     {
         setParameters (mode, filterOrder, freq);
@@ -202,52 +202,6 @@ public:
     }
 
     //==============================================================================
-    /** @inheritdoc */
-    void reset() noexcept override
-    {
-        biquadCascade.reset();
-    }
-
-    /** @inheritdoc */
-    void prepare (double sampleRate, int maximumBlockSize) noexcept override
-    {
-        this->sampleRate = sampleRate;
-        this->maximumBlockSize = maximumBlockSize;
-
-        biquadCascade.prepare (sampleRate, maximumBlockSize);
-
-        updateCoefficients();
-    }
-
-    /** @inheritdoc */
-    SampleType processSample (SampleType inputSample) noexcept override
-    {
-        return biquadCascade.processSample (inputSample);
-    }
-
-    /** @inheritdoc */
-    void processBlock (const SampleType* inputBuffer,
-                       SampleType* outputBuffer,
-                       int numSamples) noexcept override
-    {
-        biquadCascade.processBlock (inputBuffer, outputBuffer, numSamples);
-    }
-
-    /** @inheritdoc */
-    DspMath::Complex<CoeffType> getComplexResponse (CoeffType freq) const noexcept override
-    {
-        return biquadCascade.getComplexResponse (freq);
-    }
-
-    /** @inheritdoc */
-    void getPolesZeros (DspMath::ComplexVector<CoeffType>& poles,
-                        DspMath::ComplexVector<CoeffType>& zeros) const override
-    {
-        poles = digitalPoles;
-        zeros = digitalZeros;
-    }
-
-    //==============================================================================
     /**
         Returns the current filter mode.
     */
@@ -273,9 +227,55 @@ public:
     */
     CoeffType getGain() const noexcept { return gain; }
 
+    //==============================================================================
+    /** @inheritdoc */
+    void reset() noexcept override
+    {
+        biquadCascade.reset();
+    }
+
+    /** @inheritdoc */
+    void prepare (double sampleRate, int maximumBlockSize) override
+    {
+        this->sampleRate = sampleRate;
+        this->maximumBlockSize = maximumBlockSize;
+
+        biquadCascade.prepare (sampleRate, maximumBlockSize);
+
+        updateCoefficients();
+    }
+
+    /** @inheritdoc */
+    SampleType processSample (SampleType inputSample) noexcept override
+    {
+        return biquadCascade.processSample (inputSample);
+    }
+
+    /** @inheritdoc */
+    void processBlock (const SampleType* inputBuffer,
+                       SampleType* outputBuffer,
+                       int numSamples) noexcept override
+    {
+        biquadCascade.processBlock (inputBuffer, outputBuffer, numSamples);
+    }
+
+    /** @inheritdoc */
+    Complex<CoeffType> getComplexResponse (CoeffType freq) const override
+    {
+        return biquadCascade.getComplexResponse (freq);
+    }
+
+    /** @inheritdoc */
+    void getPolesZeros (ComplexVector<CoeffType>& poles,
+                        ComplexVector<CoeffType>& zeros) const override
+    {
+        poles = digitalPoles;
+        zeros = digitalZeros;
+    }
+
 private:
     //==============================================================================
-    void updateCoefficients() noexcept
+    void updateCoefficients()
     {
         // Store current section count to avoid unnecessary reinitialization
         const auto previousSectionCount = biquadCascade.getNumSections();
@@ -330,7 +330,7 @@ private:
     }
 
     //==============================================================================
-    void calculateAnalogPrototypePoles() noexcept
+    void calculateAnalogPrototypePoles()
     {
         analogPoles.clear();
         analogPoles.reserve (order);
@@ -351,7 +351,7 @@ private:
     }
 
     //==============================================================================
-    void designLowpass() noexcept
+    void designLowpass()
     {
         // Frequency pre-warping for bilinear transform
         // Convert Hz to rad/s and apply prewarping: ωc = 2*tan(π*f/fs)
@@ -359,7 +359,7 @@ private:
         const auto wc = static_cast<CoeffType> (2.0) * std::tan (digitalFreq * static_cast<CoeffType> (0.5));
 
         // Scale analog poles by prewarped cutoff frequency
-        DspMath::ComplexVector<CoeffType> scaledPoles;
+        ComplexVector<CoeffType> scaledPoles;
         scaledPoles.reserve (order);
 
         // Apply lowpass transformation
@@ -383,14 +383,14 @@ private:
     }
 
     //==============================================================================
-    void designHighpass() noexcept
+    void designHighpass()
     {
         // Highpass transformation: s → wc/s
         // Convert Hz to rad/s and apply prewarping: ωc = 2*tan(π*f/fs)
         const auto digitalFreq = MathConstants<CoeffType>::twoPi * frequency / this->sampleRate;
         const auto wc = static_cast<CoeffType> (2.0) * std::tan (digitalFreq * static_cast<CoeffType> (0.5));
 
-        DspMath::ComplexVector<CoeffType> transformedPoles;
+        ComplexVector<CoeffType> transformedPoles;
         transformedPoles.reserve (order);
 
         // Apply highpass transformation
@@ -413,7 +413,7 @@ private:
     }
 
     //==============================================================================
-    void designBandpass() noexcept
+    void designBandpass()
     {
         jassert (frequency2 > frequency);
 
@@ -434,7 +434,7 @@ private:
         const auto digitalFreq = MathConstants<CoeffType>::twoPi * frequency / this->sampleRate;
         const auto wc = static_cast<CoeffType> (2.0) * std::tan (digitalFreq * static_cast<CoeffType> (0.5));
 
-        DspMath::ComplexVector<CoeffType> highpassPoles;
+        ComplexVector<CoeffType> highpassPoles;
         highpassPoles.reserve (order);
 
         // Highpass transformation: s → wc/s maps lowpass pole p to highpass pole wc/p
@@ -455,7 +455,7 @@ private:
         const auto digitalFreq2 = MathConstants<CoeffType>::twoPi * frequency2 / this->sampleRate;
         const auto wc2 = static_cast<CoeffType> (2.0) * std::tan (digitalFreq2 * static_cast<CoeffType> (0.5));
 
-        DspMath::ComplexVector<CoeffType> lowpassPoles;
+        ComplexVector<CoeffType> lowpassPoles;
         lowpassPoles.reserve (order);
 
         // Lowpass transformation: direct scaling by cutoff frequency
@@ -502,7 +502,7 @@ private:
     }
 
     //==============================================================================
-    void designBandstop() noexcept
+    void designBandstop()
     {
         jassert (frequency2 > frequency);
 
@@ -522,7 +522,7 @@ private:
         const auto digitalFreq1 = MathConstants<CoeffType>::twoPi * frequency / this->sampleRate;
         const auto wc1 = static_cast<CoeffType> (2.0) * std::tan (digitalFreq1 * static_cast<CoeffType> (0.5));
 
-        DspMath::ComplexVector<CoeffType> lowpassPoles;
+        ComplexVector<CoeffType> lowpassPoles;
         lowpassPoles.reserve (order);
 
         // Lowpass transformation: direct scaling by cutoff frequency
@@ -541,7 +541,7 @@ private:
         const auto digitalFreq2 = MathConstants<CoeffType>::twoPi * frequency2 / this->sampleRate;
         const auto wc2 = static_cast<CoeffType> (2.0) * std::tan (digitalFreq2 * static_cast<CoeffType> (0.5));
 
-        DspMath::ComplexVector<CoeffType> highpassPoles;
+        ComplexVector<CoeffType> highpassPoles;
         highpassPoles.reserve (order);
 
         // Highpass transformation: s → wc/s maps lowpass pole p to highpass pole wc/p
@@ -591,11 +591,11 @@ private:
     }
 
     //==============================================================================
-    void designPeak() noexcept
+    void designPeak()
     {
         // Peak filter is implemented as a combination of allpass and gain stages
         // This is a simplified implementation - full peak would require more complex pole placement
-        const auto linearGain = DspMath::dbToGain (gain);
+        const auto linearGain = dbToGain (gain);
 
         designAllpass(); // Start with allpass response
 
@@ -609,11 +609,11 @@ private:
     }
 
     //==============================================================================
-    void designLowshelf() noexcept
+    void designLowshelf()
     {
         // Low shelf implementation using first-order pole-zero placement
         const auto wc = static_cast<CoeffType> (2.0) * this->sampleRate * std::tan (MathConstants<CoeffType>::pi * frequency / this->sampleRate);
-        const auto linearGain = DspMath::dbToGain (gain);
+        const auto linearGain = dbToGain (gain);
         const auto alpha = std::sqrt (linearGain);
 
         // Create single biquad for low shelf
@@ -656,11 +656,11 @@ private:
     }
 
     //==============================================================================
-    void designHighshelf() noexcept
+    void designHighshelf()
     {
         // High shelf implementation
         const auto wc = static_cast<CoeffType> (2.0) * this->sampleRate * std::tan (MathConstants<CoeffType>::pi * frequency / this->sampleRate);
-        const auto linearGain = DspMath::dbToGain (gain);
+        const auto linearGain = dbToGain (gain);
         const auto alpha = std::sqrt (linearGain);
 
         biquadCoefficients.clear();
@@ -701,14 +701,14 @@ private:
     }
 
     //==============================================================================
-    void designAllpass() noexcept
+    void designAllpass()
     {
         // Allpass filter with same poles but mirrored zeros for unit magnitude response
         calculateAnalogPrototypePoles();
 
         const auto wc = static_cast<CoeffType> (2.0) * this->sampleRate * std::tan (MathConstants<CoeffType>::pi * frequency / this->sampleRate);
 
-        DspMath::ComplexVector<CoeffType> scaledPoles;
+        ComplexVector<CoeffType> scaledPoles;
         scaledPoles.reserve (order);
 
         for (const auto& pole : analogPoles)
@@ -726,7 +726,7 @@ private:
     }
 
     //==============================================================================
-    void applyBilinearTransform (const DspMath::ComplexVector<CoeffType>& analogPoles) noexcept
+    void applyBilinearTransform (const ComplexVector<CoeffType>& analogPoles)
     {
         digitalPoles.clear();
         digitalPoles.reserve (analogPoles.size());
@@ -745,7 +745,7 @@ private:
     }
 
     //==============================================================================
-    void ensureStableDigitalPoles() noexcept
+    void ensureStableDigitalPoles()
     {
         // Check and fix unstable poles (magnitude >= 1)
         for (auto& pole : digitalPoles)
@@ -756,7 +756,7 @@ private:
                 // Move pole inside unit circle while preserving angle
                 const auto safeRadius = static_cast<CoeffType> (0.995);
                 const auto angle = std::arg (pole);
-                pole = safeRadius * std::exp (DspMath::Complex<CoeffType> (static_cast<CoeffType> (0.0), angle));
+                pole = safeRadius * std::exp (Complex<CoeffType> (static_cast<CoeffType> (0.0), angle));
             }
         }
 
@@ -764,12 +764,12 @@ private:
         pairComplexConjugatePoles();
     }
 
-    void pairComplexConjugatePoles() noexcept
+    void pairComplexConjugatePoles()
     {
         if (digitalPoles.size() < 2)
             return;
 
-        DspMath::ComplexVector<CoeffType> pairedPoles;
+        ComplexVector<CoeffType> pairedPoles;
         pairedPoles.reserve (digitalPoles.size());
 
         std::vector<bool> used (digitalPoles.size(), false);
@@ -820,7 +820,7 @@ private:
     }
 
     //==============================================================================
-    void convertToBiquadCoefficients() noexcept
+    void convertToBiquadCoefficients()
     {
         biquadCoefficients.clear();
 
@@ -1032,7 +1032,7 @@ private:
     }
 
     //==============================================================================
-    void updateBiquadCascadePreservingState() noexcept
+    void updateBiquadCascadePreservingState()
     {
         const auto newSectionCount = static_cast<int> (biquadCoefficients.size());
         const auto currentSectionCount = static_cast<int> (biquadCascade.getNumSections());
@@ -1066,9 +1066,9 @@ private:
     // Pre-allocated storage for realtime coefficient calculation
     BiquadCascade<SampleType, CoeffType> biquadCascade;
     std::vector<BiquadCoefficients<CoeffType>> biquadCoefficients;
-    DspMath::ComplexVector<CoeffType> analogPoles;
-    DspMath::ComplexVector<CoeffType> digitalPoles;
-    DspMath::ComplexVector<CoeffType> digitalZeros;
+    ComplexVector<CoeffType> analogPoles;
+    ComplexVector<CoeffType> digitalPoles;
+    ComplexVector<CoeffType> digitalZeros;
     std::vector<CoeffType> tempCoeffBuffer;
 
     //==============================================================================

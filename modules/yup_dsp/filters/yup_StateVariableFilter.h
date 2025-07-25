@@ -68,13 +68,13 @@ public:
 
     //==============================================================================
     /** Default constructor */
-    StateVariableFilter() noexcept
+    StateVariableFilter()
     {
         setParameters (Mode::lowpass, static_cast<CoeffType> (1000.0), static_cast<CoeffType> (0.707), 44100.0);
     }
 
     /** Constructor with initial mode */
-    explicit StateVariableFilter (Mode initialMode) noexcept
+    explicit StateVariableFilter (Mode initialMode)
     {
         setParameters (initialMode, static_cast<CoeffType> (1000.0), static_cast<CoeffType> (0.707), 44100.0);
     }
@@ -296,40 +296,40 @@ public:
     }
 
     /** @internal */
-    DspMath::Complex<CoeffType> getComplexResponse (CoeffType frequency) const noexcept override
+    Complex<CoeffType> getComplexResponse (CoeffType frequency) const noexcept override
     {
-        const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (this->sampleRate));
-        const auto s = DspMath::Complex<CoeffType> (static_cast<SampleType> (0.0), omega);
+        const auto omega = frequencyToAngular (frequency, static_cast<CoeffType> (this->sampleRate));
+        const auto s = Complex<CoeffType> (static_cast<SampleType> (0.0), omega);
         const auto s2 = s * s;
-        const auto wc = DspMath::frequencyToAngular (centerFreq, static_cast<CoeffType> (this->sampleRate));
+        const auto wc = frequencyToAngular (centerFreq, static_cast<CoeffType> (this->sampleRate));
         const auto wc2 = wc * wc;
         const auto k = jlimit (0.707, 20.0, qFactor);
 
-        auto denominator = s2 + DspMath::Complex<CoeffType> (wc / k) * s + DspMath::Complex<CoeffType> (wc2) + 1e-6;
+        auto denominator = s2 + Complex<CoeffType> (wc / k) * s + Complex<CoeffType> (wc2) + 1e-6;
 
         switch (filterMode)
         {
             case Mode::lowpass:
-                return DspMath::Complex<CoeffType> (wc2) / denominator;
+                return Complex<CoeffType> (wc2) / denominator;
 
             case Mode::bandpass:
-                return (DspMath::Complex<CoeffType> (wc / qFactor) * s) / denominator;
+                return (Complex<CoeffType> (wc / qFactor) * s) / denominator;
 
             case Mode::highpass:
                 return s2 / denominator;
 
             case Mode::notch:
-                return (s2 + DspMath::Complex<CoeffType> (wc2)) / denominator;
+                return (s2 + Complex<CoeffType> (wc2)) / denominator;
 
             default:
-                return DspMath::Complex<CoeffType> (1.0);
+                return Complex<CoeffType> (1.0);
         }
     }
 
     /** @internal */
     void getPolesZeros (
-        DspMath::ComplexVector<CoeffType>& poles,
-        DspMath::ComplexVector<CoeffType>& zeros) const override
+        ComplexVector<CoeffType>& poles,
+        ComplexVector<CoeffType>& zeros) const override
     {
         CoeffType f0 = centerFreq;
         CoeffType q = yup::jlimit (0.707, 20.0, qFactor);
@@ -340,11 +340,11 @@ public:
         // Analog prototype poles: s^2 + (wc/Q) s + wc^2 = 0
         CoeffType realPart = -wc / (2.0 * q);
         CoeffType imagPart = wc * std::sqrt (std::max (0.0, 1.0 - 1.0 / (4.0 * q * q)));
-        DspMath::Complex<CoeffType> pa (realPart, imagPart);
-        DspMath::Complex<CoeffType> pb (realPart, -imagPart);
+        Complex<CoeffType> pa (realPart, imagPart);
+        Complex<CoeffType> pb (realPart, -imagPart);
 
         // Bilinear map helper: z = (2 + s T) / (2 - s T)
-        auto bilinear = [T] (const DspMath::Complex<CoeffType>& s) -> DspMath::Complex<CoeffType>
+        auto bilinear = [T] (const Complex<CoeffType>& s) -> Complex<CoeffType>
         {
             return (2.0 + s * T) / (2.0 - s * T);
         };
@@ -375,8 +375,8 @@ public:
                 break;
 
             case Mode::notch: // analog zeros at s = ±j wc
-                zeros.push_back (bilinear (DspMath::Complex<CoeffType> (0.0, wc)));
-                zeros.push_back (bilinear (DspMath::Complex<CoeffType> (0.0, -wc)));
+                zeros.push_back (bilinear (Complex<CoeffType> (0.0, wc)));
+                zeros.push_back (bilinear (Complex<CoeffType> (0.0, -wc)));
                 break;
         }
     }
@@ -399,7 +399,7 @@ private:
     void updateCoefficients() noexcept
     {
         coefficients.k = static_cast<CoeffType> (1.0) / jlimit (0.707, 20.0, qFactor);
-        const auto omega = DspMath::frequencyToAngular (centerFreq, static_cast<CoeffType> (this->sampleRate));
+        const auto omega = frequencyToAngular (centerFreq, static_cast<CoeffType> (this->sampleRate));
         coefficients.g = std::tan (omega / static_cast<CoeffType> (2.0));
         coefficients.damping = coefficients.k + coefficients.g;
         coefficients.g = coefficients.g / (static_cast<CoeffType> (1.0) + coefficients.g * coefficients.damping);

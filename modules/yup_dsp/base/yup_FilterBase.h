@@ -42,8 +42,9 @@ enum class FilterMode
 /**
     Base interface for all digital filters.
 
-    Provides a common interface for filter processing with both per-sample
-    and block processing capabilities. Uses dual-precision architecture:
+    Provides a common interface for filter processing with both per-sample and block processing capabilities.
+
+    Uses dual-precision architecture:
     - SampleType: for audio buffer processing (float/double)
     - CoeffType: for internal coefficients (defaults to double for precision)
 
@@ -52,12 +53,16 @@ enum class FilterMode
     @tparam SampleType  Type for audio samples (float or double)
     @tparam CoeffType   Type for internal coefficients (defaults to double)
 
-    @see Biquad, StateVariableFilter, FirstOrderFilter
+    @see Biquad, FirstOrder
 */
 template <typename SampleType, typename CoeffType = double>
 class FilterBase
 {
 public:
+    //==============================================================================
+    using SamplesType = SampleType;
+    using CoefficientTypes = CoeffType;
+
     //==============================================================================
     /** Default constructor */
     FilterBase() = default;
@@ -75,7 +80,7 @@ public:
         @param sampleRate     The sample rate in Hz
         @param maximumBlockSize  The maximum number of samples that will be processed at once
     */
-    virtual void prepare (double sampleRate, int maximumBlockSize) noexcept = 0;
+    virtual void prepare (double sampleRate, int maximumBlockSize) = 0;
 
     /**
         Processes a single sample.
@@ -114,7 +119,7 @@ public:
         @param frequency  The frequency in Hz
         @returns         The magnitude response (linear scale)
     */
-    virtual CoeffType getMagnitudeResponse (CoeffType frequency) const noexcept
+    virtual CoeffType getMagnitudeResponse (CoeffType frequency) const
     {
         auto response = getComplexResponse (frequency);
         return std::abs (response);
@@ -126,7 +131,7 @@ public:
         @param frequency  The frequency in Hz
         @returns         The phase response in radians
     */
-    virtual CoeffType getPhaseResponse (CoeffType frequency) const noexcept
+    virtual CoeffType getPhaseResponse (CoeffType frequency) const
     {
         auto response = getComplexResponse (frequency);
         return std::arg (response);
@@ -138,7 +143,7 @@ public:
         @param frequency  The frequency in Hz
         @returns         The complex frequency response
     */
-    virtual DspMath::Complex<CoeffType> getComplexResponse (CoeffType frequency) const noexcept = 0;
+    virtual Complex<CoeffType> getComplexResponse (CoeffType frequency) const = 0;
 
     //==============================================================================
     /**
@@ -148,8 +153,8 @@ public:
         @param zeros  The zeros.
     */
     virtual void getPolesZeros (
-        DspMath::ComplexVector<CoeffType>& poles,
-        DspMath::ComplexVector<CoeffType>& zeros) const
+        ComplexVector<CoeffType>& poles,
+        ComplexVector<CoeffType>& zeros) const
     {
         poles.clear();
         zeros.clear();
@@ -163,131 +168,6 @@ protected:
 private:
     //==============================================================================
     YUP_LEAK_DETECTOR (FilterBase)
-};
-
-//==============================================================================
-/**
-    First-order filter coefficient storage.
-
-    Stores coefficients for first-order IIR filters in the form:
-    y[n] = b0*x[n] + b1*x[n-1] - a1*y[n-1]
-
-    Uses CoeffType for internal precision (default double) while supporting
-    different SampleType for audio processing.
-*/
-template <typename CoeffType = double>
-struct FirstOrderCoefficients
-{
-    CoeffType a1 = 0;         // Feedback coefficient
-    CoeffType b0 = 1, b1 = 0; // Feedforward coefficients
-
-    FirstOrderCoefficients() = default;
-
-    FirstOrderCoefficients (CoeffType b0_, CoeffType b1_, CoeffType a1_) noexcept
-        : a1 (a1_)
-        , b0 (b0_)
-        , b1 (b1_)
-    {
-    }
-
-    /** Returns the complex frequency response for these coefficients */
-    DspMath::Complex<CoeffType> getComplexResponse (CoeffType frequency, double sampleRate) const noexcept
-    {
-        const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
-        const auto z = DspMath::polar (static_cast<CoeffType> (1.0), -omega);
-
-        auto numerator = DspMath::Complex<CoeffType> (b0) + DspMath::Complex<CoeffType> (b1) * z;
-        auto denominator = DspMath::Complex<CoeffType> (1.0) + DspMath::Complex<CoeffType> (a1) * z;
-
-        return numerator / denominator;
-    }
-};
-
-//==============================================================================
-/**
-    Filter coefficient storage for biquad filters.
-
-    Stores the coefficients for a second-order IIR filter in the form:
-    y[n] = b0*x[n] + b1*x[n-1] + b2*x[n-2] - a1*y[n-1] - a2*y[n-2]
-
-    Uses CoeffType for internal precision (default double) while supporting
-    different SampleType for audio processing.
-*/
-template <typename CoeffType = double>
-struct BiquadCoefficients
-{
-    CoeffType a0 = 1, a1 = 0, a2 = 0; // Denominator coefficients (a0 is typically normalized to 1)
-    CoeffType b0 = 1, b1 = 0, b2 = 0; // Numerator coefficients
-
-    BiquadCoefficients() = default;
-
-    BiquadCoefficients (CoeffType b0_, CoeffType b1_, CoeffType b2_, CoeffType a0_, CoeffType a1_) noexcept
-        : a0 (a0_)
-        , a1 (a1_)
-        , a2 (0.0f)
-        , b0 (b0_)
-        , b1 (b1_)
-        , b2 (b2_)
-    {
-    }
-
-    BiquadCoefficients (CoeffType b0_, CoeffType b1_, CoeffType b2_, CoeffType a0_, CoeffType a1_, CoeffType a2_) noexcept
-        : a0 (a0_)
-        , a1 (a1_)
-        , a2 (a2_)
-        , b0 (b0_)
-        , b1 (b1_)
-        , b2 (b2_)
-    {
-    }
-
-    /** Normalizes coefficients so that a0 = 1 */
-    void normalize() noexcept
-    {
-        if (a0 != static_cast<CoeffType> (0.0))
-        {
-            b0 /= a0;
-            b1 /= a0;
-            b2 /= a0;
-            a1 /= a0;
-            a2 /= a0;
-            a0 = static_cast<CoeffType> (1.0);
-        }
-    }
-
-    /** Returns the complex frequency response for these coefficients */
-    DspMath::Complex<CoeffType> getComplexResponse (CoeffType frequency, double sampleRate) const noexcept
-    {
-        const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
-        const auto z = DspMath::polar (static_cast<CoeffType> (1.0), -omega);
-        const auto z2 = z * z;
-
-        auto numerator = DspMath::Complex<CoeffType> (b0) + DspMath::Complex<CoeffType> (b1) * z + DspMath::Complex<CoeffType> (b2) * z2;
-        auto denominator = DspMath::Complex<CoeffType> (a0) + DspMath::Complex<CoeffType> (a1) * z + DspMath::Complex<CoeffType> (a2) * z2;
-
-        return numerator / denominator;
-    }
-};
-
-//==============================================================================
-/**
-    Filter coefficient storage for state variable filters.
-*/
-template <typename CoeffType = double>
-struct StateVariableCoefficients
-{
-    CoeffType k = static_cast<CoeffType> (1.0);
-    CoeffType g = static_cast<CoeffType> (1.0);
-    CoeffType damping = static_cast<CoeffType> (1.0);
-
-    StateVariableCoefficients() = default;
-
-    StateVariableCoefficients (CoeffType k_, CoeffType g_, CoeffType damping_) noexcept
-        : k (k_)
-        , g (g_)
-        , damping (damping_)
-    {
-    }
 };
 
 } // namespace yup

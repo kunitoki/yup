@@ -551,11 +551,11 @@ public:
         updateResponseData();
     }
 
-    const std::vector<yup::Point<float>>& getPhaseData() const { return phaseData; }
+    const std::vector<yup::Complex<float>>& getPhaseData() const { return phaseData; }
 
-    const std::vector<yup::Point<float>>& getGroupDelayData() const { return groupDelayData; }
+    const std::vector<yup::Complex<float>>& getGroupDelayData() const { return groupDelayData; }
 
-    const std::vector<yup::Point<float>>& getStepResponseData() const { return stepResponseData; }
+    const std::vector<yup::Complex<float>>& getStepResponseData() const { return stepResponseData; }
 
     void updateResponseData()
     {
@@ -565,86 +565,25 @@ public:
             return;
         }
 
-        responseData.clear();
-        phaseData.clear();
-        groupDelayData.clear();
-        stepResponseData.clear();
-
         const int numPoints = 512;
 
-        // Calculate frequency response
-        for (int i = 0; i < numPoints; ++i)
-        {
-            // Logarithmic frequency sweep
-            const double ratio = static_cast<double> (i) / (numPoints - 1);
-            const double freq = minFreq * std::pow (maxFreq / minFreq, ratio);
+        responseData.clear();
+        responseData.resize (numPoints);
+        yup::calculateFilterMagnitudeResponse (*filter, yup::Span (responseData), minFreq, maxFreq);
 
-            // Get complex response
-            auto response = filter->getComplexResponse (freq);
+        phaseData.clear();
+        phaseData.resize (numPoints);
+        yup::calculateFilterPhaseResponse (*filter, yup::Span (phaseData), minFreq, maxFreq);
 
-            // Calculate magnitude in dB
-            double magnitude = std::abs (response);
-            double magnitudeDb = 20.0 * std::log10 (yup::jmax (magnitude, 1e-12));
-
-            // Calculate phase in degrees
-            double phaseRad = std::arg (response);
-            double phaseDeg = phaseRad * 180.0 / yup::MathConstants<double>::pi;
-
-            // Calculate group delay (numerical derivative of phase)
-            double groupDelay = 0.0;
-            if (i > 0 && i < numPoints - 1)
-            {
-                const double deltaFreq = freq * 0.01; // Small frequency step
-                auto responseLow = filter->getComplexResponse (freq - deltaFreq);
-                auto responseHigh = filter->getComplexResponse (freq + deltaFreq);
-
-                double phaseLow = std::arg (responseLow);
-                double phaseHigh = std::arg (responseHigh);
-
-                // Unwrap phase difference
-                double phaseDiff = phaseHigh - phaseLow;
-                while (phaseDiff > yup::MathConstants<double>::pi)
-                    phaseDiff -= 2.0 * yup::MathConstants<double>::pi;
-                while (phaseDiff < -yup::MathConstants<double>::pi)
-                    phaseDiff += 2.0 * yup::MathConstants<double>::pi;
-
-                groupDelay = -phaseDiff / (2.0 * deltaFreq * 2.0 * yup::MathConstants<double>::pi) * sampleRate;
-            }
-
-            responseData.push_back ({ static_cast<float> (freq), static_cast<float> (magnitudeDb) });
-            phaseData.push_back ({ static_cast<float> (freq), static_cast<float> (phaseDeg) });
-            groupDelayData.push_back ({ static_cast<float> (freq), static_cast<float> (groupDelay) });
-        }
-
-        // Calculate step response
-        calculateStepResponse();
-
-        repaint();
-    }
-
-    void calculateStepResponse()
-    {
-        if (! filter)
-            return;
+        groupDelayData.clear();
+        groupDelayData.resize (numPoints);
+        yup::calculateFilterGroupDelay (*filter, yup::Span (groupDelayData), minFreq, maxFreq, sampleRate);
 
         stepResponseData.clear();
+        stepResponseData.resize (100);
+        yup::calculateFilterStepResponse (*filter, yup::Span (stepResponseData));
 
-        // Reset filter state
-        filter->reset();
-
-        const int stepLength = 100; // 100 samples
-
-        for (int i = 0; i < stepLength; ++i)
-        {
-            // Apply unit step input
-            float input = (i == 0) ? 1.0f : 0.0f;
-            float output = filter->processSample (input);
-
-            stepResponseData.push_back ({ static_cast<float> (i), static_cast<float> (output) });
-        }
-
-        // Reset filter again for normal operation
-        filter->reset();
+        repaint();
     }
 
     void paint (yup::Graphics& g) override
@@ -664,9 +603,7 @@ public:
 
         // Plot frequency response
         if (! responseData.empty())
-        {
             drawMagnitudeResponse (g, bounds);
-        }
 
         // Labels and title
         drawLabels (g, bounds, titleBounds, bottomLabelSpace);
@@ -707,10 +644,10 @@ private:
         yup::Path path;
         bool firstPoint = true;
 
-        for (const auto& point : responseData)
+        for (const auto& data : responseData)
         {
-            float x = frequencyToX (point.getX(), bounds);
-            float y = dbToY (point.getY(), bounds);
+            float x = frequencyToX (std::real (data), bounds);
+            float y = dbToY (std::imag (data), bounds);
 
             if (firstPoint)
             {
@@ -778,10 +715,10 @@ private:
     }
 
     std::shared_ptr<yup::FilterBase<float, double>> filter;
-    std::vector<yup::Point<float>> responseData;
-    std::vector<yup::Point<float>> phaseData;
-    std::vector<yup::Point<float>> groupDelayData;
-    std::vector<yup::Point<float>> stepResponseData;
+    std::vector<yup::Complex<float>> responseData;
+    std::vector<yup::Complex<float>> phaseData;
+    std::vector<yup::Complex<float>> groupDelayData;
+    std::vector<yup::Complex<float>> stepResponseData;
 
     double sampleRate;
     double minFreq, maxFreq;
@@ -1043,9 +980,10 @@ private:
         // Filter type selector
         filterTypeCombo = std::make_unique<yup::ComboBox> ("FilterType");
         filterTypeCombo->addItem ("RBJ", 1);
-        filterTypeCombo->addItem ("State Variable", 2);
-        filterTypeCombo->addItem ("First Order", 3);
-        filterTypeCombo->addItem ("Butterworth", 4);
+        filterTypeCombo->addItem ("Zoelzer", 2);
+        filterTypeCombo->addItem ("State Variable", 3);
+        filterTypeCombo->addItem ("First Order", 4);
+        filterTypeCombo->addItem ("Butterworth", 5);
         filterTypeCombo->setSelectedId (1);
         filterTypeCombo->onSelectedItemChanged = [this]
         {
@@ -1192,23 +1130,25 @@ private:
     {
         // Create instances of all filter types for audio thread
         audioRbj = std::make_shared<yup::RbjFilter<float>>();
+        audioZoelzer = std::make_shared<yup::ZoelzerFilter<float>>();
         audioSvf = std::make_shared<yup::StateVariableFilter<float>>();
         audioFirstOrder = std::make_shared<yup::FirstOrderFilter<float>>();
         audioButterworthFilter = std::make_shared<yup::ButterworthFilter<float>>();
 
         // Create instances of all filter types for UI thread
         uiRbj = std::make_shared<yup::RbjFilter<float>>();
+        uiZoelzer = std::make_shared<yup::ZoelzerFilter<float>>();
         uiSvf = std::make_shared<yup::StateVariableFilter<float>>();
         uiFirstOrder = std::make_shared<yup::FirstOrderFilter<float>>();
         uiButterworthFilter = std::make_shared<yup::ButterworthFilter<float>>();
 
         // Store in arrays for easy management
         allAudioFilters = {
-            audioRbj, audioSvf, audioFirstOrder, audioButterworthFilter
+            audioRbj, audioZoelzer, audioSvf, audioFirstOrder, audioButterworthFilter
         };
 
         allUIFilters = {
-            uiRbj, uiSvf, uiFirstOrder, uiButterworthFilter
+            uiRbj, uiZoelzer, uiSvf, uiFirstOrder, uiButterworthFilter
         };
 
         // Set default filters
@@ -1240,12 +1180,15 @@ private:
                 currentUIFilter = uiRbj;
                 break;
             case 2:
-                currentUIFilter = uiSvf;
+                currentUIFilter = uiZoelzer;
                 break;
             case 3:
-                currentUIFilter = uiFirstOrder;
+                currentUIFilter = uiSvf;
                 break;
             case 4:
+                currentUIFilter = uiFirstOrder;
+                break;
+            case 5:
                 currentUIFilter = uiButterworthFilter;
                 break;
             default:
@@ -1284,7 +1227,11 @@ private:
         // Update parameters based on filter type using smoothed values and stored filter type
         if (auto rf = std::dynamic_pointer_cast<yup::RbjFilter<float>> (currentAudioFilter))
         {
-            rf->setParameters (getRbjMode (currentResponseTypeId), freq, 0.1f + q * 10.0f, gain, currentSampleRate);
+            rf->setParameters (getFilterMode (currentResponseTypeId), freq, 0.1f + q * 10.0f, gain, currentSampleRate);
+        }
+        else if (auto zf = std::dynamic_pointer_cast<yup::ZoelzerFilter<float>> (currentAudioFilter))
+        {
+            zf->setParameters (getFilterMode (currentResponseTypeId), freq, 0.1f + q * 10.0f, gain, currentSampleRate);
         }
         else if (auto svf = std::dynamic_pointer_cast<yup::StateVariableFilter<float>> (currentAudioFilter))
         {
@@ -1297,7 +1244,7 @@ private:
         }
         else if (auto bf = std::dynamic_pointer_cast<yup::ButterworthFilter<float>> (currentAudioFilter))
         {
-            bf->setParameters (getFilterType (currentResponseTypeId), order, freq, freq * 2.0, gain, currentSampleRate);
+            bf->setParameters (getFilterMode (currentResponseTypeId), order, freq, freq * 2.0, gain, currentSampleRate);
         }
     }
 
@@ -1314,7 +1261,11 @@ private:
         // Update parameters based on filter type using direct UI values
         if (auto rf = std::dynamic_pointer_cast<yup::RbjFilter<float>> (currentUIFilter))
         {
-            rf->setParameters (getRbjMode (currentResponseTypeId), freq, 0.1f + q * 10.0f, gain, currentSampleRate);
+            rf->setParameters (getFilterMode (currentResponseTypeId), freq, 0.1f + q * 10.0f, gain, currentSampleRate);
+        }
+        else if (auto zf = std::dynamic_pointer_cast<yup::ZoelzerFilter<float>> (currentUIFilter))
+        {
+            zf->setParameters (getFilterMode (currentResponseTypeId), freq, 0.1f + q * 10.0f, gain, currentSampleRate);
         }
         else if (auto svf = std::dynamic_pointer_cast<yup::StateVariableFilter<float>> (currentUIFilter))
         {
@@ -1327,7 +1278,7 @@ private:
         }
         else if (auto bf = std::dynamic_pointer_cast<yup::ButterworthFilter<float>> (currentUIFilter))
         {
-            bf->setParameters (getFilterType (currentResponseTypeId), order, freq, freq * 2.0, gain, currentSampleRate);
+            bf->setParameters (getFilterMode (currentResponseTypeId), order, freq, freq * 2.0, gain, currentSampleRate);
         }
     }
 
@@ -1340,12 +1291,15 @@ private:
                 currentAudioFilter = audioRbj;
                 break;
             case 2:
-                currentAudioFilter = audioSvf;
+                currentAudioFilter = audioZoelzer;
                 break;
             case 3:
-                currentAudioFilter = audioFirstOrder;
+                currentAudioFilter = audioSvf;
                 break;
             case 4:
+                currentAudioFilter = audioFirstOrder;
+                break;
+            case 5:
                 currentAudioFilter = audioButterworthFilter;
                 break;
             default:
@@ -1378,22 +1332,22 @@ private:
         // Update phase response
         auto phaseData = frequencyResponsePlot.getPhaseData();
         std::vector<yup::Point<double>> phaseDataDouble;
-        for (const auto& point : phaseData)
-            phaseDataDouble.push_back ({ static_cast<double> (point.getX()), static_cast<double> (point.getY()) });
+        for (const auto& data : phaseData)
+            phaseDataDouble.push_back ({ static_cast<double> (std::real (data)), static_cast<double> (std::imag (data)) });
         phaseResponseDisplay.updateResponse (phaseDataDouble);
 
         // Update group delay
         auto groupDelayData = frequencyResponsePlot.getGroupDelayData();
         std::vector<yup::Point<double>> groupDelayDataDouble;
-        for (const auto& point : groupDelayData)
-            groupDelayDataDouble.push_back ({ static_cast<double> (point.getX()), static_cast<double> (point.getY()) });
+        for (const auto& data : groupDelayData)
+            groupDelayDataDouble.push_back ({ static_cast<double> (std::real (data)), static_cast<double> (std::imag (data)) });
         groupDelayDisplay.updateResponse (groupDelayDataDouble);
 
         // Update step response
         auto stepData = frequencyResponsePlot.getStepResponseData();
         std::vector<yup::Point<double>> stepDataDouble;
-        for (const auto& point : stepData)
-            stepDataDouble.push_back ({ static_cast<double> (point.getX()), static_cast<double> (point.getY()) });
+        for (const auto& data : stepData)
+            stepDataDouble.push_back ({ static_cast<double> (std::real (data)), static_cast<double> (std::imag (data)) });
         stepResponseDisplay.updateResponse (stepDataDouble);
 
         // Update poles and zeros
@@ -1423,7 +1377,7 @@ private:
         polesZerosDisplay.updatePolesZeros (poles, zeros);
     }
 
-    yup::FilterMode getFilterType (int responseTypeId)
+    yup::FilterMode getFilterMode (int responseTypeId)
     {
         switch (responseTypeId)
         {
@@ -1445,31 +1399,6 @@ private:
                 return yup::FilterMode::allpass;
             default:
                 return yup::FilterMode::lowpass;
-        }
-    }
-
-    yup::RbjFilter<float>::Mode getRbjMode (int responseTypeId)
-    {
-        switch (responseTypeId)
-        {
-            case 1:
-                return yup::RbjFilter<float>::Mode::lowpass;
-            case 2:
-                return yup::RbjFilter<float>::Mode::highpass;
-            case 3:
-                return yup::RbjFilter<float>::Mode::bandpassCsg;
-            case 4:
-                return yup::RbjFilter<float>::Mode::notch;
-            case 5:
-                return yup::RbjFilter<float>::Mode::peaking;
-            case 6:
-                return yup::RbjFilter<float>::Mode::lowshelf;
-            case 7:
-                return yup::RbjFilter<float>::Mode::highshelf;
-            case 8:
-                return yup::RbjFilter<float>::Mode::allpass;
-            default:
-                return yup::RbjFilter<float>::Mode::lowpass;
         }
     }
 
@@ -1533,12 +1462,14 @@ private:
 
     // Audio thread filter instances
     std::shared_ptr<yup::RbjFilter<float>> audioRbj;
+    std::shared_ptr<yup::ZoelzerFilter<float>> audioZoelzer;
     std::shared_ptr<yup::StateVariableFilter<float>> audioSvf;
     std::shared_ptr<yup::FirstOrderFilter<float>> audioFirstOrder;
     std::shared_ptr<yup::ButterworthFilter<float>> audioButterworthFilter;
 
     // UI thread filter instances
     std::shared_ptr<yup::RbjFilter<float>> uiRbj;
+    std::shared_ptr<yup::ZoelzerFilter<float>> uiZoelzer;
     std::shared_ptr<yup::StateVariableFilter<float>> uiSvf;
     std::shared_ptr<yup::FirstOrderFilter<float>> uiFirstOrder;
     std::shared_ptr<yup::ButterworthFilter<float>> uiButterworthFilter;

@@ -98,6 +98,14 @@ public:
     // RBJ (Audio EQ Cookbook) Filter Design
     //==============================================================================
 
+    /** RBJ implementation with type selection */
+    static BiquadCoefficients<CoeffType> designRbj (
+        FilterMode filterMode,
+        CoeffType frequency,
+        CoeffType q,
+        CoeffType gain,
+        double sampleRate) noexcept;
+
     /**
         Designs RBJ lowpass filter coefficients.
 
@@ -111,7 +119,7 @@ public:
         CoeffType q,
         double sampleRate) noexcept
     {
-        return designRbjImpl (FilterMode::lowpass, frequency, q, static_cast<CoeffType> (0.0), sampleRate);
+        return designRbj (FilterMode::lowpass, frequency, q, static_cast<CoeffType> (0.0), sampleRate);
     }
 
     /**
@@ -127,7 +135,7 @@ public:
         CoeffType q,
         double sampleRate) noexcept
     {
-        return designRbjImpl (FilterMode::highpass, frequency, q, static_cast<CoeffType> (0.0), sampleRate);
+        return designRbj (FilterMode::highpass, frequency, q, static_cast<CoeffType> (0.0), sampleRate);
     }
 
     /**
@@ -143,7 +151,7 @@ public:
         CoeffType q,
         double sampleRate) noexcept
     {
-        return designRbjImpl (FilterMode::bandpass, frequency, q, static_cast<CoeffType> (0.0), sampleRate);
+        return designRbj (FilterMode::bandpass, frequency, q, static_cast<CoeffType> (0.0), sampleRate);
     }
 
     /**
@@ -159,7 +167,7 @@ public:
         CoeffType q,
         double sampleRate) noexcept
     {
-        return designRbjImpl (FilterMode::bandstop, frequency, q, static_cast<CoeffType> (0.0), sampleRate);
+        return designRbj (FilterMode::bandstop, frequency, q, static_cast<CoeffType> (0.0), sampleRate);
     }
 
     /**
@@ -177,7 +185,7 @@ public:
         CoeffType gain,
         double sampleRate) noexcept
     {
-        return designRbjImpl (FilterMode::peak, frequency, q, gain, sampleRate);
+        return designRbj (FilterMode::peak, frequency, q, gain, sampleRate);
     }
 
     /**
@@ -195,7 +203,7 @@ public:
         CoeffType gain,
         double sampleRate) noexcept
     {
-        return designRbjImpl (FilterMode::lowshelf, frequency, q, gain, sampleRate);
+        return designRbj (FilterMode::lowshelf, frequency, q, gain, sampleRate);
     }
 
     /**
@@ -213,7 +221,7 @@ public:
         CoeffType gain,
         double sampleRate) noexcept
     {
-        return designRbjImpl (FilterMode::highshelf, frequency, q, gain, sampleRate);
+        return designRbj (FilterMode::highshelf, frequency, q, gain, sampleRate);
     }
 
     /**
@@ -229,17 +237,134 @@ public:
         CoeffType q,
         double sampleRate) noexcept
     {
-        return designRbjImpl (FilterMode::allpass, frequency, q, static_cast<CoeffType> (0.0), sampleRate);
+        return designRbj (FilterMode::allpass, frequency, q, static_cast<CoeffType> (0.0), sampleRate);
     }
 
-private:
     //==============================================================================
-    /** RBJ implementation with type selection */
-    static BiquadCoefficients<CoeffType> designRbjImpl (
-        FilterMode filterMode,
+    // Zoelzer Filter Design
+    //==============================================================================
+
+    /**
+        Designs Zoelzer lowpass filter coefficients.
+
+        @param frequency  The cutoff frequency in Hz
+        @param q          The Q factor
+        @param sampleRate The sample rate in Hz
+        @returns         Biquad coefficients
+    */
+    static BiquadCoefficients<CoeffType> designZoelzerLowpass (
+        CoeffType frequency,
+        CoeffType q,
+        double sampleRate) noexcept;
+
+    /**
+        Designs Zoelzer highpass filter coefficients.
+
+        @param frequency  The cutoff frequency in Hz
+        @param q          The Q factor
+        @param sampleRate The sample rate in Hz
+        @returns         Biquad coefficients
+    */
+    static BiquadCoefficients<CoeffType> designZoelzerHighpass (
+        CoeffType frequency,
+        CoeffType q,
+        double sampleRate) noexcept;
+
+    /**
+        Designs Zoelzer bandpass filter coefficients (constant skirt gain, peak gain = Q).
+
+        @param frequency  The center frequency in Hz
+        @param q          The Q factor
+        @param sampleRate The sample rate in Hz
+        @returns         Biquad coefficients
+    */
+    static BiquadCoefficients<CoeffType> designZoelzerBandpassCsg (
+        CoeffType frequency,
+        CoeffType q,
+        double sampleRate) noexcept;
+
+    /**
+        Designs Zoelzer bandpass filter coefficients (constant peak gain = 0dB).
+
+        @param frequency  The center frequency in Hz
+        @param q          The Q factor
+        @param sampleRate The sample rate in Hz
+        @returns         Biquad coefficients
+    */
+    static BiquadCoefficients<CoeffType> designZoelzerBandpassCpg (
+        CoeffType frequency,
+        CoeffType q,
+        double sampleRate) noexcept;
+
+    /**
+        Designs Zoelzer notch filter coefficients.
+
+        @param frequency  The center frequency in Hz
+        @param q          The Q factor
+        @param sampleRate The sample rate in Hz
+        @returns         Biquad coefficients
+    */
+    static BiquadCoefficients<CoeffType> designZoelzerNotch (
+        CoeffType frequency,
+        CoeffType q,
+        double sampleRate) noexcept;
+
+    /**
+        Designs Zoelzer peaking filter coefficients.
+
+        @param frequency  The center frequency in Hz
+        @param q          The Q factor
+        @param gain       The gain in dB
+        @param sampleRate The sample rate in Hz
+        @returns         Biquad coefficients
+    */
+    static BiquadCoefficients<CoeffType> designZoelzerPeaking (
         CoeffType frequency,
         CoeffType q,
         CoeffType gain,
+        double sampleRate) noexcept;
+
+    /**
+        Designs Zoelzer low shelf filter coefficients.
+
+        @param frequency  The center frequency in Hz
+        @param q          The Q factor
+        @param gain       The gain in dB
+        @param sampleRate The sample rate in Hz
+        @returns         Biquad coefficients
+    */
+    static BiquadCoefficients<CoeffType> designZoelzerLowShelf (
+        CoeffType frequency,
+        CoeffType q,
+        CoeffType gain,
+        double sampleRate) noexcept;
+
+    /**
+        Designs Zoelzer high shelf filter coefficients.
+
+        @param frequency  The center frequency in Hz
+        @param q          The Q factor
+        @param gain       The gain in dB
+        @param sampleRate The sample rate in Hz
+        @returns         Biquad coefficients
+    */
+    static BiquadCoefficients<CoeffType> designZoelzerHighShelf (
+        CoeffType frequency,
+        CoeffType q,
+        CoeffType gain,
+        double sampleRate) noexcept;
+
+    /**
+        Designs Zoelzer allpass filter coefficients.
+
+        @param frequency  The center frequency in Hz
+        @param q          The Q factor
+        @param sampleRate The sample rate in Hz
+        @returns         Biquad coefficients
+    */
+    static BiquadCoefficients<CoeffType> designZoelzerAllpass (
+        CoeffType frequency,
+        CoeffType q,
         double sampleRate) noexcept;
 };
 

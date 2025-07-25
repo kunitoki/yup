@@ -191,7 +191,7 @@ TEST_F (FirstOrderFilterTests, LowShelfFilter)
 
     // Low frequencies should have gain
     auto lowResponse = std::abs (filterFloat.getComplexResponse (100.0));
-    auto expectedGain = DspMath::dbToGain (6.0);
+    auto expectedGain = dbToGain (6.0);
 
     EXPECT_GT (lowResponse, 1.5); // Should have noticeable gain
 

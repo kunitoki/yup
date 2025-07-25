@@ -26,12 +26,6 @@ namespace yup
 
 //==============================================================================
 
-/** Mathematical constants and utility functions for DSP operations. */
-namespace DspMath
-{
-
-//==============================================================================
-
 /** Complex number type alias using std::complex */
 template <typename FloatType>
 using Complex = std::complex<FloatType>;
@@ -46,7 +40,7 @@ constexpr Complex<FloatType> polar (FloatType magnitude, FloatType phase) noexce
 //==============================================================================
 
 template <typename FloatType>
-using ComplexVector = std::vector<DspMath::Complex<FloatType>>;
+using ComplexVector = std::vector<Complex<FloatType>>;
 
 //==============================================================================
 
@@ -142,19 +136,19 @@ void bilinearTransform (FloatType& a0, FloatType& a1, FloatType& a2, FloatType& 
 //==============================================================================
 
 template <typename FloatType>
-void extractPolesZerosFromFirstOrder (FloatType b0, FloatType b1, FloatType a1, DspMath::ComplexVector<FloatType>& poles, DspMath::ComplexVector<FloatType>& zeros)
+void extractPolesZerosFromFirstOrder (FloatType b0, FloatType b1, FloatType a1, ComplexVector<FloatType>& poles, ComplexVector<FloatType>& zeros)
 {
     if (std::abs (a1) > 1e-12) // Single pole at -a1
-        poles.push_back (DspMath::Complex<FloatType> (-a1, 0.0));
+        poles.push_back (Complex<FloatType> (-a1, 0.0));
 
     if (std::abs (b1) > 1e-12 && std::abs (b0) > 1e-12) // Single zero at -b1/b0 (if b1 != 0)
-        zeros.push_back (DspMath::Complex<FloatType> (-b1 / b0, 0.0));
+        zeros.push_back (Complex<FloatType> (-b1 / b0, 0.0));
 }
 
 //==============================================================================
 
 template <typename FloatType>
-void extractPolesZerosFromSecondOrderBiquad (FloatType b0, FloatType b1, FloatType b2, FloatType a0, FloatType a1, FloatType a2, DspMath::ComplexVector<FloatType>& poles, DspMath::ComplexVector<FloatType>& zeros)
+void extractPolesZerosFromSecondOrderBiquad (FloatType b0, FloatType b1, FloatType b2, FloatType a0, FloatType a1, FloatType a2, ComplexVector<FloatType>& poles, ComplexVector<FloatType>& zeros)
 {
     const auto epsilon = static_cast<FloatType> (1e-12);
 
@@ -168,22 +162,22 @@ void extractPolesZerosFromSecondOrderBiquad (FloatType b0, FloatType b1, FloatTy
         {
             // Real poles
             auto sqrtDisc = std::sqrt (discriminant);
-            poles.push_back (DspMath::Complex<FloatType> ((-a1 + sqrtDisc) / 2, 0));
-            poles.push_back (DspMath::Complex<FloatType> ((-a1 - sqrtDisc) / 2, 0));
+            poles.push_back (Complex<FloatType> ((-a1 + sqrtDisc) / 2, 0));
+            poles.push_back (Complex<FloatType> ((-a1 - sqrtDisc) / 2, 0));
         }
         else
         {
             // Complex conjugate poles
             auto real = -a1 / 2;
             auto imag = std::sqrt (-discriminant) / 2;
-            poles.push_back (DspMath::Complex<FloatType> (real, imag));
-            poles.push_back (DspMath::Complex<FloatType> (real, -imag));
+            poles.push_back (Complex<FloatType> (real, imag));
+            poles.push_back (Complex<FloatType> (real, -imag));
         }
     }
     else if (std::abs (a1) > epsilon)
     {
         // First-order: 1 + a1*z^-1 = 0 -> z = -1/a1
-        poles.push_back (DspMath::Complex<FloatType> (-1 / a1, 0));
+        poles.push_back (Complex<FloatType> (-1 / a1, 0));
     }
 
     // Calculate zeros from numerator: b0 + b1*z^-1 + b2*z^-2 = 0
@@ -196,36 +190,36 @@ void extractPolesZerosFromSecondOrderBiquad (FloatType b0, FloatType b1, FloatTy
         {
             // Real zeros
             auto sqrtDisc = std::sqrt (discriminant);
-            zeros.push_back (DspMath::Complex<FloatType> ((-b1 + sqrtDisc) / (2 * b0), 0));
-            zeros.push_back (DspMath::Complex<FloatType> ((-b1 - sqrtDisc) / (2 * b0), 0));
+            zeros.push_back (Complex<FloatType> ((-b1 + sqrtDisc) / (2 * b0), 0));
+            zeros.push_back (Complex<FloatType> ((-b1 - sqrtDisc) / (2 * b0), 0));
         }
         else
         {
             // Complex conjugate zeros
             auto real = -b1 / (2 * b0);
             auto imag = std::sqrt (-discriminant) / (2 * b0);
-            zeros.push_back (DspMath::Complex<FloatType> (real, imag));
-            zeros.push_back (DspMath::Complex<FloatType> (real, -imag));
+            zeros.push_back (Complex<FloatType> (real, imag));
+            zeros.push_back (Complex<FloatType> (real, -imag));
         }
     }
     else if (std::abs (b1) > epsilon && std::abs (b0) > epsilon)
     {
         // First-order: b0 + b1*z^-1 = 0 -> z = -b0/b1
-        zeros.push_back (DspMath::Complex<FloatType> (-b0 / b1, 0));
+        zeros.push_back (Complex<FloatType> (-b0 / b1, 0));
     }
     else if (std::abs (b2) > epsilon)
     {
         // Zero at origin (b0 = 0): b1*z^-1 + b2*z^-2 = 0 -> z*(b1 + b2*z^-1) = 0
         // One zero at z = 0, another at z = -b1/b2
-        zeros.push_back (DspMath::Complex<FloatType> (0, 0));
+        zeros.push_back (Complex<FloatType> (0, 0));
         if (std::abs (b1) > epsilon)
-            zeros.push_back (DspMath::Complex<FloatType> (-b1 / b2, 0));
+            zeros.push_back (Complex<FloatType> (-b1 / b2, 0));
     }
 }
 
 /** Extract poles and zeros from fourth-order section coefficients */
 template <typename FloatType>
-void extractPolesZerosFromFourthOrderBiquad (FloatType b0, FloatType b1, FloatType b2, FloatType b3, FloatType b4, FloatType a0, FloatType a1, FloatType a2, FloatType a3, FloatType a4, DspMath::ComplexVector<FloatType>& poles, DspMath::ComplexVector<FloatType>& zeros)
+void extractPolesZerosFromFourthOrderBiquad (FloatType b0, FloatType b1, FloatType b2, FloatType b3, FloatType b4, FloatType a0, FloatType a1, FloatType a2, FloatType a3, FloatType a4, ComplexVector<FloatType>& poles, ComplexVector<FloatType>& zeros)
 {
     // For fourth-order polynomials, we can try to factor them into quadratic pairs
     // This is a simplified approach - for full accuracy, a robust polynomial root finder would be needed
@@ -262,15 +256,15 @@ void extractPolesZerosFromFourthOrderBiquad (FloatType b0, FloatType b1, FloatTy
             if (discriminant1 >= 0)
             {
                 auto sqrtDisc = std::sqrt (discriminant1);
-                poles.push_back (DspMath::Complex<FloatType> ((-p1 + sqrtDisc) / 2, 0));
-                poles.push_back (DspMath::Complex<FloatType> ((-p1 - sqrtDisc) / 2, 0));
+                poles.push_back (Complex<FloatType> ((-p1 + sqrtDisc) / 2, 0));
+                poles.push_back (Complex<FloatType> ((-p1 - sqrtDisc) / 2, 0));
             }
             else
             {
                 auto real = -p1 / 2;
                 auto imag = std::sqrt (-discriminant1) / 2;
-                poles.push_back (DspMath::Complex<FloatType> (real, imag));
-                poles.push_back (DspMath::Complex<FloatType> (real, -imag));
+                poles.push_back (Complex<FloatType> (real, imag));
+                poles.push_back (Complex<FloatType> (real, -imag));
             }
         }
 
@@ -284,15 +278,15 @@ void extractPolesZerosFromFourthOrderBiquad (FloatType b0, FloatType b1, FloatTy
             if (discriminant2 >= 0)
             {
                 auto sqrtDisc = std::sqrt (discriminant2);
-                poles.push_back (DspMath::Complex<FloatType> ((-p2 + sqrtDisc) / 2, 0));
-                poles.push_back (DspMath::Complex<FloatType> ((-p2 - sqrtDisc) / 2, 0));
+                poles.push_back (Complex<FloatType> ((-p2 + sqrtDisc) / 2, 0));
+                poles.push_back (Complex<FloatType> ((-p2 - sqrtDisc) / 2, 0));
             }
             else
             {
                 auto real = -p2 / 2;
                 auto imag = std::sqrt (-discriminant2) / 2;
-                poles.push_back (DspMath::Complex<FloatType> (real, imag));
-                poles.push_back (DspMath::Complex<FloatType> (real, -imag));
+                poles.push_back (Complex<FloatType> (real, imag));
+                poles.push_back (Complex<FloatType> (real, -imag));
             }
         }
     }
@@ -314,15 +308,15 @@ void extractPolesZerosFromFourthOrderBiquad (FloatType b0, FloatType b1, FloatTy
             if (discriminant1 >= 0)
             {
                 auto sqrtDisc = std::sqrt (discriminant1);
-                zeros.push_back (DspMath::Complex<FloatType> ((-p1 + sqrtDisc) / 2, 0));
-                zeros.push_back (DspMath::Complex<FloatType> ((-p1 - sqrtDisc) / 2, 0));
+                zeros.push_back (Complex<FloatType> ((-p1 + sqrtDisc) / 2, 0));
+                zeros.push_back (Complex<FloatType> ((-p1 - sqrtDisc) / 2, 0));
             }
             else
             {
                 auto real = -p1 / 2;
                 auto imag = std::sqrt (-discriminant1) / 2;
-                zeros.push_back (DspMath::Complex<FloatType> (real, imag));
-                zeros.push_back (DspMath::Complex<FloatType> (real, -imag));
+                zeros.push_back (Complex<FloatType> (real, imag));
+                zeros.push_back (Complex<FloatType> (real, -imag));
             }
         }
 
@@ -335,19 +329,18 @@ void extractPolesZerosFromFourthOrderBiquad (FloatType b0, FloatType b1, FloatTy
             if (discriminant2 >= 0)
             {
                 auto sqrtDisc = std::sqrt (discriminant2);
-                zeros.push_back (DspMath::Complex<FloatType> ((-p2 + sqrtDisc) / 2, 0));
-                zeros.push_back (DspMath::Complex<FloatType> ((-p2 - sqrtDisc) / 2, 0));
+                zeros.push_back (Complex<FloatType> ((-p2 + sqrtDisc) / 2, 0));
+                zeros.push_back (Complex<FloatType> ((-p2 - sqrtDisc) / 2, 0));
             }
             else
             {
                 auto real = -p2 / 2;
                 auto imag = std::sqrt (-discriminant2) / 2;
-                zeros.push_back (DspMath::Complex<FloatType> (real, imag));
-                zeros.push_back (DspMath::Complex<FloatType> (real, -imag));
+                zeros.push_back (Complex<FloatType> (real, imag));
+                zeros.push_back (Complex<FloatType> (real, -imag));
             }
         }
     }
 }
 
-} // namespace DspMath
 } // namespace yup

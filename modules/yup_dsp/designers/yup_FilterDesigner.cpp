@@ -27,7 +27,7 @@ namespace yup
 template <typename CoeffType>
 FirstOrderCoefficients<CoeffType> FilterDesigner<CoeffType>::designFirstOrderLowpass (CoeffType frequency, double sampleRate) noexcept
 {
-    const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+    const auto omega = frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
     const auto alpha = std::exp (-omega);
 
     FirstOrderCoefficients<CoeffType> coefficients;
@@ -42,7 +42,7 @@ FirstOrderCoefficients<CoeffType> FilterDesigner<CoeffType>::designFirstOrderLow
 template <typename CoeffType>
 FirstOrderCoefficients<CoeffType> FilterDesigner<CoeffType>::designFirstOrderHighpass (CoeffType frequency, double sampleRate) noexcept
 {
-    const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+    const auto omega = frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
     const auto alpha = std::exp (-omega);
 
     FirstOrderCoefficients<CoeffType> coefficients;
@@ -57,8 +57,8 @@ FirstOrderCoefficients<CoeffType> FilterDesigner<CoeffType>::designFirstOrderHig
 template <typename CoeffType>
 FirstOrderCoefficients<CoeffType> FilterDesigner<CoeffType>::designFirstOrderLowShelf (CoeffType frequency, CoeffType gainDb, double sampleRate) noexcept
 {
-    const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
-    const auto gain = DspMath::dbToGain (gainDb);
+    const auto omega = frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+    const auto gain = dbToGain (gainDb);
     const auto k = std::tan (omega / static_cast<CoeffType> (2.0));
 
     FirstOrderCoefficients<CoeffType> coefficients;
@@ -84,8 +84,8 @@ FirstOrderCoefficients<CoeffType> FilterDesigner<CoeffType>::designFirstOrderLow
 template <typename CoeffType>
 FirstOrderCoefficients<CoeffType> FilterDesigner<CoeffType>::designFirstOrderHighShelf (CoeffType frequency, CoeffType gainDb, double sampleRate) noexcept
 {
-    const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
-    const auto A = DspMath::dbToGain (gainDb);
+    const auto omega = frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+    const auto A = dbToGain (gainDb);
     const auto k = std::tan (omega / static_cast<CoeffType> (2.0));
 
     FirstOrderCoefficients<CoeffType> coefficients;
@@ -112,7 +112,7 @@ FirstOrderCoefficients<CoeffType> FilterDesigner<CoeffType>::designFirstOrderHig
 template <typename CoeffType>
 FirstOrderCoefficients<CoeffType> FilterDesigner<CoeffType>::designFirstOrderAllpass (CoeffType frequency, double sampleRate) noexcept
 {
-    const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+    const auto omega = frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
     const auto alpha = (static_cast<CoeffType> (1.0) - std::tan (omega / static_cast<CoeffType> (2.0)))
                      / (static_cast<CoeffType> (1.0) + std::tan (omega / static_cast<CoeffType> (2.0)));
 
@@ -128,14 +128,14 @@ FirstOrderCoefficients<CoeffType> FilterDesigner<CoeffType>::designFirstOrderAll
 //==============================================================================
 
 template <typename CoeffType>
-BiquadCoefficients<CoeffType> FilterDesigner<CoeffType>::designRbjImpl (
+BiquadCoefficients<CoeffType> FilterDesigner<CoeffType>::designRbj (
     FilterMode filterMode,
     CoeffType frequency,
     CoeffType q,
     CoeffType gain,
     double sampleRate) noexcept
 {
-    const auto omega = DspMath::frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+    const auto omega = frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
     const auto cosOmega = std::cos (omega);
     const auto sinOmega = std::sin (omega);
     const auto alpha = sinOmega / (static_cast<CoeffType> (2.0) * q);
@@ -230,6 +230,267 @@ BiquadCoefficients<CoeffType> FilterDesigner<CoeffType>::designRbjImpl (
         default:
             break;
     }
+
+    coeffs.normalize();
+    return coeffs;
+}
+
+//==============================================================================
+// Zoelzer Filter Implementations
+//==============================================================================
+
+template <typename CoeffType>
+BiquadCoefficients<CoeffType> FilterDesigner<CoeffType>::designZoelzerLowpass (
+    CoeffType frequency,
+    CoeffType q,
+    double sampleRate) noexcept
+{
+    const auto omega = frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+    const auto K = std::tan (omega / static_cast<CoeffType> (2.0));
+    const auto K2 = K * K;
+
+    BiquadCoefficients<CoeffType> coeffs;
+
+    coeffs.b0 = K2;
+    coeffs.b1 = static_cast<CoeffType> (2.0) * K2;
+    coeffs.b2 = K2;
+    coeffs.a0 = static_cast<CoeffType> (1.0) + K / q + K2;
+    coeffs.a1 = static_cast<CoeffType> (2.0) * (K2 - static_cast<CoeffType> (1.0));
+    coeffs.a2 = static_cast<CoeffType> (1.0) - K / q + K2;
+
+    coeffs.normalize();
+    return coeffs;
+}
+
+template <typename CoeffType>
+BiquadCoefficients<CoeffType> FilterDesigner<CoeffType>::designZoelzerHighpass (
+    CoeffType frequency,
+    CoeffType q,
+    double sampleRate) noexcept
+{
+    const auto omega = frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+    const auto K = std::tan (omega / static_cast<CoeffType> (2.0));
+    const auto K2 = K * K;
+
+    BiquadCoefficients<CoeffType> coeffs;
+
+    coeffs.b0 = static_cast<CoeffType> (1.0);
+    coeffs.b1 = static_cast<CoeffType> (-2.0);
+    coeffs.b2 = static_cast<CoeffType> (1.0);
+    coeffs.a0 = static_cast<CoeffType> (1.0) + K / q + K2;
+    coeffs.a1 = static_cast<CoeffType> (2.0) * (K2 - static_cast<CoeffType> (1.0));
+    coeffs.a2 = static_cast<CoeffType> (1.0) - K / q + K2;
+
+    coeffs.normalize();
+    return coeffs;
+}
+
+template <typename CoeffType>
+BiquadCoefficients<CoeffType> FilterDesigner<CoeffType>::designZoelzerBandpassCsg (
+    CoeffType frequency,
+    CoeffType q,
+    double sampleRate) noexcept
+{
+    const auto omega = frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+    const auto K = std::tan (omega / static_cast<CoeffType> (2.0));
+    const auto K2 = K * K;
+
+    BiquadCoefficients<CoeffType> coeffs;
+
+    coeffs.b0 = K;
+    coeffs.b1 = static_cast<CoeffType> (0.0);
+    coeffs.b2 = -K;
+    coeffs.a0 = static_cast<CoeffType> (1.0) + K / q + K2;
+    coeffs.a1 = static_cast<CoeffType> (2.0) * (K2 - static_cast<CoeffType> (1.0));
+    coeffs.a2 = static_cast<CoeffType> (1.0) - K / q + K2;
+
+    coeffs.normalize();
+    return coeffs;
+}
+
+template <typename CoeffType>
+BiquadCoefficients<CoeffType> FilterDesigner<CoeffType>::designZoelzerBandpassCpg (
+    CoeffType frequency,
+    CoeffType q,
+    double sampleRate) noexcept
+{
+    const auto omega = frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+    const auto K = std::tan (omega / static_cast<CoeffType> (2.0));
+    const auto K2 = K * K;
+
+    BiquadCoefficients<CoeffType> coeffs;
+
+    coeffs.b0 = K / q;
+    coeffs.b1 = static_cast<CoeffType> (0.0);
+    coeffs.b2 = -K / q;
+    coeffs.a0 = static_cast<CoeffType> (1.0) + K / q + K2;
+    coeffs.a1 = static_cast<CoeffType> (2.0) * (K2 - static_cast<CoeffType> (1.0));
+    coeffs.a2 = static_cast<CoeffType> (1.0) - K / q + K2;
+
+    coeffs.normalize();
+    return coeffs;
+}
+
+template <typename CoeffType>
+BiquadCoefficients<CoeffType> FilterDesigner<CoeffType>::designZoelzerNotch (
+    CoeffType frequency,
+    CoeffType q,
+    double sampleRate) noexcept
+{
+    const auto omega = frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+    const auto K = std::tan (omega / static_cast<CoeffType> (2.0));
+    const auto K2 = K * K;
+
+    BiquadCoefficients<CoeffType> coeffs;
+
+    coeffs.b0 = static_cast<CoeffType> (1.0) + K2;
+    coeffs.b1 = static_cast<CoeffType> (2.0) * (K2 - static_cast<CoeffType> (1.0));
+    coeffs.b2 = static_cast<CoeffType> (1.0) + K2;
+    coeffs.a0 = static_cast<CoeffType> (1.0) + K / q + K2;
+    coeffs.a1 = static_cast<CoeffType> (2.0) * (K2 - static_cast<CoeffType> (1.0));
+    coeffs.a2 = static_cast<CoeffType> (1.0) - K / q + K2;
+
+    coeffs.normalize();
+    return coeffs;
+}
+
+template <typename CoeffType>
+BiquadCoefficients<CoeffType> FilterDesigner<CoeffType>::designZoelzerPeaking (
+    CoeffType frequency,
+    CoeffType q,
+    CoeffType gain,
+    double sampleRate) noexcept
+{
+    const auto omega = frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+    const auto K = std::tan (omega / static_cast<CoeffType> (2.0));
+    const auto K2 = K * K;
+    const auto V = dbToGain (gain);
+
+    BiquadCoefficients<CoeffType> coeffs;
+
+    if (gain >= static_cast<CoeffType> (0.0))
+    {
+        // Boost
+        coeffs.b0 = static_cast<CoeffType> (1.0) + V * K / q + K2;
+        coeffs.b1 = static_cast<CoeffType> (2.0) * (K2 - static_cast<CoeffType> (1.0));
+        coeffs.b2 = static_cast<CoeffType> (1.0) - V * K / q + K2;
+        coeffs.a0 = static_cast<CoeffType> (1.0) + K / q + K2;
+        coeffs.a1 = static_cast<CoeffType> (2.0) * (K2 - static_cast<CoeffType> (1.0));
+        coeffs.a2 = static_cast<CoeffType> (1.0) - K / q + K2;
+    }
+    else
+    {
+        // Cut
+        coeffs.b0 = static_cast<CoeffType> (1.0) + K / q + K2;
+        coeffs.b1 = static_cast<CoeffType> (2.0) * (K2 - static_cast<CoeffType> (1.0));
+        coeffs.b2 = static_cast<CoeffType> (1.0) - K / q + K2;
+        coeffs.a0 = static_cast<CoeffType> (1.0) + V * K / q + K2;
+        coeffs.a1 = static_cast<CoeffType> (2.0) * (K2 - static_cast<CoeffType> (1.0));
+        coeffs.a2 = static_cast<CoeffType> (1.0) - V * K / q + K2;
+    }
+
+    coeffs.normalize();
+    return coeffs;
+}
+
+template <typename CoeffType>
+BiquadCoefficients<CoeffType> FilterDesigner<CoeffType>::designZoelzerLowShelf (
+    CoeffType frequency,
+    CoeffType q,
+    CoeffType gain,
+    double sampleRate) noexcept
+{
+    const auto omega = frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+    const auto K = std::tan (omega / static_cast<CoeffType> (2.0));
+    const auto K2 = K * K;
+    const auto V = dbToGain (gain);
+    const auto sqrtV = std::sqrt (V);
+
+    BiquadCoefficients<CoeffType> coeffs;
+
+    if (gain >= static_cast<CoeffType> (0.0))
+    {
+        // Boost
+        coeffs.b0 = static_cast<CoeffType> (1.0) + sqrtV * K / q + V * K2;
+        coeffs.b1 = static_cast<CoeffType> (2.0) * (V * K2 - static_cast<CoeffType> (1.0));
+        coeffs.b2 = static_cast<CoeffType> (1.0) - sqrtV * K / q + V * K2;
+        coeffs.a0 = static_cast<CoeffType> (1.0) + K / q + K2;
+        coeffs.a1 = static_cast<CoeffType> (2.0) * (K2 - static_cast<CoeffType> (1.0));
+        coeffs.a2 = static_cast<CoeffType> (1.0) - K / q + K2;
+    }
+    else
+    {
+        // Cut
+        coeffs.b0 = static_cast<CoeffType> (1.0) + K / q + K2;
+        coeffs.b1 = static_cast<CoeffType> (2.0) * (K2 - static_cast<CoeffType> (1.0));
+        coeffs.b2 = static_cast<CoeffType> (1.0) - K / q + K2;
+        coeffs.a0 = static_cast<CoeffType> (1.0) + sqrtV * K / q + V * K2;
+        coeffs.a1 = static_cast<CoeffType> (2.0) * (V * K2 - static_cast<CoeffType> (1.0));
+        coeffs.a2 = static_cast<CoeffType> (1.0) - sqrtV * K / q + V * K2;
+    }
+
+    coeffs.normalize();
+    return coeffs;
+}
+
+template <typename CoeffType>
+BiquadCoefficients<CoeffType> FilterDesigner<CoeffType>::designZoelzerHighShelf (
+    CoeffType frequency,
+    CoeffType q,
+    CoeffType gain,
+    double sampleRate) noexcept
+{
+    const auto omega = frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+    const auto K = std::tan (omega / static_cast<CoeffType> (2.0));
+    const auto K2 = K * K;
+    const auto V = dbToGain (gain);
+    const auto sqrtV = std::sqrt (V);
+
+    BiquadCoefficients<CoeffType> coeffs;
+
+    if (gain >= static_cast<CoeffType> (0.0))
+    {
+        // Boost - derived from reference comments
+        coeffs.b0 = V * K2 + sqrtV * K / q + static_cast<CoeffType> (1.0);
+        coeffs.b1 = static_cast<CoeffType> (2.0) * (V * K2 - static_cast<CoeffType> (1.0));
+        coeffs.b2 = V * K2 - sqrtV * K / q + static_cast<CoeffType> (1.0);
+        coeffs.a0 = K2 + K / q + static_cast<CoeffType> (1.0);
+        coeffs.a1 = static_cast<CoeffType> (2.0) * (K2 - static_cast<CoeffType> (1.0));
+        coeffs.a2 = K2 - K / q + static_cast<CoeffType> (1.0);
+    }
+    else
+    {
+        // Cut - derived from reference comments
+        coeffs.b0 = K2 + K / q + static_cast<CoeffType> (1.0);
+        coeffs.b1 = static_cast<CoeffType> (2.0) * (K2 - static_cast<CoeffType> (1.0));
+        coeffs.b2 = K2 - K / q + static_cast<CoeffType> (1.0);
+        coeffs.a0 = V * K2 + sqrtV * K / q + static_cast<CoeffType> (1.0);
+        coeffs.a1 = static_cast<CoeffType> (2.0) * (V * K2 - static_cast<CoeffType> (1.0));
+        coeffs.a2 = V * K2 - sqrtV * K / q + static_cast<CoeffType> (1.0);
+    }
+
+    coeffs.normalize();
+    return coeffs;
+}
+
+template <typename CoeffType>
+BiquadCoefficients<CoeffType> FilterDesigner<CoeffType>::designZoelzerAllpass (
+    CoeffType frequency,
+    CoeffType q,
+    double sampleRate) noexcept
+{
+    const auto omega = frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate));
+    const auto K = std::tan (omega / static_cast<CoeffType> (2.0));
+    const auto K2 = K * K;
+
+    BiquadCoefficients<CoeffType> coeffs;
+
+    coeffs.b0 = static_cast<CoeffType> (1.0) - K / q + K2;
+    coeffs.b1 = static_cast<CoeffType> (2.0) * (K2 - static_cast<CoeffType> (1.0));
+    coeffs.b2 = static_cast<CoeffType> (1.0) + K / q + K2;
+    coeffs.a0 = static_cast<CoeffType> (1.0) + K / q + K2;
+    coeffs.a1 = static_cast<CoeffType> (2.0) * (K2 - static_cast<CoeffType> (1.0));
+    coeffs.a2 = static_cast<CoeffType> (1.0) - K / q + K2;
 
     coeffs.normalize();
     return coeffs;
