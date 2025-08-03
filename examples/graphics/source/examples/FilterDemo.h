@@ -884,9 +884,7 @@ public:
         {
             // Check if any parameters are changing and update filter coefficients if needed
             if (smoothedFrequency.isSmoothing() || smoothedQ.isSmoothing() || smoothedGain.isSmoothing() || smoothedOrder.isSmoothing())
-            {
-                updateAudioFilterParametersSmooth();
-            }
+                updateAudioFilterParameters();
 
             // Generate white noise
             float noiseSample = noiseGenerator.getNextSample();
@@ -1215,7 +1213,7 @@ private:
         updateAnalysisDisplays();
     }
 
-    void updateAudioFilterParametersSmooth()
+    void updateAudioFilterParameters()
     {
         if (! currentAudioFilter)
             return;
@@ -1225,27 +1223,7 @@ private:
         double gain = smoothedGain.getNextValue();
         int order = yup::jlimit (2, 32, static_cast<int> (smoothedOrder.getNextValue()));
 
-        // Update parameters based on filter type using smoothed values and stored filter type
-        if (auto rf = std::dynamic_pointer_cast<yup::RbjFilter<float>> (currentAudioFilter))
-        {
-            rf->setParameters (getFilterMode (currentResponseTypeId), freq, 0.1f + q * 10.0f, gain, currentSampleRate);
-        }
-        else if (auto zf = std::dynamic_pointer_cast<yup::ZoelzerFilter<float>> (currentAudioFilter))
-        {
-            zf->setParameters (getFilterMode (currentResponseTypeId), freq, 0.1f + q * 10.0f, gain, currentSampleRate);
-        }
-        else if (auto svf = std::dynamic_pointer_cast<yup::StateVariableFilter<float>> (currentAudioFilter))
-        {
-            svf->setParameters (getFilterMode (currentResponseTypeId), freq, 0.707 + q * (10.0f - 0.707), currentSampleRate);
-        }
-        else if (auto fof = std::dynamic_pointer_cast<yup::FirstOrderFilter<float>> (currentAudioFilter))
-        {
-            fof->setParameters (getFilterMode (currentResponseTypeId), freq, gain, currentSampleRate);
-        }
-        else if (auto bf = std::dynamic_pointer_cast<yup::ButterworthFilter<float>> (currentAudioFilter))
-        {
-            bf->setParameters (getFilterMode (currentResponseTypeId), order, freq, freq * 1.1, gain, currentSampleRate);
-        }
+        updateFilterParameters (currentAudioFilter.get(), freq, q, gain, order);
     }
 
     void updateUIFilterParameters()
@@ -1258,26 +1236,31 @@ private:
         double gain = gainSlider->getValue();
         int order = yup::jlimit (2, 32, static_cast<int> (orderSlider->getValue()));
 
+        updateFilterParameters (currentUIFilter.get(), freq, q, gain, order);
+    }
+
+    void updateFilterParameters (yup::FilterBase<float>* filter, double freq, double q, double gain, int order)
+    {
         // Update parameters based on filter type using direct UI values
-        if (auto rf = std::dynamic_pointer_cast<yup::RbjFilter<float>> (currentUIFilter))
+        if (auto rf = dynamic_cast<yup::RbjFilter<float>*> (filter))
         {
             rf->setParameters (getFilterMode (currentResponseTypeId), freq, 0.1f + q * 10.0f, gain, currentSampleRate);
         }
-        else if (auto zf = std::dynamic_pointer_cast<yup::ZoelzerFilter<float>> (currentUIFilter))
+        else if (auto zf = dynamic_cast<yup::ZoelzerFilter<float>*> (filter))
         {
             zf->setParameters (getFilterMode (currentResponseTypeId), freq, 0.1f + q * 10.0f, gain, currentSampleRate);
         }
-        else if (auto svf = std::dynamic_pointer_cast<yup::StateVariableFilter<float>> (currentUIFilter))
+        else if (auto svf = dynamic_cast<yup::StateVariableFilter<float>*> (filter))
         {
             svf->setParameters (getFilterMode (currentResponseTypeId), freq, 0.707 + q * (10.0f - 0.707), currentSampleRate);
         }
-        else if (auto fof = std::dynamic_pointer_cast<yup::FirstOrderFilter<float>> (currentUIFilter))
+        else if (auto fof = dynamic_cast<yup::FirstOrderFilter<float>*> (filter))
         {
             fof->setParameters (getFilterMode (currentResponseTypeId), freq, gain, currentSampleRate);
         }
-        else if (auto bf = std::dynamic_pointer_cast<yup::ButterworthFilter<float>> (currentUIFilter))
+        else if (auto bf = dynamic_cast<yup::ButterworthFilter<float>*> (filter))
         {
-            bf->setParameters (getFilterMode (currentResponseTypeId), order, freq, freq * 2.0, gain, currentSampleRate);
+            bf->setParameters (getFilterMode (currentResponseTypeId), order, freq, yup::jmin (freq * 1.1, currentSampleRate * 0.49), gain, currentSampleRate);
         }
     }
 
@@ -1313,7 +1296,7 @@ private:
         smoothedOrder.setCurrentAndTargetValue (static_cast<float> (orderSlider->getValue()));
 
         // Update audio filter with current smoothed parameters
-        updateAudioFilterParametersSmooth();
+        updateAudioFilterParameters();
     }
 
     void updateAnalysisDisplays()
