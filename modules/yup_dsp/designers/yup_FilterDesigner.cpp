@@ -384,8 +384,344 @@ BiquadCoefficients<CoeffType> FilterDesigner<CoeffType>::designZoelzer (
 }
 
 //==============================================================================
+// Butterworth Filter Design Implementation - Based on zpk approach
+//==============================================================================
 
-// Explicit instantiations for FilterDesigner
+namespace
+{
+    template <typename CoeffType>
+    void normalizeFrequencies (const std::vector<CoeffType>& freqs, double sampleRate,
+                             ButterworthWorkspace<CoeffType>& workspace)
+    {
+        workspace.normalizedFreqs.clear();
+        for (CoeffType f : freqs)
+        {
+            CoeffType w = f / (static_cast<CoeffType> (sampleRate) / static_cast<CoeffType> (2.0));
+            jassert (w > static_cast<CoeffType> (0.0) && w < static_cast<CoeffType> (1.0));
+            workspace.normalizedFreqs.push_back (w);
+        }
+    }
+
+    template <typename CoeffType>
+    void calculateAnalogPrototype (int order, ButterworthWorkspace<CoeffType>& workspace)
+    {
+        workspace.zpkPoles.clear();
+        workspace.zpkZeros.clear();
+        workspace.gain = static_cast<CoeffType> (1.0);
+
+        for (int k = -order + 1; k < order; k += 2)
+        {
+            const auto angle = (static_cast<CoeffType> (k) * MathConstants<CoeffType>::pi) /
+                (static_cast<CoeffType> (2) * static_cast<CoeffType> (order));
+
+            workspace.zpkPoles.emplace_back (-std::exp (Complex<CoeffType> (static_cast<CoeffType> (0.0), angle)));
+        }
+    }
+
+    template <typename CoeffType>
+    void prewarpFrequencies (double sampleRate, ButterworthWorkspace<CoeffType>& workspace)
+    {
+        workspace.prewarpedFreqs.clear();
+        for (CoeffType w : workspace.normalizedFreqs)
+        {
+            CoeffType warped = static_cast<CoeffType> (2.0 * sampleRate) *
+                std::tan (MathConstants<CoeffType>::pi * w / static_cast<CoeffType> (2.0));
+            workspace.prewarpedFreqs.push_back (warped);
+        }
+    }
+
+    template <typename CoeffType>
+    void frequencyTransformLowpass (ButterworthWorkspace<CoeffType>& workspace)
+    {
+        if (workspace.prewarpedFreqs.empty()) return;
+
+        CoeffType wo = workspace.prewarpedFreqs[0];
+        int degree = static_cast<int> (workspace.zpkPoles.size()) - static_cast<int> (workspace.zpkZeros.size());
+
+        // Transform poles and zeros
+        workspace.tempPoles1.clear();
+        workspace.tempZeros1.clear();
+
+        for (const auto& p : workspace.zpkPoles)
+            workspace.tempPoles1.push_back (wo * p);
+        workspace.zpkPoles = workspace.tempPoles1;
+
+        for (const auto& z : workspace.zpkZeros)
+            workspace.tempZeros1.push_back (wo * z);
+        workspace.zpkZeros = workspace.tempZeros1;
+
+        workspace.gain *= std::pow (wo, degree);
+    }
+
+    template <typename CoeffType>
+    void frequencyTransformHighpass (ButterworthWorkspace<CoeffType>& workspace)
+    {
+        if (workspace.prewarpedFreqs.empty()) return;
+
+        CoeffType wo = workspace.prewarpedFreqs[0];
+        int degree = static_cast<int> (workspace.zpkPoles.size()) - static_cast<int> (workspace.zpkZeros.size());
+
+        // Transform: s -> wo/s
+        workspace.tempPoles1.clear();
+        workspace.tempZeros1.clear();
+
+        for (const auto& p : workspace.zpkPoles)
+            workspace.tempPoles1.push_back (wo / p);
+        workspace.zpkPoles = workspace.tempPoles1;
+
+        for (const auto& z : workspace.zpkZeros)
+            workspace.tempZeros1.push_back (wo / z);
+        for (int i = 0; i < degree; ++i)
+            workspace.tempZeros1.emplace_back (static_cast<CoeffType> (0.0));
+        workspace.zpkZeros = workspace.tempZeros1;
+
+        // Update gain
+        Complex<CoeffType> P (1, 0), Z (1, 0);
+        for (const auto& p : workspace.zpkPoles) P *= -p;
+        for (const auto& z : workspace.zpkZeros) Z *= -z;
+        workspace.gain *= (Z / P).real();
+    }
+
+    template <typename CoeffType>
+    void frequencyTransformBandpass (ButterworthWorkspace<CoeffType>& workspace)
+    {
+        if (workspace.prewarpedFreqs.size() < 2) return;
+
+        CoeffType wo = std::sqrt (workspace.prewarpedFreqs[0] * workspace.prewarpedFreqs[1]);
+        CoeffType bw = std::abs (workspace.prewarpedFreqs[1] - workspace.prewarpedFreqs[0]);
+        int degree = static_cast<int> (workspace.zpkPoles.size()) - static_cast<int> (workspace.zpkZeros.size());
+
+        // Transform each pole/zero
+        workspace.tempPoles1.clear();
+        workspace.tempZeros1.clear();
+
+        for (const auto& p : workspace.zpkPoles)
+        {
+            Complex<CoeffType> s = p * (bw / static_cast<CoeffType> (2.0));
+            Complex<CoeffType> sswow = std::sqrt (s * s - wo * wo);
+            workspace.tempPoles1.push_back (s + sswow);
+            workspace.tempPoles1.push_back (s - sswow);
+        }
+
+        workspace.zpkPoles = workspace.tempPoles1;
+
+        for (const auto& z : workspace.zpkZeros)
+        {
+            Complex<CoeffType> s = z * (bw / static_cast<CoeffType> (2.0));
+            Complex<CoeffType> sswow = std::sqrt (s * s - wo * wo);
+            workspace.tempZeros1.push_back (s + sswow);
+            workspace.tempZeros1.push_back (s - sswow);
+        }
+
+        for (int i = 0; i < degree; ++i)
+            workspace.tempZeros1.emplace_back (static_cast<CoeffType> (0.0), static_cast<CoeffType> (0.0));
+
+        workspace.zpkZeros = workspace.tempZeros1;
+
+        workspace.gain *= std::pow (bw, degree);
+    }
+
+    template <typename CoeffType>
+    void frequencyTransformBandstop (ButterworthWorkspace<CoeffType>& workspace)
+    {
+        if (workspace.prewarpedFreqs.size() < 2) return;
+
+        CoeffType wo = std::sqrt (workspace.prewarpedFreqs[0] * workspace.prewarpedFreqs[1]);
+        CoeffType bw = std::abs (workspace.prewarpedFreqs[1] - workspace.prewarpedFreqs[0]);
+        int degree = static_cast<int> (workspace.zpkPoles.size()) - static_cast<int> (workspace.zpkZeros.size());
+
+        // Transform each pole/zero: s -> (bw/2)/s
+        workspace.tempPoles1.clear();
+        workspace.tempZeros1.clear();
+
+        for (const auto& p : workspace.zpkPoles)
+        {
+            Complex<CoeffType> s = (bw / static_cast<CoeffType> (2.0)) / p;
+            Complex<CoeffType> sswow = std::sqrt (s * s - wo * wo);
+            workspace.tempPoles1.push_back (s + sswow);
+            workspace.tempPoles1.push_back (s - sswow);
+        }
+
+        workspace.zpkPoles = workspace.tempPoles1;
+
+        for (const auto& z : workspace.zpkZeros)
+        {
+            Complex<CoeffType> s = (bw / static_cast<CoeffType> (2.0)) / z;
+            Complex<CoeffType> sswow = std::sqrt (s * s - wo * wo);
+            workspace.tempZeros1.push_back (s + sswow);
+            workspace.tempZeros1.push_back (s - sswow);
+        }
+
+        for (int i = 0; i < degree; ++i)
+        {
+            workspace.tempZeros1.emplace_back (static_cast<CoeffType> (0.0), wo);
+            workspace.tempZeros1.emplace_back (static_cast<CoeffType> (0.0), -wo);
+        }
+
+        workspace.zpkZeros = workspace.tempZeros1;
+
+        // Update gain
+        Complex<CoeffType> P (1, 0), Z (1, 0);
+        for (const auto& p : workspace.zpkPoles) P *= -p;
+        for (const auto& z : workspace.zpkZeros) Z *= -z;
+        workspace.gain *= (Z / P).real();
+    }
+
+    template <typename CoeffType>
+    void applyBilinearTransform (double sampleRate, ButterworthWorkspace<CoeffType>& workspace)
+    {
+        CoeffType fs = static_cast<CoeffType> (sampleRate);
+        size_t degree = std::max (workspace.zpkPoles.size(), workspace.zpkZeros.size());
+
+        workspace.tempPoles1.clear();
+        workspace.tempZeros1.clear();
+
+        for (auto& p : workspace.zpkPoles)
+            workspace.tempPoles1.emplace_back ((static_cast<CoeffType> (2.0) * fs + p) / (static_cast<CoeffType> (2.0) * fs - p));
+
+        workspace.zpkPoles = workspace.tempPoles1;
+
+        for (auto& z : workspace.zpkZeros)
+            workspace.tempZeros1.emplace_back ((static_cast<CoeffType> (2.0) * fs + z) / (static_cast<CoeffType> (2.0) * fs - z));
+
+        for (size_t i = 0; i < degree; ++i)
+            workspace.tempZeros1.emplace_back (static_cast<CoeffType> (-1.0));
+
+        workspace.zpkZeros = workspace.tempZeros1;
+
+        Complex<CoeffType> Z (1, 0), P (1, 0);
+        for (const auto& z : workspace.zpkZeros) Z *= (static_cast<CoeffType> (2.0) * fs - z);
+        for (const auto& p : workspace.zpkPoles) P *= (static_cast<CoeffType> (2.0) * fs - p);
+        workspace.gain *= (Z / P).real();
+    }
+
+    template <typename CoeffType>
+    void zpkToSos (ButterworthWorkspace<CoeffType>& workspace)
+    {
+        workspace.biquadCoeffs.clear();
+
+        auto& z = workspace.zpkZeros;
+        auto& p = workspace.zpkPoles;
+        size_t n = std::max (z.size(), p.size());
+
+        // Ensure even number of zeros and poles for biquad pairing
+        while (z.size() < n)
+            z.emplace_back (static_cast<CoeffType> (0.0));
+        while (p.size() < n)
+            p.emplace_back (static_cast<CoeffType> (0.0));
+
+        std::sort (z.begin(), z.end(), [](const auto& a, const auto& b) { return std::abs (a) < std::abs (b); });
+        std::sort (p.begin(), p.end(), [](const auto& a, const auto& b) { return std::abs (a) < std::abs (b); });
+
+        CoeffType g = workspace.gain;
+        for (size_t i = 0; i < n; i += 2)
+        {
+            Complex<CoeffType> z1 = z[i];
+            Complex<CoeffType> z2 = z[i + 1];
+            Complex<CoeffType> p1 = p[i];
+            Complex<CoeffType> p2 = p[i + 1];
+
+            BiquadCoefficients<CoeffType> coeffs;
+            coeffs.b0 = g;
+            coeffs.b1 = -g * (z1 + z2).real();
+            coeffs.b2 = g * (z1 * z2).real();
+            coeffs.a0 = static_cast<CoeffType> (1.0);
+            coeffs.a1 = -(p1 + p2).real();
+            coeffs.a2 = (p1 * p2).real();
+
+            workspace.biquadCoeffs.push_back (coeffs);
+            g = static_cast<CoeffType> (1.0);
+        }
+    }
+
+    template <typename CoeffType>
+    void normalizeDcGain (ButterworthWorkspace<CoeffType>& workspace)
+    {
+        if (workspace.biquadCoeffs.empty()) return;
+
+        // Calculate DC gain (H(z=1) = 1)
+        CoeffType dcGain = static_cast<CoeffType> (1.0);
+        for (const auto& s : workspace.biquadCoeffs)
+        {
+            CoeffType num = s.b0 + s.b1 + s.b2;
+            CoeffType den = s.a0 + s.a1 + s.a2;
+            if (std::abs (den) > static_cast<CoeffType> (1e-10))
+                dcGain *= (num / den);
+        }
+
+        // Scale first section
+        if (std::abs (dcGain) > static_cast<CoeffType> (1e-10))
+        {
+            workspace.biquadCoeffs[0].b0 /= dcGain;
+            workspace.biquadCoeffs[0].b1 /= dcGain;
+            workspace.biquadCoeffs[0].b2 /= dcGain;
+        }
+    }
+
+} // namespace
+
+template <typename CoeffType>
+int FilterDesigner<CoeffType>::designButterworth (
+    FilterModeType filterMode,
+    int order,
+    CoeffType frequency,
+    CoeffType frequency2,
+    double sampleRate,
+    ButterworthWorkspace<CoeffType>& workspace,
+    std::vector<BiquadCoefficients<CoeffType>>& coefficients) noexcept
+{
+    // Validate inputs
+    jassert (order >= 1 && order <= 32);
+    jassert (frequency > static_cast<CoeffType> (0.0));
+    jassert (sampleRate > 0.0);
+
+    if (filterMode.test (FilterMode::bandpass) || filterMode.test (FilterMode::bandstop))
+        jassert (frequency2 > frequency);
+
+    // Ensure order is valid (1 or power of 2)
+    order = order == 1 ? order : jlimit (2, 32, nextPowerOfTwo (order));
+
+    workspace.clear();
+    coefficients.clear();
+
+    // Build frequency vector
+    std::vector<CoeffType> freqs;
+    freqs.push_back (frequency);
+    if (filterMode.test (FilterMode::bandpass) || filterMode.test (FilterMode::bandstop))
+        freqs.push_back (frequency2);
+
+    // Follow the zpk design sequence
+    normalizeFrequencies (freqs, sampleRate, workspace);
+    calculateAnalogPrototype (order, workspace);
+    prewarpFrequencies (sampleRate, workspace);
+
+    // Apply frequency transformations
+    if (filterMode.test (FilterMode::lowpass))
+        frequencyTransformLowpass (workspace);
+    else if (filterMode.test (FilterMode::highpass))
+        frequencyTransformHighpass (workspace);
+    else if (filterMode.test (FilterMode::bandpass))
+        frequencyTransformBandpass (workspace);
+    else if (filterMode.test (FilterMode::bandstop))
+        frequencyTransformBandstop (workspace);
+    else
+        frequencyTransformLowpass (workspace); // Default to lowpass
+
+    // Transform to digital domain and convert to SOS
+    applyBilinearTransform (sampleRate, workspace);
+    zpkToSos (workspace);
+    normalizeDcGain (workspace);
+
+    // Copy to output
+    coefficients = workspace.biquadCoeffs;
+
+    return static_cast<int> (coefficients.size());
+}
+
+//==============================================================================
+// Explicit template instantiations
+//==============================================================================
+
 template class FilterDesigner<float>;
 template class FilterDesigner<double>;
 

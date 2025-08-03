@@ -1244,7 +1244,7 @@ private:
         }
         else if (auto bf = std::dynamic_pointer_cast<yup::ButterworthFilter<float>> (currentAudioFilter))
         {
-            bf->setParameters (getFilterMode (currentResponseTypeId), order, freq, freq * 2.0, gain, currentSampleRate);
+            bf->setParameters (getFilterMode (currentResponseTypeId), order, freq, freq * 1.1, gain, currentSampleRate);
         }
     }
 
