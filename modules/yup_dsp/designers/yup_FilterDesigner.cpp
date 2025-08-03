@@ -414,7 +414,7 @@ namespace
             const auto angle = (static_cast<CoeffType> (k) * MathConstants<CoeffType>::pi) /
                 (static_cast<CoeffType> (2) * static_cast<CoeffType> (order));
 
-            workspace.zpkPoles.emplace_back (-std::exp (Complex<CoeffType> (static_cast<CoeffType> (0.0), angle)));
+            workspace.zpkPoles.emplace_back (-Complex<CoeffType> (std::cos(angle), std::sin(angle)));
         }
     }
 
@@ -471,15 +471,12 @@ namespace
 
         for (const auto& z : workspace.zpkZeros)
             workspace.tempZeros1.push_back (wo / z);
-        for (int i = 0; i < degree; ++i)
+        for (int i = 0; i < static_cast<int>(workspace.zpkPoles.size()); ++i)
+        {
             workspace.tempZeros1.emplace_back (static_cast<CoeffType> (0.0));
+        }
         workspace.zpkZeros = workspace.tempZeros1;
 
-        // Update gain
-        Complex<CoeffType> P (1, 0), Z (1, 0);
-        for (const auto& p : workspace.zpkPoles) P *= -p;
-        for (const auto& z : workspace.zpkZeros) Z *= -z;
-        workspace.gain *= (Z / P).real();
     }
 
     template <typename CoeffType>
@@ -560,7 +557,7 @@ namespace
 
         workspace.zpkZeros = workspace.tempZeros1;
 
-        // Update gain
+        // Update gain for bandstop transformation
         Complex<CoeffType> P (1, 0), Z (1, 0);
         for (const auto& p : workspace.zpkPoles) P *= -p;
         for (const auto& z : workspace.zpkZeros) Z *= -z;
@@ -571,23 +568,26 @@ namespace
     void applyBilinearTransform (double sampleRate, ButterworthWorkspace<CoeffType>& workspace)
     {
         CoeffType fs = static_cast<CoeffType> (sampleRate);
-        size_t degree = std::max (workspace.zpkPoles.size(), workspace.zpkZeros.size());
+        int degree = static_cast<int> (workspace.zpkPoles.size()) - static_cast<int> (workspace.zpkZeros.size());
 
         workspace.tempPoles1.clear();
         workspace.tempZeros1.clear();
 
+        // Transform zeros
+        for (auto& z : workspace.zpkZeros)
+            workspace.tempZeros1.emplace_back ((static_cast<CoeffType> (2.0) * fs + z) / (static_cast<CoeffType> (2.0) * fs - z));
+
+        // Add -1 zeros for the degree difference
+        for (int i = 0; i < degree; ++i)
+            workspace.tempZeros1.emplace_back (static_cast<CoeffType> (-1.0));
+
+        workspace.zpkZeros = workspace.tempZeros1;
+
+        // Transform poles
         for (auto& p : workspace.zpkPoles)
             workspace.tempPoles1.emplace_back ((static_cast<CoeffType> (2.0) * fs + p) / (static_cast<CoeffType> (2.0) * fs - p));
 
         workspace.zpkPoles = workspace.tempPoles1;
-
-        for (auto& z : workspace.zpkZeros)
-            workspace.tempZeros1.emplace_back ((static_cast<CoeffType> (2.0) * fs + z) / (static_cast<CoeffType> (2.0) * fs - z));
-
-        for (size_t i = 0; i < degree; ++i)
-            workspace.tempZeros1.emplace_back (static_cast<CoeffType> (-1.0));
-
-        workspace.zpkZeros = workspace.tempZeros1;
 
         Complex<CoeffType> Z (1, 0), P (1, 0);
         for (const auto& z : workspace.zpkZeros) Z *= (static_cast<CoeffType> (2.0) * fs - z);
@@ -658,6 +658,58 @@ namespace
         }
     }
 
+    template <typename CoeffType>
+    void normalizeGain (ButterworthWorkspace<CoeffType>& workspace, FilterModeType filterMode)
+    {
+        if (workspace.biquadCoeffs.empty()) return;
+
+        CoeffType targetGain = static_cast<CoeffType> (1.0);
+        
+        if (filterMode.test (FilterMode::lowpass))
+        {
+            // For lowpass: normalize DC gain H(z=1) = 1
+            for (const auto& s : workspace.biquadCoeffs)
+            {
+                CoeffType num = s.b0 + s.b1 + s.b2;
+                CoeffType den = s.a0 + s.a1 + s.a2;
+                if (std::abs (den) > static_cast<CoeffType> (1e-10))
+                    targetGain *= (num / den);
+            }
+        }
+        else if (filterMode.test (FilterMode::highpass))
+        {
+            // For highpass: normalize high-frequency gain H(z=-1) = 1
+            for (const auto& s : workspace.biquadCoeffs)
+            {
+                CoeffType num = s.b0 - s.b1 + s.b2;
+                CoeffType den = s.a0 - s.a1 + s.a2;
+                if (std::abs (den) > static_cast<CoeffType> (1e-10))
+                    targetGain *= (num / den);
+            }
+        }
+        else
+        {
+            // For bandpass/bandstop: normalize at center frequency (more complex)
+            // For now, just normalize DC gain
+            for (const auto& s : workspace.biquadCoeffs)
+            {
+                CoeffType num = s.b0 + s.b1 + s.b2;
+                CoeffType den = s.a0 + s.a1 + s.a2;
+                if (std::abs (den) > static_cast<CoeffType> (1e-10))
+                    targetGain *= (num / den);
+            }
+        }
+
+        // Scale first section
+        if (std::abs (targetGain) > static_cast<CoeffType> (1e-10))
+        {
+            workspace.biquadCoeffs[0].b0 /= targetGain;
+            workspace.biquadCoeffs[0].b1 /= targetGain;
+            workspace.biquadCoeffs[0].b2 /= targetGain;
+        }
+        
+    }
+
 } // namespace
 
 template <typename CoeffType>
@@ -671,7 +723,7 @@ int FilterDesigner<CoeffType>::designButterworth (
     std::vector<BiquadCoefficients<CoeffType>>& coefficients) noexcept
 {
     // Validate inputs
-    jassert (order >= 1 && order <= 32);
+    jassert (order >= 2 && order <= 32);
     jassert (frequency > static_cast<CoeffType> (0.0));
     jassert (sampleRate > 0.0);
 
@@ -679,7 +731,7 @@ int FilterDesigner<CoeffType>::designButterworth (
         jassert (frequency2 > frequency);
 
     // Ensure order is valid (1 or power of 2)
-    order = order == 1 ? order : jlimit (2, 32, nextPowerOfTwo (order));
+    order = jlimit (2, 32, nextPowerOfTwo (order));
 
     workspace.clear();
     coefficients.clear();
@@ -710,7 +762,8 @@ int FilterDesigner<CoeffType>::designButterworth (
     // Transform to digital domain and convert to SOS
     applyBilinearTransform (sampleRate, workspace);
     zpkToSos (workspace);
-    normalizeDcGain (workspace);
+    // Normalize gain appropriately for filter type
+    normalizeGain (workspace, filterMode);
 
     // Copy to output
     coefficients = workspace.biquadCoeffs;
