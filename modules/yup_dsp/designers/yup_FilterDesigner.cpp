@@ -488,16 +488,17 @@ namespace
         CoeffType bw = std::abs (workspace.prewarpedFreqs[1] - workspace.prewarpedFreqs[0]);
         int degree = static_cast<int> (workspace.zpkPoles.size()) - static_cast<int> (workspace.zpkZeros.size());
 
-        // Transform each pole/zero
+        // Transform each pole/zero using correct bandpass transformation
         workspace.tempPoles1.clear();
         workspace.tempZeros1.clear();
 
         for (const auto& p : workspace.zpkPoles)
         {
+            // Bandpass transformation: s -> (s + sqrt(s^2 + 4*wo^2))/2 and (s - sqrt(s^2 + 4*wo^2))/2
             Complex<CoeffType> s = p * (bw / static_cast<CoeffType> (2.0));
-            Complex<CoeffType> sswow = std::sqrt (s * s - wo * wo);
-            workspace.tempPoles1.push_back (s + sswow);
-            workspace.tempPoles1.push_back (s - sswow);
+            Complex<CoeffType> discriminant = std::sqrt (s * s + static_cast<CoeffType> (4.0) * wo * wo);
+            workspace.tempPoles1.push_back ((s + discriminant) / static_cast<CoeffType> (2.0));
+            workspace.tempPoles1.push_back ((s - discriminant) / static_cast<CoeffType> (2.0));
         }
 
         workspace.zpkPoles = workspace.tempPoles1;
@@ -505,16 +506,18 @@ namespace
         for (const auto& z : workspace.zpkZeros)
         {
             Complex<CoeffType> s = z * (bw / static_cast<CoeffType> (2.0));
-            Complex<CoeffType> sswow = std::sqrt (s * s - wo * wo);
-            workspace.tempZeros1.push_back (s + sswow);
-            workspace.tempZeros1.push_back (s - sswow);
+            Complex<CoeffType> discriminant = std::sqrt (s * s + static_cast<CoeffType> (4.0) * wo * wo);
+            workspace.tempZeros1.push_back ((s + discriminant) / static_cast<CoeffType> (2.0));
+            workspace.tempZeros1.push_back ((s - discriminant) / static_cast<CoeffType> (2.0));
         }
 
+        // Add zeros at origin for degree difference
         for (int i = 0; i < degree; ++i)
             workspace.tempZeros1.emplace_back (static_cast<CoeffType> (0.0), static_cast<CoeffType> (0.0));
 
         workspace.zpkZeros = workspace.tempZeros1;
 
+        // Correct gain adjustment for bandpass
         workspace.gain *= std::pow (bw, degree);
     }
 
@@ -527,16 +530,17 @@ namespace
         CoeffType bw = std::abs (workspace.prewarpedFreqs[1] - workspace.prewarpedFreqs[0]);
         int degree = static_cast<int> (workspace.zpkPoles.size()) - static_cast<int> (workspace.zpkZeros.size());
 
-        // Transform each pole/zero: s -> (bw/2)/s
+        // Transform each pole/zero using correct bandstop transformation
         workspace.tempPoles1.clear();
         workspace.tempZeros1.clear();
 
         for (const auto& p : workspace.zpkPoles)
         {
+            // Bandstop transformation: s -> (bw/2) / (s + sqrt(s^2 + 4*wo^2)/s)
             Complex<CoeffType> s = (bw / static_cast<CoeffType> (2.0)) / p;
-            Complex<CoeffType> sswow = std::sqrt (s * s - wo * wo);
-            workspace.tempPoles1.push_back (s + sswow);
-            workspace.tempPoles1.push_back (s - sswow);
+            Complex<CoeffType> discriminant = std::sqrt (s * s + static_cast<CoeffType> (4.0) * wo * wo);
+            workspace.tempPoles1.push_back ((s + discriminant) / static_cast<CoeffType> (2.0));
+            workspace.tempPoles1.push_back ((s - discriminant) / static_cast<CoeffType> (2.0));
         }
 
         workspace.zpkPoles = workspace.tempPoles1;
@@ -544,11 +548,12 @@ namespace
         for (const auto& z : workspace.zpkZeros)
         {
             Complex<CoeffType> s = (bw / static_cast<CoeffType> (2.0)) / z;
-            Complex<CoeffType> sswow = std::sqrt (s * s - wo * wo);
-            workspace.tempZeros1.push_back (s + sswow);
-            workspace.tempZeros1.push_back (s - sswow);
+            Complex<CoeffType> discriminant = std::sqrt (s * s + static_cast<CoeffType> (4.0) * wo * wo);
+            workspace.tempZeros1.push_back ((s + discriminant) / static_cast<CoeffType> (2.0));
+            workspace.tempZeros1.push_back ((s - discriminant) / static_cast<CoeffType> (2.0));
         }
 
+        // Add zeros at ±jwo for bandstop characteristic
         for (int i = 0; i < degree; ++i)
         {
             workspace.tempZeros1.emplace_back (static_cast<CoeffType> (0.0), wo);
@@ -557,11 +562,11 @@ namespace
 
         workspace.zpkZeros = workspace.tempZeros1;
 
-        // Update gain for bandstop transformation
-        Complex<CoeffType> P (1, 0), Z (1, 0);
-        for (const auto& p : workspace.zpkPoles) P *= -p;
-        for (const auto& z : workspace.zpkZeros) Z *= -z;
-        workspace.gain *= (Z / P).real();
+        // Correct gain calculation for bandstop
+        Complex<CoeffType> gainProduct (1, 0);
+        for (const auto& p : workspace.zpkPoles) gainProduct *= p;
+        for (const auto& z : workspace.zpkZeros) gainProduct /= z;
+        workspace.gain *= std::abs (gainProduct);
     }
 
     template <typename CoeffType>
@@ -687,10 +692,41 @@ namespace
                     targetGain *= (num / den);
             }
         }
+        else if (filterMode.test (FilterMode::bandpass))
+        {
+            // For bandpass: normalize to peak gain = 1 at center frequency
+            // Use geometric mean of cutoff frequencies for center frequency
+            if (workspace.normalizedFreqs.size() >= 2)
+            {
+                CoeffType wc = std::sqrt (workspace.normalizedFreqs[0] * workspace.normalizedFreqs[1]);
+                CoeffType omega = MathConstants<CoeffType>::pi * wc;
+                Complex<CoeffType> z (std::cos (omega), std::sin (omega));
+                
+                Complex<CoeffType> H (1, 0);
+                for (const auto& s : workspace.biquadCoeffs)
+                {
+                    Complex<CoeffType> num = s.b0 + s.b1 * z + s.b2 * z * z;
+                    Complex<CoeffType> den = s.a0 + s.a1 * z + s.a2 * z * z;
+                    if (std::abs (den) > static_cast<CoeffType> (1e-10))
+                        H *= (num / den);
+                }
+                targetGain = std::abs (H);
+            }
+        }
+        else if (filterMode.test (FilterMode::bandstop))
+        {
+            // For bandstop: normalize DC or high-frequency gain
+            for (const auto& s : workspace.biquadCoeffs)
+            {
+                CoeffType num = s.b0 + s.b1 + s.b2;
+                CoeffType den = s.a0 + s.a1 + s.a2;
+                if (std::abs (den) > static_cast<CoeffType> (1e-10))
+                    targetGain *= (num / den);
+            }
+        }
         else
         {
-            // For bandpass/bandstop: normalize at center frequency (more complex)
-            // For now, just normalize DC gain
+            // Default: normalize DC gain
             for (const auto& s : workspace.biquadCoeffs)
             {
                 CoeffType num = s.b0 + s.b1 + s.b2;
@@ -707,7 +743,6 @@ namespace
             workspace.biquadCoeffs[0].b1 /= targetGain;
             workspace.biquadCoeffs[0].b2 /= targetGain;
         }
-        
     }
 
 } // namespace
