@@ -1055,7 +1055,7 @@ private:
         addAndMakeVisible (*gainSlider);
 
         orderSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Order");
-        orderSlider->setRange ({ 2.0, 10.0 });
+        orderSlider->setRange ({ 2.0, 16.0 });
         orderSlider->setValue (2.0);
         orderSlider->onValueChanged = [this] (float value)
         {
@@ -1237,7 +1237,7 @@ private:
         double freq2 = smoothedFrequency2.getNextValue();
         double q = smoothedQ.getNextValue();
         double gain = smoothedGain.getNextValue();
-        int order = yup::jlimit (2, 32, static_cast<int> (smoothedOrder.getNextValue()));
+        int order = yup::jlimit (2, 16, static_cast<int> (smoothedOrder.getNextValue()));
 
         updateFilterParameters (currentAudioFilter.get(), freq, freq2, q, gain, order);
     }
@@ -1251,7 +1251,7 @@ private:
         double freq2 = frequency2Slider->getValue();
         double q = qSlider->getValue();
         double gain = gainSlider->getValue();
-        int order = yup::jlimit (2, 32, static_cast<int> (orderSlider->getValue()));
+        int order = yup::jlimit (2, 16, static_cast<int> (orderSlider->getValue()));
 
         updateFilterParameters (currentUIFilter.get(), freq, freq2, q, gain, order);
     }

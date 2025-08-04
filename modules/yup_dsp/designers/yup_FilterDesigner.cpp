@@ -769,8 +769,8 @@ int FilterDesigner<CoeffType>::designButterworth (
     if (filterMode.test (FilterMode::bandpass) || filterMode.test (FilterMode::bandstop))
         jassert (frequency2 > frequency);
 
-    // Ensure order is valid (1 or power of 2)
-    order = jlimit (2, 32, nextPowerOfTwo (order));
+    // Ensure order is valid (1 or power of 2) - limit to 16 for numerical stability
+    order = jlimit (2, 16, nextPowerOfTwo (order));
 
     workspace.clear();
     coefficients.clear();
