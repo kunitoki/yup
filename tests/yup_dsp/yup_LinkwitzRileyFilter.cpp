@@ -92,7 +92,7 @@ TEST_F (LinkwitzRileyFilterTests, LR2SetParametersUpdatesCorrectly)
 
 TEST_F (LinkwitzRileyFilterTests, LR2ProcessSampleDoesNotCrash)
 {
-    LinkwitzRiley2Filter<float> filter (1000.0, sampleRate);
+    LinkwitzRiley2Filter<float> filter (1000.0);
 
     float lowLeft, lowRight, highLeft, highRight;
     filter.processSample (0.5f, 0.5f, lowLeft, lowRight, highLeft, highRight);
@@ -106,7 +106,7 @@ TEST_F (LinkwitzRileyFilterTests, LR2ProcessSampleDoesNotCrash)
 
 TEST_F (LinkwitzRileyFilterTests, LR2ProcessBufferDoesNotCrash)
 {
-    LinkwitzRiley2Filter<float> filter (1000.0, sampleRate);
+    LinkwitzRiley2Filter<float> filter (1000.0);
 
     filter.processBuffer (testDataLeft.data(),
                           testDataRight.data(),
@@ -137,7 +137,7 @@ TEST_F (LinkwitzRileyFilterTests, LR4ConstructorSetsValidDefaults)
 
 TEST_F (LinkwitzRileyFilterTests, LR4ProcessSampleDoesNotCrash)
 {
-    LinkwitzRiley4Filter<float> filter (1000.0, sampleRate);
+    LinkwitzRiley4Filter<float> filter (1000.0);
 
     float lowLeft, lowRight, highLeft, highRight;
     filter.processSample (0.5f, 0.5f, lowLeft, lowRight, highLeft, highRight);
@@ -160,7 +160,7 @@ TEST_F (LinkwitzRileyFilterTests, LR8ConstructorSetsValidDefaults)
 
 TEST_F (LinkwitzRileyFilterTests, LR8ProcessSampleDoesNotCrash)
 {
-    LinkwitzRiley8Filter<float> filter (1000.0, sampleRate);
+    LinkwitzRiley8Filter<float> filter (1000.0);
 
     float lowLeft, lowRight, highLeft, highRight;
     filter.processSample (0.5f, 0.5f, lowLeft, lowRight, highLeft, highRight);
@@ -174,7 +174,7 @@ TEST_F (LinkwitzRileyFilterTests, LR8ProcessSampleDoesNotCrash)
 
 TEST_F (LinkwitzRileyFilterTests, ComplementaryResponse)
 {
-    LinkwitzRiley2Filter<float> filter (1000.0, sampleRate);
+    LinkwitzRiley2Filter<float> filter (1000.0);
 
     // Test that low + high outputs sum to approximately unity at crossover frequency
     float lowLeft, lowRight, highLeft, highRight;
@@ -208,7 +208,7 @@ TEST_F (LinkwitzRileyFilterTests, ComplementaryResponse)
 
 TEST_F (LinkwitzRileyFilterTests, ResetClearsState)
 {
-    LinkwitzRiley2Filter<float> filter (1000.0, sampleRate);
+    LinkwitzRiley2Filter<float> filter (1000.0);
 
     // Process some data to build up state
     float lowLeft, lowRight, highLeft, highRight;
