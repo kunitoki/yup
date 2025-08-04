@@ -419,10 +419,12 @@ int FilterDesigner<CoeffType>::designButterworth (
         // Lowpass and Highpass filters
         for (int s = 0; s < numStages; ++s)
         {
-            const CoeffType d = static_cast<CoeffType> (2.0) * std::sin (((static_cast<CoeffType> (2 * (s + 1) - 1)) * MathConstants<CoeffType>::pi) / (static_cast<CoeffType> (2 * order)));
+            const CoeffType d = static_cast<CoeffType> (2.0) *
+                std::sin (((static_cast<CoeffType> (2 * (s + 1) - 1)) * MathConstants<CoeffType>::pi) / (static_cast<CoeffType> (2 * order)));
 
-            const CoeffType beta = static_cast<CoeffType> (0.5) * ((static_cast<CoeffType> (1.0) - (d / static_cast<CoeffType> (2.0)) * std::sin (omega)) /
-                                                                  (static_cast<CoeffType> (1.0) + (d / static_cast<CoeffType> (2.0)) * std::sin (omega)));
+            const CoeffType beta = static_cast<CoeffType> (0.5) *
+                ((static_cast<CoeffType> (1.0) - (d / static_cast<CoeffType> (2.0)) * std::sin (omega)) /
+                    (static_cast<CoeffType> (1.0) + (d / static_cast<CoeffType> (2.0)) * std::sin (omega)));
 
             const CoeffType gamma = (static_cast<CoeffType> (0.5) + beta) * std::cos (omega);
 
@@ -507,6 +509,31 @@ int FilterDesigner<CoeffType>::designButterworth (
                 coeffs.b1 = static_cast<CoeffType> (-4.0) * alpha * std::cos (omegaCenter);
                 coeffs.b2 = static_cast<CoeffType> (2.0) * alpha;
             }
+
+            coeffs.normalize();
+            coefficients.push_back (coeffs);
+        }
+    }
+    else if (filterMode.test (FilterMode::allpass))
+    {
+        // Allpass filters - use same structure as lowpass but with different coefficients
+        for (int s = 0; s < numStages; ++s)
+        {
+            const CoeffType d = static_cast<CoeffType> (2.0) * std::sin (((static_cast<CoeffType> (2 * (s + 1) - 1)) * MathConstants<CoeffType>::pi) / (static_cast<CoeffType> (2 * order)));
+
+            const CoeffType beta = static_cast<CoeffType> (0.5) * ((static_cast<CoeffType> (1.0) - (d / static_cast<CoeffType> (2.0)) * std::sin (omega)) /
+                                                                  (static_cast<CoeffType> (1.0) + (d / static_cast<CoeffType> (2.0)) * std::sin (omega)));
+
+            const CoeffType gamma = (static_cast<CoeffType> (0.5) + beta) * std::cos (omega);
+
+            BiquadCoefficients<CoeffType> coeffs;
+            // For allpass: numerator = reversed denominator
+            coeffs.a0 = static_cast<CoeffType> (1.0);
+            coeffs.a1 = static_cast<CoeffType> (-2.0) * gamma;
+            coeffs.a2 = static_cast<CoeffType> (2.0) * beta;
+            coeffs.b0 = static_cast<CoeffType> (2.0) * beta;
+            coeffs.b1 = static_cast<CoeffType> (-2.0) * gamma;
+            coeffs.b2 = static_cast<CoeffType> (1.0);
 
             coeffs.normalize();
             coefficients.push_back (coeffs);

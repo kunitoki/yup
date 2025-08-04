@@ -55,7 +55,7 @@ class ButterworthFilter : public BiquadCascade<SampleType, CoeffType>
 
     //==============================================================================
     /** Maximum supported filter order */
-    static constexpr int maxOrder = 32;
+    static constexpr int maxOrder = 16;
 
 public:
     //==============================================================================
@@ -70,7 +70,7 @@ public:
     ButterworthFilter (FilterModeType mode, int filterOrder, CoeffType freq)
         : ButterworthFilter()
     {
-        setParameters (mode, filterOrder, freq, static_cast<CoeffType> (0.0), static_cast<CoeffType> (0.0), 44100.0);
+        setParameters (mode, filterOrder, freq, static_cast<CoeffType> (0.0), 44100.0);
     }
 
     //==============================================================================
@@ -91,13 +91,13 @@ public:
     {
         mode = resolveFilterMode (mode, getSupportedModes());
 
-        jassert (filterOrder >= 1 && filterOrder <= maxOrder);
+        jassert (filterOrder >= 2 && filterOrder <= maxOrder);
         jassert (freq > static_cast<CoeffType> (0.0));
-        if (mode.test (FilterMode::bandpass) || mode.test (FilterMode::bandstop))
-            jassert (freq2 > freq && freq2 > static_cast<CoeffType> (0.0));
 
-        // Ensure order is valid (1 or power of 2)
-        filterOrder = filterOrder == 1 ? filterOrder : jlimit (2, maxOrder, nextPowerOfTwo (filterOrder));
+        if ((mode.test (FilterMode::bandpass) || mode.test (FilterMode::bandstop)) && freq2 < freq)
+            std::swap (freq, freq2);
+
+        filterOrder = jlimit (2, maxOrder, nextEven (filterOrder));
 
         if (filterMode != mode
             || order != filterOrder
@@ -138,7 +138,7 @@ public:
     */
     void setOrder (int filterOrder) noexcept
     {
-        filterOrder = filterOrder == 1 ? filterOrder : jlimit (2, maxOrder, nextPowerOfTwo (filterOrder));
+        filterOrder = jlimit (2, maxOrder, nextEven (filterOrder));
 
         if (order != filterOrder)
         {
