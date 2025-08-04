@@ -95,9 +95,7 @@ public:
         @param outputBuffer  Pointer to the output buffer
         @param numSamples    Number of samples to process
     */
-    virtual void processBlock (const SampleType* inputBuffer,
-                               SampleType* outputBuffer,
-                               int numSamples) noexcept = 0;
+    virtual void processBlock (const SampleType* inputBuffer, SampleType* outputBuffer, int numSamples) noexcept = 0;
 
     /**
         Processes a block of samples in-place.

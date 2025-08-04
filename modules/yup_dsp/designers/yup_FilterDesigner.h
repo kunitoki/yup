@@ -542,6 +542,89 @@ public:
     {
         return designButterworth (FilterMode::allpass, order, frequency, static_cast<CoeffType> (0.0), sampleRate, coefficients);
     }
+
+    //==============================================================================
+    // Linkwitz-Riley Filter Design
+    //==============================================================================
+
+    /**
+        General Linkwitz-Riley crossover designer with order specification.
+
+        @param order          The filter order (2, 4, 8, 16)
+        @param crossoverFreq  The crossover frequency in Hz
+        @param sampleRate     The sample rate in Hz
+        @param lowCoeffs      Output vector for lowpass biquad coefficients
+        @param highCoeffs     Output vector for highpass biquad coefficients
+
+        @returns              Number of biquad sections created
+    */
+    static int designLinkwitzRiley (
+        int order,
+        CoeffType crossoverFreq,
+        double sampleRate,
+        std::vector<BiquadCoefficients<CoeffType>>& lowCoeffs,
+        std::vector<BiquadCoefficients<CoeffType>>& highCoeffs) noexcept;
+
+    /**
+        Designs Linkwitz-Riley (LR2) 2nd order crossover coefficients.
+
+        Linkwitz-Riley filters are created by cascading two identical Butterworth
+        filters, resulting in complementary magnitude responses that sum to unity
+        gain with phase alignment at the crossover frequency.
+
+        @param crossoverFreq  The crossover frequency in Hz
+        @param sampleRate     The sample rate in Hz
+        @param lowCoeffs      Output coefficients for lowpass section
+        @param highCoeffs     Output coefficients for highpass section
+
+        @returns              True if coefficients were successfully calculated
+    */
+    static bool designLinkwitzRiley2 (
+        CoeffType crossoverFreq,
+        double sampleRate,
+        std::vector<BiquadCoefficients<CoeffType>>& lowCoeffs,
+        std::vector<BiquadCoefficients<CoeffType>>& highCoeffs) noexcept
+    {
+        return designLinkwitzRiley (2, crossoverFreq, sampleRate, lowCoeffs, highCoeffs);
+    }
+
+    /**
+        Designs Linkwitz-Riley 4th order crossover coefficients.
+
+        @param crossoverFreq  The crossover frequency in Hz
+        @param sampleRate     The sample rate in Hz
+        @param lowCoeffs      Output vector for lowpass biquad coefficients
+        @param highCoeffs     Output vector for highpass biquad coefficients
+
+        @returns              Number of biquad sections created (2 for LR4)
+    */
+    static int designLinkwitzRiley4 (
+        CoeffType crossoverFreq,
+        double sampleRate,
+        std::vector<BiquadCoefficients<CoeffType>>& lowCoeffs,
+        std::vector<BiquadCoefficients<CoeffType>>& highCoeffs) noexcept
+    {
+        return designLinkwitzRiley (4, crossoverFreq, sampleRate, lowCoeffs, highCoeffs);
+    }
+
+    /**
+        Designs Linkwitz-Riley 8th order crossover coefficients.
+
+        @param crossoverFreq  The crossover frequency in Hz
+        @param sampleRate     The sample rate in Hz
+        @param lowCoeffs      Output vector for lowpass biquad coefficients
+        @param highCoeffs     Output vector for highpass biquad coefficients
+
+        @returns              Number of biquad sections created (4 for LR8)
+    */
+    static int designLinkwitzRiley8 (
+        CoeffType crossoverFreq,
+        double sampleRate,
+        std::vector<BiquadCoefficients<CoeffType>>& lowCoeffs,
+        std::vector<BiquadCoefficients<CoeffType>>& highCoeffs) noexcept
+    {
+        return designLinkwitzRiley (8, crossoverFreq, sampleRate, lowCoeffs, highCoeffs);
+    }
 };
 
 } // namespace yup

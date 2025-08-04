@@ -189,11 +189,8 @@ void SpectrumAnalyzerComponent::updateDisplay (bool hasNewFFTData)
             }
 
             // Convert to decibels with proper calibration
-            // Account for window function coherent gain losses
-            const float windowCompensation = WindowFunctions<float>::getCompensationGain (currentWindowType);
-
             const float magnitudeDb = magnitude > 0.0f
-                                        ? 20.0f * std::log10 ((magnitude * windowCompensation) / float (fftSize))
+                                        ? 20.0f * std::log10 (magnitude / float (fftSize))
                                         : minDecibels;
 
             // Map to display range [0.0, 1.0]

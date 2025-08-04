@@ -537,7 +537,94 @@ int FilterDesigner<CoeffType>::designButterworth (
 }
 
 //==============================================================================
-// Explicit template instantiations
+
+template <typename CoeffType>
+int FilterDesigner<CoeffType>::designLinkwitzRiley (
+    int order,
+    CoeffType crossoverFreq,
+    double sampleRate,
+    std::vector<BiquadCoefficients<CoeffType>>& lowCoeffs,
+    std::vector<BiquadCoefficients<CoeffType>>& highCoeffs) noexcept
+{
+    jassert (order >= 2 && order <= 16);
+    jassert ((order & 1) == 0); // Must be even
+    jassert (crossoverFreq > static_cast<CoeffType> (0.0));
+    jassert (sampleRate > 0.0);
+
+    const int numStages = order / 2;
+    
+    // Clear output vectors
+    lowCoeffs.clear();
+    highCoeffs.clear();
+    
+    // Reserve space for two cascaded stages per biquad section
+    lowCoeffs.reserve (numStages * 2);
+    highCoeffs.reserve (numStages * 2);
+
+    // Direct Linkwitz-Riley coefficient calculation matching inspiration code
+    const auto omega = static_cast<CoeffType> (MathConstants<CoeffType>::twoPi * crossoverFreq / sampleRate);
+
+    for (int stage = 0; stage < numStages; ++stage)
+    {
+        // Calculate pole angle for this stage (matching inspiration formula)
+        const auto poleAngle = static_cast<CoeffType> ((2.0 * (stage + 1) - 1.0) * MathConstants<CoeffType>::pi / (2.0 * order));
+        const auto d = static_cast<CoeffType> (2.0 * std::sin (poleAngle));
+
+        const auto beta = static_cast<CoeffType> (0.5 * ((1.0 - (d / 2.0) * std::sin (omega)) / (1.0 + (d / 2.0) * std::sin (omega))));
+        const auto gamma = static_cast<CoeffType> ((0.5 + beta) * std::cos (omega));
+
+        // Lowpass coefficients (matching inspiration code lines 73-87)
+        {
+            const auto alpha = static_cast<CoeffType> ((0.5 + beta - gamma) / 4.0);
+
+            const auto la0 = static_cast<CoeffType> (1.0);
+            const auto la1 = static_cast<CoeffType> (-2.0 * gamma);
+            const auto la2 = static_cast<CoeffType> (2.0 * beta);
+            const auto lb0 = static_cast<CoeffType> (2.0 * alpha);
+            const auto lb1 = static_cast<CoeffType> (4.0 * alpha);
+            const auto lb2 = static_cast<CoeffType> (2.0 * alpha);
+
+            BiquadCoefficients<CoeffType> lowCoeff;
+            lowCoeff.a0 = la0;
+            lowCoeff.a1 = la1 / la0;
+            lowCoeff.a2 = la2 / la0;
+            lowCoeff.b0 = lb0 / la0;
+            lowCoeff.b1 = lb1 / la0;
+            lowCoeff.b2 = lb2 / la0;
+
+            // Add identical coefficients for both cascades (Linkwitz-Riley = 2x Butterworth)
+            lowCoeffs.push_back (lowCoeff);
+            lowCoeffs.push_back (lowCoeff);
+        }
+
+        // Highpass coefficients (matching inspiration code lines 92-107)
+        {
+            const auto alpha = static_cast<CoeffType> ((0.5 + beta + gamma) / 4.0);
+
+            const auto ha0 = static_cast<CoeffType> (1.0);
+            const auto ha1 = static_cast<CoeffType> (-2.0 * gamma);
+            const auto ha2 = static_cast<CoeffType> (2.0 * beta);
+            const auto hb0 = static_cast<CoeffType> (2.0 * alpha);
+            const auto hb1 = static_cast<CoeffType> (-4.0 * alpha);
+            const auto hb2 = static_cast<CoeffType> (2.0 * alpha);
+
+            BiquadCoefficients<CoeffType> highCoeff;
+            highCoeff.a0 = ha0;
+            highCoeff.a1 = ha1 / ha0;
+            highCoeff.a2 = ha2 / ha0;
+            highCoeff.b0 = hb0 / ha0;
+            highCoeff.b1 = hb1 / ha0;
+            highCoeff.b2 = hb2 / ha0;
+
+            // Add identical coefficients for both cascades (Linkwitz-Riley = 2x Butterworth)
+            highCoeffs.push_back (highCoeff);
+            highCoeffs.push_back (highCoeff);
+        }
+    }
+
+    return static_cast<int> (lowCoeffs.size());
+}
+
 //==============================================================================
 
 template class FilterDesigner<float>;

@@ -227,59 +227,6 @@ public:
     }
 
     //==============================================================================
-    /**
-        Returns the compensation gain for a window function.
-
-        @param type The window type to get the compensation gain for
-
-        @returns The compensation gain for the window function
-    */
-    static constexpr float getCompensationGain (WindowType type)
-    {
-        float windowCompensation = 1.0f;
-        switch (type)
-        {
-            case WindowType::rectangular:
-                windowCompensation = 1.0f;
-                break;
-            case WindowType::hann:
-                windowCompensation = 2.0f;
-                break; // Hann has 0.5 coherent gain
-            case WindowType::hamming:
-                windowCompensation = 1.85f;
-                break;
-            case WindowType::blackman:
-                windowCompensation = 2.8f;
-                break;
-            case WindowType::blackmanHarris:
-                windowCompensation = 4.0f;
-                break;
-            case WindowType::kaiser:
-                windowCompensation = 2.2f;
-                break;
-            case WindowType::gaussian:
-                windowCompensation = 2.5f;
-                break;
-            case WindowType::tukey:
-                windowCompensation = 1.5f;
-                break;
-            case WindowType::bartlett:
-                windowCompensation = 2.0f;
-                break;
-            case WindowType::welch:
-                windowCompensation = 1.5f;
-                break;
-            case WindowType::flattop:
-                windowCompensation = 4.6f;
-                break;
-            default:
-                break;
-        }
-
-        return windowCompensation;
-    }
-
-    //==============================================================================
     /** Method-based API for backwards compatibility and direct access */
 
     static FloatType rectangular (int n, int N) noexcept

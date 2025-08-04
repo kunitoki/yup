@@ -132,5 +132,6 @@
 #include "filters/yup_ZoelzerFilter.h"
 #include "filters/yup_StateVariableFilter.h"
 #include "filters/yup_ButterworthFilter.h"
+#include "filters/yup_LinkwitzRileyFilter.h"
 
 //==============================================================================
