@@ -82,14 +82,12 @@ public:
         @param filterOrder    The filter order (1 to maxOrder)
         @param freq           The primary frequency (cutoff, center, etc.)
         @param freq2          Secondary frequency for bandpass/bandstop filters
-        @param gainDb         Gain in dB for peak/shelf filters (not used in Butterworth)
         @param sampleRate     The sample rate in Hz
     */
     void setParameters (FilterModeType mode,
                         int filterOrder,
                         CoeffType freq,
                         CoeffType freq2 = static_cast<CoeffType> (0.0),
-                        CoeffType gainDb = static_cast<CoeffType> (0.0),
                         double sampleRate = 44100.0) noexcept
     {
         mode = resolveFilterMode (mode, getSupportedModes());

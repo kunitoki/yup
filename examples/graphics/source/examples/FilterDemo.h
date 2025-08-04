@@ -751,7 +751,7 @@ public:
 
         path.moveTo (0, centerY + renderData[0] * centerY);
         for (size_t i = 1; i < renderData.size(); ++i)
-            path.lineTo (i * xStep, centerY + renderData[i] * centerY);
+            path.lineTo (i * xStep, yup::jlimit (0.0f, bounds.getHeight(), centerY + renderData[i] * centerY));
 
         g.setStrokeColor (yup::Color (0xff4fc3f7));
         g.setStrokeWidth (2.0f);
@@ -1260,7 +1260,7 @@ private:
         }
         else if (auto bf = dynamic_cast<yup::ButterworthFilter<float>*> (filter))
         {
-            bf->setParameters (getFilterMode (currentResponseTypeId), order, freq, yup::jmin (freq * 1.1, currentSampleRate * 0.49), gain, currentSampleRate);
+            bf->setParameters (getFilterMode (currentResponseTypeId), order, freq, yup::jmin (freq * 1.1, currentSampleRate * 0.49), currentSampleRate);
         }
     }
 

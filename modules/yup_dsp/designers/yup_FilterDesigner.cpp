@@ -494,21 +494,23 @@ namespace
 
         for (const auto& p : workspace.zpkPoles)
         {
-            // Bandpass transformation: s -> (s + sqrt(s^2 + 4*wo^2))/2 and (s - sqrt(s^2 + 4*wo^2))/2
-            Complex<CoeffType> s = p * (bw / static_cast<CoeffType> (2.0));
-            Complex<CoeffType> discriminant = std::sqrt (s * s + static_cast<CoeffType> (4.0) * wo * wo);
-            workspace.tempPoles1.push_back ((s + discriminant) / static_cast<CoeffType> (2.0));
-            workspace.tempPoles1.push_back ((s - discriminant) / static_cast<CoeffType> (2.0));
+            // Correct bandpass transformation: bp_S = 0.5 * lp_S * BW + 0.5 * sqrt(BW^2 * lp_S^2 - 4*Wc^2)
+            Complex<CoeffType> lpS = p;
+            Complex<CoeffType> term1 = static_cast<CoeffType> (0.5) * lpS * bw;
+            Complex<CoeffType> discriminant = std::sqrt (bw * bw * lpS * lpS - static_cast<CoeffType> (4.0) * wo * wo);
+            workspace.tempPoles1.push_back (term1 + static_cast<CoeffType> (0.5) * discriminant);
+            workspace.tempPoles1.push_back (term1 - static_cast<CoeffType> (0.5) * discriminant);
         }
 
         workspace.zpkPoles = workspace.tempPoles1;
 
         for (const auto& z : workspace.zpkZeros)
         {
-            Complex<CoeffType> s = z * (bw / static_cast<CoeffType> (2.0));
-            Complex<CoeffType> discriminant = std::sqrt (s * s + static_cast<CoeffType> (4.0) * wo * wo);
-            workspace.tempZeros1.push_back ((s + discriminant) / static_cast<CoeffType> (2.0));
-            workspace.tempZeros1.push_back ((s - discriminant) / static_cast<CoeffType> (2.0));
+            Complex<CoeffType> lpS = z;
+            Complex<CoeffType> term1 = static_cast<CoeffType> (0.5) * lpS * bw;
+            Complex<CoeffType> discriminant = std::sqrt (bw * bw * lpS * lpS - static_cast<CoeffType> (4.0) * wo * wo);
+            workspace.tempZeros1.push_back (term1 + static_cast<CoeffType> (0.5) * discriminant);
+            workspace.tempZeros1.push_back (term1 - static_cast<CoeffType> (0.5) * discriminant);
         }
 
         // Add zeros at origin for degree difference
@@ -536,21 +538,23 @@ namespace
 
         for (const auto& p : workspace.zpkPoles)
         {
-            // Bandstop transformation: s -> (bw/2) / (s + sqrt(s^2 + 4*wo^2)/s)
-            Complex<CoeffType> s = (bw / static_cast<CoeffType> (2.0)) / p;
-            Complex<CoeffType> discriminant = std::sqrt (s * s + static_cast<CoeffType> (4.0) * wo * wo);
-            workspace.tempPoles1.push_back ((s + discriminant) / static_cast<CoeffType> (2.0));
-            workspace.tempPoles1.push_back ((s - discriminant) / static_cast<CoeffType> (2.0));
+            // Correct bandstop transformation: bs_S = 0.5 * BW / lp_S + 0.5 * sqrt(BW^2 / lp_S^2 - 4*Wc^2)
+            Complex<CoeffType> lpS = p;
+            Complex<CoeffType> term1 = static_cast<CoeffType> (0.5) * bw / lpS;
+            Complex<CoeffType> discriminant = std::sqrt (bw * bw / (lpS * lpS) - static_cast<CoeffType> (4.0) * wo * wo);
+            workspace.tempPoles1.push_back (term1 + static_cast<CoeffType> (0.5) * discriminant);
+            workspace.tempPoles1.push_back (term1 - static_cast<CoeffType> (0.5) * discriminant);
         }
 
         workspace.zpkPoles = workspace.tempPoles1;
 
         for (const auto& z : workspace.zpkZeros)
         {
-            Complex<CoeffType> s = (bw / static_cast<CoeffType> (2.0)) / z;
-            Complex<CoeffType> discriminant = std::sqrt (s * s + static_cast<CoeffType> (4.0) * wo * wo);
-            workspace.tempZeros1.push_back ((s + discriminant) / static_cast<CoeffType> (2.0));
-            workspace.tempZeros1.push_back ((s - discriminant) / static_cast<CoeffType> (2.0));
+            Complex<CoeffType> lpS = z;
+            Complex<CoeffType> term1 = static_cast<CoeffType> (0.5) * bw / lpS;
+            Complex<CoeffType> discriminant = std::sqrt (bw * bw / (lpS * lpS) - static_cast<CoeffType> (4.0) * wo * wo);
+            workspace.tempZeros1.push_back (term1 + static_cast<CoeffType> (0.5) * discriminant);
+            workspace.tempZeros1.push_back (term1 - static_cast<CoeffType> (0.5) * discriminant);
         }
 
         // Add zeros at ±jwo for bandstop characteristic
