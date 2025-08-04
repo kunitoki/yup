@@ -205,8 +205,7 @@ public:
     */
     FilterModeType getSupportedModes() const noexcept override
     {
-        return FilterMode::lowpass | FilterMode::highpass | FilterMode::bandpass |
-               FilterMode::bandstop | FilterMode::allpass;
+        return FilterMode::lowpass | FilterMode::highpass | FilterMode::bandpass | FilterMode::bandstop | FilterMode::allpass;
     }
 
     //==============================================================================
@@ -227,7 +226,7 @@ public:
     {
         poles.clear();
         zeros.clear();
-        
+
         for (const auto& coeffs : coefficients)
             extractPolesZerosFromSecondOrderBiquad (coeffs.b0, coeffs.b1, coeffs.b2, coeffs.a0, coeffs.a1, coeffs.a2, poles, zeros);
     }
@@ -246,21 +245,20 @@ private:
             frequency,
             frequency2,
             this->sampleRate,
-            coefficients
-        );
+            coefficients);
 
         // Update the biquad cascade
         if (numSections > 0)
         {
             const bool orderChanged = BaseFilterType::getNumSections() != static_cast<size_t> (numSections);
-            
+
             // Only resize if the number of sections has changed
             if (orderChanged)
                 BaseFilterType::setNumSections (numSections);
 
             for (int i = 0; i < numSections; ++i)
                 BaseFilterType::setSectionCoefficients (i, coefficients[i]);
-                
+
             // Reset all sections when order changes to prevent ringing from stored energy
             if (orderChanged)
                 BaseFilterType::reset();

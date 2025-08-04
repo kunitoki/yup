@@ -419,12 +419,9 @@ int FilterDesigner<CoeffType>::designButterworth (
         // Lowpass and Highpass filters
         for (int s = 0; s < numStages; ++s)
         {
-            const CoeffType d = static_cast<CoeffType> (2.0) *
-                std::sin (((static_cast<CoeffType> (2 * (s + 1) - 1)) * MathConstants<CoeffType>::pi) / (static_cast<CoeffType> (2 * order)));
+            const CoeffType d = static_cast<CoeffType> (2.0) * std::sin (((static_cast<CoeffType> (2 * (s + 1) - 1)) * MathConstants<CoeffType>::pi) / (static_cast<CoeffType> (2 * order)));
 
-            const CoeffType beta = static_cast<CoeffType> (0.5) *
-                ((static_cast<CoeffType> (1.0) - (d / static_cast<CoeffType> (2.0)) * std::sin (omega)) /
-                    (static_cast<CoeffType> (1.0) + (d / static_cast<CoeffType> (2.0)) * std::sin (omega)));
+            const CoeffType beta = static_cast<CoeffType> (0.5) * ((static_cast<CoeffType> (1.0) - (d / static_cast<CoeffType> (2.0)) * std::sin (omega)) / (static_cast<CoeffType> (1.0) + (d / static_cast<CoeffType> (2.0)) * std::sin (omega)));
 
             const CoeffType gamma = (static_cast<CoeffType> (0.5) + beta) * std::cos (omega);
 
@@ -478,11 +475,10 @@ int FilterDesigner<CoeffType>::designButterworth (
             const CoeffType Wk = Bk + std::sqrt (Bk * Bk - static_cast<CoeffType> (1.0));
 
             const CoeffType theta_k = ((s & 1) == 0)
-                ? static_cast<CoeffType> (2.0) * std::atan ((std::tan (omegaCenter / static_cast<CoeffType> (2.0))) * Wk)
-                : static_cast<CoeffType> (2.0) * std::atan ((std::tan (omegaCenter / static_cast<CoeffType> (2.0))) / Wk);
+                                        ? static_cast<CoeffType> (2.0) * std::atan ((std::tan (omegaCenter / static_cast<CoeffType> (2.0))) * Wk)
+                                        : static_cast<CoeffType> (2.0) * std::atan ((std::tan (omegaCenter / static_cast<CoeffType> (2.0))) / Wk);
 
-            const CoeffType beta = static_cast<CoeffType> (0.5) * (static_cast<CoeffType> (1.0) - (dk / static_cast<CoeffType> (2.0)) * std::sin (theta_k)) /
-                                                                  (static_cast<CoeffType> (1.0) + (dk / static_cast<CoeffType> (2.0)) * std::sin (theta_k));
+            const CoeffType beta = static_cast<CoeffType> (0.5) * (static_cast<CoeffType> (1.0) - (dk / static_cast<CoeffType> (2.0)) * std::sin (theta_k)) / (static_cast<CoeffType> (1.0) + (dk / static_cast<CoeffType> (2.0)) * std::sin (theta_k));
 
             const CoeffType gamma = (static_cast<CoeffType> (0.5) + beta) * std::cos (theta_k);
 
@@ -493,8 +489,7 @@ int FilterDesigner<CoeffType>::designButterworth (
 
             if (filterMode.test (FilterMode::bandpass))
             {
-                const CoeffType alpha = static_cast<CoeffType> (0.5) * (static_cast<CoeffType> (0.5) - beta) *
-                    std::sqrt (static_cast<CoeffType> (1.0) + (Wk - (static_cast<CoeffType> (1.0) / Wk)) * (Wk - (static_cast<CoeffType> (1.0) / Wk)) / (dk * dk));
+                const CoeffType alpha = static_cast<CoeffType> (0.5) * (static_cast<CoeffType> (0.5) - beta) * std::sqrt (static_cast<CoeffType> (1.0) + (Wk - (static_cast<CoeffType> (1.0) / Wk)) * (Wk - (static_cast<CoeffType> (1.0) / Wk)) / (dk * dk));
 
                 coeffs.b0 = static_cast<CoeffType> (2.0) * alpha;
                 coeffs.b1 = static_cast<CoeffType> (0.0);
@@ -502,8 +497,7 @@ int FilterDesigner<CoeffType>::designButterworth (
             }
             else // bandstop
             {
-                const CoeffType alpha = static_cast<CoeffType> (0.5) * (static_cast<CoeffType> (0.5) + beta) *
-                    ((static_cast<CoeffType> (1.0) - std::cos (theta_k)) / (static_cast<CoeffType> (1.0) - std::cos (omegaCenter)));
+                const CoeffType alpha = static_cast<CoeffType> (0.5) * (static_cast<CoeffType> (0.5) + beta) * ((static_cast<CoeffType> (1.0) - std::cos (theta_k)) / (static_cast<CoeffType> (1.0) - std::cos (omegaCenter)));
 
                 coeffs.b0 = static_cast<CoeffType> (2.0) * alpha;
                 coeffs.b1 = static_cast<CoeffType> (-4.0) * alpha * std::cos (omegaCenter);
@@ -521,8 +515,7 @@ int FilterDesigner<CoeffType>::designButterworth (
         {
             const CoeffType d = static_cast<CoeffType> (2.0) * std::sin (((static_cast<CoeffType> (2 * (s + 1) - 1)) * MathConstants<CoeffType>::pi) / (static_cast<CoeffType> (2 * order)));
 
-            const CoeffType beta = static_cast<CoeffType> (0.5) * ((static_cast<CoeffType> (1.0) - (d / static_cast<CoeffType> (2.0)) * std::sin (omega)) /
-                                                                  (static_cast<CoeffType> (1.0) + (d / static_cast<CoeffType> (2.0)) * std::sin (omega)));
+            const CoeffType beta = static_cast<CoeffType> (0.5) * ((static_cast<CoeffType> (1.0) - (d / static_cast<CoeffType> (2.0)) * std::sin (omega)) / (static_cast<CoeffType> (1.0) + (d / static_cast<CoeffType> (2.0)) * std::sin (omega)));
 
             const CoeffType gamma = (static_cast<CoeffType> (0.5) + beta) * std::cos (omega);
 
