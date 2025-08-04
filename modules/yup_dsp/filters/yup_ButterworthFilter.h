@@ -225,6 +225,11 @@ public:
     void getPolesZeros (ComplexVector<CoeffType>& poles,
                         ComplexVector<CoeffType>& zeros) const override
     {
+        poles.clear();
+        zeros.clear();
+        
+        for (const auto& coeffs : coefficients)
+            extractPolesZerosFromSecondOrderBiquad (coeffs.b0, coeffs.b1, coeffs.b2, coeffs.a0, coeffs.a1, coeffs.a2, poles, zeros);
     }
 
 private:
