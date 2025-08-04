@@ -63,7 +63,6 @@ public:
     ButterworthFilter()
     {
         // Pre-allocate workspace for maximum order
-        workspace.reserve (maxOrder);
         coefficients.reserve (maxOrder / 2 + 1);
     }
 
@@ -226,8 +225,6 @@ public:
     void getPolesZeros (ComplexVector<CoeffType>& poles,
                         ComplexVector<CoeffType>& zeros) const override
     {
-        poles = workspace.zpkPoles;
-        zeros = workspace.zpkZeros;
     }
 
 private:
@@ -244,7 +241,6 @@ private:
             frequency,
             frequency2,
             this->sampleRate,
-            workspace,
             coefficients
         );
 
@@ -273,7 +269,6 @@ private:
     CoeffType frequency2 = static_cast<CoeffType> (2000.0);
 
     // Workspace and storage for coefficient calculation
-    ButterworthWorkspace<CoeffType> workspace;
     std::vector<BiquadCoefficients<CoeffType>> coefficients;
 
     //==============================================================================

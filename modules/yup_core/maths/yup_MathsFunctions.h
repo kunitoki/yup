@@ -707,6 +707,31 @@ constexpr unsigned int truncatePositiveToUnsignedInt (FloatType value) noexcept
 }
 
 //==============================================================================
+/** Returns the next even integer greater than or equal to `value`. Works with all integral types using integer math. */
+template <typename IntegerType>
+constexpr IntegerType nextEven (IntegerType value) noexcept
+{
+    static_assert (std::is_integral_v<IntegerType>, "nextEven requires an integral type");
+
+    if constexpr (std::is_signed_v<IntegerType>)
+        return (value & 1) == 0 ? value : value + 1;
+    else
+        return (value + 1) & ~IntegerType (1);
+}
+
+/** Returns the next odd integer greater than or equal to `value`. Works with all integral types using integer math. */
+template <typename IntegerType>
+constexpr IntegerType nextOdd (IntegerType value) noexcept
+{
+    static_assert (std::is_integral_v<IntegerType>, "nextOdd requires an integral type");
+
+    if constexpr (std::is_signed_v<IntegerType>)
+        return (value & 1) != 0 ? value : value + 1;
+    else
+        return value | IntegerType (1);
+}
+
+//==============================================================================
 /** Returns true if the specified integer is a power-of-two. */
 template <typename IntegerType>
 constexpr bool isPowerOfTwo (IntegerType value)

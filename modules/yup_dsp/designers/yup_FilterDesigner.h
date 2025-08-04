@@ -26,52 +26,11 @@ namespace yup
 
 //==============================================================================
 /**
-    Workspace for Butterworth filter design using zpk approach to avoid allocations during coefficient calculation.
-*/
-template <typename CoeffType>
-struct ButterworthWorkspace
-{
-    std::vector<CoeffType> normalizedFreqs;
-    std::vector<CoeffType> prewarpedFreqs;
-    std::vector<Complex<CoeffType>> zpkPoles;
-    std::vector<Complex<CoeffType>> zpkZeros;
-    std::vector<Complex<CoeffType>> tempPoles1;
-    std::vector<Complex<CoeffType>> tempZeros1;
-    std::vector<BiquadCoefficients<CoeffType>> biquadCoeffs;
-    CoeffType gain = static_cast<CoeffType> (1.0);
-
-    void reserve (int maxOrder)
-    {
-        normalizedFreqs.reserve (2);  // Max 2 frequencies for bandpass/bandstop
-        prewarpedFreqs.reserve (2);
-        zpkPoles.reserve (maxOrder * 2);  // For bandpass/bandstop transforms
-        zpkZeros.reserve (maxOrder * 2);
-        tempPoles1.reserve (maxOrder * 2);
-        tempZeros1.reserve (maxOrder * 2);
-        biquadCoeffs.reserve (maxOrder);
-    }
-
-    void clear()
-    {
-        normalizedFreqs.clear();
-        prewarpedFreqs.clear();
-        zpkPoles.clear();
-        zpkZeros.clear();
-        tempPoles1.clear();
-        tempZeros1.clear();
-        biquadCoeffs.clear();
-        gain = static_cast<CoeffType> (1.0);
-    }
-};
-
-//==============================================================================
-/**
     Centralized filter coefficient designer for all filter types.
 
-    This class provides static methods to design coefficients for various filter
-    types, separating the coefficient calculation logic from the filter implementation
-    classes. This allows for reusability and easier testing of coefficient generation
-    algorithms.
+    This class provides static methods to design coefficients for various filter types, separating the coefficient
+    calculation logic from the filter implementation classes. This allows for reusability and easier testing of
+    coefficient generation algorithms.
 
     @see BiquadCoefficients, FilterBase
 */
@@ -478,7 +437,6 @@ public:
         CoeffType frequency,
         CoeffType frequency2,
         double sampleRate,
-        ButterworthWorkspace<CoeffType>& workspace,
         std::vector<BiquadCoefficients<CoeffType>>& coefficients) noexcept;
 
     /**
@@ -496,11 +454,9 @@ public:
         int order,
         CoeffType frequency,
         double sampleRate,
-        ButterworthWorkspace<CoeffType>& workspace,
         std::vector<BiquadCoefficients<CoeffType>>& coefficients) noexcept
     {
-        return designButterworth (FilterMode::lowpass, order, frequency, static_cast<CoeffType> (0.0),
-                                  sampleRate, workspace, coefficients);
+        return designButterworth (FilterMode::lowpass, order, frequency, static_cast<CoeffType> (0.0), sampleRate, coefficients);
     }
 
     /**
@@ -518,11 +474,9 @@ public:
         int order,
         CoeffType frequency,
         double sampleRate,
-        ButterworthWorkspace<CoeffType>& workspace,
         std::vector<BiquadCoefficients<CoeffType>>& coefficients) noexcept
     {
-        return designButterworth (FilterMode::highpass, order, frequency, static_cast<CoeffType> (0.0),
-                                  sampleRate, workspace, coefficients);
+        return designButterworth (FilterMode::highpass, order, frequency, static_cast<CoeffType> (0.0), sampleRate, coefficients);
     }
 
     /**
@@ -542,11 +496,9 @@ public:
         CoeffType lowFreq,
         CoeffType highFreq,
         double sampleRate,
-        ButterworthWorkspace<CoeffType>& workspace,
         std::vector<BiquadCoefficients<CoeffType>>& coefficients) noexcept
     {
-        return designButterworth (FilterMode::bandpass, order, lowFreq, highFreq,
-                                  sampleRate, workspace, coefficients);
+        return designButterworth (FilterMode::bandpass, order, lowFreq, highFreq, sampleRate, coefficients);
     }
 
     /**
@@ -566,11 +518,9 @@ public:
         CoeffType lowFreq,
         CoeffType highFreq,
         double sampleRate,
-        ButterworthWorkspace<CoeffType>& workspace,
         std::vector<BiquadCoefficients<CoeffType>>& coefficients) noexcept
     {
-        return designButterworth (FilterMode::bandstop, order, lowFreq, highFreq,
-                                  sampleRate, workspace, coefficients);
+        return designButterworth (FilterMode::bandstop, order, lowFreq, highFreq, sampleRate, coefficients);
     }
 
     /**
@@ -588,11 +538,9 @@ public:
         int order,
         CoeffType frequency,
         double sampleRate,
-        ButterworthWorkspace<CoeffType>& workspace,
         std::vector<BiquadCoefficients<CoeffType>>& coefficients) noexcept
     {
-        return designButterworth (FilterMode::allpass, order, frequency, static_cast<CoeffType> (0.0),
-                                  sampleRate, workspace, coefficients);
+        return designButterworth (FilterMode::allpass, order, frequency, static_cast<CoeffType> (0.0), sampleRate, coefficients);
     }
 };
 
