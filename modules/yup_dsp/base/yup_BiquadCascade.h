@@ -106,8 +106,8 @@ public:
             sections.reserve (newSize);
             for (size_t i = oldSize; i < newSize; ++i)
             {
-                sections.emplace_back (topology);
-                sections.back().prepare (this->sampleRate, this->maximumBlockSize);
+                auto& section = sections.emplace_back (topology);
+                section.prepare (this->sampleRate, this->maximumBlockSize);
             }
         }
         else

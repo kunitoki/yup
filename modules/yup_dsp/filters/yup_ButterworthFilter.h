@@ -251,12 +251,18 @@ private:
         // Update the biquad cascade
         if (numSections > 0)
         {
+            const bool orderChanged = BaseFilterType::getNumSections() != static_cast<size_t> (numSections);
+            
             // Only resize if the number of sections has changed
-            if (BaseFilterType::getNumSections() != static_cast<size_t> (numSections))
+            if (orderChanged)
                 BaseFilterType::setNumSections (numSections);
 
             for (int i = 0; i < numSections; ++i)
                 BaseFilterType::setSectionCoefficients (i, coefficients[i]);
+                
+            // Reset all sections when order changes to prevent ringing from stored energy
+            if (orderChanged)
+                BaseFilterType::reset();
         }
     }
 
