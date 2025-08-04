@@ -251,7 +251,9 @@ private:
         // Update the biquad cascade
         if (numSections > 0)
         {
-            BaseFilterType::setNumSections (numSections);
+            // Only resize if the number of sections has changed
+            if (BaseFilterType::getNumSections() != static_cast<size_t> (numSections))
+                BaseFilterType::setNumSections (numSections);
 
             for (int i = 0; i < numSections; ++i)
                 BaseFilterType::setSectionCoefficients (i, coefficients[i]);

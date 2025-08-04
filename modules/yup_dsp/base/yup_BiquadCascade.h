@@ -86,6 +86,7 @@ public:
 
     /**
         Resizes the cascade to have a different number of sections.
+        Preserves existing section state when possible.
 
         @param newNumSections  The new number of sections
         @param topology       The topology to use for new sections
@@ -93,11 +94,27 @@ public:
     void setNumSections (int newNumSections,
                          typename Biquad<SampleType, CoeffType>::Topology topology = Biquad<SampleType, CoeffType>::Topology::directFormII)
     {
-        sections.clear();
-        sections.resize (static_cast<size_t> (newNumSections), Biquad<SampleType, CoeffType> (topology));
+        const size_t newSize = static_cast<size_t> (newNumSections);
+        const size_t oldSize = sections.size();
 
-        for (int i = 0; i < newNumSections; ++i)
-            sections[i].prepare (this->sampleRate, this->maximumBlockSize);
+        if (newSize == oldSize)
+            return; // No change needed
+
+        if (newSize > oldSize)
+        {
+            // Add new sections while preserving existing ones
+            sections.reserve (newSize);
+            for (size_t i = oldSize; i < newSize; ++i)
+            {
+                sections.emplace_back (topology);
+                sections.back().prepare (this->sampleRate, this->maximumBlockSize);
+            }
+        }
+        else
+        {
+            // Remove excess sections from the end
+            sections.resize (newSize);
+        }
     }
 
     //==============================================================================
