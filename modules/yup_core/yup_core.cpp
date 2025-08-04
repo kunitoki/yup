@@ -209,6 +209,8 @@ extern char** environ;
 #include "text/yup_TextDiff.cpp"
 #include "text/yup_Base64.cpp"
 #include "threads/yup_ReadWriteLock.cpp"
+#include "threads/yup_SpinLock.cpp"
+#include "threads/yup_RecursiveSpinLock.cpp"
 #include "threads/yup_Thread.cpp"
 #include "threads/yup_ThreadPool.cpp"
 #include "threads/yup_TimeSliceThread.cpp"
