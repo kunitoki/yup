@@ -883,7 +883,7 @@ public:
         for (int sample = 0; sample < numSamples; ++sample)
         {
             // Check if any parameters are changing and update filter coefficients if needed
-            if (smoothedFrequency.isSmoothing() || smoothedQ.isSmoothing() || smoothedGain.isSmoothing() || smoothedOrder.isSmoothing())
+            if (smoothedFrequency.isSmoothing() || smoothedFrequency2.isSmoothing() || smoothedQ.isSmoothing() || smoothedGain.isSmoothing() || smoothedOrder.isSmoothing())
                 updateAudioFilterParameters();
 
             // Generate white noise
@@ -922,12 +922,14 @@ public:
 
         // Initialize smoothed parameter values
         smoothedFrequency.reset (sampleRate, 0.05); // 50ms smoothing time
+        smoothedFrequency2.reset (sampleRate, 0.05);
         smoothedQ.reset (sampleRate, 0.05);
         smoothedGain.reset (sampleRate, 0.05);
         smoothedOrder.reset (sampleRate, 0.1); // Slower for order changes
 
         // Set initial values
         smoothedFrequency.setCurrentAndTargetValue (static_cast<float> (frequencySlider->getValue()));
+        smoothedFrequency2.setCurrentAndTargetValue (static_cast<float> (frequency2Slider->getValue()));
         smoothedQ.setCurrentAndTargetValue (static_cast<float> (qSlider->getValue()));
         smoothedGain.setCurrentAndTargetValue (static_cast<float> (gainSlider->getValue()));
         smoothedOrder.setCurrentAndTargetValue (static_cast<float> (orderSlider->getValue()));
@@ -1019,6 +1021,17 @@ private:
         };
         addAndMakeVisible (*frequencySlider);
 
+        frequency2Slider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Frequency 2");
+        frequency2Slider->setRange ({ 20.0, 20000.0 });
+        frequency2Slider->setSkewFactorFromMidpoint (2000.0); // 2kHz at midpoint
+        frequency2Slider->setValue (2000.0);
+        frequency2Slider->onValueChanged = [this] (float value)
+        {
+            smoothedFrequency2.setTargetValue (value);
+            updateAnalysisDisplays();
+        };
+        addAndMakeVisible (*frequency2Slider);
+
         qSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Q / Resonance");
         qSlider->setRange ({ 0.0, 1.0 });
         qSlider->setSkewFactorFromMidpoint (0.3); // More resolution at lower Q values
@@ -1086,7 +1099,7 @@ private:
         // Labels for parameter controls
         auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (10.0f);
 
-        for (const auto& labelText : { "Filter Type:", "Response Type:", "Frequency:", "Q/Resonance:", "Gain (dB):", "Order:", "Noise Level:", "Output Level:" })
+        for (const auto& labelText : { "Filter Type:", "Response Type:", "Frequency:", "Frequency 2:", "Q/Resonance:", "Gain (dB):", "Order:", "Noise Level:", "Output Level:" })
         {
             auto label = parameterLabels.add (std::make_unique<yup::Label> (labelText));
             label->setText (labelText);
@@ -1108,11 +1121,12 @@ private:
             { parameterLabels[0], filterTypeCombo.get() },
             { parameterLabels[1], responseTypeCombo.get() },
             { parameterLabels[2], frequencySlider.get() },
-            { parameterLabels[3], qSlider.get() },
-            { parameterLabels[4], gainSlider.get() },
-            { parameterLabels[5], orderSlider.get() },
-            { parameterLabels[6], noiseGainSlider.get() },
-            { parameterLabels[7], outputGainSlider.get() }
+            { parameterLabels[3], frequency2Slider.get() },
+            { parameterLabels[4], qSlider.get() },
+            { parameterLabels[5], gainSlider.get() },
+            { parameterLabels[6], orderSlider.get() },
+            { parameterLabels[7], noiseGainSlider.get() },
+            { parameterLabels[8], outputGainSlider.get() }
         };
 
         for (auto& [label, component] : layouts)
@@ -1197,6 +1211,7 @@ private:
 
         // Synchronize smoothed values with current UI values when switching filters
         smoothedFrequency.setCurrentAndTargetValue (static_cast<float> (frequencySlider->getValue()));
+        smoothedFrequency2.setCurrentAndTargetValue (static_cast<float> (frequency2Slider->getValue()));
         smoothedQ.setCurrentAndTargetValue (static_cast<float> (qSlider->getValue()));
         smoothedGain.setCurrentAndTargetValue (static_cast<float> (gainSlider->getValue()));
         smoothedOrder.setCurrentAndTargetValue (static_cast<float> (orderSlider->getValue()));
@@ -1219,11 +1234,12 @@ private:
             return;
 
         double freq = smoothedFrequency.getNextValue();
+        double freq2 = smoothedFrequency2.getNextValue();
         double q = smoothedQ.getNextValue();
         double gain = smoothedGain.getNextValue();
         int order = yup::jlimit (2, 32, static_cast<int> (smoothedOrder.getNextValue()));
 
-        updateFilterParameters (currentAudioFilter.get(), freq, q, gain, order);
+        updateFilterParameters (currentAudioFilter.get(), freq, freq2, q, gain, order);
     }
 
     void updateUIFilterParameters()
@@ -1232,14 +1248,15 @@ private:
             return;
 
         double freq = frequencySlider->getValue();
+        double freq2 = frequency2Slider->getValue();
         double q = qSlider->getValue();
         double gain = gainSlider->getValue();
         int order = yup::jlimit (2, 32, static_cast<int> (orderSlider->getValue()));
 
-        updateFilterParameters (currentUIFilter.get(), freq, q, gain, order);
+        updateFilterParameters (currentUIFilter.get(), freq, freq2, q, gain, order);
     }
 
-    void updateFilterParameters (yup::FilterBase<float>* filter, double freq, double q, double gain, int order)
+    void updateFilterParameters (yup::FilterBase<float>* filter, double freq, double freq2, double q, double gain, int order)
     {
         // Update parameters based on filter type using direct UI values
         if (auto rf = dynamic_cast<yup::RbjFilter<float>*> (filter))
@@ -1260,7 +1277,7 @@ private:
         }
         else if (auto bf = dynamic_cast<yup::ButterworthFilter<float>*> (filter))
         {
-            bf->setParameters (getFilterMode (currentResponseTypeId), order, freq, yup::jmin (freq * 1.1, currentSampleRate * 0.49), currentSampleRate);
+            bf->setParameters (getFilterMode (currentResponseTypeId), order, freq, yup::jmax (freq2, freq * 1.01), currentSampleRate);
         }
     }
 
@@ -1291,6 +1308,7 @@ private:
 
         // Synchronize smoothed values with current UI values when switching filters
         smoothedFrequency.setCurrentAndTargetValue (static_cast<float> (frequencySlider->getValue()));
+        smoothedFrequency2.setCurrentAndTargetValue (static_cast<float> (frequency2Slider->getValue()));
         smoothedQ.setCurrentAndTargetValue (static_cast<float> (qSlider->getValue()));
         smoothedGain.setCurrentAndTargetValue (static_cast<float> (gainSlider->getValue()));
         smoothedOrder.setCurrentAndTargetValue (static_cast<float> (orderSlider->getValue()));
@@ -1393,6 +1411,7 @@ private:
 
     // Smoothed parameter values for interpolation
     yup::SmoothedValue<float> smoothedFrequency { 1000.0f };
+    yup::SmoothedValue<float> smoothedFrequency2 { 2000.0f };
     yup::SmoothedValue<float> smoothedQ { 0.1f };
     yup::SmoothedValue<float> smoothedGain { 0.0f };
     yup::SmoothedValue<float> smoothedOrder { 2.0f };
@@ -1432,6 +1451,7 @@ private:
     std::unique_ptr<yup::ComboBox> filterTypeCombo;
     std::unique_ptr<yup::ComboBox> responseTypeCombo;
     std::unique_ptr<yup::Slider> frequencySlider;
+    std::unique_ptr<yup::Slider> frequency2Slider;
     std::unique_ptr<yup::Slider> qSlider;
     std::unique_ptr<yup::Slider> gainSlider;
     std::unique_ptr<yup::Slider> orderSlider;
