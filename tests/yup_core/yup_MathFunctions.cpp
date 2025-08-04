@@ -1859,3 +1859,237 @@ TEST (MathFunctionsTests, IntegrationTest_PowersAndBits)
         }
     }
 }
+
+//==============================================================================
+// nextEven Tests
+//==============================================================================
+
+TEST (MathFunctionsTests, NextEven_Constexpr)
+{
+    // Test with signed integers
+    static_assert (nextEven (0) == 0);
+    static_assert (nextEven (1) == 2);
+    static_assert (nextEven (2) == 2);
+    static_assert (nextEven (3) == 4);
+    static_assert (nextEven (4) == 4);
+    static_assert (nextEven (5) == 6);
+    static_assert (nextEven (6) == 6);
+    static_assert (nextEven (7) == 8);
+    static_assert (nextEven (8) == 8);
+    static_assert (nextEven (9) == 10);
+    static_assert (nextEven (10) == 10);
+
+    // Test with negative signed integers
+    static_assert (nextEven (-1) == 0);
+    static_assert (nextEven (-2) == -2);
+    static_assert (nextEven (-3) == -2);
+    static_assert (nextEven (-4) == -4);
+    static_assert (nextEven (-5) == -4);
+    static_assert (nextEven (-6) == -6);
+    static_assert (nextEven (-7) == -6);
+    static_assert (nextEven (-8) == -8);
+
+    // Test with unsigned integers
+    static_assert (nextEven (0u) == 0u);
+    static_assert (nextEven (1u) == 2u);
+    static_assert (nextEven (2u) == 2u);
+    static_assert (nextEven (3u) == 4u);
+    static_assert (nextEven (4u) == 4u);
+    static_assert (nextEven (5u) == 6u);
+
+    // Test with different integer types
+    static_assert (nextEven (static_cast<int8> (7)) == static_cast<int8> (8));
+    static_assert (nextEven (static_cast<uint8> (7)) == static_cast<uint8> (8));
+    static_assert (nextEven (static_cast<int16> (15)) == static_cast<int16> (16));
+    static_assert (nextEven (static_cast<uint16> (15)) == static_cast<uint16> (16));
+    static_assert (nextEven (static_cast<int32> (31)) == static_cast<int32> (32));
+    static_assert (nextEven (static_cast<uint32> (31)) == static_cast<uint32> (32));
+    static_assert (nextEven (static_cast<int64> (63)) == static_cast<int64> (64));
+    static_assert (nextEven (static_cast<uint64> (63)) == static_cast<uint64> (64));
+}
+
+TEST (MathFunctionsTests, NextEven_Runtime)
+{
+    // Test with signed integers
+    EXPECT_EQ (nextEven (0), 0);
+    EXPECT_EQ (nextEven (1), 2);
+    EXPECT_EQ (nextEven (2), 2);
+    EXPECT_EQ (nextEven (3), 4);
+    EXPECT_EQ (nextEven (4), 4);
+    EXPECT_EQ (nextEven (5), 6);
+    EXPECT_EQ (nextEven (6), 6);
+    EXPECT_EQ (nextEven (7), 8);
+    EXPECT_EQ (nextEven (8), 8);
+    EXPECT_EQ (nextEven (9), 10);
+    EXPECT_EQ (nextEven (10), 10);
+
+    // Test with negative signed integers
+    EXPECT_EQ (nextEven (-1), 0);
+    EXPECT_EQ (nextEven (-2), -2);
+    EXPECT_EQ (nextEven (-3), -2);
+    EXPECT_EQ (nextEven (-4), -4);
+    EXPECT_EQ (nextEven (-5), -4);
+    EXPECT_EQ (nextEven (-6), -6);
+    EXPECT_EQ (nextEven (-7), -6);
+    EXPECT_EQ (nextEven (-8), -8);
+
+    // Test with unsigned integers
+    EXPECT_EQ (nextEven (0u), 0u);
+    EXPECT_EQ (nextEven (1u), 2u);
+    EXPECT_EQ (nextEven (2u), 2u);
+    EXPECT_EQ (nextEven (3u), 4u);
+    EXPECT_EQ (nextEven (4u), 4u);
+    EXPECT_EQ (nextEven (5u), 6u);
+
+    // Test with larger values
+    EXPECT_EQ (nextEven (99), 100);
+    EXPECT_EQ (nextEven (100), 100);
+    EXPECT_EQ (nextEven (999), 1000);
+    EXPECT_EQ (nextEven (1000), 1000);
+
+    // Test with different integer types
+    EXPECT_EQ (nextEven (static_cast<int8> (7)), static_cast<int8> (8));
+    EXPECT_EQ (nextEven (static_cast<uint8> (7)), static_cast<uint8> (8));
+    EXPECT_EQ (nextEven (static_cast<int16> (15)), static_cast<int16> (16));
+    EXPECT_EQ (nextEven (static_cast<uint16> (15)), static_cast<uint16> (16));
+    EXPECT_EQ (nextEven (static_cast<int32> (31)), static_cast<int32> (32));
+    EXPECT_EQ (nextEven (static_cast<uint32> (31)), static_cast<uint32> (32));
+    EXPECT_EQ (nextEven (static_cast<int64> (63)), static_cast<int64> (64));
+    EXPECT_EQ (nextEven (static_cast<uint64> (63)), static_cast<uint64> (64));
+}
+
+TEST (MathFunctionsTests, NextEven_EdgeCases)
+{
+    // Test with maximum values for different types
+    EXPECT_EQ (nextEven (std::numeric_limits<int8>::max() - 1), std::numeric_limits<int8>::max() - 1);
+    EXPECT_EQ (nextEven (static_cast<uint8> (254)), static_cast<uint8> (254));
+    EXPECT_EQ (nextEven (static_cast<uint8> (253)), static_cast<uint8> (254));
+
+    // Test with minimum values for signed types
+    EXPECT_EQ (nextEven (std::numeric_limits<int8>::min()), std::numeric_limits<int8>::min());
+    EXPECT_EQ (nextEven (std::numeric_limits<int16>::min()), std::numeric_limits<int16>::min());
+    EXPECT_EQ (nextEven (std::numeric_limits<int32>::min()), std::numeric_limits<int32>::min());
+    EXPECT_EQ (nextEven (std::numeric_limits<int64>::min()), std::numeric_limits<int64>::min());
+}
+
+//==============================================================================
+// nextOdd Tests
+//==============================================================================
+
+TEST (MathFunctionsTests, NextOdd_Constexpr)
+{
+    // Test with signed integers
+    static_assert (nextOdd (0) == 1);
+    static_assert (nextOdd (1) == 1);
+    static_assert (nextOdd (2) == 3);
+    static_assert (nextOdd (3) == 3);
+    static_assert (nextOdd (4) == 5);
+    static_assert (nextOdd (5) == 5);
+    static_assert (nextOdd (6) == 7);
+    static_assert (nextOdd (7) == 7);
+    static_assert (nextOdd (8) == 9);
+    static_assert (nextOdd (9) == 9);
+    static_assert (nextOdd (10) == 11);
+
+    // Test with negative signed integers
+    static_assert (nextOdd (-1) == -1);
+    static_assert (nextOdd (-2) == -1);
+    static_assert (nextOdd (-3) == -3);
+    static_assert (nextOdd (-4) == -3);
+    static_assert (nextOdd (-5) == -5);
+    static_assert (nextOdd (-6) == -5);
+    static_assert (nextOdd (-7) == -7);
+    static_assert (nextOdd (-8) == -7);
+
+    // Test with unsigned integers
+    static_assert (nextOdd (0u) == 1u);
+    static_assert (nextOdd (1u) == 1u);
+    static_assert (nextOdd (2u) == 3u);
+    static_assert (nextOdd (3u) == 3u);
+    static_assert (nextOdd (4u) == 5u);
+    static_assert (nextOdd (5u) == 5u);
+
+    // Test with different integer types
+    static_assert (nextOdd (static_cast<int8> (6)) == static_cast<int8> (7));
+    static_assert (nextOdd (static_cast<uint8> (6)) == static_cast<uint8> (7));
+    static_assert (nextOdd (static_cast<int16> (14)) == static_cast<int16> (15));
+    static_assert (nextOdd (static_cast<uint16> (14)) == static_cast<uint16> (15));
+    static_assert (nextOdd (static_cast<int32> (30)) == static_cast<int32> (31));
+    static_assert (nextOdd (static_cast<uint32> (30)) == static_cast<uint32> (31));
+    static_assert (nextOdd (static_cast<int64> (62)) == static_cast<int64> (63));
+    static_assert (nextOdd (static_cast<uint64> (62)) == static_cast<uint64> (63));
+}
+
+TEST (MathFunctionsTests, NextOdd_Runtime)
+{
+    // Test with signed integers
+    EXPECT_EQ (nextOdd (0), 1);
+    EXPECT_EQ (nextOdd (1), 1);
+    EXPECT_EQ (nextOdd (2), 3);
+    EXPECT_EQ (nextOdd (3), 3);
+    EXPECT_EQ (nextOdd (4), 5);
+    EXPECT_EQ (nextOdd (5), 5);
+    EXPECT_EQ (nextOdd (6), 7);
+    EXPECT_EQ (nextOdd (7), 7);
+    EXPECT_EQ (nextOdd (8), 9);
+    EXPECT_EQ (nextOdd (9), 9);
+    EXPECT_EQ (nextOdd (10), 11);
+
+    // Test with negative signed integers
+    EXPECT_EQ (nextOdd (-1), -1);
+    EXPECT_EQ (nextOdd (-2), -1);
+    EXPECT_EQ (nextOdd (-3), -3);
+    EXPECT_EQ (nextOdd (-4), -3);
+    EXPECT_EQ (nextOdd (-5), -5);
+    EXPECT_EQ (nextOdd (-6), -5);
+    EXPECT_EQ (nextOdd (-7), -7);
+    EXPECT_EQ (nextOdd (-8), -7);
+
+    // Test with unsigned integers
+    EXPECT_EQ (nextOdd (0u), 1u);
+    EXPECT_EQ (nextOdd (1u), 1u);
+    EXPECT_EQ (nextOdd (2u), 3u);
+    EXPECT_EQ (nextOdd (3u), 3u);
+    EXPECT_EQ (nextOdd (4u), 5u);
+    EXPECT_EQ (nextOdd (5u), 5u);
+
+    // Test with larger values
+    EXPECT_EQ (nextOdd (98), 99);
+    EXPECT_EQ (nextOdd (99), 99);
+    EXPECT_EQ (nextOdd (998), 999);
+    EXPECT_EQ (nextOdd (999), 999);
+
+    // Test with different integer types
+    EXPECT_EQ (nextOdd (static_cast<int8> (6)), static_cast<int8> (7));
+    EXPECT_EQ (nextOdd (static_cast<uint8> (6)), static_cast<uint8> (7));
+    EXPECT_EQ (nextOdd (static_cast<int16> (14)), static_cast<int16> (15));
+    EXPECT_EQ (nextOdd (static_cast<uint16> (14)), static_cast<uint16> (15));
+    EXPECT_EQ (nextOdd (static_cast<int32> (30)), static_cast<int32> (31));
+    EXPECT_EQ (nextOdd (static_cast<uint32> (30)), static_cast<uint32> (31));
+    EXPECT_EQ (nextOdd (static_cast<int64> (62)), static_cast<int64> (63));
+    EXPECT_EQ (nextOdd (static_cast<uint64> (62)), static_cast<uint64> (63));
+}
+
+TEST (MathFunctionsTests, NextOdd_EdgeCases)
+{
+    // Test with maximum values for different types
+    EXPECT_EQ (nextOdd (std::numeric_limits<int8>::max()), std::numeric_limits<int8>::max());
+    EXPECT_EQ (nextOdd (std::numeric_limits<uint8>::max()), std::numeric_limits<uint8>::max());
+    EXPECT_EQ (nextOdd (std::numeric_limits<int16>::max()), std::numeric_limits<int16>::max());
+    EXPECT_EQ (nextOdd (std::numeric_limits<uint16>::max()), std::numeric_limits<uint16>::max());
+    EXPECT_EQ (nextOdd (std::numeric_limits<int32>::max()), std::numeric_limits<int32>::max());
+    EXPECT_EQ (nextOdd (std::numeric_limits<uint32>::max()), std::numeric_limits<uint32>::max());
+    EXPECT_EQ (nextOdd (std::numeric_limits<int64>::max()), std::numeric_limits<int64>::max());
+    EXPECT_EQ (nextOdd (std::numeric_limits<uint64>::max()), std::numeric_limits<uint64>::max());
+
+    // Test with values just before maximum
+    EXPECT_EQ (nextOdd (std::numeric_limits<int8>::max() - 1), std::numeric_limits<int8>::max());
+    EXPECT_EQ (nextOdd (static_cast<uint8> (253)), static_cast<uint8> (253));
+    EXPECT_EQ (nextOdd (static_cast<uint8> (254)), static_cast<uint8> (255));
+
+    // Test with minimum odd values for signed types
+    EXPECT_EQ (nextOdd (std::numeric_limits<int8>::min() + 1), std::numeric_limits<int8>::min() + 1);
+    EXPECT_EQ (nextOdd (std::numeric_limits<int16>::min() + 1), std::numeric_limits<int16>::min() + 1);
+    EXPECT_EQ (nextOdd (std::numeric_limits<int32>::min() + 1), std::numeric_limits<int32>::min() + 1);
+    EXPECT_EQ (nextOdd (std::numeric_limits<int64>::min() + 1), std::numeric_limits<int64>::min() + 1);
+}
