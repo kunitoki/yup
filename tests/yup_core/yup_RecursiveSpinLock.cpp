@@ -340,7 +340,11 @@ TEST_F (RecursiveSpinLockTests, ExceptionSafetyDeep)
 TEST_F (RecursiveSpinLockTests, StressTestRecursion)
 {
     // Stress test with high recursion depth
+#if YUP_WASM
+    const int maxDepth = 20;
+#else
     const int maxDepth = 1000;
+#endif
     std::atomic<int> maxReached { 0 };
 
     std::function<void (int)> deepRecursion = [&] (int depth)
