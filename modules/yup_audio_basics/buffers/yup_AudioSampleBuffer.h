@@ -1201,7 +1201,7 @@ private:
     //==============================================================================
     void allocateData()
     {
-        static_assert (alignof (Type) <= maxAlignment,
+        static_assert (alignof (Type) <= getMaxAlignmentBytes(),
                        "AudioBuffer cannot hold types with alignment requirements larger than that guaranteed by malloc");
 
         jassert (size >= 0);
@@ -1254,43 +1254,12 @@ private:
         isClear = false;
     }
 
-    /*  On iOS/arm7 the alignment of `double` is greater than the alignment of
-        `std::max_align_t`, so we can't trust max_align_t. Instead, we query
-        lots of primitive types and use the maximum alignment of all of them.
-    */
-    static constexpr size_t getMaxAlignment() noexcept
-    {
-        constexpr size_t alignments[] { alignof (std::max_align_t),
-                                        alignof (void*),
-                                        alignof (float),
-                                        alignof (double),
-                                        alignof (long double),
-                                        alignof (short int),
-                                        alignof (int),
-                                        alignof (long int),
-                                        alignof (long long int),
-                                        alignof (bool),
-                                        alignof (char),
-                                        alignof (char16_t),
-                                        alignof (char32_t),
-                                        alignof (wchar_t) };
-
-        size_t max = 0;
-
-        for (const auto elem : alignments)
-            max = jmax (max, elem);
-
-        return max;
-    }
-
     int numChannels = 0, size = 0;
     size_t allocatedBytes = 0;
     Type** channels = nullptr;
     HeapBlock<char, true> allocatedData;
     Type* preallocatedChannelSpace[32] = {};
     bool isClear = true;
-
-    static constexpr size_t maxAlignment = getMaxAlignment();
 
     YUP_LEAK_DETECTOR (AudioBuffer)
 };

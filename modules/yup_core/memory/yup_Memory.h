@@ -92,6 +92,37 @@ inline Type* createCopyIfNotNull(const Type* objectToCopy)
     return objectToCopy != nullptr ? new Type(*objectToCopy) : nullptr;
 }
 
+/** Returns the maximum alignment of the given types.
+
+    On iOS/arm7 the alignment of `double` is greater than the alignment of
+    `std::max_align_t`, so we can't trust max_align_t. Instead, we query
+    lots of primitive types and use the maximum alignment of all of them.
+*/
+constexpr size_t getMaxAlignmentBytes() noexcept
+{
+    constexpr size_t alignments[] { alignof (std::max_align_t),
+                                    alignof (void*),
+                                    alignof (float),
+                                    alignof (double),
+                                    alignof (long double),
+                                    alignof (short int),
+                                    alignof (int),
+                                    alignof (long int),
+                                    alignof (long long int),
+                                    alignof (bool),
+                                    alignof (char),
+                                    alignof (char16_t),
+                                    alignof (char32_t),
+                                    alignof (wchar_t) };
+
+    size_t max = 0;
+
+    for (const auto elem : alignments)
+        max = jmax (max, elem);
+
+    return max;
+}
+
 //==============================================================================
 /** A handy function to read un-aligned memory without a performance penalty or bus-error. */
 template <typename Type>
