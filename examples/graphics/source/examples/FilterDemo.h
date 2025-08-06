@@ -29,38 +29,6 @@
 
 //==============================================================================
 
-class WhiteNoiseGenerator
-{
-public:
-    WhiteNoiseGenerator()
-        : distribution (-1.0f, 1.0f)
-    {
-        randomEngine.seed (static_cast<uint32_t> (std::chrono::steady_clock::now().time_since_epoch().count()));
-    }
-
-    float getNextSample()
-    {
-        return distribution (randomEngine) * amplitude.getNextValue();
-    }
-
-    void setAmplitude (float newAmplitude)
-    {
-        amplitude.setTargetValue (newAmplitude);
-    }
-
-    void setSampleRate (double sampleRate)
-    {
-        amplitude.reset (sampleRate, 0.02);
-    }
-
-private:
-    std::mt19937 randomEngine;
-    std::uniform_real_distribution<float> distribution;
-    yup::SmoothedValue<float> amplitude { 0.1f };
-};
-
-//==============================================================================
-
 class PhaseResponseDisplay : public yup::Component
 {
 public:
@@ -887,7 +855,7 @@ public:
                 updateAudioFilterParameters();
 
             // Generate white noise
-            float noiseSample = noiseGenerator.getNextSample();
+            float noiseSample = noiseGenerator.getNextSample() * noiseGeneratorAmplitude.getNextValue();
 
             // Apply current audio filter
             float filteredSample = noiseSample;
@@ -917,7 +885,6 @@ public:
         double sampleRate = device->getCurrentSampleRate();
 
         // Setup noise generator
-        noiseGenerator.setSampleRate (sampleRate);
         outputGain.reset (sampleRate, 0.02);
 
         // Initialize smoothed parameter values
@@ -1070,7 +1037,7 @@ private:
         noiseGainSlider->setValue (0.1);
         noiseGainSlider->onValueChanged = [this] (float value)
         {
-            noiseGenerator.setAmplitude (value);
+            noiseGeneratorAmplitude.setTargetValue (value);
         };
         addAndMakeVisible (*noiseGainSlider);
 
@@ -1175,7 +1142,7 @@ private:
 
     void setDefaultParameters()
     {
-        noiseGenerator.setAmplitude (0.1f);
+        noiseGeneratorAmplitude.setCurrentAndTargetValue (0.1f);
         outputGain.setCurrentAndTargetValue (0.5f);
         updateCurrentFilter();
     }
@@ -1406,8 +1373,9 @@ private:
 
     // Audio components
     yup::AudioDeviceManager deviceManager;
-    WhiteNoiseGenerator noiseGenerator;
     yup::SmoothedValue<float> outputGain { 0.5f };
+    yup::WhiteNoise noiseGenerator;
+    yup::SmoothedValue<float> noiseGeneratorAmplitude { 0.1f };
 
     // Smoothed parameter values for interpolation
     yup::SmoothedValue<float> smoothedFrequency { 1000.0f };

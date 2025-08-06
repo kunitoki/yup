@@ -39,7 +39,7 @@ public:
 
         @param componentID    The component identifier for this combo box
     */
-    ComboBox (StringRef componentID);
+    ComboBox (StringRef componentID = {});
 
     //==============================================================================
     /** Destructor. */

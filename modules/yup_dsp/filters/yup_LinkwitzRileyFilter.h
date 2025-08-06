@@ -229,6 +229,30 @@ public:
     */
     static constexpr int getOrder() noexcept { return Order; }
 
+    //==============================================================================
+
+    CoeffType getMagnitudeResponseLowBand (CoeffType freq) const
+    {
+        CoeffType wc = 2.0 * yup::MathConstants<double>::pi * frequency / sampleRate;
+        CoeffType w = 2.0 * yup::MathConstants<double>::pi * freq / sampleRate;
+        CoeffType wcWarped = 2.0 * std::tan (wc / 2.0);
+        CoeffType wWarped = 2.0 * std::tan (w / 2.0);
+        CoeffType normalizedFreq = wWarped / wcWarped;
+        CoeffType butterworthResponse = 1.0 / std::sqrt (1.0 + std::pow (normalizedFreq, Order));
+        return butterworthResponse * butterworthResponse;
+    }
+
+    CoeffType getMagnitudeResponseHighBand (CoeffType freq) const
+    {
+        CoeffType wc = 2.0 * yup::MathConstants<double>::pi * frequency / sampleRate;
+        CoeffType w = 2.0 * yup::MathConstants<double>::pi * freq / sampleRate;
+        CoeffType wcWarped = 2.0 * std::tan (wc / 2.0);
+        CoeffType wWarped = 2.0 * std::tan (w / 2.0);
+        CoeffType normalizedFreq = wWarped / wcWarped;
+        CoeffType butterworthResponse = 1.0 / std::sqrt (1.0 + std::pow (1.0 / normalizedFreq, Order));
+        return butterworthResponse * butterworthResponse;
+    }
+
 private:
     //==============================================================================
     /** Filter stage using Biquad objects */

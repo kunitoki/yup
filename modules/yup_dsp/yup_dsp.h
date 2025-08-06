@@ -107,6 +107,9 @@
 // Windowing functions
 #include "windowing/yup_WindowFunctions.h"
 
+// Noise generators
+#include "noise/yup_WhiteNoise.h"
+
 // Frequency domain functions
 #include "frequency/yup_FFTProcessor.h"
 #include "frequency/yup_SpectrumAnalyzerState.h"
