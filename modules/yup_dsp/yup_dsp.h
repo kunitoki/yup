@@ -134,4 +134,7 @@
 #include "filters/yup_ButterworthFilter.h"
 #include "filters/yup_LinkwitzRileyFilter.h"
 
+// Dynamics processors
+#include "dynamics/yup_SoftClipper.h"
+
 //==============================================================================

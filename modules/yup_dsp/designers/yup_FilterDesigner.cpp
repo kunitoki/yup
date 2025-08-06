@@ -552,11 +552,11 @@ int FilterDesigner<CoeffType>::designLinkwitzRiley (
     jassert (sampleRate > 0.0);
 
     const int numStages = order / 2;
-    
+
     // Clear output vectors
     lowCoeffs.clear();
     highCoeffs.clear();
-    
+
     // Reserve space for two cascaded stages per biquad section
     lowCoeffs.reserve (numStages * 2);
     highCoeffs.reserve (numStages * 2);
