@@ -57,8 +57,9 @@ private:
         g.fillRect (bounds);
 
         // Reserve space for labels
-        auto titleBounds = bounds.removeFromTop (20);
+        auto titleBounds = bounds.removeFromTop (25);
         auto bottomLabelSpace = bounds.removeFromBottom (20);
+        auto leftLabelSpace = bounds.removeFromLeft (50);
 
         // Grid
         g.setStrokeColor (yup::Color (0xFF333333));
@@ -156,12 +157,13 @@ private:
             g.strokePath (highPath);
         }
 
-        // Labels
+        // Labels with smaller font
         g.setFillColor (yup::Colors::white);
-        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
+        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (10.0f);
 
-        // Title
-        g.fillFittedText ("Crossover Frequency Response", font, titleBounds, yup::Justification::center);
+        // Title (centered, leaving space for legend)
+        auto titleArea = titleBounds.removeFromLeft (titleBounds.getWidth() - 120);
+        g.fillFittedText ("Crossover Frequency Response", font.withHeight (12.0f), titleArea, yup::Justification::centerLeft);
 
         // Frequency labels
         for (double freq : { 100.0, 1000.0, 10000.0 })
@@ -186,22 +188,22 @@ private:
         {
             float y = dbToY (db, bounds);
             auto label = yup::String (static_cast<int> (db)) + " dB";
-            auto labelBounds = yup::Rectangle<int> (bounds.getX() - 45,
-                                                    static_cast<int> (y - 10),
-                                                    40,
-                                                    20);
-            g.fillFittedText (label, font, labelBounds, yup::Justification::right);
+            g.fillFittedText (label, font, leftLabelSpace.withY (static_cast<int> (y - 8)).withHeight (16), yup::Justification::right);
         }
 
-        // Legend
-        auto legendBounds = titleBounds.removeFromRight (200);
+        // Legend (on the right side of title area)
+        auto legendBounds = titleBounds;
+        legendBounds = legendBounds.withY (legendBounds.getY() + 4);
+
         g.setFillColor (yup::Color (0xFF4488FF));
-        g.fillRect (legendBounds.removeFromLeft (20).reduced (4));
+        auto lowRect = legendBounds.removeFromLeft (15).reduced (2);
+        g.fillRect (lowRect);
         g.setFillColor (yup::Colors::white);
-        g.fillFittedText ("Low", font, legendBounds.removeFromLeft (30), yup::Justification::left);
+        g.fillFittedText ("Low", font, legendBounds.removeFromLeft (25), yup::Justification::left);
 
         g.setFillColor (yup::Color (0xFFFF8844));
-        g.fillRect (legendBounds.removeFromLeft (20).reduced (4));
+        auto highRect = legendBounds.removeFromLeft (15).reduced (2);
+        g.fillRect (highRect);
         g.setFillColor (yup::Colors::white);
         g.fillFittedText ("High", font, legendBounds, yup::Justification::left);
     }
@@ -242,22 +244,19 @@ class CrossoverDemo : public yup::Component,
 public:
     CrossoverDemo()
         : freqSlider (yup::Slider::LinearHorizontal)
-        , lowGainSlider (yup::Slider::LinearHorizontal)
-        , highGainSlider (yup::Slider::LinearHorizontal)
+        , lowGainSlider (yup::Slider::LinearVertical)
+        , highGainSlider (yup::Slider::LinearVertical)
     {
-        // Initialize filters
-        filter2.reset (new yup::LinkwitzRiley2Filter<float>());
-        filter4.reset (new yup::LinkwitzRiley4Filter<float>());
-        filter8.reset (new yup::LinkwitzRiley8Filter<float>());
-
         // Audio device manager
         audioDeviceManager.initialiseWithDefaultDevices (0, 2);
 
         // Initialize smoothed values
         lowGain.reset (44100, 0.02);
         highGain.reset (44100, 0.02);
+        crossoverFreq.reset (44100, 0.05);
         lowGain.setCurrentAndTargetValue (1.0f);
         highGain.setCurrentAndTargetValue (1.0f);
+        crossoverFreq.setCurrentAndTargetValue (1000.0f);
 
         // Create UI
         createUI();
@@ -277,7 +276,7 @@ public:
         auto bounds = getLocalBounds().reduced (10);
 
         // Top controls
-        auto topControls = bounds.removeFromTop (100);
+        auto topControls = bounds.removeFromTop (80);
 
         // Order selection
         auto orderSection = topControls.removeFromLeft (150);
@@ -285,22 +284,24 @@ public:
         orderComboBox.setBounds (orderSection.removeFromTop (30).reduced (5, 0));
 
         // Crossover frequency
-        auto freqSection = topControls.removeFromLeft (300);
+        auto freqSection = topControls;
         freqLabel.setBounds (freqSection.removeFromTop (25));
-        freqSlider.setBounds (freqSection.removeFromTop (60));
+        freqSlider.setBounds (freqSection.removeFromTop (40));
 
-        // Volume controls
-        auto volumeSection = topControls;
-        auto lowSection = volumeSection.removeFromLeft (volumeSection.getWidth() / 2);
-        auto highSection = volumeSection;
+        // Right side volume controls
+        auto rightControls = bounds.removeFromRight (120);
 
-        lowGainLabel.setBounds (lowSection.removeFromTop (25));
-        lowGainSlider.setBounds (lowSection.removeFromTop (60));
+        // Low gain control
+        auto lowSection = rightControls.removeFromLeft (55);
+        lowGainLabel.setBounds (lowSection.removeFromBottom (25));
+        lowGainSlider.setBounds (lowSection.reduced (5, 5));
 
-        highGainLabel.setBounds (highSection.removeFromTop (25));
-        highGainSlider.setBounds (highSection.removeFromTop (60));
+        // High gain control
+        auto highSection = rightControls;
+        highGainLabel.setBounds (highSection.removeFromBottom (25));
+        highGainSlider.setBounds (highSection.reduced (5, 5));
 
-        // Frequency response display
+        // Frequency response display takes remaining space
         frequencyDisplay.setBounds (bounds);
     }
 
@@ -317,13 +318,14 @@ public:
         auto sampleRate = device->getCurrentSampleRate();
 
         // Update filter sample rates
-        filter2->setSampleRate (sampleRate);
-        filter4->setSampleRate (sampleRate);
-        filter8->setSampleRate (sampleRate);
+        filter2.setSampleRate (sampleRate);
+        filter4.setSampleRate (sampleRate);
+        filter8.setSampleRate (sampleRate);
 
         // Update smoothed values
         lowGain.reset (sampleRate, 0.02);
         highGain.reset (sampleRate, 0.02);
+        crossoverFreq.reset (sampleRate, 0.05);
     }
 
     void audioDeviceStopped() override
@@ -354,27 +356,36 @@ public:
         {
             filterProcess = [this](float inL, float inR, float& lowL, float& lowR, float& highL, float& highR)
             {
-                filter2->processSample (inL, inR, lowL, lowR, highL, highR);
+                filter2.processSample (inL, inR, lowL, lowR, highL, highR);
             };
         }
         else if (currentOrder == 4)
         {
             filterProcess = [this](float inL, float inR, float& lowL, float& lowR, float& highL, float& highR)
             {
-                filter4->processSample (inL, inR, lowL, lowR, highL, highR);
+                filter4.processSample (inL, inR, lowL, lowR, highL, highR);
             };
         }
         else
         {
             filterProcess = [this](float inL, float inR, float& lowL, float& lowR, float& highL, float& highR)
             {
-                filter8->processSample (inL, inR, lowL, lowR, highL, highR);
+                filter8.processSample (inL, inR, lowL, lowR, highL, highR);
             };
         }
 
         // Process samples
         for (int i = 0; i < numSamples; ++i)
         {
+            // Update crossover frequency smoothly
+            if (crossoverFreq.isSmoothing())
+            {
+                float freq = crossoverFreq.getNextValue();
+                filter2.setFrequency (freq);
+                filter4.setFrequency (freq);
+                filter8.setFrequency (freq);
+            }
+
             // Generate white noise
             float noise = noiseGenerator.getNextSample() * 0.2f;
 
@@ -432,15 +443,14 @@ private:
         //freqSlider.setTextValueSuffix (" Hz");
         freqSlider.onValueChanged = [this](float value)
         {
-            filter2->setFrequency (value);
-            filter4->setFrequency (value);
-            filter8->setFrequency (value);
+            crossoverFreq.setTargetValue (value);
             frequencyDisplay.setCrossoverFrequency (value);
         };
         addAndMakeVisible (freqSlider);
 
         // Low gain slider
-        lowGainLabel.setText ("Low Band Gain", yup::NotificationType::dontSendNotification);
+        lowGainLabel.setText ("Low", yup::NotificationType::dontSendNotification);
+        //lowGainLabel.setJustification (yup::Justification::center);
         //lowGainLabel.setColour (yup::Label::textColourId, yup::Color (0xFF4488FF));
         addAndMakeVisible (lowGainLabel);
 
@@ -449,12 +459,13 @@ private:
         //lowGainSlider.setTextValueSuffix (" x");
         lowGainSlider.onValueChanged = [this](float value)
         {
-            lowGain.setTargetValue (static_cast<float> (lowGainSlider.getValue()));
+            lowGain.setTargetValue (value);
         };
         addAndMakeVisible (lowGainSlider);
 
         // High gain slider
-        highGainLabel.setText ("High Band Gain", yup::NotificationType::dontSendNotification);
+        highGainLabel.setText ("High", yup::NotificationType::dontSendNotification);
+        //highGainLabel.setJustification (yup::Justification::center);
         //highGainLabel.setColour (yup::Label::textColourId, yup::Color (0xFFFF8844));
         addAndMakeVisible (highGainLabel);
 
@@ -463,7 +474,7 @@ private:
         //highGainSlider.setTextValueSuffix (" x");
         highGainSlider.onValueChanged = [this](float value)
         {
-            highGain.setTargetValue (static_cast<float> (highGainSlider.getValue()));
+            highGain.setTargetValue (value);
         };
         addAndMakeVisible (highGainSlider);
 
@@ -502,22 +513,22 @@ private:
             {
                 case 2:
                 {
-                    lowMag = filter2->getMagnitudeResponseLowBand (freq);
-                    highMag = filter2->getMagnitudeResponseHighBand (freq);
+                    lowMag = filter2.getMagnitudeResponseLowBand (freq);
+                    highMag = filter2.getMagnitudeResponseHighBand (freq);
                     break;
                 }
 
                 case 4:
                 {
-                    lowMag = filter4->getMagnitudeResponseLowBand (freq);
-                    highMag = filter4->getMagnitudeResponseHighBand (freq);
+                    lowMag = filter4.getMagnitudeResponseLowBand (freq);
+                    highMag = filter4.getMagnitudeResponseHighBand (freq);
                     break;
                 }
 
                 case 8:
                 {
-                    lowMag = filter8->getMagnitudeResponseLowBand (freq);
-                    highMag = filter8->getMagnitudeResponseHighBand (freq);
+                    lowMag = filter8.getMagnitudeResponseLowBand (freq);
+                    highMag = filter8.getMagnitudeResponseHighBand (freq);
                     break;
                 }
             }
@@ -538,16 +549,16 @@ private:
     yup::WhiteNoise noiseGenerator;
 
     // Filters
-    std::unique_ptr<yup::LinkwitzRiley2Filter<float>> filter2;
-    std::unique_ptr<yup::LinkwitzRiley4Filter<float>> filter4;
-    std::unique_ptr<yup::LinkwitzRiley8Filter<float>> filter8;
+    yup::LinkwitzRiley2Filter<float> filter2;
+    yup::LinkwitzRiley4Filter<float> filter4;
+    yup::LinkwitzRiley8Filter<float> filter8;
     int currentOrder = 4;
 
     // Process
     yup::FixedSizeFunction<16, void (float, float, float&, float&, float&, float&)> filterProcess;
 
     // Gains
-    yup::SmoothedValue<float> lowGain, highGain;
+    yup::SmoothedValue<float> lowGain, highGain, crossoverFreq;
 
     // UI
     yup::Label orderLabel;
