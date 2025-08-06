@@ -100,25 +100,25 @@ inline Type* createCopyIfNotNull(const Type* objectToCopy)
 */
 constexpr size_t getMaxAlignmentBytes() noexcept
 {
-    constexpr size_t alignments[] { alignof (std::max_align_t),
-                                    alignof (void*),
-                                    alignof (float),
-                                    alignof (double),
-                                    alignof (long double),
-                                    alignof (short int),
-                                    alignof (int),
-                                    alignof (long int),
-                                    alignof (long long int),
-                                    alignof (bool),
-                                    alignof (char),
-                                    alignof (char16_t),
-                                    alignof (char32_t),
-                                    alignof (wchar_t) };
+    constexpr size_t alignments[]{alignof(std::max_align_t),
+                                  alignof(void*),
+                                  alignof(float),
+                                  alignof(double),
+                                  alignof(long double),
+                                  alignof(short int),
+                                  alignof(int),
+                                  alignof(long int),
+                                  alignof(long long int),
+                                  alignof(bool),
+                                  alignof(char),
+                                  alignof(char16_t),
+                                  alignof(char32_t),
+                                  alignof(wchar_t)};
 
     size_t max = 0;
 
     for (const auto elem : alignments)
-        max = jmax (max, elem);
+        max = jmax(max, elem);
 
     return max;
 }

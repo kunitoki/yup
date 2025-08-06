@@ -28,8 +28,7 @@ AudioFormatReader::AudioFormatReader (InputStream* sourceStream, const String& f
 {
 }
 
-bool AudioFormatReader::read (float* const* destChannels, int numDestChannels,
-                              int64 startSampleInSource, int numSamplesToRead)
+bool AudioFormatReader::read (float* const* destChannels, int numDestChannels, int64 startSampleInSource, int numSamplesToRead)
 {
     if (numSamplesToRead <= 0)
         return true;
@@ -42,7 +41,7 @@ bool AudioFormatReader::read (float* const* destChannels, int numDestChannels,
     // Use stack memory for small buffers
     if (numSamplesToRead <= 2048 && numChannelsToRead <= 16)
     {
-        int stackBuffer [2048 * 16];
+        int stackBuffer[2048 * 16];
         int* chans[16];
 
         for (int i = 0; i < numChannelsToRead; ++i)
@@ -79,9 +78,7 @@ bool AudioFormatReader::read (float* const* destChannels, int numDestChannels,
     return true;
 }
 
-bool AudioFormatReader::read (int* const* destChannels, int numDestChannels,
-                              int64 startSampleInSource, int numSamplesToRead,
-                              bool fillLeftoverChannelsWithCopies)
+bool AudioFormatReader::read (int* const* destChannels, int numDestChannels, int64 startSampleInSource, int numSamplesToRead, bool fillLeftoverChannelsWithCopies)
 {
     if (numSamplesToRead <= 0)
         return true;
@@ -130,7 +127,7 @@ bool AudioFormatReader::read (AudioBuffer<float>* buffer,
     if (numSamples <= 0 || numCh == 0)
         return true;
 
-        // Determine what we actually can and should read
+    // Determine what we actually can and should read
     const bool canReadLeft = useReaderLeftChan;
     const bool canReadRight = useReaderRightChan && (numChannels >= 2);
 
@@ -200,8 +197,7 @@ bool AudioFormatReader::read (AudioBuffer<float>* buffer,
     return true;
 }
 
-void AudioFormatReader::readMaxLevels (int64 startSample, int64 numSamples,
-                                       Range<float>* results, int numChannelsToRead)
+void AudioFormatReader::readMaxLevels (int64 startSample, int64 numSamples, Range<float>* results, int numChannelsToRead)
 {
     numChannelsToRead = jmin (numChannelsToRead, (int) numChannels);
 
@@ -246,9 +242,7 @@ void AudioFormatReader::readMaxLevels (int64 startSample, int64 numSamples,
                                    results[i].getEnd() / (float) 0x7fffffff);
 }
 
-void AudioFormatReader::readMaxLevels (int64 startSample, int64 numSamples,
-                                       float& lowestLeft, float& highestLeft,
-                                       float& lowestRight, float& highestRight)
+void AudioFormatReader::readMaxLevels (int64 startSample, int64 numSamples, float& lowestLeft, float& highestLeft, float& lowestRight, float& highestRight)
 {
     Range<float> levels[2];
     readMaxLevels (startSample, numSamples, levels, 2);
@@ -260,10 +254,10 @@ void AudioFormatReader::readMaxLevels (int64 startSample, int64 numSamples,
 }
 
 int64 AudioFormatReader::searchForLevel (int64 startSample,
-                                          int64 numSamplesToSearch,
-                                          double magnitudeRangeMinimum,
-                                          double magnitudeRangeMaximum,
-                                          int minimumConsecutiveSamples)
+                                         int64 numSamplesToSearch,
+                                         double magnitudeRangeMinimum,
+                                         double magnitudeRangeMaximum,
+                                         int minimumConsecutiveSamples)
 {
     if (numSamplesToSearch <= 0)
         return -1;
@@ -336,9 +330,7 @@ AudioChannelSet AudioFormatReader::getChannelLayout()
 }
 
 //==============================================================================
-void AudioFormatReader::ReadHelper::read (void* destData, const void* sourceData,
-                                          int numSamples, int srcBytesPerSample,
-                                          bool isFloatingPoint, bool isLittleEndian) noexcept
+void AudioFormatReader::ReadHelper::read (void* destData, const void* sourceData, int numSamples, int srcBytesPerSample, bool isFloatingPoint, bool isLittleEndian) noexcept
 {
     if (isFloatingPoint)
     {

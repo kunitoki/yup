@@ -201,7 +201,8 @@ public:
             for (int ch = 0; ch < numChannels; ++ch)
             {
                 FloatVectorOperations::copy (fifoBuffer.data() + (scope.startIndex1 + ch * bufferSize),
-                                             data[ch], scope.blockSize1);
+                                             data[ch],
+                                             scope.blockSize1);
             }
             offset = scope.blockSize1;
         }
@@ -211,7 +212,8 @@ public:
             for (int ch = 0; ch < numChannels; ++ch)
             {
                 FloatVectorOperations::copy (fifoBuffer.data() + (scope.startIndex2 + ch * bufferSize),
-                                             data[ch] + offset, scope.blockSize2);
+                                             data[ch] + offset,
+                                             scope.blockSize2);
             }
         }
 
@@ -267,7 +269,8 @@ public:
         }
 
         if (! writer->writeFromFloatArrays (tempBuffer.getArrayOfReadPointers(),
-                                            tempBuffer.getNumChannels(), numToWrite))
+                                            tempBuffer.getNumChannels(),
+                                            numToWrite))
         {
             hasFinished = true;
             return -1;
@@ -311,7 +314,8 @@ private:
             }
 
             writer->writeFromFloatArrays (tempBuffer.getArrayOfReadPointers(),
-                                          tempBuffer.getNumChannels(), numToWrite);
+                                          tempBuffer.getNumChannels(),
+                                          numToWrite);
         }
     }
 
@@ -356,9 +360,7 @@ void AudioFormatWriter::ThreadedWriter::waitForThreadToFinish()
 }
 
 //==============================================================================
-void AudioFormatWriter::WriteHelper::write (void* destData, const void* sourceData,
-                                            int numSamples, int destBytesPerSample,
-                                            bool isFloatingPoint, bool isLittleEndian) noexcept
+void AudioFormatWriter::WriteHelper::write (void* destData, const void* sourceData, int numSamples, int destBytesPerSample, bool isFloatingPoint, bool isLittleEndian) noexcept
 {
     if (isFloatingPoint)
     {

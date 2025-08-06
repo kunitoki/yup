@@ -151,9 +151,7 @@ public:
     struct WriteHelper
     {
         /** Writes data in various formats. */
-        static void write (void* destData, const void* sourceData,
-                           int numSamples, int destBytesPerSample,
-                           bool isFloatingPoint, bool isLittleEndian) noexcept;
+        static void write (void* destData, const void* sourceData, int numSamples, int destBytesPerSample, bool isFloatingPoint, bool isLittleEndian) noexcept;
 
         /** Writes 8-bit signed samples. */
         static void writeInt8 (void* dest, const void* src, int numSamples) noexcept;

@@ -35,7 +35,7 @@ class CrossoverFrequencyResponseDisplay : public yup::Component
 {
 public:
     void updateResponse (const std::vector<yup::Point<double>>& lowData,
-                        const std::vector<yup::Point<double>>& highData)
+                         const std::vector<yup::Point<double>>& highData)
     {
         lowPassData = lowData;
         highPassData = highData;
@@ -240,9 +240,9 @@ private:
 
 //==============================================================================
 
-class CrossoverDemo : public yup::Component,
-                     public yup::AudioIODeviceCallback,
-                     public yup::Timer
+class CrossoverDemo : public yup::Component
+    , public yup::AudioIODeviceCallback
+    , public yup::Timer
 {
 public:
     CrossoverDemo()
@@ -360,21 +360,21 @@ public:
 
         if (currentOrder == 2)
         {
-            filterProcess = [this](float inL, float inR, float& lowL, float& lowR, float& highL, float& highR)
+            filterProcess = [this] (float inL, float inR, float& lowL, float& lowR, float& highL, float& highR)
             {
                 filter2.processSample (inL, inR, lowL, lowR, highL, highR);
             };
         }
         else if (currentOrder == 4)
         {
-            filterProcess = [this](float inL, float inR, float& lowL, float& lowR, float& highL, float& highR)
+            filterProcess = [this] (float inL, float inR, float& lowL, float& lowR, float& highL, float& highR)
             {
                 filter4.processSample (inL, inR, lowL, lowR, highL, highR);
             };
         }
         else
         {
-            filterProcess = [this](float inL, float inR, float& lowL, float& lowR, float& highL, float& highR)
+            filterProcess = [this] (float inL, float inR, float& lowL, float& lowR, float& highL, float& highR)
             {
                 filter8.processSample (inL, inR, lowL, lowR, highL, highR);
             };
@@ -406,9 +406,9 @@ public:
             else
             {
                 // Stereo or multichannel - mix to mono
-                for (int ch = 0; ch < yup::jmin(2, numChannels); ++ch)
+                for (int ch = 0; ch < yup::jmin (2, numChannels); ++ch)
                     audioSample += audioBuffer.getSample (ch, readPosition) * 0.3f;
-                audioSample /= yup::jmin(2, numChannels);
+                audioSample /= yup::jmin (2, numChannels);
             }
 
             // Increment read position and wrap around for looping
@@ -440,10 +440,10 @@ private:
     {
         // Create the path to the audio file
         auto dataDir = yup::File (__FILE__)
-            .getParentDirectory()
-            .getParentDirectory()
-            .getParentDirectory()
-            .getChildFile ("data");
+                           .getParentDirectory()
+                           .getParentDirectory()
+                           .getParentDirectory()
+                           .getChildFile ("data");
 
         yup::File audioFile = dataDir.getChildFile ("break_boomblastic_92bpm.wav");
         if (! audioFile.existsAsFile())
@@ -492,9 +492,15 @@ private:
         {
             switch (orderComboBox.getSelectedId())
             {
-                case 1: currentOrder = 2; break;
-                case 2: currentOrder = 4; break;
-                case 3: currentOrder = 8; break;
+                case 1:
+                    currentOrder = 2;
+                    break;
+                case 2:
+                    currentOrder = 4;
+                    break;
+                case 3:
+                    currentOrder = 8;
+                    break;
             }
             updateFrequencyResponse();
         };
@@ -509,7 +515,7 @@ private:
         freqSlider.setSkewFactorFromMidpoint (1000.0);
         freqSlider.setValue (1000.0);
         //freqSlider.setTextValueSuffix (" Hz");
-        freqSlider.onValueChanged = [this](float value)
+        freqSlider.onValueChanged = [this] (float value)
         {
             crossoverFreq.setTargetValue (value);
             frequencyDisplay.setCrossoverFrequency (value);
@@ -526,7 +532,7 @@ private:
         lowGainSlider.setRange (0.0, 2.0);
         lowGainSlider.setValue (1.0);
         //lowGainSlider.setTextValueSuffix (" x");
-        lowGainSlider.onValueChanged = [this](float value)
+        lowGainSlider.onValueChanged = [this] (float value)
         {
             lowGain.setTargetValue (value);
         };
@@ -542,7 +548,7 @@ private:
         highGainSlider.setRange (0.0, 2.0);
         highGainSlider.setValue (1.0);
         //highGainSlider.setTextValueSuffix (" x");
-        highGainSlider.onValueChanged = [this](float value)
+        highGainSlider.onValueChanged = [this] (float value)
         {
             highGain.setTargetValue (value);
         };
@@ -567,8 +573,7 @@ private:
         lowResponse.reserve (numPoints);
         highResponse.reserve (numPoints);
 
-        auto sampleRate = audioDeviceManager.getCurrentAudioDevice() ?
-                          audioDeviceManager.getCurrentAudioDevice()->getCurrentSampleRate() : 44100.0;
+        auto sampleRate = audioDeviceManager.getCurrentAudioDevice() ? audioDeviceManager.getCurrentAudioDevice()->getCurrentSampleRate() : 44100.0;
 
         for (int i = 0; i < numPoints; ++i)
         {

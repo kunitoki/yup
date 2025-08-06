@@ -48,8 +48,7 @@ public:
 
         @returns true if the operation succeeded
     */
-    bool read (float* const* destChannels, int numDestChannels,
-               int64 startSampleInSource, int numSamplesToRead);
+    bool read (float* const* destChannels, int numDestChannels, int64 startSampleInSource, int numSamplesToRead);
 
     /** Reads samples from the stream.
 
@@ -64,9 +63,7 @@ public:
 
         @returns true if the operation succeeded
     */
-    bool read (int* const* destChannels, int numDestChannels,
-               int64 startSampleInSource, int numSamplesToRead,
-               bool fillLeftoverChannelsWithCopies);
+    bool read (int* const* destChannels, int numDestChannels, int64 startSampleInSource, int numSamplesToRead, bool fillLeftoverChannelsWithCopies);
 
     /** Fills a section of an AudioBuffer from this reader.
 
@@ -87,13 +84,10 @@ public:
                bool useReaderRightChan);
 
     /** Finds the highest and lowest sample levels from a section of the audio stream. */
-    virtual void readMaxLevels (int64 startSample, int64 numSamples,
-                                Range<float>* results, int numChannelsToRead);
+    virtual void readMaxLevels (int64 startSample, int64 numSamples, Range<float>* results, int numChannelsToRead);
 
     /** Finds the highest and lowest sample levels from a section of the audio stream. */
-    virtual void readMaxLevels (int64 startSample, int64 numSamples,
-                                float& lowestLeft, float& highestLeft,
-                                float& lowestRight, float& highestRight);
+    virtual void readMaxLevels (int64 startSample, int64 numSamples, float& lowestLeft, float& highestLeft, float& lowestRight, float& highestRight);
 
     /** Scans the source looking for a sample whose magnitude is in a specified range.
 
@@ -142,9 +136,7 @@ public:
     struct ReadHelper
     {
         /** Reads samples from a file in the given format. */
-        static void read (void* destData, const void* sourceData,
-                          int numSamples, int srcBytesPerSample,
-                          bool isFloatingPoint, bool isLittleEndian) noexcept;
+        static void read (void* destData, const void* sourceData, int numSamples, int srcBytesPerSample, bool isFloatingPoint, bool isLittleEndian) noexcept;
 
         /** Reads 8-bit signed samples. */
         static void readInt8 (int* dest, const void* src, int numSamples) noexcept;

@@ -202,8 +202,8 @@ private:
     CoeffType maxAmp = static_cast<CoeffType> (1);
     CoeffType clipAmount = static_cast<CoeffType> (0.85);
     CoeffType clipThreshold = static_cast<CoeffType> (0.85);
-    CoeffType clipA = static_cast<CoeffType> (0.0225);  // (1 - 0.85)^2
-    CoeffType clipB = static_cast<CoeffType> (-0.7);    // 1 - 2*0.85
+    CoeffType clipA = static_cast<CoeffType> (0.0225); // (1 - 0.85)^2
+    CoeffType clipB = static_cast<CoeffType> (-0.7);   // 1 - 2*0.85
 
     //==============================================================================
     YUP_LEAK_DETECTOR (SoftClipper)

@@ -46,11 +46,11 @@ public:
 
     /** Creates a writer for this format. */
     std::unique_ptr<AudioFormatWriter> createWriterFor (OutputStream* streamToWriteTo,
-                                                         double sampleRate,
-                                                         unsigned int numberOfChannels,
-                                                         int bitsPerSample,
-                                                         const StringPairArray& metadataValues,
-                                                         int qualityOptionIndex) override;
+                                                        double sampleRate,
+                                                        unsigned int numberOfChannels,
+                                                        int bitsPerSample,
+                                                        const StringPairArray& metadataValues,
+                                                        int qualityOptionIndex) override;
 
     /** Returns a set of bit depths that the format can write. */
     Array<int> getPossibleBitDepths() const override;

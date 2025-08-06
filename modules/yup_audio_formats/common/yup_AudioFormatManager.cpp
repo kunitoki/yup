@@ -86,11 +86,11 @@ std::unique_ptr<AudioFormatWriter> AudioFormatManager::createWriterFor (const Fi
             StringPairArray metadataValues;
 
             if (auto writer = format->createWriterFor (stream.release(),
-                                                        sampleRate,
-                                                        numChannels,
-                                                        bitsPerSample,
-                                                        metadataValues,
-                                                        0))
+                                                       sampleRate,
+                                                       numChannels,
+                                                       bitsPerSample,
+                                                       metadataValues,
+                                                       0))
                 return writer;
         }
     }

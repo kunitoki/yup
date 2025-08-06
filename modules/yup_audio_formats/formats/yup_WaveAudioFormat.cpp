@@ -66,9 +66,7 @@ std::unique_ptr<AudioFormatWriter> WaveAudioFormat::createWriterFor (OutputStrea
     if (bitsPerSample != 8 && bitsPerSample != 16 && bitsPerSample != 24 && bitsPerSample != 32)
         return nullptr;
 
-    return std::make_unique<WaveAudioFormatWriter> (streamToWriteTo, sampleRate,
-                                                    numberOfChannels, bitsPerSample,
-                                                    metadataValues);
+    return std::make_unique<WaveAudioFormatWriter> (streamToWriteTo, sampleRate, numberOfChannels, bitsPerSample, metadataValues);
 }
 
 Array<int> WaveAudioFormat::getPossibleBitDepths() const
@@ -122,7 +120,8 @@ WaveAudioFormatReader::WaveAudioFormatReader (InputStream* sourceStream)
                                              nullptr,
                                              sourceStream,
                                              DRWAV_WITH_METADATA,
-                                             nullptr) == DRWAV_TRUE;
+                                             nullptr)
+                == DRWAV_TRUE;
 
     if (impl->isOpen)
     {
@@ -167,10 +166,10 @@ WaveAudioFormatReader::~WaveAudioFormatReader()
 }
 
 bool WaveAudioFormatReader::readSamples (int* const* destChannels,
-                                          int numDestChannels,
-                                          int startOffsetInDestBuffer,
-                                          int64 startSampleInFile,
-                                          int numSamples)
+                                         int numDestChannels,
+                                         int startOffsetInDestBuffer,
+                                         int64 startSampleInFile,
+                                         int numSamples)
 {
     if (! impl->isOpen)
         return false;
@@ -236,9 +235,7 @@ bool WaveAudioFormatReader::readSamples (int* const* destChannels,
             for (int ch = 0; ch < numChannelsToRead; ++ch)
             {
                 const auto* samplePtr = src + (sample * numChannels + ch) * 3;
-                const int value = (((int) samplePtr[2]) << 24) |
-                                  (((int) samplePtr[1]) << 16) |
-                                  (((int) samplePtr[0]) << 8);
+                const int value = (((int) samplePtr[2]) << 24) | (((int) samplePtr[1]) << 16) | (((int) samplePtr[0]) << 8);
                 destChannels[ch][startOffsetInDestBuffer + sample] = value;
             }
         }
@@ -347,13 +344,14 @@ WaveAudioFormatWriter::WaveAudioFormatWriter (OutputStream* destStream,
     addStringMetadata ("tracknumber", drwav_metadata_type_list_info_tracknumber);
 
     impl->isOpen = drwav_init_write_with_metadata (&impl->wav,
-                                                    &format,
-                                                    Impl::writeCallback,
-                                                    Impl::seekCallback,
-                                                    destStream,
-                                                    nullptr,
-                                                    metadata.empty() ? nullptr : metadata.data(),
-                                                    (drwav_uint32) metadata.size()) == DRWAV_TRUE;
+                                                   &format,
+                                                   Impl::writeCallback,
+                                                   Impl::seekCallback,
+                                                   destStream,
+                                                   nullptr,
+                                                   metadata.empty() ? nullptr : metadata.data(),
+                                                   (drwav_uint32) metadata.size())
+                == DRWAV_TRUE;
 
     if (impl->isOpen)
     {
@@ -455,8 +453,7 @@ bool WaveAudioFormatWriter::write (const int** samplesToWrite, int numSamples)
         }
     }
 
-    const auto framesWritten = drwav_write_pcm_frames (&impl->wav, (drwav_uint64) numSamples,
-                                                        impl->tempBuffer.getData());
+    const auto framesWritten = drwav_write_pcm_frames (&impl->wav, (drwav_uint64) numSamples, impl->tempBuffer.getData());
 
     if (framesWritten > 0)
     {
