@@ -620,6 +620,7 @@ macro (yup_add_default_modules modules_path)
     yup_add_module (${modules_path}/thirdparty/rive_renderer "${modules_definitions}" ${thirdparty_group})
     yup_add_module (${modules_path}/thirdparty/oboe_library "${modules_definitions}" ${thirdparty_group})
     yup_add_module (${modules_path}/thirdparty/pffft_library "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/dr_libs "${modules_definitions}" ${thirdparty_group})
 
     # ==== Yup modules
     set (modules_group "Modules")
@@ -646,6 +647,9 @@ macro (yup_add_default_modules modules_path)
 
     yup_add_module (${modules_path}/modules/yup_audio_devices "${modules_definitions}" ${modules_group})
     add_library (yup::yup_audio_devices ALIAS yup_audio_devices)
+
+    yup_add_module (${modules_path}/modules/yup_audio_formats "${modules_definitions}" ${modules_group})
+    add_library (yup::yup_audio_formats ALIAS yup_audio_formats)
 
     yup_add_module (${modules_path}/modules/yup_audio_processors "${modules_definitions}" ${modules_group})
     add_library (yup::yup_audio_processors ALIAS yup_audio_processors)

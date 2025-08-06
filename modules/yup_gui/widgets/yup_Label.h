@@ -81,7 +81,13 @@ public:
 
         @param newWidth    The new width to use for the text outline
     */
-    void setStrokeWidth (float newWidth) noexcept;
+    void setStrokeWidth (float newWidth);
+
+    //==============================================================================
+
+    Justification getJustification() const { return justification; }
+
+    void setJustification (Justification newJustification);
 
     //==============================================================================
 
@@ -110,6 +116,7 @@ private:
     String text;
     StyledText styledText;
     float strokeWidth = 0.0f;
+    Justification justification { Justification::left };
     std::optional<Font> font;
     bool needsUpdate = true;
 

@@ -22,6 +22,7 @@
 #pragma once
 
 #include <yup_dsp/yup_dsp.h>
+#include <yup_audio_formats/yup_audio_formats.h>
 
 #include <memory>
 #include <random>
@@ -58,8 +59,10 @@ private:
 
         // Reserve space for labels
         auto titleBounds = bounds.removeFromTop (25);
+        titleBounds.removeFromLeft (5);
         auto bottomLabelSpace = bounds.removeFromBottom (20);
         auto leftLabelSpace = bounds.removeFromLeft (50);
+        leftLabelSpace.removeFromRight (5);
 
         // Grid
         g.setStrokeColor (yup::Color (0xFF333333));
@@ -247,6 +250,9 @@ public:
         , lowGainSlider (yup::Slider::LinearVertical)
         , highGainSlider (yup::Slider::LinearVertical)
     {
+        // Load the audio file
+        loadAudioFile();
+
         // Audio device manager
         audioDeviceManager.initialiseWithDefaultDevices (0, 2);
 
@@ -346,7 +352,7 @@ public:
                 yup::FloatVectorOperations::clear (outputChannelData[ch], numSamples);
         }
 
-        if (numOutputChannels < 2)
+        if (numOutputChannels < 2 || audioBuffer.getNumSamples() == 0)
             return;
 
         // Get the active filter
@@ -375,6 +381,9 @@ public:
         }
 
         // Process samples
+        const int totalSamples = audioBuffer.getNumSamples();
+        const int numChannels = audioBuffer.getNumChannels();
+
         for (int i = 0; i < numSamples; ++i)
         {
             // Update crossover frequency smoothly
@@ -386,12 +395,30 @@ public:
                 filter8.setFrequency (freq);
             }
 
-            // Generate white noise
-            float noise = noiseGenerator.getNextSample() * 0.2f;
+            // Get the audio sample from the loaded file (mono to stereo if needed)
+            float audioSample = 0.0f;
+
+            if (numChannels == 1)
+            {
+                // Mono file
+                audioSample = audioBuffer.getSample (0, readPosition) * 0.3f;
+            }
+            else
+            {
+                // Stereo or multichannel - mix to mono
+                for (int ch = 0; ch < yup::jmin(2, numChannels); ++ch)
+                    audioSample += audioBuffer.getSample (ch, readPosition) * 0.3f;
+                audioSample /= yup::jmin(2, numChannels);
+            }
+
+            // Increment read position and wrap around for looping
+            readPosition++;
+            if (readPosition >= totalSamples)
+                readPosition = 0;
 
             // Process through crossover
             float lowLeft, lowRight, highLeft, highRight;
-            filterProcess (noise, noise, lowLeft, lowRight, highLeft, highRight);
+            filterProcess (audioSample, audioSample, lowLeft, lowRight, highLeft, highRight);
 
             // Apply gains
             float lowGainValue = lowGain.getNextValue();
@@ -409,12 +436,52 @@ public:
     }
 
 private:
+    void loadAudioFile()
+    {
+        // Create the path to the audio file
+        auto dataDir = yup::File (__FILE__)
+            .getParentDirectory()
+            .getParentDirectory()
+            .getParentDirectory()
+            .getChildFile ("data");
+
+        yup::File audioFile = dataDir.getChildFile ("break_boomblastic_92bpm.wav");
+        if (! audioFile.existsAsFile())
+        {
+            std::cerr << "Could not find break_boomblastic_92bpm.wav" << std::endl;
+            return;
+        }
+
+        // Load the audio file
+        yup::AudioFormatManager formatManager;
+        formatManager.registerDefaultFormats();
+
+        if (auto reader = formatManager.createReaderFor (audioFile))
+        {
+            audioBuffer.setSize ((int) reader->numChannels, (int) reader->lengthInSamples);
+            reader->read (&audioBuffer, 0, (int) reader->lengthInSamples, 0, true, true);
+
+            std::cout << "Loaded audio file: " << audioFile.getFileName() << std::endl;
+            std::cout << "Sample rate: " << reader->sampleRate << " Hz" << std::endl;
+            std::cout << "Channels: " << reader->numChannels << std::endl;
+            std::cout << "Length: " << reader->lengthInSamples << " samples" << std::endl;
+        }
+        else
+        {
+            std::cerr << "Failed to create reader for audio file" << std::endl;
+        }
+    }
+
     void createUI()
     {
         setOpaque (false);
 
+        // Get a 12pt font
+        auto labelFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
+
         // Order selection
         orderLabel.setText ("Filter Order", yup::NotificationType::dontSendNotification);
+        orderLabel.setFont (labelFont);
         addAndMakeVisible (orderLabel);
 
         orderComboBox.addItem ("2nd Order", 1);
@@ -435,6 +502,7 @@ private:
 
         // Crossover frequency slider
         freqLabel.setText ("Crossover Frequency", yup::NotificationType::dontSendNotification);
+        freqLabel.setFont (labelFont);
         addAndMakeVisible (freqLabel);
 
         freqSlider.setRange (20.0, 20000.0);
@@ -450,7 +518,8 @@ private:
 
         // Low gain slider
         lowGainLabel.setText ("Low", yup::NotificationType::dontSendNotification);
-        //lowGainLabel.setJustification (yup::Justification::center);
+        lowGainLabel.setFont (labelFont);
+        lowGainLabel.setJustification (yup::Justification::center);
         //lowGainLabel.setColour (yup::Label::textColourId, yup::Color (0xFF4488FF));
         addAndMakeVisible (lowGainLabel);
 
@@ -465,7 +534,8 @@ private:
 
         // High gain slider
         highGainLabel.setText ("High", yup::NotificationType::dontSendNotification);
-        //highGainLabel.setJustification (yup::Justification::center);
+        highGainLabel.setFont (labelFont);
+        highGainLabel.setJustification (yup::Justification::center);
         //highGainLabel.setColour (yup::Label::textColourId, yup::Color (0xFFFF8844));
         addAndMakeVisible (highGainLabel);
 
@@ -546,7 +616,8 @@ private:
 
     // Audio
     yup::AudioDeviceManager audioDeviceManager;
-    yup::WhiteNoise noiseGenerator;
+    yup::AudioBuffer<float> audioBuffer;
+    int readPosition = 0;
 
     // Filters
     yup::LinkwitzRiley2Filter<float> filter2;

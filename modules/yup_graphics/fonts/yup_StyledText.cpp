@@ -120,6 +120,36 @@ void StyledText::TextModifier::setWrap (StyledText::TextWrap value)
 
 //==============================================================================
 
+StyledText::HorizontalAlign StyledText::horizontalAlignFromJustification (Justification justification)
+{
+    if (justification.testFlags (Justification::left))
+        return StyledText::left;
+
+    if (justification.testFlags (Justification::horizontalCenter))
+        return StyledText::center;
+
+    if (justification.testFlags (Justification::right))
+        return StyledText::right;
+
+    return StyledText::left;
+}
+
+StyledText::VerticalAlign StyledText::verticalAlignFromJustification (Justification justification)
+{
+    if (justification.testFlags (Justification::top))
+        return StyledText::top;
+
+    if (justification.testFlags (Justification::verticalCenter))
+        return StyledText::middle;
+
+    if (justification.testFlags (Justification::bottom))
+        return StyledText::bottom;
+
+    return StyledText::middle;
+}
+
+//==============================================================================
+
 StyledText::StyledText()
 {
 }

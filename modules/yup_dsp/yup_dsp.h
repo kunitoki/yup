@@ -109,6 +109,7 @@
 
 // Noise generators
 #include "noise/yup_WhiteNoise.h"
+#include "noise/yup_PinkNoise.h"
 
 // Frequency domain functions
 #include "frequency/yup_FFTProcessor.h"
