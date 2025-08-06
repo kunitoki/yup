@@ -185,11 +185,11 @@ public:
         for (int i = 0; i < numSamples; ++i)
         {
             processSample (inputLeft[i],
-                          inputRight[i],
-                          outputLowLeft[i],
-                          outputLowRight[i],
-                          outputHighLeft[i],
-                          outputHighRight[i]);
+                           inputRight[i],
+                           outputLowLeft[i],
+                           outputLowRight[i],
+                           outputHighLeft[i],
+                           outputHighRight[i]);
         }
     }
 
@@ -277,20 +277,23 @@ private:
         // Apply coefficients to biquad stages
         for (int stage = 0; stage < numStages; ++stage)
         {
-            // Each stage gets two identical coefficients (cascade)
-            const auto& lowCoeff = lowCoeffs[stage * 2];     // Both cascades use same coeffs
-            const auto& highCoeff = highCoeffs[stage * 2];   // Both cascades use same coeffs
+            // Each cascade needs its own coefficients
+            const auto& lowCoeff1 = lowCoeffs[stage * 2];       // First cascade
+            const auto& lowCoeff2 = lowCoeffs[stage * 2 + 1];   // Second cascade
+            const auto& highCoeff1 = highCoeffs[stage * 2];     // First cascade
+            const auto& highCoeff2 = highCoeffs[stage * 2 + 1]; // Second cascade
 
-            // Set coefficients for both cascades (identical for Linkwitz-Riley)
-            lowPassStage1.leftChannelStages[stage].setCoefficients (lowCoeff);
-            lowPassStage1.rightChannelStages[stage].setCoefficients (lowCoeff);
-            lowPassStage2.leftChannelStages[stage].setCoefficients (lowCoeff);
-            lowPassStage2.rightChannelStages[stage].setCoefficients (lowCoeff);
+            // Set coefficients for first cascade
+            lowPassStage1.leftChannelStages[stage].setCoefficients (lowCoeff1);
+            lowPassStage1.rightChannelStages[stage].setCoefficients (lowCoeff1);
+            highPassStage1.leftChannelStages[stage].setCoefficients (highCoeff1);
+            highPassStage1.rightChannelStages[stage].setCoefficients (highCoeff1);
 
-            highPassStage1.leftChannelStages[stage].setCoefficients (highCoeff);
-            highPassStage1.rightChannelStages[stage].setCoefficients (highCoeff);
-            highPassStage2.leftChannelStages[stage].setCoefficients (highCoeff);
-            highPassStage2.rightChannelStages[stage].setCoefficients (highCoeff);
+            // Set coefficients for second cascade (different coefficients)
+            lowPassStage2.leftChannelStages[stage].setCoefficients (lowCoeff2);
+            lowPassStage2.rightChannelStages[stage].setCoefficients (lowCoeff2);
+            highPassStage2.leftChannelStages[stage].setCoefficients (highCoeff2);
+            highPassStage2.rightChannelStages[stage].setCoefficients (highCoeff2);
         }
     }
 
@@ -311,7 +314,7 @@ private:
 
     //==============================================================================
     CoeffType frequency = static_cast<CoeffType> (1000.0);
-    double sampleRate = 44100.0;
+    double sampleRate = 0.0;
 
     FilterStage lowPassStage1, lowPassStage2;
     FilterStage highPassStage1, highPassStage2;

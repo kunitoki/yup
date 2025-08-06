@@ -175,35 +175,48 @@ TEST_F (LinkwitzRileyFilterTests, LR8ProcessSampleDoesNotCrash)
 TEST_F (LinkwitzRileyFilterTests, ComplementaryResponse)
 {
     LinkwitzRiley2Filter<float> filter (1000.0);
+    filter.setSampleRate (sampleRate);
+    filter.reset();
+
+    // Now do the actual test
+    float lowLeft, lowRight, highLeft, highRight;
+
+    // Let the filter settle by processing some samples first
+    for (int i = 0; i < blockSize; ++i)
+        filter.processSample (sineTestLeft[i], sineTestRight[i], lowLeft, lowRight, highLeft, highRight);
 
     // Test that low + high outputs sum to approximately unity at crossover frequency
-    float lowLeft, lowRight, highLeft, highRight;
-    float sumLeft = 0.0f, sumRight = 0.0f;
+    std::vector<float> summedLeft (blockSize);
+    std::vector<float> summedRight (blockSize);
 
-    // Process sine wave at crossover frequency
+    // Process sine wave at crossover frequency (second pass for steady state)
     for (int i = 0; i < blockSize; ++i)
     {
         filter.processSample (sineTestLeft[i], sineTestRight[i], lowLeft, lowRight, highLeft, highRight);
-        sumLeft += (lowLeft + highLeft) * (lowLeft + highLeft);
-        sumRight += (lowRight + highRight) * (lowRight + highRight);
+        summedLeft[i] = lowLeft + highLeft;
+        summedRight[i] = lowRight + highRight;
     }
 
-    // RMS of sum should be close to RMS of input
+    // Calculate RMS of summed outputs
+    float sumRmsLeft = 0.0f, sumRmsRight = 0.0f;
     float inputRmsLeft = 0.0f, inputRmsRight = 0.0f;
+
     for (int i = 0; i < blockSize; ++i)
     {
+        sumRmsLeft += summedLeft[i] * summedLeft[i];
+        sumRmsRight += summedRight[i] * summedRight[i];
         inputRmsLeft += sineTestLeft[i] * sineTestLeft[i];
         inputRmsRight += sineTestRight[i] * sineTestRight[i];
     }
 
-    sumLeft = std::sqrt (sumLeft / blockSize);
-    sumRight = std::sqrt (sumRight / blockSize);
+    sumRmsLeft = std::sqrt (sumRmsLeft / blockSize);
+    sumRmsRight = std::sqrt (sumRmsRight / blockSize);
     inputRmsLeft = std::sqrt (inputRmsLeft / blockSize);
     inputRmsRight = std::sqrt (inputRmsRight / blockSize);
 
     // Allow for some tolerance due to filter transient and numerical precision
-    EXPECT_NEAR (sumLeft, inputRmsLeft, 0.1f);
-    EXPECT_NEAR (sumRight, inputRmsRight, 0.1f);
+    EXPECT_NEAR (sumRmsLeft, inputRmsLeft, 0.1f);
+    EXPECT_NEAR (sumRmsRight, inputRmsRight, 0.1f);
 }
 
 TEST_F (LinkwitzRileyFilterTests, ResetClearsState)
