@@ -112,7 +112,7 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
     PyPreConfig_InitIsolatedConfig (&preconfig);
     preconfig.utf8_mode = 1;
 
-    if (PyStatus status = Py_PreInitialize(&preconfig); PyStatus_IsError (status))
+    if (PyStatus status = Py_PreInitialize (&preconfig); PyStatus_IsError (status))
     {
         YUP_DBG ("Failed Py_PreInitialize");
         return nullptr;
@@ -141,7 +141,7 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
 #if YUP_WINDOWS
     config->module_search_paths_set = 1;
 
-    const auto prefixPath = destinationFolder.getChildFile("lib").getFullPathName();
+    const auto prefixPath = destinationFolder.getChildFile ("lib").getFullPathName();
 
     if (auto status = PyConfig_SetBytesString (config.get(), &config->prefix, prefixPath.toRawUTF8()); PyStatus_IsError (status))
     {
