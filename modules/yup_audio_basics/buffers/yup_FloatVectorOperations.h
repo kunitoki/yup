@@ -155,12 +155,6 @@ struct FloatVectorOperationsBase
 
     /** Finds the maximum value in the given array. */
     static FloatType YUP_CALLTYPE findMaximum (const FloatType* src, CountType numValues) noexcept;
-
-    /** Converts an array of fixed-point integers to floating point values. */
-    static void YUP_CALLTYPE convertFixedToFloat (FloatType* dest, const int* src, FloatType multiplier, CountType numValues) noexcept;
-
-    /** Converts an array of floating point values to fixed-point integers. */
-    static void YUP_CALLTYPE convertFloatToFixed (int* dest, const FloatType* src, FloatType multiplier, CountType numValues) noexcept;
 };
 
 #if ! DOXYGEN
@@ -186,9 +180,7 @@ struct NameForwarder : public Bases...
         Bases::clip...,
         Bases::findMinAndMax...,
         Bases::findMinimum...,
-        Bases::findMaximum...,
-        Bases::convertFixedToFloat...,
-        Bases::convertFloatToFixed...;
+        Bases::findMaximum...;
 };
 
 } // namespace detail
