@@ -46,8 +46,10 @@ function (yup_prepare_python_stdlib target_name python_tools_path output_variabl
 
     if (YUP_PLATFORM_WINDOWS)
         execute_process (
-            COMMAND dir "${Python_LIBRARY_DIRS}" /s /b
-            COMMAND dir "${Python_LIBRARY_DIRS}/.." /s /b
+            COMMAND dir "${Python_LIBRARY_DIRS}/.."
+            COMMAND dir "${Python_LIBRARY_DIRS}/../Lib"
+            COMMAND dir "${Python_LIBRARY_DIRS}/../Scripts"
+            COMMAND dir "${Python_LIBRARY_DIRS}/../DLLs"
             COMMAND_ECHO STDOUT)
     endif()
 
