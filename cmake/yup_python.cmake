@@ -45,12 +45,10 @@ function (yup_prepare_python_stdlib target_name python_tools_path output_variabl
     _yup_message (STATUS " * ignored_library_patterns: ${ignored_library_patterns}")
 
     if (YUP_PLATFORM_WINDOWS)
-        execute_process (
-            COMMAND dir "${Python_LIBRARY_DIRS}/.."
-            COMMAND dir "${Python_LIBRARY_DIRS}/../Lib"
-            COMMAND dir "${Python_LIBRARY_DIRS}/../Scripts"
-            COMMAND dir "${Python_LIBRARY_DIRS}/../DLLs"
-            COMMAND_ECHO STDOUT)
+        execute_process (COMMAND dir "${Python_LIBRARY_DIRS}/.." COMMAND_ECHO STDOUT)
+        execute_process (COMMAND dir "${Python_LIBRARY_DIRS}/../Lib" COMMAND_ECHO STDOUT)
+        execute_process (COMMAND dir "${Python_LIBRARY_DIRS}/../Scripts" COMMAND_ECHO STDOUT)
+        execute_process (COMMAND dir "${Python_LIBRARY_DIRS}/../DLLs" COMMAND_ECHO STDOUT)
     endif()
 
     execute_process (
