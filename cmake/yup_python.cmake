@@ -56,8 +56,8 @@ function (yup_prepare_python_stdlib target_name python_tools_path output_variabl
     execute_process (
         COMMAND
             "${Python_EXECUTABLE}" "${python_tools_path}/ArchivePythonStdlib.py"
-                -r "${python_root_path}" -o "${CMAKE_CURRENT_BINARY_DIR}" -M "${Python_VERSION_MAJOR}" -m "${Python_VERSION_MINOR}"
-                -x "\"${ignored_library_patterns}\"" -v
+                -v -r "${python_root_path}" -o "${CMAKE_CURRENT_BINARY_DIR}" -M "${Python_VERSION_MAJOR}" -m "${Python_VERSION_MINOR}"
+                -x "\"${ignored_library_patterns}\""
         COMMAND_ECHO STDOUT
         COMMAND_ERROR_IS_FATAL ANY)
 
