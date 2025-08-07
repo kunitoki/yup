@@ -1452,8 +1452,8 @@ void convertFixedToFloat (double* dest, const int* src, double multiplier, Size 
         for (Size i = 0; i < numLongs; i += 2)
         {
             __m128i intVec = _mm_loadl_epi64 (reinterpret_cast<const __m128i*> (src + i));
-            int val0 = _mm_extract_epi32 (intVec, 0);
-            int val1 = _mm_extract_epi32 (intVec, 1);
+            int val0 = _mm_cvtsi128_si32 (intVec);
+            int val1 = _mm_cvtsi128_si32 (_mm_shuffle_epi32 (intVec, 1));
             dest[i] = (double) val0 * multiplier;
             dest[i + 1] = (double) val1 * multiplier;
         }
