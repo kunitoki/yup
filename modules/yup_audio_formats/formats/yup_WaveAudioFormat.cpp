@@ -17,77 +17,25 @@
 namespace yup
 {
 
-//==============================================================================
-// WaveAudioFormat implementation
-WaveAudioFormat::WaveAudioFormat()
-    : formatName ("Wave file")
+namespace
 {
-}
-
-WaveAudioFormat::~WaveAudioFormat() = default;
-
-const String& WaveAudioFormat::getFormatName() const
-{
-    return formatName;
-}
-
-Array<String> WaveAudioFormat::getFileExtensions() const
-{
-    return { ".wav", ".wave", ".bwf" };
-}
-
-std::unique_ptr<AudioFormatReader> WaveAudioFormat::createReaderFor (InputStream* sourceStream)
-{
-    auto reader = std::make_unique<WaveAudioFormatReader> (sourceStream);
-
-    if (reader->sampleRate > 0 && reader->numChannels > 0)
-        return reader;
-
-    return nullptr;
-}
-
-std::unique_ptr<AudioFormatWriter> WaveAudioFormat::createWriterFor (OutputStream* streamToWriteTo,
-                                                                     double sampleRate,
-                                                                     unsigned int numberOfChannels,
-                                                                     int bitsPerSample,
-                                                                     const StringPairArray& metadataValues,
-                                                                     int qualityOptionIndex)
-{
-    if (streamToWriteTo == nullptr)
-        return nullptr;
-
-    // Check supported configurations
-    if (numberOfChannels == 0 || numberOfChannels > 64)
-        return nullptr;
-
-    if (sampleRate <= 0 || sampleRate > 192000)
-        return nullptr;
-
-    if (bitsPerSample != 8 && bitsPerSample != 16 && bitsPerSample != 24 && bitsPerSample != 32)
-        return nullptr;
-
-    return std::make_unique<WaveAudioFormatWriter> (streamToWriteTo, sampleRate, numberOfChannels, bitsPerSample, metadataValues);
-}
-
-Array<int> WaveAudioFormat::getPossibleBitDepths() const
-{
-    return { 8, 16, 24, 32 };
-}
-
-Array<int> WaveAudioFormat::getPossibleSampleRates() const
-{
-    return { 8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000, 88200, 96000, 176400, 192000 };
-}
 
 //==============================================================================
-// WaveAudioFormatReader implementation
-struct WaveAudioFormatReader::Impl
-{
-    drwav wav = {};
-    HeapBlock<uint8> tempBuffer;
-    size_t tempBufferSize = 0;
-    bool isOpen = false;
 
+class WaveAudioFormatReader : public AudioFormatReader
+{
+public:
+    WaveAudioFormatReader (InputStream* sourceStream);
+
+    ~WaveAudioFormatReader() override;
+
+    bool readSamples (float* const* destChannels,
+                      int numDestChannels,
+                      int startOffsetInDestBuffer,
+                      int64 startSampleInFile,
+                      int numSamples) override;
+
+private:
     static size_t readCallback (void* pUserData, void* pBufferOut, size_t bytesToRead)
     {
         auto* stream = static_cast<InputStream*> (pUserData);
@@ -105,36 +53,41 @@ struct WaveAudioFormatReader::Impl
 
         return DRWAV_FALSE;
     }
+
+    drwav wav = {};
+    HeapBlock<uint8> tempBuffer;
+    size_t tempBufferSize = 0;
+    bool isOpen = false;
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WaveAudioFormatReader)
 };
 
 WaveAudioFormatReader::WaveAudioFormatReader (InputStream* sourceStream)
     : AudioFormatReader (sourceStream, "Wave file")
-    , impl (std::make_unique<Impl>())
 {
     if (sourceStream == nullptr)
         return;
 
-    impl->isOpen = drwav_init_with_metadata (&impl->wav,
-                                             Impl::readCallback,
-                                             Impl::seekCallback,
-                                             nullptr,
-                                             sourceStream,
-                                             DRWAV_WITH_METADATA,
-                                             nullptr)
-                == DRWAV_TRUE;
+    isOpen = drwav_init_with_metadata (&wav,
+                                       readCallback,
+                                       seekCallback,
+                                       nullptr,
+                                       sourceStream,
+                                       DRWAV_WITH_METADATA,
+                                       nullptr) == DRWAV_TRUE;
 
-    if (impl->isOpen)
+    if (isOpen)
     {
-        sampleRate = impl->wav.sampleRate;
-        bitsPerSample = impl->wav.bitsPerSample;
-        lengthInSamples = (int64) impl->wav.totalPCMFrameCount;
-        numChannels = impl->wav.channels;
-        usesFloatingPointData = impl->wav.translatedFormatTag == DR_WAVE_FORMAT_IEEE_FLOAT;
+        sampleRate = wav.sampleRate;
+        bitsPerSample = wav.bitsPerSample;
+        lengthInSamples = (int64) wav.totalPCMFrameCount;
+        numChannels = wav.channels;
+        usesFloatingPointData = wav.translatedFormatTag == DR_WAVE_FORMAT_IEEE_FLOAT;
 
         // Extract metadata
-        for (drwav_uint32 i = 0; i < impl->wav.metadataCount; ++i)
+        for (drwav_uint32 i = 0; i < wav.metadataCount; ++i)
         {
-            auto& metadata = impl->wav.pMetadata[i];
+            auto& metadata = wav.pMetadata[i];
 
             if (metadata.type == drwav_metadata_type_list_info_title && metadata.data.infoText.pString)
                 metadataValues.set ("title", String::fromUTF8 (metadata.data.infoText.pString));
@@ -154,31 +107,31 @@ WaveAudioFormatReader::WaveAudioFormatReader (InputStream* sourceStream)
 
         // Allocate temp buffer for reading
         const auto bytesPerFrame = numChannels * (bitsPerSample / 8);
-        impl->tempBufferSize = bytesPerFrame * 4096;
-        impl->tempBuffer.allocate (impl->tempBufferSize, true);
+        tempBufferSize = bytesPerFrame * 4096;
+        tempBuffer.allocate (tempBufferSize, true);
     }
 }
 
 WaveAudioFormatReader::~WaveAudioFormatReader()
 {
-    if (impl->isOpen)
-        drwav_uninit (&impl->wav);
+    if (isOpen)
+        drwav_uninit (&wav);
 }
 
-bool WaveAudioFormatReader::readSamples (int* const* destChannels,
+bool WaveAudioFormatReader::readSamples (float* const* destChannels,
                                          int numDestChannels,
                                          int startOffsetInDestBuffer,
                                          int64 startSampleInFile,
                                          int numSamples)
 {
-    if (! impl->isOpen)
+    if (! isOpen)
         return false;
 
     if (numSamples <= 0)
         return true;
 
     // Seek to the start position
-    if (! drwav_seek_to_pcm_frame (&impl->wav, (drwav_uint64) startSampleInFile))
+    if (! drwav_seek_to_pcm_frame (&wav, (drwav_uint64) startSampleInFile))
         return false;
 
     const auto numChannelsToRead = jmin (numDestChannels, (int) numChannels);
@@ -189,99 +142,110 @@ bool WaveAudioFormatReader::readSamples (int* const* destChannels,
     const auto framesToRead = (drwav_uint64) numSamples;
     const auto bytesToRead = framesToRead * bytesPerFrame;
 
-    if (bytesToRead > impl->tempBufferSize)
+    if (bytesToRead > tempBufferSize)
     {
-        impl->tempBufferSize = bytesToRead;
-        impl->tempBuffer.allocate (bytesToRead, false);
+        tempBufferSize = bytesToRead;
+        tempBuffer.allocate (bytesToRead, false);
     }
 
-    const auto framesRead = drwav_read_pcm_frames (&impl->wav, framesToRead, impl->tempBuffer.getData());
+    const auto framesRead = drwav_read_pcm_frames (&wav, framesToRead, tempBuffer.getData());
 
     if (framesRead == 0)
         return false;
 
-    // Deinterleave and convert to int
+    // Create output channel pointers offset by the start position
+    HeapBlock<float*> offsetDestChannels;
+    offsetDestChannels.malloc (numDestChannels);
+    
+    for (int ch = 0; ch < numDestChannels; ++ch)
+    {
+        offsetDestChannels[ch] = destChannels[ch] + startOffsetInDestBuffer;
+    }
+
+    // Use AudioData::deinterleaveSamples to convert and deinterleave in one step
     if (bitsPerSample == 8)
     {
-        const auto* src = impl->tempBuffer.getData();
-
-        for (int sample = 0; sample < (int) framesRead; ++sample)
-        {
-            for (int ch = 0; ch < numChannelsToRead; ++ch)
-            {
-                const auto value = (int) (src[sample * numChannels + ch] - 128) << 24;
-                destChannels[ch][startOffsetInDestBuffer + sample] = value;
-            }
-        }
+        using SourceFormat = AudioData::Format<AudioData::UInt8, AudioData::LittleEndian>;
+        using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+        
+        AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { reinterpret_cast<const uint8*> (tempBuffer.getData()), (int) numChannels },
+                                        AudioData::NonInterleavedDest<DestFormat> { offsetDestChannels.getData(), numDestChannels },
+                                        (int) framesRead);
     }
     else if (bitsPerSample == 16)
     {
-        const auto* src = reinterpret_cast<const drwav_int16*> (impl->tempBuffer.getData());
-
-        for (int sample = 0; sample < (int) framesRead; ++sample)
-        {
-            for (int ch = 0; ch < numChannelsToRead; ++ch)
-            {
-                destChannels[ch][startOffsetInDestBuffer + sample] = ((int) src[sample * numChannels + ch]) << 16;
-            }
-        }
+        using SourceFormat = AudioData::Format<AudioData::Int16, AudioData::LittleEndian>;
+        using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+        
+        AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { reinterpret_cast<const uint16*> (tempBuffer.getData()), (int) numChannels },
+                                        AudioData::NonInterleavedDest<DestFormat> { offsetDestChannels.getData(), numDestChannels },
+                                        (int) framesRead);
     }
     else if (bitsPerSample == 24)
     {
-        const auto* src = impl->tempBuffer.getData();
-
-        for (int sample = 0; sample < (int) framesRead; ++sample)
-        {
-            for (int ch = 0; ch < numChannelsToRead; ++ch)
-            {
-                const auto* samplePtr = src + (sample * numChannels + ch) * 3;
-                const int value = (((int) samplePtr[2]) << 24) | (((int) samplePtr[1]) << 16) | (((int) samplePtr[0]) << 8);
-                destChannels[ch][startOffsetInDestBuffer + sample] = value;
-            }
-        }
+        using SourceFormat = AudioData::Format<AudioData::Int24, AudioData::LittleEndian>;
+        using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+        
+        AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { reinterpret_cast<const char*> (tempBuffer.getData()), (int) numChannels },
+                                        AudioData::NonInterleavedDest<DestFormat> { offsetDestChannels.getData(), numDestChannels },
+                                        (int) framesRead);
     }
     else if (bitsPerSample == 32)
     {
         if (usesFloatingPointData)
         {
-            const auto* src = reinterpret_cast<const float*> (impl->tempBuffer.getData());
-
-            for (int sample = 0; sample < (int) framesRead; ++sample)
-            {
-                for (int ch = 0; ch < numChannelsToRead; ++ch)
-                {
-                    const auto value = jlimit (-1.0f, 1.0f, src[sample * numChannels + ch]);
-                    destChannels[ch][startOffsetInDestBuffer + sample] = (int) (value * 0x7fffffff);
-                }
-            }
+            using SourceFormat = AudioData::Format<AudioData::Float32, AudioData::LittleEndian>;
+            using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+            
+            AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { reinterpret_cast<const float*> (tempBuffer.getData()), (int) numChannels },
+                                            AudioData::NonInterleavedDest<DestFormat> { offsetDestChannels.getData(), numDestChannels },
+                                            (int) framesRead);
         }
         else
         {
-            const auto* src = reinterpret_cast<const drwav_int32*> (impl->tempBuffer.getData());
-
-            for (int sample = 0; sample < (int) framesRead; ++sample)
-            {
-                for (int ch = 0; ch < numChannelsToRead; ++ch)
-                {
-                    destChannels[ch][startOffsetInDestBuffer + sample] = src[sample * numChannels + ch];
-                }
-            }
+            using SourceFormat = AudioData::Format<AudioData::Int32, AudioData::LittleEndian>;
+            using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+            
+            AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { reinterpret_cast<const uint32*> (tempBuffer.getData()), (int) numChannels },
+                                            AudioData::NonInterleavedDest<DestFormat> { offsetDestChannels.getData(), numDestChannels },
+                                            (int) framesRead);
         }
+    }
+    else if (bitsPerSample == 64 && usesFloatingPointData)
+    {
+        // Handle 64-bit double precision float samples using AudioData
+        using SourceFormat = AudioData::Format<AudioData::Float64, AudioData::LittleEndian>;
+        using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+        
+        AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { reinterpret_cast<const double*> (tempBuffer.getData()), (int) numChannels },
+                                        AudioData::NonInterleavedDest<DestFormat> { offsetDestChannels.getData(), numDestChannels },
+                                        (int) framesRead);
+    }
+    else
+    {
+        return false;
     }
 
     return true;
 }
 
 //==============================================================================
-// WaveAudioFormatWriter implementation
-struct WaveAudioFormatWriter::Impl
+class WaveAudioFormatWriter : public AudioFormatWriter
 {
-    drwav wav = {};
-    HeapBlock<uint8> tempBuffer;
-    size_t tempBufferSize = 0;
-    bool isOpen = false;
-    int64 samplesWritten = 0;
+public:
+    WaveAudioFormatWriter (OutputStream* destStream,
+                           double sampleRate,
+                           int numberOfChannels,
+                           int bitsPerSample,
+                           const StringPairArray& metadataValues);
 
+    ~WaveAudioFormatWriter() override;
+
+    bool write (const float* const* samplesToWrite, int numSamples) override;
+
+    bool flush() override;
+
+private:
     static size_t writeCallback (void* pUserData, const void* pData, size_t bytesToWrite)
     {
         auto* stream = static_cast<OutputStream*> (pUserData);
@@ -299,15 +263,22 @@ struct WaveAudioFormatWriter::Impl
 
         return DRWAV_FALSE;
     }
+
+    drwav wav = {};
+    HeapBlock<uint8> tempBuffer;
+    size_t tempBufferSize = 0;
+    bool isOpen = false;
+    int64 samplesWritten = 0;
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WaveAudioFormatWriter)
 };
 
 WaveAudioFormatWriter::WaveAudioFormatWriter (OutputStream* destStream,
                                               double sampleRate,
-                                              unsigned int numberOfChannels,
-                                              unsigned int bitsPerSample,
+                                              int numberOfChannels,
+                                              int bitsPerSample,
                                               const StringPairArray& metadataValues)
     : AudioFormatWriter (destStream, "Wave file", sampleRate, numberOfChannels, bitsPerSample)
-    , impl (std::make_unique<Impl>())
 {
     drwav_data_format format = {};
     format.container = drwav_container_riff;
@@ -343,121 +314,105 @@ WaveAudioFormatWriter::WaveAudioFormatWriter (OutputStream* destStream,
     addStringMetadata ("comment", drwav_metadata_type_list_info_comment);
     addStringMetadata ("tracknumber", drwav_metadata_type_list_info_tracknumber);
 
-    impl->isOpen = drwav_init_write_with_metadata (&impl->wav,
-                                                   &format,
-                                                   Impl::writeCallback,
-                                                   Impl::seekCallback,
-                                                   destStream,
-                                                   nullptr,
-                                                   metadata.empty() ? nullptr : metadata.data(),
-                                                   (drwav_uint32) metadata.size())
-                == DRWAV_TRUE;
+    isOpen = drwav_init_write_with_metadata (&wav,
+                                             &format,
+                                             writeCallback,
+                                             seekCallback,
+                                             destStream,
+                                             nullptr,
+                                             metadata.empty() ? nullptr : metadata.data(),
+                                             (drwav_uint32) metadata.size()) == DRWAV_TRUE;
 
-    if (impl->isOpen)
+    if (isOpen)
     {
         // Allocate temp buffer for writing
         const auto bytesPerFrame = numberOfChannels * (bitsPerSample / 8);
-        impl->tempBufferSize = bytesPerFrame * 4096;
-        impl->tempBuffer.allocate (impl->tempBufferSize, true);
+        tempBufferSize = bytesPerFrame * 4096;
+        tempBuffer.allocate (tempBufferSize, true);
     }
 }
 
 WaveAudioFormatWriter::~WaveAudioFormatWriter()
 {
-    if (impl->isOpen)
-        drwav_uninit (&impl->wav);
+    if (isOpen)
+        drwav_uninit (&wav);
 }
 
-bool WaveAudioFormatWriter::write (const int** samplesToWrite, int numSamples)
+bool WaveAudioFormatWriter::write (const float* const* samplesToWrite, int numSamples)
 {
-    if (! impl->isOpen || numSamples <= 0)
+    if (! isOpen || numSamples <= 0)
         return false;
 
+    const auto numChannels = getNumChannels();
     const auto bytesPerSample = getBitsPerSample() / 8;
-    const auto bytesPerFrame = getNumChannels() * bytesPerSample;
+    const auto bytesPerFrame = numChannels * bytesPerSample;
     const auto bytesToWrite = numSamples * bytesPerFrame;
 
-    if (bytesToWrite > impl->tempBufferSize)
+    if (bytesToWrite > tempBufferSize)
     {
-        impl->tempBufferSize = bytesToWrite;
-        impl->tempBuffer.allocate (bytesToWrite, false);
+        tempBufferSize = bytesToWrite;
+        tempBuffer.allocate (bytesToWrite, false);
     }
 
-    // Interleave the samples
+    // Use AudioData to interleave and convert in one step
     if (getBitsPerSample() == 8)
     {
-        auto* dest = impl->tempBuffer.getData();
-
-        for (int sample = 0; sample < numSamples; ++sample)
-        {
-            for (unsigned int ch = 0; ch < getNumChannels(); ++ch)
-            {
-                const auto value = (samplesToWrite[ch][sample] >> 24) + 128;
-                dest[sample * getNumChannels() + ch] = (drwav_uint8) jlimit (0, 255, value);
-            }
-        }
+        using SourceFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+        using DestFormat = AudioData::Format<AudioData::UInt8, AudioData::LittleEndian>;
+        
+        AudioData::interleaveSamples (AudioData::NonInterleavedSource<SourceFormat> { samplesToWrite, (int) numChannels },
+                                      AudioData::InterleavedDest<DestFormat> { reinterpret_cast<uint8*> (tempBuffer.getData()), (int) numChannels },
+                                      numSamples);
     }
     else if (getBitsPerSample() == 16)
     {
-        auto* dest = reinterpret_cast<drwav_int16*> (impl->tempBuffer.getData());
-
-        for (int sample = 0; sample < numSamples; ++sample)
-        {
-            for (unsigned int ch = 0; ch < getNumChannels(); ++ch)
-            {
-                dest[sample * getNumChannels() + ch] = (drwav_int16) (samplesToWrite[ch][sample] >> 16);
-            }
-        }
+        using SourceFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+        using DestFormat = AudioData::Format<AudioData::Int16, AudioData::LittleEndian>;
+        
+        AudioData::interleaveSamples (AudioData::NonInterleavedSource<SourceFormat> { samplesToWrite, (int) numChannels },
+                                      AudioData::InterleavedDest<DestFormat> { reinterpret_cast<uint16*> (tempBuffer.getData()), (int) numChannels },
+                                      numSamples);
     }
     else if (getBitsPerSample() == 24)
     {
-        auto* dest = impl->tempBuffer.getData();
-
-        for (int sample = 0; sample < numSamples; ++sample)
-        {
-            for (unsigned int ch = 0; ch < getNumChannels(); ++ch)
-            {
-                const auto value = samplesToWrite[ch][sample] >> 8;
-                auto* samplePtr = dest + (sample * getNumChannels() + ch) * 3;
-                samplePtr[0] = (drwav_uint8) value;
-                samplePtr[1] = (drwav_uint8) (value >> 8);
-                samplePtr[2] = (drwav_uint8) (value >> 16);
-            }
-        }
+        using SourceFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+        using DestFormat = AudioData::Format<AudioData::Int24, AudioData::LittleEndian>;
+        
+        AudioData::interleaveSamples (AudioData::NonInterleavedSource<SourceFormat> { samplesToWrite, (int) numChannels },
+                                      AudioData::InterleavedDest<DestFormat> { reinterpret_cast<char*> (tempBuffer.getData()), (int) numChannels },
+                                      numSamples);
     }
     else if (getBitsPerSample() == 32)
     {
         if (isFloatingPoint())
         {
-            auto* dest = reinterpret_cast<float*> (impl->tempBuffer.getData());
-
-            for (int sample = 0; sample < numSamples; ++sample)
-            {
-                for (unsigned int ch = 0; ch < getNumChannels(); ++ch)
-                {
-                    dest[sample * getNumChannels() + ch] = samplesToWrite[ch][sample] / (float) 0x7fffffff;
-                }
-            }
+            using SourceFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+            using DestFormat = AudioData::Format<AudioData::Float32, AudioData::LittleEndian>;
+            
+            AudioData::interleaveSamples (AudioData::NonInterleavedSource<SourceFormat> { samplesToWrite, (int) numChannels },
+                                          AudioData::InterleavedDest<DestFormat> { reinterpret_cast<float*> (tempBuffer.getData()), (int) numChannels },
+                                          numSamples);
         }
         else
         {
-            auto* dest = reinterpret_cast<drwav_int32*> (impl->tempBuffer.getData());
-
-            for (int sample = 0; sample < numSamples; ++sample)
-            {
-                for (unsigned int ch = 0; ch < getNumChannels(); ++ch)
-                {
-                    dest[sample * getNumChannels() + ch] = samplesToWrite[ch][sample];
-                }
-            }
+            using SourceFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+            using DestFormat = AudioData::Format<AudioData::Int32, AudioData::LittleEndian>;
+            
+            AudioData::interleaveSamples (AudioData::NonInterleavedSource<SourceFormat> { samplesToWrite, (int) numChannels },
+                                          AudioData::InterleavedDest<DestFormat> { reinterpret_cast<uint32*> (tempBuffer.getData()), (int) numChannels },
+                                          numSamples);
         }
     }
+    else
+    {
+        return false;
+    }
 
-    const auto framesWritten = drwav_write_pcm_frames (&impl->wav, (drwav_uint64) numSamples, impl->tempBuffer.getData());
+    const auto framesWritten = drwav_write_pcm_frames (&wav, (drwav_uint64) numSamples, tempBuffer.getData());
 
     if (framesWritten > 0)
     {
-        impl->samplesWritten += framesWritten;
+        samplesWritten += framesWritten;
         return true;
     }
 
@@ -466,12 +421,76 @@ bool WaveAudioFormatWriter::write (const int** samplesToWrite, int numSamples)
 
 bool WaveAudioFormatWriter::flush()
 {
-    if (impl->isOpen && output != nullptr)
+    if (isOpen && output != nullptr)
     {
         output->flush();
         return true;
     }
     return false;
+}
+
+} // namespace
+
+//==============================================================================
+// WaveAudioFormat implementation
+WaveAudioFormat::WaveAudioFormat()
+    : formatName ("Wave file")
+{
+}
+
+WaveAudioFormat::~WaveAudioFormat() = default;
+
+const String& WaveAudioFormat::getFormatName() const
+{
+    return formatName;
+}
+
+Array<String> WaveAudioFormat::getFileExtensions() const
+{
+    return { ".wav", ".wave", ".bwf" };
+}
+
+std::unique_ptr<AudioFormatReader> WaveAudioFormat::createReaderFor (InputStream* sourceStream)
+{
+    auto reader = std::make_unique<WaveAudioFormatReader> (sourceStream);
+
+    if (reader->sampleRate > 0 && reader->numChannels > 0)
+        return reader;
+
+    return nullptr;
+}
+
+std::unique_ptr<AudioFormatWriter> WaveAudioFormat::createWriterFor (OutputStream* streamToWriteTo,
+                                                                     double sampleRate,
+                                                                     int numberOfChannels,
+                                                                     int bitsPerSample,
+                                                                     const StringPairArray& metadataValues,
+                                                                     int qualityOptionIndex)
+{
+    if (streamToWriteTo == nullptr)
+        return nullptr;
+
+    // Check supported configurations
+    if (numberOfChannels == 0 || numberOfChannels > 64)
+        return nullptr;
+
+    if (sampleRate <= 0 || sampleRate > 192000)
+        return nullptr;
+
+    if (bitsPerSample != 8 && bitsPerSample != 16 && bitsPerSample != 24 && bitsPerSample != 32)
+        return nullptr;
+
+    return std::make_unique<WaveAudioFormatWriter> (streamToWriteTo, sampleRate, numberOfChannels, bitsPerSample, metadataValues);
+}
+
+Array<int> WaveAudioFormat::getPossibleBitDepths() const
+{
+    return { 8, 16, 24, 32 };
+}
+
+Array<int> WaveAudioFormat::getPossibleSampleRates() const
+{
+    return { 8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000, 88200, 96000, 176400, 192000 };
 }
 
 } // namespace yup

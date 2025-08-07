@@ -52,20 +52,20 @@ bool AudioFormatWriter::writeFromAudioReader (AudioFormatReader& reader,
     const auto bufferSize = 16384;
     const auto maxChans = jmin ((int) numChannels, (int) reader.numChannels);
 
-    HeapBlock<int> tempBuffer (bufferSize * maxChans);
-    HeapBlock<int*> channels (maxChans);
+    HeapBlock<float> tempBuffer (bufferSize * maxChans, true);
+    HeapBlock<float*> channels (maxChans, false);
 
     for (int i = 0; i < maxChans; ++i)
-        channels[i] = tempBuffer + i * bufferSize;
+        channels[i] = tempBuffer.getData() + i * bufferSize;
 
     while (numSamplesToRead > 0)
     {
         const auto numThisTime = jmin (numSamplesToRead, (int64) bufferSize);
 
-        if (! reader.read (channels, maxChans, startSample, (int) numThisTime, false))
+        if (! reader.read (channels.getData(), maxChans, startSample, (int) numThisTime))
             return false;
 
-        if (! write ((const int**) channels.get(), (int) numThisTime))
+        if (! write (channels.getData(), (int) numThisTime))
             return false;
 
         startSample += numThisTime;
@@ -134,31 +134,31 @@ bool AudioFormatWriter::writeFromFloatArrays (const float* const* channels,
 
     numChannelsToWrite = jmin (numChannelsToWrite, (int) numChannels);
 
-    HeapBlock<int> tempBuffer (numSamples * numChannels);
-    HeapBlock<int*> intChannels (numChannels);
+    // Create temp buffer with proper channel layout for write method
+    HeapBlock<float> tempBuffer (numSamples * numChannels, true);
+    HeapBlock<float*> floatChannels (numChannels, false);
 
     for (int i = 0; i < (int) numChannels; ++i)
-        intChannels[i] = tempBuffer + i * numSamples;
+        floatChannels[i] = tempBuffer.getData() + i * numSamples;
 
-    // Convert float to int
+    // Copy float data to temporary channels
     for (int i = 0; i < numChannelsToWrite; ++i)
     {
         if (channels[i] != nullptr)
         {
-            for (int j = 0; j < numSamples; ++j)
-                intChannels[i][j] = (int) (channels[i][j] * 0x7fffffff);
+            FloatVectorOperations::copy (floatChannels[i], channels[i], numSamples);
         }
         else
         {
-            zeromem (intChannels[i], sizeof (int) * (size_t) numSamples);
+            FloatVectorOperations::clear (floatChannels[i], numSamples);
         }
     }
 
     // Clear any remaining channels
     for (int i = numChannelsToWrite; i < (int) numChannels; ++i)
-        zeromem (intChannels[i], sizeof (int) * (size_t) numSamples);
+        FloatVectorOperations::clear (floatChannels[i], numSamples);
 
-    return write ((const int**) intChannels.get(), numSamples);
+    return write (floatChannels.getData(), numSamples);
 }
 
 //==============================================================================
@@ -404,40 +404,53 @@ void AudioFormatWriter::WriteHelper::write (void* destData, const void* sourceDa
 
 void AudioFormatWriter::WriteHelper::writeInt8 (void* dest, const void* src, int numSamples) noexcept
 {
-    const auto* source = static_cast<const int*> (src);
+    const auto* source = static_cast<const float*> (src);
     auto* destination = static_cast<char*> (dest);
 
     for (int i = 0; i < numSamples; ++i)
-        destination[i] = (char) (source[i] >> 24);
+    {
+        const auto clampedValue = jlimit (-1.0f, 1.0f, source[i]);
+        const auto value = static_cast<int> (clampedValue * 127.0f) + 128;
+        destination[i] = (char) jlimit (0, 255, value);
+    }
 }
 
 void AudioFormatWriter::WriteHelper::writeInt16 (void* dest, const void* src, int numSamples, bool littleEndian) noexcept
 {
-    const auto* source = static_cast<const int*> (src);
+    const auto* source = static_cast<const float*> (src);
     auto* destination = static_cast<uint16*> (dest);
 
     if (littleEndian)
     {
         for (int i = 0; i < numSamples; ++i)
-            destination[i] = ByteOrder::swapIfBigEndian ((uint16) (source[i] >> 16));
+        {
+            const auto clampedValue = jlimit (-1.0f, 1.0f, source[i]);
+            const auto intValue = static_cast<int> (clampedValue * 32767.0f);
+            destination[i] = ByteOrder::swapIfBigEndian ((uint16) intValue);
+        }
     }
     else
     {
         for (int i = 0; i < numSamples; ++i)
-            destination[i] = ByteOrder::swapIfLittleEndian ((uint16) (source[i] >> 16));
+        {
+            const auto clampedValue = jlimit (-1.0f, 1.0f, source[i]);
+            const auto intValue = static_cast<int> (clampedValue * 32767.0f);
+            destination[i] = ByteOrder::swapIfLittleEndian ((uint16) intValue);
+        }
     }
 }
 
 void AudioFormatWriter::WriteHelper::writeInt24 (void* dest, const void* src, int numSamples, bool littleEndian) noexcept
 {
-    const auto* source = static_cast<const int*> (src);
+    const auto* source = static_cast<const float*> (src);
     auto* destination = static_cast<uint8*> (dest);
 
     if (littleEndian)
     {
         for (int i = 0; i < numSamples; ++i)
         {
-            const auto sample = source[i] >> 8;
+            const auto clampedValue = jlimit (-1.0f, 1.0f, source[i]);
+            const auto sample = static_cast<int> (clampedValue * 8388607.0f);
             destination[i * 3] = (uint8) sample;
             destination[i * 3 + 1] = (uint8) (sample >> 8);
             destination[i * 3 + 2] = (uint8) (sample >> 16);
@@ -447,7 +460,8 @@ void AudioFormatWriter::WriteHelper::writeInt24 (void* dest, const void* src, in
     {
         for (int i = 0; i < numSamples; ++i)
         {
-            const auto sample = source[i] >> 8;
+            const auto clampedValue = jlimit (-1.0f, 1.0f, source[i]);
+            const auto sample = static_cast<int> (clampedValue * 8388607.0f);
             destination[i * 3] = (uint8) (sample >> 16);
             destination[i * 3 + 1] = (uint8) (sample >> 8);
             destination[i * 3 + 2] = (uint8) sample;
@@ -457,18 +471,26 @@ void AudioFormatWriter::WriteHelper::writeInt24 (void* dest, const void* src, in
 
 void AudioFormatWriter::WriteHelper::writeInt32 (void* dest, const void* src, int numSamples, bool littleEndian) noexcept
 {
-    const auto* source = static_cast<const int*> (src);
+    const auto* source = static_cast<const float*> (src);
     auto* destination = static_cast<uint32*> (dest);
 
     if (littleEndian)
     {
         for (int i = 0; i < numSamples; ++i)
-            destination[i] = ByteOrder::swapIfBigEndian ((uint32) source[i]);
+        {
+            const auto clampedValue = jlimit (-1.0f, 1.0f, source[i]);
+            const auto intValue = static_cast<uint32> (clampedValue * 2147483647.0f);
+            destination[i] = ByteOrder::swapIfBigEndian (intValue);
+        }
     }
     else
     {
         for (int i = 0; i < numSamples; ++i)
-            destination[i] = ByteOrder::swapIfLittleEndian ((uint32) source[i]);
+        {
+            const auto clampedValue = jlimit (-1.0f, 1.0f, source[i]);
+            const auto intValue = static_cast<uint32> (clampedValue * 2147483647.0f);
+            destination[i] = ByteOrder::swapIfLittleEndian (intValue);
+        }
     }
 }
 

@@ -22,13 +22,16 @@
 namespace yup
 {
 
+//==============================================================================
 /** A class that manages audio formats. */
 class YUP_API AudioFormatManager
 {
 public:
+    //==============================================================================
     /** Constructor. */
     AudioFormatManager();
 
+    //==============================================================================
     /** Register the default formats. */
     void registerDefaultFormats();
 
@@ -38,6 +41,7 @@ public:
     */
     void registerFormat (std::unique_ptr<AudioFormat> format);
 
+    //==============================================================================
     /** Create a reader for a file.
 
         @param file The file to create a reader for.
@@ -46,6 +50,7 @@ public:
     */
     std::unique_ptr<AudioFormatReader> createReaderFor (const File& file);
 
+    //==============================================================================
     /** Create a writer for a file.
 
         @param file The file to create a writer for.

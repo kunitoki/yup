@@ -47,7 +47,7 @@ public:
 
         @returns true if the operation succeeded
     */
-    virtual bool write (const int** samplesToWrite, int numSamples) = 0;
+    virtual bool write (const float* const* samplesToWrite, int numSamples) = 0;
 
     /** Some formats may support a flush operation that makes sure the file
         is in a valid state before carrying on.
@@ -181,7 +181,7 @@ protected:
                        unsigned int bitsPerSample);
 
     /** The output stream for use by subclasses. */
-    OutputStream* output;
+    std::unique_ptr<OutputStream> output;
 
 private:
     String formatName;

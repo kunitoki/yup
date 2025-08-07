@@ -1355,6 +1355,50 @@ void convertFixedToFloat (float* dest, const int* src, float multiplier, Size nu
 #endif
 }
 
+template <typename Size>
+void convertFloatToFixed (int* dest, const float* src, float multiplier, Size num) noexcept
+{
+#if YUP_USE_ARM_NEON
+    const auto numLongs = num & ~3;
+    
+    if (numLongs != 0)
+    {
+        for (Size i = 0; i < numLongs; i += 4)
+        {
+            float32x4_t floatVec = vld1q_f32 (src + i);
+            float32x4_t scaledVec = vmulq_n_f32 (floatVec, multiplier);
+            int32x4_t intVec = vcvtq_s32_f32 (scaledVec);
+            vst1q_s32 (dest + i, intVec);
+        }
+    }
+    
+    for (Size i = numLongs; i < num; ++i)
+        dest[i] = (int) (src[i] * multiplier);
+
+#elif YUP_USE_SSE_INTRINSICS
+    const auto numLongs = num & ~3;
+    const __m128 mult = _mm_set1_ps (multiplier);
+    
+    if (numLongs != 0)
+    {
+        for (Size i = 0; i < numLongs; i += 4)
+        {
+            __m128 floatVec = _mm_loadu_ps (src + i);
+            __m128 scaledVec = _mm_mul_ps (floatVec, mult);
+            __m128i intVec = _mm_cvtps_epi32 (scaledVec);
+            _mm_storeu_si128 (reinterpret_cast<__m128i*> (dest + i), intVec);
+        }
+    }
+    
+    for (Size i = numLongs; i < num; ++i)
+        dest[i] = (int) (src[i] * multiplier);
+
+#else
+    for (Size i = 0; i < num; ++i)
+        dest[i] = (int) (src[i] * multiplier);
+#endif
+}
+
 } // namespace
 } // namespace FloatVectorHelpers
 
@@ -1608,6 +1652,16 @@ void YUP_CALLTYPE FloatVectorOperations::convertFixedToFloat (float* dest, const
 void YUP_CALLTYPE FloatVectorOperations::convertFixedToFloat (float* dest, const int* src, float multiplier, int num) noexcept
 {
     FloatVectorHelpers::convertFixedToFloat (dest, src, multiplier, num);
+}
+
+void YUP_CALLTYPE FloatVectorOperations::convertFloatToFixed (int* dest, const float* src, float multiplier, size_t num) noexcept
+{
+    FloatVectorHelpers::convertFloatToFixed (dest, src, multiplier, num);
+}
+
+void YUP_CALLTYPE FloatVectorOperations::convertFloatToFixed (int* dest, const float* src, float multiplier, int num) noexcept
+{
+    FloatVectorHelpers::convertFloatToFixed (dest, src, multiplier, num);
 }
 
 intptr_t YUP_CALLTYPE FloatVectorOperations::getFpStatusRegister() noexcept

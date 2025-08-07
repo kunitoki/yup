@@ -53,7 +53,7 @@ public:
     /** Creates a writer for this format. */
     virtual std::unique_ptr<AudioFormatWriter> createWriterFor (OutputStream* streamToWriteTo,
                                                                 double sampleRate,
-                                                                unsigned int numberOfChannels,
+                                                                int numberOfChannels,
                                                                 int bitsPerSample,
                                                                 const StringPairArray& metadataValues,
                                                                 int qualityOptionIndex) = 0;

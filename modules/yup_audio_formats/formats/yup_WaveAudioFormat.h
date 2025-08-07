@@ -47,7 +47,7 @@ public:
     /** Creates a writer for this format. */
     std::unique_ptr<AudioFormatWriter> createWriterFor (OutputStream* streamToWriteTo,
                                                         double sampleRate,
-                                                        unsigned int numberOfChannels,
+                                                        int numberOfChannels,
                                                         int bitsPerSample,
                                                         const StringPairArray& metadataValues,
                                                         int qualityOptionIndex) override;
@@ -66,63 +66,6 @@ public:
 
 private:
     String formatName;
-};
-
-//==============================================================================
-/**
-    Wave audio format reader implementation.
-*/
-class WaveAudioFormatReader : public AudioFormatReader
-{
-public:
-    /** Constructor. */
-    WaveAudioFormatReader (InputStream* sourceStream);
-
-    /** Destructor. */
-    ~WaveAudioFormatReader() override;
-
-    /** Reads samples from the file. */
-    bool readSamples (int* const* destChannels,
-                      int numDestChannels,
-                      int startOffsetInDestBuffer,
-                      int64 startSampleInFile,
-                      int numSamples) override;
-
-private:
-    struct Impl;
-    std::unique_ptr<Impl> impl;
-
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WaveAudioFormatReader)
-};
-
-//==============================================================================
-/**
-    Wave audio format writer implementation.
-*/
-class WaveAudioFormatWriter : public AudioFormatWriter
-{
-public:
-    /** Constructor. */
-    WaveAudioFormatWriter (OutputStream* destStream,
-                           double sampleRate,
-                           unsigned int numberOfChannels,
-                           unsigned int bitsPerSample,
-                           const StringPairArray& metadataValues);
-
-    /** Destructor. */
-    ~WaveAudioFormatWriter() override;
-
-    /** Writes samples to the file. */
-    bool write (const int** samplesToWrite, int numSamples) override;
-
-    /** Flushes any pending data. */
-    bool flush() override;
-
-private:
-    struct Impl;
-    std::unique_ptr<Impl> impl;
-
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WaveAudioFormatWriter)
 };
 
 } // namespace yup

@@ -171,7 +171,7 @@ protected:
 
         @returns true if the operation succeeded
     */
-    virtual bool readSamples (int* const* destChannels,
+    virtual bool readSamples (float* const* destChannels,
                               int numDestChannels,
                               int startOffsetInDestBuffer,
                               int64 startSampleInFile,

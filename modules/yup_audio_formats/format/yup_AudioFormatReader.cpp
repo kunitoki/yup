@@ -38,37 +38,9 @@ bool AudioFormatReader::read (float* const* destChannels, int numDestChannels, i
     if (numChannelsToRead == 0)
         return true;
 
-    // Use stack memory for small buffers
-    if (numSamplesToRead <= 2048 && numChannelsToRead <= 16)
-    {
-        int stackBuffer[2048 * 16];
-        int* chans[16];
-
-        for (int i = 0; i < numChannelsToRead; ++i)
-            chans[i] = stackBuffer + i * numSamplesToRead;
-
-        if (! readSamples (chans, numChannelsToRead, 0, startSampleInSource, numSamplesToRead))
-            return false;
-
-        for (int i = 0; i < numChannelsToRead; ++i)
-            if (destChannels[i] != nullptr)
-                FloatVectorOperations::convertFixedToFloat (destChannels[i], chans[i], 1.0f / 0x7fffffff, numSamplesToRead);
-    }
-    else
-    {
-        HeapBlock<int> tempBuffer (numChannelsToRead * numSamplesToRead);
-        HeapBlock<int*> chans (numChannelsToRead);
-
-        for (int i = 0; i < numChannelsToRead; ++i)
-            chans[i] = tempBuffer + i * numSamplesToRead;
-
-        if (! readSamples (chans, numChannelsToRead, 0, startSampleInSource, numSamplesToRead))
-            return false;
-
-        for (int i = 0; i < numChannelsToRead; ++i)
-            if (destChannels[i] != nullptr)
-                FloatVectorOperations::convertFixedToFloat (destChannels[i], chans[i], 1.0f / 0x7fffffff, numSamplesToRead);
-    }
+    // Since readSamples now uses float, we can read directly into destChannels
+    if (! readSamples (destChannels, numChannelsToRead, 0, startSampleInSource, numSamplesToRead))
+        return false;
 
     // Clear any remaining channels
     for (int i = numChannelsToRead; i < numDestChannels; ++i)
@@ -88,8 +60,20 @@ bool AudioFormatReader::read (int* const* destChannels, int numDestChannels, int
     if (numChannelsToRead == 0)
         return true;
 
-    if (! readSamples (destChannels, numChannelsToRead, 0, startSampleInSource, numSamplesToRead))
+    // Create temporary float buffers and read into them
+    HeapBlock<float> tempBuffer (numChannelsToRead * numSamplesToRead, true);
+    HeapBlock<float*> floatChans (numChannelsToRead, false);
+
+    for (int i = 0; i < numChannelsToRead; ++i)
+        floatChans[i] = tempBuffer.getData() + i * numSamplesToRead;
+
+    if (! readSamples (floatChans.getData(), numChannelsToRead, 0, startSampleInSource, numSamplesToRead))
         return false;
+
+    // Convert float to int
+    for (int i = 0; i < numChannelsToRead; ++i)
+        if (destChannels[i] != nullptr)
+            FloatVectorOperations::convertFloatToFixed (destChannels[i], floatChans[i], 0x7fffffff, numSamplesToRead);
 
     if (numChannelsToRead < numDestChannels)
     {
@@ -138,12 +122,12 @@ bool AudioFormatReader::read (AudioBuffer<float>* buffer,
         return true;
     }
 
-    // Allocate temporary buffer on heap to avoid stack overflow
+    // Allocate temporary float buffer on heap to avoid stack overflow
     const int numChannelsToRead = (canReadLeft ? 1 : 0) + (canReadRight ? 1 : 0);
-    HeapBlock<int> tempBuffer ((size_t) (numSamples * numChannelsToRead));
+    HeapBlock<float> tempBuffer ((size_t) (numSamples * numChannelsToRead), true);
 
     // Set up channel pointers for readSamples
-    int* chans[2] = { nullptr, nullptr };
+    float* chans[2] = { nullptr, nullptr };
 
     if (canReadLeft && canReadRight)
     {
@@ -163,14 +147,14 @@ bool AudioFormatReader::read (AudioBuffer<float>* buffer,
     if (! readSamples (chans, 2, 0, readerStartSample, numSamples))
         return false;
 
-    // Convert to float and distribute to output channels
-    const auto gain = 1.0f / 0x7fffffff;
-
+    // Distribute to output channels (no conversion needed, already float)
     if (canReadLeft && canReadRight && numCh >= 2)
     {
         // Stereo in, stereo out - direct mapping
-        FloatVectorOperations::convertFixedToFloat (buffer->getWritePointer (0, startSampleInDestBuffer), chans[0], gain, numSamples);
-        FloatVectorOperations::convertFixedToFloat (buffer->getWritePointer (1, startSampleInDestBuffer), chans[1], gain, numSamples);
+        if (chans[0] != nullptr)
+            FloatVectorOperations::copy (buffer->getWritePointer (0, startSampleInDestBuffer), chans[0], numSamples);
+        if (chans[1] != nullptr)
+            FloatVectorOperations::copy (buffer->getWritePointer (1, startSampleInDestBuffer), chans[1], numSamples);
 
         // Copy pattern to any additional output channels
         for (int ch = 2; ch < numCh; ++ch)
@@ -180,18 +164,29 @@ bool AudioFormatReader::read (AudioBuffer<float>* buffer,
     {
         // Stereo in, mono out - mix both channels
         auto* dest = buffer->getWritePointer (0, startSampleInDestBuffer);
-        FloatVectorOperations::convertFixedToFloat (dest, chans[0], gain * 0.5f, numSamples);
-
-        HeapBlock<float> temp ((size_t) numSamples);
-        FloatVectorOperations::convertFixedToFloat (temp.getData(), chans[1], gain * 0.5f, numSamples);
-        FloatVectorOperations::add (dest, temp.getData(), numSamples);
+        if (chans[0] != nullptr && chans[1] != nullptr)
+        {
+            FloatVectorOperations::copyWithMultiply (dest, chans[0], 0.5f, numSamples);
+            FloatVectorOperations::addWithMultiply (dest, chans[1], 0.5f, numSamples);
+        }
+        else if (chans[0] != nullptr)
+        {
+            FloatVectorOperations::copy (dest, chans[0], numSamples);
+        }
+        else if (chans[1] != nullptr)
+        {
+            FloatVectorOperations::copy (dest, chans[1], numSamples);
+        }
     }
     else
     {
         // Single channel to all outputs
-        const int* sourceData = canReadLeft ? chans[0] : chans[1];
-        for (int ch = 0; ch < numCh; ++ch)
-            FloatVectorOperations::convertFixedToFloat (buffer->getWritePointer (ch, startSampleInDestBuffer), sourceData, gain, numSamples);
+        const float* sourceData = canReadLeft ? chans[0] : chans[1];
+        if (sourceData != nullptr)
+        {
+            for (int ch = 0; ch < numCh; ++ch)
+                FloatVectorOperations::copy (buffer->getWritePointer (ch, startSampleInDestBuffer), sourceData, numSamples);
+        }
     }
 
     return true;
@@ -201,8 +196,8 @@ void AudioFormatReader::readMaxLevels (int64 startSample, int64 numSamples, Rang
 {
     numChannelsToRead = jmin (numChannelsToRead, (int) numChannels);
 
-    HeapBlock<int> tempBuffer (numChannelsToRead * 4096);
-    HeapBlock<int*> chans (numChannelsToRead);
+    HeapBlock<float> tempBuffer (numChannelsToRead * 4096, true);
+    HeapBlock<float*> chans (numChannelsToRead, false);
 
     for (int i = 0; i < numChannelsToRead; ++i)
     {
@@ -220,12 +215,12 @@ void AudioFormatReader::readMaxLevels (int64 startSample, int64 numSamples, Rang
         for (int i = 0; i < numChannelsToRead; ++i)
         {
             Range<float> r;
-            r.setStart ((float) chans[i][0]);
-            r.setEnd ((float) chans[i][0]);
+            r.setStart (chans[i][0]);
+            r.setEnd (chans[i][0]);
 
             for (int j = 1; j < (int) numThisTime; ++j)
             {
-                const auto sample = (float) chans[i][j];
+                const auto sample = chans[i][j];
                 r = r.getUnionWith (sample);
             }
 
@@ -236,10 +231,7 @@ void AudioFormatReader::readMaxLevels (int64 startSample, int64 numSamples, Rang
         numSamples -= numThisTime;
     }
 
-    // Convert from int to float range
-    for (int i = 0; i < numChannelsToRead; ++i)
-        results[i] = Range<float> (results[i].getStart() / (float) 0x7fffffff,
-                                   results[i].getEnd() / (float) 0x7fffffff);
+    // Results are already in float format [-1.0, 1.0], no conversion needed
 }
 
 void AudioFormatReader::readMaxLevels (int64 startSample, int64 numSamples, float& lowestLeft, float& highestLeft, float& lowestRight, float& highestRight)
@@ -262,12 +254,12 @@ int64 AudioFormatReader::searchForLevel (int64 startSample,
     if (numSamplesToSearch <= 0)
         return -1;
 
-    const auto magnitudeRangeMin = (int) (magnitudeRangeMinimum * 0x7fffffff);
-    const auto magnitudeRangeMax = (int) (magnitudeRangeMaximum * 0x7fffffff);
+    const auto magnitudeRangeMin = (float) magnitudeRangeMinimum;
+    const auto magnitudeRangeMax = (float) magnitudeRangeMaximum;
     const auto bufferSize = 4096;
-    HeapBlock<int> tempBuffer (bufferSize * 2); // Stereo buffer
+    HeapBlock<float> tempBuffer (bufferSize * 2, true); // Stereo buffer
 
-    int* chans[2] = { tempBuffer, tempBuffer + bufferSize };
+    float* chans[2] = { tempBuffer.getData(), tempBuffer.getData() + bufferSize };
     int consecutiveSamples = 0;
     bool lastSampleWasInRange = false;
 
