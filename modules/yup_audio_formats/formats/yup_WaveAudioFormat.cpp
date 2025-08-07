@@ -138,21 +138,6 @@ bool WaveAudioFormatReader::readSamples (float* const* destChannels,
     const auto bytesPerSample = bitsPerSample / 8;
     const auto bytesPerFrame = numChannels * bytesPerSample;
 
-    // Read the data
-    const auto framesToRead = (drwav_uint64) numSamples;
-    const auto bytesToRead = framesToRead * bytesPerFrame;
-
-    if (bytesToRead > tempBufferSize)
-    {
-        tempBufferSize = bytesToRead;
-        tempBuffer.allocate (bytesToRead, false);
-    }
-
-    const auto framesRead = drwav_read_pcm_frames (&wav, framesToRead, tempBuffer.getData());
-
-    if (framesRead == 0)
-        return false;
-
     // Create output channel pointers offset by the start position
     HeapBlock<float*> offsetDestChannels;
     offsetDestChannels.malloc (numDestChannels);
@@ -162,68 +147,114 @@ bool WaveAudioFormatReader::readSamples (float* const* destChannels,
         offsetDestChannels[ch] = destChannels[ch] + startOffsetInDestBuffer;
     }
 
-    // Use AudioData::deinterleaveSamples to convert and deinterleave in one step
-    if (bitsPerSample == 8)
+    drwav_uint64 framesRead;
+
+    // Handle A-law and μ-law formats using dr_wav's specialized float conversion
+    if (wav.translatedFormatTag == DR_WAVE_FORMAT_ALAW || wav.translatedFormatTag == DR_WAVE_FORMAT_MULAW)
     {
-        using SourceFormat = AudioData::Format<AudioData::UInt8, AudioData::LittleEndian>;
-        using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+        // For companded formats, use dr_wav's direct float conversion which handles the decompanding properly
+        const auto framesToRead = (drwav_uint64) numSamples;
+        const auto floatsToRead = framesToRead * numChannels;
         
-        AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { reinterpret_cast<const uint8*> (tempBuffer.getData()), (int) numChannels },
-                                        AudioData::NonInterleavedDest<DestFormat> { offsetDestChannels.getData(), numDestChannels },
-                                        (int) framesRead);
-    }
-    else if (bitsPerSample == 16)
-    {
-        using SourceFormat = AudioData::Format<AudioData::Int16, AudioData::LittleEndian>;
-        using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
-        
-        AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { reinterpret_cast<const uint16*> (tempBuffer.getData()), (int) numChannels },
-                                        AudioData::NonInterleavedDest<DestFormat> { offsetDestChannels.getData(), numDestChannels },
-                                        (int) framesRead);
-    }
-    else if (bitsPerSample == 24)
-    {
-        using SourceFormat = AudioData::Format<AudioData::Int24, AudioData::LittleEndian>;
-        using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
-        
-        AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { reinterpret_cast<const char*> (tempBuffer.getData()), (int) numChannels },
-                                        AudioData::NonInterleavedDest<DestFormat> { offsetDestChannels.getData(), numDestChannels },
-                                        (int) framesRead);
-    }
-    else if (bitsPerSample == 32)
-    {
-        if (usesFloatingPointData)
+        if (floatsToRead * sizeof(float) > tempBufferSize)
         {
-            using SourceFormat = AudioData::Format<AudioData::Float32, AudioData::LittleEndian>;
-            using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
-            
-            AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { reinterpret_cast<const float*> (tempBuffer.getData()), (int) numChannels },
-                                            AudioData::NonInterleavedDest<DestFormat> { offsetDestChannels.getData(), numDestChannels },
-                                            (int) framesRead);
+            tempBufferSize = floatsToRead * sizeof(float);
+            tempBuffer.allocate (tempBufferSize, false);
         }
-        else
-        {
-            using SourceFormat = AudioData::Format<AudioData::Int32, AudioData::LittleEndian>;
-            using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
-            
-            AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { reinterpret_cast<const uint32*> (tempBuffer.getData()), (int) numChannels },
-                                            AudioData::NonInterleavedDest<DestFormat> { offsetDestChannels.getData(), numDestChannels },
-                                            (int) framesRead);
-        }
-    }
-    else if (bitsPerSample == 64 && usesFloatingPointData)
-    {
-        // Handle 64-bit double precision float samples using AudioData
-        using SourceFormat = AudioData::Format<AudioData::Float64, AudioData::LittleEndian>;
+        
+        framesRead = drwav_read_pcm_frames_f32 (&wav, framesToRead, reinterpret_cast<float*> (tempBuffer.getData()));
+        
+        if (framesRead == 0)
+            return false;
+        
+        // Deinterleave the float data directly
+        using SourceFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
         using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
         
-        AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { reinterpret_cast<const double*> (tempBuffer.getData()), (int) numChannels },
+        AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { reinterpret_cast<const float*> (tempBuffer.getData()), (int) numChannels },
                                         AudioData::NonInterleavedDest<DestFormat> { offsetDestChannels.getData(), numDestChannels },
                                         (int) framesRead);
     }
     else
     {
-        return false;
+        // For all other formats, use the existing approach with raw data and AudioData conversion
+        const auto framesToRead = (drwav_uint64) numSamples;
+        const auto bytesToRead = framesToRead * bytesPerFrame;
+
+        if (bytesToRead > tempBufferSize)
+        {
+            tempBufferSize = bytesToRead;
+            tempBuffer.allocate (bytesToRead, false);
+        }
+
+        framesRead = drwav_read_pcm_frames (&wav, framesToRead, tempBuffer.getData());
+
+        if (framesRead == 0)
+            return false;
+
+        // Use AudioData::deinterleaveSamples to convert and deinterleave in one step
+        if (bitsPerSample == 8)
+        {
+            using SourceFormat = AudioData::Format<AudioData::UInt8, AudioData::LittleEndian>;
+            using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+            
+            AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { reinterpret_cast<const uint8*> (tempBuffer.getData()), (int) numChannels },
+                                            AudioData::NonInterleavedDest<DestFormat> { offsetDestChannels.getData(), numDestChannels },
+                                            (int) framesRead);
+        }
+        else if (bitsPerSample == 16)
+        {
+            using SourceFormat = AudioData::Format<AudioData::Int16, AudioData::LittleEndian>;
+            using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+            
+            AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { reinterpret_cast<const uint16*> (tempBuffer.getData()), (int) numChannels },
+                                            AudioData::NonInterleavedDest<DestFormat> { offsetDestChannels.getData(), numDestChannels },
+                                            (int) framesRead);
+        }
+        else if (bitsPerSample == 24)
+        {
+            using SourceFormat = AudioData::Format<AudioData::Int24, AudioData::LittleEndian>;
+            using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+            
+            AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { reinterpret_cast<const char*> (tempBuffer.getData()), (int) numChannels },
+                                            AudioData::NonInterleavedDest<DestFormat> { offsetDestChannels.getData(), numDestChannels },
+                                            (int) framesRead);
+        }
+        else if (bitsPerSample == 32)
+        {
+            if (usesFloatingPointData)
+            {
+                using SourceFormat = AudioData::Format<AudioData::Float32, AudioData::LittleEndian>;
+                using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+                
+                AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { reinterpret_cast<const float*> (tempBuffer.getData()), (int) numChannels },
+                                                AudioData::NonInterleavedDest<DestFormat> { offsetDestChannels.getData(), numDestChannels },
+                                                (int) framesRead);
+            }
+            else
+            {
+                using SourceFormat = AudioData::Format<AudioData::Int32, AudioData::LittleEndian>;
+                using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+                
+                AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { reinterpret_cast<const uint32*> (tempBuffer.getData()), (int) numChannels },
+                                                AudioData::NonInterleavedDest<DestFormat> { offsetDestChannels.getData(), numDestChannels },
+                                                (int) framesRead);
+            }
+        }
+        else if (bitsPerSample == 64 && usesFloatingPointData)
+        {
+            // Handle 64-bit double precision float samples using AudioData
+            using SourceFormat = AudioData::Format<AudioData::Float64, AudioData::LittleEndian>;
+            using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+            
+            AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { reinterpret_cast<const double*> (tempBuffer.getData()), (int) numChannels },
+                                            AudioData::NonInterleavedDest<DestFormat> { offsetDestChannels.getData(), numDestChannels },
+                                            (int) framesRead);
+        }
+        else
+        {
+            return false;
+        }
     }
 
     return true;

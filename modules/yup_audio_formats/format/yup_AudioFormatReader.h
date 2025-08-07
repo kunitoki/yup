@@ -131,32 +131,6 @@ public:
     /** The input stream, for use by subclasses. */
     std::unique_ptr<InputStream> input;
 
-    //==============================================================================
-    /** Used by subclasses to copy data to different formats. */
-    struct ReadHelper
-    {
-        /** Reads samples from a file in the given format. */
-        static void read (void* destData, const void* sourceData, int numSamples, int srcBytesPerSample, bool isFloatingPoint, bool isLittleEndian) noexcept;
-
-        /** Reads 8-bit signed samples. */
-        static void readInt8 (int* dest, const void* src, int numSamples) noexcept;
-
-        /** Reads 16-bit samples. */
-        static void readInt16 (int* dest, const void* src, int numSamples, bool littleEndian) noexcept;
-
-        /** Reads 24-bit samples. */
-        static void readInt24 (int* dest, const void* src, int numSamples, bool littleEndian) noexcept;
-
-        /** Reads 32-bit samples. */
-        static void readInt32 (int* dest, const void* src, int numSamples, bool littleEndian) noexcept;
-
-        /** Reads 32-bit float samples. */
-        static void readFloat32 (float* dest, const void* src, int numSamples, bool littleEndian) noexcept;
-
-        /** Reads 64-bit float samples. */
-        static void readFloat64 (float* dest, const void* src, int numSamples, bool littleEndian) noexcept;
-    };
-
 protected:
     /** Creates an AudioFormatReader object. */
     AudioFormatReader (InputStream* sourceStream, const String& formatName);
