@@ -113,11 +113,14 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
         zip.uncompressTo (libFolder.getParentDirectory());
     }
 
+    for (auto entry : RangedDirectoryIterator (destinationFolder, true))
+        YUP_DBG (entry.getFile().getFullPathName());
+
     PyPreConfig preconfig;
     PyPreConfig_InitIsolatedConfig (&preconfig);
     preconfig.utf8_mode = 1;
 
-    if (PyStatus status = Py_PreInitialize (&preconfig); PyStatus_IsError (status))
+    if (PyStatus status = Py_PreInitialize (&preconfig); status != PyStatus_Ok())
     {
         YUP_DBG ("Failed Py_PreInitialize");
         return nullptr;
@@ -130,14 +133,14 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
     config->isolated = 1;
     config->install_signal_handlers = 0;
 
-    if (auto status = PyConfig_SetBytesString (config.get(), &config->program_name, programName.toRawUTF8()); PyStatus_IsError (status))
+    if (auto status = PyConfig_SetBytesString (config.get(), &config->program_name, programName.toRawUTF8()); status != PyStatus_Ok())
     {
         YUP_DBG ("Failed config->program_name");
         return nullptr;
     }
 
     const auto homePath = destinationFolder.getFullPathName();
-    if (auto status = PyConfig_SetBytesString (config.get(), &config->home, homePath.toRawUTF8()); PyStatus_IsError (status))
+    if (auto status = PyConfig_SetBytesString (config.get(), &config->home, homePath.toRawUTF8()); status != PyStatus_Ok())
     {
         YUP_DBG ("Failed config->home");
         return nullptr;
@@ -146,15 +149,15 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
 #if YUP_WINDOWS
     const auto prefixPath = destinationFolder.getFullPathName();
 
-    if (auto status = PyConfig_SetBytesString (config.get(), &config->prefix, prefixPath.toRawUTF8()); PyStatus_IsError (status))
+    if (auto status = PyConfig_SetBytesString (config.get(), &config->platlibdir, prefixPath.toRawUTF8()); status != PyStatus_Ok())
     {
-        YUP_DBG ("Failed config->prefix");
+        YUP_DBG ("Failed config->platlibdir");
         return nullptr;
     }
 
-    if (auto status = PyConfig_SetBytesString (config.get(), &config->exec_prefix, prefixPath.toRawUTF8()); PyStatus_IsError (status))
+    if (auto status = PyConfig_SetBytesString (config.get(), &config->stdlib_dir, prefixPath.toRawUTF8()); status != PyStatus_Ok())
     {
-        YUP_DBG ("Failed config->exec_prefix");
+        YUP_DBG ("Failed config->stdlib_dir");
         return nullptr;
     }
 
