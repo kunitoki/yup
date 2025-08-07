@@ -155,6 +155,12 @@ struct FloatVectorOperationsBase
 
     /** Finds the maximum value in the given array. */
     static FloatType YUP_CALLTYPE findMaximum (const FloatType* src, CountType numValues) noexcept;
+    
+    /** Converts an array of fixed-point integers to floating point values. */
+    static void YUP_CALLTYPE convertFixedToFloat (FloatType* dest, const int* src, FloatType multiplier, CountType numValues) noexcept;
+    
+    /** Converts an array of floating point values to fixed-point integers. */
+    static void YUP_CALLTYPE convertFloatToFixed (int* dest, const FloatType* src, FloatType multiplier, CountType numValues) noexcept;
 };
 
 #if ! DOXYGEN
@@ -180,7 +186,9 @@ struct NameForwarder : public Bases...
         Bases::clip...,
         Bases::findMinAndMax...,
         Bases::findMinimum...,
-        Bases::findMaximum...;
+        Bases::findMaximum...,
+        Bases::convertFixedToFloat...,
+        Bases::convertFloatToFixed...;
 };
 
 } // namespace detail
@@ -199,13 +207,6 @@ struct NameForwarder : public Bases...
 class YUP_API FloatVectorOperations : public detail::NameForwarder<FloatVectorOperationsBase<float, int>, FloatVectorOperationsBase<float, size_t>, FloatVectorOperationsBase<double, int>, FloatVectorOperationsBase<double, size_t>>
 {
 public:
-    static void YUP_CALLTYPE convertFixedToFloat (float* dest, const int* src, float multiplier, int num) noexcept;
-
-    static void YUP_CALLTYPE convertFixedToFloat (float* dest, const int* src, float multiplier, size_t num) noexcept;
-
-    static void YUP_CALLTYPE convertFloatToFixed (int* dest, const float* src, float multiplier, int num) noexcept;
-
-    static void YUP_CALLTYPE convertFloatToFixed (int* dest, const float* src, float multiplier, size_t num) noexcept;
 
     /** This method enables or disables the SSE/NEON flush-to-zero mode. */
     static void YUP_CALLTYPE enableFlushToZeroMode (bool shouldEnable) noexcept;
