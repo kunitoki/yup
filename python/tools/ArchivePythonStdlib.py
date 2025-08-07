@@ -83,7 +83,7 @@ if __name__ == "__main__":
     ]
 
     if args.exclude_patterns:
-        custom_patterns = [x.strip() for x in args.exclude_patterns.split(";")]
+        custom_patterns = [x.strip() for x in args.exclude_patterns.replace('"', '').split(";")]
         base_patterns += custom_patterns
 
     ignored_files = shutil.ignore_patterns(*base_patterns)
@@ -94,7 +94,6 @@ if __name__ == "__main__":
 
     print(f"copying library from {base_python} to {final_location}...")
     if os.name == "nt":
-        (final_location / "Lib").mkdir(parents=True, exist_ok=True)
         shutil.copytree(base_python / "Lib", final_location, ignore=ignored_files, dirs_exist_ok=True)
         shutil.copytree(base_python / "DLLs", final_location, ignore=ignored_files, dirs_exist_ok=True)
     else:
