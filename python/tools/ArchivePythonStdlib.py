@@ -16,7 +16,7 @@ def file_hash(file):
     return h.hexdigest()
 
 
-def make_archive(file, directory):
+def make_archive(file, directory, verbose=False):
     archived_files = []
     for dirname, _, files in os.walk(directory):
         for filename in files:
@@ -34,6 +34,9 @@ def make_archive(file, directory):
             with open(path, "rb") as fp:
                 zf.writestr(zip_info, fp.read(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
 
+            if verbose:
+                print(f"Added to zip: {archive_path}")
+
 
 if __name__ == "__main__":
     print(f"starting python standard lib archiving tool...")
@@ -44,6 +47,7 @@ if __name__ == "__main__":
     parser.add_argument("-M", "--version-major", type=int, help="Major version number (integer).")
     parser.add_argument("-m", "--version-minor", type=int, help="Minor version number (integer).")
     parser.add_argument("-x", "--exclude-patterns", type=str, default=None, help="Excluded patterns (semicolon separated list).")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output.")
 
     args = parser.parse_args()
 
@@ -93,7 +97,7 @@ if __name__ == "__main__":
 
     print(f"making archive {temp_archive} to {final_archive}...")
     if os.path.exists(final_archive):
-        make_archive(temp_archive, final_location)
+        make_archive(temp_archive, final_location, verbose=args.verbose)
         if file_hash(temp_archive) != file_hash(final_archive):
             shutil.copy(temp_archive, final_archive)
     else:
