@@ -94,8 +94,10 @@ if __name__ == "__main__":
 
     print(f"copying library from {base_python} to {final_location}...")
     if os.name == "nt":
-        shutil.copytree(base_python / "Lib", final_location, ignore=ignored_files, dirs_exist_ok=True)
-        shutil.copytree(base_python / "DLLs", final_location, ignore=ignored_files, dirs_exist_ok=True)
+        (final_location / "Lib").mkdir(parents=True, exist_ok=True)
+        shutil.copytree(base_python / "Lib", final_location / "Lib", ignore=ignored_files, dirs_exist_ok=True)
+        (final_location / "DLLs").mkdir(parents=True, exist_ok=True)
+        shutil.copytree(base_python / "DLLs", final_location / "DLLs", ignore=ignored_files, dirs_exist_ok=True)
     else:
         shutil.copytree(base_python / "lib", final_location, ignore=ignored_files, dirs_exist_ok=True)
     os.makedirs(site_packages, exist_ok=True)
