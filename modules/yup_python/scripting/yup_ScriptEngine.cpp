@@ -108,14 +108,53 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
         zip.uncompressTo (pythonFolder.getParentDirectory());
     }
 
+    PyPreConfig preconfig;
+    PyPreConfig_InitIsolatedConfig (&preconfig);
+    preconfig.utf8_mode = 1;
+
+    if (PyStatus status = Py_PreInitialize(&preconfig); PyStatus_IsError (status))
+    {
+        YUP_DBG ("Failed Py_PreInitialize");
+        return nullptr;
+    }
+
     auto config = std::make_unique<PyConfig>();
 
     PyConfig_InitPythonConfig (config.get());
     config->parse_argv = 0;
     config->isolated = 1;
     config->install_signal_handlers = 0;
-    config->program_name = Py_DecodeLocale (programName.toRawUTF8(), nullptr);
-    config->home = Py_DecodeLocale (destinationFolder.getFullPathName().toRawUTF8(), nullptr);
+
+    if (auto status = PyConfig_SetBytesString (config.get(), &config->program_name, programName.toRawUTF8()); PyStatus_IsError (status))
+    {
+        YUP_DBG ("Failed config->program_name");
+        return nullptr;
+    }
+
+    const auto homePath = destinationFolder.getFullPathName();
+    if (auto status = PyConfig_SetBytesString (config.get(), &config->home, homePath.toRawUTF8()); PyStatus_IsError (status))
+    {
+        YUP_DBG ("Failed config->home");
+        return nullptr;
+    }
+
+#if YUP_WINDOWS
+    config->module_search_paths_set = 1;
+
+    const auto prefixPath = destinationFolder.getChildFile("lib").getFullPathName();
+
+    if (auto status = PyConfig_SetBytesString (config.get(), &config->prefix, prefixPath.toRawUTF8()); PyStatus_IsError (status))
+    {
+        YUP_DBG ("Failed config->prefix");
+        return nullptr;
+    }
+
+    if (auto status = PyConfig_SetBytesString (config.get(), &config->exec_prefix, prefixPath.toRawUTF8()); PyStatus_IsError (status))
+    {
+        YUP_DBG ("Failed config->exec_prefix");
+        return nullptr;
+    }
+#endif
 
     return config;
 }
