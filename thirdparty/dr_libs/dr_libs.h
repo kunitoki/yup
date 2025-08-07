@@ -39,6 +39,11 @@
 
 #pragma once
 
+#define DR_FLAC_NO_STDIO 1
 #include "upstream/dr_flac.h"
+
+#define DR_MP3_NO_STDIO 1
 #include "upstream/dr_mp3.h"
+
+#define DR_WAV_NO_STDIO 1
 #include "upstream/dr_wav.h"
