@@ -28,29 +28,7 @@ AudioFormatReader::AudioFormatReader (InputStream* sourceStream, const String& f
 {
 }
 
-bool AudioFormatReader::read (float* const* destChannels, int numDestChannels, int64 startSampleInSource, int numSamplesToRead)
-{
-    if (numSamplesToRead <= 0)
-        return true;
-
-    const auto numChannelsToRead = jmin (numDestChannels, (int) numChannels);
-
-    if (numChannelsToRead == 0)
-        return true;
-
-    // Since readSamples now uses float, we can read directly into destChannels
-    if (! readSamples (destChannels, numChannelsToRead, 0, startSampleInSource, numSamplesToRead))
-        return false;
-
-    // Clear any remaining channels
-    for (int i = numChannelsToRead; i < numDestChannels; ++i)
-        if (destChannels[i] != nullptr)
-            FloatVectorOperations::clear (destChannels[i], numSamplesToRead);
-
-    return true;
-}
-
-bool AudioFormatReader::read (int* const* destChannels, int numDestChannels, int64 startSampleInSource, int numSamplesToRead, bool fillLeftoverChannelsWithCopies)
+bool AudioFormatReader::read (float* const* destChannels, int numDestChannels, int64 startSampleInSource, int numSamplesToRead, bool fillLeftoverChannelsWithCopies)
 {
     if (numSamplesToRead <= 0)
         return true;
@@ -69,11 +47,6 @@ bool AudioFormatReader::read (int* const* destChannels, int numDestChannels, int
 
     if (! readSamples (floatChans.getData(), numChannelsToRead, 0, startSampleInSource, numSamplesToRead))
         return false;
-
-    // Convert float to int
-    for (int i = 0; i < numChannelsToRead; ++i)
-        if (destChannels[i] != nullptr)
-            FloatVectorOperations::convertFloatToFixed (destChannels[i], floatChans[i], 0x7fffffff, numSamplesToRead);
 
     if (numChannelsToRead < numDestChannels)
     {

@@ -24,10 +24,30 @@ namespace yup
 
 //==============================================================================
 /**
-    Reads samples from an audio file stream.
+    Abstract base class for reading audio sample data from formatted audio streams.
 
-    A subclass that reads a specific type of audio format will be created by
-    an AudioFormat object.
+    AudioFormatReader provides a standardized interface for reading audio data from various
+    audio file formats. Each concrete implementation handles the specific decoding requirements
+    of a particular format (such as WAV, FLAC, or MP3), while presenting a unified API for
+    accessing audio samples as floating-point data.
+
+    Key features:
+    - Converts all audio data to floating-point samples for consistent processing
+    - Supports multi-channel audio with flexible channel mapping
+    - Provides metadata extraction capabilities
+    - Offers both low-level sample reading and high-level convenience methods
+    - Includes level analysis and sample searching functionality
+
+    The reader maintains important audio properties such as sample rate, bit depth, channel count,
+    and total length in samples. It also preserves metadata found in the audio file for applications
+    that need access to title, artist, album information, and other embedded data.
+
+    Format-specific implementations are typically created through AudioFormat::createReaderFor(),
+    which handles the complexities of format detection and appropriate reader instantiation.
+
+    @see AudioFormat, AudioFormatWriter, AudioFormatManager
+
+    @tags{Audio}
 */
 class YUP_API AudioFormatReader
 {
@@ -35,35 +55,41 @@ public:
     /** Destructor. */
     virtual ~AudioFormatReader() = default;
 
-    /** Returns a description of what type of format this is. */
+    /** Returns a descriptive name identifying the audio format being read.
+
+        This method provides a human-readable description of the format that this reader
+        is designed to handle, such as "Wave file", "FLAC Audio", or "MP3 Audio".
+
+        @returns A reference to the format name string
+    */
     const String& getFormatName() const noexcept { return formatName; }
 
-    /** Reads samples from the stream.
+    /** Reads audio sample data from the stream into floating-point arrays.
 
-        @param destChannels             an array of pointers to arrays of floats, into which
-                                        the sample data for each channel will be written.
-        @param numDestChannels          the number of array pointers in the destChannels array
-        @param startSampleInSource      the position in the audio file from which to start reading
-        @param numSamplesToRead         the number of samples to read
+        This is the primary method for extracting audio samples from the stream. All samples
+        are converted to floating-point values in the range approximately ±1.0, regardless
+        of the original format's bit depth or encoding.
 
-        @returns true if the operation succeeded
-    */
-    bool read (float* const* destChannels, int numDestChannels, int64 startSampleInSource, int numSamplesToRead);
-
-    /** Reads samples from the stream.
-
-        @param destChannels                     an array of pointers to arrays of ints, into which
-                                                the sample data for each channel will be written
-        @param numDestChannels                  the number of array pointers in the destChannels array
-        @param startSampleInSource              the position in the audio file from which to start reading
-        @param numSamplesToRead                 the number of samples to read
+        @param destChannels             An array of pointers to float arrays, one per channel.
+                                        Each array must have space for at least numSamplesToRead samples.
+        @param numDestChannels          The number of channel arrays provided in destChannels.
+                                        If this is less than the source channel count, only the first
+                                        numDestChannels will be read.
+        @param startSampleInSource      The zero-based sample position in the source file to begin
+                                        reading from. Must be within the range [0, lengthInSamples).
+        @param numSamplesToRead         The number of samples to read from each channel.
         @param fillLeftoverChannelsWithCopies   if true, any channels in destChannels above
                                                 numChannels will be filled with copies of the
                                                 existing channels
 
-        @returns true if the operation succeeded
+        @returns true if the read operation completed successfully, false if an error occurred
+                or if the requested range extends beyond the available audio data
     */
-    bool read (int* const* destChannels, int numDestChannels, int64 startSampleInSource, int numSamplesToRead, bool fillLeftoverChannelsWithCopies);
+    bool read (float* const* destChannels,
+               int numDestChannels,
+               int64 startSampleInSource,
+               int numSamplesToRead,
+               bool fillLeftoverChannelsWithCopies = false);
 
     /** Fills a section of an AudioBuffer from this reader.
 
@@ -96,7 +122,7 @@ public:
         @param magnitudeRangeMinimum    the lowest magnitude (absolute) that is considered a match
         @param magnitudeRangeMaximum    the highest magnitude (absolute) that is considered a match
         @param minimumConsecutiveSamples the minimum number of consecutive samples that must be in
-                                        the magnitude range for a match to be registered
+                                         the magnitude range for a match to be registered
 
         @returns the index of the first matching sample, or -1 if none were found
     */
@@ -114,13 +140,13 @@ public:
     double sampleRate = 0;
 
     /** The number of bits per sample, e.g. 16, 24, 32. */
-    unsigned int bitsPerSample = 0;
+    int bitsPerSample = 0;
 
     /** The total number of samples in the audio stream. */
     int64 lengthInSamples = 0;
 
     /** The total number of channels in the audio stream. */
-    unsigned int numChannels = 0;
+    int numChannels = 0;
 
     /** Indicates whether the data is floating-point or fixed. */
     bool usesFloatingPointData = false;

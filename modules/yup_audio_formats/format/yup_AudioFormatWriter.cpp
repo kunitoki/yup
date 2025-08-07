@@ -25,8 +25,8 @@ namespace yup
 AudioFormatWriter::AudioFormatWriter (OutputStream* destStream,
                                       const String& formatName_,
                                       double rate,
-                                      unsigned int numberOfChannels_,
-                                      unsigned int bits)
+                                      int numberOfChannels_,
+                                      int bits)
     : output (destStream)
     , formatName (formatName_)
     , sampleRate (rate)

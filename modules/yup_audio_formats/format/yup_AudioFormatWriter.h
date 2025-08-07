@@ -24,10 +24,32 @@ namespace yup
 
 //==============================================================================
 /**
-    Writes samples to an audio file stream.
+    Abstract base class for writing audio sample data to formatted audio streams.
 
-    A subclass that writes a specific type of audio format will be created by
-    an AudioFormat object.
+    AudioFormatWriter provides a standardized interface for encoding and writing audio data
+    to various audio file formats. Each concrete implementation handles the specific encoding
+    requirements of a particular format (such as WAV, FLAC, or MP3), while accepting
+    floating-point sample data through a unified API.
+
+    Key features:
+    - Accepts floating-point samples for consistent input format
+    - Handles format-specific encoding and bit depth conversion internally
+    - Supports multi-channel audio output with proper interleaving
+    - Provides metadata embedding capabilities where supported by the format
+    - Offers both direct sample writing and high-level convenience methods
+    - Includes threaded writing support for background processing
+
+    The writer is configured during construction with essential parameters like sample rate,
+    channel count, and bit depth. These parameters determine how the floating-point input
+    samples are encoded into the target format's specific representation.
+
+    Format-specific implementations are typically created through AudioFormat::createWriterFor(),
+    which validates parameters against format capabilities and instantiates the appropriate
+    writer with proper configuration.
+
+    @see AudioFormat, AudioFormatReader, AudioFormatManager
+
+    @tags{Audio}
 */
 class YUP_API AudioFormatWriter
 {
@@ -35,17 +57,30 @@ public:
     /** Destructor. */
     virtual ~AudioFormatWriter();
 
-    /** Returns a description of what type of format this is. */
+    /** Returns a descriptive name identifying the audio format being written.
+
+        This method provides a human-readable description of the format that this writer
+        is designed to produce, such as "Wave file", "FLAC Audio", or "MP3 Audio".
+
+        @returns A reference to the format name string
+    */
     const String& getFormatName() const noexcept { return formatName; }
 
-    /** Writes a set of samples to the audio stream.
+    /** Writes floating-point audio sample data to the output stream.
 
-        @param samplesToWrite   an array of pointers to arrays containing the sample data
-                                for each channel to write. The number of channels must
-                                match the number of channels that this writer was created with.
-        @param numSamples       the number of samples to write
+        This is the primary method for encoding and writing audio samples to the stream.
+        The floating-point samples (typically in the range ±1.0) are converted to the
+        appropriate format-specific encoding and bit depth as configured during construction.
 
-        @returns true if the operation succeeded
+        @param samplesToWrite   An array of pointers to float arrays, one per channel.
+                               The number of pointers must match the channel count specified
+                               during writer creation. Each array must contain at least
+                               numSamples valid sample values.
+        @param numSamples       The number of samples to write from each channel array.
+                               Must be greater than 0.
+
+        @returns true if the samples were successfully encoded and written to the stream,
+                false if an encoding error occurred or if the stream write failed
     */
     virtual bool write (const float* const* samplesToWrite, int numSamples) = 0;
 
@@ -177,8 +212,8 @@ protected:
     AudioFormatWriter (OutputStream* destStream,
                        const String& formatName,
                        double sampleRate,
-                       unsigned int numberOfChannels,
-                       unsigned int bitsPerSample);
+                       int numberOfChannels,
+                       int bitsPerSample);
 
     /** The output stream for use by subclasses. */
     std::unique_ptr<OutputStream> output;
@@ -186,7 +221,8 @@ protected:
 private:
     String formatName;
     double sampleRate;
-    unsigned int numChannels, bitsPerSample;
+    int numChannels;
+    int bitsPerSample;
     bool isFloatingPointFormat;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioFormatWriter)
