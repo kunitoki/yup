@@ -44,6 +44,13 @@ function (yup_prepare_python_stdlib target_name python_tools_path output_variabl
     _yup_message (STATUS " * python_tools_path: ${python_tools_path}")
     _yup_message (STATUS " * ignored_library_patterns: ${ignored_library_patterns}")
 
+    if (YUP_PLATFORM_WINDOWS)
+        execute_process (
+            COMMAND
+                dir "${Python_LIBRARY_DIRS}" /s /b
+            COMMAND_ECHO STDOUT)
+    endif()
+
     execute_process (
         COMMAND
             "${Python_EXECUTABLE}" "${python_tools_path}/ArchivePythonStdlib.py"
