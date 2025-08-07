@@ -23,8 +23,6 @@ def make_archive(file, directory, verbose=False):
             path = os.path.join(dirname, filename)
             archived_files.append((path, os.path.relpath(path, directory)))
 
-            print(f"Added to zip: {path}")
-
     with zipfile.ZipFile(file, "w") as zf:
         for path, archive_path in sorted(archived_files):
             permission = 0o555 if os.access(path, os.X_OK) else 0o444
@@ -36,8 +34,8 @@ def make_archive(file, directory, verbose=False):
             with open(path, "rb") as fp:
                 zf.writestr(zip_info, fp.read(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
 
-            #if verbose:
-            #    print(f"Added to zip: {archive_path}")
+            if verbose:
+                print(f"Added to zip: {archive_path}")
 
 
 if __name__ == "__main__":
