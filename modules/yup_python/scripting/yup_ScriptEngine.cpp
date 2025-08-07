@@ -84,32 +84,33 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
     if (! destinationFolder.isDirectory())
         destinationFolder.createDirectory();
 
-    auto libFolder = destinationFolder.getChildFile ("lib");
+    auto libFolder = destinationFolder;
+
+#if ! YUP_WINDOWS
+    libFolder = libFolder.getChildFile ("lib");
     if (! libFolder.isDirectory())
         libFolder.createDirectory();
 
-    auto pythonFolder = libFolder.getChildFile (pythonFolderName);
-    if (! pythonFolder.isDirectory())
-        pythonFolder.createDirectory();
+    libFolder = libFolder.getChildFile (pythonFolderName);
+#endif
 
-    if (forceInstall && pythonFolder.getNumberOfChildFiles (File::findFilesAndDirectories) > 0)
+    if (! libFolder.isDirectory())
+        libFolder.createDirectory();
+
+    if (forceInstall && libFolder.getNumberOfChildFiles (File::findFilesAndDirectories) > 0)
     {
-        pythonFolder.deleteRecursively();
-        pythonFolder.createDirectory();
+        libFolder.deleteRecursively();
+        libFolder.createDirectory();
     }
 
-#if YUP_WINDOWS
-    if (! pythonFolder.getChildFile ("encodings").isDirectory())
-#else
-    if (! pythonFolder.getChildFile ("lib-dynload").isDirectory())
-#endif
+    if (! libFolder.getChildFile ("encodings").isDirectory())
     {
         MemoryBlock mb = standardLibraryCallback (pythonArchiveName.toRawUTF8());
 
         auto mis = MemoryInputStream (mb.getData(), mb.getSize(), false);
 
         auto zip = ZipFile (mis);
-        zip.uncompressTo (pythonFolder.getParentDirectory());
+        zip.uncompressTo (libFolder.getParentDirectory());
     }
 
     PyPreConfig preconfig;
