@@ -1360,7 +1360,7 @@ void convertFloatToFixed (int* dest, const float* src, float multiplier, Size nu
 {
 #if YUP_USE_ARM_NEON
     const auto numLongs = num & ~3;
-    
+
     if (numLongs != 0)
     {
         for (Size i = 0; i < numLongs; i += 4)
@@ -1371,14 +1371,14 @@ void convertFloatToFixed (int* dest, const float* src, float multiplier, Size nu
             vst1q_s32 (dest + i, intVec);
         }
     }
-    
+
     for (Size i = numLongs; i < num; ++i)
         dest[i] = (int) (src[i] * multiplier);
 
 #elif YUP_USE_SSE_INTRINSICS
     const auto numLongs = num & ~3;
     const __m128 mult = _mm_set1_ps (multiplier);
-    
+
     if (numLongs != 0)
     {
         for (Size i = 0; i < numLongs; i += 4)
@@ -1389,7 +1389,7 @@ void convertFloatToFixed (int* dest, const float* src, float multiplier, Size nu
             _mm_storeu_si128 (reinterpret_cast<__m128i*> (dest + i), intVec);
         }
     }
-    
+
     for (Size i = numLongs; i < num; ++i)
         dest[i] = (int) (src[i] * multiplier);
 

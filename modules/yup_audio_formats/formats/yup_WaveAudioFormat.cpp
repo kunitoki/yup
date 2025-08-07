@@ -74,7 +74,8 @@ WaveAudioFormatReader::WaveAudioFormatReader (InputStream* sourceStream)
                                        nullptr,
                                        sourceStream,
                                        DRWAV_WITH_METADATA,
-                                       nullptr) == DRWAV_TRUE;
+                                       nullptr)
+          == DRWAV_TRUE;
 
     if (isOpen)
     {
@@ -156,9 +157,9 @@ bool WaveAudioFormatReader::readSamples (float* const* destChannels,
         const auto framesToRead = (drwav_uint64) numSamples;
         const auto floatsToRead = framesToRead * numChannels;
 
-        if (floatsToRead * sizeof(float) > tempBufferSize)
+        if (floatsToRead * sizeof (float) > tempBufferSize)
         {
-            tempBufferSize = floatsToRead * sizeof(float);
+            tempBufferSize = floatsToRead * sizeof (float);
             tempBuffer.allocate (tempBufferSize, false);
         }
 
@@ -352,7 +353,8 @@ WaveAudioFormatWriter::WaveAudioFormatWriter (OutputStream* destStream,
                                              destStream,
                                              nullptr,
                                              metadata.empty() ? nullptr : metadata.data(),
-                                             (drwav_uint32) metadata.size()) == DRWAV_TRUE;
+                                             (drwav_uint32) metadata.size())
+          == DRWAV_TRUE;
 
     if (isOpen)
     {
