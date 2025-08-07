@@ -206,53 +206,6 @@ protected:
 };
 
 //==============================================================================
-TEST_F (FFTProcessorValidation, FormatDiagnostic)
-{
-    // Debug test to understand the actual FFT output format
-    const int size = 64;
-    FFTProcessor processor (size);
-
-    // Test with impulse signal
-    std::vector<float> impulse (size, 0.0f);
-    impulse[0] = 1.0f;
-
-    std::vector<float> output (size * 2);
-    processor.performRealFFTForward (impulse.data(), output.data());
-
-    // Print key bins to understand format
-    auto printKeyBins = [&] (const std::string& title)
-    {
-        std::cout << "\n"
-                  << title << ":\n";
-        std::cout << "DC (bin 0): [" << output[0] << ", " << output[1] << "]\n";
-        std::cout << "Bin 1: [" << output[2] << ", " << output[3] << "]\n";
-        std::cout << "Bin 2: [" << output[4] << ", " << output[5] << "]\n";
-        std::cout << "...\n";
-        int nyquist = size / 2;
-        std::cout << "Nyquist (bin " << nyquist << "): [" << output[nyquist * 2] << ", " << output[nyquist * 2 + 1] << "]\n";
-        std::cout << "Bin " << (nyquist + 1) << ": [" << output[(nyquist + 1) * 2] << ", " << output[(nyquist + 1) * 2 + 1] << "]\n";
-        std::cout << "Last bin (" << (size - 1) << "): [" << output[(size - 1) * 2] << ", " << output[(size - 1) * 2 + 1] << "]\n";
-    };
-
-    printKeyBins ("Impulse FFT output (size=" + std::to_string (size) + ")");
-
-    // Test with DC signal
-    std::vector<float> dcSignal (size, 1.0f);
-    processor.performRealFFTForward (dcSignal.data(), output.data());
-    printKeyBins ("DC signal FFT output");
-
-    // Test with alternating signal (Nyquist frequency)
-    std::vector<float> nyquistSignal (size);
-    for (int i = 0; i < size; ++i)
-        nyquistSignal[i] = (i % 2 == 0) ? 1.0f : -1.0f;
-
-    processor.performRealFFTForward (nyquistSignal.data(), output.data());
-    printKeyBins ("Alternating signal FFT output");
-
-    // Always pass this test since it's just for debugging
-    EXPECT_TRUE (true);
-}
-
 TEST_F (FFTProcessorValidation, StandardFormatValidation)
 {
     const int size = 64;
