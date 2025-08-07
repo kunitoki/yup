@@ -98,7 +98,11 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
         pythonFolder.createDirectory();
     }
 
+#if YUP_WINDOWS
+    if (! pythonFolder.getChildFile ("encodings").isDirectory())
+#else
     if (! pythonFolder.getChildFile ("lib-dynload").isDirectory())
+#endif
     {
         MemoryBlock mb = standardLibraryCallback (pythonArchiveName.toRawUTF8());
 
@@ -139,9 +143,7 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
     }
 
 #if YUP_WINDOWS
-    config->module_search_paths_set = 1;
-
-    const auto prefixPath = destinationFolder.getChildFile ("lib").getFullPathName();
+    const auto prefixPath = destinationFolder.getFullPathName();
 
     if (auto status = PyConfig_SetBytesString (config.get(), &config->prefix, prefixPath.toRawUTF8()); PyStatus_IsError (status))
     {
@@ -154,6 +156,9 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
         YUP_DBG ("Failed config->exec_prefix");
         return nullptr;
     }
+
+    PyWideStringList_Append (&config->module_search_paths, prefixPath.toWideCharPointer());
+    config->module_search_paths_set = 1;
 #endif
 
     return config;

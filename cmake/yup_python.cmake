@@ -32,6 +32,7 @@ function (yup_prepare_python_stdlib target_name python_tools_path output_variabl
     list (APPEND ignored_library_patterns ${YUP_ARG_IGNORED_LIBRARY_PATTERNS})
 
     get_filename_component (python_tools_path "${python_tools_path}" REALPATH)
+    get_filename_component (python_root_path "${Python_LIBRARY_DIRS}/.." REALPATH)
 
     set (python_standard_library "${CMAKE_CURRENT_BINARY_DIR}/python${Python_VERSION_MAJOR}${Python_VERSION_MINOR}.zip")
 
@@ -41,20 +42,21 @@ function (yup_prepare_python_stdlib target_name python_tools_path output_variabl
     _yup_message (STATUS " * Python_LIBRARY_DIRS: ${Python_LIBRARY_DIRS}")
     _yup_message (STATUS " * Python_VERSION_MAJOR: ${Python_VERSION_MAJOR}")
     _yup_message (STATUS " * Python_VERSION_MINOR: ${Python_VERSION_MINOR}")
+    _yup_message (STATUS " * python_root_path: ${python_root_path}")
     _yup_message (STATUS " * python_tools_path: ${python_tools_path}")
     _yup_message (STATUS " * ignored_library_patterns: ${ignored_library_patterns}")
 
-    if (YUP_PLATFORM_WINDOWS)
-        execute_process (COMMAND dir "${Python_LIBRARY_DIRS}/.." COMMAND_ECHO STDOUT)
-        execute_process (COMMAND dir "${Python_LIBRARY_DIRS}/../Lib" COMMAND_ECHO STDOUT)
-        execute_process (COMMAND dir "${Python_LIBRARY_DIRS}/../Scripts" COMMAND_ECHO STDOUT)
-        execute_process (COMMAND dir "${Python_LIBRARY_DIRS}/../DLLs" COMMAND_ECHO STDOUT)
-    endif()
+    #if (YUP_PLATFORM_WINDOWS)
+    #    execute_process (COMMAND dir "${python_root_path}" COMMAND_ECHO STDOUT)
+    #    execute_process (COMMAND dir "${python_root_path}/Lib" COMMAND_ECHO STDOUT)
+    #    execute_process (COMMAND dir "${python_root_path}/Scripts" COMMAND_ECHO STDOUT)
+    #    execute_process (COMMAND dir "${python_root_path}/DLLs" COMMAND_ECHO STDOUT)
+    #endif()
 
     execute_process (
         COMMAND
             "${Python_EXECUTABLE}" "${python_tools_path}/ArchivePythonStdlib.py"
-                -l "${Python_LIBRARY_DIRS}" -o "${CMAKE_CURRENT_BINARY_DIR}" -M "${Python_VERSION_MAJOR}" -m "${Python_VERSION_MINOR}"
+                -r "${python_root_path}" -o "${CMAKE_CURRENT_BINARY_DIR}" -M "${Python_VERSION_MAJOR}" -m "${Python_VERSION_MINOR}"
                 -x "\"${ignored_library_patterns}\"" -v
         COMMAND_ECHO STDOUT
         COMMAND_ERROR_IS_FATAL ANY)
