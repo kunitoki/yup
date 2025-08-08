@@ -32,9 +32,21 @@ function (yup_prepare_python_stdlib target_name python_tools_path output_variabl
     list (APPEND ignored_library_patterns ${YUP_ARG_IGNORED_LIBRARY_PATTERNS})
 
     get_filename_component (python_tools_path "${python_tools_path}" REALPATH)
-    get_filename_component (python_root_path "${Python_LIBRARY_DIRS}/.." REALPATH)
 
     set (python_standard_library "${CMAKE_CURRENT_BINARY_DIR}/python${Python_VERSION_MAJOR}${Python_VERSION_MINOR}.zip")
+
+    if (YUP_PLATFORM_WINDOWS)
+        set (python_version_string "${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}.${Python_VERSION_PATCH}")
+        set (python_embeddable_url "https://www.python.org/ftp/python/${python_version_string}/python-${python_version_string}-embed-amd64.zip")
+        FetchContent_Declare (python_embed_env URL ${python_embeddable_url})
+        if (NOT python_embed_env_POPULATED)
+            FetchContent_Populate(python_embed_env)
+        endif()
+
+        get_filename_component (python_root_path "${python_embed_env_SOURCE_DIR}" REALPATH)
+    else()
+        get_filename_component (python_root_path "${Python_LIBRARY_DIRS}" REALPATH)
+    endif()
 
     _yup_message (STATUS "Executing python stdlib archive generator tool")
     _yup_message (STATUS " * CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
@@ -42,6 +54,7 @@ function (yup_prepare_python_stdlib target_name python_tools_path output_variabl
     _yup_message (STATUS " * Python_LIBRARY_DIRS: ${Python_LIBRARY_DIRS}")
     _yup_message (STATUS " * Python_VERSION_MAJOR: ${Python_VERSION_MAJOR}")
     _yup_message (STATUS " * Python_VERSION_MINOR: ${Python_VERSION_MINOR}")
+    _yup_message (STATUS " * Python_VERSION_PATCH: ${Python_VERSION_PATCH}")
     _yup_message (STATUS " * python_root_path: ${python_root_path}")
     _yup_message (STATUS " * python_tools_path: ${python_tools_path}")
     _yup_message (STATUS " * ignored_library_patterns: ${ignored_library_patterns}")

@@ -62,24 +62,26 @@ if __name__ == "__main__":
     base_python: Path = args.root_folder
 
     base_patterns = [
-        "*.pyc",
-        "__pycache__",
-        "__phello__",
-        "*config-3*",
-        "*tcl*",
-        "*tdbc*",
-        "*tk*",
-        "Tk*",
-        "_tk*",
-        "_test*",
-        "libpython*",
-        "pkgconfig",
-        "idlelib",
-        "site-packages",
-        "test",
-        "turtledemo",
-        "EXTERNALLY-MANAGED",
-        "LICENSE.txt",
+        "**/*.pyc",
+        "**/__pycache__",
+        "**/__phello__",
+        "**/*config-3*",
+        "**/*tcl*",
+        "**/*tdbc*",
+        "**/*tk*",
+        "**/Tk*",
+        "**/_tk*",
+        "**/_test*",
+        "**/libpython*",
+        "**/pkgconfig",
+        "**/idlelib",
+        "**/site-packages",
+        "**/test",
+        "**/turtledemo",
+        "**/temp_*.txt",
+        "**/.DS_Store",
+        "**/EXTERNALLY-MANAGED",
+        "**/LICENSE.txt",
     ]
 
     if args.exclude_patterns:
@@ -93,13 +95,7 @@ if __name__ == "__main__":
         shutil.rmtree(final_location)
 
     print(f"copying library from {base_python} to {final_location}...")
-    if os.name == "nt":
-        (final_location / "Lib").mkdir(parents=True, exist_ok=True)
-        shutil.copytree(base_python / "Lib", final_location / "Lib", ignore=ignored_files, dirs_exist_ok=True)
-        (final_location / "DLLs").mkdir(parents=True, exist_ok=True)
-        shutil.copytree(base_python / "DLLs", final_location / "DLLs", ignore=ignored_files, dirs_exist_ok=True)
-    else:
-        shutil.copytree(base_python / "lib", final_location, ignore=ignored_files, dirs_exist_ok=True)
+    shutil.copytree(base_python, final_location, ignore=ignored_files, dirs_exist_ok=True)
     os.makedirs(site_packages, exist_ok=True)
 
     print(f"making archive {temp_archive} to {final_archive}...")

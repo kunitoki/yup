@@ -299,7 +299,6 @@ TEST_F (ScriptEngineTest, PrepareScriptingHomeWithValidParameters)
     };
 
     auto config = ScriptEngine::prepareScriptingHome (
-        "TestApp",
         tempDir,
         standardLibraryCallback,
         false);
@@ -443,7 +442,6 @@ TEST_F (ScriptEngineTest, RunScriptWithLambdaFunctions)
 TEST_F (ScriptEngineTest, RunScriptWithStdLibImports)
 {
     ScriptEngine engine (ScriptEngine::prepareScriptingHome (
-        YUPApplication::getInstance()->getApplicationName(),
         File::getSpecialLocation (File::tempDirectory),
         [] (const char*) -> MemoryBlock
     {

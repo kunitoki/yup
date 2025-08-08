@@ -72,7 +72,6 @@ namespace
 //==============================================================================
 
 std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
-    const String& programName,
     const File& destinationFolder,
     std::function<MemoryBlock (const char*)> standardLibraryCallback,
     bool forceInstall)
@@ -80,6 +79,8 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
     String pythonFolderName, pythonArchiveName;
     pythonFolderName << "python" << PY_MAJOR_VERSION << "." << PY_MINOR_VERSION;
     pythonArchiveName << "python" << PY_MAJOR_VERSION << PY_MINOR_VERSION << "_zip";
+
+    File applicationFile = File::getSpecialLocation (File::currentApplicationFile);
 
     if (! destinationFolder.isDirectory())
         destinationFolder.createDirectory();
@@ -113,7 +114,7 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
         zip.uncompressTo (libFolder.getParentDirectory());
     }
 
-    for (auto entry : RangedDirectoryIterator (destinationFolder, true))
+    for (auto entry : RangedDirectoryIterator (destinationFolder, true, "*", File::findFiles, File::FollowSymlinks::no))
         YUP_DBG (entry.getFile().getFullPathName());
 
     PyPreConfig preconfig;
@@ -130,39 +131,26 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
 
     PyConfig_InitIsolatedConfig (config.get());
     config->parse_argv = 0;
+    config->verbose = 1;
     config->install_signal_handlers = 0;
 
-    if (auto status = PyConfig_SetBytesString (config.get(), &config->program_name, programName.toRawUTF8()); PyStatus_IsError (status))
+    if (auto status = PyConfig_SetBytesString (config.get(), &config->program_name, applicationFile.getFullPathName().toRawUTF8()); PyStatus_Exception(status))
     {
         YUP_DBG ("Failed config->program_name");
         return nullptr;
     }
 
-    const auto homePath = destinationFolder.getFullPathName();
-    if (auto status = PyConfig_SetBytesString (config.get(), &config->home, homePath.toRawUTF8()); PyStatus_IsError (status))
+    if (auto status = PyConfig_SetBytesString (config.get(), &config->home, destinationFolder.getFullPathName().toRawUTF8()); PyStatus_Exception (status))
     {
         YUP_DBG ("Failed config->home");
         return nullptr;
     }
 
-#if YUP_WINDOWS
-    const auto prefixPath = destinationFolder.getFullPathName();
-
-    if (auto status = PyConfig_SetBytesString (config.get(), &config->platlibdir, prefixPath.toRawUTF8()); PyStatus_IsError (status))
+    if (auto status = PyConfig_Read (config.get()); PyStatus_Exception (status))
     {
-        YUP_DBG ("Failed config->platlibdir");
+        YUP_DBG ("Failed PyConfig_Read");
         return nullptr;
     }
-
-    if (auto status = PyConfig_SetBytesString (config.get(), &config->stdlib_dir, prefixPath.toRawUTF8()); PyStatus_IsError (status))
-    {
-        YUP_DBG ("Failed config->stdlib_dir");
-        return nullptr;
-    }
-
-    PyWideStringList_Append (&config->module_search_paths, prefixPath.toWideCharPointer());
-    config->module_search_paths_set = 1;
-#endif
 
     return config;
 }
