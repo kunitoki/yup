@@ -343,6 +343,11 @@ yup_wchar CharacterFunctions::toUpperCase (const yup_wchar character) noexcept
     if (iter != std::cend (lowerCaseToUpperCaseMap()))
         return iter->second;
 
+#if YUP_WINDOWS
+    if (! iswascii ((wint_t) character) || ! iswlower ((wint_t) character))
+        return character;
+#endif
+
     return (yup_wchar) towupper ((wint_t) character);
 }
 
@@ -351,6 +356,11 @@ yup_wchar CharacterFunctions::toLowerCase (const yup_wchar character) noexcept
     const auto iter = upperCaseToLowerCaseMap().find (character);
     if (iter != std::cend (upperCaseToLowerCaseMap()))
         return iter->second;
+
+#if YUP_WINDOWS
+    if (! iswascii ((wint_t) character) || ! iswupper ((wint_t) character))
+        return character;
+#endif
 
     return (yup_wchar) towlower ((wint_t) character);
 }

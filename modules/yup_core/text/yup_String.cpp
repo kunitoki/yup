@@ -2062,7 +2062,14 @@ String String::formattedRaw (const char* pf, ...)
 
         YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
-#if YUP_ANDROID
+#if YUP_WINDOWS
+        // On Windows, use narrow character functions to avoid encoding issues
+        // with mixed narrow format strings and arguments
+        HeapBlock<char> temp (bufferSize);
+        int num = (int) _vsnprintf (temp.get(), bufferSize - 1, pf, args);
+        if (num >= static_cast<int> (bufferSize))
+            num = -1;
+#elif YUP_ANDROID
         HeapBlock<char> temp (bufferSize);
         int num = (int) vsnprintf (temp.get(), bufferSize - 1, pf, args);
         if (num >= static_cast<int> (bufferSize))
@@ -2070,13 +2077,7 @@ String String::formattedRaw (const char* pf, ...)
 #else
         String wideCharVersion (pf);
         HeapBlock<wchar_t> temp (bufferSize);
-        const int num = (int)
-#if YUP_WINDOWS
-            _vsnwprintf
-#else
-            vswprintf
-#endif
-            (temp.get(), bufferSize - 1, wideCharVersion.toWideCharPointer(), args);
+        const int num = (int) vswprintf (temp.get(), bufferSize - 1, wideCharVersion.toWideCharPointer(), args);
 #endif
 
         YUP_END_IGNORE_DEPRECATION_WARNINGS
@@ -2084,7 +2085,11 @@ String String::formattedRaw (const char* pf, ...)
         va_end (args);
 
         if (num > 0)
+#if YUP_WINDOWS || YUP_ANDROID
+            return String (CharPointer_UTF8 (temp.get()));
+#else
             return String (temp.get());
+#endif
 
         bufferSize += 256;
 
