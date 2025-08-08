@@ -134,7 +134,7 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
     config->verbose = 1;
     config->install_signal_handlers = 0;
 
-    if (auto status = PyConfig_SetBytesString (config.get(), &config->program_name, applicationFile.getFullPathName().toRawUTF8()); PyStatus_Exception(status))
+    if (auto status = PyConfig_SetBytesString (config.get(), &config->program_name, applicationFile.getFullPathName().toRawUTF8()); PyStatus_Exception (status))
     {
         YUP_DBG ("Failed config->program_name");
         return nullptr;
