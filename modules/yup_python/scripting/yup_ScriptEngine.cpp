@@ -130,9 +130,12 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
     auto config = std::make_unique<PyConfig>();
 
     PyConfig_InitIsolatedConfig (config.get());
-    config->parse_argv = 0;
-    config->verbose = 1;
-    config->install_signal_handlers = 0;
+
+    if (auto status = PyConfig_Read (config.get()); PyStatus_Exception (status))
+    {
+        YUP_DBG ("Failed PyConfig_Read");
+        return nullptr;
+    }
 
     if (auto status = PyConfig_SetBytesString (config.get(), &config->program_name, applicationFile.getFullPathName().toRawUTF8()); PyStatus_Exception (status))
     {
@@ -143,12 +146,6 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
     if (auto status = PyConfig_SetBytesString (config.get(), &config->home, destinationFolder.getFullPathName().toRawUTF8()); PyStatus_Exception (status))
     {
         YUP_DBG ("Failed config->home");
-        return nullptr;
-    }
-
-    if (auto status = PyConfig_Read (config.get()); PyStatus_Exception (status))
-    {
-        YUP_DBG ("Failed PyConfig_Read");
         return nullptr;
     }
 
