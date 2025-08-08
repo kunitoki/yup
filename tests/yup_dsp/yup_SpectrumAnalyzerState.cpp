@@ -25,15 +25,12 @@
 
 using namespace yup;
 
-namespace
-{
-constexpr float tolerance = 1e-6f;
-} // namespace
-
 //==============================================================================
 class SpectrumAnalyzerStateTests : public ::testing::Test
 {
 protected:
+    static constexpr float tolerance = 1e-6f;
+
     void SetUp() override
     {
         analyzer = std::make_unique<SpectrumAnalyzerState>();

@@ -25,18 +25,15 @@
 
 using namespace yup;
 
-namespace
-{
-constexpr double tolerance = 1e-4;
-constexpr float toleranceF = 1e-4f;
-constexpr double sampleRate = 44100.0;
-constexpr int blockSize = 256;
-} // namespace
-
 //==============================================================================
 class FirstOrderFilterTests : public ::testing::Test
 {
 protected:
+    static constexpr double tolerance = 1e-4;
+    static constexpr float toleranceF = 1e-4f;
+    static constexpr double sampleRate = 44100.0;
+    static constexpr int blockSize = 256;
+
     void SetUp() override
     {
         filterFloat.prepare (sampleRate, blockSize);

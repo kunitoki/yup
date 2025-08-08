@@ -25,19 +25,16 @@
 
 using namespace yup;
 
-namespace
-{
-constexpr double tolerance = 1e-4;
-constexpr float toleranceF = 1e-4f;
-constexpr float relaxedToleranceF = 1e-3f;
-constexpr int windowSize = 128;
-constexpr int largeWindowSize = 512;
-} // namespace
-
 //==============================================================================
 class WindowFunctionsTests : public ::testing::Test
 {
 protected:
+    static constexpr double tolerance = 1e-4;
+    static constexpr float toleranceF = 1e-4f;
+    static constexpr float relaxedToleranceF = 1e-3f;
+    static constexpr int windowSize = 128;
+    static constexpr int largeWindowSize = 512;
+
     void SetUp() override
     {
         // Initialize test vectors

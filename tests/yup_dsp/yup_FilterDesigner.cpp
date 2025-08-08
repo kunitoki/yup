@@ -25,17 +25,14 @@
 
 using namespace yup;
 
-namespace
-{
-constexpr double tolerance = 1e-4;
-constexpr float toleranceF = 1e-4f;
-constexpr double sampleRate = 44100.0;
-} // namespace
-
 //==============================================================================
 class FilterDesignerTests : public ::testing::Test
 {
 protected:
+    static constexpr double tolerance = 1e-4;
+    static constexpr float toleranceF = 1e-4f;
+    static constexpr double sampleRate = 44100.0;
+
     void SetUp() override
     {
         // Common test parameters
