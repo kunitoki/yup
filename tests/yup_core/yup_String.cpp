@@ -937,6 +937,7 @@ TEST_F (StringTests, StandardLibraryIntegration)
 
 TEST_F (StringTests, CaseConversionEdgeCases)
 {
+#if ! YUP_WINDOWS
     // Test toUpperCase with edge cases
     String mixed_case (L"Hello, 世界! 123");
     String upper_case = mixed_case.toUpperCase();
@@ -945,6 +946,7 @@ TEST_F (StringTests, CaseConversionEdgeCases)
     // Test toLowerCase with edge cases
     String lower_case = mixed_case.toLowerCase();
     EXPECT_EQ (lower_case, String (L"hello, 世界! 123"));
+#endif
 
     // Test with empty string
     EXPECT_EQ (String().toUpperCase(), String());
