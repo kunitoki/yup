@@ -2035,18 +2035,23 @@ String String::reversed() const
     if (numChars <= 0)
         return *this;
 
-    auto isCombiningMark = [](yup_wchar c)
+    auto isCombiningMark = [] (yup_wchar c)
     {
         // Combining Diacritical Marks
-        if (c >= 0x0300 && c <= 0x036F) return true;
+        if (c >= 0x0300 && c <= 0x036F)
+            return true;
         // Combining Diacritical Marks Extended
-        if (c >= 0x1AB0 && c <= 0x1AFF) return true;
+        if (c >= 0x1AB0 && c <= 0x1AFF)
+            return true;
         // Combining Diacritical Marks Supplement
-        if (c >= 0x1DC0 && c <= 0x1DFF) return true;
+        if (c >= 0x1DC0 && c <= 0x1DFF)
+            return true;
         // Combining Half Marks
-        if (c >= 0xFE20 && c <= 0xFE2F) return true;
+        if (c >= 0xFE20 && c <= 0xFE2F)
+            return true;
         // Combining Diacritical Marks for Symbols
-        if (c >= 0x20D0 && c <= 0x20FF) return true;
+        if (c >= 0x20D0 && c <= 0x20FF)
+            return true;
         return false;
     };
 
