@@ -2035,20 +2035,43 @@ String String::reversed() const
     if (numChars <= 0)
         return *this;
 
-    HeapBlock<CharPointerType> positions (numChars);
+    auto isCombiningMark = [](yup_wchar c)
+    {
+        // Combining Diacritical Marks
+        if (c >= 0x0300 && c <= 0x036F) return true;
+        // Combining Diacritical Marks Extended
+        if (c >= 0x1AB0 && c <= 0x1AFF) return true;
+        // Combining Diacritical Marks Supplement
+        if (c >= 0x1DC0 && c <= 0x1DFF) return true;
+        // Combining Half Marks
+        if (c >= 0xFE20 && c <= 0xFE2F) return true;
+        // Combining Diacritical Marks for Symbols
+        if (c >= 0x20D0 && c <= 0x20FF) return true;
+        return false;
+    };
 
-    StringCreationHelper builder (text);
+    std::vector<String> clusters;
+    clusters.reserve (numChars);
 
-    int index = 0;
-    for (auto it = text; ! it.isEmpty() && index < numChars; ++it, ++index)
-        positions[index] = it;
+    for (int i = 0; i < numChars; ++i)
+    {
+        String cluster = substring (i, i + 1);
 
-    for (int i = index - 1; i >= 0; --i)
-        builder.write (*positions[i]);
+        while (i + 1 < numChars && isCombiningMark ((*this)[i + 1]))
+        {
+            ++i;
+            cluster += substring (i, i + 1);
+        }
 
-    builder.write (0); // null terminator
+        clusters.emplace_back (std::move (cluster));
+    }
 
-    return String (std::move (builder.result));
+    String result;
+    result.preallocateBytes (numChars);
+    for (auto it = clusters.rbegin(); it != clusters.rend(); ++it)
+        result += *it;
+
+    return result;
 }
 
 String String::formattedRaw (const char* pf, ...)
