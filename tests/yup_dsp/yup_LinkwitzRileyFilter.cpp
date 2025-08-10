@@ -245,7 +245,7 @@ TEST (FilterDesignerLinkwitzRileyTests, DesignLR2ReturnsValidCoefficients)
 {
     std::vector<BiquadCoefficients<double>> lowCoeffs, highCoeffs;
 
-    int sections = FilterDesigner<double>::designLinkwitzRiley2 (1000.0, sampleRate, lowCoeffs, highCoeffs);
+    int sections = FilterDesigner<double>::designLinkwitzRiley2 (1000.0, 44100.0, lowCoeffs, highCoeffs);
 
     //EXPECT_EQ (sections, 2);
     EXPECT_EQ (lowCoeffs.size(), 2);
@@ -270,7 +270,7 @@ TEST (FilterDesignerLinkwitzRileyTests, DesignLR4ReturnsCorrectNumberOfSections)
 {
     std::vector<BiquadCoefficients<double>> lowCoeffs, highCoeffs;
 
-    int sections = FilterDesigner<double>::designLinkwitzRiley4 (1000.0, sampleRate, lowCoeffs, highCoeffs);
+    int sections = FilterDesigner<double>::designLinkwitzRiley4 (1000.0, 48000.0, lowCoeffs, highCoeffs);
 
     EXPECT_EQ (sections, 4); // LR4 should create 4 biquad sections
     EXPECT_EQ (lowCoeffs.size(), 4);
@@ -281,7 +281,7 @@ TEST (FilterDesignerLinkwitzRileyTests, DesignLR8ReturnsCorrectNumberOfSections)
 {
     std::vector<BiquadCoefficients<double>> lowCoeffs, highCoeffs;
 
-    int sections = FilterDesigner<double>::designLinkwitzRiley8 (1000.0, sampleRate, lowCoeffs, highCoeffs);
+    int sections = FilterDesigner<double>::designLinkwitzRiley8 (1000.0, 48000.0, lowCoeffs, highCoeffs);
 
     EXPECT_EQ (sections, 8); // LR8 should create 8 biquad sections
     EXPECT_EQ (lowCoeffs.size(), 8);
@@ -293,14 +293,14 @@ TEST (FilterDesignerLinkwitzRileyTests, GeneralDesignerHandlesVariousOrders)
     std::vector<BiquadCoefficients<double>> lowCoeffs, highCoeffs;
 
     // Test LR2
-    int sections2 = FilterDesigner<double>::designLinkwitzRiley (2, 1000.0, sampleRate, lowCoeffs, highCoeffs);
+    int sections2 = FilterDesigner<double>::designLinkwitzRiley (2, 1000.0, 48000.0, lowCoeffs, highCoeffs);
     EXPECT_EQ (sections2, 2);
 
     // Test LR4
-    int sections4 = FilterDesigner<double>::designLinkwitzRiley (4, 1000.0, sampleRate, lowCoeffs, highCoeffs);
+    int sections4 = FilterDesigner<double>::designLinkwitzRiley (4, 1000.0, 48000.0, lowCoeffs, highCoeffs);
     EXPECT_EQ (sections4, 4);
 
     // Test LR8
-    int sections8 = FilterDesigner<double>::designLinkwitzRiley (8, 1000.0, sampleRate, lowCoeffs, highCoeffs);
+    int sections8 = FilterDesigner<double>::designLinkwitzRiley (8, 1000.0, 48000.0, lowCoeffs, highCoeffs);
     EXPECT_EQ (sections8, 8);
 }
