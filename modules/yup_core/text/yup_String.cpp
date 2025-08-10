@@ -2035,41 +2035,12 @@ String String::reversed() const
     if (numChars <= 0)
         return *this;
 
-    auto isCombiningMark = [] (yup_wchar c)
-    {
-        // Combining Diacritical Marks
-        if (c >= 0x0300 && c <= 0x036F)
-            return true;
-        // Combining Diacritical Marks Extended
-        if (c >= 0x1AB0 && c <= 0x1AFF)
-            return true;
-        // Combining Diacritical Marks Supplement
-        if (c >= 0x1DC0 && c <= 0x1DFF)
-            return true;
-        // Combining Half Marks
-        if (c >= 0xFE20 && c <= 0xFE2F)
-            return true;
-        // Combining Diacritical Marks for Symbols
-        if (c >= 0x20D0 && c <= 0x20FF)
-            return true;
-        return false;
-    };
-
-    std::vector<String> clusters;
+    std::vector<yup_wchar> clusters;
     clusters.reserve (numChars);
 
-    for (int i = 0; i < numChars; ++i)
-    {
-        String cluster = substring (i, i + 1);
-
-        while (i + 1 < numChars && isCombiningMark ((*this)[i + 1]))
-        {
-            ++i;
-            cluster += substring (i, i + 1);
-        }
-
-        clusters.emplace_back (std::move (cluster));
-    }
+    CharPointerType p{ text };
+    while (! p.isEmpty())
+        clusters.push_back (p.getAndAdvance());
 
     String result;
     result.preallocateBytes (numChars);
