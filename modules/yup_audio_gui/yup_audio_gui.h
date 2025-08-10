@@ -50,3 +50,4 @@
 
 #include "keyboard/yup_MidiKeyboardComponent.h"
 #include "displays/yup_SpectrumAnalyzerComponent.h"
+#include "displays/yup_CartesianPlane.h"

@@ -23,6 +23,7 @@
 
 #include <yup_dsp/yup_dsp.h>
 #include <yup_audio_formats/yup_audio_formats.h>
+#include <yup_audio_gui/yup_audio_gui.h>
 
 #include <memory>
 #include <random>
@@ -30,213 +31,6 @@
 #include <complex>
 
 //==============================================================================
-
-class CrossoverFrequencyResponseDisplay : public yup::Component
-{
-public:
-    void updateResponse (const std::vector<yup::Point<double>>& lowData,
-                         const std::vector<yup::Point<double>>& highData)
-    {
-        lowPassData = lowData;
-        highPassData = highData;
-        repaint();
-    }
-
-    void setCrossoverFrequency (double freq)
-    {
-        crossoverFreq = freq;
-        repaint();
-    }
-
-private:
-    void paint (yup::Graphics& g) override
-    {
-        auto bounds = getLocalBounds();
-
-        // Background
-        g.setFillColor (yup::Color (0xFF1E1E1E));
-        g.fillRect (bounds);
-
-        // Reserve space for labels
-        auto titleBounds = bounds.removeFromTop (25);
-        titleBounds.removeFromLeft (5);
-        auto bottomLabelSpace = bounds.removeFromBottom (20);
-        auto leftLabelSpace = bounds.removeFromLeft (50);
-        leftLabelSpace.removeFromRight (5);
-
-        // Grid
-        g.setStrokeColor (yup::Color (0xFF333333));
-        g.setStrokeWidth (1.0f);
-
-        // Frequency grid lines (logarithmic)
-        for (double freq : { 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0 })
-        {
-            float x = frequencyToX (freq, bounds);
-            g.strokeLine ({ x, bounds.getY() }, { x, bounds.getBottom() });
-        }
-
-        // dB grid lines
-        for (double db : { -48.0, -36.0, -24.0, -12.0, -6.0, 0.0, 6.0 })
-        {
-            float y = dbToY (db, bounds);
-            g.strokeLine ({ bounds.getX(), y }, { bounds.getRight(), y });
-        }
-
-        // Zero line
-        g.setStrokeColor (yup::Color (0xFF666666));
-        g.setStrokeWidth (2.0f);
-        float y0 = dbToY (0.0, bounds);
-        g.strokeLine ({ bounds.getX(), y0 }, { bounds.getRight(), y0 });
-
-        // -6dB crossover line
-        g.setStrokeColor (yup::Color (0xFF444444));
-        g.setStrokeWidth (1.0f);
-        float y6 = dbToY (-6.0, bounds);
-        g.strokeLine ({ bounds.getX(), y6 }, { bounds.getRight(), y6 });
-
-        // Crossover frequency line
-        if (crossoverFreq > 0)
-        {
-            g.setStrokeColor (yup::Color (0xFF888888));
-            g.setStrokeWidth (1.0f);
-            float xCross = frequencyToX (crossoverFreq, bounds);
-            g.strokeLine ({ xCross, bounds.getY() }, { xCross, bounds.getBottom() });
-        }
-
-        // Plot frequency responses
-        if (! lowPassData.empty())
-        {
-            // Low pass in blue
-            yup::Path lowPath;
-            bool firstPoint = true;
-
-            g.setStrokeColor (yup::Color (0xFF4488FF));
-            g.setStrokeWidth (2.0f);
-
-            for (const auto& point : lowPassData)
-            {
-                float x = frequencyToX (point.getX(), bounds);
-                float y = dbToY (point.getY(), bounds);
-
-                if (firstPoint)
-                {
-                    lowPath.startNewSubPath (x, y);
-                    firstPoint = false;
-                }
-                else
-                {
-                    lowPath.lineTo (x, y);
-                }
-            }
-
-            g.strokePath (lowPath);
-        }
-
-        if (! highPassData.empty())
-        {
-            // High pass in orange
-            yup::Path highPath;
-            bool firstPoint = true;
-
-            g.setStrokeColor (yup::Color (0xFFFF8844));
-            g.setStrokeWidth (2.0f);
-
-            for (const auto& point : highPassData)
-            {
-                float x = frequencyToX (point.getX(), bounds);
-                float y = dbToY (point.getY(), bounds);
-
-                if (firstPoint)
-                {
-                    highPath.startNewSubPath (x, y);
-                    firstPoint = false;
-                }
-                else
-                {
-                    highPath.lineTo (x, y);
-                }
-            }
-
-            g.strokePath (highPath);
-        }
-
-        // Labels with smaller font
-        g.setFillColor (yup::Colors::white);
-        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (10.0f);
-
-        // Title (centered, leaving space for legend)
-        auto titleArea = titleBounds.removeFromLeft (titleBounds.getWidth() - 120);
-        g.fillFittedText ("Crossover Frequency Response", font.withHeight (12.0f), titleArea, yup::Justification::centerLeft);
-
-        // Frequency labels
-        for (double freq : { 100.0, 1000.0, 10000.0 })
-        {
-            float x = frequencyToX (freq, bounds);
-            yup::String label;
-            if (freq >= 1000.0)
-                label = yup::String (freq / 1000.0, 0) + "k";
-            else
-                label = yup::String (static_cast<int> (freq));
-
-            auto labelBounds = yup::Rectangle<int> (static_cast<int> (x - 20),
-                                                    bottomLabelSpace.getY(),
-                                                    40,
-                                                    bottomLabelSpace.getHeight());
-            g.fillFittedText (label, font, labelBounds, yup::Justification::center);
-        }
-
-        // dB labels
-        g.setFillColor (yup::Colors::gray);
-        for (double db : { -24.0, -12.0, -6.0, 0.0 })
-        {
-            float y = dbToY (db, bounds);
-            auto label = yup::String (static_cast<int> (db)) + " dB";
-            g.fillFittedText (label, font, leftLabelSpace.withY (static_cast<int> (y - 8)).withHeight (16), yup::Justification::right);
-        }
-
-        // Legend (on the right side of title area)
-        auto legendBounds = titleBounds;
-        legendBounds = legendBounds.withY (legendBounds.getY() + 4);
-
-        g.setFillColor (yup::Color (0xFF4488FF));
-        auto lowRect = legendBounds.removeFromLeft (15).reduced (2);
-        g.fillRect (lowRect);
-        g.setFillColor (yup::Colors::white);
-        g.fillFittedText ("Low", font, legendBounds.removeFromLeft (25), yup::Justification::left);
-
-        g.setFillColor (yup::Color (0xFFFF8844));
-        auto highRect = legendBounds.removeFromLeft (15).reduced (2);
-        g.fillRect (highRect);
-        g.setFillColor (yup::Colors::white);
-        g.fillFittedText ("High", font, legendBounds, yup::Justification::left);
-    }
-
-    float frequencyToX (double freq, const yup::Rectangle<float>& bounds) const
-    {
-        if (freq <= 0)
-            return bounds.getX();
-
-        const double minLog = std::log10 (20.0);
-        const double maxLog = std::log10 (20000.0);
-        const double logFreq = std::log10 (freq);
-        const double normalised = (logFreq - minLog) / (maxLog - minLog);
-
-        return bounds.getX() + static_cast<float> (normalised * bounds.getWidth());
-    }
-
-    float dbToY (double db, const yup::Rectangle<float>& bounds) const
-    {
-        const double minDb = -48.0;
-        const double maxDb = 12.0;
-        const double normalised = 1.0 - (db - minDb) / (maxDb - minDb);
-
-        return bounds.getY() + static_cast<float> (normalised * bounds.getHeight());
-    }
-
-    std::vector<yup::Point<double>> lowPassData;
-    std::vector<yup::Point<double>> highPassData;
-    double crossoverFreq = 1000.0;
-};
 
 //==============================================================================
 
@@ -518,7 +312,7 @@ private:
         freqSlider.onValueChanged = [this] (float value)
         {
             crossoverFreq.setTargetValue (value);
-            frequencyDisplay.setCrossoverFrequency (value);
+            setCrossoverFrequency (value);
         };
         addAndMakeVisible (freqSlider);
 
@@ -554,7 +348,8 @@ private:
         };
         addAndMakeVisible (highGainSlider);
 
-        // Frequency display
+        // Configure frequency display (CartesianPlane)
+        setupFrequencyDisplay();
         addAndMakeVisible (frequencyDisplay);
 
         // Initialize frequency response
@@ -616,7 +411,60 @@ private:
             highResponse.emplace_back (freq, highDb);
         }
 
-        frequencyDisplay.updateResponse (lowResponse, highResponse);
+        // Update signals on the CartesianPlane
+        frequencyDisplay.updateSignalData (lowPassSignalIndex, lowResponse);
+        frequencyDisplay.updateSignalData (highPassSignalIndex, highResponse);
+    }
+
+    void setupFrequencyDisplay()
+    {
+        // Configure the CartesianPlane for frequency response display
+        frequencyDisplay.setTitle ("Crossover Frequency Response");
+        
+        // Set logarithmic X axis (frequency) and linear Y axis (dB)
+        frequencyDisplay.setXRange (20.0, 20000.0);
+        frequencyDisplay.setXScaleType (yup::CartesianPlane::AxisScaleType::logarithmic);
+        frequencyDisplay.setYRange (-48.0, 12.0);
+        frequencyDisplay.setYScaleType (yup::CartesianPlane::AxisScaleType::linear);
+        
+        // Set margins
+        frequencyDisplay.setMargins (25, 50, 20, 20);
+        
+        // Add vertical grid lines (frequency)
+        frequencyDisplay.setVerticalGridLines ({ 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0 });
+        
+        // Add horizontal grid lines (dB)
+        frequencyDisplay.setHorizontalGridLines ({ -48.0, -36.0, -24.0, -12.0, -6.0, 0.0, 6.0 });
+        
+        // Emphasize special lines
+        frequencyDisplay.addHorizontalGridLine (0.0, yup::Color (0xFF666666), 2.0f, true);  // 0dB line
+        frequencyDisplay.addHorizontalGridLine (-6.0, yup::Color (0xFF444444), 1.0f, true); // -6dB crossover line
+        
+        // Add axis labels
+        frequencyDisplay.setXAxisLabels ({ 100.0, 1000.0, 10000.0 });
+        frequencyDisplay.setYAxisLabels ({ -24.0, -12.0, -6.0, 0.0 });
+        
+        // Add signals
+        lowPassSignalIndex = frequencyDisplay.addSignal ("Low", yup::Color (0xFF4488FF), 2.0f);
+        highPassSignalIndex = frequencyDisplay.addSignal ("High", yup::Color (0xFFFF8844), 2.0f);
+        
+        // Configure legend
+        frequencyDisplay.setLegendVisible (true);
+        frequencyDisplay.setLegendPosition ({ 0.9f, 0.1f });
+        
+        // Set initial crossover frequency line
+        setCrossoverFrequency (1000.0);
+    }
+
+    void setCrossoverFrequency (double freq)
+    {
+        currentCrossoverFreq = freq;
+        
+        // Update crossover frequency line
+        frequencyDisplay.clearVerticalGridLines();
+        frequencyDisplay.setVerticalGridLines ({ 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0 });
+        if (freq > 0)
+            frequencyDisplay.addVerticalGridLine (freq, yup::Color (0xFF888888), 1.0f, true);
     }
 
     // Audio
@@ -645,5 +493,10 @@ private:
     yup::Slider lowGainSlider;
     yup::Label highGainLabel;
     yup::Slider highGainSlider;
-    CrossoverFrequencyResponseDisplay frequencyDisplay;
+    yup::CartesianPlane frequencyDisplay;
+    
+    // Signal indices for CartesianPlane
+    int lowPassSignalIndex = -1;
+    int highPassSignalIndex = -1;
+    double currentCrossoverFreq = 1000.0;
 };
