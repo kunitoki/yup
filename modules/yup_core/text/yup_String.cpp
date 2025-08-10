@@ -2042,10 +2042,41 @@ String String::reversed() const
     while (! p.isEmpty())
         clusters.push_back (p.getAndAdvance());
 
+    auto appendUTF32CodepointAsUTF8 = [](String& dest, yup_wchar cp)
+    {
+        char utf8[5] = { 0 };
+        size_t len = 0;
+
+        if (cp <= 0x7F)
+        {
+            utf8[len++] = static_cast<char> (cp);
+        }
+        else if (cp <= 0x7FF)
+        {
+            utf8[len++] = static_cast<char> (0xC0 | (cp >> 6));
+            utf8[len++] = static_cast<char> (0x80 | (cp & 0x3F));
+        }
+        else if (cp <= 0xFFFF)
+        {
+            utf8[len++] = static_cast<char> (0xE0 | (cp >> 12));
+            utf8[len++] = static_cast<char> (0x80 | ((cp >> 6) & 0x3F));
+            utf8[len++] = static_cast<char> (0x80 | (cp & 0x3F));
+        }
+        else
+        {
+            utf8[len++] = static_cast<char> (0xF0 | (cp >> 18));
+            utf8[len++] = static_cast<char> (0x80 | ((cp >> 12) & 0x3F));
+            utf8[len++] = static_cast<char> (0x80 | ((cp >> 6) & 0x3F));
+            utf8[len++] = static_cast<char> (0x80 | (cp & 0x3F));
+        }
+
+        dest.append (CharPointer_UTF8 (utf8), len);
+    };
+
     String result;
     result.preallocateBytes (numChars);
     for (auto it = clusters.rbegin(); it != clusters.rend(); ++it)
-        result += *it;
+        appendUTF32CodepointAsUTF8 (result, *it);
 
     return result;
 }
