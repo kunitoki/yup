@@ -182,7 +182,7 @@ void CartesianPlane::addXAxisLabel (double value, const String& text, const Colo
 void CartesianPlane::setXAxisLabels (const std::vector<double>& values, const Color& color, float fontSize)
 {
     xAxisLabels.clear();
-    if (!values.empty())
+    if (! values.empty())
     {
         int precision = determineAxisPrecision (values, xScaleType);
         for (auto value : values)
@@ -209,7 +209,7 @@ void CartesianPlane::addYAxisLabel (double value, const String& text, const Colo
 void CartesianPlane::setYAxisLabels (const std::vector<double>& values, const Color& color, float fontSize)
 {
     yAxisLabels.clear();
-    if (!values.empty())
+    if (! values.empty())
     {
         int precision = determineAxisPrecision (values, yScaleType);
         for (auto value : values)
@@ -652,39 +652,39 @@ int CartesianPlane::determineAxisPrecision (const std::vector<double>& values, A
 {
     if (values.empty())
         return 0;
-        
+
     // Find the range and characteristics of values
     double minVal = *std::min_element (values.begin(), values.end());
     double maxVal = *std::max_element (values.begin(), values.end());
     double range = maxVal - minVal;
-    
+
     if (scaleType == AxisScaleType::logarithmic)
     {
         // For log scales (frequency), use consistent precision based on range
         if (maxVal >= 10000.0)
-            return 0;  // 10k, 20k (no decimals)
+            return 0; // 10k, 20k (no decimals)
         else if (maxVal >= 1000.0)
-            return 1;  // 1.0k, 2.5k (one decimal)
+            return 1; // 1.0k, 2.5k (one decimal)
         else if (maxVal >= 100.0)
-            return 0;  // 100, 500 (integers)
+            return 0; // 100, 500 (integers)
         else if (maxVal >= 10.0)
-            return 1;  // 10.0, 50.5 (one decimal)
+            return 1; // 10.0, 50.5 (one decimal)
         else
-            return 2;  // 1.25, 5.50 (two decimals)
+            return 2; // 1.25, 5.50 (two decimals)
     }
     else
     {
         // For linear scales (dB, etc.), determine precision based on typical values
         double maxAbs = std::max (std::abs (minVal), std::abs (maxVal));
-        
+
         if (range < 0.1)
-            return 3;  // Very small range needs high precision
+            return 3; // Very small range needs high precision
         else if (range < 1.0)
-            return 2;  // Small range
+            return 2; // Small range
         else if (range < 10.0 || maxAbs < 10.0)
-            return 1;  // Medium range or small absolute values
+            return 1; // Medium range or small absolute values
         else
-            return 0;  // Large range or values, use integers
+            return 0; // Large range or values, use integers
     }
 }
 
@@ -693,7 +693,7 @@ String CartesianPlane::formatAxisValueWithPrecision (double value, AxisScaleType
     // Handle zero specially
     if (std::abs (value) < 1e-10)
         return "0";
-    
+
     if (scaleType == AxisScaleType::logarithmic)
     {
         // Logarithmic scale formatting (typically frequency)
