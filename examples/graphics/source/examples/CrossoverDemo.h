@@ -434,7 +434,7 @@ private:
         frequencyDisplay.setVerticalGridLines ({ 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0 });
 
         // Add horizontal grid lines (dB)
-        frequencyDisplay.setHorizontalGridLines ({ -48.0, -36.0, -24.0, -12.0, -6.0, 0.0, 6.0 });
+        frequencyDisplay.setHorizontalGridLines ({ -48.0, -36.0, -24.0, -12.0, -6.0, 0.0, 6.0, 12.0 });
 
         // Emphasize special lines
         frequencyDisplay.addHorizontalGridLine (0.0, yup::Color (0xFF666666), 2.0f, true);  // 0dB line
@@ -442,7 +442,7 @@ private:
 
         // Add axis labels
         frequencyDisplay.setXAxisLabels ({ 100.0, 1000.0, 10000.0 });
-        frequencyDisplay.setYAxisLabels ({ -24.0, -12.0, -6.0, 0.0 });
+        frequencyDisplay.setYAxisLabels ({ -48.0, -24.0, -12.0, -6.0, 0.0, 6.0, 12.0 });
 
         // Add signals
         lowPassSignalIndex = frequencyDisplay.addSignal ("Low", yup::Color (0xFF4488FF), 2.0f);
@@ -450,7 +450,7 @@ private:
 
         // Configure legend
         frequencyDisplay.setLegendVisible (true);
-        frequencyDisplay.setLegendPosition ({ 0.9f, 0.1f });
+        frequencyDisplay.setLegendPosition ({ 0.99f, 0.01f });
 
         // Set initial crossover frequency line
         setCrossoverFrequency (1000.0);

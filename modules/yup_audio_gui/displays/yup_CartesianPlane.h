@@ -306,6 +306,8 @@ private:
     void drawLegend (Graphics& g, const Rectangle<float>& bounds);
 
     String formatAxisValue (double value, AxisScaleType scaleType) const;
+    int determineAxisPrecision (const std::vector<double>& values, AxisScaleType scaleType) const;
+    String formatAxisValueWithPrecision (double value, AxisScaleType scaleType, int precision) const;
     std::optional<Point<float>> findBoundsIntersection (const Point<float>& p1, const Point<float>& p2, const Rectangle<float>& bounds) const;
 
     //==============================================================================

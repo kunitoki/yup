@@ -182,10 +182,14 @@ void CartesianPlane::addXAxisLabel (double value, const String& text, const Colo
 void CartesianPlane::setXAxisLabels (const std::vector<double>& values, const Color& color, float fontSize)
 {
     xAxisLabels.clear();
-    for (auto value : values)
+    if (!values.empty())
     {
-        String text = formatAxisValue (value, xScaleType);
-        xAxisLabels.emplace_back (value, text, color, fontSize);
+        int precision = determineAxisPrecision (values, xScaleType);
+        for (auto value : values)
+        {
+            String text = formatAxisValueWithPrecision (value, xScaleType, precision);
+            xAxisLabels.emplace_back (value, text, color, fontSize);
+        }
     }
     repaint();
 }
@@ -205,10 +209,14 @@ void CartesianPlane::addYAxisLabel (double value, const String& text, const Colo
 void CartesianPlane::setYAxisLabels (const std::vector<double>& values, const Color& color, float fontSize)
 {
     yAxisLabels.clear();
-    for (auto value : values)
+    if (!values.empty())
     {
-        String text = formatAxisValue (value, yScaleType);
-        yAxisLabels.emplace_back (value, text, color, fontSize);
+        int precision = determineAxisPrecision (values, yScaleType);
+        for (auto value : values)
+        {
+            String text = formatAxisValueWithPrecision (value, yScaleType, precision);
+            yAxisLabels.emplace_back (value, text, color, fontSize);
+        }
     }
     repaint();
 }
@@ -594,8 +602,8 @@ void CartesianPlane::drawLegend (Graphics& g, const Rectangle<float>& bounds)
     const int legendHeight = visibleSignalCount * (itemHeight + itemSpacing) - itemSpacing + 2 * padding;
 
     // Calculate legend position
-    float legendX = bounds.getX() + legendPosition.getX() * bounds.getWidth() - legendWidth;
-    float legendY = bounds.getY() + legendPosition.getY() * bounds.getHeight();
+    float legendX = bounds.getX() + bounds.proportionOfWidth (legendPosition.getX()) - legendWidth;
+    float legendY = bounds.getY() + bounds.proportionOfHeight (legendPosition.getY());
 
     // Keep legend within bounds
     legendX = jlimit (bounds.getX(), bounds.getRight() - legendWidth, legendX);
@@ -640,24 +648,98 @@ void CartesianPlane::drawLegend (Graphics& g, const Rectangle<float>& bounds)
     }
 }
 
-String CartesianPlane::formatAxisValue (double value, AxisScaleType scaleType) const
+int CartesianPlane::determineAxisPrecision (const std::vector<double>& values, AxisScaleType scaleType) const
 {
+    if (values.empty())
+        return 0;
+        
+    // Find the range and characteristics of values
+    double minVal = *std::min_element (values.begin(), values.end());
+    double maxVal = *std::max_element (values.begin(), values.end());
+    double range = maxVal - minVal;
+    
     if (scaleType == AxisScaleType::logarithmic)
     {
-        if (value >= 1000.0)
-            return String (value / 1000.0, (value >= 10000.0) ? 0 : 1) + "k";
+        // For log scales (frequency), use consistent precision based on range
+        if (maxVal >= 10000.0)
+            return 0;  // 10k, 20k (no decimals)
+        else if (maxVal >= 1000.0)
+            return 1;  // 1.0k, 2.5k (one decimal)
+        else if (maxVal >= 100.0)
+            return 0;  // 100, 500 (integers)
+        else if (maxVal >= 10.0)
+            return 1;  // 10.0, 50.5 (one decimal)
         else
-            return String (value, (value >= 100.0) ? 0 : 1);
+            return 2;  // 1.25, 5.50 (two decimals)
     }
     else
     {
-        if (std::abs (value) >= 1000.0)
-            return String (value / 1000.0, 1) + "k";
-        else if (std::abs (value) >= 1.0)
-            return String (value, (std::abs (value) >= 10.0) ? 0 : 1);
+        // For linear scales (dB, etc.), determine precision based on typical values
+        double maxAbs = std::max (std::abs (minVal), std::abs (maxVal));
+        
+        if (range < 0.1)
+            return 3;  // Very small range needs high precision
+        else if (range < 1.0)
+            return 2;  // Small range
+        else if (range < 10.0 || maxAbs < 10.0)
+            return 1;  // Medium range or small absolute values
         else
-            return String (value, 3);
+            return 0;  // Large range or values, use integers
     }
+}
+
+String CartesianPlane::formatAxisValueWithPrecision (double value, AxisScaleType scaleType, int precision) const
+{
+    // Handle zero specially
+    if (std::abs (value) < 1e-10)
+        return "0";
+    
+    if (scaleType == AxisScaleType::logarithmic)
+    {
+        // Logarithmic scale formatting (typically frequency)
+        if (value >= 1000.0)
+        {
+            double kValue = value / 1000.0;
+            if (precision == 0)
+                return String (static_cast<int> (std::round (kValue))) + "k";
+            else
+                return String (kValue, precision) + "k";
+        }
+        else
+        {
+            if (precision == 0)
+                return String (static_cast<int> (std::round (value)));
+            else
+                return String (value, precision);
+        }
+    }
+    else
+    {
+        // Linear scale formatting (typically dB, gain, etc.)
+        if (std::abs (value) >= 1000.0)
+        {
+            double kValue = value / 1000.0;
+            if (precision == 0)
+                return String (static_cast<int> (std::round (kValue))) + "k";
+            else
+                return String (kValue, precision) + "k";
+        }
+        else
+        {
+            if (precision == 0)
+                return String (static_cast<int> (std::round (value)));
+            else
+                return String (value, precision);
+        }
+    }
+}
+
+String CartesianPlane::formatAxisValue (double value, AxisScaleType scaleType) const
+{
+    // Legacy method - determine precision for single value
+    std::vector<double> singleValue = { value };
+    int precision = determineAxisPrecision (singleValue, scaleType);
+    return formatAxisValueWithPrecision (value, scaleType, precision);
 }
 
 std::optional<Point<float>> CartesianPlane::findBoundsIntersection (const Point<float>& p1, const Point<float>& p2, const Rectangle<float>& bounds) const
