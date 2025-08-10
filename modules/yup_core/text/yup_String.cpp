@@ -2042,7 +2042,7 @@ String String::reversed() const
     while (! p.isEmpty())
         clusters.push_back (p.getAndAdvance());
 
-    auto appendUTF32CodepointAsUTF8 = [](String& dest, yup_wchar cp)
+    auto appendUTF32CodepointAsUTF8 = [] (String& dest, yup_wchar cp)
     {
         char utf8[5] = { 0 };
         size_t len = 0;
