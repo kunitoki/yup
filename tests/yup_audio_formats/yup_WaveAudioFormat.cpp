@@ -27,15 +27,6 @@ using namespace yup;
 
 namespace
 {
-const File getTestDataDirectory()
-{
-    return File (__FILE__)
-        .getParentDirectory()
-        .getParentDirectory()
-        .getChildFile ("data")
-        .getChildFile ("sounds");
-}
-
 const std::vector<String> getAllWaveTestFiles()
 {
     return {
@@ -231,7 +222,11 @@ protected:
     void SetUp() override
     {
         format = std::make_unique<WaveAudioFormat>();
-        testDataDir = getTestDataDirectory();
+        testDataDir = File (__FILE__)
+                          .getParentDirectory()
+                          .getParentDirectory()
+                          .getChildFile ("data")
+                          .getChildFile ("sounds");
     }
 
     std::unique_ptr<WaveAudioFormat> format;
