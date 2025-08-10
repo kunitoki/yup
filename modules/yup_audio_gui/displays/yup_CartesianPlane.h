@@ -56,8 +56,13 @@ public:
         bool visible { true };
 
         PlotSignal() = default;
+
         PlotSignal (const String& signalName, const Color& signalColor = Colors::white, float width = 2.0f)
-            : name (signalName), color (signalColor), strokeWidth (width) {}
+            : name (signalName)
+            , color (signalColor)
+            , strokeWidth (width)
+        {
+        }
     };
 
     //==============================================================================
@@ -70,8 +75,14 @@ public:
         bool emphasize { false };
 
         GridLine() = default;
+
         GridLine (double val, const Color& col = Color (0xFF333333), float width = 1.0f, bool emp = false)
-            : value (val), color (col), strokeWidth (width), emphasize (emp) {}
+            : value (val)
+            , color (col)
+            , strokeWidth (width)
+            , emphasize (emp)
+        {
+        }
     };
 
     //==============================================================================
@@ -84,8 +95,14 @@ public:
         float fontSize { 10.0f };
 
         AxisLabel() = default;
+
         AxisLabel (double val, const String& labelText, const Color& col = Colors::white, float size = 10.0f)
-            : value (val), text (labelText), color (col), fontSize (size) {}
+            : value (val)
+            , text (labelText)
+            , color (col)
+            , fontSize (size)
+        {
+        }
     };
 
     //==============================================================================

@@ -420,38 +420,38 @@ private:
     {
         // Configure the CartesianPlane for frequency response display
         frequencyDisplay.setTitle ("Crossover Frequency Response");
-        
+
         // Set logarithmic X axis (frequency) and linear Y axis (dB)
         frequencyDisplay.setXRange (20.0, 20000.0);
         frequencyDisplay.setXScaleType (yup::CartesianPlane::AxisScaleType::logarithmic);
         frequencyDisplay.setYRange (-48.0, 12.0);
         frequencyDisplay.setYScaleType (yup::CartesianPlane::AxisScaleType::linear);
-        
+
         // Set margins
         frequencyDisplay.setMargins (25, 50, 20, 20);
-        
+
         // Add vertical grid lines (frequency)
         frequencyDisplay.setVerticalGridLines ({ 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0 });
-        
+
         // Add horizontal grid lines (dB)
         frequencyDisplay.setHorizontalGridLines ({ -48.0, -36.0, -24.0, -12.0, -6.0, 0.0, 6.0 });
-        
+
         // Emphasize special lines
         frequencyDisplay.addHorizontalGridLine (0.0, yup::Color (0xFF666666), 2.0f, true);  // 0dB line
         frequencyDisplay.addHorizontalGridLine (-6.0, yup::Color (0xFF444444), 1.0f, true); // -6dB crossover line
-        
+
         // Add axis labels
         frequencyDisplay.setXAxisLabels ({ 100.0, 1000.0, 10000.0 });
         frequencyDisplay.setYAxisLabels ({ -24.0, -12.0, -6.0, 0.0 });
-        
+
         // Add signals
         lowPassSignalIndex = frequencyDisplay.addSignal ("Low", yup::Color (0xFF4488FF), 2.0f);
         highPassSignalIndex = frequencyDisplay.addSignal ("High", yup::Color (0xFFFF8844), 2.0f);
-        
+
         // Configure legend
         frequencyDisplay.setLegendVisible (true);
         frequencyDisplay.setLegendPosition ({ 0.9f, 0.1f });
-        
+
         // Set initial crossover frequency line
         setCrossoverFrequency (1000.0);
     }
@@ -459,7 +459,7 @@ private:
     void setCrossoverFrequency (double freq)
     {
         currentCrossoverFreq = freq;
-        
+
         // Update crossover frequency line
         frequencyDisplay.clearVerticalGridLines();
         frequencyDisplay.setVerticalGridLines ({ 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0 });
@@ -494,7 +494,7 @@ private:
     yup::Label highGainLabel;
     yup::Slider highGainSlider;
     yup::CartesianPlane frequencyDisplay;
-    
+
     // Signal indices for CartesianPlane
     int lowPassSignalIndex = -1;
     int highPassSignalIndex = -1;

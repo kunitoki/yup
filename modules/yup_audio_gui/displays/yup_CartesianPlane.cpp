@@ -385,8 +385,7 @@ Rectangle<float> CartesianPlane::getPlotBounds() const
         static_cast<float> (marginLeft),
         static_cast<float> (marginTop),
         static_cast<float> (bounds.getWidth() - marginLeft - marginRight),
-        static_cast<float> (bounds.getHeight() - marginTop - marginBottom)
-    );
+        static_cast<float> (bounds.getHeight() - marginTop - marginBottom));
 }
 
 //==============================================================================
@@ -403,7 +402,7 @@ void CartesianPlane::paint (Graphics& g)
     drawAxisLabels (g, plotBounds);
     drawTitle (g);
 
-    if (showLegend && !signals.empty())
+    if (showLegend && ! signals.empty())
         drawLegend (g, plotBounds);
 }
 
@@ -453,12 +452,12 @@ void CartesianPlane::drawSignals (Graphics& g, const Rectangle<float>& bounds)
 {
     for (const auto& signal : signals)
     {
-        if (!signal.visible || signal.data.empty())
+        if (! signal.visible || signal.data.empty())
             continue;
 
         g.setStrokeColor (signal.color);
         g.setStrokeWidth (signal.strokeWidth);
-        
+
         Path path;
         bool firstPoint = true;
         Point<float> previousPoint;
@@ -468,10 +467,10 @@ void CartesianPlane::drawSignals (Graphics& g, const Rectangle<float>& bounds)
         {
             float x = valueToX (point.getX());
             float y = valueToY (point.getY());
-            
+
             Point<float> currentPoint (x, y);
             bool currentPointInBounds = bounds.contains (currentPoint);
-            
+
             // Handle visibility and path continuity
             if (currentPointInBounds)
             {
@@ -480,7 +479,7 @@ void CartesianPlane::drawSignals (Graphics& g, const Rectangle<float>& bounds)
                     path.startNewSubPath (x, y);
                     firstPoint = false;
                 }
-                else if (previousPointValid && !bounds.contains (previousPoint))
+                else if (previousPointValid && ! bounds.contains (previousPoint))
                 {
                     // Previous point was outside, current is inside - find intersection and start new subpath
                     auto intersection = findBoundsIntersection (previousPoint, currentPoint, bounds);
@@ -508,12 +507,12 @@ void CartesianPlane::drawSignals (Graphics& g, const Rectangle<float>& bounds)
                     path.lineTo (intersection->getX(), intersection->getY());
                 }
             }
-            
+
             previousPoint = currentPoint;
             previousPointValid = true;
         }
 
-        if (!firstPoint)
+        if (! firstPoint)
             g.strokePath (path);
     }
 }
@@ -533,8 +532,7 @@ void CartesianPlane::drawAxisLabels (Graphics& g, const Rectangle<float>& bounds
                 static_cast<int> (x - 30),
                 static_cast<int> (bounds.getBottom() + 2),
                 60,
-                marginBottom - 2
-            );
+                marginBottom - 2);
 
             g.fillFittedText (label.text, font, labelBounds, Justification::center);
         }
@@ -553,8 +551,7 @@ void CartesianPlane::drawAxisLabels (Graphics& g, const Rectangle<float>& bounds
                 2,
                 static_cast<int> (y - 8),
                 marginLeft - 4,
-                16
-            );
+                16);
 
             g.fillFittedText (label.text, font, labelBounds, Justification::right);
         }
@@ -572,8 +569,7 @@ void CartesianPlane::drawTitle (Graphics& g)
         marginLeft,
         2,
         getWidth() - marginLeft - marginRight,
-        marginTop - 4
-    );
+        marginTop - 4);
 
     g.fillFittedText (titleText, titleFont, titleBounds, titleJustification);
 }
@@ -584,7 +580,7 @@ void CartesianPlane::drawLegend (Graphics& g, const Rectangle<float>& bounds)
     int visibleSignalCount = 0;
     for (const auto& signal : signals)
     {
-        if (signal.visible && !signal.name.isEmpty())
+        if (signal.visible && ! signal.name.isEmpty())
             visibleSignalCount++;
     }
 
@@ -622,7 +618,7 @@ void CartesianPlane::drawLegend (Graphics& g, const Rectangle<float>& bounds)
 
     for (const auto& signal : signals)
     {
-        if (!signal.visible || signal.name.isEmpty())
+        if (! signal.visible || signal.name.isEmpty())
             continue;
 
         // Draw color indicator
@@ -635,8 +631,7 @@ void CartesianPlane::drawLegend (Graphics& g, const Rectangle<float>& bounds)
             static_cast<int> (legendX + padding + 18),
             static_cast<int> (itemY),
             legendWidth - padding - 18 - padding,
-            itemHeight
-        );
+            itemHeight);
 
         g.setFillColor (Colors::white);
         g.fillFittedText (signal.name, font, textBounds, Justification::centerLeft);
@@ -668,25 +663,25 @@ String CartesianPlane::formatAxisValue (double value, AxisScaleType scaleType) c
 std::optional<Point<float>> CartesianPlane::findBoundsIntersection (const Point<float>& p1, const Point<float>& p2, const Rectangle<float>& bounds) const
 {
     // Find intersection of line segment p1-p2 with rectangle bounds
-    
+
     float dx = p2.getX() - p1.getX();
     float dy = p2.getY() - p1.getY();
-    
+
     if (std::abs (dx) < 1e-6f && std::abs (dy) < 1e-6f)
         return std::nullopt; // Points are the same
-    
+
     float t_min = 0.0f;
     float t_max = 1.0f;
-    
+
     // Check intersection with vertical bounds (left and right edges)
     if (std::abs (dx) > 1e-6f)
     {
         float t_left = (bounds.getX() - p1.getX()) / dx;
         float t_right = (bounds.getRight() - p1.getX()) / dx;
-        
+
         float t_min_x = jmin (t_left, t_right);
         float t_max_x = jmax (t_left, t_right);
-        
+
         t_min = jmax (t_min, t_min_x);
         t_max = jmin (t_max, t_max_x);
     }
@@ -696,16 +691,16 @@ std::optional<Point<float>> CartesianPlane::findBoundsIntersection (const Point<
         if (p1.getX() < bounds.getX() || p1.getX() > bounds.getRight())
             return std::nullopt;
     }
-    
+
     // Check intersection with horizontal bounds (top and bottom edges)
     if (std::abs (dy) > 1e-6f)
     {
         float t_top = (bounds.getY() - p1.getY()) / dy;
         float t_bottom = (bounds.getBottom() - p1.getY()) / dy;
-        
+
         float t_min_y = jmin (t_top, t_bottom);
         float t_max_y = jmax (t_top, t_bottom);
-        
+
         t_min = jmax (t_min, t_min_y);
         t_max = jmin (t_max, t_max_y);
     }
@@ -715,10 +710,10 @@ std::optional<Point<float>> CartesianPlane::findBoundsIntersection (const Point<
         if (p1.getY() < bounds.getY() || p1.getY() > bounds.getBottom())
             return std::nullopt;
     }
-    
+
     if (t_min <= t_max && t_min >= 0.0f && t_min <= 1.0f)
         return Point<float> (p1.getX() + t_min * dx, p1.getY() + t_min * dy);
-    
+
     return std::nullopt;
 }
 
