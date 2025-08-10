@@ -2038,7 +2038,7 @@ String String::reversed() const
     std::vector<yup_wchar> clusters;
     clusters.reserve (numChars);
 
-    CharPointerType p{ text };
+    CharPointerType p { text };
     while (! p.isEmpty())
         clusters.push_back (p.getAndAdvance());
 
