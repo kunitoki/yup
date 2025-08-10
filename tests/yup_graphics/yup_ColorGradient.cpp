@@ -28,11 +28,6 @@
 
 using namespace yup;
 
-namespace
-{
-static constexpr float tol = 1e-5f;
-} // namespace
-
 TEST (ColorGradientTests, Default_Constructor)
 {
     ColorGradient gradient;
@@ -74,6 +69,8 @@ TEST (ColorGradientTests, Two_Color_Linear_Constructor)
 
 TEST (ColorGradientTests, Two_Color_Radial_Constructor)
 {
+    static constexpr float tol = 1e-5f;
+
     Color green (0xff00ff00);
     Color yellow (0xffffff00);
     ColorGradient gradient (green, 50.0f, 60.0f, yellow, 80.0f, 90.0f, ColorGradient::Radial);
@@ -128,6 +125,8 @@ TEST (ColorGradientTests, Multi_Stop_Constructor)
 
 TEST (ColorGradientTests, Multi_Stop_Radial_Constructor)
 {
+    static constexpr float tol = 1e-5f;
+
     std::vector<ColorGradient::ColorStop> stops;
     stops.emplace_back (Color (0xffff0000), 10.0f, 20.0f, 0.0f);
     stops.emplace_back (Color (0xff0000ff), 40.0f, 50.0f, 1.0f);
@@ -529,6 +528,8 @@ TEST (ColorGradientTests, Constructor_Default_Type_Parameter)
 
 TEST (ColorGradientTests, Constructor_Explicit_Type_Parameter)
 {
+    static constexpr float tol = 1e-5f;
+
     Color startColor (0xff00ff00); // Green
     Color endColor (0xffff00ff);   // Magenta
 
@@ -558,6 +559,8 @@ TEST (ColorGradientTests, Constructor_Explicit_Type_Parameter)
 
 TEST (ColorGradientTests, AddColorStop_With_Delta_Only)
 {
+    static constexpr float tol = 1e-5f;
+
     ColorGradient gradient;
 
     // Add first stop to establish baseline

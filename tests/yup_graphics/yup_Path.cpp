@@ -31,15 +31,13 @@ using namespace yup;
 
 namespace
 {
-static constexpr float tol = 1e-4f;
-
-void expectPointNear (const Point<float>& a, const Point<float>& b, float tolerance = tol)
+void expectPointNear (const Point<float>& a, const Point<float>& b, float tolerance = 1e-4f)
 {
     EXPECT_NEAR (a.getX(), b.getX(), tolerance);
     EXPECT_NEAR (a.getY(), b.getY(), tolerance);
 }
 
-void expectRectNear (const Rectangle<float>& a, const Rectangle<float>& b, float tolerance = tol)
+void expectRectNear (const Rectangle<float>& a, const Rectangle<float>& b, float tolerance = 1e-4f)
 {
     EXPECT_NEAR (a.getX(), b.getX(), tolerance);
     EXPECT_NEAR (a.getY(), b.getY(), tolerance);
@@ -222,6 +220,8 @@ TEST (PathTests, TransformAndTransformed)
 
 TEST (PathTests, ScaleToFit)
 {
+    static constexpr float tol = 1e-4f;
+
     Path p;
     p.addRectangle (10, 10, 20, 20);
     p.scaleToFit (0, 0, 100, 50, false);
@@ -541,6 +541,8 @@ TEST (PathTests, AppendPathPractical)
 
 TEST (PathTests, ScaleToFitPractical)
 {
+    static constexpr float tol = 1e-4f;
+
     Path p;
     p.addRectangle (10, 10, 20, 20);
     p.scaleToFit (0, 0, 100, 50, false);

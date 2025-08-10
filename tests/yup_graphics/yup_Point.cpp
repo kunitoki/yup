@@ -27,11 +27,6 @@
 
 using namespace yup;
 
-namespace
-{
-static constexpr float tol = 1e-5f;
-} // namespace
-
 TEST (PointTests, Default_Constructor)
 {
     Point<float> p;
@@ -120,6 +115,8 @@ TEST (PointTests, Magnitude)
 
 TEST (PointTests, Circumference_Points)
 {
+    static constexpr float tol = 1e-5f;
+
     Point<float> center (1.0f, 1.0f);
     float radius = 2.0f;
     float angle = 0.0f; // 0 degrees
@@ -160,6 +157,8 @@ TEST (PointTests, Scaling)
 
 TEST (PointTests, Rotation)
 {
+    static constexpr float tol = 1e-5f;
+
     float angle = MathConstants<float>::halfPi; // 90 degrees
 
     {
@@ -473,6 +472,8 @@ TEST (PointTests, ApproximatelyEqualTo)
 
 TEST (PointTests, EllipticalCircumference)
 {
+    static constexpr float tol = 1e-5f;
+
     Point<float> center (1.0f, 1.0f);
     float radiusX = 2.0f;
     float radiusY = 3.0f;
@@ -614,6 +615,8 @@ TEST (PointTests, Normalize_Zero)
 
 TEST (PointTests, Transform_DifferentTypes)
 {
+    static constexpr float tol = 1e-5f;
+
     Point<float> p (1.0f, 2.0f);
 
     // Test with translation
@@ -637,6 +640,8 @@ TEST (PointTests, Transform_DifferentTypes)
 
 TEST (PointTests, Circumference_NegativeRadii)
 {
+    static constexpr float tol = 1e-5f;
+
     Point<float> center (1.0f, 1.0f);
     float radius = -2.0f; // Negative radius
 
@@ -733,6 +738,8 @@ TEST (PointTests, VectorOperations_EdgeCases)
 
 TEST (PointTests, NormalizationEdgeCases)
 {
+    static constexpr float tol = 1e-5f;
+
     // Test already normalized vector
     Point<float> normalized (0.6f, 0.8f); // magnitude = 1.0
     EXPECT_TRUE (normalized.isNormalized());
@@ -807,6 +814,8 @@ TEST (PointTests, LerpAndMidpoint_EdgeCases)
 
 TEST (PointTests, RotationWithOrigin)
 {
+    static constexpr float tol = 1e-5f;
+
     Point<float> p (1.0f, 0.0f);
 
     // Test rotation around origin
@@ -827,6 +836,8 @@ TEST (PointTests, RotationWithOrigin)
 
 TEST (PointTests, AngleTo_EdgeCases)
 {
+    static constexpr float tol = 1e-5f;
+
     Point<float> origin (0.0f, 0.0f);
     Point<float> right (1.0f, 0.0f);
     Point<float> up (0.0f, 1.0f);

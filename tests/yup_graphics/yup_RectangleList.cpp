@@ -25,11 +25,6 @@
 
 using namespace yup;
 
-namespace
-{
-static constexpr float tol = 1e-5f;
-} // namespace
-
 TEST (RectangleListTests, DefaultConstructor)
 {
     RectangleList<float> list;
