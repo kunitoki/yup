@@ -46,6 +46,10 @@ YUP is an open-source library dedicated to empowering developers with advanced t
 > The project is still in embryonic stage, use it at your own risk!
 
 
+> [!IMPORTANT]
+> We are looking for collaborators to bring forward the framework!
+
+
 ## Features
 YUP brings a suite of powerful features, including:
 - **High-Performance Rendering:** From intricate visualizations to high-speed gaming graphics, YUP handles it all with ease and efficiency, relying on the open source [Rive](https://rive.app/) Renderer, backed by Metal, Direct3D, OpenGL, Vulkan and WebGPU.
@@ -330,9 +334,6 @@ For full documentation, including more detailed tutorials and comprehensive API 
 ## Community Engagement
 Join our growing community and contribute to the YUP project. Connect with us and other YUP developers:
 - **GitHub:** [YUP Repository](https://github.com/kunitoki/yup)
-
-> [!IMPORTANT]
-> We are looking for collaborators to bring forward the framework!
 
 
 ## License
