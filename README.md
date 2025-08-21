@@ -6,16 +6,16 @@
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
-  <a href="https://kunitoki.github.io/yup/demos/web_render_1/"><img src="./docs/demos/web_render_1.png" style="width:24%;" /></a>
-  <a href="https://kunitoki.github.io/yup/demos/web_render_2/"><img src="./docs/demos/web_render_2.png" style="width:24%;" /></a>
-  <a href="https://kunitoki.github.io/yup/demos/web_render_3/"><img src="./docs/demos/web_render_3.png" style="width:24%;" /></a>
-  <a href="https://kunitoki.github.io/yup/demos/web_render_4/"><img src="./docs/demos/web_render_4.png" style="width:24%;" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_1/"><img src="./docs/demos/web_render_1.png" style="width:24.75%;" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_2/"><img src="./docs/demos/web_render_2.png" style="width:24.75%;" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_3/"><img src="./docs/demos/web_render_3.png" style="width:24.75%;" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_4/"><img src="./docs/demos/web_render_4.png" style="width:24.75%;" /></a>
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
-  <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/images/yup_dsp_filter_rbj.png" style="width:25%;" /></a>
-  <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/images/yup_dsp_filter_butter.png" style="width:25%;" /></a>
-  <a href="./examples/graphics/source/examples/CrossoverDemo.h"><img src="./docs/images/yup_dsp_crossover.png" style="width:49%;" /></a>
+  <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/images/yup_dsp_filter_rbj.png" style="width:27%;" /></a>
+  <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/images/yup_dsp_filter_butter.png" style="width:27%;" /></a>
+  <a href="./examples/graphics/source/examples/CrossoverDemo.h"><img src="./docs/images/yup_dsp_crossover.png" style="width:44%;" /></a>
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
