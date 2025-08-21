@@ -6,21 +6,21 @@
 </div>
 
 <div style="display: flex; width: 100%; justify-content: space-between;">
-  <a href="https://kunitoki.github.io/yup/demos/web_render_1/"><img src="./docs/demos/web_render_1.png" style="height:130px; width:auto;" /></a>
-  <a href="https://kunitoki.github.io/yup/demos/web_render_2/"><img src="./docs/demos/web_render_2.png" style="height:130px; width:auto;" /></a>
-  <a href="https://kunitoki.github.io/yup/demos/web_render_3/"><img src="./docs/demos/web_render_3.png" style="height:130px; width:auto;" /></a>
-  <a href="https://kunitoki.github.io/yup/demos/web_render_4/"><img src="./docs/demos/web_render_4.png" style="height:130px; width:auto;" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_1/"><img src="./docs/demos/web_render_1.png" style="height:150px; width:auto;" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_2/"><img src="./docs/demos/web_render_2.png" style="height:150px; width:auto;" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_3/"><img src="./docs/demos/web_render_3.png" style="height:150px; width:auto;" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_4/"><img src="./docs/demos/web_render_4.png" style="height:150px; width:auto;" /></a>
 </div>
 
 <div style="display: flex; width: 100%; justify-content: space-between;">
-  <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/images/yup_dsp_filter_rbj.png" style="height:209px; width:auto;" /></a>
-  <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/images/yup_dsp_filter_butter.png" style="height:209px; width:auto;" /></a>
-  <a href="./examples/graphics/source/examples/CrossoverDemo.h"><img src="./docs/images/yup_dsp_crossover.png" style="height:209px; width:auto;" /></a>
+  <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/images/yup_dsp_filter_rbj.png" style="height:210px; width:auto;" /></a>
+  <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/images/yup_dsp_filter_butter.png" style="height:210px; width:auto;" /></a>
+  <a href="./examples/graphics/source/examples/CrossoverDemo.h"><img src="./docs/images/yup_dsp_crossover.png" style="height:210px; width:auto;" /></a>
 </div>
 
 <div style="display: flex; width: 100%; justify-content: space-between;">
-  <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_fill.png" width="100%" /></a>
-  <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_line.png" width="100%" /></a>
+  <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_fill.png" style="width:100%;" /></a>
+  <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_line.png" style="width:100%;" /></a>
 </p>
 
 Example Rive animation display ([source code](./examples/render/source/main.cpp)):
