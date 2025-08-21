@@ -66,11 +66,15 @@ yup_standalone_app (
         yup::yup_core
         yup::yup_audio_basics
         yup::yup_audio_devices
+        yup::yup_dsp
         yup::yup_events
         yup::yup_graphics
         yup::yup_gui
         yup::yup_audio_gui
         yup::yup_audio_processors
+        yup::yup_audio_formats
+        pffft_library
+        dr_libs
         libpng
         libwebp
         ${additional_modules}

@@ -587,3 +587,89 @@ TEST_F (GraphicsTest, Large_Values)
     graphics->setStrokeWidth (1000.0f);
     EXPECT_FLOAT_EQ (graphics->getStrokeWidth(), 1000.0f);
 }
+
+TEST_F (GraphicsTest, Ellipse_Fill_Operations)
+{
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+    graphics->setFillColor (Color (0xff00ff00)); // Green
+
+    // Test fillEllipse with Rectangle parameter
+    Rectangle<float> ellipseRect (50.0f, 60.0f, 80.0f, 60.0f);
+    EXPECT_NO_THROW ({
+        graphics->fillEllipse (ellipseRect);
+    });
+
+    // Test fillEllipse with individual float parameters
+    EXPECT_NO_THROW ({
+        graphics->fillEllipse (10.0f, 20.0f, 40.0f, 30.0f);
+    });
+
+    // Test with zero dimensions
+    EXPECT_NO_THROW ({
+        graphics->fillEllipse (0.0f, 0.0f, 0.0f, 0.0f);
+    });
+
+    // Test with negative dimensions
+    EXPECT_NO_THROW ({
+        graphics->fillEllipse (-10.0f, -10.0f, 20.0f, 20.0f);
+    });
+}
+
+TEST_F (GraphicsTest, Ellipse_Stroke_Operations)
+{
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+    graphics->setStrokeColor (Color (0xffff0000)); // Red
+    graphics->setStrokeWidth (2.0f);
+
+    // Test strokeEllipse with Rectangle parameter
+    Rectangle<float> ellipseRect (30.0f, 40.0f, 60.0f, 80.0f);
+    EXPECT_NO_THROW ({
+        graphics->strokeEllipse (ellipseRect);
+    });
+
+    // Test strokeEllipse with individual float parameters
+    EXPECT_NO_THROW ({
+        graphics->strokeEllipse (100.0f, 110.0f, 50.0f, 50.0f);
+    });
+
+    // Test with different stroke widths
+    graphics->setStrokeWidth (10.0f);
+    EXPECT_NO_THROW ({
+        graphics->strokeEllipse (20.0f, 30.0f, 40.0f, 50.0f);
+    });
+
+    // Test with very thin stroke
+    graphics->setStrokeWidth (0.1f);
+    EXPECT_NO_THROW ({
+        graphics->strokeEllipse (Rectangle<float> (5.0f, 5.0f, 15.0f, 15.0f));
+    });
+}
+
+TEST_F (GraphicsTest, Ellipse_Edge_Cases)
+{
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+
+    // Test perfect circle (equal width and height)
+    EXPECT_NO_THROW ({
+        graphics->fillEllipse (50.0f, 50.0f, 40.0f, 40.0f);
+        graphics->strokeEllipse (100.0f, 100.0f, 40.0f, 40.0f);
+    });
+
+    // Test very thin ellipse (height much smaller than width)
+    EXPECT_NO_THROW ({
+        graphics->fillEllipse (10.0f, 10.0f, 100.0f, 2.0f);
+        graphics->strokeEllipse (10.0f, 15.0f, 100.0f, 2.0f);
+    });
+
+    // Test very tall ellipse (width much smaller than height)
+    EXPECT_NO_THROW ({
+        graphics->fillEllipse (150.0f, 10.0f, 2.0f, 100.0f);
+        graphics->strokeEllipse (155.0f, 10.0f, 2.0f, 100.0f);
+    });
+
+    // Test with single pixel dimensions
+    EXPECT_NO_THROW ({
+        graphics->fillEllipse (180.0f, 180.0f, 1.0f, 1.0f);
+        graphics->strokeEllipse (185.0f, 185.0f, 1.0f, 1.0f);
+    });
+}

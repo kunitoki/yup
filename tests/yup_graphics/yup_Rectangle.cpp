@@ -25,11 +25,6 @@
 
 using namespace yup;
 
-namespace
-{
-static constexpr float tol = 1e-5f;
-} // namespace
-
 TEST (RectangleTests, Default_Constructor)
 {
     Rectangle<float> r;
@@ -643,6 +638,8 @@ TEST (RectangleTests, Centered_Rectangle_With_Size_Edge_Cases)
 
 TEST (RectangleTests, Transform)
 {
+    static constexpr float tol = 1e-5f;
+
     Rectangle<float> r (1.0f, 2.0f, 3.0f, 4.0f);
 
     // Test translation

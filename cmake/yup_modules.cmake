@@ -67,7 +67,7 @@ function (_yup_module_collect_sources folder output_variable)
     set (base_path "${folder}/${module_name}")
     set (all_module_sources "")
 
-    foreach (extension ${source_extensions})
+    foreach (extension IN LISTS source_extensions)
         file (GLOB found_source_files "${base_path}*${extension}")
 
         if (NOT YUP_PLATFORM_MSFT)
@@ -118,7 +118,7 @@ function (_yup_module_collect_sources folder output_variable)
     endforeach()
 
     set (module_sources "")
-    foreach (module_source ${all_module_sources})
+    foreach (module_source IN LISTS all_module_sources)
         if (APPLE)
             if (module_source MATCHES "^.*\.(cc|cxx|cpp)$")
                 get_filename_component (source_directory ${module_source} DIRECTORY)
@@ -146,11 +146,11 @@ endfunction()
 
 function (_yup_module_prepare_frameworks frameworks weak_frameworks output_variable)
     set (temp_frameworks "")
-    foreach (framework ${frameworks})
+    foreach (framework IN LISTS frameworks)
         list (APPEND temp_frameworks "-framework ${framework}")
     endforeach()
 
-    foreach (framework ${weak_frameworks})
+    foreach (framework IN LISTS weak_frameworks)
         list (APPEND temp_frameworks "-weak_framework ${framework}")
     endforeach()
 
@@ -345,7 +345,7 @@ function (yup_add_module module_path modules_definitions module_group)
     set (platform_properties "^(.*)Deps$|^(.*)Defines$|^(.*)Libs$|^(.*)Frameworks$|^(.*)WeakFrameworks$|^(.*)Options$|^(.*)LinkOptions$|^(.*)Packages$|^(.*)Searchpaths$|^(.*)CppStandard$")
 
     set (parsed_config "")
-    foreach (module_config ${module_configs})
+    foreach (module_config IN LISTS module_configs)
         string (REGEX REPLACE "^(.+):[ \t\r\n]+(.+)$" "\\1;\\2" parsed_config ${module_config})
         list (GET parsed_config 0 key)
         list (LENGTH parsed_config parsed_config_len)
@@ -452,7 +452,7 @@ function (yup_add_module module_path modules_definitions module_group)
         list (APPEND module_link_options ${module_linuxLinkOptions})
         _yup_resolve_variable_paths ("${module_linuxSearchpaths}" module_linuxSearchpaths)
         list (APPEND module_searchpaths ${module_linuxSearchpaths})
-        foreach (package ${module_linuxPackages})
+        foreach (package IN LISTS module_linuxPackages)
             _yup_get_package_config_libs ("${package}" package_libs)
             list (APPEND module_libs ${package_libs})
         endforeach()
@@ -505,7 +505,7 @@ function (yup_add_module module_path modules_definitions module_group)
     endif()
 
     # ==== Add module definitions
-    foreach (module_definition ${modules_definitions})
+    foreach (module_definition IN LISTS modules_definitions)
         list (APPEND module_defines ${module_definition})
     endforeach()
 
@@ -513,7 +513,7 @@ function (yup_add_module module_path modules_definitions module_group)
     get_filename_component (module_include_path ${module_path} DIRECTORY)
     list (APPEND module_include_paths "${module_include_path}")
 
-    foreach (searchpath ${module_searchpaths})
+    foreach (searchpath IN LISTS module_searchpaths)
         if (EXISTS "${searchpath}")
             list (APPEND module_include_paths "${searchpath}")
         elseif (EXISTS "${module_path}/${searchpath}")
@@ -619,29 +619,46 @@ macro (yup_add_default_modules modules_path)
     yup_add_module (${modules_path}/thirdparty/rive_decoders "${modules_definitions}" ${thirdparty_group})
     yup_add_module (${modules_path}/thirdparty/rive_renderer "${modules_definitions}" ${thirdparty_group})
     yup_add_module (${modules_path}/thirdparty/oboe_library "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/pffft_library "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/dr_libs "${modules_definitions}" ${thirdparty_group})
 
     # ==== Yup modules
     set (modules_group "Modules")
     yup_add_module (${modules_path}/modules/yup_core "${modules_definitions}" ${modules_group})
     add_library (yup::yup_core ALIAS yup_core)
+
     yup_add_module (${modules_path}/modules/yup_events "${modules_definitions}" ${modules_group})
     add_library (yup::yup_events ALIAS yup_events)
+
     yup_add_module (${modules_path}/modules/yup_data_model "${modules_definitions}" ${modules_group})
     add_library (yup::yup_data_model ALIAS yup_data_model)
-    yup_add_module (${modules_path}/modules/yup_audio_basics "${modules_definitions}" ${modules_group})
-    add_library (yup::yup_audio_basics ALIAS yup_audio_basics)
-    yup_add_module (${modules_path}/modules/yup_audio_devices "${modules_definitions}" ${modules_group})
-    add_library (yup::yup_audio_devices ALIAS yup_audio_devices)
-    yup_add_module (${modules_path}/modules/yup_audio_processors "${modules_definitions}" ${modules_group})
-    add_library (yup::yup_audio_processors ALIAS yup_audio_processors)
-    yup_add_module (${modules_path}/modules/yup_audio_plugin_client "${modules_definitions}" ${modules_group})
-    add_library (yup::yup_audio_plugin_client ALIAS yup_audio_plugin_client)
+
+    yup_add_module (${modules_path}/modules/yup_dsp "${modules_definitions}" ${modules_group})
+    add_library (yup::yup_dsp ALIAS yup_dsp)
+
     yup_add_module (${modules_path}/modules/yup_graphics "${modules_definitions}" ${modules_group})
     add_library (yup::yup_graphics ALIAS yup_graphics)
+
     yup_add_module (${modules_path}/modules/yup_gui "${modules_definitions}" ${modules_group})
     add_library (yup::yup_gui ALIAS yup_gui)
+
+    yup_add_module (${modules_path}/modules/yup_audio_basics "${modules_definitions}" ${modules_group})
+    add_library (yup::yup_audio_basics ALIAS yup_audio_basics)
+
+    yup_add_module (${modules_path}/modules/yup_audio_devices "${modules_definitions}" ${modules_group})
+    add_library (yup::yup_audio_devices ALIAS yup_audio_devices)
+
+    yup_add_module (${modules_path}/modules/yup_audio_formats "${modules_definitions}" ${modules_group})
+    add_library (yup::yup_audio_formats ALIAS yup_audio_formats)
+
+    yup_add_module (${modules_path}/modules/yup_audio_processors "${modules_definitions}" ${modules_group})
+    add_library (yup::yup_audio_processors ALIAS yup_audio_processors)
+
     yup_add_module (${modules_path}/modules/yup_audio_gui "${modules_definitions}" ${modules_group})
     add_library (yup::yup_audio_gui ALIAS yup_audio_gui)
+
+    yup_add_module (${modules_path}/modules/yup_audio_plugin_client "${modules_definitions}" ${modules_group})
+    add_library (yup::yup_audio_plugin_client ALIAS yup_audio_plugin_client)
 
     if (YUP_ARG_ENABLE_PYTHON)
         if (NOT YUP_BUILD_WHEEL)

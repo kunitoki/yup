@@ -80,12 +80,21 @@ void Label::resetFont()
 
 //==============================================================================
 
-void Label::setStrokeWidth (float newWidth) noexcept
+void Label::setStrokeWidth (float newWidth)
 {
     if (strokeWidth == newWidth)
         return;
 
     strokeWidth = newWidth;
+    repaint();
+}
+
+void Label::setJustification (Justification newJustification)
+{
+    if (justification == newJustification)
+        return;
+
+    justification = newJustification;
     repaint();
 }
 
@@ -117,21 +126,22 @@ void Label::prepareText()
         return;
 
     auto fontSize = getHeight() * 0.8f; // TODO - needs config
-    if (! font)
-        font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
+    auto fontToUse = ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (fontSize);
+    if (font)
+        fontToUse = *font;
 
     {
         auto modifier = styledText.startUpdate();
         modifier.setMaxSize (getSize());
-        modifier.setHorizontalAlign (StyledText::left);
-        modifier.setVerticalAlign (StyledText::middle);
+        modifier.setHorizontalAlign (StyledText::horizontalAlignFromJustification (justification));
+        modifier.setVerticalAlign (StyledText::verticalAlignFromJustification (justification));
         modifier.setOverflow (StyledText::ellipsis);
         modifier.setWrap (StyledText::noWrap);
 
         modifier.clear();
 
         if (text.isNotEmpty())
-            modifier.appendText (text, font->withHeight (fontSize));
+            modifier.appendText (text, fontToUse);
     }
 
     needsUpdate = false;

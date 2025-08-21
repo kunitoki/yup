@@ -39,7 +39,7 @@ public:
 
         @param componentID    The component identifier for this combo box
     */
-    ComboBox (StringRef componentID);
+    ComboBox (StringRef componentID = {});
 
     //==============================================================================
     /** Destructor. */
@@ -145,9 +145,12 @@ public:
 
     //==============================================================================
     /** Called when the selected item changes.
+
         Override this to respond to selection changes.
     */
-    virtual void comboBoxChanged() {}
+    virtual void selectedItemChanged() {}
+
+    std::function<void()> onSelectedItemChanged;
 
     //==============================================================================
     struct Style

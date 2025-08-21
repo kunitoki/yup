@@ -56,13 +56,16 @@ set (target_modules
     yup_core
     yup_audio_basics
     yup_audio_devices
+    yup_audio_formats
+    yup_dsp
     yup_events
     yup_data_model
-    yup_graphics)
+    yup_graphics
+    pffft_library)
 
 if (NOT YUP_PLATFORM_EMSCRIPTEN)
     list (APPEND target_modules yup_gui yup_audio_gui)
-    if (YUP_PLATFORM_DESKTOP)
+    if (YUP_PLATFORM_DESKTOP AND NOT YUP_PLATFORM_WINDOWS)
         list (APPEND target_modules yup_python)
     endif()
     list (APPEND target_gtest_modules
@@ -75,7 +78,7 @@ else()
         GTest::gmock_main)
 endif()
 
-if (YUP_PLATFORM_MAC OR YUP_PLATFORM_WINDOWS)
+if (YUP_PLATFORM_MAC) # OR YUP_PLATFORM_WINDOWS)
     set (python_tools_path "${CMAKE_CURRENT_LIST_DIR}/../python/tools")
     set (python_target_name "${target_name}_python_stdlib")
 
@@ -104,6 +107,9 @@ yup_standalone_app (
     MODULES
         ${target_modules}
         ${target_gtest_modules})
+
+# ==== (Only For Testing) Setup FFTW3
+# _yup_find_fftw3 (${target_name})
 
 # ==== Setup sources
 set (sources "")

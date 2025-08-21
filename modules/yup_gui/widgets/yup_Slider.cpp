@@ -181,6 +181,52 @@ double Slider::getInterval() const
     return range.interval;
 }
 
+//==============================================================================
+
+void Slider::setSkewFactor (double skewFactor)
+{
+    if (skewFactor <= 0.0)
+    {
+        jassertfalse; // Skew factor must be positive
+        return;
+    }
+
+    if (! approximatelyEqual (range.skew, skewFactor))
+    {
+        range.skew = skewFactor;
+
+        // Reapply constraints to current values with new skew
+        setDefaultValue (constrainValue (defaultValue));
+        setValue (constrainValue (currentValue), dontSendNotification);
+        setMinValue (constrainValue (minValue), dontSendNotification);
+        setMaxValue (constrainValue (maxValue), dontSendNotification);
+
+        repaint();
+    }
+}
+
+void Slider::setSkewFactorFromMidpoint (double midpointValue)
+{
+    midpointValue = jlimit (range.getRange().getStart(), range.getRange().getEnd(), midpointValue);
+
+    range.setSkewForCentre (midpointValue);
+
+    // Reapply constraints to current values with new skew
+    setDefaultValue (constrainValue (defaultValue));
+    setValue (constrainValue (currentValue), dontSendNotification);
+    setMinValue (constrainValue (minValue), dontSendNotification);
+    setMaxValue (constrainValue (maxValue), dontSendNotification);
+
+    repaint();
+}
+
+double Slider::getSkewFactor() const
+{
+    return range.skew;
+}
+
+//==============================================================================
+
 void Slider::setNumDecimalPlacesToDisplay (int decimalPlaces)
 {
     numDecimalPlaces = decimalPlaces;
@@ -452,68 +498,35 @@ void Slider::focusLost()
 
 void Slider::sendValueChanged (NotificationType notification)
 {
-    if (notification == dontSendNotification)
-        return;
-
-    auto notificationSender = [this, bailOutChecker = BailOutChecker (this)]
+    sendChangeNotification (notification, [this]
     {
-        if (bailOutChecker.shouldBailOut())
-            return;
-
         valueChanged();
 
         if (onValueChanged)
             onValueChanged (getValue());
-    };
-
-    if (notification == sendNotificationAsync || ! MessageManager::getInstance()->isThisTheMessageThread())
-        MessageManager::callAsync (std::move (notificationSender));
-    else
-        notificationSender();
+    });
 }
 
 void Slider::sendMinValueChanged (NotificationType notification)
 {
-    if (notification == dontSendNotification)
-        return;
-
-    auto notificationSender = [this, bailOutChecker = BailOutChecker (this)]
+    sendChangeNotification (notification, [this]
     {
-        if (bailOutChecker.shouldBailOut())
-            return;
-
         minValueChanged();
 
         if (onMinValueChanged)
             onMinValueChanged (getMinValue());
-    };
-
-    if (notification == sendNotificationAsync || ! MessageManager::getInstance()->isThisTheMessageThread())
-        MessageManager::callAsync (std::move (notificationSender));
-    else
-        notificationSender();
+    });
 }
 
 void Slider::sendMaxValueChanged (NotificationType notification)
 {
-    if (notification == dontSendNotification)
-        return;
-
-    auto notificationSender = [this, bailOutChecker = BailOutChecker (this)]
+    sendChangeNotification (notification, [this]
     {
-        if (bailOutChecker.shouldBailOut())
-            return;
-
         maxValueChanged();
 
         if (onMaxValueChanged)
             onMaxValueChanged (getMaxValue());
-    };
-
-    if (notification == sendNotificationAsync || ! MessageManager::getInstance()->isThisTheMessageThread())
-        MessageManager::callAsync (std::move (notificationSender));
-    else
-        notificationSender();
+    });
 }
 
 //==============================================================================

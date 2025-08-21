@@ -126,13 +126,11 @@ public:
 
     /** Prepare a valid python home and return the config to use.
 
-        @param programName The desired program name.
         @param destinationFolder The destination folder to use for preparing the home.
         @param standardLibraryCallback The callback to provide the standard library archive.
         @param forceInstall If true, the home will be fully rebuilt.
      */
     static std::unique_ptr<PyConfig> prepareScriptingHome (
-        const String& programName,
         const File& destinationFolder,
         std::function<MemoryBlock (const char*)> standardLibraryCallback,
         bool forceInstall = false);

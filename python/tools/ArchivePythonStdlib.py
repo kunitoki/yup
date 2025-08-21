@@ -16,7 +16,7 @@ def file_hash(file):
     return h.hexdigest()
 
 
-def make_archive(file, directory):
+def make_archive(file, directory, verbose=False):
     archived_files = []
     for dirname, _, files in os.walk(directory):
         for filename in files:
@@ -34,16 +34,20 @@ def make_archive(file, directory):
             with open(path, "rb") as fp:
                 zf.writestr(zip_info, fp.read(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
 
+            if verbose:
+                print(f"Added to zip: {archive_path}")
+
 
 if __name__ == "__main__":
     print(f"starting python standard lib archiving tool...")
 
     parser = ArgumentParser()
-    parser.add_argument("-l", "--lib-folder", type=Path, help="Path to the lib folder.")
+    parser.add_argument("-r", "--root-folder", type=Path, help="Path to the python root folder.")
     parser.add_argument("-o", "--output-folder", type=Path, help="Path to the output folder.")
     parser.add_argument("-M", "--version-major", type=int, help="Major version number (integer).")
     parser.add_argument("-m", "--version-minor", type=int, help="Minor version number (integer).")
     parser.add_argument("-x", "--exclude-patterns", type=str, default=None, help="Excluded patterns (semicolon separated list).")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output.")
 
     args = parser.parse_args()
 
@@ -52,33 +56,36 @@ if __name__ == "__main__":
 
     final_location: Path = args.output_folder / "python"
     site_packages = final_location / "site-packages"
-    base_python: Path = args.lib_folder
     final_archive = args.output_folder / f"python{version_nodot}.zip"
     temp_archive = args.output_folder / f"temp{version_nodot}.zip"
 
+    base_python: Path = args.root_folder
+
     base_patterns = [
-        "*.pyc",
-        "__pycache__",
-        "__phello__",
-        "*config-3*",
-        "*tcl*",
-        "*tdbc*",
-        "*tk*",
-        "Tk*",
-        "_tk*",
-        "_test*",
-        "libpython*",
-        "pkgconfig",
-        "idlelib",
-        "site-packages",
-        "test",
-        "turtledemo",
-        "EXTERNALLY-MANAGED",
-        "LICENSE.txt",
+        "**/*.pyc",
+        "**/__pycache__",
+        "**/__phello__",
+        "**/*config-3*",
+        "**/*tcl*",
+        "**/*tdbc*",
+        "**/*tk*",
+        "**/Tk*",
+        "**/_tk*",
+        "**/_test*",
+        "**/libpython*",
+        "**/pkgconfig",
+        "**/idlelib",
+        "**/site-packages",
+        "**/test",
+        "**/turtledemo",
+        "**/temp_*.txt",
+        "**/.DS_Store",
+        "**/EXTERNALLY-MANAGED",
+        "**/LICENSE.txt",
     ]
 
     if args.exclude_patterns:
-        custom_patterns = [x.strip() for x in args.exclude_patterns.split(";")]
+        custom_patterns = [x.strip() for x in args.exclude_patterns.replace('"', '').split(";")]
         base_patterns += custom_patterns
 
     ignored_files = shutil.ignore_patterns(*base_patterns)
@@ -93,7 +100,7 @@ if __name__ == "__main__":
 
     print(f"making archive {temp_archive} to {final_archive}...")
     if os.path.exists(final_archive):
-        make_archive(temp_archive, final_location)
+        make_archive(temp_archive, final_location, verbose=args.verbose)
         if file_hash(temp_archive) != file_hash(final_archive):
             shutil.copy(temp_archive, final_archive)
     else:

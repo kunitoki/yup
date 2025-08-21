@@ -1185,6 +1185,28 @@ public:
         WeakReference<Component> componentWeak;
     };
 
+protected:
+    /** @internal This is used by subclasses to simplify sending notifications. */
+    template <class F>
+    void sendChangeNotification (NotificationType notification, F&& function)
+    {
+        if (notification == dontSendNotification)
+            return;
+
+        auto notificationSender = [function = std::forward<F> (function), bailOutChecker = BailOutChecker (this)]
+        {
+            if (bailOutChecker.shouldBailOut())
+                return;
+
+            function();
+        };
+
+        if (notification == sendNotificationAsync || ! MessageManager::getInstance()->isThisTheMessageThread())
+            MessageManager::callAsync (std::move (notificationSender));
+        else
+            notificationSender();
+    }
+
 private:
     void internalRefreshDisplay (double lastFrameTimeSeconds);
     void internalRepaint();

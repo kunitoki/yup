@@ -296,7 +296,8 @@ TEST (ClassNameTests, StaticMethodBehavesCorrectly)
 4. **Group related tests** in test fixtures
 5. **Keep tests independent** and deterministic
 6. **Never Use C or C++ macros (like M_PI)** use yup alternatives
-7. **ALWAYS and EXCLUSIVELY use `just test`** to compile and execute tests
+7. **EXCLUSIVELY use `just test`** to compile and execute tests
+8. **NEVER start compilation or tests** unless told explicitly
 
 ### When suggesting refactoring:
 1. **Maintain existing API contracts**
@@ -358,9 +359,12 @@ Before suggesting code, verify:
 - [ ] Allman-style braces throughout
 - [ ] Consistent naming conventions
 - [ ] Proper include order and guards
-- [ ] const-correctness where applicable
+- [ ] Const-correctness whenever applicable
+- [ ] Prefer flatter code and early exits over overly indented code
+- [ ] Aim at simplifying and removing duplicated code, prefer removing rather than adding
+- [ ] When changing implementation, don't copy it and change it, adapt the existing or remove the old one once the new is in place and working
 - [ ] Platform-specific code properly guarded
-- [ ] Tests cover the new functionality
+- [ ] Proper TDD and ensure tests cover new functionality
 - [ ] No memory leaks (prefer RAII/smart pointers)
 - [ ] Thread safety considerations if applicable
 - [ ] Documentation for public APIs
@@ -392,5 +396,12 @@ void processText (const yup::String& text);
 
 // Use std::string only when interfacing with non-YUP code
 ```
+
+## Differences with JUCE
+
+- We use American english in YUP, so it's `center` and not `centred`, or `Color` and not `Colour`
+- Always check the available API in the Graphics class, don't assume we use JUCE Graphics classes
+- Graphics primitives have a template `.to<float>` method not `toFloat`
+- Fonts are obtained via ApplicationTheme, don't try to instantiate fonts inline
 
 This document should be referenced for every code generation, review, and suggestion task in the YUP project.

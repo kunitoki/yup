@@ -61,6 +61,7 @@ public:
     class Int24;   /**< Used as a template parameter for AudioData::Pointer. Indicates an 24-bit integer packed data format. */
     class Int32;   /**< Used as a template parameter for AudioData::Pointer. Indicates an 32-bit integer packed data format. */
     class Float32; /**< Used as a template parameter for AudioData::Pointer. Indicates an 32-bit float data format. */
+    class Float64; /**< Used as a template parameter for AudioData::Pointer. Indicates an 64-bit double data format. */
 
     //==============================================================================
     // These types can be used as the Endianness template parameter for the AudioData::Pointer class.
@@ -526,6 +527,7 @@ public:
         inline void advance() noexcept { ++data; }
 
         inline void skip (int numSamples) noexcept { data += numSamples; }
+
 #if YUP_BIG_ENDIAN
         inline float getAsFloatBE() const noexcept
         {
@@ -589,6 +591,7 @@ public:
             *(uint32*) data = ByteOrder::swap (n.asInt);
         }
 #endif
+
         inline int32 getAsInt32LE() const noexcept
         {
             return (int32) roundToInt (jlimit (-1.0, 1.0, (double) getAsFloatLE()) * (double) maxValue);
@@ -623,6 +626,131 @@ public:
         enum
         {
             bytesPerSample = 4,
+            maxValue = 0x7fffffff,
+            resolution = (1 << 8),
+            isFloat = 1
+        };
+    };
+
+    class Float64
+    {
+    public:
+        inline Float64 (void* d) noexcept
+            : data (static_cast<double*> (d))
+        {
+        }
+
+        inline void advance() noexcept { ++data; }
+
+        inline void skip (int numSamples) noexcept { data += numSamples; }
+
+#if YUP_BIG_ENDIAN
+        inline float getAsFloatBE() const noexcept
+        {
+            return (float) *data;
+        }
+
+        inline void setAsFloatBE (float newValue) noexcept { *data = (double) newValue; }
+
+        inline float getAsFloatLE() const noexcept
+        {
+            union
+            {
+                uint64 asInt;
+                double asDouble;
+            } n;
+
+            n.asInt = ByteOrder::swap (*(uint64*) data);
+            return (float) n.asDouble;
+        }
+
+        inline void setAsFloatLE (float newValue) noexcept
+        {
+            union
+            {
+                uint64 asInt;
+                double asDouble;
+            } n;
+
+            n.asDouble = (double) newValue;
+            *(uint64*) data = ByteOrder::swap (n.asInt);
+        }
+#else
+        inline float getAsFloatLE() const noexcept
+        {
+            return (float) *data;
+        }
+
+        inline void setAsFloatLE (float newValue) noexcept { *data = (double) newValue; }
+
+        inline float getAsFloatBE() const noexcept
+        {
+            union
+            {
+                uint64 asInt;
+                double asDouble;
+            } n;
+
+            n.asInt = ByteOrder::swap (*(uint64*) data);
+            return (float) n.asDouble;
+        }
+
+        inline void setAsFloatBE (float newValue) noexcept
+        {
+            union
+            {
+                uint64 asInt;
+                double asDouble;
+            } n;
+
+            n.asDouble = (double) newValue;
+            *(uint64*) data = ByteOrder::swap (n.asInt);
+        }
+#endif
+
+        inline int32 getAsInt32LE() const noexcept
+        {
+            return (int32) roundToInt (jlimit (-1.0f, 1.0f, getAsFloatLE()) * (double) maxValue);
+        }
+
+        inline int32 getAsInt32BE() const noexcept
+        {
+            return (int32) roundToInt (jlimit (-1.0f, 1.0f, getAsFloatBE()) * (double) maxValue);
+        }
+
+        inline void setAsInt32LE (int32 newValue) noexcept
+        {
+            setAsFloatLE ((float) (newValue * (1.0 / (1.0 + (double) maxValue))));
+        }
+
+        inline void setAsInt32BE (int32 newValue) noexcept
+        {
+            setAsFloatBE ((float) (newValue * (1.0 / (1.0 + (double) maxValue))));
+        }
+
+        inline void clear() noexcept { *data = 0; }
+
+        inline void clearMultiple (int num) noexcept { zeromem (data, (size_t) (num * bytesPerSample)); }
+
+        template <class SourceType>
+        inline void copyFromLE (SourceType& source) noexcept
+        {
+            setAsFloatLE (source.getAsFloat());
+        }
+
+        template <class SourceType>
+        inline void copyFromBE (SourceType& source) noexcept
+        {
+            setAsFloatBE (source.getAsFloat());
+        }
+
+        inline void copyFromSameType (Float64& source) noexcept { *data = *source.data; }
+
+        double* data;
+
+        enum
+        {
+            bytesPerSample = 8,
             maxValue = 0x7fffffff,
             resolution = (1 << 8),
             isFloat = 1
@@ -1234,78 +1362,5 @@ public:
         }
     }
 };
-
-//==============================================================================
-#ifndef DOXYGEN
-/**
-    A set of routines to convert buffers of 32-bit floating point data to and from
-    various integer formats.
-
-    Note that these functions are deprecated - the AudioData class provides a much more
-    flexible set of conversion classes now.
-
-    @tags{Audio}
-*/
-class [[deprecated]] YUP_API AudioDataConverters
-{
-public:
-    //==============================================================================
-    static void convertFloatToInt16LE (const float* source, void* dest, int numSamples, int destBytesPerSample = 2);
-    static void convertFloatToInt16BE (const float* source, void* dest, int numSamples, int destBytesPerSample = 2);
-
-    static void convertFloatToInt24LE (const float* source, void* dest, int numSamples, int destBytesPerSample = 3);
-    static void convertFloatToInt24BE (const float* source, void* dest, int numSamples, int destBytesPerSample = 3);
-
-    static void convertFloatToInt32LE (const float* source, void* dest, int numSamples, int destBytesPerSample = 4);
-    static void convertFloatToInt32BE (const float* source, void* dest, int numSamples, int destBytesPerSample = 4);
-
-    static void convertFloatToFloat32LE (const float* source, void* dest, int numSamples, int destBytesPerSample = 4);
-    static void convertFloatToFloat32BE (const float* source, void* dest, int numSamples, int destBytesPerSample = 4);
-
-    //==============================================================================
-    static void convertInt16LEToFloat (const void* source, float* dest, int numSamples, int srcBytesPerSample = 2);
-    static void convertInt16BEToFloat (const void* source, float* dest, int numSamples, int srcBytesPerSample = 2);
-
-    static void convertInt24LEToFloat (const void* source, float* dest, int numSamples, int srcBytesPerSample = 3);
-    static void convertInt24BEToFloat (const void* source, float* dest, int numSamples, int srcBytesPerSample = 3);
-
-    static void convertInt32LEToFloat (const void* source, float* dest, int numSamples, int srcBytesPerSample = 4);
-    static void convertInt32BEToFloat (const void* source, float* dest, int numSamples, int srcBytesPerSample = 4);
-
-    static void convertFloat32LEToFloat (const void* source, float* dest, int numSamples, int srcBytesPerSample = 4);
-    static void convertFloat32BEToFloat (const void* source, float* dest, int numSamples, int srcBytesPerSample = 4);
-
-    //==============================================================================
-    enum DataFormat
-    {
-        int16LE,
-        int16BE,
-        int24LE,
-        int24BE,
-        int32LE,
-        int32BE,
-        float32LE,
-        float32BE,
-    };
-
-    static void convertFloatToFormat (DataFormat destFormat,
-                                      const float* source,
-                                      void* dest,
-                                      int numSamples);
-
-    static void convertFormatToFloat (DataFormat sourceFormat,
-                                      const void* source,
-                                      float* dest,
-                                      int numSamples);
-
-    //==============================================================================
-    static void interleaveSamples (const float** source, float* dest, int numSamples, int numChannels);
-
-    static void deinterleaveSamples (const float* source, float** dest, int numSamples, int numChannels);
-
-private:
-    AudioDataConverters();
-};
-#endif
 
 } // namespace yup

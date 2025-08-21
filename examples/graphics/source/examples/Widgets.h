@@ -185,7 +185,7 @@ private:
         {
         }
 
-        void comboBoxChanged() override
+        void selectedItemChanged() override
         {
             if (parentWidget)
                 parentWidget->updateStatus ("ComboBox selected: " + getItemText (getSelectedItemIndex()));

@@ -47,13 +47,13 @@ void SwitchButton::setToggleState (bool shouldBeToggled, NotificationType notifi
 
         updateSwitchCirclePosition();
 
-        if (notification != dontSendNotification)
+        sendChangeNotification (notification, [this]
         {
             toggleStateChanged();
 
             if (onClick)
                 onClick();
-        }
+        });
 
         repaint();
     }

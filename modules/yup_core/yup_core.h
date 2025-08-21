@@ -248,8 +248,8 @@ extern YUP_API void YUP_CALLTYPE logAssertion (const wchar_t* file, int line) no
 } // namespace yup
 
 #include "misc/yup_EnumHelpers.h"
-#include "memory/yup_Memory.h"
 #include "maths/yup_MathsFunctions.h"
+#include "memory/yup_Memory.h"
 #include "memory/yup_ByteOrder.h"
 #include "memory/yup_Atomic.h"
 #include "text/yup_CharacterFunctions.h"
@@ -360,6 +360,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "threads/yup_SpinLock.h"
 #include "threads/yup_WaitableEvent.h"
 #include "threads/yup_Thread.h"
+#include "threads/yup_RecursiveSpinLock.h"
 #include "threads/yup_HighResolutionTimer.h"
 #include "threads/yup_ThreadLocalValue.h"
 #include "threads/yup_ThreadPool.h"

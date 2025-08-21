@@ -34,7 +34,8 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================*/
+  ==============================================================================
+*/
 
 #include <yup_audio_basics/yup_audio_basics.h>
 #include <gtest/gtest.h>

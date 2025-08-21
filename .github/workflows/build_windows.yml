@@ -8,6 +8,7 @@ on:
       - "**/cmake/**"
       - "**/examples/**"
       - "**/modules/**"
+      - "**/python/**"
       - "**/tests/**"
       - "**/thirdparty/**"
       - "!**/native/generated/**"
@@ -36,9 +37,11 @@ jobs:
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/Debug
       run: ./yup_tests.exe
+      shell: bash
     - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/Release
       run: ./yup_tests.exe
+      shell: bash
 
   build_console:
     runs-on: windows-latest

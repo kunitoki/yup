@@ -1,15 +1,26 @@
 # YUP: Cross-Platform Application And Plugin Development Library
 
-<p float="left">
+<div style="display: flex; width: 100%; flex-wrap: nowrap;">
   <a href="https://kunitoki.github.io/yup/demos/web_render_0/" title="UI courtesy from https://www.drywestdesign.com/">
-    <img src="./docs/demos/web_render_0.png" width="99%" /></a>
-<p>
+    <img src="./docs/demos/web_render_0.png" style="width:100%" /></a>
+</div>
 
-<p float="left">
-  <a href="https://kunitoki.github.io/yup/demos/web_render_1/"><img src="./docs/demos/web_render_1.png" width="24%" /></a>
-  <a href="https://kunitoki.github.io/yup/demos/web_render_2/"><img src="./docs/demos/web_render_2.png" width="24%" /></a>
-  <a href="https://kunitoki.github.io/yup/demos/web_render_3/"><img src="./docs/demos/web_render_3.png" width="24%" /></a>
-  <a href="https://kunitoki.github.io/yup/demos/web_render_4/"><img src="./docs/demos/web_render_4.png" width="23%" /></a>
+<div style="display: flex; width: 100%; flex-wrap: nowrap;">
+  <a href="https://kunitoki.github.io/yup/demos/web_render_1/"><img src="./docs/demos/web_render_1.png" style="width:24.25%;" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_2/"><img src="./docs/demos/web_render_2.png" style="width:24.25%;" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_3/"><img src="./docs/demos/web_render_3.png" style="width:24.25%;" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_4/"><img src="./docs/demos/web_render_4.png" style="width:24.25%;" /></a>
+</div>
+
+<div style="display: flex; width: 100%; flex-wrap: nowrap;">
+  <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/images/yup_dsp_filter_rbj.png" style="width:27%;" /></a>
+  <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/images/yup_dsp_filter_butter.png" style="width:27%;" /></a>
+  <a href="./examples/graphics/source/examples/CrossoverDemo.h"><img src="./docs/images/yup_dsp_crossover.png" style="width:44%;" /></a>
+</div>
+
+<div style="display: flex; width: 100%; flex-wrap: nowrap;">
+  <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_fill.png" style="width:100%;" /></a>
+  <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_line.png" style="width:100%;" /></a>
 </p>
 
 Example Rive animation display ([source code](./examples/render/source/main.cpp)):
@@ -33,6 +44,10 @@ YUP is an open-source library dedicated to empowering developers with advanced t
 
 > [!CAUTION]
 > The project is still in embryonic stage, use it at your own risk!
+
+
+> [!IMPORTANT]
+> We are looking for collaborators to bring forward the framework!
 
 
 ## Features
@@ -319,9 +334,6 @@ For full documentation, including more detailed tutorials and comprehensive API 
 ## Community Engagement
 Join our growing community and contribute to the YUP project. Connect with us and other YUP developers:
 - **GitHub:** [YUP Repository](https://github.com/kunitoki/yup)
-
-> [!IMPORTANT]
-> We are looking for collaborators to bring forward the framework!
 
 
 ## License

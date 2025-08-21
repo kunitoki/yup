@@ -47,7 +47,6 @@ protected:
     {
 #if YUP_HAS_EMBEDDED_PYTHON_STANDARD_LIBRARY
         engine = std::make_unique<ScriptEngine> (ScriptEngine::prepareScriptingHome (
-            YUPApplication::getInstance()->getApplicationName(),
             File::getSpecialLocation (File::tempDirectory),
             [] (const char*) -> MemoryBlock
         {

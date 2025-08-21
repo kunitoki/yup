@@ -2035,20 +2035,50 @@ String String::reversed() const
     if (numChars <= 0)
         return *this;
 
-    HeapBlock<CharPointerType> positions (numChars);
+    std::vector<yup_wchar> clusters;
+    clusters.reserve (numChars);
 
-    StringCreationHelper builder (text);
+    CharPointerType p { text };
+    while (! p.isEmpty())
+        clusters.push_back (p.getAndAdvance());
 
-    int index = 0;
-    for (auto it = text; ! it.isEmpty() && index < numChars; ++it, ++index)
-        positions[index] = it;
+    auto appendUTF32CodepointAsUTF8 = [] (String& dest, yup_wchar cp)
+    {
+        char utf8[5] = { 0 };
+        size_t len = 0;
 
-    for (int i = index - 1; i >= 0; --i)
-        builder.write (*positions[i]);
+        if (cp <= 0x7F)
+        {
+            utf8[len++] = static_cast<char> (cp);
+        }
+        else if (cp <= 0x7FF)
+        {
+            utf8[len++] = static_cast<char> (0xC0 | (cp >> 6));
+            utf8[len++] = static_cast<char> (0x80 | (cp & 0x3F));
+        }
+        else if (cp <= 0xFFFF)
+        {
+            utf8[len++] = static_cast<char> (0xE0 | (cp >> 12));
+            utf8[len++] = static_cast<char> (0x80 | ((cp >> 6) & 0x3F));
+            utf8[len++] = static_cast<char> (0x80 | (cp & 0x3F));
+        }
+        else
+        {
+            utf8[len++] = static_cast<char> (0xF0 | (cp >> 18));
+            utf8[len++] = static_cast<char> (0x80 | ((cp >> 12) & 0x3F));
+            utf8[len++] = static_cast<char> (0x80 | ((cp >> 6) & 0x3F));
+            utf8[len++] = static_cast<char> (0x80 | (cp & 0x3F));
+        }
 
-    builder.write (0); // null terminator
+        dest.append (CharPointer_UTF8 (utf8), len);
+    };
 
-    return String (std::move (builder.result));
+    String result;
+    result.preallocateBytes (numChars);
+    for (auto it = clusters.rbegin(); it != clusters.rend(); ++it)
+        appendUTF32CodepointAsUTF8 (result, *it);
+
+    return result;
 }
 
 String String::formattedRaw (const char* pf, ...)
@@ -2062,7 +2092,14 @@ String String::formattedRaw (const char* pf, ...)
 
         YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
-#if YUP_ANDROID
+#if YUP_WINDOWS
+        // On Windows, use narrow character functions to avoid encoding issues
+        // with mixed narrow format strings and arguments
+        HeapBlock<char> temp (bufferSize);
+        int num = (int) _vsnprintf (temp.get(), bufferSize - 1, pf, args);
+        if (num >= static_cast<int> (bufferSize))
+            num = -1;
+#elif YUP_ANDROID
         HeapBlock<char> temp (bufferSize);
         int num = (int) vsnprintf (temp.get(), bufferSize - 1, pf, args);
         if (num >= static_cast<int> (bufferSize))
@@ -2070,13 +2107,7 @@ String String::formattedRaw (const char* pf, ...)
 #else
         String wideCharVersion (pf);
         HeapBlock<wchar_t> temp (bufferSize);
-        const int num = (int)
-#if YUP_WINDOWS
-            _vsnwprintf
-#else
-            vswprintf
-#endif
-            (temp.get(), bufferSize - 1, wideCharVersion.toWideCharPointer(), args);
+        const int num = (int) vswprintf (temp.get(), bufferSize - 1, wideCharVersion.toWideCharPointer(), args);
 #endif
 
         YUP_END_IGNORE_DEPRECATION_WARNINGS
@@ -2084,7 +2115,11 @@ String String::formattedRaw (const char* pf, ...)
         va_end (args);
 
         if (num > 0)
+#if YUP_WINDOWS || YUP_ANDROID
+            return String (CharPointer_UTF8 (temp.get()));
+#else
             return String (temp.get());
+#endif
 
         bufferSize += 256;
 

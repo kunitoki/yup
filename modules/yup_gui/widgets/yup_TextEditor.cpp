@@ -59,13 +59,14 @@ void TextEditor::setText (String newText, NotificationType notification)
         caretPosition = jmin (caretPosition, text.length());
         selectionStart = selectionEnd = caretPosition;
         needsUpdate = true;
-        repaint();
 
-        if (notification == sendNotification)
+        sendChangeNotification (notification, [this]
         {
             if (onTextChange)
                 onTextChange();
-        }
+        });
+
+        repaint();
     }
 }
 

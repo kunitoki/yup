@@ -32,7 +32,7 @@
     website:              https://github.com/kunitoki/yup
     license:              ISC
 
-    dependencies:         yup_audio_basics yup_gui
+    dependencies:         yup_audio_basics yup_dsp yup_gui
 
   END_YUP_MODULE_DECLARATION
 
@@ -43,8 +43,11 @@
 #define YUP_AUDIO_GUI_H_INCLUDED
 
 #include <yup_audio_basics/yup_audio_basics.h>
+#include <yup_dsp/yup_dsp.h>
 #include <yup_gui/yup_gui.h>
 
 //==============================================================================
 
 #include "keyboard/yup_MidiKeyboardComponent.h"
+#include "displays/yup_SpectrumAnalyzerComponent.h"
+#include "displays/yup_CartesianPlane.h"

@@ -187,8 +187,20 @@ struct MathConstants
     /** A predefined value for Euler's number */
     static inline constexpr FloatType euler = static_cast<FloatType> (2.71828182845904523536L);
 
+    /** A predefined value for Pi / 4 */
+    static inline constexpr FloatType quarterPi = static_cast<FloatType> (3.141592653589793238L / 4.0L);
+
     /** A predefined value for sqrt (2) */
     static inline constexpr FloatType sqrt2 = static_cast<FloatType> (1.4142135623730950488L);
+
+    /** A predefined value for 1 / sqrt (2) */
+    static inline constexpr FloatType invSqrt2 = static_cast<FloatType> (1.0L / 1.4142135623730950488L);
+
+    /** A predefined value for natural logarithm of 2 */
+    static inline constexpr FloatType ln2 = static_cast<FloatType> (0.693147180559945309417232121458176568075500134360255254120680L);
+
+    /** A predefined value for natural logarithm of 10 */
+    static inline constexpr FloatType ln10 = static_cast<FloatType> (2.302585092994045684017991454684364207601101488628772976033327L);
 
     /** A predefined value for 0.5 */
     static inline constexpr FloatType half = static_cast<FloatType> (0.5L);
@@ -692,6 +704,31 @@ constexpr unsigned int truncatePositiveToUnsignedInt (FloatType value) noexcept
              <= static_cast<FloatType> (std::numeric_limits<unsigned int>::max()));
 
     return static_cast<unsigned int> (value);
+}
+
+//==============================================================================
+/** Returns the next even integer greater than or equal to `value`. Works with all integral types using integer math. */
+template <typename IntegerType>
+constexpr IntegerType nextEven (IntegerType value) noexcept
+{
+    static_assert (std::is_integral_v<IntegerType>, "nextEven requires an integral type");
+
+    if constexpr (std::is_signed_v<IntegerType>)
+        return (value & 1) == 0 ? value : value + 1;
+    else
+        return (value + 1) & ~IntegerType (1);
+}
+
+/** Returns the next odd integer greater than or equal to `value`. Works with all integral types using integer math. */
+template <typename IntegerType>
+constexpr IntegerType nextOdd (IntegerType value) noexcept
+{
+    static_assert (std::is_integral_v<IntegerType>, "nextOdd requires an integral type");
+
+    if constexpr (std::is_signed_v<IntegerType>)
+        return (value & 1) != 0 ? value : value + 1;
+    else
+        return value | IntegerType (1);
 }
 
 //==============================================================================

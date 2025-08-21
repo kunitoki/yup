@@ -25,11 +25,6 @@
 
 using namespace yup;
 
-namespace
-{
-static constexpr float tol = 1e-5f;
-} // namespace
-
 TEST (LineTests, DefaultConstructor)
 {
     Line<float> l;
@@ -146,6 +141,8 @@ TEST (LineTests, KeepOnlyStartAndEnd)
 
 TEST (LineTests, RotateAtPoint)
 {
+    static constexpr float tol = 1e-5f;
+
     Line<float> l (2.0f, 0.0f, 4.0f, 0.0f);
     auto rl = l.rotateAtPoint (Point<float> (2.0f, 0.0f), MathConstants<float>::halfPi);
     EXPECT_NEAR (rl.getStartX(), 2.0f, tol);
@@ -299,6 +296,8 @@ TEST (LineTests, TypeConversionEdgeCases)
 
 TEST (LineTests, RotationEdgeCases)
 {
+    static constexpr float tol = 1e-5f;
+
     // Test rotation with different angles
     Line<float> l (0.0f, 0.0f, 2.0f, 0.0f);
 

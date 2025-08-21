@@ -63,8 +63,10 @@ std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String&) { return
 
 MidiDeviceListConnection MidiDeviceListConnection::make (std::function<void()> cb)
 {
-    auto& broadcaster = MidiDeviceListConnectionBroadcaster::get();
-    return { &broadcaster, broadcaster.add (std::move (cb)) };
+    // MIDI is not implemented for WASM, so we return a no-op connection
+    // to avoid thread assertion issues when AudioDeviceManager is created
+    // from non-message threads (e.g., in tests)
+    return { nullptr, 0 };
 }
 
 } // namespace yup

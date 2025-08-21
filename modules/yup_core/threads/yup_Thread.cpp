@@ -356,20 +356,6 @@ bool Thread::launch (Priority priority, std::function<void()> functionToRun)
 }
 
 //==============================================================================
-void SpinLock::enter() const noexcept
-{
-    if (! tryEnter())
-    {
-        for (int i = 20; --i >= 0;)
-            if (tryEnter())
-                return;
-
-        while (! tryEnter())
-            Thread::yield();
-    }
-}
-
-//==============================================================================
 bool YUP_CALLTYPE Process::isRunningUnderDebugger() noexcept
 {
     return yup_isRunningUnderDebugger();

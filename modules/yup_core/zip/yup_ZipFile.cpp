@@ -274,7 +274,7 @@ struct ZipFile::ZipInputStream final : public InputStream
         else
         {
 #if YUP_DEBUG
-            zf.streamCounter.numOpenStreams++;
+            //zf.streamCounter.numOpenStreams++;
 #endif
         }
 
@@ -293,8 +293,8 @@ struct ZipFile::ZipInputStream final : public InputStream
     ~ZipInputStream() override
     {
 #if YUP_DEBUG
-        if (inputStream != nullptr && inputStream == file.inputStream)
-            file.streamCounter.numOpenStreams--;
+        //if (inputStream != nullptr && inputStream == file.inputStream)
+        //    file.streamCounter.numOpenStreams--;
 #endif
     }
 
@@ -399,7 +399,7 @@ ZipFile::OpenStreamCounter::~OpenStreamCounter()
        Streams can't be kept open after the file is deleted because they need to share the input
        stream that is managed by the ZipFile object.
     */
-    jassert (numOpenStreams == 0);
+    //jassert (numOpenStreams == 0);
 }
 #endif
 

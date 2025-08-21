@@ -72,7 +72,6 @@ namespace
 //==============================================================================
 
 std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
-    const String& programName,
     const File& destinationFolder,
     std::function<MemoryBlock (const char*)> standardLibraryCallback,
     bool forceInstall)
@@ -81,41 +80,74 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
     pythonFolderName << "python" << PY_MAJOR_VERSION << "." << PY_MINOR_VERSION;
     pythonArchiveName << "python" << PY_MAJOR_VERSION << PY_MINOR_VERSION << "_zip";
 
+    File applicationFile = File::getSpecialLocation (File::currentApplicationFile);
+
     if (! destinationFolder.isDirectory())
         destinationFolder.createDirectory();
 
-    auto libFolder = destinationFolder.getChildFile ("lib");
+    auto libFolder = destinationFolder;
+
+#if ! YUP_WINDOWS
+    libFolder = libFolder.getChildFile ("lib");
     if (! libFolder.isDirectory())
         libFolder.createDirectory();
 
-    auto pythonFolder = libFolder.getChildFile (pythonFolderName);
-    if (! pythonFolder.isDirectory())
-        pythonFolder.createDirectory();
+    libFolder = libFolder.getChildFile (pythonFolderName);
+#endif
 
-    if (forceInstall && pythonFolder.getNumberOfChildFiles (File::findFilesAndDirectories) > 0)
+    if (! libFolder.isDirectory())
+        libFolder.createDirectory();
+
+    if (forceInstall && libFolder.getNumberOfChildFiles (File::findFilesAndDirectories) > 0)
     {
-        pythonFolder.deleteRecursively();
-        pythonFolder.createDirectory();
+        libFolder.deleteRecursively();
+        libFolder.createDirectory();
     }
 
-    if (! pythonFolder.getChildFile ("lib-dynload").isDirectory())
+    if (! libFolder.getChildFile ("encodings").isDirectory())
     {
         MemoryBlock mb = standardLibraryCallback (pythonArchiveName.toRawUTF8());
 
         auto mis = MemoryInputStream (mb.getData(), mb.getSize(), false);
 
         auto zip = ZipFile (mis);
-        zip.uncompressTo (pythonFolder.getParentDirectory());
+        zip.uncompressTo (libFolder.getParentDirectory());
+    }
+
+    for (auto entry : RangedDirectoryIterator (destinationFolder, true, "*", File::findFiles, File::FollowSymlinks::no))
+        YUP_DBG (entry.getFile().getFullPathName());
+
+    PyPreConfig preconfig;
+    PyPreConfig_InitIsolatedConfig (&preconfig);
+    preconfig.utf8_mode = 1;
+
+    if (PyStatus status = Py_PreInitialize (&preconfig); PyStatus_IsError (status))
+    {
+        YUP_DBG ("Failed Py_PreInitialize");
+        return nullptr;
     }
 
     auto config = std::make_unique<PyConfig>();
 
-    PyConfig_InitPythonConfig (config.get());
-    config->parse_argv = 0;
-    config->isolated = 1;
-    config->install_signal_handlers = 0;
-    config->program_name = Py_DecodeLocale (programName.toRawUTF8(), nullptr);
-    config->home = Py_DecodeLocale (destinationFolder.getFullPathName().toRawUTF8(), nullptr);
+    PyConfig_InitIsolatedConfig (config.get());
+
+    if (auto status = PyConfig_Read (config.get()); PyStatus_Exception (status))
+    {
+        YUP_DBG ("Failed PyConfig_Read");
+        return nullptr;
+    }
+
+    if (auto status = PyConfig_SetBytesString (config.get(), &config->program_name, applicationFile.getFullPathName().toRawUTF8()); PyStatus_Exception (status))
+    {
+        YUP_DBG ("Failed config->program_name");
+        return nullptr;
+    }
+
+    if (auto status = PyConfig_SetBytesString (config.get(), &config->home, destinationFolder.getFullPathName().toRawUTF8()); PyStatus_Exception (status))
+    {
+        YUP_DBG ("Failed config->home");
+        return nullptr;
+    }
 
     return config;
 }

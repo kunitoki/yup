@@ -142,3 +142,26 @@ macro (_yup_fetch_python use_static_libs modules)
         find_package (Python REQUIRED COMPONENTS ${modules})
     endif()
 endmacro()
+
+#==============================================================================
+
+function (_yup_find_fftw3 target_name)
+    if (TARGET PkgConfig::FFTW AND TARGET FFTW::Float)
+    else()
+        find_package (PkgConfig REQUIRED)
+        pkg_check_modules (FFTW IMPORTED_TARGET REQUIRED fftw3)
+        find_library (FFTWF_LIB NAMES "fftw3f" PATHS ${PKG_FFTW_LIBRARY_DIRS} ${LIB_INSTALL_DIR})
+
+        if (FFTWF_LIB)
+            add_library (FFTW::Float INTERFACE IMPORTED)
+            set_target_properties (FFTW::Float
+                PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${FFTW_INCLUDE_DIRS}"
+                INTERFACE_LINK_LIBRARIES "${FFTWF_LIB}")
+        else()
+            _yup_message (FATAL_ERROR "FFTW3 library not found")
+        endif()
+    endif()
+
+    target_include_directories (${target_name} PRIVATE PkgConfig::FFTW)
+    target_link_libraries (${target_name} PRIVATE FFTW::Float)
+endfunction()

@@ -185,6 +185,11 @@ public:
     */
     bool isValidCharacterIndex (int characterIndex) const;
 
+    //==============================================================================
+
+    static HorizontalAlign horizontalAlignFromJustification (Justification justification);
+    static VerticalAlign verticalAlignFromJustification (Justification justification);
+
 private:
     friend class TextModifier;
 

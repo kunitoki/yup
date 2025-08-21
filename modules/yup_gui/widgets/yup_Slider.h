@@ -163,6 +163,27 @@ public:
     /** Returns the interval/step size for the slider. */
     double getInterval() const;
 
+    //==============================================================================
+    /** Sets the skew factor for the slider's range.
+
+        The skew factor affects how values are distributed across the slider:
+        - A value of 1.0 creates a linear distribution (no skewing)
+        - Values < 1.0 allocate more space to the lower end of the range
+        - Values > 1.0 allocate more space to the upper end of the range
+
+        This is particularly useful for parameters like frequency which benefit
+        from logarithmic scaling.
+
+        @param skewFactor The skew factor to apply (must be > 0.0)
+    */
+    void setSkewFactor (double skewFactor);
+
+    void setSkewFactorFromMidpoint (double midpointValue);
+
+    /** Returns the current skew factor for the slider's range. */
+    double getSkewFactor() const;
+
+    //==============================================================================
     /** Sets the number of decimal places to use when displaying values.
 
         @param decimalPlaces Number of decimal places (negative for automatic)

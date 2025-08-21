@@ -71,7 +71,6 @@
 #include <arm_neon.h>
 #endif
 
-#include "buffers/yup_AudioDataConverters.cpp"
 #include "buffers/yup_FloatVectorOperations.cpp"
 #include "buffers/yup_AudioChannelSet.cpp"
 #include "buffers/yup_AudioProcessLoadMeasurer.cpp"

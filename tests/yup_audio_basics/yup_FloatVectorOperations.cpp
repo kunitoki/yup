@@ -121,24 +121,10 @@ protected:
             FloatVectorOperations::abs (data2, data1, num);
             EXPECT_TRUE (areAllValuesEqual (data2, num, (ValueType) 256));
 
-            fillRandomly (random, int1, num);
-            doConversionTest (data1, data2, int1, num);
-
             FloatVectorOperations::fill (data1, (ValueType) 2, num);
             FloatVectorOperations::fill (data2, (ValueType) 3, num);
             FloatVectorOperations::addWithMultiply (data1, data1, data2, num);
             EXPECT_TRUE (areAllValuesEqual (data1, num, (ValueType) 8));
-        }
-
-        static void doConversionTest (float* data1, float* data2, int* const int1, int num)
-        {
-            FloatVectorOperations::convertFixedToFloat (data1, int1, 2.0f, num);
-            convertFixed (data2, int1, 2.0f, num);
-            EXPECT_TRUE (buffersMatch (data1, data2, num));
-        }
-
-        static void doConversionTest (double*, double*, int*, int)
-        {
         }
 
         static void fillRandomly (Random& random, ValueType* d, int num)
@@ -157,6 +143,24 @@ protected:
         {
             while (--num >= 0)
                 *d++ = (float) *s++ * multiplier;
+        }
+
+        static void convertFixedToDouble (double* d, const int* s, double multiplier, int num)
+        {
+            while (--num >= 0)
+                *d++ = (double) *s++ * multiplier;
+        }
+
+        static void convertFloatToFixed (int* d, const float* s, float multiplier, int num)
+        {
+            while (--num >= 0)
+                *d++ = (int) (*s++ * multiplier);
+        }
+
+        static void convertDoubleToFixed (int* d, const double* s, double multiplier, int num)
+        {
+            while (--num >= 0)
+                *d++ = (int) (*s++ * multiplier);
         }
 
         static bool areAllValuesEqual (const ValueType* d, int num, ValueType target)

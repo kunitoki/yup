@@ -19,7 +19,7 @@ build CONFIG="Debug":
 test CONFIG="Debug":
   cmake -G Xcode -B build
   cmake --build build --target yup_tests --config {{CONFIG}}
-  build/tests/{{CONFIG}}/yup_tests --gtest_filter={{gtest_filter}}
+  build/tests/{{CONFIG}}/yup_tests.app/Contents/MacOS/yup_tests --gtest_filter={{gtest_filter}}
 
 [doc("generate and open project in macOS using Xcode")]
 mac PROFILING="OFF":

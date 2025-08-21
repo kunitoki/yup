@@ -8,6 +8,7 @@ on:
       - "**/cmake/**"
       - "**/examples/**"
       - "**/modules/**"
+      - "**/python/**"
       - "**/tests/**"
       - "**/thirdparty/**"
       - "!**/native/generated/**"

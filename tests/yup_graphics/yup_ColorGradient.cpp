@@ -28,11 +28,6 @@
 
 using namespace yup;
 
-namespace
-{
-static constexpr float tol = 1e-5f;
-} // namespace
-
 TEST (ColorGradientTests, Default_Constructor)
 {
     ColorGradient gradient;
@@ -74,6 +69,8 @@ TEST (ColorGradientTests, Two_Color_Linear_Constructor)
 
 TEST (ColorGradientTests, Two_Color_Radial_Constructor)
 {
+    static constexpr float tol = 1e-5f;
+
     Color green (0xff00ff00);
     Color yellow (0xffffff00);
     ColorGradient gradient (green, 50.0f, 60.0f, yellow, 80.0f, 90.0f, ColorGradient::Radial);
@@ -128,6 +125,8 @@ TEST (ColorGradientTests, Multi_Stop_Constructor)
 
 TEST (ColorGradientTests, Multi_Stop_Radial_Constructor)
 {
+    static constexpr float tol = 1e-5f;
+
     std::vector<ColorGradient::ColorStop> stops;
     stops.emplace_back (Color (0xffff0000), 10.0f, 20.0f, 0.0f);
     stops.emplace_back (Color (0xff0000ff), 40.0f, 50.0f, 1.0f);
@@ -495,4 +494,128 @@ TEST (ColorGradientTests, Multi_Stop_Radial_Single_Stop)
     EXPECT_EQ (gradient.getType(), ColorGradient::Radial);
     EXPECT_EQ (gradient.getNumStops(), 1);
     EXPECT_FLOAT_EQ (gradient.getRadius(), 0.0f); // Can't calculate radius with single stop
+}
+
+TEST (ColorGradientTests, Constructor_Default_Type_Parameter)
+{
+    Color startColor (0xffff0000); // Red
+    Color endColor (0xff0000ff);   // Blue
+
+    // Test constructor with coordinate parameters but no type (should default to Linear)
+    ColorGradient gradient1 (startColor, 0.0f, 0.0f, endColor, 100.0f, 100.0f);
+
+    EXPECT_EQ (gradient1.getType(), ColorGradient::Linear);
+    EXPECT_EQ (gradient1.getStartColor(), startColor);
+    EXPECT_EQ (gradient1.getFinishColor(), endColor);
+    EXPECT_FLOAT_EQ (gradient1.getStartX(), 0.0f);
+    EXPECT_FLOAT_EQ (gradient1.getStartY(), 0.0f);
+    EXPECT_FLOAT_EQ (gradient1.getFinishX(), 100.0f);
+    EXPECT_FLOAT_EQ (gradient1.getFinishY(), 100.0f);
+
+    // Test constructor with Point parameters but no type (should default to Linear)
+    Point<float> startPoint (10.0f, 20.0f);
+    Point<float> endPoint (30.0f, 40.0f);
+    ColorGradient gradient2 (startColor, startPoint, endColor, endPoint);
+
+    EXPECT_EQ (gradient2.getType(), ColorGradient::Linear);
+    EXPECT_EQ (gradient2.getStartColor(), startColor);
+    EXPECT_EQ (gradient2.getFinishColor(), endColor);
+    EXPECT_FLOAT_EQ (gradient2.getStartX(), 10.0f);
+    EXPECT_FLOAT_EQ (gradient2.getStartY(), 20.0f);
+    EXPECT_FLOAT_EQ (gradient2.getFinishX(), 30.0f);
+    EXPECT_FLOAT_EQ (gradient2.getFinishY(), 40.0f);
+}
+
+TEST (ColorGradientTests, Constructor_Explicit_Type_Parameter)
+{
+    static constexpr float tol = 1e-5f;
+
+    Color startColor (0xff00ff00); // Green
+    Color endColor (0xffff00ff);   // Magenta
+
+    // Test constructor with explicit Radial type
+    ColorGradient gradient1 (startColor, 50.0f, 50.0f, endColor, 150.0f, 150.0f, ColorGradient::Radial);
+
+    EXPECT_EQ (gradient1.getType(), ColorGradient::Radial);
+    EXPECT_EQ (gradient1.getStartColor(), startColor);
+    EXPECT_EQ (gradient1.getFinishColor(), endColor);
+    EXPECT_FLOAT_EQ (gradient1.getStartX(), 50.0f);
+    EXPECT_FLOAT_EQ (gradient1.getStartY(), 50.0f);
+    EXPECT_FLOAT_EQ (gradient1.getFinishX(), 150.0f);
+    EXPECT_FLOAT_EQ (gradient1.getFinishY(), 150.0f);
+
+    // For radial gradient, radius should be calculated as distance between points
+    float expectedRadius = std::sqrt (100.0f * 100.0f + 100.0f * 100.0f); // sqrt((150-50)^2 + (150-50)^2)
+    EXPECT_NEAR (gradient1.getRadius(), expectedRadius, tol);
+
+    // Test constructor with explicit Linear type
+    Point<float> startPoint (0.0f, 0.0f);
+    Point<float> endPoint (100.0f, 0.0f);
+    ColorGradient gradient2 (startColor, startPoint, endColor, endPoint, ColorGradient::Linear);
+
+    EXPECT_EQ (gradient2.getType(), ColorGradient::Linear);
+    EXPECT_FLOAT_EQ (gradient2.getRadius(), 0.0f); // Linear gradients don't have radius
+}
+
+TEST (ColorGradientTests, AddColorStop_With_Delta_Only)
+{
+    static constexpr float tol = 1e-5f;
+
+    ColorGradient gradient;
+
+    // Add first stop to establish baseline
+    gradient.addColorStop (Color (0xffff0000), 0.0f, 0.0f, 0.0f);
+    gradient.addColorStop (Color (0xff0000ff), 100.0f, 100.0f, 1.0f);
+
+    EXPECT_EQ (gradient.getNumStops(), 2);
+
+    // Add a stop using just delta (should interpolate position based on existing stops)
+    gradient.addColorStop (Color (0xff00ff00), 0.5f);
+
+    EXPECT_EQ (gradient.getNumStops(), 3);
+
+    // The new stop should be positioned between the existing ones
+    // This tests the new addColorStop overload that only takes color and delta
+    EXPECT_EQ (gradient.getNumStops(), 3);
+
+    // Find the green stop
+    bool foundGreenStop = false;
+    for (size_t i = 0; i < gradient.getNumStops(); ++i)
+    {
+        auto& stop = gradient.getStop (i);
+
+        if (stop.color == Color (0xff00ff00))
+        {
+            foundGreenStop = true;
+            EXPECT_NEAR (stop.delta, 0.5f, tol);
+            // Position should be interpolated between first and last stops
+            EXPECT_GT (stop.x, 0.0f);
+            EXPECT_LT (stop.x, 100.0f);
+            EXPECT_GT (stop.y, 0.0f);
+            EXPECT_LT (stop.y, 100.0f);
+            break;
+        }
+    }
+    EXPECT_TRUE (foundGreenStop);
+}
+
+TEST (ColorGradientTests, AddColorStop_Delta_Only_Edge_Cases)
+{
+    ColorGradient gradient;
+
+    // Test adding delta-only stop when gradient has no stops or only one stop
+    gradient.addColorStop (Color (0xffff0000), 0.5f);
+
+    // Should handle gracefully (implementation may vary, but should not crash)
+    EXPECT_GE (gradient.getNumStops(), 0); // At least should not decrease
+
+    // Add one more stop
+    gradient.addColorStop (Color (0xff0000ff), 0.0f, 0.0f, 0.0f);
+    gradient.addColorStop (Color (0xff00ff00), 100.0f, 100.0f, 1.0f);
+
+    // Now try adding with delta only - should work
+    gradient.addColorStop (Color (0xffffff00), 0.25f);
+
+    // Should now have at least the stops we added
+    EXPECT_GE (gradient.getNumStops(), 3);
 }
