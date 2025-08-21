@@ -6,10 +6,10 @@
 </div>
 
 <div style="display: flex; width: 100%; justify-content: space-between;">
-  <a href="https://kunitoki.github.io/yup/demos/web_render_1/"><img src="./docs/demos/web_render_1.png" style="height:153px; width:auto;" /></a>
-  <a href="https://kunitoki.github.io/yup/demos/web_render_2/"><img src="./docs/demos/web_render_2.png" style="height:153px; width:auto;" /></a>
-  <a href="https://kunitoki.github.io/yup/demos/web_render_3/"><img src="./docs/demos/web_render_3.png" style="height:153px; width:auto;" /></a>
-  <a href="https://kunitoki.github.io/yup/demos/web_render_4/"><img src="./docs/demos/web_render_4.png" style="height:153px; width:auto;" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_1/"><img src="./docs/demos/web_render_1.png" style="height:154px; width:auto;" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_2/"><img src="./docs/demos/web_render_2.png" style="height:154px; width:auto;" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_3/"><img src="./docs/demos/web_render_3.png" style="height:154px; width:auto;" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_4/"><img src="./docs/demos/web_render_4.png" style="height:154px; width:auto;" /></a>
 </div>
 
 <div style="display: flex; width: 100%; justify-content: space-between;">
