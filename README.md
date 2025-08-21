@@ -5,16 +5,16 @@
     <img src="./docs/demos/web_render_0.png" width="99%" /></a>
 <p>
 
-<p float="left">
+<div style="display: flex; flex-wrap: wrap; gap: 4px; justify-content: space-between;">
   <a href="https://kunitoki.github.io/yup/demos/web_render_1/"><img src="./docs/demos/web_render_1.png" width="24%" /></a>
   <a href="https://kunitoki.github.io/yup/demos/web_render_2/"><img src="./docs/demos/web_render_2.png" width="24%" /></a>
   <a href="https://kunitoki.github.io/yup/demos/web_render_3/"><img src="./docs/demos/web_render_3.png" width="24%" /></a>
-  <a href="https://kunitoki.github.io/yup/demos/web_render_4/"><img src="./docs/demos/web_render_4.png" width="23%" /></a>
-  <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/images/yup_dsp_filter_rbj.png" width="49%" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_4/"><img src="./docs/demos/web_render_4.png" width="24%" /></a>
+  <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/images/yup_dsp_filter_rbj.png" width="50%" /></a>
   <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/images/yup_dsp_filter_butter.png" width="50%" /></a>
-  <a href="./examples/graphics/source/examples/CrossoverDemo.h"><img src="./docs/images/yup_dsp_crossover.png" width="99%" /></a>
-  <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_fill.png" width="99%" /></a>
-  <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_line.png" width="99%" /></a>
+  <a href="./examples/graphics/source/examples/CrossoverDemo.h"><img src="./docs/images/yup_dsp_crossover.png" width="100%" /></a>
+  <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_fill.png" width="100%" /></a>
+  <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_line.png" width="100%" /></a>
 </p>
 
 Example Rive animation display ([source code](./examples/render/source/main.cpp)):
