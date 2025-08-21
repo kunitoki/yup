@@ -38,7 +38,7 @@ jobs:
 
     - name: Configure
       run: |
-        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
+        cmake ${{ github.workspace }} -G Xcode -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
           -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 
     - name: Build SDL2
@@ -67,7 +67,7 @@ jobs:
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
       run: |
-        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
+        cmake ${{ github.workspace }} -G Xcode -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
           -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_console
     - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_console
@@ -86,7 +86,7 @@ jobs:
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
       run: |
-        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
+        cmake ${{ github.workspace }} -G Xcode -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
           -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_app
     - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_app
@@ -105,7 +105,7 @@ jobs:
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
       run: |
-        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
+        cmake ${{ github.workspace }} -G Xcode -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
           -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_graphics
     - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_graphics
