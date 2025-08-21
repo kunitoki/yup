@@ -25,7 +25,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  DEVELOPER_DIR: /Applications/Xcode_15.1.app/Contents/Developer
   IOS_PLATFORM: OS64
 
 jobs:
