@@ -1088,6 +1088,97 @@ DataTree DataTree::readFromBinaryStream (InputStream& input)
     return tree;
 }
 
+var DataTree::createJson() const
+{
+    if (object == nullptr)
+        return var::undefined();
+    
+    auto jsonObject = std::make_unique<DynamicObject>();
+    
+    // Set type
+    jsonObject->setProperty ("type", object->type.toString());
+    
+    // Create properties object
+    auto propertiesObject = std::make_unique<DynamicObject>();
+    for (int i = 0; i < object->properties.size(); ++i)
+    {
+        const auto name = object->properties.getName (i);
+        const auto value = object->properties.getValueAt (i);
+        propertiesObject->setProperty (name.toString(), value);
+    }
+    jsonObject->setProperty ("properties", propertiesObject.release());
+    
+    // Create children array
+    Array<var> childrenArray;
+    for (const auto& child : object->children)
+    {
+        var childJson = child.createJson();
+        if (! childJson.isUndefined())
+            childrenArray.add (childJson);
+    }
+    jsonObject->setProperty ("children", childrenArray);
+    
+    return jsonObject.release();
+}
+
+DataTree DataTree::fromJson (const var& jsonData)
+{
+    if (! jsonData.isObject())
+        return {};
+    
+    auto* jsonObject = jsonData.getDynamicObject();
+    if (jsonObject == nullptr)
+        return {};
+    
+    // Get type
+    var typeVar = jsonObject->getProperty ("type", var());
+    if (! typeVar.isString() || typeVar.toString().isEmpty())
+        return {};
+    
+    DataTree tree (typeVar.toString());
+    
+    // Load properties - must be an object if present
+    var properties = jsonObject->getProperty ("properties");
+    if (! properties.isVoid())
+    {
+        if (! properties.isObject())
+            return {}; // Invalid structure - properties must be object
+            
+        auto* propertiesObject = properties.getDynamicObject();
+        if (propertiesObject != nullptr)
+        {
+            const auto& props = propertiesObject->getProperties();
+            for (int i = 0; i < props.size(); ++i)
+            {
+                const auto& name = props.getName (i);
+                const auto& value = props.getValueAt (i);
+                tree.setProperty (name.toString(), value);
+            }
+        }
+    }
+    
+    // Load children - must be an array if present
+    var children = jsonObject->getProperty ("children");
+    if (! children.isVoid())
+    {
+        if (! children.isArray())
+            return {}; // Invalid structure - children must be array
+            
+        auto* childrenArray = children.getArray();
+        if (childrenArray != nullptr)
+        {
+            for (int i = 0; i < childrenArray->size(); ++i)
+            {
+                auto child = fromJson (childrenArray->getReference (i));
+                if (child.isValid())
+                    tree.addChild (child);
+            }
+        }
+    }
+    
+    return tree;
+}
+
 //==============================================================================
 void DataTree::addListener (Listener* listener)
 {

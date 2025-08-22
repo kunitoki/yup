@@ -602,6 +602,314 @@ TEST_F (DataTreeTests, BinarySerialization)
     EXPECT_TRUE (tree.isEquivalentTo (reconstructed));
 }
 
+TEST_F (DataTreeTests, JsonSerialization)
+{
+    {
+        auto transaction = tree.beginTransaction ("Setup JSON Serialization Test");
+        transaction.setProperty ("stringProp", "test string");
+        transaction.setProperty ("intProp", 42);
+        transaction.setProperty ("floatProp", 3.14);
+        transaction.setProperty ("boolProp", true);
+
+        DataTree child (childType);
+        {
+            auto childTransaction = child.beginTransaction ("Setup Child Properties");
+            childTransaction.setProperty ("childProp", "child value");
+            childTransaction.setProperty ("childInt", 123);
+        }
+        transaction.addChild (child);
+
+        DataTree emptyChild ("EmptyChild");
+        transaction.addChild (emptyChild);
+    }
+
+    // Create JSON
+    var jsonData = tree.createJson();
+    ASSERT_TRUE (jsonData.isObject());
+
+    // Verify JSON structure
+    auto* jsonObj = jsonData.getDynamicObject();
+    ASSERT_NE (nullptr, jsonObj);
+    EXPECT_EQ (rootType.toString(), jsonObj->getProperty ("type").toString());
+
+    // Check properties
+    var properties = jsonObj->getProperty ("properties");
+    ASSERT_TRUE (properties.isObject());
+    auto* propsObj = properties.getDynamicObject();
+    ASSERT_NE (nullptr, propsObj);
+    EXPECT_EQ ("test string", propsObj->getProperty ("stringProp").toString());
+    EXPECT_EQ (var (42), propsObj->getProperty ("intProp"));
+    EXPECT_NEAR (3.14, static_cast<double> (propsObj->getProperty ("floatProp")), 0.001);
+    EXPECT_TRUE (static_cast<bool> (propsObj->getProperty ("boolProp")));
+
+    // Check children array
+    var children = jsonObj->getProperty ("children");
+    ASSERT_TRUE (children.isArray());
+    auto* childrenArray = children.getArray();
+    ASSERT_NE (nullptr, childrenArray);
+    EXPECT_EQ (2, childrenArray->size());
+
+    // Check first child
+    var firstChild = childrenArray->getReference (0);
+    ASSERT_TRUE (firstChild.isObject());
+    auto* firstChildObj = firstChild.getDynamicObject();
+    ASSERT_NE (nullptr, firstChildObj);
+    EXPECT_EQ (childType.toString(), firstChildObj->getProperty ("type").toString());
+
+    var firstChildProps = firstChildObj->getProperty ("properties");
+    ASSERT_TRUE (firstChildProps.isObject());
+    auto* firstChildPropsObj = firstChildProps.getDynamicObject();
+    ASSERT_NE (nullptr, firstChildPropsObj);
+    EXPECT_EQ ("child value", firstChildPropsObj->getProperty ("childProp").toString());
+    EXPECT_EQ (var (123), firstChildPropsObj->getProperty ("childInt"));
+
+    // Check second child (empty)
+    var secondChild = childrenArray->getReference (1);
+    ASSERT_TRUE (secondChild.isObject());
+    auto* secondChildObj = secondChild.getDynamicObject();
+    ASSERT_NE (nullptr, secondChildObj);
+    EXPECT_EQ ("EmptyChild", secondChildObj->getProperty ("type").toString());
+
+    var secondChildProps = secondChildObj->getProperty ("properties");
+    ASSERT_TRUE (secondChildProps.isObject());
+    auto* secondChildPropsObj = secondChildProps.getDynamicObject();
+    EXPECT_EQ (0, secondChildPropsObj->getProperties().size());
+
+    // Reconstruct from JSON
+    auto reconstructed = DataTree::fromJson (jsonData);
+    EXPECT_TRUE (reconstructed.isValid());
+    EXPECT_TRUE (tree.isEquivalentTo (reconstructed));
+}
+
+TEST_F (DataTreeTests, JsonSerializationWithComplexStructure)
+{
+    DataTree root ("Root");
+
+    {
+        auto transaction = root.beginTransaction ("Setup Complex JSON Structure");
+        transaction.setProperty ("version", "2.0");
+        transaction.setProperty ("debug", false);
+
+        DataTree config ("Configuration");
+        {
+            auto configTransaction = config.beginTransaction ("Setup Config");
+            configTransaction.setProperty ("timeout", 30);
+            configTransaction.setProperty ("retries", 3);
+
+            DataTree database ("Database");
+            {
+                auto dbTransaction = database.beginTransaction ("Setup Database");
+                dbTransaction.setProperty ("host", "localhost");
+                dbTransaction.setProperty ("port", 5432);
+                dbTransaction.setProperty ("ssl", true);
+            }
+            configTransaction.addChild (database);
+
+            DataTree logging ("Logging");
+            {
+                auto logTransaction = logging.beginTransaction ("Setup Logging");
+                logTransaction.setProperty ("level", "info");
+                logTransaction.setProperty ("file", "/var/log/app.log");
+
+                DataTree handlers ("Handlers");
+                logTransaction.addChild (handlers);
+            }
+            configTransaction.addChild (logging);
+        }
+        transaction.addChild (config);
+
+        DataTree plugins ("Plugins");
+        transaction.addChild (plugins);
+    }
+
+    // Serialize and deserialize
+    var jsonData = root.createJson();
+    auto reconstructed = DataTree::fromJson (jsonData);
+
+    EXPECT_TRUE (reconstructed.isValid());
+    EXPECT_TRUE (root.isEquivalentTo (reconstructed));
+
+    // Verify specific properties are preserved
+    EXPECT_EQ ("2.0", reconstructed.getProperty ("version", ""));
+    EXPECT_FALSE (static_cast<bool> (reconstructed.getProperty ("debug", true)));
+
+    auto configChild = reconstructed.getChildWithName ("Configuration");
+    EXPECT_TRUE (configChild.isValid());
+    EXPECT_EQ (var (30), configChild.getProperty ("timeout"));
+
+    auto databaseChild = configChild.getChildWithName ("Database");
+    EXPECT_TRUE (databaseChild.isValid());
+    EXPECT_EQ ("localhost", databaseChild.getProperty ("host", ""));
+    EXPECT_TRUE (static_cast<bool> (databaseChild.getProperty ("ssl", false)));
+}
+
+TEST_F (DataTreeTests, JsonSerializationErrorHandling)
+{
+    // Test invalid JSON input
+    var invalidJson = "not an object";
+    DataTree fromInvalid = DataTree::fromJson (invalidJson);
+    EXPECT_FALSE (fromInvalid.isValid());
+
+    // Test JSON missing required fields
+    auto missingType = std::make_unique<DynamicObject>();
+    missingType->setProperty ("properties", var (new DynamicObject()));
+    missingType->setProperty ("children", Array<var>());
+    DataTree fromMissingType = DataTree::fromJson (missingType.release());
+    EXPECT_FALSE (fromMissingType.isValid());
+
+    // Test JSON with invalid structure
+    auto invalidStructure = std::make_unique<DynamicObject>();
+    invalidStructure->setProperty ("type", "TestType");
+    invalidStructure->setProperty ("properties", "not an object"); // Should be object
+    invalidStructure->setProperty ("children", Array<var>());
+    DataTree fromInvalidStructure = DataTree::fromJson (invalidStructure.release());
+    EXPECT_FALSE (fromInvalidStructure.isValid());
+}
+
+TEST_F (DataTreeTests, JsonSerializationEmptyTree)
+{
+    DataTree empty ("Empty");
+
+    var jsonData = empty.createJson();
+    ASSERT_TRUE (jsonData.isObject());
+
+    auto* jsonObj = jsonData.getDynamicObject();
+    ASSERT_NE (nullptr, jsonObj);
+    EXPECT_EQ ("Empty", jsonObj->getProperty ("type").toString());
+
+    var properties = jsonObj->getProperty ("properties");
+    ASSERT_TRUE (properties.isObject());
+    auto* propsObj = properties.getDynamicObject();
+    EXPECT_EQ (0, propsObj->getProperties().size());
+
+    var children = jsonObj->getProperty ("children");
+    ASSERT_TRUE (children.isArray());
+    auto* childrenArray = children.getArray();
+    EXPECT_EQ (0, childrenArray->size());
+
+    // Round trip
+    auto reconstructed = DataTree::fromJson (jsonData);
+    EXPECT_TRUE (reconstructed.isValid());
+    EXPECT_TRUE (empty.isEquivalentTo (reconstructed));
+}
+
+TEST_F (DataTreeTests, SerializationFormatConsistency)
+{
+    // Create a complex tree structure
+    DataTree original ("Application");
+
+    {
+        auto transaction = original.beginTransaction ("Setup Consistency Test");
+        transaction.setProperty ("name", "TestApp");
+        transaction.setProperty ("version", "1.2.3");
+        transaction.setProperty ("debug", true);
+        transaction.setProperty ("maxUsers", 1000);
+        transaction.setProperty ("pi", 3.14159);
+
+        DataTree settings ("Settings");
+        {
+            auto settingsTransaction = settings.beginTransaction ("Setup Settings");
+            settingsTransaction.setProperty ("theme", "dark");
+            settingsTransaction.setProperty ("autoSave", true);
+            settingsTransaction.setProperty ("interval", 300);
+
+            DataTree advanced ("Advanced");
+            {
+                auto advancedTransaction = advanced.beginTransaction ("Setup Advanced");
+                advancedTransaction.setProperty ("bufferSize", 8192);
+                advancedTransaction.setProperty ("compression", false);
+            }
+            settingsTransaction.addChild (advanced);
+        }
+        transaction.addChild (settings);
+
+        DataTree plugins ("Plugins");
+        {
+            auto pluginsTransaction = plugins.beginTransaction ("Setup Plugins");
+
+            DataTree plugin1 ("Plugin");
+            {
+                auto plugin1Transaction = plugin1.beginTransaction ("Setup Plugin1");
+                plugin1Transaction.setProperty ("name", "Logger");
+                plugin1Transaction.setProperty ("enabled", true);
+            }
+            pluginsTransaction.addChild (plugin1);
+
+            DataTree plugin2 ("Plugin");
+            {
+                auto plugin2Transaction = plugin2.beginTransaction ("Setup Plugin2");
+                plugin2Transaction.setProperty ("name", "Validator");
+                plugin2Transaction.setProperty ("enabled", false);
+            }
+            pluginsTransaction.addChild (plugin2);
+        }
+        transaction.addChild (plugins);
+    }
+
+    // Test XML serialization roundtrip
+    auto xml = original.createXml();
+    ASSERT_NE (nullptr, xml);
+    auto fromXml = DataTree::fromXml (*xml);
+    EXPECT_TRUE (fromXml.isValid());
+    EXPECT_TRUE (original.isEquivalentTo (fromXml));
+
+    // Test binary serialization roundtrip
+    MemoryOutputStream binaryOutput;
+    original.writeToBinaryStream (binaryOutput);
+    MemoryInputStream binaryInput (binaryOutput.getData(), binaryOutput.getDataSize(), false);
+    auto fromBinary = DataTree::readFromBinaryStream (binaryInput);
+    EXPECT_TRUE (fromBinary.isValid());
+    EXPECT_TRUE (original.isEquivalentTo (fromBinary));
+
+    // Test JSON serialization roundtrip
+    var jsonData = original.createJson();
+    auto fromJson = DataTree::fromJson (jsonData);
+    EXPECT_TRUE (fromJson.isValid());
+    EXPECT_TRUE (original.isEquivalentTo (fromJson));
+
+    // Verify all formats produce equivalent results
+    EXPECT_TRUE (fromXml.isEquivalentTo (fromBinary));
+    EXPECT_TRUE (fromBinary.isEquivalentTo (fromJson));
+    EXPECT_TRUE (fromXml.isEquivalentTo (fromJson));
+
+    // Spot check some properties across all formats
+    EXPECT_EQ ("TestApp", fromXml.getProperty ("name", ""));
+    EXPECT_EQ ("TestApp", fromBinary.getProperty ("name", ""));
+    EXPECT_EQ ("TestApp", fromJson.getProperty ("name", ""));
+
+    auto xmlSettings = fromXml.getChildWithName ("Settings");
+    auto binarySettings = fromBinary.getChildWithName ("Settings");
+    auto jsonSettings = fromJson.getChildWithName ("Settings");
+
+    EXPECT_TRUE (xmlSettings.isValid());
+    EXPECT_TRUE (binarySettings.isValid());
+    EXPECT_TRUE (jsonSettings.isValid());
+
+    EXPECT_EQ ("dark", xmlSettings.getProperty ("theme", ""));
+    EXPECT_EQ ("dark", binarySettings.getProperty ("theme", ""));
+    EXPECT_EQ ("dark", jsonSettings.getProperty ("theme", ""));
+}
+
+TEST_F (DataTreeTests, InvalidTreeSerialization)
+{
+    DataTree invalid;
+    EXPECT_FALSE (invalid.isValid());
+
+    // Invalid trees should return appropriate failure indicators
+    auto xml = invalid.createXml();
+    EXPECT_EQ (nullptr, xml);
+
+    var jsonData = invalid.createJson();
+    EXPECT_FALSE (jsonData.isObject());
+
+    // Writing invalid tree to binary should not crash but produce empty/invalid data
+    MemoryOutputStream output;
+    invalid.writeToBinaryStream (output);
+    // The specific behavior of writing an invalid tree is implementation-defined,
+    // but it should not crash
+    EXPECT_GE (output.getDataSize(), 0); // At least it didn't crash
+}
+
 //==============================================================================
 // Comparison Tests
 
