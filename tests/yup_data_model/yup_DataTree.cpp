@@ -370,6 +370,130 @@ TEST_F (DataTreeTests, ChildIteration)
     EXPECT_EQ (child3, visited[2]);
 }
 
+TEST_F (DataTreeTests, RangeBasedForLoop)
+{
+    DataTree child1 ("Type1");
+    DataTree child2 ("Type2");
+    DataTree child3 ("Type3");
+
+    {
+        auto transaction = tree.beginTransaction ("Range Based For Loop Setup");
+        transaction.addChild (child1);
+        transaction.addChild (child2);
+        transaction.addChild (child3);
+    }
+
+    // Test range-based for loop
+    std::vector<DataTree> visited;
+    for (const auto& child : tree)
+    {
+        visited.push_back (child);
+    }
+
+    EXPECT_EQ (3, visited.size());
+    EXPECT_EQ (child1, visited[0]);
+    EXPECT_EQ (child2, visited[1]);
+    EXPECT_EQ (child3, visited[2]);
+}
+
+TEST_F (DataTreeTests, RangeBasedForLoopEmpty)
+{
+    // Test with empty DataTree
+    std::vector<DataTree> visited;
+    for (const auto& child : tree)
+    {
+        visited.push_back (child);
+    }
+
+    EXPECT_EQ (0, visited.size());
+}
+
+TEST_F (DataTreeTests, IteratorInterface)
+{
+    DataTree child1 ("Child1");
+    DataTree child2 ("Child2");
+
+    {
+        auto transaction = tree.beginTransaction ("Iterator Interface Setup");
+        transaction.addChild (child1);
+        transaction.addChild (child2);
+    }
+
+    // Test iterator equality and inequality
+    auto it1 = tree.begin();
+    auto it2 = tree.begin();
+    auto end = tree.end();
+
+    EXPECT_TRUE (it1 == it2);
+    EXPECT_FALSE (it1 != it2);
+    EXPECT_FALSE (it1 == end);
+    EXPECT_TRUE (it1 != end);
+
+    // Test dereference
+    EXPECT_EQ (child1, *it1);
+
+    // Test pre-increment
+    ++it1;
+    EXPECT_EQ (child2, *it1);
+    EXPECT_FALSE (it1 == it2);
+
+    // Test post-increment
+    auto it3 = it1++;
+    EXPECT_EQ (child2, *it3);
+    EXPECT_TRUE (it1 == end);
+
+    // Test arrow operator
+    auto it4 = tree.begin();
+    EXPECT_EQ (child1.getType(), (*it4).getType());
+}
+
+TEST_F (DataTreeTests, RangeBasedForLoopModification)
+{
+    DataTree child1 ("Child1");
+    DataTree child2 ("Child2");
+
+    {
+        auto transaction = tree.beginTransaction ("Modification Setup");
+        transaction.addChild (child1);
+        transaction.addChild (child2);
+    }
+
+    // Test that we can access properties through the iterator
+    int propertyCount = 0;
+    for (const auto& child : tree)
+    {
+        if (child.hasProperty ("name"))
+            propertyCount++;
+    }
+
+    EXPECT_EQ (0, propertyCount);
+
+    // Add properties
+    {
+        auto transaction1 = child1.beginTransaction ("Add Property");
+        transaction1.setProperty ("name", "First");
+
+        auto transaction2 = child2.beginTransaction ("Add Property");
+        transaction2.setProperty ("name", "Second");
+    }
+
+    // Test again
+    propertyCount = 0;
+    std::vector<String> names;
+    for (const auto& child : tree)
+    {
+        if (child.hasProperty ("name"))
+        {
+            propertyCount++;
+            names.push_back (child.getProperty ("name"));
+        }
+    }
+
+    EXPECT_EQ (2, propertyCount);
+    EXPECT_EQ ("First", names[0]);
+    EXPECT_EQ ("Second", names[1]);
+}
+
 TEST_F (DataTreeTests, PredicateBasedSearch)
 {
     DataTree child1 ("Type1");

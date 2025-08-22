@@ -197,23 +197,18 @@ private:
     void propertyChanged (DataTree& tree, const Identifier& property) override
     {
         if (property == propertyName)
-            updateCacheFromDataTree();
+            refreshCacheFromDataTree();
     }
 
     void treeRedirected (DataTree& tree) override
     {
+        cleanupBinding();
         dataTree = tree;
-
         setupBinding();
         refresh();
     }
 
     //==============================================================================
-    void updateCacheFromDataTree()
-    {
-        refreshCacheFromDataTree();
-    }
-
     void refreshCacheFromDataTree()
     {
         if (! isBound())
@@ -257,9 +252,9 @@ private:
     }
 
     //==============================================================================
+    std::atomic<T> cachedValue {};
     DataTree dataTree;
     Identifier propertyName;
-    std::atomic<T> cachedValue {};
     T defaultValue {};
     bool hasDefaultValue = false;
     bool usingDefault = false;

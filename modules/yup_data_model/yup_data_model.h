@@ -46,6 +46,7 @@
 //==============================================================================
 #include <atomic>
 #include <functional>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <optional>

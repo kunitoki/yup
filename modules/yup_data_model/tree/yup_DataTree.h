@@ -380,6 +380,64 @@ public:
     */
     template<typename Callback>
     void forEachDescendant (Callback callback) const;
+    
+    //==============================================================================
+    /**
+        Iterator class for range-based for loop support over child DataTrees.
+        
+        This provides standard C++ iterator interface for iterating over direct children
+        of a DataTree, enabling natural syntax like:
+        
+        @code
+        for (const auto& child : dataTree) {
+            // Process each child
+        }
+        @endcode
+    */
+    class Iterator
+    {
+    public:
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = DataTree;
+        using difference_type = std::ptrdiff_t;
+        using pointer = DataTree*;
+        using reference = DataTree;
+        
+        Iterator() = default;
+        Iterator (const DataTree* parent, int index) : parent (parent), index (index) {}
+        
+        reference operator*() const { return parent->getChild (index); }
+
+        Iterator& operator++() { ++index; return *this; }
+        Iterator operator++(int) { Iterator temp = *this; ++index; return temp; }
+        
+        bool operator== (const Iterator& other) const 
+        { 
+            return parent == other.parent && index == other.index; 
+        }
+        
+        bool operator!= (const Iterator& other) const { return !(*this == other); }
+        
+    private:
+        const DataTree* parent = nullptr;
+        int index = 0;
+    };
+    
+    /**
+        Returns an iterator to the first child DataTree.
+        
+        @return Iterator pointing to the first child, or end() if no children
+        @see end(), Iterator
+    */
+    Iterator begin() const noexcept { return Iterator (this, 0); }
+    
+    /**
+        Returns an iterator past the last child DataTree.
+        
+        @return Iterator representing the end of children iteration
+        @see begin(), Iterator  
+    */
+    Iterator end() const noexcept { return Iterator (this, getNumChildren()); }
 
     /**
         Finds all direct children matching a predicate and adds them to the results vector.

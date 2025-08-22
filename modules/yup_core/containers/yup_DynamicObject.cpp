@@ -62,8 +62,6 @@ bool DynamicObject::hasProperty (const Identifier& propertyName) const
 
 const var& DynamicObject::getProperty (const Identifier& propertyName) const
 {
-    jassert(properties.contains(propertyName));
-
     return properties[propertyName];
 }
 
