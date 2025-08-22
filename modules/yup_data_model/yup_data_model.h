@@ -56,6 +56,6 @@
 #include "undo/yup_UndoableAction.h"
 #include "undo/yup_UndoManager.h"
 #include "tree/yup_DataTree.h"
-//#include "tree/yup_DataTreeObjectList.h"
+#include "tree/yup_DataTreeObjectList.h"
 #include "tree/yup_CachedValue.h"
 #include "tree/yup_AtomicCachedValue.h"
