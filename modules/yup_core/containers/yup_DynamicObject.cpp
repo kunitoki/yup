@@ -62,7 +62,17 @@ bool DynamicObject::hasProperty (const Identifier& propertyName) const
 
 const var& DynamicObject::getProperty (const Identifier& propertyName) const
 {
+    jassert(properties.contains(propertyName));
+
     return properties[propertyName];
+}
+
+const var& DynamicObject::getProperty (const Identifier& propertyName, const var& defaultValue) const
+{
+    if (const var* const v = properties.getVarPointer (propertyName))
+        return *v;
+
+    return defaultValue;
 }
 
 void DynamicObject::setProperty (const Identifier& propertyName, const var& newValue)
