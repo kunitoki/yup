@@ -255,14 +255,15 @@ private:
         {
             // Property selection
             ++currentToken;
-            if (currentToken < static_cast<int> (tokens.size()) && tokens[currentToken].type == Token::Type::Identifier)
+            if (currentToken < static_cast<int> (tokens.size()) && 
+                (tokens[currentToken].type == Token::Type::Identifier || tokens[currentToken].type == Token::Type::Function))
             {
                 operations.emplace_back (QueryOperation::Property, tokens[currentToken].value);
                 ++currentToken;
             }
             else
             {
-                // Error: @ not followed by identifier
+                // Error: @ not followed by identifier or function name
                 parseResult = Result::fail ("Expected property name after '@' in node test");
                 return;
             }
@@ -419,105 +420,100 @@ private:
         else if (token.type == Token::Type::Function)
         {
             ++currentToken;
+            std::unique_ptr<Predicate> pred;
 
-            if (token.value == "first")
+            auto skipParenthesis = [&]
             {
-                return std::make_unique<Predicate> (Predicate::First);
-            }
-            else if (token.value == "last")
-            {
-                return std::make_unique<Predicate> (Predicate::Last);
-            }
-            else if (token.value == "position")
-            {
-                // Skip parentheses for position()
                 if (currentToken < static_cast<int> (tokens.size()) && tokens[currentToken].type == Token::Type::OpenParen)
                 {
                     ++currentToken;
                     if (currentToken < static_cast<int> (tokens.size()) && tokens[currentToken].type == Token::Type::CloseParen)
                         ++currentToken;
                 }
+            };
 
-                // For now, treat position() as position(1) - could be enhanced
+            if (token.value == "first")
+            {
+                skipParenthesis();
+                return std::make_unique<Predicate> (Predicate::First);
+            }
+            else if (token.value == "last")
+            {
+                skipParenthesis();
+                return std::make_unique<Predicate> (Predicate::Last);
+            }
+            else if (token.value == "position")
+            {
+                skipParenthesis();
                 return std::make_unique<Predicate> (Predicate::Position, 1);
             }
         }
         else if (token.type == Token::Type::AtSign)
         {
             ++currentToken;
-            if (currentToken < static_cast<int> (tokens.size()) && tokens[currentToken].type == Token::Type::Identifier)
+            if (currentToken < static_cast<int> (tokens.size()) && 
+                (tokens[currentToken].type == Token::Type::Identifier || tokens[currentToken].type == Token::Type::Function))
             {
                 String propertyName = tokens[currentToken].value;
                 ++currentToken;
+
+                auto parseAndValidateValue = [&]
+                {
+                    ++currentToken;
+                    auto value = parseValue();
+                    if (! isValidValue (value))
+                    {
+                        parseResult = Result::fail ("Expected value after comparison operator");
+                        return var();
+                    }
+
+                    return value;
+                };
 
                 // Check for equality/inequality
                 if (currentToken < static_cast<int> (tokens.size()))
                 {
                     if (tokens[currentToken].type == Token::Type::Equal)
                     {
-                        ++currentToken;
-                        auto value = parseValue();
-                        if (! isValidValue (value))
-                        {
-                            parseResult = Result::fail ("Expected value after comparison operator");
-                            return nullptr;
-                        }
-                        return std::make_unique<Predicate> (Predicate::PropertyEquals, propertyName, value);
+                        if (auto value = parseAndValidateValue(); ! value.isVoid())
+                            return std::make_unique<Predicate> (Predicate::PropertyEquals, propertyName, value);
+
+                        return nullptr;
                     }
                     else if (tokens[currentToken].type == Token::Type::NotEqual)
                     {
-                        ++currentToken;
-                        auto value = parseValue();
-                        if (! isValidValue (value))
-                        {
-                            parseResult = Result::fail ("Expected value after comparison operator");
-                            return nullptr;
-                        }
-                        return std::make_unique<Predicate> (Predicate::PropertyNotEquals, propertyName, value);
+                        if (auto value = parseAndValidateValue(); ! value.isVoid())
+                            return std::make_unique<Predicate> (Predicate::PropertyNotEquals, propertyName, value);
+
+                        return nullptr;
                     }
                     else if (tokens[currentToken].type == Token::Type::Greater)
                     {
-                        ++currentToken;
-                        auto value = parseValue();
-                        if (! isValidValue (value))
-                        {
-                            parseResult = Result::fail ("Expected value after comparison operator");
-                            return nullptr;
-                        }
-                        return std::make_unique<Predicate> (Predicate::PropertyGreater, propertyName, value);
+                        if (auto value = parseAndValidateValue(); ! value.isVoid())
+                            return std::make_unique<Predicate> (Predicate::PropertyGreater, propertyName, value);
+
+                        return nullptr;
                     }
                     else if (tokens[currentToken].type == Token::Type::Less)
                     {
-                        ++currentToken;
-                        auto value = parseValue();
-                        if (! isValidValue (value))
-                        {
-                            parseResult = Result::fail ("Expected value after comparison operator");
-                            return nullptr;
-                        }
-                        return std::make_unique<Predicate> (Predicate::PropertyLess, propertyName, value);
+                        if (auto value = parseAndValidateValue(); ! value.isVoid())
+                            return std::make_unique<Predicate> (Predicate::PropertyLess, propertyName, value);
+
+                        return nullptr;
                     }
                     else if (tokens[currentToken].type == Token::Type::GreaterEqual)
                     {
-                        ++currentToken;
-                        auto value = parseValue();
-                        if (! isValidValue (value))
-                        {
-                            parseResult = Result::fail ("Expected value after comparison operator");
-                            return nullptr;
-                        }
-                        return std::make_unique<Predicate> (Predicate::PropertyGreaterEqual, propertyName, value);
+                        if (auto value = parseAndValidateValue(); ! value.isVoid())
+                            return std::make_unique<Predicate> (Predicate::PropertyGreaterEqual, propertyName, value);
+
+                        return nullptr;
                     }
                     else if (tokens[currentToken].type == Token::Type::LessEqual)
                     {
-                        ++currentToken;
-                        auto value = parseValue();
-                        if (! isValidValue (value))
-                        {
-                            parseResult = Result::fail ("Expected value after comparison operator");
-                            return nullptr;
-                        }
-                        return std::make_unique<Predicate> (Predicate::PropertyLessEqual, propertyName, value);
+                        if (auto value = parseAndValidateValue(); ! value.isVoid())
+                            return std::make_unique<Predicate> (Predicate::PropertyLessEqual, propertyName, value);
+
+                        return nullptr;
                     }
                 }
 
@@ -526,7 +522,7 @@ private:
             }
             else
             {
-                // Error: @ not followed by identifier in predicate
+                // Error: @ not followed by identifier or function name in predicate
                 parseResult = Result::fail ("Expected property name after '@' in predicate");
                 return nullptr;
             }
@@ -704,40 +700,61 @@ private:
                     break;
 
                 case '!':
-                    if (pos + 1 < input.length() && input[pos + 1] == '=')
                     {
-                        tokens.emplace_back (Token::Type::NotEqual, tokenStart);
-                        pos += 2;
-                    }
-                    else
-                    {
-                        ++pos; // Skip invalid character
+                        // Check for != with optional whitespace
+                        int nextPos = pos + 1;
+                        while (nextPos < input.length() && std::isspace (input[nextPos]))
+                            ++nextPos;
+                        
+                        if (nextPos < input.length() && input[nextPos] == '=')
+                        {
+                            tokens.emplace_back (Token::Type::NotEqual, tokenStart);
+                            pos = nextPos + 1; // Move past the '='
+                        }
+                        else
+                        {
+                            ++pos; // Skip invalid character
+                        }
                     }
                     break;
 
                 case '>':
-                    if (pos + 1 < input.length() && input[pos + 1] == '=')
                     {
-                        tokens.emplace_back (Token::Type::GreaterEqual, tokenStart);
-                        pos += 2;
-                    }
-                    else
-                    {
-                        tokens.emplace_back (Token::Type::Greater, tokenStart);
-                        ++pos;
+                        // Check for >= with optional whitespace
+                        int nextPos = pos + 1;
+                        while (nextPos < input.length() && std::isspace (input[nextPos]))
+                            ++nextPos;
+                        
+                        if (nextPos < input.length() && input[nextPos] == '=')
+                        {
+                            tokens.emplace_back (Token::Type::GreaterEqual, tokenStart);
+                            pos = nextPos + 1; // Move past the '='
+                        }
+                        else
+                        {
+                            tokens.emplace_back (Token::Type::Greater, tokenStart);
+                            ++pos; // Just move past '>'
+                        }
                     }
                     break;
 
                 case '<':
-                    if (pos + 1 < input.length() && input[pos + 1] == '=')
                     {
-                        tokens.emplace_back (Token::Type::LessEqual, tokenStart);
-                        pos += 2;
-                    }
-                    else
-                    {
-                        tokens.emplace_back (Token::Type::Less, tokenStart);
-                        ++pos;
+                        // Check for <= with optional whitespace
+                        int nextPos = pos + 1;
+                        while (nextPos < input.length() && std::isspace (input[nextPos]))
+                            ++nextPos;
+                        
+                        if (nextPos < input.length() && input[nextPos] == '=')
+                        {
+                            tokens.emplace_back (Token::Type::LessEqual, tokenStart);
+                            pos = nextPos + 1; // Move past the '='
+                        }
+                        else
+                        {
+                            tokens.emplace_back (Token::Type::Less, tokenStart);
+                            ++pos; // Just move past '<'
+                        }
                     }
                     break;
 

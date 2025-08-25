@@ -478,13 +478,17 @@ Result DataTreeSchema::validateValueAgainstSchema (const var& value, const Prope
     // Type validation
     if (schema.type == "string" && ! value.isString())
         return Result::fail ("Property '" + propertyName + "' must be a string");
-    else if (schema.type == "number" && ! value.isDouble() && ! value.isInt())
+
+    if (schema.type == "number" && ! value.isDouble() && ! value.isInt())
         return Result::fail ("Property '" + propertyName + "' must be a number");
-    else if (schema.type == "boolean" && ! value.isBool())
+
+    if (schema.type == "boolean" && ! value.isBool())
         return Result::fail ("Property '" + propertyName + "' must be a boolean");
-    else if (schema.type == "array" && ! value.isArray())
+
+    if (schema.type == "array" && ! value.isArray())
         return Result::fail ("Property '" + propertyName + "' must be an array");
-    else if (schema.type == "object" && ! value.isObject())
+
+    if (schema.type == "object" && ! value.isObject())
         return Result::fail ("Property '" + propertyName + "' must be an object");
 
     // Enum validation
@@ -499,6 +503,7 @@ Result DataTreeSchema::validateValueAgainstSchema (const var& value, const Prope
                 break;
             }
         }
+
         if (! found)
             return Result::fail ("Property '" + propertyName + "' must be one of the allowed values");
     }
