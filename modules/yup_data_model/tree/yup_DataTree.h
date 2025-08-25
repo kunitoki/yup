@@ -966,7 +966,7 @@ public:
         void captureInitialState();
         void applyChanges();
         void rollbackChanges();
-        
+
         // Static helper for applying changes - used by both Transaction and TransactionAction
         static void applyChangesToTree (DataTree& tree,
                                         const NamedValueSet& originalProperties,

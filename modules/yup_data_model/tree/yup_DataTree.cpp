@@ -1446,10 +1446,10 @@ void DataTree::Transaction::captureInitialState()
 }
 
 void DataTree::Transaction::applyChangesToTree (DataTree& tree,
-                                                 const NamedValueSet& originalProperties,
-                                                 const std::vector<DataTree>& originalChildren,
-                                                 const std::vector<PropertyChange>& propertyChanges,
-                                                 const std::vector<ChildChange>& childChanges)
+                                                const NamedValueSet& originalProperties,
+                                                const std::vector<DataTree>& originalChildren,
+                                                const std::vector<PropertyChange>& propertyChanges,
+                                                const std::vector<ChildChange>& childChanges)
 {
     if (tree.object == nullptr)
         return;
