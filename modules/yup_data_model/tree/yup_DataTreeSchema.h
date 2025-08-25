@@ -25,11 +25,11 @@ namespace yup
 //==============================================================================
 /**
     A schema system for defining, validating, and instantiating DataTree structures.
-    
+
     DataTreeSchema provides comprehensive validation and metadata querying capabilities
     for DataTree nodes, including property validation, structural constraints, and
     schema-driven object instantiation with default values.
-    
+
     ## Key Features:
     - **JSON Schema Support**: Load schemas from standard JSON Schema format
     - **Property Validation**: Type checking, ranges, enums, patterns, and custom constraints
@@ -37,7 +37,7 @@ namespace yup
     - **Metadata Querying**: Access property types, defaults, constraints, and documentation
     - **Smart Instantiation**: Create DataTree nodes with proper defaults and validation
     - **Transaction Integration**: Validate mutations during DataTree transactions
-    
+
     ## Basic Usage:
     @code
     // Load schema from JSON
@@ -60,35 +60,35 @@ namespace yup
             }
         }
     })";
-    
+
     auto schema = DataTreeSchema::fromJsonSchema(schemaJson);
-    
+
     // Create validated DataTree with defaults
     auto settingsTree = schema.createNode("Settings");
     // settingsTree now has theme="light" and fontSize=12
-    
+
     // Query property metadata
     auto themeInfo = schema.getPropertyInfo("Settings", "theme");
     String defaultTheme = themeInfo.getDefault(); // "light"
     Array<var> allowedValues = themeInfo.getEnumValues(); // ["light", "dark", "auto"]
-    
+
     // Validate mutations
     auto result = schema.validatePropertyValue("Settings", "fontSize", 150);
     if (result.failed())
         std::cout << result.getErrorMessage(); // "Value 150 exceeds maximum 72"
     @endcode
-    
+
     ## Schema-Aware Child Creation:
     @code
     DataTree root("Root");
-    
+
     // Add child using schema - applies defaults and validates
     auto transaction = root.beginTransaction("Add Settings");
     auto settingsChild = schema.createChildNode("Root", "Settings");
     transaction.addChild(settingsChild);
     // settingsChild has all default properties set
     @endcode
-    
+
     @see DataTree, ValidatedTransaction
 */
 class YUP_API DataTreeSchema : public ReferenceCountedObject
@@ -101,11 +101,11 @@ public:
     //==============================================================================
     /**
         Creates an empty schema with no node type definitions.
-        
+
         Use fromJsonSchema() or addNodeType() to populate the schema.
     */
     DataTreeSchema() = default;
-    
+
     /**
         Copy constructor - creates a deep copy of the schema.
     */
@@ -120,7 +120,7 @@ public:
         Destructor - automatically cleans up schema resources.
     */
     ~DataTreeSchema() = default;
-    
+
     /**
         Copy assignment - creates a deep copy of the schema.
     */
@@ -137,7 +137,7 @@ public:
 
         The JSON should follow the DataTree schema specification with nodeTypes
         definitions containing properties and children constraints.
-        
+
         @param schemaData JSON string containing the schema.
 
         @return A reference-counted pointer to DataTreeSchema, or nullptr if parsing fails
@@ -164,7 +164,7 @@ public:
 
         The JSON should follow the DataTree schema specification with nodeTypes
         definitions containing properties and children constraints.
-        
+
         @param schemaData Parsed var object containing the schema.
 
         @return A reference-counted pointer to DataTreeSchema, or nullptr if parsing fails
@@ -173,25 +173,25 @@ public:
 
     /**
         Exports this schema to JSON Schema format.
-        
+
         @return JSON representation of the schema as a var object
     */
     var toJsonSchema() const;
-    
+
     /**
         Checks if this schema is valid and can be used for validation.
-        
+
         @return true if the schema contains valid node type definitions
     */
     bool isValid() const;
-    
+
     //==============================================================================
     /**
         Validates a complete DataTree against this schema.
-        
+
         Performs comprehensive validation including node types, properties,
         property values, and structural constraints.
-        
+
         @param tree The DataTree to validate
 
         @return Result indicating success or failure with detailed error messages
@@ -207,7 +207,7 @@ public:
 
     /**
         Validates a specific property value against schema constraints.
-        
+
         @param nodeType The type of node containing the property
         @param propertyName The name of the property to validate
         @param value The value to validate
@@ -220,9 +220,9 @@ public:
 
     /**
         Validates if a child node can be added to a parent node.
-        
+
         Checks child type constraints, count limits, and ordering requirements.
-        
+
         @param parentType The type of the parent node
         @param childType The type of the proposed child node
         @param currentChildCount The current number of children in the parent
@@ -236,14 +236,14 @@ public:
     //==============================================================================
     /**
         Creates a new DataTree node of the specified type with default properties.
-        
+
         The created node will have all required properties set to their default
         values as defined in the schema. Optional properties with defaults will
         also be set.
-        
+
         @param nodeType The type of node to create
         @return A new DataTree with default properties, or invalid tree if type unknown
-        
+
         @code
         auto button = schema.createNode("Button");
         // button has "enabled" = true and any other defaults
@@ -253,14 +253,14 @@ public:
 
     /**
         Creates a child node that can be added to the specified parent type.
-        
+
         This is a convenience method that creates a node of the specified child type
         and ensures it's compatible with the parent's child constraints.
-        
+
         @param parentType The type of the parent that will contain this child
         @param childType The type of child node to create
         @return A new DataTree configured for the parent, or invalid if incompatible
-        
+
         @code
         // Create a Settings child that can be added to Root
         auto settings = schema.createChildNode("Root", "Settings");
@@ -271,7 +271,7 @@ public:
     //==============================================================================
     /**
         Information about a property defined in the schema.
-        
+
         Provides access to all metadata about a property including its type,
         constraints, default value, and validation rules.
     */
@@ -281,76 +281,76 @@ public:
             The data type of this property ("string", "number", "boolean", "array", "object").
         */
         String type;
-        
+
         /**
             Whether this property is required to be present.
         */
         bool required = false;
-        
+
         /**
             The default value for this property, or undefined if no default.
         */
         var defaultValue;
-        
+
         /**
             Human-readable description of this property.
         */
         String description;
-        
+
         /**
             Allowed values for enum-type properties.
         */
         Array<var> enumValues;
-        
+
         /**
             Minimum value for numeric properties.
         */
         std::optional<double> minimum;
-        
+
         /**
             Maximum value for numeric properties.
         */
         std::optional<double> maximum;
-        
+
         /**
             Minimum length for string properties.
         */
         std::optional<int> minLength;
-        
+
         /**
             Maximum length for string properties.
         */
         std::optional<int> maxLength;
-        
+
         /**
             Regular expression pattern for string validation.
         */
         String pattern;
-        
+
         /**
             Whether this property has a default value.
         */
-        bool hasDefault() const { return !defaultValue.isUndefined(); }
-        
+        bool hasDefault() const { return ! defaultValue.isUndefined(); }
+
         /**
             Whether this property is an enum with restricted values.
         */
-        bool isEnum() const { return !enumValues.isEmpty(); }
-        
+        bool isEnum() const { return ! enumValues.isEmpty(); }
+
         /**
             Whether this property has numeric constraints.
         */
         bool hasNumericConstraints() const { return minimum.has_value() || maximum.has_value(); }
-        
+
         /**
             Whether this property has string length constraints.
         */
         bool hasLengthConstraints() const { return minLength.has_value() || maxLength.has_value(); }
     };
-    
+
     /**
         Gets detailed information about a specific property.
-        
+
         @param nodeType The node type containing the property
         @param propertyName The name of the property
         @return PropertyInfo struct with all metadata, or empty info if not found
@@ -359,7 +359,7 @@ public:
 
     /**
         Gets all property names defined for a node type.
-        
+
         @param nodeType The node type to query
         @return Array of property names, empty if node type not found
     */
@@ -367,7 +367,7 @@ public:
 
     /**
         Gets all required property names for a node type.
-        
+
         @param nodeType The node type to query
         @return Array of required property names
     */
@@ -383,36 +383,36 @@ public:
             Node types that are allowed as children.
         */
         StringArray allowedTypes;
-        
+
         /**
             Minimum number of children required.
         */
         int minCount = 0;
-        
+
         /**
             Maximum number of children allowed (-1 for unlimited).
         */
         int maxCount = -1;
-        
+
         /**
             Whether child order is significant.
         */
         bool ordered = false;
-        
+
         /**
             Whether any child type is allowed (empty allowedTypes with maxCount > 0).
         */
         bool allowsAnyType() const { return allowedTypes.isEmpty() && maxCount != 0; }
-        
+
         /**
             Whether children are allowed at all.
         */
         bool allowsChildren() const { return maxCount != 0; }
     };
-    
+
     /**
         Gets child constraints for a specific node type.
-        
+
         @param nodeType The node type to query
         @return ChildConstraints with all child rules
     */
@@ -420,14 +420,14 @@ public:
 
     /**
         Gets all defined node type names in this schema.
-        
+
         @return Array of node type identifiers
     */
     StringArray getNodeTypeNames() const;
-    
+
     /**
         Checks if a node type is defined in this schema.
-        
+
         @param nodeType The node type to check
         @return true if the node type is defined
     */
@@ -470,7 +470,7 @@ private:
 
     HashMap<Identifier, NodeTypeSchema> nodeTypes;
     bool valid = false;
-    
+
     YUP_LEAK_DETECTOR (DataTreeSchema)
 };
 

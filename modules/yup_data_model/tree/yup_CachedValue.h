@@ -38,11 +38,10 @@ namespace yup
 
     @tparam T The type of value to cache (must be copy-constructible)
 */
-template<typename T>
+template <typename T>
 class YUP_API CachedValue : private DataTree::Listener
 {
 public:
-
     //==============================================================================
     /** Creates an unbound CachedValue. */
     CachedValue() = default;
@@ -109,8 +108,8 @@ public:
         propertyName = Identifier();
         hasDefaultValue = false;
         usingDefault = false;
-        cachedValue = T{};
-        defaultValue = T{};
+        cachedValue = T {};
+        defaultValue = T {};
     }
 
     /** Returns true if this CachedValue is bound to a DataTree property. */
@@ -181,7 +180,7 @@ public:
         {
             // Handle unbound case
             usingDefault = hasDefaultValue;
-            cachedValue = hasDefaultValue ? defaultValue : T{};
+            cachedValue = hasDefaultValue ? defaultValue : T {};
         }
     }
 
@@ -215,14 +214,14 @@ private:
         if (! isBound())
         {
             usingDefault = hasDefaultValue;
-            cachedValue = hasDefaultValue ? defaultValue : T{};
+            cachedValue = hasDefaultValue ? defaultValue : T {};
             return;
         }
 
         if (! dataTree.hasProperty (propertyName))
         {
             usingDefault = hasDefaultValue;
-            cachedValue = hasDefaultValue ? defaultValue : T{};
+            cachedValue = hasDefaultValue ? defaultValue : T {};
             return;
         }
 
@@ -235,7 +234,7 @@ private:
         catch (...)
         {
             usingDefault = hasDefaultValue;
-            cachedValue = hasDefaultValue ? defaultValue : T{};
+            cachedValue = hasDefaultValue ? defaultValue : T {};
         }
     }
 

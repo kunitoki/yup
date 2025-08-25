@@ -61,3 +61,4 @@
 #include "tree/yup_DataTreeObjectList.h"
 #include "tree/yup_CachedValue.h"
 #include "tree/yup_AtomicCachedValue.h"
+#include "tree/yup_DataTreeQuery.h"

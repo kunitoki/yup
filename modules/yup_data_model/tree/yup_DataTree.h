@@ -341,10 +341,10 @@ public:
     //==============================================================================
     /**
         Iterator class for range-based for loop support over child DataTrees.
-        
+
         This provides standard C++ iterator interface for iterating over direct children
         of a DataTree, enabling natural syntax like:
-        
+
         @code
         for (const auto& child : dataTree) {
             // Process each child
@@ -359,40 +359,55 @@ public:
         using difference_type = std::ptrdiff_t;
         using pointer = DataTree*;
         using reference = DataTree;
-        
+
         Iterator() = default;
-        Iterator (const DataTree* parent, int index) : parent (parent), index (index) {}
-        
+
+        Iterator (const DataTree* parent, int index)
+            : parent (parent)
+            , index (index)
+        {
+        }
+
         reference operator*() const { return parent->getChild (index); }
 
-        Iterator& operator++() { ++index; return *this; }
-        Iterator operator++(int) { Iterator temp = *this; ++index; return temp; }
-        
-        bool operator== (const Iterator& other) const 
-        { 
-            return parent == other.parent && index == other.index; 
+        Iterator& operator++()
+        {
+            ++index;
+            return *this;
         }
-        
-        bool operator!= (const Iterator& other) const { return !(*this == other); }
-        
+
+        Iterator operator++ (int)
+        {
+            Iterator temp = *this;
+            ++index;
+            return temp;
+        }
+
+        bool operator== (const Iterator& other) const
+        {
+            return parent == other.parent && index == other.index;
+        }
+
+        bool operator!= (const Iterator& other) const { return ! (*this == other); }
+
     private:
         const DataTree* parent = nullptr;
         int index = 0;
     };
-    
+
     /**
         Returns an iterator to the first child DataTree.
-        
+
         @return Iterator pointing to the first child, or end() if no children
         @see end(), Iterator
     */
     Iterator begin() const noexcept { return Iterator (this, 0); }
-    
+
     /**
         Returns an iterator past the last child DataTree.
-        
+
         @return Iterator representing the end of children iteration
-        @see begin(), Iterator  
+        @see begin(), Iterator
     */
     Iterator end() const noexcept { return Iterator (this, getNumChildren()); }
 
@@ -420,7 +435,7 @@ public:
 
         @see forEachDescendant(), findChild()
     */
-    template<typename Callback>
+    template <typename Callback>
     void forEachChild (Callback callback) const;
 
     /**
@@ -440,7 +455,7 @@ public:
 
         @see forEachChild(), findDescendant()
     */
-    template<typename Callback>
+    template <typename Callback>
     void forEachDescendant (Callback callback) const;
 
     //==============================================================================
@@ -462,7 +477,7 @@ public:
 
         @see findChild(), findDescendants()
     */
-    template<typename Predicate>
+    template <typename Predicate>
     void findChildren (std::vector<DataTree>& results, Predicate predicate) const;
 
     /**
@@ -479,7 +494,7 @@ public:
 
         @see findChildren(), getChildWithName()
     */
-    template<typename Predicate>
+    template <typename Predicate>
     DataTree findChild (Predicate predicate) const;
 
     /**
@@ -499,7 +514,7 @@ public:
 
         @see findDescendant(), forEachDescendant()
     */
-    template<typename Predicate>
+    template <typename Predicate>
     void findDescendants (std::vector<DataTree>& results, Predicate predicate) const;
 
     /**
@@ -509,7 +524,7 @@ public:
         @return The first matching descendant, or an invalid DataTree if none found
         @see findDescendants(), findChild()
     */
-    template<typename Predicate>
+    template <typename Predicate>
     DataTree findDescendant (Predicate predicate) const;
 
     //==============================================================================
@@ -933,7 +948,12 @@ public:
         // Transaction state tracking
         struct PropertyChange
         {
-            enum Type { Set, Remove, RemoveAll };
+            enum Type
+            {
+                Set,
+                Remove,
+                RemoveAll
+            };
 
             Type type;
             Identifier name;
@@ -941,7 +961,7 @@ public:
             var oldValue;
         };
 
-        struct ChildChange;  // Forward declaration
+        struct ChildChange; // Forward declaration
 
         void captureInitialState();
         void applyChanges();
@@ -962,20 +982,20 @@ public:
     //==============================================================================
     /**
         A validated transaction that enforces schema constraints during mutations.
-        
+
         This transaction wrapper validates all property changes and child additions
         against a DataTreeSchema before applying them. Invalid operations are rejected
         with detailed error messages.
-        
+
         @code
         DataTreeSchema schema = DataTreeSchema::fromJsonSchema(schemaJson);
         auto validatedTransaction = tree.beginTransaction(schema, "Update settings");
-        
+
         // This will validate that "fontSize" accepts numbers and is within range
         auto result = validatedTransaction.setProperty("fontSize", 14);
         if (result.failed())
             DBG("Invalid fontSize: " << result.getErrorMessage());
-        
+
         // Auto-commits if all operations were valid
         @endcode
     */
@@ -985,109 +1005,108 @@ public:
         /**
             Creates a validated transaction for the specified DataTree.
         */
-        ValidatedTransaction(DataTree& tree, DataTreeSchema* schema,
-                             const String& description, UndoManager* undoManager = nullptr);
+        ValidatedTransaction (DataTree& tree, DataTreeSchema* schema, const String& description, UndoManager* undoManager = nullptr);
 
         /**
             Move constructor - transfers ownership of the transaction.
         */
-        ValidatedTransaction(ValidatedTransaction&& other) noexcept;
-        
+        ValidatedTransaction (ValidatedTransaction&& other) noexcept;
+
         /**
             Move assignment - transfers ownership of the transaction.
         */
-        ValidatedTransaction& operator=(ValidatedTransaction&& other) noexcept;
-        
+        ValidatedTransaction& operator= (ValidatedTransaction&& other) noexcept;
+
         /**
             Destructor - commits the transaction if still active and valid.
         */
         ~ValidatedTransaction();
-        
+
         /**
             Sets a property value with schema validation.
-            
+
             @param name The property name
             @param newValue The new value to set
             @return Result indicating success or validation failure
         */
-        yup::Result setProperty(const Identifier& name, const var& newValue);
-        
+        yup::Result setProperty (const Identifier& name, const var& newValue);
+
         /**
             Removes a property with schema validation.
-            
+
             Checks if the property is required and prevents removal if so.
-            
+
             @param name The property name to remove
             @return Result indicating success or validation failure
         */
-        yup::Result removeProperty(const Identifier& name);
-        
+        yup::Result removeProperty (const Identifier& name);
+
         /**
             Adds a child node with schema validation.
-            
+
             Validates child type, count constraints, and compatibility.
-            
+
             @param child The child DataTree to add
             @param index Position to insert at, or -1 to append
             @return Result indicating success or validation failure
         */
-        yup::Result addChild(const DataTree& child, int index = -1);
-        
+        yup::Result addChild (const DataTree& child, int index = -1);
+
         /**
             Creates and adds a new child node of the specified type.
-            
+
             Uses the schema to create a properly initialized child with defaults.
-            
+
             @param childType The type of child to create and add
             @param index Position to insert at, or -1 to append
             @return ResultValue containing the created child, or error on failure
         */
-        yup::ResultValue<DataTree> createAndAddChild(const Identifier& childType, int index = -1);
-        
+        yup::ResultValue<DataTree> createAndAddChild (const Identifier& childType, int index = -1);
+
         /**
             Removes a child node with schema validation.
-            
+
             Checks minimum child count constraints.
-            
+
             @param child The child to remove
             @return Result indicating success or validation failure
         */
-        yup::Result removeChild(const DataTree& child);
-        
+        yup::Result removeChild (const DataTree& child);
+
         /**
             Commits all validated changes to the DataTree.
-            
+
             Only commits if all operations were valid.
-            
+
             @return Result indicating success or failure of the commit
         */
         yup::Result commit();
-        
+
         /**
             Aborts the transaction, discarding all batched changes.
         */
         void abort();
-        
+
         /**
             Checks if this transaction is still active.
         */
         bool isActive() const;
-        
+
         /**
             Gets the underlying DataTree transaction.
-            
+
             Advanced users can access the raw transaction for operations that
             don't need validation, but this bypasses schema enforcement.
         */
         Transaction& getTransaction();
-        
+
     private:
         std::unique_ptr<Transaction> transaction;
         ReferenceCountedObjectPtr<DataTreeSchema> schema;
         Identifier nodeType;
         bool hasValidationErrors = false;
-        
-        YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ValidatedTransaction)
+
+        YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ValidatedTransaction)
     };
 
     /**
@@ -1123,29 +1142,29 @@ public:
 
     /**
         Creates a validated transaction for modifying this DataTree with schema enforcement.
-        
+
         This overload creates a ValidatedTransaction that validates all operations against
         the provided schema before applying them to the DataTree.
-        
+
         @param schema The DataTreeSchema to validate against (reference-counted)
         @param description Human-readable description of the changes (used for undo history)
         @param undoManager Optional UndoManager for undo/redo functionality
         @return A ValidatedTransaction that enforces schema constraints
-        
+
         @code
         auto schema = DataTreeSchema::fromJsonSchema(schemaJson);
         auto transaction = tree.beginTransaction(schema, "Update settings");
         transaction.setProperty("theme", "dark"); // Validates against schema
         // Auto-commits when transaction goes out of scope if all validations pass
         @endcode
-        
+
         @see ValidatedTransaction, DataTreeSchema
     */
-    ValidatedTransaction beginTransaction(DataTreeSchema* schema,
-                                          const String& description = "DataTree Changes",
-                                          UndoManager* undoManager = nullptr)
+    ValidatedTransaction beginTransaction (DataTreeSchema* schema,
+                                           const String& description = "DataTree Changes",
+                                           UndoManager* undoManager = nullptr)
     {
-        return ValidatedTransaction(*this, schema, description, undoManager);
+        return ValidatedTransaction (*this, schema, description, undoManager);
     }
 
 private:
@@ -1212,7 +1231,7 @@ private:
 };
 
 //==============================================================================
-template<typename Callback>
+template <typename Callback>
 void DataTree::forEachChild (Callback callback) const
 {
     const int numChildren = getNumChildren();
@@ -1231,10 +1250,10 @@ void DataTree::forEachChild (Callback callback) const
 }
 
 //==============================================================================
-template<typename Callback>
+template <typename Callback>
 void DataTree::forEachDescendant (Callback callback) const
 {
-    std::function<bool(const DataTree&)> traverse = [&] (const DataTree& tree) -> bool
+    std::function<bool (const DataTree&)> traverse = [&] (const DataTree& tree) -> bool
     {
         const int numChildren = tree.getNumChildren();
         for (int i = 0; i < numChildren; ++i)
@@ -1261,7 +1280,7 @@ void DataTree::forEachDescendant (Callback callback) const
 }
 
 //==============================================================================
-template<typename Predicate>
+template <typename Predicate>
 void DataTree::findChildren (std::vector<DataTree>& results, Predicate predicate) const
 {
     forEachChild ([&] (const DataTree& child)
@@ -1272,7 +1291,7 @@ void DataTree::findChildren (std::vector<DataTree>& results, Predicate predicate
 }
 
 //==============================================================================
-template<typename Predicate>
+template <typename Predicate>
 DataTree DataTree::findChild (Predicate predicate) const
 {
     DataTree result;
@@ -1289,7 +1308,7 @@ DataTree DataTree::findChild (Predicate predicate) const
 }
 
 //==============================================================================
-template<typename Predicate>
+template <typename Predicate>
 void DataTree::findDescendants (std::vector<DataTree>& results, Predicate predicate) const
 {
     forEachDescendant ([&] (const DataTree& descendant)
@@ -1300,7 +1319,7 @@ void DataTree::findDescendants (std::vector<DataTree>& results, Predicate predic
 }
 
 //==============================================================================
-template<typename Predicate>
+template <typename Predicate>
 DataTree DataTree::findDescendant (Predicate predicate) const
 {
     DataTree result;

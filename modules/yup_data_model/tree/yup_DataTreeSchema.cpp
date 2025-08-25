@@ -30,7 +30,7 @@ DataTreeSchema::PropertySchema::PropertySchema (const var& propertyDef)
         return;
 
     auto* obj = propertyDef.getDynamicObject();
-    if (!obj)
+    if (! obj)
         return;
 
     type = obj->getProperty ("type", "string").toString();
@@ -44,7 +44,7 @@ DataTreeSchema::PropertySchema::PropertySchema (const var& propertyDef)
     {
         auto* enumArray = enumVar.getArray();
         for (int i = 0; i < enumArray->size(); ++i)
-            enumValues.add (enumArray->getReference(i));
+            enumValues.add (enumArray->getReference (i));
     }
 
     // Handle numeric constraints
@@ -72,11 +72,11 @@ DataTreeSchema::PropertySchema::PropertySchema (const var& propertyDef)
 
 DataTreeSchema::NodeTypeSchema::NodeTypeSchema (const var& nodeTypeDef)
 {
-    if (!nodeTypeDef.isObject())
+    if (! nodeTypeDef.isObject())
         return;
 
     auto* obj = nodeTypeDef.getDynamicObject();
-    if (!obj)
+    if (! obj)
         return;
 
     description = obj->getProperty ("description", "").toString();
@@ -91,8 +91,8 @@ DataTreeSchema::NodeTypeSchema::NodeTypeSchema (const var& nodeTypeDef)
             const auto& props = propsObj->getProperties();
             for (int i = 0; i < props.size(); ++i)
             {
-                Identifier propName (props.getName(i).toString());
-                properties.set (propName, PropertySchema (props.getValueAt(i)));
+                Identifier propName (props.getName (i).toString());
+                properties.set (propName, PropertySchema (props.getValueAt (i)));
             }
         }
     }
@@ -125,7 +125,7 @@ DataTreeSchema::NodeTypeSchema::NodeTypeSchema (const var& nodeTypeDef)
 
 //==============================================================================
 
-bool DataTreeSchema::loadFromJson(const var& schemaData)
+bool DataTreeSchema::loadFromJson (const var& schemaData)
 {
     nodeTypes.clear();
     valid = false;
@@ -134,25 +134,25 @@ bool DataTreeSchema::loadFromJson(const var& schemaData)
         return;
 
     auto* schemaObj = schemaData.getDynamicObject();
-    if (!schemaObj)
+    if (! schemaObj)
         return;
 
     var nodeTypesVar = schemaObj->getProperty ("nodeTypes");
-    if (!nodeTypesVar.isObject())
+    if (! nodeTypesVar.isObject())
         return;
 
     auto* nodeTypesObj = nodeTypesVar.getDynamicObject();
-    if (!nodeTypesObj)
+    if (! nodeTypesObj)
         return;
 
     const auto& types = nodeTypesObj->getProperties();
     for (int i = 0; i < types.size(); ++i)
     {
-        Identifier typeName (types.getName(i).toString());
-        nodeTypes.set (typeName, NodeTypeSchema(types.getValueAt(i)));
+        Identifier typeName (types.getName (i).toString());
+        nodeTypes.set (typeName, NodeTypeSchema (types.getValueAt (i)));
     }
 
-    valid = !nodeTypes.isEmpty();
+    valid = ! nodeTypes.isEmpty();
     return valid;
 }
 
@@ -207,13 +207,13 @@ var DataTreeSchema::toJsonSchema() const
                 if (propSchema.required)
                     propObj->setProperty ("required", true);
 
-                if (!propSchema.defaultValue.isUndefined())
+                if (! propSchema.defaultValue.isUndefined())
                     propObj->setProperty ("default", propSchema.defaultValue);
 
                 if (propSchema.description.isNotEmpty())
                     propObj->setProperty ("description", propSchema.description);
 
-                if (!propSchema.enumValues.isEmpty())
+                if (! propSchema.enumValues.isEmpty())
                     propObj->setProperty ("enum", Array<var> (propSchema.enumValues));
 
                 if (propSchema.minimum.has_value())
@@ -275,116 +275,116 @@ bool DataTreeSchema::isValid() const
 
 Result DataTreeSchema::validate (const DataTree& tree) const
 {
-    if (!tree.isValid())
+    if (! tree.isValid())
         return Result::fail ("Invalid DataTree");
 
     Identifier nodeType = tree.getType();
-    auto* nodeSchema = nodeTypes.getPointer(nodeType);
-    if (!nodeSchema)
-        return Result::fail("Unknown node type: " + nodeType.toString());
-        
+    auto* nodeSchema = nodeTypes.getPointer (nodeType);
+    if (! nodeSchema)
+        return Result::fail ("Unknown node type: " + nodeType.toString());
+
     // Validate required properties
     for (auto it = nodeSchema->properties.begin(); it != nodeSchema->properties.end(); ++it)
     {
         const Identifier& propName = it.getKey();
         const PropertySchema& propSchema = it.getValue();
-        
-        if (propSchema.required && !tree.hasProperty(propName))
-            return Result::fail("Required property '" + propName.toString() + "' is missing");
-            
-        if (tree.hasProperty(propName))
+
+        if (propSchema.required && ! tree.hasProperty (propName))
+            return Result::fail ("Required property '" + propName.toString() + "' is missing");
+
+        if (tree.hasProperty (propName))
         {
-            var propValue = tree.getProperty(propName);
-            auto validationResult = validateValueAgainstSchema(propValue, propSchema, propName.toString());
+            var propValue = tree.getProperty (propName);
+            auto validationResult = validateValueAgainstSchema (propValue, propSchema, propName.toString());
             if (validationResult.failed())
                 return validationResult;
         }
     }
-    
+
     // Validate child constraints
     const auto& childConstraints = nodeSchema->childConstraints;
     int childCount = tree.getNumChildren();
-    
+
     if (childCount < childConstraints.minCount)
-        return Result::fail("Node requires at least " + String(childConstraints.minCount) + " children, has " + String(childCount));
-        
+        return Result::fail ("Node requires at least " + String (childConstraints.minCount) + " children, has " + String (childCount));
+
     if (childConstraints.maxCount >= 0 && childCount > childConstraints.maxCount)
-        return Result::fail("Node allows at most " + String(childConstraints.maxCount) + " children, has " + String(childCount));
-        
+        return Result::fail ("Node allows at most " + String (childConstraints.maxCount) + " children, has " + String (childCount));
+
     // Validate child types
-    if (!childConstraints.allowsAnyType())
+    if (! childConstraints.allowsAnyType())
     {
         for (int i = 0; i < childCount; ++i)
         {
-            DataTree child = tree.getChild(i);
+            DataTree child = tree.getChild (i);
             Identifier childType = child.getType();
-            
-            if (!childConstraints.allowedTypes.contains(childType.toString()))
-                return Result::fail("Child type '" + childType.toString() + "' is not allowed in '" + nodeType.toString() + "'");
-                
+
+            if (! childConstraints.allowedTypes.contains (childType.toString()))
+                return Result::fail ("Child type '" + childType.toString() + "' is not allowed in '" + nodeType.toString() + "'");
+
             // Recursively validate children
-            auto childResult = validate(child);
+            auto childResult = validate (child);
             if (childResult.failed())
                 return childResult;
         }
     }
-    
+
     return Result::ok();
 }
 
-Result DataTreeSchema::validatePropertyValue(const Identifier& nodeType, const Identifier& propertyName, const var& value) const
+Result DataTreeSchema::validatePropertyValue (const Identifier& nodeType, const Identifier& propertyName, const var& value) const
 {
-    return validateProperty(nodeType, propertyName, value);
+    return validateProperty (nodeType, propertyName, value);
 }
 
-Result DataTreeSchema::validateChildAddition(const Identifier& parentType, const Identifier& childType, int currentChildCount) const
+Result DataTreeSchema::validateChildAddition (const Identifier& parentType, const Identifier& childType, int currentChildCount) const
 {
-    auto* nodeSchema = nodeTypes.getPointer(parentType);
-    if (!nodeSchema)
-        return Result::fail("Unknown node type: " + parentType.toString());
-        
+    auto* nodeSchema = nodeTypes.getPointer (parentType);
+    if (! nodeSchema)
+        return Result::fail ("Unknown node type: " + parentType.toString());
+
     const auto& childConstraints = nodeSchema->childConstraints;
-    
+
     // Check count constraints
     if (childConstraints.maxCount >= 0 && currentChildCount >= childConstraints.maxCount)
-        return Result::fail("Parent '" + parentType.toString() + "' already has maximum number of children (" + String(childConstraints.maxCount) + ")");
-        
+        return Result::fail ("Parent '" + parentType.toString() + "' already has maximum number of children (" + String (childConstraints.maxCount) + ")");
+
     // Check type constraints
-    if (!childConstraints.allowsAnyType() && !childConstraints.allowedTypes.contains(childType.toString()))
-        return Result::fail("Child type '" + childType.toString() + "' is not allowed in parent '" + parentType.toString() + "'");
-        
+    if (! childConstraints.allowsAnyType() && ! childConstraints.allowedTypes.contains (childType.toString()))
+        return Result::fail ("Child type '" + childType.toString() + "' is not allowed in parent '" + parentType.toString() + "'");
+
     return Result::ok();
 }
 
 //==============================================================================
 
-DataTree DataTreeSchema::createNode(const Identifier& nodeType) const
+DataTree DataTreeSchema::createNode (const Identifier& nodeType) const
 {
-    return createNodeWithDefaults(nodeType);
+    return createNodeWithDefaults (nodeType);
 }
 
-DataTree DataTreeSchema::createChildNode(const Identifier& parentType, const Identifier& childType) const
+DataTree DataTreeSchema::createChildNode (const Identifier& parentType, const Identifier& childType) const
 {
     // First validate that this child type is allowed
-    auto validationResult = validateChildAddition(parentType, childType, 0);
+    auto validationResult = validateChildAddition (parentType, childType, 0);
     if (validationResult.failed())
         return DataTree(); // Invalid tree
-        
-    return createNode(childType);
+
+    return createNode (childType);
 }
 
-DataTreeSchema::PropertyInfo DataTreeSchema::getPropertyInfo(const Identifier& nodeType, const Identifier& propertyName) const
+DataTreeSchema::PropertyInfo DataTreeSchema::getPropertyInfo (const Identifier& nodeType, const Identifier& propertyName) const
 {
     PropertyInfo info;
-    
-    auto* nodeSchema = nodeTypes.getPointer(nodeType);
-    if (!nodeSchema)
+
+    auto* nodeSchema = nodeTypes.getPointer (nodeType);
+    if (! nodeSchema)
         return info;
-        
-    auto* propSchema = nodeSchema->properties.getPointer(propertyName);
-    if (!propSchema)
+
+    auto* propSchema = nodeSchema->properties.getPointer (propertyName);
+    if (! propSchema)
         return info;
-        
+
     info.type = propSchema->type;
     info.required = propSchema->required;
     info.defaultValue = propSchema->defaultValue;
@@ -395,100 +395,100 @@ DataTreeSchema::PropertyInfo DataTreeSchema::getPropertyInfo(const Identifier& n
     info.minLength = propSchema->minLength;
     info.maxLength = propSchema->maxLength;
     info.pattern = propSchema->pattern;
-    
+
     return info;
 }
 
 //==============================================================================
 
-StringArray DataTreeSchema::getPropertyNames(const Identifier& nodeType) const
+StringArray DataTreeSchema::getPropertyNames (const Identifier& nodeType) const
 {
     StringArray names;
-    
-    auto* nodeSchema = nodeTypes.getPointer(nodeType);
-    if (!nodeSchema)
+
+    auto* nodeSchema = nodeTypes.getPointer (nodeType);
+    if (! nodeSchema)
         return names;
-        
+
     for (auto it = nodeSchema->properties.begin(); it != nodeSchema->properties.end(); ++it)
-        names.add(it.getKey().toString());
-        
+        names.add (it.getKey().toString());
+
     return names;
 }
 
-StringArray DataTreeSchema::getRequiredPropertyNames(const Identifier& nodeType) const
+StringArray DataTreeSchema::getRequiredPropertyNames (const Identifier& nodeType) const
 {
     StringArray names;
-    
-    auto* nodeSchema = nodeTypes.getPointer(nodeType);
-    if (!nodeSchema)
+
+    auto* nodeSchema = nodeTypes.getPointer (nodeType);
+    if (! nodeSchema)
         return names;
-        
+
     for (auto it = nodeSchema->properties.begin(); it != nodeSchema->properties.end(); ++it)
     {
         if (it.getValue().required)
-            names.add(it.getKey().toString());
+            names.add (it.getKey().toString());
     }
-    
+
     return names;
 }
 
-DataTreeSchema::ChildConstraints DataTreeSchema::getChildConstraints(const Identifier& nodeType) const
+DataTreeSchema::ChildConstraints DataTreeSchema::getChildConstraints (const Identifier& nodeType) const
 {
     ChildConstraints constraints;
-    
-    auto* nodeSchema = nodeTypes.getPointer(nodeType);
+
+    auto* nodeSchema = nodeTypes.getPointer (nodeType);
     if (nodeSchema)
         constraints = nodeSchema->childConstraints;
-        
+
     return constraints;
 }
 
 StringArray DataTreeSchema::getNodeTypeNames() const
 {
     StringArray names;
-    
+
     for (auto it = nodeTypes.begin(); it != nodeTypes.end(); ++it)
-        names.add(it.getKey().toString());
-        
+        names.add (it.getKey().toString());
+
     return names;
 }
 
-bool DataTreeSchema::hasNodeType(const Identifier& nodeType) const
+bool DataTreeSchema::hasNodeType (const Identifier& nodeType) const
 {
-    return nodeTypes.contains(nodeType);
+    return nodeTypes.contains (nodeType);
 }
 
 //==============================================================================
 
-Result DataTreeSchema::validateProperty(const Identifier& nodeType, const Identifier& propertyName, const var& value) const
+Result DataTreeSchema::validateProperty (const Identifier& nodeType, const Identifier& propertyName, const var& value) const
 {
-    auto* nodeSchema = nodeTypes.getPointer(nodeType);
-    if (!nodeSchema)
-        return Result::fail("Unknown node type: " + nodeType.toString());
+    auto* nodeSchema = nodeTypes.getPointer (nodeType);
+    if (! nodeSchema)
+        return Result::fail ("Unknown node type: " + nodeType.toString());
 
-    auto* propSchema = nodeSchema->properties.getPointer(propertyName);
-    if (!propSchema)
-        return Result::fail("Unknown property '" + propertyName.toString() + "' for node type '" + nodeType.toString() + "'");
+    auto* propSchema = nodeSchema->properties.getPointer (propertyName);
+    if (! propSchema)
+        return Result::fail ("Unknown property '" + propertyName.toString() + "' for node type '" + nodeType.toString() + "'");
 
-    return validateValueAgainstSchema(value, *propSchema, propertyName.toString());
+    return validateValueAgainstSchema (value, *propSchema, propertyName.toString());
 }
 
-Result DataTreeSchema::validateValueAgainstSchema(const var& value, const PropertySchema& schema, const String& propertyName) const
+Result DataTreeSchema::validateValueAgainstSchema (const var& value, const PropertySchema& schema, const String& propertyName) const
 {
     // Type validation
-    if (schema.type == "string" && !value.isString())
-        return Result::fail("Property '" + propertyName + "' must be a string");
-    else if (schema.type == "number" && !value.isDouble() && !value.isInt())
-        return Result::fail("Property '" + propertyName + "' must be a number");
-    else if (schema.type == "boolean" && !value.isBool())
-        return Result::fail("Property '" + propertyName + "' must be a boolean");
-    else if (schema.type == "array" && !value.isArray())
-        return Result::fail("Property '" + propertyName + "' must be an array");
-    else if (schema.type == "object" && !value.isObject())
-        return Result::fail("Property '" + propertyName + "' must be an object");
+    if (schema.type == "string" && ! value.isString())
+        return Result::fail ("Property '" + propertyName + "' must be a string");
+    else if (schema.type == "number" && ! value.isDouble() && ! value.isInt())
+        return Result::fail ("Property '" + propertyName + "' must be a number");
+    else if (schema.type == "boolean" && ! value.isBool())
+        return Result::fail ("Property '" + propertyName + "' must be a boolean");
+    else if (schema.type == "array" && ! value.isArray())
+        return Result::fail ("Property '" + propertyName + "' must be an array");
+    else if (schema.type == "object" && ! value.isObject())
+        return Result::fail ("Property '" + propertyName + "' must be an object");
 
     // Enum validation
-    if (!schema.enumValues.isEmpty())
+    if (! schema.enumValues.isEmpty())
     {
         bool found = false;
         for (const auto& enumValue : schema.enumValues)
@@ -499,20 +499,20 @@ Result DataTreeSchema::validateValueAgainstSchema(const var& value, const Proper
                 break;
             }
         }
-        if (!found)
-            return Result::fail("Property '" + propertyName + "' must be one of the allowed values");
+        if (! found)
+            return Result::fail ("Property '" + propertyName + "' must be one of the allowed values");
     }
 
     // Numeric constraints
     if (schema.type == "number" && (value.isDouble() || value.isInt()))
     {
-        double numValue = static_cast<double>(value);
+        double numValue = static_cast<double> (value);
 
         if (schema.minimum.has_value() && numValue < schema.minimum.value())
-            return Result::fail("Property '" + propertyName + "' value " + String(numValue) + " is below minimum " + String(schema.minimum.value()));
+            return Result::fail ("Property '" + propertyName + "' value " + String (numValue) + " is below minimum " + String (schema.minimum.value()));
 
         if (schema.maximum.has_value() && numValue > schema.maximum.value())
-            return Result::fail("Property '" + propertyName + "' value " + String(numValue) + " exceeds maximum " + String(schema.maximum.value()));
+            return Result::fail ("Property '" + propertyName + "' value " + String (numValue) + " exceeds maximum " + String (schema.maximum.value()));
     }
 
     // String constraints
@@ -521,17 +521,17 @@ Result DataTreeSchema::validateValueAgainstSchema(const var& value, const Proper
         String strValue = value.toString();
 
         if (schema.minLength.has_value() && strValue.length() < schema.minLength.value())
-            return Result::fail("Property '" + propertyName + "' length " + String(strValue.length()) + " is below minimum " + String(schema.minLength.value()));
+            return Result::fail ("Property '" + propertyName + "' length " + String (strValue.length()) + " is below minimum " + String (schema.minLength.value()));
 
         if (schema.maxLength.has_value() && strValue.length() > schema.maxLength.value())
-            return Result::fail("Property '" + propertyName + "' length " + String(strValue.length()) + " exceeds maximum " + String(schema.maxLength.value()));
+            return Result::fail ("Property '" + propertyName + "' length " + String (strValue.length()) + " exceeds maximum " + String (schema.maxLength.value()));
 
         // TODO: Pattern validation using regex
         if (schema.pattern.isNotEmpty())
         {
             // For now, just validate it's not empty - proper regex validation would require regex library
             if (strValue.isEmpty())
-                return Result::fail("Property '" + propertyName + "' does not match required pattern");
+                return Result::fail ("Property '" + propertyName + "' does not match required pattern");
         }
     }
 
@@ -540,13 +540,13 @@ Result DataTreeSchema::validateValueAgainstSchema(const var& value, const Proper
 
 //==============================================================================
 
-DataTree DataTreeSchema::createNodeWithDefaults(const Identifier& nodeType) const
+DataTree DataTreeSchema::createNodeWithDefaults (const Identifier& nodeType) const
 {
-    auto* nodeSchema = nodeTypes.getPointer(nodeType);
-    if (!nodeSchema)
+    auto* nodeSchema = nodeTypes.getPointer (nodeType);
+    if (! nodeSchema)
         return DataTree(); // Invalid tree
 
-    DataTree tree(nodeType);
+    DataTree tree (nodeType);
 
     // Set default values for properties
     for (auto it = nodeSchema->properties.begin(); it != nodeSchema->properties.end(); ++it)
@@ -554,10 +554,10 @@ DataTree DataTreeSchema::createNodeWithDefaults(const Identifier& nodeType) cons
         const Identifier& propName = it.getKey();
         const PropertySchema& propSchema = it.getValue();
 
-        if (!propSchema.defaultValue.isUndefined())
+        if (! propSchema.defaultValue.isUndefined())
         {
-            auto transaction = tree.beginTransaction("Set default properties");
-            transaction.setProperty(propName, propSchema.defaultValue);
+            auto transaction = tree.beginTransaction ("Set default properties");
+            transaction.setProperty (propName, propSchema.defaultValue);
         }
     }
 

@@ -38,7 +38,7 @@ namespace yup
 
     @tparam T The type of value to cache atomically (must be atomic-compatible)
 */
-template<typename T>
+template <typename T>
 class YUP_API AtomicCachedValue : private DataTree::Listener
 {
 public:
@@ -108,8 +108,8 @@ public:
         propertyName = Identifier();
         hasDefaultValue = false;
         usingDefault = false;
-        cachedValue.store (T{});
-        defaultValue = T{};
+        cachedValue.store (T {});
+        defaultValue = T {};
     }
 
     /** Returns true if this AtomicCachedValue is bound to a DataTree property. */
@@ -180,7 +180,7 @@ public:
         {
             // Handle unbound case
             usingDefault = hasDefaultValue;
-            cachedValue.store (hasDefaultValue ? defaultValue : T{});
+            cachedValue.store (hasDefaultValue ? defaultValue : T {});
         }
     }
 
@@ -213,14 +213,14 @@ private:
     {
         if (! isBound())
         {
-            cachedValue.store (hasDefaultValue ? defaultValue : T{});
+            cachedValue.store (hasDefaultValue ? defaultValue : T {});
             usingDefault = hasDefaultValue;
             return;
         }
 
         if (! dataTree.hasProperty (propertyName))
         {
-            cachedValue.store (hasDefaultValue ? defaultValue : T{});
+            cachedValue.store (hasDefaultValue ? defaultValue : T {});
             usingDefault = hasDefaultValue;
             return;
         }
@@ -234,7 +234,7 @@ private:
         }
         catch (...)
         {
-            cachedValue.store (hasDefaultValue ? defaultValue : T{});
+            cachedValue.store (hasDefaultValue ? defaultValue : T {});
             usingDefault = hasDefaultValue;
         }
     }
