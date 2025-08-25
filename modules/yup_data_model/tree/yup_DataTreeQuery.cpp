@@ -1304,7 +1304,7 @@ std::vector<DataTree> DataTreeQuery::applyOperation (const QueryOperation& op, c
                             break;
                         }
                     }
-                    
+
                     // Add all siblings that come after current node
                     if (currentIndex != -1)
                     {
@@ -1336,7 +1336,7 @@ std::vector<DataTree> DataTreeQuery::applyOperation (const QueryOperation& op, c
                             break;
                         }
                     }
-                    
+
                     // Add all siblings that come before current node
                     if (currentIndex != -1)
                     {
