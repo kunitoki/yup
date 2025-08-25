@@ -475,6 +475,10 @@ auto buttonLabels = DataTreeQuery::xpath(appRoot, "//Button/text()").strings();
 // Comparison operators
 auto widePanels = DataTreeQuery::xpath(appRoot, "//Panel[@width > 180]").nodes();
 auto enabledButtons = DataTreeQuery::xpath(appRoot, "//Button[@enabled != 'false']").nodes();
+
+// Sibling axis navigation
+auto nextButtons = DataTreeQuery::xpath(appRoot, "//Button[@text='Save']/following-sibling").nodes();
+auto prevPanels = DataTreeQuery::xpath(appRoot, "//Panel[@name='RightPanel']/preceding-sibling").nodes();
 ```
 
 XPath queries are particularly elegant for simple, well-defined queries. The property extraction syntax (`/@propertyName`) is often more concise than the equivalent fluent API calls, especially when you're extracting the same property from many nodes.
@@ -492,6 +496,8 @@ Understanding the full XPath syntax available in DataTreeQuery helps you write m
 "*"                   // Any node type
 "."                   // Current node
 ".."                  // Parent node
+"/following-sibling"   // All following sibling nodes
+"/preceding-sibling"   // All preceding sibling nodes
 
 // Property predicates
 "[@property]"         // Nodes with property

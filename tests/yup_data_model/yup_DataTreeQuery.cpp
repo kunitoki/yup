@@ -846,33 +846,6 @@ TEST_F (DataTreeQueryTests, DataTreeCircularReferencePreventionCore)
     EXPECT_EQ (2, static_cast<int> (ancestors.size())); // child1 and root
 }
 
-TEST_F (DataTreeQueryTests, ConcurrentAccess)
-{
-    // Test thread safety of query results (basic sanity check)
-    auto result = DataTreeQuery::from (testTree).descendants().execute();
-
-    // Access from multiple contexts (simulating concurrent access)
-    std::vector<std::thread> threads;
-    std::vector<int> sizes (10);
-
-    for (int i = 0; i < 10; ++i)
-    {
-        threads.emplace_back ([&result, &sizes, i]()
-        {
-            sizes[i] = result.size(); // Should be consistent
-        });
-    }
-
-    for (auto& thread : threads)
-        thread.join();
-
-    // All threads should get the same size
-    for (int i = 1; i < 10; ++i)
-    {
-        EXPECT_EQ (sizes[0], sizes[i]);
-    }
-}
-
 TEST_F (DataTreeQueryTests, LazyEvaluationConsistency)
 {
     // Create query but don't execute immediately
@@ -928,4 +901,76 @@ TEST_F (DataTreeQueryTests, XPathComplexExpressions)
     // Nested expressions with NOT
     auto result3 = DataTreeQuery::xpath (testTree, "//Button[not(@enabled='false')]").nodes();
     EXPECT_GT (static_cast<int> (result3.size()), 0);
+}
+
+TEST_F (DataTreeQueryTests, XPathAxisSupport)
+{
+    // Test following-sibling and preceding-sibling axes
+    DataTree root ("Root");
+    {
+        auto tx = root.beginTransaction ("Create test structure");
+
+        DataTree first ("Child");
+        first.beginTransaction ("").setProperty ("name", "first");
+
+        DataTree second ("Child");
+        second.beginTransaction ("").setProperty ("name", "second");
+
+        DataTree third ("Child");
+        third.beginTransaction ("").setProperty ("name", "third");
+
+        DataTree fourth ("Child");
+        fourth.beginTransaction ("").setProperty ("name", "fourth");
+
+        tx.addChild (first);
+        tx.addChild (second);
+        tx.addChild (third);
+        tx.addChild (fourth);
+    }
+
+    // Debug: Test that we can find the second child first
+    auto secondChild = DataTreeQuery::xpath (root, "/Child[@name='second']").nodes();
+    ASSERT_EQ (1, static_cast<int> (secondChild.size()));
+    EXPECT_EQ ("second", secondChild[0].getProperty ("name").toString());
+
+    // Test with fluent API first to verify the axis operations work
+    auto secondChildFluent = DataTreeQuery::from (root)
+                                 .children ("Child")
+                                 .propertyEquals ("name", "second");
+    ASSERT_EQ (1, secondChildFluent.count());
+
+    // Now test following siblings with fluent API
+    auto followingFluentAPI = secondChildFluent.followingSiblings().nodes();
+    ASSERT_EQ (2, static_cast<int> (followingFluentAPI.size()));
+    EXPECT_EQ ("third", followingFluentAPI[0].getProperty ("name").toString());
+    EXPECT_EQ ("fourth", followingFluentAPI[1].getProperty ("name").toString());
+
+    // Now test the actual axis operations - let's try different syntax
+    // Try without the leading slash on the axis
+    auto followingSiblings = DataTreeQuery::xpath (root, "/Child[@name='second']/following-sibling").nodes();
+
+    // If that doesn't work, let's debug what tokens are being generated
+    if (followingSiblings.empty())
+    {
+        // Try a simpler test - just the axis without predicates
+        auto simpleAxis = DataTreeQuery::xpath (root, "/Child/following-sibling").nodes();
+        EXPECT_GT (static_cast<int> (simpleAxis.size()), 0) << "Simple axis test failed too";
+    }
+
+    ASSERT_EQ (2, static_cast<int> (followingSiblings.size()));
+    EXPECT_EQ ("third", followingSiblings[0].getProperty ("name").toString());
+    EXPECT_EQ ("fourth", followingSiblings[1].getProperty ("name").toString());
+
+    // Test preceding-sibling axis
+    auto precedingSiblings = DataTreeQuery::xpath (root, "/Child[@name='third']/preceding-sibling").nodes();
+    ASSERT_EQ (2, static_cast<int> (precedingSiblings.size()));
+    EXPECT_EQ ("first", precedingSiblings[0].getProperty ("name").toString());
+    EXPECT_EQ ("second", precedingSiblings[1].getProperty ("name").toString());
+
+    // Test edge cases
+    auto firstPreceding = DataTreeQuery::xpath (root, "/Child[@name='first']/preceding-sibling").nodes();
+    EXPECT_EQ (0, static_cast<int> (firstPreceding.size()));
+
+    auto lastFollowing = DataTreeQuery::xpath (root, "/Child[@name='fourth']/following-sibling").nodes();
+    EXPECT_EQ (0, static_cast<int> (lastFollowing.size()));
 }

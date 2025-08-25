@@ -437,6 +437,40 @@ public:
     */
     DataTreeQuery& siblings();
 
+    /**
+        Selects following siblings of current nodes.
+
+        This method finds all sibling nodes that come after the current selection
+        in document order (sibling nodes with higher indices).
+
+        @returns Reference to this query for method chaining
+
+        @code
+        // Find all buttons that come after the selected button
+        auto nextButtons = DataTreeQuery::from(selectedButton)
+            .followingSiblings()
+            .nodes();
+        @endcode
+    */
+    DataTreeQuery& followingSiblings();
+
+    /**
+        Selects preceding siblings of current nodes.
+
+        This method finds all sibling nodes that come before the current selection
+        in document order (sibling nodes with lower indices).
+
+        @returns Reference to this query for method chaining
+
+        @code
+        // Find all buttons that come before the selected button  
+        auto prevButtons = DataTreeQuery::from(selectedButton)
+            .precedingSiblings()
+            .nodes();
+        @endcode
+    */
+    DataTreeQuery& precedingSiblings();
+
     //==============================================================================
     /**
         Filters nodes using a predicate function.
@@ -986,6 +1020,8 @@ private:
             Parent,
             Ancestors,
             Siblings,
+            FollowingSibling,
+            PrecedingSibling,
             Where,
             OfType,
             HasProperty,

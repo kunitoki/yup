@@ -228,13 +228,28 @@ private:
         }
         else if (token.type == Token::Type::Identifier)
         {
-            // Specific node type
-            if (descendants)
-                operations.emplace_back (QueryOperation::DescendantsOfType, token.value);
+            // Check for axis specifiers - these should NOT respect the descendants flag
+            // because axes operate on the current selection, not children/descendants
+            if (token.value == "following-sibling")
+            {
+                operations.emplace_back (QueryOperation::FollowingSibling);
+                ++currentToken;
+            }
+            else if (token.value == "preceding-sibling")
+            {
+                operations.emplace_back (QueryOperation::PrecedingSibling);
+                ++currentToken;
+            }
             else
-                operations.emplace_back (QueryOperation::ChildrenOfType, token.value);
+            {
+                // Specific node type
+                if (descendants)
+                    operations.emplace_back (QueryOperation::DescendantsOfType, token.value);
+                else
+                    operations.emplace_back (QueryOperation::ChildrenOfType, token.value);
 
-            ++currentToken;
+                ++currentToken;
+            }
         }
         else if (token.type == Token::Type::AtSign)
         {
@@ -269,6 +284,18 @@ private:
 
             operations.emplace_back (QueryOperation::Property, "text");
             return; // text() selection terminates node traversal
+        }
+        else if (token.type == Token::Type::Function && token.value == "following-sibling")
+        {
+            // following-sibling axis
+            operations.emplace_back (QueryOperation::FollowingSibling);
+            ++currentToken;
+        }
+        else if (token.type == Token::Type::Function && token.value == "preceding-sibling")
+        {
+            // preceding-sibling axis
+            operations.emplace_back (QueryOperation::PrecedingSibling);
+            ++currentToken;
         }
         else if (token.type == Token::Type::OpenBracket)
         {
@@ -787,7 +814,7 @@ private:
         int start = pos;
         String identifier;
 
-        while (pos < input.length() && (std::isalnum (input[pos]) || input[pos] == '_'))
+        while (pos < input.length() && (std::isalnum (input[pos]) || input[pos] == '_' || input[pos] == '-'))
             identifier += input[pos++];
 
         if (identifier == "and")
@@ -801,6 +828,8 @@ private:
 
         else if (identifier == "first" || identifier == "last" || identifier == "position" || identifier == "count" || identifier == "text")
             tokens.emplace_back (Token::Type::Function, identifier, start);
+        else if (identifier == "following-sibling" || identifier == "preceding-sibling")
+            tokens.emplace_back (Token::Type::Function, identifier, start); // Treat as Function for special handling
 
         else
             tokens.emplace_back (Token::Type::Identifier, identifier, start);
@@ -981,6 +1010,16 @@ DataTreeQuery& DataTreeQuery::ancestors()
 DataTreeQuery& DataTreeQuery::siblings()
 {
     return addOperation (QueryOperation (QueryOperation::Siblings));
+}
+
+DataTreeQuery& DataTreeQuery::followingSiblings()
+{
+    return addOperation (QueryOperation (QueryOperation::FollowingSibling));
+}
+
+DataTreeQuery& DataTreeQuery::precedingSiblings()
+{
+    return addOperation (QueryOperation (QueryOperation::PrecedingSibling));
 }
 
 DataTreeQuery& DataTreeQuery::ofType (const Identifier& type)
@@ -1241,6 +1280,70 @@ std::vector<DataTree> DataTreeQuery::applyOperation (const QueryOperation& op, c
                         auto sibling = parent.getChild (i);
                         if (sibling != node)
                             result.push_back (sibling);
+                    }
+                }
+            }
+
+            break;
+        }
+
+        case QueryOperation::FollowingSibling:
+        {
+            for (const auto& node : input)
+            {
+                auto parent = node.getParent();
+                if (parent.isValid())
+                {
+                    // Find current node's position
+                    int currentIndex = -1;
+                    for (int i = 0; i < parent.getNumChildren(); ++i)
+                    {
+                        if (parent.getChild (i) == node)
+                        {
+                            currentIndex = i;
+                            break;
+                        }
+                    }
+                    
+                    // Add all siblings that come after current node
+                    if (currentIndex != -1)
+                    {
+                        for (int i = currentIndex + 1; i < parent.getNumChildren(); ++i)
+                        {
+                            result.push_back (parent.getChild (i));
+                        }
+                    }
+                }
+            }
+
+            break;
+        }
+
+        case QueryOperation::PrecedingSibling:
+        {
+            for (const auto& node : input)
+            {
+                auto parent = node.getParent();
+                if (parent.isValid())
+                {
+                    // Find current node's position
+                    int currentIndex = -1;
+                    for (int i = 0; i < parent.getNumChildren(); ++i)
+                    {
+                        if (parent.getChild (i) == node)
+                        {
+                            currentIndex = i;
+                            break;
+                        }
+                    }
+                    
+                    // Add all siblings that come before current node
+                    if (currentIndex != -1)
+                    {
+                        for (int i = 0; i < currentIndex; ++i)
+                        {
+                            result.push_back (parent.getChild (i));
+                        }
                     }
                 }
             }
