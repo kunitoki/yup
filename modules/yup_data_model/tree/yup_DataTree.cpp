@@ -1348,12 +1348,16 @@ void DataTree::Transaction::commit()
     if (! active || dataTree.object == nullptr)
         return;
 
-    // Apply all changes
-    applyChanges();
-
-    // Create undo action if we have an undo manager
     if (undoManager != nullptr && (! propertyChanges.empty() || ! childChanges.empty()))
+    {
+        // Use undo manager to perform the transaction action
         undoManager->perform (new TransactionAction (dataTree, description, originalProperties, originalChildren, propertyChanges, childChanges));
+    }
+    else
+    {
+        // No undo manager - apply changes directly
+        applyChanges();
+    }
 
     active = false;
 }
@@ -1533,7 +1537,7 @@ void DataTree::Transaction::applyChanges()
     if (dataTree.object == nullptr)
         return;
 
-    // Apply property changes directly to avoid undo system complications
+    // Apply property changes directly
     for (const auto& change : propertyChanges)
     {
         switch (change.type)
@@ -1559,7 +1563,7 @@ void DataTree::Transaction::applyChanges()
         }
     }
 
-    // Apply child changes directly to avoid undo system complications
+    // Apply child changes directly
     for (const auto& change : childChanges)
     {
         switch (change.type)
