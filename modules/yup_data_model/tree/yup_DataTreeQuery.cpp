@@ -255,8 +255,7 @@ private:
         {
             // Property selection
             ++currentToken;
-            if (currentToken < static_cast<int> (tokens.size()) && 
-                (tokens[currentToken].type == Token::Type::Identifier || tokens[currentToken].type == Token::Type::Function))
+            if (currentToken < static_cast<int> (tokens.size()) && (tokens[currentToken].type == Token::Type::Identifier || tokens[currentToken].type == Token::Type::Function))
             {
                 operations.emplace_back (QueryOperation::Property, tokens[currentToken].value);
                 ++currentToken;
@@ -451,8 +450,7 @@ private:
         else if (token.type == Token::Type::AtSign)
         {
             ++currentToken;
-            if (currentToken < static_cast<int> (tokens.size()) && 
-                (tokens[currentToken].type == Token::Type::Identifier || tokens[currentToken].type == Token::Type::Function))
+            if (currentToken < static_cast<int> (tokens.size()) && (tokens[currentToken].type == Token::Type::Identifier || tokens[currentToken].type == Token::Type::Function))
             {
                 String propertyName = tokens[currentToken].value;
                 ++currentToken;
@@ -700,63 +698,63 @@ private:
                     break;
 
                 case '!':
+                {
+                    // Check for != with optional whitespace
+                    int nextPos = pos + 1;
+                    while (nextPos < input.length() && std::isspace (input[nextPos]))
+                        ++nextPos;
+
+                    if (nextPos < input.length() && input[nextPos] == '=')
                     {
-                        // Check for != with optional whitespace
-                        int nextPos = pos + 1;
-                        while (nextPos < input.length() && std::isspace (input[nextPos]))
-                            ++nextPos;
-                        
-                        if (nextPos < input.length() && input[nextPos] == '=')
-                        {
-                            tokens.emplace_back (Token::Type::NotEqual, tokenStart);
-                            pos = nextPos + 1; // Move past the '='
-                        }
-                        else
-                        {
-                            ++pos; // Skip invalid character
-                        }
+                        tokens.emplace_back (Token::Type::NotEqual, tokenStart);
+                        pos = nextPos + 1; // Move past the '='
                     }
-                    break;
+                    else
+                    {
+                        ++pos; // Skip invalid character
+                    }
+                }
+                break;
 
                 case '>':
+                {
+                    // Check for >= with optional whitespace
+                    int nextPos = pos + 1;
+                    while (nextPos < input.length() && std::isspace (input[nextPos]))
+                        ++nextPos;
+
+                    if (nextPos < input.length() && input[nextPos] == '=')
                     {
-                        // Check for >= with optional whitespace
-                        int nextPos = pos + 1;
-                        while (nextPos < input.length() && std::isspace (input[nextPos]))
-                            ++nextPos;
-                        
-                        if (nextPos < input.length() && input[nextPos] == '=')
-                        {
-                            tokens.emplace_back (Token::Type::GreaterEqual, tokenStart);
-                            pos = nextPos + 1; // Move past the '='
-                        }
-                        else
-                        {
-                            tokens.emplace_back (Token::Type::Greater, tokenStart);
-                            ++pos; // Just move past '>'
-                        }
+                        tokens.emplace_back (Token::Type::GreaterEqual, tokenStart);
+                        pos = nextPos + 1; // Move past the '='
                     }
-                    break;
+                    else
+                    {
+                        tokens.emplace_back (Token::Type::Greater, tokenStart);
+                        ++pos; // Just move past '>'
+                    }
+                }
+                break;
 
                 case '<':
+                {
+                    // Check for <= with optional whitespace
+                    int nextPos = pos + 1;
+                    while (nextPos < input.length() && std::isspace (input[nextPos]))
+                        ++nextPos;
+
+                    if (nextPos < input.length() && input[nextPos] == '=')
                     {
-                        // Check for <= with optional whitespace
-                        int nextPos = pos + 1;
-                        while (nextPos < input.length() && std::isspace (input[nextPos]))
-                            ++nextPos;
-                        
-                        if (nextPos < input.length() && input[nextPos] == '=')
-                        {
-                            tokens.emplace_back (Token::Type::LessEqual, tokenStart);
-                            pos = nextPos + 1; // Move past the '='
-                        }
-                        else
-                        {
-                            tokens.emplace_back (Token::Type::Less, tokenStart);
-                            ++pos; // Just move past '<'
-                        }
+                        tokens.emplace_back (Token::Type::LessEqual, tokenStart);
+                        pos = nextPos + 1; // Move past the '='
                     }
-                    break;
+                    else
+                    {
+                        tokens.emplace_back (Token::Type::Less, tokenStart);
+                        ++pos; // Just move past '<'
+                    }
+                }
+                break;
 
                 case '(':
                     tokens.emplace_back (Token::Type::OpenParen, tokenStart);
