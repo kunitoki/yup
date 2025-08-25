@@ -1583,4 +1583,159 @@ void DataTree::Transaction::applyChanges()
     }
 }
 
+//==============================================================================
+// ValidatedTransaction implementation
+
+DataTree::ValidatedTransaction::ValidatedTransaction(DataTree& tree, DataTreeSchema* schema, const String& description, UndoManager* undoManager)
+    : transaction(std::make_unique<Transaction>(tree.beginTransaction(description, undoManager)))
+    , schema(schema)
+    , nodeType(tree.getType())
+{
+}
+
+DataTree::ValidatedTransaction::ValidatedTransaction(ValidatedTransaction&& other) noexcept
+    : transaction(std::move(other.transaction))
+    , schema(std::move(other.schema))
+    , nodeType(other.nodeType)
+    , hasValidationErrors(other.hasValidationErrors)
+{
+}
+
+DataTree::ValidatedTransaction& DataTree::ValidatedTransaction::operator=(ValidatedTransaction&& other) noexcept
+{
+    if (this != &other)
+    {
+        transaction = std::move(other.transaction);
+        schema = std::move(other.schema);
+        nodeType = other.nodeType;
+        hasValidationErrors = other.hasValidationErrors;
+    }
+    return *this;
+}
+
+DataTree::ValidatedTransaction::~ValidatedTransaction()
+{
+    // Only auto-commit if there were no validation errors
+    if (transaction && transaction->isActive() && !hasValidationErrors)
+    {
+        transaction->commit();
+    }
+    else if (transaction && transaction->isActive())
+    {
+        transaction->abort();
+    }
+}
+
+Result DataTree::ValidatedTransaction::setProperty(const Identifier& name, const var& newValue)
+{
+    if (!transaction || !transaction->isActive() || !schema)
+        return Result::fail("Transaction is not active");
+        
+    auto validationResult = schema->validatePropertyValue(nodeType, name, newValue);
+    if (validationResult.failed())
+    {
+        hasValidationErrors = true;
+        return validationResult;
+    }
+    
+    transaction->setProperty(name, newValue);
+    return Result::ok();
+}
+
+Result DataTree::ValidatedTransaction::removeProperty(const Identifier& name)
+{
+    if (!transaction || !transaction->isActive() || !schema)
+        return Result::fail("Transaction is not active");
+        
+    // Check if property is required
+    auto propInfo = schema->getPropertyInfo(nodeType, name);
+    if (propInfo.required)
+    {
+        hasValidationErrors = true;
+        return Result::fail("Cannot remove required property '" + name.toString() + "'");
+    }
+    
+    transaction->removeProperty(name);
+    return Result::ok();
+}
+
+Result DataTree::ValidatedTransaction::addChild(const DataTree& child, int index)
+{
+    if (!transaction || !transaction->isActive() || !schema)
+        return Result::fail("Transaction is not active");
+        
+    if (!child.isValid())
+        return Result::fail("Cannot add invalid child");
+        
+    // TODO: Get current child count from the transaction's target tree
+    auto validationResult = schema->validateChildAddition(nodeType, child.getType(), 0);
+    if (validationResult.failed())
+    {
+        hasValidationErrors = true;
+        return validationResult;
+    }
+    
+    transaction->addChild(child, index);
+    return Result::ok();
+}
+
+ResultValue<DataTree> DataTree::ValidatedTransaction::createAndAddChild(const Identifier& childType, int index)
+{
+    if (!transaction || !transaction->isActive() || !schema)
+        return ResultValue<DataTree>::fail("Transaction is not active");
+        
+    DataTree child = schema->createChildNode(nodeType, childType);
+    if (!child.isValid())
+        return ResultValue<DataTree>::fail("Could not create child of type '" + childType.toString() + "'");
+        
+    auto addResult = addChild(child, index);
+    if (addResult.failed())
+        return ResultValue<DataTree>::fail(addResult.getErrorMessage());
+        
+    return ResultValue<DataTree>::ok (child);
+}
+
+Result DataTree::ValidatedTransaction::removeChild(const DataTree& child)
+{
+    if (!transaction || !transaction->isActive() || !schema)
+        return Result::fail("Transaction is not active");
+        
+    // TODO: Check minimum child count constraints
+    
+    transaction->removeChild(child);
+    return Result::ok();
+}
+
+Result DataTree::ValidatedTransaction::commit()
+{
+    if (!transaction || !transaction->isActive())
+        return Result::fail("Transaction is not active");
+        
+    if (hasValidationErrors)
+        return Result::fail("Cannot commit transaction with validation errors");
+        
+    transaction->commit();
+    return Result::ok();
+}
+
+void DataTree::ValidatedTransaction::abort()
+{
+    if (transaction && transaction->isActive())
+    {
+        transaction->abort();
+        hasValidationErrors = false; // Reset error state
+    }
+}
+
+bool DataTree::ValidatedTransaction::isActive() const
+{
+    return transaction && transaction->isActive();
+}
+
+DataTree::Transaction& DataTree::ValidatedTransaction::getTransaction()
+{
+    jassert(transaction != nullptr);
+    return *transaction;
+}
+
 } // namespace yup

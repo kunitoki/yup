@@ -23,6 +23,10 @@ namespace yup
 {
 
 //==============================================================================
+// Forward declarations
+class DataTreeSchema;
+
+//==============================================================================
 /**
     A hierarchical data structure for storing properties and child nodes with transactional support.
 
@@ -336,53 +340,6 @@ public:
 
     //==============================================================================
     /**
-        Calls a function for each direct child of this DataTree.
-
-        The callback can return void or bool. If it returns bool and returns true,
-        the iteration stops early.
-
-        @param callback Function to call for each child: (const DataTree&) -> void or bool
-
-        @code
-        tree.forEachChild([](const DataTree& child) {
-            std::cout << child.getType().toString() << std::endl;
-        });
-
-        // Early termination
-        tree.forEachChild([](const DataTree& child) {
-            if (child.getType() == "target")
-                return true; // Stop iteration
-            return false;    // Continue
-        });
-        @endcode
-
-        @see forEachDescendant(), findChild()
-    */
-    template<typename Callback>
-    void forEachChild (Callback callback) const;
-
-    /**
-        Calls a function for each descendant of this DataTree using depth-first traversal.
-
-        This visits all nodes in the subtree rooted at this DataTree, excluding
-        this DataTree itself. The callback can return void or bool for early termination.
-
-        @param callback Function to call for each descendant: (const DataTree&) -> void or bool
-
-        @code
-        tree.forEachDescendant([](const DataTree& descendant) {
-            if (descendant.hasProperty("enabled"))
-                descendant.getProperty("enabled", false);
-        });
-        @endcode
-
-        @see forEachChild(), findDescendant()
-    */
-    template<typename Callback>
-    void forEachDescendant (Callback callback) const;
-    
-    //==============================================================================
-    /**
         Iterator class for range-based for loop support over child DataTrees.
         
         This provides standard C++ iterator interface for iterating over direct children
@@ -439,6 +396,54 @@ public:
     */
     Iterator end() const noexcept { return Iterator (this, getNumChildren()); }
 
+    //==============================================================================
+    /**
+        Calls a function for each direct child of this DataTree.
+
+        The callback can return void or bool. If it returns bool and returns true,
+        the iteration stops early.
+
+        @param callback Function to call for each child: (const DataTree&) -> void or bool
+
+        @code
+        tree.forEachChild([](const DataTree& child) {
+            std::cout << child.getType().toString() << std::endl;
+        });
+
+        // Early termination
+        tree.forEachChild([](const DataTree& child) {
+            if (child.getType() == "target")
+                return true; // Stop iteration
+            return false;    // Continue
+        });
+        @endcode
+
+        @see forEachDescendant(), findChild()
+    */
+    template<typename Callback>
+    void forEachChild (Callback callback) const;
+
+    /**
+        Calls a function for each descendant of this DataTree using depth-first traversal.
+
+        This visits all nodes in the subtree rooted at this DataTree, excluding
+        this DataTree itself. The callback can return void or bool for early termination.
+
+        @param callback Function to call for each descendant: (const DataTree&) -> void or bool
+
+        @code
+        tree.forEachDescendant([](const DataTree& descendant) {
+            if (descendant.hasProperty("enabled"))
+                descendant.getProperty("enabled", false);
+        });
+        @endcode
+
+        @see forEachChild(), findDescendant()
+    */
+    template<typename Callback>
+    void forEachDescendant (Callback callback) const;
+
+    //==============================================================================
     /**
         Finds all direct children matching a predicate and adds them to the results vector.
 
@@ -954,6 +959,137 @@ public:
         YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Transaction)
     };
 
+    //==============================================================================
+    /**
+        A validated transaction that enforces schema constraints during mutations.
+        
+        This transaction wrapper validates all property changes and child additions
+        against a DataTreeSchema before applying them. Invalid operations are rejected
+        with detailed error messages.
+        
+        @code
+        DataTreeSchema schema = DataTreeSchema::fromJsonSchema(schemaJson);
+        auto validatedTransaction = tree.beginTransaction(schema, "Update settings");
+        
+        // This will validate that "fontSize" accepts numbers and is within range
+        auto result = validatedTransaction.setProperty("fontSize", 14);
+        if (result.failed())
+            DBG("Invalid fontSize: " << result.getErrorMessage());
+        
+        // Auto-commits if all operations were valid
+        @endcode
+    */
+    class YUP_API ValidatedTransaction
+    {
+    public:
+        /**
+            Creates a validated transaction for the specified DataTree.
+        */
+        ValidatedTransaction(DataTree& tree, DataTreeSchema* schema,
+                             const String& description, UndoManager* undoManager = nullptr);
+
+        /**
+            Move constructor - transfers ownership of the transaction.
+        */
+        ValidatedTransaction(ValidatedTransaction&& other) noexcept;
+        
+        /**
+            Move assignment - transfers ownership of the transaction.
+        */
+        ValidatedTransaction& operator=(ValidatedTransaction&& other) noexcept;
+        
+        /**
+            Destructor - commits the transaction if still active and valid.
+        */
+        ~ValidatedTransaction();
+        
+        /**
+            Sets a property value with schema validation.
+            
+            @param name The property name
+            @param newValue The new value to set
+            @return Result indicating success or validation failure
+        */
+        yup::Result setProperty(const Identifier& name, const var& newValue);
+        
+        /**
+            Removes a property with schema validation.
+            
+            Checks if the property is required and prevents removal if so.
+            
+            @param name The property name to remove
+            @return Result indicating success or validation failure
+        */
+        yup::Result removeProperty(const Identifier& name);
+        
+        /**
+            Adds a child node with schema validation.
+            
+            Validates child type, count constraints, and compatibility.
+            
+            @param child The child DataTree to add
+            @param index Position to insert at, or -1 to append
+            @return Result indicating success or validation failure
+        */
+        yup::Result addChild(const DataTree& child, int index = -1);
+        
+        /**
+            Creates and adds a new child node of the specified type.
+            
+            Uses the schema to create a properly initialized child with defaults.
+            
+            @param childType The type of child to create and add
+            @param index Position to insert at, or -1 to append
+            @return ResultValue containing the created child, or error on failure
+        */
+        yup::ResultValue<DataTree> createAndAddChild(const Identifier& childType, int index = -1);
+        
+        /**
+            Removes a child node with schema validation.
+            
+            Checks minimum child count constraints.
+            
+            @param child The child to remove
+            @return Result indicating success or validation failure
+        */
+        yup::Result removeChild(const DataTree& child);
+        
+        /**
+            Commits all validated changes to the DataTree.
+            
+            Only commits if all operations were valid.
+            
+            @return Result indicating success or failure of the commit
+        */
+        yup::Result commit();
+        
+        /**
+            Aborts the transaction, discarding all batched changes.
+        */
+        void abort();
+        
+        /**
+            Checks if this transaction is still active.
+        */
+        bool isActive() const;
+        
+        /**
+            Gets the underlying DataTree transaction.
+            
+            Advanced users can access the raw transaction for operations that
+            don't need validation, but this bypasses schema enforcement.
+        */
+        Transaction& getTransaction();
+        
+    private:
+        std::unique_ptr<Transaction> transaction;
+        ReferenceCountedObjectPtr<DataTreeSchema> schema;
+        Identifier nodeType;
+        bool hasValidationErrors = false;
+        
+        YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ValidatedTransaction)
+    };
+
     /**
         Creates a new transaction for modifying this DataTree.
 
@@ -983,6 +1119,33 @@ public:
     Transaction beginTransaction (const String& description = "DataTree Changes", UndoManager* undoManager = nullptr)
     {
         return Transaction (*this, description, undoManager);
+    }
+
+    /**
+        Creates a validated transaction for modifying this DataTree with schema enforcement.
+        
+        This overload creates a ValidatedTransaction that validates all operations against
+        the provided schema before applying them to the DataTree.
+        
+        @param schema The DataTreeSchema to validate against (reference-counted)
+        @param description Human-readable description of the changes (used for undo history)
+        @param undoManager Optional UndoManager for undo/redo functionality
+        @return A ValidatedTransaction that enforces schema constraints
+        
+        @code
+        auto schema = DataTreeSchema::fromJsonSchema(schemaJson);
+        auto transaction = tree.beginTransaction(schema, "Update settings");
+        transaction.setProperty("theme", "dark"); // Validates against schema
+        // Auto-commits when transaction goes out of scope if all validations pass
+        @endcode
+        
+        @see ValidatedTransaction, DataTreeSchema
+    */
+    ValidatedTransaction beginTransaction(DataTreeSchema* schema,
+                                          const String& description = "DataTree Changes",
+                                          UndoManager* undoManager = nullptr)
+    {
+        return ValidatedTransaction(*this, schema, description, undoManager);
     }
 
 private:
