@@ -23,16 +23,6 @@ namespace yup
 {
 
 //==============================================================================
-// Forward declaration for VarHasher
-struct VarHasher
-{
-    std::size_t operator() (const var& v) const
-    {
-        return std::hash<String>() (v.toString());
-    }
-};
-
-//==============================================================================
 /**
     A powerful query system for extracting data from DataTree hierarchies using both fluent API and XPath-like syntax.
 
@@ -111,6 +101,15 @@ struct VarHasher
 */
 class YUP_API DataTreeQuery
 {
+    //==============================================================================
+    struct VarHasher
+    {
+        std::size_t operator() (const var& v) const
+        {
+            return std::hash<String>() (v.toString());
+        }
+    };
+
 public:
     //==============================================================================
     /**
@@ -428,6 +427,9 @@ private:
         var parameter2;
         std::function<bool (const DataTree&)> predicate;
         std::function<var (const DataTree&)> transformer;
+        
+        // For XPath predicates that need position information
+        std::shared_ptr<void> xpathPredicate;
 
         QueryOperation (Type t)
             : type (t)
@@ -539,7 +541,7 @@ DataTreeQuery& DataTreeQuery::orderBy (KeySelector keySelector)
 }
 
 template <typename KeySelector>
-std::unordered_map<var, std::vector<DataTree>, VarHasher> DataTreeQuery::groupBy (KeySelector keySelector) const
+std::unordered_map<var, std::vector<DataTree>, DataTreeQuery::VarHasher> DataTreeQuery::groupBy (KeySelector keySelector) const
 {
     auto results = nodes();
     std::unordered_map<var, std::vector<DataTree>, VarHasher> groups;

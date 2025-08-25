@@ -917,11 +917,11 @@ TEST_F (DataTreeQueryTests, XPathInvalidSyntax)
 
 TEST_F (DataTreeQueryTests, XPathComplexExpressions)
 {
-    // Complex boolean expressions
+    // Complex boolean expressions with AND and comparison operators
     auto result = DataTreeQuery::xpath (testTree, "//Button[@enabled='true' and @width > 50]").nodes();
     EXPECT_GT (static_cast<int> (result.size()), 0);
 
-    // OR expressions
+    // OR expressions with comparison operators
     auto result2 = DataTreeQuery::xpath (testTree, "//Button[@width > 100 or @enabled='false']").nodes();
     EXPECT_GT (static_cast<int> (result2.size()), 0);
 
