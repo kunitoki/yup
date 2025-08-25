@@ -438,95 +438,8 @@ private:
                 child.object->parent = dataTree.object;
         }
 
-        // Apply property changes
-        for (const auto& change : propertyChanges)
-        {
-            switch (change.type)
-            {
-                case DataTree::Transaction::PropertyChange::Set:
-                    dataTree.object->properties.set (change.name, change.newValue);
-                    dataTree.object->sendPropertyChangeMessage (change.name);
-                    break;
-
-                case DataTree::Transaction::PropertyChange::Remove:
-                    dataTree.object->properties.remove (change.name);
-                    dataTree.object->sendPropertyChangeMessage (change.name);
-                    break;
-
-                case DataTree::Transaction::PropertyChange::RemoveAll:
-                {
-                    auto oldProperties = dataTree.object->properties;
-                    dataTree.object->properties.clear();
-                    for (int i = 0; i < oldProperties.size(); ++i)
-                        dataTree.object->sendPropertyChangeMessage (oldProperties.getName (i));
-                }
-                break;
-            }
-        }
-
-        // Apply child changes
-        for (const auto& change : childChangeList)
-        {
-            switch (change.type)
-            {
-                case DataTree::Transaction::ChildChange::Add:
-                {
-                    // Remove from previous parent if any
-                    if (auto oldParentObj = change.child.object->parent.lock())
-                    {
-                        DataTree oldParent (oldParentObj);
-                        oldParent.removeChild (change.child, nullptr);
-                    }
-
-                    const int numChildren = static_cast<int> (dataTree.object->children.size());
-                    const int actualIndex = (change.newIndex < 0 || change.newIndex > numChildren) ? numChildren : change.newIndex;
-
-                    dataTree.object->children.insert (dataTree.object->children.begin() + actualIndex, change.child);
-                    change.child.object->parent = dataTree.object;
-                    dataTree.object->sendChildAddedMessage (change.child);
-                }
-                break;
-
-                case DataTree::Transaction::ChildChange::Remove:
-                {
-                    // Resolve child by index at redo time
-                    if (change.oldIndex >= 0 && change.oldIndex < static_cast<int> (dataTree.object->children.size()))
-                    {
-                        auto child = dataTree.object->children[static_cast<size_t> (change.oldIndex)];
-                        dataTree.object->children.erase (dataTree.object->children.begin() + change.oldIndex);
-                        child.object->parent.reset();
-                        dataTree.object->sendChildRemovedMessage (child, change.oldIndex);
-                    }
-                }
-                break;
-
-                case DataTree::Transaction::ChildChange::RemoveAll:
-                {
-                    auto oldChildren = dataTree.object->children;
-                    dataTree.object->children.clear();
-                    for (size_t i = 0; i < oldChildren.size(); ++i)
-                    {
-                        oldChildren[i].object->parent.reset();
-                        dataTree.object->sendChildRemovedMessage (oldChildren[i], static_cast<int> (i));
-                    }
-                }
-                break;
-
-                case DataTree::Transaction::ChildChange::Move:
-                {
-                    // Resolve child by current index at redo time
-                    const int numChildren = static_cast<int> (dataTree.object->children.size());
-                    if (change.oldIndex >= 0 && change.oldIndex < numChildren && change.newIndex >= 0 && change.newIndex < numChildren)
-                    {
-                        auto child = dataTree.object->children[static_cast<size_t> (change.oldIndex)];
-                        dataTree.object->children.erase (dataTree.object->children.begin() + change.oldIndex);
-                        dataTree.object->children.insert (dataTree.object->children.begin() + change.newIndex, child);
-                        dataTree.object->sendChildMovedMessage (child, change.oldIndex, change.newIndex);
-                    }
-                }
-                break;
-            }
-        }
+        // Apply all changes using the shared implementation
+        DataTree::Transaction::applyChangesToTree (dataTree, originalProperties, originalChildren, propertyChanges, childChangeList);
     }
 
     DataTree dataTree;
@@ -1532,9 +1445,13 @@ void DataTree::Transaction::captureInitialState()
     originalChildren = dataTree.object->children;
 }
 
-void DataTree::Transaction::applyChanges()
+void DataTree::Transaction::applyChangesToTree (DataTree& tree,
+                                                 const NamedValueSet& originalProperties,
+                                                 const std::vector<DataTree>& originalChildren,
+                                                 const std::vector<PropertyChange>& propertyChanges,
+                                                 const std::vector<ChildChange>& childChanges)
 {
-    if (dataTree.object == nullptr)
+    if (tree.object == nullptr)
         return;
 
     // Apply property changes directly
@@ -1543,21 +1460,21 @@ void DataTree::Transaction::applyChanges()
         switch (change.type)
         {
             case PropertyChange::Set:
-                dataTree.object->properties.set (change.name, change.newValue);
-                dataTree.object->sendPropertyChangeMessage (change.name);
+                tree.object->properties.set (change.name, change.newValue);
+                tree.object->sendPropertyChangeMessage (change.name);
                 break;
 
             case PropertyChange::Remove:
-                dataTree.object->properties.remove (change.name);
-                dataTree.object->sendPropertyChangeMessage (change.name);
+                tree.object->properties.remove (change.name);
+                tree.object->sendPropertyChangeMessage (change.name);
                 break;
 
             case PropertyChange::RemoveAll:
             {
-                auto oldProperties = dataTree.object->properties;
-                dataTree.object->properties.clear();
+                auto oldProperties = tree.object->properties;
+                tree.object->properties.clear();
                 for (int i = 0; i < oldProperties.size(); ++i)
-                    dataTree.object->sendPropertyChangeMessage (oldProperties.getName (i));
+                    tree.object->sendPropertyChangeMessage (oldProperties.getName (i));
             }
             break;
         }
@@ -1577,36 +1494,36 @@ void DataTree::Transaction::applyChanges()
                     oldParent.removeChild (change.child, nullptr);
                 }
 
-                const int numChildren = static_cast<int> (dataTree.object->children.size());
+                const int numChildren = static_cast<int> (tree.object->children.size());
                 const int actualIndex = (change.newIndex < 0 || change.newIndex > numChildren) ? numChildren : change.newIndex;
 
-                dataTree.object->children.insert (dataTree.object->children.begin() + actualIndex, change.child);
-                change.child.object->parent = dataTree.object;
-                dataTree.object->sendChildAddedMessage (change.child);
+                tree.object->children.insert (tree.object->children.begin() + actualIndex, change.child);
+                change.child.object->parent = tree.object;
+                tree.object->sendChildAddedMessage (change.child);
             }
             break;
 
             case ChildChange::Remove:
             {
                 // Resolve child by index at commit time
-                if (change.oldIndex >= 0 && change.oldIndex < static_cast<int> (dataTree.object->children.size()))
+                if (change.oldIndex >= 0 && change.oldIndex < static_cast<int> (tree.object->children.size()))
                 {
-                    auto child = dataTree.object->children[static_cast<size_t> (change.oldIndex)];
-                    dataTree.object->children.erase (dataTree.object->children.begin() + change.oldIndex);
+                    auto child = tree.object->children[static_cast<size_t> (change.oldIndex)];
+                    tree.object->children.erase (tree.object->children.begin() + change.oldIndex);
                     child.object->parent.reset();
-                    dataTree.object->sendChildRemovedMessage (child, change.oldIndex);
+                    tree.object->sendChildRemovedMessage (child, change.oldIndex);
                 }
             }
             break;
 
             case ChildChange::RemoveAll:
             {
-                auto oldChildren = dataTree.object->children;
-                dataTree.object->children.clear();
+                auto oldChildren = tree.object->children;
+                tree.object->children.clear();
                 for (size_t i = 0; i < oldChildren.size(); ++i)
                 {
                     oldChildren[i].object->parent.reset();
-                    dataTree.object->sendChildRemovedMessage (oldChildren[i], static_cast<int> (i));
+                    tree.object->sendChildRemovedMessage (oldChildren[i], static_cast<int> (i));
                 }
             }
             break;
@@ -1614,18 +1531,23 @@ void DataTree::Transaction::applyChanges()
             case ChildChange::Move:
             {
                 // Resolve child by current index at commit time
-                const int numChildren = static_cast<int> (dataTree.object->children.size());
+                const int numChildren = static_cast<int> (tree.object->children.size());
                 if (change.oldIndex >= 0 && change.oldIndex < numChildren && change.newIndex >= 0 && change.newIndex < numChildren)
                 {
-                    auto child = dataTree.object->children[static_cast<size_t> (change.oldIndex)];
-                    dataTree.object->children.erase (dataTree.object->children.begin() + change.oldIndex);
-                    dataTree.object->children.insert (dataTree.object->children.begin() + change.newIndex, child);
-                    dataTree.object->sendChildMovedMessage (child, change.oldIndex, change.newIndex);
+                    auto child = tree.object->children[static_cast<size_t> (change.oldIndex)];
+                    tree.object->children.erase (tree.object->children.begin() + change.oldIndex);
+                    tree.object->children.insert (tree.object->children.begin() + change.newIndex, child);
+                    tree.object->sendChildMovedMessage (child, change.oldIndex, change.newIndex);
                 }
             }
             break;
         }
     }
+}
+
+void DataTree::Transaction::applyChanges()
+{
+    applyChangesToTree (dataTree, originalProperties, originalChildren, propertyChanges, childChanges);
 }
 
 //==============================================================================

@@ -966,6 +966,13 @@ public:
         void captureInitialState();
         void applyChanges();
         void rollbackChanges();
+        
+        // Static helper for applying changes - used by both Transaction and TransactionAction
+        static void applyChangesToTree (DataTree& tree,
+                                        const NamedValueSet& originalProperties,
+                                        const std::vector<DataTree>& originalChildren,
+                                        const std::vector<PropertyChange>& propertyChanges,
+                                        const std::vector<ChildChange>& childChanges);
 
         DataTree& dataTree;
         UndoManager* undoManager;
