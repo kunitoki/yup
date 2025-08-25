@@ -169,56 +169,68 @@ Before diving into query examples, let's establish a realistic DataTree structur
 DataTree appRoot("Application");
 {
     auto tx = appRoot.beginTransaction("Create sample structure");
-    
-    // Main window
-    DataTree mainWindow("Window");
-    auto windowTx = mainWindow.beginTransaction("Setup window");
-    windowTx.setProperty("title", "My Application");
-    windowTx.setProperty("width", 800);
-    windowTx.setProperty("height", 600);
-    windowTx.setProperty("visible", true);
-    
-    // Add panels to main window
-    DataTree leftPanel("Panel");
-    auto leftTx = leftPanel.beginTransaction("Setup left panel");
-    leftTx.setProperty("name", "LeftPanel");
-    leftTx.setProperty("width", 200);
-    leftTx.setProperty("docked", true);
-    
-    DataTree rightPanel("Panel");
-    auto rightTx = rightPanel.beginTransaction("Setup right panel");
-    rightTx.setProperty("name", "RightPanel");
-    rightTx.setProperty("width", 150);
-    rightTx.setProperty("docked", false);
-    
-    // Add buttons to left panel
+
+    // Add buttons
     DataTree saveButton("Button");
-    auto saveTx = saveButton.beginTransaction("Setup save button");
-    saveTx.setProperty("text", "Save");
-    saveTx.setProperty("enabled", true);
-    saveTx.setProperty("x", 10);
-    saveTx.setProperty("y", 20);
-    
+    {
+        auto saveTx = saveButton.beginTransaction("Setup save button");
+        saveTx.setProperty("text", "Save");
+        saveTx.setProperty("enabled", true);
+        saveTx.setProperty("x", 10);
+        saveTx.setProperty("y", 20);
+    }
+
     DataTree loadButton("Button");
-    auto loadTx = loadButton.beginTransaction("Setup load button");
-    loadTx.setProperty("text", "Load");
-    loadTx.setProperty("enabled", false);
-    loadTx.setProperty("x", 10);
-    loadTx.setProperty("y", 60);
-    
-    // Build hierarchy
-    leftTx.addChild(saveButton);
-    leftTx.addChild(loadButton);
-    windowTx.addChild(leftPanel);
-    windowTx.addChild(rightPanel);
+    {
+        auto loadTx = loadButton.beginTransaction("Setup load button");
+        loadTx.setProperty("text", "Load");
+        loadTx.setProperty("enabled", false);
+        loadTx.setProperty("x", 10);
+        loadTx.setProperty("y", 60);
+    }
+
+    // Add panels
+    DataTree leftPanel("Panel");
+    {
+        auto leftTx = leftPanel.beginTransaction("Setup left panel");
+        leftTx.setProperty("name", "LeftPanel");
+        leftTx.setProperty("width", 200);
+        leftTx.setProperty("docked", true);
+        leftTx.addChild(saveButton);
+        leftTx.addChild(loadButton);
+    }
+
+    DataTree rightPanel("Panel");
+    {
+        auto rightTx = rightPanel.beginTransaction("Setup right panel");
+        rightTx.setProperty("name", "RightPanel");
+        rightTx.setProperty("width", 150);
+        rightTx.setProperty("docked", false);
+    }
+
+    // Add main window
+    DataTree mainWindow("Window");
+    {
+        auto windowTx = mainWindow.beginTransaction("Setup window");
+        windowTx.setProperty("title", "My Application");
+        windowTx.setProperty("width", 800);
+        windowTx.setProperty("height", 600);
+        windowTx.setProperty("visible", true);
+        windowTx.addChild(leftPanel);
+        windowTx.addChild(rightPanel);
+    }
+
     tx.addChild(mainWindow);
-    
+
     // Add settings dialog
     DataTree settingsDialog("Dialog");
-    auto dialogTx = settingsDialog.beginTransaction("Setup dialog");
-    dialogTx.setProperty("title", "Settings");
-    dialogTx.setProperty("modal", true);
-    dialogTx.setProperty("visible", false);
+    {
+        auto dialogTx = settingsDialog.beginTransaction("Setup dialog");
+        dialogTx.setProperty("title", "Settings");
+        dialogTx.setProperty("modal", true);
+        dialogTx.setProperty("visible", false);
+    }
+
     tx.addChild(settingsDialog);
 }
 ```
@@ -377,7 +389,7 @@ auto windowProps = DataTreeQuery::from(appRoot)
 auto buttonInfo = DataTreeQuery::from(appRoot)
     .descendants("Button")
     .select([](const DataTree& button) {
-        return button.getProperty("text").toString() + 
+        return button.getProperty("text").toString() +
                " (" + String(button.getProperty("enabled", false) ? "enabled" : "disabled") + ")";
     })
     .strings();
@@ -466,7 +478,7 @@ auto lastPanel = DataTreeQuery::xpath(appRoot, "//Panel[last()]").node();
 auto firstTwoButtons = DataTreeQuery::xpath(appRoot, "//Button[position() <= 2]").nodes();
 
 // Complex conditions
-auto modalDialogs = DataTreeQuery::xpath(appRoot, 
+auto modalDialogs = DataTreeQuery::xpath(appRoot,
     "//Dialog[@modal='true' and @visible='false']").nodes();
 
 // Text content access
@@ -492,7 +504,7 @@ Understanding the full XPath syntax available in DataTreeQuery helps you write m
 ```cpp
 // Axis and path expressions
 "//NodeType"           // All descendants of type NodeType
-"/NodeType"           // Direct children of type NodeType  
+"/NodeType"           // Direct children of type NodeType
 "*"                   // Any node type
 "."                   // Current node
 ".."                  // Parent node
@@ -508,6 +520,7 @@ Understanding the full XPath syntax available in DataTreeQuery helps you write m
 // Position predicates
 "[1]"                 // First child (1-indexed)
 "[2]"                 // Second child
+"[first()]"           // First child
 "[last()]"            // Last child
 "[position() > 2]"    // Position greater than 2
 
@@ -1084,10 +1097,12 @@ UIComponentList components(uiRoot);
     auto tx = uiRoot.beginTransaction("Add UI components");
 
     DataTree button("UIComponent");
-    auto buttonTx = button.beginTransaction("Setup button");
-    buttonTx.setProperty("name", "SubmitButton");
-    buttonTx.setProperty("x", 100.0f);
-    buttonTx.setProperty("y", 50.0f);
+    {
+        auto buttonTx = button.beginTransaction("Setup button");
+        buttonTx.setProperty("name", "SubmitButton");
+        buttonTx.setProperty("x", 100.0f);
+        buttonTx.setProperty("y", 50.0f);
+    }
 
     tx.addChild(button);
 }
@@ -1115,4 +1130,4 @@ EXPECT_EQ(200.0f, buttonObj->getX()); // CachedValue reflects change
 EXPECT_EQ(0, components.objects.size());
 ```
 
-This tutorial provides a solid foundation for using the YUP DataTree system effectively. The combination of DataTree, DataTreeSchema, CachedValue, and DataTreeObjectList provides a powerful, type-safe, and efficient way to manage hierarchical data in your applications.
+This tutorial provides a solid foundation for using the YUP DataTree system effectively. The combination of DataTree, DataTreeSchema, DataTreeQuery, DataTreeObjectList and CachedValue provides a powerful, type-safe, and efficient way to manage hierarchical data in your applications.

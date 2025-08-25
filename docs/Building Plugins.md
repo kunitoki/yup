@@ -76,7 +76,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.fillAll (getLookAndFeel().findColour (yup::ResizableWindow::backgroundColourId));
+        g.fillAll (findColour (yup::ResizableWindow::backgroundColourId));
     }
 
 private:
