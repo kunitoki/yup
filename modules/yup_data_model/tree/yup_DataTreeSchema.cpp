@@ -131,19 +131,19 @@ bool DataTreeSchema::loadFromJson (const var& schemaData)
     valid = false;
 
     if (! schemaData.isObject())
-        return;
+        return false;
 
     auto* schemaObj = schemaData.getDynamicObject();
     if (! schemaObj)
-        return;
+        return false;
 
     var nodeTypesVar = schemaObj->getProperty ("nodeTypes");
     if (! nodeTypesVar.isObject())
-        return;
+        return false;
 
     auto* nodeTypesObj = nodeTypesVar.getDynamicObject();
     if (! nodeTypesObj)
-        return;
+        return false;
 
     const auto& types = nodeTypesObj->getProperties();
     for (int i = 0; i < types.size(); ++i)
