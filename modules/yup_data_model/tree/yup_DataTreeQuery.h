@@ -1012,7 +1012,7 @@ private:
         var parameter2;
         std::function<bool (const DataTree&)> predicate;
         std::function<var (const DataTree&)> transformer;
-        
+
         // For XPath predicates that need position information
         std::shared_ptr<void> xpathPredicate;
 

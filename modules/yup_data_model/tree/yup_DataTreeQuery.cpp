@@ -84,19 +84,19 @@ struct DataTreeQuery::XPathParser
     {
         enum Type
         {
-            HasProperty,       // [@prop]
-            PropertyEquals,    // [@prop='value']
-            PropertyNotEquals, // [@prop!='value']
-            PropertyGreater,   // [@prop > value]
-            PropertyLess,      // [@prop < value]
+            HasProperty,          // [@prop]
+            PropertyEquals,       // [@prop='value']
+            PropertyNotEquals,    // [@prop!='value']
+            PropertyGreater,      // [@prop > value]
+            PropertyLess,         // [@prop < value]
             PropertyGreaterEqual, // [@prop >= value]
-            PropertyLessEqual, // [@prop <= value]
-            Position,          // [1], [2], etc.
-            First,             // [first()]
-            Last,              // [last()]
-            And,               // predicate1 and predicate2
-            Or,                // predicate1 or predicate2
-            Not                // not(predicate)
+            PropertyLessEqual,    // [@prop <= value]
+            Position,             // [1], [2], etc.
+            First,                // [first()]
+            Last,                 // [last()]
+            And,                  // predicate1 and predicate2
+            Or,                   // predicate1 or predicate2
+            Not                   // not(predicate)
         };
 
         Type type;
@@ -248,7 +248,7 @@ private:
             else
             {
                 // Error: @ not followed by identifier
-                parseResult = Result::fail("Expected property name after '@' in node test");
+                parseResult = Result::fail ("Expected property name after '@' in node test");
                 return;
             }
 
@@ -258,7 +258,7 @@ private:
         {
             // text() function - select text property
             ++currentToken;
-            
+
             // Skip parentheses for text()
             if (currentToken < static_cast<int> (tokens.size()) && tokens[currentToken].type == Token::Type::OpenParen)
             {
@@ -266,14 +266,14 @@ private:
                 if (currentToken < static_cast<int> (tokens.size()) && tokens[currentToken].type == Token::Type::CloseParen)
                     ++currentToken;
             }
-            
+
             operations.emplace_back (QueryOperation::Property, "text");
             return; // text() selection terminates node traversal
         }
         else if (token.type == Token::Type::OpenBracket)
         {
             // Unexpected bracket without node test
-            parseResult = Result::fail("Unexpected '[' without preceding node selector");
+            parseResult = Result::fail ("Unexpected '[' without preceding node selector");
             return;
         }
 
@@ -297,7 +297,7 @@ private:
         else
         {
             // Error parsing predicate expression
-            parseResult = Result::fail("Invalid predicate expression inside brackets");
+            parseResult = Result::fail ("Invalid predicate expression inside brackets");
             return;
         }
 
@@ -307,7 +307,7 @@ private:
         else
         {
             // Error: missing closing bracket
-            parseResult = Result::fail("Missing closing bracket ']' in predicate");
+            parseResult = Result::fail ("Missing closing bracket ']' in predicate");
             return;
         }
     }
@@ -430,9 +430,9 @@ private:
                     {
                         ++currentToken;
                         auto value = parseValue();
-                        if (!isValidValue(value))
+                        if (! isValidValue (value))
                         {
-                            parseResult = Result::fail("Expected value after comparison operator");
+                            parseResult = Result::fail ("Expected value after comparison operator");
                             return nullptr;
                         }
                         return std::make_unique<Predicate> (Predicate::PropertyEquals, propertyName, value);
@@ -441,9 +441,9 @@ private:
                     {
                         ++currentToken;
                         auto value = parseValue();
-                        if (!isValidValue(value))
+                        if (! isValidValue (value))
                         {
-                            parseResult = Result::fail("Expected value after comparison operator");
+                            parseResult = Result::fail ("Expected value after comparison operator");
                             return nullptr;
                         }
                         return std::make_unique<Predicate> (Predicate::PropertyNotEquals, propertyName, value);
@@ -452,9 +452,9 @@ private:
                     {
                         ++currentToken;
                         auto value = parseValue();
-                        if (!isValidValue(value))
+                        if (! isValidValue (value))
                         {
-                            parseResult = Result::fail("Expected value after comparison operator");
+                            parseResult = Result::fail ("Expected value after comparison operator");
                             return nullptr;
                         }
                         return std::make_unique<Predicate> (Predicate::PropertyGreater, propertyName, value);
@@ -463,9 +463,9 @@ private:
                     {
                         ++currentToken;
                         auto value = parseValue();
-                        if (!isValidValue(value))
+                        if (! isValidValue (value))
                         {
-                            parseResult = Result::fail("Expected value after comparison operator");
+                            parseResult = Result::fail ("Expected value after comparison operator");
                             return nullptr;
                         }
                         return std::make_unique<Predicate> (Predicate::PropertyLess, propertyName, value);
@@ -474,9 +474,9 @@ private:
                     {
                         ++currentToken;
                         auto value = parseValue();
-                        if (!isValidValue(value))
+                        if (! isValidValue (value))
                         {
-                            parseResult = Result::fail("Expected value after comparison operator");
+                            parseResult = Result::fail ("Expected value after comparison operator");
                             return nullptr;
                         }
                         return std::make_unique<Predicate> (Predicate::PropertyGreaterEqual, propertyName, value);
@@ -485,9 +485,9 @@ private:
                     {
                         ++currentToken;
                         auto value = parseValue();
-                        if (!isValidValue(value))
+                        if (! isValidValue (value))
                         {
-                            parseResult = Result::fail("Expected value after comparison operator");
+                            parseResult = Result::fail ("Expected value after comparison operator");
                             return nullptr;
                         }
                         return std::make_unique<Predicate> (Predicate::PropertyLessEqual, propertyName, value);
@@ -500,7 +500,7 @@ private:
             else
             {
                 // Error: @ not followed by identifier in predicate
-                parseResult = Result::fail("Expected property name after '@' in predicate");
+                parseResult = Result::fail ("Expected property name after '@' in predicate");
                 return nullptr;
             }
         }
@@ -542,13 +542,13 @@ private:
 
         return {};
     }
-    
-    bool isValidValue(const var& value) const
+
+    bool isValidValue (const var& value) const
     {
         // Check if the value is valid (not empty/null in meaningful way)
         // For XPath parsing, any parsed value should be valid
         // But if parseValue() was called and no value was found, it returns empty var
-        return !value.isVoid();
+        return ! value.isVoid();
     }
 
     void addPredicateOperation (std::vector<DataTreeQuery::QueryOperation>& operations,
@@ -557,13 +557,12 @@ private:
         QueryOperation op (QueryOperation::Where);
 
         auto predicatePtr = std::shared_ptr<Predicate> (std::move (predicate));
-        
+
         // Store the predicate for position-aware evaluation
         op.xpathPredicate = predicatePtr;
-        
+
         operations.push_back (std::move (op));
     }
-
 
 public:
     static bool evaluatePredicate (const Predicate& predicate, const DataTree& node, int position, int totalCount)
@@ -580,22 +579,22 @@ public:
                 return ! node.hasProperty (predicate.property) || node.getProperty (predicate.property) != predicate.value;
 
             case Predicate::PropertyGreater:
-                if (!node.hasProperty (predicate.property))
+                if (! node.hasProperty (predicate.property))
                     return false;
                 return node.getProperty (predicate.property) > predicate.value;
 
             case Predicate::PropertyLess:
-                if (!node.hasProperty (predicate.property))
+                if (! node.hasProperty (predicate.property))
                     return false;
                 return node.getProperty (predicate.property) < predicate.value;
 
             case Predicate::PropertyGreaterEqual:
-                if (!node.hasProperty (predicate.property))
+                if (! node.hasProperty (predicate.property))
                     return false;
                 return node.getProperty (predicate.property) >= predicate.value;
 
             case Predicate::PropertyLessEqual:
-                if (!node.hasProperty (predicate.property))
+                if (! node.hasProperty (predicate.property))
                     return false;
                 return node.getProperty (predicate.property) <= predicate.value;
 
@@ -768,7 +767,7 @@ private:
         else
         {
             // Error: Unmatched quote
-            parseResult = Result::fail("Unmatched quote in string literal");
+            parseResult = Result::fail ("Unmatched quote in string literal");
         }
     }
 
@@ -942,7 +941,7 @@ DataTreeQuery& DataTreeQuery::xpath (const String& query)
         rootNode = DataTree();
         return *this;
     }
-    
+
     for (auto& op : xpathOps)
         operations.push_back (std::move (op));
 
@@ -1113,7 +1112,6 @@ std::vector<DataTree> DataTreeQuery::executeOperations() const
     return result;
 }
 
-
 std::vector<DataTree> DataTreeQuery::applyOperation (const QueryOperation& op, const std::vector<DataTree>& input, const DataTree& rootNode)
 {
     std::vector<DataTree> result;
@@ -1157,21 +1155,21 @@ std::vector<DataTree> DataTreeQuery::applyOperation (const QueryOperation& op, c
         {
             for (const auto& node : input)
             {
-                std::function<void(const DataTree&)> traverse = [&](const DataTree& current)
+                std::function<void (const DataTree&)> traverse = [&] (const DataTree& current)
                 {
                     const int numChildren = current.getNumChildren();
                     for (int i = 0; i < numChildren; ++i)
                     {
-                        auto child = current.getChild(i);
+                        auto child = current.getChild (i);
                         if (child.isValid())
                         {
-                            result.push_back(child);
-                            traverse(child);  // Recursively process child
+                            result.push_back (child);
+                            traverse (child); // Recursively process child
                         }
                     }
                 };
 
-                traverse(node);
+                traverse (node);
             }
 
             break;
@@ -1180,25 +1178,25 @@ std::vector<DataTree> DataTreeQuery::applyOperation (const QueryOperation& op, c
         case QueryOperation::DescendantsOfType:
         {
             Identifier type (op.parameter1.toString());
-            
+
             for (const auto& node : input)
             {
-                std::function<void(const DataTree&)> traverse = [&](const DataTree& current)
+                std::function<void (const DataTree&)> traverse = [&] (const DataTree& current)
                 {
                     const int numChildren = current.getNumChildren();
                     for (int i = 0; i < numChildren; ++i)
                     {
-                        auto child = current.getChild(i);
+                        auto child = current.getChild (i);
                         if (child.isValid())
                         {
                             if (child.getType() == type)
-                                result.push_back(child);
-                            traverse(child);  // Recursively process child
+                                result.push_back (child);
+                            traverse (child); // Recursively process child
                         }
                     }
                 };
 
-                traverse(node);
+                traverse (node);
             }
 
             break;
@@ -1223,7 +1221,7 @@ std::vector<DataTree> DataTreeQuery::applyOperation (const QueryOperation& op, c
                 auto parent = node.getParent();
                 while (parent.isValid())
                 {
-                    result.push_back(parent);
+                    result.push_back (parent);
                     parent = parent.getParent();
                 }
             }
@@ -1255,12 +1253,12 @@ std::vector<DataTree> DataTreeQuery::applyOperation (const QueryOperation& op, c
             if (op.xpathPredicate)
             {
                 // XPath predicate with position information
-                auto predicate = std::static_pointer_cast<XPathParser::Predicate>(op.xpathPredicate);
-                int totalCount = static_cast<int>(input.size());
-                for (int i = 0; i < static_cast<int>(input.size()); ++i)
+                auto predicate = std::static_pointer_cast<XPathParser::Predicate> (op.xpathPredicate);
+                int totalCount = static_cast<int> (input.size());
+                for (int i = 0; i < static_cast<int> (input.size()); ++i)
                 {
                     const auto& node = input[i];
-                    if (XPathParser::evaluatePredicate(*predicate, node, i, totalCount))
+                    if (XPathParser::evaluatePredicate (*predicate, node, i, totalCount))
                         result.push_back (node);
                 }
             }

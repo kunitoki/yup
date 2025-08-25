@@ -999,10 +999,10 @@ bool DataTree::isAChildOf (const DataTree& possibleParent) const noexcept
     while (parent.isValid())
     {
         const void* parentPtr = parent.object.get();
-        if (visited.find(parentPtr) != visited.end())
+        if (visited.find (parentPtr) != visited.end())
             return false;
 
-        visited.insert(parentPtr);
+        visited.insert (parentPtr);
 
         if (parent == possibleParent)
             return true;
