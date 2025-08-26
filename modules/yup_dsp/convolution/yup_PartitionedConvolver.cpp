@@ -606,7 +606,6 @@ public:
         tempLayerHop_.clear();
 
         // Clear working buffers - will be allocated in prepare()
-        workingInput_.clear();
         workingOutput_.clear();
 
         isPrepared_ = false;
@@ -644,7 +643,6 @@ public:
         }
 
         // Allocate working buffers
-        workingInput_.resize (maxBlockSize);
         workingOutput_.resize (maxBlockSize);
 
         isPrepared_ = true;
@@ -752,11 +750,10 @@ private:
         if (! isPrepared_ || numSamples > maxBlockSize_)
             return;
 
-        FloatVectorOperations::copy (workingInput_.data(), input, numSamples);
         FloatVectorOperations::clear (workingOutput_.data(), numSamples);
 
         // Process direct FIR (no block size constraints)
-        directFIR_.process (workingInput_.data(), workingOutput_.data(), numSamples);
+        directFIR_.process (input, workingOutput_.data(), numSamples);
         if (layers_.empty())
         {
             FloatVectorOperations::add (output, workingOutput_.data(), numSamples);
@@ -764,7 +761,7 @@ private:
         }
 
         // Add input to main input staging buffer using circular buffer logic
-        writeToInputStaging (workingInput_.data(), numSamples);
+        writeToInputStaging (input, numSamples);
 
         std::size_t outputSamplesProduced = 0;
         while (getInputStagingAvailable() >= static_cast<std::size_t> (baseHopSize_))
@@ -870,7 +867,6 @@ private:
     std::vector<FFTLayer> layers_;
 
     // Working buffers
-    std::vector<float> workingInput_;
     std::vector<float> workingOutput_;
 
     // Input staging with circular buffer management
