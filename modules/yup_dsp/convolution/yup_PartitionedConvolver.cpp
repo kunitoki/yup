@@ -616,8 +616,9 @@ public:
     {
         maxBlockSize_ = maxBlockSize;
 
-        // Prepare main input staging
-        inputStaging_.resize (maxBlockSize);
+        // Prepare main input staging - needs to accumulate up to baseHopSize samples plus incoming block
+        const std::size_t inputStagingSize = static_cast<std::size_t> (baseHopSize_) + maxBlockSize;
+        inputStaging_.resize (inputStagingSize);
         outputStaging_.assign (static_cast<std::size_t> (baseHopSize_), 0.0f);
 
         // Prepare per-layer circular buffers with layer-specific sizing
@@ -777,6 +778,9 @@ private:
             for (std::size_t layerIndex = 0; layerIndex < layers_.size(); ++layerIndex)
             {
                 auto& layer = layers_[layerIndex];
+                if (! layer.hasImpulseResponse())
+                    continue;
+
                 const int layerHopSize = layer.getHopSize();
                 auto& inputBuffer = layerInputBuffers_[layerIndex];
                 auto& outputBuffer = layerOutputBuffers_[layerIndex];
@@ -791,8 +795,8 @@ private:
                     inputBuffer.read (tempLayerHop_.data(), static_cast<std::size_t> (layerHopSize));
                     FloatVectorOperations::clear (layerTempOutput_.data(), layerHopSize);
 
-                    if (layer.hasImpulseResponse())
-                        layer.processHop (tempLayerHop_.data(), layerTempOutput_.data());
+                    // Process hop
+                    layer.processHop (tempLayerHop_.data(), layerTempOutput_.data());
 
                     // Write output to layer's output buffer
                     outputBuffer.write (layerTempOutput_.data(), static_cast<std::size_t> (layerHopSize));
