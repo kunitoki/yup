@@ -969,7 +969,7 @@ public:
         void captureInitialState();
         void applyChanges();
         void rollbackChanges();
-        
+
         static void applyChangesToTree (DataTree& tree,
                                         const NamedValueSet& originalProperties,
                                         const std::vector<DataTree>& originalChildren,
