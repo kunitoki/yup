@@ -42,28 +42,28 @@ static void complexMultiplyAccumulate (const float* A, const float* B, float* Y,
     {
         const int idx = i * 2;
 
-        __m256 a = _mm256_loadu_ps(A + idx);
-        __m256 b = _mm256_loadu_ps(B + idx);
-        __m256 y = _mm256_loadu_ps(Y + idx);
+        __m256 a = _mm256_loadu_ps (A + idx);
+        __m256 b = _mm256_loadu_ps (B + idx);
+        __m256 y = _mm256_loadu_ps (Y + idx);
 
         // a = [ar0 ai0 ar1 ai1 ar2 ai2 ar3 ai3]
         // b = [br0 bi0 br1 bi1 br2 bi2 br3 bi3]
 
         // separate real and imag for a and b
-        const __m256 a_shuffled = _mm256_permute_ps(a, _MM_SHUFFLE(2, 3, 0, 1));
-        const __m256 b_shuffled = _mm256_permute_ps(b, _MM_SHUFFLE(2, 3, 0, 1));
+        const __m256 a_shuffled = _mm256_permute_ps (a, _MM_SHUFFLE (2, 3, 0, 1));
+        const __m256 b_shuffled = _mm256_permute_ps (b, _MM_SHUFFLE (2, 3, 0, 1));
 
         // real = ar*br - ai*bi
-        __m256 realPart = _mm256_fmsub_ps(a, b, _mm256_mul_ps(a_shuffled, b_shuffled));
+        __m256 realPart = _mm256_fmsub_ps (a, b, _mm256_mul_ps (a_shuffled, b_shuffled));
 
         // imag = ar*bi + ai*br
-        __m256 imagPart = _mm256_fmadd_ps(a, b_shuffled, _mm256_mul_ps(a_shuffled, b));
+        __m256 imagPart = _mm256_fmadd_ps (a, b_shuffled, _mm256_mul_ps (a_shuffled, b));
 
         // interleave real/imag back
-        const __m256 interleaved = _mm256_blend_ps(realPart, imagPart, 0b10101010);
+        const __m256 interleaved = _mm256_blend_ps (realPart, imagPart, 0b10101010);
 
-        y = _mm256_add_ps(y, interleaved);
-        _mm256_storeu_ps(Y + idx, y);
+        y = _mm256_add_ps (y, interleaved);
+        _mm256_storeu_ps (Y + idx, y);
     }
 
 #elif YUP_USE_SSE_INTRINSICS
@@ -72,25 +72,25 @@ static void complexMultiplyAccumulate (const float* A, const float* B, float* Y,
     {
         const int idx = i * 2;
 
-        __m128 a = _mm_loadu_ps(A + idx);
-        __m128 b = _mm_loadu_ps(B + idx);
-        __m128 y = _mm_loadu_ps(Y + idx);
+        __m128 a = _mm_loadu_ps (A + idx);
+        __m128 b = _mm_loadu_ps (B + idx);
+        __m128 y = _mm_loadu_ps (Y + idx);
 
         // separate real and imag for a and b
-        const __m128 a_shuffled = _mm_shuffle_ps(a, a, _MM_SHUFFLE(2, 3, 0, 1));
-        const __m128 b_shuffled = _mm_shuffle_ps(b, b, _MM_SHUFFLE(2, 3, 0, 1));
+        const __m128 a_shuffled = _mm_shuffle_ps (a, a, _MM_SHUFFLE (2, 3, 0, 1));
+        const __m128 b_shuffled = _mm_shuffle_ps (b, b, _MM_SHUFFLE (2, 3, 0, 1));
 
         // real = ar*br - ai*bi
-        __m128 realPart = _mm_sub_ps(_mm_mul_ps(a, b), _mm_mul_ps(a_shuffled, b_shuffled));
+        __m128 realPart = _mm_sub_ps (_mm_mul_ps (a, b), _mm_mul_ps (a_shuffled, b_shuffled));
 
         // imag = ar*bi + ai*br
-        __m128 imagPart = _mm_add_ps(_mm_mul_ps(a, b_shuffled), _mm_mul_ps(a_shuffled, b));
+        __m128 imagPart = _mm_add_ps (_mm_mul_ps (a, b_shuffled), _mm_mul_ps (a_shuffled, b));
 
         // interleave real/imag back
-        const __m128 interleaved = _mm_unpacklo_ps(realPart, imagPart);
+        const __m128 interleaved = _mm_unpacklo_ps (realPart, imagPart);
 
-        y = _mm_add_ps(y, interleaved);
-        _mm_storeu_ps(Y + idx, y);
+        y = _mm_add_ps (y, interleaved);
+        _mm_storeu_ps (Y + idx, y);
     }
 
 #elif YUP_USE_ARM_NEON
@@ -99,33 +99,33 @@ static void complexMultiplyAccumulate (const float* A, const float* B, float* Y,
     {
         const int idx = i * 2;
 
-        float32x4_t a = vld1q_f32(A + idx); // [ar0, ai0, ar1, ai1]
-        float32x4_t b = vld1q_f32(B + idx); // [br0, bi0, br1, bi1]
-        float32x4_t y = vld1q_f32(Y + idx);
+        float32x4_t a = vld1q_f32 (A + idx); // [ar0, ai0, ar1, ai1]
+        float32x4_t b = vld1q_f32 (B + idx); // [br0, bi0, br1, bi1]
+        float32x4_t y = vld1q_f32 (Y + idx);
 
         // Shuffle a and b to get swapped real/imag for cross-multiplication
-        float32x4_t a_shuf = vrev64q_f32(a); // [ai0, ar0, ai1, ar1]
-        float32x4_t b_shuf = vrev64q_f32(b); // [bi0, br0, bi1, br1]
+        float32x4_t a_shuf = vrev64q_f32 (a); // [ai0, ar0, ai1, ar1]
+        float32x4_t b_shuf = vrev64q_f32 (b); // [bi0, br0, bi1, br1]
 
         // real = ar*br - ai*bi
-        float32x4_t realPart = vsubq_f32(vmulq_f32(a, b), vmulq_f32(a_shuf, b_shuf));
+        float32x4_t realPart = vsubq_f32 (vmulq_f32 (a, b), vmulq_f32 (a_shuf, b_shuf));
 
         // imag = ar*bi + ai*br
-        float32x4_t imagPart = vaddq_f32(vmulq_f32(a, b_shuf), vmulq_f32(a_shuf, b));
+        float32x4_t imagPart = vaddq_f32 (vmulq_f32 (a, b_shuf), vmulq_f32 (a_shuf, b));
 
         // Interleave real and imag: [real0, imag0, real1, imag1]
-        float32x2_t realLow = vget_low_f32(realPart);
-        float32x2_t imagLow = vget_low_f32(imagPart);
-        float32x2x2_t zippedLow = vzip_f32(realLow, imagLow);
+        float32x2_t realLow = vget_low_f32 (realPart);
+        float32x2_t imagLow = vget_low_f32 (imagPart);
+        float32x2x2_t zippedLow = vzip_f32 (realLow, imagLow);
 
-        float32x2_t realHigh = vget_high_f32(realPart);
-        float32x2_t imagHigh = vget_high_f32(imagPart);
-        float32x2x2_t zippedHigh = vzip_f32(realHigh, imagHigh);
+        float32x2_t realHigh = vget_high_f32 (realPart);
+        float32x2_t imagHigh = vget_high_f32 (imagPart);
+        float32x2x2_t zippedHigh = vzip_f32 (realHigh, imagHigh);
 
-        float32x4_t interleaved = vcombine_f32(zippedLow.val[0], zippedHigh.val[0]);
+        float32x4_t interleaved = vcombine_f32 (zippedLow.val[0], zippedHigh.val[0]);
 
-        y = vaddq_f32(y, interleaved);
-        vst1q_f32(Y + idx, y);
+        y = vaddq_f32 (y, interleaved);
+        vst1q_f32 (Y + idx, y);
     }
 
 #endif
@@ -172,7 +172,8 @@ public:
     void process (const float* input, float* output, std::size_t numSamples)
     {
         const std::size_t numTaps = taps_.size();
-        if (numTaps == 0) return;
+        if (numTaps == 0)
+            return;
 
         for (std::size_t i = 0; i < numSamples; ++i)
         {
@@ -228,14 +229,16 @@ public:
         overlapBuffer_.assign (static_cast<std::size_t> (hopSize_), 0.0f);
         timeBuffer_.assign (static_cast<std::size_t> (fftSize_), 0.0f);
         frequencyBuffer_.assign (static_cast<std::size_t> (fftSize_) * 2, 0.0f);
-        tempBuffer_.assign (static_cast<std::size_t> (fftSize_) * 2, 0.0f);  // Must hold complex data for in-place FFT
+        tempBuffer_.assign (static_cast<std::size_t> (fftSize_) * 2, 0.0f); // Must hold complex data for in-place FFT
 
         fdlIndex_ = 0;
         configured_ = true;
     }
 
     int getHopSize() const { return hopSize_; }
+
     int getFFTSize() const { return fftSize_; }
+
     bool isConfigured() const { return configured_; }
 
     std::size_t setImpulseResponse (const float* impulseResponse, std::size_t length, float scaling)
@@ -357,7 +360,7 @@ public:
         }
     }
 
-    bool hasImpulseResponse() const { return !frequencyPartitions_.empty(); }
+    bool hasImpulseResponse() const { return ! frequencyPartitions_.empty(); }
 
 private:
     int hopSize_ = 0;
@@ -387,13 +390,13 @@ class PartitionedConvolver::CircularBuffer
 {
 public:
     CircularBuffer() = default;
-    
+
     void resize (std::size_t size)
     {
         buffer_.resize (size);
         clear();
     }
-    
+
     void clear()
     {
         std::fill (buffer_.begin(), buffer_.end(), 0.0f);
@@ -401,68 +404,73 @@ public:
         readIndex_ = 0;
         availableForRead_ = 0;
     }
-    
+
     std::size_t getAvailableForRead() const { return availableForRead_; }
+
     std::size_t getAvailableForWrite() const { return buffer_.size() - availableForRead_; }
+
     std::size_t getSize() const { return buffer_.size(); }
-    
+
     void write (const float* data, std::size_t numSamples)
     {
         jassert (numSamples <= getAvailableForWrite());
         numSamples = std::min (numSamples, getAvailableForWrite());
-        
-        if (numSamples == 0) return;
-        
+
+        if (numSamples == 0)
+            return;
+
         const std::size_t beforeWrap = std::min (numSamples, buffer_.size() - writeIndex_);
         const std::size_t afterWrap = numSamples - beforeWrap;
-        
+
         std::copy (data, data + beforeWrap, buffer_.begin() + writeIndex_);
         if (afterWrap > 0)
             std::copy (data + beforeWrap, data + numSamples, buffer_.begin());
-        
+
         writeIndex_ = (writeIndex_ + numSamples) % buffer_.size();
         availableForRead_ += numSamples;
     }
-    
+
     void read (float* data, std::size_t numSamples)
     {
         jassert (numSamples <= getAvailableForRead());
         numSamples = std::min (numSamples, getAvailableForRead());
-        
-        if (numSamples == 0) return;
-        
+
+        if (numSamples == 0)
+            return;
+
         const std::size_t beforeWrap = std::min (numSamples, buffer_.size() - readIndex_);
         const std::size_t afterWrap = numSamples - beforeWrap;
-        
+
         std::copy (buffer_.begin() + readIndex_, buffer_.begin() + readIndex_ + beforeWrap, data);
         if (afterWrap > 0)
             std::copy (buffer_.begin(), buffer_.begin() + afterWrap, data + beforeWrap);
-        
+
         readIndex_ = (readIndex_ + numSamples) % buffer_.size();
         availableForRead_ -= numSamples;
     }
-    
+
     void peek (float* data, std::size_t numSamples, std::size_t offset = 0) const
     {
         jassert (numSamples + offset <= getAvailableForRead());
         numSamples = std::min (numSamples, getAvailableForRead() - offset);
-        
-        if (numSamples == 0) return;
-        
+
+        if (numSamples == 0)
+            return;
+
         const std::size_t startIndex = (readIndex_ + offset) % buffer_.size();
         const std::size_t beforeWrap = std::min (numSamples, buffer_.size() - startIndex);
         const std::size_t afterWrap = numSamples - beforeWrap;
-        
+
         std::copy (buffer_.begin() + startIndex, buffer_.begin() + startIndex + beforeWrap, data);
         if (afterWrap > 0)
             std::copy (buffer_.begin(), buffer_.begin() + afterWrap, data + beforeWrap);
     }
-    
+
     void skip (std::size_t numSamples)
     {
         jassert (numSamples <= getAvailableForRead());
         numSamples = std::min (numSamples, getAvailableForRead());
-        
+
         readIndex_ = (readIndex_ + numSamples) % buffer_.size();
         availableForRead_ -= numSamples;
     }
@@ -504,7 +512,7 @@ public:
         }
 
         maxHopSize_ = maximumHopSize;
-        
+
         // Clear staging buffers - will be allocated in prepare()
         inputStaging_.clear();
         outputStaging_.clear();
@@ -512,21 +520,21 @@ public:
         // Resize per-layer circular buffers - will be allocated in prepare()
         layerInputBuffers_.resize (layers.size());
         layerOutputBuffers_.resize (layers.size());
-        
+
         layerTempOutput_.clear();
         tempLayerHop_.clear();
-        
+
         // Clear working buffers - will be allocated in prepare()
         workingInput_.clear();
         workingOutput_.clear();
-        
+
         isPrepared_ = false;
     }
 
     void prepare (std::size_t maxBlockSize)
     {
         maxBlockSize_ = maxBlockSize;
-        
+
         // Calculate buffer sizes - generous but fixed allocation
         const std::size_t inputBufferSize = maxBlockSize; // Input staging for all layers
         const std::size_t outputBufferSize = maxHopSize_; // Output buffering for all layers
@@ -541,18 +549,18 @@ public:
             layerInputBuffers_[i].resize (inputBufferSize);
             layerOutputBuffers_[i].resize (outputBufferSize);
         }
-        
+
         // Allocate temp buffers
         if (maxHopSize_ > 0)
         {
             layerTempOutput_.resize (maxHopSize_);
             tempLayerHop_.resize (maxHopSize_);
         }
-        
+
         // Allocate working buffers
         workingInput_.resize (maxBlockSize);
         workingOutput_.resize (maxBlockSize);
-        
+
         isPrepared_ = true;
     }
 
@@ -624,7 +632,8 @@ public:
 
     void process (const float* input, float* output, std::size_t numSamples)
     {
-        if (numSamples == 0) return;
+        if (numSamples == 0)
+            return;
 
         SpinLock::ScopedLockType lock (processingLock_);
 
@@ -655,8 +664,8 @@ private:
         // Ensure prepare() was called
         jassert (isPrepared_);
         jassert (numSamples <= maxBlockSize_);
-        
-        if (!isPrepared_ || numSamples > maxBlockSize_)
+
+        if (! isPrepared_ || numSamples > maxBlockSize_)
             return; // Fail gracefully in release builds
 
         FloatVectorOperations::copy (workingInput_.data(), input, numSamples);
@@ -677,10 +686,10 @@ private:
         while (getInputStagingAvailable() >= static_cast<std::size_t> (baseHopSize_))
         {
             const std::size_t hopSize = static_cast<std::size_t> (baseHopSize_);
-            
+
             // Read hop from input staging
             readFromInputStaging (tempLayerHop_.data(), hopSize);
-            
+
             FloatVectorOperations::clear (outputStaging_.data(), outputStaging_.size());
 
             for (std::size_t layerIndex = 0; layerIndex < layers_.size(); ++layerIndex)
@@ -698,7 +707,7 @@ private:
                 {
                     // Read a full hop for this layer
                     inputBuffer.read (tempLayerHop_.data(), static_cast<std::size_t> (layerHopSize));
-                    
+
                     FloatVectorOperations::clear (layerTempOutput_.data(), layerHopSize);
 
                     if (layer.hasImpulseResponse())
@@ -732,36 +741,38 @@ private:
         const std::size_t available = inputStaging_.size() - inputStagingAvailable_;
         jassert (numSamples <= available);
         numSamples = std::min (numSamples, available);
-        if (numSamples == 0) return;
-        
+        if (numSamples == 0)
+            return;
+
         const std::size_t beforeWrap = std::min (numSamples, inputStaging_.size() - inputStagingWriteIndex_);
         const std::size_t afterWrap = numSamples - beforeWrap;
-        
+
         std::copy (data, data + beforeWrap, inputStaging_.begin() + inputStagingWriteIndex_);
         if (afterWrap > 0)
             std::copy (data + beforeWrap, data + numSamples, inputStaging_.begin());
-        
+
         inputStagingWriteIndex_ = (inputStagingWriteIndex_ + numSamples) % inputStaging_.size();
         inputStagingAvailable_ += numSamples;
     }
-    
+
     void readFromInputStaging (float* data, std::size_t numSamples)
     {
         jassert (numSamples <= inputStagingAvailable_);
         numSamples = std::min (numSamples, inputStagingAvailable_);
-        if (numSamples == 0) return;
-        
+        if (numSamples == 0)
+            return;
+
         const std::size_t beforeWrap = std::min (numSamples, inputStaging_.size() - inputStagingReadIndex_);
         const std::size_t afterWrap = numSamples - beforeWrap;
-        
+
         std::copy (inputStaging_.begin() + inputStagingReadIndex_, inputStaging_.begin() + inputStagingReadIndex_ + beforeWrap, data);
         if (afterWrap > 0)
             std::copy (inputStaging_.begin(), inputStaging_.begin() + afterWrap, data + beforeWrap);
-        
+
         inputStagingReadIndex_ = (inputStagingReadIndex_ + numSamples) % inputStaging_.size();
         inputStagingAvailable_ -= numSamples;
     }
-    
+
     std::size_t getInputStagingAvailable() const { return inputStagingAvailable_; }
 
     std::size_t directFIRTapCount_ = 0;
@@ -827,7 +838,7 @@ void PartitionedConvolver::setTypicalLayout (std::size_t directTaps, const std::
     layerSpecs.reserve (hops.size());
 
     for (int hop : hops)
-        layerSpecs.push_back ({hop});
+        layerSpecs.push_back ({ hop });
 
     configureLayers (directTaps, layerSpecs);
 }

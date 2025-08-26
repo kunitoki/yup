@@ -65,7 +65,7 @@ public:
     /** Configuration for a single FFT-based convolution layer */
     struct LayerSpec
     {
-        int hopSize;  /**< Partition size L (FFT size will be 2*L) */
+        int hopSize; /**< Partition size L (FFT size will be 2*L) */
     };
 
     //==============================================================================
@@ -153,7 +153,7 @@ public:
     */
     void process (const float* input, float* output, std::size_t numSamples);
 
-        /**
+    /**
         Reset all internal processing state (clears delay lines, overlap buffers).
         Impulse response partitions are preserved.
     */
