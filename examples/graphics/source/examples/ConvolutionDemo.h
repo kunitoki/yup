@@ -60,7 +60,7 @@ public:
         dryGain.setCurrentAndTargetValue (0.3f);
 
         // Configure convolver with typical layout
-        convolver.setTypicalLayout (256, {256, 1024, 4096});
+        convolver.setTypicalLayout (128, {128, 256, 512, 1024, 4096});
 
         // Create UI
         createUI();
@@ -118,6 +118,7 @@ public:
 
         // Reset convolver
         convolver.reset();
+        convolver.prepare (static_cast<std::size_t> (device->getCurrentBufferSizeSamples()));
     }
 
     void audioDeviceStopped() override
@@ -387,7 +388,7 @@ private:
         irWaveformDisplay.setMargins (25, 25, 25, 25);
 
         // Add grid lines
-        irWaveformDisplay.setVerticalGridLines ({ 0.0, 1.0 });
+         irWaveformDisplay.setVerticalGridLines ({ 0.0, 1.0 });
         irWaveformDisplay.setHorizontalGridLines ({ -1.0, -0.5, 0.5, 1.0 });
         irWaveformDisplay.addHorizontalGridLine (0.0, yup::Color (0xFF666666), 1.0f, true);
 
@@ -406,6 +407,13 @@ private:
         if (impulseResponseData.empty())
             return;
 
+        // Always apply peak headroom
+        float headroomScale = std::pow (10.0f, -12.0f / 20.0f);
+        const auto minMax = yup::FloatVectorOperations::findMinAndMax (impulseResponseData.data(), impulseResponseData.size());
+        const float peak = std::max (std::abs (minMax.getStart()), std::abs (minMax.getEnd()));
+        if (peak > 0.0f)
+            headroomScale /= peak;
+
         // Create waveform data points
         const size_t numPoints = std::min (static_cast<size_t> (2048), impulseResponseData.size());
         const size_t stride = impulseResponseData.size() / numPoints;
@@ -420,7 +428,7 @@ private:
                 sampleIndex = impulseResponseData.size() - 1;
 
             double normalizedTime = static_cast<double> (i) / static_cast<double> (numPoints - 1);
-            double amplitude = static_cast<double> (impulseResponseData[sampleIndex]);
+            double amplitude = static_cast<double> (impulseResponseData[sampleIndex] * headroomScale);
 
             waveformData.emplace_back (normalizedTime, amplitude);
         }
@@ -431,11 +439,13 @@ private:
         // Update X axis range to show time
         double lengthInSeconds = static_cast<double> (impulseResponseData.size()) / 44100.0; // Assume 44.1kHz
         irWaveformDisplay.setXRange (0.0, lengthInSeconds);
+        irWaveformDisplay.setVerticalGridLines ({ 0.0, lengthInSeconds });
 
         // Update X axis labels to show time
         std::vector<double> timeLabels;
         for (int i = 0; i <= 4; ++i)
             timeLabels.push_back (lengthInSeconds * static_cast<double> (i) / 4.0);
+
         irWaveformDisplay.setXAxisLabels (timeLabels);
     }
 

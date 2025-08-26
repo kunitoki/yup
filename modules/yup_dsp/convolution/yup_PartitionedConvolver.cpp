@@ -308,18 +308,64 @@ public:
             else
                 baseHopSize_ = std::min (baseHopSize_, layers[i].hopSize);
 
-            maximumHopSize = std::max (maximumHopSize, layers[i].hopSize);
+            maximumHopSize = std::max (maximumHopSize, static_cast<std::size_t> (layers[i].hopSize));
         }
 
+        maxHopSize_ = maximumHopSize;
+        
+        // Clear staging buffers - will be allocated in prepare()
+        inputStaging_.clear();
+        outputStaging_.clear();
+        inputCarry_.clear();
+
+        // Clear per-layer accumulators - will be allocated in prepare()
+        layerInputAccumulators_.assign (layers.size(), std::vector<float>());
+        layerOutputCarries_.assign (layers.size(), std::vector<float>());
+        
+        layerTempOutput_.clear();
+        tempLayerHop_.clear();
+        
+        // Clear working buffers - will be allocated in prepare()
+        workingInput_.clear();
+        workingOutput_.clear();
+        
+        isPrepared_ = false;
+    }
+
+    void prepare (std::size_t maxBlockSize)
+    {
+        maxBlockSize_ = maxBlockSize;
+        
+        // Calculate buffer sizes based on block size and hop configurations
+        const std::size_t maxBufferSize = std::max (maxBlockSize * 4, maxHopSize_ * 16);
+        
         // Prepare staging buffers
         inputStaging_.clear();
         outputStaging_.assign (static_cast<std::size_t> (baseHopSize_), 0.0f);
         inputCarry_.clear();
+        inputCarry_.reserve (maxBufferSize);
 
         // Prepare per-layer accumulators
-        layerInputAccumulators_.assign (layers.size(), std::vector<float>());
-        layerOutputCarries_.assign (layers.size(), std::vector<float>());
-        layerTempOutput_.resize (maximumHopSize);
+        for (std::size_t i = 0; i < layerInputAccumulators_.size(); ++i)
+        {
+            layerInputAccumulators_[i].clear();
+            layerInputAccumulators_[i].reserve (maxBufferSize);
+            layerOutputCarries_[i].clear();
+            layerOutputCarries_[i].reserve (maxBufferSize);
+        }
+        
+        // Allocate temp buffers
+        if (maxHopSize_ > 0)
+        {
+            layerTempOutput_.resize (maxHopSize_);
+            tempLayerHop_.reserve (maxHopSize_);
+        }
+        
+        // Allocate working buffers
+        workingInput_.resize (maxBlockSize);
+        workingOutput_.resize (maxBlockSize);
+        
+        isPrepared_ = true;
     }
 
     void setImpulseResponse (const float* impulseResponse, std::size_t length, const PartitionedConvolver::IRLoadOptions& options)
@@ -417,7 +463,12 @@ private:
 
     void processUnsafe (const float* input, float* output, std::size_t numSamples)
     {
-        ensureWorkingBuffers (numSamples); // TODO - move outside of process
+        // Ensure prepare() was called
+        jassert (isPrepared_);
+        jassert (numSamples <= maxBlockSize_);
+        
+        if (!isPrepared_ || numSamples > maxBlockSize_)
+            return; // Fail gracefully in release builds
 
         FloatVectorOperations::copy (workingInput_.data(), input, numSamples);
         FloatVectorOperations::clear (workingOutput_.data(), numSamples);
@@ -431,7 +482,7 @@ private:
         }
 
         // Process FFT layers with hop-based processing
-        appendToBuffer (inputCarry_, workingInput_.data(), numSamples);
+        safeAppendToBuffer (inputCarry_, workingInput_.data(), numSamples);
 
         std::size_t outputSamplesProduced = 0;
         while (inputCarry_.size() >= static_cast<std::size_t> (baseHopSize_))
@@ -446,7 +497,7 @@ private:
                 auto& layer = layers_[layerIndex];
                 const int layerHopSize = layer.getHopSize();
 
-                appendToBuffer (layerInputAccumulators_[layerIndex], inputStaging_.data(), hopSize);
+                safeAppendToBuffer (layerInputAccumulators_[layerIndex], inputStaging_.data(), hopSize);
 
                 while (layerInputAccumulators_[layerIndex].size() >= static_cast<std::size_t> (layerHopSize))
                 {
@@ -458,7 +509,7 @@ private:
                     if (layer.hasImpulseResponse())
                         layer.processHop (tempLayerHop_.data(), layerTempOutput_.data());
 
-                    appendToBuffer (layerOutputCarries_[layerIndex], layerTempOutput_.data(), static_cast<std::size_t> (layerHopSize));
+                    safeAppendToBuffer (layerOutputCarries_[layerIndex], layerTempOutput_.data(), static_cast<std::size_t> (layerHopSize));
 
                     layerInputAccumulators_[layerIndex].erase (
                         layerInputAccumulators_[layerIndex].begin(),
@@ -489,26 +540,35 @@ private:
     }
 
 private:
-    void ensureWorkingBuffers (std::size_t numSamples)
-    {
-        if (workingInput_.size() < numSamples)
-            workingInput_.resize (numSamples);
 
-        if (workingOutput_.size() < numSamples)
-            workingOutput_.resize (numSamples);
-    }
-
-    void appendToBuffer (std::vector<float>& buffer, const float* data, std::size_t numSamples)
+    void safeAppendToBuffer (std::vector<float>& buffer, const float* data, std::size_t numSamples)
     {
         const std::size_t oldSize = buffer.size();
+        const std::size_t newSize = oldSize + numSamples;
 
-        buffer.resize (oldSize + numSamples);
+        // Ensure we never exceed the reserved capacity to avoid allocations
+        jassert (newSize <= buffer.capacity());
+        if (newSize > buffer.capacity())
+        {
+            // Truncate to prevent allocation - this is a safety measure
+            const std::size_t maxSamples = buffer.capacity() - oldSize;
+            if (maxSamples > 0)
+            {
+                buffer.resize (buffer.capacity());
+                std::copy (data, data + maxSamples, buffer.begin() + oldSize);
+            }
+            return;
+        }
 
+        buffer.resize (newSize);
         std::copy (data, data + numSamples, buffer.begin() + oldSize);
     }
 
     std::size_t directFIRTapCount_ = 0;
     int baseHopSize_ = 0;
+    std::size_t maxHopSize_ = 0;
+    std::size_t maxBlockSize_ = 0;
+    bool isPrepared_ = false;
 
     DirectFIR directFIR_;
     std::vector<FFTLayer> layers_;
@@ -578,6 +638,11 @@ void PartitionedConvolver::setImpulseResponse (const float* impulseResponse, std
 void PartitionedConvolver::setImpulseResponse (const std::vector<float>& impulseResponse, const IRLoadOptions& options)
 {
     setImpulseResponse (impulseResponse.data(), impulseResponse.size(), options);
+}
+
+void PartitionedConvolver::prepare (std::size_t maxBlockSize)
+{
+    pImpl->prepare (maxBlockSize);
 }
 
 void PartitionedConvolver::reset()

@@ -44,12 +44,15 @@ namespace yup
     // Configure layers: 256 direct taps + FFT layers with hops 256, 1024, 4096
     convolver.setTypicalLayout(256, {256, 1024, 4096});
     
+    // Prepare for processing with maximum block size (must be called before process)
+    convolver.prepare(512); // Maximum 512 samples per process() call
+    
     // Set impulse response (e.g., reverb IR)
     std::vector<float> impulseResponse = loadImpulseResponse();
     convolver.setImpulseResponse(impulseResponse);
     
     // In audio callback (accumulates into output):
-    convolver.process(inputBuffer, outputBuffer, numSamples);
+    convolver.process(inputBuffer, outputBuffer, numSamples); // numSamples <= 512
     @endcode
     
     @note The process() method accumulates results into the output buffer.
@@ -127,6 +130,17 @@ public:
     void setImpulseResponse (const std::vector<float>& impulseResponse, const IRLoadOptions& options = {});
 
     //==============================================================================
+    /**
+        Prepare the convolver for processing with a specific maximum block size.
+        
+        @param maxBlockSize  Maximum number of samples that will be passed to process()
+        
+        @note This method is not real-time safe and should be called during initialization
+              or when audio processing is paused. It pre-allocates all internal buffers
+              to handle the specified block size without further allocations.
+    */
+    void prepare (std::size_t maxBlockSize);
+
     /**
         Reset all internal processing state (clears delay lines, overlap buffers).
         Impulse response partitions are preserved.
