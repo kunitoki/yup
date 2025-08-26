@@ -95,7 +95,22 @@ protected:
 TEST_F (PartitionedConvolverTest, DefaultConstruction)
 {
     PartitionedConvolver convolver;
-    // Should not crash - basic construction test
+
+    // Verify default state - should be safe to call these methods
+    EXPECT_NO_THROW (convolver.reset());
+
+    // Should be able to configure after construction
+    EXPECT_NO_THROW (convolver.setTypicalLayout (64, { 64, 256 }));
+    EXPECT_NO_THROW (convolver.prepare (512));
+
+    // Should handle empty processing gracefully
+    std::vector<float> input (256, 0.0f);
+    std::vector<float> output (256, 0.0f);
+    EXPECT_NO_THROW (convolver.process (input.data(), output.data(), input.size()));
+
+    // Output should remain zero without impulse response
+    for (float sample : output)
+        EXPECT_EQ (sample, 0.0f);
 }
 
 TEST_F (PartitionedConvolverTest, MoveSemantics)
@@ -104,14 +119,35 @@ TEST_F (PartitionedConvolverTest, MoveSemantics)
     convolver1.setTypicalLayout (64, { 64, 256 });
     convolver1.prepare (512);
 
+    // Set up a known state
+    std::vector<float> ir (128, 0.0f);
+    ir[0] = 1.0f;
+    convolver1.setImpulseResponse (ir);
+
     // Move constructor
     PartitionedConvolver convolver2 = std::move (convolver1);
+
+    // Verify moved convolver works
+    std::vector<float> input (256, 0.0f);
+    input[0] = 1.0f;
+    std::vector<float> output (256, 0.0f);
+
+    EXPECT_NO_THROW (convolver2.process (input.data(), output.data(), input.size()));
+
+    // Should produce output from the moved convolver
+    float outputRMS = calculateRMS (output);
+    EXPECT_GT (outputRMS, 0.001f);
 
     // Move assignment
     PartitionedConvolver convolver3;
     convolver3 = std::move (convolver2);
 
-    // Should not crash
+    // Verify move-assigned convolver works
+    clearBuffer (output);
+    EXPECT_NO_THROW (convolver3.process (input.data(), output.data(), input.size()));
+
+    outputRMS = calculateRMS (output);
+    EXPECT_GT (outputRMS, 0.001f);
 }
 
 TEST_F (PartitionedConvolverTest, BasicConfiguration)
@@ -119,13 +155,37 @@ TEST_F (PartitionedConvolverTest, BasicConfiguration)
     PartitionedConvolver convolver;
 
     // Test typical layout configuration
-    convolver.setTypicalLayout (128, { 128, 512, 2048 });
+    EXPECT_NO_THROW (convolver.setTypicalLayout (128, { 128, 512, 2048 }));
 
-    // Should not crash
-    convolver.prepare (512);
+    // Should be able to prepare after configuration
+    EXPECT_NO_THROW (convolver.prepare (512));
 
-    // Test reset
+    // Verify configuration works by setting an impulse response
+    std::vector<float> ir (256, 0.0f);
+    ir[0] = 1.0f;
+    EXPECT_NO_THROW (convolver.setImpulseResponse (ir));
+
+    // Verify processing works after configuration
+    std::vector<float> input (256, 0.0f);
+    input[0] = 1.0f;
+    std::vector<float> output (256, 0.0f);
+
+    EXPECT_NO_THROW (convolver.process (input.data(), output.data(), input.size()));
+
+    // Should produce output
+    float outputRMS = calculateRMS (output);
+    EXPECT_GT (outputRMS, 0.001f);
+
+    // Test reset clears state
     convolver.reset();
+
+    // After reset, same input should produce same output (deterministic)
+    std::vector<float> output2 (256, 0.0f);
+    EXPECT_NO_THROW (convolver.process (input.data(), output2.data(), input.size()));
+
+    // Outputs should be very similar after reset
+    for (size_t i = 0; i < output.size(); ++i)
+        EXPECT_NEAR (output[i], output2[i], 0.001f);
 }
 
 TEST_F (PartitionedConvolverTest, ConfigureLayers)
@@ -136,10 +196,28 @@ TEST_F (PartitionedConvolverTest, ConfigureLayers)
         { 64 }, { 256 }, { 1024 }
     };
 
-    convolver.configureLayers (32, layers);
-    convolver.prepare (256);
+    EXPECT_NO_THROW (convolver.configureLayers (32, layers));
+    EXPECT_NO_THROW (convolver.prepare (256));
 
-    // Should not crash
+    // Verify the configuration works with an impulse response
+    std::vector<float> ir (500, 0.0f);
+    ir[0] = 1.0f;
+    ir[50] = 0.5f;
+    EXPECT_NO_THROW (convolver.setImpulseResponse (ir));
+
+    // Test processing with the configured layers
+    std::vector<float> input (256, 0.0f);
+    input[0] = 1.0f;
+    std::vector<float> output (256, 0.0f);
+
+    EXPECT_NO_THROW (convolver.process (input.data(), output.data(), input.size()));
+
+    // Should produce output from direct FIR immediately
+    float outputRMS = calculateRMS (output);
+    EXPECT_GT (outputRMS, 0.001f);
+
+    // Verify immediate response from direct taps
+    EXPECT_GT (findPeak (output), 0.1f);
 }
 
 //==============================================================================
@@ -156,9 +234,36 @@ TEST_F (PartitionedConvolverTest, SetImpulseResponseVector)
     std::vector<float> ir (1000);
     fillWithRandomData (ir);
 
-    convolver.setImpulseResponse (ir);
+    // Normalize to reasonable levels
+    float peak = findPeak (ir);
+    if (peak > 0.0f)
+    {
+        for (auto& sample : ir)
+            sample /= peak;
+    }
 
-    // Should not crash
+    EXPECT_NO_THROW (convolver.setImpulseResponse (ir));
+
+    // Verify the impulse response was set by testing processing
+    std::vector<float> input (512, 0.0f);
+    input[0] = 1.0f;
+    std::vector<float> output (512, 0.0f);
+
+    EXPECT_NO_THROW (convolver.process (input.data(), output.data(), input.size()));
+
+    // Should produce significant output
+    float outputRMS = calculateRMS (output);
+    EXPECT_GT (outputRMS, 0.001f);
+
+    // Test linearity - 2x input should give ~2x output
+    input[0] = 2.0f;
+    std::vector<float> output2 (512, 0.0f);
+
+    convolver.reset();
+    EXPECT_NO_THROW (convolver.process (input.data(), output2.data(), input.size()));
+
+    float output2RMS = calculateRMS (output2);
+    EXPECT_GT (output2RMS, outputRMS * 1.5f);
 }
 
 TEST_F (PartitionedConvolverTest, SetImpulseResponsePointer)
@@ -171,9 +276,35 @@ TEST_F (PartitionedConvolverTest, SetImpulseResponsePointer)
     std::vector<float> ir (1000);
     fillWithRandomData (ir);
 
-    convolver.setImpulseResponse (ir.data(), ir.size());
+    // Normalize to reasonable levels
+    float peak = findPeak (ir);
+    if (peak > 0.0f)
+    {
+        for (auto& sample : ir)
+            sample /= peak;
+    }
 
-    // Should not crash
+    EXPECT_NO_THROW (convolver.setImpulseResponse (ir.data(), ir.size()));
+
+    // Verify both pointer and vector methods produce same result
+    std::vector<float> input (512, 0.0f);
+    input[0] = 1.0f;
+    std::vector<float> output1 (512, 0.0f);
+
+    EXPECT_NO_THROW (convolver.process (input.data(), output1.data(), input.size()));
+
+    // Reset and test with vector method
+    PartitionedConvolver convolver2;
+    convolver2.setTypicalLayout (64, { 64, 256 });
+    convolver2.prepare (512);
+    convolver2.setImpulseResponse (ir);
+
+    std::vector<float> output2 (512, 0.0f);
+    EXPECT_NO_THROW (convolver2.process (input.data(), output2.data(), input.size()));
+
+    // Both methods should produce identical results
+    for (size_t i = 0; i < output1.size(); ++i)
+        EXPECT_NEAR (output1[i], output2[i], 0.0001f);
 }
 
 TEST_F (PartitionedConvolverTest, SetImpulseResponseWithOptions)
@@ -185,13 +316,45 @@ TEST_F (PartitionedConvolverTest, SetImpulseResponseWithOptions)
     std::vector<float> ir (1000);
     fillWithRandomData (ir);
 
+    // Make IR have a known peak
+    ir[0] = 2.0f; // Peak value
+
     PartitionedConvolver::IRLoadOptions options;
     options.normalize = true;
     options.headroomDb = -6.0f;
 
-    convolver.setImpulseResponse (ir, options);
+    EXPECT_NO_THROW (convolver.setImpulseResponse (ir, options));
 
-    // Should not crash
+    // Test that normalization and headroom are applied
+    std::vector<float> input (512, 0.0f);
+    input[0] = 1.0f;
+    std::vector<float> output (512, 0.0f);
+
+    EXPECT_NO_THROW (convolver.process (input.data(), output.data(), input.size()));
+
+    // Should produce output, but peak should be limited by headroom
+    float outputPeak = findPeak (output);
+    EXPECT_GT (outputPeak, 0.001f);
+    EXPECT_LT (outputPeak, 1.0f); // Should be less than input due to headroom
+
+    // Compare with non-normalized version
+    PartitionedConvolver convolver2;
+    convolver2.setTypicalLayout (64, { 64, 256 });
+    convolver2.prepare (512);
+
+    PartitionedConvolver::IRLoadOptions options2;
+    options2.normalize = false;
+    options2.headroomDb = 0.0f;
+
+    convolver2.setImpulseResponse (ir, options2);
+
+    std::vector<float> output2 (512, 0.0f);
+    EXPECT_NO_THROW (convolver2.process (input.data(), output2.data(), input.size()));
+
+    float output2Peak = findPeak (output2);
+
+    // Normalized version should have different peak
+    EXPECT_NE (outputPeak, output2Peak);
 }
 
 TEST_F (PartitionedConvolverTest, EmptyImpulseResponse)
