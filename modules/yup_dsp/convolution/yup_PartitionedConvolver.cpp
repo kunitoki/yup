@@ -195,7 +195,7 @@ public:
 #if YUP_ENABLE_VDSP
             vDSP_dotpr (w, 1, h, 1, &sum, M);
 #else
-            sum = dotProduct (w, h, M, paddedLen_);
+            sum = dotProduct (w, h, M);
 #endif
 
             output[i] += sum;
@@ -211,7 +211,7 @@ public:
     }
 
 private:
-    static float dotProduct (const float* __restrict a, const float* __restrict b, std::size_t len, std::size_t paddedLen) noexcept
+    static float dotProduct (const float* __restrict a, const float* __restrict b, std::size_t len) noexcept
     {
         float acc = 0.0f;
         std::size_t i = 0;
