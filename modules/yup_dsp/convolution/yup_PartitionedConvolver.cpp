@@ -321,10 +321,7 @@ public:
             return;
 
         // 1) Transform current input hop to frequency domain
-        std::fill (tempBuffer_.begin(), tempBuffer_.end(), 0.0f);
-        for (int i = 0; i < hopSize_; ++i)
-            tempBuffer_[i] = inputHop[i];
-
+        FloatVectorOperations::copy (tempBuffer_.data(), inputHop, hopSize_);
         fftProcessor_.performRealFFTForward (tempBuffer_.data(), tempBuffer_.data());
 
         // 2) Store in frequency delay line (circular buffer) - copy full complex buffer
@@ -332,7 +329,7 @@ public:
         std::copy (tempBuffer_.begin(), tempBuffer_.begin() + (fftSize_ * 2), frequencyDelayLine_[static_cast<std::size_t> (fdlIndex_)].begin());
 
         // 3) Frequency domain convolution: Y = sum(X[k-p] * H[p])
-        std::fill (frequencyBuffer_.data(), frequencyBuffer_.data() + (fftSize_ * 2), 0.0f);
+        FloatVectorOperations::clear (frequencyBuffer_.data(), fftSize_ * 2);
 
         int xIndex = fdlIndex_;
         for (std::size_t p = 0; p < frequencyPartitions_.size(); ++p)
@@ -661,12 +658,10 @@ private:
 
     void processUnsafe (const float* input, float* output, std::size_t numSamples)
     {
-        // Ensure prepare() was called
         jassert (isPrepared_);
         jassert (numSamples <= maxBlockSize_);
-
         if (! isPrepared_ || numSamples > maxBlockSize_)
-            return; // Fail gracefully in release builds
+            return;
 
         FloatVectorOperations::copy (workingInput_.data(), input, numSamples);
         FloatVectorOperations::clear (workingOutput_.data(), numSamples);
@@ -689,7 +684,6 @@ private:
 
             // Read hop from input staging
             readFromInputStaging (tempLayerHop_.data(), hopSize);
-
             FloatVectorOperations::clear (outputStaging_.data(), outputStaging_.size());
 
             for (std::size_t layerIndex = 0; layerIndex < layers_.size(); ++layerIndex)
@@ -707,7 +701,6 @@ private:
                 {
                     // Read a full hop for this layer
                     inputBuffer.read (tempLayerHop_.data(), static_cast<std::size_t> (layerHopSize));
-
                     FloatVectorOperations::clear (layerTempOutput_.data(), layerHopSize);
 
                     if (layer.hasImpulseResponse())
