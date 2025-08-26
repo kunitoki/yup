@@ -65,6 +65,14 @@ const var& DynamicObject::getProperty (const Identifier& propertyName) const
     return properties[propertyName];
 }
 
+const var& DynamicObject::getProperty (const Identifier& propertyName, const var& defaultValue) const
+{
+    if (const var* const v = properties.getVarPointer (propertyName))
+        return *v;
+
+    return defaultValue;
+}
+
 void DynamicObject::setProperty (const Identifier& propertyName, const var& newValue)
 {
     properties.set (propertyName, newValue);

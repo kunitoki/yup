@@ -73,6 +73,9 @@ struct DefaultHashFunctions
 
     /** Generates a simple hash from a UUID. */
     static int generateHash (const Uuid& key, int upperLimit) noexcept { return generateHash (key.hash(), upperLimit); }
+
+    /** Generates a simple hash from a Identifier. */
+    static int generateHash (const Identifier& key, int upperLimit) noexcept { return generateHash ((uint64) (*reinterpret_cast<uintptr_t*> (key.getCharPointer().getAddress())), upperLimit); }
 };
 
 //==============================================================================
@@ -235,6 +238,12 @@ public:
 
     //==============================================================================
     /** Returns the current number of items in the map. */
+    inline bool isEmpty() const noexcept
+    {
+        return totalNumItems == 0;
+    }
+
+    /** Returns the current number of items in the map. */
     inline int size() const noexcept
     {
         return totalNumItems;
@@ -277,6 +286,17 @@ public:
             remapTable (getNumSlots() * 2);
 
         return entry->value;
+    }
+
+    /** Returns a pointer to the value corresponding to a given key, or nullptr if not found. */
+    inline ValueType* getPointer (KeyTypeParameter keyToLookFor) const
+    {
+        const ScopedLockType sl (getLock());
+
+        if (auto* entry = getEntry (getSlot (keyToLookFor), keyToLookFor))
+            return std::addressof (entry->value);
+
+        return nullptr;
     }
 
     //==============================================================================

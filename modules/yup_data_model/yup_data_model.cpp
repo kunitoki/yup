@@ -34,3 +34,6 @@
 
 //==============================================================================
 #include "undo/yup_UndoManager.cpp"
+#include "tree/yup_DataTree.cpp"
+#include "tree/yup_DataTreeQuery.cpp"
+#include "tree/yup_DataTreeSchema.cpp"

@@ -13,6 +13,8 @@ This document provides directive guidelines for AI assistants working on the YUP
 
 ## Code Generation Rules
 
+**NEVER EVER run bash commands to configure, compile or test the implementation, acknowledge that we should test and we'll run and report any issue.**
+
 ### 1. File Headers
 **ALWAYS** start new files with this exact header:
 
@@ -296,8 +298,6 @@ TEST (ClassNameTests, StaticMethodBehavesCorrectly)
 4. **Group related tests** in test fixtures
 5. **Keep tests independent** and deterministic
 6. **Never Use C or C++ macros (like M_PI)** use yup alternatives
-7. **EXCLUSIVELY use `just test`** to compile and execute tests
-8. **NEVER start compilation or tests** unless told explicitly
 
 ### When suggesting refactoring:
 1. **Maintain existing API contracts**
