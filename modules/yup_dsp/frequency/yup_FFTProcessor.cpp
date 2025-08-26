@@ -787,7 +787,7 @@ void FFTProcessor::updateScalingFactor()
 
 void FFTProcessor::applyScaling (float* data, int numElements, bool isForward) const
 {
-    if (scaling == FFTScaling::none || (scaling == FFTScaling::asymmetric && ! isForward))
+    if (scaling == FFTScaling::none || (scaling == FFTScaling::asymmetric && ! isForward))
         return;
 
     FloatVectorOperations::multiply (data, scalingFactor, numElements);
