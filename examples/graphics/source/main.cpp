@@ -40,6 +40,7 @@
 #include "examples/Artboard.h"
 #include "examples/Audio.h"
 #include "examples/CrossoverDemo.h"
+#include "examples/ConvolutionDemo.h"
 #include "examples/FilterDemo.h"
 #include "examples/LayoutFonts.h"
 #include "examples/FileChooser.h"
@@ -107,6 +108,7 @@ public:
         registerDemo<SpectrumAnalyzerDemo> ("FFT Analyzer", counter++);
         registerDemo<FilterDemo> ("Filter Demo", counter++);
         registerDemo<CrossoverDemo> ("Crossover Demo", counter++);
+        registerDemo<ConvolutionDemo> ("Convolution Demo", counter++);
         registerDemo<LayoutFontsExample> ("Layout Fonts", counter++);
         registerDemo<VariableFontsExample> ("Variable Fonts", counter++);
         registerDemo<PathsExample> ("Paths", counter++);

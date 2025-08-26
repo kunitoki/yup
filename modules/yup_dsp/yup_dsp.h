@@ -141,4 +141,7 @@
 // Dynamics processors
 #include "dynamics/yup_SoftClipper.h"
 
+// Convolution processors
+#include "convolution/yup_PartitionedConvolver.h"
+
 //==============================================================================
