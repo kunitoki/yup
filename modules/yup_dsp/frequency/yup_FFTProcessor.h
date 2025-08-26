@@ -89,7 +89,7 @@ public:
     int getSize() const noexcept { return fftSize; }
 
     /** Sets the FFT scaling mode */
-    void setScaling (FFTScaling newScaling) noexcept { scaling = newScaling; }
+    void setScaling (FFTScaling newScaling) noexcept;
 
     /** Gets the current scaling mode */
     FFTScaling getScaling() const noexcept { return scaling; }
@@ -139,11 +139,13 @@ public:
 
 private:
     //==============================================================================
-    void applyScaling (float* data, int numElements, bool isForward);
+    void updateScalingFactor ();
+    void applyScaling (float* data, int numElements, bool isForward) const;
 
     //==============================================================================
     int fftSize = -1;
     FFTScaling scaling = FFTScaling::none;
+    float scalingFactor = 1.0f;
 
     std::unique_ptr<Engine> engine;
 

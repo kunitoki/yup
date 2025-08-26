@@ -751,6 +751,7 @@ constexpr int nextPowerOfTwo (int n) noexcept
     n |= (n >> 4);
     n |= (n >> 8);
     n |= (n >> 16);
+
     return n + 1;
 }
 

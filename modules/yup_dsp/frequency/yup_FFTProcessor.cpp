@@ -700,7 +700,17 @@ FFTProcessor& FFTProcessor::operator= (FFTProcessor&& other) noexcept
 }
 
 //==============================================================================
-// Public interface
+
+void FFTProcessor::setScaling (FFTScaling newScaling) noexcept
+{
+    if (scaling != newScaling)
+    {
+        scaling = newScaling;
+
+        updateScalingFactor();
+    }
+}
+
 void FFTProcessor::setSize (int newSize)
 {
     jassert (isPowerOfTwo (newSize) && newSize >= 64 && newSize <= 65536);
@@ -708,6 +718,8 @@ void FFTProcessor::setSize (int newSize)
     if (newSize != fftSize)
     {
         fftSize = newSize;
+
+        updateScalingFactor();
 
         if (engine)
             engine->initialize (fftSize);
@@ -720,6 +732,7 @@ void FFTProcessor::performRealFFTForward (const float* realInput, float* complex
     jassert (engine != nullptr);
 
     engine->performRealFFTForward (realInput, complexOutput);
+
     applyScaling (complexOutput, fftSize * 2, true);
 }
 
@@ -729,6 +742,7 @@ void FFTProcessor::performRealFFTInverse (const float* complexInput, float* real
     jassert (engine != nullptr);
 
     engine->performRealFFTInverse (complexInput, realOutput);
+
     applyScaling (realOutput, fftSize, false);
 }
 
@@ -738,6 +752,7 @@ void FFTProcessor::performComplexFFTForward (const float* complexInput, float* c
     jassert (engine != nullptr);
 
     engine->performComplexFFTForward (complexInput, complexOutput);
+
     applyScaling (complexOutput, fftSize * 2, true);
 }
 
@@ -747,6 +762,7 @@ void FFTProcessor::performComplexFFTInverse (const float* complexInput, float* c
     jassert (engine != nullptr);
 
     engine->performComplexFFTInverse (complexInput, complexOutput);
+
     applyScaling (complexOutput, fftSize * 2, false);
 }
 
@@ -756,25 +772,25 @@ String FFTProcessor::getBackendName() const
 }
 
 //==============================================================================
-// Private implementation
-void FFTProcessor::applyScaling (float* data, int numElements, bool isForward)
+
+void FFTProcessor::updateScalingFactor()
 {
-    if (scaling == FFTScaling::none)
+    if (scaling == FFTScaling::unitary)
+        scalingFactor = 1.0f / std::sqrt (static_cast<float> (fftSize));
+
+    else if (scaling == FFTScaling::asymmetric)
+        scalingFactor = 1.0f / static_cast<float> (fftSize);
+
+    else
+        scalingFactor = 1.0f;
+}
+
+void FFTProcessor::applyScaling (float* data, int numElements, bool isForward) const
+{
+    if (scaling == FFTScaling::none || (scaling == FFTScaling::asymmetric && ! isForward))
         return;
 
-    float scale = 1.0f;
-
-    if (scaling == FFTScaling::unitary)
-    {
-        scale = 1.0f / std::sqrt (static_cast<float> (fftSize));
-    }
-    else if (scaling == FFTScaling::asymmetric && ! isForward)
-    {
-        scale = 1.0f / static_cast<float> (fftSize);
-    }
-
-    if (scale != 1.0f)
-        FloatVectorOperations::multiply (data, scale, numElements);
+    FloatVectorOperations::multiply (data, scalingFactor, numElements);
 }
 
 } // namespace yup
