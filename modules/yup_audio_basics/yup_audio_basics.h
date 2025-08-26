@@ -69,11 +69,20 @@
 
 //==============================================================================
 #ifndef YUP_USE_SSE_INTRINSICS
+#if defined (__SSE__)
 #define YUP_USE_SSE_INTRINSICS 1
+#endif
+#endif
+
+#ifndef YUP_USE_AVX_INTRINSICS
+#if defined (__AVX2__)
+#define YUP_USE_AVX_INTRINSICS 1
+#endif
 #endif
 
 #if ! YUP_INTEL
 #undef YUP_USE_SSE_INTRINSICS
+#undef YUP_USE_AVX_INTRINSICS
 #endif
 
 #if __ARM_NEON__ && ! (YUP_USE_VDSP_FRAMEWORK || defined(YUP_USE_ARM_NEON))

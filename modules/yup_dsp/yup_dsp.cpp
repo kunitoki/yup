@@ -31,6 +31,10 @@
 #include "yup_dsp.h"
 
 //==============================================================================
+#include <atomic>
+#include <thread>
+
+//==============================================================================
 #include "frequency/yup_FFTProcessor.cpp"
 #include "frequency/yup_SpectrumAnalyzerState.cpp"
 
