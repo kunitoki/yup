@@ -93,13 +93,12 @@ public:
     //==============================================================================
     /** Creates a DataTreeObjectList that monitors the specified parent DataTree.
 
-        The constructor registers this object as a listener on the parent DataTree
-        to receive notifications about child additions, removals, and reordering.
+        The constructor registers this object as a listener on the parent DataTree to receive notifications about child
+        additions, removals, and reordering.
 
         @param parentTree The DataTree whose children will be monitored and mirrored as objects in this list.
 
-        @note After construction, you must call rebuildObjects() to initialize the
-              object list from any existing children in the parent DataTree.
+        @note After construction, you must call rebuildObjects() to initialize the object list from any existing children in the parent DataTree.
     */
     DataTreeObjectList (const DataTree& parentTree)
         : parent (parentTree)
@@ -109,9 +108,8 @@ public:
 
     /** Destructor.
 
-        @warning The destructor asserts that all objects have been freed. You must
-                 call freeObjects() in your subclass destructor before this base
-                 destructor is called, otherwise you'll get an assertion failure.
+        @warning The destructor asserts that all objects have been freed. You must call freeObjects() in your
+                 subclass destructor before this base destructor is called, otherwise you'll get an assertion failure.
 
         This design ensures proper cleanup order and prevents memory leaks.
     */
@@ -123,11 +121,11 @@ public:
     //==============================================================================
     /** Initializes the object list from existing children in the parent DataTree.
 
-        This method scans all current children of the parent DataTree, creates objects
-        for those that pass the isSuitableType() test, and adds them to the objects array.
+        This method scans all current children of the parent DataTree, creates objects for those that pass the
+        isSuitableType() test, and adds them to the objects array.
 
-        @warning This method must be called exactly once, typically in your subclass
-                 constructor, and only when the objects array is empty.
+        @warning This method must be called exactly once, typically in your subclass constructor, and only when
+                 the objects array is empty.
 
         @note Objects are created in the same order as they appear in the parent DataTree.
 
@@ -145,8 +143,7 @@ public:
 
         for (int i = 0; i < parent.getNumChildren(); ++i)
         {
-            const auto& v = parent.getChild (i);
-            if (isSuitableType (v))
+            if (const auto& v = parent.getChild (i); isSuitableType (v))
             {
                 if (ObjectType* newObject = createNewObject (v))
                     objects.add (newObject);
@@ -156,12 +153,10 @@ public:
 
     /** Cleans up all objects and unregisters from the parent DataTree.
 
-        This method removes the listener from the parent DataTree and deletes all
-        managed objects. It should be called in your subclass destructor to ensure
-        proper cleanup order.
+        This method removes the listener from the parent DataTree and deletes all managed objects. It should be called in
+        your subclass destructor to ensure proper cleanup order.
 
-        @warning This method must be called in your subclass destructor before the
-                 base class destructor is called.
+        @warning This method must be called in your subclass destructor before the base class destructor is called.
 
         Example usage:
         @code
@@ -174,19 +169,19 @@ public:
     void freeObjects()
     {
         parent.removeListener (this);
+
         deleteAllObjects();
     }
 
     //==============================================================================
     /** Determines whether a DataTree child should have a corresponding object.
 
-        This method is called whenever a DataTree child is encountered to determine
-        if an object should be created for it. You can use this to filter which
-        children are represented as objects based on their type, properties, or other criteria.
+        This method is called whenever a DataTree child is encountered to determine if an object should be created
+        for it. You can use this to filter which children are represented as objects based on their type, properties, or other criteria.
 
         @param tree The DataTree child to evaluate
-        @return true if an object should be created for this DataTree child,
-                false if it should be ignored
+
+        @return true if an object should be created for this DataTree child, false if it should be ignored
 
         Example implementations:
         @code
@@ -207,15 +202,14 @@ public:
 
     /** Creates a new object to represent the given DataTree.
 
-        This method is called when a DataTree child passes the isSuitableType() test
-        and needs an object to represent it. You should create and return a new object
-        that corresponds to the given DataTree.
+        This method is called when a DataTree child passes the isSuitableType() test and needs an object to represent it. You
+        should create and return a new object that corresponds to the given DataTree.
 
         @param tree The DataTree for which to create an object
+
         @return A pointer to the newly created object, or nullptr if creation failed
 
-        @warning The returned object must have a getDataTree() method that returns
-                 the DataTree it represents. This is used for synchronization.
+        @warning The returned object must have a getDataTree() method that returns  the DataTree it represents.
 
         Example implementation:
         @code
@@ -229,9 +223,8 @@ public:
 
     /** Deletes an object that is no longer needed.
 
-        This method is called when an object needs to be removed from the list,
-        typically because its corresponding DataTree child has been removed.
-        You are responsible for properly disposing of the object.
+        This method is called when an object needs to be removed from the list, typically because its corresponding DataTree
+        child has been removed. You are responsible for properly disposing of the object.
 
         @param object The object to delete
 
@@ -246,17 +239,44 @@ public:
     virtual void deleteObject (ObjectType*) = 0;
 
     //==============================================================================
-    /** @name Notification Callbacks
-        These methods are called when the object list changes. Override them to
-        receive notifications about object lifecycle events.
-    */
-    ///@{
+    /**
 
+        @note When using thread-safe operation (CriticalSectionType != DummyCriticalSection),
+              you should lock arrayLock before accessing this array directly.
+    */
+    int getNumObjects() const
+    {
+        return objects.size();
+    }
+
+    /**
+
+        @note When using thread-safe operation (CriticalSectionType != DummyCriticalSection),
+              you should lock arrayLock before accessing this array directly.
+    */
+    ObjectType* getObject (int index)
+    {
+        jassert (isPositiveAndBelow (index, objects.size()));
+
+        return objects.getUnchecked (index);
+    }
+
+    /**
+        @note When using thread-safe operation (CriticalSectionType != DummyCriticalSection),
+              you should lock arrayLock before accessing this array directly.
+    */
+    const ObjectType* getObject (int index) const
+    {
+        jassert (isPositiveAndBelow (index, objects.size()));
+
+        return objects.getUnchecked (index);
+    }
+
+    //==============================================================================
     /** Called when a new object has been added to the list.
 
-        This notification is sent after an object has been successfully created
-        and added to the objects array. You can use this to perform additional
-        setup or notify other parts of your application.
+        This notification is sent after an object has been successfully created and added to the objects array. You can
+        use this to perform additional setup or notify other parts of your application.
 
         @param object The object that was added
     */
@@ -264,9 +284,8 @@ public:
 
     /** Called when an object has been removed from the list.
 
-        This notification is sent after an object has been removed from the objects
-        array but before it is deleted. You can use this to perform cleanup or
-        notify other parts of your application.
+        This notification is sent after an object has been removed from the objects array but before it is deleted. You can
+        use this to perform cleanup or notify other parts of your application.
 
         @param object The object that was removed (will be deleted after this call)
     */
@@ -274,41 +293,28 @@ public:
 
     /** Called when the order of objects in the list has changed.
 
-        This notification is sent when the parent DataTree's children have been
-        reordered and the objects array has been re-sorted to match. The objects
-        array will already contain the objects in their new order when this is called.
+        This notification is sent when the parent DataTree's children have been reordered and the objects array has been
+        re-sorted to match. The objects array will already contain the objects in their new order when this is called.
     */
     virtual void objectOrderChanged() {}
 
     //==============================================================================
-    /** The array of objects managed by this list.
-
-        This array contains pointers to all objects that correspond to suitable
-        DataTree children. The objects are maintained in the same order as their
-        corresponding DataTree children.
-
-        @note When using thread-safe operation (CriticalSectionType != DummyCriticalSection),
-              you should lock arrayLock before accessing this array directly.
-    */
-    Array<ObjectType*> objects;
-
     /** The critical section used for thread-safe access to the objects array.
 
-        When CriticalSectionType is not DummyCriticalSection, this lock protects
-        the objects array from concurrent access. Use ScopedLockType to lock it:
+        When CriticalSectionType is not DummyCriticalSection, this lock protects the objects array from concurrent
+        access. Use ScopedLockType to lock it:
 
         @code
         {
-            const ScopedLockType lock(arrayLock);
+            const DataTreeObjectList<MyObject>::ScopedLockType lock (objectList.arrayLock);
             // Safe to access objects array here
-            for (auto* obj : objects)
-                obj->doSomething();
+            for (int index = 0; index < objectList.getNumObjects(); ++index)
+                objectList.getObject (index)->doSomething();
         }
         @endcode
     */
     CriticalSectionType arrayLock;
 
-    //==============================================================================
     /** Type alias for scoped locking of the arrayLock. */
     using ScopedLockType = typename CriticalSectionType::ScopedLockType;
 
@@ -325,66 +331,72 @@ protected:
     //==============================================================================
     void childAdded (DataTree&, DataTree& tree) override
     {
-        if (isChildTree (tree))
+        if (! isChildTree (tree))
+            return;
+
+        const int index = parent.indexOf (tree);
+        jassert (index >= 0);
+
+        if (ObjectType* newObject = createNewObject (tree))
         {
-            const int index = parent.indexOf (tree);
-            jassert (index >= 0);
-
-            if (ObjectType* newObject = createNewObject (tree))
             {
-                {
-                    const ScopedLockType sl (arrayLock);
+                const ScopedLockType sl (arrayLock);
 
-                    if (index == parent.getNumChildren() - 1)
-                        objects.add (newObject);
-                    else
-                        objects.addSorted (*this, newObject);
-                }
-
-                newObjectAdded (newObject);
+                if (index == parent.getNumChildren() - 1)
+                    objects.add (newObject);
+                else
+                    objects.addSorted (*this, newObject);
             }
-            else
-                jassertfalse;
+
+            newObjectAdded (newObject);
+        }
+        else
+        {
+            jassertfalse;
         }
     }
 
     void childRemoved (DataTree& exParent, DataTree& tree, int) override
     {
-        if (parent == exParent && isSuitableType (tree))
+        if (parent != exParent || ! isSuitableType (tree))
+            return;
+
+        const int oldIndex = indexOf (tree);
+        if (oldIndex < 0)
+            return;
+
+        ObjectType* o;
+
         {
-            const int oldIndex = indexOf (tree);
-
-            if (oldIndex >= 0)
-            {
-                ObjectType* o;
-
-                {
-                    const ScopedLockType sl (arrayLock);
-                    o = objects.removeAndReturn (oldIndex);
-                }
-
-                objectRemoved (o);
-                deleteObject (o);
-            }
+            const ScopedLockType sl (arrayLock);
+            o = objects.removeAndReturn (oldIndex);
         }
+
+        objectRemoved (o);
+        deleteObject (o);
     }
 
     void childMoved (DataTree& tree, DataTree&, int, int) override
     {
-        if (tree == parent)
-        {
-            {
-                const ScopedLockType sl (arrayLock);
-                sortArray();
-            }
+        if (tree != parent)
+            return;
 
-            objectOrderChanged();
+        {
+            const ScopedLockType sl (arrayLock);
+            sortArray();
         }
+
+        objectOrderChanged();
     }
 
-    void propertyChanged (DataTree&, const Identifier&) override {}
+    void propertyChanged (DataTree&, const Identifier&) override
+    {
+    }
 
-    void treeRedirected (DataTree&) override { jassertfalse; } // may need to add handling if this is hit
+    void treeRedirected (DataTree&) override
+    {
+        jassertfalse; // may need to add handling if this is hit
+    }
 
     //==============================================================================
     void deleteAllObjects()
@@ -403,8 +415,10 @@ protected:
     int indexOf (const DataTree& v) const noexcept
     {
         for (int i = 0; i < objects.size(); ++i)
+        {
             if (objects.getUnchecked (i)->getDataTree() == v)
                 return i;
+        }
 
         return -1;
     }
@@ -415,6 +429,7 @@ protected:
     }
 
     DataTree parent;
+    Array<ObjectType*> objects;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DataTreeObjectList)
 };

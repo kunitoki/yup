@@ -487,7 +487,8 @@ public:
         @return The first matching child, or an invalid DataTree if none found
 
         @code
-        DataTree config = tree.findChild([](const DataTree& child) {
+        DataTree config = tree.findChild ([](const DataTree& child)
+        {
             return child.getType() == "Configuration";
         });
         @endcode
@@ -507,8 +508,9 @@ public:
 
         @code
         std::vector<DataTree> allSettings;
-        root.findDescendants(allSettings, [](const DataTree& node) {
-            return node.getType().toString().endsWith("Settings");
+        root.findDescendants (allSettings, [](const DataTree& node)
+        {
+            return node.getType().toString().endsWith ("Settings");
         });
         @endcode
 
@@ -538,7 +540,7 @@ public:
         @see fromXml(), writeToBinaryStream()
 
         @code
-        DataTree settings("AppSettings");
+        DataTree settings ("AppSettings");
         // ... populate settings ...
         auto xml = settings.createXml();
         String xmlString = xml->toString();
@@ -606,10 +608,10 @@ public:
         @see fromJson(), createXml()
 
         @code
-        DataTree settings("AppSettings");
+        DataTree settings ("AppSettings");
         // ... populate settings ...
         var jsonData = settings.createJson();
-        String jsonString = JSON::toString(jsonData);
+        String jsonString = JSON::toString (jsonData);
         @endcode
     */
     var createJson() const;
@@ -628,9 +630,9 @@ public:
         @code
         String jsonString = "{ \"type\": \"Settings\", \"properties\": { \"version\": \"1.0\" }, \"children\": [] }";
         var jsonData;
-        if (JSON::parse(jsonString, jsonData).wasOk())
+        if (JSON::parse (jsonString, jsonData).wasOk())
         {
-            DataTree tree = DataTree::fromJson(jsonData);
+            DataTree tree = DataTree::fromJson (jsonData);
         }
         @endcode
     */
@@ -647,12 +649,12 @@ public:
         class MyListener : public DataTree::Listener
         {
         public:
-            void propertyChanged(DataTree& tree, const Identifier& property) override
+            void propertyChanged (DataTree& tree, const Identifier& property) override
             {
                 std::cout << "Property " << property.toString() << " changed" << std::endl;
             }
 
-            void childAdded(DataTree& parent, DataTree& child) override
+            void childAdded (DataTree& parent, DataTree& child) override
             {
                 std::cout << "Child of type " << child.getType().toString() << " added" << std::endl;
             }
@@ -793,15 +795,15 @@ public:
         @code
         // Basic usage with auto-commit
         {
-            auto transaction = tree.beginTransaction("Update settings");
-            transaction.setProperty("version", "2.0");
-            transaction.setProperty("debug", false);
+            auto transaction = tree.beginTransaction ("Update settings");
+            transaction.setProperty ("version", "2.0");
+            transaction.setProperty ("debug", false);
             // Commits automatically when transaction goes out of scope
         }
 
         // Explicit commit with error handling
-        auto transaction = tree.beginTransaction("Complex update");
-        transaction.setProperty("config", configData);
+        auto transaction = tree.beginTransaction ("Complex update");
+        transaction.setProperty ("config", configData);
         if (configData.isValid())
             transaction.commit();
         else
@@ -810,7 +812,7 @@ public:
         // With undo support
         UndoManager undoManager;
         {
-            auto transaction = tree.beginTransaction("Undoable changes", &undoManager);
+            auto transaction = tree.beginTransaction ("Undoable changes", &undoManager);
             // ... make changes ...
         }
         // Later: undoManager.undo();
@@ -832,6 +834,7 @@ public:
             @param tree The DataTree to operate on
             @param description Human-readable description for undo history
             @param undoManager Optional UndoManager for undo/redo support
+
             @see DataTree::beginTransaction()
         */
         Transaction (DataTree& tree, const String& description, UndoManager* undoManager = nullptr);
@@ -891,6 +894,7 @@ public:
 
             @param name The property name
             @param newValue The new value to set
+
             @see DataTree::getProperty()
         */
         void setProperty (const Identifier& name, const var& newValue);
@@ -945,7 +949,6 @@ public:
     private:
         friend class TransactionAction;
 
-        // Transaction state tracking
         struct PropertyChange
         {
             enum Type
@@ -961,13 +964,12 @@ public:
             var oldValue;
         };
 
-        struct ChildChange; // Forward declaration
+        struct ChildChange;
 
         void captureInitialState();
         void applyChanges();
         void rollbackChanges();
-
-        // Static helper for applying changes - used by both Transaction and TransactionAction
+        
         static void applyChangesToTree (DataTree& tree,
                                         const NamedValueSet& originalProperties,
                                         const std::vector<DataTree>& originalChildren,
@@ -977,11 +979,11 @@ public:
         DataTree& dataTree;
         UndoManager* undoManager;
         String description;
-        bool active = true;
         std::vector<PropertyChange> propertyChanges;
         std::vector<ChildChange> childChanges;
         NamedValueSet originalProperties;
         std::vector<DataTree> originalChildren;
+        bool active = true;
 
         YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Transaction)
     };
@@ -995,11 +997,11 @@ public:
         with detailed error messages.
 
         @code
-        DataTreeSchema schema = DataTreeSchema::fromJsonSchema(schemaJson);
-        auto validatedTransaction = tree.beginTransaction(schema, "Update settings");
+        DataTreeSchema schema = DataTreeSchema::fromJsonSchema (schemaJson);
+        auto validatedTransaction = tree.beginTransaction (schema, "Update settings");
 
         // This will validate that "fontSize" accepts numbers and is within range
-        auto result = validatedTransaction.setProperty("fontSize", 14);
+        auto result = validatedTransaction.setProperty ("fontSize", 14);
         if (result.failed())
             DBG("Invalid fontSize: " << result.getErrorMessage());
 
@@ -1012,7 +1014,10 @@ public:
         /**
             Creates a validated transaction for the specified DataTree.
         */
-        ValidatedTransaction (DataTree& tree, DataTreeSchema* schema, const String& description, UndoManager* undoManager = nullptr);
+        ValidatedTransaction (DataTree& tree,
+                              ReferenceCountedObjectPtr<DataTreeSchema> schema,
+                              const String& description,
+                              UndoManager* undoManager = nullptr);
 
         /**
             Move constructor - transfers ownership of the transaction.
@@ -1034,6 +1039,7 @@ public:
 
             @param name The property name
             @param newValue The new value to set
+
             @return Result indicating success or validation failure
         */
         yup::Result setProperty (const Identifier& name, const var& newValue);
@@ -1044,6 +1050,7 @@ public:
             Checks if the property is required and prevents removal if so.
 
             @param name The property name to remove
+
             @return Result indicating success or validation failure
         */
         yup::Result removeProperty (const Identifier& name);
@@ -1055,6 +1062,7 @@ public:
 
             @param child The child DataTree to add
             @param index Position to insert at, or -1 to append
+
             @return Result indicating success or validation failure
         */
         yup::Result addChild (const DataTree& child, int index = -1);
@@ -1066,6 +1074,7 @@ public:
 
             @param childType The type of child to create and add
             @param index Position to insert at, or -1 to append
+
             @return ResultValue containing the created child, or error on failure
         */
         yup::ResultValue<DataTree> createAndAddChild (const Identifier& childType, int index = -1);
@@ -1076,6 +1085,7 @@ public:
             Checks minimum child count constraints.
 
             @param child The child to remove
+
             @return Result indicating success or validation failure
         */
         yup::Result removeChild (const DataTree& child);
@@ -1124,27 +1134,35 @@ public:
 
         @param description Human-readable description of the changes (used for undo history)
         @param undoManager Optional UndoManager to enable undo/redo functionality
+
         @return A new Transaction object that will modify this DataTree
 
         @code
         // Basic usage
-        auto transaction = tree.beginTransaction("Update configuration");
-        transaction.setProperty("version", "2.0");
-        transaction.addChild(DataTree("NewSection"));
+        auto transaction = tree.beginTransaction ("Update configuration");
+        transaction.setProperty ("version", "2.0");
+        transaction.addChild (DataTree ("NewSection"));
         // Auto-commits when transaction goes out of scope
 
         // With undo support
         UndoManager undoManager;
-        auto transaction = tree.beginTransaction("Reversible changes", &undoManager);
-        // ... make changes ...
+        {
+            auto transaction = tree.beginTransaction ("Reversible changes", &undoManager);
+            // ... make changes ...
+        }
         // Later: undoManager.undo();
         @endcode
 
         @see Transaction
     */
-    Transaction beginTransaction (const String& description = "DataTree Changes", UndoManager* undoManager = nullptr)
+    Transaction beginTransaction (const String& description, UndoManager* undoManager = nullptr)
     {
         return Transaction (*this, description, undoManager);
+    }
+
+    Transaction beginTransaction (UndoManager* undoManager = nullptr)
+    {
+        return Transaction (*this, {}, undoManager);
     }
 
     /**
@@ -1159,19 +1177,40 @@ public:
         @return A ValidatedTransaction that enforces schema constraints
 
         @code
-        auto schema = DataTreeSchema::fromJsonSchema(schemaJson);
-        auto transaction = tree.beginTransaction(schema, "Update settings");
-        transaction.setProperty("theme", "dark"); // Validates against schema
-        // Auto-commits when transaction goes out of scope if all validations pass
+        auto schema = DataTreeSchema::fromJsonSchema (schemaJson);
+        {
+            auto transaction = tree.beginTransaction(schema, "Update settings");
+            transaction.setProperty ("theme", "dark"); // Validates against schema
+            // Auto-commits when transaction goes out of scope if all validations pass
+        }
         @endcode
 
         @see ValidatedTransaction, DataTreeSchema
     */
-    ValidatedTransaction beginTransaction (DataTreeSchema* schema,
-                                           const String& description = "DataTree Changes",
+    ValidatedTransaction beginTransaction (ReferenceCountedObjectPtr<DataTreeSchema> schema,
+                                           const String& description,
                                            UndoManager* undoManager = nullptr)
     {
         return ValidatedTransaction (*this, schema, description, undoManager);
+    }
+
+    /**
+        Creates a validated transaction for modifying this DataTree with schema enforcement.
+
+        This overload creates a ValidatedTransaction that validates all operations against
+        the provided schema before applying them to the DataTree.
+
+        @param schema The DataTreeSchema to validate against (reference-counted)
+        @param undoManager Optional UndoManager for undo/redo functionality
+
+        @return A ValidatedTransaction that enforces schema constraints
+
+        @see ValidatedTransaction, DataTreeSchema
+    */
+    ValidatedTransaction beginTransaction (ReferenceCountedObjectPtr<DataTreeSchema> schema,
+                                           UndoManager* undoManager = nullptr)
+    {
+        return ValidatedTransaction (*this, schema, {}, undoManager);
     }
 
 private:
@@ -1194,7 +1233,6 @@ private:
         std::vector<DataTree> children;
         std::weak_ptr<DataObject> parent;
         ListenerList<DataTree::Listener> listeners;
-        DataTree* ownerTree = nullptr;
 
         //==============================================================================
         DataObject() = default;
@@ -1209,8 +1247,6 @@ private:
 
         //==============================================================================
         std::shared_ptr<DataObject> clone() const;
-
-        DataTree* getDataTree() const;
 
     private:
         YUP_DECLARE_NON_COPYABLE (DataObject)
@@ -1241,8 +1277,7 @@ private:
 template <typename Callback>
 void DataTree::forEachChild (Callback callback) const
 {
-    const int numChildren = getNumChildren();
-    for (int i = 0; i < numChildren; ++i)
+    for (int i = 0; i < getNumChildren(); ++i)
     {
         if constexpr (std::is_void_v<std::invoke_result_t<Callback, DataTree>>)
         {
@@ -1262,8 +1297,7 @@ void DataTree::forEachDescendant (Callback callback) const
 {
     std::function<bool (const DataTree&)> traverse = [&] (const DataTree& tree) -> bool
     {
-        const int numChildren = tree.getNumChildren();
-        for (int i = 0; i < numChildren; ++i)
+        for (int i = 0; i < tree.getNumChildren(); ++i)
         {
             auto child = tree.getChild (i);
 
@@ -1274,12 +1308,11 @@ void DataTree::forEachDescendant (Callback callback) const
             }
             else
             {
-                if (callback (child))
-                    return true;
-                if (traverse (child))
+                if (callback (child) || traverse (child))
                     return true;
             }
         }
+
         return false;
     };
 
@@ -1302,6 +1335,7 @@ template <typename Predicate>
 DataTree DataTree::findChild (Predicate predicate) const
 {
     DataTree result;
+
     forEachChild ([&] (const DataTree& child)
     {
         if (predicate (child))
@@ -1309,8 +1343,10 @@ DataTree DataTree::findChild (Predicate predicate) const
             result = child;
             return true; // Stop iteration
         }
+
         return false;
     });
+
     return result;
 }
 
@@ -1330,6 +1366,7 @@ template <typename Predicate>
 DataTree DataTree::findDescendant (Predicate predicate) const
 {
     DataTree result;
+
     forEachDescendant ([&] (const DataTree& descendant)
     {
         if (predicate (descendant))
@@ -1337,8 +1374,10 @@ DataTree DataTree::findDescendant (Predicate predicate) const
             result = descendant;
             return true; // Stop iteration
         }
+
         return false;
     });
+
     return result;
 }
 

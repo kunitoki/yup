@@ -150,7 +150,7 @@ TEST_F (DataTreeObjectListTests, BasicUsage)
     TestObjectList objectList (rootTree);
 
     // Initially empty
-    EXPECT_EQ (0, objectList.objects.size());
+    EXPECT_EQ (0, objectList.getNumObjects());
     EXPECT_EQ (0, TestObject::constructorCallCount);
 
     // Add some objects to the DataTree
@@ -172,15 +172,15 @@ TEST_F (DataTreeObjectListTests, BasicUsage)
     }
 
     // Objects should be automatically created
-    EXPECT_EQ (2, objectList.objects.size());
+    EXPECT_EQ (2, objectList.getNumObjects());
     EXPECT_EQ (2, TestObject::constructorCallCount);
 
     // Check object properties via getter methods
-    EXPECT_EQ ("Button1", objectList.objects[0]->getName());
-    EXPECT_EQ ("Label1", objectList.objects[1]->getName());
+    EXPECT_EQ ("Button1", objectList.getObject (0)->getName());
+    EXPECT_EQ ("Label1", objectList.getObject (1)->getName());
 
     // Check callback notifications
-    EXPECT_EQ (2, objectList.addedObjects.size());
+    EXPECT_EQ (2, objectList.getNumObjects());
     EXPECT_EQ ("Button1", objectList.addedObjects[0]);
     EXPECT_EQ ("Label1", objectList.addedObjects[1]);
 }
@@ -215,9 +215,9 @@ TEST_F (DataTreeObjectListTests, SelectiveObjectCreation)
     }
 
     // Only objects with name property should be in the list
-    EXPECT_EQ (2, objectList.objects.size());
-    EXPECT_EQ ("Named Object 1", objectList.objects[0]->getName());
-    EXPECT_EQ ("Named Object 2", objectList.objects[1]->getName());
+    EXPECT_EQ (2, objectList.getNumObjects());
+    EXPECT_EQ ("Named Object 1", objectList.getObject (0)->getName());
+    EXPECT_EQ ("Named Object 2", objectList.getObject (1)->getName());
 
     // Check notifications
     EXPECT_EQ (2, objectList.addedObjects.size());
@@ -253,7 +253,7 @@ TEST_F (DataTreeObjectListTests, ObjectRemoval)
         rootTransaction.addChild (obj3);
     }
 
-    EXPECT_EQ (3, objectList.objects.size());
+    EXPECT_EQ (3, objectList.getNumObjects());
     EXPECT_EQ (3, TestObject::constructorCallCount);
 
     // Remove middle object
@@ -262,12 +262,12 @@ TEST_F (DataTreeObjectListTests, ObjectRemoval)
         transaction.removeChild (obj2);
     }
 
-    EXPECT_EQ (2, objectList.objects.size());
+    EXPECT_EQ (2, objectList.getNumObjects());
     EXPECT_EQ (1, TestObject::destructorCallCount);
 
     // Remaining objects should be correct
-    EXPECT_EQ ("Obj1", objectList.objects[0]->getName());
-    EXPECT_EQ ("Obj3", objectList.objects[1]->getName());
+    EXPECT_EQ ("Obj1", objectList.getObject (0)->getName());
+    EXPECT_EQ ("Obj3", objectList.getObject (1)->getName());
 
     // Check removal notification
     EXPECT_EQ (1, objectList.removedObjects.size());
@@ -309,9 +309,9 @@ TEST_F (DataTreeObjectListTests, ObjectReordering)
     }
 
     // Order should be updated
-    EXPECT_EQ ("Second", objectList.objects[0]->getName());
-    EXPECT_EQ ("Third", objectList.objects[1]->getName());
-    EXPECT_EQ ("First", objectList.objects[2]->getName());
+    EXPECT_EQ ("Second", objectList.getObject (0)->getName());
+    EXPECT_EQ ("Third", objectList.getObject (1)->getName());
+    EXPECT_EQ ("First", objectList.getObject (2)->getName());
 
     EXPECT_EQ (1, objectList.orderChangedCount);
 }
@@ -332,8 +332,8 @@ TEST_F (DataTreeObjectListTests, ObjectStateSync)
         rootTransaction.addChild (objTree);
     }
 
-    EXPECT_EQ (1, objectList.objects.size());
-    TestObject* object = objectList.objects[0];
+    EXPECT_EQ (1, objectList.getNumObjects());
+    TestObject* object = objectList.getObject (0);
 
     // Test initial state via getter methods
     EXPECT_EQ ("Test Object", object->getName());
@@ -374,20 +374,10 @@ TEST_F (DataTreeObjectListTests, ArrayLikeAccess)
         }
     }
 
-    EXPECT_EQ (5, objectList.objects.size());
-
-    // Test array-like access
-    for (int i = 0; i < objectList.objects.size(); ++i)
+    EXPECT_EQ (5, objectList.getNumObjects());
+    for (int index = 0; index < objectList.getNumObjects(); ++index)
     {
-        EXPECT_EQ ("Object" + String (i), objectList.objects[i]->getName());
-    }
-
-    // Test iterator-style usage
-    int index = 0;
-    for (auto* object : objectList.objects)
-    {
-        EXPECT_EQ ("Object" + String (index), object->getName());
-        ++index;
+        EXPECT_EQ ("Object" + String (index), objectList.getObject (index)->getName());
     }
 }
 
@@ -428,7 +418,7 @@ TEST_F (DataTreeObjectListTests, EmptyListBehavior)
     TestObjectList objectList (rootTree);
 
     // Test empty list
-    EXPECT_EQ (0, objectList.objects.size());
+    EXPECT_EQ (0, objectList.getNumObjects());
     EXPECT_EQ (0, objectList.addedObjects.size());
     EXPECT_EQ (0, objectList.removedObjects.size());
 
@@ -443,14 +433,14 @@ TEST_F (DataTreeObjectListTests, EmptyListBehavior)
         rootTransaction.addChild (obj);
     }
 
-    EXPECT_EQ (1, objectList.objects.size());
+    EXPECT_EQ (1, objectList.getNumObjects());
 
     {
         auto transaction = rootTree.beginTransaction ("Remove Object");
         transaction.removeChild (obj);
     }
 
-    EXPECT_EQ (0, objectList.objects.size());
+    EXPECT_EQ (0, objectList.getNumObjects());
     EXPECT_EQ (1, objectList.addedObjects.size());
     EXPECT_EQ (1, objectList.removedObjects.size());
 }
@@ -483,7 +473,7 @@ TEST_F (DataTreeObjectListTests, RangeBasedForLoopIntegration)
 
     // Now create the object list after adding children
     TestObjectList objectList (rootTree);
-    EXPECT_EQ (3, objectList.objects.size());
+    EXPECT_EQ (3, objectList.getNumObjects());
 
     // Verify the range-based for loop works with DataTree
     std::vector<String> childNames;
@@ -499,8 +489,8 @@ TEST_F (DataTreeObjectListTests, RangeBasedForLoopIntegration)
     EXPECT_EQ ("Third", childNames[2]);
 
     // Verify objects match the DataTree children
-    for (int i = 0; i < objectList.objects.size(); ++i)
+    for (int i = 0; i < objectList.getNumObjects(); ++i)
     {
-        EXPECT_EQ (childNames[i], objectList.objects[i]->getName());
+        EXPECT_EQ (childNames[i], objectList.getObject (i)->getName());
     }
 }

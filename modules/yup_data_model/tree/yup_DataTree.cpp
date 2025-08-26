@@ -457,60 +457,45 @@ DataTree::DataObject::DataObject (const Identifier& treeType)
 {
 }
 
-DataTree::DataObject::~DataObject()
-{
-    ownerTree = nullptr;
-}
+DataTree::DataObject::~DataObject() = default;
 
 void DataTree::DataObject::sendPropertyChangeMessage (const Identifier& property)
 {
-    if (auto tree = getDataTree())
+    DataTree treeObj (shared_from_this());
+    listeners.call ([&] (DataTree::Listener& l)
     {
-        DataTree treeObj (shared_from_this());
-        listeners.call ([&] (DataTree::Listener& l)
-        {
-            l.propertyChanged (treeObj, property);
-        });
-    }
+        l.propertyChanged (treeObj, property);
+    });
 }
 
 void DataTree::DataObject::sendChildAddedMessage (const DataTree& child)
 {
-    if (auto tree = getDataTree())
+    DataTree treeObj (shared_from_this());
+    DataTree childTree (child.object);
+    listeners.call ([&] (DataTree::Listener& l)
     {
-        DataTree treeObj (shared_from_this());
-        DataTree childTree (child.object);
-        listeners.call ([&] (DataTree::Listener& l)
-        {
-            l.childAdded (treeObj, childTree);
-        });
-    }
+        l.childAdded (treeObj, childTree);
+    });
 }
 
 void DataTree::DataObject::sendChildRemovedMessage (const DataTree& child, int formerIndex)
 {
-    if (auto tree = getDataTree())
+    DataTree treeObj (shared_from_this());
+    DataTree childTree (child.object);
+    listeners.call ([&] (DataTree::Listener& l)
     {
-        DataTree treeObj (shared_from_this());
-        DataTree childTree (child.object);
-        listeners.call ([&] (DataTree::Listener& l)
-        {
-            l.childRemoved (treeObj, childTree, formerIndex);
-        });
-    }
+        l.childRemoved (treeObj, childTree, formerIndex);
+    });
 }
 
 void DataTree::DataObject::sendChildMovedMessage (const DataTree& child, int oldIndex, int newIndex)
 {
-    if (auto tree = getDataTree())
+    DataTree treeObj (shared_from_this());
+    DataTree childTree (child.object);
+    listeners.call ([&] (DataTree::Listener& l)
     {
-        DataTree treeObj (shared_from_this());
-        DataTree childTree (child.object);
-        listeners.call ([&] (DataTree::Listener& l)
-        {
-            l.childMoved (treeObj, childTree, oldIndex, newIndex);
-        });
-    }
+        l.childMoved (treeObj, childTree, oldIndex, newIndex);
+    });
 }
 
 std::shared_ptr<DataTree::DataObject> DataTree::DataObject::clone() const
@@ -529,11 +514,6 @@ std::shared_ptr<DataTree::DataObject> DataTree::DataObject::clone() const
     return newObject;
 }
 
-DataTree* DataTree::DataObject::getDataTree() const
-{
-    return ownerTree;
-}
-
 //==============================================================================
 
 DataTree::DataTree() noexcept = default;
@@ -541,7 +521,6 @@ DataTree::DataTree() noexcept = default;
 DataTree::DataTree (const Identifier& type)
     : object (std::make_shared<DataObject> (type))
 {
-    object->ownerTree = this;
 }
 
 DataTree::DataTree (const DataTree& other) noexcept
@@ -593,8 +572,6 @@ DataTree& DataTree::operator= (DataTree&& other) noexcept
 DataTree::DataTree (std::shared_ptr<DataObject> objectToUse)
     : object (std::move (objectToUse))
 {
-    if (object)
-        object->ownerTree = this;
 }
 
 //==============================================================================
@@ -1552,9 +1529,9 @@ void DataTree::Transaction::applyChanges()
 
 //==============================================================================
 
-DataTree::ValidatedTransaction::ValidatedTransaction (DataTree& tree, DataTreeSchema* schema, const String& description, UndoManager* undoManager)
+DataTree::ValidatedTransaction::ValidatedTransaction (DataTree& tree, ReferenceCountedObjectPtr<DataTreeSchema> schema, const String& description, UndoManager* undoManager)
     : transaction (std::make_unique<Transaction> (tree.beginTransaction (description, undoManager)))
-    , schema (schema)
+    , schema (std::move (schema))
     , nodeType (tree.getType())
 {
 }
@@ -1576,6 +1553,7 @@ DataTree::ValidatedTransaction& DataTree::ValidatedTransaction::operator= (Valid
         nodeType = other.nodeType;
         hasValidationErrors = other.hasValidationErrors;
     }
+
     return *this;
 }
 
@@ -1685,6 +1663,7 @@ void DataTree::ValidatedTransaction::abort()
     if (transaction && transaction->isActive())
     {
         transaction->abort();
+
         hasValidationErrors = false; // Reset error state
     }
 }
