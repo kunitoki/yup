@@ -967,7 +967,6 @@ public:
         struct ChildChange;
 
         void captureInitialState();
-        void applyChanges();
         void rollbackChanges();
 
         static void applyChangesToTree (DataTree& tree,
@@ -1308,7 +1307,7 @@ void DataTree::forEachDescendant (Callback callback) const
             }
             else
             {
-                if (callback (child) || traverse (child))
+                if (callback (child) || traverse (child))
                     return true;
             }
         }

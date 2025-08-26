@@ -1245,8 +1245,7 @@ void DataTree::Transaction::commit()
     }
     else
     {
-        // No undo manager - apply changes directly
-        applyChanges();
+        applyChangesToTree (dataTree, originalProperties, originalChildren, propertyChanges, childChanges);
     }
 
     active = false;
@@ -1520,11 +1519,6 @@ void DataTree::Transaction::applyChangesToTree (DataTree& tree,
             break;
         }
     }
-}
-
-void DataTree::Transaction::applyChanges()
-{
-    applyChangesToTree (dataTree, originalProperties, originalChildren, propertyChanges, childChanges);
 }
 
 //==============================================================================
