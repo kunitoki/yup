@@ -155,11 +155,16 @@ public:
 
     void setTaps (std::vector<float> taps, float scaling)
     {
-        taps_ = std::move (taps);
-        FloatVectorOperations::multiply (taps_.data(), scaling, taps_.size());
+        FloatVectorOperations::multiply (taps.data(), scaling, taps.size());
 
-        history_.assign (taps_.size(), 0.0f);
+        tapsReversed_ = std::move (taps);
+        std::reverse (tapsReversed_.begin(), tapsReversed_.end());
 
+        numTaps_ = tapsReversed_.size();
+        paddedLen_ = (numTaps_ + 3u) & ~3u;
+        tapsReversed_.resize (paddedLen_, 0.0f);
+
+        history_.assign (2 * numTaps_, 0.0f);
         writeIndex_ = 0;
     }
 
@@ -169,41 +174,120 @@ public:
         writeIndex_ = 0;
     }
 
-    void process (const float* input, float* output, std::size_t numSamples)
+    void process (const float* input, float* output, std::size_t numSamples) noexcept
     {
-        const std::size_t numTaps = taps_.size();
-        if (numTaps == 0)
+        const std::size_t M = numTaps_;
+        if (M == 0)
             return;
 
+        const float* h = tapsReversed_.data();
         for (std::size_t i = 0; i < numSamples; ++i)
         {
-            history_[writeIndex_] = input[i];
+            const float x = input[i];
 
-            // Convolution: y[n] = sum(h[m] * x[n-m])
+            history_[writeIndex_] = x;
+            history_[writeIndex_ + M] = x;
+
+            const float* w = history_.data() + writeIndex_ + 1;
+
             float sum = 0.0f;
-            std::size_t readIndex = writeIndex_;
-            for (std::size_t m = 0; m < numTaps; ++m)
-            {
-                sum += taps_[m] * history_[readIndex];
-                if (readIndex == 0)
-                    readIndex = numTaps - 1;
-                else
-                    --readIndex;
-            }
+
+#if YUP_ENABLE_VDSP
+            vDSP_dotpr (w, 1, h, 1, &sum, M);
+#else
+            sum = dotProduct (w, h, M, paddedLen_);
+#endif
 
             output[i] += sum;
 
-            // Advance circular buffer
-            if (++writeIndex_ == numTaps)
+            if (++writeIndex_ == M)
                 writeIndex_ = 0;
         }
     }
 
-    std::size_t getNumTaps() const { return taps_.size(); }
+    std::size_t getNumTaps() const
+    {
+        return numTaps_;
+    }
 
 private:
-    std::vector<float> taps_;
+    static float dotProduct (const float* __restrict a, const float* __restrict b, std::size_t len, std::size_t paddedLen) noexcept
+    {
+        float acc = 0.0f;
+        std::size_t i = 0;
+
+#if YUP_USE_AVX_INTRINSICS && YUP_USE_FMA_INTRINSICS
+        // 8-wide AVX2 FMA path
+        __m256 vacc = _mm256_setzero_ps();
+        for (; i + 8 <= len; i += 8)
+        {
+            __m256 va = _mm256_loadu_ps (a + i);
+            __m256 vb = _mm256_loadu_ps (b + i);
+            vacc = _mm256_fmadd_ps (va, vb, vacc);
+        }
+        // horizontal add
+        __m128 low = _mm256_castps256_ps128 (vacc);
+        __m128 high = _mm256_extractf128_ps (vacc, 1);
+        __m128 vsum = _mm_add_ps (low, high);
+        vsum = _mm_hadd_ps (vsum, vsum);
+        vsum = _mm_hadd_ps (vsum, vsum);
+        acc += _mm_cvtss_f32 (vsum);
+
+#elif YUP_USE_SSE_INTRINSICS
+        __m128 vacc = _mm_setzero_ps();
+        std::size_t i = 0;
+#if YUP_USE_FMA_INTRINSICS
+        for (; i + 4 <= len; i += 4)
+        {
+            __m128 va = _mm_loadu_ps (a + i);
+            __m128 vb = _mm_loadu_ps (b + i);
+            vacc = _mm_fmadd_ps (va, vb, vacc);
+        }
+#else
+        for (; i + 4 <= len; i += 4)
+        {
+            __m128 va = _mm_loadu_ps (a + i);
+            __m128 vb = _mm_loadu_ps (b + i);
+            vacc = _mm_add_ps (vacc, _mm_mul_ps (va, vb));
+        }
+#endif
+        // horizontal add
+        __m128 shuf = _mm_movehdup_ps (vacc);
+        __m128 sums = _mm_add_ps (vacc, shuf);
+        shuf = _mm_movehl_ps (shuf, sums);
+        sums = _mm_add_ss (sums, shuf);
+        acc += _mm_cvtss_f32 (sums);
+
+#elif YUP_USE_ARM_NEON
+        float32x4_t vacc = vdupq_n_f32 (0.0f);
+        for (; i + 4 <= len; i += 4)
+        {
+            float32x4_t va = vld1q_f32 (a + i);
+            float32x4_t vb = vld1q_f32 (b + i);
+            vacc = vmlaq_f32 (vacc, va, vb);
+        }
+#if YUP_64BIT
+        acc += vaddvq_f32 (vacc);
+#else
+        float32x2_t vlow = vget_low_f32 (vacc);
+        float32x2_t vhigh = vget_high_f32 (vacc);
+        float32x2_t vsum2 = vpadd_f32 (vlow, vhigh);
+        vsum2 = vpadd_f32 (vsum2, vsum2);
+        acc += vget_lane_f32 (vsum2, 0);
+#endif
+
+#endif
+
+        for (; i < len; ++i)
+            acc += a[i] * b[i];
+
+        return acc;
+    }
+
+    std::vector<float> tapsReversed_;
     std::vector<float> history_;
+    std::size_t numTaps_ = 0;
+    std::size_t paddedLen_ = 0;
     std::size_t writeIndex_ = 0;
 };
 
@@ -532,19 +616,23 @@ public:
     {
         maxBlockSize_ = maxBlockSize;
 
-        // Calculate buffer sizes - generous but fixed allocation
-        const std::size_t inputBufferSize = maxBlockSize; // Input staging for all layers
-        const std::size_t outputBufferSize = maxHopSize_; // Output buffering for all layers
-
         // Prepare main input staging
-        inputStaging_.resize (inputBufferSize);
+        inputStaging_.resize (maxBlockSize);
         outputStaging_.assign (static_cast<std::size_t> (baseHopSize_), 0.0f);
 
-        // Prepare per-layer circular buffers
+        // Prepare per-layer circular buffers with layer-specific sizing
         for (std::size_t i = 0; i < layerInputBuffers_.size(); ++i)
         {
-            layerInputBuffers_[i].resize (inputBufferSize);
-            layerOutputBuffers_[i].resize (outputBufferSize);
+            const std::size_t layerHopSize = static_cast<std::size_t> (layers_[i].getHopSize());
+
+            // Input buffer: needs to accumulate up to layerHopSize samples plus incoming block
+            const std::size_t layerInputBufferSize = layerHopSize + maxBlockSize;
+            layerInputBuffers_[i].resize (layerInputBufferSize);
+
+            // Output buffer: needs to handle bursts of layerHopSize samples
+            // Size it to handle multiple hops since read rate (baseHopSize) may be much smaller than write rate (layerHopSize)
+            const std::size_t layerOutputBufferSize = layerHopSize * ((layerHopSize / static_cast<std::size_t> (baseHopSize_)) + 2);
+            layerOutputBuffers_[i].resize (layerOutputBufferSize);
         }
 
         // Allocate temp buffers

@@ -31,6 +31,23 @@
 #include "yup_dsp.h"
 
 //==============================================================================
+#if YUP_USE_AVX_INTRINSICS || YUP_USE_FMA_INTRINSICS
+#include <immintrin.h>
+#endif
+
+#if YUP_USE_SSE_INTRINSICS
+#include <emmintrin.h>
+#endif
+
+#if YUP_USE_ARM_NEON
+#include <arm_neon.h>
+#endif
+
+#if (YUP_MAC || YUP_IOS) && YUP_ENABLE_VDSP
+#include <Accelerate/Accelerate.h>
+#endif
+
+//==============================================================================
 #include <atomic>
 #include <thread>
 

@@ -60,7 +60,7 @@ public:
         dryGain.setCurrentAndTargetValue (0.3f);
 
         // Configure convolver with typical layout
-        convolver.setTypicalLayout (128, {128, 256, 512, 1024, 4096});
+        convolver.setTypicalLayout (128, {128, 512, 2048});
 
         // Create UI
         createUI();
