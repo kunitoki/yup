@@ -1568,13 +1568,13 @@ void convertDoubleToFloat (float* dest, const double* src, Size num) noexcept
     for (; i + 2 <= num; i += 2)
     {
         __m128d d = _mm_loadu_pd (src + i);
-        __m128 f  = _mm_cvtpd_ps (d);
+        __m128 f = _mm_cvtpd_ps (d);
         _mm_storel_pi ((__m64*) (dest + i), f);
     }
 #endif
 
-   for (; i < num; ++i)
-       dest[i] = (float) src[i];
+    for (; i < num; ++i)
+        dest[i] = (float) src[i];
 #endif
 }
 
@@ -1603,8 +1603,8 @@ void convertFloatToDouble (double* dest, const float* src, Size num) noexcept
     }
 #endif
 
-   for (; i < num; ++i)
-       dest[i] = (double) src[i];
+    for (; i < num; ++i)
+        dest[i] = (double) src[i];
 #endif
 }
 
