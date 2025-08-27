@@ -97,24 +97,26 @@ namespace yup
 
     @see jassert()
 */
-#define YUP_BREAK_IN_DEBUGGER ::kill (0, SIGTRAP);
+#define YUP_BREAK_IN_DEBUGGER { ::kill (0, SIGTRAP); }
 #elif YUP_WASM
-#define YUP_BREAK_IN_DEBUGGER
+#define YUP_BREAK_IN_DEBUGGER { }
 #elif YUP_MSVC
 #pragma intrinsic(__debugbreak)
-#define YUP_BREAK_IN_DEBUGGER __debugbreak();
+#define YUP_BREAK_IN_DEBUGGER { __debugbreak(); }
 #elif YUP_INTEL && (YUP_GCC || YUP_CLANG || YUP_MAC)
 #if YUP_NO_INLINE_ASM
-#define YUP_BREAK_IN_DEBUGGER
+#define YUP_BREAK_IN_DEBUGGER { }
 #else
-#define YUP_BREAK_IN_DEBUGGER asm ("int $3");
+#define YUP_BREAK_IN_DEBUGGER { asm ("int $3"); }
 #endif
-#elif YUP_ARM && YUP_MAC
-#define YUP_BREAK_IN_DEBUGGER __builtin_debugtrap();
 #elif YUP_ANDROID
-#define YUP_BREAK_IN_DEBUGGER __builtin_trap();
+#define YUP_BREAK_IN_DEBUGGER { __builtin_trap(); }
+#elif YUP_ARM
+#if YUP_MAC || (YUP_WINDOWS && YUP_CLANG)
+#define YUP_BREAK_IN_DEBUGGER { __builtin_debugtrap(); }
+#endif
 #else
-#define YUP_BREAK_IN_DEBUGGER __asm int 3;
+#define YUP_BREAK_IN_DEBUGGER { __asm int 3; }
 #endif
 // clang-format on
 
