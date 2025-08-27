@@ -84,6 +84,12 @@ struct FloatVectorOperationsBase
     /** Copies a vector of floating point numbers, multiplying each value by a given multiplier */
     static void YUP_CALLTYPE copyWithMultiply (FloatType* dest, const FloatType* src, FloatType multiplier, CountType numValues) noexcept;
 
+    /** Copies a vector of floating point numbers, dividing a dividend with each value (dest[i] = dividend / src[i]) */
+    static void YUP_CALLTYPE copyWithDividend (FloatType* dest, const FloatType* src, FloatType dividend, CountType numValues) noexcept;
+
+    /** Copies a vector of floating point numbers, dividing each value with a divisor (dest[i] = src[i] / divisor) */
+    static void YUP_CALLTYPE copyWithDivide (FloatType* dest, const FloatType* src, FloatType divisor, CountType numValues) noexcept;
+
     /** Adds a fixed value to the destination values. */
     static void YUP_CALLTYPE add (FloatType* dest, FloatType amountToAdd, CountType numValues) noexcept;
 
@@ -125,6 +131,18 @@ struct FloatVectorOperationsBase
 
     /** Multiplies each of the source values by a fixed multiplier and stores the result in the destination array. */
     static void YUP_CALLTYPE multiply (FloatType* dest, const FloatType* src, FloatType multiplier, CountType num) noexcept;
+
+    /** Divides the destination values by the source values. */
+    static void YUP_CALLTYPE divide (FloatType* dest, const FloatType* src, CountType numValues) noexcept;
+
+    /** Divides each source1 value by the corresponding source2 value, then stores it in the destination array. */
+    static void YUP_CALLTYPE divide (FloatType* dest, const FloatType* src1, const FloatType* src2, CountType numValues) noexcept;
+
+    /** Divides each of the destination values by a fixed divisor. */
+    static void YUP_CALLTYPE divide (FloatType* dest, FloatType divisor, CountType numValues) noexcept;
+
+    /** Divides each of the source values by a fixed divisor and stores the result in the destination array. */
+    static void YUP_CALLTYPE divide (FloatType* dest, const FloatType* src, FloatType divisor, CountType num) noexcept;
 
     /** Copies a source vector to a destination, negating each value. */
     static void YUP_CALLTYPE negate (FloatType* dest, const FloatType* src, CountType numValues) noexcept;
