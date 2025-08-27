@@ -1929,22 +1929,22 @@ void YUP_CALLTYPE FloatVectorOperations::convertFloatToFixed (int* dest, const f
     FloatVectorHelpers::convertFloatToFixed (dest, src, multiplier, num);
 }
 
-void YUP_CALLTYPE convertFloatToDouble (double* dest, const float* src, int num) noexcept
+void YUP_CALLTYPE FloatVectorOperations::convertFloatToDouble (double* dest, const float* src, int num) noexcept
 {
     FloatVectorHelpers::convertFloatToDouble (dest, src, num);
 }
 
-void YUP_CALLTYPE convertFloatToDouble (double* dest, const float* src, size_t num) noexcept
+void YUP_CALLTYPE FloatVectorOperations::convertFloatToDouble (double* dest, const float* src, size_t num) noexcept
 {
     FloatVectorHelpers::convertFloatToDouble (dest, src, num);
 }
 
-void YUP_CALLTYPE convertDoubleToFloat (float* dest, const double* src, int num) noexcept
+void YUP_CALLTYPE FloatVectorOperations::convertDoubleToFloat (float* dest, const double* src, int num) noexcept
 {
     FloatVectorHelpers::convertDoubleToFloat (dest, src, num);
 }
 
-void YUP_CALLTYPE convertDoubleToFloat (float* dest, const double* src, size_t num) noexcept
+void YUP_CALLTYPE FloatVectorOperations::convertDoubleToFloat (float* dest, const double* src, size_t num) noexcept
 {
     FloatVectorHelpers::convertDoubleToFloat (dest, src, num);
 }

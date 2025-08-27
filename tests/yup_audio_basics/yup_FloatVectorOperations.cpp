@@ -154,28 +154,6 @@ protected:
             FloatVectorOperations::fill (data1, (ValueType) 18, num);
             FloatVectorOperations::divide (data2, data1, (ValueType) 6, num);
             EXPECT_TRUE (areAllValuesEqual (data2, num, (ValueType) 3));
-
-            fillRandomly (random, int1, num);
-            const ValueType multiplier = (ValueType) (1.0 / (1 << 16));
-
-            if constexpr (std::is_same_v<ValueType, float>)
-            {
-                convertFixed (data1, int1, multiplier, num);
-                FloatVectorOperations::convertFixedToFloat (data2, int1, multiplier, num);
-                EXPECT_TRUE (buffersMatch (data1, data2, num));
-
-                convertFloatToFixed (int1, data1, 1.0f / multiplier, num);
-                HeapBlock<int> int2 (num + 16);
-#if YUP_ARM
-                int* const intData = int2;
-#else
-                int* const intData = addBytesToPointer (int2.get(), random.nextInt (16));
-#endif
-                FloatVectorOperations::convertFloatToFixed (intData, data1, 1.0f / multiplier, num);
-
-                for (int i = 0; i < num; ++i)
-                    EXPECT_EQ (int1[i], intData[i]);
-            }
         }
 
         static void fillRandomly (Random& random, ValueType* d, int num)
@@ -188,30 +166,6 @@ protected:
         {
             while (--num >= 0)
                 *d++ = random.nextInt();
-        }
-
-        static void convertFixed (float* d, const int* s, ValueType multiplier, int num)
-        {
-            while (--num >= 0)
-                *d++ = (float) *s++ * multiplier;
-        }
-
-        static void convertFixedToDouble (double* d, const int* s, double multiplier, int num)
-        {
-            while (--num >= 0)
-                *d++ = (double) *s++ * multiplier;
-        }
-
-        static void convertFloatToFixed (int* d, const float* s, float multiplier, int num)
-        {
-            while (--num >= 0)
-                *d++ = (int) (*s++ * multiplier);
-        }
-
-        static void convertDoubleToFixed (int* d, const double* s, double multiplier, int num)
-        {
-            while (--num >= 0)
-                *d++ = (int) (*s++ * multiplier);
         }
 
         static bool areAllValuesEqual (const ValueType* d, int num, ValueType target)
@@ -237,6 +191,43 @@ protected:
             return std::abs (v1 - v2) < std::numeric_limits<ValueType>::epsilon();
         }
     };
+
+    template <class ValueType>
+    static bool valuesMatch (ValueType v1, ValueType v2)
+    {
+        return std::abs (v1 - v2) < std::numeric_limits<ValueType>::epsilon();
+    }
+
+    template <class ValueType>
+    static bool buffersMatch (const ValueType* d1, const ValueType* d2, int num)
+    {
+        while (--num >= 0)
+        {
+            if (! valuesMatch (*d1++, *d2++))
+                return false;
+        }
+
+        return true;
+    }
+
+    static void convertFixedToFloat (float* d, const int* s, float multiplier, int num)
+    {
+        while (--num >= 0)
+            *d++ = (float) *s++ * multiplier;
+    }
+
+    static void convertFloatToFixed (int* d, const float* s, float multiplier, int num)
+    {
+        while (--num >= 0)
+            *d++ = (int) (*s++ * multiplier);
+    }
+
+    template <class ValueType>
+    static void fillRandomly (Random& random, ValueType* d, int num)
+    {
+        while (--num >= 0)
+            *d++ = (ValueType) (random.nextDouble() * 1000.0);
+    }
 };
 
 TEST_F (FloatVectorOperationsTests, BasicOperations)
@@ -245,5 +236,85 @@ TEST_F (FloatVectorOperationsTests, BasicOperations)
     {
         TestRunner<float>::runTest (Random::getSystemRandom());
         TestRunner<double>::runTest (Random::getSystemRandom());
+    }
+}
+
+TEST_F (FloatVectorOperationsTests, FloatToFixedAndBack)
+{
+    Random& random = Random::getSystemRandom();
+
+    for (int i = 1000; --i >= 0;)
+    {
+        const int range = random.nextBool() ? 500 : 10;
+        const int num = random.nextInt (range) + 1;
+
+        HeapBlock<float> buffer1 (num + 16), buffer2 (num + 16);
+        HeapBlock<int> buffer3 (num + 16, true);
+
+#if YUP_ARM
+        float* const data1 = buffer1;
+        float* const data2 = buffer2;
+        int* const int1 = buffer3;
+#else
+        // These tests deliberately operate on misaligned memory and will be flagged up by
+        // checks for undefined behavior!
+        float* const data1 = addBytesToPointer (buffer1.get(), random.nextInt (16));
+        float* const data2 = addBytesToPointer (buffer2.get(), random.nextInt (16));
+        int* const int1 = addBytesToPointer (buffer3.get(), random.nextInt (16));
+#endif
+
+        fillRandomly (random, data1, num);
+        fillRandomly (random, data2, num);
+
+        fillRandomly (random, int1, num);
+        const auto multiplier = (float) (1.0 / (1 << 16));
+
+        convertFixedToFloat (data1, int1, multiplier, num);
+        FloatVectorOperations::convertFixedToFloat (data2, int1, multiplier, num);
+        EXPECT_TRUE (buffersMatch (data1, data2, num));
+
+        convertFloatToFixed (int1, data1, 1.0f / multiplier, num);
+        HeapBlock<int> int2 (num + 16);
+#if YUP_ARM
+        int* const intData = int2;
+#else
+        int* const intData = addBytesToPointer (int2.get(), random.nextInt (16));
+#endif
+        FloatVectorOperations::convertFloatToFixed (intData, data1, 1.0f / multiplier, num);
+
+        for (int i = 0; i < num; ++i)
+            EXPECT_EQ (int1[i], intData[i]);
+    }
+}
+
+TEST_F (FloatVectorOperationsTests, FloatToDoubleAndBack)
+{
+    Random& random = Random::getSystemRandom();
+
+    for (int i = 1000; --i >= 0;)
+    {
+        const int range = random.nextBool() ? 500 : 10;
+        const int num = random.nextInt (range) + 1;
+
+        HeapBlock<float> floatBuffer (num + 16);
+        HeapBlock<double> doubleBuffer (num + 16);
+
+#if YUP_ARM
+        float* const floatData = floatBuffer;
+        double* const doubleData = doubleBuffer;
+#else
+        float* const floatData = addBytesToPointer (floatBuffer.get(), random.nextInt (16));
+        double* const doubleData = addBytesToPointer (doubleBuffer.get(), random.nextInt (16));
+#endif
+
+        fillRandomly (random, floatData, num);
+        FloatVectorOperations::convertFloatToDouble (doubleData, floatData, num);
+        for (int i = 0; i < num; ++i)
+            EXPECT_NEAR ((float) doubleData[i], (float) floatData[i], std::numeric_limits<float>::epsilon());
+
+        fillRandomly (random, doubleData, num);
+        FloatVectorOperations::convertDoubleToFloat (floatData, doubleData, num);
+        for (int i = 0; i < num; ++i)
+            EXPECT_NEAR ((float) floatData[i], (float) doubleData[i], std::numeric_limits<float>::epsilon());
     }
 }
