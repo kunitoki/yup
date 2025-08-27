@@ -37,7 +37,7 @@ DataTree createTestTree()
     DataTree root ("Root");
 
     {
-        auto transaction = root.beginTransaction ("Setup test data");
+        auto transaction = root.beginTransaction();
 
         // Add root properties
         transaction.setProperty ("rootProp", "rootValue");
@@ -46,7 +46,7 @@ DataTree createTestTree()
         // Create first level children
         DataTree settings ("Settings");
         {
-            auto settingsTransaction = settings.beginTransaction ("Setup settings");
+            auto settingsTransaction = settings.beginTransaction();
             settingsTransaction.setProperty ("theme", "dark");
             settingsTransaction.setProperty ("fontSize", 12);
             settingsTransaction.setProperty ("enabled", true);
@@ -55,13 +55,13 @@ DataTree createTestTree()
 
         DataTree ui ("UI");
         {
-            auto uiTransaction = ui.beginTransaction ("Setup UI");
+            auto uiTransaction = ui.beginTransaction();
             uiTransaction.setProperty ("layout", "vertical");
 
             // Add UI children
             DataTree button1 ("Button");
             {
-                auto btnTransaction = button1.beginTransaction ("Setup button1");
+                auto btnTransaction = button1.beginTransaction();
                 btnTransaction.setProperty ("text", "OK");
                 btnTransaction.setProperty ("enabled", true);
                 btnTransaction.setProperty ("width", 100);
@@ -70,7 +70,7 @@ DataTree createTestTree()
 
             DataTree button2 ("Button");
             {
-                auto btnTransaction = button2.beginTransaction ("Setup button2");
+                auto btnTransaction = button2.beginTransaction();
                 btnTransaction.setProperty ("text", "Cancel");
                 btnTransaction.setProperty ("enabled", false);
                 btnTransaction.setProperty ("width", 80);
@@ -79,14 +79,14 @@ DataTree createTestTree()
 
             DataTree panel ("Panel");
             {
-                auto panelTransaction = panel.beginTransaction ("Setup panel");
+                auto panelTransaction = panel.beginTransaction();
                 panelTransaction.setProperty ("title", "Main Panel");
                 panelTransaction.setProperty ("visible", true);
 
                 // Nested panel children
                 DataTree dialog ("Dialog");
                 {
-                    auto dialogTransaction = dialog.beginTransaction ("Setup dialog");
+                    auto dialogTransaction = dialog.beginTransaction();
                     dialogTransaction.setProperty ("title", "Confirmation Dialog");
                     dialogTransaction.setProperty ("modal", true);
                     dialogTransaction.setProperty ("width", 300);
@@ -95,7 +95,7 @@ DataTree createTestTree()
 
                 DataTree label ("Label");
                 {
-                    auto labelTransaction = label.beginTransaction ("Setup label");
+                    auto labelTransaction = label.beginTransaction();
                     labelTransaction.setProperty ("text", "Status: Ready");
                     labelTransaction.setProperty ("color", "blue");
                 }
@@ -108,7 +108,7 @@ DataTree createTestTree()
         // Add data section
         DataTree data ("Data");
         {
-            auto dataTransaction = data.beginTransaction ("Setup data");
+            auto dataTransaction = data.beginTransaction();
             dataTransaction.setProperty ("version", 2);
             dataTransaction.setProperty ("modified", true);
         }
@@ -712,7 +712,7 @@ TEST_F (DataTreeQueryTests, DeepNestingHandling)
     {
         DataTree level ("Level" + String (i));
         {
-            auto levelTrans = level.beginTransaction ("Setup level");
+            auto levelTrans = level.beginTransaction();
             levelTrans.setProperty ("depth", i);
             levelTrans.setProperty ("name", "Level" + String (i));
         }
@@ -722,13 +722,13 @@ TEST_F (DataTreeQueryTests, DeepNestingHandling)
     // Build hierarchy from bottom up
     for (int i = 49; i > 0; --i) // Start from last and work backwards
     {
-        auto parentTrans = levels[i - 1].beginTransaction ("Add child");
+        auto parentTrans = levels[i - 1].beginTransaction();
         parentTrans.addChild (levels[i]);
     }
 
     // Add first level to root
     {
-        auto rootTrans = deepRoot.beginTransaction ("Add first level");
+        auto rootTrans = deepRoot.beginTransaction();
         rootTrans.addChild (levels[0]);
     }
 
@@ -751,7 +751,7 @@ TEST_F (DataTreeQueryTests, CircularReferenceProtection)
     DataTree child ("Child");
 
     {
-        auto parentTrans = parent.beginTransaction ("Add child");
+        auto parentTrans = parent.beginTransaction();
         parentTrans.addChild (child);
     }
 
@@ -796,11 +796,11 @@ TEST_F (DataTreeQueryTests, DataTreeCircularReferencePreventionCore)
 
     // Build valid hierarchy
     {
-        auto rootTrans = root.beginTransaction ("Add children");
+        auto rootTrans = root.beginTransaction();
         rootTrans.addChild (child1);
     }
     {
-        auto child1Trans = child1.beginTransaction ("Add child2");
+        auto child1Trans = child1.beginTransaction();
         child1Trans.addChild (child2);
     }
 
@@ -811,21 +811,21 @@ TEST_F (DataTreeQueryTests, DataTreeCircularReferencePreventionCore)
 
     // Test 1: Try to add self as child (should be prevented)
     {
-        auto rootTrans = root.beginTransaction ("Try to add self");
+        auto rootTrans = root.beginTransaction();
         rootTrans.addChild (root); // Should be silently ignored
     }
     EXPECT_EQ (1, root.getNumChildren()); // Should still be 1
 
     // Test 2: Try to add parent as child (should be prevented)
     {
-        auto child1Trans = child1.beginTransaction ("Try to add parent");
+        auto child1Trans = child1.beginTransaction();
         child1Trans.addChild (root); // Should be silently ignored - would create cycle
     }
     EXPECT_EQ (1, child1.getNumChildren()); // Should still be 1 (just child2)
 
     // Test 3: Try to add grandparent as child (should be prevented)
     {
-        auto child2Trans = child2.beginTransaction ("Try to add grandparent");
+        auto child2Trans = child2.beginTransaction();
         child2Trans.addChild (root); // Should be silently ignored - would create cycle
     }
     EXPECT_EQ (0, child2.getNumChildren()); // Should still be 0
@@ -908,19 +908,12 @@ TEST_F (DataTreeQueryTests, XPathAxisSupport)
     // Test following-sibling and preceding-sibling axes
     DataTree root ("Root");
     {
-        auto tx = root.beginTransaction ("Create test structure");
+        auto tx = root.beginTransaction();
 
-        DataTree first ("Child");
-        first.beginTransaction ("").setProperty ("name", "first");
-
-        DataTree second ("Child");
-        second.beginTransaction ("").setProperty ("name", "second");
-
-        DataTree third ("Child");
-        third.beginTransaction ("").setProperty ("name", "third");
-
-        DataTree fourth ("Child");
-        fourth.beginTransaction ("").setProperty ("name", "fourth");
+        DataTree first ("Child", { { "name", "first" } });
+        DataTree second ("Child", { { "name", "second" } });
+        DataTree third ("Child", { { "name", "third" } });
+        DataTree fourth ("Child", { { "name", "fourth" } });
 
         tx.addChild (first);
         tx.addChild (second);

@@ -158,15 +158,15 @@ TEST_F (DataTreeObjectListTests, BasicUsage)
     DataTree obj2 ("Object");
 
     {
-        auto transaction1 = obj1.beginTransaction ("Setup Object 1");
+        auto transaction1 = obj1.beginTransaction();
         transaction1.setProperty ("name", "Button1");
     }
     {
-        auto transaction2 = obj2.beginTransaction ("Setup Object 2");
+        auto transaction2 = obj2.beginTransaction();
         transaction2.setProperty ("name", "Label1");
     }
     {
-        auto rootTransaction = rootTree.beginTransaction ("Add Objects");
+        auto rootTransaction = rootTree.beginTransaction();
         rootTransaction.addChild (obj1);
         rootTransaction.addChild (obj2);
     }
@@ -195,20 +195,20 @@ TEST_F (DataTreeObjectListTests, SelectiveObjectCreation)
     DataTree obj3 ("Object");
 
     {
-        auto transaction1 = obj1.beginTransaction ("Setup Object 1");
+        auto transaction1 = obj1.beginTransaction();
         transaction1.setProperty ("name", "Named Object 1");
     }
     {
-        auto transaction2 = obj2.beginTransaction ("Setup Object 2");
+        auto transaction2 = obj2.beginTransaction();
         transaction2.setProperty ("name", "Named Object 2");
     }
     {
         // obj3 has no name property - should not be included
-        auto transaction3 = obj3.beginTransaction ("Setup Object 3");
+        auto transaction3 = obj3.beginTransaction();
         transaction3.setProperty ("id", 123);
     }
     {
-        auto rootTransaction = rootTree.beginTransaction ("Add Mixed Objects");
+        auto rootTransaction = rootTree.beginTransaction();
         rootTransaction.addChild (obj1);
         rootTransaction.addChild (obj3); // This won't be included
         rootTransaction.addChild (obj2);
@@ -235,19 +235,19 @@ TEST_F (DataTreeObjectListTests, ObjectRemoval)
     DataTree obj3 ("Object");
 
     {
-        auto transaction1 = obj1.beginTransaction ("Setup Object 1");
+        auto transaction1 = obj1.beginTransaction();
         transaction1.setProperty ("name", "Obj1");
     }
     {
-        auto transaction2 = obj2.beginTransaction ("Setup Object 2");
+        auto transaction2 = obj2.beginTransaction();
         transaction2.setProperty ("name", "Obj2");
     }
     {
-        auto transaction3 = obj3.beginTransaction ("Setup Object 3");
+        auto transaction3 = obj3.beginTransaction();
         transaction3.setProperty ("name", "Obj3");
     }
     {
-        auto rootTransaction = rootTree.beginTransaction ("Add Objects");
+        auto rootTransaction = rootTree.beginTransaction();
         rootTransaction.addChild (obj1);
         rootTransaction.addChild (obj2);
         rootTransaction.addChild (obj3);
@@ -258,7 +258,7 @@ TEST_F (DataTreeObjectListTests, ObjectRemoval)
 
     // Remove middle object
     {
-        auto transaction = rootTree.beginTransaction ("Remove Object");
+        auto transaction = rootTree.beginTransaction();
         transaction.removeChild (obj2);
     }
 
@@ -284,19 +284,19 @@ TEST_F (DataTreeObjectListTests, ObjectReordering)
     DataTree obj3 ("Object");
 
     {
-        auto transaction1 = obj1.beginTransaction ("Setup Object 1");
+        auto transaction1 = obj1.beginTransaction();
         transaction1.setProperty ("name", "First");
     }
     {
-        auto transaction2 = obj2.beginTransaction ("Setup Object 2");
+        auto transaction2 = obj2.beginTransaction();
         transaction2.setProperty ("name", "Second");
     }
     {
-        auto transaction3 = obj3.beginTransaction ("Setup Object 3");
+        auto transaction3 = obj3.beginTransaction();
         transaction3.setProperty ("name", "Third");
     }
     {
-        auto rootTransaction = rootTree.beginTransaction ("Add Objects");
+        auto rootTransaction = rootTree.beginTransaction();
         rootTransaction.addChild (obj1);
         rootTransaction.addChild (obj2);
         rootTransaction.addChild (obj3);
@@ -304,7 +304,7 @@ TEST_F (DataTreeObjectListTests, ObjectReordering)
 
     // Move first object to end
     {
-        auto transaction = rootTree.beginTransaction ("Reorder Objects");
+        auto transaction = rootTree.beginTransaction();
         transaction.moveChild (0, 2);
     }
 
@@ -324,12 +324,12 @@ TEST_F (DataTreeObjectListTests, ObjectStateSync)
     // Add an object
     DataTree objTree ("Object");
     {
-        auto transaction = objTree.beginTransaction ("Setup Object");
+        auto transaction = objTree.beginTransaction();
         transaction.setProperty ("name", "Test Object");
         transaction.setProperty ("enabled", true);
     }
     {
-        auto rootTransaction = rootTree.beginTransaction ("Add Object");
+        auto rootTransaction = rootTree.beginTransaction();
         rootTransaction.addChild (objTree);
     }
 
@@ -349,7 +349,7 @@ TEST_F (DataTreeObjectListTests, ObjectStateSync)
 
     // Modify through DataTree
     {
-        auto transaction = objTree.beginTransaction ("Enable Object");
+        auto transaction = objTree.beginTransaction();
         transaction.setProperty ("enabled", true);
     }
 
@@ -366,11 +366,11 @@ TEST_F (DataTreeObjectListTests, ArrayLikeAccess)
     {
         DataTree obj ("Object");
         {
-            auto transaction = obj.beginTransaction ("Setup Object");
+            auto transaction = obj.beginTransaction();
             transaction.setProperty ("name", "Object" + String (i));
         }
         {
-            auto rootTransaction = rootTree.beginTransaction ("Add Object");
+            auto rootTransaction = rootTree.beginTransaction();
             rootTransaction.addChild (obj);
         }
     }
@@ -392,15 +392,15 @@ TEST_F (DataTreeObjectListTests, LifecycleManagement)
         DataTree obj2 ("Object");
 
         {
-            auto transaction1 = obj1.beginTransaction ("Setup Object 1");
+            auto transaction1 = obj1.beginTransaction();
             transaction1.setProperty ("name", "Obj1");
         }
         {
-            auto transaction2 = obj2.beginTransaction ("Setup Object 2");
+            auto transaction2 = obj2.beginTransaction();
             transaction2.setProperty ("name", "Obj2");
         }
         {
-            auto rootTransaction = rootTree.beginTransaction ("Add Objects");
+            auto rootTransaction = rootTree.beginTransaction();
             rootTransaction.addChild (obj1);
             rootTransaction.addChild (obj2);
         }
@@ -426,18 +426,18 @@ TEST_F (DataTreeObjectListTests, EmptyListBehavior)
     // Add and immediately remove
     DataTree obj ("Object");
     {
-        auto transaction = obj.beginTransaction ("Setup Object");
+        auto transaction = obj.beginTransaction();
         transaction.setProperty ("name", "TempObject");
     }
     {
-        auto rootTransaction = rootTree.beginTransaction ("Add Object");
+        auto rootTransaction = rootTree.beginTransaction();
         rootTransaction.addChild (obj);
     }
 
     EXPECT_EQ (1, objectList.getNumObjects());
 
     {
-        auto transaction = rootTree.beginTransaction ("Remove Object");
+        auto transaction = rootTree.beginTransaction();
         transaction.removeChild (obj);
     }
 
@@ -454,19 +454,19 @@ TEST_F (DataTreeObjectListTests, RangeBasedForLoopIntegration)
     DataTree obj3 ("Object");
 
     {
-        auto transaction1 = obj1.beginTransaction ("Setup Object 1");
+        auto transaction1 = obj1.beginTransaction();
         transaction1.setProperty ("name", "First");
     }
     {
-        auto transaction2 = obj2.beginTransaction ("Setup Object 2");
+        auto transaction2 = obj2.beginTransaction();
         transaction2.setProperty ("name", "Second");
     }
     {
-        auto transaction3 = obj3.beginTransaction ("Setup Object 3");
+        auto transaction3 = obj3.beginTransaction();
         transaction3.setProperty ("name", "Third");
     }
     {
-        auto rootTransaction = rootTree.beginTransaction ("Add Objects");
+        auto rootTransaction = rootTree.beginTransaction();
         rootTransaction.addChild (obj1);
         rootTransaction.addChild (obj2);
         rootTransaction.addChild (obj3);

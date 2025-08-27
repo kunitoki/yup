@@ -140,7 +140,7 @@ public:
         try
         {
             var varValue = VariantConverter<T>::toVar (newValue);
-            auto transaction = dataTree.beginTransaction ("CachedValue Set");
+            auto transaction = dataTree.beginTransaction();
             transaction.setProperty (propertyName, varValue);
         }
         catch (...)

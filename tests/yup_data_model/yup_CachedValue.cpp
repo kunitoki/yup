@@ -215,7 +215,7 @@ protected:
 
         // Set up initial property values
         {
-            auto transaction = dataTree.beginTransaction ("Default", undoManager);
+            auto transaction = dataTree.beginTransaction (undoManager);
             transaction.setProperty (kTestPropertyName, 123);
             transaction.setProperty (kAnotherPropertyName, "hello");
             transaction.commit();
@@ -390,7 +390,7 @@ TEST_F (CachedValueTests, TreeRedirectionUpdatesBinding)
     // Create new tree with different value
     DataTree newTree ("xyz");
     {
-        auto transaction = newTree.beginTransaction ("abc", undoManager);
+        auto transaction = newTree.beginTransaction (undoManager);
         transaction.setProperty (kTestPropertyName, 888);
         transaction.commit();
     }
@@ -408,7 +408,7 @@ TEST (CachedValueTypeTests, WorksWithDifferentTypes)
     DataTree tree ("xyz");
 
     {
-        auto transaction = tree.beginTransaction ("abc", undoManager);
+        auto transaction = tree.beginTransaction (undoManager);
         transaction.setProperty ("stringProp", "test string");
         transaction.setProperty ("doubleProp", 2.5);
         transaction.setProperty ("boolProp", true);
@@ -430,7 +430,7 @@ TEST (CachedValueAtomicTests, WorksWithAtomicInt)
     DataTree tree ("atomicTest");
 
     {
-        auto transaction = tree.beginTransaction ("init", undoManager);
+        auto transaction = tree.beginTransaction (undoManager);
         transaction.setProperty ("atomicIntProp", 42);
         transaction.commit();
     }
@@ -461,7 +461,7 @@ TEST (CachedValueAtomicTests, AtomicUpdatesOnPropertyChange)
     DataTree tree ("atomicTest");
 
     {
-        auto transaction = tree.beginTransaction ("init", undoManager);
+        auto transaction = tree.beginTransaction (undoManager);
         transaction.setProperty ("atomicIntProp", 100);
         transaction.commit();
     }
@@ -472,7 +472,7 @@ TEST (CachedValueAtomicTests, AtomicUpdatesOnPropertyChange)
 
     // Change the property value
     {
-        auto transaction = tree.beginTransaction ("update", undoManager);
+        auto transaction = tree.beginTransaction (undoManager);
         transaction.setProperty ("atomicIntProp", 200);
         transaction.commit();
     }
@@ -501,7 +501,7 @@ TEST (CachedValueAtomicTests, AtomicWithBool)
     DataTree tree ("atomicTest");
 
     {
-        auto transaction = tree.beginTransaction ("init", undoManager);
+        auto transaction = tree.beginTransaction (undoManager);
         transaction.setProperty ("atomicBoolProp", true);
         transaction.commit();
     }
@@ -513,7 +513,7 @@ TEST (CachedValueAtomicTests, AtomicWithBool)
 
     // Change to false
     {
-        auto transaction = tree.beginTransaction ("update", undoManager);
+        auto transaction = tree.beginTransaction (undoManager);
         transaction.setProperty ("atomicBoolProp", false);
         transaction.commit();
     }
@@ -527,7 +527,7 @@ TEST (CachedValueAtomicTests, AtomicThreadSafeAccess)
     DataTree tree ("atomicTest");
 
     {
-        auto transaction = tree.beginTransaction ("init", undoManager);
+        auto transaction = tree.beginTransaction (undoManager);
         transaction.setProperty ("atomicIntProp", 0);
         transaction.commit();
     }
@@ -553,7 +553,7 @@ TEST (CachedValueAtomicTests, AtomicThreadSafeAccess)
     {
         for (int i = 1; i <= 10 && ! stopFlag.load(); ++i)
         {
-            auto transaction = tree.beginTransaction ("update", undoManager);
+            auto transaction = tree.beginTransaction (undoManager);
             transaction.setProperty ("atomicIntProp", i * 10);
             transaction.commit();
             std::this_thread::sleep_for (std::chrono::microseconds (100));
@@ -613,7 +613,7 @@ TEST (CachedValueAtomicTests, AtomicSetMethodUpdatesDataTree)
     DataTree tree ("atomicSetTest");
 
     {
-        auto transaction = tree.beginTransaction ("init", undoManager);
+        auto transaction = tree.beginTransaction (undoManager);
         transaction.setProperty ("atomicProp", 111);
         transaction.commit();
     }
@@ -681,7 +681,7 @@ TEST (CachedValueVariantConverterTests, ColorTypeWithStringConverter)
 
     // Set up initial color value directly in DataTree as hex string
     {
-        auto transaction = tree.beginTransaction ("init", undoManager);
+        auto transaction = tree.beginTransaction (undoManager);
         transaction.setProperty ("colorProp", "#FF0080FF"); // Red=255, Green=0, Blue=128, Alpha=255
     }
 
@@ -744,7 +744,7 @@ TEST (CachedValueVariantConverterTests, PointTypePropertyChangeUpdatesCache)
 
     // Change the property directly through DataTree transaction
     {
-        auto transaction = tree.beginTransaction ("manual change", undoManager);
+        auto transaction = tree.beginTransaction (undoManager);
         auto obj = std::make_unique<DynamicObject>();
         obj->setProperty ("x", 300);
         obj->setProperty ("y", 400);
@@ -794,7 +794,7 @@ TEST (CachedValueAtomicVariantConverterTests, AtomicColorTypeThreadSafety)
 
     // Initialize with a color
     {
-        auto transaction = tree.beginTransaction ("init", undoManager);
+        auto transaction = tree.beginTransaction (undoManager);
         transaction.setProperty ("atomicColorProp", "#FF000000"); // Red with no alpha
     }
 
@@ -846,7 +846,7 @@ TEST (CachedValueVariantConverterTests, ConversionFailureHandling)
 
     // Set up invalid data that cannot be converted to Point
     {
-        auto transaction = tree.beginTransaction ("bad data", undoManager);
+        auto transaction = tree.beginTransaction (undoManager);
         transaction.setProperty ("badPoint", "not a point object");
     }
 
@@ -871,7 +871,7 @@ TEST (CachedValueVariantConverterTests, StrictConversionFailureHandling)
 
     // Set up invalid data that will cause StrictPoint converter to throw
     {
-        auto transaction = tree.beginTransaction ("bad data", undoManager);
+        auto transaction = tree.beginTransaction (undoManager);
         transaction.setProperty ("strictPoint", "not a point object");
     }
 
@@ -884,7 +884,7 @@ TEST (CachedValueVariantConverterTests, StrictConversionFailureHandling)
 
     // Test with valid data - should work correctly
     {
-        auto transaction = tree.beginTransaction ("good data", undoManager);
+        auto transaction = tree.beginTransaction (undoManager);
         auto obj = std::make_unique<DynamicObject>();
         obj->setProperty ("x", 100);
         obj->setProperty ("y", 200);

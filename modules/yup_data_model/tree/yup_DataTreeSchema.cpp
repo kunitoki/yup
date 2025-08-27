@@ -561,7 +561,7 @@ DataTree DataTreeSchema::createNodeWithDefaults (const Identifier& nodeType) con
 
         if (! propSchema.defaultValue.isUndefined())
         {
-            auto transaction = tree.beginTransaction ("Set default properties");
+            auto transaction = tree.beginTransaction();
             transaction.setProperty (propName, propSchema.defaultValue);
         }
     }

@@ -306,22 +306,22 @@ TEST_F (DataTreeSchemaTests, CompleteTreeValidation)
 
     // Set required properties
     {
-        auto rootTx = root.beginTransaction ("Set root properties");
+        auto rootTx = root.beginTransaction();
         rootTx.setProperty ("version", "2.0.0");
     }
     {
-        auto settingsTx = settings.beginTransaction ("Set settings properties");
+        auto settingsTx = settings.beginTransaction();
         settingsTx.setProperty ("name", "MySettings");
     }
     {
-        auto userTx = userData.beginTransaction ("Set user properties");
+        auto userTx = userData.beginTransaction();
         userTx.setProperty ("username", "testuser");
         userTx.setProperty ("age", 25);
     }
 
     // Add children
     {
-        auto rootTx = root.beginTransaction ("Add children");
+        auto rootTx = root.beginTransaction();
         rootTx.addChild (settings);
         rootTx.addChild (userData);
     }
@@ -332,7 +332,7 @@ TEST_F (DataTreeSchemaTests, CompleteTreeValidation)
 
     // Test validation failure - remove required property
     {
-        auto settingsTx = settings.beginTransaction ("Remove required property");
+        auto settingsTx = settings.beginTransaction();
         settingsTx.removeProperty ("name");
     }
 
@@ -346,7 +346,7 @@ TEST_F (DataTreeSchemaTests, ValidatedTransactionSuccess)
     auto settingsTree = schema->createNode ("Settings");
 
     // Valid transaction operations
-    auto transaction = settingsTree.beginTransaction (schema, "Update settings");
+    auto transaction = settingsTree.beginValidatedTransaction (schema);
 
     auto result1 = transaction.setProperty ("name", "Test Settings");
     EXPECT_TRUE (result1.wasOk());
@@ -374,7 +374,7 @@ TEST_F (DataTreeSchemaTests, ValidatedTransactionFailures)
 {
     auto settingsTree = schema->createNode ("Settings");
 
-    auto transaction = settingsTree.beginTransaction (schema, "Invalid updates");
+    auto transaction = settingsTree.beginValidatedTransaction (schema);
 
     // Invalid property value should fail
     auto result1 = transaction.setProperty ("theme", "invalid");
@@ -388,7 +388,7 @@ TEST_F (DataTreeSchemaTests, ValidatedTransactionFailures)
 
     // Try to remove required property
     {
-        auto validTx = settingsTree.beginTransaction ("Set required property");
+        auto validTx = settingsTree.beginTransaction();
         validTx.setProperty ("name", "Test");
     }
 
@@ -409,7 +409,7 @@ TEST_F (DataTreeSchemaTests, ValidatedTransactionChildOperations)
 {
     auto rootTree = schema->createNode ("Root");
 
-    auto transaction = rootTree.beginTransaction (schema, "Add children");
+    auto transaction = rootTree.beginValidatedTransaction (schema);
 
     // Create and add valid child
     auto childResult = transaction.createAndAddChild ("Settings");
@@ -426,7 +426,7 @@ TEST_F (DataTreeSchemaTests, ValidatedTransactionChildOperations)
     // Manually create and add child
     auto userData = schema->createNode ("UserData");
     {
-        auto userTx = userData.beginTransaction ("Set username");
+        auto userTx = userData.beginTransaction();
         userTx.setProperty ("username", "testuser");
     }
 
@@ -486,14 +486,14 @@ TEST_F (DataTreeSchemaTests, RealWorldUsageExample)
     EXPECT_EQ ("1.0.0", appTree.getProperty ("version").toString()); // Default applied
 
     // 2. Use validated transaction to build complete structure
-    auto buildTransaction = appTree.beginTransaction (schema, "Build application structure");
+    auto buildTransaction = appTree.beginValidatedTransaction (schema);
 
     // Create settings with custom values
     auto settingsResult = buildTransaction.createAndAddChild ("Settings");
     ASSERT_TRUE (settingsResult.wasOk());
 
     DataTree settings = settingsResult.getValue();
-    auto settingsTx = settings.beginTransaction (schema, "Configure settings");
+    auto settingsTx = settings.beginValidatedTransaction (schema);
     settingsTx.setProperty ("name", "Application Settings");
     settingsTx.setProperty ("theme", "dark");
     settingsTx.setProperty ("fontSize", 14);
@@ -504,7 +504,7 @@ TEST_F (DataTreeSchemaTests, RealWorldUsageExample)
     ASSERT_TRUE (userResult.wasOk());
 
     DataTree userData = userResult.getValue();
-    auto userTx = userData.beginTransaction (schema, "Set user info");
+    auto userTx = userData.beginValidatedTransaction (schema);
     userTx.setProperty ("username", "john_doe");
     userTx.setProperty ("age", 30);
     userTx.commit();
@@ -529,7 +529,7 @@ TEST_F (DataTreeSchemaTests, RealWorldUsageExample)
     EXPECT_EQ (30, static_cast<int> (foundUser.getProperty ("age")));
 
     // 5. Test runtime property updates with validation
-    auto updateTx = foundSettings.beginTransaction (schema, "Update theme");
+    auto updateTx = foundSettings.beginValidatedTransaction (schema);
     auto themeUpdate = updateTx.setProperty ("theme", "auto");
     EXPECT_TRUE (themeUpdate.wasOk());
     updateTx.commit();
@@ -537,7 +537,7 @@ TEST_F (DataTreeSchemaTests, RealWorldUsageExample)
     EXPECT_EQ ("auto", foundSettings.getProperty ("theme").toString());
 
     // 6. Test validation prevents invalid updates
-    auto invalidTx = foundSettings.beginTransaction (schema, "Invalid update");
+    auto invalidTx = foundSettings.beginValidatedTransaction (schema);
     auto invalidUpdate = invalidTx.setProperty ("fontSize", 200); // Exceeds maximum
     EXPECT_TRUE (invalidUpdate.failed());
     EXPECT_TRUE (invalidUpdate.getErrorMessage().contains ("maximum"));

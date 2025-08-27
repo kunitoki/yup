@@ -805,14 +805,14 @@ public:
         @code
         // Basic usage with auto-commit
         {
-            auto transaction = tree.beginTransaction ("Update settings");
+            auto transaction = tree.beginTransaction();
             transaction.setProperty ("version", "2.0");
             transaction.setProperty ("debug", false);
             // Commits automatically when transaction goes out of scope
         }
 
         // Explicit commit with error handling
-        auto transaction = tree.beginTransaction ("Complex update");
+        auto transaction = tree.beginTransaction();
         transaction.setProperty ("config", configData);
         if (configData.isValid())
             transaction.commit();
@@ -822,7 +822,7 @@ public:
         // With undo support
         UndoManager undoManager;
         {
-            auto transaction = tree.beginTransaction ("Undoable changes", &undoManager);
+            auto transaction = tree.beginTransaction (&undoManager);
             // ... make changes ...
         }
         // Later: undoManager.undo();
@@ -842,12 +842,11 @@ public:
             This constructor is typically called indirectly via beginTransaction().
 
             @param tree The DataTree to operate on
-            @param description Human-readable description for undo history
             @param undoManager Optional UndoManager for undo/redo support
 
             @see DataTree::beginTransaction()
         */
-        Transaction (DataTree& tree, const String& description, UndoManager* undoManager = nullptr);
+        Transaction (DataTree& tree, UndoManager* undoManager = nullptr);
 
         /**
             Move constructor - transfers ownership of the transaction.
@@ -959,39 +958,13 @@ public:
     private:
         friend class TransactionAction;
 
-        struct PropertyChange
-        {
-            enum Type
-            {
-                Set,
-                Remove,
-                RemoveAll
-            };
-
-            Type type;
-            Identifier name;
-            var newValue;
-            var oldValue;
-        };
-
+        struct PropertyChange;
         struct ChildChange;
-
-        void captureInitialState();
-        void rollbackChanges();
-
-        static void applyChangesToTree (DataTree& tree,
-                                        const NamedValueSet& originalProperties,
-                                        const std::vector<DataTree>& originalChildren,
-                                        const std::vector<PropertyChange>& propertyChanges,
-                                        const std::vector<ChildChange>& childChanges);
 
         DataTree& dataTree;
         UndoManager* undoManager;
-        String description;
         std::vector<PropertyChange> propertyChanges;
         std::vector<ChildChange> childChanges;
-        NamedValueSet originalProperties;
-        std::vector<DataTree> originalChildren;
         bool active = true;
 
         YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Transaction)
@@ -1025,7 +998,6 @@ public:
         */
         ValidatedTransaction (DataTree& tree,
                               ReferenceCountedObjectPtr<DataTreeSchema> schema,
-                              const String& description,
                               UndoManager* undoManager = nullptr);
 
         /**
@@ -1141,14 +1113,13 @@ public:
         This is the primary way to make changes to a DataTree. All structural
         modifications (properties and children) must be performed within a transaction.
 
-        @param description Human-readable description of the changes (used for undo history)
         @param undoManager Optional UndoManager to enable undo/redo functionality
 
         @return A new Transaction object that will modify this DataTree
 
         @code
         // Basic usage
-        auto transaction = tree.beginTransaction ("Update configuration");
+        auto transaction = tree.beginTransaction();
         transaction.setProperty ("version", "2.0");
         transaction.addChild (DataTree ("NewSection"));
         // Auto-commits when transaction goes out of scope
@@ -1156,7 +1127,7 @@ public:
         // With undo support
         UndoManager undoManager;
         {
-            auto transaction = tree.beginTransaction ("Reversible changes", &undoManager);
+            auto transaction = tree.beginTransaction (&undoManager);
             // ... make changes ...
         }
         // Later: undoManager.undo();
@@ -1164,14 +1135,9 @@ public:
 
         @see Transaction
     */
-    Transaction beginTransaction (const String& description, UndoManager* undoManager = nullptr)
-    {
-        return Transaction (*this, description, undoManager);
-    }
-
     Transaction beginTransaction (UndoManager* undoManager = nullptr)
     {
-        return Transaction (*this, {}, undoManager);
+        return Transaction (*this, undoManager);
     }
 
     /**
@@ -1181,14 +1147,13 @@ public:
         the provided schema before applying them to the DataTree.
 
         @param schema The DataTreeSchema to validate against (reference-counted)
-        @param description Human-readable description of the changes (used for undo history)
         @param undoManager Optional UndoManager for undo/redo functionality
         @return A ValidatedTransaction that enforces schema constraints
 
         @code
         auto schema = DataTreeSchema::fromJsonSchema (schemaJson);
         {
-            auto transaction = tree.beginTransaction(schema, "Update settings");
+            auto transaction = tree.beginValidatedTransaction (schema);
             transaction.setProperty ("theme", "dark"); // Validates against schema
             // Auto-commits when transaction goes out of scope if all validations pass
         }
@@ -1196,30 +1161,10 @@ public:
 
         @see ValidatedTransaction, DataTreeSchema
     */
-    ValidatedTransaction beginTransaction (ReferenceCountedObjectPtr<DataTreeSchema> schema,
-                                           const String& description,
-                                           UndoManager* undoManager = nullptr)
+    ValidatedTransaction beginValidatedTransaction (ReferenceCountedObjectPtr<DataTreeSchema> schema,
+                                                    UndoManager* undoManager = nullptr)
     {
-        return ValidatedTransaction (*this, schema, description, undoManager);
-    }
-
-    /**
-        Creates a validated transaction for modifying this DataTree with schema enforcement.
-
-        This overload creates a ValidatedTransaction that validates all operations against
-        the provided schema before applying them to the DataTree.
-
-        @param schema The DataTreeSchema to validate against (reference-counted)
-        @param undoManager Optional UndoManager for undo/redo functionality
-
-        @return A ValidatedTransaction that enforces schema constraints
-
-        @see ValidatedTransaction, DataTreeSchema
-    */
-    ValidatedTransaction beginTransaction (ReferenceCountedObjectPtr<DataTreeSchema> schema,
-                                           UndoManager* undoManager = nullptr)
-    {
-        return ValidatedTransaction (*this, schema, {}, undoManager);
+        return ValidatedTransaction (*this, schema, undoManager);
     }
 
 private:

@@ -26,7 +26,7 @@ DataTree appSettings("AppSettings");
 
 // Use transactions to modify the tree
 {
-    auto transaction = appSettings.beginTransaction("Set initial values");
+    auto transaction = appSettings.beginTransaction();
     transaction.setProperty("version", "1.0.0");
     transaction.setProperty("debug", true);
     transaction.setProperty("maxConnections", 100);
@@ -51,7 +51,7 @@ DataTree uiConfig("UIConfig");
 
 // Add children using transactions
 {
-    auto transaction = appSettings.beginTransaction("Add configuration sections");
+    auto transaction = appSettings.beginTransaction();
     transaction.addChild(serverConfig);
     transaction.addChild(uiConfig);
 }
@@ -60,7 +60,7 @@ DataTree uiConfig("UIConfig");
 DataTree foundServer = appSettings.getChildWithName("ServerConfig");
 if (foundServer.isValid())
 {
-    auto serverTx = foundServer.beginTransaction("Configure server");
+    auto serverTx = foundServer.beginTransaction();
     serverTx.setProperty("port", 8080);
     serverTx.setProperty("hostname", "localhost");
 }
@@ -101,14 +101,14 @@ DataTree settings("Settings");
 
 // Basic transaction
 {
-    auto tx = settings.beginTransaction("Update theme");
+    auto tx = settings.beginTransaction();
     tx.setProperty("theme", "dark");
     tx.setProperty("fontSize", 14);
     // Auto-commits on scope exit
 }
 
 // Explicit commit/abort
-auto tx = settings.beginTransaction("Conditional update");
+auto tx = settings.beginTransaction();
 tx.setProperty("experimental", true);
 
 if (someCondition)
@@ -117,13 +117,14 @@ else
     tx.abort(); // Discard changes
 
 // Transaction with undo support
-UndoManager undoManager;
+UndoManager::Ptr undoManager = new UndoManager;
+undoManager->beginNewTransaction("Change Language");
 {
-    auto tx = settings.beginTransaction("Undoable changes", &undoManager);
+    auto tx = settings.beginTransaction(undoManager);
     tx.setProperty("language", "en");
     tx.setProperty("region", "US");
 }
-// Later: undoManager.undo();
+// Later: undoManager->undo();
 ```
 
 ### Child Management
@@ -134,7 +135,7 @@ DataTree child1("Child");
 DataTree child2("Child");
 
 {
-    auto tx = parent.beginTransaction("Manage children");
+    auto tx = parent.beginTransaction();
 
     // Add children
     tx.addChild(child1, 0);    // Insert at index 0
@@ -168,12 +169,12 @@ Before diving into query examples, let's establish a realistic DataTree structur
 // Sample DataTree structure for examples
 DataTree appRoot("Application");
 {
-    auto tx = appRoot.beginTransaction("Create sample structure");
+    auto tx = appRoot.beginTransaction();
 
     // Add buttons
     DataTree saveButton("Button");
     {
-        auto saveTx = saveButton.beginTransaction("Setup save button");
+        auto saveTx = saveButton.beginTransaction();
         saveTx.setProperty("text", "Save");
         saveTx.setProperty("enabled", true);
         saveTx.setProperty("x", 10);
@@ -182,7 +183,7 @@ DataTree appRoot("Application");
 
     DataTree loadButton("Button");
     {
-        auto loadTx = loadButton.beginTransaction("Setup load button");
+        auto loadTx = loadButton.beginTransaction();
         loadTx.setProperty("text", "Load");
         loadTx.setProperty("enabled", false);
         loadTx.setProperty("x", 10);
@@ -192,7 +193,7 @@ DataTree appRoot("Application");
     // Add panels
     DataTree leftPanel("Panel");
     {
-        auto leftTx = leftPanel.beginTransaction("Setup left panel");
+        auto leftTx = leftPanel.beginTransaction();
         leftTx.setProperty("name", "LeftPanel");
         leftTx.setProperty("width", 200);
         leftTx.setProperty("docked", true);
@@ -202,7 +203,7 @@ DataTree appRoot("Application");
 
     DataTree rightPanel("Panel");
     {
-        auto rightTx = rightPanel.beginTransaction("Setup right panel");
+        auto rightTx = rightPanel.beginTransaction();
         rightTx.setProperty("name", "RightPanel");
         rightTx.setProperty("width", 150);
         rightTx.setProperty("docked", false);
@@ -211,7 +212,7 @@ DataTree appRoot("Application");
     // Add main window
     DataTree mainWindow("Window");
     {
-        auto windowTx = mainWindow.beginTransaction("Setup window");
+        auto windowTx = mainWindow.beginTransaction();
         windowTx.setProperty("title", "My Application");
         windowTx.setProperty("width", 800);
         windowTx.setProperty("height", 600);
@@ -225,7 +226,7 @@ DataTree appRoot("Application");
     // Add settings dialog
     DataTree settingsDialog("Dialog");
     {
-        auto dialogTx = settingsDialog.beginTransaction("Setup dialog");
+        auto dialogTx = settingsDialog.beginTransaction();
         dialogTx.setProperty("title", "Settings");
         dialogTx.setProperty("modal", true);
         dialogTx.setProperty("visible", false);
@@ -843,7 +844,7 @@ DBG("Allowed child types: " << childConstraints.allowedTypes.size());
 ```cpp
 // Schema-validated transactions prevent invalid data
 auto settings = schema->createNode("AppSettings");
-auto transaction = settings.beginTransaction(schema, "Update settings");
+auto transaction = settings.beginTransaction(schema);
 
 // Valid operations
 auto result1 = transaction.setProperty("theme", "dark"); // Valid enum
@@ -941,7 +942,7 @@ AppComponent component(settingsTree);
 
 // External change to DataTree
 {
-    auto tx = settingsTree.beginTransaction("External update");
+    auto tx = settingsTree.beginTransaction();
     tx.setProperty("theme", "dark");
 }
 
@@ -1094,11 +1095,11 @@ UIComponentList components(uiRoot);
 
 // Add components via DataTree
 {
-    auto tx = uiRoot.beginTransaction("Add UI components");
+    auto tx = uiRoot.beginTransaction();
 
     DataTree button("UIComponent");
     {
-        auto buttonTx = button.beginTransaction("Setup button");
+        auto buttonTx = button.beginTransaction();
         buttonTx.setProperty("name", "SubmitButton");
         buttonTx.setProperty("x", 100.0f);
         buttonTx.setProperty("y", 50.0f);
@@ -1114,7 +1115,7 @@ EXPECT_EQ("SubmitButton", buttonObj->getName());
 
 // Modify object through DataTree - object reflects changes automatically
 {
-    auto tx = uiRoot.getChild(0).beginTransaction("Move button");
+    auto tx = uiRoot.getChild(0).beginTransaction();
     tx.setProperty("x", 200.0f);
 }
 
@@ -1122,7 +1123,7 @@ EXPECT_EQ(200.0f, buttonObj->getX()); // CachedValue reflects change
 
 // Remove component via DataTree
 {
-    auto tx = uiRoot.beginTransaction("Remove button");
+    auto tx = uiRoot.beginTransaction();
     tx.removeChild(0);
 }
 
