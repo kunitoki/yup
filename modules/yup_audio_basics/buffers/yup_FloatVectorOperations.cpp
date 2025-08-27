@@ -1165,28 +1165,28 @@ void multiply (double* dest, const double* src, double multiplier, Size num) noe
 }
 
 template <typename Size>
-void divide (float* dest, float divisor, Size num) noexcept
+void divide (float* dest, const float* src, Size num) noexcept
 {
 #if YUP_USE_VDSP_FRAMEWORK
-    vDSP_vsdiv (dest, 1, &divisor, dest, 1, (vDSP_Length) num);
+    vDSP_vdiv (src, 1, dest, 1, dest, 1, (vDSP_Length) num);
 #else
-    YUP_PERFORM_VEC_OP_DEST (dest[i] /= divisor,
-                             Mode::div (d, divs),
-                             YUP_LOAD_DEST,
-                             const Mode::ParallelType divs = Mode::load1 (divisor);)
+    YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] /= src[i],
+                                 Mode::div (d, s),
+                                 YUP_LOAD_SRC_DEST,
+                                 YUP_INCREMENT_SRC_DEST, )
 #endif
 }
 
 template <typename Size>
-void divide (double* dest, double divisor, Size num) noexcept
+void divide (double* dest, const double* src, Size num) noexcept
 {
 #if YUP_USE_VDSP_FRAMEWORK
-    vDSP_vsdivD (dest, 1, &divisor, dest, 1, (vDSP_Length) num);
+    vDSP_vdivD (src, 1, dest, 1, dest, 1, (vDSP_Length) num);
 #else
-    YUP_PERFORM_VEC_OP_DEST (dest[i] /= divisor,
-                             Mode::div (d, divs),
-                             YUP_LOAD_DEST,
-                             const Mode::ParallelType divs = Mode::load1 (divisor);)
+    YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] /= src[i],
+                                 Mode::div (d, s),
+                                 YUP_LOAD_SRC_DEST,
+                                 YUP_INCREMENT_SRC_DEST, )
 #endif
 }
 
@@ -1213,6 +1213,32 @@ void divide (double* dest, const double* src1, const double* src2, Size num) noe
                                        Mode::div (s1, s2),
                                        YUP_LOAD_SRC1_SRC2,
                                        YUP_INCREMENT_SRC1_SRC2_DEST,)
+#endif
+}
+
+template <typename Size>
+void divide (float* dest, float divisor, Size num) noexcept
+{
+#if YUP_USE_VDSP_FRAMEWORK
+    vDSP_vsdiv (dest, 1, &divisor, dest, 1, (vDSP_Length) num);
+#else
+    YUP_PERFORM_VEC_OP_DEST (dest[i] /= divisor,
+                             Mode::div (d, divs),
+                             YUP_LOAD_DEST,
+                             const Mode::ParallelType divs = Mode::load1 (divisor);)
+#endif
+}
+
+template <typename Size>
+void divide (double* dest, double divisor, Size num) noexcept
+{
+#if YUP_USE_VDSP_FRAMEWORK
+    vDSP_vsdivD (dest, 1, &divisor, dest, 1, (vDSP_Length) num);
+#else
+    YUP_PERFORM_VEC_OP_DEST (dest[i] /= divisor,
+                             Mode::div (d, divs),
+                             YUP_LOAD_DEST,
+                             const Mode::ParallelType divs = Mode::load1 (divisor);)
 #endif
 }
 
@@ -1648,6 +1674,40 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::multiply (Flo
                                                                              CountType num) noexcept
 {
     FloatVectorHelpers::multiply (dest, src, multiplier, num);
+}
+
+template <typename FloatType, typename CountType>
+void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::divide (FloatType* dest,
+                                                                           const FloatType* src,
+                                                                           CountType numValues) noexcept
+{
+    FloatVectorHelpers::divide (dest, src, numValues);
+}
+
+template <typename FloatType, typename CountType>
+void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::divide (FloatType* dest,
+                                                                           const FloatType* src1,
+                                                                           const FloatType* src2,
+                                                                           CountType numValues) noexcept
+{
+    FloatVectorHelpers::divide (dest, src1, src2, numValues);
+}
+
+template <typename FloatType, typename CountType>
+void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::divide (FloatType* dest,
+                                                                           FloatType divisor,
+                                                                           CountType numValues) noexcept
+{
+    FloatVectorHelpers::divide (dest, divisor, numValues);
+}
+
+template <typename FloatType, typename CountType>
+void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::divide (FloatType* dest,
+                                                                           const FloatType* src,
+                                                                           FloatType divisor,
+                                                                           CountType num) noexcept
+{
+    FloatVectorHelpers::divide (dest, src, divisor, num);
 }
 
 template <typename FloatType, typename CountType>

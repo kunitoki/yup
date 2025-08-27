@@ -125,6 +125,33 @@ protected:
             FloatVectorOperations::fill (data2, (ValueType) 3, num);
             FloatVectorOperations::addWithMultiply (data1, data1, data2, num);
             EXPECT_TRUE (areAllValuesEqual (data1, num, (ValueType) 8));
+
+            FloatVectorOperations::fill (data1, (ValueType) 8, num);
+            FloatVectorOperations::copyWithDividend (data2, data1, (ValueType) 16, num);
+            EXPECT_TRUE (areAllValuesEqual (data2, num, (ValueType) 2));
+
+            FloatVectorOperations::fill (data1, (ValueType) 12, num);
+            FloatVectorOperations::copyWithDivide (data2, data1, (ValueType) 3, num);
+            EXPECT_TRUE (areAllValuesEqual (data2, num, (ValueType) 4));
+
+            FloatVectorOperations::fill (data1, (ValueType) 20, num);
+            FloatVectorOperations::divide (data1, (ValueType) 4, num);
+            EXPECT_TRUE (areAllValuesEqual (data1, num, (ValueType) 5));
+
+            FloatVectorOperations::fill (data1, (ValueType) 15, num);
+            FloatVectorOperations::fill (data2, (ValueType) 3, num);
+            HeapBlock<ValueType> result (num + 16);
+#if YUP_ARM
+            ValueType* const resultData = result;
+#else
+            ValueType* const resultData = addBytesToPointer (result.get(), random.nextInt (16));
+#endif
+            FloatVectorOperations::divide (resultData, data1, data2, num);
+            EXPECT_TRUE (areAllValuesEqual (resultData, num, (ValueType) 5));
+
+            FloatVectorOperations::fill (data1, (ValueType) 18, num);
+            FloatVectorOperations::divide (data2, data1, (ValueType) 6, num);
+            EXPECT_TRUE (areAllValuesEqual (data2, num, (ValueType) 3));
         }
 
         static void fillRandomly (Random& random, ValueType* d, int num)
