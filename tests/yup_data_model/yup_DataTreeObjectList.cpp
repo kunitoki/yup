@@ -270,7 +270,7 @@ TEST_F (DataTreeObjectListTests, ObjectRemoval)
     EXPECT_EQ ("Obj3", objectList.getObject (1)->getName());
 
     // Check removal notification
-    EXPECT_EQ (1, objectList.removedObjects.size());
+    ASSERT_EQ (1, objectList.removedObjects.size());
     EXPECT_EQ ("Obj2", objectList.removedObjects[0]);
 }
 
@@ -309,6 +309,7 @@ TEST_F (DataTreeObjectListTests, ObjectReordering)
     }
 
     // Order should be updated
+    ASSERT_EQ (objectList.getNumObjects(), 3);
     EXPECT_EQ ("Second", objectList.getObject (0)->getName());
     EXPECT_EQ ("Third", objectList.getObject (1)->getName());
     EXPECT_EQ ("First", objectList.getObject (2)->getName());
@@ -332,7 +333,7 @@ TEST_F (DataTreeObjectListTests, ObjectStateSync)
         rootTransaction.addChild (objTree);
     }
 
-    EXPECT_EQ (1, objectList.getNumObjects());
+    ASSERT_EQ (1, objectList.getNumObjects());
     TestObject* object = objectList.getObject (0);
 
     // Test initial state via getter methods
@@ -374,7 +375,7 @@ TEST_F (DataTreeObjectListTests, ArrayLikeAccess)
         }
     }
 
-    EXPECT_EQ (5, objectList.getNumObjects());
+    ASSERT_EQ (5, objectList.getNumObjects());
     for (int index = 0; index < objectList.getNumObjects(); ++index)
     {
         EXPECT_EQ ("Object" + String (index), objectList.getObject (index)->getName());

@@ -1231,7 +1231,7 @@ private:
     friend class RemoveChildAction;
     friend class RemoveAllChildrenAction;
     friend class MoveChildAction;
-    friend class SimpleTransactionAction;
+    friend class CompoundAction;
 
     class DataObject : public std::enable_shared_from_this<DataObject>
     {

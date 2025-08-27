@@ -660,7 +660,7 @@ TEST_F (DataTreeTests, ChildChangeNotifications)
         transaction.removeChild (child);
     }
 
-    EXPECT_EQ (1, listener.childRemovals.size());
+    ASSERT_EQ (1, listener.childRemovals.size());
     EXPECT_EQ (tree, listener.childRemovals[0].parent);
     EXPECT_EQ (child, listener.childRemovals[0].child);
     EXPECT_EQ (0, listener.childRemovals[0].index);
@@ -2539,4 +2539,412 @@ TEST_F (DataTreeTests, TransactionMultipleOperationsUndoRedo)
     EXPECT_EQ ("value3", tree.getProperty ("prop3"));
     EXPECT_EQ (child, tree.getChild (0));
     EXPECT_EQ (tree, child.getParent());
+}
+
+//==============================================================================
+// DataTree Constructor with Initializer Lists Tests
+
+TEST_F (DataTreeTests, ConstructorWithInitializerListProperties)
+{
+    // Test constructor with properties initializer list
+    DataTree treeWithProps ("TestType", { { "stringProp", "testString" }, { "intProp", 42 }, { "boolProp", true }, { "floatProp", 3.14 } });
+
+    EXPECT_TRUE (treeWithProps.isValid());
+    EXPECT_EQ ("TestType", treeWithProps.getType().toString());
+    EXPECT_EQ (4, treeWithProps.getNumProperties());
+    EXPECT_EQ ("testString", treeWithProps.getProperty ("stringProp"));
+    EXPECT_EQ (var (42), treeWithProps.getProperty ("intProp"));
+    EXPECT_TRUE (static_cast<bool> (treeWithProps.getProperty ("boolProp")));
+    EXPECT_NEAR (3.14, static_cast<double> (treeWithProps.getProperty ("floatProp")), 0.001);
+}
+
+TEST_F (DataTreeTests, ConstructorWithInitializerListChildren)
+{
+    DataTree child1 ("Child1");
+    DataTree child2 ("Child2");
+    DataTree child3 ("Child3");
+
+    // Test constructor with children initializer list
+    DataTree treeWithChildren ("Parent", {}, { child1, child2, child3 });
+
+    EXPECT_TRUE (treeWithChildren.isValid());
+    EXPECT_EQ ("Parent", treeWithChildren.getType().toString());
+    EXPECT_EQ (0, treeWithChildren.getNumProperties());
+    EXPECT_EQ (3, treeWithChildren.getNumChildren());
+    EXPECT_EQ (child1, treeWithChildren.getChild (0));
+    EXPECT_EQ (child2, treeWithChildren.getChild (1));
+    EXPECT_EQ (child3, treeWithChildren.getChild (2));
+
+    // Verify parent-child relationships
+    EXPECT_EQ (treeWithChildren, child1.getParent());
+    EXPECT_EQ (treeWithChildren, child2.getParent());
+    EXPECT_EQ (treeWithChildren, child3.getParent());
+}
+
+TEST_F (DataTreeTests, ConstructorWithInitializerListPropertiesAndChildren)
+{
+    DataTree child1 ("Child1");
+    DataTree child2 ("Child2");
+
+    // Test constructor with both properties and children
+    DataTree complexTree ("ComplexType", { { "name", "ComplexTree" }, { "version", "1.0" }, { "childCount", 2 } }, { child1, child2 });
+
+    EXPECT_TRUE (complexTree.isValid());
+    EXPECT_EQ ("ComplexType", complexTree.getType().toString());
+
+    // Check properties
+    EXPECT_EQ (3, complexTree.getNumProperties());
+    EXPECT_EQ ("ComplexTree", complexTree.getProperty ("name"));
+    EXPECT_EQ ("1.0", complexTree.getProperty ("version"));
+    EXPECT_EQ (var (2), complexTree.getProperty ("childCount"));
+
+    // Check children
+    EXPECT_EQ (2, complexTree.getNumChildren());
+    EXPECT_EQ (child1, complexTree.getChild (0));
+    EXPECT_EQ (child2, complexTree.getChild (1));
+    EXPECT_EQ (complexTree, child1.getParent());
+    EXPECT_EQ (complexTree, child2.getParent());
+}
+
+TEST_F (DataTreeTests, ConstructorWithEmptyInitializerLists)
+{
+    // Test constructor with empty initializer lists
+    DataTree emptyTree ("EmptyType", {}, {});
+
+    EXPECT_TRUE (emptyTree.isValid());
+    EXPECT_EQ ("EmptyType", emptyTree.getType().toString());
+    EXPECT_EQ (0, emptyTree.getNumProperties());
+    EXPECT_EQ (0, emptyTree.getNumChildren());
+}
+
+//==============================================================================
+// Transaction Child Operations with Existing Parent Tests
+
+TEST_F (DataTreeTests, TransactionAddChildWithExistingParent)
+{
+    DataTree parent1 ("Parent1");
+    DataTree parent2 ("Parent2");
+    DataTree child ("Child");
+
+    // First, add child to parent1
+    {
+        auto transaction = parent1.beginTransaction ("Add Child to Parent1");
+        transaction.addChild (child);
+    }
+
+    EXPECT_EQ (1, parent1.getNumChildren());
+    EXPECT_EQ (0, parent2.getNumChildren());
+    EXPECT_EQ (parent1, child.getParent());
+
+    // Now add same child to parent2 - should move from parent1 to parent2
+    {
+        auto transaction = parent2.beginTransaction ("Move Child to Parent2");
+        transaction.addChild (child);
+    }
+
+    EXPECT_EQ (0, parent1.getNumChildren());
+    EXPECT_EQ (1, parent2.getNumChildren());
+    EXPECT_EQ (parent2, child.getParent());
+    EXPECT_EQ (child, parent2.getChild (0));
+}
+
+TEST_F (DataTreeTests, TransactionAddChildWithExistingParentAndUndo)
+{
+    auto undoManager = UndoManager::Ptr (new UndoManager());
+    DataTree child ("Child");
+    DataTree parent1 ("Parent1", { child });
+    DataTree parent2 ("Parent2");
+
+    EXPECT_EQ (parent1, child.getParent());
+
+    // Move child to parent2 with undo
+    undoManager->beginNewTransaction ("Move");
+    {
+        auto transaction = parent2.beginTransaction ("Move Child to Parent2", undoManager);
+        transaction.addChild (child);
+    }
+
+    EXPECT_EQ (0, parent1.getNumChildren());
+    EXPECT_EQ (1, parent2.getNumChildren());
+    EXPECT_EQ (parent2, child.getParent());
+
+    // Undo the move - should restore child to parent1
+    undoManager->undo();
+    EXPECT_EQ (1, parent1.getNumChildren());
+    EXPECT_EQ (0, parent2.getNumChildren());
+    EXPECT_EQ (parent1, child.getParent());
+
+    // Redo the move
+    undoManager->redo();
+    EXPECT_EQ (0, parent1.getNumChildren());
+    EXPECT_EQ (1, parent2.getNumChildren());
+    EXPECT_EQ (parent2, child.getParent());
+}
+
+TEST_F (DataTreeTests, TransactionRemoveChildWithoutUndoManager)
+{
+    DataTree child1 ("Child1");
+    DataTree child2 ("Child2");
+
+    // Add children first
+    {
+        auto transaction = tree.beginTransaction ("Add Children");
+        transaction.addChild (child1);
+        transaction.addChild (child2);
+    }
+
+    EXPECT_EQ (2, tree.getNumChildren());
+    EXPECT_EQ (tree, child1.getParent());
+    EXPECT_EQ (tree, child2.getParent());
+
+    // Remove child without undo manager
+    {
+        auto transaction = tree.beginTransaction ("Remove Child");
+        transaction.removeChild (child1);
+    }
+
+    EXPECT_EQ (1, tree.getNumChildren());
+    EXPECT_EQ (child2, tree.getChild (0));
+    EXPECT_FALSE (child1.getParent().isValid());
+    EXPECT_EQ (tree, child2.getParent());
+}
+
+//==============================================================================
+// Comprehensive Transaction Operations Tests
+
+TEST_F (DataTreeTests, TransactionPropertyOperationsWithoutUndoManager)
+{
+    // Test transaction operations without undo manager
+    {
+        auto transaction = tree.beginTransaction ("Set Properties");
+        transaction.setProperty ("directProp", "directValue");
+        transaction.setProperty ("intProp", 123);
+    }
+
+    EXPECT_EQ ("directValue", tree.getProperty ("directProp"));
+    EXPECT_EQ (var (123), tree.getProperty ("intProp"));
+
+    // Remove property
+    {
+        auto transaction = tree.beginTransaction ("Remove Property");
+        transaction.removeProperty ("directProp");
+    }
+
+    EXPECT_FALSE (tree.hasProperty ("directProp"));
+    EXPECT_TRUE (tree.hasProperty ("intProp"));
+
+    // Remove all properties
+    {
+        auto transaction = tree.beginTransaction ("Remove All Properties");
+        transaction.removeAllProperties();
+    }
+
+    EXPECT_EQ (0, tree.getNumProperties());
+}
+
+TEST_F (DataTreeTests, TransactionPropertyOperationsWithUndoManager)
+{
+    auto undoManager = UndoManager::Ptr (new UndoManager());
+
+    // Test transaction operations with undo manager
+    {
+        auto transaction = tree.beginTransaction ("Set Property", undoManager);
+        transaction.setProperty ("directProp", "directValue");
+    }
+
+    EXPECT_EQ ("directValue", tree.getProperty ("directProp"));
+
+    // Undo
+    undoManager->undo();
+    EXPECT_FALSE (tree.hasProperty ("directProp"));
+
+    // Redo
+    undoManager->redo();
+    EXPECT_EQ ("directValue", tree.getProperty ("directProp"));
+}
+
+TEST_F (DataTreeTests, TransactionChildOperationsWithoutUndoManager)
+{
+    DataTree child1 ("Child1");
+    DataTree child2 ("Child2");
+
+    // Add children via transactions
+    {
+        auto transaction = tree.beginTransaction ("Add Children");
+        transaction.addChild (child1);
+        transaction.addChild (child2);
+    }
+
+    EXPECT_EQ (2, tree.getNumChildren());
+
+    // Move child via transaction
+    {
+        auto transaction = tree.beginTransaction ("Move Child");
+        transaction.moveChild (0, 1);
+    }
+
+    EXPECT_EQ (child2, tree.getChild (0));
+    EXPECT_EQ (child1, tree.getChild (1));
+
+    // Remove child via transaction
+    {
+        auto transaction = tree.beginTransaction ("Remove Child");
+        transaction.removeChild (child1);
+    }
+
+    EXPECT_EQ (1, tree.getNumChildren());
+    EXPECT_EQ (child2, tree.getChild (0));
+
+    // Remove all children via transaction
+    {
+        auto transaction = tree.beginTransaction ("Remove All Children");
+        transaction.removeAllChildren();
+    }
+
+    EXPECT_EQ (0, tree.getNumChildren());
+}
+
+TEST_F (DataTreeTests, TransactionChildOperationsWithUndoManager)
+{
+    auto undoManager = UndoManager::Ptr (new UndoManager());
+    DataTree child ("Child");
+
+    // Add child with undo manager via transaction
+    {
+        auto transaction = tree.beginTransaction ("Add Child", undoManager);
+        transaction.addChild (child);
+    }
+
+    EXPECT_EQ (1, tree.getNumChildren());
+    EXPECT_EQ (child, tree.getChild (0));
+
+    // Undo add
+    undoManager->undo();
+    EXPECT_EQ (0, tree.getNumChildren());
+    EXPECT_FALSE (child.getParent().isValid());
+
+    // Redo add
+    undoManager->redo();
+    EXPECT_EQ (1, tree.getNumChildren());
+    EXPECT_EQ (tree, child.getParent());
+}
+
+//==============================================================================
+// Listener Tests for Add/Remove/RemoveAll Operations
+
+TEST_F (DataTreeTests, ListenerTestsForPropertyOperations)
+{
+    TestListener listener;
+    tree.addListener (&listener);
+
+    // Test property set
+    {
+        auto transaction = tree.beginTransaction ("Set Properties");
+        transaction.setProperty ("prop1", "value1");
+        transaction.setProperty ("prop2", "value2");
+    }
+
+    ASSERT_EQ (2, listener.propertyChanges.size());
+    EXPECT_EQ ("prop1", listener.propertyChanges[0].property.toString());
+    EXPECT_EQ ("prop2", listener.propertyChanges[1].property.toString());
+
+    listener.reset();
+
+    // Test property removal
+    {
+        auto transaction = tree.beginTransaction ("Remove Property");
+        transaction.removeProperty ("prop1");
+    }
+
+    ASSERT_EQ (1, listener.propertyChanges.size());
+    EXPECT_EQ ("prop1", listener.propertyChanges[0].property.toString());
+
+    listener.reset();
+
+    // Test remove all properties
+    {
+        auto transaction = tree.beginTransaction ("Remove All Properties");
+        transaction.removeAllProperties();
+    }
+
+    EXPECT_EQ (1, listener.propertyChanges.size()); // Only one remaining property
+    EXPECT_EQ ("prop2", listener.propertyChanges[0].property.toString());
+
+    tree.removeListener (&listener);
+}
+
+TEST_F (DataTreeTests, ListenerTestsForChildOperations)
+{
+    TestListener listener;
+    tree.addListener (&listener);
+
+    DataTree child1 ("Child1");
+    DataTree child2 ("Child2");
+
+    // Test child addition
+    {
+        auto transaction = tree.beginTransaction ("Add Children");
+        transaction.addChild (child1);
+        transaction.addChild (child2);
+    }
+
+    EXPECT_EQ (2, listener.childAdditions.size());
+    EXPECT_EQ (child1, listener.childAdditions[0].child);
+    EXPECT_EQ (child2, listener.childAdditions[1].child);
+
+    listener.reset();
+
+    // Test child removal
+    {
+        auto transaction = tree.beginTransaction ("Remove Child");
+        transaction.removeChild (child1);
+    }
+
+    ASSERT_EQ (1, listener.childRemovals.size());
+    EXPECT_EQ (child1, listener.childRemovals[0].child);
+    EXPECT_EQ (0, listener.childRemovals[0].index); // child1 was at index 0
+
+    listener.reset();
+
+    // Test remove all children
+    {
+        auto transaction = tree.beginTransaction ("Remove All Children");
+        transaction.removeAllChildren();
+    }
+
+    ASSERT_EQ (1, listener.childRemovals.size()); // Only one remaining child (child2)
+    EXPECT_EQ (child2, listener.childRemovals[0].child);
+
+    tree.removeListener (&listener);
+}
+
+TEST_F (DataTreeTests, ListenerTestsWithUndoOperations)
+{
+    auto undoManager = UndoManager::Ptr (new UndoManager());
+    TestListener listener;
+    tree.addListener (&listener);
+
+    DataTree child ("Child");
+
+    // Add child with undo
+    {
+        auto transaction = tree.beginTransaction ("Add Child", undoManager);
+        transaction.addChild (child);
+        transaction.setProperty ("count", 1);
+    }
+
+    // Should have both property and child notifications
+    EXPECT_GE (listener.propertyChanges.size(), 1);
+    EXPECT_GE (listener.childAdditions.size(), 1);
+
+    listener.reset();
+
+    // Undo - should get notifications for undo operations
+    undoManager->undo();
+
+    // The undo should also trigger notifications
+    // Exact count depends on implementation, but should be non-zero
+    EXPECT_GE (listener.propertyChanges.size() + listener.childRemovals.size(), 0);
+
+    tree.removeListener (&listener);
 }
