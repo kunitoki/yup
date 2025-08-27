@@ -411,7 +411,7 @@ public:
 
     bool isValid() const override
     {
-        return dataTree.object != nullptr && !individualActions.empty();
+        return dataTree.object != nullptr && ! individualActions.empty();
     }
 
     bool perform (UndoableActionState state) override
@@ -1270,7 +1270,7 @@ void DataTree::Transaction::commit()
             }
         }
     }
-    
+
     // Create child actions that capture current state
     for (const auto& change : childChanges)
     {
@@ -1301,9 +1301,9 @@ void DataTree::Transaction::commit()
             }
         }
     }
-    
+
     // If we have undo manager, use compound action for undo/redo
-    if (undoManager != nullptr && !actions.empty())
+    if (undoManager != nullptr && ! actions.empty())
     {
         undoManager->perform (new CompoundAction (dataTree, std::move (actions)));
     }
