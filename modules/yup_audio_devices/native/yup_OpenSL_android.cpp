@@ -1073,6 +1073,9 @@ public:
     void close() override
     {
         stop();
+
+        deviceOpen = false;
+
         session = nullptr;
         callback = nullptr;
     }
