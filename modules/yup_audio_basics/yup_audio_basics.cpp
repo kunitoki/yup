@@ -48,6 +48,10 @@
 
 #include "yup_audio_basics.h"
 
+#if YUP_MAC || YUP_IOS
+#include "native/yup_AudioWorkgroup_apple.h"
+#endif
+
 #include "buffers/yup_FloatVectorOperations.cpp"
 #include "buffers/yup_AudioChannelSet.cpp"
 #include "buffers/yup_AudioProcessLoadMeasurer.cpp"
