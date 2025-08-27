@@ -217,7 +217,6 @@ private:
         std::size_t i = 0;
 
 #if YUP_USE_AVX_INTRINSICS && YUP_USE_FMA_INTRINSICS
-        // 8-wide AVX2 FMA path
         __m256 vacc = _mm256_setzero_ps();
         for (; i + 8 <= len; i += 8)
         {
@@ -225,7 +224,6 @@ private:
             __m256 vb = _mm256_loadu_ps (b + i);
             vacc = _mm256_fmadd_ps (va, vb, vacc);
         }
-        // horizontal add
         __m128 low = _mm256_castps256_ps128 (vacc);
         __m128 high = _mm256_extractf128_ps (vacc, 1);
         __m128 vsum = _mm_add_ps (low, high);
@@ -250,8 +248,7 @@ private:
             vacc = _mm_add_ps (vacc, _mm_mul_ps (va, vb));
         }
 #endif
-        // horizontal add
-        __m128 shuf = _mm_movehdup_ps (vacc);
+        __m128 shuf = _mm_shuffle_ps (vacc, vacc, _MM_SHUFFLE (2, 3, 0, 1));
         __m128 sums = _mm_add_ps (vacc, shuf);
         shuf = _mm_movehl_ps (shuf, sums);
         sums = _mm_add_ss (sums, shuf);
