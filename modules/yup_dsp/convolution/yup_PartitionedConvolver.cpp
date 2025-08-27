@@ -235,7 +235,6 @@ private:
 
 #elif YUP_USE_SSE_INTRINSICS
         __m128 vacc = _mm_setzero_ps();
-        std::size_t i = 0;
 #if YUP_USE_FMA_INTRINSICS
         for (; i + 4 <= len; i += 4)
         {
