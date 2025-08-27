@@ -1550,6 +1550,64 @@ void convertFloatToFixed (int* dest, const float* src, float multiplier, Size nu
 #endif
 }
 
+template <typename Size>
+void convertDoubleToFloat (float* dest, const double* src, Size num) noexcept
+{
+#if YUP_USE_VDSP_FRAMEWORK
+    vDSP_vdpsp (src, 1, dest, 1, (vDSP_Length) num);
+#else
+    Size i = 0;
+#if YUP_USE_ARM_NEON
+    for (; i + 2 <= num; i += 2)
+    {
+        float64x2_t d = vld1q_f64 (src + i);
+        float32x2_t f = vcvt_f32_f64 (d);
+        vst1_f32 (dest + i, f);
+    }
+#elif JUCE_USE_SSE_INTRINSICS
+    for (; i + 2 <= num; i += 2)
+    {
+        __m128d d = _mm_loadu_pd (src + i);
+        __m128 f  = _mm_cvtpd_ps (d);
+        _mm_storel_pi ((__m64*) (dest + i), f);
+    }
+#endif
+
+   for (; i < num; ++i)
+       dest[i] = (float) src[i];
+#endif
+}
+
+template <typename Size>
+void convertFloatToDouble (double* dest, const float* src, Size num) noexcept
+{
+#if YUP_USE_VDSP_FRAMEWORK
+    vDSP_vspdp (src, 1, dest, 1, (vDSP_Length) num);
+#else
+    Size i = 0;
+#if YUP_USE_ARM_NEON
+    for (; i + 2 <= num; i += 2)
+    {
+        float32x2_t f = vld1_f32 (src + i);
+        float64x2_t d = vcvt_f64_f32 (f);
+        vst1q_f64 (dest + i, d);
+    }
+#elif JUCE_USE_SSE_INTRINSICS
+    for (; i + 4 <= num; i += 4)
+    {
+        __m128 f = _mm_loadu_ps (src + i);
+        __m128d d0 = _mm_cvtps_pd (f);
+        __m128d d1 = _mm_cvtps_pd (_mm_movehl_ps (f, f));
+        _mm_storeu_pd (dest + i, d0);
+        _mm_storeu_pd (dest + i + 2, d1);
+    }
+#endif
+
+   for (; i < num; ++i)
+       dest[i] = (double) src[i];
+#endif
+}
+
 } // namespace
 } // namespace FloatVectorHelpers
 
@@ -1869,6 +1927,26 @@ void YUP_CALLTYPE FloatVectorOperations::convertFloatToFixed (int* dest, const f
 void YUP_CALLTYPE FloatVectorOperations::convertFloatToFixed (int* dest, const float* src, float multiplier, int num) noexcept
 {
     FloatVectorHelpers::convertFloatToFixed (dest, src, multiplier, num);
+}
+
+void YUP_CALLTYPE convertFloatToDouble (double* dest, const float* src, int num) noexcept
+{
+    FloatVectorHelpers::convertFloatToDouble (dest, src, num);
+}
+
+void YUP_CALLTYPE convertFloatToDouble (double* dest, const float* src, size_t num) noexcept
+{
+    FloatVectorHelpers::convertFloatToDouble (dest, src, num);
+}
+
+void YUP_CALLTYPE convertDoubleToFloat (float* dest, const double* src, int num) noexcept
+{
+    FloatVectorHelpers::convertDoubleToFloat (dest, src, num);
+}
+
+void YUP_CALLTYPE convertDoubleToFloat (float* dest, const double* src, size_t num) noexcept
+{
+    FloatVectorHelpers::convertDoubleToFloat (dest, src, num);
 }
 
 //==============================================================================

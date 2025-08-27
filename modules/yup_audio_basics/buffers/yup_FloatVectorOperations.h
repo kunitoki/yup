@@ -228,6 +228,14 @@ public:
     static void YUP_CALLTYPE convertFloatToFixed (int* dest, const float* src, float multiplier, int num) noexcept;
     static void YUP_CALLTYPE convertFloatToFixed (int* dest, const float* src, float multiplier, size_t num) noexcept;
 
+    /** Convert float signal to double. */
+    static void YUP_CALLTYPE convertFloatToDouble (double* dest, const float* src, int num) noexcept;
+    static void YUP_CALLTYPE convertFloatToDouble (double* dest, const float* src, size_t num) noexcept;
+
+    /** Convert double signal to float. */
+    static void YUP_CALLTYPE convertDoubleToFloat (float* dest, const double* src, int num) noexcept;
+    static void YUP_CALLTYPE convertDoubleToFloat (float* dest, const double* src, size_t num) noexcept;
+
     /** This method enables or disables the SSE/NEON flush-to-zero mode. */
     static void YUP_CALLTYPE enableFlushToZeroMode (bool shouldEnable) noexcept;
 
