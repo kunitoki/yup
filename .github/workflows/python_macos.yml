@@ -34,10 +34,12 @@ jobs:
       fail-fast: true
       matrix:
         include:
-        - { os: macos-15, python: 311, platform_id: macosx_universal2, cibw_archs: universal2 }
+        - { os: macos-latest, python: 311, platform_id: macosx_universal2, cibw_archs: universal2 }
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup and install python
         uses: actions/setup-python@v5
