@@ -93,7 +93,7 @@ struct BasicOps32
 
     static forcedinline ParallelType mul (ParallelType a, ParallelType b) noexcept { return _mm_mul_ps (a, b); }
 
-    static forcedinline ParallelType div (ParallelType a, ParallelType b) noexcept  { return _mm_div_ps (a, b); }
+    static forcedinline ParallelType div (ParallelType a, ParallelType b) noexcept { return _mm_div_ps (a, b); }
 
     static forcedinline ParallelType max (ParallelType a, ParallelType b) noexcept { return _mm_max_ps (a, b); }
 
@@ -154,7 +154,7 @@ struct BasicOps64
 
     static forcedinline ParallelType mul (ParallelType a, ParallelType b) noexcept { return _mm_mul_pd (a, b); }
 
-    static forcedinline ParallelType div (ParallelType a, ParallelType b) noexcept  { return _mm_div_pd (a, b); }
+    static forcedinline ParallelType div (ParallelType a, ParallelType b) noexcept { return _mm_div_pd (a, b); }
 
     static forcedinline ParallelType max (ParallelType a, ParallelType b) noexcept { return _mm_max_pd (a, b); }
 
@@ -771,7 +771,6 @@ void copyWithMultiply (double* dest, const double* src, double multiplier, Size 
 #endif
 }
 
-
 template <typename Size>
 void copyWithDividend (float* dest, const float* src, float dividend, Size num) noexcept
 {
@@ -1207,7 +1206,7 @@ void divide (float* dest, const float* src1, const float* src2, Size num) noexce
     YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST (dest[i] = src1[i] / src2[i],
                                        Mode::div (s1, s2),
                                        YUP_LOAD_SRC1_SRC2,
-                                       YUP_INCREMENT_SRC1_SRC2_DEST,)
+                                       YUP_INCREMENT_SRC1_SRC2_DEST, )
 #endif
 }
 
@@ -1220,7 +1219,7 @@ void divide (double* dest, const double* src1, const double* src2, Size num) noe
     YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST (dest[i] = src1[i] / src2[i],
                                        Mode::div (s1, s2),
                                        YUP_LOAD_SRC1_SRC2,
-                                       YUP_INCREMENT_SRC1_SRC2_DEST,)
+                                       YUP_INCREMENT_SRC1_SRC2_DEST, )
 #endif
 }
 
@@ -1854,7 +1853,7 @@ template struct FloatVectorOperationsBase<double, size_t>;
 
 void YUP_CALLTYPE FloatVectorOperations::convertFixedToFloat (float* dest, const int* src, float multiplier, size_t num) noexcept
 {
-   FloatVectorHelpers::convertFixedToFloat (dest, src, multiplier, num);
+    FloatVectorHelpers::convertFixedToFloat (dest, src, multiplier, num);
 }
 
 void YUP_CALLTYPE FloatVectorOperations::convertFixedToFloat (float* dest, const int* src, float multiplier, int num) noexcept
@@ -1864,7 +1863,7 @@ void YUP_CALLTYPE FloatVectorOperations::convertFixedToFloat (float* dest, const
 
 void YUP_CALLTYPE FloatVectorOperations::convertFloatToFixed (int* dest, const float* src, float multiplier, size_t num) noexcept
 {
-   FloatVectorHelpers::convertFloatToFixed (dest, src, multiplier, num);
+    FloatVectorHelpers::convertFloatToFixed (dest, src, multiplier, num);
 }
 
 void YUP_CALLTYPE FloatVectorOperations::convertFloatToFixed (int* dest, const float* src, float multiplier, int num) noexcept
