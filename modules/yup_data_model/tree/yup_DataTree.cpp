@@ -182,11 +182,17 @@ public:
 
         if (state == UndoableActionState::Redo)
         {
-            // Remove from previous parent if any
-            if (auto oldParentObj = childTree.object->parent.lock())
+            // Capture the child's current parent (if any) for undo
+            if (auto currentParent = childTree.object->parent.lock())
             {
-                DataTree oldParent (oldParentObj);
-                oldParent.removeChild (childTree);
+                previousParent = DataTree (currentParent);
+                previousIndex = previousParent.indexOf (childTree);
+                previousParent.removeChild (childTree);
+            }
+            else
+            {
+                previousParent = DataTree(); // No previous parent
+                previousIndex = -1;
             }
 
             const int numChildren = static_cast<int> (parentTree.object->children.size());
@@ -203,8 +209,24 @@ public:
             if (childIndex >= 0)
             {
                 parentTree.object->children.erase (parentTree.object->children.begin() + childIndex);
-                childTree.object->parent.reset();
                 parentTree.object->sendChildRemovedMessage (childTree, childIndex);
+                
+                // Restore previous parent
+                if (previousParent.isValid())
+                {
+                    // Restore to previous parent at previous index
+                    const int numChildren = static_cast<int> (previousParent.object->children.size());
+                    const int actualIndex = (previousIndex < 0 || previousIndex > numChildren) ? numChildren : previousIndex;
+                    
+                    previousParent.object->children.insert (previousParent.object->children.begin() + actualIndex, childTree);
+                    childTree.object->parent = previousParent.object;
+                    previousParent.object->sendChildAddedMessage (childTree);
+                }
+                else
+                {
+                    // No previous parent - clear parent reference
+                    childTree.object->parent.reset();
+                }
             }
         }
 
@@ -215,6 +237,8 @@ private:
     DataTree parentTree;
     DataTree childTree;
     int index;
+    DataTree previousParent; // For undo: the child's parent before this action
+    int previousIndex = -1;  // For undo: the child's index in previous parent
 };
 
 class RemoveChildAction : public UndoableAction
@@ -367,17 +391,21 @@ private:
 
 //==============================================================================
 
-class TransactionAction : public UndoableAction
+class SimpleTransactionAction : public UndoableAction
 {
 public:
-    TransactionAction (DataTree tree, const String& desc, const NamedValueSet& origProps, const std::vector<DataTree>& origChildren, const std::vector<DataTree::Transaction::PropertyChange>& propChanges, const std::vector<DataTree::Transaction::ChildChange>& childChanges)
+    SimpleTransactionAction (DataTree tree, const String& desc, const NamedValueSet& origProps, const std::vector<DataTree>& origChildren)
         : dataTree (tree)
         , description (desc)
         , originalProperties (origProps)
         , originalChildren (origChildren)
-        , propertyChanges (propChanges)
-        , childChangeList (childChanges)
     {
+        // Capture current state as the "after" state
+        if (dataTree.object != nullptr)
+        {
+            currentProperties = dataTree.object->properties;
+            currentChildren = dataTree.object->children;
+        }
     }
 
     bool isValid() const override
@@ -392,62 +420,63 @@ public:
 
         if (state == UndoableActionState::Redo)
         {
-            // Reapply all the changes
-            applyChangesToTree();
-            return true;
+            // Restore "after" state (current/new state)
+            restoreState (currentProperties, currentChildren);
         }
         else // Undo
         {
-            // Restore original state
-            dataTree.object->properties = originalProperties;
-            dataTree.object->children = originalChildren;
-
-            // Update parent pointers for children
-            for (auto& child : dataTree.object->children)
-            {
-                if (child.object != nullptr)
-                    child.object->parent = dataTree.object;
-            }
-
-            // Send notifications for all properties
-            for (int i = 0; i < originalProperties.size(); ++i)
-                dataTree.object->sendPropertyChangeMessage (originalProperties.getName (i));
-
-            // Send notifications for children
-            for (size_t i = 0; i < originalChildren.size(); ++i)
-                dataTree.object->sendChildAddedMessage (originalChildren[i]);
-
-            return true;
+            // Restore "before" state (original state)  
+            restoreState (originalProperties, originalChildren);
         }
+
+        return true;
     }
 
 private:
-    void applyChangesToTree()
+    void restoreState (const NamedValueSet& props, const std::vector<DataTree>& children)
     {
-        if (dataTree.object == nullptr)
-            return;
+        // Clear parent references for children that will be removed
+        for (const auto& currentChild : dataTree.object->children)
+        {
+            bool willBeKept = false;
+            for (const auto& newChild : children)
+            {
+                if (currentChild.object == newChild.object)
+                {
+                    willBeKept = true;
+                    break;
+                }
+            }
+            
+            if (!willBeKept && currentChild.object != nullptr)
+            {
+                currentChild.object->parent.reset();
+            }
+        }
+        
+        // Restore properties and children
+        dataTree.object->properties = props;
+        dataTree.object->children = children;
 
-        // Start with original state
-        dataTree.object->properties = originalProperties;
-        dataTree.object->children = originalChildren;
-
-        // Update parent pointers for original children
-        for (auto& child : dataTree.object->children)
+        // Set parent references for restored children
+        for (const auto& child : dataTree.object->children)
         {
             if (child.object != nullptr)
                 child.object->parent = dataTree.object;
         }
 
-        // Apply all changes using the shared implementation
-        DataTree::Transaction::applyChangesToTree (dataTree, originalProperties, originalChildren, propertyChanges, childChangeList);
+        // Send notifications
+        for (int i = 0; i < props.size(); ++i)
+            dataTree.object->sendPropertyChangeMessage (props.getName (i));
+
+        for (size_t i = 0; i < children.size(); ++i)
+            dataTree.object->sendChildAddedMessage (children[i]);
     }
 
     DataTree dataTree;
     String description;
-    NamedValueSet originalProperties;
-    std::vector<DataTree> originalChildren;
-    std::vector<DataTree::Transaction::PropertyChange> propertyChanges;
-    std::vector<DataTree::Transaction::ChildChange> childChangeList;
+    NamedValueSet originalProperties, currentProperties;
+    std::vector<DataTree> originalChildren, currentChildren;
 };
 
 //==============================================================================
@@ -521,6 +550,40 @@ DataTree::DataTree() noexcept = default;
 DataTree::DataTree (const Identifier& type)
     : object (std::make_shared<DataObject> (type))
 {
+}
+
+DataTree::DataTree (const Identifier& type,
+                    const std::initializer_list<std::pair<Identifier, var>>& properties)
+    : DataTree (type)
+{
+    auto transaction = beginTransaction();
+
+    for (const auto& [key, value] : properties)
+        transaction.setProperty (key, value);
+}
+
+DataTree::DataTree (const Identifier& type,
+                    const std::initializer_list<DataTree>& children)
+    : DataTree (type)
+{
+    auto transaction = beginTransaction();
+
+    for (const auto& child : children)
+        transaction.addChild (child);
+}
+
+DataTree::DataTree (const Identifier& type,
+                    const std::initializer_list<std::pair<Identifier, var>>& properties,
+                    const std::initializer_list<DataTree>& children)
+    : DataTree (type)
+{
+    auto transaction = beginTransaction();
+
+    for (const auto& [key, value] : properties)
+        transaction.setProperty (key, value);
+
+    for (const auto& child : children)
+        transaction.addChild (child);
 }
 
 DataTree::DataTree (const DataTree& other) noexcept
@@ -1240,8 +1303,11 @@ void DataTree::Transaction::commit()
 
     if (undoManager != nullptr && (! propertyChanges.empty() || ! childChanges.empty()))
     {
-        // Use undo manager to perform the transaction action
-        undoManager->perform (new TransactionAction (dataTree, description, originalProperties, originalChildren, propertyChanges, childChanges));
+        // Apply changes first to get final state, then create undo action with before/after states
+        applyChangesToTree (dataTree, originalProperties, originalChildren, propertyChanges, childChanges);
+        
+        // Create a simple action that can restore the original state
+        undoManager->perform (new SimpleTransactionAction (dataTree, description, originalProperties, originalChildren));
     }
     else
     {

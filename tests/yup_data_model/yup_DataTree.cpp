@@ -1223,7 +1223,7 @@ TEST_F (DataTreeTests, TransactionWithUndo)
     auto undoManager = UndoManager::Ptr (new UndoManager());
 
     {
-        auto transaction = tree.beginTransaction ("Test Changes", undoManager.get());
+        auto transaction = tree.beginTransaction ("Test Changes", undoManager);
         transaction.setProperty ("prop1", "value1");
         transaction.setProperty ("prop2", 42);
     }
@@ -1302,7 +1302,7 @@ TEST_F (DataTreeTests, UndoManagerWithTransactions)
 
     // Test transactions with explicit undo manager
     {
-        auto transaction = tree.beginTransaction ("Set Property with Undo", undoManager.get());
+        auto transaction = tree.beginTransaction ("Set Property with Undo", undoManager);
         transaction.setProperty ("prop", "value");
     }
 
@@ -1521,7 +1521,7 @@ TEST_F (DataTreeTests, TransactionChildOperationsUndoTest)
 
     // Perform complex operations
     {
-        auto transaction = tree.beginTransaction ("Complex Operations with Undo", undoManager.get());
+        auto transaction = tree.beginTransaction ("Complex Operations with Undo", undoManager);
 
         transaction.addChild (child1);
         transaction.addChild (child2);
@@ -1562,7 +1562,7 @@ TEST_F (DataTreeTests, UndoManagerPropertyOperations)
 
     // Test setting multiple properties with undo
     {
-        auto transaction = tree.beginTransaction ("Set Multiple Properties", undoManager.get());
+        auto transaction = tree.beginTransaction ("Set Multiple Properties", undoManager);
         transaction.setProperty ("name", "TestName");
         transaction.setProperty ("version", "1.0.0");
         transaction.setProperty ("enabled", true);
@@ -1603,7 +1603,7 @@ TEST_F (DataTreeTests, UndoManagerPropertyModification)
     // Set initial property in first undo transaction
     undoManager->beginNewTransaction ("Initial Property");
     {
-        auto transaction = tree.beginTransaction ("Initial Property", undoManager.get());
+        auto transaction = tree.beginTransaction ("Initial Property", undoManager);
         transaction.setProperty ("value", "initial");
     }
 
@@ -1612,7 +1612,7 @@ TEST_F (DataTreeTests, UndoManagerPropertyModification)
     // Modify the property in second undo transaction
     undoManager->beginNewTransaction ("Modify Property");
     {
-        auto transaction = tree.beginTransaction ("Modify Property", undoManager.get());
+        auto transaction = tree.beginTransaction ("Modify Property", undoManager);
         transaction.setProperty ("value", "modified");
     }
 
@@ -1641,7 +1641,7 @@ TEST_F (DataTreeTests, UndoManagerPropertyRemoval)
 
     // Set up properties first
     {
-        auto transaction = tree.beginTransaction ("Setup Properties", undoManager.get());
+        auto transaction = tree.beginTransaction ("Setup Properties", undoManager);
         transaction.setProperty ("prop1", "value1");
         transaction.setProperty ("prop2", "value2");
     }
@@ -1652,7 +1652,7 @@ TEST_F (DataTreeTests, UndoManagerPropertyRemoval)
 
     // Remove properties in separate transaction
     {
-        auto transaction = tree.beginTransaction ("Remove Properties", undoManager.get());
+        auto transaction = tree.beginTransaction ("Remove Properties", undoManager);
         transaction.removeProperty ("prop1");
     }
 
@@ -1677,7 +1677,7 @@ TEST_F (DataTreeTests, UndoManagerRemoveAllProperties)
 
     // Set up properties
     {
-        auto transaction = tree.beginTransaction ("Setup Properties", undoManager.get());
+        auto transaction = tree.beginTransaction ("Setup Properties", undoManager);
         transaction.setProperty ("prop1", "value1");
         transaction.setProperty ("prop2", 42);
     }
@@ -1686,7 +1686,7 @@ TEST_F (DataTreeTests, UndoManagerRemoveAllProperties)
 
     // Remove all properties
     {
-        auto transaction = tree.beginTransaction ("Remove All Properties", undoManager.get());
+        auto transaction = tree.beginTransaction ("Remove All Properties", undoManager);
         transaction.removeAllProperties();
     }
 
@@ -1714,7 +1714,7 @@ TEST_F (DataTreeTests, UndoManagerChildOperations)
 
     // Add children
     {
-        auto transaction = tree.beginTransaction ("Add Children", undoManager.get());
+        auto transaction = tree.beginTransaction ("Add Children", undoManager);
         transaction.addChild (child1);
         transaction.addChild (child2);
     }
@@ -1746,7 +1746,7 @@ TEST_F (DataTreeTests, UndoManagerBasicChildMovement)
     // Set up children in first undo transaction
     undoManager->beginNewTransaction ("Setup Children");
     {
-        auto transaction = tree.beginTransaction ("Setup Children", undoManager.get());
+        auto transaction = tree.beginTransaction ("Setup Children", undoManager);
         transaction.addChild (child1);
         transaction.addChild (child2);
     }
@@ -1758,7 +1758,7 @@ TEST_F (DataTreeTests, UndoManagerBasicChildMovement)
     // Move child in separate undo transaction
     undoManager->beginNewTransaction ("Move Child");
     {
-        auto transaction = tree.beginTransaction ("Move Child", undoManager.get());
+        auto transaction = tree.beginTransaction ("Move Child", undoManager);
         transaction.moveChild (0, 1); // Move first child to second position
     }
 
@@ -1787,7 +1787,7 @@ TEST_F (DataTreeTests, UndoManagerChildRemoval)
 
     // Add children
     {
-        auto transaction = tree.beginTransaction ("Add Children", undoManager.get());
+        auto transaction = tree.beginTransaction ("Add Children", undoManager);
         transaction.addChild (child1);
         transaction.addChild (child2);
     }
@@ -1796,7 +1796,7 @@ TEST_F (DataTreeTests, UndoManagerChildRemoval)
 
     // Remove one child
     {
-        auto transaction = tree.beginTransaction ("Remove Child", undoManager.get());
+        auto transaction = tree.beginTransaction ("Remove Child", undoManager);
         transaction.removeChild (0); // Remove first child
     }
 
@@ -1823,7 +1823,7 @@ TEST_F (DataTreeTests, UndoManagerRemoveAllChildren)
 
     // Add children
     {
-        auto transaction = tree.beginTransaction ("Add Children", undoManager.get());
+        auto transaction = tree.beginTransaction ("Add Children", undoManager);
         transaction.addChild (child1);
         transaction.addChild (child2);
     }
@@ -1832,7 +1832,7 @@ TEST_F (DataTreeTests, UndoManagerRemoveAllChildren)
 
     // Remove all children
     {
-        auto transaction = tree.beginTransaction ("Remove All Children", undoManager.get());
+        auto transaction = tree.beginTransaction ("Remove All Children", undoManager);
         transaction.removeAllChildren();
     }
 
@@ -1859,7 +1859,7 @@ TEST_F (DataTreeTests, UndoManagerComplexMixedOperations)
 
     // Mixed transaction with properties and children
     {
-        auto transaction = tree.beginTransaction ("Mixed Operations", undoManager.get());
+        auto transaction = tree.beginTransaction ("Mixed Operations", undoManager);
         transaction.setProperty ("prop", "value");
         transaction.addChild (child);
     }
@@ -1895,7 +1895,7 @@ TEST_F (DataTreeTests, UndoManagerWithListenerNotifications)
 
     // Simple transaction to test listener integration
     {
-        auto transaction = tree.beginTransaction ("Add Child with Listener", undoManager.get());
+        auto transaction = tree.beginTransaction ("Add Child with Listener", undoManager);
         transaction.addChild (child);
     }
 
@@ -1920,7 +1920,7 @@ TEST_F (DataTreeTests, UndoManagerTransactionDescription)
 
     // Test transaction with description
     {
-        auto transaction = tree.beginTransaction ("Test Description", undoManager.get());
+        auto transaction = tree.beginTransaction ("Test Description", undoManager);
         transaction.setProperty ("prop", "value");
     }
 
@@ -1942,14 +1942,14 @@ TEST_F (DataTreeTests, UndoManagerMultipleTransactionLevels)
     // First undo transaction
     undoManager->beginNewTransaction ("First");
     {
-        auto transaction = tree.beginTransaction ("First", undoManager.get());
+        auto transaction = tree.beginTransaction ("First", undoManager);
         transaction.setProperty ("prop1", "value1");
     }
 
     // Second undo transaction
     undoManager->beginNewTransaction ("Second");
     {
-        auto transaction = tree.beginTransaction ("Second", undoManager.get());
+        auto transaction = tree.beginTransaction ("Second", undoManager);
         transaction.setProperty ("prop2", "value2");
     }
 
@@ -1984,7 +1984,7 @@ TEST_F (DataTreeTests, UndoManagerAbortedTransaction)
 
     // Set initial state
     {
-        auto transaction = tree.beginTransaction ("Initial State", undoManager.get());
+        auto transaction = tree.beginTransaction ("Initial State", undoManager);
         transaction.setProperty ("initial", "value");
     }
 
@@ -1993,7 +1993,7 @@ TEST_F (DataTreeTests, UndoManagerAbortedTransaction)
 
     // Create transaction but abort it
     {
-        auto transaction = tree.beginTransaction ("Aborted Changes", undoManager.get());
+        auto transaction = tree.beginTransaction ("Aborted Changes", undoManager);
         transaction.setProperty ("aborted", "shouldNotSee");
         transaction.setProperty ("initial", "modified");
         transaction.addChild (DataTree ("AbortedChild"));
@@ -2019,7 +2019,7 @@ TEST_F (DataTreeTests, UndoManagerErrorHandling)
     DataTree invalidTree;
 
     {
-        auto transaction = invalidTree.beginTransaction ("Invalid Tree Test", undoManager.get());
+        auto transaction = invalidTree.beginTransaction ("Invalid Tree Test", undoManager);
         transaction.setProperty ("prop", "value");
         transaction.addChild (DataTree ("Child"));
     }
@@ -2030,7 +2030,7 @@ TEST_F (DataTreeTests, UndoManagerErrorHandling)
 
     // Test with valid tree
     {
-        auto transaction = tree.beginTransaction ("Valid Operations", undoManager.get());
+        auto transaction = tree.beginTransaction ("Valid Operations", undoManager);
         transaction.setProperty ("prop", "value");
     }
 
@@ -2050,7 +2050,7 @@ TEST_F (DataTreeTests, TransactionRollbackOnException)
 
     // Set initial state
     {
-        auto transaction = tree.beginTransaction ("Initial State", undoManager.get());
+        auto transaction = tree.beginTransaction ("Initial State", undoManager);
         transaction.setProperty ("initial", "value");
         transaction.addChild (DataTree ("InitialChild"));
     }
@@ -2062,7 +2062,7 @@ TEST_F (DataTreeTests, TransactionRollbackOnException)
     // Simulate a transaction that would abort due to error
     try
     {
-        auto transaction = tree.beginTransaction ("Error Transaction", undoManager.get());
+        auto transaction = tree.beginTransaction ("Error Transaction", undoManager);
         transaction.setProperty ("temp1", "tempValue1");
         transaction.setProperty ("temp2", "tempValue2");
         transaction.addChild (DataTree ("TempChild"));
@@ -2096,7 +2096,7 @@ TEST_F (DataTreeTests, TransactionWithInvalidOperations)
     DataTree invalidChild; // Invalid DataTree
 
     {
-        auto transaction = tree.beginTransaction ("Mixed Valid/Invalid Operations", undoManager.get());
+        auto transaction = tree.beginTransaction ("Mixed Valid/Invalid Operations", undoManager);
 
         // Valid operations
         transaction.setProperty ("validProp", "validValue");
@@ -2129,7 +2129,7 @@ TEST_F (DataTreeTests, TransactionEmptyOperations)
 
     // Empty transaction
     {
-        auto transaction = tree.beginTransaction ("Empty Transaction", undoManager.get());
+        auto transaction = tree.beginTransaction ("Empty Transaction", undoManager);
         // No operations performed
     }
 
@@ -2138,7 +2138,7 @@ TEST_F (DataTreeTests, TransactionEmptyOperations)
 
     // Transaction with operations that don't change state
     {
-        auto transaction = tree.beginTransaction ("No-Change Transaction", undoManager.get());
+        auto transaction = tree.beginTransaction ("No-Change Transaction", undoManager);
         transaction.removeProperty ("nonexistent"); // Property doesn't exist
         transaction.removeChild (-1);               // Invalid index
         transaction.moveChild (0, 0);               // No children to move
@@ -2153,7 +2153,7 @@ TEST_F (DataTreeTests, TransactionRedundantOperations)
     auto undoManager = UndoManager::Ptr (new UndoManager());
 
     {
-        auto transaction = tree.beginTransaction ("Redundant Operations", undoManager.get());
+        auto transaction = tree.beginTransaction ("Redundant Operations", undoManager);
 
         // Set property multiple times
         transaction.setProperty ("prop", "value1");
@@ -2191,7 +2191,7 @@ TEST_F (DataTreeTests, TransactionLargeOperationBatch)
     std::vector<DataTree> children;
 
     {
-        auto transaction = tree.beginTransaction ("Large Batch", undoManager.get());
+        auto transaction = tree.beginTransaction ("Large Batch", undoManager);
 
         // Add many properties
         for (int i = 0; i < numOperations; ++i)
@@ -2237,7 +2237,7 @@ TEST_F (DataTreeTests, NestedTransactionScenarios)
 
     // Parent transaction
     {
-        auto parentTransaction = tree.beginTransaction ("Parent Operations", undoManager.get());
+        auto parentTransaction = tree.beginTransaction ("Parent Operations", undoManager);
         parentTransaction.setProperty ("parentProp", "parentValue");
         parentTransaction.addChild (child1);
         parentTransaction.addChild (child2);
@@ -2313,4 +2313,230 @@ TEST (DataTreeSafetyTests, NoMutexRelatedCrashes)
     }
 
     EXPECT_EQ (var (99), tree.getProperty ("counter"));
+}
+
+//==============================================================================
+// Additional Transaction-based Undo/Redo Coverage Tests
+
+TEST_F (DataTreeTests, TransactionPropertyRemovalUndoRedo)
+{
+    auto undoManager = UndoManager::Ptr (new UndoManager());
+
+    // Set up initial properties
+    undoManager->beginNewTransaction ("Setup Properties");
+    {
+        auto transaction = tree.beginTransaction ("Setup Properties", undoManager);
+        transaction.setProperty ("prop1", "value1");
+        transaction.setProperty ("prop2", "value2");
+        transaction.setProperty ("prop3", "value3");
+    }
+
+    EXPECT_EQ (3, tree.getNumProperties());
+
+    // Transaction that removes specific properties
+    undoManager->beginNewTransaction ("Remove Specific Properties");
+    {
+        auto transaction = tree.beginTransaction ("Remove Specific Properties", undoManager);
+        transaction.removeProperty ("prop2");
+        transaction.setProperty ("prop1", "modified");
+    }
+
+    EXPECT_EQ (2, tree.getNumProperties());
+    EXPECT_EQ ("modified", tree.getProperty ("prop1"));
+    EXPECT_FALSE (tree.hasProperty ("prop2"));
+    EXPECT_EQ ("value3", tree.getProperty ("prop3"));
+
+    // Undo property removal transaction
+    undoManager->undo();
+    EXPECT_EQ (3, tree.getNumProperties());
+    EXPECT_EQ ("value1", tree.getProperty ("prop1")); // Reverted
+    EXPECT_EQ ("value2", tree.getProperty ("prop2")); // Restored
+    EXPECT_EQ ("value3", tree.getProperty ("prop3"));
+
+    // Redo
+    undoManager->redo();
+    EXPECT_EQ (2, tree.getNumProperties());
+    EXPECT_EQ ("modified", tree.getProperty ("prop1"));
+    EXPECT_FALSE (tree.hasProperty ("prop2"));
+}
+
+TEST_F (DataTreeTests, TransactionRemoveAllPropertiesUndoRedo)
+{
+    auto undoManager = UndoManager::Ptr (new UndoManager());
+
+    // Set up initial properties
+    undoManager->beginNewTransaction();
+    {
+        auto transaction = tree.beginTransaction ("Setup Properties", undoManager);
+        transaction.setProperty ("prop1", "value1");
+        transaction.setProperty ("prop2", 42);
+        transaction.setProperty ("prop3", true);
+    }
+
+    EXPECT_EQ (3, tree.getNumProperties());
+
+    // Transaction that removes all properties and adds new ones
+    undoManager->beginNewTransaction();
+    {
+        auto transaction = tree.beginTransaction ("Clear and Reset", undoManager);
+        transaction.removeAllProperties();
+        transaction.setProperty ("newProp", "newValue");
+    }
+
+    EXPECT_EQ (1, tree.getNumProperties());
+    EXPECT_EQ ("newValue", tree.getProperty ("newProp"));
+    EXPECT_FALSE (tree.hasProperty ("prop1"));
+
+    // Undo - should restore original properties
+    undoManager->undo();
+    EXPECT_EQ (3, tree.getNumProperties());
+    EXPECT_EQ ("value1", tree.getProperty ("prop1"));
+    EXPECT_EQ (var (42), tree.getProperty ("prop2"));
+    EXPECT_TRUE (static_cast<bool> (tree.getProperty ("prop3")));
+    EXPECT_FALSE (tree.hasProperty ("newProp"));
+
+    // Redo
+    undoManager->redo();
+    EXPECT_EQ (1, tree.getNumProperties());
+    EXPECT_EQ ("newValue", tree.getProperty ("newProp"));
+}
+
+TEST_F (DataTreeTests, TransactionMixedChildAndPropertyOperations)
+{
+    auto undoManager = UndoManager::Ptr (new UndoManager());
+    DataTree child1 ("Child1");
+    DataTree child2 ("Child2");
+
+    // Complex transaction mixing properties and children
+    {
+        auto transaction = tree.beginTransaction ("Mixed Operations", undoManager);
+        transaction.setProperty ("count", 1);
+        transaction.addChild (child1);
+        transaction.setProperty ("count", 2); // Update property
+        transaction.addChild (child2);
+        transaction.setProperty ("finalProp", "finalValue"); // Add property
+    }
+
+    // Verify final state
+    EXPECT_EQ (2, tree.getNumProperties());
+    EXPECT_EQ (var (2), tree.getProperty ("count"));
+    EXPECT_EQ ("finalValue", tree.getProperty ("finalProp"));
+    EXPECT_EQ (2, tree.getNumChildren());
+    EXPECT_EQ (child1, tree.getChild (0));
+    EXPECT_EQ (child2, tree.getChild (1));
+
+    // Undo entire transaction
+    undoManager->undo();
+    EXPECT_EQ (0, tree.getNumProperties());
+    EXPECT_EQ (0, tree.getNumChildren());
+    EXPECT_FALSE (child1.getParent().isValid());
+    EXPECT_FALSE (child2.getParent().isValid());
+
+    // Redo entire transaction
+    undoManager->redo();
+    EXPECT_EQ (2, tree.getNumProperties());
+    EXPECT_EQ (var (2), tree.getProperty ("count"));
+    EXPECT_EQ ("finalValue", tree.getProperty ("finalProp"));
+    EXPECT_EQ (2, tree.getNumChildren());
+    EXPECT_EQ (tree, child1.getParent());
+    EXPECT_EQ (tree, child2.getParent());
+}
+
+TEST_F (DataTreeTests, TransactionRemoveAllChildrenUndoRedo)
+{
+    auto undoManager = UndoManager::Ptr (new UndoManager());
+    DataTree child1 ("Child1", { { "id", 1 } });
+    DataTree child2 ("Child2", { { "id", 2 } });
+    DataTree child3 ("Child3", { { "id", 3 } });
+
+    // Add children first
+    undoManager->beginNewTransaction();
+    {
+        auto transaction = tree.beginTransaction ("Add Children", undoManager);
+        transaction.addChild (child1);
+        transaction.addChild (child2);
+        transaction.addChild (child3);
+        transaction.setProperty ("childCount", 3);
+    }
+
+    EXPECT_EQ (3, tree.getNumChildren());
+    EXPECT_EQ (var (3), tree.getProperty ("childCount"));
+
+    // Transaction that removes all children and updates properties
+    undoManager->beginNewTransaction();
+    {
+        auto transaction = tree.beginTransaction ("Clear Children", undoManager);
+        transaction.removeAllChildren();
+        transaction.setProperty ("childCount", 0);
+        transaction.setProperty ("cleared", true);
+    }
+
+    EXPECT_EQ (0, tree.getNumChildren());
+    EXPECT_EQ (var (0), tree.getProperty ("childCount"));
+    EXPECT_TRUE (static_cast<bool> (tree.getProperty ("cleared")));
+    EXPECT_FALSE (child1.getParent().isValid());
+    EXPECT_FALSE (child2.getParent().isValid());
+    EXPECT_FALSE (child3.getParent().isValid());
+
+    // Undo clear children transaction
+    undoManager->undo();
+    EXPECT_EQ (3, tree.getNumChildren());
+    EXPECT_EQ (var (3), tree.getProperty ("childCount"));
+    EXPECT_FALSE (tree.hasProperty ("cleared"));
+    EXPECT_EQ (child1, tree.getChild (0));
+    EXPECT_EQ (child2, tree.getChild (1));
+    EXPECT_EQ (child3, tree.getChild (2));
+    EXPECT_EQ (tree, child1.getParent());
+    EXPECT_EQ (tree, child2.getParent());
+    EXPECT_EQ (tree, child3.getParent());
+
+    // Verify child properties are preserved
+    EXPECT_EQ (var (1), child1.getProperty ("id"));
+    EXPECT_EQ (var (2), child2.getProperty ("id"));
+    EXPECT_EQ (var (3), child3.getProperty ("id"));
+
+    // Redo clear children
+    undoManager->redo();
+    EXPECT_EQ (0, tree.getNumChildren());
+    EXPECT_EQ (var (0), tree.getProperty ("childCount"));
+    EXPECT_TRUE (static_cast<bool> (tree.getProperty ("cleared")));
+}
+
+TEST_F (DataTreeTests, TransactionMultipleOperationsUndoRedo)
+{
+    auto undoManager = UndoManager::Ptr (new UndoManager());
+    DataTree child ("Child");
+
+    // Single transaction with multiple operations
+    {
+        auto transaction = tree.beginTransaction ("Multiple Operations", undoManager);
+        transaction.setProperty ("prop1", "value1");
+        transaction.setProperty ("prop2", "value2");
+        transaction.addChild (child);
+        transaction.setProperty ("prop3", "value3");
+    }
+
+    EXPECT_EQ (1, undoManager->getNumTransactions()); // 1 transaction
+    EXPECT_EQ (3, tree.getNumProperties());
+    EXPECT_EQ (1, tree.getNumChildren());
+    EXPECT_EQ ("value1", tree.getProperty ("prop1"));
+    EXPECT_EQ ("value2", tree.getProperty ("prop2"));
+    EXPECT_EQ ("value3", tree.getProperty ("prop3"));
+    EXPECT_EQ (child, tree.getChild (0));
+
+    // Undo entire transaction at once
+    undoManager->undo();
+    EXPECT_EQ (0, tree.getNumProperties());
+    EXPECT_EQ (0, tree.getNumChildren());
+    EXPECT_FALSE (child.getParent().isValid());
+
+    // Redo entire transaction at once
+    undoManager->redo();
+    EXPECT_EQ (3, tree.getNumProperties());
+    EXPECT_EQ (1, tree.getNumChildren());
+    EXPECT_EQ ("value1", tree.getProperty ("prop1"));
+    EXPECT_EQ ("value2", tree.getProperty ("prop2"));
+    EXPECT_EQ ("value3", tree.getProperty ("prop3"));
+    EXPECT_EQ (child, tree.getChild (0));
+    EXPECT_EQ (tree, child.getParent());
 }

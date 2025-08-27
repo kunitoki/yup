@@ -116,6 +116,16 @@ public:
     */
     explicit DataTree (const Identifier& type);
 
+    DataTree (const Identifier& type,
+              const std::initializer_list<std::pair<Identifier, var>>& properties);
+
+    DataTree (const Identifier& type,
+              const std::initializer_list<DataTree>& children);
+
+    DataTree (const Identifier& type,
+              const std::initializer_list<std::pair<Identifier, var>>& properties,
+              const std::initializer_list<DataTree>& children);
+
     /**
         Copy constructor - creates a shallow copy that shares the same internal data.
 
@@ -1221,7 +1231,7 @@ private:
     friend class RemoveChildAction;
     friend class RemoveAllChildrenAction;
     friend class MoveChildAction;
-    friend class TransactionAction;
+    friend class SimpleTransactionAction;
 
     class DataObject : public std::enable_shared_from_this<DataObject>
     {
