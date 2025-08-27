@@ -144,6 +144,8 @@ protected:
 #if YUP_ARM
             ValueType* const resultData = result;
 #else
+            // These tests deliberately operate on misaligned memory and will be flagged up by
+            // checks for undefined behavior!
             ValueType* const resultData = addBytesToPointer (result.get(), random.nextInt (16));
 #endif
             FloatVectorOperations::divide (resultData, data1, data2, num);
