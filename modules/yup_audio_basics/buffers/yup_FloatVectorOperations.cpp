@@ -1501,6 +1501,23 @@ double findMaximum (const double* src, Size num) noexcept
 #endif
 }
 
+template <typename Size>
+void convertFixedToFloat (float* dest, const int* src, float multiplier, Size num) noexcept
+{
+#if YUP_USE_ARM_NEON
+    YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = (float) src[i] * multiplier,
+                                 vmulq_n_f32 (vcvtq_f32_s32 (vld1q_s32 (src)), multiplier),
+                                 YUP_LOAD_NONE,
+                                 YUP_INCREMENT_SRC_DEST, )
+#else
+    YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = (float) src[i] * multiplier,
+                                 Mode::mul (mult, _mm_cvtepi32_ps (_mm_loadu_si128 (reinterpret_cast<const __m128i*> (src)))),
+                                 YUP_LOAD_NONE,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType mult = Mode::load1 (multiplier);)
+#endif
+}
+
 } // namespace
 } // namespace FloatVectorHelpers
 
@@ -1799,6 +1816,18 @@ template struct FloatVectorOperationsBase<float, int>;
 template struct FloatVectorOperationsBase<float, size_t>;
 template struct FloatVectorOperationsBase<double, int>;
 template struct FloatVectorOperationsBase<double, size_t>;
+
+//==============================================================================
+
+void YUP_CALLTYPE FloatVectorOperations::convertFixedToFloat (float* dest, const int* src, float multiplier, size_t num) noexcept
+{
+   FloatVectorHelpers::convertFixedToFloat (dest, src, multiplier, num);
+}
+
+void YUP_CALLTYPE FloatVectorOperations::convertFixedToFloat (float* dest, const int* src, float multiplier, int num) noexcept
+{
+    FloatVectorHelpers::convertFixedToFloat (dest, src, multiplier, num);
+}
 
 //==============================================================================
 
