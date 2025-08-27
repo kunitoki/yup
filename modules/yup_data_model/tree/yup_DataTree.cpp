@@ -210,14 +210,14 @@ public:
             {
                 parentTree.object->children.erase (parentTree.object->children.begin() + childIndex);
                 parentTree.object->sendChildRemovedMessage (childTree, childIndex);
-                
+
                 // Restore previous parent
                 if (previousParent.isValid())
                 {
                     // Restore to previous parent at previous index
                     const int numChildren = static_cast<int> (previousParent.object->children.size());
                     const int actualIndex = (previousIndex < 0 || previousIndex > numChildren) ? numChildren : previousIndex;
-                    
+
                     previousParent.object->children.insert (previousParent.object->children.begin() + actualIndex, childTree);
                     childTree.object->parent = previousParent.object;
                     previousParent.object->sendChildAddedMessage (childTree);
@@ -439,11 +439,11 @@ private:
                     break;
                 }
             }
-            
-            if (!willBeKept && currentChild.object != nullptr)
+
+            if (! willBeKept && currentChild.object != nullptr)
                 currentChild.object->parent.reset();
         }
-        
+
         dataTree.object->properties = props;
         dataTree.object->children = children;
 
@@ -1262,7 +1262,7 @@ void DataTree::Transaction::commit()
     {
         // Apply changes first to get final state, then create undo action with before/after states
         applyChangesToTree (dataTree, originalProperties, originalChildren, propertyChanges, childChanges);
-        
+
         // Create a simple action that can restore the original state
         undoManager->perform (new SimpleTransactionAction (dataTree, description, originalProperties, originalChildren));
     }
