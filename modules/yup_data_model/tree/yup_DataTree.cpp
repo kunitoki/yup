@@ -400,7 +400,6 @@ public:
         , originalProperties (origProps)
         , originalChildren (origChildren)
     {
-        // Capture current state as the "after" state
         if (dataTree.object != nullptr)
         {
             currentProperties = dataTree.object->properties;
@@ -419,15 +418,9 @@ public:
             return false;
 
         if (state == UndoableActionState::Redo)
-        {
-            // Restore "after" state (current/new state)
             restoreState (currentProperties, currentChildren);
-        }
-        else // Undo
-        {
-            // Restore "before" state (original state)  
+        else
             restoreState (originalProperties, originalChildren);
-        }
 
         return true;
     }
@@ -435,7 +428,6 @@ public:
 private:
     void restoreState (const NamedValueSet& props, const std::vector<DataTree>& children)
     {
-        // Clear parent references for children that will be removed
         for (const auto& currentChild : dataTree.object->children)
         {
             bool willBeKept = false;
@@ -449,23 +441,18 @@ private:
             }
             
             if (!willBeKept && currentChild.object != nullptr)
-            {
                 currentChild.object->parent.reset();
-            }
         }
         
-        // Restore properties and children
         dataTree.object->properties = props;
         dataTree.object->children = children;
 
-        // Set parent references for restored children
         for (const auto& child : dataTree.object->children)
         {
             if (child.object != nullptr)
                 child.object->parent = dataTree.object;
         }
 
-        // Send notifications
         for (int i = 0; i < props.size(); ++i)
             dataTree.object->sendPropertyChangeMessage (props.getName (i));
 
@@ -709,8 +696,7 @@ void DataTree::setProperty (const Identifier& name, const var& newValue, UndoMan
     }
     else
     {
-        object->properties.set (name, newValue);
-        object->sendPropertyChangeMessage (name);
+        PropertySetAction (*this, name, newValue, object->properties[name]).perform (UndoableActionState::Redo);
     }
 }
 
@@ -727,8 +713,7 @@ void DataTree::removeProperty (const Identifier& name, UndoManager* undoManager)
     }
     else
     {
-        object->properties.remove (name);
-        object->sendPropertyChangeMessage (name);
+        PropertyRemoveAction (*this, name, object->properties[name]).perform (UndoableActionState::Redo);
     }
 }
 
@@ -745,11 +730,7 @@ void DataTree::removeAllProperties (UndoManager* undoManager)
     }
     else
     {
-        auto oldProperties = object->properties;
-        object->properties.clear();
-
-        for (int i = 0; i < oldProperties.size(); ++i)
-            object->sendPropertyChangeMessage (oldProperties.getName (i));
+        RemoveAllPropertiesAction (*this, object->properties).perform (UndoableActionState::Redo);
     }
 }
 
@@ -773,17 +754,7 @@ void DataTree::addChild (const DataTree& child, int index, UndoManager* undoMana
     }
     else
     {
-        // Remove from previous parent if any
-        if (auto oldParentObj = child.object->parent.lock())
-        {
-            DataTree oldParent (oldParentObj);
-            oldParent.removeChild (child);
-        }
-
-        object->children.insert (object->children.begin() + index, child);
-        child.object->parent = object;
-
-        object->sendChildAddedMessage (child);
+        AddChildAction (*this, child, index).perform (UndoableActionState::Redo);
     }
 }
 
@@ -811,10 +782,7 @@ void DataTree::removeChild (int index, UndoManager* undoManager)
     }
     else
     {
-        object->children.erase (object->children.begin() + index);
-        child.object->parent.reset();
-
-        object->sendChildRemovedMessage (child, index);
+        RemoveChildAction (*this, child, index).perform (UndoableActionState::Redo);
     }
 }
 
@@ -831,14 +799,7 @@ void DataTree::removeAllChildren (UndoManager* undoManager)
     }
     else
     {
-        auto oldChildren = object->children;
-        object->children.clear();
-
-        for (size_t i = 0; i < oldChildren.size(); ++i)
-        {
-            oldChildren[i].object->parent.reset();
-            object->sendChildRemovedMessage (oldChildren[i], static_cast<int> (i));
-        }
+        RemoveAllChildrenAction (*this, object->children).perform (UndoableActionState::Redo);
     }
 }
 
@@ -859,11 +820,7 @@ void DataTree::moveChild (int currentIndex, int newIndex, UndoManager* undoManag
     }
     else
     {
-        auto child = object->children[static_cast<size_t> (currentIndex)];
-        object->children.erase (object->children.begin() + currentIndex);
-        object->children.insert (object->children.begin() + newIndex, child);
-
-        object->sendChildMovedMessage (child, currentIndex, newIndex);
+        MoveChildAction (*this, currentIndex, newIndex).perform (UndoableActionState::Redo);
     }
 }
 
