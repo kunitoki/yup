@@ -83,6 +83,10 @@ struct BasicOps32
 
     static forcedinline void storeU (Type* dest, ParallelType a) noexcept { _mm_storeu_ps (dest, a); }
 
+    static forcedinline void storeU (int* dest, ParallelType a) noexcept { _mm_storeu_si128 (reinterpret_cast<__m128i*> (dest), _mm_castps_si128 (a)); }
+
+    static forcedinline void storeA (int* dest, ParallelType a) noexcept { _mm_store_si128 (reinterpret_cast<__m128i*> (dest), _mm_castps_si128 (a)); }
+
     static forcedinline ParallelType add (ParallelType a, ParallelType b) noexcept { return _mm_add_ps (a, b); }
 
     static forcedinline ParallelType sub (ParallelType a, ParallelType b) noexcept { return _mm_sub_ps (a, b); }
@@ -334,6 +338,10 @@ struct BasicOps32
     static forcedinline void storeA (Type* dest, ParallelType a) noexcept { vst1q_f32 (dest, a); }
 
     static forcedinline void storeU (Type* dest, ParallelType a) noexcept { vst1q_f32 (dest, a); }
+
+    static forcedinline void storeU (int* dest, ParallelType a) noexcept { vst1q_f32 (reinterpret_cast<float*> (dest), a); }
+
+    static forcedinline void storeA (int* dest, ParallelType a) noexcept { vst1q_f32 (reinterpret_cast<float*> (dest), a); }
 
     static forcedinline ParallelType add (ParallelType a, ParallelType b) noexcept { return vaddq_f32 (a, b); }
 
@@ -1509,12 +1517,37 @@ void convertFixedToFloat (float* dest, const int* src, float multiplier, Size nu
                                  vmulq_n_f32 (vcvtq_f32_s32 (vld1q_s32 (src)), multiplier),
                                  YUP_LOAD_NONE,
                                  YUP_INCREMENT_SRC_DEST, )
-#else
+#elif YUP_USE_SSE_INTRINSICS
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = (float) src[i] * multiplier,
                                  Mode::mul (mult, _mm_cvtepi32_ps (_mm_loadu_si128 (reinterpret_cast<const __m128i*> (src)))),
                                  YUP_LOAD_NONE,
                                  YUP_INCREMENT_SRC_DEST,
                                  const Mode::ParallelType mult = Mode::load1 (multiplier);)
+#else
+    for (Size i = 0; i < num; ++i)
+        dest[i] = (float) src[i] * multiplier;
+#endif
+}
+
+template <typename Size>
+void convertFloatToFixed (int* dest, const float* src, float multiplier, Size num) noexcept
+{
+#if YUP_USE_ARM_NEON
+    YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = (int) (src[i] * multiplier),
+                                 vreinterpretq_f32_s32 (vcvtq_s32_f32 (vmulq_n_f32 (vld1q_f32 (src), multiplier))),
+                                 YUP_LOAD_NONE,
+                                 YUP_INCREMENT_SRC_DEST, )
+
+#elif YUP_USE_SSE_INTRINSICS
+    YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = (int) (src[i] * multiplier),
+                                 _mm_castsi128_ps (_mm_cvtps_epi32 (_mm_mul_ps (_mm_loadu_ps (src), mult))),
+                                 YUP_LOAD_NONE,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType mult = Mode::load1 (multiplier);)
+
+#else
+    for (Size i = 0; i < num; ++i)
+        dest[i] = (int) (src[i] * multiplier);
 #endif
 }
 
@@ -1827,6 +1860,16 @@ void YUP_CALLTYPE FloatVectorOperations::convertFixedToFloat (float* dest, const
 void YUP_CALLTYPE FloatVectorOperations::convertFixedToFloat (float* dest, const int* src, float multiplier, int num) noexcept
 {
     FloatVectorHelpers::convertFixedToFloat (dest, src, multiplier, num);
+}
+
+void YUP_CALLTYPE FloatVectorOperations::convertFloatToFixed (int* dest, const float* src, float multiplier, size_t num) noexcept
+{
+   FloatVectorHelpers::convertFloatToFixed (dest, src, multiplier, num);
+}
+
+void YUP_CALLTYPE FloatVectorOperations::convertFloatToFixed (int* dest, const float* src, float multiplier, int num) noexcept
+{
+    FloatVectorHelpers::convertFloatToFixed (dest, src, multiplier, num);
 }
 
 //==============================================================================

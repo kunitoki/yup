@@ -220,11 +220,13 @@ struct NameForwarder : public Bases...
 class YUP_API FloatVectorOperations : public detail::NameForwarder<FloatVectorOperationsBase<float, int>, FloatVectorOperationsBase<float, size_t>, FloatVectorOperationsBase<double, int>, FloatVectorOperationsBase<double, size_t>>
 {
 public:
-    /** */
-    static void JUCE_CALLTYPE convertFixedToFloat (float* dest, const int* src, float multiplier, int num) noexcept;
+    /** Convert fixed integer signal to float applying a multiplier. */
+    static void YUP_CALLTYPE convertFixedToFloat (float* dest, const int* src, float multiplier, int num) noexcept;
+    static void YUP_CALLTYPE convertFixedToFloat (float* dest, const int* src, float multiplier, size_t num) noexcept;
 
-    /** */
-    static void JUCE_CALLTYPE convertFixedToFloat (float* dest, const int* src, float multiplier, size_t num) noexcept;
+    /** Convert float signal to int applying a multiplier. */
+    static void YUP_CALLTYPE convertFloatToFixed (int* dest, const float* src, float multiplier, int num) noexcept;
+    static void YUP_CALLTYPE convertFloatToFixed (int* dest, const float* src, float multiplier, size_t num) noexcept;
 
     /** This method enables or disables the SSE/NEON flush-to-zero mode. */
     static void YUP_CALLTYPE enableFlushToZeroMode (bool shouldEnable) noexcept;

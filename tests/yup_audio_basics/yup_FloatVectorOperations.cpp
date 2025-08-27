@@ -154,6 +154,28 @@ protected:
             FloatVectorOperations::fill (data1, (ValueType) 18, num);
             FloatVectorOperations::divide (data2, data1, (ValueType) 6, num);
             EXPECT_TRUE (areAllValuesEqual (data2, num, (ValueType) 3));
+
+            fillRandomly (random, int1, num);
+            const ValueType multiplier = (ValueType) (1.0 / (1 << 16));
+
+            if constexpr (std::is_same_v<ValueType, float>)
+            {
+                convertFixed (data1, int1, multiplier, num);
+                FloatVectorOperations::convertFixedToFloat (data2, int1, multiplier, num);
+                EXPECT_TRUE (buffersMatch (data1, data2, num));
+
+                convertFloatToFixed (int1, data1, 1.0f / multiplier, num);
+                HeapBlock<int> int2 (num + 16);
+#if YUP_ARM
+                int* const intData = int2;
+#else
+                int* const intData = addBytesToPointer (int2.get(), random.nextInt (16));
+#endif
+                FloatVectorOperations::convertFloatToFixed (intData, data1, 1.0f / multiplier, num);
+
+                for (int i = 0; i < num; ++i)
+                    EXPECT_EQ (int1[i], intData[i]);
+            }
         }
 
         static void fillRandomly (Random& random, ValueType* d, int num)
