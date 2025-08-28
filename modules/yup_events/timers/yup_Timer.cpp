@@ -367,12 +367,10 @@ void Timer::startTimerHz (int timerFrequencyHz) noexcept
 
 void Timer::stopTimer() noexcept
 {
-    if (timerPeriodMs > 0)
+    if (timerPeriodMs.exchange (0, std::memory_order_relaxed) > 0)
     {
         if (auto* instance = TimerThread::getInstanceWithoutCreating())
             instance->removeTimer (this);
-
-        timerPeriodMs = 0;
     }
 }
 
