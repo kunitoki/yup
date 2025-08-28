@@ -1650,9 +1650,11 @@ struct CoreAudioClasses
                 d->close();
         }
 
-        void restart (AudioIODeviceCallback* cb)
+        void restart()
         {
             const ScopedLock sl (closeLock);
+
+            AudioIODeviceCallback* cb = previousCallback;
 
             close();
 
@@ -1791,7 +1793,7 @@ struct CoreAudioClasses
         {
             stopTimer();
 
-            restart (previousCallback);
+            restart();
         }
 
         void shutdown (const String& error)
