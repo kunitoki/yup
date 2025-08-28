@@ -1055,7 +1055,7 @@ struct CoreAudioClasses
 
         CoreAudioIODevice& owner;
         int bitDepth = 32;
-        int xruns = 0;
+        std::atomic<int> xruns { 0 };
         Array<double> sampleRates;
         Array<int> bufferSizes;
         AudioDeviceID deviceID;
@@ -1163,7 +1163,7 @@ struct CoreAudioClasses
                 return x.mSelector == kAudioDeviceProcessorOverload;
             });
 
-            intern.xruns += xruns;
+            intern.xruns.fetch_add (xruns);
 
             const auto detailsChanged = std::any_of (pa, pa + numAddresses, [] (const AudioObjectPropertyAddress& x)
             {
@@ -1318,7 +1318,7 @@ struct CoreAudioClasses
 
         int getCurrentBufferSizeSamples() override { return internal->getBufferSize(); }
 
-        int getXRunCount() const noexcept override { return internal->xruns; }
+        int getXRunCount() const noexcept override { return internal->xruns.load (std::memory_order_relaxed); }
 
         int getIndexOfDevice (bool asInput) const { return deviceType->getDeviceNames (asInput).indexOf (getName()); }
 
@@ -1341,7 +1341,7 @@ struct CoreAudioClasses
                      int bufferSizeSamples) override
         {
             isOpen_ = true;
-            internal->xruns = 0;
+            internal->xruns.store (0);
 
             inputChannelsRequested = inputChannels;
             outputChannelsRequested = outputChannels;
@@ -1763,7 +1763,7 @@ struct CoreAudioClasses
 
         int getXRunCount() const noexcept override
         {
-            return xruns.load();
+            return xruns.load (std::memory_order_relaxed);
         }
 
     private:
@@ -1771,6 +1771,7 @@ struct CoreAudioClasses
 
         WeakReference<CoreAudioIODeviceType> owner;
         CriticalSection callbackLock;
+        CriticalSection closeLock;
         AudioIODeviceCallback* callback = nullptr;
         AudioIODeviceCallback* previousCallback = nullptr;
         double currentSampleRate = 0;
@@ -1778,7 +1779,6 @@ struct CoreAudioClasses
         bool active = false;
         String lastError;
         AudioSampleBuffer fifo, scratchBuffer;
-        CriticalSection closeLock;
         int targetLatency = 0;
         std::atomic<int> xruns { -1 };
         std::atomic<uint64_t> lastValidReadPosition { invalidSampleTime };
@@ -1965,7 +1965,7 @@ struct CoreAudioClasses
             for (auto& d : getDeviceWrappers())
                 d->sampleTime.store (invalidSampleTime);
 
-            ++xruns;
+            xruns.fetch_add (1);
         }
 
         void handleAudioDeviceAboutToStart (AudioIODevice* device)
@@ -2132,8 +2132,7 @@ struct CoreAudioClasses
         };
 
         /* If the current AudioIODeviceCombiner::callback is nullptr, it sets itself as the callback
-       and forwards error related callbacks to the provided callback
-    */
+           and forwards error related callbacks to the provided callback. */
         class ScopedErrorForwarder final : public AudioIODeviceCallback
         {
         public:
