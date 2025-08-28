@@ -214,11 +214,14 @@ TEST_F (MidiFileTest, TimeFormatGetSet)
     EXPECT_EQ (file.getTimeFormat(), 96);
 
     // Test SMPTE format
-    file.setSmpteTimeFormat (24, 8);
-    //EXPECT_EQ(file.getTimeFormat(), (short)(((-24) << 8) | 8));
+    file.setSmpteTimeFormat (24, 4);
+    EXPECT_EQ (file.getTimeFormat(), -6140);
 
-    file.setSmpteTimeFormat (30, 10);
-    //EXPECT_EQ(file.getTimeFormat(), (short)(((-30) << 8) | 10));
+    file.setSmpteTimeFormat (25, 40);
+    EXPECT_EQ (file.getTimeFormat(), -6360);
+
+    file.setSmpteTimeFormat (26, 40);
+    EXPECT_EQ (file.getTimeFormat(), -6360);
 }
 
 TEST_F (MidiFileTest, ReadFromValidStream)

@@ -1158,7 +1158,7 @@ struct CoreAudioClasses
         {
             auto& intern = *static_cast<CoreAudioInternal*> (inClientData);
 
-            const auto xruns = std::count_if (pa, pa + numAddresses, [] (const AudioObjectPropertyAddress& x)
+            const auto xruns = (int) std::count_if (pa, pa + numAddresses, [] (const AudioObjectPropertyAddress& x)
             {
                 return x.mSelector == kAudioDeviceProcessorOverload;
             });

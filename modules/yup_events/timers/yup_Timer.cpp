@@ -134,7 +134,7 @@ public:
                 break;
 
             auto* timer = first.timer;
-            first.countdownMs = timer->timerPeriodMs;
+            first.countdownMs = timer->getTimerInterval();
             shuffleTimerBackInQueue (0);
             notify();
 
@@ -175,7 +175,7 @@ public:
 
         auto pos = timers.size();
 
-        timers.push_back ({ t, t->timerPeriodMs });
+        timers.push_back ({ t, t->getTimerInterval() });
         t->positionInQueue = pos;
         shuffleTimerForwardInQueue (pos);
         notify();
@@ -210,7 +210,7 @@ public:
         jassert (timers[pos].timer == t);
 
         auto lastCountdown = timers[pos].countdownMs;
-        auto newCountdown = t->timerPeriodMs;
+        auto newCountdown = t->getTimerInterval();
 
         if (newCountdown != lastCountdown)
         {
@@ -350,10 +350,7 @@ void Timer::startTimer (int interval) noexcept
 
     if (auto* instance = TimerThread::getInstance())
     {
-        bool wasStopped = (timerPeriodMs == 0);
-        timerPeriodMs = jmax (1, interval);
-
-        if (wasStopped)
+        if (timerPeriodMs.exchange (jmax (1, interval)) == 0)
             instance->addTimer (this);
         else
             instance->resetTimerCounter (this);
