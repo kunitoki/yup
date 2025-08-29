@@ -37,7 +37,7 @@ namespace yup
     @return The casted value, or std::nullopt if the cast failed.
  */
 template <class T>
-std::optional<T> python_cast (const pybind11::object& value)
+std::optional<T> python_cast(const pybind11::object& value)
 {
     try
     {
@@ -51,7 +51,7 @@ std::optional<T> python_cast (const pybind11::object& value)
 
 //==============================================================================
 
-YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wattributes")
+YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wattributes")
 
 /** Redirect the standard output and error streams to the script engine.
 
@@ -62,7 +62,7 @@ struct YUP_API ScriptStreamRedirection
     ScriptStreamRedirection() noexcept;
     ~ScriptStreamRedirection() noexcept;
 
-private:
+   private:
     pybind11::object sys;
 };
 

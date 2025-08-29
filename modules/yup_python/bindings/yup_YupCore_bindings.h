@@ -23,7 +23,7 @@
 
 #include <yup_core/yup_core.h>
 
-YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wattributes")
+YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wattributes")
 
 #define YUP_PYTHON_INCLUDE_PYBIND11_OPERATORS
 #define YUP_PYTHON_INCLUDE_PYBIND11_STL
@@ -36,8 +36,8 @@ YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wattributes")
 #include <cstddef>
 #include <functional>
 #include <memory>
-#include <typeinfo>
 #include <type_traits>
+#include <typeinfo>
 #include <utility>
 
 namespace PYBIND11_NAMESPACE
@@ -50,15 +50,15 @@ namespace detail
 template <>
 struct type_caster<yup::StringRef>
 {
-public:
-    PYBIND11_TYPE_CASTER (yup::StringRef, const_name (PYBIND11_STRING_NAME));
+   public:
+    PYBIND11_TYPE_CASTER(yup::StringRef, const_name(PYBIND11_STRING_NAME));
 
-    bool load (handle src, bool convert);
+    bool load(handle src, bool convert);
 
-    static handle cast (const yup::StringRef& src, return_value_policy policy, handle parent);
+    static handle cast(const yup::StringRef& src, return_value_policy policy, handle parent);
 
-private:
-    bool load_raw (handle src);
+   private:
+    bool load_raw(handle src);
 };
 
 //==============================================================================
@@ -66,15 +66,15 @@ private:
 template <>
 struct type_caster<yup::String>
 {
-public:
-    PYBIND11_TYPE_CASTER (yup::String, const_name (PYBIND11_STRING_NAME));
+   public:
+    PYBIND11_TYPE_CASTER(yup::String, const_name(PYBIND11_STRING_NAME));
 
-    bool load (handle src, bool convert);
+    bool load(handle src, bool convert);
 
-    static handle cast (const yup::String& src, return_value_policy policy, handle parent);
+    static handle cast(const yup::String& src, return_value_policy policy, handle parent);
 
-private:
-    bool load_raw (handle src);
+   private:
+    bool load_raw(handle src);
 };
 
 //==============================================================================
@@ -84,15 +84,15 @@ struct type_caster<yup::Identifier> : public type_caster_base<yup::Identifier>
 {
     using base_type = type_caster_base<yup::Identifier>;
 
-public:
-    PYBIND11_TYPE_CASTER (yup::Identifier, const_name ("yup.Identifier"));
+   public:
+    PYBIND11_TYPE_CASTER(yup::Identifier, const_name("yup.Identifier"));
 
-    bool load (handle src, bool convert);
+    bool load(handle src, bool convert);
 
-    static handle cast (const yup::Identifier& src, return_value_policy policy, handle parent);
+    static handle cast(const yup::Identifier& src, return_value_policy policy, handle parent);
 
-private:
-    bool load_raw (handle src);
+   private:
+    bool load_raw(handle src);
 };
 
 //==============================================================================
@@ -100,12 +100,12 @@ private:
 template <>
 struct type_caster<yup::var>
 {
-public:
-    PYBIND11_TYPE_CASTER (yup::var, const_name ("yup.var"));
+   public:
+    PYBIND11_TYPE_CASTER(yup::var, const_name("yup.var"));
 
-    bool load (handle src, bool convert);
+    bool load(handle src, bool convert);
 
-    static handle cast (const yup::var& src, return_value_policy policy, handle parent);
+    static handle cast(const yup::var& src, return_value_policy policy, handle parent);
 };
 
 } // namespace detail
@@ -116,7 +116,7 @@ namespace yup::Bindings
 
 //==============================================================================
 
-void registerYupCoreBindings (pybind11::module_& m);
+void registerYupCoreBindings(pybind11::module_& m);
 
 //==============================================================================
 
@@ -126,7 +126,7 @@ struct isEqualityComparable : std::false_type
 };
 
 template <class T>
-struct isEqualityComparable<T, std::void_t<decltype (std::declval<T>() == std::declval<T>())>> : std::true_type
+struct isEqualityComparable<T, std::void_t<decltype(std::declval<T>() == std::declval<T>())>> : std::true_type
 {
 };
 
@@ -137,25 +137,25 @@ struct PyArrayElementComparator
 {
     PyArrayElementComparator() = default;
 
-    int compareElements (const T& first, const T& second)
+    int compareElements(const T& first, const T& second)
     {
         pybind11::gil_scoped_acquire gil;
 
-        if (pybind11::function override_ = pybind11::get_override (static_cast<PyArrayElementComparator*> (this), "compareElements"); override_)
+        if (pybind11::function override_ = pybind11::get_override(static_cast<PyArrayElementComparator*>(this), "compareElements"); override_)
         {
-            auto result = override_ (first, second);
+            auto result = override_(first, second);
 
             return result.template cast<int>();
         }
 
-        pybind11::pybind11_fail ("Tried to call pure virtual function \"Array.Comparator.compareElements\"");
+        pybind11::pybind11_fail("Tried to call pure virtual function \"Array.Comparator.compareElements\"");
     }
 };
 
 //==============================================================================
 
 template <template <class, class, int> class Class, class... Types>
-void registerArray (pybind11::module_& m)
+void registerArray(pybind11::module_& m)
 {
     // clang-format off
 
@@ -365,8 +365,8 @@ void registerArray (pybind11::module_& m)
 
 struct YUP_API PyThreadID
 {
-    explicit PyThreadID (Thread::ThreadID value) noexcept
-        : value (value)
+    explicit PyThreadID(Thread::ThreadID value) noexcept
+        : value(value)
     {
     }
 
@@ -375,17 +375,17 @@ struct YUP_API PyThreadID
         return value;
     }
 
-    bool operator== (const PyThreadID& other) const noexcept
+    bool operator==(const PyThreadID& other) const noexcept
     {
         return value == other.value;
     }
 
-    bool operator!= (const PyThreadID& other) const noexcept
+    bool operator!=(const PyThreadID& other) const noexcept
     {
         return value != other.value;
     }
 
-private:
+   private:
     Thread::ThreadID value;
 };
 
@@ -394,131 +394,131 @@ private:
 template <class Base = InputStream>
 struct PyInputStream : Base
 {
-private:
-#if JUCE_WINDOWS && ! JUCE_MINGW
+   private:
+#if JUCE_WINDOWS && !JUCE_MINGW
     using ssize_t = pointer_sized_int;
 #endif
 
-public:
+   public:
     using Base::Base;
 
     int64 getTotalLength() override
     {
-        PYBIND11_OVERRIDE_PURE (int64, Base, getTotalLength);
+        PYBIND11_OVERRIDE_PURE(int64, Base, getTotalLength);
     }
 
     bool isExhausted() override
     {
-        PYBIND11_OVERRIDE_PURE (bool, Base, isExhausted);
+        PYBIND11_OVERRIDE_PURE(bool, Base, isExhausted);
     }
 
-    int read (void* destBuffer, int maxBytesToRead) override
+    int read(void* destBuffer, int maxBytesToRead) override
     {
         pybind11::gil_scoped_acquire gil;
 
-        if (pybind11::function override_ = pybind11::get_override (static_cast<Base*> (this), "read"); override_)
+        if (pybind11::function override_ = pybind11::get_override(static_cast<Base*>(this), "read"); override_)
         {
-            auto result = override_ (pybind11::memoryview::from_memory (destBuffer, static_cast<ssize_t> (maxBytesToRead)));
+            auto result = override_(pybind11::memoryview::from_memory(destBuffer, static_cast<ssize_t>(maxBytesToRead)));
 
             return result.cast<int>();
         }
 
-        pybind11::pybind11_fail ("Tried to call pure virtual function \"InputStream.read\"");
+        pybind11::pybind11_fail("Tried to call pure virtual function \"InputStream.read\"");
     }
 
     char readByte() override
     {
-        PYBIND11_OVERRIDE (char, Base, readByte);
+        PYBIND11_OVERRIDE(char, Base, readByte);
     }
 
     short readShort() override
     {
-        PYBIND11_OVERRIDE (short, Base, readShort);
+        PYBIND11_OVERRIDE(short, Base, readShort);
     }
 
     short readShortBigEndian() override
     {
-        PYBIND11_OVERRIDE (short, Base, readShortBigEndian);
+        PYBIND11_OVERRIDE(short, Base, readShortBigEndian);
     }
 
     int readInt() override
     {
-        PYBIND11_OVERRIDE (int, Base, readInt);
+        PYBIND11_OVERRIDE(int, Base, readInt);
     }
 
     int readIntBigEndian() override
     {
-        PYBIND11_OVERRIDE (int, Base, readIntBigEndian);
+        PYBIND11_OVERRIDE(int, Base, readIntBigEndian);
     }
 
     int64 readInt64() override
     {
-        PYBIND11_OVERRIDE (int64, Base, readInt64);
+        PYBIND11_OVERRIDE(int64, Base, readInt64);
     }
 
     int64 readInt64BigEndian() override
     {
-        PYBIND11_OVERRIDE (int64, Base, readInt64BigEndian);
+        PYBIND11_OVERRIDE(int64, Base, readInt64BigEndian);
     }
 
     float readFloat() override
     {
-        PYBIND11_OVERRIDE (float, Base, readFloat);
+        PYBIND11_OVERRIDE(float, Base, readFloat);
     }
 
     float readFloatBigEndian() override
     {
-        PYBIND11_OVERRIDE (float, Base, readFloatBigEndian);
+        PYBIND11_OVERRIDE(float, Base, readFloatBigEndian);
     }
 
     double readDouble() override
     {
-        PYBIND11_OVERRIDE (double, Base, readDouble);
+        PYBIND11_OVERRIDE(double, Base, readDouble);
     }
 
     double readDoubleBigEndian() override
     {
-        PYBIND11_OVERRIDE (double, Base, readDoubleBigEndian);
+        PYBIND11_OVERRIDE(double, Base, readDoubleBigEndian);
     }
 
     int readCompressedInt() override
     {
-        PYBIND11_OVERRIDE (int, Base, readCompressedInt);
+        PYBIND11_OVERRIDE(int, Base, readCompressedInt);
     }
 
     String readNextLine() override
     {
-        PYBIND11_OVERRIDE (String, Base, readNextLine);
+        PYBIND11_OVERRIDE(String, Base, readNextLine);
     }
 
     String readString() override
     {
-        PYBIND11_OVERRIDE (String, Base, readString);
+        PYBIND11_OVERRIDE(String, Base, readString);
     }
 
     String readEntireStreamAsString() override
     {
-        PYBIND11_OVERRIDE (String, Base, readEntireStreamAsString);
+        PYBIND11_OVERRIDE(String, Base, readEntireStreamAsString);
     }
 
-    size_t readIntoMemoryBlock (MemoryBlock& destBlock, ssize_t maxNumBytesToRead) override
+    size_t readIntoMemoryBlock(MemoryBlock& destBlock, ssize_t maxNumBytesToRead) override
     {
-        PYBIND11_OVERRIDE (size_t, Base, readIntoMemoryBlock, destBlock, maxNumBytesToRead);
+        PYBIND11_OVERRIDE(size_t, Base, readIntoMemoryBlock, destBlock, maxNumBytesToRead);
     }
 
     int64 getPosition() override
     {
-        PYBIND11_OVERRIDE_PURE (int64, Base, getPosition);
+        PYBIND11_OVERRIDE_PURE(int64, Base, getPosition);
     }
 
-    bool setPosition (int64 newPosition) override
+    bool setPosition(int64 newPosition) override
     {
-        PYBIND11_OVERRIDE_PURE (bool, Base, setPosition, newPosition);
+        PYBIND11_OVERRIDE_PURE(bool, Base, setPosition, newPosition);
     }
 
-    void skipNextBytes (int64 newPosition) override
+    void skipNextBytes(int64 newPosition) override
     {
-        PYBIND11_OVERRIDE (void, Base, skipNextBytes, newPosition);
+        PYBIND11_OVERRIDE(void, Base, skipNextBytes, newPosition);
     }
 };
 
@@ -531,17 +531,17 @@ struct PyInputSource : Base
 
     InputStream* createInputStream() override
     {
-        PYBIND11_OVERRIDE_PURE (InputStream*, Base, createInputStream);
+        PYBIND11_OVERRIDE_PURE(InputStream*, Base, createInputStream);
     }
 
-    InputStream* createInputStreamFor (const String& relatedItemPath) override
+    InputStream* createInputStreamFor(const String& relatedItemPath) override
     {
-        PYBIND11_OVERRIDE_PURE (InputStream*, Base, createInputStreamFor, relatedItemPath);
+        PYBIND11_OVERRIDE_PURE(InputStream*, Base, createInputStreamFor, relatedItemPath);
     }
 
     int64 hashCode() const override
     {
-        PYBIND11_OVERRIDE_PURE (int64, Base, hashCode);
+        PYBIND11_OVERRIDE_PURE(int64, Base, hashCode);
     }
 };
 
@@ -550,126 +550,126 @@ struct PyInputSource : Base
 template <class Base = OutputStream>
 struct PyOutputStream : Base
 {
-private:
+   private:
 #if YUP_WINDOWS
     using ssize_t = pointer_sized_int;
 #endif
 
-public:
+   public:
     using Base::Base;
 
     void flush() override
     {
-        PYBIND11_OVERRIDE_PURE (void, Base, flush);
+        PYBIND11_OVERRIDE_PURE(void, Base, flush);
     }
 
-    bool setPosition (int64 newPosition) override
+    bool setPosition(int64 newPosition) override
     {
-        PYBIND11_OVERRIDE_PURE (bool, Base, setPosition, newPosition);
+        PYBIND11_OVERRIDE_PURE(bool, Base, setPosition, newPosition);
     }
 
     int64 getPosition() override
     {
-        PYBIND11_OVERRIDE_PURE (int64, Base, getPosition);
+        PYBIND11_OVERRIDE_PURE(int64, Base, getPosition);
     }
 
-    bool write (const void* dataToWrite, size_t numberOfBytes) override
+    bool write(const void* dataToWrite, size_t numberOfBytes) override
     {
         pybind11::gil_scoped_acquire gil;
 
-        if (pybind11::function override_ = pybind11::get_override (static_cast<Base*> (this), "write"); override_)
+        if (pybind11::function override_ = pybind11::get_override(static_cast<Base*>(this), "write"); override_)
         {
-            auto result = override_ (pybind11::memoryview::from_memory (dataToWrite, static_cast<ssize_t> (numberOfBytes)));
+            auto result = override_(pybind11::memoryview::from_memory(dataToWrite, static_cast<ssize_t>(numberOfBytes)));
 
             return result.cast<bool>();
         }
 
-        pybind11::pybind11_fail ("Tried to call pure virtual function \"OutputStream.write\"");
+        pybind11::pybind11_fail("Tried to call pure virtual function \"OutputStream.write\"");
     }
 
-    bool writeByte (char value) override
+    bool writeByte(char value) override
     {
-        PYBIND11_OVERRIDE (bool, Base, writeByte, value);
+        PYBIND11_OVERRIDE(bool, Base, writeByte, value);
     }
 
-    bool writeBool (bool value) override
+    bool writeBool(bool value) override
     {
-        PYBIND11_OVERRIDE (bool, Base, writeBool, value);
+        PYBIND11_OVERRIDE(bool, Base, writeBool, value);
     }
 
-    bool writeShort (short value) override
+    bool writeShort(short value) override
     {
-        PYBIND11_OVERRIDE (bool, Base, writeShort, value);
+        PYBIND11_OVERRIDE(bool, Base, writeShort, value);
     }
 
-    bool writeShortBigEndian (short value) override
+    bool writeShortBigEndian(short value) override
     {
-        PYBIND11_OVERRIDE (bool, Base, writeShortBigEndian, value);
+        PYBIND11_OVERRIDE(bool, Base, writeShortBigEndian, value);
     }
 
-    bool writeInt (int value) override
+    bool writeInt(int value) override
     {
-        PYBIND11_OVERRIDE (bool, Base, writeInt, value);
+        PYBIND11_OVERRIDE(bool, Base, writeInt, value);
     }
 
-    bool writeIntBigEndian (int value) override
+    bool writeIntBigEndian(int value) override
     {
-        PYBIND11_OVERRIDE (bool, Base, writeIntBigEndian, value);
+        PYBIND11_OVERRIDE(bool, Base, writeIntBigEndian, value);
     }
 
-    bool writeInt64 (int64 value) override
+    bool writeInt64(int64 value) override
     {
-        PYBIND11_OVERRIDE (bool, Base, writeInt64, value);
+        PYBIND11_OVERRIDE(bool, Base, writeInt64, value);
     }
 
-    bool writeInt64BigEndian (int64 value) override
+    bool writeInt64BigEndian(int64 value) override
     {
-        PYBIND11_OVERRIDE (bool, Base, writeInt64BigEndian, value);
+        PYBIND11_OVERRIDE(bool, Base, writeInt64BigEndian, value);
     }
 
-    bool writeFloat (float value) override
+    bool writeFloat(float value) override
     {
-        PYBIND11_OVERRIDE (bool, Base, writeFloat, value);
+        PYBIND11_OVERRIDE(bool, Base, writeFloat, value);
     }
 
-    bool writeFloatBigEndian (float value) override
+    bool writeFloatBigEndian(float value) override
     {
-        PYBIND11_OVERRIDE (bool, Base, writeFloatBigEndian, value);
+        PYBIND11_OVERRIDE(bool, Base, writeFloatBigEndian, value);
     }
 
-    bool writeDouble (double value) override
+    bool writeDouble(double value) override
     {
-        PYBIND11_OVERRIDE (bool, Base, writeDouble, value);
+        PYBIND11_OVERRIDE(bool, Base, writeDouble, value);
     }
 
-    bool writeDoubleBigEndian (double value) override
+    bool writeDoubleBigEndian(double value) override
     {
-        PYBIND11_OVERRIDE (bool, Base, writeDoubleBigEndian, value);
+        PYBIND11_OVERRIDE(bool, Base, writeDoubleBigEndian, value);
     }
 
-    bool writeRepeatedByte (uint8 byte, size_t numTimesToRepeat) override
+    bool writeRepeatedByte(uint8 byte, size_t numTimesToRepeat) override
     {
-        PYBIND11_OVERRIDE (bool, Base, writeRepeatedByte, byte, numTimesToRepeat);
+        PYBIND11_OVERRIDE(bool, Base, writeRepeatedByte, byte, numTimesToRepeat);
     }
 
-    bool writeCompressedInt (int value) override
+    bool writeCompressedInt(int value) override
     {
-        PYBIND11_OVERRIDE (bool, Base, writeCompressedInt, value);
+        PYBIND11_OVERRIDE(bool, Base, writeCompressedInt, value);
     }
 
-    bool writeString (const String& text) override
+    bool writeString(const String& text) override
     {
-        PYBIND11_OVERRIDE (bool, Base, writeString, text);
+        PYBIND11_OVERRIDE(bool, Base, writeString, text);
     }
 
-    bool writeText (const String& text, bool asUTF16, bool writeUTF16ByteOrderMark, const char* lineEndings) override
+    bool writeText(const String& text, bool asUTF16, bool writeUTF16ByteOrderMark, const char* lineEndings) override
     {
-        PYBIND11_OVERRIDE (bool, Base, writeText, text, asUTF16, writeUTF16ByteOrderMark, lineEndings);
+        PYBIND11_OVERRIDE(bool, Base, writeText, text, asUTF16, writeUTF16ByteOrderMark, lineEndings);
     }
 
-    int64 writeFromInputStream (InputStream& source, int64 maxNumBytesToWrite) override
+    int64 writeFromInputStream(InputStream& source, int64 maxNumBytesToWrite) override
     {
-        PYBIND11_OVERRIDE (int64, Base, writeFromInputStream, source, maxNumBytesToWrite);
+        PYBIND11_OVERRIDE(int64, Base, writeFromInputStream, source, maxNumBytesToWrite);
     }
 };
 
@@ -680,14 +680,14 @@ struct PyFileFilter : Base
 {
     using Base::Base;
 
-    bool isFileSuitable (const File& file) const override
+    bool isFileSuitable(const File& file) const override
     {
-        PYBIND11_OVERRIDE_PURE (bool, Base, isFileSuitable, file);
+        PYBIND11_OVERRIDE_PURE(bool, Base, isFileSuitable, file);
     }
 
-    bool isDirectorySuitable (const File& file) const override
+    bool isDirectorySuitable(const File& file) const override
     {
-        PYBIND11_OVERRIDE_PURE (bool, Base, isDirectorySuitable, file);
+        PYBIND11_OVERRIDE_PURE(bool, Base, isDirectorySuitable, file);
     }
 };
 
@@ -695,14 +695,14 @@ struct PyFileFilter : Base
 
 struct YUP_API PyURLDownloadTaskListener : public URL::DownloadTaskListener
 {
-    void finished (URL::DownloadTask* task, bool success) override
+    void finished(URL::DownloadTask* task, bool success) override
     {
-        PYBIND11_OVERRIDE_PURE (void, URL::DownloadTaskListener, finished, task, success);
+        PYBIND11_OVERRIDE_PURE(void, URL::DownloadTaskListener, finished, task, success);
     }
 
-    void progress (URL::DownloadTask* task, int64 bytesDownloaded, int64 totalLength) override
+    void progress(URL::DownloadTask* task, int64 bytesDownloaded, int64 totalLength) override
     {
-        PYBIND11_OVERRIDE_PURE (void, URL::DownloadTaskListener, progress, task, bytesDownloaded, totalLength);
+        PYBIND11_OVERRIDE_PURE(void, URL::DownloadTaskListener, progress, task, bytesDownloaded, totalLength);
     }
 };
 
@@ -712,43 +712,43 @@ struct YUP_API PyXmlElementComparator
 {
     PyXmlElementComparator() = default;
 
-    int compareElements (const XmlElement* first, const XmlElement* second)
+    int compareElements(const XmlElement* first, const XmlElement* second)
     {
         pybind11::gil_scoped_acquire gil;
 
-        if (pybind11::function override_ = pybind11::get_override (static_cast<PyXmlElementComparator*> (this), "compareElements"); override_)
+        if (pybind11::function override_ = pybind11::get_override(static_cast<PyXmlElementComparator*>(this), "compareElements"); override_)
         {
-            auto result = override_ (first, second);
+            auto result = override_(first, second);
 
             return result.cast<int>();
         }
 
-        pybind11::pybind11_fail ("Tried to call pure virtual function \"XmlElement.Comparator.compareElements\"");
+        pybind11::pybind11_fail("Tried to call pure virtual function \"XmlElement.Comparator.compareElements\"");
     }
 };
 
 struct YUP_API PyXmlElementCallableComparator
 {
-    explicit PyXmlElementCallableComparator (pybind11::function f)
-        : fn (std::move (f))
+    explicit PyXmlElementCallableComparator(pybind11::function f)
+        : fn(std::move(f))
     {
     }
 
-    int compareElements (const XmlElement* first, const XmlElement* second)
+    int compareElements(const XmlElement* first, const XmlElement* second)
     {
         pybind11::gil_scoped_acquire gil;
 
         if (fn)
         {
-            auto result = fn (first, second);
+            auto result = fn(first, second);
 
             return result.cast<int>();
         }
 
-        pybind11::pybind11_fail ("Tried to call function \"XmlElement.Comparator.compareElements\" without a callable");
+        pybind11::pybind11_fail("Tried to call function \"XmlElement.Comparator.compareElements\" without a callable");
     }
 
-private:
+   private:
     pybind11::function fn;
 };
 
@@ -758,7 +758,7 @@ struct YUP_API PyHighResolutionTimer : public HighResolutionTimer
 {
     void hiResTimerCallback() override
     {
-        PYBIND11_OVERRIDE_PURE (void, HighResolutionTimer, hiResTimerCallback);
+        PYBIND11_OVERRIDE_PURE(void, HighResolutionTimer, hiResTimerCallback);
     }
 };
 
@@ -767,13 +767,13 @@ struct YUP_API PyHighResolutionTimer : public HighResolutionTimer
 template <class T>
 struct PyGenericScopedLock
 {
-    PyGenericScopedLock (const T& mutex)
-        : mutex (mutex)
+    PyGenericScopedLock(const T& mutex)
+        : mutex(mutex)
     {
     }
 
-    PyGenericScopedLock (const PyGenericScopedLock&) = delete;
-    PyGenericScopedLock (PyGenericScopedLock&&) = default;
+    PyGenericScopedLock(const PyGenericScopedLock&) = delete;
+    PyGenericScopedLock(PyGenericScopedLock&&) = default;
 
     ~PyGenericScopedLock()
     {
@@ -790,20 +790,20 @@ struct PyGenericScopedLock
         mutex.exit();
     }
 
-private:
+   private:
     const T& mutex;
 };
 
 template <class T>
 struct PyGenericScopedUnlock
 {
-    PyGenericScopedUnlock (const T& mutex)
-        : mutex (mutex)
+    PyGenericScopedUnlock(const T& mutex)
+        : mutex(mutex)
     {
     }
 
-    PyGenericScopedUnlock (const PyGenericScopedUnlock&) = delete;
-    PyGenericScopedUnlock (PyGenericScopedUnlock&&) = default;
+    PyGenericScopedUnlock(const PyGenericScopedUnlock&) = delete;
+    PyGenericScopedUnlock(PyGenericScopedUnlock&&) = default;
 
     ~PyGenericScopedUnlock()
     {
@@ -820,22 +820,20 @@ struct PyGenericScopedUnlock
         mutex.enter();
     }
 
-private:
+   private:
     const T& mutex;
 };
 
 template <class T>
 struct PyGenericScopedTryLock
 {
-    PyGenericScopedTryLock (const T& mutex, bool acquireLockOnInitialisation = true)
-        : mutex (mutex)
-        , lockWasSuccessful (acquireLockOnInitialisation && mutex.tryEnter())
-        , acquireLockOnInitialisation (acquireLockOnInitialisation)
+    PyGenericScopedTryLock(const T& mutex, bool acquireLockOnInitialisation = true)
+        : mutex(mutex), lockWasSuccessful(acquireLockOnInitialisation && mutex.tryEnter()), acquireLockOnInitialisation(acquireLockOnInitialisation)
     {
     }
 
-    PyGenericScopedTryLock (const PyGenericScopedTryLock&) = delete;
-    PyGenericScopedTryLock (PyGenericScopedTryLock&&) = default;
+    PyGenericScopedTryLock(const PyGenericScopedTryLock&) = delete;
+    PyGenericScopedTryLock(PyGenericScopedTryLock&&) = default;
 
     ~PyGenericScopedTryLock()
     {
@@ -855,7 +853,7 @@ struct PyGenericScopedTryLock
 
     void enter()
     {
-        if (! acquireLockOnInitialisation)
+        if (!acquireLockOnInitialisation)
             retryLock();
     }
 
@@ -865,7 +863,7 @@ struct PyGenericScopedTryLock
             mutex.exit();
     }
 
-private:
+   private:
     const T& mutex;
     mutable bool lockWasSuccessful;
     bool acquireLockOnInitialisation;
@@ -884,27 +882,27 @@ struct PyThread : Base
         try
         {
 #endif
-            PYBIND11_OVERRIDE_PURE (void, Base, run);
+            PYBIND11_OVERRIDE_PURE(void, Base, run);
 
 #if JUCE_PYTHON_THREAD_CATCH_EXCEPTION
         }
         catch (const pybind11::error_already_set& e)
         {
             pybind11::gil_scoped_acquire acquire;
-            pybind11::print ("The \"Thread.run\" method mustn't throw any exceptions!");
-            pybind11::module_::import ("traceback").attr ("print_exception") (e.type(), e.value(), e.trace());
+            pybind11::print("The \"Thread.run\" method mustn't throw any exceptions!");
+            pybind11::module_::import("traceback").attr("print_exception")(e.type(), e.value(), e.trace());
         }
         catch (const std::exception& e)
         {
             pybind11::gil_scoped_acquire acquire;
-            auto exception = String ("The \"Thread.run\" method mustn't throw any exceptions: ") + e.what();
-            pybind11::print (exception);
+            auto exception = String("The \"Thread.run\" method mustn't throw any exceptions: ") + e.what();
+            pybind11::print(exception);
         }
         catch (...)
         {
             pybind11::gil_scoped_acquire acquire;
-            auto exception = String ("The \"Thread.run\" method mustn't throw any exceptions: Unhandled python exeption");
-            pybind11::print (exception);
+            auto exception = String("The \"Thread.run\" method mustn't throw any exceptions: Unhandled python exeption");
+            pybind11::print(exception);
         }
 #endif
     }
@@ -918,7 +916,7 @@ struct YUP_API PyThreadListener : Thread::Listener
 
     void exitSignalSent() override
     {
-        PYBIND11_OVERRIDE_PURE (void, Thread::Listener, exitSignalSent);
+        PYBIND11_OVERRIDE_PURE(void, Thread::Listener, exitSignalSent);
     }
 };
 
@@ -930,7 +928,7 @@ struct YUP_API PyThreadPoolJob : ThreadPoolJob
 
     JobStatus runJob() override
     {
-        PYBIND11_OVERRIDE_PURE (JobStatus, ThreadPoolJob, runJob);
+        PYBIND11_OVERRIDE_PURE(JobStatus, ThreadPoolJob, runJob);
     }
 };
 
@@ -940,9 +938,9 @@ struct YUP_API PyThreadPoolJobSelector : ThreadPool::JobSelector
 {
     using ThreadPool::JobSelector::JobSelector;
 
-    bool isJobSuitable (ThreadPoolJob* job) override
+    bool isJobSuitable(ThreadPoolJob* job) override
     {
-        PYBIND11_OVERRIDE_PURE (bool, ThreadPool::JobSelector, isJobSuitable, job);
+        PYBIND11_OVERRIDE_PURE(bool, ThreadPool::JobSelector, isJobSuitable, job);
     }
 };
 
@@ -954,7 +952,7 @@ struct YUP_API PyTimeSliceClient : TimeSliceClient
 
     int useTimeSlice() override
     {
-        PYBIND11_OVERRIDE_PURE (int, TimeSliceClient, useTimeSlice);
+        PYBIND11_OVERRIDE_PURE(int, TimeSliceClient, useTimeSlice);
     }
 };
 
