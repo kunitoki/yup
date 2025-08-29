@@ -23,6 +23,8 @@
 
 #include <yup_core/yup_core.h>
 
+YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wattributes")
+
 #define YUP_PYTHON_INCLUDE_PYBIND11_OPERATORS
 #define YUP_PYTHON_INCLUDE_PYBIND11_STL
 #include "../utilities/yup_PyBind11Includes.h"
@@ -957,3 +959,5 @@ struct YUP_API PyTimeSliceClient : TimeSliceClient
 };
 
 } // namespace yup::Bindings
+
+YUP_END_IGNORE_WARNINGS_GCC_LIKE

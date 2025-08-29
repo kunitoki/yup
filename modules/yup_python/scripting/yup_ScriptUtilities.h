@@ -51,6 +51,8 @@ std::optional<T> python_cast (const pybind11::object& value)
 
 //==============================================================================
 
+YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wattributes")
+
 /** Redirect the standard output and error streams to the script engine.
 
     @param scriptEngine The script engine to redirect the streams to.
@@ -63,5 +65,7 @@ struct YUP_API ScriptStreamRedirection
 private:
     pybind11::object sys;
 };
+
+YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 } // namespace yup
