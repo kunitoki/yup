@@ -23,8 +23,6 @@
 
 #include <yup_events/yup_events.h>
 
-#include <tuple>
-
 using namespace yup;
 
 class TimerTests : public ::testing::Test
@@ -32,13 +30,41 @@ class TimerTests : public ::testing::Test
 protected:
     void SetUp() override
     {
+        mm = MessageManager::getInstance();
+        jassert (mm != nullptr);
     }
 
     void TearDown() override
     {
     }
+
+    void runDispatchLoopUntil (int millisecondsToRunFor = 10)
+    {
+#if YUP_MODAL_LOOPS_PERMITTED
+        mm->runDispatchLoopUntil (millisecondsToRunFor);
+#endif
+    }
+
+    MessageManager* mm = nullptr;
 };
 
-TEST_F (TimerTests, Existence)
+TEST_F (TimerTests, SimpleTimerSingleCall)
 {
+    struct TestTimer : Timer
+    {
+        int calledCount = 0;
+
+        void timerCallback() override
+        {
+            calledCount = 1;
+
+            stopTimer();
+        }
+    } testTimer;
+
+    testTimer.startTimer (0);
+
+    EXPECT_EQ (testTimer.calledCount, 0);
+    runDispatchLoopUntil();
+    EXPECT_EQ (testTimer.calledCount, 1);
 }
