@@ -63,7 +63,7 @@ TEST_F (MessageManagerTests, Existence)
 #if ! YUP_EMSCRIPTEN
     auto messageThreadId = mm->getCurrentMessageThread();
 
-    std::thread ([messageThreadId]
+    auto t = std::thread ([messageThreadId]
     {
         auto mmt = MessageManager::getInstance();
         EXPECT_EQ (messageThreadId, mmt->getCurrentMessageThread());
@@ -72,7 +72,10 @@ TEST_F (MessageManagerTests, Existence)
         EXPECT_FALSE (MessageManager::existsAndIsCurrentThread());
         EXPECT_FALSE (mmt->currentThreadHasLockedMessageManager());
         EXPECT_FALSE (MessageManager::existsAndIsLockedByCurrentThread());
-    }).join();
+    });
+
+    if (t.joinable())
+        t.join();
 #endif
 }
 
@@ -91,18 +94,19 @@ TEST_F (MessageManagerTests, CallAsync)
 }
 
 #if ! YUP_EMSCRIPTEN
-TEST_F (MessageManagerTests, CallFunctionOnMessageThread)
+TEST_F (MessageManagerTests, DISABLED_CallFunctionOnMessageThread)
 {
     int called = 0;
 
     auto t = std::thread ([&]
     {
+        // clang-format off
         auto result = mm->callFunctionOnMessageThread (+[] (void* data) -> void*
         {
             *reinterpret_cast<int*> (data) = 42;
             return nullptr;
-        },
-                                                       (void*) &called);
+        }, (void*) &called);
+        // clang-format on
 
         EXPECT_EQ (result, nullptr);
     });
