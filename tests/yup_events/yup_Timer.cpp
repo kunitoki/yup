@@ -62,9 +62,9 @@ TEST_F (TimerTests, SimpleTimerSingleCall)
         }
     } testTimer;
 
-    testTimer.startTimer (0);
+    testTimer.startTimer (1);
 
     EXPECT_EQ (testTimer.calledCount, 0);
-    runDispatchLoopUntil();
+    runDispatchLoopUntil (200);
     EXPECT_EQ (testTimer.calledCount, 1);
 }
