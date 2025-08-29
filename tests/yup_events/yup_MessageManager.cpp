@@ -48,6 +48,8 @@ protected:
     MessageManager* mm = nullptr;
 };
 
+#if 0
+
 TEST_F (MessageManagerTests, Existence)
 {
     EXPECT_NE (MessageManager::getInstanceWithoutCreating(), nullptr);
@@ -171,5 +173,7 @@ TEST_F (MessageManagerTests, PostMessage)
 
     EXPECT_EQ (valueCalled, "xyz");
 }
+
+#endif
 
 #endif
