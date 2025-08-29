@@ -31,6 +31,7 @@
   license:            ISC
 
   dependencies:       yup_core
+  linuxOptions:       -Wno-attributes
   needsPython:        true
 
  END_YUP_MODULE_DECLARATION
