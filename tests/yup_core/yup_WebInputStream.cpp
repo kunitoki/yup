@@ -180,16 +180,16 @@ private:
 class WebInputStreamTests : public ::testing::Test
 {
 protected:
-    void SetUp() override
+    static void SetUpTestSuite()
     {
         server = std::make_unique<SimpleHttpServer>();
-        ASSERT_TRUE (server->start()) << "Failed to start test HTTP server";
+        ASSERT_TRUE (server != nullptr && server->start()) << "Failed to start test HTTP server";
 
         while (! server->isThreadRunning())
             Thread::sleep (10);
     }
 
-    void TearDown() override
+    static void TearDownTestSuite()
     {
         server.reset();
     }
@@ -199,8 +199,10 @@ protected:
         return yup_isRunningUnderDebugger() ? -1 : 5000;
     }
 
-    std::unique_ptr<SimpleHttpServer> server;
+    static std::unique_ptr<SimpleHttpServer> server;
 };
+
+std::unique_ptr<SimpleHttpServer> WebInputStreamTests::server;
 
 TEST_F (WebInputStreamTests, CanReadHtmlContent)
 {
@@ -385,10 +387,6 @@ TEST_F (WebInputStreamTests, MultipleReadsWork)
         String content2 (buffer2, bytesRead2);
         EXPECT_NE (content1, content2);
     }
-    else
-    {
-        FAIL();
-    }
 }
 
 TEST_F (WebInputStreamTests, LargeContentHandling)
@@ -404,7 +402,7 @@ TEST_F (WebInputStreamTests, LargeContentHandling)
     EXPECT_TRUE (content.contains ("This is line 999"));
 }
 
-TEST_F (WebInputStreamTests, DISABLED_SlowResponseHandling)
+TEST_F (WebInputStreamTests, SlowResponseHandling)
 {
     URL url (server->getBaseUrl() + "/slow");
 
