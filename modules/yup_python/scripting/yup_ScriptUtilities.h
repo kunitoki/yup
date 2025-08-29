@@ -37,7 +37,7 @@ namespace yup
     @return The casted value, or std::nullopt if the cast failed.
  */
 template <class T>
-std::optional<T> python_cast(const pybind11::object& value)
+std::optional<T> python_cast (const pybind11::object& value)
 {
     try
     {
@@ -60,7 +60,7 @@ struct YUP_API ScriptStreamRedirection
     ScriptStreamRedirection() noexcept;
     ~ScriptStreamRedirection() noexcept;
 
-   private:
+private:
     pybind11::object sys;
 };
 

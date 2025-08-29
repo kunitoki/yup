@@ -44,10 +44,10 @@ namespace yup
     @see UndoableAction
 */
 class YUP_API UndoManager
-    : public ReferenceCountedObject,
-      private Timer
+    : public ReferenceCountedObject
+    , private Timer
 {
-   public:
+public:
     using Ptr = ReferenceCountedObjectPtr<UndoManager>;
 
     //==============================================================================
@@ -61,14 +61,14 @@ class YUP_API UndoManager
 
         @param maxHistorySize The maximum number of items to keep in the history.
     */
-    UndoManager(int maxHistorySize);
+    UndoManager (int maxHistorySize);
 
     /**
         Creates a new UndoManager and starts the timer.
 
         @param actionGroupThreshold The time used to coalesce actions in the same transaction.
     */
-    UndoManager(RelativeTime actionGroupThreshold);
+    UndoManager (RelativeTime actionGroupThreshold);
 
     /**
         Creates a new UndoManager and starts the timer.
@@ -76,7 +76,7 @@ class YUP_API UndoManager
         @param maxHistorySize The maximum number of items to keep in the history.
         @param actionGroupThreshold The time used to coalesce actions in the same transaction.
     */
-    UndoManager(int maxHistorySize, RelativeTime actionGroupThreshold);
+    UndoManager (int maxHistorySize, RelativeTime actionGroupThreshold);
 
     //==============================================================================
     /**
@@ -86,7 +86,7 @@ class YUP_API UndoManager
 
         @return true if the action was added and performed successfully, false otherwise.
     */
-    bool perform(UndoableAction::Ptr f);
+    bool perform (UndoableAction::Ptr f);
 
     //==============================================================================
     /**
@@ -103,11 +103,11 @@ class YUP_API UndoManager
         @return true if the action was added and performed successfully, false otherwise.
     */
     template <class T, class F>
-    bool perform(T object, F&& function)
+    bool perform (T object, F&& function)
     {
-        static_assert(std::is_base_of_v<ReferenceCountedObject, typename T::ReferencedType>);
+        static_assert (std::is_base_of_v<ReferenceCountedObject, typename T::ReferencedType>);
 
-        return perform(new Item<typename T::ReferencedType>(object, std::forward<F>(function)));
+        return perform (new Item<typename T::ReferencedType> (object, std::forward<F> (function)));
     }
 
     //==============================================================================
@@ -121,7 +121,7 @@ class YUP_API UndoManager
 
         @param transactionName The name of the transaction.
     */
-    void beginNewTransaction(StringRef transactionName);
+    void beginNewTransaction (StringRef transactionName);
 
     //==============================================================================
     /**
@@ -137,7 +137,7 @@ class YUP_API UndoManager
 
         @return The name of the transaction.
     */
-    String getTransactionName(int index) const;
+    String getTransactionName (int index) const;
 
     //==============================================================================
     /**
@@ -152,7 +152,7 @@ class YUP_API UndoManager
 
         @param newName  the new name for the transaction
     */
-    void setCurrentTransactionName(StringRef newName);
+    void setCurrentTransactionName (StringRef newName);
 
     //==============================================================================
     /**
@@ -200,7 +200,7 @@ class YUP_API UndoManager
 
         Disabling the undo manager will clear the history and stop the timer.
     */
-    void setEnabled(bool shouldBeEnabled);
+    void setEnabled (bool shouldBeEnabled);
 
     /**
         Checks if the undo manager is enabled.
@@ -236,7 +236,7 @@ class YUP_API UndoManager
 
             @param undoManager The UndoManager to be used.
         */
-        ScopedTransaction(UndoManager& undoManager);
+        ScopedTransaction (UndoManager& undoManager);
 
         /**
             Constructs a ScopedTransaction object.
@@ -244,43 +244,44 @@ class YUP_API UndoManager
             @param undoManager The UndoManager to be used.
             @param transactionName The name of the transaction.
         */
-        ScopedTransaction(UndoManager& undoManager, StringRef transactionName);
+        ScopedTransaction (UndoManager& undoManager, StringRef transactionName);
 
         /**
             Destructs the ScopedTransaction object.
         */
         ~ScopedTransaction();
 
-       private:
+    private:
         UndoManager& undoManager;
     };
 
-   private:
+private:
     template <class T>
     struct Item : public UndoableAction
     {
-        using PerformCallback = std::function<bool(typename T::Ptr, UndoableActionState)>;
+        using PerformCallback = std::function<bool (typename T::Ptr, UndoableActionState)>;
 
-        Item(typename T::Ptr object, PerformCallback function)
-            : object(object), function(std::move(function))
+        Item (typename T::Ptr object, PerformCallback function)
+            : object (object)
+            , function (std::move (function))
         {
-            jassert(this->function != nullptr);
+            jassert (this->function != nullptr);
         }
 
-        bool perform(UndoableActionState stateToPerform) override
+        bool perform (UndoableActionState stateToPerform) override
         {
             if (object.wasObjectDeleted())
                 return false;
 
-            return function(*object, stateToPerform);
+            return function (*object, stateToPerform);
         }
 
         bool isValid() const override
         {
-            return !object.wasObjectDeleted();
+            return ! object.wasObjectDeleted();
         }
 
-       private:
+    private:
         WeakReference<T> object;
         PerformCallback function;
     };
@@ -291,18 +292,18 @@ class YUP_API UndoManager
         using Ptr = ReferenceCountedObjectPtr<Transaction>;
 
         Transaction() = default;
-        explicit Transaction(StringRef name);
+        explicit Transaction (StringRef name);
 
-        void add(UndoableAction::Ptr action);
+        void add (UndoableAction::Ptr action);
         int size() const;
 
         String getTransactionName() const;
-        void setTransactionName(StringRef newName);
+        void setTransactionName (StringRef newName);
 
-        bool perform(UndoableActionState stateToPerform) override;
+        bool perform (UndoableActionState stateToPerform) override;
         bool isValid() const override;
 
-       private:
+    private:
         String transactionName;
         UndoableAction::Array childItems;
     };
@@ -310,7 +311,7 @@ class YUP_API UndoManager
     /** @internal */
     void timerCallback() override;
     /** @internal */
-    bool internalPerform(UndoableActionState stateToPerform);
+    bool internalPerform (UndoableActionState stateToPerform);
     /** @internal */
     bool flushCurrentTransaction();
 
@@ -326,8 +327,8 @@ class YUP_API UndoManager
 
     bool isUndoEnabled = false;
 
-    YUP_DECLARE_WEAK_REFERENCEABLE(UndoManager)
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(UndoManager)
+    YUP_DECLARE_WEAK_REFERENCEABLE (UndoManager)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (UndoManager)
 };
 
 } // namespace yup

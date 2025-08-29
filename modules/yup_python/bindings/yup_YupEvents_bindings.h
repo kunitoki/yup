@@ -21,7 +21,7 @@
 
 #pragma once
 
-#if !YUP_MODULE_AVAILABLE_yup_events
+#if ! YUP_MODULE_AVAILABLE_yup_events
 #error This binding file requires adding the yup_events module in the project
 #else
 #include <yup_events/yup_events.h>
@@ -38,15 +38,15 @@ namespace yup::Bindings
 
 // =================================================================================================
 
-void registerYupEventsBindings(pybind11::module_& m);
+void registerYupEventsBindings (pybind11::module_& m);
 
 // =================================================================================================
 
 struct PyActionListener : public yup::ActionListener
 {
-    void actionListenerCallback(const yup::String& message) override
+    void actionListenerCallback (const yup::String& message) override
     {
-        PYBIND11_OVERRIDE_PURE(void, yup::ActionListener, actionListenerCallback, message);
+        PYBIND11_OVERRIDE_PURE (void, yup::ActionListener, actionListenerCallback, message);
     }
 };
 
@@ -56,7 +56,7 @@ struct PyAsyncUpdater : public yup::AsyncUpdater
 {
     void handleAsyncUpdate() override
     {
-        PYBIND11_OVERRIDE_PURE(void, yup::AsyncUpdater, handleAsyncUpdate);
+        PYBIND11_OVERRIDE_PURE (void, yup::AsyncUpdater, handleAsyncUpdate);
     }
 };
 
@@ -64,9 +64,9 @@ struct PyAsyncUpdater : public yup::AsyncUpdater
 
 struct PyChangeListener : public yup::ChangeListener
 {
-    void changeListenerCallback(yup::ChangeBroadcaster* source) override
+    void changeListenerCallback (yup::ChangeBroadcaster* source) override
     {
-        PYBIND11_OVERRIDE_PURE(void, yup::ChangeListener, changeListenerCallback, source);
+        PYBIND11_OVERRIDE_PURE (void, yup::ChangeListener, changeListenerCallback, source);
     }
 };
 
@@ -79,7 +79,7 @@ struct PyMessageBase : public Base
 
     void messageCallback() override
     {
-        PYBIND11_OVERRIDE_PURE(void, Base, messageCallback);
+        PYBIND11_OVERRIDE_PURE (void, Base, messageCallback);
     }
 };
 
@@ -92,7 +92,7 @@ struct PyCallbackMessage : public PyMessageBase<Base>
 
     void messageCallback() override
     {
-        PYBIND11_OVERRIDE_PURE(void, Base, messageCallback);
+        PYBIND11_OVERRIDE_PURE (void, Base, messageCallback);
     }
 };
 
@@ -100,9 +100,9 @@ struct PyCallbackMessage : public PyMessageBase<Base>
 
 struct PyMessageListener : public yup::MessageListener
 {
-    void handleMessage(const yup::Message& message) override
+    void handleMessage (const yup::Message& message) override
     {
-        PYBIND11_OVERRIDE_PURE(void, yup::MessageListener, handleMessage, message);
+        PYBIND11_OVERRIDE_PURE (void, yup::MessageListener, handleMessage, message);
     }
 };
 
@@ -110,13 +110,13 @@ struct PyMessageListener : public yup::MessageListener
 
 struct PyMessageManagerLock
 {
-    explicit PyMessageManagerLock(yup::Thread* thread)
-        : thread(thread)
+    explicit PyMessageManagerLock (yup::Thread* thread)
+        : thread (thread)
     {
     }
 
-    explicit PyMessageManagerLock(yup::ThreadPoolJob* threadPoolJob)
-        : threadPoolJob(threadPoolJob)
+    explicit PyMessageManagerLock (yup::ThreadPoolJob* threadPoolJob)
+        : threadPoolJob (threadPoolJob)
     {
     }
 
@@ -133,7 +133,7 @@ struct PyTimer : public yup::Timer
 
     void timerCallback() override
     {
-        PYBIND11_OVERRIDE_PURE(void, yup::Timer, timerCallback);
+        PYBIND11_OVERRIDE_PURE (void, yup::Timer, timerCallback);
     }
 };
 
@@ -143,9 +143,9 @@ struct PyMultiTimer : public yup::MultiTimer
 {
     using yup::MultiTimer::MultiTimer;
 
-    void timerCallback(int timerID) override
+    void timerCallback (int timerID) override
     {
-        PYBIND11_OVERRIDE_PURE(void, yup::MultiTimer, timerCallback, timerID);
+        PYBIND11_OVERRIDE_PURE (void, yup::MultiTimer, timerCallback, timerID);
     }
 };
 
