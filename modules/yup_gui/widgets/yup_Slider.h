@@ -35,7 +35,7 @@ namespace yup
  */
 class YUP_API Slider : public Component
 {
-public:
+   public:
     //==============================================================================
     /** Defines the different types of slider that can be created. */
     enum SliderType
@@ -70,13 +70,13 @@ public:
         @param sliderType The type of slider to create
         @param componentID Optional component identifier
     */
-    Slider (SliderType sliderType, StringRef componentID);
+    Slider(SliderType sliderType, StringRef componentID);
 
     /** Creates a slider with the specified type using enum construction.
 
         @param sliderType The type of slider to create
     */
-    explicit Slider (SliderType sliderType);
+    explicit Slider(SliderType sliderType);
 
     //==============================================================================
     /** Sets the slider's current value.
@@ -84,7 +84,7 @@ public:
         @param newValue The new value to set
         @param notification Whether to send change notifications
     */
-    void setValue (double newValue, NotificationType notification = sendNotification);
+    void setValue(double newValue, NotificationType notification = sendNotification);
 
     /** Returns the slider's current value. */
     double getValue() const;
@@ -93,7 +93,7 @@ public:
         @param newValue The normalised value to set
         @param notification Whether to send change notifications
     */
-    void setValueNormalised (double newValue, NotificationType notification = sendNotification);
+    void setValueNormalised(double newValue, NotificationType notification = sendNotification);
 
     /** Returns the value as a normalised position (0.0 to 1.0). */
     double getValueNormalised() const;
@@ -108,9 +108,9 @@ public:
         @param notification Whether to send change notifications
         @param allowNudgingOfOtherValues Whether to adjust other values if they conflict
     */
-    void setMinValue (double newMinValue,
-                      NotificationType notification = sendNotification,
-                      bool allowNudgingOfOtherValues = false);
+    void setMinValue(double newMinValue,
+                     NotificationType notification = sendNotification,
+                     bool allowNudgingOfOtherValues = false);
 
     /** Returns the minimum value for two-value and three-value sliders. */
     double getMinValue() const;
@@ -121,9 +121,9 @@ public:
         @param notification Whether to send change notifications
         @param allowNudgingOfOtherValues Whether to adjust other values if they conflict
     */
-    void setMaxValue (double newMaxValue,
-                      NotificationType notification = sendNotification,
-                      bool allowNudgingOfOtherValues = false);
+    void setMaxValue(double newMaxValue,
+                     NotificationType notification = sendNotification,
+                     bool allowNudgingOfOtherValues = false);
 
     /** Returns the maximum value for two-value and three-value sliders. */
     double getMaxValue() const;
@@ -138,7 +138,7 @@ public:
     /** Sets the slider's default value (used for double-click reset).
         @param newDefaultValue The new default value
     */
-    void setDefaultValue (double newDefaultValue);
+    void setDefaultValue(double newDefaultValue);
 
     /** Returns the slider's default value. */
     double getDefaultValue() const;
@@ -147,7 +147,7 @@ public:
     /** Sets the slider's range using a NormalisableRange.
         @param newRange The new range with optional skew and step parameters
     */
-    void setRange (const NormalisableRange<double>& newRange);
+    void setRange(const NormalisableRange<double>& newRange);
 
     /** Sets the slider's range with explicit parameters.
 
@@ -155,7 +155,7 @@ public:
         @param maxValue The maximum value
         @param stepSize The step size (0 for continuous)
     */
-    void setRange (double minValue, double maxValue, double stepSize = 0.0);
+    void setRange(double minValue, double maxValue, double stepSize = 0.0);
 
     /** Returns the slider's current range. */
     NormalisableRange<double> getRange() const;
@@ -176,9 +176,9 @@ public:
 
         @param skewFactor The skew factor to apply (must be > 0.0)
     */
-    void setSkewFactor (double skewFactor);
+    void setSkewFactor(double skewFactor);
 
-    void setSkewFactorFromMidpoint (double midpointValue);
+    void setSkewFactorFromMidpoint(double midpointValue);
 
     /** Returns the current skew factor for the slider's range. */
     double getSkewFactor() const;
@@ -188,7 +188,7 @@ public:
 
         @param decimalPlaces Number of decimal places (negative for automatic)
     */
-    void setNumDecimalPlacesToDisplay (int decimalPlaces);
+    void setNumDecimalPlacesToDisplay(int decimalPlaces);
 
     /** Returns the number of decimal places used for display. */
     int getNumDecimalPlacesToDisplay() const;
@@ -198,7 +198,7 @@ public:
 
         @param newType The new slider type
     */
-    void setSliderType (SliderType newType);
+    void setSliderType(SliderType newType);
 
     /** Returns the current slider type. */
     SliderType getSliderType() const;
@@ -210,10 +210,10 @@ public:
         @param textEntryBoxWidth Width of the text box
         @param textEntryBoxHeight Height of the text box
     */
-    void setTextBoxStyle (TextEntryBoxPosition position,
-                          bool isReadOnly = false,
-                          int textEntryBoxWidth = 80,
-                          int textEntryBoxHeight = 20);
+    void setTextBoxStyle(TextEntryBoxPosition position,
+                         bool isReadOnly = false,
+                         int textEntryBoxWidth = 80,
+                         int textEntryBoxHeight = 20);
 
     /** Returns the text entry box position. */
     TextEntryBoxPosition getTextBoxPosition() const;
@@ -227,10 +227,10 @@ public:
         @param shouldShowBubble Whether to show the bubble
         @param bubbleComponent Optional custom bubble component
     */
-    void setPopupDisplayEnabled (bool shouldShowBubble, Component* bubbleComponent = nullptr);
+    void setPopupDisplayEnabled(bool shouldShowBubble, Component* bubbleComponent = nullptr);
 
     /** Sets the menu items that appear when right-clicking the slider. */
-    void setPopupMenuEnabled (bool shouldShowMenu);
+    void setPopupMenuEnabled(bool shouldShowMenu);
 
     //==============================================================================
     /** Returns true if the mouse is currently over the slider. */
@@ -244,7 +244,7 @@ public:
 
         @param sensitivity Multiplier for mouse movement (default is 1.0)
     */
-    void setMouseDragSensitivity (double sensitivity);
+    void setMouseDragSensitivity(double sensitivity);
 
     /** Returns the current mouse drag sensitivity. */
     double getMouseDragSensitivity() const;
@@ -255,9 +255,9 @@ public:
         @param threshold Minimum velocity threshold
         @param offsetThreshold Minimum offset threshold
     */
-    void setVelocityModeParameters (double sensitivity = 1.0,
-                                    double threshold = 1.0,
-                                    double offsetThreshold = 0.0);
+    void setVelocityModeParameters(double sensitivity = 1.0,
+                                   double threshold = 1.0,
+                                   double offsetThreshold = 0.0);
 
     //==============================================================================
     /**
@@ -275,35 +275,35 @@ public:
 
     //==============================================================================
     /** Callback function objects for value changes. */
-    std::function<void (double)> onValueChanged;
-    std::function<void (double)> onMinValueChanged;
-    std::function<void (double)> onMaxValueChanged;
+    std::function<void(double)> onValueChanged;
+    std::function<void(double)> onMinValueChanged;
+    std::function<void(double)> onMaxValueChanged;
 
     /** Callback function objects for drag events. */
-    std::function<void (const MouseEvent&)> onDragStart;
-    std::function<void (const MouseEvent&)> onDragEnd;
+    std::function<void(const MouseEvent&)> onDragStart;
+    std::function<void(const MouseEvent&)> onDragEnd;
 
     //==============================================================================
     /** @internal */
     void resized() override;
     /** @internal */
-    void paint (Graphics& g) override;
+    void paint(Graphics& g) override;
     /** @internal */
-    void mouseEnter (const MouseEvent& event) override;
+    void mouseEnter(const MouseEvent& event) override;
     /** @internal */
-    void mouseExit (const MouseEvent& event) override;
+    void mouseExit(const MouseEvent& event) override;
     /** @internal */
-    void mouseDown (const MouseEvent& event) override;
+    void mouseDown(const MouseEvent& event) override;
     /** @internal */
-    void mouseUp (const MouseEvent& event) override;
+    void mouseUp(const MouseEvent& event) override;
     /** @internal */
-    void mouseDrag (const MouseEvent& event) override;
+    void mouseDrag(const MouseEvent& event) override;
     /** @internal */
-    void mouseWheel (const MouseEvent& event, const MouseWheelData& data) override;
+    void mouseWheel(const MouseEvent& event, const MouseWheelData& data) override;
     /** @internal */
-    void mouseDoubleClick (const MouseEvent& event) override;
+    void mouseDoubleClick(const MouseEvent& event) override;
     /** @internal */
-    void keyDown (const KeyPress& key, const Point<float>& position) override;
+    void keyDown(const KeyPress& key, const Point<float>& position) override;
     /** @internal */
     void focusGained() override;
     /** @internal */
@@ -311,7 +311,7 @@ public:
     /** @internal */
     Rectangle<float> getSliderBounds() const;
 
-private:
+   private:
     //==============================================================================
     enum DragMode
     {
@@ -321,34 +321,34 @@ private:
         draggingForMaxValue
     };
 
-    void sendValueChanged (NotificationType notification);
-    void sendMinValueChanged (NotificationType notification);
-    void sendMaxValueChanged (NotificationType notification);
+    void sendValueChanged(NotificationType notification);
+    void sendMinValueChanged(NotificationType notification);
+    void sendMaxValueChanged(NotificationType notification);
 
-    void updateValueFromMousePosition (Point<float> mousePos, DragMode dragMode);
-    void updateValueFromKeypress (const KeyPress& key);
+    void updateValueFromMousePosition(Point<float> mousePos, DragMode dragMode);
+    void updateValueFromKeypress(const KeyPress& key);
     void resetToDefaultValue();
 
-    double constrainValue (double valueToConstrain) const;
-    double snapToLegalValue (double valueToSnap) const;
+    double constrainValue(double valueToConstrain) const;
+    double snapToLegalValue(double valueToSnap) const;
 
     Rectangle<float> getTextBoxBounds() const;
 
-    DragMode getDragModeForMousePosition (Point<float> mousePos) const;
-    bool isMouseOverSliderArea (Point<float> mousePos) const;
+    DragMode getDragModeForMousePosition(Point<float> mousePos) const;
+    bool isMouseOverSliderArea(Point<float> mousePos) const;
 
     // New methods for improved linear slider handling
     Rectangle<float> getThumbBounds() const;
-    bool isMouseOverThumb (Point<float> mousePos) const;
+    bool isMouseOverThumb(Point<float> mousePos) const;
     float getThumbSize() const;
 
     void showPopupMenu();
     void createTextEditor();
-    void hideTextEditor (bool discardCurrentEditorContents);
+    void hideTextEditor(bool discardCurrentEditorContents);
 
     //==============================================================================
     SliderType sliderType = LinearHorizontal;
-    NormalisableRange<double> range { 0.0, 1.0 };
+    NormalisableRange<double> range{0.0, 1.0};
 
     double defaultValue = 0.0;
     double currentValue = 0.0;
@@ -380,7 +380,7 @@ private:
     std::unique_ptr<Component> popupBubbleComponent;
     std::unique_ptr<TextEditor> textEditor;
 
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Slider)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Slider)
 };
 
 } // namespace yup
