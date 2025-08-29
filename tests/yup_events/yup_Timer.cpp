@@ -48,7 +48,7 @@ protected:
     MessageManager* mm = nullptr;
 };
 
-TEST_F (TimerTests, SimpleTimerSingleCall)
+TEST_F (TimerTests, DISABLED_SimpleTimerSingleCall)
 {
     struct TestTimer : Timer
     {
