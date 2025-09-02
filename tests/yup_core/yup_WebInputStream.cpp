@@ -25,7 +25,7 @@
 
 using namespace yup;
 
-#if YUP_MAC
+#if YUP_MAC || YUP_LINUX || YUP_WINDOWS
 
 namespace
 {
