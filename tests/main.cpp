@@ -257,7 +257,7 @@ private:
             std::cout << "\n========================================\n";
             std::cout << "*** FAILURES (" << failedTests.size() << "):\n";
             for (const auto& fail : failedTests)
-                std::cout << "\n--- " << fail.name << "\n"
+                std::cout << "\n*** " << fail.name << "\n"
                           << fail.failureDetails << "\n";
         }
 
@@ -267,6 +267,8 @@ private:
                   << " (" << passedTests << "/" << totalTests << " tests) in "
                   << std::chrono::duration_cast<std::chrono::milliseconds> (totalElapsed).count()
                   << " ms\n";
+
+        std::cout.flush();
 
         setApplicationReturnValue (failedTests.empty() ? 0 : 1);
 
@@ -326,6 +328,12 @@ private:
             testStart = std::chrono::steady_clock::now();
             failureStream.str ("");
             failureStream.clear();
+
+            std::ostringstream line;
+            line << (std::string (info.test_suite_name()) + "." + info.name());
+
+            std::cout << "--- " << line.str() << " ";
+            std::cout.flush();
         }
 
         void OnTestPartResult (const testing::TestPartResult& result) override
@@ -333,7 +341,7 @@ private:
             if (result.failed())
             {
                 failureStream << result.file_name() << ":" << result.line_number() << ": "
-                              << result.summary() << "\n";
+                              << result.summary() << '\n';
             }
         }
 
@@ -352,16 +360,18 @@ private:
 
             if (testPassed)
             {
-                std::cout << "--- PASS - " << line.str() << " (" << elapsedMs << " ms)\n";
+                std::cout << "--- PASS (" << elapsedMs << " ms)" << '\n';
                 owner.passedTests++;
             }
             else
             {
-                std::cout << "*** FAIL - " << line.str() << " (" << elapsedMs << " ms)\n";
-                owner.failedTests.push_back (
-                    { std::string (info.test_suite_name()) + "." + info.name(),
-                      failureStream.str() });
+                std::cout << "*** FAIL (" << elapsedMs << " ms)" << '\n';
+                std::cout << failureStream.str() << '\n';
+
+                owner.failedTests.push_back ({ line.str(), failureStream.str() });
             }
+
+            std::cout.flush();
 
             if (owner.currentSuite)
             {

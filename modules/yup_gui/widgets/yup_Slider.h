@@ -350,10 +350,10 @@ private:
     SliderType sliderType = LinearHorizontal;
     NormalisableRange<double> range { 0.0, 1.0 };
 
+    double defaultValue = 0.0;
     double currentValue = 0.0;
     double minValue = 0.0;
     double maxValue = 1.0;
-    double defaultValue = 0.0;
 
     int numDecimalPlaces = 7;
     double mouseDragSensitivity = 1.0;

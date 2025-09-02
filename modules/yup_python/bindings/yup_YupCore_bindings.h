@@ -34,8 +34,8 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
-#include <typeinfo>
 #include <type_traits>
+#include <typeinfo>
 #include <utility>
 
 namespace PYBIND11_NAMESPACE
@@ -361,7 +361,7 @@ void registerArray (pybind11::module_& m)
 
 //==============================================================================
 
-struct YUP_API PyThreadID
+struct PyThreadID
 {
     explicit PyThreadID (Thread::ThreadID value) noexcept
         : value (value)
@@ -691,7 +691,7 @@ struct PyFileFilter : Base
 
 //==============================================================================
 
-struct YUP_API PyURLDownloadTaskListener : public URL::DownloadTaskListener
+struct PyURLDownloadTaskListener : public URL::DownloadTaskListener
 {
     void finished (URL::DownloadTask* task, bool success) override
     {
@@ -706,7 +706,7 @@ struct YUP_API PyURLDownloadTaskListener : public URL::DownloadTaskListener
 
 //==============================================================================
 
-struct YUP_API PyXmlElementComparator
+struct PyXmlElementComparator
 {
     PyXmlElementComparator() = default;
 
@@ -725,7 +725,7 @@ struct YUP_API PyXmlElementComparator
     }
 };
 
-struct YUP_API PyXmlElementCallableComparator
+struct PyXmlElementCallableComparator
 {
     explicit PyXmlElementCallableComparator (pybind11::function f)
         : fn (std::move (f))
@@ -752,7 +752,7 @@ private:
 
 //==============================================================================
 
-struct YUP_API PyHighResolutionTimer : public HighResolutionTimer
+struct PyHighResolutionTimer : public HighResolutionTimer
 {
     void hiResTimerCallback() override
     {
@@ -910,7 +910,7 @@ struct PyThread : Base
 
 //==============================================================================
 
-struct YUP_API PyThreadListener : Thread::Listener
+struct PyThreadListener : Thread::Listener
 {
     using Thread::Listener::Listener;
 
@@ -922,7 +922,7 @@ struct YUP_API PyThreadListener : Thread::Listener
 
 //==============================================================================
 
-struct YUP_API PyThreadPoolJob : ThreadPoolJob
+struct PyThreadPoolJob : ThreadPoolJob
 {
     using ThreadPoolJob::ThreadPoolJob;
 
@@ -934,7 +934,7 @@ struct YUP_API PyThreadPoolJob : ThreadPoolJob
 
 //==============================================================================
 
-struct YUP_API PyThreadPoolJobSelector : ThreadPool::JobSelector
+struct PyThreadPoolJobSelector : ThreadPool::JobSelector
 {
     using ThreadPool::JobSelector::JobSelector;
 
@@ -946,7 +946,7 @@ struct YUP_API PyThreadPoolJobSelector : ThreadPool::JobSelector
 
 //==============================================================================
 
-struct YUP_API PyTimeSliceClient : TimeSliceClient
+struct PyTimeSliceClient : TimeSliceClient
 {
     using TimeSliceClient::TimeSliceClient;
 
