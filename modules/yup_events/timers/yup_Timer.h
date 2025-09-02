@@ -125,12 +125,13 @@ public:
 
     //==============================================================================
     /** Returns true if the timer is currently running. */
-    bool isTimerRunning() const noexcept { return timerPeriodMs > 0; }
+    bool isTimerRunning() const noexcept { return getTimerInterval() > 0; }
 
     /** Returns the timer's interval.
+
         @returns the timer's interval in milliseconds if it's running, or 0 if it's not.
     */
-    int getTimerInterval() const noexcept { return timerPeriodMs; }
+    int getTimerInterval() const noexcept { return timerPeriodMs.load (std::memory_order_relaxed); }
 
     //==============================================================================
     /** Invokes a lambda after a given number of milliseconds. */
@@ -143,7 +144,7 @@ public:
 private:
     class TimerThread;
     size_t positionInQueue = (size_t) -1;
-    int timerPeriodMs = 0;
+    std::atomic<int> timerPeriodMs = 0;
 
     Timer& operator= (const Timer&) = delete;
 };

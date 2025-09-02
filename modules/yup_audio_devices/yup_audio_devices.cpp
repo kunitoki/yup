@@ -164,7 +164,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include <iasiodrv.h>
 #include "native/yup_ASIO_windows.cpp"
 #endif
-// clang-format oon
+// clang-format on
 
 //==============================================================================
 #elif YUP_LINUX || YUP_BSD
