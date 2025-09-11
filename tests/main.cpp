@@ -80,7 +80,10 @@ struct TestApplication : yup::YUPApplication
         else
         {
             // Run suites individually
-            runNextSuite (0);
+            yup::MessageManager::callAsync ([this]
+            {
+                runNextSuite (0);
+            });
         }
     }
 
