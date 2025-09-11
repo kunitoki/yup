@@ -32,7 +32,7 @@ namespace yup
     @param Y pointer to output complex array (accumulated)
     @param complexPairs number of complex pairs (not number of floats!)
 */
-static void complexMultiplyAccumulate (const float* A, const float* B, float* Y, int complexPairs) noexcept
+static void complexMultiplyAccumulate (const float* __restrict A, const float* __restrict B, float* __restrict Y, int complexPairs) noexcept
 {
     int i = 0;
 
@@ -122,147 +122,6 @@ static void complexMultiplyAccumulate (const float* A, const float* B, float* Y,
         Y[ii] += ar * bi + ai * br;
     }
 }
-
-//==============================================================================
-
-class PartitionedConvolver::DirectFIR
-{
-public:
-    DirectFIR() = default;
-
-    void setTaps (std::vector<float> taps, float scaling)
-    {
-        FloatVectorOperations::multiply (taps.data(), scaling, taps.size());
-
-        tapsReversed = std::move (taps);
-        std::reverse (tapsReversed.begin(), tapsReversed.end());
-
-        numTaps = tapsReversed.size();
-        paddedLen = (numTaps + 3u) & ~3u;
-        tapsReversed.resize (paddedLen, 0.0f);
-
-        history.assign (2 * numTaps, 0.0f);
-        writeIndex = 0;
-    }
-
-    void reset()
-    {
-        std::fill (history.begin(), history.end(), 0.0f);
-        writeIndex = 0;
-    }
-
-    void process (const float* input, float* output, std::size_t numSamples) noexcept
-    {
-        const std::size_t M = numTaps;
-        if (M == 0)
-            return;
-
-        const float* h = tapsReversed.data();
-        for (std::size_t i = 0; i < numSamples; ++i)
-        {
-            const float x = input[i];
-
-            history[writeIndex] = x;
-            history[writeIndex + M] = x;
-
-            const float* w = history.data() + writeIndex + 1;
-
-            float sum = 0.0f;
-
-#if YUP_ENABLE_VDSP
-            vDSP_dotpr (w, 1, h, 1, &sum, M);
-#else
-            sum = dotProduct (w, h, M);
-#endif
-
-            output[i] += sum;
-
-            if (++writeIndex == M)
-                writeIndex = 0;
-        }
-    }
-
-    std::size_t getNumTaps() const
-    {
-        return numTaps;
-    }
-
-private:
-    static float dotProduct (const float* __restrict a, const float* __restrict b, std::size_t len) noexcept
-    {
-        float acc = 0.0f;
-        std::size_t i = 0;
-
-#if YUP_USE_AVX_INTRINSICS && YUP_USE_FMA_INTRINSICS
-        __m256 vacc = _mm256_setzero_ps();
-        for (; i + 8 <= len; i += 8)
-        {
-            __m256 va = _mm256_loadu_ps (a + i);
-            __m256 vb = _mm256_loadu_ps (b + i);
-            vacc = _mm256_fmadd_ps (va, vb, vacc);
-        }
-        __m128 low = _mm256_castps256_ps128 (vacc);
-        __m128 high = _mm256_extractf128_ps (vacc, 1);
-        __m128 vsum = _mm_add_ps (low, high);
-        vsum = _mm_hadd_ps (vsum, vsum);
-        vsum = _mm_hadd_ps (vsum, vsum);
-        acc += _mm_cvtss_f32 (vsum);
-
-#elif YUP_USE_SSE_INTRINSICS
-        __m128 vacc = _mm_setzero_ps();
-#if YUP_USE_FMA_INTRINSICS
-        for (; i + 4 <= len; i += 4)
-        {
-            __m128 va = _mm_loadu_ps (a + i);
-            __m128 vb = _mm_loadu_ps (b + i);
-            vacc = _mm_fmadd_ps (va, vb, vacc);
-        }
-#else
-        for (; i + 4 <= len; i += 4)
-        {
-            __m128 va = _mm_loadu_ps (a + i);
-            __m128 vb = _mm_loadu_ps (b + i);
-            vacc = _mm_add_ps (vacc, _mm_mul_ps (va, vb));
-        }
-#endif
-        __m128 shuf = _mm_shuffle_ps (vacc, vacc, _MM_SHUFFLE (2, 3, 0, 1));
-        __m128 sums = _mm_add_ps (vacc, shuf);
-        shuf = _mm_movehl_ps (shuf, sums);
-        sums = _mm_add_ss (sums, shuf);
-        acc += _mm_cvtss_f32 (sums);
-
-#elif YUP_USE_ARM_NEON
-        float32x4_t vacc = vdupq_n_f32 (0.0f);
-        for (; i + 4 <= len; i += 4)
-        {
-            float32x4_t va = vld1q_f32 (a + i);
-            float32x4_t vb = vld1q_f32 (b + i);
-            vacc = vmlaq_f32 (vacc, va, vb);
-        }
-#if YUP_64BIT
-        acc += vaddvq_f32 (vacc);
-#else
-        float32x2_t vlow = vget_low_f32 (vacc);
-        float32x2_t vhigh = vget_high_f32 (vacc);
-        float32x2_t vsum2 = vpadd_f32 (vlow, vhigh);
-        vsum2 = vpadd_f32 (vsum2, vsum2);
-        acc += vget_lane_f32 (vsum2, 0);
-#endif
-
-#endif
-
-        for (; i < len; ++i)
-            acc += a[i] * b[i];
-
-        return acc;
-    }
-
-    std::vector<float> tapsReversed;
-    std::vector<float> history;
-    std::size_t numTaps = 0;
-    std::size_t paddedLen = 0;
-    std::size_t writeIndex = 0;
-};
 
 //==============================================================================
 
@@ -544,9 +403,9 @@ public:
     Impl() = default;
     ~Impl() = default;
 
-    void configureLayers (std::size_t directFIRTaps, const std::vector<LayerSpec>& newLayers)
+    void configureLayers (std::size_t directFIRCoefficients, const std::vector<LayerSpec>& newLayers)
     {
-        directFIRTapCount = directFIRTaps;
+        directFIRCoefficientCount = directFIRCoefficients;
 
         layers.clear();
         layers.resize (newLayers.size());
@@ -659,6 +518,7 @@ public:
         if (significantContentEnd == 0)
         {
             const std::size_t checkLength = std::min (minRetainLength, length);
+
             float rmsSquared = 0.0f;
             for (std::size_t j = 0; j < checkLength; ++j)
                 rmsSquared += impulseResponse[j] * impulseResponse[j];
@@ -685,12 +545,10 @@ public:
         // Safety check
         if (impulseResponse != nullptr && trimmedLength > 0)
         {
-            // Trim end silence if requested
-            if (options.trimEndSilenceBelowDb)
-                trimmedLength = trimSilenceFromEnd (impulseResponse, length, *options.trimEndSilenceBelowDb);
-
             // Always apply peak headroom
             float headroomScale = std::pow (10.0f, options.headroomDb / 20.0f);
+
+            // Normalize peaks
             if (options.normalize)
             {
                 const auto minMax = FloatVectorOperations::findMinAndMax (impulseResponse, trimmedLength);
@@ -700,20 +558,24 @@ public:
                     headroomScale /= peak;
             }
 
-            // Update DirectFIR in-place
-            std::vector<float> directTaps;
+            // Trim end silence if requested
+            if (options.trimEndSilenceBelowDb)
+                trimmedLength = trimSilenceFromEnd (impulseResponse, length, *options.trimEndSilenceBelowDb);
 
-            const auto directTapsCount = std::min (directFIRTapCount, trimmedLength);
-            if (directTapsCount > 0)
+            // Update DirectFIR in-place
+            std::vector<float> directCoefficients;
+
+            const auto directCoefficientsCount = std::min (directFIRCoefficientCount, trimmedLength);
+            if (directCoefficientsCount > 0)
             {
-                directTaps.reserve (directTapsCount);
-                directTaps.assign (impulseResponse, impulseResponse + directTapsCount);
+                directCoefficients.reserve (directCoefficientsCount);
+                directCoefficients.assign (impulseResponse, impulseResponse + directCoefficientsCount);
             }
 
-            newFIR.setTaps (std::move (directTaps), headroomScale);
+            newFIR.setCoefficients (std::move (directCoefficients), headroomScale);
 
             // Update FFT layers
-            std::size_t consumed = directTapsCount;
+            std::size_t consumed = directCoefficientsCount;
             for (std::size_t i = 0; i < newLayers.size(); ++i)
             {
                 auto& layer = newLayers[i];
@@ -735,9 +597,15 @@ public:
 
             directFIR = std::move (newFIR);
             layers = std::move (newLayers);
+            finalImpulseLength = trimmedLength;
 
             resetStateUnsafe();
         }
+    }
+
+    std::size_t getImpulseLength() const
+    {
+        return finalImpulseLength;
     }
 
     void reset()
@@ -890,10 +758,11 @@ private:
 
     std::size_t getInputStagingAvailable() const { return inputStagingAvailable; }
 
-    std::size_t directFIRTapCount = 0;
+    std::size_t directFIRCoefficientCount = 0;
     int baseHopSize = 0;
     std::size_t maxHopSize = 0;
     std::size_t maxBlockSize = 0;
+    std::size_t finalImpulseLength = 0;
     bool isPrepared = false;
 
     DirectFIR directFIR;
@@ -941,12 +810,12 @@ PartitionedConvolver& PartitionedConvolver::operator= (PartitionedConvolver&& ot
     return *this;
 }
 
-void PartitionedConvolver::configureLayers (std::size_t directFIRTaps, const std::vector<LayerSpec>& layers)
+void PartitionedConvolver::configureLayers (std::size_t directFIRCoefficients, const std::vector<LayerSpec>& layers)
 {
-    pImpl->configureLayers (directFIRTaps, layers);
+    pImpl->configureLayers (directFIRCoefficients, layers);
 }
 
-void PartitionedConvolver::setTypicalLayout (std::size_t directTaps, const std::vector<int>& hops)
+void PartitionedConvolver::setTypicalLayout (std::size_t directCoefficients, const std::vector<int>& hops)
 {
     std::vector<LayerSpec> layerSpecs;
     layerSpecs.reserve (hops.size());
@@ -954,12 +823,12 @@ void PartitionedConvolver::setTypicalLayout (std::size_t directTaps, const std::
     for (int hop : hops)
     {
         if (hop < 64)
-            directTaps += static_cast<std::size_t> (hop);
+            directCoefficients += static_cast<std::size_t> (hop);
         else
             layerSpecs.push_back ({ nextPowerOfTwo (hop) });
     }
 
-    configureLayers (directTaps, layerSpecs);
+    configureLayers (directCoefficients, layerSpecs);
 }
 
 void PartitionedConvolver::setImpulseResponse (const float* impulseResponse, std::size_t length, const IRLoadOptions& options)
@@ -970,6 +839,11 @@ void PartitionedConvolver::setImpulseResponse (const float* impulseResponse, std
 void PartitionedConvolver::setImpulseResponse (const std::vector<float>& impulseResponse, const IRLoadOptions& options)
 {
     setImpulseResponse (impulseResponse.data(), impulseResponse.size(), options);
+}
+
+std::size_t PartitionedConvolver::getImpulseLength() const
+{
+    return pImpl->getImpulseLength();
 }
 
 void PartitionedConvolver::prepare (std::size_t maxBlockSize)

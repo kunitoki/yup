@@ -29,7 +29,7 @@ namespace yup
     Layered partitioned convolution engine optimized for real-time audio processing.
 
     Combines multiple processing strategies for efficient convolution:
-    - Direct FIR computation for early taps (low latency)
+    - Direct FIR computation for early coefficients (low latency)
     - One or more FFT-based Overlap-Add layers with uniform partitioning per layer
 
     The engine uses YUP's FFTProcessor for real FFT operations and supports:
@@ -41,7 +41,7 @@ namespace yup
     @code
     PartitionedConvolver convolver;
 
-    // Configure layers: 256 direct taps + FFT layers with hops 256, 1024, 4096
+    // Configure layers: 256 direct coefficients + FFT layers with hops 256, 1024, 4096
     convolver.setTypicalLayout(256, {256, 1024, 4096});
 
     // Prepare for processing with maximum block size (must be called before process)
@@ -83,19 +83,19 @@ public:
     /**
         Configure the convolution layers before setting the impulse response.
 
-        @param directFIRTaps  Number of early taps to process with direct FIR (for low latency)
+        @param directFIRCoefficients  Number of early coefficients to process with direct FIR (for low latency)
         @param layers         Vector of layer specifications with increasing hop sizes
                              (e.g., {{256}, {1024}, {4096}} for 256→1024→4096 progression)
     */
-    void configureLayers (std::size_t directFIRTaps, const std::vector<LayerSpec>& layers);
+    void configureLayers (std::size_t directFIRCoefficients, const std::vector<LayerSpec>& layers);
 
     /**
         Convenience method to set a typical late-reverb configuration.
 
-        @param directTaps  Number of direct FIR taps for early reflections
+        @param directCoefficients  Number of direct FIR coefficients for early reflections
         @param hops        Vector of hop sizes for FFT layers (geometrically increasing recommended)
     */
-    void setTypicalLayout (std::size_t directTaps, const std::vector<int>& hops);
+    void setTypicalLayout (std::size_t directCoefficients, const std::vector<int>& hops);
 
     //==============================================================================
     /** Impulse response loading options. */
@@ -130,6 +130,9 @@ public:
     */
     void setImpulseResponse (const std::vector<float>& impulseResponse, const IRLoadOptions& options = {});
 
+    /** Returns the length of the impulse in samples, taking into account trimmed silence samples. */
+    std::size_t getImpulseLength() const;
+
     //==============================================================================
     /**
         Prepare the convolver for processing with a specific maximum block size.
@@ -162,7 +165,6 @@ public:
 
 private:
     //==============================================================================
-    class DirectFIR;
     class FFTLayer;
     class CircularBuffer;
     class Impl;

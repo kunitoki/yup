@@ -309,18 +309,23 @@ struct Application : yup::YUPApplication
 
         yup::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
-        window = std::make_unique<CustomWindow>();
+        yup::MessageManager::callAsync ([this]
+        {
+            yup::Process::makeForegroundProcess();
+
+            window = std::make_unique<CustomWindow>();
 
 #if YUP_IOS
-        window->centreWithSize ({ 320, 480 });
+            window->centreWithSize ({ 320, 480 });
 #elif YUP_ANDROID
-        window->centreWithSize ({ 1080, 2400 });
-        // window->setFullScreen(true);
+            window->centreWithSize ({ 1080, 2400 });
+            // window->setFullScreen(true);
 #else
-        window->centreWithSize ({ 600, 800 });
+            window->centreWithSize ({ 600, 800 });
 #endif
 
-        window->setVisible (true);
+            window->setVisible (true);
+        });
     }
 
     void shutdown() override

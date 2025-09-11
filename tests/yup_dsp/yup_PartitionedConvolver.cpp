@@ -490,10 +490,10 @@ TEST_F (PartitionedConvolverTest, LatencyMeasurement)
         { 256, { 256, 1024 } }
     };
 
-    for (const auto& [directTaps, hops] : configs)
+    for (const auto& [directCoefficients, hops] : configs)
     {
         PartitionedConvolver convolver;
-        convolver.setTypicalLayout (directTaps, hops);
+        convolver.setTypicalLayout (directCoefficients, hops);
         convolver.prepare (1024);
 
         // Unit impulse response
@@ -526,8 +526,8 @@ TEST_F (PartitionedConvolverTest, LatencyMeasurement)
         EXPECT_LE (latencySamples, static_cast<size_t> (maxHop * 2));
 
         // With direct FIR, latency should be minimal
-        if (directTaps > 0)
-            EXPECT_LE (latencySamples, directTaps);
+        if (directCoefficients > 0)
+            EXPECT_LE (latencySamples, directCoefficients);
     }
 }
 
@@ -537,9 +537,9 @@ TEST_F (PartitionedConvolverTest, LatencyMeasurement)
 
 TEST_F (PartitionedConvolverTest, VariousPartitionSizes)
 {
-    // Test various partition configurations - all with direct taps for immediate response
+    // Test various partition configurations - all with direct coefficients for immediate response
     std::vector<std::tuple<size_t, std::vector<int>, size_t>> testConfigs = {
-        // (directTaps, hops, maxBlockSize)
+        // (directCoefficients, hops, maxBlockSize)
         { 64, { 64 }, 512 },
         { 32, { 64 }, 512 },
         { 64, { 64, 256 }, 512 },
@@ -553,11 +553,11 @@ TEST_F (PartitionedConvolverTest, VariousPartitionSizes)
 
     for (const auto& item : testConfigs)
     {
-        const auto& directTaps = std::get<0> (item);
+        const auto& directCoefficients = std::get<0> (item);
         const auto& hops = std::get<1> (item);
         const auto& maxBlockSize = std::get<2> (item);
 
-        SCOPED_TRACE (testing::Message() << "Config: directTaps=" << directTaps << " hops=[" << [&]()
+        SCOPED_TRACE (testing::Message() << "Config: directCoefficients=" << directCoefficients << " hops=[" << [&]()
         {
             std::string hopStr;
             for (size_t i = 0; i < hops.size(); ++i)
@@ -572,7 +572,7 @@ TEST_F (PartitionedConvolverTest, VariousPartitionSizes)
         PartitionedConvolver convolver;
 
         // Configure and verify setup
-        EXPECT_NO_THROW (convolver.setTypicalLayout (directTaps, hops));
+        EXPECT_NO_THROW (convolver.setTypicalLayout (directCoefficients, hops));
         EXPECT_NO_THROW (convolver.prepare (maxBlockSize));
 
         // Create a simple known impulse response
@@ -749,7 +749,7 @@ TEST_F (PartitionedConvolverTest, RandomizedFuzzing)
 {
     // Generate random configurations and test them
     std::uniform_int_distribution<int> hopDist (32, 2048);
-    std::uniform_int_distribution<size_t> directTapsDist (32, 512); // Always have some direct taps
+    std::uniform_int_distribution<size_t> directCoefficientsDist (32, 512); // Always have some direct coefficients
     std::uniform_int_distribution<size_t> blockSizeDist (32, 1024);
 
     for (int trial = 0; trial < 10; ++trial) // Reduce trials for stability
@@ -757,7 +757,7 @@ TEST_F (PartitionedConvolverTest, RandomizedFuzzing)
         SCOPED_TRACE (testing::Message() << "Fuzzing trial " << trial);
 
         // Generate random configuration
-        const size_t directTaps = directTapsDist (generator);
+        const size_t directCoefficients = directCoefficientsDist (generator);
         const size_t numLayers = 1 + (generator() % 3); // 1-3 layers
 
         std::vector<int> hops;
@@ -777,7 +777,7 @@ TEST_F (PartitionedConvolverTest, RandomizedFuzzing)
 
         try
         {
-            convolver.setTypicalLayout (directTaps, hops);
+            convolver.setTypicalLayout (directCoefficients, hops);
             convolver.prepare (maxBlockSize);
 
             // Simple impulse response

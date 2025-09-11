@@ -294,13 +294,15 @@ private:
 
             // Set impulse response in convolver
             yup::PartitionedConvolver::IRLoadOptions loadOptions;
-            loadOptions.trimEndSilenceBelowDb = -60.0f;
+            loadOptions.trimEndSilenceBelowDb = -36.0f;
             convolver.setImpulseResponse (impulseResponseData, loadOptions);
+            impulseLength = static_cast<int> (convolver.getImpulseLength());
             hasImpulseResponse = true;
 
             std::cout << "Loaded impulse response: " << file.getFileName() << std::endl;
             std::cout << "Sample rate: " << reader->sampleRate << " Hz" << std::endl;
             std::cout << "Length: " << reader->lengthInSamples << " samples" << std::endl;
+            std::cout << "Effective Length: " << impulseLength << " samples" << std::endl;
 
             // Update UI
             updateIRInfo (file.getFileName());
@@ -409,6 +411,8 @@ private:
         if (impulseResponseData.empty())
             return;
 
+        const size_t length = static_cast<size_t> (impulseLength);
+
         // Always apply peak headroom
         float headroomScale = std::pow (10.0f, -12.0f / 20.0f);
         const auto minMax = yup::FloatVectorOperations::findMinAndMax (impulseResponseData.data(), impulseResponseData.size());
@@ -417,8 +421,8 @@ private:
             headroomScale /= peak;
 
         // Create waveform data points
-        const size_t numPoints = std::min (static_cast<size_t> (2048), impulseResponseData.size());
-        const size_t stride = impulseResponseData.size() / numPoints;
+        const size_t numPoints = std::min (static_cast<size_t> (getWidth()), length);
+        const size_t stride = length / numPoints;
 
         std::vector<yup::Point<double>> waveformData;
         waveformData.reserve (numPoints);
@@ -426,8 +430,8 @@ private:
         for (size_t i = 0; i < numPoints; ++i)
         {
             size_t sampleIndex = i * stride;
-            if (sampleIndex >= impulseResponseData.size())
-                sampleIndex = impulseResponseData.size() - 1;
+            if (sampleIndex >= length)
+                sampleIndex = length - 1;
 
             double normalizedTime = static_cast<double> (i) / static_cast<double> (numPoints - 1);
             double amplitude = static_cast<double> (impulseResponseData[sampleIndex] * headroomScale);
@@ -439,7 +443,7 @@ private:
         irWaveformDisplay.updateSignalData (waveformSignalIndex, waveformData);
 
         // Update X axis range to show time
-        double lengthInSeconds = static_cast<double> (impulseResponseData.size()) / 44100.0; // Assume 44.1kHz
+        double lengthInSeconds = static_cast<double> (length) / 44100.0; // Assume 44.1kHz
         irWaveformDisplay.setXRange (0.0, lengthInSeconds);
         irWaveformDisplay.setVerticalGridLines ({ 0.0, lengthInSeconds });
 
@@ -463,6 +467,7 @@ private:
     yup::AudioBuffer<float> impulseResponseBuffer;
     std::vector<float> impulseResponseData;
     int readPosition = 0;
+    int impulseLength = 0;
     std::atomic<bool> hasImpulseResponse = false;
 
     // Processing
