@@ -97,6 +97,7 @@
 #include <cmath>
 #include <complex>
 #include <memory>
+#include <optional>
 #include <vector>
 
 //==============================================================================

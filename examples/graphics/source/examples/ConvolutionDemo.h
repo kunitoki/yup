@@ -60,7 +60,7 @@ public:
         dryGain.setCurrentAndTargetValue (0.3f);
 
         // Configure convolver with typical layout
-        convolver.setTypicalLayout (256, {256, 1024, 4096});
+        convolver.setTypicalLayout (256, { 256, 1024, 4096 });
 
         // Create UI
         createUI();
@@ -293,7 +293,9 @@ private:
                 impulseResponseData[static_cast<size_t> (i)] = impulseResponseBuffer.getSample (0, i) * normalizationGain;
 
             // Set impulse response in convolver
-            convolver.setImpulseResponse (impulseResponseData);
+            yup::PartitionedConvolver::IRLoadOptions loadOptions;
+            loadOptions.trimEndSilenceBelowDb = -60.0f;
+            convolver.setImpulseResponse (impulseResponseData, loadOptions);
             hasImpulseResponse = true;
 
             std::cout << "Loaded impulse response: " << file.getFileName() << std::endl;
@@ -388,7 +390,7 @@ private:
         irWaveformDisplay.setMargins (25, 25, 25, 25);
 
         // Add grid lines
-         irWaveformDisplay.setVerticalGridLines ({ 0.0, 1.0 });
+        irWaveformDisplay.setVerticalGridLines ({ 0.0, 1.0 });
         irWaveformDisplay.setHorizontalGridLines ({ -1.0, -0.5, 0.5, 1.0 });
         irWaveformDisplay.addHorizontalGridLine (0.0, yup::Color (0xFF666666), 1.0f, true);
 

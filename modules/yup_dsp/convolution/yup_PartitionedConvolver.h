@@ -109,6 +109,7 @@ public:
 
         bool normalize;
         float headroomDb;
+        std::optional<float> trimEndSilenceBelowDb;
     };
 
     /**

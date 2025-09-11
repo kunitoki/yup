@@ -998,4 +998,285 @@ TEST_F (PartitionedConvolverTest, ResetFunctionality)
     }
 }
 
+//==============================================================================
+// IR Trimming Tests
+//==============================================================================
+
+TEST_F (PartitionedConvolverTest, IRTrimmingBasicFunctionality)
+{
+    PartitionedConvolver convolver;
+    convolver.setTypicalLayout (64, { 64, 256 });
+    convolver.prepare (512);
+
+    // Create IR with significant content at start and silence at end
+    const size_t originalLength = 2000;
+    const size_t significantLength = 800;
+    std::vector<float> ir (originalLength, 0.0f);
+
+    // Fill first part with meaningful signal
+    for (size_t i = 0; i < significantLength; ++i)
+    {
+        ir[i] = std::exp (-static_cast<float> (i) / 100.0f) * std::sin (2.0f * MathConstants<float>::pi * i / 32.0f);
+    }
+
+    // Add very quiet noise at the end (below -60dB)
+    for (size_t i = significantLength; i < originalLength; ++i)
+    {
+        ir[i] = randomFloat (-0.001f, 0.001f); // ~ -60dB
+    }
+
+    // Test without trimming
+    convolver.setImpulseResponse (ir);
+    std::vector<float> input (512, 0.0f);
+    input[0] = 1.0f;
+    std::vector<float> outputWithoutTrim (512, 0.0f);
+    convolver.process (input.data(), outputWithoutTrim.data(), input.size());
+    convolver.reset();
+
+    // Test with trimming at -50dB threshold
+    PartitionedConvolver::IRLoadOptions options;
+    options.trimEndSilenceBelowDb = -50.0f;
+    convolver.setImpulseResponse (ir, options);
+
+    std::vector<float> outputWithTrim (512, 0.0f);
+    convolver.process (input.data(), outputWithTrim.data(), input.size());
+
+    // Both should produce similar output in the early samples
+    float correlationSum = 0.0f;
+    float norm1 = 0.0f, norm2 = 0.0f;
+
+    for (size_t i = 0; i < 200; ++i) // Compare first 200 samples
+    {
+        correlationSum += outputWithoutTrim[i] * outputWithTrim[i];
+        norm1 += outputWithoutTrim[i] * outputWithoutTrim[i];
+        norm2 += outputWithTrim[i] * outputWithTrim[i];
+    }
+
+    if (norm1 > 0.0f && norm2 > 0.0f)
+    {
+        float correlation = correlationSum / std::sqrt (norm1 * norm2);
+        EXPECT_GT (correlation, 0.95f) << "Trimmed and untrimmed outputs should be highly correlated in early samples";
+    }
+}
+
+TEST_F (PartitionedConvolverTest, IRTrimmingWithDifferentThresholds)
+{
+    PartitionedConvolver convolver;
+    convolver.setTypicalLayout (64, { 64, 256 });
+    convolver.prepare (512);
+
+    // Create IR with exponentially decaying tail
+    const size_t originalLength = 2000;
+    std::vector<float> ir (originalLength);
+
+    for (size_t i = 0; i < originalLength; ++i)
+    {
+        float decay = std::exp (-static_cast<float> (i) / 200.0f);
+        ir[i] = decay * std::sin (2.0f * MathConstants<float>::pi * i / 16.0f);
+    }
+
+    std::vector<float> thresholds = { -20.0f, -40.0f, -60.0f, -80.0f };
+    std::vector<float> outputEnergies;
+
+    for (float threshold : thresholds)
+    {
+        PartitionedConvolver::IRLoadOptions options;
+        options.trimEndSilenceBelowDb = threshold;
+        convolver.setImpulseResponse (ir, options);
+
+        std::vector<float> input (512, 0.0f);
+        input[0] = 1.0f;
+        std::vector<float> output (512, 0.0f);
+        convolver.process (input.data(), output.data(), input.size());
+
+        float energy = 0.0f;
+        for (float sample : output)
+            energy += sample * sample;
+
+        outputEnergies.push_back (energy);
+        convolver.reset();
+    }
+
+    // More aggressive trimming should result in less energy
+    for (size_t i = 1; i < outputEnergies.size(); ++i)
+    {
+        EXPECT_LE (outputEnergies[i], outputEnergies[i - 1] * 1.1f)
+            << "More aggressive trimming threshold should not significantly increase output energy";
+    }
+}
+
+TEST_F (PartitionedConvolverTest, IRTrimmingVeryShortIR)
+{
+    PartitionedConvolver convolver;
+    convolver.setTypicalLayout (64, { 64, 256 });
+    convolver.prepare (512);
+
+    // Very short IR that shouldn't be trimmed much
+    std::vector<float> shortIR (100);
+    for (size_t i = 0; i < shortIR.size(); ++i)
+    {
+        shortIR[i] = std::sin (2.0f * MathConstants<float>::pi * i / 8.0f);
+    }
+
+    PartitionedConvolver::IRLoadOptions options;
+    options.trimEndSilenceBelowDb = -40.0f;
+
+    // Should not crash or produce errors with short IR
+    EXPECT_NO_THROW (convolver.setImpulseResponse (shortIR, options));
+
+    std::vector<float> input (512, 0.0f);
+    input[0] = 1.0f;
+    std::vector<float> output (512, 0.0f);
+
+    EXPECT_NO_THROW (convolver.process (input.data(), output.data(), input.size()));
+
+    // Should still produce meaningful output
+    float outputRMS = calculateRMS (output);
+    EXPECT_GT (outputRMS, 0.01f);
+}
+
+TEST_F (PartitionedConvolverTest, IRTrimmingAllSilence)
+{
+    PartitionedConvolver convolver;
+    convolver.setTypicalLayout (64, { 64, 256 });
+    convolver.prepare (512);
+
+    // IR with only very quiet content
+    std::vector<float> quietIR (1000);
+    for (size_t i = 0; i < quietIR.size(); ++i)
+    {
+        quietIR[i] = randomFloat (-0.0001f, 0.0001f); // Very quiet, ~ -80dB
+    }
+
+    PartitionedConvolver::IRLoadOptions options;
+    options.normalize = false;              // Don't normalize the quiet IR
+    options.trimEndSilenceBelowDb = -60.0f; // Should trim most/all of it
+
+    EXPECT_NO_THROW (convolver.setImpulseResponse (quietIR, options));
+
+    std::vector<float> input (512);
+    fillWithRandomData (input);
+    std::vector<float> output (512, 0.0f);
+
+    EXPECT_NO_THROW (convolver.process (input.data(), output.data(), input.size()));
+
+    // Output should be very quiet or silent
+    float outputRMS = calculateRMS (output);
+    EXPECT_LT (outputRMS, 0.001f); // Should be very quiet with normalized disabled and aggressive trimming
+}
+
+TEST_F (PartitionedConvolverTest, IRTrimmingWithNormalization)
+{
+    PartitionedConvolver convolver;
+    convolver.setTypicalLayout (64, { 64, 256 });
+    convolver.prepare (512);
+
+    // Create IR with large peak but quiet tail
+    std::vector<float> ir (1500);
+    for (size_t i = 0; i < ir.size(); ++i)
+    {
+        if (i < 100)
+            ir[i] = 2.0f * std::exp (-static_cast<float> (i) / 50.0f); // Large peak
+        else
+            ir[i] = 0.01f * randomFloat (-0.1f, 0.1f); // Quiet tail
+    }
+
+    PartitionedConvolver::IRLoadOptions options;
+    options.normalize = true;
+    options.headroomDb = -6.0f;
+    options.trimEndSilenceBelowDb = -50.0f;
+
+    EXPECT_NO_THROW (convolver.setImpulseResponse (ir, options));
+
+    std::vector<float> input (512, 0.0f);
+    input[0] = 1.0f;
+    std::vector<float> output (512, 0.0f);
+
+    EXPECT_NO_THROW (convolver.process (input.data(), output.data(), input.size()));
+
+    // Should produce reasonable output levels due to normalization
+    float outputPeak = findPeak (output);
+    EXPECT_GT (outputPeak, 0.1f);
+    EXPECT_LT (outputPeak, 1.0f); // Should be limited by headroom
+}
+
+TEST_F (PartitionedConvolverTest, IRTrimmingExactBoundary)
+{
+    PartitionedConvolver convolver;
+    convolver.setTypicalLayout (64, { 64, 256 });
+    convolver.prepare (512);
+
+    // Create IR that drops exactly to threshold
+    const size_t significantLength = 1000;
+    const size_t totalLength = 1500;
+    std::vector<float> ir (totalLength, 0.0f);
+
+    // Significant content
+    for (size_t i = 0; i < significantLength; ++i)
+    {
+        ir[i] = std::exp (-static_cast<float> (i) / 200.0f);
+    }
+
+    // Content right at threshold level (-50dB = 0.00316)
+    const float thresholdLevel = std::pow (10.0f, -50.0f / 20.0f);
+    for (size_t i = significantLength; i < totalLength; ++i)
+    {
+        ir[i] = thresholdLevel * 0.9f; // Slightly below threshold
+    }
+
+    PartitionedConvolver::IRLoadOptions options;
+    options.trimEndSilenceBelowDb = -50.0f;
+
+    EXPECT_NO_THROW (convolver.setImpulseResponse (ir, options));
+
+    std::vector<float> input (512, 0.0f);
+    input[0] = 1.0f;
+    std::vector<float> output (512, 0.0f);
+
+    EXPECT_NO_THROW (convolver.process (input.data(), output.data(), input.size()));
+
+    // Should work correctly at boundary conditions
+    float outputRMS = calculateRMS (output);
+    EXPECT_GT (outputRMS, 0.001f);
+}
+
+TEST_F (PartitionedConvolverTest, IRTrimmingConsistency)
+{
+    // Test that trimming produces consistent results across multiple calls
+    PartitionedConvolver convolver1, convolver2;
+    convolver1.setTypicalLayout (64, { 64, 256 });
+    convolver1.prepare (512);
+    convolver2.setTypicalLayout (64, { 64, 256 });
+    convolver2.prepare (512);
+
+    std::vector<float> ir (1000);
+    fillWithRandomData (ir);
+    // Add quiet tail
+    for (size_t i = 600; i < ir.size(); ++i)
+    {
+        ir[i] *= 0.001f; // Make very quiet
+    }
+
+    PartitionedConvolver::IRLoadOptions options;
+    options.trimEndSilenceBelowDb = -50.0f;
+
+    // Set same IR with trimming on both convolvers
+    convolver1.setImpulseResponse (ir, options);
+    convolver2.setImpulseResponse (ir, options);
+
+    std::vector<float> input (512);
+    fillWithRandomData (input);
+    std::vector<float> output1 (512, 0.0f);
+    std::vector<float> output2 (512, 0.0f);
+
+    convolver1.process (input.data(), output1.data(), input.size());
+    convolver2.process (input.data(), output2.data(), input.size());
+
+    // Both should produce identical results
+    for (size_t i = 0; i < output1.size(); ++i)
+    {
+        EXPECT_NEAR (output1[i], output2[i], 0.0001f) << "Inconsistent trimming results at sample " << i;
+    }
+}
+
 } // namespace yup::test
