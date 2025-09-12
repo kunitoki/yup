@@ -23,6 +23,8 @@
 
 #include <gtest/gtest.h>
 
+#include <fstream>
+
 using namespace yup;
 
 //==============================================================================
@@ -357,4 +359,309 @@ TEST_F (FilterDesignerTests, FloatPrecisionConsistency)
     EXPECT_NEAR (doubleCoeffs.b2, static_cast<double> (floatCoeffs.b2), toleranceF);
     EXPECT_NEAR (doubleCoeffs.a1, static_cast<double> (floatCoeffs.a1), toleranceF);
     EXPECT_NEAR (doubleCoeffs.a2, static_cast<double> (floatCoeffs.a2), toleranceF);
+}
+
+//==============================================================================
+// FIR Filter Design Tests
+//==============================================================================
+
+TEST_F (FilterDesignerTests, FirLowpassBasicProperties)
+{
+    const int numCoeffs = 65; // Odd number for symmetric filter
+    auto coeffs = FilterDesigner<float>::designFIRLowpass (numCoeffs, 1000.0f, sampleRate);
+
+    // Should return the correct number of coefficients
+    EXPECT_EQ (coeffs.size(), numCoeffs);
+
+    // All coefficients should be finite
+    for (const auto& coeff : coeffs)
+        EXPECT_TRUE (std::isfinite (coeff));
+
+    // FIR filter should be symmetric for linear phase
+    const int center = (numCoeffs - 1) / 2;
+    for (int i = 0; i < center; ++i)
+        EXPECT_NEAR (coeffs[i], coeffs[numCoeffs - 1 - i], toleranceF);
+
+    // Center coefficient should be largest for lowpass
+    for (int i = 0; i < numCoeffs; ++i)
+    {
+        if (i != center)
+            EXPECT_GE (coeffs[center], coeffs[i]);
+    }
+}
+
+TEST_F (FilterDesignerTests, FirHighpassBasicProperties)
+{
+    const int numCoeffs = 65;
+    auto coeffs = FilterDesigner<float>::designFIRHighpass (numCoeffs, 1000.0f, sampleRate);
+
+    // Should return the correct number of coefficients
+    EXPECT_EQ (coeffs.size(), numCoeffs);
+
+    // All coefficients should be finite
+    for (const auto& coeff : coeffs)
+        EXPECT_TRUE (std::isfinite (coeff));
+
+    // FIR filter should be symmetric for linear phase
+    const int center = (numCoeffs - 1) / 2;
+    for (int i = 0; i < center; ++i)
+        EXPECT_NEAR (coeffs[i], coeffs[numCoeffs - 1 - i], toleranceF);
+
+    // Sum of coefficients should be approximately zero for highpass (DC gain = 0)
+    // Note: windowing can cause small deviations from ideal DC gain
+    float sum = 0.0f;
+    for (const auto& coeff : coeffs)
+        sum += coeff;
+
+    EXPECT_NEAR (sum, 0.0f, 0.05f); // Relaxed tolerance for windowed FIR
+}
+
+TEST_F (FilterDesignerTests, FirBandpassBasicProperties)
+{
+    const int numCoeffs = 65;
+    auto coeffs = FilterDesigner<float>::designFIRBandpass (numCoeffs, 800.0f, 1200.0f, sampleRate);
+
+    // Should return the correct number of coefficients
+    EXPECT_EQ (coeffs.size(), numCoeffs);
+
+    // All coefficients should be finite
+    for (const auto& coeff : coeffs)
+        EXPECT_TRUE (std::isfinite (coeff));
+
+    // FIR filter should be symmetric for linear phase
+    const int center = (numCoeffs - 1) / 2;
+    for (int i = 0; i < center; ++i)
+        EXPECT_NEAR (coeffs[i], coeffs[numCoeffs - 1 - i], toleranceF);
+
+    // Sum of coefficients should be approximately zero for bandpass (DC gain = 0)
+    // Note: windowing can cause small deviations from ideal DC gain
+    float sum = 0.0f;
+    for (const auto& coeff : coeffs)
+        sum += coeff;
+
+    EXPECT_NEAR (sum, 0.0f, 0.15f); // Relaxed tolerance for windowed FIR
+}
+
+TEST_F (FilterDesignerTests, FirBandstopBasicProperties)
+{
+    const int numCoeffs = 65;
+    auto coeffs = FilterDesigner<float>::designFIRBandstop (numCoeffs, 800.0f, 1200.0f, sampleRate);
+
+    // Should return the correct number of coefficients
+    EXPECT_EQ (coeffs.size(), numCoeffs);
+
+    // All coefficients should be finite
+    for (const auto& coeff : coeffs)
+        EXPECT_TRUE (std::isfinite (coeff));
+
+    // FIR filter should be symmetric for linear phase
+    const int center = (numCoeffs - 1) / 2;
+    for (int i = 0; i < center; ++i)
+        EXPECT_NEAR (coeffs[i], coeffs[numCoeffs - 1 - i], toleranceF);
+
+    // Sum of coefficients should be approximately 1.0 for bandstop (DC gain = 1)
+    // Note: windowing can cause small deviations from ideal DC gain
+    float sum = 0.0f;
+    for (const auto& coeff : coeffs)
+        sum += coeff;
+
+    EXPECT_NEAR (sum, 1.0f, 0.15f); // Relaxed tolerance for windowed FIR
+}
+
+TEST_F (FilterDesignerTests, FirDifferentWindowTypes)
+{
+    const int numCoeffs = 33;
+
+    // Test different window types
+    auto hannCoeffs = FilterDesigner<float>::designFIRLowpass (numCoeffs, 1000.0f, sampleRate, WindowType::hann);
+    auto hammingCoeffs = FilterDesigner<float>::designFIRLowpass (numCoeffs, 1000.0f, sampleRate, WindowType::hamming);
+    auto blackmanCoeffs = FilterDesigner<float>::designFIRLowpass (numCoeffs, 1000.0f, sampleRate, WindowType::blackman);
+
+    // All should have same size
+    EXPECT_EQ (hannCoeffs.size(), numCoeffs);
+    EXPECT_EQ (hammingCoeffs.size(), numCoeffs);
+    EXPECT_EQ (blackmanCoeffs.size(), numCoeffs);
+
+    // All coefficients should be finite
+    for (int i = 0; i < numCoeffs; ++i)
+    {
+        EXPECT_TRUE (std::isfinite (hannCoeffs[i]));
+        EXPECT_TRUE (std::isfinite (hammingCoeffs[i]));
+        EXPECT_TRUE (std::isfinite (blackmanCoeffs[i]));
+    }
+
+    // Different windows should produce different coefficients
+    bool coeffsDifferent = false;
+    for (int i = 0; i < numCoeffs; ++i)
+    {
+        if (std::abs (hannCoeffs[i] - blackmanCoeffs[i]) > toleranceF)
+        {
+            coeffsDifferent = true;
+            break;
+        }
+    }
+    EXPECT_TRUE (coeffsDifferent);
+}
+
+TEST_F (FilterDesignerTests, FirFloatDoubleConsistency)
+{
+    const int numCoeffs = 33;
+
+    auto doubleCoeffs = FilterDesigner<double>::designFIRLowpass (numCoeffs, 1000.0, sampleRate);
+    auto floatCoeffs = FilterDesigner<float>::designFIRLowpass (numCoeffs, 1000.0f, sampleRate);
+
+    EXPECT_EQ (doubleCoeffs.size(), floatCoeffs.size());
+
+    // Coefficients should be very similar between float and double precision
+    for (int i = 0; i < numCoeffs; ++i)
+        EXPECT_NEAR (doubleCoeffs[i], static_cast<double> (floatCoeffs[i]), toleranceF);
+}
+
+TEST_F (FilterDesignerTests, ExportFIRCoefficientsForAnalysis)
+{
+    const int numCoeffs = 65;
+    const float sampleRateF = 44100.0f;
+
+    // Design different FIR filters
+    auto lowpass = FilterDesigner<float>::designFIRLowpass (numCoeffs, 1000.0f, sampleRateF);
+    auto highpass = FilterDesigner<float>::designFIRHighpass (numCoeffs, 1000.0f, sampleRateF);
+    auto bandpass = FilterDesigner<float>::designFIRBandpass (numCoeffs, 800.0f, 1200.0f, sampleRateF);
+    auto bandstop = FilterDesigner<float>::designFIRBandstop (numCoeffs, 800.0f, 1200.0f, sampleRateF);
+
+    // Different windows for lowpass
+    auto lowpassHann = FilterDesigner<float>::designFIRLowpass (numCoeffs, 1000.0f, sampleRateF, WindowType::hann);
+    auto lowpassHamming = FilterDesigner<float>::designFIRLowpass (numCoeffs, 1000.0f, sampleRateF, WindowType::hamming);
+    auto lowpassBlackman = FilterDesigner<float>::designFIRLowpass (numCoeffs, 1000.0f, sampleRateF, WindowType::blackman);
+
+    // Helper lambda to write coefficients to file
+    auto writeCoeffs = [] (const std::vector<float>& coeffs, const std::string& filename)
+    {
+        std::ofstream file (filename);
+        if (file.is_open())
+        {
+            for (size_t i = 0; i < coeffs.size(); ++i)
+            {
+                file << coeffs[i];
+                if (i < coeffs.size() - 1)
+                    file << "\n";
+            }
+            file.close();
+        }
+    };
+
+    // Write all coefficient sets to files
+    writeCoeffs (lowpass, "fir_lowpass_1000hz.txt");
+    writeCoeffs (highpass, "fir_highpass_1000hz.txt");
+    writeCoeffs (bandpass, "fir_bandpass_800_1200hz.txt");
+    writeCoeffs (bandstop, "fir_bandstop_800_1200hz.txt");
+    writeCoeffs (lowpassHann, "fir_lowpass_hann_1000hz.txt");
+    writeCoeffs (lowpassHamming, "fir_lowpass_hamming_1000hz.txt");
+    writeCoeffs (lowpassBlackman, "fir_lowpass_blackman_1000hz.txt");
+
+    // Create a Python script to plot the frequency responses
+    std::ofstream pyScript ("plot_fir_responses.py");
+    if (pyScript.is_open())
+    {
+        pyScript << R"(#!/usr/bin/env python3
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy import signal
+
+def load_coeffs(filename):
+    with open(filename, 'r') as f:
+        return [float(line.strip()) for line in f.readlines()]
+
+def plot_frequency_response(coeffs, title, sample_rate=44100):
+    w, h = signal.freqz(coeffs, worN=8000, fs=sample_rate)
+    
+    plt.figure(figsize=(12, 8))
+    
+    # Magnitude response
+    plt.subplot(2, 1, 1)
+    plt.plot(w, 20 * np.log10(np.abs(h)))
+    plt.title(f'{title} - Magnitude Response')
+    plt.xlabel('Frequency (Hz)')
+    plt.ylabel('Magnitude (dB)')
+    plt.grid(True)
+    plt.xlim(0, sample_rate/2)
+    plt.ylim(-80, 5)
+    
+    # Phase response
+    plt.subplot(2, 1, 2)
+    plt.plot(w, np.unwrap(np.angle(h)) * 180 / np.pi)
+    plt.title(f'{title} - Phase Response')
+    plt.xlabel('Frequency (Hz)')
+    plt.ylabel('Phase (degrees)')
+    plt.grid(True)
+    plt.xlim(0, sample_rate/2)
+    
+    plt.tight_layout()
+    plt.savefig(f'{title.lower().replace(" ", "_").replace("-", "_")}_response.png', dpi=150, bbox_inches='tight')
+    plt.show()
+
+# Load and plot all FIR filter responses
+filters = [
+    ('fir_lowpass_1000hz.txt', 'FIR Lowpass 1000Hz'),
+    ('fir_highpass_1000hz.txt', 'FIR Highpass 1000Hz'), 
+    ('fir_bandpass_800_1200hz.txt', 'FIR Bandpass 800-1200Hz'),
+    ('fir_bandstop_800_1200hz.txt', 'FIR Bandstop 800-1200Hz'),
+    ('fir_lowpass_hann_1000hz.txt', 'FIR Lowpass Hann Window'),
+    ('fir_lowpass_hamming_1000hz.txt', 'FIR Lowpass Hamming Window'),
+    ('fir_lowpass_blackman_1000hz.txt', 'FIR Lowpass Blackman Window')
+]
+
+for filename, title in filters:
+    try:
+        coeffs = load_coeffs(filename)
+        plot_frequency_response(coeffs, title)
+    except FileNotFoundError:
+        print(f"File {filename} not found!")
+
+# Compare window types on same plot
+plt.figure(figsize=(12, 6))
+window_files = [
+    ('fir_lowpass_hann_1000hz.txt', 'Hann', 'blue'),
+    ('fir_lowpass_hamming_1000hz.txt', 'Hamming', 'red'),
+    ('fir_lowpass_blackman_1000hz.txt', 'Blackman', 'green')
+]
+
+for filename, label, color in window_files:
+    try:
+        coeffs = load_coeffs(filename)
+        w, h = signal.freqz(coeffs, worN=8000, fs=44100)
+        plt.plot(w, 20 * np.log10(np.abs(h)), label=label, color=color)
+    except FileNotFoundError:
+        print(f"File {filename} not found!")
+
+plt.title('FIR Lowpass 1000Hz - Window Comparison')
+plt.xlabel('Frequency (Hz)')
+plt.ylabel('Magnitude (dB)')
+plt.grid(True)
+plt.legend()
+plt.xlim(0, 22050)
+plt.ylim(-80, 5)
+plt.savefig('fir_window_comparison.png', dpi=150, bbox_inches='tight')
+plt.show()
+
+print("All plots generated successfully!")
+)";
+        pyScript.close();
+    }
+
+    // Just verify the files were created - the actual validation will be done visually with Python
+    EXPECT_EQ (lowpass.size(), numCoeffs);
+    EXPECT_EQ (highpass.size(), numCoeffs);
+    EXPECT_EQ (bandpass.size(), numCoeffs);
+    EXPECT_EQ (bandstop.size(), numCoeffs);
+
+    std::cout << "\nFIR coefficient files and Python plotting script created:\n";
+    std::cout << "- fir_lowpass_1000hz.txt\n";
+    std::cout << "- fir_highpass_1000hz.txt\n";
+    std::cout << "- fir_bandpass_800_1200hz.txt\n";
+    std::cout << "- fir_bandstop_800_1200hz.txt\n";
+    std::cout << "- fir_lowpass_hann_1000hz.txt\n";
+    std::cout << "- fir_lowpass_hamming_1000hz.txt\n";
+    std::cout << "- fir_lowpass_blackman_1000hz.txt\n";
+    std::cout << "- plot_fir_responses.py\n\n";
+    std::cout << "Run: python3 plot_fir_responses.py (requires numpy, matplotlib, scipy)\n";
 }

@@ -118,7 +118,7 @@ protected:
 
 TEST_F (DirectFIRTest, DefaultConstruction)
 {
-    DirectFIR fir;
+    DirectFIRFloat fir;
 
     // Default state should be safe
     EXPECT_EQ (fir.getNumCoefficients(), 0);
@@ -137,12 +137,12 @@ TEST_F (DirectFIRTest, DefaultConstruction)
 
 TEST_F (DirectFIRTest, MoveSemantics)
 {
-    DirectFIR fir1;
+    DirectFIRFloat fir1;
     std::vector<float> coefficients = { 1.0f, 0.5f, 0.25f };
     fir1.setCoefficients (coefficients, 2.0f);
 
     // Move constructor
-    DirectFIR fir2 = std::move (fir1);
+    DirectFIRFloat fir2 = std::move (fir1);
 
     // Verify moved filter works
     EXPECT_EQ (fir2.getNumCoefficients(), 3);
@@ -166,7 +166,7 @@ TEST_F (DirectFIRTest, MoveSemantics)
     EXPECT_GT (outputSum, 1.0f); // Should be > 1 due to scaling
 
     // Move assignment
-    DirectFIR fir3;
+    DirectFIRFloat fir3;
     fir3 = std::move (fir2);
 
     EXPECT_EQ (fir3.getNumCoefficients(), 3);
@@ -180,7 +180,7 @@ TEST_F (DirectFIRTest, MoveSemantics)
 
 TEST_F (DirectFIRTest, SetCoefficientsVector)
 {
-    DirectFIR fir;
+    DirectFIRFloat fir;
     std::vector<float> coefficients = { 0.1f, 0.5f, 1.0f, 0.5f, 0.1f };
 
     fir.setCoefficients (coefficients, 1.0f);
@@ -196,7 +196,7 @@ TEST_F (DirectFIRTest, SetCoefficientsVector)
 
 TEST_F (DirectFIRTest, SetCoefficientsPointer)
 {
-    DirectFIR fir;
+    DirectFIRFloat fir;
     float coefficients[] = { 0.2f, 0.4f, 0.6f, 0.8f };
 
     fir.setCoefficients (coefficients, 4, 2.0f);
@@ -208,7 +208,7 @@ TEST_F (DirectFIRTest, SetCoefficientsPointer)
 
 TEST_F (DirectFIRTest, SetCoefficientsNullptr)
 {
-    DirectFIR fir;
+    DirectFIRFloat fir;
 
     // First set some valid coefficients
     std::vector<float> coefficients = { 1.0f, 0.5f };
@@ -223,7 +223,7 @@ TEST_F (DirectFIRTest, SetCoefficientsNullptr)
 
 TEST_F (DirectFIRTest, SetCoefficientsWithScaling)
 {
-    DirectFIR fir;
+    DirectFIRFloat fir;
     std::vector<float> coefficients = { 1.0f, 1.0f, 1.0f };
 
     fir.setCoefficients (coefficients, 0.5f);
@@ -251,7 +251,7 @@ TEST_F (DirectFIRTest, SetCoefficientsWithScaling)
 
 TEST_F (DirectFIRTest, ImpulseResponse)
 {
-    DirectFIR fir;
+    DirectFIRFloat fir;
     std::vector<float> coefficients = { 1.0f, 0.5f, 0.25f };
     fir.setCoefficients (coefficients);
 
@@ -274,7 +274,7 @@ TEST_F (DirectFIRTest, ImpulseResponse)
 
 TEST_F (DirectFIRTest, AccumulativeOutput)
 {
-    DirectFIR fir;
+    DirectFIRFloat fir;
     std::vector<float> coefficients = { 0.5f, 0.5f };
     fir.setCoefficients (coefficients);
 
@@ -294,8 +294,8 @@ TEST_F (DirectFIRTest, AccumulativeOutput)
 
 TEST_F (DirectFIRTest, Linearity)
 {
-    DirectFIR fir;
-    std::vector<float> coefficients = createLowpassCoefficients (32, 1000.0f, 44100.0f);
+    DirectFIRFloat fir;
+    auto coefficients = FilterDesigner<float>::designFIRLowpass (32, 1000.0f, 44100.0f);
     fir.setCoefficients (coefficients);
 
     std::vector<float> input (512);
@@ -324,7 +324,7 @@ TEST_F (DirectFIRTest, Linearity)
 
 TEST_F (DirectFIRTest, Reset)
 {
-    DirectFIR fir;
+    DirectFIRFloat fir;
     std::vector<float> coefficients = { 1.0f, 0.8f, 0.6f, 0.4f, 0.2f };
     fir.setCoefficients (coefficients);
 
@@ -351,10 +351,10 @@ TEST_F (DirectFIRTest, Reset)
 
 TEST_F (DirectFIRTest, LowpassFiltering)
 {
-    DirectFIR fir;
+    DirectFIRFloat fir;
 
     // Create lowpass filter coefficients
-    std::vector<float> coefficients = createLowpassCoefficients (64, 1000.0f, 44100.0f);
+    auto coefficients = FilterDesigner<float>::designFIRLowpass (64, 1000.0f, 44100.0);
     fir.setCoefficients (coefficients);
 
     const float sampleRate = 44100.0f;
@@ -394,8 +394,8 @@ TEST_F (DirectFIRTest, LowpassFiltering)
 
 TEST_F (DirectFIRTest, BlockSizeIndependence)
 {
-    DirectFIR fir;
-    std::vector<float> coefficients = createLowpassCoefficients (48, 2000.0f, 44100.0f);
+    DirectFIRFloat fir;
+    auto coefficients = FilterDesigner<float>::designFIRLowpass (48, 2000.0f, 44100.0);
     fir.setCoefficients (coefficients);
 
     const size_t totalSamples = 1024;
@@ -448,7 +448,7 @@ TEST_F (DirectFIRTest, BlockSizeIndependence)
 
 TEST_F (DirectFIRTest, ZeroSamples)
 {
-    DirectFIR fir;
+    DirectFIRFloat fir;
     std::vector<float> coefficients = { 1.0f, 0.5f };
     fir.setCoefficients (coefficients);
 
@@ -465,7 +465,7 @@ TEST_F (DirectFIRTest, ZeroSamples)
 
 TEST_F (DirectFIRTest, NullPointers)
 {
-    DirectFIR fir;
+    DirectFIRFloat fir;
     std::vector<float> coefficients = { 1.0f };
     fir.setCoefficients (coefficients);
 
@@ -483,7 +483,7 @@ TEST_F (DirectFIRTest, NullPointers)
 
 TEST_F (DirectFIRTest, LargeTapCounts)
 {
-    DirectFIR fir;
+    DirectFIRFloat fir;
 
     // Test with relatively large number of coefficients
     std::vector<float> coefficients (512);
@@ -508,7 +508,7 @@ TEST_F (DirectFIRTest, LargeTapCounts)
 
 TEST_F (DirectFIRTest, SingleTap)
 {
-    DirectFIR fir;
+    DirectFIRFloat fir;
     std::vector<float> coefficients = { 0.75f };
     fir.setCoefficients (coefficients);
 
@@ -530,7 +530,7 @@ TEST_F (DirectFIRTest, SingleTap)
 
 TEST_F (DirectFIRTest, MemoryAlignment)
 {
-    DirectFIR fir;
+    DirectFIRFloat fir;
 
     // Coefficient count that's not a multiple of 4
     std::vector<float> coefficients (37);
@@ -549,7 +549,7 @@ TEST_F (DirectFIRTest, MemoryAlignment)
 
 TEST_F (DirectFIRTest, StressTest)
 {
-    DirectFIR fir;
+    DirectFIRFloat fir;
 
     // Create complex impulse response
     std::vector<float> coefficients (256);

@@ -75,8 +75,8 @@
 #include "frequency/yup_FFTProcessor.cpp"
 #include "frequency/yup_SpectrumAnalyzerState.cpp"
 #include "designers/yup_FilterDesigner.cpp"
-#include "filters/yup_DirectFIR.cpp"
 #include "convolution/yup_PartitionedConvolver.cpp"
+#include "utilities/yup_DspMath.cpp"
 
 //==============================================================================
 

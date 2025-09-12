@@ -625,6 +625,78 @@ public:
     {
         return designLinkwitzRiley (8, crossoverFreq, sampleRate, lowCoeffs, highCoeffs);
     }
+
+    //==============================================================================
+    // FIR Filter Design
+    //==============================================================================
+
+    /**
+        Designs FIR lowpass filter coefficients using windowed sinc method.
+
+        @param numCoefficients  The number of filter coefficients (filter order + 1)
+        @param cutoffFreq       The cutoff frequency in Hz
+        @param sampleRate       The sample rate in Hz
+        @param windowType       The window function to apply (default: Hanning)
+
+        @returns               Vector of FIR coefficients suitable for DirectFIR
+    */
+    static std::vector<CoeffType> designFIRLowpass (
+        int numCoefficients,
+        CoeffType cutoffFreq,
+        double sampleRate,
+        WindowType windowType = WindowType::hann) noexcept;
+
+    /**
+        Designs FIR highpass filter coefficients using windowed sinc method.
+
+        @param numCoefficients  The number of filter coefficients (filter order + 1)
+        @param cutoffFreq       The cutoff frequency in Hz
+        @param sampleRate       The sample rate in Hz
+        @param windowType       The window function to apply (default: Hanning)
+
+        @returns               Vector of FIR coefficients suitable for DirectFIR
+    */
+    static std::vector<CoeffType> designFIRHighpass (
+        int numCoefficients,
+        CoeffType cutoffFreq,
+        double sampleRate,
+        WindowType windowType = WindowType::hann) noexcept;
+
+    /**
+        Designs FIR bandpass filter coefficients using windowed sinc method.
+
+        @param numCoefficients  The number of filter coefficients (filter order + 1)
+        @param lowCutoffFreq    The lower cutoff frequency in Hz
+        @param highCutoffFreq   The upper cutoff frequency in Hz
+        @param sampleRate       The sample rate in Hz
+        @param windowType       The window function to apply (default: Hanning)
+
+        @returns               Vector of FIR coefficients suitable for DirectFIR
+    */
+    static std::vector<CoeffType> designFIRBandpass (
+        int numCoefficients,
+        CoeffType lowCutoffFreq,
+        CoeffType highCutoffFreq,
+        double sampleRate,
+        WindowType windowType = WindowType::hann) noexcept;
+
+    /**
+        Designs FIR bandstop filter coefficients using windowed sinc method.
+
+        @param numCoefficients  The number of filter coefficients (filter order + 1)
+        @param lowCutoffFreq    The lower cutoff frequency in Hz
+        @param highCutoffFreq   The upper cutoff frequency in Hz
+        @param sampleRate       The sample rate in Hz
+        @param windowType       The window function to apply (default: Hanning)
+
+        @returns               Vector of FIR coefficients suitable for DirectFIR
+    */
+    static std::vector<CoeffType> designFIRBandstop (
+        int numCoefficients,
+        CoeffType lowCutoffFreq,
+        CoeffType highCutoffFreq,
+        double sampleRate,
+        WindowType windowType = WindowType::hann) noexcept;
 };
 
 } // namespace yup

@@ -110,6 +110,24 @@ FloatType fastCos (FloatType x) noexcept
 
 //==============================================================================
 
+/** Dot product fallback implementation */
+template <typename CoeffType, typename SampleType>
+SampleType dotProduct (const CoeffType* __restrict a, const SampleType* __restrict b, std::size_t length) noexcept
+{
+    CoeffType acc = CoeffType (0);
+
+    for (std::size_t i = 0; i < length; ++i)
+        acc += a[i] * static_cast<CoeffType> (b[i]);
+
+    return static_cast<SampleType> (acc);
+}
+
+/** Fast specialization for dotProduct using SIMD */
+template <>
+float dotProduct (const float* __restrict a, const float* __restrict b, std::size_t length) noexcept;
+
+//==============================================================================
+
 /** Bilinear transform from s-plane to z-plane with frequency warping */
 template <typename FloatType>
 void bilinearTransform (FloatType& a0, FloatType& a1, FloatType& a2, FloatType& b0, FloatType& b1, FloatType& b2, FloatType frequency, FloatType sampleRate) noexcept

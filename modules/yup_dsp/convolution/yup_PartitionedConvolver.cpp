@@ -537,7 +537,7 @@ public:
 
     void setImpulseResponse (const float* impulseResponse, std::size_t length, const PartitionedConvolver::IRLoadOptions& options)
     {
-        DirectFIR newFIR;
+        DirectFIRFloat newFIR;
         std::vector<FFTLayer> newLayers (layers.size());
 
         std::size_t trimmedLength = length;
@@ -765,7 +765,7 @@ private:
     std::size_t finalImpulseLength = 0;
     bool isPrepared = false;
 
-    DirectFIR directFIR;
+    DirectFIRFloat directFIR;
     std::vector<FFTLayer> layers;
 
     // Working buffers
