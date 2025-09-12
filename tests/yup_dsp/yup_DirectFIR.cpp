@@ -118,7 +118,7 @@ protected:
 
 TEST_F (DirectFIRTest, DefaultConstruction)
 {
-    DirectFIRFloat fir;
+    DirectFIR<float, float> fir;
 
     // Default state should be safe
     EXPECT_EQ (fir.getNumCoefficients(), 0);
@@ -128,7 +128,7 @@ TEST_F (DirectFIRTest, DefaultConstruction)
     // Should handle empty processing gracefully
     std::vector<float> input (256, 0.0f);
     std::vector<float> output (256, 0.0f);
-    EXPECT_NO_THROW (fir.process (input.data(), output.data(), input.size()));
+    EXPECT_NO_THROW (fir.processBlock (input.data(), output.data(), static_cast<int> (input.size())));
 
     // Output should remain zero without coefficients
     for (float sample : output)
@@ -137,12 +137,12 @@ TEST_F (DirectFIRTest, DefaultConstruction)
 
 TEST_F (DirectFIRTest, MoveSemantics)
 {
-    DirectFIRFloat fir1;
+    DirectFIR<float, float> fir1;
     std::vector<float> coefficients = { 1.0f, 0.5f, 0.25f };
     fir1.setCoefficients (coefficients, 2.0f);
 
     // Move constructor
-    DirectFIRFloat fir2 = std::move (fir1);
+    DirectFIR<float, float> fir2 = std::move (fir1);
 
     // Verify moved filter works
     EXPECT_EQ (fir2.getNumCoefficients(), 3);
@@ -157,7 +157,7 @@ TEST_F (DirectFIRTest, MoveSemantics)
     input[0] = 1.0f;
     std::vector<float> output (10, 0.0f);
 
-    EXPECT_NO_THROW (fir2.process (input.data(), output.data(), input.size()));
+    EXPECT_NO_THROW (fir2.processBlock (input.data(), output.data(), static_cast<int> (static_cast<int> (input.size()))));
 
     // Should produce scaled output
     float outputSum = 0.0f;
@@ -166,7 +166,7 @@ TEST_F (DirectFIRTest, MoveSemantics)
     EXPECT_GT (outputSum, 1.0f); // Should be > 1 due to scaling
 
     // Move assignment
-    DirectFIRFloat fir3;
+    DirectFIR<float, float> fir3;
     fir3 = std::move (fir2);
 
     EXPECT_EQ (fir3.getNumCoefficients(), 3);
@@ -180,7 +180,7 @@ TEST_F (DirectFIRTest, MoveSemantics)
 
 TEST_F (DirectFIRTest, SetCoefficientsVector)
 {
-    DirectFIRFloat fir;
+    DirectFIR<float, float> fir;
     std::vector<float> coefficients = { 0.1f, 0.5f, 1.0f, 0.5f, 0.1f };
 
     fir.setCoefficients (coefficients, 1.0f);
@@ -196,7 +196,7 @@ TEST_F (DirectFIRTest, SetCoefficientsVector)
 
 TEST_F (DirectFIRTest, SetCoefficientsPointer)
 {
-    DirectFIRFloat fir;
+    DirectFIR<float, float> fir;
     float coefficients[] = { 0.2f, 0.4f, 0.6f, 0.8f };
 
     fir.setCoefficients (coefficients, 4, 2.0f);
@@ -208,7 +208,7 @@ TEST_F (DirectFIRTest, SetCoefficientsPointer)
 
 TEST_F (DirectFIRTest, SetCoefficientsNullptr)
 {
-    DirectFIRFloat fir;
+    DirectFIR<float, float> fir;
 
     // First set some valid coefficients
     std::vector<float> coefficients = { 1.0f, 0.5f };
@@ -223,7 +223,7 @@ TEST_F (DirectFIRTest, SetCoefficientsNullptr)
 
 TEST_F (DirectFIRTest, SetCoefficientsWithScaling)
 {
-    DirectFIRFloat fir;
+    DirectFIR<float, float> fir;
     std::vector<float> coefficients = { 1.0f, 1.0f, 1.0f };
 
     fir.setCoefficients (coefficients, 0.5f);
@@ -233,7 +233,7 @@ TEST_F (DirectFIRTest, SetCoefficientsWithScaling)
     input[0] = 2.0f; // Unit impulse scaled by 2
     std::vector<float> output (10, 0.0f);
 
-    fir.process (input.data(), output.data(), input.size());
+    fir.processBlock (input.data(), output.data(), static_cast<int> (input.size()));
 
     // Output should reflect the coefficient scaling
     // Each coefficient was originally 1.0, scaled by 0.5, so output per coefficient = 2.0 * 0.5 = 1.0
@@ -251,7 +251,7 @@ TEST_F (DirectFIRTest, SetCoefficientsWithScaling)
 
 TEST_F (DirectFIRTest, ImpulseResponse)
 {
-    DirectFIRFloat fir;
+    DirectFIR<float, float> fir;
     std::vector<float> coefficients = { 1.0f, 0.5f, 0.25f };
     fir.setCoefficients (coefficients);
 
@@ -260,7 +260,7 @@ TEST_F (DirectFIRTest, ImpulseResponse)
     input[0] = 1.0f;
     std::vector<float> output (10, 0.0f);
 
-    fir.process (input.data(), output.data(), input.size());
+    fir.processBlock (input.data(), output.data(), static_cast<int> (input.size()));
 
     // Should get the impulse response (coefficients in original order)
     EXPECT_NEAR (output[0], 1.0f, 0.001f);  // First coefficient h0
@@ -274,7 +274,7 @@ TEST_F (DirectFIRTest, ImpulseResponse)
 
 TEST_F (DirectFIRTest, AccumulativeOutput)
 {
-    DirectFIRFloat fir;
+    DirectFIR<float, float> fir;
     std::vector<float> coefficients = { 0.5f, 0.5f };
     fir.setCoefficients (coefficients);
 
@@ -285,7 +285,7 @@ TEST_F (DirectFIRTest, AccumulativeOutput)
     std::fill (output.begin(), output.end(), 1.0f);
     std::vector<float> originalOutput = output;
 
-    fir.process (input.data(), output.data(), input.size());
+    fir.processBlock (input.data(), output.data(), static_cast<int> (input.size()));
 
     // Output should contain original data plus filter result
     for (size_t i = 0; i < output.size(); ++i)
@@ -294,7 +294,7 @@ TEST_F (DirectFIRTest, AccumulativeOutput)
 
 TEST_F (DirectFIRTest, Linearity)
 {
-    DirectFIRFloat fir;
+    DirectFIR<float, float> fir;
     auto coefficients = FilterDesigner<float>::designFIRLowpass (32, 1000.0f, 44100.0f);
     fir.setCoefficients (coefficients);
 
@@ -309,10 +309,10 @@ TEST_F (DirectFIRTest, Linearity)
     std::vector<float> output2 (512, 0.0f);
 
     fir.reset();
-    fir.process (input.data(), output1.data(), input.size());
+    fir.processBlock (input.data(), output1.data(), static_cast<int> (input.size()));
 
     fir.reset();
-    fir.process (input2.data(), output2.data(), input2.size());
+    fir.processBlock (input2.data(), output2.data(), input2.size());
 
     // output2 should be approximately 2x output1
     for (size_t i = 0; i < output1.size(); ++i)
@@ -324,7 +324,7 @@ TEST_F (DirectFIRTest, Linearity)
 
 TEST_F (DirectFIRTest, Reset)
 {
-    DirectFIRFloat fir;
+    DirectFIR<float, float> fir;
     std::vector<float> coefficients = { 1.0f, 0.8f, 0.6f, 0.4f, 0.2f };
     fir.setCoefficients (coefficients);
 
@@ -333,12 +333,12 @@ TEST_F (DirectFIRTest, Reset)
     std::vector<float> output1 (20, 0.0f);
 
     // Process some data to build up internal state
-    fir.process (input.data(), output1.data(), input.size());
+    fir.processBlock (input.data(), output1.data(), static_cast<int> (input.size()));
 
     // Reset and process same input
     fir.reset();
     std::vector<float> output2 (20, 0.0f);
-    fir.process (input.data(), output2.data(), input.size());
+    fir.processBlock (input.data(), output2.data(), static_cast<int> (input.size()));
 
     // Outputs should be identical after reset
     for (size_t i = 0; i < output1.size(); ++i)
@@ -351,7 +351,7 @@ TEST_F (DirectFIRTest, Reset)
 
 TEST_F (DirectFIRTest, LowpassFiltering)
 {
-    DirectFIRFloat fir;
+    DirectFIR<float, float> fir;
 
     // Create lowpass filter coefficients
     auto coefficients = FilterDesigner<float>::designFIRLowpass (64, 1000.0f, 44100.0);
@@ -365,7 +365,7 @@ TEST_F (DirectFIRTest, LowpassFiltering)
     fillWithSine (lowFreqInput, 500.0f, sampleRate);
     std::vector<float> lowFreqOutput (bufferSize, 0.0f);
 
-    fir.process (lowFreqInput.data(), lowFreqOutput.data(), bufferSize);
+    fir.processBlock (lowFreqInput.data(), lowFreqOutput.data(), bufferSize);
 
     // Test with high frequency (should be attenuated)
     fir.reset();
@@ -373,7 +373,7 @@ TEST_F (DirectFIRTest, LowpassFiltering)
     fillWithSine (highFreqInput, 5000.0f, sampleRate);
     std::vector<float> highFreqOutput (bufferSize, 0.0f);
 
-    fir.process (highFreqInput.data(), highFreqOutput.data(), bufferSize);
+    fir.processBlock (highFreqInput.data(), highFreqOutput.data(), bufferSize);
 
     // Compare RMS levels (skip first samples due to transient)
     const size_t skipSamples = 100;
@@ -394,7 +394,7 @@ TEST_F (DirectFIRTest, LowpassFiltering)
 
 TEST_F (DirectFIRTest, BlockSizeIndependence)
 {
-    DirectFIRFloat fir;
+    DirectFIR<float, float> fir;
     auto coefficients = FilterDesigner<float>::designFIRLowpass (48, 2000.0f, 44100.0);
     fir.setCoefficients (coefficients);
 
@@ -405,7 +405,7 @@ TEST_F (DirectFIRTest, BlockSizeIndependence)
     // Process in one big block
     fir.reset();
     std::vector<float> output1 (totalSamples, 0.0f);
-    fir.process (input.data(), output1.data(), totalSamples);
+    fir.processBlock (input.data(), output1.data(), totalSamples);
 
     // Process in smaller blocks
     fir.reset();
@@ -424,7 +424,7 @@ TEST_F (DirectFIRTest, BlockSizeIndependence)
         if (blockSize == 0)
             break;
 
-        fir.process (input.data() + processed, output2.data() + processed, blockSize);
+        fir.processBlock (input.data() + processed, output2.data() + processed, blockSize);
         processed += blockSize;
     }
 
@@ -433,7 +433,7 @@ TEST_F (DirectFIRTest, BlockSizeIndependence)
     {
         size_t remaining = totalSamples - processed;
         size_t blockSize = std::min (remaining, size_t (128)); // Process in chunks of 128
-        fir.process (input.data() + processed, output2.data() + processed, blockSize);
+        fir.processBlock (input.data() + processed, output2.data() + processed, blockSize);
         processed += blockSize;
     }
 
@@ -448,7 +448,7 @@ TEST_F (DirectFIRTest, BlockSizeIndependence)
 
 TEST_F (DirectFIRTest, ZeroSamples)
 {
-    DirectFIRFloat fir;
+    DirectFIR<float, float> fir;
     std::vector<float> coefficients = { 1.0f, 0.5f };
     fir.setCoefficients (coefficients);
 
@@ -456,7 +456,7 @@ TEST_F (DirectFIRTest, ZeroSamples)
     std::vector<float> output (10, 0.0f);
 
     // Processing zero samples should be safe
-    EXPECT_NO_THROW (fir.process (input.data(), output.data(), 0));
+    EXPECT_NO_THROW (fir.processBlock (input.data(), output.data(), 0));
 
     // Output should remain unchanged
     for (float sample : output)
@@ -465,25 +465,25 @@ TEST_F (DirectFIRTest, ZeroSamples)
 
 TEST_F (DirectFIRTest, NullPointers)
 {
-    DirectFIRFloat fir;
+    DirectFIR<float, float> fir;
     std::vector<float> coefficients = { 1.0f };
     fir.setCoefficients (coefficients);
 
     std::vector<float> buffer (10, 0.0f);
 
     // Null input pointer should be handled gracefully
-    EXPECT_NO_THROW (fir.process (nullptr, buffer.data(), 10));
+    EXPECT_NO_THROW (fir.processBlock (nullptr, buffer.data(), 10));
 
     // Null output pointer should be handled gracefully
-    EXPECT_NO_THROW (fir.process (buffer.data(), nullptr, 10));
+    EXPECT_NO_THROW (fir.processBlock (buffer.data(), nullptr, 10));
 
     // Both null should be handled gracefully
-    EXPECT_NO_THROW (fir.process (nullptr, nullptr, 10));
+    EXPECT_NO_THROW (fir.processBlock (nullptr, nullptr, 10));
 }
 
 TEST_F (DirectFIRTest, LargeTapCounts)
 {
-    DirectFIRFloat fir;
+    DirectFIR<float, float> fir;
 
     // Test with relatively large number of coefficients
     std::vector<float> coefficients (512);
@@ -498,7 +498,7 @@ TEST_F (DirectFIRTest, LargeTapCounts)
     std::vector<float> output (1024, 0.0f);
     fillWithRandomData (input);
 
-    EXPECT_NO_THROW (fir.process (input.data(), output.data(), input.size()));
+    EXPECT_NO_THROW (fir.processBlock (input.data(), output.data(), static_cast<int> (input.size())));
 
     // Should produce reasonable output
     float rms = calculateRMS (output);
@@ -508,7 +508,7 @@ TEST_F (DirectFIRTest, LargeTapCounts)
 
 TEST_F (DirectFIRTest, SingleTap)
 {
-    DirectFIRFloat fir;
+    DirectFIR<float, float> fir;
     std::vector<float> coefficients = { 0.75f };
     fir.setCoefficients (coefficients);
 
@@ -518,7 +518,7 @@ TEST_F (DirectFIRTest, SingleTap)
     std::vector<float> input = { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f };
     std::vector<float> output (5, 0.0f);
 
-    fir.process (input.data(), output.data(), input.size());
+    fir.processBlock (input.data(), output.data(), static_cast<int> (input.size()));
 
     for (size_t i = 0; i < input.size(); ++i)
         EXPECT_NEAR (output[i], input[i] * 0.75f, 0.001f);
@@ -530,7 +530,7 @@ TEST_F (DirectFIRTest, SingleTap)
 
 TEST_F (DirectFIRTest, MemoryAlignment)
 {
-    DirectFIRFloat fir;
+    DirectFIR<float, float> fir;
 
     // Coefficient count that's not a multiple of 4
     std::vector<float> coefficients (37);
@@ -549,7 +549,7 @@ TEST_F (DirectFIRTest, MemoryAlignment)
 
 TEST_F (DirectFIRTest, StressTest)
 {
-    DirectFIRFloat fir;
+    DirectFIR<float, float> fir;
 
     // Create complex impulse response
     std::vector<float> coefficients (256);
@@ -571,7 +571,7 @@ TEST_F (DirectFIRTest, StressTest)
         std::vector<float> output (blockSize, 0.0f);
         fillWithRandomData (input);
 
-        EXPECT_NO_THROW (fir.process (input.data(), output.data(), blockSize));
+        EXPECT_NO_THROW (fir.processBlock (input.data(), output.data(), blockSize));
 
         // Verify output quality
         for (float sample : output)

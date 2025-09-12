@@ -111,7 +111,7 @@ public:
     void setCoefficients (std::vector<CoeffType> coefficients, CoeffType scaling = CoeffType (1))
     {
         currentScaling = scaling;
-        if (! approximatelyEqual (currentScaling, 1.0f))
+        if (! approximatelyEqual (currentScaling, CoeffType (1)))
             FloatVectorOperations::multiply (coefficients.data(), scaling, coefficients.size());
 
         coefficientsReversed = std::move (coefficients);
