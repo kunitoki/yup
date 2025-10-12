@@ -630,11 +630,13 @@ int FilterDesigner<CoeffType>::designLinkwitzRiley (
 //==============================================================================
 
 template <typename CoeffType>
-std::vector<CoeffType> FilterDesigner<CoeffType>::designFIRLowpass (
+void FilterDesigner<CoeffType>::designFIRLowpass (
+    std::vector<CoeffType>& coefficients,
     int numCoefficients,
     CoeffType cutoffFreq,
     double sampleRate,
-    WindowType windowType) noexcept
+    WindowType windowType,
+    CoeffType windowParameter) noexcept
 {
     jassert (numCoefficients > 0);
     jassert (cutoffFreq > static_cast<CoeffType> (0.0));
@@ -642,7 +644,7 @@ std::vector<CoeffType> FilterDesigner<CoeffType>::designFIRLowpass (
     jassert (cutoffFreq < static_cast<CoeffType> (sampleRate / 2.0));
 
     numCoefficients = nextOdd (numCoefficients);
-    std::vector<CoeffType> coefficients (numCoefficients);
+    coefficients.resize (numCoefficients);
 
     const auto normalizedCutoff = static_cast<CoeffType> (2.0) * cutoffFreq / static_cast<CoeffType> (sampleRate);
     const int center = (numCoefficients - 1) / 2;
@@ -664,25 +666,27 @@ std::vector<CoeffType> FilterDesigner<CoeffType>::designFIRLowpass (
     // Apply window function
     for (int i = 0; i < numCoefficients; ++i)
     {
-        const auto windowValue = WindowFunctions<CoeffType>::getValue (windowType, i, numCoefficients);
+        const auto windowValue = WindowFunctions<CoeffType>::getValue (windowType, i, numCoefficients, windowParameter);
         coefficients[i] *= windowValue;
     }
 
     // Normalization
     const auto sum = std::accumulate (coefficients.begin(), coefficients.end(), static_cast<CoeffType> (0.0));
     if (sum != static_cast<CoeffType> (0.0))
+    {
         for (auto& c : coefficients)
             c /= sum;
-
-    return coefficients;
+    }
 }
 
 template <typename CoeffType>
-std::vector<CoeffType> FilterDesigner<CoeffType>::designFIRHighpass (
+void FilterDesigner<CoeffType>::designFIRHighpass (
+    std::vector<CoeffType>& coefficients,
     int numCoefficients,
     CoeffType cutoffFreq,
     double sampleRate,
-    WindowType windowType) noexcept
+    WindowType windowType,
+    CoeffType windowParameter) noexcept
 {
     jassert (numCoefficients > 0);
     jassert (cutoffFreq > static_cast<CoeffType> (0.0));
@@ -691,7 +695,7 @@ std::vector<CoeffType> FilterDesigner<CoeffType>::designFIRHighpass (
 
     // Generate lowpass first
     numCoefficients = nextOdd (numCoefficients);
-    auto coefficients = designFIRLowpass (numCoefficients, cutoffFreq, sampleRate, windowType);
+    designFIRLowpass (coefficients, numCoefficients, cutoffFreq, sampleRate, windowType);
 
     // Convert to highpass using spectral inversion
     const int center = (numCoefficients - 1) / 2;
@@ -707,19 +711,21 @@ std::vector<CoeffType> FilterDesigner<CoeffType>::designFIRHighpass (
         hpi += coefficients[n] * ((n & 1) ? static_cast<CoeffType> (-1.0) : static_cast<CoeffType> (1.0));
 
     if (hpi != static_cast<CoeffType> (0.0))
+    {
         for (auto& c : coefficients)
             c /= hpi;
-
-    return coefficients;
+    }
 }
 
 template <typename CoeffType>
-std::vector<CoeffType> FilterDesigner<CoeffType>::designFIRBandpass (
+void FilterDesigner<CoeffType>::designFIRBandpass (
+    std::vector<CoeffType>& coefficients,
     int numCoefficients,
     CoeffType lowCutoffFreq,
     CoeffType highCutoffFreq,
     double sampleRate,
-    WindowType windowType) noexcept
+    WindowType windowType,
+    CoeffType windowParameter) noexcept
 {
     jassert (numCoefficients > 0);
     jassert (lowCutoffFreq > static_cast<CoeffType> (0.0));
@@ -728,7 +734,7 @@ std::vector<CoeffType> FilterDesigner<CoeffType>::designFIRBandpass (
     jassert (highCutoffFreq < static_cast<CoeffType> (sampleRate / 2.0));
 
     numCoefficients = nextOdd (numCoefficients);
-    std::vector<CoeffType> coefficients (numCoefficients);
+    coefficients.resize (numCoefficients);
 
     const auto normalizedLow = static_cast<CoeffType> (2.0) * lowCutoffFreq / static_cast<CoeffType> (sampleRate);
     const auto normalizedHigh = static_cast<CoeffType> (2.0) * highCutoffFreq / static_cast<CoeffType> (sampleRate);
@@ -754,20 +760,20 @@ std::vector<CoeffType> FilterDesigner<CoeffType>::designFIRBandpass (
     // Apply window function
     for (int i = 0; i < numCoefficients; ++i)
     {
-        const auto windowValue = WindowFunctions<CoeffType>::getValue (windowType, i, numCoefficients);
+        const auto windowValue = WindowFunctions<CoeffType>::getValue (windowType, i, numCoefficients, windowParameter);
         coefficients[i] *= windowValue;
     }
-
-    return coefficients;
 }
 
 template <typename CoeffType>
-std::vector<CoeffType> FilterDesigner<CoeffType>::designFIRBandstop (
+void FilterDesigner<CoeffType>::designFIRBandstop (
+    std::vector<CoeffType>& coefficients,
     int numCoefficients,
     CoeffType lowCutoffFreq,
     CoeffType highCutoffFreq,
     double sampleRate,
-    WindowType windowType) noexcept
+    WindowType windowType,
+    CoeffType windowParameter) noexcept
 {
     jassert (numCoefficients > 0);
     jassert (lowCutoffFreq > static_cast<CoeffType> (0.0));
@@ -777,7 +783,7 @@ std::vector<CoeffType> FilterDesigner<CoeffType>::designFIRBandstop (
 
     // Generate bandpass first
     numCoefficients = nextOdd (numCoefficients);
-    auto coefficients = designFIRBandpass (numCoefficients, lowCutoffFreq, highCutoffFreq, sampleRate, windowType);
+    designFIRBandpass (coefficients, numCoefficients, lowCutoffFreq, highCutoffFreq, sampleRate, windowType);
 
     // Convert to bandstop using spectral inversion
     const int center = (numCoefficients - 1) / 2;
@@ -787,8 +793,6 @@ std::vector<CoeffType> FilterDesigner<CoeffType>::designFIRBandstop (
 
     // Add unit impulse at center
     coefficients[center] += static_cast<CoeffType> (1.0);
-
-    return coefficients;
 }
 
 //==============================================================================

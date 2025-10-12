@@ -640,11 +640,13 @@ public:
 
         @returns               Vector of FIR coefficients suitable for DirectFIR
     */
-    static std::vector<CoeffType> designFIRLowpass (
+    static void designFIRLowpass (
+        std::vector<CoeffType>& coefficients,
         int numCoefficients,
         CoeffType cutoffFreq,
         double sampleRate,
-        WindowType windowType = WindowType::hann) noexcept;
+        WindowType windowType = WindowType::hann,
+        CoeffType windowParameter = CoeffType (8)) noexcept;
 
     /**
         Designs FIR highpass filter coefficients using windowed sinc method.
@@ -656,11 +658,13 @@ public:
 
         @returns               Vector of FIR coefficients suitable for DirectFIR
     */
-    static std::vector<CoeffType> designFIRHighpass (
+    static void designFIRHighpass (
+        std::vector<CoeffType>& coefficients,
         int numCoefficients,
         CoeffType cutoffFreq,
         double sampleRate,
-        WindowType windowType = WindowType::hann) noexcept;
+        WindowType windowType = WindowType::hann,
+        CoeffType windowParameter = CoeffType (8)) noexcept;
 
     /**
         Designs FIR bandpass filter coefficients using windowed sinc method.
@@ -673,12 +677,14 @@ public:
 
         @returns               Vector of FIR coefficients suitable for DirectFIR
     */
-    static std::vector<CoeffType> designFIRBandpass (
+    static void designFIRBandpass (
+        std::vector<CoeffType>& coefficients,
         int numCoefficients,
         CoeffType lowCutoffFreq,
         CoeffType highCutoffFreq,
         double sampleRate,
-        WindowType windowType = WindowType::hann) noexcept;
+        WindowType windowType = WindowType::hann,
+        CoeffType windowParameter = CoeffType (8)) noexcept;
 
     /**
         Designs FIR bandstop filter coefficients using windowed sinc method.
@@ -691,12 +697,14 @@ public:
 
         @returns               Vector of FIR coefficients suitable for DirectFIR
     */
-    static std::vector<CoeffType> designFIRBandstop (
+    static void designFIRBandstop (
+        std::vector<CoeffType>& coefficients,
         int numCoefficients,
         CoeffType lowCutoffFreq,
         CoeffType highCutoffFreq,
         double sampleRate,
-        WindowType windowType = WindowType::hann) noexcept;
+        WindowType windowType = WindowType::hann,
+        CoeffType windowParameter = CoeffType (8)) noexcept;
 };
 
 } // namespace yup

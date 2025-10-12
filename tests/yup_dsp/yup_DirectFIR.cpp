@@ -295,7 +295,8 @@ TEST_F (DirectFIRTest, AccumulativeOutput)
 TEST_F (DirectFIRTest, Linearity)
 {
     DirectFIR<float, float> fir;
-    auto coefficients = FilterDesigner<float>::designFIRLowpass (32, 1000.0f, 44100.0f);
+    std::vector<float> coefficients;
+    FilterDesigner<float>::designFIRLowpass (coefficients, 32, 1000.0f, 44100.0f);
     fir.setCoefficients (coefficients);
 
     std::vector<float> input (512);
@@ -312,7 +313,7 @@ TEST_F (DirectFIRTest, Linearity)
     fir.processBlock (input.data(), output1.data(), static_cast<int> (input.size()));
 
     fir.reset();
-    fir.processBlock (input2.data(), output2.data(), input2.size());
+    fir.processBlock (input2.data(), output2.data(), static_cast<int> (input2.size()));
 
     // output2 should be approximately 2x output1
     for (size_t i = 0; i < output1.size(); ++i)
@@ -354,7 +355,8 @@ TEST_F (DirectFIRTest, LowpassFiltering)
     DirectFIR<float, float> fir;
 
     // Create lowpass filter coefficients
-    auto coefficients = FilterDesigner<float>::designFIRLowpass (64, 1000.0f, 44100.0);
+    std::vector<float> coefficients;
+    FilterDesigner<float>::designFIRLowpass (coefficients, 64, 1000.0f, 44100.0);
     fir.setCoefficients (coefficients);
 
     const float sampleRate = 44100.0f;
@@ -395,7 +397,8 @@ TEST_F (DirectFIRTest, LowpassFiltering)
 TEST_F (DirectFIRTest, BlockSizeIndependence)
 {
     DirectFIR<float, float> fir;
-    auto coefficients = FilterDesigner<float>::designFIRLowpass (48, 2000.0f, 44100.0);
+    std::vector<float> coefficients;
+    FilterDesigner<float>::designFIRLowpass (coefficients, 48, 2000.0f, 44100.0);
     fir.setCoefficients (coefficients);
 
     const size_t totalSamples = 1024;
@@ -424,7 +427,7 @@ TEST_F (DirectFIRTest, BlockSizeIndependence)
         if (blockSize == 0)
             break;
 
-        fir.processBlock (input.data() + processed, output2.data() + processed, blockSize);
+        fir.processBlock (input.data() + processed, output2.data() + processed, static_cast<int> (blockSize));
         processed += blockSize;
     }
 
@@ -433,7 +436,7 @@ TEST_F (DirectFIRTest, BlockSizeIndependence)
     {
         size_t remaining = totalSamples - processed;
         size_t blockSize = std::min (remaining, size_t (128)); // Process in chunks of 128
-        fir.processBlock (input.data() + processed, output2.data() + processed, blockSize);
+        fir.processBlock (input.data() + processed, output2.data() + processed, static_cast<int> (blockSize));
         processed += blockSize;
     }
 
@@ -571,7 +574,7 @@ TEST_F (DirectFIRTest, StressTest)
         std::vector<float> output (blockSize, 0.0f);
         fillWithRandomData (input);
 
-        EXPECT_NO_THROW (fir.processBlock (input.data(), output.data(), blockSize));
+        EXPECT_NO_THROW (fir.processBlock (input.data(), output.data(), static_cast<int> (blockSize)));
 
         // Verify output quality
         for (float sample : output)

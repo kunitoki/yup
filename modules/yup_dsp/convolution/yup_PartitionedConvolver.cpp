@@ -563,16 +563,8 @@ public:
                 trimmedLength = trimSilenceFromEnd (impulseResponse, length, *options.trimEndSilenceBelowDb);
 
             // Update DirectFIR in-place
-            std::vector<float> directCoefficients;
-
             const auto directCoefficientsCount = std::min (directFIRCoefficientCount, trimmedLength);
-            if (directCoefficientsCount > 0)
-            {
-                directCoefficients.reserve (directCoefficientsCount);
-                directCoefficients.assign (impulseResponse, impulseResponse + directCoefficientsCount);
-            }
-
-            newFIR.setCoefficients (std::move (directCoefficients), headroomScale);
+            newFIR.setCoefficients (impulseResponse, directCoefficientsCount, headroomScale);
 
             // Update FFT layers
             std::size_t consumed = directCoefficientsCount;

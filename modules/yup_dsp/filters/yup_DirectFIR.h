@@ -100,29 +100,17 @@ public:
 
     //==============================================================================
     /**
-        Set the FIR filter coefficients.
+        Set the FIR filter coefficients from a raw pointer.
 
-        @param coefficients  Vector containing the FIR coefficients in time order
-        @param scaling       Scaling factor to apply to all coefficients
+        @param coefficients     Span of FIR coefficients array
+        @param scaling          Scaling factor to apply to all coefficients
 
         @note This method is not real-time safe and should be called during initialization
-              or when audio processing is paused.
+              or when audio processing is paused, unless the coefficients vector has already been set with a greater or equal size.
     */
-    void setCoefficients (std::vector<CoeffType> coefficients, CoeffType scaling = CoeffType (1))
+    void setCoefficients (yup::Span<const CoeffType> coefficients, CoeffType scaling = CoeffType (1))
     {
-        currentScaling = scaling;
-        if (! approximatelyEqual (currentScaling, CoeffType (1)))
-            FloatVectorOperations::multiply (coefficients.data(), scaling, coefficients.size());
-
-        coefficientsReversed = std::move (coefficients);
-        std::reverse (coefficientsReversed.begin(), coefficientsReversed.end());
-
-        numCoefficients = coefficientsReversed.size();
-        paddedLen = (numCoefficients + 3u) & ~3u; // Round up to multiple of 4 for SIMD
-        coefficientsReversed.resize (paddedLen, 0.0f);
-
-        history.assign (2 * numCoefficients, 0.0f);
-        reset();
+        setCoefficients (coefficients.data(), coefficients.size(), scaling);
     }
 
     /**
@@ -133,7 +121,7 @@ public:
         @param scaling          Scaling factor to apply to all coefficients
 
         @note This method is not real-time safe and should be called during initialization
-              or when audio processing is paused.
+              or when audio processing is paused, unless the coefficients vector has already been set with a greater or equal size.
     */
     void setCoefficients (const CoeffType* coefficients, std::size_t numCoefficientsIn, CoeffType scaling = CoeffType (1))
     {
@@ -144,8 +132,21 @@ public:
             return;
         }
 
-        std::vector<float> coefficientsVector (coefficients, coefficients + numCoefficientsIn);
-        setCoefficients (std::move (coefficientsVector), scaling);
+        numCoefficients = numCoefficientsIn;
+        paddedLen = (numCoefficientsIn + 3u) & ~3u; // Round up to multiple of 4 for SIMD
+
+        coefficientsReversed.resize (paddedLen, 0.0f);
+
+        currentScaling = scaling;
+        if (! approximatelyEqual (currentScaling, CoeffType (1)))
+            FloatVectorOperations::copyWithMultiply (coefficientsReversed.data(), coefficients, scaling, static_cast<int> (numCoefficientsIn));
+        else
+            FloatVectorOperations::copy (coefficientsReversed.data(), coefficients, static_cast<int> (numCoefficientsIn));
+
+        std::reverse (coefficientsReversed.begin(), coefficientsReversed.begin() + numCoefficients);
+
+        history.resize (2 * numCoefficients, 0.0f);
+        writeIndex = 0;
     }
 
     /**
@@ -263,19 +264,29 @@ public:
         if (numCoefficients == 0)
             return Complex<CoeffType> (0, 0);
 
+        // ω = 2π f / Fs
         const CoeffType omega = MathConstants<CoeffType>::twoPi * frequency / static_cast<CoeffType> (this->sampleRate);
 
-        Complex<CoeffType> response (0, 0);
+        // Standard FIR frequency response: H(e^{jω}) = Σ_{n=0}^{N-1} h[n] * e^{-jωn}
+        // coefficientsReversed stores: [h[M-1], h[M-2], ..., h[1], h[0]]
+        // So coefficientsReversed[k] = h[M-1-k], and we need: Σ h[n] * e^{-jωn}
 
-        // H(e^jω) = Σ h[n] * e^(-jωn) for n = 0 to N-1
+        // e^{-jω}
+        const Complex<CoeffType> ez_neg { std::cos (omega), -std::sin (omega) };
+
+        // Accumulate: Σ_{n=0}^{N-1} h[n] * e^{-jωn}
+        // Since coefficientsReversed[k] = h[M-1-k], we have h[n] = coefficientsReversed[M-1-n]
+        Complex<CoeffType> sum { 0, 0 };
+        Complex<CoeffType> ez_neg_n { 1, 0 }; // e^{-jω*0} = 1
+
         for (std::size_t n = 0; n < numCoefficients; ++n)
         {
-            const CoeffType angle = -omega * static_cast<CoeffType> (n);
-            Complex<CoeffType> exponential (std::cos (angle), std::sin (angle));
-            response += static_cast<CoeffType> (coefficientsReversed[numCoefficients - 1 - n]) * exponential;
+            const CoeffType h_n = coefficientsReversed[numCoefficients - 1 - n];
+            sum += h_n * ez_neg_n;
+            ez_neg_n *= ez_neg;
         }
 
-        return response;
+        return sum;
     }
 
     /**

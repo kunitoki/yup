@@ -368,7 +368,8 @@ TEST_F (FilterDesignerTests, FloatPrecisionConsistency)
 TEST_F (FilterDesignerTests, FirLowpassBasicProperties)
 {
     const int numCoeffs = 65; // Odd number for symmetric filter
-    auto coeffs = FilterDesigner<float>::designFIRLowpass (numCoeffs, 1000.0f, sampleRate);
+    std::vector<float> coeffs;
+    FilterDesigner<float>::designFIRLowpass (coeffs, numCoeffs, 1000.0f, sampleRate);
 
     // Should return the correct number of coefficients
     EXPECT_EQ (coeffs.size(), numCoeffs);
@@ -393,7 +394,8 @@ TEST_F (FilterDesignerTests, FirLowpassBasicProperties)
 TEST_F (FilterDesignerTests, FirHighpassBasicProperties)
 {
     const int numCoeffs = 65;
-    auto coeffs = FilterDesigner<float>::designFIRHighpass (numCoeffs, 1000.0f, sampleRate);
+    std::vector<float> coeffs;
+    FilterDesigner<float>::designFIRHighpass (coeffs, numCoeffs, 1000.0f, sampleRate);
 
     // Should return the correct number of coefficients
     EXPECT_EQ (coeffs.size(), numCoeffs);
@@ -419,7 +421,8 @@ TEST_F (FilterDesignerTests, FirHighpassBasicProperties)
 TEST_F (FilterDesignerTests, FirBandpassBasicProperties)
 {
     const int numCoeffs = 65;
-    auto coeffs = FilterDesigner<float>::designFIRBandpass (numCoeffs, 800.0f, 1200.0f, sampleRate);
+    std::vector<float> coeffs;
+    FilterDesigner<float>::designFIRBandpass (coeffs, numCoeffs, 800.0f, 1200.0f, sampleRate);
 
     // Should return the correct number of coefficients
     EXPECT_EQ (coeffs.size(), numCoeffs);
@@ -445,7 +448,8 @@ TEST_F (FilterDesignerTests, FirBandpassBasicProperties)
 TEST_F (FilterDesignerTests, FirBandstopBasicProperties)
 {
     const int numCoeffs = 65;
-    auto coeffs = FilterDesigner<float>::designFIRBandstop (numCoeffs, 800.0f, 1200.0f, sampleRate);
+    std::vector<float> coeffs;
+    FilterDesigner<float>::designFIRBandstop (coeffs, numCoeffs, 800.0f, 1200.0f, sampleRate);
 
     // Should return the correct number of coefficients
     EXPECT_EQ (coeffs.size(), numCoeffs);
@@ -473,9 +477,11 @@ TEST_F (FilterDesignerTests, FirDifferentWindowTypes)
     const int numCoeffs = 33;
 
     // Test different window types
-    auto hannCoeffs = FilterDesigner<float>::designFIRLowpass (numCoeffs, 1000.0f, sampleRate, WindowType::hann);
-    auto hammingCoeffs = FilterDesigner<float>::designFIRLowpass (numCoeffs, 1000.0f, sampleRate, WindowType::hamming);
-    auto blackmanCoeffs = FilterDesigner<float>::designFIRLowpass (numCoeffs, 1000.0f, sampleRate, WindowType::blackman);
+    std::vector<float> hannCoeffs, hammingCoeffs, blackmanCoeffs;
+
+    FilterDesigner<float>::designFIRLowpass (hannCoeffs, numCoeffs, 1000.0f, sampleRate, WindowType::hann);
+    FilterDesigner<float>::designFIRLowpass (hammingCoeffs, numCoeffs, 1000.0f, sampleRate, WindowType::hamming);
+    FilterDesigner<float>::designFIRLowpass (blackmanCoeffs, numCoeffs, 1000.0f, sampleRate, WindowType::blackman);
 
     // All should have same size
     EXPECT_EQ (hannCoeffs.size(), numCoeffs);
@@ -507,8 +513,11 @@ TEST_F (FilterDesignerTests, FirFloatDoubleConsistency)
 {
     const int numCoeffs = 33;
 
-    auto doubleCoeffs = FilterDesigner<double>::designFIRLowpass (numCoeffs, 1000.0, sampleRate);
-    auto floatCoeffs = FilterDesigner<float>::designFIRLowpass (numCoeffs, 1000.0f, sampleRate);
+    std::vector<double> doubleCoeffs;
+    FilterDesigner<double>::designFIRLowpass (doubleCoeffs, numCoeffs, 1000.0, sampleRate);
+
+    std::vector<float> floatCoeffs;
+    FilterDesigner<float>::designFIRLowpass (floatCoeffs, numCoeffs, 1000.0f, sampleRate);
 
     EXPECT_EQ (doubleCoeffs.size(), floatCoeffs.size());
 
@@ -519,19 +528,21 @@ TEST_F (FilterDesignerTests, FirFloatDoubleConsistency)
 
 TEST_F (FilterDesignerTests, DISABLED_ExportFIRCoefficientsForAnalysis)
 {
-    const int numCoeffs = 129;
+    const int numCoeffs = 97;
     const float sampleRateF = 44100.0f;
 
     // Design different FIR filters
-    auto lowpass = FilterDesigner<float>::designFIRLowpass (numCoeffs, 10000.0f, sampleRateF);
-    auto highpass = FilterDesigner<float>::designFIRHighpass (numCoeffs, 10000.0f, sampleRateF);
-    auto bandpass = FilterDesigner<float>::designFIRBandpass (numCoeffs, 8000.0f, 12000.0f, sampleRateF);
-    auto bandstop = FilterDesigner<float>::designFIRBandstop (numCoeffs, 8000.0f, 12000.0f, sampleRateF);
+    std::vector<float> lowpass, highpass, bandpass, bandstop;
+    FilterDesigner<float>::designFIRLowpass (lowpass, numCoeffs, 10000.0f, sampleRateF);
+    FilterDesigner<float>::designFIRHighpass (highpass, numCoeffs, 10000.0f, sampleRateF);
+    FilterDesigner<float>::designFIRBandpass (bandpass, numCoeffs, 8000.0f, 12000.0f, sampleRateF);
+    FilterDesigner<float>::designFIRBandstop (bandstop, numCoeffs, 8000.0f, 12000.0f, sampleRateF);
 
     // Different windows for lowpass
-    auto lowpassHann = FilterDesigner<float>::designFIRLowpass (numCoeffs, 10000.0f, sampleRateF, WindowType::hann);
-    auto lowpassHamming = FilterDesigner<float>::designFIRLowpass (numCoeffs, 10000.0f, sampleRateF, WindowType::hamming);
-    auto lowpassBlackman = FilterDesigner<float>::designFIRLowpass (numCoeffs, 10000.0f, sampleRateF, WindowType::blackman);
+    std::vector<float> lowpassHann, lowpassHamming, lowpassBlackman;
+    FilterDesigner<float>::designFIRLowpass (lowpassHann, numCoeffs, 10000.0f, sampleRateF, WindowType::hann);
+    FilterDesigner<float>::designFIRLowpass (lowpassHamming, numCoeffs, 10000.0f, sampleRateF, WindowType::hamming);
+    FilterDesigner<float>::designFIRLowpass (lowpassBlackman, numCoeffs, 10000.0f, sampleRateF, WindowType::blackman);
 
     // Helper lambda to write coefficients to file
     auto writeCoeffs = [] (const std::vector<float>& coeffs, const std::string& filename)

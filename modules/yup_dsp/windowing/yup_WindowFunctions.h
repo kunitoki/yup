@@ -35,21 +35,22 @@ namespace yup
 */
 enum class WindowType
 {
-    rectangular,    /**< Rectangular (no windowing) */
-    hann,           /**< Hann window (raised cosine) */
-    hamming,        /**< Hamming window */
-    blackman,       /**< Blackman window */
-    blackmanHarris, /**< Blackman-Harris window (4-term) */
-    kaiser,         /**< Kaiser window (parameterizable) */
-    gaussian,       /**< Gaussian window */
-    tukey,          /**< Tukey window (tapered cosine) */
-    bartlett,       /**< Bartlett window (triangular) */
-    welch,          /**< Welch window (parabolic) */
-    flattop,        /**< Flat-top window */
-    cosine,         /**< Cosine window */
-    lanczos,        /**< Lanczos window (sinc) */
-    nuttall,        /**< Nuttall window */
-    blackmanNuttall /**< Blackman-Nuttall window */
+    rectangular,     /**< Rectangular (no windowing) */
+    hann,            /**< Hann window (raised cosine) */
+    hamming,         /**< Hamming window */
+    blackman,        /**< Blackman window */
+    blackmanHarris,  /**< Blackman-Harris window (4-term) */
+    kaiser,          /**< Kaiser window (parameterizable) */
+    gaussian,        /**< Gaussian window */
+    tukey,           /**< Tukey window (tapered cosine) */
+    bartlett,        /**< Bartlett window (triangular) */
+    welch,           /**< Welch window (parabolic) */
+    flattop,         /**< Flat-top window */
+    cosine,          /**< Cosine window */
+    lanczos,         /**< Lanczos window (sinc) */
+    nuttall,         /**< Nuttall window */
+    blackmanNuttall, /**< Blackman-Nuttall window */
+    rakshitUllah     /**< Rakshit-Ullah adjustable window (novel) */
 };
 
 //==============================================================================
@@ -131,6 +132,8 @@ public:
                 return nuttall (n, N);
             case WindowType::blackmanNuttall:
                 return blackmanNuttall (n, N);
+            case WindowType::rakshitUllah:
+                return rakshitUllah (n, N, parameter);
             default:
                 return rectangular (n, N);
         }
@@ -351,6 +354,55 @@ public:
         const auto factor = MathConstants<FloatType>::twoPi * n / (N - 1);
 
         return a0 - a1 * std::cos (factor) + a2 * std::cos (FloatType (2) * factor) - a3 * std::cos (FloatType (3) * factor);
+    }
+
+    /**
+        Rakshit-Ullah adjustable window function.
+
+        A novel adjustable window combining hyperbolic tangent and weighted cosine functions.
+        Proposed by Hrishi Rakshit and Muhammad Ahsan Ullah (2015).
+
+        @param n Sample index (0 to N-1)
+        @param N Window length
+        @param r Controlling parameter (default 1.0). Higher values give better side-lobe roll-off.
+               Common values: 0.0005, 1.18, 1.618, 30, 75
+        @return Window value at sample n
+
+        @note Reference: "FIR Filter Design Using An Adjustable Novel Window and Its Applications"
+              International Journal of Engineering and Technology (IJET), 2015
+    */
+    static FloatType rakshitUllah (int n, int N, FloatType r = FloatType (1)) noexcept
+    {
+        if (N <= 1)
+            return FloatType (1);
+
+        // Constants from the paper
+        constexpr auto alpha = FloatType (2);
+        constexpr auto B = FloatType (2);
+
+        // Hyperbolic tangent component (y1)
+        const auto center = (N - 1) / FloatType (2);
+        const auto coshAlpha = std::cosh (alpha);
+        const auto coshAlphaSquared = coshAlpha * coshAlpha;
+
+        const auto arg1 = (n - center + coshAlphaSquared) / B;
+        const auto arg2 = (n - center - coshAlphaSquared) / B;
+
+        const auto y1 = std::tanh (arg1) - std::tanh (arg2);
+
+        // Weighted cosine component (y2)
+        const auto factor = MathConstants<FloatType>::twoPi * n / (N - 1);
+        const auto y2 = FloatType (0.375) - FloatType (0.5) * std::cos (factor)
+                      + FloatType (0.125) * std::cos (FloatType (2) * factor);
+
+        // Combined window with power parameter
+        const auto window = y1 * y2;
+
+        // Apply the controlling parameter r
+        if (approximatelyEqual (r, FloatType (1)))
+            return window;
+        else
+            return std::pow (std::abs (window), r) * (window >= FloatType (0) ? FloatType (1) : FloatType (-1));
     }
 
 private:
