@@ -393,7 +393,7 @@ template <class Base = InputStream>
 struct PyInputStream : Base
 {
 private:
-#if JUCE_WINDOWS && ! JUCE_MINGW
+#if YUP_WINDOWS
     using ssize_t = pointer_sized_int;
 #endif
 
@@ -878,13 +878,13 @@ struct PyThread : Base
 
     void run() override
     {
-#if JUCE_PYTHON_THREAD_CATCH_EXCEPTION
+#if YUP_PYTHON_THREAD_CATCH_EXCEPTION
         try
         {
 #endif
             PYBIND11_OVERRIDE_PURE (void, Base, run);
 
-#if JUCE_PYTHON_THREAD_CATCH_EXCEPTION
+#if YUP_PYTHON_THREAD_CATCH_EXCEPTION
         }
         catch (const pybind11::error_already_set& e)
         {

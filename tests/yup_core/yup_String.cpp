@@ -895,6 +895,52 @@ TEST_F (StringTests, StringCreationFromData)
     EXPECT_TRUE (empty_from_data.isEmpty());
 }
 
+TEST_F (StringTests, CreateStringFromDataHandlesEncodings)
+{
+    const String expectedString (CharPointer_UTF8 ("glass \xc2\xbd full"));
+    const String emojiExpectedString (CharPointer_UTF8 ("hello JUCE \xf0\x9f\xa7\x83"));
+
+    {
+        SCOPED_TRACE ("createStringFromData reads LE UTF-16");
+        constexpr char buffer[] = "\xff\xfe\x67\x00\x6c\x00\x61\x00\x73\x00\x73\x00\x20\x00\xbd\x00\x20\x00\x66\x00\x75\x00\x6c\x00\x6c\x00";
+        const auto actualString = String::createStringFromData (buffer, static_cast<int> (sizeof (buffer)));
+        EXPECT_EQ (expectedString, actualString);
+
+        constexpr char emojiBuffer[] = "\xff\xfe\x68\x00\x65\x00\x6c\x00\x6c\x00\x6f\x00\x20\x00\x4a\x00\x55\x00\x43\x00\x45\x00\x20\x00\x3e\xd8\xc3\xdd";
+        const auto emojiActualString = String::createStringFromData (emojiBuffer, static_cast<int> (sizeof (emojiBuffer)));
+        EXPECT_EQ (emojiExpectedString, emojiActualString);
+    }
+
+    {
+        SCOPED_TRACE ("createStringFromData reads BE UTF-16");
+        constexpr char buffer[] = "\xfe\xff\x00\x67\x00\x6c\x00\x61\x00\x73\x00\x73\x00\x20\x00\xbd\x00\x20\x00\x66\x00\x75\x00\x6c\x00\x6c";
+        const auto actualString = String::createStringFromData (buffer, static_cast<int> (sizeof (buffer)));
+        EXPECT_EQ (expectedString, actualString);
+
+        constexpr char emojiBuffer[] = "\xfe\xff\x00\x68\x00\x65\x00\x6c\x00\x6c\x00\x6f\x00\x20\x00\x4a\x00\x55\x00\x43\x00\x45\x00\x20\xd8\x3e\xdd\xc3";
+        const auto emojiActualString = String::createStringFromData (emojiBuffer, static_cast<int> (sizeof (emojiBuffer)));
+        EXPECT_EQ (emojiExpectedString, emojiActualString);
+    }
+
+    {
+        SCOPED_TRACE ("createStringFromData reads UTF-8");
+        constexpr char buffer[] = "glass \xc2\xbd full";
+        const auto actualString = String::createStringFromData (buffer, static_cast<int> (sizeof (buffer)));
+        EXPECT_EQ (expectedString, actualString);
+
+        constexpr char emojiBuffer[] = "hello JUCE \xf0\x9f\xa7\x83";
+        const auto emojiActualString = String::createStringFromData (emojiBuffer, static_cast<int> (sizeof (emojiBuffer)));
+        EXPECT_EQ (emojiExpectedString, emojiActualString);
+    }
+
+    {
+        SCOPED_TRACE ("createStringFromData reads Windows 1252");
+        constexpr char buffer[] = "glass \xBD full";
+        const auto actualString = String::createStringFromData (buffer, static_cast<int> (sizeof (buffer)));
+        EXPECT_EQ (expectedString, actualString);
+    }
+}
+
 TEST_F (StringTests, FromUTF8)
 {
     // Test fromUTF8

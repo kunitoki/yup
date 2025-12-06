@@ -1564,7 +1564,7 @@ void convertDoubleToFloat (float* dest, const double* src, Size num) noexcept
         float32x2_t f = vcvt_f32_f64 (d);
         vst1_f32 (dest + i, f);
     }
-#elif JUCE_USE_SSE_INTRINSICS
+#elif YUP_USE_SSE_INTRINSICS
     for (; i + 2 <= num; i += 2)
     {
         __m128d d = _mm_loadu_pd (src + i);
@@ -1592,7 +1592,7 @@ void convertFloatToDouble (double* dest, const float* src, Size num) noexcept
         float64x2_t d = vcvt_f64_f32 (f);
         vst1q_f64 (dest + i, d);
     }
-#elif JUCE_USE_SSE_INTRINSICS
+#elif YUP_USE_SSE_INTRINSICS
     for (; i + 4 <= num; i += 4)
     {
         __m128 f = _mm_loadu_ps (src + i);
