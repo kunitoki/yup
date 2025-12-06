@@ -1,0 +1,32 @@
+name: Doxygen
+
+on:
+  push:
+    paths:
+      - "**/modules/**"
+      - "!**/native/**/*"
+      - "**/workflows/doxygen.yml"
+      - "docs/**/*.md"
+      - "README.md"
+      - "Doxyfile"
+    branches:
+      - "main"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: DenverCoder1/doxygen-github-pages-action@v2.0.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: gh-pages
+          folder: docs/doxygen
+          config_file: Doxyfile
+          doxygen_version: 1.14.0
