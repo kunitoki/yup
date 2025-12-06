@@ -99,7 +99,7 @@ char* MemoryOutputStream::prepareToWrite (size_t numBytes)
     if (blockToUse != nullptr)
     {
         if (storageNeeded >= blockToUse->getSize())
-            blockToUse->ensureSize ((storageNeeded + jmin (storageNeeded / 2, (size_t) (1024 * 1024)) + 32) & ~31u);
+            blockToUse->ensureSize ((storageNeeded + jmin (storageNeeded / 2, (size_t) (1024 * 1024)) + 32) & (size_t) (31));
 
         data = static_cast<char*> (blockToUse->getData());
     }
@@ -226,3 +226,4 @@ OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, const MemoryOutputS
 }
 
 } // namespace yup
+
