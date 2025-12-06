@@ -109,7 +109,7 @@
 //==============================================================================
 #if YUP_WINDOWS
 #ifdef __MINGW32__
-#error "MingW is no longer supported by YUP!"
+#error "MingW is an unsupported platform in YUP!"
 #endif
 
 #ifdef _MSC_VER
