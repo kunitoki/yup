@@ -44,5 +44,21 @@
 #include <yup_events/yup_events.h>
 
 //==============================================================================
+#include <atomic>
+#include <functional>
+#include <iterator>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <type_traits>
+#include <vector>
+
+//==============================================================================
 #include "undo/yup_UndoableAction.h"
 #include "undo/yup_UndoManager.h"
+#include "tree/yup_DataTree.h"
+#include "tree/yup_DataTreeSchema.h"
+#include "tree/yup_DataTreeObjectList.h"
+#include "tree/yup_CachedValue.h"
+#include "tree/yup_AtomicCachedValue.h"
+#include "tree/yup_DataTreeQuery.h"
