@@ -389,12 +389,14 @@ void MessageManager::broadcastMessage (const String&)
 void LinuxEventLoop::registerFdCallback (int fd, std::function<void (int)> readCallback, short eventMask)
 {
     if (auto* runLoop = InternalRunLoop::getInstanceWithoutCreating())
+    {
         runLoop->registerFdCallback (
             fd, [cb = std::move (readCallback), fd]
         {
             cb (fd);
         },
             eventMask);
+    }
 }
 
 void LinuxEventLoop::unregisterFdCallback (int fd)

@@ -340,7 +340,22 @@ void MidiFile::setTicksPerQuarterNote (int ticks) noexcept
 
 void MidiFile::setSmpteTimeFormat (int framesPerSecond, int subframeResolution) noexcept
 {
-    timeFormat = (short) (((-framesPerSecond) << 8) | subframeResolution);
+    switch (framesPerSecond)
+    {
+        case 24:
+        case 25:
+        case 29:
+        case 30:
+            break;
+
+        default:
+            framesPerSecond = 25;
+            break;
+    }
+
+    const int8 smpteByte = static_cast<int8> (-framesPerSecond);
+
+    timeFormat = static_cast<int16> ((static_cast<uint8> (smpteByte) << 8) | static_cast<uint8> (subframeResolution));
 }
 
 //==============================================================================

@@ -83,11 +83,17 @@ struct BasicOps32
 
     static forcedinline void storeU (Type* dest, ParallelType a) noexcept { _mm_storeu_ps (dest, a); }
 
+    static forcedinline void storeU (int* dest, ParallelType a) noexcept { _mm_storeu_si128 (reinterpret_cast<__m128i*> (dest), _mm_castps_si128 (a)); }
+
+    static forcedinline void storeA (int* dest, ParallelType a) noexcept { _mm_store_si128 (reinterpret_cast<__m128i*> (dest), _mm_castps_si128 (a)); }
+
     static forcedinline ParallelType add (ParallelType a, ParallelType b) noexcept { return _mm_add_ps (a, b); }
 
     static forcedinline ParallelType sub (ParallelType a, ParallelType b) noexcept { return _mm_sub_ps (a, b); }
 
     static forcedinline ParallelType mul (ParallelType a, ParallelType b) noexcept { return _mm_mul_ps (a, b); }
+
+    static forcedinline ParallelType div (ParallelType a, ParallelType b) noexcept { return _mm_div_ps (a, b); }
 
     static forcedinline ParallelType max (ParallelType a, ParallelType b) noexcept { return _mm_max_ps (a, b); }
 
@@ -147,6 +153,8 @@ struct BasicOps64
     static forcedinline ParallelType sub (ParallelType a, ParallelType b) noexcept { return _mm_sub_pd (a, b); }
 
     static forcedinline ParallelType mul (ParallelType a, ParallelType b) noexcept { return _mm_mul_pd (a, b); }
+
+    static forcedinline ParallelType div (ParallelType a, ParallelType b) noexcept { return _mm_div_pd (a, b); }
 
     static forcedinline ParallelType max (ParallelType a, ParallelType b) noexcept { return _mm_max_pd (a, b); }
 
@@ -331,11 +339,17 @@ struct BasicOps32
 
     static forcedinline void storeU (Type* dest, ParallelType a) noexcept { vst1q_f32 (dest, a); }
 
+    static forcedinline void storeU (int* dest, ParallelType a) noexcept { vst1q_f32 (reinterpret_cast<float*> (dest), a); }
+
+    static forcedinline void storeA (int* dest, ParallelType a) noexcept { vst1q_f32 (reinterpret_cast<float*> (dest), a); }
+
     static forcedinline ParallelType add (ParallelType a, ParallelType b) noexcept { return vaddq_f32 (a, b); }
 
     static forcedinline ParallelType sub (ParallelType a, ParallelType b) noexcept { return vsubq_f32 (a, b); }
 
     static forcedinline ParallelType mul (ParallelType a, ParallelType b) noexcept { return vmulq_f32 (a, b); }
+
+    static forcedinline ParallelType div (ParallelType a, ParallelType b) noexcept { return vdivq_f32 (a, b); }
 
     static forcedinline ParallelType max (ParallelType a, ParallelType b) noexcept { return vmaxq_f32 (a, b); }
 
@@ -410,6 +424,8 @@ struct BasicOps64
     static forcedinline ParallelType sub (ParallelType a, ParallelType b) noexcept { return a - b; }
 
     static forcedinline ParallelType mul (ParallelType a, ParallelType b) noexcept { return a * b; }
+
+    static forcedinline ParallelType div (ParallelType a, ParallelType b) noexcept { return a / b; }
 
     static forcedinline ParallelType max (ParallelType a, ParallelType b) noexcept { return jmax (a, b); }
 
@@ -752,6 +768,62 @@ void copyWithMultiply (double* dest, const double* src, double multiplier, Size 
                                  YUP_LOAD_SRC,
                                  YUP_INCREMENT_SRC_DEST,
                                  const Mode::ParallelType mult = Mode::load1 (multiplier);)
+#endif
+}
+
+template <typename Size>
+void copyWithDividend (float* dest, const float* src, float dividend, Size num) noexcept
+{
+#if YUP_USE_VDSP_FRAMEWORK
+    vDSP_svdiv (&dividend, src, 1, dest, 1, (vDSP_Length) num);
+#else
+    YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = dividend / src[i],
+                                 Mode::div (divsd, s),
+                                 YUP_LOAD_SRC,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType divsd = Mode::load1 (dividend);)
+#endif
+}
+
+template <typename Size>
+void copyWithDividend (double* dest, const double* src, double dividend, Size num) noexcept
+{
+#if YUP_USE_VDSP_FRAMEWORK
+    vDSP_svdivD (&dividend, src, 1, dest, 1, (vDSP_Length) num);
+#else
+    YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = dividend / src[i],
+                                 Mode::div (divsd, s),
+                                 YUP_LOAD_SRC,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType divsd = Mode::load1 (dividend);)
+#endif
+}
+
+template <typename Size>
+void copyWithDivide (float* dest, const float* src, float divisor, Size num) noexcept
+{
+#if YUP_USE_VDSP_FRAMEWORK
+    vDSP_vsdiv (src, 1, &divisor, dest, 1, (vDSP_Length) num);
+#else
+    YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = src[i] / divisor,
+                                 Mode::div (s, divs),
+                                 YUP_LOAD_SRC,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType divs = Mode::load1 (divisor);)
+#endif
+}
+
+template <typename Size>
+void copyWithDivide (double* dest, const double* src, double divisor, Size num) noexcept
+{
+#if YUP_USE_VDSP_FRAMEWORK
+    vDSP_vsdivD (src, 1, &divisor, dest, 1, (vDSP_Length) num);
+#else
+    YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = src[i] / divisor,
+                                 Mode::div (s, divs),
+                                 YUP_LOAD_SRC,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType divs = Mode::load1 (divisor);)
 #endif
 }
 
@@ -1100,6 +1172,104 @@ void multiply (double* dest, const double* src, double multiplier, Size num) noe
 }
 
 template <typename Size>
+void divide (float* dest, const float* src, Size num) noexcept
+{
+#if YUP_USE_VDSP_FRAMEWORK
+    vDSP_vdiv (src, 1, dest, 1, dest, 1, (vDSP_Length) num);
+#else
+    YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] /= src[i],
+                                 Mode::div (d, s),
+                                 YUP_LOAD_SRC_DEST,
+                                 YUP_INCREMENT_SRC_DEST, )
+#endif
+}
+
+template <typename Size>
+void divide (double* dest, const double* src, Size num) noexcept
+{
+#if YUP_USE_VDSP_FRAMEWORK
+    vDSP_vdivD (src, 1, dest, 1, dest, 1, (vDSP_Length) num);
+#else
+    YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] /= src[i],
+                                 Mode::div (d, s),
+                                 YUP_LOAD_SRC_DEST,
+                                 YUP_INCREMENT_SRC_DEST, )
+#endif
+}
+
+template <typename Size>
+void divide (float* dest, const float* src1, const float* src2, Size num) noexcept
+{
+#if YUP_USE_VDSP_FRAMEWORK
+    vDSP_vdiv (src2, 1, src1, 1, dest, 1, (vDSP_Length) num);
+#else
+    YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST (dest[i] = src1[i] / src2[i],
+                                       Mode::div (s1, s2),
+                                       YUP_LOAD_SRC1_SRC2,
+                                       YUP_INCREMENT_SRC1_SRC2_DEST, )
+#endif
+}
+
+template <typename Size>
+void divide (double* dest, const double* src1, const double* src2, Size num) noexcept
+{
+#if YUP_USE_VDSP_FRAMEWORK
+    vDSP_vdivD (src2, 1, src1, 1, dest, 1, (vDSP_Length) num);
+#else
+    YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST (dest[i] = src1[i] / src2[i],
+                                       Mode::div (s1, s2),
+                                       YUP_LOAD_SRC1_SRC2,
+                                       YUP_INCREMENT_SRC1_SRC2_DEST, )
+#endif
+}
+
+template <typename Size>
+void divide (float* dest, float divisor, Size num) noexcept
+{
+#if YUP_USE_VDSP_FRAMEWORK
+    vDSP_vsdiv (dest, 1, &divisor, dest, 1, (vDSP_Length) num);
+#else
+    YUP_PERFORM_VEC_OP_DEST (dest[i] /= divisor,
+                             Mode::div (d, divs),
+                             YUP_LOAD_DEST,
+                             const Mode::ParallelType divs = Mode::load1 (divisor);)
+#endif
+}
+
+template <typename Size>
+void divide (double* dest, double divisor, Size num) noexcept
+{
+#if YUP_USE_VDSP_FRAMEWORK
+    vDSP_vsdivD (dest, 1, &divisor, dest, 1, (vDSP_Length) num);
+#else
+    YUP_PERFORM_VEC_OP_DEST (dest[i] /= divisor,
+                             Mode::div (d, divs),
+                             YUP_LOAD_DEST,
+                             const Mode::ParallelType divs = Mode::load1 (divisor);)
+#endif
+}
+
+template <typename Size>
+void divide (float* dest, const float* src, float divisor, Size num) noexcept
+{
+    YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = src[i] / divisor,
+                                 Mode::div (s, divs),
+                                 YUP_LOAD_SRC,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType divs = Mode::load1 (divisor);)
+}
+
+template <typename Size>
+void divide (double* dest, const double* src, double divisor, Size num) noexcept
+{
+    YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = src[i] / divisor,
+                                 Mode::div (s, divs),
+                                 YUP_LOAD_SRC,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType divs = Mode::load1 (divisor);)
+}
+
+template <typename Size>
 void negate (float* dest, const float* src, Size num) noexcept
 {
 #if YUP_USE_VDSP_FRAMEWORK
@@ -1338,6 +1508,106 @@ double findMaximum (const double* src, Size num) noexcept
 #endif
 }
 
+template <typename Size>
+void convertFixedToFloat (float* dest, const int* src, float multiplier, Size num) noexcept
+{
+#if YUP_USE_ARM_NEON
+    YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = (float) src[i] * multiplier,
+                                 vmulq_n_f32 (vcvtq_f32_s32 (vld1q_s32 (src)), multiplier),
+                                 YUP_LOAD_NONE,
+                                 YUP_INCREMENT_SRC_DEST, )
+#elif YUP_USE_SSE_INTRINSICS
+    YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = (float) src[i] * multiplier,
+                                 Mode::mul (mult, _mm_cvtepi32_ps (_mm_loadu_si128 (reinterpret_cast<const __m128i*> (src)))),
+                                 YUP_LOAD_NONE,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType mult = Mode::load1 (multiplier);)
+#else
+    for (Size i = 0; i < num; ++i)
+        dest[i] = (float) src[i] * multiplier;
+#endif
+}
+
+template <typename Size>
+void convertFloatToFixed (int* dest, const float* src, float multiplier, Size num) noexcept
+{
+#if YUP_USE_ARM_NEON
+    YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = (int) (src[i] * multiplier),
+                                 vreinterpretq_f32_s32 (vcvtq_s32_f32 (vmulq_n_f32 (vld1q_f32 (src), multiplier))),
+                                 YUP_LOAD_NONE,
+                                 YUP_INCREMENT_SRC_DEST, )
+
+#elif YUP_USE_SSE_INTRINSICS
+    YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = (int) (src[i] * multiplier),
+                                 _mm_castsi128_ps (_mm_cvtps_epi32 (_mm_mul_ps (_mm_loadu_ps (src), mult))),
+                                 YUP_LOAD_NONE,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType mult = Mode::load1 (multiplier);)
+
+#else
+    for (Size i = 0; i < num; ++i)
+        dest[i] = (int) (src[i] * multiplier);
+#endif
+}
+
+template <typename Size>
+void convertDoubleToFloat (float* dest, const double* src, Size num) noexcept
+{
+#if YUP_USE_VDSP_FRAMEWORK
+    vDSP_vdpsp (src, 1, dest, 1, (vDSP_Length) num);
+#else
+    Size i = 0;
+#if YUP_USE_ARM_NEON
+    for (; i + 2 <= num; i += 2)
+    {
+        float64x2_t d = vld1q_f64 (src + i);
+        float32x2_t f = vcvt_f32_f64 (d);
+        vst1_f32 (dest + i, f);
+    }
+#elif JUCE_USE_SSE_INTRINSICS
+    for (; i + 2 <= num; i += 2)
+    {
+        __m128d d = _mm_loadu_pd (src + i);
+        __m128 f = _mm_cvtpd_ps (d);
+        _mm_storel_pi ((__m64*) (dest + i), f);
+    }
+#endif
+
+    for (; i < num; ++i)
+        dest[i] = (float) src[i];
+#endif
+}
+
+template <typename Size>
+void convertFloatToDouble (double* dest, const float* src, Size num) noexcept
+{
+#if YUP_USE_VDSP_FRAMEWORK
+    vDSP_vspdp (src, 1, dest, 1, (vDSP_Length) num);
+#else
+    Size i = 0;
+#if YUP_USE_ARM_NEON
+    for (; i + 2 <= num; i += 2)
+    {
+        float32x2_t f = vld1_f32 (src + i);
+        float64x2_t d = vcvt_f64_f32 (f);
+        vst1q_f64 (dest + i, d);
+    }
+#elif JUCE_USE_SSE_INTRINSICS
+    for (; i + 4 <= num; i += 4)
+    {
+        __m128 f = _mm_loadu_ps (src + i);
+        __m128d d0 = _mm_cvtps_pd (f);
+        __m128d d1 = _mm_cvtps_pd (_mm_movehl_ps (f, f));
+        _mm_storeu_pd (dest + i, d0);
+        _mm_storeu_pd (dest + i + 2, d1);
+    }
+#endif
+
+    for (; i < num; ++i)
+        dest[i] = (double) src[i];
+#endif
+}
+
 } // namespace
 } // namespace FloatVectorHelpers
 
@@ -1372,6 +1642,24 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::copyWithMulti
                                                                                      CountType numValues) noexcept
 {
     FloatVectorHelpers::copyWithMultiply (dest, src, multiplier, numValues);
+}
+
+template <typename FloatType, typename CountType>
+void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::copyWithDividend (FloatType* dest,
+                                                                                     const FloatType* src,
+                                                                                     FloatType dividend,
+                                                                                     CountType numValues) noexcept
+{
+    FloatVectorHelpers::copyWithDividend (dest, src, dividend, numValues);
+}
+
+template <typename FloatType, typename CountType>
+void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::copyWithDivide (FloatType* dest,
+                                                                                   const FloatType* src,
+                                                                                   FloatType divisor,
+                                                                                   CountType numValues) noexcept
+{
+    FloatVectorHelpers::copyWithDivide (dest, src, divisor, numValues);
 }
 
 template <typename FloatType, typename CountType>
@@ -1496,6 +1784,40 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::multiply (Flo
 }
 
 template <typename FloatType, typename CountType>
+void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::divide (FloatType* dest,
+                                                                           const FloatType* src,
+                                                                           CountType numValues) noexcept
+{
+    FloatVectorHelpers::divide (dest, src, numValues);
+}
+
+template <typename FloatType, typename CountType>
+void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::divide (FloatType* dest,
+                                                                           const FloatType* src1,
+                                                                           const FloatType* src2,
+                                                                           CountType numValues) noexcept
+{
+    FloatVectorHelpers::divide (dest, src1, src2, numValues);
+}
+
+template <typename FloatType, typename CountType>
+void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::divide (FloatType* dest,
+                                                                           FloatType divisor,
+                                                                           CountType numValues) noexcept
+{
+    FloatVectorHelpers::divide (dest, divisor, numValues);
+}
+
+template <typename FloatType, typename CountType>
+void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::divide (FloatType* dest,
+                                                                           const FloatType* src,
+                                                                           FloatType divisor,
+                                                                           CountType num) noexcept
+{
+    FloatVectorHelpers::divide (dest, src, divisor, num);
+}
+
+template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::negate (FloatType* dest,
                                                                            const FloatType* src,
                                                                            CountType numValues) noexcept
@@ -1584,6 +1906,48 @@ template struct FloatVectorOperationsBase<float, int>;
 template struct FloatVectorOperationsBase<float, size_t>;
 template struct FloatVectorOperationsBase<double, int>;
 template struct FloatVectorOperationsBase<double, size_t>;
+
+//==============================================================================
+
+void YUP_CALLTYPE FloatVectorOperations::convertFixedToFloat (float* dest, const int* src, float multiplier, size_t num) noexcept
+{
+    FloatVectorHelpers::convertFixedToFloat (dest, src, multiplier, num);
+}
+
+void YUP_CALLTYPE FloatVectorOperations::convertFixedToFloat (float* dest, const int* src, float multiplier, int num) noexcept
+{
+    FloatVectorHelpers::convertFixedToFloat (dest, src, multiplier, num);
+}
+
+void YUP_CALLTYPE FloatVectorOperations::convertFloatToFixed (int* dest, const float* src, float multiplier, size_t num) noexcept
+{
+    FloatVectorHelpers::convertFloatToFixed (dest, src, multiplier, num);
+}
+
+void YUP_CALLTYPE FloatVectorOperations::convertFloatToFixed (int* dest, const float* src, float multiplier, int num) noexcept
+{
+    FloatVectorHelpers::convertFloatToFixed (dest, src, multiplier, num);
+}
+
+void YUP_CALLTYPE FloatVectorOperations::convertFloatToDouble (double* dest, const float* src, int num) noexcept
+{
+    FloatVectorHelpers::convertFloatToDouble (dest, src, num);
+}
+
+void YUP_CALLTYPE FloatVectorOperations::convertFloatToDouble (double* dest, const float* src, size_t num) noexcept
+{
+    FloatVectorHelpers::convertFloatToDouble (dest, src, num);
+}
+
+void YUP_CALLTYPE FloatVectorOperations::convertDoubleToFloat (float* dest, const double* src, int num) noexcept
+{
+    FloatVectorHelpers::convertDoubleToFloat (dest, src, num);
+}
+
+void YUP_CALLTYPE FloatVectorOperations::convertDoubleToFloat (float* dest, const double* src, size_t num) noexcept
+{
+    FloatVectorHelpers::convertDoubleToFloat (dest, src, num);
+}
 
 //==============================================================================
 

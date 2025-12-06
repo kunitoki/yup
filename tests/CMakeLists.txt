@@ -104,6 +104,7 @@ yup_standalone_app (
     TARGET_CONSOLE ${target_console}
     DEFINITIONS
         YUP_USE_CURL=0
+        YUP_MODAL_LOOPS_PERMITTED=1
     MODULES
         ${target_modules}
         ${target_gtest_modules})

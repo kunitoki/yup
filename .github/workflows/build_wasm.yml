@@ -38,6 +38,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - name: Setup emsdk
@@ -58,6 +60,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - name: Setup emsdk
@@ -74,6 +78,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - name: Setup emsdk
@@ -90,6 +96,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - name: Setup emsdk

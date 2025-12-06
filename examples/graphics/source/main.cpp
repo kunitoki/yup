@@ -40,6 +40,7 @@
 #include "examples/Artboard.h"
 #include "examples/Audio.h"
 #include "examples/CrossoverDemo.h"
+#include "examples/ConvolutionDemo.h"
 #include "examples/FilterDemo.h"
 #include "examples/LayoutFonts.h"
 #include "examples/FileChooser.h"
@@ -107,6 +108,7 @@ public:
         registerDemo<SpectrumAnalyzerDemo> ("FFT Analyzer", counter++);
         registerDemo<FilterDemo> ("Filter Demo", counter++);
         registerDemo<CrossoverDemo> ("Crossover Demo", counter++);
+        registerDemo<ConvolutionDemo> ("Convolution Demo", counter++);
         registerDemo<LayoutFontsExample> ("Layout Fonts", counter++);
         registerDemo<VariableFontsExample> ("Variable Fonts", counter++);
         registerDemo<PathsExample> ("Paths", counter++);
@@ -307,18 +309,23 @@ struct Application : yup::YUPApplication
 
         yup::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
-        window = std::make_unique<CustomWindow>();
+        yup::MessageManager::callAsync ([this]
+        {
+            yup::Process::makeForegroundProcess();
+
+            window = std::make_unique<CustomWindow>();
 
 #if YUP_IOS
-        window->centreWithSize ({ 320, 480 });
+            window->centreWithSize ({ 320, 480 });
 #elif YUP_ANDROID
-        window->centreWithSize ({ 1080, 2400 });
-        // window->setFullScreen(true);
+            window->centreWithSize ({ 1080, 2400 });
+            // window->setFullScreen(true);
 #else
-        window->centreWithSize ({ 600, 800 });
+            window->centreWithSize ({ 600, 800 });
 #endif
 
-        window->setVisible (true);
+            window->setVisible (true);
+        });
     }
 
     void shutdown() override

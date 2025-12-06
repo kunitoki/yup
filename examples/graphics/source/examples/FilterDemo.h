@@ -951,6 +951,7 @@ private:
         filterTypeCombo->addItem ("State Variable", 3);
         filterTypeCombo->addItem ("First Order", 4);
         filterTypeCombo->addItem ("Butterworth", 5);
+        filterTypeCombo->addItem ("FIR Filter", 6);
         filterTypeCombo->setSelectedId (1);
         filterTypeCombo->onSelectedItemChanged = [this]
         {
@@ -975,6 +976,42 @@ private:
             updateCurrentFilter();
         };
         addAndMakeVisible (*responseTypeCombo);
+
+        // FIR-specific controls
+        firCoefficientsSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "FIR Length");
+        firCoefficientsSlider->setRange ({ 16.0, 256.0 });
+        firCoefficientsSlider->setValue (64.0);
+        firCoefficientsSlider->onValueChanged = [this] (float value)
+        {
+            updateAnalysisDisplays();
+        };
+        addAndMakeVisible (*firCoefficientsSlider);
+
+        firWindowCombo = std::make_unique<yup::ComboBox> ("FIR Window");
+        firWindowCombo->addItem ("Hann", 1);
+        firWindowCombo->addItem ("Hamming", 2);
+        firWindowCombo->addItem ("Blackman", 3);
+        firWindowCombo->addItem ("Kaiser", 4);
+        firWindowCombo->addItem ("Rectangle", 5);
+        firWindowCombo->addItem ("Rakshit-Ullah", 6);
+        firWindowCombo->setSelectedId (1);
+        firWindowCombo->onSelectedItemChanged = [this]
+        {
+            updateWindowParameterRange();
+            updateAnalysisDisplays();
+        };
+        addAndMakeVisible (*firWindowCombo);
+
+        // FIR window parameter control (for adjustable windows like Kaiser and Rakshit-Ullah)
+        firWindowParameterSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Window Parameter");
+        firWindowParameterSlider->setRange ({ 0.0005, 10.0 });
+        firWindowParameterSlider->setSkewFactorFromMidpoint (1.0);
+        firWindowParameterSlider->setValue (1.0);
+        firWindowParameterSlider->onValueChanged = [this] (float value)
+        {
+            updateAnalysisDisplays();
+        };
+        addAndMakeVisible (*firWindowParameterSlider);
 
         // Parameter controls with smoothed parameter updates
         frequencySlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Frequency");
@@ -1066,7 +1103,7 @@ private:
         // Labels for parameter controls
         auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (10.0f);
 
-        for (const auto& labelText : { "Filter Type:", "Response Type:", "Frequency:", "Frequency 2:", "Q/Resonance:", "Gain (dB):", "Order:", "Noise Level:", "Output Level:" })
+        for (const auto& labelText : { "Filter Type:", "Response Type:", "Frequency:", "Frequency 2:", "Q/Resonance:", "Gain (dB):", "Order:", "FIR Length:", "FIR Window:", "Window Param:", "Noise Level:", "Output Level:" })
         {
             auto label = parameterLabels.add (std::make_unique<yup::Label> (labelText));
             label->setText (labelText);
@@ -1092,8 +1129,11 @@ private:
             { parameterLabels[4], qSlider.get() },
             { parameterLabels[5], gainSlider.get() },
             { parameterLabels[6], orderSlider.get() },
-            { parameterLabels[7], noiseGainSlider.get() },
-            { parameterLabels[8], outputGainSlider.get() }
+            { parameterLabels[7], firCoefficientsSlider.get() },
+            { parameterLabels[8], firWindowCombo.get() },
+            { parameterLabels[9], firWindowParameterSlider.get() },
+            { parameterLabels[10], noiseGainSlider.get() },
+            { parameterLabels[11], outputGainSlider.get() }
         };
 
         for (auto& [label, component] : layouts)
@@ -1114,6 +1154,7 @@ private:
         audioSvf = std::make_shared<yup::StateVariableFilter<float>>();
         audioFirstOrder = std::make_shared<yup::FirstOrderFilter<float>>();
         audioButterworthFilter = std::make_shared<yup::ButterworthFilter<float>>();
+        audioDirectFIR = std::make_shared<yup::DirectFIR<float>>();
 
         // Create instances of all filter types for UI thread
         uiRbj = std::make_shared<yup::RbjFilter<float>>();
@@ -1121,14 +1162,15 @@ private:
         uiSvf = std::make_shared<yup::StateVariableFilter<float>>();
         uiFirstOrder = std::make_shared<yup::FirstOrderFilter<float>>();
         uiButterworthFilter = std::make_shared<yup::ButterworthFilter<float>>();
+        uiDirectFIR = std::make_shared<yup::DirectFIR<float>>();
 
         // Store in arrays for easy management
         allAudioFilters = {
-            audioRbj, audioZoelzer, audioSvf, audioFirstOrder, audioButterworthFilter
+            audioRbj, audioZoelzer, audioSvf, audioFirstOrder, audioButterworthFilter, audioDirectFIR
         };
 
         allUIFilters = {
-            uiRbj, uiZoelzer, uiSvf, uiFirstOrder, uiButterworthFilter
+            uiRbj, uiZoelzer, uiSvf, uiFirstOrder, uiButterworthFilter, uiDirectFIR
         };
 
         // Set default filters
@@ -1144,7 +1186,9 @@ private:
     {
         noiseGeneratorAmplitude.setCurrentAndTargetValue (0.1f);
         outputGain.setCurrentAndTargetValue (0.5f);
+        updateWindowParameterRange(); // Set initial window parameter range
         updateCurrentFilter();
+        updateControlVisibility(); // Set initial visibility
     }
 
     void updateCurrentFilter()
@@ -1171,6 +1215,9 @@ private:
             case 5:
                 currentUIFilter = uiButterworthFilter;
                 break;
+            case 6:
+                currentUIFilter = uiDirectFIR;
+                break;
             default:
                 currentUIFilter = uiRbj;
                 break;
@@ -1189,6 +1236,9 @@ private:
         // Update UI filter with current parameters
         updateUIFilterParameters();
 
+        // Update control visibility based on filter type
+        updateControlVisibility();
+
         // Update displays using UI filter
         frequencyResponsePlot.setFilter (currentUIFilter);
         frequencyResponsePlot.updateResponseData();
@@ -1201,12 +1251,12 @@ private:
             return;
 
         double freq = smoothedFrequency.getNextValue();
-        double freq2 = smoothedFrequency2.getNextValue();
+        double freq2 = yup::jmax (freq, (double) smoothedFrequency2.getNextValue());
         double q = smoothedQ.getNextValue();
         double gain = smoothedGain.getNextValue();
         int order = yup::jlimit (2, 16, static_cast<int> (smoothedOrder.getNextValue()));
 
-        updateFilterParameters (currentAudioFilter.get(), freq, freq2, q, gain, order);
+        updateFilterParameters (currentAudioFilter.get(), firCoefficients, freq, freq2, q, gain, order);
     }
 
     void updateUIFilterParameters()
@@ -1215,15 +1265,15 @@ private:
             return;
 
         double freq = frequencySlider->getValue();
-        double freq2 = frequency2Slider->getValue();
+        double freq2 = yup::jmax (freq, frequency2Slider->getValue());
         double q = qSlider->getValue();
         double gain = gainSlider->getValue();
         int order = yup::jlimit (2, 16, static_cast<int> (orderSlider->getValue()));
 
-        updateFilterParameters (currentUIFilter.get(), freq, freq2, q, gain, order);
+        updateFilterParameters (currentUIFilter.get(), firCoefficientsUI, freq, freq2, q, gain, order);
     }
 
-    void updateFilterParameters (yup::FilterBase<float>* filter, double freq, double freq2, double q, double gain, int order)
+    void updateFilterParameters (yup::FilterBase<float>* filter, std::vector<double>& coefficients, double freq, double freq2, double q, double gain, int order)
     {
         // Update parameters based on filter type using direct UI values
         if (auto rf = dynamic_cast<yup::RbjFilter<float>*> (filter))
@@ -1246,6 +1296,10 @@ private:
         {
             bf->setParameters (getFilterMode (currentResponseTypeId), order, freq, yup::jmax (freq2, freq * 1.01), currentSampleRate);
         }
+        else if (auto fir = dynamic_cast<yup::DirectFIR<float>*> (filter))
+        {
+            updateFIRFilterParameters (fir, coefficients, freq, freq2);
+        }
     }
 
     void updateCurrentAudioFilter()
@@ -1267,6 +1321,9 @@ private:
                 break;
             case 5:
                 currentAudioFilter = audioButterworthFilter;
+                break;
+            case 6:
+                currentAudioFilter = audioDirectFIR;
                 break;
             default:
                 currentAudioFilter = audioRbj;
@@ -1344,6 +1401,147 @@ private:
         polesZerosDisplay.updatePolesZeros (poles, zeros);
     }
 
+    void updateControlVisibility()
+    {
+        bool isFIRFilter = (currentFilterTypeId == 6);
+
+        // Show/hide FIR-specific controls
+        firCoefficientsSlider->setVisible (isFIRFilter);
+        firWindowCombo->setVisible (isFIRFilter);
+        parameterLabels[7]->setVisible (isFIRFilter); // FIR Length label
+        parameterLabels[8]->setVisible (isFIRFilter); // FIR Window label
+
+        // Show/hide window parameter control for adjustable windows (Kaiser, Rakshit-Ullah)
+        bool needsWindowParameter = isFIRFilter && (firWindowCombo->getSelectedId() == 4 || firWindowCombo->getSelectedId() == 6); // Kaiser or Rakshit-Ullah
+        firWindowParameterSlider->setVisible (needsWindowParameter);
+        parameterLabels[9]->setVisible (needsWindowParameter); // Window Parameter label
+
+        // Show/hide standard filter controls
+        qSlider->setVisible (! isFIRFilter);
+        gainSlider->setVisible (! isFIRFilter);
+        orderSlider->setVisible (! isFIRFilter || currentFilterTypeId == 5);        // Show for Butterworth and FIR
+        parameterLabels[4]->setVisible (! isFIRFilter);                             // Q label
+        parameterLabels[5]->setVisible (! isFIRFilter);                             // Gain label
+        parameterLabels[6]->setVisible (! isFIRFilter || currentFilterTypeId == 5); // Order label
+
+        // Frequency 2 is only visible for bandpass/bandstop filters
+        bool needsFreq2 = (currentResponseTypeId >= 3 && currentResponseTypeId <= 5);
+        frequency2Slider->setVisible (needsFreq2);
+        parameterLabels[3]->setVisible (needsFreq2); // Frequency 2 label
+
+        // Update restricted response types for FIR
+        if (isFIRFilter)
+        {
+            // Save current selection
+            int currentResponse = responseTypeCombo->getSelectedId();
+
+            // Clear and repopulate with FIR-compatible responses
+            responseTypeCombo->clear();
+            responseTypeCombo->addItem ("Lowpass", 1);
+            responseTypeCombo->addItem ("Highpass", 2);
+            responseTypeCombo->addItem ("Bandpass", 3);
+            responseTypeCombo->addItem ("Bandstop", 5);
+
+            // Restore selection if compatible, otherwise default to lowpass
+            if (currentResponse == 1 || currentResponse == 2 || currentResponse == 3 || currentResponse == 5)
+                responseTypeCombo->setSelectedId (currentResponse, yup::dontSendNotification);
+            else
+                responseTypeCombo->setSelectedId (1, yup::dontSendNotification);
+        }
+        else
+        {
+            // Restore full response type list for IIR filters
+            int currentResponse = responseTypeCombo->getSelectedId();
+            responseTypeCombo->clear();
+            responseTypeCombo->addItem ("Lowpass", 1);
+            responseTypeCombo->addItem ("Highpass", 2);
+            responseTypeCombo->addItem ("Bandpass CSG", 3);
+            responseTypeCombo->addItem ("Bandpass CPG", 4);
+            responseTypeCombo->addItem ("Bandstop", 5);
+            responseTypeCombo->addItem ("Peak", 6);
+            responseTypeCombo->addItem ("Low Shelf", 7);
+            responseTypeCombo->addItem ("High Shelf", 8);
+            responseTypeCombo->addItem ("Allpass", 9);
+
+            // Restore selection
+            responseTypeCombo->setSelectedId (currentResponse, yup::dontSendNotification);
+        }
+
+        repaint();
+    }
+
+    void updateWindowParameterRange()
+    {
+        int windowId = firWindowCombo->getSelectedId();
+
+        // Update parameter range and default based on window type
+        switch (windowId)
+        {
+            case 4: // Kaiser
+                firWindowParameterSlider->setRange ({ 0.0, 20.0 });
+                firWindowParameterSlider->setSkewFactorFromMidpoint (8.0);
+                firWindowParameterSlider->setValue (8.0); // Kaiser beta parameter
+                break;
+
+            case 6: // Rakshit-Ullah
+                firWindowParameterSlider->setRange ({ 0.0001, 100.0 });
+                firWindowParameterSlider->setSkewFactorFromMidpoint (1.0);
+                firWindowParameterSlider->setValue (1.0); // Rakshit-Ullah r parameter
+                break;
+
+            default: // Other windows (parameter not used)
+                firWindowParameterSlider->setRange ({ 0.0, 10.0 });
+                firWindowParameterSlider->setValue (1.0);
+                break;
+        }
+
+        updateControlVisibility();
+    }
+
+    void updateFIRFilterParameters (yup::DirectFIR<float>* fir, std::vector<double>& coeffs, double freq, double freq2)
+    {
+        int numCoeffs = static_cast<int> (firCoefficientsSlider->getValue());
+        auto windowType = getFIRWindowType (firWindowCombo->getSelectedId());
+        auto responseMode = getFilterMode (currentResponseTypeId);
+
+        // Get window parameter (for Kaiser and Rakshit-Ullah windows)
+        double windowParam = firWindowParameterSlider->getValue();
+
+        if (responseMode.test (yup::FilterMode::lowpass))
+            yup::FilterDesigner<double>::designFIRLowpass (coeffs, numCoeffs, freq, currentSampleRate, windowType, windowParam);
+        else if (responseMode.test (yup::FilterMode::highpass))
+            yup::FilterDesigner<double>::designFIRHighpass (coeffs, numCoeffs, freq, currentSampleRate, windowType, windowParam);
+        else if (responseMode.test (yup::FilterMode::bandpassCsg | yup::FilterMode::bandpassCpg))
+            yup::FilterDesigner<double>::designFIRBandpass (coeffs, numCoeffs, freq, freq2, currentSampleRate, windowType, windowParam);
+        else if (responseMode.test (yup::FilterMode::bandstop))
+            yup::FilterDesigner<double>::designFIRBandstop (coeffs, numCoeffs, freq, freq2, currentSampleRate, windowType, windowParam);
+        else
+            yup::FilterDesigner<double>::designFIRLowpass (coeffs, numCoeffs, freq, currentSampleRate, windowType, windowParam);
+
+        fir->setCoefficients (coeffs.data(), coeffs.size());
+    }
+
+    yup::WindowType getFIRWindowType (int windowId)
+    {
+        switch (windowId)
+        {
+            case 1:
+                return yup::WindowType::hann;
+            case 2:
+                return yup::WindowType::hamming;
+            case 3:
+                return yup::WindowType::blackman;
+            case 4:
+                return yup::WindowType::kaiser;
+            case 5:
+                return yup::WindowType::rectangular;
+            case 6:
+                return yup::WindowType::rakshitUllah;
+            default:
+                return yup::WindowType::hann;
+        }
+    }
+
     yup::FilterModeType getFilterMode (int responseTypeId)
     {
         switch (responseTypeId)
@@ -1391,6 +1589,9 @@ private:
     std::vector<std::complex<double>> poles;
     std::vector<std::complex<double>> zeros;
 
+    std::vector<double> firCoefficients { 512, 0.0f };
+    std::vector<double> firCoefficientsUI { 512, 0.0f };
+
     // Filter type settings (thread-safe storage)
     std::atomic<int> currentFilterTypeId { 1 };
     std::atomic<int> currentResponseTypeId { 1 };
@@ -1401,6 +1602,7 @@ private:
     std::shared_ptr<yup::StateVariableFilter<float>> audioSvf;
     std::shared_ptr<yup::FirstOrderFilter<float>> audioFirstOrder;
     std::shared_ptr<yup::ButterworthFilter<float>> audioButterworthFilter;
+    std::shared_ptr<yup::DirectFIR<float>> audioDirectFIR;
 
     // UI thread filter instances
     std::shared_ptr<yup::RbjFilter<float>> uiRbj;
@@ -1408,6 +1610,7 @@ private:
     std::shared_ptr<yup::StateVariableFilter<float>> uiSvf;
     std::shared_ptr<yup::FirstOrderFilter<float>> uiFirstOrder;
     std::shared_ptr<yup::ButterworthFilter<float>> uiButterworthFilter;
+    std::shared_ptr<yup::DirectFIR<float>> uiDirectFIR;
 
     std::vector<std::shared_ptr<yup::FilterBase<float>>> allAudioFilters;
     std::vector<std::shared_ptr<yup::FilterBase<float>>> allUIFilters;
@@ -1423,6 +1626,9 @@ private:
     std::unique_ptr<yup::Slider> qSlider;
     std::unique_ptr<yup::Slider> gainSlider;
     std::unique_ptr<yup::Slider> orderSlider;
+    std::unique_ptr<yup::Slider> firCoefficientsSlider;
+    std::unique_ptr<yup::ComboBox> firWindowCombo;
+    std::unique_ptr<yup::Slider> firWindowParameterSlider;
     std::unique_ptr<yup::Slider> noiseGainSlider;
     std::unique_ptr<yup::Slider> outputGainSlider;
     yup::OwnedArray<yup::Label> parameterLabels;

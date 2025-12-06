@@ -2,25 +2,25 @@
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
   <a href="https://kunitoki.github.io/yup/demos/web_render_0/" title="UI courtesy from https://www.drywestdesign.com/">
-    <img src="./docs/demos/web_render_0.png" style="width:100%" /></a>
+    <img src="./docs/demos/web_render_0.png" style="width:99%" /></a>
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
-  <a href="https://kunitoki.github.io/yup/demos/web_render_1/"><img src="./docs/demos/web_render_1.png" style="width:24.25%;" /></a>
-  <a href="https://kunitoki.github.io/yup/demos/web_render_2/"><img src="./docs/demos/web_render_2.png" style="width:24.25%;" /></a>
-  <a href="https://kunitoki.github.io/yup/demos/web_render_3/"><img src="./docs/demos/web_render_3.png" style="width:24.25%;" /></a>
-  <a href="https://kunitoki.github.io/yup/demos/web_render_4/"><img src="./docs/demos/web_render_4.png" style="width:24.25%;" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_1/"><img src="./docs/demos/web_render_1.png" style="width:23.5%;" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_2/"><img src="./docs/demos/web_render_2.png" style="width:23.5%;" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_3/"><img src="./docs/demos/web_render_3.png" style="width:23.5%;" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_4/"><img src="./docs/demos/web_render_4.png" style="width:23.5%;" /></a>
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
-  <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/images/yup_dsp_filter_rbj.png" style="width:27%;" /></a>
-  <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/images/yup_dsp_filter_butter.png" style="width:27%;" /></a>
-  <a href="./examples/graphics/source/examples/CrossoverDemo.h"><img src="./docs/images/yup_dsp_crossover.png" style="width:44%;" /></a>
+  <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/images/yup_dsp_filter_rbj.png" style="width:26.5%;" /></a>
+  <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/images/yup_dsp_filter_butter.png" style="width:26.5%;" /></a>
+  <a href="./examples/graphics/source/examples/CrossoverDemo.h"><img src="./docs/images/yup_dsp_crossover.png" style="width:43.5%;" /></a>
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
-  <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_fill.png" style="width:100%;" /></a>
-  <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_line.png" style="width:100%;" /></a>
+  <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_fill.png" style="width:99%;" /></a>
+  <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_line.png" style="width:99%;" /></a>
 </p>
 
 Example Rive animation display ([source code](./examples/render/source/main.cpp)):

@@ -31,12 +31,55 @@
 #include "yup_dsp.h"
 
 //==============================================================================
+
+#include <atomic>
+#include <thread>
+
+//==============================================================================
+
+#if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_VDSP && (YUP_MAC || YUP_IOS)
+#define YUP_FFT_USING_VDSP 1
+#define YUP_FFT_FOUND_BACKEND 1
+#endif
+
+#if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_INTEL_IPP && __has_include(<ipp.h>)
+#include <ipp.h>
+#define YUP_FFT_USING_IPP 1
+#define YUP_FFT_FOUND_BACKEND 1
+#endif
+
+#if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_FFTW3 && __has_include(<fftw3.h>)
+#include <fftw3.h>
+#define YUP_FFT_USING_FFTW3 1
+#define YUP_FFT_FOUND_BACKEND 1
+#endif
+
+#if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_PFFFT && YUP_MODULE_AVAILABLE_pffft_library
+#include <pffft_library/pffft_library.h>
+#define YUP_FFT_USING_PFFFT 1
+#define YUP_FFT_FOUND_BACKEND 1
+#endif
+
+#if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_OOURA
+#include "yup_OouraFFT8g.h"
+#define YUP_FFT_USING_OOURA 1
+#define YUP_FFT_FOUND_BACKEND 1
+#endif
+
+#if ! defined(YUP_FFT_FOUND_BACKEND)
+#error "Unable to find a proper FFT backend !"
+#endif
+
+//==============================================================================
+
 #include "frequency/yup_FFTProcessor.cpp"
 #include "frequency/yup_SpectrumAnalyzerState.cpp"
+#include "designers/yup_FilterDesigner.cpp"
+#include "convolution/yup_PartitionedConvolver.cpp"
+#include "utilities/yup_DspMath.cpp"
+
+//==============================================================================
 
 #if YUP_ENABLE_OOURA && YUP_FFT_USING_OOURA
 #include "frequency/yup_OouraFFT8g.cpp"
 #endif
-
-//==============================================================================
-#include "designers/yup_FilterDesigner.cpp"

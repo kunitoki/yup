@@ -69,11 +69,27 @@
 
 //==============================================================================
 #ifndef YUP_USE_SSE_INTRINSICS
+#if defined (__SSE__)
 #define YUP_USE_SSE_INTRINSICS 1
+#endif
+#endif
+
+#ifndef YUP_USE_AVX_INTRINSICS
+#if defined (__AVX2__)
+#define YUP_USE_AVX_INTRINSICS 1
+#endif
+#endif
+
+#ifndef YUP_USE_FMA_INTRINSICS
+#if defined (__FMA__)
+#define YUP_USE_FMA_INTRINSICS 1
+#endif
 #endif
 
 #if ! YUP_INTEL
 #undef YUP_USE_SSE_INTRINSICS
+#undef YUP_USE_AVX_INTRINSICS
+#undef YUP_USE_FMA_INTRINSICS
 #endif
 
 #if __ARM_NEON__ && ! (YUP_USE_VDSP_FRAMEWORK || defined(YUP_USE_ARM_NEON))
@@ -85,6 +101,36 @@
 #undef YUP_USE_ARM_NEON
 #endif
 #define YUP_USE_ARM_NEON 0
+#endif
+
+//==============================================================================
+#if YUP_USE_AVX_INTRINSICS || YUP_USE_FMA_INTRINSICS
+#include <immintrin.h>
+#endif
+
+#if YUP_USE_SSE_INTRINSICS
+#include <emmintrin.h>
+#endif
+
+#if YUP_USE_ARM_NEON
+#if JUCE_64BIT && JUCE_WINDOWS
+#include <arm64_neon.h>
+#else
+#include <arm_neon.h>
+#endif
+#endif
+
+#if (YUP_MAC || YUP_IOS) && __has_include(<Accelerate/Accelerate.h>)
+#ifndef YUP_USE_VDSP_FRAMEWORK
+#define YUP_USE_VDSP_FRAMEWORK 1
+#endif
+
+#if YUP_USE_VDSP_FRAMEWORK
+#include <Accelerate/Accelerate.h>
+#endif
+
+#elif YUP_USE_VDSP_FRAMEWORK
+#undef YUP_USE_VDSP_FRAMEWORK
 #endif
 
 //==============================================================================
