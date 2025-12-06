@@ -1094,9 +1094,14 @@ Expression::Expression (const String& stringToParse, String& parseError)
 Expression Expression::parse (String::CharPointerType& stringToParse, String& parseError)
 {
     Helpers::Parser parser (stringToParse);
-    Expression e (parser.readUpToComma().get());
+
+    auto result = parser.readUpToComma();
     parseError = parser.error;
-    return e;
+
+    if (result)
+        return Expression (result.get());
+
+    return {};
 }
 
 double Expression::evaluate() const
@@ -1114,7 +1119,9 @@ double Expression::evaluate (const Scope& scope, String& evaluationError) const
 {
     try
     {
-        return term->resolve (scope, 0)->toDouble();
+        if (term != nullptr)
+            if (auto result = term->resolve (scope, 0))
+                return result->toDouble();
     }
     catch (Helpers::EvaluationError& e)
     {
