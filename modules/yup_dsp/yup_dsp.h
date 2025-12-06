@@ -68,7 +68,7 @@
     Enable Apple's vDSP backend.
 */
 #ifndef YUP_ENABLE_VDSP
-#if (YUP_MAC || YUP_IOS)
+#if (YUP_MAC || YUP_IOS) && YUP_USE_VDSP_FRAMEWORK
 #define YUP_ENABLE_VDSP 1
 #else
 #define YUP_ENABLE_VDSP 0
@@ -97,6 +97,7 @@
 #include <cmath>
 #include <complex>
 #include <memory>
+#include <optional>
 #include <vector>
 
 //==============================================================================
@@ -137,8 +138,10 @@
 #include "filters/yup_StateVariableFilter.h"
 #include "filters/yup_ButterworthFilter.h"
 #include "filters/yup_LinkwitzRileyFilter.h"
+#include "filters/yup_DirectFIR.h"
 
 // Dynamics processors
 #include "dynamics/yup_SoftClipper.h"
 
-//==============================================================================
+// Convolution processors
+#include "convolution/yup_PartitionedConvolver.h"

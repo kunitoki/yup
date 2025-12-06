@@ -37,6 +37,8 @@ jobs:
 
     steps:
         - uses: actions/checkout@v4
+          with:
+            fetch-depth: 0
         - uses: seanmiddleditch/gha-setup-ninja@master
         - name: Setup Java
           uses: actions/setup-java@v3
@@ -65,6 +67,8 @@ jobs:
     needs: [configure]
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - uses: seanmiddleditch/gha-setup-ninja@master
     - name: Setup Java
       uses: actions/setup-java@v3
@@ -95,6 +99,8 @@ jobs:
     needs: [configure]
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - uses: seanmiddleditch/gha-setup-ninja@master
     - name: Setup Java
       uses: actions/setup-java@v3

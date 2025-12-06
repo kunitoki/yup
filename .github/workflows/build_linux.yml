@@ -39,6 +39,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - uses: seanmiddleditch/gha-setup-ninja@master
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
@@ -63,6 +65,8 @@ jobs:
     needs: [configure]
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - uses: actions/cache/restore@v4
@@ -85,6 +89,8 @@ jobs:
     needs: [configure]
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - uses: actions/cache/restore@v4
@@ -103,6 +109,8 @@ jobs:
     needs: [configure]
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - uses: actions/cache/restore@v4
@@ -121,6 +129,8 @@ jobs:
     needs: [configure]
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - uses: actions/cache/restore@v4
@@ -139,6 +149,8 @@ jobs:
     needs: [configure]
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - uses: actions/cache/restore@v4

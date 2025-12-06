@@ -33,6 +33,8 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/Debug
@@ -47,6 +49,8 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_console
     - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_console
@@ -55,6 +59,8 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_app
     - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_app
@@ -63,6 +69,8 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_graphics
     - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_graphics
@@ -71,6 +79,8 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_plugin_clap_plugin
     - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_plugin_clap_plugin

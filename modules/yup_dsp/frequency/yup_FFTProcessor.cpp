@@ -19,41 +19,6 @@
   ==============================================================================
 */
 
-// Conditional includes based on available FFT backends
-#if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_VDSP && (YUP_MAC || YUP_IOS) && __has_include(<Accelerate/Accelerate.h>)
-#include <Accelerate/Accelerate.h>
-#define YUP_FFT_USING_VDSP 1
-#define YUP_FFT_FOUND_BACKEND 1
-#endif
-
-#if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_INTEL_IPP && __has_include(<ipp.h>)
-#include <ipp.h>
-#define YUP_FFT_USING_IPP 1
-#define YUP_FFT_FOUND_BACKEND 1
-#endif
-
-#if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_FFTW3 && __has_include(<fftw3.h>)
-#include <fftw3.h>
-#define YUP_FFT_USING_FFTW3 1
-#define YUP_FFT_FOUND_BACKEND 1
-#endif
-
-#if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_PFFFT && YUP_MODULE_AVAILABLE_pffft_library
-#include <pffft_library/pffft_library.h>
-#define YUP_FFT_USING_PFFFT 1
-#define YUP_FFT_FOUND_BACKEND 1
-#endif
-
-#if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_OOURA
-#include "yup_OouraFFT8g.h"
-#define YUP_FFT_USING_OOURA 1
-#define YUP_FFT_FOUND_BACKEND 1
-#endif
-
-#if ! defined(YUP_FFT_FOUND_BACKEND)
-#error "Unable to find a proper FFT backend !"
-#endif
-
 namespace yup
 {
 
@@ -700,7 +665,17 @@ FFTProcessor& FFTProcessor::operator= (FFTProcessor&& other) noexcept
 }
 
 //==============================================================================
-// Public interface
+
+void FFTProcessor::setScaling (FFTScaling newScaling) noexcept
+{
+    if (scaling != newScaling)
+    {
+        scaling = newScaling;
+
+        updateScalingFactor();
+    }
+}
+
 void FFTProcessor::setSize (int newSize)
 {
     jassert (isPowerOfTwo (newSize) && newSize >= 64 && newSize <= 65536);
@@ -708,6 +683,8 @@ void FFTProcessor::setSize (int newSize)
     if (newSize != fftSize)
     {
         fftSize = newSize;
+
+        updateScalingFactor();
 
         if (engine)
             engine->initialize (fftSize);
@@ -720,6 +697,7 @@ void FFTProcessor::performRealFFTForward (const float* realInput, float* complex
     jassert (engine != nullptr);
 
     engine->performRealFFTForward (realInput, complexOutput);
+
     applyScaling (complexOutput, fftSize * 2, true);
 }
 
@@ -729,6 +707,7 @@ void FFTProcessor::performRealFFTInverse (const float* complexInput, float* real
     jassert (engine != nullptr);
 
     engine->performRealFFTInverse (complexInput, realOutput);
+
     applyScaling (realOutput, fftSize, false);
 }
 
@@ -738,6 +717,7 @@ void FFTProcessor::performComplexFFTForward (const float* complexInput, float* c
     jassert (engine != nullptr);
 
     engine->performComplexFFTForward (complexInput, complexOutput);
+
     applyScaling (complexOutput, fftSize * 2, true);
 }
 
@@ -747,6 +727,7 @@ void FFTProcessor::performComplexFFTInverse (const float* complexInput, float* c
     jassert (engine != nullptr);
 
     engine->performComplexFFTInverse (complexInput, complexOutput);
+
     applyScaling (complexOutput, fftSize * 2, false);
 }
 
@@ -756,25 +737,25 @@ String FFTProcessor::getBackendName() const
 }
 
 //==============================================================================
-// Private implementation
-void FFTProcessor::applyScaling (float* data, int numElements, bool isForward)
+
+void FFTProcessor::updateScalingFactor()
 {
-    if (scaling == FFTScaling::none)
+    if (scaling == FFTScaling::unitary)
+        scalingFactor = 1.0f / std::sqrt (static_cast<float> (fftSize));
+
+    else if (scaling == FFTScaling::asymmetric)
+        scalingFactor = 1.0f / static_cast<float> (fftSize);
+
+    else
+        scalingFactor = 1.0f;
+}
+
+void FFTProcessor::applyScaling (float* data, int numElements, bool isForward) const
+{
+    if (scaling == FFTScaling::none || (scaling == FFTScaling::asymmetric && ! isForward))
         return;
 
-    float scale = 1.0f;
-
-    if (scaling == FFTScaling::unitary)
-    {
-        scale = 1.0f / std::sqrt (static_cast<float> (fftSize));
-    }
-    else if (scaling == FFTScaling::asymmetric && ! isForward)
-    {
-        scale = 1.0f / static_cast<float> (fftSize);
-    }
-
-    if (scale != 1.0f)
-        FloatVectorOperations::multiply (data, scale, numElements);
+    FloatVectorOperations::multiply (data, scalingFactor, numElements);
 }
 
 } // namespace yup

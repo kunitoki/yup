@@ -48,27 +48,8 @@
 
 #include "yup_audio_basics.h"
 
-#if YUP_USE_SSE_INTRINSICS
-#include <emmintrin.h>
-#endif
-
 #if YUP_MAC || YUP_IOS
-#ifndef YUP_USE_VDSP_FRAMEWORK
-#define YUP_USE_VDSP_FRAMEWORK 1
-#endif
-
-#if YUP_USE_VDSP_FRAMEWORK
-#include <Accelerate/Accelerate.h>
-#endif
-
 #include "native/yup_AudioWorkgroup_apple.h"
-
-#elif YUP_USE_VDSP_FRAMEWORK
-#undef YUP_USE_VDSP_FRAMEWORK
-#endif
-
-#if YUP_USE_ARM_NEON
-#include <arm_neon.h>
 #endif
 
 #include "buffers/yup_FloatVectorOperations.cpp"
