@@ -227,7 +227,7 @@ public:
             return;
     }
 
-    Optional<PositionInfo> getPosition() const override
+    std::optional<PositionInfo> getPosition() const override
     {
         if (process.transport == nullptr)
             return {};

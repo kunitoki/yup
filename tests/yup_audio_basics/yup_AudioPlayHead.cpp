@@ -31,7 +31,7 @@ namespace
 class TestAudioPlayHead : public AudioPlayHead
 {
 public:
-    Optional<PositionInfo> getPosition() const override
+    std::optional<PositionInfo> getPosition() const override
     {
         return testPosition;
     }
@@ -43,11 +43,11 @@ public:
 
     void clearTestPosition()
     {
-        testPosition = nullopt;
+        testPosition = std::nullopt;
     }
 
 private:
-    Optional<PositionInfo> testPosition;
+    std::optional<PositionInfo> testPosition;
 };
 } // namespace
 
@@ -239,18 +239,18 @@ TEST_F (AudioPlayHeadTests, PositionInfoGettersReturnNulloptByDefault)
 {
     AudioPlayHead::PositionInfo info;
 
-    EXPECT_FALSE (info.getTimeInSamples().hasValue());
-    EXPECT_FALSE (info.getTimeInSeconds().hasValue());
-    EXPECT_FALSE (info.getBpm().hasValue());
-    EXPECT_FALSE (info.getTimeSignature().hasValue());
-    EXPECT_FALSE (info.getLoopPoints().hasValue());
-    EXPECT_FALSE (info.getBarCount().hasValue());
-    EXPECT_FALSE (info.getPpqPositionOfLastBarStart().hasValue());
-    EXPECT_FALSE (info.getFrameRate().hasValue());
-    EXPECT_FALSE (info.getPpqPosition().hasValue());
-    EXPECT_FALSE (info.getEditOriginTime().hasValue());
-    EXPECT_FALSE (info.getHostTimeNs().hasValue());
-    EXPECT_FALSE (info.getContinuousTimeInSamples().hasValue());
+    EXPECT_FALSE (info.getTimeInSamples().has_value());
+    EXPECT_FALSE (info.getTimeInSeconds().has_value());
+    EXPECT_FALSE (info.getBpm().has_value());
+    EXPECT_FALSE (info.getTimeSignature().has_value());
+    EXPECT_FALSE (info.getLoopPoints().has_value());
+    EXPECT_FALSE (info.getBarCount().has_value());
+    EXPECT_FALSE (info.getPpqPositionOfLastBarStart().has_value());
+    EXPECT_FALSE (info.getFrameRate().has_value());
+    EXPECT_FALSE (info.getPpqPosition().has_value());
+    EXPECT_FALSE (info.getEditOriginTime().has_value());
+    EXPECT_FALSE (info.getHostTimeNs().has_value());
+    EXPECT_FALSE (info.getContinuousTimeInSamples().has_value());
 
     // Boolean flags should default to false
     EXPECT_FALSE (info.getIsPlaying());
@@ -264,18 +264,18 @@ TEST_F (AudioPlayHeadTests, PositionInfoSettersAndGetters)
 
     // Test setTimeInSamples/getTimeInSamples
     info.setTimeInSamples (1000);
-    EXPECT_TRUE (info.getTimeInSamples().hasValue());
+    EXPECT_TRUE (info.getTimeInSamples().has_value());
     EXPECT_EQ (1000, *info.getTimeInSamples());
 
     // Test setBpm/getBpm
     info.setBpm (120.0);
-    EXPECT_TRUE (info.getBpm().hasValue());
+    EXPECT_TRUE (info.getBpm().has_value());
     EXPECT_EQ (120.0, *info.getBpm());
 
     // Test setTimeSignature/getTimeSignature
     AudioPlayHead::TimeSignature sig { 3, 4 };
     info.setTimeSignature (sig);
-    EXPECT_TRUE (info.getTimeSignature().hasValue());
+    EXPECT_TRUE (info.getTimeSignature().has_value());
     EXPECT_EQ (sig, *info.getTimeSignature());
 
     // Test boolean flags
@@ -294,18 +294,18 @@ TEST_F (AudioPlayHeadTests, PositionInfoSetOptionalValues)
     AudioPlayHead::PositionInfo info;
 
     // Set values using Optional
-    info.setTimeInSamples (makeOptional<int64_t> (2000));
-    EXPECT_TRUE (info.getTimeInSamples().hasValue());
+    info.setTimeInSamples (std::optional<int64_t> (2000));
+    EXPECT_TRUE (info.getTimeInSamples().has_value());
     EXPECT_EQ (2000, *info.getTimeInSamples());
 
     // Clear values using nullopt
-    info.setTimeInSamples (nullopt);
-    EXPECT_FALSE (info.getTimeInSamples().hasValue());
+    info.setTimeInSamples (std::nullopt);
+    EXPECT_FALSE (info.getTimeInSamples().has_value());
 
     // Test with FrameRate
     AudioPlayHead::FrameRate rate (AudioPlayHead::FrameRateType::fps30);
     info.setFrameRate (rate);
-    EXPECT_TRUE (info.getFrameRate().hasValue());
+    EXPECT_TRUE (info.getFrameRate().has_value());
     EXPECT_EQ (rate, *info.getFrameRate());
 }
 
@@ -330,7 +330,7 @@ TEST_F (AudioPlayHeadTests, PlayHeadPositionReturnsNulloptByDefault)
 {
     playHead->clearTestPosition();
     auto position = playHead->getPosition();
-    EXPECT_FALSE (position.hasValue());
+    EXPECT_FALSE (position.has_value());
 }
 
 TEST_F (AudioPlayHeadTests, PlayHeadCanReturnPositionInfo)
@@ -343,6 +343,6 @@ TEST_F (AudioPlayHeadTests, PlayHeadCanReturnPositionInfo)
     playHead->setTestPosition (testInfo);
 
     auto position = playHead->getPosition();
-    EXPECT_TRUE (position.hasValue());
+    EXPECT_TRUE (position.has_value());
     EXPECT_EQ (testInfo, *position);
 }

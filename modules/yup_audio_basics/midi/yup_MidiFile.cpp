@@ -79,7 +79,7 @@ struct ReadTrait<uint16>
 };
 
 template <typename Integral>
-Optional<Integral> tryRead (const uint8*& data, size_t& remaining)
+std::optional<Integral> tryRead (const uint8*& data, size_t& remaining)
 {
     using Trait = ReadTrait<Integral>;
     constexpr auto size = sizeof (Integral);
@@ -87,7 +87,7 @@ Optional<Integral> tryRead (const uint8*& data, size_t& remaining)
     if (remaining < size)
         return {};
 
-    const Optional<Integral> result { Trait::read (data) };
+    const std::optional<Integral> result { Trait::read (data) };
 
     data += size;
     remaining -= size;
@@ -103,15 +103,15 @@ struct HeaderDetails
     short numberOfTracks = 0;
 };
 
-static Optional<HeaderDetails> parseMidiHeader (const uint8* const initialData,
-                                                const size_t maxSize)
+static std::optional<HeaderDetails> parseMidiHeader (const uint8* const initialData,
+                                                     const size_t maxSize)
 {
     auto* data = initialData;
     auto remaining = maxSize;
 
     auto ch = tryRead<uint32> (data, remaining);
 
-    if (! ch.hasValue())
+    if (! ch.has_value())
         return {};
 
     if (*ch != ByteOrder::bigEndianInt ("MThd"))
@@ -124,7 +124,7 @@ static Optional<HeaderDetails> parseMidiHeader (const uint8* const initialData,
             {
                 ch = tryRead<uint32> (data, remaining);
 
-                if (! ch.hasValue())
+                if (! ch.has_value())
                     return {};
 
                 if (*ch == ByteOrder::bigEndianInt ("MThd"))
@@ -141,22 +141,22 @@ static Optional<HeaderDetails> parseMidiHeader (const uint8* const initialData,
 
     const auto bytesRemaining = tryRead<uint32> (data, remaining);
 
-    if (! bytesRemaining.hasValue() || *bytesRemaining > remaining)
+    if (! bytesRemaining.has_value() || *bytesRemaining > remaining)
         return {};
 
     const auto optFileType = tryRead<uint16> (data, remaining);
 
-    if (! optFileType.hasValue() || 2 < *optFileType)
+    if (! optFileType.has_value() || 2 < *optFileType)
         return {};
 
     const auto optNumTracks = tryRead<uint16> (data, remaining);
 
-    if (! optNumTracks.hasValue() || (*optFileType == 0 && *optNumTracks != 1))
+    if (! optNumTracks.has_value() || (*optFileType == 0 && *optNumTracks != 1))
         return {};
 
     const auto optTimeFormat = tryRead<uint16> (data, remaining);
 
-    if (! optTimeFormat.hasValue())
+    if (! optTimeFormat.has_value())
         return {};
 
     HeaderDetails result;
@@ -403,7 +403,7 @@ bool MidiFile::readFrom (InputStream& sourceStream,
 
     const auto optHeader = MidiFileHelpers::parseMidiHeader (d, size);
 
-    if (! optHeader.hasValue())
+    if (! optHeader.has_value())
         return false;
 
     const auto header = *optHeader;
@@ -416,12 +416,12 @@ bool MidiFile::readFrom (InputStream& sourceStream,
     {
         const auto optChunkType = MidiFileHelpers::tryRead<uint32> (d, size);
 
-        if (! optChunkType.hasValue())
+        if (! optChunkType.has_value())
             return false;
 
         const auto optChunkSize = MidiFileHelpers::tryRead<uint32> (d, size);
 
-        if (! optChunkSize.hasValue())
+        if (! optChunkSize.has_value())
             return false;
 
         const auto chunkSize = *optChunkSize;

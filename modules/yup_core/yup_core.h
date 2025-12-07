@@ -276,7 +276,6 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "memory/yup_ReferenceCountedObject.h"
 #include "memory/yup_ScopedPointer.h"
 #include "memory/yup_OptionalScopedPointer.h"
-#include "containers/yup_Optional.h"
 #include "containers/yup_Enumerate.h"
 #include "containers/yup_ScopedValueSetter.h"
 #include "memory/yup_Singleton.h"

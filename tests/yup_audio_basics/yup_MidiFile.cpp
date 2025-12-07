@@ -52,7 +52,7 @@ void writeBytes (OutputStream& os, const std::vector<uint8>& bytes)
 }
 
 template <typename Fn>
-Optional<MidiFile> parseFile (Fn&& fn)
+std::optional<MidiFile> parseFile (Fn&& fn)
 {
     MemoryOutputStream os;
     fn (os);
@@ -525,7 +525,7 @@ TEST_F (MidiFileTest, ReadTrackRespectsRunningStatus)
         writeBytes (os, { 0, 0xff, 0x2f, 0 });
     });
 
-    ASSERT_TRUE (file.hasValue());
+    ASSERT_TRUE (file.has_value());
     EXPECT_EQ (file->getNumTracks(), 1);
 
     auto* track = file->getTrack (0);
@@ -543,7 +543,7 @@ TEST_F (MidiFileTest, HeaderParsingWorks)
     {
         // Empty input
         const auto file = parseFile ([] (OutputStream&) {});
-        EXPECT_FALSE (file.hasValue());
+        EXPECT_FALSE (file.has_value());
     }
 
     {
@@ -552,7 +552,7 @@ TEST_F (MidiFileTest, HeaderParsingWorks)
         {
             writeBytes (os, { 0xff });
         });
-        EXPECT_FALSE (file.hasValue());
+        EXPECT_FALSE (file.has_value());
     }
 
     {
@@ -563,7 +563,7 @@ TEST_F (MidiFileTest, HeaderParsingWorks)
             writeBytes (os, { 'M', 'T', 'r', 'k', 0, 0, 0, 4, 0, 0xff, 0x2f, 0 });
         });
 
-        EXPECT_TRUE (file.hasValue());
+        EXPECT_TRUE (file.has_value());
         EXPECT_EQ (file->getTimeFormat(), 96);
         EXPECT_EQ (file->getNumTracks(), 1);
     }
