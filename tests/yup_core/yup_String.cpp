@@ -1081,3 +1081,289 @@ TEST_F (StringTests, EdgeCasesAndBoundaryConditions)
     EXPECT_GT (large_num.length(), 0);
     EXPECT_EQ (large_num.getLargeIntValue(), std::numeric_limits<long long>::max());
 }
+
+TEST_F (StringTests, CharPointerUTF16ConstructorWithMaxChars)
+{
+    String original ("Hello World Test String");
+    CharPointer_UTF16 ptr (original.toUTF16());
+
+    String s (ptr, 5);
+    EXPECT_EQ (s, "Hello");
+}
+
+TEST_F (StringTests, CharPointerUTF32ConstructorWithMaxChars)
+{
+    String original ("Hello World Test String");
+    CharPointer_UTF32 ptr (original.toUTF32());
+
+    String s (ptr, 5);
+    EXPECT_EQ (s, "Hello");
+}
+
+TEST_F (StringTests, CharPointerUTF16ConstructorWithRange)
+{
+    String original ("Hello World");
+    CharPointer_UTF16 start (original.toUTF16());
+    CharPointer_UTF16 end = start + 5;
+
+    String s (start, end);
+    EXPECT_EQ (s, "Hello");
+}
+
+TEST_F (StringTests, CharPointerUTF32ConstructorWithRange)
+{
+    String original ("Hello World");
+    CharPointer_UTF32 start (original.toUTF32());
+    CharPointer_UTF32 end = start + 5;
+
+    String s (start, end);
+    EXPECT_EQ (s, "Hello");
+}
+
+TEST_F (StringTests, UnsignedShortConstructor)
+{
+    unsigned short num = 12345;
+    String s (num);
+    EXPECT_EQ (s, "12345");
+    EXPECT_EQ (s.getIntValue(), 12345);
+}
+
+TEST_F (StringTests, FloatConstructorWithDecimalPlaces)
+{
+    String s1 (3.14159f, 2, false);
+    EXPECT_TRUE (s1.startsWith ("3.14"));
+
+    String s2 (1234.5678f, 3, false);
+    EXPECT_TRUE (s2.contains ("1234"));
+    EXPECT_TRUE (s2.contains ("."));
+}
+
+TEST_F (StringTests, FloatConstructorWithScientificNotation)
+{
+    String s (0.00012345f, 2, true);
+    EXPECT_TRUE (s.containsIgnoreCase ("e"));
+}
+
+TEST_F (StringTests, ComparisonWithWideCharPointer)
+{
+    String s1 (L"test");
+    const wchar_t* s2 = L"test";
+    const wchar_t* s3 = L"different";
+
+    EXPECT_TRUE (s1 == s2);
+    EXPECT_FALSE (s1 == s3);
+    EXPECT_FALSE (s1 != s2);
+    EXPECT_TRUE (s1 != s3);
+}
+
+TEST_F (StringTests, ComparisonWithCharPointerUTF8)
+{
+    String s1 ("hello");
+    CharPointer_UTF8 s2 ("hello");
+    CharPointer_UTF8 s3 ("world");
+
+    EXPECT_TRUE (s1 == s2);
+    EXPECT_FALSE (s1 == s3);
+    EXPECT_FALSE (s1 != s2);
+    EXPECT_TRUE (s1 != s3);
+}
+
+TEST_F (StringTests, ComparisonWithCharPointerUTF16)
+{
+    String s1 ("hello");
+    String s2Str ("hello");
+    String s3Str ("world");
+    CharPointer_UTF16 s2 (s2Str.toUTF16());
+    CharPointer_UTF16 s3 (s3Str.toUTF16());
+
+    EXPECT_TRUE (s1 == s2);
+    EXPECT_FALSE (s1 == s3);
+    EXPECT_FALSE (s1 != s2);
+    EXPECT_TRUE (s1 != s3);
+}
+
+TEST_F (StringTests, ComparisonWithCharPointerUTF32)
+{
+    String s1 ("hello");
+    String s2Str ("hello");
+    String s3Str ("world");
+    CharPointer_UTF32 s2 (s2Str.toUTF32());
+    CharPointer_UTF32 s3 (s3Str.toUTF32());
+
+    EXPECT_TRUE (s1 == s2);
+    EXPECT_FALSE (s1 == s3);
+    EXPECT_FALSE (s1 != s2);
+    EXPECT_TRUE (s1 != s3);
+}
+
+TEST_F (StringTests, EqualsIgnoreCaseWithWideChar)
+{
+    String s1 (L"Hello");
+    const wchar_t* s2 = L"HELLO";
+    const wchar_t* s3 = L"world";
+
+    EXPECT_TRUE (s1.equalsIgnoreCase (s2));
+    EXPECT_FALSE (s1.equalsIgnoreCase (s3));
+}
+
+TEST_F (StringTests, AppendLongNumber)
+{
+    String s ("Value: ");
+    long num = 123456789L;
+    s += num;
+
+    EXPECT_TRUE (s.contains ("123456789"));
+}
+
+TEST_F (StringTests, AppendUInt64Number)
+{
+    String s ("Value: ");
+    uint64 num = 9876543210ULL;
+    s += num;
+
+    EXPECT_TRUE (s.contains ("9876543210"));
+}
+
+TEST_F (StringTests, AddWideCharPointerToString)
+{
+    const wchar_t* s1 = L"Hello ";
+    String s2 ("World");
+    String result = s1 + s2;
+
+    EXPECT_EQ (result, "Hello World");
+}
+
+TEST_F (StringTests, AddCharToString)
+{
+    char c = 'X';
+    String s ("Test");
+    String result = c + s;
+
+    EXPECT_TRUE (result.startsWith ("X"));
+    EXPECT_TRUE (result.endsWith ("Test"));
+}
+
+TEST_F (StringTests, AddWideCharToString)
+{
+    wchar_t c = L'Y';
+    String s ("Test");
+    String result = c + s;
+
+    EXPECT_TRUE (result.startsWith ("Y"));
+    EXPECT_TRUE (result.endsWith ("Test"));
+}
+
+TEST_F (StringTests, AddStdStringToString)
+{
+    String s1 ("Hello ");
+    std::string s2 = "World";
+    String result = s1 + s2;
+
+    EXPECT_EQ (result, "Hello World");
+}
+
+TEST_F (StringTests, StreamWideCharToString)
+{
+    String s;
+    wchar_t c = L'A';
+    s << c;
+
+    EXPECT_EQ (s, "A");
+}
+
+TEST_F (StringTests, StreamLongToString)
+{
+    String s ("Value: ");
+    long num = 42L;
+    s << num;
+
+    EXPECT_TRUE (s.endsWith ("42"));
+}
+
+TEST_F (StringTests, StreamDoubleToString)
+{
+    String s ("Pi: ");
+    double num = 3.14;
+    s << num;
+
+    EXPECT_TRUE (s.contains ("3.14"));
+}
+
+TEST_F (StringTests, QuotedWithEmptyString)
+{
+    String s;
+    String quoted = s.quoted ('"');
+
+    EXPECT_EQ (quoted, "\"\"");
+}
+
+TEST_F (StringTests, RetainCharactersEmpty)
+{
+    String s;
+    String result = s.retainCharacters ("abc");
+
+    EXPECT_TRUE (result.isEmpty());
+}
+
+TEST_F (StringTests, RemoveCharactersEmpty)
+{
+    String s;
+    String result = s.removeCharacters ("abc");
+
+    EXPECT_TRUE (result.isEmpty());
+}
+
+TEST_F (StringTests, ContainsAnyOfReturnsFalse)
+{
+    String s ("hello");
+    EXPECT_FALSE (s.containsAnyOf ("xyz"));
+}
+
+TEST_F (StringTests, FormattedRawBasic)
+{
+    String result = String::formatted ("Test %d %s", 42, "hello");
+
+    EXPECT_TRUE (result.contains ("42"));
+    EXPECT_TRUE (result.contains ("hello"));
+}
+
+TEST_F (StringTests, ToHexStringWithZeroSize)
+{
+    const char data[] = "test";
+    String hex = String::toHexString (data, 0, 0);
+
+    EXPECT_TRUE (hex.isEmpty());
+}
+
+TEST_F (StringTests, ToHexStringWithNegativeSize)
+{
+    const char data[] = "test";
+    String hex = String::toHexString (data, -5, 0);
+
+    EXPECT_TRUE (hex.isEmpty());
+}
+
+TEST_F (StringTests, IndentLinesEmpty)
+{
+    String s;
+    String indented = s.indentLines ("  ", false);
+
+    EXPECT_TRUE (indented.isEmpty());
+}
+
+TEST_F (StringTests, DedentLinesEmpty)
+{
+    String s;
+    String dedented = s.dedentLines();
+
+    EXPECT_TRUE (dedented.isEmpty());
+}
+
+TEST_F (StringTests, CompareNaturalWithLeadingZeros)
+{
+    String s1 ("file001");
+    String s2 ("file002");
+
+    EXPECT_LT (s1.compareNatural (s2, true), 0);
+    EXPECT_GT (s2.compareNatural (s1, true), 0);
+}
