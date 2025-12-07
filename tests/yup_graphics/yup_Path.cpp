@@ -550,3 +550,435 @@ TEST (PathTests, ScaleToFitPractical)
     EXPECT_NEAR (b.getWidth(), 100.0f, tol);
     EXPECT_NEAR (b.getHeight(), 50.0f, tol);
 }
+
+// ==============================================================================
+// Tests for uncovered methods
+// ==============================================================================
+
+TEST (PathTests, ConstructorWithPoint)
+{
+    Point<float> p (10.0f, 20.0f);
+    Path path (p);
+    EXPECT_GT (path.size(), 0);
+}
+
+TEST (PathTests, QuadToWithPointParameter)
+{
+    Path p;
+    p.moveTo (0, 0);
+    Point<float> controlPoint (5, 5);
+    p.quadTo (controlPoint, 10, 0);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, CubicToWithPointParameter)
+{
+    Path p;
+    p.moveTo (0, 0);
+    Point<float> controlPoint1 (3, 5);
+    p.cubicTo (controlPoint1, 7, 5, 10, 0);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, CreateCopy)
+{
+    Path p1;
+    p1.addRectangle (0, 0, 10, 10);
+    p1.addEllipse (5, 5, 15, 15);
+
+    Path p2 = p1.createCopy();
+
+    EXPECT_EQ (p1.size(), p2.size());
+    expectRectNear (p1.getBounds(), p2.getBounds());
+}
+
+TEST (PathTests, CreateCopyEmpty)
+{
+    Path p1;
+    Path p2 = p1.createCopy();
+
+    EXPECT_EQ (p1.size(), p2.size());
+    EXPECT_TRUE (p2.getBounds().isEmpty());
+}
+
+TEST (PathTests, IteratorPostfixIncrement)
+{
+    Path p;
+    p.addRectangle (0, 0, 10, 10);
+
+    auto it = p.begin();
+    auto end = p.end();
+    int count = 0;
+
+    while (it != end)
+    {
+        it++; // Postfix increment
+        ++count;
+    }
+
+    EXPECT_GT (count, 0);
+}
+
+TEST (PathTests, FromStringQuadraticBezierAbsolute)
+{
+    Path p;
+    bool ok = p.fromString ("M 10 80 Q 52.5 10, 95 80");
+    EXPECT_TRUE (ok);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, FromStringQuadraticBezierRelative)
+{
+    Path p;
+    bool ok = p.fromString ("M 10 80 q 42.5 -70, 85 0");
+    EXPECT_TRUE (ok);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, FromStringSmoothQuadraticAbsolute)
+{
+    Path p;
+    bool ok = p.fromString ("M 10 80 Q 52.5 10, 95 80 T 180 80");
+    EXPECT_TRUE (ok);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, FromStringSmoothQuadraticRelative)
+{
+    Path p;
+    bool ok = p.fromString ("M 10 80 Q 52.5 10, 95 80 t 85 0");
+    EXPECT_TRUE (ok);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, FromStringCubicBezierAbsolute)
+{
+    Path p;
+    bool ok = p.fromString ("M 10 10 C 20 20, 40 20, 50 10");
+    EXPECT_TRUE (ok);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, FromStringCubicBezierRelative)
+{
+    Path p;
+    bool ok = p.fromString ("M 10 10 c 10 10, 30 10, 40 0");
+    EXPECT_TRUE (ok);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, FromStringSmoothCubicAbsolute)
+{
+    Path p;
+    bool ok = p.fromString ("M 10 80 C 40 10, 65 10, 95 80 S 150 150, 180 80");
+    EXPECT_TRUE (ok);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, FromStringSmoothCubicRelative)
+{
+    Path p;
+    bool ok = p.fromString ("M 10 80 C 40 10, 65 10, 95 80 s 55 70, 85 0");
+    EXPECT_TRUE (ok);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, FromStringEllipticalArcAbsolute)
+{
+    Path p;
+    bool ok = p.fromString ("M 10 20 A 20 20 0 0 1 50 20");
+    EXPECT_TRUE (ok);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, FromStringEllipticalArcRelative)
+{
+    Path p;
+    bool ok = p.fromString ("M 10 20 a 20 20 0 0 1 40 0");
+    EXPECT_TRUE (ok);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, FromStringEllipticalArcLargeArc)
+{
+    Path p;
+    bool ok = p.fromString ("M 10 20 A 30 30 0 1 0 50 20");
+    EXPECT_TRUE (ok);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, FromStringEllipticalArcSweep)
+{
+    Path p;
+    bool ok = p.fromString ("M 10 20 A 30 30 45 0 1 50 20");
+    EXPECT_TRUE (ok);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, FromStringEllipticalArcDegenerateToLine)
+{
+    Path p;
+    bool ok = p.fromString ("M 10 20 A 0 0 0 0 1 50 20");
+    EXPECT_TRUE (ok);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, FromStringComplexPath)
+{
+    Path p;
+    bool ok = p.fromString ("M 10 10 L 20 20 Q 30 30, 40 20 C 50 10, 60 10, 70 20 S 90 40, 100 20 T 120 20 A 10 10 0 0 1 140 20 Z");
+    EXPECT_TRUE (ok);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, GetPointAlongPathQuadratic)
+{
+    Path p;
+    p.moveTo (0, 0).quadTo (10, 10, 5, 5).close();
+
+    Point<float> start = p.getPointAlongPath (0.0f);
+    Point<float> mid = p.getPointAlongPath (0.5f);
+    Point<float> end = p.getPointAlongPath (1.0f);
+
+    expectPointNear (start, Point<float> (0, 0));
+    EXPECT_TRUE (mid.getX() >= 0 && mid.getX() <= 10);
+    EXPECT_TRUE (mid.getY() >= 0 && mid.getY() <= 10);
+}
+
+TEST (PathTests, GetPointAlongPathCubic)
+{
+    Path p;
+    p.moveTo (0, 0).cubicTo (10, 0, 5, 5, 15, 5).close();
+
+    Point<float> start = p.getPointAlongPath (0.0f);
+    Point<float> mid = p.getPointAlongPath (0.5f);
+    Point<float> end = p.getPointAlongPath (1.0f);
+
+    expectPointNear (start, Point<float> (0, 0));
+    EXPECT_TRUE (mid.getX() >= 0 && mid.getX() <= 15);
+    EXPECT_TRUE (mid.getY() >= 0 && mid.getY() <= 5);
+}
+
+TEST (PathTests, GetPointAlongPathMixedSegments)
+{
+    Path p;
+    p.moveTo (0, 0)
+        .lineTo (10, 0)
+        .quadTo (15, 5, 10, 10)
+        .cubicTo (5, 15, 0, 10, 0, 0)
+        .close();
+
+    Point<float> p1 = p.getPointAlongPath (0.0f);
+    Point<float> p2 = p.getPointAlongPath (0.25f);
+    Point<float> p3 = p.getPointAlongPath (0.5f);
+    Point<float> p4 = p.getPointAlongPath (0.75f);
+    Point<float> p5 = p.getPointAlongPath (1.0f);
+
+    expectPointNear (p1, Point<float> (0, 0));
+    EXPECT_TRUE (p2.getX() >= 0 && p2.getX() <= 15);
+    EXPECT_TRUE (p3.getX() >= 0 && p3.getX() <= 15);
+    EXPECT_TRUE (p4.getX() >= 0 && p4.getX() <= 15);
+}
+
+TEST (PathTests, CreateStrokePolygonLine)
+{
+    Path p;
+    p.moveTo (0, 0).lineTo (10, 0);
+
+    Path stroke = p.createStrokePolygon (2.0f);
+    EXPECT_FALSE (stroke.getBounds().isEmpty());
+    EXPECT_GT (stroke.size(), 0);
+}
+
+TEST (PathTests, CreateStrokePolygonQuadratic)
+{
+    Path p;
+    p.moveTo (0, 0).quadTo (10, 10, 5, 5);
+
+    Path stroke = p.createStrokePolygon (2.0f);
+    EXPECT_FALSE (stroke.getBounds().isEmpty());
+    EXPECT_GT (stroke.size(), 0);
+}
+
+TEST (PathTests, CreateStrokePolygonCubic)
+{
+    Path p;
+    p.moveTo (0, 0).cubicTo (10, 0, 5, 5, 15, 5);
+
+    Path stroke = p.createStrokePolygon (2.0f);
+    EXPECT_FALSE (stroke.getBounds().isEmpty());
+    EXPECT_GT (stroke.size(), 0);
+}
+
+TEST (PathTests, CreateStrokePolygonClosedPath)
+{
+    Path p;
+    p.moveTo (0, 0).lineTo (10, 0).lineTo (10, 10).lineTo (0, 10).close();
+
+    Path stroke = p.createStrokePolygon (2.0f);
+    EXPECT_FALSE (stroke.getBounds().isEmpty());
+    EXPECT_GT (stroke.size(), 0);
+}
+
+TEST (PathTests, CreateStrokePolygonMixedCommands)
+{
+    Path p;
+    p.moveTo (0, 0)
+        .lineTo (10, 0)
+        .quadTo (15, 5, 10, 10)
+        .cubicTo (5, 15, 0, 10, 0, 0)
+        .close();
+
+    Path stroke = p.createStrokePolygon (2.0f);
+    EXPECT_FALSE (stroke.getBounds().isEmpty());
+    EXPECT_GT (stroke.size(), 0);
+}
+
+TEST (PathTests, AddBubbleArrowTop)
+{
+    Path p;
+    Rectangle<float> body (50, 50, 100, 50);
+    Rectangle<float> max (0, 0, 200, 200);
+    Point<float> tip (100, 10);
+
+    p.addBubble (body, max, tip, 5, 10);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, AddBubbleArrowBottom)
+{
+    Path p;
+    Rectangle<float> body (50, 50, 100, 50);
+    Rectangle<float> max (0, 0, 200, 200);
+    Point<float> tip (100, 180);
+
+    p.addBubble (body, max, tip, 5, 10);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, AddBubbleArrowLeft)
+{
+    Path p;
+    Rectangle<float> body (50, 50, 100, 50);
+    Rectangle<float> max (0, 0, 200, 200);
+    Point<float> tip (10, 75);
+
+    p.addBubble (body, max, tip, 5, 10);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, AddBubbleArrowRight)
+{
+    Path p;
+    Rectangle<float> body (50, 50, 100, 50);
+    Rectangle<float> max (0, 0, 200, 200);
+    Point<float> tip (180, 75);
+
+    p.addBubble (body, max, tip, 5, 10);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, AddBubbleArrowTopLeft)
+{
+    Path p;
+    Rectangle<float> body (50, 50, 100, 50);
+    Rectangle<float> max (0, 0, 200, 200);
+    Point<float> tip (30, 30);
+
+    p.addBubble (body, max, tip, 5, 10);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, AddBubbleArrowTopRight)
+{
+    Path p;
+    Rectangle<float> body (50, 50, 100, 50);
+    Rectangle<float> max (0, 0, 200, 200);
+    Point<float> tip (170, 30);
+
+    p.addBubble (body, max, tip, 5, 10);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, AddBubbleArrowBottomLeft)
+{
+    Path p;
+    Rectangle<float> body (50, 50, 100, 50);
+    Rectangle<float> max (0, 0, 200, 200);
+    Point<float> tip (30, 170);
+
+    p.addBubble (body, max, tip, 5, 10);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, AddBubbleArrowBottomRight)
+{
+    Path p;
+    Rectangle<float> body (50, 50, 100, 50);
+    Rectangle<float> max (0, 0, 200, 200);
+    Point<float> tip (170, 170);
+
+    p.addBubble (body, max, tip, 5, 10);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, AppendPathWithTransformTranslation)
+{
+    Path p1;
+    p1.addRectangle (0, 0, 10, 10);
+
+    Path p2;
+    p2.addEllipse (0, 0, 5, 5);
+
+    AffineTransform t = AffineTransform::translation (20, 20);
+    p1.appendPath (p2, t);
+
+    Rectangle<float> bounds = p1.getBounds();
+    EXPECT_GE (bounds.getWidth(), 15.0f);
+}
+
+TEST (PathTests, AppendPathWithTransformScaling)
+{
+    Path p1;
+    p1.addRectangle (0, 0, 10, 10);
+
+    Path p2;
+    p2.addRectangle (0, 0, 5, 5);
+
+    AffineTransform t = AffineTransform::scaling (2.0f);
+    p1.appendPath (p2, t);
+
+    Rectangle<float> bounds = p1.getBounds();
+    EXPECT_GE (bounds.getWidth(), 10.0f);
+}
+
+TEST (PathTests, AppendPathWithTransformRotation)
+{
+    Path p1;
+    p1.addRectangle (0, 0, 10, 10);
+
+    Path p2;
+    p2.addRectangle (10, 0, 5, 5);
+
+    AffineTransform t = AffineTransform::rotation (MathConstants<float>::halfPi);
+    p1.appendPath (p2, t);
+
+    EXPECT_FALSE (p1.getBounds().isEmpty());
+}
+
+TEST (PathTests, AppendPathWithTransformComplex)
+{
+    Path p1;
+    p1.addRectangle (0, 0, 10, 10);
+
+    Path p2;
+    p2.addEllipse (0, 0, 8, 8);
+
+    AffineTransform t = AffineTransform::translation (10, 10)
+                            .scaled (1.5f)
+                            .rotated (MathConstants<float>::quarterPi);
+    p1.appendPath (p2, t);
+
+    EXPECT_FALSE (p1.getBounds().isEmpty());
+    EXPECT_GT (p1.size(), 0);
+}
