@@ -803,6 +803,9 @@ bool File::startAsProcess (const String& parameters, const StringPairArray& envi
 //==============================================================================
 std::unique_ptr<FileInputStream> File::createInputStream() const
 {
+    if (isDirectory())
+        return nullptr;
+
     auto fin = std::make_unique<FileInputStream> (*this);
 
     if (fin->openedOk())
@@ -813,6 +816,9 @@ std::unique_ptr<FileInputStream> File::createInputStream() const
 
 std::unique_ptr<FileOutputStream> File::createOutputStream (size_t bufferSize) const
 {
+    if (isDirectory())
+        return nullptr;
+
     auto fout = std::make_unique<FileOutputStream> (*this, bufferSize);
 
     if (fout->openedOk())

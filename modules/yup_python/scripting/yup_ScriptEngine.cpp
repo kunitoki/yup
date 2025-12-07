@@ -114,8 +114,8 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
         zip.uncompressTo (libFolder.getParentDirectory());
     }
 
-    for (auto entry : RangedDirectoryIterator (destinationFolder, true, "*", File::findFiles, File::FollowSymlinks::no))
-        YUP_DBG (entry.getFile().getFullPathName());
+    //for (auto entry : RangedDirectoryIterator (destinationFolder, true, "*", File::findFiles, File::FollowSymlinks::no))
+    //    YUP_DBG (entry.getFile().getFullPathName());
 
     PyPreConfig preconfig;
     PyPreConfig_InitIsolatedConfig (&preconfig);

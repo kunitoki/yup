@@ -617,62 +617,6 @@ TEST_F (URLTests, StaticUtilityMethods)
     EXPECT_EQ (unparsedUrl.toString (false), urlWithParams);
 }
 
-#if ! YUP_WASM
-TEST_F (URLTests, LocalFileStreams)
-{
-    URL fileUrl (testFile);
-
-    // Test input stream
-    if (auto inputStream = fileUrl.createInputStream (URL::InputStreamOptions (URL::ParameterHandling::inAddress)))
-    {
-        EXPECT_EQ (inputStream->getTotalLength(), testFile.getSize());
-
-        MemoryBlock readData;
-        inputStream->readIntoMemoryBlock (readData);
-        EXPECT_EQ (readData.toString(), "Test content");
-    }
-
-    // Test output stream
-    File tempFile = File::getSpecialLocation (File::tempDirectory).getChildFile ("test_output.txt");
-    URL outputUrl (tempFile);
-
-    if (auto outputStream = outputUrl.createOutputStream())
-    {
-        outputStream->writeText ("Test output", false, false, nullptr);
-        outputStream.reset();
-
-        EXPECT_TRUE (tempFile.existsAsFile());
-        EXPECT_EQ (tempFile.loadFileAsString(), "Test output");
-        tempFile.deleteFile();
-    }
-
-    // Test readEntireBinaryStream
-    MemoryBlock binaryData;
-    EXPECT_TRUE (fileUrl.readEntireBinaryStream (binaryData, false));
-    EXPECT_EQ (binaryData.toString(), "Test content");
-
-    // Test readEntireTextStream
-    String textData = fileUrl.readEntireTextStream (false);
-    EXPECT_EQ (textData, "Test content");
-
-    // Test readEntireXmlStream with XML content
-    File xmlFile = File::getSpecialLocation (File::tempDirectory).getChildFile ("test.xml");
-    xmlFile.replaceWithText ("<?xml version=\"1.0\"?><root><child attr=\"value\">content</child></root>");
-    URL xmlUrl (xmlFile);
-
-    if (auto xml = xmlUrl.readEntireXmlStream (false))
-    {
-        EXPECT_EQ (xml->getTagName(), "root");
-        if (auto child = xml->getChildByName ("child"))
-        {
-            EXPECT_EQ (child->getStringAttribute ("attr"), "value");
-            EXPECT_EQ (child->getAllSubText(), "content");
-        }
-    }
-    xmlFile.deleteFile();
-}
-#endif
-
 // Additional edge cases
 TEST_F (URLTests, EdgeCases)
 {
@@ -699,45 +643,6 @@ TEST_F (URLTests, EdgeCases)
     EXPECT_EQ (fullUrl.getParameterNames().size(), 2);
     EXPECT_EQ (fullUrl.getAnchorString(), "#section");
 }
-
-#if ! YUP_WASM
-TEST_F (URLTests, ReadEntireStreams)
-{
-    // Test with local file
-    URL fileUrl (testFile);
-
-    // readEntireBinaryStream
-    MemoryBlock binaryData;
-    bool success = fileUrl.readEntireBinaryStream (binaryData, false);
-    EXPECT_TRUE (success);
-    EXPECT_EQ (binaryData.getSize(), testFile.getSize());
-    EXPECT_EQ (String::fromUTF8 ((const char*) binaryData.getData(), (int) binaryData.getSize()), "Test content");
-
-    // readEntireTextStream
-    String textData = fileUrl.readEntireTextStream (false);
-    EXPECT_EQ (textData, "Test content");
-
-    // Test with POST flag
-    String textDataPost = fileUrl.readEntireTextStream (true);
-    EXPECT_EQ (textDataPost, "Test content");
-
-    // readEntireXmlStream with valid XML
-    File xmlFile = testDir.getChildFile ("test.xml");
-    xmlFile.replaceWithText ("<?xml version=\"1.0\"?><root><element>value</element></root>");
-    URL xmlUrl (xmlFile);
-
-    auto xmlDoc = xmlUrl.readEntireXmlStream (false);
-    EXPECT_NE (xmlDoc, nullptr);
-    if (xmlDoc != nullptr)
-    {
-        EXPECT_EQ (xmlDoc->getTagName(), "root");
-        auto* element = xmlDoc->getChildByName ("element");
-        EXPECT_NE (element, nullptr);
-        if (element != nullptr)
-            EXPECT_EQ (element->getAllSubText(), "value");
-    }
-}
-#endif
 
 TEST_F (URLTests, LaunchInDefaultBrowser)
 {
@@ -803,42 +708,6 @@ TEST_F (URLTests, DownloadTaskOptions)
     EXPECT_EQ (chained.listener, &listener);
     EXPECT_TRUE (chained.usePost);
 }
-
-#if ! YUP_WASM
-TEST_F (URLTests, DownloadTask)
-{
-    // Create a test file to serve as download source
-    File sourceFile = testDir.getChildFile ("source.txt");
-    sourceFile.replaceWithText ("Download content");
-
-    URL sourceUrl (sourceFile);
-    File targetFile = testDir.getChildFile ("downloaded.txt");
-
-    // Test basic download
-    URL::DownloadTaskOptions options;
-    auto task = sourceUrl.downloadToFile (targetFile, options);
-
-    if (task != nullptr)
-    {
-        // Wait for download to complete
-        int maxWait = 50; // 5 seconds max
-        while (! task->isFinished() && maxWait-- > 0)
-            Thread::sleep (100);
-
-        EXPECT_TRUE (task->isFinished());
-        EXPECT_FALSE (task->hadError());
-        EXPECT_GT (task->getTotalLength(), 0);
-        EXPECT_EQ (task->getLengthDownloaded(), task->getTotalLength());
-        EXPECT_EQ (task->getTargetLocation().getFullPathName(), targetFile.getFullPathName());
-
-        // Verify downloaded content
-        if (targetFile.existsAsFile())
-        {
-            EXPECT_EQ (targetFile.loadFileAsString(), "Download content");
-        }
-    }
-}
-#endif
 
 TEST_F (URLTests, URLWithComplexEscaping)
 {
@@ -1004,3 +873,130 @@ TEST_F (URLTests, DataURLs)
     URL imageUrl ("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==");
     EXPECT_TRUE (imageUrl.isWellFormed());
 }
+
+#if ! YUP_WASM
+TEST_F (URLTests, LocalFileStreams)
+{
+    URL fileUrl (testFile);
+
+    // Test input stream
+    if (auto inputStream = fileUrl.createInputStream (URL::InputStreamOptions (URL::ParameterHandling::inAddress)))
+    {
+        EXPECT_EQ (inputStream->getTotalLength(), testFile.getSize());
+
+        MemoryBlock readData;
+        inputStream->readIntoMemoryBlock (readData);
+        EXPECT_EQ (readData.toString(), "Test content");
+    }
+
+    // Test output stream
+    File tempFile = File::getSpecialLocation (File::tempDirectory).getChildFile ("test_output.txt");
+    URL outputUrl (tempFile);
+
+    if (auto outputStream = outputUrl.createOutputStream())
+    {
+        outputStream->writeText ("Test output", false, false, nullptr);
+        outputStream.reset();
+
+        EXPECT_TRUE (tempFile.existsAsFile());
+        EXPECT_EQ (tempFile.loadFileAsString(), "Test output");
+        tempFile.deleteFile();
+    }
+
+    // Test readEntireBinaryStream
+    MemoryBlock binaryData;
+    EXPECT_TRUE (fileUrl.readEntireBinaryStream (binaryData, false));
+    EXPECT_EQ (binaryData.toString(), "Test content");
+
+    // Test readEntireTextStream
+    String textData = fileUrl.readEntireTextStream (false);
+    EXPECT_EQ (textData, "Test content");
+
+    // Test readEntireXmlStream with XML content
+    File xmlFile = File::getSpecialLocation (File::tempDirectory).getChildFile ("test.xml");
+    xmlFile.replaceWithText ("<?xml version=\"1.0\"?><root><child attr=\"value\">content</child></root>");
+    URL xmlUrl (xmlFile);
+
+    if (auto xml = xmlUrl.readEntireXmlStream (false))
+    {
+        EXPECT_EQ (xml->getTagName(), "root");
+        if (auto child = xml->getChildByName ("child"))
+        {
+            EXPECT_EQ (child->getStringAttribute ("attr"), "value");
+            EXPECT_EQ (child->getAllSubText(), "content");
+        }
+    }
+    xmlFile.deleteFile();
+}
+
+TEST_F (URLTests, ReadEntireStreams)
+{
+    // Test with local file
+    URL fileUrl (testFile);
+
+    // readEntireBinaryStream
+    MemoryBlock binaryData;
+    bool success = fileUrl.readEntireBinaryStream (binaryData, false);
+    EXPECT_TRUE (success);
+    EXPECT_EQ (binaryData.getSize(), testFile.getSize());
+    EXPECT_EQ (String::fromUTF8 ((const char*) binaryData.getData(), (int) binaryData.getSize()), "Test content");
+
+    // readEntireTextStream
+    String textData = fileUrl.readEntireTextStream (false);
+    EXPECT_EQ (textData, "Test content");
+
+    // Test with POST flag
+    String textDataPost = fileUrl.readEntireTextStream (true);
+    EXPECT_EQ (textDataPost, "Test content");
+
+    // readEntireXmlStream with valid XML
+    File xmlFile = testDir.getChildFile ("test.xml");
+    xmlFile.replaceWithText ("<?xml version=\"1.0\"?><root><element>value</element></root>");
+    URL xmlUrl (xmlFile);
+
+    auto xmlDoc = xmlUrl.readEntireXmlStream (false);
+    EXPECT_NE (xmlDoc, nullptr);
+    if (xmlDoc != nullptr)
+    {
+        EXPECT_EQ (xmlDoc->getTagName(), "root");
+        auto* element = xmlDoc->getChildByName ("element");
+        EXPECT_NE (element, nullptr);
+        if (element != nullptr)
+            EXPECT_EQ (element->getAllSubText(), "value");
+    }
+}
+
+TEST_F (URLTests, DownloadTask)
+{
+    // Create a test file to serve as download source
+    File sourceFile = testDir.getChildFile ("source.txt");
+    sourceFile.replaceWithText ("Download content");
+
+    URL sourceUrl (sourceFile);
+    File targetFile = testDir.getChildFile ("downloaded.txt");
+
+    // Test basic download
+    URL::DownloadTaskOptions options;
+    auto task = sourceUrl.downloadToFile (targetFile, options);
+
+    if (task != nullptr)
+    {
+        // Wait for download to complete
+        int maxWait = 50; // 5 seconds max
+        while (! task->isFinished() && maxWait-- > 0)
+            Thread::sleep (100);
+
+        EXPECT_TRUE (task->isFinished());
+        EXPECT_FALSE (task->hadError());
+        EXPECT_GT (task->getTotalLength(), 0);
+        EXPECT_EQ (task->getLengthDownloaded(), task->getTotalLength());
+        EXPECT_EQ (task->getTargetLocation().getFullPathName(), targetFile.getFullPathName());
+
+        // Verify downloaded content
+        if (targetFile.existsAsFile())
+        {
+            EXPECT_EQ (targetFile.loadFileAsString(), "Download content");
+        }
+    }
+}
+#endif
