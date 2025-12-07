@@ -294,7 +294,7 @@ void Font::setAxisValues (std::initializer_list<AxisOption> axisOptions)
 
 Font Font::withAxisValues (std::initializer_list<AxisOption> axisOptions) const
 {
-    if (font == nullptr || axisOptions.size() == 0)
+    if (font == nullptr || axisOptions.size() == 0)
         return {};
 
     std::vector<rive::Font::Coord> coords;
