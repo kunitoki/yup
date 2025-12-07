@@ -897,9 +897,8 @@ TEST (JavascriptEngineTests, CallFunctionObject)
     engine.execute ("function getValue() { return this.value; }");
     var funcObject = engine.getRootObjectProperties()["getValue"];
 
-    var args[] = {};
     Result result = Result::fail ("wrong");
-    var returnValue = engine.callFunctionObject (scope, funcObject, var::NativeFunctionArgs (scope.get(), args, 0), &result);
+    var returnValue = engine.callFunctionObject (scope, funcObject, var::NativeFunctionArgs (scope.get()), &result);
 
     EXPECT_TRUE (result.wasOk());
     EXPECT_EQ (42, (int) returnValue);

@@ -64,6 +64,7 @@ public:
     */
     struct YUP_API NativeFunctionArgs
     {
+        NativeFunctionArgs (const var& thisObject) noexcept;
         NativeFunctionArgs (const var& thisObject, const var* args, int numArgs) noexcept;
 
         const var& thisObject;
