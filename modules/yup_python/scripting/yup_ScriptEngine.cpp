@@ -111,7 +111,7 @@ std::unique_ptr<PyConfig> ScriptEngine::prepareScriptingHome (
         auto mis = MemoryInputStream (mb.getData(), mb.getSize(), false);
 
         auto zip = ZipFile (mis);
-        zip.uncompressTo (libFolder.getParentDirectory());
+        zip.uncompressTo (destinationFolder);
     }
 
     //for (auto entry : RangedDirectoryIterator (destinationFolder, true, "*", File::findFiles, File::FollowSymlinks::no))

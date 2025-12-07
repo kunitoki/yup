@@ -26,7 +26,7 @@ function (yup_prepare_python_stdlib target_name python_tools_path output_variabl
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
-    set (default_ignored_library_patterns "lib2to3" "pydoc_data" "_xxtestfuzz*")
+    set (default_ignored_library_patterns "lib2to3")
 
     set (ignored_library_patterns ${default_ignored_library_patterns})
     list (APPEND ignored_library_patterns ${YUP_ARG_IGNORED_LIBRARY_PATTERNS})
@@ -45,7 +45,7 @@ function (yup_prepare_python_stdlib target_name python_tools_path output_variabl
 
         get_filename_component (python_root_path "${python_embed_env_SOURCE_DIR}" REALPATH)
     else()
-        get_filename_component (python_root_path "${Python_LIBRARY_DIRS}" REALPATH)
+        get_filename_component (python_root_path "${Python_LIBRARY_DIRS}/.." REALPATH)
     endif()
 
     _yup_message (STATUS "Executing python stdlib archive generator tool")
