@@ -31,7 +31,6 @@ env:
     libx11-dev libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev
     libxrandr-dev libxrender-dev libglu1-mesa-dev mesa-common-dev
   EM_VERSION: 3.1.45
-  EM_CACHE_FOLDER: "emsdk-cache"
 
 jobs:
   build_tests:
@@ -42,11 +41,17 @@ jobs:
         fetch-depth: 0
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - name: Cache emsdk
+      id: cache-emsdk
+      uses: actions/cache@v4
+      continue-on-error: true
+      with:
+        path: emsdk
+        key: emsdk-${{ env.EM_VERSION }}-${{ runner.os }}
     - name: Setup emsdk
       uses: mymindstorm/setup-emsdk@v14
       with:
         version: ${{ env.EM_VERSION }}
-        actions-cache-folder: ${{ env.EM_CACHE_FOLDER }}
     - name: Configure
       run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target yup_tests
@@ -64,11 +69,17 @@ jobs:
         fetch-depth: 0
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - name: Cache emsdk
+      id: cache-emsdk
+      uses: actions/cache@v4
+      continue-on-error: true
+      with:
+        path: emsdk
+        key: emsdk-${{ env.EM_VERSION }}-${{ runner.os }}
     - name: Setup emsdk
       uses: mymindstorm/setup-emsdk@v14
       with:
         version: ${{ env.EM_VERSION }}
-        actions-cache-folder: ${{ env.EM_CACHE_FOLDER }}
     - name: Configure
       run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_console
@@ -82,11 +93,17 @@ jobs:
         fetch-depth: 0
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - name: Cache emsdk
+      id: cache-emsdk
+      uses: actions/cache@v4
+      continue-on-error: true
+      with:
+        path: emsdk
+        key: emsdk-${{ env.EM_VERSION }}-${{ runner.os }}
     - name: Setup emsdk
       uses: mymindstorm/setup-emsdk@v14
       with:
         version: ${{ env.EM_VERSION }}
-        actions-cache-folder: ${{ env.EM_CACHE_FOLDER }}
     - name: Configure
       run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_app
@@ -100,11 +117,17 @@ jobs:
         fetch-depth: 0
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - name: Cache emsdk
+      id: cache-emsdk
+      uses: actions/cache@v4
+      continue-on-error: true
+      with:
+        path: emsdk
+        key: emsdk-${{ env.EM_VERSION }}-${{ runner.os }}
     - name: Setup emsdk
       uses: mymindstorm/setup-emsdk@v14
       with:
         version: ${{ env.EM_VERSION }}
-        actions-cache-folder: ${{ env.EM_CACHE_FOLDER }}
     - name: Configure
       run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_graphics
