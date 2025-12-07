@@ -178,9 +178,10 @@ Array<File> FileSearchPath::findChildFiles (int whatToLookFor, bool recurse, con
 int FileSearchPath::findChildFiles (Array<File>& results, int whatToLookFor, bool recurse, const String& wildcard) const
 {
     int total = 0;
+    auto followSymlinks = recurse ? File::FollowSymlinks::noCycles : File::FollowSymlinks::yes;
 
     for (auto& d : directories)
-        total += File (d).findChildFiles (results, whatToLookFor, recurse, wildcard);
+        total += File (d).findChildFiles (results, whatToLookFor, recurse, wildcard, followSymlinks);
 
     return total;
 }
