@@ -89,7 +89,7 @@ function (_yup_fetch_perfetto)
     FetchContent_MakeAvailable (Perfetto)
 
     add_library (perfetto STATIC)
-    target_compile_features (perfetto PUBLIC cxx_std_17)
+    target_compile_features (perfetto PUBLIC cxx_std_20)
 
     target_sources (perfetto
         PRIVATE "$<BUILD_INTERFACE:${perfetto_SOURCE_DIR}/sdk/perfetto.cc>"

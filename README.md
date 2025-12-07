@@ -102,7 +102,7 @@ YUP brings a suite of powerful features, including:
 
 ## Prerequisites
 Before building, ensure you have a:
-- C++17-compliant compiler
+- C++20-compliant compiler
 - CMake 3.28 or later
 
 
