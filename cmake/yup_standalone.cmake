@@ -35,7 +35,7 @@ function (yup_standalone_app)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
-    _yup_set_default (YUP_ARG_TARGET_CXX_STANDARD 17)
+    _yup_set_default (YUP_ARG_TARGET_CXX_STANDARD 20)
     _yup_set_default (YUP_ARG_TARGET_ICON "${CMAKE_SOURCE_DIR}/cmake/resources/app-icon.png")
 
     set (target_name "${YUP_ARG_TARGET_NAME}")

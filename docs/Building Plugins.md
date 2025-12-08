@@ -124,7 +124,7 @@ yup_audio_plugin (
     TARGET_IDE_GROUP "MyPlugin"
     TARGET_APP_ID "com.mycompany.${target_name}"
     TARGET_APP_NAMESPACE "com.mycompany"
-    TARGET_CXX_STANDARD 17
+    TARGET_CXX_STANDARD 20
     PLUGIN_ID "com.mycompany.MyPlugin"
     PLUGIN_NAME "MyPlugin"
     PLUGIN_VENDOR "com.mycompany"

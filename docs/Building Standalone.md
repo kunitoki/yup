@@ -110,7 +110,7 @@ yup_standalone_app (
     TARGET_IDE_GROUP "MyApp"
     TARGET_APP_ID "com.mycompany.${target_name}"
     TARGET_APP_NAMESPACE "com.mycompany"
-    TARGET_CXX_STANDARD 17
+    TARGET_CXX_STANDARD 20
     INITIAL_MEMORY 268435456  # 256MB initial memory
     MODULES
         yup_audio_devices
