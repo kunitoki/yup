@@ -30,7 +30,7 @@ env:
     libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfreetype6-dev
     libx11-dev libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev
     libxrandr-dev libxrender-dev libglu1-mesa-dev mesa-common-dev
-  EM_VERSION: 3.1.45
+  EM_VERSION: 4.0.21
 
 jobs:
   build_tests:

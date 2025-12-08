@@ -100,7 +100,7 @@ extern "C" yup::AudioProcessor* createPluginProcessor()
 Create a `CMakeLists.txt` file for your plugin:
 
 ```cmake
-cmake_minimum_required (VERSION 3.28)
+cmake_minimum_required (VERSION 3.31)
 
 set (target_name my_plugin)
 set (target_version "0.0.1")

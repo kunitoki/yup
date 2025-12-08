@@ -86,7 +86,7 @@ START_YUP_APPLICATION (MyApplication)
 Create a `CMakeLists.txt` file for your application:
 
 ```cmake
-cmake_minimum_required (VERSION 3.28)
+cmake_minimum_required (VERSION 3.31)
 
 set (target_name my_app)
 set (target_version "1.0.0")
