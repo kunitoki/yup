@@ -135,6 +135,14 @@ bool UndoManager::perform (UndoableAction::Ptr action)
     if (! isEnabled())
         return false;
 
+    // Ensure timer is started if MessageManager is now available and we're enabled
+    if (actionGroupThreshold > RelativeTime()
+        && ! isTimerRunning()
+        && MessageManager::getInstanceWithoutCreating() != nullptr)
+    {
+        startTimer (static_cast<int> (actionGroupThreshold.inMilliseconds()));
+    }
+
     if (action->perform (UndoableActionState::Redo))
     {
         if (currentTransaction == nullptr)
@@ -248,7 +256,8 @@ void UndoManager::setEnabled (bool shouldBeEnabled)
 
         if (shouldBeEnabled)
         {
-            if (actionGroupThreshold > RelativeTime())
+            // Only start timer if MessageManager exists (may not be available during early initialization)
+            if (actionGroupThreshold > RelativeTime() && MessageManager::getInstanceWithoutCreating() != nullptr)
                 startTimer (static_cast<int> (actionGroupThreshold.inMilliseconds()));
         }
         else
