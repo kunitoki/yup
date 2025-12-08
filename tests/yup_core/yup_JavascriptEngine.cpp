@@ -904,6 +904,24 @@ TEST (JavascriptEngineTests, CallFunctionObject)
     EXPECT_EQ (42, (int) returnValue);
 }
 
+TEST (JavascriptEngineTests, CallFunctionObjectArguments)
+{
+    JavascriptEngine engine;
+
+    DynamicObject::Ptr scope = new DynamicObject();
+    scope->setProperty ("value", 42);
+
+    engine.execute ("function getValue(a) { return this.value + a; }");
+    var funcObject = engine.getRootObjectProperties()["getValue"];
+
+    var args[] = { 1 };
+    Result result = Result::fail ("wrong");
+    var returnValue = engine.callFunctionObject (scope, funcObject, var::NativeFunctionArgs (scope.get(), args, 1), &result);
+
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_EQ (43, (int) returnValue);
+}
+
 TEST (JavascriptEngineTests, UndefinedFunctionCall)
 {
     JavascriptEngine engine;
