@@ -23,6 +23,8 @@ include (cmake/yup.cmake)
 _yup_get_project_version_string (${CMAKE_CURRENT_LIST_DIR}/modules yup_version)
 _yup_message (STATUS "Building project version ${yup_version}")
 
+set (CMAKE_CXX_SCAN_FOR_MODULES 0)
+
 if (YUP_PLATFORM_MAC)
     set (CMAKE_OSX_DEPLOYMENT_TARGET 11.0)
     set (CMAKE_XCODE_GENERATE_SCHEME OFF)
