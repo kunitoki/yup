@@ -102,7 +102,7 @@ YUP brings a suite of powerful features, including:
 
 ## Prerequisites
 Before building, ensure you have a:
-- C++17-compliant compiler
+- C++20-compliant compiler
 - CMake 3.28 or later
 
 
@@ -293,7 +293,7 @@ START_YUP_APPLICATION (MyApplication)
 And add this as `CMakeLists.txt`:
 
 ```cmake
-cmake_minimum_required (VERSION 3.28)
+cmake_minimum_required (VERSION 3.31)
 
 set (target_name my_app)
 set (target_version "0.0.1")

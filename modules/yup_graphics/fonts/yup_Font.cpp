@@ -28,10 +28,14 @@ namespace
 uint32_t axisTagFromString (StringRef tagName)
 {
     uint32_t tag = 0;
-    tag += static_cast<uint8_t> (tagName[0]) << 24;
-    tag += static_cast<uint8_t> (tagName[1]) << 16;
-    tag += static_cast<uint8_t> (tagName[2]) << 8;
-    tag += static_cast<uint8_t> (tagName[3]) << 0;
+    if (tagName.length() > 0)
+        tag += static_cast<uint8_t> (tagName[0]) << 24;
+    if (tagName.length() > 1)
+        tag += static_cast<uint8_t> (tagName[1]) << 16;
+    if (tagName.length() > 2)
+        tag += static_cast<uint8_t> (tagName[2]) << 8;
+    if (tagName.length() > 3)
+        tag += static_cast<uint8_t> (tagName[3]) << 0;
     return tag;
 }
 
@@ -65,6 +69,9 @@ Font::Font (rive::rcp<rive::Font> font, float height)
 
 Result Font::loadFromData (const MemoryBlock& fontBytes)
 {
+    if (fontBytes.isEmpty())
+        return Result::fail ("Unable to instantiate font from empty data");
+
     font = HBFont::Decode (rive::make_span (static_cast<const uint8_t*> (fontBytes.getData()), fontBytes.getSize()));
     return font ? Result::ok() : Result::fail ("Unable to load font");
 }
@@ -161,8 +168,6 @@ std::optional<Font::Axis> Font::getAxisDescription (int index) const
 
 std::optional<Font::Axis> Font::getAxisDescription (StringRef tagName) const
 {
-    jassert (tagName.length() == 4);
-
     if (font == nullptr)
         return std::nullopt;
 
@@ -221,8 +226,6 @@ void Font::setAxisValue (int index, float value)
 
 void Font::setAxisValue (StringRef tagName, float value)
 {
-    jassert (tagName.length() == 4);
-
     if (font == nullptr)
         return;
 
@@ -252,8 +255,6 @@ Font Font::withAxisValue (int index, float value) const
 
 Font Font::withAxisValue (StringRef tagName, float value) const
 {
-    jassert (tagName.length() == 4);
-
     if (font == nullptr)
         return {};
 
@@ -267,9 +268,7 @@ Font Font::withAxisValue (StringRef tagName, float value) const
 
 void Font::setAxisValues (std::initializer_list<AxisOption> axisOptions)
 {
-    jassert (axisOptions.size() > 0);
-
-    if (font == nullptr)
+    if (font == nullptr || axisOptions.size() == 0)
         return;
 
     std::vector<rive::Font::Coord> coords;
@@ -295,9 +294,7 @@ void Font::setAxisValues (std::initializer_list<AxisOption> axisOptions)
 
 Font Font::withAxisValues (std::initializer_list<AxisOption> axisOptions) const
 {
-    jassert (axisOptions.size() > 0);
-
-    if (font == nullptr)
+    if (font == nullptr || axisOptions.size() == 0)
         return {};
 
     std::vector<rive::Font::Coord> coords;
@@ -331,8 +328,6 @@ void Font::resetAxisValue (int index)
 
 void Font::resetAxisValue (StringRef tagName)
 {
-    jassert (tagName.length() == 4);
-
     if (font == nullptr)
         return;
 

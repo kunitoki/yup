@@ -36,7 +36,7 @@ function (yup_audio_plugin)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
-    _yup_set_default (YUP_ARG_TARGET_CXX_STANDARD 17)
+    _yup_set_default (YUP_ARG_TARGET_CXX_STANDARD 20)
 
     set (target_name "${YUP_ARG_TARGET_NAME}")
     set (target_version "${YUP_ARG_TARGET_VERSION}")

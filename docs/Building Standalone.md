@@ -86,7 +86,7 @@ START_YUP_APPLICATION (MyApplication)
 Create a `CMakeLists.txt` file for your application:
 
 ```cmake
-cmake_minimum_required (VERSION 3.28)
+cmake_minimum_required (VERSION 3.31)
 
 set (target_name my_app)
 set (target_version "1.0.0")
@@ -110,7 +110,7 @@ yup_standalone_app (
     TARGET_IDE_GROUP "MyApp"
     TARGET_APP_ID "com.mycompany.${target_name}"
     TARGET_APP_NAMESPACE "com.mycompany"
-    TARGET_CXX_STANDARD 17
+    TARGET_CXX_STANDARD 20
     INITIAL_MEMORY 268435456  # 256MB initial memory
     MODULES
         yup_audio_devices

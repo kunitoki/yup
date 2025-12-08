@@ -312,17 +312,34 @@ TEST_F (ScriptEngineTest, PrepareScriptingHomeWithValidParameters)
 
 TEST_F (ScriptEngineTest, PrepareScriptingHomeWithForceInstall)
 {
-    ScriptEngine engine;
+    auto tempDir = File::createTempFile ("test_home_force");
+    tempDir.deleteFile();
 
-    auto result = engine.runScript (String (R"(
-        try:
-            import non_existent_module
-        except ImportError as e:
-            print(f"Import error: {e}")
-            result = "import_failed"
-    )")
-                                        .dedentLines());
-    EXPECT_TRUE (result.wasOk());
+    auto standardLibraryCallback = [] (const char* name) -> MemoryBlock
+    {
+        return MemoryBlock();
+    };
+
+    // First call without force install
+    auto config1 = ScriptEngine::prepareScriptingHome (
+        tempDir,
+        standardLibraryCallback,
+        false);
+
+    EXPECT_NE (nullptr, config1);
+    EXPECT_TRUE (tempDir.isDirectory());
+
+    // Second call with force install (should recreate)
+    auto config2 = ScriptEngine::prepareScriptingHome (
+        tempDir,
+        standardLibraryCallback,
+        true);
+
+    EXPECT_NE (nullptr, config2);
+    EXPECT_TRUE (tempDir.isDirectory());
+
+    // Clean up
+    tempDir.deleteRecursively();
 }
 
 TEST_F (ScriptEngineTest, RunScriptWithExceptionHandling)

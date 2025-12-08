@@ -854,7 +854,7 @@ TEST_F (DataTreeTests, JsonSerializationWithComplexStructure)
     EXPECT_TRUE (root.isEquivalentTo (reconstructed));
 
     // Verify specific properties are preserved
-    EXPECT_EQ ("2.0", reconstructed.getProperty ("version", ""));
+    EXPECT_EQ (var ("2.0"), reconstructed.getProperty ("version", ""));
     EXPECT_FALSE (static_cast<bool> (reconstructed.getProperty ("debug", true)));
 
     auto configChild = reconstructed.getChildWithName ("Configuration");
@@ -863,7 +863,7 @@ TEST_F (DataTreeTests, JsonSerializationWithComplexStructure)
 
     auto databaseChild = configChild.getChildWithName ("Database");
     EXPECT_TRUE (databaseChild.isValid());
-    EXPECT_EQ ("localhost", databaseChild.getProperty ("host", ""));
+    EXPECT_EQ (var ("localhost"), databaseChild.getProperty ("host", ""));
     EXPECT_TRUE (static_cast<bool> (databaseChild.getProperty ("ssl", false)));
 }
 
@@ -997,9 +997,9 @@ TEST_F (DataTreeTests, SerializationFormatConsistency)
     EXPECT_TRUE (fromXml.isEquivalentTo (fromJson));
 
     // Spot check some properties across all formats
-    EXPECT_EQ ("TestApp", fromXml.getProperty ("name", ""));
-    EXPECT_EQ ("TestApp", fromBinary.getProperty ("name", ""));
-    EXPECT_EQ ("TestApp", fromJson.getProperty ("name", ""));
+    EXPECT_EQ (var ("TestApp"), fromXml.getProperty ("name", ""));
+    EXPECT_EQ (var ("TestApp"), fromBinary.getProperty ("name", ""));
+    EXPECT_EQ (var ("TestApp"), fromJson.getProperty ("name", ""));
 
     auto xmlSettings = fromXml.getChildWithName ("Settings");
     auto binarySettings = fromBinary.getChildWithName ("Settings");
@@ -1009,9 +1009,9 @@ TEST_F (DataTreeTests, SerializationFormatConsistency)
     EXPECT_TRUE (binarySettings.isValid());
     EXPECT_TRUE (jsonSettings.isValid());
 
-    EXPECT_EQ ("dark", xmlSettings.getProperty ("theme", ""));
-    EXPECT_EQ ("dark", binarySettings.getProperty ("theme", ""));
-    EXPECT_EQ ("dark", jsonSettings.getProperty ("theme", ""));
+    EXPECT_EQ (var ("dark"), xmlSettings.getProperty ("theme", ""));
+    EXPECT_EQ (var ("dark"), binarySettings.getProperty ("theme", ""));
+    EXPECT_EQ (var ("dark"), jsonSettings.getProperty ("theme", ""));
 }
 
 TEST_F (DataTreeTests, InvalidTreeSerialization)
@@ -1134,33 +1134,6 @@ TEST_F (DataTreeTests, OutOfBoundsAccess)
 }
 
 //==============================================================================
-// Thread Safety Tests
-
-/*
-// TODO: ThreadSafe operations are not implemented yet
-TEST_F (DataTreeTests, ThreadSafeOperations)
-{
-    auto threadSafe = tree.threadSafe();
-
-    // Test thread-safe property operations
-    threadSafe.setProperty ("threadProp", 42);
-    EXPECT_EQ (var (42), tree.getProperty ("threadProp"));
-
-    threadSafe.removeProperty ("threadProp");
-    EXPECT_FALSE (tree.hasProperty ("threadProp"));
-
-    // Test thread-safe child operations
-    DataTree child (childType);
-    threadSafe.addChild (child);
-    EXPECT_EQ (1, tree.getNumChildren());
-    EXPECT_EQ (child, tree.getChild (0));
-
-    threadSafe.removeChild (child);
-    EXPECT_EQ (0, tree.getNumChildren());
-}
-*/
-
-//==============================================================================
 // Transaction Tests
 
 TEST_F (DataTreeTests, BasicTransaction)
@@ -1187,7 +1160,7 @@ TEST_F (DataTreeTests, BasicTransaction)
     transaction.commit();
 
     // Changes should now be visible
-    EXPECT_EQ ("value1", tree.getProperty ("prop1"));
+    EXPECT_EQ (var ("value1"), tree.getProperty ("prop1"));
     EXPECT_EQ (var (42), tree.getProperty ("prop2"));
     EXPECT_EQ (1, tree.getNumChildren());
     EXPECT_EQ (child, tree.getChild (0));
@@ -1203,7 +1176,7 @@ TEST_F (DataTreeTests, TransactionAutoCommit)
         // Transaction auto-commits when it goes out of scope
     }
 
-    EXPECT_EQ ("value", tree.getProperty ("prop"));
+    EXPECT_EQ (var ("value"), tree.getProperty ("prop"));
 }
 
 TEST_F (DataTreeTests, TransactionAbort)
@@ -1228,7 +1201,7 @@ TEST_F (DataTreeTests, TransactionWithUndo)
         transaction.setProperty ("prop2", 42);
     }
 
-    EXPECT_EQ ("value1", tree.getProperty ("prop1"));
+    EXPECT_EQ (var ("value1"), tree.getProperty ("prop1"));
     EXPECT_EQ (var (42), tree.getProperty ("prop2"));
 
     undoManager->undo();
@@ -1251,8 +1224,8 @@ TEST_F (DataTreeTests, TransactionMoveSemantics)
     transaction2.setProperty ("prop2", "value2");
     transaction2.commit();
 
-    EXPECT_EQ ("value1", tree.getProperty ("prop"));
-    EXPECT_EQ ("value2", tree.getProperty ("prop2"));
+    EXPECT_EQ (var ("value1"), tree.getProperty ("prop"));
+    EXPECT_EQ (var ("value2"), tree.getProperty ("prop2"));
 }
 
 TEST_F (DataTreeTests, TransactionChildOperations)
@@ -1556,8 +1529,8 @@ TEST_F (DataTreeTests, UndoManagerPropertyOperations)
         transaction.setProperty ("count", 42);
     }
 
-    EXPECT_EQ ("TestName", tree.getProperty ("name"));
-    EXPECT_EQ ("1.0.0", tree.getProperty ("version"));
+    EXPECT_EQ (var ("TestName"), tree.getProperty ("name"));
+    EXPECT_EQ (var ("1.0.0"), tree.getProperty ("version"));
     EXPECT_TRUE (static_cast<bool> (tree.getProperty ("enabled")));
     EXPECT_EQ (var (42), tree.getProperty ("count"));
     EXPECT_EQ (4, tree.getNumProperties());
@@ -1576,8 +1549,8 @@ TEST_F (DataTreeTests, UndoManagerPropertyOperations)
     ASSERT_TRUE (undoManager->canRedo());
     undoManager->redo();
 
-    EXPECT_EQ ("TestName", tree.getProperty ("name"));
-    EXPECT_EQ ("1.0.0", tree.getProperty ("version"));
+    EXPECT_EQ (var ("TestName"), tree.getProperty ("name"));
+    EXPECT_EQ (var ("1.0.0"), tree.getProperty ("version"));
     EXPECT_TRUE (static_cast<bool> (tree.getProperty ("enabled")));
     EXPECT_EQ (var (42), tree.getProperty ("count"));
     EXPECT_EQ (4, tree.getNumProperties());
@@ -1594,7 +1567,7 @@ TEST_F (DataTreeTests, UndoManagerPropertyModification)
         transaction.setProperty ("value", "initial");
     }
 
-    EXPECT_EQ ("initial", tree.getProperty ("value"));
+    EXPECT_EQ (var ("initial"), tree.getProperty ("value"));
 
     // Modify the property in second undo transaction
     undoManager->beginNewTransaction ("Modify Property");
@@ -1603,12 +1576,12 @@ TEST_F (DataTreeTests, UndoManagerPropertyModification)
         transaction.setProperty ("value", "modified");
     }
 
-    EXPECT_EQ ("modified", tree.getProperty ("value"));
+    EXPECT_EQ (var ("modified"), tree.getProperty ("value"));
     EXPECT_EQ (2, undoManager->getNumTransactions());
 
     // Undo modification - should revert to initial
     undoManager->undo();
-    EXPECT_EQ ("initial", tree.getProperty ("value"));
+    EXPECT_EQ (var ("initial"), tree.getProperty ("value"));
 
     // Undo initial setting - should have no property
     undoManager->undo();
@@ -1616,10 +1589,10 @@ TEST_F (DataTreeTests, UndoManagerPropertyModification)
 
     // Redo both operations
     undoManager->redo();
-    EXPECT_EQ ("initial", tree.getProperty ("value"));
+    EXPECT_EQ (var ("initial"), tree.getProperty ("value"));
 
     undoManager->redo();
-    EXPECT_EQ ("modified", tree.getProperty ("value"));
+    EXPECT_EQ (var ("modified"), tree.getProperty ("value"));
 }
 
 TEST_F (DataTreeTests, UndoManagerPropertyRemoval)
@@ -1634,8 +1607,8 @@ TEST_F (DataTreeTests, UndoManagerPropertyRemoval)
     }
 
     EXPECT_EQ (2, tree.getNumProperties());
-    EXPECT_EQ ("value1", tree.getProperty ("prop1"));
-    EXPECT_EQ ("value2", tree.getProperty ("prop2"));
+    EXPECT_EQ (var ("value1"), tree.getProperty ("prop1"));
+    EXPECT_EQ (var ("value2"), tree.getProperty ("prop2"));
 
     // Remove properties in separate transaction
     {
@@ -1653,7 +1626,7 @@ TEST_F (DataTreeTests, UndoManagerPropertyRemoval)
         // Verify undo worked by checking state change
         if (tree.hasProperty ("prop1"))
         {
-            EXPECT_EQ ("value1", tree.getProperty ("prop1"));
+            EXPECT_EQ (var ("value1"), tree.getProperty ("prop1"));
         }
     }
 }
@@ -1852,7 +1825,7 @@ TEST_F (DataTreeTests, UndoManagerComplexMixedOperations)
     }
 
     // Verify state after transaction
-    EXPECT_EQ ("value", tree.getProperty ("prop"));
+    EXPECT_EQ (var ("value"), tree.getProperty ("prop"));
     EXPECT_EQ (1, tree.getNumChildren());
 
     // Test undo functionality
@@ -1866,7 +1839,7 @@ TEST_F (DataTreeTests, UndoManagerComplexMixedOperations)
         if (undoManager->canRedo())
         {
             undoManager->redo();
-            EXPECT_EQ ("value", tree.getProperty ("prop"));
+            EXPECT_EQ (var ("value"), tree.getProperty ("prop"));
             EXPECT_EQ (1, tree.getNumChildren());
         }
     }
@@ -1911,7 +1884,7 @@ TEST_F (DataTreeTests, UndoManagerTransactionDescription)
         transaction.setProperty ("prop", "value");
     }
 
-    EXPECT_EQ ("value", tree.getProperty ("prop"));
+    EXPECT_EQ (var ("value"), tree.getProperty ("prop"));
     EXPECT_GE (undoManager->getNumTransactions(), 0);
 
     // Test basic undo functionality
@@ -1941,13 +1914,13 @@ TEST_F (DataTreeTests, UndoManagerMultipleTransactionLevels)
     }
 
     // Verify both properties exist
-    EXPECT_EQ ("value1", tree.getProperty ("prop1"));
-    EXPECT_EQ ("value2", tree.getProperty ("prop2"));
+    EXPECT_EQ (var ("value1"), tree.getProperty ("prop1"));
+    EXPECT_EQ (var ("value2"), tree.getProperty ("prop2"));
     EXPECT_EQ (2, undoManager->getNumTransactions());
 
     // Undo second transaction
     undoManager->undo();
-    EXPECT_EQ ("value1", tree.getProperty ("prop1"));
+    EXPECT_EQ (var ("value1"), tree.getProperty ("prop1"));
     EXPECT_FALSE (tree.hasProperty ("prop2"));
 
     // Undo first transaction
@@ -1957,12 +1930,12 @@ TEST_F (DataTreeTests, UndoManagerMultipleTransactionLevels)
 
     // Redo both
     undoManager->redo();
-    EXPECT_EQ ("value1", tree.getProperty ("prop1"));
+    EXPECT_EQ (var ("value1"), tree.getProperty ("prop1"));
     EXPECT_FALSE (tree.hasProperty ("prop2"));
 
     undoManager->redo();
-    EXPECT_EQ ("value1", tree.getProperty ("prop1"));
-    EXPECT_EQ ("value2", tree.getProperty ("prop2"));
+    EXPECT_EQ (var ("value1"), tree.getProperty ("prop1"));
+    EXPECT_EQ (var ("value2"), tree.getProperty ("prop2"));
 }
 
 TEST_F (DataTreeTests, UndoManagerAbortedTransaction)
@@ -1976,7 +1949,7 @@ TEST_F (DataTreeTests, UndoManagerAbortedTransaction)
     }
 
     EXPECT_EQ (1, undoManager->getNumTransactions());
-    EXPECT_EQ ("value", tree.getProperty ("initial"));
+    EXPECT_EQ (var ("value"), tree.getProperty ("initial"));
 
     // Create transaction but abort it
     {
@@ -1988,8 +1961,8 @@ TEST_F (DataTreeTests, UndoManagerAbortedTransaction)
     }
 
     // Aborted transaction should not affect undo manager or tree state
-    EXPECT_EQ (1, undoManager->getNumTransactions());  // No new transaction added
-    EXPECT_EQ ("value", tree.getProperty ("initial")); // Unchanged
+    EXPECT_EQ (1, undoManager->getNumTransactions());        // No new transaction added
+    EXPECT_EQ (var ("value"), tree.getProperty ("initial")); // Unchanged
     EXPECT_FALSE (tree.hasProperty ("aborted"));
     EXPECT_EQ (0, tree.getNumChildren());
 
@@ -2068,7 +2041,7 @@ TEST_F (DataTreeTests, TransactionRollbackOnException)
     // State should remain unchanged
     EXPECT_EQ (1, tree.getNumProperties());
     EXPECT_EQ (1, tree.getNumChildren());
-    EXPECT_EQ ("value", tree.getProperty ("initial"));
+    EXPECT_EQ (var ("value"), tree.getProperty ("initial"));
     EXPECT_EQ ("InitialChild", tree.getChild (0).getType().toString());
 
     // No additional transactions should be in undo history
@@ -2099,7 +2072,7 @@ TEST_F (DataTreeTests, TransactionWithInvalidOperations)
     }
 
     // Valid operations should succeed
-    EXPECT_EQ ("validValue", tree.getProperty ("validProp"));
+    EXPECT_EQ (var ("validValue"), tree.getProperty ("validProp"));
     EXPECT_EQ (var (42), tree.getProperty ("anotherProp"));
     EXPECT_EQ (1, tree.getNumChildren());
     EXPECT_EQ (validChild, tree.getChild (0));
@@ -2157,8 +2130,8 @@ TEST_F (DataTreeTests, TransactionRedundantOperations)
     }
 
     // Should reflect final state
-    EXPECT_EQ ("value1", tree.getProperty ("prop"));
-    EXPECT_EQ ("finalValue", tree.getProperty ("finalProp"));
+    EXPECT_EQ (var ("value1"), tree.getProperty ("prop"));
+    EXPECT_EQ (var ("finalValue"), tree.getProperty ("finalProp"));
     // Child count may be 0 or 1 depending on implementation details
     EXPECT_LE (tree.getNumChildren(), 1);
 
@@ -2246,15 +2219,15 @@ TEST_F (DataTreeTests, NestedTransactionScenarios)
     }
 
     // Verify hierarchical structure
-    EXPECT_EQ ("parentValue", tree.getProperty ("parentProp"));
-    EXPECT_EQ ("parentValue2", tree.getProperty ("parentProp2"));
+    EXPECT_EQ (var ("parentValue"), tree.getProperty ("parentProp"));
+    EXPECT_EQ (var ("parentValue2"), tree.getProperty ("parentProp2"));
     EXPECT_EQ (2, tree.getNumChildren());
 
-    EXPECT_EQ ("child1Value", child1.getProperty ("child1Prop"));
+    EXPECT_EQ (var ("child1Value"), child1.getProperty ("child1Prop"));
     EXPECT_EQ (1, child1.getNumChildren());
     EXPECT_EQ (grandchild, child1.getChild (0));
 
-    EXPECT_EQ ("child2Value", child2.getProperty ("child2Prop"));
+    EXPECT_EQ (var ("child2Value"), child2.getProperty ("child2Prop"));
     EXPECT_EQ (0, child2.getNumChildren());
 
     // Undo parent transaction (child transactions were separate)
@@ -2263,8 +2236,8 @@ TEST_F (DataTreeTests, NestedTransactionScenarios)
     EXPECT_EQ (0, tree.getNumChildren());
 
     // Child properties should remain (they were in separate transactions without undo manager)
-    EXPECT_EQ ("child1Value", child1.getProperty ("child1Prop"));
-    EXPECT_EQ ("child2Value", child2.getProperty ("child2Prop"));
+    EXPECT_EQ (var ("child1Value"), child1.getProperty ("child1Prop"));
+    EXPECT_EQ (var ("child2Value"), child2.getProperty ("child2Prop"));
     EXPECT_EQ (1, child1.getNumChildren()); // Grandchild remains
 }
 
@@ -2286,7 +2259,7 @@ TEST (DataTreeSafetyTests, NoMutexRelatedCrashes)
     }
 
     // Verify the operations worked
-    EXPECT_EQ ("value1", tree.getProperty ("prop1"));
+    EXPECT_EQ (var ("value1"), tree.getProperty ("prop1"));
     EXPECT_EQ (var (42), tree.getProperty ("prop2"));
     EXPECT_EQ (tree.getProperty ("prop2"), var (42));
     EXPECT_EQ (2, tree.getNumChildren());
@@ -2329,21 +2302,21 @@ TEST_F (DataTreeTests, TransactionPropertyRemovalUndoRedo)
     }
 
     EXPECT_EQ (2, tree.getNumProperties());
-    EXPECT_EQ ("modified", tree.getProperty ("prop1"));
+    EXPECT_EQ (var ("modified"), tree.getProperty ("prop1"));
     EXPECT_FALSE (tree.hasProperty ("prop2"));
-    EXPECT_EQ ("value3", tree.getProperty ("prop3"));
+    EXPECT_EQ (var ("value3"), tree.getProperty ("prop3"));
 
     // Undo property removal transaction
     undoManager->undo();
     EXPECT_EQ (3, tree.getNumProperties());
-    EXPECT_EQ ("value1", tree.getProperty ("prop1")); // Reverted
-    EXPECT_EQ ("value2", tree.getProperty ("prop2")); // Restored
-    EXPECT_EQ ("value3", tree.getProperty ("prop3"));
+    EXPECT_EQ (var ("value1"), tree.getProperty ("prop1")); // Reverted
+    EXPECT_EQ (var ("value2"), tree.getProperty ("prop2")); // Restored
+    EXPECT_EQ (var ("value3"), tree.getProperty ("prop3"));
 
     // Redo
     undoManager->redo();
     EXPECT_EQ (2, tree.getNumProperties());
-    EXPECT_EQ ("modified", tree.getProperty ("prop1"));
+    EXPECT_EQ (var ("modified"), tree.getProperty ("prop1"));
     EXPECT_FALSE (tree.hasProperty ("prop2"));
 }
 
@@ -2371,13 +2344,13 @@ TEST_F (DataTreeTests, TransactionRemoveAllPropertiesUndoRedo)
     }
 
     EXPECT_EQ (1, tree.getNumProperties());
-    EXPECT_EQ ("newValue", tree.getProperty ("newProp"));
+    EXPECT_EQ (var ("newValue"), tree.getProperty ("newProp"));
     EXPECT_FALSE (tree.hasProperty ("prop1"));
 
     // Undo - should restore original properties
     undoManager->undo();
     EXPECT_EQ (3, tree.getNumProperties());
-    EXPECT_EQ ("value1", tree.getProperty ("prop1"));
+    EXPECT_EQ (var ("value1"), tree.getProperty ("prop1"));
     EXPECT_EQ (var (42), tree.getProperty ("prop2"));
     EXPECT_TRUE (static_cast<bool> (tree.getProperty ("prop3")));
     EXPECT_FALSE (tree.hasProperty ("newProp"));
@@ -2385,7 +2358,7 @@ TEST_F (DataTreeTests, TransactionRemoveAllPropertiesUndoRedo)
     // Redo
     undoManager->redo();
     EXPECT_EQ (1, tree.getNumProperties());
-    EXPECT_EQ ("newValue", tree.getProperty ("newProp"));
+    EXPECT_EQ (var ("newValue"), tree.getProperty ("newProp"));
 }
 
 TEST_F (DataTreeTests, TransactionMixedChildAndPropertyOperations)
@@ -2407,7 +2380,7 @@ TEST_F (DataTreeTests, TransactionMixedChildAndPropertyOperations)
     // Verify final state
     EXPECT_EQ (2, tree.getNumProperties());
     EXPECT_EQ (var (2), tree.getProperty ("count"));
-    EXPECT_EQ ("finalValue", tree.getProperty ("finalProp"));
+    EXPECT_EQ (var ("finalValue"), tree.getProperty ("finalProp"));
     EXPECT_EQ (2, tree.getNumChildren());
     EXPECT_EQ (child1, tree.getChild (0));
     EXPECT_EQ (child2, tree.getChild (1));
@@ -2423,7 +2396,7 @@ TEST_F (DataTreeTests, TransactionMixedChildAndPropertyOperations)
     undoManager->redo();
     EXPECT_EQ (2, tree.getNumProperties());
     EXPECT_EQ (var (2), tree.getProperty ("count"));
-    EXPECT_EQ ("finalValue", tree.getProperty ("finalProp"));
+    EXPECT_EQ (var ("finalValue"), tree.getProperty ("finalProp"));
     EXPECT_EQ (2, tree.getNumChildren());
     EXPECT_EQ (tree, child1.getParent());
     EXPECT_EQ (tree, child2.getParent());
@@ -2506,9 +2479,9 @@ TEST_F (DataTreeTests, TransactionMultipleOperationsUndoRedo)
     EXPECT_EQ (1, undoManager->getNumTransactions()); // 1 transaction
     EXPECT_EQ (3, tree.getNumProperties());
     EXPECT_EQ (1, tree.getNumChildren());
-    EXPECT_EQ ("value1", tree.getProperty ("prop1"));
-    EXPECT_EQ ("value2", tree.getProperty ("prop2"));
-    EXPECT_EQ ("value3", tree.getProperty ("prop3"));
+    EXPECT_EQ (var ("value1"), tree.getProperty ("prop1"));
+    EXPECT_EQ (var ("value2"), tree.getProperty ("prop2"));
+    EXPECT_EQ (var ("value3"), tree.getProperty ("prop3"));
     EXPECT_EQ (child, tree.getChild (0));
 
     // Undo entire transaction at once
@@ -2521,9 +2494,9 @@ TEST_F (DataTreeTests, TransactionMultipleOperationsUndoRedo)
     undoManager->redo();
     EXPECT_EQ (3, tree.getNumProperties());
     EXPECT_EQ (1, tree.getNumChildren());
-    EXPECT_EQ ("value1", tree.getProperty ("prop1"));
-    EXPECT_EQ ("value2", tree.getProperty ("prop2"));
-    EXPECT_EQ ("value3", tree.getProperty ("prop3"));
+    EXPECT_EQ (var ("value1"), tree.getProperty ("prop1"));
+    EXPECT_EQ (var ("value2"), tree.getProperty ("prop2"));
+    EXPECT_EQ (var ("value3"), tree.getProperty ("prop3"));
     EXPECT_EQ (child, tree.getChild (0));
     EXPECT_EQ (tree, child.getParent());
 }
@@ -2539,7 +2512,7 @@ TEST_F (DataTreeTests, ConstructorWithInitializerListProperties)
     EXPECT_TRUE (treeWithProps.isValid());
     EXPECT_EQ ("TestType", treeWithProps.getType().toString());
     EXPECT_EQ (4, treeWithProps.getNumProperties());
-    EXPECT_EQ ("testString", treeWithProps.getProperty ("stringProp"));
+    EXPECT_EQ (var ("testString"), treeWithProps.getProperty ("stringProp"));
     EXPECT_EQ (var (42), treeWithProps.getProperty ("intProp"));
     EXPECT_TRUE (static_cast<bool> (treeWithProps.getProperty ("boolProp")));
     EXPECT_NEAR (3.14, static_cast<double> (treeWithProps.getProperty ("floatProp")), 0.001);
@@ -2581,8 +2554,8 @@ TEST_F (DataTreeTests, ConstructorWithInitializerListPropertiesAndChildren)
 
     // Check properties
     EXPECT_EQ (3, complexTree.getNumProperties());
-    EXPECT_EQ ("ComplexTree", complexTree.getProperty ("name"));
-    EXPECT_EQ ("1.0", complexTree.getProperty ("version"));
+    EXPECT_EQ (var ("ComplexTree"), complexTree.getProperty ("name"));
+    EXPECT_EQ (var ("1.0"), complexTree.getProperty ("version"));
     EXPECT_EQ (var (2), complexTree.getProperty ("childCount"));
 
     // Check children
@@ -2708,7 +2681,7 @@ TEST_F (DataTreeTests, TransactionPropertyOperationsWithoutUndoManager)
         transaction.setProperty ("intProp", 123);
     }
 
-    EXPECT_EQ ("directValue", tree.getProperty ("directProp"));
+    EXPECT_EQ (var ("directValue"), tree.getProperty ("directProp"));
     EXPECT_EQ (var (123), tree.getProperty ("intProp"));
 
     // Remove property
@@ -2739,7 +2712,7 @@ TEST_F (DataTreeTests, TransactionPropertyOperationsWithUndoManager)
         transaction.setProperty ("directProp", "directValue");
     }
 
-    EXPECT_EQ ("directValue", tree.getProperty ("directProp"));
+    EXPECT_EQ (var ("directValue"), tree.getProperty ("directProp"));
 
     // Undo
     undoManager->undo();
@@ -2747,7 +2720,7 @@ TEST_F (DataTreeTests, TransactionPropertyOperationsWithUndoManager)
 
     // Redo
     undoManager->redo();
-    EXPECT_EQ ("directValue", tree.getProperty ("directProp"));
+    EXPECT_EQ (var ("directValue"), tree.getProperty ("directProp"));
 }
 
 TEST_F (DataTreeTests, TransactionChildOperationsWithoutUndoManager)

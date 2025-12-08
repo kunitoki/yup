@@ -335,12 +335,12 @@ void MidiMessageSequence::deleteSysExMessages()
 //==============================================================================
 class OptionalPitchWheel
 {
-    Optional<int> value;
+    std::optional<int> value;
 
 public:
     void emit (int channel, Array<MidiMessage>& out) const
     {
-        if (value.hasValue())
+        if (value.has_value())
             out.add (MidiMessage::pitchWheel (channel, *value));
     }
 
@@ -352,13 +352,13 @@ public:
 
 class OptionalControllerValues
 {
-    Optional<char> values[128];
+    std::optional<char> values[128];
 
 public:
     void emit (int channel, Array<MidiMessage>& out) const
     {
         for (auto it = std::begin (values); it != std::end (values); ++it)
-            if (it->hasValue())
+            if (it->has_value())
                 out.add (MidiMessage::controllerEvent (channel, (int) std::distance (std::begin (values), it), **it));
     }
 
@@ -370,15 +370,15 @@ public:
 
 class OptionalProgramChange
 {
-    Optional<char> value, bankLSB, bankMSB;
+    std::optional<char> value, bankLSB, bankMSB;
 
 public:
     void emit (int channel, double time, Array<MidiMessage>& out) const
     {
-        if (! value.hasValue())
+        if (! value.has_value())
             return;
 
-        if (bankLSB.hasValue() && bankMSB.hasValue())
+        if (bankLSB.has_value() && bankMSB.has_value())
         {
             out.add (MidiMessage::controllerEvent (channel, 0x00, *bankMSB).withTimeStamp (time));
             out.add (MidiMessage::controllerEvent (channel, 0x20, *bankLSB).withTimeStamp (time));
@@ -414,7 +414,7 @@ class ParameterNumberState
         nrpn
     };
 
-    Optional<char> newestRpnLsb, newestRpnMsb, newestNrpnLsb, newestNrpnMsb, lastSentLsb, lastSentMsb;
+    std::optional<char> newestRpnLsb, newestRpnMsb, newestNrpnLsb, newestNrpnMsb, lastSentLsb, lastSentMsb;
     Kind lastSentKind = Kind::rpn, newestKind = Kind::rpn;
 
 public:
@@ -430,7 +430,7 @@ public:
         auto lastSent = std::tie (lastSentKind, lastSentMsb, lastSentLsb);
         const auto newest = std::tie (newestKind, newestMsb, newestLsb);
 
-        if (lastSent == newest || ! newestMsb.hasValue() || ! newestLsb.hasValue())
+        if (lastSent == newest || ! newestMsb.has_value() || ! newestLsb.has_value())
             return;
 
         out.add (MidiMessage::controllerEvent (channel, newestKind == Kind::rpn ? 0x65 : 0x63, *newestMsb).withTimeStamp (time));

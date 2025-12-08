@@ -993,10 +993,10 @@ public:
         return { scheduler, param.sched_priority };
     }
 
-    static PosixSchedulerPriority getNativeSchedulerAndPriority (const Optional<Thread::RealtimeOptions>& rt,
+    static PosixSchedulerPriority getNativeSchedulerAndPriority (const std::optional<Thread::RealtimeOptions>& rt,
                                                                  [[maybe_unused]] Thread::Priority prio)
     {
-        const auto isRealtime = rt.hasValue();
+        const auto isRealtime = rt.has_value();
 
         const auto priority = [&]
         {

@@ -17,7 +17,7 @@
 #
 # ==============================================================================
 
-cmake_minimum_required (VERSION 3.28)
+cmake_minimum_required (VERSION 3.31)
 
 _yup_get_project_version_string (${CMAKE_CURRENT_LIST_DIR}/../modules yup_version)
 _yup_message (STATUS "Building project version ${yup_version}")

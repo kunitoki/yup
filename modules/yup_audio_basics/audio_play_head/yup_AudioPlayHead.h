@@ -361,43 +361,43 @@ public:
     {
     public:
         /** Returns the number of samples that have elapsed. */
-        Optional<int64_t> getTimeInSamples() const { return getOptional (flagTimeSamples, timeInSamples); }
+        std::optional<int64_t> getTimeInSamples() const { return getOptional (flagTimeSamples, timeInSamples); }
 
         /** @see getTimeInSamples() */
-        void setTimeInSamples (Optional<int64_t> timeInSamplesIn) { setOptional (flagTimeSamples, timeInSamples, timeInSamplesIn); }
+        void setTimeInSamples (std::optional<int64_t> timeInSamplesIn) { setOptional (flagTimeSamples, timeInSamples, timeInSamplesIn); }
 
         /** Returns the number of seconds that have elapsed. */
-        Optional<double> getTimeInSeconds() const { return getOptional (flagTimeSeconds, timeInSeconds); }
+        std::optional<double> getTimeInSeconds() const { return getOptional (flagTimeSeconds, timeInSeconds); }
 
         /** @see getTimeInSamples() */
-        void setTimeInSeconds (Optional<double> timeInSecondsIn) { setOptional (flagTimeSeconds, timeInSeconds, timeInSecondsIn); }
+        void setTimeInSeconds (std::optional<double> timeInSecondsIn) { setOptional (flagTimeSeconds, timeInSeconds, timeInSecondsIn); }
 
         /** Returns the bpm, if available. */
-        Optional<double> getBpm() const { return getOptional (flagTempo, tempoBpm); }
+        std::optional<double> getBpm() const { return getOptional (flagTempo, tempoBpm); }
 
         /** @see getBpm() */
-        void setBpm (Optional<double> bpmIn) { setOptional (flagTempo, tempoBpm, bpmIn); }
+        void setBpm (std::optional<double> bpmIn) { setOptional (flagTempo, tempoBpm, bpmIn); }
 
         /** Returns the time signature, if available. */
-        Optional<TimeSignature> getTimeSignature() const { return getOptional (flagTimeSignature, timeSignature); }
+        std::optional<TimeSignature> getTimeSignature() const { return getOptional (flagTimeSignature, timeSignature); }
 
         /** @see getTimeSignature() */
-        void setTimeSignature (Optional<TimeSignature> timeSignatureIn) { setOptional (flagTimeSignature, timeSignature, timeSignatureIn); }
+        void setTimeSignature (std::optional<TimeSignature> timeSignatureIn) { setOptional (flagTimeSignature, timeSignature, timeSignatureIn); }
 
         /** Returns host loop points, if available. */
-        Optional<LoopPoints> getLoopPoints() const { return getOptional (flagLoopPoints, loopPoints); }
+        std::optional<LoopPoints> getLoopPoints() const { return getOptional (flagLoopPoints, loopPoints); }
 
         /** @see getLoopPoints() */
-        void setLoopPoints (Optional<LoopPoints> loopPointsIn) { setOptional (flagLoopPoints, loopPoints, loopPointsIn); }
+        void setLoopPoints (std::optional<LoopPoints> loopPointsIn) { setOptional (flagLoopPoints, loopPoints, loopPointsIn); }
 
         /** The number of bars since the beginning of the timeline.
 
             This value isn't available in all hosts or in all plugin formats.
         */
-        Optional<int64_t> getBarCount() const { return getOptional (flagBarCount, barCount); }
+        std::optional<int64_t> getBarCount() const { return getOptional (flagBarCount, barCount); }
 
         /** @see getBarCount() */
-        void setBarCount (Optional<int64_t> barCountIn) { setOptional (flagBarCount, barCount, barCountIn); }
+        void setBarCount (std::optional<int64_t> barCountIn) { setOptional (flagBarCount, barCount, barCountIn); }
 
         /** The position of the start of the last bar, in units of quarter-notes.
 
@@ -406,40 +406,40 @@ public:
 
             Note - this value may be unavailable on some hosts, e.g. Pro-Tools.
         */
-        Optional<double> getPpqPositionOfLastBarStart() const { return getOptional (flagLastBarStartPpq, lastBarStartPpq); }
+        std::optional<double> getPpqPositionOfLastBarStart() const { return getOptional (flagLastBarStartPpq, lastBarStartPpq); }
 
         /** @see getPpqPositionOfLastBarStart() */
-        void setPpqPositionOfLastBarStart (Optional<double> positionIn) { setOptional (flagLastBarStartPpq, lastBarStartPpq, positionIn); }
+        void setPpqPositionOfLastBarStart (std::optional<double> positionIn) { setOptional (flagLastBarStartPpq, lastBarStartPpq, positionIn); }
 
         /** The video frame rate, if available. */
-        Optional<FrameRate> getFrameRate() const { return getOptional (flagFrameRate, frame); }
+        std::optional<FrameRate> getFrameRate() const { return getOptional (flagFrameRate, frame); }
 
         /** @see getFrameRate() */
-        void setFrameRate (Optional<FrameRate> frameRateIn) { setOptional (flagFrameRate, frame, frameRateIn); }
+        void setFrameRate (std::optional<FrameRate> frameRateIn) { setOptional (flagFrameRate, frame, frameRateIn); }
 
         /** The current play position, in units of quarter-notes. */
-        Optional<double> getPpqPosition() const { return getOptional (flagPpqPosition, positionPpq); }
+        std::optional<double> getPpqPosition() const { return getOptional (flagPpqPosition, positionPpq); }
 
         /** @see getPpqPosition() */
-        void setPpqPosition (Optional<double> ppqPositionIn) { setOptional (flagPpqPosition, positionPpq, ppqPositionIn); }
+        void setPpqPosition (std::optional<double> ppqPositionIn) { setOptional (flagPpqPosition, positionPpq, ppqPositionIn); }
 
         /** For timecode, the position of the start of the timeline, in seconds from 00:00:00:00. */
-        Optional<double> getEditOriginTime() const { return getOptional (flagOriginTime, originTime); }
+        std::optional<double> getEditOriginTime() const { return getOptional (flagOriginTime, originTime); }
 
         /** @see getEditOriginTime() */
-        void setEditOriginTime (Optional<double> editOriginTimeIn) { setOptional (flagOriginTime, originTime, editOriginTimeIn); }
+        void setEditOriginTime (std::optional<double> editOriginTimeIn) { setOptional (flagOriginTime, originTime, editOriginTimeIn); }
 
         /** Get the host's callback time in nanoseconds, if available. */
-        Optional<uint64_t> getHostTimeNs() const { return getOptional (flagHostTimeNs, hostTimeNs); }
+        std::optional<uint64_t> getHostTimeNs() const { return getOptional (flagHostTimeNs, hostTimeNs); }
 
         /** @see getHostTimeNs() */
-        void setHostTimeNs (Optional<uint64_t> hostTimeNsIn) { setOptional (flagHostTimeNs, hostTimeNs, hostTimeNsIn); }
+        void setHostTimeNs (std::optional<uint64_t> hostTimeNsIn) { setOptional (flagHostTimeNs, hostTimeNs, hostTimeNsIn); }
 
         /** The current play position, in samples from the start of processing, without looping, if available. */
-        Optional<int64_t> getContinuousTimeInSamples() const { return getOptional (flagContinuousTime, continuousTimeInSamples); }
+        std::optional<int64_t> getContinuousTimeInSamples() const { return getOptional (flagContinuousTime, continuousTimeInSamples); }
 
         /** @see getContinuousTimeInSamples() */
-        void setContinuousTimeInSamples (Optional<int64_t> cont) { setOptional (flagContinuousTime, continuousTimeInSamples, cont); }
+        void setContinuousTimeInSamples (std::optional<int64_t> cont) { setOptional (flagContinuousTime, continuousTimeInSamples, cont); }
 
         /** True if the transport is currently playing. */
         bool getIsPlaying() const { return getFlag (flagIsPlaying); }
@@ -502,18 +502,18 @@ public:
         }
 
         template <typename Value>
-        Optional<Value> getOptional (int64_t flagToCheck, Value value) const
+        std::optional<Value> getOptional (int64_t flagToCheck, Value value) const
         {
-            return getFlag (flagToCheck) ? makeOptional (std::move (value)) : nullopt;
+            return getFlag (flagToCheck) ? std::make_optional (std::move (value)) : std::nullopt;
         }
 
         template <typename Value>
-        void setOptional (int64_t flagToCheck, Value& value, Optional<Value> opt)
+        void setOptional (int64_t flagToCheck, Value& value, std::optional<Value> opt)
         {
-            if (opt.hasValue())
+            if (opt.has_value())
                 value = *opt;
 
-            setFlag (flagToCheck, opt.hasValue());
+            setFlag (flagToCheck, opt.has_value());
         }
 
         enum
@@ -564,7 +564,7 @@ public:
         in which a time would make sense, and some hosts will almost certainly have
         multithreading issues if it's not called on the audio thread.
     */
-    virtual Optional<PositionInfo> getPosition() const = 0;
+    virtual std::optional<PositionInfo> getPosition() const = 0;
 
     /** Returns true if this object can control the transport. */
     virtual bool canControlTransport();

@@ -231,3 +231,64 @@ TEST (UuidTests, Deterministic)
     Uuid uuid = Uuid::fromSHA1 (hash);
     EXPECT_EQ (uuid.toDashedString(), String ("74738ff5-5367-5958-9aee-98fffdcd1876"));
 }
+
+TEST (UuidTests, CompareReturnsTrueForEqualUuids)
+{
+    Uuid uuid1 ("12345678123456781234567812345678");
+    Uuid uuid2 ("12345678123456781234567812345678");
+    EXPECT_TRUE (uuid1 == uuid2);
+}
+
+TEST (UuidTests, GetPart)
+{
+    uint8 rawData[16] = { 0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0x0a, 0xbc, 0xde };
+    Uuid uuid (rawData);
+
+    EXPECT_EQ (uuid.getPart (0), 0x12345678);
+    EXPECT_EQ (uuid.getPart (1), 0x90abcdef);
+    EXPECT_EQ (uuid.getPart (2), 0x01234567);
+    EXPECT_EQ (uuid.getPart (3), 0x890abcde);
+}
+
+TEST (UuidTests, GetClockSeqLow)
+{
+    Uuid uuid;
+    uint8 clockSeqLow = uuid.getClockSeqLow();
+    EXPECT_NE (clockSeqLow, 0);
+}
+
+TEST (UuidTests, FromSHA1MemoryBlock)
+{
+    MemoryBlock hashBlock;
+    hashBlock.loadFromHexString ("74738ff55367e9589aee98fffdcd187694028007");
+
+    Uuid uuid = Uuid::fromSHA1 (hashBlock);
+    EXPECT_EQ (uuid.toDashedString(), String ("74738ff5-5367-5958-9aee-98fffdcd1876"));
+}
+
+TEST (UuidTests, FromHexStringSHA1)
+{
+    String hashStr = "74738ff55367e9589aee98fffdcd187694028007";
+
+    Uuid uuid = Uuid::fromHexStringSHA1 (hashStr);
+    EXPECT_EQ (uuid.toDashedString(), String ("74738ff5-5367-5958-9aee-98fffdcd1876"));
+}
+
+TEST (UuidTests, FromMD5)
+{
+    MemoryBlock hashBlock;
+    hashBlock.loadFromHexString ("12345678901234567890123456789012");
+
+    Uuid uuid = Uuid::fromMD5 (hashBlock);
+    EXPECT_FALSE (uuid.isNull());
+    EXPECT_EQ (uuid.toString().length(), 32);
+}
+
+TEST (UuidTests, FromHexStringMD5)
+{
+    String hashStr = "12345678901234567890123456789012";
+
+    Uuid uuid = Uuid::fromHexStringMD5 (hashStr);
+    EXPECT_FALSE (uuid.isNull());
+    EXPECT_EQ (uuid.toString().length(), 32);
+}

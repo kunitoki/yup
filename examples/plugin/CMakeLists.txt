@@ -17,7 +17,7 @@
 #
 # ==============================================================================
 
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 3.31)
 
 # ==== Prepare target
 set (target_name example_plugin)
@@ -31,7 +31,7 @@ yup_audio_plugin (
     TARGET_IDE_GROUP "Examples"
     TARGET_APP_ID "org.yup.${target_name}"
     TARGET_APP_NAMESPACE "org.yup"
-    TARGET_CXX_STANDARD 17
+    TARGET_CXX_STANDARD 20
     PLUGIN_ID "org.yup.YupCLAP"
     PLUGIN_NAME "YupCLAPPZ"
     PLUGIN_VENDOR "org.yup"

@@ -183,7 +183,7 @@ function (_yup_module_setup_target module_name
     if (module_cpp_standard)
         target_compile_features (${module_name} INTERFACE cxx_std_${module_cpp_standard})
     else()
-        target_compile_features (${module_name} INTERFACE cxx_std_17)
+        target_compile_features (${module_name} INTERFACE cxx_std_20)
     endif()
 
     set_target_properties (${module_name} PROPERTIES
@@ -366,7 +366,7 @@ function (yup_add_module module_path modules_definitions module_group)
         endif()
     endforeach()
 
-    _yup_set_default (module_cpp_standard "17")
+    _yup_set_default (module_cpp_standard "20")
     _yup_set_default (module_arc_enabled OFF)
     _yup_set_default (module_needs_python OFF)
     _yup_resolve_variable_paths ("${module_searchpaths}" module_searchpaths)

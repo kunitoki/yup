@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.28)
+cmake_minimum_required (VERSION 3.31)
 
 set (target_name my_app)
 set (target_version "1.0.0")

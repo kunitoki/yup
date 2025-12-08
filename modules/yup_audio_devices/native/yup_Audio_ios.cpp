@@ -658,7 +658,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
                 impl.handleAudioTransportEvent (kAudioUnitRemoteControlEvent_Rewind);
         }
 
-        Optional<PositionInfo> getPosition() const override
+        std::optional<PositionInfo> getPosition() const override
         {
             if (! canControlTransportImpl())
                 return {};

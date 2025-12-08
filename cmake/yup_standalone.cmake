@@ -35,7 +35,7 @@ function (yup_standalone_app)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
-    _yup_set_default (YUP_ARG_TARGET_CXX_STANDARD 17)
+    _yup_set_default (YUP_ARG_TARGET_CXX_STANDARD 20)
     _yup_set_default (YUP_ARG_TARGET_ICON "${CMAKE_SOURCE_DIR}/cmake/resources/app-icon.png")
 
     set (target_name "${YUP_ARG_TARGET_NAME}")
@@ -177,7 +177,6 @@ function (yup_standalone_app)
             -sASSERTIONS=1
             -sDISABLE_EXCEPTION_CATCHING=0
             -sERROR_ON_UNDEFINED_SYMBOLS=1
-            -sDEMANGLE_SUPPORT=1
             -sSTACK_OVERFLOW_CHECK=2
             -sFORCE_FILESYSTEM=1
             -sNODERAWFS=0
@@ -185,7 +184,7 @@ function (yup_standalone_app)
             -sFETCH=1
             #-sASYNCIFY=1
             -sEXPORTED_RUNTIME_METHODS=ccall,cwrap
-            -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
+            -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall','$stackTrace'
             --shell-file "${YUP_ARG_CUSTOM_SHELL}")
 
         foreach (preload_file ${YUP_ARG_PRELOAD_FILES})

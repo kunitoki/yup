@@ -453,38 +453,6 @@ int CharacterFunctions::getHexDigitValue (const yup_wchar digit) noexcept
     return -1;
 }
 
-double CharacterFunctions::mulexp10 (const double value, int exponent) noexcept
-{
-    if (exponent == 0)
-        return value;
-
-    if (exactlyEqual (value, 0.0))
-        return 0;
-
-    const bool negative = (exponent < 0);
-
-    if (negative)
-        exponent = -exponent;
-
-    double result = 1.0, power = 10.0;
-
-    for (int bit = 1; exponent != 0; bit <<= 1)
-    {
-        if ((exponent & bit) != 0)
-        {
-            exponent ^= bit;
-            result *= power;
-
-            if (exponent == 0)
-                break;
-        }
-
-        power *= power;
-    }
-
-    return negative ? (value / result) : (value * result);
-}
-
 yup_wchar CharacterFunctions::getUnicodeCharFromWindows1252Codepage (const uint8 c) noexcept
 {
     if (c < 0x80 || c >= 0xa0)
