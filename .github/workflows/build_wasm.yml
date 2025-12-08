@@ -41,13 +41,6 @@ jobs:
         fetch-depth: 0
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - name: Cache emsdk
-      id: cache-emsdk
-      uses: actions/cache@v4
-      continue-on-error: true
-      with:
-        path: emsdk
-        key: emsdk-${{ env.EM_VERSION }}-${{ runner.os }}
     - name: Setup emsdk
       uses: mymindstorm/setup-emsdk@v14
       with:
@@ -69,13 +62,6 @@ jobs:
         fetch-depth: 0
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - name: Cache emsdk
-      id: cache-emsdk
-      uses: actions/cache@v4
-      continue-on-error: true
-      with:
-        path: emsdk
-        key: emsdk-${{ env.EM_VERSION }}-${{ runner.os }}
     - name: Setup emsdk
       uses: mymindstorm/setup-emsdk@v14
       with:
@@ -93,13 +79,6 @@ jobs:
         fetch-depth: 0
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - name: Cache emsdk
-      id: cache-emsdk
-      uses: actions/cache@v4
-      continue-on-error: true
-      with:
-        path: emsdk
-        key: emsdk-${{ env.EM_VERSION }}-${{ runner.os }}
     - name: Setup emsdk
       uses: mymindstorm/setup-emsdk@v14
       with:
@@ -117,13 +96,6 @@ jobs:
         fetch-depth: 0
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - name: Cache emsdk
-      id: cache-emsdk
-      uses: actions/cache@v4
-      continue-on-error: true
-      with:
-        path: emsdk
-        key: emsdk-${{ env.EM_VERSION }}-${{ runner.os }}
     - name: Setup emsdk
       uses: mymindstorm/setup-emsdk@v14
       with:
