@@ -177,7 +177,6 @@ function (yup_standalone_app)
             -sASSERTIONS=1
             -sDISABLE_EXCEPTION_CATCHING=0
             -sERROR_ON_UNDEFINED_SYMBOLS=1
-            -sDEMANGLE_SUPPORT=1
             -sSTACK_OVERFLOW_CHECK=2
             -sFORCE_FILESYSTEM=1
             -sNODERAWFS=0
