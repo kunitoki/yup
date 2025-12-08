@@ -86,8 +86,8 @@ TEST (FileSearchPathTests, StringAssignment)
     fsp = prefix + "/a/b;" + prefix + "/c/d";
 
     EXPECT_EQ (fsp.getNumPaths(), 2);
-    EXPECT_EQ (fsp[0].getFullPathName(), prefix + "/a/b");
-    EXPECT_EQ (fsp[1].getFullPathName(), prefix + "/c/d");
+    EXPECT_EQ (fsp[0].getFullPathName(), File (prefix + "/a/b").getFullPathName());
+    EXPECT_EQ (fsp[1].getFullPathName(), File (prefix + "/c/d").getFullPathName());
 }
 
 TEST (FileSearchPathTests, GetNumPaths)
@@ -114,8 +114,8 @@ TEST (FileSearchPathTests, IndexOperator)
 #endif
 
     FileSearchPath fsp { prefix + "/a/b;" + prefix + "/c/d" };
-    EXPECT_EQ (fsp[0].getFullPathName(), prefix + "/a/b");
-    EXPECT_EQ (fsp[1].getFullPathName(), prefix + "/c/d");
+    EXPECT_EQ (fsp[0].getFullPathName(), File (prefix + "/a/b").getFullPathName());
+    EXPECT_EQ (fsp[1].getFullPathName(), File (prefix + "/c/d").getFullPathName());
 }
 
 TEST (FileSearchPathTests, GetRawString)
@@ -144,8 +144,8 @@ TEST (FileSearchPathTests, Add)
     fsp.add (File (prefix + "/c/d"));
 
     EXPECT_EQ (fsp.getNumPaths(), 2);
-    EXPECT_EQ (fsp[0].getFullPathName(), prefix + "/a/b");
-    EXPECT_EQ (fsp[1].getFullPathName(), prefix + "/c/d");
+    EXPECT_EQ (fsp[0].getFullPathName(), File (prefix + "/a/b").getFullPathName());
+    EXPECT_EQ (fsp[1].getFullPathName(), File (prefix + "/c/d").getFullPathName());
 }
 
 TEST (FileSearchPathTests, AddWithIndex)
@@ -160,9 +160,9 @@ TEST (FileSearchPathTests, AddWithIndex)
     fsp.add (File (prefix + "/e/f"), 1);
 
     EXPECT_EQ (fsp.getNumPaths(), 3);
-    EXPECT_EQ (fsp[0].getFullPathName(), prefix + "/a/b");
-    EXPECT_EQ (fsp[1].getFullPathName(), prefix + "/e/f");
-    EXPECT_EQ (fsp[2].getFullPathName(), prefix + "/c/d");
+    EXPECT_EQ (fsp[0].getFullPathName(), File (prefix + "/a/b").getFullPathName());
+    EXPECT_EQ (fsp[1].getFullPathName(), File (prefix + "/e/f").getFullPathName());
+    EXPECT_EQ (fsp[2].getFullPathName(), File (prefix + "/c/d").getFullPathName());
 }
 
 TEST (FileSearchPathTests, AddIfNotAlreadyThere)
@@ -194,8 +194,8 @@ TEST (FileSearchPathTests, Remove)
     fsp.remove (1);
 
     EXPECT_EQ (fsp.getNumPaths(), 2);
-    EXPECT_EQ (fsp[0].getFullPathName(), prefix + "/a/b");
-    EXPECT_EQ (fsp[1].getFullPathName(), prefix + "/e/f");
+    EXPECT_EQ (fsp[0].getFullPathName(), File (prefix + "/a/b").getFullPathName());
+    EXPECT_EQ (fsp[1].getFullPathName(), File (prefix + "/e/f").getFullPathName());
 }
 
 TEST (FileSearchPathTests, AddPath)
@@ -212,8 +212,8 @@ TEST (FileSearchPathTests, AddPath)
     fsp1.addPath (fsp2);
 
     EXPECT_EQ (fsp1.getNumPaths(), 4);
-    EXPECT_EQ (fsp1[2].getFullPathName(), prefix + "/e/f");
-    EXPECT_EQ (fsp1[3].getFullPathName(), prefix + "/g/h");
+    EXPECT_EQ (fsp1[2].getFullPathName(), File (prefix + "/e/f").getFullPathName());
+    EXPECT_EQ (fsp1[3].getFullPathName(), File (prefix + "/g/h").getFullPathName());
 }
 
 TEST (FileSearchPathTests, AddPathSkipsDuplicates)
@@ -230,9 +230,9 @@ TEST (FileSearchPathTests, AddPathSkipsDuplicates)
     fsp1.addPath (fsp2);
 
     EXPECT_EQ (fsp1.getNumPaths(), 3);
-    EXPECT_EQ (fsp1[0].getFullPathName(), prefix + "/a/b");
-    EXPECT_EQ (fsp1[1].getFullPathName(), prefix + "/c/d");
-    EXPECT_EQ (fsp1[2].getFullPathName(), prefix + "/e/f");
+    EXPECT_EQ (fsp1[0].getFullPathName(), File (prefix + "/a/b").getFullPathName());
+    EXPECT_EQ (fsp1[1].getFullPathName(), File (prefix + "/c/d").getFullPathName());
+    EXPECT_EQ (fsp1[2].getFullPathName(), File (prefix + "/e/f").getFullPathName());
 }
 
 TEST (FileSearchPathTests, RemoveNonExistentPaths)

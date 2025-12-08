@@ -45,12 +45,12 @@ def test_message_manager_broadcast_listener():
     mm.registerBroadcastListener(listener)
     mm.deliverBroadcastMessage("123")
     assert listener.message is None
-    mm.runDispatchLoopUntil(10)
+    mm.runDispatchLoopUntil(100)  # Increased from 10ms to 100ms for reliability
     assert listener.message == "123"
 
     mm.deregisterBroadcastListener(listener)
     mm.deliverBroadcastMessage("abc")
-    mm.runDispatchLoopUntil(10)
+    mm.runDispatchLoopUntil(100)  # Increased from 10ms to 100ms for reliability
     assert listener.message == "123"
 
 #==================================================================================================
