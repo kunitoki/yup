@@ -103,7 +103,7 @@ YUP brings a suite of powerful features, including:
 ## Prerequisites
 Before building, ensure you have a:
 - C++20-compliant compiler
-- CMake 3.28 or later
+- CMake 3.31 or later
 
 
 ### Windows
@@ -126,7 +126,7 @@ sudo apt-get update && sudo apt-get install -y \
 
 
 ### Wasm
-Emscripten SDK (at least version 3.1.45).
+Emscripten SDK (at least version 4.0.22).
 
 
 ### Android
