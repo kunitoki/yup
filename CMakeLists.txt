@@ -23,6 +23,12 @@ include (cmake/yup.cmake)
 _yup_get_project_version_string (${CMAKE_CURRENT_LIST_DIR}/modules yup_version)
 _yup_message (STATUS "Building project version ${yup_version}")
 
+# Disable C++ module dependency scanning for Emscripten (incompatible with clang-scan-deps)
+if (EMSCRIPTEN)
+    set (CMAKE_CXX_SCANDEP_SOURCE "")
+    set (CMAKE_EXPERIMENTAL_CXX_SCANDEP_SOURCE "")
+endif()
+
 if (YUP_PLATFORM_MAC)
     set (CMAKE_OSX_DEPLOYMENT_TARGET 11.0)
     set (CMAKE_XCODE_GENERATE_SCHEME OFF)
