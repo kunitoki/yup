@@ -1036,26 +1036,7 @@ DataTree DataTree::fromXml (const XmlElement& xml, ReferenceCountedObjectPtr<Dat
         auto name = xml.getAttributeName (i);
         auto value = xml.getAttributeValue (i);
 
-        bool isBase64 = name.startsWith ("base64:");
-        if (isBase64)
-            name = name.substring (7);
-
-        var propertyValue;
-
-        if (isBase64)
-        {
-            MemoryBlock block;
-            if (block.fromBase64Encoding (value))
-                propertyValue = var (block);
-            else
-                propertyValue = var (value);
-        }
-        else
-        {
-            propertyValue = coerceAttributeValue (nodeType, name, value, schema);
-        }
-
-        tree.setProperty (name, propertyValue);
+        tree.setProperty (name, coerceAttributeValue (nodeType, name, value, schema));
     }
 
     // Load children from child elements
