@@ -34,33 +34,30 @@ env:
 jobs:
   configure:
     runs-on: ubuntu-latest
-
     steps:
-        - uses: actions/checkout@v4
-          with:
-            fetch-depth: 0
-        - uses: seanmiddleditch/gha-setup-ninja@master
-        - name: Setup Java
-          uses: actions/setup-java@v3
-          with:
-            distribution: ${{env.JAVA_DISTRIBUTION}}
-            java-version: ${{env.JAVA_VERSION}}
-        - name: Setup Android SDK
-          uses: android-actions/setup-android@v2.0.10
-        - name: Setup Android NDK
-          uses: nttld/setup-ndk@v1
-          with:
-            ndk-version: ${{env.NDK_VERSION}}
-
-        - name: Configure
-          run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_TARGET_ANDROID=ON -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-
-        - name: Cache Configure
-          id: cache-build
-          uses: actions/cache/save@v4
-          with:
-            path: ${{ runner.workspace }}/build
-            key: android-build-${{ github.sha }}
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: seanmiddleditch/gha-setup-ninja@master
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: ${{env.JAVA_DISTRIBUTION}}
+          java-version: ${{env.JAVA_VERSION}}
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v2.0.10
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: ${{env.NDK_VERSION}}
+      - name: Configure
+        run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_TARGET_ANDROID=ON -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+      - name: Cache Configure
+        id: cache-build
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.workspace }}/build
+          key: android-build-${{ github.sha }}
 
   build_app:
     runs-on: ubuntu-latest

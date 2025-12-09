@@ -33,7 +33,7 @@ env:
   EM_VERSION: 4.0.21
 
 jobs:
-  build_tests:
+  build_tests_debug:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -47,10 +47,25 @@ jobs:
         version: ${{ env.EM_VERSION }}
     - name: Configure
       run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target yup_tests
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/Debug
       run: node yup_tests.js
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target yup_tests
+
+  build_tests_release:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - uses: seanmiddleditch/gha-setup-ninja@master
+    - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - name: Setup emsdk
+      uses: mymindstorm/setup-emsdk@v14
+      with:
+        version: ${{ env.EM_VERSION }}
+    - name: Configure
+      run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/Release
       run: node yup_tests.js
 
@@ -68,8 +83,8 @@ jobs:
         version: ${{ env.EM_VERSION }}
     - name: Configure
       run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_console
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_console
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_console
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_console
 
   build_app:
     runs-on: ubuntu-latest
@@ -85,8 +100,8 @@ jobs:
         version: ${{ env.EM_VERSION }}
     - name: Configure
       run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_app
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_app
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_app
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_app
 
   build_graphics:
     runs-on: ubuntu-latest
@@ -102,5 +117,5 @@ jobs:
         version: ${{ env.EM_VERSION }}
     - name: Configure
       run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_graphics
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_graphics
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_graphics
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_graphics
