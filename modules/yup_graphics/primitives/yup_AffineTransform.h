@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2024 - kunitoki@gmail.com
+   Copyright (c) 2025 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -205,6 +205,111 @@ public:
     [[nodiscard]] static constexpr AffineTransform identity() noexcept
     {
         return { 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f };
+    }
+
+    //==============================================================================
+    /** Check if the transformation only contains translation
+
+        Checks if the AffineTransform object represents only a translation transformation,
+        with no rotation, scaling, or shearing applied.
+
+        @return True if this is only a translation transformation, false otherwise.
+    */
+    constexpr bool isOnlyTranslation() const noexcept
+    {
+        return approximatelyEqual (scaleX, 1.0f)
+            && approximatelyEqual (shearX, 0.0f)
+            && approximatelyEqual (shearY, 0.0f)
+            && approximatelyEqual (scaleY, 1.0f);
+    }
+
+    /** Check if the transformation only contains rotation
+
+        Checks if the AffineTransform object represents only a rotation transformation,
+        with no translation, scaling, or shearing applied. A pure rotation maintains unit
+        determinant and has orthonormal basis vectors.
+
+        @return True if this is only a rotation transformation, false otherwise.
+    */
+    constexpr bool isOnlyRotation() const noexcept
+    {
+        if (! approximatelyEqual (translateX, 0.0f) || ! approximatelyEqual (translateY, 0.0f))
+            return false;
+
+        const float det = getDeterminant();
+        const float col1LengthSq = scaleX * scaleX + shearY * shearY;
+        const float col2LengthSq = shearX * shearX + scaleY * scaleY;
+
+        constexpr float rotationTolerance = 0.0001f;
+        return yup_abs (det - 1.0f) < rotationTolerance
+            && yup_abs (col1LengthSq - 1.0f) < rotationTolerance
+            && yup_abs (col2LengthSq - 1.0f) < rotationTolerance;
+    }
+
+    /** Check if the transformation only contains uniform scaling
+
+        Checks if the AffineTransform object represents only a uniform scaling transformation,
+        with no translation, rotation, or shearing applied. Uniform scaling has equal scale
+        factors in both x and y directions.
+
+        @return True if this is only a uniform scaling transformation, false otherwise.
+    */
+    constexpr bool isOnlyUniformScaling() const noexcept
+    {
+        return approximatelyEqual (translateX, 0.0f)
+            && approximatelyEqual (translateY, 0.0f)
+            && approximatelyEqual (shearX, 0.0f)
+            && approximatelyEqual (shearY, 0.0f)
+            && approximatelyEqual (scaleX, scaleY)
+            && ! approximatelyEqual (scaleX, 1.0f);
+    }
+
+    /** Check if the transformation only contains non-uniform scaling
+
+        Checks if the AffineTransform object represents only a non-uniform scaling transformation,
+        with no translation, rotation, or shearing applied. Non-uniform scaling has different
+        scale factors in x and y directions.
+
+        @return True if this is only a non-uniform scaling transformation, false otherwise.
+    */
+    constexpr bool isOnlyNonUniformScaling() const noexcept
+    {
+        return approximatelyEqual (translateX, 0.0f)
+            && approximatelyEqual (translateY, 0.0f)
+            && approximatelyEqual (shearX, 0.0f)
+            && approximatelyEqual (shearY, 0.0f)
+            && ! approximatelyEqual (scaleX, scaleY)
+            && ! approximatelyEqual (scaleX, 1.0f)
+            && ! approximatelyEqual (scaleY, 1.0f);
+    }
+
+    /** Check if the transformation only contains scaling (uniform or non-uniform)
+
+        Checks if the AffineTransform object represents only a scaling transformation,
+        with no translation, rotation, or shearing applied.
+
+        @return True if this is only a scaling transformation, false otherwise.
+    */
+    constexpr bool isOnlyScaling() const noexcept
+    {
+        return isOnlyUniformScaling() || isOnlyNonUniformScaling();
+    }
+
+    /** Check if the transformation only contains shearing
+
+        Checks if the AffineTransform object represents only a shearing transformation,
+        with no translation, rotation, or scaling applied. A pure shear maintains unit
+        scale factors.
+
+        @return True if this is only a shearing transformation, false otherwise.
+    */
+    constexpr bool isOnlyShearing() const noexcept
+    {
+        return approximatelyEqual (translateX, 0.0f)
+            && approximatelyEqual (translateY, 0.0f)
+            && approximatelyEqual (scaleX, 1.0f)
+            && approximatelyEqual (scaleY, 1.0f)
+            && (! approximatelyEqual (shearX, 0.0f) || ! approximatelyEqual (shearY, 0.0f));
     }
 
     //==============================================================================
@@ -654,14 +759,21 @@ public:
     */
     [[nodiscard]] constexpr AffineTransform prependedBy (const AffineTransform& other) const noexcept
     {
-        return {
-            scaleX * other.scaleX + shearX * other.shearY,
-            shearX * other.scaleX + scaleY * other.shearY,
-            translateX * other.scaleX + translateY * other.shearY + other.translateX,
-            scaleX * other.shearX + shearY * other.scaleY,
-            shearX * other.shearX + scaleY * other.scaleY,
-            translateX * other.shearX + translateY * other.scaleY + other.translateY
-        };
+        return other.followedBy (*this);
+    }
+
+    //==============================================================================
+    /** Create a transformation that follows another.
+
+        Creates a new AffineTransform object that represents this transformation followed by another specified AffineTransform.
+
+        @param other The AffineTransform to follow this one.
+
+        @return A new AffineTransform object representing the combined transformation.
+    */
+    [[nodiscard]] constexpr AffineTransform operator* (const AffineTransform& other) const noexcept
+    {
+        return followedBy (other);
     }
 
     //==============================================================================
