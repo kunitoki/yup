@@ -155,6 +155,7 @@ TEST (FontTests, LoadFromDirectory)
     EXPECT_FALSE (result.wasOk());
 }
 
+#if ! YUP_EMSCRIPTEN
 TEST (FontTests, LoadFromFileWithValidFile)
 {
     Font font;
@@ -490,6 +491,7 @@ TEST (FontTests, VariableFont_FontMetrics)
     EXPECT_NE (0.0f, font.getDescent());
     EXPECT_GT (font.getWeight(), 0);
 }
+#endif
 
 // ==============================================================================
 // Height Tests
