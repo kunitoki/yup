@@ -25,6 +25,19 @@
 
 using namespace yup;
 
+namespace
+{
+File getValidFontFile()
+{
+    return File (__FILE__)
+        .getParentDirectory()
+        .getParentDirectory()
+        .getChildFile ("data")
+        .getChildFile ("fonts")
+        .getChildFile ("Linefont-VariableFont_wdth,wght.ttf");
+}
+} // namespace
+
 // ==============================================================================
 // Constructor and Assignment Tests
 // ==============================================================================
@@ -135,6 +148,342 @@ TEST (FontTests, LoadFromDirectory)
     Result result = font.loadFromFile (directory);
 
     EXPECT_FALSE (result.wasOk());
+}
+
+TEST (FontTests, LoadFromFileWithValidFile)
+{
+    Font font;
+    File fontFile = getValidFontFile();
+
+    Result result = font.loadFromFile (fontFile);
+
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_TRUE (result.getErrorMessage().isEmpty());
+}
+
+// ==============================================================================
+// Variable Font Tests
+// ==============================================================================
+
+TEST (FontTests, VariableFont_HasCorrectNumberOfAxes)
+{
+    Font font;
+    File fontFile = getValidFontFile();
+
+    font.loadFromFile (fontFile);
+
+    // The font should have 2 axes: wdth and wght
+    EXPECT_EQ (2, font.getNumAxis());
+}
+
+TEST (FontTests, VariableFont_GetAxisDescriptionByIndex)
+{
+    Font font;
+    File fontFile = getValidFontFile();
+
+    font.loadFromFile (fontFile);
+
+    // Get axis descriptions by index
+    auto axis0 = font.getAxisDescription (0);
+    auto axis1 = font.getAxisDescription (1);
+
+    ASSERT_TRUE (axis0.has_value());
+    ASSERT_TRUE (axis1.has_value());
+
+    // Check that we have wdth and wght axes (order may vary)
+    bool hasWdth = axis0->tagName == "wdth" || axis1->tagName == "wdth";
+    bool hasWght = axis0->tagName == "wght" || axis1->tagName == "wght";
+
+    EXPECT_TRUE (hasWdth);
+    EXPECT_TRUE (hasWght);
+}
+
+TEST (FontTests, VariableFont_GetAxisDescriptionByTag)
+{
+    Font font;
+    File fontFile = getValidFontFile();
+
+    font.loadFromFile (fontFile);
+
+    // Get wdth axis description
+    auto wdthAxis = font.getAxisDescription ("wdth");
+    ASSERT_TRUE (wdthAxis.has_value());
+    EXPECT_EQ ("wdth", wdthAxis->tagName);
+    EXPECT_GT (wdthAxis->maximumValue, wdthAxis->minimumValue);
+    EXPECT_GE (wdthAxis->defaultValue, wdthAxis->minimumValue);
+    EXPECT_LE (wdthAxis->defaultValue, wdthAxis->maximumValue);
+
+    // Get wght axis description
+    auto wghtAxis = font.getAxisDescription ("wght");
+    ASSERT_TRUE (wghtAxis.has_value());
+    EXPECT_EQ ("wght", wghtAxis->tagName);
+    EXPECT_GT (wghtAxis->maximumValue, wghtAxis->minimumValue);
+    EXPECT_GE (wghtAxis->defaultValue, wghtAxis->minimumValue);
+    EXPECT_LE (wghtAxis->defaultValue, wghtAxis->maximumValue);
+}
+
+TEST (FontTests, VariableFont_GetAxisDescriptionForInvalidTag)
+{
+    Font font;
+    File fontFile = getValidFontFile();
+
+    font.loadFromFile (fontFile);
+
+    // Try to get description for non-existent axis
+    auto invalidAxis = font.getAxisDescription ("slnt");
+
+    EXPECT_FALSE (invalidAxis.has_value());
+}
+
+TEST (FontTests, VariableFont_GetAxisValueReturnsDefaultValue)
+{
+    Font font;
+    File fontFile = getValidFontFile();
+
+    font.loadFromFile (fontFile);
+
+    // Get default values
+    auto wdthAxis = font.getAxisDescription ("wdth");
+    auto wghtAxis = font.getAxisDescription ("wght");
+
+    ASSERT_TRUE (wdthAxis.has_value());
+    ASSERT_TRUE (wghtAxis.has_value());
+
+    // Initially, axis values should be at their defaults
+    EXPECT_FLOAT_EQ (wdthAxis->defaultValue, font.getAxisValue ("wdth"));
+    EXPECT_FLOAT_EQ (wghtAxis->defaultValue, font.getAxisValue ("wght"));
+}
+
+TEST (FontTests, VariableFont_SetAxisValueByTag)
+{
+    Font font;
+    File fontFile = getValidFontFile();
+
+    font.loadFromFile (fontFile);
+
+    // Get axis ranges
+    auto wdthAxis = font.getAxisDescription ("wdth");
+    auto wghtAxis = font.getAxisDescription ("wght");
+
+    ASSERT_TRUE (wdthAxis.has_value());
+    ASSERT_TRUE (wghtAxis.has_value());
+
+    // Set wdth to maximum
+    font.setAxisValue ("wdth", wdthAxis->maximumValue);
+    EXPECT_FLOAT_EQ (wdthAxis->maximumValue, font.getAxisValue ("wdth"));
+
+    // Set wght to minimum
+    font.setAxisValue ("wght", wghtAxis->minimumValue);
+    EXPECT_FLOAT_EQ (wghtAxis->minimumValue, font.getAxisValue ("wght"));
+}
+
+TEST (FontTests, VariableFont_SetAxisValueByIndex)
+{
+    Font font;
+    File fontFile = getValidFontFile();
+
+    font.loadFromFile (fontFile);
+
+    // Get axis descriptions to find which index is which
+    auto axis0 = font.getAxisDescription (0);
+    ASSERT_TRUE (axis0.has_value());
+
+    // Set axis 0 to its maximum value
+    font.setAxisValue (0, axis0->maximumValue);
+    EXPECT_FLOAT_EQ (axis0->maximumValue, font.getAxisValue (0));
+}
+
+TEST (FontTests, VariableFont_WithAxisValueByTag)
+{
+    Font font;
+    File fontFile = getValidFontFile();
+
+    font.loadFromFile (fontFile);
+
+    auto wghtAxis = font.getAxisDescription ("wght");
+    ASSERT_TRUE (wghtAxis.has_value());
+
+    // Create new font with modified wght
+    Font newFont = font.withAxisValue ("wght", wghtAxis->maximumValue);
+
+    // Original font should be unchanged
+    EXPECT_FLOAT_EQ (wghtAxis->defaultValue, font.getAxisValue ("wght"));
+
+    // New font should have the modified value
+    EXPECT_FLOAT_EQ (wghtAxis->maximumValue, newFont.getAxisValue ("wght"));
+}
+
+TEST (FontTests, VariableFont_WithAxisValueByIndex)
+{
+    Font font;
+    File fontFile = getValidFontFile();
+
+    font.loadFromFile (fontFile);
+
+    auto axis0 = font.getAxisDescription (0);
+    ASSERT_TRUE (axis0.has_value());
+
+    // Create new font with modified axis value
+    Font newFont = font.withAxisValue (0, axis0->maximumValue);
+
+    // Original font should be unchanged
+    EXPECT_FLOAT_EQ (axis0->defaultValue, font.getAxisValue (0));
+
+    // New font should have the modified value
+    EXPECT_FLOAT_EQ (axis0->maximumValue, newFont.getAxisValue (0));
+}
+
+TEST (FontTests, VariableFont_ResetAxisValueByTag)
+{
+    Font font;
+    File fontFile = getValidFontFile();
+
+    font.loadFromFile (fontFile);
+
+    auto wdthAxis = font.getAxisDescription ("wdth");
+    ASSERT_TRUE (wdthAxis.has_value());
+
+    // Set to non-default value
+    font.setAxisValue ("wdth", wdthAxis->maximumValue);
+    EXPECT_FLOAT_EQ (wdthAxis->maximumValue, font.getAxisValue ("wdth"));
+
+    // Reset to default
+    font.resetAxisValue ("wdth");
+    EXPECT_FLOAT_EQ (wdthAxis->defaultValue, font.getAxisValue ("wdth"));
+}
+
+TEST (FontTests, VariableFont_ResetAxisValueByIndex)
+{
+    Font font;
+    File fontFile = getValidFontFile();
+
+    font.loadFromFile (fontFile);
+
+    auto axis0 = font.getAxisDescription (0);
+    ASSERT_TRUE (axis0.has_value());
+
+    // Set to non-default value
+    font.setAxisValue (0, axis0->maximumValue);
+    EXPECT_FLOAT_EQ (axis0->maximumValue, font.getAxisValue (0));
+
+    // Reset to default
+    font.resetAxisValue (0);
+    EXPECT_FLOAT_EQ (axis0->defaultValue, font.getAxisValue (0));
+}
+
+TEST (FontTests, VariableFont_ResetAllAxisValues)
+{
+    Font font;
+    File fontFile = getValidFontFile();
+
+    font.loadFromFile (fontFile);
+
+    auto wdthAxis = font.getAxisDescription ("wdth");
+    auto wghtAxis = font.getAxisDescription ("wght");
+
+    ASSERT_TRUE (wdthAxis.has_value());
+    ASSERT_TRUE (wghtAxis.has_value());
+
+    // Set both axes to non-default values
+    font.setAxisValue ("wdth", wdthAxis->maximumValue);
+    font.setAxisValue ("wght", wghtAxis->minimumValue);
+
+    // Reset all axes
+    font.resetAllAxisValues();
+
+    // Both should be back to defaults
+    EXPECT_FLOAT_EQ (wdthAxis->defaultValue, font.getAxisValue ("wdth"));
+    EXPECT_FLOAT_EQ (wghtAxis->defaultValue, font.getAxisValue ("wght"));
+}
+
+TEST (FontTests, VariableFont_SetAxisValues)
+{
+    Font font;
+    File fontFile = getValidFontFile();
+
+    font.loadFromFile (fontFile);
+
+    auto wdthAxis = font.getAxisDescription ("wdth");
+    auto wghtAxis = font.getAxisDescription ("wght");
+
+    ASSERT_TRUE (wdthAxis.has_value());
+    ASSERT_TRUE (wghtAxis.has_value());
+
+    // Set multiple axes at once
+    font.setAxisValues ({ { "wdth", wdthAxis->maximumValue },
+                          { "wght", wghtAxis->minimumValue } });
+
+    EXPECT_FLOAT_EQ (wdthAxis->maximumValue, font.getAxisValue ("wdth"));
+    EXPECT_FLOAT_EQ (wghtAxis->minimumValue, font.getAxisValue ("wght"));
+}
+
+TEST (FontTests, VariableFont_WithAxisValues)
+{
+    Font font;
+    File fontFile = getValidFontFile();
+
+    font.loadFromFile (fontFile);
+
+    auto wdthAxis = font.getAxisDescription ("wdth");
+    auto wghtAxis = font.getAxisDescription ("wght");
+
+    ASSERT_TRUE (wdthAxis.has_value());
+    ASSERT_TRUE (wghtAxis.has_value());
+
+    // Create new font with multiple axis modifications
+    Font newFont = font.withAxisValues ({ { "wdth", wdthAxis->minimumValue },
+                                          { "wght", wghtAxis->maximumValue } });
+
+    // Original font should be unchanged
+    EXPECT_FLOAT_EQ (wdthAxis->defaultValue, font.getAxisValue ("wdth"));
+    EXPECT_FLOAT_EQ (wghtAxis->defaultValue, font.getAxisValue ("wght"));
+
+    // New font should have the modified values
+    EXPECT_FLOAT_EQ (wdthAxis->minimumValue, newFont.getAxisValue ("wdth"));
+    EXPECT_FLOAT_EQ (wghtAxis->maximumValue, newFont.getAxisValue ("wght"));
+}
+
+TEST (FontTests, VariableFont_ChainedAxisOperations)
+{
+    Font font;
+    File fontFile = getValidFontFile();
+
+    font.loadFromFile (fontFile);
+
+    auto wdthAxis = font.getAxisDescription ("wdth");
+    auto wghtAxis = font.getAxisDescription ("wght");
+
+    ASSERT_TRUE (wdthAxis.has_value());
+    ASSERT_TRUE (wghtAxis.has_value());
+
+    // Chain multiple operations
+    Font newFont = font
+                       .withAxisValue ("wdth", wdthAxis->maximumValue)
+                       .withAxisValue ("wght", wghtAxis->minimumValue)
+                       .withHeight (24.0f);
+
+    // Original font should be unchanged
+    EXPECT_FLOAT_EQ (wdthAxis->defaultValue, font.getAxisValue ("wdth"));
+    EXPECT_FLOAT_EQ (wghtAxis->defaultValue, font.getAxisValue ("wght"));
+    EXPECT_EQ (12.0f, font.getHeight());
+
+    // New font should have all modifications
+    EXPECT_FLOAT_EQ (wdthAxis->maximumValue, newFont.getAxisValue ("wdth"));
+    EXPECT_FLOAT_EQ (wghtAxis->minimumValue, newFont.getAxisValue ("wght"));
+    EXPECT_EQ (24.0f, newFont.getHeight());
+}
+
+TEST (FontTests, VariableFont_FontMetrics)
+{
+    Font font;
+    File fontFile = getValidFontFile();
+
+    font.loadFromFile (fontFile);
+
+    // Variable font should have valid metrics
+    EXPECT_NE (0.0f, font.getAscent());
+    EXPECT_NE (0.0f, font.getDescent());
+    EXPECT_GT (font.getWeight(), 0);
 }
 
 // ==============================================================================
