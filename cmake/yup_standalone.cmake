@@ -187,8 +187,8 @@ function (yup_standalone_app)
             -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall','$stackTrace'
             --shell-file "${YUP_ARG_CUSTOM_SHELL}")
 
-        foreach (preload_file ${YUP_ARG_PRELOAD_FILES})
-            list (APPEND additional_link_options --preload-file ${preload_file})
+        foreach (preload_file IN LISTS ${YUP_ARG_PRELOAD_FILES})
+            list (APPEND additional_link_options --preload-file "${preload_file}")
         endforeach()
 
         set (target_copy_dest "$<TARGET_FILE_DIR:${target_name}>")
