@@ -237,14 +237,14 @@ TEST_F (AudioProcessLoadMeasurerTests, ScopedTimerConstructor)
 {
     measurer->reset (44100.0, 512);
 
-    EXPECT_NO_THROW (AudioProcessLoadMeasurer::ScopedTimer (*measurer));
+    EXPECT_NO_THROW ((AudioProcessLoadMeasurer::ScopedTimer { *measurer }));
 }
 
 TEST_F (AudioProcessLoadMeasurerTests, ScopedTimerWithSamples)
 {
     measurer->reset (44100.0, 512);
 
-    EXPECT_NO_THROW (AudioProcessLoadMeasurer::ScopedTimer (*measurer, 256));
+    EXPECT_NO_THROW ((AudioProcessLoadMeasurer::ScopedTimer { *measurer, 256 }));
 }
 
 TEST_F (AudioProcessLoadMeasurerTests, ScopedTimerMeasures)

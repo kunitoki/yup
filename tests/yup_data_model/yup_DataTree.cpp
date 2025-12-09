@@ -696,6 +696,45 @@ TEST_F (DataTreeTests, XmlSerialization)
     // Reconstruct from XML
     auto reconstructed = DataTree::fromXml (*xml);
     EXPECT_TRUE (reconstructed.isValid());
+    EXPECT_TRUE (reconstructed.getProperty ("intProp").isString());
+    EXPECT_EQ ("42", reconstructed.getProperty ("intProp").toString());
+    EXPECT_TRUE (reconstructed.getProperty ("floatProp").isString());
+    EXPECT_EQ ("3.14", reconstructed.getProperty ("floatProp").toString());
+}
+
+TEST_F (DataTreeTests, XmlSerializationWithSchemaRestoresTypes)
+{
+    {
+        auto transaction = tree.beginTransaction();
+        transaction.setProperty ("stringProp", "test string");
+        transaction.setProperty ("intProp", 42);
+        transaction.setProperty ("floatProp", 3.14);
+        transaction.setProperty ("boolProp", true);
+    }
+
+    auto xml = tree.createXml();
+    ASSERT_NE (nullptr, xml);
+
+    const String schemaJson = R"({
+        "nodeTypes": {
+            "Root": {
+                "properties": {
+                    "stringProp": { "type": "string" },
+                    "intProp":    { "type": "number" },
+                    "floatProp":  { "type": "number" },
+                    "boolProp":   { "type": "boolean" }
+                }
+            }
+        }
+    })";
+
+    var schemaVar;
+    ASSERT_TRUE (JSON::parse (schemaJson, schemaVar));
+    auto schema = DataTreeSchema::fromJsonSchema (schemaVar);
+    ASSERT_NE (nullptr, schema);
+
+    auto reconstructed = DataTree::fromXml (*xml, schema);
+    EXPECT_TRUE (reconstructed.isValid());
     EXPECT_TRUE (tree.isEquivalentTo (reconstructed));
 }
 
@@ -970,10 +1009,55 @@ TEST_F (DataTreeTests, SerializationFormatConsistency)
         transaction.addChild (plugins);
     }
 
+    const String schemaJson = R"({
+        "nodeTypes": {
+            "Application": {
+                "properties": {
+                    "name":     { "type": "string" },
+                    "version":  { "type": "string" },
+                    "debug":    { "type": "boolean" },
+                    "maxUsers": { "type": "number" },
+                    "pi":       { "type": "number" }
+                },
+                "children": { "allowedTypes": ["Settings", "Plugins"] }
+            },
+            "Settings": {
+                "properties": {
+                    "theme":    { "type": "string" },
+                    "autoSave": { "type": "boolean" },
+                    "interval": { "type": "number" }
+                },
+                "children": { "allowedTypes": ["Advanced"] }
+            },
+            "Advanced": {
+                "properties": {
+                    "bufferSize":  { "type": "number" },
+                    "compression": { "type": "boolean" }
+                },
+                "children": { "maxCount": 0 }
+            },
+            "Plugins": {
+                "children": { "allowedTypes": ["Plugin"] }
+            },
+            "Plugin": {
+                "properties": {
+                    "name":    { "type": "string" },
+                    "enabled": { "type": "boolean" }
+                },
+                "children": { "maxCount": 0 }
+            }
+        }
+    })";
+
+    var schemaVar;
+    ASSERT_TRUE (JSON::parse (schemaJson, schemaVar));
+    auto schema = DataTreeSchema::fromJsonSchema (schemaVar);
+    ASSERT_NE (nullptr, schema);
+
     // Test XML serialization roundtrip
     auto xml = original.createXml();
     ASSERT_NE (nullptr, xml);
-    auto fromXml = DataTree::fromXml (*xml);
+    auto fromXml = DataTree::fromXml (*xml, schema);
     EXPECT_TRUE (fromXml.isValid());
     EXPECT_TRUE (original.isEquivalentTo (fromXml));
 
