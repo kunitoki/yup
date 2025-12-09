@@ -318,3 +318,227 @@ TEST_F (FloatVectorOperationsTests, FloatToDoubleAndBack)
             EXPECT_NEAR ((float) floatData[i], (float) doubleData[i], std::numeric_limits<float>::epsilon());
     }
 }
+
+TEST_F (FloatVectorOperationsTests, FindMinAndMax)
+{
+    float data[10] = { 0.1f, -0.5f, 0.8f, -0.2f, 0.4f, 0.9f, -0.7f, 0.3f, -0.1f, 0.6f };
+
+    auto range = FloatVectorOperations::findMinAndMax (data, 10);
+
+    EXPECT_FLOAT_EQ (range.getStart(), -0.7f);
+    EXPECT_FLOAT_EQ (range.getEnd(), 0.9f);
+}
+
+TEST_F (FloatVectorOperationsTests, FindMinimum)
+{
+    float data[10] = { 0.1f, -0.5f, 0.8f, -0.2f, 0.4f, 0.9f, -0.7f, 0.3f, -0.1f, 0.6f };
+
+    auto minVal = FloatVectorOperations::findMinimum (data, 10);
+
+    EXPECT_FLOAT_EQ (minVal, -0.7f);
+}
+
+TEST_F (FloatVectorOperationsTests, FindMaximum)
+{
+    float data[10] = { 0.1f, -0.5f, 0.8f, -0.2f, 0.4f, 0.9f, -0.7f, 0.3f, -0.1f, 0.6f };
+
+    auto maxVal = FloatVectorOperations::findMaximum (data, 10);
+
+    EXPECT_FLOAT_EQ (maxVal, 0.9f);
+}
+
+TEST_F (FloatVectorOperationsTests, Negate)
+{
+    float src[5] = { 1.0f, -2.0f, 3.0f, -4.0f, 5.0f };
+    float dest[5];
+
+    FloatVectorOperations::negate (dest, src, 5);
+
+    EXPECT_FLOAT_EQ (dest[0], -1.0f);
+    EXPECT_FLOAT_EQ (dest[1], 2.0f);
+    EXPECT_FLOAT_EQ (dest[2], -3.0f);
+    EXPECT_FLOAT_EQ (dest[3], 4.0f);
+    EXPECT_FLOAT_EQ (dest[4], -5.0f);
+}
+
+TEST_F (FloatVectorOperationsTests, Abs)
+{
+    float src[5] = { 1.0f, -2.0f, 3.0f, -4.0f, 5.0f };
+    float dest[5];
+
+    FloatVectorOperations::abs (dest, src, 5);
+
+    EXPECT_FLOAT_EQ (dest[0], 1.0f);
+    EXPECT_FLOAT_EQ (dest[1], 2.0f);
+    EXPECT_FLOAT_EQ (dest[2], 3.0f);
+    EXPECT_FLOAT_EQ (dest[3], 4.0f);
+    EXPECT_FLOAT_EQ (dest[4], 5.0f);
+}
+
+TEST_F (FloatVectorOperationsTests, MinWithScalar)
+{
+    float src[5] = { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f };
+    float dest[5];
+
+    FloatVectorOperations::min (dest, src, 3.0f, 5);
+
+    EXPECT_FLOAT_EQ (dest[0], 1.0f);
+    EXPECT_FLOAT_EQ (dest[1], 2.0f);
+    EXPECT_FLOAT_EQ (dest[2], 3.0f);
+    EXPECT_FLOAT_EQ (dest[3], 3.0f);
+    EXPECT_FLOAT_EQ (dest[4], 3.0f);
+}
+
+TEST_F (FloatVectorOperationsTests, MinWithArray)
+{
+    float src1[5] = { 1.0f, 5.0f, 2.0f, 4.0f, 3.0f };
+    float src2[5] = { 3.0f, 2.0f, 4.0f, 1.0f, 5.0f };
+    float dest[5];
+
+    FloatVectorOperations::min (dest, src1, src2, 5);
+
+    EXPECT_FLOAT_EQ (dest[0], 1.0f);
+    EXPECT_FLOAT_EQ (dest[1], 2.0f);
+    EXPECT_FLOAT_EQ (dest[2], 2.0f);
+    EXPECT_FLOAT_EQ (dest[3], 1.0f);
+    EXPECT_FLOAT_EQ (dest[4], 3.0f);
+}
+
+TEST_F (FloatVectorOperationsTests, MaxWithScalar)
+{
+    float src[5] = { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f };
+    float dest[5];
+
+    FloatVectorOperations::max (dest, src, 3.0f, 5);
+
+    EXPECT_FLOAT_EQ (dest[0], 3.0f);
+    EXPECT_FLOAT_EQ (dest[1], 3.0f);
+    EXPECT_FLOAT_EQ (dest[2], 3.0f);
+    EXPECT_FLOAT_EQ (dest[3], 4.0f);
+    EXPECT_FLOAT_EQ (dest[4], 5.0f);
+}
+
+TEST_F (FloatVectorOperationsTests, MaxWithArray)
+{
+    float src1[5] = { 1.0f, 5.0f, 2.0f, 4.0f, 3.0f };
+    float src2[5] = { 3.0f, 2.0f, 4.0f, 1.0f, 5.0f };
+    float dest[5];
+
+    FloatVectorOperations::max (dest, src1, src2, 5);
+
+    EXPECT_FLOAT_EQ (dest[0], 3.0f);
+    EXPECT_FLOAT_EQ (dest[1], 5.0f);
+    EXPECT_FLOAT_EQ (dest[2], 4.0f);
+    EXPECT_FLOAT_EQ (dest[3], 4.0f);
+    EXPECT_FLOAT_EQ (dest[4], 5.0f);
+}
+
+TEST_F (FloatVectorOperationsTests, Clip)
+{
+    float src[7] = { -2.0f, -0.5f, 0.0f, 0.5f, 1.0f, 1.5f, 2.0f };
+    float dest[7];
+
+    FloatVectorOperations::clip (dest, src, 0.0f, 1.0f, 7);
+
+    EXPECT_FLOAT_EQ (dest[0], 0.0f);
+    EXPECT_FLOAT_EQ (dest[1], 0.0f);
+    EXPECT_FLOAT_EQ (dest[2], 0.0f);
+    EXPECT_FLOAT_EQ (dest[3], 0.5f);
+    EXPECT_FLOAT_EQ (dest[4], 1.0f);
+    EXPECT_FLOAT_EQ (dest[5], 1.0f);
+    EXPECT_FLOAT_EQ (dest[6], 1.0f);
+}
+
+TEST_F (FloatVectorOperationsTests, CopyWithDividend)
+{
+    float src[5] = { 2.0f, 4.0f, 5.0f, 10.0f, 20.0f };
+    float dest[5];
+
+    FloatVectorOperations::copyWithDividend (dest, src, 20.0f, 5);
+
+    EXPECT_FLOAT_EQ (dest[0], 10.0f);
+    EXPECT_FLOAT_EQ (dest[1], 5.0f);
+    EXPECT_FLOAT_EQ (dest[2], 4.0f);
+    EXPECT_FLOAT_EQ (dest[3], 2.0f);
+    EXPECT_FLOAT_EQ (dest[4], 1.0f);
+}
+
+TEST_F (FloatVectorOperationsTests, CopyWithDivide)
+{
+    float src[5] = { 20.0f, 10.0f, 8.0f, 4.0f, 2.0f };
+    float dest[5];
+
+    FloatVectorOperations::copyWithDivide (dest, src, 2.0f, 5);
+
+    EXPECT_FLOAT_EQ (dest[0], 10.0f);
+    EXPECT_FLOAT_EQ (dest[1], 5.0f);
+    EXPECT_FLOAT_EQ (dest[2], 4.0f);
+    EXPECT_FLOAT_EQ (dest[3], 2.0f);
+    EXPECT_FLOAT_EQ (dest[4], 1.0f);
+}
+
+TEST_F (FloatVectorOperationsTests, DivideScalarByArray)
+{
+    float src[5] = { 2.0f, 4.0f, 5.0f, 10.0f, 20.0f };
+    float dest[5];
+
+    FloatVectorOperations::divide (dest, 20.0f, 5);
+
+    // Initial dest values get divided
+    for (int i = 0; i < 5; ++i)
+        dest[i] = src[i];
+
+    FloatVectorOperations::divide (dest, 2.0f, 5);
+
+    EXPECT_FLOAT_EQ (dest[0], 1.0f);
+    EXPECT_FLOAT_EQ (dest[1], 2.0f);
+    EXPECT_FLOAT_EQ (dest[2], 2.5f);
+    EXPECT_FLOAT_EQ (dest[3], 5.0f);
+    EXPECT_FLOAT_EQ (dest[4], 10.0f);
+}
+
+TEST_F (FloatVectorOperationsTests, EnableFlushToZeroMode)
+{
+    // Just test that it doesn't crash
+    EXPECT_NO_THROW (FloatVectorOperations::enableFlushToZeroMode (true));
+    EXPECT_NO_THROW (FloatVectorOperations::enableFlushToZeroMode (false));
+}
+
+TEST_F (FloatVectorOperationsTests, LargeBufferOperations)
+{
+    const int size = 10000;
+    HeapBlock<float> src (size);
+    HeapBlock<float> dest (size);
+
+    Random& random = Random::getSystemRandom();
+    for (int i = 0; i < size; ++i)
+        src[i] = random.nextFloat() * 2.0f - 1.0f;
+
+    // Test that large buffer operations don't crash
+    EXPECT_NO_THROW (FloatVectorOperations::copy (dest, src, size));
+    EXPECT_NO_THROW (FloatVectorOperations::multiply (dest, 2.0f, size));
+    EXPECT_NO_THROW (FloatVectorOperations::add (dest, 1.0f, size));
+    EXPECT_NO_THROW (FloatVectorOperations::clear (dest, size));
+}
+
+TEST_F (FloatVectorOperationsTests, DoubleOperations)
+{
+    double src[5] = { 1.0, 2.0, 3.0, 4.0, 5.0 };
+    double dest[5];
+
+    FloatVectorOperations::clear (dest, 5);
+    for (int i = 0; i < 5; ++i)
+        EXPECT_DOUBLE_EQ (dest[i], 0.0);
+
+    FloatVectorOperations::copy (dest, src, 5);
+    for (int i = 0; i < 5; ++i)
+        EXPECT_DOUBLE_EQ (dest[i], src[i]);
+
+    FloatVectorOperations::multiply (dest, 2.0, 5);
+    for (int i = 0; i < 5; ++i)
+        EXPECT_DOUBLE_EQ (dest[i], src[i] * 2.0);
+
+    FloatVectorOperations::add (dest, 1.0, 5);
+    for (int i = 0; i < 5; ++i)
+        EXPECT_DOUBLE_EQ (dest[i], src[i] * 2.0 + 1.0);
+}

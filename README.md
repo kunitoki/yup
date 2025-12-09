@@ -177,7 +177,7 @@ Generate the build system files with CMake.
 For a standard desktop build with tests and examples enabled, run:
 
 ```bash
-cmake . -B build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+cmake . -B build -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON
 cmake --build build --config Release --parallel 4
 ```
 
@@ -186,7 +186,7 @@ cmake --build build --config Release --parallel 4
 Android will rely on cmake for configuration and gradlew will again call into cmake to build the native part of yup:
 
 ```bash
-cmake -G "Ninja Multi-Config" . -B build -DYUP_TARGET_ANDROID=ON -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+cmake -G "Ninja Multi-Config" . -B build -DYUP_TARGET_ANDROID=ON -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON
 cd build/examples/render
 ./gradlew assembleRelease
 # ./gradlew assembleDebug
