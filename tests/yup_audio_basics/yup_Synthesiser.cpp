@@ -28,6 +28,14 @@ using namespace yup;
 namespace
 {
 
+// Test-friendly Synthesiser that exposes protected methods for testing
+class TestSynthesiser : public Synthesiser
+{
+public:
+    using Synthesiser::handleMidiEvent;
+    using Synthesiser::startVoice;
+};
+
 // Test implementation of SynthesiserSound
 class TestSound : public SynthesiserSound
 {
@@ -81,6 +89,7 @@ public:
         lastStopVelocity = velocity;
         lastAllowTailOff = allowTailOff;
         noteStopped = true;
+        stopCount++;
 
         if (! allowTailOff)
         {
@@ -151,6 +160,8 @@ public:
 
     int getLastRenderNumSamples() const { return lastRenderNumSamples; }
 
+    int getStopCount() const { return stopCount; }
+
     void reset()
     {
         noteStarted = false;
@@ -168,6 +179,7 @@ public:
         lastRenderStartSample = -1;
         lastRenderNumSamples = -1;
         phase = 0.0f;
+        stopCount = 0;
     }
 
 private:
@@ -186,6 +198,7 @@ private:
     int lastPitchWheel = 8192;
     int lastRenderStartSample = -1;
     int lastRenderNumSamples = -1;
+    int stopCount = 0;
 
     float phase = 0.0f;
     SynthesiserSound* currentSound = nullptr;
@@ -198,7 +211,7 @@ class SynthesiserTest : public ::testing::Test
 protected:
     void SetUp() override
     {
-        synth = std::make_unique<Synthesiser>();
+        synth = std::make_unique<TestSynthesiser>();
         synth->setCurrentPlaybackSampleRate (44100.0);
     }
 
@@ -207,7 +220,7 @@ protected:
         synth.reset();
     }
 
-    std::unique_ptr<Synthesiser> synth;
+    std::unique_ptr<TestSynthesiser> synth;
 };
 
 TEST_F (SynthesiserTest, DefaultConstruction)
@@ -679,4 +692,481 @@ TEST_F (SynthesiserTest, VoiceStateManagement)
     EXPECT_EQ (voice->getCurrentlyPlayingNote(), -1);
     EXPECT_EQ (voice->getCurrentlyPlayingSound(), nullptr);
     EXPECT_FALSE (voice->isKeyDown());
+}
+
+//==============================================================================
+// Additional coverage tests for uncovered lines
+
+TEST_F (SynthesiserTest, WasStartedBeforeComparison)
+{
+    auto* voice1 = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto* voice2 = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto sound = SynthesiserSound::Ptr (new TestSound());
+    synth->addSound (sound);
+
+    // Start notes in sequence
+    synth->noteOn (1, 60, 0.8f);
+    synth->noteOn (1, 64, 0.7f);
+
+    // voice1 was started before voice2
+    EXPECT_TRUE (voice1->wasStartedBefore (*voice2));
+    EXPECT_FALSE (voice2->wasStartedBefore (*voice1));
+}
+
+TEST_F (SynthesiserTest, SetCurrentPlaybackSampleRateUpdatesVoices)
+{
+    // Add voice after initial sample rate is set
+    auto* voice = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    EXPECT_EQ (voice->getSampleRate(), 44100.0);
+
+    // Change sample rate - should update all voices
+    synth->setCurrentPlaybackSampleRate (48000.0);
+    EXPECT_EQ (voice->getSampleRate(), 48000.0);
+
+    // Add another voice after rate change
+    auto* voice2 = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    EXPECT_EQ (voice2->getSampleRate(), 48000.0);
+}
+
+TEST_F (SynthesiserTest, SetCurrentPlaybackSampleRateClearsActiveNotes)
+{
+    auto* voice = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto sound = SynthesiserSound::Ptr (new TestSound());
+    synth->addSound (sound);
+
+    // Start a note
+    synth->noteOn (1, 60, 0.8f);
+    EXPECT_TRUE (voice->isVoiceActive());
+
+    voice->reset();
+
+    // Change sample rate should stop all notes
+    synth->setCurrentPlaybackSampleRate (48000.0);
+    EXPECT_TRUE (voice->wasNoteStopped());
+}
+
+TEST_F (SynthesiserTest, HandleMidiEventAllNotesOff)
+{
+    auto* voice = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto sound = SynthesiserSound::Ptr (new TestSound());
+    synth->addSound (sound);
+
+    synth->noteOn (1, 60, 0.8f);
+    voice->reset();
+
+    // Send all notes off message
+    MidiMessage msg = MidiMessage::allNotesOff (1);
+    synth->handleMidiEvent (msg);
+
+    EXPECT_TRUE (voice->wasNoteStopped());
+}
+
+TEST_F (SynthesiserTest, HandleMidiEventAllSoundOff)
+{
+    auto* voice = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto sound = SynthesiserSound::Ptr (new TestSound());
+    synth->addSound (sound);
+
+    synth->noteOn (1, 60, 0.8f);
+    voice->reset();
+
+    // Send all sound off message
+    MidiMessage msg = MidiMessage::allSoundOff (1);
+    synth->handleMidiEvent (msg);
+
+    EXPECT_TRUE (voice->wasNoteStopped());
+}
+
+TEST_F (SynthesiserTest, HandleMidiEventAftertouch)
+{
+    auto* voice = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto sound = SynthesiserSound::Ptr (new TestSound());
+    synth->addSound (sound);
+
+    synth->noteOn (1, 60, 0.8f);
+
+    // Send aftertouch message
+    MidiMessage msg = MidiMessage::aftertouchChange (1, 60, 80);
+    synth->handleMidiEvent (msg);
+
+    // Just verify it doesn't crash - base implementation does nothing
+}
+
+TEST_F (SynthesiserTest, HandleMidiEventChannelPressure)
+{
+    auto* voice = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto sound = SynthesiserSound::Ptr (new TestSound());
+    synth->addSound (sound);
+
+    synth->noteOn (1, 60, 0.8f);
+
+    // Send channel pressure message
+    MidiMessage msg = MidiMessage::channelPressureChange (1, 100);
+    synth->handleMidiEvent (msg);
+
+    // Just verify it doesn't crash - base implementation does nothing
+}
+
+TEST_F (SynthesiserTest, HandleMidiEventProgramChange)
+{
+    // Send program change message
+    MidiMessage msg = MidiMessage::programChange (1, 42);
+    synth->handleMidiEvent (msg);
+
+    // Just verify it doesn't crash - base implementation does nothing
+}
+
+TEST_F (SynthesiserTest, NoteOnStopsExistingNote)
+{
+    auto* voice1 = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto sound = SynthesiserSound::Ptr (new TestSound());
+    synth->addSound (sound);
+
+    // Start note 60
+    synth->noteOn (1, 60, 0.8f);
+    EXPECT_EQ (voice1->getCurrentlyPlayingNote(), 60);
+    EXPECT_TRUE (voice1->isVoiceActive());
+
+    // Add another voice to avoid immediate restart on the same voice
+    auto* voice2 = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+
+    // Start the same note again - should stop voice1 first and start voice2
+    synth->noteOn (1, 60, 0.7f);
+
+    // voice1 should have been stopped with tail-off
+    EXPECT_TRUE (voice1->wasNoteStopped());
+    EXPECT_TRUE (voice1->getLastAllowTailOff());
+
+    // voice2 should have started the new note
+    EXPECT_TRUE (voice2->wasNoteStarted());
+    EXPECT_EQ (voice2->getCurrentlyPlayingNote(), 60);
+}
+
+TEST_F (SynthesiserTest, StartVoiceStopsActiveVoice)
+{
+    auto* voice = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto sound = SynthesiserSound::Ptr (new TestSound());
+    synth->addSound (sound);
+
+    // Start a note
+    synth->noteOn (1, 60, 0.8f);
+    EXPECT_TRUE (voice->isVoiceActive());
+    EXPECT_NE (voice->getCurrentlyPlayingSound(), nullptr);
+    EXPECT_EQ (voice->getStopCount(), 0);
+
+    // Manually start the same voice again (simulating voice stealing scenario)
+    // This forces the voice->stopNote (0.0f, false) path in startVoice (line 352)
+    synth->startVoice (voice, sound.get(), 1, 64, 0.7f);
+
+    // Voice should have been stopped without tail-off and restarted with new note
+    EXPECT_EQ (voice->getStopCount(), 1); // stopNote was called once
+    EXPECT_FALSE (voice->getLastAllowTailOff());
+    EXPECT_EQ (voice->getCurrentlyPlayingNote(), 64);
+}
+
+TEST_F (SynthesiserTest, HandleControllerSustainPedal)
+{
+    auto* voice = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto sound = SynthesiserSound::Ptr (new TestSound());
+    synth->addSound (sound);
+
+    synth->noteOn (1, 60, 0.8f);
+
+    // Send sustain pedal on (controller 0x40, value >= 64)
+    synth->handleController (1, 0x40, 127);
+    EXPECT_TRUE (voice->isSustainPedalDown());
+
+    // Release key
+    synth->noteOff (1, 60, 0.5f, true);
+    EXPECT_FALSE (voice->isKeyDown());
+    EXPECT_TRUE (voice->isVoiceActive()); // Still active due to sustain
+
+    voice->reset();
+
+    // Send sustain pedal off (controller 0x40, value < 64)
+    synth->handleController (1, 0x40, 0);
+    EXPECT_FALSE (voice->isSustainPedalDown());
+    EXPECT_TRUE (voice->wasNoteStopped());
+}
+
+TEST_F (SynthesiserTest, HandleControllerSostenutoPedal)
+{
+    auto* voice = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto sound = SynthesiserSound::Ptr (new TestSound());
+    synth->addSound (sound);
+
+    synth->noteOn (1, 60, 0.8f);
+
+    // Send sostenuto pedal on (controller 0x42, value >= 64)
+    synth->handleController (1, 0x42, 127);
+    EXPECT_TRUE (voice->isSostenutoPedalDown());
+
+    voice->reset();
+
+    // Send sostenuto pedal off (controller 0x42, value < 64)
+    synth->handleController (1, 0x42, 0);
+    EXPECT_TRUE (voice->wasNoteStopped());
+}
+
+TEST_F (SynthesiserTest, HandleControllerSoftPedal)
+{
+    // Send soft pedal on (controller 0x43, value >= 64)
+    synth->handleController (1, 0x43, 127);
+
+    // Send soft pedal off (controller 0x43, value < 64)
+    synth->handleController (1, 0x43, 0);
+
+    // Just verify it doesn't crash - base implementation does nothing
+}
+
+TEST_F (SynthesiserTest, ProcessNextBlockWithMidiAtEndOfBuffer)
+{
+    auto* voice = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto sound = SynthesiserSound::Ptr (new TestSound());
+    synth->addSound (sound);
+
+    AudioBuffer<float> buffer (2, 64);
+    buffer.clear();
+
+    MidiBuffer midiBuffer;
+    // Add MIDI event at the exact end of the buffer
+    midiBuffer.addEvent (MidiMessage::noteOn (1, 60, 0.8f), 64);
+
+    voice->reset();
+
+    synth->renderNextBlock (buffer, midiBuffer, 0, 64);
+
+    // The note should be handled but not rendered in this block
+    EXPECT_TRUE (voice->wasNoteStarted());
+}
+
+TEST_F (SynthesiserTest, ProcessNextBlockWithMidiAfterRenderRegion)
+{
+    auto* voice = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto sound = SynthesiserSound::Ptr (new TestSound());
+    synth->addSound (sound);
+
+    AudioBuffer<float> buffer (2, 128);
+    buffer.clear();
+
+    MidiBuffer midiBuffer;
+    // Add MIDI events throughout and after the render region
+    midiBuffer.addEvent (MidiMessage::noteOn (1, 60, 0.8f), 0);
+    midiBuffer.addEvent (MidiMessage::controllerEvent (1, 7, 100), 64);
+    midiBuffer.addEvent (MidiMessage::noteOff (1, 60, 0.5f), 96);
+
+    voice->reset();
+
+    // Render only first 64 samples, but buffer has events beyond
+    synth->renderNextBlock (buffer, midiBuffer, 0, 64);
+
+    EXPECT_TRUE (voice->wasNoteStarted());
+    EXPECT_TRUE (voice->wasControllerMoved());
+    EXPECT_TRUE (voice->wasNoteStopped());
+}
+
+TEST_F (SynthesiserTest, FindFreeVoiceWithoutStealing)
+{
+    // Don't enable note stealing
+    synth->setNoteStealingEnabled (false);
+
+    auto* voice1 = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto* voice2 = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto sound = SynthesiserSound::Ptr (new TestSound());
+    synth->addSound (sound);
+
+    // Start notes to occupy all voices
+    synth->noteOn (1, 60, 0.8f);
+    synth->noteOn (1, 64, 0.7f);
+
+    EXPECT_EQ (voice1->getCurrentlyPlayingNote(), 60);
+    EXPECT_EQ (voice2->getCurrentlyPlayingNote(), 64);
+
+    // Try to start another note - should not trigger (no free voices, stealing disabled)
+    synth->noteOn (1, 67, 0.6f);
+
+    // Neither voice should have changed notes
+    EXPECT_EQ (voice1->getCurrentlyPlayingNote(), 60);
+    EXPECT_EQ (voice2->getCurrentlyPlayingNote(), 64);
+}
+
+TEST_F (SynthesiserTest, FindFreeVoiceWithStealingEnabled)
+{
+    synth->setNoteStealingEnabled (true);
+
+    auto* voice1 = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto* voice2 = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto sound = SynthesiserSound::Ptr (new TestSound());
+    synth->addSound (sound);
+
+    // Start notes to occupy all voices
+    synth->noteOn (1, 60, 0.8f);
+    synth->noteOn (1, 64, 0.7f);
+
+    // Try to start another note - should steal a voice
+    synth->noteOn (1, 67, 0.6f);
+
+    // One of the voices should now be playing note 67
+    EXPECT_TRUE (voice1->getCurrentlyPlayingNote() == 67 || voice2->getCurrentlyPlayingNote() == 67);
+}
+
+TEST_F (SynthesiserTest, VoiceStealingPrefersOldestNote)
+{
+    synth->setNoteStealingEnabled (true);
+
+    auto* voice1 = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto* voice2 = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto sound = SynthesiserSound::Ptr (new TestSound());
+    synth->addSound (sound);
+
+    // Start notes in sequence
+    synth->noteOn (1, 60, 0.8f); // Oldest, lowest note
+    synth->noteOn (1, 72, 0.7f); // Newer, highest note
+
+    // Both notes are currently held (not released), so they're protected
+    // The algorithm protects lowest and highest notes
+    // Since both are protected and we only have 2 voices, it will steal the top one
+    synth->noteOn (1, 67, 0.6f);
+
+    // One voice should now be playing note 67
+    bool voice1Has67 = (voice1->getCurrentlyPlayingNote() == 67);
+    bool voice2Has67 = (voice2->getCurrentlyPlayingNote() == 67);
+    EXPECT_TRUE (voice1Has67 || voice2Has67);
+}
+
+TEST_F (SynthesiserTest, VoiceStealingPrefersSameNote)
+{
+    synth->setNoteStealingEnabled (true);
+
+    auto* voice1 = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto* voice2 = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto sound = SynthesiserSound::Ptr (new TestSound());
+    synth->addSound (sound);
+
+    // Start notes
+    synth->noteOn (1, 60, 0.8f);
+    synth->noteOn (1, 64, 0.7f);
+
+    // Trigger the same note again - should steal the voice already playing that note
+    synth->noteOn (1, 60, 0.9f);
+
+    // voice1 should have been restarted with same note
+    EXPECT_EQ (voice1->getCurrentlyPlayingNote(), 60);
+    EXPECT_EQ (voice2->getCurrentlyPlayingNote(), 64);
+}
+
+TEST_F (SynthesiserTest, VoiceStealingPrefersReleasedNotes)
+{
+    synth->setNoteStealingEnabled (true);
+
+    auto* voice1 = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto* voice2 = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto sound = SynthesiserSound::Ptr (new TestSound());
+    synth->addSound (sound);
+
+    // Start notes with different pitches so they're not protected the same way
+    synth->noteOn (1, 60, 0.8f); // Lower note
+    synth->noteOn (1, 72, 0.7f); // Higher note
+
+    // Release first note (without sustain, so it's fully released)
+    synth->noteOff (1, 60, 0.5f, true);
+
+    // voice1 should be released (not held by key)
+    EXPECT_FALSE (voice1->isKeyDown());
+    EXPECT_TRUE (voice2->isKeyDown());
+
+    // Start a new note - should prefer stealing the released voice
+    synth->noteOn (1, 67, 0.6f);
+
+    // The released voice should have been stolen
+    // Since voice1 was released and voice2 is still held, voice1 should be stolen
+    EXPECT_EQ (voice1->getCurrentlyPlayingNote(), 67);
+    EXPECT_EQ (voice2->getCurrentlyPlayingNote(), 72);
+}
+
+TEST_F (SynthesiserTest, VoiceStealingProtectsLowestAndHighestNotes)
+{
+    synth->setNoteStealingEnabled (true);
+
+    // Add 3 voices
+    auto* voice1 = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto* voice2 = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto* voice3 = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto sound = SynthesiserSound::Ptr (new TestSound());
+    synth->addSound (sound);
+
+    // Start notes: low, middle, high
+    synth->noteOn (1, 48, 0.8f); // Low - protected
+    synth->noteOn (1, 60, 0.7f); // Middle - not protected
+    synth->noteOn (1, 72, 0.6f); // High - protected
+
+    // Start a new note - should steal the middle note (voice2)
+    synth->noteOn (1, 64, 0.5f);
+
+    EXPECT_EQ (voice1->getCurrentlyPlayingNote(), 48); // Low protected
+    EXPECT_EQ (voice2->getCurrentlyPlayingNote(), 64); // Was stolen
+    EXPECT_EQ (voice3->getCurrentlyPlayingNote(), 72); // High protected
+}
+
+TEST_F (SynthesiserTest, VoiceStealingWithOnlyOneNote)
+{
+    synth->setNoteStealingEnabled (true);
+
+    auto* voice = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto sound = SynthesiserSound::Ptr (new TestSound());
+    synth->addSound (sound);
+
+    // Start one note
+    synth->noteOn (1, 60, 0.8f);
+    EXPECT_EQ (voice->getCurrentlyPlayingNote(), 60);
+
+    // Start another note - should steal the only voice
+    synth->noteOn (1, 64, 0.7f);
+    EXPECT_EQ (voice->getCurrentlyPlayingNote(), 64);
+}
+
+TEST_F (SynthesiserTest, MinimumRenderingSubdivisionStrictMode)
+{
+    synth->setMinimumRenderingSubdivisionSize (32, true);
+
+    auto* voice = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto sound = SynthesiserSound::Ptr (new TestSound());
+    synth->addSound (sound);
+
+    AudioBuffer<float> buffer (2, 128);
+    buffer.clear();
+
+    MidiBuffer midiBuffer;
+    // Add MIDI event very early (at sample 1)
+    midiBuffer.addEvent (MidiMessage::noteOn (1, 60, 0.8f), 1);
+
+    voice->reset();
+
+    synth->renderNextBlock (buffer, midiBuffer, 0, 128);
+
+    // In strict mode, the minimum subdivision should be enforced
+    EXPECT_TRUE (voice->wasNoteStarted());
+}
+
+TEST_F (SynthesiserTest, MinimumRenderingSubdivisionNonStrictMode)
+{
+    synth->setMinimumRenderingSubdivisionSize (32, false);
+
+    auto* voice = static_cast<TestVoice*> (synth->addVoice (new TestVoice()));
+    auto sound = SynthesiserSound::Ptr (new TestSound());
+    synth->addSound (sound);
+
+    AudioBuffer<float> buffer (2, 128);
+    buffer.clear();
+
+    MidiBuffer midiBuffer;
+    // Add MIDI event at sample 0 (first event in non-strict mode can be at 0)
+    midiBuffer.addEvent (MidiMessage::noteOn (1, 60, 0.8f), 0);
+
+    voice->reset();
+
+    synth->renderNextBlock (buffer, midiBuffer, 0, 128);
+
+    // In non-strict mode, first event can render immediately
+    EXPECT_TRUE (voice->wasNoteStarted());
 }

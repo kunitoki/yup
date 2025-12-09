@@ -571,6 +571,21 @@ public:
     static DataTree fromXml (const XmlElement& xml);
 
     /**
+        Recreates a DataTree from an XmlElement using a schema to recover types.
+
+        Behaves like fromXml(), but uses the provided schema to coerce property values
+        back to their declared types (e.g., numbers, booleans) during deserialization.
+        When no schema is provided, properties are imported as strings, matching JUCE
+        ValueTree behaviour.
+
+        @param xml The XmlElement to deserialize from
+        @param schema Optional schema describing node/property types for coercion
+        @return A new DataTree representing the XML content, or invalid DataTree on failure
+    */
+    static DataTree fromXml (const XmlElement& xml,
+                             ReferenceCountedObjectPtr<DataTreeSchema> schema);
+
+    /**
         Writes this DataTree to a binary stream in a compact format.
 
         The binary format is more efficient than XML for storage and transmission,
@@ -954,6 +969,11 @@ public:
             @param newIndex The new index for the child
         */
         void moveChild (int currentIndex, int newIndex);
+
+        /**
+            Returns the effective number of children taking pending operations into account.
+        */
+        int getEffectiveChildCount() const;
 
     private:
         friend class TransactionAction;

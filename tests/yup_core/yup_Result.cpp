@@ -25,7 +25,7 @@
 
 using namespace yup;
 
-static String operator"" _S (const char* chars, size_t)
+static String operator""_S (const char* chars, size_t)
 {
     return String { chars };
 }

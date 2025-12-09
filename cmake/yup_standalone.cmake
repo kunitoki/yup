@@ -85,7 +85,7 @@ function (yup_standalone_app)
 
     # ==== Enable profiling
     if (YUP_ENABLE_PROFILING AND NOT "${target_name}" STREQUAL "yup_tests")
-        list (APPEND additional_definitions YUP_ENABLE_PROFILING=1 YUP_ENABLE_PROFILING=1)
+        list (APPEND additional_definitions YUP_ENABLE_PROFILING=1)
         list (APPEND additional_libraries perfetto::perfetto)
     endif()
 
@@ -184,11 +184,11 @@ function (yup_standalone_app)
             -sFETCH=1
             #-sASYNCIFY=1
             -sEXPORTED_RUNTIME_METHODS=ccall,cwrap
-            -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall','$stackTrace'
-            --shell-file "${YUP_ARG_CUSTOM_SHELL}")
+            -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
+            --shell-file=${YUP_ARG_CUSTOM_SHELL})
 
-        foreach (preload_file ${YUP_ARG_PRELOAD_FILES})
-            list (APPEND additional_link_options --preload-file ${preload_file})
+        foreach (preload_file IN ITEMS ${YUP_ARG_PRELOAD_FILES})
+            list (APPEND additional_link_options "--preload-file=${preload_file}")
         endforeach()
 
         set (target_copy_dest "$<TARGET_FILE_DIR:${target_name}>")

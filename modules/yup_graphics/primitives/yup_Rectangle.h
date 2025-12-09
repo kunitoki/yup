@@ -252,7 +252,7 @@ public:
     */
     [[nodiscard]] constexpr Rectangle withTrimmedLeft (ValueType amountToTrim) const noexcept
     {
-        return withLeft (xy.getX() + amountToTrim);
+        return { xy.withX (xy.getX() + amountToTrim), size.withWidth (jmax (static_cast<ValueType> (0), size.getWidth() - amountToTrim)) };
     }
 
     //==============================================================================
@@ -300,7 +300,7 @@ public:
     */
     [[nodiscard]] constexpr Rectangle withTrimmedTop (ValueType amountToTrim) const noexcept
     {
-        return withTop (xy.getY() + amountToTrim);
+        return { xy.withY (xy.getY() + amountToTrim), size.withHeight (jmax (static_cast<ValueType> (0), size.getHeight() - amountToTrim)) };
     }
 
     //==============================================================================
@@ -1696,8 +1696,14 @@ public:
     [[nodiscard]] constexpr auto aspectRatio() const noexcept
         -> std::enable_if_t<std::is_integral_v<T>, std::tuple<int, int>>
     {
-        auto factor = std::gcd (size.getWidth(), size.getHeight());
-        return std::make_tuple (size.getWidth() / factor, size.getHeight() / factor);
+        const T w = size.getWidth();
+        const T h = size.getHeight();
+
+        if (w == 0 || h == 0)
+            return { 0, 0 };
+
+        const T factor = std::gcd (w, h);
+        return { w / factor, h / factor };
     }
 
     /** Returns the ratio of the width to the height of the rectangle.

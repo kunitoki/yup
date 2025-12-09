@@ -440,6 +440,59 @@ TEST_F (DataTreeSchemaTests, ValidatedTransactionChildOperations)
     EXPECT_EQ (2, rootTree.getNumChildren());
 }
 
+TEST (DataTreeSchemaChildCountConstraints, ValidatedTransactionsHonorConstraints)
+{
+    const String schemaJson = R"({
+        "nodeTypes": {
+            "Root": {
+                "children": {
+                    "allowedTypes": ["Child"],
+                    "minCount": 1,
+                    "maxCount": 2
+                }
+            },
+            "Child": {
+                "children": { "maxCount": 0 }
+            }
+        }
+    })";
+
+    var schemaVar;
+    ASSERT_TRUE (JSON::parse (schemaJson, schemaVar));
+    auto schema = DataTreeSchema::fromJsonSchema (schemaVar);
+    ASSERT_NE (nullptr, schema);
+
+    auto root = schema->createNode ("Root");
+    ASSERT_TRUE (root.isValid());
+
+    // Attempt to add three children in a single validated transaction; the third should fail.
+    auto addTx = root.beginValidatedTransaction (schema);
+    EXPECT_TRUE (addTx.createAndAddChild ("Child").wasOk());
+    EXPECT_TRUE (addTx.createAndAddChild ("Child").wasOk());
+
+    auto thirdChild = addTx.createAndAddChild ("Child");
+    EXPECT_TRUE (thirdChild.failed());
+    EXPECT_TRUE (addTx.commit().failed());
+    addTx.abort();
+
+    // Create two children in a plain transaction to reach the minimum count.
+    {
+        auto tx = root.beginTransaction();
+        tx.addChild (schema->createNode ("Child"));
+        tx.addChild (schema->createNode ("Child"));
+    }
+
+    // Removing one child is ok, removing below minCount should be rejected.
+    auto removeTx = root.beginValidatedTransaction (schema);
+    auto removeFirst = removeTx.removeChild (root.getChild (0));
+    EXPECT_TRUE (removeFirst.wasOk());
+
+    auto removeSecond = removeTx.removeChild (root.getChild (1));
+    EXPECT_TRUE (removeSecond.failed());
+    EXPECT_TRUE (removeSecond.getErrorMessage().contains ("minimum"));
+    removeTx.abort();
+}
+
 TEST_F (DataTreeSchemaTests, SchemaRoundtripSerialization)
 {
     // Export schema to JSON

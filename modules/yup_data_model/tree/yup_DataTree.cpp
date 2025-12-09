@@ -24,6 +24,103 @@ namespace yup
 
 //==============================================================================
 
+namespace
+{
+var coerceAttributeValue (const Identifier& nodeType,
+                          const Identifier& propertyName,
+                          const String& rawValue,
+                          const ReferenceCountedObjectPtr<DataTreeSchema>& schema)
+{
+    if (schema == nullptr)
+        return var (rawValue);
+
+    auto info = schema->getPropertyInfo (nodeType, propertyName);
+    if (info.type.isEmpty())
+        return var (rawValue);
+
+    const auto trimmed = rawValue.trim();
+
+    const auto looksLikeInteger = [] (const String& text)
+    {
+        if (text.isEmpty())
+            return false;
+
+        int start = 0;
+        if (text.startsWithChar ('-') || text.startsWithChar ('+'))
+            start = 1;
+
+        if (start == text.length())
+            return false;
+
+        for (int i = start; i < text.length(); ++i)
+        {
+            if (! CharacterFunctions::isDigit (text[i]))
+                return false;
+        }
+
+        return true;
+    };
+
+    const auto looksLikeNumber = [] (const String& text)
+    {
+        bool hasDigit = false;
+
+        for (int i = 0; i < text.length(); ++i)
+        {
+            const auto c = text[i];
+            if (CharacterFunctions::isDigit (c))
+            {
+                hasDigit = true;
+                continue;
+            }
+
+            if (c == '.' || c == '-' || c == '+' || c == 'e' || c == 'E')
+                continue;
+
+            return false;
+        }
+
+        return hasDigit;
+    };
+
+    if (info.type == "boolean")
+    {
+        if (trimmed.equalsIgnoreCase ("true") || trimmed == "1" || trimmed.equalsIgnoreCase ("yes"))
+            return var (true);
+
+        if (trimmed.equalsIgnoreCase ("false") || trimmed == "0" || trimmed.equalsIgnoreCase ("no"))
+            return var (false);
+
+        return var (rawValue);
+    }
+
+    if (info.type == "number" && looksLikeNumber (trimmed))
+    {
+        if (looksLikeInteger (trimmed))
+            return var (trimmed.getLargeIntValue());
+
+        return var (trimmed.getDoubleValue());
+    }
+
+    if ((info.type == "array" || info.type == "object") && trimmed.isNotEmpty())
+    {
+        var parsed;
+        if (JSON::parse (trimmed, parsed))
+        {
+            if (info.type == "array" && parsed.isArray())
+                return parsed;
+
+            if (info.type == "object" && parsed.isObject())
+                return parsed;
+        }
+    }
+
+    return var (rawValue);
+}
+} // namespace
+
+//==============================================================================
+
 class PropertySetAction : public UndoableAction
 {
 public:
@@ -911,13 +1008,7 @@ std::unique_ptr<XmlElement> DataTree::createXml() const
     auto element = std::make_unique<XmlElement> (object->type.toString());
 
     // Add properties as attributes
-    for (int i = 0; i < object->properties.size(); ++i)
-    {
-        const auto name = object->properties.getName (i);
-        const auto value = object->properties.getValueAt (i);
-
-        element->setAttribute (name.toString(), value.toString());
-    }
+    object->properties.copyToXmlAttributes (*element);
 
     // Add children as child elements
     for (const auto& child : object->children)
@@ -931,20 +1022,27 @@ std::unique_ptr<XmlElement> DataTree::createXml() const
 
 DataTree DataTree::fromXml (const XmlElement& xml)
 {
+    return fromXml (xml, nullptr);
+}
+
+DataTree DataTree::fromXml (const XmlElement& xml, ReferenceCountedObjectPtr<DataTreeSchema> schema)
+{
     DataTree tree (xml.getTagName());
+    const auto nodeType = tree.getType();
 
     // Load properties from attributes
     for (int i = 0; i < xml.getNumAttributes(); ++i)
     {
-        const auto name = xml.getAttributeName (i);
-        const auto value = xml.getAttributeValue (i);
-        tree.setProperty (name, value);
+        auto name = xml.getAttributeName (i);
+        auto value = xml.getAttributeValue (i);
+
+        tree.setProperty (name, coerceAttributeValue (nodeType, name, value, schema));
     }
 
     // Load children from child elements
     for (const auto* childXml : xml.getChildIterator())
     {
-        auto child = fromXml (*childXml);
+        auto child = fromXml (*childXml, schema);
         tree.addChild (child);
     }
 
@@ -1475,6 +1573,38 @@ void DataTree::Transaction::moveChild (int currentIndex, int newIndex)
     childChanges.push_back (change);
 }
 
+int DataTree::Transaction::getEffectiveChildCount() const
+{
+    if (dataTree.object == nullptr)
+        return 0;
+
+    int count = dataTree.getNumChildren();
+
+    for (const auto& change : childChanges)
+    {
+        switch (change.type)
+        {
+            case ChildChange::Add:
+                ++count;
+                break;
+
+            case ChildChange::Remove:
+                if (count > 0)
+                    --count;
+                break;
+
+            case ChildChange::RemoveAll:
+                count = 0;
+                break;
+
+            case ChildChange::Move:
+                break; // No change in count
+        }
+    }
+
+    return std::max (0, count);
+}
+
 //==============================================================================
 
 DataTree::ValidatedTransaction::ValidatedTransaction (DataTree& tree, ReferenceCountedObjectPtr<DataTreeSchema> schema, UndoManager* undoManager)
@@ -1555,8 +1685,8 @@ Result DataTree::ValidatedTransaction::addChild (const DataTree& child, int inde
     if (! child.isValid())
         return Result::fail ("Cannot add invalid child");
 
-    // TODO: Get current child count from the transaction's target tree
-    auto validationResult = schema->validateChildAddition (nodeType, child.getType(), 0);
+    const int effectiveChildCount = transaction->getEffectiveChildCount();
+    auto validationResult = schema->validateChildAddition (nodeType, child.getType(), effectiveChildCount);
     if (validationResult.failed())
     {
         hasValidationErrors = true;
@@ -1588,7 +1718,18 @@ Result DataTree::ValidatedTransaction::removeChild (const DataTree& child)
     if (! transaction || ! transaction->isActive() || ! schema)
         return Result::fail ("Transaction is not active");
 
-    // TODO: Check minimum child count constraints
+    if (! schema->hasNodeType (nodeType))
+        return Result::fail ("Unknown node type: " + nodeType.toString());
+
+    const auto constraints = schema->getChildConstraints (nodeType);
+    const int currentCount = transaction->getEffectiveChildCount();
+    const int resultingCount = std::max (0, currentCount - 1);
+
+    if (resultingCount < constraints.minCount)
+    {
+        hasValidationErrors = true;
+        return Result::fail ("Cannot remove child: would violate minimum child count (" + String (constraints.minCount) + ")");
+    }
 
     transaction->removeChild (child);
     return Result::ok();
