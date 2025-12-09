@@ -523,17 +523,18 @@ TEST (AffineTransformTests, MultiplicationOperator)
     AffineTransform t2 = AffineTransform::translation (5.0f, 10.0f);
 
     // operator* is equivalent to followedBy
-    // t1 * t2 means: apply t2 first, then t1
+    // t1 * t2 means: this * other = t1 * t2
+    // This applies t2 first, then t1
     AffineTransform result = t1 * t2;
 
-    // This is equivalent to: scale then translate
-    // Point (1, 1) -> translate (5, 10) -> (6, 11) -> scale (2) -> (12, 22)
+    // This is: scale then translate
+    // Point (1, 1) -> scale (2) -> (2, 2) -> translate (5, 10) -> (7, 12)
     Point<float> p (1.0f, 1.0f);
     float x = p.getX();
     float y = p.getY();
     result.transformPoint (x, y);
-    EXPECT_FLOAT_EQ (x, 12.0f);
-    EXPECT_FLOAT_EQ (y, 22.0f);
+    EXPECT_FLOAT_EQ (x, 7.0f);
+    EXPECT_FLOAT_EQ (y, 12.0f);
 
     // Verify it's the same as followedBy
     AffineTransform result2 = t1.followedBy (t2);
