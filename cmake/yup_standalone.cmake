@@ -184,10 +184,10 @@ function (yup_standalone_app)
             -sFETCH=1
             #-sASYNCIFY=1
             -sEXPORTED_RUNTIME_METHODS=ccall,cwrap
-            -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall','$stackTrace'
+            -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
             --shell-file "${YUP_ARG_CUSTOM_SHELL}")
 
-        foreach (preload_file IN LISTS ${YUP_ARG_PRELOAD_FILES})
+        foreach (preload_file IN ITEMS ${YUP_ARG_PRELOAD_FILES})
             list (APPEND additional_link_options --preload-file "${preload_file}")
         endforeach()
 

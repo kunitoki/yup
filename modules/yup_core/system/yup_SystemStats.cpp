@@ -252,8 +252,8 @@ String SystemStats::getStackBacktrace()
 
 #elif YUP_EMSCRIPTEN
     std::string temporaryStack;
-    temporaryStack.resize (10 * EM_ASM_INT_V ({ return (lengthBytesUTF8 || Module.lengthBytesUTF8) (stackTrace()); }));
-    EM_ASM_ARGS ({ (stringToUTF8 || Module.stringToUTF8) (stackTrace(), $0, $1); }, temporaryStack.data(), temporaryStack.size());
+    temporaryStack.resize (emscripten_get_callstack (EM_LOG_C_STACK, nullptr, 0));
+    emscripten_get_callstack (EM_LOG_C_STACK, temporaryStack.data(), static_cast<int> (temporaryStack.size()));
     result << temporaryStack.c_str();
 
 #elif YUP_WINDOWS
