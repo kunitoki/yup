@@ -52,6 +52,7 @@ set (target_name yup_tests)
 set (target_version "1.0.0")
 set (target_console OFF)
 set (target_gtest_modules "")
+set (target_preloaded "")
 set (target_modules
     yup_core
     yup_audio_basics
@@ -76,6 +77,12 @@ else()
     list (APPEND target_gtest_modules
         GTest::gtest_main
         GTest::gmock_main)
+
+    file (GLOB_RECURSE data_files "${CMAKE_CURRENT_LIST_DIR}/data/*")
+    foreach (data_file ${data_files})
+        file (RELATIVE_PATH rel_path "${CMAKE_CURRENT_LIST_DIR}" "${data_file}")
+        list (APPEND target_preloaded "${data_file}@${rel_path}")
+    endforeach()
 endif()
 
 if (YUP_PLATFORM_MAC) # OR YUP_PLATFORM_WINDOWS)
@@ -105,11 +112,13 @@ yup_standalone_app (
     DEFINITIONS
         YUP_USE_CURL=0
         YUP_MODAL_LOOPS_PERMITTED=1
+    PRELOAD_FILES
+        ${target_preloaded}
     MODULES
         ${target_modules}
         ${target_gtest_modules})
 
-# ==== (Only For Testing) Setup FFTW3
+# ==== (Only For Manual Testing) Setup FFTW3
 # _yup_find_fftw3 (${target_name})
 
 # ==== Setup sources

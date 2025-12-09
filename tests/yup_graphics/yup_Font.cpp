@@ -29,12 +29,17 @@ namespace
 {
 File getValidFontFile()
 {
-    return File (__FILE__)
-        .getParentDirectory()
-        .getParentDirectory()
-        .getChildFile ("data")
-        .getChildFile ("fonts")
-        .getChildFile ("Linefont-VariableFont_wdth,wght.ttf");
+    return
+#if YUP_EMSCRIPTEN
+        File ("/")
+#else
+        File (__FILE__)
+#endif
+            .getParentDirectory()
+            .getParentDirectory()
+            .getChildFile ("data")
+            .getChildFile ("fonts")
+            .getChildFile ("Linefont-VariableFont_wdth,wght.ttf");
 }
 } // namespace
 
