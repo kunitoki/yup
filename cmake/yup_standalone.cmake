@@ -160,6 +160,7 @@ function (yup_standalone_app)
             $<$<CONFIG:RELEASE>:-O3>
             -fexceptions
             -pthread
+            -Wno-nontrivial-memcall
             -sDISABLE_EXCEPTION_CATCHING=0)
 
         list (APPEND additional_link_options
