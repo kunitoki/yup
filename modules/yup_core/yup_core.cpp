@@ -115,6 +115,10 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include <sys/stat.h>
 #include <sys/time.h>
 
+#if __has_include(<sys/sysmacros.h>)
+#include <sys/sysmacros.h>
+#endif
+
 #if YUP_USE_CURL
 #include <curl/curl.h>
 #endif

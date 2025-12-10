@@ -40,6 +40,9 @@
 namespace yup
 {
 
+namespace
+{
+
 enum
 {
     U_ISOFS_SUPER_MAGIC = 0x9660, // linux/iso_fs.h
@@ -47,6 +50,37 @@ enum
     U_NFS_SUPER_MAGIC = 0x6969,   // linux/nfs_fs.h
     U_SMB_SUPER_MAGIC = 0x517B    // linux/smb_fs.h
 };
+
+static String getBlockDeviceName (dev_t dev)
+{
+    // Example sysfs entry:
+    // /sys/dev/block/8:16 -> ../../block/sdb/sdb1
+    char sysPath[128] = {};
+    std::snprintf (sysPath, sizeof (sysPath), "/sys/dev/block/%u:%u", static_cast<unsigned int> (major (dev)), static_cast<unsigned int> (minor (dev)));
+
+    char buf[4096 + 1] = {};
+    const ssize_t len = ::readlink (sysPath, buf, 4096);
+    if (len <= 0)
+        return {};
+
+    buf[len] = 0;
+    const String link (CharPointer_UTF8 (buf));
+
+    // Look for "/block/" component
+    const int blockIndex = link.indexOf ("/block/");
+    if (blockIndex < 0)
+        return {};
+
+    String rest = link.substring (blockIndex + 7); // skip "/block/"
+
+    // rest is typically "sdb/sdb1" or just "sdb"
+    const int slash = rest.indexOfChar ('/');
+    if (slash >= 0)
+        rest = rest.substring (0, slash);
+
+    return rest; // e.g. "sdb"
+}
+} // namespace
 
 bool File::isOnCDRomDrive() const
 {
@@ -81,8 +115,21 @@ bool File::isOnHardDisk() const
 
 bool File::isOnRemovableDrive() const
 {
-    jassertfalse; // xxx not implemented for linux!
-    return false;
+    struct stat st {};
+    const auto path = getFullPathName();
+
+    if (::stat (path.toUTF8(), &st) != 0)
+        return false;
+
+    const auto devName = getBlockDeviceName (st.st_dev);
+    if (devName.isEmpty())
+        return false;
+
+    const File removableFlag ("/sys/block/" + devName + "/removable");
+    if (! removableFlag.existsAsFile())
+        return false;
+
+    return removableFlag.loadFileAsString().trim() == "1";
 }
 
 String File::getVersion() const
