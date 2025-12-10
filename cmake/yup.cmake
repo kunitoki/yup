@@ -85,8 +85,13 @@ endfunction()
 
 #==============================================================================
 
+# Initialize platform settings
+_yup_setup_platform()
+
+#==============================================================================
+
+# Common includes
 include (${CMAKE_CURRENT_LIST_DIR}/yup_utilities.cmake)
-include (${CMAKE_CURRENT_LIST_DIR}/yup_platforms.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_dependencies.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_modules.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_standalone.cmake)
@@ -95,6 +100,5 @@ include (${CMAKE_CURRENT_LIST_DIR}/yup_embed_binary.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_android_java.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_python.cmake)
 
-#==============================================================================
-
-_yup_setup_platform()
+# Platform specific includes
+include ("${CMAKE_CURRENT_LIST_DIR}/platforms/yup_${YUP_PLATFORM}.cmake")

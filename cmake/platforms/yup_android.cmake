@@ -1,7 +1,7 @@
 # ==============================================================================
 #
 #   This file is part of the YUP library.
-#   Copyright (c) 2025 - kunitoki@gmail.com
+#   Copyright (c) 2024 - kunitoki@gmail.com
 #
 #   YUP is an open source library subject to open-source licensing.
 #
@@ -19,13 +19,93 @@
 
 include_guard (DIRECTORY)
 
-include (${CMAKE_CURRENT_LIST_DIR}/yup_utilities.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/../yup_utilities.cmake)
+
+#==============================================================================
+
+function (_yup_android_prepare_gradle)
+    set (options "")
+    set (one_value_args
+        MIN_SDK_VERSION COMPILE_SDK_VERSION TARGET_SDK_VERSION
+        TARGET_NAME TARGET_ICON ABI TOOLCHAIN PLATFORM STL CPP_VERSION CMAKE_VERSION
+        APPLICATION_ID APPLICATION_NAMESPACE APPLICATION_CMAKELISTS_PATH APPLICATION_VERSION)
+    set (multi_value_args "")
+
+    cmake_parse_arguments (YUP_ANDROID "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
+
+    # Prepare variables
+    _yup_set_default (YUP_ANDROID_MIN_SDK_VERSION "21")
+    _yup_set_default (YUP_ANDROID_COMPILE_SDK_VERSION "34")
+    _yup_set_default (YUP_ANDROID_TARGET_SDK_VERSION "${YUP_ANDROID_COMPILE_SDK_VERSION}")
+    _yup_set_default (YUP_ANDROID_TARGET_NAME "default_app")
+    _yup_set_default (YUP_ANDROID_TOOLCHAIN "clang")
+    _yup_set_default (YUP_ANDROID_PLATFORM "android-${YUP_ANDROID_MIN_SDK_VERSION}")
+    _yup_set_default (YUP_ANDROID_STL "c++_shared")
+    _yup_set_default (YUP_ANDROID_CPP_VERSION "20")
+    _yup_set_default (YUP_ANDROID_APPLICATION_NAMESPACE "org.yup")
+    _yup_set_default (YUP_ANDROID_APPLICATION_ID "org.yup.default_app")
+    _yup_set_default (YUP_ANDROID_APPLICATION_VERSION "1.0")
+    _yup_set_default (YUP_ANDROID_APPLICATION_PATH "${CMAKE_CURRENT_SOURCE_DIR}")
+    _yup_set_default (YUP_ANDROID_ABI "arm64-v8a")
+    _yup_set_default (YUP_ANDROID_CMAKE_VERSION "${CMAKE_VERSION}")
+
+    _yup_join_list_with_separator ("${YUP_ANDROID_ABI}" "\n            " "abiFilters += \"" "\"" YUP_ANDROID_ABI)
+    _yup_version_string_to_version_code (${YUP_ANDROID_APPLICATION_VERSION} YUP_ANDROID_APPLICATION_VERSION_CODE)
+    file (RELATIVE_PATH YUP_ANDROID_APPLICATION_PATH "${CMAKE_CURRENT_BINARY_DIR}/app" "${YUP_ANDROID_APPLICATION_PATH}")
+
+    # Prepare files
+    set (BASE_FILES_PATH "${CMAKE_SOURCE_DIR}/cmake/platforms/android")
+    configure_file (${BASE_FILES_PATH}/build.gradle.kts.in ${CMAKE_CURRENT_BINARY_DIR}/build.gradle.kts)
+    configure_file (${BASE_FILES_PATH}/settings.gradle.kts.in ${CMAKE_CURRENT_BINARY_DIR}/settings.gradle.kts)
+    configure_file (${BASE_FILES_PATH}/app/build.gradle.kts.in ${CMAKE_CURRENT_BINARY_DIR}/app/build.gradle.kts)
+    configure_file (${BASE_FILES_PATH}/app/proguard-rules.pro.in ${CMAKE_CURRENT_BINARY_DIR}/app/proguard-rules.pro)
+    configure_file (${BASE_FILES_PATH}/app/src/main/java/org/yup/YupActivity.java.in ${CMAKE_CURRENT_BINARY_DIR}/app/src/main/java/org/yup/YupActivity.java)
+    configure_file (${BASE_FILES_PATH}/app/src/main/AndroidManifest.xml.in ${CMAKE_CURRENT_BINARY_DIR}/app/src/main/AndroidManifest.xml)
+    configure_file (${BASE_FILES_PATH}/gradle/libs.versions.toml.in ${CMAKE_CURRENT_BINARY_DIR}/gradle/libs.versions.toml COPYONLY)
+    configure_file (${BASE_FILES_PATH}/gradle/wrapper/gradle-wrapper.jar.in ${CMAKE_CURRENT_BINARY_DIR}/gradle/wrapper/gradle-wrapper.jar COPYONLY)
+    configure_file (${BASE_FILES_PATH}/gradle/wrapper/gradle-wrapper.properties.in ${CMAKE_CURRENT_BINARY_DIR}/gradle/wrapper/gradle-wrapper.properties COPYONLY)
+    configure_file (${BASE_FILES_PATH}/gradlew.in ${CMAKE_CURRENT_BINARY_DIR}/gradlew COPYONLY)
+    configure_file (${BASE_FILES_PATH}/gradlew.bat.in ${CMAKE_CURRENT_BINARY_DIR}/gradlew.bat COPYONLY)
+    configure_file (${BASE_FILES_PATH}/gradle.properties.in ${CMAKE_CURRENT_BINARY_DIR}/gradle.properties COPYONLY)
+
+    # Copy icons
+    if (YUP_ANDROID_TARGET_ICON)
+        set (base_icon_path "${CMAKE_CURRENT_BINARY_DIR}/app/src/main/res")
+
+        find_program (sips_program sips)
+        if (sips_program)
+            file (MAKE_DIRECTORY ${base_icon_path}/mipmap-ldpi)
+            _yup_execute_process_or_fail (${sips_program} -z 36 36 "${YUP_ANDROID_TARGET_ICON}" --out "${base_icon_path}/mipmap-ldpi/ic_launcher.png")
+            file (MAKE_DIRECTORY ${base_icon_path}/mipmap-mdpi)
+            _yup_execute_process_or_fail (${sips_program} -z 48 48 "${YUP_ANDROID_TARGET_ICON}" --out "${base_icon_path}/mipmap-mdpi/ic_launcher.png")
+            file (MAKE_DIRECTORY ${base_icon_path}/mipmap-hdpi)
+            _yup_execute_process_or_fail (${sips_program} -z 72 72 "${YUP_ANDROID_TARGET_ICON}" --out "${base_icon_path}/mipmap-hdpi/ic_launcher.png")
+            file (MAKE_DIRECTORY ${base_icon_path}/mipmap-xhdpi)
+            _yup_execute_process_or_fail (${sips_program} -z 96 96 "${YUP_ANDROID_TARGET_ICON}" --out "${base_icon_path}/mipmap-xhdpi/ic_launcher.png")
+            file (MAKE_DIRECTORY ${base_icon_path}/mipmap-xxhdpi)
+            _yup_execute_process_or_fail (${sips_program} -z 144 144 "${YUP_ANDROID_TARGET_ICON}" --out "${base_icon_path}/mipmap-xxhdpi/ic_launcher.png")
+            file (MAKE_DIRECTORY ${base_icon_path}/mipmap-xxxhdpi)
+            _yup_execute_process_or_fail (${sips_program} -z 192 192 "${YUP_ANDROID_TARGET_ICON}" --out "${base_icon_path}/mipmap-xxxhdpi/ic_launcher.png")
+        else()
+            configure_file (${YUP_ANDROID_TARGET_ICON} ${base_icon_path}/mipmap-xxxhdpi/ic_launcher.png COPYONLY)
+        endif()
+    endif()
+
+endfunction()
+
+#==============================================================================
+
+function (_yup_android_copy_sdl2_activity)
+    set (JAVA_SOURCE_RELATIVE_FOLDER app/src/main/java)
+    set (SOURCE_FOLDER ${CMAKE_BINARY_DIR}/externals/SDL2/android-project/${JAVA_SOURCE_RELATIVE_FOLDER}/org)
+    file (COPY ${SOURCE_FOLDER} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/${JAVA_SOURCE_RELATIVE_FOLDER})
+endfunction()
 
 #==============================================================================
 
 # Function to add Java bytecode compilation to a YUP module
-function (_yup_module_add_java_support module_name)
-    _yup_message (STATUS "_yup_module_add_java_support called for module: ${module_name}")
+function (_yup_android_module_add_java_support module_name)
+    _yup_message (STATUS "_yup_android_module_add_java_support called for module: ${module_name}")
 
     if (NOT YUP_PLATFORM_ANDROID)
         _yup_message (STATUS "Not Android platform, skipping Java support for ${module_name}")
@@ -67,7 +147,7 @@ function (_yup_module_add_java_support module_name)
         get_filename_component (class_name "${java_source}" NAME_WE)
 
         # Generate individual class bytecode
-        _yup_add_single_java_class (
+        _yup_android_add_single_java_class (
             MODULE_NAME ${module_name}
             CLASS_NAME ${class_name}
             JAVA_SOURCE "${java_source}"
@@ -89,8 +169,8 @@ endfunction()
 #==============================================================================
 
 # Function to compile a single Java class to DEX bytecode
-function (_yup_add_single_java_class)
-    _yup_message (STATUS "_yup_add_single_java_class called")
+function (_yup_android_add_single_java_class)
+    _yup_message (STATUS "_yup_android_add_single_java_class called")
 
     cmake_parse_arguments (
         JAVA_ARG
@@ -112,7 +192,7 @@ function (_yup_add_single_java_class)
     endif()
 
     if (NOT JAVA_ARG_JAVA_SOURCE)
-        _yup_message (WARNING "_yup_add_single_java_class: No Java source specified for ${JAVA_ARG_CLASS_NAME}")
+        _yup_message (WARNING "_yup_android_add_single_java_class: No Java source specified for ${JAVA_ARG_CLASS_NAME}")
         return()
     endif()
 

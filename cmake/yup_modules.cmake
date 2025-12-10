@@ -586,7 +586,7 @@ function (yup_add_module module_path modules_definitions module_group)
 
     # ==== Add Java support for Android if available (after target properties are set)
     if (YUP_PLATFORM_ANDROID AND YUP_BUILD_JAVA_SUPPORT)
-        _yup_module_add_java_support (${module_name})
+        _yup_android_module_add_java_support (${module_name})
     endif()
 
 endfunction()
