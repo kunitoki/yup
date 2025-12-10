@@ -51,6 +51,7 @@ enum
     U_SMB_SUPER_MAGIC = 0x517B    // linux/smb_fs.h
 };
 
+#if YUP_LINUX
 static String getBlockDeviceName (dev_t dev)
 {
     // Example sysfs entry: /sys/dev/block/8:16 -> ../../block/sdb/sdb1
@@ -77,6 +78,7 @@ static String getBlockDeviceName (dev_t dev)
 
     return rest; // e.g. "sdb"
 }
+#endif
 } // namespace
 
 //==============================================================================
@@ -113,6 +115,7 @@ bool File::isOnHardDisk() const
 
 bool File::isOnRemovableDrive() const
 {
+#if YUP_LINUX
     struct stat st {};
     const auto path = getFullPathName();
 
@@ -128,6 +131,9 @@ bool File::isOnRemovableDrive() const
         return false;
 
     return removableFlag.loadFileAsString().trim() == "1";
+#else
+    return false;
+#endif
 }
 
 String File::getVersion() const
