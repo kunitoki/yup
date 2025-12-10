@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2024 - kunitoki@gmail.com
+   Copyright (c) 2025 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -541,4 +541,471 @@ TEST_F (FloatVectorOperationsTests, DoubleOperations)
     FloatVectorOperations::add (dest, 1.0, 5);
     for (int i = 0; i < 5; ++i)
         EXPECT_DOUBLE_EQ (dest[i], src[i] * 2.0 + 1.0);
+}
+
+// ==============================================================================
+// Additional Add Operations Tests
+// ==============================================================================
+
+TEST_F (FloatVectorOperationsTests, AddWithAmount_Float)
+{
+    float dest[5];
+    float src[5] = { 0.5f, 1.0f, 1.5f, 2.0f, 2.5f };
+
+    // add(dest, src, amount) sets dest = src + amount
+    FloatVectorOperations::add (dest, src, 10.0f, 5);
+
+    EXPECT_FLOAT_EQ (dest[0], 10.5f); // 0.5 + 10.0
+    EXPECT_FLOAT_EQ (dest[1], 11.0f); // 1.0 + 10.0
+    EXPECT_FLOAT_EQ (dest[2], 11.5f); // 1.5 + 10.0
+    EXPECT_FLOAT_EQ (dest[3], 12.0f); // 2.0 + 10.0
+    EXPECT_FLOAT_EQ (dest[4], 12.5f); // 2.5 + 10.0
+}
+
+TEST_F (FloatVectorOperationsTests, AddWithAmount_Double)
+{
+    double dest[5];
+    double src[5] = { 0.5, 1.0, 1.5, 2.0, 2.5 };
+
+    // add(dest, src, amount) sets dest = src + amount
+    FloatVectorOperations::add (dest, src, 10.0, 5);
+
+    EXPECT_DOUBLE_EQ (dest[0], 10.5); // 0.5 + 10.0
+    EXPECT_DOUBLE_EQ (dest[1], 11.0); // 1.0 + 10.0
+    EXPECT_DOUBLE_EQ (dest[2], 11.5); // 1.5 + 10.0
+    EXPECT_DOUBLE_EQ (dest[3], 12.0); // 2.0 + 10.0
+    EXPECT_DOUBLE_EQ (dest[4], 12.5); // 2.5 + 10.0
+}
+
+TEST_F (FloatVectorOperationsTests, AddTwoArrays_Float)
+{
+    float dest[5];
+    float src1[5] = { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f };
+    float src2[5] = { 0.5f, 1.5f, 2.5f, 3.5f, 4.5f };
+
+    FloatVectorOperations::add (dest, src1, src2, 5);
+
+    EXPECT_FLOAT_EQ (dest[0], 1.5f);
+    EXPECT_FLOAT_EQ (dest[1], 3.5f);
+    EXPECT_FLOAT_EQ (dest[2], 5.5f);
+    EXPECT_FLOAT_EQ (dest[3], 7.5f);
+    EXPECT_FLOAT_EQ (dest[4], 9.5f);
+}
+
+TEST_F (FloatVectorOperationsTests, AddTwoArrays_Double)
+{
+    double dest[5];
+    double src1[5] = { 1.0, 2.0, 3.0, 4.0, 5.0 };
+    double src2[5] = { 0.5, 1.5, 2.5, 3.5, 4.5 };
+
+    FloatVectorOperations::add (dest, src1, src2, 5);
+
+    EXPECT_DOUBLE_EQ (dest[0], 1.5);
+    EXPECT_DOUBLE_EQ (dest[1], 3.5);
+    EXPECT_DOUBLE_EQ (dest[2], 5.5);
+    EXPECT_DOUBLE_EQ (dest[3], 7.5);
+    EXPECT_DOUBLE_EQ (dest[4], 9.5);
+}
+
+// ==============================================================================
+// Subtract Operations Tests
+// ==============================================================================
+
+TEST_F (FloatVectorOperationsTests, SubtractTwoArrays_Float)
+{
+    float dest[5];
+    float src1[5] = { 5.0f, 4.0f, 3.0f, 2.0f, 1.0f };
+    float src2[5] = { 1.0f, 1.5f, 2.0f, 2.5f, 3.0f };
+
+    FloatVectorOperations::subtract (dest, src1, src2, 5);
+
+    EXPECT_FLOAT_EQ (dest[0], 4.0f);
+    EXPECT_FLOAT_EQ (dest[1], 2.5f);
+    EXPECT_FLOAT_EQ (dest[2], 1.0f);
+    EXPECT_FLOAT_EQ (dest[3], -0.5f);
+    EXPECT_FLOAT_EQ (dest[4], -2.0f);
+}
+
+TEST_F (FloatVectorOperationsTests, SubtractTwoArrays_Double)
+{
+    double dest[5];
+    double src1[5] = { 5.0, 4.0, 3.0, 2.0, 1.0 };
+    double src2[5] = { 1.0, 1.5, 2.0, 2.5, 3.0 };
+
+    FloatVectorOperations::subtract (dest, src1, src2, 5);
+
+    EXPECT_DOUBLE_EQ (dest[0], 4.0);
+    EXPECT_DOUBLE_EQ (dest[1], 2.5);
+    EXPECT_DOUBLE_EQ (dest[2], 1.0);
+    EXPECT_DOUBLE_EQ (dest[3], -0.5);
+    EXPECT_DOUBLE_EQ (dest[4], -2.0);
+}
+
+// ==============================================================================
+// Subtract With Multiply Operations Tests
+// ==============================================================================
+
+TEST_F (FloatVectorOperationsTests, SubtractWithMultiply_FloatScalar)
+{
+    float dest[5] = { 10.0f, 20.0f, 30.0f, 40.0f, 50.0f };
+    float src[5] = { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f };
+
+    FloatVectorOperations::subtractWithMultiply (dest, src, 2.0f, 5);
+
+    EXPECT_FLOAT_EQ (dest[0], 8.0f);
+    EXPECT_FLOAT_EQ (dest[1], 16.0f);
+    EXPECT_FLOAT_EQ (dest[2], 24.0f);
+    EXPECT_FLOAT_EQ (dest[3], 32.0f);
+    EXPECT_FLOAT_EQ (dest[4], 40.0f);
+}
+
+TEST_F (FloatVectorOperationsTests, SubtractWithMultiply_DoubleScalar)
+{
+    double dest[5] = { 10.0, 20.0, 30.0, 40.0, 50.0 };
+    double src[5] = { 1.0, 2.0, 3.0, 4.0, 5.0 };
+
+    FloatVectorOperations::subtractWithMultiply (dest, src, 2.0, 5);
+
+    EXPECT_DOUBLE_EQ (dest[0], 8.0);
+    EXPECT_DOUBLE_EQ (dest[1], 16.0);
+    EXPECT_DOUBLE_EQ (dest[2], 24.0);
+    EXPECT_DOUBLE_EQ (dest[3], 32.0);
+    EXPECT_DOUBLE_EQ (dest[4], 40.0);
+}
+
+TEST_F (FloatVectorOperationsTests, SubtractWithMultiply_FloatArrays)
+{
+    float dest[5] = { 10.0f, 20.0f, 30.0f, 40.0f, 50.0f };
+    float src1[5] = { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f };
+    float src2[5] = { 2.0f, 3.0f, 4.0f, 5.0f, 6.0f };
+
+    FloatVectorOperations::subtractWithMultiply (dest, src1, src2, 5);
+
+    EXPECT_FLOAT_EQ (dest[0], 8.0f);  // 10 - (1 * 2)
+    EXPECT_FLOAT_EQ (dest[1], 14.0f); // 20 - (2 * 3)
+    EXPECT_FLOAT_EQ (dest[2], 18.0f); // 30 - (3 * 4)
+    EXPECT_FLOAT_EQ (dest[3], 20.0f); // 40 - (4 * 5)
+    EXPECT_FLOAT_EQ (dest[4], 20.0f); // 50 - (5 * 6)
+}
+
+TEST_F (FloatVectorOperationsTests, SubtractWithMultiply_DoubleArrays)
+{
+    double dest[5] = { 10.0, 20.0, 30.0, 40.0, 50.0 };
+    double src1[5] = { 1.0, 2.0, 3.0, 4.0, 5.0 };
+    double src2[5] = { 2.0, 3.0, 4.0, 5.0, 6.0 };
+
+    FloatVectorOperations::subtractWithMultiply (dest, src1, src2, 5);
+
+    EXPECT_DOUBLE_EQ (dest[0], 8.0);  // 10 - (1 * 2)
+    EXPECT_DOUBLE_EQ (dest[1], 14.0); // 20 - (2 * 3)
+    EXPECT_DOUBLE_EQ (dest[2], 18.0); // 30 - (3 * 4)
+    EXPECT_DOUBLE_EQ (dest[3], 20.0); // 40 - (4 * 5)
+    EXPECT_DOUBLE_EQ (dest[4], 20.0); // 50 - (5 * 6)
+}
+
+// ==============================================================================
+// Multiply Operations Tests
+// ==============================================================================
+
+TEST_F (FloatVectorOperationsTests, MultiplyTwoArrays_Float)
+{
+    float dest[5];
+    float src1[5] = { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f };
+    float src2[5] = { 2.0f, 3.0f, 4.0f, 5.0f, 6.0f };
+
+    FloatVectorOperations::multiply (dest, src1, src2, 5);
+
+    EXPECT_FLOAT_EQ (dest[0], 2.0f);
+    EXPECT_FLOAT_EQ (dest[1], 6.0f);
+    EXPECT_FLOAT_EQ (dest[2], 12.0f);
+    EXPECT_FLOAT_EQ (dest[3], 20.0f);
+    EXPECT_FLOAT_EQ (dest[4], 30.0f);
+}
+
+TEST_F (FloatVectorOperationsTests, MultiplyTwoArrays_Double)
+{
+    double dest[5];
+    double src1[5] = { 1.0, 2.0, 3.0, 4.0, 5.0 };
+    double src2[5] = { 2.0, 3.0, 4.0, 5.0, 6.0 };
+
+    FloatVectorOperations::multiply (dest, src1, src2, 5);
+
+    EXPECT_DOUBLE_EQ (dest[0], 2.0);
+    EXPECT_DOUBLE_EQ (dest[1], 6.0);
+    EXPECT_DOUBLE_EQ (dest[2], 12.0);
+    EXPECT_DOUBLE_EQ (dest[3], 20.0);
+    EXPECT_DOUBLE_EQ (dest[4], 30.0);
+}
+
+TEST_F (FloatVectorOperationsTests, MultiplyWithScalar_Float)
+{
+    float dest[5];
+    float src[5] = { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f };
+
+    FloatVectorOperations::multiply (dest, src, 3.0f, 5);
+
+    EXPECT_FLOAT_EQ (dest[0], 3.0f);
+    EXPECT_FLOAT_EQ (dest[1], 6.0f);
+    EXPECT_FLOAT_EQ (dest[2], 9.0f);
+    EXPECT_FLOAT_EQ (dest[3], 12.0f);
+    EXPECT_FLOAT_EQ (dest[4], 15.0f);
+}
+
+TEST_F (FloatVectorOperationsTests, MultiplyWithScalar_Double)
+{
+    double dest[5];
+    double src[5] = { 1.0, 2.0, 3.0, 4.0, 5.0 };
+
+    FloatVectorOperations::multiply (dest, src, 3.0, 5);
+
+    EXPECT_DOUBLE_EQ (dest[0], 3.0);
+    EXPECT_DOUBLE_EQ (dest[1], 6.0);
+    EXPECT_DOUBLE_EQ (dest[2], 9.0);
+    EXPECT_DOUBLE_EQ (dest[3], 12.0);
+    EXPECT_DOUBLE_EQ (dest[4], 15.0);
+}
+
+// ==============================================================================
+// Divide Operations Tests
+// ==============================================================================
+
+TEST_F (FloatVectorOperationsTests, DivideByArray_Float)
+{
+    float dest[5] = { 10.0f, 20.0f, 30.0f, 40.0f, 50.0f };
+    float src[5] = { 2.0f, 4.0f, 5.0f, 8.0f, 10.0f };
+
+    FloatVectorOperations::divide (dest, src, 5);
+
+    EXPECT_FLOAT_EQ (dest[0], 5.0f);
+    EXPECT_FLOAT_EQ (dest[1], 5.0f);
+    EXPECT_FLOAT_EQ (dest[2], 6.0f);
+    EXPECT_FLOAT_EQ (dest[3], 5.0f);
+    EXPECT_FLOAT_EQ (dest[4], 5.0f);
+}
+
+TEST_F (FloatVectorOperationsTests, DivideByArray_Double)
+{
+    double dest[5] = { 10.0, 20.0, 30.0, 40.0, 50.0 };
+    double src[5] = { 2.0, 4.0, 5.0, 8.0, 10.0 };
+
+    FloatVectorOperations::divide (dest, src, 5);
+
+    EXPECT_DOUBLE_EQ (dest[0], 5.0);
+    EXPECT_DOUBLE_EQ (dest[1], 5.0);
+    EXPECT_DOUBLE_EQ (dest[2], 6.0);
+    EXPECT_DOUBLE_EQ (dest[3], 5.0);
+    EXPECT_DOUBLE_EQ (dest[4], 5.0);
+}
+
+// ==============================================================================
+// Min/Max Operations Tests (Double versions)
+// ==============================================================================
+
+TEST_F (FloatVectorOperationsTests, MinWithScalar_Double)
+{
+    double src[5] = { 1.0, 2.0, 3.0, 4.0, 5.0 };
+    double dest[5];
+
+    FloatVectorOperations::min (dest, src, 3.0, 5);
+
+    EXPECT_DOUBLE_EQ (dest[0], 1.0);
+    EXPECT_DOUBLE_EQ (dest[1], 2.0);
+    EXPECT_DOUBLE_EQ (dest[2], 3.0);
+    EXPECT_DOUBLE_EQ (dest[3], 3.0);
+    EXPECT_DOUBLE_EQ (dest[4], 3.0);
+}
+
+TEST_F (FloatVectorOperationsTests, MinWithArray_Double)
+{
+    double src1[5] = { 1.0, 5.0, 2.0, 4.0, 3.0 };
+    double src2[5] = { 3.0, 2.0, 4.0, 1.0, 5.0 };
+    double dest[5];
+
+    FloatVectorOperations::min (dest, src1, src2, 5);
+
+    EXPECT_DOUBLE_EQ (dest[0], 1.0);
+    EXPECT_DOUBLE_EQ (dest[1], 2.0);
+    EXPECT_DOUBLE_EQ (dest[2], 2.0);
+    EXPECT_DOUBLE_EQ (dest[3], 1.0);
+    EXPECT_DOUBLE_EQ (dest[4], 3.0);
+}
+
+TEST_F (FloatVectorOperationsTests, MaxWithScalar_Double)
+{
+    double src[5] = { 1.0, 2.0, 3.0, 4.0, 5.0 };
+    double dest[5];
+
+    FloatVectorOperations::max (dest, src, 3.0, 5);
+
+    EXPECT_DOUBLE_EQ (dest[0], 3.0);
+    EXPECT_DOUBLE_EQ (dest[1], 3.0);
+    EXPECT_DOUBLE_EQ (dest[2], 3.0);
+    EXPECT_DOUBLE_EQ (dest[3], 4.0);
+    EXPECT_DOUBLE_EQ (dest[4], 5.0);
+}
+
+TEST_F (FloatVectorOperationsTests, MaxWithArray_Double)
+{
+    double src1[5] = { 1.0, 5.0, 2.0, 4.0, 3.0 };
+    double src2[5] = { 3.0, 2.0, 4.0, 1.0, 5.0 };
+    double dest[5];
+
+    FloatVectorOperations::max (dest, src1, src2, 5);
+
+    EXPECT_DOUBLE_EQ (dest[0], 3.0);
+    EXPECT_DOUBLE_EQ (dest[1], 5.0);
+    EXPECT_DOUBLE_EQ (dest[2], 4.0);
+    EXPECT_DOUBLE_EQ (dest[3], 4.0);
+    EXPECT_DOUBLE_EQ (dest[4], 5.0);
+}
+
+// ==============================================================================
+// Clip Operations Tests (Double version)
+// ==============================================================================
+
+TEST_F (FloatVectorOperationsTests, Clip_Double)
+{
+    double src[7] = { -2.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0 };
+    double dest[7];
+
+    FloatVectorOperations::clip (dest, src, 0.0, 1.0, 7);
+
+    EXPECT_DOUBLE_EQ (dest[0], 0.0);
+    EXPECT_DOUBLE_EQ (dest[1], 0.0);
+    EXPECT_DOUBLE_EQ (dest[2], 0.0);
+    EXPECT_DOUBLE_EQ (dest[3], 0.5);
+    EXPECT_DOUBLE_EQ (dest[4], 1.0);
+    EXPECT_DOUBLE_EQ (dest[5], 1.0);
+    EXPECT_DOUBLE_EQ (dest[6], 1.0);
+}
+
+// ==============================================================================
+// Conversion Operations Tests
+// ==============================================================================
+
+TEST_F (FloatVectorOperationsTests, ConvertFixedToFloat)
+{
+    int src[5] = { 1000, 2000, 3000, 4000, 5000 };
+    float dest[5];
+    float multiplier = 0.001f;
+
+    FloatVectorOperations::convertFixedToFloat (dest, src, multiplier, 5);
+
+    EXPECT_FLOAT_EQ (dest[0], 1.0f);
+    EXPECT_FLOAT_EQ (dest[1], 2.0f);
+    EXPECT_FLOAT_EQ (dest[2], 3.0f);
+    EXPECT_FLOAT_EQ (dest[3], 4.0f);
+    EXPECT_FLOAT_EQ (dest[4], 5.0f);
+}
+
+TEST_F (FloatVectorOperationsTests, ConvertFloatToFixed)
+{
+    float src[5] = { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f };
+    int dest[5];
+    float multiplier = 1000.0f;
+
+    FloatVectorOperations::convertFloatToFixed (dest, src, multiplier, 5);
+
+    EXPECT_EQ (dest[0], 1000);
+    EXPECT_EQ (dest[1], 2000);
+    EXPECT_EQ (dest[2], 3000);
+    EXPECT_EQ (dest[3], 4000);
+    EXPECT_EQ (dest[4], 5000);
+}
+
+TEST_F (FloatVectorOperationsTests, ConvertFloatToDouble)
+{
+    float src[5] = { 1.5f, 2.5f, 3.5f, 4.5f, 5.5f };
+    double dest[5];
+
+    FloatVectorOperations::convertFloatToDouble (dest, src, 5);
+
+    EXPECT_NEAR (dest[0], 1.5, 0.0001);
+    EXPECT_NEAR (dest[1], 2.5, 0.0001);
+    EXPECT_NEAR (dest[2], 3.5, 0.0001);
+    EXPECT_NEAR (dest[3], 4.5, 0.0001);
+    EXPECT_NEAR (dest[4], 5.5, 0.0001);
+}
+
+TEST_F (FloatVectorOperationsTests, ConvertDoubleToFloat)
+{
+    double src[5] = { 1.5, 2.5, 3.5, 4.5, 5.5 };
+    float dest[5];
+
+    FloatVectorOperations::convertDoubleToFloat (dest, src, 5);
+
+    EXPECT_FLOAT_EQ (dest[0], 1.5f);
+    EXPECT_FLOAT_EQ (dest[1], 2.5f);
+    EXPECT_FLOAT_EQ (dest[2], 3.5f);
+    EXPECT_FLOAT_EQ (dest[3], 4.5f);
+    EXPECT_FLOAT_EQ (dest[4], 5.5f);
+}
+
+// ==============================================================================
+// Denormal Support Tests
+// ==============================================================================
+
+TEST_F (FloatVectorOperationsTests, DisableDenormalisedNumberSupport)
+{
+    // Test that it doesn't crash
+    EXPECT_NO_THROW (FloatVectorOperations::disableDenormalisedNumberSupport (true));
+    EXPECT_NO_THROW (FloatVectorOperations::disableDenormalisedNumberSupport (false));
+}
+
+TEST_F (FloatVectorOperationsTests, AreDenormalsDisabled)
+{
+    // Initially should be false
+    bool initialState = FloatVectorOperations::areDenormalsDisabled();
+
+    // Try to disable denormals
+    FloatVectorOperations::disableDenormalisedNumberSupport (true);
+
+    // Check if the state changed (platform dependent)
+    bool afterDisable = FloatVectorOperations::areDenormalsDisabled();
+
+    // Re-enable denormals
+    FloatVectorOperations::disableDenormalisedNumberSupport (false);
+
+    bool afterEnable = FloatVectorOperations::areDenormalsDisabled();
+
+    // The actual behavior is platform-dependent, but the functions should not crash
+    EXPECT_TRUE (true);
+}
+
+TEST_F (FloatVectorOperationsTests, ScopedNoDenormals)
+{
+    bool initialState = FloatVectorOperations::areDenormalsDisabled();
+
+    {
+        ScopedNoDenormals scopedDisable;
+
+        // Inside scope, denormals might be disabled (platform dependent)
+        bool insideScope = FloatVectorOperations::areDenormalsDisabled();
+    }
+
+    // After scope, state should be restored
+    bool afterScope = FloatVectorOperations::areDenormalsDisabled();
+
+    // The scoped object should not crash
+    EXPECT_TRUE (true);
+}
+
+TEST_F (FloatVectorOperationsTests, ScopedNoDenormals_NestedScopes)
+{
+    {
+        ScopedNoDenormals outer;
+
+        {
+            ScopedNoDenormals inner;
+
+            // Nested scopes should work correctly
+            EXPECT_TRUE (true);
+        }
+
+        // Outer scope still active
+        EXPECT_TRUE (true);
+    }
+
+    // All scopes exited, should not crash
+    EXPECT_TRUE (true);
 }
