@@ -42,7 +42,7 @@ namespace yup
 
 namespace
 {
-
+//==============================================================================
 enum
 {
     U_ISOFS_SUPER_MAGIC = 0x9660, // linux/iso_fs.h
@@ -53,8 +53,7 @@ enum
 
 static String getBlockDeviceName (dev_t dev)
 {
-    // Example sysfs entry:
-    // /sys/dev/block/8:16 -> ../../block/sdb/sdb1
+    // Example sysfs entry: /sys/dev/block/8:16 -> ../../block/sdb/sdb1
     char sysPath[128] = {};
     std::snprintf (sysPath, sizeof (sysPath), "/sys/dev/block/%u:%u", static_cast<unsigned int> (major (dev)), static_cast<unsigned int> (minor (dev)));
 
@@ -64,16 +63,14 @@ static String getBlockDeviceName (dev_t dev)
         return {};
 
     buf[len] = 0;
-    const String link (CharPointer_UTF8 (buf));
+    const String link = CharPointer_UTF8 (buf);
 
-    // Look for "/block/" component
     const int blockIndex = link.indexOf ("/block/");
     if (blockIndex < 0)
         return {};
 
     String rest = link.substring (blockIndex + 7); // skip "/block/"
 
-    // rest is typically "sdb/sdb1" or just "sdb"
     const int slash = rest.indexOfChar ('/');
     if (slash >= 0)
         rest = rest.substring (0, slash);
@@ -82,6 +79,7 @@ static String getBlockDeviceName (dev_t dev)
 }
 } // namespace
 
+//==============================================================================
 bool File::isOnCDRomDrive() const
 {
     struct statfs buf;
