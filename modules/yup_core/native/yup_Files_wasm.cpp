@@ -192,7 +192,7 @@ static bool isFileExecutable (const String& filename)
 
 bool Process::openDocument (const String& fileName, const String&)
 {
-    auto cmdString = "file://";
+    auto cmdString = String ("file://");
     cmdString << fileName.replace (" ", "\\ ", false);
 
     MAIN_THREAD_EM_ASM ({
