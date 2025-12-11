@@ -71,6 +71,37 @@ TEST_F (FileTests, SpecialLocations)
     EXPECT_TRUE (File::getSpecialLocation (File::tempDirectory).isDirectory());
 }
 
+TEST_F (FileTests, SpecialLocationComprehensive)
+{
+    // Test all special locations mentioned in the requirements
+    File userMusic = File::getSpecialLocation (File::userMusicDirectory);
+    EXPECT_TRUE (userMusic.getFullPathName().isNotEmpty());
+
+    File userMovies = File::getSpecialLocation (File::userMoviesDirectory);
+    EXPECT_TRUE (userMovies.getFullPathName().isNotEmpty());
+
+    File userPictures = File::getSpecialLocation (File::userPicturesDirectory);
+    EXPECT_TRUE (userPictures.getFullPathName().isNotEmpty());
+
+    File userDesktop = File::getSpecialLocation (File::userDesktopDirectory);
+    EXPECT_TRUE (userDesktop.isDirectory());
+
+    File commonDocuments = File::getSpecialLocation (File::commonDocumentsDirectory);
+    EXPECT_TRUE (commonDocuments.getFullPathName().isNotEmpty());
+
+    File commonAppData = File::getSpecialLocation (File::commonApplicationDataDirectory);
+    EXPECT_TRUE (commonAppData.getFullPathName().isNotEmpty());
+
+    File globalApps = File::getSpecialLocation (File::globalApplicationsDirectory);
+    EXPECT_TRUE (globalApps.getFullPathName().isNotEmpty());
+
+    File tempDir = File::getSpecialLocation (File::tempDirectory);
+    EXPECT_TRUE (tempDir.isDirectory());
+
+    File hostAppPath = File::getSpecialLocation (File::hostApplicationPath);
+    EXPECT_TRUE (hostAppPath.getFullPathName().isNotEmpty());
+}
+
 TEST_F (FileTests, RootDirectory)
 {
 #if ! YUP_WINDOWS
@@ -1075,3 +1106,23 @@ TEST_F (FileTests, FileOutputStreamFlush)
     EXPECT_EQ (testFile.loadFileAsString(), "testdata");
 }
 #endif
+
+TEST_F (FileTests, RevealToUser)
+{
+    // Test File::revealToUser() - this method shows the file in the OS file browser
+    tempFolder.createDirectory();
+    File fileToReveal = tempFolder.getChildFile ("reveal_test.txt");
+    fileToReveal.replaceWithText ("Test content for reveal");
+
+    ASSERT_TRUE (fileToReveal.exists());
+
+    // revealToUser() doesn't return a value, just verify it doesn't crash
+    EXPECT_NO_THROW (fileToReveal.revealToUser());
+
+    // Also test with a directory
+    EXPECT_NO_THROW (tempFolder.revealToUser());
+
+    // Test with non-existent file (should not crash)
+    File nonExistent = tempFolder.getChildFile ("does_not_exist.txt");
+    EXPECT_NO_THROW (nonExistent.revealToUser());
+}

@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2024 - kunitoki@gmail.com
+   Copyright (c) 2025 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -123,7 +123,7 @@ TEST (SystemStatsTests, GetEnvironmentVariables)
     EXPECT_GT (envVars.size(), 0);
 }
 
-TEST (SystemStatsTests, DISABLED_UserAndComputerInfo)
+TEST (SystemStatsTests, UserAndComputerInfo)
 {
     String logonName = SystemStats::getLogonName();
     EXPECT_FALSE (logonName.isEmpty());
@@ -135,7 +135,7 @@ TEST (SystemStatsTests, DISABLED_UserAndComputerInfo)
     EXPECT_FALSE (computerName.isEmpty());
 }
 
-TEST (SystemStatsTests, DISABLED_LocaleInfo)
+TEST (SystemStatsTests, LocaleInfo)
 {
     String userLanguage = SystemStats::getUserLanguage();
     EXPECT_FALSE (userLanguage.isEmpty());
@@ -150,7 +150,7 @@ TEST (SystemStatsTests, DISABLED_LocaleInfo)
     EXPECT_GE (displayLanguage.length(), 2);
 }
 
-TEST (SystemStatsTests, DISABLED_DeviceInfo)
+TEST (SystemStatsTests, DeviceInfo)
 {
     String deviceDescription = SystemStats::getDeviceDescription();
     EXPECT_TRUE (deviceDescription.isNotEmpty());
@@ -176,7 +176,7 @@ TEST (SystemStatsTests, GetMachineIdentifiers)
     EXPECT_FALSE (identifiers.isEmpty());
 }
 
-TEST (SystemStatsTests, DISABLED_CpuInfo)
+TEST (SystemStatsTests, CpuInfo)
 {
     int numCpus = SystemStats::getNumCpus();
     EXPECT_GT (numCpus, 0);
