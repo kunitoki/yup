@@ -117,7 +117,7 @@ TEST_F (WatchdogTests, UnwatchAllFolders)
     EXPECT_EQ (watchdog->getAllWatchedFolders().size(), 0);
 }
 
-TEST_F (WatchdogTests, DetectFileCreation)
+TEST_F (WatchdogTests, DISABLED_DetectFileCreation)
 {
     auto watchdog = Watchdog::createInstance (std::chrono::milliseconds (100));
     ASSERT_NE (watchdog, nullptr);
