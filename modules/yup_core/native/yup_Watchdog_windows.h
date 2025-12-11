@@ -37,11 +37,13 @@ public:
                                     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                                     nullptr,
                                     OPEN_EXISTING,
-                                    FILE_FLAG_BACKUP_SEMANTICS,
+                                    FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED,
                                     nullptr);
 
         if (folderHandle != INVALID_HANDLE_VALUE)
         {
+            overlapped.hEvent = CreateEvent (nullptr, TRUE, FALSE, nullptr);
+
             thread = std::thread ([this]
             {
                 threadCallback();
@@ -56,124 +58,169 @@ public:
             threadShouldExit = true;
 
             if (folderHandle != INVALID_HANDLE_VALUE)
-                CancelIoEx (folderHandle, nullptr);
+            {
+                CancelIoEx (folderHandle, &overlapped);
+
+                if (overlapped.hEvent)
+                    SetEvent (overlapped.hEvent);
+            }
 
             thread.join();
         }
 
         if (folderHandle != INVALID_HANDLE_VALUE)
             CloseHandle (folderHandle);
+
+        if (overlapped.hEvent)
+            CloseHandle (overlapped.hEvent);
     }
 
 private:
     void threadCallback()
     {
-        constexpr int heapSize = 16 * 1024;
+        constexpr DWORD bufferSize = 16 * 1024;
+        std::vector<uint8_t> buffer (bufferSize);
 
         DWORD bytesOut = 0;
         auto lastRenamedPath = std::optional<File> {};
 
         while (! threadShouldExit)
         {
-            uint8_t buffer[heapSize] = {};
+            ResetEvent (overlapped.hEvent);
+
             const BOOL success = ReadDirectoryChangesW (folderHandle,
-                                                        buffer,
-                                                        heapSize,
-                                                        true,
+                                                        buffer.data(),
+                                                        bufferSize,
+                                                        TRUE,
                                                         FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME | FILE_NOTIFY_CHANGE_SIZE | FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_CREATION,
-                                                        &bytesOut,
                                                         nullptr,
+                                                        &overlapped,
                                                         nullptr);
+
+            if (! success)
+            {
+                DWORD err = GetLastError();
+                if (err == ERROR_OPERATION_ABORTED || threadShouldExit)
+                    break;
+
+                continue;
+            }
+
+            DWORD waitResult = WaitForSingleObjectEx (overlapped.hEvent, INFINITE, TRUE);
+
             if (threadShouldExit)
                 break;
 
-            if (! success || bytesOut <= 0)
+            if (waitResult != WAIT_OBJECT_0)
                 continue;
 
-            uint8_t* rawData = buffer;
-            while (true)
+            if (! GetOverlappedResult (folderHandle, &overlapped, &bytesOut, FALSE))
             {
-                const FILE_NOTIFY_INFORMATION* fni = reinterpret_cast<FILE_NOTIFY_INFORMATION*> (rawData);
+                DWORD err = GetLastError();
+                if (err == ERROR_OPERATION_ABORTED || threadShouldExit)
+                    break;
 
-                auto path = folder.getChildFile (String (fni->FileName, fni->FileNameLength / sizeof (wchar_t)));
-                if (path.isHidden())
-                    continue;
+                continue;
+            }
 
-                auto event = Watchdog::EventType::undefined;
-                switch (fni->Action)
+            if (bytesOut == 0)
+                continue;
+
+            if (! parseNotifications (buffer.data(), bytesOut, lastRenamedPath))
+                break;
+        }
+    }
+
+    bool parseNotifications (uint8_t* data, DWORD bytesOut, std::optional<File>& lastRenamedPath)
+    {
+        std::vector<Watchdog::Event> localEvents;
+
+        uint8_t* raw = data;
+
+        while (true)
+        {
+            const FILE_NOTIFY_INFORMATION* fni = reinterpret_cast<FILE_NOTIFY_INFORMATION*> (rawData);
+
+            auto path = folder.getChildFile (String (fni->FileName, fni->FileNameLength / sizeof (wchar_t)));
+            if (path.isHidden())
+                return true;
+
+            auto event = Watchdog::EventType::undefined;
+            switch (fni->Action)
+            {
+                case FILE_ACTION_ADDED:
+                    event = Watchdog::EventType::file_created;
+                    break;
+
+                case FILE_ACTION_MODIFIED:
+                    event = Watchdog::EventType::file_updated;
+                    break;
+
+                case FILE_ACTION_REMOVED:
+                    event = Watchdog::EventType::file_deleted;
+                    break;
+
+                case FILE_ACTION_RENAMED_NEW_NAME:
+                case FILE_ACTION_RENAMED_OLD_NAME:
                 {
-                    case FILE_ACTION_ADDED:
-                        event = Watchdog::EventType::file_created;
-                        break;
-
-                    case FILE_ACTION_MODIFIED:
-                        event = Watchdog::EventType::file_updated;
-                        break;
-
-                    case FILE_ACTION_REMOVED:
-                        event = Watchdog::EventType::file_deleted;
-                        break;
-
-                    case FILE_ACTION_RENAMED_NEW_NAME:
-                    case FILE_ACTION_RENAMED_OLD_NAME:
+                    if (lastRenamedPath)
                     {
-                        if (lastRenamedPath)
-                        {
-                            event = Watchdog::EventType::file_renamed;
+                        event = Watchdog::EventType::file_renamed;
 
-                            if (fni->Action == FILE_ACTION_RENAMED_OLD_NAME && ! path.exists())
-                                lastRenamedPath = std::exchange (path, *lastRenamedPath);
-                        }
-                        else
-                        {
-                            lastRenamedPath = path;
-                        }
-
-                        break;
+                        if (fni->Action == FILE_ACTION_RENAMED_OLD_NAME && ! path.exists())
+                            lastRenamedPath = std::exchange (path, *lastRenamedPath);
+                    }
+                    else
+                    {
+                        lastRenamedPath = path;
                     }
 
-                    default:
-                        break;
+                    break;
                 }
 
-                if (event != Watchdog::EventType::undefined)
-                {
-                    auto otherPath = std::optional<File> {};
-
-                    if (event == Watchdog::EventType::file_renamed)
-                        otherPath = std::exchange (lastRenamedPath, std::optional<File> {});
-
-                    events.emplace_back (event, path, otherPath);
-                }
-
-                if (fni->NextEntryOffset > 0)
-                    rawData += fni->NextEntryOffset;
-                else
+                default:
                     break;
             }
 
-            if (lastRenamedPath)
+            if (event != Watchdog::EventType::undefined)
             {
-                auto newEventType = Watchdog::EventType::file_created;
-                if (! lastRenamedPath->exists())
-                    newEventType = Watchdog::EventType::file_deleted;
+                auto otherPath = std::optional<File> {};
 
-                events.emplace_back (newEventType, *lastRenamedPath);
+                if (event == Watchdog::EventType::file_renamed)
+                    otherPath = std::exchange (lastRenamedPath, std::optional<File> {});
+
+                events.emplace_back (event, path, otherPath);
             }
 
-            if (! events.empty())
+            if (fni->NextEntryOffset > 0)
+                rawData += fni->NextEntryOffset;
+            else
+                return false;
+        }
+
+        if (lastRenamedPath)
+        {
+            auto newEventType = Watchdog::EventType::file_created;
+            if (! lastRenamedPath->exists())
+                newEventType = Watchdog::EventType::file_deleted;
+
+            events.emplace_back (newEventType, *lastRenamedPath);
+        }
+
+        if (! events.empty())
+        {
+            if (auto lockedOwner = owner.lock())
             {
-                if (auto lockedOwner = owner.lock())
-                {
-                    lockedOwner->enqueueEvents (std::move (events));
-                    events.clear();
-                }
-                else
-                {
-                    break;
-                }
+                lockedOwner->enqueueEvents (std::move (events));
+                events.clear();
+            }
+            else
+            {
+                return false;
             }
         }
+
+        return true;
     }
 
     std::weak_ptr<Watchdog> owner;
@@ -182,7 +229,8 @@ private:
     std::thread thread;
     std::atomic_bool threadShouldExit = false;
 
-    HANDLE folderHandle;
+    HANDLE folderHandle = INVALID_HANDLE_VALUE;
+    OVERLAPPED overlapped = {};
 };
 
 } // namespace yup
