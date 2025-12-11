@@ -308,7 +308,7 @@ extern char** environ;
 
 //==============================================================================
 #elif YUP_WASM
-#include "native/yup_WebAssemblyHelpers.h"
+#include "native/yup_WebAssemblyHelpers_wasm.h"
 #include "native/yup_SystemStats_wasm.cpp"
 #include "native/yup_Files_wasm.cpp"
 #include "native/yup_Network_wasm.cpp"
