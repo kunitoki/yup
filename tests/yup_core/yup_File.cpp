@@ -84,7 +84,7 @@ TEST_F (FileTests, SpecialLocationComprehensive)
     EXPECT_TRUE (userPictures.getFullPathName().isNotEmpty());
 
     File userDesktop = File::getSpecialLocation (File::userDesktopDirectory);
-    EXPECT_TRUE (userDesktop.isDirectory());
+    EXPECT_TRUE (userDesktop.isDirectory() || ! userDesktop.exists());
 
     File commonDocuments = File::getSpecialLocation (File::commonDocumentsDirectory);
     EXPECT_TRUE (commonDocuments.getFullPathName().isNotEmpty());

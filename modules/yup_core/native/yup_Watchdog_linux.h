@@ -35,6 +35,9 @@ public:
         if (fd < 0)
             return;
 
+        const int flags = fcntl (fd, F_GETFL, 0);
+        fcntl (fd, F_SETFL, flags | O_NONBLOCK);
+
         addPaths (folder);
 
         thread = std::thread ([this]
@@ -48,11 +51,10 @@ public:
         if (thread.joinable())
         {
             threadShouldExit = true;
+            thread.join();
 
             removeAllPaths();
             close (fd);
-
-            thread.join();
         }
     }
 
@@ -153,20 +155,32 @@ private:
 
     void threadCallback()
     {
-        const inotify_event* notifyEvent = nullptr;
         auto lastRenamedPath = std::optional<File> {};
+        char buffer[bufferSize] = { 0 };
 
         while (! threadShouldExit)
         {
-            char buffer[bufferSize];
             const ssize_t numRead = read (fd, buffer, bufferSize);
+            if (numRead < 0)
+            {
+                if (errno == EAGAIN || errno == EWOULDBLOCK)
+                {
+                    std::this_thread::sleep_for (std::chrono::milliseconds (50));
+                    continue;
+                }
+                else
+                {
+                    break;
+                }
+            }
 
-            if (numRead <= 0 || threadShouldExit)
+            if (threadShouldExit)
                 break;
 
-            for (const char* ptr = buffer; ptr < buffer + numRead; ptr += sizeof (struct inotify_event) + notifyEvent->len)
+            const inotify_event* notifyEvent = nullptr;
+            for (const char* ptr = buffer; ptr < buffer + numRead; ptr += sizeof (struct inotify_event) + notifyEvent ? notifyEvent->len : 0)
             {
-                const inotify_event* notifyEvent = reinterpret_cast<const inotify_event*> (ptr);
+                notifyEvent = reinterpret_cast<const inotify_event*> (ptr);
 
                 auto path = folder.getChildFile (String::fromUTF8 (notifyEvent->name));
                 if (path.isHidden())
