@@ -150,24 +150,24 @@ private:
 
     void threadCallback()
     {
-        constexpr std::size_t bufferSize = (10 * (sizeof (struct inotify_event) + NAME_MAX + 1));
+        constexpr std::size_t bufferSize = (32 * (sizeof (struct inotify_event) + NAME_MAX + 1));
         std::vector<char> buffer (bufferSize, 0);
 
         auto lastRenamedPath = std::optional<File> {};
 
-        struct pollfd pfd;
-        pfd.fd = fd;
-        pfd.events = POLLIN;
-
         while (! threadShouldExit)
         {
-            const int pollResult = poll (&pfd, 1, 200);
+            fd_set fileDescriptorSet;
+            FD_ZERO (&fileDescriptorSet);
+            FD_SET (fd, &fileDescriptorSet);
+            if (select (FD_SETSIZE, &fileDescriptorSet, nullptr, nullptr, nullptr) <= 0)
+            {
+                std::this_thread::sleep_for (std::chrono::milliseconds (50));
+                continue;
+            }
 
             if (threadShouldExit)
                 break;
-
-            if (pollResult <= 0 || (pfd.revents & POLLIN) == 0)
-                continue;
 
             const ssize_t numRead = read (fd, buffer.data(), bufferSize);
 
