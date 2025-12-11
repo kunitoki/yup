@@ -24,8 +24,6 @@ namespace yup
 
 class Watchdog::Impl final
 {
-    inline static constexpr std::size_t bufferSize = (10 * (sizeof (struct inotify_event) + NAME_MAX + 1));
-
 public:
     Impl (std::weak_ptr<Watchdog> owner, const File& folder)
         : owner (std::move (owner))
@@ -152,8 +150,10 @@ private:
 
     void threadCallback()
     {
+        constexpr std::size_t bufferSize = (10 * (sizeof (struct inotify_event) + NAME_MAX + 1));
+        std::vector<char> buffer (bufferSize, 0);
+
         auto lastRenamedPath = std::optional<File> {};
-        char buffer[bufferSize + 1] = { 0 };
 
         struct pollfd pfd;
         pfd.fd = fd;
@@ -166,10 +166,10 @@ private:
             if (threadShouldExit)
                 break;
 
-            if (pollResult <= 0 || pfd.revents & POLLIN == 0)
+            if (pollResult <= 0 || (pfd.revents & POLLIN) == 0)
                 continue;
 
-            const ssize_t numRead = read (fd, buffer, bufferSize);
+            const ssize_t numRead = read (fd, buffer.data(), bufferSize);
 
             if (threadShouldExit)
                 break;
@@ -178,7 +178,7 @@ private:
                 continue;
 
             const inotify_event* notifyEvent = nullptr;
-            for (const char* ptr = buffer; ptr < buffer + numRead; ptr += sizeof (struct inotify_event) + notifyEvent ? notifyEvent->len : 0)
+            for (const char* ptr = buffer.data(); ptr < buffer.data() + numRead; ptr += sizeof (struct inotify_event) + notifyEvent ? notifyEvent->len : 0)
             {
                 notifyEvent = reinterpret_cast<const inotify_event*> (ptr);
 
