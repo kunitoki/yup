@@ -135,7 +135,7 @@ private:
     {
         std::vector<Watchdog::Event> localEvents;
 
-        uint8_t* raw = data;
+        uint8_t* rawData = data;
 
         while (true)
         {
