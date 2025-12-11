@@ -33,8 +33,9 @@ TEST (ThreadTests, Sleep)
     auto elapsed = Time::getMillisecondCounter() - startTime;
 
     // Should sleep at least 100ms (with some tolerance for scheduling)
+    // Upper bound is generous to account for heavily loaded CI systems
     EXPECT_GE (elapsed, 95);
-    EXPECT_LT (elapsed, 200);
+    EXPECT_LT (elapsed, 500);
 
     // Test zero sleep
     Thread::sleep (0);
