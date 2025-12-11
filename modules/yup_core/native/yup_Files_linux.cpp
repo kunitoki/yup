@@ -272,6 +272,11 @@ static bool isFileExecutable (const String& filename)
 
 static bool openDocumentExternally (const String& fileName, const String& parameters, const Array<char*>* environment = nullptr)
 {
+    const bool hasDisplay = std::getenv ("DISPLAY") != nullptr && std::strlen (std::getenv ("DISPLAY")) > 0;
+
+    if (! hasDisplay)
+        return false;
+
     const auto cmdString = [&]
     {
         if (fileName.startsWithIgnoreCase ("file:")
