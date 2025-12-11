@@ -35,9 +35,6 @@ public:
         if (fd < 0)
             return;
 
-        const int flags = fcntl (fd, F_GETFL, 0);
-        fcntl (fd, F_SETFL, flags | O_NONBLOCK);
-
         addPaths (folder);
 
         thread = std::thread ([this]
@@ -156,26 +153,29 @@ private:
     void threadCallback()
     {
         auto lastRenamedPath = std::optional<File> {};
-        char buffer[bufferSize] = { 0 };
+        char buffer[bufferSize + 1] = { 0 };
+
+        struct pollfd pfd;
+        pfd.fd = fd;
+        pfd.events = POLLIN;
 
         while (! threadShouldExit)
         {
-            const ssize_t numRead = read (fd, buffer, bufferSize);
-            if (numRead < 0)
-            {
-                if (errno == EAGAIN || errno == EWOULDBLOCK)
-                {
-                    std::this_thread::sleep_for (std::chrono::milliseconds (50));
-                    continue;
-                }
-                else
-                {
-                    break;
-                }
-            }
+            const int pollResult = poll (&pfd, 1, 200);
 
             if (threadShouldExit)
                 break;
+
+            if (pollResult <= 0 || pfd.revents & POLLIN == 0)
+                continue;
+
+            const ssize_t numRead = read (fd, buffer, bufferSize);
+
+            if (threadShouldExit)
+                break;
+
+            if (numRead <= 0)
+                continue;
 
             const inotify_event* notifyEvent = nullptr;
             for (const char* ptr = buffer; ptr < buffer + numRead; ptr += sizeof (struct inotify_event) + notifyEvent ? notifyEvent->len : 0)
