@@ -196,14 +196,14 @@ bool Process::openDocument (const String& fileName, const String&)
     cmdString << fileName.replace (" ", "\\ ", false);
 
     MAIN_THREAD_EM_ASM ({
-        if (window)
+        if (typeof window !== "undefined" && typeof window.document !== "undefined")
         {
             var elem = window.document.createElement ("a");
             elem.href = UTF8ToString ($0);
             elem.target = "_blank";
-            document.body.appendChild (elem);
+            window.document.body.appendChild (elem);
             elem.click();
-            document.body.removeChild (elem);
+            window.document.body.removeChild (elem);
         }
     }, cmdString.toRawUTF8());
 
