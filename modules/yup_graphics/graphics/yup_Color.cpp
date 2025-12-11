@@ -66,7 +66,10 @@ float parseNextFloat (String::CharPointerType& data)
         ++data;
 
     if (*data == '-')
+    {
+        isNegative = true;
         ++data;
+    }
 
     while (*data >= '0' && *data <= '9')
     {
@@ -77,16 +80,14 @@ float parseNextFloat (String::CharPointerType& data)
     if (*data == '.')
     {
         ++data;
-        float decimalPart = 0;
-        float decimalFactor = 10;
+        float decimalFactor = 10.0f;
 
         while (*data >= '0' && *data <= '9')
         {
-            decimalPart = decimalPart * 10 + (*data - '0');
+            result += (*data - '0') / decimalFactor;
+            decimalFactor *= 10.0f;
             ++data;
         }
-
-        result += decimalPart / decimalFactor;
     }
 
     if (*data == '%')
