@@ -52,7 +52,9 @@ public:
             thread.join();
 
             removeAllPaths();
-            close (fd);
+
+            if (fd >= 0)
+                close (fd);
         }
     }
 
