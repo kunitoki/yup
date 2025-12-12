@@ -115,6 +115,10 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include <sys/stat.h>
 #include <sys/time.h>
 
+#if __has_include(<sys/sysmacros.h>)
+#include <sys/sysmacros.h>
+#endif
+
 #if YUP_USE_CURL
 #include <curl/curl.h>
 #endif
@@ -304,7 +308,7 @@ extern char** environ;
 
 //==============================================================================
 #elif YUP_WASM
-#include "native/yup_WebAssemblyHelpers.h"
+#include "native/yup_WebAssemblyHelpers_wasm.h"
 #include "native/yup_SystemStats_wasm.cpp"
 #include "native/yup_Files_wasm.cpp"
 #include "native/yup_Network_wasm.cpp"

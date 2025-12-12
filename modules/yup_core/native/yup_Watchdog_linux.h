@@ -24,8 +24,6 @@ namespace yup
 
 class Watchdog::Impl final
 {
-    inline static constexpr std::size_t bufferSize = (10 * (sizeof (struct inotify_event) + NAME_MAX + 1));
-
 public:
     Impl (std::weak_ptr<Watchdog> owner, const File& folder)
         : owner (std::move (owner))
@@ -34,6 +32,9 @@ public:
         fd = inotify_init();
         if (fd < 0)
             return;
+
+        int flags = fcntl (fd, F_GETFL, 0);
+        fcntl (fd, F_SETFL, flags | O_NONBLOCK);
 
         addPaths (folder);
 
@@ -48,11 +49,12 @@ public:
         if (thread.joinable())
         {
             threadShouldExit = true;
+            thread.join();
 
             removeAllPaths();
-            close (fd);
 
-            thread.join();
+            if (fd >= 0)
+                close (fd);
         }
     }
 
@@ -153,20 +155,30 @@ private:
 
     void threadCallback()
     {
-        const inotify_event* notifyEvent = nullptr;
+        constexpr std::size_t bufferSize = (32 * (sizeof (struct inotify_event) + NAME_MAX + 1));
+        std::vector<char> buffer (bufferSize, 0);
+
         auto lastRenamedPath = std::optional<File> {};
 
         while (! threadShouldExit)
         {
-            char buffer[bufferSize];
-            const ssize_t numRead = read (fd, buffer, bufferSize);
+            const ssize_t numRead = read (fd, buffer.data(), bufferSize);
+            if (numRead < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+            {
+                std::this_thread::sleep_for (std::chrono::milliseconds (50));
+                continue;
+            }
 
-            if (numRead <= 0 || threadShouldExit)
+            if (threadShouldExit)
                 break;
 
-            for (const char* ptr = buffer; ptr < buffer + numRead; ptr += sizeof (struct inotify_event) + notifyEvent->len)
+            if (numRead <= 0)
+                continue;
+
+            const inotify_event* notifyEvent = nullptr;
+            for (const char* ptr = buffer.data(); ptr < buffer.data() + numRead; ptr += offsetof (struct inotify_event, name) + notifyEvent ? notifyEvent->len : 0)
             {
-                const inotify_event* notifyEvent = reinterpret_cast<const inotify_event*> (ptr);
+                notifyEvent = reinterpret_cast<const inotify_event*> (ptr);
 
                 auto path = folder.getChildFile (String::fromUTF8 (notifyEvent->name));
                 if (path.isHidden())

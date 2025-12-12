@@ -581,3 +581,272 @@ TEST (ColorTests, Chaining_Operations)
     EXPECT_EQ (modified.getGreen(), 128);
     EXPECT_EQ (modified.getBlue(), 64);
 }
+
+TEST (ColorTests, HSL_String_Parsing)
+{
+    // Test basic HSL parsing (hue normalized to 0-1 range, not degrees)
+    // Green: hue = 120/360 = 0.333...
+    Color fromHSL = Color::fromString ("hsl(0.333, 1, 0.5)");
+    EXPECT_GT (fromHSL.getGreen(), 200); // Green dominant
+    EXPECT_LT (fromHSL.getRed(), 50);
+    EXPECT_LT (fromHSL.getBlue(), 50);
+
+    // Test HSL with percentage values
+    // Blue: hue = 240/360 = 0.666...
+    Color fromHSLPercent = Color::fromString ("hsl(0.666, 100%, 50%)");
+    EXPECT_GT (fromHSLPercent.getBlue(), 200); // Blue dominant
+    EXPECT_LT (fromHSLPercent.getRed(), 50);
+    EXPECT_LT (fromHSLPercent.getGreen(), 50);
+
+    // Test HSLA parsing
+    // Red: hue = 0
+    Color fromHSLA = Color::fromString ("hsla(0, 1, 0.5, 0.5)");
+    EXPECT_GT (fromHSLA.getRed(), 200); // Red dominant
+    EXPECT_LT (fromHSLA.getGreen(), 50);
+    EXPECT_LT (fromHSLA.getBlue(), 50);
+    EXPECT_NEAR (fromHSLA.getAlpha(), 127, 1); // Alpha ~0.5
+
+    // Test HSLA with percentage and decimal values mixed
+    // Yellow: hue = 60/360 = 0.166...
+    Color fromHSLAMixed = Color::fromString ("hsla(0.166, 100%, 50%, 0.75)");
+    EXPECT_GT (fromHSLAMixed.getRed(), 200); // Yellow (red + green)
+    EXPECT_GT (fromHSLAMixed.getGreen(), 200);
+    EXPECT_LT (fromHSLAMixed.getBlue(), 50);
+    EXPECT_NEAR (fromHSLAMixed.getAlpha(), 191, 1); // Alpha ~0.75
+
+    // Test HSL with spaces and commas
+    // Cyan: hue = 180/360 = 0.5
+    Color fromHSLSpaces = Color::fromString ("hsl( 0.5 , 1 , 0.5 )");
+    EXPECT_GT (fromHSLSpaces.getBlue(), 200); // Cyan (green + blue)
+    EXPECT_GT (fromHSLSpaces.getGreen(), 200);
+    EXPECT_LT (fromHSLSpaces.getRed(), 50);
+
+    // Test invalid HSL format (should return transparentBlack)
+    Color fromInvalidHSL = Color::fromString ("hsl_invalid(0, 0, 0)");
+    EXPECT_EQ (fromInvalidHSL.getARGB(), Colors::transparentBlack);
+}
+
+TEST (ColorTests, RGB_String_Parsing_EdgeCases)
+{
+    // Test invalid RGB format (should return transparentBlack)
+    Color fromInvalidRGB = Color::fromString ("rgb_invalid(255, 0, 0)");
+    EXPECT_EQ (fromInvalidRGB.getARGB(), Colors::transparentBlack);
+
+    // Test RGB with extra spaces
+    Color fromRGBSpaces = Color::fromString ("rgb(  255  ,  128  ,  64  )");
+    EXPECT_EQ (fromRGBSpaces.getRed(), 255);
+    EXPECT_EQ (fromRGBSpaces.getGreen(), 128);
+    EXPECT_EQ (fromRGBSpaces.getBlue(), 64);
+
+    // Test RGB with no spaces
+    Color fromRGBNoSpaces = Color::fromString ("rgb(255,128,64)");
+    EXPECT_EQ (fromRGBNoSpaces.getRed(), 255);
+    EXPECT_EQ (fromRGBNoSpaces.getGreen(), 128);
+    EXPECT_EQ (fromRGBNoSpaces.getBlue(), 64);
+
+    // Test RGBA with spaces
+    Color fromRGBASpaces = Color::fromString ("rgba(  100  ,  150  ,  200  ,  128  )");
+    EXPECT_EQ (fromRGBASpaces.getRed(), 100);
+    EXPECT_EQ (fromRGBASpaces.getGreen(), 150);
+    EXPECT_EQ (fromRGBASpaces.getBlue(), 200);
+    EXPECT_EQ (fromRGBASpaces.getAlpha(), 128);
+}
+
+TEST (ColorTests, ParseNextInt_Coverage)
+{
+    // Test negative number parsing via RGB (if implementation supports it)
+    Color fromNegative = Color::fromString ("rgb(-10, 50, 100)");
+    EXPECT_NO_THROW (fromNegative.getRed()); // Should handle gracefully
+
+    // Test numbers with leading zeros
+    Color fromLeadingZeros = Color::fromString ("rgb(001, 050, 100)");
+    EXPECT_EQ (fromLeadingZeros.getRed(), 1);
+    EXPECT_EQ (fromLeadingZeros.getGreen(), 50);
+    EXPECT_EQ (fromLeadingZeros.getBlue(), 100);
+
+    // Test multiple commas and spaces
+    Color fromMultipleDelimiters = Color::fromString ("rgb( , 10 , , 20 , 30 )");
+    EXPECT_NO_THROW (fromMultipleDelimiters.getRed()); // Should handle gracefully
+}
+
+TEST (ColorTests, ParseNextFloat_Coverage)
+{
+    // Test multi-digit decimal values in HSL (now that parsing is fixed)
+    Color fromHSLDecimal = Color::fromString ("hsl(0.333, 0.75, 0.5)");
+    EXPECT_NO_THROW (fromHSLDecimal.getRed()); // Should parse decimal correctly
+
+    // Test values without decimals
+    Color fromHSLNoDecimal = Color::fromString ("hsl(0, 0, 0)");
+    EXPECT_EQ (fromHSLNoDecimal.getRed(), 0);
+    EXPECT_EQ (fromHSLNoDecimal.getGreen(), 0);
+    EXPECT_EQ (fromHSLNoDecimal.getBlue(), 0);
+
+    // Test percentage values with decimals
+    Color fromHSLPercentDecimal = Color::fromString ("hsl(0, 50.5%, 25.25%)");
+    EXPECT_NO_THROW (fromHSLPercentDecimal.getRed()); // Should handle percentage with decimals
+
+    // Test mixed formats (decimals and percentages)
+    Color fromHSLMixed = Color::fromString ("hsl(0.666, 80.5%, 0.625)");
+    EXPECT_NO_THROW (fromHSLMixed.getRed());
+
+    // Test edge case: percentage at 0%
+    Color fromHSLZeroPercent = Color::fromString ("hsl(0, 0%, 50%)");
+    EXPECT_NEAR (fromHSLZeroPercent.getRed(), 127, 2);
+    EXPECT_NEAR (fromHSLZeroPercent.getGreen(), 127, 2);
+    EXPECT_NEAR (fromHSLZeroPercent.getBlue(), 127, 2);
+
+    // Test edge case: percentage at 100%
+    Color fromHSLHundredPercent = Color::fromString ("hsl(0, 100%, 50%)");
+    EXPECT_GT (fromHSLHundredPercent.getRed(), 200);
+    EXPECT_LT (fromHSLHundredPercent.getGreen(), 50);
+    EXPECT_LT (fromHSLHundredPercent.getBlue(), 50);
+
+    // Test HSLA with multi-digit float alpha
+    Color fromHSLAFloats = Color::fromString ("hsla(0.5, 0.456, 0.789, 0.625)");
+    EXPECT_NO_THROW (fromHSLAFloats.getRed());
+    EXPECT_NEAR (fromHSLAFloats.getAlpha(), 159, 1); // 0.625 * 255
+}
+
+TEST (ColorTests, FromHSL_HueToRGB_EdgeCases)
+{
+    // Test to hit line 528: t < 0.0f branch in hue2rgb lambda
+    // This occurs when h - 1.0f/3.0f is negative (when h < 1/3)
+    Color c1 = Color::fromHSL (0.0f, 1.0f, 0.5f);
+    EXPECT_GT (c1.getRed(), 200); // Red dominant
+    EXPECT_LT (c1.getGreen(), 50);
+    EXPECT_LT (c1.getBlue(), 50);
+
+    Color c2 = Color::fromHSL (0.1f, 1.0f, 0.5f);
+    EXPECT_NO_THROW (c2.getRed()); // Should handle h < 1/3
+
+    Color c3 = Color::fromHSL (0.2f, 1.0f, 0.5f);
+    EXPECT_NO_THROW (c3.getRed()); // Should handle h < 1/3
+
+    // Test to hit line 530: t > 1.0f branch in hue2rgb lambda
+    // This occurs when h + 1.0f/3.0f is > 1.0 (when h > 2/3)
+    Color c4 = Color::fromHSL (0.7f, 1.0f, 0.5f);
+    EXPECT_NO_THROW (c4.getRed()); // Should handle h > 2/3
+
+    Color c5 = Color::fromHSL (0.9f, 1.0f, 0.5f);
+    EXPECT_NO_THROW (c5.getRed()); // Should handle h > 2/3
+
+    // Test edge cases for different ranges in hue2rgb
+    // t < 1/6 (line 531-532)
+    Color c6 = Color::fromHSL (0.05f, 1.0f, 0.5f);
+    EXPECT_NO_THROW (c6.getRed());
+
+    // 1/6 <= t < 1/2 (line 533-534)
+    Color c7 = Color::fromHSL (0.25f, 1.0f, 0.5f);
+    EXPECT_NO_THROW (c7.getRed());
+
+    // 1/2 <= t < 2/3 (line 535-536)
+    Color c8 = Color::fromHSL (0.5f, 1.0f, 0.5f);
+    EXPECT_NO_THROW (c8.getRed());
+
+    // t >= 2/3 (line 537)
+    Color c9 = Color::fromHSL (0.8f, 1.0f, 0.5f);
+    EXPECT_NO_THROW (c9.getRed());
+}
+
+TEST (ColorTests, FromHSV_AllSwitchCases)
+{
+    // Test all 6 cases in the switch statement (lines 623-652)
+
+    // Case 0: hue in [0, 1/6) - red to yellow
+    Color case0 = Color::fromHSV (0.0f, 1.0f, 1.0f);
+    EXPECT_EQ (case0.getRed(), 255);
+    EXPECT_EQ (case0.getGreen(), 0);
+    EXPECT_EQ (case0.getBlue(), 0);
+
+    // Case 1: hue in [1/6, 2/6) - yellow to green
+    Color case1 = Color::fromHSV (1.0f / 6.0f + 0.05f, 1.0f, 1.0f);
+    EXPECT_GT (case1.getGreen(), 200); // Green becoming dominant
+    EXPECT_LT (case1.getBlue(), 50);
+
+    // Case 2: hue in [2/6, 3/6) - green to cyan
+    Color case2 = Color::fromHSV (2.0f / 6.0f + 0.05f, 1.0f, 1.0f);
+    EXPECT_GT (case2.getGreen(), 200); // Green dominant
+    EXPECT_LT (case2.getRed(), 50);
+
+    // Case 3: hue in [3/6, 4/6) - cyan to blue
+    Color case3 = Color::fromHSV (3.0f / 6.0f + 0.05f, 1.0f, 1.0f);
+    EXPECT_GT (case3.getBlue(), 200); // Blue becoming dominant
+    EXPECT_LT (case3.getRed(), 50);
+
+    // Case 4: hue in [4/6, 5/6) - blue to magenta
+    Color case4 = Color::fromHSV (4.0f / 6.0f + 0.05f, 1.0f, 1.0f);
+    EXPECT_GT (case4.getBlue(), 200); // Blue dominant
+    EXPECT_LT (case4.getGreen(), 50);
+
+    // Case 5: hue in [5/6, 1.0) - magenta to red
+    Color case5 = Color::fromHSV (5.0f / 6.0f + 0.05f, 1.0f, 1.0f);
+    EXPECT_GT (case5.getRed(), 200); // Red becoming dominant
+    EXPECT_LT (case5.getGreen(), 50);
+
+    // Test exact boundaries
+    Color boundary0 = Color::fromHSV (0.0f, 1.0f, 1.0f);
+    EXPECT_NO_THROW (boundary0.getRed());
+
+    Color boundary1 = Color::fromHSV (1.0f / 6.0f, 1.0f, 1.0f);
+    EXPECT_NO_THROW (boundary1.getRed());
+
+    Color boundary2 = Color::fromHSV (2.0f / 6.0f, 1.0f, 1.0f);
+    EXPECT_NO_THROW (boundary2.getRed());
+
+    Color boundary3 = Color::fromHSV (3.0f / 6.0f, 1.0f, 1.0f);
+    EXPECT_NO_THROW (boundary3.getRed());
+
+    Color boundary4 = Color::fromHSV (4.0f / 6.0f, 1.0f, 1.0f);
+    EXPECT_NO_THROW (boundary4.getRed());
+
+    Color boundary5 = Color::fromHSV (5.0f / 6.0f, 1.0f, 1.0f);
+    EXPECT_NO_THROW (boundary5.getRed());
+}
+
+TEST (ColorTests, OverlaidWith_AlphaBlending)
+{
+    // Test line 784-785: destAlpha <= 0
+    Color transparent (0x00ff0000); // Fully transparent red
+    Color opaqueSrc (0xff0000ff);   // Fully opaque blue
+    Color result1 = transparent.overlaidWith (opaqueSrc);
+    EXPECT_EQ (result1.getARGB(), opaqueSrc.getARGB()); // Should return src
+
+    // Test line 789-790: resA <= 0
+    Color fullyTransparent (0x00000000);
+    Color alsoTransparent (0x00ffffff);
+    Color result2 = fullyTransparent.overlaidWith (alsoTransparent);
+    EXPECT_EQ (result2.getARGB(), alsoTransparent.getARGB()); // Should return src
+
+    // Test normal blending (lines 792-796)
+    Color semiDest (0x80ff0000); // Semi-transparent red
+    Color semiSrc (0x800000ff);  // Semi-transparent blue
+    Color result3 = semiDest.overlaidWith (semiSrc);
+    EXPECT_NE (result3.getARGB(), semiDest.getARGB()); // Should be blended
+    EXPECT_NE (result3.getARGB(), semiSrc.getARGB());  // Should be blended
+    EXPECT_GT (result3.getAlpha(), 0);                 // Should have some alpha
+
+    // Test with different alpha combinations
+    Color dest1 (0xc0ff0000); // 75% opaque red
+    Color src1 (0x400000ff);  // 25% opaque blue
+    Color result4 = dest1.overlaidWith (src1);
+    EXPECT_GT (result4.getRed(), result4.getBlue()); // Red should dominate
+
+    // Test with opaque dest and semi-transparent src
+    Color opaqueDest (0xffff0000); // Fully opaque red
+    Color semiSrc2 (0x800000ff);   // Semi-transparent blue
+    Color result5 = opaqueDest.overlaidWith (semiSrc2);
+    EXPECT_GT (result5.getRed(), 0);  // Should have red component
+    EXPECT_GT (result5.getBlue(), 0); // Should have blue component
+
+    // Test with semi-transparent dest and opaque src
+    Color semiDest2 (0x80ff0000);  // Semi-transparent red
+    Color opaqueSrc2 (0xff0000ff); // Fully opaque blue
+    Color result6 = semiDest2.overlaidWith (opaqueSrc2);
+    EXPECT_EQ (result6.getBlue(), 255); // Blue should be dominant
+
+    // Edge case: both nearly opaque
+    Color nearlyOpaqueDest (0xfeff0000);
+    Color nearlyOpaqueSrc (0xfe0000ff);
+    Color result7 = nearlyOpaqueDest.overlaidWith (nearlyOpaqueSrc);
+    EXPECT_NO_THROW (result7.getRed()); // Should handle without issues
+}

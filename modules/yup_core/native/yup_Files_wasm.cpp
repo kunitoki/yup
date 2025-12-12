@@ -68,13 +68,12 @@ bool File::isOnHardDisk() const
 
 bool File::isOnRemovableDrive() const
 {
-    jassertfalse; // xxx not yet implemented for wasm!
-    return false;
+    return false; // xxx not yet implemented for wasm!
 }
 
 String File::getVersion() const
 {
-    return {}; // xxx not yet implemented
+    return {}; // xxx not yet implemented for wasm!
 }
 
 //==============================================================================
@@ -191,18 +190,21 @@ static bool isFileExecutable (const String& filename)
         && access (filename.toUTF8(), X_OK) == 0;
 }
 
-bool Process::openDocument (const String& fileName, const String& parameters)
+bool Process::openDocument (const String& fileName, const String&)
 {
-    auto cmdString = fileName.replace (" ", "\\ ", false);
-    cmdString << " " << parameters;
+    auto cmdString = String ("file://");
+    cmdString << fileName.replace (" ", "\\ ", false);
 
     MAIN_THREAD_EM_ASM ({
-        var elem = window.document.createElement ('a');
-        elem.href = UTF8ToString ($0);
-        elem.target = "_blank";
-        document.body.appendChild (elem);
-        elem.click();
-        document.body.removeChild (elem);
+        if (typeof window !== "undefined" && typeof window.document !== "undefined")
+        {
+            var elem = window.document.createElement ("a");
+            elem.href = UTF8ToString ($0);
+            elem.target = "_blank";
+            window.document.body.appendChild (elem);
+            elem.click();
+            window.document.body.removeChild (elem);
+        }
     }, cmdString.toRawUTF8());
 
     return true;

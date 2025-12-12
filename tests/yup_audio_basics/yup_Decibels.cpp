@@ -322,8 +322,8 @@ TEST (DecibelsTests, ToStringAtMinusInfinity)
 TEST (DecibelsTests, ToStringCustomMinusInfinityString)
 {
     // Custom minus infinity string (lines 114-117)
-    String s = Decibels::toString (-120.0f, 2, -100.0f, true, "-\u221E");
-    EXPECT_TRUE (s.contains ("-\u221E"));
+    String s = Decibels::toString (-120.0f, 2, -100.0f, true, "minus infinite");
+    EXPECT_TRUE (s.contains ("minus infinite"));
 }
 
 TEST (DecibelsTests, ToStringWithoutSuffix)

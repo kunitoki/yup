@@ -30,24 +30,19 @@ env:
 jobs:
   configure:
     runs-on: macos-latest
-
     steps:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
-
     - uses: seanmiddleditch/gha-setup-ninja@master
-
     - name: Configure
       run: |
         cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
           -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-
     - name: Build SDL2
       run: |
-        cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target SDL2-static
-        cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target SDL2-static
-
+        cmake --build ${{ runner.workspace }}/build --config Debug --target SDL2-static
+        cmake --build ${{ runner.workspace }}/build --config Release --target SDL2-static
     - name: Cache Configure
       id: cache-build
       uses: actions/cache/save@v4
@@ -73,8 +68,8 @@ jobs:
       run: |
         cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
           -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_console
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_console
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_console
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_console
 
   build_app:
     runs-on: macos-latest
@@ -94,8 +89,8 @@ jobs:
       run: |
         cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
           -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_app
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_app
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_app
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_app
 
   build_graphics:
     runs-on: macos-latest
@@ -115,5 +110,5 @@ jobs:
       run: |
         cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
           -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_graphics
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_graphics
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_graphics
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_graphics

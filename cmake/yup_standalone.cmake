@@ -62,7 +62,7 @@ function (yup_standalone_app)
     # ==== Setup Android platform, build gradle stage
     if (YUP_TARGET_ANDROID)
         _yup_message (STATUS "${target_name} - Creating java gradle project")
-        _yup_prepare_gradle_android(
+        _yup_android_prepare_gradle(
             TARGET_NAME ${target_name}
             TARGET_ICON ${target_icon}
             APPLICATION_ID ${target_app_identifier}
@@ -71,7 +71,7 @@ function (yup_standalone_app)
 
         _yup_message (STATUS "${target_name} - Copying SDL2 java activity to application")
         _yup_fetch_sdl2()
-        _yup_copy_sdl2_activity_android()
+        _yup_android_copy_sdl2_activity()
 
         return()
     endif()
@@ -160,6 +160,7 @@ function (yup_standalone_app)
             $<$<CONFIG:RELEASE>:-O3>
             -fexceptions
             -pthread
+            -Wno-nontrivial-memcall
             -sDISABLE_EXCEPTION_CATCHING=0)
 
         list (APPEND additional_link_options

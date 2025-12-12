@@ -644,16 +644,16 @@ TEST_F (URLTests, EdgeCases)
     EXPECT_EQ (fullUrl.getAnchorString(), "#section");
 }
 
-TEST_F (URLTests, LaunchInDefaultBrowser)
+TEST_F (URLTests, DISABLED_LaunchInDefaultBrowser)
 {
-    /*
     // We can't really test if the browser opens, but we can test the method exists
     // and returns a value. On CI systems, this might return false.
     URL webUrl ("http://www.example.com");
-    bool result = webUrl.launchInDefaultBrowser();
+
+    [[maybe_unused]] bool result = webUrl.launchInDefaultBrowser();
+
     // Don't assert on the result as it's system-dependent
-    (void) result;
-    */
+    SUCCEED();
 }
 
 TEST_F (URLTests, DownloadTaskOptions)

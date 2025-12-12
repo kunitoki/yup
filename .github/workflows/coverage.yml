@@ -55,19 +55,15 @@ env:
 jobs:
   cpp-coverage:
     runs-on: ubuntu-latest
-
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
-
     - name: Setup Ninja
       uses: seanmiddleditch/gha-setup-ninja@master
-
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-
     - name: Configure CMake with Coverage
       run: |
         cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build \
@@ -76,19 +72,15 @@ jobs:
           -DYUP_BUILD_EXAMPLES=OFF \
           -DYUP_ENABLE_COVERAGE=ON \
           -DCMAKE_BUILD_TYPE=Debug
-
     - name: Build Tests
       working-directory: ${{ runner.workspace }}/build
-      run: cmake --build . --config Debug --parallel 4 --target yup_tests
-
+      run: cmake --build . --config Debug --target yup_tests
     - name: Clean Coverage Data
       working-directory: ${{ runner.workspace }}/build
       run: cmake --build . --target coverage_clean
-
     - name: Run C++ Tests
       working-directory: ${{ runner.workspace }}/build/tests/Debug
       run: ./yup_tests --gtest_output=xml:test_results.xml
-
     - name: Generate C++ Coverage Report
       working-directory: ${{ runner.workspace }}/build
       run: |
@@ -104,7 +96,6 @@ jobs:
           "*/CMakeFiles/*" \
           --output-file coverage/coverage_final.info --ignore-errors ${IGNORE_ERRORS}
         lcov --list coverage/coverage_final.info
-
     - name: Upload Coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
@@ -113,14 +104,12 @@ jobs:
         name: overall-coverage
         fail_ci_if_error: false
         verbose: true
-
     - name: Upload Test Results
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: test-results
         path: ${{ runner.workspace }}/build/tests/Debug/test_results.xml
-
     - name: Upload Coverage Reports
       uses: actions/upload-artifact@v4
       if: always()
