@@ -43,6 +43,7 @@ protected:
 
     void TearDown() override
     {
+        tree = DataTree();
     }
 
     DataTree tree;
@@ -663,6 +664,8 @@ TEST_F (DataTreeTests, ChildChangeNotifications)
     EXPECT_EQ (tree, listener.childRemovals[0].parent);
     EXPECT_EQ (child, listener.childRemovals[0].child);
     EXPECT_EQ (0, listener.childRemovals[0].index);
+
+    tree.removeListener (&listener);
 }
 
 //==============================================================================
