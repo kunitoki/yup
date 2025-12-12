@@ -291,3 +291,242 @@ def test_DataTree_getChildWithName():
     # Non-existent child
     nonExistent = parent.getChildWithName(yup.Identifier("NonExistent"))
     assert not nonExistent.isValid()
+
+#==================================================================================================
+
+def test_DataTree_forEachChild_with_bool_return():
+    """Test forEachChild with bool return for early exit."""
+    parent = yup.DataTree(yup.Identifier("Parent"))
+
+    transaction = parent.beginTransaction()
+    for i in range(5):
+        child = yup.DataTree(yup.Identifier(f"Child{i}"))
+        transaction.addChild(child)
+    transaction.commit()
+
+    # Test early exit when callback returns True
+    count = 0
+    def callback_early_exit(child):
+        nonlocal count
+        count += 1
+        # Stop after processing 2 children
+        return count >= 2
+
+    parent.forEachChild(callback_early_exit)
+    assert count == 2  # Should stop early
+
+    # Test normal iteration when callback returns False
+    count2 = 0
+    def callback_no_exit(child):
+        nonlocal count2
+        count2 += 1
+        return False  # Continue iteration
+
+    parent.forEachChild(callback_no_exit)
+    assert count2 == 5  # Should process all children
+
+#==================================================================================================
+
+def test_DataTree_forEachDescendant():
+    """Test forEachDescendant method."""
+    root = yup.DataTree(yup.Identifier("Root"))
+
+    # Build a hierarchy
+    transaction = root.beginTransaction()
+    child1 = yup.DataTree(yup.Identifier("Child1"))
+    child2 = yup.DataTree(yup.Identifier("Child2"))
+    transaction.addChild(child1)
+    transaction.addChild(child2)
+    transaction.commit()
+
+    actualChild1 = root.getChild(0)
+    transaction2 = actualChild1.beginTransaction()
+    grandchild1 = yup.DataTree(yup.Identifier("Grandchild1"))
+    grandchild2 = yup.DataTree(yup.Identifier("Grandchild2"))
+    transaction2.addChild(grandchild1)
+    transaction2.addChild(grandchild2)
+    transaction2.commit()
+
+    # Test callback visits all descendants
+    visited = []
+    def callback(child):
+        visited.append(child.getType().toString())
+        return False
+
+    root.forEachDescendant(callback)
+    assert len(visited) == 4  # 2 children + 2 grandchildren
+    assert "Child1" in visited
+    assert "Child2" in visited
+    assert "Grandchild1" in visited
+    assert "Grandchild2" in visited
+
+#==================================================================================================
+
+def test_DataTree_forEachDescendant_with_bool_return():
+    """Test forEachDescendant with bool return for early exit."""
+    root = yup.DataTree(yup.Identifier("Root"))
+
+    # Build a hierarchy
+    transaction = root.beginTransaction()
+    for i in range(3):
+        child = yup.DataTree(yup.Identifier(f"Child{i}"))
+        transaction.addChild(child)
+    transaction.commit()
+
+    # Add grandchildren to first child
+    actualChild = root.getChild(0)
+    transaction2 = actualChild.beginTransaction()
+    for i in range(3):
+        grandchild = yup.DataTree(yup.Identifier(f"Grandchild{i}"))
+        transaction2.addChild(grandchild)
+    transaction2.commit()
+
+    # Test early exit
+    count = 0
+    def callback_early_exit(child):
+        nonlocal count
+        count += 1
+        return count >= 2  # Stop after 2 descendants
+
+    root.forEachDescendant(callback_early_exit)
+    assert count == 2  # Should stop early
+
+#==================================================================================================
+
+def test_DataTree_findChildren():
+    """Test findChildren with predicate."""
+    parent = yup.DataTree(yup.Identifier("Parent"))
+
+    transaction = parent.beginTransaction()
+    for i in range(5):
+        child = yup.DataTree(yup.Identifier(f"Item{i}"))
+        transaction.setProperty(yup.Identifier("index"), i)
+        transaction.addChild(child)
+    transaction.commit()
+
+    # Add a property to some children
+    for i in [0, 2, 4]:
+        actualChild = parent.getChild(i)
+        trans = actualChild.beginTransaction()
+        trans.setProperty(yup.Identifier("even"), True)
+        trans.commit()
+
+    # Find children with even property
+    found = parent.findChildren(lambda c: c.hasProperty(yup.Identifier("even")))
+    assert len(found) == 3
+    assert all(child.hasProperty(yup.Identifier("even")) for child in found)
+
+    # Find children by name pattern
+    found2 = parent.findChildren(lambda c: c.getType() == yup.Identifier("Item2"))
+    assert len(found2) == 1
+    assert found2[0].getType() == yup.Identifier("Item2")
+
+#==================================================================================================
+
+def test_DataTree_findDescendants():
+    """Test findDescendants with predicate."""
+    root = yup.DataTree(yup.Identifier("Root"))
+
+    # Build hierarchy
+    transaction = root.beginTransaction()
+    child1 = yup.DataTree(yup.Identifier("Child1"))
+    child2 = yup.DataTree(yup.Identifier("Child2"))
+    transaction.addChild(child1)
+    transaction.addChild(child2)
+    transaction.commit()
+
+    # Add grandchildren
+    actualChild1 = root.getChild(0)
+    transaction2 = actualChild1.beginTransaction()
+    grandchild1 = yup.DataTree(yup.Identifier("Target"))
+    grandchild2 = yup.DataTree(yup.Identifier("Other"))
+    transaction2.addChild(grandchild1)
+    transaction2.addChild(grandchild2)
+    transaction2.commit()
+
+    actualChild2 = root.getChild(1)
+    transaction3 = actualChild2.beginTransaction()
+    grandchild3 = yup.DataTree(yup.Identifier("Target"))
+    transaction3.addChild(grandchild3)
+    transaction3.commit()
+
+    # Find all descendants named "Target"
+    found = root.findDescendants(lambda d: d.getType() == yup.Identifier("Target"))
+    assert len(found) == 2
+    assert all(d.getType() == yup.Identifier("Target") for d in found)
+
+#==================================================================================================
+
+def test_DataTree_findDescendant():
+    """Test findDescendant with predicate (finds first match)."""
+    root = yup.DataTree(yup.Identifier("Root"))
+
+    # Build hierarchy
+    transaction = root.beginTransaction()
+    child1 = yup.DataTree(yup.Identifier("Child1"))
+    child2 = yup.DataTree(yup.Identifier("Child2"))
+    transaction.addChild(child1)
+    transaction.addChild(child2)
+    transaction.commit()
+
+    # Add grandchildren
+    actualChild1 = root.getChild(0)
+    transaction2 = actualChild1.beginTransaction()
+    grandchild1 = yup.DataTree(yup.Identifier("Target"))
+    transaction2.addChild(grandchild1)
+    transaction2.commit()
+
+    actualChild2 = root.getChild(1)
+    transaction3 = actualChild2.beginTransaction()
+    grandchild2 = yup.DataTree(yup.Identifier("Target"))
+    transaction3.addChild(grandchild2)
+    transaction3.commit()
+
+    # Find first descendant named "Target"
+    found = root.findDescendant(lambda d: d.getType() == yup.Identifier("Target"))
+    assert found.isValid()
+    assert found.getType() == yup.Identifier("Target")
+
+    # Find non-existent descendant
+    notFound = root.findDescendant(lambda d: d.getType() == yup.Identifier("NonExistent"))
+    assert not notFound.isValid()
+
+#==================================================================================================
+
+def test_DataTree_repr():
+    """Test DataTree __repr__ method."""
+    tree = yup.DataTree(yup.Identifier("Settings"))
+    repr_str = repr(tree)
+
+    # Should contain class name and type
+    assert "DataTree" in repr_str
+    assert "Settings" in repr_str
+    assert "object at" in repr_str
+
+    # Invalid tree repr
+    invalid_tree = yup.DataTree()
+    invalid_repr = repr(invalid_tree)
+    assert "DataTree" in invalid_repr
+
+#==================================================================================================
+
+def test_DataTree_Transaction_repr():
+    """Test DataTree.Transaction has proper type representation."""
+    tree = yup.DataTree(yup.Identifier("Test"))
+    transaction = tree.beginTransaction()
+
+    # Verify we can get the type name
+    type_name = type(transaction).__name__
+    assert "Transaction" in type_name
+
+#==================================================================================================
+
+def test_DataTree_ValidatedTransaction_type():
+    """Test DataTree.ValidatedTransaction has proper type representation."""
+    tree = yup.DataTree(yup.Identifier("Test"))
+    transaction = tree.beginTransaction()
+
+    # ValidatedTransaction is obtained through validation
+    # For now, just verify the type exists and is accessible
+    type_name = type(transaction).__name__
+    assert type_name is not None

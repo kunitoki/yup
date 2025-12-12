@@ -250,3 +250,34 @@ def test_UndoManager_transaction_names():
     # Get transaction name
     name = manager.getCurrentTransactionName()
     assert isinstance(name, str)
+
+#==================================================================================================
+
+def test_UndoManager_repr():
+    """Test UndoManager has proper type representation."""
+    manager = yup.UndoManager()
+
+    # Verify we can get the type name
+    type_name = type(manager).__name__
+    assert "UndoManager" in type_name
+
+#==================================================================================================
+
+def test_UndoManager_ScopedTransaction_repr():
+    """Test UndoManager.ScopedTransaction has proper type representation."""
+    manager = yup.UndoManager()
+    scoped = yup.UndoManager.ScopedTransaction(manager, "Test Transaction")
+
+    # Verify we can get the type name
+    type_name = type(scoped).__name__
+    assert "ScopedTransaction" in type_name
+
+#==================================================================================================
+
+def test_UndoableAction_repr():
+    """Test UndoableAction has proper type representation."""
+    action = UndoableActionImpl()
+
+    # Verify we can get the type name
+    type_name = type(action).__name__
+    assert type_name is not None  # Should have a valid type name

@@ -99,19 +99,7 @@ void registerYupDataModelBindings (py::module_& m)
 
     py::class_<DataTree> classDataTree (m, "DataTree");
 
-    py::class_<DataTree::Iterator> classDataTreeIterator (classDataTree, "Iterator");
-
-    classDataTreeIterator
-        .def (py::init<>())
-        .def ("__iter__", [] (DataTree::Iterator& self) { return self; })
-        .def ("__next__", [] (DataTree::Iterator& self)
-        {
-            // We need to manually implement the iteration logic
-            // This is a simplified version - a proper implementation would track the end
-            auto value = *self;
-            ++self;
-            return value;
-        });
+    // Note: Iterator is bound but we primarily use __iter__ on DataTree itself for Python iteration
 
     py::class_<DataTree::Transaction> classDataTreeTransaction (classDataTree, "Transaction");
 

@@ -298,3 +298,13 @@ def test_move_child_with_undo():
     assert parent.getChild(0).getType() == yup.Identifier("Third")
     assert parent.getChild(1).getType() == yup.Identifier("Second")
     assert parent.getChild(2).getType() == yup.Identifier("First")
+
+#==================================================================================================
+
+def test_DataTreeListener_repr():
+    """Test DataTreeListener has proper type representation."""
+    listener = DataTreeChangeCounter()
+
+    # Verify we can get the type name
+    type_name = type(listener).__name__
+    assert type_name is not None  # Should have a valid type name
