@@ -151,13 +151,10 @@ def test_UndoManager_ScopedTransaction():
     tree = yup.DataTree(yup.Identifier("Test"))
 
     # Use scoped transaction
-    scoped = yup.UndoManager.ScopedTransaction(manager, "Scoped Transaction")
-
-    transaction = tree.beginTransaction(manager)
-    transaction.setProperty(yup.Identifier("key"), "value")
-    transaction.commit()
-
-    del scoped
+    with yup.UndoManager.ScopedTransaction(manager, "Scoped Transaction") as scoped:
+        transaction = tree.beginTransaction(manager)
+        transaction.setProperty(yup.Identifier("key"), "value")
+        transaction.commit()
 
     assert manager.canUndo()
 
@@ -266,11 +263,10 @@ def test_UndoManager_repr():
 def test_UndoManager_ScopedTransaction_repr():
     """Test UndoManager.ScopedTransaction has proper type representation."""
     manager = yup.UndoManager()
-    scoped = yup.UndoManager.ScopedTransaction(manager, "Test Transaction")
-
-    # Verify we can get the type name
-    type_name = type(scoped).__name__
-    assert "ScopedTransaction" in type_name
+    with yup.UndoManager.ScopedTransaction(manager, "Test Transaction") as scoped:
+       # Verify we can get the type name
+       type_name = type(scoped).__name__
+       assert "ScopedTransaction" in type_name
 
 #==================================================================================================
 

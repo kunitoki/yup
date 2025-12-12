@@ -2135,6 +2135,7 @@ void registerYupCoreBindings (py::module_& m)
         .def ("__enter__", [] (PerformanceCounter& self)
         {
             self.start();
+            return std::addressof (self);
         }, py::return_value_policy::reference)
         .def ("__exit__", [] (PerformanceCounter& self, const std::optional<py::type>&, const std::optional<py::object>&, const std::optional<py::object>&)
         {

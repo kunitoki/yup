@@ -57,11 +57,40 @@ void registerYupDataModelBindings (py::module_& m)
 
     py::class_<UndoManager, ReferenceCountedObjectPtr<UndoManager>> classUndoManager (m, "UndoManager");
 
-    py::class_<UndoManager::ScopedTransaction> classUndoManagerScopedTransaction (classUndoManager, "ScopedTransaction");
+    struct PyUndoManagerScopedTransaction
+    {
+        PyUndoManagerScopedTransaction (UndoManager& um)
+            : um (um)
+        {
+        }
 
-    classUndoManagerScopedTransaction
+        PyUndoManagerScopedTransaction (UndoManager& um, StringRef transactionName)
+            : um (um)
+            , transactionName (transactionName)
+        {
+        }
+
+        UndoManager& um;
+        std::optional<String> transactionName;
+        std::variant<std::monostate, UndoManager::ScopedTransaction> state;
+    };
+
+    py::class_<PyUndoManagerScopedTransaction> (classUndoManager, "ScopedTransaction")
         .def (py::init<UndoManager&>())
-        .def (py::init<UndoManager&, StringRef>());
+        .def (py::init<UndoManager&, StringRef>())
+        .def ("__enter__", [] (PyUndoManagerScopedTransaction& self)
+        {
+            if (self.transactionName.has_value())
+                self.state.emplace<UndoManager::ScopedTransaction> (self.um, *self.transactionName);
+            else
+                self.state.emplace<UndoManager::ScopedTransaction> (self.um);
+
+            return std::addressof (self);
+        })
+        .def ("__exit__", [] (PyUndoManagerScopedTransaction& self, const std::optional<py::type>&, const std::optional<py::object>&, const std::optional<py::object>&)
+        {
+            self.state.emplace<std::monostate>();
+        });
 
     classUndoManager
         .def (py::init<>())
