@@ -40,11 +40,11 @@
 #include "../bindings/yup_YupGui_bindings.h"
 #endif
 
-/*
 #if YUP_MODULE_AVAILABLE_yup_audio_basics
 #include "../bindings/yup_YupAudioBasics_bindings.h"
 #endif
 
+/*
 #if YUP_MODULE_AVAILABLE_yup_audio_devices
 #include "../bindings/yup_YupAudioDevices_bindings.h"
 #endif
@@ -92,11 +92,11 @@ PYBIND11_MODULE (YUP_PYTHON_MODULE_NAME, m)
     yup::Bindings::registerYupGuiBindings (m);
 #endif
 
-    /*
 #if YUP_MODULE_AVAILABLE_yup_audio_basics
     yup::Bindings::registerYupAudioBasicsBindings (m);
 #endif
 
+    /*
 #if YUP_MODULE_AVAILABLE_yup_audio_devices
     yup::Bindings::registerYupAudioDevicesBindings (m);
 #endif
