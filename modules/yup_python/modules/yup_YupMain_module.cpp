@@ -28,11 +28,9 @@
 #include "../bindings/yup_YupEvents_bindings.h"
 #endif
 
-/*
 #if YUP_MODULE_AVAILABLE_yup_data_model
 #include "../bindings/yup_YupDataModel_bindings.h"
 #endif
-*/
 
 #if YUP_MODULE_AVAILABLE_yup_graphics
 #include "../bindings/yup_YupGraphics_bindings.h"
@@ -82,11 +80,9 @@ PYBIND11_MODULE (YUP_PYTHON_MODULE_NAME, m)
     yup::Bindings::registerYupEventsBindings (m);
 #endif
 
-    /*
 #if YUP_MODULE_AVAILABLE_yup_data_model
     yup::Bindings::registerYupDataModelBindings (m);
 #endif
-    */
 
 #if YUP_MODULE_AVAILABLE_yup_graphics
     yup::Bindings::registerYupGraphicsBindings (m);
