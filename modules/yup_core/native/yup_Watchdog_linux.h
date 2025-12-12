@@ -162,12 +162,16 @@ private:
             FD_SET (fd, &fileDescriptorSet);
             if (select (FD_SETSIZE, &fileDescriptorSet, nullptr, nullptr, nullptr) <= 0)
             {
+                if (threadShouldExit)
+                    break;
+
                 std::this_thread::sleep_for (std::chrono::milliseconds (50));
                 continue;
             }
-
-            if (threadShouldExit)
+            else if (threadShouldExit)
+            {
                 break;
+            }
 
             const ssize_t numRead = read (fd, buffer.data(), bufferSize);
 
