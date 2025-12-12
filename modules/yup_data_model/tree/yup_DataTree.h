@@ -24,7 +24,83 @@ namespace yup
 
 //==============================================================================
 // Forward declarations
+class DataTree;
 class DataTreeSchema;
+
+//==============================================================================
+/**
+    Base class for objects that want to receive notifications about DataTree changes.
+
+    Listeners are automatically removed when the DataTree is destroyed, but should
+    be explicitly removed if the listener is destroyed first to avoid dangling pointers.
+
+    @code
+    class MyListener : public DataTree::Listener
+    {
+    public:
+        void propertyChanged (DataTree& tree, const Identifier& property) override
+        {
+            std::cout << "Property " << property.toString() << " changed" << std::endl;
+        }
+
+        void childAdded (DataTree& parent, DataTree& child) override
+        {
+            std::cout << "Child of type " << child.getType().toString() << " added" << std::endl;
+        }
+    };
+    @endcode
+
+    @see addListener(), removeListener()
+*/
+class YUP_API DataTreeListener
+{
+public:
+    virtual ~DataTreeListener() = default;
+
+    /**
+        Called after a property has been changed via a transaction.
+
+        @param tree The DataTree that was modified
+        @param property The identifier of the property that changed
+    */
+    virtual void propertyChanged (DataTree& tree, const Identifier& property) {}
+
+    /**
+        Called after a child has been added via a transaction.
+
+        @param parent The DataTree that received the new child
+        @param child The child DataTree that was added
+    */
+    virtual void childAdded (DataTree& parent, DataTree& child) {}
+
+    /**
+        Called after a child has been removed via a transaction.
+
+        @param parent The DataTree that lost the child
+        @param child The child DataTree that was removed
+        @param formerIndex The index where the child used to be
+    */
+    virtual void childRemoved (DataTree& parent, DataTree& child, int formerIndex) {}
+
+    /**
+        Called after a child has been moved to a different index via a transaction.
+
+        @param parent The DataTree containing the moved child
+        @param child The child DataTree that was moved
+        @param oldIndex The previous index of the child
+        @param newIndex The new index of the child
+    */
+    virtual void childMoved (DataTree& parent, DataTree& child, int oldIndex, int newIndex) {}
+
+    /**
+        Called when the internal tree structure has been completely replaced.
+
+        This is a rare event that occurs during certain internal operations.
+
+        @param tree The DataTree whose structure was replaced
+    */
+    virtual void treeRedirected (DataTree& tree) {}
+};
 
 //==============================================================================
 /**
@@ -89,6 +165,34 @@ class DataTreeSchema;
 */
 class YUP_API DataTree
 {
+    class DataObject : public std::enable_shared_from_this<DataObject>
+    {
+    public:
+        //==============================================================================
+        Identifier type;
+        NamedValueSet properties;
+        std::vector<std::shared_ptr<DataObject>> children;
+        std::weak_ptr<DataObject> parent;
+        ListenerList<DataTreeListener> listeners;
+
+        //==============================================================================
+        DataObject() = default;
+        explicit DataObject (const Identifier& treeType);
+        ~DataObject();
+
+        //==============================================================================
+        void sendPropertyChangeMessage (const Identifier& property);
+        void sendChildAddedMessage (std::shared_ptr<DataObject> child);
+        void sendChildRemovedMessage (std::shared_ptr<DataObject> child, int formerIndex);
+        void sendChildMovedMessage (std::shared_ptr<DataObject> child, int oldIndex, int newIndex);
+
+        //==============================================================================
+        std::shared_ptr<DataObject> clone() const;
+
+    private:
+        YUP_DECLARE_NON_COPYABLE (DataObject)
+    };
+
 public:
     //==============================================================================
     /**
@@ -666,77 +770,8 @@ public:
     //==============================================================================
     /**
         Base class for objects that want to receive notifications about DataTree changes.
-
-        Listeners are automatically removed when the DataTree is destroyed, but should
-        be explicitly removed if the listener is destroyed first to avoid dangling pointers.
-
-        @code
-        class MyListener : public DataTree::Listener
-        {
-        public:
-            void propertyChanged (DataTree& tree, const Identifier& property) override
-            {
-                std::cout << "Property " << property.toString() << " changed" << std::endl;
-            }
-
-            void childAdded (DataTree& parent, DataTree& child) override
-            {
-                std::cout << "Child of type " << child.getType().toString() << " added" << std::endl;
-            }
-        };
-        @endcode
-
-        @see addListener(), removeListener()
     */
-    class YUP_API Listener
-    {
-    public:
-        virtual ~Listener() = default;
-
-        /**
-            Called after a property has been changed via a transaction.
-
-            @param tree The DataTree that was modified
-            @param property The identifier of the property that changed
-        */
-        virtual void propertyChanged (DataTree& tree, const Identifier& property) {}
-
-        /**
-            Called after a child has been added via a transaction.
-
-            @param parent The DataTree that received the new child
-            @param child The child DataTree that was added
-        */
-        virtual void childAdded (DataTree& parent, DataTree& child) {}
-
-        /**
-            Called after a child has been removed via a transaction.
-
-            @param parent The DataTree that lost the child
-            @param child The child DataTree that was removed
-            @param formerIndex The index where the child used to be
-        */
-        virtual void childRemoved (DataTree& parent, DataTree& child, int formerIndex) {}
-
-        /**
-            Called after a child has been moved to a different index via a transaction.
-
-            @param parent The DataTree containing the moved child
-            @param child The child DataTree that was moved
-            @param oldIndex The previous index of the child
-            @param newIndex The new index of the child
-        */
-        virtual void childMoved (DataTree& parent, DataTree& child, int oldIndex, int newIndex) {}
-
-        /**
-            Called when the internal tree structure has been completely replaced.
-
-            This is a rare event that occurs during certain internal operations.
-
-            @param tree The DataTree whose structure was replaced
-        */
-        virtual void treeRedirected (DataTree& tree) {}
-    };
+    using Listener = DataTreeListener;
 
     /**
         Adds a listener to receive notifications about changes to this DataTree.
@@ -852,18 +887,6 @@ public:
     {
     public:
         /**
-            Constructs a transaction for the specified DataTree.
-
-            This constructor is typically called indirectly via beginTransaction().
-
-            @param tree The DataTree to operate on
-            @param undoManager Optional UndoManager for undo/redo support
-
-            @see DataTree::beginTransaction()
-        */
-        Transaction (DataTree& tree, UndoManager* undoManager = nullptr);
-
-        /**
             Move constructor - transfers ownership of the transaction.
 
             The moved-from transaction becomes inactive.
@@ -976,12 +999,25 @@ public:
         int getEffectiveChildCount() const;
 
     private:
+        friend class DataTree;
         friend class TransactionAction;
 
         struct PropertyChange;
         struct ChildChange;
 
-        DataTree& dataTree;
+        /**
+            Constructs a transaction for the specified DataTree.
+
+            This constructor is typically called indirectly via beginTransaction().
+
+            @param dataObject The DataObject to operate on
+            @param undoManager Optional UndoManager for undo/redo support
+
+            @see DataTree::beginTransaction()
+        */
+        Transaction (std::shared_ptr<DataObject> dataObject, UndoManager* undoManager = nullptr);
+
+        std::shared_ptr<DataObject> dataObject;
         UndoManager* undoManager;
         std::vector<PropertyChange> propertyChanges;
         std::vector<ChildChange> childChanges;
@@ -1013,13 +1049,6 @@ public:
     class YUP_API ValidatedTransaction
     {
     public:
-        /**
-            Creates a validated transaction for the specified DataTree.
-        */
-        ValidatedTransaction (DataTree& tree,
-                              ReferenceCountedObjectPtr<DataTreeSchema> schema,
-                              UndoManager* undoManager = nullptr);
-
         /**
             Move constructor - transfers ownership of the transaction.
         */
@@ -1119,6 +1148,15 @@ public:
         Transaction& getTransaction();
 
     private:
+        friend class DataTree;
+
+        /**
+            Creates a validated transaction for the specified DataTree.
+        */
+        ValidatedTransaction (std::shared_ptr<DataObject> dataObject,
+                              ReferenceCountedObjectPtr<DataTreeSchema> schema,
+                              UndoManager* undoManager = nullptr);
+
         std::unique_ptr<Transaction> transaction;
         ReferenceCountedObjectPtr<DataTreeSchema> schema;
         Identifier nodeType;
@@ -1157,7 +1195,7 @@ public:
     */
     Transaction beginTransaction (UndoManager* undoManager = nullptr)
     {
-        return Transaction (*this, undoManager);
+        return Transaction (object, undoManager);
     }
 
     /**
@@ -1184,7 +1222,7 @@ public:
     ValidatedTransaction beginValidatedTransaction (ReferenceCountedObjectPtr<DataTreeSchema> schema,
                                                     UndoManager* undoManager = nullptr)
     {
-        return ValidatedTransaction (*this, schema, undoManager);
+        return ValidatedTransaction (object, schema, undoManager);
     }
 
 private:
@@ -1197,34 +1235,6 @@ private:
     friend class RemoveAllChildrenAction;
     friend class MoveChildAction;
     friend class CompoundAction;
-
-    class DataObject : public std::enable_shared_from_this<DataObject>
-    {
-    public:
-        //==============================================================================
-        Identifier type;
-        NamedValueSet properties;
-        std::vector<DataTree> children;
-        std::weak_ptr<DataObject> parent;
-        ListenerList<DataTree::Listener> listeners;
-
-        //==============================================================================
-        DataObject() = default;
-        explicit DataObject (const Identifier& treeType);
-        ~DataObject();
-
-        //==============================================================================
-        void sendPropertyChangeMessage (const Identifier& property);
-        void sendChildAddedMessage (const DataTree& child);
-        void sendChildRemovedMessage (const DataTree& child, int formerIndex);
-        void sendChildMovedMessage (const DataTree& child, int oldIndex, int newIndex);
-
-        //==============================================================================
-        std::shared_ptr<DataObject> clone() const;
-
-    private:
-        YUP_DECLARE_NON_COPYABLE (DataObject)
-    };
 
     explicit DataTree (std::shared_ptr<DataObject> objectToUse);
     void sendPropertyChangeMessage (const Identifier& property) const;

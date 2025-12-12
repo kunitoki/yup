@@ -124,8 +124,8 @@ var coerceAttributeValue (const Identifier& nodeType,
 class PropertySetAction : public UndoableAction
 {
 public:
-    PropertySetAction (DataTree tree, const Identifier& prop, const var& newVal, const var& oldVal)
-        : dataTree (tree)
+    PropertySetAction (std::shared_ptr<DataTree::DataObject> obj, const Identifier& prop, const var& newVal, const var& oldVal)
+        : dataObject (std::move (obj))
         , property (prop)
         , newValue (newVal)
         , oldValue (oldVal)
@@ -135,34 +135,34 @@ public:
 
     bool isValid() const override
     {
-        return dataTree.object != nullptr;
+        return dataObject != nullptr;
     }
 
     bool perform (UndoableActionState state) override
     {
-        if (dataTree.object == nullptr)
+        if (dataObject == nullptr)
             return false;
 
         if (state == UndoableActionState::Redo)
         {
-            wasPropertyPresent = dataTree.object->properties.contains (property);
+            wasPropertyPresent = dataObject->properties.contains (property);
 
-            dataTree.object->properties.set (property, newValue);
+            dataObject->properties.set (property, newValue);
         }
         else
         {
             if (wasPropertyPresent)
-                dataTree.object->properties.set (property, oldValue);
+                dataObject->properties.set (property, oldValue);
             else
-                dataTree.object->properties.remove (property);
+                dataObject->properties.remove (property);
         }
 
-        dataTree.object->sendPropertyChangeMessage (property);
+        dataObject->sendPropertyChangeMessage (property);
         return true;
     }
 
 private:
-    DataTree dataTree;
+    std::shared_ptr<DataTree::DataObject> dataObject;
     Identifier property;
     var newValue, oldValue;
     bool wasPropertyPresent;
@@ -173,8 +173,8 @@ private:
 class PropertyRemoveAction : public UndoableAction
 {
 public:
-    PropertyRemoveAction (DataTree tree, const Identifier& prop, const var& oldVal)
-        : dataTree (tree)
+    PropertyRemoveAction (std::shared_ptr<DataTree::DataObject> obj, const Identifier& prop, const var& oldVal)
+        : dataObject (std::move (obj))
         , property (prop)
         , oldValue (oldVal)
     {
@@ -182,25 +182,25 @@ public:
 
     bool isValid() const override
     {
-        return dataTree.object != nullptr;
+        return dataObject != nullptr;
     }
 
     bool perform (UndoableActionState state) override
     {
-        if (dataTree.object == nullptr)
+        if (dataObject == nullptr)
             return false;
 
         if (state == UndoableActionState::Redo)
-            dataTree.object->properties.remove (property);
+            dataObject->properties.remove (property);
         else
-            dataTree.object->properties.set (property, oldValue);
+            dataObject->properties.set (property, oldValue);
 
-        dataTree.object->sendPropertyChangeMessage (property);
+        dataObject->sendPropertyChangeMessage (property);
         return true;
     }
 
 private:
-    DataTree dataTree;
+    std::shared_ptr<DataTree::DataObject> dataObject;
     Identifier property;
     var oldValue;
 };
@@ -210,35 +210,35 @@ private:
 class RemoveAllPropertiesAction : public UndoableAction
 {
 public:
-    RemoveAllPropertiesAction (DataTree tree, const NamedValueSet& oldProps)
-        : dataTree (tree)
+    RemoveAllPropertiesAction (std::shared_ptr<DataTree::DataObject> obj, const NamedValueSet& oldProps)
+        : dataObject (std::move (obj))
         , oldProperties (oldProps)
     {
     }
 
     bool isValid() const override
     {
-        return dataTree.object != nullptr;
+        return dataObject != nullptr;
     }
 
     bool perform (UndoableActionState state) override
     {
-        if (dataTree.object == nullptr)
+        if (dataObject == nullptr)
             return false;
 
         if (state == UndoableActionState::Redo)
-            dataTree.object->properties.clear();
+            dataObject->properties.clear();
         else
-            dataTree.object->properties = oldProperties;
+            dataObject->properties = oldProperties;
 
         for (int i = 0; i < oldProperties.size(); ++i)
-            dataTree.object->sendPropertyChangeMessage (oldProperties.getName (i));
+            dataObject->sendPropertyChangeMessage (oldProperties.getName (i));
 
         return true;
     }
 
 private:
-    DataTree dataTree;
+    std::shared_ptr<DataTree::DataObject> dataObject;
     NamedValueSet oldProperties;
 };
 
@@ -247,65 +247,75 @@ private:
 class AddChildAction : public UndoableAction
 {
 public:
-    AddChildAction (DataTree parent, const DataTree& child, int idx)
-        : parentTree (parent)
-        , childTree (child)
+    AddChildAction (std::shared_ptr<DataTree::DataObject> parent, std::shared_ptr<DataTree::DataObject> child, int idx)
+        : parentObject (std::move (parent))
+        , childObject (std::move (child))
         , index (idx)
     {
     }
 
     bool isValid() const override
     {
-        return parentTree.object != nullptr && childTree.object != nullptr;
+        return parentObject != nullptr && childObject != nullptr;
     }
 
     bool perform (UndoableActionState state) override
     {
-        if (parentTree.object == nullptr || childTree.object == nullptr)
+        if (parentObject == nullptr || childObject == nullptr)
             return false;
 
         if (state == UndoableActionState::Redo)
         {
-            if (auto currentParent = childTree.object->parent.lock())
+            if (auto currentParent = childObject->parent.lock())
             {
-                previousParent = DataTree (currentParent);
-                previousIndex = previousParent.indexOf (childTree);
+                previousParent = currentParent;
 
-                currentParent->children.erase (currentParent->children.begin() + previousIndex);
-                currentParent->sendChildRemovedMessage (childTree, previousIndex);
+                // Find child index in current parent
+                auto& currentChildren = currentParent->children;
+                auto it = std::find (currentChildren.begin(), currentChildren.end(), childObject);
+                if (it != currentChildren.end())
+                {
+                    previousIndex = static_cast<int> (std::distance (currentChildren.begin(), it));
+                    currentChildren.erase (it);
+                    currentParent->sendChildRemovedMessage (childObject, previousIndex);
+                }
             }
             else
             {
-                previousParent = DataTree(); // No previous parent
+                previousParent.reset();
                 previousIndex = -1;
             }
 
-            const int numChildren = static_cast<int> (parentTree.object->children.size());
+            const int numChildren = static_cast<int> (parentObject->children.size());
             const int actualIndex = isPositiveAndBelow (index, numChildren) ? index : numChildren;
 
-            parentTree.object->children.insert (parentTree.object->children.begin() + actualIndex, childTree);
-            childTree.object->parent = parentTree.object;
-            parentTree.object->sendChildAddedMessage (childTree);
+            parentObject->children.insert (parentObject->children.begin() + actualIndex, childObject);
+            childObject->parent = parentObject;
+            parentObject->sendChildAddedMessage (childObject);
         }
         else
         {
-            if (const int childIndex = parentTree.indexOf (childTree); childIndex >= 0)
+            // Find child in parent
+            auto& parentChildren = parentObject->children;
+            auto it = std::find (parentChildren.begin(), parentChildren.end(), childObject);
+            if (it != parentChildren.end())
             {
-                parentTree.object->children.erase (parentTree.object->children.begin() + childIndex);
-                parentTree.object->sendChildRemovedMessage (childTree, childIndex);
+                const int childIndex = static_cast<int> (std::distance (parentChildren.begin(), it));
+                parentChildren.erase (it);
+                parentObject->sendChildRemovedMessage (childObject, childIndex);
 
-                if (previousParent.isValid())
+                if (auto prevParent = previousParent.lock())
                 {
-                    const int numChildren = static_cast<int> (previousParent.object->children.size());
+                    const int numChildren = static_cast<int> (prevParent->children.size());
                     const int actualIndex = (previousIndex < 0 || previousIndex > numChildren) ? numChildren : previousIndex;
 
-                    previousParent.object->children.insert (previousParent.object->children.begin() + actualIndex, childTree);
-                    childTree.object->parent = previousParent.object;
-                    previousParent.object->sendChildAddedMessage (childTree);
+                    prevParent->children.insert (prevParent->children.begin() + actualIndex, childObject);
+                    childObject->parent = prevParent;
+                    prevParent->sendChildAddedMessage (childObject);
                 }
                 else
                 {
-                    childTree.object->parent.reset();
+                    childObject->parent.reset();
                 }
             }
         }
@@ -314,10 +324,10 @@ public:
     }
 
 private:
-    DataTree parentTree;
-    DataTree childTree;
+    std::shared_ptr<DataTree::DataObject> parentObject;
+    std::shared_ptr<DataTree::DataObject> childObject;
     int index;
-    DataTree previousParent;
+    std::weak_ptr<DataTree::DataObject> previousParent;
     int previousIndex = -1;
 };
 
@@ -326,63 +336,63 @@ private:
 class RemoveChildAction : public UndoableAction
 {
 public:
-    RemoveChildAction (DataTree parent, DataTree childTree, int idx)
-        : parentTree (parent)
-        , childTree (childTree)
+    RemoveChildAction (std::shared_ptr<DataTree::DataObject> parent, std::shared_ptr<DataTree::DataObject> child, int idx)
+        : parentObject (std::move (parent))
+        , childObject (std::move (child))
         , index (idx)
     {
     }
 
     bool isValid() const override
     {
-        return parentTree.object != nullptr;
+        return parentObject != nullptr;
     }
 
     bool perform (UndoableActionState state) override
     {
-        if (parentTree.object == nullptr)
+        if (parentObject == nullptr)
             return false;
 
-        auto& parentChildren = parentTree.object->children;
+        auto& parentChildren = parentObject->children;
 
         if (state == UndoableActionState::Redo)
         {
-            if (childTree.isValid())
+            if (childObject != nullptr)
             {
-                auto it = std::find (parentChildren.begin(), parentChildren.end(), childTree);
+                auto it = std::find (parentChildren.begin(), parentChildren.end(), childObject);
                 if (it != parentChildren.end())
                     index = static_cast<int> (std::distance (parentChildren.begin(), it));
             }
 
-            if (! isPositiveAndBelow (index, static_cast<int> (parentTree.object->children.size())))
+            if (! isPositiveAndBelow (index, static_cast<int> (parentObject->children.size())))
                 return false;
 
-            if (! childTree.isValid())
-                childTree = parentChildren[index];
+            if (childObject == nullptr)
+                childObject = parentChildren[index];
 
             parentChildren.erase (parentChildren.begin() + index);
-            childTree.object->parent.reset();
-            parentTree.object->sendChildRemovedMessage (childTree, index);
+            childObject->parent.reset();
+            parentObject->sendChildRemovedMessage (childObject, index);
         }
         else
         {
-            if (childTree.object == nullptr)
+            if (childObject == nullptr)
                 return false;
 
             const int numChildren = static_cast<int> (parentChildren.size());
             const int actualIndex = isPositiveAndBelow (index, numChildren) ? index : numChildren;
 
-            parentChildren.insert (parentChildren.begin() + actualIndex, childTree);
-            childTree.object->parent = parentTree.object;
-            parentTree.object->sendChildAddedMessage (childTree);
+            parentChildren.insert (parentChildren.begin() + actualIndex, childObject);
+            childObject->parent = parentObject;
+            parentObject->sendChildAddedMessage (childObject);
         }
 
         return true;
     }
 
 private:
-    DataTree parentTree;
-    DataTree childTree;
+    std::shared_ptr<DataTree::DataObject> parentObject;
+    std::shared_ptr<DataTree::DataObject> childObject;
     int index;
 };
 
@@ -391,40 +401,40 @@ private:
 class RemoveAllChildrenAction : public UndoableAction
 {
 public:
-    RemoveAllChildrenAction (DataTree parent, const std::vector<DataTree>& oldChildren)
-        : parentTree (parent)
+    RemoveAllChildrenAction (std::shared_ptr<DataTree::DataObject> parent, const std::vector<std::shared_ptr<DataTree::DataObject>>& oldChildren)
+        : parentObject (std::move (parent))
         , children (oldChildren)
     {
     }
 
     bool isValid() const override
     {
-        return parentTree.object != nullptr;
+        return parentObject != nullptr;
     }
 
     bool perform (UndoableActionState state) override
     {
-        if (parentTree.object == nullptr)
+        if (parentObject == nullptr)
             return false;
 
         if (state == UndoableActionState::Redo)
         {
-            parentTree.object->children.clear();
+            parentObject->children.clear();
 
             for (size_t i = 0; i < children.size(); ++i)
             {
-                children[i].object->parent.reset();
-                parentTree.object->sendChildRemovedMessage (children[i], static_cast<int> (i));
+                children[i]->parent.reset();
+                parentObject->sendChildRemovedMessage (children[i], static_cast<int> (i));
             }
         }
         else
         {
-            parentTree.object->children = children;
+            parentObject->children = children;
 
             for (auto& child : children)
             {
-                child.object->parent = parentTree.object;
-                parentTree.object->sendChildAddedMessage (child);
+                child->parent = parentObject;
+                parentObject->sendChildAddedMessage (child);
             }
         }
 
@@ -432,8 +442,8 @@ public:
     }
 
 private:
-    DataTree parentTree;
-    std::vector<DataTree> children;
+    std::shared_ptr<DataTree::DataObject> parentObject;
+    std::vector<std::shared_ptr<DataTree::DataObject>> children;
 };
 
 //==============================================================================
@@ -441,8 +451,8 @@ private:
 class MoveChildAction : public UndoableAction
 {
 public:
-    MoveChildAction (DataTree parent, int fromIndex, int toIndex)
-        : parentTree (parent)
+    MoveChildAction (std::shared_ptr<DataTree::DataObject> parent, int fromIndex, int toIndex)
+        : parentObject (std::move (parent))
         , oldIndex (fromIndex)
         , newIndex (toIndex)
     {
@@ -450,48 +460,48 @@ public:
 
     bool isValid() const override
     {
-        return parentTree.object != nullptr && oldIndex != newIndex;
+        return parentObject != nullptr && oldIndex != newIndex;
     }
 
     bool perform (UndoableActionState state) override
     {
-        if (parentTree.object == nullptr || oldIndex == newIndex)
+        if (parentObject == nullptr || oldIndex == newIndex)
             return false;
 
-        const int numChildren = static_cast<int> (parentTree.object->children.size());
+        const int numChildren = static_cast<int> (parentObject->children.size());
         if (! isPositiveAndBelow (oldIndex, numChildren) || ! isPositiveAndBelow (newIndex, numChildren))
             return false;
 
         if (state == UndoableActionState::Redo)
         {
-            auto child = parentTree.object->children[static_cast<size_t> (oldIndex)];
+            auto child = parentObject->children[static_cast<size_t> (oldIndex)];
 
-            auto start = parentTree.object->children.begin();
+            auto start = parentObject->children.begin();
             auto first = start + std::min (oldIndex, newIndex);
             auto middle = start + oldIndex;
             auto last = start + std::max (oldIndex, newIndex) + 1;
             std::rotate (first, middle + (oldIndex < newIndex), last);
 
-            parentTree.object->sendChildMovedMessage (child, oldIndex, newIndex);
+            parentObject->sendChildMovedMessage (child, oldIndex, newIndex);
         }
         else
         {
-            auto child = parentTree.object->children[static_cast<size_t> (newIndex)];
+            auto child = parentObject->children[static_cast<size_t> (newIndex)];
 
-            auto start = parentTree.object->children.begin();
+            auto start = parentObject->children.begin();
             auto first = start + std::min (newIndex, oldIndex);
             auto middle = start + newIndex;
             auto last = start + std::max (newIndex, oldIndex) + 1;
             std::rotate (first, middle + (newIndex < oldIndex), last);
 
-            parentTree.object->sendChildMovedMessage (child, newIndex, oldIndex);
+            parentObject->sendChildMovedMessage (child, newIndex, oldIndex);
         }
 
         return true;
     }
 
 private:
-    DataTree parentTree;
+    std::shared_ptr<DataTree::DataObject> parentObject;
     int oldIndex, newIndex;
 };
 
@@ -500,20 +510,20 @@ private:
 class CompoundAction : public UndoableAction
 {
 public:
-    CompoundAction (DataTree tree, std::vector<UndoableAction::Ptr>&& actions)
-        : dataTree (tree)
+    CompoundAction (std::shared_ptr<DataTree::DataObject> obj, std::vector<UndoableAction::Ptr>&& actions)
+        : dataObject (std::move (obj))
         , individualActions (std::move (actions))
     {
     }
 
     bool isValid() const override
     {
-        return dataTree.object != nullptr && ! individualActions.empty();
+        return dataObject != nullptr && ! individualActions.empty();
     }
 
     bool perform (UndoableActionState state) override
     {
-        if (dataTree.object == nullptr)
+        if (dataObject == nullptr)
             return false;
 
         if (state == UndoableActionState::Redo)
@@ -531,7 +541,7 @@ public:
     }
 
 private:
-    DataTree dataTree;
+    std::shared_ptr<DataTree::DataObject> dataObject;
     std::vector<UndoableAction::Ptr> individualActions;
 };
 
@@ -553,30 +563,30 @@ void DataTree::DataObject::sendPropertyChangeMessage (const Identifier& property
     });
 }
 
-void DataTree::DataObject::sendChildAddedMessage (const DataTree& child)
+void DataTree::DataObject::sendChildAddedMessage (std::shared_ptr<DataObject> child)
 {
     DataTree treeObj (shared_from_this());
-    DataTree childTree (child.object);
+    DataTree childTree (child);
     listeners.call ([&] (DataTree::Listener& l)
     {
         l.childAdded (treeObj, childTree);
     });
 }
 
-void DataTree::DataObject::sendChildRemovedMessage (const DataTree& child, int formerIndex)
+void DataTree::DataObject::sendChildRemovedMessage (std::shared_ptr<DataObject> child, int formerIndex)
 {
     DataTree treeObj (shared_from_this());
-    DataTree childTree (child.object);
+    DataTree childTree (child);
     listeners.call ([&] (DataTree::Listener& l)
     {
         l.childRemoved (treeObj, childTree, formerIndex);
     });
 }
 
-void DataTree::DataObject::sendChildMovedMessage (const DataTree& child, int oldIndex, int newIndex)
+void DataTree::DataObject::sendChildMovedMessage (std::shared_ptr<DataObject> child, int oldIndex, int newIndex)
 {
     DataTree treeObj (shared_from_this());
-    DataTree childTree (child.object);
+    DataTree childTree (child);
     listeners.call ([&] (DataTree::Listener& l)
     {
         l.childMoved (treeObj, childTree, oldIndex, newIndex);
@@ -591,8 +601,8 @@ std::shared_ptr<DataTree::DataObject> DataTree::DataObject::clone() const
     // Deep clone children
     for (const auto& child : children)
     {
-        auto childClone = DataTree (child.object->clone());
-        childClone.object->parent = newObject;
+        auto childClone = child->clone();
+        childClone->parent = newObject;
         newObject->children.push_back (childClone);
     }
 
@@ -658,10 +668,9 @@ DataTree& DataTree::operator= (const DataTree& other) noexcept
 {
     if (this != &other)
     {
-        object = other.object;
-        if (object)
+        if (auto oldObject = std::exchange (object, other.object))
         {
-            object->listeners.call ([this] (Listener& l)
+            oldObject->listeners.call ([this] (Listener& l)
             {
                 l.treeRedirected (*this);
             });
@@ -675,10 +684,9 @@ DataTree& DataTree::operator= (DataTree&& other) noexcept
 {
     if (this != &other)
     {
-        object = std::move (other.object);
-        if (object)
+        if (auto oldObject = std::exchange (object, other.object))
         {
-            object->listeners.call ([this] (Listener& l)
+            oldObject->listeners.call ([this] (Listener& l)
             {
                 l.treeRedirected (*this);
             });
@@ -759,11 +767,11 @@ void DataTree::setProperty (const Identifier& name, const var& newValue, UndoMan
 
     if (undoManager != nullptr)
     {
-        undoManager->perform (new PropertySetAction (*this, name, newValue, object->properties[name]));
+        undoManager->perform (new PropertySetAction (object, name, newValue, object->properties[name]));
     }
     else
     {
-        PropertySetAction (*this, name, newValue, object->properties[name]).perform (UndoableActionState::Redo);
+        PropertySetAction (object, name, newValue, object->properties[name]).perform (UndoableActionState::Redo);
     }
 }
 
@@ -774,11 +782,11 @@ void DataTree::removeProperty (const Identifier& name, UndoManager* undoManager)
 
     if (undoManager != nullptr)
     {
-        undoManager->perform (new PropertyRemoveAction (*this, name, object->properties[name]));
+        undoManager->perform (new PropertyRemoveAction (object, name, object->properties[name]));
     }
     else
     {
-        PropertyRemoveAction (*this, name, object->properties[name]).perform (UndoableActionState::Redo);
+        PropertyRemoveAction (object, name, object->properties[name]).perform (UndoableActionState::Redo);
     }
 }
 
@@ -789,11 +797,11 @@ void DataTree::removeAllProperties (UndoManager* undoManager)
 
     if (undoManager != nullptr)
     {
-        undoManager->perform (new RemoveAllPropertiesAction (*this, object->properties));
+        undoManager->perform (new RemoveAllPropertiesAction (object, object->properties));
     }
     else
     {
-        RemoveAllPropertiesAction (*this, object->properties).perform (UndoableActionState::Redo);
+        RemoveAllPropertiesAction (object, object->properties).perform (UndoableActionState::Redo);
     }
 }
 
@@ -811,11 +819,11 @@ void DataTree::addChild (const DataTree& child, int index, UndoManager* undoMana
 
     if (undoManager != nullptr)
     {
-        undoManager->perform (new AddChildAction (*this, child, index));
+        undoManager->perform (new AddChildAction (object, child.object, index));
     }
     else
     {
-        AddChildAction (*this, child, index).perform (UndoableActionState::Redo);
+        AddChildAction (object, child.object, index).perform (UndoableActionState::Redo);
     }
 }
 
@@ -826,11 +834,11 @@ void DataTree::removeChild (const DataTree& child, UndoManager* undoManager)
 
     if (undoManager != nullptr)
     {
-        undoManager->perform (new RemoveChildAction (*this, child, -1));
+        undoManager->perform (new RemoveChildAction (object, child.object, -1));
     }
     else
     {
-        RemoveChildAction (*this, child, -1).perform (UndoableActionState::Redo);
+        RemoveChildAction (object, child.object, -1).perform (UndoableActionState::Redo);
     }
 }
 
@@ -841,11 +849,11 @@ void DataTree::removeChild (int index, UndoManager* undoManager)
 
     if (undoManager != nullptr)
     {
-        undoManager->perform (new RemoveChildAction (*this, {}, index));
+        undoManager->perform (new RemoveChildAction (object, nullptr, index));
     }
     else
     {
-        RemoveChildAction (*this, {}, index).perform (UndoableActionState::Redo);
+        RemoveChildAction (object, nullptr, index).perform (UndoableActionState::Redo);
     }
 }
 
@@ -856,11 +864,11 @@ void DataTree::removeAllChildren (UndoManager* undoManager)
 
     if (undoManager != nullptr)
     {
-        undoManager->perform (new RemoveAllChildrenAction (*this, object->children));
+        undoManager->perform (new RemoveAllChildrenAction (object, object->children));
     }
     else
     {
-        RemoveAllChildrenAction (*this, object->children).perform (UndoableActionState::Redo);
+        RemoveAllChildrenAction (object, object->children).perform (UndoableActionState::Redo);
     }
 }
 
@@ -875,11 +883,11 @@ void DataTree::moveChild (int currentIndex, int newIndex, UndoManager* undoManag
 
     if (undoManager != nullptr)
     {
-        undoManager->perform (new MoveChildAction (*this, currentIndex, newIndex));
+        undoManager->perform (new MoveChildAction (object, currentIndex, newIndex));
     }
     else
     {
-        MoveChildAction (*this, currentIndex, newIndex).perform (UndoableActionState::Redo);
+        MoveChildAction (object, currentIndex, newIndex).perform (UndoableActionState::Redo);
     }
 }
 
@@ -895,7 +903,7 @@ DataTree DataTree::getChild (int index) const noexcept
     if (! object || index < 0 || index >= static_cast<int> (object->children.size()))
         return {};
 
-    return object->children[static_cast<size_t> (index)];
+    return DataTree (object->children[static_cast<size_t> (index)]);
 }
 
 DataTree DataTree::getChildWithName (const Identifier& type) const noexcept
@@ -905,8 +913,8 @@ DataTree DataTree::getChildWithName (const Identifier& type) const noexcept
 
     for (const auto& child : object->children)
     {
-        if (child.getType() == type)
-            return child;
+        if (child->type == type)
+            return DataTree (child);
     }
 
     return {};
@@ -919,7 +927,7 @@ int DataTree::indexOf (const DataTree& child) const noexcept
 
     for (size_t i = 0; i < object->children.size(); ++i)
     {
-        if (object->children[i].object == child.object)
+        if (object->children[i] == child.object)
             return static_cast<int> (i);
     }
 
@@ -1013,7 +1021,7 @@ std::unique_ptr<XmlElement> DataTree::createXml() const
     // Add children as child elements
     for (const auto& child : object->children)
     {
-        if (auto childXml = child.createXml())
+        if (auto childXml = DataTree (child).createXml())
             element->addChildElement (childXml.release());
     }
 
@@ -1070,7 +1078,7 @@ void DataTree::writeToBinaryStream (OutputStream& output) const
     // Write children
     output.writeCompressedInt (static_cast<int> (object->children.size()));
     for (const auto& child : object->children)
-        child.writeToBinaryStream (output);
+        DataTree (child).writeToBinaryStream (output);
 }
 
 DataTree DataTree::readFromBinaryStream (InputStream& input)
@@ -1126,7 +1134,7 @@ var DataTree::createJson() const
     Array<var> childrenArray;
     for (const auto& child : object->children)
     {
-        var childJson = child.createJson();
+        var childJson = DataTree (child).createJson();
         if (! childJson.isUndefined())
             childrenArray.add (childJson);
     }
@@ -1250,7 +1258,7 @@ bool DataTree::isEquivalentTo (const DataTree& other) const
 
     for (size_t i = 0; i < object->children.size(); ++i)
     {
-        if (! object->children[i].isEquivalentTo (other.object->children[i]))
+        if (! DataTree (object->children[i]).isEquivalentTo (DataTree (other.object->children[i])))
             return false;
     }
 
@@ -1292,11 +1300,11 @@ struct DataTree::Transaction::ChildChange
 
 //==============================================================================
 
-DataTree::Transaction::Transaction (DataTree& tree, UndoManager* manager)
-    : dataTree (tree)
+DataTree::Transaction::Transaction (std::shared_ptr<DataObject> object, UndoManager* manager)
+    : dataObject (std::move (object))
     , undoManager (manager)
 {
-    if (dataTree.object == nullptr)
+    if (dataObject == nullptr)
     {
         active = false;
         return;
@@ -1304,7 +1312,7 @@ DataTree::Transaction::Transaction (DataTree& tree, UndoManager* manager)
 }
 
 DataTree::Transaction::Transaction (Transaction&& other) noexcept
-    : dataTree (other.dataTree)
+    : dataObject (std::move (other.dataObject))
     , undoManager (other.undoManager)
     , active (std::exchange (other.active, false))
     , propertyChanges (std::move (other.propertyChanges))
@@ -1320,7 +1328,7 @@ DataTree::Transaction& DataTree::Transaction::operator= (Transaction&& other) no
         if (active)
             commit();
 
-        dataTree = other.dataTree;
+        dataObject = std::move (other.dataObject);
         undoManager = other.undoManager;
         active = std::exchange (other.active, false);
         propertyChanges = std::move (other.propertyChanges);
@@ -1338,7 +1346,7 @@ DataTree::Transaction::~Transaction()
 
 void DataTree::Transaction::commit()
 {
-    if (! active || dataTree.object == nullptr)
+    if (! active || dataObject == nullptr)
         return;
 
     // Always build individual actions and execute them
@@ -1351,19 +1359,19 @@ void DataTree::Transaction::commit()
         {
             case PropertyChange::Set:
             {
-                actions.push_back (new PropertySetAction (dataTree, change.name, change.newValue, change.oldValue));
+                actions.push_back (new PropertySetAction (dataObject, change.name, change.newValue, change.oldValue));
                 break;
             }
 
             case PropertyChange::Remove:
             {
-                actions.push_back (new PropertyRemoveAction (dataTree, change.name, change.oldValue));
+                actions.push_back (new PropertyRemoveAction (dataObject, change.name, change.oldValue));
                 break;
             }
 
             case PropertyChange::RemoveAll:
             {
-                actions.push_back (new RemoveAllPropertiesAction (dataTree, dataTree.object->properties));
+                actions.push_back (new RemoveAllPropertiesAction (dataObject, dataObject->properties));
                 break;
             }
         }
@@ -1376,25 +1384,25 @@ void DataTree::Transaction::commit()
         {
             case ChildChange::Add:
             {
-                actions.push_back (new AddChildAction (dataTree, change.child, change.newIndex));
+                actions.push_back (new AddChildAction (dataObject, change.child.object, change.newIndex));
                 break;
             }
 
             case ChildChange::Remove:
             {
-                actions.push_back (new RemoveChildAction (dataTree, change.child, change.oldIndex));
+                actions.push_back (new RemoveChildAction (dataObject, change.child.object, change.oldIndex));
                 break;
             }
 
             case ChildChange::RemoveAll:
             {
-                actions.push_back (new RemoveAllChildrenAction (dataTree, dataTree.object->children));
+                actions.push_back (new RemoveAllChildrenAction (dataObject, dataObject->children));
                 break;
             }
 
             case ChildChange::Move:
             {
-                actions.push_back (new MoveChildAction (dataTree, change.oldIndex, change.newIndex));
+                actions.push_back (new MoveChildAction (dataObject, change.oldIndex, change.newIndex));
                 break;
             }
         }
@@ -1403,7 +1411,7 @@ void DataTree::Transaction::commit()
     // If we have undo manager, use compound action for undo/redo
     if (undoManager != nullptr && ! actions.empty())
     {
-        undoManager->perform (new CompoundAction (dataTree, std::move (actions)));
+        undoManager->perform (new CompoundAction (dataObject, std::move (actions)));
     }
     else
     {
@@ -1427,7 +1435,7 @@ void DataTree::Transaction::abort()
 
 void DataTree::Transaction::setProperty (const Identifier& name, const var& newValue)
 {
-    if (! active || dataTree.object == nullptr)
+    if (! active || dataObject == nullptr)
         return;
 
     // Check if we already have a change for this property
@@ -1441,7 +1449,9 @@ void DataTree::Transaction::setProperty (const Identifier& name, const var& newV
     }
 
     // Get current value for undo purposes
-    var oldValue = dataTree.getProperty (name);
+    var oldValue;
+    if (auto* value = dataObject->properties.getVarPointer (name))
+        oldValue = *value;
 
     // Skip if no change
     if (oldValue == newValue)
@@ -1458,26 +1468,26 @@ void DataTree::Transaction::setProperty (const Identifier& name, const var& newV
 
 void DataTree::Transaction::removeProperty (const Identifier& name)
 {
-    if (! active || dataTree.object == nullptr)
+    if (! active || dataObject == nullptr)
         return;
 
-    if (! dataTree.hasProperty (name))
+    if (! dataObject->properties.contains (name))
         return;
 
     // Record the change
     PropertyChange change;
     change.type = PropertyChange::Remove;
     change.name = name;
-    change.oldValue = dataTree.getProperty (name);
+    change.oldValue = dataObject->properties[name];
     propertyChanges.push_back (change);
 }
 
 void DataTree::Transaction::removeAllProperties()
 {
-    if (! active || dataTree.object == nullptr)
+    if (! active || dataObject == nullptr)
         return;
 
-    if (dataTree.getNumProperties() == 0)
+    if (dataObject->properties.size() == 0)
         return;
 
     // Record the change
@@ -1488,16 +1498,16 @@ void DataTree::Transaction::removeAllProperties()
 
 void DataTree::Transaction::addChild (const DataTree& child, int index)
 {
-    if (! active || dataTree.object == nullptr || child.object == nullptr)
+    if (! active || dataObject == nullptr || child.object == nullptr)
         return;
 
     // Don't add invalid or self-referencing children
-    // Also prevent circular references: don't add X to Y if Y is a descendant of X
-    if (child.isAChildOf (dataTree) || child == dataTree || dataTree.isAChildOf (child))
+    DataTree thisTree (dataObject);
+    if (child.isAChildOf (thisTree) || child.object == dataObject || thisTree.isAChildOf (child))
         return;
 
     // Calculate effective number of children including pending additions
-    int effectiveNumChildren = dataTree.getNumChildren();
+    int effectiveNumChildren = static_cast<int> (dataObject->children.size());
     for (const auto& change : childChanges)
     {
         if (change.type == ChildChange::Add)
@@ -1521,7 +1531,7 @@ void DataTree::Transaction::addChild (const DataTree& child, int index)
 
 void DataTree::Transaction::removeChild (const DataTree& child)
 {
-    if (! active || dataTree.object == nullptr)
+    if (! active || dataObject == nullptr)
         return;
 
     ChildChange change;
@@ -1534,7 +1544,7 @@ void DataTree::Transaction::removeChild (const DataTree& child)
 
 void DataTree::Transaction::removeChild (int index)
 {
-    if (! active || dataTree.object == nullptr)
+    if (! active || dataObject == nullptr)
         return;
 
     ChildChange change;
@@ -1547,10 +1557,10 @@ void DataTree::Transaction::removeChild (int index)
 
 void DataTree::Transaction::removeAllChildren()
 {
-    if (! active || dataTree.object == nullptr)
+    if (! active || dataObject == nullptr)
         return;
 
-    if (dataTree.getNumChildren() == 0)
+    if (dataObject->children.size() == 0)
         return;
 
     // Record the change
@@ -1561,7 +1571,7 @@ void DataTree::Transaction::removeAllChildren()
 
 void DataTree::Transaction::moveChild (int currentIndex, int newIndex)
 {
-    if (! active || dataTree.object == nullptr || currentIndex == newIndex)
+    if (! active || dataObject == nullptr || currentIndex == newIndex)
         return;
 
     // Simply record the move operation as specified by the user
@@ -1575,10 +1585,10 @@ void DataTree::Transaction::moveChild (int currentIndex, int newIndex)
 
 int DataTree::Transaction::getEffectiveChildCount() const
 {
-    if (dataTree.object == nullptr)
+    if (dataObject == nullptr)
         return 0;
 
-    int count = dataTree.getNumChildren();
+    int count = static_cast<int> (dataObject->children.size());
 
     for (const auto& change : childChanges)
     {
@@ -1607,10 +1617,10 @@ int DataTree::Transaction::getEffectiveChildCount() const
 
 //==============================================================================
 
-DataTree::ValidatedTransaction::ValidatedTransaction (DataTree& tree, ReferenceCountedObjectPtr<DataTreeSchema> schema, UndoManager* undoManager)
-    : transaction (std::make_unique<Transaction> (tree.beginTransaction (undoManager)))
+DataTree::ValidatedTransaction::ValidatedTransaction (std::shared_ptr<DataObject> object, ReferenceCountedObjectPtr<DataTreeSchema> schema, UndoManager* undoManager)
+    : transaction (std::make_unique<Transaction> (DataTree (object).beginTransaction (undoManager)))
     , schema (std::move (schema))
-    , nodeType (tree.getType())
+    , nodeType (DataTree (object).getType())
 {
 }
 

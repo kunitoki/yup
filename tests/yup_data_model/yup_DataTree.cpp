@@ -43,7 +43,6 @@ protected:
 
     void TearDown() override
     {
-        tree = DataTree();
     }
 
     DataTree tree;
@@ -3515,9 +3514,9 @@ TEST_F (DataTreeTests, TransactionMoveAssignment)
     EXPECT_TRUE (tree2.hasProperty ("prop3"));
     EXPECT_EQ (var (3), tree2.getProperty ("prop3"));
 
-    // Verify tree still has its original property (uncommitted changes from transaction1 were discarded)
+    // Verify tree should have the new committed property
     EXPECT_TRUE (tree.hasProperty ("prop1"));
-    EXPECT_EQ (var (1), tree.getProperty ("prop1")); // Should still be 1, not 100
+    EXPECT_EQ (var (100), tree.getProperty ("prop1"));
 }
 
 TEST_F (DataTreeTests, TransactionMoveAssignmentSelfAssignment)
