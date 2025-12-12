@@ -664,6 +664,8 @@ TEST_F (DataTreeTests, ChildChangeNotifications)
     EXPECT_EQ (tree, listener.childRemovals[0].parent);
     EXPECT_EQ (child, listener.childRemovals[0].child);
     EXPECT_EQ (0, listener.childRemovals[0].index);
+
+    tree.removeListener (&listener);
 }
 
 //==============================================================================
@@ -2991,4 +2993,696 @@ TEST_F (DataTreeTests, ListenerTestsWithUndoOperations)
     EXPECT_GE (listener.propertyChanges.size() + listener.childRemovals.size(), 0);
 
     tree.removeListener (&listener);
+}
+
+//==============================================================================
+// Clone Tests with Children
+
+TEST_F (DataTreeTests, CloneCreatesDeepCopyWithChildren)
+{
+    // Setup tree with properties and children
+    {
+        auto transaction = tree.beginTransaction();
+        transaction.setProperty ("rootProp", "rootValue");
+
+        DataTree child1 ("Child1");
+        {
+            auto childTransaction = child1.beginTransaction();
+            childTransaction.setProperty ("child1Prop", 42);
+        }
+
+        DataTree child2 ("Child2");
+        {
+            auto childTransaction = child2.beginTransaction();
+            childTransaction.setProperty ("child2Prop", "test");
+
+            DataTree grandChild ("GrandChild");
+            {
+                auto grandChildTransaction = grandChild.beginTransaction();
+                grandChildTransaction.setProperty ("grandChildProp", 3.14);
+            }
+            childTransaction.addChild (grandChild);
+        }
+
+        transaction.addChild (child1);
+        transaction.addChild (child2);
+    }
+
+    // Clone the tree
+    auto clonedTree = tree.clone();
+
+    // Verify cloned tree is independent
+    EXPECT_NE (tree, clonedTree);
+    EXPECT_TRUE (tree.isEquivalentTo (clonedTree));
+
+    // Verify properties
+    EXPECT_EQ (tree.getType(), clonedTree.getType());
+    EXPECT_EQ (tree.getProperty ("rootProp"), clonedTree.getProperty ("rootProp"));
+
+    // Verify children
+    EXPECT_EQ (tree.getNumChildren(), clonedTree.getNumChildren());
+
+    auto originalChild1 = tree.getChild (0);
+    auto clonedChild1 = clonedTree.getChild (0);
+    EXPECT_NE (originalChild1, clonedChild1);
+    EXPECT_EQ (originalChild1.getType(), clonedChild1.getType());
+    EXPECT_EQ (originalChild1.getProperty ("child1Prop"), clonedChild1.getProperty ("child1Prop"));
+
+    auto originalChild2 = tree.getChild (1);
+    auto clonedChild2 = clonedTree.getChild (1);
+    EXPECT_NE (originalChild2, clonedChild2);
+    EXPECT_EQ (originalChild2.getType(), clonedChild2.getType());
+    EXPECT_EQ (originalChild2.getProperty ("child2Prop"), clonedChild2.getProperty ("child2Prop"));
+
+    // Verify grandchildren
+    EXPECT_EQ (originalChild2.getNumChildren(), clonedChild2.getNumChildren());
+    auto originalGrandChild = originalChild2.getChild (0);
+    auto clonedGrandChild = clonedChild2.getChild (0);
+    EXPECT_NE (originalGrandChild, clonedGrandChild);
+    EXPECT_EQ (originalGrandChild.getType(), clonedGrandChild.getType());
+    EXPECT_EQ (originalGrandChild.getProperty ("grandChildProp"), clonedGrandChild.getProperty ("grandChildProp"));
+
+    // Verify independence by modifying clone
+    {
+        auto transaction = clonedTree.beginTransaction();
+        transaction.setProperty ("rootProp", "modifiedValue");
+    }
+
+    EXPECT_NE (tree.getProperty ("rootProp"), clonedTree.getProperty ("rootProp"));
+    EXPECT_EQ (var ("rootValue"), tree.getProperty ("rootProp"));
+    EXPECT_EQ (var ("modifiedValue"), clonedTree.getProperty ("rootProp"));
+}
+
+//==============================================================================
+// indexOf Edge Cases
+
+TEST_F (DataTreeTests, IndexOfWithInvalidChild)
+{
+    DataTree child ("Child");
+    {
+        auto transaction = tree.beginTransaction();
+        transaction.addChild (child);
+    }
+
+    // Test with empty/invalid child
+    DataTree invalidChild;
+    EXPECT_EQ (-1, tree.indexOf (invalidChild));
+
+    // Test with child not in tree
+    DataTree notInTree ("NotInTree");
+    EXPECT_EQ (-1, tree.indexOf (notInTree));
+
+    // Test with valid child
+    EXPECT_EQ (0, tree.indexOf (child));
+}
+
+TEST_F (DataTreeTests, IndexOfWithInvalidParent)
+{
+    DataTree invalidTree;
+    DataTree child ("Child");
+
+    EXPECT_EQ (-1, invalidTree.indexOf (child));
+}
+
+//==============================================================================
+// isAChildOf Edge Cases
+
+TEST_F (DataTreeTests, IsAChildOfWithInvalidPossibleParent)
+{
+    DataTree parent ("Parent");
+    DataTree child ("Child");
+
+    {
+        auto transaction = parent.beginTransaction();
+        transaction.addChild (child);
+    }
+
+    // Test with invalid possible parent
+    DataTree invalidParent;
+    EXPECT_FALSE (child.isAChildOf (invalidParent));
+
+    // Test with valid parent
+    EXPECT_TRUE (child.isAChildOf (parent));
+}
+
+TEST_F (DataTreeTests, IsAChildOfWithInvalidChild)
+{
+    DataTree parent ("Parent");
+    DataTree invalidChild;
+
+    EXPECT_FALSE (invalidChild.isAChildOf (parent));
+}
+
+TEST_F (DataTreeTests, IsAChildOfWithDeepHierarchy)
+{
+    DataTree root ("Root");
+    DataTree level1 ("Level1");
+    DataTree level2 ("Level2");
+    DataTree level3 ("Level3");
+
+    {
+        auto transaction = root.beginTransaction();
+        transaction.addChild (level1);
+    }
+    {
+        auto transaction = level1.beginTransaction();
+        transaction.addChild (level2);
+    }
+    {
+        auto transaction = level2.beginTransaction();
+        transaction.addChild (level3);
+    }
+
+    // Test deep hierarchy
+    EXPECT_TRUE (level3.isAChildOf (level2));
+    EXPECT_TRUE (level3.isAChildOf (level1));
+    EXPECT_TRUE (level3.isAChildOf (root));
+    EXPECT_TRUE (level2.isAChildOf (level1));
+    EXPECT_TRUE (level2.isAChildOf (root));
+    EXPECT_TRUE (level1.isAChildOf (root));
+
+    // Test reverse (parent is not child of child)
+    EXPECT_FALSE (root.isAChildOf (level1));
+    EXPECT_FALSE (level1.isAChildOf (level2));
+}
+
+//==============================================================================
+// Binary Stream Edge Cases
+
+TEST_F (DataTreeTests, ReadFromBinaryStreamWithEmptyStream)
+{
+    MemoryOutputStream output;
+    output.writeString (String());
+
+    MemoryInputStream input (output.getData(), output.getDataSize(), false);
+    auto loadedTree = DataTree::readFromBinaryStream (input);
+
+    EXPECT_FALSE (loadedTree.isValid());
+}
+
+TEST_F (DataTreeTests, ReadFromBinaryStreamWithIncompleteData)
+{
+    // Create a stream with just a type but no property/child counts
+    MemoryOutputStream output;
+    output.writeString ("TestType");
+    // Deliberately not writing property count or other data
+
+    MemoryInputStream input (output.getData(), output.getDataSize(), false);
+    auto loadedTree = DataTree::readFromBinaryStream (input);
+
+    // Should still create tree with type, but no properties/children
+    EXPECT_TRUE (loadedTree.isValid());
+    EXPECT_EQ (Identifier ("TestType"), loadedTree.getType());
+}
+
+//==============================================================================
+// JSON Edge Cases
+
+TEST_F (DataTreeTests, FromJsonWithNonDynamicObject)
+{
+    // Test with string instead of object
+    var stringVar = "not an object";
+    auto loadedTree = DataTree::fromJson (stringVar);
+    EXPECT_FALSE (loadedTree.isValid());
+
+    // Test with number
+    var numberVar = 42;
+    loadedTree = DataTree::fromJson (numberVar);
+    EXPECT_FALSE (loadedTree.isValid());
+
+    // Test with array
+    var arrayVar = var (Array<var>());
+    loadedTree = DataTree::fromJson (arrayVar);
+    EXPECT_FALSE (loadedTree.isValid());
+
+    // Test with undefined
+    var undefinedVar = var::undefined();
+    loadedTree = DataTree::fromJson (undefinedVar);
+    EXPECT_FALSE (loadedTree.isValid());
+}
+
+TEST_F (DataTreeTests, FromJsonWithInvalidStructure)
+{
+    // Test without type field
+    auto jsonObject = std::make_unique<DynamicObject>();
+    jsonObject->setProperty ("properties", var (std::make_unique<DynamicObject>()));
+    var jsonData (jsonObject.release());
+
+    auto loadedTree = DataTree::fromJson (jsonData);
+    EXPECT_FALSE (loadedTree.isValid());
+
+    // Test with empty type
+    jsonObject = std::make_unique<DynamicObject>();
+    jsonObject->setProperty ("type", "");
+    var jsonData2 (jsonObject.release());
+
+    loadedTree = DataTree::fromJson (jsonData2);
+    EXPECT_FALSE (loadedTree.isValid());
+
+    // Test with non-string type
+    jsonObject = std::make_unique<DynamicObject>();
+    jsonObject->setProperty ("type", 123);
+    var jsonData3 (jsonObject.release());
+
+    loadedTree = DataTree::fromJson (jsonData3);
+    EXPECT_FALSE (loadedTree.isValid());
+}
+
+TEST_F (DataTreeTests, FromJsonWithInvalidChildrenStructure)
+{
+    // Children must be an array, not an object
+    auto jsonObject = std::make_unique<DynamicObject>();
+    jsonObject->setProperty ("type", "TestType");
+    jsonObject->setProperty ("properties", var (std::make_unique<DynamicObject>()));
+    jsonObject->setProperty ("children", var (std::make_unique<DynamicObject>()));
+
+    var jsonData (jsonObject.release());
+    auto loadedTree = DataTree::fromJson (jsonData);
+
+    EXPECT_FALSE (loadedTree.isValid());
+}
+
+//==============================================================================
+// RemoveAllListeners Tests
+
+TEST_F (DataTreeTests, RemoveAllListeners)
+{
+    TestListener listener1;
+    TestListener listener2;
+    TestListener listener3;
+
+    tree.addListener (&listener1);
+    tree.addListener (&listener2);
+    tree.addListener (&listener3);
+
+    // Make a change to verify listeners are active
+    {
+        auto transaction = tree.beginTransaction();
+        transaction.setProperty ("testProp", "testValue");
+    }
+
+    EXPECT_EQ (1, listener1.propertyChanges.size());
+    EXPECT_EQ (1, listener2.propertyChanges.size());
+    EXPECT_EQ (1, listener3.propertyChanges.size());
+
+    // Remove all listeners
+    tree.removeAllListeners();
+
+    // Make another change
+    {
+        auto transaction = tree.beginTransaction();
+        transaction.setProperty ("testProp2", "testValue2");
+    }
+
+    // Listeners should not have received the second change
+    EXPECT_EQ (1, listener1.propertyChanges.size());
+    EXPECT_EQ (1, listener2.propertyChanges.size());
+    EXPECT_EQ (1, listener3.propertyChanges.size());
+}
+
+TEST_F (DataTreeTests, RemoveAllListenersOnInvalidTree)
+{
+    DataTree invalidTree;
+
+    // Should not crash
+    invalidTree.removeAllListeners();
+}
+
+//==============================================================================
+// isEquivalentTo Comprehensive Tests
+
+TEST_F (DataTreeTests, IsEquivalentToBothInvalid)
+{
+    DataTree invalid1;
+    DataTree invalid2;
+
+    EXPECT_TRUE (invalid1.isEquivalentTo (invalid2));
+}
+
+TEST_F (DataTreeTests, IsEquivalentToOneInvalid)
+{
+    DataTree invalid;
+
+    EXPECT_FALSE (tree.isEquivalentTo (invalid));
+    EXPECT_FALSE (invalid.isEquivalentTo (tree));
+}
+
+TEST_F (DataTreeTests, IsEquivalentToDifferentTypes)
+{
+    DataTree tree1 ("Type1");
+    DataTree tree2 ("Type2");
+
+    EXPECT_FALSE (tree1.isEquivalentTo (tree2));
+}
+
+TEST_F (DataTreeTests, IsEquivalentToDifferentPropertyCounts)
+{
+    DataTree tree1 ("TestType");
+    DataTree tree2 ("TestType");
+
+    {
+        auto transaction = tree1.beginTransaction();
+        transaction.setProperty ("prop1", 1);
+        transaction.setProperty ("prop2", 2);
+    }
+
+    {
+        auto transaction = tree2.beginTransaction();
+        transaction.setProperty ("prop1", 1);
+    }
+
+    EXPECT_FALSE (tree1.isEquivalentTo (tree2));
+}
+
+TEST_F (DataTreeTests, IsEquivalentToDifferentPropertyValues)
+{
+    DataTree tree1 ("TestType");
+    DataTree tree2 ("TestType");
+
+    {
+        auto transaction = tree1.beginTransaction();
+        transaction.setProperty ("prop1", 1);
+    }
+
+    {
+        auto transaction = tree2.beginTransaction();
+        transaction.setProperty ("prop1", 2);
+    }
+
+    EXPECT_FALSE (tree1.isEquivalentTo (tree2));
+}
+
+TEST_F (DataTreeTests, IsEquivalentToDifferentPropertyNames)
+{
+    DataTree tree1 ("TestType");
+    DataTree tree2 ("TestType");
+
+    {
+        auto transaction = tree1.beginTransaction();
+        transaction.setProperty ("prop1", 1);
+    }
+
+    {
+        auto transaction = tree2.beginTransaction();
+        transaction.setProperty ("prop2", 1);
+    }
+
+    EXPECT_FALSE (tree1.isEquivalentTo (tree2));
+}
+
+TEST_F (DataTreeTests, IsEquivalentToDifferentChildCounts)
+{
+    DataTree tree1 ("TestType");
+    DataTree tree2 ("TestType");
+
+    {
+        auto transaction = tree1.beginTransaction();
+        transaction.addChild (DataTree ("Child1"));
+        transaction.addChild (DataTree ("Child2"));
+    }
+
+    {
+        auto transaction = tree2.beginTransaction();
+        transaction.addChild (DataTree ("Child1"));
+    }
+
+    EXPECT_FALSE (tree1.isEquivalentTo (tree2));
+}
+
+TEST_F (DataTreeTests, IsEquivalentToDifferentChildContent)
+{
+    DataTree tree1 ("TestType");
+    DataTree tree2 ("TestType");
+
+    {
+        auto transaction = tree1.beginTransaction();
+        DataTree child1 ("Child");
+        {
+            auto childTx = child1.beginTransaction();
+            childTx.setProperty ("prop", 1);
+        }
+        transaction.addChild (child1);
+    }
+
+    {
+        auto transaction = tree2.beginTransaction();
+        DataTree child2 ("Child");
+        {
+            auto childTx = child2.beginTransaction();
+            childTx.setProperty ("prop", 2);
+        }
+        transaction.addChild (child2);
+    }
+
+    EXPECT_FALSE (tree1.isEquivalentTo (tree2));
+}
+
+TEST_F (DataTreeTests, IsEquivalentToComplexEquivalentTrees)
+{
+    DataTree tree1 ("Root");
+    DataTree tree2 ("Root");
+
+    // Build identical complex trees
+    {
+        auto tx1 = tree1.beginTransaction();
+        tx1.setProperty ("prop1", "value1");
+        tx1.setProperty ("prop2", 42);
+
+        DataTree child1 ("Child1");
+        {
+            auto childTx = child1.beginTransaction();
+            childTx.setProperty ("childProp", 3.14);
+            childTx.addChild (DataTree ("GrandChild"));
+        }
+        tx1.addChild (child1);
+        tx1.addChild (DataTree ("Child2"));
+    }
+
+    {
+        auto tx2 = tree2.beginTransaction();
+        tx2.setProperty ("prop1", "value1");
+        tx2.setProperty ("prop2", 42);
+
+        DataTree child1 ("Child1");
+        {
+            auto childTx = child1.beginTransaction();
+            childTx.setProperty ("childProp", 3.14);
+            childTx.addChild (DataTree ("GrandChild"));
+        }
+        tx2.addChild (child1);
+        tx2.addChild (DataTree ("Child2"));
+    }
+
+    EXPECT_TRUE (tree1.isEquivalentTo (tree2));
+    EXPECT_NE (tree1, tree2); // Different objects
+}
+
+//==============================================================================
+// Transaction Move Assignment Tests
+
+TEST_F (DataTreeTests, TransactionMoveAssignment)
+{
+    DataTree tree2 ("Tree2");
+
+    // Commit transaction1 explicitly before moving
+    {
+        auto transaction1 = tree.beginTransaction();
+        transaction1.setProperty ("prop1", 1);
+        transaction1.commit();
+    }
+
+    EXPECT_TRUE (tree.hasProperty ("prop1"));
+    EXPECT_EQ (var (1), tree.getProperty ("prop1"));
+
+    // Now test move assignment with a new transaction
+    auto transaction1 = tree.beginTransaction();
+    transaction1.setProperty ("prop1", 100); // Modify existing property
+
+    auto transaction2 = tree2.beginTransaction();
+    transaction2.setProperty ("prop2", 2);
+
+    // Move assign - test that move semantics work correctly
+    transaction1 = std::move (transaction2);
+
+    // transaction1 now refers to tree2's transaction
+    EXPECT_TRUE (transaction1.isActive());
+
+    // Complete the moved transaction
+    transaction1.setProperty ("prop3", 3);
+    transaction1.commit();
+
+    // Verify tree2 has both properties from transaction2
+    EXPECT_TRUE (tree2.hasProperty ("prop2"));
+    EXPECT_EQ (var (2), tree2.getProperty ("prop2"));
+    EXPECT_TRUE (tree2.hasProperty ("prop3"));
+    EXPECT_EQ (var (3), tree2.getProperty ("prop3"));
+
+    // Verify tree should have the new committed property
+    EXPECT_TRUE (tree.hasProperty ("prop1"));
+    EXPECT_EQ (var (100), tree.getProperty ("prop1"));
+}
+
+TEST_F (DataTreeTests, TransactionMoveAssignmentSelfAssignment)
+{
+    auto transaction = tree.beginTransaction();
+    transaction.setProperty ("prop1", 1);
+
+    // Self-assignment should be safe
+    transaction = std::move (transaction);
+
+    EXPECT_TRUE (transaction.isActive());
+    transaction.commit();
+
+    EXPECT_TRUE (tree.hasProperty ("prop1"));
+}
+
+//==============================================================================
+// ValidatedTransaction Move Tests
+
+TEST_F (DataTreeTests, ValidatedTransactionMoveConstructor)
+{
+    const String schemaJson = R"({
+        "nodeTypes": {
+            "Root": {
+                "properties": {
+                    "stringProp": {
+                        "type": "string"
+                    }
+                }
+            }
+        }
+    })";
+
+    auto schema = DataTreeSchema::fromJsonSchemaString (schemaJson);
+    ASSERT_NE (nullptr, schema);
+
+    auto validatedTx1 = tree.beginValidatedTransaction (schema);
+    validatedTx1.setProperty ("stringProp", "test");
+
+    // Move construct
+    auto validatedTx2 (std::move (validatedTx1));
+
+    // Original should not be active
+    EXPECT_FALSE (validatedTx1.isActive());
+
+    // New transaction should be active and functional
+    EXPECT_TRUE (validatedTx2.isActive());
+    validatedTx2.setProperty ("stringProp", "modified");
+    validatedTx2.commit();
+
+    EXPECT_EQ (var ("modified"), tree.getProperty ("stringProp"));
+}
+
+TEST_F (DataTreeTests, ValidatedTransactionMoveAssignment)
+{
+    const String schemaJson = R"({
+        "nodeTypes": {
+            "Root": {
+                "properties": {
+                    "prop1": {
+                        "type": "string"
+                    },
+                    "prop2": {
+                        "type": "number"
+                    }
+                }
+            }
+        }
+    })";
+
+    auto schema = DataTreeSchema::fromJsonSchemaString (schemaJson);
+    ASSERT_NE (nullptr, schema);
+
+    DataTree tree2 ("Root");
+
+    auto validatedTx1 = tree.beginValidatedTransaction (schema);
+    validatedTx1.setProperty ("prop1", "value1");
+
+    auto validatedTx2 = tree2.beginValidatedTransaction (schema);
+    validatedTx2.setProperty ("prop2", 42);
+
+    // Move assign
+    validatedTx1 = std::move (validatedTx2);
+
+    // Original transaction should not be active
+    EXPECT_FALSE (validatedTx2.isActive());
+
+    // Assigned transaction should be active
+    EXPECT_TRUE (validatedTx1.isActive());
+    validatedTx1.setProperty ("prop2", 99);
+    validatedTx1.commit();
+
+    EXPECT_EQ (var (99), tree2.getProperty ("prop2"));
+}
+
+//==============================================================================
+// ValidatedTransaction::getTransaction Tests
+
+TEST_F (DataTreeTests, ValidatedTransactionGetTransaction)
+{
+    const String schemaJson = R"({
+        "nodeTypes": {
+            "Root": {
+                "properties": {
+                    "validatedProp": {
+                        "type": "string"
+                    }
+                }
+            }
+        }
+    })";
+
+    auto schema = DataTreeSchema::fromJsonSchemaString (schemaJson);
+    ASSERT_NE (nullptr, schema);
+
+    auto validatedTx = tree.beginValidatedTransaction (schema);
+
+    // Get underlying transaction
+    auto& rawTransaction = validatedTx.getTransaction();
+
+    // Use raw transaction to bypass validation
+    rawTransaction.setProperty ("anyProp", "anyValue");
+    rawTransaction.setProperty ("validatedProp", 123); // Wrong type, but bypasses validation
+
+    validatedTx.commit();
+
+    // Both properties should be set
+    EXPECT_TRUE (tree.hasProperty ("anyProp"));
+    EXPECT_TRUE (tree.hasProperty ("validatedProp"));
+    EXPECT_EQ (var ("anyValue"), tree.getProperty ("anyProp"));
+    EXPECT_EQ (var (123), tree.getProperty ("validatedProp"));
+}
+
+TEST_F (DataTreeTests, ValidatedTransactionGetTransactionModifiesState)
+{
+    const String schemaJson = R"({
+        "nodeTypes": {
+            "Root": {
+                "children": {
+                    "allowedTypes": ["Child"]
+                }
+            },
+            "Child": {
+                "properties": {}
+            }
+        }
+    })";
+
+    auto schema = DataTreeSchema::fromJsonSchemaString (schemaJson);
+    ASSERT_NE (nullptr, schema);
+
+    auto validatedTx = tree.beginValidatedTransaction (schema);
+
+    // Get transaction and add a child
+    auto& rawTransaction = validatedTx.getTransaction();
+    DataTree child ("Child");
+    rawTransaction.addChild (child);
+
+    // Check effective child count through transaction
+    EXPECT_EQ (1, rawTransaction.getEffectiveChildCount());
+
+    validatedTx.commit();
+
+    EXPECT_EQ (1, tree.getNumChildren());
+    EXPECT_EQ (child, tree.getChild (0));
 }

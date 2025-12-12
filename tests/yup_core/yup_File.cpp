@@ -904,7 +904,7 @@ TEST_F (FileTests, Version)
     // Version might be empty for test executables
 }
 
-TEST_F (FileTests, StartAsProcess)
+TEST_F (FileTests, DISABLED_StartAsProcess)
 {
     // Limited testing - we don't want to actually launch processes in unit tests
     tempFolder.createDirectory();
@@ -913,6 +913,7 @@ TEST_F (FileTests, StartAsProcess)
 
     // Just verify the method exists and doesn't crash
     // Actual process launching should be tested manually
+    textFile.startAsProcess();
 }
 
 TEST_F (FileTests, RecursiveReadOnly)
@@ -1107,7 +1108,7 @@ TEST_F (FileTests, FileOutputStreamFlush)
 }
 #endif
 
-TEST_F (FileTests, RevealToUser)
+TEST_F (FileTests, DISABLED_RevealToUser)
 {
     // Test File::revealToUser() - this method shows the file in the OS file browser
     tempFolder.createDirectory();

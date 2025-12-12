@@ -240,18 +240,18 @@ TEST_F (SynthesiserTest, VoiceManagement)
     // Add voices
     auto* voice1 = synth->addVoice (new TestVoice());
     EXPECT_EQ (synth->getNumVoices(), 1);
-    EXPECT_EQ (synth->getVoice (0), voice1);
+    EXPECT_EQ (synth->getVoice (0).get(), voice1);
     EXPECT_NE (voice1, nullptr);
 
     auto* voice2 = synth->addVoice (new TestVoice());
     EXPECT_EQ (synth->getNumVoices(), 2);
-    EXPECT_EQ (synth->getVoice (1), voice2);
+    EXPECT_EQ (synth->getVoice (1).get(), voice2);
     EXPECT_NE (voice2, nullptr);
 
     // Remove voice
     synth->removeVoice (0);
     EXPECT_EQ (synth->getNumVoices(), 1);
-    EXPECT_EQ (synth->getVoice (0), voice2);
+    EXPECT_EQ (synth->getVoice (0).get(), voice2);
 
     // Clear all voices
     synth->clearVoices();

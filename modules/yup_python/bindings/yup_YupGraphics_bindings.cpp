@@ -1779,6 +1779,7 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("__enter__", [] (PyGraphicsSaveState& self)
         {
             self.state.emplace<Graphics::SavedState> (self.g.saveState());
+            return std::addressof (self);
         })
         .def ("__exit__", [] (PyGraphicsSaveState& self, const std::optional<py::type>&, const std::optional<py::object>&, const std::optional<py::object>&)
         {

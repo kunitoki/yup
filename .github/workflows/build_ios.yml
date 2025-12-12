@@ -34,7 +34,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
-    - uses: seanmiddleditch/gha-setup-ninja@master
     - name: Configure
       run: |
         cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
@@ -57,7 +56,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
-    - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: actions/cache/restore@v4
       id: cache-restore
       with:
@@ -78,7 +76,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
-    - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: actions/cache/restore@v4
       id: cache-restore
       with:
@@ -99,7 +96,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
-    - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: actions/cache/restore@v4
       id: cache-restore
       with:

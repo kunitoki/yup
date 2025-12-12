@@ -48,7 +48,7 @@ protected:
     File testFile;
 };
 
-TEST_F (ProcessTests, OpenDocumentWithFileName)
+TEST_F (ProcessTests, DISABLED_OpenDocumentWithFileName)
 {
     // Test Process::openDocument() with a file name
     // This attempts to open the file with the default application
@@ -64,7 +64,7 @@ TEST_F (ProcessTests, OpenDocumentWithFileName)
     SUCCEED();
 }
 
-TEST_F (ProcessTests, OpenDocumentWithUrl)
+TEST_F (ProcessTests, DISABLED_OpenDocumentWithUrl)
 {
     // Test opening a URL (this should be safer than opening a file)
     // Most systems have a default browser
@@ -77,7 +77,7 @@ TEST_F (ProcessTests, OpenDocumentWithUrl)
     SUCCEED();
 }
 
-TEST_F (ProcessTests, OpenDocumentWithParameters)
+TEST_F (ProcessTests, DISABLED_OpenDocumentWithParameters)
 {
     // Test Process::openDocument() with parameters
     [[maybe_unused]] bool result = Process::openDocument (testFile.getFullPathName(), "--test-param");
@@ -85,7 +85,7 @@ TEST_F (ProcessTests, OpenDocumentWithParameters)
     SUCCEED();
 }
 
-TEST_F (ProcessTests, OpenDocumentWithEnvironment)
+TEST_F (ProcessTests, DISABLED_OpenDocumentWithEnvironment)
 {
     // Test Process::openDocument() with custom environment variables
     StringPairArray environment;
@@ -97,7 +97,7 @@ TEST_F (ProcessTests, OpenDocumentWithEnvironment)
     SUCCEED();
 }
 
-TEST_F (ProcessTests, OpenDocumentWithEmptyPath)
+TEST_F (ProcessTests, DISABLED_OpenDocumentWithEmptyPath)
 {
     // Test with empty path (should fail gracefully)
     [[maybe_unused]] bool result = Process::openDocument ("", "");
@@ -106,7 +106,7 @@ TEST_F (ProcessTests, OpenDocumentWithEmptyPath)
     SUCCEED();
 }
 
-TEST_F (ProcessTests, OpenDocumentWithNonExistentFile)
+TEST_F (ProcessTests, DISABLED_OpenDocumentWithNonExistentFile)
 {
     // Test with a file that doesn't exist
     File nonExistent = File::getSpecialLocation (File::tempDirectory)
@@ -119,7 +119,7 @@ TEST_F (ProcessTests, OpenDocumentWithNonExistentFile)
     SUCCEED();
 }
 
-TEST_F (ProcessTests, OpenDocumentWithSpecialCharacters)
+TEST_F (ProcessTests, DISABLED_OpenDocumentWithSpecialCharacters)
 {
     // Create a file with special characters in the name
     File specialFile = testFile.getParentDirectory().getChildFile ("test file with spaces & special.txt");
