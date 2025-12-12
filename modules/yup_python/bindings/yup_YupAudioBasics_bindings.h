@@ -157,6 +157,70 @@ struct PySynthesiserVoice : SynthesiserVoice
 };
 
 //==============================================================================
+struct PySynthesiser : Synthesiser
+{
+    void noteOn (int midiChannel, int midiNoteNumber, float velocity) override
+    {
+        PYBIND11_OVERRIDE (void, Synthesiser, noteOn, midiChannel, midiNoteNumber, velocity);
+    }
+
+    void noteOff (int midiChannel, int midiNoteNumber, float velocity, bool allowTailOff) override
+    {
+        PYBIND11_OVERRIDE (void, Synthesiser, noteOff, midiChannel, midiNoteNumber, velocity, allowTailOff);
+    }
+
+    void allNotesOff (int midiChannel, bool allowTailOff) override
+    {
+        PYBIND11_OVERRIDE (void, Synthesiser, allNotesOff, midiChannel, allowTailOff);
+    }
+
+    void handlePitchWheel (int midiChannel, int wheelValue) override
+    {
+        PYBIND11_OVERRIDE (void, Synthesiser, handlePitchWheel, midiChannel, wheelValue);
+    }
+
+    void handleController (int midiChannel, int controllerNumber, int controllerValue) override
+    {
+        PYBIND11_OVERRIDE (void, Synthesiser, handleController, midiChannel, controllerNumber, controllerValue);
+    }
+
+    void handleAftertouch (int midiChannel, int midiNoteNumber, int aftertouchValue) override
+    {
+        PYBIND11_OVERRIDE (void, Synthesiser, handleAftertouch, midiChannel, midiNoteNumber, aftertouchValue);
+    }
+
+    void handleChannelPressure (int midiChannel, int channelPressureValue) override
+    {
+        PYBIND11_OVERRIDE (void, Synthesiser, handleChannelPressure, midiChannel, channelPressureValue);
+    }
+
+    void handleSustainPedal (int midiChannel, bool isDown) override
+    {
+        PYBIND11_OVERRIDE (void, Synthesiser, handleSustainPedal, midiChannel, isDown);
+    }
+
+    void handleSostenutoPedal (int midiChannel, bool isDown) override
+    {
+        PYBIND11_OVERRIDE (void, Synthesiser, handleSostenutoPedal, midiChannel, isDown);
+    }
+
+    void handleSoftPedal (int midiChannel, bool isDown) override
+    {
+        PYBIND11_OVERRIDE (void, Synthesiser, handleSoftPedal, midiChannel, isDown);
+    }
+
+    void handleProgramChange (int midiChannel, int programNumber) override
+    {
+        PYBIND11_OVERRIDE (void, Synthesiser, handleProgramChange, midiChannel, programNumber);
+    }
+
+    void setCurrentPlaybackSampleRate (double sampleRate) override
+    {
+        PYBIND11_OVERRIDE (void, Synthesiser, setCurrentPlaybackSampleRate, sampleRate);
+    }
+};
+
+//==============================================================================
 
 struct PyAudioPlayHeadPositionInfo : AudioPlayHead::PositionInfo
 {

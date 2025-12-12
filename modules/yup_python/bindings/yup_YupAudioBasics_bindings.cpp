@@ -256,6 +256,97 @@ void registerYupAudioBasicsBindings (py::module_& m)
             return Decibels::toString (decibels, decimalPlaces, minusInfinityDb, shouldIncludeSuffix, customMinusInfinityString);
         }, "decibels"_a, "decimalPlaces"_a = 2, "minusInfinityDb"_a = -100.0f, "shouldIncludeSuffix"_a = true, "customMinusInfinityString"_a = StringRef());
 
+    // ============================================================================================ yup::MidiMessage
+
+    py::class_<MidiMessage> classMidiMessage (m, "MidiMessage");
+
+    classMidiMessage
+        .def (py::init<>())
+        .def (py::init<const MidiMessage&>())
+        .def (py::init<const MidiMessage&, double>(), "other"_a, "newTimeStamp"_a)
+        .def ("getRawData", [] (const MidiMessage& self) -> py::bytes
+        {
+            return py::bytes (reinterpret_cast<const char*> (self.getRawData()), self.getRawDataSize());
+        })
+        .def ("getRawDataSize", &MidiMessage::getRawDataSize)
+        .def ("getDescription", &MidiMessage::getDescription)
+        .def ("getTimeStamp", &MidiMessage::getTimeStamp)
+        .def ("setTimeStamp", &MidiMessage::setTimeStamp)
+        .def ("addToTimeStamp", &MidiMessage::addToTimeStamp)
+        .def ("withTimeStamp", &MidiMessage::withTimeStamp)
+        .def ("getChannel", &MidiMessage::getChannel)
+        .def ("isForChannel", &MidiMessage::isForChannel)
+        .def ("setChannel", &MidiMessage::setChannel)
+        .def ("isSysEx", &MidiMessage::isSysEx)
+        .def ("getSysExDataSize", &MidiMessage::getSysExDataSize)
+        .def ("isNoteOn", &MidiMessage::isNoteOn, "returnTrueForVelocity0"_a = false)
+        .def ("isNoteOff", &MidiMessage::isNoteOff, "returnTrueForNoteOnVelocity0"_a = true)
+        .def ("isNoteOnOrOff", &MidiMessage::isNoteOnOrOff)
+        .def ("getNoteNumber", &MidiMessage::getNoteNumber)
+        .def ("setNoteNumber", &MidiMessage::setNoteNumber)
+        .def ("getVelocity", &MidiMessage::getVelocity)
+        .def ("getFloatVelocity", &MidiMessage::getFloatVelocity)
+        .def ("setVelocity", &MidiMessage::setVelocity)
+        .def ("multiplyVelocity", &MidiMessage::multiplyVelocity)
+        .def ("isAftertouch", &MidiMessage::isAftertouch)
+        .def ("getAfterTouchValue", &MidiMessage::getAfterTouchValue)
+        .def ("isProgramChange", &MidiMessage::isProgramChange)
+        .def ("getProgramChangeNumber", &MidiMessage::getProgramChangeNumber)
+        .def ("isPitchWheel", &MidiMessage::isPitchWheel)
+        .def ("getPitchWheelValue", &MidiMessage::getPitchWheelValue)
+        .def ("isController", &MidiMessage::isController)
+        .def ("getControllerNumber", &MidiMessage::getControllerNumber)
+        .def ("getControllerValue", &MidiMessage::getControllerValue)
+        .def ("isControllerOfType", &MidiMessage::isControllerOfType)
+        .def ("isAllNotesOff", &MidiMessage::isAllNotesOff)
+        .def ("isAllSoundOff", &MidiMessage::isAllSoundOff)
+        .def ("isResetAllControllers", &MidiMessage::isResetAllControllers)
+        .def_static ("noteOn", static_cast<MidiMessage (*)(int, int, float)> (&MidiMessage::noteOn), "channel"_a, "noteNumber"_a, "velocity"_a)
+        .def_static ("noteOff", static_cast<MidiMessage (*)(int, int, float)> (&MidiMessage::noteOff), "channel"_a, "noteNumber"_a, "velocity"_a)
+        .def_static ("noteOff", static_cast<MidiMessage (*)(int, int)> (&MidiMessage::noteOff), "channel"_a, "noteNumber"_a)
+        .def_static ("programChange", &MidiMessage::programChange, "channel"_a, "programNumber"_a)
+        .def_static ("pitchWheel", &MidiMessage::pitchWheel, "channel"_a, "position"_a)
+        .def_static ("aftertouchChange", &MidiMessage::aftertouchChange, "channel"_a, "noteNumber"_a, "aftertouchValue"_a)
+        .def_static ("channelPressureChange", &MidiMessage::channelPressureChange, "channel"_a, "pressure"_a)
+        .def_static ("controllerEvent", &MidiMessage::controllerEvent, "channel"_a, "controllerType"_a, "value"_a)
+        .def_static ("allNotesOff", &MidiMessage::allNotesOff, "channel"_a)
+        .def_static ("allSoundOff", &MidiMessage::allSoundOff, "channel"_a)
+        .def_static ("allControllersOff", &MidiMessage::allControllersOff, "channel"_a);
+
+    // ============================================================================================ yup::MidiMessageMetadata
+
+    py::class_<MidiMessageMetadata> classMidiMessageMetadata (m, "MidiMessageMetadata");
+
+    classMidiMessageMetadata
+        .def (py::init<>())
+        .def (py::init<const uint8*, int, int>())
+        .def ("getMessage", &MidiMessageMetadata::getMessage)
+        .def_readonly ("numBytes", &MidiMessageMetadata::numBytes)
+        .def_readonly ("samplePosition", &MidiMessageMetadata::samplePosition);
+
+    // ============================================================================================ yup::MidiBuffer
+
+    py::class_<MidiBuffer> classMidiBuffer (m, "MidiBuffer");
+
+    classMidiBuffer
+        .def (py::init<>())
+        .def (py::init<const MidiMessage&>())
+        .def ("clear", py::overload_cast<> (&MidiBuffer::clear))
+        .def ("clear", py::overload_cast<int, int> (&MidiBuffer::clear))
+        .def ("isEmpty", &MidiBuffer::isEmpty)
+        .def ("getNumEvents", &MidiBuffer::getNumEvents)
+        .def ("addEvent", py::overload_cast<const MidiMessage&, int> (&MidiBuffer::addEvent))
+        .def ("addEvents", &MidiBuffer::addEvents)
+        .def ("getFirstEventTime", &MidiBuffer::getFirstEventTime)
+        .def ("getLastEventTime", &MidiBuffer::getLastEventTime)
+        .def ("swapWith", &MidiBuffer::swapWith)
+        .def ("ensureSize", &MidiBuffer::ensureSize)
+        .def ("__iter__", [] (const MidiBuffer& self)
+        {
+            return py::make_iterator (self.begin(), self.end());
+        }, py::keep_alive<0, 1>())
+        .def ("__len__", &MidiBuffer::getNumEvents);
+
     // ============================================================================================ yup::ADSR
 
     py::class_<ADSR> classADSR (m, "ADSR");
@@ -382,7 +473,7 @@ void registerYupAudioBasicsBindings (py::module_& m)
 
     // ============================================================================================ yup::PositionableAudioSource
 
-    py::class_<PositionableAudioSource, PyPositionableAudioSource<>, AudioSource> classPositionableAudioSource (m, "PositionableAudioSource");
+    py::class_<PositionableAudioSource, PyPositionableAudioSource<>> classPositionableAudioSource (m, "PositionableAudioSource");
 
     classPositionableAudioSource
         .def (py::init<>())
@@ -422,7 +513,7 @@ void registerYupAudioBasicsBindings (py::module_& m)
 
     // ============================================================================================ yup::SynthesiserVoice
 
-    py::class_<SynthesiserVoice, PySynthesiserVoice> classSynthesiserVoice (m, "SynthesiserVoice");
+    py::class_<SynthesiserVoice, PySynthesiserVoice, ReferenceCountedObjectPtr<SynthesiserVoice>> classSynthesiserVoice (m, "SynthesiserVoice");
 
     classSynthesiserVoice
         .def (py::init<>())
@@ -443,11 +534,12 @@ void registerYupAudioBasicsBindings (py::module_& m)
 
     // ============================================================================================ yup::Synthesiser
 
-    py::class_<Synthesiser> classSynthesiser (m, "Synthesiser");
+    py::class_<Synthesiser, PySynthesiser> classSynthesiser (m, "Synthesiser");
 
     classSynthesiser
         .def (py::init<>())
         .def ("clearVoices", &Synthesiser::clearVoices)
+        .def ("getNumVoices", &Synthesiser::getNumVoices)
         .def ("getVoice", &Synthesiser::getVoice, py::return_value_policy::reference)
         .def ("addVoice", &Synthesiser::addVoice)
         .def ("removeVoice", &Synthesiser::removeVoice)
@@ -461,7 +553,17 @@ void registerYupAudioBasicsBindings (py::module_& m)
         .def ("setMinimumRenderingSubdivisionSize", &Synthesiser::setMinimumRenderingSubdivisionSize)
         .def ("setCurrentPlaybackSampleRate", &Synthesiser::setCurrentPlaybackSampleRate)
         .def ("renderNextBlock", py::overload_cast<AudioBuffer<float>&, const MidiBuffer&, int, int> (&Synthesiser::renderNextBlock), "outputAudio"_a, "inputMidi"_a, "startSample"_a, "numSamples"_a)
-        .def ("allNotesOff", &Synthesiser::allNotesOff);
+        .def ("noteOn", &Synthesiser::noteOn)
+        .def ("noteOff", &Synthesiser::noteOff)
+        .def ("allNotesOff", &Synthesiser::allNotesOff)
+        .def ("handlePitchWheel", &Synthesiser::handlePitchWheel)
+        .def ("handleController", &Synthesiser::handleController)
+        .def ("handleAftertouch", &Synthesiser::handleAftertouch)
+        .def ("handleChannelPressure", &Synthesiser::handleChannelPressure)
+        .def ("handleSustainPedal", &Synthesiser::handleSustainPedal)
+        .def ("handleSostenutoPedal", &Synthesiser::handleSostenutoPedal)
+        .def ("handleSoftPedal", &Synthesiser::handleSoftPedal)
+        .def ("handleProgramChange", &Synthesiser::handleProgramChange);
 
     // ============================================================================================ yup::AudioPlayHead
 

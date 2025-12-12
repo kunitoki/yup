@@ -106,7 +106,7 @@ Synthesiser::~Synthesiser()
 }
 
 //==============================================================================
-SynthesiserVoice* Synthesiser::getVoice (const int index) const
+SynthesiserVoice::Ptr Synthesiser::getVoice (const int index) const
 {
     const ScopedLock sl (lock);
     return voices[index];
@@ -118,7 +118,7 @@ void Synthesiser::clearVoices()
     voices.clear();
 }
 
-SynthesiserVoice* Synthesiser::addVoice (SynthesiserVoice* const newVoice)
+SynthesiserVoice* Synthesiser::addVoice (const SynthesiserVoice::Ptr newVoice)
 {
     SynthesiserVoice* voice;
 
