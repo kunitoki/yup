@@ -33,6 +33,9 @@ public:
         if (fd < 0)
             return;
 
+        int flags = fcntl (fd, F_GETFL, 0);
+        fcntl (fd, F_SETFL, flags | O_NONBLOCK);
+
         addPaths (folder);
 
         thread = std::thread ([this]
@@ -157,23 +160,12 @@ private:
 
         while (! threadShouldExit)
         {
-            fd_set fileDescriptorSet;
-            FD_ZERO (&fileDescriptorSet);
-            FD_SET (fd, &fileDescriptorSet);
-            if (select (FD_SETSIZE, &fileDescriptorSet, nullptr, nullptr, nullptr) <= 0)
+            const ssize_t numRead = read (fd, buffer.data(), bufferSize);
+            if (numRead < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
             {
-                if (threadShouldExit)
-                    break;
-
                 std::this_thread::sleep_for (std::chrono::milliseconds (50));
                 continue;
             }
-            else if (threadShouldExit)
-            {
-                break;
-            }
-
-            const ssize_t numRead = read (fd, buffer.data(), bufferSize);
 
             if (threadShouldExit)
                 break;
