@@ -24,7 +24,7 @@ namespace yup
 
 //==============================================================================
 #ifndef YUP_DRAWABLE_LOGGING
-#define YUP_DRAWABLE_LOGGING 1
+#define YUP_DRAWABLE_LOGGING 0
 #endif
 
 #if YUP_DRAWABLE_LOGGING
