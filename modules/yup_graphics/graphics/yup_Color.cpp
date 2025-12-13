@@ -202,7 +202,11 @@ Color parseNamedColor (const String& name)
 String Color::toString() const
 {
     String result;
-    result << "#" << String::toHexString (r) << String::toHexString (g) << String::toHexString (b) << String::toHexString (a);
+    result << "#"
+           << String::toHexString (r).paddedLeft ('0', 2)
+           << String::toHexString (g).paddedLeft ('0', 2)
+           << String::toHexString (b).paddedLeft ('0', 2)
+           << String::toHexString (a).paddedLeft ('0', 2);
     return result;
 }
 

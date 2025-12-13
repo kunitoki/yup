@@ -1505,6 +1505,18 @@ bool Path::isExplicitlyClosed() const
 
 //==============================================================================
 
+void Path::setUsingNonZeroWinding (bool shouldUseNonZeroWinding)
+{
+    path->fillRule (shouldUseNonZeroWinding ? rive::FillRule::nonZero : rive::FillRule::evenOdd);
+}
+
+bool Path::isUsingNonZeroWinding() const
+{
+    return path->getFillRule() == rive::FillRule::nonZero;
+}
+
+//==============================================================================
+
 Path& Path::appendPath (const Path& other)
 {
     path->addRenderPath (other.getRenderPath(), rive::Mat2D());

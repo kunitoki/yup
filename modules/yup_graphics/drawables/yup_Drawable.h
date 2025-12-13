@@ -212,6 +212,12 @@ private:
     HashMap<String, Gradient::Ptr> gradientsById;
     std::vector<ClipPath::Ptr> clipPaths;
     HashMap<String, ClipPath::Ptr> clipPathsById;
+
+    // Root SVG element's default presentation attributes
+    bool rootHasFill = true;    // SVG default fill is black
+    bool rootHasStroke = false; // SVG default stroke is none
+    std::optional<Color> rootFillColor;
+    std::optional<Color> rootStrokeColor;
 };
 
 } // namespace yup

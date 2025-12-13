@@ -24,7 +24,7 @@ namespace yup
 
 //==============================================================================
 #ifndef YUP_DRAWABLE_LOGGING
-#define YUP_DRAWABLE_LOGGING 1
+#define YUP_DRAWABLE_LOGGING 0
 #endif
 
 #if YUP_DRAWABLE_LOGGING
@@ -97,6 +97,12 @@ void Drawable::clear()
     gradientsById.clear();
     clipPaths.clear();
     clipPathsById.clear();
+
+    // Reset root element's default presentation attributes to SVG defaults
+    rootHasFill = true;    // SVG default fill is black
+    rootHasStroke = false; // SVG default stroke is none
+    rootFillColor = std::nullopt;
+    rootStrokeColor = std::nullopt;
 }
 
 //==============================================================================
@@ -113,13 +119,23 @@ void Drawable::paint (Graphics& g)
     const auto savedState = g.saveState();
 
     g.setStrokeWidth (1.0f);
-    g.setFillColor (Colors::black);
+
+    // Set default fill color based on root SVG element or SVG default (black)
+    if (rootFillColor)
+        g.setFillColor (*rootFillColor);
+    else
+        g.setFillColor (Colors::black);
+
+    // Set default stroke color if root SVG element specified one
+    if (rootStrokeColor)
+        g.setStrokeColor (*rootStrokeColor);
 
     if (! transform.isIdentity())
         g.addTransform (transform);
 
+    // Pass root element's fill/stroke state to top-level elements
     for (const auto& element : elements)
-        paintElement (g, *element, true, false);
+        paintElement (g, *element, rootHasFill, rootHasStroke);
 }
 
 void Drawable::paint (Graphics& g, const Rectangle<float>& targetArea, Fitting fitting, Justification justification)
@@ -137,10 +153,20 @@ void Drawable::paint (Graphics& g, const Rectangle<float>& targetArea, Fitting f
         g.addTransform (finalTransform);
 
     g.setStrokeWidth (1.0f);
-    g.setFillColor (Colors::black);
 
+    // Set default fill color based on root SVG element or SVG default (black)
+    if (rootFillColor)
+        g.setFillColor (*rootFillColor);
+    else
+        g.setFillColor (Colors::black);
+
+    // Set default stroke color if root SVG element specified one
+    if (rootStrokeColor)
+        g.setStrokeColor (*rootStrokeColor);
+
+    // Pass root element's fill/stroke state to top-level elements
     for (const auto& element : elements)
-        paintElement (g, *element, true, false);
+        paintElement (g, *element, rootHasFill, rootHasStroke);
 }
 
 //==============================================================================
@@ -236,13 +262,12 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
     {
         if (element.path)
         {
-            if (element.path->isClosed())
-            {
-                // TODO: Apply fill-rule when Graphics class supports it
-                // if (element.fillRule)
-                //     g.setFillRule (*element.fillRule == "evenodd" ? FillRule::EvenOdd : FillRule::NonZero);
-                g.fillPath (*element.path);
-            }
+            // SVG spec: fill is applied to both closed and unclosed paths
+            // For unclosed paths, an implicit line connects the last point to the first point
+            // TODO: Apply fill-rule when Graphics class supports it
+            // if (element.fillRule)
+            //     g.setFillRule (*element.fillRule == "evenodd" ? FillRule::EvenOdd : FillRule::NonZero);
+            g.fillPath (*element.path);
         }
         else if (element.reference)
         {
@@ -258,13 +283,11 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
                 if (refElement->localTransform)
                     g.setTransform (refElement->localTransform->followedBy (savedTransform));
 
-                if (refElement->path->isClosed())
-                {
-                    // TODO: Apply fill-rule when Graphics class supports it
-                    // if (element.fillRule)
-                    //     g.setFillRule (*element.fillRule == "evenodd" ? FillRule::EvenOdd : FillRule::NonZero);
-                    g.fillPath (*refElement->path);
-                }
+                // SVG spec: fill is applied to both closed and unclosed paths
+                // TODO: Apply fill-rule when Graphics class supports it
+                // if (element.fillRule)
+                //     g.setFillRule (*element.fillRule == "evenodd" ? FillRule::EvenOdd : FillRule::NonZero);
+                g.fillPath (*refElement->path);
 
                 if (refElement->localTransform)
                     g.setTransform (savedTransform);
@@ -403,7 +426,9 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
     for (const auto& childElement : element.children)
     {
         YUP_DRAWABLE_LOG ("Rendering child element - current graphics transform: " << g.getTransform().toString());
-        paintElement (g, *childElement, isFillDefined, isStrokeDefined);
+        // Pass fill/stroke state to children, but respect explicit "none" values
+        // If this element has fill="none", children should not inherit fill
+        paintElement (g, *childElement, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke);
     }
 
     // paintDebugElement (g, element);
@@ -434,6 +459,10 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
 
         currentTransform = parseTransform (element, currentTransform, *e);
         parseStyle (element, currentTransform, *e);
+
+        // Apply fill-rule after parsing style
+        if (e->fillRule && *e->fillRule == "evenodd")
+            e->path->setUsingNonZeroWinding (false);
     }
     else if (element.hasTagName ("g"))
     {
@@ -649,7 +678,30 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
     }
 
     if (isRootElement)
+    {
+        // Store root SVG element's default fill/stroke for inheritance by top-level elements
+        if (e->fillColor)
+        {
+            rootFillColor = e->fillColor;
+            rootHasFill = true;
+        }
+        else if (e->noFill)
+        {
+            rootHasFill = false;
+        }
+
+        if (e->strokeColor)
+        {
+            rootStrokeColor = e->strokeColor;
+            rootHasStroke = true;
+        }
+        else if (e->noStroke)
+        {
+            rootHasStroke = false;
+        }
+
         return true;
+    }
 
     if (parent != nullptr && ! parentIsRoot)
         parent->children.push_back (std::move (e));

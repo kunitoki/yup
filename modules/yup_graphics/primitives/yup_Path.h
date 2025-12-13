@@ -618,6 +618,25 @@ public:
     bool isExplicitlyClosed() const;
 
     //==============================================================================
+    /** Sets whether the path should use the non-zero winding fill rule.
+
+        This method sets the fill rule for the path. When set to true, the path uses the
+        non-zero winding rule for determining which areas are inside the path ("nonzero").
+        When set to false, the path uses the even-odd rule ("evenodd").
+
+        The non-zero winding rule is the default.
+
+        @param shouldUseNonZeroWinding True for non-zero winding rule, false for even-odd rule.
+    */
+    void setUsingNonZeroWinding (bool shouldUseNonZeroWinding);
+
+    /** Returns whether the path is using the non-zero winding fill rule.
+
+        @return True if using non-zero winding rule, false if using even-odd rule.
+    */
+    bool isUsingNonZeroWinding() const;
+
+    //==============================================================================
     /** Appends another path to this one.
 
         This method appends all segments of another path to this path. It effectively concatenates
