@@ -164,6 +164,53 @@ TEST (AffineTransformTests, Shearing)
     EXPECT_FLOAT_EQ (t2.getScaleY(), 1.0f);
 }
 
+TEST (AffineTransformTests, Sheared_UpdatesTranslation)
+{
+    // A shear applied after a translation must also shear the translation vector.
+    // This matches matrix multiplication: shearing(fx, fy) * translation(tx, ty).
+    AffineTransform t = AffineTransform::translation (10.0f, 20.0f);
+
+    {
+        const float fx = 0.5f;
+        AffineTransform t2 = t.sheared (fx, 0.0f);
+        EXPECT_NEAR (t2.getScaleX(), 1.0f, tol);
+        EXPECT_NEAR (t2.getShearX(), fx, tol);
+        EXPECT_NEAR (t2.getTranslateX(), 10.0f + fx * 20.0f, tol);
+        EXPECT_NEAR (t2.getShearY(), 0.0f, tol);
+        EXPECT_NEAR (t2.getScaleY(), 1.0f, tol);
+        EXPECT_NEAR (t2.getTranslateY(), 20.0f, tol);
+    }
+
+    {
+        const float fy = 0.5f;
+        AffineTransform t2 = t.sheared (0.0f, fy);
+        EXPECT_NEAR (t2.getScaleX(), 1.0f, tol);
+        EXPECT_NEAR (t2.getShearX(), 0.0f, tol);
+        EXPECT_NEAR (t2.getTranslateX(), 10.0f, tol);
+        EXPECT_NEAR (t2.getShearY(), fy, tol);
+        EXPECT_NEAR (t2.getScaleY(), 1.0f, tol);
+        EXPECT_NEAR (t2.getTranslateY(), 20.0f + fy * 10.0f, tol);
+    }
+}
+
+TEST (AffineTransformTests, SVG_TransformList_OrderMatchesSpec)
+{
+    // From examples/graphics/data/svg/hearth_use.svg:
+    // rotate(-10 50 100) translate(-36 45.5) skewX(40) scale(1 0.5)
+    AffineTransform t;
+    t = t.rotated (degreesToRadians (-10.0f), 50.0f, 100.0f);
+    t = t.translated (-36.0f, 45.5f);
+    t = t.sheared (std::tan (degreesToRadians (40.0f)), 0.0f);
+    t = t.scaled (1.0f, 0.5f);
+
+    EXPECT_NEAR (t.getScaleX(), 0.83909963f, 1e-5f);
+    EXPECT_NEAR (t.getShearX(), 1.0f, 1e-5f);
+    EXPECT_NEAR (t.getTranslateX(), -5.8659854f, 1e-5f);
+    EXPECT_NEAR (t.getShearY(), -0.086824089f, 1e-5f);
+    EXPECT_NEAR (t.getScaleY(), 0.49240387f, 1e-5f);
+    EXPECT_NEAR (t.getTranslateY(), 27.850817f, 1e-5f);
+}
+
 TEST (AffineTransformTests, FollowedBy)
 {
     AffineTransform t1 = AffineTransform::translation (3.0f, 4.0f);
@@ -273,10 +320,13 @@ TEST (AffineTransformTests, ToMat2D_Identity)
 
 TEST (AffineTransformTests, ToMat2D_CustomTransform)
 {
+    // YUP: [2  3  4]    Rive (transposed): [2  5  4]
+    //      [5  6  7]                        [3  6  7]
     AffineTransform affine (2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f);
     auto matrixFromAffine = affine.toMat2D();
 
-    rive::Mat2D expectedMatrix (2.0f, -3.0f, -5.0f, 6.0f, 4.0f, 7.0f);
+    // Rive expects the transposed off-diagonal elements
+    rive::Mat2D expectedMatrix (2.0f, 5.0f, 3.0f, 6.0f, 4.0f, 7.0f);
 
     EXPECT_FLOAT_EQ (matrixFromAffine.xx(), expectedMatrix.xx());
     EXPECT_FLOAT_EQ (matrixFromAffine.xy(), expectedMatrix.xy());
@@ -918,4 +968,124 @@ TEST (AffineTransformTests, TransformationType_Combinations)
     EXPECT_FALSE (combined.isOnlyRotation());
     EXPECT_FALSE (combined.isOnlyScaling());
     EXPECT_FALSE (combined.isOnlyShearing());
+}
+
+TEST (AffineTransformTests, HearthUseSVG_TransformDebug)
+{
+    // Debug test for hearth_use.svg transform issue
+    // Transform: rotate(-10 50 100) translate(-36 45.5) skewX(40) scale(1 0.5)
+    AffineTransform t;
+
+    std::cout << "\n=== Hearth Use SVG Transform Sequence ===\n";
+    std::cout << "Initial (identity): " << t.toString() << "\n";
+
+    t = t.rotated (degreesToRadians (-10.0f), 50.0f, 100.0f);
+    std::cout << "After rotate(-10, 50, 100): " << t.toString() << "\n";
+
+    t = t.translated (-36.0f, 45.5f);
+    std::cout << "After translate(-36, 45.5): " << t.toString() << "\n";
+
+    t = t.sheared (std::tan (degreesToRadians (40.0f)), 0.0f);
+    std::cout << "After skewX(40): " << t.toString() << "\n";
+
+    t = t.scaled (1.0f, 0.5f);
+    std::cout << "After scale(1, 0.5): " << t.toString() << "\n";
+
+    std::cout << "\nParsed from logs: 0.8391, 1, -5.86598, -0.0868241, 0.492404, 27.8508\n";
+    std::cout << "Actual values:\n";
+    std::cout << "  " << t.getScaleX() << ", " << t.getShearX() << ", " << t.getTranslateX()
+              << ", " << t.getShearY() << ", " << t.getScaleY() << ", " << t.getTranslateY() << "\n";
+
+    // Transform some key points from the heart path
+    std::cout << "\nPoint transformations:\n";
+
+    // Center-top of heart path (approximately)
+    float x1 = 50.0f, y1 = 30.0f;
+    t.transformPoint (x1, y1);
+    std::cout << "  (50, 30) -> (" << x1 << ", " << y1 << ")\n";
+
+    // Left control point
+    float x2 = 10.0f, y2 = 30.0f;
+    t.transformPoint (x2, y2);
+    std::cout << "  (10, 30) -> (" << x2 << ", " << y2 << ")\n";
+
+    // Right control point
+    float x3 = 90.0f, y3 = 30.0f;
+    t.transformPoint (x3, y3);
+    std::cout << "  (90, 30) -> (" << x3 << ", " << y3 << ")\n";
+
+    // Bottom point
+    float x4 = 50.0f, y4 = 90.0f;
+    t.transformPoint (x4, y4);
+    std::cout << "  (50, 90) -> (" << x4 << ", " << y4 << ")\n";
+
+    // Verify the transform matches test expectations
+    EXPECT_NEAR (t.getScaleX(), 0.83909963f, 1e-5f);
+    EXPECT_NEAR (t.getShearX(), 1.0f, 1e-5f);
+    EXPECT_NEAR (t.getTranslateX(), -5.8659854f, 1e-5f);
+    EXPECT_NEAR (t.getShearY(), -0.086824089f, 1e-5f);
+    EXPECT_NEAR (t.getScaleY(), 0.49240387f, 1e-5f);
+    EXPECT_NEAR (t.getTranslateY(), 27.850817f, 1e-5f);
+
+    // Test conversion to Rive Mat2D
+    std::cout << "\n=== Rive Mat2D Conversion ===\n";
+    auto mat2d = t.toMat2D();
+    std::cout << "YUP AffineTransform:\n";
+    std::cout << "  [" << t.getScaleX() << "  " << t.getShearX() << "  " << t.getTranslateX() << "]\n";
+    std::cout << "  [" << t.getShearY() << "  " << t.getScaleY() << "  " << t.getTranslateY() << "]\n";
+    std::cout << "\nRive Mat2D (xx, xy, yx, yy, tx, ty):\n";
+    std::cout << "  [" << mat2d.xx() << "  " << mat2d.xy() << "  " << mat2d.tx() << "]\n";
+    std::cout << "  [" << mat2d.yx() << "  " << mat2d.yy() << "  " << mat2d.ty() << "]\n";
+
+    // Test if Rive produces same point transformations
+    std::cout << "\nRive Mat2D point transformations:\n";
+    rive::Vec2D p1 = mat2d * rive::Vec2D (50.0f, 30.0f);
+    std::cout << "  (50, 30) -> (" << p1.x << ", " << p1.y << ")\n";
+    rive::Vec2D p2 = mat2d * rive::Vec2D (10.0f, 30.0f);
+    std::cout << "  (10, 30) -> (" << p2.x << ", " << p2.y << ")\n";
+    rive::Vec2D p3 = mat2d * rive::Vec2D (90.0f, 30.0f);
+    std::cout << "  (90, 30) -> (" << p3.x << ", " << p3.y << ")\n";
+    rive::Vec2D p4 = mat2d * rive::Vec2D (50.0f, 90.0f);
+    std::cout << "  (50, 90) -> (" << p4.x << ", " << p4.y << ")\n";
+
+    // Compare with YUP transformations
+    EXPECT_NEAR (p1.x, x1, 1e-4f);
+    EXPECT_NEAR (p1.y, y1, 1e-4f);
+    EXPECT_NEAR (p2.x, x2, 1e-4f);
+    EXPECT_NEAR (p2.y, y2, 1e-4f);
+    EXPECT_NEAR (p3.x, x3, 1e-4f);
+    EXPECT_NEAR (p3.y, y3, 1e-4f);
+    EXPECT_NEAR (p4.x, x4, 1e-4f);
+    EXPECT_NEAR (p4.y, y4, 1e-4f);
+
+    // Test composition order: does Rive pre-multiply or post-multiply?
+    std::cout << "\n=== Testing Rive Matrix Composition ===\n";
+    rive::Mat2D translate = rive::Mat2D::fromTranslate (10.0f, 20.0f);
+    rive::Mat2D scale = rive::Mat2D::fromScale (2.0f, 2.0f);
+
+    // YUP: translate then scale (post-multiply)
+    AffineTransform yupComposed = AffineTransform::translation (10.0f, 20.0f)
+                                      .followedBy (AffineTransform::scaling (2.0f, 2.0f));
+    std::cout << "YUP translate.followedBy(scale): " << yupComposed.toString() << "\n";
+
+    // Rive operator* (what does this do?)
+    rive::Mat2D riveMultiply1 = translate * scale;
+    std::cout << "Rive translate * scale: [" << riveMultiply1.xx() << ", " << riveMultiply1.xy() << ", " << riveMultiply1.tx()
+              << " / " << riveMultiply1.yx() << ", " << riveMultiply1.yy() << ", " << riveMultiply1.ty() << "]\n";
+
+    rive::Mat2D riveMultiply2 = scale * translate;
+    std::cout << "Rive scale * translate: [" << riveMultiply2.xx() << ", " << riveMultiply2.xy() << ", " << riveMultiply2.tx()
+              << " / " << riveMultiply2.yx() << ", " << riveMultiply2.yy() << ", " << riveMultiply2.ty() << "]\n";
+
+    // Test point
+    rive::Vec2D testPt (5.0f, 5.0f);
+    rive::Vec2D result1 = riveMultiply1 * testPt;
+    rive::Vec2D result2 = riveMultiply2 * testPt;
+    std::cout << "Point (5,5) with translate*scale: (" << result1.x << ", " << result1.y << ")\n";
+    std::cout << "Point (5,5) with scale*translate: (" << result2.x << ", " << result2.y << ")\n";
+
+    // Compare with YUP
+    float yupX = 5.0f, yupY = 5.0f;
+    yupComposed.transformPoint (yupX, yupY);
+    std::cout << "Point (5,5) with YUP: (" << yupX << ", " << yupY << ")\n";
 }
