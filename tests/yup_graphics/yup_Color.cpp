@@ -467,6 +467,37 @@ TEST (ColorTests, String_Operations)
     EXPECT_EQ (fromInvalid.getARGB(), 0); // Should return default/empty color
 }
 
+TEST (ColorTests, HexString_ZeroPadding)
+{
+    // Test that hex string properly zero-pads all components
+    // This was a bug where #E30000 would display as #e300ff instead of #e30000ff
+    Color red (0xffe30000);
+    String hexString = red.toString();
+    EXPECT_EQ (hexString, "#e30000ff");
+    EXPECT_EQ (hexString.length(), 9);
+
+    // Test with zeros in different positions
+    Color zeroRed (0xff003456);
+    EXPECT_EQ (zeroRed.toString(), "#003456ff");
+
+    Color zeroGreen (0xff120056);
+    EXPECT_EQ (zeroGreen.toString(), "#120056ff");
+
+    Color zeroBlue (0xff123400);
+    EXPECT_EQ (zeroBlue.toString(), "#123400ff");
+
+    Color zeroAlpha (0x00123456);
+    EXPECT_EQ (zeroAlpha.toString(), "#12345600");
+
+    // Test all zeros
+    Color allZeros (0x00000000);
+    EXPECT_EQ (allZeros.toString(), "#00000000");
+
+    // Test single digit hex values
+    Color singleDigits (0x0f010203);
+    EXPECT_EQ (singleDigits.toString(), "#0102030f");
+}
+
 TEST (ColorTests, Random_Color)
 {
     // Test opaqueRandom
