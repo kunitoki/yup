@@ -162,6 +162,12 @@ private:
 
         std::vector<GradientStop> stops;
         AffineTransform transform;
+
+        bool hasStart = false;
+        bool hasEnd = false;
+        bool hasCenter = false;
+        bool hasRadius = false;
+        bool hasFocal = false;
     };
 
     struct ClipPath : public ReferenceCountedObject
@@ -180,7 +186,7 @@ private:
     void parseGradient (const XmlElement& element);
     Gradient::Ptr getGradientById (const String& id);
     Gradient::Ptr resolveGradient (Gradient::Ptr gradient);
-    ColorGradient createColorGradientFromSVG (const Gradient& gradient, const AffineTransform& currentTransform = AffineTransform::identity());
+    ColorGradient createColorGradientFromSVG (const Gradient& gradient, const Rectangle<float>* objectBounds = nullptr);
     void parseClipPath (const XmlElement& element);
     ClipPath::Ptr getClipPathById (const String& id);
     void parseCSSStyle (const String& styleString, Element& e);

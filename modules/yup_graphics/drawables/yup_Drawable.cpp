@@ -24,7 +24,7 @@ namespace yup
 
 //==============================================================================
 #ifndef YUP_DRAWABLE_LOGGING
-#define YUP_DRAWABLE_LOGGING 0
+#define YUP_DRAWABLE_LOGGING 1
 #endif
 
 #if YUP_DRAWABLE_LOGGING
@@ -205,7 +205,18 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
         {
             YUP_DRAWABLE_LOG ("Found gradient, resolving references...");
             auto resolvedGradient = resolveGradient (gradient);
-            ColorGradient colorGradient = createColorGradientFromSVG (*resolvedGradient, g.getTransform());
+            std::optional<Rectangle<float>> gradientBounds;
+
+            if (element.path)
+                gradientBounds = element.path->getBounds();
+            else if (element.reference)
+            {
+                if (auto refElement = elementsById[*element.reference]; refElement != nullptr && refElement->path)
+                    gradientBounds = refElement->path->getBounds();
+            }
+
+            ColorGradient colorGradient = createColorGradientFromSVG (*resolvedGradient,
+                                                                      gradientBounds ? std::addressof (*gradientBounds) : nullptr);
             g.setFillColorGradient (colorGradient);
             isFillDefined = true;
             YUP_DRAWABLE_LOG ("Applied gradient to fill");
@@ -242,7 +253,7 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
                 YUP_DRAWABLE_LOG ("Referenced element local transform: " << (refElement->localTransform ? refElement->localTransform->toString() : "none"));
                 YUP_DRAWABLE_LOG ("Graphics transform during use fill: " << g.getTransform().toString());
 
-                // For <use> elements, apply only the referenced element's local transform (if any)
+                // For <use> elements, apply only the referenced element's own transform (not inherited parents)
                 const auto savedTransform = g.getTransform();
                 if (refElement->localTransform)
                     g.setTransform (refElement->localTransform->followedBy (savedTransform));
@@ -317,7 +328,18 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
         if (auto gradient = getGradientById (*element.strokeUrl))
         {
             auto resolvedGradient = resolveGradient (gradient);
-            ColorGradient colorGradient = createColorGradientFromSVG (*resolvedGradient, g.getTransform());
+            std::optional<Rectangle<float>> gradientBounds;
+
+            if (element.path)
+                gradientBounds = element.path->getBounds();
+            else if (element.reference)
+            {
+                if (auto refElement = elementsById[*element.reference]; refElement != nullptr && refElement->path)
+                    gradientBounds = refElement->path->getBounds();
+            }
+
+            ColorGradient colorGradient = createColorGradientFromSVG (*resolvedGradient,
+                                                                      gradientBounds ? std::addressof (*gradientBounds) : nullptr);
             g.setStrokeColorGradient (colorGradient);
             isStrokeDefined = true;
         }
@@ -365,12 +387,10 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
                 YUP_DRAWABLE_LOG ("Stroking use element - reference: " << *element.reference);
                 YUP_DRAWABLE_LOG ("Graphics transform during stroke: " << g.getTransform().toString());
 
-                // For <use> elements, apply only the referenced element's local transform (if any)
+                // For <use> elements, apply only the referenced element's own transform (not inherited parents)
                 const auto savedTransform = g.getTransform();
                 if (refElement->localTransform)
-                {
                     g.setTransform (refElement->localTransform->followedBy (savedTransform));
-                }
 
                 g.strokePath (*refElement->path);
 
@@ -917,6 +937,25 @@ void Drawable::parseGradient (const XmlElement& element)
 
     Gradient::Ptr gradient = new Gradient;
     gradient->id = id;
+    gradient->start = { 0.0f, 0.0f };
+    gradient->end = { 1.0f, 0.0f };
+    gradient->center = { 0.5f, 0.5f };
+    gradient->radius = 0.5f;
+    gradient->focal = gradient->center;
+
+    auto parseCoordinate = [&element] (const String& name, float defaultValue, bool& hasValue) -> float
+    {
+        const auto value = element.getStringAttribute (name);
+        if (value.isEmpty())
+            return defaultValue;
+
+        hasValue = true;
+
+        if (value.containsChar ('%'))
+            return value.upToFirstOccurrenceOf ("%", false, false).getFloatValue() / 100.0f;
+
+        return value.getFloatValue();
+    };
 
     // Parse xlink:href reference
     String href = element.getStringAttribute ("xlink:href");
@@ -929,20 +968,28 @@ void Drawable::parseGradient (const XmlElement& element)
     if (element.hasTagName ("linearGradient"))
     {
         gradient->type = Gradient::Linear;
-        gradient->start = { element.getFloatAttribute ("x1"), element.getFloatAttribute ("y1") };
-        gradient->end = { element.getFloatAttribute ("x2"), element.getFloatAttribute ("y2") };
+        bool hasX1 = false, hasY1 = false, hasX2 = false, hasY2 = false;
+        gradient->start = { parseCoordinate ("x1", gradient->start.getX(), hasX1), parseCoordinate ("y1", gradient->start.getY(), hasY1) };
+        gradient->end = { parseCoordinate ("x2", gradient->end.getX(), hasX2), parseCoordinate ("y2", gradient->end.getY(), hasY2) };
+        gradient->hasStart = hasX1 || hasY1;
+        gradient->hasEnd = hasX2 || hasY2;
 
         YUP_DRAWABLE_LOG ("Linear gradient - start: (" << gradient->start.getX() << ", " << gradient->start.getY() << ") end: (" << gradient->end.getX() << ", " << gradient->end.getY() << ")");
     }
     else if (element.hasTagName ("radialGradient"))
     {
         gradient->type = Gradient::Radial;
-        gradient->center = { element.getFloatAttribute ("cx"), element.getFloatAttribute ("cy") };
-        gradient->radius = element.getFloatAttribute ("r");
+        bool hasCx = false, hasCy = false, hasR = false;
+        bool hasFx = false, hasFy = false;
+        gradient->center = { parseCoordinate ("cx", gradient->center.getX(), hasCx), parseCoordinate ("cy", gradient->center.getY(), hasCy) };
+        gradient->radius = parseCoordinate ("r", gradient->radius, hasR);
 
-        auto fx = element.getFloatAttribute ("fx", gradient->center.getX());
-        auto fy = element.getFloatAttribute ("fy", gradient->center.getY());
+        auto fx = parseCoordinate ("fx", gradient->center.getX(), hasFx);
+        auto fy = parseCoordinate ("fy", gradient->center.getY(), hasFy);
         gradient->focal = { fx, fy };
+        gradient->hasCenter = hasCx || hasCy;
+        gradient->hasRadius = hasR;
+        gradient->hasFocal = hasFx || hasFy;
 
         YUP_DRAWABLE_LOG ("Radial gradient - center: (" << gradient->center.getX() << ", " << gradient->center.getY() << ") radius: " << gradient->radius);
     }
@@ -975,7 +1022,13 @@ void Drawable::parseGradient (const XmlElement& element)
         if (child->hasTagName ("stop"))
         {
             GradientStop stop;
-            stop.offset = child->getFloatAttribute ("offset");
+            const auto offsetString = child->getStringAttribute ("offset");
+            if (offsetString.containsChar ('%'))
+                stop.offset = offsetString.upToFirstOccurrenceOf ("%", false, false).getFloatValue() * 0.01f;
+            else
+                stop.offset = child->getFloatAttribute ("offset");
+
+            stop.offset = jlimit (0.0f, 1.0f, stop.offset);
 
             // First try to get stop-color from attributes
             String stopColor = child->getStringAttribute ("stop-color");
@@ -1027,6 +1080,29 @@ void Drawable::parseGradient (const XmlElement& element)
         }
     }
 
+    if (! gradient->stops.empty())
+    {
+        std::sort (gradient->stops.begin(), gradient->stops.end(), [] (const GradientStop& a, const GradientStop& b)
+        {
+            return a.offset < b.offset;
+        });
+
+        // Ensure implicit first/last stops per SVG spec
+        if (gradient->stops.front().offset > 0.0f)
+        {
+            auto first = gradient->stops.front();
+            first.offset = 0.0f;
+            gradient->stops.insert (gradient->stops.begin(), first);
+        }
+
+        if (gradient->stops.back().offset < 1.0f)
+        {
+            auto last = gradient->stops.back();
+            last.offset = 1.0f;
+            gradient->stops.push_back (last);
+        }
+    }
+
     YUP_DRAWABLE_LOG ("Gradient parsed with " << gradient->stops.size() << " stops");
 
     gradients.push_back (gradient);
@@ -1073,14 +1149,17 @@ Drawable::Gradient::Ptr Drawable::resolveGradient (Gradient::Ptr gradient)
     resolvedGradient->stops = referencedGradient->stops;
 
     // Override with properties from the current gradient (if specified)
-    if (gradient->start.getX() != 0.0f || gradient->start.getY() != 0.0f)
+    if (gradient->hasStart)
         resolvedGradient->start = gradient->start;
-    if (gradient->end.getX() != 0.0f || gradient->end.getY() != 0.0f)
+    if (gradient->hasEnd)
         resolvedGradient->end = gradient->end;
-    if (gradient->center.getX() != 0.0f || gradient->center.getY() != 0.0f)
+    if (gradient->hasCenter)
         resolvedGradient->center = gradient->center;
-    if (gradient->radius != 0.0f)
+    if (gradient->hasRadius)
         resolvedGradient->radius = gradient->radius;
+    if (gradient->hasFocal)
+        resolvedGradient->focal = gradient->focal;
+
     if (! gradient->transform.isIdentity())
         resolvedGradient->transform = gradient->transform;
     if (gradient->units != Gradient::ObjectBoundingBox) // Only override if explicitly set
@@ -1094,9 +1173,9 @@ Drawable::Gradient::Ptr Drawable::resolveGradient (Gradient::Ptr gradient)
 
 //==============================================================================
 
-ColorGradient Drawable::createColorGradientFromSVG (const Gradient& gradient, const AffineTransform& currentTransform)
+ColorGradient Drawable::createColorGradientFromSVG (const Gradient& gradient, const Rectangle<float>* objectBounds)
 {
-    YUP_DRAWABLE_LOG ("Creating ColorGradient from SVG gradient ID: " << gradient.id << " type: " << (gradient.type == Gradient::Linear ? "Linear" : "Radial") << " units: " << (gradient.units == Gradient::UserSpaceOnUse ? "userSpaceOnUse" : "objectBoundingBox") << " currentTransform: " << currentTransform.toString());
+    YUP_DRAWABLE_LOG ("Creating ColorGradient from SVG gradient ID: " << gradient.id << " type: " << (gradient.type == Gradient::Linear ? "Linear" : "Radial") << " units: " << (gradient.units == Gradient::UserSpaceOnUse ? "userSpaceOnUse" : "objectBoundingBox"));
 
     if (gradient.stops.empty())
     {
@@ -1104,71 +1183,75 @@ ColorGradient Drawable::createColorGradientFromSVG (const Gradient& gradient, co
         return ColorGradient();
     }
 
-    if (gradient.stops.size() == 1)
+    // Ensure we always have a valid bounds transform for objectBoundingBox gradients
+    const bool hasBounds = objectBounds != nullptr && objectBounds->getWidth() > 0.0f && objectBounds->getHeight() > 0.0f;
+    AffineTransform unitsTransform = AffineTransform::identity();
+
+    if (gradient.units == Gradient::ObjectBoundingBox && hasBounds)
     {
-        const auto& stop = gradient.stops[0];
-        Color color = stop.color.withAlpha (stop.opacity);
-        YUP_DRAWABLE_LOG ("Single stop gradient with color: " << color.toString());
-        return ColorGradient (color, 0, 0, color, 1, 0, gradient.type == Gradient::Linear ? ColorGradient::Linear : ColorGradient::Radial);
+        // Normalize gradient space to the element bounds (0..1 -> bounds)
+        unitsTransform = AffineTransform::translation (objectBounds->getX(), objectBounds->getY())
+                             .scaled (objectBounds->getWidth(), objectBounds->getHeight());
     }
 
-    // Create ColorStop vector for YUP ColorGradient
+    // Per SVG spec, gradientUnits are applied first, then gradientTransform
+    const AffineTransform gradientSpaceTransform = unitsTransform.followedBy (gradient.transform);
+
+    // Helper to apply transforms to a point
+    auto transformPoint = [&gradientSpaceTransform] (Point<float> p)
+    {
+        float x = p.getX();
+        float y = p.getY();
+        if (! gradientSpaceTransform.isIdentity())
+            gradientSpaceTransform.transformPoint (x, y);
+        return Point<float> (x, y);
+    };
+
+    // Prepare start/end/center after transforms (in local space; Graphics will apply viewport transforms)
+    const Point<float> start = transformPoint (gradient.start);
+    const Point<float> end = transformPoint (gradient.end);
+    const Point<float> center = transformPoint (gradient.center);
+
+    // Compute radial radius in transformed space
+    auto computeRadius = [&]() -> float
+    {
+        if (gradient.radius <= 0.0f)
+            return 0.0f;
+
+        const auto edgePoint = transformPoint (Point<float> (gradient.center.getX() + gradient.radius, gradient.center.getY()));
+        return Line<float> (center, edgePoint).length();
+    };
+
+    const auto radius = gradient.type == Gradient::Radial ? computeRadius() : 0.0f;
+
+    // Build color stops in gradient space
     std::vector<ColorGradient::ColorStop> colorStops;
+    colorStops.reserve (gradient.stops.size());
+
     for (const auto& stop : gradient.stops)
     {
-        Color color = stop.color.withAlpha (stop.opacity);
+        Color color = stop.color.withMultipliedAlpha (stop.opacity);
 
         if (gradient.type == Gradient::Linear)
         {
-            // For linear gradients, interpolate position based on offset
-            float x = gradient.start.getX() + stop.offset * (gradient.end.getX() - gradient.start.getX());
-            float y = gradient.start.getY() + stop.offset * (gradient.end.getY() - gradient.start.getY());
+            const auto interpolated = Point<float> (start.getX() + stop.offset * (end.getX() - start.getX()),
+                                                    start.getY() + stop.offset * (end.getY() - start.getY()));
 
-            // Apply transformations: first gradient transform, then current viewport transform
-            AffineTransform combinedTransform = gradient.transform;
-            if (gradient.units == Gradient::UserSpaceOnUse && ! currentTransform.isIdentity())
-            {
-                // For userSpaceOnUse, apply the current graphics transform to make gradient scale with viewport
-                combinedTransform = combinedTransform.followedBy (currentTransform);
-            }
-
-            if (! combinedTransform.isIdentity())
-            {
-                float originalX = x;
-                float originalY = y;
-
-                combinedTransform.transformPoint (x, y);
-                YUP_DRAWABLE_LOG ("Transformed gradient stop: offset=" << stop.offset << " original=(" << originalX << "," << originalY << ") transformed=(" << x << "," << y << ")");
-            }
-
-            colorStops.emplace_back (color, x, y, stop.offset);
-            YUP_DRAWABLE_LOG ("Linear gradient stop: offset=" << stop.offset << " pos=(" << x << "," << y << ") color=" << color.toString());
+            colorStops.emplace_back (color, interpolated, stop.offset);
         }
         else
         {
-            // For radial gradients, use center as base position
-            float x = gradient.center.getX();
-            float y = gradient.center.getY();
-
-            // Apply transformations: first gradient transform, then current viewport transform
-            AffineTransform combinedTransform = gradient.transform;
-            if (gradient.units == Gradient::UserSpaceOnUse && ! currentTransform.isIdentity())
-            {
-                // For userSpaceOnUse, apply the current graphics transform to make gradient scale with viewport
-                combinedTransform = combinedTransform.followedBy (currentTransform);
-            }
-
-            if (! combinedTransform.isIdentity())
-                combinedTransform.transformPoint (x, y);
-
-            colorStops.emplace_back (color, x, y, stop.offset);
-            YUP_DRAWABLE_LOG ("Radial gradient stop: offset=" << stop.offset << " color=" << color.toString());
+            // Radial gradient: position lies along the radius vector to preserve radius computation
+            const auto radialPoint = Point<float> (center.getX() + radius * stop.offset, center.getY());
+            colorStops.emplace_back (color, radialPoint, stop.offset);
         }
     }
 
     ColorGradient::Type type = (gradient.type == Gradient::Linear) ? ColorGradient::Linear : ColorGradient::Radial;
+    ColorGradient result (type, colorStops);
+
     YUP_DRAWABLE_LOG ("Created ColorGradient with " << colorStops.size() << " stops");
-    return ColorGradient (type, colorStops);
+    return result;
 }
 
 //==============================================================================
