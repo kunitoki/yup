@@ -24,7 +24,7 @@ namespace yup
 
 //==============================================================================
 #ifndef YUP_DRAWABLE_LOGGING
-#define YUP_DRAWABLE_LOGGING 0
+#define YUP_DRAWABLE_LOGGING 1
 #endif
 
 #if YUP_DRAWABLE_LOGGING
@@ -859,36 +859,38 @@ AffineTransform Drawable::parseTransform (const String& transformString)
             ++data;
 
         // Apply the parsed transform
+        // SVG transforms are post-multiplied (applied left-to-right), so we use prependedBy
+        // to append each new transform on the right: result = result * newTransform
         if (type == "translate" && (params.size() == 1 || params.size() == 2))
         {
             const auto tx = params[0];
             const auto ty = (params.size() == 2) ? params[1] : 0.0f;
-            result = result.translated (tx, ty);
+            result = result.prependedBy (AffineTransform::translation (tx, ty));
         }
         else if (type == "scale" && (params.size() == 1 || params.size() == 2))
         {
             const auto sx = params[0];
             const auto sy = (params.size() == 2) ? params[1] : params[0];
-            result = result.scaled (sx, sy);
+            result = result.prependedBy (AffineTransform::scaling (sx, sy));
         }
         else if (type == "rotate" && (params.size() == 1 || params.size() == 3))
         {
             if (params.size() == 1)
-                result = result.rotated (degreesToRadians (params[0]));
+                result = result.prependedBy (AffineTransform::rotation (degreesToRadians (params[0])));
             else
-                result = result.rotated (degreesToRadians (params[0]), params[1], params[2]);
+                result = result.prependedBy (AffineTransform::rotation (degreesToRadians (params[0]), params[1], params[2]));
         }
         else if (type == "skewX" && params.size() == 1)
         {
-            result = result.sheared (tanf (degreesToRadians (params[0])), 0.0f);
+            result = result.prependedBy (AffineTransform::shearing (tanf (degreesToRadians (params[0])), 0.0f));
         }
         else if (type == "skewY" && params.size() == 1)
         {
-            result = result.sheared (0.0f, tanf (degreesToRadians (params[0])));
+            result = result.prependedBy (AffineTransform::shearing (0.0f, tanf (degreesToRadians (params[0]))));
         }
         else if (type == "matrix" && params.size() == 6)
         {
-            result = result.followedBy (AffineTransform (
+            result = result.prependedBy (AffineTransform (
                 params[0], params[2], params[4], params[1], params[3], params[5]));
         }
     }
