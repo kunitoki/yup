@@ -39,7 +39,7 @@
 
 #ifndef DOXYGEN
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 /** The kinds of MIDI protocol that can be formatted into Universal MIDI Packets. */
@@ -57,6 +57,6 @@ enum class MidiProtocol
     UMP_MIDI_2_0,
 };
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump
 
 #endif

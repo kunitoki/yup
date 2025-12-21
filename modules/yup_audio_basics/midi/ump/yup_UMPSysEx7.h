@@ -39,7 +39,7 @@
 
 #ifndef DOXYGEN
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 /**
@@ -86,6 +86,6 @@ struct YUP_API SysEx7
     static PacketBytes getDataBytes (const PacketX2& packet);
 };
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump
 
 #endif

@@ -39,7 +39,7 @@
 
 #ifndef DOXYGEN
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 /**
@@ -176,6 +176,6 @@ struct U32ToUMPHandler : public U32InputHandler
     GenericUMPConverter converter;
 };
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump
 
 #endif

@@ -69,19 +69,19 @@
 
 //==============================================================================
 #ifndef YUP_USE_SSE_INTRINSICS
-#if defined (__SSE__)
+#if defined(__SSE__)
 #define YUP_USE_SSE_INTRINSICS 1
 #endif
 #endif
 
 #ifndef YUP_USE_AVX_INTRINSICS
-#if defined (__AVX2__)
+#if defined(__AVX2__)
 #define YUP_USE_AVX_INTRINSICS 1
 #endif
 #endif
 
 #ifndef YUP_USE_FMA_INTRINSICS
-#if defined (__FMA__)
+#if defined(__FMA__)
 #define YUP_USE_FMA_INTRINSICS 1
 #endif
 #endif
@@ -180,8 +180,5 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "midi/ump/yup_UMPBytesOnGroup.h"
 #include "midi/ump/yup_UMPDeviceInfo.h"
 #include "midi/ump/yup_UMP.h"
-
-namespace yup
-{
-namespace ump = universal_midi_packets;
-} // namespace yup
+#include "midi/ump/yup_UMPPacketBuffer.h"
+#include "midi/ump/yup_UMPKeyboardState.h"

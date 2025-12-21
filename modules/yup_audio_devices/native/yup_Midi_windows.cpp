@@ -1961,7 +1961,7 @@ std::unique_ptr<MidiInput> MidiInput::openDevice (const String& deviceIdentifier
     if (deviceIdentifier.isEmpty() || callback == nullptr)
         return {};
 
-    std::unique_ptr<MidiInput> in (new MidiInput ({}, deviceIdentifier));
+    std::unique_ptr<MidiInput> in (new MidiInput ({}, deviceIdentifier, ump::PacketProtocol::MIDI_1_0));
     std::unique_ptr<Pimpl> wrapper;
 
     try
@@ -1979,8 +1979,18 @@ std::unique_ptr<MidiInput> MidiInput::openDevice (const String& deviceIdentifier
     return in;
 }
 
-MidiInput::MidiInput (const String& deviceName, const String& deviceIdentifier)
-    : deviceInfo (deviceName, deviceIdentifier)
+std::unique_ptr<MidiInput> MidiInput::openDevice (const String&,
+                                                  ump::PacketProtocol,
+                                                  ump::Receiver*)
+{
+    jassertfalse;
+    return {};
+}
+
+MidiInput::MidiInput (const String& deviceName,
+                      const String& deviceIdentifier,
+                      ump::PacketProtocol protocol)
+    : deviceInfo (deviceName, deviceIdentifier, protocol)
 {
 }
 
@@ -2018,11 +2028,20 @@ std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String& deviceIdentifi
     }
 
     std::unique_ptr<MidiOutput> out;
-    out.reset (new MidiOutput (wrapper->getDeviceName(), deviceIdentifier));
+    out.reset (new MidiOutput (wrapper->getDeviceName(), deviceIdentifier, ump::PacketProtocol::MIDI_1_0));
 
     out->internal = std::move (wrapper);
 
     return out;
+}
+
+std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String& deviceIdentifier,
+                                                    ump::PacketProtocol protocol)
+{
+    if (protocol != ump::PacketProtocol::MIDI_1_0)
+        return {};
+
+    return openDevice (deviceIdentifier);
 }
 
 MidiOutput::~MidiOutput()
@@ -2033,6 +2052,21 @@ MidiOutput::~MidiOutput()
 void MidiOutput::sendMessageNow (const MidiMessage& message)
 {
     internal->sendMessageNow (message);
+}
+
+void MidiOutput::sendMessageNow (const ump::View& message)
+{
+    ump::ToBytestreamConverter converter { 2048 };
+    converter.convert (message, 0.0, [&] (const MidiMessage& midiMessage)
+    {
+        sendMessageNow (midiMessage);
+    });
+}
+
+void MidiOutput::sendMessageNow (const ump::Packets& packets)
+{
+    for (auto it = packets.cbegin(); it != packets.cend(); ++it)
+        sendMessageNow (*it);
 }
 
 MidiDeviceListConnection MidiDeviceListConnection::make (std::function<void()> cb)

@@ -39,7 +39,7 @@
 
 #ifndef DOXYGEN
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 /**
@@ -227,6 +227,6 @@ private:
     double pendingSysExTime = 0.0;
 };
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump
 
 #endif

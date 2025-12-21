@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 uint32_t Utils::getNumWordsForMessageType (uint32_t mt)
@@ -70,4 +70,4 @@ uint32_t Utils::getNumWordsForMessageType (uint32_t mt)
     return 1;
 }
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump

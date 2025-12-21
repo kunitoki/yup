@@ -387,6 +387,9 @@ public:
     */
     void setDefaultMidiOutputDevice (const String& deviceIdentifier);
 
+    /** Opens a default MIDI output device with the requested protocol. */
+    void setDefaultMidiOutputDevice (const String& deviceIdentifier, ump::PacketProtocol protocol);
+
     /** Returns the name of the default midi output.
 
         @see setDefaultMidiOutputDevice, getDefaultMidiOutput

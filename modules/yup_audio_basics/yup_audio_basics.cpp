@@ -64,6 +64,8 @@
 #include "midi/yup_MidiMessage.cpp"
 #include "midi/yup_MidiMessageSequence.cpp"
 #include "midi/yup_MidiRPN.cpp"
+#include "midi/ump/yup_UMPPacketBuffer.cpp"
+#include "midi/ump/yup_UMPKeyboardState.cpp"
 #include "mpe/yup_MPEValue.cpp"
 #include "mpe/yup_MPENote.cpp"
 #include "mpe/yup_MPEZoneLayout.cpp"

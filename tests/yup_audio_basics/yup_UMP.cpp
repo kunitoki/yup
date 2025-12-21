@@ -498,7 +498,7 @@ TEST_F (UniversalMidiPacketTest, WideningConversionsWork)
 
 TEST (UMPUtilsTests, GetNumWordsForMessageType)
 {
-    using namespace yup::universal_midi_packets;
+    using namespace yup::ump;
 
     // Test 1-word message types
     EXPECT_EQ (1, Utils::getNumWordsForMessageType (0x00000000)); // Message type 0x0
@@ -527,7 +527,7 @@ TEST (UMPUtilsTests, GetNumWordsForMessageType)
 
 TEST (UMPUtilsTests, UtilityFunctionsGetMessageTypeGroupStatusChannel)
 {
-    using namespace yup::universal_midi_packets;
+    using namespace yup::ump;
 
     // Test a word with all nibbles set to different values
     uint32_t testWord = 0x12345678;
@@ -540,7 +540,7 @@ TEST (UMPUtilsTests, UtilityFunctionsGetMessageTypeGroupStatusChannel)
 
 TEST (UMPUtilsTests, U4TemplateHelpers)
 {
-    using namespace yup::universal_midi_packets;
+    using namespace yup::ump;
 
     // Test setting and getting 4-bit values at different positions
     uint32_t word = 0x00000000;
@@ -568,7 +568,7 @@ TEST (UMPUtilsTests, U4TemplateHelpers)
 
 TEST (UMPUtilsTests, U8TemplateHelpers)
 {
-    using namespace yup::universal_midi_packets;
+    using namespace yup::ump;
 
     uint32_t word = 0x00000000;
 
@@ -590,7 +590,7 @@ TEST (UMPUtilsTests, U8TemplateHelpers)
 
 TEST (UMPUtilsTests, U16TemplateHelpers)
 {
-    using namespace yup::universal_midi_packets;
+    using namespace yup::ump;
 
     uint32_t word = 0x00000000;
 
@@ -612,7 +612,7 @@ TEST (UMPUtilsTests, U16TemplateHelpers)
 
 TEST (UMPUtilsTests, BytesToWordFunction)
 {
-    using namespace yup::universal_midi_packets;
+    using namespace yup::ump;
 
     auto result = Utils::bytesToWord (std::byte { 0x12 }, std::byte { 0x34 }, std::byte { 0x56 }, std::byte { 0x78 });
     EXPECT_EQ (0x12345678, result);

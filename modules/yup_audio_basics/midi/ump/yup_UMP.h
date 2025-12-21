@@ -51,12 +51,3 @@
 #include "yup_UMPConverters.h"
 #include "yup_UMPDispatcher.h"
 #include "yup_UMPReceiver.h"
-
-#ifndef DOXYGEN
-
-namespace yup
-{
-namespace ump = universal_midi_packets;
-} // namespace yup
-
-#endif

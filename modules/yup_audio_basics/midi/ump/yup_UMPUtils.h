@@ -39,7 +39,7 @@
 
 #ifndef DOXYGEN
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 /**
@@ -132,6 +132,6 @@ struct YUP_API Utils
     static constexpr uint8_t getChannel (uint32_t w) noexcept { return U4<3>::get (w); }
 };
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump
 
 #endif

@@ -39,7 +39,7 @@
 
 #ifndef DOXYGEN
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 /**
@@ -210,6 +210,6 @@ private:
     std::array<ChannelBanks, 16> groupBanks;
 };
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump
 
 #endif

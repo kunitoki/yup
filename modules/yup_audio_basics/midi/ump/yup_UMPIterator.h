@@ -39,7 +39,7 @@
 
 #ifndef DOXYGEN
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 /**
@@ -132,6 +132,6 @@ private:
 #endif
 };
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump
 
 #endif

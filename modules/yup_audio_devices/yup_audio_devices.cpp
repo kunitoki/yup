@@ -313,5 +313,6 @@ bool YUP_CALLTYPE SystemAudioVolume::setMuted (bool)
 #include "audio_io/yup_AudioIODevice.cpp"
 #include "audio_io/yup_AudioIODeviceType.cpp"
 #include "midi_io/yup_MidiMessageCollector.cpp"
+#include "midi_io/ump/yup_UMPPacketCollector.cpp"
 #include "sources/yup_AudioSourcePlayer.cpp"
 #include "sources/yup_AudioTransportSource.cpp"

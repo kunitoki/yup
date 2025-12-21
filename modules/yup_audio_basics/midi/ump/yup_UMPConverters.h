@@ -39,7 +39,7 @@
 
 #ifndef DOXYGEN
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 /**
         Allows conversion from bytestream- or Universal MIDI Packet-formatted
@@ -201,6 +201,6 @@ struct ToBytestreamConverter
 
     Midi1ToBytestreamTranslator translator;
 };
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump
 
 #endif

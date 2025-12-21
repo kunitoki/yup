@@ -140,9 +140,14 @@ struct MidiDeviceInfo
 {
     MidiDeviceInfo() = default;
 
-    MidiDeviceInfo (const String& deviceName, const String& deviceIdentifier)
+    MidiDeviceInfo (const String& deviceName,
+                    const String& deviceIdentifier,
+                    ump::PacketProtocol deviceProtocol = ump::PacketProtocol::MIDI_1_0,
+                    bool supportsMidi2In = false)
         : name (deviceName)
         , identifier (deviceIdentifier)
+        , protocol (deviceProtocol)
+        , supportsMidi2 (supportsMidi2In || deviceProtocol == ump::PacketProtocol::MIDI_2_0)
     {
     }
 
@@ -164,8 +169,14 @@ struct MidiDeviceInfo
     */
     String identifier;
 
+    /** The protocol associated with this device info. */
+    ump::PacketProtocol protocol = ump::PacketProtocol::MIDI_1_0;
+
+    /** True if the OS reports MIDI 2.0 support for this device. */
+    bool supportsMidi2 = false;
+
     //==============================================================================
-    auto tie() const { return std::tie (name, identifier); }
+    auto tie() const { return std::tie (name, identifier, protocol, supportsMidi2); }
 
     bool operator== (const MidiDeviceInfo& other) const noexcept { return tie() == other.tie(); }
 
@@ -214,6 +225,11 @@ public:
         @see MidiInputCallback, getDevices
     */
     static std::unique_ptr<MidiInput> openDevice (const String& deviceIdentifier, MidiInputCallback* callback);
+
+    /** Tries to open one of the midi input devices with the requested protocol. */
+    static std::unique_ptr<MidiInput> openDevice (const String& deviceIdentifier,
+                                                  ump::PacketProtocol protocol,
+                                                  ump::Receiver* receiver);
 
 #if YUP_LINUX || YUP_BSD || YUP_MAC || YUP_IOS || YUP_WASM || DOXYGEN
     /** This will try to create a new midi input device (only available on Linux, macOS and iOS).
@@ -269,7 +285,7 @@ public:
 
 private:
     //==============================================================================
-    explicit MidiInput (const String&, const String&);
+    explicit MidiInput (const String&, const String&, ump::PacketProtocol = ump::PacketProtocol::MIDI_1_0);
 
     MidiDeviceInfo deviceInfo;
 
@@ -365,6 +381,10 @@ public:
     */
     static std::unique_ptr<MidiOutput> openDevice (const String& deviceIdentifier);
 
+    /** Tries to open one of the midi output devices with the requested protocol. */
+    static std::unique_ptr<MidiOutput> openDevice (const String& deviceIdentifier,
+                                                   ump::PacketProtocol protocol);
+
 #if YUP_LINUX || YUP_BSD || YUP_MAC || YUP_IOS || YUP_WASM || DOXYGEN
     /** This will try to create a new midi output device (only available on Linux, macOS and iOS).
 
@@ -400,6 +420,12 @@ public:
     //==============================================================================
     /** Sends out a MIDI message immediately. */
     void sendMessageNow (const MidiMessage& message);
+
+    /** Sends out a UMP packet immediately. */
+    void sendMessageNow (const ump::View& message);
+
+    /** Sends out a sequence of UMP packets immediately. */
+    void sendMessageNow (const ump::Packets& packets);
 
     /** Sends out a sequence of MIDI messages immediately. */
     void sendBlockOfMessagesNow (const MidiBuffer& buffer);
@@ -461,7 +487,7 @@ private:
     };
 
     //==============================================================================
-    explicit MidiOutput (const String&, const String&);
+    explicit MidiOutput (const String&, const String&, ump::PacketProtocol = ump::PacketProtocol::MIDI_1_0);
     void run() override;
 
     MidiDeviceInfo deviceInfo;

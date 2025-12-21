@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 /**
@@ -52,4 +52,4 @@ struct BytesOnGroup
     Span<const std::byte> bytes;
 };
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump

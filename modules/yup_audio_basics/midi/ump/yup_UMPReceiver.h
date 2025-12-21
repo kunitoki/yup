@@ -39,7 +39,7 @@
 
 #ifndef DOXYGEN
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 /**
@@ -55,6 +55,6 @@ struct Receiver
     virtual void packetReceived (const View& packet, double time) = 0;
 };
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump
 
 #endif

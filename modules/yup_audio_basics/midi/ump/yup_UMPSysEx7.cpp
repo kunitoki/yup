@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 uint32_t SysEx7::getNumPacketsRequiredForDataSize (uint32_t size)
@@ -63,4 +63,4 @@ SysEx7::PacketBytes SysEx7::getDataBytes (const PacketX2& packet)
     };
 }
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump
