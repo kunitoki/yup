@@ -13,9 +13,9 @@
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
-  <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/images/yup_svg_tiger.png" style="width:33%;" /></a>
-  <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/images/yup_svg_lambo.png" style="width:33%;" /></a>
-  <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/images/yup_svg_yellow_car.png" style="width:33%;" /></a>
+  <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/images/yup_svg_tiger.png" style="width:32.3%;" /></a>
+  <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/images/yup_svg_lambo.png" style="width:32.3%;" /></a>
+  <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/images/yup_svg_yellow_car.png" style="width:32.3%;" /></a>
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
