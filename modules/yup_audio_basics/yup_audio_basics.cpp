@@ -88,7 +88,6 @@
 #include "audio_play_head/yup_AudioPlayHead.cpp"
 #include "midi/ump/yup_UMPUtils.cpp"
 #include "midi/ump/yup_UMPView.cpp"
-#include "midi/ump/yup_UMPSysEx7.cpp"
 #include "midi/ump/yup_UMPMidi1ToMidi2DefaultTranslator.cpp"
 #include "midi/ump/yup_UMPIterator.cpp"
 #include "utilities/yup_AudioWorkgroup.cpp"
