@@ -13,6 +13,12 @@
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
+  <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/images/yup_svg_tiger.png" style="width:33%;" /></a>
+  <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/images/yup_svg_lambo.png" style="width:33%;" /></a>
+  <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/images/yup_svg_yellow_car.png" style="width:33%;" /></a>
+</div>
+
+<div style="display: flex; width: 100%; flex-wrap: nowrap;">
   <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/images/yup_dsp_filter_rbj.png" style="width:26.5%;" /></a>
   <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/images/yup_dsp_filter_butter.png" style="width:26.5%;" /></a>
   <a href="./examples/graphics/source/examples/CrossoverDemo.h"><img src="./docs/images/yup_dsp_crossover.png" style="width:43.5%;" /></a>
@@ -42,12 +48,8 @@ Example Rive animation display ([source code](./examples/render/source/main.cpp)
 YUP is an open-source library dedicated to empowering developers with advanced tools for cross-platform application and plugin development, featuring state-of-the-art rendering and audio processing. Originating from a fork of [JUCE7](https://juce.com/)'s ISC-licensed modules, YUP builds on the robust, high-performance capabilities that made JUCE7 popular among audio and visual application developers. Unlike its successor JUCE8, which moved to a restrictive AGPL license and an even more costly commercial one, YUP maintains the more permissive ISC license and ensures that all of its dependencies are either liberally licensed or public domain, remaining a freely accessible and modifiable resource for developers worldwide.
 
 
-> [!CAUTION]
+> [!CAUTION]
 > The project is still in embryonic stage, use it at your own risk!
-
-
-> [!IMPORTANT]
-> We are looking for collaborators to bring forward the framework!
 
 
 ## Features
@@ -335,6 +337,8 @@ For full documentation, including more detailed tutorials and comprehensive API 
 Join our growing community and contribute to the YUP project. Connect with us and other YUP developers:
 - **GitHub:** [YUP Repository](https://github.com/kunitoki/yup)
 
+> [!IMPORTANT]
+> We are looking for collaborators to bring forward the framework!
 
 ## License
 YUP is distributed under the ISC License, supporting both personal and commercial use, modification, and distribution without restrictions.
