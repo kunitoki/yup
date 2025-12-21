@@ -284,9 +284,6 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
                     g.setTransform (refElement->localTransform->followedBy (savedTransform));
 
                 // SVG spec: fill is applied to both closed and unclosed paths
-                // TODO: Apply fill-rule when Graphics class supports it
-                // if (element.fillRule)
-                //     g.setFillRule (*element.fillRule == "evenodd" ? FillRule::EvenOdd : FillRule::NonZero);
                 g.fillPath (*refElement->path);
 
                 if (refElement->localTransform)
