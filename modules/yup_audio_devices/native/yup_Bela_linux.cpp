@@ -633,6 +633,14 @@ std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String&, MidiInputC
     return {};
 }
 
+std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String&,
+                                                       ump::PacketProtocol,
+                                                       ump::Receiver*)
+{
+    jassertfalse;
+    return {};
+}
+
 //==============================================================================
 // TODO: Add Bela MidiOutput support
 class MidiOutput::Pimpl
@@ -656,5 +664,7 @@ std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String&) { return {}; 
 std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String&, ump::PacketProtocol) { return {}; }
 
 std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String&) { return {}; }
+
+std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String&, ump::PacketProtocol) { return {}; }
 
 } // namespace yup

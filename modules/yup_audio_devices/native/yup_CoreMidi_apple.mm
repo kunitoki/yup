@@ -474,7 +474,7 @@ static void updateProtocolInfo(MIDIObjectRef entity, MidiDeviceInfo& info)
 #if YUP_HAS_NEW_COREMIDI_API
     SInt32 protocol = 0;
 
-    if (CHECK_ERROR(MIDIObjectGetIntegerProperty(entity, kMIDIPropertyProtocolID, &protocol)))
+    if (MIDIObjectGetIntegerProperty(entity, kMIDIPropertyProtocolID, &protocol) == noErr)
     {
         if (protocol == kMIDIProtocol_2_0)
         {
@@ -1272,6 +1272,18 @@ std::unique_ptr<MidiInput> MidiInput::createNewDevice(const String& deviceName, 
                                callback);
 }
 
+std::unique_ptr<MidiInput> MidiInput::createNewDevice(const String& deviceName,
+                                                      ump::PacketProtocol protocol,
+                                                      ump::Receiver* receiver)
+{
+    if (receiver == nullptr)
+        return {};
+
+    return Pimpl::createDevice(protocol,
+                               deviceName,
+                               *receiver);
+}
+
 MidiInput::MidiInput(const String& deviceName,
                      const String& deviceIdentifier,
                      ump::PacketProtocol protocol)
@@ -1358,6 +1370,12 @@ std::unique_ptr<MidiOutput> MidiOutput::openDevice(const String& deviceIdentifie
 
 std::unique_ptr<MidiOutput> MidiOutput::createNewDevice(const String& deviceName)
 {
+    return createNewDevice(deviceName, ump::PacketProtocol::MIDI_1_0);
+}
+
+std::unique_ptr<MidiOutput> MidiOutput::createNewDevice(const String& deviceName,
+                                                        ump::PacketProtocol protocol)
+{
     using namespace CoreMidiHelpers;
 
     if (auto client = getGlobalMidiClient())
@@ -1366,7 +1384,7 @@ std::unique_ptr<MidiOutput> MidiOutput::createNewDevice(const String& deviceName
 
         CFUniquePtr<CFStringRef> name(deviceName.toCFString());
 
-        auto err = CreatorFunctionsToUse::createSource(ump::PacketProtocol::MIDI_1_0, client, name.get(), &endpoint);
+        auto err = CreatorFunctionsToUse::createSource(protocol, client, name.get(), &endpoint);
         ScopedEndpointRef scopedEndpoint{endpoint};
 
 #if YUP_IOS
@@ -1387,10 +1405,10 @@ std::unique_ptr<MidiOutput> MidiOutput::createNewDevice(const String& deviceName
         if (!CHECK_ERROR(MIDIObjectSetIntegerProperty(*scopedEndpoint, kMIDIPropertyUniqueID, (SInt32)deviceIdentifier)))
             return {};
 
-        auto midiOutput = rawToUniquePtr(new MidiOutput(deviceName, String(deviceIdentifier), ump::PacketProtocol::MIDI_1_0));
+        auto midiOutput = rawToUniquePtr(new MidiOutput(deviceName, String(deviceIdentifier), protocol));
         midiOutput->internal = std::make_unique<Pimpl>(ScopedPortRef{},
                                                        std::move(scopedEndpoint),
-                                                       ump::PacketProtocol::MIDI_1_0);
+                                                       protocol);
 
         return midiOutput;
     }

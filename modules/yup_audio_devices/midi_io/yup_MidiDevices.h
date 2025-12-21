@@ -246,6 +246,11 @@ public:
         @param callback    the object that will receive the midi messages from this device
     */
     static std::unique_ptr<MidiInput> createNewDevice (const String& deviceName, MidiInputCallback* callback);
+
+    /** This will try to create a new midi input device with the requested protocol. */
+    static std::unique_ptr<MidiInput> createNewDevice (const String& deviceName,
+                                                       ump::PacketProtocol protocol,
+                                                       ump::Receiver* receiver);
 #endif
 
     //==============================================================================
@@ -399,6 +404,10 @@ public:
         @param deviceName  the name of the device to create
     */
     static std::unique_ptr<MidiOutput> createNewDevice (const String& deviceName);
+
+    /** This will try to create a new midi output device with the requested protocol. */
+    static std::unique_ptr<MidiOutput> createNewDevice (const String& deviceName,
+                                                        ump::PacketProtocol protocol);
 #endif
 
     //==============================================================================

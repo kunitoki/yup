@@ -629,6 +629,14 @@ std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String& deviceName,
     return midiInput;
 }
 
+std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String&,
+                                                       ump::PacketProtocol,
+                                                       ump::Receiver*)
+{
+    jassertfalse;
+    return {};
+}
+
 MidiInput::MidiInput (const String& deviceName,
                       const String& deviceIdentifier,
                       ump::PacketProtocol protocol)
@@ -719,6 +727,15 @@ std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String& deviceNam
     return midiOutput;
 }
 
+std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String& deviceName,
+                                                         ump::PacketProtocol protocol)
+{
+    if (protocol != ump::PacketProtocol::MIDI_1_0)
+        return {};
+
+    return createNewDevice (deviceName);
+}
+
 MidiOutput::~MidiOutput()
 {
     stopBackgroundThread();
@@ -792,6 +809,13 @@ std::unique_ptr<MidiInput> MidiInput::openDevice (const String&,
 
 std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String&, MidiInputCallback*) { return {}; }
 
+std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String&,
+                                                       ump::PacketProtocol,
+                                                       ump::Receiver*)
+{
+    return {};
+}
+
 class MidiOutput::Pimpl
 {
 };
@@ -813,6 +837,8 @@ std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String&) { return {}; 
 std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String&, ump::PacketProtocol) { return {}; }
 
 std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String&) { return {}; }
+
+std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String&, ump::PacketProtocol) { return {}; }
 
 MidiDeviceListConnection MidiDeviceListConnection::make (std::function<void()> cb)
 {
