@@ -154,19 +154,17 @@ rive::rcp<rive::RenderShader> toColorGradient (rive::Factory& factory, const Col
         float y1 = gradient.getStartY();
         float x2 = gradient.getFinishX();
         float y2 = gradient.getFinishY();
-        //transform.transformPoints (x1, y1, x2, y2);
 
         return factory.makeLinearGradient (x1, y1, x2, y2, colors.data(), stops.data(), colors.size());
     }
     else
     {
-        float x1 = gradient.getStartX();
-        float y1 = gradient.getStartY();
+        float centerX = gradient.getStartX();
+        float centerY = gradient.getStartY();
         float radiusX = gradient.getRadius();
         [[maybe_unused]] float radiusY = gradient.getRadius();
-        //transform.transformPoints (x1, y1, radiusX, radiusY);
 
-        return factory.makeRadialGradient (x1, y1, radiusX, colors.data(), stops.data(), colors.size());
+        return factory.makeRadialGradient (centerX, centerY, radiusX, colors.data(), stops.data(), colors.size());
     }
 }
 

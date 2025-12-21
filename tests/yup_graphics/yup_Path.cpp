@@ -982,3 +982,58 @@ TEST (PathTests, AppendPathWithTransformComplex)
     EXPECT_FALSE (p1.getBounds().isEmpty());
     EXPECT_GT (p1.size(), 0);
 }
+
+TEST (PathTests, FillRule_DefaultIsNonZeroWinding)
+{
+    // Test that paths default to non-zero winding rule
+    Path p;
+    EXPECT_TRUE (p.isUsingNonZeroWinding());
+}
+
+TEST (PathTests, FillRule_SetToEvenOdd)
+{
+    // Test setting to even-odd rule
+    Path p;
+    p.setUsingNonZeroWinding (false);
+    EXPECT_FALSE (p.isUsingNonZeroWinding());
+}
+
+TEST (PathTests, FillRule_SetToNonZeroWinding)
+{
+    // Test setting to non-zero winding rule
+    Path p;
+    p.setUsingNonZeroWinding (false);
+    p.setUsingNonZeroWinding (true);
+    EXPECT_TRUE (p.isUsingNonZeroWinding());
+}
+
+TEST (PathTests, FillRule_PersistsAfterPathOperations)
+{
+    // Test that fill rule persists after adding shapes
+    Path p;
+    p.setUsingNonZeroWinding (false);
+
+    p.addRectangle (0, 0, 10, 10);
+    EXPECT_FALSE (p.isUsingNonZeroWinding());
+
+    p.addEllipse (5, 5, 8, 8);
+    EXPECT_FALSE (p.isUsingNonZeroWinding());
+
+    p.lineTo (100, 100);
+    EXPECT_FALSE (p.isUsingNonZeroWinding());
+}
+
+TEST (PathTests, FillRule_IndependentBetweenPaths)
+{
+    // Test that each path maintains its own fill rule
+    Path p1;
+    Path p2;
+
+    p1.setUsingNonZeroWinding (false);
+    EXPECT_FALSE (p1.isUsingNonZeroWinding());
+    EXPECT_TRUE (p2.isUsingNonZeroWinding()); // p2 should still be default
+
+    p2.setUsingNonZeroWinding (true);
+    EXPECT_FALSE (p1.isUsingNonZeroWinding()); // p1 should remain even-odd
+    EXPECT_TRUE (p2.isUsingNonZeroWinding());
+}

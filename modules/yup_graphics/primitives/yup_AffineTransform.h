@@ -669,14 +669,7 @@ public:
     */
     [[nodiscard]] constexpr AffineTransform sheared (float factorX, float factorY) const noexcept
     {
-        return {
-            scaleX + factorX * shearY,
-            shearX + factorX * scaleY,
-            translateX,
-            shearY + factorY * scaleX,
-            scaleY + factorY * shearX,
-            translateY
-        };
+        return followedBy (shearing (factorX, factorY));
     }
 
     /** Create a shearing transformation
@@ -895,14 +888,16 @@ public:
     }
 
     //==============================================================================
-    /** @internal Conversion to Rive Mat2D class.  */
+    /** @internal Conversion to Rive Mat2D class.
+     *  Note: Rive uses a transposed matrix representation compared to YUP.
+     */
     rive::Mat2D toMat2D() const
     {
         return {
-            getScaleX(),     // xx
-            -getShearX(),    // xy
-            -getShearY(),    // yx
-            getScaleY(),     // yy
+            getScaleX(),     // xx (same)
+            getShearY(),     // xy (was yx in YUP - transposed!)
+            getShearX(),     // yx (was xy in YUP - transposed!)
+            getScaleY(),     // yy (same)
             getTranslateX(), // tx
             getTranslateY()  // ty
         };
