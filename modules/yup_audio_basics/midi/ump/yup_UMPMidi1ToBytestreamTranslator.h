@@ -90,7 +90,7 @@ public:
                 if (Utils::getMessageType (firstWord) != 0x00)
                 {
                     const auto message = fromUmp (PacketX1 { firstWord }, time);
-                    callback (BytestreamMidiView (&message));
+                    callback (message);
                 }
 
                 break;
@@ -187,7 +187,7 @@ private:
     void terminateSysExMessage (MessageCallback&& callback)
     {
         pendingSysExData.push_back (std::byte { 0xf7 });
-        callback (BytestreamMidiView (pendingSysExData, pendingSysExTime));
+        callback (BytestreamMidiView (pendingSysExData, pendingSysExTime).getMessage());
         pendingSysExData.clear();
     }
 

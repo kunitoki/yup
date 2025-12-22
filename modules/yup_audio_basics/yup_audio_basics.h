@@ -134,6 +134,9 @@
 #endif
 
 //==============================================================================
+#include <chrono>
+
+//==============================================================================
 #include "buffers/yup_AudioDataConverters.h"
 YUP_BEGIN_IGNORE_WARNINGS_MSVC (4661)
 #include "buffers/yup_FloatVectorOperations.h"
@@ -179,6 +182,6 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "utilities/yup_AudioWorkgroup.h"
 #include "midi/ump/yup_UMPBytesOnGroup.h"
 #include "midi/ump/yup_UMPDeviceInfo.h"
-#include "midi/ump/yup_UMP.h"
 #include "midi/ump/yup_UMPPacketBuffer.h"
 #include "midi/ump/yup_UMPKeyboardState.h"
+#include "midi/ump/yup_UMP.h"

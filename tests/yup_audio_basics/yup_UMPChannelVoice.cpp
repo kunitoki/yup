@@ -128,8 +128,10 @@ TEST (UMPChannelVoiceTests, Midi2AttributesAndSensitivity)
 
 TEST (UMPChannelVoiceTests, Midi2ToMidi1Translation)
 {
-    const auto noteOn = Midi2ChannelVoiceMessageView { makeMidi2NoteOnMessage (4, 7, 99, Velocity { uint16_t { 0x4567 } }) };
-    const auto noteOff = Midi2ChannelVoiceMessageView { makeMidi2NoteOffMessage (3, 9, 66, Velocity { uint16_t { 0x1234 } }) };
+    const auto noteOnMessage = makeMidi2NoteOnMessage (4, 7, 99, Velocity { uint16_t { 0x4567 } });
+    const auto noteOffMessage = makeMidi2NoteOffMessage (3, 9, 66, Velocity { uint16_t { 0x1234 } });
+    const auto noteOn = Midi2ChannelVoiceMessageView { noteOnMessage };
+    const auto noteOff = Midi2ChannelVoiceMessageView { noteOffMessage };
 
     auto m1 = asMidi1ChannelVoiceMessage (noteOn);
     ASSERT_TRUE (m1.has_value());
