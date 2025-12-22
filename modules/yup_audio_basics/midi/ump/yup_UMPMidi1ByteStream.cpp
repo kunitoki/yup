@@ -151,7 +151,11 @@ void Midi1ByteStreamParser::systemCommon (uint8_t byte)
 
 void Midi1ByteStreamParser::channelVoice (uint8_t byte)
 {
-    packet = makeMidi1ChannelVoiceMessage (group, Status (byte));
+    packet = makeMidi1ChannelVoiceMessage (group,
+                                           Status (byte & 0xf0),
+                                           Channel (byte & 0x0f),
+                                           0,
+                                           0);
     packetByte = 2;
     numMissingBytes = 0;
 

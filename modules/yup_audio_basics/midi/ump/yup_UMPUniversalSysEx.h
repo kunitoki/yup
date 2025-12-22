@@ -24,6 +24,8 @@
 namespace yup::ump
 {
 
+inline bool isUniversalSysExMessage (const SysEx7& message);
+
 namespace UniversalSysEx
 {
 
