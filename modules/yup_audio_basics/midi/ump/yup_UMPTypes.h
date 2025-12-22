@@ -24,6 +24,10 @@
 namespace yup::ump
 {
 
+#ifdef Status
+#undef Status
+#endif
+
 using uint2_t = std::uint8_t;
 using uint4_t = std::uint8_t;
 using uint7_t = std::uint8_t;
