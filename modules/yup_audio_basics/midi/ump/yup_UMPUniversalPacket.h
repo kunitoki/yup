@@ -21,6 +21,11 @@
 
 #ifndef DOXYGEN
 
+#include <iomanip>
+#include <ios>
+#include <istream>
+#include <ostream>
+
 namespace yup::ump
 {
 
@@ -127,8 +132,8 @@ enum class StreamProtocol : Protocol
 
 enum class StreamExtensions : Extensions
 {
-    jitter_reduction_transmit = 0x1,
-    jitter_reduction_receive = 0x2
+    jitterReductionTransmit = 0x1,
+    jitterReductionReceive = 0x2
 };
 
 enum class StreamStatus : Status
@@ -369,6 +374,56 @@ struct UniversalPacket
         return false;
     }
 };
+
+namespace detail
+{
+struct IosBaseFlagsRestorer
+{
+    explicit IosBaseFlagsRestorer (std::ios_base& stream)
+        : strm (stream)
+        , flags (stream.flags())
+    {
+    }
+
+    ~IosBaseFlagsRestorer() { strm.flags (flags); }
+
+    std::ios_base& strm;
+    std::ios_base::fmtflags flags;
+};
+} // namespace detail
+
+inline std::ostream& operator<< (std::ostream& out, const UniversalPacket& p)
+{
+    detail::IosBaseFlagsRestorer flagRestorer (out);
+
+    for (size_t word = 0; word < p.getSize(); ++word)
+    {
+        if (word != 0)
+            out << ' ';
+        out << std::hex << std::setfill ('0') << std::setw (8) << p.data[word];
+    }
+
+    return out;
+}
+
+inline std::istream& operator>> (std::istream& in, UniversalPacket& p)
+{
+    detail::IosBaseFlagsRestorer flagRestorer (in);
+    in >> std::hex >> p.data[0];
+
+    if (in.good())
+    {
+        const auto words = p.getSize();
+        for (size_t word = 1; word < words; ++word)
+        {
+            in >> std::hex >> p.data[word];
+            if (! in.good())
+                break;
+        }
+    }
+
+    return in;
+}
 
 } // namespace yup::ump
 
