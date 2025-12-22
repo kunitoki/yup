@@ -126,14 +126,14 @@ void Midi1ByteStreamParser::systemCommon (uint8_t byte)
 
     switch (packet.getStatus())
     {
-        case Status (SystemStatus::mtc_quarter_frame):
-        case Status (SystemStatus::song_select):
+        case Status (SystemStatus::mtcQuarterFrame):
+        case Status (SystemStatus::songSelect):
             numMissingBytes = 1;
             break;
-        case Status (SystemStatus::song_position):
+        case Status (SystemStatus::songPosition):
             numMissingBytes = 2;
             break;
-        case Status (SystemStatus::tune_request):
+        case Status (SystemStatus::tuneRequest):
             break;
         default:
             packet = UniversalPacket {};
@@ -161,15 +161,15 @@ void Midi1ByteStreamParser::channelVoice (uint8_t byte)
 
     switch (packet.getStatus() & 0xf0)
     {
-        case Status (Midi1ChannelVoiceStatus::note_off):
-        case Status (Midi1ChannelVoiceStatus::note_on):
-        case Status (Midi1ChannelVoiceStatus::poly_pressure):
-        case Status (Midi1ChannelVoiceStatus::control_change):
-        case Status (Midi1ChannelVoiceStatus::pitch_bend):
+        case Status (Midi1ChannelVoiceStatus::noteOff):
+        case Status (Midi1ChannelVoiceStatus::noteOn):
+        case Status (Midi1ChannelVoiceStatus::polyPressure):
+        case Status (Midi1ChannelVoiceStatus::controlChange):
+        case Status (Midi1ChannelVoiceStatus::pitchBend):
             numMissingBytes = 2;
             break;
-        case Status (Midi1ChannelVoiceStatus::program_change):
-        case Status (Midi1ChannelVoiceStatus::channel_pressure):
+        case Status (Midi1ChannelVoiceStatus::programChange):
+        case Status (Midi1ChannelVoiceStatus::channelPressure):
             numMissingBytes = 1;
             break;
         default:
@@ -261,7 +261,7 @@ void Midi1ByteStreamParser::sysExEndPacket()
     const auto currentSysExStatus = uint8_t (packet.getStatus() & 0xf0);
     const auto currentPacketSize = uint8_t ((packetByte - 2) & 0x0f);
 
-    if (currentSysExStatus == uint8_t (DataStatus::sysex7_start))
+    if (currentSysExStatus == uint8_t (DataStatus::sysex7Start))
     {
         if (packetByte < 3)
         {
@@ -269,11 +269,11 @@ void Midi1ByteStreamParser::sysExEndPacket()
             return;
         }
 
-        packet.setByte (1, uint8_t (DataStatus::sysex7_complete) + currentPacketSize);
+        packet.setByte (1, uint8_t (DataStatus::sysex7Complete) + currentPacketSize);
     }
     else
     {
-        packet.setByte (1, uint8_t (DataStatus::sysex7_end) + currentPacketSize);
+        packet.setByte (1, uint8_t (DataStatus::sysex7End) + currentPacketSize);
     }
 
     if (invokeCallbacks)
@@ -291,7 +291,7 @@ size_t toMidi1ByteStream (const UniversalPacket& packet, uint8_t result[8])
     switch (packet.getType())
     {
         case PacketType::system:
-        case PacketType::midi1_channel_voice:
+        case PacketType::midi1ChannelVoice:
             if (payloadBytes > 0)
             {
                 for (; resultBytes < payloadBytes; ++resultBytes)
@@ -303,15 +303,15 @@ size_t toMidi1ByteStream (const UniversalPacket& packet, uint8_t result[8])
             {
                 const auto status = packet.getStatus() & 0xf0;
 
-                if ((status == Status (DataStatus::sysex7_complete))
-                    || (status == Status (DataStatus::sysex7_start)))
+                if ((status == Status (DataStatus::sysex7Complete))
+                    || (status == Status (DataStatus::sysex7Start)))
                     result[resultBytes++] = 0xf0;
 
                 for (size_t b = 0; b < payloadBytes; ++b)
                     result[resultBytes++] = packet.getByte (2 + b);
 
-                if ((status == Status (DataStatus::sysex7_complete))
-                    || (status == Status (DataStatus::sysex7_end)))
+                if ((status == Status (DataStatus::sysex7Complete))
+                    || (status == Status (DataStatus::sysex7End)))
                     result[resultBytes++] = 0xf7;
             }
             break;

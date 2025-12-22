@@ -94,7 +94,7 @@ struct SystemMessageView
 
     constexpr uint14_t getSongPosition() const
     {
-        if (SystemStatus (p.getStatus()) == SystemStatus::song_position)
+        if (SystemStatus (p.getStatus()) == SystemStatus::songPosition)
             return uint14_t (getDataByte1() | (uint14_t (getDataByte2()) << 7u));
 
         return 0;
@@ -120,7 +120,7 @@ constexpr SystemMessage makeSystemMessage (Group group, Status status, uint7_t d
 constexpr SystemMessage makeSongPositionMessage (Group group, uint14_t position)
 {
     return makeSystemMessage (group,
-                              Status (SystemStatus::song_position),
+                              Status (SystemStatus::songPosition),
                               static_cast<uint7_t> (position & 0x7f),
                               static_cast<uint7_t> ((position >> 7) & 0x7f));
 }
@@ -139,13 +139,13 @@ struct Midi1ChannelVoiceMessage : UniversalPacket
     constexpr explicit Midi1ChannelVoiceMessage (const UniversalPacket& p)
         : UniversalPacket (p)
     {
-        jassert (p.getType() == PacketType::midi1_channel_voice);
+        jassert (p.getType() == PacketType::midi1ChannelVoice);
     }
 };
 
 constexpr bool isMidi1ChannelVoiceMessage (const UniversalPacket& p)
 {
-    return p.getType() == PacketType::midi1_channel_voice;
+    return p.getType() == PacketType::midi1ChannelVoice;
 }
 
 struct Midi1ChannelVoiceMessageView
@@ -201,7 +201,7 @@ constexpr Midi1ChannelVoiceMessage makeMidi1NoteOffMessage (Group group,
                                                             Velocity vel = {})
 {
     return makeMidi1ChannelVoiceMessage (group,
-                                         Status (Midi1ChannelVoiceStatus::note_off),
+                                         Status (Midi1ChannelVoiceStatus::noteOff),
                                          channel,
                                          noteNr,
                                          vel.asUInt7());
@@ -213,7 +213,7 @@ constexpr Midi1ChannelVoiceMessage makeMidi1NoteOnMessage (Group group,
                                                            Velocity vel)
 {
     return makeMidi1ChannelVoiceMessage (group,
-                                         Status (Midi1ChannelVoiceStatus::note_on),
+                                         Status (Midi1ChannelVoiceStatus::noteOn),
                                          channel,
                                          noteNr,
                                          vel.asUInt7());
@@ -225,7 +225,7 @@ constexpr Midi1ChannelVoiceMessage makeMidi1PolyPressureMessage (Group group,
                                                                  ControllerValue pressure)
 {
     return makeMidi1ChannelVoiceMessage (group,
-                                         Status (Midi1ChannelVoiceStatus::poly_pressure),
+                                         Status (Midi1ChannelVoiceStatus::polyPressure),
                                          channel,
                                          noteNr,
                                          pressure.asUInt7());
@@ -237,7 +237,7 @@ constexpr Midi1ChannelVoiceMessage makeMidi1ControlChangeMessage (Group group,
                                                                   ControllerValue value)
 {
     return makeMidi1ChannelVoiceMessage (group,
-                                         Status (Midi1ChannelVoiceStatus::control_change),
+                                         Status (Midi1ChannelVoiceStatus::controlChange),
                                          channel,
                                          controller,
                                          value.asUInt7());
@@ -248,7 +248,7 @@ constexpr Midi1ChannelVoiceMessage makeMidi1ProgramChangeMessage (Group group,
                                                                   ProgramNumber program)
 {
     return makeMidi1ChannelVoiceMessage (group,
-                                         Status (Midi1ChannelVoiceStatus::program_change),
+                                         Status (Midi1ChannelVoiceStatus::programChange),
                                          channel,
                                          program);
 }
@@ -258,7 +258,7 @@ constexpr Midi1ChannelVoiceMessage makeMidi1ChannelPressureMessage (Group group,
                                                                     ControllerValue pressure)
 {
     return makeMidi1ChannelVoiceMessage (group,
-                                         Status (Midi1ChannelVoiceStatus::channel_pressure),
+                                         Status (Midi1ChannelVoiceStatus::channelPressure),
                                          channel,
                                          pressure.asUInt7(),
                                          0);
@@ -270,7 +270,7 @@ constexpr Midi1ChannelVoiceMessage makeMidi1PitchBendMessage (Group group,
 {
     const auto pb14 = pb.asUInt14();
     return makeMidi1ChannelVoiceMessage (group,
-                                         Status (Midi1ChannelVoiceStatus::pitch_bend),
+                                         Status (Midi1ChannelVoiceStatus::pitchBend),
                                          channel,
                                          uint7_t (pb14 & 0x7f),
                                          uint7_t ((pb14 >> 7) & 0x7f));
@@ -297,13 +297,13 @@ struct Midi2ChannelVoiceMessage : UniversalPacket
     constexpr explicit Midi2ChannelVoiceMessage (const UniversalPacket& p)
         : UniversalPacket (p)
     {
-        jassert (p.getType() == PacketType::midi2_channel_voice);
+        jassert (p.getType() == PacketType::midi2ChannelVoice);
     }
 };
 
 constexpr bool isMidi2ChannelVoiceMessage (const UniversalPacket& p)
 {
-    return p.getType() == PacketType::midi2_channel_voice;
+    return p.getType() == PacketType::midi2ChannelVoice;
 }
 
 struct Midi2ChannelVoiceMessageView
@@ -311,7 +311,7 @@ struct Midi2ChannelVoiceMessageView
     constexpr explicit Midi2ChannelVoiceMessageView (const UniversalPacket& ump)
         : p (ump)
     {
-        jassert (p.getType() == PacketType::midi2_channel_voice);
+        jassert (p.getType() == PacketType::midi2ChannelVoice);
     }
 
     constexpr Group getGroup() const { return p.getGroup(); }
@@ -373,7 +373,7 @@ constexpr Midi2ChannelVoiceMessage makeMidi2NoteOffMessage (Group group,
                                                             uint16_t attributeData = 0)
 {
     return Midi2ChannelVoiceMessage { group,
-                                      Status (ChannelVoiceStatus::note_off),
+                                      Status (ChannelVoiceStatus::noteOff),
                                       channel,
                                       noteNr,
                                       attribute,
@@ -386,7 +386,7 @@ constexpr Midi2ChannelVoiceMessage makeMidi2NoteOnMessage (Group group,
                                                            Velocity vel)
 {
     return Midi2ChannelVoiceMessage { group,
-                                      Status (ChannelVoiceStatus::note_on),
+                                      Status (ChannelVoiceStatus::noteOn),
                                       channel,
                                       noteNr,
                                       0,
@@ -400,7 +400,7 @@ constexpr Midi2ChannelVoiceMessage makeMidi2NoteOnMessage (Group group,
                                                            Pitch7_9 pitch)
 {
     return Midi2ChannelVoiceMessage { group,
-                                      Status (ChannelVoiceStatus::note_on),
+                                      Status (ChannelVoiceStatus::noteOn),
                                       channel,
                                       noteNr,
                                       NoteAttribute::pitch_7_9,
@@ -415,7 +415,7 @@ constexpr Midi2ChannelVoiceMessage makeMidi2NoteOnMessage (Group group,
                                                            uint16_t attributeData)
 {
     return Midi2ChannelVoiceMessage { group,
-                                      Status (ChannelVoiceStatus::note_on),
+                                      Status (ChannelVoiceStatus::noteOn),
                                       channel,
                                       noteNr,
                                       attribute,
@@ -428,7 +428,7 @@ constexpr Midi2ChannelVoiceMessage makeMidi2PolyPressureMessage (Group group,
                                                                  ControllerValue pressure)
 {
     return Midi2ChannelVoiceMessage { group,
-                                      Status (ChannelVoiceStatus::poly_pressure),
+                                      Status (ChannelVoiceStatus::polyPressure),
                                       channel,
                                       noteNr,
                                       0,
@@ -442,7 +442,7 @@ constexpr Midi2ChannelVoiceMessage makeRegisteredPerNoteControllerMessage (Group
                                                                            ControllerValue value)
 {
     return Midi2ChannelVoiceMessage { group,
-                                      Status (ChannelVoiceStatus::registered_per_note_controller),
+                                      Status (ChannelVoiceStatus::registeredPerNoteController),
                                       channel,
                                       noteNr,
                                       controller,
@@ -456,7 +456,7 @@ constexpr Midi2ChannelVoiceMessage makeAssignablePerNoteControllerMessage (Group
                                                                            ControllerValue value)
 {
     return Midi2ChannelVoiceMessage { group,
-                                      Status (ChannelVoiceStatus::assignable_per_note_controller),
+                                      Status (ChannelVoiceStatus::assignablePerNoteController),
                                       channel,
                                       noteNr,
                                       controller,
@@ -469,7 +469,7 @@ constexpr Midi2ChannelVoiceMessage makePerNoteManagementMessage (Group group,
                                                                  NoteManagementFlags flags)
 {
     return Midi2ChannelVoiceMessage { group,
-                                      Status (ChannelVoiceStatus::per_note_management),
+                                      Status (ChannelVoiceStatus::perNoteManagement),
                                       channel,
                                       noteNr,
                                       flags,
@@ -482,7 +482,7 @@ constexpr Midi2ChannelVoiceMessage makeMidi2ControlChangeMessage (Group group,
                                                                   ControllerValue value)
 {
     return Midi2ChannelVoiceMessage { group,
-                                      Status (ChannelVoiceStatus::control_change),
+                                      Status (ChannelVoiceStatus::controlChange),
                                       channel,
                                       controller,
                                       0,
@@ -496,7 +496,7 @@ constexpr Midi2ChannelVoiceMessage makeRegisteredControllerMessage (Group group,
                                                                     ControllerValue value)
 {
     return Midi2ChannelVoiceMessage { group,
-                                      Status (ChannelVoiceStatus::registered_controller),
+                                      Status (ChannelVoiceStatus::registeredController),
                                       channel,
                                       bank,
                                       index,
@@ -510,7 +510,7 @@ constexpr Midi2ChannelVoiceMessage makeAssignableControllerMessage (Group group,
                                                                     ControllerValue value)
 {
     return Midi2ChannelVoiceMessage { group,
-                                      Status (ChannelVoiceStatus::assignable_controller),
+                                      Status (ChannelVoiceStatus::assignableController),
                                       channel,
                                       bank,
                                       index,
@@ -524,7 +524,7 @@ constexpr Midi2ChannelVoiceMessage makeRelativeRegisteredControllerMessage (Grou
                                                                             ControllerIncrement inc)
 {
     return Midi2ChannelVoiceMessage { group,
-                                      Status (ChannelVoiceStatus::relative_registered_controller),
+                                      Status (ChannelVoiceStatus::relativeRegisteredController),
                                       channel,
                                       bank,
                                       index,
@@ -538,7 +538,7 @@ constexpr Midi2ChannelVoiceMessage makeRelativeAssignableControllerMessage (Grou
                                                                             ControllerIncrement inc)
 {
     return Midi2ChannelVoiceMessage { group,
-                                      Status (ChannelVoiceStatus::relative_assignable_controller),
+                                      Status (ChannelVoiceStatus::relativeAssignableController),
                                       channel,
                                       bank,
                                       index,
@@ -550,7 +550,7 @@ constexpr Midi2ChannelVoiceMessage makeMidi2ProgramChangeMessage (Group group,
                                                                   ProgramNumber program)
 {
     return Midi2ChannelVoiceMessage { group,
-                                      Status (ChannelVoiceStatus::program_change),
+                                      Status (ChannelVoiceStatus::programChange),
                                       channel,
                                       0,
                                       0,
@@ -563,7 +563,7 @@ constexpr Midi2ChannelVoiceMessage makeMidi2ProgramChangeMessage (Group group,
                                                                   uint14_t bank)
 {
     return Midi2ChannelVoiceMessage { group,
-                                      Status (ChannelVoiceStatus::program_change),
+                                      Status (ChannelVoiceStatus::programChange),
                                       channel,
                                       0,
                                       1,
@@ -575,7 +575,7 @@ constexpr Midi2ChannelVoiceMessage makeMidi2ChannelPressureMessage (Group group,
                                                                     ControllerValue pressure)
 {
     return Midi2ChannelVoiceMessage { group,
-                                      Status (ChannelVoiceStatus::channel_pressure),
+                                      Status (ChannelVoiceStatus::channelPressure),
                                       channel,
                                       0,
                                       0,
@@ -587,7 +587,7 @@ constexpr Midi2ChannelVoiceMessage makeMidi2PitchBendMessage (Group group,
                                                               PitchBend bend)
 {
     return Midi2ChannelVoiceMessage { group,
-                                      Status (ChannelVoiceStatus::pitch_bend),
+                                      Status (ChannelVoiceStatus::pitchBend),
                                       channel,
                                       0,
                                       0,
@@ -600,7 +600,7 @@ constexpr Midi2ChannelVoiceMessage makePerNotePitchBendMessage (Group group,
                                                                 PitchBend bend)
 {
     return Midi2ChannelVoiceMessage { group,
-                                      Status (ChannelVoiceStatus::per_note_pitch_bend),
+                                      Status (ChannelVoiceStatus::perNotePitchBend),
                                       channel,
                                       noteNr,
                                       0,

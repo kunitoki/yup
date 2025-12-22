@@ -82,13 +82,13 @@ struct SysEx8Packet : ExtendedDataMessage
 
 constexpr bool isExtendedDataMessage (const UniversalPacket& p)
 {
-    return p.getType() == PacketType::extended_data;
+    return p.getType() == PacketType::extendedData;
 }
 
 constexpr bool isSysEx8Packet (const UniversalPacket& p)
 {
     return isExtendedDataMessage (p)
-        && ((p.getStatus() & 0xf0) <= Status (ExtendedDataStatus::sysex8_end))
+        && ((p.getStatus() & 0xf0) <= Status (ExtendedDataStatus::sysex8End))
         && ((p.getStatus() & 0x0f) > 0)
         && ((p.getStatus() & 0x0f) <= 14);
 }
@@ -129,22 +129,22 @@ constexpr std::optional<SysEx8PacketView> asSysEx8PacketView (const UniversalPac
 
 constexpr SysEx8Packet makeSysEx8CompletePacket (uint8_t streamId, Group group = 0)
 {
-    return SysEx8Packet { Status (ExtendedDataStatus::sysex8_complete), streamId, group };
+    return SysEx8Packet { Status (ExtendedDataStatus::sysex8Complete), streamId, group };
 }
 
 constexpr SysEx8Packet makeSysEx8StartPacket (uint8_t streamId, Group group = 0)
 {
-    return SysEx8Packet { Status (ExtendedDataStatus::sysex8_start), streamId, group };
+    return SysEx8Packet { Status (ExtendedDataStatus::sysex8Start), streamId, group };
 }
 
 constexpr SysEx8Packet makeSysEx8ContinuePacket (uint8_t streamId, Group group = 0)
 {
-    return SysEx8Packet { Status (ExtendedDataStatus::sysex8_continue), streamId, group };
+    return SysEx8Packet { Status (ExtendedDataStatus::sysex8Continue), streamId, group };
 }
 
 constexpr SysEx8Packet makeSysEx8EndPacket (uint8_t streamId, Group group = 0)
 {
-    return SysEx8Packet { Status (ExtendedDataStatus::sysex8_end), streamId, group };
+    return SysEx8Packet { Status (ExtendedDataStatus::sysex8End), streamId, group };
 }
 
 } // namespace yup::ump

@@ -34,9 +34,9 @@ constexpr bool isChannelVoiceMessageWithStatus (const UniversalPacket& p, Status
 
 constexpr bool isNoteOnMessage (const UniversalPacket& p)
 {
-    if (isChannelVoiceMessageWithStatus (p, Status (ChannelVoiceStatus::note_on)))
+    if (isChannelVoiceMessageWithStatus (p, Status (ChannelVoiceStatus::noteOn)))
     {
-        return (p.getType() == PacketType::midi2_channel_voice) || (p.getByte4() != 0);
+        return (p.getType() == PacketType::midi2ChannelVoice) || (p.getByte4() != 0);
     }
 
     return false;
@@ -44,11 +44,11 @@ constexpr bool isNoteOnMessage (const UniversalPacket& p)
 
 constexpr bool isNoteOffMessage (const UniversalPacket& p)
 {
-    if (isChannelVoiceMessageWithStatus (p, Status (ChannelVoiceStatus::note_off)))
+    if (isChannelVoiceMessageWithStatus (p, Status (ChannelVoiceStatus::noteOff)))
         return true;
 
-    return (p.getType() == PacketType::midi1_channel_voice)
-        && ((p.getStatus() & 0xf0) == uint8_t (ChannelVoiceStatus::note_on))
+    return (p.getType() == PacketType::midi1ChannelVoice)
+        && ((p.getStatus() & 0xf0) == uint8_t (ChannelVoiceStatus::noteOn))
         && (p.getByte4() == 0);
 }
 
@@ -59,8 +59,8 @@ constexpr NoteNumber getNoteNumber (const UniversalPacket& p)
 
 constexpr Pitch7_9 getNotePitch (const UniversalPacket& p)
 {
-    if ((p.getType() == PacketType::midi2_channel_voice)
-        && ((p.getStatus() & 0xf0) == uint8_t (ChannelVoiceStatus::note_on))
+    if ((p.getType() == PacketType::midi2ChannelVoice)
+        && ((p.getStatus() & 0xf0) == uint8_t (ChannelVoiceStatus::noteOn))
         && (p.getByte4() == NoteAttribute::pitch_7_9))
     {
         return Pitch7_9 { uint16_t (p.data[1] & 0xffff) };
@@ -71,11 +71,11 @@ constexpr Pitch7_9 getNotePitch (const UniversalPacket& p)
 
 constexpr Velocity getNoteVelocity (const UniversalPacket& p)
 {
-    if (p.getType() == PacketType::midi2_channel_voice)
+    if (p.getType() == PacketType::midi2ChannelVoice)
         return Velocity { uint16_t (p.data[1] >> 16) };
 
-    if ((p.getType() == PacketType::midi1_channel_voice)
-        && ((p.getStatus() & 0xf0) == uint8_t (ChannelVoiceStatus::note_on))
+    if ((p.getType() == PacketType::midi1ChannelVoice)
+        && ((p.getStatus() & 0xf0) == uint8_t (ChannelVoiceStatus::noteOn))
         && (p.getByte4() == 0))
     {
         return Velocity { uint7_t { 64 } };
@@ -86,7 +86,7 @@ constexpr Velocity getNoteVelocity (const UniversalPacket& p)
 
 constexpr bool isPolyPressureMessage (const UniversalPacket& p)
 {
-    return isChannelVoiceMessageWithStatus (p, Status (ChannelVoiceStatus::poly_pressure));
+    return isChannelVoiceMessageWithStatus (p, Status (ChannelVoiceStatus::polyPressure));
 }
 
 constexpr ControllerValue getPolyPressureValue (const UniversalPacket& p)
@@ -96,7 +96,7 @@ constexpr ControllerValue getPolyPressureValue (const UniversalPacket& p)
 
 constexpr bool isControlChangeMessage (const UniversalPacket& p)
 {
-    return isChannelVoiceMessageWithStatus (p, Status (ChannelVoiceStatus::control_change));
+    return isChannelVoiceMessageWithStatus (p, Status (ChannelVoiceStatus::controlChange));
 }
 
 constexpr ControllerNumber getControllerNumber (const UniversalPacket& p)
@@ -106,7 +106,7 @@ constexpr ControllerNumber getControllerNumber (const UniversalPacket& p)
 
 constexpr ControllerValue getControllerValue (const UniversalPacket& p)
 {
-    if (p.getType() == PacketType::midi1_channel_voice)
+    if (p.getType() == PacketType::midi1ChannelVoice)
         return ControllerValue { uint7_t (p.getByte4() & 0x7f) };
 
     return ControllerValue { p.data[1] };
@@ -114,16 +114,16 @@ constexpr ControllerValue getControllerValue (const UniversalPacket& p)
 
 constexpr bool isProgramChangeMessage (const UniversalPacket& p)
 {
-    return isChannelVoiceMessageWithStatus (p, Status (ChannelVoiceStatus::program_change));
+    return isChannelVoiceMessageWithStatus (p, Status (ChannelVoiceStatus::programChange));
 }
 
 constexpr uint7_t getProgramValue (const UniversalPacket& p)
 {
     switch (p.getType())
     {
-        case PacketType::midi1_channel_voice:
+        case PacketType::midi1ChannelVoice:
             return uint7_t (p.getByte3() & 0x7f);
-        case PacketType::midi2_channel_voice:
+        case PacketType::midi2ChannelVoice:
             return uint7_t ((p.data[1] >> 24u) & 0x7f);
         default:
             break;
@@ -134,12 +134,12 @@ constexpr uint7_t getProgramValue (const UniversalPacket& p)
 
 constexpr bool isChannelPressureMessage (const UniversalPacket& p)
 {
-    return isChannelVoiceMessageWithStatus (p, Status (ChannelVoiceStatus::channel_pressure));
+    return isChannelVoiceMessageWithStatus (p, Status (ChannelVoiceStatus::channelPressure));
 }
 
 constexpr ControllerValue getChannelPressureValue (const UniversalPacket& p)
 {
-    if (p.getType() == PacketType::midi1_channel_voice)
+    if (p.getType() == PacketType::midi1ChannelVoice)
         return ControllerValue { uint7_t (p.getByte3() & 0x7f) };
 
     return ControllerValue { p.data[1] };
@@ -147,12 +147,12 @@ constexpr ControllerValue getChannelPressureValue (const UniversalPacket& p)
 
 constexpr bool isChannelPitchBendMessage (const UniversalPacket& p)
 {
-    return isChannelVoiceMessageWithStatus (p, Status (ChannelVoiceStatus::pitch_bend));
+    return isChannelVoiceMessageWithStatus (p, Status (ChannelVoiceStatus::pitchBend));
 }
 
 constexpr PitchBend getChannelPitchBendValue (const UniversalPacket& p)
 {
-    if (p.getType() == PacketType::midi1_channel_voice)
+    if (p.getType() == PacketType::midi1ChannelVoice)
         return PitchBend { uint14_t (p.getByte3() | (p.getByte4() << 7)) };
 
     return PitchBend { p.data[1] };
@@ -163,11 +163,11 @@ constexpr std::optional<Midi1ChannelVoiceMessage> asMidi1ChannelVoiceMessage (co
 {
     switch (m.getStatus())
     {
-        case Status (ChannelVoiceStatus::note_off):
+        case Status (ChannelVoiceStatus::noteOff):
             if (m.getByte4() == 0)
                 return makeMidi1NoteOffMessage (m.getGroup(), m.getChannel(), m.getByte3(), Velocity { uint16_t (m.getData() >> 16) });
             break;
-        case Status (ChannelVoiceStatus::note_on):
+        case Status (ChannelVoiceStatus::noteOn):
             if (m.getByte4() == 0)
             {
                 auto vel = Velocity { uint16_t (m.getData() >> 16) };
@@ -176,9 +176,9 @@ constexpr std::optional<Midi1ChannelVoiceMessage> asMidi1ChannelVoiceMessage (co
                 return makeMidi1NoteOnMessage (m.getGroup(), m.getChannel(), m.getByte3(), vel);
             }
             break;
-        case Status (ChannelVoiceStatus::poly_pressure):
+        case Status (ChannelVoiceStatus::polyPressure):
             return makeMidi1PolyPressureMessage (m.getGroup(), m.getChannel(), m.getByte3(), ControllerValue { m.getData() });
-        case Status (ChannelVoiceStatus::control_change):
+        case Status (ChannelVoiceStatus::controlChange):
             switch (m.getByte3())
             {
                 case ControlChange::bankSelectMsb:
@@ -195,13 +195,13 @@ constexpr std::optional<Midi1ChannelVoiceMessage> asMidi1ChannelVoiceMessage (co
                     return makeMidi1ControlChangeMessage (m.getGroup(), m.getChannel(), m.getByte3(), ControllerValue { m.getData() });
             }
             break;
-        case Status (ChannelVoiceStatus::program_change):
+        case Status (ChannelVoiceStatus::programChange):
             if ((m.getByte4() & 0x1) == 0)
                 return makeMidi1ProgramChangeMessage (m.getGroup(), m.getChannel(), uint7_t (m.getData() >> 24));
             break;
-        case Status (ChannelVoiceStatus::channel_pressure):
+        case Status (ChannelVoiceStatus::channelPressure):
             return makeMidi1ChannelPressureMessage (m.getGroup(), m.getChannel(), ControllerValue { m.getData() });
-        case Status (ChannelVoiceStatus::pitch_bend):
+        case Status (ChannelVoiceStatus::pitchBend):
             return makeMidi1PitchBendMessage (m.getGroup(), m.getChannel(), PitchBend { m.getData() });
         default:
             break;
@@ -214,15 +214,15 @@ constexpr std::optional<Midi2ChannelVoiceMessage> asMidi2ChannelVoiceMessage (co
 {
     switch (m.getStatus())
     {
-        case Status (ChannelVoiceStatus::note_off):
+        case Status (ChannelVoiceStatus::noteOff):
             return makeMidi2NoteOffMessage (m.getGroup(), m.getChannel(), m.getDataByte1(), Velocity { m.getDataByte2() });
-        case Status (ChannelVoiceStatus::note_on):
+        case Status (ChannelVoiceStatus::noteOn):
             if (m.getDataByte2() == 0)
                 return makeMidi2NoteOffMessage (m.getGroup(), m.getChannel(), m.getDataByte1(), Velocity { uint7_t { 64 } });
             return makeMidi2NoteOnMessage (m.getGroup(), m.getChannel(), m.getDataByte1(), Velocity { m.getDataByte2() });
-        case Status (ChannelVoiceStatus::poly_pressure):
+        case Status (ChannelVoiceStatus::polyPressure):
             return makeMidi2PolyPressureMessage (m.getGroup(), m.getChannel(), m.getDataByte1(), ControllerValue { m.getDataByte2() });
-        case Status (ChannelVoiceStatus::control_change):
+        case Status (ChannelVoiceStatus::controlChange):
             switch (m.getDataByte1())
             {
                 case ControlChange::bankSelectMsb:
@@ -239,11 +239,11 @@ constexpr std::optional<Midi2ChannelVoiceMessage> asMidi2ChannelVoiceMessage (co
                     return makeMidi2ControlChangeMessage (m.getGroup(), m.getChannel(), m.getDataByte1(), ControllerValue { m.getDataByte2() });
             }
             break;
-        case Status (ChannelVoiceStatus::program_change):
+        case Status (ChannelVoiceStatus::programChange):
             return makeMidi2ProgramChangeMessage (m.getGroup(), m.getChannel(), m.getDataByte1());
-        case Status (ChannelVoiceStatus::channel_pressure):
+        case Status (ChannelVoiceStatus::channelPressure):
             return makeMidi2ChannelPressureMessage (m.getGroup(), m.getChannel(), ControllerValue { m.getDataByte1() });
-        case Status (ChannelVoiceStatus::pitch_bend):
+        case Status (ChannelVoiceStatus::pitchBend):
             return makeMidi2PitchBendMessage (m.getGroup(), m.getChannel(), PitchBend { m.get14BitValue() });
         default:
             break;
@@ -256,19 +256,19 @@ constexpr std::optional<Midi2ChannelVoiceMessage> asMidi2ChannelVoiceMessage (co
 constexpr bool isRegisteredControllerMessage (const UniversalPacket& p)
 {
     return isMidi2ChannelVoiceMessage (p)
-        && (p.getStatus() & 0xf0) == uint8_t (ChannelVoiceStatus::registered_controller);
+        && (p.getStatus() & 0xf0) == uint8_t (ChannelVoiceStatus::registeredController);
 }
 
 constexpr bool isAssignableControllerMessage (const UniversalPacket& p)
 {
     return isMidi2ChannelVoiceMessage (p)
-        && (p.getStatus() & 0xf0) == uint8_t (ChannelVoiceStatus::assignable_controller);
+        && (p.getStatus() & 0xf0) == uint8_t (ChannelVoiceStatus::assignableController);
 }
 
 constexpr bool isRegisteredPerNoteControllerMessage (const UniversalPacket& p)
 {
     return isMidi2ChannelVoiceMessage (p)
-        && (p.getStatus() & 0xf0) == uint8_t (ChannelVoiceStatus::registered_per_note_controller);
+        && (p.getStatus() & 0xf0) == uint8_t (ChannelVoiceStatus::registeredPerNoteController);
 }
 
 constexpr bool isRegisteredPerNoteControllerPitchMessage (const UniversalPacket& p)
@@ -280,26 +280,26 @@ constexpr bool isRegisteredPerNoteControllerPitchMessage (const UniversalPacket&
 constexpr bool isAssignablePerNoteControllerMessage (const UniversalPacket& p)
 {
     return isMidi2ChannelVoiceMessage (p)
-        && (p.getStatus() & 0xf0) == uint8_t (ChannelVoiceStatus::assignable_per_note_controller);
+        && (p.getStatus() & 0xf0) == uint8_t (ChannelVoiceStatus::assignablePerNoteController);
 }
 
 constexpr bool isPerNotePitchBendMessage (const UniversalPacket& p)
 {
     return isMidi2ChannelVoiceMessage (p)
-        && (p.getStatus() & 0xf0) == uint8_t (ChannelVoiceStatus::per_note_pitch_bend);
+        && (p.getStatus() & 0xf0) == uint8_t (ChannelVoiceStatus::perNotePitchBend);
 }
 
 constexpr bool isNoteOnWithAttribute (const UniversalPacket& p, uint8_t attribute)
 {
     return isMidi2ChannelVoiceMessage (p)
-        && ((p.getStatus() & 0xf0) == uint8_t (ChannelVoiceStatus::note_on))
+        && ((p.getStatus() & 0xf0) == uint8_t (ChannelVoiceStatus::noteOn))
         && (p.getByte4() == attribute);
 }
 
 constexpr bool isNoteOffWithAttribute (const UniversalPacket& p, uint8_t attribute)
 {
     return isMidi2ChannelVoiceMessage (p)
-        && ((p.getStatus() & 0xf0) == uint8_t (ChannelVoiceStatus::note_off))
+        && ((p.getStatus() & 0xf0) == uint8_t (ChannelVoiceStatus::noteOff))
         && (p.getByte4() == attribute);
 }
 

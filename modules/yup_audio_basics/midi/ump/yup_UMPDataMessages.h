@@ -78,7 +78,7 @@ constexpr bool isDataMessage (const UniversalPacket& p)
 constexpr bool isSysEx7Packet (const UniversalPacket& p)
 {
     return isDataMessage (p)
-        && ((p.getStatus() & 0xf0) <= Status (DataStatus::sysex7_end))
+        && ((p.getStatus() & 0xf0) <= Status (DataStatus::sysex7End))
         && ((p.getStatus() & 0x0f) <= 6);
 }
 
@@ -114,22 +114,22 @@ constexpr std::optional<SysEx7PacketView> asSysEx7PacketView (const UniversalPac
 
 constexpr SysEx7Packet makeSysEx7CompletePacket (Group group = 0)
 {
-    return SysEx7Packet { Status (DataStatus::sysex7_complete), group };
+    return SysEx7Packet { Status (DataStatus::sysex7Complete), group };
 }
 
 constexpr SysEx7Packet makeSysEx7StartPacket (Group group = 0)
 {
-    return SysEx7Packet { Status (DataStatus::sysex7_start), group };
+    return SysEx7Packet { Status (DataStatus::sysex7Start), group };
 }
 
 constexpr SysEx7Packet makeSysEx7ContinuePacket (Group group = 0)
 {
-    return SysEx7Packet { Status (DataStatus::sysex7_continue), group };
+    return SysEx7Packet { Status (DataStatus::sysex7Continue), group };
 }
 
 constexpr SysEx7Packet makeSysEx7EndPacket (Group group = 0)
 {
-    return SysEx7Packet { Status (DataStatus::sysex7_end), group };
+    return SysEx7Packet { Status (DataStatus::sysex7End), group };
 }
 
 } // namespace yup::ump

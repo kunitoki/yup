@@ -83,7 +83,7 @@ struct EndpointDiscoveryView
         : p (ump)
     {
         jassert (p.getType() == PacketType::stream);
-        jassert (StreamStatus (p.getStatus()) == StreamStatus::endpoint_discovery);
+        jassert (StreamStatus (p.getStatus()) == StreamStatus::endpointDiscovery);
     }
 
     constexpr uint8_t getUmpVersionMajor() const { return p.getByte3(); }
@@ -110,7 +110,7 @@ private:
 
 constexpr std::optional<EndpointDiscoveryView> asEndpointDiscoveryView (const UniversalPacket& p)
 {
-    if (isStreamMessage (p) && StreamStatus (p.getStatus()) == StreamStatus::endpoint_discovery)
+    if (isStreamMessage (p) && StreamStatus (p.getStatus()) == StreamStatus::endpointDiscovery)
         return EndpointDiscoveryView { p };
 
     return std::nullopt;
@@ -122,7 +122,7 @@ struct EndpointInfoView
         : p (ump)
     {
         jassert (p.getType() == PacketType::stream);
-        jassert (StreamStatus (p.getStatus()) == StreamStatus::endpoint_info);
+        jassert (StreamStatus (p.getStatus()) == StreamStatus::endpointInfo);
     }
 
     constexpr uint8_t getUmpVersionMajor() const { return p.getByte3(); }
@@ -145,7 +145,7 @@ private:
 
 constexpr std::optional<EndpointInfoView> asEndpointInfoView (const UniversalPacket& p)
 {
-    if (isStreamMessage (p) && StreamStatus (p.getStatus()) == StreamStatus::endpoint_info)
+    if (isStreamMessage (p) && StreamStatus (p.getStatus()) == StreamStatus::endpointInfo)
         return EndpointInfoView { p };
 
     return std::nullopt;
@@ -157,7 +157,7 @@ struct DeviceIdentityView
         : p (ump)
     {
         jassert (p.getType() == PacketType::stream);
-        jassert (StreamStatus (p.getStatus()) == StreamStatus::device_identity);
+        jassert (StreamStatus (p.getStatus()) == StreamStatus::deviceIdentity);
     }
 
     constexpr DeviceIdentity getIdentity() const
@@ -179,7 +179,7 @@ private:
 
 constexpr std::optional<DeviceIdentityView> asDeviceIdentityView (const UniversalPacket& p)
 {
-    if (isStreamMessage (p) && StreamStatus (p.getStatus()) == StreamStatus::device_identity)
+    if (isStreamMessage (p) && StreamStatus (p.getStatus()) == StreamStatus::deviceIdentity)
         return DeviceIdentityView { p };
 
     return std::nullopt;
@@ -191,7 +191,7 @@ struct EndpointNameView
         : p (ump)
     {
         jassert (p.getType() == PacketType::stream);
-        jassert (StreamStatus (p.getStatus()) == StreamStatus::endpoint_name);
+        jassert (StreamStatus (p.getStatus()) == StreamStatus::endpointName);
     }
 
     constexpr PacketFormat getFormat() const { return PacketFormat ((p.data[0] >> 26u) & 0x3u); }
@@ -204,7 +204,7 @@ private:
 
 constexpr std::optional<EndpointNameView> asEndpointNameView (const UniversalPacket& p)
 {
-    if (isStreamMessage (p) && StreamStatus (p.getStatus()) == StreamStatus::endpoint_name)
+    if (isStreamMessage (p) && StreamStatus (p.getStatus()) == StreamStatus::endpointName)
         return EndpointNameView { p };
 
     return std::nullopt;
@@ -216,7 +216,7 @@ struct ProductInstanceIdView
         : p (ump)
     {
         jassert (p.getType() == PacketType::stream);
-        jassert (StreamStatus (p.getStatus()) == StreamStatus::product_instance_id);
+        jassert (StreamStatus (p.getStatus()) == StreamStatus::productInstanceId);
     }
 
     constexpr PacketFormat getFormat() const { return PacketFormat ((p.data[0] >> 26u) & 0x3u); }
@@ -229,7 +229,7 @@ private:
 
 constexpr std::optional<ProductInstanceIdView> asProductInstanceIdView (const UniversalPacket& p)
 {
-    if (isStreamMessage (p) && StreamStatus (p.getStatus()) == StreamStatus::product_instance_id)
+    if (isStreamMessage (p) && StreamStatus (p.getStatus()) == StreamStatus::productInstanceId)
         return ProductInstanceIdView { p };
 
     return std::nullopt;
@@ -241,8 +241,8 @@ struct StreamConfigurationView
         : p (ump)
     {
         jassert (p.getType() == PacketType::stream);
-        jassert (StreamStatus (p.getStatus()) == StreamStatus::stream_configuration_request
-                 || StreamStatus (p.getStatus()) == StreamStatus::stream_configuration_notify);
+        jassert (StreamStatus (p.getStatus()) == StreamStatus::streamConfigurationRequest
+                 || StreamStatus (p.getStatus()) == StreamStatus::streamConfigurationNotify);
     }
 
     constexpr Protocol getProtocol() const { return p.getByte3() & 0x3; }
@@ -259,7 +259,7 @@ constexpr std::optional<StreamConfigurationView> asStreamConfigurationView (cons
         return std::nullopt;
 
     const auto status = StreamStatus (p.getStatus());
-    if (status == StreamStatus::stream_configuration_request || status == StreamStatus::stream_configuration_notify)
+    if (status == StreamStatus::streamConfigurationRequest || status == StreamStatus::streamConfigurationNotify)
         return StreamConfigurationView { p };
 
     return std::nullopt;
@@ -271,7 +271,7 @@ struct FunctionBlockDiscoveryView
         : p (ump)
     {
         jassert (p.getType() == PacketType::stream);
-        jassert (StreamStatus (p.getStatus()) == StreamStatus::function_block_discovery);
+        jassert (StreamStatus (p.getStatus()) == StreamStatus::functionBlockDiscovery);
     }
 
     constexpr uint8_t getFunctionBlock() const { return p.getByte3(); }
@@ -294,7 +294,7 @@ private:
 
 constexpr std::optional<FunctionBlockDiscoveryView> asFunctionBlockDiscoveryView (const UniversalPacket& p)
 {
-    if (isStreamMessage (p) && StreamStatus (p.getStatus()) == StreamStatus::function_block_discovery)
+    if (isStreamMessage (p) && StreamStatus (p.getStatus()) == StreamStatus::functionBlockDiscovery)
         return FunctionBlockDiscoveryView { p };
 
     return std::nullopt;
@@ -332,7 +332,7 @@ struct FunctionBlockInfoView
         : p (ump)
     {
         jassert (p.getType() == PacketType::stream);
-        jassert (StreamStatus (p.getStatus()) == StreamStatus::function_block_info);
+        jassert (StreamStatus (p.getStatus()) == StreamStatus::functionBlockInfo);
     }
 
     constexpr bool isActive() const { return (p.data[0] & 0x00008000u) != 0; }
@@ -359,7 +359,7 @@ private:
 
 constexpr std::optional<FunctionBlockInfoView> asFunctionBlockInfoView (const UniversalPacket& p)
 {
-    if (isStreamMessage (p) && StreamStatus (p.getStatus()) == StreamStatus::function_block_info)
+    if (isStreamMessage (p) && StreamStatus (p.getStatus()) == StreamStatus::functionBlockInfo)
         return FunctionBlockInfoView { p };
 
     return std::nullopt;
@@ -371,7 +371,7 @@ struct FunctionBlockNameView
         : p (ump)
     {
         jassert (p.getType() == PacketType::stream);
-        jassert (StreamStatus (p.getStatus()) == StreamStatus::function_block_name);
+        jassert (StreamStatus (p.getStatus()) == StreamStatus::functionBlockName);
     }
 
     constexpr PacketFormat getFormat() const { return PacketFormat ((p.data[0] >> 26u) & 0x3u); }
@@ -386,7 +386,7 @@ private:
 
 constexpr std::optional<FunctionBlockNameView> asFunctionBlockNameView (const UniversalPacket& p)
 {
-    if (isStreamMessage (p) && StreamStatus (p.getStatus()) == StreamStatus::function_block_name)
+    if (isStreamMessage (p) && StreamStatus (p.getStatus()) == StreamStatus::functionBlockName)
         return FunctionBlockNameView { p };
 
     return std::nullopt;
@@ -397,7 +397,7 @@ constexpr StreamMessage makeEndpointDiscoveryMessage (uint8_t filter,
                                                       uint8_t umpVersionMajor = 1,
                                                       uint8_t umpVersionMinor = 1)
 {
-    StreamMessage message { Status (StreamStatus::endpoint_discovery), PacketFormat::complete };
+    StreamMessage message { Status (StreamStatus::endpointDiscovery), PacketFormat::complete };
     message.setByte (2, umpVersionMajor);
     message.setByte (3, umpVersionMinor);
     message.data[1] = filter;
@@ -411,7 +411,7 @@ constexpr StreamMessage makeEndpointInfoMessage (uint8_t numFunctionBlocks,
                                                  uint8_t umpVersionMajor = 1,
                                                  uint8_t umpVersionMinor = 1)
 {
-    StreamMessage message { Status (StreamStatus::endpoint_info), PacketFormat::complete };
+    StreamMessage message { Status (StreamStatus::endpointInfo), PacketFormat::complete };
     message.setByte (2, umpVersionMajor);
     message.setByte (3, umpVersionMinor);
     message.setByte (4, uint8_t ((staticFunctionBlocks ? 0x80u : 0x00u) | numFunctionBlocks));
@@ -422,7 +422,7 @@ constexpr StreamMessage makeEndpointInfoMessage (uint8_t numFunctionBlocks,
 
 constexpr StreamMessage makeDeviceIdentityMessage (const DeviceIdentity& identity)
 {
-    StreamMessage message { Status (StreamStatus::device_identity), PacketFormat::complete };
+    StreamMessage message { Status (StreamStatus::deviceIdentity), PacketFormat::complete };
     message.data[1] = identity.manufacturer;
     message.data[2] = ((uint32_t (identity.family) << 24) & 0x7F000000u)
                     | ((uint32_t (identity.family) << 9) & 0x007F0000u)
@@ -438,7 +438,7 @@ constexpr StreamMessage makeDeviceIdentityMessage (const DeviceIdentity& identit
 constexpr StreamMessage makeEndpointNameMessage (PacketFormat format, const std::string_view& name)
 {
     jassert (name.length() <= 14);
-    StreamMessage message { Status (StreamStatus::endpoint_name), format };
+    StreamMessage message { Status (StreamStatus::endpointName), format };
     uint8_t byte = 2;
     for (const auto c : name)
     {
@@ -453,7 +453,7 @@ constexpr StreamMessage makeProductInstanceIdMessage (PacketFormat format, const
 {
     jassert (name.length() <= 14);
     jassert (format != PacketFormat::cont);
-    StreamMessage message { Status (StreamStatus::product_instance_id), format };
+    StreamMessage message { Status (StreamStatus::productInstanceId), format };
     uint8_t byte = 2;
     for (const auto c : name)
     {
@@ -467,7 +467,7 @@ constexpr StreamMessage makeProductInstanceIdMessage (PacketFormat format, const
 constexpr StreamMessage makeStreamConfigurationRequest (Protocol protocol, Extensions extensions = 0)
 {
     jassert (protocol && protocol < 0x3);
-    StreamMessage message { Status (StreamStatus::stream_configuration_request), PacketFormat::complete };
+    StreamMessage message { Status (StreamStatus::streamConfigurationRequest), PacketFormat::complete };
     message.setByte (2, protocol);
     message.setByte (3, extensions);
     return message;
@@ -476,7 +476,7 @@ constexpr StreamMessage makeStreamConfigurationRequest (Protocol protocol, Exten
 constexpr StreamMessage makeStreamConfigurationNotification (Protocol protocol, Extensions extensions = 0)
 {
     jassert (protocol && protocol < 0x3);
-    StreamMessage message { Status (StreamStatus::stream_configuration_notify), PacketFormat::complete };
+    StreamMessage message { Status (StreamStatus::streamConfigurationNotify), PacketFormat::complete };
     message.setByte (2, protocol);
     message.setByte (3, extensions);
     return message;
@@ -485,7 +485,7 @@ constexpr StreamMessage makeStreamConfigurationNotification (Protocol protocol, 
 constexpr StreamMessage makeFunctionBlockDiscoveryMessage (uint8_t functionBlock, uint8_t filter)
 {
     jassert (functionBlock == 0xff || functionBlock < 32);
-    StreamMessage message { Status (StreamStatus::function_block_discovery), PacketFormat::complete };
+    StreamMessage message { Status (StreamStatus::functionBlockDiscovery), PacketFormat::complete };
     message.setByte (2, functionBlock);
     message.setByte (3, filter);
     return message;
@@ -498,7 +498,7 @@ constexpr StreamMessage makeFunctionBlockInfoMessage (uint7_t functionBlock,
 {
     jassert (functionBlock < 32);
     jassert (direction > 0 && direction < 4);
-    StreamMessage message { Status (StreamStatus::function_block_info), PacketFormat::complete };
+    StreamMessage message { Status (StreamStatus::functionBlockInfo), PacketFormat::complete };
     message.setByte (2, uint8_t (0x80u | (functionBlock & 0x1f)));
     message.setByte (3, uint8_t (((direction & 0x03u) << 4) | (direction & 0x03u)));
     message.setByte (4, firstGroup & 0x0f);
@@ -517,7 +517,7 @@ constexpr StreamMessage makeFunctionBlockInfoMessage (uint7_t functionBlock,
     jassert (options.uiHint < 4);
     jassert (options.uiHint == 0 || (options.direction & options.uiHint));
 
-    StreamMessage message { Status (StreamStatus::function_block_info), PacketFormat::complete };
+    StreamMessage message { Status (StreamStatus::functionBlockInfo), PacketFormat::complete };
     message.setByte (2, uint8_t ((options.active ? 0x80u : 0x00u) | (functionBlock & 0x1f)));
     message.setByte (3, uint8_t ((((options.uiHint ? options.uiHint : options.direction) & 0x03u) << 4) | ((options.midi1 & 0x03u) << 2) | (options.direction & 0x03u)));
     message.setByte (4, firstGroup & 0x0f);
@@ -532,7 +532,7 @@ constexpr StreamMessage makeFunctionBlockNameMessage (PacketFormat format,
                                                       const std::string_view& name)
 {
     jassert (name.length() <= 13);
-    StreamMessage message { Status (StreamStatus::function_block_name), format };
+    StreamMessage message { Status (StreamStatus::functionBlockName), format };
     message.setByte (2, functionBlock);
 
     uint8_t byte = 3;

@@ -126,42 +126,42 @@ constexpr size_t getMidi1ByteStreamSize (const UniversalPacket& packet)
         case PacketType::system:
             switch (SystemStatus (packet.getStatus()))
             {
-                case SystemStatus::song_position:
+                case SystemStatus::songPosition:
                     return 3u;
-                case SystemStatus::mtc_quarter_frame:
-                case SystemStatus::song_select:
+                case SystemStatus::mtcQuarterFrame:
+                case SystemStatus::songSelect:
                     return 2u;
-                case SystemStatus::tune_request:
+                case SystemStatus::tuneRequest:
                 case SystemStatus::clock:
                 case SystemStatus::start:
                 case SystemStatus::cont:
                 case SystemStatus::stop:
-                case SystemStatus::active_sense:
+                case SystemStatus::activeSense:
                 case SystemStatus::reset:
                     return 1u;
             }
             break;
-        case PacketType::midi1_channel_voice:
+        case PacketType::midi1ChannelVoice:
             switch (packet.getStatus() & 0xf0)
             {
-                case Status (Midi1ChannelVoiceStatus::note_off):
-                case Status (Midi1ChannelVoiceStatus::note_on):
-                case Status (Midi1ChannelVoiceStatus::poly_pressure):
-                case Status (Midi1ChannelVoiceStatus::control_change):
-                case Status (Midi1ChannelVoiceStatus::pitch_bend):
+                case Status (Midi1ChannelVoiceStatus::noteOff):
+                case Status (Midi1ChannelVoiceStatus::noteOn):
+                case Status (Midi1ChannelVoiceStatus::polyPressure):
+                case Status (Midi1ChannelVoiceStatus::controlChange):
+                case Status (Midi1ChannelVoiceStatus::pitchBend):
                     return 3u;
-                case Status (Midi1ChannelVoiceStatus::program_change):
-                case Status (Midi1ChannelVoiceStatus::channel_pressure):
+                case Status (Midi1ChannelVoiceStatus::programChange):
+                case Status (Midi1ChannelVoiceStatus::channelPressure):
                     return 2u;
             }
             break;
         case PacketType::data:
             switch (packet.getStatus() & 0xf0)
             {
-                case Status (DataStatus::sysex7_complete):
-                case Status (DataStatus::sysex7_start):
-                case Status (DataStatus::sysex7_end):
-                case Status (DataStatus::sysex7_continue):
+                case Status (DataStatus::sysex7Complete):
+                case Status (DataStatus::sysex7Start):
+                case Status (DataStatus::sysex7End):
+                case Status (DataStatus::sysex7Continue):
                     if ((packet.getStatus() & 0x0f) <= 6)
                         return packet.getStatus() & 0x0f;
                     break;
@@ -176,7 +176,7 @@ constexpr size_t getMidi1ByteStreamSize (const UniversalPacket& packet)
 
 constexpr UniversalPacket fromMidi1ByteStream (uint8_t status, uint7_t data1, uint7_t data2)
 {
-    auto type = PacketType::midi1_channel_voice;
+    auto type = PacketType::midi1ChannelVoice;
 
     if ((status & 0xf0) == 0xf0)
     {

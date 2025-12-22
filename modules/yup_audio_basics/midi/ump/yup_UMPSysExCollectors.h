@@ -51,13 +51,13 @@ public:
 
         switch (DataStatus (view.getStatus()))
         {
-            case DataStatus::sysex7_complete:
-            case DataStatus::sysex7_start:
-                if (state != Status (DataStatus::sysex7_start))
+            case DataStatus::sysex7Complete:
+            case DataStatus::sysex7Start:
+                if (state != Status (DataStatus::sysex7Start))
                     reset();
                 break;
             default:
-                if (state != Status (DataStatus::sysex7_continue))
+                if (state != Status (DataStatus::sysex7Continue))
                 {
                     reset();
                     return;
@@ -77,7 +77,7 @@ public:
 
             if (limitedSize && (sysex.data.size() + numBytes > sysex.data.capacity()))
             {
-                state = Status (DataStatus::sysex7_start);
+                state = Status (DataStatus::sysex7Start);
                 return;
             }
         }
@@ -114,14 +114,14 @@ public:
 
         switch (DataStatus (view.getStatus()))
         {
-            case DataStatus::sysex7_complete:
-            case DataStatus::sysex7_end:
+            case DataStatus::sysex7Complete:
+            case DataStatus::sysex7End:
                 if (callback)
                     callback (sysex);
                 reset();
                 break;
             default:
-                state = Status (DataStatus::sysex7_continue);
+                state = Status (DataStatus::sysex7Continue);
                 break;
         }
     }
@@ -129,14 +129,14 @@ public:
     void reset()
     {
         sysex.clear();
-        state = Status (DataStatus::sysex7_start);
+        state = Status (DataStatus::sysex7Start);
         manufacturerIdBytesRead = 0;
     }
 
 private:
     SysEx7 sysex;
     size_t maxSysExDataSize { 0 };
-    Status state { Status (DataStatus::sysex7_start) };
+    Status state { Status (DataStatus::sysex7Start) };
     uint8_t manufacturerIdBytesRead { 0 };
     Callback callback;
 };

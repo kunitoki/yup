@@ -28,11 +28,11 @@ enum class PacketType : uint4_t
 {
     utility = 0x0,
     system = 0x1,
-    midi1_channel_voice = 0x2,
+    midi1ChannelVoice = 0x2,
     data = 0x3,
-    midi2_channel_voice = 0x4,
-    extended_data = 0x5,
-    flex_data = 0xD,
+    midi2ChannelVoice = 0x4,
+    extendedData = 0x5,
+    flexData = 0xD,
     stream = 0xF
 };
 
@@ -59,64 +59,64 @@ enum class UtilityStatus : Status
 
 enum class SystemStatus : Status
 {
-    mtc_quarter_frame = 0xF1,
-    song_position = 0xF2,
-    song_select = 0xF3,
-    tune_request = 0xF6,
+    mtcQuarterFrame = 0xF1,
+    songPosition = 0xF2,
+    songSelect = 0xF3,
+    tuneRequest = 0xF6,
     clock = 0xF8,
     start = 0xFA,
     cont = 0xFB,
     stop = 0xFC,
-    active_sense = 0xFE,
+    activeSense = 0xFE,
     reset = 0xFF
 };
 
 enum class Midi1ChannelVoiceStatus : Status
 {
-    note_off = 0x80,
-    note_on = 0x90,
-    poly_pressure = 0xA0,
-    control_change = 0xB0,
-    program_change = 0xC0,
-    channel_pressure = 0xD0,
-    pitch_bend = 0xE0
+    noteOff = 0x80,
+    noteOn = 0x90,
+    polyPressure = 0xA0,
+    controlChange = 0xB0,
+    programChange = 0xC0,
+    channelPressure = 0xD0,
+    pitchBend = 0xE0
 };
 
 enum class DataStatus : Status
 {
-    sysex7_complete = (Status (PacketFormat::complete) << 4),
-    sysex7_start = (Status (PacketFormat::start) << 4),
-    sysex7_continue = (Status (PacketFormat::cont) << 4),
-    sysex7_end = (Status (PacketFormat::end) << 4)
+    sysex7Complete = (Status (PacketFormat::complete) << 4),
+    sysex7Start = (Status (PacketFormat::start) << 4),
+    sysex7Continue = (Status (PacketFormat::cont) << 4),
+    sysex7End = (Status (PacketFormat::end) << 4)
 };
 
 enum class ChannelVoiceStatus : Status
 {
-    registered_per_note_controller = 0x00,
-    assignable_per_note_controller = 0x10,
-    registered_controller = 0x20,
-    assignable_controller = 0x30,
-    relative_registered_controller = 0x40,
-    relative_assignable_controller = 0x50,
-    per_note_pitch_bend = 0x60,
-    note_off = 0x80,
-    note_on = 0x90,
-    poly_pressure = 0xA0,
-    control_change = 0xB0,
-    program_change = 0xC0,
-    channel_pressure = 0xD0,
-    pitch_bend = 0xE0,
-    per_note_management = 0xF0
+    registeredPerNoteController = 0x00,
+    assignablePerNoteController = 0x10,
+    registeredController = 0x20,
+    assignableController = 0x30,
+    relativeRegisteredController = 0x40,
+    relativeAssignableController = 0x50,
+    perNotePitchBend = 0x60,
+    noteOff = 0x80,
+    noteOn = 0x90,
+    polyPressure = 0xA0,
+    controlChange = 0xB0,
+    programChange = 0xC0,
+    channelPressure = 0xD0,
+    pitchBend = 0xE0,
+    perNoteManagement = 0xF0
 };
 
 enum class ExtendedDataStatus : Status
 {
-    sysex8_complete = (Status (PacketFormat::complete) << 4),
-    sysex8_start = (Status (PacketFormat::start) << 4),
-    sysex8_continue = (Status (PacketFormat::cont) << 4),
-    sysex8_end = (Status (PacketFormat::end) << 4),
-    mixed_data_set_header = 0x80,
-    mixed_data_set_payload = 0x90
+    sysex8Complete = (Status (PacketFormat::complete) << 4),
+    sysex8Start = (Status (PacketFormat::start) << 4),
+    sysex8Continue = (Status (PacketFormat::cont) << 4),
+    sysex8End = (Status (PacketFormat::end) << 4),
+    mixedDataSetHeader = 0x80,
+    mixedDataSetPayload = 0x90
 };
 
 enum class StreamProtocol : Protocol
@@ -133,16 +133,16 @@ enum class StreamExtensions : Extensions
 
 enum class StreamStatus : Status
 {
-    endpoint_discovery = 0x00,
-    endpoint_info = 0x01,
-    device_identity = 0x02,
-    endpoint_name = 0x03,
-    product_instance_id = 0x04,
-    stream_configuration_request = 0x05,
-    stream_configuration_notify = 0x06,
-    function_block_discovery = 0x10,
-    function_block_info = 0x11,
-    function_block_name = 0x12
+    endpointDiscovery = 0x00,
+    endpointInfo = 0x01,
+    deviceIdentity = 0x02,
+    endpointName = 0x03,
+    productInstanceId = 0x04,
+    streamConfigurationRequest = 0x05,
+    streamConfigurationNotify = 0x06,
+    functionBlockDiscovery = 0x10,
+    functionBlockInfo = 0x11,
+    functionBlockName = 0x12
 };
 
 namespace ControlChange
@@ -245,9 +245,9 @@ struct UniversalPacket
 
     constexpr bool hasChannel() const
     {
-        return getType() == PacketType::midi1_channel_voice
-            || getType() == PacketType::midi2_channel_voice
-            || getType() == PacketType::flex_data;
+        return getType() == PacketType::midi1ChannelVoice
+            || getType() == PacketType::midi2ChannelVoice
+            || getType() == PacketType::flexData;
     }
 
     constexpr Channel getChannel() const
@@ -333,12 +333,12 @@ struct UniversalPacket
 
     constexpr bool isChannelVoiceMessage() const
     {
-        return getType() == PacketType::midi1_channel_voice || getType() == PacketType::midi2_channel_voice;
+        return getType() == PacketType::midi1ChannelVoice || getType() == PacketType::midi2ChannelVoice;
     }
 
     constexpr bool isDataMessage() const
     {
-        return getType() == PacketType::data || getType() == PacketType::extended_data;
+        return getType() == PacketType::data || getType() == PacketType::extendedData;
     }
 
     constexpr bool isMidi1ProtocolMessage() const
@@ -347,15 +347,15 @@ struct UniversalPacket
         {
             switch (SystemStatus (getStatus()))
             {
-                case SystemStatus::mtc_quarter_frame:
-                case SystemStatus::song_position:
-                case SystemStatus::song_select:
-                case SystemStatus::tune_request:
+                case SystemStatus::mtcQuarterFrame:
+                case SystemStatus::songPosition:
+                case SystemStatus::songSelect:
+                case SystemStatus::tuneRequest:
                 case SystemStatus::clock:
                 case SystemStatus::start:
                 case SystemStatus::cont:
                 case SystemStatus::stop:
-                case SystemStatus::active_sense:
+                case SystemStatus::activeSense:
                 case SystemStatus::reset:
                     return true;
                 default:
@@ -363,7 +363,7 @@ struct UniversalPacket
             }
         }
 
-        if (getType() == PacketType::midi1_channel_voice)
+        if (getType() == PacketType::midi1ChannelVoice)
             return getStatus() >= 0x80 && getStatus() < 0xf0;
 
         return false;

@@ -85,7 +85,7 @@ struct FlexDataMessage : UniversalPacket
 
 constexpr bool isFlexDataMessage (const UniversalPacket& p)
 {
-    return p.getType() == PacketType::flex_data;
+    return p.getType() == PacketType::flexData;
 }
 
 struct FlexDataMessageView
@@ -93,7 +93,7 @@ struct FlexDataMessageView
     constexpr explicit FlexDataMessageView (const UniversalPacket& ump)
         : p (ump)
     {
-        jassert (p.getType() == PacketType::flex_data);
+        jassert (p.getType() == PacketType::flexData);
     }
 
     constexpr Group getGroup() const { return p.getGroup(); }
