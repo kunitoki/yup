@@ -95,3 +95,19 @@ TEST (JitterReductionTimestampTests, JitterTimestampMessage)
     EXPECT_EQ (tsMsg.getByte3(), 0x7bu);
     EXPECT_EQ (tsMsg.getByte4(), 0x7cu);
 }
+
+TEST (JitterReductionTimestampTests, JitterClockFollowerScheduling)
+{
+    JitterClockFollower follower;
+    follower.reset();
+
+    const auto now = JitterClockFollower::SystemClock::now();
+    const auto offset = std::chrono::milliseconds (5);
+    follower.setSecurityOffset (offset);
+
+    follower.processClock (now, JitterTimestamp { 0 });
+    const auto scheduled = follower.scheduleMessage (now, JitterTimestamp { 0 });
+
+    EXPECT_GE (scheduled, now + offset);
+    EXPECT_EQ (follower.getSecurityOffset(), offset);
+}
