@@ -90,7 +90,7 @@ public:
                 if (Utils::getMessageType (firstWord) != 0x00)
                 {
                     const auto message = fromUmp (PacketX1 { firstWord }, time);
-                    callback (message);
+                    dispatchMessage (callback, message);
                 }
 
                 break;
@@ -187,8 +187,27 @@ private:
     void terminateSysExMessage (MessageCallback&& callback)
     {
         pendingSysExData.push_back (std::byte { 0xf7 });
-        callback (BytestreamMidiView (pendingSysExData, pendingSysExTime).getMessage());
+        const BytestreamMidiView view (pendingSysExData, pendingSysExTime);
+        dispatchMessage (callback, view);
         pendingSysExData.clear();
+    }
+
+    template <typename MessageCallback>
+    static void dispatchMessage (MessageCallback&& callback, const MidiMessage& message)
+    {
+        if constexpr (std::is_invocable_v<MessageCallback, const MidiMessage&>)
+            callback (message);
+        else
+            callback (BytestreamMidiView (&message));
+    }
+
+    template <typename MessageCallback>
+    static void dispatchMessage (MessageCallback&& callback, const BytestreamMidiView& view)
+    {
+        if constexpr (std::is_invocable_v<MessageCallback, const MidiMessage&>)
+            callback (view.getMessage());
+        else
+            callback (view);
     }
 
     static bool shouldPacketTerminateSysExEarly (uint32_t firstWord)

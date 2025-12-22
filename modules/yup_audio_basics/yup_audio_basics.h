@@ -135,6 +135,7 @@
 
 //==============================================================================
 #include <chrono>
+#include <type_traits>
 
 //==============================================================================
 #include "buffers/yup_AudioDataConverters.h"
@@ -167,6 +168,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "mpe/yup_MPESynthesiserVoice.h"
 #include "mpe/yup_MPESynthesiser.h"
 #include "mpe/yup_MPEUtils.h"
+#include "midi/ump/yup_UMP.h"
 #include "sources/yup_AudioSource.h"
 #include "sources/yup_PositionableAudioSource.h"
 #include "sources/yup_BufferingAudioSource.h"
@@ -180,8 +182,3 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "synthesisers/yup_Synthesiser.h"
 #include "audio_play_head/yup_AudioPlayHead.h"
 #include "utilities/yup_AudioWorkgroup.h"
-#include "midi/ump/yup_UMPBytesOnGroup.h"
-#include "midi/ump/yup_UMPDeviceInfo.h"
-#include "midi/ump/yup_UMPPacketBuffer.h"
-#include "midi/ump/yup_UMPKeyboardState.h"
-#include "midi/ump/yup_UMP.h"

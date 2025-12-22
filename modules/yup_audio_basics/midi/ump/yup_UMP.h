@@ -37,12 +37,15 @@
   ==============================================================================
 */
 
+#include "yup_UMPBytesOnGroup.h"
+#include "yup_UMPDeviceInfo.h"
 #include "yup_UMPProtocols.h"
 #include "yup_UMPTypes.h"
 #include "yup_UMPUniversalPacket.h"
 #include "yup_UMPUtils.h"
 #include "yup_UMPacket.h"
 #include "yup_UMPView.h"
+#include "yup_UMPPacketBuffer.h"
 #include "yup_UMPIterator.h"
 #include "yup_UMPackets.h"
 #include "yup_UMPMessages.h"
@@ -65,3 +68,4 @@
 #include "yup_UMPDispatcher.h"
 #include "yup_UMPReceiver.h"
 #include "yup_UMPJitterReductionTimestamps.h"
+#include "yup_UMPKeyboardState.h"
