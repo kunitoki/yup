@@ -111,3 +111,189 @@ TEST (JitterReductionTimestampTests, JitterClockFollowerScheduling)
     EXPECT_GE (scheduled, now + offset);
     EXPECT_EQ (follower.getSecurityOffset(), offset);
 }
+
+TEST (JitterReductionTimestampTests, JitterClockNow)
+{
+    auto t1 = JitterClock::now();
+    std::this_thread::sleep_for (std::chrono::microseconds (100));
+    auto t2 = JitterClock::now();
+
+    EXPECT_NE (t1.value, t2.value);
+}
+
+TEST (JitterReductionTimestampTests, JitterTimestampWraparound)
+{
+    JitterTimestamp t1 { 0xfffe };
+    JitterTimestamp t2 { 0x0002 };
+
+    auto diff = t2 - t1;
+    EXPECT_EQ (diff.count(), 4);
+}
+
+TEST (JitterReductionTimestampTests, JitterClockFollowerInitialState)
+{
+    JitterClockFollower follower;
+    follower.reset();
+
+    EXPECT_EQ (follower.getSecurityOffset().count(), 2);
+}
+
+TEST (JitterReductionTimestampTests, JitterClockFollowerFirstClock)
+{
+    JitterClockFollower follower;
+    follower.reset();
+
+    const auto now = JitterClockFollower::SystemClock::now();
+    follower.processClock (now, JitterTimestamp { 100 });
+
+    const auto scheduled = follower.scheduleMessage (now, JitterTimestamp { 100 });
+    EXPECT_GE (scheduled, now);
+}
+
+TEST (JitterReductionTimestampTests, JitterClockFollowerSubsequentClocks)
+{
+    JitterClockFollower follower;
+    follower.reset();
+
+    auto now = JitterClockFollower::SystemClock::now();
+    follower.processClock (now, JitterTimestamp { 1000 });
+
+    now += std::chrono::milliseconds (10);
+    follower.processClock (now, JitterTimestamp { 1100 });
+
+    const auto scheduled = follower.scheduleMessage (now, JitterTimestamp { 1100 });
+    EXPECT_GE (scheduled, now);
+}
+
+TEST (JitterReductionTimestampTests, JitterClockFollowerEarlyClock)
+{
+    JitterClockFollower follower;
+    follower.reset();
+
+    auto now = JitterClockFollower::SystemClock::now();
+    follower.processClock (now, JitterTimestamp { 1000 });
+
+    auto early = now + std::chrono::milliseconds (5);
+    follower.processClock (early, JitterTimestamp { 1100 });
+
+    auto laterStill = now + std::chrono::milliseconds (20);
+    const auto scheduled = follower.scheduleMessage (laterStill, JitterTimestamp { 1200 });
+    EXPECT_GE (scheduled, now);
+}
+
+TEST (JitterReductionTimestampTests, JitterClockFollowerLateClock)
+{
+    JitterClockFollower follower;
+    follower.reset();
+
+    auto now = JitterClockFollower::SystemClock::now();
+    follower.processClock (now, JitterTimestamp { 1000 });
+
+    auto late = now + std::chrono::milliseconds (20);
+    follower.processClock (late, JitterTimestamp { 1100 });
+
+    const auto scheduled = follower.scheduleMessage (late, JitterTimestamp { 1100 });
+    EXPECT_GE (scheduled, now);
+}
+
+TEST (JitterReductionTimestampTests, JitterClockFollowerScheduleWithoutClock)
+{
+    JitterClockFollower follower;
+    follower.reset();
+
+    const auto now = JitterClockFollower::SystemClock::now();
+    const auto scheduled = follower.scheduleMessage (now, JitterTimestamp { 100 });
+
+    EXPECT_GE (scheduled, now);
+}
+
+TEST (JitterReductionTimestampTests, JitterClockFollowerSecurityOffsetAdjustment)
+{
+    JitterClockFollower follower;
+    follower.reset();
+
+    auto now = JitterClockFollower::SystemClock::now();
+    follower.processClock (now, JitterTimestamp { 1000 });
+
+    auto late = now + std::chrono::milliseconds (50);
+    follower.processClock (late, JitterTimestamp { 1100 });
+
+    EXPECT_GT (follower.getSecurityOffset().count(), 2);
+}
+
+TEST (JitterReductionTimestampTests, JitterClockFollowerMultipleSchedules)
+{
+    JitterClockFollower follower;
+    follower.reset();
+
+    auto now = JitterClockFollower::SystemClock::now();
+    follower.processClock (now, JitterTimestamp { 1000 });
+
+    auto scheduled1 = follower.scheduleMessage (now, JitterTimestamp { 1000 });
+    auto scheduled2 = follower.scheduleMessage (now, JitterTimestamp { 1010 });
+    auto scheduled3 = follower.scheduleMessage (now, JitterTimestamp { 1020 });
+
+    EXPECT_LE (scheduled1, scheduled2);
+    EXPECT_LE (scheduled2, scheduled3);
+}
+
+TEST (JitterReductionTimestampTests, JitterClockMessageConstruction)
+{
+    JitterClockMessage msg;
+    EXPECT_EQ (msg.getType(), PacketType::utility);
+    EXPECT_EQ (msg.getStatus(), uint8_t (UtilityStatus::jitterClock));
+}
+
+TEST (JitterReductionTimestampTests, JitterTimestampMessageConstruction)
+{
+    JitterTimestampMessage msg;
+    EXPECT_EQ (msg.getType(), PacketType::utility);
+    EXPECT_EQ (msg.getStatus(), uint8_t (UtilityStatus::jitterTimestamp));
+}
+
+TEST (JitterReductionTimestampTests, JitterClockMessageSetGetTimestamp)
+{
+    JitterClockMessage msg;
+
+    for (uint16_t i = 0; i < 1000; i += 100)
+    {
+        JitterTimestamp ts { i };
+        msg.setTimestamp (ts);
+        EXPECT_EQ (msg.getTimestamp(), ts);
+    }
+}
+
+TEST (JitterReductionTimestampTests, JitterTimestampMessageSetGetTimestamp)
+{
+    JitterTimestampMessage msg;
+
+    for (uint16_t i = 0; i < 1000; i += 100)
+    {
+        JitterTimestamp ts { i };
+        msg.setTimestamp (ts);
+        EXPECT_EQ (msg.getTimestamp(), ts);
+    }
+}
+
+TEST (JitterReductionTimestampTests, JitterTimestampMaxValue)
+{
+    JitterTimestamp t { 0xffff };
+    EXPECT_EQ (t.value, 0xffffu);
+
+    JitterTimestamp t2 { 0 };
+    auto diff = t2 - t;
+    EXPECT_EQ (diff.count(), 1);
+}
+
+TEST (JitterReductionTimestampTests, JitterClockFollowerResetClearsState)
+{
+    JitterClockFollower follower;
+
+    auto now = JitterClockFollower::SystemClock::now();
+    follower.processClock (now, JitterTimestamp { 1000 });
+    follower.setSecurityOffset (std::chrono::milliseconds (100));
+
+    follower.reset();
+
+    EXPECT_EQ (follower.getSecurityOffset().count(), 2);
+}
