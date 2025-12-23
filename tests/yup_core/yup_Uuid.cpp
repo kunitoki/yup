@@ -252,9 +252,10 @@ TEST (UuidTests, GetPart)
 
 TEST (UuidTests, GetClockSeqLow)
 {
-    Uuid uuid;
+    uint8 rawData[16] = { 0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0x0a, 0xbc, 0xde };
+    Uuid uuid (rawData);
     uint8 clockSeqLow = uuid.getClockSeqLow();
-    EXPECT_NE (clockSeqLow, 0);
+    EXPECT_EQ (clockSeqLow, 0x23);
 }
 
 TEST (UuidTests, FromSHA1MemoryBlock)
