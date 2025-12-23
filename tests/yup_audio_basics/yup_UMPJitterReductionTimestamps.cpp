@@ -135,7 +135,8 @@ TEST (JitterReductionTimestampTests, JitterClockFollowerInitialState)
     JitterClockFollower follower;
     follower.reset();
 
-    EXPECT_EQ (follower.getSecurityOffset().count(), 2);
+    auto offsetMs = std::chrono::duration_cast<std::chrono::milliseconds> (follower.getSecurityOffset());
+    EXPECT_EQ (offsetMs.count(), 2);
 }
 
 TEST (JitterReductionTimestampTests, JitterClockFollowerFirstClock)
@@ -295,5 +296,6 @@ TEST (JitterReductionTimestampTests, JitterClockFollowerResetClearsState)
 
     follower.reset();
 
-    EXPECT_EQ (follower.getSecurityOffset().count(), 2);
+    auto offsetMs = std::chrono::duration_cast<std::chrono::milliseconds> (follower.getSecurityOffset());
+    EXPECT_EQ (offsetMs.count(), 2);
 }

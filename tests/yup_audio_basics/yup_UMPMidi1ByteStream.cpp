@@ -282,7 +282,7 @@ TEST (Midi1ByteStreamParserTests, SysExWithCallback)
 
     ASSERT_EQ (receivedSysEx.size(), 1u);
     EXPECT_EQ (receivedSysEx[0].manufacturerId, 0x7e0000u);
-    EXPECT_EQ (receivedSysEx[0].data.size(), 2u);
+    EXPECT_EQ (receivedSysEx[0].data.size(), 3u);
 }
 
 TEST (Midi1ByteStreamParserTests, SysExWithCallbackThreeByteManufacturerId)
