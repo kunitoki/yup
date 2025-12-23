@@ -37,10 +37,96 @@
   ==============================================================================
 */
 
+#include <array>
+#include <cstring>
+#include <poll.h>
+#include <unistd.h>
+#include <fcntl.h>
+
+#if defined(__has_include)
+#if __has_include(<alsa/ump.h>)
+#include <alsa/ump.h>
+#define YUP_HAS_ALSA_UMP 1
+#endif
+#endif
+
+#ifndef YUP_HAS_ALSA_UMP
+#define YUP_HAS_ALSA_UMP 0
+#endif
+
 namespace yup
 {
 
 #if YUP_ALSA
+
+namespace
+{
+constexpr const char* umpRawmidiPrefix = "ump-rawmidi:";
+constexpr const char* umpSequencerPrefix = "ump-seq:";
+
+bool isUmpRawmidiIdentifier (const String& identifier)
+{
+    return identifier.startsWith (umpRawmidiPrefix);
+}
+
+bool isUmpSequencerIdentifier (const String& identifier)
+{
+    return identifier.startsWith (umpSequencerPrefix);
+}
+
+String getUmpRawmidiPath (const String& identifier)
+{
+    return identifier.fromFirstOccurrenceOf (umpRawmidiPrefix, false, false);
+}
+
+String getUmpRawmidiIdentifier (const String& path)
+{
+    return String (umpRawmidiPrefix) + path;
+}
+
+String getUmpSequencerIdentifier (const String& identifier)
+{
+    return String (umpSequencerPrefix) + identifier;
+}
+
+Array<File> findUmpRawmidiNodes()
+{
+    Array<File> results;
+    File ("/dev/snd").findChildFiles (results, File::findFiles, false, "umpC*D*");
+    return results;
+}
+
+bool parseUmpRawmidiPath (const String& path, int& card, int& device)
+{
+    const auto name = File (path).getFileName();
+    if (! name.startsWith ("umpC"))
+        return false;
+
+    const auto dIndex = name.indexOfChar ('D');
+    if (dIndex <= 4)
+        return false;
+
+    const auto cardString = name.substring (4, dIndex);
+    const auto deviceString = name.substring (dIndex + 1);
+
+    if (! cardString.containsOnly ("0123456789") || ! deviceString.containsOnly ("0123456789"))
+        return false;
+
+    card = cardString.getIntValue();
+    device = deviceString.getIntValue();
+    return true;
+}
+
+String getUmpAlsaDeviceName (const String& path)
+{
+    int card = 0;
+    int device = 0;
+    if (! parseUmpRawmidiPath (path, card, device))
+        return {};
+
+    return "hw:" + String (card) + "," + String (device);
+}
+} // namespace
 
 //==============================================================================
 class AlsaClient
@@ -126,6 +212,19 @@ public:
             jassert (cb != nullptr && input != nullptr);
             callback = cb;
             midiInput = input;
+            umpReceiver = nullptr;
+            umpConverter.reset();
+            umpToBytestream = std::make_unique<ump::ToBytestreamConverter> (2048);
+        }
+
+        void setupInputUMP (MidiInput* input, ump::Receiver* receiverIn, ump::PacketProtocol protocolIn)
+        {
+            jassert (receiverIn != nullptr && input != nullptr);
+            callback = nullptr;
+            midiInput = input;
+            umpReceiver = receiverIn;
+            umpProtocol = protocolIn;
+            umpConverter = std::make_unique<ump::GenericUMPConverter> (protocolIn);
         }
 
         void setupOutput()
@@ -185,6 +284,33 @@ public:
             return success;
         }
 
+        bool sendUmpMessageNow (const uint32_t* words, uint32_t numWords)
+        {
+#if defined(SND_SEQ_EVENT_UMP)
+            if (words == nullptr || numWords == 0 || numWords > 4)
+                return false;
+
+            snd_seq_event_t event;
+            snd_seq_ev_clear (&event);
+            event.type = 0;
+            event.flags |= SND_SEQ_EVENT_UMP;
+
+            std::array<uint32_t, 4> payload {};
+            std::memcpy (payload.data(), words, sizeof (uint32_t) * numWords);
+            snd_seq_ev_set_variable (&event, (unsigned int) (numWords * sizeof (uint32_t)), payload.data());
+
+            snd_seq_ev_set_source (&event, (unsigned char) portId);
+            snd_seq_ev_set_subs (&event);
+            snd_seq_ev_set_direct (&event);
+
+            return snd_seq_event_output_direct (client->get(), &event) >= 0;
+#else
+            (void) words;
+            (void) numWords;
+            return false;
+#endif
+        }
+
         bool operator== (const Port& lhs) const noexcept
         {
             return portId != -1 && portId == lhs.portId;
@@ -205,14 +331,51 @@ public:
 
         void handleIncomingMidiMessage (const MidiMessage& message) const
         {
-            if (callbackEnabled)
+            if (! callbackEnabled)
+                return;
+
+            if (callback != nullptr)
+            {
                 callback->handleIncomingMidiMessage (midiInput, message);
+                return;
+            }
+
+            if (umpReceiver != nullptr && umpConverter != nullptr)
+            {
+                const auto timestamp = message.getTimeStamp();
+                umpConverter->convert (ump::BytestreamMidiView (&message), [&] (const ump::View& view)
+                {
+                    umpReceiver->packetReceived (view, timestamp);
+                });
+            }
         }
 
         void handlePartialSysexMessage (const uint8* messageData, int numBytesSoFar, double timeStamp)
         {
             if (callbackEnabled)
                 callback->handlePartialSysexMessage (midiInput, messageData, numBytesSoFar, timeStamp);
+        }
+
+        void handleIncomingUmpPacket (const uint32_t* words, uint32_t numWords, double timeStamp) const
+        {
+            if (! callbackEnabled || words == nullptr || numWords == 0)
+                return;
+
+            const ump::View view (words);
+
+            if (umpReceiver != nullptr)
+            {
+                umpReceiver->packetReceived (view, timeStamp);
+                return;
+            }
+
+            if (callback != nullptr && umpToBytestream != nullptr)
+            {
+                umpToBytestream->convert (view, timeStamp, [&] (const MidiMessage& message)
+                {
+                    callback->handleIncomingMidiMessage (midiInput, message);
+                });
+            }
         }
 
         int getPortId() const { return portId; }
@@ -225,6 +388,10 @@ public:
         MidiInputCallback* callback = nullptr;
         snd_midi_event_t* midiParser = nullptr;
         MidiInput* midiInput = nullptr;
+        ump::Receiver* umpReceiver = nullptr;
+        ump::PacketProtocol umpProtocol = ump::PacketProtocol::MIDI_1_0;
+        std::unique_ptr<ump::GenericUMPConverter> umpConverter;
+        std::unique_ptr<ump::ToBytestreamConverter> umpToBytestream;
 
         String portName;
 
@@ -322,6 +489,7 @@ private:
     snd_seq_t* handle = nullptr;
     int clientId = 0;
     int announcementsIn = 0;
+    bool umpConfigured = false;
     std::vector<std::unique_ptr<Port>> ports;
     Atomic<int> activeCallbacks;
     CriticalSection callbackLock;
@@ -432,6 +600,29 @@ private:
                                     continue;
                                 }
 
+#if defined(SND_SEQ_EVENT_UMP)
+                                if ((inputEvent->flags & SND_SEQ_EVENT_UMP) != 0)
+                                {
+                                    const auto timeStamp = Time::getMillisecondCounter() * 0.001;
+                                    const auto* dataPtr = static_cast<const uint8_t*> (inputEvent->data.ext.ptr);
+                                    const auto dataLen = inputEvent->data.ext.len;
+
+                                    if (dataPtr != nullptr && dataLen >= 4)
+                                    {
+                                        std::array<uint32_t, 4> words {};
+                                        const auto bytesToCopy = jmin ((size_t) dataLen, sizeof (words));
+                                        std::memcpy (words.data(), dataPtr, bytesToCopy);
+
+                                        if (auto* port = client.findPort (inputEvent->dest.port))
+                                            port->handleIncomingUmpPacket (words.data(),
+                                                                           static_cast<uint32_t> (bytesToCopy / sizeof (uint32_t)),
+                                                                           timeStamp);
+                                    }
+
+                                    continue;
+                                }
+#endif
+
                                 // xxx what about SYSEXes that are too big for the buffer?
                                 const auto numBytes = snd_midi_event_decode (midiParser,
                                                                              buffer.data(),
@@ -487,8 +678,19 @@ static AlsaClient::Port* iterateMidiClient (AlsaClient& client,
             String portName (snd_seq_port_info_get_name (portInfo));
             auto portID = snd_seq_port_info_get_port (portInfo);
 
-            MidiDeviceInfo device (portName, getFormattedPortIdentifier (sourceClient, portID));
+            const auto baseIdentifier = getFormattedPortIdentifier (sourceClient, portID);
+            MidiDeviceInfo device (portName, baseIdentifier);
             devices.add (device);
+
+#if defined(SND_SEQ_PORT_TYPE_MIDI_UMP)
+            if ((snd_seq_port_info_get_type (portInfo) & SND_SEQ_PORT_TYPE_MIDI_UMP) != 0)
+            {
+                devices.add (MidiDeviceInfo { portName,
+                                              getUmpSequencerIdentifier (baseIdentifier),
+                                              ump::PacketProtocol::MIDI_2_0,
+                                              true });
+            }
+#endif
 
             if (deviceIdentifierToOpen.isNotEmpty() && deviceIdentifierToOpen == device.identifier)
             {
@@ -561,15 +763,233 @@ struct AlsaPortPtr
 };
 
 //==============================================================================
-class MidiInput::Pimpl final : public AlsaPortPtr
+class MidiInput::Pimpl
 {
 public:
-    using AlsaPortPtr::AlsaPortPtr;
+    void configureForUmp()
+    {
+#if defined(SND_SEQ_EVENT_UMP)
+        if (! umpConfigured && handle != nullptr)
+        {
+            snd_seq_set_client_midi_version (handle, 2);
+#if defined(snd_seq_set_client_ump_conversion)
+            snd_seq_set_client_ump_conversion (handle, 1);
+#endif
+            umpConfigured = true;
+        }
+#endif
+    }
+
+    virtual ~Pimpl() = default;
+    virtual void start() = 0;
+    virtual void stop() = 0;
+};
+
+class SequencerInputPimpl final : public MidiInput::Pimpl
+    , public AlsaPortPtr
+{
+public:
+    explicit SequencerInputPimpl (AlsaClient::Port* p, std::unique_ptr<MidiInputCallback> cb)
+        : AlsaPortPtr (p)
+        , callback (std::move (cb))
+    {
+    }
+
+    void start() override
+    {
+        ptr->enableCallback (true);
+    }
+
+    void stop() override
+    {
+        ptr->enableCallback (false);
+    }
+
+private:
+    std::unique_ptr<MidiInputCallback> callback;
+};
+
+class UmpRawmidiInputPimpl final : public MidiInput::Pimpl
+{
+public:
+    UmpRawmidiInputPimpl (int fdIn, std::unique_ptr<ump::U32InputHandler> handlerIn)
+        : fd (fdIn)
+        , handler (std::move (handlerIn))
+    {
+        startThread();
+    }
+
+#if YUP_HAS_ALSA_UMP
+    UmpRawmidiInputPimpl (snd_ump_t* handleIn, std::unique_ptr<ump::U32InputHandler> handlerIn)
+        : umpHandle (handleIn)
+        , handler (std::move (handlerIn))
+    {
+        startThread();
+    }
+#endif
+
+    ~UmpRawmidiInputPimpl() override
+    {
+        shouldStop = true;
+        if (thread.joinable())
+            thread.join();
+
+        if (fd >= 0)
+            ::close (fd);
+#if YUP_HAS_ALSA_UMP
+        if (umpHandle != nullptr)
+            snd_ump_close (umpHandle);
+#endif
+    }
+
+    void start() override
+    {
+        callbackEnabled = true;
+        handler->reset();
+    }
+
+    void stop() override
+    {
+        callbackEnabled = false;
+    }
+
+private:
+    void startThread()
+    {
+        thread = std::thread ([this]
+        {
+            Thread::setCurrentThreadName ("YUP UMP RawMIDI Input");
+
+            std::array<uint32_t, 256> buffer {};
+
+#if YUP_HAS_ALSA_UMP
+            if (umpHandle != nullptr)
+            {
+                const auto numPfds = snd_ump_poll_descriptors_count (umpHandle);
+                std::vector<pollfd> pfds ((size_t) numPfds);
+                snd_ump_poll_descriptors (umpHandle, pfds.data(), (unsigned int) numPfds);
+
+                while (! shouldStop)
+                {
+                    if (poll (pfds.data(), (nfds_t) pfds.size(), 100) <= 0)
+                        continue;
+
+                    unsigned short revents = 0;
+                    snd_ump_poll_descriptors_revents (umpHandle, pfds.data(), (unsigned int) pfds.size(), &revents);
+                    if ((revents & POLLIN) == 0)
+                        continue;
+
+                    const auto bytesRead = snd_ump_read (umpHandle, buffer.data(), buffer.size() * sizeof (uint32_t));
+                    if (bytesRead <= 0)
+                        continue;
+
+                    const auto words = static_cast<size_t> (bytesRead / sizeof (uint32_t));
+                    if (words == 0 || ! callbackEnabled)
+                        continue;
+
+                    const auto now = Time::getMillisecondCounterHiRes() * 0.001;
+                    handler->pushMidiData (buffer.data(), buffer.data() + words, now);
+                }
+
+                return;
+            }
+#endif
+
+            pollfd pfd { fd, POLLIN, 0 };
+
+            while (! shouldStop)
+            {
+                if (poll (&pfd, 1, 100) <= 0)
+                    continue;
+
+                if ((pfd.revents & POLLIN) == 0)
+                    continue;
+
+                const auto bytesRead = ::read (fd, buffer.data(), buffer.size() * sizeof (uint32_t));
+                if (bytesRead <= 0)
+                    continue;
+
+                const auto words = static_cast<size_t> (bytesRead / sizeof (uint32_t));
+                if (words == 0 || ! callbackEnabled)
+                    continue;
+
+                const auto now = Time::getMillisecondCounterHiRes() * 0.001;
+                handler->pushMidiData (buffer.data(), buffer.data() + words, now);
+            }
+        });
+    }
+
+    int fd = -1;
+#if YUP_HAS_ALSA_UMP
+    snd_ump_t* umpHandle = nullptr;
+#endif
+    std::unique_ptr<ump::U32InputHandler> handler;
+    std::atomic<bool> shouldStop { false };
+    std::atomic<bool> callbackEnabled { false };
+    std::thread thread;
+};
+
+class UmpReceiverCallback final : public MidiInputCallback
+{
+public:
+    UmpReceiverCallback (ump::PacketProtocol protocolIn, ump::Receiver& receiverIn)
+        : receiver (receiverIn)
+        , converter (protocolIn)
+    {
+    }
+
+    void handleIncomingMidiMessage (MidiInput*, const MidiMessage& message) override
+    {
+        const auto timestamp = message.getTimeStamp();
+        converter.convert (ump::BytestreamMidiView (&message), [&] (const ump::View& view)
+        {
+            receiver.packetReceived (view, timestamp);
+        });
+    }
+
+    void handlePartialSysexMessage (MidiInput*, const uint8*, int, double) override {}
+
+private:
+    ump::Receiver& receiver;
+    ump::GenericUMPConverter converter;
+};
+
+class UmpReceiverCallback final : public MidiInputCallback
+{
+public:
+    UmpReceiverCallback (ump::PacketProtocol protocolIn, ump::Receiver& receiverIn)
+        : receiver (receiverIn)
+        , converter (protocolIn)
+    {
+    }
+
+    void handleIncomingMidiMessage (MidiInput*, const MidiMessage& message) override
+    {
+        const auto timestamp = message.getTimeStamp();
+        converter.convert (ump::BytestreamMidiView (&message), [&] (const ump::View& view)
+        {
+            receiver.packetReceived (view, timestamp);
+        });
+    }
+
+    void handlePartialSysexMessage (MidiInput*, const uint8*, int, double) override {}
+
+private:
+    ump::Receiver& receiver;
+    ump::GenericUMPConverter converter;
 };
 
 Array<MidiDeviceInfo> MidiInput::getAvailableDevices()
 {
     Array<MidiDeviceInfo> devices;
+    for (const auto& node : findUmpRawmidiNodes())
+    {
+        const auto path = node.getFullPathName();
+        devices.add (MidiDeviceInfo { "UMP " + node.getFileName(),
+                                      getUmpRawmidiIdentifier (path),
+                                      ump::PacketProtocol::MIDI_2_0,
+                                      true });
+    }
     iterateMidiDevices (true, devices, {});
 
     return devices;
@@ -585,8 +1005,61 @@ std::unique_ptr<MidiInput> MidiInput::openDevice (const String& deviceIdentifier
     if (deviceIdentifier.isEmpty())
         return {};
 
+    String identifierToOpen = deviceIdentifier;
+    if (isUmpSequencerIdentifier (identifierToOpen))
+        identifierToOpen = identifierToOpen.fromFirstOccurrenceOf (umpSequencerPrefix, false, false);
+
+    if (isUmpRawmidiIdentifier (identifierToOpen))
+    {
+        if (callback == nullptr)
+            return {};
+
+        const auto path = getUmpRawmidiPath (identifierToOpen);
+        int fd = -1;
+#if YUP_HAS_ALSA_UMP
+        snd_ump_t* umpHandle = nullptr;
+        const auto umpName = getUmpAlsaDeviceName (path);
+        if (umpName.isNotEmpty()
+            && snd_ump_open (&umpHandle, nullptr, umpName.toRawUTF8(), SND_RAWMIDI_NONBLOCK) >= 0)
+        {
+            snd_ump_nonblock (umpHandle, 1);
+        }
+        else
+        {
+            umpHandle = nullptr;
+        }
+#endif
+
+#if YUP_HAS_ALSA_UMP
+        if (umpHandle == nullptr)
+            fd = ::open (path.toRawUTF8(), O_RDONLY | O_NONBLOCK);
+#else
+        fd = ::open (path.toRawUTF8(), O_RDONLY | O_NONBLOCK);
+#endif
+
+        if (fd < 0
+#if YUP_HAS_ALSA_UMP
+            && umpHandle == nullptr
+#endif
+        )
+            return {};
+
+        std::unique_ptr<MidiInput> midiInput (new MidiInput (File (path).getFileName(),
+                                                             deviceIdentifier,
+                                                             ump::PacketProtocol::MIDI_1_0));
+
+        auto handler = std::make_unique<ump::U32ToBytestreamHandler> (*midiInput, *callback);
+#if YUP_HAS_ALSA_UMP
+        if (umpHandle != nullptr)
+            midiInput->internal.reset (new UmpRawmidiInputPimpl (umpHandle, std::move (handler)));
+        else
+#endif
+            midiInput->internal.reset (new UmpRawmidiInputPimpl (fd, std::move (handler)));
+        return midiInput;
+    }
+
     Array<MidiDeviceInfo> devices;
-    auto* port = iterateMidiDevices (true, devices, deviceIdentifier);
+    auto* port = iterateMidiDevices (true, devices, identifierToOpen);
 
     if (port == nullptr || ! port->isValid())
         return {};
@@ -598,17 +1071,93 @@ std::unique_ptr<MidiInput> MidiInput::openDevice (const String& deviceIdentifier
                                                          ump::PacketProtocol::MIDI_1_0));
 
     port->setupInput (midiInput.get(), callback);
-    midiInput->internal = std::make_unique<Pimpl> (port);
+    midiInput->internal.reset (new SequencerInputPimpl (port, nullptr));
 
     return midiInput;
 }
 
-std::unique_ptr<MidiInput> MidiInput::openDevice (const String&,
-                                                  ump::PacketProtocol,
-                                                  ump::Receiver*)
+std::unique_ptr<MidiInput> MidiInput::openDevice (const String& deviceIdentifier,
+                                                  ump::PacketProtocol protocol,
+                                                  ump::Receiver* receiver)
 {
-    jassertfalse;
-    return {};
+    if (deviceIdentifier.isEmpty() || receiver == nullptr)
+        return {};
+
+    String identifierToOpen = deviceIdentifier;
+    if (isUmpSequencerIdentifier (identifierToOpen))
+        identifierToOpen = identifierToOpen.fromFirstOccurrenceOf (umpSequencerPrefix, false, false);
+
+    if (isUmpRawmidiIdentifier (identifierToOpen))
+    {
+        const auto path = getUmpRawmidiPath (identifierToOpen);
+        int fd = -1;
+#if YUP_HAS_ALSA_UMP
+        snd_ump_t* umpHandle = nullptr;
+        const auto umpName = getUmpAlsaDeviceName (path);
+        if (umpName.isNotEmpty()
+            && snd_ump_open (&umpHandle, nullptr, umpName.toRawUTF8(), SND_RAWMIDI_NONBLOCK) >= 0)
+        {
+            snd_ump_nonblock (umpHandle, 1);
+        }
+        else
+        {
+            umpHandle = nullptr;
+        }
+#endif
+
+#if YUP_HAS_ALSA_UMP
+        if (umpHandle == nullptr)
+            fd = ::open (path.toRawUTF8(), O_RDONLY | O_NONBLOCK);
+#else
+        fd = ::open (path.toRawUTF8(), O_RDONLY | O_NONBLOCK);
+#endif
+
+        if (fd < 0
+#if YUP_HAS_ALSA_UMP
+            && umpHandle == nullptr
+#endif
+        )
+            return {};
+
+        std::unique_ptr<MidiInput> midiInput (new MidiInput (File (path).getFileName(),
+                                                             deviceIdentifier,
+                                                             protocol));
+
+        auto handler = std::make_unique<ump::U32ToUMPHandler> (protocol, *receiver);
+#if YUP_HAS_ALSA_UMP
+        if (umpHandle != nullptr)
+            midiInput->internal.reset (new UmpRawmidiInputPimpl (umpHandle, std::move (handler)));
+        else
+#endif
+            midiInput->internal.reset (new UmpRawmidiInputPimpl (fd, std::move (handler)));
+        return midiInput;
+    }
+
+    Array<MidiDeviceInfo> devices;
+    auto* port = iterateMidiDevices (true, devices, identifierToOpen);
+
+    if (port == nullptr || ! port->isValid())
+        return {};
+
+    if (deviceIdentifier.startsWith (umpSequencerPrefix))
+        AlsaClient::getInstance()->configureForUmp();
+
+    std::unique_ptr<MidiInput> midiInput (new MidiInput (port->getPortName(),
+                                                         deviceIdentifier,
+                                                         protocol));
+
+    if (deviceIdentifier.startsWith (umpSequencerPrefix))
+    {
+        port->setupInputUMP (midiInput.get(), receiver, protocol);
+        midiInput->internal.reset (new SequencerInputPimpl (port, nullptr));
+    }
+    else
+    {
+        auto callback = std::make_unique<UmpReceiverCallback> (protocol, *receiver);
+        port->setupInput (midiInput.get(), callback.get());
+        midiInput->internal.reset (new SequencerInputPimpl (port, std::move (callback)));
+    }
+    return midiInput;
 }
 
 std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String& deviceName, MidiInputCallback* callback)
@@ -624,7 +1173,7 @@ std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String& deviceName,
                                                          ump::PacketProtocol::MIDI_1_0));
 
     port->setupInput (midiInput.get(), callback);
-    midiInput->internal = std::make_unique<Pimpl> (port);
+    midiInput->internal.reset (new SequencerInputPimpl (port, nullptr));
 
     return midiInput;
 }
@@ -651,24 +1200,168 @@ MidiInput::~MidiInput()
 
 void MidiInput::start()
 {
-    internal->ptr->enableCallback (true);
+    internal->start();
 }
 
 void MidiInput::stop()
 {
-    internal->ptr->enableCallback (false);
+    internal->stop();
 }
 
 //==============================================================================
-class MidiOutput::Pimpl final : public AlsaPortPtr
+class MidiOutput::Pimpl
 {
 public:
-    using AlsaPortPtr::AlsaPortPtr;
+    virtual ~Pimpl() = default;
+    virtual void sendMessageNow (const MidiMessage& message) = 0;
+    virtual void sendMessageNow (const ump::View& message) = 0;
+};
+
+class SequencerOutputPimpl final : public AlsaPortPtr
+    , public MidiOutput::Pimpl
+{
+public:
+    explicit SequencerOutputPimpl (AlsaClient::Port* p)
+        : AlsaPortPtr (p)
+    {
+    }
+
+    void sendMessageNow (const MidiMessage& message) override
+    {
+        ptr->sendMessageNow (message);
+    }
+
+    void sendMessageNow (const ump::View& message) override
+    {
+        ump::ToBytestreamConverter converter { 2048 };
+        converter.convert (message, 0.0, [&] (const MidiMessage& midiMessage)
+        {
+            ptr->sendMessageNow (midiMessage);
+        });
+    }
+};
+
+class UmpSequencerOutputPimpl final : public AlsaPortPtr
+    , public MidiOutput::Pimpl
+{
+public:
+    explicit UmpSequencerOutputPimpl (AlsaClient::Port* p, ump::PacketProtocol protocolIn)
+        : AlsaPortPtr (p)
+        , converter (protocolIn)
+    {
+    }
+
+    void sendMessageNow (const MidiMessage& message) override
+    {
+        converter.convert (ump::BytestreamMidiView (&message), [&] (const ump::View& view)
+        {
+            ptr->sendUmpMessageNow (view.data(), view.size());
+        });
+    }
+
+    void sendMessageNow (const ump::View& message) override
+    {
+        ptr->sendUmpMessageNow (message.data(), message.size());
+    }
+
+private:
+    ump::GenericUMPConverter converter;
+};
+
+class UmpRawmidiOutputPimpl final : public MidiOutput::Pimpl
+{
+public:
+    UmpRawmidiOutputPimpl (int fdIn, ump::PacketProtocol protocolIn)
+        : fd (fdIn)
+        , converter (protocolIn)
+    {
+    }
+
+#if YUP_HAS_ALSA_UMP
+    UmpRawmidiOutputPimpl (snd_ump_t* handleIn, ump::PacketProtocol protocolIn)
+        : umpHandle (handleIn)
+        , converter (protocolIn)
+    {
+    }
+#endif
+
+    ~UmpRawmidiOutputPimpl() override
+    {
+        if (fd >= 0)
+            ::close (fd);
+#if YUP_HAS_ALSA_UMP
+        if (umpHandle != nullptr)
+            snd_ump_close (umpHandle);
+#endif
+    }
+
+    void sendMessageNow (const MidiMessage& message) override
+    {
+        converter.convert (ump::BytestreamMidiView (&message), [&] (const ump::View& view)
+        {
+            writeWords (view.data(), view.size());
+        });
+    }
+
+    void sendMessageNow (const ump::View& message) override
+    {
+        writeWords (message.data(), message.size());
+    }
+
+private:
+    void writeWords (const uint32_t* data, uint32_t numWords) const
+    {
+        if (fd < 0 || data == nullptr || numWords == 0)
+        {
+#if YUP_HAS_ALSA_UMP
+            if (umpHandle == nullptr)
+                return;
+#else
+            return;
+#endif
+        }
+
+#if YUP_HAS_ALSA_UMP
+        if (umpHandle != nullptr)
+        {
+            const auto totalBytes = static_cast<size_t> (numWords) * sizeof (uint32_t);
+            snd_ump_write (umpHandle, data, totalBytes);
+            return;
+        }
+#endif
+
+        const auto totalBytes = static_cast<size_t> (numWords) * sizeof (uint32_t);
+        const auto* bytes = reinterpret_cast<const uint8_t*> (data);
+        size_t offset = 0;
+
+        while (offset < totalBytes)
+        {
+            const auto written = ::write (fd, bytes + offset, totalBytes - offset);
+            if (written <= 0)
+                break;
+
+            offset += static_cast<size_t> (written);
+        }
+    }
+
+    int fd = -1;
+#if YUP_HAS_ALSA_UMP
+    snd_ump_t* umpHandle = nullptr;
+#endif
+    ump::GenericUMPConverter converter;
 };
 
 Array<MidiDeviceInfo> MidiOutput::getAvailableDevices()
 {
     Array<MidiDeviceInfo> devices;
+    for (const auto& node : findUmpRawmidiNodes())
+    {
+        const auto path = node.getFullPathName();
+        devices.add (MidiDeviceInfo { "UMP " + node.getFileName(),
+                                      getUmpRawmidiIdentifier (path),
+                                      ump::PacketProtocol::MIDI_2_0,
+                                      true });
+    }
     iterateMidiDevices (false, devices, {});
 
     return devices;
@@ -684,6 +1377,11 @@ std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String& deviceIdentifi
     if (deviceIdentifier.isEmpty())
         return {};
 
+    if (isUmpRawmidiIdentifier (deviceIdentifier))
+        return openDevice (deviceIdentifier, ump::PacketProtocol::MIDI_2_0);
+    if (isUmpSequencerIdentifier (deviceIdentifier))
+        return openDevice (deviceIdentifier, ump::PacketProtocol::MIDI_2_0);
+
     Array<MidiDeviceInfo> devices;
     auto* port = iterateMidiDevices (false, devices, deviceIdentifier);
 
@@ -695,7 +1393,7 @@ std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String& deviceIdentifi
                                                             ump::PacketProtocol::MIDI_1_0));
 
     port->setupOutput();
-    midiOutput->internal = std::make_unique<Pimpl> (port);
+    midiOutput->internal.reset (new SequencerOutputPimpl (port));
 
     return midiOutput;
 }
@@ -703,6 +1401,81 @@ std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String& deviceIdentifi
 std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String& deviceIdentifier,
                                                     ump::PacketProtocol protocol)
 {
+    if (deviceIdentifier.isEmpty())
+        return {};
+
+    String identifierToOpen = deviceIdentifier;
+    if (isUmpSequencerIdentifier (identifierToOpen))
+        identifierToOpen = identifierToOpen.fromFirstOccurrenceOf (umpSequencerPrefix, false, false);
+
+    if (isUmpRawmidiIdentifier (identifierToOpen))
+    {
+        const auto path = getUmpRawmidiPath (identifierToOpen);
+        int fd = -1;
+#if YUP_HAS_ALSA_UMP
+        snd_ump_t* umpHandle = nullptr;
+        const auto umpName = getUmpAlsaDeviceName (path);
+        if (umpName.isNotEmpty()
+            && snd_ump_open (nullptr, &umpHandle, umpName.toRawUTF8(), SND_RAWMIDI_NONBLOCK) >= 0)
+        {
+            snd_ump_nonblock (umpHandle, 1);
+        }
+        else
+        {
+            umpHandle = nullptr;
+        }
+#endif
+
+#if YUP_HAS_ALSA_UMP
+        if (umpHandle == nullptr)
+            fd = ::open (path.toRawUTF8(), O_WRONLY | O_NONBLOCK);
+#else
+        fd = ::open (path.toRawUTF8(), O_WRONLY | O_NONBLOCK);
+#endif
+
+        if (fd < 0
+#if YUP_HAS_ALSA_UMP
+            && umpHandle == nullptr
+#endif
+        )
+            return {};
+
+        std::unique_ptr<MidiOutput> midiOutput (new MidiOutput (File (path).getFileName(),
+                                                                deviceIdentifier,
+                                                                protocol));
+
+#if YUP_HAS_ALSA_UMP
+        if (umpHandle != nullptr)
+            midiOutput->internal.reset (new UmpRawmidiOutputPimpl (umpHandle, protocol));
+        else
+#endif
+            midiOutput->internal.reset (new UmpRawmidiOutputPimpl (fd, protocol));
+        return midiOutput;
+    }
+
+    if (deviceIdentifier.startsWith (umpSequencerPrefix))
+    {
+#if defined(SND_SEQ_EVENT_UMP)
+        Array<MidiDeviceInfo> devices;
+        auto* port = iterateMidiDevices (false, devices, identifierToOpen);
+
+        if (port == nullptr || ! port->isValid())
+            return {};
+
+        AlsaClient::getInstance()->configureForUmp();
+
+        std::unique_ptr<MidiOutput> midiOutput (new MidiOutput (port->getPortName(),
+                                                                deviceIdentifier,
+                                                                protocol));
+
+        port->setupOutput();
+        midiOutput->internal.reset (new UmpSequencerOutputPimpl (port, protocol));
+        return midiOutput;
+#else
+        return {};
+#endif
+    }
+
     if (protocol != ump::PacketProtocol::MIDI_1_0)
         return {};
 
@@ -722,7 +1495,7 @@ std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String& deviceNam
                                                             ump::PacketProtocol::MIDI_1_0));
 
     port->setupOutput();
-    midiOutput->internal = std::make_unique<Pimpl> (port);
+    midiOutput->internal.reset (new SequencerOutputPimpl (port));
 
     return midiOutput;
 }
@@ -743,16 +1516,12 @@ MidiOutput::~MidiOutput()
 
 void MidiOutput::sendMessageNow (const MidiMessage& message)
 {
-    internal->ptr->sendMessageNow (message);
+    internal->sendMessageNow (message);
 }
 
 void MidiOutput::sendMessageNow (const ump::View& message)
 {
-    ump::ToBytestreamConverter converter { 2048 };
-    converter.convert (message, 0.0, [&] (const MidiMessage& midiMessage)
-    {
-        sendMessageNow (midiMessage);
-    });
+    internal->sendMessageNow (message);
 }
 
 void MidiOutput::sendMessageNow (const ump::Packets& packets)
