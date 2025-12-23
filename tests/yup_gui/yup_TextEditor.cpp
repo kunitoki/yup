@@ -27,7 +27,7 @@ using namespace yup;
 
 namespace
 {
-constexpr auto kTestText = "Hello World";
+constexpr auto kSingleText = "Hello World";
 constexpr auto kMultilineText = "Line 1\nLine 2\nLine 3";
 } // namespace
 
@@ -58,14 +58,14 @@ TEST_F (TextEditorTests, ConstructorInitializesCorrectly)
 
 TEST_F (TextEditorTests, SetTextUpdatesContent)
 {
-    editor->setText (kTestText);
-    EXPECT_EQ (String (kTestText), editor->getText());
+    editor->setText (kSingleText);
+    EXPECT_EQ (String (kSingleText), editor->getText());
     EXPECT_EQ (0, editor->getCaretPosition());
 }
 
 TEST_F (TextEditorTests, CaretPositionHandling)
 {
-    editor->setText (kTestText);
+    editor->setText (kSingleText);
 
     editor->setCaretPosition (5);
     EXPECT_EQ (5, editor->getCaretPosition());
@@ -80,7 +80,7 @@ TEST_F (TextEditorTests, CaretPositionHandling)
 
 TEST_F (TextEditorTests, SelectionHandling)
 {
-    editor->setText (kTestText);
+    editor->setText (kSingleText);
 
     // Test setting selection
     editor->setSelection (Range<int> (2, 7));
@@ -89,7 +89,7 @@ TEST_F (TextEditorTests, SelectionHandling)
 
     // Test select all
     editor->selectAll();
-    EXPECT_EQ (String (kTestText), editor->getSelectedText());
+    EXPECT_EQ (String (kSingleText), editor->getSelectedText());
 
     // Test clearing selection
     editor->setCaretPosition (3);
@@ -108,7 +108,7 @@ TEST_F (TextEditorTests, TextInsertion)
 
 TEST_F (TextEditorTests, TextDeletion)
 {
-    editor->setText (kTestText);
+    editor->setText (kSingleText);
     editor->setSelection (Range<int> (6, 11)); // Select "World"
     editor->deleteSelectedText();
 
@@ -128,18 +128,18 @@ TEST_F (TextEditorTests, MultiLineMode)
 
 TEST_F (TextEditorTests, ReadOnlyMode)
 {
-    editor->setText (kTestText);
+    editor->setText (kSingleText);
     editor->setReadOnly (true);
     EXPECT_TRUE (editor->isReadOnly());
 
     // Text insertion should be ignored
     editor->insertText (" Extra");
-    EXPECT_EQ (String (kTestText), editor->getText());
+    EXPECT_EQ (String (kSingleText), editor->getText());
 
     // Selection deletion should be ignored
     editor->selectAll();
     editor->deleteSelectedText();
-    EXPECT_EQ (String (kTestText), editor->getText());
+    EXPECT_EQ (String (kSingleText), editor->getText());
 }
 
 TEST_F (TextEditorTests, FontHandling)

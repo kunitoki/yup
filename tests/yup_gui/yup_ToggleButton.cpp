@@ -27,8 +27,8 @@ using namespace yup;
 
 namespace
 {
-const String kTestButtonText = "Toggle Me";
-const String kEmptyText = "";
+const String kToggleButtonText = "Toggle Me";
+const String kToggleEmptyText = "";
 } // namespace
 
 class ToggleButtonTest : public ::testing::Test
@@ -89,10 +89,10 @@ TEST_F (ToggleButtonTest, ButtonTextGetterAndSetter)
 {
     EXPECT_TRUE (toggleButton->getButtonText().isEmpty());
 
-    toggleButton->setButtonText (kTestButtonText);
-    EXPECT_EQ (kTestButtonText, toggleButton->getButtonText());
+    toggleButton->setButtonText (kToggleButtonText);
+    EXPECT_EQ (kToggleButtonText, toggleButton->getButtonText());
 
-    toggleButton->setButtonText (kEmptyText);
+    toggleButton->setButtonText (kToggleEmptyText);
     EXPECT_TRUE (toggleButton->getButtonText().isEmpty());
 }
 
@@ -122,10 +122,10 @@ TEST_F (ToggleButtonTest, LongButtonText)
 
 TEST_F (ToggleButtonTest, ToggleStateIndependentOfText)
 {
-    toggleButton->setButtonText (kTestButtonText);
+    toggleButton->setButtonText (kToggleButtonText);
     toggleButton->setToggleState (true, dontSendNotification);
 
-    EXPECT_EQ (kTestButtonText, toggleButton->getButtonText());
+    EXPECT_EQ (kToggleButtonText, toggleButton->getButtonText());
     EXPECT_TRUE (toggleButton->getToggleState());
 
     toggleButton->setButtonText ("New Text");
@@ -196,21 +196,21 @@ TEST_F (ToggleButtonTest, StateAfterMultipleTextChanges)
 
 TEST_F (ToggleButtonTest, TextAfterMultipleStateChanges)
 {
-    toggleButton->setButtonText (kTestButtonText);
+    toggleButton->setButtonText (kToggleButtonText);
 
     for (int i = 0; i < 5; ++i)
     {
         bool state = (i % 2) == 0;
         toggleButton->setToggleState (state, dontSendNotification);
         EXPECT_EQ (state, toggleButton->getToggleState());
-        EXPECT_EQ (kTestButtonText, toggleButton->getButtonText());
+        EXPECT_EQ (kToggleButtonText, toggleButton->getButtonText());
     }
 }
 
 TEST_F (ToggleButtonTest, EmptyStringHandling)
 {
-    toggleButton->setButtonText (kTestButtonText);
-    EXPECT_EQ (kTestButtonText, toggleButton->getButtonText());
+    toggleButton->setButtonText (kToggleButtonText);
+    EXPECT_EQ (kToggleButtonText, toggleButton->getButtonText());
 
     toggleButton->setButtonText (String());
     EXPECT_TRUE (toggleButton->getButtonText().isEmpty());

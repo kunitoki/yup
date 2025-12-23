@@ -28,11 +28,11 @@ using namespace yup;
 //==============================================================================
 namespace
 {
-class MockAudioSource : public AudioSource
+class MockReverbAudioSource : public AudioSource
 {
 public:
-    MockAudioSource() = default;
-    ~MockAudioSource() override = default;
+    MockReverbAudioSource() = default;
+    ~MockReverbAudioSource() override = default;
 
     void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override
     {
@@ -75,7 +75,7 @@ class ReverbAudioSourceTests : public ::testing::Test
 protected:
     void SetUp() override
     {
-        mockSource = new MockAudioSource();
+        mockSource = new MockReverbAudioSource();
         reverbSource = std::make_unique<ReverbAudioSource> (mockSource, true);
     }
 
@@ -84,26 +84,26 @@ protected:
         reverbSource.reset();
     }
 
-    MockAudioSource* mockSource; // Owned by reverbSource
+    MockReverbAudioSource* mockSource; // Owned by reverbSource
     std::unique_ptr<ReverbAudioSource> reverbSource;
 };
 
 //==============================================================================
 TEST_F (ReverbAudioSourceTests, ConstructorWithDeleteInput)
 {
-    auto* source = new MockAudioSource();
+    auto* source = new MockReverbAudioSource();
     EXPECT_NO_THROW (ReverbAudioSource (source, true));
 }
 
 TEST_F (ReverbAudioSourceTests, ConstructorWithoutDeleteInput)
 {
-    MockAudioSource source;
+    MockReverbAudioSource source;
     EXPECT_NO_THROW (ReverbAudioSource (&source, false));
 }
 
 TEST_F (ReverbAudioSourceTests, Destructor)
 {
-    auto* source = new MockAudioSource();
+    auto* source = new MockReverbAudioSource();
     auto* temp = new ReverbAudioSource (source, true);
     EXPECT_NO_THROW (delete temp);
 }

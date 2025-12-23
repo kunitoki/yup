@@ -28,11 +28,6 @@
 
 using namespace yup;
 
-namespace
-{
-static constexpr float tol = 1e-5f;
-} // namespace
-
 TEST (ColorTests, Default_Constructor)
 {
     Color c;
@@ -120,6 +115,8 @@ TEST (ColorTests, Transparency_Checks)
 
 TEST (ColorTests, Alpha_Operations)
 {
+    static constexpr float tol = 1e-5f;
+
     Color c (0xff123456);
 
     // Test getAlpha and getAlphaFloat
@@ -155,6 +152,8 @@ TEST (ColorTests, Alpha_Operations)
 
 TEST (ColorTests, Red_Operations)
 {
+    static constexpr float tol = 1e-5f;
+
     Color c (0xff123456);
 
     // Test getRed and getRedFloat
@@ -181,6 +180,8 @@ TEST (ColorTests, Red_Operations)
 
 TEST (ColorTests, Green_Operations)
 {
+    static constexpr float tol = 1e-5f;
+
     Color c (0xff123456);
 
     // Test getGreen and getGreenFloat
@@ -207,6 +208,8 @@ TEST (ColorTests, Green_Operations)
 
 TEST (ColorTests, Blue_Operations)
 {
+    static constexpr float tol = 1e-5f;
+
     Color c (0xff123456);
 
     // Test getBlue and getBlueFloat
@@ -233,6 +236,8 @@ TEST (ColorTests, Blue_Operations)
 
 TEST (ColorTests, HSL_Operations)
 {
+    static constexpr float tol = 1e-5f;
+
     // Test red color
     Color red (0xffff0000);
     EXPECT_NEAR (red.getHue(), 0.0f, tol);
@@ -276,6 +281,8 @@ TEST (ColorTests, HSL_Operations)
 
 TEST (ColorTests, HSV_Operations)
 {
+    static constexpr float tol = 1e-5f;
+
     // Test red color
     Color red (0xffff0000);
     auto [h, s, v] = red.toHSV();

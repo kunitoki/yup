@@ -30,14 +30,6 @@
 
 using namespace yup;
 
-namespace
-{
-constexpr int numThreads = 4;
-constexpr int iterationsPerThread = 1000;
-constexpr auto shortDelay = std::chrono::microseconds (10);
-constexpr auto mediumDelay = std::chrono::milliseconds (1);
-} // namespace
-
 //==============================================================================
 class SpinLockTests : public ::testing::Test
 {
@@ -49,6 +41,11 @@ protected:
 
     SpinLock spinLock;
     std::atomic<int> counter { 0 };
+
+    static constexpr int numThreads = 4;
+    static constexpr int iterationsPerThread = 1000;
+    static constexpr auto shortDelay = std::chrono::microseconds (10);
+    static constexpr auto mediumDelay = std::chrono::milliseconds (1);
 };
 
 //==============================================================================
