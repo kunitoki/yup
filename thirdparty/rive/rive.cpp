@@ -21,12 +21,13 @@
 
 #include "rive.h"
 
-#if __clang__
- #pragma clang diagnostic push
- #pragma clang diagnostic ignored "-Wshorten-64-to-32"
-#elif __GNUC__
+#if __GNUC__
  #pragma GCC diagnostic push
  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+ #pragma GCC diagnostic ignored "-Wempty-body"
+#elif __clang__
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wshorten-64-to-32"
 #elif _MSC_VER
  #pragma warning (push)
  #pragma warning (disable : 4244)
@@ -581,10 +582,10 @@
 #include "source/audio_event.cpp"
 #include "source/nested_artboard_leaf.cpp"
 
-#if __clang__
- #pragma clang diagnostic pop
-#elif __GNUC__
+#if __GNUC__
  #pragma GCC diagnostic pop
+#elif __clang__
+ #pragma clang diagnostic pop
 #elif _MSC_VER
  #pragma warning (pop)
 #endif

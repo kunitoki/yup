@@ -37,23 +37,6 @@
   ==============================================================================
 */
 
-#include <array>
-#include <cstring>
-#include <poll.h>
-#include <unistd.h>
-#include <fcntl.h>
-
-#if defined(__has_include)
-#if __has_include(<alsa/ump.h>)
-#include <alsa/ump.h>
-#define YUP_HAS_ALSA_UMP 1
-#endif
-#endif
-
-#ifndef YUP_HAS_ALSA_UMP
-#define YUP_HAS_ALSA_UMP 0
-#endif
-
 namespace yup
 {
 
@@ -432,6 +415,20 @@ public:
 
     int getId() const noexcept { return clientId; }
 
+    void configureForUmp()
+    {
+#if defined(SND_SEQ_EVENT_UMP)
+        if (! umpConfigured && handle != nullptr)
+        {
+            snd_seq_set_client_midi_version (handle, 2);
+#if defined(snd_seq_set_client_ump_conversion)
+            snd_seq_set_client_ump_conversion (handle, 1);
+#endif
+            umpConfigured = true;
+        }
+#endif
+    }
+
     Port* createPort (const String& name, bool forInput, bool enableSubscription)
     {
         const ScopedLock sl (callbackLock);
@@ -766,20 +763,6 @@ struct AlsaPortPtr
 class MidiInput::Pimpl
 {
 public:
-    void configureForUmp()
-    {
-#if defined(SND_SEQ_EVENT_UMP)
-        if (! umpConfigured && handle != nullptr)
-        {
-            snd_seq_set_client_midi_version (handle, 2);
-#if defined(snd_seq_set_client_ump_conversion)
-            snd_seq_set_client_ump_conversion (handle, 1);
-#endif
-            umpConfigured = true;
-        }
-#endif
-    }
-
     virtual ~Pimpl() = default;
     virtual void start() = 0;
     virtual void stop() = 0;
@@ -927,31 +910,6 @@ private:
     std::atomic<bool> shouldStop { false };
     std::atomic<bool> callbackEnabled { false };
     std::thread thread;
-};
-
-class UmpReceiverCallback final : public MidiInputCallback
-{
-public:
-    UmpReceiverCallback (ump::PacketProtocol protocolIn, ump::Receiver& receiverIn)
-        : receiver (receiverIn)
-        , converter (protocolIn)
-    {
-    }
-
-    void handleIncomingMidiMessage (MidiInput*, const MidiMessage& message) override
-    {
-        const auto timestamp = message.getTimeStamp();
-        converter.convert (ump::BytestreamMidiView (&message), [&] (const ump::View& view)
-        {
-            receiver.packetReceived (view, timestamp);
-        });
-    }
-
-    void handlePartialSysexMessage (MidiInput*, const uint8*, int, double) override {}
-
-private:
-    ump::Receiver& receiver;
-    ump::GenericUMPConverter converter;
 };
 
 class UmpReceiverCallback final : public MidiInputCallback
