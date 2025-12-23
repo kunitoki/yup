@@ -582,8 +582,10 @@ struct BelaAudioIODeviceType final : public AudioIODeviceType
 };
 
 //==============================================================================
-MidiInput::MidiInput (const String& deviceName, const String& deviceID)
-    : deviceInfo (deviceName, deviceID)
+MidiInput::MidiInput (const String& deviceName,
+                      const String& deviceID,
+                      ump::PacketProtocol protocol)
+    : deviceInfo (deviceName, deviceID, protocol)
 {
 }
 
@@ -608,15 +610,33 @@ std::unique_ptr<MidiInput> MidiInput::openDevice (const String& deviceIdentifier
     if (deviceIdentifier.isEmpty())
         return {};
 
-    std::unique_ptr<MidiInput> midiInput (new MidiInput (deviceIdentifier, deviceIdentifier));
+    std::unique_ptr<MidiInput> midiInput (new MidiInput (deviceIdentifier,
+                                                         deviceIdentifier,
+                                                         ump::PacketProtocol::MIDI_1_0));
     midiInput->internal = std::make_unique<Pimpl> (deviceIdentifier, midiInput.get(), callback);
 
     return midiInput;
 }
 
+std::unique_ptr<MidiInput> MidiInput::openDevice (const String&,
+                                                  ump::PacketProtocol,
+                                                  ump::Receiver*)
+{
+    jassertfalse;
+    return {};
+}
+
 std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String&, MidiInputCallback*)
 {
     // N/A on Bela
+    jassertfalse;
+    return {};
+}
+
+std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String&,
+                                                       ump::PacketProtocol,
+                                                       ump::Receiver*)
+{
     jassertfalse;
     return {};
 }
@@ -631,12 +651,20 @@ MidiOutput::~MidiOutput() = default;
 
 void MidiOutput::sendMessageNow (const MidiMessage&) {}
 
+void MidiOutput::sendMessageNow (const ump::View&) {}
+
+void MidiOutput::sendMessageNow (const ump::Packets&) {}
+
 Array<MidiDeviceInfo> MidiOutput::getAvailableDevices() { return {}; }
 
 MidiDeviceInfo MidiOutput::getDefaultDevice() { return {}; }
 
 std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String&) { return {}; }
 
+std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String&, ump::PacketProtocol) { return {}; }
+
 std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String&) { return {}; }
+
+std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String&, ump::PacketProtocol) { return {}; }
 
 } // namespace yup

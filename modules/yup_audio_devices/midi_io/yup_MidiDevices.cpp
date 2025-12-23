@@ -125,9 +125,11 @@ void MidiInputCallback::handlePartialSysexMessage ([[maybe_unused]] MidiInput* s
                                                    [[maybe_unused]] double timestamp) {}
 
 //==============================================================================
-MidiOutput::MidiOutput (const String& deviceName, const String& deviceIdentifier)
+MidiOutput::MidiOutput (const String& deviceName,
+                        const String& deviceIdentifier,
+                        ump::PacketProtocol protocol)
     : Thread ("midi out")
-    , deviceInfo (deviceName, deviceIdentifier)
+    , deviceInfo (deviceName, deviceIdentifier, protocol)
 {
 }
 

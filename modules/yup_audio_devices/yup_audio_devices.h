@@ -174,6 +174,7 @@
 //==============================================================================
 #include "midi_io/yup_MidiDevices.h"
 #include "midi_io/yup_MidiMessageCollector.h"
+#include "midi_io/ump/yup_UMPPacketCollector.h"
 
 namespace yup
 {

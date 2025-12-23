@@ -37,26 +37,35 @@
   ==============================================================================
 */
 
+#include "yup_UMPBytesOnGroup.h"
+#include "yup_UMPDeviceInfo.h"
 #include "yup_UMPProtocols.h"
+#include "yup_UMPTypes.h"
+#include "yup_UMPUniversalPacket.h"
 #include "yup_UMPUtils.h"
 #include "yup_UMPacket.h"
-#include "yup_UMPSysEx7.h"
 #include "yup_UMPView.h"
+#include "yup_UMPPacketBuffer.h"
 #include "yup_UMPIterator.h"
 #include "yup_UMPackets.h"
+#include "yup_UMPMessages.h"
+#include "yup_UMPChannelVoice.h"
+#include "yup_UMPDataMessages.h"
+#include "yup_UMPExtendedDataMessages.h"
+#include "yup_UMPSysEx.h"
+#include "yup_UMPFlexDataMessages.h"
+#include "yup_UMPStreamMessages.h"
+#include "yup_UMPSysExCollectors.h"
+#include "yup_UMPManufacturer.h"
+#include "yup_UMPUniversalSysEx.h"
+#include "yup_UMPCapabilityInquiry.h"
 #include "yup_UMPFactory.h"
 #include "yup_UMPConversion.h"
+#include "yup_UMPMidi1ByteStream.h"
 #include "yup_UMPMidi1ToBytestreamTranslator.h"
 #include "yup_UMPMidi1ToMidi2DefaultTranslator.h"
 #include "yup_UMPConverters.h"
 #include "yup_UMPDispatcher.h"
 #include "yup_UMPReceiver.h"
-
-#ifndef DOXYGEN
-
-namespace yup
-{
-namespace ump = universal_midi_packets;
-} // namespace yup
-
-#endif
+#include "yup_UMPJitterReductionTimestamps.h"
+#include "yup_UMPKeyboardState.h"

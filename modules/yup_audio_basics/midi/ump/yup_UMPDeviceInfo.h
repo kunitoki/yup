@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 /**
@@ -73,4 +73,4 @@ public:
     }
 };
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump

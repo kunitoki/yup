@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 Iterator::Iterator (const uint32_t* ptr, [[maybe_unused]] size_t bytes) noexcept
@@ -48,4 +48,4 @@ Iterator::Iterator (const uint32_t* ptr, [[maybe_unused]] size_t bytes) noexcept
 {
 }
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump

@@ -39,7 +39,7 @@
 
 #ifndef DOXYGEN
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 /**
@@ -110,6 +110,6 @@ private:
     std::vector<uint32_t> storage;
 };
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump
 
 #endif

@@ -39,7 +39,7 @@
 
 #ifndef DOXYGEN
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 /** Represents a MIDI message that happened at a particular time.
@@ -372,6 +372,6 @@ struct Conversion
     }
 };
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump
 
 #endif

@@ -67,6 +67,17 @@ static auto tie (const AudioDeviceManager::AudioDeviceSetup& s)
                      s.useDefaultOutputChannels);
 }
 
+static ump::PacketProtocol parseMidiProtocol (const String& value)
+{
+    return value.equalsIgnoreCase ("midi2") ? ump::PacketProtocol::MIDI_2_0
+                                            : ump::PacketProtocol::MIDI_1_0;
+}
+
+static String midiProtocolToString (ump::PacketProtocol protocol)
+{
+    return protocol == ump::PacketProtocol::MIDI_2_0 ? "midi2" : "midi1";
+}
+
 bool AudioDeviceManager::AudioDeviceSetup::operator== (const AudioDeviceManager::AudioDeviceSetup& other) const
 {
     return tie (*this) == tie (other);
@@ -462,13 +473,18 @@ String AudioDeviceManager::initialiseFromXML (const XmlElement& xml,
         Array<MidiDeviceInfo> result;
 
         for (auto* c : xml.getChildWithTagNameIterator ("MIDIINPUT"))
-            result.add ({ c->getStringAttribute ("name"), c->getStringAttribute ("identifier") });
+        {
+            result.add ({ c->getStringAttribute ("name"),
+                          c->getStringAttribute ("identifier"),
+                          parseMidiProtocol (c->getStringAttribute ("protocol")) });
+        }
 
         return result;
     }();
 
     const MidiDeviceInfo defaultOutputDeviceInfo (xml.getStringAttribute ("defaultMidiOutput"),
-                                                  xml.getStringAttribute ("defaultMidiOutputDevice"));
+                                                  xml.getStringAttribute ("defaultMidiOutputDevice"),
+                                                  parseMidiProtocol (xml.getStringAttribute ("defaultMidiOutputProtocol")));
 
     openLastRequestedMidiDevices (midiInputs, defaultOutputDeviceInfo);
 
@@ -515,7 +531,7 @@ void AudioDeviceManager::openLastRequestedMidiDevices (const Array<MidiDeviceInf
 
     openDeviceIfAvailable (outputs, defaultOutput, [&] (const auto identifier)
     {
-        setDefaultMidiOutputDevice (identifier);
+        setDefaultMidiOutputDevice (identifier, defaultOutput.protocol);
     });
 }
 
@@ -959,6 +975,7 @@ void AudioDeviceManager::updateXml()
 
         child->setAttribute ("name", input->getName());
         child->setAttribute ("identifier", input->getIdentifier());
+        child->setAttribute ("protocol", midiProtocolToString (input->getDeviceInfo().protocol));
     }
 
     if (midiDeviceInfosFromXml.size() > 0)
@@ -969,12 +986,20 @@ void AudioDeviceManager::updateXml()
 
         for (auto& d : midiDeviceInfosFromXml)
         {
-            if (! availableMidiDevices.contains (d))
+            const auto isAvailable = std::any_of (availableMidiDevices.begin(),
+                                                  availableMidiDevices.end(),
+                                                  [&] (const auto& info)
+            {
+                return info.identifier == d.identifier;
+            });
+
+            if (! isAvailable)
             {
                 auto* child = lastExplicitSettings->createNewChildElement ("MIDIINPUT");
 
                 child->setAttribute ("name", d.name);
                 child->setAttribute ("identifier", d.identifier);
+                child->setAttribute ("protocol", midiProtocolToString (d.protocol));
             }
         }
     }
@@ -983,6 +1008,8 @@ void AudioDeviceManager::updateXml()
     {
         lastExplicitSettings->setAttribute ("defaultMidiOutput", defaultMidiOutputDeviceInfo.name);
         lastExplicitSettings->setAttribute ("defaultMidiOutputDevice", defaultMidiOutputDeviceInfo.identifier);
+        lastExplicitSettings->setAttribute ("defaultMidiOutputProtocol",
+                                            midiProtocolToString (defaultMidiOutputDeviceInfo.protocol));
     }
 }
 
@@ -1209,7 +1236,14 @@ void AudioDeviceManager::handleIncomingMidiMessageInt (MidiInput* source, const 
 //==============================================================================
 void AudioDeviceManager::setDefaultMidiOutputDevice (const String& identifier)
 {
-    if (defaultMidiOutputDeviceInfo.identifier != identifier)
+    setDefaultMidiOutputDevice (identifier, ump::PacketProtocol::MIDI_1_0);
+}
+
+void AudioDeviceManager::setDefaultMidiOutputDevice (const String& identifier,
+                                                     ump::PacketProtocol protocol)
+{
+    if (defaultMidiOutputDeviceInfo.identifier != identifier
+        || defaultMidiOutputDeviceInfo.protocol != protocol)
     {
         std::unique_ptr<MidiOutput> oldMidiPort;
         Array<AudioIODeviceCallback*> oldCallbacks;
@@ -1226,7 +1260,7 @@ void AudioDeviceManager::setDefaultMidiOutputDevice (const String& identifier)
         std::swap (oldMidiPort, defaultMidiOutput);
 
         if (identifier.isNotEmpty())
-            defaultMidiOutput = MidiOutput::openDevice (identifier);
+            defaultMidiOutput = MidiOutput::openDevice (identifier, protocol);
 
         if (defaultMidiOutput != nullptr)
             defaultMidiOutputDeviceInfo = defaultMidiOutput->getDeviceInfo();

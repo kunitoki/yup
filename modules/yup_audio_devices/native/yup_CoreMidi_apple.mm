@@ -88,8 +88,15 @@ struct SenderBase
 {
     virtual ~SenderBase() noexcept = default;
 
-    virtual void send(MIDIPortRef port, MIDIEndpointRef endpoint, const ump::BytestreamMidiView& m) = 0;
-    virtual void send(MIDIPortRef port, MIDIEndpointRef endpoint, ump::Iterator b, ump::Iterator e) = 0;
+    virtual void send(MIDIPortRef port,
+                      MIDIEndpointRef endpoint,
+                      ump::PacketProtocol protocol,
+                      const ump::BytestreamMidiView& m) = 0;
+    virtual void send(MIDIPortRef port,
+                      MIDIEndpointRef endpoint,
+                      ump::PacketProtocol protocol,
+                      ump::Iterator b,
+                      ump::Iterator e) = 0;
 };
 
 template <ImplementationStrategy>
@@ -99,30 +106,28 @@ struct Sender;
 template <>
 struct API_AVAILABLE(macos(11.0), ios(14.0)) Sender<ImplementationStrategy::onlyNew> final : public SenderBase
 {
-    void send(MIDIPortRef port, MIDIEndpointRef endpoint, const ump::BytestreamMidiView& m) override
+    void send(MIDIPortRef port,
+              MIDIEndpointRef endpoint,
+              ump::PacketProtocol protocol,
+              const ump::BytestreamMidiView& m) override
     {
-        newSendImpl(port, endpoint, m);
+        newSendImpl(port, endpoint, protocol, m);
     }
 
-    void send(MIDIPortRef port, MIDIEndpointRef endpoint, ump::Iterator b, ump::Iterator e) override
+    void send(MIDIPortRef port,
+              MIDIEndpointRef endpoint,
+              ump::PacketProtocol protocol,
+              ump::Iterator b,
+              ump::Iterator e) override
     {
-        newSendImpl(port, endpoint, b, e);
+        newSendImpl(port, endpoint, protocol, b, e);
     }
 
    private:
-    ump::ToUMP1Converter umpConverter;
-
-    static ump::PacketProtocol getProtocolForEndpoint(MIDIEndpointRef ep) noexcept
-    {
-        SInt32 protocol = 0;
-        CHECK_ERROR(MIDIObjectGetIntegerProperty(ep, kMIDIPropertyProtocolID, &protocol));
-
-        return protocol == kMIDIProtocol_2_0 ? ump::PacketProtocol::MIDI_2_0
-                                             : ump::PacketProtocol::MIDI_1_0;
-    }
-
-    template <typename... Params>
-    void newSendImpl(MIDIPortRef port, MIDIEndpointRef endpoint, Params&&... params)
+    void newSendImpl(MIDIPortRef port,
+                     MIDIEndpointRef endpoint,
+                     ump::PacketProtocol protocol,
+                     const ump::BytestreamMidiView& message)
     {
 #if YUP_IOS
         const MIDITimeStamp timeStamp = mach_absolute_time();
@@ -135,10 +140,10 @@ struct API_AVAILABLE(macos(11.0), ios(14.0)) Sender<ImplementationStrategy::only
 
         const auto init = [&]
         {
-            // At the moment, we can only send MIDI 1.0 protocol. If the device is using MIDI
-            // 2.0 protocol (as may be the case for the IAC driver), we trust in the system to
-            // translate it.
-            end = MIDIEventListInit(&stackList, kMIDIProtocol_1_0);
+            const auto protocolId = protocol == ump::PacketProtocol::MIDI_2_0
+                                        ? kMIDIProtocol_2_0
+                                        : kMIDIProtocol_1_0;
+            end = MIDIEventListInit(&stackList, protocolId);
         };
 
         const auto send = [&]
@@ -161,17 +166,77 @@ struct API_AVAILABLE(macos(11.0), ios(14.0)) Sender<ImplementationStrategy::only
 
         init();
 
-        ump::GenericUMPConverter::convertImpl(umpConverter, params..., [&](const auto& v)
-                                              { umpConverter.convert(v, [&](const ump::View& view)
-                                                                     {
-                    add (view);
+        ump::GenericUMPConverter converter { protocol };
+        converter.convert (message, [&] (const ump::View& view)
+        {
+            add (view);
 
-                    if (end != nullptr)
-                        return;
+            if (end != nullptr)
+                return;
 
-                    send();
-                    init();
-                    add (view); }); });
+            send();
+            init();
+            add (view);
+        });
+
+        send();
+    }
+
+    void newSendImpl(MIDIPortRef port,
+                     MIDIEndpointRef endpoint,
+                     ump::PacketProtocol protocol,
+                     ump::Iterator b,
+                     ump::Iterator e)
+    {
+#if YUP_IOS
+        const MIDITimeStamp timeStamp = mach_absolute_time();
+#else
+        const MIDITimeStamp timeStamp = AudioGetCurrentHostTime();
+#endif
+
+        MIDIEventList stackList = {};
+        MIDIEventPacket* end = nullptr;
+
+        const auto init = [&]
+        {
+            const auto protocolId = protocol == ump::PacketProtocol::MIDI_2_0
+                                        ? kMIDIProtocol_2_0
+                                        : kMIDIProtocol_1_0;
+            end = MIDIEventListInit(&stackList, protocolId);
+        };
+
+        const auto send = [&]
+        {
+            CHECK_ERROR(port != 0 ? MIDISendEventList(port, endpoint, &stackList)
+                                  : MIDIReceivedEventList(endpoint, &stackList));
+        };
+
+        const auto add = [&](const ump::View& view)
+        {
+            static_assert(sizeof(uint32_t) == sizeof(UInt32) && alignof(uint32_t) == alignof(UInt32),
+                          "If this fails, the cast below will be broken too!");
+            end = MIDIEventListAdd(&stackList,
+                                   sizeof(MIDIEventList::packet),
+                                   end,
+                                   timeStamp,
+                                   view.size(),
+                                   reinterpret_cast<const UInt32*>(view.data()));
+        };
+
+        init();
+
+        ump::GenericUMPConverter converter { protocol };
+        converter.convert (b, e, [&] (const ump::View& view)
+        {
+            add (view);
+
+            if (end != nullptr)
+                return;
+
+            send();
+            init();
+            add (view);
+        });
 
         send();
     }
@@ -182,16 +247,23 @@ struct API_AVAILABLE(macos(11.0), ios(14.0)) Sender<ImplementationStrategy::only
 template <>
 struct Sender<ImplementationStrategy::onlyOld> final : public SenderBase
 {
-    void send(MIDIPortRef port, MIDIEndpointRef endpoint, const ump::BytestreamMidiView& m) override
+    void send(MIDIPortRef port,
+              MIDIEndpointRef endpoint,
+              [[maybe_unused]] ump::PacketProtocol protocol,
+              const ump::BytestreamMidiView& m) override
     {
         oldSendImpl(port, endpoint, m);
     }
 
-    void send(MIDIPortRef port, MIDIEndpointRef endpoint, ump::Iterator b, ump::Iterator e) override
+    void send(MIDIPortRef port,
+              MIDIEndpointRef endpoint,
+              [[maybe_unused]] ump::PacketProtocol protocol,
+              ump::Iterator b,
+              ump::Iterator e) override
     {
         std::for_each(b, e, [&](const ump::View& v)
                       { bytestreamConverter.convert(v, 0.0, [&](const ump::BytestreamMidiView& m)
-                                                    { send(port, endpoint, m); }); });
+                                                    { send(port, endpoint, protocol, m); }); });
     }
 
    private:
@@ -270,14 +342,21 @@ struct Sender<ImplementationStrategy::both>
     {
     }
 
-    void send(MIDIPortRef port, MIDIEndpointRef endpoint, const ump::BytestreamMidiView& m)
+    void send(MIDIPortRef port,
+              MIDIEndpointRef endpoint,
+              ump::PacketProtocol protocol,
+              const ump::BytestreamMidiView& m)
     {
-        sender->send(port, endpoint, m);
+        sender->send(port, endpoint, protocol, m);
     }
 
-    void send(MIDIPortRef port, MIDIEndpointRef endpoint, ump::Iterator b, ump::Iterator e)
+    void send(MIDIPortRef port,
+              MIDIEndpointRef endpoint,
+              ump::PacketProtocol protocol,
+              ump::Iterator b,
+              ump::Iterator e)
     {
-        sender->send(port, endpoint, b, e);
+        sender->send(port, endpoint, protocol, b, e);
     }
 
    private:
@@ -356,8 +435,9 @@ using ScopedEndpointRef = ScopedMidiResource<MIDIEndpointRef, EndpointRefDestruc
 class MidiPortAndEndpoint
 {
    public:
-    MidiPortAndEndpoint(ScopedPortRef p, ScopedEndpointRef ep) noexcept
+    MidiPortAndEndpoint(ScopedPortRef p, ScopedEndpointRef ep, ump::PacketProtocol protocolIn) noexcept
         : port(std::move(p)), endpoint(std::move(ep))
+        , protocol(protocolIn)
     {
     }
 
@@ -370,12 +450,12 @@ class MidiPortAndEndpoint
 
     void send(const ump::BytestreamMidiView& m)
     {
-        sender.send(*port, *endpoint, m);
+        sender.send(*port, *endpoint, protocol, m);
     }
 
     void send(ump::Iterator b, ump::Iterator e)
     {
-        sender.send(*port, *endpoint, b, e);
+        sender.send(*port, *endpoint, protocol, b, e);
     }
 
     bool canStop() const noexcept { return *port != 0; }
@@ -384,9 +464,33 @@ class MidiPortAndEndpoint
    private:
     ScopedPortRef port;
     ScopedEndpointRef endpoint;
+    ump::PacketProtocol protocol;
 
     SenderToUse sender;
 };
+
+static void updateProtocolInfo(MIDIObjectRef entity, MidiDeviceInfo& info)
+{
+#if YUP_HAS_NEW_COREMIDI_API
+    SInt32 protocol = 0;
+
+    if (MIDIObjectGetIntegerProperty(entity, kMIDIPropertyProtocolID, &protocol) == noErr)
+    {
+        if (protocol == kMIDIProtocol_2_0)
+        {
+            info.protocol = ump::PacketProtocol::MIDI_2_0;
+            info.supportsMidi2 = true;
+        }
+        else
+        {
+            info.protocol = ump::PacketProtocol::MIDI_1_0;
+            info.supportsMidi2 = false;
+        }
+    }
+#else
+    ignoreUnused(entity, info);
+#endif
+}
 
 static MidiDeviceInfo getMidiObjectInfo(MIDIObjectRef entity)
 {
@@ -413,6 +517,7 @@ static MidiDeviceInfo getMidiObjectInfo(MIDIObjectRef entity)
             info.identifier = String::fromCFString(str.object);
     }
 
+    updateProtocolInfo(entity, info);
     return info;
 }
 
@@ -988,16 +1093,37 @@ class MidiInput::Pimpl : public CoreMidiHelpers::MidiPortAndCallback
         return std::make_unique<Pimpl>(midiInput, CoreMidiHelpers::ReceiverToUse(midiInput, *midiInputCallback));
     }
 
-    template <typename... Args>
     static std::unique_ptr<MidiInput> makeInput(const String& name,
                                                 const String& identifier,
-                                                Args&&... args)
+                                                ump::PacketProtocol protocol,
+                                                ump::Receiver& receiver)
     {
         using namespace CoreMidiHelpers;
 
-        if (auto midiInput = rawToUniquePtr(new MidiInput(name, identifier)))
+        if (auto midiInput = rawToUniquePtr(new MidiInput(name, identifier, protocol)))
         {
-            if ((midiInput->internal = makePimpl(*midiInput, std::forward<Args>(args)...)))
+            if ((midiInput->internal = makePimpl(*midiInput, protocol, receiver)))
+            {
+                const ScopedLock sl(callbackLock);
+                activeCallbacks.add(midiInput->internal.get());
+
+                return midiInput;
+            }
+        }
+
+        return {};
+    }
+
+    static std::unique_ptr<MidiInput> makeInput(const String& name,
+                                                const String& identifier,
+                                                ump::PacketProtocol protocol,
+                                                MidiInputCallback* midiInputCallback)
+    {
+        using namespace CoreMidiHelpers;
+
+        if (auto midiInput = rawToUniquePtr(new MidiInput(name, identifier, protocol)))
+        {
+            if ((midiInput->internal = makePimpl(*midiInput, midiInputCallback)))
             {
                 const ScopedLock sl(callbackLock);
                 activeCallbacks.add(midiInput->internal.get());
@@ -1033,7 +1159,10 @@ class MidiInput::Pimpl : public CoreMidiHelpers::MidiPortAndCallback
                 if (!CHECK_ERROR(MIDIObjectGetStringProperty(endpoint, kMIDIPropertyName, &cfName.object)))
                     continue;
 
-                if (auto input = makeInput(endpointInfo.name, endpointInfo.identifier, std::forward<Args>(args)...))
+                if (auto input = makeInput(endpointInfo.name,
+                                           endpointInfo.identifier,
+                                           protocol,
+                                           std::forward<Args>(args)...))
                 {
                     MIDIPortRef port;
 
@@ -1045,7 +1174,9 @@ class MidiInput::Pimpl : public CoreMidiHelpers::MidiPortAndCallback
                     if (!CHECK_ERROR(MIDIPortConnectSource(*scopedPort, endpoint, nullptr)))
                         continue;
 
-                    input->internal->portAndEndpoint = std::make_unique<MidiPortAndEndpoint>(std::move(scopedPort), ScopedEndpointRef{endpoint});
+                    input->internal->portAndEndpoint = std::make_unique<MidiPortAndEndpoint>(std::move(scopedPort),
+                                                                                               ScopedEndpointRef{endpoint},
+                                                                                               protocol);
                     return input;
                 }
             }
@@ -1065,7 +1196,10 @@ class MidiInput::Pimpl : public CoreMidiHelpers::MidiPortAndCallback
         {
             auto deviceIdentifier = createUniqueIDForMidiPort(deviceName, true);
 
-            if (auto input = makeInput(deviceName, String(deviceIdentifier), std::forward<Args>(args)...))
+            if (auto input = makeInput(deviceName,
+                                       String(deviceIdentifier),
+                                       protocol,
+                                       std::forward<Args>(args)...))
             {
                 MIDIEndpointRef endpoint;
                 CFUniquePtr<CFStringRef> name(deviceName.toCFString());
@@ -1089,7 +1223,9 @@ class MidiInput::Pimpl : public CoreMidiHelpers::MidiPortAndCallback
                 if (!CHECK_ERROR(MIDIObjectSetIntegerProperty(endpoint, kMIDIPropertyUniqueID, (SInt32)deviceIdentifier)))
                     return {};
 
-                input->internal->portAndEndpoint = std::make_unique<MidiPortAndEndpoint>(ScopedPortRef{}, std::move(scopedEndpoint));
+                input->internal->portAndEndpoint = std::make_unique<MidiPortAndEndpoint>(ScopedPortRef{},
+                                                                                           std::move(scopedEndpoint),
+                                                                                           protocol);
                 return input;
             }
         }
@@ -1119,6 +1255,16 @@ std::unique_ptr<MidiInput> MidiInput::openDevice(const String& deviceIdentifier,
                              callback);
 }
 
+std::unique_ptr<MidiInput> MidiInput::openDevice(const String& deviceIdentifier,
+                                                 ump::PacketProtocol protocol,
+                                                 ump::Receiver* receiver)
+{
+    if (receiver == nullptr)
+        return nullptr;
+
+    return Pimpl::openDevice(protocol, deviceIdentifier, *receiver);
+}
+
 std::unique_ptr<MidiInput> MidiInput::createNewDevice(const String& deviceName, MidiInputCallback* callback)
 {
     return Pimpl::createDevice(ump::PacketProtocol::MIDI_1_0,
@@ -1126,8 +1272,22 @@ std::unique_ptr<MidiInput> MidiInput::createNewDevice(const String& deviceName, 
                                callback);
 }
 
-MidiInput::MidiInput(const String& deviceName, const String& deviceIdentifier)
-    : deviceInfo(deviceName, deviceIdentifier)
+std::unique_ptr<MidiInput> MidiInput::createNewDevice(const String& deviceName,
+                                                      ump::PacketProtocol protocol,
+                                                      ump::Receiver* receiver)
+{
+    if (receiver == nullptr)
+        return {};
+
+    return Pimpl::createDevice(protocol,
+                               deviceName,
+                               *receiver);
+}
+
+MidiInput::MidiInput(const String& deviceName,
+                     const String& deviceIdentifier,
+                     ump::PacketProtocol protocol)
+    : deviceInfo(deviceName, deviceIdentifier, protocol)
 {
 }
 
@@ -1164,6 +1324,12 @@ MidiDeviceInfo MidiOutput::getDefaultDevice()
 
 std::unique_ptr<MidiOutput> MidiOutput::openDevice(const String& deviceIdentifier)
 {
+    return openDevice(deviceIdentifier, ump::PacketProtocol::MIDI_1_0);
+}
+
+std::unique_ptr<MidiOutput> MidiOutput::openDevice(const String& deviceIdentifier,
+                                                   ump::PacketProtocol protocol)
+{
     if (deviceIdentifier.isEmpty())
         return {};
 
@@ -1190,8 +1356,10 @@ std::unique_ptr<MidiOutput> MidiOutput::openDevice(const String& deviceIdentifie
 
             ScopedPortRef scopedPort{port};
 
-            auto midiOutput = rawToUniquePtr(new MidiOutput(endpointInfo.name, endpointInfo.identifier));
-            midiOutput->internal = std::make_unique<Pimpl>(std::move(scopedPort), ScopedEndpointRef{endpoint});
+            auto midiOutput = rawToUniquePtr(new MidiOutput(endpointInfo.name, endpointInfo.identifier, protocol));
+            midiOutput->internal = std::make_unique<Pimpl>(std::move(scopedPort),
+                                                           ScopedEndpointRef{endpoint},
+                                                           protocol);
 
             return midiOutput;
         }
@@ -1202,6 +1370,12 @@ std::unique_ptr<MidiOutput> MidiOutput::openDevice(const String& deviceIdentifie
 
 std::unique_ptr<MidiOutput> MidiOutput::createNewDevice(const String& deviceName)
 {
+    return createNewDevice(deviceName, ump::PacketProtocol::MIDI_1_0);
+}
+
+std::unique_ptr<MidiOutput> MidiOutput::createNewDevice(const String& deviceName,
+                                                        ump::PacketProtocol protocol)
+{
     using namespace CoreMidiHelpers;
 
     if (auto client = getGlobalMidiClient())
@@ -1210,7 +1384,7 @@ std::unique_ptr<MidiOutput> MidiOutput::createNewDevice(const String& deviceName
 
         CFUniquePtr<CFStringRef> name(deviceName.toCFString());
 
-        auto err = CreatorFunctionsToUse::createSource(ump::PacketProtocol::MIDI_1_0, client, name.get(), &endpoint);
+        auto err = CreatorFunctionsToUse::createSource(protocol, client, name.get(), &endpoint);
         ScopedEndpointRef scopedEndpoint{endpoint};
 
 #if YUP_IOS
@@ -1231,8 +1405,10 @@ std::unique_ptr<MidiOutput> MidiOutput::createNewDevice(const String& deviceName
         if (!CHECK_ERROR(MIDIObjectSetIntegerProperty(*scopedEndpoint, kMIDIPropertyUniqueID, (SInt32)deviceIdentifier)))
             return {};
 
-        auto midiOutput = rawToUniquePtr(new MidiOutput(deviceName, String(deviceIdentifier)));
-        midiOutput->internal = std::make_unique<Pimpl>(ScopedPortRef{}, std::move(scopedEndpoint));
+        auto midiOutput = rawToUniquePtr(new MidiOutput(deviceName, String(deviceIdentifier), protocol));
+        midiOutput->internal = std::make_unique<Pimpl>(ScopedPortRef{},
+                                                       std::move(scopedEndpoint),
+                                                       protocol);
 
         return midiOutput;
     }
@@ -1248,6 +1424,18 @@ MidiOutput::~MidiOutput()
 void MidiOutput::sendMessageNow(const MidiMessage& message)
 {
     internal->send(ump::BytestreamMidiView(&message));
+}
+
+void MidiOutput::sendMessageNow(const ump::View& message)
+{
+    auto begin = ump::Iterator (message.data(), message.size() * sizeof (uint32_t));
+    auto end = ump::Iterator (message.data() + message.size(), 0);
+    internal->send (begin, end);
+}
+
+void MidiOutput::sendMessageNow (const ump::Packets& packets)
+{
+    internal->send (packets.cbegin(), packets.cend());
 }
 
 MidiDeviceListConnection MidiDeviceListConnection::make(std::function<void()> cb)
