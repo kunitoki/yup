@@ -27,14 +27,14 @@ using namespace yup;
 
 namespace
 {
-constexpr int kTestId1 = 1;
-constexpr int kTestId2 = 2;
-constexpr int kTestId3 = 3;
+constexpr int kPopupTestId1 = 1;
+constexpr int kPopupTestId2 = 2;
+constexpr int kPopupTestId3 = 3;
 constexpr int kCustomItemId = 100;
 
-const String kTestText1 = "Option 1";
-const String kTestText2 = "Option 2";
-const String kTestText3 = "Option 3";
+const String kPopupTestText1 = "Option 1";
+const String kPopupTestText2 = "Option 2";
+const String kPopupTestText3 = "Option 3";
 const String kSubMenuText = "Sub Menu";
 const String kShortcutText = "Ctrl+S";
 } // namespace
@@ -93,7 +93,7 @@ TEST_F (PopupMenuTest, AddItemIncreasesCount)
     EXPECT_EQ (0, menu->getNumItems());
     EXPECT_TRUE (menu->isEmpty());
 
-    menu->addItem (kTestText1, kTestId1);
+    menu->addItem (kPopupTestText1, kPopupTestId1);
 
     EXPECT_EQ (1, menu->getNumItems());
     EXPECT_FALSE (menu->isEmpty());
@@ -103,9 +103,9 @@ TEST_F (PopupMenuTest, AddMultipleItemsWithShortcuts)
 {
     auto menu = PopupMenu::create();
 
-    menu->addItem (kTestText1, kTestId1, true, false, kShortcutText);
-    menu->addItem (kTestText2, kTestId2, false, true); // Disabled and ticked
-    menu->addItem (kTestText3, kTestId3);
+    menu->addItem (kPopupTestText1, kPopupTestId1, true, false, kShortcutText);
+    menu->addItem (kPopupTestText2, kPopupTestId2, false, true); // Disabled and ticked
+    menu->addItem (kPopupTestText3, kPopupTestId3);
 
     EXPECT_EQ (3, menu->getNumItems());
 
@@ -122,9 +122,9 @@ TEST_F (PopupMenuTest, AddSeparatorIncreasesCount)
 {
     auto menu = PopupMenu::create();
 
-    menu->addItem (kTestText1, kTestId1);
+    menu->addItem (kPopupTestText1, kPopupTestId1);
     menu->addSeparator();
-    menu->addItem (kTestText2, kTestId2);
+    menu->addItem (kPopupTestText2, kPopupTestId2);
 
     EXPECT_EQ (3, menu->getNumItems());
 }
@@ -137,7 +137,7 @@ TEST_F (PopupMenuTest, AddSubMenu)
     subMenu->addItem ("Sub Item 1", 10);
     subMenu->addItem ("Sub Item 2", 11);
 
-    menu->addItem (kTestText1, kTestId1);
+    menu->addItem (kPopupTestText1, kPopupTestId1);
     menu->addSubMenu (kSubMenuText, subMenu, true);
 
     EXPECT_EQ (2, menu->getNumItems());
@@ -150,7 +150,7 @@ TEST_F (PopupMenuTest, AddCustomItem)
     customComponent->setText ("Custom Menu Item");
     customComponent->setSize (150, 25);
 
-    menu->addItem (kTestText1, kTestId1);
+    menu->addItem (kPopupTestText1, kPopupTestId1);
     menu->addCustomItem (std::move (customComponent), kCustomItemId);
 
     EXPECT_EQ (2, menu->getNumItems());
@@ -160,9 +160,9 @@ TEST_F (PopupMenuTest, ClearRemovesAllItems)
 {
     auto menu = PopupMenu::create();
 
-    menu->addItem (kTestText1, kTestId1);
+    menu->addItem (kPopupTestText1, kPopupTestId1);
     menu->addSeparator();
-    menu->addItem (kTestText2, kTestId2);
+    menu->addItem (kPopupTestText2, kPopupTestId2);
 
     EXPECT_EQ (3, menu->getNumItems());
     EXPECT_FALSE (menu->isEmpty());
@@ -178,10 +178,10 @@ TEST_F (PopupMenuTest, ClearRemovesAllItems)
 
 TEST_F (PopupMenuTest, ItemConstructorText)
 {
-    PopupMenu::Item textItem (kTestText1, kTestId1, true, false);
+    PopupMenu::Item textItem (kPopupTestText1, kPopupTestId1, true, false);
 
-    EXPECT_EQ (kTestText1, textItem.text);
-    EXPECT_EQ (kTestId1, textItem.itemID);
+    EXPECT_EQ (kPopupTestText1, textItem.text);
+    EXPECT_EQ (kPopupTestId1, textItem.itemID);
     EXPECT_TRUE (textItem.isEnabled);
     EXPECT_FALSE (textItem.isTicked);
     EXPECT_FALSE (textItem.isHovered);
@@ -332,7 +332,7 @@ TEST_F (PopupMenuTest, ShowAndDismissBasic)
     PopupMenu::dismissAllPopups();
 
     auto menu = PopupMenu::create (PopupMenu::Options().withParentComponent (targetComponent.get()));
-    menu->addItem (kTestText1, kTestId1);
+    menu->addItem (kPopupTestText1, kPopupTestId1);
 
     EXPECT_FALSE (menu->isVisible());
 
@@ -352,8 +352,8 @@ TEST_F (PopupMenuTest, ShowWithCallback)
     PopupMenu::dismissAllPopups();
 
     auto menu = PopupMenu::create (PopupMenu::Options().withParentComponent (targetComponent.get()));
-    menu->addItem (kTestText1, kTestId1);
-    menu->addItem (kTestText2, kTestId2);
+    menu->addItem (kPopupTestText1, kPopupTestId1);
+    menu->addItem (kPopupTestText2, kPopupTestId2);
 
     int selectedItemId = -1;
     bool callbackCalled = false;
@@ -407,7 +407,7 @@ TEST_F (PopupMenuTest, DismissAllPopupsStatic)
 TEST_F (PopupMenuTest, OnItemSelectedCallback)
 {
     auto menu = PopupMenu::create();
-    menu->addItem (kTestText1, kTestId1);
+    menu->addItem (kPopupTestText1, kPopupTestId1);
 
     int selectedId = -1;
     menu->onItemSelected = [&selectedId] (int itemId)
@@ -419,9 +419,9 @@ TEST_F (PopupMenuTest, OnItemSelectedCallback)
 
     // Simulate calling the callback directly
     if (menu->onItemSelected)
-        menu->onItemSelected (kTestId1);
+        menu->onItemSelected (kPopupTestId1);
 
-    EXPECT_EQ (kTestId1, selectedId);
+    EXPECT_EQ (kPopupTestId1, selectedId);
 }
 
 //==============================================================================
@@ -522,9 +522,9 @@ TEST_F (PopupMenuTest, DuplicateItemIds)
 {
     auto menu = PopupMenu::create();
 
-    menu->addItem ("First Item", kTestId1);
-    menu->addItem ("Second Item", kTestId1); // Same ID
-    menu->addItem ("Third Item", kTestId1);  // Same ID again
+    menu->addItem ("First Item", kPopupTestId1);
+    menu->addItem ("Second Item", kPopupTestId1); // Same ID
+    menu->addItem ("Third Item", kPopupTestId1);  // Same ID again
 
     EXPECT_EQ (3, menu->getNumItems());
     // All items should be added regardless of duplicate IDs
@@ -550,7 +550,7 @@ TEST_F (PopupMenuTest, VeryLongItemText)
     for (int i = 0; i < 100; ++i)
         longText += "Very long menu item text ";
 
-    menu->addItem (longText, kTestId1);
+    menu->addItem (longText, kPopupTestId1);
     EXPECT_EQ (1, menu->getNumItems());
 }
 
@@ -558,9 +558,9 @@ TEST_F (PopupMenuTest, SpecialCharactersInText)
 {
     auto menu = PopupMenu::create();
 
-    menu->addItem (L"Item with üñíçødé", kTestId1);
-    menu->addItem ("Item with\nNewline", kTestId2);
-    menu->addItem ("Item with\tTab", kTestId3);
+    menu->addItem (L"Item with üñíçødé", kPopupTestId1);
+    menu->addItem ("Item with\nNewline", kPopupTestId2);
+    menu->addItem ("Item with\tTab", kPopupTestId3);
     menu->addItem ("", 0); // Empty text item
 
     EXPECT_EQ (4, menu->getNumItems());
@@ -630,9 +630,9 @@ TEST_F (PopupMenuTest, IteratorSupport)
 {
     auto menu = PopupMenu::create();
 
-    menu->addItem (kTestText1, kTestId1);
+    menu->addItem (kPopupTestText1, kPopupTestId1);
     menu->addSeparator();
-    menu->addItem (kTestText2, kTestId2);
+    menu->addItem (kPopupTestText2, kPopupTestId2);
 
     // Test range-based for loop
     int itemCount = 0;
