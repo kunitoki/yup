@@ -28,8 +28,8 @@ using namespace yup;
 namespace
 {
 const String kTestButtonText = "Click Me";
-const String kEmptyText = "";
-const String kLongText = "This is a very long button text that might need to be handled properly";
+const String kButtonEmptyText = "";
+const String kButtonLongText = "This is a very long button text that might need to be handled properly";
 } // namespace
 
 class TextButtonTest : public ::testing::Test
@@ -65,7 +65,7 @@ TEST_F (TextButtonTest, ButtonTextGetterAndSetter)
     textButton->setButtonText (kTestButtonText);
     EXPECT_EQ (kTestButtonText, textButton->getButtonText());
 
-    textButton->setButtonText (kEmptyText);
+    textButton->setButtonText (kButtonEmptyText);
     EXPECT_TRUE (textButton->getButtonText().isEmpty());
 }
 
@@ -85,8 +85,8 @@ TEST_F (TextButtonTest, ButtonTextWithUnicode)
 
 TEST_F (TextButtonTest, LongButtonText)
 {
-    textButton->setButtonText (kLongText);
-    EXPECT_EQ (kLongText, textButton->getButtonText());
+    textButton->setButtonText (kButtonLongText);
+    EXPECT_EQ (kButtonLongText, textButton->getButtonText());
 }
 
 TEST_F (TextButtonTest, VeryLongButtonText)

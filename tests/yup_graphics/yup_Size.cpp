@@ -24,11 +24,6 @@
 
 using namespace yup;
 
-namespace
-{
-static constexpr float tol = 1e-5f;
-} // namespace
-
 TEST (SizeTests, DefaultConstructor)
 {
     Size<float> s;

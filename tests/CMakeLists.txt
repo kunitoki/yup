@@ -124,14 +124,13 @@ yup_standalone_app (
 # ==== Setup sources
 set (sources "")
 foreach (module ${target_modules})
-    file (GLOB_RECURSE module_sources
-        "${CMAKE_CURRENT_LIST_DIR}/${module}/*.hpp"
-        "${CMAKE_CURRENT_LIST_DIR}/${module}/*.cpp")
+    file (GLOB module_sources
+        "${CMAKE_CURRENT_LIST_DIR}/${module}.cpp")
     list (APPEND sources ${module_sources})
 
     if (YUP_PLATFORM_APPLE)
         file (GLOB_RECURSE apple_sources
-            "${CMAKE_CURRENT_LIST_DIR}/${module}/*.mm")
+            "${CMAKE_CURRENT_LIST_DIR}/${module}.mm")
         list (APPEND sources ${apple_sources})
     endif()
 endforeach()

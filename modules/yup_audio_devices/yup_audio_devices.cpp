@@ -64,14 +64,13 @@
 
 #include "audio_io/yup_SampleRateHelpers.cpp"
 #include "midi_io/yup_MidiDevices.cpp"
+#include "midi_io/ump/yup_UMPBytestreamInputHandler.h"
+#include "midi_io/ump/yup_UMPU32InputHandler.h"
 
 //==============================================================================
 #if YUP_MAC || YUP_IOS
 #include <yup_audio_basics/native/yup_CoreAudioTimeConversions_apple.h>
 #include <yup_audio_basics/native/yup_AudioWorkgroup_apple.h>
-
-#include "midi_io/ump/yup_UMPBytestreamInputHandler.h"
-#include "midi_io/ump/yup_UMPU32InputHandler.h"
 #endif
 
 #if YUP_MAC

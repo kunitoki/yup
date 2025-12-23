@@ -43,11 +43,6 @@
 
 using namespace yup;
 
-static String operator""_S (const char* chars, size_t)
-{
-    return String { chars };
-}
-
 class StringPairArrayTests : public ::testing::Test
 {
 protected:
@@ -271,14 +266,14 @@ TEST_F (StringPairArrayTests, AddMapRespectsCaseSensitivity)
     StringPairArray insensitive { true }; // Case insensitive
     insensitive.addMap ({ { "duplicate", "a" }, { "Duplicate", "b" } });
     EXPECT_EQ (insensitive.size(), 1);
-    EXPECT_EQ (insensitive["DUPLICATE"], "a"_S);
+    EXPECT_EQ (insensitive["DUPLICATE"], String ("a"));
 
     StringPairArray sensitive { false }; // Case sensitive
-    sensitive.addMap ({ { "duplicate", "a"_S }, { "Duplicate", "b"_S } });
+    sensitive.addMap ({ { "duplicate", String ("a") }, { "Duplicate", String ("b") } });
     EXPECT_EQ (sensitive.size(), 2);
-    EXPECT_EQ (sensitive["duplicate"], "a"_S);
-    EXPECT_EQ (sensitive["Duplicate"], "b"_S);
-    EXPECT_EQ (sensitive["DUPLICATE"], ""_S);
+    EXPECT_EQ (sensitive["duplicate"], String ("a"));
+    EXPECT_EQ (sensitive["Duplicate"], String ("b"));
+    EXPECT_EQ (sensitive["DUPLICATE"], String (""));
 }
 
 TEST_F (StringPairArrayTests, AddMapOverwritesExistingPairs)
@@ -287,8 +282,8 @@ TEST_F (StringPairArrayTests, AddMapOverwritesExistingPairs)
     insensitive.set ("key", "value");
     insensitive.addMap ({ { "KEY", "VALUE" } });
     EXPECT_EQ (insensitive.size(), 1);
-    EXPECT_EQ (insensitive.getAllKeys()[0], "key"_S);
-    EXPECT_EQ (insensitive.getAllValues()[0], "VALUE"_S);
+    EXPECT_EQ (insensitive.getAllKeys()[0], String ("key"));
+    EXPECT_EQ (insensitive.getAllValues()[0], String ("VALUE"));
 
     StringPairArray sensitive { false };
     sensitive.set ("key", "value");

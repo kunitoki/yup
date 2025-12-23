@@ -28,11 +28,11 @@ using namespace yup;
 //==============================================================================
 namespace
 {
-class MockAudioSource : public AudioSource
+class MockMixerAudioSource : public AudioSource
 {
 public:
-    MockAudioSource() = default;
-    ~MockAudioSource() override = default;
+    MockMixerAudioSource() = default;
+    ~MockMixerAudioSource() override = default;
 
     void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override
     {
@@ -95,7 +95,7 @@ TEST_F (MixerAudioSourceTests, Constructor)
 TEST_F (MixerAudioSourceTests, Destructor)
 {
     auto* temp = new MixerAudioSource();
-    auto* source = new MockAudioSource();
+    auto* source = new MockMixerAudioSource();
     temp->addInputSource (source, true);
 
     // Destructor should call removeAllInputs which releases resources
@@ -111,7 +111,7 @@ TEST_F (MixerAudioSourceTests, AddInputSourceWithNull)
 
 TEST_F (MixerAudioSourceTests, AddInputSourceWithoutDelete)
 {
-    MockAudioSource source;
+    MockMixerAudioSource source;
     mixer->addInputSource (&source, false);
 
     // Source should not be prepared if mixer hasn't been prepared yet (line 68)
@@ -122,7 +122,7 @@ TEST_F (MixerAudioSourceTests, AddInputSourceAfterPrepare)
 {
     mixer->prepareToPlay (512, 44100.0);
 
-    MockAudioSource source;
+    MockMixerAudioSource source;
     mixer->addInputSource (&source, false);
 
     // Source should be prepared if mixer was already prepared (line 68-69)
@@ -133,7 +133,7 @@ TEST_F (MixerAudioSourceTests, AddInputSourceAfterPrepare)
 
 TEST_F (MixerAudioSourceTests, AddInputSourceWithDelete)
 {
-    auto* source = new MockAudioSource();
+    auto* source = new MockMixerAudioSource();
     mixer->addInputSource (source, true);
 
     // Cleanup will happen in mixer destructor or removeInputSource
@@ -141,7 +141,7 @@ TEST_F (MixerAudioSourceTests, AddInputSourceWithDelete)
 
 TEST_F (MixerAudioSourceTests, AddDuplicateInput)
 {
-    MockAudioSource source;
+    MockMixerAudioSource source;
     mixer->addInputSource (&source, false);
 
     // Adding same source again should be ignored (line 57)
@@ -157,7 +157,7 @@ TEST_F (MixerAudioSourceTests, RemoveInputSourceWithNull)
 
 TEST_F (MixerAudioSourceTests, RemoveNonExistentInput)
 {
-    MockAudioSource source;
+    MockMixerAudioSource source;
     // Should return early if input not found (line 88-89)
     EXPECT_NO_THROW (mixer->removeInputSource (&source));
     EXPECT_FALSE (source.releaseResourcesCalled);
@@ -165,7 +165,7 @@ TEST_F (MixerAudioSourceTests, RemoveNonExistentInput)
 
 TEST_F (MixerAudioSourceTests, RemoveInputSourceWithoutDelete)
 {
-    MockAudioSource source;
+    MockMixerAudioSource source;
     mixer->addInputSource (&source, false);
     mixer->removeInputSource (&source);
 
@@ -175,7 +175,7 @@ TEST_F (MixerAudioSourceTests, RemoveInputSourceWithoutDelete)
 
 TEST_F (MixerAudioSourceTests, RemoveInputSourceWithDelete)
 {
-    auto* source = new MockAudioSource();
+    auto* source = new MockMixerAudioSource();
     mixer->addInputSource (source, true);
 
     // Should delete the source (line 91-92)
@@ -192,8 +192,8 @@ TEST_F (MixerAudioSourceTests, RemoveAllInputsEmpty)
 
 TEST_F (MixerAudioSourceTests, RemoveAllInputsWithoutDelete)
 {
-    MockAudioSource source1;
-    MockAudioSource source2;
+    MockMixerAudioSource source1;
+    MockMixerAudioSource source2;
 
     mixer->addInputSource (&source1, false);
     mixer->addInputSource (&source2, false);
@@ -208,8 +208,8 @@ TEST_F (MixerAudioSourceTests, RemoveAllInputsWithoutDelete)
 
 TEST_F (MixerAudioSourceTests, RemoveAllInputsWithDelete)
 {
-    auto* source1 = new MockAudioSource();
-    auto* source2 = new MockAudioSource();
+    auto* source1 = new MockMixerAudioSource();
+    auto* source2 = new MockMixerAudioSource();
 
     mixer->addInputSource (source1, true);
     mixer->addInputSource (source2, true);
@@ -220,8 +220,8 @@ TEST_F (MixerAudioSourceTests, RemoveAllInputsWithDelete)
 
 TEST_F (MixerAudioSourceTests, RemoveAllInputsMixed)
 {
-    MockAudioSource source1;
-    auto* source2 = new MockAudioSource();
+    MockMixerAudioSource source1;
+    auto* source2 = new MockMixerAudioSource();
 
     mixer->addInputSource (&source1, false);
     mixer->addInputSource (source2, true);
@@ -235,8 +235,8 @@ TEST_F (MixerAudioSourceTests, RemoveAllInputsMixed)
 //==============================================================================
 TEST_F (MixerAudioSourceTests, PrepareToPlay)
 {
-    MockAudioSource source1;
-    MockAudioSource source2;
+    MockMixerAudioSource source1;
+    MockMixerAudioSource source2;
 
     mixer->addInputSource (&source1, false);
     mixer->addInputSource (&source2, false);
@@ -253,8 +253,8 @@ TEST_F (MixerAudioSourceTests, PrepareToPlay)
 //==============================================================================
 TEST_F (MixerAudioSourceTests, ReleaseResources)
 {
-    MockAudioSource source1;
-    MockAudioSource source2;
+    MockMixerAudioSource source1;
+    MockMixerAudioSource source2;
 
     mixer->addInputSource (&source1, false);
     mixer->addInputSource (&source2, false);
@@ -301,7 +301,7 @@ TEST_F (MixerAudioSourceTests, GetNextAudioBlockWithNoInputs)
 
 TEST_F (MixerAudioSourceTests, GetNextAudioBlockWithSingleInput)
 {
-    MockAudioSource source;
+    MockMixerAudioSource source;
     source.fillValue = 0.3f;
 
     mixer->addInputSource (&source, false);
@@ -332,9 +332,9 @@ TEST_F (MixerAudioSourceTests, GetNextAudioBlockWithSingleInput)
 
 TEST_F (MixerAudioSourceTests, GetNextAudioBlockWithMultipleInputs)
 {
-    MockAudioSource source1;
-    MockAudioSource source2;
-    MockAudioSource source3;
+    MockMixerAudioSource source1;
+    MockMixerAudioSource source2;
+    MockMixerAudioSource source3;
 
     source1.fillValue = 0.2f;
     source2.fillValue = 0.3f;
@@ -374,7 +374,7 @@ TEST_F (MixerAudioSourceTests, GetNextAudioBlockWithMultipleInputs)
 
 TEST_F (MixerAudioSourceTests, GetNextAudioBlockWithStartSampleOffset)
 {
-    MockAudioSource source;
+    MockMixerAudioSource source;
     source.fillValue = 0.5f;
 
     mixer->addInputSource (&source, false);
@@ -411,8 +411,8 @@ TEST_F (MixerAudioSourceTests, GetNextAudioBlockWithStartSampleOffset)
 
 TEST_F (MixerAudioSourceTests, GetNextAudioBlockResizesTempBuffer)
 {
-    MockAudioSource source1;
-    MockAudioSource source2;
+    MockMixerAudioSource source1;
+    MockMixerAudioSource source2;
 
     source1.fillValue = 0.3f;
     source2.fillValue = 0.4f;

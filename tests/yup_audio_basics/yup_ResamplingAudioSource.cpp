@@ -28,11 +28,11 @@ using namespace yup;
 //==============================================================================
 namespace
 {
-class MockAudioSource : public AudioSource
+class MockResamplingAudioSource : public AudioSource
 {
 public:
-    MockAudioSource() = default;
-    ~MockAudioSource() override = default;
+    MockResamplingAudioSource() = default;
+    ~MockResamplingAudioSource() override = default;
 
     void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override
     {
@@ -75,7 +75,7 @@ class ResamplingAudioSourceTests : public ::testing::Test
 protected:
     void SetUp() override
     {
-        mockSource = new MockAudioSource();
+        mockSource = new MockResamplingAudioSource();
         resampler = std::make_unique<ResamplingAudioSource> (mockSource, true, 2);
     }
 
@@ -84,26 +84,26 @@ protected:
         resampler.reset();
     }
 
-    MockAudioSource* mockSource; // Owned by resampler
+    MockResamplingAudioSource* mockSource; // Owned by resampler
     std::unique_ptr<ResamplingAudioSource> resampler;
 };
 
 //==============================================================================
 TEST_F (ResamplingAudioSourceTests, Constructor)
 {
-    auto* source = new MockAudioSource();
+    auto* source = new MockResamplingAudioSource();
     EXPECT_NO_THROW (ResamplingAudioSource (source, true, 2));
 }
 
 TEST_F (ResamplingAudioSourceTests, ConstructorWithDifferentChannels)
 {
-    auto* source = new MockAudioSource();
+    auto* source = new MockResamplingAudioSource();
     EXPECT_NO_THROW (ResamplingAudioSource (source, true, 8));
 }
 
 TEST_F (ResamplingAudioSourceTests, Destructor)
 {
-    auto* source = new MockAudioSource();
+    auto* source = new MockResamplingAudioSource();
     auto* temp = new ResamplingAudioSource (source, true, 2);
     EXPECT_NO_THROW (delete temp);
 }
@@ -308,7 +308,7 @@ TEST_F (ResamplingAudioSourceTests, GetNextAudioBlockBufferResize)
 
 TEST_F (ResamplingAudioSourceTests, GetNextAudioBlockMultipleChannels)
 {
-    auto* source = new MockAudioSource();
+    auto* source = new MockResamplingAudioSource();
     auto multiChannelResampler = std::make_unique<ResamplingAudioSource> (source, true, 8);
 
     multiChannelResampler->setResamplingRatio (1.0);
