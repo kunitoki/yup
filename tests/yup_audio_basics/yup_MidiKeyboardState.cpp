@@ -57,7 +57,6 @@ public:
     std::vector<NoteEvent> noteOnCalls;
     std::vector<NoteEvent> noteOffCalls;
 };
-} // namespace
 
 //==============================================================================
 class MidiKeyboardStateTests : public ::testing::Test
@@ -78,6 +77,8 @@ protected:
     std::unique_ptr<MidiKeyboardState> state;
     std::unique_ptr<TestListener> listener;
 };
+
+} // namespace
 
 //==============================================================================
 // Constructor and Reset Tests

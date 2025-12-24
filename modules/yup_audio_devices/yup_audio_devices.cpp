@@ -62,9 +62,6 @@
 
 #include "yup_audio_devices.h"
 
-#include "midi_io/ump/yup_UMPBytestreamInputHandler.h"
-#include "midi_io/ump/yup_UMPU32InputHandler.h"
-
 #include "midi_io/yup_MidiDevices.cpp"
 #include "audio_io/yup_SampleRateHelpers.cpp"
 

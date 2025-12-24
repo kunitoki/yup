@@ -49,7 +49,6 @@ public:
 private:
     std::optional<PositionInfo> testPosition;
 };
-} // namespace
 
 class AudioPlayHeadTests : public ::testing::Test
 {
@@ -61,6 +60,8 @@ protected:
 
     std::unique_ptr<TestAudioPlayHead> playHead;
 };
+
+} // namespace
 
 TEST_F (AudioPlayHeadTests, DefaultTransportControlMethodsExist)
 {

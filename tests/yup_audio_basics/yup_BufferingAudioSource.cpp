@@ -104,7 +104,6 @@ public:
     int64 currentPosition;
     bool looping;
 };
-} // namespace
 
 //==============================================================================
 class BufferingAudioSourceTests : public ::testing::Test
@@ -130,6 +129,8 @@ protected:
     MockPositionableAudioSource* mockSource; // Owned by buffering
     std::unique_ptr<BufferingAudioSource> buffering;
 };
+
+} // namespace
 
 //==============================================================================
 TEST_F (BufferingAudioSourceTests, Constructor)

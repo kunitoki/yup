@@ -46,6 +46,7 @@ using namespace yup;
 
 namespace
 {
+
 class MockListener
 {
 public:

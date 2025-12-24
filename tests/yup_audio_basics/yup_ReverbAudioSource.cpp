@@ -67,7 +67,6 @@ public:
     double lastSampleRate = 0.0;
     float fillValue = 0.5f;
 };
-} // namespace
 
 //==============================================================================
 class ReverbAudioSourceTests : public ::testing::Test
@@ -87,6 +86,8 @@ protected:
     MockReverbAudioSource* mockSource; // Owned by reverbSource
     std::unique_ptr<ReverbAudioSource> reverbSource;
 };
+
+} // namespace
 
 //==============================================================================
 TEST_F (ReverbAudioSourceTests, ConstructorWithDeleteInput)

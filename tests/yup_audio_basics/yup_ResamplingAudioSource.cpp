@@ -67,7 +67,6 @@ public:
     int lastSamplesPerBlock = 0;
     double lastSampleRate = 0.0;
 };
-} // namespace
 
 //==============================================================================
 class ResamplingAudioSourceTests : public ::testing::Test
@@ -87,6 +86,8 @@ protected:
     MockResamplingAudioSource* mockSource; // Owned by resampler
     std::unique_ptr<ResamplingAudioSource> resampler;
 };
+
+} // namespace
 
 //==============================================================================
 TEST_F (ResamplingAudioSourceTests, Constructor)

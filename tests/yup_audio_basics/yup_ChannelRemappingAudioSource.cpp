@@ -67,7 +67,6 @@ public:
     int lastSamplesPerBlock = 0;
     double lastSampleRate = 0.0;
 };
-} // namespace
 
 //==============================================================================
 class ChannelRemappingAudioSourceTests : public ::testing::Test
@@ -87,6 +86,8 @@ protected:
     MockAudioSource* mockSource; // Owned by remapper
     std::unique_ptr<ChannelRemappingAudioSource> remapper;
 };
+
+} // namespace
 
 //==============================================================================
 TEST_F (ChannelRemappingAudioSourceTests, Constructor)
