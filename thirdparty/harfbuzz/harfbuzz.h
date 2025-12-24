@@ -44,5 +44,16 @@
 
 #pragma once
 
+#if defined(__GNUC__) || defined(__clang__)
+ #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wempty-body"
+ #pragma GCC diagnostic ignored "-Wunused-function"
+ #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
 #include "upstream/hb.h"
 #include "upstream/hb-ot.h"
+
+#if defined(__GNUC__) || defined(__clang__)
+ #pragma GCC diagnostic pop
+#endif

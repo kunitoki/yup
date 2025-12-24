@@ -108,6 +108,8 @@ static inline constexpr const char* const PythonModuleName = YUP_PYTHON_STRINGIF
 
 //==============================================================================
 
+YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wattributes")
+
 #include "scripting/yup_ScriptException.h"
 #include "scripting/yup_ScriptEngine.h"
 #include "scripting/yup_ScriptBindings.h"
@@ -115,3 +117,5 @@ static inline constexpr const char* const PythonModuleName = YUP_PYTHON_STRINGIF
 #include "utilities/yup_ClassDemangling.h"
 #include "utilities/yup_CrashHandling.h"
 #include "utilities/yup_PythonInterop.h"
+
+YUP_END_IGNORE_WARNINGS_GCC_LIKE
