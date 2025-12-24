@@ -21,4 +21,8 @@
 
 #include "pffft_library.h"
 
+#ifdef _USE_MATH_DEFINES
+#undef _USE_MATH_DEFINES
+#endif
+
 #include "upstream/pffft_double.c"

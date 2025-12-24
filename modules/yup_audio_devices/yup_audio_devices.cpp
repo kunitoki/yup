@@ -62,10 +62,11 @@
 
 #include "yup_audio_devices.h"
 
-#include "audio_io/yup_SampleRateHelpers.cpp"
-#include "midi_io/yup_MidiDevices.cpp"
 #include "midi_io/ump/yup_UMPBytestreamInputHandler.h"
 #include "midi_io/ump/yup_UMPU32InputHandler.h"
+
+#include "midi_io/yup_MidiDevices.cpp"
+#include "audio_io/yup_SampleRateHelpers.cpp"
 
 //==============================================================================
 #if YUP_MAC || YUP_IOS
@@ -225,7 +226,6 @@ RealtimeThreadFactory getAndroidRealtimeThreadFactory();
 } // namespace yup
 
 #include "native/yup_Audio_android.cpp"
-
 #include "native/yup_Midi_android.cpp"
 
 #if YUP_USE_ANDROID_OPENSLES || YUP_USE_ANDROID_OBOE
