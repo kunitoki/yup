@@ -20,10 +20,10 @@
 */
 
 #define DR_FLAC_IMPLEMENTATION
-#include "upstream/dr_flac.h"
+#include <dr_flac.h>
 
 #define DR_MP3_IMPLEMENTATION
-#include "upstream/dr_mp3.h"
+#include <dr_mp3.h>
 
 #define DR_WAV_IMPLEMENTATION
-#include "upstream/dr_wav.h"
+#include <dr_wav.h>

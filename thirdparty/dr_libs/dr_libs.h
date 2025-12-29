@@ -30,6 +30,9 @@
     name:             Public domain, single file audio decoding libraries for C and C++
     description:      Public domain, single file audio decoding libraries for C and C++.
     website:          https://github.com/mackron/dr_libs
+    repository:       https://github.com/mackron/dr_libs.git
+    branch:           d6e1d922fb7f5c2e0052da566a8a30f0e6b8f613
+    submodules:       0
     license:          Public Domain
 
   END_YUP_MODULE_DECLARATION
@@ -40,10 +43,10 @@
 #pragma once
 
 #define DR_FLAC_NO_STDIO 1
-#include "upstream/dr_flac.h"
+#include <dr_flac.h>
 
 #define DR_MP3_NO_STDIO 1
-#include "upstream/dr_mp3.h"
+#include <dr_mp3.h>
 
 #define DR_WAV_NO_STDIO 1
-#include "upstream/dr_wav.h"
+#include <dr_wav.h>
