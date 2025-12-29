@@ -31,6 +31,10 @@ void AudioFormatManager::registerDefaultFormats()
     // Register Wave format
     registerFormat (std::make_unique<WaveAudioFormat>());
 
+#if YUP_MODULE_AVAILABLE_opus_library && YUP_AUDIO_FORMAT_OPUS
+    registerFormat (std::make_unique<OpusAudioFormat>());
+#endif
+
     // TODO: Add other formats like:
     // registerFormat (std::make_unique<AiffAudioFormat>());
     // registerFormat (std::make_unique<FlacAudioFormat>());

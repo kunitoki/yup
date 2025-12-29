@@ -24,13 +24,18 @@
 
   BEGIN_YUP_MODULE_DECLARATION
 
-    ID:               dr_libs
-    vendor:           dr_libs
-    version:          0.14.0
-    name:             Public domain, single file audio decoding libraries for C and C++
-    description:      Public domain, single file audio decoding libraries for C and C++.
-    website:          https://github.com/mackron/dr_libs
-    license:          Public Domain
+    ID:               opus
+    vendor:           Xiph.Org
+    version:          1.6
+    name:             Opus is a totally open, royalty-free, highly versatile audio codec
+    description:      Opus is a totally open, royalty-free, highly versatile audio codec.
+    website:          https://opus-codec.org/
+    upstream:         https://downloads.xiph.org/releases/opus/opus-1.6.tar.gz
+    sha256:           b7637334527201fdfd6dd6a02e67aceffb0e5e60155bbd89175647a80301c92c
+    license:          BSD
+
+    defines:
+    searchpaths:      include celt silk silk/float silk/fixed dnn
 
   END_YUP_MODULE_DECLARATION
 
@@ -39,11 +44,9 @@
 
 #pragma once
 
-#define DR_FLAC_NO_STDIO 1
-#include "upstream/dr_flac.h"
+#if defined(__aarch64__) || defined(__ARM_NEON) || defined(__ARM_NEON__)
+#define OPUS_ARM_PRESUME_NEON_INTR 1
+#define OPUS_ARM_PRESUME_NEON 1
+#endif
 
-#define DR_MP3_NO_STDIO 1
-#include "upstream/dr_mp3.h"
-
-#define DR_WAV_NO_STDIO 1
-#include "upstream/dr_wav.h"
+#include <opus.h>

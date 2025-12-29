@@ -58,6 +58,120 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_module_upstream_has_content module_name module_path output_variable)
+    set (source_upstream_path "${module_path}/upstream")
+    set (build_upstream_path "${CMAKE_BINARY_DIR}/externals/${module_name}/upstream")
+
+    foreach (candidate_path IN ITEMS "${source_upstream_path}" "${build_upstream_path}")
+        if (EXISTS "${candidate_path}")
+            file (GLOB upstream_items "${candidate_path}/*")
+            list (LENGTH upstream_items upstream_items_len)
+            if (upstream_items_len GREATER 0)
+                set (${output_variable} ON PARENT_SCOPE)
+                return()
+            endif()
+        endif()
+    endforeach()
+
+    set (${output_variable} OFF PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_get_upstream_path module_name module_path output_variable)
+    set (source_upstream_path "${module_path}/upstream")
+    if (EXISTS "${source_upstream_path}")
+        set (${output_variable} "${source_upstream_path}" PARENT_SCOPE)
+        return()
+    endif()
+
+    set (build_upstream_path "${CMAKE_BINARY_DIR}/externals/${module_name}/upstream")
+    if (EXISTS "${build_upstream_path}")
+        set (${output_variable} "${build_upstream_path}" PARENT_SCOPE)
+        return()
+    endif()
+
+    set (${output_variable} "" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_fetch_upstream module_name module_path module_upstream module_sha256 module_repository module_branch)
+    if (NOT YUP_FETCH_UPSTREAM_MODULES)
+        return()
+    endif()
+
+    if (module_upstream AND module_repository)
+        _yup_message (FATAL_ERROR "Module ${module_name} defines both upstream and repository sources")
+    endif()
+
+    if (NOT module_upstream AND NOT module_repository)
+        return()
+    endif()
+
+    _yup_module_upstream_has_content ("${module_name}" "${module_path}" upstream_has_content)
+    if (upstream_has_content)
+        return()
+    endif()
+
+    _yup_message (STATUS "Fetching upstream sources for ${module_name}")
+
+    if (module_upstream)
+        set (download_dir "${CMAKE_BINARY_DIR}/_yup_upstream_downloads")
+        file (MAKE_DIRECTORY "${download_dir}")
+        get_filename_component (archive_name "${module_upstream}" NAME)
+        if ("${archive_name}" STREQUAL "")
+            set (archive_name "${module_name}.archive")
+        endif()
+        set (archive_path "${download_dir}/${archive_name}")
+
+        # SHOW_PROGRESS
+        if (module_sha256)
+            file (DOWNLOAD "${module_upstream}" "${archive_path}" EXPECTED_HASH SHA256=${module_sha256})
+        else()
+            file (DOWNLOAD "${module_upstream}" "${archive_path}")
+        endif()
+
+        set (extract_dir "${CMAKE_BINARY_DIR}/_yup_upstream_extract/${module_name}")
+        file (REMOVE_RECURSE "${extract_dir}")
+        file (MAKE_DIRECTORY "${extract_dir}")
+        file (ARCHIVE_EXTRACT INPUT "${archive_path}" DESTINATION "${extract_dir}")
+
+        file (GLOB extracted_entries RELATIVE "${extract_dir}" "${extract_dir}/*")
+        list (LENGTH extracted_entries extracted_entries_len)
+        set (source_dir "${extract_dir}")
+        if (extracted_entries_len EQUAL 1)
+            list (GET extracted_entries 0 single_entry)
+            if (IS_DIRECTORY "${extract_dir}/${single_entry}")
+                set (source_dir "${extract_dir}/${single_entry}")
+            endif()
+        endif()
+
+        set (upstream_target_dir "${CMAKE_BINARY_DIR}/externals/${module_name}/upstream")
+        file (REMOVE_RECURSE "${upstream_target_dir}")
+        file (MAKE_DIRECTORY "${upstream_target_dir}")
+        file (GLOB extracted_items "${source_dir}/*")
+        if (extracted_items)
+            file (COPY ${extracted_items} DESTINATION "${upstream_target_dir}")
+        endif()
+    else()
+        if (NOT module_branch)
+            set (module_branch "HEAD")
+        endif()
+
+        set (upstream_target_dir "${CMAKE_BINARY_DIR}/externals/${module_name}/upstream")
+        FetchContent_Declare(
+            "${module_name}_upstream"
+            GIT_REPOSITORY "${module_repository}"
+            GIT_TAG "${module_branch}"
+            GIT_SUBMODULES_RECURSE ON
+            SOURCE_DIR "${upstream_target_dir}")
+        FetchContent_Populate ("${module_name}_upstream")
+    endif()
+endfunction()
+
+#==============================================================================
+
 function (_yup_module_collect_sources folder output_variable)
     set(source_extensions ".c;.cc;.cxx;.cpp;.h;.hh;.hxx;.hpp")
     if (APPLE)
@@ -363,6 +477,14 @@ function (yup_add_module module_path modules_definitions module_group)
             _yup_boolean_property ("${value}" module_arc_enabled)
         elseif (${key} MATCHES "^needsPython$")
             _yup_boolean_property ("${value}" module_needs_python)
+        elseif (${key} MATCHES "^upstream$")
+            set (module_upstream "${value}")
+        elseif (${key} MATCHES "^sha256$")
+            set (module_sha256 "${value}")
+        elseif (${key} MATCHES "^repository$")
+            set (module_repository "${value}")
+        elseif (${key} MATCHES "^branch$")
+            set (module_branch "${value}")
         endif()
     endforeach()
 
@@ -370,6 +492,17 @@ function (yup_add_module module_path modules_definitions module_group)
     _yup_set_default (module_arc_enabled OFF)
     _yup_set_default (module_needs_python OFF)
     _yup_resolve_variable_paths ("${module_searchpaths}" module_searchpaths)
+
+    if (module_upstream OR module_repository)
+        _yup_module_upstream_has_content ("${module_name}" "${module_path}" upstream_has_content)
+        if (NOT upstream_has_content)
+            if (YUP_FETCH_UPSTREAM_MODULES)
+                _yup_module_fetch_upstream ("${module_name}" "${module_path}" "${module_upstream}" "${module_sha256}" "${module_repository}" "${module_branch}")
+            else()
+                _yup_message (WARNING "Upstream sources for ${module_name} are missing and YUP_FETCH_UPSTREAM_MODULES is OFF")
+            endif()
+        endif()
+    endif()
 
     # ==== Setup Platform-Specific Configurations
     if (YUP_PLATFORM_IOS)
@@ -513,11 +646,22 @@ function (yup_add_module module_path modules_definitions module_group)
     get_filename_component (module_include_path ${module_path} DIRECTORY)
     list (APPEND module_include_paths "${module_include_path}")
 
+    if (module_upstream OR module_repository)
+        _yup_module_get_upstream_path ("${module_name}" "${module_path}" module_upstream_path)
+        if (module_upstream_path)
+            list (APPEND module_include_paths "${module_upstream_path}")
+        endif()
+    endif()
+
     foreach (searchpath IN LISTS module_searchpaths)
         if (EXISTS "${searchpath}")
             list (APPEND module_include_paths "${searchpath}")
         elseif (EXISTS "${module_path}/${searchpath}")
             list (APPEND module_include_paths "${module_path}/${searchpath}")
+        elseif (module_upstream_path AND EXISTS "${module_upstream_path}/${searchpath}")
+            list (APPEND module_include_paths "${module_upstream_path}/${searchpath}")
+        elseif (module_upstream OR module_repository)
+            list (APPEND module_include_paths "${CMAKE_BINARY_DIR}/externals/${module_name}/upstream/${searchpath}")
         endif()
     endforeach()
 
@@ -621,6 +765,7 @@ macro (yup_add_default_modules modules_path)
     yup_add_module (${modules_path}/thirdparty/oboe_library "${modules_definitions}" ${thirdparty_group})
     yup_add_module (${modules_path}/thirdparty/pffft_library "${modules_definitions}" ${thirdparty_group})
     yup_add_module (${modules_path}/thirdparty/dr_libs "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/opus_library "${modules_definitions}" ${thirdparty_group})
 
     # ==== Yup modules
     set (modules_group "Modules")

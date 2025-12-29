@@ -74,6 +74,7 @@ yup_standalone_app (
         yup::yup_audio_processors
         yup::yup_audio_formats
         pffft_library
+        opus_library
         dr_libs
         libpng
         libwebp

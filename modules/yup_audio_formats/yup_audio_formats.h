@@ -45,6 +45,17 @@
 #include <yup_audio_basics/yup_audio_basics.h>
 
 //==============================================================================
+/** Config: YUP_AUDIO_FORMAT_OPUS
+
+    Enable Opus audio format support.
+*/
+#ifndef YUP_AUDIO_FORMAT_OPUS
+#if YUP_MODULE_AVAILABLE_opus_library
+#define YUP_AUDIO_FORMAT_OPUS 1
+#endif
+#endif
+
+//==============================================================================
 
 #include "format/yup_AudioFormat.h"
 #include "format/yup_AudioFormatReader.h"
@@ -54,3 +65,7 @@
 //==============================================================================
 
 #include "formats/yup_WaveAudioFormat.h"
+
+#if YUP_MODULE_AVAILABLE_opus_library && YUP_AUDIO_FORMAT_OPUS
+#include "formats/yup_OpusAudioFormat.h"
+#endif
