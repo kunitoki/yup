@@ -17,8 +17,6 @@
 #
 # ==============================================================================
 
-#==============================================================================
-
 function (_yup_module_parse_config module_header output_module_configs output_module_user_configs)
     set (module_configs "")
     set (module_user_configs "")
@@ -96,7 +94,7 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_module_fetch_upstream module_name module_path module_upstream module_sha256 module_repository module_branch)
+function (_yup_module_fetch_upstream module_name module_path module_upstream module_sha256 module_repository module_branch module_submodules output_target_variable)
     if (NOT YUP_FETCH_UPSTREAM_MODULES)
         return()
     endif()
@@ -160,13 +158,80 @@ function (_yup_module_fetch_upstream module_name module_path module_upstream mod
         endif()
 
         set (upstream_target_dir "${CMAKE_BINARY_DIR}/externals/${module_name}/upstream")
-        FetchContent_Declare(
-            "${module_name}_upstream"
-            GIT_REPOSITORY "${module_repository}"
-            GIT_TAG "${module_branch}"
-            GIT_SUBMODULES_RECURSE ON
-            SOURCE_DIR "${upstream_target_dir}")
-        FetchContent_Populate ("${module_name}_upstream")
+        if (module_submodules)
+            set (module_submodules_recurse ON)
+        else()
+            set (module_submodules_recurse OFF)
+        endif()
+
+        file (MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/externals/${module_name}")
+
+        file (REMOVE_RECURSE "${upstream_target_dir}")
+        set (module_branch_value "${module_branch}")
+        string (STRIP "${module_branch_value}" module_branch_value)
+        string (REGEX REPLACE "^\"(.*)\"$" "\\1" module_branch_value "${module_branch_value}")
+        string (REGEX REPLACE "^'(.*)'$" "\\1" module_branch_value "${module_branch_value}")
+
+        if (module_branch_value AND NOT module_branch_value STREQUAL "HEAD")
+            string (REGEX MATCH "^[0-9a-fA-F]+$" module_branch_is_hex "${module_branch_value}")
+            string (LENGTH "${module_branch_value}" module_branch_length)
+            if (module_branch_is_hex AND module_branch_length GREATER_EQUAL 7 AND module_branch_length LESS_EQUAL 40)
+                set (module_branch_is_commit ON)
+            else()
+                set (module_branch_is_commit "")
+            endif()
+        else()
+            set (module_branch_is_commit "")
+        endif()
+
+        if (module_branch_is_commit)
+            execute_process (
+                COMMAND git clone -q --no-checkout "${module_repository}" "${upstream_target_dir}"
+                WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/externals/${module_name}"
+                RESULT_VARIABLE clone_result)
+            if (clone_result EQUAL 0)
+                execute_process (
+                    COMMAND git -c advice.detachedHead=false -C "${upstream_target_dir}" fetch -q --depth=1 origin "${module_branch_value}"
+                    RESULT_VARIABLE fetch_result)
+                execute_process (
+                    COMMAND git -c advice.detachedHead=false -C "${upstream_target_dir}" checkout -q "${module_branch_value}"
+                    RESULT_VARIABLE checkout_result)
+                if (module_submodules_recurse AND fetch_result EQUAL 0 AND checkout_result EQUAL 0)
+                    execute_process (
+                        COMMAND git -c advice.detachedHead=false -C "${upstream_target_dir}" submodule update --init --recursive --depth=1
+                        RESULT_VARIABLE submodule_result)
+                endif()
+            endif()
+        else()
+            set (clone_args git clone)
+            if (module_submodules_recurse)
+                list (APPEND clone_args --recurse-submodules --shallow-submodules)
+            endif()
+            list (APPEND clone_args -q --depth=1)
+            if (module_branch_value AND NOT module_branch_value STREQUAL "HEAD")
+                list (APPEND clone_args --branch "${module_branch_value}")
+            endif()
+            list (APPEND clone_args "${module_repository}" "${upstream_target_dir}")
+            execute_process (
+                COMMAND ${clone_args}
+                WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/externals/${module_name}"
+                RESULT_VARIABLE clone_result)
+        endif()
+
+        if (module_branch_is_commit)
+            if (NOT clone_result EQUAL 0 OR NOT fetch_result EQUAL 0 OR NOT checkout_result EQUAL 0)
+                _yup_message (FATAL_ERROR "Failed to clone ${module_repository} at commit ${module_branch} for ${module_name}")
+            endif()
+            if (module_submodules_recurse AND NOT submodule_result EQUAL 0)
+                _yup_message (FATAL_ERROR "Failed to update submodules for ${module_repository} at commit ${module_branch}")
+            endif()
+        else()
+            if (NOT clone_result EQUAL 0)
+                _yup_message (FATAL_ERROR "Failed to clone ${module_repository} for ${module_name}")
+            endif()
+        endif()
+
+        set (${output_target_variable} "" PARENT_SCOPE)
     endif()
 endfunction()
 
@@ -485,19 +550,23 @@ function (yup_add_module module_path modules_definitions module_group)
             set (module_repository "${value}")
         elseif (${key} MATCHES "^branch$")
             set (module_branch "${value}")
+        elseif (${key} MATCHES "^submodules$")
+            _yup_boolean_property ("${value}" module_submodules)
         endif()
     endforeach()
 
     _yup_set_default (module_cpp_standard "20")
     _yup_set_default (module_arc_enabled OFF)
     _yup_set_default (module_needs_python OFF)
+    _yup_set_default (module_submodules ON)
     _yup_resolve_variable_paths ("${module_searchpaths}" module_searchpaths)
 
+    set (module_upstream_target "")
     if (module_upstream OR module_repository)
         _yup_module_upstream_has_content ("${module_name}" "${module_path}" upstream_has_content)
         if (NOT upstream_has_content)
             if (YUP_FETCH_UPSTREAM_MODULES)
-                _yup_module_fetch_upstream ("${module_name}" "${module_path}" "${module_upstream}" "${module_sha256}" "${module_repository}" "${module_branch}")
+                _yup_module_fetch_upstream ("${module_name}" "${module_path}" "${module_upstream}" "${module_sha256}" "${module_repository}" "${module_branch}" "${module_submodules}" module_upstream_target)
             else()
                 _yup_message (WARNING "Upstream sources for ${module_name} are missing and YUP_FETCH_UPSTREAM_MODULES is OFF")
             endif()
@@ -701,6 +770,10 @@ function (yup_add_module module_path modules_definitions module_group)
                               "${module_frameworks}"
                               "${module_dependencies}"
                               "${module_arc_enabled}")
+
+    if (module_upstream_target)
+        add_dependencies (${module_name} "${module_upstream_target}")
+    endif()
 
     #set (${module_name}_Configs "${module_user_configs}")
     #set (${module_name}_Configs ${${module_name}_Configs} PARENT_SCOPE)

@@ -21,6 +21,15 @@
 
 #include "pffft_library.h"
 
-#include "upstream/pffft.c"
-#include "upstream/pffft_common.c"
-#include "upstream/pffastconv.c"
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-W#pragma-messages"
+#endif
+
+#include <pffft.c>
+#include <pffft_common.c>
+#include <pffastconv.c>
+
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
