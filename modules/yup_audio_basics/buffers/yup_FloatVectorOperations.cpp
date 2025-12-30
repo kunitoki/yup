@@ -1617,9 +1617,9 @@ double computeCorrelation (const float* a, const float* b, Size num) noexcept
     double sumA2 = 0.0;
     double sumB2 = 0.0;
     double sumAB = 0.0;
+    Size i = 0;
 
 #if YUP_USE_SSE_INTRINSICS
-    Size i = 0;
     __m128 sumA = _mm_setzero_ps();
     __m128 sumB = _mm_setzero_ps();
     __m128 sumABv = _mm_setzero_ps();
@@ -1642,7 +1642,6 @@ double computeCorrelation (const float* a, const float* b, Size num) noexcept
     sumAB += temp[0] + temp[1] + temp[2] + temp[3];
 
 #elif YUP_USE_ARM_NEON
-    Size i = 0;
     float32x4_t sumA = vdupq_n_f32 (0.0f);
     float32x4_t sumB = vdupq_n_f32 (0.0f);
     float32x4_t sumABv = vdupq_n_f32 (0.0f);
