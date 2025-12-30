@@ -42,4 +42,7 @@
 
 #pragma once
 
+#define FLAC__NO_DLL 1
+#define FLAC__HAS_OGG 0
+
 #include <FLAC/all.h>

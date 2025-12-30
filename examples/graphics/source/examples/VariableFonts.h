@@ -168,11 +168,11 @@ private:
         slider->setDefaultValue (defaultValue);
         slider->setRange ({ minValue, maxValue });
         slider->setValue (defaultValue);
-        slider->onValueChanged = [this, index, &valueToSet] (float value)
+        slider->onValueChanged = [this, index, &valueToSet] (double value)
         {
             updateLabel (index);
 
-            valueToSet = value;
+            valueToSet = static_cast<float> (value);
 
             resized();
             repaint (textBounds);

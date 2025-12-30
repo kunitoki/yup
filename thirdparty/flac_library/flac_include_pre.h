@@ -86,9 +86,6 @@
 #undef PACKAGE_VERSION
 #define PACKAGE_VERSION "1.5.0"
 
-#define FLAC__NO_DLL 1
-#define FLAC__HAS_OGG 0
-
 #if !defined _MSC_VER
  #define HAVE_LROUND 1
 #endif
