@@ -19,8 +19,6 @@
   ==============================================================================
 */
 
-#include "flac_library.h"
-
 #if defined _WIN32 && !defined __CYGWIN__
  #include <io.h>
 #else
@@ -168,3 +166,5 @@
 #ifndef NDEBUG
  #define NDEBUG // (some flac code prints cpu info if this isn't defined)
 #endif
+
+#include "flac_library.h"

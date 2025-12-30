@@ -19,33 +19,31 @@
   ==============================================================================
 */
 
-#include "flac_library.h"
-
 #include "flac_include_pre.h"
 
-#include <libFLAC/bitmath.c>
-#include <libFLAC/bitreader.c>
-#include <libFLAC/bitwriter.c>
-#include <libFLAC/cpu.c>
-#include <libFLAC/crc.c>
-#include <libFLAC/fixed.c>
-#include <libFLAC/float.c>
-#include <libFLAC/format.c>
-#include <libFLAC/lpc.c>
-#include <libFLAC/lpc_intrin_avx2.c>
-#include <libFLAC/lpc_intrin_fma.c>
-#include <libFLAC/lpc_intrin_neon.c>
-#include <libFLAC/lpc_intrin_sse2.c>
-#include <libFLAC/lpc_intrin_sse41.c>
-#include <libFLAC/md5.c>
-#include <libFLAC/memory.c>
-//#include <libFLAC/metadata_iterators.c>
-//#include <libFLAC/metadata_object.c>
-#include <libFLAC/stream_decoder.c>
-#include <libFLAC/stream_encoder_framing.c>
-#include <libFLAC/stream_encoder_intrin_avx2.c>
-#include <libFLAC/stream_encoder_intrin_sse2.c>
-#include <libFLAC/stream_encoder_intrin_ssse3.c>
-#include <libFLAC/window.c>
+#include "bitmath.c"
+#include "bitreader.c"
+#include "bitwriter.c"
+#include "cpu.c"
+#include "crc.c"
+#include "fixed.c"
+#include "float.c"
+#include "format.c"
+#include "lpc.c"
+#include "lpc_intrin_avx2.c"
+#include "lpc_intrin_fma.c"
+#include "lpc_intrin_neon.c"
+#include "lpc_intrin_sse2.c"
+#include "lpc_intrin_sse41.c"
+#include "md5.c"
+#include "memory.c"
+//#include "metadata_iterators.c"
+//#include "metadata_object.c"
+#include "stream_decoder.c"
+#include "stream_encoder_framing.c"
+#include "stream_encoder_intrin_avx2.c"
+#include "stream_encoder_intrin_sse2.c"
+#include "stream_encoder_intrin_ssse3.c"
+#include "window.c"
 
 #include "flac_include_post.h"

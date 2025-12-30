@@ -19,10 +19,8 @@
   ==============================================================================
 */
 
-#include "flac_library.h"
-
 #include "flac_include_pre.h"
 
-#include <libFLAC/stream_encoder.c>
+#include "stream_encoder.c"
 
 #include "flac_include_post.h"

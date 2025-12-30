@@ -208,6 +208,15 @@ endfunction()
 function (_yup_collect_upstream_candidate_paths module_name module_path output_variable)
     set (candidate_paths "${module_path}/upstream")
 
+    if (DEFINED YUP_UPSTREAM_ROOT AND NOT "${YUP_UPSTREAM_ROOT}" STREQUAL "")
+        list (APPEND candidate_paths "${YUP_UPSTREAM_ROOT}/${module_name}/upstream")
+    endif()
+
+    if (CMAKE_SOURCE_DIR)
+        list (APPEND candidate_paths "${CMAKE_SOURCE_DIR}/build/externals/${module_name}/upstream")
+        list (APPEND candidate_paths "${CMAKE_SOURCE_DIR}/../build/externals/${module_name}/upstream")
+    endif()
+
     set (candidate_root "${CMAKE_BINARY_DIR}")
     set (max_depth 10)
     while (max_depth GREATER 0)
