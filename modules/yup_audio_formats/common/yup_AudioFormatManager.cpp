@@ -28,7 +28,10 @@ AudioFormatManager::AudioFormatManager()
 
 void AudioFormatManager::registerDefaultFormats()
 {
-    // Register Wave format
+#if YUP_AUDIO_FORMAT_COREAUDIO
+    registerFormat (std::make_unique<AppleCoreAudioFormat>());
+#endif
+
 #if YUP_AUDIO_FORMAT_WAVE
     registerFormat (std::make_unique<WaveAudioFormat>());
 #endif

@@ -27,3 +27,7 @@
 #if YUP_MODULE_AVAILABLE_flac_library && YUP_AUDIO_FORMAT_FLAC
 #include "yup_audio_formats/yup_FlacAudioFormat.cpp"
 #endif
+
+#if YUP_AUDIO_FORMAT_COREAUDIO
+#include "yup_audio_formats/yup_AppleCoreAudioFormat.cpp"
+#endif

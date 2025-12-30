@@ -33,6 +33,7 @@
     license:              ISC
 
     dependencies:         yup_audio_basics
+    appleFrameworks:      AudioToolbox CoreAudio CoreFoundation
 
   END_YUP_MODULE_DECLARATION
 
@@ -90,6 +91,17 @@
 #endif
 
 //==============================================================================
+/** Config: YUP_AUDIO_FORMAT_COREAUDIO
+
+    Enable CoreAudio audio format support on Apple platforms.
+*/
+#ifndef YUP_AUDIO_FORMAT_COREAUDIO
+#if YUP_MAC || YUP_IOS
+#define YUP_AUDIO_FORMAT_COREAUDIO 1
+#endif
+#endif
+
+//==============================================================================
 
 #if YUP_AUDIO_FORMAT_WAVE && ! YUP_MODULE_AVAILABLE_dr_libs
 #undef YUP_AUDIO_FORMAT_WAVE
@@ -109,6 +121,11 @@
 #if YUP_AUDIO_FORMAT_FLAC && ! YUP_MODULE_AVAILABLE_flac_library
 #undef YUP_AUDIO_FORMAT_FLAC
 #define YUP_AUDIO_FORMAT_FLAC 0
+#endif
+
+#if YUP_AUDIO_FORMAT_COREAUDIO && ! (YUP_MAC || YUP_IOS)
+#undef YUP_AUDIO_FORMAT_COREAUDIO
+#define YUP_AUDIO_FORMAT_COREAUDIO 0
 #endif
 
 //==============================================================================
@@ -134,4 +151,8 @@
 
 #if YUP_AUDIO_FORMAT_FLAC
 #include "formats/yup_FlacAudioFormat.h"
+#endif
+
+#if YUP_AUDIO_FORMAT_COREAUDIO
+#include "formats/yup_AppleCoreAudioFormat.h"
 #endif

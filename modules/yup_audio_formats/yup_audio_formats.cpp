@@ -44,6 +44,11 @@
 #include <flac_library/flac_library.h>
 #endif
 
+#if YUP_MAC || YUP_IOS
+#include <AudioToolbox/AudioToolbox.h>
+#include <CoreFoundation/CoreFoundation.h>
+#endif
+
 //==============================================================================
 
 #include "format/yup_AudioFormat.cpp"
@@ -67,4 +72,8 @@
 
 #if YUP_AUDIO_FORMAT_FLAC
 #include "formats/yup_FlacAudioFormat.cpp"
+#endif
+
+#if YUP_AUDIO_FORMAT_COREAUDIO
+#include "formats/yup_AppleCoreAudioFormat.cpp"
 #endif
