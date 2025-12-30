@@ -719,6 +719,8 @@ function (yup_add_module module_path modules_definitions module_group)
         _yup_module_get_upstream_path ("${module_name}" "${module_path}" module_upstream_path)
         if (module_upstream_path)
             list (APPEND module_include_paths "${module_upstream_path}")
+        else()
+            list (APPEND module_include_paths "${CMAKE_BINARY_DIR}/externals/${module_name}/upstream")
         endif()
     endif()
 
