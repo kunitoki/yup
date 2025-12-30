@@ -67,15 +67,6 @@
  #include <windows.h>
 #endif
 
-#if __APPLE__
- #include <TargetConditionals.h>
- #if TARGET_OS_IPHONE && TARGET_IPHONE_SIMULATOR
- #elif TARGET_OS_IPHONE
- #else
-  #define TARGET_OS_OSX 1
- #endif
-#endif
-
 #ifdef DEBUG
  #include <assert.h>
 #endif
@@ -88,10 +79,6 @@
 
 #if !defined _MSC_VER
  #define HAVE_LROUND 1
-#endif
-
-#if TARGET_OS_OSX
- #define FLAC__SYS_DARWIN 1
 #endif
 
 #ifndef SIZE_MAX
@@ -152,9 +139,6 @@
    #define FLAC__HAS_A64NEONINTRIN 1
  #endif
 #endif
-
-//#define flac_max(a, b) ((a) > (b) ? (a) : (b))
-//#define flac_min(a, b) ((a) < (b) ? (a) : (b))
 
 #pragma push_macro ("DEBUG")
 #pragma push_macro ("NDEBUG")
