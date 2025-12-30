@@ -474,18 +474,26 @@ static void updateProtocolInfo(MIDIObjectRef entity, MidiDeviceInfo& info)
 #if YUP_HAS_NEW_COREMIDI_API
     SInt32 protocol = 0;
 
-    if (MIDIObjectGetIntegerProperty(entity, kMIDIPropertyProtocolID, &protocol) == noErr)
+    if (@available(iOS 14.0, macOS 11.0, *))
     {
-        if (protocol == kMIDIProtocol_2_0)
+        if (MIDIObjectGetIntegerProperty(entity, kMIDIPropertyProtocolID, &protocol) == noErr)
         {
-            info.protocol = ump::PacketProtocol::MIDI_2_0;
-            info.supportsMidi2 = true;
+            if (protocol == kMIDIProtocol_2_0)
+            {
+                info.protocol = ump::PacketProtocol::MIDI_2_0;
+                info.supportsMidi2 = true;
+            }
+            else
+            {
+                info.protocol = ump::PacketProtocol::MIDI_1_0;
+                info.supportsMidi2 = false;
+            }
         }
-        else
-        {
-            info.protocol = ump::PacketProtocol::MIDI_1_0;
-            info.supportsMidi2 = false;
-        }
+    }
+    else
+    {
+        info.protocol = ump::PacketProtocol::MIDI_1_0;
+        info.supportsMidi2 = false;
     }
 #else
     ignoreUnused(entity, info);

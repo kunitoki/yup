@@ -19,11 +19,10 @@
   ==============================================================================
 */
 
-#include "rive.h"
-
 #if __clang__
  #pragma clang diagnostic push
  #pragma clang diagnostic ignored "-Wshorten-64-to-32"
+ #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #elif __GNUC__
  #pragma GCC diagnostic push
  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
@@ -31,6 +30,8 @@
  #pragma warning (push)
  #pragma warning (disable : 4244)
 #endif
+
+#include "rive.h"
 
 #if !defined(_RIVE_INTERNAL_)
 #define _RIVE_INTERNAL_ 1

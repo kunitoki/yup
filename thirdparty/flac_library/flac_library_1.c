@@ -30,6 +30,11 @@
 #include "fixed_intrin_sse2.c"
 #include "fixed_intrin_sse42.c"
 #include "fixed_intrin_ssse3.c"
+
+#if defined(CHECK_ORDER_IS_VALID)
+#undef CHECK_ORDER_IS_VALID
+#endif
+
 #include "fixed.c"
 #include "float.c"
 #include "format.c"
@@ -41,13 +46,14 @@
 #include "lpc_intrin_sse41.c"
 #include "md5.c"
 #include "memory.c"
+#include "stream_decoder.c"
+#include "window.c"
+
 //#include "metadata_iterators.c"
 //#include "metadata_object.c"
 //#include "ogg_decoder_aspect.c"
 //#include "ogg_encoder_aspect.c"
 //#include "ogg_helper.c"
 //#include "ogg_mapping.c"
-#include "stream_decoder.c"
-#include "window.c"
 
 #include "flac_include_post.h"

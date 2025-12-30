@@ -43,6 +43,16 @@
 
 #pragma once
 
+#include <math.h>
+
+#if !defined(HAVE_LRINT) && !defined(_MSC_VER)
+#define HAVE_LRINT 1
+#endif
+
+#if !defined(HAVE_LRINTF) && !defined(_MSC_VER)
+#define HAVE_LRINTF 1
+#endif
+
 #if defined(__aarch64__) || defined(__ARM_NEON) || defined(__ARM_NEON__)
 #define OPUS_ARM_PRESUME_NEON_INTR 1
 #define OPUS_ARM_PRESUME_NEON 1
