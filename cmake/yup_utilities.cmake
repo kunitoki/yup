@@ -209,7 +209,7 @@ function (_yup_collect_upstream_candidate_paths module_name module_path output_v
     set (candidate_paths "${module_path}/upstream")
 
     set (candidate_root "${CMAKE_BINARY_DIR}")
-    set (max_depth 6)
+    set (max_depth 10)
     while (max_depth GREATER 0)
         list (APPEND candidate_paths "${candidate_root}/externals/${module_name}/upstream")
 

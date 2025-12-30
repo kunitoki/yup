@@ -37,13 +37,22 @@ namespace yup
 class YUP_API OpusAudioFormat : public AudioFormat
 {
 public:
+    /** Constructs a new OpusAudioFormat instance. */
     OpusAudioFormat();
+
+    /** Destructor. */
     ~OpusAudioFormat() override;
 
+    /** Returns the descriptive name of this format. */
     const String& getFormatName() const override;
+
+    /** Returns the file extensions that this format can handle. */
     Array<String> getFileExtensions() const override;
 
+    /** Creates a reader for decoding Opus audio data from the provided stream. */
     std::unique_ptr<AudioFormatReader> createReaderFor (InputStream* sourceStream) override;
+
+    /** Creates a writer for encoding audio data to Opus format. */
     std::unique_ptr<AudioFormatWriter> createWriterFor (OutputStream* streamToWriteTo,
                                                         double sampleRate,
                                                         int numberOfChannels,
@@ -51,13 +60,19 @@ public:
                                                         const StringPairArray& metadataValues,
                                                         int qualityOptionIndex) override;
 
+    /** Returns the bit depths supported by this Opus format implementation. */
     Array<int> getPossibleBitDepths() const override;
+
+    /** Returns the sample rates supported by this Opus format implementation. */
     Array<int> getPossibleSampleRates() const override;
 
+    /** Indicates whether this format can handle mono audio. */
     bool canDoMono() const override { return true; }
 
+    /** Indicates whether this format can handle stereo audio. */
     bool canDoStereo() const override { return true; }
 
+    /** Indicates that this format is compressed. */
     bool isCompressed() const override { return true; }
 
 private:

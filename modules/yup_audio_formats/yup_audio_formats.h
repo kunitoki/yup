@@ -65,6 +65,7 @@
 //==============================================================================
 
 #include "formats/yup_WaveAudioFormat.h"
+#include "formats/yup_Mp3AudioFormat.h"
 
 #if YUP_MODULE_AVAILABLE_opus_library && YUP_AUDIO_FORMAT_OPUS
 #include "formats/yup_OpusAudioFormat.h"
