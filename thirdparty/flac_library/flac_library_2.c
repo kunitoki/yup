@@ -27,4 +27,8 @@
 #include "stream_encoder_intrin_ssse3.c"
 #include "stream_encoder.c"
 
+#if _MSC_VER
+#include "share/win_utf8_io/win_utf8_io.c"
+#endif
+
 #include "flac_include_post.h"
