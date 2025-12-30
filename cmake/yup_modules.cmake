@@ -57,10 +57,8 @@ endfunction()
 #==============================================================================
 
 function (_yup_module_upstream_has_content module_name module_path output_variable)
-    set (source_upstream_path "${module_path}/upstream")
-    set (build_upstream_path "${CMAKE_BINARY_DIR}/externals/${module_name}/upstream")
-
-    foreach (candidate_path IN ITEMS "${source_upstream_path}" "${build_upstream_path}")
+    _yup_collect_upstream_candidate_paths ("${module_name}" "${module_path}" candidate_paths)
+    foreach (candidate_path IN LISTS candidate_paths)
         if (EXISTS "${candidate_path}")
             file (GLOB upstream_items "${candidate_path}/*")
             list (LENGTH upstream_items upstream_items_len)
@@ -77,17 +75,13 @@ endfunction()
 #==============================================================================
 
 function (_yup_module_get_upstream_path module_name module_path output_variable)
-    set (source_upstream_path "${module_path}/upstream")
-    if (EXISTS "${source_upstream_path}")
-        set (${output_variable} "${source_upstream_path}" PARENT_SCOPE)
-        return()
-    endif()
-
-    set (build_upstream_path "${CMAKE_BINARY_DIR}/externals/${module_name}/upstream")
-    if (EXISTS "${build_upstream_path}")
-        set (${output_variable} "${build_upstream_path}" PARENT_SCOPE)
-        return()
-    endif()
+    _yup_collect_upstream_candidate_paths ("${module_name}" "${module_path}" candidate_paths)
+    foreach (candidate_path IN LISTS candidate_paths)
+        if (EXISTS "${candidate_path}")
+            set (${output_variable} "${candidate_path}" PARENT_SCOPE)
+            return()
+        endif()
+    endforeach()
 
     set (${output_variable} "" PARENT_SCOPE)
 endfunction()

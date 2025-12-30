@@ -245,24 +245,24 @@ TEST_F (OpusAudioFormatFileTests, TestWriteAndReadRoundTrip)
         tempFile.deleteFile();
     } };
 
-    std::unique_ptr<FileOutputStream> outputStream = std::make_unique<FileOutputStream> (tempFile);
-    auto writer = format->createWriterFor (outputStream.get(), 48000, 1, 32, {}, 0);
-    ASSERT_NE (nullptr, writer);
-
     const int numSamples = 960 * 3;
     AudioBuffer<float> buffer (1, numSamples);
     auto* channelData = buffer.getWritePointer (0);
     for (int sample = 0; sample < numSamples; ++sample)
         channelData[sample] = std::sin (2.0 * 3.14159 * 440.0 * sample / 48000.0);
 
-    const float* const* bufferData = buffer.getArrayOfReadPointers();
-    EXPECT_TRUE (writer->write (bufferData, numSamples));
-    writer->flush();
+    {
+        auto outputStream = std::make_unique<FileOutputStream> (tempFile);
+        auto writer = format->createWriterFor (outputStream.release(), 48000, 1, 32, {}, 0);
+        ASSERT_NE (nullptr, writer);
 
-    outputStream.release();
+        const float* const* bufferData = buffer.getArrayOfReadPointers();
+        EXPECT_TRUE (writer->write (bufferData, numSamples));
+        writer->flush();
+    }
 
-    std::unique_ptr<FileInputStream> inputStream = std::make_unique<FileInputStream> (tempFile);
-    auto reader = format->createReaderFor (inputStream.get());
+    auto inputStream = std::make_unique<FileInputStream> (tempFile);
+    auto reader = format->createReaderFor (inputStream.release());
     ASSERT_NE (nullptr, reader);
 
     EXPECT_DOUBLE_EQ (48000.0, reader->sampleRate);
@@ -318,7 +318,5 @@ TEST_F (OpusAudioFormatFileTests, TestWriteAndReadRoundTrip)
     EXPECT_LT (rmsRatio, 1.6);
     EXPECT_GT (peakRatio, 0.4);
     EXPECT_LT (peakRatio, 1.6);
-
-    inputStream.release();
 }
 #endif
