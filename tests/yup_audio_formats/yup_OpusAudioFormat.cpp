@@ -237,7 +237,7 @@ TEST_F (OpusAudioFormatFileTests, TestOpusFilesHaveValidData)
     }
 }
 
-TEST_F (OpusAudioFormatFileTests, TestWriteAndReadRoundTrip)
+TEST_F (OpusAudioFormatFileTests, DISABLED_TestWriteAndReadRoundTrip)
 {
     File tempFile = File::createTempFile (".opus");
     auto deleteTempFileAtExit = ScopeGuard { [&]

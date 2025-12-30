@@ -107,11 +107,10 @@ BigInteger::BigInteger (int64 value)
     , highestBit (63)
     , negative (value < 0)
 {
-    if (value < 0)
-        value = -value;
+    const uint64 absValue = negative ? ((uint64) value) : ((uint64) 0 - absValue);
 
-    preallocated[0] = (uint32) value;
-    preallocated[1] = (uint32) (value >> 32);
+    preallocated[0] = (uint32) absValue;
+    preallocated[1] = (uint32) (absValue >> 32);
 
     for (int i = 2; i < numPreallocatedInts; ++i)
         preallocated[i] = 0;
