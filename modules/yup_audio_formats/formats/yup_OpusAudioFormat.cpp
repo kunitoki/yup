@@ -734,6 +734,7 @@ bool OpusAudioFormatWriter::write (const float* const* samplesToWrite, int numSa
 bool OpusAudioFormatWriter::encodeFrames (bool flushPending)
 {
     const size_t samplesPerFrame = (size_t) frameSize * (size_t) numChannelsInternal;
+    std::vector<float> tempFrame;
 
     while (true)
     {
@@ -745,8 +746,8 @@ bool OpusAudioFormatWriter::encodeFrames (bool flushPending)
             break;
 
         const bool isLast = flushPending && available < samplesPerFrame;
-        std::vector<float> tempFrame;
         const float* frameData = pendingInterleaved.data() + pendingOffset;
+        tempFrame.clear();
 
         if (isLast)
         {

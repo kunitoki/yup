@@ -2021,6 +2021,8 @@ void YUP_CALLTYPE FloatVectorOperations::convertDoubleToFloat (float* dest, cons
     FloatVectorHelpers::convertDoubleToFloat (dest, src, num);
 }
 
+//==============================================================================
+
 double YUP_CALLTYPE FloatVectorOperations::computeCorrelation (const float* a, const float* b, int num) noexcept
 {
     return FloatVectorHelpers::computeCorrelation (a, b, num);
