@@ -23,6 +23,7 @@
 
 #include "yup_AudioFormatTools.h"
 
+#include <cmath>
 #include <gtest/gtest.h>
 
 using namespace yup;
@@ -236,7 +237,7 @@ TEST_F (OpusAudioFormatFileTests, TestOpusFilesHaveValidData)
     }
 }
 
-TEST_F (OpusAudioFormatFileTests, CreateWriterReturnsNull)
+TEST_F (OpusAudioFormatFileTests, TestWriteAndReadRoundTrip)
 {
     File tempFile = File::createTempFile (".opus");
     auto deleteTempFileAtExit = ScopeGuard { [&]
@@ -245,7 +246,79 @@ TEST_F (OpusAudioFormatFileTests, CreateWriterReturnsNull)
     } };
 
     std::unique_ptr<FileOutputStream> outputStream = std::make_unique<FileOutputStream> (tempFile);
-    auto writer = format->createWriterFor (outputStream.get(), 48000, 2, 32, {}, 0);
-    EXPECT_EQ (nullptr, writer);
+    auto writer = format->createWriterFor (outputStream.get(), 48000, 1, 32, {}, 0);
+    ASSERT_NE (nullptr, writer);
+
+    const int numSamples = 960 * 3;
+    AudioBuffer<float> buffer (1, numSamples);
+    auto* channelData = buffer.getWritePointer (0);
+    for (int sample = 0; sample < numSamples; ++sample)
+        channelData[sample] = std::sin (2.0 * 3.14159 * 440.0 * sample / 48000.0);
+
+    const float* const* bufferData = buffer.getArrayOfReadPointers();
+    EXPECT_TRUE (writer->write (bufferData, numSamples));
+    writer->flush();
+
+    outputStream.release();
+
+    std::unique_ptr<FileInputStream> inputStream = std::make_unique<FileInputStream> (tempFile);
+    auto reader = format->createReaderFor (inputStream.get());
+    ASSERT_NE (nullptr, reader);
+
+    EXPECT_DOUBLE_EQ (48000.0, reader->sampleRate);
+    EXPECT_EQ (1, reader->numChannels);
+    EXPECT_TRUE (reader->usesFloatingPointData);
+    EXPECT_GT (reader->lengthInSamples, 0);
+    EXPECT_LE (reader->lengthInSamples, numSamples);
+    EXPECT_GE (reader->lengthInSamples, numSamples - 1000);
+
+    const int readSamples = static_cast<int> (reader->lengthInSamples);
+    AudioBuffer<float> readBuffer (1, readSamples);
+    EXPECT_TRUE (reader->read (&readBuffer, 0, readSamples, 0, true, true));
+
+    const int startOffset = jmax (0, numSamples - readSamples);
+    const int compareSamples = jmin (readSamples, numSamples - startOffset);
+    ASSERT_GT (compareSamples, 0);
+
+    const float* original = buffer.getReadPointer (0) + startOffset;
+    const float* decoded = readBuffer.getReadPointer (0);
+
+    double originalSumSq = 0.0;
+    double decodedSumSq = 0.0;
+    double originalPeak = 0.0;
+    double decodedPeak = 0.0;
+    for (int i = 0; i < compareSamples; ++i)
+    {
+        const double ov = original[i];
+        const double dv = decoded[i];
+        originalSumSq += ov * ov;
+        decodedSumSq += dv * dv;
+        originalPeak = std::max (originalPeak, std::abs (ov));
+        decodedPeak = std::max (decodedPeak, std::abs (dv));
+
+        const double oa = std::abs (ov);
+        const double da = std::abs (dv);
+    }
+
+    const double originalRms = std::sqrt (originalSumSq / compareSamples);
+    const double decodedRms = std::sqrt (decodedSumSq / compareSamples);
+    const double rmsRatio = (originalRms > 0.0) ? (decodedRms / originalRms) : 0.0;
+    const double peakRatio = (originalPeak > 0.0) ? (decodedPeak / originalPeak) : 0.0;
+
+    HeapBlock<float> absOriginal (compareSamples);
+    HeapBlock<float> absDecoded (compareSamples);
+    FloatVectorOperations::abs (absOriginal.get(), original, compareSamples);
+    FloatVectorOperations::abs (absDecoded.get(), decoded, compareSamples);
+    const double simdCorrelation = FloatVectorOperations::computeCorrelation (absOriginal.get(), absDecoded.get(), compareSamples);
+
+    EXPECT_GT (decodedRms, 0.0);
+    EXPECT_GT (decodedPeak, 0.0);
+    EXPECT_GT (simdCorrelation, 0.7);
+    EXPECT_GT (rmsRatio, 0.4);
+    EXPECT_LT (rmsRatio, 1.6);
+    EXPECT_GT (peakRatio, 0.4);
+    EXPECT_LT (peakRatio, 1.6);
+
+    inputStream.release();
 }
 #endif

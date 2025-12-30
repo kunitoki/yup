@@ -37,6 +37,7 @@
   ==============================================================================
 */
 
+#include <cmath>
 #include <gtest/gtest.h>
 
 #include <yup_audio_basics/yup_audio_basics.h>
@@ -46,6 +47,30 @@ using namespace yup;
 class FloatVectorOperationsTests : public ::testing::Test
 {
 protected:
+    static double computeCorrelationReference (const float* a, const float* b, int num)
+    {
+        if (num <= 0)
+            return 0.0;
+
+        double sumA2 = 0.0;
+        double sumB2 = 0.0;
+        double sumAB = 0.0;
+
+        for (int i = 0; i < num; ++i)
+        {
+            const double av = a[i];
+            const double bv = b[i];
+            sumA2 += av * av;
+            sumB2 += bv * bv;
+            sumAB += av * bv;
+        }
+
+        if (sumA2 == 0.0 || sumB2 == 0.0)
+            return 0.0;
+
+        return sumAB / std::sqrt (sumA2 * sumB2);
+    }
+
     template <class ValueType>
     struct TestRunner
     {
@@ -285,6 +310,50 @@ TEST_F (FloatVectorOperationsTests, FloatToFixedAndBack)
         for (int i = 0; i < num; ++i)
             EXPECT_EQ (int1[i], intData[i]);
     }
+}
+
+TEST_F (FloatVectorOperationsTests, ComputeCorrelationIdentity)
+{
+    Random& random = Random::getSystemRandom();
+    const int num = 257;
+
+    HeapBlock<float> buffer (num + 16);
+    float* data = buffer.get();
+    fillRandomly (random, data, num);
+
+    const double correlation = FloatVectorOperations::computeCorrelation (data, data, num);
+    EXPECT_NEAR (correlation, 1.0, 1.0e-5);
+}
+
+TEST_F (FloatVectorOperationsTests, ComputeCorrelationZero)
+{
+    const int num = 64;
+    HeapBlock<float> buffer1 (num + 16, true);
+    HeapBlock<float> buffer2 (num + 16, true);
+
+    for (int i = 0; i < num; ++i)
+        buffer2[i] = (float) (i + 1);
+
+    const double correlation = FloatVectorOperations::computeCorrelation (buffer1.get(), buffer2.get(), num);
+    EXPECT_DOUBLE_EQ (correlation, 0.0);
+}
+
+TEST_F (FloatVectorOperationsTests, ComputeCorrelationMatchesScalar)
+{
+    Random& random = Random::getSystemRandom();
+    const int num = 511;
+
+    HeapBlock<float> buffer1 (num + 16);
+    HeapBlock<float> buffer2 (num + 16);
+    float* data1 = buffer1.get();
+    float* data2 = buffer2.get();
+
+    fillRandomly (random, data1, num);
+    fillRandomly (random, data2, num);
+
+    const double reference = computeCorrelationReference (data1, data2, num);
+    const double correlation = FloatVectorOperations::computeCorrelation (data1, data2, num);
+    EXPECT_NEAR (correlation, reference, 1.0e-5);
 }
 
 TEST_F (FloatVectorOperationsTests, FloatToDoubleAndBack)
