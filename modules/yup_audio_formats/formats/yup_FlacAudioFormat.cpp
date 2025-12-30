@@ -143,32 +143,52 @@ private:
                                                          void* clientData)
     {
         auto* reader = static_cast<FlacAudioFormatReader*> (clientData);
-        if (reader == nullptr || frame == nullptr || buffer == nullptr || reader->currentReadState == nullptr)
+        if (reader == nullptr || frame == nullptr || buffer == nullptr)
             return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
 
-        auto& state = *reader->currentReadState;
         const int samplesAvailable = (int) frame->header.blocksize;
-        const int samplesRemaining = state.numSamples - state.samplesWritten;
-        const int samplesToCopy = jmin (samplesAvailable, samplesRemaining);
+        const int numChannels = reader->numChannels;
 
-        if (samplesToCopy <= 0)
-            return FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE;
-
-        const int numChannelsToCopy = jmin (state.numDestChannels, reader->numChannels);
-
-        for (int ch = 0; ch < numChannelsToCopy; ++ch)
+        if (reader->currentReadState != nullptr)
         {
-            if (state.destChannels[ch] == nullptr)
-                continue;
+            auto& state = *reader->currentReadState;
+            const int samplesRemaining = state.numSamples - state.samplesWritten;
+            const int samplesToCopy = jmin (samplesAvailable, samplesRemaining);
 
-            float* dest = state.destChannels[ch] + state.startOffset + state.samplesWritten;
-            const FLAC__int32* src = buffer[ch];
+            if (samplesToCopy <= 0)
+                return FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE;
 
-            for (int i = 0; i < samplesToCopy; ++i)
-                dest[i] = flacIntToFloat (src[i], reader->bitsPerSample);
+            const int numChannelsToCopy = jmin (state.numDestChannels, numChannels);
+
+            for (int ch = 0; ch < numChannelsToCopy; ++ch)
+            {
+                if (state.destChannels[ch] == nullptr)
+                    continue;
+
+                float* dest = state.destChannels[ch] + state.startOffset + state.samplesWritten;
+                const FLAC__int32* src = buffer[ch];
+
+                for (int i = 0; i < samplesToCopy; ++i)
+                    dest[i] = flacIntToFloat (src[i], reader->bitsPerSample);
+            }
+
+            state.samplesWritten += samplesToCopy;
+        }
+        else if (numChannels > 0 && samplesAvailable > 0)
+        {
+            const size_t startIndex = reader->interleavedSamples.size();
+            reader->interleavedSamples.resize (startIndex + (size_t) samplesAvailable * (size_t) numChannels);
+
+            float* dest = reader->interleavedSamples.data() + startIndex;
+
+            for (int i = 0; i < samplesAvailable; ++i)
+            {
+                const size_t baseIndex = (size_t) i * (size_t) numChannels;
+                for (int ch = 0; ch < numChannels; ++ch)
+                    dest[baseIndex + (size_t) ch] = flacIntToFloat (buffer[ch][i], reader->bitsPerSample);
+            }
         }
 
-        state.samplesWritten += samplesToCopy;
         return FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE;
     }
 
@@ -219,6 +239,7 @@ private:
 
     FLAC__StreamDecoder* decoder = nullptr;
     ReadState* currentReadState = nullptr;
+    std::vector<float> interleavedSamples;
     bool isOpen = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FlacAudioFormatReader)
@@ -227,7 +248,7 @@ private:
 FlacAudioFormatReader::FlacAudioFormatReader (InputStream* sourceStream)
     : AudioFormatReader (sourceStream, "FLAC audio")
 {
-    usesFloatingPointData = false;
+    usesFloatingPointData = true;
 
     if (sourceStream == nullptr)
         return;
@@ -256,7 +277,17 @@ FlacAudioFormatReader::FlacAudioFormatReader (InputStream* sourceStream)
     if (! FLAC__stream_decoder_process_until_end_of_metadata (decoder))
         return;
 
+    if (! FLAC__stream_decoder_process_until_end_of_stream (decoder))
+        return;
+
+    if (numChannels > 0)
+        lengthInSamples = (int64) (interleavedSamples.size() / (size_t) numChannels);
+
     isOpen = sampleRate > 0 && numChannels > 0 && bitsPerSample > 0;
+
+    FLAC__stream_decoder_finish (decoder);
+    FLAC__stream_decoder_delete (decoder);
+    decoder = nullptr;
 }
 
 FlacAudioFormatReader::~FlacAudioFormatReader()
@@ -274,7 +305,7 @@ bool FlacAudioFormatReader::readSamples (float* const* destChannels,
                                          int64 startSampleInFile,
                                          int numSamples)
 {
-    if (! isOpen || decoder == nullptr)
+    if (! isOpen)
         return false;
 
     if (numSamples <= 0)
@@ -283,64 +314,51 @@ bool FlacAudioFormatReader::readSamples (float* const* destChannels,
     if (startSampleInFile < 0)
         return false;
 
-    int64 availableSamples = lengthInSamples > 0 ? (lengthInSamples - startSampleInFile) : numSamples;
-    const int samplesToRead = (int) jmax<int64> (0, jmin<int64> (availableSamples, numSamples));
-
-    if (samplesToRead <= 0)
+    if (lengthInSamples <= 0 || interleavedSamples.empty())
         return false;
 
-    if (! FLAC__stream_decoder_seek_absolute (decoder, (FLAC__uint64) startSampleInFile))
+    if (startSampleInFile < 0 || startSampleInFile >= lengthInSamples)
         return false;
 
-    ReadState state;
-    state.destChannels = destChannels;
-    state.numDestChannels = numDestChannels;
-    state.startOffset = startOffsetInDestBuffer;
-    state.numSamples = samplesToRead;
-    state.samplesWritten = 0;
-    currentReadState = &state;
+    const auto numChannelsToRead = jmin (numDestChannels, numChannels);
+    const auto availableSamples = (int64) lengthInSamples - startSampleInFile;
+    const auto samplesToCopy = (int) jmin<int64> (availableSamples, numSamples);
 
-    while (state.samplesWritten < samplesToRead)
+    if (samplesToCopy <= 0)
+        return false;
+
+    HeapBlock<float*> offsetDestChannels;
+    offsetDestChannels.malloc (numDestChannels);
+
+    for (int ch = 0; ch < numDestChannels; ++ch)
+        offsetDestChannels[ch] = destChannels[ch] + startOffsetInDestBuffer;
+
+    const size_t interleavedOffset = (size_t) startSampleInFile * (size_t) numChannels;
+    const float* interleavedStart = interleavedSamples.data() + interleavedOffset;
+
+    using SourceFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+    using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+
+    AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { interleavedStart, (int) numChannels },
+                                    AudioData::NonInterleavedDest<DestFormat> { offsetDestChannels.getData(), numChannelsToRead },
+                                    samplesToCopy);
+
+    if (numDestChannels > numChannelsToRead)
     {
-        if (! FLAC__stream_decoder_process_single (decoder))
-            break;
-
-        const auto decoderState = FLAC__stream_decoder_get_state (decoder);
-        if (decoderState == FLAC__STREAM_DECODER_END_OF_STREAM)
-            break;
+        for (int ch = numChannelsToRead; ch < numDestChannels; ++ch)
+            if (offsetDestChannels[ch] != nullptr)
+                zeromem (offsetDestChannels[ch], sizeof (float) * (size_t) samplesToCopy);
     }
 
-    currentReadState = nullptr;
-
-    const int numChannelsToCopy = jmin (numDestChannels, numChannels);
-    const int missingSamples = samplesToRead - state.samplesWritten;
-
-    if (missingSamples > 0)
+    if (samplesToCopy < numSamples)
     {
-        for (int ch = 0; ch < numChannelsToCopy; ++ch)
-            if (destChannels[ch] != nullptr)
-                zeromem (destChannels[ch] + startOffsetInDestBuffer + state.samplesWritten,
-                         sizeof (float) * (size_t) missingSamples);
-    }
-
-    if (numSamples > samplesToRead)
-    {
-        const int remainder = numSamples - samplesToRead;
+        const auto remaining = numSamples - samplesToCopy;
         for (int ch = 0; ch < numDestChannels; ++ch)
-            if (destChannels[ch] != nullptr)
-                zeromem (destChannels[ch] + startOffsetInDestBuffer + samplesToRead,
-                         sizeof (float) * (size_t) remainder);
+            if (offsetDestChannels[ch] != nullptr)
+                zeromem (offsetDestChannels[ch] + samplesToCopy, sizeof (float) * (size_t) remaining);
     }
 
-    if (numDestChannels > numChannelsToCopy)
-    {
-        for (int ch = numChannelsToCopy; ch < numDestChannels; ++ch)
-            if (destChannels[ch] != nullptr)
-                zeromem (destChannels[ch] + startOffsetInDestBuffer,
-                         sizeof (float) * (size_t) numSamples);
-    }
-
-    return state.samplesWritten > 0;
+    return true;
 }
 
 //==============================================================================
