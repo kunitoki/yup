@@ -40,7 +40,7 @@ const std::vector<String> getAllFlacTestFiles()
     return {
         "M1F1-int16.flac",
         "M1F1-int24.flac",
-        "M1F1-int32.flac"
+        "M1F1-int32.flac",
         "M1F1-uint8.flac"
     };
 }
