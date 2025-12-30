@@ -42,9 +42,6 @@
 
 #pragma once
 
-#define DR_FLAC_NO_STDIO 1
-#include <dr_flac.h>
-
 #define DR_MP3_NO_STDIO 1
 #include <dr_mp3.h>
 

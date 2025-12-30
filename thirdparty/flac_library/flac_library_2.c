@@ -19,8 +19,10 @@
   ==============================================================================
 */
 
-#define DR_MP3_IMPLEMENTATION
-#include <dr_mp3.h>
+#include "flac_library.h"
 
-#define DR_WAV_IMPLEMENTATION
-#include <dr_wav.h>
+#include "flac_include_pre.h"
+
+#include <libFLAC/stream_encoder.c>
+
+#include "flac_include_post.h"

@@ -32,10 +32,16 @@
 
 //==============================================================================
 
+#if YUP_AUDIO_FORMAT_WAVE || YUP_AUDIO_FORMAT_MP3
 #include <dr_libs/dr_libs.h>
+#endif
 
-#if YUP_MODULE_AVAILABLE_opus_library && YUP_AUDIO_FORMAT_OPUS
+#if YUP_AUDIO_FORMAT_OPUS
 #include <opus_library/opus_library.h>
+#endif
+
+#if YUP_AUDIO_FORMAT_FLAC
+#include <flac_library/flac_library.h>
 #endif
 
 //==============================================================================
@@ -47,11 +53,18 @@
 
 //==============================================================================
 
+#if YUP_AUDIO_FORMAT_WAVE
 #include "formats/yup_WaveAudioFormat.cpp"
+#endif
+
+#if YUP_AUDIO_FORMAT_MP3
 #include "formats/yup_Mp3AudioFormat.cpp"
+#endif
 
-//==============================================================================
-
-#if YUP_MODULE_AVAILABLE_opus_library && YUP_AUDIO_FORMAT_OPUS
+#if YUP_AUDIO_FORMAT_OPUS
 #include "formats/yup_OpusAudioFormat.cpp"
+#endif
+
+#if YUP_AUDIO_FORMAT_FLAC
+#include "formats/yup_FlacAudioFormat.cpp"
 #endif

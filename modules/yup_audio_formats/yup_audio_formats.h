@@ -32,7 +32,7 @@
     website:              https://github.com/kunitoki/yup
     license:              ISC
 
-    dependencies:         yup_audio_basics dr_libs
+    dependencies:         yup_audio_basics
 
   END_YUP_MODULE_DECLARATION
 
@@ -43,6 +43,28 @@
 #define YUP_AUDIO_FORMATS_H_INCLUDED
 
 #include <yup_audio_basics/yup_audio_basics.h>
+
+//==============================================================================
+/** Config: YUP_AUDIO_FORMAT_WAVE
+
+    Enable Wave audio format support.
+*/
+#ifndef YUP_AUDIO_FORMAT_WAVE
+#if YUP_MODULE_AVAILABLE_dr_libs
+#define YUP_AUDIO_FORMAT_WAVE 1
+#endif
+#endif
+
+//==============================================================================
+/** Config: YUP_AUDIO_FORMAT_MP3
+
+    Enable Mp3 audio format support.
+*/
+#ifndef YUP_AUDIO_FORMAT_MP3
+#if YUP_MODULE_AVAILABLE_dr_libs
+#define YUP_AUDIO_FORMAT_MP3 1
+#endif
+#endif
 
 //==============================================================================
 /** Config: YUP_AUDIO_FORMAT_OPUS
@@ -57,6 +79,40 @@
 
 //==============================================================================
 
+/** Config: YUP_AUDIO_FORMAT_FLAC
+
+    Enable FLAC audio format support.
+*/
+#ifndef YUP_AUDIO_FORMAT_FLAC
+#if YUP_MODULE_AVAILABLE_flac_library
+#define YUP_AUDIO_FORMAT_FLAC 1
+#endif
+#endif
+
+//==============================================================================
+
+#if YUP_AUDIO_FORMAT_WAVE && ! YUP_MODULE_AVAILABLE_dr_libs
+#undef YUP_AUDIO_FORMAT_WAVE
+#define YUP_AUDIO_FORMAT_WAVE 0
+#endif
+
+#if YUP_AUDIO_FORMAT_MP3 && ! YUP_MODULE_AVAILABLE_dr_libs
+#undef YUP_AUDIO_FORMAT_MP3
+#define YUP_AUDIO_FORMAT_MP3 0
+#endif
+
+#if YUP_AUDIO_FORMAT_OPUS && ! YUP_MODULE_AVAILABLE_opus_library
+#undef YUP_AUDIO_FORMAT_OPUS
+#define YUP_AUDIO_FORMAT_OPUS 0
+#endif
+
+#if YUP_AUDIO_FORMAT_FLAC && ! YUP_MODULE_AVAILABLE_flac_library
+#undef YUP_AUDIO_FORMAT_FLAC
+#define YUP_AUDIO_FORMAT_FLAC 0
+#endif
+
+//==============================================================================
+
 #include "format/yup_AudioFormat.h"
 #include "format/yup_AudioFormatReader.h"
 #include "format/yup_AudioFormatWriter.h"
@@ -64,9 +120,18 @@
 
 //==============================================================================
 
+#if YUP_AUDIO_FORMAT_WAVE
 #include "formats/yup_WaveAudioFormat.h"
-#include "formats/yup_Mp3AudioFormat.h"
+#endif
 
-#if YUP_MODULE_AVAILABLE_opus_library && YUP_AUDIO_FORMAT_OPUS
+#if YUP_AUDIO_FORMAT_MP3
+#include "formats/yup_Mp3AudioFormat.h"
+#endif
+
+#if YUP_AUDIO_FORMAT_OPUS
 #include "formats/yup_OpusAudioFormat.h"
+#endif
+
+#if YUP_AUDIO_FORMAT_FLAC
+#include "formats/yup_FlacAudioFormat.h"
 #endif

@@ -19,8 +19,26 @@
   ==============================================================================
 */
 
-#define DR_MP3_IMPLEMENTATION
-#include <dr_mp3.h>
+#include "flac_library.h"
 
-#define DR_WAV_IMPLEMENTATION
-#include <dr_wav.h>
+#include "flac_include_pre.h"
+
+#include <libFLAC/bitmath.c>
+#include <libFLAC/bitreader.c>
+#include <libFLAC/bitwriter.c>
+#include <libFLAC/cpu.c>
+#include <libFLAC/crc.c>
+#include <libFLAC/fixed.c>
+#include <libFLAC/float.c>
+#include <libFLAC/format.c>
+#include <libFLAC/lpc.c>
+#include <libFLAC/lpc_intrin_neon.c>
+#include <libFLAC/md5.c>
+#include <libFLAC/memory.c>
+//#include <libFLAC/metadata_iterators.c>
+//#include <libFLAC/metadata_object.c>
+#include <libFLAC/stream_decoder.c>
+#include <libFLAC/stream_encoder_framing.c>
+#include <libFLAC/window.c>
+
+#include "flac_include_post.h"

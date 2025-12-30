@@ -29,17 +29,25 @@ AudioFormatManager::AudioFormatManager()
 void AudioFormatManager::registerDefaultFormats()
 {
     // Register Wave format
+#if YUP_AUDIO_FORMAT_WAVE
     registerFormat (std::make_unique<WaveAudioFormat>());
+#endif
 
-#if YUP_MODULE_AVAILABLE_opus_library && YUP_AUDIO_FORMAT_OPUS
+#if YUP_AUDIO_FORMAT_MP3
+    registerFormat (std::make_unique<Mp3AudioFormat>());
+#endif
+
+#if YUP_AUDIO_FORMAT_OPUS
     registerFormat (std::make_unique<OpusAudioFormat>());
+#endif
+
+#if YUP_AUDIO_FORMAT_FLAC
+    registerFormat (std::make_unique<FlacAudioFormat>());
 #endif
 
     // TODO: Add other formats like:
     // registerFormat (std::make_unique<AiffAudioFormat>());
-    // registerFormat (std::make_unique<FlacAudioFormat>());
     // registerFormat (std::make_unique<OggVorbisAudioFormat>());
-    // registerFormat (std::make_unique<MP3AudioFormat>());
 }
 
 void AudioFormatManager::registerFormat (std::unique_ptr<AudioFormat> format)

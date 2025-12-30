@@ -62,8 +62,10 @@ set (target_modules
     yup_events
     yup_data_model
     yup_graphics
+    dr_libs
     pffft_library
-    opus_library)
+    opus_library
+    flac_library)
 
 if (NOT YUP_PLATFORM_EMSCRIPTEN)
     list (APPEND target_modules yup_gui yup_audio_gui)

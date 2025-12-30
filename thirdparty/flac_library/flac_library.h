@@ -19,8 +19,27 @@
   ==============================================================================
 */
 
-#define DR_MP3_IMPLEMENTATION
-#include <dr_mp3.h>
+/*
+  ==============================================================================
 
-#define DR_WAV_IMPLEMENTATION
-#include <dr_wav.h>
+  BEGIN_YUP_MODULE_DECLARATION
+
+    ID:               flac_library
+    vendor:           flac_library
+    version:          1.5.0
+    name:             FLAC stands for Free Lossless Audio Codec, an audio format similar to MP3, but lossless
+    description:      FLAC stands for Free Lossless Audio Codec, an audio format similar to MP3, but lossless.
+    website:          https://xiph.org/flac
+    upstream:         https://ftp.osuosl.org/pub/xiph/releases/flac/flac-1.5.0.tar.xz
+    license:          BSD
+
+    searchpaths:      include src src/libFLAC src/libFLAC/include
+
+  END_YUP_MODULE_DECLARATION
+
+  ==============================================================================
+*/
+
+#pragma once
+
+#include <FLAC/all.h>
