@@ -19,6 +19,13 @@
   ==============================================================================
 */
 
+#define OPUS_BUILD 1
+#define USE_ALLOCA 1
+
+#if ! NDEBUG
+#define OPUS_WILL_BE_SLOW 1
+#endif
+
 #include "opus_library.h"
 
 #if defined(__clang__)
@@ -27,13 +34,6 @@
 #pragma clang diagnostic ignored "-Wnonnull"
 #pragma clang diagnostic ignored "-Wtautological-pointer-compare"
 #pragma clang diagnostic ignored "-Wshorten-64-to-32"
-#endif
-
-#define OPUS_BUILD 1
-#define USE_ALLOCA 1
-
-#if YUP_DEBUG
-#define OPUS_WILL_BE_SLOW 1
 #endif
 
 #include "src/opus.c"

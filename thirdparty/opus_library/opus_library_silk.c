@@ -19,10 +19,10 @@
   ==============================================================================
 */
 
-#include "opus_library.h"
-
 #define OPUS_BUILD 1
 #define USE_ALLOCA 1
+
+#include "opus_library.h"
 
 #include "silk/CNG.c"
 #include "silk/code_signs.c"

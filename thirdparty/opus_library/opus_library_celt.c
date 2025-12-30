@@ -19,15 +19,15 @@
   ==============================================================================
 */
 
+#define OPUS_BUILD 1
+#define USE_ALLOCA 1
+
 #include "opus_library.h"
 
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wtautological-pointer-compare"
 #endif
-
-#define OPUS_BUILD 1
-#define USE_ALLOCA 1
 
 #define CELT_ENCODER_C 1
 #define CELT_DECODER_C 1

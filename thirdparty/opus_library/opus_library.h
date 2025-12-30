@@ -34,7 +34,6 @@
     sha256:           b7637334527201fdfd6dd6a02e67aceffb0e5e60155bbd89175647a80301c92c
     license:          BSD
 
-    defines:
     searchpaths:      include celt silk silk/float silk/fixed dnn
 
   END_YUP_MODULE_DECLARATION
