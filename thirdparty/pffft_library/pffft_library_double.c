@@ -26,6 +26,10 @@
 #pragma clang diagnostic ignored "-W#pragma-messages"
 #endif
 
+#if _MSC_VER && defined(_USE_MATH_DEFINES)
+#undef _USE_MATH_DEFINES
+#endif
+
 #include <pffft_double.c>
 
 #if defined(__clang__)

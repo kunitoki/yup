@@ -495,7 +495,7 @@ bool FlacAudioFormatWriter::write (const float* const* samplesToWrite, int numSa
     return FLAC__stream_encoder_process_interleaved (encoder,
                                                      interleavedBuffer.data(),
                                                      (unsigned) numSamples)
-        == true;
+        == 1;
 }
 
 bool FlacAudioFormatWriter::flush()
