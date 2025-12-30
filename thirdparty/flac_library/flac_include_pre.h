@@ -156,8 +156,8 @@
  #endif
 #endif
 
-#define flac_max(a, b) ((a) > (b) ? (a) : (b))
-#define flac_min(a, b) ((a) < (b) ? (a) : (b))
+//#define flac_max(a, b) ((a) > (b) ? (a) : (b))
+//#define flac_min(a, b) ((a) < (b) ? (a) : (b))
 
 #pragma push_macro ("DEBUG")
 #pragma push_macro ("NDEBUG")
