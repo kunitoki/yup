@@ -21,6 +21,10 @@
 
 #include "flac_include_pre.h"
 
+#include "stream_encoder_framing.c"
+#include "stream_encoder_intrin_avx2.c"
+#include "stream_encoder_intrin_sse2.c"
+#include "stream_encoder_intrin_ssse3.c"
 #include "stream_encoder.c"
 
 #include "flac_include_post.h"
