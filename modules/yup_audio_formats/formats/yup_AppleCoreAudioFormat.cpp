@@ -26,6 +26,322 @@ namespace
 {
 
 //==============================================================================
+static AudioFileTypeID toAudioFileTypeID (AppleCoreAudioFormat::StreamKind kind)
+{
+    using StreamKind = AppleCoreAudioFormat::StreamKind;
+
+    switch (kind)
+    {
+        case StreamKind::kAiff:
+            return kAudioFileAIFFType;
+        case StreamKind::kAifc:
+            return kAudioFileAIFCType;
+        case StreamKind::kWave:
+            return kAudioFileWAVEType;
+        case StreamKind::kSoundDesigner2:
+            return kAudioFileSoundDesigner2Type;
+        case StreamKind::kNext:
+            return kAudioFileNextType;
+        case StreamKind::kMp4:
+            return kAudioFileMPEG4Type;
+        case StreamKind::kMp3:
+            return kAudioFileMP3Type;
+        case StreamKind::kMp2:
+            return kAudioFileMP2Type;
+        case StreamKind::kMp1:
+            return kAudioFileMP1Type;
+        case StreamKind::kAc3:
+            return kAudioFileAC3Type;
+        case StreamKind::kAacAdts:
+            return kAudioFileAAC_ADTSType;
+        case StreamKind::kM4a:
+            return kAudioFileM4AType;
+        case StreamKind::kM4b:
+            return kAudioFileM4BType;
+        case StreamKind::kCaf:
+            return kAudioFileCAFType;
+        case StreamKind::k3gp:
+            return kAudioFile3GPType;
+        case StreamKind::k3gp2:
+            return kAudioFile3GP2Type;
+        case StreamKind::kAmr:
+            return kAudioFileAMRType;
+        case StreamKind::kNone:
+            break;
+    }
+
+    return {};
+}
+
+static Array<String> getStringInfo (AudioFilePropertyID property, UInt32 size, void* data)
+{
+    Array<String> extensionsArray;
+
+    CFArrayRef extensions = nullptr;
+    UInt32 sizeOfArray = sizeof (extensions);
+
+    if (AudioFileGetGlobalInfo (property, size, data, &sizeOfArray, &extensions) != noErr || extensions == nullptr)
+        return extensionsArray;
+
+    const auto numValues = CFArrayGetCount (extensions);
+
+    for (CFIndex i = 0; i < numValues; ++i)
+        extensionsArray.add ("." + String::fromCFString ((CFStringRef) CFArrayGetValueAtIndex (extensions, i)));
+
+    CFRelease (extensions);
+    return extensionsArray;
+}
+
+static Array<String> findFileExtensionsForCoreAudioCodec (AudioFileTypeID type)
+{
+    return getStringInfo (kAudioFileGlobalInfo_ExtensionsForType, sizeof (AudioFileTypeID), &type);
+}
+
+static Array<String> findFileExtensionsForCoreAudioCodecs()
+{
+    return getStringInfo (kAudioFileGlobalInfo_AllExtensions, 0, nullptr);
+}
+
+static bool isEncodingStreamKindSupported (AppleCoreAudioFormat::StreamKind kind)
+{
+    using StreamKind = AppleCoreAudioFormat::StreamKind;
+
+    switch (kind)
+    {
+        case StreamKind::kAacAdts:
+        case StreamKind::kMp4:
+        case StreamKind::kM4a:
+        case StreamKind::kM4b:
+        case StreamKind::kCaf:
+        case StreamKind::k3gp:
+        case StreamKind::k3gp2:
+            return true;
+        case StreamKind::kNone:
+        default:
+            break;
+    }
+
+    return false;
+}
+
+struct CoreAudioFormatMetadata
+{
+    static uint32 chunkName (const char* const name) noexcept
+    {
+        return ByteOrder::bigEndianInt (name);
+    }
+
+    struct FileHeader
+    {
+        explicit FileHeader (InputStream& input)
+        {
+            fileType = (uint32) input.readIntBigEndian();
+            fileVersion = (uint16) input.readShortBigEndian();
+            fileFlags = (uint16) input.readShortBigEndian();
+        }
+
+        uint32 fileType = 0;
+        uint16 fileVersion = 0;
+        uint16 fileFlags = 0;
+    };
+
+    struct ChunkHeader
+    {
+        explicit ChunkHeader (InputStream& input)
+        {
+            chunkType = (uint32) input.readIntBigEndian();
+            chunkSize = (int64) input.readInt64BigEndian();
+        }
+
+        uint32 chunkType = 0;
+        int64 chunkSize = 0;
+    };
+
+    static StringPairArray parseUserDefinedChunk (InputStream& input, int64 size)
+    {
+        StringPairArray infoStrings;
+        const auto originalPosition = input.getPosition();
+
+        uint8 uuid[16] = {};
+        input.read (uuid, sizeof (uuid));
+
+        if (memcmp (uuid, "\x29\x81\x92\x73\xB5\xBF\x4A\xEF\xB7\x8D\x62\xD1\xEF\x90\xBB\x2C", 16) == 0)
+        {
+            const auto numEntries = (uint32) input.readIntBigEndian();
+
+            for (uint32 i = 0; i < numEntries && input.getPosition() < originalPosition + size; ++i)
+                infoStrings.set (input.readString(), input.readString());
+        }
+
+        input.setPosition (originalPosition + size);
+        return infoStrings;
+    }
+
+    static void findTempoEvents (MidiFile& midiFile, StringPairArray& midiMetadata)
+    {
+        MidiMessageSequence tempoEvents;
+        midiFile.findAllTempoEvents (tempoEvents);
+
+        const auto numTempoEvents = tempoEvents.getNumEvents();
+        MemoryOutputStream tempoSequence;
+
+        for (int i = 0; i < numTempoEvents; ++i)
+        {
+            if (auto* holder = tempoEvents.getEventPointer (i))
+            {
+                auto& midiMessage = holder->message;
+                if (midiMessage.isTempoMetaEvent())
+                {
+                    const auto tempoSecondsPerQuarterNote = midiMessage.getTempoSecondsPerQuarterNote();
+                    if (tempoSecondsPerQuarterNote > 0.0)
+                    {
+                        const auto tempo = 60.0 / tempoSecondsPerQuarterNote;
+
+                        if (i == 0)
+                            midiMetadata.set (AppleCoreAudioFormat::tempo, String (tempo));
+
+                        if (numTempoEvents > 1)
+                            tempoSequence << String (tempo) << ',' << tempoEvents.getEventTime (i) << ';';
+                    }
+                }
+            }
+        }
+
+        if (tempoSequence.getDataSize() > 0)
+            midiMetadata.set ("tempo sequence", tempoSequence.toUTF8());
+    }
+
+    static void findTimeSigEvents (MidiFile& midiFile, StringPairArray& midiMetadata)
+    {
+        MidiMessageSequence timeSigEvents;
+        midiFile.findAllTimeSigEvents (timeSigEvents);
+
+        const auto numTimeSigEvents = timeSigEvents.getNumEvents();
+        MemoryOutputStream timeSigSequence;
+
+        for (int i = 0; i < numTimeSigEvents; ++i)
+        {
+            int numerator = 0;
+            int denominator = 0;
+            timeSigEvents.getEventPointer (i)->message.getTimeSignatureInfo (numerator, denominator);
+
+            String timeSigString;
+            timeSigString << numerator << '/' << denominator;
+
+            if (i == 0)
+                midiMetadata.set (AppleCoreAudioFormat::timeSig, timeSigString);
+
+            if (numTimeSigEvents > 1)
+                timeSigSequence << timeSigString << ',' << timeSigEvents.getEventTime (i) << ';';
+        }
+
+        if (timeSigSequence.getDataSize() > 0)
+            midiMetadata.set ("time signature sequence", timeSigSequence.toUTF8());
+    }
+
+    static void findKeySigEvents (MidiFile& midiFile, StringPairArray& midiMetadata)
+    {
+        MidiMessageSequence keySigEvents;
+        midiFile.findAllKeySigEvents (keySigEvents);
+
+        const auto numKeySigEvents = keySigEvents.getNumEvents();
+        MemoryOutputStream keySigSequence;
+
+        static const char* majorKeys[] = { "Cb", "Gb", "Db", "Ab", "Eb", "Bb", "F", "C", "G", "D", "A", "E", "B", "F#", "C#" };
+        static const char* minorKeys[] = { "Ab", "Eb", "Bb", "F", "C", "G", "D", "A", "E", "B", "F#", "C#", "G#", "D#", "A#" };
+
+        for (int i = 0; i < numKeySigEvents; ++i)
+        {
+            auto& message (keySigEvents.getEventPointer (i)->message);
+            const auto key = jlimit (0, 14, message.getKeySignatureNumberOfSharpsOrFlats() + 7);
+            const auto isMajor = message.isKeySignatureMajorKey();
+
+            String keySigString (isMajor ? majorKeys[key] : minorKeys[key]);
+            if (! isMajor)
+                keySigString << 'm';
+
+            if (i == 0)
+                midiMetadata.set (AppleCoreAudioFormat::keySig, keySigString);
+
+            if (numKeySigEvents > 1)
+                keySigSequence << keySigString << ',' << keySigEvents.getEventTime (i) << ';';
+        }
+
+        if (keySigSequence.getDataSize() > 0)
+            midiMetadata.set ("key signature sequence", keySigSequence.toUTF8());
+    }
+
+    static StringPairArray parseMidiChunk (InputStream& input, int64 size)
+    {
+        const auto originalPosition = input.getPosition();
+
+        MemoryBlock midiBlock;
+        input.readIntoMemoryBlock (midiBlock, (ssize_t) size);
+        MemoryInputStream midiInputStream (midiBlock, false);
+
+        StringPairArray midiMetadata;
+        MidiFile midiFile;
+
+        if (midiFile.readFrom (midiInputStream))
+        {
+            midiMetadata.set (AppleCoreAudioFormat::midiDataBase64, midiBlock.toBase64Encoding());
+            findTempoEvents (midiFile, midiMetadata);
+            findTimeSigEvents (midiFile, midiMetadata);
+            findKeySigEvents (midiFile, midiMetadata);
+        }
+
+        input.setPosition (originalPosition + size);
+        return midiMetadata;
+    }
+
+    static StringPairArray parseInformationChunk (InputStream& input)
+    {
+        StringPairArray infoStrings;
+        const auto numEntries = (uint32) input.readIntBigEndian();
+
+        for (uint32 i = 0; i < numEntries; ++i)
+            infoStrings.set (input.readString(), input.readString());
+
+        return infoStrings;
+    }
+
+    static bool read (InputStream& input, StringPairArray& metadataValues)
+    {
+        const auto originalPos = input.getPosition();
+
+        const FileHeader cafFileHeader (input);
+        const bool isCafFile = cafFileHeader.fileType == chunkName ("caff");
+
+        if (isCafFile)
+        {
+            while (! input.isExhausted())
+            {
+                const ChunkHeader chunkHeader (input);
+
+                if (chunkHeader.chunkType == chunkName ("uuid"))
+                    metadataValues.addArray (parseUserDefinedChunk (input, chunkHeader.chunkSize));
+                else if (chunkHeader.chunkType == chunkName ("midi"))
+                    metadataValues.addArray (parseMidiChunk (input, chunkHeader.chunkSize));
+                else if (chunkHeader.chunkType == chunkName ("info"))
+                    metadataValues.addArray (parseInformationChunk (input));
+                else if (chunkHeader.chunkType == chunkName ("data"))
+                {
+                    if (chunkHeader.chunkSize == -1)
+                        break;
+
+                    input.setPosition (input.getPosition() + chunkHeader.chunkSize);
+                }
+                else
+                {
+                    input.setPosition (input.getPosition() + chunkHeader.chunkSize);
+                }
+            }
+        }
+
+        input.setPosition (originalPos);
+        return isCafFile;
+    }
+};
 
 struct CoreAudioOutputStreamState
 {
@@ -184,7 +500,7 @@ static OSStatus coreAudioSetSizeProc (void* inClientData, SInt64 inSize)
 class AppleCoreAudioFormatReader : public AudioFormatReader
 {
 public:
-    explicit AppleCoreAudioFormatReader (InputStream* sourceStream);
+    AppleCoreAudioFormatReader (InputStream* sourceStream, AppleCoreAudioFormat::StreamKind kind);
     ~AppleCoreAudioFormatReader() override;
 
     bool readSamples (float* const* destChannels,
@@ -192,12 +508,14 @@ public:
                       int startOffsetInDestBuffer,
                       int64 startSampleInFile,
                       int numSamples) override;
+    AudioChannelSet getChannelLayout() override;
 
 private:
     bool openFromStream (InputStream* sourceStream);
     void close();
 
     ExtAudioFileRef audioFile = nullptr;
+    AudioFileID audioFileId = nullptr;
     AudioStreamBasicDescription inputFormat = {};
     AudioStreamBasicDescription clientFormat = {};
     SInt64 headerFrames = 0;
@@ -206,6 +524,10 @@ private:
 
     HeapBlock<float> tempBuffer;
     size_t tempBufferFrames = 0;
+    AudioChannelSet channelSet;
+    HeapBlock<int> channelMap;
+    bool hasChannelMap = false;
+    AppleCoreAudioFormat::StreamKind streamKind = AppleCoreAudioFormat::StreamKind::kNone;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AppleCoreAudioFormatReader)
 };
@@ -218,7 +540,8 @@ public:
                                 int numberOfChannels,
                                 int bitsPerSample,
                                 const StringPairArray& metadataValues,
-                                int qualityOptionIndex);
+                                int qualityOptionIndex,
+                                AppleCoreAudioFormat::StreamKind kind);
 
     ~AppleCoreAudioFormatWriter() override;
 
@@ -229,6 +552,7 @@ private:
     void close();
 
     ExtAudioFileRef audioFile = nullptr;
+    AudioFileID audioFileId = nullptr;
     AudioStreamBasicDescription clientFormat = {};
     AudioStreamBasicDescription fileFormat = {};
     bool isOpen = false;
@@ -236,13 +560,15 @@ private:
 
     HeapBlock<float> tempBuffer;
     size_t tempBufferFrames = 0;
+    AppleCoreAudioFormat::StreamKind streamKind = AppleCoreAudioFormat::StreamKind::kNone;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AppleCoreAudioFormatWriter)
 };
 
-AppleCoreAudioFormatReader::AppleCoreAudioFormatReader (InputStream* sourceStream)
+AppleCoreAudioFormatReader::AppleCoreAudioFormatReader (InputStream* sourceStream, AppleCoreAudioFormat::StreamKind kind)
     : AudioFormatReader (sourceStream, "CoreAudio file")
 {
+    streamKind = kind;
     isOpen = openFromStream (sourceStream);
 }
 
@@ -259,6 +585,12 @@ void AppleCoreAudioFormatReader::close()
         audioFile = nullptr;
     }
 
+    if (audioFileId != nullptr)
+    {
+        AudioFileClose (audioFileId);
+        audioFileId = nullptr;
+    }
+
     isOpen = false;
 }
 
@@ -267,22 +599,28 @@ bool AppleCoreAudioFormatReader::openFromStream (InputStream* sourceStream)
     if (sourceStream == nullptr)
         return false;
 
+    CoreAudioFormatMetadata::read (*sourceStream, metadataValues);
+
     streamState.stream = sourceStream;
     streamState.size = sourceStream->getTotalLength();
 
-    AudioFileID audioFileId = nullptr;
+    audioFileId = nullptr;
+    const auto fileTypeHint = toAudioFileTypeID (streamKind);
     auto err = AudioFileOpenWithCallbacks (&streamState,
                                            coreAudioInputReadProc,
                                            nullptr,
                                            coreAudioInputGetSizeProc,
                                            nullptr,
-                                           0,
+                                           fileTypeHint,
                                            &audioFileId);
     if (err == noErr)
         err = ExtAudioFileWrapAudioFileID (audioFileId, false, &audioFile);
 
     if (err != noErr && audioFileId != nullptr)
+    {
         AudioFileClose (audioFileId);
+        audioFileId = nullptr;
+    }
 
     if (err != noErr || audioFile == nullptr)
     {
@@ -364,6 +702,37 @@ bool AppleCoreAudioFormatReader::openFromStream (InputStream* sourceStream)
     numChannels = (int) clientFormat.mChannelsPerFrame;
     usesFloatingPointData = true;
 
+    UInt32 sizeOfLayout = 0;
+    UInt32 isWritable = 0;
+    if (AudioFileGetPropertyInfo (audioFileId, kAudioFilePropertyChannelLayout, &sizeOfLayout, &isWritable) == noErr
+        && sizeOfLayout >= (sizeof (AudioChannelLayout) - sizeof (AudioChannelDescription)))
+    {
+        HeapBlock<uint8> layoutData;
+        layoutData.malloc (sizeOfLayout);
+        auto* layout = reinterpret_cast<AudioChannelLayout*> (layoutData.getData());
+
+        if (AudioFileGetProperty (audioFileId, kAudioFilePropertyChannelLayout, &sizeOfLayout, layout) == noErr)
+        {
+            auto fileLayout = CoreAudioLayouts::fromCoreAudio (*layout);
+            if (fileLayout.size() == numChannels)
+            {
+                channelSet = fileLayout;
+                auto caOrder = CoreAudioLayouts::getCoreAudioLayoutChannels (*layout);
+                if (caOrder.size() == numChannels)
+                {
+                    channelMap.malloc (numChannels);
+                    hasChannelMap = true;
+
+                    for (int i = 0; i < numChannels; ++i)
+                    {
+                        const auto idx = channelSet.getChannelIndexForType (caOrder.getReference (i));
+                        channelMap[i] = isPositiveAndBelow (idx, numChannels) ? idx : i;
+                    }
+                }
+            }
+        }
+    }
+
     return true;
 }
 
@@ -386,11 +755,17 @@ bool AppleCoreAudioFormatReader::readSamples (float* const* destChannels,
     if (numChannelsToRead <= 0)
         return false;
 
-    HeapBlock<float*> offsetDestChannels;
-    offsetDestChannels.malloc (numDestChannels);
+    HeapBlock<float*> destWritePointers;
+    destWritePointers.malloc (numDestChannels);
 
     for (int ch = 0; ch < numDestChannels; ++ch)
-        offsetDestChannels[ch] = destChannels[ch] + startOffsetInDestBuffer;
+        destWritePointers[ch] = destChannels[ch] + startOffsetInDestBuffer;
+
+    HeapBlock<float*> mappedDestChannels;
+    mappedDestChannels.malloc (numChannels);
+
+    HeapBlock<char> channelWritten;
+    channelWritten.malloc (numDestChannels);
 
     const int maxFramesPerRead = 4096;
     int remainingFrames = numSamples;
@@ -425,20 +800,35 @@ bool AppleCoreAudioFormatReader::readSamples (float* const* destChannels,
         using SourceFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
         using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
 
-        AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { tempBuffer.getData(), numChannels },
-                                        AudioData::NonInterleavedDest<DestFormat> { offsetDestChannels.getData(), numChannelsToRead },
-                                        (int) framesRead);
+        zeromem (channelWritten.getData(), (size_t) numDestChannels);
 
-        for (int ch = numChannelsToRead; ch < numDestChannels; ++ch)
+        for (int ch = 0; ch < numChannels; ++ch)
         {
-            if (offsetDestChannels[ch] != nullptr)
-                zeromem (offsetDestChannels[ch], sizeof (float) * framesRead);
+            const auto targetIndex = hasChannelMap ? channelMap[ch] : ch;
+            if (isPositiveAndBelow (targetIndex, numDestChannels))
+            {
+                mappedDestChannels[ch] = destWritePointers[targetIndex];
+                channelWritten[targetIndex] = 1;
+            }
+            else
+            {
+                mappedDestChannels[ch] = nullptr;
+            }
         }
+
+        AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { tempBuffer.getData(), numChannels },
+                                        AudioData::NonInterleavedDest<DestFormat> { mappedDestChannels.getData(), numChannels },
+                                        (int) framesRead);
 
         for (int ch = 0; ch < numDestChannels; ++ch)
         {
-            if (offsetDestChannels[ch] != nullptr)
-                offsetDestChannels[ch] += framesRead;
+            if (destWritePointers[ch] != nullptr)
+            {
+                if (channelWritten[ch] == 0)
+                    zeromem (destWritePointers[ch], sizeof (float) * framesRead);
+
+                destWritePointers[ch] += framesRead;
+            }
         }
 
         totalFramesRead += (int) framesRead;
@@ -448,23 +838,42 @@ bool AppleCoreAudioFormatReader::readSamples (float* const* destChannels,
     return totalFramesRead > 0;
 }
 
+AudioChannelSet AppleCoreAudioFormatReader::getChannelLayout()
+{
+    if (channelSet.size() == numChannels)
+        return channelSet;
+
+    return AudioFormatReader::getChannelLayout();
+}
+
 AppleCoreAudioFormatWriter::AppleCoreAudioFormatWriter (OutputStream* destStream,
                                                         double sampleRate,
                                                         int numberOfChannels,
                                                         int bitsPerSample,
                                                         const StringPairArray& metadataValues,
-                                                        int qualityOptionIndex)
+                                                        int qualityOptionIndex,
+                                                        AppleCoreAudioFormat::StreamKind kind)
     : AudioFormatWriter (destStream, "CoreAudio file", sampleRate, numberOfChannels, bitsPerSample)
 {
     ignoreUnused (metadataValues);
+    streamKind = kind;
 
-    if (destStream == nullptr || numberOfChannels < 1 || numberOfChannels > 2 || sampleRate <= 0.0)
+    if (destStream == nullptr || numberOfChannels < 1 || sampleRate <= 0.0)
         return;
 
     if (bitsPerSample != 32)
         return;
 
     AudioFileTypeID fileType = kAudioFileAAC_ADTSType;
+    if (streamKind != AppleCoreAudioFormat::StreamKind::kNone)
+    {
+        if (! isEncodingStreamKindSupported (streamKind))
+            return;
+
+        const auto kindType = toAudioFileTypeID (streamKind);
+        if (kindType != 0)
+            fileType = kindType;
+    }
 
     fileFormat = {};
     fileFormat.mSampleRate = sampleRate;
@@ -478,7 +887,7 @@ AppleCoreAudioFormatWriter::AppleCoreAudioFormatWriter (OutputStream* destStream
     streamState.stream = destStream;
     streamState.size = destStream->getPosition();
 
-    AudioFileID audioFileId = nullptr;
+    audioFileId = nullptr;
     auto err = AudioFileInitializeWithCallbacks (&streamState,
                                                  coreAudioReadProc,
                                                  coreAudioWriteProc,
@@ -492,7 +901,10 @@ AppleCoreAudioFormatWriter::AppleCoreAudioFormatWriter (OutputStream* destStream
         err = ExtAudioFileWrapAudioFileID (audioFileId, true, &audioFile);
 
     if (err != noErr && audioFileId != nullptr)
+    {
         AudioFileClose (audioFileId);
+        audioFileId = nullptr;
+    }
 
     if (err != noErr || audioFile == nullptr)
     {
@@ -565,6 +977,12 @@ void AppleCoreAudioFormatWriter::close()
         audioFile = nullptr;
     }
 
+    if (audioFileId != nullptr)
+    {
+        AudioFileClose (audioFileId);
+        audioFileId = nullptr;
+    }
+
     isOpen = false;
 }
 
@@ -615,8 +1033,20 @@ bool AppleCoreAudioFormatWriter::flush()
 
 //==============================================================================
 // AppleCoreAudioFormat implementation
+const char* const AppleCoreAudioFormat::midiDataBase64 = "midiDataBase64";
+const char* const AppleCoreAudioFormat::tempo = "tempo";
+const char* const AppleCoreAudioFormat::timeSig = "time signature";
+const char* const AppleCoreAudioFormat::keySig = "key signature";
+
 AppleCoreAudioFormat::AppleCoreAudioFormat()
     : formatName ("CoreAudio file")
+    , streamKind (StreamKind::kNone)
+{
+}
+
+AppleCoreAudioFormat::AppleCoreAudioFormat (StreamKind kind)
+    : formatName ("CoreAudio file")
+    , streamKind (kind)
 {
 }
 
@@ -629,12 +1059,23 @@ const String& AppleCoreAudioFormat::getFormatName() const
 
 Array<String> AppleCoreAudioFormat::getFileExtensions() const
 {
-    return { ".m4a", ".aac", ".mp3", ".mp2" };
+    if (streamKind != StreamKind::kNone)
+    {
+        const auto extensions = findFileExtensionsForCoreAudioCodec (toAudioFileTypeID (streamKind));
+        if (! extensions.isEmpty())
+            return extensions;
+    }
+
+    const auto extensions = findFileExtensionsForCoreAudioCodecs();
+    if (! extensions.isEmpty())
+        return extensions;
+
+    return { ".wav", ".aiff", ".aif", ".aifc", ".wav", ".sd2", ".au", ".snd", ".mp4", ".mp3", ".mp2", ".mp1", ".ac3", ".aac", ".m4a", ".m4b", ".caf", ".3gp", ".3g2", ".amr" };
 }
 
 std::unique_ptr<AudioFormatReader> AppleCoreAudioFormat::createReaderFor (InputStream* sourceStream)
 {
-    auto reader = std::make_unique<AppleCoreAudioFormatReader> (sourceStream);
+    auto reader = std::make_unique<AppleCoreAudioFormatReader> (sourceStream, streamKind);
 
     if (reader->sampleRate > 0 && reader->numChannels > 0)
         return reader;
@@ -652,13 +1093,13 @@ std::unique_ptr<AudioFormatWriter> AppleCoreAudioFormat::createWriterFor (Output
     if (streamToWriteTo == nullptr)
         return nullptr;
 
-    if (numberOfChannels < 1 || numberOfChannels > 2)
+    if (numberOfChannels < 1)
         return nullptr;
 
     if (sampleRate <= 0.0)
         return nullptr;
 
-    if (bitsPerSample != 32)
+    if (streamKind != StreamKind::kNone && ! isEncodingStreamKindSupported (streamKind))
         return nullptr;
 
     return std::make_unique<AppleCoreAudioFormatWriter> (streamToWriteTo,
@@ -666,12 +1107,13 @@ std::unique_ptr<AudioFormatWriter> AppleCoreAudioFormat::createWriterFor (Output
                                                          numberOfChannels,
                                                          bitsPerSample,
                                                          metadataValues,
-                                                         qualityOptionIndex);
+                                                         qualityOptionIndex,
+                                                         streamKind);
 }
 
 Array<int> AppleCoreAudioFormat::getPossibleBitDepths() const
 {
-    return { 32 };
+    return {};
 }
 
 Array<int> AppleCoreAudioFormat::getPossibleSampleRates() const

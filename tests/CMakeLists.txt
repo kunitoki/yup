@@ -126,15 +126,20 @@ yup_standalone_app (
 
 # ==== Setup sources
 set (sources "")
+set (imported_sources "")
 foreach (module ${target_modules})
-    file (GLOB module_sources
-        "${CMAKE_CURRENT_LIST_DIR}/${module}.cpp")
+    file (GLOB module_sources "${CMAKE_CURRENT_LIST_DIR}/${module}.cpp")
     list (APPEND sources ${module_sources})
 
+    file (GLOB module_imported_sources "${CMAKE_CURRENT_LIST_DIR}/${module}/*.cpp")
+    list (APPEND imported_sources ${module_imported_sources})
+
     if (YUP_PLATFORM_APPLE)
-        file (GLOB_RECURSE apple_sources
-            "${CMAKE_CURRENT_LIST_DIR}/${module}.mm")
+        file (GLOB_RECURSE apple_sources "${CMAKE_CURRENT_LIST_DIR}/${module}.mm")
         list (APPEND sources ${apple_sources})
+
+        file (GLOB_RECURSE apple_imported_sources "${CMAKE_CURRENT_LIST_DIR}/${module}/*.mm")
+        list (APPEND imported_sources ${apple_imported_sources})
     endif()
 endforeach()
 
@@ -142,8 +147,11 @@ if (NOT YUP_PLATFORM_EMSCRIPTEN)
     list (APPEND sources "${CMAKE_CURRENT_LIST_DIR}/main.cpp")
 endif()
 
+target_sources (${target_name} PRIVATE ${sources} ${imported_sources})
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
-target_sources (${target_name} PRIVATE ${sources})
+source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${imported_sources})
+set_source_files_properties (${imported_sources} PROPERTIES HEADER_FILE_ONLY TRUE)
+
 set_target_properties (${target_name} PROPERTIES
     XCODE_SCHEME_ARGUMENTS "--gtest_filter=*"
     VS_DEBUGGER_COMMAND_ARGUMENTS "--gtest_filter=*")

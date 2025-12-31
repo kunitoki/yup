@@ -47,6 +47,23 @@
 #if YUP_MAC || YUP_IOS
 #include <AudioToolbox/AudioToolbox.h>
 #include <CoreFoundation/CoreFoundation.h>
+
+#include <yup_audio_basics/native/yup_CoreAudioLayouts_apple.h>
+#endif
+
+#if YUP_WINDOWS
+#include <windows.h>
+#include <mfapi.h>
+#include <mfidl.h>
+#include <mfreadwrite.h>
+#include <mferror.h>
+#include <propvarutil.h>
+
+#if ! YUP_DONT_AUTOLINK_TO_WIN32_LIBRARIES
+#pragma comment(lib, "mfplat.lib")
+#pragma comment(lib, "mfreadwrite.lib")
+#pragma comment(lib, "mfuuid.lib")
+#endif
 #endif
 
 //==============================================================================
@@ -76,4 +93,8 @@
 
 #if YUP_AUDIO_FORMAT_COREAUDIO
 #include "formats/yup_AppleCoreAudioFormat.cpp"
+#endif
+
+#if YUP_AUDIO_FORMAT_MEDIAFOUNDATION
+#include "formats/yup_WindowsMediaAudioFormat.cpp"
 #endif

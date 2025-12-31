@@ -102,6 +102,17 @@
 #endif
 
 //==============================================================================
+/** Config: YUP_AUDIO_FORMAT_MEDIAFOUNDATION
+
+    Enable Media Foundation audio format support on Windows.
+*/
+#ifndef YUP_AUDIO_FORMAT_MEDIAFOUNDATION
+#if YUP_WINDOWS
+#define YUP_AUDIO_FORMAT_MEDIAFOUNDATION 1
+#endif
+#endif
+
+//==============================================================================
 
 #if YUP_AUDIO_FORMAT_WAVE && ! YUP_MODULE_AVAILABLE_dr_libs
 #undef YUP_AUDIO_FORMAT_WAVE
@@ -126,6 +137,11 @@
 #if YUP_AUDIO_FORMAT_COREAUDIO && ! (YUP_MAC || YUP_IOS)
 #undef YUP_AUDIO_FORMAT_COREAUDIO
 #define YUP_AUDIO_FORMAT_COREAUDIO 0
+#endif
+
+#if YUP_AUDIO_FORMAT_MEDIAFOUNDATION && ! YUP_WINDOWS
+#undef YUP_AUDIO_FORMAT_MEDIAFOUNDATION
+#define YUP_AUDIO_FORMAT_MEDIAFOUNDATION 0
 #endif
 
 //==============================================================================
@@ -155,4 +171,8 @@
 
 #if YUP_AUDIO_FORMAT_COREAUDIO
 #include "formats/yup_AppleCoreAudioFormat.h"
+#endif
+
+#if YUP_AUDIO_FORMAT_MEDIAFOUNDATION
+#include "formats/yup_WindowsMediaAudioFormat.h"
 #endif

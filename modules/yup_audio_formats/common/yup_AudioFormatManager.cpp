@@ -32,24 +32,27 @@ void AudioFormatManager::registerDefaultFormats()
     registerFormat (std::make_unique<AppleCoreAudioFormat>());
 #endif
 
+#if YUP_AUDIO_FORMAT_MEDIAFOUNDATION
+    registerFormat (std::make_unique<WindowsMediaAudioFormat>());
+#endif
+
 #if YUP_AUDIO_FORMAT_WAVE
     registerFormat (std::make_unique<WaveAudioFormat>());
-#endif
-
-#if YUP_AUDIO_FORMAT_MP3
-    registerFormat (std::make_unique<Mp3AudioFormat>());
-#endif
-
-#if YUP_AUDIO_FORMAT_OPUS
-    registerFormat (std::make_unique<OpusAudioFormat>());
 #endif
 
 #if YUP_AUDIO_FORMAT_FLAC
     registerFormat (std::make_unique<FlacAudioFormat>());
 #endif
 
+#if YUP_AUDIO_FORMAT_OPUS
+    registerFormat (std::make_unique<OpusAudioFormat>());
+#endif
+
+#if YUP_AUDIO_FORMAT_MP3
+    registerFormat (std::make_unique<Mp3AudioFormat>());
+#endif
+
     // TODO: Add other formats like:
-    // registerFormat (std::make_unique<AiffAudioFormat>());
     // registerFormat (std::make_unique<OggVorbisAudioFormat>());
 }
 
