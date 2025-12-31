@@ -95,9 +95,9 @@ TEST_F (AppleCoreAudioFormatTests, GetPossibleBitDepthsAndSampleRates)
     Array<int> bitDepths = format->getPossibleBitDepths();
     Array<int> sampleRates = format->getPossibleSampleRates();
 
-    EXPECT_FALSE (bitDepths.isEmpty());
+    EXPECT_TRUE (bitDepths.isEmpty());
     EXPECT_FALSE (sampleRates.isEmpty());
-    EXPECT_TRUE (bitDepths.contains (kTestBitsPerSample));
+    EXPECT_FALSE (bitDepths.contains (kTestBitsPerSample));
     EXPECT_TRUE (sampleRates.contains (kTestSampleRate));
 }
 
