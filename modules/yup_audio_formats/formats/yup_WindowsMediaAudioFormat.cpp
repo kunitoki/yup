@@ -68,12 +68,14 @@ public:
     }
 
     STDMETHODIMP_ (ULONG)
+
     AddRef() override
     {
         return (ULONG) InterlockedIncrement (&refCount);
     }
 
     STDMETHODIMP_ (ULONG)
+
     Release() override
     {
         const auto count = (ULONG) InterlockedDecrement (&refCount);
@@ -85,7 +87,7 @@ public:
     ULONG bytesProcessed = 0;
 
 private:
-    ~MediaFoundationAsyncState() override = default;
+    ~MediaFoundationAsyncState() = default;
 
     LONG refCount = 1;
 };
@@ -128,12 +130,14 @@ public:
     }
 
     STDMETHODIMP_ (ULONG)
+
     AddRef() override
     {
         return (ULONG) InterlockedIncrement (&refCount);
     }
 
     STDMETHODIMP_ (ULONG)
+
     Release() override
     {
         const auto count = (ULONG) InterlockedDecrement (&refCount);
@@ -189,7 +193,7 @@ public:
         if (stream == nullptr)
             return E_FAIL;
 
-        return stream->setPosition ((int64) qwPosition) ? S_OK : E_FAIL;
+        return stream->setPosition ((int64) qwPosition) ? S_OK : E_NOTIMPL;
     }
 
     STDMETHODIMP IsEndOfStream (BOOL* pfEndOfStream) override
@@ -219,7 +223,7 @@ public:
         if (pcbRead != nullptr)
             *pcbRead = (ULONG) bytesRead;
 
-        return S_OK;
+        return bytesRead == (int) cb ? S_OK : S_FALSE;
     }
 
     STDMETHODIMP BeginRead (BYTE* pb,
@@ -330,7 +334,7 @@ public:
     }
 
 private:
-    ~MediaFoundationInputByteStream() override = default;
+    ~MediaFoundationInputByteStream() = default;
 
     LONG refCount = 1;
     InputStream* stream = nullptr;
@@ -371,12 +375,14 @@ public:
     }
 
     STDMETHODIMP_ (ULONG)
+
     AddRef() override
     {
         return (ULONG) InterlockedIncrement (&refCount);
     }
 
     STDMETHODIMP_ (ULONG)
+
     Release() override
     {
         const auto count = (ULONG) InterlockedDecrement (&refCount);
@@ -591,7 +597,7 @@ public:
     }
 
 private:
-    ~MediaFoundationOutputByteStream() override = default;
+    ~MediaFoundationOutputByteStream() = default;
 
     LONG refCount = 1;
     OutputStream* stream = nullptr;
@@ -835,7 +841,7 @@ bool WindowsMediaAudioFormatReader::copyInterleavedToDest (const void* source,
         using SourceFormat = AudioData::Format<AudioData::Int16, AudioData::LittleEndian>;
         using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
 
-        AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { static_cast<const int16*> (source), numChannels },
+        AudioData::deinterleaveSamples (AudioData::InterleavedSource<SourceFormat> { reinterpret_cast<const uint16*> (source), numChannels },
                                         AudioData::NonInterleavedDest<DestFormat> { offsetDestChannels.getData(), numDestChannels },
                                         numFrames);
         return true;
@@ -1110,7 +1116,7 @@ bool WindowsMediaAudioFormatWriter::openWriter (OutputStream* stream,
     const auto containerType = resolveContainerType (stream);
     attributes->SetGUID (MF_TRANSCODE_CONTAINERTYPE, containerType);
 
-    hr = MFCreateSinkWriterFromByteStream (byteStream, attributes, &sinkWriter);
+    hr = MFCreateSinkWriterFromURL (nullptr, byteStream, attributes, &sinkWriter);
     safeRelease (&attributes);
 
     if (FAILED (hr) || sinkWriter == nullptr)
@@ -1246,7 +1252,7 @@ bool WindowsMediaAudioFormatWriter::flush()
 //==============================================================================
 // WindowsMediaAudioFormat implementation
 WindowsMediaAudioFormat::WindowsMediaAudioFormat()
-    : formatName ("Windows Media Foundation")
+    : formatName ("Windows Media")
 {
 }
 
@@ -1259,7 +1265,7 @@ const String& WindowsMediaAudioFormat::getFormatName() const
 
 Array<String> WindowsMediaAudioFormat::getFileExtensions() const
 {
-    return { ".m4a", ".mp4", ".aac", ".wma", ".aiff" };
+    return { ".m4a", ".mp4", ".aac", ".wma", ".wm", ".wmv", ".asf", ".mp3" };
 }
 
 std::unique_ptr<AudioFormatReader> WindowsMediaAudioFormat::createReaderFor (InputStream* sourceStream)

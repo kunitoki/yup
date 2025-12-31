@@ -1039,13 +1039,12 @@ const char* const AppleCoreAudioFormat::timeSig = "time signature";
 const char* const AppleCoreAudioFormat::keySig = "key signature";
 
 AppleCoreAudioFormat::AppleCoreAudioFormat()
-    : formatName ("CoreAudio file")
-    , streamKind (StreamKind::kNone)
+    : AppleCoreAudioFormat (StreamKind::kNone)
 {
 }
 
 AppleCoreAudioFormat::AppleCoreAudioFormat (StreamKind kind)
-    : formatName ("CoreAudio file")
+    : formatName ("CoreAudio")
     , streamKind (kind)
 {
 }

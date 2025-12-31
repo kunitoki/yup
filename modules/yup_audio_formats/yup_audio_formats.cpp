@@ -53,6 +53,7 @@
 
 #if YUP_WINDOWS
 #include <windows.h>
+#include <mfobjects.h>
 #include <mfapi.h>
 #include <mfidl.h>
 #include <mfreadwrite.h>
