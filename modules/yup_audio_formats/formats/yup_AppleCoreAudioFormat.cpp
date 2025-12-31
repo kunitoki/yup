@@ -861,9 +861,6 @@ AppleCoreAudioFormatWriter::AppleCoreAudioFormatWriter (OutputStream* destStream
     if (destStream == nullptr || numberOfChannels < 1 || sampleRate <= 0.0)
         return;
 
-    if (bitsPerSample != 32)
-        return;
-
     AudioFileTypeID fileType = kAudioFileAAC_ADTSType;
     if (streamKind != AppleCoreAudioFormat::StreamKind::kNone)
     {

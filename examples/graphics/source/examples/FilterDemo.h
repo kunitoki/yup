@@ -1040,9 +1040,9 @@ private:
         qSlider->setRange ({ 0.0, 1.0 });
         qSlider->setSkewFactorFromMidpoint (0.3); // More resolution at lower Q values
         qSlider->setValue (0.0);
-        qSlider->onValueChanged = [this] (float value)
+        qSlider->onValueChanged = [this] (double value)
         {
-            smoothedQ.setTargetValue (value);
+            smoothedQ.setTargetValue ((float) value);
             updateAnalysisDisplays();
         };
         addAndMakeVisible (*qSlider);

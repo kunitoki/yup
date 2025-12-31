@@ -853,7 +853,7 @@ std::unique_ptr<AudioFormatWriter> OpusAudioFormat::createWriterFor (OutputStrea
     if (numberOfChannels < 1 || numberOfChannels > 2)
         return nullptr;
 
-    if (sampleRate != 48000.0)
+    if (sampleRate < 8000.0 || sampleRate > 96000.0)
         return nullptr;
 
     if (bitsPerSample != 32)
@@ -874,7 +874,7 @@ Array<int> OpusAudioFormat::getPossibleBitDepths() const
 
 Array<int> OpusAudioFormat::getPossibleSampleRates() const
 {
-    return { 48000 };
+    return { 8000, 12000, 16000, 24000, 48000, 96000 };
 }
 
 } // namespace yup

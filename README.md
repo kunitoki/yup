@@ -25,6 +25,10 @@
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
+  <a href="./examples/graphics/source/examples/AudioFileDemo.h"><img src="./docs/images/yup_audio_scope.png" style="width:99%;" /></a>
+</p>
+
+<div style="display: flex; width: 100%; flex-wrap: nowrap;">
   <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_fill.png" style="width:99%;" /></a>
   <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_line.png" style="width:99%;" /></a>
 </p>
