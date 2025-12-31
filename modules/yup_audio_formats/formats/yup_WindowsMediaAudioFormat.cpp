@@ -25,6 +25,9 @@ namespace yup
 namespace
 {
 
+constexpr MFBYTESTREAM_SEEK_ORIGIN kSeekCurrent = static_cast<MFBYTESTREAM_SEEK_ORIGIN> (1);
+constexpr MFBYTESTREAM_SEEK_ORIGIN kSeekEnd = static_cast<MFBYTESTREAM_SEEK_ORIGIN> (2);
+
 template <typename T>
 static void safeRelease (T** value)
 {
@@ -300,9 +303,9 @@ public:
 
         int64 basePosition = 0;
 
-        if (seekOrigin == mfbsoCurrent)
+        if (seekOrigin == kSeekCurrent)
             basePosition = stream->getPosition();
-        else if (seekOrigin == mfbsoEnd)
+        else if (seekOrigin == kSeekEnd)
         {
             if (! lengthKnown)
                 return MF_E_BYTESTREAM_UNKNOWN_LENGTH;
@@ -561,9 +564,9 @@ public:
 
         int64 basePosition = 0;
 
-        if (seekOrigin == mfbsoCurrent)
+        if (seekOrigin == kSeekCurrent)
             basePosition = stream->getPosition();
-        else if (seekOrigin == mfbsoEnd)
+        else if (seekOrigin == kSeekEnd)
             basePosition = (int64) size;
 
         const auto targetPosition = basePosition + (int64) llSeekOffset;
@@ -644,7 +647,7 @@ private:
 };
 
 WindowsMediaAudioFormatReader::WindowsMediaAudioFormatReader (InputStream* sourceStream)
-    : AudioFormatReader (sourceStream, "Windows Media Foundation")
+    : AudioFormatReader (sourceStream, "Windows Media")
 {
     if (sourceStream != nullptr)
         isOpen = openFromStream (sourceStream);
@@ -1042,7 +1045,7 @@ WindowsMediaAudioFormatWriter::WindowsMediaAudioFormatWriter (OutputStream* dest
                                                               int bitsPerSampleIn,
                                                               const StringPairArray& metadataValues,
                                                               int qualityOptionIndex)
-    : AudioFormatWriter (destStream, "Windows Media Foundation", sampleRateIn, numberOfChannels, bitsPerSampleIn)
+    : AudioFormatWriter (destStream, "Windows Media", sampleRateIn, numberOfChannels, bitsPerSampleIn)
 {
     ignoreUnused (metadataValues);
     isOpen = openWriter (destStream, sampleRateIn, numberOfChannels, bitsPerSampleIn, qualityOptionIndex);

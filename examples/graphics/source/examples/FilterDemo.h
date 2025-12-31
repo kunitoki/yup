@@ -981,7 +981,7 @@ private:
         firCoefficientsSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "FIR Length");
         firCoefficientsSlider->setRange ({ 16.0, 256.0 });
         firCoefficientsSlider->setValue (64.0);
-        firCoefficientsSlider->onValueChanged = [this] (float value)
+        firCoefficientsSlider->onValueChanged = [this] (double value)
         {
             updateAnalysisDisplays();
         };
@@ -1007,7 +1007,7 @@ private:
         firWindowParameterSlider->setRange ({ 0.0005, 10.0 });
         firWindowParameterSlider->setSkewFactorFromMidpoint (1.0);
         firWindowParameterSlider->setValue (1.0);
-        firWindowParameterSlider->onValueChanged = [this] (float value)
+        firWindowParameterSlider->onValueChanged = [this] (double value)
         {
             updateAnalysisDisplays();
         };
@@ -1018,9 +1018,9 @@ private:
         frequencySlider->setRange ({ 20.0, 20000.0 });
         frequencySlider->setSkewFactorFromMidpoint (1000.0); // 1kHz at midpoint
         frequencySlider->setValue (1000.0);
-        frequencySlider->onValueChanged = [this] (float value)
+        frequencySlider->onValueChanged = [this] (double value)
         {
-            smoothedFrequency.setTargetValue (value);
+            smoothedFrequency.setTargetValue ((float) value);
             updateAnalysisDisplays();
         };
         addAndMakeVisible (*frequencySlider);
@@ -1029,9 +1029,9 @@ private:
         frequency2Slider->setRange ({ 20.0, 20000.0 });
         frequency2Slider->setSkewFactorFromMidpoint (2000.0); // 2kHz at midpoint
         frequency2Slider->setValue (2000.0);
-        frequency2Slider->onValueChanged = [this] (float value)
+        frequency2Slider->onValueChanged = [this] (double value)
         {
-            smoothedFrequency2.setTargetValue (value);
+            smoothedFrequency2.setTargetValue ((float) value);
             updateAnalysisDisplays();
         };
         addAndMakeVisible (*frequency2Slider);
@@ -1051,9 +1051,9 @@ private:
         gainSlider->setRange ({ -48.0, 20.0 });
         gainSlider->setSkewFactorFromMidpoint (0.0); // 0 dB at midpoint
         gainSlider->setValue (0.0);
-        gainSlider->onValueChanged = [this] (float value)
+        gainSlider->onValueChanged = [this] (double value)
         {
-            smoothedGain.setTargetValue (value);
+            smoothedGain.setTargetValue ((float) value);
             updateAnalysisDisplays();
         };
         addAndMakeVisible (*gainSlider);
@@ -1061,9 +1061,9 @@ private:
         orderSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Order");
         orderSlider->setRange ({ 2.0, 16.0 });
         orderSlider->setValue (2.0);
-        orderSlider->onValueChanged = [this] (float value)
+        orderSlider->onValueChanged = [this] (double value)
         {
-            smoothedOrder.setTargetValue (value);
+            smoothedOrder.setTargetValue ((float) value);
             updateAnalysisDisplays();
         };
         addAndMakeVisible (*orderSlider);
@@ -1072,9 +1072,9 @@ private:
         noiseGainSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Noise Level");
         noiseGainSlider->setRange ({ 0.0, 1.0 });
         noiseGainSlider->setValue (0.1);
-        noiseGainSlider->onValueChanged = [this] (float value)
+        noiseGainSlider->onValueChanged = [this] (double value)
         {
-            noiseGeneratorAmplitude.setTargetValue (value);
+            noiseGeneratorAmplitude.setTargetValue ((float) value);
         };
         addAndMakeVisible (*noiseGainSlider);
 
@@ -1082,9 +1082,9 @@ private:
         outputGainSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Output Level");
         outputGainSlider->setRange ({ 0.0, 1.0 });
         outputGainSlider->setValue (0.5);
-        outputGainSlider->onValueChanged = [this] (float value)
+        outputGainSlider->onValueChanged = [this] (double value)
         {
-            outputGain.setTargetValue (value);
+            outputGain.setTargetValue ((float) value);
         };
         addAndMakeVisible (*outputGainSlider);
 
