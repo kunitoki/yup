@@ -102,7 +102,8 @@ public:
     /** Creates a writer for encoding audio data to MP3 format.
 
         This method creates an MP3 writer configured for the specified audio parameters.
-        Note that MP3 encoding is not currently implemented in this version.
+        Encoding is provided by the Helix MP3 encoder when the hmp3_library module
+        is available.
 
         @param streamToWriteTo     The output stream where MP3 data will be written
         @param sampleRate          The sample rate in Hz (supports 8kHz to 48kHz)
@@ -110,7 +111,7 @@ public:
         @param bitsPerSample       The bit depth (ignored for MP3, always 16-bit output)
         @param metadataValues      Metadata to embed in the MP3 file (title, artist, etc.)
         @param qualityOptionIndex  Quality setting (0-100, where 100 is highest quality)
-        @returns nullptr (encoding not implemented)
+        @returns A writer when MP3 encoding is available, otherwise nullptr
     */
     std::unique_ptr<AudioFormatWriter> createWriterFor (OutputStream* streamToWriteTo,
                                                         double sampleRate,

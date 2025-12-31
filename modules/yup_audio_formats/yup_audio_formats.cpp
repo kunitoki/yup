@@ -36,6 +36,10 @@
 #include <dr_libs/dr_libs.h>
 #endif
 
+#if YUP_AUDIO_FORMAT_MP3 && YUP_MODULE_AVAILABLE_hmp3_library
+#include <hmp3_library/hmp3_library.h>
+#endif
+
 #if YUP_AUDIO_FORMAT_OPUS
 #include <opus_library/opus_library.h>
 #endif

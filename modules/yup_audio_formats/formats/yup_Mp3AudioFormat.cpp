@@ -103,6 +103,83 @@ private:
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Mp3AudioFormatReader)
 };
 
+#if YUP_MODULE_AVAILABLE_hmp3_library
+static E_CONTROL makeMp3EncoderControl (double sampleRate,
+                                        int numberOfChannels,
+                                        int qualityOptionIndex)
+{
+    E_CONTROL ec = {};
+    ec.mode = (numberOfChannels == 1) ? 3 : 1;
+    ec.bitrate = -1;
+    ec.samprate = (int) sampleRate;
+    ec.nsbstereo = -1;
+    ec.filter_select = -1;
+    ec.nsb_limit = -1;
+    ec.freq_limit = 24000;
+    ec.cr_bit = 1;
+    ec.original = 1;
+    ec.layer = 3;
+    ec.hf_flag = 0;
+    ec.vbr_flag = 1;
+    ec.vbr_mnr = jlimit (0, 150, qualityOptionIndex > 0 ? qualityOptionIndex : 50);
+    ec.vbr_br_limit = 160;
+    ec.chan_add_f0 = 24000;
+    ec.chan_add_f1 = 24000;
+    ec.sparse_scale = -1;
+    ec.vbr_delta_mnr = 0;
+    ec.cpu_select = 0;
+    ec.quick = -1;
+    ec.test1 = -1;
+    ec.test2 = 0;
+    ec.test3 = 0;
+    ec.short_block_threshold = 700;
+
+    for (int i = 0; i < 21; ++i)
+        ec.mnr_adjust[i] = 0;
+
+    return ec;
+}
+
+class Mp3AudioFormatWriter : public AudioFormatWriter
+{
+public:
+    Mp3AudioFormatWriter (OutputStream* destStream,
+                          double sampleRate,
+                          int numberOfChannels,
+                          int bitsPerSample,
+                          const StringPairArray& metadataValues,
+                          int qualityOptionIndex);
+    ~Mp3AudioFormatWriter() override;
+
+    bool write (const float* const* samplesToWrite, int numSamples) override;
+    bool flush() override;
+
+    bool isValid() const { return isOpen; }
+
+private:
+    bool encodeAvailableInput();
+    void compactPcmBuffer();
+
+    CMp3Enc encoder;
+    E_CONTROL control = {};
+
+    std::vector<uint8> pcmBuffer;
+    size_t pcmReadOffset = 0;
+
+    HeapBlock<float> interleavedBuffer;
+    size_t interleavedCapacity = 0;
+
+    std::vector<uint8> outputBuffer;
+    std::vector<uint8> zeroBuffer;
+
+    int minInputBytes = 0;
+    int64 framesExpected = 0;
+    bool isOpen = false;
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Mp3AudioFormatWriter)
+};
+#endif
+
 Mp3AudioFormatReader::Mp3AudioFormatReader (InputStream* sourceStream)
     : AudioFormatReader (sourceStream, "MP3 file")
 {
@@ -211,6 +288,150 @@ bool Mp3AudioFormatReader::readSamples (float* const* destChannels,
     return framesRead > 0;
 }
 
+#if YUP_MODULE_AVAILABLE_hmp3_library
+Mp3AudioFormatWriter::Mp3AudioFormatWriter (OutputStream* destStream,
+                                            double sampleRate,
+                                            int numberOfChannels,
+                                            int bitsPerSample,
+                                            const StringPairArray& metadataValues,
+                                            int qualityOptionIndex)
+    : AudioFormatWriter (destStream, "MP3 file", sampleRate, numberOfChannels, bitsPerSample)
+{
+    ignoreUnused (metadataValues);
+
+    control = makeMp3EncoderControl (sampleRate, numberOfChannels, qualityOptionIndex);
+    minInputBytes = encoder.MP3_audio_encode_init (&control, 32, 1, 0, 0);
+
+    if (minInputBytes > 0)
+    {
+        outputBuffer.resize (128u * 1024u);
+        zeroBuffer.resize ((size_t) minInputBytes, 0);
+        isOpen = true;
+    }
+}
+
+Mp3AudioFormatWriter::~Mp3AudioFormatWriter()
+{
+    flush();
+}
+
+bool Mp3AudioFormatWriter::write (const float* const* samplesToWrite, int numSamples)
+{
+    if (! isOpen || numSamples <= 0)
+        return false;
+
+    const auto numChannels = getNumChannels();
+    const size_t totalSamples = (size_t) numSamples * (size_t) numChannels;
+
+    if (totalSamples > interleavedCapacity)
+    {
+        interleavedCapacity = totalSamples;
+        interleavedBuffer.allocate (interleavedCapacity, false);
+    }
+
+    using SourceFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+    using DestFormat = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+
+    AudioData::interleaveSamples (AudioData::NonInterleavedSource<SourceFormat> { samplesToWrite, (int) numChannels },
+                                  AudioData::InterleavedDest<DestFormat> { interleavedBuffer.getData(), (int) numChannels },
+                                  numSamples);
+
+    const size_t bytesToAdd = totalSamples * sizeof (float);
+    const auto* bytes = reinterpret_cast<const uint8*> (interleavedBuffer.getData());
+    pcmBuffer.insert (pcmBuffer.end(), bytes, bytes + bytesToAdd);
+
+    return encodeAvailableInput();
+}
+
+bool Mp3AudioFormatWriter::flush()
+{
+    if (! isOpen)
+        return false;
+
+    if (minInputBytes > 0)
+    {
+        const size_t availableBytes = pcmBuffer.size() - pcmReadOffset;
+        if (availableBytes > 0 && availableBytes < (size_t) minInputBytes)
+        {
+            const size_t padBytes = (size_t) minInputBytes - availableBytes;
+            pcmBuffer.insert (pcmBuffer.end(), padBytes, 0);
+        }
+    }
+
+    if (! encodeAvailableInput())
+        return false;
+
+    int64 expectedFrames = framesExpected;
+    if (control.samprate < 32000)
+        expectedFrames *= 2;
+
+    int safetyCounter = 0;
+    while (encoder.L3_audio_encode_get_frames() < (unsigned int) expectedFrames && safetyCounter < 4096)
+    {
+        auto io = encoder.MP3_audio_encode (zeroBuffer.data(), outputBuffer.data());
+        if (io.out_bytes > 0)
+        {
+            if (! output->write (outputBuffer.data(), (size_t) io.out_bytes))
+                return false;
+        }
+
+        if (io.in_bytes <= 0 && io.out_bytes <= 0)
+            break;
+
+        ++safetyCounter;
+    }
+
+    return true;
+}
+
+bool Mp3AudioFormatWriter::encodeAvailableInput()
+{
+    if (minInputBytes <= 0 || pcmBuffer.size() <= pcmReadOffset)
+        return true;
+
+    while (pcmBuffer.size() - pcmReadOffset >= (size_t) minInputBytes)
+    {
+        auto io = encoder.MP3_audio_encode (pcmBuffer.data() + pcmReadOffset, outputBuffer.data());
+        if (io.in_bytes <= 0 && io.out_bytes <= 0)
+            break;
+
+        ++framesExpected;
+
+        if (io.in_bytes > 0)
+            pcmReadOffset += (size_t) io.in_bytes;
+
+        if (io.out_bytes > 0)
+        {
+            if (! output->write (outputBuffer.data(), (size_t) io.out_bytes))
+                return false;
+        }
+
+        compactPcmBuffer();
+    }
+
+    return true;
+}
+
+void Mp3AudioFormatWriter::compactPcmBuffer()
+{
+    if (pcmReadOffset == 0)
+        return;
+
+    if (pcmReadOffset >= pcmBuffer.size())
+    {
+        pcmBuffer.clear();
+        pcmReadOffset = 0;
+        return;
+    }
+
+    if (pcmReadOffset > 4096)
+    {
+        pcmBuffer.erase (pcmBuffer.begin(), pcmBuffer.begin() + (ptrdiff_t) pcmReadOffset);
+        pcmReadOffset = 0;
+    }
+}
+#endif
+
 } // namespace
 
 //==============================================================================
@@ -249,7 +470,33 @@ std::unique_ptr<AudioFormatWriter> Mp3AudioFormat::createWriterFor (OutputStream
                                                                     const StringPairArray& metadataValues,
                                                                     int qualityOptionIndex)
 {
-    // MP3 encoding is not implemented in this version
+#if YUP_MODULE_AVAILABLE_hmp3_library
+    if (streamToWriteTo == nullptr)
+        return nullptr;
+
+    if (numberOfChannels < 1 || numberOfChannels > 2)
+        return nullptr;
+
+    if (sampleRate < 8000.0 || sampleRate > 48000.0)
+        return nullptr;
+
+    auto writer = std::make_unique<Mp3AudioFormatWriter> (streamToWriteTo,
+                                                          sampleRate,
+                                                          numberOfChannels,
+                                                          bitsPerSample,
+                                                          metadataValues,
+                                                          qualityOptionIndex);
+    if (writer->isValid())
+        return writer;
+#else
+    ignoreUnused (streamToWriteTo,
+                  sampleRate,
+                  numberOfChannels,
+                  bitsPerSample,
+                  metadataValues,
+                  qualityOptionIndex);
+#endif
+
     return nullptr;
 }
 

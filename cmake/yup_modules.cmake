@@ -836,6 +836,7 @@ macro (yup_add_default_modules modules_path)
     yup_add_module (${modules_path}/thirdparty/dr_libs "${modules_definitions}" ${thirdparty_group})
     yup_add_module (${modules_path}/thirdparty/opus_library "${modules_definitions}" ${thirdparty_group})
     yup_add_module (${modules_path}/thirdparty/flac_library "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/hmp3_library "${modules_definitions}" ${thirdparty_group})
 
     # ==== Yup modules
     set (modules_group "Modules")

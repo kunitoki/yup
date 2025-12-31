@@ -76,6 +76,7 @@ yup_standalone_app (
         pffft_library
         opus_library
         flac_library
+        hmp3_library
         dr_libs
         libpng
         libwebp
