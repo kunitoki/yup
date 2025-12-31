@@ -1608,6 +1608,78 @@ void convertFloatToDouble (double* dest, const float* src, Size num) noexcept
 #endif
 }
 
+template <typename Size>
+double computeCorrelation (const float* a, const float* b, Size num) noexcept
+{
+    if (num == 0)
+        return 0.0;
+
+    double sumA2 = 0.0;
+    double sumB2 = 0.0;
+    double sumAB = 0.0;
+    Size i = 0;
+
+#if YUP_USE_SSE_INTRINSICS
+    __m128 sumA = _mm_setzero_ps();
+    __m128 sumB = _mm_setzero_ps();
+    __m128 sumABv = _mm_setzero_ps();
+
+    for (; i + 4 <= num; i += 4)
+    {
+        __m128 av = _mm_loadu_ps (a + i);
+        __m128 bv = _mm_loadu_ps (b + i);
+        sumA = _mm_add_ps (sumA, _mm_mul_ps (av, av));
+        sumB = _mm_add_ps (sumB, _mm_mul_ps (bv, bv));
+        sumABv = _mm_add_ps (sumABv, _mm_mul_ps (av, bv));
+    }
+
+    alignas (16) float temp[4];
+    _mm_store_ps (temp, sumA);
+    sumA2 += temp[0] + temp[1] + temp[2] + temp[3];
+    _mm_store_ps (temp, sumB);
+    sumB2 += temp[0] + temp[1] + temp[2] + temp[3];
+    _mm_store_ps (temp, sumABv);
+    sumAB += temp[0] + temp[1] + temp[2] + temp[3];
+
+#elif YUP_USE_ARM_NEON
+    float32x4_t sumA = vdupq_n_f32 (0.0f);
+    float32x4_t sumB = vdupq_n_f32 (0.0f);
+    float32x4_t sumABv = vdupq_n_f32 (0.0f);
+
+    for (; i + 4 <= num; i += 4)
+    {
+        float32x4_t av = vld1q_f32 (a + i);
+        float32x4_t bv = vld1q_f32 (b + i);
+        sumA = vmlaq_f32 (sumA, av, av);
+        sumB = vmlaq_f32 (sumB, bv, bv);
+        sumABv = vmlaq_f32 (sumABv, av, bv);
+    }
+
+    alignas (16) float temp[4];
+    vst1q_f32 (temp, sumA);
+    sumA2 += temp[0] + temp[1] + temp[2] + temp[3];
+    vst1q_f32 (temp, sumB);
+    sumB2 += temp[0] + temp[1] + temp[2] + temp[3];
+    vst1q_f32 (temp, sumABv);
+    sumAB += temp[0] + temp[1] + temp[2] + temp[3];
+
+#endif
+
+    for (; i < num; ++i)
+    {
+        const double av = a[i];
+        const double bv = b[i];
+        sumA2 += av * av;
+        sumB2 += bv * bv;
+        sumAB += av * bv;
+    }
+
+    if (sumA2 == 0.0 || sumB2 == 0.0)
+        return 0.0;
+
+    return sumAB / std::sqrt (sumA2 * sumB2);
+}
+
 } // namespace
 } // namespace FloatVectorHelpers
 
@@ -1947,6 +2019,18 @@ void YUP_CALLTYPE FloatVectorOperations::convertDoubleToFloat (float* dest, cons
 void YUP_CALLTYPE FloatVectorOperations::convertDoubleToFloat (float* dest, const double* src, size_t num) noexcept
 {
     FloatVectorHelpers::convertDoubleToFloat (dest, src, num);
+}
+
+//==============================================================================
+
+double YUP_CALLTYPE FloatVectorOperations::computeCorrelation (const float* a, const float* b, int num) noexcept
+{
+    return FloatVectorHelpers::computeCorrelation (a, b, num);
+}
+
+double YUP_CALLTYPE FloatVectorOperations::computeCorrelation (const float* a, const float* b, size_t num) noexcept
+{
+    return FloatVectorHelpers::computeCorrelation (a, b, num);
 }
 
 //==============================================================================

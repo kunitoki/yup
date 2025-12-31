@@ -30,10 +30,13 @@
     name:             A pretty fast FFT and fast convolution with PFFASTCONV
     description:      A pretty fast FFT and fast convolution with PFFASTCONV.
     website:          https://github.com/marton78/pffft
+    repository:       https://github.com/marton78/pffft.git
+    branch:           20a601531c96b736d3e9a5e204eda768f86741d5
+    submodules:       0
     license:          BSD
 
     defines:          PFFFT_ENABLE_FLOAT=1 PFFFT_ENABLE_DOUBLE=1 PFFFT_ENABLE_NEON=1 _USE_MATH_DEFINES=1
- 
+
   END_YUP_MODULE_DECLARATION
 
   ==============================================================================
@@ -41,4 +44,4 @@
 
 #pragma once
 
-#include "upstream/pffft.h"
+#include <pffft.h>

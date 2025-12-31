@@ -21,4 +21,17 @@
 
 #include "pffft_library.h"
 
-#include "upstream/pffft_double.c"
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-W#pragma-messages"
+#endif
+
+#if _MSC_VER && defined(_USE_MATH_DEFINES)
+#undef _USE_MATH_DEFINES
+#endif
+
+#include <pffft_double.c>
+
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif

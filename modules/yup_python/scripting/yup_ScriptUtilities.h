@@ -55,7 +55,7 @@ std::optional<T> python_cast (const pybind11::object& value)
 
     @param scriptEngine The script engine to redirect the streams to.
  */
-struct YUP_API ScriptStreamRedirection
+struct ScriptStreamRedirection
 {
     ScriptStreamRedirection() noexcept;
     ~ScriptStreamRedirection() noexcept;

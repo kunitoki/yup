@@ -38,6 +38,14 @@
 #include <typeinfo>
 #include <utility>
 
+#ifndef YUP_PYBIND11_HIDDEN
+#if defined(__GNUC__) || defined(__clang__)
+#define YUP_PYBIND11_HIDDEN __attribute__ ((visibility ("hidden")))
+#else
+#define YUP_PYBIND11_HIDDEN
+#endif
+#endif
+
 namespace PYBIND11_NAMESPACE
 {
 namespace detail
@@ -725,7 +733,7 @@ struct PyXmlElementComparator
     }
 };
 
-struct PyXmlElementCallableComparator
+struct YUP_PYBIND11_HIDDEN PyXmlElementCallableComparator
 {
     explicit PyXmlElementCallableComparator (pybind11::function f)
         : fn (std::move (f))

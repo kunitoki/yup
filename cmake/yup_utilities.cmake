@@ -203,6 +203,37 @@ function (_yup_resolve_variable_path input_path output_variable)
     set (${output_variable} "${input_path}" PARENT_SCOPE)
 endfunction()
 
+#==============================================================================
+
+function (_yup_collect_upstream_candidate_paths module_name module_path output_variable)
+    set (candidate_paths "${module_path}/upstream")
+
+    if (DEFINED YUP_UPSTREAM_ROOT AND NOT "${YUP_UPSTREAM_ROOT}" STREQUAL "")
+        list (APPEND candidate_paths "${YUP_UPSTREAM_ROOT}/${module_name}/upstream")
+    endif()
+
+    if (CMAKE_SOURCE_DIR)
+        list (APPEND candidate_paths "${CMAKE_SOURCE_DIR}/build/externals/${module_name}/upstream")
+        list (APPEND candidate_paths "${CMAKE_SOURCE_DIR}/../build/externals/${module_name}/upstream")
+    endif()
+
+    set (candidate_root "${CMAKE_BINARY_DIR}")
+    set (max_depth 10)
+    while (max_depth GREATER 0)
+        list (APPEND candidate_paths "${candidate_root}/externals/${module_name}/upstream")
+
+        get_filename_component (candidate_parent "${candidate_root}" DIRECTORY)
+        if ("${candidate_parent}" STREQUAL "${candidate_root}")
+            break()
+        endif()
+
+        set (candidate_root "${candidate_parent}")
+        math (EXPR max_depth "${max_depth} - 1")
+    endwhile()
+
+    set (${output_variable} "${candidate_paths}" PARENT_SCOPE)
+endfunction()
+
 function (_yup_resolve_variable_paths input_list output_list)
     set (resolved_list "")
 

@@ -103,22 +103,26 @@ void FileChooser::browseForDirectory (CompletionCallback callback)
 //==============================================================================
 void FileChooser::showDialog (CompletionCallback callback, int flags)
 {
-    //YUP_ASSERT_MESSAGE_THREAD
-
     // Set additional flags based on construction parameters
     if (packageDirsAsFiles)
         flags |= treatFilePackagesAsDirs;
 
-    if (useNativeDialogBox)
+    auto capturedCallback = createCapturingCallback (std::move (callback));
+    auto showOnMessageThread = [self = Ptr { this }, flags, callback = std::move (capturedCallback)]() mutable
     {
-        showPlatformDialog (createCapturingCallback (std::move (callback)), flags);
-    }
-    else
+        self->showPlatformDialog (std::move (callback), flags);
+    };
+
+    if (! MessageManager::existsAndIsCurrentThread())
     {
-        // TODO: Implement YUP-based file browser when needed
-        // For now, fall back to platform dialog
-        showPlatformDialog (createCapturingCallback (std::move (callback)), flags);
+        MessageManager::callAsync ([show = std::move (showOnMessageThread)]() mutable
+        {
+            show();
+        });
+        return;
     }
+
+    showOnMessageThread();
 }
 
 //==============================================================================

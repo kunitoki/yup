@@ -32,7 +32,44 @@
 
 //==============================================================================
 
+#if YUP_AUDIO_FORMAT_WAVE || YUP_AUDIO_FORMAT_MP3
 #include <dr_libs/dr_libs.h>
+#endif
+
+#if YUP_AUDIO_FORMAT_MP3 && YUP_MODULE_AVAILABLE_hmp3_library
+#include <hmp3_library/hmp3_library.h>
+#endif
+
+#if YUP_AUDIO_FORMAT_OPUS
+#include <opus_library/opus_library.h>
+#endif
+
+#if YUP_AUDIO_FORMAT_FLAC
+#include <flac_library/flac_library.h>
+#endif
+
+#if YUP_MAC || YUP_IOS
+#include <AudioToolbox/AudioToolbox.h>
+#include <CoreFoundation/CoreFoundation.h>
+
+#include <yup_audio_basics/native/yup_CoreAudioLayouts_apple.h>
+#endif
+
+#if YUP_WINDOWS
+#include <windows.h>
+#include <mfobjects.h>
+#include <mfapi.h>
+#include <mfidl.h>
+#include <mfreadwrite.h>
+#include <mferror.h>
+#include <propvarutil.h>
+
+#if ! YUP_DONT_AUTOLINK_TO_WIN32_LIBRARIES
+#pragma comment(lib, "mfplat.lib")
+#pragma comment(lib, "mfreadwrite.lib")
+#pragma comment(lib, "mfuuid.lib")
+#endif
+#endif
 
 //==============================================================================
 
@@ -43,4 +80,26 @@
 
 //==============================================================================
 
+#if YUP_AUDIO_FORMAT_WAVE
 #include "formats/yup_WaveAudioFormat.cpp"
+#endif
+
+#if YUP_AUDIO_FORMAT_MP3
+#include "formats/yup_Mp3AudioFormat.cpp"
+#endif
+
+#if YUP_AUDIO_FORMAT_OPUS
+#include "formats/yup_OpusAudioFormat.cpp"
+#endif
+
+#if YUP_AUDIO_FORMAT_FLAC
+#include "formats/yup_FlacAudioFormat.cpp"
+#endif
+
+#if YUP_AUDIO_FORMAT_COREAUDIO
+#include "formats/yup_AppleCoreAudioFormat.cpp"
+#endif
+
+#if YUP_AUDIO_FORMAT_MEDIAFOUNDATION
+#include "formats/yup_WindowsMediaAudioFormat.cpp"
+#endif
