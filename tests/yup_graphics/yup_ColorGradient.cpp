@@ -123,6 +123,47 @@ TEST (ColorGradientTests, Multi_Stop_Constructor)
     EXPECT_FLOAT_EQ (stop2.delta, 1.0f);
 }
 
+TEST (ColorGradientTests, FromLinearColors_GeneratesStops)
+{
+    Color start (255, 0, 0);
+    Color end (0, 0, 255);
+
+    auto gradient = ColorGradient::fromLinearColors (start, 0.0f, 0.0f, end, 10.0f, 0.0f, 3);
+
+    EXPECT_EQ (gradient.getNumStops(), 3u);
+    EXPECT_NEAR (gradient.getStartColor().getRed(), start.getRed(), 1);
+    EXPECT_NEAR (gradient.getStartColor().getGreen(), start.getGreen(), 1);
+    EXPECT_NEAR (gradient.getStartColor().getBlue(), start.getBlue(), 1);
+    EXPECT_NEAR (gradient.getStartColor().getAlpha(), start.getAlpha(), 1);
+    EXPECT_NEAR (gradient.getFinishColor().getRed(), end.getRed(), 1);
+    EXPECT_NEAR (gradient.getFinishColor().getGreen(), end.getGreen(), 1);
+    EXPECT_NEAR (gradient.getFinishColor().getBlue(), end.getBlue(), 1);
+    EXPECT_NEAR (gradient.getFinishColor().getAlpha(), end.getAlpha(), 1);
+
+    const auto& middle = gradient.getStop (1);
+    EXPECT_NEAR (middle.delta, 0.5f, 1.0e-5f);
+    EXPECT_NEAR (middle.x, 5.0f, 1.0e-5f);
+    EXPECT_NEAR (middle.y, 0.0f, 1.0e-5f);
+    EXPECT_NEAR (middle.color.getRed(), 73, 1);
+    EXPECT_NEAR (middle.color.getGreen(), 24, 1);
+    EXPECT_NEAR (middle.color.getBlue(), 42, 1);
+}
+
+TEST (ColorGradientTests, FromLinearColors_EdgeCases)
+{
+    Color start (0xff00ff00);
+    Color end (0xff0000ff);
+
+    auto empty = ColorGradient::fromLinearColors (start, 0.0f, 0.0f, end, 10.0f, 10.0f, 0);
+    EXPECT_EQ (empty.getNumStops(), 0u);
+
+    auto single = ColorGradient::fromLinearColors (start, 0.0f, 0.0f, end, 10.0f, 10.0f, 1);
+    EXPECT_EQ (single.getNumStops(), 1u);
+    EXPECT_EQ (single.getStartColor(), start);
+    EXPECT_FLOAT_EQ (single.getStartX(), 0.0f);
+    EXPECT_FLOAT_EQ (single.getStartY(), 0.0f);
+}
+
 TEST (ColorGradientTests, Multi_Stop_Radial_Constructor)
 {
     static constexpr float tol = 1e-5f;

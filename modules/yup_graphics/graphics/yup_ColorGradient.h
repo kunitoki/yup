@@ -103,6 +103,14 @@ public:
             radius = std::sqrt (square (x2 - x1) + square (y2 - y1));
     }
 
+    /** Constructs a gradient with specified attributes.
+
+        @param color1 The starting color of the gradient.
+        @param p1 The pointof the starting color.
+        @param color2 The ending color of the gradient.
+        @param p2 The point of the ending color.
+        @param type The type of gradient (Linear or Radial).
+    */
     ColorGradient (Color color1, const Point<float>& p1, Color color2, const Point<float>& p2, Type type = Type::Linear) noexcept
         : ColorGradient (color1, p1.getX(), p1.getY(), color2, p2.getX(), p2.getY(), type)
     {
@@ -113,9 +121,9 @@ public:
         @param type The type of gradient (Linear or Radial).
         @param colorStops Vector of ColorStop objects defining the gradient.
     */
-    ColorGradient (Type type, const std::vector<ColorStop>& colorStops) noexcept
+    ColorGradient (Type type, std::vector<ColorStop> colorStops) noexcept
         : type (type)
-        , stops (colorStops)
+        , stops (std::move (colorStops))
     {
         if (type == Radial && stops.size() >= 2)
         {
@@ -262,11 +270,22 @@ public:
         });
     }
 
+    /** Adds a color stop to the gradient.
+
+        @param color The color of the new stop.
+        @param p The point of the stop.
+        @param delta The relative position of the stop (0.0-1.0).
+    */
     void addColorStop (Color color, const Point<float>& p, float delta)
     {
         addColorStop (color, p.getX(), p.getY(), delta);
     }
 
+    /** Adds a color stop to the gradient.
+
+        @param color The color of the new stop.
+        @param delta The relative position of the stop (0.0-1.0).
+    */
     void addColorStop (Color color, float delta)
     {
         if (stops.size() <= 1)
@@ -372,6 +391,79 @@ public:
         for (auto& stop : result.stops)
             stop.color = stop.color.withMultipliedAlpha (alpha);
         return result;
+    }
+
+    //==============================================================================
+    /** Constructs a gradient with evenly spaced color stops generated from two colors.
+
+        This helper creates a gradient containing a specified number of stops in linear position space.
+        Colors are generated using Color::mixedWith, which provides perceptual blending. The stops are
+        placed along the line between the start and end positions.
+
+        @param color1 The starting color of the gradient.
+        @param x1 The x-coordinate of the starting color.
+        @param y1 The y-coordinate of the starting color.
+        @param color2 The ending color of the gradient.
+        @param x2 The x-coordinate of the ending color.
+        @param y2 The y-coordinate of the ending color.
+        @param numColors The number of color stops to generate (including start and end).
+        @param type The type of gradient (Linear or Radial).
+
+        @return A ColorGradient with evenly spaced stops between the given colors.
+    */
+    static ColorGradient fromLinearColors (Color color1,
+                                           float x1,
+                                           float y1,
+                                           Color color2,
+                                           float x2,
+                                           float y2,
+                                           size_t numColors,
+                                           Type type = Type::Linear) noexcept
+    {
+        if (numColors == 0)
+            return ColorGradient (type, {});
+
+        if (numColors == 1)
+            return ColorGradient (type, { ColorStop (color1, x1, y1, 0.0f) });
+
+        std::vector<ColorStop> colorStops;
+        colorStops.reserve (numColors);
+
+        const Line<float> line (x1, y1, x2, y2);
+        const float step = 1.0f / static_cast<float> (numColors - 1);
+
+        for (size_t i = 0; i < numColors; ++i)
+        {
+            const float t = static_cast<float> (i) * step;
+            colorStops.emplace_back (color1.mixedWith (color2, t), line.pointAlong (t), t);
+        }
+
+        return ColorGradient (type, std::move (colorStops));
+    }
+
+    /** Constructs a gradient with evenly spaced color stops generated from two colors.
+
+        This helper creates a gradient containing a specified number of stops in linear position space.
+        Colors are generated using Color::mixedWith, which provides perceptual blending. The stops are
+        placed along the line between the start and end positions.
+
+        @param color1 The starting color of the gradient.
+        @param p1 The point of the starting color.
+        @param color2 The ending color of the gradient.
+        @param p2 The point of the ending color.
+        @param numColors The number of color stops to generate (including start and end).
+        @param type The type of gradient (Linear or Radial).
+
+        @return A ColorGradient with evenly spaced stops between the given colors.
+    */
+    static ColorGradient fromLinearColors (Color color1,
+                                           const Point<float>& p1,
+                                           Color color2,
+                                           const Point<float>& p2,
+                                           size_t numColors,
+                                           Type type = Type::Linear) noexcept
+    {
+        return fromLinearColors (color1, p1.getX(), p1.getY(), color2, p2.getX(), p2.getY(), numColors, type);
     }
 
 private:
