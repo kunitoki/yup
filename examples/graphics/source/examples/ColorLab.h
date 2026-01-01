@@ -370,9 +370,9 @@ private:
         return 1.055 * std::pow (value, 1.0 / 2.4) - 0.055;
     }
 
-    static uint8 toByte (double value)
+    static yup::uint8 toByte (double value)
     {
-        return static_cast<uint8> (yup::roundToInt (yup::jlimit (0.0, 1.0, value) * 255.0));
+        return static_cast<yup::uint8> (yup::roundToInt (yup::jlimit (0.0, 1.0, value) * 255.0));
     }
 
     static yup::Color colorFromNormalized (double r, double g, double b, double a)
