@@ -19,8 +19,8 @@
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
-  <a href="./examples/graphics/source/examples/ColorLab.h"><img src="./docs/images/yup_gradient_editor.png" style="width:47.47%;" /></a>
-  <a href="./examples/graphics/source/examples/ColorLab.h"><img src="./docs/images/yup_color_picker.png" style="width:52.53%;" /></a>
+  <a href="./examples/graphics/source/examples/ColorLab.h"><img src="./docs/images/yup_gradient_editor.png" style="width:46.8%;" /></a>
+  <a href="./examples/graphics/source/examples/ColorLab.h"><img src="./docs/images/yup_color_picker.png" style="width:51.8%;" /></a>
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
