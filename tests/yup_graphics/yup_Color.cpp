@@ -279,6 +279,41 @@ TEST (ColorTests, HSL_Operations)
     EXPECT_EQ (fromHSLAlpha.getAlpha(), 127); // Implementation returns 127
 }
 
+TEST (ColorTests, HSLuv_Conversions)
+{
+    static constexpr float tol = 1.0e-4f;
+
+    const Color red (255, 0, 0);
+    const auto [h, s, l] = red.toHSLuv();
+
+    EXPECT_NEAR (h, 12.1770506f / 360.0f, tol);
+    EXPECT_NEAR (s, 1.0f, tol);
+    EXPECT_NEAR (l, 53.2371156f / 100.0f, tol);
+
+    const auto redRoundTrip = Color::fromHSLuv (h, s, l);
+    EXPECT_NEAR (redRoundTrip.getRed(), 255, 1);
+    EXPECT_NEAR (redRoundTrip.getGreen(), 0, 1);
+    EXPECT_NEAR (redRoundTrip.getBlue(), 0, 1);
+
+    const auto vivid = Color::fromHSLuv (0.0f, 1.0f, 0.5f);
+    EXPECT_NEAR (vivid.getRed(), 234, 1);
+    EXPECT_NEAR (vivid.getGreen(), 0, 1);
+    EXPECT_NEAR (vivid.getBlue(), 100, 1);
+
+    const Color slate (51, 102, 153);
+    const auto [h2, s2, l2] = slate.toHSLuv();
+    const auto slateRoundTrip = Color::fromHSLuv (h2, s2, l2);
+    EXPECT_NEAR (slateRoundTrip.getRed(), slate.getRed(), 2);
+    EXPECT_NEAR (slateRoundTrip.getGreen(), slate.getGreen(), 2);
+    EXPECT_NEAR (slateRoundTrip.getBlue(), slate.getBlue(), 2);
+
+    const auto grayA = Color::fromHSLuv (0.1f, 0.0f, 0.4f);
+    const auto grayB = Color::fromHSLuv (0.7f, 0.0f, 0.4f);
+    EXPECT_NEAR (grayA.getRed(), grayA.getGreen(), 1);
+    EXPECT_NEAR (grayA.getGreen(), grayA.getBlue(), 1);
+    EXPECT_NEAR (grayA.getRed(), grayB.getRed(), 1);
+}
+
 TEST (ColorTests, HSV_Operations)
 {
     static constexpr float tol = 1e-5f;
@@ -887,4 +922,44 @@ TEST (ColorTests, OverlaidWith_AlphaBlending)
     Color nearlyOpaqueSrc (0xfe0000ff);
     Color result7 = nearlyOpaqueDest.overlaidWith (nearlyOpaqueSrc);
     EXPECT_NO_THROW (result7.getRed()); // Should handle without issues
+}
+
+TEST (ColorTests, MixedWith_Spectral)
+{
+    Color red (255, 0, 0);
+    Color blue (0, 0, 255);
+
+    const auto mixed = red.mixedWith (blue, 0.5f);
+    EXPECT_EQ (mixed.getRed(), 73);
+    EXPECT_EQ (mixed.getGreen(), 24);
+    EXPECT_EQ (mixed.getBlue(), 42);
+
+    const auto same = red.mixedWith (red, 0.25f);
+    EXPECT_NEAR (same.getRed(), red.getRed(), 1);
+    EXPECT_NEAR (same.getGreen(), red.getGreen(), 1);
+    EXPECT_NEAR (same.getBlue(), red.getBlue(), 1);
+
+    const Color semi (128, 10, 20, 30);
+    const Color opaque (255, 10, 20, 30);
+    const auto mixedAlpha = semi.mixedWith (opaque, 0.25f);
+    EXPECT_EQ (mixedAlpha.getAlpha(), 160);
+    EXPECT_NEAR (mixedAlpha.getRed(), 10, 1);
+    EXPECT_NEAR (mixedAlpha.getGreen(), 20, 1);
+    EXPECT_NEAR (mixedAlpha.getBlue(), 30, 1);
+
+    const auto startMix = red.mixedWith (blue, 0.0f);
+    EXPECT_NEAR (startMix.getRed(), red.getRed(), 1);
+    EXPECT_NEAR (startMix.getGreen(), red.getGreen(), 1);
+    EXPECT_NEAR (startMix.getBlue(), red.getBlue(), 1);
+
+    const auto endMix = red.mixedWith (blue, 1.0f);
+    EXPECT_NEAR (endMix.getRed(), blue.getRed(), 1);
+    EXPECT_NEAR (endMix.getGreen(), blue.getGreen(), 1);
+    EXPECT_NEAR (endMix.getBlue(), blue.getBlue(), 1);
+
+    const auto mixAB = red.mixedWith (blue, 0.25f);
+    const auto mixBA = blue.mixedWith (red, 0.75f);
+    EXPECT_NEAR (mixAB.getRed(), mixBA.getRed(), 1);
+    EXPECT_NEAR (mixAB.getGreen(), mixBA.getGreen(), 1);
+    EXPECT_NEAR (mixAB.getBlue(), mixBA.getBlue(), 1);
 }

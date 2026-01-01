@@ -46,12 +46,12 @@ public:
     /** Constructs a color from a 32-bit integer.
 
         This constructor initializes the color from a 32-bit integer, assuming a format
-        where the highest byte is alpha, followed by red, green, and blue.
+        where the highest byte is alpha, followed by red, green, and blue (ARGB).
 
-        @param color The 32-bit integer representing the color.
+        @param colorARGB The 32-bit integer representing the color.
     */
-    constexpr Color (uint32 color) noexcept
-        : data (color)
+    constexpr Color (uint32 colorARGB) noexcept
+        : data (colorARGB)
     {
     }
 
@@ -508,6 +508,16 @@ public:
         return std::make_tuple (h, s, l);
     }
 
+    /** Converts the color to its HSLuv (Hue, Saturation, Luminance) components.
+
+        HSLuv is a perceptually uniform HSL space based on CIELUV, intended to provide more consistent
+        perceived saturation across hues. The returned tuple contains the hue, saturation, and luminance
+        components normalized to the range [0, 1].
+
+        @return A tuple consisting of hue, saturation, and luminance in HSLuv space.
+    */
+    std::tuple<float, float, float> toHSLuv() const noexcept;
+
     /** Constructs a color from HSL values.
 
         This static method allows for the creation of a color from its HSL representation.
@@ -556,6 +566,21 @@ public:
             static_cast<uint8> (b * 255)
         };
     }
+
+    /** Constructs a color from HSLuv values.
+
+        This static method allows for the creation of a color from its HSLuv representation.
+        Hue, saturation, and luminance are normalized to [0, 1], with hue mapped to a 0-360 degree range
+        and saturation/luminance mapped to 0-100 internally.
+
+        @param h The hue component, normalized to [0, 1].
+        @param s The saturation component, normalized to [0, 1].
+        @param l The luminance component, normalized to [0, 1].
+        @param a The alpha component, normalized to [0, 1].
+
+        @return A Color object corresponding to the given HSLuv values.
+    */
+    static Color fromHSLuv (float h, float s, float l, float a = 1.0f) noexcept;
 
     //==============================================================================
     /** Converts the color to its HSV (Hue, Saturation, Value) components.
@@ -693,6 +718,20 @@ public:
     {
         return brighter (-amount);
     }
+
+    //==============================================================================
+    /** Mixes this color with another using a spectral (reflectance) model.
+
+        This method performs spectral upsampling of the two colors, mixes their reflectances using a
+        Kubelka-Munk model, and converts the result back to sRGB. The result usually produces more
+        natural, pigment-like blends than a linear RGB interpolation. Alpha is interpolated linearly.
+
+        @param other The color to mix with this color.
+        @param amount The mix factor in the range [0, 1], where 0 returns this color and 1 returns the other.
+
+        @return A new Color object representing the spectrally mixed result.
+    */
+    Color mixedWith (Color other, float amount) const noexcept;
 
     //==============================================================================
     /** Returns a contrasting color.
