@@ -263,7 +263,8 @@ public:
     */
     void addColorStop (Color color, float x, float y, float delta)
     {
-        stops.emplace_back (color, x, y, delta);
+        stops.emplace_back (color, x, y, jlimit (0.0f, 1.0f, delta));
+
         std::sort (stops.begin(), stops.end(), [] (const ColorStop& a, const ColorStop& b)
         {
             return a.delta < b.delta;
