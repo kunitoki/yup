@@ -221,12 +221,12 @@ public:
 
     void mouseDown (const yup::MouseEvent& event) override
     {
-        handlePointer (event.getPosition(), true);
+        handlePointer (event.getPosition(), event.getModifiers(), true);
     }
 
     void mouseDrag (const yup::MouseEvent& event) override
     {
-        handlePointer (event.getPosition(), false);
+        handlePointer (event.getPosition(), event.getModifiers(), false);
     }
 
     void mouseUp (const yup::MouseEvent&) override
@@ -510,7 +510,7 @@ private:
         auto hintArea = content.removeFromBottom (22.0f);
         g.setFillColor (yup::Colors::white.withAlpha (0.6f));
         const auto infoFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
-        g.fillFittedText ("Drag the points to reshape the gradient.", infoFont, hintArea, yup::Justification::left);
+        g.fillFittedText ("Drag points; hold Shift to constrain stops to the line.", infoFont, hintArea, yup::Justification::left);
     }
 
     void drawPicker (yup::Graphics& g, yup::Rectangle<float> area)
@@ -634,6 +634,15 @@ private:
             g.setStrokeColor (isSelected ? yup::Colors::white : yup::Colors::black.withAlpha (0.4f));
             g.setStrokeWidth (1.0f);
             g.strokeEllipse (yup::Rectangle<float> (point.getX() - radius, point.getY() - radius, radius * 2.0f, radius * 2.0f));
+
+            if (isSelected)
+            {
+                const auto labelFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (11.0f);
+                const auto label = formatValue (gradientStops[i].t, 2);
+                const auto labelArea = yup::Rectangle<float> (point.getX() + 16.0f, point.getY() - 10.0f, 48.0f, 18.0f);
+                g.setFillColor (yup::Colors::white.withAlpha (0.8f));
+                g.fillFittedText (label, labelFont, labelArea, yup::Justification::left);
+            }
         }
     }
 
@@ -805,6 +814,7 @@ private:
         g.setStrokeWidth (1.0f);
         g.strokeEllipse (yup::Rectangle<float> (point.getX() - 6.0f, point.getY() - 6.0f, 12.0f, 12.0f));
         g.setFillColor (yup::Colors::black.withAlpha (0.6f));
+
         const auto labelFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (11.0f);
         g.fillFittedText (label, labelFont, yup::Rectangle<float> (point.getX() + 8.0f, point.getY() - 10.0f, 18.0f, 18.0f), yup::Justification::left);
     }
@@ -865,6 +875,11 @@ private:
         return yup::jlimit (0.0f, 1.0f, t);
     }
 
+    yup::String formatValue (float value, int decimals = 2) const
+    {
+        return yup::String (value, decimals);
+    }
+
     void updateCustomStopDeltas()
     {
         if (gradientStops.size() < 3)
@@ -895,7 +910,7 @@ private:
         repaint();
     }
 
-    void handlePointer (const yup::Point<float>& position, bool isDown)
+    void handlePointer (const yup::Point<float>& position, const yup::KeyModifiers& modifiers, bool isDown)
     {
         if (currentMode == Mode::GradientEditor)
         {
@@ -953,10 +968,18 @@ private:
                         const auto end = pointFromNormalized (gradientEditorArea, gradientEndNorm);
                         const auto normalized = normalizedFromPoint (gradientEditorArea, position);
                         const auto clampedPosition = pointFromNormalized (gradientEditorArea, normalized);
+                        const bool constrainToLine = modifiers.isShiftDown();
 
                         auto& stop = gradientStops[draggingStopIndex];
-                        stop.customPositionNorm = normalized;
-                        stop.hasCustomPosition = true;
+                        if (constrainToLine)
+                        {
+                            stop.hasCustomPosition = false;
+                        }
+                        else
+                        {
+                            stop.customPositionNorm = normalized;
+                            stop.hasCustomPosition = true;
+                        }
 
                         const float minT = gradientStops[draggingStopIndex - 1].t + 0.001f;
                         const float maxT = gradientStops[draggingStopIndex + 1].t - 0.001f;
@@ -1069,11 +1092,6 @@ private:
 
     void updateChannelLabels()
     {
-        const auto formatValue = [] (float value)
-        {
-            return yup::String (value, 2);
-        };
-
         switch (pickerSpace)
         {
             case PickerSpace::Rgba:
