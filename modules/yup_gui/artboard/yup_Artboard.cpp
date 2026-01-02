@@ -23,6 +23,62 @@ namespace yup
 {
 
 //==============================================================================
+namespace
+{
+rive::Fit toRiveFit (Artboard::Layout layout)
+{
+    switch (layout)
+    {
+        case Artboard::Layout::fill:
+            return rive::Fit::fill;
+        case Artboard::Layout::contain:
+            return rive::Fit::contain;
+        case Artboard::Layout::cover:
+            return rive::Fit::cover;
+        case Artboard::Layout::fitWidth:
+            return rive::Fit::fitWidth;
+        case Artboard::Layout::fitHeight:
+            return rive::Fit::fitHeight;
+        case Artboard::Layout::none:
+            return rive::Fit::none;
+        case Artboard::Layout::scaleDown:
+            return rive::Fit::scaleDown;
+        case Artboard::Layout::layout:
+            return rive::Fit::layout;
+    }
+
+    return rive::Fit::contain;
+}
+
+rive::Alignment toRiveAlignment (Artboard::Alignment alignment)
+{
+    switch (alignment)
+    {
+        case Artboard::Alignment::topLeft:
+            return rive::Alignment::topLeft;
+        case Artboard::Alignment::topCenter:
+            return rive::Alignment::topCenter;
+        case Artboard::Alignment::topRight:
+            return rive::Alignment::topRight;
+        case Artboard::Alignment::centerLeft:
+            return rive::Alignment::centerLeft;
+        case Artboard::Alignment::center:
+            return rive::Alignment::center;
+        case Artboard::Alignment::centerRight:
+            return rive::Alignment::centerRight;
+        case Artboard::Alignment::bottomLeft:
+            return rive::Alignment::bottomLeft;
+        case Artboard::Alignment::bottomCenter:
+            return rive::Alignment::bottomCenter;
+        case Artboard::Alignment::bottomRight:
+            return rive::Alignment::bottomRight;
+    }
+
+    return rive::Alignment::center;
+}
+} // namespace
+
+//==============================================================================
 
 Artboard::Artboard (StringRef componentID)
     : Component (componentID)
@@ -59,6 +115,39 @@ void Artboard::clear()
     stateMachine = nullptr;
 
     eventProperties.clear();
+    viewTransform = rive::Mat2D();
+}
+
+//==============================================================================
+
+void Artboard::setLayout (Layout newLayout)
+{
+    if (layout == newLayout)
+        return;
+
+    layout = newLayout;
+    updateViewTransform();
+    repaint();
+}
+
+Artboard::Layout Artboard::getLayout() const
+{
+    return layout;
+}
+
+void Artboard::setAlignment (Alignment newAlignment)
+{
+    if (alignment == newAlignment)
+        return;
+
+    alignment = newAlignment;
+    updateViewTransform();
+    repaint();
+}
+
+Artboard::Alignment Artboard::getAlignment() const
+{
+    return alignment;
 }
 
 //==============================================================================
@@ -265,12 +354,15 @@ void Artboard::paint (Graphics& g)
 
     auto* renderer = g.getRenderer();
 
-    renderer->save();
+    auto transform = g.getTransform()
+                         .translated (g.getDrawingArea().getX(), g.getDrawingArea().getY())
+                         .scaled (g.getContextScale());
 
+    renderer->save();
+    renderer->transform (transform.toMat2D());
     renderer->transform (viewTransform);
 
     scene->draw (renderer);
-
     renderer->restore();
 }
 
@@ -278,19 +370,7 @@ void Artboard::paint (Graphics& g)
 
 void Artboard::resized()
 {
-    auto scaleDpi = getScaleDpi();
-    auto scaledBounds = getBounds() * scaleDpi;
-    auto frameBounds = scaledBounds.toAABB();
-
-    rive::AABB artboardBounds;
-    if (artboard != nullptr)
-        artboardBounds = artboard->bounds();
-
-    viewTransform = rive::computeAlignment (
-        rive::Fit::contain,
-        rive::Alignment::center,
-        frameBounds,
-        artboardBounds);
+    updateViewTransform();
 }
 
 //==============================================================================
@@ -416,6 +496,9 @@ void Artboard::updateSceneFromFile()
     scene = std::move (currentScene);
 
     stateMachine = currentStateMachine;
+
+    updateViewTransform();
+    repaint();
 }
 
 //==============================================================================
@@ -466,10 +549,25 @@ void Artboard::pullEventsFromStateMachines()
 
 Point<float> Artboard::transformPoint (Point<float> point) const
 {
-    point *= getScaleDpi();
-
     const auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (point.getX(), point.getY());
     return { xy.x, xy.y };
+}
+
+//==============================================================================
+
+void Artboard::updateViewTransform()
+{
+    if (artboard == nullptr)
+    {
+        viewTransform = rive::Mat2D();
+        return;
+    }
+
+    viewTransform = rive::computeAlignment (
+        toRiveFit (layout),
+        toRiveAlignment (alignment),
+        getLocalBounds().toAABB(),
+        artboard->bounds());
 }
 
 } // namespace yup
