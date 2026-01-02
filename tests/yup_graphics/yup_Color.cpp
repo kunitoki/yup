@@ -28,6 +28,63 @@
 
 using namespace yup;
 
+namespace
+{
+uint8 toByte (double value)
+{
+    return static_cast<uint8> (roundToInt (jlimit (0.0, 1.0, value) * 255.0));
+}
+
+Color colorFromFloat (double r, double g, double b)
+{
+    return Color (255, toByte (r), toByte (g), toByte (b));
+}
+
+double blendChannelExpected (BlendMode mode, double backdrop, double source)
+{
+    switch (mode)
+    {
+        case BlendMode::SrcOver:
+            return source;
+        case BlendMode::Screen:
+            return 1.0 - (1.0 - backdrop) * (1.0 - source);
+        case BlendMode::Overlay:
+            return backdrop <= 0.5 ? 2.0 * backdrop * source : 1.0 - 2.0 * (1.0 - backdrop) * (1.0 - source);
+        case BlendMode::Darken:
+            return jmin (backdrop, source);
+        case BlendMode::Lighten:
+            return jmax (backdrop, source);
+        case BlendMode::ColorDodge:
+            return source >= 1.0 ? 1.0 : jmin (1.0, backdrop / (1.0 - source));
+        case BlendMode::ColorBurn:
+            return source <= 0.0 ? 0.0 : 1.0 - jmin (1.0, (1.0 - backdrop) / source);
+        case BlendMode::HardLight:
+            return source <= 0.5 ? 2.0 * backdrop * source : 1.0 - 2.0 * (1.0 - backdrop) * (1.0 - source);
+        case BlendMode::SoftLight:
+        {
+            if (source <= 0.5)
+                return backdrop - (1.0 - 2.0 * source) * backdrop * (1.0 - backdrop);
+
+            const double d = backdrop <= 0.25 ? ((16.0 * backdrop - 12.0) * backdrop + 4.0) * backdrop : std::sqrt (backdrop);
+            return backdrop + (2.0 * source - 1.0) * (d - backdrop);
+        }
+        case BlendMode::Difference:
+            return std::abs (backdrop - source);
+        case BlendMode::Exclusion:
+            return backdrop + source - 2.0 * backdrop * source;
+        case BlendMode::Multiply:
+            return backdrop * source;
+        case BlendMode::Hue:
+        case BlendMode::Saturation:
+        case BlendMode::Color:
+        case BlendMode::Luminosity:
+            return source;
+        default:
+            return source;
+    }
+}
+} // namespace
+
 TEST (ColorTests, Default_Constructor)
 {
     Color c;
@@ -1006,6 +1063,84 @@ TEST (ColorTests, BlendWith_Opacity)
     EXPECT_EQ (blended.getARGB(), expected.getARGB());
 }
 
+TEST (ColorTests, BlendWith_SrcAlphaZero_NoChange)
+{
+    const Color dest (200, 10, 20, 30);
+    const Color src (0, 200, 100, 50);
+    const auto blended = dest.blendedWith (src, BlendMode::SrcOver);
+    EXPECT_EQ (blended.getARGB(), dest.getARGB());
+}
+
+TEST (ColorTests, BlendWith_DestAlphaZero_ReturnsSrc)
+{
+    const Color dest (0, 10, 20, 30);
+    const Color src (100, 40, 50, 60);
+    const auto blended = dest.blendedWith (src, BlendMode::Screen);
+    EXPECT_EQ (blended.getARGB(), src.getARGB());
+}
+
+TEST (ColorTests, BlendWith_ChannelModes)
+{
+    const double backdropValue = 0.2;
+    const double sourceValue = 0.7;
+    const auto backdrop = colorFromFloat (backdropValue, backdropValue, backdropValue);
+    const auto source = colorFromFloat (sourceValue, sourceValue, sourceValue);
+
+    const BlendMode modes[] = {
+        BlendMode::SrcOver,
+        BlendMode::Screen,
+        BlendMode::Overlay,
+        BlendMode::Darken,
+        BlendMode::Lighten,
+        BlendMode::ColorDodge,
+        BlendMode::ColorBurn,
+        BlendMode::HardLight,
+        BlendMode::SoftLight,
+        BlendMode::Difference,
+        BlendMode::Exclusion,
+        BlendMode::Multiply
+    };
+
+    for (const auto mode : modes)
+    {
+        const auto blended = backdrop.blendedWith (source, mode);
+        const double expected = blendChannelExpected (mode, backdropValue, sourceValue);
+        EXPECT_NEAR (blended.getRedFloat(), expected, 1.0f / 255.0f);
+        EXPECT_NEAR (blended.getGreenFloat(), expected, 1.0f / 255.0f);
+        EXPECT_NEAR (blended.getBlueFloat(), expected, 1.0f / 255.0f);
+    }
+}
+
+TEST (ColorTests, BlendWith_HslModes)
+{
+    const auto backdrop = Color::fromHSL (0.1f, 0.7f, 0.4f);
+    const auto source = Color::fromHSL (0.7f, 0.3f, 0.8f);
+
+    const auto hueResult = backdrop.blendedWith (source, BlendMode::Hue);
+    const auto [hueH, hueS, hueL] = hueResult.toHSL();
+    EXPECT_NEAR (hueH, std::get<0> (source.toHSL()), 0.02f);
+    EXPECT_NEAR (hueS, std::get<1> (backdrop.toHSL()), 0.02f);
+    EXPECT_NEAR (hueL, std::get<2> (backdrop.toHSL()), 0.02f);
+
+    const auto satResult = backdrop.blendedWith (source, BlendMode::Saturation);
+    const auto [satH, satS, satL] = satResult.toHSL();
+    EXPECT_NEAR (satH, std::get<0> (backdrop.toHSL()), 0.02f);
+    EXPECT_NEAR (satS, std::get<1> (source.toHSL()), 0.02f);
+    EXPECT_NEAR (satL, std::get<2> (backdrop.toHSL()), 0.02f);
+
+    const auto colorResult = backdrop.blendedWith (source, BlendMode::Color);
+    const auto [colH, colS, colL] = colorResult.toHSL();
+    EXPECT_NEAR (colH, std::get<0> (source.toHSL()), 0.02f);
+    EXPECT_NEAR (colS, std::get<1> (source.toHSL()), 0.02f);
+    EXPECT_NEAR (colL, std::get<2> (backdrop.toHSL()), 0.02f);
+
+    const auto lumResult = backdrop.blendedWith (source, BlendMode::Luminosity);
+    const auto [lumH, lumS, lumL] = lumResult.toHSL();
+    EXPECT_NEAR (lumH, std::get<0> (backdrop.toHSL()), 0.02f);
+    EXPECT_NEAR (lumS, std::get<1> (backdrop.toHSL()), 0.02f);
+    EXPECT_NEAR (lumL, std::get<2> (source.toHSL()), 0.02f);
+}
+
 TEST (ColorTests, MixWith_ModifiesInPlace)
 {
     Color base (255, 20, 40, 60);
@@ -1015,4 +1150,16 @@ TEST (ColorTests, MixWith_ModifiesInPlace)
     copy.mixWith (other, 0.35f, ColorSpace::SRGB);
     const auto expected = base.mixedWith (other, 0.35f, ColorSpace::SRGB);
     EXPECT_EQ (copy.getARGB(), expected.getARGB());
+}
+
+TEST (ColorTests, MixWith_RgbUsesSrcOver)
+{
+    const Color base (128, 40, 80, 120);
+    const Color other (200, 200, 20, 40);
+    const float amount = 0.3f;
+
+    auto rgbMix = base;
+    rgbMix.mixWith (other, amount, ColorSpace::RGB);
+    const auto expected = base.blendedWith (other.withMultipliedAlpha (amount), BlendMode::SrcOver);
+    EXPECT_EQ (rgbMix.getARGB(), expected.getARGB());
 }
