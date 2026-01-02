@@ -108,9 +108,9 @@ public:
     }
 
     /** Spaceship operator. */
-    constexpr auto operator<= > (const Color& other) const noexcept
+    constexpr auto operator<=> (const Color& other) const noexcept
     {
-        return data <= > other.data;
+        return data <=> other.data;
     }
 
     //==============================================================================
