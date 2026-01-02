@@ -27,6 +27,7 @@
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wtautological-pointer-compare"
+#pragma clang diagnostic ignored "-Wshorten-64-to-32"
 #endif
 
 #define CELT_ENCODER_C 1
@@ -34,7 +35,6 @@
 #include "opus_custom.h"
 #undef CELT_ENCODER_C
 #undef CELT_DECODER_C
-
 
 #include "celt/bands.c"
 #include "celt/celt.c"

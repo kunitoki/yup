@@ -28,6 +28,63 @@
 
 using namespace yup;
 
+namespace
+{
+uint8 toByte (double value)
+{
+    return static_cast<uint8> (roundToInt (jlimit (0.0, 1.0, value) * 255.0));
+}
+
+Color colorFromFloat (double r, double g, double b)
+{
+    return Color (255, toByte (r), toByte (g), toByte (b));
+}
+
+double blendChannelExpected (BlendMode mode, double backdrop, double source)
+{
+    switch (mode)
+    {
+        case BlendMode::SrcOver:
+            return source;
+        case BlendMode::Screen:
+            return 1.0 - (1.0 - backdrop) * (1.0 - source);
+        case BlendMode::Overlay:
+            return backdrop <= 0.5 ? 2.0 * backdrop * source : 1.0 - 2.0 * (1.0 - backdrop) * (1.0 - source);
+        case BlendMode::Darken:
+            return jmin (backdrop, source);
+        case BlendMode::Lighten:
+            return jmax (backdrop, source);
+        case BlendMode::ColorDodge:
+            return source >= 1.0 ? 1.0 : jmin (1.0, backdrop / (1.0 - source));
+        case BlendMode::ColorBurn:
+            return source <= 0.0 ? 0.0 : 1.0 - jmin (1.0, (1.0 - backdrop) / source);
+        case BlendMode::HardLight:
+            return source <= 0.5 ? 2.0 * backdrop * source : 1.0 - 2.0 * (1.0 - backdrop) * (1.0 - source);
+        case BlendMode::SoftLight:
+        {
+            if (source <= 0.5)
+                return backdrop - (1.0 - 2.0 * source) * backdrop * (1.0 - backdrop);
+
+            const double d = backdrop <= 0.25 ? ((16.0 * backdrop - 12.0) * backdrop + 4.0) * backdrop : std::sqrt (backdrop);
+            return backdrop + (2.0 * source - 1.0) * (d - backdrop);
+        }
+        case BlendMode::Difference:
+            return std::abs (backdrop - source);
+        case BlendMode::Exclusion:
+            return backdrop + source - 2.0 * backdrop * source;
+        case BlendMode::Multiply:
+            return backdrop * source;
+        case BlendMode::Hue:
+        case BlendMode::Saturation:
+        case BlendMode::Color:
+        case BlendMode::Luminosity:
+            return source;
+        default:
+            return source;
+    }
+}
+} // namespace
+
 TEST (ColorTests, Default_Constructor)
 {
     Color c;
@@ -91,7 +148,7 @@ TEST (ColorTests, Copy_And_Move_Constructors)
 TEST (ColorTests, Implicit_Conversion_To_Uint32)
 {
     Color c (0xff123456);
-    uint32 value = c;
+    uint32 value = (uint32) c;
     EXPECT_EQ (value, 0xff123456);
 }
 
@@ -277,6 +334,41 @@ TEST (ColorTests, HSL_Operations)
     // Test fromHSL with alpha
     Color fromHSLAlpha = Color::fromHSL (0.0f, 1.0f, 0.5f, 0.5f);
     EXPECT_EQ (fromHSLAlpha.getAlpha(), 127); // Implementation returns 127
+}
+
+TEST (ColorTests, HSLuv_Conversions)
+{
+    static constexpr float tol = 1.0e-4f;
+
+    const Color red (255, 0, 0);
+    const auto [h, s, l] = red.toHSLuv();
+
+    EXPECT_NEAR (h, 12.1770506f / 360.0f, tol);
+    EXPECT_NEAR (s, 1.0f, tol);
+    EXPECT_NEAR (l, 53.2371156f / 100.0f, tol);
+
+    const auto redRoundTrip = Color::fromHSLuv (h, s, l);
+    EXPECT_NEAR (redRoundTrip.getRed(), 255, 1);
+    EXPECT_NEAR (redRoundTrip.getGreen(), 0, 1);
+    EXPECT_NEAR (redRoundTrip.getBlue(), 0, 1);
+
+    const auto vivid = Color::fromHSLuv (0.0f, 1.0f, 0.5f);
+    EXPECT_NEAR (vivid.getRed(), 234, 1);
+    EXPECT_NEAR (vivid.getGreen(), 0, 1);
+    EXPECT_NEAR (vivid.getBlue(), 100, 1);
+
+    const Color slate (51, 102, 153);
+    const auto [h2, s2, l2] = slate.toHSLuv();
+    const auto slateRoundTrip = Color::fromHSLuv (h2, s2, l2);
+    EXPECT_NEAR (slateRoundTrip.getRed(), slate.getRed(), 2);
+    EXPECT_NEAR (slateRoundTrip.getGreen(), slate.getGreen(), 2);
+    EXPECT_NEAR (slateRoundTrip.getBlue(), slate.getBlue(), 2);
+
+    const auto grayA = Color::fromHSLuv (0.1f, 0.0f, 0.4f);
+    const auto grayB = Color::fromHSLuv (0.7f, 0.0f, 0.4f);
+    EXPECT_NEAR (grayA.getRed(), grayA.getGreen(), 1);
+    EXPECT_NEAR (grayA.getGreen(), grayA.getBlue(), 1);
+    EXPECT_NEAR (grayA.getRed(), grayB.getRed(), 1);
 }
 
 TEST (ColorTests, HSV_Operations)
@@ -841,24 +933,24 @@ TEST (ColorTests, FromHSV_AllSwitchCases)
     EXPECT_NO_THROW (boundary5.getRed());
 }
 
-TEST (ColorTests, OverlaidWith_AlphaBlending)
+TEST (ColorTests, BlendedWith_AlphaBlending)
 {
     // Test line 784-785: destAlpha <= 0
     Color transparent (0x00ff0000); // Fully transparent red
     Color opaqueSrc (0xff0000ff);   // Fully opaque blue
-    Color result1 = transparent.overlaidWith (opaqueSrc);
+    Color result1 = transparent.blendedWith (opaqueSrc, BlendMode::SrcOver);
     EXPECT_EQ (result1.getARGB(), opaqueSrc.getARGB()); // Should return src
 
     // Test line 789-790: resA <= 0
     Color fullyTransparent (0x00000000);
     Color alsoTransparent (0x00ffffff);
-    Color result2 = fullyTransparent.overlaidWith (alsoTransparent);
+    Color result2 = fullyTransparent.blendedWith (alsoTransparent, BlendMode::SrcOver);
     EXPECT_EQ (result2.getARGB(), alsoTransparent.getARGB()); // Should return src
 
     // Test normal blending (lines 792-796)
     Color semiDest (0x80ff0000); // Semi-transparent red
     Color semiSrc (0x800000ff);  // Semi-transparent blue
-    Color result3 = semiDest.overlaidWith (semiSrc);
+    Color result3 = semiDest.blendedWith (semiSrc, BlendMode::SrcOver);
     EXPECT_NE (result3.getARGB(), semiDest.getARGB()); // Should be blended
     EXPECT_NE (result3.getARGB(), semiSrc.getARGB());  // Should be blended
     EXPECT_GT (result3.getAlpha(), 0);                 // Should have some alpha
@@ -866,25 +958,208 @@ TEST (ColorTests, OverlaidWith_AlphaBlending)
     // Test with different alpha combinations
     Color dest1 (0xc0ff0000); // 75% opaque red
     Color src1 (0x400000ff);  // 25% opaque blue
-    Color result4 = dest1.overlaidWith (src1);
+    Color result4 = dest1.blendedWith (src1, BlendMode::SrcOver);
     EXPECT_GT (result4.getRed(), result4.getBlue()); // Red should dominate
 
     // Test with opaque dest and semi-transparent src
     Color opaqueDest (0xffff0000); // Fully opaque red
     Color semiSrc2 (0x800000ff);   // Semi-transparent blue
-    Color result5 = opaqueDest.overlaidWith (semiSrc2);
+    Color result5 = opaqueDest.blendedWith (semiSrc2, BlendMode::SrcOver);
     EXPECT_GT (result5.getRed(), 0);  // Should have red component
     EXPECT_GT (result5.getBlue(), 0); // Should have blue component
 
     // Test with semi-transparent dest and opaque src
     Color semiDest2 (0x80ff0000);  // Semi-transparent red
     Color opaqueSrc2 (0xff0000ff); // Fully opaque blue
-    Color result6 = semiDest2.overlaidWith (opaqueSrc2);
+    Color result6 = semiDest2.blendedWith (opaqueSrc2, BlendMode::SrcOver);
     EXPECT_EQ (result6.getBlue(), 255); // Blue should be dominant
 
     // Edge case: both nearly opaque
     Color nearlyOpaqueDest (0xfeff0000);
     Color nearlyOpaqueSrc (0xfe0000ff);
-    Color result7 = nearlyOpaqueDest.overlaidWith (nearlyOpaqueSrc);
+    Color result7 = nearlyOpaqueDest.blendedWith (nearlyOpaqueSrc, BlendMode::SrcOver);
     EXPECT_NO_THROW (result7.getRed()); // Should handle without issues
+}
+
+TEST (ColorTests, MixedWith_Spectral)
+{
+    Color red (255, 0, 0);
+    Color blue (0, 0, 255);
+
+    const auto mixed = red.mixedWith (blue, 0.5f);
+    EXPECT_EQ (mixed.getRed(), 73);
+    EXPECT_EQ (mixed.getGreen(), 24);
+    EXPECT_EQ (mixed.getBlue(), 42);
+
+    const auto same = red.mixedWith (red, 0.25f);
+    EXPECT_NEAR (same.getRed(), red.getRed(), 1);
+    EXPECT_NEAR (same.getGreen(), red.getGreen(), 1);
+    EXPECT_NEAR (same.getBlue(), red.getBlue(), 1);
+
+    const Color semi (128, 10, 20, 30);
+    const Color opaque (255, 10, 20, 30);
+    const auto mixedAlpha = semi.mixedWith (opaque, 0.25f);
+    EXPECT_EQ (mixedAlpha.getAlpha(), 160);
+    EXPECT_NEAR (mixedAlpha.getRed(), 10, 1);
+    EXPECT_NEAR (mixedAlpha.getGreen(), 20, 1);
+    EXPECT_NEAR (mixedAlpha.getBlue(), 30, 1);
+
+    const auto startMix = red.mixedWith (blue, 0.0f);
+    EXPECT_NEAR (startMix.getRed(), red.getRed(), 1);
+    EXPECT_NEAR (startMix.getGreen(), red.getGreen(), 1);
+    EXPECT_NEAR (startMix.getBlue(), red.getBlue(), 1);
+
+    const auto endMix = red.mixedWith (blue, 1.0f);
+    EXPECT_NEAR (endMix.getRed(), blue.getRed(), 1);
+    EXPECT_NEAR (endMix.getGreen(), blue.getGreen(), 1);
+    EXPECT_NEAR (endMix.getBlue(), blue.getBlue(), 1);
+
+    const auto mixAB = red.mixedWith (blue, 0.25f);
+    const auto mixBA = blue.mixedWith (red, 0.75f);
+    EXPECT_NEAR (mixAB.getRed(), mixBA.getRed(), 1);
+    EXPECT_NEAR (mixAB.getGreen(), mixBA.getGreen(), 1);
+    EXPECT_NEAR (mixAB.getBlue(), mixBA.getBlue(), 1);
+}
+
+TEST (ColorTests, Premultiplied_Unpremultiplied_RoundTrip)
+{
+    Color color (128, 64, 128, 192);
+    const auto premultiplied = color.premultiplied();
+
+    const float alpha = color.getAlphaFloat();
+    EXPECT_NEAR (premultiplied.getRedFloat(), color.getRedFloat() * alpha, 1.0f / 255.0f);
+    EXPECT_NEAR (premultiplied.getGreenFloat(), color.getGreenFloat() * alpha, 1.0f / 255.0f);
+    EXPECT_NEAR (premultiplied.getBlueFloat(), color.getBlueFloat() * alpha, 1.0f / 255.0f);
+    EXPECT_NEAR (premultiplied.getAlphaFloat(), alpha, 1.0f / 255.0f);
+
+    const auto restored = premultiplied.unpremultiplied();
+    EXPECT_NEAR (restored.getRedFloat(), color.getRedFloat(), 1.0f / 255.0f);
+    EXPECT_NEAR (restored.getGreenFloat(), color.getGreenFloat(), 1.0f / 255.0f);
+    EXPECT_NEAR (restored.getBlueFloat(), color.getBlueFloat(), 1.0f / 255.0f);
+    EXPECT_NEAR (restored.getAlphaFloat(), color.getAlphaFloat(), 1.0f / 255.0f);
+}
+
+TEST (ColorTests, Premultiplied_Unpremultiplied_ZeroAlpha)
+{
+    Color transparent (0, 10, 20, 30);
+    const auto premultiplied = transparent.premultiplied();
+    EXPECT_EQ (premultiplied.getARGB(), 0u);
+
+    const auto unpremultiplied = transparent.unpremultiplied();
+    EXPECT_EQ (unpremultiplied.getARGB(), 0u);
+}
+
+TEST (ColorTests, BlendWith_Opacity)
+{
+    const Color dest (255, 200, 0, 0);
+    const Color src (255, 0, 0, 200);
+
+    Color muted = dest;
+    muted.blendWith (src, BlendMode::SrcOver, 0.0f);
+    EXPECT_EQ (muted.getARGB(), dest.getARGB());
+
+    const auto expected = dest.blendedWith (src.withMultipliedAlpha (0.5f), BlendMode::SrcOver);
+    const auto blended = dest.blendedWith (src, BlendMode::SrcOver, 0.5f);
+    EXPECT_EQ (blended.getARGB(), expected.getARGB());
+}
+
+TEST (ColorTests, BlendWith_SrcAlphaZero_NoChange)
+{
+    const Color dest (200, 10, 20, 30);
+    const Color src (0, 200, 100, 50);
+    const auto blended = dest.blendedWith (src, BlendMode::SrcOver);
+    EXPECT_EQ (blended.getARGB(), dest.getARGB());
+}
+
+TEST (ColorTests, BlendWith_DestAlphaZero_ReturnsSrc)
+{
+    const Color dest (0, 10, 20, 30);
+    const Color src (100, 40, 50, 60);
+    const auto blended = dest.blendedWith (src, BlendMode::Screen);
+    EXPECT_EQ (blended.getARGB(), src.getARGB());
+}
+
+TEST (ColorTests, BlendWith_ChannelModes)
+{
+    const double backdropValue = 0.2;
+    const double sourceValue = 0.7;
+    const auto backdrop = colorFromFloat (backdropValue, backdropValue, backdropValue);
+    const auto source = colorFromFloat (sourceValue, sourceValue, sourceValue);
+
+    const BlendMode modes[] = {
+        BlendMode::SrcOver,
+        BlendMode::Screen,
+        BlendMode::Overlay,
+        BlendMode::Darken,
+        BlendMode::Lighten,
+        BlendMode::ColorDodge,
+        BlendMode::ColorBurn,
+        BlendMode::HardLight,
+        BlendMode::SoftLight,
+        BlendMode::Difference,
+        BlendMode::Exclusion,
+        BlendMode::Multiply
+    };
+
+    for (const auto mode : modes)
+    {
+        const auto blended = backdrop.blendedWith (source, mode);
+        const double expected = blendChannelExpected (mode, backdropValue, sourceValue);
+        EXPECT_NEAR (blended.getRedFloat(), expected, 1.0f / 255.0f);
+        EXPECT_NEAR (blended.getGreenFloat(), expected, 1.0f / 255.0f);
+        EXPECT_NEAR (blended.getBlueFloat(), expected, 1.0f / 255.0f);
+    }
+}
+
+TEST (ColorTests, BlendWith_HslModes)
+{
+    const auto backdrop = Color::fromHSL (0.1f, 0.7f, 0.4f);
+    const auto source = Color::fromHSL (0.7f, 0.3f, 0.8f);
+
+    const auto hueResult = backdrop.blendedWith (source, BlendMode::Hue);
+    const auto [hueH, hueS, hueL] = hueResult.toHSL();
+    EXPECT_NEAR (hueH, std::get<0> (source.toHSL()), 0.02f);
+    EXPECT_NEAR (hueS, std::get<1> (backdrop.toHSL()), 0.02f);
+    EXPECT_NEAR (hueL, std::get<2> (backdrop.toHSL()), 0.02f);
+
+    const auto satResult = backdrop.blendedWith (source, BlendMode::Saturation);
+    const auto [satH, satS, satL] = satResult.toHSL();
+    EXPECT_NEAR (satH, std::get<0> (backdrop.toHSL()), 0.02f);
+    EXPECT_NEAR (satS, std::get<1> (source.toHSL()), 0.02f);
+    EXPECT_NEAR (satL, std::get<2> (backdrop.toHSL()), 0.02f);
+
+    const auto colorResult = backdrop.blendedWith (source, BlendMode::Color);
+    const auto [colH, colS, colL] = colorResult.toHSL();
+    EXPECT_NEAR (colH, std::get<0> (source.toHSL()), 0.02f);
+    EXPECT_NEAR (colS, std::get<1> (source.toHSL()), 0.02f);
+    EXPECT_NEAR (colL, std::get<2> (backdrop.toHSL()), 0.02f);
+
+    const auto lumResult = backdrop.blendedWith (source, BlendMode::Luminosity);
+    const auto [lumH, lumS, lumL] = lumResult.toHSL();
+    EXPECT_NEAR (lumH, std::get<0> (backdrop.toHSL()), 0.02f);
+    EXPECT_NEAR (lumS, std::get<1> (backdrop.toHSL()), 0.02f);
+    EXPECT_NEAR (lumL, std::get<2> (source.toHSL()), 0.02f);
+}
+
+TEST (ColorTests, MixWith_ModifiesInPlace)
+{
+    Color base (255, 20, 40, 60);
+    const Color other (255, 200, 30, 10);
+
+    auto copy = base;
+    copy.mixWith (other, 0.35f, ColorSpace::SRGB);
+    const auto expected = base.mixedWith (other, 0.35f, ColorSpace::SRGB);
+    EXPECT_EQ (copy.getARGB(), expected.getARGB());
+}
+
+TEST (ColorTests, MixWith_RgbUsesSrcOver)
+{
+    const Color base (128, 40, 80, 120);
+    const Color other (200, 200, 20, 40);
+    const float amount = 0.3f;
+
+    auto rgbMix = base;
+    rgbMix.mixWith (other, amount, ColorSpace::RGB);
+    const auto expected = base.blendedWith (other.withMultipliedAlpha (amount), BlendMode::SrcOver);
+    EXPECT_EQ (rgbMix.getARGB(), expected.getARGB());
 }
