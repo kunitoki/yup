@@ -390,10 +390,10 @@ private:
         frequencySlider->setRange ({ 20.0, 22000.0 });
         frequencySlider->setSkewFactorFromMidpoint (440.0);
         frequencySlider->setValue (440.0);
-        frequencySlider->onValueChanged = [this] (float value)
+        frequencySlider->onValueChanged = [this] (double value)
         {
-            currentFrequency = value;
-            signalGenerator.setFrequency (value);
+            currentFrequency = (float) value;
+            signalGenerator.setFrequency ((float) value);
         };
         addAndMakeVisible (*frequencySlider);
 
@@ -401,10 +401,10 @@ private:
         amplitudeSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Amplitude");
         amplitudeSlider->setRange ({ 0.0, 1.0 });
         amplitudeSlider->setValue (0.5);
-        amplitudeSlider->onValueChanged = [this] (float value)
+        amplitudeSlider->onValueChanged = [this] (double value)
         {
-            currentAmplitude = value;
-            signalGenerator.setAmplitude (value);
+            currentAmplitude = (float) value;
+            signalGenerator.setAmplitude ((float) value);
         };
         addAndMakeVisible (*amplitudeSlider);
 
@@ -412,10 +412,10 @@ private:
         sweepDurationSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Sweep Duration");
         sweepDurationSlider->setRange ({ 1.0, 60.0 });
         sweepDurationSlider->setValue (10.0);
-        sweepDurationSlider->onValueChanged = [this] (float value)
+        sweepDurationSlider->onValueChanged = [this] (double value)
         {
-            sweepDurationSeconds = value;
-            signalGenerator.setSweepParameters (20.0, 22000.0, value);
+            sweepDurationSeconds = (float) value;
+            signalGenerator.setSweepParameters (20.0, 22000.0, (float) value);
         };
         addAndMakeVisible (*sweepDurationSlider);
 
@@ -466,9 +466,9 @@ private:
         releaseSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Release");
         releaseSlider->setRange ({ 0.0, 5.0 });
         releaseSlider->setValue (1.0);
-        releaseSlider->onValueChanged = [this] (float value)
+        releaseSlider->onValueChanged = [this] (double value)
         {
-            analyzerComponent.setReleaseTimeSeconds (value);
+            analyzerComponent.setReleaseTimeSeconds ((float) value);
         };
         addAndMakeVisible (*releaseSlider);
 
@@ -476,9 +476,9 @@ private:
         overlapSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Overlap");
         overlapSlider->setRange ({ 0.0, 0.95 });
         overlapSlider->setValue (0.75);
-        overlapSlider->onValueChanged = [this] (float value)
+        overlapSlider->onValueChanged = [this] (double value)
         {
-            analyzerComponent.setOverlapFactor (value);
+            analyzerComponent.setOverlapFactor ((float) value);
         };
         addAndMakeVisible (*overlapSlider);
 
@@ -486,9 +486,9 @@ private:
         smoothingSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Smoothing");
         smoothingSlider->setRange ({ 0.001, 0.5 });
         smoothingSlider->setValue (0.05);
-        smoothingSlider->onValueChanged = [this] (float value)
+        smoothingSlider->onValueChanged = [this] (double value)
         {
-            setSmoothingTime (value);
+            setSmoothingTime ((float) value);
         };
         addAndMakeVisible (*smoothingSlider);
 

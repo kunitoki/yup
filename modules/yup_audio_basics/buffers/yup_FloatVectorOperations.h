@@ -236,6 +236,10 @@ public:
     static void YUP_CALLTYPE convertDoubleToFloat (float* dest, const double* src, int num) noexcept;
     static void YUP_CALLTYPE convertDoubleToFloat (float* dest, const double* src, size_t num) noexcept;
 
+    /** Returns the normalized cross-correlation between two float vectors. */
+    static double YUP_CALLTYPE computeCorrelation (const float* a, const float* b, int num) noexcept;
+    static double YUP_CALLTYPE computeCorrelation (const float* a, const float* b, size_t num) noexcept;
+
     /** This method enables or disables the SSE/NEON flush-to-zero mode. */
     static void YUP_CALLTYPE enableFlushToZeroMode (bool shouldEnable) noexcept;
 

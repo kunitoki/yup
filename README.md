@@ -19,10 +19,19 @@
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
+  <a href="./examples/graphics/source/examples/ColorLab.h"><img src="./docs/images/yup_gradient_editor.png" style="width:46.8%;" /></a>
+  <a href="./examples/graphics/source/examples/ColorLab.h"><img src="./docs/images/yup_color_picker.png" style="width:51.8%;" /></a>
+</div>
+
+<div style="display: flex; width: 100%; flex-wrap: nowrap;">
   <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/images/yup_dsp_filter_rbj.png" style="width:26.5%;" /></a>
   <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/images/yup_dsp_filter_butter.png" style="width:26.5%;" /></a>
   <a href="./examples/graphics/source/examples/CrossoverDemo.h"><img src="./docs/images/yup_dsp_crossover.png" style="width:43.5%;" /></a>
 </div>
+
+<div style="display: flex; width: 100%; flex-wrap: nowrap;">
+  <a href="./examples/graphics/source/examples/AudioFileDemo.h"><img src="./docs/images/yup_audio_scope.png" style="width:99%;" /></a>
+</p>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
   <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_fill.png" style="width:99%;" /></a>
@@ -101,6 +110,23 @@ YUP brings a suite of powerful features, including:
 | **macOS**                | :white_check_mark: | :construction:     |                    |                    | :construction:            |                       |                       |
 | **Linux**                | :construction:     | :construction:     |                    |                    |                           |                       |                       |
 
+
+## Supported Sound Formats
+
+|                   | **Wav**            | **Wav64**          | **Mp3**            | **OGG**        | **Flac**           | **Opus**           | **AAC**            | **WMF**        |
+|-------------------|:------------------:|:------------------:|:------------------:|:--------------:|:------------------:|:------------------:|:------------------:|:--------------:|
+| **Windows** (enc) | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction: | :white_check_mark: | :white_check_mark: | :construction:     | :construction: |
+| **Windows** (dec) | :white_check_mark: | :white_check_mark: | :construction:     | :construction: | :white_check_mark: | :white_check_mark: | :construction:     | :construction: |
+| **macOS** (enc)   | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                |
+| **macOS** (dec)   | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                |
+| **Linux** (enc)   | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction: | :white_check_mark: | :white_check_mark: |                    |                |
+| **Linux** (dec)   | :white_check_mark: | :white_check_mark: | :construction:     | :construction: | :white_check_mark: | :white_check_mark: |                    |                |
+| **WASM** (enc)    | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction: | :white_check_mark: | :white_check_mark: |                    |                |
+| **WASM** (dec)    | :white_check_mark: | :white_check_mark: | :construction:     | :construction: | :white_check_mark: | :white_check_mark: |                    |                |
+| **Android** (enc) | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction: | :white_check_mark: | :white_check_mark: |                    |                |
+| **Android** (dec) | :white_check_mark: | :white_check_mark: | :construction:     | :construction: | :white_check_mark: | :white_check_mark: |                    |                |
+| **iOS** (enc)     | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                |
+| **iOS** (dec)     | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                |
 
 ## Prerequisites
 Before building, ensure you have a:

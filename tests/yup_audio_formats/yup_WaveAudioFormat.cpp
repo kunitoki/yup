@@ -21,6 +21,8 @@
 
 #include <yup_audio_formats/yup_audio_formats.h>
 
+#include "yup_AudioFormatTools.h"
+
 #include <gtest/gtest.h>
 
 using namespace yup;
@@ -57,81 +59,6 @@ const std::vector<String> getFailingWaveTestFiles()
         "addf8-GSM-GW.wav"
     };
 }
-
-struct AudioValidationResult
-{
-    bool hasClippedSamples = false;
-    bool hasExtremeValues = false;
-    float maxAbsValue = 0.0f;
-    float minValue = 0.0f;
-    float maxValue = 0.0f;
-    int clippedSampleCount = 0;
-    int extremeValueCount = 0;
-};
-
-AudioValidationResult validateAudioData (AudioFormatReader& reader)
-{
-    AudioValidationResult result;
-
-    if (reader.lengthInSamples <= 0)
-        return result;
-
-    // Read the entire file in chunks to validate all data
-    const int bufferSize = 4096;
-    AudioBuffer<float> buffer (static_cast<int> (reader.numChannels), bufferSize);
-
-    int64 samplesRemaining = reader.lengthInSamples;
-    int64 currentPos = 0;
-
-    while (samplesRemaining > 0)
-    {
-        const int samplesToRead = static_cast<int> (std::min ((int64) bufferSize, samplesRemaining));
-
-        if (! reader.read (&buffer, 0, samplesToRead, currentPos, true, true))
-            break;
-
-        // Check all channels and samples for extreme values
-        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
-        {
-            const float* channelData = buffer.getReadPointer (ch);
-
-            for (int sample = 0; sample < samplesToRead; ++sample)
-            {
-                const float value = channelData[sample];
-                const float absValue = std::abs (value);
-
-                // Update min/max tracking
-                result.minValue = std::min (result.minValue, value);
-                result.maxValue = std::max (result.maxValue, value);
-                result.maxAbsValue = std::max (result.maxAbsValue, absValue);
-
-                // Check for clipped samples - use a more realistic approach
-                // Only flag samples that are obviously clipped or corrupted
-                const float clipThreshold = 1.0001f; // Only flag if clearly exceeding normal range
-
-                if (absValue > clipThreshold)
-                {
-                    result.hasClippedSamples = true;
-                    result.clippedSampleCount++;
-                }
-
-                // Check for extreme values (beyond normal range, could indicate corruption)
-                const float extremeThreshold = 10.0f; // Way beyond normal audio range
-                if (absValue > extremeThreshold)
-                {
-                    result.hasExtremeValues = true;
-                    result.extremeValueCount++;
-                }
-            }
-        }
-
-        currentPos += samplesToRead;
-        samplesRemaining -= samplesToRead;
-    }
-
-    return result;
-}
-
 } // namespace
 
 class WaveAudioFormatTests : public ::testing::Test

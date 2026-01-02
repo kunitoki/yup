@@ -39,8 +39,10 @@
 
 #include "examples/Artboard.h"
 #include "examples/Audio.h"
+#include "examples/AudioFileDemo.h"
 #include "examples/CrossoverDemo.h"
 #include "examples/ConvolutionDemo.h"
+#include "examples/ColorLab.h"
 #include "examples/FilterDemo.h"
 #include "examples/LayoutFonts.h"
 #include "examples/FileChooser.h"
@@ -105,17 +107,16 @@ public:
         int counter = 0;
 
         registerDemo<AudioExample> ("Audio", counter++);
+        registerDemo<AudioFileDemo> ("Audio File", counter++);
         registerDemo<SpectrumAnalyzerDemo> ("FFT Analyzer", counter++);
         registerDemo<FilterDemo> ("Filter Demo", counter++);
         registerDemo<CrossoverDemo> ("Crossover Demo", counter++);
         registerDemo<ConvolutionDemo> ("Convolution Demo", counter++);
+        registerDemo<ColorLabDemo> ("Color Lab", counter++);
         registerDemo<LayoutFontsExample> ("Layout Fonts", counter++);
         registerDemo<VariableFontsExample> ("Variable Fonts", counter++);
         registerDemo<PathsExample> ("Paths", counter++);
         registerDemo<TextEditorDemo> ("Text Editor", counter++);
-#if YUP_MODULE_AVAILABLE_yup_python
-        registerDemo<PythonDemo> ("Python", counter++);
-#endif
         registerDemo<PopupMenuDemo> ("Popup Menu", counter++);
         registerDemo<FileChooserDemo> ("File Chooser", counter++);
         registerDemo<SliderDemo> ("Sliders", counter++);
@@ -125,6 +126,9 @@ public:
             jassert (artboard.loadArtboard());
         });
         registerDemo<OpaqueDemo> ("Opaque Demo", counter++);
+#if YUP_MODULE_AVAILABLE_yup_python
+        registerDemo<PythonDemo> ("Python", counter++);
+#endif
 
         {
             auto button = std::make_unique<yup::TextButton> ("SVG");

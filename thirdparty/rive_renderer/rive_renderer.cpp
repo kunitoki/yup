@@ -19,19 +19,21 @@
   ==============================================================================
 */
 
-#include "rive_renderer.h"
-
 #if __clang__
  #pragma clang diagnostic push
  #pragma clang diagnostic ignored "-Wshorten-64-to-32"
  #pragma clang diagnostic ignored "-Wattributes"
+ #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #elif __GNUC__
  #pragma GCC diagnostic push
  #pragma GCC diagnostic ignored "-Wattributes"
+ #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #elif _MSC_VER
  __pragma (warning (push))
  __pragma (warning (disable: 4244))
 #endif
+
+#include "rive_renderer.h"
 
 #include "source/rive_renderer.cpp"
 #include "source/render_context.cpp"

@@ -63,11 +63,11 @@ public:
             slider->setDefaultValue (axisInfo->defaultValue);
             slider->setRange ({ axisInfo->minimumValue, axisInfo->maximumValue });
             slider->setValue (axisInfo->defaultValue);
-            slider->onValueChanged = [this, index, offsetIndex] (float value)
+            slider->onValueChanged = [this, index, offsetIndex] (double value)
             {
                 updateLabel (index + offsetIndex);
 
-                this->font = this->font.withAxisValue (index, value);
+                this->font = this->font.withAxisValue (index, static_cast<float> (value));
 
                 resized();
                 repaint (textBounds);
@@ -168,11 +168,11 @@ private:
         slider->setDefaultValue (defaultValue);
         slider->setRange ({ minValue, maxValue });
         slider->setValue (defaultValue);
-        slider->onValueChanged = [this, index, &valueToSet] (float value)
+        slider->onValueChanged = [this, index, &valueToSet] (double value)
         {
             updateLabel (index);
 
-            valueToSet = value;
+            valueToSet = static_cast<float> (value);
 
             resized();
             repaint (textBounds);

@@ -135,7 +135,7 @@ Possible values:
   - (Optional) A list (space or comma-separated) of macro defines needed by this module.
 
 - searchpaths
-  - (Optional) A space-separated list of internal include paths, relative to the module's parent folder, which need to be added to a project's header search path.
+  - (Optional) A space-separated list of internal include paths, relative to the module's parent folder or the upstream checkout folder, which need to be added to a project's header search path.
 
 - [android|apple|ios|linux|mobile|msft|osx|wasm|win32|windows]CppStandard
   - (Optional) A number indicating the minimum C++ language standard that is required for this module and this platform exclusively. This must be just the standard number with no prefix e.g. 20 for C++20.
@@ -156,7 +156,7 @@ Possible values:
   - (Optional) A list (space or comma-separated) of link options needed by this module in a build.
 
 - [android|apple|ios|linux|mobile|msft|osx|wasm|win32|windows]Searchpaths
-  - (Optional) A space-separated list of internal include paths, relative to the module's parent folder, which need to be added to a project's header search path.
+  - (Optional) A space-separated list of internal include paths, relative to the module's parent folder or the upstream checkout folder, which need to be added to a project's header search path.
 
 - [ios|osx|apple]Frameworks
   - (Optional) A list (space or comma-separated) of iOS/macOS/Apple frameworks that are needed by this module.

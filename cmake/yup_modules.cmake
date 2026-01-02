@@ -17,8 +17,6 @@
 #
 # ==============================================================================
 
-#==============================================================================
-
 function (_yup_module_parse_config module_header output_module_configs output_module_user_configs)
     set (module_configs "")
     set (module_user_configs "")
@@ -54,6 +52,181 @@ function (_yup_module_parse_config module_header output_module_configs output_mo
 
     set (${output_module_configs} "${module_configs}" PARENT_SCOPE)
     set (${output_module_user_configs} "${module_user_configs}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_upstream_has_content module_name module_path output_variable)
+    _yup_collect_upstream_candidate_paths ("${module_name}" "${module_path}" candidate_paths)
+    foreach (candidate_path IN LISTS candidate_paths)
+        if (EXISTS "${candidate_path}")
+            file (GLOB upstream_items "${candidate_path}/*")
+            list (LENGTH upstream_items upstream_items_len)
+            if (upstream_items_len GREATER 0)
+                set (${output_variable} ON PARENT_SCOPE)
+                return()
+            endif()
+        endif()
+    endforeach()
+
+    set (${output_variable} OFF PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_get_upstream_path module_name module_path output_variable)
+    _yup_collect_upstream_candidate_paths ("${module_name}" "${module_path}" candidate_paths)
+    foreach (candidate_path IN LISTS candidate_paths)
+        if (EXISTS "${candidate_path}")
+            set (${output_variable} "${candidate_path}" PARENT_SCOPE)
+            return()
+        endif()
+    endforeach()
+
+    set (${output_variable} "" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_fetch_upstream module_name module_path module_upstream module_sha256 module_repository module_branch module_submodules output_target_variable)
+    if (NOT YUP_FETCH_UPSTREAM_MODULES)
+        return()
+    endif()
+
+    if (module_upstream AND module_repository)
+        _yup_message (FATAL_ERROR "Module ${module_name} defines both upstream and repository sources")
+    endif()
+
+    if (NOT module_upstream AND NOT module_repository)
+        return()
+    endif()
+
+    _yup_module_upstream_has_content ("${module_name}" "${module_path}" upstream_has_content)
+    if (upstream_has_content)
+        return()
+    endif()
+
+    _yup_message (STATUS "Fetching upstream sources for ${module_name}")
+
+    if (module_upstream)
+        set (download_dir "${CMAKE_BINARY_DIR}/_yup_upstream_downloads")
+        file (MAKE_DIRECTORY "${download_dir}")
+        get_filename_component (archive_name "${module_upstream}" NAME)
+        if ("${archive_name}" STREQUAL "")
+            set (archive_name "${module_name}.archive")
+        endif()
+        set (archive_path "${download_dir}/${archive_name}")
+
+        # SHOW_PROGRESS
+        if (module_sha256)
+            file (DOWNLOAD "${module_upstream}" "${archive_path}" EXPECTED_HASH SHA256=${module_sha256})
+        else()
+            file (DOWNLOAD "${module_upstream}" "${archive_path}")
+        endif()
+
+        set (extract_dir "${CMAKE_BINARY_DIR}/_yup_upstream_extract/${module_name}")
+        file (REMOVE_RECURSE "${extract_dir}")
+        file (MAKE_DIRECTORY "${extract_dir}")
+        file (ARCHIVE_EXTRACT INPUT "${archive_path}" DESTINATION "${extract_dir}")
+
+        file (GLOB extracted_entries RELATIVE "${extract_dir}" "${extract_dir}/*")
+        list (LENGTH extracted_entries extracted_entries_len)
+        set (source_dir "${extract_dir}")
+        if (extracted_entries_len EQUAL 1)
+            list (GET extracted_entries 0 single_entry)
+            if (IS_DIRECTORY "${extract_dir}/${single_entry}")
+                set (source_dir "${extract_dir}/${single_entry}")
+            endif()
+        endif()
+
+        set (upstream_target_dir "${CMAKE_BINARY_DIR}/externals/${module_name}/upstream")
+        file (REMOVE_RECURSE "${upstream_target_dir}")
+        file (MAKE_DIRECTORY "${upstream_target_dir}")
+        file (GLOB extracted_items "${source_dir}/*")
+        if (extracted_items)
+            file (COPY ${extracted_items} DESTINATION "${upstream_target_dir}")
+        endif()
+    else()
+        if (NOT module_branch)
+            set (module_branch "HEAD")
+        endif()
+
+        set (upstream_target_dir "${CMAKE_BINARY_DIR}/externals/${module_name}/upstream")
+        if (module_submodules)
+            set (module_submodules_recurse ON)
+        else()
+            set (module_submodules_recurse OFF)
+        endif()
+
+        file (MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/externals/${module_name}")
+
+        file (REMOVE_RECURSE "${upstream_target_dir}")
+        set (module_branch_value "${module_branch}")
+        string (STRIP "${module_branch_value}" module_branch_value)
+        string (REGEX REPLACE "^\"(.*)\"$" "\\1" module_branch_value "${module_branch_value}")
+        string (REGEX REPLACE "^'(.*)'$" "\\1" module_branch_value "${module_branch_value}")
+
+        if (module_branch_value AND NOT module_branch_value STREQUAL "HEAD")
+            string (REGEX MATCH "^[0-9a-fA-F]+$" module_branch_is_hex "${module_branch_value}")
+            string (LENGTH "${module_branch_value}" module_branch_length)
+            if (module_branch_is_hex AND module_branch_length GREATER_EQUAL 7 AND module_branch_length LESS_EQUAL 40)
+                set (module_branch_is_commit ON)
+            else()
+                set (module_branch_is_commit "")
+            endif()
+        else()
+            set (module_branch_is_commit "")
+        endif()
+
+        if (module_branch_is_commit)
+            execute_process (
+                COMMAND git clone -q --no-checkout "${module_repository}" "${upstream_target_dir}"
+                WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/externals/${module_name}"
+                RESULT_VARIABLE clone_result)
+            if (clone_result EQUAL 0)
+                execute_process (
+                    COMMAND git -c advice.detachedHead=false -C "${upstream_target_dir}" fetch -q --depth=1 origin "${module_branch_value}"
+                    RESULT_VARIABLE fetch_result)
+                execute_process (
+                    COMMAND git -c advice.detachedHead=false -C "${upstream_target_dir}" checkout -q "${module_branch_value}"
+                    RESULT_VARIABLE checkout_result)
+                if (module_submodules_recurse AND fetch_result EQUAL 0 AND checkout_result EQUAL 0)
+                    execute_process (
+                        COMMAND git -c advice.detachedHead=false -C "${upstream_target_dir}" submodule update --init --recursive --depth=1
+                        RESULT_VARIABLE submodule_result)
+                endif()
+            endif()
+        else()
+            set (clone_args git clone)
+            if (module_submodules_recurse)
+                list (APPEND clone_args --recurse-submodules --shallow-submodules)
+            endif()
+            list (APPEND clone_args -q --depth=1)
+            if (module_branch_value AND NOT module_branch_value STREQUAL "HEAD")
+                list (APPEND clone_args --branch "${module_branch_value}")
+            endif()
+            list (APPEND clone_args "${module_repository}" "${upstream_target_dir}")
+            execute_process (
+                COMMAND ${clone_args}
+                WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/externals/${module_name}"
+                RESULT_VARIABLE clone_result)
+        endif()
+
+        if (module_branch_is_commit)
+            if (NOT clone_result EQUAL 0 OR NOT fetch_result EQUAL 0 OR NOT checkout_result EQUAL 0)
+                _yup_message (FATAL_ERROR "Failed to clone ${module_repository} at commit ${module_branch} for ${module_name}")
+            endif()
+            if (module_submodules_recurse AND NOT submodule_result EQUAL 0)
+                _yup_message (FATAL_ERROR "Failed to update submodules for ${module_repository} at commit ${module_branch}")
+            endif()
+        else()
+            if (NOT clone_result EQUAL 0)
+                _yup_message (FATAL_ERROR "Failed to clone ${module_repository} for ${module_name}")
+            endif()
+        endif()
+
+        set (${output_target_variable} "" PARENT_SCOPE)
+    endif()
 endfunction()
 
 #==============================================================================
@@ -363,13 +536,36 @@ function (yup_add_module module_path modules_definitions module_group)
             _yup_boolean_property ("${value}" module_arc_enabled)
         elseif (${key} MATCHES "^needsPython$")
             _yup_boolean_property ("${value}" module_needs_python)
+        elseif (${key} MATCHES "^upstream$")
+            set (module_upstream "${value}")
+        elseif (${key} MATCHES "^sha256$")
+            set (module_sha256 "${value}")
+        elseif (${key} MATCHES "^repository$")
+            set (module_repository "${value}")
+        elseif (${key} MATCHES "^branch$")
+            set (module_branch "${value}")
+        elseif (${key} MATCHES "^submodules$")
+            _yup_boolean_property ("${value}" module_submodules)
         endif()
     endforeach()
 
     _yup_set_default (module_cpp_standard "20")
     _yup_set_default (module_arc_enabled OFF)
     _yup_set_default (module_needs_python OFF)
+    _yup_set_default (module_submodules ON)
     _yup_resolve_variable_paths ("${module_searchpaths}" module_searchpaths)
+
+    set (module_upstream_target "")
+    if (module_upstream OR module_repository)
+        _yup_module_upstream_has_content ("${module_name}" "${module_path}" upstream_has_content)
+        if (NOT upstream_has_content)
+            if (YUP_FETCH_UPSTREAM_MODULES)
+                _yup_module_fetch_upstream ("${module_name}" "${module_path}" "${module_upstream}" "${module_sha256}" "${module_repository}" "${module_branch}" "${module_submodules}" module_upstream_target)
+            else()
+                _yup_message (WARNING "Upstream sources for ${module_name} are missing and YUP_FETCH_UPSTREAM_MODULES is OFF")
+            endif()
+        endif()
+    endif()
 
     # ==== Setup Platform-Specific Configurations
     if (YUP_PLATFORM_IOS)
@@ -513,11 +709,24 @@ function (yup_add_module module_path modules_definitions module_group)
     get_filename_component (module_include_path ${module_path} DIRECTORY)
     list (APPEND module_include_paths "${module_include_path}")
 
+    if (module_upstream OR module_repository)
+        _yup_module_get_upstream_path ("${module_name}" "${module_path}" module_upstream_path)
+        if (module_upstream_path)
+            list (APPEND module_include_paths "${module_upstream_path}")
+        else()
+            list (APPEND module_include_paths "${CMAKE_BINARY_DIR}/externals/${module_name}/upstream")
+        endif()
+    endif()
+
     foreach (searchpath IN LISTS module_searchpaths)
         if (EXISTS "${searchpath}")
             list (APPEND module_include_paths "${searchpath}")
         elseif (EXISTS "${module_path}/${searchpath}")
             list (APPEND module_include_paths "${module_path}/${searchpath}")
+        elseif (module_upstream_path AND EXISTS "${module_upstream_path}/${searchpath}")
+            list (APPEND module_include_paths "${module_upstream_path}/${searchpath}")
+        elseif (module_upstream OR module_repository)
+            list (APPEND module_include_paths "${CMAKE_BINARY_DIR}/externals/${module_name}/upstream/${searchpath}")
         endif()
     endforeach()
 
@@ -557,6 +766,10 @@ function (yup_add_module module_path modules_definitions module_group)
                               "${module_frameworks}"
                               "${module_dependencies}"
                               "${module_arc_enabled}")
+
+    if (module_upstream_target)
+        add_dependencies (${module_name} "${module_upstream_target}")
+    endif()
 
     #set (${module_name}_Configs "${module_user_configs}")
     #set (${module_name}_Configs ${${module_name}_Configs} PARENT_SCOPE)
@@ -621,6 +834,9 @@ macro (yup_add_default_modules modules_path)
     yup_add_module (${modules_path}/thirdparty/oboe_library "${modules_definitions}" ${thirdparty_group})
     yup_add_module (${modules_path}/thirdparty/pffft_library "${modules_definitions}" ${thirdparty_group})
     yup_add_module (${modules_path}/thirdparty/dr_libs "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/opus_library "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/flac_library "${modules_definitions}" ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/hmp3_library "${modules_definitions}" ${thirdparty_group})
 
     # ==== Yup modules
     set (modules_group "Modules")
