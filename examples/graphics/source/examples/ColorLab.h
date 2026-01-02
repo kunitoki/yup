@@ -656,18 +656,18 @@ private:
         const auto& colorA = blendStartColor;
         const auto& colorB = blendEndColor;
 
-        const int steps = 10;
-        const float gap = 6.0f;
-        const float swatchWidth = (area.getWidth() - gap * (steps - 1)) / static_cast<float> (steps);
-        const float swatchHeight = area.getHeight() - 6.0f;
-
-        for (int i = 0; i < steps; ++i)
-        {
-            const float t = static_cast<float> (i) / static_cast<float> (steps - 1);
-            auto swatch = yup::Rectangle<float> (area.getX() + i * (swatchWidth + gap), area.getY(), swatchWidth, swatchHeight);
-            g.setFillColor (blendColors (colorA, colorB, t, mode));
-            g.fillRoundedRect (swatch, 8.0f);
-        }
+        const auto start = yup::Point<float> (area.getX(), area.getCenterY());
+        const auto end = yup::Point<float> (area.getRight(), area.getCenterY());
+        const auto colorSpace = mode == BlendMode::Spectral
+                                  ? yup::ColorSpace::Spectral
+                                  : (mode == BlendMode::Srgb ? yup::ColorSpace::SRGB : yup::ColorSpace::RGB);
+        const size_t steps = colorSpace == yup::ColorSpace::RGB ? 2 : (colorSpace == yup::ColorSpace::SRGB ? 24 : 48);
+        auto gradient = yup::ColorGradient::fromLinearColors (colorA, start, colorB, end, steps, yup::ColorGradient::Type::Linear, colorSpace);
+        g.setFillColorGradient (gradient);
+        g.fillRoundedRect (area, 8.0f);
+        g.setStrokeColor (yup::Colors::white.withAlpha (0.2f));
+        g.setStrokeWidth (1.0f);
+        g.strokeRoundedRect (area, 8.0f);
     }
 
     void drawHsluvPalette (yup::Graphics& g, yup::Rectangle<float> area)

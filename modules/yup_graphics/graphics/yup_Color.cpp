@@ -22,10 +22,11 @@
 namespace yup
 {
 
-//==============================================================================
-
 namespace
 {
+
+//==============================================================================
+
 int hexCharToInt (yup_wchar c) noexcept
 {
     return CharacterFunctions::getHexDigitValue (c);
@@ -197,6 +198,7 @@ Color parseNamedColor (const String& name)
 }
 
 //==============================================================================
+
 using DoubleRgb = std::array<double, 3>;
 using IntRgb = std::array<int, 3>;
 
@@ -375,38 +377,9 @@ void hsluvGetBounds (double l, std::array<HsluvBounds, 6>& bounds) noexcept
     }
 }
 
-double hsluvIntersectLineLine (const HsluvBounds& line1, const HsluvBounds& line2) noexcept
-{
-    return (line1.b - line2.b) / (line2.a - line1.a);
-}
-
-double hsluvDistanceFromPoleSquared (double x, double y) noexcept
-{
-    return x * x + y * y;
-}
-
 double hsluvRayLengthUntilIntersect (double theta, const HsluvBounds& line) noexcept
 {
     return line.b / (std::sin (theta) - line.a * std::cos (theta));
-}
-
-double hsluvMaxSafeChromaForL (double l) noexcept
-{
-    double minLenSquared = std::numeric_limits<double>::max();
-    std::array<HsluvBounds, 6> bounds;
-
-    hsluvGetBounds (l, bounds);
-    for (const auto& bound : bounds)
-    {
-        const HsluvBounds line2 = { -1.0 / bound.a, 0.0 };
-        const double x = hsluvIntersectLineLine (bound, line2);
-        const double distance = hsluvDistanceFromPoleSquared (x, bound.b + x * bound.a);
-
-        if (distance < minLenSquared)
-            minLenSquared = distance;
-    }
-
-    return std::sqrt (minLenSquared);
 }
 
 double hsluvMaxChromaForLH (double l, double h) noexcept
@@ -500,6 +473,7 @@ DoubleRgb hsluvFromRgb (double r, double g, double b) noexcept
 }
 
 //==============================================================================
+
 constexpr int spectralSampleCount = 38;
 constexpr double spectralGamma = 2.4;
 constexpr double spectralEpsilon = 0.00000001;
@@ -646,23 +620,264 @@ IntRgb spectralMix (const DoubleRgb& lrgb1, const DoubleRgb& lrgb2, double t) no
 
     return xyzToSrgb (reflectanceToXyz (reflectance));
 }
+
+//==============================================================================
+
+struct DoubleHsl
+{
+    double h = 0.0;
+    double s = 0.0;
+    double l = 0.0;
+};
+
+DoubleHsl rgbToHsl (const DoubleRgb& rgb) noexcept
+{
+    const double maxValue = jmax (rgb[0], rgb[1], rgb[2]);
+    const double minValue = jmin (rgb[0], rgb[1], rgb[2]);
+    const double l = (maxValue + minValue) * 0.5;
+
+    if (maxValue == minValue)
+        return { 0.0, 0.0, l };
+
+    const double d = maxValue - minValue;
+    const double s = l > 0.5 ? d / (2.0 - maxValue - minValue) : d / (maxValue + minValue);
+    double h = 0.0;
+
+    if (maxValue == rgb[0])
+        h = (rgb[1] - rgb[2]) / d + (rgb[1] < rgb[2] ? 6.0 : 0.0);
+    else if (maxValue == rgb[1])
+        h = (rgb[2] - rgb[0]) / d + 2.0;
+    else
+        h = (rgb[0] - rgb[1]) / d + 4.0;
+
+    h /= 6.0;
+    return { h, s, l };
+}
+
+DoubleRgb hslToRgb (const DoubleHsl& hsl) noexcept
+{
+    auto hueToRgb = [] (double p, double q, double t)
+    {
+        if (t < 0.0)
+            t += 1.0;
+        if (t > 1.0)
+            t -= 1.0;
+        if (t < 1.0 / 6.0)
+            return p + (q - p) * 6.0 * t;
+        if (t < 1.0 / 2.0)
+            return q;
+        if (t < 2.0 / 3.0)
+            return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+        return p;
+    };
+
+    double r = hsl.l;
+    double g = hsl.l;
+    double b = hsl.l;
+
+    if (hsl.s != 0.0)
+    {
+        const double q = hsl.l < 0.5 ? hsl.l * (1.0 + hsl.s) : hsl.l + hsl.s - hsl.l * hsl.s;
+        const double p = 2.0 * hsl.l - q;
+        r = hueToRgb (p, q, hsl.h + 1.0 / 3.0);
+        g = hueToRgb (p, q, hsl.h);
+        b = hueToRgb (p, q, hsl.h - 1.0 / 3.0);
+    }
+
+    return { r, g, b };
+}
+
+double blendChannel (BlendMode mode, double backdrop, double source) noexcept
+{
+    switch (mode)
+    {
+        case BlendMode::SrcOver:
+            return source;
+        case BlendMode::Screen:
+            return 1.0 - (1.0 - backdrop) * (1.0 - source);
+        case BlendMode::Overlay:
+            return backdrop <= 0.5 ? 2.0 * backdrop * source : 1.0 - 2.0 * (1.0 - backdrop) * (1.0 - source);
+        case BlendMode::Darken:
+            return jmin (backdrop, source);
+        case BlendMode::Lighten:
+            return jmax (backdrop, source);
+        case BlendMode::ColorDodge:
+            return source >= 1.0 ? 1.0 : jmin (1.0, backdrop / (1.0 - source));
+        case BlendMode::ColorBurn:
+            return source <= 0.0 ? 0.0 : 1.0 - jmin (1.0, (1.0 - backdrop) / source);
+        case BlendMode::HardLight:
+            return source <= 0.5 ? 2.0 * backdrop * source : 1.0 - 2.0 * (1.0 - backdrop) * (1.0 - source);
+        case BlendMode::SoftLight:
+        {
+            if (source <= 0.5)
+                return backdrop - (1.0 - 2.0 * source) * backdrop * (1.0 - backdrop);
+
+            const double d = backdrop <= 0.25 ? ((16.0 * backdrop - 12.0) * backdrop + 4.0) * backdrop : std::sqrt (backdrop);
+            return backdrop + (2.0 * source - 1.0) * (d - backdrop);
+        }
+        case BlendMode::Difference:
+            return std::abs (backdrop - source);
+        case BlendMode::Exclusion:
+            return backdrop + source - 2.0 * backdrop * source;
+        case BlendMode::Multiply:
+            return backdrop * source;
+        case BlendMode::Hue:
+        case BlendMode::Saturation:
+        case BlendMode::Color:
+        case BlendMode::Luminosity:
+            return source;
+        default:
+            return source;
+    }
+}
+
+DoubleRgb blendRgb (BlendMode mode, const DoubleRgb& backdrop, const DoubleRgb& source) noexcept
+{
+    if (mode == BlendMode::Hue || mode == BlendMode::Saturation || mode == BlendMode::Color || mode == BlendMode::Luminosity)
+    {
+        const auto hslBackdrop = rgbToHsl (backdrop);
+        const auto hslSource = rgbToHsl (source);
+        DoubleHsl blended = hslBackdrop;
+
+        if (mode == BlendMode::Hue)
+            blended.h = hslSource.h;
+        else if (mode == BlendMode::Saturation)
+            blended.s = hslSource.s;
+        else if (mode == BlendMode::Color)
+        {
+            blended.h = hslSource.h;
+            blended.s = hslSource.s;
+        }
+        else if (mode == BlendMode::Luminosity)
+            blended.l = hslSource.l;
+
+        return hslToRgb (blended);
+    }
+
+    return {
+        blendChannel (mode, backdrop[0], source[0]),
+        blendChannel (mode, backdrop[1], source[1]),
+        blendChannel (mode, backdrop[2], source[2])
+    };
+}
 } // namespace
 
 //==============================================================================
 
-Color Color::mixedWith (Color other, float amount) const noexcept
+Color& Color::mixWith (Color other, float amount, ColorSpace space) noexcept
 {
     const float clamped = jlimit (0.0f, 1.0f, amount);
+
+    if (space == ColorSpace::RGB)
+    {
+        if (clamped <= 0.0f)
+            return *this;
+
+        if (clamped >= 1.0f)
+        {
+            *this = other;
+            return *this;
+        }
+
+        return blendWith (other.withMultipliedAlpha (clamped), BlendMode::SrcOver);
+    }
+
+    if (space == ColorSpace::SRGB)
+    {
+        const double ra = getRedFloat();
+        const double ga = getGreenFloat();
+        const double ba = getBlueFloat();
+        const double rb = other.getRedFloat();
+        const double gb = other.getGreenFloat();
+        const double bb = other.getBlueFloat();
+
+        const float outA = getAlphaFloat() + (other.getAlphaFloat() - getAlphaFloat()) * clamped;
+        const float outR = static_cast<float> (ra + (rb - ra) * clamped);
+        const float outG = static_cast<float> (ga + (gb - ga) * clamped);
+        const float outB = static_cast<float> (ba + (bb - ba) * clamped);
+
+        a = normalizedToComponent (outA);
+        r = normalizedToComponent (outR);
+        g = normalizedToComponent (outG);
+        b = normalizedToComponent (outB);
+        return *this;
+    }
+
     const auto mixed = spectralMix (srgbToLinear (*this), srgbToLinear (other), static_cast<double> (clamped));
     const float alpha = getAlphaFloat() + (other.getAlphaFloat() - getAlphaFloat()) * clamped;
 
-    return {
-        normalizedToComponent (alpha),
-        static_cast<uint8> (mixed[0]),
-        static_cast<uint8> (mixed[1]),
-        static_cast<uint8> (mixed[2])
-    };
+    a = normalizedToComponent (alpha);
+    r = static_cast<uint8> (mixed[0]);
+    g = static_cast<uint8> (mixed[1]);
+    b = static_cast<uint8> (mixed[2]);
+    return *this;
 }
+
+Color Color::mixedWith (Color other, float amount, ColorSpace space) const noexcept
+{
+    Color result (*this);
+    result.mixWith (other, amount, space);
+    return result;
+}
+
+//==============================================================================
+
+Color& Color::blendWith (Color src, BlendMode mode) noexcept
+{
+    const double srcAlpha = src.getAlphaFloat();
+    const double destAlpha = getAlphaFloat();
+
+    if (destAlpha <= 0.0)
+    {
+        *this = src;
+        return *this;
+    }
+
+    if (srcAlpha <= 0.0)
+        return *this;
+
+    const DoubleRgb dest = { getRedFloat(), getGreenFloat(), getBlueFloat() };
+    const DoubleRgb source = { src.getRedFloat(), src.getGreenFloat(), src.getBlueFloat() };
+    const DoubleRgb blended = blendRgb (mode, dest, source);
+
+    const double outAlpha = srcAlpha + destAlpha - srcAlpha * destAlpha;
+    if (outAlpha <= 0.0)
+    {
+        a = 0;
+        r = 0;
+        g = 0;
+        b = 0;
+        return *this;
+    }
+
+    auto compositeChannel = [srcAlpha, destAlpha, outAlpha] (double cb, double cs, double bb)
+    {
+        const double co = (1.0 - srcAlpha) * cb * destAlpha
+                        + (1.0 - destAlpha) * cs * srcAlpha
+                        + destAlpha * srcAlpha * bb;
+        return jlimit (0.0, 1.0, co / outAlpha);
+    };
+
+    const float outR = static_cast<float> (compositeChannel (dest[0], source[0], blended[0]));
+    const float outG = static_cast<float> (compositeChannel (dest[1], source[1], blended[1]));
+    const float outB = static_cast<float> (compositeChannel (dest[2], source[2], blended[2]));
+    const float outA = static_cast<float> (jlimit (0.0, 1.0, outAlpha));
+
+    r = normalizedToComponent (outR);
+    g = normalizedToComponent (outG);
+    b = normalizedToComponent (outB);
+    a = normalizedToComponent (outA);
+    return *this;
+}
+
+Color Color::blendedWith (Color src, BlendMode mode) const noexcept
+{
+    Color result (*this);
+    result.blendWith (src, mode);
+    return result;
+}
+
+//==============================================================================
 
 std::tuple<float, float, float> Color::toHSLuv() const noexcept
 {

@@ -876,24 +876,24 @@ TEST (ColorTests, FromHSV_AllSwitchCases)
     EXPECT_NO_THROW (boundary5.getRed());
 }
 
-TEST (ColorTests, OverlaidWith_AlphaBlending)
+TEST (ColorTests, BlendedWith_AlphaBlending)
 {
     // Test line 784-785: destAlpha <= 0
     Color transparent (0x00ff0000); // Fully transparent red
     Color opaqueSrc (0xff0000ff);   // Fully opaque blue
-    Color result1 = transparent.overlaidWith (opaqueSrc);
+    Color result1 = transparent.blendedWith (opaqueSrc, BlendMode::SrcOver);
     EXPECT_EQ (result1.getARGB(), opaqueSrc.getARGB()); // Should return src
 
     // Test line 789-790: resA <= 0
     Color fullyTransparent (0x00000000);
     Color alsoTransparent (0x00ffffff);
-    Color result2 = fullyTransparent.overlaidWith (alsoTransparent);
+    Color result2 = fullyTransparent.blendedWith (alsoTransparent, BlendMode::SrcOver);
     EXPECT_EQ (result2.getARGB(), alsoTransparent.getARGB()); // Should return src
 
     // Test normal blending (lines 792-796)
     Color semiDest (0x80ff0000); // Semi-transparent red
     Color semiSrc (0x800000ff);  // Semi-transparent blue
-    Color result3 = semiDest.overlaidWith (semiSrc);
+    Color result3 = semiDest.blendedWith (semiSrc, BlendMode::SrcOver);
     EXPECT_NE (result3.getARGB(), semiDest.getARGB()); // Should be blended
     EXPECT_NE (result3.getARGB(), semiSrc.getARGB());  // Should be blended
     EXPECT_GT (result3.getAlpha(), 0);                 // Should have some alpha
@@ -901,26 +901,26 @@ TEST (ColorTests, OverlaidWith_AlphaBlending)
     // Test with different alpha combinations
     Color dest1 (0xc0ff0000); // 75% opaque red
     Color src1 (0x400000ff);  // 25% opaque blue
-    Color result4 = dest1.overlaidWith (src1);
+    Color result4 = dest1.blendedWith (src1, BlendMode::SrcOver);
     EXPECT_GT (result4.getRed(), result4.getBlue()); // Red should dominate
 
     // Test with opaque dest and semi-transparent src
     Color opaqueDest (0xffff0000); // Fully opaque red
     Color semiSrc2 (0x800000ff);   // Semi-transparent blue
-    Color result5 = opaqueDest.overlaidWith (semiSrc2);
+    Color result5 = opaqueDest.blendedWith (semiSrc2, BlendMode::SrcOver);
     EXPECT_GT (result5.getRed(), 0);  // Should have red component
     EXPECT_GT (result5.getBlue(), 0); // Should have blue component
 
     // Test with semi-transparent dest and opaque src
     Color semiDest2 (0x80ff0000);  // Semi-transparent red
     Color opaqueSrc2 (0xff0000ff); // Fully opaque blue
-    Color result6 = semiDest2.overlaidWith (opaqueSrc2);
+    Color result6 = semiDest2.blendedWith (opaqueSrc2, BlendMode::SrcOver);
     EXPECT_EQ (result6.getBlue(), 255); // Blue should be dominant
 
     // Edge case: both nearly opaque
     Color nearlyOpaqueDest (0xfeff0000);
     Color nearlyOpaqueSrc (0xfe0000ff);
-    Color result7 = nearlyOpaqueDest.overlaidWith (nearlyOpaqueSrc);
+    Color result7 = nearlyOpaqueDest.blendedWith (nearlyOpaqueSrc, BlendMode::SrcOver);
     EXPECT_NO_THROW (result7.getRed()); // Should handle without issues
 }
 

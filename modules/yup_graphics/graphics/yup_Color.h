@@ -23,6 +23,15 @@ namespace yup
 {
 
 //==============================================================================
+/** Enumeration for color spaces. */
+enum class ColorSpace : unsigned int
+{
+    RGB,     ///< Standard RGB color space.
+    SRGB,    ///< Standard sRGB color space with gamma correction.
+    Spectral ///< Spectral color space for accurate color representation based on light spectra.
+};
+
+//==============================================================================
 /** Represents an RGBA color for graphical use.
 
     This class encapsulates color information in RGBA format, where each component (red, green, blue, alpha)
@@ -720,18 +729,49 @@ public:
     }
 
     //==============================================================================
-    /** Mixes this color with another using a spectral (reflectance) model.
+    /** Mixes this color with another using a selectable color space.
 
-        This method performs spectral upsampling of the two colors, mixes their reflectances using a
-        Kubelka-Munk model, and converts the result back to sRGB. The result usually produces more
+        This method can perform spectral upsampling of the two colors, mix their reflectances using a
+        Kubelka-Munk model, and convert the result back to sRGB. The result usually produces more
         natural, pigment-like blends than a linear RGB interpolation. Alpha is interpolated linearly.
+        RGB uses alpha compositing, SRGB uses a direct sRGB interpolation, and Spectral uses the
+        reflectance model.
 
         @param other The color to mix with this color.
         @param amount The mix factor in the range [0, 1], where 0 returns this color and 1 returns the other.
+        @param space The color space used for mixing.
 
-        @return A new Color object representing the spectrally mixed result.
+        @return A new Color object representing the mixed result.
     */
-    Color mixedWith (Color other, float amount) const noexcept;
+    Color mixedWith (Color other, float amount, ColorSpace space = ColorSpace::Spectral) const noexcept;
+
+    /** Mixes this color with another, updating the current object.
+
+        @param other The color to mix with this color.
+        @param amount The mix factor in the range [0, 1], where 0 returns this color and 1 returns the other.
+        @param space The color space used for mixing.
+
+        @return A reference to this color object.
+    */
+    Color& mixWith (Color other, float amount, ColorSpace space = ColorSpace::Spectral) noexcept;
+
+    /** Blends this color with another using a blend mode.
+
+        @param src The source color to composite over this color.
+        @param mode The blend mode to use.
+
+        @return A reference to this color object.
+    */
+    Color& blendWith (Color src, BlendMode mode = BlendMode::SrcOver) noexcept;
+
+    /** Blends this color with another using a blend mode.
+
+        @param src The source color to composite over this color.
+        @param mode The blend mode to use.
+
+        @return A new Color object containing the blended result.
+    */
+    Color blendedWith (Color src, BlendMode mode = BlendMode::SrcOver) const noexcept;
 
     //==============================================================================
     /** Returns a contrasting color.
@@ -814,25 +854,6 @@ public:
         Color result (*this);
         result.invertAlpha();
         return result;
-    }
-
-    //==============================================================================
-    constexpr Color overlaidWith (Color src) const noexcept
-    {
-        auto destAlpha = getAlpha();
-        if (destAlpha <= 0)
-            return src;
-
-        auto invA = 0xff - static_cast<int> (src.getAlpha());
-        auto resA = 0xff - (((0xff - destAlpha) * invA) >> 8);
-        if (resA <= 0)
-            return *this;
-
-        auto da = (invA * destAlpha) / resA;
-        return Color ((uint8) resA,
-                      (uint8) (src.getRed() + ((((int) getRed() - src.getRed()) * da) >> 8)),
-                      (uint8) (src.getGreen() + ((((int) getGreen() - src.getGreen()) * da) >> 8)),
-                      (uint8) (src.getBlue() + ((((int) getBlue() - src.getBlue()) * da) >> 8)));
     }
 
     //==============================================================================

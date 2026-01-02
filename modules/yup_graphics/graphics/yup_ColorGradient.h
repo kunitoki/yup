@@ -133,6 +133,23 @@ public:
         }
     }
 
+    /** Constructs a gradient with multiple color stops.
+
+        @param type The type of gradient (Linear or Radial).
+        @param colorStops Initializer list of ColorStop objects defining the gradient.
+    */
+    ColorGradient (Type type, std::initializer_list<ColorStop> colorStops) noexcept
+        : type (type)
+        , stops (std::move (colorStops))
+    {
+        if (type == Radial && stops.size() >= 2)
+        {
+            const auto& first = stops.front();
+            const auto& last = stops.back();
+            radius = std::sqrt (square (last.x - first.x) + square (last.y - first.y));
+        }
+    }
+
     //==============================================================================
     /** Copy and move constructors and assignment operators. */
     ColorGradient (const ColorGradient& other) = default;
@@ -398,8 +415,8 @@ public:
     /** Constructs a gradient with evenly spaced color stops generated from two colors.
 
         This helper creates a gradient containing a specified number of stops in linear position space.
-        Colors are generated using Color::mixedWith, which provides perceptual blending. The stops are
-        placed along the line between the start and end positions.
+        Colors are generated using Color::mixedWith for sRGB and spectral spaces, while RGB produces only
+        the start/end stops. The stops are placed along the line between the start and end positions.
 
         @param color1 The starting color of the gradient.
         @param x1 The x-coordinate of the starting color.
@@ -409,6 +426,7 @@ public:
         @param y2 The y-coordinate of the ending color.
         @param numColors The number of color stops to generate (including start and end).
         @param type The type of gradient (Linear or Radial).
+        @param colorSpace The color space used for mixing.
 
         @return A ColorGradient with evenly spaced stops between the given colors.
     */
@@ -419,13 +437,19 @@ public:
                                            float x2,
                                            float y2,
                                            size_t numColors,
-                                           Type type = Type::Linear) noexcept
+                                           Type type = Type::Linear,
+                                           ColorSpace colorSpace = ColorSpace::Spectral) noexcept
     {
         if (numColors == 0)
             return ColorGradient (type, {});
 
         if (numColors == 1)
             return ColorGradient (type, { ColorStop (color1, x1, y1, 0.0f) });
+
+        if (colorSpace == ColorSpace::RGB)
+        {
+            return ColorGradient (type, { ColorStop (color1, x1, y1, 0.0f), ColorStop (color2, x2, y2, 1.0f) });
+        }
 
         std::vector<ColorStop> colorStops;
         colorStops.reserve (numColors);
@@ -436,7 +460,7 @@ public:
         for (size_t i = 0; i < numColors; ++i)
         {
             const float t = static_cast<float> (i) * step;
-            colorStops.emplace_back (color1.mixedWith (color2, t), line.pointAlong (t), t);
+            colorStops.emplace_back (color1.mixedWith (color2, t, colorSpace), line.pointAlong (t), t);
         }
 
         return ColorGradient (type, std::move (colorStops));
@@ -445,8 +469,8 @@ public:
     /** Constructs a gradient with evenly spaced color stops generated from two colors.
 
         This helper creates a gradient containing a specified number of stops in linear position space.
-        Colors are generated using Color::mixedWith, which provides perceptual blending. The stops are
-        placed along the line between the start and end positions.
+        Colors are generated using Color::mixedWith for sRGB and spectral spaces, while RGB produces only
+        the start/end stops. The stops are placed along the line between the start and end positions.
 
         @param color1 The starting color of the gradient.
         @param p1 The point of the starting color.
@@ -454,6 +478,7 @@ public:
         @param p2 The point of the ending color.
         @param numColors The number of color stops to generate (including start and end).
         @param type The type of gradient (Linear or Radial).
+        @param colorSpace The color space used for mixing.
 
         @return A ColorGradient with evenly spaced stops between the given colors.
     */
@@ -462,9 +487,10 @@ public:
                                            Color color2,
                                            const Point<float>& p2,
                                            size_t numColors,
-                                           Type type = Type::Linear) noexcept
+                                           Type type = Type::Linear,
+                                           ColorSpace colorSpace = ColorSpace::Spectral) noexcept
     {
-        return fromLinearColors (color1, p1.getX(), p1.getY(), color2, p2.getX(), p2.getY(), numColors, type);
+        return fromLinearColors (color1, p1.getX(), p1.getY(), color2, p2.getX(), p2.getY(), numColors, type, colorSpace);
     }
 
 private:

@@ -824,7 +824,7 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
             if (isPressed)
                 fillColor = pressedColor;
             if (isOver && ! isPressed)
-                fillColor = whiteKeyColor.overlaidWith (pressedColor.withAlpha (0.3f));
+                fillColor = whiteKeyColor.blendedWith (pressedColor.withAlpha (0.3f), BlendMode::SrcOver);
 
             // Fill the key
             g.setFillColor (fillColor);
@@ -916,7 +916,7 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
             if (isPressed)
                 fillColor = blackPressedColor;
             if (isOver && ! isPressed)
-                fillColor = blackKeyColor.overlaidWith (blackPressedColor.withAlpha (0.3f));
+                fillColor = blackKeyColor.blendedWith (blackPressedColor.withAlpha (0.3f), BlendMode::SrcOver);
 
             // Fill the key
             g.setFillColor (fillColor);
