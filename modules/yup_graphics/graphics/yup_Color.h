@@ -101,6 +101,19 @@ public:
     constexpr Color& operator= (Color&& other) noexcept = default;
 
     //==============================================================================
+    /** Equality operator. */
+    constexpr bool operator== (const Color& other) const noexcept
+    {
+        return data == other.data;
+    }
+
+    /** Spaceship operator. */
+    constexpr auto operator<= > (const Color& other) const noexcept
+    {
+        return data <= > other.data;
+    }
+
+    //==============================================================================
     /** Returns the color as a 32-bit integer in ARGB format.
 
         @return The color as a 32-bit integer.
@@ -110,13 +123,13 @@ public:
         return data;
     }
 
-    /** Implicit conversion to a 32-bit integer.
+    /** Explicit conversion to a 32-bit integer.
 
         Allows the color to be used wherever a 32-bit integer color is expected.
 
         @return The color as a 32-bit integer.
     */
-    constexpr operator uint32() const noexcept
+    constexpr explicit operator uint32() const noexcept
     {
         return data;
     }
@@ -196,22 +209,89 @@ public:
         return { alpha, r, g, b };
     }
 
-    // TODO - doxygen
+    /** Returns a new color with the specified alpha value.
+
+        This method creates a new color with the same red, green, and blue values but a different alpha.
+
+        @param alpha The new alpha value, normalized to the range [0, 1].
+
+        @return A new color with the specified alpha value.
+    */
     constexpr Color withAlpha (float alpha) const noexcept
     {
         return { normalizedToComponent (alpha), r, g, b };
     }
 
-    // TODO - doxygen
+    /** Returns a new color with the alpha value multiplied by the specified amount.
+
+        This method creates a new color with the same red, green, and blue values but with the alpha value multiplied by the given amount.
+
+        @param alpha The amount to multiply the alpha value by, as an 8-bit integer.
+
+        @return A new color with the multiplied alpha value.
+    */
     constexpr Color withMultipliedAlpha (uint8 alpha) const noexcept
     {
         return { normalizedToComponent (componentToNormalized (a) * componentToNormalized (alpha)), r, g, b };
     }
 
-    // TODO - doxygen
+    /** Returns a new color with the alpha value multiplied by the specified amount.
+
+        This method creates a new color with the same red, green, and blue values but with the alpha value multiplied by the given amount.
+
+        @param alpha The amount to multiply the alpha value by, as a floating point value.
+
+        @return A new color with the multiplied alpha value.
+    */
     constexpr Color withMultipliedAlpha (float alpha) const noexcept
     {
         return { normalizedToComponent (componentToNormalized (a) * alpha), r, g, b };
+    }
+
+    //==============================================================================
+    /** Premultiply alpha in this color. */
+    constexpr Color& premultiply() noexcept
+    {
+        const float alpha = getAlphaFloat();
+        r = normalizedToComponent (getRedFloat() * alpha);
+        g = normalizedToComponent (getGreenFloat() * alpha);
+        b = normalizedToComponent (getBlueFloat() * alpha);
+        return *this;
+    }
+
+    /** Returns a premultiplied alpha version of this color. */
+    constexpr Color premultiplied() const noexcept
+    {
+        Color result (*this);
+        result.premultiply();
+        return result;
+    }
+
+    /** Unpremultiply alpha in this color. */
+    constexpr Color& unpremultiply() noexcept
+    {
+        const float alpha = getAlphaFloat();
+        if (alpha <= 0.0f)
+        {
+            a = 0;
+            r = 0;
+            g = 0;
+            b = 0;
+            return *this;
+        }
+
+        r = normalizedToComponent (getRedFloat() / alpha);
+        g = normalizedToComponent (getGreenFloat() / alpha);
+        b = normalizedToComponent (getBlueFloat() / alpha);
+        return *this;
+    }
+
+    /** Returns an unpremultiplied alpha version of this color. */
+    constexpr Color unpremultiplied() const noexcept
+    {
+        Color result (*this);
+        result.unpremultiply();
+        return result;
     }
 
     //==============================================================================
@@ -270,7 +350,14 @@ public:
         return { a, red, g, b };
     }
 
-    // TODO - doxygen
+    /** Returns a new color with the specified red value.
+
+        This method creates a new color with the same green, blue, and alpha values but a different red.
+
+        @param red The new red value, normalized to the range [0, 1].
+
+        @return A new color with the specified red value.
+    */
     constexpr Color withRed (float red) const noexcept
     {
         return { a, normalizedToComponent (red), g, b };
@@ -332,7 +419,14 @@ public:
         return { a, r, green, b };
     }
 
-    // TODO - doxygen
+    /** Returns a new color with the specified green value.
+
+        This method creates a new color with the same red, blue, and alpha values but a different green.
+
+        @param green The new green value, normalized to the range [0, 1].
+
+        @return A new color with the specified green value.
+    */
     constexpr Color withGreen (float green) const noexcept
     {
         return { a, r, normalizedToComponent (green), b };
@@ -394,7 +488,14 @@ public:
         return { a, r, g, blue };
     }
 
-    // TODO - doxygen
+    /** Returns a new color with the specified blue value.
+
+        This method creates a new color with the same red, green, and alpha values but a different blue.
+
+        @param blue The new blue value, normalized to the range [0, 1].
+
+        @return A new color with the specified blue value.
+    */
     constexpr Color withBlue (float blue) const noexcept
     {
         return { a, r, g, normalizedToComponent (blue) };
@@ -479,6 +580,172 @@ public:
     }
 
     //==============================================================================
+    /** Returns a contrasting color.
+
+        This method calculates a color that contrasts with the current color based on its luminance.
+        It is particularly useful for ensuring text or UI elements are readable when placed on backgrounds of varying colors.
+
+        @return A new Color object that contrasts with the current color.
+    */
+    constexpr Color contrasting() const noexcept
+    {
+        return contrasting (0.5f);
+    }
+
+    /** Returns a contrasting color adjusted by a specified amount.
+
+        This method provides finer control over the contrast calculation by allowing adjustment of the hue shift used in
+        determining the contrasting color. The luminance and saturation of the original color are maintained.
+
+        @param amount The amount to adjust the hue by, normalized to the range [0, 1].
+
+        @return A new Color object that contrasts with the current color.
+    */
+    constexpr Color contrasting (float amount) const noexcept
+    {
+        const auto [h, s, l] = inverted().toHSL();
+
+        return fromHSL (modulo (h + jlimit (0.0f, 1.0f, amount), 1.0f), s, l).withAlpha (a);
+    }
+
+    //==============================================================================
+    /** Makes the color brighter by a specified amount.
+
+        This method increases the RGB components of the color by the given amount, capped at 1.0 to maintain valid color values.
+        It is useful for creating lighter variations of the color without altering the hue and saturation significantly.
+
+        @param amount The amount by which to increase the RGB components, normalized to the range [0, 1].
+
+        @return A new Color object that is brighter than the original.
+    */
+    constexpr Color brighter (float amount) const noexcept
+    {
+        const float finalAmount = jlimit (-1.0f, 1.0f, amount);
+
+        return {
+            a,
+            normalizedToComponent (getRedFloat() + finalAmount),
+            normalizedToComponent (getGreenFloat() + finalAmount),
+            normalizedToComponent (getBlueFloat() + finalAmount)
+        };
+    }
+
+    /** Makes the color darker by a specified amount.
+
+        This method decreases the RGB components of the color by the given amount, capped at 0 to maintain valid color values.
+        It is useful for creating darker variations of the color without altering the hue and saturation significantly.
+
+        @param amount The amount by which to decrease the RGB components, normalized to the range [0, 1].
+
+        @return A new Color object that is darker than the original.
+    */
+    constexpr Color darker (float amount) const noexcept
+    {
+        return brighter (-amount);
+    }
+
+    //==============================================================================
+    /** Inverts the color components (RGB) of the current color.
+
+        This method changes each RGB component to its complementary value, which is useful for creating negative effects or for visual highlights.
+
+        @return A reference to this Color object, now with inverted RGB values.
+    */
+    constexpr Color& invert() noexcept
+    {
+        r = 255 - r;
+        g = 255 - g;
+        b = 255 - b;
+        return *this;
+    }
+
+    /** Returns a new color that is the inverse of the current color.
+
+        This method creates a new Color object with each RGB component set to its complementary value, effectively providing the negative of the color.
+
+        @return A new Color object with inverted RGB values.
+    */
+    constexpr Color inverted() const noexcept
+    {
+        Color result (*this);
+        result.invert();
+        return result;
+    }
+
+    //==============================================================================
+    /** Inverts the alpha component of the current color.
+
+        This method changes the alpha component to its complementary value, which is useful for reversing transparency effects.
+
+        @return A reference to this Color object, now with an inverted alpha value.
+    */
+    constexpr Color& invertAlpha() noexcept
+    {
+        a = 255 - a;
+        return *this;
+    }
+
+    /** Returns a new color that is the inverse of the current color in terms of alpha transparency.
+
+        This method creates a new Color object with the alpha component set to its complementary value, effectively reversing the transparency of the color.
+
+        @return A new Color object with an inverted alpha value.
+    */
+    constexpr Color invertedAlpha() const noexcept
+    {
+        Color result (*this);
+        result.invertAlpha();
+        return result;
+    }
+
+    //==============================================================================
+    /** Mixes this color with another using a selectable color space.
+
+        This method can perform spectral upsampling of the two colors, mix their reflectances using a
+        Kubelka-Munk model, and convert the result back to sRGB. The result usually produces more
+        natural, pigment-like blends than a linear RGB interpolation. Alpha is interpolated linearly.
+        RGB uses alpha compositing, SRGB uses a direct sRGB interpolation, and Spectral uses the
+        reflectance model.
+
+        @param other The color to mix with this color.
+        @param amount The mix factor in the range [0, 1], where 0 returns this color and 1 returns the other.
+        @param space The color space used for mixing.
+
+        @return A new Color object representing the mixed result.
+    */
+    Color mixedWith (Color other, float amount, ColorSpace space = ColorSpace::Spectral) const noexcept;
+
+    /** Mixes this color with another, updating the current object.
+
+        @param other The color to mix with this color.
+        @param amount The mix factor in the range [0, 1], where 0 returns this color and 1 returns the other.
+        @param space The color space used for mixing.
+
+        @return A reference to this color object.
+    */
+    Color& mixWith (Color other, float amount, ColorSpace space = ColorSpace::Spectral) noexcept;
+
+    /** Blends this color with another using a blend mode.
+
+        @param src The source color to composite over this color.
+        @param mode The blend mode to use.
+        @param opacity The opacity applied to the source color.
+
+        @return A reference to this color object.
+    */
+    Color& blendWith (Color src, BlendMode mode = BlendMode::SrcOver, float opacity = 1.0f) noexcept;
+
+    /** Blends this color with another using a blend mode.
+
+        @param src The source color to composite over this color.
+        @param mode The blend mode to use.
+        @param opacity The opacity applied to the source color.
+
+        @return A new Color object containing the blended result.
+    */
+    Color blendedWith (Color src, BlendMode mode = BlendMode::SrcOver, float opacity = 1.0f) const noexcept;
+
+    //==============================================================================
     /** Converts the color to its HSL (Hue, Saturation, Luminance) components.
 
         This method provides a way to obtain the HSL representation of the color, which can be useful for color manipulation
@@ -516,16 +783,6 @@ public:
 
         return std::make_tuple (h, s, l);
     }
-
-    /** Converts the color to its HSLuv (Hue, Saturation, Luminance) components.
-
-        HSLuv is a perceptually uniform HSL space based on CIELUV, intended to provide more consistent
-        perceived saturation across hues. The returned tuple contains the hue, saturation, and luminance
-        components normalized to the range [0, 1].
-
-        @return A tuple consisting of hue, saturation, and luminance in HSLuv space.
-    */
-    std::tuple<float, float, float> toHSLuv() const noexcept;
 
     /** Constructs a color from HSL values.
 
@@ -575,6 +832,17 @@ public:
             static_cast<uint8> (b * 255)
         };
     }
+
+    //==============================================================================
+    /** Converts the color to its HSLuv (Hue, Saturation, Luminance) components.
+
+        HSLuv is a perceptually uniform HSL space based on CIELUV, intended to provide more consistent
+        perceived saturation across hues. The returned tuple contains the hue, saturation, and luminance
+        components normalized to the range [0, 1].
+
+        @return A tuple consisting of hue, saturation, and luminance in HSLuv space.
+    */
+    std::tuple<float, float, float> toHSLuv() const noexcept;
 
     /** Constructs a color from HSLuv values.
 
@@ -695,169 +963,78 @@ public:
     }
 
     //==============================================================================
-    /** Makes the color brighter by a specified amount.
+    /** Creates a Color object from RGB components.
 
-        This method increases the RGB components of the color by the given amount, capped at 1.0 to maintain valid color values.
-        It is useful for creating lighter variations of the color without altering the hue and saturation significantly.
+        This static method constructs a Color object using the specified red, green, and blue components.
+        The alpha component is set to fully opaque (255).
 
-        @param amount The amount by which to increase the RGB components, normalized to the range [0, 1].
+        @param r The red component, from 0 to 255.
+        @param g The green component, from 0 to 255.
+        @param b The blue component, from 0 to 255.
 
-        @return A new Color object that is brighter than the original.
+        @return A Color object with the specified RGB values and full opacity.
     */
-    constexpr Color brighter (float amount) const noexcept
+    static Color fromRGB (uint8 r, uint8 g, uint8 b) noexcept
     {
-        return {
-            a,
-            normalizedToComponent (getRedFloat() + amount),
-            normalizedToComponent (getGreenFloat() + amount),
-            normalizedToComponent (getBlueFloat() + amount)
-        };
+        return { 255, r, g, b };
     }
 
-    /** Makes the color darker by a specified amount.
+    /** Creates a Color object from RGBA components.
 
-        This method decreases the RGB components of the color by the given amount, capped at 0 to maintain valid color values.
-        It is useful for creating darker variations of the color without altering the hue and saturation significantly.
+        This static method constructs a Color object using the specified red, green, blue, and alpha components.
 
-        @param amount The amount by which to decrease the RGB components, normalized to the range [0, 1].
+        @param r The red component, from 0 to 255.
+        @param g The green component, from 0 to 255.
+        @param b The blue component, from 0 to 255.
+        @param a The alpha component, from 0 (transparent) to 255 (opaque).
 
-        @return A new Color object that is darker than the original.
+        @return A Color object with the specified RGBA values.
     */
-    constexpr Color darker (float amount) const noexcept
+    static Color fromRGBA (uint8 r, uint8 g, uint8 b, uint8 a) noexcept
     {
-        return brighter (-amount);
+        return { a, r, g, b };
     }
 
-    //==============================================================================
-    /** Mixes this color with another using a selectable color space.
+    /** Creates a Color object from ARGB components.
 
-        This method can perform spectral upsampling of the two colors, mix their reflectances using a
-        Kubelka-Munk model, and convert the result back to sRGB. The result usually produces more
-        natural, pigment-like blends than a linear RGB interpolation. Alpha is interpolated linearly.
-        RGB uses alpha compositing, SRGB uses a direct sRGB interpolation, and Spectral uses the
-        reflectance model.
+        This static method constructs a Color object using the specified alpha, red, green, and blue components.
 
-        @param other The color to mix with this color.
-        @param amount The mix factor in the range [0, 1], where 0 returns this color and 1 returns the other.
-        @param space The color space used for mixing.
+        @param a The alpha component, from 0 (transparent) to 255 (opaque).
+        @param r The red component, from 0 to 255.
+        @param g The green component, from 0 to 255.
+        @param b The blue component, from 0 to 255.
 
-        @return A new Color object representing the mixed result.
+        @return A Color object with the specified ARGB values.
     */
-    Color mixedWith (Color other, float amount, ColorSpace space = ColorSpace::Spectral) const noexcept;
-
-    /** Mixes this color with another, updating the current object.
-
-        @param other The color to mix with this color.
-        @param amount The mix factor in the range [0, 1], where 0 returns this color and 1 returns the other.
-        @param space The color space used for mixing.
-
-        @return A reference to this color object.
-    */
-    Color& mixWith (Color other, float amount, ColorSpace space = ColorSpace::Spectral) noexcept;
-
-    /** Blends this color with another using a blend mode.
-
-        @param src The source color to composite over this color.
-        @param mode The blend mode to use.
-
-        @return A reference to this color object.
-    */
-    Color& blendWith (Color src, BlendMode mode = BlendMode::SrcOver) noexcept;
-
-    /** Blends this color with another using a blend mode.
-
-        @param src The source color to composite over this color.
-        @param mode The blend mode to use.
-
-        @return A new Color object containing the blended result.
-    */
-    Color blendedWith (Color src, BlendMode mode = BlendMode::SrcOver) const noexcept;
-
-    //==============================================================================
-    /** Returns a contrasting color.
-
-        This method calculates a color that contrasts with the current color based on its luminance.
-        It is particularly useful for ensuring text or UI elements are readable when placed on backgrounds of varying colors.
-
-        @return A new Color object that contrasts with the current color.
-    */
-    constexpr Color contrasting() const noexcept
+    static Color fromARGB (uint8 a, uint8 r, uint8 g, uint8 b) noexcept
     {
-        return contrasting (0.5f);
+        return { a, r, g, b };
     }
 
-    /** Returns a contrasting color adjusted by a specified amount.
+    /** Creates a Color object from BGRA components.
 
-        This method provides finer control over the contrast calculation by allowing adjustment of the hue shift used in
-        determining the contrasting color. The luminance and saturation of the original color are maintained.
+        This static method constructs a Color object using the specified blue, green, red, and alpha components.
 
-        @param amount The amount to adjust the hue by, normalized to the range [0, 1].
+        @param b The blue component, from 0 to 255.
+        @param g The green component, from 0 to 255.
+        @param r The red component, from 0 to 255.
+        @param a The alpha component, from 0 (transparent) to 255 (opaque).
 
-        @return A new Color object that contrasts with the current color.
+        @return A Color object with the specified BGRA values.
     */
-    constexpr Color contrasting (float amount) const noexcept
+    static Color fromBGRA (uint8 b, uint8 g, uint8 r, uint8 a) noexcept
     {
-        const auto [h, s, l] = inverted().toHSL();
-
-        return fromHSL (modulo (h + jlimit (0.0f, 1.0f, amount), 1.0f), s, l).withAlpha (a);
+        return { a, r, g, b };
     }
 
     //==============================================================================
-    /** Inverts the color components (RGB) of the current color.
+    /** Generates a random opaque color.
 
-        This method changes each RGB component to its complementary value, which is useful for creating negative effects or for visual highlights.
+        This static method creates a color with random red, green, and blue components,
+        while the alpha component is set to fully opaque (255).
 
-        @return A reference to this Color object, now with inverted RGB values.
+        @return A Color object with random RGB values and full opacity.
     */
-    constexpr Color& invert() noexcept
-    {
-        r = 255 - r;
-        g = 255 - g;
-        b = 255 - b;
-        return *this;
-    }
-
-    /** Returns a new color that is the inverse of the current color.
-
-        This method creates a new Color object with each RGB component set to its complementary value, effectively providing the negative of the color.
-
-        @return A new Color object with inverted RGB values.
-    */
-    constexpr Color inverted() const noexcept
-    {
-        Color result (*this);
-        result.invert();
-        return result;
-    }
-
-    //==============================================================================
-    /** Inverts the alpha component of the current color.
-
-        This method changes the alpha component to its complementary value, which is useful for reversing transparency effects.
-
-        @return A reference to this Color object, now with an inverted alpha value.
-    */
-    constexpr Color& invertAlpha() noexcept
-    {
-        a = 255 - a;
-        return *this;
-    }
-
-    /** Returns a new color that is the inverse of the current color in terms of alpha transparency.
-
-        This method creates a new Color object with the alpha component set to its complementary value, effectively reversing the transparency of the color.
-
-        @return A new Color object with an inverted alpha value.
-    */
-    constexpr Color invertedAlpha() const noexcept
-    {
-        Color result (*this);
-        result.invertAlpha();
-        return result;
-    }
-
-    //==============================================================================
-    // TODO - doxygen
     static Color opaqueRandom() noexcept
     {
         auto random = Random();
@@ -872,35 +1049,36 @@ public:
     }
 
     //==============================================================================
+    /** Converts the color to a string representation.
 
-    static Color fromRGB (uint8 r, uint8 g, uint8 b) noexcept
-    {
-        return { 255, r, g, b };
-    }
+        This method generates a string that represents the color in a human-readable format.
+        The exact format of the string is implementation-defined but typically includes the
+        RGBA components.
 
-    static Color fromRGBA (uint8 r, uint8 g, uint8 b, uint8 a) noexcept
-    {
-        return { a, r, g, b };
-    }
-
-    static Color fromARGB (uint8 a, uint8 r, uint8 g, uint8 b) noexcept
-    {
-        return { a, r, g, b };
-    }
-
-    static Color fromBGRA (uint8 b, uint8 g, uint8 r, uint8 a) noexcept
-    {
-        return { a, r, g, b };
-    }
-
-    //==============================================================================
-    // TODO - doxygen
+        @return A string representation of the color.
+    */
     String toString() const;
 
-    // TODO - doxygen
+    /** Converts the color to a string representation in RGB format.
+
+        This method generates a string that represents the color in RGB format.
+        If `withAlpha` is true, the alpha component is included in the string representation.
+
+        @param withAlpha If true, includes the alpha component in the string.
+
+        @return A string representation of the color in RGB format.
+    */
     String toStringRGB (bool withAlpha) const;
 
-    // TODO - doxygen
+    /** Creates a Color object from a string representation.
+
+        This static method parses a string to create a Color object.
+        The exact format of the string is implementation-defined.
+
+        @param colourString The string representation of the color.
+
+        @return A Color object parsed from the string.
+    */
     static Color fromString (const String& colourString);
 
 private:

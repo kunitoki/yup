@@ -130,13 +130,13 @@ rive::rcp<rive::RenderShader> toColorGradient (rive::Factory& factory, const Col
     // Handle single color stop as solid color
     if (colorStops.size() == 1)
     {
-        uint32 color = colorStops[0].color;
         float stops[] = { 0.0f };
+        auto color = (rive::ColorInt) colorStops[0].color;
         return factory.makeLinearGradient (0.0f, 0.0f, 1.0f, 0.0f, &color, stops, 1);
     }
 
     // Create dynamic arrays for colors and stops
-    std::vector<uint32> colors;
+    std::vector<rive::ColorInt> colors;
     std::vector<float> stops;
 
     colors.reserve (colorStops.size());
@@ -144,7 +144,7 @@ rive::rcp<rive::RenderShader> toColorGradient (rive::Factory& factory, const Col
 
     for (const auto& stop : colorStops)
     {
-        colors.push_back (stop.color);
+        colors.push_back ((rive::ColorInt) stop.color);
         stops.push_back (stop.delta);
     }
 
@@ -644,7 +644,7 @@ void Graphics::renderStrokePath (const Path& path, const RenderOptions& options,
     paint.cap (toStrokeCap (options.cap));
 
     if (options.isStrokeColor())
-        paint.color (options.getStrokeColor());
+        paint.color ((rive::ColorInt) options.getStrokeColor());
     else
         paint.shader (toColorGradient (factory, options.getStrokeColorGradient(), transform));
 
@@ -662,7 +662,7 @@ void Graphics::renderFillPath (const Path& path, const RenderOptions& options, c
     paint.feather (options.feather);
 
     if (options.isFillColor())
-        paint.color (options.getFillColor());
+        paint.color ((rive::ColorInt) options.getFillColor());
     else
         paint.shader (toColorGradient (factory, options.getFillColorGradient(), transform));
 
@@ -719,7 +719,7 @@ void Graphics::fillFittedText (const StyledText& text, const Rectangle<float>& r
     paint.feather (options.feather);
 
     if (options.isFillColor())
-        paint.color (options.getFillColor());
+        paint.color ((rive::ColorInt) options.getFillColor());
     else
         paint.shader (toColorGradient (factory, options.getFillColorGradient(), options.getTransform()));
 
@@ -756,7 +756,7 @@ void Graphics::strokeFittedText (const StyledText& text, const Rectangle<float>&
     paint.cap (toStrokeCap (options.cap));
 
     if (options.isStrokeColor())
-        paint.color (options.getStrokeColor());
+        paint.color ((rive::ColorInt) options.getStrokeColor());
     else
         paint.shader (toColorGradient (factory, options.getStrokeColorGradient(), options.getTransform()));
 

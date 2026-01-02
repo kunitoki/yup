@@ -822,8 +822,14 @@ Color Color::mixedWith (Color other, float amount, ColorSpace space) const noexc
 
 //==============================================================================
 
-Color& Color::blendWith (Color src, BlendMode mode) noexcept
+Color& Color::blendWith (Color src, BlendMode mode, float opacity) noexcept
 {
+    const float clampedOpacity = jlimit (0.0f, 1.0f, opacity);
+    if (clampedOpacity <= 0.0f)
+        return *this;
+
+    src = src.withMultipliedAlpha (clampedOpacity);
+
     const double srcAlpha = src.getAlphaFloat();
     const double destAlpha = getAlphaFloat();
 
@@ -870,10 +876,10 @@ Color& Color::blendWith (Color src, BlendMode mode) noexcept
     return *this;
 }
 
-Color Color::blendedWith (Color src, BlendMode mode) const noexcept
+Color Color::blendedWith (Color src, BlendMode mode, float opacity) const noexcept
 {
     Color result (*this);
-    result.blendWith (src, mode);
+    result.blendWith (src, mode, opacity);
     return result;
 }
 

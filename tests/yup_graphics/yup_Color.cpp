@@ -91,7 +91,7 @@ TEST (ColorTests, Copy_And_Move_Constructors)
 TEST (ColorTests, Implicit_Conversion_To_Uint32)
 {
     Color c (0xff123456);
-    uint32 value = c;
+    uint32 value = (uint32) c;
     EXPECT_EQ (value, 0xff123456);
 }
 
@@ -962,4 +962,57 @@ TEST (ColorTests, MixedWith_Spectral)
     EXPECT_NEAR (mixAB.getRed(), mixBA.getRed(), 1);
     EXPECT_NEAR (mixAB.getGreen(), mixBA.getGreen(), 1);
     EXPECT_NEAR (mixAB.getBlue(), mixBA.getBlue(), 1);
+}
+
+TEST (ColorTests, Premultiplied_Unpremultiplied_RoundTrip)
+{
+    Color color (128, 64, 128, 192);
+    const auto premultiplied = color.premultiplied();
+
+    const float alpha = color.getAlphaFloat();
+    EXPECT_NEAR (premultiplied.getRedFloat(), color.getRedFloat() * alpha, 1.0f / 255.0f);
+    EXPECT_NEAR (premultiplied.getGreenFloat(), color.getGreenFloat() * alpha, 1.0f / 255.0f);
+    EXPECT_NEAR (premultiplied.getBlueFloat(), color.getBlueFloat() * alpha, 1.0f / 255.0f);
+    EXPECT_NEAR (premultiplied.getAlphaFloat(), alpha, 1.0f / 255.0f);
+
+    const auto restored = premultiplied.unpremultiplied();
+    EXPECT_NEAR (restored.getRedFloat(), color.getRedFloat(), 1.0f / 255.0f);
+    EXPECT_NEAR (restored.getGreenFloat(), color.getGreenFloat(), 1.0f / 255.0f);
+    EXPECT_NEAR (restored.getBlueFloat(), color.getBlueFloat(), 1.0f / 255.0f);
+    EXPECT_NEAR (restored.getAlphaFloat(), color.getAlphaFloat(), 1.0f / 255.0f);
+}
+
+TEST (ColorTests, Premultiplied_Unpremultiplied_ZeroAlpha)
+{
+    Color transparent (0, 10, 20, 30);
+    const auto premultiplied = transparent.premultiplied();
+    EXPECT_EQ (premultiplied.getARGB(), 0u);
+
+    const auto unpremultiplied = transparent.unpremultiplied();
+    EXPECT_EQ (unpremultiplied.getARGB(), 0u);
+}
+
+TEST (ColorTests, BlendWith_Opacity)
+{
+    const Color dest (255, 200, 0, 0);
+    const Color src (255, 0, 0, 200);
+
+    Color muted = dest;
+    muted.blendWith (src, BlendMode::SrcOver, 0.0f);
+    EXPECT_EQ (muted.getARGB(), dest.getARGB());
+
+    const auto expected = dest.blendedWith (src.withMultipliedAlpha (0.5f), BlendMode::SrcOver);
+    const auto blended = dest.blendedWith (src, BlendMode::SrcOver, 0.5f);
+    EXPECT_EQ (blended.getARGB(), expected.getARGB());
+}
+
+TEST (ColorTests, MixWith_ModifiesInPlace)
+{
+    Color base (255, 20, 40, 60);
+    const Color other (255, 200, 30, 10);
+
+    auto copy = base;
+    copy.mixWith (other, 0.35f, ColorSpace::SRGB);
+    const auto expected = base.mixedWith (other, 0.35f, ColorSpace::SRGB);
+    EXPECT_EQ (copy.getARGB(), expected.getARGB());
 }

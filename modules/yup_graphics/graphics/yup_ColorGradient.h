@@ -271,6 +271,77 @@ public:
         return stops;
     }
 
+    /** Returns the interpolated color at the given gradient position (0.0-1.0). */
+    Color getColorAt (float t) const noexcept
+    {
+        if (stops.empty())
+            return {};
+
+        if (stops.size() == 1)
+            return stops.front().color;
+
+        if (t <= stops.front().delta)
+            return stops.front().color;
+
+        if (t >= stops.back().delta)
+            return stops.back().color;
+
+        for (size_t i = 1; i < stops.size(); ++i)
+        {
+            if (t <= stops[i].delta)
+            {
+                const auto& a = stops[i - 1];
+                const auto& b = stops[i];
+                const float denom = b.delta - a.delta;
+                if (denom <= 0.0f)
+                    return b.color;
+
+                const float localT = (t - a.delta) / denom;
+                return a.color.mixedWith (b.color, localT, ColorSpace::SRGB);
+            }
+        }
+
+        return stops.back().color;
+    }
+
+    /** Returns the interpolated color at a given point in gradient space. */
+    Color getColorAt (float x, float y) const noexcept
+    {
+        if (stops.empty())
+            return {};
+
+        const auto start = Point<float> (stops.front().x, stops.front().y);
+        const auto end = Point<float> (stops.back().x, stops.back().y);
+
+        if (type == Type::Radial)
+        {
+            float radiusValue = radius;
+            if (radiusValue <= 0.0f)
+                radiusValue = start.distanceTo (end);
+
+            if (radiusValue <= 0.0f)
+                return stops.front().color;
+
+            const float t = start.distanceTo ({ x, y }) / radiusValue;
+            return getColorAt (jlimit (0.0f, 1.0f, t));
+        }
+
+        const float dx = end.getX() - start.getX();
+        const float dy = end.getY() - start.getY();
+        const float lenSquared = dx * dx + dy * dy;
+        if (lenSquared <= 0.0f)
+            return stops.front().color;
+
+        const float t = ((x - start.getX()) * dx + (y - start.getY()) * dy) / lenSquared;
+        return getColorAt (jlimit (0.0f, 1.0f, t));
+    }
+
+    /** Returns the interpolated color at a given point in gradient space. */
+    Color getColorAt (const Point<float>& p) const noexcept
+    {
+        return getColorAt (p.getX(), p.getY());
+    }
+
     /** Adds a color stop to the gradient.
 
         @param color The color of the new stop.
