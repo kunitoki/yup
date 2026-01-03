@@ -26,30 +26,36 @@ AudioFormatManager::AudioFormatManager()
 {
 }
 
-void AudioFormatManager::registerDefaultFormats()
+void AudioFormatManager::registerDefaultFormats (AudioFormatType types)
 {
 #if YUP_AUDIO_FORMAT_COREAUDIO
-    registerFormat (std::make_unique<AppleCoreAudioFormat>());
+    if (hasBitValueSet (types, AudioFormatType::coreAudio))
+        registerFormat (std::make_unique<AppleCoreAudioFormat>());
 #endif
 
 #if YUP_AUDIO_FORMAT_MEDIAFOUNDATION
-    registerFormat (std::make_unique<WindowsMediaAudioFormat>());
+    if (hasBitValueSet (types, AudioFormatType::windowsMedia))
+        registerFormat (std::make_unique<WindowsMediaAudioFormat>());
 #endif
 
 #if YUP_AUDIO_FORMAT_WAVE
-    registerFormat (std::make_unique<WaveAudioFormat>());
+    if (hasBitValueSet (types, AudioFormatType::wav))
+        registerFormat (std::make_unique<WaveAudioFormat>());
 #endif
 
 #if YUP_AUDIO_FORMAT_FLAC
-    registerFormat (std::make_unique<FlacAudioFormat>());
+    if (hasBitValueSet (types, AudioFormatType::flac))
+        registerFormat (std::make_unique<FlacAudioFormat>());
 #endif
 
 #if YUP_AUDIO_FORMAT_MP3
-    registerFormat (std::make_unique<Mp3AudioFormat>());
+    if (hasBitValueSet (types, AudioFormatType::mp3))
+        registerFormat (std::make_unique<Mp3AudioFormat>());
 #endif
 
 #if YUP_AUDIO_FORMAT_OPUS
-    registerFormat (std::make_unique<OpusAudioFormat>());
+    if (hasBitValueSet (types, AudioFormatType::opus))
+        registerFormat (std::make_unique<OpusAudioFormat>());
 #endif
 
     // TODO: Add other formats like:

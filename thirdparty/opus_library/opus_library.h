@@ -35,7 +35,7 @@
     license:          BSD
 
     defines:          ENABLE_QEXT=1
-    searchpaths:      include celt silk silk/float silk/fixed dnn
+    searchpaths:      include celt silk silk/float dnn
 
   END_YUP_MODULE_DECLARATION
 

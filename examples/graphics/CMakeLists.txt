@@ -78,6 +78,7 @@ yup_standalone_app (
         flac_library
         hmp3_library
         dr_libs
+        libvorbis
         libpng
         libwebp
         ${additional_modules}

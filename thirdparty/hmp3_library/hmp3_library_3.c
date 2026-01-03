@@ -28,9 +28,11 @@
 #pragma clang diagnostic ignored "-Wincompatible-pointer-types"
 #endif
 
-#include "setup.c"
-#include "l3math.c"
-#include "pow34.c"
+#define mdct_init hmp3_mdct_init
+#include <hmp3_library/hmp3/src/setup.c>
+#include <hmp3_library/hmp3/src/l3math.c>
+#include <hmp3_library/hmp3/src/pow34.c>
+#undef mdct_init
 
 #if defined(__clang__)
 #pragma clang diagnostic pop

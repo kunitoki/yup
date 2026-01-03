@@ -30,7 +30,7 @@
 #undef _USE_MATH_DEFINES
 #endif
 
-#include <pffft_double.c>
+#include <pffft_library/pffft_double.c>
 
 #if defined(__clang__)
 #pragma clang diagnostic pop

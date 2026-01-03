@@ -32,32 +32,32 @@
 
 #define CELT_ENCODER_C 1
 #define CELT_DECODER_C 1
-#include "opus_custom.h"
+#include <opus_custom.h>
 #undef CELT_ENCODER_C
 #undef CELT_DECODER_C
 
-#include "celt/bands.c"
-#include "celt/celt.c"
-#include "celt/celt_encoder.c"
-#include "celt/celt_decoder.c"
-#include "celt/cwrs.c"
-#include "celt/entcode.c"
-#include "celt/entdec.c"
-#include "celt/entenc.c"
-#include "celt/kiss_fft.c"
-#include "celt/laplace.c"
-#include "celt/mathops.c"
-#include "celt/mdct.c"
-#include "celt/modes.c"
-#include "celt/pitch.c"
-#include "celt/celt_lpc.c"
-#include "celt/quant_bands.c"
-#include "celt/rate.c"
-#include "celt/vq.c"
+#include <opus_library/celt/bands.c>
+#include <opus_library/celt/celt.c>
+#include <opus_library/celt/celt_encoder.c>
+#include <opus_library/celt/celt_decoder.c>
+#include <opus_library/celt/cwrs.c>
+#include <opus_library/celt/entcode.c>
+#include <opus_library/celt/entdec.c>
+#include <opus_library/celt/entenc.c>
+#include <opus_library/celt/kiss_fft.c>
+#include <opus_library/celt/laplace.c>
+#include <opus_library/celt/mathops.c>
+#include <opus_library/celt/mdct.c>
+#include <opus_library/celt/modes.c>
+#include <opus_library/celt/pitch.c>
+#include <opus_library/celt/celt_lpc.c>
+#include <opus_library/celt/quant_bands.c>
+#include <opus_library/celt/rate.c>
+#include <opus_library/celt/vq.c>
 
 #if defined(OPUS_ARM_PRESUME_NEON_INTR)
-#include "celt/arm/pitch_neon_intr.c"
-#include "celt/arm/celt_neon_intr.c"
+#include <opus_library/celt/arm/pitch_neon_intr.c>
+#include <opus_library/celt/arm/celt_neon_intr.c>
 #endif
 
 #if defined(__clang__)

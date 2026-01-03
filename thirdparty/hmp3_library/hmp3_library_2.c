@@ -28,9 +28,11 @@
 #pragma clang diagnostic ignored "-Wincompatible-pointer-types"
 #endif
 
-#include "amodini2.c"
-#include "xhead.c"
-#include "cnts.c"
+#define mdct_init hmp3_mdct_init
+#include <hmp3_library/hmp3/src/amodini2.c>
+#include <hmp3_library/hmp3/src/xhead.c>
+#include <hmp3_library/hmp3/src/cnts.c>
+#undef mdct_init
 
 #if defined(__clang__)
 #pragma clang diagnostic pop

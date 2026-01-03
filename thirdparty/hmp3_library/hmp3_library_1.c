@@ -28,18 +28,20 @@
 #pragma clang diagnostic ignored "-Wincompatible-pointer-types"
 #endif
 
-#include "cnt.c"
-#include "emap.c"
-#include "filter2.c"
-#include "hwin.c"
-#include "l3init.c"
-#include "l3pack.c"
-#include "pcmhpm.c"
-#include "sbt.c"
-#include "spdsmr.c"
-#include "xhwin.c"
-#include "xsbt.c"
-#include "detect.c"
+#define mdct_init hmp3_mdct_init
+#include <hmp3_library/hmp3/src/cnt.c>
+#include <hmp3_library/hmp3/src/emap.c>
+#include <hmp3_library/hmp3/src/filter2.c>
+#include <hmp3_library/hmp3/src/hwin.c>
+#include <hmp3_library/hmp3/src/l3init.c>
+#include <hmp3_library/hmp3/src/l3pack.c>
+#include <hmp3_library/hmp3/src/pcmhpm.c>
+#include <hmp3_library/hmp3/src/sbt.c>
+#include <hmp3_library/hmp3/src/spdsmr.c>
+#include <hmp3_library/hmp3/src/xhwin.c>
+#include <hmp3_library/hmp3/src/xsbt.c>
+#include <hmp3_library/hmp3/src/detect.c>
+#undef mdct_init
 
 #if defined(__clang__)
 #pragma clang diagnostic pop

@@ -108,6 +108,8 @@ function (_yup_module_fetch_upstream module_name module_path module_upstream mod
 
     _yup_message (STATUS "Fetching upstream sources for ${module_name}")
 
+    set (upstream_target_dir "${CMAKE_BINARY_DIR}/externals/${module_name}")
+
     if (module_upstream)
         set (download_dir "${CMAKE_BINARY_DIR}/_yup_upstream_downloads")
         file (MAKE_DIRECTORY "${download_dir}")
@@ -139,11 +141,10 @@ function (_yup_module_fetch_upstream module_name module_path module_upstream mod
             endif()
         endif()
 
-        set (upstream_target_dir "${CMAKE_BINARY_DIR}/externals/${module_name}/upstream")
-        file (REMOVE_RECURSE "${upstream_target_dir}")
-        file (MAKE_DIRECTORY "${upstream_target_dir}")
         file (GLOB extracted_items "${source_dir}/*")
         if (extracted_items)
+            file (REMOVE_RECURSE "${upstream_target_dir}")
+            file (MAKE_DIRECTORY "${upstream_target_dir}")
             file (COPY ${extracted_items} DESTINATION "${upstream_target_dir}")
         endif()
     else()
@@ -151,16 +152,15 @@ function (_yup_module_fetch_upstream module_name module_path module_upstream mod
             set (module_branch "HEAD")
         endif()
 
-        set (upstream_target_dir "${CMAKE_BINARY_DIR}/externals/${module_name}/upstream")
         if (module_submodules)
             set (module_submodules_recurse ON)
         else()
             set (module_submodules_recurse OFF)
         endif()
 
-        file (MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/externals/${module_name}")
-
         file (REMOVE_RECURSE "${upstream_target_dir}")
+        file (MAKE_DIRECTORY "${upstream_target_dir}")
+
         set (module_branch_value "${module_branch}")
         string (STRIP "${module_branch_value}" module_branch_value)
         string (REGEX REPLACE "^\"(.*)\"$" "\\1" module_branch_value "${module_branch_value}")
@@ -208,7 +208,7 @@ function (_yup_module_fetch_upstream module_name module_path module_upstream mod
             list (APPEND clone_args "${module_repository}" "${upstream_target_dir}")
             execute_process (
                 COMMAND ${clone_args}
-                WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/externals/${module_name}"
+                WORKING_DIRECTORY "${upstream_target_dir}"
                 RESULT_VARIABLE clone_result)
         endif()
 
@@ -712,9 +712,10 @@ function (yup_add_module module_path modules_definitions module_group)
     if (module_upstream OR module_repository)
         _yup_module_get_upstream_path ("${module_name}" "${module_path}" module_upstream_path)
         if (module_upstream_path)
-            list (APPEND module_include_paths "${module_upstream_path}")
+            get_filename_component (module_upstream_include_path ${module_upstream_path} DIRECTORY)
+            list (APPEND module_include_paths "${module_upstream_path}" "${module_upstream_include_path}")
         else()
-            list (APPEND module_include_paths "${CMAKE_BINARY_DIR}/externals/${module_name}/upstream")
+            list (APPEND module_include_paths "${CMAKE_BINARY_DIR}/externals")
         endif()
     endif()
 
@@ -726,7 +727,7 @@ function (yup_add_module module_path modules_definitions module_group)
         elseif (module_upstream_path AND EXISTS "${module_upstream_path}/${searchpath}")
             list (APPEND module_include_paths "${module_upstream_path}/${searchpath}")
         elseif (module_upstream OR module_repository)
-            list (APPEND module_include_paths "${CMAKE_BINARY_DIR}/externals/${module_name}/upstream/${searchpath}")
+            list (APPEND module_include_paths "${CMAKE_BINARY_DIR}/externals/${module_name}/${searchpath}")
         endif()
     endforeach()
 
@@ -821,60 +822,25 @@ macro (yup_add_default_modules modules_path)
 
     # ==== Thirdparty modules
     set (thirdparty_group "Thirdparty")
-    yup_add_module (${modules_path}/thirdparty/zlib "${modules_definitions}" ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/glad "${modules_definitions}" ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/harfbuzz "${modules_definitions}" ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/libpng "${modules_definitions}" ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/libwebp "${modules_definitions}" ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/sheenbidi "${modules_definitions}" ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/yoga_library "${modules_definitions}" ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/rive "${modules_definitions}" ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/rive_decoders "${modules_definitions}" ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/rive_renderer "${modules_definitions}" ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/oboe_library "${modules_definitions}" ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/pffft_library "${modules_definitions}" ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/dr_libs "${modules_definitions}" ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/opus_library "${modules_definitions}" ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/flac_library "${modules_definitions}" ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/hmp3_library "${modules_definitions}" ${thirdparty_group})
+    file (GLOB thirdparty_module_dirs "${modules_path}/thirdparty/*")
+    foreach (thirdparty_module_dir IN LISTS thirdparty_module_dirs)
+        if (IS_DIRECTORY "${thirdparty_module_dir}")
+            get_filename_component (module_dir_name "${thirdparty_module_dir}" NAME)
+            yup_add_module (${modules_path}/thirdparty/${module_dir_name} "${modules_definitions}" ${thirdparty_group})
+        endif()
+    endforeach()
 
     # ==== Yup modules
     set (modules_group "Modules")
-    yup_add_module (${modules_path}/modules/yup_core "${modules_definitions}" ${modules_group})
-    add_library (yup::yup_core ALIAS yup_core)
-
-    yup_add_module (${modules_path}/modules/yup_events "${modules_definitions}" ${modules_group})
-    add_library (yup::yup_events ALIAS yup_events)
-
-    yup_add_module (${modules_path}/modules/yup_data_model "${modules_definitions}" ${modules_group})
-    add_library (yup::yup_data_model ALIAS yup_data_model)
-
-    yup_add_module (${modules_path}/modules/yup_dsp "${modules_definitions}" ${modules_group})
-    add_library (yup::yup_dsp ALIAS yup_dsp)
-
-    yup_add_module (${modules_path}/modules/yup_graphics "${modules_definitions}" ${modules_group})
-    add_library (yup::yup_graphics ALIAS yup_graphics)
-
-    yup_add_module (${modules_path}/modules/yup_gui "${modules_definitions}" ${modules_group})
-    add_library (yup::yup_gui ALIAS yup_gui)
-
-    yup_add_module (${modules_path}/modules/yup_audio_basics "${modules_definitions}" ${modules_group})
-    add_library (yup::yup_audio_basics ALIAS yup_audio_basics)
-
-    yup_add_module (${modules_path}/modules/yup_audio_devices "${modules_definitions}" ${modules_group})
-    add_library (yup::yup_audio_devices ALIAS yup_audio_devices)
-
-    yup_add_module (${modules_path}/modules/yup_audio_formats "${modules_definitions}" ${modules_group})
-    add_library (yup::yup_audio_formats ALIAS yup_audio_formats)
-
-    yup_add_module (${modules_path}/modules/yup_audio_processors "${modules_definitions}" ${modules_group})
-    add_library (yup::yup_audio_processors ALIAS yup_audio_processors)
-
-    yup_add_module (${modules_path}/modules/yup_audio_gui "${modules_definitions}" ${modules_group})
-    add_library (yup::yup_audio_gui ALIAS yup_audio_gui)
-
-    yup_add_module (${modules_path}/modules/yup_audio_plugin_client "${modules_definitions}" ${modules_group})
-    add_library (yup::yup_audio_plugin_client ALIAS yup_audio_plugin_client)
+    file (GLOB yup_module_dirs "${modules_path}/modules/*")
+    list (FILTER yup_module_dirs EXCLUDE REGEX ".*yup_python.*")
+    foreach (yup_module_dir IN LISTS yup_module_dirs)
+        if (IS_DIRECTORY "${yup_module_dir}")
+            get_filename_component (module_dir_name "${yup_module_dir}" NAME)
+            yup_add_module (${modules_path}/modules/${module_dir_name} "${modules_definitions}" ${modules_group})
+            add_library (yup::${module_dir_name} ALIAS ${module_dir_name})
+        endif()
+    endforeach()
 
     if (YUP_ARG_ENABLE_PYTHON)
         if (NOT YUP_BUILD_WHEEL)

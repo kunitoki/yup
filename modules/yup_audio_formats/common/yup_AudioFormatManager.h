@@ -23,6 +23,23 @@ namespace yup
 {
 
 //==============================================================================
+/** Enumeration of supported audio format types. */
+enum class AudioFormatType
+{
+    wav = 1 << 0,
+    mp3 = 1 << 1,
+    flac = 1 << 2,
+    ogg = 1 << 3,
+    opus = 1 << 4,
+    coreAudio = 1 << 5,
+    windowsMedia = 1 << 6,
+
+    all = ~0
+};
+
+YUP_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS (AudioFormatType)
+
+//==============================================================================
 /**
     Central registry and factory for audio format handlers.
 
@@ -82,7 +99,7 @@ public:
         The specific formats registered may depend on compile-time configuration
         and available dependencies.
     */
-    void registerDefaultFormats();
+    void registerDefaultFormats (AudioFormatType types = AudioFormatType::all);
 
     /** Registers a custom audio format implementation.
 

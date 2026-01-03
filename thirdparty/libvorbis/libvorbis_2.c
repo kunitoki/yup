@@ -19,8 +19,10 @@
   ==============================================================================
 */
 
-#define DR_MP3_IMPLEMENTATION
-#include <dr_libs/dr_mp3.h>
+#include "libvorbis.h"
 
-#define DR_WAV_IMPLEMENTATION
-#include <dr_libs/dr_wav.h>
+#include "libvorbis_include_pre.h"
+
+#include <libvorbis/lib/codebook.c>
+
+#include "libvorbis_include_post.h"

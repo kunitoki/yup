@@ -36,20 +36,20 @@
 #pragma clang diagnostic ignored "-Wshorten-64-to-32"
 #endif
 
-#include "src/opus.c"
-#include "src/opus_decoder.c"
-#include "src/opus_encoder.c"
-#include "src/extensions.c"
-#include "src/opus_multistream.c"
-#include "src/opus_multistream_encoder.c"
-#include "src/opus_multistream_decoder.c"
-#include "src/repacketizer.c"
-#include "src/opus_projection_encoder.c"
-#include "src/opus_projection_decoder.c"
-#include "src/mapping_matrix.c"
-#include "src/analysis.c"
-#include "src/mlp.c"
-#include "src/mlp_data.c"
+#include <opus_library/src/opus.c>
+#include <opus_library/src/opus_decoder.c>
+#include <opus_library/src/opus_encoder.c>
+#include <opus_library/src/extensions.c>
+#include <opus_library/src/opus_multistream.c>
+#include <opus_library/src/opus_multistream_encoder.c>
+#include <opus_library/src/opus_multistream_decoder.c>
+#include <opus_library/src/repacketizer.c>
+#include <opus_library/src/opus_projection_encoder.c>
+#include <opus_library/src/opus_projection_decoder.c>
+#include <opus_library/src/mapping_matrix.c>
+#include <opus_library/src/analysis.c>
+#include <opus_library/src/mlp.c>
+#include <opus_library/src/mlp_data.c>
 
 #if defined(__clang__)
 #pragma clang diagnostic pop

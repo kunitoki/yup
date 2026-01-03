@@ -19,8 +19,8 @@
   ==============================================================================
 */
 
-#define DR_MP3_IMPLEMENTATION
-#include <dr_libs/dr_mp3.h>
-
-#define DR_WAV_IMPLEMENTATION
-#include <dr_libs/dr_wav.h>
+#if defined(_MSC_VER)
+#pragma warning (pop)
+#else
+#pragma clang diagnostic pop
+#endif

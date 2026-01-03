@@ -19,20 +19,29 @@
   ==============================================================================
 */
 
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wcomment"
-#pragma clang diagnostic ignored "-Wpointer-to-int-cast"
-#pragma clang diagnostic ignored "-Wint-to-pointer-cast"
-#pragma clang diagnostic ignored "-Wshorten-64-to-32"
-#pragma clang diagnostic ignored "-Wincompatible-pointer-types"
+#include "flac_include_pre.h"
+
+#if FLAC__HAS_OGG
+#define write_callback_ write_callback_flac_ogg_x_
+#define metadata_callback_ metadata_callback_flac_ogg_x_
+#define error_callback_ error_callback_flac_ogg_x_
+#include <flac_library/src/libFLAC/metadata_iterators.c>
+#undef write_callback_
+#undef metadata_callback_
+#undef error_callback_
+
+#define write_callback_ write_callback_flac_ogg_y_
+#define metadata_callback_ metadata_callback_flac_ogg_y_
+#define error_callback_ error_callback_flac_ogg_y_
+#include <flac_library/src/libFLAC/metadata_object.c>
+#undef write_callback_
+#undef metadata_callback_
+#undef error_callback_
+
+#include <flac_library/src/libFLAC/ogg_decoder_aspect.c>
+#include <flac_library/src/libFLAC/ogg_encoder_aspect.c>
+#include <flac_library/src/libFLAC/ogg_helper.c>
+#include <flac_library/src/libFLAC/ogg_mapping.c>
 #endif
 
-#define mdct_init hmp3_mdct_init
-#include <hmp3_library/hmp3/src/emdct.c>
-#include <hmp3_library/hmp3/src/mhead.c>
-#undef mdct_init
-
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif
+#include "flac_include_post.h"
