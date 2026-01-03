@@ -707,7 +707,7 @@ function (yup_add_module module_path modules_definitions module_group)
 
     # ==== Prepare include paths
     get_filename_component (module_include_path ${module_path} DIRECTORY)
-    list (APPEND module_include_paths "${module_include_path}")
+    list (APPEND module_include_paths "${module_include_path}" "${module_path}")
 
     if (module_upstream OR module_repository)
         _yup_module_get_upstream_path ("${module_name}" "${module_path}" module_upstream_path)

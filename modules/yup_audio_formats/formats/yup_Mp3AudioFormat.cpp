@@ -467,12 +467,11 @@ const String& Mp3AudioFormat::getFormatName() const
 
 Array<String> Mp3AudioFormat::getFileExtensions ([[maybe_unused]] Mode handleMode) const
 {
-    if (handleMode == Mode::forReading)
-        return { ".mp3" };
-
 #if YUP_MODULE_AVAILABLE_hmp3_library
     return { ".mp3" };
 #else
+    if (handleMode == Mode::forReading)
+        return { ".mp3" };
     return {};
 #endif
 }
