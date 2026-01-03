@@ -192,9 +192,26 @@ Mp3AudioFormatReader::Mp3AudioFormatReader (InputStream* sourceStream)
     {
         sampleRate = mp3.sampleRate;
         bitsPerSample = 16; // MP3 always outputs 16-bit samples
-        lengthInSamples = mp3.totalPCMFrameCount;
         numChannels = mp3.channels;
         usesFloatingPointData = false; // MP3 outputs 16-bit integer samples
+
+        const drmp3_uint64 unknownFrameCount = (drmp3_uint64) -1;
+        drmp3_uint64 totalFrames = mp3.totalPCMFrameCount;
+
+        if (totalFrames == 0 || totalFrames == unknownFrameCount)
+        {
+            const auto scannedFrames = drmp3_get_pcm_frame_count (&mp3);
+            if (scannedFrames != 0 && scannedFrames != unknownFrameCount)
+                totalFrames = scannedFrames;
+
+            drmp3_seek_to_pcm_frame (&mp3, 0);
+            currentPCMFrame = 0;
+        }
+
+        if (totalFrames == 0 || totalFrames == unknownFrameCount || totalFrames > 0x7fffffffffffffffULL)
+            lengthInSamples = 0;
+        else
+            lengthInSamples = (int64) totalFrames;
 
         // Allocate temp buffer for reading
         const auto bytesPerFrame = numChannels * (bitsPerSample / 8);
@@ -450,7 +467,14 @@ const String& Mp3AudioFormat::getFormatName() const
 
 Array<String> Mp3AudioFormat::getFileExtensions ([[maybe_unused]] Mode handleMode) const
 {
+    if (handleMode == Mode::forReading)
+        return { ".mp3" };
+
+#if YUP_MODULE_AVAILABLE_hmp3_library
     return { ".mp3" };
+#else
+    return {};
+#endif
 }
 
 std::unique_ptr<AudioFormatReader> Mp3AudioFormat::createReaderFor (InputStream* sourceStream)
