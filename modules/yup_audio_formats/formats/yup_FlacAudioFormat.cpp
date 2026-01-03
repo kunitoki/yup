@@ -529,7 +529,7 @@ const String& FlacAudioFormat::getFormatName() const
     return formatName;
 }
 
-Array<String> FlacAudioFormat::getFileExtensions() const
+Array<String> FlacAudioFormat::getFileExtensions ([[maybe_unused]] Mode handleMode) const
 {
     return { ".flac" };
 }

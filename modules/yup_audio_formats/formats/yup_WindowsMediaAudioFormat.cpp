@@ -1266,7 +1266,7 @@ const String& WindowsMediaAudioFormat::getFormatName() const
     return formatName;
 }
 
-Array<String> WindowsMediaAudioFormat::getFileExtensions() const
+Array<String> WindowsMediaAudioFormat::getFileExtensions ([[maybe_unused]] Mode handleMode) const
 {
     return { ".m4a", ".mp4", ".aac", ".wma", ".wm", ".wmv", ".asf", ".mp3" };
 }

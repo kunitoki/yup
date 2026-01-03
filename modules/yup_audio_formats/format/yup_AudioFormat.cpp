@@ -22,9 +22,9 @@
 namespace yup
 {
 
-bool AudioFormat::canHandleFile (const File& file) const
+bool AudioFormat::canHandleFile (const File& file, Mode handleMode) const
 {
-    auto extensions = getFileExtensions();
+    auto extensions = getFileExtensions (handleMode);
     auto fileExt = file.getFileExtension().toLowerCase();
 
     for (auto& ext : extensions)

@@ -53,13 +53,15 @@ void AudioFormatManager::registerDefaultFormats (AudioFormatType types)
         registerFormat (std::make_unique<Mp3AudioFormat>());
 #endif
 
+#if YUP_AUDIO_FORMAT_OGG
+    if (hasBitValueSet (types, AudioFormatType::ogg))
+        registerFormat (std::make_unique<OggVorbisAudioFormat>());
+#endif
+
 #if YUP_AUDIO_FORMAT_OPUS
     if (hasBitValueSet (types, AudioFormatType::opus))
         registerFormat (std::make_unique<OpusAudioFormat>());
 #endif
-
-    // TODO: Add other formats like:
-    // registerFormat (std::make_unique<OggVorbisAudioFormat>());
 }
 
 void AudioFormatManager::registerFormat (std::unique_ptr<AudioFormat> format)
@@ -72,20 +74,21 @@ std::unique_ptr<AudioFormatReader> AudioFormatManager::createReaderFor (const Fi
 {
     // Try to open the file
     auto stream = file.createInputStream();
-
     if (stream == nullptr)
         return nullptr;
 
     // Try each format
     for (auto& format : formats)
     {
-        if (format->canHandleFile (file))
-        {
-            stream->setPosition (0);
+        if (! format->canHandleFile (file, AudioFormat::forReading))
+            continue;
 
-            if (auto reader = format->createReaderFor (stream.release()))
-                return reader;
-        }
+        stream->setPosition (0);
+
+        if (auto reader = format->createReaderFor (stream.release()))
+            return reader;
+        else
+            stream = file.createInputStream();
     }
 
     return nullptr;
@@ -94,28 +97,33 @@ std::unique_ptr<AudioFormatReader> AudioFormatManager::createReaderFor (const Fi
 std::unique_ptr<AudioFormatWriter> AudioFormatManager::createWriterFor (const File& file,
                                                                         int sampleRate,
                                                                         int numChannels,
-                                                                        int bitsPerSample)
+                                                                        int bitsPerSample,
+                                                                        const StringPairArray& metadataValues,
+                                                                        int qualityOptionIndex)
 {
     // Try to create the output file
     auto stream = file.createOutputStream();
-
     if (stream == nullptr)
         return nullptr;
 
     // Try each format
     for (auto& format : formats)
     {
-        if (format->canHandleFile (file))
-        {
-            StringPairArray metadataValues;
+        if (! format->canHandleFile (file, AudioFormat::forWriting))
+            continue;
 
-            if (auto writer = format->createWriterFor (stream.release(),
-                                                       sampleRate,
-                                                       numChannels,
-                                                       bitsPerSample,
-                                                       metadataValues,
-                                                       0))
-                return writer;
+        if (auto writer = format->createWriterFor (stream.release(),
+                                                   sampleRate,
+                                                   numChannels,
+                                                   bitsPerSample,
+                                                   metadataValues,
+                                                   qualityOptionIndex))
+        {
+            return writer;
+        }
+        else
+        {
+            stream = file.createOutputStream();
         }
     }
 

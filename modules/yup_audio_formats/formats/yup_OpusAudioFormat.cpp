@@ -825,7 +825,7 @@ const String& OpusAudioFormat::getFormatName() const
     return formatName;
 }
 
-Array<String> OpusAudioFormat::getFileExtensions() const
+Array<String> OpusAudioFormat::getFileExtensions ([[maybe_unused]] Mode handleMode) const
 {
     return { ".opus" };
 }

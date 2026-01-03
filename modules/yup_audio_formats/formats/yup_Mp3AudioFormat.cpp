@@ -448,7 +448,7 @@ const String& Mp3AudioFormat::getFormatName() const
     return formatName;
 }
 
-Array<String> Mp3AudioFormat::getFileExtensions() const
+Array<String> Mp3AudioFormat::getFileExtensions ([[maybe_unused]] Mode handleMode) const
 {
     return { ".mp3" };
 }

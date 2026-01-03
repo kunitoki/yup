@@ -74,7 +74,7 @@ TEST_F (AppleCoreAudioFormatTests, GetFormatNameReturnsCoreAudio)
 
 TEST_F (AppleCoreAudioFormatTests, GetFileExtensionsIncludesM4aOrAac)
 {
-    Array<String> extensions = format->getFileExtensions();
+    Array<String> extensions = format->getFileExtensions (AudioFormat::forReading);
     EXPECT_FALSE (extensions.isEmpty());
 
     bool foundExtension = false;

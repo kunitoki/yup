@@ -119,8 +119,7 @@ public:
         should handle it, then attempts to create a reader for that format. The file
         is opened and its header is parsed to extract audio properties.
 
-        @param file The audio file to create a reader for. The file must exist and
-                    be readable.
+        @param file The audio file to create a reader for. The file must exist and be readable.
 
         @returns A unique pointer to an AudioFormatReader if a compatible format
                  was found and the file could be parsed successfully, nullptr otherwise.
@@ -134,11 +133,12 @@ public:
         its extension, then creates a writer configured with the specified audio parameters.
         The format's capabilities are validated against the requested parameters.
 
-        @param file The destination file where audio data will be written. Parent
-                    directories must exist and be writable.
+        @param file The destination file where audio data will be written. Parent directories must exist and be writable.
         @param sampleRate The sample rate for the output audio in Hz (e.g., 44100, 48000).
         @param numChannels The number of audio channels (1 for mono, 2 for stereo, etc.).
         @param bitsPerSample The bit depth for sample encoding (e.g., 16, 24, 32).
+        @param metadataValues The metadata values to write (if supported).
+        @param qualityOptionIndex The quality option index (if supported).
 
         @returns A unique pointer to an AudioFormatWriter if a compatible format was found
                  and supports the specified parameters, nullptr if no suitable format is
@@ -147,7 +147,9 @@ public:
     std::unique_ptr<AudioFormatWriter> createWriterFor (const File& file,
                                                         int sampleRate,
                                                         int numChannels,
-                                                        int bitsPerSample);
+                                                        int bitsPerSample,
+                                                        const StringPairArray& metadataValues = {},
+                                                        int qualityOptionIndex = 0);
 
 private:
     std::vector<std::unique_ptr<AudioFormat>> formats;

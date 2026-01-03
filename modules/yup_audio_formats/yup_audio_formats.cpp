@@ -40,6 +40,11 @@
 #include <hmp3_library/hmp3_library.h>
 #endif
 
+#if YUP_AUDIO_FORMAT_OGG
+#include <libogg/libogg.h>
+#include <libvorbis/libvorbis.h>
+#endif
+
 #if YUP_AUDIO_FORMAT_OPUS
 #include <opus_library/opus_library.h>
 #endif
@@ -86,6 +91,10 @@
 
 #if YUP_AUDIO_FORMAT_MP3
 #include "formats/yup_Mp3AudioFormat.cpp"
+#endif
+
+#if YUP_AUDIO_FORMAT_OGG
+#include "formats/yup_OggVorbisAudioFormat.cpp"
 #endif
 
 #if YUP_AUDIO_FORMAT_OPUS

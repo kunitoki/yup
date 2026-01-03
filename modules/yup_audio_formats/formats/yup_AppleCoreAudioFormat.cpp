@@ -1053,20 +1053,27 @@ const String& AppleCoreAudioFormat::getFormatName() const
     return formatName;
 }
 
-Array<String> AppleCoreAudioFormat::getFileExtensions() const
+Array<String> AppleCoreAudioFormat::getFileExtensions (Mode handleMode) const
 {
-    if (streamKind != StreamKind::kNone)
+    if (handleMode == Mode::forReading)
     {
-        const auto extensions = findFileExtensionsForCoreAudioCodec (toAudioFileTypeID (streamKind));
+        if (streamKind != StreamKind::kNone)
+        {
+            const auto extensions = findFileExtensionsForCoreAudioCodec (toAudioFileTypeID (streamKind));
+            if (! extensions.isEmpty())
+                return extensions;
+        }
+
+        const auto extensions = findFileExtensionsForCoreAudioCodecs();
         if (! extensions.isEmpty())
             return extensions;
+
+        return { ".wav", ".aiff", ".aif", ".aifc", ".wav", ".sd2", ".au", ".snd", ".mp4", ".mp3", ".mp2", ".mp1", ".ac3", ".aac", ".m4a", ".m4b", ".caf", ".3gp", ".3g2", ".amr" };
     }
-
-    const auto extensions = findFileExtensionsForCoreAudioCodecs();
-    if (! extensions.isEmpty())
-        return extensions;
-
-    return { ".wav", ".aiff", ".aif", ".aifc", ".wav", ".sd2", ".au", ".snd", ".mp4", ".mp3", ".mp2", ".mp1", ".ac3", ".aac", ".m4a", ".m4b", ".caf", ".3gp", ".3g2", ".amr" };
+    else
+    {
+        return { ".aiff", ".aif", ".aifc", ".sd2", ".au", ".snd", ".mp4", ".mp2", ".mp1", ".ac3", ".aac", ".m4a", ".m4b", ".caf", ".3gp", ".3g2", ".amr" };
+    }
 }
 
 std::unique_ptr<AudioFormatReader> AppleCoreAudioFormat::createReaderFor (InputStream* sourceStream)

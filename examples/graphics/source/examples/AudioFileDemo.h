@@ -335,7 +335,9 @@ public:
         , saveButton ("Save As")
         , loopButton ("Loop")
     {
-        formatManager.registerDefaultFormats();
+        formatManager.registerDefaultFormats (
+            yup::AudioFormatType::all & ~yup::AudioFormatType::coreAudio);
+
         deviceManager.initialiseWithDefaultDevices (0, 2);
         deviceManager.addAudioCallback (&sourcePlayer);
         sourcePlayer.setSource (&transportSource);
@@ -608,7 +610,7 @@ private:
 
     yup::String getAudioFileFilter() const
     {
-        return "*.wav;*.aiff;*.aif;*.flac;*.mp3;*.opus;*.m4a;*.wma";
+        return "*.wav;*.aiff;*.aif;*.flac;*.mp3;*.opus;*.m4a;*.wma;*.ogg";
     }
 
     yup::AudioFormatManager formatManager;

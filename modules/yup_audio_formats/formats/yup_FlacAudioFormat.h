@@ -47,7 +47,7 @@ public:
     const String& getFormatName() const override;
 
     /** Returns the file extensions that this format can handle. */
-    Array<String> getFileExtensions() const override;
+    Array<String> getFileExtensions (Mode handleMode) const override;
 
     /** Creates a reader for decoding FLAC audio data from the provided stream. */
     std::unique_ptr<AudioFormatReader> createReaderFor (InputStream* sourceStream) override;
