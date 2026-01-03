@@ -85,7 +85,7 @@ public:
         @returns An array containing the supported extensions: ".wav", ".wave", and ".bwf"
                 (Broadcast Wave Format)
     */
-    Array<String> getFileExtensions() const override;
+    Array<String> getFileExtensions (Mode handleMode) const override;
 
     /** Creates a reader for decoding WAV audio data from the provided stream.
         

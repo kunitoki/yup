@@ -53,6 +53,13 @@ class AudioFormatWriter;
 class YUP_API AudioFormat
 {
 public:
+    /** Mode of operation. */
+    enum Mode
+    {
+        forReading,
+        forWriting
+    };
+
     /** Destructor. */
     virtual ~AudioFormat() = default;
 
@@ -64,10 +71,9 @@ public:
 
     /** Returns the file extensions associated with this format.
 
-        @returns An array of file extensions (including the dot) that this format can handle
-                 (e.g., {".wav", ".wave"} for WAV format)
+        @returns An array of file extensions (including the dot) that this format can handle (e.g., {".wav", ".wave"} for WAV format)
     */
-    virtual Array<String> getFileExtensions() const = 0;
+    virtual Array<String> getFileExtensions (Mode handleMode) const = 0;
 
     /** Tests whether this format can handle files with the given file extension.
 
@@ -75,10 +81,11 @@ public:
         based on its extension, without needing to attempt to open the file.
 
         @param file The file to test for compatibility
+        @param handleMode The mode to check for compatibility
 
         @returns true if this format can potentially handle the file, false otherwise
     */
-    virtual bool canHandleFile (const File& file) const;
+    virtual bool canHandleFile (const File& file, Mode handleMode) const;
 
     /** Creates a reader object capable of parsing audio data from the given stream.
 

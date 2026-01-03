@@ -29,7 +29,9 @@
 #pragma clang diagnostic ignored "-Wparentheses-equality"
 #endif
 
-#include "bitallo3.cpp"
+#define mdct_init hmp3_mdct_init
+#include <hmp3_library/hmp3/src/bitallo3.cpp>
+#undef mdct_init
 
 #if defined(__clang__)
 #pragma clang diagnostic pop

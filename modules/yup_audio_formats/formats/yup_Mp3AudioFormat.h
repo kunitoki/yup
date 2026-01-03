@@ -84,7 +84,7 @@ public:
 
         @returns An array containing the supported extensions: ".mp3"
     */
-    Array<String> getFileExtensions() const override;
+    Array<String> getFileExtensions (Mode handleMode) const override;
 
     /** Creates a reader for decoding MP3 audio data from the provided stream.
 

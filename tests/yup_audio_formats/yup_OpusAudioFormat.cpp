@@ -65,19 +65,37 @@ TEST_F (OpusAudioFormatTests, GetFormatNameReturnsOpus)
 
 TEST_F (OpusAudioFormatTests, GetFileExtensionsIncludesOpus)
 {
-    Array<String> extensions = format->getFileExtensions();
-    EXPECT_FALSE (extensions.isEmpty());
-
-    bool foundOpus = false;
-    for (const auto& ext : extensions)
     {
-        if (ext.equalsIgnoreCase (".opus") || ext.equalsIgnoreCase ("opus"))
+        Array<String> extensions = format->getFileExtensions (AudioFormat::forReading);
+        EXPECT_FALSE (extensions.isEmpty());
+
+        bool foundOpus = false;
+        for (const auto& ext : extensions)
         {
-            foundOpus = true;
-            break;
+            if (ext.equalsIgnoreCase (".opus") || ext.equalsIgnoreCase ("opus"))
+            {
+                foundOpus = true;
+                break;
+            }
         }
+        EXPECT_TRUE (foundOpus);
     }
-    EXPECT_TRUE (foundOpus);
+
+    {
+        Array<String> extensions = format->getFileExtensions (AudioFormat::forWriting);
+        EXPECT_FALSE (extensions.isEmpty());
+
+        bool foundOpus = false;
+        for (const auto& ext : extensions)
+        {
+            if (ext.equalsIgnoreCase (".opus") || ext.equalsIgnoreCase ("opus"))
+            {
+                foundOpus = true;
+                break;
+            }
+        }
+        EXPECT_TRUE (foundOpus);
+    }
 }
 
 TEST_F (OpusAudioFormatTests, GetPossibleBitDepthsAndSampleRates)

@@ -21,39 +21,32 @@
 
 #include "flac_include_pre.h"
 
-#include "bitmath.c"
-#include "bitreader.c"
-#include "bitwriter.c"
-#include "cpu.c"
-#include "crc.c"
-#include "fixed_intrin_avx2.c"
-#include "fixed_intrin_sse2.c"
-#include "fixed_intrin_sse42.c"
-#include "fixed_intrin_ssse3.c"
+#include <flac_library/src/libFLAC/bitmath.c>
+#include <flac_library/src/libFLAC/bitreader.c>
+#include <flac_library/src/libFLAC/bitwriter.c>
+#include <flac_library/src/libFLAC/cpu.c>
+#include <flac_library/src/libFLAC/crc.c>
+#include <flac_library/src/libFLAC/fixed_intrin_avx2.c>
+#include <flac_library/src/libFLAC/fixed_intrin_sse2.c>
+#include <flac_library/src/libFLAC/fixed_intrin_sse42.c>
+#include <flac_library/src/libFLAC/fixed_intrin_ssse3.c>
 
 #if defined(CHECK_ORDER_IS_VALID)
 #undef CHECK_ORDER_IS_VALID
 #endif
 
-#include "fixed.c"
-#include "float.c"
-#include "format.c"
-#include "lpc.c"
-#include "lpc_intrin_avx2.c"
-#include "lpc_intrin_fma.c"
-#include "lpc_intrin_neon.c"
-#include "lpc_intrin_sse2.c"
-#include "lpc_intrin_sse41.c"
-#include "md5.c"
-#include "memory.c"
-#include "stream_decoder.c"
-#include "window.c"
-
-//#include "metadata_iterators.c"
-//#include "metadata_object.c"
-//#include "ogg_decoder_aspect.c"
-//#include "ogg_encoder_aspect.c"
-//#include "ogg_helper.c"
-//#include "ogg_mapping.c"
+#include <flac_library/src/libFLAC/fixed.c>
+#include <flac_library/src/libFLAC/float.c>
+#include <flac_library/src/libFLAC/format.c>
+#include <flac_library/src/libFLAC/lpc.c>
+#include <flac_library/src/libFLAC/lpc_intrin_avx2.c>
+#include <flac_library/src/libFLAC/lpc_intrin_fma.c>
+#include <flac_library/src/libFLAC/lpc_intrin_neon.c>
+#include <flac_library/src/libFLAC/lpc_intrin_sse2.c>
+#include <flac_library/src/libFLAC/lpc_intrin_sse41.c>
+#include <flac_library/src/libFLAC/md5.c>
+#include <flac_library/src/libFLAC/memory.c>
+#include <flac_library/src/libFLAC/stream_decoder.c>
+#include <flac_library/src/libFLAC/window.c>
 
 #include "flac_include_post.h"

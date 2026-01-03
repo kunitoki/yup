@@ -113,20 +113,20 @@ YUP brings a suite of powerful features, including:
 
 ## Supported Sound Formats
 
-|                   | **Wav**            | **Wav64**          | **Mp3**            | **OGG**        | **Flac**           | **Opus**           | **AAC**            | **WMF**        |
-|-------------------|:------------------:|:------------------:|:------------------:|:--------------:|:------------------:|:------------------:|:------------------:|:--------------:|
-| **Windows** (enc) | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction: | :white_check_mark: | :white_check_mark: | :construction:     | :construction: |
-| **Windows** (dec) | :white_check_mark: | :white_check_mark: | :construction:     | :construction: | :white_check_mark: | :white_check_mark: | :construction:     | :construction: |
-| **macOS** (enc)   | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                |
-| **macOS** (dec)   | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                |
-| **Linux** (enc)   | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction: | :white_check_mark: | :white_check_mark: |                    |                |
-| **Linux** (dec)   | :white_check_mark: | :white_check_mark: | :construction:     | :construction: | :white_check_mark: | :white_check_mark: |                    |                |
-| **WASM** (enc)    | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction: | :white_check_mark: | :white_check_mark: |                    |                |
-| **WASM** (dec)    | :white_check_mark: | :white_check_mark: | :construction:     | :construction: | :white_check_mark: | :white_check_mark: |                    |                |
-| **Android** (enc) | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction: | :white_check_mark: | :white_check_mark: |                    |                |
-| **Android** (dec) | :white_check_mark: | :white_check_mark: | :construction:     | :construction: | :white_check_mark: | :white_check_mark: |                    |                |
-| **iOS** (enc)     | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                |
-| **iOS** (dec)     | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                |
+|                   | **Wav**            | **Wav64**          | **Mp3**            | **OGG**            | **Flac**           | **Opus**           | **AAC**            | **WMF**            |
+|-------------------|:------------------:|:------------------:|:------------------:|:------------------:|:------------------:|:------------------:|:------------------:|:------------------:|
+| **Windows** (enc) | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| **Windows** (dec) | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| **macOS** (enc)   | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    |
+| **macOS** (dec)   | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    |
+| **Linux** (enc)   | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    |                    |
+| **Linux** (dec)   | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    |                    |
+| **WASM** (enc)    | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    |                    |
+| **WASM** (dec)    | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    |                    |
+| **Android** (enc) | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction:     |                    |
+| **Android** (dec) | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction:     |                    |
+| **iOS** (enc)     | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    |
+| **iOS** (dec)     | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    |
 
 ## Prerequisites
 Before building, ensure you have a:

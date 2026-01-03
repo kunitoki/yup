@@ -34,7 +34,7 @@
     license:          RPSL
 
     defines:          IEEE_FLOAT=1 _FILE_OFFSET_BITS=64
-    searchpaths:      hmp3/src/pub hmp3/src
+    searchpaths:      hmp3/src/pub
 
   END_YUP_MODULE_DECLARATION
 

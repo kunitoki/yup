@@ -24,24 +24,24 @@ namespace yup
 
 //==============================================================================
 /**
-    AudioFormat implementation backed by Windows Media Foundation.
+    AudioFormat implementation for Ogg Vorbis audio files.
 
-    This reader uses the Media Foundation Source Reader to decode supported
-    formats (e.g. m4a, aac, wma) into floating-point PCM samples. The writer
-    uses the Media Foundation Sink Writer to encode AAC streams.
+    This format provides read and write support for .ogg files containing Vorbis
+    audio streams. Decoding and encoding are handled through libvorbis, with
+    samples exposed as floating point values.
 
     @see AudioFormat, AudioFormatReader, AudioFormatWriter
 
     @tags{Audio}
 */
-class YUP_API WindowsMediaAudioFormat : public AudioFormat
+class YUP_API OggVorbisAudioFormat : public AudioFormat
 {
 public:
-    /** Constructs a new WindowsMediaAudioFormat instance. */
-    WindowsMediaAudioFormat();
+    /** Constructs a new OggVorbisAudioFormat instance. */
+    OggVorbisAudioFormat();
 
     /** Destructor. */
-    ~WindowsMediaAudioFormat() override;
+    ~OggVorbisAudioFormat() override;
 
     /** Returns the descriptive name of this format. */
     const String& getFormatName() const override;
@@ -49,10 +49,10 @@ public:
     /** Returns the file extensions that this format can handle. */
     Array<String> getFileExtensions (Mode handleMode) const override;
 
-    /** Creates a reader for decoding Media Foundation-supported audio data. */
+    /** Creates a reader for decoding Ogg Vorbis audio data from the provided stream. */
     std::unique_ptr<AudioFormatReader> createReaderFor (InputStream* sourceStream) override;
 
-    /** Creates a writer for encoding audio data. */
+    /** Creates a writer for encoding audio data to Ogg Vorbis format. */
     std::unique_ptr<AudioFormatWriter> createWriterFor (OutputStream* streamToWriteTo,
                                                         double sampleRate,
                                                         int numberOfChannels,
@@ -60,22 +60,22 @@ public:
                                                         const StringPairArray& metadataValues,
                                                         int qualityOptionIndex) override;
 
-    /** Returns the bit depths supported by this format implementation. */
+    /** Returns the bit depths supported by this Ogg Vorbis format implementation. */
     Array<int> getPossibleBitDepths() const override;
 
-    /** Returns the sample rates supported by this format implementation. */
+    /** Returns the sample rates supported by this Ogg Vorbis format implementation. */
     Array<int> getPossibleSampleRates() const override;
 
-    /** Returns true indicating that this format supports mono audio files. */
+    /** Indicates whether this format can handle mono audio. */
     bool canDoMono() const override { return true; }
 
-    /** Returns true indicating that this format supports stereo audio files. */
+    /** Indicates whether this format can handle stereo audio. */
     bool canDoStereo() const override { return true; }
 
-    /** Returns true indicating that this format is compressed. */
+    /** Indicates that this format is compressed. */
     bool isCompressed() const override { return true; }
 
-    /** Returns the available quality options for encoded output. */
+    /** Returns the available quality options for Vorbis encoding. */
     StringArray getQualityOptions() const override;
 
 private:

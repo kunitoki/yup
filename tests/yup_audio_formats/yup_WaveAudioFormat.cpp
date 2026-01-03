@@ -81,19 +81,37 @@ TEST_F (WaveAudioFormatTests, GetFormatNameReturnsWave)
 
 TEST_F (WaveAudioFormatTests, GetFileExtensionsIncludesWav)
 {
-    Array<String> extensions = format->getFileExtensions();
-    EXPECT_FALSE (extensions.isEmpty());
-
-    bool foundWav = false;
-    for (const auto& ext : extensions)
     {
-        if (ext.equalsIgnoreCase (".wav") || ext.equalsIgnoreCase ("wav"))
+        Array<String> extensions = format->getFileExtensions (AudioFormat::forReading);
+        EXPECT_FALSE (extensions.isEmpty());
+
+        bool foundWav = false;
+        for (const auto& ext : extensions)
         {
-            foundWav = true;
-            break;
+            if (ext.equalsIgnoreCase (".wav") || ext.equalsIgnoreCase ("wav"))
+            {
+                foundWav = true;
+                break;
+            }
         }
+        EXPECT_TRUE (foundWav);
     }
-    EXPECT_TRUE (foundWav);
+
+    {
+        Array<String> extensions = format->getFileExtensions (AudioFormat::forWriting);
+        EXPECT_FALSE (extensions.isEmpty());
+
+        bool foundWav = false;
+        for (const auto& ext : extensions)
+        {
+            if (ext.equalsIgnoreCase (".wav") || ext.equalsIgnoreCase ("wav"))
+            {
+                foundWav = true;
+                break;
+            }
+        }
+        EXPECT_TRUE (foundWav);
+    }
 }
 
 TEST_F (WaveAudioFormatTests, GetPossibleBitDepthsIsNotEmpty)

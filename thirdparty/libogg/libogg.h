@@ -19,8 +19,27 @@
   ==============================================================================
 */
 
-#define DR_MP3_IMPLEMENTATION
-#include <dr_libs/dr_mp3.h>
+/*
+  ==============================================================================
 
-#define DR_WAV_IMPLEMENTATION
-#include <dr_libs/dr_wav.h>
+  BEGIN_YUP_MODULE_DECLARATION
+
+    ID:               libogg
+    vendor:           libogg
+    version:          1.3.6
+    name:             Libogg contains necessary functionality to create, decode, and work with Ogg bitstreams
+    description:      Libogg contains necessary functionality to create, decode, and work with Ogg bitstreams.
+    website:          https://xiph.org/ogg/doc/
+    upstream:         https://downloads.xiph.org/releases/ogg/libogg-1.3.6.tar.xz
+    license:          MIT
+
+    searchpaths:      include
+
+  END_YUP_MODULE_DECLARATION
+
+  ==============================================================================
+*/
+
+#pragma once
+
+#include <ogg/ogg.h>

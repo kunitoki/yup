@@ -43,7 +43,7 @@
 #pragma once
 
 #define DR_MP3_NO_STDIO 1
-#include <dr_mp3.h>
+#include <dr_libs/dr_mp3.h>
 
 #define DR_WAV_NO_STDIO 1
-#include <dr_wav.h>
+#include <dr_libs/dr_wav.h>

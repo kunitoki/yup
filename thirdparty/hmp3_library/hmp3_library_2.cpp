@@ -28,7 +28,9 @@
 #pragma clang diagnostic ignored "-Wincompatible-pointer-types"
 #endif
 
-#include "bitallosc.cpp"
+#define mdct_init hmp3_mdct_init
+#include <hmp3_library/hmp3/src/bitallosc.cpp>
+#undef mdct_init
 
 #if defined(__clang__)
 #pragma clang diagnostic pop

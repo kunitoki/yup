@@ -33,9 +33,10 @@
     upstream:         https://ftp.osuosl.org/pub/xiph/releases/flac/flac-1.5.0.tar.xz
     license:          BSD
 
-    defines:          FLAC__NO_DLL=1 FLAC__HAS_OGG=0
+    dependencies:     libogg
+    defines:          FLAC__NO_DLL=1 FLAC__HAS_OGG=1 HAVE_LROUND=1
     macDefines:       FLAC__SYS_DARWIN=1
-    searchpaths:      include src src/libFLAC src/libFLAC/include
+    searchpaths:      include src/libFLAC src/libFLAC/include
 
   END_YUP_MODULE_DECLARATION
 

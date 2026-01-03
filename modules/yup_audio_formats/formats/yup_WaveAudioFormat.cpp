@@ -483,9 +483,15 @@ const String& WaveAudioFormat::getFormatName() const
     return formatName;
 }
 
-Array<String> WaveAudioFormat::getFileExtensions() const
+Array<String> WaveAudioFormat::getFileExtensions (Mode handleMode) const
 {
-    return { ".wav", ".wave", ".bwf" };
+    switch (handleMode)
+    {
+        case Mode::forReading:
+            return { ".wav", ".wave", ".bwf" };
+        case Mode::forWriting:
+            return { ".wav" };
+    }
 }
 
 std::unique_ptr<AudioFormatReader> WaveAudioFormat::createReaderFor (InputStream* sourceStream)

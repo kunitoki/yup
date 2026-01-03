@@ -23,6 +23,23 @@ namespace yup
 {
 
 //==============================================================================
+/** Enumeration of supported audio format types. */
+enum class AudioFormatType
+{
+    wav = 1 << 0,
+    mp3 = 1 << 1,
+    flac = 1 << 2,
+    ogg = 1 << 3,
+    opus = 1 << 4,
+    coreAudio = 1 << 5,
+    windowsMedia = 1 << 6,
+
+    all = ~0
+};
+
+YUP_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS (AudioFormatType)
+
+//==============================================================================
 /**
     Central registry and factory for audio format handlers.
 
@@ -82,7 +99,7 @@ public:
         The specific formats registered may depend on compile-time configuration
         and available dependencies.
     */
-    void registerDefaultFormats();
+    void registerDefaultFormats (AudioFormatType types = AudioFormatType::all);
 
     /** Registers a custom audio format implementation.
 
@@ -102,8 +119,7 @@ public:
         should handle it, then attempts to create a reader for that format. The file
         is opened and its header is parsed to extract audio properties.
 
-        @param file The audio file to create a reader for. The file must exist and
-                    be readable.
+        @param file The audio file to create a reader for. The file must exist and be readable.
 
         @returns A unique pointer to an AudioFormatReader if a compatible format
                  was found and the file could be parsed successfully, nullptr otherwise.
@@ -117,11 +133,12 @@ public:
         its extension, then creates a writer configured with the specified audio parameters.
         The format's capabilities are validated against the requested parameters.
 
-        @param file The destination file where audio data will be written. Parent
-                    directories must exist and be writable.
+        @param file The destination file where audio data will be written. Parent directories must exist and be writable.
         @param sampleRate The sample rate for the output audio in Hz (e.g., 44100, 48000).
         @param numChannels The number of audio channels (1 for mono, 2 for stereo, etc.).
         @param bitsPerSample The bit depth for sample encoding (e.g., 16, 24, 32).
+        @param metadataValues The metadata values to write (if supported).
+        @param qualityOptionIndex The quality option index (if supported).
 
         @returns A unique pointer to an AudioFormatWriter if a compatible format was found
                  and supports the specified parameters, nullptr if no suitable format is
@@ -130,7 +147,9 @@ public:
     std::unique_ptr<AudioFormatWriter> createWriterFor (const File& file,
                                                         int sampleRate,
                                                         int numChannels,
-                                                        int bitsPerSample);
+                                                        int bitsPerSample,
+                                                        const StringPairArray& metadataValues = {},
+                                                        int qualityOptionIndex = 0);
 
 private:
     std::vector<std::unique_ptr<AudioFormat>> formats;

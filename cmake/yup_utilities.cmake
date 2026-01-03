@@ -206,21 +206,17 @@ endfunction()
 #==============================================================================
 
 function (_yup_collect_upstream_candidate_paths module_name module_path output_variable)
-    set (candidate_paths "${module_path}/upstream")
+    set (candidate_paths
+        "${module_path}/upstream"
+        "${CMAKE_SOURCE_DIR}/build/externals/${module_name}")
 
-    if (DEFINED YUP_UPSTREAM_ROOT AND NOT "${YUP_UPSTREAM_ROOT}" STREQUAL "")
-        list (APPEND candidate_paths "${YUP_UPSTREAM_ROOT}/${module_name}/upstream")
-    endif()
-
-    if (CMAKE_SOURCE_DIR)
-        list (APPEND candidate_paths "${CMAKE_SOURCE_DIR}/build/externals/${module_name}/upstream")
-        list (APPEND candidate_paths "${CMAKE_SOURCE_DIR}/../build/externals/${module_name}/upstream")
-    endif()
+    get_filename_component (parent_candidate_path "${CMAKE_SOURCE_DIR}/../build/externals/${module_name}" REALPATH)
+    list (APPEND candidate_paths "${parent_candidate_path}")
 
     set (candidate_root "${CMAKE_BINARY_DIR}")
     set (max_depth 10)
     while (max_depth GREATER 0)
-        list (APPEND candidate_paths "${candidate_root}/externals/${module_name}/upstream")
+        list (APPEND candidate_paths "${candidate_root}/externals/${module_name}")
 
         get_filename_component (candidate_parent "${candidate_root}" DIRECTORY)
         if ("${candidate_parent}" STREQUAL "${candidate_root}")
@@ -233,6 +229,8 @@ function (_yup_collect_upstream_candidate_paths module_name module_path output_v
 
     set (${output_variable} "${candidate_paths}" PARENT_SCOPE)
 endfunction()
+
+#==============================================================================
 
 function (_yup_resolve_variable_paths input_list output_list)
     set (resolved_list "")
@@ -293,16 +291,9 @@ function (_yup_convert_png_to_icns png_path icons_path output_variable)
     file (REMOVE_RECURSE "${temp_iconset_path}")
     file (MAKE_DIRECTORY "${temp_iconset_path}")
 
-    _yup_execute_process_or_fail (/usr/bin/sips -z 16 16 "${png_path}" --out "${temp_iconset_path}/icon_16x16.png")
-    _yup_execute_process_or_fail (/usr/bin/sips -z 32 32 "${png_path}" --out "${temp_iconset_path}/icon_32x32.png")
-    _yup_execute_process_or_fail (/usr/bin/sips -z 32 32 "${png_path}" --out "${temp_iconset_path}/icon_16x16@2x.png")
-    _yup_execute_process_or_fail (/usr/bin/sips -z 64 64 "${png_path}" --out "${temp_iconset_path}/icon_32x32@2x.png")
-    _yup_execute_process_or_fail (/usr/bin/sips -z 128 128 "${png_path}" --out "${temp_iconset_path}/icon_128x128.png")
-    _yup_execute_process_or_fail (/usr/bin/sips -z 256 256 "${png_path}" --out "${temp_iconset_path}/icon_128x128@2x.png")
-    _yup_execute_process_or_fail (/usr/bin/sips -z 256 256 "${png_path}" --out "${temp_iconset_path}/icon_256x256.png")
-    _yup_execute_process_or_fail (/usr/bin/sips -z 512 512 "${png_path}" --out "${temp_iconset_path}/icon_256x256@2x.png")
-    _yup_execute_process_or_fail (/usr/bin/sips -z 512 512 "${png_path}" --out "${temp_iconset_path}/icon_512x512.png")
-    _yup_execute_process_or_fail (/usr/bin/sips -z 1024 1024 "${png_path}" --out "${temp_iconset_path}/icon_512x512@2x.png")
+    foreach (size IN ITEMS 16 32 128 256 512)
+        _yup_execute_process_or_fail (/usr/bin/sips -z ${size} ${size} "${png_path}" --out "${temp_iconset_path}/icon_${size}x${size}.png")
+    endforeach()
     _yup_execute_process_or_fail (/usr/bin/iconutil -c icns -o "${output_iconset_path}" "${temp_iconset_path}")
 
     file (REMOVE_RECURSE "${temp_iconset_path}")

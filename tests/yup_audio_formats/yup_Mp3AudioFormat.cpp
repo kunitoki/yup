@@ -60,19 +60,37 @@ TEST_F (Mp3AudioFormatTests, GetFormatNameReturnsMp3)
 
 TEST_F (Mp3AudioFormatTests, GetFileExtensionsIncludesMp3)
 {
-    Array<String> extensions = format->getFileExtensions();
-    EXPECT_FALSE (extensions.isEmpty());
-
-    bool foundMp3 = false;
-    for (const auto& ext : extensions)
     {
-        if (ext.equalsIgnoreCase (".mp3") || ext.equalsIgnoreCase ("mp3"))
+        Array<String> extensions = format->getFileExtensions (AudioFormat::forReading);
+        EXPECT_FALSE (extensions.isEmpty());
+
+        bool foundMp3 = false;
+        for (const auto& ext : extensions)
         {
-            foundMp3 = true;
-            break;
+            if (ext.equalsIgnoreCase (".mp3") || ext.equalsIgnoreCase ("mp3"))
+            {
+                foundMp3 = true;
+                break;
+            }
         }
+        EXPECT_TRUE (foundMp3);
     }
-    EXPECT_TRUE (foundMp3);
+
+    {
+        Array<String> extensions = format->getFileExtensions (AudioFormat::forWriting);
+        EXPECT_FALSE (extensions.isEmpty());
+
+        bool foundMp3 = false;
+        for (const auto& ext : extensions)
+        {
+            if (ext.equalsIgnoreCase (".mp3") || ext.equalsIgnoreCase ("mp3"))
+            {
+                foundMp3 = true;
+                break;
+            }
+        }
+        EXPECT_TRUE (foundMp3);
+    }
 }
 
 TEST_F (Mp3AudioFormatTests, GetPossibleBitDepthsAndSampleRates)

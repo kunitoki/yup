@@ -68,6 +68,17 @@
 #endif
 
 //==============================================================================
+/** Config: YUP_AUDIO_FORMAT_OGG
+
+    Enable Ogg Vorbis audio format support.
+*/
+#ifndef YUP_AUDIO_FORMAT_OGG
+#if YUP_MODULE_AVAILABLE_libvorbis && YUP_MODULE_AVAILABLE_libogg
+#define YUP_AUDIO_FORMAT_OGG 1
+#endif
+#endif
+
+//==============================================================================
 /** Config: YUP_AUDIO_FORMAT_OPUS
 
     Enable Opus audio format support.
@@ -124,6 +135,11 @@
 #define YUP_AUDIO_FORMAT_MP3 0
 #endif
 
+#if YUP_AUDIO_FORMAT_OGG && ! (YUP_MODULE_AVAILABLE_libvorbis && YUP_MODULE_AVAILABLE_libogg)
+#undef YUP_AUDIO_FORMAT_OGG
+#define YUP_AUDIO_FORMAT_OGG 0
+#endif
+
 #if YUP_AUDIO_FORMAT_OPUS && ! YUP_MODULE_AVAILABLE_opus_library
 #undef YUP_AUDIO_FORMAT_OPUS
 #define YUP_AUDIO_FORMAT_OPUS 0
@@ -159,6 +175,10 @@
 
 #if YUP_AUDIO_FORMAT_MP3
 #include "formats/yup_Mp3AudioFormat.h"
+#endif
+
+#if YUP_AUDIO_FORMAT_OGG
+#include "formats/yup_OggVorbisAudioFormat.h"
 #endif
 
 #if YUP_AUDIO_FORMAT_OPUS

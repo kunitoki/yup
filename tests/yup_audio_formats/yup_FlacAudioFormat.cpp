@@ -83,19 +83,37 @@ TEST_F (FlacAudioFormatTests, GetFormatNameReturnsFlac)
 
 TEST_F (FlacAudioFormatTests, GetFileExtensionsIncludesFlac)
 {
-    Array<String> extensions = format->getFileExtensions();
-    EXPECT_FALSE (extensions.isEmpty());
-
-    bool foundFlac = false;
-    for (const auto& ext : extensions)
     {
-        if (ext.equalsIgnoreCase (".flac") || ext.equalsIgnoreCase ("flac"))
+        Array<String> extensions = format->getFileExtensions (AudioFormat::forReading);
+        EXPECT_FALSE (extensions.isEmpty());
+
+        bool foundFlac = false;
+        for (const auto& ext : extensions)
         {
-            foundFlac = true;
-            break;
+            if (ext.equalsIgnoreCase (".flac") || ext.equalsIgnoreCase ("flac"))
+            {
+                foundFlac = true;
+                break;
+            }
         }
+        EXPECT_TRUE (foundFlac);
     }
-    EXPECT_TRUE (foundFlac);
+
+    {
+        Array<String> extensions = format->getFileExtensions (AudioFormat::forWriting);
+        EXPECT_FALSE (extensions.isEmpty());
+
+        bool foundFlac = false;
+        for (const auto& ext : extensions)
+        {
+            if (ext.equalsIgnoreCase (".flac") || ext.equalsIgnoreCase ("flac"))
+            {
+                foundFlac = true;
+                break;
+            }
+        }
+        EXPECT_TRUE (foundFlac);
+    }
 }
 
 TEST_F (FlacAudioFormatTests, GetPossibleBitDepthsAndSampleRates)

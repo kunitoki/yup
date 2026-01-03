@@ -26,9 +26,9 @@
 #pragma clang diagnostic ignored "-W#pragma-messages"
 #endif
 
-#include <pffft.c>
-#include <pffft_common.c>
-#include <pffastconv.c>
+#include <pffft_library/pffft.c>
+#include <pffft_library/pffft_common.c>
+#include <pffft_library/pffastconv.c>
 
 #if defined(__clang__)
 #pragma clang diagnostic pop

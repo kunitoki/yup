@@ -19,8 +19,29 @@
   ==============================================================================
 */
 
-#define DR_MP3_IMPLEMENTATION
-#include <dr_libs/dr_mp3.h>
+/*
+  ==============================================================================
 
-#define DR_WAV_IMPLEMENTATION
-#include <dr_libs/dr_wav.h>
+  BEGIN_YUP_MODULE_DECLARATION
+
+    ID:               libvorbis
+    vendor:           libvorbis
+    version:          1.3.6
+    name:             Vorbis is a general purpose perceptual audio CODEC intended to allow maximum encoder flexibility
+    description:      Vorbis is a general purpose perceptual audio CODEC intended to allow maximum encoder flexibility.
+    website:          https://xiph.org/ogg/doc/
+    upstream:         https://downloads.xiph.org/releases/vorbis/libvorbis-1.3.7.tar.xz
+    license:          MIT
+
+    dependencies:     libogg
+    searchpaths:      include lib
+
+  END_YUP_MODULE_DECLARATION
+
+  ==============================================================================
+*/
+
+#pragma once
+
+#include <vorbis/vorbisfile.h>
+#include <vorbis/vorbisenc.h>
