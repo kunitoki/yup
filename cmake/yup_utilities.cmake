@@ -208,8 +208,10 @@ endfunction()
 function (_yup_collect_upstream_candidate_paths module_name module_path output_variable)
     set (candidate_paths
         "${module_path}/upstream"
-        "${CMAKE_SOURCE_DIR}/build/externals/${module_name}"
-        "${CMAKE_SOURCE_DIR}/../build/externals/${module_name}")
+        "${CMAKE_SOURCE_DIR}/build/externals/${module_name}")
+
+    get_filename_component (parent_candidate_path "${CMAKE_SOURCE_DIR}/../build/externals/${module_name}" REALPATH)
+    list (APPEND candidate_paths "${parent_candidate_path}")
 
     set (candidate_root "${CMAKE_BINARY_DIR}")
     set (max_depth 10)
