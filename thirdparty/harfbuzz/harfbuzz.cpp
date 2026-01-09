@@ -24,18 +24,18 @@
  #pragma clang diagnostic ignored "-Wempty-body"
  #pragma clang diagnostic ignored "-Wunused-function"
  #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+ #pragma clang diagnostic ignored "-Wformat"
 #elif __GNUC__
  #pragma GCC diagnostic push
  #pragma GCC diagnostic ignored "-Wempty-body"
  #pragma GCC diagnostic ignored "-Wunused-function"
  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+ #pragma GCC diagnostic ignored "-Wformat"
 #endif
 
 #include "harfbuzz.h"
 
 #include "upstream/graph/gsubgpos-context.cc"
-//#include "upstream/harfbuzz-subset.cc"
-//#include "upstream/harfbuzz.cc"
 #include "upstream/hb-aat-layout.cc"
 #include "upstream/hb-aat-map.cc"
 #include "upstream/hb-blob.cc"
