@@ -40,7 +40,8 @@ standalone/*/build/*
 cmake-build*
 out/*
 
-# Ides
+# Ides/Agents
 .vscode
 .idea
 .vs
+.claude
