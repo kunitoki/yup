@@ -32,7 +32,7 @@
     website:            https://github.com/rive-app/rive-runtime
     license:            MIT
 
-    dependencies:       harfbuzz sheenbidi yoga_library
+    dependencies:       harfbuzz sheenbidi_library yoga_library
     defines:            WITH_RIVE_TEXT=1 WITH_RIVE_YOGA=1 WITH_RIVE_LAYOUT=1
     appleFrameworks:    CoreText
     searchpaths:        include

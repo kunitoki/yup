@@ -24,8 +24,8 @@
 
   BEGIN_YUP_MODULE_DECLARATION
 
-    ID:               sheenbidi
-    vendor:           sheenbidi
+    ID:               sheenbidi_library
+    vendor:           sheenbidi_library
     version:          2.6
     name:             SheenBidi implements Unicode Bidirectional Algorithm
     description:      It is a sophisticated implementation which provides the developers an easy way to use UBA in their applications.
