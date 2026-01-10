@@ -31,12 +31,6 @@ ScrollBar::ScrollBar (Orientation orientation)
 
 ScrollBar::~ScrollBar()
 {
-    // Ensure we unregister from global mouse events if we're destroyed while dragging
-    if (isDraggingThumb)
-    {
-        if (auto* desktop = Desktop::getInstance())
-            desktop->removeGlobalMouseListener (this);
-    }
 }
 
 //==============================================================================
@@ -213,10 +207,6 @@ void ScrollBar::mouseDown (const MouseEvent& event)
         dragStartPosition = clickPos;
         dragStartRangeStart = currentRangeStart;
 
-        // Register for global mouse events to continue receiving drag events even when cursor leaves window
-        if (auto* desktop = Desktop::getInstance())
-            desktop->addGlobalMouseListener (this);
-
         repaint();
     }
     else
@@ -240,10 +230,6 @@ void ScrollBar::mouseUp (const MouseEvent& event)
     {
         isDraggingThumb = false;
 
-        // Unregister from global mouse events
-        if (auto* desktop = Desktop::getInstance())
-            desktop->removeGlobalMouseListener (this);
-
         repaint();
     }
 }
@@ -253,9 +239,7 @@ void ScrollBar::mouseDrag (const MouseEvent& event)
     if (! isDraggingThumb)
         return;
 
-    // Convert screen coordinates to local coordinates
-    // When receiving global mouse events, the position is in screen coordinates
-    auto currentPos = screenToLocal (event.getPosition());
+    auto currentPos = event.getPosition();
 
     auto dragDelta = (orientation == Orientation::vertical)
                        ? (currentPos.getY() - dragStartPosition.getY())
