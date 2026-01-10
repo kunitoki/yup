@@ -22,25 +22,67 @@
 namespace yup
 {
 
+/** A base class for receiving mouse events.
+
+    To receive mouse events, create a subclass of MouseListener and implement the
+    relevant callback methods. Then register your listener with a Component using
+    the Component::addMouseListener() method.
+
+    @see MouseEvent, Component::addMouseListener, Component::removeMouseListener
+*/
 class YUP_API MouseListener
 {
 public:
+    /** Destructor. */
     virtual ~MouseListener() {}
 
+    /** Called when the mouse enters a component.
+
+        @param event The mouse event.
+    */
     virtual void mouseEnter (const MouseEvent& event) {}
 
+    /** Called when the mouse exits a component.
+
+        @param event The mouse event.
+    */
     virtual void mouseExit (const MouseEvent& event) {}
 
+    /** Called when the mouse is double-clicked.
+
+        @param event The mouse event.
+    */
     virtual void mouseDoubleClick (const MouseEvent& event) {}
 
+    /** Called when a mouse button is pressed.
+
+        @param event The mouse event.
+    */
     virtual void mouseDown (const MouseEvent& event) {}
 
+    /** Called when the mouse is moved.
+
+        @param event The mouse event.
+    */
     virtual void mouseMove (const MouseEvent& event) {}
 
+    /** Called when the mouse is dragged.
+
+        @param event The mouse event.
+    */
     virtual void mouseDrag (const MouseEvent& event) {}
 
+    /** Called when a mouse button is released.
+
+        @param event The mouse event.
+    */
     virtual void mouseUp (const MouseEvent& event) {}
 
+    /** Called when the mouse wheel is moved.
+
+        @param event The mouse event.
+        @param wheelData The data associated with the mouse wheel movement.
+    */
     virtual void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) {}
 
 private:

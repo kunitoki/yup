@@ -21,9 +21,6 @@
 
 #pragma once
 
-namespace yup
-{
-
 class SvgDemo : public yup::Component
 {
 public:
@@ -46,7 +43,7 @@ public:
         parseSvgFile (currentSvgFileIndex);
     }
 
-    void paint (Graphics& g) override
+    void paint (yup::Graphics& g) override
     {
         g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
         g.fillAll();
@@ -92,8 +89,6 @@ private:
     }
 
     yup::Drawable drawable;
-    Array<yup::File> svgFiles;
+    yup::Array<yup::File> svgFiles;
     int currentSvgFileIndex = 0;
 };
-
-} // namespace yup

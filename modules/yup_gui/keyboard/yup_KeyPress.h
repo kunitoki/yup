@@ -69,6 +69,7 @@ public:
     }
 
     //==============================================================================
+    /** Copy constructor and assignment operators. */
     constexpr KeyPress (const KeyPress& other) noexcept = default;
     constexpr KeyPress (KeyPress&& other) noexcept = default;
     constexpr KeyPress& operator= (const KeyPress& other) noexcept = default;

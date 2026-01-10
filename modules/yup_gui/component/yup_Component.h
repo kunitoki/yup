@@ -30,7 +30,7 @@ namespace yup
     It provides a common interface for all components, and is used to create and manage GUI components.
     It is a lightweight class that is used to create and manage GUI components.
  */
-class YUP_API Component
+class YUP_API Component : public MouseListener
 {
 public:
     //==============================================================================
@@ -994,49 +994,49 @@ public:
 
         @param event The mouse event.
      */
-    virtual void mouseEnter (const MouseEvent& event);
+    void mouseEnter (const MouseEvent& event) override;
 
     /**
         Called when the mouse exits the component.
 
         @param event The mouse event.
      */
-    virtual void mouseExit (const MouseEvent& event);
+    void mouseExit (const MouseEvent& event) override;
 
     /**
         Called when the mouse button is pressed.
 
         @param event The mouse event.
      */
-    virtual void mouseDown (const MouseEvent& event);
+    void mouseDown (const MouseEvent& event) override;
 
     /**
         Called when the mouse is moved.
 
         @param event The mouse event.
      */
-    virtual void mouseMove (const MouseEvent& event);
+    void mouseMove (const MouseEvent& event) override;
 
     /**
         Called when the mouse is dragged.
 
         @param event The mouse event.
      */
-    virtual void mouseDrag (const MouseEvent& event);
+    void mouseDrag (const MouseEvent& event) override;
 
     /**
         Called when the mouse button is released.
 
         @param event The mouse event.
      */
-    virtual void mouseUp (const MouseEvent& event);
+    void mouseUp (const MouseEvent& event) override;
 
     /**
         Called when the mouse button is double clicked.
 
         @param event The mouse event.
      */
-    virtual void mouseDoubleClick (const MouseEvent& event);
+    void mouseDoubleClick (const MouseEvent& event) override;
 
     /**
         Called when the mouse wheel is scrolled.
@@ -1044,7 +1044,7 @@ public:
         @param event The mouse event.
         @param wheelData The mouse wheel data.
      */
-    virtual void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
+    void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
 
     //==============================================================================
     /**

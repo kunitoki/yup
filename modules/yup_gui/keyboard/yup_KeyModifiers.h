@@ -45,6 +45,7 @@ public:
     }
 
     //==============================================================================
+    /** Copy constructor and assignment operators. */
     constexpr KeyModifiers (const KeyModifiers& other) noexcept = default;
     constexpr KeyModifiers (KeyModifiers&& other) noexcept = default;
     constexpr KeyModifiers& operator= (const KeyModifiers& other) noexcept = default;
