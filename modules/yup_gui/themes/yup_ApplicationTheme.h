@@ -130,18 +130,33 @@ public:
 
     //==============================================================================
     /**
-        Sets the default font for the application theme.
+        Sets the default text font for the application theme.
 
-        @param font  The font to set as the default.
+        @param font  The font to set as the default font (for text).
     */
     void setDefaultFont (Font font);
 
     /**
-        Returns the default font for the application theme.
+        Returns the default text font for the application theme.
 
-        @returns  The default font.
+        @returns  The default text font.
     */
     const Font& getDefaultFont() const;
+
+    //==============================================================================
+    /**
+        Sets the default icon font for the application theme.
+
+        @param font  The font to set as the default font (for icons).
+    */
+    void setDefaultIconFont (Font font);
+
+    /**
+        Returns the default icon font for the application theme.
+
+        @returns  The default icon font.
+    */
+    const Font& getDefaultIconFont() const;
 
 private:
     static ApplicationTheme::Ptr& getGlobalThemeInstance();
@@ -150,6 +165,7 @@ private:
     std::unordered_map<std::type_index, ComponentStyle::Ptr> componentStyles;
     std::unordered_map<Identifier, Color> defaultColors;
     Font defaultFont;
+    Font defaultIconFont;
 
     YUP_LEAK_DETECTOR (ApplicationTheme)
 };

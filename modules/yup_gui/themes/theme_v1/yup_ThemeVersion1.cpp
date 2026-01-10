@@ -30,6 +30,8 @@ namespace yup
 
 extern const uint8_t RobotoFlexFont_data[];
 extern const std::size_t RobotoFlexFont_size;
+extern const uint8_t FontAwesome7Font_data[];
+extern const std::size_t FontAwesome7Font_size;
 
 //==============================================================================
 
@@ -768,6 +770,100 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
 }
 
 //==============================================================================
+
+void paintScrollBar (Graphics& g, const ApplicationTheme& theme, const ScrollBar& scrollBar)
+{
+    // Don't paint if hidden
+    if (scrollBar.getVisibilityMode() == ScrollBar::VisibilityMode::alwaysHidden)
+        return;
+
+    // Don't paint in auto-hide mode if scrolling is not needed
+    if (scrollBar.getVisibilityMode() == ScrollBar::VisibilityMode::autoHide && ! scrollBar.isScrollingNeeded())
+        return;
+
+    auto trackBounds = scrollBar.getTrackBoundsForRendering();
+    auto thumbBounds = scrollBar.getThumbBoundsForRendering();
+
+    // Draw track (optional, usually invisible on macOS)
+    auto trackColor = scrollBar.findColor (ScrollBar::Style::trackColorId).value_or (Color (0x00000000));
+    if (trackColor.getAlpha() > 0)
+    {
+        g.setFillColor (trackColor);
+        auto cornerSize = scrollBar.getScrollBarWidth() * 0.5f;
+        g.fillRoundedRect (trackBounds, cornerSize);
+    }
+
+    // Draw thumb with rounded caps
+    Color thumbColor;
+
+    if (scrollBar.isDragging())
+        thumbColor = scrollBar.findColor (ScrollBar::Style::thumbDraggingColorId).value_or (Color (0x99000000));
+    else if (scrollBar.isThumbHovered())
+        thumbColor = scrollBar.findColor (ScrollBar::Style::thumbHoverColorId).value_or (Color (0x77000000));
+    else
+        thumbColor = scrollBar.findColor (ScrollBar::Style::thumbColorId).value_or (Color (0x55000000));
+
+    g.setFillColor (thumbColor);
+
+    // Draw with rounded caps (full rounding for pill shape)
+    auto cornerSize = scrollBar.getScrollBarWidth() * 0.5f;
+    g.fillRoundedRect (thumbBounds, cornerSize);
+}
+
+void paintListBoxItem (Graphics& g, const ApplicationTheme& theme, const ListBoxItem& item)
+{
+    // Determine background color
+    Color backgroundColor;
+
+    if (item.isSelected())
+        backgroundColor = item.findColor (ListBoxItem::Style::backgroundColorSelectedId).value_or (Color (0xff3a7ebf));
+    else if (item.isHovered())
+        backgroundColor = item.findColor (ListBoxItem::Style::backgroundColorHoveredId).value_or (Color (0x22ffffff));
+    else
+        backgroundColor = item.findColor (ListBoxItem::Style::backgroundColorId).value_or (Color (0x00000000));
+
+    // Fill background
+    if (backgroundColor.getAlpha() > 0)
+    {
+        g.setFillColor (backgroundColor);
+        g.fillRect (item.getLocalBounds());
+    }
+
+    // Draw icon
+    auto iconDrawable = item.getIconDrawable();
+    auto iconBounds = item.getIconBoundsForRendering();
+    if (iconDrawable != nullptr && ! iconBounds.isEmpty())
+        iconDrawable->paint (g, iconBounds, Fitting::scaleToFit, Justification::center);
+
+    // Draw text
+    auto text = item.getText();
+    auto textBounds = item.getTextBoundsForRendering();
+    if (text.isNotEmpty() && ! textBounds.isEmpty())
+    {
+        Color textColor;
+
+        if (item.isSelected())
+            textColor = item.findColor (ListBoxItem::Style::textColorSelectedId).value_or (Color (0xffffffff));
+        else
+            textColor = item.findColor (ListBoxItem::Style::textColorId).value_or (Color (0xff000000));
+
+        g.setFillColor (textColor);
+
+        auto font = theme.getDefaultFont();
+        auto fontSize = std::min (textBounds.getHeight() * 0.6f, 16.0f);
+
+        auto styledText = yup::StyledText();
+        {
+            auto modifier = styledText.startUpdate();
+            modifier.appendText (text, font.withHeight (fontSize));
+            modifier.setVerticalAlign (StyledText::middle);
+        }
+
+        g.fillFittedText (styledText, textBounds);
+    }
+}
+
+//==============================================================================
 #if YUP_MODULE_AVAILABLE_yup_audio_gui
 void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKeyboardComponent& keyboard)
 {
@@ -805,92 +901,92 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
     // Paint white keys first
     for (int note = keyboard.getLowestVisibleKey(); note <= keyboard.getHighestVisibleKey(); ++note)
     {
-        if (! keyboard.isBlackKey (note))
+        if (keyboard.isBlackKey (note))
+            continue;
+
+        bool isBlack;
+        Rectangle<float> keyArea;
+        keyboard.getKeyPosition (note, keyWidth, keyArea, isBlack);
+
+        auto isPressed = keyboard.isNoteOn (note);
+        auto isOver = keyboard.isMouseOverNote (note);
+
+        // Base colors from theme
+        auto whiteKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyColorId);
+        auto pressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyPressedColorId);
+        auto outlineColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::keyOutlineColorId);
+
+        // Determine fill color based on state
+        Color fillColor = whiteKeyColor;
+        if (isPressed)
+            fillColor = pressedColor;
+        if (isOver && ! isPressed)
+            fillColor = whiteKeyColor.blendedWith (pressedColor.withAlpha (0.3f), BlendMode::SrcOver);
+
+        // Fill the key
+        g.setFillColor (fillColor);
+        g.fillRect (keyArea);
+
+        // Draw key separator line on the left edge
+        if (! outlineColor.isTransparent())
         {
-            bool isBlack;
-            Rectangle<float> keyArea;
-            keyboard.getKeyPosition (note, keyWidth, keyArea, isBlack);
+            g.setFillColor (outlineColor);
+            g.fillRect (keyArea.removeFromLeft (1.0f));
 
-            auto isPressed = keyboard.isNoteOn (note);
-            auto isOver = keyboard.isMouseOverNote (note);
+            // Draw right edge for the last key
+            if (note == keyboard.getHighestVisibleKey())
+                g.fillRect (keyArea.removeFromRight (1.0f).translated (keyArea.getWidth(), 0.0f));
+        }
 
-            // Base colors from theme
-            auto whiteKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyColorId);
-            auto pressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyPressedColorId);
-            auto outlineColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::keyOutlineColorId);
-
-            // Determine fill color based on state
-            Color fillColor = whiteKeyColor;
-            if (isPressed)
-                fillColor = pressedColor;
-            if (isOver && ! isPressed)
-                fillColor = whiteKeyColor.blendedWith (pressedColor.withAlpha (0.3f), BlendMode::SrcOver);
-
-            // Fill the key
-            g.setFillColor (fillColor);
-            g.fillRect (keyArea);
-
-            // Draw key separator line on the left edge
-            if (! outlineColor.isTransparent())
+        // Draw note text if there's space
+        if (keyboard.getWidth() > 100 && keyArea.getWidth() > 15.0f)
+        {
+            auto noteText = String();
+            int noteInOctave = note % 12;
+            switch (noteInOctave)
             {
-                g.setFillColor (outlineColor);
-                g.fillRect (keyArea.removeFromLeft (1.0f));
-
-                // Draw right edge for the last key
-                if (note == keyboard.getHighestVisibleKey())
-                    g.fillRect (keyArea.removeFromRight (1.0f).translated (keyArea.getWidth(), 0.0f));
+                case 0:
+                    noteText = "C";
+                    break;
+                case 2:
+                    noteText = "D";
+                    break;
+                case 4:
+                    noteText = "E";
+                    break;
+                case 5:
+                    noteText = "F";
+                    break;
+                case 7:
+                    noteText = "G";
+                    break;
+                case 9:
+                    noteText = "A";
+                    break;
+                case 11:
+                    noteText = "B";
+                    break;
+                default:
+                    break;
             }
 
-            // Draw note text if there's space
-            if (keyboard.getWidth() > 100 && keyArea.getWidth() > 15.0f)
+            if (noteText.isNotEmpty())
             {
-                auto noteText = String();
-                int noteInOctave = note % 12;
-                switch (noteInOctave)
+                auto textColor = outlineColor.contrasting (0.8f);
+                if (isPressed)
+                    textColor = pressedColor.contrasting (0.8f);
+
+                g.setFillColor (textColor);
+
+                StyledText styledText;
                 {
-                    case 0:
-                        noteText = "C";
-                        break;
-                    case 2:
-                        noteText = "D";
-                        break;
-                    case 4:
-                        noteText = "E";
-                        break;
-                    case 5:
-                        noteText = "F";
-                        break;
-                    case 7:
-                        noteText = "G";
-                        break;
-                    case 9:
-                        noteText = "A";
-                        break;
-                    case 11:
-                        noteText = "B";
-                        break;
-                    default:
-                        break;
+                    auto modifier = styledText.startUpdate();
+                    modifier.appendText (noteText, theme.getDefaultFont().withHeight (11.0f));
+                    modifier.setHorizontalAlign (StyledText::center);
                 }
 
-                if (noteText.isNotEmpty())
-                {
-                    auto textColor = outlineColor.contrasting (0.8f);
-                    if (isPressed)
-                        textColor = pressedColor.contrasting (0.8f);
-
-                    g.setFillColor (textColor);
-
-                    StyledText styledText;
-                    {
-                        auto modifier = styledText.startUpdate();
-                        modifier.appendText (noteText, theme.getDefaultFont().withHeight (11.0f));
-                        modifier.setHorizontalAlign (StyledText::center);
-                    }
-
-                    auto textArea = keyArea.reduced (2.0f).removeFromBottom (16.0f);
-                    g.fillFittedText (styledText, textArea);
-                }
+                auto textArea = keyArea.reduced (2.0f).removeFromBottom (16.0f);
+                g.fillFittedText (styledText, textArea);
             }
         }
     }
@@ -898,50 +994,50 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
     // Paint black keys on top
     for (int note = keyboard.getLowestVisibleKey(); note <= keyboard.getHighestVisibleKey(); ++note)
     {
-        if (keyboard.isBlackKey (note))
+        if (! keyboard.isBlackKey (note))
+            continue;
+
+        bool isBlack;
+        Rectangle<float> keyArea;
+        keyboard.getKeyPosition (note, keyWidth, keyArea, isBlack);
+
+        auto isPressed = keyboard.isNoteOn (note);
+        auto isOver = keyboard.isMouseOverNote (note);
+
+        // Base colors from theme
+        auto blackKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyColorId);
+        auto blackPressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyPressedColorId);
+
+        // Determine fill color based on state
+        Color fillColor = blackKeyColor;
+        if (isPressed)
+            fillColor = blackPressedColor;
+        if (isOver && ! isPressed)
+            fillColor = blackKeyColor.blendedWith (blackPressedColor.withAlpha (0.3f), BlendMode::SrcOver);
+
+        // Fill the key
+        g.setFillColor (fillColor);
+        g.fillRect (keyArea);
+
+        if (isPressed)
         {
-            bool isBlack;
-            Rectangle<float> keyArea;
-            keyboard.getKeyPosition (note, keyWidth, keyArea, isBlack);
+            // Draw pressed outline
+            g.setStrokeColor (blackKeyColor);
+            g.setStrokeWidth (1.0f);
+            g.strokeRect (keyArea);
+        }
+        else
+        {
+            // Draw 3D highlight effect for unpressed keys
+            auto highlightColor = fillColor.brighter (0.4f);
+            g.setFillColor (highlightColor);
 
-            auto isPressed = keyboard.isNoteOn (note);
-            auto isOver = keyboard.isMouseOverNote (note);
+            // Create highlight area - top portion and side edges
+            auto sideIndent = keyArea.getWidth() * 0.125f;
+            auto topIndent = keyArea.getHeight() * 0.875f;
+            auto highlightArea = keyArea.reduced (sideIndent, 0).removeFromTop (topIndent);
 
-            // Base colors from theme
-            auto blackKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyColorId);
-            auto blackPressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyPressedColorId);
-
-            // Determine fill color based on state
-            Color fillColor = blackKeyColor;
-            if (isPressed)
-                fillColor = blackPressedColor;
-            if (isOver && ! isPressed)
-                fillColor = blackKeyColor.blendedWith (blackPressedColor.withAlpha (0.3f), BlendMode::SrcOver);
-
-            // Fill the key
-            g.setFillColor (fillColor);
-            g.fillRect (keyArea);
-
-            if (isPressed)
-            {
-                // Draw pressed outline
-                g.setStrokeColor (blackKeyColor);
-                g.setStrokeWidth (1.0f);
-                g.strokeRect (keyArea);
-            }
-            else
-            {
-                // Draw 3D highlight effect for unpressed keys
-                auto highlightColor = fillColor.brighter (0.4f);
-                g.setFillColor (highlightColor);
-
-                // Create highlight area - top portion and side edges
-                auto sideIndent = keyArea.getWidth() * 0.125f;
-                auto topIndent = keyArea.getHeight() * 0.875f;
-                auto highlightArea = keyArea.reduced (sideIndent, 0).removeFromTop (topIndent);
-
-                g.fillRect (highlightArea);
-            }
+            g.fillRect (highlightArea);
         }
     }
 }
@@ -959,6 +1055,14 @@ ApplicationTheme::Ptr createThemeVersion1()
             yup::Logger::outputDebugString (result.getErrorMessage());
 
         theme->setDefaultFont (std::move (font));
+    }
+
+    {
+        Font font;
+        if (auto result = font.loadFromData (MemoryBlock (&FontAwesome7Font_data[0], FontAwesome7Font_size)); result.failed())
+            yup::Logger::outputDebugString (result.getErrorMessage());
+
+        theme->setDefaultIconFont (std::move (font));
     }
 
     theme->setComponentStyle<Slider> (ComponentStyle::createStyle<Slider> (paintSlider));
@@ -982,6 +1086,19 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setColor (Label::Style::outlineColorId, Colors::transparentBlack);
 
     theme->setComponentStyle<PopupMenu> (ComponentStyle::createStyle<PopupMenu> (paintPopupMenu));
+
+    theme->setComponentStyle<ScrollBar> (ComponentStyle::createStyle<ScrollBar> (paintScrollBar));
+    theme->setColor (ScrollBar::Style::trackColorId, Colors::transparentBlack);
+    theme->setColor (ScrollBar::Style::thumbColorId, Color (0x55000000));
+    theme->setColor (ScrollBar::Style::thumbHoverColorId, Color (0x77000000));
+    theme->setColor (ScrollBar::Style::thumbDraggingColorId, Color (0x99000000));
+
+    theme->setComponentStyle<ListBoxItem> (ComponentStyle::createStyle<ListBoxItem> (paintListBoxItem));
+    theme->setColor (ListBoxItem::Style::textColorId, Colors::black);
+    theme->setColor (ListBoxItem::Style::textColorSelectedId, Colors::white);
+    theme->setColor (ListBoxItem::Style::backgroundColorId, Colors::transparentBlack);
+    theme->setColor (ListBoxItem::Style::backgroundColorSelectedId, Color (0xff3a7ebf));
+    theme->setColor (ListBoxItem::Style::backgroundColorHoveredId, Color (0x22ffffff));
 
 #if YUP_MODULE_AVAILABLE_yup_audio_gui
     theme->setComponentStyle<MidiKeyboardComponent> (ComponentStyle::createStyle<MidiKeyboardComponent> (paintMidiKeyboard));
