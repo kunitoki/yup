@@ -52,7 +52,6 @@
 #include "native/yup_AudioWorkgroup_apple.h"
 #endif
 
-#include "buffers/yup_FloatVectorOperations.cpp"
 #include "buffers/yup_AudioChannelSet.cpp"
 #include "buffers/yup_AudioProcessLoadMeasurer.cpp"
 #include "utilities/yup_IIRFilter.cpp"

@@ -247,6 +247,28 @@ protected:
             *d++ = (int) (*s++ * multiplier);
     }
 
+    static void encodeMidSide (float* mid, float* side, const float* left, const float* right, int num)
+    {
+        while (--num >= 0)
+        {
+            const float l = *left++;
+            const float r = *right++;
+            *mid++ = (l + r) * 0.5f;
+            *side++ = (l - r) * 0.5f;
+        }
+    }
+
+    static void decodeMidSide (float* left, float* right, const float* mid, const float* side, int num)
+    {
+        while (--num >= 0)
+        {
+            const float m = *mid++;
+            const float s = *side++;
+            *left++ = m + s;
+            *right++ = m - s;
+        }
+    }
+
     template <class ValueType>
     static void fillRandomly (Random& random, ValueType* d, int num)
     {
@@ -385,6 +407,85 @@ TEST_F (FloatVectorOperationsTests, FloatToDoubleAndBack)
         FloatVectorOperations::convertDoubleToFloat (floatData, doubleData, num);
         for (int i = 0; i < num; ++i)
             EXPECT_NEAR ((float) floatData[i], (float) doubleData[i], std::numeric_limits<float>::epsilon());
+    }
+}
+
+TEST_F (FloatVectorOperationsTests, MidSideEncodeDecodeRoundTrip)
+{
+    Random& random = Random::getSystemRandom();
+
+    for (int i = 500; --i >= 0;)
+    {
+        const int range = random.nextBool() ? 500 : 10;
+        const int num = random.nextInt (range) + 1;
+
+        HeapBlock<float> leftBuffer (num + 16);
+        HeapBlock<float> rightBuffer (num + 16);
+        HeapBlock<float> midBuffer (num + 16);
+        HeapBlock<float> sideBuffer (num + 16);
+        HeapBlock<float> leftOutBuffer (num + 16);
+        HeapBlock<float> rightOutBuffer (num + 16);
+
+#if YUP_ARM
+        float* const left = leftBuffer;
+        float* const right = rightBuffer;
+        float* const mid = midBuffer;
+        float* const side = sideBuffer;
+        float* const leftOut = leftOutBuffer;
+        float* const rightOut = rightOutBuffer;
+#else
+        float* const left = addBytesToPointer (leftBuffer.get(), random.nextInt (16));
+        float* const right = addBytesToPointer (rightBuffer.get(), random.nextInt (16));
+        float* const mid = addBytesToPointer (midBuffer.get(), random.nextInt (16));
+        float* const side = addBytesToPointer (sideBuffer.get(), random.nextInt (16));
+        float* const leftOut = addBytesToPointer (leftOutBuffer.get(), random.nextInt (16));
+        float* const rightOut = addBytesToPointer (rightOutBuffer.get(), random.nextInt (16));
+#endif
+
+        fillRandomly (random, left, num);
+        fillRandomly (random, right, num);
+
+        encodeMidSide (mid, side, left, right, num);
+        FloatVectorOperations::encodeMidSide (leftOut, rightOut, left, right, num);
+        EXPECT_TRUE (buffersMatch (mid, leftOut, num));
+        EXPECT_TRUE (buffersMatch (side, rightOut, num));
+
+        FloatVectorOperations::decodeMidSide (leftOut, rightOut, mid, side, num);
+
+        for (int j = 0; j < num; ++j)
+        {
+            EXPECT_NEAR (leftOut[j], left[j], std::numeric_limits<float>::epsilon());
+            EXPECT_NEAR (rightOut[j], right[j], std::numeric_limits<float>::epsilon());
+        }
+    }
+}
+
+TEST_F (FloatVectorOperationsTests, MidSideKnownValues)
+{
+    constexpr int num = 4;
+    const float left[num] = { 1.0f, -1.0f, 2.0f, -2.0f };
+    const float right[num] = { -1.0f, 1.0f, 2.0f, -2.0f };
+    float mid[num] = {};
+    float side[num] = {};
+    float decodedLeft[num] = {};
+    float decodedRight[num] = {};
+
+    FloatVectorOperations::encodeMidSide (mid, side, left, right, num);
+    FloatVectorOperations::decodeMidSide (decodedLeft, decodedRight, mid, side, num);
+
+    EXPECT_FLOAT_EQ (mid[0], 0.0f);
+    EXPECT_FLOAT_EQ (side[0], 1.0f);
+    EXPECT_FLOAT_EQ (mid[1], 0.0f);
+    EXPECT_FLOAT_EQ (side[1], -1.0f);
+    EXPECT_FLOAT_EQ (mid[2], 2.0f);
+    EXPECT_FLOAT_EQ (side[2], 0.0f);
+    EXPECT_FLOAT_EQ (mid[3], -2.0f);
+    EXPECT_FLOAT_EQ (side[3], 0.0f);
+
+    for (int i = 0; i < num; ++i)
+    {
+        EXPECT_FLOAT_EQ (decodedLeft[i], left[i]);
+        EXPECT_FLOAT_EQ (decodedRight[i], right[i]);
     }
 }
 

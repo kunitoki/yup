@@ -32,7 +32,7 @@
     website:              https://github.com/kunitoki/yup
     license:              ISC
 
-    dependencies:         yup_core yup_audio_basics
+    dependencies:         yup_core yup_audio_basics yup_simd
     appleFrameworks:      Accelerate
 
   END_YUP_MODULE_DECLARATION
@@ -45,6 +45,7 @@
 
 #include <yup_core/yup_core.h>
 #include <yup_audio_basics/yup_audio_basics.h>
+#include <yup_simd/yup_simd.h>
 
 //==============================================================================
 /** Config: YUP_ENABLE_FFTW3
