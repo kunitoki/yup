@@ -1718,16 +1718,18 @@ TEST (RectangleTests, WithSizeKeepingCenter_OddSizeInteger)
     EXPECT_EQ (center.getY(), 20);
 
     // Resize to odd width and height
+    // New position: center - newSize/2 = (20 - 15/2, 20 - 13/2) = (20 - 7, 20 - 6) = (13, 14)
     auto resized = r.withSizeKeepingCenter (15, 13);
-    EXPECT_EQ (resized.getX(), 12);
-    EXPECT_EQ (resized.getY(), 13);
+    EXPECT_EQ (resized.getX(), 13);
+    EXPECT_EQ (resized.getY(), 14);
     EXPECT_EQ (resized.getWidth(), 15);
     EXPECT_EQ (resized.getHeight(), 13);
 
-    // Center might shift by 1 due to integer division
+    // Center is preserved correctly with integer division
+    // New center: (13 + 15/2, 14 + 13/2) = (13 + 7, 14 + 6) = (20, 20)
     auto newCenter = resized.getCenter();
-    EXPECT_EQ (newCenter.getX(), 19);
-    EXPECT_EQ (newCenter.getY(), 19);
+    EXPECT_EQ (newCenter.getX(), 20);
+    EXPECT_EQ (newCenter.getY(), 20);
 }
 
 TEST (RectangleTests, WithSizeKeepingCenter_SameSize)
