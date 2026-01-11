@@ -782,20 +782,18 @@ void paintScrollBar (Graphics& g, const ApplicationTheme& theme, const ScrollBar
         return;
 
     auto trackBounds = scrollBar.getTrackBoundsForRendering();
-    auto thumbBounds = scrollBar.getThumbBoundsForRendering();
+    auto thumbBounds = scrollBar.getThumbBoundsForRendering().reduced (3);
+    auto cornerSize = scrollBar.getScrollBarWidth() * 0.5f;
 
     // Draw track (optional, usually invisible on macOS)
-    auto trackColor = scrollBar.findColor (ScrollBar::Style::trackColorId).value_or (Color (0x00000000));
-    if (trackColor.getAlpha() > 0)
+    if (const auto trackColor = scrollBar.findColor (ScrollBar::Style::trackColorId); trackColor && ! trackColor->isTransparent())
     {
-        g.setFillColor (trackColor);
-        auto cornerSize = scrollBar.getScrollBarWidth() * 0.5f;
-        g.fillRoundedRect (trackBounds, cornerSize);
+        g.setFillColor (*trackColor);
+        g.fillRect (trackBounds);
     }
 
     // Draw thumb with rounded caps
     Color thumbColor;
-
     if (scrollBar.isDragging())
         thumbColor = scrollBar.findColor (ScrollBar::Style::thumbDraggingColorId).value_or (Color (0x99000000));
     else if (scrollBar.isThumbHovered())
@@ -804,9 +802,6 @@ void paintScrollBar (Graphics& g, const ApplicationTheme& theme, const ScrollBar
         thumbColor = scrollBar.findColor (ScrollBar::Style::thumbColorId).value_or (Color (0x55000000));
 
     g.setFillColor (thumbColor);
-
-    // Draw with rounded caps (full rounding for pill shape)
-    auto cornerSize = scrollBar.getScrollBarWidth() * 0.5f;
     g.fillRoundedRect (thumbBounds, cornerSize);
 }
 
@@ -1088,7 +1083,7 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setComponentStyle<PopupMenu> (ComponentStyle::createStyle<PopupMenu> (paintPopupMenu));
 
     theme->setComponentStyle<ScrollBar> (ComponentStyle::createStyle<ScrollBar> (paintScrollBar));
-    theme->setColor (ScrollBar::Style::trackColorId, Colors::transparentBlack);
+    theme->setColor (ScrollBar::Style::trackColorId, Color (0xff3d3d3d));
     theme->setColor (ScrollBar::Style::thumbColorId, Color (0x55000000));
     theme->setColor (ScrollBar::Style::thumbHoverColorId, Color (0x77000000));
     theme->setColor (ScrollBar::Style::thumbDraggingColorId, Color (0x99000000));

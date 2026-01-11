@@ -115,9 +115,15 @@ public:
 
         // Draw content with clipping and translation
         {
+            auto state = g.saveState();
+
             // Translate to viewport origin (no scrolling applied yet)
             auto currentTransform = g.getTransform();
             g.setTransform (currentTransform.translated (-scrollX, -scrollY));
+
+            // Clip path ?
+            auto bounds = getBounds();
+            g.setClipPath (yup::Rectangle<float> (getLeft() + visibleLeft, getTop() + visibleTop, viewportWidth, viewportHeight));
 
             // Draw canvas background (only visible portion)
             g.setFillColor (yup::Color (0xff2a2a2a));
