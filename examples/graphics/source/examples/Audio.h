@@ -364,9 +364,9 @@ public:
             slider->setRange (0.0f, 1.0f);
             slider->setDefaultValue (0.0f);
 
-            slider->onValueChanged = [this, i] (float value)
+            slider->onValueChanged = [this, i] (double value)
             {
-                harmonicSynth.setHarmonicAmplitude (i, value * 0.4f); // Scale down to prevent clipping
+                harmonicSynth.setHarmonicAmplitude (i, (float) value * 0.4f); // Scale down to prevent clipping
             };
 
             addAndMakeVisible (slider);
