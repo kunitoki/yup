@@ -410,9 +410,9 @@ public:
         volumeSlider->setRange ({ 0.0f, 1.0f });
         volumeSlider->setDefaultValue (0.5f);
 
-        volumeSlider->onValueChanged = [this] (float value)
+        volumeSlider->onValueChanged = [this] (double value)
         {
-            masterVolume = value;
+            masterVolume = (float) value;
         };
         volumeSlider->setValue (0.5f); // Set initial volume to 50%
         addAndMakeVisible (*volumeSlider);

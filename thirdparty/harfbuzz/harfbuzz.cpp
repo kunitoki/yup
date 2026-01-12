@@ -29,6 +29,10 @@
  #pragma GCC diagnostic ignored "-Wempty-body"
  #pragma GCC diagnostic ignored "-Wunused-function"
  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif _MSC_VER
+ #pragma warning(push)
+ #pragma warning(disable : 4244)
+ #pragma warning(disable : 4146)
 #endif
 
 #include "harfbuzz.h"
@@ -115,4 +119,6 @@
 
 #if defined(__GNUC__) || defined(__clang__)
  #pragma GCC diagnostic pop
+#elif _MSC_VER 
+ #pragma warning(pop)
 #endif

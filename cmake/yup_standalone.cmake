@@ -228,4 +228,11 @@ function (yup_standalone_app)
         ${additional_libraries}
         ${YUP_ARG_MODULES})
 
+    # ==== Post build steps, workaround for python*.dll
+    if ("yup::yup_python" IN_LIST YUP_ARG_MODULES AND YUP_PLATFORM_WINDOWS AND NOT YUP_ENABLE_STATIC_PYTHON_LIBS AND Python_RUNTIME_LIBRARY_RELEASE)
+        add_custom_command (TARGET ${target_name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${Python_RUNTIME_LIBRARY_RELEASE}" "$<TARGET_FILE_DIR:${target_name}>"
+            COMMENT "Copying Python DLL next to executable")
+    endif()
+
 endfunction()
