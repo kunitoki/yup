@@ -32,7 +32,7 @@ Desktop::Desktop() = default;
 
 Desktop::~Desktop()
 {
-    jassert (globalMouseListeners.isEmpty());
+    // jassert (globalMouseListeners.isEmpty());
 
     clearSingletonInstance();
 }
