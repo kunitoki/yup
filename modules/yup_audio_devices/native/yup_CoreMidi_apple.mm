@@ -472,10 +472,10 @@ class MidiPortAndEndpoint
 static void updateProtocolInfo(MIDIObjectRef entity, MidiDeviceInfo& info)
 {
 #if YUP_HAS_NEW_COREMIDI_API
-    SInt32 protocol = 0;
-
     if (@available(iOS 14.0, macOS 11.0, *))
     {
+        SInt32 protocol = 0;
+
         if (MIDIObjectGetIntegerProperty(entity, kMIDIPropertyProtocolID, &protocol) == noErr)
         {
             if (protocol == kMIDIProtocol_2_0)
@@ -492,8 +492,7 @@ static void updateProtocolInfo(MIDIObjectRef entity, MidiDeviceInfo& info)
     }
     else
     {
-        info.protocol = ump::PacketProtocol::MIDI_1_0;
-        info.supportsMidi2 = false;
+        ignoreUnused(entity, info);
     }
 #else
     ignoreUnused(entity, info);

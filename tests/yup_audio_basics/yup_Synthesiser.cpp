@@ -204,8 +204,6 @@ private:
     SynthesiserSound* currentSound = nullptr;
 };
 
-} // namespace
-
 class SynthesiserTest : public ::testing::Test
 {
 protected:
@@ -222,6 +220,8 @@ protected:
 
     std::unique_ptr<TestSynthesiser> synth;
 };
+
+} // namespace
 
 TEST_F (SynthesiserTest, DefaultConstruction)
 {

@@ -996,6 +996,9 @@ TEST_F (ComponentTest, OpaqueStateWithMultipleChildren)
 // Tests for missing Component methods using ComponentMock
 // =============================================================================
 
+namespace
+{
+
 class ComponentMockTest : public ::testing::Test
 {
 protected:
@@ -1007,6 +1010,8 @@ protected:
 
     std::unique_ptr<ComponentMock> mockComponent;
 };
+
+} // namespace
 
 // =============================================================================
 

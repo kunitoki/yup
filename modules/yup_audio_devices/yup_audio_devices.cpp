@@ -62,10 +62,8 @@
 
 #include "yup_audio_devices.h"
 
-#include "audio_io/yup_SampleRateHelpers.cpp"
 #include "midi_io/yup_MidiDevices.cpp"
-#include "midi_io/ump/yup_UMPBytestreamInputHandler.h"
-#include "midi_io/ump/yup_UMPU32InputHandler.h"
+#include "audio_io/yup_SampleRateHelpers.cpp"
 
 //==============================================================================
 #if YUP_MAC || YUP_IOS
@@ -183,6 +181,15 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "native/yup_ALSA_linux.cpp"
 #endif
 
+#if defined(__has_include) && __has_include(<alsa/ump.h>)
+#include <alsa/ump.h>
+#define YUP_HAS_ALSA_UMP 1
+#endif
+
+#ifndef YUP_HAS_ALSA_UMP
+#define YUP_HAS_ALSA_UMP 0
+#endif
+
 #if (YUP_LINUX && YUP_BELA)
 /* Got an include error here? If so, you've either not got the bela headers
    installed, or you've not got your paths set up correctly to find its header
@@ -197,6 +204,12 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #undef SIZEOF
 
 #if ! YUP_BELA
+#include <array>
+#include <cstring>
+#include <poll.h>
+#include <unistd.h>
+#include <fcntl.h>
+
 #include "native/yup_Midi_linux.cpp"
 #endif
 
@@ -210,7 +223,6 @@ RealtimeThreadFactory getAndroidRealtimeThreadFactory();
 } // namespace yup
 
 #include "native/yup_Audio_android.cpp"
-
 #include "native/yup_Midi_android.cpp"
 
 #if YUP_USE_ANDROID_OPENSLES || YUP_USE_ANDROID_OBOE
@@ -248,6 +260,7 @@ RealtimeThreadFactory getAndroidRealtimeThreadFactory() { return nullptr; }
 } // namespace yup
 #endif
 
+//==============================================================================
 #elif YUP_WASM
 #if YUP_EMSCRIPTEN
 #include <emscripten/webaudio.h>
@@ -260,6 +273,7 @@ RealtimeThreadFactory getAndroidRealtimeThreadFactory() { return nullptr; }
 
 #endif
 
+//==============================================================================
 #if (YUP_LINUX || YUP_BSD || YUP_MAC || YUP_WINDOWS) && YUP_JACK
 /* Got an include error here? If so, you've either not got jack-audio-connection-kit
    installed, or you've not got your paths set up correctly to find its header files.
@@ -276,6 +290,7 @@ RealtimeThreadFactory getAndroidRealtimeThreadFactory() { return nullptr; }
 #include "native/yup_JackAudio.cpp"
 #endif
 
+//==============================================================================
 #if ! YUP_SYSTEMAUDIOVOL_IMPLEMENTED
 namespace yup
 {
@@ -308,6 +323,7 @@ bool YUP_CALLTYPE SystemAudioVolume::setMuted (bool)
 } // namespace yup
 #endif
 
+//==============================================================================
 #include "audio_io/yup_AudioDeviceManager.cpp"
 #include "audio_io/yup_AudioIODevice.cpp"
 #include "audio_io/yup_AudioIODeviceType.cpp"

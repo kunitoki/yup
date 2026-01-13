@@ -26,6 +26,7 @@
 #elif __GNUC__
  #pragma GCC diagnostic push
  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+ #pragma GCC diagnostic ignored "-Wempty-body"
 #elif _MSC_VER
  #pragma warning (push)
  #pragma warning (disable : 4244)

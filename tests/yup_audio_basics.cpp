@@ -1,3 +1,9 @@
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunknown-warning-option"
+#pragma GCC diagnostic ignored "-Wsubobject-linkage"
+#endif
+
 #include "yup_audio_basics/yup_ADSR.cpp"
 #include "yup_audio_basics/yup_AudioChannelSet.cpp"
 #include "yup_audio_basics/yup_AudioDataConverters.cpp"
@@ -50,3 +56,7 @@
 #include "yup_audio_basics/yup_UMPTypes.cpp"
 #include "yup_audio_basics/yup_UMPUniversalPacket.cpp"
 #include "yup_audio_basics/yup_UMPUniversalSysEx.cpp"
+
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif

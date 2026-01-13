@@ -312,7 +312,8 @@ function (_yup_setup_coverage_flags target_name)
             -fprofile-arcs
             -fprofile-update=atomic
             -ftest-coverage
-            -fno-elide-constructors)
+            $<$<COMPILE_LANGUAGE:CXX>:-fno-elide-constructors>
+            $<$<COMPILE_LANGUAGE:OBJCXX>:-fno-elide-constructors>)
 
         target_link_options (${target_name} INTERFACE --coverage)
 

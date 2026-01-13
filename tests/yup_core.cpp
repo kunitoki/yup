@@ -1,3 +1,9 @@
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunknown-warning-option"
+#pragma GCC diagnostic ignored "-Wsubobject-linkage"
+#endif
+
 #include "yup_core/yup_AbstractFifo.cpp"
 #include "yup_core/yup_ArrayBase.cpp"
 #include "yup_core/yup_Atomic.cpp"
@@ -84,3 +90,7 @@
 #include "yup_core/yup_XmlDocument.cpp"
 #include "yup_core/yup_XmlElement.cpp"
 #include "yup_core/yup_ZipFile.cpp"
+
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
