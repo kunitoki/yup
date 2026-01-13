@@ -1163,7 +1163,13 @@ void SDL2ComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
 
         case SDL_WINDOWEVENT_SHOWN:
             YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_SHOWN");
-            // repaint();
+            if (firstDisplay)
+            {
+                firstDisplay = false;
+
+                const auto size = getSize();
+                handleResized (size.getWidth(), size.getHeight());
+            }
             break;
 
         case SDL_WINDOWEVENT_HIDDEN:
