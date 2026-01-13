@@ -33,7 +33,7 @@
     license:            MIT
 
     dependencies:       harfbuzz sheenbidi yoga_library
-    defines:            WITH_RIVE_TEXT=1 WITH_RIVE_YOGA=1 WITH_RIVE_LAYOUT=1
+    defines:            WITH_RIVE_TEXT=1 WITH_RIVE_YOGA=1 WITH_RIVE_LAYOUT=1 WITH_RIVE_TOOLS=1
     appleFrameworks:    CoreText
     searchpaths:        include
 
