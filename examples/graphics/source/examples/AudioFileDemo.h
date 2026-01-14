@@ -27,6 +27,8 @@
 #include <yup_audio_basics/yup_audio_basics.h>
 #include <yup_audio_devices/yup_audio_devices.h>
 #include <yup_audio_formats/yup_audio_formats.h>
+#include <yup_audio_gui/yup_audio_gui.h>
+#include <yup_core/yup_core.h>
 #include <yup_gui/yup_gui.h>
 
 //==============================================================================
@@ -34,288 +36,92 @@
 /**
     Draws a multi-channel waveform with one horizontal lane per channel.
 */
-class AudioWaveformDisplay : public yup::Component
+class AudioFileWaveform : public yup::AudioViewComponent
 {
 public:
-    AudioWaveformDisplay()
+    AudioFileWaveform()
     {
         addAndMakeVisible (playhead);
+        playhead.setVisible (false);
     }
 
-    /** Assigns the buffer to render and refreshes the waveform cache. */
-    void setAudioBuffer (const yup::AudioBuffer<float>* newBuffer)
-    {
-        audioBuffer = newBuffer;
-
-        playhead.setLaneBounds (getWaveformBounds());
-
-        rebuildCache();
-        repaint();
-    }
-
-    /** Clears the waveform display back to its empty placeholder state. */
     void clear()
     {
-        audioBuffer = nullptr;
+        AudioViewComponent::clear();
         playheadSeconds = 0.0;
         lengthSeconds = 0.0;
-        channelPeaks.clear();
-
-        updatePlayheadBounds();
-
-        repaint();
+        updatePlayheadPosition();
     }
 
-    /** Updates the playhead marker position in seconds. */
+    /** Updates the playhead without repainting the full waveform. */
     void setPlayhead (double newPlayheadSeconds, double newLengthSeconds)
     {
         playheadSeconds = newPlayheadSeconds;
         lengthSeconds = newLengthSeconds;
-
-        updatePlayheadBounds();
+        updatePlayheadPosition();
     }
 
+protected:
     void resized() override
     {
-        rebuildCache();
-
-        playhead.setLaneBounds (getWaveformBounds());
-
-        updatePlayheadBounds();
-    }
-
-    void paint (yup::Graphics& g) override
-    {
-        auto bounds = getLocalBounds().reduced (8);
-        g.setFillColor (yup::Color (0xFF101010));
-        g.fillAll();
-
-        if (audioBuffer == nullptr || audioBuffer->getNumSamples() == 0)
-        {
-            g.setFillColor (yup::Colors::lightgray);
-            auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (14.0f);
-            g.fillFittedText ("Load an audio file to view its waveform.",
-                              font,
-                              bounds,
-                              yup::Justification::center);
-            return;
-        }
-
-        auto labelArea = bounds.removeFromLeft (labelWidth);
-        auto waveformArea = bounds;
-        const int numChannels = static_cast<int> (channelPeaks.size());
-
-        if (numChannels == 0)
-            return;
-
-        const float laneHeight = waveformArea.getHeight() / static_cast<float> (numChannels);
-        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
-
-        for (int channel = 0; channel < numChannels; ++channel)
-        {
-            yup::Rectangle<float> lane (waveformArea.getX(),
-                                        waveformArea.getY() + laneHeight * channel,
-                                        waveformArea.getWidth(),
-                                        laneHeight);
-
-            g.setFillColor (yup::Color (0xFF181818));
-            g.fillRect (lane);
-
-            g.setStrokeColor (yup::Color (0xFF2A2A2A));
-            g.setStrokeWidth (1.0f);
-            g.strokeRect (lane);
-
-            auto labelBounds = labelArea.withY (lane.getY()).withHeight (lane.getHeight());
-            g.setFillColor (yup::Colors::white);
-            g.fillFittedText ("Ch " + yup::String (channel + 1),
-                              font,
-                              labelBounds,
-                              yup::Justification::center);
-
-            drawChannelWaveform (g, lane, channel);
-        }
+        AudioViewComponent::resized();
+        updatePlayheadPosition();
     }
 
 private:
-    class PlayheadComponent : public yup::Component
+    class PlayheadMarker : public yup::Component
     {
     public:
-        PlayheadComponent()
-        {
-            setOpaque (false);
-        }
-
-        void setPlayheadX (float newX)
-        {
-            playheadX = newX;
-
-            updateBounds();
-        }
-
-        void setLaneBounds (const yup::Rectangle<float>& newBounds)
-        {
-            laneBounds = newBounds;
-
-            updateBounds();
-        }
-
-    private:
         void paint (yup::Graphics& g) override
         {
             g.setFillColor (yup::Color (0xFFFFCC33));
             g.fillRect (getLocalBounds());
         }
-
-        void updateBounds()
-        {
-            if (laneBounds.getWidth() <= 0.0f || playheadX < 0.0f)
-            {
-                setVisible (false);
-                return;
-            }
-
-            setVisible (true);
-            const float snappedX = static_cast<float> (static_cast<int> (playheadX));
-            setBounds (laneBounds.withX (laneBounds.getX() + snappedX).withWidth (1.0f).toNearestInt());
-
-            repaint();
-        }
-
-        yup::Rectangle<float> laneBounds;
-        float playheadX = -1.0f;
     };
 
-    struct ChannelPeaks
+    void updatePlayheadPosition()
     {
-        std::vector<float> minValues;
-        std::vector<float> maxValues;
-    };
-
-    yup::Rectangle<float> getWaveformBounds() const
-    {
-        auto bounds = getLocalBounds().reduced (8);
-        bounds.removeFromLeft (labelWidth);
-        return bounds;
-    }
-
-    void rebuildCache()
-    {
-        channelPeaks.clear();
-        if (audioBuffer == nullptr)
-            return;
-
-        const int numSamples = audioBuffer->getNumSamples();
-        const int numChannels = audioBuffer->getNumChannels();
-        auto waveformBounds = getWaveformBounds();
-        const int waveformWidth = static_cast<int> (waveformBounds.getWidth());
-
-        if (numSamples <= 0 || numChannels <= 0 || waveformWidth <= 0)
-            return;
-
-        const int columns = yup::jmax (1, yup::jmin (waveformWidth, numSamples));
-        const int samplesPerColumn = yup::jmax (1, numSamples / columns);
-
-        channelPeaks.resize (static_cast<size_t> (numChannels));
-        for (int channel = 0; channel < numChannels; ++channel)
+        const double sampleRate = getSampleRate();
+        if (lengthSeconds <= 0.0 || sampleRate <= 0.0 || getTotalSamples() <= 0)
         {
-            auto& peaks = channelPeaks[static_cast<size_t> (channel)];
-            peaks.minValues.assign (static_cast<size_t> (columns), 0.0f);
-            peaks.maxValues.assign (static_cast<size_t> (columns), 0.0f);
-
-            for (int column = 0; column < columns; ++column)
-            {
-                const int startSample = column * samplesPerColumn;
-                const int endSample = (column == columns - 1)
-                                        ? numSamples
-                                        : yup::jmin (numSamples, startSample + samplesPerColumn);
-
-                float minValue = 1.0f;
-                float maxValue = -1.0f;
-
-                for (int sample = startSample; sample < endSample; ++sample)
-                {
-                    const float value = audioBuffer->getSample (channel, sample);
-                    minValue = yup::jmin (minValue, value);
-                    maxValue = yup::jmax (maxValue, value);
-                }
-
-                peaks.minValues[static_cast<size_t> (column)] = minValue;
-                peaks.maxValues[static_cast<size_t> (column)] = maxValue;
-            }
-        }
-    }
-
-    void updatePlayheadBounds()
-    {
-        if (lengthSeconds <= 0.0)
-        {
-            playhead.setPlayheadX (-1.0f);
+            playhead.setVisible (false);
             return;
         }
 
-        auto waveformBounds = getWaveformBounds();
-        playhead.setLaneBounds (waveformBounds);
+        const auto waveformBounds = getWaveformBounds();
+        if (waveformBounds.getWidth() <= 0.0f)
+        {
+            playhead.setVisible (false);
+            return;
+        }
 
         const double clamped = yup::jlimit (0.0, lengthSeconds, playheadSeconds);
-        const float x = static_cast<float> (clamped / lengthSeconds) * waveformBounds.getWidth();
-        playhead.setPlayheadX (x);
-    }
+        const double samplePosition = clamped * sampleRate;
+        const auto viewRange = getViewRangeSamples();
 
-    void drawChannelWaveform (yup::Graphics& g, const yup::Rectangle<float>& lane, int channelIndex)
-    {
-        if (channelIndex < 0 || channelIndex >= static_cast<int> (channelPeaks.size()))
-            return;
-
-        const auto& peaks = channelPeaks[static_cast<size_t> (channelIndex)];
-        if (peaks.minValues.empty() || peaks.maxValues.empty())
-            return;
-
-        const float centerY = lane.getCenterY();
-        const float amplitude = lane.getHeight() * 0.45f;
-        const float startX = lane.getX();
-        const float stepX = lane.getWidth() / static_cast<float> (peaks.minValues.size());
-
-        g.setStrokeColor (getChannelColor (channelIndex));
-        g.setStrokeWidth (1.0f);
-
-        for (size_t i = 0; i < peaks.minValues.size(); ++i)
+        if (viewRange.isEmpty()
+            || samplePosition < viewRange.getStart()
+            || samplePosition > viewRange.getEnd())
         {
-            float x = startX + static_cast<float> (i) * stepX;
-            float minValue = peaks.minValues[i];
-            float maxValue = peaks.maxValues[i];
-
-            float y1 = centerY - maxValue * amplitude;
-            float y2 = centerY - minValue * amplitude;
-
-            g.strokeLine ({ x, y1 }, { x, y2 });
+            playhead.setVisible (false);
+            return;
         }
 
-        g.setStrokeColor (yup::Color (0xFF3A3A3A));
-        g.setStrokeWidth (1.0f);
-        g.strokeLine ({ lane.getX(), centerY }, { lane.getRight(), centerY });
+        const float x = sampleToX (samplePosition, waveformBounds);
+        const float lineWidth = 2.0f;
+        playhead.setBounds (x - lineWidth * 0.5f,
+                            waveformBounds.getY(),
+                            lineWidth,
+                            waveformBounds.getHeight());
+        playhead.setVisible (true);
+        playhead.repaint();
     }
 
-    yup::Color getChannelColor (int channelIndex) const
-    {
-        static const yup::Color colors[] = {
-            yup::Color (0xFF5BC0EB),
-            yup::Color (0xFFFDE74C),
-            yup::Color (0xFF9BC53D),
-            yup::Color (0xFFE55934),
-            yup::Color (0xFFFA7921),
-            yup::Color (0xFF9D4EDD)
-        };
-
-        const int colorIndex = channelIndex % (static_cast<int> (sizeof (colors) / sizeof (colors[0])));
-        return colors[colorIndex];
-    }
-
-    const yup::AudioBuffer<float>* audioBuffer = nullptr;
-    std::vector<ChannelPeaks> channelPeaks;
+    PlayheadMarker playhead;
     double playheadSeconds = 0.0;
     double lengthSeconds = 0.0;
-    const int labelWidth = 48;
-    PlayheadComponent playhead;
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioFileWaveform)
 };
 
 //==============================================================================
@@ -324,7 +130,6 @@ private:
     Demonstrates loading, visualizing, playing, and exporting audio files.
 */
 class AudioFileDemo : public yup::Component
-    , public yup::Timer
 {
 public:
     AudioFileDemo()
@@ -334,6 +139,7 @@ public:
         , stopButton ("Stop")
         , saveButton ("Save As")
         , loopButton ("Loop")
+        , labelsButton ("Labels")
     {
         formatManager.registerDefaultFormats (
             yup::AudioFormatType::all & ~yup::AudioFormatType::coreAudio);
@@ -343,7 +149,6 @@ public:
         sourcePlayer.setSource (&transportSource);
 
         setupUi();
-        startTimerHz (30);
     }
 
     ~AudioFileDemo() override
@@ -361,7 +166,7 @@ public:
         auto header = bounds.removeFromTop (38);
 
         const int buttonHeight = 28;
-        const int buttonWidth = 110;
+        const int buttonWidth = 100;
         const int buttonMargin = 6;
 
         auto buttonRow = header.removeFromTop (buttonHeight);
@@ -374,6 +179,8 @@ public:
         saveButton.setBounds (buttonRow.removeFromLeft (buttonWidth));
         buttonRow.removeFromLeft (buttonMargin);
         loopButton.setBounds (buttonRow.removeFromLeft (buttonWidth));
+        buttonRow.removeFromLeft (buttonMargin);
+        labelsButton.setBounds (buttonRow.removeFromLeft (buttonWidth));
 
         bounds.removeFromTop (6);
         infoLabel.setBounds (bounds.removeFromTop (22));
@@ -387,6 +194,19 @@ public:
     {
         g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::darkslategray));
         g.fillAll();
+    }
+
+    void refreshDisplay (double) override
+    {
+        if (! hasLoadedAudio)
+            return;
+
+        if (transportSource.hasStreamFinished())
+            stopPlayback();
+
+        waveformDisplay.setPlayhead (transportSource.getCurrentPosition(),
+                                     audioLengthSeconds);
+        updatePlaybackStatus();
     }
 
 private:
@@ -434,6 +254,13 @@ private:
                 memorySource->setLooping (loopEnabled);
         };
 
+        addAndMakeVisible (labelsButton);
+        labelsButton.setToggleState (true, yup::NotificationType::dontSendNotification);
+        labelsButton.onClick = [this]
+        {
+            waveformDisplay.setChannelLabelsVisible (labelsButton.getToggleState());
+        };
+
         addAndMakeVisible (infoLabel);
         infoLabel.setText ("No audio loaded.", yup::NotificationType::dontSendNotification);
         infoLabel.setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
@@ -443,19 +270,10 @@ private:
         statusLabel.setColor (yup::Label::Style::textFillColorId, yup::Colors::lightgray);
 
         addAndMakeVisible (waveformDisplay);
-    }
-
-    void timerCallback() override
-    {
-        if (! hasLoadedAudio)
-            return;
-
-        if (transportSource.hasStreamFinished())
-            stopPlayback();
-
-        waveformDisplay.setPlayhead (transportSource.getCurrentPosition(),
-                                     audioLengthSeconds);
-        updatePlaybackStatus();
+        waveformDisplay.setSelectable (true);
+        waveformDisplay.getThumbnail().setThreadPool (&waveformThreadPool);
+        waveformDisplay.getThumbnail().setBackgroundCalculationEnabled (true);
+        waveformDisplay.setChannelLabelsVisible (labelsButton.getToggleState());
     }
 
     void updateStatus (const yup::String& newStatus)
@@ -503,6 +321,8 @@ private:
         transportSource.stop();
         transportSource.setPosition (0.0);
         playButton.setButtonText ("Play");
+        waveformDisplay.setPlayhead (0.0, audioLengthSeconds);
+        updatePlaybackStatus();
     }
 
     void loadAudioFile (const yup::File& file)
@@ -537,7 +357,8 @@ private:
         memorySource = std::make_unique<yup::MemoryAudioSource> (audioBuffer, false, loopEnabled);
         transportSource.setSource (memorySource.get(), 0, nullptr, loadedSampleRate, numChannels);
 
-        waveformDisplay.setAudioBuffer (&audioBuffer);
+        waveformDisplay.setAudioBuffer (&audioBuffer, loadedSampleRate);
+        waveformDisplay.setPlayhead (0.0, audioLengthSeconds);
         updateStatus ("Loaded " + file.getFileName() + " | " + yup::String (numChannels)
                       + " ch | " + yup::String (loadedSampleRate, 1) + " Hz | "
                       + formatTime (audioLengthSeconds));
@@ -619,16 +440,18 @@ private:
     yup::AudioTransportSource transportSource;
     std::unique_ptr<yup::MemoryAudioSource> memorySource;
     yup::AudioBuffer<float> audioBuffer;
+    yup::ThreadPool waveformThreadPool;
 
     yup::TextButton loadButton;
     yup::TextButton playButton;
     yup::TextButton stopButton;
     yup::TextButton saveButton;
     yup::ToggleButton loopButton;
+    yup::ToggleButton labelsButton;
 
     yup::Label infoLabel;
     yup::Label statusLabel;
-    AudioWaveformDisplay waveformDisplay;
+    AudioFileWaveform waveformDisplay;
 
     yup::String currentFileName { "No audio loaded" };
     double loadedSampleRate = 0.0;

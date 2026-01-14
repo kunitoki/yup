@@ -33,5 +33,7 @@
 //==============================================================================
 
 #include "keyboard/yup_MidiKeyboardComponent.cpp"
+#include "displays/yup_AudioThumbnail.cpp"
+#include "displays/yup_AudioViewComponent.cpp"
 #include "displays/yup_SpectrumAnalyzerComponent.cpp"
 #include "displays/yup_CartesianPlane.cpp"
