@@ -169,6 +169,29 @@ TEST (PathTests, AddStar)
     EXPECT_FALSE (p.getBounds().isEmpty());
 }
 
+TEST (PathTests, AddQuadrilateral)
+{
+    Path p;
+    p.addQuadrilateral (0, 0, 10, 0, 10, 10, 0, 10);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+    EXPECT_EQ (0, p.getBounds().getX());
+    EXPECT_EQ (0, p.getBounds().getY());
+    EXPECT_EQ (10, p.getBounds().getWidth());
+    EXPECT_EQ (10, p.getBounds().getHeight());
+
+    Path p2;
+    Point<float> p1 (5, 5);
+    Point<float> p2 (15, 5);
+    Point<float> p3 (15, 15);
+    Point<float> p4 (5, 15);
+    p2.addQuadrilateral (p1, p2, p3, p4);
+    EXPECT_FALSE (p2.getBounds().isEmpty());
+    EXPECT_EQ (5, p2.getBounds().getX());
+    EXPECT_EQ (5, p2.getBounds().getY());
+    EXPECT_EQ (10, p2.getBounds().getWidth());
+    EXPECT_EQ (10, p2.getBounds().getHeight());
+}
+
 TEST (PathTests, AddBubble)
 {
     Path p;
@@ -359,6 +382,26 @@ TEST (PathTests, AddStarEdgeCases)
     EXPECT_FALSE (p.getBounds().isEmpty());
 
     p.addStar (center, 5, 2, 0, 0.0f);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, AddQuadrilateralEdgeCases)
+{
+    Path p;
+
+    // Degenerate quadrilateral (all points the same)
+    p.addQuadrilateral (0, 0, 0, 0, 0, 0, 0, 0);
+    EXPECT_TRUE (p.getBounds().isEmpty());
+
+    // Quadrilateral collapsed to a line
+    p.clear();
+    p.addQuadrilateral (0, 0, 10, 0, 10, 0, 0, 0);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+    EXPECT_EQ (0, p.getBounds().getHeight());
+
+    // Self-intersecting quadrilateral
+    p.clear();
+    p.addQuadrilateral (0, 0, 10, 10, 10, 0, 0, 10);
     EXPECT_FALSE (p.getBounds().isEmpty());
 }
 

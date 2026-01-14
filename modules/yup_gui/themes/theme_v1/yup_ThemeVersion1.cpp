@@ -805,6 +805,90 @@ void paintScrollBar (Graphics& g, const ApplicationTheme& theme, const ScrollBar
     g.fillRoundedRect (thumbBounds, cornerSize);
 }
 
+//==============================================================================
+
+void paintProgressBar (Graphics& g, const ApplicationTheme& theme, const ProgressBar& progressBar)
+{
+    const auto bounds = progressBar.getLocalBounds();
+    const auto cornerSize = bounds.getHeight() * 0.5f;
+
+    // Get colors
+    const auto backgroundColor = progressBar.findColor (ProgressBar::Style::backgroundColorId)
+                                     .value_or (Color (0xff3d3d3d));
+    const auto foregroundColor = progressBar.findColor (ProgressBar::Style::foregroundColorId)
+                                     .value_or (Color (0xff4ebfff));
+
+    // Draw background track
+    g.setFillColor (backgroundColor);
+    g.fillRoundedRect (bounds, cornerSize);
+
+    const auto progress = progressBar.getProgress();
+
+    if (progressBar.isIndeterminate())
+    {
+        // Indeterminate mode - draw animated diagonal stripes (JUCE-style)
+        const auto stripeWidth = bounds.getHeight() * 2.0f;
+        const auto halfStripeWidth = stripeWidth * 0.5f;
+        // Reverse animation direction (right to left becomes left to right)
+        const auto position = static_cast<float> (static_cast<int> (stripeWidth) - (static_cast<int> (Time::getCurrentTime().toMilliseconds() / 15) % static_cast<int> (stripeWidth)));
+
+        auto state = g.saveState();
+
+        // Create a rounded rect clip path (setClipPath requires global coordinates)
+        const auto globalBounds = progressBar.getBoundsRelativeToTopLevelComponent();
+        Path clipPath;
+        clipPath.addRoundedRectangle (globalBounds, cornerSize);
+        g.setClipPath (clipPath);
+
+        // Build two separate paths for alternating solid color shades
+        Path stripesLight;
+        Path stripesDark;
+        int stripeIndex = 0;
+
+        // Use half stripe width for spacing so stripes are closer together
+        for (auto x = -position; x < bounds.getWidth() + stripeWidth; x += halfStripeWidth)
+        {
+            // Alternate between the two paths
+            Path& currentPath = (stripeIndex % 2 == 0) ? stripesLight : stripesDark;
+
+            currentPath.addQuadrilateral (
+                x, 0.0f, x + halfStripeWidth, 0.0f, x, bounds.getHeight(), x - halfStripeWidth, bounds.getHeight());
+
+            ++stripeIndex;
+        }
+
+        // Draw all stripes with solid colors (no alpha blending)
+        g.setFillColor (foregroundColor);
+        g.fillPath (stripesLight);
+
+        g.setFillColor (foregroundColor.darker (0.15f));
+        g.fillPath (stripesDark);
+    }
+    else
+    {
+        // Normal mode - draw filled portion with rounded rect clipping
+        const auto filledWidth = bounds.getWidth() * static_cast<float> (jlimit (0.0, 1.0, progress));
+
+        if (filledWidth > 0.0f)
+        {
+            auto state = g.saveState();
+
+            // Create a rounded rect clip path for the filled portion (setClipPath requires global coordinates)
+            const auto globalBounds = progressBar.getBoundsRelativeToTopLevelComponent();
+            Path clipPath;
+            clipPath.addRoundedRectangle (globalBounds, cornerSize);
+            g.setClipPath (clipPath);
+
+            // Draw the filled bar
+            auto filledBounds = bounds.withWidth (filledWidth);
+            g.setFillColor (foregroundColor);
+            g.fillRect (filledBounds);
+        }
+    }
+}
+
+//==============================================================================
+
 void paintListBoxItem (Graphics& g, const ApplicationTheme& theme, const ListBoxItem& item)
 {
     // Determine background color
@@ -1087,6 +1171,10 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setColor (ScrollBar::Style::thumbColorId, Color (0x55000000));
     theme->setColor (ScrollBar::Style::thumbHoverColorId, Color (0x77000000));
     theme->setColor (ScrollBar::Style::thumbDraggingColorId, Color (0x99000000));
+
+    theme->setComponentStyle<ProgressBar> (ComponentStyle::createStyle<ProgressBar> (paintProgressBar));
+    theme->setColor (ProgressBar::Style::backgroundColorId, Color (0xff3d3d3d));
+    theme->setColor (ProgressBar::Style::foregroundColorId, Color (0xff4ebfff));
 
     theme->setComponentStyle<ListBoxItem> (ComponentStyle::createStyle<ListBoxItem> (paintListBoxItem));
     theme->setColor (ListBoxItem::Style::textColorId, Colors::black);

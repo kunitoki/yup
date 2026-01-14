@@ -92,6 +92,7 @@
 #include "widgets/yup_Slider.h"
 #include "widgets/yup_ComboBox.h"
 #include "widgets/yup_ScrollBar.h"
+#include "widgets/yup_ProgressBar.h"
 #include "widgets/yup_ListBoxItem.h"
 #include "widgets/yup_ListBox.h"
 #include "artboard/yup_ArtboardFile.h"

@@ -1190,6 +1190,24 @@ void Path::addTriangle (const Point<float>& p1, const Point<float>& p2, const Po
 
 //==============================================================================
 
+void Path::addQuadrilateral (float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4)
+{
+    addQuadrilateral ({ x1, y1 }, { x2, y2 }, { x3, y3 }, { x4, y4 });
+}
+
+void Path::addQuadrilateral (const Point<float>& p1, const Point<float>& p2, const Point<float>& p3, const Point<float>& p4)
+{
+    reserveSpace (size() + 5);
+
+    moveTo (p1);
+    lineTo (p2);
+    lineTo (p3);
+    lineTo (p4);
+    close();
+}
+
+//==============================================================================
+
 Path& Path::addPolygon (const Point<float>& centre, int numberOfSides, float radius, float startAngle)
 {
     if (numberOfSides < 3)

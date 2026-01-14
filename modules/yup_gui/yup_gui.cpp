@@ -143,6 +143,7 @@
 #include "widgets/yup_Slider.cpp"
 #include "widgets/yup_ComboBox.cpp"
 #include "widgets/yup_ScrollBar.cpp"
+#include "widgets/yup_ProgressBar.cpp"
 #include "widgets/yup_ListBoxItem.cpp"
 #include "widgets/yup_ListBox.cpp"
 #include "artboard/yup_ArtboardFile.cpp"
