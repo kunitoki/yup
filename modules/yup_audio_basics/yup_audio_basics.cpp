@@ -49,6 +49,8 @@
 #include "yup_audio_basics.h"
 
 #if YUP_MAC || YUP_IOS
+#include <os/workgroup.h>
+
 #include "native/yup_AudioWorkgroup_apple.h"
 #endif
 

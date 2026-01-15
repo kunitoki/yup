@@ -100,29 +100,9 @@
 #endif
 
 //==============================================================================
-#if YUP_USE_AVX_INTRINSICS || YUP_USE_FMA_INTRINSICS
-#include <immintrin.h>
-#endif
-
-#if YUP_USE_SSE_INTRINSICS
-#include <emmintrin.h>
-#endif
-
-#if YUP_USE_ARM_NEON
-#if JUCE_64BIT && JUCE_WINDOWS
-#include <arm64_neon.h>
-#else
-#include <arm_neon.h>
-#endif
-#endif
-
 #if (YUP_MAC || YUP_IOS) && __has_include(<Accelerate/Accelerate.h>)
 #ifndef YUP_USE_VDSP_FRAMEWORK
 #define YUP_USE_VDSP_FRAMEWORK 1
-#endif
-
-#if YUP_USE_VDSP_FRAMEWORK
-#include <Accelerate/Accelerate.h>
 #endif
 
 #elif YUP_USE_VDSP_FRAMEWORK
