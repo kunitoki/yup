@@ -180,12 +180,14 @@ private:
     void registerNativeComponent (ComponentNative* nativeComponent);
     void unregisterNativeComponent (ComponentNative* nativeComponent);
 
+    void addPendingMouseListeners();
+
     Screen::Array screens;
     std::optional<MouseCursor> currentMouseCursor;
 
     std::unordered_map<void*, ComponentNative*> nativeComponents;
 
-    Array<MouseListener*> globalMouseListeners;
+    ListenerList<MouseListener> globalMouseListeners;
     Array<MouseListener*> pendingMouseListeners;
     bool sendingMouseEvent = false;
 

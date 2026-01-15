@@ -134,7 +134,7 @@ void Desktop::addGlobalMouseListener (MouseListener* listener)
     if (sendingMouseEvent)
         pendingMouseListeners.addIfNotAlreadyThere (listener);
     else
-        globalMouseListeners.addIfNotAlreadyThere (listener);
+        globalMouseListeners.add (listener);
 }
 
 void Desktop::removeGlobalMouseListener (MouseListener* listener)
@@ -145,67 +145,65 @@ void Desktop::removeGlobalMouseListener (MouseListener* listener)
     YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
     pendingMouseListeners.removeFirstMatchingValue (listener);
-    globalMouseListeners.removeFirstMatchingValue (listener);
+    globalMouseListeners.remove (listener);
 }
 
 void Desktop::handleGlobalMouseDown (const MouseEvent& event)
 {
     {
         ScopedValueSetter setter (sendingMouseEvent, true);
-        for (auto listener : globalMouseListeners)
-            listener->mouseDown (event);
+        globalMouseListeners.call (&MouseListener::mouseDown, event);
     }
 
-    for (auto listener : globalMouseListeners)
-        globalMouseListeners.addIfNotAlreadyThere (listener);
+    addPendingMouseListeners();
 }
 
 void Desktop::handleGlobalMouseUp (const MouseEvent& event)
 {
     {
         ScopedValueSetter setter (sendingMouseEvent, true);
-        for (auto listener : globalMouseListeners)
-            listener->mouseUp (event);
+        globalMouseListeners.call (&MouseListener::mouseUp, event);
     }
 
-    for (auto listener : globalMouseListeners)
-        globalMouseListeners.addIfNotAlreadyThere (listener);
+    addPendingMouseListeners();
 }
 
 void Desktop::handleGlobalMouseMove (const MouseEvent& event)
 {
     {
         ScopedValueSetter setter (sendingMouseEvent, true);
-        for (auto listener : globalMouseListeners)
-            listener->mouseMove (event);
+        globalMouseListeners.call (&MouseListener::mouseMove, event);
     }
 
-    for (auto listener : globalMouseListeners)
-        globalMouseListeners.addIfNotAlreadyThere (listener);
+    addPendingMouseListeners();
 }
 
 void Desktop::handleGlobalMouseDrag (const MouseEvent& event)
 {
     {
         ScopedValueSetter setter (sendingMouseEvent, true);
-        for (auto listener : globalMouseListeners)
-            listener->mouseDrag (event);
+        globalMouseListeners.call (&MouseListener::mouseDrag, event);
     }
 
-    for (auto listener : globalMouseListeners)
-        globalMouseListeners.addIfNotAlreadyThere (listener);
+    addPendingMouseListeners();
 }
 
 void Desktop::handleGlobalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
 {
     {
         ScopedValueSetter setter (sendingMouseEvent, true);
-        for (auto listener : globalMouseListeners)
-            listener->mouseWheel (event, wheelData);
+        globalMouseListeners.call (&MouseListener::mouseWheel, event, wheelData);
     }
 
-    for (auto listener : globalMouseListeners)
-        globalMouseListeners.addIfNotAlreadyThere (listener);
+    addPendingMouseListeners();
+}
+
+void Desktop::addPendingMouseListeners()
+{
+    for (auto listener : pendingMouseListeners)
+        globalMouseListeners.add (listener);
+
+    pendingMouseListeners.clear();
 }
 
 //==============================================================================
