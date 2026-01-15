@@ -117,9 +117,9 @@
 #include "upstream/hb-wasm-api.cc"
 #include "upstream/hb-wasm-shape.cc"
 
-#if defined(__clang__)
+#if __clang__
  #pragma clang diagnostic pop
-#if defined(__GNUC__)
+#elif __GNUC__
  #pragma GCC diagnostic pop
 #elif _MSC_VER 
  #pragma warning(pop)

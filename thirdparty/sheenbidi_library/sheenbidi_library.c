@@ -23,6 +23,7 @@
 
 #if defined(__GNUC__) && !defined(__clang__)
  #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wpragmas"
  #pragma GCC diagnostic ignored "-Wstringop-overflow"
  #pragma GCC diagnostic ignored "-Wnonportable-include-path"
 #endif

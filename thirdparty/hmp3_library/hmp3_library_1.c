@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#if defined(__clang__)
+#if __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wcomment"
 #pragma clang diagnostic ignored "-Wpointer-to-int-cast"
@@ -43,6 +43,6 @@
 #include <hmp3_library/hmp3/src/detect.c>
 #undef mdct_init
 
-#if defined(__clang__)
+#if __clang__
 #pragma clang diagnostic pop
 #endif

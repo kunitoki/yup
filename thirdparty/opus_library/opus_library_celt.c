@@ -24,7 +24,7 @@
 
 #include "opus_library.h"
 
-#if defined(__clang__)
+#if __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wtautological-pointer-compare"
 #pragma clang diagnostic ignored "-Wshorten-64-to-32"
@@ -60,6 +60,6 @@
 #include <opus_library/celt/arm/celt_neon_intr.c>
 #endif
 
-#if defined(__clang__)
+#if __clang__
 #pragma clang diagnostic pop
 #endif

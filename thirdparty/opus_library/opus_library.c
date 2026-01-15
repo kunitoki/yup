@@ -28,7 +28,7 @@
 
 #include "opus_library.h"
 
-#if defined(__clang__)
+#if __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-W#pragma-messages"
 #pragma clang diagnostic ignored "-Wnonnull"
@@ -51,6 +51,6 @@
 #include <opus_library/src/mlp.c>
 #include <opus_library/src/mlp_data.c>
 
-#if defined(__clang__)
+#if __clang__
 #pragma clang diagnostic pop
 #endif
