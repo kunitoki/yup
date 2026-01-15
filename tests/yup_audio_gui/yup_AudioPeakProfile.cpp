@@ -668,3 +668,348 @@ TEST_F (AudioPeakProfileTests, BuildAfterFailedBuildWorks)
     EXPECT_TRUE (result.wasOk());
     EXPECT_TRUE (profile->isValid());
 }
+
+//==============================================================================
+// BuildFromReader Tests
+//==============================================================================
+
+namespace
+{
+// Mock AudioFormatReader for testing
+class MockAudioFormatReader : public AudioFormatReader
+{
+public:
+    MockAudioFormatReader (int numChannels, int64 numSamples, double sampleRate = 44100.0, bool shouldFailReads = false)
+        : AudioFormatReader (nullptr, "MockFormat")
+        , buffer (numChannels, static_cast<int> (numSamples))
+        , shouldFail (shouldFailReads)
+    {
+        this->sampleRate = sampleRate;
+        this->bitsPerSample = 32;
+        this->lengthInSamples = numSamples;
+        this->numChannels = numChannels;
+        this->usesFloatingPointData = true;
+
+        // Fill buffer with test data
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            float* channelData = buffer.getWritePointer (ch);
+            for (int i = 0; i < static_cast<int> (numSamples); ++i)
+            {
+                const float phase = (i / static_cast<float> (sampleRate)) * 440.0f * 2.0f * MathConstants<float>::pi;
+                channelData[i] = std::sin (phase) * (ch * 0.1f + 0.5f); // Different amplitude per channel
+            }
+        }
+    }
+
+    bool readSamples (float* const* destChannels,
+                      int numDestChannels,
+                      int startOffsetInDestBuffer,
+                      int64 startSampleInFile,
+                      int numSamples) override
+    {
+        if (shouldFail)
+            return false;
+
+        if (startSampleInFile < 0 || startSampleInFile >= lengthInSamples)
+            return false;
+
+        const int samplesToRead = jmin (numSamples,
+                                        static_cast<int> (lengthInSamples - startSampleInFile));
+
+        for (int ch = 0; ch < jmin (numDestChannels, this->numChannels); ++ch)
+        {
+            if (destChannels[ch] != nullptr)
+            {
+                const float* src = buffer.getReadPointer (ch) + startSampleInFile;
+                float* dst = destChannels[ch] + startOffsetInDestBuffer;
+                std::copy (src, src + samplesToRead, dst);
+            }
+        }
+
+        return true;
+    }
+
+private:
+    AudioBuffer<float> buffer;
+    bool shouldFail;
+};
+} // namespace
+
+TEST_F (AudioPeakProfileTests, BuildFromReaderWithSmallFile)
+{
+    MockAudioFormatReader reader (2, 1000, 44100.0);
+    auto factors = AudioPeakProfile::getDefaultAggregationFactors();
+
+    auto result = profile->buildFromReader (reader, 1, factors);
+
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_TRUE (profile->isValid());
+    EXPECT_EQ (1000, profile->getNumSamples());
+    EXPECT_EQ (2, profile->getNumChannels());
+    EXPECT_EQ (1, profile->getBaseResolution());
+}
+
+TEST_F (AudioPeakProfileTests, BuildFromReaderWithLargeFile)
+{
+    MockAudioFormatReader reader (2, 100000, 44100.0);
+    auto factors = AudioPeakProfile::getDefaultAggregationFactors();
+
+    auto result = profile->buildFromReader (reader, 256, factors);
+
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_TRUE (profile->isValid());
+    EXPECT_EQ (100000, profile->getNumSamples());
+    EXPECT_EQ (2, profile->getNumChannels());
+    EXPECT_EQ (256, profile->getBaseResolution());
+}
+
+TEST_F (AudioPeakProfileTests, BuildFromReaderWithMonoFile)
+{
+    MockAudioFormatReader reader (1, 5000, 44100.0);
+
+    auto result = profile->buildFromReader (reader, 1, {});
+
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_TRUE (profile->isValid());
+    EXPECT_EQ (5000, profile->getNumSamples());
+    EXPECT_EQ (1, profile->getNumChannels());
+}
+
+TEST_F (AudioPeakProfileTests, BuildFromReaderWithMultiChannel)
+{
+    MockAudioFormatReader reader (8, 10000, 44100.0);
+
+    auto result = profile->buildFromReader (reader, 1, {});
+
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_TRUE (profile->isValid());
+    EXPECT_EQ (10000, profile->getNumSamples());
+    EXPECT_EQ (8, profile->getNumChannels());
+}
+
+TEST_F (AudioPeakProfileTests, BuildFromReaderWithZeroLengthFile)
+{
+    MockAudioFormatReader reader (2, 0, 44100.0);
+
+    auto result = profile->buildFromReader (reader, 1, {});
+
+    EXPECT_FALSE (result.wasOk());
+    EXPECT_FALSE (profile->isValid());
+}
+
+TEST_F (AudioPeakProfileTests, BuildFromReaderWithZeroChannels)
+{
+    MockAudioFormatReader reader (0, 1000, 44100.0);
+
+    auto result = profile->buildFromReader (reader, 1, {});
+
+    EXPECT_FALSE (result.wasOk());
+    EXPECT_FALSE (profile->isValid());
+}
+
+TEST_F (AudioPeakProfileTests, BuildFromReaderWithInvalidBaseResolution)
+{
+    MockAudioFormatReader reader (2, 1000, 44100.0);
+
+    auto result = profile->buildFromReader (reader, 0, {});
+
+    EXPECT_FALSE (result.wasOk());
+    EXPECT_FALSE (profile->isValid());
+}
+
+TEST_F (AudioPeakProfileTests, BuildFromReaderWithNegativeBaseResolution)
+{
+    MockAudioFormatReader reader (2, 1000, 44100.0);
+
+    auto result = profile->buildFromReader (reader, -1, {});
+
+    EXPECT_FALSE (result.wasOk());
+    EXPECT_FALSE (profile->isValid());
+}
+
+TEST_F (AudioPeakProfileTests, BuildFromReaderWithFailingReader)
+{
+    MockAudioFormatReader reader (2, 1000, 44100.0, true); // shouldFail = true
+
+    auto result = profile->buildFromReader (reader, 1, {});
+
+    EXPECT_FALSE (result.wasOk());
+    EXPECT_FALSE (profile->isValid());
+}
+
+TEST_F (AudioPeakProfileTests, BuildFromReaderWithAggregationFactors)
+{
+    MockAudioFormatReader reader (2, 10000, 44100.0);
+    std::vector<int> factors { 16, 256 };
+
+    auto result = profile->buildFromReader (reader, 1, factors);
+
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_TRUE (profile->isValid());
+    EXPECT_EQ (3, profile->getNumAggregationLevels()); // Base + 2 aggregation levels
+}
+
+TEST_F (AudioPeakProfileTests, BuildFromReaderWithLargeBaseResolution)
+{
+    MockAudioFormatReader reader (2, 50000, 44100.0);
+
+    auto result = profile->buildFromReader (reader, 1024, {});
+
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_TRUE (profile->isValid());
+    EXPECT_EQ (50000, profile->getNumSamples());
+    EXPECT_EQ (1024, profile->getBaseResolution());
+}
+
+TEST_F (AudioPeakProfileTests, BuildFromReaderWithProgressCallback)
+{
+    MockAudioFormatReader reader (2, 10000, 44100.0);
+
+    int callbackCount = 0;
+    double lastProgress = 0.0;
+
+    auto progressCallback = [&callbackCount, &lastProgress] (double progress) -> bool
+    {
+        callbackCount++;
+        lastProgress = progress;
+        return true; // Continue
+    };
+
+    auto result = profile->buildFromReader (reader, 1, {}, progressCallback);
+
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_GT (callbackCount, 0);
+    EXPECT_GE (lastProgress, 0.0);
+    EXPECT_LE (lastProgress, 1.0);
+}
+
+TEST_F (AudioPeakProfileTests, BuildFromReaderWithCancelledProgress)
+{
+    MockAudioFormatReader reader (2, 100000, 44100.0);
+
+    int callbackCount = 0;
+
+    auto progressCallback = [&callbackCount] (double progress) -> bool
+    {
+        callbackCount++;
+        return callbackCount < 3; // Cancel after 3 callbacks
+    };
+
+    auto result = profile->buildFromReader (reader, 1, {}, progressCallback);
+
+    EXPECT_FALSE (result.wasOk());
+    EXPECT_FALSE (profile->isValid());
+    EXPECT_GE (callbackCount, 3);
+}
+
+TEST_F (AudioPeakProfileTests, BuildFromReaderPreservesChannelData)
+{
+    MockAudioFormatReader reader (2, 1000, 44100.0);
+
+    auto result = profile->buildFromReader (reader, 10, {});
+
+    EXPECT_TRUE (result.wasOk());
+
+    // Verify we can retrieve peak data
+    auto range = profile->getPeakRangeForSamples (Range<int> (0, 100), 0);
+    EXPECT_FALSE (range.isEmpty());
+}
+
+TEST_F (AudioPeakProfileTests, BuildFromReaderWithDifferentSampleRates)
+{
+    // Test with 48kHz
+    MockAudioFormatReader reader48k (2, 5000, 48000.0);
+    auto result = profile->buildFromReader (reader48k, 1, {});
+    EXPECT_TRUE (result.wasOk());
+
+    // Test with 96kHz
+    MockAudioFormatReader reader96k (2, 5000, 96000.0);
+    auto result2 = profile->buildFromReader (reader96k, 1, {});
+    EXPECT_TRUE (result2.wasOk());
+
+    // Test with 192kHz
+    MockAudioFormatReader reader192k (2, 5000, 192000.0);
+    auto result3 = profile->buildFromReader (reader192k, 1, {});
+    EXPECT_TRUE (result3.wasOk());
+}
+
+TEST_F (AudioPeakProfileTests, BuildFromReaderThenBuildFromBuffer)
+{
+    // First build from reader
+    MockAudioFormatReader reader (2, 1000, 44100.0);
+    auto result1 = profile->buildFromReader (reader, 1, {});
+    EXPECT_TRUE (result1.wasOk());
+    EXPECT_EQ (1000, profile->getNumSamples());
+
+    // Then build from buffer
+    auto buffer = createTestBuffer (1, 500);
+    auto result2 = profile->buildFromBuffer (buffer, 1, {});
+    EXPECT_TRUE (result2.wasOk());
+    EXPECT_EQ (500, profile->getNumSamples());
+    EXPECT_EQ (1, profile->getNumChannels());
+}
+
+TEST_F (AudioPeakProfileTests, BuildFromReaderWithVerySmallChunks)
+{
+    // Test with file where baseResolution > chunk size (8192)
+    MockAudioFormatReader reader (2, 20000, 44100.0);
+
+    auto result = profile->buildFromReader (reader, 16384, {}); // baseResolution larger than chunk size
+
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_TRUE (profile->isValid());
+}
+
+TEST_F (AudioPeakProfileTests, BuildFromReaderHandlesPartialLastPeak)
+{
+    // 1005 samples with base resolution 100 = 10 full peaks + 1 partial (5 samples)
+    MockAudioFormatReader reader (2, 1005, 44100.0);
+
+    auto result = profile->buildFromReader (reader, 100, {});
+
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_TRUE (profile->isValid());
+    EXPECT_EQ (1005, profile->getNumSamples());
+}
+
+TEST_F (AudioPeakProfileTests, BuildFromReaderWithSingleSample)
+{
+    MockAudioFormatReader reader (1, 1, 44100.0);
+
+    auto result = profile->buildFromReader (reader, 1, {});
+
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_TRUE (profile->isValid());
+    EXPECT_EQ (1, profile->getNumSamples());
+}
+
+TEST_F (AudioPeakProfileTests, BuildFromReaderMultipleTimes)
+{
+    MockAudioFormatReader reader1 (1, 1000, 44100.0);
+    auto result1 = profile->buildFromReader (reader1, 1, {});
+    EXPECT_TRUE (result1.wasOk());
+    EXPECT_EQ (1000, profile->getNumSamples());
+
+    MockAudioFormatReader reader2 (2, 2000, 48000.0);
+    auto result2 = profile->buildFromReader (reader2, 1, {});
+    EXPECT_TRUE (result2.wasOk());
+    EXPECT_EQ (2000, profile->getNumSamples());
+    EXPECT_EQ (2, profile->getNumChannels());
+}
+
+TEST_F (AudioPeakProfileTests, BuildFromReaderClearsOldData)
+{
+    // First build
+    auto buffer = createTestBuffer (1, 500);
+    profile->buildFromBuffer (buffer, 1, {});
+    EXPECT_EQ (500, profile->getNumSamples());
+
+    // Second build from reader should clear old data
+    MockAudioFormatReader reader (2, 1000, 44100.0);
+    auto result = profile->buildFromReader (reader, 1, {});
+
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_EQ (1000, profile->getNumSamples());
+    EXPECT_EQ (2, profile->getNumChannels());
+}
