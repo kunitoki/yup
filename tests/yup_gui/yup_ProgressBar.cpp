@@ -136,6 +136,9 @@ TEST_F (ProgressBarTests, ProgressChangedCallbackInvoked)
 
     progressBar->setProgress (0.75, sendNotification);
 
+    // Process async messages
+    MessageManager::getInstance()->runDispatchLoopUntil (100);
+
     EXPECT_TRUE (callbackInvoked);
     EXPECT_EQ (0.75, receivedProgress);
 }
@@ -167,6 +170,9 @@ TEST_F (ProgressBarTests, ProgressChangedCallbackInvokedForIndeterminate)
 
     progressBar->setProgress (-1.0, sendNotification);
 
+    // Process async messages
+    MessageManager::getInstance()->runDispatchLoopUntil (100);
+
     EXPECT_TRUE (callbackInvoked);
     EXPECT_EQ (-1.0, receivedProgress);
 }
@@ -182,6 +188,9 @@ TEST_F (ProgressBarTests, ProgressChangedCallbackNotInvokedForSameValue)
     };
 
     progressBar->setProgress (0.5, sendNotification);
+
+    // Process async messages
+    MessageManager::getInstance()->runDispatchLoopUntil (100);
 
     EXPECT_EQ (0, callbackCount);
 }

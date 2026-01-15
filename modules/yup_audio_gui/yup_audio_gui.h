@@ -49,8 +49,10 @@
 
 //==============================================================================
 
+#include "waveform/yup_AudioPeakProfile.h"
+#include "waveform/yup_AudioPeakProfileCache.h"
+#include "waveform/yup_AudioThumbnail.h"
 #include "keyboard/yup_MidiKeyboardComponent.h"
-#include "displays/yup_AudioThumbnail.h"
 #include "displays/yup_AudioViewComponent.h"
 #include "displays/yup_SpectrumAnalyzerComponent.h"
 #include "displays/yup_CartesianPlane.h"

@@ -370,12 +370,16 @@ TEST_F (ListBoxTests, ModelCallbacksInvokedOnSelection)
 
 TEST_F (ListBoxTests, RowClickCallbackInvoked)
 {
+    listBox->setRowHeight (20);
+    listBox->updateContent();
+
     listBox->onRowClicked = [] (int rowIndex)
     {
         EXPECT_EQ (5, rowIndex);
     };
 
-    MouseEvent event (Point<float> (100.0f, 100.0f));
+    // Click in the middle of row 5 (y = 100 to 120, so use 110)
+    MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (100.0f, 110.0f));
     listBox->mouseDown (event);
 }
 

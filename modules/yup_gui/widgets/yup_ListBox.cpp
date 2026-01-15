@@ -801,7 +801,10 @@ void ListBox::updateVisibleRows()
 void ListBox::layoutRows()
 {
     if (model == nullptr)
+    {
+        visibleRowRange = Range<int> (0, 0);
         return;
+    }
 
     auto numRows = model->getNumRows();
     if (numRows == 0)

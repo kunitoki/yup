@@ -23,9 +23,9 @@ namespace yup
 {
 
 //==============================================================================
-AudioViewComponent::AudioViewComponent()
+AudioViewComponent::AudioViewComponent (std::shared_ptr<AudioPeakProfileCache> cacheToUse)
 {
-    ownedThumbnail = std::make_unique<AudioThumbnail>();
+    ownedThumbnail = std::make_unique<AudioThumbnail> (cacheToUse);
     attachThumbnail (*ownedThumbnail);
 }
 
@@ -40,44 +40,23 @@ AudioViewComponent::~AudioViewComponent()
         thumbnail->removeListener (this);
 }
 
-AudioThumbnail& AudioViewComponent::getThumbnail() noexcept
+void AudioViewComponent::setSource (const AudioBuffer<float>* newBuffer, double newSampleRate)
 {
-    return *thumbnail;
+    thumbnail->setSource (newBuffer, newSampleRate);
 }
 
-const AudioThumbnail& AudioViewComponent::getThumbnail() const noexcept
+void AudioViewComponent::setSource (std::unique_ptr<AudioFormatReader> reader, double newSampleRate)
 {
-    return *thumbnail;
-}
-
-void AudioViewComponent::setAudioBuffer (const AudioBuffer<float>* newBuffer, double newSampleRate)
-{
-    thumbnail->setAudioBuffer (newBuffer, newSampleRate);
-}
-
-void AudioViewComponent::setAudioFile (const File& file, AudioFormatManager* managerToUse)
-{
-    thumbnail->setAudioFile (file, managerToUse);
+    thumbnail->setSource (std::move (reader), newSampleRate);
 }
 
 void AudioViewComponent::clear()
 {
     thumbnail->clear();
-}
-
-const AudioBuffer<float>* AudioViewComponent::getAudioBuffer() const noexcept
-{
-    return thumbnail->getAudioBuffer();
-}
-
-const File& AudioViewComponent::getAudioFile() const noexcept
-{
-    return thumbnail->getAudioFile();
-}
-
-bool AudioViewComponent::isUsingAudioFile() const noexcept
-{
-    return thumbnail->isUsingAudioFile();
+    viewRangeSamples = {};
+    zoomFactor = 1.0;
+    updateScrollBar();
+    repaint();
 }
 
 void AudioViewComponent::setZoomFactor (double newZoomFactor)
@@ -92,10 +71,11 @@ void AudioViewComponent::setZoomFactor (double newZoomFactor)
         return;
     }
 
-    const double maxZoom = static_cast<double> (totalSamples);
+    // Limit maximum zoom to prevent viewing less than 100 samples (or total if smaller)
+    const double maxZoom = jmin (static_cast<double> (totalSamples), static_cast<double> (totalSamples) / 100.0);
     zoomFactor = jlimit (1.0, maxZoom, newZoomFactor);
 
-    const double viewLength = jmax (1.0, static_cast<double> (totalSamples) / zoomFactor);
+    const double viewLength = jmax (100.0, static_cast<double> (totalSamples) / zoomFactor);
     auto newRange = Range<double>::withStartAndLength (viewRangeSamples.getStart(), viewLength);
 
     setViewRangeSamplesInternal (newRange, true);
@@ -159,12 +139,14 @@ double AudioViewComponent::getSampleRate() const noexcept
 
 double AudioViewComponent::timeToSample (double seconds) const noexcept
 {
-    return thumbnail->timeToSample (seconds);
+    const double sampleRate = getSampleRate();
+    return sampleRate > 0.0 ? seconds * sampleRate : 0.0;
 }
 
 double AudioViewComponent::sampleToTime (double sample) const noexcept
 {
-    return thumbnail->sampleToTime (sample);
+    const double sampleRate = getSampleRate();
+    return sampleRate > 0.0 ? sample / sampleRate : 0.0;
 }
 
 float AudioViewComponent::sampleToX (double sample, const Rectangle<float>& waveformBounds) const noexcept
@@ -219,21 +201,17 @@ void AudioViewComponent::paint (Graphics& g)
     auto labelArea = shouldShowLabels ? bounds.removeFromLeft (labelWidth) : Rectangle<float>();
     auto waveformArea = bounds;
 
-    if (thumbnail->getTotalSamples() <= 0 || thumbnail->getNumChannels() <= 0)
+    const int numChannels = thumbnail->getNumChannels();
+    const int totalSamples = thumbnail->getTotalSamples();
+
+    if (totalSamples <= 0 || numChannels <= 0)
     {
         paintPlaceholder (g, waveformArea);
         return;
     }
 
-    auto profile = thumbnail->getActiveProfile();
-    if (profile == nullptr || profile->channelPeaks.empty())
-    {
-        paintPlaceholder (g, waveformArea);
-        return;
-    }
-
-    const int numChannels = profile->numChannels;
-    if (numChannels <= 0)
+    auto profile = thumbnail->getPeakProfile();
+    if (profile == nullptr || ! profile->isValid())
     {
         paintPlaceholder (g, waveformArea);
         return;
@@ -242,25 +220,12 @@ void AudioViewComponent::paint (Graphics& g)
     const float laneHeight = waveformArea.getHeight() / static_cast<float> (numChannels);
     auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
 
-    const int numPeaks = static_cast<int> (profile->channelPeaks[0].minValues.size());
-    if (numPeaks <= 0)
-    {
-        paintPlaceholder (g, waveformArea);
-        return;
-    }
+    // Calculate visible sample range
+    const Range<double> visibleSamples = viewRangeSamples.isEmpty()
+                                           ? Range<double> (0.0, static_cast<double> (totalSamples))
+                                           : viewRangeSamples;
 
-    const double viewStart = viewRangeSamples.getStart();
-    const double viewEnd = viewRangeSamples.getEnd();
-    const int samplesPerPeak = profile->samplesPerPeak;
-    const int startIndex = jlimit (0, numPeaks - 1, static_cast<int> (viewStart / samplesPerPeak));
-    const int endIndex = jlimit (startIndex + 1,
-                                 numPeaks,
-                                 static_cast<int> (std::ceil (viewEnd / samplesPerPeak)));
-
-    const int numVisiblePeaks = jmax (1, endIndex - startIndex);
-    const float stepX = waveformArea.getWidth() / static_cast<float> (numVisiblePeaks);
-    const float startX = waveformArea.getX();
-
+    // Paint each channel
     for (int channel = 0; channel < numChannels; ++channel)
     {
         Rectangle<float> lane (waveformArea.getX(),
@@ -268,6 +233,7 @@ void AudioViewComponent::paint (Graphics& g)
                                waveformArea.getWidth(),
                                laneHeight);
 
+        // Draw lane background
         g.setFillColor (Color (0xFF181818));
         g.fillRect (lane);
 
@@ -275,6 +241,7 @@ void AudioViewComponent::paint (Graphics& g)
         g.setStrokeWidth (1.0f);
         g.strokeRect (lane);
 
+        // Draw channel label
         if (shouldShowLabels)
         {
             auto labelBounds = labelArea.withY (lane.getY()).withHeight (lane.getHeight());
@@ -285,16 +252,8 @@ void AudioViewComponent::paint (Graphics& g)
                               Justification::center);
         }
 
-        const auto& peaks = profile->channelPeaks[static_cast<size_t> (channel)];
-        thumbnail->paintChannel (g,
-                                 lane,
-                                 channel,
-                                 peaks.minValues,
-                                 peaks.maxValues,
-                                 startIndex,
-                                 endIndex,
-                                 startX,
-                                 stepX);
+        // Paint waveform using new simplified API
+        thumbnail->paintChannel (g, lane, channel, visibleSamples, waveformArea.getWidth());
     }
 
     paintOverlay (g, waveformArea);
@@ -304,35 +263,7 @@ void AudioViewComponent::resized()
 {
     updateScrollBar();
     updateLayout();
-
-    const int waveformWidth = static_cast<int> (getWaveformBounds().getWidth());
-    if (waveformWidth != lastWaveformWidth)
-    {
-        lastWaveformWidth = waveformWidth;
-        rebuildPeakProfileIfNeeded();
-    }
-}
-
-void AudioViewComponent::timerCallback()
-{
-    if (! pendingRebuild)
-    {
-        stopTimer();
-        return;
-    }
-
-    const auto elapsedMs = (Time::getCurrentTime() - lastResizeTime).inMilliseconds();
-    if (elapsedMs < rebuildDebounceMs)
-        return;
-
-    pendingRebuild = false;
-    stopTimer();
-    if (pendingSamplesPerPeak > 0)
-    {
-        thumbnail->requestProfile (pendingSamplesPerPeak);
-        lastRequestedSamplesPerPeak = pendingSamplesPerPeak;
-        pendingSamplesPerPeak = 0;
-    }
+    repaint();
 }
 
 void AudioViewComponent::mouseDown (const MouseEvent& event)
@@ -500,9 +431,35 @@ void AudioViewComponent::handleScrollBarMoved()
 
 void AudioViewComponent::setViewRangeSamplesInternal (Range<double> range, bool notifyScrollBar)
 {
-    viewRangeSamples = thumbnail->getClampedViewRange (range);
-
     const double totalSamples = static_cast<double> (getTotalSamples());
+    if (totalSamples <= 0.0)
+    {
+        viewRangeSamples = {};
+        zoomFactor = 1.0;
+        if (notifyScrollBar)
+            updateScrollBar();
+        repaint();
+        return;
+    }
+
+    // Clamp view range to valid sample bounds
+    double clampedStart = jlimit (0.0, totalSamples - 1.0, range.getStart());
+    double clampedLength = range.getLength();
+
+    // Ensure the view doesn't extend past the end
+    if (clampedStart + clampedLength > totalSamples)
+        clampedLength = totalSamples - clampedStart;
+
+    // Ensure minimum length (at least 10 samples or total samples if smaller)
+    const double minViewLength = jmin (10.0, totalSamples);
+    clampedLength = jmax (minViewLength, clampedLength);
+
+    // Final check: if start + length would exceed total, adjust start
+    if (clampedStart + clampedLength > totalSamples)
+        clampedStart = jmax (0.0, totalSamples - clampedLength);
+
+    viewRangeSamples = Range<double>::withStartAndLength (clampedStart, clampedLength);
+
     zoomFactor = (totalSamples > 0.0 && viewRangeSamples.getLength() > 0.0)
                    ? totalSamples / viewRangeSamples.getLength()
                    : 1.0;
@@ -510,46 +467,7 @@ void AudioViewComponent::setViewRangeSamplesInternal (Range<double> range, bool 
     if (notifyScrollBar)
         updateScrollBar();
 
-    rebuildPeakProfileIfNeeded();
     repaint();
-}
-
-void AudioViewComponent::rebuildPeakProfileIfNeeded()
-{
-    if (getTotalSamples() <= 0 || getNumChannels() <= 0)
-        return;
-
-    const auto waveformBounds = getWaveformBounds();
-    if (waveformBounds.getWidth() <= 0.0f)
-        return;
-
-    const double viewLength = viewRangeSamples.isEmpty()
-                                ? static_cast<double> (getTotalSamples())
-                                : viewRangeSamples.getLength();
-    const int samplesPerPeak = thumbnail->getSamplesPerPeakForView (viewLength, waveformBounds.getWidth());
-    if (samplesPerPeak <= 0)
-        return;
-
-    auto profile = thumbnail->getActiveProfile();
-    if (profile == nullptr)
-    {
-        thumbnail->requestProfile (samplesPerPeak);
-        lastRequestedSamplesPerPeak = samplesPerPeak;
-        return;
-    }
-
-    schedulePeakProfileUpdate (samplesPerPeak);
-}
-
-void AudioViewComponent::schedulePeakProfileUpdate (int samplesPerPeak)
-{
-    if (samplesPerPeak == lastRequestedSamplesPerPeak)
-        return;
-
-    pendingSamplesPerPeak = samplesPerPeak;
-    pendingRebuild = true;
-    lastResizeTime = Time::getCurrentTime();
-    startTimer (rebuildDebounceMs);
 }
 
 void AudioViewComponent::scrollBySamples (double deltaSamples)
@@ -562,8 +480,26 @@ void AudioViewComponent::scrollBySamples (double deltaSamples)
                                 ? static_cast<double> (totalSamples)
                                 : viewRangeSamples.getLength();
     const double viewStart = viewRangeSamples.isEmpty() ? 0.0 : viewRangeSamples.getStart();
-    setViewRangeSamplesInternal (Range<double>::withStartAndLength (viewStart + deltaSamples, viewLength),
-                                 true);
+    const double newStart = viewStart + deltaSamples;
+
+    // Prevent scrolling beyond boundaries
+    if (deltaSamples < 0.0 && newStart <= 0.0)
+    {
+        // At the beginning, don't scroll left
+        setViewRangeSamplesInternal (Range<double>::withStartAndLength (0.0, viewLength), true);
+        return;
+    }
+
+    if (deltaSamples > 0.0 && newStart + viewLength >= static_cast<double> (totalSamples))
+    {
+        // At the end, don't scroll right
+        setViewRangeSamplesInternal (Range<double>::withStartAndLength (
+                                         static_cast<double> (totalSamples) - viewLength, viewLength),
+                                     true);
+        return;
+    }
+
+    setViewRangeSamplesInternal (Range<double>::withStartAndLength (newStart, viewLength), true);
 }
 
 void AudioViewComponent::zoomAroundSample (double zoomMultiplier, double anchorSample)
@@ -573,14 +509,16 @@ void AudioViewComponent::zoomAroundSample (double zoomMultiplier, double anchorS
         return;
 
     const double currentZoom = zoomFactor;
-    const double newZoom = jlimit (1.0, totalSamples, currentZoom * zoomMultiplier);
-    const double newViewLength = jmax (1.0, totalSamples / newZoom);
+    // Limit maximum zoom to prevent viewing less than 100 samples (or total if smaller)
+    const double maxZoom = jmin (totalSamples, totalSamples / 100.0);
+    const double newZoom = jlimit (1.0, maxZoom, currentZoom * zoomMultiplier);
+    const double newViewLength = jmax (100.0, totalSamples / newZoom);
 
     const double oldViewLength = viewRangeSamples.isEmpty()
                                    ? totalSamples
                                    : viewRangeSamples.getLength();
     const double oldViewStart = viewRangeSamples.isEmpty() ? 0.0 : viewRangeSamples.getStart();
-    const double clampedAnchor = jlimit (0.0, totalSamples, anchorSample);
+    const double clampedAnchor = jlimit (0.0, totalSamples - 1.0, anchorSample);
     const double anchorRatio = oldViewLength > 0.0
                                  ? jlimit (0.0, 1.0, (clampedAnchor - oldViewStart) / oldViewLength)
                                  : 0.5;
@@ -596,14 +534,13 @@ void AudioViewComponent::ensureViewRangeIsValid()
     {
         viewRangeSamples = {};
         zoomFactor = 1.0;
+        updateScrollBar();
         return;
     }
 
     const auto defaultRange = Range<double>::withStartAndLength (0.0, static_cast<double> (totalSamples));
-    const auto clampedRange = viewRangeSamples.isEmpty()
-                                ? defaultRange
-                                : thumbnail->getClampedViewRange (viewRangeSamples);
-    setViewRangeSamplesInternal (clampedRange, true);
+    const auto rangeToUse = viewRangeSamples.isEmpty() ? defaultRange : viewRangeSamples;
+    setViewRangeSamplesInternal (rangeToUse, true);
 }
 
 void AudioViewComponent::updateProgressBar (double progress, bool isVisible)
@@ -622,8 +559,6 @@ void AudioViewComponent::updateProgressBar (double progress, bool isVisible)
 
 void AudioViewComponent::thumbnailChanged (AudioThumbnail&)
 {
-    lastRequestedSamplesPerPeak = 0;
-    pendingSamplesPerPeak = 0;
     ensureViewRangeIsValid();
     repaint();
 }

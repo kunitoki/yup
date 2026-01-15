@@ -29,13 +29,15 @@ namespace yup
     View component that renders an AudioThumbnail with zooming, scrolling, and progress display.
 */
 class YUP_API AudioViewComponent : public Component
-    , public Timer
     , private AudioThumbnail::Listener
 {
 public:
     //==============================================================================
-    /** Creates a view with an owned AudioThumbnail. */
-    AudioViewComponent();
+    /** Creates a view with an owned AudioThumbnail.
+
+        @param cacheToUse  Optional cache to share across multiple views (creates default if nullptr)
+    */
+    explicit AudioViewComponent (std::shared_ptr<AudioPeakProfileCache> cacheToUse = nullptr);
 
     /** Creates a view for an externally owned AudioThumbnail. */
     explicit AudioViewComponent (AudioThumbnail& thumbnailToUse);
@@ -44,30 +46,14 @@ public:
     ~AudioViewComponent() override;
 
     //==============================================================================
-    /** Returns the thumbnail used for rendering. */
-    AudioThumbnail& getThumbnail() noexcept;
-
-    /** Returns the thumbnail used for rendering. */
-    const AudioThumbnail& getThumbnail() const noexcept;
-
-    //==============================================================================
     /** Assigns the buffer to render and refreshes the peak cache. */
-    void setAudioBuffer (const AudioBuffer<float>* newBuffer, double newSampleRate = 0.0);
+    void setSource (const AudioBuffer<float>* newBuffer, double newSampleRate = 0.0);
 
     /** Assigns an audio file to render and refreshes the peak cache. */
-    void setAudioFile (const File& file, AudioFormatManager* managerToUse = nullptr);
+    void setSource (std::unique_ptr<AudioFormatReader> reader, double newSampleRate = 0.0);
 
     /** Clears the waveform display and cache. */
     void clear();
-
-    /** Returns the currently assigned audio buffer. */
-    const AudioBuffer<float>* getAudioBuffer() const noexcept;
-
-    /** Returns the currently assigned audio file (may be empty). */
-    const File& getAudioFile() const noexcept;
-
-    /** Returns true if the thumbnail is using an audio file source. */
-    bool isUsingAudioFile() const noexcept;
 
     //==============================================================================
     /** Sets the zoom factor.
@@ -145,8 +131,6 @@ public:
     /** @internal */
     void resized() override;
     /** @internal */
-    void timerCallback() override;
-    /** @internal */
     void mouseDown (const MouseEvent& event) override;
     /** @internal */
     void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
@@ -173,8 +157,6 @@ private:
     void updateScrollBar();
     void handleScrollBarMoved();
     void setViewRangeSamplesInternal (Range<double> range, bool notifyScrollBar);
-    void rebuildPeakProfileIfNeeded();
-    void schedulePeakProfileUpdate (int samplesPerPeak);
     void scrollBySamples (double deltaSamples);
     void zoomAroundSample (double zoomMultiplier, double anchorSample);
     void ensureViewRangeIsValid();
@@ -193,14 +175,8 @@ private:
     int labelWidth = 48;
     bool showChannelLabels = true;
     bool selectable = false;
-    int lastWaveformWidth = 0;
-    bool pendingRebuild = false;
-    Time lastResizeTime;
-    int pendingSamplesPerPeak = 0;
-    int lastRequestedSamplesPerPeak = 0;
 
     static constexpr int progressBarHeight = 6;
-    static constexpr int rebuildDebounceMs = 120;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioViewComponent)
 };

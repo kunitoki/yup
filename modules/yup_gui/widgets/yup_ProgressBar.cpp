@@ -120,8 +120,13 @@ void ProgressBar::refreshDisplay (double lastFrameTimeSeconds)
 //==============================================================================
 void ProgressBar::updateProgress (double newProgress, NotificationType notification)
 {
-    MessageManager::callAsync ([this, notification]
+    WeakReference<Component> self = this;
+
+    MessageManager::callAsync ([this, self, notification]
     {
+        if (self.get() == nullptr)
+            return;
+
         repaint();
         sendProgressChanged (notification);
     });

@@ -39,7 +39,8 @@
 class AudioFileWaveform : public yup::AudioViewComponent
 {
 public:
-    AudioFileWaveform()
+    AudioFileWaveform (std::shared_ptr<yup::AudioPeakProfileCache> cacheToUse)
+        : yup::AudioViewComponent (std::move (cacheToUse))
     {
         addAndMakeVisible (playhead);
         playhead.setVisible (false);
@@ -134,12 +135,14 @@ class AudioFileDemo : public yup::Component
 public:
     AudioFileDemo()
         : Component ("AudioFileDemo")
+        , waveformCache (std::make_shared<yup::AudioPeakProfileCache>())
         , loadButton ("Load Audio")
         , playButton ("Play")
         , stopButton ("Stop")
         , saveButton ("Save As")
         , loopButton ("Loop")
         , labelsButton ("Labels")
+        , waveformDisplay (waveformCache)
     {
         formatManager.registerDefaultFormats (
             yup::AudioFormatType::all & ~yup::AudioFormatType::coreAudio);
@@ -147,6 +150,9 @@ public:
         deviceManager.initialiseWithDefaultDevices (0, 2);
         deviceManager.addAudioCallback (&sourcePlayer);
         sourcePlayer.setSource (&transportSource);
+
+        // Configure the waveform cache
+        waveformCache->setThreadPool (&waveformThreadPool);
 
         setupUi();
     }
@@ -271,8 +277,6 @@ private:
 
         addAndMakeVisible (waveformDisplay);
         waveformDisplay.setSelectable (true);
-        waveformDisplay.getThumbnail().setThreadPool (&waveformThreadPool);
-        waveformDisplay.getThumbnail().setBackgroundCalculationEnabled (true);
         waveformDisplay.setChannelLabelsVisible (labelsButton.getToggleState());
     }
 
@@ -357,7 +361,7 @@ private:
         memorySource = std::make_unique<yup::MemoryAudioSource> (audioBuffer, false, loopEnabled);
         transportSource.setSource (memorySource.get(), 0, nullptr, loadedSampleRate, numChannels);
 
-        waveformDisplay.setAudioBuffer (&audioBuffer, loadedSampleRate);
+        waveformDisplay.setSource (&audioBuffer, loadedSampleRate);
         waveformDisplay.setPlayhead (0.0, audioLengthSeconds);
         updateStatus ("Loaded " + file.getFileName() + " | " + yup::String (numChannels)
                       + " ch | " + yup::String (loadedSampleRate, 1) + " Hz | "
@@ -440,7 +444,9 @@ private:
     yup::AudioTransportSource transportSource;
     std::unique_ptr<yup::MemoryAudioSource> memorySource;
     yup::AudioBuffer<float> audioBuffer;
+
     yup::ThreadPool waveformThreadPool;
+    std::shared_ptr<yup::AudioPeakProfileCache> waveformCache;
 
     yup::TextButton loadButton;
     yup::TextButton playButton;

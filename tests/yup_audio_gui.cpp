@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2025 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,16 +19,6 @@
   ==============================================================================
 */
 
-#include "yup_gui/yup_ComboBox.cpp"
-#include "yup_gui/yup_Component.cpp"
-#include "yup_gui/yup_FileChooser.cpp"
-#include "yup_gui/yup_Label.cpp"
-#include "yup_gui/yup_ListBox.cpp"
-#include "yup_gui/yup_PopupMenu.cpp"
-#include "yup_gui/yup_ProgressBar.cpp"
-#include "yup_gui/yup_ScrollBar.cpp"
-#include "yup_gui/yup_Slider.cpp"
-#include "yup_gui/yup_SwitchButton.cpp"
-#include "yup_gui/yup_TextButton.cpp"
-#include "yup_gui/yup_TextEditor.cpp"
-#include "yup_gui/yup_ToggleButton.cpp"
+#include "yup_audio_gui/yup_AudioPeakProfile.cpp"
+#include "yup_audio_gui/yup_AudioPeakProfileCache.cpp"
+#include "yup_audio_gui/yup_AudioThumbnail.cpp"
