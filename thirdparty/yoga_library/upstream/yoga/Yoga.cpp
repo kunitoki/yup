@@ -197,9 +197,27 @@ YOGA_EXPORT YGNodeRef YGNodeNewWithConfig(const YGConfigRef config) {
   return node;
 }
 
+namespace {
+struct YogaWrapperWithCleanup {
+  YogaWrapperWithCleanup()
+    : defaultConfig (YGConfigNew())
+  {
+  }
+
+  ~YogaWrapperWithCleanup() {
+    if (defaultConfig != nullptr) {
+      YGConfigFree (defaultConfig);
+      defaultConfig = nullptr;
+    }
+  }
+
+  YGConfigRef defaultConfig = nullptr;
+};
+} // namespace
+
 YOGA_EXPORT YGConfigRef YGConfigGetDefault() {
-  static YGConfigRef defaultConfig = YGConfigNew();
-  return defaultConfig;
+  static YogaWrapperWithCleanup defaultWrapper = YogaWrapperWithCleanup();
+  return defaultWrapper.defaultConfig;
 }
 
 YOGA_EXPORT YGNodeRef YGNodeNew(void) {

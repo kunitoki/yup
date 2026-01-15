@@ -31,6 +31,10 @@
  #pragma GCC diagnostic ignored "-Wunused-function"
  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
  #pragma GCC diagnostic ignored "-Wformat"
+#elif _MSC_VER
+ #pragma warning(push)
+ #pragma warning(disable : 4244)
+ #pragma warning(disable : 4146)
 #endif
 
 #include "harfbuzz.h"
@@ -113,6 +117,10 @@
 #include "upstream/hb-wasm-api.cc"
 #include "upstream/hb-wasm-shape.cc"
 
-#if defined(__GNUC__) || defined(__clang__)
+#if defined(__clang__)
+ #pragma clang diagnostic pop
+#if defined(__GNUC__)
  #pragma GCC diagnostic pop
+#elif _MSC_VER 
+ #pragma warning(pop)
 #endif

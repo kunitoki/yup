@@ -40,7 +40,7 @@ function (yup_prepare_python_stdlib target_name python_tools_path output_variabl
         set (python_embeddable_url "https://www.python.org/ftp/python/${python_version_string}/python-${python_version_string}-embed-amd64.zip")
         FetchContent_Declare (python_embed_env URL ${python_embeddable_url})
         if (NOT python_embed_env_POPULATED)
-            FetchContent_Populate(python_embed_env)
+            FetchContent_MakeAvailable (python_embed_env)
         endif()
 
         get_filename_component (python_root_path "${python_embed_env_SOURCE_DIR}" REALPATH)

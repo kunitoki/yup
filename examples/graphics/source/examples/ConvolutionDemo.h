@@ -353,9 +353,9 @@ private:
 
         wetGainSlider.setRange (0.0, 2.0);
         wetGainSlider.setValue (1.0);
-        wetGainSlider.onValueChanged = [this] (float value)
+        wetGainSlider.onValueChanged = [this] (double value)
         {
-            wetGain.setTargetValue (value);
+            wetGain.setTargetValue ((float) value);
         };
         addAndMakeVisible (wetGainSlider);
 
@@ -366,9 +366,9 @@ private:
 
         dryGainSlider.setRange (0.0, 2.0);
         dryGainSlider.setValue (0.3);
-        dryGainSlider.onValueChanged = [this] (float value)
+        dryGainSlider.onValueChanged = [this] (double value)
         {
-            dryGain.setTargetValue (value);
+            dryGain.setTargetValue ((float) value);
         };
         addAndMakeVisible (dryGainSlider);
 
@@ -422,6 +422,9 @@ private:
 
         // Create waveform data points
         const size_t numPoints = std::min (static_cast<size_t> (getWidth()), length);
+        if (numPoints == 0)
+            return;
+
         const size_t stride = length / numPoints;
 
         std::vector<yup::Point<double>> waveformData;
