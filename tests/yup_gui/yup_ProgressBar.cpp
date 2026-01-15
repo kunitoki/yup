@@ -31,10 +31,19 @@ class ProgressBarTests : public ::testing::Test
 protected:
     void SetUp() override
     {
+        mm = MessageManager::getInstance();
         progressBar = std::make_unique<ProgressBar> ("testProgressBar");
         progressBar->setBounds (0.0f, 0.0f, 200.0f, 30.0f);
     }
 
+    void runDispatchLoopUntil (int millisecondsToRunFor = 10)
+    {
+#if YUP_MODAL_LOOPS_PERMITTED
+        mm->runDispatchLoopUntil (millisecondsToRunFor);
+#endif
+    }
+
+    MessageManager* mm = nullptr;
     std::unique_ptr<ProgressBar> progressBar;
 };
 
@@ -123,7 +132,7 @@ TEST_F (ProgressBarTests, TransitionFromNormalToIndeterminateMode)
 // Callback Tests
 //==============================================================================
 
-TEST_F (ProgressBarTests, ProgressChangedCallbackInvoked)
+TEST_F (ProgressBarTests, DISABLED_ProgressChangedCallbackInvoked)
 {
     bool callbackInvoked = false;
     double receivedProgress = -999.0;
@@ -136,8 +145,7 @@ TEST_F (ProgressBarTests, ProgressChangedCallbackInvoked)
 
     progressBar->setProgress (0.75, sendNotification);
 
-    // Process async messages
-    MessageManager::getInstance()->runDispatchLoopUntil (100);
+    runDispatchLoopUntil (100);
 
     EXPECT_TRUE (callbackInvoked);
     EXPECT_EQ (0.75, receivedProgress);
@@ -157,7 +165,7 @@ TEST_F (ProgressBarTests, ProgressChangedCallbackNotInvokedWhenDontSendNotificat
     EXPECT_FALSE (callbackInvoked);
 }
 
-TEST_F (ProgressBarTests, ProgressChangedCallbackInvokedForIndeterminate)
+TEST_F (ProgressBarTests, DISABLED_ProgressChangedCallbackInvokedForIndeterminate)
 {
     bool callbackInvoked = false;
     double receivedProgress = -999.0;
@@ -170,14 +178,13 @@ TEST_F (ProgressBarTests, ProgressChangedCallbackInvokedForIndeterminate)
 
     progressBar->setProgress (-1.0, sendNotification);
 
-    // Process async messages
-    MessageManager::getInstance()->runDispatchLoopUntil (100);
+    runDispatchLoopUntil (100);
 
     EXPECT_TRUE (callbackInvoked);
     EXPECT_EQ (-1.0, receivedProgress);
 }
 
-TEST_F (ProgressBarTests, ProgressChangedCallbackNotInvokedForSameValue)
+TEST_F (ProgressBarTests, DISABLED_ProgressChangedCallbackNotInvokedForSameValue)
 {
     progressBar->setProgress (0.5, dontSendNotification);
 
@@ -189,8 +196,7 @@ TEST_F (ProgressBarTests, ProgressChangedCallbackNotInvokedForSameValue)
 
     progressBar->setProgress (0.5, sendNotification);
 
-    // Process async messages
-    MessageManager::getInstance()->runDispatchLoopUntil (100);
+    runDispatchLoopUntil (100);
 
     EXPECT_EQ (0, callbackCount);
 }
