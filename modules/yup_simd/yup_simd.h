@@ -110,6 +110,23 @@
 #endif
 
 //==============================================================================
+#if YUP_USE_AVX_INTRINSICS || YUP_USE_FMA_INTRINSICS
+#include <immintrin.h>
+#endif
+
+#if YUP_USE_SSE_INTRINSICS
+#include <emmintrin.h>
+#endif
+
+#if YUP_USE_ARM_NEON
+#if YUP_64BIT && YUP_WINDOWS
+#include <arm64_neon.h>
+#else
+#include <arm_neon.h>
+#endif
+#endif
+
+//==============================================================================
 #include <chrono>
 #include <type_traits>
 
