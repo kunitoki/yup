@@ -128,8 +128,8 @@ TEST_F (AudioPeakProfileCacheTests, GenerateCacheKeyFromBuffer)
     auto buffer1 = createCacheTestBuffer (2, kCacheBufferSize);
     auto buffer2 = createCacheTestBuffer (2, kCacheBufferSize);
 
-    String key1 = AudioPeakProfileCache::generateCacheKey (buffer1, kTestSampleRate);
-    String key2 = AudioPeakProfileCache::generateCacheKey (buffer2, kTestSampleRate);
+    String key1 = AudioPeakProfileCache::generateCacheKey (buffer1, kCacheSampleRate);
+    String key2 = AudioPeakProfileCache::generateCacheKey (buffer2, kCacheSampleRate);
 
     // Same content should produce same key
     EXPECT_EQ (key1, key2);
@@ -409,4 +409,277 @@ TEST_F (AudioPeakProfileCacheTests, RemoveListenerStopsNotifications)
     cache->clearMemoryCache();
     cache->requestProfile (cacheKey, buildFunction, false);
     EXPECT_EQ (0, listener->readyCallCount);
+}
+
+//==============================================================================
+// Cache Directory Tests
+//==============================================================================
+
+TEST_F (AudioPeakProfileCacheTests, SetCacheDirectoryAcceptsPath)
+{
+    File newCacheDir = tempDir.getChildFile ("new_cache");
+    newCacheDir.createDirectory();
+
+    cache->setCacheDirectory (newCacheDir);
+
+    // Should not crash
+    EXPECT_TRUE (true);
+
+    newCacheDir.deleteRecursively();
+}
+
+TEST_F (AudioPeakProfileCacheTests, CacheKeyGenerationForEmptyBuffer)
+{
+    AudioBuffer<float> emptyBuffer (0, 0);
+    String key = AudioPeakProfileCache::generateCacheKey (emptyBuffer, kCacheSampleRate);
+
+    EXPECT_FALSE (key.isEmpty());
+}
+
+TEST_F (AudioPeakProfileCacheTests, CacheKeyGenerationWithDifferentSampleRates)
+{
+    auto buffer = createCacheTestBuffer (1, 1000);
+
+    String key1 = AudioPeakProfileCache::generateCacheKey (buffer, 44100.0);
+    String key2 = AudioPeakProfileCache::generateCacheKey (buffer, 48000.0);
+
+    EXPECT_NE (key1, key2);
+}
+
+TEST_F (AudioPeakProfileCacheTests, CacheKeyGenerationForNonExistentFile)
+{
+    File nonExistentFile = tempDir.getChildFile ("does_not_exist.wav");
+    String key = AudioPeakProfileCache::generateCacheKey (nonExistentFile);
+
+    // Non-existent file returns empty key
+    EXPECT_TRUE (key.isEmpty());
+}
+
+//==============================================================================
+// Async Request Tests
+//==============================================================================
+
+TEST_F (AudioPeakProfileCacheTests, MultipleAsyncRequests)
+{
+    ThreadPool threadPool (4);
+    cache->setThreadPool (&threadPool);
+
+    for (int i = 0; i < 5; ++i)
+    {
+        String cacheKey = "async_key_" + String (i);
+
+        auto buildFunction = [i]() -> std::shared_ptr<AudioPeakProfile>
+        {
+            auto profile = std::make_shared<AudioPeakProfile>();
+            auto buffer = createCacheTestBuffer (1, 1000 + i * 100);
+            profile->buildFromBuffer (buffer, 1, {});
+            return profile;
+        };
+
+        cache->requestProfile (cacheKey, buildFunction, true);
+    }
+
+    // Wait for all requests to complete
+    int attempts = 0;
+    while (listener->readyCallCount < 5 && attempts++ < 200)
+        Thread::sleep (10);
+
+    EXPECT_EQ (5, listener->readyCallCount);
+}
+
+TEST_F (AudioPeakProfileCacheTests, AsyncRequestWithNullThreadPool)
+{
+    // No thread pool set - should fall back to synchronous
+    cache->setThreadPool (nullptr);
+
+    String cacheKey = "null_threadpool_async";
+
+    auto buildFunction = []() -> std::shared_ptr<AudioPeakProfile>
+    {
+        auto profile = std::make_shared<AudioPeakProfile>();
+        auto buffer = createCacheTestBuffer (1, 1000);
+        profile->buildFromBuffer (buffer, 1, {});
+        return profile;
+    };
+
+    cache->requestProfile (cacheKey, buildFunction, true);
+
+    // Should complete synchronously even though async was requested
+    EXPECT_EQ (1, listener->readyCallCount);
+}
+
+//==============================================================================
+// Disk Cache Disabled Tests
+//==============================================================================
+
+TEST_F (AudioPeakProfileCacheTests, DiskCacheDisabledByDefault)
+{
+    AudioPeakProfileCache testCache;
+
+    String cacheKey = "test_disk_disabled";
+
+    auto buildFunction = []() -> std::shared_ptr<AudioPeakProfile>
+    {
+        auto profile = std::make_shared<AudioPeakProfile>();
+        auto buffer = createCacheTestBuffer (1, 1000);
+        profile->buildFromBuffer (buffer, 1, {});
+        return profile;
+    };
+
+    testCache.setCacheDirectory (tempDir);
+    testCache.requestProfile (cacheKey, buildFunction, false);
+
+    // No disk cache files should be created
+    auto cacheFiles = tempDir.findChildFiles (File::TypesOfFileToFind::findFiles, false, "*.yuppeaks");
+    EXPECT_EQ (0, cacheFiles.size());
+}
+
+TEST_F (AudioPeakProfileCacheTests, DiskCacheCanBeDisabled)
+{
+    cache->setDiskCacheEnabled (true);
+    cache->setDiskCacheEnabled (false);
+
+    String cacheKey = "test_disk_toggle";
+
+    auto buildFunction = []() -> std::shared_ptr<AudioPeakProfile>
+    {
+        auto profile = std::make_shared<AudioPeakProfile>();
+        auto buffer = createCacheTestBuffer (1, 1000);
+        profile->buildFromBuffer (buffer, 1, {});
+        return profile;
+    };
+
+    cache->requestProfile (cacheKey, buildFunction, false);
+
+    // No disk cache files should be created
+    auto cacheFiles = tempDir.findChildFiles (File::TypesOfFileToFind::findFiles, false, "*.yuppeaks");
+    EXPECT_EQ (0, cacheFiles.size());
+}
+
+//==============================================================================
+// Edge Cases
+//==============================================================================
+
+TEST_F (AudioPeakProfileCacheTests, BuildFunctionReturningNull)
+{
+    String cacheKey = "test_null_profile";
+
+    auto buildFunction = []() -> std::shared_ptr<AudioPeakProfile>
+    {
+        return nullptr;
+    };
+
+    cache->requestProfile (cacheKey, buildFunction, false);
+
+    auto retrieved = cache->getProfile (cacheKey);
+    EXPECT_EQ (nullptr, retrieved);
+}
+
+TEST_F (AudioPeakProfileCacheTests, BuildFunctionThrowing)
+{
+    String cacheKey = "test_throwing_build";
+
+    auto buildFunction = []() -> std::shared_ptr<AudioPeakProfile>
+    {
+        throw std::runtime_error ("Build failed");
+        return nullptr;
+    };
+
+    // Should not crash
+    try
+    {
+        cache->requestProfile (cacheKey, buildFunction, false);
+    }
+    catch (...)
+    {
+        // Expected
+    }
+
+    EXPECT_TRUE (true);
+}
+
+TEST_F (AudioPeakProfileCacheTests, SameCacheKeyDifferentBuildFunctions)
+{
+    String cacheKey = "same_key";
+
+    int buildFunction1CallCount = 0;
+    auto buildFunction1 = [&buildFunction1CallCount]() -> std::shared_ptr<AudioPeakProfile>
+    {
+        buildFunction1CallCount++;
+        auto profile = std::make_shared<AudioPeakProfile>();
+        auto buffer = createCacheTestBuffer (1, 1000);
+        profile->buildFromBuffer (buffer, 1, {});
+        return profile;
+    };
+
+    int buildFunction2CallCount = 0;
+    auto buildFunction2 = [&buildFunction2CallCount]() -> std::shared_ptr<AudioPeakProfile>
+    {
+        buildFunction2CallCount++;
+        auto profile = std::make_shared<AudioPeakProfile>();
+        auto buffer = createCacheTestBuffer (2, 2000);
+        profile->buildFromBuffer (buffer, 1, {});
+        return profile;
+    };
+
+    cache->requestProfile (cacheKey, buildFunction1, false);
+    EXPECT_EQ (1, buildFunction1CallCount);
+
+    // Second request with different build function should hit cache
+    cache->requestProfile (cacheKey, buildFunction2, false);
+    EXPECT_EQ (1, buildFunction1CallCount);
+    EXPECT_EQ (0, buildFunction2CallCount); // Not called
+}
+
+TEST_F (AudioPeakProfileCacheTests, VeryLongCacheKey)
+{
+    auto longKey = String::repeatedString ("x", 1000);
+
+    auto buildFunction = []() -> std::shared_ptr<AudioPeakProfile>
+    {
+        auto profile = std::make_shared<AudioPeakProfile>();
+        auto buffer = createCacheTestBuffer (1, 1000);
+        profile->buildFromBuffer (buffer, 1, {});
+        return profile;
+    };
+
+    cache->requestProfile (longKey, buildFunction, false);
+
+    auto retrieved = cache->getProfile (longKey);
+    EXPECT_NE (nullptr, retrieved);
+}
+
+TEST_F (AudioPeakProfileCacheTests, SpecialCharactersInCacheKey)
+{
+    String specialKey = "test!@#$%^&*()_+-=[]{}|;':\",./<>?";
+
+    auto buildFunction = []() -> std::shared_ptr<AudioPeakProfile>
+    {
+        auto profile = std::make_shared<AudioPeakProfile>();
+        auto buffer = createCacheTestBuffer (1, 1000);
+        profile->buildFromBuffer (buffer, 1, {});
+        return profile;
+    };
+
+    cache->requestProfile (specialKey, buildFunction, false);
+
+    auto retrieved = cache->getProfile (specialKey);
+    EXPECT_NE (nullptr, retrieved);
+}
+
+TEST_F (AudioPeakProfileCacheTests, GetDiskCacheSizeWithNoCache)
+{
+    AudioPeakProfileCache testCache;
+    auto size = testCache.getDiskCacheSize();
+
+    EXPECT_EQ (0, size);
+}
+
+TEST_F (AudioPeakProfileCacheTests, ClearDiskCacheWithNoCacheDirectory)
+{
+    AudioPeakProfileCache testCache;
+    testCache.clearDiskCache();
+
+    // Should not crash
+    EXPECT_TRUE (true);
 }

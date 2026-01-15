@@ -887,7 +887,7 @@ TEST_F (DesktopTest, HandleScreenEventsWithInvalidIndexDoesNotCrash)
 
 TEST_F (DesktopTest, GetCurrentMouseLocationDoesNotCrash)
 {
-    auto location = desktop->getCurrentMouseLocation();
+    [[maybe_unused]] auto location = desktop->getCurrentMouseLocation();
     // Should return some location, just verify it doesn't crash
     EXPECT_TRUE (true);
 }

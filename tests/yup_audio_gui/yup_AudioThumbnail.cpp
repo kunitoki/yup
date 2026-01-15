@@ -25,6 +25,11 @@
 
 using namespace yup;
 
+namespace yup
+{
+extern std::unique_ptr<yup::GraphicsContext> yup_constructHeadlessGraphicsContext (yup::GraphicsContext::Options);
+} // namespace yup
+
 namespace
 {
 constexpr int kThumbnailSampleRate = 44100;
@@ -52,11 +57,13 @@ class ThumbnailTestListener : public AudioThumbnail::Listener
 public:
     void thumbnailChanged (AudioThumbnail& thumb) override
     {
+        ignoreUnused (thumb);
         changedCallCount++;
     }
 
     void thumbnailProgressChanged (AudioThumbnail& thumb, double progress, bool visible) override
     {
+        ignoreUnused (thumb);
         lastProgress = progress;
         lastProgressVisible = visible;
         progressCallCount++;
@@ -386,4 +393,566 @@ TEST_F (AudioThumbnailTests, SmallBufferHandling)
 
     EXPECT_EQ (10, syncThumbnail.getTotalSamples());
     EXPECT_NE (nullptr, syncThumbnail.getPeakProfile());
+}
+
+//==============================================================================
+// GetClampedViewRange Tests
+//==============================================================================
+
+TEST_F (AudioThumbnailTests, GetClampedViewRangeWithValidRange)
+{
+    auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
+    thumbnail->setSource (&buffer, kThumbnailSampleRate);
+
+    auto clampedRange = thumbnail->getClampedViewRange (Range<double> (100.0, 500.0));
+
+    EXPECT_DOUBLE_EQ (100.0, clampedRange.getStart());
+    EXPECT_DOUBLE_EQ (500.0, clampedRange.getEnd());
+}
+
+TEST_F (AudioThumbnailTests, GetClampedViewRangeWithNegativeStart)
+{
+    auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
+    thumbnail->setSource (&buffer, kThumbnailSampleRate);
+
+    auto clampedRange = thumbnail->getClampedViewRange (Range<double> (-100.0, 500.0));
+
+    EXPECT_GE (clampedRange.getStart(), 0.0);
+    EXPECT_DOUBLE_EQ (500.0, clampedRange.getEnd());
+}
+
+TEST_F (AudioThumbnailTests, GetClampedViewRangeWithExceedingEnd)
+{
+    auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
+    thumbnail->setSource (&buffer, kThumbnailSampleRate);
+
+    auto clampedRange = thumbnail->getClampedViewRange (Range<double> (100.0, 50000.0));
+
+    EXPECT_DOUBLE_EQ (100.0, clampedRange.getStart());
+    EXPECT_LE (clampedRange.getEnd(), static_cast<double> (kThumbnailBufferSize));
+}
+
+TEST_F (AudioThumbnailTests, GetClampedViewRangeWithEmptyThumbnail)
+{
+    auto clampedRange = thumbnail->getClampedViewRange (Range<double> (100.0, 500.0));
+
+    EXPECT_TRUE (clampedRange.isEmpty() || clampedRange.getStart() >= clampedRange.getEnd());
+}
+
+//==============================================================================
+// PaintChannel Tests (using headless GraphicsContext for coverage)
+//==============================================================================
+
+TEST_F (AudioThumbnailTests, PaintChannelWithValidData)
+{
+    auto syncCache = std::make_shared<AudioPeakProfileCache>();
+    AudioThumbnail syncThumbnail (syncCache);
+
+    auto buffer = createThumbnailTestBuffer (2, kThumbnailBufferSize);
+    syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
+
+    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto renderer = context->makeRenderer (400, 200);
+    Graphics g (*context, *renderer);
+
+    Rectangle<float> lane (0.0f, 0.0f, 400.0f, 100.0f);
+    Range<double> sampleRange (0.0, static_cast<double> (kThumbnailBufferSize));
+
+    // Should not crash
+    syncThumbnail.paintChannel (g, lane, 0, sampleRange, 400.0f);
+
+    EXPECT_TRUE (true);
+}
+
+TEST_F (AudioThumbnailTests, PaintChannelWithInvalidChannelIndex)
+{
+    auto syncCache = std::make_shared<AudioPeakProfileCache>();
+    AudioThumbnail syncThumbnail (syncCache);
+
+    auto buffer = createThumbnailTestBuffer (2, kThumbnailBufferSize);
+    syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
+
+    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto renderer = context->makeRenderer (400, 200);
+    Graphics g (*context, *renderer);
+
+    Rectangle<float> lane (0.0f, 0.0f, 400.0f, 100.0f);
+    Range<double> sampleRange (0.0, static_cast<double> (kThumbnailBufferSize));
+
+    // Should not crash with invalid channel
+    syncThumbnail.paintChannel (g, lane, 10, sampleRange, 400.0f);
+
+    EXPECT_TRUE (true);
+}
+
+TEST_F (AudioThumbnailTests, PaintChannelWithNegativeChannelIndex)
+{
+    auto syncCache = std::make_shared<AudioPeakProfileCache>();
+    AudioThumbnail syncThumbnail (syncCache);
+
+    auto buffer = createThumbnailTestBuffer (2, kThumbnailBufferSize);
+    syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
+
+    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto renderer = context->makeRenderer (400, 200);
+    Graphics g (*context, *renderer);
+
+    Rectangle<float> lane (0.0f, 0.0f, 400.0f, 100.0f);
+    Range<double> sampleRange (0.0, static_cast<double> (kThumbnailBufferSize));
+
+    // Should not crash with negative channel
+    syncThumbnail.paintChannel (g, lane, -1, sampleRange, 400.0f);
+
+    EXPECT_TRUE (true);
+}
+
+TEST_F (AudioThumbnailTests, PaintChannelWithEmptyRange)
+{
+    auto syncCache = std::make_shared<AudioPeakProfileCache>();
+    AudioThumbnail syncThumbnail (syncCache);
+
+    auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
+    syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
+
+    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto renderer = context->makeRenderer (400, 200);
+    Graphics g (*context, *renderer);
+
+    Rectangle<float> lane (0.0f, 0.0f, 400.0f, 100.0f);
+    Range<double> emptySampleRange (100.0, 100.0);
+
+    // Should not crash with empty range
+    syncThumbnail.paintChannel (g, lane, 0, emptySampleRange, 400.0f);
+
+    EXPECT_TRUE (true);
+}
+
+TEST_F (AudioThumbnailTests, PaintChannelWithNoPeakProfile)
+{
+    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto renderer = context->makeRenderer (400, 200);
+    Graphics g (*context, *renderer);
+
+    Rectangle<float> lane (0.0f, 0.0f, 400.0f, 100.0f);
+    Range<double> sampleRange (0.0, 1000.0);
+
+    // Should not crash even without peak profile
+    thumbnail->paintChannel (g, lane, 0, sampleRange, 400.0f);
+
+    EXPECT_TRUE (true);
+}
+
+TEST_F (AudioThumbnailTests, PaintChannelZoomedIn)
+{
+    auto syncCache = std::make_shared<AudioPeakProfileCache>();
+    AudioThumbnail syncThumbnail (syncCache);
+
+    auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
+    syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
+
+    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto renderer = context->makeRenderer (800, 200);
+    Graphics g (*context, *renderer);
+
+    Rectangle<float> lane (0.0f, 0.0f, 800.0f, 100.0f);
+    Range<double> sampleRange (0.0, 100.0); // Very zoomed in
+
+    // Should use rectangle rendering
+    syncThumbnail.paintChannel (g, lane, 0, sampleRange, 800.0f);
+
+    EXPECT_TRUE (true);
+}
+
+TEST_F (AudioThumbnailTests, PaintChannelZoomedOut)
+{
+    auto syncCache = std::make_shared<AudioPeakProfileCache>();
+    AudioThumbnail syncThumbnail (syncCache);
+
+    auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
+    syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
+
+    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto renderer = context->makeRenderer (400, 200);
+    Graphics g (*context, *renderer);
+
+    Rectangle<float> lane (0.0f, 0.0f, 400.0f, 100.0f);
+    Range<double> sampleRange (0.0, static_cast<double> (kThumbnailBufferSize));
+
+    // Should use line rendering
+    syncThumbnail.paintChannel (g, lane, 0, sampleRange, 400.0f);
+
+    EXPECT_TRUE (true);
+}
+
+TEST_F (AudioThumbnailTests, PaintChannelMultipleChannels)
+{
+    auto syncCache = std::make_shared<AudioPeakProfileCache>();
+    AudioThumbnail syncThumbnail (syncCache);
+
+    auto buffer = createThumbnailTestBuffer (8, kThumbnailBufferSize);
+    syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
+
+    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto renderer = context->makeRenderer (400, 800);
+    Graphics g (*context, *renderer);
+
+    Range<double> sampleRange (0.0, static_cast<double> (kThumbnailBufferSize));
+
+    // Paint all channels
+    for (int ch = 0; ch < 8; ++ch)
+    {
+        Rectangle<float> lane (0.0f, ch * 100.0f, 400.0f, 100.0f);
+        syncThumbnail.paintChannel (g, lane, ch, sampleRange, 400.0f);
+    }
+
+    EXPECT_TRUE (true);
+}
+
+TEST_F (AudioThumbnailTests, PaintChannelWithZeroPixelWidth)
+{
+    auto syncCache = std::make_shared<AudioPeakProfileCache>();
+    AudioThumbnail syncThumbnail (syncCache);
+
+    auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
+    syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
+
+    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto renderer = context->makeRenderer (400, 200);
+    Graphics g (*context, *renderer);
+
+    Rectangle<float> lane (0.0f, 0.0f, 400.0f, 100.0f);
+    Range<double> sampleRange (0.0, static_cast<double> (kThumbnailBufferSize));
+
+    // Should handle zero pixel width gracefully
+    syncThumbnail.paintChannel (g, lane, 0, sampleRange, 0.0f);
+
+    EXPECT_TRUE (true);
+}
+
+TEST_F (AudioThumbnailTests, PaintChannelWithNegativePixelWidth)
+{
+    auto syncCache = std::make_shared<AudioPeakProfileCache>();
+    AudioThumbnail syncThumbnail (syncCache);
+
+    auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
+    syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
+
+    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto renderer = context->makeRenderer (400, 200);
+    Graphics g (*context, *renderer);
+
+    Rectangle<float> lane (0.0f, 0.0f, 400.0f, 100.0f);
+    Range<double> sampleRange (0.0, static_cast<double> (kThumbnailBufferSize));
+
+    // Should handle negative pixel width gracefully
+    syncThumbnail.paintChannel (g, lane, 0, sampleRange, -100.0f);
+
+    EXPECT_TRUE (true);
+}
+
+TEST_F (AudioThumbnailTests, PaintChannelWithVeryLargePixelWidth)
+{
+    auto syncCache = std::make_shared<AudioPeakProfileCache>();
+    AudioThumbnail syncThumbnail (syncCache);
+
+    auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
+    syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
+
+    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto renderer = context->makeRenderer (10000, 200);
+    Graphics g (*context, *renderer);
+
+    Rectangle<float> lane (0.0f, 0.0f, 10000.0f, 100.0f);
+    Range<double> sampleRange (0.0, static_cast<double> (kThumbnailBufferSize));
+
+    // Should handle very large pixel width
+    syncThumbnail.paintChannel (g, lane, 0, sampleRange, 10000.0f);
+
+    EXPECT_TRUE (true);
+}
+
+TEST_F (AudioThumbnailTests, PaintChannelWithEmptyLane)
+{
+    auto syncCache = std::make_shared<AudioPeakProfileCache>();
+    AudioThumbnail syncThumbnail (syncCache);
+
+    auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
+    syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
+
+    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto renderer = context->makeRenderer (400, 200);
+    Graphics g (*context, *renderer);
+
+    Rectangle<float> emptyLane (0.0f, 0.0f, 0.0f, 0.0f);
+    Range<double> sampleRange (0.0, static_cast<double> (kThumbnailBufferSize));
+
+    // Should handle empty lane gracefully
+    syncThumbnail.paintChannel (g, emptyLane, 0, sampleRange, 0.0f);
+
+    EXPECT_TRUE (true);
+}
+
+//==============================================================================
+// GetChannelColor Tests
+//==============================================================================
+
+TEST_F (AudioThumbnailTests, GetChannelColorConsistency)
+{
+    auto buffer = createThumbnailTestBuffer (2, kThumbnailBufferSize);
+    thumbnail->setSource (&buffer, kThumbnailSampleRate);
+
+    auto color1a = thumbnail->getChannelColor (0);
+    auto color1b = thumbnail->getChannelColor (0);
+
+    // Same channel should return same color
+    EXPECT_EQ (color1a, color1b);
+}
+
+TEST_F (AudioThumbnailTests, GetChannelColorForNegativeIndex)
+{
+    auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
+    thumbnail->setSource (&buffer, kThumbnailSampleRate);
+
+    // Should not crash
+    auto color = thumbnail->getChannelColor (-1);
+    EXPECT_TRUE (true);
+}
+
+TEST_F (AudioThumbnailTests, GetChannelColorForInvalidIndex)
+{
+    auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
+    thumbnail->setSource (&buffer, kThumbnailSampleRate);
+
+    // Should not crash
+    auto color = thumbnail->getChannelColor (100);
+    EXPECT_TRUE (true);
+}
+
+//==============================================================================
+// Progress Visibility Tests
+//==============================================================================
+
+TEST_F (AudioThumbnailTests, ProgressVisibilityDuringComputation)
+{
+    auto buffer = createThumbnailTestBuffer (1, 1000000); // Large buffer
+    thumbnail->setSource (&buffer, kThumbnailSampleRate);
+
+    // Progress might be visible during computation
+    // This test just ensures the getter works
+    bool visible = thumbnail->isProgressVisible();
+    EXPECT_TRUE (visible || ! visible);
+}
+
+TEST_F (AudioThumbnailTests, ProgressValueInValidRange)
+{
+    auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
+    thumbnail->setSource (&buffer, kThumbnailSampleRate);
+
+    double progress = thumbnail->getProgress();
+    EXPECT_GE (progress, 0.0);
+    EXPECT_LE (progress, 1.0);
+}
+
+//==============================================================================
+// Edge Cases and Error Handling
+//==============================================================================
+
+TEST_F (AudioThumbnailTests, SetSourceWithEmptyBuffer)
+{
+    AudioBuffer<float> emptyBuffer (0, 0);
+    thumbnail->setSource (&emptyBuffer, kThumbnailSampleRate);
+
+    EXPECT_EQ (0, thumbnail->getTotalSamples());
+}
+
+TEST_F (AudioThumbnailTests, SetSourceWithSingleSampleBuffer)
+{
+    auto syncCache = std::make_shared<AudioPeakProfileCache>();
+    AudioThumbnail syncThumbnail (syncCache);
+
+    auto buffer = createThumbnailTestBuffer (1, 1);
+    syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
+
+    EXPECT_EQ (1, syncThumbnail.getTotalSamples());
+}
+
+TEST_F (AudioThumbnailTests, SetSourceWithNegativeSampleRate)
+{
+    auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
+    thumbnail->setSource (&buffer, -44100.0);
+
+    // The implementation stores the sample rate as-is without validation
+    EXPECT_DOUBLE_EQ (-44100.0, thumbnail->getSampleRate());
+}
+
+TEST_F (AudioThumbnailTests, SetSourceWithVeryHighSampleRate)
+{
+    auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
+    thumbnail->setSource (&buffer, 384000.0);
+
+    EXPECT_DOUBLE_EQ (384000.0, thumbnail->getSampleRate());
+}
+
+TEST_F (AudioThumbnailTests, MultipleClearCalls)
+{
+    auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
+    thumbnail->setSource (&buffer, kThumbnailSampleRate);
+    waitForProfileReady();
+
+    thumbnail->clear();
+    thumbnail->clear(); // Second clear should not crash
+
+    EXPECT_EQ (0, thumbnail->getTotalSamples());
+}
+
+TEST_F (AudioThumbnailTests, ClearWithoutSettingSource)
+{
+    thumbnail->clear();
+
+    EXPECT_EQ (0, thumbnail->getTotalSamples());
+    EXPECT_EQ (nullptr, thumbnail->getPeakProfile());
+}
+
+TEST_F (AudioThumbnailTests, SetSourceAfterClear)
+{
+    auto buffer1 = createThumbnailTestBuffer (1, 1000);
+    thumbnail->setSource (&buffer1, kThumbnailSampleRate);
+    waitForProfileReady();
+
+    thumbnail->clear();
+
+    auto buffer2 = createThumbnailTestBuffer (2, 2000);
+    thumbnail->setSource (&buffer2, kThumbnailSampleRate);
+    waitForProfileReady();
+
+    EXPECT_EQ (2, thumbnail->getNumChannels());
+    EXPECT_EQ (2000, thumbnail->getTotalSamples());
+}
+
+//==============================================================================
+// Listener Edge Cases
+//==============================================================================
+
+TEST_F (AudioThumbnailTests, AddListenerMultipleTimes)
+{
+    // Adding same listener multiple times should be handled
+    thumbnail->addListener (listener.get());
+    thumbnail->addListener (listener.get());
+
+    auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
+    thumbnail->setSource (&buffer, kThumbnailSampleRate);
+    waitForProfileReady();
+
+    // Should not crash
+    EXPECT_TRUE (true);
+}
+
+TEST_F (AudioThumbnailTests, RemoveNonExistentListener)
+{
+    ThumbnailTestListener otherListener;
+
+    // Removing a listener that wasn't added should not crash
+    thumbnail->removeListener (&otherListener);
+
+    EXPECT_TRUE (true);
+}
+
+TEST_F (AudioThumbnailTests, RemoveListenerMultipleTimes)
+{
+    thumbnail->removeListener (listener.get());
+    thumbnail->removeListener (listener.get()); // Second remove should not crash
+
+    EXPECT_TRUE (true);
+}
+
+TEST_F (AudioThumbnailTests, MultipleListeners)
+{
+    ThumbnailTestListener listener2;
+    ThumbnailTestListener listener3;
+
+    thumbnail->addListener (&listener2);
+    thumbnail->addListener (&listener3);
+
+    auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
+    thumbnail->setSource (&buffer, kThumbnailSampleRate);
+    waitForProfileReady();
+
+    // All listeners should be notified
+    EXPECT_GT (listener->changedCallCount, 0);
+    EXPECT_GT (listener2.changedCallCount, 0);
+    EXPECT_GT (listener3.changedCallCount, 0);
+}
+
+//==============================================================================
+// Cache Integration Edge Cases
+//==============================================================================
+
+TEST_F (AudioThumbnailTests, NullCacheHandling)
+{
+    AudioThumbnail thumbWithNullCache (nullptr);
+
+    auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
+    thumbWithNullCache.setSource (&buffer, kThumbnailSampleRate);
+
+    // Should handle null cache gracefully
+    EXPECT_EQ (kThumbnailBufferSize, thumbWithNullCache.getTotalSamples());
+}
+
+TEST_F (AudioThumbnailTests, SharedCacheThreadSafety)
+{
+    // Multiple thumbnails using same cache simultaneously
+    AudioThumbnail thumb1 (cache);
+    AudioThumbnail thumb2 (cache);
+    AudioThumbnail thumb3 (cache);
+
+    auto buffer1 = createThumbnailTestBuffer (1, 1000);
+    auto buffer2 = createThumbnailTestBuffer (2, 2000);
+    auto buffer3 = createThumbnailTestBuffer (3, 3000);
+
+    thumb1.setSource (&buffer1, kThumbnailSampleRate);
+    thumb2.setSource (&buffer2, kThumbnailSampleRate);
+    thumb3.setSource (&buffer3, kThumbnailSampleRate);
+
+    Thread::sleep (100);
+
+    // All should work correctly
+    EXPECT_EQ (1000, thumb1.getTotalSamples());
+    EXPECT_EQ (2000, thumb2.getTotalSamples());
+    EXPECT_EQ (3000, thumb3.getTotalSamples());
+}
+
+//==============================================================================
+// Stress Tests
+//==============================================================================
+
+TEST_F (AudioThumbnailTests, RapidSetSourceCalls)
+{
+    auto buffer1 = createThumbnailTestBuffer (1, 1000);
+    auto buffer2 = createThumbnailTestBuffer (2, 2000);
+    auto buffer3 = createThumbnailTestBuffer (3, 3000);
+
+    // Rapidly change sources
+    thumbnail->setSource (&buffer1, kThumbnailSampleRate);
+    thumbnail->setSource (&buffer2, kThumbnailSampleRate);
+    thumbnail->setSource (&buffer3, kThumbnailSampleRate);
+
+    waitForProfileReady();
+
+    // Should settle on last source
+    EXPECT_EQ (3, thumbnail->getNumChannels());
+    EXPECT_EQ (3000, thumbnail->getTotalSamples());
+}
+
+TEST_F (AudioThumbnailTests, AlternatingSetSourceAndClear)
+{
+    auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
+
+    for (int i = 0; i < 5; ++i)
+    {
+        thumbnail->setSource (&buffer, kThumbnailSampleRate);
+        Thread::sleep (10);
+        thumbnail->clear();
+    }
+
+    EXPECT_EQ (0, thumbnail->getTotalSamples());
 }

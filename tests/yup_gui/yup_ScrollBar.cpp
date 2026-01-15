@@ -226,3 +226,317 @@ TEST (ListBoxScrollBarTests, HorizontalScrollBarCanBeConfigured)
     EXPECT_EQ (ScrollBar::VisibilityMode::alwaysHidden,
                listBox.getHorizontalScrollBar()->getVisibilityMode());
 }
+
+//==============================================================================
+// Mouse Interaction Tests
+//==============================================================================
+
+TEST_F (ScrollBarTests, MouseDownOnThumbStartsDragging)
+{
+    scrollBar->setRangeLimits (0.0, 1000.0);
+    scrollBar->setCurrentRange (0.0, 100.0);
+    scrollBar->resized();
+
+    auto thumbBounds = scrollBar->getThumbBoundsForRendering();
+    auto center = thumbBounds.getCenter();
+
+    MouseEvent event (MouseEvent::leftButton, KeyModifiers(), center);
+    scrollBar->mouseDown (event);
+
+    EXPECT_TRUE (scrollBar->isDragging());
+}
+
+TEST_F (ScrollBarTests, MouseUpStopsDragging)
+{
+    scrollBar->setRangeLimits (0.0, 1000.0);
+    scrollBar->setCurrentRange (0.0, 100.0);
+    scrollBar->resized();
+
+    auto thumbBounds = scrollBar->getThumbBoundsForRendering();
+    auto center = thumbBounds.getCenter();
+
+    MouseEvent downEvent (MouseEvent::leftButton, KeyModifiers(), center);
+    scrollBar->mouseDown (downEvent);
+
+    MouseEvent upEvent (MouseEvent::leftButton, KeyModifiers(), center);
+    scrollBar->mouseUp (upEvent);
+
+    EXPECT_FALSE (scrollBar->isDragging());
+}
+
+TEST_F (ScrollBarTests, MouseDragMovesThumb)
+{
+    scrollBar->setRangeLimits (0.0, 1000.0);
+    scrollBar->setCurrentRange (0.0, 100.0);
+    scrollBar->resized();
+
+    auto thumbBounds = scrollBar->getThumbBoundsForRendering();
+    auto center = thumbBounds.getCenter();
+
+    MouseEvent downEvent (MouseEvent::leftButton, KeyModifiers(), center);
+    scrollBar->mouseDown (downEvent);
+
+    double initialPosition = scrollBar->getCurrentRangeStart();
+
+    MouseEvent dragEvent (MouseEvent::leftButton, KeyModifiers(), Point<float> (center.getX(), center.getY() + 50.0f));
+    scrollBar->mouseDrag (dragEvent);
+
+    EXPECT_GT (scrollBar->getCurrentRangeStart(), initialPosition);
+}
+
+TEST_F (ScrollBarTests, MouseEnterSetsHoverState)
+{
+    scrollBar->setRangeLimits (0.0, 1000.0);
+    scrollBar->setCurrentRange (0.0, 100.0);
+    scrollBar->resized();
+
+    auto thumbBounds = scrollBar->getThumbBoundsForRendering();
+    auto center = thumbBounds.getCenter();
+
+    MouseEvent event (MouseEvent::leftButton, KeyModifiers(), center);
+    scrollBar->mouseEnter (event);
+
+    EXPECT_TRUE (scrollBar->isThumbHovered());
+}
+
+TEST_F (ScrollBarTests, MouseExitClearsHoverState)
+{
+    scrollBar->setRangeLimits (0.0, 1000.0);
+    scrollBar->setCurrentRange (0.0, 100.0);
+    scrollBar->resized();
+
+    auto thumbBounds = scrollBar->getThumbBoundsForRendering();
+    auto center = thumbBounds.getCenter();
+
+    MouseEvent enterEvent (MouseEvent::leftButton, KeyModifiers(), center);
+    scrollBar->mouseEnter (enterEvent);
+
+    MouseEvent exitEvent (MouseEvent::leftButton, KeyModifiers(), Point<float> (0.0f, 0.0f));
+    scrollBar->mouseExit (exitEvent);
+
+    EXPECT_FALSE (scrollBar->isThumbHovered());
+}
+
+TEST_F (ScrollBarTests, MouseWheelScrollsContent)
+{
+    scrollBar->setRangeLimits (0.0, 1000.0);
+    scrollBar->setCurrentRange (100.0, 200.0);
+
+    double initialPosition = scrollBar->getCurrentRangeStart();
+
+    MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (10.0f, 100.0f));
+    MouseWheelData wheelData (0.0f, 3.0f);
+    scrollBar->mouseWheel (event, wheelData);
+
+    EXPECT_NE (scrollBar->getCurrentRangeStart(), initialPosition);
+}
+
+//==============================================================================
+// Rendering Bounds Tests
+//==============================================================================
+
+TEST_F (ScrollBarTests, ThumbBoundsAreValid)
+{
+    scrollBar->setRangeLimits (0.0, 1000.0);
+    scrollBar->setCurrentRange (0.0, 100.0);
+    scrollBar->resized();
+
+    auto thumbBounds = scrollBar->getThumbBoundsForRendering();
+
+    EXPECT_FALSE (thumbBounds.isEmpty());
+    EXPECT_GT (thumbBounds.getWidth(), 0.0f);
+    EXPECT_GT (thumbBounds.getHeight(), 0.0f);
+}
+
+TEST_F (ScrollBarTests, TrackBoundsAreValid)
+{
+    scrollBar->resized();
+
+    auto trackBounds = scrollBar->getTrackBoundsForRendering();
+
+    EXPECT_FALSE (trackBounds.isEmpty());
+}
+
+TEST_F (ScrollBarTests, ThumbBoundsChangeWithPosition)
+{
+    scrollBar->setRangeLimits (0.0, 1000.0);
+    scrollBar->setCurrentRange (0.0, 100.0);
+    scrollBar->resized();
+
+    auto bounds1 = scrollBar->getThumbBoundsForRendering();
+
+    scrollBar->setCurrentRangeStart (500.0, dontSendNotification);
+    scrollBar->resized();
+
+    auto bounds2 = scrollBar->getThumbBoundsForRendering();
+
+    EXPECT_NE (bounds1.getY(), bounds2.getY());
+}
+
+TEST_F (ScrollBarTests, ThumbSizeScalesWithContentRatio)
+{
+    scrollBar->setRangeLimits (0.0, 1000.0);
+
+    scrollBar->setCurrentRange (0.0, 100.0);
+    scrollBar->resized();
+    auto smallRangeBounds = scrollBar->getThumbBoundsForRendering();
+
+    scrollBar->setCurrentRange (0.0, 500.0);
+    scrollBar->resized();
+    auto largeRangeBounds = scrollBar->getThumbBoundsForRendering();
+
+    EXPECT_LT (smallRangeBounds.getHeight(), largeRangeBounds.getHeight());
+}
+
+//==============================================================================
+// Edge Cases
+//==============================================================================
+
+TEST_F (ScrollBarTests, ZeroRangeHandling)
+{
+    scrollBar->setRangeLimits (0.0, 0.0);
+    scrollBar->setCurrentRange (0.0, 0.0);
+
+    EXPECT_FALSE (scrollBar->isScrollingNeeded());
+}
+
+TEST_F (ScrollBarTests, NegativeRangeHandling)
+{
+    scrollBar->setRangeLimits (-100.0, 100.0);
+    scrollBar->setCurrentRange (-50.0, 50.0);
+
+    EXPECT_EQ (-50.0, scrollBar->getCurrentRangeStart());
+    EXPECT_EQ (50.0, scrollBar->getCurrentRangeEnd());
+}
+
+TEST_F (ScrollBarTests, InvertedRangeClamping)
+{
+    scrollBar->setRangeLimits (0.0, 1000.0);
+    scrollBar->setCurrentRange (500.0, 100.0); // Inverted
+
+    // Should be clamped appropriately
+    EXPECT_LE (scrollBar->getCurrentRangeStart(), scrollBar->getCurrentRangeEnd());
+}
+
+TEST_F (ScrollBarTests, VerySmallRangeSize)
+{
+    scrollBar->setRangeLimits (0.0, 1000.0);
+    scrollBar->setCurrentRange (500.0, 500.1);
+
+    EXPECT_TRUE (scrollBar->isScrollingNeeded());
+}
+
+TEST_F (ScrollBarTests, ScrollBeyondStartClamped)
+{
+    scrollBar->setRangeLimits (0.0, 1000.0);
+    scrollBar->setCurrentRange (100.0, 200.0);
+
+    scrollBar->scrollBy (-200.0, dontSendNotification);
+
+    EXPECT_EQ (0.0, scrollBar->getCurrentRangeStart());
+}
+
+TEST_F (ScrollBarTests, ScrollBeyondEndClamped)
+{
+    scrollBar->setRangeLimits (0.0, 1000.0);
+    scrollBar->setCurrentRange (800.0, 900.0);
+
+    scrollBar->scrollBy (200.0, dontSendNotification);
+
+    EXPECT_EQ (900.0, scrollBar->getCurrentRangeStart());
+    EXPECT_EQ (1000.0, scrollBar->getCurrentRangeEnd());
+}
+
+//==============================================================================
+// Horizontal Orientation Tests
+//==============================================================================
+
+TEST_F (ScrollBarTests, HorizontalOrientationWorks)
+{
+    scrollBar->setOrientation (ScrollBar::Orientation::horizontal);
+    scrollBar->setBounds (0.0f, 0.0f, 400.0f, 20.0f);
+    scrollBar->setRangeLimits (0.0, 1000.0);
+    scrollBar->setCurrentRange (0.0, 100.0);
+    scrollBar->resized();
+
+    auto thumbBounds = scrollBar->getThumbBoundsForRendering();
+
+    EXPECT_FALSE (thumbBounds.isEmpty());
+    EXPECT_GT (thumbBounds.getWidth(), 0.0f);
+}
+
+TEST_F (ScrollBarTests, HorizontalThumbMoves)
+{
+    scrollBar->setOrientation (ScrollBar::Orientation::horizontal);
+    scrollBar->setBounds (0.0f, 0.0f, 400.0f, 20.0f);
+    scrollBar->setRangeLimits (0.0, 1000.0);
+    scrollBar->setCurrentRange (0.0, 100.0);
+    scrollBar->resized();
+
+    auto bounds1 = scrollBar->getThumbBoundsForRendering();
+
+    scrollBar->setCurrentRangeStart (500.0, dontSendNotification);
+    scrollBar->resized();
+
+    auto bounds2 = scrollBar->getThumbBoundsForRendering();
+
+    EXPECT_NE (bounds1.getX(), bounds2.getX());
+}
+
+//==============================================================================
+// Callback Notification Tests
+//==============================================================================
+
+TEST_F (ScrollBarTests, CallbackNotInvokedWithDontSendNotification)
+{
+    scrollBar->setRangeLimits (0.0, 1000.0);
+    scrollBar->setCurrentRange (0.0, 100.0);
+
+    int callbackCount = 0;
+    scrollBar->onScrollPositionChanged = [&callbackCount] (double)
+    {
+        callbackCount++;
+    };
+
+    scrollBar->setCurrentRangeStart (200.0, dontSendNotification);
+
+    EXPECT_EQ (0, callbackCount);
+}
+
+TEST_F (ScrollBarTests, CallbackInvokedForScrollBy)
+{
+    scrollBar->setRangeLimits (0.0, 1000.0);
+    scrollBar->setCurrentRange (0.0, 100.0);
+
+    int callbackCount = 0;
+    scrollBar->onScrollPositionChanged = [&callbackCount] (double)
+    {
+        callbackCount++;
+    };
+
+    scrollBar->scrollBy (50.0, sendNotification);
+
+    EXPECT_EQ (1, callbackCount);
+}
+
+//==============================================================================
+// Resized and Paint Tests
+//==============================================================================
+
+TEST_F (ScrollBarTests, ResizedDoesNotCrash)
+{
+    scrollBar->setRangeLimits (0.0, 1000.0);
+    scrollBar->setCurrentRange (0.0, 100.0);
+
+    scrollBar->resized();
+
+    EXPECT_TRUE (true);
+}
+
+TEST_F (ScrollBarTests, ResizedWithZeroSize)
+{
+    scrollBar->setBounds (0.0f, 0.0f, 0.0f, 0.0f);
+    scrollBar->resized();
+
+    EXPECT_TRUE (true);
+}
