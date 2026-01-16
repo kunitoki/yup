@@ -128,6 +128,11 @@
 #include "base/yup_Biquad.h"
 #include "base/yup_BiquadCascade.h"
 
+// Metering and level measurement (after Biquad definition)
+#include "metering/yup_LevelProcessor.h"
+#include "metering/yup_LoudnessFilter.h"
+#include "metering/yup_KMeterState.h"
+
 // Filter designers and coefficient calculators
 #include "designers/yup_FilterDesigner.h"
 

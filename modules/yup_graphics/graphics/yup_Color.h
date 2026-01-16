@@ -645,6 +645,17 @@ public:
     }
 
     //==============================================================================
+    /** TODO */
+    constexpr Color withMultipliedBrightness (float amount) const noexcept
+    {
+        [[maybe_unused]] auto [h, s, brightness] = toHSV();
+
+        brightness = jmin (1.0f, brightness * amount);
+
+        return fromHSV (h, s, brightness, getAlphaFloat());
+    }
+
+    //==============================================================================
     /** Inverts the color components (RGB) of the current color.
 
         This method changes each RGB component to its complementary value, which is useful for creating negative effects or for visual highlights.

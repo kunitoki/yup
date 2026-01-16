@@ -128,6 +128,92 @@ private:
 //==============================================================================
 
 /**
+    Wraps an AudioSource and taps the audio stream to send to a KMeterState.
+*/
+class MeteringAudioSource : public yup::PositionableAudioSource
+{
+public:
+    MeteringAudioSource (yup::PositionableAudioSource* sourceToWrap, yup::KMeterState& meterState)
+        : source (sourceToWrap)
+        , meter (meterState)
+    {
+    }
+
+    void prepareToPlay (int samplesPerBlockExpected, double newSampleRate) override
+    {
+        if (source != nullptr)
+            source->prepareToPlay (samplesPerBlockExpected, newSampleRate);
+
+        meter.prepare (newSampleRate, 2);
+    }
+
+    void releaseResources() override
+    {
+        if (source != nullptr)
+            source->releaseResources();
+    }
+
+    void getNextAudioBlock (const yup::AudioSourceChannelInfo& bufferToFill) override
+    {
+        if (source != nullptr)
+        {
+            source->getNextAudioBlock (bufferToFill);
+
+            // Tap the audio and push to meter
+            const int numChannels = yup::jmin (bufferToFill.buffer->getNumChannels(), 2);
+            if (numChannels > 0 && bufferToFill.numSamples > 0)
+            {
+                const float* channels[2] = { nullptr, nullptr };
+                for (int i = 0; i < numChannels; ++i)
+                    channels[i] = bufferToFill.buffer->getReadPointer (i, bufferToFill.startSample);
+
+                meter.pushSamples (channels, numChannels, bufferToFill.numSamples);
+                meter.processPendingAudio();
+            }
+        }
+        else
+        {
+            bufferToFill.clearActiveBufferRegion();
+        }
+    }
+
+    void setNextReadPosition (yup::int64 newPosition) override
+    {
+        if (source != nullptr)
+            source->setNextReadPosition (newPosition);
+    }
+
+    yup::int64 getNextReadPosition() const override
+    {
+        return source != nullptr ? source->getNextReadPosition() : 0;
+    }
+
+    yup::int64 getTotalLength() const override
+    {
+        return source != nullptr ? source->getTotalLength() : 0;
+    }
+
+    bool isLooping() const override
+    {
+        return source != nullptr ? source->isLooping() : false;
+    }
+
+    void setLooping (bool shouldLoop) override
+    {
+        if (source != nullptr)
+            source->setLooping (shouldLoop);
+    }
+
+private:
+    yup::PositionableAudioSource* source;
+    yup::KMeterState& meter;
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MeteringAudioSource)
+};
+
+//==============================================================================
+
+/**
     Demonstrates loading, visualizing, playing, and exporting audio files.
 */
 class AudioFileDemo : public yup::Component
@@ -143,13 +229,22 @@ public:
         , loopButton ("Loop")
         , labelsButton ("Labels")
         , waveformDisplay (waveformCache)
+        , meterState (48000.0, 2)
+        , leftMeter (meterState, 0)
+        , rightMeter (meterState, 1)
+        , meteringSource (&transportSource, meterState)
     {
         formatManager.registerDefaultFormats (
             yup::AudioFormatType::all & ~yup::AudioFormatType::coreAudio);
 
         deviceManager.initialiseWithDefaultDevices (0, 2);
         deviceManager.addAudioCallback (&sourcePlayer);
-        sourcePlayer.setSource (&transportSource);
+        sourcePlayer.setSource (&meteringSource);
+
+        // Configure K-Meters
+        meterState.setScale (yup::KMeterState::Scale::k20);
+        leftMeter.setShowPeakHold (true);
+        rightMeter.setShowPeakHold (true);
 
         // Configure the waveform cache
         waveformCache->setThreadPool (&waveformThreadPool);
@@ -161,6 +256,7 @@ public:
     {
         stopPlayback();
         transportSource.setSource (nullptr);
+        meteringSource.setLooping (false);
         sourcePlayer.setSource (nullptr);
         deviceManager.removeAudioCallback (&sourcePlayer);
         deviceManager.closeAudioDevice();
@@ -169,12 +265,15 @@ public:
     void resized() override
     {
         auto bounds = getLocalBounds().reduced (8);
-        auto header = bounds.removeFromTop (38);
+        auto header = bounds.removeFromTop (122);
 
         const int buttonHeight = 28;
         const int buttonWidth = 100;
+        const int smallButtonWidth = 60;
+        const int mediumButtonWidth = 85;
         const int buttonMargin = 6;
 
+        // First row of buttons
         auto buttonRow = header.removeFromTop (buttonHeight);
         loadButton.setBounds (buttonRow.removeFromLeft (buttonWidth));
         buttonRow.removeFromLeft (buttonMargin);
@@ -188,11 +287,48 @@ public:
         buttonRow.removeFromLeft (buttonMargin);
         labelsButton.setBounds (buttonRow.removeFromLeft (buttonWidth));
 
+        // Second row for K-scale buttons
+        header.removeFromTop (4);
+        auto scaleRow = header.removeFromTop (buttonHeight);
+        k20Button.setBounds (scaleRow.removeFromLeft (smallButtonWidth));
+        scaleRow.removeFromLeft (buttonMargin);
+        k14Button.setBounds (scaleRow.removeFromLeft (smallButtonWidth));
+        scaleRow.removeFromLeft (buttonMargin);
+        k12Button.setBounds (scaleRow.removeFromLeft (smallButtonWidth));
+
+        // Third row for metering standard buttons
+        header.removeFromTop (4);
+        auto standardRow = header.removeFromTop (buttonHeight);
+        rmsButton.setBounds (standardRow.removeFromLeft (mediumButtonWidth));
+        standardRow.removeFromLeft (buttonMargin);
+        ituButton.setBounds (standardRow.removeFromLeft (mediumButtonWidth));
+        standardRow.removeFromLeft (buttonMargin);
+        ebuButton.setBounds (standardRow.removeFromLeft (mediumButtonWidth));
+
+        // Fourth row for over counter mode buttons
+        header.removeFromTop (4);
+        auto modeRow = header.removeFromTop (buttonHeight);
+        contiguousButton.setBounds (modeRow.removeFromLeft (mediumButtonWidth));
+        modeRow.removeFromLeft (buttonMargin);
+        totalButton.setBounds (modeRow.removeFromLeft (mediumButtonWidth));
+
         bounds.removeFromTop (6);
         infoLabel.setBounds (bounds.removeFromTop (22));
         statusLabel.setBounds (bounds.removeFromTop (22));
         bounds.removeFromTop (6);
 
+        // Reserve space for K-Meters on the right
+        const int meterWidth = 60;
+        const int meterGap = 8;
+        const int meterSectionWidth = (meterWidth * 2) + (meterGap * 3);
+
+        auto meterArea = bounds.removeFromRight (meterSectionWidth);
+        leftMeter.setBounds (meterArea.removeFromLeft (meterWidth));
+        meterArea.removeFromLeft (meterGap);
+        rightMeter.setBounds (meterArea.removeFromLeft (meterWidth));
+
+        // Rest is for waveform
+        bounds.removeFromRight (meterGap);
         waveformDisplay.setBounds (bounds);
     }
 
@@ -218,6 +354,9 @@ public:
 private:
     void setupUi()
     {
+        addAndMakeVisible (leftMeter);
+        addAndMakeVisible (rightMeter);
+
         addAndMakeVisible (loadButton);
         loadButton.onClick = [this]
         {
@@ -265,6 +404,107 @@ private:
         labelsButton.onClick = [this]
         {
             waveformDisplay.setChannelLabelsVisible (labelsButton.getToggleState());
+        };
+
+        // K-Scale selection buttons (manual radio button behavior)
+        addAndMakeVisible (k20Button);
+        k20Button.setButtonText ("K-20");
+        k20Button.setToggleState (true, yup::NotificationType::dontSendNotification);
+        k20Button.onClick = [this]
+        {
+            k20Button.setToggleState (true, yup::NotificationType::dontSendNotification);
+            k14Button.setToggleState (false, yup::NotificationType::dontSendNotification);
+            k12Button.setToggleState (false, yup::NotificationType::dontSendNotification);
+            meterState.setScale (yup::KMeterState::Scale::k20);
+            leftMeter.repaint();
+            rightMeter.repaint();
+        };
+
+        addAndMakeVisible (k14Button);
+        k14Button.setButtonText ("K-14");
+        k14Button.setToggleState (false, yup::NotificationType::dontSendNotification);
+        k14Button.onClick = [this]
+        {
+            k20Button.setToggleState (false, yup::NotificationType::dontSendNotification);
+            k14Button.setToggleState (true, yup::NotificationType::dontSendNotification);
+            k12Button.setToggleState (false, yup::NotificationType::dontSendNotification);
+            meterState.setScale (yup::KMeterState::Scale::k14);
+            leftMeter.repaint();
+            rightMeter.repaint();
+        };
+
+        addAndMakeVisible (k12Button);
+        k12Button.setButtonText ("K-12");
+        k12Button.setToggleState (false, yup::NotificationType::dontSendNotification);
+        k12Button.onClick = [this]
+        {
+            k20Button.setToggleState (false, yup::NotificationType::dontSendNotification);
+            k14Button.setToggleState (false, yup::NotificationType::dontSendNotification);
+            k12Button.setToggleState (true, yup::NotificationType::dontSendNotification);
+            meterState.setScale (yup::KMeterState::Scale::k12);
+            leftMeter.repaint();
+            rightMeter.repaint();
+        };
+
+        // Metering standard selection buttons
+        addAndMakeVisible (rmsButton);
+        rmsButton.setButtonText ("RMS Flat");
+        rmsButton.setToggleState (true, yup::NotificationType::dontSendNotification);
+        rmsButton.onClick = [this]
+        {
+            rmsButton.setToggleState (true, yup::NotificationType::dontSendNotification);
+            ituButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+            ebuButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+            meterState.setMeteringStandard (yup::KMeterState::MeteringStandard::rmsFlat);
+            leftMeter.repaint();
+            rightMeter.repaint();
+        };
+
+        addAndMakeVisible (ituButton);
+        ituButton.setButtonText ("ITU BS.1770-4");
+        ituButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+        ituButton.onClick = [this]
+        {
+            rmsButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+            ituButton.setToggleState (true, yup::NotificationType::dontSendNotification);
+            ebuButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+            meterState.setMeteringStandard (yup::KMeterState::MeteringStandard::ituBS1770_4);
+            leftMeter.repaint();
+            rightMeter.repaint();
+        };
+
+        addAndMakeVisible (ebuButton);
+        ebuButton.setButtonText ("EBU R128");
+        ebuButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+        ebuButton.onClick = [this]
+        {
+            rmsButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+            ituButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+            ebuButton.setToggleState (true, yup::NotificationType::dontSendNotification);
+            meterState.setMeteringStandard (yup::KMeterState::MeteringStandard::ebuR128);
+            leftMeter.repaint();
+            rightMeter.repaint();
+        };
+
+        // Over counter mode selection buttons
+        addAndMakeVisible (contiguousButton);
+        contiguousButton.setButtonText ("Contiguous");
+        contiguousButton.setToggleState (true, yup::NotificationType::dontSendNotification);
+        contiguousButton.onClick = [this]
+        {
+            contiguousButton.setToggleState (true, yup::NotificationType::dontSendNotification);
+            totalButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+            meterState.setOverCounterMode (yup::KMeterState::OverCounterMode::contiguous);
+        };
+
+        addAndMakeVisible (totalButton);
+        totalButton.setButtonText ("Total");
+        totalButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+        totalButton.onClick = [this]
+        {
+            contiguousButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+            totalButton.setToggleState (true, yup::NotificationType::dontSendNotification);
+            meterState.setOverCounterMode (yup::KMeterState::OverCounterMode::total);
         };
 
         addAndMakeVisible (infoLabel);
@@ -454,10 +694,24 @@ private:
     yup::TextButton saveButton;
     yup::ToggleButton loopButton;
     yup::ToggleButton labelsButton;
+    yup::ToggleButton k20Button;
+    yup::ToggleButton k14Button;
+    yup::ToggleButton k12Button;
+    yup::ToggleButton rmsButton;
+    yup::ToggleButton ituButton;
+    yup::ToggleButton ebuButton;
+    yup::ToggleButton contiguousButton;
+    yup::ToggleButton totalButton;
 
     yup::Label infoLabel;
     yup::Label statusLabel;
     AudioFileWaveform waveformDisplay;
+
+    // K-Meter components
+    yup::KMeterState meterState;
+    yup::KMeterComponent leftMeter;
+    yup::KMeterComponent rightMeter;
+    MeteringAudioSource meteringSource;
 
     yup::String currentFileName { "No audio loaded" };
     double loadedSampleRate = 0.0;

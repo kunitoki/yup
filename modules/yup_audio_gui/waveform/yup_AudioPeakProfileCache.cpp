@@ -333,17 +333,25 @@ void AudioPeakProfileCache::saveToDisk (const String& cacheKey, const AudioPeakP
 
 void AudioPeakProfileCache::notifyProfileReady (const String& cacheKey, std::shared_ptr<AudioPeakProfile> profile)
 {
-    listeners.call ([&] (Listener& l)
+    // Post to message thread to ensure UI updates happen on the correct thread
+    MessageManager::callAsync ([this, cacheKey, profile]
     {
-        l.profileReady (cacheKey, profile);
+        listeners.call ([&] (Listener& l)
+        {
+            l.profileReady (cacheKey, profile);
+        });
     });
 }
 
 void AudioPeakProfileCache::notifyProfileProgress (const String& cacheKey, double progress)
 {
-    listeners.call ([&] (Listener& l)
+    // Post to message thread to ensure UI updates happen on the correct thread
+    MessageManager::callAsync ([this, cacheKey, progress]
     {
-        l.profileProgress (cacheKey, progress);
+        listeners.call ([&] (Listener& l)
+        {
+            l.profileProgress (cacheKey, progress);
+        });
     });
 }
 

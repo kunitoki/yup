@@ -74,6 +74,8 @@ class AudioPeakProfileCacheTests : public ::testing::Test
 protected:
     void SetUp() override
     {
+        mm = MessageManager::getInstance();
+
         cache = std::make_unique<AudioPeakProfileCache>();
         listener = std::make_unique<CacheTestListener>();
         cache->addListener (listener.get());
@@ -82,6 +84,9 @@ protected:
                       .getChildFile ("yup_cache_test");
         tempDir.createDirectory();
         cache->setCacheDirectory (tempDir);
+
+        // Drain any pending messages from previous tests after setup
+        runDispatchLoopUntil (10);
     }
 
     void TearDown() override
@@ -92,6 +97,14 @@ protected:
         tempDir.deleteRecursively();
     }
 
+    void runDispatchLoopUntil (int millisecondsToRunFor = 10)
+    {
+#if YUP_MODAL_LOOPS_PERMITTED
+        mm->runDispatchLoopUntil (millisecondsToRunFor);
+#endif
+    }
+
+    MessageManager* mm = nullptr;
     std::unique_ptr<AudioPeakProfileCache> cache;
     std::unique_ptr<CacheTestListener> listener;
     File tempDir;
@@ -157,6 +170,10 @@ TEST_F (AudioPeakProfileCacheTests, RequestProfileSynchronously)
     cache->requestProfile (cacheKey, buildFunction, false);
 
     EXPECT_TRUE (buildFunctionCalled);
+
+    // Pump message queue to process async notification
+    runDispatchLoopUntil (100);
+
     EXPECT_EQ (1, listener->readyCallCount);
     EXPECT_EQ (cacheKey, listener->lastCacheKey);
     EXPECT_NE (nullptr, listener->lastProfile);
@@ -180,14 +197,23 @@ TEST_F (AudioPeakProfileCacheTests, RequestProfileAsynchronously)
 
     cache->requestProfile (cacheKey, buildFunction, true);
 
-    // Wait for async completion
+    // Wait for async completion and pump message queue
     int attempts = 0;
     while (listener->readyCallCount == 0 && attempts++ < 100)
+    {
+        runDispatchLoopUntil (10);
         Thread::sleep (10);
+    }
 
     EXPECT_EQ (1, listener->readyCallCount);
     EXPECT_EQ (cacheKey, listener->lastCacheKey);
     EXPECT_NE (nullptr, listener->lastProfile);
+
+    // Detach thread pool before it's destroyed
+    cache->setThreadPool (nullptr);
+
+    // Give any remaining jobs time to fully complete
+    Thread::sleep (50);
 }
 
 TEST_F (AudioPeakProfileCacheTests, MemoryCacheHit)
@@ -207,12 +233,18 @@ TEST_F (AudioPeakProfileCacheTests, MemoryCacheHit)
     // First request builds profile
     cache->requestProfile (cacheKey, buildFunction, false);
     EXPECT_EQ (1, buildCallCount);
+
+    // Pump message queue to process async notification
+    runDispatchLoopUntil (100);
     EXPECT_EQ (1, listener->readyCallCount);
 
     // Second request hits memory cache
     listener->readyCallCount = 0;
     cache->requestProfile (cacheKey, buildFunction, false);
-    EXPECT_EQ (1, buildCallCount);           // Build function not called again
+    EXPECT_EQ (1, buildCallCount); // Build function not called again
+
+    // Pump message queue to process async notification
+    runDispatchLoopUntil (100);
     EXPECT_EQ (1, listener->readyCallCount); // But listener notified
 }
 
@@ -261,13 +293,19 @@ TEST_F (AudioPeakProfileCacheTests, DiskCacheEnabled)
     cache->requestProfile (cacheKey, buildFunction, false);
     EXPECT_EQ (1, buildCallCount);
 
+    // Pump message queue to process async notification
+    runDispatchLoopUntil (100);
+
     // Clear memory cache
     cache->clearMemoryCache();
 
     // Second request should load from disk
     listener->readyCallCount = 0;
     cache->requestProfile (cacheKey, buildFunction, false);
-    EXPECT_EQ (1, buildCallCount);           // Build function not called again
+    EXPECT_EQ (1, buildCallCount); // Build function not called again
+
+    // Pump message queue to process async notification
+    runDispatchLoopUntil (100);
     EXPECT_EQ (1, listener->readyCallCount); // Loaded from disk
 }
 
@@ -367,6 +405,9 @@ TEST_F (AudioPeakProfileCacheTests, ProgressCallbacksWork)
 
 TEST_F (AudioPeakProfileCacheTests, MultipleListenersNotified)
 {
+    // Reset counts from any previous tests
+    listener->readyCallCount = 0;
+
     CacheTestListener listener2;
     cache->addListener (&listener2);
 
@@ -381,6 +422,9 @@ TEST_F (AudioPeakProfileCacheTests, MultipleListenersNotified)
     };
 
     cache->requestProfile (cacheKey, buildFunction, false);
+
+    // Pump message queue to process async notifications
+    runDispatchLoopUntil (100);
 
     EXPECT_EQ (1, listener->readyCallCount);
     EXPECT_EQ (1, listener2.readyCallCount);
@@ -401,6 +445,9 @@ TEST_F (AudioPeakProfileCacheTests, RemoveListenerStopsNotifications)
     };
 
     cache->requestProfile (cacheKey, buildFunction, false);
+
+    // Pump message queue to process async notification
+    runDispatchLoopUntil (100);
     EXPECT_EQ (1, listener->readyCallCount);
 
     cache->removeListener (listener.get());
@@ -408,6 +455,9 @@ TEST_F (AudioPeakProfileCacheTests, RemoveListenerStopsNotifications)
 
     cache->clearMemoryCache();
     cache->requestProfile (cacheKey, buildFunction, false);
+
+    // Pump message queue to ensure no notification arrives
+    runDispatchLoopUntil (100);
     EXPECT_EQ (0, listener->readyCallCount);
 }
 
@@ -479,12 +529,21 @@ TEST_F (AudioPeakProfileCacheTests, MultipleAsyncRequests)
         cache->requestProfile (cacheKey, buildFunction, true);
     }
 
-    // Wait for all requests to complete
+    // Wait for all requests to complete and pump message queue
     int attempts = 0;
     while (listener->readyCallCount < 5 && attempts++ < 200)
+    {
+        runDispatchLoopUntil (10);
         Thread::sleep (10);
+    }
 
     EXPECT_EQ (5, listener->readyCallCount);
+
+    // Detach thread pool before it's destroyed
+    cache->setThreadPool (nullptr);
+
+    // Give any remaining jobs time to fully complete
+    Thread::sleep (50);
 }
 
 TEST_F (AudioPeakProfileCacheTests, AsyncRequestWithNullThreadPool)
@@ -505,6 +564,8 @@ TEST_F (AudioPeakProfileCacheTests, AsyncRequestWithNullThreadPool)
     cache->requestProfile (cacheKey, buildFunction, true);
 
     // Should complete synchronously even though async was requested
+    // But notification is still async via message queue
+    runDispatchLoopUntil (100);
     EXPECT_EQ (1, listener->readyCallCount);
 }
 

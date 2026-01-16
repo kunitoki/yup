@@ -49,6 +49,7 @@ void TextButton::setButtonText (StringRef newButtonText)
         buttonText = newButtonText;
 
         resized();
+        repaint();
     }
 }
 

@@ -75,6 +75,9 @@
 
 #include "frequency/yup_FFTProcessor.cpp"
 #include "frequency/yup_SpectrumAnalyzerState.cpp"
+#include "metering/yup_LevelProcessor.cpp"
+#include "metering/yup_LoudnessFilter.cpp"
+#include "metering/yup_KMeterState.cpp"
 #include "designers/yup_FilterDesigner.cpp"
 #include "convolution/yup_PartitionedConvolver.cpp"
 #include "utilities/yup_DspMath.cpp"

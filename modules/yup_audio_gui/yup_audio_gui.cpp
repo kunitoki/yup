@@ -39,3 +39,4 @@
 #include "displays/yup_AudioViewComponent.cpp"
 #include "displays/yup_SpectrumAnalyzerComponent.cpp"
 #include "displays/yup_CartesianPlane.cpp"
+#include "metering/yup_KMeterComponent.cpp"

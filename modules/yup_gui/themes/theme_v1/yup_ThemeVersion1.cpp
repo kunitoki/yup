@@ -1120,6 +1120,333 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
         }
     }
 }
+
+void paintKMeter (Graphics& g, const ApplicationTheme& theme, const KMeterComponent& meter)
+{
+    const auto bounds = meter.getLocalBounds();
+    const auto width = bounds.getWidth();
+    const auto height = bounds.getHeight();
+
+    if (bounds.isEmpty())
+        return;
+
+    // Get colors from theme
+    const auto backgroundColor = meter.findColor (KMeterComponent::Style::backgroundColorId)
+                                     .value_or (Color (0xff1a1a1a));
+    const auto greenColor = meter.findColor (KMeterComponent::Style::greenZoneColorId)
+                                .value_or (Color (0xff00cc00));
+    const auto amberColor = meter.findColor (KMeterComponent::Style::amberZoneColorId)
+                                .value_or (Color (0xffffaa00));
+    const auto redColor = meter.findColor (KMeterComponent::Style::redZoneColorId)
+                              .value_or (Color (0xffcc0000));
+    const auto averageColor = meter.findColor (KMeterComponent::Style::averageLevelColorId)
+                                  .value_or (Color (0xccffffff));
+    const auto peakColor = meter.findColor (KMeterComponent::Style::peakLevelColorId)
+                               .value_or (Color (0xffffffff));
+    const auto peakClipColor = meter.findColor (KMeterComponent::Style::peakLevelClipColorId)
+                                   .value_or (Color (0xffff0000));
+    const auto peakHoldColor = meter.findColor (KMeterComponent::Style::peakHoldColorId)
+                                   .value_or (Color (0xffffff00));
+
+    // Draw background with subtle depth
+    {
+        ColorGradient backgroundGradient;
+        backgroundGradient.addColorStop (backgroundColor.darker (0.15f),
+                                         Point<float> (bounds.getX(), bounds.getY()),
+                                         0.0f);
+        backgroundGradient.addColorStop (backgroundColor,
+                                         Point<float> (bounds.getX(), bounds.getY() + height * 0.5f),
+                                         0.5f);
+        backgroundGradient.addColorStop (backgroundColor.darker (0.25f),
+                                         Point<float> (bounds.getX(), bounds.getBottom()),
+                                         1.0f);
+
+        g.setFillColorGradient (backgroundGradient);
+        g.fillRect (bounds);
+    }
+
+    // Get K-System scale range for the meter state
+    const auto scale = meter.meterState.getScale();
+    const float rangeMin = KMeterState::rangeMinForScale (scale);
+    const float rangeMax = KMeterState::rangeMaxForScale (scale);
+    const float rangeSpan = rangeMax - rangeMin;
+
+    auto linearDbToY = [&] (float db) -> float
+    {
+        const float clampedDb = jlimit (rangeMin, rangeMax, db);
+        const float normalized = (clampedDb - rangeMin) / rangeSpan;
+        return bounds.getY() + height * (1.0f - normalized);
+    };
+
+    std::function<float (float)> dbToY = linearDbToY;
+
+    if (meter.getScaleMapping() == KMeterComponent::ScaleMapping::segmented)
+    {
+        struct MeterSegment
+        {
+            float topDb = 0.0f;
+            float bottomDb = 0.0f;
+            float topY = 0.0f;
+            float bottomY = 0.0f;
+            float heightUnits = 1.0f;
+            Color color;
+        };
+
+        const float limitRedBars = 4.0f;
+        const float limitAmberBars = 0.0f;
+        float limitTopBars = 18.0f;
+        float limitGreenBars = -24.0f;
+        float limitLinearArea = -30.0f;
+        bool useFiveUnitBottom = false;
+
+        switch (scale)
+        {
+            case KMeterState::Scale::k20:
+                limitTopBars = 18.0f;
+                limitGreenBars = -24.0f;
+                limitLinearArea = -30.0f;
+                useFiveUnitBottom = false;
+                break;
+            case KMeterState::Scale::k14:
+                limitTopBars = 12.0f;
+                limitGreenBars = -30.0f;
+                limitLinearArea = -30.0f;
+                useFiveUnitBottom = false;
+                break;
+            case KMeterState::Scale::k12:
+                limitTopBars = 10.0f;
+                limitGreenBars = -30.0f;
+                limitLinearArea = -30.0f;
+                useFiveUnitBottom = true;
+                break;
+            default:
+                break;
+        }
+
+        const Color nonLinearColor = greenColor.darker (0.35f);
+        std::vector<MeterSegment> segments;
+        segments.reserve (64);
+
+        float currentDb = rangeMax;
+        while (currentDb > rangeMin)
+        {
+            float segmentRange = 1.0f;
+
+            if (currentDb > limitTopBars)
+                segmentRange = 0.5f;
+            else if (currentDb > limitGreenBars)
+                segmentRange = 1.0f;
+            else if (currentDb > limitLinearArea)
+                segmentRange = 6.0f;
+            else
+                segmentRange = 10.0f;
+
+            float bottomDb = currentDb - segmentRange;
+            if (bottomDb < rangeMin)
+                bottomDb = rangeMin;
+
+            float heightUnits = 1.0f;
+            if (currentDb > limitTopBars)
+                heightUnits = 1.0f;
+            else if (currentDb > limitGreenBars)
+                heightUnits = 2.0f;
+            else if (currentDb > limitLinearArea)
+                heightUnits = 3.0f;
+            else if (bottomDb <= rangeMin)
+                heightUnits = useFiveUnitBottom ? 5.0f : 4.0f;
+            else
+                heightUnits = 3.0f;
+
+            Color segmentColor = nonLinearColor;
+            if (currentDb > limitRedBars)
+                segmentColor = redColor;
+            else if (currentDb > limitAmberBars)
+                segmentColor = amberColor;
+            else if (currentDb > limitGreenBars)
+                segmentColor = greenColor;
+
+            segments.push_back ({ currentDb, bottomDb, 0.0f, 0.0f, heightUnits, segmentColor });
+            currentDb = bottomDb;
+        }
+
+        float totalUnits = 0.0f;
+        for (const auto& segment : segments)
+            totalUnits += segment.heightUnits;
+
+        const float unitHeight = totalUnits > 0.0f ? height / totalUnits : height;
+        float currentY = bounds.getY();
+
+        for (size_t index = 0; index < segments.size(); ++index)
+        {
+            auto& segment = segments[index];
+            const bool isLast = (index + 1 == segments.size());
+            const float segmentHeight = isLast ? (bounds.getBottom() - currentY) : (segment.heightUnits * unitHeight);
+
+            segment.topY = currentY;
+            segment.bottomY = currentY + segmentHeight;
+            currentY = segment.bottomY;
+        }
+
+        dbToY = [segments, rangeMin, rangeMax, bounds] (float db) -> float
+        {
+            const float clampedDb = jlimit (rangeMin, rangeMax, db);
+
+            for (const auto& segment : segments)
+            {
+                if (clampedDb <= segment.topDb && clampedDb >= segment.bottomDb)
+                {
+                    const float range = segment.topDb - segment.bottomDb;
+                    const float normalized = range > 0.0f ? (clampedDb - segment.bottomDb) / range : 0.0f;
+                    return segment.bottomY - (segment.bottomY - segment.topY) * normalized;
+                }
+            }
+
+            return bounds.getBottom();
+        };
+    }
+
+    // Get current levels (thread-safe)
+    const float averageDb = meter.currentAverageDb.get();
+    const float peakDb = meter.currentPeakDb.get();
+    const float peakHoldDb = meter.currentPeakHoldDb.get();
+    const bool isClipping = meter.currentClipping.get();
+
+    // Draw average level (filled bar from bottom with gradient)
+    if (averageDb > rangeMin)
+    {
+        const float clampedAverageDb = jlimit (rangeMin, rangeMax, averageDb);
+        const float barLeft = bounds.getX() + 2.0f;
+        const float barWidth = width - 4.0f;
+        const float barBottom = dbToY (rangeMin);
+        const float barTop = dbToY (clampedAverageDb);
+        const float fillHeight = barBottom - barTop;
+
+        if (fillHeight > 0.0f)
+        {
+            const float barCenterX = barLeft + barWidth * 0.5f;
+            const Point<float> gradientStart (barCenterX, bounds.getBottom());
+            const Point<float> gradientEnd (barCenterX, bounds.getY());
+
+            auto positionForDb = [&] (float db) -> float
+            {
+                const float y = dbToY (db);
+                return jlimit (0.0f, 1.0f, (bounds.getBottom() - y) / height);
+            };
+
+            std::vector<ColorGradient::ColorStop> gradientStops;
+            gradientStops.emplace_back (greenColor, gradientStart, positionForDb (rangeMin));
+
+            if (rangeMax >= 0.0f)
+            {
+                const float zeroPos = positionForDb (0.0f);
+                if (zeroPos > 0.0f && zeroPos < 1.0f)
+                    gradientStops.emplace_back (amberColor, Point<float> (barCenterX, dbToY (0.0f)), zeroPos);
+            }
+
+            if (rangeMax >= 4.0f)
+            {
+                const float fourPos = positionForDb (4.0f);
+                if (fourPos > 0.0f && fourPos < 1.0f)
+                    gradientStops.emplace_back (redColor, Point<float> (barCenterX, dbToY (4.0f)), fourPos);
+            }
+
+            gradientStops.emplace_back (redColor, gradientEnd, positionForDb (rangeMax));
+
+            ColorGradient gradient (ColorGradient::Type::Linear, std::move (gradientStops));
+            g.setFillColorGradient (gradient.withMultipliedAlpha (averageColor.getAlphaFloat()));
+            g.fillRect (barLeft, barTop, barWidth, fillHeight);
+        }
+    }
+
+    // Draw peak hold marker first
+    if (meter.getShowPeakHold() && peakHoldDb > rangeMin)
+    {
+        const float holdY = dbToY (peakHoldDb);
+        if (holdY >= bounds.getY() && holdY <= bounds.getBottom())
+        {
+            g.setFillColor (peakHoldColor);
+            const float lineTop = jlimit (bounds.getY(), bounds.getBottom() - 2.0f, holdY - 1.0f);
+            g.fillRect (bounds.getX(), lineTop, width, 2.0f);
+        }
+    }
+
+    // Draw peak level indicator
+    if (meter.getShowPeak() && peakDb > rangeMin)
+    {
+        const float peakY = dbToY (peakDb);
+        if (peakY >= bounds.getY() && peakY <= bounds.getBottom())
+        {
+            g.setFillColor (isClipping ? peakClipColor : peakColor);
+            const float lineTop = jlimit (bounds.getY(), bounds.getBottom() - 2.0f, peakY - 1.0f);
+            g.fillRect (bounds.getX(), lineTop, width, 2.0f);
+        }
+    }
+
+    // Draw scale markers and labels
+    {
+        const auto& font = theme.getDefaultFont();
+        g.setFillColor (Color (0xffffffff).withAlpha (0.7f));
+
+        // Determine tick interval based on meter height and range
+        const float dbPerPixel = rangeSpan / height;
+        int tickInterval = 5; // Default: 5dB ticks
+
+        // Adjust tick interval for better visibility
+        if (height < 200)
+            tickInterval = 10; // Fewer ticks for small meters
+
+        // Draw tick marks and labels
+        // Start from a nice round number
+        const int startDb = static_cast<int> (std::ceil (rangeMin / tickInterval)) * tickInterval;
+        const int endDb = static_cast<int> (std::floor (rangeMax / tickInterval)) * tickInterval;
+
+        for (int db = startDb; db <= endDb; db += tickInterval)
+        {
+            const float y = dbToY (static_cast<float> (db));
+
+            // Skip if outside visible area
+            if (y < bounds.getY() || y > bounds.getBottom())
+                continue;
+
+            // Draw tick mark
+            g.fillRect (bounds.getX(), y - 0.5f, 4.0f, 1.0f);
+
+            // Draw label for important values
+            bool shouldLabel = false;
+
+            // Always label 0dB (the reference)
+            if (db == 0)
+                shouldLabel = true;
+            // Label every 10dB
+            else if (db % 10 == 0)
+                shouldLabel = true;
+            // Label -20dB (important for K-20)
+            else if (db == -20)
+                shouldLabel = true;
+
+            if (shouldLabel)
+            {
+                const String label = (db > 0 ? "+" : "") + String (db);
+                const float labelHeight = 12.0f;
+                const Rectangle<float> labelRect (bounds.getX() + 5.0f, y - 6.0f, 22.0f, labelHeight);
+
+                // Only draw label if it's fully visible (not clipped at top or bottom)
+                if (labelRect.getY() >= bounds.getY() && labelRect.getBottom() <= bounds.getBottom())
+                {
+                    g.fillFittedText (label, font, labelRect, Justification::left);
+                }
+            }
+        }
+    }
+
+    // Draw 0dB reference line
+    {
+        const float zeroDbY = dbToY (0.0f);
+        g.setStrokeColor (Color (0xffffffff).withAlpha (0.5f));
+        g.setStrokeWidth (1.5f);
+        g.strokeLine (Point<float> (bounds.getX(), zeroDbY), Point<float> (bounds.getRight(), zeroDbY));
+    }
+}
 #endif
 
 //==============================================================================
@@ -1192,6 +1519,16 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setColor (MidiKeyboardComponent::Style::blackKeyPressedColorId, Color (0xff4ebfff));
     theme->setColor (MidiKeyboardComponent::Style::blackKeyShadowColorId, Color (0x80000000));
     theme->setColor (MidiKeyboardComponent::Style::keyOutlineColorId, Color (0xff888888));
+
+    theme->setComponentStyle<KMeterComponent> (ComponentStyle::createStyle<KMeterComponent> (paintKMeter));
+    theme->setColor (KMeterComponent::Style::backgroundColorId, Color (0xff1a1a1a));
+    theme->setColor (KMeterComponent::Style::greenZoneColorId, Color (0xff00cc00));
+    theme->setColor (KMeterComponent::Style::amberZoneColorId, Color (0xffffaa00));
+    theme->setColor (KMeterComponent::Style::redZoneColorId, Color (0xffcc0000));
+    theme->setColor (KMeterComponent::Style::averageLevelColorId, Color (0xccffffff));
+    theme->setColor (KMeterComponent::Style::peakLevelColorId, Color (0xffffffff));
+    theme->setColor (KMeterComponent::Style::peakLevelClipColorId, Color (0xffff0000));
+    theme->setColor (KMeterComponent::Style::peakHoldColorId, Color (0xffffff00));
 #endif
 
     return theme;

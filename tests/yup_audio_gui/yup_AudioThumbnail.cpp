@@ -81,10 +81,14 @@ class AudioThumbnailTests : public ::testing::Test
 protected:
     void SetUp() override
     {
+        mm = MessageManager::getInstance();
         cache = std::make_shared<AudioPeakProfileCache>();
         thumbnail = std::make_unique<AudioThumbnail> (cache);
         listener = std::make_unique<ThumbnailTestListener>();
         thumbnail->addListener (listener.get());
+
+        // Drain any pending messages from previous tests
+        runDispatchLoopUntil (10);
     }
 
     void TearDown() override
@@ -95,16 +99,25 @@ protected:
         cache.reset();
     }
 
+    void runDispatchLoopUntil (int millisecondsToRunFor = 10)
+    {
+#if YUP_MODAL_LOOPS_PERMITTED
+        mm->runDispatchLoopUntil (millisecondsToRunFor);
+#endif
+    }
+
     void waitForProfileReady (int maxWaitMs = 1000)
     {
         int waited = 0;
         while (thumbnail->getPeakProfile() == nullptr && waited < maxWaitMs)
         {
+            runDispatchLoopUntil (10);
             Thread::sleep (10);
-            waited += 10;
+            waited += 20;
         }
     }
 
+    MessageManager* mm = nullptr;
     std::shared_ptr<AudioPeakProfileCache> cache;
     std::unique_ptr<AudioThumbnail> thumbnail;
     std::unique_ptr<ThumbnailTestListener> listener;
@@ -199,6 +212,8 @@ TEST_F (AudioThumbnailTests, SetBackgroundCalculationDisabled)
     syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
 
     // Profile should be computed synchronously (no ThreadPool = synchronous)
+    // But notification is still async, so pump the message queue
+    runDispatchLoopUntil (100);
     EXPECT_NE (nullptr, syncThumbnail.getPeakProfile());
 }
 
@@ -245,7 +260,8 @@ TEST_F (AudioThumbnailTests, SharedCacheBetweenThumbnails)
 
     thumbnail2.setSource (&buffer, kThumbnailSampleRate);
 
-    // Should get profile immediately from cache
+    // Should get profile from cache (but notification is async)
+    runDispatchLoopUntil (100);
     EXPECT_NE (nullptr, thumbnail2.getPeakProfile());
     // Gets 2 notifications: one from setSource, one from profileReady
     EXPECT_GE (listener2.changedCallCount, 1);
@@ -379,6 +395,9 @@ TEST_F (AudioThumbnailTests, LargeBufferHandling)
 
     EXPECT_EQ (1000000, syncThumbnail.getTotalSamples());
     EXPECT_EQ (8, syncThumbnail.getNumChannels());
+
+    // Pump message queue for async notification
+    runDispatchLoopUntil (100);
     EXPECT_NE (nullptr, syncThumbnail.getPeakProfile());
 }
 
@@ -392,6 +411,9 @@ TEST_F (AudioThumbnailTests, SmallBufferHandling)
     syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
 
     EXPECT_EQ (10, syncThumbnail.getTotalSamples());
+
+    // Pump message queue for async notification
+    runDispatchLoopUntil (100);
     EXPECT_NE (nullptr, syncThumbnail.getPeakProfile());
 }
 

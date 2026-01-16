@@ -56,3 +56,4 @@
 #include "displays/yup_AudioViewComponent.h"
 #include "displays/yup_SpectrumAnalyzerComponent.h"
 #include "displays/yup_CartesianPlane.h"
+#include "metering/yup_KMeterComponent.h"
