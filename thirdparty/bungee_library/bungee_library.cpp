@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#include "bungee.h"
+#include "bungee_library.h"
 
 #include "src/Assert.cpp"
 #include "src/Fourier.cpp"

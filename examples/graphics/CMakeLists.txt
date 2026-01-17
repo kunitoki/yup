@@ -81,6 +81,7 @@ yup_standalone_app (
         libvorbis
         libpng
         libwebp
+        bungee_library
         ${additional_modules}
         ${link_libraries})
 
