@@ -338,6 +338,12 @@ bool yup_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
         if (LinuxErrorHandling::keyboardBreakOccurred)
             YUPApplicationBase::quit();
 
+        if (auto* mm = MessageManager::getInstanceWithoutCreating())
+        {
+            if (mm->hasStopMessageBeenSent())
+                return false;
+        }
+
         auto* runLoop = InternalRunLoop::getInstanceWithoutCreating();
         if (runLoop == nullptr)
             return false;

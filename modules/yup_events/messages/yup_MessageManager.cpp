@@ -153,8 +153,10 @@ void MessageManager::runDispatchLoop()
 
 void MessageManager::stopDispatchLoop()
 {
-    (new QuitMessage())->post();
+    quitMessageReceived = true;
     quitMessagePosted = true;
+
+    (new QuitMessage())->post();
 }
 
 #if YUP_MODAL_LOOPS_PERMITTED
