@@ -31,6 +31,7 @@ concurrency:
 jobs:
   build_tests_debug:
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
     - uses: actions/checkout@v4
       with:
@@ -43,6 +44,7 @@ jobs:
 
   build_tests_release:
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
     - uses: actions/checkout@v4
       with:
