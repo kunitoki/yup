@@ -333,26 +333,56 @@ void AudioPeakProfileCache::saveToDisk (const String& cacheKey, const AudioPeakP
 
 void AudioPeakProfileCache::notifyProfileReady (const String& cacheKey, std::shared_ptr<AudioPeakProfile> profile)
 {
-    // Post to message thread to ensure UI updates happen on the correct thread
-    MessageManager::callAsync ([this, cacheKey, profile]
+    auto notify = [this, cacheKey, profile]
     {
         listeners.call ([&] (Listener& l)
         {
             l.profileReady (cacheKey, profile);
         });
-    });
+    };
+
+#if YUP_MODAL_LOOPS_PERMITTED
+    if (auto* mm = MessageManager::getInstanceWithoutCreating())
+    {
+        if (mm->isThisTheMessageThread())
+        {
+            notify();
+            return;
+        }
+    }
+
+    if (MessageManager::callAsync (notify))
+        return;
+#endif
+
+    notify();
 }
 
 void AudioPeakProfileCache::notifyProfileProgress (const String& cacheKey, double progress)
 {
-    // Post to message thread to ensure UI updates happen on the correct thread
-    MessageManager::callAsync ([this, cacheKey, progress]
+    auto notify = [this, cacheKey, progress]
     {
         listeners.call ([&] (Listener& l)
         {
             l.profileProgress (cacheKey, progress);
         });
-    });
+    };
+
+#if YUP_MODAL_LOOPS_PERMITTED
+    if (auto* mm = MessageManager::getInstanceWithoutCreating())
+    {
+        if (mm->isThisTheMessageThread())
+        {
+            notify();
+            return;
+        }
+    }
+
+    if (MessageManager::callAsync (notify))
+        return;
+#endif
+
+    notify();
 }
 
 } // namespace yup
