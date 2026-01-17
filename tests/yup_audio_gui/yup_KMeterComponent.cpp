@@ -25,6 +25,11 @@
 
 using namespace yup;
 
+namespace yup
+{
+extern std::unique_ptr<yup::GraphicsContext> yup_constructHeadlessGraphicsContext (yup::GraphicsContext::Options);
+} // namespace yup
+
 //==============================================================================
 TEST (KMeterComponentTests, DefaultsAreConfigured)
 {
@@ -56,4 +61,19 @@ TEST (KMeterComponentTests, SettersUpdateState)
     EXPECT_DOUBLE_EQ (0.9, meterState.getAverageFallTime());
     EXPECT_DOUBLE_EQ (1.5, meterState.getPeakHoldTime());
     EXPECT_EQ (KMeterState::OverCounterMode::total, meter.getOverCounterMode());
+}
+
+TEST (KMeterComponentTests, PaintWithThemeDoesNotCrash)
+{
+    KMeterState meterState (48000.0, 2);
+    KMeterComponent meter (meterState, 0);
+    meter.setBounds (0.0f, 0.0f, 60.0f, 240.0f);
+
+    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto renderer = context->makeRenderer (120, 240);
+    Graphics g (*context, *renderer);
+
+    meter.paint (g);
+
+    EXPECT_TRUE (true);
 }

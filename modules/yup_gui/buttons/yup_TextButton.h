@@ -59,6 +59,8 @@ public:
     StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
 
 private:
+    void updateTextLayout();
+
     String buttonText;
     StyledText styledText;
 };

@@ -32,4 +32,5 @@
 #include "yup_gui/yup_SwitchButton.cpp"
 #include "yup_gui/yup_TextButton.cpp"
 #include "yup_gui/yup_TextEditor.cpp"
+#include "yup_gui/yup_ThemeVersion1.cpp"
 #include "yup_gui/yup_ToggleButton.cpp"
