@@ -6,14 +6,12 @@
 #include "Instrumentation.h"
 #include "log2.h"
 
-#include <numbers>
-
 namespace Bungee {
 
 using namespace Internal;
 
 namespace {
-static constexpr float pi = std::numbers::pi_v<float>;
+static constexpr float pi = static_cast<float>(3.141592653589793238462643383279502884L);
 static constexpr float gain = (3 * pi) / (3 * pi + 8);
 } // namespace
 

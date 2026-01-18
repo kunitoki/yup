@@ -19,7 +19,6 @@
 #include <array>
 #include <complex>
 #include <memory>
-#include <numbers>
 
 namespace Bungee {
 

@@ -102,7 +102,7 @@ void Internal::Stretcher::synthesiseGrain(OutputChunk &outputChunk)
 
 		auto t = temporary.topRows(grain.validBinCount);
 
-		t = grain.rotation.topRows(grain.validBinCount).cast<float>() * (std::complex<float>{0, std::numbers::pi_v<float> / 0x8000});
+		t = grain.rotation.topRows(grain.validBinCount).cast<float>() * (std::complex<float>{0, static_cast<float>(3.141592653589793238462643383279502884L) / 0x8000});
 		t = t.exp();
 
 		if (grain.reverse())
