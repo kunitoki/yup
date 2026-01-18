@@ -6,7 +6,13 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
+
+#if defined(_MSC_VER)
+#include <process.h>
+#define getpid _getpid
+#else
 #include <unistd.h>
+#endif
 
 namespace Bungee::Assert {
 
