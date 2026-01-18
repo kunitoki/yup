@@ -155,7 +155,7 @@ public:
 		{
 			if (processGrain)
 			{
-				if (!isnan(request.position))
+				if (!std::isnan(request.position))
 				{
 					inputBuffer.analyseGrain();
 					inputBuffer.stretcher.synthesiseGrain(outputChunk);
@@ -172,7 +172,7 @@ public:
 				inputBuffer.inputChunk = inputBuffer.stretcher.specifyGrain(request);
 			}
 
-			if (outputChunk.request[0] && !isnan(outputChunk.request[0]->position))
+			if (outputChunk.request[0] && !std::isnan(outputChunk.request[0]->position))
 			{
 				const int need = round(framesNeeded) - frameCounter;
 				const int available = outputChunk.frameCount - outputChunkConsumed;
