@@ -21,6 +21,8 @@
 
 #include "bungee_library.h"
 
+#include <math.h>
+
 #include "src/Assert.cpp"
 #include "src/Fourier.cpp"
 #include "src/Grain.cpp"
