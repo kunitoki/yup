@@ -11,7 +11,6 @@
 #include <complex>
 #include <cstdint>
 #include <limits>
-#include <numbers>
 
 // Functions that use integer types to represent an angle in the interval [-pi, pi).
 
@@ -25,6 +24,8 @@
 namespace Bungee::Phase {
 
 typedef int16_t Type;
+
+constexpr auto fPi = static_cast<double>(3.141592653589793238462643383279502884L);
 
 template <typename T2, typename T1>
 T2 cast(T1 t1)
@@ -56,7 +57,7 @@ template <typename T = Type>
 static inline constexpr float toRadians(T phase)
 {
 	constexpr auto shift = 8 * sizeof(T);
-	constexpr auto k = float((2 * std::numbers::pi) / (1ull << shift));
+	constexpr auto k = float((2 * fPi) / (1ull << shift));
 	return phase * k;
 }
 
@@ -64,7 +65,7 @@ template <typename T = Type>
 static inline constexpr T fromRadians(float radians)
 {
 	constexpr auto shift = 8 * sizeof(T);
-	constexpr float k = float((1ull << shift) / (2 * std::numbers::pi));
+	constexpr float k = float((1ull << shift) / (2 * fPi));
 	const T phase = T(k * radians);
 	return phase;
 }

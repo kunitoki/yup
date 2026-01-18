@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cassert>
 #include <span>
+#include <vector>
 
 #pragma once
 
