@@ -151,19 +151,19 @@ public:
 		framesNeeded += outputFrameCount;
 
 		int frameCounter = 0;
-		for (bool processGrain = false; frameCounter != std::round(framesNeeded); processGrain = true)
+		for (bool processGrain = false; frameCounter != round(framesNeeded); processGrain = true)
 		{
 			if (processGrain)
 			{
-				if (!std::isnan(request.position))
+				if (!isnan(request.position))
 				{
 					inputBuffer.analyseGrain();
 					inputBuffer.stretcher.synthesiseGrain(outputChunk);
 					outputChunkConsumed = 0;
 				}
 
-				[[maybe_unused]] const double proportionRemaining = 1. - frameCounter / std::round(outputFrameCount);
-				const double proportionRemainingDenominator = std::round(outputFrameCount);
+				[[maybe_unused]] const double proportionRemaining = 1. - frameCounter / round(outputFrameCount);
+				const double proportionRemainingDenominator = round(outputFrameCount);
 				const double proportionRemainingNumerator = proportionRemainingDenominator - frameCounter;
 
 				const auto position = inputBuffer.endPosition() - inputBuffer.stretcher.maxInputFrameCount() / 2 - inputFrameCount * proportionRemainingNumerator / proportionRemainingDenominator;
@@ -172,9 +172,9 @@ public:
 				inputBuffer.inputChunk = inputBuffer.stretcher.specifyGrain(request);
 			}
 
-			if (outputChunk.request[0] && !std::isnan(outputChunk.request[0]->position))
+			if (outputChunk.request[0] && !isnan(outputChunk.request[0]->position))
 			{
-				const int need = std::round(framesNeeded) - frameCounter;
+				const int need = round(framesNeeded) - frameCounter;
 				const int available = outputChunk.frameCount - outputChunkConsumed;
 				const int n = std::min(need, available);
 
@@ -189,7 +189,7 @@ public:
 			}
 		}
 
-		assert(frameCounter == std::floor(outputFrameCount) || frameCounter == std::ceil(outputFrameCount));
+		assert(frameCounter == floor(outputFrameCount) || frameCounter == ceil(outputFrameCount));
 		framesNeeded -= frameCounter;
 		return frameCounter;
 	};
