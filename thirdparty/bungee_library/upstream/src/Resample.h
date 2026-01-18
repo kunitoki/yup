@@ -12,6 +12,12 @@
 
 namespace Bungee::Resample {
 
+#if defined(__GNUC__) || defined(__clang__)
+#define BUNGEE_NOINLINE __attribute__((noinline))
+#else
+#define BUNGEE_NOINLINE
+#endif
+
 // To resample from external buffer at input sample rate to internal buffer at (Fourier transformed) sample rate
 class Input;
 
@@ -158,7 +164,7 @@ template <class Interpolation, class Mode>
 struct Loop
 {
 	template <bool ratioIsConstant>
-	static __attribute__((noinline)) void run(RatioState<ratioIsConstant> &ratioState, Internal &internal, External external) // const & ext
+	static BUNGEE_NOINLINE void run(RatioState<ratioIsConstant> &ratioState, Internal &internal, External external) // const & ext
 	{
 		const Assert::FloatingPointExceptions floatingPointExceptions(FE_INEXACT | FE_UNDERFLOW);
 
