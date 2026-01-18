@@ -5,6 +5,9 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdlib>
+#include <cmath>
+#include <limits>
 #include <span>
 #include <vector>
 
