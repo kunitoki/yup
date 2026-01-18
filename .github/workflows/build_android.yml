@@ -44,7 +44,7 @@ jobs:
           distribution: ${{env.JAVA_DISTRIBUTION}}
           java-version: ${{env.JAVA_VERSION}}
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v2.0.10
+        uses: android-actions/setup-android@v3
       - name: Setup Android NDK
         uses: nttld/setup-ndk@v1
         with:
@@ -71,7 +71,7 @@ jobs:
         distribution: ${{env.JAVA_DISTRIBUTION}}
         java-version: ${{env.JAVA_VERSION}}
     - name: Setup Android SDK
-      uses: android-actions/setup-android@v2.0.10
+      uses: android-actions/setup-android@v3
     - name: Setup Android NDK
       uses: nttld/setup-ndk@v1
       with:
@@ -102,7 +102,7 @@ jobs:
         distribution: ${{env.JAVA_DISTRIBUTION}}
         java-version: ${{env.JAVA_VERSION}}
     - name: Setup Android SDK
-      uses: android-actions/setup-android@v2.0.10
+      uses: android-actions/setup-android@v3
     - name: Setup Android NDK
       uses: nttld/setup-ndk@v1
       with:
