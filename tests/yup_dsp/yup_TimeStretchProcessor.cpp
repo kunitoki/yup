@@ -838,31 +838,30 @@ TEST_F (TimeStretchProcessorTests, ChangeParametersDuringProcessing)
 //==============================================================================
 TEST_F (TimeStretchProcessorTests, DifferentTimeRatios)
 {
-    TimeStretchProcessor processor;
-    ASSERT_TRUE (processor.prepare (spec).wasOk());
-
-    // Set input provider
-    auto provider = [&] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
-    {
-        muteHead = 0;
-        muteTail = 0;
-        for (int ch = 0; ch < numChannels; ++ch)
-        {
-            for (int i = 0; i < numFrames; ++i)
-            {
-                const int srcIndex = static_cast<int> ((beginFrame + i) % maximumBlockSize);
-                destChannels[ch][i] = inputBuffer.getReadPointer (ch)[srcIndex];
-            }
-        }
-    };
-    processor.setInputProvider (provider);
-
     const double ratios[] = { 0.5, 0.75, 1.0, 1.5, 2.0, 3.0 };
 
     for (auto ratio : ratios)
     {
+        TimeStretchProcessor processor;
+        ASSERT_TRUE (processor.prepare (spec).wasOk());
+
+        // Set input provider
+        auto provider = [&] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
+        {
+            muteHead = 0;
+            muteTail = 0;
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                for (int i = 0; i < numFrames; ++i)
+                {
+                    const int srcIndex = static_cast<int> ((beginFrame + i) % maximumBlockSize);
+                    destChannels[ch][i] = inputBuffer.getReadPointer (ch)[srcIndex];
+                }
+            }
+        };
+        processor.setInputProvider (provider);
+
         processor.setTimeRatio (ratio);
-        processor.reset();
 
         auto result = processor.process (inputBuffer.getArrayOfReadPointers(),
                                          inputBuffer.getNumSamples(),
@@ -875,31 +874,30 @@ TEST_F (TimeStretchProcessorTests, DifferentTimeRatios)
 
 TEST_F (TimeStretchProcessorTests, DifferentPitchRatios)
 {
-    TimeStretchProcessor processor;
-    ASSERT_TRUE (processor.prepare (spec).wasOk());
-
-    // Set input provider
-    auto provider = [&] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
-    {
-        muteHead = 0;
-        muteTail = 0;
-        for (int ch = 0; ch < numChannels; ++ch)
-        {
-            for (int i = 0; i < numFrames; ++i)
-            {
-                const int srcIndex = static_cast<int> ((beginFrame + i) % maximumBlockSize);
-                destChannels[ch][i] = inputBuffer.getReadPointer (ch)[srcIndex];
-            }
-        }
-    };
-    processor.setInputProvider (provider);
-
     const double ratios[] = { 0.5, 0.75, 1.0, 1.5, 2.0 };
 
     for (auto ratio : ratios)
     {
+        TimeStretchProcessor processor;
+        ASSERT_TRUE (processor.prepare (spec).wasOk());
+
+        // Set input provider
+        auto provider = [&] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
+        {
+            muteHead = 0;
+            muteTail = 0;
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                for (int i = 0; i < numFrames; ++i)
+                {
+                    const int srcIndex = static_cast<int> ((beginFrame + i) % maximumBlockSize);
+                    destChannels[ch][i] = inputBuffer.getReadPointer (ch)[srcIndex];
+                }
+            }
+        };
+        processor.setInputProvider (provider);
+
         processor.setPitchRatio (ratio);
-        processor.reset();
 
         auto result = processor.process (inputBuffer.getArrayOfReadPointers(),
                                          inputBuffer.getNumSamples(),
