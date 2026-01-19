@@ -288,7 +288,7 @@ Color AudioThumbnail::getChannelColor (int channelIndex) const
         0xFF2ECC71, // Green
     };
 
-    return Color (colors[channelIndex % 6]);
+    return Color (colors[std::abs (channelIndex) % 6]);
 }
 
 //==============================================================================

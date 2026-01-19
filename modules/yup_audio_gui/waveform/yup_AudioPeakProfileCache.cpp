@@ -253,20 +253,17 @@ String AudioPeakProfileCache::generateCacheKey (const File& audioFile)
 
 String AudioPeakProfileCache::generateCacheKey (const AudioBuffer<float>& buffer, double sampleRate)
 {
-    int64 hash = buffer.getNumSamples();
-    hash = hash * 31 + buffer.getNumChannels();
-    hash = hash * 31 + static_cast<int64> (sampleRate * 1000.0);
+    uint64 hash = static_cast<uint64> (buffer.getNumSamples());
+    hash = hash * 31 + static_cast<uint64> (buffer.getNumChannels());
+    hash = hash * 31 + static_cast<uint64> (std::abs (sampleRate) * 1000.0);
 
-    // Sample buffer content at intervals for unique identification
     for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
     {
         const float* data = buffer.getReadPointer (channel);
         const int numSamples = buffer.getNumSamples();
 
         for (int i = 0; i < jmin (1000, numSamples); i += 100)
-        {
-            hash = hash * 31 + static_cast<int64> (data[i] * 1000000.0f);
-        }
+            hash = hash * 31 + static_cast<uint64> (std::abs (data[i]) * 1000000.0f);
     }
 
     return String::toHexString (hash);
@@ -279,9 +276,7 @@ int64 AudioPeakProfileCache::getDiskCacheSize() const
 
     int64 totalSize = 0;
     for (const auto& entry : RangedDirectoryIterator (cacheDirectory, false, "*.yuppeaks"))
-    {
         totalSize += entry.getFile().getSize();
-    }
 
     return totalSize;
 }
@@ -341,7 +336,6 @@ void AudioPeakProfileCache::notifyProfileReady (const String& cacheKey, std::sha
         });
     };
 
-#if YUP_MODAL_LOOPS_PERMITTED
     if (auto* mm = MessageManager::getInstanceWithoutCreating())
     {
         if (mm->isThisTheMessageThread())
@@ -350,13 +344,10 @@ void AudioPeakProfileCache::notifyProfileReady (const String& cacheKey, std::sha
             return;
         }
 
-        // Always use callAsync when not on message thread - don't fall back to synchronous call
         MessageManager::callAsync (notify);
         return;
     }
-#endif
 
-    // Fallback for when message manager is not available
     notify();
 }
 
@@ -370,7 +361,6 @@ void AudioPeakProfileCache::notifyProfileProgress (const String& cacheKey, doubl
         });
     };
 
-#if YUP_MODAL_LOOPS_PERMITTED
     if (auto* mm = MessageManager::getInstanceWithoutCreating())
     {
         if (mm->isThisTheMessageThread())
@@ -379,13 +369,10 @@ void AudioPeakProfileCache::notifyProfileProgress (const String& cacheKey, doubl
             return;
         }
 
-        // Always use callAsync when not on message thread - don't fall back to synchronous call
         MessageManager::callAsync (notify);
         return;
     }
-#endif
 
-    // Fallback for when message manager is not available
     notify();
 }
 

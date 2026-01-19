@@ -42,7 +42,7 @@ protected:
 
         // Initialize test buffers
         inputBuffer.setSize (numChannels, maximumBlockSize);
-        outputBuffer.setSize (numChannels, maximumBlockSize * 2);
+        outputBuffer.setSize (numChannels, maximumBlockSize * 4);
 
         // Fill input with a test signal (sine wave + noise)
         for (int ch = 0; ch < numChannels; ++ch)
@@ -409,7 +409,7 @@ TEST_F (TimeStretchProcessorTests, SetInputProvider)
     ASSERT_TRUE (processor.prepare (spec).wasOk());
 
     bool providerCalled = false;
-    auto provider = [&] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
+    auto provider = [&providerCalled, numChannels = this->numChannels, sampleRate = this->sampleRate] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
     {
         providerCalled = true;
         muteHead = 0;
@@ -459,17 +459,40 @@ TEST_F (TimeStretchProcessorTests, ProcessWithValidInput)
     ASSERT_TRUE (processor.prepare (spec).wasOk());
 
     // Set input provider
-    auto provider = [&] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
+    auto provider = [this] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
     {
-        muteHead = 0;
-        muteTail = 0;
+        (void) channelStride;
+
+        const int64 totalLength = maximumBlockSize;
+        const int64 clampedBegin = jlimit<int64> (0, totalLength, beginFrame);
+        const int64 clampedEnd = jlimit<int64> (0, totalLength, beginFrame + numFrames);
+
+        if (clampedBegin >= clampedEnd)
+        {
+            muteHead = numFrames;
+            muteTail = 0;
+            for (int ch = 0; ch < numChannels; ++ch)
+                std::fill (destChannels[ch], destChannels[ch] + numFrames, 0.0f);
+            return;
+        }
+
+        muteHead = static_cast<int> (clampedBegin - beginFrame);
+        muteTail = static_cast<int> ((beginFrame + numFrames) - clampedEnd);
+        const int validFrames = static_cast<int> (clampedEnd - clampedBegin);
+
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            for (int i = 0; i < numFrames; ++i)
-            {
-                const int srcIndex = static_cast<int> ((beginFrame + i) % maximumBlockSize);
-                destChannels[ch][i] = inputBuffer.getReadPointer (ch)[srcIndex];
-            }
+            if (muteHead > 0)
+                std::fill (destChannels[ch], destChannels[ch] + muteHead, 0.0f);
+
+            const float* srcData = inputBuffer.getReadPointer (ch);
+            for (int i = 0; i < validFrames; ++i)
+                destChannels[ch][muteHead + i] = srcData[static_cast<int> (clampedBegin + i)];
+
+            if (muteTail > 0)
+                std::fill (destChannels[ch] + muteHead + validFrames,
+                           destChannels[ch] + numFrames,
+                           0.0f);
         }
     };
     processor.setInputProvider (provider);
@@ -575,17 +598,40 @@ TEST_F (TimeStretchProcessorTests, ProcessAudioBufferVariant)
     ASSERT_TRUE (processor.prepare (spec).wasOk());
 
     // Set input provider
-    auto provider = [&] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
+    auto provider = [this] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
     {
-        muteHead = 0;
-        muteTail = 0;
+        (void) channelStride;
+
+        const int64 totalLength = maximumBlockSize;
+        const int64 clampedBegin = jlimit<int64> (0, totalLength, beginFrame);
+        const int64 clampedEnd = jlimit<int64> (0, totalLength, beginFrame + numFrames);
+
+        if (clampedBegin >= clampedEnd)
+        {
+            muteHead = numFrames;
+            muteTail = 0;
+            for (int ch = 0; ch < numChannels; ++ch)
+                std::fill (destChannels[ch], destChannels[ch] + numFrames, 0.0f);
+            return;
+        }
+
+        muteHead = static_cast<int> (clampedBegin - beginFrame);
+        muteTail = static_cast<int> ((beginFrame + numFrames) - clampedEnd);
+        const int validFrames = static_cast<int> (clampedEnd - clampedBegin);
+
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            for (int i = 0; i < numFrames; ++i)
-            {
-                const int srcIndex = static_cast<int> ((beginFrame + i) % maximumBlockSize);
-                destChannels[ch][i] = inputBuffer.getReadPointer (ch)[srcIndex];
-            }
+            if (muteHead > 0)
+                std::fill (destChannels[ch], destChannels[ch] + muteHead, 0.0f);
+
+            const float* srcData = inputBuffer.getReadPointer (ch);
+            for (int i = 0; i < validFrames; ++i)
+                destChannels[ch][muteHead + i] = srcData[static_cast<int> (clampedBegin + i)];
+
+            if (muteTail > 0)
+                std::fill (destChannels[ch] + muteHead + validFrames,
+                           destChannels[ch] + numFrames,
+                           0.0f);
         }
     };
     processor.setInputProvider (provider);
@@ -628,17 +674,40 @@ TEST_F (TimeStretchProcessorTests, ProcessUsingTimeRatio)
     ASSERT_TRUE (processor.prepare (spec).wasOk());
 
     // Set input provider
-    auto provider = [&] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
+    auto provider = [this] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
     {
-        muteHead = 0;
-        muteTail = 0;
+        (void) channelStride;
+
+        const int64 totalLength = maximumBlockSize;
+        const int64 clampedBegin = jlimit<int64> (0, totalLength, beginFrame);
+        const int64 clampedEnd = jlimit<int64> (0, totalLength, beginFrame + numFrames);
+
+        if (clampedBegin >= clampedEnd)
+        {
+            muteHead = numFrames;
+            muteTail = 0;
+            for (int ch = 0; ch < numChannels; ++ch)
+                std::fill (destChannels[ch], destChannels[ch] + numFrames, 0.0f);
+            return;
+        }
+
+        muteHead = static_cast<int> (clampedBegin - beginFrame);
+        muteTail = static_cast<int> ((beginFrame + numFrames) - clampedEnd);
+        const int validFrames = static_cast<int> (clampedEnd - clampedBegin);
+
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            for (int i = 0; i < numFrames; ++i)
-            {
-                const int srcIndex = static_cast<int> ((beginFrame + i) % maximumBlockSize);
-                destChannels[ch][i] = inputBuffer.getReadPointer (ch)[srcIndex];
-            }
+            if (muteHead > 0)
+                std::fill (destChannels[ch], destChannels[ch] + muteHead, 0.0f);
+
+            const float* srcData = inputBuffer.getReadPointer (ch);
+            for (int i = 0; i < validFrames; ++i)
+                destChannels[ch][muteHead + i] = srcData[static_cast<int> (clampedBegin + i)];
+
+            if (muteTail > 0)
+                std::fill (destChannels[ch] + muteHead + validFrames,
+                           destChannels[ch] + numFrames,
+                           0.0f);
         }
     };
     processor.setInputProvider (provider);
@@ -675,17 +744,40 @@ TEST_F (TimeStretchProcessorTests, ProcessUsingTimeRatioAudioBuffer)
     ASSERT_TRUE (processor.prepare (spec).wasOk());
 
     // Set input provider
-    auto provider = [&] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
+    auto provider = [this] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
     {
-        muteHead = 0;
-        muteTail = 0;
+        (void) channelStride;
+
+        const int64 totalLength = maximumBlockSize;
+        const int64 clampedBegin = jlimit<int64> (0, totalLength, beginFrame);
+        const int64 clampedEnd = jlimit<int64> (0, totalLength, beginFrame + numFrames);
+
+        if (clampedBegin >= clampedEnd)
+        {
+            muteHead = numFrames;
+            muteTail = 0;
+            for (int ch = 0; ch < numChannels; ++ch)
+                std::fill (destChannels[ch], destChannels[ch] + numFrames, 0.0f);
+            return;
+        }
+
+        muteHead = static_cast<int> (clampedBegin - beginFrame);
+        muteTail = static_cast<int> ((beginFrame + numFrames) - clampedEnd);
+        const int validFrames = static_cast<int> (clampedEnd - clampedBegin);
+
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            for (int i = 0; i < numFrames; ++i)
-            {
-                const int srcIndex = static_cast<int> ((beginFrame + i) % maximumBlockSize);
-                destChannels[ch][i] = inputBuffer.getReadPointer (ch)[srcIndex];
-            }
+            if (muteHead > 0)
+                std::fill (destChannels[ch], destChannels[ch] + muteHead, 0.0f);
+
+            const float* srcData = inputBuffer.getReadPointer (ch);
+            for (int i = 0; i < validFrames; ++i)
+                destChannels[ch][muteHead + i] = srcData[static_cast<int> (clampedBegin + i)];
+
+            if (muteTail > 0)
+                std::fill (destChannels[ch] + muteHead + validFrames,
+                           destChannels[ch] + numFrames,
+                           0.0f);
         }
     };
     processor.setInputProvider (provider);
@@ -718,17 +810,40 @@ TEST_F (TimeStretchProcessorTests, ResetState)
     ASSERT_TRUE (processor.prepare (spec).wasOk());
 
     // Set input provider
-    auto provider = [&] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
+    auto provider = [this] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
     {
-        muteHead = 0;
-        muteTail = 0;
+        (void) channelStride;
+
+        const int64 totalLength = maximumBlockSize;
+        const int64 clampedBegin = jlimit<int64> (0, totalLength, beginFrame);
+        const int64 clampedEnd = jlimit<int64> (0, totalLength, beginFrame + numFrames);
+
+        if (clampedBegin >= clampedEnd)
+        {
+            muteHead = numFrames;
+            muteTail = 0;
+            for (int ch = 0; ch < numChannels; ++ch)
+                std::fill (destChannels[ch], destChannels[ch] + numFrames, 0.0f);
+            return;
+        }
+
+        muteHead = static_cast<int> (clampedBegin - beginFrame);
+        muteTail = static_cast<int> ((beginFrame + numFrames) - clampedEnd);
+        const int validFrames = static_cast<int> (clampedEnd - clampedBegin);
+
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            for (int i = 0; i < numFrames; ++i)
-            {
-                const int srcIndex = static_cast<int> ((beginFrame + i) % maximumBlockSize);
-                destChannels[ch][i] = inputBuffer.getReadPointer (ch)[srcIndex];
-            }
+            if (muteHead > 0)
+                std::fill (destChannels[ch], destChannels[ch] + muteHead, 0.0f);
+
+            const float* srcData = inputBuffer.getReadPointer (ch);
+            for (int i = 0; i < validFrames; ++i)
+                destChannels[ch][muteHead + i] = srcData[static_cast<int> (clampedBegin + i)];
+
+            if (muteTail > 0)
+                std::fill (destChannels[ch] + muteHead + validFrames,
+                           destChannels[ch] + numFrames,
+                           0.0f);
         }
     };
     processor.setInputProvider (provider);
@@ -768,17 +883,40 @@ TEST_F (TimeStretchProcessorTests, MultipleProcessCalls)
     ASSERT_TRUE (processor.prepare (spec).wasOk());
 
     // Set input provider
-    auto provider = [&] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
+    auto provider = [this] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
     {
-        muteHead = 0;
-        muteTail = 0;
+        (void) channelStride;
+
+        const int64 totalLength = maximumBlockSize;
+        const int64 clampedBegin = jlimit<int64> (0, totalLength, beginFrame);
+        const int64 clampedEnd = jlimit<int64> (0, totalLength, beginFrame + numFrames);
+
+        if (clampedBegin >= clampedEnd)
+        {
+            muteHead = numFrames;
+            muteTail = 0;
+            for (int ch = 0; ch < numChannels; ++ch)
+                std::fill (destChannels[ch], destChannels[ch] + numFrames, 0.0f);
+            return;
+        }
+
+        muteHead = static_cast<int> (clampedBegin - beginFrame);
+        muteTail = static_cast<int> ((beginFrame + numFrames) - clampedEnd);
+        const int validFrames = static_cast<int> (clampedEnd - clampedBegin);
+
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            for (int i = 0; i < numFrames; ++i)
-            {
-                const int srcIndex = static_cast<int> ((beginFrame + i) % maximumBlockSize);
-                destChannels[ch][i] = inputBuffer.getReadPointer (ch)[srcIndex];
-            }
+            if (muteHead > 0)
+                std::fill (destChannels[ch], destChannels[ch] + muteHead, 0.0f);
+
+            const float* srcData = inputBuffer.getReadPointer (ch);
+            for (int i = 0; i < validFrames; ++i)
+                destChannels[ch][muteHead + i] = srcData[static_cast<int> (clampedBegin + i)];
+
+            if (muteTail > 0)
+                std::fill (destChannels[ch] + muteHead + validFrames,
+                           destChannels[ch] + numFrames,
+                           0.0f);
         }
     };
     processor.setInputProvider (provider);
@@ -804,17 +942,40 @@ TEST_F (TimeStretchProcessorTests, ChangeParametersDuringProcessing)
     ASSERT_TRUE (processor.prepare (spec).wasOk());
 
     // Set input provider
-    auto provider = [&] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
+    auto provider = [this] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
     {
-        muteHead = 0;
-        muteTail = 0;
+        (void) channelStride;
+
+        const int64 totalLength = maximumBlockSize;
+        const int64 clampedBegin = jlimit<int64> (0, totalLength, beginFrame);
+        const int64 clampedEnd = jlimit<int64> (0, totalLength, beginFrame + numFrames);
+
+        if (clampedBegin >= clampedEnd)
+        {
+            muteHead = numFrames;
+            muteTail = 0;
+            for (int ch = 0; ch < numChannels; ++ch)
+                std::fill (destChannels[ch], destChannels[ch] + numFrames, 0.0f);
+            return;
+        }
+
+        muteHead = static_cast<int> (clampedBegin - beginFrame);
+        muteTail = static_cast<int> ((beginFrame + numFrames) - clampedEnd);
+        const int validFrames = static_cast<int> (clampedEnd - clampedBegin);
+
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            for (int i = 0; i < numFrames; ++i)
-            {
-                const int srcIndex = static_cast<int> ((beginFrame + i) % maximumBlockSize);
-                destChannels[ch][i] = inputBuffer.getReadPointer (ch)[srcIndex];
-            }
+            if (muteHead > 0)
+                std::fill (destChannels[ch], destChannels[ch] + muteHead, 0.0f);
+
+            const float* srcData = inputBuffer.getReadPointer (ch);
+            for (int i = 0; i < validFrames; ++i)
+                destChannels[ch][muteHead + i] = srcData[static_cast<int> (clampedBegin + i)];
+
+            if (muteTail > 0)
+                std::fill (destChannels[ch] + muteHead + validFrames,
+                           destChannels[ch] + numFrames,
+                           0.0f);
         }
     };
     processor.setInputProvider (provider);
@@ -841,18 +1002,41 @@ TEST_F (TimeStretchProcessorTests, DifferentTimeRatios)
     TimeStretchProcessor processor;
     ASSERT_TRUE (processor.prepare (spec).wasOk());
 
-    // Set input provider once
-    auto provider = [&] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
+    // Set input provider
+    auto provider = [this] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
     {
-        muteHead = 0;
-        muteTail = 0;
+        (void) channelStride;
+
+        const int64 totalLength = maximumBlockSize;
+        const int64 clampedBegin = jlimit<int64> (0, totalLength, beginFrame);
+        const int64 clampedEnd = jlimit<int64> (0, totalLength, beginFrame + numFrames);
+
+        if (clampedBegin >= clampedEnd)
+        {
+            muteHead = numFrames;
+            muteTail = 0;
+            for (int ch = 0; ch < numChannels; ++ch)
+                std::fill (destChannels[ch], destChannels[ch] + numFrames, 0.0f);
+            return;
+        }
+
+        muteHead = static_cast<int> (clampedBegin - beginFrame);
+        muteTail = static_cast<int> ((beginFrame + numFrames) - clampedEnd);
+        const int validFrames = static_cast<int> (clampedEnd - clampedBegin);
+
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            for (int i = 0; i < numFrames; ++i)
-            {
-                const int srcIndex = static_cast<int> ((beginFrame + i) % maximumBlockSize);
-                destChannels[ch][i] = inputBuffer.getReadPointer (ch)[srcIndex];
-            }
+            if (muteHead > 0)
+                std::fill (destChannels[ch], destChannels[ch] + muteHead, 0.0f);
+
+            const float* srcData = inputBuffer.getReadPointer (ch);
+            for (int i = 0; i < validFrames; ++i)
+                destChannels[ch][muteHead + i] = srcData[static_cast<int> (clampedBegin + i)];
+
+            if (muteTail > 0)
+                std::fill (destChannels[ch] + muteHead + validFrames,
+                           destChannels[ch] + numFrames,
+                           0.0f);
         }
     };
     processor.setInputProvider (provider);
@@ -878,18 +1062,41 @@ TEST_F (TimeStretchProcessorTests, DifferentPitchRatios)
     TimeStretchProcessor processor;
     ASSERT_TRUE (processor.prepare (spec).wasOk());
 
-    // Set input provider once
-    auto provider = [&] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
+    // Set input provider
+    auto provider = [this] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
     {
-        muteHead = 0;
-        muteTail = 0;
+        (void) channelStride;
+
+        const int64 totalLength = maximumBlockSize;
+        const int64 clampedBegin = jlimit<int64> (0, totalLength, beginFrame);
+        const int64 clampedEnd = jlimit<int64> (0, totalLength, beginFrame + numFrames);
+
+        if (clampedBegin >= clampedEnd)
+        {
+            muteHead = numFrames;
+            muteTail = 0;
+            for (int ch = 0; ch < numChannels; ++ch)
+                std::fill (destChannels[ch], destChannels[ch] + numFrames, 0.0f);
+            return;
+        }
+
+        muteHead = static_cast<int> (clampedBegin - beginFrame);
+        muteTail = static_cast<int> ((beginFrame + numFrames) - clampedEnd);
+        const int validFrames = static_cast<int> (clampedEnd - clampedBegin);
+
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            for (int i = 0; i < numFrames; ++i)
-            {
-                const int srcIndex = static_cast<int> ((beginFrame + i) % maximumBlockSize);
-                destChannels[ch][i] = inputBuffer.getReadPointer (ch)[srcIndex];
-            }
+            if (muteHead > 0)
+                std::fill (destChannels[ch], destChannels[ch] + muteHead, 0.0f);
+
+            const float* srcData = inputBuffer.getReadPointer (ch);
+            for (int i = 0; i < validFrames; ++i)
+                destChannels[ch][muteHead + i] = srcData[static_cast<int> (clampedBegin + i)];
+
+            if (muteTail > 0)
+                std::fill (destChannels[ch] + muteHead + validFrames,
+                           destChannels[ch] + numFrames,
+                           0.0f);
         }
     };
     processor.setInputProvider (provider);
@@ -916,17 +1123,40 @@ TEST_F (TimeStretchProcessorTests, IndependentTimeAndPitchShift)
     ASSERT_TRUE (processor.prepare (spec).wasOk());
 
     // Set input provider
-    auto provider = [&] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
+    auto provider = [this] (int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
     {
-        muteHead = 0;
-        muteTail = 0;
+        (void) channelStride;
+
+        const int64 totalLength = maximumBlockSize;
+        const int64 clampedBegin = jlimit<int64> (0, totalLength, beginFrame);
+        const int64 clampedEnd = jlimit<int64> (0, totalLength, beginFrame + numFrames);
+
+        if (clampedBegin >= clampedEnd)
+        {
+            muteHead = numFrames;
+            muteTail = 0;
+            for (int ch = 0; ch < numChannels; ++ch)
+                std::fill (destChannels[ch], destChannels[ch] + numFrames, 0.0f);
+            return;
+        }
+
+        muteHead = static_cast<int> (clampedBegin - beginFrame);
+        muteTail = static_cast<int> ((beginFrame + numFrames) - clampedEnd);
+        const int validFrames = static_cast<int> (clampedEnd - clampedBegin);
+
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            for (int i = 0; i < numFrames; ++i)
-            {
-                const int srcIndex = static_cast<int> ((beginFrame + i) % maximumBlockSize);
-                destChannels[ch][i] = inputBuffer.getReadPointer (ch)[srcIndex];
-            }
+            if (muteHead > 0)
+                std::fill (destChannels[ch], destChannels[ch] + muteHead, 0.0f);
+
+            const float* srcData = inputBuffer.getReadPointer (ch);
+            for (int i = 0; i < validFrames; ++i)
+                destChannels[ch][muteHead + i] = srcData[static_cast<int> (clampedBegin + i)];
+
+            if (muteTail > 0)
+                std::fill (destChannels[ch] + muteHead + validFrames,
+                           destChannels[ch] + numFrames,
+                           0.0f);
         }
     };
     processor.setInputProvider (provider);
