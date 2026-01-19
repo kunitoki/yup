@@ -92,11 +92,33 @@
 #define YUP_ENABLE_OOURA 1
 #endif
 
+/** Config: YUP_ENABLE_BUNGEE
+
+    Enable Bungee backend for time-stretching/pitch-shifting.
+*/
+#ifndef YUP_ENABLE_BUNGEE
+#if YUP_MODULE_AVAILABLE_bungee_library
+#define YUP_ENABLE_BUNGEE 1
+#else
+#define YUP_ENABLE_BUNGEE 0
+#endif
+#endif
+
 //==============================================================================
 
+#if YUP_ENABLE_BUNGEE && ! YUP_MODULE_AVAILABLE_bungee_library
+#undef YUP_ENABLE_BUNGEE
+#define YUP_ENABLE_BUNGEE 0
+#endif
+
+//==============================================================================
+
+#include <algorithm>
+#include <functional>
 #include <array>
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -151,3 +173,6 @@
 
 // Convolution processors
 #include "convolution/yup_PartitionedConvolver.h"
+
+// Time-stretching and pitch-shifting
+#include "stretching/yup_TimeStretchProcessor.h"

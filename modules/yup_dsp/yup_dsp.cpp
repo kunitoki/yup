@@ -37,6 +37,12 @@
 
 //==============================================================================
 
+#if YUP_ENABLE_BUNGEE
+#include <bungee_library/bungee_library.h>
+#endif
+
+//==============================================================================
+
 #if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_VDSP && (YUP_MAC || YUP_IOS)
 #define YUP_FFT_USING_VDSP 1
 #define YUP_FFT_FOUND_BACKEND 1
@@ -80,6 +86,7 @@
 #include "metering/yup_KMeterState.cpp"
 #include "designers/yup_FilterDesigner.cpp"
 #include "convolution/yup_PartitionedConvolver.cpp"
+#include "stretching/yup_TimeStretchProcessor.cpp"
 #include "utilities/yup_DspMath.cpp"
 
 //==============================================================================

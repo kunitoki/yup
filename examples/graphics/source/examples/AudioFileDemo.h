@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2025 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include <atomic>
+#include <cmath>
 #include <memory>
 #include <vector>
 
@@ -29,6 +31,7 @@
 #include <yup_audio_formats/yup_audio_formats.h>
 #include <yup_audio_gui/yup_audio_gui.h>
 #include <yup_core/yup_core.h>
+#include <yup_dsp/yup_dsp.h>
 #include <yup_gui/yup_gui.h>
 
 //==============================================================================
@@ -212,6 +215,278 @@ private:
 };
 
 //==============================================================================
+/**
+    Wraps a PositionableAudioSource with time-stretching and pitch-shifting.
+*/
+class TimeStretchAudioSource : public yup::PositionableAudioSource
+{
+public:
+    TimeStretchAudioSource (yup::PositionableAudioSource* sourceToWrap, int numChannelsToUse)
+        : source (sourceToWrap)
+        , numChannels (numChannelsToUse)
+    {
+    }
+
+    void prepareToPlay (int samplesPerBlockExpected, double newSampleRate) override
+    {
+        sampleRate = newSampleRate;
+        maxInputBlockSize = static_cast<int> (std::ceil (static_cast<double> (samplesPerBlockExpected) / minTimeRatio));
+        maxInputBlockSize = yup::jmax (maxInputBlockSize, samplesPerBlockExpected);
+        outputPointers.resize (static_cast<size_t> (numChannels));
+
+        if (source != nullptr)
+            source->prepareToPlay (maxInputBlockSize, newSampleRate);
+
+        yup::TimeStretchProcessor::ProcessSpec spec;
+        spec.inputSampleRate = newSampleRate;
+        spec.outputSampleRate = newSampleRate;
+        spec.maximumBlockSize = maxInputBlockSize;
+        spec.numChannels = numChannels;
+
+        const auto result = timeStretchProcessor.prepare (spec);
+        timeStretchAvailable = result.wasOk();
+
+        if (timeStretchAvailable)
+        {
+            timeStretchProcessor.setTimeRatio (timeRatio);
+            timeStretchProcessor.setPitchRatio (pitchRatio);
+            setupInputProvider();
+        }
+    }
+
+    void releaseResources() override
+    {
+        if (source != nullptr)
+            source->releaseResources();
+    }
+
+    void getNextAudioBlock (const yup::AudioSourceChannelInfo& bufferToFill) override
+    {
+        if (source == nullptr)
+        {
+            bufferToFill.clearActiveBufferRegion();
+            return;
+        }
+
+        applyPendingParameters();
+
+        const int outputFrames = bufferToFill.numSamples;
+        if (outputFrames <= 0)
+            return;
+
+        if (! timeStretchAvailable)
+        {
+            source->getNextAudioBlock (bufferToFill);
+            outputPosition += outputFrames;
+            currentInputPosition.store (source->getNextReadPosition());
+            return;
+        }
+
+        const int channelsToProcess = yup::jmin (numChannels, bufferToFill.buffer->getNumChannels());
+        for (int channel = 0; channel < channelsToProcess; ++channel)
+            outputPointers[static_cast<size_t> (channel)] = bufferToFill.buffer->getWritePointer (channel, bufferToFill.startSample);
+
+        const auto result = timeStretchProcessor.process (nullptr, 0, outputPointers.data(), outputFrames);
+
+        if (result.failed())
+        {
+            bufferToFill.clearActiveBufferRegion();
+        }
+        else
+        {
+            const int renderedFrames = result.getValue();
+            if (renderedFrames < outputFrames)
+            {
+                const int framesToClear = outputFrames - renderedFrames;
+                for (int channel = 0; channel < channelsToProcess; ++channel)
+                    bufferToFill.buffer->clear (channel,
+                                                bufferToFill.startSample + renderedFrames,
+                                                framesToClear);
+            }
+        }
+
+        outputPosition += outputFrames;
+    }
+
+    void setNextReadPosition (yup::int64 newPosition) override
+    {
+        const auto oldPosition = outputPosition;
+        outputPosition = newPosition;
+
+        const auto inputPos = getInputPositionForOutput (newPosition);
+
+        if (source != nullptr)
+            source->setNextReadPosition (inputPos);
+
+        currentInputPosition.store (inputPos);
+
+        // Only reset if this is a discontinuous seek
+        if (timeStretchAvailable && std::abs (newPosition - oldPosition) > 64)
+            timeStretchProcessor.setInputPosition (inputPos);
+    }
+
+    yup::int64 getNextReadPosition() const override
+    {
+        return outputPosition;
+    }
+
+    yup::int64 getTotalLength() const override
+    {
+        if (source == nullptr)
+            return 0;
+
+        const auto ratio = timeStretchAvailable ? timeRatio.load() : 1.0;
+        return static_cast<yup::int64> (std::round (static_cast<double> (source->getTotalLength()) * ratio));
+    }
+
+    bool isLooping() const override
+    {
+        return source != nullptr ? source->isLooping() : false;
+    }
+
+    void setLooping (bool shouldLoop) override
+    {
+        if (source != nullptr)
+            source->setLooping (shouldLoop);
+    }
+
+    void setTimeRatio (double newTimeRatio)
+    {
+        const auto clamped = yup::jlimit (minTimeRatio, maxTimeRatio, newTimeRatio);
+        if (timeRatio.load() == clamped)
+            return;
+
+        timeRatio.store (clamped);
+        parametersDirty.store (true);
+    }
+
+    void setPitchRatio (double newPitchRatio)
+    {
+        const auto clamped = yup::jlimit (minPitchRatio, maxPitchRatio, newPitchRatio);
+        if (pitchRatio.load() == clamped)
+            return;
+
+        pitchRatio.store (clamped);
+        parametersDirty.store (true);
+    }
+
+    double getTimeRatio() const noexcept { return timeRatio.load(); }
+
+    double getPitchRatio() const noexcept { return pitchRatio.load(); }
+
+    yup::int64 getInputPosition() const noexcept { return currentInputPosition.load(); }
+
+private:
+    void setupInputProvider()
+    {
+        if (source == nullptr)
+            return;
+
+        const int maxFrames = timeStretchProcessor.getMaxInputFrameCount();
+        tempBuffer.setSize (numChannels, maxFrames);
+
+        timeStretchProcessor.setInputProvider ([this] (yup::int64 beginFrame,
+                                                       int numFrames,
+                                                       float* const* destChannels,
+                                                       int channelStride,
+                                                       int& muteHead,
+                                                       int& muteTail)
+        {
+            (void) channelStride;
+            muteHead = 0;
+            muteTail = 0;
+
+            // Track the center of the grain as the current input position
+            currentInputPosition.store (beginFrame + numFrames / 2);
+
+            if (source == nullptr || numFrames <= 0)
+            {
+                muteHead = numFrames;
+                return;
+            }
+
+            const auto totalLength = source->getTotalLength();
+            const yup::int64 clampedBegin = yup::jlimit<yup::int64> (0, totalLength, beginFrame);
+            const yup::int64 clampedEnd = yup::jlimit<yup::int64> (0, totalLength, beginFrame + numFrames);
+
+            if (clampedBegin >= clampedEnd)
+            {
+                muteHead = numFrames;
+                for (int ch = 0; ch < numChannels; ++ch)
+                    std::fill (destChannels[ch], destChannels[ch] + numFrames, 0.0f);
+                return;
+            }
+
+            muteHead = static_cast<int> (clampedBegin - beginFrame);
+            muteTail = static_cast<int> ((beginFrame + numFrames) - clampedEnd);
+            const int validFrames = static_cast<int> (clampedEnd - clampedBegin);
+
+            source->setNextReadPosition (clampedBegin);
+            yup::AudioSourceChannelInfo info (&tempBuffer, 0, validFrames);
+            source->getNextAudioBlock (info);
+
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                if (muteHead > 0)
+                    std::fill (destChannels[ch], destChannels[ch] + muteHead, 0.0f);
+
+                std::copy (tempBuffer.getReadPointer (ch),
+                           tempBuffer.getReadPointer (ch) + validFrames,
+                           destChannels[ch] + muteHead);
+
+                if (muteTail > 0)
+                    std::fill (destChannels[ch] + muteHead + validFrames,
+                               destChannels[ch] + numFrames,
+                               0.0f);
+            }
+        });
+    }
+
+    void applyPendingParameters()
+    {
+        if (! timeStretchAvailable)
+            return;
+
+        if (! parametersDirty.exchange (false))
+            return;
+
+        const auto newTimeRatio = timeRatio.load();
+        const auto newPitchRatio = pitchRatio.load();
+        timeStretchProcessor.setTimeRatio (newTimeRatio);
+        timeStretchProcessor.setPitchRatio (newPitchRatio);
+    }
+
+    yup::int64 getInputPositionForOutput (yup::int64 outputFrames) const
+    {
+        const auto ratio = timeStretchAvailable ? timeRatio.load() : 1.0;
+        return static_cast<yup::int64> (std::floor (static_cast<double> (outputFrames) / ratio));
+    }
+
+    yup::PositionableAudioSource* source = nullptr;
+    int numChannels = 0;
+    int maxInputBlockSize = 0;
+    double sampleRate = 0.0;
+    yup::int64 outputPosition = 0;
+    bool timeStretchAvailable = false;
+
+    std::atomic<double> timeRatio { 1.0 };
+    std::atomic<double> pitchRatio { 1.0 };
+    std::atomic<bool> parametersDirty { false };
+    std::atomic<yup::int64> currentInputPosition { 0 };
+
+    yup::AudioBuffer<float> tempBuffer;
+    std::vector<float*> outputPointers;
+    yup::TimeStretchProcessor timeStretchProcessor;
+
+    static constexpr double minTimeRatio = 0.5;
+    static constexpr double maxTimeRatio = 2.0;
+    static constexpr double minPitchRatio = 0.5;
+    static constexpr double maxPitchRatio = 2.0;
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TimeStretchAudioSource)
+};
+
+//==============================================================================
 
 /**
     Demonstrates loading, visualizing, playing, and exporting audio files.
@@ -249,6 +524,8 @@ public:
         // Configure the waveform cache
         waveformCache->setThreadPool (&waveformThreadPool);
 
+        timeStretchSupported = yup::TimeStretchProcessor::isBackendAvailable (yup::TimeStretchProcessor::Backend::automatic);
+
         setupUi();
     }
 
@@ -265,7 +542,7 @@ public:
     void resized() override
     {
         auto bounds = getLocalBounds().reduced (8);
-        auto header = bounds.removeFromTop (122);
+        auto header = bounds.removeFromTop (156);
 
         const int buttonHeight = 28;
         const int buttonWidth = 100;
@@ -312,6 +589,20 @@ public:
         modeRow.removeFromLeft (buttonMargin);
         totalButton.setBounds (modeRow.removeFromLeft (mediumButtonWidth));
 
+        // Fifth row for time/pitch controls
+        header.removeFromTop (4);
+        auto stretchRow = header.removeFromTop (buttonHeight);
+        const int sliderLabelWidth = 70;
+        const int sliderWidth = 180;
+
+        timeLabel.setBounds (stretchRow.removeFromLeft (sliderLabelWidth));
+        stretchRow.removeFromLeft (buttonMargin);
+        timeStretchSlider.setBounds (stretchRow.removeFromLeft (sliderWidth));
+        stretchRow.removeFromLeft (buttonMargin * 2);
+        pitchLabel.setBounds (stretchRow.removeFromLeft (sliderLabelWidth));
+        stretchRow.removeFromLeft (buttonMargin);
+        pitchShiftSlider.setBounds (stretchRow.removeFromLeft (sliderWidth));
+
         bounds.removeFromTop (6);
         infoLabel.setBounds (bounds.removeFromTop (22));
         statusLabel.setBounds (bounds.removeFromTop (22));
@@ -346,8 +637,15 @@ public:
         if (transportSource.hasStreamFinished())
             stopPlayback();
 
-        waveformDisplay.setPlayhead (transportSource.getCurrentPosition(),
-                                     audioLengthSeconds);
+        // Get the actual input position being read from the time stretch source
+        double inputSeconds = 0.0;
+        if (timeStretchSource != nullptr && loadedSampleRate > 0.0)
+        {
+            const auto inputPos = timeStretchSource->getInputPosition();
+            inputSeconds = static_cast<double> (inputPos) / loadedSampleRate;
+        }
+
+        waveformDisplay.setPlayhead (inputSeconds, audioLengthSeconds);
         updatePlaybackStatus();
     }
 
@@ -515,6 +813,48 @@ private:
         statusLabel.setText ("Choose an audio file to begin.", yup::NotificationType::dontSendNotification);
         statusLabel.setColor (yup::Label::Style::textFillColorId, yup::Colors::lightgray);
 
+        addAndMakeVisible (timeLabel);
+        timeLabel.setText ("Time", yup::NotificationType::dontSendNotification);
+        timeLabel.setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
+
+        addAndMakeVisible (timeStretchSlider);
+        timeStretchSlider.setSliderType (yup::Slider::LinearBarHorizontal);
+        timeStretchSlider.setRange (0.5, 2.0, 0.01);
+        timeStretchSlider.setValue (1.0, yup::NotificationType::dontSendNotification);
+        timeStretchSlider.setDefaultValue (1.0);
+        timeStretchSlider.setNumDecimalPlacesToDisplay (2);
+        timeStretchSlider.setTextBoxStyle (yup::Slider::TextBoxRight, false, 60, 20);
+        timeStretchSlider.onValueChanged = [this] (double value)
+        {
+            timeStretchRatio = value;
+            if (timeStretchSource != nullptr)
+                timeStretchSource->setTimeRatio (timeStretchRatio);
+            updatePlaybackStatus();
+        };
+
+        addAndMakeVisible (pitchLabel);
+        pitchLabel.setText ("Pitch", yup::NotificationType::dontSendNotification);
+        pitchLabel.setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
+
+        addAndMakeVisible (pitchShiftSlider);
+        pitchShiftSlider.setSliderType (yup::Slider::LinearBarHorizontal);
+        pitchShiftSlider.setRange (0.5, 2.0, 0.01);
+        pitchShiftSlider.setValue (1.0, yup::NotificationType::dontSendNotification);
+        pitchShiftSlider.setDefaultValue (1.0);
+        pitchShiftSlider.setNumDecimalPlacesToDisplay (2);
+        pitchShiftSlider.setTextBoxStyle (yup::Slider::TextBoxRight, false, 60, 20);
+        pitchShiftSlider.onValueChanged = [this] (double value)
+        {
+            pitchShiftRatio = value;
+            if (timeStretchSource != nullptr)
+                timeStretchSource->setPitchRatio (pitchShiftRatio);
+        };
+
+        timeStretchSlider.setEnabled (timeStretchSupported);
+        pitchShiftSlider.setEnabled (timeStretchSupported);
+        timeLabel.setEnabled (timeStretchSupported);
+        pitchLabel.setEnabled (timeStretchSupported);
+
         addAndMakeVisible (waveformDisplay);
         waveformDisplay.setSelectable (true);
         waveformDisplay.setChannelLabelsVisible (labelsButton.getToggleState());
@@ -527,7 +867,7 @@ private:
 
     void updatePlaybackStatus()
     {
-        const double lengthSeconds = audioLengthSeconds;
+        const double lengthSeconds = audioLengthSeconds * (timeStretchRatio > 0.0 ? timeStretchRatio : 1.0);
         const double positionSeconds = transportSource.getCurrentPosition();
         yup::String positionText = formatTime (positionSeconds) + " / " + formatTime (lengthSeconds);
 
@@ -599,7 +939,10 @@ private:
         transportSource.stop();
         transportSource.setSource (nullptr);
         memorySource = std::make_unique<yup::MemoryAudioSource> (audioBuffer, false, loopEnabled);
-        transportSource.setSource (memorySource.get(), 0, nullptr, loadedSampleRate, numChannels);
+        timeStretchSource = std::make_unique<TimeStretchAudioSource> (memorySource.get(), numChannels);
+        timeStretchSource->setTimeRatio (timeStretchRatio);
+        timeStretchSource->setPitchRatio (pitchShiftRatio);
+        transportSource.setSource (timeStretchSource.get(), 0, nullptr, loadedSampleRate, numChannels);
 
         waveformDisplay.setSource (&audioBuffer, loadedSampleRate);
         waveformDisplay.setPlayhead (0.0, audioLengthSeconds);
@@ -675,6 +1018,7 @@ private:
 
     yup::String getAudioFileFilter() const
     {
+        // TODO - Add methods to audioformatmanager to get supported formats dynamically
         return "*.wav;*.aiff;*.aif;*.flac;*.mp3;*.opus;*.m4a;*.wma;*.ogg";
     }
 
@@ -683,6 +1027,7 @@ private:
     yup::AudioSourcePlayer sourcePlayer;
     yup::AudioTransportSource transportSource;
     std::unique_ptr<yup::MemoryAudioSource> memorySource;
+    std::unique_ptr<TimeStretchAudioSource> timeStretchSource;
     yup::AudioBuffer<float> audioBuffer;
 
     yup::ThreadPool waveformThreadPool;
@@ -703,6 +1048,11 @@ private:
     yup::ToggleButton contiguousButton;
     yup::ToggleButton totalButton;
 
+    yup::Label timeLabel;
+    yup::Label pitchLabel;
+    yup::Slider timeStretchSlider { yup::Slider::LinearBarHorizontal, "Time Stretch" };
+    yup::Slider pitchShiftSlider { yup::Slider::LinearBarHorizontal, "Pitch Shift" };
+
     yup::Label infoLabel;
     yup::Label statusLabel;
     AudioFileWaveform waveformDisplay;
@@ -716,6 +1066,9 @@ private:
     yup::String currentFileName { "No audio loaded" };
     double loadedSampleRate = 0.0;
     double audioLengthSeconds = 0.0;
+    double timeStretchRatio = 1.0;
+    double pitchShiftRatio = 1.0;
     bool hasLoadedAudio = false;
     bool loopEnabled = false;
+    bool timeStretchSupported = false;
 };
