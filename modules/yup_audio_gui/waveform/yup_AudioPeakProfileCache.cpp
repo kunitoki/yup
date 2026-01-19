@@ -349,12 +349,14 @@ void AudioPeakProfileCache::notifyProfileReady (const String& cacheKey, std::sha
             notify();
             return;
         }
-    }
 
-    if (MessageManager::callAsync (notify))
+        // Always use callAsync when not on message thread - don't fall back to synchronous call
+        MessageManager::callAsync (notify);
         return;
+    }
 #endif
 
+    // Fallback for when message manager is not available
     notify();
 }
 
@@ -376,12 +378,14 @@ void AudioPeakProfileCache::notifyProfileProgress (const String& cacheKey, doubl
             notify();
             return;
         }
-    }
 
-    if (MessageManager::callAsync (notify))
+        // Always use callAsync when not on message thread - don't fall back to synchronous call
+        MessageManager::callAsync (notify);
         return;
+    }
 #endif
 
+    // Fallback for when message manager is not available
     notify();
 }
 

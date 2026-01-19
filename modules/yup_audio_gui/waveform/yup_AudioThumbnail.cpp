@@ -195,12 +195,14 @@ void AudioThumbnail::paintChannel (Graphics& g,
     // Calculate zoom level and select best aggregation level
     const int numSamplesInRange = static_cast<int> (sampleRange.getLength());
     const float samplesPerPixel = static_cast<float> (numSamplesInRange) / static_cast<float> (pixelColumns);
+    const int baseResolution = currentProfile->getBaseResolution();
 
     int bestLevel = 0;
     for (int i = 0; i < currentProfile->getNumAggregationLevels(); ++i)
     {
         const int factor = currentProfile->getAggregationFactor (i);
-        if (samplesPerPixel >= factor * 2.0f)
+        const float samplesPerPeakAtLevel = static_cast<float> (baseResolution * factor);
+        if (samplesPerPixel >= samplesPerPeakAtLevel * 2.0f)
             bestLevel = i;
         else
             break;
@@ -233,7 +235,11 @@ void AudioThumbnail::paintChannel (Graphics& g,
     for (int pixel = 0; pixel < pixelColumns; ++pixel)
     {
         const int peakStart = startPeak + static_cast<int> (pixel * peaksPerPixelColumn);
-        const int peakEnd = startPeak + static_cast<int> ((pixel + 1) * peaksPerPixelColumn);
+        int peakEnd = startPeak + static_cast<int> ((pixel + 1) * peaksPerPixelColumn);
+
+        // Ensure we always render at least one peak per pixel (fixes spiky appearance when zoomed in)
+        if (peakEnd <= peakStart)
+            peakEnd = peakStart + 1;
 
         // Aggregate all peaks for this pixel column
         float minValue = 0.0f;
