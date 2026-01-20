@@ -148,7 +148,7 @@ if __name__ == "__main__":
 
     print(f"-- YUP -- Cleaning up {final_location}...")
     if final_location.exists():
-        shutil.rmtree(final_location)
+        shutil.rmtree(final_location, ignore_errors=True)
 
     final_location.mkdir(parents=True, exist_ok=True)
 
@@ -260,4 +260,4 @@ if __name__ == "__main__":
 
     # Clean up temporary directory
     print(f"-- YUP -- Cleaning up {final_location}...")
-    shutil.rmtree(final_location)
+    shutil.rmtree(final_location, ignore_errors=True)
