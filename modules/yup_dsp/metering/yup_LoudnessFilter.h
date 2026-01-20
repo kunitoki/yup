@@ -152,7 +152,7 @@ private:
     Biquad<float, double> highpassFilter; // Stage 2: Highpass (38 Hz, Q=0.5)
 
     //==============================================================================
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LoudnessFilter)
+    YUP_LEAK_DETECTOR (LoudnessFilter)
 };
 
 } // namespace yup

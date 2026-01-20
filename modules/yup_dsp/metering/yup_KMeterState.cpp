@@ -79,6 +79,15 @@ void KMeterState::prepare (double newSampleRate, int maxChannels)
         processor.setFallTime (peakFallTime);
     }
 
+    // Initialize loudness filters (one per channel for ITU/EBU K-weighting)
+    loudnessFilters.resize (numChannels);
+    const int maxBlockSize = 512; // Match processPendingAudio chunk size
+    for (auto& filter : loudnessFilters)
+        filter.prepare (sampleRate, maxBlockSize);
+
+    // Allocate temporary buffer for K-weighted samples
+    filteredBuffer.resize (maxBlockSize);
+
     reset();
 }
 
@@ -104,6 +113,9 @@ void KMeterState::reset() noexcept
 
     for (auto& processor : levelProcessors)
         processor.reset();
+
+    for (auto& filter : loudnessFilters)
+        filter.reset();
 
     atomicPeakLevelDb.set (kMeterMinimumDecibel + scaleOffset);
     atomicAverageLevelDb.set (kMeterMinimumDecibel + scaleOffset);
@@ -264,7 +276,21 @@ void KMeterState::processChannelLevels (int channel, const float* samples, int n
     auto& channelState = channels[channel];
     auto& processor = levelProcessors[channel];
 
-    // Process peak
+    // Determine if we need K-weighting (ITU BS.1770-4 or EBU R128)
+    const bool needsKWeighting = meteringStandard == MeteringStandard::ituBS1770_4
+                              || meteringStandard == MeteringStandard::ebuR128;
+
+    // Apply K-weighting filter for ITU/EBU modes
+    const float* samplesToProcess = samples;
+    if (needsKWeighting)
+    {
+        jassert (numSamples <= static_cast<int> (filteredBuffer.size()));
+        std::copy (samples, samples + numSamples, filteredBuffer.begin());
+        loudnessFilters[channel].processBlock (filteredBuffer.data(), numSamples);
+        samplesToProcess = filteredBuffer.data();
+    }
+
+    // Process peak (always from original samples, never filtered)
     float peak = 0.0f;
     processor.processPeak (samples, numSamples, peak);
 
@@ -272,9 +298,9 @@ void KMeterState::processChannelLevels (int channel, const float* samples, int n
     const double timeDelta = numSamples / sampleRate;
     processor.processPeakWithFall (peak, timeDelta, channelState.currentPeak);
 
-    // Process RMS
+    // Process RMS (from K-weighted samples if ITU/EBU, otherwise from original)
     float rms = 0.0f;
-    processor.processRMS (samples, numSamples, rms);
+    processor.processRMS (samplesToProcess, numSamples, rms);
     channelState.currentAverage = rms;
 
     // CRITICAL: Peak must never fall below RMS average (physically impossible)
@@ -328,6 +354,7 @@ void KMeterState::processChannelLevels (int channel, const float* samples, int n
     }
 
     // Update OVER counter (counts contiguous or total samples at or above threshold)
+    // IMPORTANT: Always use ORIGINAL samples for clipping detection, never filtered
     int overflowsInBlock = 0;
     for (int i = 0; i < numSamples; ++i)
     {
@@ -351,7 +378,9 @@ void KMeterState::setMeteringStandard (MeteringStandard standard)
     if (meteringStandard != standard)
     {
         meteringStandard = standard;
-        // ITU BS.1770-4 and EBU R128 support will be added in Phase 4
+        // Reset filters when switching metering standards
+        for (auto& filter : loudnessFilters)
+            filter.reset();
     }
 }
 
