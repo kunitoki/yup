@@ -51,8 +51,15 @@ struct Time
 	inline int32_t delta(int32_t phase, int32_t previous, int m) const
 	{
 		constexpr auto logS = 32 + log2SynthesisHopRevolution;
-		const int32_t da = (phase - previous) - m * a;
-		return (m << logS) + (da >> 15) * multiplier;
+		// const int32_t da = (phase - previous) - m * a;
+		// return (m << logS) + (da >> 15) * multiplier;
+		const int32_t phaseDiff = int32_t(int64_t(phase) - int64_t(previous));
+		const int32_t ma = int32_t(int64_t(m) * int64_t(a));
+		const int32_t da = int32_t(int64_t(phaseDiff) - int64_t(ma));
+		const uint64_t shifted64 = uint64_t(uint32_t(m)) << logS;
+		const int32_t mShifted = int32_t(uint32_t(shifted64));
+		const int32_t scaled = int32_t((int64_t(da) >> 15) * int64_t(multiplier));
+		return int32_t(int64_t(mShifted) + int64_t(scaled));
 	}
 
 	inline int16_t delta(int16_t phase, int16_t previous, int m) const
