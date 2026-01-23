@@ -29,7 +29,7 @@ function (yup_standalone_app)
         INITIAL_MEMORY PTHREAD_POOL_SIZE CUSTOM_PLIST CUSTOM_SHELL)
     set (multi_value_args
         # Globals
-        DEFINITIONS COMPILE_OPTIONS MODULES LINK_OPTIONS
+        DEFINITIONS COMPILE_OPTIONS MODULES SOURCES LINK_OPTIONS
         # Emscripten
         PRELOAD_FILES)
 
@@ -227,6 +227,10 @@ function (yup_standalone_app)
     target_link_libraries (${target_name} PRIVATE
         ${additional_libraries}
         ${YUP_ARG_MODULES})
+
+    if (YUP_ARG_SOURCES AND NOT YUP_TARGET_ANDROID)
+        target_sources (${target_name} PRIVATE ${YUP_ARG_SOURCES})
+    endif()
 
     # ==== Post build steps, workaround for python*.dll
     if ("yup::yup_python" IN_LIST YUP_ARG_MODULES AND YUP_PLATFORM_WINDOWS AND NOT YUP_ENABLE_STATIC_PYTHON_LIBS AND Python_RUNTIME_LIBRARY_RELEASE)

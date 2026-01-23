@@ -15,6 +15,9 @@ set (YUP_BUILD_EXAMPLES OFF)
 set (YUP_BUILD_TESTS OFF)
 FetchContent_MakeAvailable(yup)
 
+file (GLOB sources "${CMAKE_CURRENT_LIST_DIR}/*.cpp")
+source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
+
 yup_standalone_app (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}
@@ -22,10 +25,5 @@ yup_standalone_app (
     TARGET_APP_ID "my.company.${target_name}"
     TARGET_APP_NAMESPACE "my.company"
     INITIAL_MEMORY 268435456
-    MODULES yup::yup_gui)
-
-if (NOT YUP_TARGET_ANDROID)
-    file (GLOB sources "${CMAKE_CURRENT_LIST_DIR}/*.cpp")
-    source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
-    target_sources (${target_name} PRIVATE ${sources})
-endif()
+    MODULES yup::yup_gui
+    SOURCES ${sources})
