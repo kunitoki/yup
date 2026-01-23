@@ -43,7 +43,7 @@
    flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
    header files that the compiler may be using.
 */
-#error "Incorrect use of JUCE cpp file"
+#error "Incorrect use of YUP cpp file"
 #endif
 
 #include "yup_simd.h"

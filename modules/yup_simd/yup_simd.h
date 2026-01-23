@@ -42,11 +42,11 @@
 
   BEGIN_YUP_MODULE_DECLARATION
 
-    ID:                 yup_audio_basics
+    ID:                 yup_simd
     vendor:             yup
     version:            1.0.0
-    name:               YUP audio and MIDI data classes
-    description:        Classes for audio buffer manipulation, midi message handling, synthesis, etc.
+    name:               YUP single instruction multiple data (SIMD) support
+    description:        Classes and functions for SIMD operations using SSE, AVX, FMA, NEON, and Accelerate framework.
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
@@ -59,7 +59,7 @@
 */
 
 #pragma once
-#define YUP_AUDIO_BASICS_H_INCLUDED
+#define YUP_SIMD_H_INCLUDED
 
 #include <yup_core/yup_core.h>
 
