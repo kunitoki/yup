@@ -36,7 +36,7 @@ function (yup_standalone_app)
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
     _yup_set_default (YUP_ARG_TARGET_CXX_STANDARD 20)
-    _yup_set_default (YUP_ARG_TARGET_ICON "${CMAKE_SOURCE_DIR}/cmake/resources/app-icon.png")
+    _yup_set_default (YUP_ARG_TARGET_ICON "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/resources/app-icon.png")
 
     set (target_name "${YUP_ARG_TARGET_NAME}")
     set (target_version "${YUP_ARG_TARGET_VERSION}")
@@ -125,7 +125,7 @@ function (yup_standalone_app)
     # ==== Per platform configuration
     if (YUP_PLATFORM_APPLE)
         if (NOT "${target_console}" AND NOT "${target_wheel}")
-            _yup_set_default (YUP_ARG_CUSTOM_PLIST "${CMAKE_SOURCE_DIR}/cmake/platforms/${YUP_PLATFORM}/Info.plist")
+            _yup_set_default (YUP_ARG_CUSTOM_PLIST "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/${YUP_PLATFORM}/Info.plist")
             _yup_valid_identifier_string ("${target_app_identifier}" target_app_identifier)
 
             _yup_message (STATUS "${target_name} - Converting application input icon to apple .icns format")
@@ -164,7 +164,7 @@ function (yup_standalone_app)
             set_target_properties (${target_name} PROPERTIES SUFFIX ".html")
         endif()
 
-        _yup_set_default (YUP_ARG_CUSTOM_SHELL "${CMAKE_SOURCE_DIR}/cmake/platforms/${YUP_PLATFORM}/shell.html")
+        _yup_set_default (YUP_ARG_CUSTOM_SHELL "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/${YUP_PLATFORM}/shell.html")
         _yup_set_default (YUP_ARG_INITIAL_MEMORY 33554432) # 32mb
         _yup_set_default (YUP_ARG_PTHREAD_POOL_SIZE 8)
 
@@ -209,7 +209,7 @@ function (yup_standalone_app)
         add_custom_command(
             TARGET ${target_name} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy
-                "${CMAKE_SOURCE_DIR}/cmake/platforms/${YUP_PLATFORM}/mini-coi.js"
+                "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/${YUP_PLATFORM}/mini-coi.js"
                 "${target_copy_dest}/mini-coi.js")
 
     elseif (YUP_PLATFORM_LINUX)
