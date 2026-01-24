@@ -36,7 +36,6 @@
 
 # Intermediates
 build/*
-standalone/*/build/*
 cmake-build*
 out/*
 

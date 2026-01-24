@@ -57,7 +57,7 @@ android:
 [doc("generate and open project for Android using Android Studio (windows)")]
 [windows]
 android:
-  cmake -G "Visual Studio 17 2022" -B build -DYUP_TARGET_ANDROID=ON
+  cmake -G "Visual Studio 18 2026" -B build -DYUP_TARGET_ANDROID=ON
 
 [doc("generate and open project for Android using Android Studio (linux)")]
 [linux]
