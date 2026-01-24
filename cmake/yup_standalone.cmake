@@ -76,6 +76,18 @@ function (yup_standalone_app)
         return()
     endif()
 
+    # ==== Find modules includes
+    set (module_include_dirs "")
+    foreach (module IN ITEMS ${YUP_ARG_MODULES})
+        _yup_message (STATUS "${target_name} - Including module ${module}")
+        get_target_property (module_path ${module} YUP_MODULE_PATH)
+        if (module_path AND EXISTS "${module_path}")
+            get_filename_component (module_path "${module_path}" DIRECTORY)
+            list (APPEND module_include_dirs "${module_path}")
+        endif()
+    endforeach()
+    list (REMOVE_DUPLICATES module_include_dirs)
+
     # ==== Find dependencies
     if (NOT "${target_console}" AND NOT YUP_PLATFORM_EMSCRIPTEN)
         _yup_message (STATUS "${target_name} - Fetching SDL2 library")
@@ -108,6 +120,7 @@ function (yup_standalone_app)
     endif()
 
     target_compile_features (${target_name} PRIVATE cxx_std_${target_cxx_standard})
+    target_include_directories (${target_name} PRIVATE ${module_include_dirs})
 
     # ==== Per platform configuration
     if (YUP_PLATFORM_APPLE)
