@@ -54,7 +54,7 @@ function (_yup_android_prepare_gradle)
     file (RELATIVE_PATH YUP_ANDROID_APPLICATION_PATH "${CMAKE_CURRENT_BINARY_DIR}/app" "${YUP_ANDROID_APPLICATION_PATH}")
 
     # Prepare files
-    set (BASE_FILES_PATH "${YUP_ANDROID_BASE_PATH}/android")
+    set (BASE_FILES_PATH "${YUP_ANDROID_BASE_PATH}/platforms/android")
     configure_file (${BASE_FILES_PATH}/build.gradle.kts.in ${CMAKE_CURRENT_BINARY_DIR}/build.gradle.kts)
     configure_file (${BASE_FILES_PATH}/settings.gradle.kts.in ${CMAKE_CURRENT_BINARY_DIR}/settings.gradle.kts)
     configure_file (${BASE_FILES_PATH}/app/build.gradle.kts.in ${CMAKE_CURRENT_BINARY_DIR}/app/build.gradle.kts)
