@@ -26,7 +26,7 @@ include (${CMAKE_CURRENT_LIST_DIR}/../yup_utilities.cmake)
 function (_yup_android_prepare_gradle)
     set (options "")
     set (one_value_args
-        MIN_SDK_VERSION COMPILE_SDK_VERSION TARGET_SDK_VERSION
+        BASE_PATH MIN_SDK_VERSION COMPILE_SDK_VERSION TARGET_SDK_VERSION
         TARGET_NAME TARGET_ICON ABI TOOLCHAIN PLATFORM STL CPP_VERSION CMAKE_VERSION
         APPLICATION_ID APPLICATION_NAMESPACE APPLICATION_CMAKELISTS_PATH APPLICATION_VERSION)
     set (multi_value_args "")
@@ -54,7 +54,7 @@ function (_yup_android_prepare_gradle)
     file (RELATIVE_PATH YUP_ANDROID_APPLICATION_PATH "${CMAKE_CURRENT_BINARY_DIR}/app" "${YUP_ANDROID_APPLICATION_PATH}")
 
     # Prepare files
-    set (BASE_FILES_PATH "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/android")
+    set (BASE_FILES_PATH "${YUP_ANDROID_BASE_PATH}/android")
     configure_file (${BASE_FILES_PATH}/build.gradle.kts.in ${CMAKE_CURRENT_BINARY_DIR}/build.gradle.kts)
     configure_file (${BASE_FILES_PATH}/settings.gradle.kts.in ${CMAKE_CURRENT_BINARY_DIR}/settings.gradle.kts)
     configure_file (${BASE_FILES_PATH}/app/build.gradle.kts.in ${CMAKE_CURRENT_BINARY_DIR}/app/build.gradle.kts)

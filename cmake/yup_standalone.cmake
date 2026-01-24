@@ -63,11 +63,12 @@ function (yup_standalone_app)
     if (YUP_TARGET_ANDROID)
         _yup_message (STATUS "${target_name} - Creating java gradle project")
         _yup_android_prepare_gradle(
-            TARGET_NAME ${target_name}
-            TARGET_ICON ${target_icon}
-            APPLICATION_ID ${target_app_identifier}
-            APPLICATION_NAMESPACE ${target_app_namespace}
-            APPLICATION_VERSION ${target_version})
+            BASE_PATH "${CMAKE_CURRENT_FUNCTION_LIST_DIR}"
+            TARGET_NAME "${target_name}"
+            TARGET_ICON "${target_icon}"
+            APPLICATION_ID "${target_app_identifier}"
+            APPLICATION_NAMESPACE "${target_app_namespace}"
+            APPLICATION_VERSION "${target_version}")
 
         _yup_message (STATUS "${target_name} - Copying SDL2 java activity to application")
         _yup_fetch_sdl2()
