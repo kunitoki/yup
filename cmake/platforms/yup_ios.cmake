@@ -16,31 +16,3 @@
 #   DISCLAIMED.
 #
 # ==============================================================================
-
-#==============================================================================
-# iOS Platform Configuration
-#==============================================================================
-
-# Handle iOS simulator builds when not using the full YUP iOS toolchain
-# This ensures the correct SDK is used even when using FetchContent
-if (DEFINED PLATFORM AND PLATFORM MATCHES "^SIMULATOR")
-    # Determine the correct SDK name based on platform
-    set (SDK_NAME "iphonesimulator")
-
-    # Query xcodebuild for the simulator SDK path if sysroot is not set correctly
-    if (NOT DEFINED CMAKE_OSX_SYSROOT OR CMAKE_OSX_SYSROOT STREQUAL "" OR CMAKE_OSX_SYSROOT MATCHES "iphoneos")
-        find_program (XCODEBUILD_EXECUTABLE xcodebuild)
-        if (XCODEBUILD_EXECUTABLE)
-            execute_process (
-                COMMAND ${XCODEBUILD_EXECUTABLE} -version -sdk ${SDK_NAME} Path
-                OUTPUT_VARIABLE SIMULATOR_SDK_PATH
-                ERROR_QUIET
-                OUTPUT_STRIP_TRAILING_WHITESPACE
-            )
-            if (SIMULATOR_SDK_PATH)
-                set (CMAKE_OSX_SYSROOT "${SIMULATOR_SDK_PATH}" CACHE PATH "iOS Simulator SDK path" FORCE)
-                _yup_message (STATUS "Using iOS Simulator SDK: ${SIMULATOR_SDK_PATH}")
-            endif()
-        endif()
-    endif()
-endif()
