@@ -372,6 +372,10 @@ void SDL2ComponentNative::setFocusedComponent (Component* comp)
 {
     auto compBailOut = Component::BailOutChecker (comp);
 
+    // Check if we need to stop text input for the previously focused component
+    Component* previousComponent = lastComponentFocused.get();
+    bool previousWantsTextInput = previousComponent != nullptr && dynamic_cast<TextInputTarget*> (previousComponent) != nullptr;
+
     if (lastComponentFocused != nullptr)
     {
         auto focusBailOut = Component::BailOutChecker (lastComponentFocused.get());
@@ -386,6 +390,14 @@ void SDL2ComponentNative::setFocusedComponent (Component* comp)
         return;
 
     lastComponentFocused = comp;
+
+    // Check if the newly focused component needs text input
+    Component* newComponent = lastComponentFocused.get();
+    bool newWantsTextInput = newComponent != nullptr && dynamic_cast<TextInputTarget*> (newComponent) != nullptr;
+
+    // Stop text input if the previous component had it but the new one doesn't
+    if (previousWantsTextInput && ! newWantsTextInput && previousComponent != nullptr)
+        stopTextInput (*previousComponent);
 
     if (lastComponentFocused != nullptr)
     {
@@ -507,6 +519,46 @@ rive::Factory* SDL2ComponentNative::getFactory()
 void* SDL2ComponentNative::getNativeHandle() const
 {
     return getNativeWindowHandle (window);
+}
+
+//==============================================================================
+
+void SDL2ComponentNative::startTextInput (Component& component)
+{
+    if (window == nullptr)
+        return;
+
+    auto* target = dynamic_cast<TextInputTarget*> (std::addressof (component));
+    if (target == nullptr)
+        return;
+
+    if (currentTextInputComponent != nullptr && currentTextInputComponent != std::addressof (component))
+        SDL_StopTextInput();
+
+    currentTextInputComponent = std::addressof (component);
+
+    SDL_StartTextInput();
+
+    SDL_Rect sdlRect;
+    auto textRect = target->getTextInputRect();
+    sdlRect.x = static_cast<int> (textRect.getX());
+    sdlRect.y = static_cast<int> (textRect.getY());
+    sdlRect.w = static_cast<int> (textRect.getWidth());
+    sdlRect.h = static_cast<int> (textRect.getHeight());
+    SDL_SetTextInputRect (&sdlRect);
+}
+
+void SDL2ComponentNative::stopTextInput (Component& component)
+{
+    if (window == nullptr)
+        return;
+
+    if (currentTextInputComponent == std::addressof (component))
+    {
+        currentTextInputComponent = nullptr;
+
+        SDL_StopTextInput();
+    }
 }
 
 //==============================================================================
@@ -990,22 +1042,27 @@ void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
 
     if (gotFocus)
     {
-        SDL_StartTextInput();
-
         if (! isRendering())
             startRendering();
 
         component.internalFocusChanged (true);
+
+        if (auto* comp = currentTextInputComponent.get())
+        {
+            if (auto* target = dynamic_cast<TextInputTarget*> (comp))
+                startTextInput (*comp);
+        }
     }
     else
     {
+        if (currentTextInputComponent != nullptr)
+            SDL_StopTextInput();
+
         component.internalFocusChanged (false);
 
         lastComponentClicked = nullptr;
         lastMouseDownPosition.reset();
         lastMouseDownTime.reset();
-
-        SDL_StopTextInput();
 
         if (updateOnlyWhenFocused)
         {

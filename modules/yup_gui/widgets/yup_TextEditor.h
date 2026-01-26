@@ -41,9 +41,10 @@ namespace yup
     addAndMakeVisible(*editor);
     @endcode
 
-    @see Component, StyledText
+    @see Component, StyledText, TextInputTarget
 */
 class YUP_API TextEditor : public Component
+    , public TextInputTarget
 {
 public:
     //==============================================================================
@@ -289,6 +290,13 @@ public:
 
     /** @internal */
     StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
+
+    //==============================================================================
+    /** @internal
+        Returns the rectangle where text input is being edited.
+        This is used to position on-screen keyboards appropriately.
+    */
+    Rectangle<float> getTextInputRect() const override;
 
 private:
     //==============================================================================

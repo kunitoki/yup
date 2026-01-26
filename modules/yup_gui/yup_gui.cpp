@@ -127,6 +127,7 @@
 
 #include "application/yup_Application.cpp"
 #include "desktop/yup_Desktop.cpp"
+#include "keyboard/yup_TextInputTarget.cpp"
 #include "mouse/yup_MouseEvent.cpp"
 #include "mouse/yup_MouseCursor.cpp"
 #include "clipboard/yup_SystemClipboard.cpp"
