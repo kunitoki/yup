@@ -194,6 +194,7 @@ function (yup_standalone_app)
             -sERROR_ON_UNDEFINED_SYMBOLS=1
             -sSTACK_OVERFLOW_CHECK=2
             -sFORCE_FILESYSTEM=1
+            -sEXIT_RUNTIME=1
             -sNODERAWFS=0
             -sWASMFS=1
             -sFETCH=1
