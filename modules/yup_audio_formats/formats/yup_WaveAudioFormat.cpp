@@ -487,10 +487,12 @@ Array<String> WaveAudioFormat::getFileExtensions (Mode handleMode) const
 {
     switch (handleMode)
     {
-        case Mode::forReading:
-            return { ".wav", ".wave", ".bwf" };
         case Mode::forWriting:
             return { ".wav" };
+
+        case Mode::forReading:
+        default:
+            return { ".wav", ".wave", ".bwf" };
     }
 }
 

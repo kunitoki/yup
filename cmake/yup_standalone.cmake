@@ -29,14 +29,14 @@ function (yup_standalone_app)
         INITIAL_MEMORY PTHREAD_POOL_SIZE CUSTOM_PLIST CUSTOM_SHELL)
     set (multi_value_args
         # Globals
-        DEFINITIONS COMPILE_OPTIONS MODULES LINK_OPTIONS
+        DEFINITIONS COMPILE_OPTIONS MODULES SOURCES LINK_OPTIONS
         # Emscripten
         PRELOAD_FILES)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
     _yup_set_default (YUP_ARG_TARGET_CXX_STANDARD 20)
-    _yup_set_default (YUP_ARG_TARGET_ICON "${CMAKE_SOURCE_DIR}/cmake/resources/app-icon.png")
+    _yup_set_default (YUP_ARG_TARGET_ICON "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/resources/app-icon.png")
 
     set (target_name "${YUP_ARG_TARGET_NAME}")
     set (target_version "${YUP_ARG_TARGET_VERSION}")
@@ -63,11 +63,12 @@ function (yup_standalone_app)
     if (YUP_TARGET_ANDROID)
         _yup_message (STATUS "${target_name} - Creating java gradle project")
         _yup_android_prepare_gradle(
-            TARGET_NAME ${target_name}
-            TARGET_ICON ${target_icon}
-            APPLICATION_ID ${target_app_identifier}
-            APPLICATION_NAMESPACE ${target_app_namespace}
-            APPLICATION_VERSION ${target_version})
+            BASE_PATH "${CMAKE_CURRENT_FUNCTION_LIST_DIR}"
+            TARGET_NAME "${target_name}"
+            TARGET_ICON "${target_icon}"
+            APPLICATION_ID "${target_app_identifier}"
+            APPLICATION_NAMESPACE "${target_app_namespace}"
+            APPLICATION_VERSION "${target_version}")
 
         _yup_message (STATUS "${target_name} - Copying SDL2 java activity to application")
         _yup_fetch_sdl2()
@@ -75,6 +76,18 @@ function (yup_standalone_app)
 
         return()
     endif()
+
+    # ==== Find modules includes
+    set (module_include_dirs "")
+    foreach (module IN ITEMS ${YUP_ARG_MODULES})
+        _yup_message (STATUS "${target_name} - Including module ${module}")
+        get_target_property (module_path ${module} YUP_MODULE_PATH)
+        if (module_path AND EXISTS "${module_path}")
+            get_filename_component (module_path "${module_path}" DIRECTORY)
+            list (APPEND module_include_dirs "${module_path}")
+        endif()
+    endforeach()
+    list (REMOVE_DUPLICATES module_include_dirs)
 
     # ==== Find dependencies
     if (NOT "${target_console}" AND NOT YUP_PLATFORM_EMSCRIPTEN)
@@ -108,11 +121,12 @@ function (yup_standalone_app)
     endif()
 
     target_compile_features (${target_name} PRIVATE cxx_std_${target_cxx_standard})
+    target_include_directories (${target_name} PRIVATE ${module_include_dirs})
 
     # ==== Per platform configuration
     if (YUP_PLATFORM_APPLE)
         if (NOT "${target_console}" AND NOT "${target_wheel}")
-            _yup_set_default (YUP_ARG_CUSTOM_PLIST "${CMAKE_SOURCE_DIR}/cmake/platforms/${YUP_PLATFORM}/Info.plist")
+            _yup_set_default (YUP_ARG_CUSTOM_PLIST "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/${YUP_PLATFORM}/Info.plist")
             _yup_valid_identifier_string ("${target_app_identifier}" target_app_identifier)
 
             _yup_message (STATUS "${target_name} - Converting application input icon to apple .icns format")
@@ -151,7 +165,7 @@ function (yup_standalone_app)
             set_target_properties (${target_name} PROPERTIES SUFFIX ".html")
         endif()
 
-        _yup_set_default (YUP_ARG_CUSTOM_SHELL "${CMAKE_SOURCE_DIR}/cmake/platforms/${YUP_PLATFORM}/shell.html")
+        _yup_set_default (YUP_ARG_CUSTOM_SHELL "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/${YUP_PLATFORM}/shell.html")
         _yup_set_default (YUP_ARG_INITIAL_MEMORY 33554432) # 32mb
         _yup_set_default (YUP_ARG_PTHREAD_POOL_SIZE 8)
 
@@ -180,6 +194,7 @@ function (yup_standalone_app)
             -sERROR_ON_UNDEFINED_SYMBOLS=1
             -sSTACK_OVERFLOW_CHECK=2
             -sFORCE_FILESYSTEM=1
+            -sEXIT_RUNTIME=1
             -sNODERAWFS=0
             -sWASMFS=1
             -sFETCH=1
@@ -196,7 +211,7 @@ function (yup_standalone_app)
         add_custom_command(
             TARGET ${target_name} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy
-                "${CMAKE_SOURCE_DIR}/cmake/platforms/${YUP_PLATFORM}/mini-coi.js"
+                "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/${YUP_PLATFORM}/mini-coi.js"
                 "${target_copy_dest}/mini-coi.js")
 
     elseif (YUP_PLATFORM_LINUX)
@@ -227,5 +242,16 @@ function (yup_standalone_app)
     target_link_libraries (${target_name} PRIVATE
         ${additional_libraries}
         ${YUP_ARG_MODULES})
+
+    if (YUP_ARG_SOURCES AND NOT YUP_TARGET_ANDROID)
+        target_sources (${target_name} PRIVATE ${YUP_ARG_SOURCES})
+    endif()
+
+    # ==== Post build steps, workaround for python*.dll
+    if ("yup::yup_python" IN_LIST YUP_ARG_MODULES AND YUP_PLATFORM_WINDOWS AND NOT YUP_ENABLE_STATIC_PYTHON_LIBS AND Python_RUNTIME_LIBRARY_RELEASE)
+        add_custom_command (TARGET ${target_name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${Python_RUNTIME_LIBRARY_RELEASE}" "$<TARGET_FILE_DIR:${target_name}>"
+            COMMENT "Copying Python DLL next to executable")
+    endif()
 
 endfunction()

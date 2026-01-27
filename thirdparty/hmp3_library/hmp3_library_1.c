@@ -19,13 +19,19 @@
   ==============================================================================
 */
 
-#if defined(__clang__)
+#if __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wcomment"
 #pragma clang diagnostic ignored "-Wpointer-to-int-cast"
 #pragma clang diagnostic ignored "-Wint-to-pointer-cast"
 #pragma clang diagnostic ignored "-Wshorten-64-to-32"
 #pragma clang diagnostic ignored "-Wincompatible-pointer-types"
+#elif __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcomment"
+#pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
+#pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
+#pragma GCC diagnostic ignored "-Wincompatible-pointer-types"
 #endif
 
 #define mdct_init hmp3_mdct_init
@@ -43,6 +49,8 @@
 #include <hmp3_library/hmp3/src/detect.c>
 #undef mdct_init
 
-#if defined(__clang__)
+#if __clang__
 #pragma clang diagnostic pop
+#elif __GNUC__
+#pragma GCC diagnostic pop
 #endif

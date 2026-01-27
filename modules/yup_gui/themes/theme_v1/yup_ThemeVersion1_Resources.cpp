@@ -30,4 +30,12 @@ const uint8_t RobotoFlexFont_data[] = {
 
 const std::size_t RobotoFlexFont_size = sizeof (RobotoFlexFont_data);
 
+//==============================================================================
+
+const uint8_t FontAwesome7Font_data[] = {
+#include "FontAwesome7Font.inc"
+};
+
+const std::size_t FontAwesome7Font_size = sizeof (FontAwesome7Font_data);
+
 } // namespace yup

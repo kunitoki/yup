@@ -309,9 +309,9 @@ private:
         freqSlider.setSkewFactorFromMidpoint (1000.0);
         freqSlider.setValue (1000.0);
         //freqSlider.setTextValueSuffix (" Hz");
-        freqSlider.onValueChanged = [this] (float value)
+        freqSlider.onValueChanged = [this] (double value)
         {
-            crossoverFreq.setTargetValue (value);
+            crossoverFreq.setTargetValue ((float) value);
             setCrossoverFrequency (value);
         };
         addAndMakeVisible (freqSlider);
@@ -326,9 +326,9 @@ private:
         lowGainSlider.setRange (0.0, 2.0);
         lowGainSlider.setValue (1.0);
         //lowGainSlider.setTextValueSuffix (" x");
-        lowGainSlider.onValueChanged = [this] (float value)
+        lowGainSlider.onValueChanged = [this] (double value)
         {
-            lowGain.setTargetValue (value);
+            lowGain.setTargetValue ((float) value);
         };
         addAndMakeVisible (lowGainSlider);
 
@@ -342,9 +342,9 @@ private:
         highGainSlider.setRange (0.0, 2.0);
         highGainSlider.setValue (1.0);
         //highGainSlider.setTextValueSuffix (" x");
-        highGainSlider.onValueChanged = [this] (float value)
+        highGainSlider.onValueChanged = [this] (double value)
         {
-            highGain.setTargetValue (value);
+            highGain.setTargetValue ((float) value);
         };
         addAndMakeVisible (highGainSlider);
 

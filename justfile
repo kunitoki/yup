@@ -32,8 +32,8 @@ ninja PROFILING="OFF":
 
 [doc("generate and open project in Windows using Visual Studio")]
 win PROFILING="OFF":
-  cmake -G "Visual Studio 17 2022" -B build -DYUP_ENABLE_PROFILING={{PROFILING}}
-  -start build/yup.sln
+  cmake -G "Visual Studio 18 2026" -B build -DYUP_ENABLE_PROFILING={{PROFILING}}
+  -start build/yup.slnx
 
 [doc("generate project in Linux using Ninja")]
 linux PROFILING="OFF":
@@ -57,7 +57,7 @@ android:
 [doc("generate and open project for Android using Android Studio (windows)")]
 [windows]
 android:
-  cmake -G "Visual Studio 17 2022" -B build -DYUP_TARGET_ANDROID=ON
+  cmake -G "Visual Studio 18 2026" -B build -DYUP_TARGET_ANDROID=ON
 
 [doc("generate and open project for Android using Android Studio (linux)")]
 [linux]

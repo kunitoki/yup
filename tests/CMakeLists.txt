@@ -66,7 +66,8 @@ set (target_modules
     pffft_library
     opus_library
     flac_library
-    hmp3_library)
+    hmp3_library
+    bungee_library)
 
 if (NOT YUP_PLATFORM_EMSCRIPTEN)
     list (APPEND target_modules yup_gui yup_audio_gui)

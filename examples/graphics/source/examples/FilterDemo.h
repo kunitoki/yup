@@ -44,7 +44,7 @@ private:
         auto bounds = getLocalBounds();
 
         // Background
-        g.setFillColor (yup::Color (0xFF1E1E1E));
+        g.setFillColor (yup::Color (0xff1e1e1e));
         g.fillRect (bounds);
 
         // Reserve space for labels
@@ -165,7 +165,7 @@ private:
         auto bounds = getLocalBounds();
 
         // Background
-        g.setFillColor (yup::Color (0xFF1E1E1E));
+        g.setFillColor (yup::Color (0xff1e1e1e));
         g.fillRect (bounds);
 
         // Reserve space for labels
@@ -281,7 +281,7 @@ private:
         auto bounds = getLocalBounds();
 
         // Background
-        g.setFillColor (yup::Color (0xFF1E1E1E));
+        g.setFillColor (yup::Color (0xff1e1e1e));
         g.fillRect (bounds);
 
         // Reserve space for labels
@@ -403,7 +403,7 @@ private:
         auto bounds = getLocalBounds();
 
         // Background
-        g.setFillColor (yup::Color (0xFF1E1E1E));
+        g.setFillColor (yup::Color (0xff1e1e1e));
         g.fillRect (bounds);
 
         // Reserve space for labels
@@ -559,7 +559,7 @@ public:
         auto bounds = getLocalBounds();
 
         // Background
-        g.setFillColor (yup::Color (0xff1a1a1a));
+        g.setFillColor (yup::Color (0xff1e1e1e));
         g.fillAll();
 
         // Reserve space for labels

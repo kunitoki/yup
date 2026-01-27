@@ -28,12 +28,12 @@ YUP_IMPLEMENT_SINGLETON (Desktop)
 
 //==============================================================================
 
-Desktop::Desktop()
-{
-}
+Desktop::Desktop() = default;
 
 Desktop::~Desktop()
 {
+    // jassert (globalMouseListeners.isEmpty());
+
     clearSingletonInstance();
 }
 
@@ -129,11 +129,12 @@ void Desktop::addGlobalMouseListener (MouseListener* listener)
     if (listener == nullptr)
         return;
 
-    // Remove any existing weak reference to this listener first
-    removeGlobalMouseListener (listener);
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
-    // Add the new weak reference
-    globalMouseListeners.push_back (WeakReference<MouseListener> (listener));
+    if (sendingMouseEvent)
+        pendingMouseListeners.addIfNotAlreadyThere (listener);
+    else
+        globalMouseListeners.add (listener);
 }
 
 void Desktop::removeGlobalMouseListener (MouseListener* listener)
@@ -141,102 +142,68 @@ void Desktop::removeGlobalMouseListener (MouseListener* listener)
     if (listener == nullptr)
         return;
 
-    globalMouseListeners.erase (
-        std::remove_if (globalMouseListeners.begin(), globalMouseListeners.end(), [listener] (const WeakReference<MouseListener>& ref)
-    {
-        return ref.get() == listener || ref.get() == nullptr;
-    }),
-        globalMouseListeners.end());
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+
+    pendingMouseListeners.removeFirstMatchingValue (listener);
+    globalMouseListeners.remove (listener);
 }
 
 void Desktop::handleGlobalMouseDown (const MouseEvent& event)
 {
-    auto it = globalMouseListeners.begin();
-    while (it != globalMouseListeners.end())
     {
-        auto* listener = it->get();
-        if (listener == nullptr)
-        {
-            it = globalMouseListeners.erase (it);
-        }
-        else
-        {
-            listener->mouseDown (event);
-            ++it;
-        }
+        ScopedValueSetter setter (sendingMouseEvent, true);
+        globalMouseListeners.call (&MouseListener::mouseDown, event);
     }
+
+    addPendingMouseListeners();
 }
 
 void Desktop::handleGlobalMouseUp (const MouseEvent& event)
 {
-    auto it = globalMouseListeners.begin();
-    while (it != globalMouseListeners.end())
     {
-        auto* listener = it->get();
-        if (listener == nullptr)
-        {
-            it = globalMouseListeners.erase (it);
-        }
-        else
-        {
-            listener->mouseUp (event);
-            ++it;
-        }
+        ScopedValueSetter setter (sendingMouseEvent, true);
+        globalMouseListeners.call (&MouseListener::mouseUp, event);
     }
+
+    addPendingMouseListeners();
 }
 
 void Desktop::handleGlobalMouseMove (const MouseEvent& event)
 {
-    auto it = globalMouseListeners.begin();
-    while (it != globalMouseListeners.end())
     {
-        auto* listener = it->get();
-        if (listener == nullptr)
-        {
-            it = globalMouseListeners.erase (it);
-        }
-        else
-        {
-            listener->mouseMove (event);
-            ++it;
-        }
+        ScopedValueSetter setter (sendingMouseEvent, true);
+        globalMouseListeners.call (&MouseListener::mouseMove, event);
     }
+
+    addPendingMouseListeners();
 }
 
 void Desktop::handleGlobalMouseDrag (const MouseEvent& event)
 {
-    auto it = globalMouseListeners.begin();
-    while (it != globalMouseListeners.end())
     {
-        auto* listener = it->get();
-        if (listener == nullptr)
-        {
-            it = globalMouseListeners.erase (it);
-        }
-        else
-        {
-            listener->mouseDrag (event);
-            ++it;
-        }
+        ScopedValueSetter setter (sendingMouseEvent, true);
+        globalMouseListeners.call (&MouseListener::mouseDrag, event);
     }
+
+    addPendingMouseListeners();
 }
 
 void Desktop::handleGlobalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
 {
-    auto it = globalMouseListeners.begin();
-    while (it != globalMouseListeners.end())
     {
-        auto* listener = it->get();
-        if (listener == nullptr)
-        {
-            it = globalMouseListeners.erase (it);
-        }
-        else
-        {
-            listener->mouseWheel (event, wheelData);
-            ++it;
-        }
+        ScopedValueSetter setter (sendingMouseEvent, true);
+        globalMouseListeners.call (&MouseListener::mouseWheel, event, wheelData);
     }
+
+    addPendingMouseListeners();
+}
+
+void Desktop::addPendingMouseListeners()
+{
+    for (auto listener : pendingMouseListeners)
+        globalMouseListeners.add (listener);
+
+    pendingMouseListeners.clear();
 }
 
 //==============================================================================

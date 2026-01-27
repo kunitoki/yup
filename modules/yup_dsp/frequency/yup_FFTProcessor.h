@@ -131,7 +131,7 @@ public:
     /** Returns a string describing the active FFT backend */
     String getBackendName() const;
 
-//==============================================================================
+    //==============================================================================
 #ifndef DOXYGEN
     /** @internal */
     class Engine;
@@ -139,7 +139,7 @@ public:
 
 private:
     //==============================================================================
-    void updateScalingFactor ();
+    void updateScalingFactor();
     void applyScaling (float* data, int numElements, bool isForward) const;
 
     //==============================================================================

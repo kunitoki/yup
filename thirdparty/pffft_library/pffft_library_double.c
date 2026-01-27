@@ -21,7 +21,7 @@
 
 #include "pffft_library.h"
 
-#if defined(__clang__)
+#if __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-W#pragma-messages"
 #endif
@@ -32,6 +32,6 @@
 
 #include <pffft_library/pffft_double.c>
 
-#if defined(__clang__)
+#if __clang__
 #pragma clang diagnostic pop
 #endif

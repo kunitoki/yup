@@ -338,16 +338,23 @@ bool yup_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
         if (LinuxErrorHandling::keyboardBreakOccurred)
             YUPApplicationBase::quit();
 
-        if (auto* runLoop = InternalRunLoop::getInstanceWithoutCreating())
+        if (auto* mm = MessageManager::getInstanceWithoutCreating())
         {
-            if (runLoop->dispatchPendingEvents())
-                break;
-
-            if (returnIfNoPendingMessages)
+            if (mm->hasStopMessageBeenSent())
                 return false;
-
-            runLoop->sleepUntilNextEvent (2000);
         }
+
+        auto* runLoop = InternalRunLoop::getInstanceWithoutCreating();
+        if (runLoop == nullptr)
+            return false;
+
+        if (runLoop->dispatchPendingEvents())
+            break;
+
+        if (returnIfNoPendingMessages)
+            return false;
+
+        runLoop->sleepUntilNextEvent (2000);
     }
 
     return true;

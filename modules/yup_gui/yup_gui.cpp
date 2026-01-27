@@ -127,6 +127,7 @@
 
 #include "application/yup_Application.cpp"
 #include "desktop/yup_Desktop.cpp"
+#include "keyboard/yup_TextInputTarget.cpp"
 #include "mouse/yup_MouseEvent.cpp"
 #include "mouse/yup_MouseCursor.cpp"
 #include "clipboard/yup_SystemClipboard.cpp"
@@ -142,6 +143,10 @@
 #include "widgets/yup_Label.cpp"
 #include "widgets/yup_Slider.cpp"
 #include "widgets/yup_ComboBox.cpp"
+#include "widgets/yup_ScrollBar.cpp"
+#include "widgets/yup_ProgressBar.cpp"
+#include "widgets/yup_ListBoxItem.cpp"
+#include "widgets/yup_ListBox.cpp"
 #include "artboard/yup_ArtboardFile.cpp"
 #include "artboard/yup_Artboard.cpp"
 #include "windowing/yup_DocumentWindow.cpp"

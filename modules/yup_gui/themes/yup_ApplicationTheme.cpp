@@ -77,4 +77,14 @@ const Font& ApplicationTheme::getDefaultFont() const
     return defaultFont;
 }
 
+void ApplicationTheme::setDefaultIconFont (Font font)
+{
+    defaultIconFont = std::move (font);
+}
+
+const Font& ApplicationTheme::getDefaultIconFont() const
+{
+    return defaultIconFont;
+}
+
 } // namespace yup

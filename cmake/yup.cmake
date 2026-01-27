@@ -74,11 +74,11 @@ function (_yup_setup_platform)
     _yup_message (STATUS "Setting up for ${platform} platform")
     _yup_message (STATUS "Running on cmake ${CMAKE_VERSION}")
 
-    set (YUP_PLATFORM "${platform}" PARENT_SCOPE)
+    set (YUP_PLATFORM "${platform}" CACHE STRING INTERNAL)
 
     foreach (platform_name ${platforms})
         string (TOUPPER "${platform_name}" platform_name_upper)
-        set (YUP_PLATFORM_${platform_name_upper} ON PARENT_SCOPE)
+        set (YUP_PLATFORM_${platform_name_upper} ON CACHE BOOL INTERNAL)
     endforeach()
 
 endfunction()

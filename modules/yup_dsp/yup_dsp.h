@@ -32,7 +32,7 @@
     website:              https://github.com/kunitoki/yup
     license:              ISC
 
-    dependencies:         yup_core yup_audio_basics
+    dependencies:         yup_core yup_audio_basics yup_simd
     appleFrameworks:      Accelerate
 
   END_YUP_MODULE_DECLARATION
@@ -45,6 +45,7 @@
 
 #include <yup_core/yup_core.h>
 #include <yup_audio_basics/yup_audio_basics.h>
+#include <yup_simd/yup_simd.h>
 
 //==============================================================================
 /** Config: YUP_ENABLE_FFTW3
@@ -91,11 +92,33 @@
 #define YUP_ENABLE_OOURA 1
 #endif
 
+/** Config: YUP_ENABLE_BUNGEE
+
+    Enable Bungee backend for time-stretching/pitch-shifting.
+*/
+#ifndef YUP_ENABLE_BUNGEE
+#if YUP_MODULE_AVAILABLE_bungee_library
+#define YUP_ENABLE_BUNGEE 1
+#else
+#define YUP_ENABLE_BUNGEE 0
+#endif
+#endif
+
 //==============================================================================
 
+#if YUP_ENABLE_BUNGEE && ! YUP_MODULE_AVAILABLE_bungee_library
+#undef YUP_ENABLE_BUNGEE
+#define YUP_ENABLE_BUNGEE 0
+#endif
+
+//==============================================================================
+
+#include <algorithm>
+#include <functional>
 #include <array>
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -127,6 +150,11 @@
 #include "base/yup_Biquad.h"
 #include "base/yup_BiquadCascade.h"
 
+// Metering and level measurement (after Biquad definition)
+#include "metering/yup_LevelProcessor.h"
+#include "metering/yup_LoudnessFilter.h"
+#include "metering/yup_KMeterState.h"
+
 // Filter designers and coefficient calculators
 #include "designers/yup_FilterDesigner.h"
 
@@ -145,3 +173,6 @@
 
 // Convolution processors
 #include "convolution/yup_PartitionedConvolver.h"
+
+// Time-stretching and pitch-shifting
+#include "stretching/yup_TimeStretchProcessor.h"

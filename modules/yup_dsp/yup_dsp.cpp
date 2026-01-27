@@ -37,9 +37,16 @@
 
 //==============================================================================
 
+#if YUP_ENABLE_BUNGEE
+#include <bungee_library/bungee_library.h>
+#endif
+
+//==============================================================================
+
 #if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_VDSP && (YUP_MAC || YUP_IOS)
 #define YUP_FFT_USING_VDSP 1
 #define YUP_FFT_FOUND_BACKEND 1
+#include <Accelerate/Accelerate.h>
 #endif
 
 #if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_INTEL_IPP && __has_include(<ipp.h>)
@@ -74,8 +81,12 @@
 
 #include "frequency/yup_FFTProcessor.cpp"
 #include "frequency/yup_SpectrumAnalyzerState.cpp"
+#include "metering/yup_LevelProcessor.cpp"
+#include "metering/yup_LoudnessFilter.cpp"
+#include "metering/yup_KMeterState.cpp"
 #include "designers/yup_FilterDesigner.cpp"
 #include "convolution/yup_PartitionedConvolver.cpp"
+#include "stretching/yup_TimeStretchProcessor.cpp"
 #include "utilities/yup_DspMath.cpp"
 
 //==============================================================================

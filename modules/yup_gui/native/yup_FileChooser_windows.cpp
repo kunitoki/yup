@@ -64,32 +64,48 @@ static String createFilterString (const String& filters)
 }
 
 //==============================================================================
-static COMDLG_FILTERSPEC* createFilterSpecs (const String& filters, int& numFilters)
+struct FilterSpecHolder
 {
-    numFilters = 0;
+    ~FilterSpecHolder()
+    {
+        delete[] specs;
+        for (auto* str : wideStrings)
+            delete[] str;
+    }
+
+    COMDLG_FILTERSPEC* specs = nullptr;
+    std::vector<wchar_t*> wideStrings;
+    int numFilters = 0;
+};
+
+//==============================================================================
+static FilterSpecHolder* createFilterSpecs (const String& filters)
+{
+    auto* holder = new FilterSpecHolder();
 
     if (filters.isEmpty())
     {
-        numFilters = 1;
-        COMDLG_FILTERSPEC* specs = new COMDLG_FILTERSPEC[1];
-        specs[0].pszName = L"All Files";
-        specs[0].pszSpec = L"*.*";
-        return specs;
+        holder->numFilters = 1;
+        holder->specs = new COMDLG_FILTERSPEC[1];
+        holder->specs[0].pszName = L"All Files";
+        holder->specs[0].pszSpec = L"*.*";
+        return holder;
     }
 
     StringArray extensions = StringArray::fromTokens (filters, ";,", String());
 
     if (extensions.size() == 0)
     {
-        numFilters = 1;
-        COMDLG_FILTERSPEC* specs = new COMDLG_FILTERSPEC[1];
-        specs[0].pszName = L"All Files";
-        specs[0].pszSpec = L"*.*";
-        return specs;
+        holder->numFilters = 1;
+        holder->specs = new COMDLG_FILTERSPEC[1];
+        holder->specs[0].pszName = L"All Files";
+        holder->specs[0].pszSpec = L"*.*";
+        return holder;
     }
 
-    numFilters = extensions.size() + 1;
-    COMDLG_FILTERSPEC* specs = new COMDLG_FILTERSPEC[numFilters];
+    // Create one entry for "Supported Files" and one for "All Files"
+    holder->numFilters = 2;
+    holder->specs = new COMDLG_FILTERSPEC[2];
 
     String allPatterns;
     for (int i = 0; i < extensions.size(); ++i)
@@ -106,12 +122,21 @@ static COMDLG_FILTERSPEC* createFilterSpecs (const String& filters, int& numFilt
         }
     }
 
-    specs[0].pszName = L"Supported Files";
-    specs[0].pszSpec = allPatterns.toWideCharPointer();
-    specs[numFilters - 1].pszName = L"All Files";
-    specs[numFilters - 1].pszSpec = L"*.*";
+    // Allocate persistent wide string for the pattern
+    auto utf16 = allPatterns.toUTF16();
+    auto len = utf16.length();
+    auto* wideStr = new wchar_t[len + 1];
+    for (int i = 0; i < len; ++i)
+        wideStr[i] = (wchar_t) utf16.getAddress()[i];
+    wideStr[len] = 0;
+    holder->wideStrings.push_back (wideStr);
 
-    return specs;
+    holder->specs[0].pszName = L"Supported Files";
+    holder->specs[0].pszSpec = wideStr;
+    holder->specs[1].pszName = L"All Files";
+    holder->specs[1].pszSpec = L"*.*";
+
+    return holder;
 }
 
 //==============================================================================
@@ -153,13 +178,11 @@ public:
                 pFileSave->SetTitle (fileChooser.title.toWideCharPointer());
 
                 // Set file type filters
-                int numFilters;
-                COMDLG_FILTERSPEC* filterSpecs = createFilterSpecs (fileChooser.filters, numFilters);
-                if (filterSpecs != nullptr)
+                FilterSpecHolder* filterHolder = createFilterSpecs (fileChooser.filters);
+                if (filterHolder != nullptr && filterHolder->specs != nullptr)
                 {
-                    pFileSave->SetFileTypes (numFilters, filterSpecs);
+                    pFileSave->SetFileTypes (filterHolder->numFilters, filterHolder->specs);
                     pFileSave->SetFileTypeIndex (1);
-                    delete[] filterSpecs;
                 }
 
                 // Set starting directory
@@ -214,6 +237,7 @@ public:
                 }
 
                 pFileSave->Release();
+                delete filterHolder;
             }
         }
         else
@@ -228,15 +252,14 @@ public:
                 pFileOpen->SetTitle (fileChooser.title.toWideCharPointer());
 
                 // Set file type filters
+                FilterSpecHolder* filterHolder = nullptr;
                 if (canChooseFiles)
                 {
-                    int numFilters;
-                    COMDLG_FILTERSPEC* filterSpecs = createFilterSpecs (fileChooser.filters, numFilters);
-                    if (filterSpecs != nullptr)
+                    filterHolder = createFilterSpecs (fileChooser.filters);
+                    if (filterHolder != nullptr && filterHolder->specs != nullptr)
                     {
-                        pFileOpen->SetFileTypes (numFilters, filterSpecs);
+                        pFileOpen->SetFileTypes (filterHolder->numFilters, filterHolder->specs);
                         pFileOpen->SetFileTypeIndex (1);
-                        delete[] filterSpecs;
                     }
                 }
 
@@ -330,6 +353,7 @@ public:
                 }
 
                 pFileOpen->Release();
+                delete filterHolder;
             }
         }
 

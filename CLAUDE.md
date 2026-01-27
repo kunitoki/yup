@@ -5,7 +5,7 @@ This document provides directive guidelines for AI assistants working on the YUP
 ## Project Context
 - **Project Type:** C++ graphics/audio library
 - **License:** ISC License
-- **Copyright:** `Copyright (c) 2025 - kunitoki@gmail.com`
+- **Copyright:** `Copyright (c) 2026 - kunitoki@gmail.com`
 - **Based On:** Fork of JUCE7 ISC Modules
 - **Build System:** CMake
 - **Testing Framework:** Google Test
@@ -23,7 +23,7 @@ This document provides directive guidelines for AI assistants working on the YUP
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2025 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 

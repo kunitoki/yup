@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#if defined(_MSC_VER)
+#if _MSC_VER
 #pragma warning (pop)
 #else
 #pragma clang diagnostic pop

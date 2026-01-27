@@ -277,7 +277,7 @@ function (_yup_execute_process_or_fail)
         OUTPUT_QUIET)
 
     if (NOT result EQUAL 0)
-        _yup_join_list_with_separator ("${command}" " " "" "" command_string)
+        _yup_join_list_with_separator ("${ARGN}" " " "" "" command_string)
         message (FATAL_ERROR "Failed to execute command '${command_string}': ${error_message}")
     endif()
 endfunction()

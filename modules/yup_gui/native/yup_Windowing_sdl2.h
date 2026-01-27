@@ -108,6 +108,10 @@ public:
     void* getNativeHandle() const override;
 
     //==============================================================================
+    void startTextInput (Component& component) override;
+    void stopTextInput (Component& component) override;
+
+    //==============================================================================
     void run() override;
     void handleAsyncUpdate() override;
     void timerCallback() override;
@@ -195,6 +199,7 @@ private:
     int currentContentWidth = 0;
     int currentContentHeight = 0;
     bool internalBoundsChange = false;
+    bool firstDisplay = true;
 
     WaitableEvent renderEvent { true };
     std::atomic<bool> shouldRenderContinuous = false;
@@ -202,6 +207,8 @@ private:
     bool renderAtomicMode = false;
     bool renderWireframe = false;
     bool updateOnlyWhenFocused = false;
+
+    WeakReference<Component> currentTextInputComponent;
 };
 
 } // namespace yup

@@ -735,7 +735,9 @@ function (yup_add_module module_path modules_definitions module_group)
 
     # ==== Fetch Python if needed
     if (module_needs_python)
-        if (NOT YUP_BUILD_WHEEL)
+        if (YUP_ENABLE_STATIC_PYTHON_LIBS)
+            list (APPEND module_libs ${Python_LIBRARIES})
+        elseif (NOT YUP_BUILD_WHEEL)
             list (APPEND module_libs Python::Python)
             if (YUP_PLATFORM_MAC)
                 list (APPEND module_link_options "-Wl,-weak_reference_mismatches,weak")

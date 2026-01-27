@@ -180,11 +180,16 @@ private:
     void registerNativeComponent (ComponentNative* nativeComponent);
     void unregisterNativeComponent (ComponentNative* nativeComponent);
 
+    void addPendingMouseListeners();
+
     Screen::Array screens;
     std::optional<MouseCursor> currentMouseCursor;
 
-    std::vector<WeakReference<MouseListener>> globalMouseListeners;
     std::unordered_map<void*, ComponentNative*> nativeComponents;
+
+    ListenerList<MouseListener> globalMouseListeners;
+    Array<MouseListener*> pendingMouseListeners;
+    bool sendingMouseEvent = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Desktop)
 };

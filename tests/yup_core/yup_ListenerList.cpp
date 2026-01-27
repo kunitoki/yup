@@ -46,11 +46,65 @@ using namespace yup;
 
 namespace
 {
+
 class MockListener
 {
 public:
     MOCK_METHOD (void, myCallbackMethod, (int, bool) );
 };
+
+class MyListenerType
+{
+public:
+    void myCallbackMethod (int foo, bool bar)
+    {
+        std::lock_guard lock (mutex);
+
+        lastFoo = foo;
+        lastBar = bar;
+        callbackCount++;
+    }
+
+    int getCallbackCount() const
+    {
+        return callbackCount;
+    }
+
+    int getLastFoo() const
+    {
+        return lastFoo;
+    }
+
+    bool getLastBar() const
+    {
+        return lastBar;
+    }
+
+private:
+    std::mutex mutex;
+    int lastFoo = 0;
+    bool lastBar = false;
+    int callbackCount = 0;
+};
+
+using ThreadSafeList = yup::ListenerList<MyListenerType, yup::Array<MyListenerType*, yup::CriticalSection>>;
+
+class WeakListenerType
+{
+public:
+    void myCallbackMethod (int foo, bool bar)
+    {
+        callbackCount++;
+    }
+
+    static int callbackCount;
+
+    YUP_DECLARE_WEAK_REFERENCEABLE (WeakListenerType);
+};
+
+int WeakListenerType::callbackCount = 0;
+
+} // namespace
 
 class ListenerListTests : public ::testing::Test
 {
@@ -125,59 +179,6 @@ protected:
         return result;
     }
 };
-
-class MyListenerType
-{
-public:
-    void myCallbackMethod (int foo, bool bar)
-    {
-        std::lock_guard lock (mutex);
-
-        lastFoo = foo;
-        lastBar = bar;
-        callbackCount++;
-    }
-
-    int getCallbackCount() const
-    {
-        return callbackCount;
-    }
-
-    int getLastFoo() const
-    {
-        return lastFoo;
-    }
-
-    bool getLastBar() const
-    {
-        return lastBar;
-    }
-
-private:
-    std::mutex mutex;
-    int lastFoo = 0;
-    bool lastBar = false;
-    int callbackCount = 0;
-};
-
-using ThreadSafeList = yup::ListenerList<MyListenerType, yup::Array<MyListenerType*, yup::CriticalSection>>;
-
-class WeakListenerType
-{
-public:
-    void myCallbackMethod (int foo, bool bar)
-    {
-        callbackCount++;
-    }
-
-    static int callbackCount;
-
-    YUP_DECLARE_WEAK_REFERENCEABLE (WeakListenerType);
-};
-
-int WeakListenerType::callbackCount = 0;
-
-} // namespace
 
 TEST_F (ListenerListTests, Add_Remove_Contains)
 {

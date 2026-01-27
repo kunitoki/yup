@@ -36,12 +36,13 @@
 
 # Intermediates
 build/*
-standalone/*/build/*
 cmake-build*
 out/*
 
 # Ides/Agents
-.vscode
-.idea
-.vs
-.claude
+.vscode/
+.idea/
+.vs/
+.claude/
+.pytest_cache/
+.cache/

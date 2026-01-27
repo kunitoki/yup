@@ -29,8 +29,8 @@
  #pragma GCC diagnostic ignored "-Wattributes"
  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #elif _MSC_VER
- __pragma (warning (push))
- __pragma (warning (disable: 4244))
+ #pragma warning (push)
+ #pragma warning (disable: 4244)
 #endif
 
 #include "rive_renderer.h"
@@ -54,5 +54,5 @@
 #elif __GNUC__
  #pragma GCC diagnostic pop
 #elif _MSC_VER
- __pragma (warning (pop))
+ #pragma warning (pop)
 #endif

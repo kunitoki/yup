@@ -364,9 +364,9 @@ public:
             slider->setRange (0.0f, 1.0f);
             slider->setDefaultValue (0.0f);
 
-            slider->onValueChanged = [this, i] (float value)
+            slider->onValueChanged = [this, i] (double value)
             {
-                harmonicSynth.setHarmonicAmplitude (i, value * 0.4f); // Scale down to prevent clipping
+                harmonicSynth.setHarmonicAmplitude (i, (float) value * 0.4f); // Scale down to prevent clipping
             };
 
             addAndMakeVisible (slider);
@@ -410,9 +410,9 @@ public:
         volumeSlider->setRange ({ 0.0f, 1.0f });
         volumeSlider->setDefaultValue (0.5f);
 
-        volumeSlider->onValueChanged = [this] (float value)
+        volumeSlider->onValueChanged = [this] (double value)
         {
-            masterVolume = value;
+            masterVolume = (float) value;
         };
         volumeSlider->setValue (0.5f); // Set initial volume to 50%
         addAndMakeVisible (*volumeSlider);

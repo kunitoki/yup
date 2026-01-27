@@ -29,7 +29,7 @@
     version:          2.0.1
     name:             A portable layout engine targeting web standards
     description:      A portable layout engine targeting web standards.
-    website:          https://www.zlib.net/
+    website:          https://github.com/facebook/yoga
     license:          Public Domain
 
     searchpaths:      upstream

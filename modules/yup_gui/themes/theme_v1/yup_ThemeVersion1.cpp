@@ -30,6 +30,8 @@ namespace yup
 
 extern const uint8_t RobotoFlexFont_data[];
 extern const std::size_t RobotoFlexFont_size;
+extern const uint8_t FontAwesome7Font_data[];
+extern const std::size_t FontAwesome7Font_size;
 
 //==============================================================================
 
@@ -768,6 +770,179 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
 }
 
 //==============================================================================
+
+void paintScrollBar (Graphics& g, const ApplicationTheme& theme, const ScrollBar& scrollBar)
+{
+    // Don't paint if hidden
+    if (scrollBar.getVisibilityMode() == ScrollBar::VisibilityMode::alwaysHidden)
+        return;
+
+    // Don't paint in auto-hide mode if scrolling is not needed
+    if (scrollBar.getVisibilityMode() == ScrollBar::VisibilityMode::autoHide && ! scrollBar.isScrollingNeeded())
+        return;
+
+    auto trackBounds = scrollBar.getTrackBoundsForRendering();
+    auto thumbBounds = scrollBar.getThumbBoundsForRendering().reduced (3);
+    auto cornerSize = scrollBar.getScrollBarWidth() * 0.5f;
+
+    // Draw track (optional, usually invisible on macOS)
+    if (const auto trackColor = scrollBar.findColor (ScrollBar::Style::trackColorId); trackColor && ! trackColor->isTransparent())
+    {
+        g.setFillColor (*trackColor);
+        g.fillRect (trackBounds);
+    }
+
+    // Draw thumb with rounded caps
+    Color thumbColor;
+    if (scrollBar.isDragging())
+        thumbColor = scrollBar.findColor (ScrollBar::Style::thumbDraggingColorId).value_or (Color (0x99000000));
+    else if (scrollBar.isThumbHovered())
+        thumbColor = scrollBar.findColor (ScrollBar::Style::thumbHoverColorId).value_or (Color (0x77000000));
+    else
+        thumbColor = scrollBar.findColor (ScrollBar::Style::thumbColorId).value_or (Color (0x55000000));
+
+    g.setFillColor (thumbColor);
+    g.fillRoundedRect (thumbBounds, cornerSize);
+}
+
+//==============================================================================
+
+void paintProgressBar (Graphics& g, const ApplicationTheme& theme, const ProgressBar& progressBar)
+{
+    const auto bounds = progressBar.getLocalBounds();
+    const auto cornerSize = bounds.getHeight() * 0.5f;
+
+    // Get colors
+    const auto backgroundColor = progressBar.findColor (ProgressBar::Style::backgroundColorId)
+                                     .value_or (Color (0xff3d3d3d));
+    const auto foregroundColor = progressBar.findColor (ProgressBar::Style::foregroundColorId)
+                                     .value_or (Color (0xff4ebfff));
+
+    // Draw background track
+    g.setFillColor (backgroundColor);
+    g.fillRoundedRect (bounds, cornerSize);
+
+    const auto progress = progressBar.getProgress();
+
+    if (progressBar.isIndeterminate())
+    {
+        // Indeterminate mode - draw animated diagonal stripes (JUCE-style)
+        const auto stripeWidth = bounds.getHeight() * 2.0f;
+        const auto halfStripeWidth = stripeWidth * 0.5f;
+        // Reverse animation direction (right to left becomes left to right)
+        const auto position = static_cast<float> (static_cast<int> (stripeWidth) - (static_cast<int> (Time::getCurrentTime().toMilliseconds() / 15) % static_cast<int> (stripeWidth)));
+
+        auto state = g.saveState();
+
+        // Create a rounded rect clip path (setClipPath requires global coordinates)
+        const auto globalBounds = progressBar.getBoundsRelativeToTopLevelComponent();
+        Path clipPath;
+        clipPath.addRoundedRectangle (globalBounds, cornerSize);
+        g.setClipPath (clipPath);
+
+        // Build two separate paths for alternating solid color shades
+        Path stripesLight;
+        Path stripesDark;
+        int stripeIndex = 0;
+
+        // Use half stripe width for spacing so stripes are closer together
+        for (auto x = -position; x < bounds.getWidth() + stripeWidth; x += halfStripeWidth)
+        {
+            // Alternate between the two paths
+            Path& currentPath = (stripeIndex % 2 == 0) ? stripesLight : stripesDark;
+
+            currentPath.addQuadrilateral (
+                x, 0.0f, x + halfStripeWidth, 0.0f, x, bounds.getHeight(), x - halfStripeWidth, bounds.getHeight());
+
+            ++stripeIndex;
+        }
+
+        // Draw all stripes with solid colors (no alpha blending)
+        g.setFillColor (foregroundColor);
+        g.fillPath (stripesLight);
+
+        g.setFillColor (foregroundColor.darker (0.15f));
+        g.fillPath (stripesDark);
+    }
+    else
+    {
+        // Normal mode - draw filled portion with rounded rect clipping
+        const auto filledWidth = bounds.getWidth() * static_cast<float> (jlimit (0.0, 1.0, progress));
+
+        if (filledWidth > 0.0f)
+        {
+            auto state = g.saveState();
+
+            // Create a rounded rect clip path for the filled portion (setClipPath requires global coordinates)
+            const auto globalBounds = progressBar.getBoundsRelativeToTopLevelComponent();
+            Path clipPath;
+            clipPath.addRoundedRectangle (globalBounds, cornerSize);
+            g.setClipPath (clipPath);
+
+            // Draw the filled bar
+            auto filledBounds = bounds.withWidth (filledWidth);
+            g.setFillColor (foregroundColor);
+            g.fillRect (filledBounds);
+        }
+    }
+}
+
+//==============================================================================
+
+void paintListBoxItem (Graphics& g, const ApplicationTheme& theme, const ListBoxItem& item)
+{
+    // Determine background color
+    Color backgroundColor;
+
+    if (item.isSelected())
+        backgroundColor = item.findColor (ListBoxItem::Style::backgroundColorSelectedId).value_or (Color (0xff3a7ebf));
+    else if (item.isHovered())
+        backgroundColor = item.findColor (ListBoxItem::Style::backgroundColorHoveredId).value_or (Color (0x22ffffff));
+    else
+        backgroundColor = item.findColor (ListBoxItem::Style::backgroundColorId).value_or (Color (0x00000000));
+
+    // Fill background
+    if (backgroundColor.getAlpha() > 0)
+    {
+        g.setFillColor (backgroundColor);
+        g.fillRect (item.getLocalBounds());
+    }
+
+    // Draw icon
+    auto iconDrawable = item.getIconDrawable();
+    auto iconBounds = item.getIconBoundsForRendering();
+    if (iconDrawable != nullptr && ! iconBounds.isEmpty())
+        iconDrawable->paint (g, iconBounds, Fitting::scaleToFit, Justification::center);
+
+    // Draw text
+    auto text = item.getText();
+    auto textBounds = item.getTextBoundsForRendering();
+    if (text.isNotEmpty() && ! textBounds.isEmpty())
+    {
+        Color textColor;
+
+        if (item.isSelected())
+            textColor = item.findColor (ListBoxItem::Style::textColorSelectedId).value_or (Color (0xffffffff));
+        else
+            textColor = item.findColor (ListBoxItem::Style::textColorId).value_or (Color (0xff000000));
+
+        g.setFillColor (textColor);
+
+        auto font = theme.getDefaultFont();
+        auto fontSize = std::min (textBounds.getHeight() * 0.6f, 16.0f);
+
+        auto styledText = yup::StyledText();
+        {
+            auto modifier = styledText.startUpdate();
+            modifier.appendText (text, font.withHeight (fontSize));
+            modifier.setVerticalAlign (StyledText::middle);
+        }
+
+        g.fillFittedText (styledText, textBounds);
+    }
+}
+
+//==============================================================================
 #if YUP_MODULE_AVAILABLE_yup_audio_gui
 void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKeyboardComponent& keyboard)
 {
@@ -805,92 +980,92 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
     // Paint white keys first
     for (int note = keyboard.getLowestVisibleKey(); note <= keyboard.getHighestVisibleKey(); ++note)
     {
-        if (! keyboard.isBlackKey (note))
+        if (keyboard.isBlackKey (note))
+            continue;
+
+        bool isBlack;
+        Rectangle<float> keyArea;
+        keyboard.getKeyPosition (note, keyWidth, keyArea, isBlack);
+
+        auto isPressed = keyboard.isNoteOn (note);
+        auto isOver = keyboard.isMouseOverNote (note);
+
+        // Base colors from theme
+        auto whiteKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyColorId);
+        auto pressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyPressedColorId);
+        auto outlineColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::keyOutlineColorId);
+
+        // Determine fill color based on state
+        Color fillColor = whiteKeyColor;
+        if (isPressed)
+            fillColor = pressedColor;
+        if (isOver && ! isPressed)
+            fillColor = whiteKeyColor.blendedWith (pressedColor.withAlpha (0.3f), BlendMode::SrcOver);
+
+        // Fill the key
+        g.setFillColor (fillColor);
+        g.fillRect (keyArea);
+
+        // Draw key separator line on the left edge
+        if (! outlineColor.isTransparent())
         {
-            bool isBlack;
-            Rectangle<float> keyArea;
-            keyboard.getKeyPosition (note, keyWidth, keyArea, isBlack);
+            g.setFillColor (outlineColor);
+            g.fillRect (keyArea.removeFromLeft (1.0f));
 
-            auto isPressed = keyboard.isNoteOn (note);
-            auto isOver = keyboard.isMouseOverNote (note);
+            // Draw right edge for the last key
+            if (note == keyboard.getHighestVisibleKey())
+                g.fillRect (keyArea.removeFromRight (1.0f).translated (keyArea.getWidth(), 0.0f));
+        }
 
-            // Base colors from theme
-            auto whiteKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyColorId);
-            auto pressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyPressedColorId);
-            auto outlineColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::keyOutlineColorId);
-
-            // Determine fill color based on state
-            Color fillColor = whiteKeyColor;
-            if (isPressed)
-                fillColor = pressedColor;
-            if (isOver && ! isPressed)
-                fillColor = whiteKeyColor.blendedWith (pressedColor.withAlpha (0.3f), BlendMode::SrcOver);
-
-            // Fill the key
-            g.setFillColor (fillColor);
-            g.fillRect (keyArea);
-
-            // Draw key separator line on the left edge
-            if (! outlineColor.isTransparent())
+        // Draw note text if there's space
+        if (keyboard.getWidth() > 100 && keyArea.getWidth() > 15.0f)
+        {
+            auto noteText = String();
+            int noteInOctave = note % 12;
+            switch (noteInOctave)
             {
-                g.setFillColor (outlineColor);
-                g.fillRect (keyArea.removeFromLeft (1.0f));
-
-                // Draw right edge for the last key
-                if (note == keyboard.getHighestVisibleKey())
-                    g.fillRect (keyArea.removeFromRight (1.0f).translated (keyArea.getWidth(), 0.0f));
+                case 0:
+                    noteText = "C";
+                    break;
+                case 2:
+                    noteText = "D";
+                    break;
+                case 4:
+                    noteText = "E";
+                    break;
+                case 5:
+                    noteText = "F";
+                    break;
+                case 7:
+                    noteText = "G";
+                    break;
+                case 9:
+                    noteText = "A";
+                    break;
+                case 11:
+                    noteText = "B";
+                    break;
+                default:
+                    break;
             }
 
-            // Draw note text if there's space
-            if (keyboard.getWidth() > 100 && keyArea.getWidth() > 15.0f)
+            if (noteText.isNotEmpty())
             {
-                auto noteText = String();
-                int noteInOctave = note % 12;
-                switch (noteInOctave)
+                auto textColor = outlineColor.contrasting (0.8f);
+                if (isPressed)
+                    textColor = pressedColor.contrasting (0.8f);
+
+                g.setFillColor (textColor);
+
+                StyledText styledText;
                 {
-                    case 0:
-                        noteText = "C";
-                        break;
-                    case 2:
-                        noteText = "D";
-                        break;
-                    case 4:
-                        noteText = "E";
-                        break;
-                    case 5:
-                        noteText = "F";
-                        break;
-                    case 7:
-                        noteText = "G";
-                        break;
-                    case 9:
-                        noteText = "A";
-                        break;
-                    case 11:
-                        noteText = "B";
-                        break;
-                    default:
-                        break;
+                    auto modifier = styledText.startUpdate();
+                    modifier.appendText (noteText, theme.getDefaultFont().withHeight (11.0f));
+                    modifier.setHorizontalAlign (StyledText::center);
                 }
 
-                if (noteText.isNotEmpty())
-                {
-                    auto textColor = outlineColor.contrasting (0.8f);
-                    if (isPressed)
-                        textColor = pressedColor.contrasting (0.8f);
-
-                    g.setFillColor (textColor);
-
-                    StyledText styledText;
-                    {
-                        auto modifier = styledText.startUpdate();
-                        modifier.appendText (noteText, theme.getDefaultFont().withHeight (11.0f));
-                        modifier.setHorizontalAlign (StyledText::center);
-                    }
-
-                    auto textArea = keyArea.reduced (2.0f).removeFromBottom (16.0f);
-                    g.fillFittedText (styledText, textArea);
-                }
+                auto textArea = keyArea.reduced (2.0f).removeFromBottom (16.0f);
+                g.fillFittedText (styledText, textArea);
             }
         }
     }
@@ -898,51 +1073,378 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
     // Paint black keys on top
     for (int note = keyboard.getLowestVisibleKey(); note <= keyboard.getHighestVisibleKey(); ++note)
     {
-        if (keyboard.isBlackKey (note))
+        if (! keyboard.isBlackKey (note))
+            continue;
+
+        bool isBlack;
+        Rectangle<float> keyArea;
+        keyboard.getKeyPosition (note, keyWidth, keyArea, isBlack);
+
+        auto isPressed = keyboard.isNoteOn (note);
+        auto isOver = keyboard.isMouseOverNote (note);
+
+        // Base colors from theme
+        auto blackKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyColorId);
+        auto blackPressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyPressedColorId);
+
+        // Determine fill color based on state
+        Color fillColor = blackKeyColor;
+        if (isPressed)
+            fillColor = blackPressedColor;
+        if (isOver && ! isPressed)
+            fillColor = blackKeyColor.blendedWith (blackPressedColor.withAlpha (0.3f), BlendMode::SrcOver);
+
+        // Fill the key
+        g.setFillColor (fillColor);
+        g.fillRect (keyArea);
+
+        if (isPressed)
         {
-            bool isBlack;
-            Rectangle<float> keyArea;
-            keyboard.getKeyPosition (note, keyWidth, keyArea, isBlack);
+            // Draw pressed outline
+            g.setStrokeColor (blackKeyColor);
+            g.setStrokeWidth (1.0f);
+            g.strokeRect (keyArea);
+        }
+        else
+        {
+            // Draw 3D highlight effect for unpressed keys
+            auto highlightColor = fillColor.brighter (0.4f);
+            g.setFillColor (highlightColor);
 
-            auto isPressed = keyboard.isNoteOn (note);
-            auto isOver = keyboard.isMouseOverNote (note);
+            // Create highlight area - top portion and side edges
+            auto sideIndent = keyArea.getWidth() * 0.125f;
+            auto topIndent = keyArea.getHeight() * 0.875f;
+            auto highlightArea = keyArea.reduced (sideIndent, 0).removeFromTop (topIndent);
 
-            // Base colors from theme
-            auto blackKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyColorId);
-            auto blackPressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyPressedColorId);
+            g.fillRect (highlightArea);
+        }
+    }
+}
 
-            // Determine fill color based on state
-            Color fillColor = blackKeyColor;
-            if (isPressed)
-                fillColor = blackPressedColor;
-            if (isOver && ! isPressed)
-                fillColor = blackKeyColor.blendedWith (blackPressedColor.withAlpha (0.3f), BlendMode::SrcOver);
+void paintKMeter (Graphics& g, const ApplicationTheme& theme, const KMeterComponent& meter)
+{
+    const auto bounds = meter.getLocalBounds();
+    const auto width = bounds.getWidth();
+    const auto height = bounds.getHeight();
 
-            // Fill the key
-            g.setFillColor (fillColor);
-            g.fillRect (keyArea);
+    if (bounds.isEmpty())
+        return;
 
-            if (isPressed)
-            {
-                // Draw pressed outline
-                g.setStrokeColor (blackKeyColor);
-                g.setStrokeWidth (1.0f);
-                g.strokeRect (keyArea);
-            }
+    // Get colors from theme
+    const auto backgroundColor = meter.findColor (KMeterComponent::Style::backgroundColorId)
+                                     .value_or (Color (0xff1a1a1a));
+    const auto greenColor = meter.findColor (KMeterComponent::Style::greenZoneColorId)
+                                .value_or (Color (0xff00cc00));
+    const auto amberColor = meter.findColor (KMeterComponent::Style::amberZoneColorId)
+                                .value_or (Color (0xffffaa00));
+    const auto redColor = meter.findColor (KMeterComponent::Style::redZoneColorId)
+                              .value_or (Color (0xffcc0000));
+    const auto averageColor = meter.findColor (KMeterComponent::Style::averageLevelColorId)
+                                  .value_or (Color (0xccffffff));
+    const auto peakColor = meter.findColor (KMeterComponent::Style::peakLevelColorId)
+                               .value_or (Color (0xffffffff));
+    const auto peakClipColor = meter.findColor (KMeterComponent::Style::peakLevelClipColorId)
+                                   .value_or (Color (0xffff0000));
+    const auto peakHoldColor = meter.findColor (KMeterComponent::Style::peakHoldColorId)
+                                   .value_or (Color (0xffffff00));
+
+    // Draw background with subtle depth
+    {
+        ColorGradient backgroundGradient;
+        backgroundGradient.addColorStop (backgroundColor.darker (0.15f),
+                                         Point<float> (bounds.getX(), bounds.getY()),
+                                         0.0f);
+        backgroundGradient.addColorStop (backgroundColor,
+                                         Point<float> (bounds.getX(), bounds.getY() + height * 0.5f),
+                                         0.5f);
+        backgroundGradient.addColorStop (backgroundColor.darker (0.25f),
+                                         Point<float> (bounds.getX(), bounds.getBottom()),
+                                         1.0f);
+
+        g.setFillColorGradient (backgroundGradient);
+        g.fillRect (bounds);
+    }
+
+    // Get K-System scale range for the meter state
+    const auto scale = meter.meterState.getScale();
+    const float rangeMin = KMeterState::rangeMinForScale (scale);
+    const float rangeMax = KMeterState::rangeMaxForScale (scale);
+    const float rangeSpan = rangeMax - rangeMin;
+
+    auto linearDbToY = [&] (float db) -> float
+    {
+        const float clampedDb = jlimit (rangeMin, rangeMax, db);
+        const float normalized = (clampedDb - rangeMin) / rangeSpan;
+        return bounds.getY() + height * (1.0f - normalized);
+    };
+
+    std::function<float (float)> dbToY = linearDbToY;
+
+    if (meter.getScaleMapping() == KMeterComponent::ScaleMapping::segmented)
+    {
+        struct MeterSegment
+        {
+            float topDb = 0.0f;
+            float bottomDb = 0.0f;
+            float topY = 0.0f;
+            float bottomY = 0.0f;
+            float heightUnits = 1.0f;
+            Color color;
+        };
+
+        const float limitRedBars = 4.0f;
+        const float limitAmberBars = 0.0f;
+        float limitTopBars = 18.0f;
+        float limitGreenBars = -24.0f;
+        float limitLinearArea = -30.0f;
+        bool useFiveUnitBottom = false;
+
+        switch (scale)
+        {
+            case KMeterState::Scale::k20:
+                limitTopBars = 18.0f;
+                limitGreenBars = -24.0f;
+                limitLinearArea = -30.0f;
+                useFiveUnitBottom = false;
+                break;
+            case KMeterState::Scale::k14:
+                limitTopBars = 12.0f;
+                limitGreenBars = -30.0f;
+                limitLinearArea = -30.0f;
+                useFiveUnitBottom = false;
+                break;
+            case KMeterState::Scale::k12:
+                limitTopBars = 10.0f;
+                limitGreenBars = -30.0f;
+                limitLinearArea = -30.0f;
+                useFiveUnitBottom = true;
+                break;
+            default:
+                break;
+        }
+
+        const Color nonLinearColor = greenColor.darker (0.35f);
+        std::vector<MeterSegment> segments;
+        segments.reserve (64);
+
+        float currentDb = rangeMax;
+        while (currentDb > rangeMin)
+        {
+            float segmentRange = 1.0f;
+
+            if (currentDb > limitTopBars)
+                segmentRange = 0.5f;
+            else if (currentDb > limitGreenBars)
+                segmentRange = 1.0f;
+            else if (currentDb > limitLinearArea)
+                segmentRange = 6.0f;
             else
+                segmentRange = 10.0f;
+
+            float bottomDb = currentDb - segmentRange;
+            if (bottomDb < rangeMin)
+                bottomDb = rangeMin;
+
+            float heightUnits = 1.0f;
+            if (currentDb > limitTopBars)
+                heightUnits = 1.0f;
+            else if (currentDb > limitGreenBars)
+                heightUnits = 2.0f;
+            else if (currentDb > limitLinearArea)
+                heightUnits = 3.0f;
+            else if (bottomDb <= rangeMin)
+                heightUnits = useFiveUnitBottom ? 5.0f : 4.0f;
+            else
+                heightUnits = 3.0f;
+
+            Color segmentColor = nonLinearColor;
+            if (currentDb > limitRedBars)
+                segmentColor = redColor;
+            else if (currentDb > limitAmberBars)
+                segmentColor = amberColor;
+            else if (currentDb > limitGreenBars)
+                segmentColor = greenColor;
+
+            segments.push_back ({ currentDb, bottomDb, 0.0f, 0.0f, heightUnits, segmentColor });
+            currentDb = bottomDb;
+        }
+
+        float totalUnits = 0.0f;
+        for (const auto& segment : segments)
+            totalUnits += segment.heightUnits;
+
+        const float unitHeight = totalUnits > 0.0f ? height / totalUnits : height;
+        float currentY = bounds.getY();
+
+        for (size_t index = 0; index < segments.size(); ++index)
+        {
+            auto& segment = segments[index];
+            const bool isLast = (index + 1 == segments.size());
+            const float segmentHeight = isLast ? (bounds.getBottom() - currentY) : (segment.heightUnits * unitHeight);
+
+            segment.topY = currentY;
+            segment.bottomY = currentY + segmentHeight;
+            currentY = segment.bottomY;
+        }
+
+        dbToY = [segments, rangeMin, rangeMax, bounds] (float db) -> float
+        {
+            const float clampedDb = jlimit (rangeMin, rangeMax, db);
+
+            for (const auto& segment : segments)
             {
-                // Draw 3D highlight effect for unpressed keys
-                auto highlightColor = fillColor.brighter (0.4f);
-                g.setFillColor (highlightColor);
+                if (clampedDb <= segment.topDb && clampedDb >= segment.bottomDb)
+                {
+                    const float range = segment.topDb - segment.bottomDb;
+                    const float normalized = range > 0.0f ? (clampedDb - segment.bottomDb) / range : 0.0f;
+                    return segment.bottomY - (segment.bottomY - segment.topY) * normalized;
+                }
+            }
 
-                // Create highlight area - top portion and side edges
-                auto sideIndent = keyArea.getWidth() * 0.125f;
-                auto topIndent = keyArea.getHeight() * 0.875f;
-                auto highlightArea = keyArea.reduced (sideIndent, 0).removeFromTop (topIndent);
+            return bounds.getBottom();
+        };
+    }
 
-                g.fillRect (highlightArea);
+    // Get current levels (thread-safe)
+    const float averageDb = meter.currentAverageDb.get();
+    const float peakDb = meter.currentPeakDb.get();
+    const float peakHoldDb = meter.currentPeakHoldDb.get();
+    const bool isClipping = meter.currentClipping.get();
+
+    // Draw average level (filled bar from bottom with gradient)
+    if (averageDb > rangeMin)
+    {
+        const float clampedAverageDb = jlimit (rangeMin, rangeMax, averageDb);
+        const float barLeft = bounds.getX() + 2.0f;
+        const float barWidth = width - 4.0f;
+        const float barBottom = dbToY (rangeMin);
+        const float barTop = dbToY (clampedAverageDb);
+        const float fillHeight = barBottom - barTop;
+
+        if (fillHeight > 0.0f)
+        {
+            const float barCenterX = barLeft + barWidth * 0.5f;
+            const Point<float> gradientStart (barCenterX, bounds.getBottom());
+            const Point<float> gradientEnd (barCenterX, bounds.getY());
+
+            auto positionForDb = [&] (float db) -> float
+            {
+                const float y = dbToY (db);
+                return jlimit (0.0f, 1.0f, (bounds.getBottom() - y) / height);
+            };
+
+            std::vector<ColorGradient::ColorStop> gradientStops;
+            gradientStops.emplace_back (greenColor, gradientStart, positionForDb (rangeMin));
+
+            if (rangeMax >= 0.0f)
+            {
+                const float zeroPos = positionForDb (0.0f);
+                if (zeroPos > 0.0f && zeroPos < 1.0f)
+                    gradientStops.emplace_back (amberColor, Point<float> (barCenterX, dbToY (0.0f)), zeroPos);
+            }
+
+            if (rangeMax >= 4.0f)
+            {
+                const float fourPos = positionForDb (4.0f);
+                if (fourPos > 0.0f && fourPos < 1.0f)
+                    gradientStops.emplace_back (redColor, Point<float> (barCenterX, dbToY (4.0f)), fourPos);
+            }
+
+            gradientStops.emplace_back (redColor, gradientEnd, positionForDb (rangeMax));
+
+            ColorGradient gradient (ColorGradient::Type::Linear, std::move (gradientStops));
+            g.setFillColorGradient (gradient.withMultipliedAlpha (averageColor.getAlphaFloat()));
+            g.fillRect (barLeft, barTop, barWidth, fillHeight);
+        }
+    }
+
+    // Draw peak hold marker first
+    if (meter.getShowPeakHold() && peakHoldDb > rangeMin)
+    {
+        const float holdY = dbToY (peakHoldDb);
+        if (holdY >= bounds.getY() && holdY <= bounds.getBottom())
+        {
+            g.setFillColor (peakHoldColor);
+            const float lineTop = jlimit (bounds.getY(), bounds.getBottom() - 2.0f, holdY - 1.0f);
+            g.fillRect (bounds.getX(), lineTop, width, 2.0f);
+        }
+    }
+
+    // Draw peak level indicator
+    if (meter.getShowPeak() && peakDb > rangeMin)
+    {
+        const float peakY = dbToY (peakDb);
+        if (peakY >= bounds.getY() && peakY <= bounds.getBottom())
+        {
+            g.setFillColor (isClipping ? peakClipColor : peakColor);
+            const float lineTop = jlimit (bounds.getY(), bounds.getBottom() - 2.0f, peakY - 1.0f);
+            g.fillRect (bounds.getX(), lineTop, width, 2.0f);
+        }
+    }
+
+    // Draw scale markers and labels
+    {
+        const auto& font = theme.getDefaultFont();
+        g.setFillColor (Color (0xffffffff).withAlpha (0.7f));
+
+        // Determine tick interval based on meter height and range
+        const float dbPerPixel = rangeSpan / height;
+        int tickInterval = 5; // Default: 5dB ticks
+
+        // Adjust tick interval for better visibility
+        if (height < 200)
+            tickInterval = 10; // Fewer ticks for small meters
+
+        // Draw tick marks and labels
+        // Start from a nice round number
+        const int startDb = static_cast<int> (std::ceil (rangeMin / tickInterval)) * tickInterval;
+        const int endDb = static_cast<int> (std::floor (rangeMax / tickInterval)) * tickInterval;
+
+        for (int db = startDb; db <= endDb; db += tickInterval)
+        {
+            const float y = dbToY (static_cast<float> (db));
+
+            // Skip if outside visible area
+            if (y < bounds.getY() || y > bounds.getBottom())
+                continue;
+
+            // Draw tick mark
+            g.fillRect (bounds.getX(), y - 0.5f, 4.0f, 1.0f);
+
+            // Draw label for important values
+            bool shouldLabel = false;
+
+            // Always label 0dB (the reference)
+            if (db == 0)
+                shouldLabel = true;
+            // Label every 10dB
+            else if (db % 10 == 0)
+                shouldLabel = true;
+            // Label -20dB (important for K-20)
+            else if (db == -20)
+                shouldLabel = true;
+
+            if (shouldLabel)
+            {
+                const String label = (db > 0 ? "+" : "") + String (db);
+                const float labelHeight = 12.0f;
+                const Rectangle<float> labelRect (bounds.getX() + 5.0f, y - 6.0f, 22.0f, labelHeight);
+
+                // Only draw label if it's fully visible (not clipped at top or bottom)
+                if (labelRect.getY() >= bounds.getY() && labelRect.getBottom() <= bounds.getBottom())
+                {
+                    g.fillFittedText (label, font, labelRect, Justification::left);
+                }
             }
         }
+    }
+
+    // Draw 0dB reference line
+    {
+        const float zeroDbY = dbToY (0.0f);
+        g.setStrokeColor (Color (0xffffffff).withAlpha (0.5f));
+        g.setStrokeWidth (1.5f);
+        g.strokeLine (Point<float> (bounds.getX(), zeroDbY), Point<float> (bounds.getRight(), zeroDbY));
     }
 }
 #endif
@@ -959,6 +1461,14 @@ ApplicationTheme::Ptr createThemeVersion1()
             yup::Logger::outputDebugString (result.getErrorMessage());
 
         theme->setDefaultFont (std::move (font));
+    }
+
+    {
+        Font font;
+        if (auto result = font.loadFromData (MemoryBlock (&FontAwesome7Font_data[0], FontAwesome7Font_size)); result.failed())
+            yup::Logger::outputDebugString (result.getErrorMessage());
+
+        theme->setDefaultIconFont (std::move (font));
     }
 
     theme->setComponentStyle<Slider> (ComponentStyle::createStyle<Slider> (paintSlider));
@@ -983,6 +1493,23 @@ ApplicationTheme::Ptr createThemeVersion1()
 
     theme->setComponentStyle<PopupMenu> (ComponentStyle::createStyle<PopupMenu> (paintPopupMenu));
 
+    theme->setComponentStyle<ScrollBar> (ComponentStyle::createStyle<ScrollBar> (paintScrollBar));
+    theme->setColor (ScrollBar::Style::trackColorId, Color (0xff3d3d3d));
+    theme->setColor (ScrollBar::Style::thumbColorId, Color (0x55000000));
+    theme->setColor (ScrollBar::Style::thumbHoverColorId, Color (0x77000000));
+    theme->setColor (ScrollBar::Style::thumbDraggingColorId, Color (0x99000000));
+
+    theme->setComponentStyle<ProgressBar> (ComponentStyle::createStyle<ProgressBar> (paintProgressBar));
+    theme->setColor (ProgressBar::Style::backgroundColorId, Color (0xff3d3d3d));
+    theme->setColor (ProgressBar::Style::foregroundColorId, Color (0xff4ebfff));
+
+    theme->setComponentStyle<ListBoxItem> (ComponentStyle::createStyle<ListBoxItem> (paintListBoxItem));
+    theme->setColor (ListBoxItem::Style::textColorId, Colors::black);
+    theme->setColor (ListBoxItem::Style::textColorSelectedId, Colors::white);
+    theme->setColor (ListBoxItem::Style::backgroundColorId, Colors::transparentBlack);
+    theme->setColor (ListBoxItem::Style::backgroundColorSelectedId, Color (0xff3a7ebf));
+    theme->setColor (ListBoxItem::Style::backgroundColorHoveredId, Color (0x22ffffff));
+
 #if YUP_MODULE_AVAILABLE_yup_audio_gui
     theme->setComponentStyle<MidiKeyboardComponent> (ComponentStyle::createStyle<MidiKeyboardComponent> (paintMidiKeyboard));
     theme->setColor (MidiKeyboardComponent::Style::whiteKeyColorId, Color (0xfff0f0f0));
@@ -992,6 +1519,16 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setColor (MidiKeyboardComponent::Style::blackKeyPressedColorId, Color (0xff4ebfff));
     theme->setColor (MidiKeyboardComponent::Style::blackKeyShadowColorId, Color (0x80000000));
     theme->setColor (MidiKeyboardComponent::Style::keyOutlineColorId, Color (0xff888888));
+
+    theme->setComponentStyle<KMeterComponent> (ComponentStyle::createStyle<KMeterComponent> (paintKMeter));
+    theme->setColor (KMeterComponent::Style::backgroundColorId, Color (0xff1a1a1a));
+    theme->setColor (KMeterComponent::Style::greenZoneColorId, Color (0xff00cc00));
+    theme->setColor (KMeterComponent::Style::amberZoneColorId, Color (0xffffaa00));
+    theme->setColor (KMeterComponent::Style::redZoneColorId, Color (0xffcc0000));
+    theme->setColor (KMeterComponent::Style::averageLevelColorId, Color (0xccffffff));
+    theme->setColor (KMeterComponent::Style::peakLevelColorId, Color (0xffffffff));
+    theme->setColor (KMeterComponent::Style::peakLevelClipColorId, Color (0xffff0000));
+    theme->setColor (KMeterComponent::Style::peakHoldColorId, Color (0xffffff00));
 #endif
 
     return theme;

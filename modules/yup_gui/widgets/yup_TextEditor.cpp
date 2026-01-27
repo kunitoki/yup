@@ -315,12 +315,14 @@ void TextEditor::resized()
 void TextEditor::focusGained()
 {
     startCaretBlinking();
+    requestTextInput();
     repaint();
 }
 
 void TextEditor::focusLost()
 {
     stopCaretBlinking();
+    relinquishTextInput();
     repaint();
 }
 
@@ -777,6 +779,16 @@ void TextEditor::moveCaretToEnd (bool extendSelection)
         selectionStart = selectionEnd = caretPosition;
     else
         selectionEnd = caretPosition;
+}
+
+//==============================================================================
+
+Rectangle<float> TextEditor::getTextInputRect() const
+{
+    auto caretBounds = getCaretBounds();
+    auto screenPos = localToScreen (caretBounds.getTopLeft());
+
+    return Rectangle<float> (screenPos.getX(), screenPos.getY(), caretBounds.getWidth(), caretBounds.getHeight());
 }
 
 //==============================================================================

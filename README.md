@@ -1,4 +1,6 @@
-# YUP: Cross-Platform Application And Plugin Development Library
+<img src="./logo.png" />
+
+# YUP! Cross-Platform Application And Plugin Development Library
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
   <a href="https://kunitoki.github.io/yup/demos/web_render_0/" title="UI courtesy from https://www.drywestdesign.com/">

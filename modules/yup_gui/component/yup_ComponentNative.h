@@ -357,6 +357,19 @@ public:
     virtual const RectangleList<float>& getRepaintAreas() const = 0;
 
     //==============================================================================
+    /** Starts text input for the specified component.
+
+        @param component The component to start text input for.
+    */
+    virtual void startTextInput (Component& component) = 0;
+
+    /** Stops text input for the specified component.
+
+        @param component The component to stop text input for.
+    */
+    virtual void stopTextInput (Component& component) = 0;
+
+    //==============================================================================
     /** Gets the DPI scale factor.
 
         @return The current DPI scale factor.

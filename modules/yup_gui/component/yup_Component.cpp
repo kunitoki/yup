@@ -352,6 +352,8 @@ void Component::setBounds (float x, float y, float width, float height)
 
 void Component::setBounds (const Rectangle<float>& newBounds)
 {
+    repaint();
+
     boundsInParent = newBounds;
 
     if (options.onDesktop && native != nullptr)
