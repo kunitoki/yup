@@ -1,0 +1,495 @@
+{
+  "metadata_path": "thirdparty/rive_vendor_versions.json",
+  "global_exclude_globs": [
+    ".DS_Store",
+    "**/.DS_Store",
+    ".git/**",
+    ".github/**",
+    ".gitignore",
+    ".gitattributes",
+    ".editorconfig",
+    "CMakeLists.txt",
+    "**/CMakeLists.txt",
+    "BUILD*",
+    "WORKSPACE*",
+    "Makefile.in",
+    "Makefile.am",
+    "meson.build",
+    "meson_options.txt",
+    "**/meson.build",
+    "**/meson_options.txt",
+    "test/**",
+    "tests/**",
+    "example/**",
+    "examples/**",
+    "docs/**",
+    "doc/**",
+    "benchmark/**",
+    "benchmarks/**",
+    "fuzz/**",
+    "fuzzer/**",
+    "perf/**",
+    "script/**",
+    "scripts/**",
+    "**/*.md"
+  ],
+  "dependencies": [
+    {
+      "name": "rive",
+      "repo": "https://github.com/rive-app/rive-runtime.git",
+      "ref": "main",
+      "destination": "thirdparty/rive",
+      "license": "MIT",
+      "module_header": "thirdparty/rive/rive.h",
+      "module_version_from_ref": true,
+      "follow_rive_ref": true,
+      "copies": [
+        {
+          "from": "include",
+          "to": "include",
+          "include_globs": [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp"
+          ]
+        },
+        {
+          "from": "src",
+          "to": "source",
+          "include_globs": [
+            "**/*.c",
+            "**/*.cc",
+            "**/*.cpp",
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.mm"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "rive_renderer",
+      "repo": "https://github.com/rive-app/rive-runtime.git",
+      "ref": "main",
+      "destination": "thirdparty/rive_renderer",
+      "license": "MIT",
+      "module_header": "thirdparty/rive_renderer/rive_renderer.h",
+      "module_version_from_ref": true,
+      "follow_rive_ref": true,
+      "copies": [
+        {
+          "from": "renderer/include",
+          "to": "include",
+          "include_globs": [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp"
+          ]
+        },
+        {
+          "from": "renderer/src",
+          "to": "source",
+          "include_globs": [
+            "**/*.c",
+            "**/*.cc",
+            "**/*.cpp",
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.m",
+            "**/*.mm",
+            "**/*.glsl",
+            "**/*.metal",
+            "**/*.frag",
+            "**/*.vert",
+            "**/*.main",
+            "**/*.py",
+            "**/Makefile"
+          ],
+          "preserve_globs": [
+            "generated/shaders/**"
+          ],
+          "exclude_globs": [
+            "out/**"
+          ]
+        }
+      ],
+      "shader_generation": {
+        "source_dir": "renderer/src/shaders",
+        "output_dir": "out/generated",
+        "destination": "thirdparty/rive_renderer/source/generated/shaders",
+        "python_package": "ply",
+        "required_tools": {
+          "minify": [
+            "make"
+          ],
+          "rive_pls_macosx_metallib": [
+            "make",
+            "xcrun",
+            "xxd"
+          ],
+          "rive_pls_ios_metallib": [
+            "make",
+            "xcrun",
+            "xxd"
+          ],
+          "rive_pls_ios_simulator_metallib": [
+            "make",
+            "xcrun",
+            "xxd"
+          ],
+          "rive_renderer_xros_metallib": [
+            "make",
+            "xcrun",
+            "xxd"
+          ],
+          "rive_renderer_xros_simulator_metallib": [
+            "make",
+            "xcrun",
+            "xxd"
+          ],
+          "rive_renderer_appletvos_metallib": [
+            "make",
+            "xcrun",
+            "xxd"
+          ],
+          "rive_renderer_appletvsimulator_metallib": [
+            "make",
+            "xcrun",
+            "xxd"
+          ],
+          "spirv": [
+            "make",
+            "glslangValidator"
+          ],
+          "spirv-binary": [
+            "make",
+            "glslangValidator"
+          ]
+        },
+        "targets": [
+          "minify",
+          "rive_pls_macosx_metallib",
+          "rive_pls_ios_metallib",
+          "rive_pls_ios_simulator_metallib",
+          "rive_renderer_xros_metallib",
+          "rive_renderer_xros_simulator_metallib",
+          "rive_renderer_appletvos_metallib",
+          "rive_renderer_appletvsimulator_metallib",
+          "spirv",
+          "spirv-binary"
+        ]
+      }
+    },
+    {
+      "name": "rive_decoders",
+      "repo": "https://github.com/rive-app/rive-runtime.git",
+      "ref": "main",
+      "destination": "thirdparty/rive_decoders",
+      "license": "MIT",
+      "module_header": "thirdparty/rive_decoders/rive_decoders.h",
+      "module_version_from_ref": true,
+      "follow_rive_ref": true,
+      "copies": [
+        {
+          "from": "decoders/include",
+          "to": "include",
+          "include_globs": [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp"
+          ]
+        },
+        {
+          "from": "decoders/src",
+          "to": "source",
+          "include_globs": [
+            "**/*.c",
+            "**/*.cc",
+            "**/*.cpp",
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.m",
+            "**/*.mm"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "harfbuzz",
+      "repo": "https://github.com/rive-app/harfbuzz.git",
+      "rive_dependency_premake": {
+        "file": "dependencies/premake5_harfbuzz_v2.lua",
+        "project": "rive-app/harfbuzz"
+      },
+      "destination": "thirdparty/harfbuzz",
+      "license": "MIT",
+      "copies": [
+        {
+          "from": "src",
+          "to": "upstream",
+          "include_globs": [
+            "**/*.c",
+            "**/*.cc",
+            "**/*.h",
+            "**/*.hh",
+            "**/*.rl"
+          ],
+          "exclude_globs": [
+            "*-test*",
+            "test-*",
+            "main.cc"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sheenbidi_library",
+      "repo": "https://github.com/Tehreer/SheenBidi.git",
+      "rive_dependency_premake": {
+        "file": "dependencies/premake5_sheenbidi_v2.lua",
+        "project": "Tehreer/SheenBidi"
+      },
+      "destination": "thirdparty/sheenbidi_library",
+      "license": "Apache-2.0",
+      "copies": [
+        {
+          "from": "Headers",
+          "to": "include",
+          "include_globs": [
+            "**/*.h"
+          ]
+        },
+        {
+          "from": "Source",
+          "to": "source",
+          "include_globs": [
+            "**/*.c",
+            "**/*.h"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "yoga_library",
+      "repo": "https://github.com/rive-app/yoga.git",
+      "rive_dependency_premake": {
+        "file": "dependencies/premake5_yoga_v2.lua",
+        "project": "rive-app/yoga"
+      },
+      "destination": "thirdparty/yoga_library",
+      "license": "MIT",
+      "copies": [
+        {
+          "from": "yoga",
+          "to": "upstream/yoga",
+          "include_globs": [
+            "**/*.cpp",
+            "**/*.h"
+          ],
+          "exclude_globs": [
+            "tests/**"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "libpng",
+      "repo": "https://github.com/glennrp/libpng.git",
+      "rive_dependency_premake": {
+        "file": "dependencies/premake5_libpng_v2.lua",
+        "project": "glennrp/libpng"
+      },
+      "destination": "thirdparty/libpng",
+      "license": "PNG-2.0",
+      "copies": [
+        {
+          "from": ".",
+          "to": "upstream",
+          "include_globs": [
+            "*.c",
+            "*.h",
+            "LICENSE",
+            "arm/*.c",
+            "arm/*.h",
+            "intel/*.c",
+            "intel/*.h"
+          ],
+          "exclude_globs": [
+            "pngtest.c",
+            "arm/filter_neon.S"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "libwebp",
+      "repo": "https://github.com/webmproject/libwebp.git",
+      "rive_dependency_premake": {
+        "file": "dependencies/premake5_libwebp_v2.lua",
+        "project": "webmproject/libwebp"
+      },
+      "destination": "thirdparty/libwebp",
+      "license": "BSD-3-Clause",
+      "copies": [
+        {
+          "from": "src",
+          "to": "upstream/src",
+          "include_globs": [
+            "**/*.c",
+            "**/*.h"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "zlib",
+      "repo": "https://github.com/madler/zlib.git",
+      "rive_dependency_premake": {
+        "file": "dependencies/premake5_libpng_v2.lua",
+        "project": "madler/zlib"
+      },
+      "destination": "thirdparty/zlib",
+      "license": "Zlib",
+      "copies": [
+        {
+          "from": ".",
+          "to": "src",
+          "include_globs": [
+            "*.c",
+            "*.h",
+            "README"
+          ],
+          "exclude_globs": [
+            "example.c",
+            "minigzip.c"
+          ]
+        }
+      ]
+    }
+  ],
+  "include_blocks": [
+    {
+      "path": "thirdparty/rive/rive.cpp",
+      "start_marker": "// BEGIN YUP GENERATED RIVE INCLUDES",
+      "end_marker": "// END YUP GENERATED RIVE INCLUDES",
+      "insert_after": "#if !defined(_RIVE_INTERNAL_)\n#define _RIVE_INTERNAL_ 1\n#endif",
+      "insert_before": "#if __clang__",
+      "root": "thirdparty/rive/source",
+      "prefix": "source",
+      "include_globs": [
+        "**/*.c",
+        "**/*.cc",
+        "**/*.cpp"
+      ],
+      "exclude_globs": [
+        "**/*_test.*"
+      ]
+    },
+    {
+      "path": "thirdparty/rive_renderer/rive_renderer.cpp",
+      "start_marker": "// BEGIN YUP GENERATED RIVE RENDERER INCLUDES",
+      "end_marker": "// END YUP GENERATED RIVE RENDERER INCLUDES",
+      "insert_after": "#include \"rive_renderer.h\"",
+      "insert_before": "#if __clang__",
+      "root": "thirdparty/rive_renderer/source",
+      "prefix": "source",
+      "include_globs": [
+        "*.c",
+        "*.cc",
+        "*.cpp"
+      ]
+    },
+    {
+      "path": "thirdparty/rive_decoders/rive_decoders.cpp",
+      "start_marker": "// BEGIN YUP GENERATED RIVE DECODER INCLUDES",
+      "end_marker": "// END YUP GENERATED RIVE DECODER INCLUDES",
+      "insert_after": "#include \"rive_decoders.h\"",
+      "insert_before": "#if RIVE_JPEG",
+      "root": "thirdparty/rive_decoders/source",
+      "prefix": "source",
+      "include_globs": [
+        "*.c",
+        "*.cc",
+        "*.cpp"
+      ],
+      "exclude_globs": [
+        "decode_jpeg.cpp",
+        "decode_png.cpp",
+        "decode_webp.cpp"
+      ]
+    },
+    {
+      "path": "thirdparty/harfbuzz/harfbuzz.cpp",
+      "start_marker": "// BEGIN YUP GENERATED HARFBUZZ INCLUDES",
+      "end_marker": "// END YUP GENERATED HARFBUZZ INCLUDES",
+      "insert_after": "#include \"harfbuzz.h\"",
+      "insert_before": "#if __clang__",
+      "root": "thirdparty/harfbuzz/upstream",
+      "prefix": "upstream",
+      "include_globs": [
+        "**/*.cc"
+      ],
+      "exclude_globs": [
+        "main.cc",
+        "*-test*",
+        "test-*"
+      ]
+    },
+    {
+      "path": "thirdparty/sheenbidi_library/sheenbidi_library.c",
+      "start_marker": "// BEGIN YUP GENERATED SHEENBIDI INCLUDES",
+      "end_marker": "// END YUP GENERATED SHEENBIDI INCLUDES",
+      "insert_after": "#if defined(__GNUC__) && !defined(__clang__)\n #pragma GCC diagnostic push\n #pragma GCC diagnostic ignored \"-Wpragmas\"\n #pragma GCC diagnostic ignored \"-Wstringop-overflow\"\n #pragma GCC diagnostic ignored \"-Wnonportable-include-path\"\n#endif",
+      "insert_before": "#if defined(__GNUC__) && !defined(__clang__)",
+      "root": "thirdparty/sheenbidi_library/source",
+      "prefix": "source",
+      "include_globs": [
+        "*.c"
+      ]
+    },
+    {
+      "path": "thirdparty/yoga_library/yoga_library.cpp",
+      "start_marker": "// BEGIN YUP GENERATED YOGA INCLUDES",
+      "end_marker": "// END YUP GENERATED YOGA INCLUDES",
+      "insert_after": "#include \"yoga_library.h\"",
+      "root": "thirdparty/yoga_library/upstream",
+      "prefix": "upstream",
+      "include_globs": [
+        "**/*.cpp"
+      ],
+      "exclude_globs": [
+        "**/*Test.cpp"
+      ]
+    },
+    {
+      "path": "thirdparty/libpng/libpng.c",
+      "start_marker": "// BEGIN YUP GENERATED LIBPNG INCLUDES",
+      "end_marker": "// END YUP GENERATED LIBPNG INCLUDES",
+      "insert_after": "#include \"libpng.h\"",
+      "insert_before": "#if defined(__arm__)",
+      "root": "thirdparty/libpng/upstream",
+      "prefix": "upstream",
+      "include_globs": [
+        "*.c"
+      ],
+      "exclude_globs": [
+        "pngtest.c"
+      ]
+    },
+    {
+      "path": "thirdparty/libwebp/libwebp.c",
+      "validate_existing_includes": true,
+      "search_roots": [
+        "thirdparty/libwebp",
+        "thirdparty/libwebp/upstream"
+      ]
+    },
+    {
+      "path": "thirdparty/zlib/zlib.c",
+      "validate_existing_includes": true
+    }
+  ]
+}
