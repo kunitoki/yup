@@ -83,7 +83,7 @@ function (yup_audio_plugin)
 
     set_target_properties (${target_name}_shared PROPERTIES
         FOLDER "${YUP_ARG_TARGET_IDE_GROUP}"
-        XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC OFF
+        XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC ON
         XCODE_GENERATE_SCHEME ON)
 
     # ==== Find dependencies
@@ -119,6 +119,14 @@ function (yup_audio_plugin)
             YUP_STANDALONE_APPLICATION=0)
 
         target_link_libraries (${target_name}_clap_plugin PRIVATE
+            ${target_name}_shared
+            yup_audio_plugin_client
+            clap
+            ${target_name}_clap
+            ${additional_libraries}
+            ${YUP_ARG_MODULES})
+
+        _yup_module_apply_arc_to_target_sources (${target_name}_clap_plugin
             ${target_name}_shared
             yup_audio_plugin_client
             clap
@@ -176,6 +184,14 @@ function (yup_audio_plugin)
             YUP_STANDALONE_APPLICATION=0)
 
         target_link_libraries (${target_name}_vst3_plugin PRIVATE
+            ${target_name}_shared
+            yup_audio_plugin_client
+            sdk
+            ${target_name}_vst3
+            ${additional_libraries}
+            ${YUP_ARG_MODULES})
+
+        _yup_module_apply_arc_to_target_sources (${target_name}_vst3_plugin
             ${target_name}_shared
             yup_audio_plugin_client
             sdk

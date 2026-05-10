@@ -1541,7 +1541,7 @@ void iOSAudioIODeviceType::handleAsyncUpdate()
 //==============================================================================
 AudioSessionHolder::AudioSessionHolder() { nativeSession = [[iOSAudioSessionNative alloc] init:this]; }
 
-AudioSessionHolder::~AudioSessionHolder() { [nativeSession release]; }
+AudioSessionHolder::~AudioSessionHolder() = default;
 
 void AudioSessionHolder::handleStatusChange (bool enabled, const char* reason) const
 {

@@ -96,7 +96,7 @@ inline NSArray* createNSArrayFromStringArray(const StringArray& strings)
     for (const auto& string : strings)
         [array addObject:yupStringToNS(string)];
 
-    return [array autorelease];
+    return array;
 }
 
 inline NSData* varToJsonData(const var& varToParse)
@@ -110,7 +110,7 @@ inline var jsonDataToVar(NSData* jsonData)
                                              encoding:NSUTF8StringEncoding];
 
     jassert(jsonString != nullptr);
-    return JSON::parse(nsStringToYup([jsonString autorelease]));
+    return JSON::parse(nsStringToYup(jsonString));
 }
 
 // If for any reason the given var cannot be converted into a valid dictionary
@@ -208,10 +208,21 @@ struct NSObjectDeleter
 {
     void operator()(NSObject* object) const noexcept
     {
-        if (object != nullptr)
-            [object release];
+        (void)object;
     }
 };
+
+template <typename T>
+void retainObjCObject(T item)
+{
+    (void)item;
+}
+
+template <typename T>
+void releaseObjCObject(T item)
+{
+    (void)item;
+}
 
 template <typename NSType>
 using NSUniquePtr = std::unique_ptr<NSType, NSObjectDeleter>;
@@ -235,8 +246,7 @@ class ObjCObjectHandle
     ObjCObjectHandle(const ObjCObjectHandle& other)
         : item(other.item)
     {
-        if (item != nullptr)
-            [item retain];
+        retainObjCObject(item);
     }
 
     ObjCObjectHandle& operator=(const ObjCObjectHandle& other)
@@ -262,8 +272,7 @@ class ObjCObjectHandle
 
     void reset()
     {
-        if (item != nullptr)
-            [item release];
+        releaseObjCObject(item);
 
         item = {};
     }
@@ -312,9 +321,27 @@ constexpr auto makeCompileTimeStr(const char (&v)[A], Others&&... others)
 template <typename Type>
 inline Type getIvar(id self, const char* name)
 {
-    void* v = nullptr;
-    object_getInstanceVariable(self, name, &v);
-    return static_cast<Type>(v);
+    auto* ivar = class_getInstanceVariable(object_getClass(self), name);
+    jassert(ivar != nullptr);
+
+    if (ivar == nullptr)
+        return {};
+
+    auto* bytes = static_cast<uint8_t*>((__bridge void*)self);
+    return *reinterpret_cast<Type*>(bytes + ivar_getOffset(ivar));
+}
+
+template <typename Type>
+inline void setIvar(id self, const char* name, Type value)
+{
+    auto* ivar = class_getInstanceVariable(object_getClass(self), name);
+    jassert(ivar != nullptr);
+
+    if (ivar == nullptr)
+        return;
+
+    auto* bytes = static_cast<uint8_t*>((__bridge void*)self);
+    *reinterpret_cast<Type*>(bytes + ivar_getOffset(ivar)) = value;
 }
 
 template <typename SuperclassType>
@@ -404,7 +431,7 @@ struct ObjCLifetimeManagedClass : public ObjCClass<NSObject>
         addMethod(@selector(initWithYupObject:), initWithYupObject);
         YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
-        addMethod(@selector(dealloc), dealloc);
+        addMethod(sel_registerName("dealloc"), dealloc);
 
         registerClass();
     }
@@ -412,7 +439,7 @@ struct ObjCLifetimeManagedClass : public ObjCClass<NSObject>
     static id initWithYupObject(id _self, SEL, YupClass* obj)
     {
         NSObject* self = sendSuperclassMessage<NSObject*>(_self, @selector(init));
-        object_setInstanceVariable(self, "cppObject", obj);
+        setIvar(self, "cppObject", obj);
 
         return self;
     }
@@ -422,10 +449,10 @@ struct ObjCLifetimeManagedClass : public ObjCClass<NSObject>
         if (auto* obj = getIvar<YupClass*>(_self, "cppObject"))
         {
             delete obj;
-            object_setInstanceVariable(_self, "cppObject", nullptr);
+            setIvar<YupClass*>(_self, "cppObject", nullptr);
         }
 
-        sendSuperclassMessage<void>(_self, @selector(dealloc));
+        sendSuperclassMessage<void>(_self, sel_registerName("dealloc"));
     }
 
     static ObjCLifetimeManagedClass objCLifetimeManagedClass;
@@ -477,9 +504,11 @@ constexpr auto getSignature(Result (Class::*)(Args...) const)
 template <typename Class, typename Fn, typename Result, typename... Params>
 auto createObjCBlockImpl(Class* object, Fn func, Signature<Result(Params...)>)
 {
-    return [[^Result(Params... params) {
+    auto block = [^Result(Params... params) {
       return (object->*func)(params...);
-    } copy] autorelease];
+    } copy];
+
+    return block;
 }
 } // namespace detail
 
@@ -520,8 +549,7 @@ class ObjCBlock
 
     ~ObjCBlock() noexcept
     {
-        if (block != nullptr)
-            [block release];
+        releaseObjCObject(block);
     }
 
     bool operator==(BlockType ptr) const { return block == ptr; }

@@ -291,8 +291,8 @@ void setNativeParent (void* nativeWindow, SDL_Window* window)
     SetWindowPos (hwnd, nullptr, 0, 0, 0, 0, SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
 
 #elif YUP_MAC
-    NSWindow* parentWindow = [reinterpret_cast<NSView*> (nativeWindow) window];
-    NSWindow* currentWindow = reinterpret_cast<NSWindow*> (getNativeWindowHandle (window));
+    NSWindow* parentWindow = [(__bridge NSView*) nativeWindow window];
+    NSWindow* currentWindow = (__bridge NSWindow*) getNativeWindowHandle (window);
     [parentWindow addChildWindow:currentWindow ordered:NSWindowAbove];
 
 #elif YUP_LINUX

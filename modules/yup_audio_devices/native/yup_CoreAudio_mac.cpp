@@ -502,12 +502,9 @@ struct CoreAudioClasses
                 pa.mScope = kAudioObjectPropertyScopeWildcard;
                 pa.mElement = yupAudioObjectPropertyElementMain;
 
-                if (auto* workgroup = audioObjectGetProperty<os_workgroup_t> (deviceID, pa).value_or (nullptr))
+                if (auto* workgroupHandle = audioObjectGetProperty<void*> (deviceID, pa).value_or (nullptr))
                 {
-                    ScopeGuard scope { [&]
-                    {
-                        os_release (workgroup);
-                    } };
+                    os_workgroup_t workgroup = (__bridge_transfer os_workgroup_t) workgroupHandle;
                     return makeRealAudioWorkgroup (workgroup);
                 }
 
@@ -941,10 +938,10 @@ struct CoreAudioClasses
                     String name;
                     const auto element = static_cast<AudioObjectPropertyElement> (args.chanNum + 1);
 
-                    if (auto nameNSString = audioObjectGetProperty<NSString*> (parent.deviceID, { kAudioObjectPropertyElementName, getScope (isInput), element }).value_or (nullptr))
+                    if (auto retainedName = audioObjectGetProperty<CFStringRef> (parent.deviceID, { kAudioObjectPropertyElementName, getScope (isInput), element }).value_or (nullptr))
                     {
-                        name = nsStringToYup (nameNSString);
-                        [nameNSString release];
+                        const CFUniquePtr<CFStringRef> nameString { retainedName };
+                        name = String::fromCFString (nameString.get());
                     }
 
                     if (name.isEmpty())
@@ -1241,7 +1238,7 @@ struct CoreAudioClasses
 
                 // This used to be just "org.yup.aggregate", but macOS doesn't allow two different instances of an app with
                 // the same bundle ID to create the same aggregate device UID, even when it's private.
-                CFStringRef aggregateDeviceUid = Uuid().toString().toCFString();
+                NSString* aggregateDeviceUid = CFBridgingRelease (Uuid().toString().toCFString());
 
                 // kAudioSubDeviceDriftCompensationMaxQuality has this value but for some reason in Xcode 15 started being
                 // marked available only since macOS 13.0, even though it's been available since forever (see
@@ -1252,7 +1249,7 @@ struct CoreAudioClasses
                 // clang-format off
                 NSDictionary* description =
                 @{
-                    @(kAudioAggregateDeviceUIDKey) : (NSString*) aggregateDeviceUid,
+                    @(kAudioAggregateDeviceUIDKey) : aggregateDeviceUid,
                     @(kAudioAggregateDeviceIsPrivateKey) : @(1),
                     @(kAudioAggregateDeviceSubDeviceListKey):
                     @[
@@ -1270,10 +1267,8 @@ struct CoreAudioClasses
                 };
                 // clang-format on
 
-                CFRelease (aggregateDeviceUid);
-
                 // Guaranteed available earlier in CoreAudioIODeviceType::createDevice()
-                OSStatus status = AudioHardwareCreateAggregateDevice ((CFDictionaryRef) description, &aggregateDeviceID);
+                OSStatus status = AudioHardwareCreateAggregateDevice ((__bridge CFDictionaryRef) description, &aggregateDeviceID);
                 return status == noErr ? std::make_unique<CoreAudioInternal> (*this, aggregateDeviceID, true, true) : nullptr;
             }();
 
@@ -1501,7 +1496,7 @@ struct CoreAudioClasses
             AudioObjectPropertyAddress pa { kAudioDevicePropertyDeviceUID, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMaster };
             AudioObjectGetPropertyData (deviceID, &pa, 0, nullptr, &uidSize, &uid);
 
-            return [(NSString*) uid autorelease];
+            return CFBridgingRelease (uid);
         }
 
         YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CoreAudioIODevice)

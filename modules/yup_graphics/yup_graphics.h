@@ -35,7 +35,6 @@
     dependencies:       yup_core rive rive_renderer
     appleFrameworks:    Metal
     searchpaths:        native
-    enableARC:          1
 
   END_YUP_MODULE_DECLARATION
 

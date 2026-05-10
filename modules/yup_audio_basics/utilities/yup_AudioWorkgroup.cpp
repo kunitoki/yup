@@ -147,14 +147,10 @@ private:
         ScopedWorkgroupRetainer (os_workgroup_t wg)
             : handle { wg }
         {
-            if (handle != nullptr)
-                os_retain (handle);
         }
 
         ~ScopedWorkgroupRetainer()
         {
-            if (handle != nullptr)
-                os_release (handle);
         }
 
         ScopedWorkgroupRetainer (const ScopedWorkgroupRetainer& other)

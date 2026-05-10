@@ -34,7 +34,6 @@
 
 - (void)dealloc
 {
-    [super dealloc];
 }
 
 - (void)applicationDidFinishLaunching:(UIApplication* __unused)application

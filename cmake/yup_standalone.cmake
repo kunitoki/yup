@@ -156,7 +156,7 @@ function (yup_standalone_app)
             XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED          OFF
             XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT       dwarf
             XCODE_ATTRIBUTE_GCC_INLINES_ARE_PRIVATE_EXTERN ON
-            XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC          OFF
+            XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC          ON
             XCODE_ATTRIBUTE_CLANG_LINK_OBJC_RUNTIME        OFF
             XCODE_GENERATE_SCHEME                          ON)
 
@@ -240,6 +240,10 @@ function (yup_standalone_app)
         ${YUP_ARG_LINK_OPTIONS})
 
     target_link_libraries (${target_name} PRIVATE
+        ${additional_libraries}
+        ${YUP_ARG_MODULES})
+
+    _yup_module_apply_arc_to_target_sources (${target_name}
         ${additional_libraries}
         ${YUP_ARG_MODULES})
 

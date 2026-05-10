@@ -33,7 +33,6 @@
     license:            ISC
 
     dependencies:       yup_audio_basics yup_gui
-    enableARC:          1
 
   END_YUP_MODULE_DECLARATION
 

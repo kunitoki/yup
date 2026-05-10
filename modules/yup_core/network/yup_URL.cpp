@@ -1013,13 +1013,14 @@ bool URL::isProbablyAnEmailAddress (const String& possibleEmailAddress)
 //==============================================================================
 #if YUP_IOS
 URL::Bookmark::Bookmark (void* bookmarkToUse)
-    : data (bookmarkToUse)
+    : data ((__bridge_retained void*) (NSData*) bookmarkToUse)
 {
 }
 
 URL::Bookmark::~Bookmark()
 {
-    [(NSData*) data release];
+    if (data != nullptr)
+        CFRelease (data);
 }
 
 void setURLBookmark (URL& u, void* bookmark)
@@ -1061,7 +1062,7 @@ public:
     {
         iOSFileStreamWrapperFlush<Stream>::flush (this);
 
-        if (NSData* bookmark = (NSData*) getURLBookmark (url))
+        if (NSData* bookmark = (__bridge NSData*) getURLBookmark (url))
         {
             BOOL isBookmarkStale = false;
             NSError* error = nil;
@@ -1093,7 +1094,7 @@ private:
 
     File getLocalFileAccess (URL& urlToUse)
     {
-        if (NSData* bookmark = (NSData*) getURLBookmark (urlToUse))
+        if (NSData* bookmark = (__bridge NSData*) getURLBookmark (urlToUse))
         {
             BOOL isBookmarkStale = false;
             NSError* error = nil;
