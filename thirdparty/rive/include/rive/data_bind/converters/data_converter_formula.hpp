@@ -4,20 +4,25 @@
 #include "rive/data_bind/converters/formula/formula_token.hpp"
 #include "rive/data_bind/data_bind.hpp"
 #include "rive/data_bind/data_values/data_value_number.hpp"
+#include "rive/viewmodel/viewmodel_instance_value.hpp"
+#include "rive/viewmodel/viewmodel_value_dependent.hpp"
 #include <stdio.h>
 #include <unordered_map>
 namespace rive
 {
 
-class DataConverterFormula : public DataConverterFormulaBase
+class DataConverterFormula : public DataConverterFormulaBase,
+                             public ViewModelValueDependent
 {
 public:
     ~DataConverterFormula();
     DataType outputType() override { return DataType::number; };
     void addToken(FormulaToken*);
     void addOutputToken(FormulaToken*, int);
-    void initialize();
+    void calculateFormula();
     void isInstance(bool value) { m_isInstance = value; }
+    void addDirt(ComponentDirt value, bool recurse) override;
+    void relinkDataBind() override {}
 
 protected:
     DataValue* convert(DataValue* value, DataBind* dataBind) override;
@@ -26,7 +31,6 @@ protected:
     Core* clone() const override;
     void bindFromContext(DataContext* dataContext, DataBind* dataBind) override;
     void unbind() override;
-    void update() override;
 
 private:
     int getPrecedence(FormulaToken*);
@@ -40,6 +44,7 @@ private:
     std::vector<float> m_randoms;
     std::unordered_map<FormulaToken*, int> m_argumentsCount;
     bool m_isInstance = false;
+    rcp<ViewModelInstanceValue> m_source = nullptr;
 };
 } // namespace rive
 

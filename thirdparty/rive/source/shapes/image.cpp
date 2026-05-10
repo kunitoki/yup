@@ -4,6 +4,7 @@
 #include "rive/importers/backboard_importer.hpp"
 #include "rive/assets/file_asset.hpp"
 #include "rive/assets/image_asset.hpp"
+#include "rive/layout.hpp"
 #include "rive/layout/n_slicer.hpp"
 #include "rive/shapes/mesh_drawable.hpp"
 #include "rive/artboard.hpp"
@@ -13,54 +14,52 @@ using namespace rive;
 
 void Image::draw(Renderer* renderer)
 {
+
     rive::ImageAsset* asset = this->imageAsset();
-    if (asset == nullptr || renderOpacity() == 0.0f)
-    {
-        return;
-    }
 
     rive::RenderImage* renderImage = asset->renderImage();
     if (renderImage == nullptr)
     {
         return;
     }
-
-    ClipResult clipResult = applyClip(renderer);
-
-    if (clipResult == ClipResult::noClip)
+    if (m_needsSaveOperation)
     {
-        // We didn't clip, so make sure to save as we'll be doing some
-        // transformations.
+
         renderer->save();
     }
 
-    if (clipResult != ClipResult::emptyClip)
+    float width = (float)renderImage->width();
+    float height = (float)renderImage->height();
+
+    // until image loading and saving is done, use default sampling for
+    // image assets
+    if (m_Mesh != nullptr)
     {
-        float width = (float)renderImage->width();
-        float height = (float)renderImage->height();
-
-        // until image loading and saving is done, use default sampling for
-        // image assets
-        if (m_Mesh != nullptr)
-        {
-            m_Mesh->draw(renderer,
-                         renderImage,
-                         rive::ImageSampler::LinearClamp(),
-                         blendMode(),
-                         renderOpacity());
-        }
-        else
-        {
-            renderer->transform(worldTransform());
-            renderer->translate(-width * originX(), -height * originY());
-            renderer->drawImage(renderImage,
-                                rive::ImageSampler::LinearClamp(),
-                                blendMode(),
-                                renderOpacity());
-        }
+        m_Mesh->draw(renderer,
+                     renderImage,
+                     rive::ImageSampler::LinearClamp(),
+                     blendMode(),
+                     renderOpacity());
     }
+    else
+    {
+        renderer->transform(worldTransform());
+        renderer->translate(-width * originX(), -height * originY());
+        renderer->drawImage(renderImage,
+                            rive::ImageSampler::LinearClamp(),
+                            blendMode(),
+                            renderOpacity());
+    }
+    if (m_needsSaveOperation)
+    {
+        renderer->restore();
+    }
+}
 
-    renderer->restore();
+bool Image::willDraw()
+{
+    return Super::willDraw() && renderOpacity() != 0.0f &&
+           this->imageAsset() != nullptr;
 }
 
 Core* Image::hitTest(HitInfo* hinfo, const Mat2D& xform)
@@ -105,9 +104,9 @@ StatusCode Image::import(ImportStack& importStack)
 // getAssetId...)
 uint32_t Image::assetId() { return ImageBase::assetId(); }
 
-void Image::setAsset(FileAsset* asset)
+void Image::setAsset(rcp<FileAsset> asset)
 {
-    if (asset->is<ImageAsset>())
+    if (asset != nullptr && asset->is<ImageAsset>())
     {
         FileAssetReferencer::setAsset(asset);
 
@@ -137,7 +136,15 @@ Core* Image::clone() const
     return twin;
 }
 
-void Image::setMesh(MeshDrawable* mesh) { m_Mesh = mesh; }
+void Image::setMesh(MeshDrawable* mesh)
+{
+    if (m_Mesh == mesh)
+    {
+        return;
+    }
+    m_Mesh = mesh;
+    updateImageScale();
+}
 
 float Image::width() const
 {
@@ -150,7 +157,7 @@ float Image::width() const
     rive::RenderImage* renderImage = asset->renderImage();
     if (renderImage == nullptr)
     {
-        return 0.0f;
+        return asset->width();
     }
     return (float)renderImage->width();
 }
@@ -166,7 +173,7 @@ float Image::height() const
     rive::RenderImage* renderImage = asset->renderImage();
     if (renderImage == nullptr)
     {
-        return 0.0f;
+        return asset->height();
     }
     return (float)renderImage->height();
 }
@@ -220,28 +227,134 @@ void Image::controlSize(Vec2D size,
     }
 }
 
+void Image::updateTransform()
+{
+    Super::updateTransform();
+    m_Transform[4] += m_layoutOffsetX;
+    m_Transform[5] += m_layoutOffsetY;
+}
+
 void Image::updateImageScale()
 {
-    // User-created meshes are not affected by scale
-    if ((m_Mesh != nullptr && m_Mesh->type() == MeshType::vertex) ||
-        imageAsset() == nullptr)
+    if (imageAsset() == nullptr)
     {
+        if (m_layoutOffsetX != 0.0f || m_layoutOffsetY != 0.0f)
+        {
+            m_layoutOffsetX = 0.0f;
+            m_layoutOffsetY = 0.0f;
+            markTransformDirty();
+        }
         return;
     }
+
+    float newOffsetX = 0.0f;
+    float newOffsetY = 0.0f;
     auto renderImage = imageAsset()->renderImage();
     if (renderImage != nullptr && !std::isnan(m_layoutWidth) &&
         !std::isnan(m_layoutHeight))
     {
-        float newScaleX = m_layoutWidth / (float)renderImage->width();
-        float newScaleY = m_layoutHeight / (float)renderImage->height();
+        float imgW = (float)renderImage->width();
+        float imgH = (float)renderImage->height();
+        float newScaleX, newScaleY;
+        auto imageFit = static_cast<Fit>(fit());
+        switch (imageFit)
+        {
+            case Fit::fill:
+                newScaleX = m_layoutWidth / imgW;
+                newScaleY = m_layoutHeight / imgH;
+                break;
+            case Fit::contain:
+            {
+                float s =
+                    std::fmin(m_layoutWidth / imgW, m_layoutHeight / imgH);
+                newScaleX = newScaleY = s;
+                break;
+            }
+            case Fit::cover:
+            {
+                float s =
+                    std::fmax(m_layoutWidth / imgW, m_layoutHeight / imgH);
+                newScaleX = newScaleY = s;
+                break;
+            }
+            case Fit::fitWidth:
+                newScaleX = newScaleY = m_layoutWidth / imgW;
+                break;
+            case Fit::fitHeight:
+                newScaleX = newScaleY = m_layoutHeight / imgH;
+                break;
+            case Fit::none:
+                newScaleX = newScaleY = 1.0f;
+                break;
+            case Fit::scaleDown:
+            {
+                float s =
+                    std::fmin(m_layoutWidth / imgW, m_layoutHeight / imgH);
+                s = s < 1.0f ? s : 1.0f;
+                newScaleX = newScaleY = s;
+                break;
+            }
+            case Fit::layout:
+            default:
+                newScaleX = m_layoutWidth / imgW;
+                newScaleY = m_layoutHeight / imgH;
+                break;
+        }
+
+        // Compatibility: legacy files assume fill does not apply fit/alignment
+        // translation offsets, only scale.
+        if (imageFit != Fit::fill)
+        {
+            float boundsW = imgW;
+            float boundsH = imgH;
+            float boundsLeft = -imgW * originX();
+            float boundsTop = -imgH * originY();
+            if (m_Mesh != nullptr && m_Mesh->type() == MeshType::vertex)
+            {
+                // Keep fit behavior stable while editing vertex meshes.
+                boundsLeft = -imgW * 0.5f;
+                boundsTop = -imgH * 0.5f;
+            }
+            Alignment alignment(alignmentX(), alignmentY());
+            float xAlign = (alignment.x() + 1.0f) * 0.5f;
+            float yAlign = (alignment.y() + 1.0f) * 0.5f;
+            float scaledLeft = boundsLeft * newScaleX;
+            float scaledTop = boundsTop * newScaleY;
+            float widthRemainder = m_layoutWidth - (boundsW * newScaleX);
+            float heightRemainder = m_layoutHeight - (boundsH * newScaleY);
+            newOffsetX = -scaledLeft + widthRemainder * xAlign;
+            newOffsetY = -scaledTop + heightRemainder * yAlign;
+        }
+
         if (newScaleX != scaleX() || newScaleY != scaleY())
         {
             scaleX(newScaleX);
             scaleY(newScaleY);
-            addDirt(ComponentDirt::WorldTransform, false);
         }
     }
+    if (newOffsetX != m_layoutOffsetX || newOffsetY != m_layoutOffsetY)
+    {
+        m_layoutOffsetX = newOffsetX;
+        m_layoutOffsetY = newOffsetY;
+        // Offset is applied in updateTransform(), so changing it must mark the
+        // local transform dirty (not just world transform).
+        markTransformDirty();
+    }
 }
+
+AABB Image::localBounds() const
+{
+    if (imageAsset() == nullptr)
+    {
+        return AABB();
+    }
+    return AABB::fromLTWH(-width() * originX(),
+                          -height() * originY(),
+                          width(),
+                          height());
+}
+
+ImageAsset* Image::imageAsset() const { return (ImageAsset*)m_fileAsset.get(); }
 
 #ifdef TESTING
 #include "rive/shapes/mesh.hpp"

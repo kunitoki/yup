@@ -94,9 +94,9 @@ public:
 
 private:
     ArtboardFile() = default;
-    ArtboardFile (std::unique_ptr<rive::File> rivFile);
+    ArtboardFile (rive::rcp<rive::File> rivFile);
 
-    std::unique_ptr<rive::File> rivFile;
+    rive::rcp<rive::File> rivFile;
 };
 
 } // namespace yup

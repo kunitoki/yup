@@ -79,7 +79,7 @@ public:
 
     void addPath (rive::CommandPath*, const rive::Mat2D&) override {}
 
-    void addRenderPath (rive::RenderPath*, const rive::Mat2D&) override {}
+    void addRenderPath (const rive::RenderPath*, const rive::Mat2D&) override {}
 
     void moveTo (float, float) override {}
 
@@ -179,6 +179,8 @@ public:
                         uint32_t indexCount,
                         rive::BlendMode,
                         float) override {}
+
+    void modulateOpacity (float) override {}
 };
 
 //==============================================================================

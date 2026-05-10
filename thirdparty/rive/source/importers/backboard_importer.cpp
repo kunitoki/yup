@@ -9,11 +9,13 @@
 #include "rive/constraints/scrolling/scroll_physics.hpp"
 #include "rive/viewmodel/viewmodel.hpp"
 #include "rive/viewmodel/viewmodel_instance.hpp"
+#include "rive/file.hpp"
 #include "rive/data_bind/converters/data_converter.hpp"
 #include "rive/data_bind/converters/data_converter_group_item.hpp"
 #include "rive/data_bind/converters/data_converter_range_mapper.hpp"
 #include "rive/data_bind/converters/data_converter_interpolator.hpp"
 #include "rive/data_bind/data_bind.hpp"
+#include "rive/script_input_artboard.hpp"
 #include <unordered_set>
 
 using namespace rive;
@@ -21,12 +23,12 @@ using namespace rive;
 BackboardImporter::BackboardImporter(Backboard* backboard) :
     m_Backboard(backboard), m_NextArtboardId(0)
 {}
-void BackboardImporter::addNestedArtboard(NestedArtboard* artboard)
+void BackboardImporter::addArtboardReferencer(ArtboardReferencer* artboard)
 {
-    m_NestedArtboards.push_back(artboard);
+    m_ArtboardsReferencers.push_back(artboard);
 }
 
-void BackboardImporter::addFileAsset(FileAsset* asset)
+void BackboardImporter::addFileAsset(rcp<FileAsset> asset)
 {
     m_FileAssets.push_back(asset);
     {
@@ -63,6 +65,9 @@ void BackboardImporter::addFileAssetReferencer(FileAssetReferencer* referencer)
 
 void BackboardImporter::addArtboard(Artboard* artboard)
 {
+#ifdef WITH_RIVE_TOOLS
+    artboard->artboardId((uint16_t)m_NextArtboardId);
+#endif
     m_ArtboardLookup[m_NextArtboardId++] = artboard;
 }
 
@@ -70,15 +75,16 @@ void BackboardImporter::addMissingArtboard() { m_NextArtboardId++; }
 
 StatusCode BackboardImporter::resolve()
 {
-    for (auto nestedArtboard : m_NestedArtboards)
+    for (auto nestedArtboard : m_ArtboardsReferencers)
     {
-        auto itr = m_ArtboardLookup.find(nestedArtboard->artboardId());
+        auto itr =
+            m_ArtboardLookup.find(nestedArtboard->referencedArtboardId());
         if (itr != m_ArtboardLookup.end())
         {
             auto artboard = itr->second;
             if (artboard != nullptr)
             {
-                nestedArtboard->nest(artboard);
+                nestedArtboard->referencedArtboard(artboard);
             }
         }
     }

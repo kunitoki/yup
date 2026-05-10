@@ -18,8 +18,9 @@ ENABLE_FEATHER = Feature('ENABLE_FEATHER', 3)
 ENABLE_EVEN_ODD = Feature('ENABLE_EVEN_ODD', 4)
 ENABLE_NESTED_CLIPPING = Feature('ENABLE_NESTED_CLIPPING', 5)
 ENABLE_HSL_BLEND_MODES = Feature('ENABLE_HSL_BLEND_MODES', 6)
-DRAW_INTERIOR_TRIANGLES = Feature('DRAW_INTERIOR_TRIANGLES', 7)
-ATLAS_BLIT = Feature('ATLAS_BLIT', 8)
+ENABLE_DITHER = Feature('ENABLE_DITHER', 7)
+DRAW_INTERIOR_TRIANGLES = Feature('DRAW_INTERIOR_TRIANGLES', 8)
+ATLAS_BLIT = Feature('ATLAS_BLIT', 9)
 
 whole_program_features = {ENABLE_CLIPPING,
                           ENABLE_CLIP_RECT,
@@ -28,7 +29,8 @@ whole_program_features = {ENABLE_CLIPPING,
 
 fragment_only_features = {ENABLE_EVEN_ODD,
                           ENABLE_NESTED_CLIPPING,
-                          ENABLE_HSL_BLEND_MODES}
+                          ENABLE_HSL_BLEND_MODES,
+                          ENABLE_DITHER}
 
 all_features = whole_program_features.union(fragment_only_features)
 
@@ -75,7 +77,7 @@ def emit_shader(out, shader_type, draw_type, fill_type, feature_set):
         out.write('#define FRAGMENT\n')
     if draw_type == DrawType.IMAGE_MESH:
         assert(is_image_mesh_feature_set(feature_set))
-    namespace_id = ['0', '0', '0', '0', '0', '0', '0', '0', '0']
+    namespace_id = ['0', '0', '0', '0', '0', '0', '0', '0', '0', '0']
     for feature in feature_set:
         namespace_id[feature.index] = '1'
     for feature in feature_set:
@@ -83,17 +85,28 @@ def emit_shader(out, shader_type, draw_type, fill_type, feature_set):
     if fill_type == FillType.CLOCKWISE:
         out.write('#define CLOCKWISE_FILL 1\n')
     if draw_type == DrawType.PATH:
+        out.write('#define DRAW_PATH 1\n')
         out.write('namespace %s%s\n' %
                   ('c' if fill_type == FillType.CLOCKWISE else 'p',
                    ''.join(namespace_id)))
         out.write('{\n')
-        out.write('#include "draw_path.minified.glsl"\n')
+        out.write('#include "draw_path.minified.vert"\n')
+        if ATLAS_BLIT in feature_set:
+            out.write('#include "draw_mesh.minified.frag"\n')
+        else:
+            out.write('#include "draw_raster_order_path.minified.frag"\n')
         out.write('}\n')
+        out.write('#undef DRAW_PATH\n')
     else:
+        out.write('#define DRAW_IMAGE 1\n')
+        out.write('#define DRAW_IMAGE_MESH 1\n')
         out.write('namespace m%s\n' % ''.join(namespace_id))
         out.write('{\n')
-        out.write('#include "draw_image_mesh.minified.glsl"\n')
+        out.write('#include "draw_image_mesh.minified.vert"\n')
+        out.write('#include "draw_mesh.minified.frag"\n')
         out.write('}\n')
+        out.write('#undef DRAW_IMAGE_MESH\n')
+        out.write('#undef DRAW_IMAGE\n')
     for feature in feature_set:
         out.write('#undef %s\n' % feature.name)
     if shader_type == ShaderType.VERTEX:

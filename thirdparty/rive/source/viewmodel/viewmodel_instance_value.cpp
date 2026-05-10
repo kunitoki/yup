@@ -1,14 +1,37 @@
 #include <sstream>
 #include <iomanip>
 #include <array>
+#include <algorithm>
 
+#include "rive/artboard.hpp"
 #include "rive/viewmodel/viewmodel_instance.hpp"
 #include "rive/viewmodel/viewmodel_instance_value.hpp"
+#include "rive/viewmodel/viewmodel_property_symbol_list_index.hpp"
+#include "rive/importers/artboard_importer.hpp"
 #include "rive/importers/viewmodel_instance_importer.hpp"
 #include "rive/data_bind/data_bind.hpp"
 #include "rive/refcnt.hpp"
 
 using namespace rive;
+
+StatusCode ViewModelInstanceValue::onAddedDirty(CoreContext* context)
+{
+    StatusCode result = Super::onAddedDirty(context);
+    if (result != StatusCode::Ok)
+    {
+        return result;
+    }
+
+    // If parent is a ViewModelInstance, register with it.
+    // This handles stateful ViewModelInstances (children of NestedArtboard)
+    // where values are cloned separately during artboard cloning.
+    if (parent() != nullptr && parent()->is<ViewModelInstance>())
+    {
+        parent()->as<ViewModelInstance>()->addValue(this);
+    }
+
+    return StatusCode::Ok;
+}
 
 StatusCode ViewModelInstanceValue::import(ImportStack& importStack)
 {
@@ -21,24 +44,58 @@ StatusCode ViewModelInstanceValue::import(ImportStack& importStack)
     }
     viewModelInstanceImporter->addValue(this);
 
-    return Super::import(importStack);
+    // If we're inside an artboard context, import through Component so we're
+    // added to the artboard's object list and can be resolved by ID.
+    auto artboardImporter =
+        importStack.latest<ArtboardImporter>(ArtboardBase::typeKey);
+    if (artboardImporter != nullptr)
+    {
+        return Super::import(importStack);
+    }
+
+    return Core::import(importStack);
+}
+
+bool ViewModelInstanceValue::hasChanged()
+{
+    return enums::is_flag_set(m_changeFlags, ValueFlags::valueChanged);
+}
+
+void ViewModelInstanceValue::registerSymbol()
+{
+
+    if (m_ViewModelProperty != nullptr && m_viewModelInstance != nullptr)
+    {
+        if (m_ViewModelProperty->is<ViewModelPropertySymbolListIndex>())
+        {
+            m_viewModelInstance->propertyValue(SymbolType::itemIndex, this);
+        }
+        else if ((SymbolType)m_ViewModelProperty->symbolTypeValue() !=
+                 SymbolType::none)
+        {
+            m_viewModelInstance->propertyValue(
+                (SymbolType)m_ViewModelProperty->symbolTypeValue(),
+                this);
+        }
+    }
 }
 
 void ViewModelInstanceValue::viewModelProperty(ViewModelProperty* value)
 {
     m_ViewModelProperty = value;
+    registerSymbol();
 }
 ViewModelProperty* ViewModelInstanceValue::viewModelProperty()
 {
     return m_ViewModelProperty;
 }
 
-void ViewModelInstanceValue::addDependent(Dirtyable* value)
+void ViewModelInstanceValue::addDependent(ViewModelValueDependent* value)
 {
     m_DependencyHelper.addDependent(value);
 }
 
-void ViewModelInstanceValue::removeDependent(Dirtyable* value)
+void ViewModelInstanceValue::removeDependent(ViewModelValueDependent* value)
 {
     m_DependencyHelper.removeDependent(value);
 }
@@ -62,4 +119,84 @@ const std::string& ViewModelInstanceValue::name() const
         return m_ViewModelProperty->constName();
     };
     return defaultName;
+}
+
+void ViewModelInstanceValue::advanced()
+{
+    m_usedLayers.clear();
+    m_changeFlags &= ~ValueFlags::valueChanged;
+}
+
+void ViewModelInstanceValue::viewModelInstance(ViewModelInstance* value)
+{
+    m_viewModelInstance = value;
+    registerSymbol();
+}
+
+void ViewModelInstanceValue::addDelegate(
+    ViewModelInstanceValueDelegate* delegate)
+{
+    m_delegates.push_back(delegate);
+    m_changeFlags |= ValueFlags::delegatesChanged;
+}
+
+void ViewModelInstanceValue::removeDelegate(
+    ViewModelInstanceValueDelegate* delegate)
+{
+    auto itr = std::find(m_delegates.begin(), m_delegates.end(), delegate);
+    if (itr == m_delegates.end())
+    {
+        return;
+    }
+    m_delegates.erase(itr);
+    m_changeFlags |= ValueFlags::delegatesChanged;
+}
+
+bool ViewModelInstanceValue::suppressDelegation()
+{
+    if (enums::is_flag_set(m_changeFlags, ValueFlags::delegating))
+    {
+        return false;
+    }
+    m_changeFlags |= ValueFlags::delegating;
+    return true;
+}
+
+void ViewModelInstanceValue::restoreDelegation()
+{
+    m_changeFlags &= ~ValueFlags::delegating;
+}
+
+void ViewModelInstanceValue::onValueChanged()
+{
+    m_changeFlags |= ValueFlags::valueChanged;
+
+    if (enums::is_flag_set(m_changeFlags, ValueFlags::delegatesChanged))
+    {
+        m_delegatesCopy.clear();
+        std::copy(m_delegates.begin(),
+                  m_delegates.end(),
+                  std::back_inserter(m_delegatesCopy));
+        m_changeFlags &= ~ValueFlags::delegatesChanged;
+    }
+
+    if (enums::is_flag_set(m_changeFlags, ValueFlags::delegating))
+    {
+        // We're already calling delegates for this value change, changing the
+        // value in a delegate will not report the change.
+        return;
+    }
+
+    // Flag to guard against calling this recursively.
+    m_changeFlags |= ValueFlags::delegating;
+
+    // Iterate over a copy of the delegates in case delegates get changed in
+    // valueChanged callbacks.
+    for (auto delegate : m_delegatesCopy)
+    {
+        delegate->valueChanged();
+    }
+
+    // Clear guard flag.
+    m_changeFlags &= ~ValueFlags::delegating;
 }

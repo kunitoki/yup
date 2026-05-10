@@ -6,17 +6,18 @@
 #include "rive/data_bind/data_context.hpp"
 #include "rive/data_bind/converters/data_converter.hpp"
 #include "rive/data_bind/data_values/data_type.hpp"
-#include "rive/dirtyable.hpp"
+#include "rive/viewmodel/viewmodel_value_dependent.hpp"
 #include <stdio.h>
 namespace rive
 {
-class File;
 class DataBindContextValue;
+class DataBindContainer;
+class File;
 #ifdef WITH_RIVE_TOOLS
 class DataBind;
 typedef void (*DataBindChanged)();
 #endif
-class DataBind : public DataBindBase, public Dirtyable
+class DataBind : public DataBindBase, public ViewModelValueDependent
 {
 public:
     ~DataBind();
@@ -24,6 +25,7 @@ public:
     StatusCode import(ImportStack& importStack) override;
     virtual void updateSourceBinding(bool invalidate = false);
     virtual void update(ComponentDirt value);
+    void updateDependents();
     Core* target() const { return m_target; };
     void target(Core* value) { m_target = value; };
     virtual void bind();
@@ -33,23 +35,36 @@ public:
     void addDirt(ComponentDirt value, bool recurse) override;
     DataConverter* converter() const { return m_dataConverter; };
     void converter(DataConverter* value) { m_dataConverter = value; };
-    ViewModelInstanceValue* source() const { return m_Source; };
-    void source(ViewModelInstanceValue* value);
+    ViewModelInstanceValue* source() const { return m_Source.get(); };
+    void source(rcp<ViewModelInstanceValue> value);
     void clearSource();
     bool toSource();
     bool toTarget();
+    bool isNameBased();
+    bool canSkip();
+    bool isMainToSource();
+    bool sourceToTargetRunsFirst();
     bool advance(float elapsedTime);
     void suppressDirt(bool value) { m_suppressDirt = value; };
-    void file(File* value) { m_file = value; };
-    File* file() const { return m_file; };
+    void file(File* value);
+    File* file() const;
+    DataType outputType();
+    DataType sourceOutputType();
+    void container(DataBindContainer*);
+    DataBindContainer* m_container = nullptr;
+    void collapse(bool collapsed);
+    void initialize();
+    void relinkDataBind() override;
+
+private:
+    bool m_isCollapsed = false;
 
 protected:
-    ComponentDirt m_Dirt = ComponentDirt::Filthy;
+    ComponentDirt m_Dirt = ComponentDirt::None;
     Core* m_target = nullptr;
-    ViewModelInstanceValue* m_Source = nullptr;
+    rcp<ViewModelInstanceValue> m_Source = nullptr;
     DataBindContextValue* m_ContextValue = nullptr;
     DataConverter* m_dataConverter = nullptr;
-    DataType outputType();
     bool bindsOnce();
     bool m_suppressDirt = false;
     File* m_file;

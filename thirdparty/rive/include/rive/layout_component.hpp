@@ -118,7 +118,7 @@ protected:
     ShapePaintPath m_localPath;
     ShapePaintPath m_worldPath;
     DrawableProxy m_proxy;
-    bool m_displayHidden = false;
+    bool m_justAddedToHost = false;
 
     Artboard* getArtboard() override { return artboard(); }
     LayoutAnimationData* currentAnimationData();
@@ -136,13 +136,14 @@ protected:
         }
         return nullptr;
     }
-    bool isDisplayHidden() const;
+    bool isCollapsed() const override;
     void propagateCollapse(bool collapse);
     bool collapse(bool value) override;
     float computedLocalX() override { return m_layout.left(); };
     float computedLocalY() override { return m_layout.top(); };
     float computedWidth() override { return m_layout.width(); };
     float computedHeight() override { return m_layout.height(); };
+    void calculateLayoutInternal(float availableWidth, float availableHeight);
 
 private:
     float m_widthOverride = NAN;
@@ -155,13 +156,14 @@ private:
     float m_forcedWidth = NAN;
     float m_forcedHeight = NAN;
     bool m_forceUpdateLayoutBounds = false;
+    bool m_positionLeftChanged = true;
+    bool m_positionTopChanged = true;
 
 #ifdef WITH_RIVE_LAYOUT
 protected:
     void propagateSizeToChildren(ContainerComponent* component);
     bool applyInterpolation(float elapsedSeconds, bool animate = true);
-    void calculateLayout();
-    bool styleDisplayHidden();
+    bool styleDisplayHidden() const;
 #endif
 
 public:
@@ -178,6 +180,9 @@ public:
     void drawProxy(Renderer* renderer) override;
     bool isProxyHidden() override { return isHidden(); }
     Core* hitTest(HitInfo*, const Mat2D&) override;
+    bool hitTestPoint(const Vec2D& position,
+                      bool skipOnUnclipped,
+                      bool isPrimaryHit) override;
     DrawableProxy* proxy() { return &m_proxy; };
     virtual void updateRenderPath();
     void update(ComponentDirt value) override;
@@ -190,11 +195,12 @@ public:
                               m_layout.height());
     }
     size_t numLayoutNodes() override { return 1; }
+    AABB constraintBounds() const override { return localBounds(); }
     AABB localBounds() const override
     {
         return AABB::fromLTWH(0.0f, 0.0f, m_layout.width(), m_layout.height());
     }
-    AABB worldBounds() const
+    virtual AABB worldBounds() const
     {
         auto transform = worldTransform();
         return AABB::fromLTWH(transform[4],
@@ -276,7 +282,7 @@ public:
     bool cascadeLayoutStyle(LayoutStyleInterpolation inheritedInterpolation,
                             KeyFrameInterpolator* inheritedInterpolator,
                             float inheritedInterpolationTime,
-                            LayoutDirection direction);
+                            LayoutDirection direction) override;
     bool setInheritedInterpolation(
         LayoutStyleInterpolation inheritedInterpolation,
         KeyFrameInterpolator* inheritedInterpolator,
@@ -291,6 +297,9 @@ public:
     void directionChanged();
     LayoutDirection actualDirection();
 #endif
+
+    void markPositionLeftChanged() { m_positionLeftChanged = true; }
+    void markPositionTopChanged() { m_positionTopChanged = true; }
     void buildDependencies() override;
 
     void markLayoutNodeDirty(

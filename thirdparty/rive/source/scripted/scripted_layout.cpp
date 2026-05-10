@@ -1,0 +1,148 @@
+#ifdef WITH_RIVE_SCRIPTING
+#include "rive/lua/rive_lua_libs.hpp"
+#endif
+#include "rive/component_dirt.hpp"
+#include "rive/layout_component.hpp"
+#include "rive/scripted/scripted_layout.hpp"
+
+using namespace rive;
+
+#ifdef WITH_RIVE_SCRIPTING
+
+void ScriptedLayout::didHydrateScriptInputs()
+{
+    ScriptedDrawable::didHydrateScriptInputs();
+    if (parent() != nullptr && parent()->is<LayoutComponent>())
+    {
+        parent()->as<LayoutComponent>()->markLayoutNodeDirty(true);
+    }
+}
+
+void ScriptedLayout::callScriptedResize(Vec2D size)
+{
+    if (!resizes() || m_vm == nullptr)
+    {
+        return;
+    }
+    lua_State* L = state();
+    // Stack: []
+    rive_lua_pushRef(L, m_self);
+    // Stack: [self]
+    lua_getfield(L, -1, "resize");
+    // Stack: [self, function]
+    lua_pushvalue(L, -2);
+    // Stack: [self, function, self]
+    lua_pushvec2d(L, size);
+    // Stack: [self, function, self, size]
+    if (static_cast<lua_Status>(rive_lua_pcall_with_context(L, this, 2, 0)) !=
+        LUA_OK)
+    {
+        // Stack: [self, status]
+        fprintf(stderr, "resize failed\n");
+        rive_lua_pop(L, 1);
+    }
+    // Stack: [self]
+    rive_lua_pop(L, 1);
+}
+
+Vec2D ScriptedLayout::measureLayout(float width,
+                                    LayoutMeasureMode widthMode,
+                                    float height,
+                                    LayoutMeasureMode heightMode)
+{
+    if (!measures() || m_vm == nullptr)
+    {
+        return Vec2D(0, 0);
+    }
+    lua_State* L = state();
+    auto measuredWidth = std::numeric_limits<float>::max();
+    auto measuredHeight = std::numeric_limits<float>::max();
+    // Stack: []
+    rive_lua_pushRef(L, m_self);
+    // Stack: [self]
+    lua_getfield(L, -1, "measure");
+    // Stack: [self, field]
+    lua_pushvalue(L, -2);
+    // Stack: [self, field, self]
+    if (static_cast<lua_Status>(rive_lua_pcall_with_context(L, this, 1, 1)) !=
+        LUA_OK)
+    {
+
+        fprintf(stderr, "measure failed\n");
+    }
+    else
+    {
+        if (static_cast<lua_Type>(lua_type(L, -1)) != LUA_TVECTOR)
+        {
+            fprintf(stderr, "expected measure to return a Vec2D\n");
+        }
+        else
+        {
+            auto size = lua_tovec2d(L, -1);
+            measuredWidth = size->x;
+            measuredHeight = size->y;
+        }
+    }
+    // Stack: [self, status] or Stack: [self, result]
+    rive_lua_pop(L, 2);
+
+    return Vec2D(std::min((widthMode == LayoutMeasureMode::undefined
+                               ? std::numeric_limits<float>::max()
+                               : width),
+                          measuredWidth),
+                 std::min((heightMode == LayoutMeasureMode::undefined
+                               ? std::numeric_limits<float>::max()
+                               : height),
+                          measuredHeight));
+}
+
+void ScriptedLayout::controlSize(Vec2D size,
+                                 LayoutScaleType widthScaleType,
+                                 LayoutScaleType heightScaleType,
+                                 LayoutDirection direction)
+{
+    m_size = size;
+    callScriptedResize(size);
+}
+#else
+Vec2D ScriptedLayout::measureLayout(float width,
+                                    LayoutMeasureMode widthMode,
+                                    float height,
+                                    LayoutMeasureMode heightMode)
+{
+    return Vec2D((widthMode == LayoutMeasureMode::undefined
+                      ? std::numeric_limits<float>::max()
+                      : width),
+                 (heightMode == LayoutMeasureMode::undefined
+                      ? std::numeric_limits<float>::max()
+                      : height));
+}
+
+void ScriptedLayout::controlSize(Vec2D size,
+                                 LayoutScaleType widthScaleType,
+                                 LayoutScaleType heightScaleType,
+                                 LayoutDirection direction)
+{
+    m_size = size;
+}
+#endif
+
+void ScriptedLayout::addProperty(CustomProperty* prop)
+{
+    auto scriptInput = ScriptInput::from(prop);
+    if (scriptInput != nullptr)
+    {
+        scriptInput->scriptedObject(this);
+    }
+    CustomPropertyContainer::addProperty(prop);
+}
+
+Core* ScriptedLayout::clone() const
+{
+    ScriptedLayout* twin = ScriptedLayoutBase::clone()->as<ScriptedLayout>();
+    if (m_fileAsset != nullptr)
+    {
+        twin->setAsset(m_fileAsset);
+    }
+    return twin;
+}

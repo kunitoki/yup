@@ -98,6 +98,5 @@ python_uninstall:
 python_test *TEST_OPTS:
   python -m pytest -s {{TEST_OPTS}}
 
-bump_rive:
-  uv run python tools/bump_rive.py --rive-ref runtime-v0.1.62 --allow-dirty
-
+rive_update REF="runtime-v0.1.62":
+  uv run python tools/rive_update.py --rive-ref {{REF}} --allow-dirty --keep-work-dir

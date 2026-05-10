@@ -197,27 +197,9 @@ YOGA_EXPORT YGNodeRef YGNodeNewWithConfig(const YGConfigRef config) {
   return node;
 }
 
-namespace {
-struct YogaWrapperWithCleanup {
-  YogaWrapperWithCleanup()
-    : defaultConfig (YGConfigNew())
-  {
-  }
-
-  ~YogaWrapperWithCleanup() {
-    if (defaultConfig != nullptr) {
-      YGConfigFree (defaultConfig);
-      defaultConfig = nullptr;
-    }
-  }
-
-  YGConfigRef defaultConfig = nullptr;
-};
-} // namespace
-
 YOGA_EXPORT YGConfigRef YGConfigGetDefault() {
-  static YogaWrapperWithCleanup defaultWrapper = YogaWrapperWithCleanup();
-  return defaultWrapper.defaultConfig;
+  static YGConfigRef defaultConfig = YGConfigNew();
+  return defaultConfig;
 }
 
 YOGA_EXPORT YGNodeRef YGNodeNew(void) {
@@ -1996,6 +1978,7 @@ static YGCollectFlexItemsRowValues YGCalculateCollectFlexItemsRowValues(
 
   // Add items to the current line until it's full or we run out of items.
   uint32_t endOfLineIndex = startOfLineIndex;
+  bool isFirstElementInLine = true;
   for (; endOfLineIndex < node->getChildren().size(); endOfLineIndex++) {
     const YGNodeRef child = node->getChild(endOfLineIndex);
     if (child->getStyle().display() == YGDisplayNone ||
@@ -2003,12 +1986,11 @@ static YGCollectFlexItemsRowValues YGCalculateCollectFlexItemsRowValues(
       continue;
     }
 
-    const bool isFirstElementInLine = (endOfLineIndex - startOfLineIndex) == 0;
-
     child->setLineIndex(lineCount);
     const float childMarginMainAxis =
         child->getMarginForAxis(mainAxis, availableInnerWidth).unwrap();
     const float childLeadingGapMainAxis = isFirstElementInLine ? 0.0f : gap;
+    isFirstElementInLine = false;
     const float flexBasisWithMinAndMaxConstraints =
         YGNodeBoundAxisWithinMinAndMax(
             child,
@@ -2533,13 +2515,24 @@ static void YGJustifyMainAxis(
   float maxAscentForCurrentLine = 0;
   float maxDescentForCurrentLine = 0;
   bool isNodeBaselineLayout = YGIsBaselineLayout(node);
+  int lastVisibleChildIndex = 0;
+  for (uint32_t i = startOfLineIndex;
+       i < collectedFlexItemsValues.endOfLineIndex;
+       i++) {
+        const YGNodeRef child = node->getChild(i);
+        const YGStyle& childStyle = child->getStyle();
+        if (childStyle.display() == YGDisplayNone) {
+          continue;
+        }
+        lastVisibleChildIndex = i;
+  }
   for (uint32_t i = startOfLineIndex;
        i < collectedFlexItemsValues.endOfLineIndex;
        i++) {
     const YGNodeRef child = node->getChild(i);
     const YGStyle& childStyle = child->getStyle();
     const YGLayout childLayout = child->getLayout();
-    const bool isLastChild = i == collectedFlexItemsValues.endOfLineIndex - 1;
+    const bool isLastChild = i == lastVisibleChildIndex;
     // remove the gap if it is the last element of the line
     if (isLastChild) {
       betweenMainDim -= gap;
@@ -4291,6 +4284,7 @@ void YGAssertWithNode(
     const char* message) {
   if (!condition) {
     Log::log(node, YGLogLevelFatal, nullptr, "%s\n", message);
+    node->setHasError(true);
     throwLogicalErrorWithMessage(message);
   }
 }

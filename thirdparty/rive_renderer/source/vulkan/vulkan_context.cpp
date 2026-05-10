@@ -19,6 +19,7 @@ static VmaAllocator make_vma_allocator(
         .vkGetDeviceProcAddr = vk->GetDeviceProcAddr,
         .vkGetPhysicalDeviceProperties = vk->GetPhysicalDeviceProperties,
     };
+
     VmaAllocatorCreateInfo vmaCreateInfo = {
         // We are single-threaded.
         .flags = VMA_ALLOCATOR_CREATE_EXTERNALLY_SYNCHRONIZED_BIT,
@@ -53,6 +54,12 @@ VulkanContext::VulkanContext(
 #undef LOAD_VULKAN_DEVICE_COMMAND
             m_vmaAllocator(make_vma_allocator(this, pfnvkGetInstanceProcAddr))
 {
+    GetPhysicalDeviceProperties(physicalDevice, &m_physicalDeviceProperties);
+
+    // Check that we weren't told the device was more capable than it is
+    assert(m_physicalDeviceProperties.apiVersion >= features.apiVersion &&
+           "Supplied API version should not be newer than the physical device");
+
     // VK spec says between D24_S8 and D32_S8, one of them must be supported
     m_supportsD24S8 = isFormatSupportedWithFeatureFlags(
         VK_FORMAT_D24_UNORM_S8_UINT,
@@ -86,9 +93,10 @@ rcp<vkutil::Buffer> VulkanContext::makeBuffer(const VkBufferCreateInfo& info,
     return rcp(new vkutil::Buffer(ref_rcp(this), info, mappability));
 }
 
-rcp<vkutil::Image> VulkanContext::makeImage(const VkImageCreateInfo& info)
+rcp<vkutil::Image> VulkanContext::makeImage(const VkImageCreateInfo& info,
+                                            const char* name)
 {
-    return rcp(new vkutil::Image(ref_rcp(this), info));
+    return rcp(new vkutil::Image(ref_rcp(this), info, name));
 }
 
 rcp<vkutil::Framebuffer> VulkanContext::makeFramebuffer(
@@ -126,14 +134,14 @@ static VkImageAspectFlags image_aspect_flags_for_format(VkFormat format)
     RIVE_UNREACHABLE();
 }
 
-rcp<vkutil::ImageView> VulkanContext::makeImageView(rcp<vkutil::Image> image)
+rcp<vkutil::ImageView> VulkanContext::makeImageView(rcp<vkutil::Image> image,
+                                                    const char* name)
 {
     const VkImageCreateInfo& texInfo = image->info();
 
     return makeImageView(
         image,
         {
-            .image = *image,
             .viewType = image_view_type_for_image_type(texInfo.imageType),
             .format = texInfo.format,
             .subresourceRange =
@@ -142,28 +150,34 @@ rcp<vkutil::ImageView> VulkanContext::makeImageView(rcp<vkutil::Image> image)
                     .levelCount = texInfo.mipLevels,
                     .layerCount = 1,
                 },
-        });
+        },
+        name);
 }
 
 rcp<vkutil::ImageView> VulkanContext::makeImageView(
     rcp<vkutil::Image> image,
-    const VkImageViewCreateInfo& info)
+    const VkImageViewCreateInfo& info,
+    const char* name)
 {
     assert(image);
-    return rcp(new vkutil::ImageView(ref_rcp(this), std::move(image), info));
+    return rcp(
+        new vkutil::ImageView(ref_rcp(this), std::move(image), info, name));
 }
 
 rcp<vkutil::ImageView> VulkanContext::makeExternalImageView(
-    const VkImageViewCreateInfo& info)
+    const VkImageViewCreateInfo& info,
+    const char* name)
 {
     return rcp<vkutil::ImageView>(
-        new vkutil::ImageView(ref_rcp(this), nullptr, info));
+        new vkutil::ImageView(ref_rcp(this), nullptr, info, name));
 }
 
 rcp<vkutil::Texture2D> VulkanContext::makeTexture2D(
-    const VkImageCreateInfo& info)
+    const VkImageCreateInfo& info,
+    const char* name)
 {
-    return rcp<vkutil::Texture2D>(new vkutil::Texture2D(ref_rcp(this), info));
+    return rcp<vkutil::Texture2D>(
+        new vkutil::Texture2D(ref_rcp(this), info, name));
 }
 
 void VulkanContext::updateImageDescriptorSets(
@@ -305,9 +319,33 @@ void VulkanContext::bufferMemoryBarrier(
                        nullptr);
 }
 
+void VulkanContext::clearColorImage(VkCommandBuffer commandBuffer,
+                                    ColorInt clearColor,
+                                    VkImage image,
+                                    VkImageLayout imageLayout)
+{
+    const VkClearColorValue colorClearValue = {
+        vkutil::color_clear_rgba32f(clearColor)};
+
+    const VkImageSubresourceRange colorClearRange = {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .levelCount = 1,
+        .layerCount = 1,
+    };
+
+    CmdClearColorImage(commandBuffer,
+                       image,
+                       imageLayout,
+                       &colorClearValue,
+                       1,
+                       &colorClearRange);
+}
+
 void VulkanContext::blitSubRect(VkCommandBuffer commandBuffer,
-                                VkImage src,
-                                VkImage dst,
+                                VkImage srcImage,
+                                VkImageLayout srcImageLayout,
+                                VkImage dstImage,
+                                VkImageLayout dstImageLayout,
                                 const IAABB& blitBounds)
 {
     if (blitBounds.empty())
@@ -335,12 +373,30 @@ void VulkanContext::blitSubRect(VkCommandBuffer commandBuffer,
     imageBlit.dstOffsets[1] = {blitBounds.right, blitBounds.bottom, 1};
 
     CmdBlitImage(commandBuffer,
-                 src,
-                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                 dst,
-                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                 srcImage,
+                 srcImageLayout,
+                 dstImage,
+                 dstImageLayout,
                  1,
                  &imageBlit,
                  VK_FILTER_NEAREST);
 }
+
+void VulkanContext::setDebugNameIfEnabled(uint64_t handle,
+                                          VkObjectType objectType,
+                                          const char* name)
+{
+    if (SetDebugUtilsObjectNameEXT != nullptr && name != nullptr)
+    {
+        VkDebugUtilsObjectNameInfoEXT nameInfo = {
+            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+            .objectType = objectType,
+            .objectHandle = handle,
+            .pObjectName = name,
+        };
+
+        SetDebugUtilsObjectNameEXT(device, &nameInfo);
+    }
+}
+
 } // namespace rive::gpu

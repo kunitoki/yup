@@ -6,21 +6,20 @@
 #include "rive/refcnt.hpp"
 #include "rive/viewmodel/viewmodel.hpp"
 #include "rive/viewmodel/viewmodel_instance_list_item.hpp"
+#include "rive/file.hpp"
 #include <stdio.h>
 namespace rive
 {
-class File;
 
 class DataConverterNumberToList : public DataConverterNumberToListBase
 {
 private:
     File* m_file = nullptr;
     DataValueList m_output;
-    std::vector<ViewModelInstanceListItem*> m_listItems;
+    std::vector<rcp<ViewModelInstanceListItem>> m_listItems;
     void clearItems();
 
 public:
-    ~DataConverterNumberToList();
     DataValue* convert(DataValue* value, DataBind* dataBind) override;
     DataType outputType() override { return DataType::list; };
     void file(File*);

@@ -11,16 +11,19 @@ public:
     void distanceChanged() override;
     void orientChanged() override;
     StatusCode onAddedClean(CoreContext* context) override;
-    const Mat2D targetTransform() const;
+    const Mat2D targetTransform(float distanceOffset = 1.0) const;
     void constrain(TransformComponent* component) override;
     void update(ComponentDirt value) override;
     void buildDependencies() override;
 
+protected:
+    TransformComponents constrainHelper(const Mat2D& componentTransform,
+                                        Mat2D& transformB,
+                                        const Mat2D& componentParentWorld);
+
 private:
     RawPath m_rawPath;
     PathMeasure m_pathMeasure;
-    TransformComponents m_ComponentsA;
-    TransformComponents m_ComponentsB;
 };
 } // namespace rive
 

@@ -8,18 +8,17 @@
 #include "shaders/constants.glsl"
 #include "rive/renderer/gl/gl_utils.hpp"
 
-#include "generated/shaders/glsl.exports.h"
+#include "generated/shaders/glsl.glsl.exports.h"
+
+#include <numeric>
 
 namespace rive::gpu
 {
-using DrawBufferMask = RenderTargetGL::DrawBufferMask;
-
-static bool needs_coalesced_atomic_resolve_and_transfer(
+static bool wants_coalesced_atomic_resolve_and_transfer(
     const gpu::FlushDescriptor& desc)
 {
-    assert(desc.interlockMode == gpu::InterlockMode::atomics);
-    return (desc.combinedShaderFeatures &
-            ShaderFeatures::ENABLE_ADVANCED_BLEND) &&
+    return desc.interlockMode == gpu::InterlockMode::atomics &&
+           !desc.fixedFunctionColorOutput &&
            lite_rtti_cast<FramebufferRenderTargetGL*>(
                static_cast<RenderTargetGL*>(desc.renderTarget)) != nullptr;
 }
@@ -27,142 +26,266 @@ static bool needs_coalesced_atomic_resolve_and_transfer(
 class RenderContextGLImpl::PLSImplRWTexture
     : public RenderContextGLImpl::PixelLocalStorageImpl
 {
-    bool supportsRasterOrdering(
-        const GLCapabilities& capabilities) const override
+    void init(rcp<GLState>) override
     {
-        return capabilities.ARB_fragment_shader_interlock ||
-               capabilities.INTEL_fragment_shader_ordering;
+        glBindFramebuffer(GL_FRAMEBUFFER, m_plsClearFBO);
+        std::array<GLenum, PLS_CLEAR_BUFFER_COUNT> plsClearBuffers;
+        std::iota(plsClearBuffers.begin(),
+                  plsClearBuffers.end(),
+                  GL_COLOR_ATTACHMENT0);
+        glDrawBuffers(plsClearBuffers.size(), plsClearBuffers.data());
     }
 
-    bool supportsFragmentShaderAtomics(
-        const GLCapabilities& capabilities) const override
+    void getSupportedInterlockModes(
+        const GLCapabilities& capabilities,
+        PlatformFeatures* platformFeatures) const override
     {
-        return true;
+        if (capabilities.ARB_fragment_shader_interlock ||
+            capabilities.INTEL_fragment_shader_ordering)
+        {
+            platformFeatures->supportsRasterOrderingMode = true;
+            platformFeatures->supportsClockwiseMode = true;
+            platformFeatures->supportsClockwiseFixedFunctionMode = true;
+        }
+        platformFeatures->supportsAtomicMode = true;
     }
 
-    void activatePixelLocalStorage(RenderContextGLImpl* renderContextImpl,
-                                   const FlushDescriptor& desc) override
+    void resizeTransientPLSBacking(uint32_t width,
+                                   uint32_t height,
+                                   uint32_t planeCount) override
     {
-        auto renderTarget = static_cast<RenderTargetGL*>(desc.renderTarget);
-        renderTarget->allocateInternalPLSTextures(desc.interlockMode);
+        assert(planeCount <= PLS_TRANSIENT_BACKING_MAX_PLANE_COUNT);
 
-        if (!desc.atomicFixedFunctionColorOutput)
+        if (width == 0 || height == 0 || planeCount == 0)
         {
-            if (auto framebufferRenderTarget =
-                    lite_rtti_cast<FramebufferRenderTargetGL*>(renderTarget))
-            {
-                // We're targeting an external FBO but can't render to it
-                // directly. Make sure to allocate and attach an offscreen
-                // target texture.
-                framebufferRenderTarget->allocateOffscreenTargetTexture();
-                if (desc.colorLoadAction ==
-                    gpu::LoadAction::preserveRenderTarget)
-                {
-                    // Copy the framebuffer's contents to our offscreen texture.
-                    framebufferRenderTarget->bindDestinationFramebuffer(
-                        GL_READ_FRAMEBUFFER);
-                    framebufferRenderTarget->bindInternalFramebuffer(
-                        GL_DRAW_FRAMEBUFFER,
-                        DrawBufferMask::color);
-                    glutils::BlitFramebuffer(desc.renderTargetUpdateBounds,
-                                             renderTarget->height());
-                }
-            }
+            m_plsTransientBackingTexture = glutils::Texture::Zero();
+        }
+        else
+        {
+            m_plsTransientBackingTexture = glutils::Texture();
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D_ARRAY, m_plsTransientBackingTexture);
+            glTexStorage3D(GL_TEXTURE_2D_ARRAY,
+                           1,
+                           GL_R32UI,
+                           width,
+                           height,
+                           planeCount);
         }
 
-        // Clear the necessary textures.
-        auto rwTexBuffers = DrawBufferMask::coverage;
-        if (desc.interlockMode == gpu::InterlockMode::rasterOrdering)
+        glBindFramebuffer(GL_FRAMEBUFFER, m_plsClearFBO);
+        for (uint32_t i = 0; i < PLS_TRANSIENT_BACKING_MAX_PLANE_COUNT; ++i)
         {
-            rwTexBuffers |=
-                DrawBufferMask::color | DrawBufferMask::scratchColor;
-        }
-        else if (desc.combinedShaderFeatures &
-                 ShaderFeatures::ENABLE_ADVANCED_BLEND)
-        {
-            rwTexBuffers |= DrawBufferMask::color;
-        }
-        if (desc.combinedShaderFeatures & gpu::ShaderFeatures::ENABLE_CLIPPING)
-        {
-            rwTexBuffers |= DrawBufferMask::clip;
-        }
-        renderTarget->bindInternalFramebuffer(GL_FRAMEBUFFER, rwTexBuffers);
-        if (desc.colorLoadAction == gpu::LoadAction::clear &&
-            (rwTexBuffers & DrawBufferMask::color))
-        {
-            // If the color buffer is not a storage texture, we will clear it
-            // once the main framebuffer gets bound.
-            float clearColor4f[4];
-            UnpackColorToRGBA32FPremul(desc.colorClearValue, clearColor4f);
-            glClearBufferfv(GL_COLOR, COLOR_PLANE_IDX, clearColor4f);
-        }
-        if (desc.combinedShaderFeatures & gpu::ShaderFeatures::ENABLE_CLIPPING)
-        {
-            constexpr static GLuint kZeroClear[4]{};
-            glClearBufferuiv(GL_COLOR, CLIP_PLANE_IDX, kZeroClear);
-        }
-        {
-            GLuint coverageClear[4]{desc.coverageClearValue};
-            glClearBufferuiv(GL_COLOR, COVERAGE_PLANE_IDX, coverageClear);
+            glFramebufferTextureLayer(
+                GL_FRAMEBUFFER,
+                GL_COLOR_ATTACHMENT0 + PLS_TRANSIENT_BACKING_CLEAR_IDX + i,
+                (i < planeCount) ? m_plsTransientBackingTexture : 0,
+                0,
+                i);
         }
 
-        switch (desc.interlockMode)
+        RIVE_DEBUG_CODE(m_plsTransientBackingPlaneCount = planeCount;)
+    }
+
+    void resizeAtomicCoverageBacking(uint32_t width, uint32_t height) override
+    {
+        if (width == 0 || height == 0)
         {
-            case gpu::InterlockMode::rasterOrdering:
-                // rasterOrdering mode renders by storing to an image texture.
-                // Bind a framebuffer with no color attachments.
-                renderTarget->bindHeadlessFramebuffer(
-                    renderContextImpl->m_capabilities);
-                break;
-            case gpu::InterlockMode::atomics:
-                renderTarget->bindDestinationFramebuffer(GL_FRAMEBUFFER);
-                if (desc.colorLoadAction == gpu::LoadAction::clear &&
-                    !(rwTexBuffers & DrawBufferMask::color))
-                {
-                    // We're rendering directly to the main framebuffer. Clear
-                    // it now.
-                    float cc[4];
-                    UnpackColorToRGBA32FPremul(desc.colorClearValue, cc);
-                    glClearColor(cc[0], cc[1], cc[2], cc[3]);
-                    glClear(GL_COLOR_BUFFER_BIT);
-                }
-                break;
-            default:
-                RIVE_UNREACHABLE();
+            m_atomicCoverageTexture = glutils::Texture::Zero();
+        }
+        else
+        {
+            m_atomicCoverageTexture = glutils::Texture();
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, m_atomicCoverageTexture);
+            glTexStorage2D(GL_TEXTURE_2D, 1, GL_R32UI, width, height);
         }
 
-        renderTarget->bindAsImageTextures(rwTexBuffers);
-
-        glMemoryBarrierByRegion(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+        glBindFramebuffer(GL_FRAMEBUFFER, m_plsClearFBO);
+        glFramebufferTexture2D(GL_FRAMEBUFFER,
+                               GL_COLOR_ATTACHMENT0 +
+                                   PLS_ATOMIC_COVERAGE_CLEAR_IDX,
+                               GL_TEXTURE_2D,
+                               m_atomicCoverageTexture,
+                               0);
     }
 
     gpu::ShaderMiscFlags shaderMiscFlags(const gpu::FlushDescriptor& desc,
                                          gpu::DrawType drawType) const final
     {
         auto flags = gpu::ShaderMiscFlags::none;
-        if (desc.interlockMode == gpu::InterlockMode::atomics)
+        if (drawType == gpu::DrawType::renderPassResolve &&
+            wants_coalesced_atomic_resolve_and_transfer(desc))
         {
-            if (desc.atomicFixedFunctionColorOutput)
-            {
-                flags |= gpu::ShaderMiscFlags::fixedFunctionColorOutput;
-            }
-            if (drawType == gpu::DrawType::atomicResolve &&
-                needs_coalesced_atomic_resolve_and_transfer(desc))
-            {
-                flags |= gpu::ShaderMiscFlags::coalescedResolveAndTransfer;
-            }
+            flags |= gpu::ShaderMiscFlags::coalescedResolveAndTransfer;
         }
         return flags;
     }
 
-    void deactivatePixelLocalStorage(RenderContextGLImpl*,
+    void applyPipelineStateOverrides(
+        const DrawBatch& batch,
+        const FlushDescriptor& desc,
+        const PlatformFeatures&,
+        PipelineState* pipelineState) const override
+    {
+        if (batch.drawType == gpu::DrawType::renderPassResolve &&
+            wants_coalesced_atomic_resolve_and_transfer(desc))
+        {
+            // If we opted for "coalescedResolveAndTransfer", turn color writes
+            // back on for this draw.
+            pipelineState->colorWriteEnabled = true;
+        }
+    }
+
+    void activatePixelLocalStorage(RenderContextGLImpl* renderContextImpl,
+                                   const FlushDescriptor& desc) override
+    {
+        auto renderTarget = static_cast<RenderTargetGL*>(desc.renderTarget);
+
+        // Bind and initialize the PLS backing textures.
+        renderContextImpl->state()->setPipelineState(
+            gpu::COLOR_ONLY_PIPELINE_STATE);
+        renderContextImpl->state()->setScissor(desc.renderTargetUpdateBounds,
+                                               renderTarget->height());
+
+        if (!desc.fixedFunctionColorOutput)
+        {
+            if (desc.colorLoadAction == gpu::LoadAction::preserveRenderTarget)
+            {
+                if (auto framebufferRenderTarget =
+                        lite_rtti_cast<FramebufferRenderTargetGL*>(
+                            renderTarget))
+                {
+                    // We're targeting an external FBO but need to render to a
+                    // texture. Since we also need to preserve the contents,
+                    // blit the target framebuffer into the offscreen texture.
+                    framebufferRenderTarget->bindDestinationFramebuffer(
+                        GL_READ_FRAMEBUFFER);
+                    framebufferRenderTarget->bindTextureFramebuffer(
+                        GL_DRAW_FRAMEBUFFER);
+                    glutils::BlitFramebuffer(desc.renderTargetUpdateBounds,
+                                             renderTarget->height());
+                }
+            }
+            // If the color buffer is *not* a storage texture, we will clear it
+            // once the main framebuffer gets bound.
+            if (desc.colorLoadAction == gpu::LoadAction::clear)
+            {
+                float clearColor4f[4];
+                UnpackColorToRGBA32FPremul(desc.colorClearValue, clearColor4f);
+                renderTarget->bindTextureFramebuffer(GL_FRAMEBUFFER);
+                glClearBufferfv(GL_COLOR, COLOR_PLANE_IDX, clearColor4f);
+            }
+            glBindImageTexture(COLOR_PLANE_IDX,
+                               renderTarget->renderTexture(),
+                               0,
+                               GL_FALSE,
+                               0,
+                               GL_READ_WRITE,
+                               GL_RGBA8);
+        }
+
+        glBindFramebuffer(GL_FRAMEBUFFER, m_plsClearFBO);
+        uint32_t nextTransientLayer = 0;
+        {
+            GLuint coverageClear[4]{desc.coverageClearValue};
+            if (desc.interlockMode == gpu::InterlockMode::rasterOrdering ||
+                desc.interlockMode == gpu::InterlockMode::clockwise)
+            {
+                glClearBufferuiv(GL_COLOR, nextTransientLayer, coverageClear);
+                glBindImageTexture(COVERAGE_PLANE_IDX,
+                                   m_plsTransientBackingTexture,
+                                   0,
+                                   GL_FALSE,
+                                   nextTransientLayer,
+                                   GL_READ_WRITE,
+                                   GL_R32UI);
+                ++nextTransientLayer;
+            }
+            else
+            {
+                assert(desc.interlockMode == gpu::InterlockMode::atomics);
+                glClearBufferuiv(GL_COLOR,
+                                 PLS_ATOMIC_COVERAGE_CLEAR_IDX,
+                                 coverageClear);
+                glBindImageTexture(COVERAGE_PLANE_IDX,
+                                   m_atomicCoverageTexture,
+                                   0,
+                                   GL_FALSE,
+                                   0,
+                                   GL_READ_WRITE,
+                                   GL_R32UI);
+            }
+        }
+
+        if (enums::is_flag_set(desc.combinedShaderFeatures,
+                               gpu::ShaderFeatures::ENABLE_CLIPPING))
+        {
+            constexpr static GLuint kZeroClear[4]{};
+            glClearBufferuiv(GL_COLOR, nextTransientLayer, kZeroClear);
+            glBindImageTexture(CLIP_PLANE_IDX,
+                               m_plsTransientBackingTexture,
+                               0,
+                               GL_FALSE,
+                               nextTransientLayer,
+                               GL_READ_WRITE,
+                               GL_R32UI);
+            ++nextTransientLayer;
+        }
+
+        if (desc.interlockMode == gpu::InterlockMode::rasterOrdering ||
+            (desc.interlockMode == gpu::InterlockMode::clockwise &&
+             enums::is_flag_set(desc.combinedShaderFeatures,
+                                gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND)))
+        {
+            glBindImageTexture(
+                SCRATCH_COLOR_PLANE_IDX,
+                m_plsTransientBackingTexture,
+                0,
+                GL_FALSE,
+                nextTransientLayer,
+                GL_READ_WRITE,
+                (desc.interlockMode == gpu::InterlockMode::clockwise)
+                    ? GL_RGB10_A2
+                    : GL_RGBA8);
+            ++nextTransientLayer;
+        }
+        assert(nextTransientLayer <= m_plsTransientBackingPlaneCount);
+
+        if (desc.fixedFunctionColorOutput ||
+            wants_coalesced_atomic_resolve_and_transfer(desc))
+        {
+            // Render directly to the main framebuffer.
+            renderTarget->bindDestinationFramebuffer(GL_FRAMEBUFFER);
+            if (desc.fixedFunctionColorOutput &&
+                desc.colorLoadAction == gpu::LoadAction::clear)
+            {
+                // Clear the main framebuffer.
+                float cc[4];
+                UnpackColorToRGBA32FPremul(desc.colorClearValue, cc);
+                glClearColor(cc[0], cc[1], cc[2], cc[3]);
+                glClear(GL_COLOR_BUFFER_BIT);
+            }
+        }
+        else
+        {
+            // Render by storing to an image texture, which we will copy out at
+            // the end of the render pass.
+            // Bind a framebuffer with no color attachments.
+            renderTarget->bindHeadlessFramebuffer(
+                renderContextImpl->m_capabilities);
+        }
+
+        glMemoryBarrierByRegion(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+    }
+
+    void deactivatePixelLocalStorage(RenderContextGLImpl* renderContextImpl,
                                      const FlushDescriptor& desc) override
     {
         glMemoryBarrierByRegion(GL_ALL_BARRIER_BITS);
 
-        // atomic mode never needs to copy anything here because it transfers
-        // the offscreen texture during resolve.
-        if (desc.interlockMode == gpu::InterlockMode::rasterOrdering)
+        if (!desc.fixedFunctionColorOutput &&
+            !wants_coalesced_atomic_resolve_and_transfer(desc))
         {
             if (auto framebufferRenderTarget =
                     lite_rtti_cast<FramebufferRenderTargetGL*>(
@@ -170,11 +293,12 @@ class RenderContextGLImpl::PLSImplRWTexture
             {
                 // We rendered to an offscreen texture. Copy back to the
                 // external target framebuffer.
-                framebufferRenderTarget->bindInternalFramebuffer(
-                    GL_READ_FRAMEBUFFER,
-                    DrawBufferMask::color);
+                framebufferRenderTarget->bindTextureFramebuffer(
+                    GL_READ_FRAMEBUFFER);
                 framebufferRenderTarget->bindDestinationFramebuffer(
                     GL_DRAW_FRAMEBUFFER);
+                renderContextImpl->state()->setPipelineState(
+                    gpu::COLOR_ONLY_PIPELINE_STATE);
                 glutils::BlitFramebuffer(desc.renderTargetUpdateBounds,
                                          framebufferRenderTarget->height());
             }
@@ -192,6 +316,19 @@ class RenderContextGLImpl::PLSImplRWTexture
     {
         return glMemoryBarrierByRegion(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
     }
+
+private:
+    constexpr static uint32_t PLS_TRANSIENT_BACKING_CLEAR_IDX = 0;
+    constexpr static uint32_t PLS_ATOMIC_COVERAGE_CLEAR_IDX =
+        PLS_TRANSIENT_BACKING_MAX_PLANE_COUNT;
+    constexpr static uint32_t PLS_CLEAR_BUFFER_COUNT =
+        PLS_TRANSIENT_BACKING_MAX_PLANE_COUNT + 1;
+
+    glutils::Texture m_plsTransientBackingTexture = glutils::Texture::Zero();
+    glutils::Texture m_atomicCoverageTexture = glutils::Texture::Zero();
+    glutils::Framebuffer m_plsClearFBO; // FBO solely for clearing PLS.
+
+    RIVE_DEBUG_CODE(uint32_t m_plsTransientBackingPlaneCount = 0;)
 };
 
 std::unique_ptr<RenderContextGLImpl::PixelLocalStorageImpl>

@@ -34,9 +34,17 @@ namespace glutils
 void CompileAndAttachShader(GLuint program,
                             GLenum type,
                             const char* source,
-                            const GLCapabilities& capabilities)
+                            const GLCapabilities& capabilities,
+                            DebugPrintErrorAndAbort debugPrintErrornAndAbort)
 {
-    CompileAndAttachShader(program, type, nullptr, 0, &source, 1, capabilities);
+    CompileAndAttachShader(program,
+                           type,
+                           nullptr,
+                           0,
+                           &source,
+                           1,
+                           capabilities,
+                           debugPrintErrornAndAbort);
 }
 
 void CompileAndAttachShader(GLuint program,
@@ -45,23 +53,32 @@ void CompileAndAttachShader(GLuint program,
                             size_t numDefines,
                             const char* inputSources[],
                             size_t numInputSources,
-                            const GLCapabilities& capabilities)
+                            const GLCapabilities& capabilities,
+                            DebugPrintErrorAndAbort debugPrintErrornAndAbort)
 {
     GLuint shader = CompileShader(type,
                                   defines,
                                   numDefines,
                                   inputSources,
                                   numInputSources,
-                                  capabilities);
+                                  capabilities,
+                                  debugPrintErrornAndAbort);
     glAttachShader(program, shader);
     glDeleteShader(shader);
 }
 
 GLuint CompileShader(GLuint type,
                      const char* source,
-                     const GLCapabilities& capabilities)
+                     const GLCapabilities& capabilities,
+                     DebugPrintErrorAndAbort debugPrintErrornAndAbort)
 {
-    return CompileShader(type, nullptr, 0, &source, 1, capabilities);
+    return CompileShader(type,
+                         nullptr,
+                         0,
+                         &source,
+                         1,
+                         capabilities,
+                         debugPrintErrornAndAbort);
 }
 
 GLuint CompileShader(GLuint type,
@@ -69,7 +86,8 @@ GLuint CompileShader(GLuint type,
                      size_t numDefines,
                      const char* inputSources[],
                      size_t numInputSources,
-                     const GLCapabilities& capabilities)
+                     const GLCapabilities& capabilities,
+                     DebugPrintErrorAndAbort debugPrintErrornAndAbort)
 {
     std::ostringstream shaderSource;
     shaderSource << "#version " << capabilities.contextVersionMajor
@@ -106,15 +124,54 @@ GLuint CompileShader(GLuint type,
     {
         shaderSource << "#define " << GLSL_TESS_TEXTURE_FLOATING_POINT << '\n';
     }
+    if (capabilities.isMali)
+    {
+        shaderSource << "#define " << GLSL_GL_RENDERER_MALI << '\n';
+    }
     shaderSource << rive::gpu::glsl::glsl << "\n";
     for (size_t i = 0; i < numInputSources; ++i)
     {
         shaderSource << inputSources[i] << "\n";
     }
-    return CompileRawGLSL(type, shaderSource.str().c_str());
+    return CompileRawGLSL(type,
+                          shaderSource.str().c_str(),
+                          debugPrintErrornAndAbort);
 }
 
-[[nodiscard]] GLuint CompileRawGLSL(GLenum shaderType, const char* rawGLSL)
+#ifdef DEBUG
+void PrintShaderCompilationErrors(GLuint shader)
+{
+    GLint maxLength = 0;
+    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &maxLength);
+    std::vector<GLchar> infoLog(maxLength);
+    glGetShaderInfoLog(shader, maxLength, &maxLength, &infoLog[0]);
+    fprintf(stderr, "Failed to compile shader\n");
+    // Print the error message *before* the shader in case stderr hasn't
+    // finished flushing when we call abort() further on.
+    fprintf(stderr, "%s\n", &infoLog[0]);
+
+    GLint sourceLength = 0;
+    glGetShaderiv(shader, GL_SHADER_SOURCE_LENGTH, &sourceLength);
+    std::vector<GLchar> shaderSource(sourceLength);
+    glGetShaderSource(shader, sourceLength, nullptr, shaderSource.data());
+    int l = 1;
+    std::stringstream stream(shaderSource.data());
+    std::string lineStr;
+    while (std::getline(stream, lineStr, '\n'))
+    {
+        fprintf(stderr, "%4i| %s\n", l++, lineStr.c_str());
+    }
+    // Print the error message, again, *after* the shader where it's easier
+    // to find in the console.
+    fprintf(stderr, "%s\n", &infoLog[0]);
+    fflush(stderr);
+}
+#endif
+
+[[nodiscard]] GLuint CompileRawGLSL(
+    GLenum shaderType,
+    const char* rawGLSL,
+    DebugPrintErrorAndAbort debugPrintErrornAndAbort)
 {
     GLuint shader = glCreateShader(shaderType);
 #ifdef BYPASS_EMSCRIPTEN_SHADER_PARSER
@@ -134,54 +191,54 @@ GLuint CompileShader(GLuint type,
 #endif
     glCompileShader(shader);
 #ifdef DEBUG
-    GLint isCompiled = 0;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &isCompiled);
-    if (isCompiled == GL_FALSE)
+    if (debugPrintErrornAndAbort == DebugPrintErrorAndAbort::yes)
     {
-        GLint maxLength = 0;
-        glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &maxLength);
-        std::vector<GLchar> infoLog(maxLength);
-        glGetShaderInfoLog(shader, maxLength, &maxLength, &infoLog[0]);
-        fprintf(stderr, "Failed to compile shader\n");
-        // Print the error message *before* the shader in case stderr hasn't
-        // finished flushing when we call abort() further on.
-        fprintf(stderr, "%s\n", &infoLog[0]);
-        int l = 1;
-        std::stringstream stream(rawGLSL);
-        std::string lineStr;
-        while (std::getline(stream, lineStr, '\n'))
+        GLint isCompiled = 0;
+        glGetShaderiv(shader, GL_COMPILE_STATUS, &isCompiled);
+        if (isCompiled == GL_FALSE)
         {
-            fprintf(stderr, "%4i| %s\n", l++, lineStr.c_str());
+            PrintShaderCompilationErrors(shader);
+            glDeleteShader(shader);
+            // Give stderr another second to finish flushing before we abort.
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            abort();
         }
-        // Print the error message, again, *after* the shader where it's easier
-        // to find in the console.
-        fprintf(stderr, "%s\n", &infoLog[0]);
-        fflush(stderr);
-        glDeleteShader(shader);
-        // Give stderr another second to finish flushing before we abort.
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        abort();
     }
+#else
+    std::ignore = debugPrintErrornAndAbort;
 #endif
     return shader;
 }
 
-void LinkProgram(GLuint program)
+#ifdef DEBUG
+void PrintLinkProgramErrors(GLuint program)
+{
+    GLint maxLength = 0;
+    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &maxLength);
+    std::vector<GLchar> infoLog(maxLength);
+    glGetProgramInfoLog(program, maxLength, &maxLength, &infoLog[0]);
+    fprintf(stderr, "Failed to link program %s\n", &infoLog[0]);
+    fflush(stderr);
+}
+#endif
+
+void LinkProgram(GLuint program,
+                 DebugPrintErrorAndAbort debugPrintErrornAndAbort)
 {
     glLinkProgram(program);
 #ifdef DEBUG
-    GLint isLinked = 0;
-    glGetProgramiv(program, GL_LINK_STATUS, &isLinked);
-    if (isLinked == GL_FALSE)
+    if (debugPrintErrornAndAbort == DebugPrintErrorAndAbort::yes)
     {
-        GLint maxLength = 0;
-        glGetProgramiv(program, GL_INFO_LOG_LENGTH, &maxLength);
-        std::vector<GLchar> infoLog(maxLength);
-        glGetProgramInfoLog(program, maxLength, &maxLength, &infoLog[0]);
-        fprintf(stderr, "Failed to link program %s\n", &infoLog[0]);
-        fflush(stderr);
-        abort();
+        GLint isLinked = 0;
+        glGetProgramiv(program, GL_LINK_STATUS, &isLinked);
+        if (isLinked == GL_FALSE)
+        {
+            PrintLinkProgramErrors(program);
+            abort();
+        }
     }
+#else
+    std::ignore = debugPrintErrornAndAbort;
 #endif
 }
 
@@ -253,8 +310,8 @@ GLint gl_min_filter_for_image_filter(rive::ImageFilter filter)
 {
     switch (filter)
     {
-        case rive::ImageFilter::trilinear:
-            return GL_LINEAR_MIPMAP_LINEAR;
+        case rive::ImageFilter::bilinear:
+            return GL_LINEAR_MIPMAP_NEAREST;
         case rive::ImageFilter::nearest:
             return GL_NEAREST;
     }
@@ -266,10 +323,10 @@ GLint gl_mag_filter_for_image_filter(rive::ImageFilter filter)
 {
     switch (filter)
     {
-        case rive::ImageFilter::trilinear:
-            return GL_LINEAR;
         case rive::ImageFilter::nearest:
             return GL_NEAREST;
+        case rive::ImageFilter::bilinear:
+            return GL_LINEAR;
     }
 
     RIVE_UNREACHABLE();
@@ -312,35 +369,5 @@ void Uniform1iByName(GLuint programID, const char* name, GLint value)
     // performance reasons.
     assert(location != -1);
     glUniform1i(location, value);
-}
-
-// Setup a small test to verify that GL_PIXEL_LOCAL_FORMAT_ANGLE has the correct
-// value.
-bool validate_pixel_local_storage_angle()
-{
-#if defined(RIVE_DESKTOP_GL) || defined(RIVE_WEBGL)
-    glutils::Texture tex;
-    glBindTexture(GL_TEXTURE_2D, tex);
-    glTexStorage2D(GL_TEXTURE_2D, 1, GL_R32UI, 1, 1);
-
-    glutils::Framebuffer fbo;
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-    glFramebufferTexturePixelLocalStorageANGLE(0, tex, 0, 0);
-
-    // Clear the error queue. (Should already be empty.)
-    while (GLenum err = glGetError())
-    {
-        fprintf(stderr, "WARNING: unhandled GL error 0x%x\n", err);
-    }
-
-    GLint format = GL_NONE;
-    glGetFramebufferPixelLocalStorageParameterivANGLE(
-        0,
-        GL_PIXEL_LOCAL_FORMAT_ANGLE,
-        &format);
-    return glGetError() == GL_NONE && format == GL_R32UI;
-#else
-    return false;
-#endif
 }
 } // namespace glutils

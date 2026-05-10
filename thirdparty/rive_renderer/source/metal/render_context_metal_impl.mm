@@ -6,13 +6,16 @@
 
 #include "background_shader_compiler.h"
 #include "rive/renderer/buffer_ring.hpp"
+#ifdef RIVE_CANVAS
+#include "rive/renderer/render_canvas.hpp"
+#endif
 #include "rive/renderer/texture.hpp"
 #include "rive/renderer/rive_render_buffer.hpp"
 #include "shaders/constants.glsl"
 #include <sstream>
 
-#include "generated/shaders/color_ramp.exports.h"
-#include "generated/shaders/tessellate.exports.h"
+#include "generated/shaders/color_ramp.glsl.exports.h"
+#include "generated/shaders/tessellate.glsl.exports.h"
 
 #if defined(RIVE_IOS_SIMULATOR)
 #import <mach-o/arch.h>
@@ -39,15 +42,13 @@ namespace rive::gpu
 static id<MTLRenderPipelineState> make_pipeline_state(
     id<MTLDevice> gpu, MTLRenderPipelineDescriptor* desc)
 {
-    NSError* err = [NSError errorWithDomain:@"pipeline_create"
-                                       code:201
-                                   userInfo:nil];
+    NSError* err = nil;
     id<MTLRenderPipelineState> state =
         [gpu newRenderPipelineStateWithDescriptor:desc error:&err];
-    if (!state)
+    if (err != nil || state == nil)
     {
-        fprintf(stderr, "%s\n", err.localizedDescription.UTF8String);
-        abort();
+        NSLog(@"RIVE: make_pipeline_state error %@",
+              err != nil ? err.localizedDescription : @"<nil>");
     }
     return state;
 }
@@ -72,7 +73,7 @@ static MTLSamplerMinMagFilter min_mag_filter_for_image_filter(
 {
     switch (option)
     {
-        case ImageFilter::trilinear:
+        case ImageFilter::bilinear:
             return MTLSamplerMinMagFilterLinear;
         case ImageFilter::nearest:
             return MTLSamplerMinMagFilterNearest;
@@ -85,9 +86,8 @@ static MTLSamplerMipFilter mip_filter_for_image_filter(ImageFilter option)
 {
     switch (option)
     {
-        case ImageFilter::trilinear:
-            return MTLSamplerMipFilterLinear;
         case ImageFilter::nearest:
+        case ImageFilter::bilinear:
             return MTLSamplerMipFilterNearest;
     }
 
@@ -152,7 +152,7 @@ public:
         desc.vertexFunction =
             [plsLibrary newFunctionWithName:@GLSL_atlasVertexMain];
         desc.fragmentFunction = [plsLibrary newFunctionWithName:fragmentMain];
-        desc.colorAttachments[0].pixelFormat = MTLPixelFormatR32Float;
+        desc.colorAttachments[0].pixelFormat = MTLPixelFormatR16Float;
         desc.colorAttachments[0].blendingEnabled = TRUE;
         desc.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorOne;
         desc.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOne;
@@ -186,14 +186,14 @@ public:
     {
         // Each feature corresponds to a specific index in the namespaceID.
         // These must stay in sync with generate_draw_combinations.py.
-        char namespaceID[] = "000000000";
+        char namespaceID[] = "0000000000";
         static_assert(sizeof(namespaceID) ==
                       gpu::kShaderFeatureCount + 1 /*DRAW_INTERIOR_TRIANGLES*/ +
                           1 /*ATLAS_BLIT*/ + 1 /*null terminator*/);
         for (size_t i = 0; i < gpu::kShaderFeatureCount; ++i)
         {
-            ShaderFeatures feature = static_cast<ShaderFeatures>(1 << i);
-            if (shaderFeatures & feature)
+            const auto feature = ShaderFeatures(1 << i);
+            if (enums::is_flag_set(shaderFeatures, feature))
             {
                 namespaceID[i] = '1';
             }
@@ -206,6 +206,7 @@ public:
                           1 << 5);
             static_assert((int)ShaderFeatures::ENABLE_HSL_BLEND_MODES ==
                           1 << 6);
+            static_assert((int)ShaderFeatures::ENABLE_DITHER == 1 << 7);
         }
         if (drawType == DrawType::interiorTriangulation)
         {
@@ -226,7 +227,8 @@ public:
             case DrawType::interiorTriangulation:
             case DrawType::atlasBlit:
                 namespacePrefix =
-                    (shaderMiscFlags & gpu::ShaderMiscFlags::clockwiseFill)
+                    enums::is_flag_set(shaderMiscFlags,
+                                       gpu::ShaderMiscFlags::clockwiseFill)
                         ? 'c'
                         : 'p';
                 break;
@@ -235,8 +237,6 @@ public:
             case DrawType::imageMesh:
                 namespacePrefix = 'm';
                 break;
-            case DrawType::atomicInitialize:
-            case DrawType::atomicResolve:
             case DrawType::msaaStrokes:
             case DrawType::msaaMidpointFanBorrowedCoverage:
             case DrawType::msaaMidpointFans:
@@ -244,7 +244,9 @@ public:
             case DrawType::msaaMidpointFanPathsStencil:
             case DrawType::msaaMidpointFanPathsCover:
             case DrawType::msaaOuterCubics:
-            case DrawType::msaaStencilClipReset:
+            case DrawType::clipReset:
+            case DrawType::renderPassInitialize:
+            case DrawType::renderPassResolve:
                 RIVE_UNREACHABLE();
         }
 
@@ -261,7 +263,12 @@ public:
                  gpu::DrawType drawType,
                  gpu::InterlockMode interlockMode,
                  gpu::ShaderFeatures shaderFeatures,
-                 gpu::ShaderMiscFlags shaderMiscFlags)
+                 gpu::ShaderMiscFlags shaderMiscFlags
+#ifdef WITH_RIVE_TOOLS
+                 ,
+                 gpu::SynthesizedFailureType synthesizedFailureType
+#endif
+    )
     {
         if (library == nil)
         {
@@ -269,6 +276,14 @@ public:
             // compile. Leave everything nil and let draws fail.
             return;
         }
+
+#ifdef WITH_RIVE_TOOLS
+        if (synthesizedFailureType == SynthesizedFailureType::pipelineCreation)
+        {
+            NSLog(@"RIVE: Synthesizing pipeline creation failure...");
+            return;
+        }
+#endif
 
         auto makePipelineState = [=](id<MTLFunction> vertexMain,
                                      id<MTLFunction> fragmentMain,
@@ -298,8 +313,9 @@ public:
                     // In atomic mode, the PLS planes are accessed as device
                     // buffers. We only use the "framebuffer" attachment
                     // configured above.
-                    if (shaderMiscFlags &
-                        gpu::ShaderMiscFlags::fixedFunctionColorOutput)
+                    if (enums::is_flag_set(
+                            shaderMiscFlags,
+                            gpu::ShaderMiscFlags::fixedFunctionColorOutput))
                     {
                         // The shader expectes a "src-over" blend function in
                         // order to to implement antialiasing and opacity.
@@ -314,7 +330,7 @@ public:
                         framebuffer.alphaBlendOperation = MTLBlendOperationAdd;
                         framebuffer.writeMask = MTLColorWriteMaskAll;
                     }
-                    else if (drawType == gpu::DrawType::atomicResolve)
+                    else if (drawType == gpu::DrawType::renderPassResolve)
                     {
                         // We're resolving from the offscreen color buffer to
                         // the framebuffer attachment. Write out the final color
@@ -332,6 +348,7 @@ public:
                     }
                     break;
 
+                case gpu::InterlockMode::clockwise:
                 case gpu::InterlockMode::clockwiseAtomic:
                 case gpu::InterlockMode::msaa:
                     RIVE_UNREACHABLE();
@@ -457,8 +474,8 @@ RenderContextMetalImpl::RenderContextMetalImpl(
         m_platformFeatures.maxTextureSize = 8192;
     }
 #if defined(RIVE_IOS) || defined(RIVE_XROS) || defined(RIVE_APPLETVOS)
-    m_platformFeatures.supportsRasterOrdering = true;
-    m_platformFeatures.supportsFragmentShaderAtomics = false;
+    m_platformFeatures.supportsRasterOrderingMode = true;
+    m_platformFeatures.supportsAtomicMode = false;
     if (!is_apple_silicon(m_gpu))
     {
         // The PowerVR GPU, at least on A10, has fp16 precision issues. We can't
@@ -470,15 +487,29 @@ RenderContextMetalImpl::RenderContextMetalImpl(
     defined(RIVE_APPLETVOS_SIMULATOR)
     // The simulator does not support framebuffer reads. Fall back on atomic
     // mode.
-    m_platformFeatures.supportsRasterOrdering = false;
-    m_platformFeatures.supportsFragmentShaderAtomics = true;
+    m_platformFeatures.supportsRasterOrderingMode = false;
+    m_platformFeatures.supportsAtomicMode = true;
 #else
-    m_platformFeatures.supportsRasterOrdering =
+    m_platformFeatures.supportsRasterOrderingMode =
         [m_gpu supportsFamily:MTLGPUFamilyApple1] &&
         !contextOptions.disableFramebufferReads;
-    m_platformFeatures.supportsFragmentShaderAtomics = true;
+    m_platformFeatures.supportsAtomicMode = true;
 #endif
-    m_platformFeatures.atomicPLSMustBeInitializedAsDraw = true;
+    m_platformFeatures.atomicPLSInitNeedsDraw = true;
+
+    // Texture compression support varies by Apple platform family.
+#if defined(RIVE_IOS) || defined(RIVE_XROS) || defined(RIVE_APPLETVOS) ||      \
+    defined(RIVE_IOS_SIMULATOR) || defined(RIVE_XROS_SIMULATOR) ||             \
+    defined(RIVE_APPLETVOS_SIMULATOR)
+    // iOS/tvOS/visionOS: ETC2 and ASTC are always supported.
+    m_platformFeatures.supportsTextureCompressionETC2 = true;
+    m_platformFeatures.supportsTextureCompressionASTC = true;
+#else
+    // macOS: BC is always supported; ASTC only on Apple Silicon.
+    m_platformFeatures.supportsTextureCompressionBC = true;
+    m_platformFeatures.supportsTextureCompressionASTC =
+        [m_gpu supportsFamily:MTLGPUFamilyApple1];
+#endif
 
 #if defined(RIVE_IOS) || defined(RIVE_XROS) || defined(RIVE_XROS_SIMULATOR) || \
     defined(RIVE_APPLETVOS) || defined(RIVE_APPLETVOS_SIMULATOR)
@@ -568,16 +599,14 @@ RenderContextMetalImpl::RenderContextMetalImpl(
 #endif
         nil,
         nil);
-    NSError* err = [NSError errorWithDomain:@"metallib_load"
-                                       code:200
-                                   userInfo:nil];
+    NSError* err = nil;
     m_plsPrecompiledLibrary = [m_gpu newLibraryWithData:metallibData
                                                   error:&err];
-    if (m_plsPrecompiledLibrary == nil)
+    if (err != nil || m_plsPrecompiledLibrary == nil)
     {
-        fprintf(stderr, "Failed to load pls metallib.\n");
-        fprintf(stderr, "%s\n", err.localizedDescription.UTF8String);
-        abort();
+        NSLog(@"RIVE: Failed to load pls metallib error: %@",
+              err != nil ? err.localizedDescription : @"<nil>");
+        return;
     }
 
     m_colorRampPipeline =
@@ -617,7 +646,7 @@ RenderContextMetalImpl::RenderContextMetalImpl(
     // drawType in "rasterOrdering" mode. We load these at initialization and
     // use them while waiting for the background compiler to generate more
     // specialized, higher performance shaders.
-    if (m_platformFeatures.supportsRasterOrdering)
+    if (m_platformFeatures.supportsRasterOrderingMode)
     {
         for (auto drawType : {DrawType::midpointFanPatches,
                               DrawType::interiorTriangulation,
@@ -658,7 +687,12 @@ RenderContextMetalImpl::RenderContextMetalImpl(
                     drawType,
                     gpu::InterlockMode::rasterOrdering,
                     allShaderFeatures,
-                    shaderMiscFlags);
+                    shaderMiscFlags
+#ifdef WITH_RIVE_TOOLS
+                    ,
+                    SynthesizedFailureType::none
+#endif
+                );
             }
         }
     }
@@ -716,7 +750,7 @@ RenderTargetMetal::RenderTargetMetal(id<MTLDevice> gpu,
     RenderTarget(width, height), m_gpu(gpu), m_pixelFormat(pixelFormat)
 {
     m_targetTexture = nil; // Will be configured later by setTargetTexture().
-    if (platformFeatures.supportsRasterOrdering)
+    if (platformFeatures.supportsRasterOrderingMode)
     {
         m_coverageMemorylessTexture = make_pls_memoryless_texture(
             gpu, MTLPixelFormatR32Uint, width, height);
@@ -752,7 +786,8 @@ public:
         m_gpu(gpu)
     {
         int bufferCount =
-            flags() & RenderBufferFlags::mappedOnceAtInitialization
+            enums::is_flag_set(flags(),
+                               RenderBufferFlags::mappedOnceAtInitialization)
                 ? 1
                 : gpu::kBufferRingSize;
         for (int i = 0; i < bufferCount; ++i)
@@ -827,7 +862,13 @@ public:
         }
     }
 
+    // Adopt a pre-created MTLTexture (for RenderCanvas).
+    TextureMetalImpl(id<MTLTexture> texture, uint32_t width, uint32_t height) :
+        Texture(width, height), m_texture(texture), m_mipsDirty(false)
+    {}
+
     id<MTLTexture> texture() const { return m_texture; }
+    void* nativeHandle() const override { return (__bridge void*)m_texture; }
 
 private:
     id<MTLTexture> m_texture;
@@ -838,11 +879,49 @@ rcp<Texture> RenderContextMetalImpl::makeImageTexture(
     uint32_t width,
     uint32_t height,
     uint32_t mipLevelCount,
+    GPUTextureFormat format,
     const uint8_t imageDataRGBAPremul[])
 {
+    if (format != GPUTextureFormat::rgba32)
+    {
+        assert(!"unsupported format");
+        return nullptr;
+    }
+
     return make_rcp<TextureMetalImpl>(
         m_gpu, width, height, mipLevelCount, imageDataRGBAPremul);
 }
+
+#ifdef RIVE_CANVAS
+rcp<RenderCanvas> RenderContextMetalImpl::makeRenderCanvas(uint32_t width,
+                                                           uint32_t height)
+{
+    // Create an MTLTexture usable as both a render target and a shader-read
+    // image for compositing into Rive draws.
+    MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
+    desc.pixelFormat = MTLPixelFormatRGBA8Unorm;
+    desc.width = width;
+    desc.height = height;
+    desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+    desc.textureType = MTLTextureType2D;
+    desc.mipmapLevelCount = 1;
+    desc.storageMode = MTLStorageModePrivate;
+    id<MTLTexture> mtlTexture = [m_gpu newTextureWithDescriptor:desc];
+
+    // Wrap as a RenderTarget for rendering into.
+    auto renderTarget =
+        makeRenderTarget(MTLPixelFormatRGBA8Unorm, width, height);
+    renderTarget->setTargetTexture(mtlTexture);
+
+    // Wrap as a RiveRenderImage for compositing. The TextureMetalImpl adopt
+    // constructor takes a pre-created MTLTexture without uploading data.
+    auto texture = make_rcp<TextureMetalImpl>(mtlTexture, width, height);
+    auto renderImage = make_rcp<RiveRenderImage>(std::move(texture));
+
+    return make_rcp<RenderCanvas>(std::move(renderImage),
+                                  std::move(renderTarget));
+}
+#endif
 
 std::unique_ptr<BufferRing> RenderContextMetalImpl::makeUniformBufferRing(
     size_t capacityInBytes)
@@ -909,7 +988,7 @@ void RenderContextMetalImpl::resizeAtlasTexture(uint32_t width, uint32_t height)
     }
 
     MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
-    desc.pixelFormat = MTLPixelFormatR32Float;
+    desc.pixelFormat = MTLPixelFormatR16Float;
     desc.width = width;
     desc.height = height;
     desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
@@ -945,22 +1024,28 @@ const RenderContextMetalImpl::DrawPipeline* RenderContextMetalImpl::
     // Find a fully-featured superset of features whose pipeline we can fall
     // back on while waiting for it to compile.
     ShaderFeatures fullyFeaturedPipelineFeatures =
-        gpu::ShaderFeaturesMaskFor(drawType, desc.interlockMode);
-    if (desc.interlockMode == gpu::InterlockMode::atomics)
+        gpu::UbershaderFeaturesMaskFor(shaderFeatures,
+                                       drawType,
+                                       desc.interlockMode,
+                                       shaderMiscFlags,
+                                       m_platformFeatures);
+
+    if (m_contextOptions.shaderCompilationMode ==
+        ShaderCompilationMode::onlyUbershaders)
     {
-        // Never add ENABLE_ADVANCED_BLEND to an atomic pipeline that doesn't
-        // use advanced blend, since in atomic mode, the shaders behave
-        // differently depending on whether advanced blend is enabled.
-        fullyFeaturedPipelineFeatures &=
-            shaderFeatures | ~ShaderFeatures::ENABLE_ADVANCED_BLEND;
-        // Never add ENABLE_CLIPPING to an atomic pipeline that doesn't use
-        // clipping; it will cause a "missing buffer binding" validation error
-        // because the shader will define an (unused) clipBuffer, but we won't
-        // bind anything to it.
-        fullyFeaturedPipelineFeatures &=
-            shaderFeatures | ~ShaderFeatures::ENABLE_CLIPPING;
+        // Force the shader features to be the full set if that's what was
+        // requested.
+        shaderFeatures = fullyFeaturedPipelineFeatures;
     }
-    shaderFeatures &= fullyFeaturedPipelineFeatures;
+
+#ifdef WITH_RIVE_TOOLS
+    if (desc.synthesizedFailureType == SynthesizedFailureType::ubershaderLoad)
+    {
+        // Pretend that the requested shader is not ready yet and the ubershader
+        // compilation failed
+        return nil;
+    }
+#endif
 
     uint32_t pipelineKey = gpu::ShaderUniqueKey(
         drawType, shaderFeatures, desc.interlockMode, shaderMiscFlags);
@@ -975,7 +1060,7 @@ const RenderContextMetalImpl::DrawPipeline* RenderContextMetalImpl::
             .interlockMode = desc.interlockMode,
             .shaderMiscFlags = shaderMiscFlags,
 #ifdef WITH_RIVE_TOOLS
-            .synthesizeCompilationFailure = desc.synthesizeCompilationFailures,
+            .synthesizedFailureType = desc.synthesizedFailureType,
 #endif
         });
         pipelineIter = m_drawPipelines.insert({pipelineKey, nullptr}).first;
@@ -995,7 +1080,8 @@ const RenderContextMetalImpl::DrawPipeline* RenderContextMetalImpl::
         BackgroundCompileJob job;
         bool shouldWaitForBackgroundCompilation =
             shaderFeatures == fullyFeaturedPipelineFeatures ||
-            m_contextOptions.synchronousShaderCompilations;
+            m_contextOptions.shaderCompilationMode !=
+                ShaderCompilationMode::allowAsynchronous;
         while (m_backgroundShaderCompiler->popFinishedJob(
             &job, shouldWaitForBackgroundCompilation))
         {
@@ -1011,7 +1097,12 @@ const RenderContextMetalImpl::DrawPipeline* RenderContextMetalImpl::
                                                job.drawType,
                                                job.interlockMode,
                                                job.shaderFeatures,
-                                               job.shaderMiscFlags);
+                                               job.shaderMiscFlags
+#ifdef WITH_RIVE_TOOLS
+                                               ,
+                                               desc.synthesizedFailureType
+#endif
+                );
             if (jobKey == pipelineKey)
             {
                 // The shader we wanted was actually done compiling and pending
@@ -1032,6 +1123,30 @@ const RenderContextMetalImpl::DrawPipeline* RenderContextMetalImpl::
     }
 
     return pipelineIter->second.get();
+}
+
+void* RenderContextMetalImpl::makeCommandBuffer()
+{
+    if (m_commandQueue == nil)
+    {
+        return nullptr;
+    }
+    // __bridge_retained: transfers ARC ownership to the void* so it stays alive
+    // until commitCommandBuffer() releases it.
+    return (__bridge_retained void*)[m_commandQueue commandBuffer];
+}
+
+void RenderContextMetalImpl::commitCommandBuffer(void* commandBuffer)
+{
+    if (commandBuffer == nullptr)
+    {
+        return;
+    }
+    // __bridge_transfer: reclaims ARC ownership, balancing the
+    // __bridge_retained in makeCommandBuffer().
+    id<MTLCommandBuffer> mtlCmdBuffer =
+        (__bridge_transfer id<MTLCommandBuffer>)commandBuffer;
+    [mtlCmdBuffer commit];
 }
 
 void RenderContextMetalImpl::prepareToFlush(uint64_t nextFrameNumber,
@@ -1144,8 +1259,8 @@ id<MTLRenderCommandEncoder> RenderContextMetalImpl::makeRenderPassForDraws(
         // separately. Since the PLS plane indices collide with other buffer
         // bindings, offset the binding indices of these buffers by
         // DEFAULT_BINDINGS_SET_SIZE.
-        if (!(baselineShaderMiscFlags &
-              gpu::ShaderMiscFlags::fixedFunctionColorOutput))
+        if (!enums::is_flag_set(baselineShaderMiscFlags,
+                                gpu::ShaderMiscFlags::fixedFunctionColorOutput))
         {
             [encoder
                 setFragmentBuffer:renderTarget->colorAtomicBuffer()
@@ -1153,15 +1268,10 @@ id<MTLRenderCommandEncoder> RenderContextMetalImpl::makeRenderPassForDraws(
                           atIndex:METAL_BUFFER_IDX(COLOR_PLANE_IDX +
                                                    DEFAULT_BINDINGS_SET_SIZE)];
         }
-        if (flushDesc.combinedShaderFeatures &
-            gpu::ShaderFeatures::ENABLE_CLIPPING)
-        {
-            [encoder
-                setFragmentBuffer:renderTarget->clipAtomicBuffer()
-                           offset:0
-                          atIndex:METAL_BUFFER_IDX(CLIP_PLANE_IDX +
-                                                   DEFAULT_BINDINGS_SET_SIZE)];
-        }
+        [encoder setFragmentBuffer:renderTarget->clipAtomicBuffer()
+                            offset:0
+                           atIndex:METAL_BUFFER_IDX(CLIP_PLANE_IDX +
+                                                    DEFAULT_BINDINGS_SET_SIZE)];
         [encoder setFragmentBuffer:renderTarget->coverageAtomicBuffer()
                             offset:0
                            atIndex:METAL_BUFFER_IDX(COVERAGE_PLANE_IDX +
@@ -1176,6 +1286,7 @@ id<MTLRenderCommandEncoder> RenderContextMetalImpl::makeRenderPassForDraws(
 
 void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
 {
+    assert(desc.interlockMode != gpu::InterlockMode::clockwise);
     assert(desc.interlockMode != gpu::InterlockMode::clockwiseAtomic);
     assert(desc.interlockMode != gpu::InterlockMode::msaa); // TODO: msaa.
 
@@ -1186,6 +1297,19 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
     // Render the color ramps to the gradient texture.
     if (desc.gradSpanCount > 0)
     {
+        // We failed to load the precompiled library and therefore do not have
+        // the abililty to draw anything.
+        if (!m_colorRampPipeline)
+        {
+            return;
+        }
+        // We are removing the abort in the case this doesn't build. So give up
+        // drawing if we still don't have a pipeline here.
+        auto pipelineState = m_colorRampPipeline->pipelineState();
+        if (!pipelineState)
+        {
+            return;
+        }
         MTLRenderPassDescriptor* gradPass =
             [MTLRenderPassDescriptor renderPassDescriptor];
         gradPass.renderTargetWidth = kGradTextureWidth;
@@ -1201,8 +1325,7 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
                                       0,
                                       kGradTextureWidth,
                                       static_cast<float>(desc.gradDataHeight))];
-        [gradEncoder
-            setRenderPipelineState:m_colorRampPipeline->pipelineState()];
+        [gradEncoder setRenderPipelineState:pipelineState];
         [gradEncoder
             setVertexBuffer:mtl_buffer(flushUniformBufferRing())
                      offset:desc.flushUniformDataOffsetInBytes
@@ -1222,6 +1345,20 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
     // Tessellate all curves into vertices in the tessellation texture.
     if (desc.tessVertexSpanCount > 0)
     {
+        // We failed to load the precompiled library and therefore do not have
+        // the abililty to draw anything.
+        if (!m_tessPipeline)
+        {
+            return;
+        }
+        // We are removing the abort in the case this doesn't build. So give up
+        // drawing if we still don't have a pipeline here.
+        auto pipelineState = m_tessPipeline->pipelineState();
+        if (!pipelineState)
+        {
+            return;
+        }
+
         MTLRenderPassDescriptor* tessPass =
             [MTLRenderPassDescriptor renderPassDescriptor];
         tessPass.renderTargetWidth = kTessTextureWidth;
@@ -1235,7 +1372,7 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
         [tessEncoder
             setViewport:make_viewport(
                             0, 0, kTessTextureWidth, desc.tessDataHeight)];
-        [tessEncoder setRenderPipelineState:m_tessPipeline->pipelineState()];
+        [tessEncoder setRenderPipelineState:pipelineState];
         [tessEncoder setVertexTexture:m_featherTexture
                               atIndex:FEATHER_TEXTURE_IDX];
         [tessEncoder
@@ -1268,6 +1405,26 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
     // Render the atlas if we have any offscreen feathers.
     if ((desc.atlasFillBatchCount | desc.atlasStrokeBatchCount) != 0)
     {
+        // We failed to load the precompiled library and therefore do not have
+        // the abililty to draw anything.
+        if (!m_atlasStrokePipeline || !m_atlasFillPipeline)
+        {
+            return;
+        }
+        // We are removing the abort in the case this doesn't build. So give up
+        // drawing if we still don't have a pipeline here.
+        auto atlasFillpipelineState = m_atlasFillPipeline->pipelineState();
+        if (!atlasFillpipelineState)
+        {
+            return;
+        }
+
+        auto atlasStrokepipelineState = m_atlasStrokePipeline->pipelineState();
+        if (!atlasStrokepipelineState)
+        {
+            return;
+        }
+
         MTLRenderPassDescriptor* atlasPass =
             [MTLRenderPassDescriptor renderPassDescriptor];
         atlasPass.renderTargetWidth = desc.atlasContentWidth;
@@ -1324,12 +1481,11 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
         [atlasEncoder setVertexBuffer:m_pathPatchVertexBuffer
                                offset:0
                               atIndex:0];
-        [atlasEncoder setCullMode:MTLCullModeBack];
 
         if (desc.atlasFillBatchCount != 0)
         {
-            [atlasEncoder
-                setRenderPipelineState:m_atlasFillPipeline->pipelineState()];
+            [atlasEncoder setCullMode:MTLCullModeNone];
+            [atlasEncoder setRenderPipelineState:atlasFillpipelineState];
             for (size_t i = 0; i < desc.atlasFillBatchCount; ++i)
             {
                 const gpu::AtlasDrawBatch& fillBatch = desc.atlasFillBatches[i];
@@ -1354,8 +1510,8 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
 
         if (desc.atlasStrokeBatchCount != 0)
         {
-            [atlasEncoder
-                setRenderPipelineState:m_atlasStrokePipeline->pipelineState()];
+            [atlasEncoder setCullMode:MTLCullModeBack];
+            [atlasEncoder setRenderPipelineState:atlasStrokepipelineState];
             for (size_t i = 0; i < desc.atlasStrokeBatchCount; ++i)
             {
                 const gpu::AtlasDrawBatch& strokeBatch =
@@ -1450,13 +1606,8 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
         pass.colorAttachments[COVERAGE_PLANE_IDX].storeAction =
             MTLStoreActionDontCare;
     }
-    else if (desc.atomicFixedFunctionColorOutput)
-    {
-        assert(desc.interlockMode == gpu::InterlockMode::atomics);
-        baselineShaderMiscFlags |=
-            gpu::ShaderMiscFlags::fixedFunctionColorOutput;
-    }
-    else if (desc.colorLoadAction == gpu::LoadAction::preserveRenderTarget)
+    else if (desc.colorLoadAction == gpu::LoadAction::preserveRenderTarget &&
+             !desc.fixedFunctionColorOutput)
     {
         // Since we need to preserve the renderTarget during load, and since
         // we're rendering to an offscreen color buffer, we have to literally
@@ -1491,28 +1642,36 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
     for (const DrawBatch& batch : *desc.drawList)
     {
         // Setup the pipeline for this specific drawType and shaderFeatures.
-        gpu::ShaderFeatures shaderFeatures =
-            desc.interlockMode == gpu::InterlockMode::atomics
-                ? desc.combinedShaderFeatures
-                : batch.shaderFeatures;
+        gpu::ShaderFeatures shaderFeatures;
+        if (desc.interlockMode == gpu::InterlockMode::atomics)
+        {
+            // The combined shader features might have more flags set than are
+            // actually relevant for this draw type, so filter them out.
+            shaderFeatures =
+                desc.combinedShaderFeatures &
+                gpu::ShaderFeaturesMaskFor(batch.drawType, desc.interlockMode);
+        }
+        else
+        {
+            shaderFeatures = batch.shaderFeatures;
+        }
+
         gpu::ShaderMiscFlags batchMiscFlags =
             baselineShaderMiscFlags | batch.shaderMiscFlags;
-        if (desc.interlockMode == gpu::InterlockMode::rasterOrdering &&
-            (batch.drawContents & gpu::DrawContents::clockwiseFill))
+        if (!enums::is_flag_set(batchMiscFlags,
+                                gpu::ShaderMiscFlags::fixedFunctionColorOutput))
         {
-            batchMiscFlags |= gpu::ShaderMiscFlags::clockwiseFill;
-        }
-        if (!(batchMiscFlags & gpu::ShaderMiscFlags::fixedFunctionColorOutput))
-        {
-            if (batch.drawType == gpu::DrawType::atomicResolve)
+            if (batch.drawType == gpu::DrawType::renderPassResolve)
             {
                 // Atomic mode can always do a coalesced resolve when rendering
                 // to an offscreen color buffer.
+                assert(desc.interlockMode == gpu::InterlockMode::atomics);
                 batchMiscFlags |=
                     gpu::ShaderMiscFlags::coalescedResolveAndTransfer;
             }
-            else if (batch.drawType == gpu::DrawType::atomicInitialize)
+            else if (batch.drawType == gpu::DrawType::renderPassInitialize)
             {
+                assert(desc.interlockMode == gpu::InterlockMode::atomics);
                 if (desc.colorLoadAction == gpu::LoadAction::clear)
                 {
                     batchMiscFlags |= gpu::ShaderMiscFlags::storeColorClear;
@@ -1552,19 +1711,19 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
 
             [encoder setFragmentSamplerState:m_imageSamplers[batch.imageSampler
                                                                  .asKey()]
-                                     atIndex:IMAGE_SAMPLER_IDX];
+                                     atIndex:IMAGE_TEXTURE_IDX];
         }
         else
         {
             [encoder setFragmentSamplerState:
                          m_imageSamplers[ImageSampler::LINEAR_CLAMP_SAMPLER_KEY]
-                                     atIndex:IMAGE_SAMPLER_IDX];
+                                     atIndex:IMAGE_TEXTURE_IDX];
         }
 
         // Issue any barriers if needed.
-        if (batch.barriers &
-            (BarrierFlags::plsAtomic | BarrierFlags::plsAtomicPostInit |
-             BarrierFlags::plsAtomicPreResolve))
+        if (enums::any_flag_set(batch.barriers,
+                                BarrierFlags::plsAtomic |
+                                    BarrierFlags::plsAtomicPreResolve))
         {
             assert(desc.interlockMode == gpu::InterlockMode::atomics);
             switch (m_metalFeatures.atomicBarrierType)
@@ -1697,8 +1856,8 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
                 }
                 break;
             }
-            case DrawType::atomicInitialize:
-            case DrawType::atomicResolve:
+            case DrawType::renderPassInitialize:
+            case DrawType::renderPassResolve:
             {
                 assert(desc.interlockMode == gpu::InterlockMode::atomics);
                 [encoder setRenderPipelineState:drawPipelineState];
@@ -1714,7 +1873,7 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
             case DrawType::msaaMidpointFanPathsStencil:
             case DrawType::msaaMidpointFanPathsCover:
             case DrawType::msaaOuterCubics:
-            case DrawType::msaaStencilClipReset:
+            case DrawType::clipReset:
             {
                 RIVE_UNREACHABLE();
             }

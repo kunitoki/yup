@@ -7,6 +7,7 @@
 #include "rive/math/bezier_utils.hpp"
 #include "rive/math/simd.hpp"
 #include "rive/renderer/gpu.hpp"
+#include "rive/profiler/profiler_macros.h"
 #include "shaders/constants.glsl"
 
 namespace rive
@@ -78,10 +79,10 @@ void RiveRenderPath::close()
     m_dirt = kAllDirt;
 }
 
-void RiveRenderPath::addRenderPath(RenderPath* path, const Mat2D& matrix)
+void RiveRenderPath::addRenderPath(const RenderPath* path, const Mat2D& matrix)
 {
     assert(m_rawPathMutationLockCount == 0);
-    RiveRenderPath* riveRenderPath = static_cast<RiveRenderPath*>(path);
+    auto riveRenderPath = static_cast<const RiveRenderPath*>(path);
 
     bool isIdentity = matrix == Mat2D();
     RawPath::Iter transformedPathIter =
@@ -95,10 +96,10 @@ void RiveRenderPath::addRenderPath(RenderPath* path, const Mat2D& matrix)
     m_dirt = kAllDirt;
 }
 
-void RiveRenderPath::addRenderPathBackwards(RenderPath* path,
+void RiveRenderPath::addRenderPathBackwards(const RenderPath* path,
                                             const Mat2D& transform)
 {
-    RiveRenderPath* riveRenderPath = static_cast<RiveRenderPath*>(path);
+    auto riveRenderPath = static_cast<const RiveRenderPath*>(path);
     RawPath::Iter transformedPathIter =
         m_rawPath.addPathBackwards(riveRenderPath->m_rawPath, &transform);
     if (transform != Mat2D())
@@ -161,6 +162,7 @@ static void chop_cubic_at_uniform_rotation(RawPath* path,
                                            int numChops,
                                            const Mat2D& rotationMatrix)
 {
+    RIVE_PROF_SCOPE_L(3)
     math::CubicCoeffs coeffs(p);
     float2 tangent = simd::load2f(&tangents[0]);
     float4 rotation = simd::load4f(rotationMatrix.values());
@@ -249,6 +251,7 @@ rcp<RiveRenderPath> RiveRenderPath::makeSoftenedCopyForFeathering(
     float feather,
     float matrixMaxScale)
 {
+    RIVE_PROF_SCOPE_L(2)
     // Since curvature is what breaks 1-dimensional feathering along the normal
     // vector, chop into segments that rotate no more than a certain threshold.
     constexpr static int POLAR_JOIN_PRECISION = 2;
@@ -307,14 +310,14 @@ rcp<RiveRenderPath> RiveRenderPath::makeSoftenedCopyForFeathering(
                     // Cross through cusps with short lines to avoid unstable
                     // math. Large cusp padding empirically gets better results.
                     constexpr static float CUSP_PADDING = 1e-2f;
-                    for (int i = 0; i < n; ++i)
+                    for (int i = n - 1; i >= 0; --i)
                     {
                         // If the cusps are extremely close together, don't
                         // allow the straddle points to cross.
                         float minT = i == 0 ? 0.f : (T[i - 1] + T[i]) * .5f;
                         float maxT = i + 1 == n ? 1.f : (T[i + 1] + T[i]) * .5f;
-                        T[i * 2 + 0] = fmaxf(T[i] - CUSP_PADDING, minT);
                         T[i * 2 + 1] = fminf(T[i] + CUSP_PADDING, maxT);
+                        T[i * 2 + 0] = fmaxf(T[i] - CUSP_PADDING, minT);
                     }
                     n *= 2;
                 }

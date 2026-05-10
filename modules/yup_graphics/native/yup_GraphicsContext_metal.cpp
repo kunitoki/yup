@@ -82,7 +82,7 @@ public:
         rive::gpu::RenderContextMetalImpl::ContextOptions metalOptions;
 
         if (m_fiddleOptions.synchronousShaderCompilations)
-            metalOptions.synchronousShaderCompilations = true;
+            metalOptions.shaderCompilationMode = rive::gpu::ShaderCompilationMode::alwaysSynchronous;
 
         if (m_fiddleOptions.disableRasterOrdering)
             metalOptions.disableFramebufferReads = true;
@@ -192,8 +192,12 @@ public:
         if (m_currentTexture != nil)
         {
             [m_currentTexture setPurgeableState:MTLPurgeableStateEmpty];
+#if defined(__has_feature) && __has_feature(objc_arc)
+            m_currentTexture = nil;
+#else
             [m_currentTexture release];
             m_currentTexture = nil;
+#endif
         }
 
         MTLTextureDescriptor* descriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:(MTLPixelFormatBGRA8Unorm)

@@ -12,6 +12,7 @@ class ViewportDraggableProxy : public DraggableProxy
 private:
     ScrollConstraint* m_constraint;
     Vec2D m_lastPosition;
+    bool m_isDragging = false;
 
 public:
     ViewportDraggableProxy(ScrollConstraint* constraint, Drawable* hittable) :
@@ -21,9 +22,9 @@ public:
     }
     ~ViewportDraggableProxy() {}
     bool isOpaque() override { return false; }
-    void startDrag(Vec2D mousePosition) override;
-    void drag(Vec2D mousePosition) override;
-    void endDrag(Vec2D mousePosition) override;
+    bool startDrag(Vec2D mousePosition, float timeStamp = 0) override;
+    bool drag(Vec2D mousePosition, float timeStamp = 0) override;
+    bool endDrag(Vec2D mousePosition, float timeStamp = 0) override;
 };
 } // namespace rive
 

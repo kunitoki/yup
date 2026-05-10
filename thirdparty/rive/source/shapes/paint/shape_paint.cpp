@@ -2,8 +2,10 @@
 #include "rive/shapes/shape_paint_container.hpp"
 #include "rive/shapes/paint/feather.hpp"
 #include "rive/artboard.hpp"
+#include "rive/transform_component.hpp"
 #include "rive/factory.hpp"
 #include "rive/shapes/paint/fill.hpp"
+#include "rive/profiler/profiler_macros.h"
 
 using namespace rive;
 
@@ -23,6 +25,26 @@ StatusCode ShapePaint::onAddedClean(CoreContext* context)
     }
 
     return StatusCode::Ok;
+}
+
+void ShapePaint::update(ComponentDirt value)
+{
+    Super::update(value);
+    auto shapeEffects = effects();
+    if (hasDirt(value, ComponentDirt::Path) && shapeEffects->size() > 0)
+    {
+        auto container = ShapePaintContainer::from(parent());
+        auto path = pickPath(container);
+        for (auto& effect : *shapeEffects)
+        {
+            effect->updateEffect(this, path, this);
+            auto newPath = effect->effectPath(this);
+            if (newPath)
+            {
+                path = newPath;
+            }
+        }
+    }
 }
 
 RenderPaint* ShapePaint::initRenderPaint(ShapePaintMutator* mutator)
@@ -57,10 +79,13 @@ void ShapePaint::draw(Renderer* renderer,
                       ShapePaintPath* shapePaintPath,
                       const Mat2D& transform,
                       bool usePathFillRule,
-                      RenderPaint* overridePaint)
+                      RenderPaint* overridePaint,
+                      bool needsSaveOperation)
 {
+    RIVE_PROF_SCOPE_L(2)
+
     ShapePaintPath* pathToDraw = shapePaintPath;
-    bool saved = false;
+    bool saved = !needsSaveOperation;
     if (m_feather != nullptr)
     {
         bool offsetInArtboard = m_feather->space() == TransformSpace::world;
@@ -87,6 +112,12 @@ void ShapePaint::draw(Renderer* renderer,
         renderer->transform(transform);
     }
 
+    auto pathEffect = lastEffectPath(this);
+    if (pathEffect)
+    {
+        pathToDraw = pathEffect;
+    }
+
     if (m_feather != nullptr)
     {
         if (m_feather->inner())
@@ -95,13 +126,30 @@ void ShapePaint::draw(Renderer* renderer,
             {
                 return;
             }
+            // When a path effect is active, the inner path and clip must be
+            // based on the effect-modified path, not the original shape path.
+            // Only rebuild when the effect path has actually changed.
+            if (pathEffect != nullptr && m_feather->effectPathDirty())
+            {
+                auto container = ShapePaintContainer::from(parent());
+                if (container != nullptr)
+                {
+                    bool offsetInArtboard =
+                        m_feather->space() == TransformSpace::world;
+                    m_feather->rebuildInnerPath(
+                        pathEffect,
+                        container->shapeWorldTransform(),
+                        offsetInArtboard);
+                }
+            }
             pathToDraw = m_feather->innerPath();
             if (!saved)
             {
                 saved = true;
                 renderer->save();
             }
-            auto renderPath = shapePaintPath->renderPath(this);
+            auto clipPath = pathEffect ? pathEffect : shapePaintPath;
+            auto renderPath = clipPath->renderPath(this);
             if (renderPath != nullptr)
             {
                 renderer->clipPath(renderPath);
@@ -136,8 +184,42 @@ void ShapePaint::draw(Renderer* renderer,
                                                     : renderPaint());
     }
 
-    if (saved)
+    if (saved && needsSaveOperation)
     {
         renderer->restore();
     }
+}
+
+void ShapePaint::invalidateEffects(StrokeEffect* invalidatingEffect)
+{
+    EffectsContainer::invalidateEffects(invalidatingEffect);
+    if (m_feather != nullptr)
+    {
+        m_feather->markEffectPathDirty();
+    }
+    invalidateRendering();
+}
+
+void ShapePaint::invalidateEffects() { invalidateEffects(nullptr); }
+
+void ShapePaint::invalidateRendering() { addDirt(ComponentDirt::Path); }
+
+void ShapePaint::addStrokeEffect(StrokeEffect* effect)
+{
+    effect->addPathProvider(this);
+    EffectsContainer::addStrokeEffect(effect);
+}
+
+TransformComponent* ShapePaint::parentTransformComponent() const
+{
+    auto _parent = parent();
+    while (_parent)
+    {
+        if (_parent->is<TransformComponent>())
+        {
+            return _parent->as<TransformComponent>();
+        }
+        _parent = _parent->parent();
+    }
+    return nullptr;
 }

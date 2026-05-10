@@ -51,6 +51,40 @@ extern "C" {
 #define NO_DUMMY_DECL
 #include "src/zlib.h"
 
+#if ! defined (Z_PREFIX)
+typedef uInt z_uInt;
+#endif
+
+#if defined (_MSC_VER)
+#define YUP_ZLIB_BEGIN_IGNORE_WARNINGS \
+    __pragma (warning (push))          \
+    __pragma (warning (disable: 4309)) \
+    __pragma (warning (disable: 4305)) \
+    __pragma (warning (disable: 4365)) \
+    __pragma (warning (disable: 6385)) \
+    __pragma (warning (disable: 6326)) \
+    __pragma (warning (disable: 6340))
+#define YUP_ZLIB_END_IGNORE_WARNINGS __pragma (warning (pop))
+#elif defined (__clang__)
+#define YUP_ZLIB_PRAGMA(x) _Pragma (#x)
+#define YUP_ZLIB_BEGIN_IGNORE_WARNINGS                                      \
+    YUP_ZLIB_PRAGMA (clang diagnostic push)                                 \
+    YUP_ZLIB_PRAGMA (clang diagnostic ignored "-Wconversion")               \
+    YUP_ZLIB_PRAGMA (clang diagnostic ignored "-Wsign-conversion")          \
+    YUP_ZLIB_PRAGMA (clang diagnostic ignored "-Wshadow")                   \
+    YUP_ZLIB_PRAGMA (clang diagnostic ignored "-Wdeprecated-register")      \
+    YUP_ZLIB_PRAGMA (clang diagnostic ignored "-Wswitch-enum")              \
+    YUP_ZLIB_PRAGMA (clang diagnostic ignored "-Wswitch-default")           \
+    YUP_ZLIB_PRAGMA (clang diagnostic ignored "-Wredundant-decls")          \
+    YUP_ZLIB_PRAGMA (clang diagnostic ignored "-Wimplicit-fallthrough")     \
+    YUP_ZLIB_PRAGMA (clang diagnostic ignored "-Wzero-as-null-pointer-constant") \
+    YUP_ZLIB_PRAGMA (clang diagnostic ignored "-Wcomma")
+#define YUP_ZLIB_END_IGNORE_WARNINGS YUP_ZLIB_PRAGMA (clang diagnostic pop)
+#else
+#define YUP_ZLIB_BEGIN_IGNORE_WARNINGS
+#define YUP_ZLIB_END_IGNORE_WARNINGS
+#endif
+
 #if __cplusplus
 } // extern "C"
 #endif

@@ -3,18 +3,19 @@
 
 #include <vector>
 #include "rive/importers/import_stack.hpp"
+#include "rive/assets/file_asset.hpp"
 
 namespace rive
 {
-class FileAsset;
 class FileAssetReferencer
 {
 protected:
-    FileAsset* m_fileAsset = nullptr;
+    rcp<FileAsset> m_fileAsset;
 
 public:
     virtual ~FileAssetReferencer() = 0;
-    virtual void setAsset(FileAsset* asset);
+    virtual void setAsset(rcp<FileAsset> asset);
+    const rcp<FileAsset> asset() { return m_fileAsset; }
     virtual uint32_t assetId() = 0;
     StatusCode registerReferencer(ImportStack& importStack);
     virtual void assetUpdated() {}

@@ -218,6 +218,77 @@
       ]
     },
     {
+      "name": "luau",
+      "repo": "https://github.com/luigi-rosso/luau.git",
+      "rive_dependency_premake": {
+        "file": "scripting/premake5.lua",
+        "project": "luigi-rosso/luau"
+      },
+      "destination": "thirdparty/luau",
+      "license": "MIT",
+      "module_header": "thirdparty/luau/luau.h",
+      "module_version_from_ref": true,
+      "copies": [
+        {
+          "from": "Common/include",
+          "to": "upstream/Common/include",
+          "include_globs": [
+            "**/*.h",
+            "**/*.hpp"
+          ]
+        },
+        {
+          "from": "Common/src",
+          "to": "upstream/Common/src",
+          "include_globs": [
+            "**/*.cpp",
+            "**/*.h",
+            "**/*.hpp"
+          ]
+        },
+        {
+          "from": "VM/include",
+          "to": "upstream/VM/include",
+          "include_globs": [
+            "**/*.h",
+            "**/*.hpp"
+          ]
+        },
+        {
+          "from": "VM/src",
+          "to": "upstream/VM/src",
+          "include_globs": [
+            "**/*.cpp",
+            "**/*.h",
+            "**/*.hpp"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "libhydrogen",
+      "repo": "https://github.com/luigi-rosso/libhydrogen.git",
+      "rive_dependency_premake": {
+        "file": "scripting/premake5.lua",
+        "project": "luigi-rosso/libhydrogen"
+      },
+      "destination": "thirdparty/libhydrogen",
+      "license": "ISC",
+      "module_header": "thirdparty/libhydrogen/libhydrogen.h",
+      "module_version_from_ref": true,
+      "copies": [
+        {
+          "from": ".",
+          "to": "upstream",
+          "include_globs": [
+            "libhydrogen.c",
+            "libhydrogen.h",
+            "impl/**"
+          ]
+        }
+      ]
+    },
+    {
       "name": "harfbuzz",
       "repo": "https://github.com/rive-app/harfbuzz.git",
       "rive_dependency_premake": {
@@ -238,9 +309,13 @@
             "**/*.rl"
           ],
           "exclude_globs": [
+            "harfbuzz-subset.cc",
             "*-test*",
+            "test.cc",
             "test-*",
-            "main.cc"
+            "main.cc",
+            "graph/test-*.cc",
+            "wasm/sample/**"
           ]
         }
       ]
@@ -293,6 +368,39 @@
             "tests/**"
           ]
         }
+      ],
+      "patches": [
+        {
+          "path": "upstream/yoga/YGMacros.h",
+          "note": "patched YG_DEPRECATED override guard",
+          "already_contains": "#if !defined(YG_DEPRECATED)",
+          "replace": {
+            "from": [
+              "#if defined(__cplusplus)",
+              "#define YG_DEPRECATED(message) [[deprecated(message)]]",
+              "#elif defined(_MSC_VER)",
+              "#define YG_DEPRECATED(message) __declspec(deprecated(message))",
+              "#else",
+              "#define YG_DEPRECATED(message) __attribute__((deprecated(message)))",
+              "#endif",
+              "",
+              "#ifdef _WINDLL"
+            ],
+            "to": [
+              "#if !defined(YG_DEPRECATED)",
+              "#if defined(__cplusplus)",
+              "#define YG_DEPRECATED(message) [[deprecated(message)]]",
+              "#elif defined(_MSC_VER)",
+              "#define YG_DEPRECATED(message) __declspec(deprecated(message))",
+              "#else",
+              "#define YG_DEPRECATED(message) __attribute__((deprecated(message)))",
+              "#endif",
+              "#endif",
+              "",
+              "#ifdef _WINDLL"
+            ]
+          }
+        }
       ]
     },
     {
@@ -320,6 +428,9 @@
           "exclude_globs": [
             "pngtest.c",
             "arm/filter_neon.S"
+          ],
+          "preserve_globs": [
+            "pnglibconf.h"
           ]
         }
       ]
@@ -370,6 +481,24 @@
       ]
     }
   ],
+  "generated_files": [
+    {
+      "path": "thirdparty/libwebp/upstream/src/webp/config.h",
+      "file_header": "yup_c",
+      "lines": [
+        "#ifndef WEBP_CONFIG_H_",
+        "#define WEBP_CONFIG_H_",
+        "",
+        "/*",
+        "   libwebp expects this generated header when HAVE_CONFIG_H is defined. The YUP",
+        "   unity wrapper defines the actual feature macros before including upstream",
+        "   sources, so this file only provides the include target expected by upstream.",
+        "*/",
+        "",
+        "#endif /* WEBP_CONFIG_H_ */"
+      ]
+    }
+  ],
   "include_blocks": [
     {
       "path": "thirdparty/rive/rive.cpp",
@@ -386,7 +515,118 @@
       ],
       "exclude_globs": [
         "**/*_test.*"
-      ]
+      ],
+      "include_overrides": {
+        "source/animation/nested_bool.cpp": [
+          "#define StateMachineInstance YUPRiveNestedBoolStateMachineInstance",
+          "#include \"source/animation/nested_bool.cpp\"",
+          "#undef StateMachineInstance"
+        ],
+        "source/animation/nested_number.cpp": [
+          "#define StateMachineInstance YUPRiveNestedNumberStateMachineInstance",
+          "#include \"source/animation/nested_number.cpp\"",
+          "#undef StateMachineInstance"
+        ],
+        "source/animation/nested_trigger.cpp": [
+          "#define StateMachineInstance YUPRiveNestedTriggerStateMachineInstance",
+          "#include \"source/animation/nested_trigger.cpp\"",
+          "#undef StateMachineInstance"
+        ],
+        "source/constraints/constraint.cpp": [
+          "#define identity yup_rive_constraint_identity",
+          "#include \"source/constraints/constraint.cpp\"",
+          "#undef identity"
+        ],
+        "source/core/binary_data_reader.cpp": [
+          "#define is_big_endian yup_rive_binary_data_reader_is_big_endian",
+          "#define decode_uint_leb yup_rive_binary_data_reader_decode_uint_leb",
+          "#define decode_uint_leb32 yup_rive_binary_data_reader_decode_uint_leb32",
+          "#define decode_string yup_rive_binary_data_reader_decode_string",
+          "#define decode_double yup_rive_binary_data_reader_decode_double",
+          "#define decode_float yup_rive_binary_data_reader_decode_float",
+          "#define decode_uint_8 yup_rive_binary_data_reader_decode_uint_8",
+          "#define decode_uint_16 yup_rive_binary_data_reader_decode_uint_16",
+          "#define decode_uint_32 yup_rive_binary_data_reader_decode_uint_32",
+          "#include \"source/core/binary_data_reader.cpp\"",
+          "#undef is_big_endian",
+          "#undef decode_uint_leb",
+          "#undef decode_uint_leb32",
+          "#undef decode_string",
+          "#undef decode_double",
+          "#undef decode_float",
+          "#undef decode_uint_8",
+          "#undef decode_uint_16",
+          "#undef decode_uint_32"
+        ],
+        "source/core/binary_reader.cpp": [
+          "#define is_big_endian yup_rive_binary_reader_is_big_endian",
+          "#define decode_uint_leb yup_rive_binary_reader_decode_uint_leb",
+          "#define decode_uint_leb32 yup_rive_binary_reader_decode_uint_leb32",
+          "#define decode_string yup_rive_binary_reader_decode_string",
+          "#define decode_double yup_rive_binary_reader_decode_double",
+          "#define decode_float yup_rive_binary_reader_decode_float",
+          "#define decode_uint_8 yup_rive_binary_reader_decode_uint_8",
+          "#define decode_uint_16 yup_rive_binary_reader_decode_uint_16",
+          "#define decode_uint_32 yup_rive_binary_reader_decode_uint_32",
+          "#include \"source/core/binary_reader.cpp\"",
+          "#undef is_big_endian",
+          "#undef decode_uint_leb",
+          "#undef decode_uint_leb32",
+          "#undef decode_string",
+          "#undef decode_double",
+          "#undef decode_float",
+          "#undef decode_uint_8",
+          "#undef decode_uint_16",
+          "#undef decode_uint_32"
+        ],
+        "source/core/binary_writer.cpp": [
+          "#define is_big_endian yup_rive_binary_writer_is_big_endian",
+          "#define decode_uint_leb yup_rive_binary_writer_decode_uint_leb",
+          "#define decode_uint_leb32 yup_rive_binary_writer_decode_uint_leb32",
+          "#define decode_string yup_rive_binary_writer_decode_string",
+          "#define decode_double yup_rive_binary_writer_decode_double",
+          "#define decode_float yup_rive_binary_writer_decode_float",
+          "#define decode_uint_8 yup_rive_binary_writer_decode_uint_8",
+          "#define decode_uint_16 yup_rive_binary_writer_decode_uint_16",
+          "#define decode_uint_32 yup_rive_binary_writer_decode_uint_32",
+          "#include \"source/core/binary_writer.cpp\"",
+          "#undef is_big_endian",
+          "#undef decode_uint_leb",
+          "#undef decode_uint_leb32",
+          "#undef decode_string",
+          "#undef decode_double",
+          "#undef decode_float",
+          "#undef decode_uint_8",
+          "#undef decode_uint_16",
+          "#undef decode_uint_32"
+        ],
+        "source/lua/lua_data_context.cpp": [
+          "#define data_value_namecall yup_rive_lua_data_context_namecall",
+          "#include \"source/lua/lua_data_context.cpp\"",
+          "#undef data_value_namecall"
+        ],
+        "source/lua/lua_data_value.cpp": [
+          "#define data_value_namecall yup_rive_lua_data_value_namecall",
+          "#include \"source/lua/lua_data_value.cpp\"",
+          "#undef data_value_namecall"
+        ],
+        "source/math/hit_test.cpp": [
+          "#include \"rive/math/hit_test.hpp\"",
+          "#include \"rive/math/mat2d.hpp\"",
+          "#define graphics_roundf yup_rive_hit_test_graphics_roundf",
+          "#define graphics_round yup_rive_hit_test_graphics_round",
+          "#define lerp yup_rive_hit_test_lerp",
+          "#include \"source/math/hit_test.cpp\"",
+          "#undef graphics_roundf",
+          "#undef graphics_round",
+          "#undef lerp"
+        ],
+        "source/shapes/clipping_shape.cpp": [
+          "#define identity yup_rive_clipping_shape_identity",
+          "#include \"source/shapes/clipping_shape.cpp\"",
+          "#undef identity"
+        ]
+      }
     },
     {
       "path": "thirdparty/rive_renderer/rive_renderer.cpp",
@@ -423,19 +663,9 @@
     },
     {
       "path": "thirdparty/harfbuzz/harfbuzz.cpp",
-      "start_marker": "// BEGIN YUP GENERATED HARFBUZZ INCLUDES",
-      "end_marker": "// END YUP GENERATED HARFBUZZ INCLUDES",
-      "insert_after": "#include \"harfbuzz.h\"",
-      "insert_before": "#if __clang__",
-      "root": "thirdparty/harfbuzz/upstream",
-      "prefix": "upstream",
-      "include_globs": [
-        "**/*.cc"
-      ],
-      "exclude_globs": [
-        "main.cc",
-        "*-test*",
-        "test-*"
+      "validate_existing_includes": true,
+      "search_roots": [
+        "thirdparty/harfbuzz"
       ]
     },
     {
@@ -466,18 +696,7 @@
     },
     {
       "path": "thirdparty/libpng/libpng.c",
-      "start_marker": "// BEGIN YUP GENERATED LIBPNG INCLUDES",
-      "end_marker": "// END YUP GENERATED LIBPNG INCLUDES",
-      "insert_after": "#include \"libpng.h\"",
-      "insert_before": "#if defined(__arm__)",
-      "root": "thirdparty/libpng/upstream",
-      "prefix": "upstream",
-      "include_globs": [
-        "*.c"
-      ],
-      "exclude_globs": [
-        "pngtest.c"
-      ]
+      "validate_existing_includes": true
     },
     {
       "path": "thirdparty/libwebp/libwebp.c",
@@ -486,6 +705,25 @@
         "thirdparty/libwebp",
         "thirdparty/libwebp/upstream"
       ]
+    },
+    {
+      "path": "thirdparty/luau/luau.cpp",
+      "validate_existing_includes": true
+    },
+    {
+      "path": "thirdparty/luau/luau_split.cpp",
+      "start_marker": "// BEGIN YUP GENERATED LUAU COMMON INCLUDES",
+      "end_marker": "// END YUP GENERATED LUAU COMMON INCLUDES",
+      "insert_after": "#include \"luau.h\"",
+      "root": "thirdparty/luau/upstream/Common/src",
+      "prefix": "upstream/Common/src",
+      "include_globs": [
+        "**/*.cpp"
+      ]
+    },
+    {
+      "path": "thirdparty/libhydrogen/libhydrogen.c",
+      "validate_existing_includes": true
     },
     {
       "path": "thirdparty/zlib/zlib.c",

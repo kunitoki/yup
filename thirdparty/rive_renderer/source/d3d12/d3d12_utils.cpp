@@ -128,6 +128,37 @@ void D3D12DescriptorHeap::markSrvToIndex(ID3D12Device* device,
     device->CreateShaderResourceView(resource->resource(), &srvDesc, srvHandle);
 }
 
+void D3D12DescriptorHeap::markSrvToIndex(ID3D12Device* device,
+                                         D3D12Buffer* resource,
+                                         UINT index,
+                                         UINT numElements,
+                                         UINT elementByteStride,
+                                         UINT gpuByteStride,
+                                         UINT64 firstElement)
+{
+    assert(m_type == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    assert(elementByteStride % gpuByteStride == 0);
+
+    const UINT cpuScale = elementByteStride / gpuByteStride;
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+
+    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+    srvDesc.Buffer.FirstElement = firstElement * cpuScale;
+    srvDesc.Buffer.NumElements = numElements * cpuScale;
+    srvDesc.Buffer.StructureByteStride = gpuByteStride;
+    srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+    srvDesc.Format = resource->desc().Format;
+
+    CD3DX12_CPU_DESCRIPTOR_HANDLE srvHandle(
+        m_heap->GetCPUDescriptorHandleForHeapStart(),
+        index,
+        m_heapDescriptorSize);
+
+    device->CreateShaderResourceView(resource->resource(), &srvDesc, srvHandle);
+}
+
 void D3D12DescriptorHeap::markUavToIndex(ID3D12Device* device,
                                          D3D12Buffer* resource,
                                          DXGI_FORMAT format,
@@ -178,6 +209,51 @@ void D3D12DescriptorHeap::markSrvToIndex(ID3D12Device* device,
         m_heapDescriptorSize);
 
     device->CreateShaderResourceView(resource->resource(), &srvDesc, srvHandle);
+}
+
+void D3D12DescriptorHeap::markNullTexture2DSrvToIndex(ID3D12Device* device,
+                                                      UINT index,
+                                                      DXGI_FORMAT format)
+{
+    assert(m_type == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Format = format;
+    srvDesc.Texture2D.MipLevels = 1;
+    srvDesc.Texture2D.PlaneSlice = 0;
+
+    CD3DX12_CPU_DESCRIPTOR_HANDLE srvHandle(
+        m_heap->GetCPUDescriptorHandleForHeapStart(),
+        index,
+        m_heapDescriptorSize);
+
+    device->CreateShaderResourceView(nullptr, &srvDesc, srvHandle);
+}
+
+void D3D12DescriptorHeap::markNullStructuredBufferSrvToIndex(
+    ID3D12Device* device,
+    UINT index,
+    UINT elementByteStride)
+{
+    assert(m_type == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+    srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+    srvDesc.Buffer.FirstElement = 0;
+    srvDesc.Buffer.NumElements = 0;
+    srvDesc.Buffer.StructureByteStride = elementByteStride;
+    srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+
+    CD3DX12_CPU_DESCRIPTOR_HANDLE srvHandle(
+        m_heap->GetCPUDescriptorHandleForHeapStart(),
+        index,
+        m_heapDescriptorSize);
+
+    device->CreateShaderResourceView(nullptr, &srvDesc, srvHandle);
 }
 
 void D3D12DescriptorHeap::markSrvToIndex(ID3D12Device* device,
@@ -236,6 +312,11 @@ void D3D12DescriptorHeap::markRtvToIndex(ID3D12Device* device,
 
     D3D12_RENDER_TARGET_VIEW_DESC RTVDesc = {};
     RTVDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+    RTVDesc.Format = resource->desc().Format;
+    if (DXGI_FORMAT_R8G8B8A8_TYPELESS == RTVDesc.Format)
+    {
+        RTVDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    }
     RTVDesc.Texture2D.MipSlice = 0;
 
     CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(
@@ -379,7 +460,7 @@ void D3D12VolatileBuffer::resizeBuffers(UINT newSize)
 {
     m_uploadBuffer = d3d()->makeUploadBuffer(newSize,
                                              D3D12_RESOURCE_FLAG_NONE,
-                                             D3D12_RESOURCE_STATE_COPY_SOURCE);
+                                             D3D12_RESOURCE_STATE_GENERIC_READ);
     m_gpuBuffer = d3d()->makeBuffer(newSize,
                                     m_bindFlags,
                                     D3D12_RESOURCE_STATE_COMMON,

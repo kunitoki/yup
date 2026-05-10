@@ -3,6 +3,7 @@
 #include "rive/generated/data_bind/converters/data_converter_group_base.hpp"
 #include "rive/data_bind/converters/data_converter_group_item.hpp"
 #include "rive/data_bind/data_bind.hpp"
+#include "rive/data_bind/data_values/data_type.hpp"
 #include <stdio.h>
 namespace rive
 {
@@ -17,7 +18,16 @@ public:
     {
         if (m_items.size() > 0)
         {
-            return m_items.back()->converter()->outputType();
+            int currentIndex = int(m_items.size() - 1);
+            while (currentIndex >= 0)
+            {
+                if (m_items[currentIndex]->converter()->outputType() !=
+                    DataType::input)
+                {
+                    return m_items[currentIndex]->converter()->outputType();
+                }
+                currentIndex--;
+            }
         };
         return Super::outputType();
     }
@@ -27,6 +37,7 @@ public:
     void unbind() override;
     void update() override;
     bool advance(float elapsedSeconds) override;
+    void reset() override;
 
 private:
     std::vector<DataConverterGroupItem*> m_items;

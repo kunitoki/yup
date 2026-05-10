@@ -71,13 +71,11 @@ typedef struct {
 
 //------------------------------------------------------------------------------
 
-#if 0
 #define CLIP_8b_MASK (int)(~0U << (8 + DFIX))
 static WEBP_INLINE uint8_t clip_8b(int v) {
   return (!(v & CLIP_8b_MASK)) ? (uint8_t)(v >> DFIX) : (v < 0) ? 0u : 255u;
 }
 #undef CLIP_8b_MASK
-#endif
 
 // vertical accumulation
 static void VFilter(SmoothParams* const p) {

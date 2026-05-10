@@ -1,5 +1,6 @@
 import argparse
 import glob
+import io
 import os
 import re
 import sys
@@ -35,17 +36,22 @@ parser.add_argument("-o", "--outdir", required=True,
                     help="OUTPUT directory to store the header files")
 parser.add_argument("-H", "--human-readable", action='store_true',
                     help="don't rename or strip out comments or whitespace")
-parser.add_argument("-p", "--ply-path", required=True, type=str, help="path to ply module")
+parser.add_argument("-p", "--ply-path", type=str, help="path to ply module")
+parser.add_argument("-m", "--msvc", action="store_true", help="set this to generate MSVC-compatible headers")
 
 args = parser.parse_args()
 
-# Convert posix path to windows 
-convertedPath = args.ply_path
-if sys.platform.startswith('win32') and args.ply_path[:2] == '/c':
-    convertedPath = 'C:\\' + args.ply_path[2:]
-    print('Using ply path:' + convertedPath)
+if args.ply_path:
+    # --ply-path was specified, so add it to the sys path so we can locate the module.
+    # (if it was not specified we'll assume that it's already reachable via the path)
 
-sys.path.append(convertedPath)
+    # Convert posix path to windows
+    convertedPath = args.ply_path
+    if sys.platform.startswith('win32') and args.ply_path[:2] == '/c':
+        convertedPath = 'C:\\' + args.ply_path[2:]
+        print('Using ply path:' + convertedPath)
+
+    sys.path.append(convertedPath)
 
 import ply.lex as lex
 
@@ -224,7 +230,7 @@ glsl_reserved = {
     "outerProduct", "outerProduct", "outerProduct", "outerProduct", "outerProduct", "outerProduct",
     "outerProduct", "outerProduct", "packDouble2x32", "packHalf2x16", "packSnorm2x16",
     "packSnorm4x8", "packUnorm2x16", "packUnorm4x8", "pixelLocalLoadANGLE", "pixelLocalStoreANGLE",
-    "pow", "precision", "r16f", "r32f", "r32ui", "radians", "reflect", "reflect", "refract",
+    "pow", "precision", "r16f", "r32f", "r32i", "r32ui", "radians", "reflect", "reflect", "refract",
     "refract", "return", "rg16f", "rgb_2_yuv", "rgba8", "rgba8i", "rgba8ui", "round", "round",
     "roundEven", "roundEven", "sampler2D", "sampler2DArray", "sampler2DArrayShadow",
     "sampler2DShadow", "sampler3D", "samplerCube", "samplerCubeShadow", "shadow1D", "shadow1DLod",
@@ -308,13 +314,15 @@ glsl_reserved = {
     "usampler2DArray", "usampler3D", "usamplerCube", "usubBorrow", "uvec2", "uvec3", "uvec4",
     "vec2", "vec3", "vec4", "void", "volatile", "while", "yuv_2_rgb", "__pixel_localEXT",
     "__pixel_local_inEXT", "__pixel_local_outEXT", "set", "texture2D", "utexture2D", "sampler",
-    "subpassInput", "usubpassInput", "input_attachment_index", "readonly", "buffer",
-    "unpackUnorm4x8", "defined", "elif", "extension", "enable", "require", "endif", "undef",
-    "pragma", "__VERSION__", "constant_id", "blend_support_all_equations", "blend_support_multiply",
+    "subpassInput", "subpassInputMS", "usubpassInput", "input_attachment_index",
+    "readonly", "buffer", "unpackUnorm4x8", "defined", "elif", "extension",
+    "enable", "require", "endif", "undef", "pragma", "__VERSION__",
+    "constant_id", "blend_support_all_equations", "blend_support_multiply",
     "blend_support_screen", "blend_support_overlay", "blend_support_darken",
-    "blend_support_lighten", "blend_support_colordodge", "blend_support_colorburn",
-    "blend_support_hardlight", "blend_support_softlight", "blend_support_difference",
-    "blend_support_exclusion",
+    "blend_support_lighten", "blend_support_colordodge",
+    "blend_support_colorburn", "blend_support_hardlight",
+    "blend_support_softlight", "blend_support_difference",
+    "blend_support_exclusion", "rgb10_a2",
 }
 
 # rgba and stpq get rewritten to xyzw, so we only need to check xyzw here. This way we can keep
@@ -343,7 +351,7 @@ def remove_leading_annotation(name):
     if name[0] == '@':
         # A leading '@' indicates identifier names that should be exported. Rename '@my_var' to
         # '_EXPORTED_my_var' to enforce that '@my_var' and 'my_var' are not interchangeable.
-        return '_EXPORTED_' + name[1:]
+        return 'EXPORTED_' + name[1:]
     if name[0] == '$':
         # A leading '$' indicates identifier names that should not be renamed.
         return name[1:]
@@ -449,7 +457,7 @@ class Minifier:
 
 
     # generates rewritten glsl from our tokens.
-    def emit_tokens_to_rewritten_glsl(self, out, *, preserve_exported_switches):
+    def emit_tokens_to_rewritten_glsl(self, out, *, preserve_exported_switches, calling_token_type:str=None):
         # stand-in for a null token.
         lasttoken = lambda : None
         lasttoken.type = ""
@@ -468,7 +476,8 @@ class Minifier:
 
             is_directive = tok.type in ["DEFINE", "IFDEF", "DIRECTIVE"]
             needs_whitespace = tok.type in ["FLOAT", "INT", "HEX", "ID", "DEFINED_ID"]
-            if is_directive and not is_newline:
+            # Adding this calling_token_type != 'DEFINE' prevents us from adding a new line to stringify macros
+            if is_directive and not is_newline and calling_token_type != 'DEFINE':
                 out.write('\n')
             elif needs_whitespace and lasttoken_needs_whitespace:
                 out.write(' ')
@@ -492,13 +501,15 @@ class Minifier:
                 if tok.define_arglist != None:
                     is_newline = tok.define_arglist.emit_tokens_to_rewritten_glsl(\
                         out,\
-                        preserve_exported_switches=preserve_exported_switches)
+                        preserve_exported_switches=preserve_exported_switches,\
+                        calling_token_type=tok.type)
                     assert(not is_newline)
                 if tok.define_val != None:
                     out.write(' ')
                     is_newline = tok.define_val.emit_tokens_to_rewritten_glsl(\
                         out,\
-                        preserve_exported_switches=preserve_exported_switches)
+                        preserve_exported_switches=preserve_exported_switches,\
+                        calling_token_type=tok.type)
 
             elif tok.type == "IFDEF":
                 out.write('#')
@@ -516,7 +527,8 @@ class Minifier:
                 if tok.directive_val != None:
                     is_newline = tok.directive_val.emit_tokens_to_rewritten_glsl(\
                         out,\
-                        preserve_exported_switches=preserve_exported_switches)
+                        preserve_exported_switches=preserve_exported_switches,\
+                        calling_token_type=tok.type)
 
             else:
                 out.write(tok.value)
@@ -543,8 +555,8 @@ class Minifier:
 
 
     def write_exports(self, outdir):
-        output_path = os.path.join(outdir, os.path.splitext(self.basename)[0] + ".exports.h")
-        print("Exporting %s <- %s" % (output_path, self.basename))
+        output_path = os.path.join(outdir, f"{self.basename}.exports.h")
+        print(f"Exporting {output_path} <- {self.basename}")
         out = open(output_path, "w", newline='\n')
         out.write('#pragma once\n\n')
         for exp in sorted(self.exports):
@@ -559,27 +571,57 @@ class Minifier:
         out = open(output_path, "w", newline='\n')
         out.write("#pragma once\n\n")
 
-        out.write('#include "%s"\n\n' % (os.path.splitext(self.basename)[0] + ".exports.h"))
+        out.write(f'#include "{self.basename}.exports.h"\n\n')
 
         # emit shader code.
+        root, ext = os.path.splitext(self.basename)
+        cpp_name = root
+        if ext != '.glsl':
+            cpp_name = f"{root}_{ext[1:]}"
         out.write("namespace rive {\n")
         out.write("namespace gpu {\n")
         out.write("namespace glsl {\n")
-        out.write('const char %s[] = R"===(' % os.path.splitext(self.basename)[0])
+        if args.msvc:
+            # MSVC cannot compile raw shaders as strings because of an internal
+            # string length limit. There is, however, no limit on arrays so
+            # instead write it out as an array of individual characters.
+            out.write(f'const char {cpp_name}[] = {{\n   ')
 
-        is_newline = self.emit_tokens_to_rewritten_glsl(out, preserve_exported_switches=False)
-        if not is_newline:
-            out.write('\n')
+            codeIO = io.StringIO()
+            self.emit_tokens_to_rewritten_glsl(codeIO, preserve_exported_switches=False)
 
-        out.write(')===";\n')
+            out_ch_count = 0
+            for ch in codeIO.getvalue():
+                # use `repr` to escape the characters (but we need to handle single
+                # quote manually, since it will represent that as "'" - which will
+                # definitely not compile)
+
+                out.write(f" {repr(ch)},") if ch != "'" else out.write(" '\\'',")
+                out_ch_count = out_ch_count + 1
+                CHAR_COUNT_PER_LINE = 12
+                if (out_ch_count % CHAR_COUNT_PER_LINE) == 0:
+                    out.write('\n   ')
+            # Null-terminate so the array is a valid C-string when passed to
+            # APIs like ostream::operator<<(const char*), which read until '\0'.
+            out.write(" '\\0'\n};\n")
+        else:
+            # For non-MSVC outputs just output as a raw string
+            out.write(f'const char {cpp_name}[] = R"===(')
+
+            is_newline = self.emit_tokens_to_rewritten_glsl(out, preserve_exported_switches=False)
+            if not is_newline:
+                out.write('\n')
+
+            out.write(')===";\n')
         out.write("} // namespace glsl\n")
         out.write("} // namespace gpu\n")
         out.write("} // namespace rive")
         out.close()
 
     def write_offline_glsl(self, outdir):
-        output_path = os.path.join(outdir, os.path.splitext(self.basename)[0] + ".minified.glsl")
-        print("Minifying %s <- %s" % (output_path, self.basename))
+        root, ext = os.path.splitext(self.basename)
+        output_path = os.path.join(outdir, f"{root}.minified{ext}")
+        print(f"Minifying f{output_path} <- {self.basename}")
         out = open(output_path, "w", newline='\n')
         self.emit_tokens_to_rewritten_glsl(out, preserve_exported_switches=True)
         out.close()

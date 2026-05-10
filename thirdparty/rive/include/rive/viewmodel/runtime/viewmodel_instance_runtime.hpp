@@ -15,6 +15,7 @@
 #include "rive/viewmodel/runtime/viewmodel_instance_trigger_runtime.hpp"
 #include "rive/viewmodel/runtime/viewmodel_instance_list_runtime.hpp"
 #include "rive/viewmodel/runtime/viewmodel_instance_asset_image_runtime.hpp"
+#include "rive/viewmodel/runtime/viewmodel_instance_artboard_runtime.hpp"
 #include "rive/refcnt.hpp"
 
 namespace rive
@@ -30,6 +31,7 @@ public:
     ~ViewModelInstanceRuntime();
 
     const std::string& name() const;
+    const std::string& viewModelName() const;
     size_t propertyCount() const;
     ViewModelInstanceNumberRuntime* propertyNumber(
         const std::string& path) const;
@@ -42,8 +44,11 @@ public:
     ViewModelInstanceTriggerRuntime* propertyTrigger(
         const std::string& path) const;
     ViewModelInstanceListRuntime* propertyList(const std::string& path) const;
-    ViewModelInstanceRuntime* propertyViewModel(const std::string& path) const;
+    rcp<ViewModelInstanceRuntime> propertyViewModel(
+        const std::string& path) const;
     ViewModelInstanceAssetImageRuntime* propertyImage(
+        const std::string& path) const;
+    ViewModelInstanceArtboardRuntime* propertyArtboard(
         const std::string& path) const;
     bool replaceViewModel(const std::string& path,
                           ViewModelInstanceRuntime* value) const;
@@ -55,7 +60,6 @@ public:
 
 private:
     rcp<ViewModelInstance> m_viewModelInstance = nullptr;
-
     std::string getPropertyNameFromPath(const std::string& path) const;
     const ViewModelInstanceRuntime* viewModelInstanceFromFullPath(
         const std::string& path) const;
@@ -77,7 +81,12 @@ private:
         auto itr = m_properties.find(name);
         if (itr != m_properties.end())
         {
-            return static_cast<U*>(itr->second);
+            if (itr->second->viewModelInstanceValue() &&
+                itr->second->viewModelInstanceValue()->is<T>())
+            {
+                return static_cast<U*>(itr->second);
+            }
+            return nullptr;
         }
         auto viewModelInstanceValue = m_viewModelInstance->propertyValue(name);
         if (viewModelInstanceValue != nullptr &&

@@ -14,6 +14,32 @@
 
 using namespace rive;
 
+std::string DataConverterToString::formatWithCommas(std::string& num)
+{
+    // Split integer and fractional parts
+    std::string intPart, fracPart;
+    size_t dotPos = num.find('.');
+    if (dotPos != std::string::npos)
+    {
+        intPart = num.substr(0, dotPos);
+        fracPart = num.substr(dotPos); // keep the '.' too
+    }
+    else
+    {
+        intPart = num;
+    }
+
+    // Insert commas into the integer part
+    int insertPosition = (int)intPart.length() - 3;
+    while (insertPosition > 0 && isdigit(intPart[insertPosition - 1]))
+    {
+        intPart.insert(insertPosition, ",");
+        insertPosition -= 3;
+    }
+
+    return intPart + fracPart;
+}
+
 DataValue* DataConverterToString::convertNumber(DataValueNumber* input)
 {
     auto flagsValue = static_cast<DataConverterToStringFlags>(flags());
@@ -34,6 +60,11 @@ DataValue* DataConverterToString::convertNumber(DataValueNumber* input)
         DataConverterToStringFlags::TrailingZeros)
     {
         outputValue = DataConverterStringRemoveZeros::removeZeros(outputValue);
+    }
+    if ((flagsValue & DataConverterToStringFlags::FormatWithCommas) ==
+        DataConverterToStringFlags::FormatWithCommas)
+    {
+        outputValue = formatWithCommas(outputValue);
     }
     m_output.value(outputValue);
     return &m_output;
@@ -154,9 +185,12 @@ DataValue* DataConverterToString::convert(DataValue* input, DataBind* dataBind)
     else if (input->is<DataValueEnum>())
     {
         auto dataEnum = input->as<DataValueEnum>()->dataEnum();
-        auto index = input->as<DataValueEnum>()->value();
-        auto enumValue = dataEnum->value(index);
-        m_output.value(enumValue);
+        if (dataEnum)
+        {
+            auto index = input->as<DataValueEnum>()->value();
+            auto enumValue = dataEnum->value(index);
+            m_output.value(enumValue);
+        }
     }
     else if (input->is<DataValueString>())
     {
