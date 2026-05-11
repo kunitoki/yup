@@ -1013,7 +1013,7 @@ bool URL::isProbablyAnEmailAddress (const String& possibleEmailAddress)
 //==============================================================================
 #if YUP_IOS
 URL::Bookmark::Bookmark (void* bookmarkToUse)
-    : data ((__bridge_retained void*) (NSData*) bookmarkToUse)
+    : data ((__bridge_retained void*) (__bridge NSData*) bookmarkToUse)
 {
 }
 
@@ -1132,7 +1132,7 @@ private:
                                                     error:&error];
 
         if (error == nil)
-            setURLBookmark (yupUrl, (void*) bookmark);
+            setURLBookmark (yupUrl, (__bridge void*) bookmark);
         else
             jassertfalse;
     }
