@@ -9,51 +9,111 @@
 
 using namespace rive;
 
+void ClippingShapeStart::draw(Renderer* renderer, bool needsSaveOperation)
+{
+    if (!m_clippingShape->isVisible())
+    {
+        return;
+    }
+    if (needsSaveOperation)
+    {
+
+        renderer->save();
+    }
+    if (m_clippingShape)
+    {
+        ShapePaintPath* path = m_clippingShape->path();
+        if (!path)
+        {
+            return;
+        }
+        RenderPath* renderPath = path->renderPath(m_clippingShape);
+        renderer->clipPath(renderPath);
+    }
+}
+
+int ClippingShapeStart::emptyClipCount()
+{
+    if (m_clippingShape && m_clippingShape->isVisible())
+    {
+        ShapePaintPath* path = m_clippingShape->path();
+        if (!path)
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+bool ClippingShapeStart::isVisible()
+{
+    if (m_clippingShape)
+    {
+        return m_clippingShape->isVisible();
+    }
+    return false;
+}
+
+int ClippingShapeEnd::emptyClipCount()
+{
+    if (m_clippingShape && m_clippingShape->isVisible())
+    {
+        ShapePaintPath* path = m_clippingShape->path();
+        if (!path)
+        {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+void ClippingShapeEnd::draw(Renderer* renderer, bool needsSaveOperation)
+{
+    if (!m_clippingShape->isVisible() || !needsSaveOperation)
+    {
+        return;
+    }
+    renderer->restore();
+}
+
+ClippingShape::~ClippingShape()
+{
+    for (auto& proxy : m_proxyDrawables)
+    {
+        delete proxy;
+    }
+    for (auto& proxy : m_pooledProxyDrawables)
+    {
+        delete proxy;
+    }
+}
+
 StatusCode ClippingShape::onAddedClean(CoreContext* context)
 {
-    auto clippingHolder = parent();
+    // Find drawables parented (directly or transitively) to this clipping
+    // shape's parent; they need to know they'll be clipped by this shape.
+    parent()->forAll([this](Component* component) -> bool {
+        if (component->is<Drawable>())
+        {
+            component->as<Drawable>()->addClippingShape(this);
+        }
+        return true;
+    });
 
-    auto artboard = static_cast<Artboard*>(context);
-    for (auto core : artboard->objects())
+    // Find shapes parented (directly or transitively) to the source node;
+    // their paths will need to be RenderPaths in order to be used for
+    // clipping operations.
+    if (m_Source)
     {
-        if (core == nullptr)
-        {
-            continue;
-        }
-        // Iterate artboard to find drawables that are parented to this clipping
-        // shape, they need to know they'll be clipped by this shape.
-        if (core->is<Drawable>())
-        {
-            auto drawable = core->as<Drawable>();
-            for (ContainerComponent* component = drawable; component != nullptr;
-                 component = component->parent())
+        m_Source->forAll([this](Component* component) -> bool {
+            if (component->is<Shape>())
             {
-                if (component == clippingHolder)
-                {
-                    drawable->addClippingShape(this);
-                    break;
-                }
+                auto shape = component->as<Shape>();
+                shape->addFlags(PathFlags::world | PathFlags::clipping);
+                m_Shapes.push_back(shape);
             }
-        }
-
-        // Iterate artboard to find shapes that are parented to the source,
-        // their paths will need to be RenderPaths in order to be used for
-        // clipping operations.
-        if (core->is<Shape>())
-        {
-            auto component = core->as<ContainerComponent>();
-            while (component != nullptr)
-            {
-                if (component == m_Source)
-                {
-                    auto shape = core->as<Shape>();
-                    shape->addFlags(PathFlags::world | PathFlags::clipping);
-                    m_Shapes.push_back(shape);
-                    break;
-                }
-                component = component->parent();
-            }
-        }
+            return true;
+        });
     }
 
     return StatusCode::Ok;
@@ -83,12 +143,13 @@ void ClippingShape::buildDependencies()
     {
         shape->pathComposer()->addDependent(this);
     }
+    clipStart.clippingShape(this);
+    clipEnd.clippingShape(this);
 }
 
+static Mat2D identity;
 void ClippingShape::update(ComponentDirt value)
 {
-    static Mat2D identity;
-
     if (hasDirt(value,
                 ComponentDirt::Path | ComponentDirt::WorldTransform |
                     ComponentDirt::NSlicer))
@@ -109,4 +170,9 @@ void ClippingShape::update(ComponentDirt value)
             }
         }
     }
+}
+
+void ClippingShape::isVisibleChanged()
+{
+    artboard()->addDirt(ComponentDirt::Clipping);
 }

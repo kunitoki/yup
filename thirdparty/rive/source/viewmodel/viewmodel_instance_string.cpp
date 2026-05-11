@@ -16,4 +16,10 @@ void ViewModelInstanceString::propertyValueChanged()
         m_changedCallback(this, propertyValue().c_str());
     }
 #endif
+    onValueChanged();
+}
+
+void ViewModelInstanceString::applyValue(DataValueString* dataValue)
+{
+    propertyValue(dataValue->value());
 }

@@ -5,6 +5,7 @@
 #include "rive/importers/artboard_importer.hpp"
 #include "rive/importers/import_stack.hpp"
 #include "rive/layout_component.hpp"
+#include "rive/data_bind/data_bind.hpp"
 #include <algorithm>
 
 using namespace rive;
@@ -80,7 +81,8 @@ StatusCode Component::import(ImportStack& importStack)
 
 bool Component::collapse(bool value)
 {
-    if (isCollapsed() == value)
+    if (((m_Dirt & ComponentDirt::Collapsed) == ComponentDirt::Collapsed) ==
+        value)
     {
         return false;
     }
@@ -94,5 +96,37 @@ bool Component::collapse(bool value)
     }
     onDirty(m_Dirt);
     m_DependencyHelper.onComponentDirty(this);
+    updateCollapsables();
     return true;
+}
+
+bool Component::hitTestPoint(const Vec2D& position,
+                             bool skipOnUnclipped,
+                             bool isPrimaryHit)
+{
+    if (parent())
+    {
+        return parent()->hitTestPoint(position, skipOnUnclipped, false);
+    }
+    return true;
+}
+
+void Component::addCollapsable(DataBind* collapsable)
+{
+    auto itr =
+        std::find(m_collapsables.begin(), m_collapsables.end(), collapsable);
+    if (itr == m_collapsables.end())
+    {
+        m_collapsables.push_back(collapsable);
+        collapsable->collapse(isCollapsed());
+    }
+}
+
+void Component::updateCollapsables()
+{
+    auto collapsed = isCollapsed();
+    for (auto& collapsable : m_collapsables)
+    {
+        collapsable->collapse(collapsed);
+    }
 }

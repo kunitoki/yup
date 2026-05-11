@@ -30,6 +30,7 @@
 *.exe
 *.out
 *.app
+*.pyc
 
 # Cruft
 .DS_Store
@@ -40,6 +41,8 @@ cmake-build*
 out/*
 
 # Ides/Agents
+__pycache__/
+.gitnexus/
 .vscode/
 .idea/
 .vs/

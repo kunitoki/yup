@@ -6,11 +6,12 @@
 
 #include "rive/renderer/gl/load_store_actions_ext.hpp"
 #include "rive/renderer/gl/gl_utils.hpp"
-#include "rive/math/simd.hpp"
 #include "rive/renderer/gl/render_target_gl.hpp"
+#include "shaders/constants.glsl"
+#include <map>
 #include <sstream>
 
-#include "generated/shaders/pls_load_store_ext.exports.h"
+#include "generated/shaders/pls_load_store_ext.glsl.exports.h"
 
 namespace rive::gpu
 {
@@ -41,7 +42,7 @@ public:
         glDeleteShader(fragmentShader);
 
         glutils::LinkProgram(m_id);
-        if (actions & LoadStoreActionsEXT::clearColor)
+        if (enums::is_flag_set(actions, LoadStoreActionsEXT::clearColor))
         {
             m_colorClearUniLocation =
                 glGetUniformLocation(m_id, GLSL_clearColor);
@@ -78,14 +79,27 @@ public:
 
     void init(rcp<GLState> state) override { m_state = std::move(state); }
 
-    bool supportsRasterOrdering(const GLCapabilities&) const override
+    void getSupportedInterlockModes(
+        const GLCapabilities& capabilities,
+        PlatformFeatures* platformFeatures) const override
     {
-        return true;
+        assert(capabilities.EXT_shader_pixel_local_storage);
+        platformFeatures->supportsRasterOrderingMode = true;
+        platformFeatures->supportsClockwiseMode = true;
+        platformFeatures->supportsClockwiseFixedFunctionMode =
+            capabilities.EXT_shader_pixel_local_storage2;
     }
-    bool supportsFragmentShaderAtomics(
-        const GLCapabilities& capabilities) const override
+
+    void applyPipelineStateOverrides(
+        const DrawBatch&,
+        const FlushDescriptor& desc,
+        const PlatformFeatures&,
+        PipelineState* pipelineState) const override
     {
-        return false;
+        // Vivo Y21 and Oppo Reno 3 Pro both disable writes to pixel local
+        // storage when the color mask is off; just leave the color mask enabled
+        // in EXT_shader_pixel_local_storage mode.
+        pipelineState->colorWriteEnabled = true;
     }
 
     void activatePixelLocalStorage(RenderContextGLImpl* impl,
@@ -97,35 +111,87 @@ public:
 
         auto renderTarget = static_cast<RenderTargetGL*>(desc.renderTarget);
         renderTarget->bindDestinationFramebuffer(GL_FRAMEBUFFER);
+        if (desc.fixedFunctionColorOutput)
+        {
+            // We need EXT_shader_pixel_local_storage2 for
+            // fixedFunctionColorOutput.
+            assert(impl->m_capabilities.EXT_shader_pixel_local_storage2);
+            assert(desc.interlockMode == gpu::InterlockMode::clockwise);
+            assert(!enums::is_flag_set(
+                desc.combinedShaderFeatures,
+                gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND));
+            glFramebufferPixelLocalStorageSizeEXT(GL_FRAMEBUFFER,
+                                                  2 * sizeof(uint32_t));
+        }
+        else if (impl->m_capabilities.usePixelLocalStorage2AsWorkaround)
+        {
+            // PowerVR Rogue GE8300, OpenGL ES 3.2 build 1.10@5187610 has severe
+            // pixel local storage corruption issues with our renderer. Using
+            // the EXT_shader_pixel_local_storage2 API to set the size is an
+            // apparent workaround that comes with worse performance and other,
+            // less severe visual artifacts.
+            assert(impl->m_capabilities.EXT_shader_pixel_local_storage2);
+            glFramebufferPixelLocalStorageSizeEXT(GL_FRAMEBUFFER,
+                                                  PLS_PLANE_COUNT *
+                                                      sizeof(uint32_t));
+        }
         glEnable(GL_SHADER_PIXEL_LOCAL_STORAGE_EXT);
 
-        std::array<float, 4> clearColor4f;
-        LoadStoreActionsEXT actions = BuildLoadActionsEXT(desc, &clearColor4f);
-        const PLSLoadStoreProgram& plsProgram =
-            findLoadStoreProgram(actions, desc.combinedShaderFeatures);
-        m_state->bindProgram(plsProgram.id());
-        if (plsProgram.clearColorUniLocation() >= 0)
+        m_state->setPipelineState(gpu::COLOR_ONLY_PIPELINE_STATE);
+        if (desc.fixedFunctionColorOutput)
         {
-            glUniform4fv(plsProgram.clearColorUniLocation(),
-                         1,
-                         clearColor4f.data());
+            // Clear the main framebuffer.
+            float cc[4];
+            UnpackColorToRGBA32FPremul(desc.colorClearValue, cc);
+            glClearColor(cc[0], cc[1], cc[2], cc[3]);
+            glClear(GL_COLOR_BUFFER_BIT);
+
+            // Clear PLS using the EXT_shader_pixel_local_storage2 API.
+            assert(impl->m_capabilities.EXT_shader_pixel_local_storage2);
+            GLuint plsClearValues[2] = {
+                desc.coverageClearValue,
+                /*clipClearValue=*/0u,
+            };
+            glClearPixelLocalStorageuiEXT(0, 2, plsClearValues);
         }
-        m_state->bindVAO(m_plsLoadStoreVAO);
-        m_state->setCullFace(GL_BACK);
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        else
+        {
+            // EXT_shader_pixel_local_storage doesn't have an initialization
+            // API. Initialize PLS by drawing a fullscreen quad.
+            std::array<float, 4> clearColor4f;
+            LoadStoreActionsEXT actions =
+                BuildLoadActionsEXT(desc, &clearColor4f);
+            const PLSLoadStoreProgram& plsProgram =
+                findLoadStoreProgram(actions, desc.combinedShaderFeatures);
+            m_state->bindProgram(plsProgram.id());
+            if (plsProgram.clearColorUniLocation() >= 0)
+            {
+                glUniform4fv(plsProgram.clearColorUniLocation(),
+                             1,
+                             clearColor4f.data());
+            }
+            m_state->bindVAO(m_plsLoadStoreVAO);
+            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        }
     }
 
     void deactivatePixelLocalStorage(RenderContextGLImpl* impl,
                                      const FlushDescriptor& desc) override
     {
-        // Issue a fullscreen draw that transfers the color information in pixel
-        // local storage to the main framebuffer.
-        LoadStoreActionsEXT actions = LoadStoreActionsEXT::storeColor;
-        m_state->bindProgram(
-            findLoadStoreProgram(actions, desc.combinedShaderFeatures).id());
-        m_state->bindVAO(m_plsLoadStoreVAO);
-        m_state->setCullFace(GL_BACK);
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        if (!desc.fixedFunctionColorOutput)
+        {
+            // EXT_shader_pixel_local_storage doesn't support concurrent
+            // rendering to PLS and the framebuffer. Now that we're done, issue
+            // a fullscreen draw that transfers the color information from PLS
+            // to the main framebuffer.
+            LoadStoreActionsEXT actions = LoadStoreActionsEXT::storeColor;
+            m_state->bindProgram(
+                findLoadStoreProgram(actions, desc.combinedShaderFeatures)
+                    .id());
+            m_state->bindVAO(m_plsLoadStoreVAO);
+            m_state->setPipelineState(gpu::COLOR_ONLY_PIPELINE_STATE);
+            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        }
 
         glDisable(GL_SHADER_PIXEL_LOCAL_STORAGE_EXT);
     }

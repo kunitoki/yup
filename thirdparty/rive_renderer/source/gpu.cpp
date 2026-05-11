@@ -2,15 +2,16 @@
  * Copyright 2022 Rive
  */
 
-#include "rive/renderer/gpu.hpp"
-
-#include "rive/renderer/render_target.hpp"
 #include "shaders/constants.glsl"
+#include "rive/math/bitwise.hpp"
+#include "rive/renderer/gpu.hpp"
+#include "rive/renderer/render_context.hpp"
+#include "rive/renderer/render_target.hpp"
 #include "rive/renderer/texture.hpp"
-#include "rive_render_paint.hpp"
 #include "gradient.hpp"
+#include "rive_render_paint.hpp"
 
-#include "generated/shaders/draw_path.exports.h"
+#include "generated/shaders/draw_path.vert.exports.h"
 
 namespace rive::gpu
 {
@@ -18,21 +19,306 @@ static_assert(kGradTextureWidth == GRAD_TEXTURE_WIDTH);
 static_assert(kTessTextureWidth == TESS_TEXTURE_WIDTH);
 static_assert(kTessTextureWidthLog2 == TESS_TEXTURE_WIDTH_LOG2);
 
+static Span<const DrawType> get_valid_draw_types(InterlockMode mode)
+{
+    switch (mode)
+    {
+        case InterlockMode::rasterOrdering:
+        {
+            static constexpr DrawType types[] = {
+                DrawType::midpointFanPatches,
+                DrawType::midpointFanCenterAAPatches,
+                DrawType::outerCurvePatches,
+                DrawType::interiorTriangulation,
+                DrawType::atlasBlit,
+                DrawType::imageMesh,
+                DrawType::renderPassResolve,
+            };
+            return make_span(types);
+        }
+
+        case InterlockMode::clockwise:
+        {
+            static constexpr DrawType types[] = {
+                DrawType::midpointFanPatches,
+                DrawType::midpointFanCenterAAPatches,
+                DrawType::outerCurvePatches,
+                DrawType::interiorTriangulation,
+                DrawType::atlasBlit,
+                DrawType::imageMesh,
+            };
+            return make_span(types);
+        }
+        case InterlockMode::atomics:
+        {
+            static constexpr DrawType types[] = {
+                DrawType::midpointFanPatches,
+                DrawType::midpointFanCenterAAPatches,
+                DrawType::outerCurvePatches,
+                DrawType::interiorTriangulation,
+                DrawType::atlasBlit,
+                DrawType::imageRect,
+                DrawType::imageMesh,
+                DrawType::renderPassInitialize,
+                DrawType::renderPassResolve,
+            };
+            return make_span(types);
+        }
+        case InterlockMode::clockwiseAtomic:
+        {
+            static constexpr DrawType types[] = {
+                DrawType::midpointFanPatches,
+                DrawType::midpointFanCenterAAPatches,
+                DrawType::outerCurvePatches,
+                DrawType::interiorTriangulation,
+                DrawType::atlasBlit,
+                DrawType::imageMesh,
+                DrawType::clipReset,
+                DrawType::renderPassInitialize,
+            };
+            return make_span(types);
+        }
+        case InterlockMode::msaa:
+        {
+            static constexpr DrawType types[] = {
+                DrawType::atlasBlit,
+                DrawType::imageMesh,
+                DrawType::msaaStrokes,
+                DrawType::msaaMidpointFanBorrowedCoverage,
+                DrawType::msaaMidpointFans,
+                DrawType::msaaMidpointFanStencilReset,
+                DrawType::msaaMidpointFanPathsStencil,
+                DrawType::msaaMidpointFanPathsCover,
+                DrawType::msaaOuterCubics,
+                DrawType::clipReset,
+                DrawType::renderPassInitialize,
+                DrawType::renderPassResolve,
+            };
+            return make_span(types);
+        }
+    }
+
+    assert(false && "Unexpected interlock mode");
+    return {};
+}
+
+static ShaderMiscFlags get_valid_shader_misc_flags(DrawType drawType,
+                                                   InterlockMode mode)
+{
+    ShaderMiscFlags outFlags = ShaderMiscFlags::none;
+
+    switch (drawType)
+    {
+        case DrawType::midpointFanPatches:
+        case DrawType::midpointFanCenterAAPatches:
+        case DrawType::outerCurvePatches:
+        case DrawType::interiorTriangulation:
+        case DrawType::clipReset:
+            // Clockwise modes introduce borrowed coverage and dedicated clip
+            // draws for paths.
+            if (mode == InterlockMode::clockwise ||
+                mode == InterlockMode::clockwiseAtomic)
+            {
+                if (drawType == DrawType::interiorTriangulation ||
+                    mode == InterlockMode::clockwiseAtomic)
+                {
+                    outFlags |= ShaderMiscFlags::borrowedCoveragePass;
+                }
+
+                // midpointFanCenterAAPatches is only used for feathers, and
+                // feathers are never clips.
+                if (drawType != DrawType::midpointFanCenterAAPatches)
+                {
+                    outFlags |= ShaderMiscFlags::clipUpdateOnly;
+                    if (mode == InterlockMode::clockwiseAtomic)
+                    {
+                        outFlags |= ShaderMiscFlags::nestedClipUpdateOnly;
+                    }
+                }
+            }
+            break;
+
+        case DrawType::renderPassInitialize:
+            if (mode == InterlockMode::atomics)
+            {
+                outFlags |= ShaderMiscFlags::storeColorClear |
+                            ShaderMiscFlags::swizzleColorBGRAToRGBA;
+            }
+            break;
+        case DrawType::renderPassResolve:
+            if (mode == InterlockMode::atomics)
+            {
+                outFlags |= ShaderMiscFlags::coalescedResolveAndTransfer;
+            }
+            break;
+
+        case DrawType::atlasBlit:
+        case DrawType::imageRect:
+        case DrawType::imageMesh:
+        case DrawType::msaaStrokes:
+        case DrawType::msaaMidpointFanBorrowedCoverage:
+        case DrawType::msaaMidpointFans:
+        case DrawType::msaaMidpointFanStencilReset:
+        case DrawType::msaaMidpointFanPathsStencil:
+        case DrawType::msaaMidpointFanPathsCover:
+        case DrawType::msaaOuterCubics:
+            break;
+    }
+
+    switch (mode)
+    {
+        case InterlockMode::atomics:
+        case InterlockMode::clockwise:
+        case InterlockMode::clockwiseAtomic:
+        case InterlockMode::msaa:
+            outFlags |= ShaderMiscFlags::fixedFunctionColorOutput;
+            break;
+
+        case InterlockMode::rasterOrdering:
+            outFlags |= ShaderMiscFlags::clockwiseFill;
+            break;
+    }
+
+    return outFlags;
+}
+
+void ForEachUbershaderPermutation(
+    InterlockMode interlockMode,
+    const PlatformFeatures& platformFeatures,
+    const std::function<bool(DrawType, ShaderFeatures, ShaderMiscFlags)>& func)
+{
+    // RenderPassInitialize is only needed in these two specific scenarios, and
+    // should be skipped otherwise.
+    const bool allowRenderPassInitialize =
+        (interlockMode == InterlockMode::atomics &&
+         platformFeatures.atomicPLSInitNeedsDraw) ||
+        (interlockMode == InterlockMode::clockwiseAtomic &&
+         platformFeatures
+             .clockwiseAtomicBorrowedCoverageBarrierNeedsRenderPassInit) ||
+        (interlockMode == InterlockMode::msaa &&
+         platformFeatures.msaaColorPreserveNeedsDraw);
+
+    for (auto drawType : get_valid_draw_types(interlockMode))
+    {
+        if (drawType == DrawType::renderPassInitialize &&
+            !allowRenderPassInitialize)
+        {
+            continue;
+        }
+
+        const auto allValidMiscFlags =
+            get_valid_shader_misc_flags(drawType, interlockMode);
+
+        for (auto curMiscFlags :
+             math::iterate_bit_combinations_in_mask(allValidMiscFlags))
+        {
+            // Filter out any invalid combinations of ShaderMiscFlags
+            switch (interlockMode)
+            {
+                case InterlockMode::atomics:
+                    if (enums::is_flag_set(
+                            curMiscFlags,
+                            ShaderMiscFlags::coalescedResolveAndTransfer))
+                    {
+                        if (enums::is_flag_set(
+                                curMiscFlags,
+                                ShaderMiscFlags::fixedFunctionColorOutput))
+                        {
+                            continue;
+                        }
+                    }
+                    break;
+
+                case InterlockMode::clockwiseAtomic:
+                    if (enums::is_flag_set(
+                            curMiscFlags,
+                            ShaderMiscFlags::borrowedCoveragePass))
+                    {
+                        // Borrowed coverage clockwiseAtomic passes always set
+                        // fixedFunctionColorOutput because they never read (or
+                        // even write, for that matter) the color buffer.
+                        if (!enums::is_flag_set(
+                                curMiscFlags,
+                                ShaderMiscFlags::fixedFunctionColorOutput))
+                        {
+                            continue;
+                        }
+                        // Borrowed coverage clockwiseAtomic passes never update
+                        // clip.
+                        if (enums::any_flag_set(
+                                curMiscFlags,
+                                ShaderMiscFlags::clipUpdateOnly |
+                                    ShaderMiscFlags::nestedClipUpdateOnly))
+                        {
+                            continue;
+                        }
+                    }
+                    break;
+
+                case InterlockMode::rasterOrdering:
+                case InterlockMode::clockwise:
+                case InterlockMode::msaa:
+                    break;
+            }
+
+            // Get the minimal set of ubershader features (with no optional
+            // flags)
+            const auto minUbershaderFeatures =
+                UbershaderFeaturesMaskFor(ShaderFeatures::NONE,
+                                          drawType,
+                                          interlockMode,
+                                          curMiscFlags,
+                                          platformFeatures);
+
+            // Now find the ubershader that has *all* flags set
+            const auto maxUbershaderFeatures = UbershaderFeaturesMaskFor(
+                ShaderFeaturesMaskFor(drawType, interlockMode),
+                drawType,
+                interlockMode,
+                curMiscFlags,
+                platformFeatures);
+
+            // Get the flags that still change ubershader behavior
+            const ShaderFeatures allOptionalUbershaderFeatures =
+                minUbershaderFeatures ^ maxUbershaderFeatures;
+
+            // Now iterate the
+            for (auto curOptionalFeatures :
+                 math::iterate_bit_combinations_in_mask(
+                     allOptionalUbershaderFeatures))
+            {
+                ShaderFeatures features =
+                    curOptionalFeatures | minUbershaderFeatures;
+
+                if (!func(drawType, features, curMiscFlags))
+                {
+                    // Function returned false to stop iterating.
+                    return;
+                }
+            }
+        }
+    }
+}
+
 uint32_t ShaderUniqueKey(DrawType drawType,
                          ShaderFeatures shaderFeatures,
                          InterlockMode interlockMode,
                          ShaderMiscFlags miscFlags)
 {
-    if (miscFlags & ShaderMiscFlags::coalescedResolveAndTransfer)
+    if (enums::is_flag_set(miscFlags,
+                           ShaderMiscFlags::coalescedResolveAndTransfer))
     {
-        assert(drawType == DrawType::atomicResolve);
-        assert(shaderFeatures & ShaderFeatures::ENABLE_ADVANCED_BLEND);
+        assert(drawType == DrawType::renderPassResolve);
+        assert(enums::is_flag_set(shaderFeatures,
+                                  ShaderFeatures::ENABLE_ADVANCED_BLEND));
         assert(interlockMode == InterlockMode::atomics);
     }
-    if (miscFlags & (ShaderMiscFlags::storeColorClear |
-                     ShaderMiscFlags::swizzleColorBGRAToRGBA))
+    if (enums::any_flag_set(miscFlags,
+                            ShaderMiscFlags::storeColorClear |
+                                ShaderMiscFlags::swizzleColorBGRAToRGBA))
     {
-        assert(drawType == DrawType::atomicInitialize);
+        assert(drawType == DrawType::renderPassInitialize);
+        assert(interlockMode == InterlockMode::atomics);
     }
     uint32_t drawTypeKey;
     switch (drawType)
@@ -61,25 +347,32 @@ uint32_t ShaderUniqueKey(DrawType drawType,
         case DrawType::imageMesh:
             drawTypeKey = 4;
             break;
-        case DrawType::atomicInitialize:
-            assert(interlockMode == gpu::InterlockMode::atomics);
+        case DrawType::clipReset:
+            assert(interlockMode == InterlockMode::clockwiseAtomic ||
+                   interlockMode == InterlockMode::msaa);
+            drawTypeKey = 7;
+            break;
+        case DrawType::renderPassInitialize:
+            assert(interlockMode == InterlockMode::atomics ||
+                   interlockMode == InterlockMode::msaa ||
+                   interlockMode == InterlockMode::clockwiseAtomic);
             drawTypeKey = 5;
             break;
-        case DrawType::atomicResolve:
-            assert(interlockMode == gpu::InterlockMode::atomics);
+        case DrawType::renderPassResolve:
+            assert(interlockMode == InterlockMode::rasterOrdering ||
+                   interlockMode == InterlockMode::atomics ||
+                   interlockMode == InterlockMode::msaa);
             drawTypeKey = 6;
-            break;
-        case DrawType::msaaStencilClipReset:
-            assert(interlockMode == gpu::InterlockMode::msaa);
-            drawTypeKey = 7;
             break;
     }
     uint32_t key = static_cast<uint32_t>(miscFlags);
-    assert(static_cast<uint32_t>(interlockMode) < 1 << 2);
-    key = (key << 2) | static_cast<uint32_t>(interlockMode);
+    assert(static_cast<uint32_t>(interlockMode) <
+           1 << INTERLOCK_MODE_BIT_COUNT);
+    key = (key << INTERLOCK_MODE_BIT_COUNT) |
+          static_cast<uint32_t>(interlockMode);
     key = (key << kShaderFeatureCount) |
-          (shaderFeatures & ShaderFeaturesMaskFor(drawType, interlockMode))
-              .bits();
+          uint32_t(shaderFeatures &
+                   ShaderFeaturesMaskFor(drawType, interlockMode));
     assert(drawTypeKey < 1 << 3);
     key = (key << 3) | drawTypeKey;
     return key;
@@ -105,6 +398,8 @@ const char* GetShaderFeatureGLSLName(ShaderFeatures feature)
             return GLSL_ENABLE_NESTED_CLIPPING;
         case ShaderFeatures::ENABLE_HSL_BLEND_MODES:
             return GLSL_ENABLE_HSL_BLEND_MODES;
+        case ShaderFeatures::ENABLE_DITHER:
+            return GLSL_ENABLE_DITHER;
     }
     RIVE_UNREACHABLE();
 }
@@ -485,8 +780,18 @@ FlushUniforms::FlushUniforms(const FlushDescriptor& flushDesc,
                                        : 2.f) /
                                       flushDesc.atlasContentHeight),
     m_coverageBufferPrefix(flushDesc.coverageBufferPrefix),
+    m_epsilonForPseudoMemoryBarrier(1e-9f),
     m_pathIDGranularity(platformFeatures.pathIDGranularity),
     m_vertexDiscardValue(std::numeric_limits<float>::quiet_NaN()),
+    m_mipMapLODBias(MIP_MAP_LOD_BIAS),
+    m_maxPathId(flushDesc.pathCount),
+    m_ditherScale((flushDesc.ditherMode == DitherMode::none) ? 0.0f
+                                                             : (1.0f / 256.0f)),
+    m_ditherBias(m_ditherScale * -0.5f),
+    // Negate dither when storing to RGB10, in order to get some more variation.
+    m_ditherConversionToRGB10((flushDesc.ditherMode == DitherMode::none)
+                                  ? 0.0f
+                                  : (-1.0f / 1024.0f) / m_ditherScale),
     m_wireframeEnabled(flushDesc.wireframe)
 {}
 
@@ -567,11 +872,11 @@ void PaintData::set(DrawContents singleDrawContents,
             break;
         }
     }
-    if (singleDrawContents & gpu::DrawContents::nonZeroFill)
+    if (enums::is_flag_set(singleDrawContents, DrawContents::nonZeroFill))
     {
         localParams |= PAINT_FLAG_NON_ZERO_FILL;
     }
-    else if (singleDrawContents & gpu::DrawContents::evenOddFill)
+    else if (enums::is_flag_set(singleDrawContents, DrawContents::evenOddFill))
     {
         localParams |= PAINT_FLAG_EVEN_ODD_FILL;
     }
@@ -589,7 +894,7 @@ void PaintAuxData::set(const Mat2D& viewMatrix,
                        const Texture* imageTexture,
                        const ClipRectInverseMatrix* clipRectInverseMatrix,
                        const RenderTarget* renderTarget,
-                       const gpu::PlatformFeatures& platformFeatures)
+                       const PlatformFeatures& platformFeatures)
 {
     switch (paintType)
     {
@@ -623,7 +928,8 @@ void PaintAuxData::set(const Mat2D& viewMatrix,
                 // Instead of finding sqrt(maxScaleFactorPow2), just multiply
                 // the log by .5.
                 m_imageTextureLOD =
-                    log2f(std::max(maxScaleFactorPow2, 1.f)) * .5f;
+                    (log2f(std::max(maxScaleFactorPow2, 1.f)) * .5f) +
+                    MIP_MAP_LOD_BIAS;
             }
             else
             {
@@ -763,87 +1069,210 @@ float find_transformed_area(const AABB& bounds, const Mat2D& matrix)
            .5f;
 }
 
-static void get_depth_state(const DrawBatch& batch,
-                            const FlushDescriptor& flushDesc,
-                            PipelineState* pipelineState)
+DepthState get_depth_state(InterlockMode interlockMode,
+                           DrawType drawType,
+                           DrawContents drawContents)
 {
-    if (flushDesc.interlockMode != InterlockMode::msaa)
+    if (interlockMode != InterlockMode::msaa)
     {
-        pipelineState->depthTestEnabled = false;
-        pipelineState->depthWriteEnabled = false;
-        return;
+        return {.depthTestEnabled = false, .depthWriteEnabled = false};
     }
 
-    switch (batch.drawType)
+    switch (drawType)
     {
         case DrawType::imageRect:
         case DrawType::imageMesh:
         case DrawType::atlasBlit:
         case DrawType::outerCurvePatches:
-            pipelineState->depthTestEnabled = true;
-            pipelineState->depthWriteEnabled = false;
-            break;
-
         case DrawType::msaaMidpointFanBorrowedCoverage:
         case DrawType::msaaMidpointFanPathsStencil:
-        case DrawType::msaaStencilClipReset:
-            pipelineState->depthTestEnabled = true;
-            pipelineState->depthWriteEnabled = false;
+        case DrawType::clipReset:
+            return {.depthTestEnabled = true, .depthWriteEnabled = false};
             break;
 
         case DrawType::msaaStrokes:
         case DrawType::msaaOuterCubics:
-            pipelineState->depthTestEnabled = true;
-            pipelineState->depthWriteEnabled = true;
+            return {.depthTestEnabled = true, .depthWriteEnabled = true};
             break;
 
         case DrawType::msaaMidpointFans:
         case DrawType::msaaMidpointFanPathsCover:
-            pipelineState->depthTestEnabled = true;
-            pipelineState->depthWriteEnabled =
-                !(batch.drawContents & gpu::DrawContents::clipUpdate);
+            return {
+                .depthTestEnabled = true,
+                .depthWriteEnabled =
+                    !enums::is_flag_set(drawContents, DrawContents::clipUpdate),
+            };
             break;
 
         case DrawType::msaaMidpointFanStencilReset:
-            pipelineState->depthTestEnabled = true;
-            pipelineState->depthWriteEnabled =
-                !(batch.drawContents & (gpu::DrawContents::clockwiseFill |
-                                        gpu::DrawContents::clipUpdate));
-            break;
+            return {
+                .depthTestEnabled = true,
+                .depthWriteEnabled = enums::no_flags_set(
+                    drawContents,
+                    DrawContents::clockwiseFill | DrawContents::clipUpdate),
+            };
+
+        case DrawType::renderPassInitialize:
+        case DrawType::renderPassResolve:
+            return {.depthTestEnabled = false, .depthWriteEnabled = false};
 
         case DrawType::interiorTriangulation:
-        case DrawType::atomicInitialize:
-        case DrawType::atomicResolve:
         case DrawType::midpointFanPatches:
         case DrawType::midpointFanCenterAAPatches:
-            RIVE_UNREACHABLE();
+            break;
     }
+
+    RIVE_UNREACHABLE();
 }
 
-static void get_stencil_state(const DrawBatch& batch,
-                              const FlushDescriptor& flushDesc,
-                              PipelineState* pipelineState)
+StencilInfo get_stencil_info(InterlockMode interlockMode,
+                             DrawType drawType,
+                             DrawContents drawContents)
 {
-    if (flushDesc.interlockMode != InterlockMode::msaa)
+    bool areDrawContentsValid = true;
+    if (interlockMode != InterlockMode::msaa)
+    {
+        // Only MSAA has any valid stencil types
+        return {StencilType::disabled,
+                DrawContents::none,
+                areDrawContentsValid};
+    }
+
+    switch (drawType)
+    {
+        case DrawType::imageRect:
+        case DrawType::imageMesh:
+        case DrawType::atlasBlit:
+        case DrawType::msaaStrokes:
+        case DrawType::msaaOuterCubics:
+            if (enums::is_flag_set(drawContents, DrawContents::activeClip))
+            {
+                return {
+                    StencilType::activeStencilClip,
+                    DrawContents::activeClip,
+                    areDrawContentsValid,
+                };
+            }
+            else
+            {
+                return {
+                    StencilType::disabled,
+                    DrawContents::none,
+                    areDrawContentsValid,
+                };
+            }
+
+        case DrawType::msaaMidpointFanBorrowedCoverage:
+            return {
+                StencilType::borrowedCoverage,
+                DrawContents::activeClip,
+                areDrawContentsValid,
+            };
+
+        case DrawType::msaaMidpointFans:
+            return {
+                StencilType::forwardClippedByBackward,
+                DrawContents::activeClip | DrawContents::clipUpdate,
+                areDrawContentsValid,
+            };
+
+        case DrawType::msaaMidpointFanStencilReset:
+            return {
+                StencilType::backwardTriangleCleanup,
+                DrawContents::clockwiseFill | DrawContents::activeClip |
+                    DrawContents::clipUpdate,
+                areDrawContentsValid,
+            };
+
+        case DrawType::msaaMidpointFanPathsStencil:
+            areDrawContentsValid =
+                enums::is_flag_set(drawContents, DrawContents::evenOddFill) ||
+                enums::all_flags_set(drawContents, kNestedClipUpdateMask);
+            return {
+                StencilType::stencilNestedOrEvenOdd,
+                DrawContents::activeClip | DrawContents::evenOddFill,
+                areDrawContentsValid,
+            };
+
+        case DrawType::msaaMidpointFanPathsCover:
+            areDrawContentsValid =
+                enums::is_flag_set(drawContents, DrawContents::evenOddFill);
+            return {StencilType::evenOddDrawAndReset,
+                    DrawContents::clipUpdate,
+                    areDrawContentsValid};
+
+        case DrawType::clipReset:
+            return {
+                ((drawContents & kNestedClipUpdateMask) ==
+                 kNestedClipUpdateMask)
+                    ? StencilType::nestedClipReset
+                    : StencilType::clipReset,
+                DrawContents::clockwiseFill,
+                areDrawContentsValid,
+            };
+
+        case DrawType::renderPassInitialize:
+        case DrawType::renderPassResolve:
+            return {
+                StencilType::disabled,
+                DrawContents::none,
+                areDrawContentsValid,
+            };
+
+        case DrawType::interiorTriangulation:
+        case DrawType::midpointFanPatches:
+        case DrawType::midpointFanCenterAAPatches:
+        case DrawType::outerCurvePatches:
+            break;
+    }
+
+    RIVE_UNREACHABLE();
+}
+
+// Returns an 8-bit key that uniquely identifies the stencil settings.
+static void get_stencil_settings(InterlockMode interlockMode,
+                                 DrawType drawType,
+                                 DrawContents drawContents,
+                                 PipelineState* pipelineState)
+{
+    if (interlockMode != InterlockMode::msaa)
     {
         pipelineState->stencilTestEnabled = false;
         pipelineState->stencilWriteMask = 0;
         return;
     }
 
+    pipelineState->stencilTestEnabled = true;
+
+    // Draw contents that affect on the stencil settings for this particular
+    // drawType.
+    const auto stencilInfo =
+        get_stencil_info(interlockMode, drawType, drawContents);
+
+    assert(stencilInfo.areDrawContentsValid);
+
+    // Apply the mask we were given - if the mask is missing bits, tests will
+    // fail.
+    drawContents &= stencilInfo.drawContentsMask;
+
+    const bool isClockwiseFill =
+        enums::is_flag_set(drawContents, DrawContents::clockwiseFill);
+    const bool isEvenOddFill =
+        enums::is_flag_set(drawContents, DrawContents::evenOddFill);
     const bool hasActiveClip =
-        (batch.drawContents & gpu::DrawContents::activeClip);
+        enums::is_flag_set(drawContents, DrawContents::activeClip);
     const bool isClipUpdate =
-        (batch.drawContents & gpu::DrawContents::clipUpdate);
-    switch (batch.drawType)
+        enums::is_flag_set(drawContents, DrawContents::clipUpdate);
+
+    switch (stencilInfo.stencilType)
     {
-        case DrawType::imageRect:
-        case DrawType::imageMesh:
-        case DrawType::atlasBlit:
-        case DrawType::msaaStrokes:
-        case DrawType::msaaOuterCubics:
-            pipelineState->stencilTestEnabled = true;
-            pipelineState->stencilDoubleSided = false;
+        case StencilType::disabled:
+            pipelineState->stencilTestEnabled = false;
+            pipelineState->stencilWriteMask = 0;
+            break;
+
+        case StencilType::activeStencilClip:
+            assert(hasActiveClip);
             pipelineState->stencilCompareMask = 0xff;
             pipelineState->stencilWriteMask = 0xff;
             pipelineState->stencilReference = 0x80;
@@ -851,16 +1280,15 @@ static void get_stencil_state(const DrawBatch& batch,
                 .failOp = StencilOp::keep,
                 .passOp = StencilOp::keep,
                 .depthFailOp = StencilOp::keep,
-                .compareOp = hasActiveClip ? StencilCompareOp::equal
-                                           : StencilCompareOp::always,
+                .compareOp = StencilCompareOp::equal,
             };
+
+            pipelineState->stencilDoubleSided = false;
             break;
 
-        case DrawType::msaaMidpointFanBorrowedCoverage:
+        case StencilType::borrowedCoverage:
             // Count backward triangle hits (negative coverage) in the stencil
             // buffer.
-            pipelineState->stencilTestEnabled = true;
-            pipelineState->stencilDoubleSided = false;
             pipelineState->stencilCompareMask = 0xff;
             pipelineState->stencilWriteMask = 0x7f;
             pipelineState->stencilReference = 0x80;
@@ -871,13 +1299,12 @@ static void get_stencil_state(const DrawBatch& batch,
                 .compareOp = hasActiveClip ? StencilCompareOp::lessOrEqual
                                            : StencilCompareOp::always,
             };
+            pipelineState->stencilDoubleSided = false;
             break;
 
-        case DrawType::msaaMidpointFans:
+        case StencilType::forwardClippedByBackward:
             // Draw forward triangles, clipped by the backward triangle counts.
             // (The depth test prevents double hits.)
-            pipelineState->stencilTestEnabled = true;
-            pipelineState->stencilDoubleSided = true;
             pipelineState->stencilCompareMask = hasActiveClip ? 0xff : 0x7f;
             pipelineState->stencilWriteMask = isClipUpdate ? 0xff : 0x7f;
             pipelineState->stencilReference = 0x80;
@@ -894,16 +1321,15 @@ static void get_stencil_state(const DrawBatch& batch,
                 .depthFailOp = StencilOp::keep,
                 .compareOp = StencilCompareOp::less,
             };
+            pipelineState->stencilDoubleSided = true;
             break;
 
-        case DrawType::msaaMidpointFanStencilReset:
+        case StencilType::backwardTriangleCleanup:
             // Clean up backward triangles in the stencil buffer, (also filling
             // negative winding numbers for nonZero fill).
-            pipelineState->stencilTestEnabled = true;
-            pipelineState->stencilDoubleSided = true;
             pipelineState->stencilCompareMask = hasActiveClip ? 0xff : 0x7f;
             pipelineState->stencilWriteMask =
-                (batch.drawContents & gpu::DrawContents::clockwiseFill)
+                isClockwiseFill
                     // For clockwise fill, disable clip-bit writes when cleaning
                     // up backward triangles. Clockwise only fills in forward
                     // triangles.
@@ -923,20 +1349,14 @@ static void get_stencil_state(const DrawBatch& batch,
                 .depthFailOp = StencilOp::keep,
                 .compareOp = StencilCompareOp::less,
             };
+            pipelineState->stencilDoubleSided = true;
             break;
 
-        case DrawType::msaaMidpointFanPathsStencil:
+        case StencilType::stencilNestedOrEvenOdd:
             // Just stencil the path into the stencil buffer. This is used for
             // nested clip updates and for evenOdd paths.
-            assert(batch.drawContents & (gpu::DrawContents::evenOddFill) ||
-                   (batch.drawContents & gpu::kNestedClipUpdateMask) ==
-                       gpu::kNestedClipUpdateMask);
-            pipelineState->stencilTestEnabled = true;
-            pipelineState->stencilDoubleSided = true;
             pipelineState->stencilCompareMask = 0xff;
-            pipelineState->stencilWriteMask =
-                (batch.drawContents & gpu::DrawContents::evenOddFill) ? 0x1
-                                                                      : 0x7f;
+            pipelineState->stencilWriteMask = isEvenOddFill ? 0x1 : 0x7f;
             pipelineState->stencilReference = 0x80;
             // Decrement front-facing triangles so the MSB is set when
             // clockwise.
@@ -953,14 +1373,12 @@ static void get_stencil_state(const DrawBatch& batch,
                 .depthFailOp = pipelineState->stencilFrontOps.depthFailOp,
                 .compareOp = pipelineState->stencilFrontOps.compareOp,
             };
+            pipelineState->stencilDoubleSided = true;
             break;
 
-        case DrawType::msaaMidpointFanPathsCover:
+        case StencilType::evenOddDrawAndReset:
             // Draw & reset stencil winding numbers. This is only needed for
             // evenOdd paths.
-            assert(batch.drawContents & gpu::DrawContents::evenOddFill);
-            pipelineState->stencilTestEnabled = true;
-            pipelineState->stencilDoubleSided = false;
             pipelineState->stencilCompareMask = 0x7f;
             pipelineState->stencilWriteMask = isClipUpdate ? 0xff : 0x1;
             pipelineState->stencilReference = 0x80;
@@ -970,63 +1388,52 @@ static void get_stencil_state(const DrawBatch& batch,
                 .depthFailOp = StencilOp::keep,
                 .compareOp = StencilCompareOp::notEqual,
             };
-            break;
-
-        case DrawType::msaaStencilClipReset:
-            pipelineState->stencilTestEnabled = true;
             pipelineState->stencilDoubleSided = false;
-            if ((batch.drawContents & gpu::kNestedClipUpdateMask) ==
-                gpu::kNestedClipUpdateMask)
-            {
-                // The nested clip just got stencilled and left in the stencil
-                // buffer. Intersect it with the existing clip. (Erasing regions
-                // of the existing clip that are outside the nested clip.)
-                pipelineState->stencilCompareMask =
-                    (batch.drawContents & gpu::DrawContents::clockwiseFill)
-                        // clockwise: (0x80 & 0xc0) < (stencilValue & 0xc0)
-                        //   => "If clipbit is set and winding is negative"
-                        //   => "If clipbit is set and winding is clockwise"
-                        //      (because clockwise decrements)
-                        //
-                        ? 0xc0
-                        // non-clockwise: 0x80 < stencilValue
-                        //   => "If clipbit is set and winding is nonzero"
-                        : 0xff;
-                pipelineState->stencilWriteMask = 0xff;
-                pipelineState->stencilReference = 0x80;
-                pipelineState->stencilFrontOps = {
-                    .failOp = StencilOp::zero,
-                    .passOp = StencilOp::replace,
-                    .depthFailOp = StencilOp::keep,
-                    .compareOp = StencilCompareOp::less,
-                };
-            }
-            else
-            {
-                // Clear the entire previous clip.
-                pipelineState->stencilCompareMask = 0xff;
-                pipelineState->stencilWriteMask = 0xff;
-                pipelineState->stencilReference = 0x00;
-                pipelineState->stencilFrontOps = {
-                    .failOp = StencilOp::keep,
-                    .passOp = StencilOp::zero,
-                    .depthFailOp = StencilOp::keep,
-                    .compareOp = StencilCompareOp::notEqual,
-                };
-            }
             break;
 
-        case DrawType::interiorTriangulation:
-        case DrawType::atomicInitialize:
-        case DrawType::atomicResolve:
-        case DrawType::midpointFanPatches:
-        case DrawType::midpointFanCenterAAPatches:
-        case DrawType::outerCurvePatches:
-            RIVE_UNREACHABLE();
+        case StencilType::nestedClipReset:
+            // The nested clip just got stencilled and left in the stencil
+            // buffer. Intersect it with the existing clip. (Erasing regions of
+            // the existing clip that are outside the nested clip.)
+            pipelineState->stencilCompareMask =
+                isClockwiseFill
+                    // clockwise: (0x80 & 0xc0) < (stencilValue & 0xc0)
+                    //   => "If clipbit is set and winding is negative"
+                    //   => "If clipbit is set and winding is clockwise"
+                    //      (because clockwise decrements)
+                    //
+                    ? 0xc0
+                    // non-clockwise: 0x80 < stencilValue
+                    //   => "If clipbit is set and winding is nonzero"
+                    : 0xff;
+            pipelineState->stencilWriteMask = 0xff;
+            pipelineState->stencilReference = 0x80;
+            pipelineState->stencilFrontOps = {
+                .failOp = StencilOp::zero,
+                .passOp = StencilOp::replace,
+                .depthFailOp = StencilOp::keep,
+                .compareOp = StencilCompareOp::less,
+            };
+            pipelineState->stencilDoubleSided = false;
+            break;
+
+        case StencilType::clipReset:
+            // Clear the entire previous clip.
+            pipelineState->stencilCompareMask = 0xff;
+            pipelineState->stencilWriteMask = 0xff;
+            pipelineState->stencilReference = 0x00;
+            pipelineState->stencilFrontOps = {
+                .failOp = StencilOp::keep,
+                .passOp = StencilOp::zero,
+                .depthFailOp = StencilOp::keep,
+                .compareOp = StencilCompareOp::notEqual,
+            };
+            pipelineState->stencilDoubleSided = false;
+            break;
     }
 }
 
-static CullFace get_cull_face(DrawType drawType)
+CullFace get_cull_face(DrawType drawType)
 {
     switch (drawType)
     {
@@ -1037,7 +1444,7 @@ static CullFace get_cull_face(DrawType drawType)
         case DrawType::atlasBlit:
         case DrawType::msaaStrokes:
         case DrawType::msaaMidpointFans:
-        case DrawType::msaaStencilClipReset:
+        case DrawType::clipReset:
             return CullFace::counterclockwise;
         case DrawType::msaaMidpointFanBorrowedCoverage:
         case DrawType::msaaMidpointFanStencilReset:
@@ -1051,39 +1458,91 @@ static CullFace get_cull_face(DrawType drawType)
             return CullFace::clockwise;
         case DrawType::imageRect:
         case DrawType::imageMesh:
-        case DrawType::atomicResolve:
-        case DrawType::atomicInitialize:
         case DrawType::msaaMidpointFanPathsStencil:
         case DrawType::msaaMidpointFanPathsCover:
         case DrawType::msaaOuterCubics:
+        case DrawType::renderPassResolve:
+        case DrawType::renderPassInitialize:
             return CullFace::none;
     }
     RIVE_UNREACHABLE();
 }
 
 static BlendEquation get_blend_equation(
-    const FlushDescriptor& flushDesc,
-    const DrawBatch& batch,
+    DrawType drawType,
+    InterlockMode interlockMode,
+    ShaderMiscFlags shaderMiscFlags,
+    DrawContents drawContents,
+    BlendMode blendMode,
+    bool fixedFunctionColorOutput,
     const PlatformFeatures& platformFeatures)
 {
-    switch (flushDesc.interlockMode)
+    switch (interlockMode)
     {
         case InterlockMode::rasterOrdering:
         case InterlockMode::atomics:
-            return flushDesc.atomicFixedFunctionColorOutput
-                       ? BlendEquation::srcOver
-                       : BlendEquation::none;
+        case InterlockMode::clockwise:
+            return fixedFunctionColorOutput ? BlendEquation::srcOver
+                                            : BlendEquation::none;
 
         case InterlockMode::clockwiseAtomic:
-            return BlendEquation::srcOver;
+            if (drawType == DrawType::renderPassInitialize)
+            {
+                // This draw is a seeming workaround for Qualcomm. Basically,
+                // input attachment reads of the clip and color buffers don't
+                // work unless we first draw these buffers into themselves
+                // between borrowed coverage and the main subpass.
+                return fixedFunctionColorOutput
+                           // When using fixedFunctionColorOutput, this
+                           // workaround doesn't apply to the color buffer, but
+                           // we still need to make sure the existing color
+                           // content doesn't change. To do this, we use srcOver
+                           // blend and emit a color of 0.
+                           ? BlendEquation::srcOver
+                           // Otherwise, the workaround draws both color and
+                           // clip into themselves. Blend needs to be disabled
+                           // in this case because the existing color value
+                           // might have transparency.
+                           : BlendEquation::none;
+            }
+            else if (enums::is_flag_set(
+                         shaderMiscFlags,
+                         gpu::ShaderMiscFlags::borrowedCoveragePass))
+            {
+                // Borrowed coverage passes don't emit color. They only update
+                // the coverage buffer.
+                return BlendEquation::none;
+            }
+            else if (enums::is_flag_set(
+                         shaderMiscFlags,
+                         gpu::ShaderMiscFlags::nestedClipUpdateOnly))
+            {
+                // The coverage of two intersecting clips is
+                // "min(clipCoverageA, clipCoverageB)".
+                return BlendEquation::min;
+            }
+            else if (enums::is_flag_set(shaderMiscFlags,
+                                        gpu::ShaderMiscFlags::clipUpdateOnly) &&
+                     drawType != gpu::DrawType::clipReset)
+            {
+                // clockwiseAtomic clips render coverage count directly to the
+                // clip buffer.
+                return BlendEquation::plus;
+            }
+            else
+            {
+                // For normal paths, clockwiseAtomic uses src-over to accumulate
+                // coverage, even with advanced blend.
+                return BlendEquation::srcOver;
+            }
 
         case InterlockMode::msaa:
-            if (batch.drawContents & DrawContents::opaquePaint)
+            if (enums::is_flag_set(drawContents, DrawContents::opaquePaint))
             {
                 return BlendEquation::none;
             }
-            else if (!platformFeatures.supportsKHRBlendEquations ||
-                     batch.firstBlendMode == BlendMode::srcOver)
+            else if (!platformFeatures.supportsBlendAdvancedKHR ||
+                     blendMode == BlendMode::srcOver)
             {
                 // Normal and in-shader blending both use src-over hardware
                 // blend coefficients.
@@ -1091,23 +1550,31 @@ static BlendEquation get_blend_equation(
                 // When drawing an advanced blend mode, the shader only does the
                 // "color" portion of the blend equation, and relies on the
                 // hardware blend unit to finish the "alpha" portion.
+                assert(drawType != DrawType::renderPassInitialize &&
+                       drawType != DrawType::renderPassResolve);
                 return BlendEquation::srcOver;
             }
             else
             {
-                // When m_platformFeatures.supportsKHRBlendEquations is true in
+                // When m_platformFeatures.supportsBlendAdvancedKHR is true in
                 // MSAA mode, the renderContext does not combine draws that have
                 // different blend modes.
-                return static_cast<BlendEquation>(batch.firstBlendMode);
+                assert(drawType != DrawType::renderPassInitialize &&
+                       drawType != DrawType::renderPassResolve);
+                return static_cast<BlendEquation>(blendMode);
             }
     }
 
     RIVE_UNREACHABLE();
 }
 
-static bool get_color_writemask(const DrawBatch& batch)
+bool get_color_write_enable(DrawType drawType,
+                            InterlockMode interlockMode,
+                            ShaderMiscFlags shaderMiscFlags,
+                            bool fixedFunctionColorOutput,
+                            DrawContents drawContents)
 {
-    switch (batch.drawType)
+    switch (drawType)
     {
         case DrawType::midpointFanPatches:
         case DrawType::midpointFanCenterAAPatches:
@@ -1116,36 +1583,148 @@ static bool get_color_writemask(const DrawBatch& batch)
         case DrawType::atlasBlit:
         case DrawType::imageRect:
         case DrawType::imageMesh:
-        case DrawType::atomicInitialize:
-        case DrawType::atomicResolve:
-            return true;
+        case DrawType::renderPassInitialize:
+        case DrawType::renderPassResolve:
+            if (enums::any_flag_set(shaderMiscFlags,
+                                    ShaderMiscFlags::clipUpdateOnly |
+                                        ShaderMiscFlags::borrowedCoveragePass))
+            {
+                // Clip updates and borrowed coverage passes don't output color.
+                return false;
+            }
+            // We generate pipeline state under the assumption that pixel local
+            // storage can still be written when colorWriteEnabled is false.
+            // Disable color writes when we're rendering only to PLS.
+            return fixedFunctionColorOutput ||
+                   interlockMode == InterlockMode::msaa;
         case DrawType::msaaStrokes:
         case DrawType::msaaOuterCubics:
             return true;
         case DrawType::msaaMidpointFanBorrowedCoverage:
         case DrawType::msaaMidpointFanPathsStencil:
-        case DrawType::msaaStencilClipReset:
+        case DrawType::clipReset:
             return false;
         case DrawType::msaaMidpointFans:
         case DrawType::msaaMidpointFanPathsCover:
-            return !(batch.drawContents & DrawContents::clipUpdate);
+            return !enums::is_flag_set(drawContents, DrawContents::clipUpdate);
         case DrawType::msaaMidpointFanStencilReset:
             // For clockwise fill, disable color writes when cleaning up
             // backward triangles. Clockwise only fills in forward triangles.
-            return !(batch.drawContents &
-                     (DrawContents::clockwiseFill | DrawContents::clipUpdate));
+            return enums::no_flags_set(drawContents,
+                                       DrawContents::clockwiseFill |
+                                           DrawContents::clipUpdate);
     }
-    return false;
+
+    RIVE_UNREACHABLE();
+}
+
+uint64_t pipeline_unique_key(DrawType drawType,
+                             ShaderFeatures shaderFeatures,
+                             InterlockMode interlockMode,
+                             ShaderMiscFlags shaderMiscFlags,
+                             DrawContents drawContents,
+                             bool fixedFunctionColorOutput,
+                             rive::BlendMode blendMode,
+                             const PlatformFeatures& platformFeatures)
+{
+    uint64_t key = gpu::ShaderUniqueKey(drawType,
+                                        shaderFeatures,
+                                        interlockMode,
+                                        shaderMiscFlags);
+
+    constexpr auto VALID_PIPELINE_DRAW_CONTENTS_BIT_COUNT =
+        math::count_set_bits(uint32_t(DRAW_CONTENTS_FOR_MSAA_PIPELINE_STATE));
+
+    const auto stencilInfo =
+        get_stencil_info(interlockMode,
+                         drawType,
+                         drawContents & DRAW_CONTENTS_FOR_MSAA_PIPELINE_STATE);
+
+    const auto drawContentsMask =
+        (interlockMode == InterlockMode::msaa)
+            ? DrawContents(stencilInfo.drawContentsMask |
+                           DrawContents::opaquePaint)
+            : DrawContents::none;
+
+    assert((drawContentsMask & DRAW_CONTENTS_FOR_MSAA_PIPELINE_STATE) ==
+           drawContentsMask);
+
+    const auto effectiveDrawContents =
+        DrawContents(drawContents & drawContentsMask);
+
+    // Compact the draw contents to only the bits that matter for the pipeline
+    // (and, thus, the key)
+    key = math::add_bits_to_key(
+        key,
+        math::compact_bitmask_value(
+            uint32_t(effectiveDrawContents),
+            uint32_t(DRAW_CONTENTS_FOR_MSAA_PIPELINE_STATE)),
+        VALID_PIPELINE_DRAW_CONTENTS_BIT_COUNT);
+
+    // Only MSAA cares about other blend modes during pipeline creation.
+    auto effectiveBlendMode = (interlockMode == InterlockMode::msaa &&
+                               platformFeatures.supportsBlendAdvancedKHR)
+                                  ? blendMode
+                                  : BlendMode::srcOver;
+
+    assert(uint32_t(effectiveBlendMode) < (1u << BLEND_MODE_BIT_COUNT));
+
+    key = math::add_bits_to_key(key,
+                                uint32_t(effectiveBlendMode),
+                                BLEND_MODE_BIT_COUNT);
+
+    key = math::add_bits_to_key(key,
+                                uint32_t(stencilInfo.stencilType),
+                                STENCIL_TYPE_BIT_COUNT);
+
+    const bool colorWriteEnabled =
+        get_color_write_enable(drawType,
+                               interlockMode,
+                               shaderMiscFlags,
+                               fixedFunctionColorOutput,
+                               effectiveDrawContents);
+    key = math::add_bits_to_key(key, uint32_t(colorWriteEnabled), 1);
+    const auto depthState =
+        get_depth_state(interlockMode, drawType, effectiveDrawContents);
+    key = math::add_bits_to_key(key, uint32_t(depthState.depthTestEnabled), 1);
+    key = math::add_bits_to_key(key, uint32_t(depthState.depthWriteEnabled), 1);
+    key = math::add_bits_to_key(key,
+                                uint32_t(get_cull_face(drawType)),
+                                CULL_FACE_BIT_COUNT);
+    return key;
 }
 
 void get_pipeline_state(const DrawBatch& batch,
                         const FlushDescriptor& flushDesc,
                         const PlatformFeatures& platformFeatures,
-                        PipelineState* pipelineState)
+                        PipelineState* pipelineStateOut)
 {
+    *pipelineStateOut = get_pipeline_state(batch.drawType,
+                                           flushDesc.interlockMode,
+                                           batch.shaderMiscFlags,
+                                           batch.drawContents,
+                                           flushDesc.fixedFunctionColorOutput,
+                                           batch.firstBlendMode,
+                                           platformFeatures);
+}
+
+PipelineState get_pipeline_state(DrawType drawType,
+                                 InterlockMode interlockMode,
+                                 ShaderMiscFlags shaderMiscFlags,
+                                 DrawContents drawContents,
+                                 bool fixedFunctionColorOutput,
+                                 rive::BlendMode blendMode,
+                                 const PlatformFeatures& platformFeatures)
+{
+    // Only some DrawContents flags are relevant (and only for msaa at the
+    // moment)
+    drawContents &= (interlockMode == InterlockMode::msaa)
+                        ? DRAW_CONTENTS_FOR_MSAA_PIPELINE_STATE
+                        : DrawContents::none;
+
 #ifndef NDEBUG
     // Ensure drawType is compatible with the interlock mode.
-    switch (batch.drawType)
+    switch (drawType)
     {
         case DrawType::atlasBlit:
         case DrawType::imageMesh:
@@ -1155,13 +1734,20 @@ void get_pipeline_state(const DrawBatch& batch,
         case DrawType::midpointFanCenterAAPatches:
         case DrawType::outerCurvePatches:
         case DrawType::interiorTriangulation:
-            assert(flushDesc.interlockMode != InterlockMode::msaa);
+            assert(interlockMode != InterlockMode::msaa);
             break;
 
         case DrawType::imageRect:
-        case DrawType::atomicResolve:
-        case DrawType::atomicInitialize:
-            assert(flushDesc.interlockMode == InterlockMode::atomics);
+        case DrawType::renderPassResolve:
+            assert(interlockMode == InterlockMode::rasterOrdering ||
+                   interlockMode == InterlockMode::atomics ||
+                   interlockMode == InterlockMode::msaa);
+            break;
+
+        case DrawType::renderPassInitialize:
+            assert(interlockMode == InterlockMode::atomics ||
+                   interlockMode == InterlockMode::msaa ||
+                   interlockMode == InterlockMode::clockwiseAtomic);
             break;
 
         case DrawType::msaaStrokes:
@@ -1171,18 +1757,36 @@ void get_pipeline_state(const DrawBatch& batch,
         case DrawType::msaaMidpointFanPathsStencil:
         case DrawType::msaaMidpointFanPathsCover:
         case DrawType::msaaOuterCubics:
-        case DrawType::msaaStencilClipReset:
-            assert(flushDesc.interlockMode == InterlockMode::msaa);
+            assert(interlockMode == InterlockMode::msaa);
+            break;
+
+        case DrawType::clipReset:
+            assert(interlockMode == InterlockMode::clockwiseAtomic ||
+                   interlockMode == InterlockMode::msaa);
             break;
     }
 #endif
 
-    get_depth_state(batch, flushDesc, pipelineState);
-    get_stencil_state(batch, flushDesc, pipelineState);
-    pipelineState->cullFace = get_cull_face(batch.drawType);
-    pipelineState->blendEquation =
-        get_blend_equation(flushDesc, batch, platformFeatures);
-    pipelineState->colorWriteEnabled = get_color_writemask(batch);
+    PipelineState pipelineState;
+    auto depthState = get_depth_state(interlockMode, drawType, drawContents);
+    pipelineState.depthTestEnabled = depthState.depthTestEnabled;
+    pipelineState.depthWriteEnabled = depthState.depthWriteEnabled;
+    get_stencil_settings(interlockMode, drawType, drawContents, &pipelineState);
+    pipelineState.cullFace = get_cull_face(drawType);
+    pipelineState.blendEquation = get_blend_equation(drawType,
+                                                     interlockMode,
+                                                     shaderMiscFlags,
+                                                     drawContents,
+                                                     blendMode,
+                                                     fixedFunctionColorOutput,
+                                                     platformFeatures);
+    pipelineState.colorWriteEnabled =
+        get_color_write_enable(drawType,
+                               interlockMode,
+                               shaderMiscFlags,
+                               fixedFunctionColorOutput,
+                               drawContents);
+    return pipelineState;
 }
 
 // Borrowed from:
@@ -1229,7 +1833,7 @@ uint16x4 cast_f32_to_f16(float4 x)
 }
 
 // Code to generate g_gaussianIntegralTableF16.
-#if 0
+#ifdef RIVE_GENERATE_FEATHER_LUT
 static float eval_normal_distribution(float x, float mu, float inverseSigma)
 {
     constexpr static float ONE_OVER_SQRT_2_PI = 0.398942280401433f;
@@ -1270,6 +1874,29 @@ void generate_gausian_integral_table(float (&table)[GAUSSIAN_TABLE_SIZE])
     {
         table[i] = fminf(fmaxf(table[i - 1], table[i] + shift), 1);
     }
+
+    //  How many entries to ease in and out, so the table has a soft landing at
+    //  0 and 1 on the edges.
+    constexpr size_t EASE_IN_OUT_DIST = 8;
+    for (size_t i = 0; i < GAUSSIAN_TABLE_SIZE; ++i)
+    {
+        if (i < EASE_IN_OUT_DIST)
+        {
+            float fi =
+                static_cast<float>(i) / static_cast<float>(EASE_IN_OUT_DIST);
+            table[i] *= fi;
+        }
+
+        if (i > (GAUSSIAN_TABLE_SIZE - EASE_IN_OUT_DIST) - 1)
+        {
+            float diffToOne = 1.0 - table[i];
+            float fi = static_cast<float>(
+                           i - (GAUSSIAN_TABLE_SIZE - EASE_IN_OUT_DIST) + 1) /
+                       static_cast<float>(EASE_IN_OUT_DIST);
+            table[i] = table[i] + (diffToOne * fi);
+        }
+    }
+
     printf("\nconst float g_gaussianIntegralTableF16[GAUSSIAN_TABLE_SIZE] = "
            "{\n");
     for (size_t i = 0; i < GAUSSIAN_TABLE_SIZE; ++i)
@@ -1288,7 +1915,7 @@ void generate_gausian_integral_table(float (&table)[GAUSSIAN_TABLE_SIZE])
 #endif
 
 const uint16_t g_gaussianIntegralTableF16[GAUSSIAN_TABLE_SIZE] = {
-    0x15a3, 0x15db, 0x1616, 0x1652, 0x1691, 0x16d1, 0x1715, 0x175a, 0x17a2,
+    0x0,    0x9db,  0xe16,  0x10be, 0x1291, 0x1443, 0x154f, 0x166f, 0x17a2,
     0x17ec, 0x181c, 0x1844, 0x186d, 0x1898, 0x18c4, 0x18f1, 0x1920, 0x1951,
     0x1983, 0x19b7, 0x19ec, 0x1a23, 0x1a5d, 0x1a98, 0x1ad4, 0x1b13, 0x1b54,
     0x1b97, 0x1bdc, 0x1c12, 0x1c36, 0x1c5c, 0x1c83, 0x1cac, 0x1cd5, 0x1d00,
@@ -1344,11 +1971,11 @@ const uint16_t g_gaussianIntegralTableF16[GAUSSIAN_TABLE_SIZE] = {
     0x3bf6, 0x3bf7, 0x3bf7, 0x3bf7, 0x3bf8, 0x3bf8, 0x3bf8, 0x3bf8, 0x3bf9,
     0x3bf9, 0x3bf9, 0x3bf9, 0x3bfa, 0x3bfa, 0x3bfa, 0x3bfa, 0x3bfa, 0x3bfb,
     0x3bfb, 0x3bfb, 0x3bfb, 0x3bfb, 0x3bfc, 0x3bfc, 0x3bfc, 0x3bfc, 0x3bfc,
-    0x3bfc, 0x3bfc, 0x3bfd, 0x3bfd, 0x3bfd, 0x3bfd, 0x3bfd, 0x3bfd,
+    0x3bfd, 0x3bfd, 0x3bfe, 0x3bfe, 0x3bff, 0x3bff, 0x3c00, 0x3c00,
 };
 
 // Code to generate g_inverseGaussianIntegralTableF32.
-#if 0
+#ifdef RIVE_GENERATE_FEATHER_LUT
 void generate_inverse_gausian_integral_table(
     float (&table)[GAUSSIAN_TABLE_SIZE])
 {

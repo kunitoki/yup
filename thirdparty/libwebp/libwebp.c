@@ -375,5 +375,7 @@
 #include "libwebp_undef.h"
 #include "src/utils/utils.c"
 #include "libwebp_undef.h"
+#define clip_8b clip_8b_quant
 #include "src/utils/quant_levels_dec_utils.c"
+#undef clip_8b
 #include "libwebp_undef.h"

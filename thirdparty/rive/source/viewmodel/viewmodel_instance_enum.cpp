@@ -17,6 +17,7 @@ void ViewModelInstanceEnum::propertyValueChanged()
         m_changedCallback(this, propertyValue());
     }
 #endif
+    onValueChanged();
 }
 
 bool ViewModelInstanceEnum::value(std::string name)
@@ -40,4 +41,9 @@ bool ViewModelInstanceEnum::value(uint32_t index)
         return true;
     }
     return false;
+}
+
+void ViewModelInstanceEnum::applyValue(DataValueInteger* dataValue)
+{
+    propertyValue(dataValue->value());
 }

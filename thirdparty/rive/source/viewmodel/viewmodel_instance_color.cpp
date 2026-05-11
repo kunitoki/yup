@@ -16,4 +16,10 @@ void ViewModelInstanceColor::propertyValueChanged()
         m_changedCallback(this, propertyValue());
     }
 #endif
+    onValueChanged();
+}
+
+void ViewModelInstanceColor::applyValue(DataValueColor* dataValue)
+{
+    propertyValue(dataValue->value());
 }

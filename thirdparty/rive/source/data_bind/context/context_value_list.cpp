@@ -14,17 +14,17 @@ void DataBindContextValueList::apply(Core* target,
                                      bool isMainDirection)
 {
     syncSourceValue();
-    auto value =
-        calculateValue<DataValueList, std::vector<ViewModelInstanceListItem*>*>(
-            m_dataValue,
-            isMainDirection,
-            m_dataBind);
+    auto value = calculateValue<DataValueList,
+                                std::vector<rcp<ViewModelInstanceListItem>>*>(
+        m_dataValue,
+        isMainDirection,
+        m_dataBind);
     if (target != nullptr)
     {
         auto consumer = DataBindListItemConsumer::from(target);
         if (consumer != nullptr)
         {
-            consumer->updateList(m_dataBind->propertyKey(), value);
+            consumer->updateList(value);
         }
     }
 }

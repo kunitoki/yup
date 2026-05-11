@@ -13,7 +13,7 @@
 #include <TargetConditionals.h>
 
 #if TARGET_OS_IPHONE
-#import <CoreGraphics/CoreGraphics.h>
+#include <CoreGraphics/CoreGraphics.h>
 #include <ImageIO/ImageIO.h>
 #elif TARGET_OS_MAC
 #include <ApplicationServices/ApplicationServices.h>
@@ -204,6 +204,7 @@ std::unique_ptr<Bitmap> Bitmap::decode(const uint8_t bytes[], size_t byteCount)
 
     return std::make_unique<Bitmap>(image.width,
                                     image.height,
+                                    image.width * image.height * 4,
                                     // CG always premultiplies alpha.
                                     PixelFormat::RGBAPremul,
                                     std::move(image.pixels));

@@ -10,8 +10,7 @@ class ListenerViewModelChange : public ListenerViewModelChangeBase
 public:
     ~ListenerViewModelChange();
     void perform(StateMachineInstance* stateMachineInstance,
-                 Vec2D position,
-                 Vec2D previousPosition) const override;
+                 const ListenerInvocation& invocation) const override;
     StatusCode import(ImportStack& importStack) override;
 
 private:

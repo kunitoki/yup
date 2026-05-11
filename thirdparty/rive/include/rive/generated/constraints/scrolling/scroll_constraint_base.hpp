@@ -40,6 +40,10 @@ public:
     static const uint16_t snapPropertyKey = 724;
     static const uint16_t physicsTypeValuePropertyKey = 727;
     static const uint16_t physicsIdPropertyKey = 726;
+    static const uint16_t virtualizePropertyKey = 850;
+    static const uint16_t infinitePropertyKey = 851;
+    static const uint16_t interactivePropertyKey = 891;
+    static const uint16_t thresholdPropertyKey = 894;
 
 protected:
     float m_ScrollOffsetX = 0.0f;
@@ -47,6 +51,10 @@ protected:
     bool m_Snap = false;
     uint32_t m_PhysicsTypeValue = 0;
     uint32_t m_PhysicsId = -1;
+    bool m_Virtualize = false;
+    bool m_Infinite = false;
+    bool m_Interactive = true;
+    float m_Threshold = 0.0f;
 
 public:
     inline float scrollOffsetX() const { return m_ScrollOffsetX; }
@@ -140,6 +148,50 @@ public:
         physicsIdChanged();
     }
 
+    inline bool virtualize() const { return m_Virtualize; }
+    void virtualize(bool value)
+    {
+        if (m_Virtualize == value)
+        {
+            return;
+        }
+        m_Virtualize = value;
+        virtualizeChanged();
+    }
+
+    inline bool infinite() const { return m_Infinite; }
+    void infinite(bool value)
+    {
+        if (m_Infinite == value)
+        {
+            return;
+        }
+        m_Infinite = value;
+        infiniteChanged();
+    }
+
+    inline bool interactive() const { return m_Interactive; }
+    void interactive(bool value)
+    {
+        if (m_Interactive == value)
+        {
+            return;
+        }
+        m_Interactive = value;
+        interactiveChanged();
+    }
+
+    inline float threshold() const { return m_Threshold; }
+    void threshold(float value)
+    {
+        if (m_Threshold == value)
+        {
+            return;
+        }
+        m_Threshold = value;
+        thresholdChanged();
+    }
+
     Core* clone() const override;
     void copy(const ScrollConstraintBase& object)
     {
@@ -148,6 +200,10 @@ public:
         m_Snap = object.m_Snap;
         m_PhysicsTypeValue = object.m_PhysicsTypeValue;
         m_PhysicsId = object.m_PhysicsId;
+        m_Virtualize = object.m_Virtualize;
+        m_Infinite = object.m_Infinite;
+        m_Interactive = object.m_Interactive;
+        m_Threshold = object.m_Threshold;
         DraggableConstraint::copy(object);
     }
 
@@ -170,6 +226,18 @@ public:
             case physicsIdPropertyKey:
                 m_PhysicsId = CoreUintType::deserialize(reader);
                 return true;
+            case virtualizePropertyKey:
+                m_Virtualize = CoreBoolType::deserialize(reader);
+                return true;
+            case infinitePropertyKey:
+                m_Infinite = CoreBoolType::deserialize(reader);
+                return true;
+            case interactivePropertyKey:
+                m_Interactive = CoreBoolType::deserialize(reader);
+                return true;
+            case thresholdPropertyKey:
+                m_Threshold = CoreDoubleType::deserialize(reader);
+                return true;
         }
         return DraggableConstraint::deserialize(propertyKey, reader);
     }
@@ -183,6 +251,10 @@ protected:
     virtual void snapChanged() {}
     virtual void physicsTypeValueChanged() {}
     virtual void physicsIdChanged() {}
+    virtual void virtualizeChanged() {}
+    virtual void infiniteChanged() {}
+    virtual void interactiveChanged() {}
+    virtual void thresholdChanged() {}
 };
 } // namespace rive
 

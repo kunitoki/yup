@@ -25,18 +25,61 @@ void DataBindContext::decodeSourcePathIds(Span<const uint8_t> value)
 void DataBindContext::copySourcePathIds(const DataBindContextBase& object)
 {
     m_SourcePathIdsBuffer = object.as<DataBindContext>()->m_SourcePathIdsBuffer;
+    m_isPathResolved = object.as<DataBindContext>()->m_isPathResolved;
+}
+
+void DataBindContext::resolvePath()
+{
+    if (!isNameBased() || m_isPathResolved)
+    {
+        return;
+    }
+    m_isPathResolved = true;
+    if (m_SourcePathIdsBuffer.size() > 0)
+    {
+        auto pathId = m_SourcePathIdsBuffer[0];
+        if (m_file)
+        {
+            auto dataResolver = m_file->dataResolver();
+            if (dataResolver)
+            {
+                auto resolvedPath = dataResolver->resolvePath(pathId);
+                if (!resolvedPath.empty())
+                {
+                    m_SourcePathIdsBuffer = resolvedPath;
+                }
+            }
+        }
+    }
 }
 
 void DataBindContext::bindFromContext(DataContext* dataContext)
 {
     if (dataContext != nullptr)
     {
+        resolvePath();
         auto vmSource =
-            dataContext->getViewModelProperty(m_SourcePathIdsBuffer);
-        if (vmSource != nullptr)
+            isNameBased() && file()
+                ? dataContext->getRelativeViewModelProperty(
+                      m_SourcePathIdsBuffer,
+                      file()->dataResolver())
+                : dataContext->getViewModelProperty(m_SourcePathIdsBuffer);
+        if (m_Source == nullptr || vmSource != m_Source.get())
         {
-            source(vmSource);
-            bind();
+            if (vmSource != nullptr)
+            {
+                clearSource();
+                source(ref_rcp(vmSource));
+                bind();
+            }
+            else
+            {
+                unbind();
+            }
+        }
+        else
+        {
+            addDirt(ComponentDirt::Bindings, true);
         }
         if (m_dataConverter != nullptr)
         {

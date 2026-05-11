@@ -3,9 +3,7 @@
  */
 
 #include "rive/decoders/bitmap_decoder.hpp"
-
-#include <libpng/libpng.h>
-
+#include "png.h"
 #include <algorithm>
 #include <cassert>
 #include <string.h>
@@ -157,8 +155,11 @@ std::unique_ptr<Bitmap> DecodePng(const uint8_t bytes[], size_t byteCount)
             pixelFormat = Bitmap::PixelFormat::RGB;
             break;
     }
+
+    assert(pixelBufferSize == height * width * channels);
     return std::make_unique<Bitmap>(width,
                                     height,
+                                    pixelBufferSize,
                                     pixelFormat,
                                     std::move(pixelBuffer));
 }

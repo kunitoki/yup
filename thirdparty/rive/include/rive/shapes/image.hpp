@@ -20,15 +20,18 @@ private:
     // and use the image width/height to compute the proper scale
     float m_layoutWidth = NAN;
     float m_layoutHeight = NAN;
+    float m_layoutOffsetX = 0.0f;
+    float m_layoutOffsetY = 0.0f;
     void updateImageScale();
 
 public:
     void setMesh(MeshDrawable* mesh);
-    ImageAsset* imageAsset() const { return (ImageAsset*)m_fileAsset; }
+    ImageAsset* imageAsset() const;
     void draw(Renderer* renderer) override;
+    bool willDraw() override;
     Core* hitTest(HitInfo*, const Mat2D&) override;
     StatusCode import(ImportStack& importStack) override;
-    void setAsset(FileAsset*) override;
+    void setAsset(rcp<FileAsset>) override;
     uint32_t assetId() override;
     Core* clone() const override;
     Vec2D measureLayout(float width,
@@ -42,6 +45,8 @@ public:
     float width() const;
     float height() const;
     void assetUpdated() override;
+    AABB localBounds() const override;
+    void updateTransform() override;
 
 #ifdef TESTING
     Mesh* mesh() const;

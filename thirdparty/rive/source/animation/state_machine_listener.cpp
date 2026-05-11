@@ -6,15 +6,47 @@
 #include "rive/shapes/shape.hpp"
 #include "rive/animation/state_machine_instance.hpp"
 #include "rive/animation/listener_input_change.hpp"
+#include "rive/animation/listener_types/listener_input_type.hpp"
 
 using namespace rive;
 
 StateMachineListener::StateMachineListener() {}
 StateMachineListener::~StateMachineListener() {}
 
+bool StateMachineListener::hasListener(ListenerType listenerType) const
+{
+    for (auto& listenerInputType : m_listenerInputTypes)
+    {
+        if (listenerInputType->listenerTypeValue() == (int)listenerType)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool StateMachineListener::hasListeners(
+    Span<const ListenerType> listenerTypes) const
+{
+    for (auto listenerType : listenerTypes)
+    {
+        if (hasListener(listenerType))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 void StateMachineListener::addAction(std::unique_ptr<ListenerAction> action)
 {
     m_actions.push_back(std::move(action));
+}
+
+void StateMachineListener::addListenerInputType(
+    std::unique_ptr<ListenerInputType> listenerInputType)
+{
+    m_listenerInputTypes.push_back(std::move(listenerInputType));
 }
 
 StatusCode StateMachineListener::import(ImportStack& importStack)
@@ -40,13 +72,22 @@ const ListenerAction* StateMachineListener::action(size_t index) const
     return nullptr;
 }
 
+const ListenerInputType* StateMachineListener::listenerInputType(
+    size_t index) const
+{
+    if (index < m_listenerInputTypes.size())
+    {
+        return m_listenerInputTypes[index].get();
+    }
+    return nullptr;
+}
+
 void StateMachineListener::performChanges(
     StateMachineInstance* stateMachineInstance,
-    Vec2D position,
-    Vec2D previousPosition) const
+    const ListenerInvocation& invocation) const
 {
     for (auto& action : m_actions)
     {
-        action->perform(stateMachineInstance, position, previousPosition);
+        action->perform(stateMachineInstance, invocation);
     }
 }

@@ -13,7 +13,6 @@
 #include "rive/shapes/paint/shape_paint.hpp"
 #include "rive/shapes/paint/stroke.hpp"
 #include "rive/shapes/rectangle.hpp"
-#include "rive/nested_artboard_layout.hpp"
 #include "rive/layout/layout_data.hpp"
 #include "rive/layout/layout_component_style.hpp"
 #ifdef WITH_RIVE_LAYOUT
@@ -46,6 +45,39 @@ void LayoutComponent::buildDependencies()
 }
 
 Core* LayoutComponent::hitTest(HitInfo*, const Mat2D&) { return nullptr; }
+
+bool LayoutComponent::hitTestPoint(const Vec2D& position,
+                                   bool skipOnUnclipped,
+                                   bool isPrimaryHit)
+{
+    Mat2D inverseWorld;
+    if (worldTransform().invert(&inverseWorld))
+    {
+        // If the layout is not clipped and skipOnUnclipped is true, we
+        // don't care about whether it contains the position
+        auto canSkip = skipOnUnclipped && !this->clip();
+        if (!canSkip)
+        {
+            auto localWorld = inverseWorld * position;
+            if (this->is<Artboard>())
+            {
+                auto artboard = this->as<Artboard>();
+                if (artboard->originX() != 0 || artboard->originY() != 0)
+                {
+                    localWorld +=
+                        Vec2D(artboard->originX() * artboard->layoutWidth(),
+                              artboard->originY() * artboard->layoutHeight());
+                }
+            }
+            if (!localBounds().contains(localWorld))
+            {
+                return false;
+            }
+        }
+        return Drawable::hitTestPoint(position, true, isPrimaryHit);
+    }
+    return false;
+}
 
 void LayoutComponent::update(ComponentDirt value)
 {
@@ -84,6 +116,9 @@ void LayoutComponent::update(ComponentDirt value)
     {
         updateRenderPath();
     }
+
+    m_positionLeftChanged = false;
+    m_positionTopChanged = false;
 }
 
 void LayoutComponent::widthOverride(float width, int unitValue, bool isRow)
@@ -180,29 +215,29 @@ bool LayoutComponent::overridesKeyedInterpolation(int propertyKey)
 
 bool LayoutComponent::isHidden() const
 {
-    return Super::isHidden() || isDisplayHidden();
+    return Super::isHidden() || isCollapsed();
 }
 
-bool LayoutComponent::isDisplayHidden() const
+bool LayoutComponent::isCollapsed() const
 {
-#ifdef WITH_RIVE_LAYOUT
-    if (m_displayHidden || parent() == nullptr ||
-        !parent()->is<LayoutComponent>())
+    if (Super::isCollapsed())
     {
-        return m_displayHidden;
+        return true;
     }
-    return parent()->as<LayoutComponent>()->isDisplayHidden();
+#ifdef WITH_RIVE_LAYOUT
+    return styleDisplayHidden();
 #endif
     return false;
 }
 
 void LayoutComponent::propagateCollapse(bool collapse)
 {
-    bool displayHidden = isDisplayHidden();
+    auto collapsed = collapse || isCollapsed();
     for (Component* child : children())
     {
-        child->collapse(collapse || displayHidden);
+        child->collapse(collapsed);
     }
+    updateCollapsables();
 }
 
 bool LayoutComponent::collapse(bool value)
@@ -211,10 +246,7 @@ bool LayoutComponent::collapse(bool value)
     {
         return false;
     }
-    for (Component* child : children())
-    {
-        child->collapse(value || m_displayHidden);
-    }
+    propagateCollapse(value);
     return true;
 }
 
@@ -315,7 +347,7 @@ void LayoutComponent::draw(Renderer* renderer)
 
 void LayoutComponent::updateRenderPath()
 {
-    if (isDisplayHidden())
+    if (isHidden())
     {
         return;
     }
@@ -353,9 +385,9 @@ void LayoutComponent::updateRenderPath()
         {
             continue;
         }
-        if (shapePaint->is<Stroke>())
+        if (shapePaint->is<ShapePaint>())
         {
-            shapePaint->as<Stroke>()->invalidateEffects();
+            shapePaint->as<ShapePaint>()->invalidateEffects();
         }
     }
 }
@@ -461,12 +493,45 @@ void LayoutComponent::syncStyle()
         ygNode.setMeasureFunc(nullptr);
     }
 
+    // Derive the unit the layout engine needs from the persisted unit + scale
+    // type.
+    //   - fill/hug always map to YGUnitAuto (regardless of position type) —
+    //     these scale modes don't have a meaningful unit; the layout engine
+    //     decides the size.
+    //   - fixed uses the stored unit. Absolute layouts trust whatever's
+    //     stored (e.g. the editor freezes a point value at the moment
+    //     positionType becomes absolute, since absolute children sit outside
+    //     flex flow).
+    bool isAbsolute = m_style->positionType() == YGPositionTypeAbsolute;
+    bool isLegacyHugEncoding =
+        m_style->widthScaleType() == LayoutScaleType::fixed &&
+        m_style->heightScaleType() == LayoutScaleType::fixed &&
+        m_style->intrinsicallySized() && isLeaf();
+    auto effectiveUnits = [isAbsolute,
+                           isLegacyHugEncoding](LayoutScaleType scaleType,
+                                                YGUnit storedUnits) {
+        if (isAbsolute && scaleType != LayoutScaleType::hug)
+        {
+            return storedUnits;
+        }
+        if (scaleType != LayoutScaleType::fixed)
+        {
+            return YGUnitAuto;
+        }
+        if (storedUnits == YGUnitPoint || storedUnits == YGUnitPercent)
+        {
+            return storedUnits;
+        }
+        return isLegacyHugEncoding ? YGUnitAuto : YGUnitPoint;
+    };
     auto realWidth = width();
-    auto realWidthUnits = m_style->widthUnits();
     auto realWidthScaleType = m_style->widthScaleType();
+    auto realWidthUnits =
+        effectiveUnits(realWidthScaleType, m_style->widthUnits());
     auto realHeight = height();
-    auto realHeightUnits = m_style->heightUnits();
     auto realHeightScaleType = m_style->heightScaleType();
+    auto realHeightUnits =
+        effectiveUnits(realHeightScaleType, m_style->heightUnits());
     auto parentIsRow =
         layoutParent() != nullptr ? layoutParent()->mainAxisIsRow() : true;
 
@@ -767,14 +832,21 @@ void LayoutComponent::syncStyle()
         YGValue{m_style->borderTop(), m_style->borderTopUnits()};
     ygStyle.border()[YGEdgeBottom] =
         YGValue{m_style->borderBottom(), m_style->borderBottomUnits()};
+
+    bool hasLayoutParent = layoutParent() != nullptr;
     ygStyle.margin()[startEdge] =
-        YGValue{m_style->marginLeft(), m_style->marginLeftUnits()};
+        YGValue{m_style->marginLeft(),
+                hasLayoutParent ? m_style->marginLeftUnits() : YGUnitPoint};
     ygStyle.margin()[endEdge] =
-        YGValue{m_style->marginRight(), m_style->marginRightUnits()};
+        YGValue{m_style->marginRight(),
+                hasLayoutParent ? m_style->marginRightUnits() : YGUnitPoint};
     ygStyle.margin()[YGEdgeTop] =
-        YGValue{m_style->marginTop(), m_style->marginTopUnits()};
+        YGValue{m_style->marginTop(),
+                hasLayoutParent ? m_style->marginTopUnits() : YGUnitPoint};
     ygStyle.margin()[YGEdgeBottom] =
-        YGValue{m_style->marginBottom(), m_style->marginBottomUnits()};
+        YGValue{m_style->marginBottom(),
+                hasLayoutParent ? m_style->marginBottomUnits() : YGUnitPoint};
+
     ygStyle.padding()[startEdge] =
         YGValue{m_style->paddingLeft(), m_style->paddingLeftUnits()};
     ygStyle.padding()[endEdge] =
@@ -798,6 +870,8 @@ void LayoutComponent::syncStyle()
     ygStyle.flexDirection() = m_style->flexDirection();
     ygStyle.flexWrap() = m_style->flexWrap();
     ygStyle.direction() = m_style->direction();
+    ygStyle.aspectRatio() = YGFloatOptional(
+        m_style->aspectRatio() > 0 ? m_style->aspectRatio() : NAN);
 
     ygNode.setStyle(ygStyle);
 }
@@ -894,15 +968,24 @@ void LayoutComponent::propagateSizeToChildren(ContainerComponent* component)
     }
 }
 
-void LayoutComponent::calculateLayout()
+void LayoutComponent::calculateLayoutInternal(float availableWidth,
+                                              float availableHeight)
 {
+    auto actualAvailWidth =
+        std::isnan(availableWidth) && m_style && m_style->intrinsicallySized()
+            ? availableWidth
+            : width();
+    auto actualAvailHeight =
+        std::isnan(availableHeight) && m_style && m_style->intrinsicallySized()
+            ? availableHeight
+            : height();
     YGNodeCalculateLayout(&m_layoutData->node,
-                          width(),
-                          height(),
+                          actualAvailWidth,
+                          actualAvailHeight,
                           YGDirection::YGDirectionInherit);
 }
 
-bool LayoutComponent::styleDisplayHidden()
+bool LayoutComponent::styleDisplayHidden() const
 {
     if (m_style == nullptr)
     {
@@ -965,12 +1048,6 @@ void LayoutComponent::updateLayoutBounds(bool animate)
     }
     node.setHasNewLayout(false);
 
-    if (m_style != nullptr && styleDisplayHidden() != m_displayHidden)
-    {
-        m_displayHidden = styleDisplayHidden();
-        propagateCollapse(isCollapsed());
-    }
-
     for (auto child : children())
     {
         auto layout = LayoutNodeProvider::from(child);
@@ -983,6 +1060,30 @@ void LayoutComponent::updateLayoutBounds(bool animate)
     auto yogaLayout = node.getLayout();
     Layout newLayout = layoutFromYoga(yogaLayout);
     m_layoutPadding = layoutPaddingFromYoga(yogaLayout);
+
+    if (m_justAddedToHost)
+    {
+        m_justAddedToHost = false;
+        // In cases were we have a host (ie, Component List, etc), we
+        // don't want to animate the x/y/width/height because the initial
+        // x/y/width/height will have been 0,0,0,0 within the parent host.
+        //
+        // Instead, we want to the position/size to start at whatever this
+        // layout's computed position is within its host.
+        //
+        // We'll keep this as an entirely seperate code path because
+        // this may be useful in adding support for animate in/out of
+        // items in an ArtboardHost.
+        m_layout = newLayout;
+        auto animationData = currentAnimationData();
+        animationData->from = newLayout;
+        animationData->to = newLayout;
+        animationData->elapsedSeconds = 0.0f;
+        propagateSize();
+        markWorldTransformDirty();
+        m_forceUpdateLayoutBounds = false;
+        return;
+    }
 
     if (animate && animates())
     {
@@ -1028,6 +1129,11 @@ void LayoutComponent::updateLayoutBounds(bool animate)
 
 bool LayoutComponent::advanceComponent(float elapsedSeconds, AdvanceFlags flags)
 {
+    if ((flags & AdvanceFlags::NewFrame) != AdvanceFlags::NewFrame)
+    {
+        return false;
+    }
+
     return applyInterpolation(elapsedSeconds,
                               (flags & AdvanceFlags::Animate) ==
                                       AdvanceFlags::Animate ||
@@ -1151,6 +1257,13 @@ bool LayoutComponent::cascadeLayoutStyle(
                 interpolator(),
                 interpolationTime(),
                 actualDirection());
+        }
+        else if (auto provider = LayoutNodeProvider::from(child))
+        {
+            provider->cascadeLayoutStyle(interpolation(),
+                                         interpolator(),
+                                         interpolationTime(),
+                                         actualDirection());
         }
     }
     return updated;
@@ -1323,8 +1436,17 @@ void LayoutComponent::positionTypeChanged()
     }
     if (m_style->positionType() == YGPositionTypeAbsolute)
     {
-        m_style->positionLeft(layoutBounds().left());
-        m_style->positionTop(layoutBounds().top());
+        // Preserve computed position only if left/top were not explicitly keyed
+        // this frame. If keyed, honor those values and only set units
+        // appropriately.
+        if (!m_positionLeftChanged)
+        {
+            m_style->positionLeft(layoutBounds().left());
+        }
+        if (!m_positionTopChanged)
+        {
+            m_style->positionTop(layoutBounds().top());
+        }
         m_style->positionRight(0);
         m_style->positionBottom(0);
         m_style->positionLeftUnitsValue(YGUnitPoint);
@@ -1352,12 +1474,6 @@ void LayoutComponent::scaleTypeChanged()
     {
         return;
     }
-    m_style->widthUnitsValue(m_style->widthScaleType() == LayoutScaleType::fixed
-                                 ? YGUnitPoint
-                                 : YGUnitAuto);
-    m_style->heightUnitsValue(
-        m_style->heightScaleType() == LayoutScaleType::fixed ? YGUnitPoint
-                                                             : YGUnitAuto);
     m_style->intrinsicallySizedValue(
         m_style->widthScaleType() == LayoutScaleType::hug ||
         m_style->heightScaleType() == LayoutScaleType::hug);
@@ -1370,6 +1486,7 @@ void LayoutComponent::displayChanged()
     {
         return;
     }
+    propagateCollapse(isCollapsed());
     markLayoutNodeDirty();
 }
 
@@ -1424,6 +1541,9 @@ void LayoutComponent::onDirty(ComponentDirt value) {}
 bool LayoutComponent::mainAxisIsRow() { return true; }
 
 bool LayoutComponent::mainAxisIsColumn() { return false; }
+void LayoutComponent::calculateLayoutInternal(float availableWidth,
+                                              float availableHeight)
+{}
 #endif
 
 LayoutComponent::~LayoutComponent()

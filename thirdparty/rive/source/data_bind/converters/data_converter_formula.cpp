@@ -10,14 +10,17 @@
 #include "rive/data_bind/converters/formula/formula_token_parenthesis_open.hpp"
 #include "rive/data_bind/converters/formula/formula_token_parenthesis_close.hpp"
 #include "rive/animation/arithmetic_operation.hpp"
+#include "rive/random_mode.hpp"
 #include "rive/function_type.hpp"
 #include "rive/math/math_types.hpp"
+#include "rive/math/random.hpp"
 #include <cmath>
 
 using namespace rive;
 
 DataConverterFormula::~DataConverterFormula()
 {
+    unbind();
     if (m_isInstance)
     {
 
@@ -34,6 +37,8 @@ DataConverterFormula::~DataConverterFormula()
             delete token;
         }
     }
+    m_outputQueue.clear();
+    m_tokens.clear();
 }
 
 int DataConverterFormula::getPrecedence(FormulaToken* token)
@@ -71,7 +76,7 @@ int DataConverterFormula::getPrecedence(FormulaToken* token)
     return 0;
 }
 
-void DataConverterFormula::initialize()
+void DataConverterFormula::calculateFormula()
 {
     // convert the formula to Reverse Polish Notation using a version of
     // the Shunting yard algorithm
@@ -218,16 +223,14 @@ float DataConverterFormula::applyOperation(float left,
 
 float DataConverterFormula::getRandom(int randomIndex)
 {
-#ifdef TESTING
-    int testInt = 0;
-#endif
+    if (randomModeValue() == static_cast<uint32_t>(RandomMode::always))
+    {
+        return RandomProvider::generateRandomFloat();
+    }
+
     while (m_randoms.size() <= randomIndex)
     {
-#ifdef TESTING
-        m_randoms.push_back(testInt++);
-#else
-        m_randoms.push_back((float)rand() / float(RAND_MAX));
-#endif
+        m_randoms.push_back(RandomProvider::generateRandomFloat());
     }
     return m_randoms[randomIndex];
 }
@@ -495,7 +498,7 @@ void DataConverterFormula::addOutputToken(FormulaToken* token,
 Core* DataConverterFormula::clone() const
 {
     auto cloned = DataConverterFormulaBase::clone()->as<DataConverterFormula>();
-    // Instead of cloning all tookens, we can clone the processed tokens that
+    // Instead of cloning all tokens, we can clone the processed tokens that
     // will be used during conversion
     for (auto& token : m_outputQueue)
     {
@@ -506,6 +509,15 @@ Core* DataConverterFormula::clone() const
                 : tokenArgumentsCountSearch->second;
         auto clonedToken = token->clone()->as<FormulaToken>();
         cloned->addOutputToken(clonedToken, argumentsCount);
+        int index = 0;
+        for (auto& dataBind : dataBinds())
+        {
+            if (dataBind->target() == token)
+            {
+                cloned->dataBinds()[index]->target(clonedToken);
+            }
+            index++;
+        }
     }
     cloned->isInstance(true);
     return cloned;
@@ -514,24 +526,27 @@ Core* DataConverterFormula::clone() const
 void DataConverterFormula::bindFromContext(DataContext* dataContext,
                                            DataBind* dataBind)
 {
-    for (auto& token : m_outputQueue)
+    DataConverter::bindFromContext(dataContext, dataBind);
+    if (dataBind && dataBind->source())
     {
-        token->bindFromContext(dataContext, dataBind);
+        m_source = ref_rcp<ViewModelInstanceValue>(dataBind->source());
+        m_source->addDependent(this);
+    }
+}
+
+void DataConverterFormula::addDirt(ComponentDirt value, bool recurse)
+{
+    if (randomModeValue() == static_cast<uint32_t>(RandomMode::sourceChange))
+    {
+        m_randoms.clear();
     }
 }
 
 void DataConverterFormula::unbind()
 {
-    for (auto& token : m_outputQueue)
+    if (m_source)
     {
-        token->unbind();
-    }
-}
-
-void DataConverterFormula::update()
-{
-    for (auto& token : m_outputQueue)
-    {
-        token->update();
+        m_source->removeDependent(this);
+        m_source = nullptr;
     }
 }

@@ -1,0 +1,34 @@
+#ifndef _RIVE_SCRIPT_INPUT_VIEW_MODEL_PROPERTY_HPP_
+#define _RIVE_SCRIPT_INPUT_VIEW_MODEL_PROPERTY_HPP_
+#include "rive/generated/script_input_viewmodel_property_base.hpp"
+#include "rive/assets/script_asset.hpp"
+#include "rive/scripted/scripted_object.hpp"
+#include "rive/data_bind_path_referencer.hpp"
+#include <stdio.h>
+namespace rive
+{
+class ViewModelInstanceValue;
+
+class ScriptInputViewModelProperty : public ScriptInputViewModelPropertyBase,
+                                     public ScriptInput,
+                                     public DataBindPathReferencer
+{
+private:
+    ViewModelInstanceValue* m_viewModelInstanceValue;
+
+public:
+    ~ScriptInputViewModelProperty();
+    void decodeDataBindPathIds(Span<const uint8_t> value) override;
+    void copyDataBindPathIds(
+        const ScriptInputViewModelPropertyBase& object) override;
+    void initScriptedValue() override;
+    bool validateForScriptInit() override;
+    bool validateForColdScriptInit() override;
+    bool hydrateScriptInput() override;
+    bool validateHydrationPrerequisites() override;
+    StatusCode import(ImportStack& importStack) override;
+    StatusCode onAddedClean(CoreContext* context) override;
+};
+} // namespace rive
+
+#endif

@@ -8,9 +8,11 @@
 #include "rive/shapes/paint/blend_mode.hpp"
 #include "rive/shapes/paint/shape_paint.hpp"
 #include "rive/shapes/path_composer.hpp"
+#include "rive/artboard.hpp"
 #include "rive/clip_result.hpp"
 #include "rive/math/contour_measure.hpp"
 #include "rive/math/raw_path.hpp"
+#include "rive/profiler/profiler_macros.h"
 #include <algorithm>
 
 using namespace rive;
@@ -76,7 +78,13 @@ float Shape::length()
         float l = 0;
         for (auto path : m_Paths)
         {
-            RawPath source = path->rawPath().transform(path->pathTransform());
+            const bool pathDirty = path->hasDirt(ComponentDirt::Path |
+                                                 ComponentDirt::WorldTransform |
+                                                 ComponentDirt::NSlicer);
+            RawPath temp;
+            const RawPath& base =
+                pathDirty ? (path->buildPath(temp), temp) : path->rawPath();
+            RawPath source = base.transform(path->pathTransform());
             ContourMeasureIter iter(&source);
             while (auto contour = iter.next())
             {
@@ -91,6 +99,7 @@ float Shape::length()
 void Shape::pathChanged()
 {
     m_PathComposer.addDirt(ComponentDirt::Path, true);
+    m_WorldLength = -1;
     for (auto constraint : constraints())
     {
         constraint->addDirt(ComponentDirt::Path);
@@ -111,34 +120,41 @@ void Shape::addToRenderPath(RenderPath* path, const Mat2D& transform)
     }
 }
 
+void Shape::addToRawPath(RawPath& path, const Mat2D* transform)
+{
+    if (isFlagged(PathFlags::local))
+    {
+        Mat2D xform = transform == nullptr ? worldTransform()
+                                           : (*transform) * worldTransform();
+        path.addPath(*m_PathComposer.localPath()->rawPath(), &xform);
+    }
+    else
+    {
+        path.addPath(*m_PathComposer.worldPath()->rawPath(), transform);
+    }
+}
+
 void Shape::draw(Renderer* renderer)
 {
-    if (renderOpacity() == 0.0f)
+    RIVE_PROF_SCOPE_L(2)
+    auto needsSaveOperation = m_needsSaveOperation || m_ShapePaints.size() > 1;
+    for (auto shapePaint : m_ShapePaints)
     {
-        return;
-    }
-    ClipResult clipResult = applyClip(renderer);
-
-    if (clipResult != ClipResult::emptyClip)
-    {
-        for (auto shapePaint : m_ShapePaints)
+        if (!shapePaint->isVisible())
         {
-            if (!shapePaint->isVisible())
-            {
-                continue;
-            }
-            auto shapePaintPath = shapePaint->pickPath(this);
-            if (shapePaintPath == nullptr)
-            {
-                continue;
-            }
-            shapePaint->draw(renderer, shapePaintPath, worldTransform());
+            continue;
         }
-    }
-
-    if (clipResult != ClipResult::noClip)
-    {
-        renderer->restore();
+        auto shapePaintPath = shapePaint->pickPath(this);
+        if (shapePaintPath == nullptr)
+        {
+            continue;
+        }
+        shapePaint->draw(renderer,
+                         shapePaintPath,
+                         worldTransform(),
+                         false,
+                         nullptr,
+                         needsSaveOperation);
     }
 }
 
@@ -222,6 +238,27 @@ Core* Shape::hitTest(HitInfo* hinfo, const Mat2D& xform)
     return nullptr;
 }
 
+bool Shape::hitTestPoint(const Vec2D& position,
+                         bool skipOnUnclipped,
+                         bool isPrimaryHit)
+{
+    // If we're NOT the primary hit test, don't perform the AABB hit test
+    // just keep walking up the tree
+    if (!isPrimaryHit)
+    {
+        return Component::hitTestPoint(position, skipOnUnclipped, isPrimaryHit);
+    }
+    // Only perform the AABB hit test if we're the primary hit test
+    // This prevents walking up the tree and having another shape return a
+    // false hit test because we're not hitting their AABB
+    if (hitTestAABB(position) &&
+        Component::hitTestPoint(position, skipOnUnclipped, isPrimaryHit))
+    {
+        return hitTestHiFi(position, 2);
+    }
+    return false;
+}
+
 void Shape::buildDependencies()
 {
     // Make sure to propagate the call to PathComposer as it's no longer part of
@@ -285,6 +322,8 @@ bool Shape::isEmpty()
     }
     return true;
 }
+
+bool Shape::willDraw() { return Super::willDraw() && renderOpacity() != 0.0f; }
 
 // Do constraints need to be marked as dirty too? From tests it doesn't seem
 // they do.

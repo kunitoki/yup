@@ -9,10 +9,138 @@ using namespace rive;
 #include "rive/text/text_value_run.hpp"
 #include "rive/text/text_modifier_group.hpp"
 #include "rive/shapes/paint/shape_paint.hpp"
+#include "rive/shapes/paint/color.hpp"
+#include "rive/shapes/paint/blend_mode.hpp"
+#include "rive/shapes/paint/image_sampler.hpp"
+#include "rive/viewmodel/viewmodel_instance_string.hpp"
 #include "rive/artboard.hpp"
 #include "rive/factory.hpp"
 #include "rive/clip_result.hpp"
+#include "rive/generated/core_registry.hpp"
 #include <limits>
+
+TextValueRunProperty::TextValueRunProperty(
+    Core* textValueRun,
+    TextValueRunListener* textValueRunListener,
+    ViewModelInstanceValue* instanceValue,
+    uint16_t propertyKey,
+    SymbolType symbolType) :
+    PropertySymbolDependentSingle(textValueRun,
+                                  textValueRunListener,
+                                  instanceValue,
+                                  propertyKey),
+    m_symbolType(symbolType)
+{}
+
+void TextValueRunProperty::writeValue()
+{
+    switch (m_symbolType)
+    {
+        case SymbolType::textContent:
+            CoreRegistry::setString(
+                m_coreObject,
+                m_propertyKey,
+                m_instanceValue->as<ViewModelInstanceString>()
+                    ->propertyValue());
+            break;
+        case SymbolType::textStyle:
+        {
+            auto stylePaints =
+                static_cast<TextValueRunListener*>(m_coreObjectListener)
+                    ->text()
+                    ->textStylePaints();
+            auto styleValue =
+                m_instanceValue->as<ViewModelInstanceString>()->propertyValue();
+            for (size_t i = 0; i < stylePaints.size(); i++)
+            {
+                auto stylePaint = stylePaints[i];
+                if (stylePaint->name() == styleValue)
+                {
+                    m_coreObject->as<TextValueRun>()->style(stylePaint);
+                    break;
+                }
+                else if (i == 0)
+                {
+                    m_coreObject->as<TextValueRun>()->style(stylePaint);
+                }
+            }
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+TextValueRunListener::TextValueRunListener(TextValueRun* textValueRun,
+                                           rcp<ViewModelInstance> instance,
+                                           Text* text) :
+    CoreObjectListener(textValueRun, instance), m_text(text)
+{
+    createProperties();
+}
+
+void TextValueRunListener::markDirty() { m_text->markShapeDirty(); }
+
+void TextValueRunListener::createProperties()
+{
+    createPropertyListener(SymbolType::textStyle);
+    createPropertyListener(SymbolType::textContent);
+}
+
+TextValueRunProperty* TextValueRunListener::createSinglePropertyListener(
+    SymbolType symbolType)
+{
+    uint16_t propertyKey = 0;
+    switch (symbolType)
+    {
+        case SymbolType::textStyle:
+            propertyKey = TextValueRunBase::styleIdPropertyKey;
+            break;
+        case SymbolType::textContent:
+            propertyKey = TextValueRunBase::textPropertyKey;
+            break;
+        default:
+            break;
+    }
+    auto prop = m_instance->propertyValue(symbolType);
+    if (prop != nullptr && prop->is<ViewModelInstanceValue>())
+    {
+        auto vpl = new TextValueRunProperty(m_core,
+                                            this,
+                                            prop,
+                                            propertyKey,
+                                            symbolType);
+        return vpl;
+    }
+    return nullptr;
+}
+
+void TextValueRunListener::createPropertyListener(SymbolType symbolType)
+{
+    TextValueRunProperty* listener = nullptr;
+    switch (symbolType)
+    {
+        case SymbolType::textStyle:
+        case SymbolType::textContent:
+            listener = createSinglePropertyListener(symbolType);
+            break;
+        default:
+            break;
+    }
+    if (listener != nullptr)
+    {
+        listener->writeValue();
+        m_properties.push_back(listener);
+    }
+}
+
+Text::~Text()
+{
+    for (auto& textValueRun : m_valueRunListeners)
+    {
+        delete textValueRun;
+    }
+}
 
 Vec2D Text::measureLayout(float width,
                           LayoutMeasureMode widthMode,
@@ -64,8 +192,9 @@ void Text::clearRenderStyles()
         style->rewindPath();
     }
     m_renderStyles.clear();
+    m_drawCommands.clear();
 
-    for (TextValueRun* textValueRun : m_runs)
+    for (TextValueRun* textValueRun : m_allRuns)
     {
         textValueRun->resetHitTest();
     }
@@ -80,6 +209,7 @@ TextBoundsInfo Text::computeBoundsInfo()
     float y = 0.0f;
     float minY = 0.0f;
     float maxWidth = 0.0f;
+    float ellipsedHeight = 0;
     if (textOrigin() == TextOrigin::baseline && !m_lines.empty() &&
         !m_lines[0].empty())
     {
@@ -92,8 +222,7 @@ TextBoundsInfo Text::computeBoundsInfo()
     // Find the line to put the ellipsis on (line before the one that
     // overflows).
     bool wantEllipsis = overflow() == TextOverflow::ellipsis &&
-                        effectiveSizing() == TextSizing::fixed &&
-                        verticalAlign() == VerticalTextAlign::top;
+                        effectiveSizing() == TextSizing::fixed;
 
     int lastLineIndex = -1;
     for (const SimpleArray<GlyphLine>& paragraphLines : m_lines)
@@ -112,6 +241,7 @@ TextBoundsInfo Text::computeBoundsInfo()
             lastLineIndex++;
             if (wantEllipsis && y + line.bottom <= effectiveHeight())
             {
+                ellipsedHeight = y + line.bottom;
                 ellipsisLine++;
             }
         }
@@ -122,12 +252,12 @@ TextBoundsInfo Text::computeBoundsInfo()
         }
         y += paragraphSpace;
     }
-    auto totalHeight = y;
     if (wantEllipsis && ellipsisLine == -1)
     {
         // Nothing fits, just show the first line and ellipse it.
         ellipsisLine = 0;
     }
+    auto totalHeight = ellipsisLine > 0 ? ellipsedHeight : y;
     isEllipsisLineLast = lastLineIndex == ellipsisLine;
     return {
         minY,
@@ -342,8 +472,6 @@ void Text::buildRenderStyles()
                 GlyphID glyphId = run->glyphs[glyphIndex];
                 float advance = run->advances[glyphIndex];
 
-                RawPath path = font->getPath(glyphId);
-
                 // Step 6.1: translate to the glyph's origin and scale.
                 Vec2D curPos(curX, renderY);
                 float centerX = advance / 2.0f;
@@ -385,21 +513,41 @@ void Text::buildRenderStyles()
                                          curPos.y + offset.y) *
                     pathTransform;
 
-                path.transformInPlace(pathTransform);
-
-                assert(run->styleId < m_runs.size());
-                TextValueRun* textValueRun = m_runs[run->styleId];
+                assert(run->styleId < m_allRuns.size());
+                TextValueRun* textValueRun = m_allRuns[run->styleId];
                 TextStylePaint* style = textValueRun->style();
-                // TextValueRun::onAddedDirty botches loading if it cannot
-                // resolve a style, so we're confident we have a style here.
                 assert(style != nullptr);
 
-                if (style->addPath(path, opacity))
+                // Check for color glyph (emoji) -- draw individually
+                // with per-layer colors instead of accumulating.
+                if (font->isColorGlyph(glyphId))
                 {
-                    // This was the first path added to the style, so let's
-                    // mark it in our draw list.
-                    m_renderStyles.push_back(style);
-                    style->propagateOpacity(renderOpacity());
+                    TextDrawCommand cmd;
+                    cmd.type = TextDrawCommand::kColorGlyph;
+                    cmd.colorGlyph = {run->font,
+                                      glyphId,
+                                      pathTransform,
+                                      style->foregroundColor(),
+                                      opacity};
+                    m_drawCommands.push_back(std::move(cmd));
+                }
+                else
+                {
+                    RawPath path = font->getPath(glyphId);
+                    path.transformInPlace(pathTransform);
+
+                    if (style->addPath(path, opacity))
+                    {
+                        // This was the first path added to the style, so
+                        // let's mark it in our draw list.
+                        m_renderStyles.push_back(style);
+                        style->propagateOpacity(renderOpacity());
+
+                        TextDrawCommand cmd;
+                        cmd.type = TextDrawCommand::kStylePath;
+                        cmd.style = style;
+                        m_drawCommands.push_back(std::move(cmd));
+                    }
                 }
 
                 // Bounds of the glyph
@@ -486,7 +634,7 @@ skipLines:
 #endif
 
     // Step 8: cleanup
-    for (TextValueRun* textValueRun : m_runs)
+    for (TextValueRun* textValueRun : m_allRuns)
     {
         if (textValueRun->isHitTarget())
         {
@@ -503,33 +651,104 @@ const TextStylePaint* Text::styleFromShaperId(uint16_t id) const
 
 void Text::draw(Renderer* renderer)
 {
-    ClipResult clipResult = applyClip(renderer);
-    if (clipResult == ClipResult::noClip)
+    if (m_needsSaveOperation)
     {
-        // We didn't clip, so make sure to save as we'll be doing some
-        // transformations.
         renderer->save();
     }
-    if (clipResult != ClipResult::emptyClip)
+    // For now we need to check both empty() and hasRenderPath() in
+    // ShapePaintPath because the raw path gets cleared when the render path
+    // is created.
+    if (overflow() == TextOverflow::clipped &&
+        (!m_clipPath.empty() || m_clipPath.hasRenderPath()))
     {
-        // For now we need to check both empty() and hasRenderPath() in
-        // ShapePaintPath because the raw path gets cleared when the render path
-        // is created.
-        if (overflow() == TextOverflow::clipped &&
-            (!m_clipPath.empty() || m_clipPath.hasRenderPath()))
+        renderer->clipPath(m_clipPath.renderPath(this));
+    }
+    auto worldTransform = shapeWorldTransform();
+    for (auto& cmd : m_drawCommands)
+    {
+        if (cmd.type == TextDrawCommand::kStylePath)
         {
-            renderer->clipPath(m_clipPath.renderPath(this));
+            cmd.style->draw(renderer, worldTransform);
         }
-        auto worldTransform = shapeWorldTransform();
-        for (auto style : m_renderStyles)
+        else
         {
-            style->draw(renderer, worldTransform);
+            drawColorGlyph(renderer, cmd.colorGlyph, worldTransform);
+        }
+    }
+    if (m_needsSaveOperation)
+    {
+        renderer->restore();
+    }
+}
+
+void Text::drawColorGlyph(Renderer* renderer,
+                          const TextDrawCommand::ColorGlyphInfo& info,
+                          const Mat2D& worldTransform)
+{
+    std::vector<Font::ColorGlyphLayer> layers;
+    size_t count =
+        info.font->getColorLayers(info.glyphId, layers, info.foregroundColor);
+    if (count == 0)
+    {
+        return;
+    }
+
+    Factory* factory = artboard()->factory();
+    renderer->save();
+    renderer->transform(worldTransform * info.transform);
+
+    for (auto& layer : layers)
+    {
+        if (layer.paintType == Font::ColorGlyphPaintType::image)
+        {
+            // Decode and draw bitmap emoji (SBIX/CBDT).
+            ColorGlyphCacheKey cacheKey{info.font.get(), info.glyphId};
+            auto it = m_emojiImageCache.find(cacheKey);
+            if (it == m_emojiImageCache.end())
+            {
+                auto image = factory->decodeImage(
+                    {layer.imageBytes.data(), layer.imageBytes.size()});
+                it =
+                    m_emojiImageCache.emplace(cacheKey, std::move(image)).first;
+            }
+            if (it->second != nullptr)
+            {
+                renderer->save();
+                // Transform from glyph space: position at bearing and
+                // scale from image pixels to glyph extent units.
+                float scaleX = layer.imageExtentX / (float)layer.imageWidth;
+                float scaleY = layer.imageExtentY / (float)layer.imageHeight;
+                renderer->transform(Mat2D(scaleX,
+                                          0,
+                                          0,
+                                          scaleY,
+                                          layer.imageBearingX,
+                                          layer.imageBearingY));
+                renderer->drawImage(it->second.get(),
+                                    ImageSampler::LinearClamp(),
+                                    BlendMode::srcOver,
+                                    info.opacity);
+                renderer->restore();
+            }
+        }
+        else
+        {
+            auto renderPath =
+                factory->makeRenderPath(layer.path, FillRule::nonZero);
+            auto renderPaint = factory->makeRenderPaint();
+            renderPaint->style(RenderPaintStyle::fill);
+            renderPaint->color(colorModulateOpacity(layer.color, info.opacity));
+            renderer->drawPath(renderPath.get(), renderPaint.get());
         }
     }
     renderer->restore();
 }
 
-void Text::addRun(TextValueRun* run) { m_runs.push_back(run); }
+void Text::addRun(TextValueRun* run)
+{
+    m_runs.push_back(run);
+    m_allRuns.push_back(run);
+}
 
 void Text::addModifierGroup(TextModifierGroup* group)
 {
@@ -618,7 +837,7 @@ bool Text::makeStyled(StyledText& styledText, bool withModifiers) const
 {
     styledText.clear();
     uint16_t runIndex = 0;
-    for (auto valueRun : m_runs)
+    for (auto valueRun : m_allRuns)
     {
         auto style = valueRun->style();
         const std::string& text = valueRun->text();
@@ -724,9 +943,9 @@ void Text::update(ComponentDirt value)
         bool precomputeModifierCoverage = modifierRangesNeedShape();
         bool parentIsLayoutNotArtboard =
             parent()->is<LayoutComponent>() && !parent()->is<Artboard>();
-        if (precomputeModifierCoverage)
+        if (precomputeModifierCoverage &&
+            makeStyled(m_modifierStyledText, false))
         {
-            makeStyled(m_modifierStyledText, false);
             auto runs = m_modifierStyledText.runs();
             m_modifierShape =
                 runs[0].font->shapeText(m_modifierStyledText.unichars(), runs);
@@ -785,6 +1004,7 @@ void Text::update(ComponentDirt value)
         }
         m_orderedLines.clear();
         m_ellipsisRun = {};
+        m_emojiImageCache.clear();
 
         // Immediately build render styles so dimensions get computed.
         buildRenderStyles();
@@ -853,8 +1073,7 @@ Vec2D Text::measure(Vec2D maxSize)
         }
         int ellipsisLine = -1;
         bool wantEllipsis = overflow() == TextOverflow::ellipsis &&
-                            sizing() == TextSizing::fixed &&
-                            verticalAlign() == VerticalTextAlign::top;
+                            sizing() == TextSizing::fixed;
 
         for (const SimpleArray<GlyphLine>& paragraphLines : lines)
         {
@@ -947,6 +1166,7 @@ void Text::originYChanged()
 
 #else
 // Text disabled.
+Text::~Text() {}
 void Text::draw(Renderer* renderer) {}
 Core* Text::hitTest(HitInfo*, const Mat2D&) { return nullptr; }
 void Text::addRun(TextValueRun* run) {}
@@ -997,3 +1217,64 @@ TextAlign Text::align() const
     return m_layoutDirection == LayoutDirection::ltr ? TextAlign::left
                                                      : TextAlign::right;
 }
+
+void Text::updateList(std::vector<rcp<ViewModelInstanceListItem>>* list)
+{
+#ifdef WITH_RIVE_TEXT
+    buildTextStylePaints();
+    m_allRuns.clear();
+    m_allRuns.assign(m_runs.begin(), m_runs.end());
+    auto currentSize = m_valueRunListeners.size();
+    size_t index = 0;
+    for (auto& listItem : *list)
+    {
+        auto instance = listItem->viewModelInstance();
+        if (instance)
+        {
+            TextValueRun* textRun;
+            if (index < currentSize)
+            {
+                auto textRunListener = m_valueRunListeners[index];
+                textRunListener->remap(instance);
+                textRun = textRunListener->textValueRun();
+            }
+            else
+            {
+                textRun = new TextValueRun();
+                textRun->textComponent(this);
+                auto textRunListener =
+                    new TextValueRunListener(textRun, instance, this);
+                m_valueRunListeners.push_back(textRunListener);
+            }
+            if (textRun)
+            {
+                m_allRuns.push_back(textRun);
+            }
+            index++;
+        }
+    }
+    while (m_valueRunListeners.size() > index)
+    {
+        auto valueRun = m_valueRunListeners.back();
+        m_valueRunListeners.pop_back();
+        delete valueRun;
+    }
+    markShapeDirty();
+#endif
+}
+
+#ifdef WITH_RIVE_TEXT
+void Text::buildTextStylePaints()
+{
+    if (m_textStylePaints.size() == 0)
+    {
+        for (auto& child : children())
+        {
+            if (child->coreType() == TextStylePaint::typeKey)
+            {
+                m_textStylePaints.push_back(child->as<TextStylePaint>());
+            }
+        }
+    }
+}
+#endif

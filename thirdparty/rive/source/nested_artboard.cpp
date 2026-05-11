@@ -1,47 +1,72 @@
 #include "rive/nested_artboard.hpp"
 #include "rive/artboard.hpp"
 #include "rive/backboard.hpp"
+#include "rive/file.hpp"
 #include "rive/importers/import_stack.hpp"
 #include "rive/importers/backboard_importer.hpp"
+#include "rive/input/focusable.hpp"
 #include "rive/nested_animation.hpp"
 #include "rive/animation/nested_state_machine.hpp"
+#include "rive/data_bind/data_bind_path.hpp"
 #include "rive/clip_result.hpp"
+#include "rive/text/text_input.hpp"
 #include <limits>
 #include <cassert>
 
 using namespace rive;
 
 NestedArtboard::NestedArtboard() {}
-NestedArtboard::~NestedArtboard() {}
+NestedArtboard::~NestedArtboard()
+{
+    // Release dependencies of nested animations BEFORE m_Instance is destroyed.
+    // The nested animations (like NestedStateMachine) hold
+    // StateMachineInstances that reference m_Instance. If we don't release them
+    // here, their destructors (called later when the parent artboard destroys
+    // them from m_Objects) will try to access the already-freed m_Instance.
+    for (auto& animation : m_NestedAnimations)
+    {
+        animation->releaseDependencies();
+    }
+    // Also release the bound state machine's dependencies if it exists
+    if (m_boundNestedStateMachine)
+    {
+        m_boundNestedStateMachine->releaseDependencies();
+    }
+
+    // Clear ViewModelInstance references to break potential ref cycles.
+    // The ViewModelInstance and its property values are also in the artboard's
+    // m_Objects list and will be cleaned up there.
+    m_viewModelInstance = nullptr;
+    m_statefulViewModelInstance = nullptr;
+}
 
 Core* NestedArtboard::clone() const
 {
     NestedArtboard* nestedArtboard =
         static_cast<NestedArtboard*>(NestedArtboardBase::clone());
-    if (m_Artboard == nullptr)
+    nestedArtboard->file(file());
+    if (m_referencedArtboard == nullptr)
     {
         return nestedArtboard;
     }
-    auto ni = m_Artboard->instance();
-    nestedArtboard->nest(ni.release());
+    auto ni = m_referencedArtboard->instance();
+    nestedArtboard->referencedArtboard(ni.release());
     return nestedArtboard;
 }
 
 void NestedArtboard::nest(Artboard* artboard)
 {
-    assert(artboard != nullptr);
-
-    m_Artboard = artboard;
-    if (!m_Artboard->isInstance())
+    m_referencedArtboard = artboard;
+    if (!m_referencedArtboard->isInstance())
     {
         // We're just marking the source artboard so we can later instance from
         // it. No need to advance it or change any of its properties.
         // E.g. at import time, we return here.
         return;
     }
-    m_Artboard->frameOrigin(false);
-    m_Artboard->opacity(renderOpacity());
-    m_Artboard->volume(artboard->volume());
+    m_referencedArtboard->frameOrigin(false);
+    m_referencedArtboard->opacity(renderOpacity());
+    m_referencedArtboard->volume(artboard->volume());
     m_Instance = nullptr;
     if (artboard->isInstance())
     {
@@ -50,7 +75,139 @@ void NestedArtboard::nest(Artboard* artboard)
     }
     // This allows for swapping after initial load (after onAddedClean has
     // already been called).
-    m_Artboard->host(this);
+    m_referencedArtboard->host(this);
+}
+
+bool NestedArtboard::tryScheduleBindStateful()
+{
+
+    if (m_statefulViewModelInstance != nullptr && artboardInstance())
+    {
+        m_hasPendingStatefulBinding = true;
+        return true;
+    }
+    return false;
+}
+
+void NestedArtboard::bindStateful()
+{
+    m_hasPendingStatefulBinding = false;
+    bindArtboardInstance(m_statefulViewModelInstance, m_dataContext);
+}
+
+void NestedArtboard::bindArtboardInstance(rcp<ViewModelInstance> instance,
+                                          rcp<DataContext> parent)
+{
+    artboardInstance()->bindViewModelInstance(instance, parent);
+    for (auto& animation : m_NestedAnimations)
+    {
+        if (animation->is<NestedStateMachine>())
+        {
+            animation->as<NestedStateMachine>()->dataContext(
+                artboardInstance()->dataContext());
+        }
+    }
+}
+
+void NestedArtboard::clearNestedAnimations()
+{
+    for (auto& animation : m_NestedAnimations)
+    {
+        // Release the nested animation dependencies. The file will take care of
+        // destroying the nested animation itself.
+        animation->releaseDependencies();
+    }
+    m_NestedAnimations.clear();
+}
+
+void NestedArtboard::updateArtboard(
+    ViewModelInstanceArtboard* viewModelInstanceArtboard)
+{
+    clearDataContext();
+    clearNestedAnimations();
+    m_boundNestedStateMachine = nullptr;
+    // If asset == nullptr and propertyValue == -1, it means that the user
+    // explicitly set the asset to null, so only in that case we clear the
+    // artboard
+    if (viewModelInstanceArtboard != nullptr &&
+        viewModelInstanceArtboard->asset() == nullptr &&
+        viewModelInstanceArtboard->propertyValue() == -1)
+    {
+        if (m_referencedArtboard)
+        {
+            m_referencedArtboard->host(nullptr);
+            m_referencedArtboard = nullptr;
+        }
+        m_Instance = nullptr;
+        m_statefulViewModelInstance = nullptr;
+        return;
+    }
+
+    Artboard* artboard =
+        findArtboard(viewModelInstanceArtboard, parentArtboard(), m_file);
+    if (artboard != nullptr)
+    {
+        auto artboardInstance = artboard->instance();
+        if (artboard->stateMachineCount() > 0)
+        {
+
+            auto nestedStateMachine = new NestedStateMachine();
+            nestedStateMachine->animationId(0);
+            nestedStateMachine->initializeAnimation(artboardInstance.get());
+            addNestedAnimation(nestedStateMachine);
+
+            m_boundNestedStateMachine.reset(static_cast<NestedStateMachine*>(
+                nestedStateMachine)); // take ownership
+        }
+        referencedArtboard(artboardInstance.release());
+
+        if (artboard->isStateful())
+        {
+            const bool cacheStale =
+                m_statefulViewModelInstance == nullptr ||
+                m_statefulViewModelInstance->viewModelId() !=
+                    artboard->viewModelId();
+            if (cacheStale)
+            {
+                auto vm = m_file != nullptr
+                              ? m_file->viewModel(artboard->viewModelId())
+                              : nullptr;
+                m_statefulViewModelInstance =
+                    vm != nullptr ? m_file->createDefaultViewModelInstance(vm)
+                                  : nullptr;
+                if (m_statefulViewModelInstance != nullptr)
+                {
+                    m_file->completeViewModelProperties(
+                        m_statefulViewModelInstance.get());
+                }
+            }
+        }
+        else
+        {
+            m_statefulViewModelInstance = nullptr;
+        }
+
+        if (viewModelInstanceArtboard->boundViewModelInstance())
+        {
+            bindViewModelInstance(
+                viewModelInstanceArtboard->boundViewModelInstance(),
+                m_dataContext);
+        }
+        else if (tryScheduleBindStateful())
+        {
+            bindStateful();
+        }
+        else if (m_dataContext != nullptr && m_viewModelInstance == nullptr)
+        {
+            internalDataContext(m_dataContext);
+        }
+        else if (m_viewModelInstance != nullptr)
+        {
+            bindViewModelInstance(m_viewModelInstance, m_dataContext);
+        }
+        // TODO: @hernan review what dirt to add
+        addDirt(ComponentDirt::Filthy);
+    }
 }
 
 static Mat2D makeTranslate(const Artboard* artboard)
@@ -61,34 +218,32 @@ static Mat2D makeTranslate(const Artboard* artboard)
 
 void NestedArtboard::draw(Renderer* renderer)
 {
-    if (m_Artboard == nullptr)
+    if (m_needsSaveOperation)
     {
-        return;
-    }
-    ClipResult clipResult = applyClip(renderer);
-    if (clipResult == ClipResult::noClip)
-    {
-        // We didn't clip, so make sure to save as we'll be doing some
-        // transformations.
         renderer->save();
     }
-    if (clipResult != ClipResult::emptyClip)
+    renderer->transform(worldTransform());
+    m_referencedArtboard->drawInternal(renderer);
+    if (m_needsSaveOperation)
     {
-        renderer->transform(worldTransform());
-        m_Artboard->draw(renderer);
+        renderer->restore();
     }
-    renderer->restore();
+}
+
+bool NestedArtboard::willDraw()
+{
+    return Super::willDraw() && m_referencedArtboard != nullptr;
 }
 
 Core* NestedArtboard::hitTest(HitInfo* hinfo, const Mat2D& xform)
 {
-    if (m_Artboard == nullptr)
+    if (m_referencedArtboard == nullptr)
     {
         return nullptr;
     }
     hinfo->mounts.push_back(this);
-    auto mx = xform * worldTransform() * makeTranslate(m_Artboard);
-    if (auto c = m_Artboard->hitTest(hinfo, mx))
+    auto mx = xform * worldTransform() * makeTranslate(m_referencedArtboard);
+    if (auto c = m_referencedArtboard->hitTest(hinfo, mx))
     {
         return c;
     }
@@ -96,15 +251,38 @@ Core* NestedArtboard::hitTest(HitInfo* hinfo, const Mat2D& xform)
     return nullptr;
 }
 
+bool NestedArtboard::hitTestHost(const Vec2D& position,
+                                 bool skipOnUnclipped,
+                                 ArtboardInstance* artboard)
+{
+    return parent()->hitTestPoint(worldTransform() * position,
+                                  skipOnUnclipped,
+                                  false);
+}
+
+Vec2D NestedArtboard::hostTransformPoint(const Vec2D& vec,
+                                         ArtboardInstance* artboardInstance)
+{
+    auto localVec = Vec2D::transformMat2D(vec, worldTransform());
+    auto ab = artboard();
+    return ab ? ab->rootTransform(localVec) : localVec;
+}
+
+Mat2D NestedArtboard::worldTransformForArtboard(ArtboardInstance*)
+{
+    return worldTransform();
+}
+
 StatusCode NestedArtboard::import(ImportStack& importStack)
 {
+    importDataBindPath(importStack);
     auto backboardImporter =
         importStack.latest<BackboardImporter>(Backboard::typeKey);
     if (backboardImporter == nullptr)
     {
         return StatusCode::MissingObject;
     }
-    backboardImporter->addNestedArtboard(this);
+    backboardImporter->addArtboardReferencer(this);
 
     return Super::import(importStack);
 }
@@ -122,7 +300,8 @@ StatusCode NestedArtboard::onAddedClean(CoreContext* context)
     // does require that we always use an artboard instance (not just the source
     // artboard) when working with nested artboards, but in general this is good
     // practice for any loaded Rive file.
-    assert(m_Artboard == nullptr || m_Artboard == m_Instance.get());
+    assert(m_referencedArtboard == nullptr ||
+           m_referencedArtboard == m_Instance.get());
 
     if (m_Instance)
     {
@@ -130,29 +309,75 @@ StatusCode NestedArtboard::onAddedClean(CoreContext* context)
         {
             animation->initializeAnimation(m_Instance.get());
         }
-        m_Artboard->host(this);
+        m_referencedArtboard->host(this);
     }
+
+    // ViewModelInstance children are only added to NestedArtboards
+    // that wrap a stateful component Artboard.
+    for (auto child : children())
+    {
+        if (child->is<ViewModelInstance>())
+        {
+            auto vmi = child->as<ViewModelInstance>();
+            // Take ownership of the VMI's initial ref count. The VMI starts
+            // with ref count 1 from construction. The rcp constructor takes
+            // this ref without adding another. NestedArtboard now owns the VMI.
+            m_statefulViewModelInstance = rcp<ViewModelInstance>(vmi);
+            m_file->completeViewModelProperties(
+                m_statefulViewModelInstance.get());
+            break;
+        }
+    }
+    tryScheduleBindStateful();
+
     return Super::onAddedClean(context);
 }
 
 void NestedArtboard::update(ComponentDirt value)
 {
     Super::update(value);
-    if (m_Artboard == nullptr)
+    if (m_referencedArtboard == nullptr)
     {
         return;
     }
+    if (hasDirt(value, ComponentDirt::WorldTransform))
+    {
+        // Mark semantic bounds dirty for nodes inside the nested artboard.
+        // Their root-space bounds depend on the host's world transform.
+        if (m_Instance != nullptr)
+        {
+            m_Instance->markSemanticBoundaryTransformDirty();
+        }
+    }
     if (hasDirt(value, ComponentDirt::RenderOpacity))
     {
-        m_Artboard->opacity(renderOpacity());
+        m_referencedArtboard->opacity(renderOpacity());
     }
     if (hasDirt(value, ComponentDirt::Components))
     {
         // We intentionally discard whether or not this updated because by the
         // end of the pass all the dirt is removed and only another advance of
         // animations/statemachines can re-add it.
-        m_Artboard->updatePass(false);
+        m_referencedArtboard->updatePass(false);
     }
+}
+
+bool NestedArtboard::collapse(bool value)
+{
+    if (!Super::collapse(value))
+    {
+        return false;
+    }
+
+    auto* nestedInstance = artboardInstance();
+    if (nestedInstance == nullptr)
+    {
+        return true;
+    }
+    // Semantic-only collapse via the artboard boundary node. Only touches
+    // SemanticData nodes — non-semantic components stay untouched.
+    nestedInstance->collapseSemanticBoundary(value);
+    return true;
 }
 
 bool NestedArtboard::hasNestedStateMachines() const
@@ -229,7 +454,7 @@ NestedInput* NestedArtboard::input(std::string name,
 bool NestedArtboard::worldToLocal(Vec2D world, Vec2D* local)
 {
     assert(local != nullptr);
-    if (m_Artboard == nullptr)
+    if (m_referencedArtboard == nullptr)
     {
         return false;
     }
@@ -267,25 +492,30 @@ void NestedArtboard::controlSize(Vec2D size,
 
 void NestedArtboard::decodeDataBindPathIds(Span<const uint8_t> value)
 {
-    BinaryReader reader(value);
-    while (!reader.reachedEnd())
-    {
-        auto val = reader.readVarUintAs<uint32_t>();
-        m_DataBindPathIdsBuffer.push_back(val);
-    }
+    decodeDataBindPath(value);
 }
 
 void NestedArtboard::copyDataBindPathIds(const NestedArtboardBase& object)
 {
-    m_DataBindPathIdsBuffer =
-        object.as<NestedArtboard>()->m_DataBindPathIdsBuffer;
+    copyDataBindPath(object.as<NestedArtboard>()->dataBindPath());
 }
 
-void NestedArtboard::internalDataContext(DataContext* value)
+void NestedArtboard::internalDataContext(rcp<DataContext> value)
 {
+    m_dataContext = value;
+    m_viewModelInstance = nullptr;
+
     if (artboardInstance() != nullptr)
     {
-        artboardInstance()->internalDataContext(value, false);
+        // If we have a stateful ViewModelInstance, bind it to the artboard
+        // instance.
+        if (tryScheduleBindStateful())
+        {
+            return;
+        }
+
+        // Non-stateful path: just propagate the data context.
+        artboardInstance()->internalDataContext(value);
         for (auto& animation : m_NestedAnimations)
         {
             if (animation->is<NestedStateMachine>())
@@ -296,55 +526,117 @@ void NestedArtboard::internalDataContext(DataContext* value)
     }
 }
 
+void NestedArtboard::relinkDataContext(rcp<ViewModelInstance> viewModelInstance)
+{
+    m_viewModelInstance = viewModelInstance;
+    auto instance = artboardInstance(0);
+    if (instance && !instance->isStateful())
+    {
+        auto dataContext = instance->dataContext();
+        if (dataContext != nullptr)
+        {
+            if (dataContext->viewModelInstance() != viewModelInstance)
+            {
+                dataContext->viewModelInstance(viewModelInstance);
+            }
+        }
+        instance->relinkDataContext();
+    }
+}
+
 void NestedArtboard::clearDataContext()
 {
     if (artboardInstance() != nullptr)
     {
         artboardInstance()->clearDataContext();
-    }
-}
-
-void NestedArtboard::populateDataBinds(std::vector<DataBind*>* dataBinds)
-{
-    if (artboardInstance() != nullptr)
-    {
-        artboardInstance()->populateDataBinds(dataBinds);
-    }
-}
-
-void NestedArtboard::bindViewModelInstance(
-    rcp<ViewModelInstance> viewModelInstance,
-    DataContext* parent)
-{
-    if (artboardInstance() != nullptr)
-    {
-        artboardInstance()->bindViewModelInstance(viewModelInstance,
-                                                  parent,
-                                                  false);
         for (auto& animation : m_NestedAnimations)
         {
             if (animation->is<NestedStateMachine>())
             {
-                animation->as<NestedStateMachine>()->dataContext(
-                    artboardInstance()->dataContext());
+                animation->as<NestedStateMachine>()->clearDataContext();
             }
         }
     }
 }
 
+void NestedArtboard::unbind()
+{
+    if (artboardInstance() != nullptr)
+    {
+        artboardInstance()->unbind();
+    }
+}
+
+void NestedArtboard::updateDataBinds()
+{
+    if (artboardInstance() != nullptr && !isPaused())
+    {
+        artboardInstance()->updateDataBinds();
+    }
+}
+
+void NestedArtboard::bindViewModelInstance(
+    rcp<ViewModelInstance> viewModelInstance,
+    rcp<DataContext> parent)
+{
+    m_dataContext = parent;
+    m_viewModelInstance = viewModelInstance;
+    if (artboardInstance() != nullptr)
+    {
+        // Stateful nested artboards must keep their own instance as the local
+        // root context, while the incoming instance remains the parent context.
+        auto instanceToBind = m_statefulViewModelInstance != nullptr
+                                  ? m_statefulViewModelInstance
+                                  : viewModelInstance;
+        bindArtboardInstance(instanceToBind, parent);
+    }
+}
+
+float NestedArtboard::calculateLocalElapsedSeconds(float elapsedSeconds)
+{
+    auto localElapsedSeconds = elapsedSeconds * (speed() >= 0 ? speed() : 1);
+    if (quantize() >= 0)
+    {
+        m_cumulatedSeconds += localElapsedSeconds;
+        auto quantizedSeconds = 1 / quantize();
+        if (m_cumulatedSeconds > quantizedSeconds)
+        {
+            localElapsedSeconds =
+                std::floor(m_cumulatedSeconds / quantizedSeconds) *
+                quantizedSeconds;
+            m_cumulatedSeconds -= localElapsedSeconds;
+        }
+        else
+        {
+            localElapsedSeconds = 0;
+        }
+    }
+    return localElapsedSeconds;
+}
+
 bool NestedArtboard::advanceComponent(float elapsedSeconds, AdvanceFlags flags)
 {
-    if (m_Artboard == nullptr || isCollapsed())
+    if (m_referencedArtboard == nullptr || isCollapsed() || isPaused())
     {
         return false;
+    }
+    if (m_hasPendingStatefulBinding)
+    {
+        bindStateful();
     }
     bool keepGoing = false;
     bool advanceNested =
         (flags & AdvanceFlags::AdvanceNested) == AdvanceFlags::AdvanceNested;
+    auto localElapsedSeconds = calculateLocalElapsedSeconds(elapsedSeconds);
+    bool newFrame = (flags & AdvanceFlags::NewFrame) == AdvanceFlags::NewFrame;
+    // If the elapsed time is 0 because of quantization, we still want to
+    // continue advancing until the cumulated time is flushed
+    if (localElapsedSeconds == 0 && quantize() >= 0 && newFrame)
+    {
+        return true;
+    }
     if (advanceNested)
     {
-        bool newFrame =
-            (flags & AdvanceFlags::NewFrame) == AdvanceFlags::NewFrame;
         for (auto animation : m_NestedAnimations)
         {
             // If it is not a new frame, we only advance state machines. And we
@@ -358,7 +650,7 @@ bool NestedArtboard::advanceComponent(float elapsedSeconds, AdvanceFlags flags)
                 {
                     if (animation->as<NestedStateMachine>()->tryChangeState())
                     {
-                        if (animation->advance(elapsedSeconds, newFrame))
+                        if (animation->advance(localElapsedSeconds, newFrame))
                         {
                             keepGoing = true;
                         }
@@ -368,7 +660,7 @@ bool NestedArtboard::advanceComponent(float elapsedSeconds, AdvanceFlags flags)
             else
             {
 
-                if (animation->advance(elapsedSeconds, newFrame))
+                if (animation->advance(localElapsedSeconds, newFrame))
                 {
                     keepGoing = true;
                 }
@@ -377,15 +669,42 @@ bool NestedArtboard::advanceComponent(float elapsedSeconds, AdvanceFlags flags)
     }
 
     auto advancingFlags = flags & ~AdvanceFlags::IsRoot;
-    if (m_Artboard->advanceInternal(elapsedSeconds, advancingFlags))
+    if (m_referencedArtboard->advanceInternal(localElapsedSeconds,
+                                              advancingFlags))
     {
         keepGoing = true;
     }
-    if (m_Artboard->hasDirt(ComponentDirt::Components))
+    if (m_referencedArtboard->hasDirt(ComponentDirt::Components))
     {
         // The animation(s) caused the artboard to need an update.
         addDirt(ComponentDirt::Components);
     }
 
     return keepGoing;
+}
+
+void NestedArtboard::reset()
+{
+    if (m_referencedArtboard)
+    {
+        m_referencedArtboard->reset();
+    }
+    if (m_statefulViewModelInstance != nullptr)
+    {
+        m_statefulViewModelInstance->advanced();
+    }
+}
+
+void NestedArtboard::file(File* value) { m_file = value; }
+
+File* NestedArtboard::file() const { return m_file; }
+
+int NestedArtboard::referencedArtboardId() { return artboardId(); }
+
+void NestedArtboard::referencedArtboard(Artboard* artboard)
+{
+    assert(artboard != nullptr);
+    ArtboardReferencer::referencedArtboard(artboard);
+    nest(artboard);
+    tryScheduleBindStateful();
 }

@@ -173,6 +173,7 @@ bool Image::createTextureIfNotPresent (GraphicsContext& context) const
         width,
         height,
         rive::math::msb (width | height),
+        rive::GPUTextureFormat::rgba32,
         getRawData().data());
 
     return true;

@@ -26,12 +26,18 @@ void TextStyle::addFeature(TextStyleFeature* feature)
 
 void TextStyle::onDirty(ComponentDirt dirt)
 {
-    if ((dirt & ComponentDirt::TextShape) == ComponentDirt::TextShape)
+    // This can happen if the Text is in a Solo which is propagating its
+    // collapsed state during its onAddedClean (which could be called before
+    // ours, so m_text might still be null).
+    if (m_text != nullptr)
     {
-        m_text->markShapeDirty();
-        if (m_variationHelper != nullptr)
+        if ((dirt & ComponentDirt::TextShape) == ComponentDirt::TextShape)
         {
-            m_variationHelper->addDirt(ComponentDirt::TextShape);
+            m_text->markShapeDirty();
+            if (m_variationHelper != nullptr)
+            {
+                m_variationHelper->addDirt(ComponentDirt::TextShape);
+            }
         }
     }
 }
@@ -49,7 +55,7 @@ StatusCode TextStyle::onAddedClean(CoreContext* context)
     // This ensures context propagates to variation helper too.
     if (!m_variations.empty() || !m_styleFeatures.empty())
     {
-        m_variationHelper = rivestd::make_unique<TextVariationHelper>(this);
+        m_variationHelper = std::make_unique<TextVariationHelper>(this);
     }
     if (m_variationHelper != nullptr)
     {
@@ -72,11 +78,24 @@ const rcp<Font> TextStyle::font() const
         return m_variableFont;
     }
 
+    // Lazily build the variable font if variations/features are present but
+    // the variable font hasn't been created yet. This ensures the very first
+    // shape/measure uses the intended axes (e.g. wght) rather than the font's
+    // default axis values.
+    if ((!m_variations.empty() || !m_styleFeatures.empty()))
+    {
+        updateVariableFont();
+        if (m_variableFont != nullptr)
+        {
+            return m_variableFont;
+        }
+    }
+
     auto asset = fontAsset();
     return asset == nullptr ? nullptr : asset->font();
 }
 
-void TextStyle::updateVariableFont()
+void TextStyle::updateVariableFont() const
 {
     auto asset = fontAsset();
     rcp<Font> baseFont = asset == nullptr ? nullptr : asset->font();
@@ -118,7 +137,7 @@ void TextStyle::buildDependencies()
 
 uint32_t TextStyle::assetId() { return this->fontAssetId(); }
 
-void TextStyle::setAsset(FileAsset* asset)
+void TextStyle::setAsset(rcp<FileAsset> asset)
 {
     if (asset->is<FontAsset>())
     {

@@ -1,7 +1,6 @@
 #ifndef _RIVE_TEXT_VALUE_RUN_HPP_
 #define _RIVE_TEXT_VALUE_RUN_HPP_
 #include "rive/generated/text/text_value_run_base.hpp"
-#include "rive/animation/hittable.hpp"
 #include "rive/text/utf.hpp"
 #include "rive/math/rectangles_to_contour.hpp"
 
@@ -9,7 +8,7 @@ namespace rive
 {
 class TextStylePaint;
 class Text;
-class TextValueRun : public TextValueRunBase, public Hittable
+class TextValueRun : public TextValueRunBase
 {
     friend class HitTextRun;
 
@@ -17,7 +16,9 @@ public:
     StatusCode onAddedClean(CoreContext* context) override;
     StatusCode onAddedDirty(CoreContext* context) override;
     TextStylePaint* style() { return m_style; }
+    void style(TextStylePaint* value) { m_style = value; }
     Text* textComponent() const;
+    void textComponent(Text* value) { m_textComponent = value; };
     uint32_t length()
     {
         if (m_length == -1)
@@ -47,11 +48,14 @@ public:
     // adding hit rects (via addHitRect) again.
     void computeHitContours();
 
-    bool hitTestAABB(const Vec2D& position) override;
-    bool hitTestHiFi(const Vec2D& position, float hitRadius) override;
+    bool hitTestAABB(const Vec2D& position);
+    bool hitTestHiFi(const Vec2D& position, float hitRadius);
 
     bool isHitTarget() const { return m_isHitTarget; }
     void isHitTarget(bool value);
+    bool hitTestPoint(const Vec2D& position,
+                      bool skipOnUnclipped,
+                      bool isPrimaryHit) override;
 
 protected:
     void textChanged() override;
@@ -65,6 +69,7 @@ private:
     TextStylePaint* m_style = nullptr;
     uint32_t m_length = -1;
     bool canHitTest() const;
+    Text* m_textComponent = nullptr;
 };
 } // namespace rive
 

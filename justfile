@@ -97,3 +97,6 @@ python_uninstall:
 [working-directory: 'python']
 python_test *TEST_OPTS:
   python -m pytest -s {{TEST_OPTS}}
+
+rive_update REF="runtime-v0.1.62":
+  uv run python tools/rive_update.py --rive-ref {{REF}} --allow-dirty --keep-work-dir

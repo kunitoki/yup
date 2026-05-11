@@ -8,7 +8,7 @@
 #include "rive/renderer/gl/render_target_gl.hpp"
 #include "shaders/constants.glsl"
 
-#include "generated/shaders/glsl.exports.h"
+#include "generated/shaders/glsl.glsl.exports.h"
 
 #ifdef RIVE_WEBGL
 #include <emscripten/emscripten.h>
@@ -19,8 +19,19 @@ EM_JS(bool,
       (EMSCRIPTEN_WEBGL_CONTEXT_HANDLE gl),
       {
           gl = GL.getContext(gl).GLctx;
-          gl.pls = gl["getExtension"]("WEBGL_shader_pixel_local_storage");
-          return Boolean(gl.pls && gl.pls["isCoherent"]());
+          const pls = gl["getExtension"]("WEBGL_shader_pixel_local_storage");
+          if (Boolean(
+                  pls && pls["isCoherent"]() &&
+                  // WEBGL_shader_pixel_local_storage has breaking changes from
+                  // time to time, while it's still a draft extension. A 5th
+                  // argument was added to this function in 2026. Only use the
+                  // extension if we are on the latest spec (with 5 arguments).
+                  pls["framebufferTexturePixelLocalStorageWEBGL"].length == 5))
+          {
+              gl.pls = pls;
+              return true;
+          }
+          return false;
       });
 
 EM_JS(void,
@@ -29,7 +40,8 @@ EM_JS(void,
        GLint plane,
        GLuint backingtexture,
        GLint level,
-       GLint layer),
+       GLint layer,
+       GLenum usage),
       {
           const pls = GL.getContext(gl).GLctx.pls;
           if (pls)
@@ -38,7 +50,8 @@ EM_JS(void,
                   plane,
                   GL.textures[backingtexture],
                   level,
-                  layer);
+                  layer,
+                  usage);
           }
       });
 
@@ -123,23 +136,19 @@ bool webgl_enable_WEBGL_shader_pixel_local_storage_coherent()
         emscripten_webgl_get_current_context());
 }
 
-bool webgl_enable_WEBGL_provoking_vertex()
-{
-    return enable_WEBGL_provoking_vertex(
-        emscripten_webgl_get_current_context());
-}
-
 void glFramebufferTexturePixelLocalStorageANGLE(GLint plane,
                                                 GLuint backingtexture,
                                                 GLint level,
-                                                GLint layer)
+                                                GLint layer,
+                                                GLenum usage)
 {
     framebufferTexturePixelLocalStorageWEBGL(
         emscripten_webgl_get_current_context(),
         plane,
         backingtexture,
         level,
-        layer);
+        layer,
+        usage);
 }
 
 void glFramebufferPixelLocalClearValuefvANGLE(GLint plane,
@@ -180,6 +189,12 @@ void glGetFramebufferPixelLocalStorageParameterivANGLE(GLint plane,
         pname);
 }
 
+bool webgl_enable_WEBGL_provoking_vertex()
+{
+    return enable_WEBGL_provoking_vertex(
+        emscripten_webgl_get_current_context());
+}
+
 void glProvokingVertexANGLE(GLenum provokeMode)
 {
     provokingVertexWEBGL(emscripten_webgl_get_current_context(), provokeMode);
@@ -188,8 +203,6 @@ void glProvokingVertexANGLE(GLenum provokeMode)
 
 namespace rive::gpu
 {
-using DrawBufferMask = RenderTargetGL::DrawBufferMask;
-
 static GLenum webgl_load_op(gpu::LoadAction loadAction)
 {
     switch (loadAction)
@@ -207,23 +220,23 @@ static GLenum webgl_load_op(gpu::LoadAction loadAction)
 class RenderContextGLImpl::PLSImplWebGL
     : public RenderContextGLImpl::PixelLocalStorageImpl
 {
-    bool supportsRasterOrdering(
-        const GLCapabilities& capabilities) const override
+    void getSupportedInterlockModes(
+        const GLCapabilities& capabilities,
+        PlatformFeatures* platformFeatures) const override
     {
-        return capabilities.ANGLE_shader_pixel_local_storage_coherent;
-    }
-
-    bool supportsFragmentShaderAtomics(
-        const GLCapabilities& capabilities) const override
-    {
-        return false;
+        assert(capabilities.ANGLE_shader_pixel_local_storage);
+        if (capabilities.ANGLE_shader_pixel_local_storage_coherent)
+        {
+            platformFeatures->supportsRasterOrderingMode = true;
+        }
     }
 
     void activatePixelLocalStorage(RenderContextGLImpl* renderContextImpl,
                                    const FlushDescriptor& desc) override
     {
         auto renderTarget = static_cast<RenderTargetGL*>(desc.renderTarget);
-        renderTarget->allocateInternalPLSTextures(desc.interlockMode);
+        renderTarget->allocateWebGLPLSBacking(
+            renderContextImpl->capabilities());
 
         auto framebufferRenderTarget =
             lite_rtti_cast<FramebufferRenderTargetGL*>(renderTarget);
@@ -237,9 +250,10 @@ class RenderContextGLImpl::PLSImplWebGL
                 // Copy the framebuffer's contents to our offscreen texture.
                 framebufferRenderTarget->bindDestinationFramebuffer(
                     GL_READ_FRAMEBUFFER);
-                framebufferRenderTarget->bindInternalFramebuffer(
-                    GL_DRAW_FRAMEBUFFER,
-                    DrawBufferMask::color);
+                framebufferRenderTarget->bindTextureFramebuffer(
+                    GL_DRAW_FRAMEBUFFER);
+                renderContextImpl->state()->setPipelineState(
+                    gpu::COLOR_ONLY_PIPELINE_STATE);
                 glutils::BlitFramebuffer(desc.renderTargetUpdateBounds,
                                          renderTarget->height());
             }
@@ -256,7 +270,8 @@ class RenderContextGLImpl::PLSImplWebGL
                                                      clearColor4f);
         }
         GLenum clipLoadAction =
-            (desc.combinedShaderFeatures & gpu::ShaderFeatures::ENABLE_CLIPPING)
+            enums::is_flag_set(desc.combinedShaderFeatures,
+                               gpu::ShaderFeatures::ENABLE_CLIPPING)
                 ? GL_LOAD_OP_ZERO_ANGLE
                 : GL_DONT_CARE;
         GLenum loadOps[4] = {webgl_load_op(desc.colorLoadAction),
@@ -270,7 +285,7 @@ class RenderContextGLImpl::PLSImplWebGL
         glBeginPixelLocalStorageANGLE(4, loadOps);
     }
 
-    void deactivatePixelLocalStorage(RenderContextGLImpl*,
+    void deactivatePixelLocalStorage(RenderContextGLImpl* renderContextImpl,
                                      const FlushDescriptor& desc) override
     {
         constexpr static GLenum kStoreOps[4] = {GL_STORE_OP_STORE_ANGLE,
@@ -289,11 +304,12 @@ class RenderContextGLImpl::PLSImplWebGL
         {
             // We rendered to an offscreen texture. Copy back to the external
             // target FBO.
-            framebufferRenderTarget->bindInternalFramebuffer(
-                GL_READ_FRAMEBUFFER,
-                DrawBufferMask::color);
+            framebufferRenderTarget->bindTextureFramebuffer(
+                GL_READ_FRAMEBUFFER);
             framebufferRenderTarget->bindDestinationFramebuffer(
                 GL_DRAW_FRAMEBUFFER);
+            renderContextImpl->state()->setPipelineState(
+                gpu::COLOR_ONLY_PIPELINE_STATE);
             glutils::BlitFramebuffer(desc.renderTargetUpdateBounds,
                                      framebufferRenderTarget->height());
         }

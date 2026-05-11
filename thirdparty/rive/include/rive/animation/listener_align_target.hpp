@@ -8,8 +8,7 @@ class ListenerAlignTarget : public ListenerAlignTargetBase
 {
 public:
     void perform(StateMachineInstance* stateMachineInstance,
-                 Vec2D position,
-                 Vec2D previousPosition) const override;
+                 const ListenerInvocation& invocation) const override;
 };
 } // namespace rive
 

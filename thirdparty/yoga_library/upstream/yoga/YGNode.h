@@ -27,6 +27,7 @@ struct YGNodeFlags {
   bool measureUsesContext : 1;
   bool baselineUsesContext : 1;
   bool printUsesContext : 1;
+  bool hasError : 1;
 };
 #pragma pack(pop)
 
@@ -103,6 +104,8 @@ public:
   void print(void*);
 
   bool getHasNewLayout() const { return flags_.hasNewLayout; }
+
+  bool getHasError() const { return flags_.hasError; }
 
   YGNodeType getNodeType() const {
     return static_cast<YGNodeType>(flags_.nodeType);
@@ -248,6 +251,8 @@ public:
   void setHasNewLayout(bool hasNewLayout) {
     flags_.hasNewLayout = hasNewLayout;
   }
+
+  void setHasError(bool hasError) { flags_.hasError = hasError; }
 
   void setNodeType(YGNodeType nodeType) {
     flags_.nodeType = static_cast<uint8_t>(nodeType);
