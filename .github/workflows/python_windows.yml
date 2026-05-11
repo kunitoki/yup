@@ -40,7 +40,7 @@ jobs:
         - { os: windows-latest, python: 311, platform_id: win_arm64, cibw_archs: ARM64 }
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 

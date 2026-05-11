@@ -35,7 +35,7 @@ jobs:
   configure:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Setup Java
@@ -53,7 +53,7 @@ jobs:
         run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_TARGET_ANDROID=ON -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
       - name: Cache Configure
         id: cache-build
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: ${{ runner.workspace }}/build
           key: android-build-${{ github.sha }}
@@ -62,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [configure]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - name: Setup Java
@@ -76,7 +76,7 @@ jobs:
       uses: nttld/setup-ndk@v1
       with:
         ndk-version: ${{env.NDK_VERSION}}
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build
@@ -93,7 +93,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [configure]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - name: Setup Java
@@ -107,7 +107,7 @@ jobs:
       uses: nttld/setup-ndk@v1
       with:
         ndk-version: ${{env.NDK_VERSION}}
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build

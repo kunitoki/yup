@@ -34,7 +34,6 @@
 
     searchpaths:        include
     appleFrameworks:    ImageIO
-    enableARC:          1
 
   END_YUP_MODULE_DECLARATION
 

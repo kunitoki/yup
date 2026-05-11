@@ -61,7 +61,6 @@ For main module headers (e.g., `yup_graphics.h`), include this declaration block
 
     dependencies:       yup_graphics [other_dependencies]
     searchpaths:        native
-    enableARC:          1
 
   END_YUP_MODULE_DECLARATION
 

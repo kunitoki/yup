@@ -163,11 +163,11 @@ bool openDocument(const String& fileName, const String& parameters, const Array<
                 StringArray params;
                 params.addTokens(parameters, true);
 
-                NSMutableArray* paramArray = [[NSMutableArray new] autorelease];
+                NSMutableArray* paramArray = [NSMutableArray array];
                 for (int i = 0; i < params.size(); ++i)
                     [paramArray addObject:yupStringToNS(params[i])];
 
-                NSMutableDictionary* envDict = [[NSMutableDictionary new] autorelease];
+                NSMutableDictionary* envDict = [NSMutableDictionary dictionary];
                 if (environment)
                 {
                     for (int i = 0; i < environment->size(); ++i)
@@ -202,7 +202,7 @@ bool openDocument(const String& fileName, const String& parameters, const Array<
 
                 YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
-                NSMutableDictionary* dict = [[NSMutableDictionary new] autorelease];
+                NSMutableDictionary* dict = [NSMutableDictionary dictionary];
 
                 if (params.size())
                 {
@@ -481,14 +481,11 @@ class DirectoryIterator::NativeIterator::Pimpl
     {
         YUP_AUTORELEASEPOOL
         {
-            enumerator = [[[NSFileManager defaultManager] enumeratorAtPath:yupStringToNS(directory.getFullPathName())] retain];
+            enumerator = [[NSFileManager defaultManager] enumeratorAtPath:yupStringToNS(directory.getFullPathName())];
         }
     }
 
-    ~Pimpl()
-    {
-        [enumerator release];
-    }
+    ~Pimpl() = default;
 
     bool next(String& filenameFound,
               bool* const isDir,

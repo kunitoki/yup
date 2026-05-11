@@ -333,6 +333,100 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_module_collect_objc_sources output_variable)
+    set (objc_sources "")
+    foreach (source_file IN LISTS ARGN)
+        if (source_file MATCHES "^.*\\.(m|mm)$")
+            list (APPEND objc_sources "${source_file}")
+        endif()
+    endforeach()
+
+    set (${output_variable} "${objc_sources}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_apply_objc_arc_to_sources target_name)
+    if (NOT YUP_PLATFORM_APPLE OR NOT TARGET "${target_name}")
+        return()
+    endif()
+
+    set (objc_sources ${ARGN})
+    if (NOT objc_sources)
+        return()
+    endif()
+
+    set_property (SOURCE ${objc_sources}
+        TARGET_DIRECTORY ${target_name}
+        APPEND PROPERTY COMPILE_OPTIONS "-fobjc-arc")
+
+    set_property (SOURCE ${objc_sources}
+        TARGET_DIRECTORY ${target_name}
+        APPEND PROPERTY XCODE_FILE_ATTRIBUTES "RequiresObjCArc")
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_collect_objc_sources_from_target target_name output_variable visited_variable)
+    set (arc_sources "${${output_variable}}")
+    set (visited_targets "${${visited_variable}}")
+
+    if (NOT TARGET "${target_name}")
+        set (${output_variable} "${arc_sources}" PARENT_SCOPE)
+        set (${visited_variable} "${visited_targets}" PARENT_SCOPE)
+        return()
+    endif()
+
+    get_target_property (aliased_target "${target_name}" ALIASED_TARGET)
+    if (aliased_target)
+        set (target_name "${aliased_target}")
+    endif()
+
+    if ("${target_name}" IN_LIST visited_targets)
+        set (${output_variable} "${arc_sources}" PARENT_SCOPE)
+        set (${visited_variable} "${visited_targets}" PARENT_SCOPE)
+        return()
+    endif()
+
+    list (APPEND visited_targets "${target_name}")
+
+    get_target_property (target_arc_sources "${target_name}" YUP_MODULE_ARC_SOURCES)
+    if (target_arc_sources)
+        list (APPEND arc_sources ${target_arc_sources})
+    endif()
+
+    foreach (link_property IN ITEMS INTERFACE_LINK_LIBRARIES LINK_LIBRARIES)
+        get_target_property (target_libraries "${target_name}" ${link_property})
+        foreach (target_library IN LISTS target_libraries)
+            _yup_module_collect_objc_sources_from_target ("${target_library}" arc_sources visited_targets)
+        endforeach()
+    endforeach()
+
+    set (${output_variable} "${arc_sources}" PARENT_SCOPE)
+    set (${visited_variable} "${visited_targets}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_apply_arc_to_target_sources target_name)
+    if (NOT YUP_PLATFORM_APPLE)
+        return()
+    endif()
+
+    set (arc_sources "")
+    set (visited_targets "")
+    foreach (linked_target IN LISTS ARGN)
+        _yup_module_collect_objc_sources_from_target ("${linked_target}" arc_sources visited_targets)
+    endforeach()
+
+    if (arc_sources)
+        list (REMOVE_DUPLICATES arc_sources)
+        _yup_module_apply_objc_arc_to_sources ("${target_name}" ${arc_sources})
+    endif()
+endfunction()
+
+#==============================================================================
+
 function (_yup_module_setup_target module_name
                                    module_path
                                    module_cpp_standard
@@ -344,14 +438,19 @@ function (_yup_module_setup_target module_name
                                    module_libs_paths
                                    module_link_options
                                    module_frameworks
-                                   module_dependencies
-                                   module_arc_enabled)
+                                   module_dependencies)
     if (YUP_PLATFORM_MSFT)
         list (APPEND module_defines NOMINMAX=1 WIN32_LEAN_AND_MEAN=1)
         list (APPEND module_options /bigobj)
     endif()
 
     target_sources (${module_name} INTERFACE ${module_sources})
+
+    set (module_objc_sources "")
+    set (module_arc_sources "")
+    _yup_module_collect_objc_sources (module_objc_sources ${module_sources})
+    set (module_arc_sources "${module_objc_sources}")
+    _yup_module_apply_objc_arc_to_sources ("${module_name}" ${module_arc_sources})
 
     if (module_cpp_standard)
         target_compile_features (${module_name} INTERFACE cxx_std_${module_cpp_standard})
@@ -364,9 +463,12 @@ function (_yup_module_setup_target module_name
         CXX_VISIBILITY_PRESET hidden
         VISIBILITY_INLINES_HIDDEN ON)
 
+    set_target_properties (${module_name} PROPERTIES
+        YUP_MODULE_ARC_SOURCES "${module_arc_sources}")
+
     if (YUP_PLATFORM_APPLE)
         set_target_properties (${module_name} PROPERTIES
-            XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC ${module_arc_enabled}
+            XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC ON
             XCODE_GENERATE_SCHEME OFF)
     endif()
 
@@ -438,7 +540,6 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
     get_target_property (module_link_options ${plugin_client_target} YUP_MODULE_LINK_OPTIONS)
     get_target_property (module_frameworks ${plugin_client_target} YUP_MODULE_FRAMEWORK)
     get_target_property (module_dependencies ${plugin_client_target} YUP_MODULE_DEPENDENCIES)
-    get_target_property (module_arc_enabled ${plugin_client_target} YUP_MODULE_ARC_ENABLED)
 
     list (APPEND module_defines ${plugin_define})
     list (APPEND module_defines YupPlugin_Id="${YUP_ARG_PLUGIN_ID}")
@@ -478,8 +579,7 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
                               "${module_libs_paths}"
                               "${module_link_options}"
                               "${module_frameworks}"
-                              "${module_dependencies}"
-                              "${module_arc_enabled}")
+                              "${module_dependencies}")
 
     _yup_glob_recurse ("${module_path}/${plugin_type}/*" all_module_files)
     target_sources (${custom_target_name} PRIVATE ${all_module_files})
@@ -532,8 +632,6 @@ function (yup_add_module module_path modules_definitions module_group)
             _yup_comma_or_space_separated_list ("${value}" module_${key})
         elseif (${key} MATCHES "^minimumCppStandard$")
             set (module_cpp_standard "${value}")
-        elseif (${key} MATCHES "^enableARC$")
-            _yup_boolean_property ("${value}" module_arc_enabled)
         elseif (${key} MATCHES "^needsPython$")
             _yup_boolean_property ("${value}" module_needs_python)
         elseif (${key} MATCHES "^upstream$")
@@ -550,7 +648,6 @@ function (yup_add_module module_path modules_definitions module_group)
     endforeach()
 
     _yup_set_default (module_cpp_standard "20")
-    _yup_set_default (module_arc_enabled OFF)
     _yup_set_default (module_needs_python OFF)
     _yup_set_default (module_submodules ON)
     _yup_resolve_variable_paths ("${module_searchpaths}" module_searchpaths)
@@ -769,8 +866,7 @@ function (yup_add_module module_path modules_definitions module_group)
                               "${module_libs_paths}"
                               "${module_link_options}"
                               "${module_frameworks}"
-                              "${module_dependencies}"
-                              "${module_arc_enabled}")
+                              "${module_dependencies}")
 
     if (module_upstream_target)
         add_dependencies (${module_name} "${module_upstream_target}")
@@ -799,8 +895,7 @@ function (yup_add_module module_path modules_definitions module_group)
         YUP_MODULE_LIBS_PATHS "${module_libs_paths}"
         YUP_MODULE_LINK_OPTIONS "${module_link_options}"
         YUP_MODULE_FRAMEWORK "${module_frameworks}"
-        YUP_MODULE_DEPENDENCIES "${module_dependencies}"
-        YUP_MODULE_ARC_ENABLED "${module_arc_enabled}")
+        YUP_MODULE_DEPENDENCIES "${module_dependencies}")
 
     # ==== Add Java support for Android if available (after target properties are set)
     if (YUP_PLATFORM_ANDROID AND YUP_BUILD_JAVA_SUPPORT)

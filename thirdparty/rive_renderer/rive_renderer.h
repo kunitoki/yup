@@ -46,7 +46,6 @@
     androidDefines:     RIVE_ANDROID=1
     androidLibs:        EGL GLESv3
     windowsCppStandard: 20
-    enableARC:          1
 
   END_YUP_MODULE_DECLARATION
 

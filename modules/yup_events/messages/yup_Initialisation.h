@@ -212,7 +212,6 @@ class YUP_API ScopedYupInitialiser_GUI final
    -(void) dealloc
    {
        [yupDelegate release];
-       [super dealloc];
    }
 
    - (void) forwardInvocation: (NSInvocation*) anInvocation

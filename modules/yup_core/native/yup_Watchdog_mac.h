@@ -101,7 +101,7 @@ class Watchdog::Impl final
     {
         NSString* newPath = [NSString stringWithUTF8String:folder.getFullPathName().toRawUTF8()];
 
-        paths = [[NSArray arrayWithObject:newPath] retain];
+        paths = [NSArray arrayWithObject:newPath];
 
         context.version = 0l;
         context.info = this;
@@ -112,7 +112,8 @@ class Watchdog::Impl final
         dispatch_queue_t queue = dispatch_queue_create("org.yup.watchdog", DISPATCH_QUEUE_SERIAL);
 
         stream = FSEventStreamCreate(
-            kCFAllocatorDefault, callback, &context, reinterpret_cast<CFArrayRef>(paths),
+            kCFAllocatorDefault, callback, &context,
+            (__bridge CFArrayRef)paths,
             kFSEventStreamEventIdSinceNow, 0.1,
             kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagFileEvents);
 

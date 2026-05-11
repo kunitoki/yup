@@ -34,7 +34,6 @@
 
 - (void)dealloc
 {
-    [super dealloc];
 }
 
 - (void)applicationDidFinishLaunching:(UIApplication* __unused)application
@@ -83,7 +82,7 @@ namespace yup
 int yup_iOSMain(int argc, const char* argv[], void* customDelegatePtr);
 int yup_iOSMain(int argc, const char* argv[], void* customDelegatePtr)
 {
-    Class delegateClass = (customDelegatePtr != nullptr ? reinterpret_cast<Class>(customDelegatePtr) : [YupApplicationDelegate class]);
+    Class delegateClass = (customDelegatePtr != nullptr ? (__bridge Class) customDelegatePtr : [YupApplicationDelegate class]);
 
     return UIApplicationMain(argc, const_cast<char**>(argv), nil, NSStringFromClass(delegateClass));
 }

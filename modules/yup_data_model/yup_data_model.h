@@ -32,7 +32,6 @@
     license:            ISC
 
     dependencies:       yup_events
-    enableARC:          1
 
   END_YUP_MODULE_DECLARATION
 

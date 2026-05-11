@@ -26,7 +26,7 @@ namespace yup
 
 Rectangle<int> getNativeWindowPosition(void* nativeWindow)
 {
-    NSView* view = reinterpret_cast<NSView*>(nativeWindow);
+    NSView* view = (__bridge NSView*) nativeWindow;
     NSWindow* window = [view window];
 
     // Convert view bounds to window coordinates

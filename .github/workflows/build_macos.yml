@@ -30,7 +30,7 @@ jobs:
   configure:
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - name: Configure
@@ -41,7 +41,7 @@ jobs:
         cmake --build ${{ runner.workspace }}/build --config Release --target SDL2-static
     - name: Cache Configure
       id: cache-build
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       with:
         path: ${{ runner.workspace }}/build
         key: macos-build-${{ github.sha }}
@@ -51,10 +51,10 @@ jobs:
     needs: [configure]
     timeout-minutes: 45
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build
@@ -71,10 +71,10 @@ jobs:
     needs: [configure]
     timeout-minutes: 45
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build
@@ -90,10 +90,10 @@ jobs:
     runs-on: macos-latest
     needs: [configure]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build
@@ -108,10 +108,10 @@ jobs:
     runs-on: macos-latest
     needs: [configure]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build
@@ -126,10 +126,10 @@ jobs:
     runs-on: macos-latest
     needs: [configure]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build
@@ -144,10 +144,10 @@ jobs:
     runs-on: macos-latest
     needs: [configure]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build

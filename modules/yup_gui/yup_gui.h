@@ -36,7 +36,6 @@
     appleFrameworks:      Metal
     iosWeakFrameworks:    UniformTypeIdentifiers
     iosSimWeakFrameworks: UniformTypeIdentifiers
-    enableARC:            1
 
   END_YUP_MODULE_DECLARATION
 
