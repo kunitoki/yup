@@ -21,5 +21,6 @@
 
 #include "glad.h"
 
-#include "source/glad.c"
+#include "source/egl.c"
+#include "source/gles2.c"
 #include "source/glad_custom.c"
