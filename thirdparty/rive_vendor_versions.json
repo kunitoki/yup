@@ -14,6 +14,12 @@
     },
     {
       "checkout": "972e52893bf03fd26920d4d191d1a09c7e0b0fa5",
+      "name": "glad",
+      "ref": "runtime-v0.1.62",
+      "version": "0.1.62"
+    },
+    {
+      "checkout": "972e52893bf03fd26920d4d191d1a09c7e0b0fa5",
       "name": "rive_decoders",
       "ref": "runtime-v0.1.62",
       "version": "0.1.62"

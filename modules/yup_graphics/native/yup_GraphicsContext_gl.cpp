@@ -38,14 +38,14 @@ static void GLAPIENTRY err_msg_callback (GLenum source,
                                          const GLchar* message,
                                          const void* userParam)
 {
-    if (type == GL_DEBUG_TYPE_ERROR)
+    if (type == GL_DEBUG_TYPE_ERROR_KHR)
     {
         printf ("GL ERROR: %s\n", message);
         fflush (stdout);
 
         assert (false);
     }
-    else if (type == GL_DEBUG_TYPE_PERFORMANCE)
+    else if (type == GL_DEBUG_TYPE_PERFORMANCE_KHR)
     {
         if (strcmp (message,
                     "API_ID_REDUNDANT_FBO performance warning has been generated. Redundant state "
@@ -73,7 +73,7 @@ public:
     {
 #if RIVE_DESKTOP_GL
         // Load the OpenGL API using glad.
-        if (! gladLoadCustomLoader ((GLADloadproc) options.loaderFunction))
+        if (! gladLoadCustomLoader ((GLADloadfunc) options.loaderFunction))
         {
             fprintf (stderr, "Failed to initialize glad.\n");
             exit (-1);
@@ -105,7 +105,7 @@ public:
 #if RIVE_DESKTOP_GL && DEBUG
         if (GLAD_GL_KHR_debug)
         {
-            glEnable (GL_DEBUG_OUTPUT);
+            glEnable (GL_DEBUG_OUTPUT_KHR);
             glDebugMessageControlKHR (GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
             glDebugMessageCallbackKHR (&err_msg_callback, nullptr);
         }

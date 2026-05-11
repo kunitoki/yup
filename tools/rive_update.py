@@ -576,12 +576,34 @@ def process_include_blocks(manifest: dict[str, Any]) -> int:
     return changed
 
 
-def selected_shader_targets(shader_config: dict[str, Any], skipped_targets: set[str]) -> list[str]:
+def selected_shader_targets(
+    shader_config: dict[str, Any],
+    skipped_targets: set[str],
+    auto_skip_unavailable_optional_targets: bool = False,
+) -> list[str]:
     targets = shader_config.get("targets", [])
     unknown = skipped_targets.difference(targets)
     if unknown:
         raise SystemExit(f"Unknown shader target(s) for --skip-shader-target: {', '.join(sorted(unknown))}")
-    return [target for target in targets if target not in skipped_targets]
+
+    selected = [target for target in targets if target not in skipped_targets]
+    if not auto_skip_unavailable_optional_targets:
+        return selected
+
+    optional_targets = set(shader_config.get("optional_targets", []))
+    required_tools = shader_config.get("required_tools", {})
+    return [
+        target
+        for target in selected
+        if target not in optional_targets
+        or all(shutil.which(tool) is not None for tool in required_tools.get(target, []))
+    ]
+
+
+def auto_skipped_shader_targets(shader_config: dict[str, Any], skipped_targets: set[str]) -> set[str]:
+    requested = set(selected_shader_targets(shader_config, skipped_targets))
+    selected = set(selected_shader_targets(shader_config, skipped_targets, True))
+    return requested.difference(selected)
 
 
 def preflight_shader_generation(dep: dict[str, Any], checkout_dir: Path, skipped_targets: set[str]) -> None:
@@ -595,7 +617,7 @@ def preflight_shader_generation(dep: dict[str, Any], checkout_dir: Path, skipped
 
     missing: dict[str, list[str]] = {}
     required_tools = shader_config.get("required_tools", {})
-    for target in selected_shader_targets(shader_config, skipped_targets):
+    for target in selected_shader_targets(shader_config, skipped_targets, True):
         missing_tools = [tool for tool in required_tools.get(target, []) if shutil.which(tool) is None]
         if missing_tools:
             missing[target] = missing_tools
@@ -611,6 +633,14 @@ def preflight_shader_generation(dep: dict[str, Any], checkout_dir: Path, skipped
     for target in missing:
         lines.append(f"  --skip-shader-target {target}")
     raise SystemExit("\n".join(lines))
+
+
+def find_venv_site_packages(venv_dir: Path) -> Path | None:
+    candidates = [
+        *(venv_dir / "lib").glob("python*/site-packages"),
+        venv_dir / "Lib" / "site-packages",
+    ]
+    return next((path for path in candidates if path.exists()), None)
 
 
 def run_shader_generation(dep: dict[str, Any], checkout_dir: Path, skipped_targets: set[str]) -> int:
@@ -630,10 +660,11 @@ def run_shader_generation(dep: dict[str, Any], checkout_dir: Path, skipped_targe
     if package:
         run([str(python_bin), "-m", "pip", "install", package])
 
-    site_packages = next((venv_dir / "lib").glob("python*/site-packages"), None)
+    site_packages = find_venv_site_packages(venv_dir)
     flags = [f"--ply-path={site_packages}"] if site_packages else []
 
-    targets = selected_shader_targets(shader_config, skipped_targets)
+    auto_skipped_targets = auto_skipped_shader_targets(shader_config, skipped_targets)
+    targets = selected_shader_targets(shader_config, skipped_targets, True)
     for target in targets:
         run(["make", f"FLAGS={' '.join(flags)}", target], cwd=shader_dir)
 
@@ -654,7 +685,7 @@ def run_shader_generation(dep: dict[str, Any], checkout_dir: Path, skipped_targe
             shutil.copy2(source, target)
         count += 1
 
-    if not skipped_targets:
+    if not skipped_targets and not auto_skipped_targets:
         for existing in sorted(path for path in destination.rglob("*") if path.is_file()):
             if existing.resolve() not in copied_paths:
                 existing.unlink()
@@ -774,6 +805,10 @@ def update_dependencies(
             result.notes.append(f"copied {result.generated_files} generated shader files")
         if dep.get("shader_generation") and skipped_shader_targets:
             result.notes.append(f"skipped shader targets: {', '.join(sorted(skipped_shader_targets))}")
+        if dep.get("shader_generation"):
+            auto_skipped_targets = auto_skipped_shader_targets(dep["shader_generation"], skipped_shader_targets)
+            if auto_skipped_targets:
+                result.notes.append(f"auto-skipped unavailable optional shader targets: {', '.join(sorted(auto_skipped_targets))}")
 
         results.append(result)
 

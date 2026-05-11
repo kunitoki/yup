@@ -101,6 +101,8 @@
             "**/*.mm",
             "**/*.glsl",
             "**/*.metal",
+            "**/*.hlsl",
+            "**/*.sig",
             "**/*.frag",
             "**/*.vert",
             "**/*.main",
@@ -166,6 +168,10 @@
           "spirv-binary": [
             "make",
             "glslangValidator"
+          ],
+          "d3d": [
+            "make",
+            "fxc"
           ]
         },
         "targets": [
@@ -178,9 +184,68 @@
           "rive_renderer_appletvos_metallib",
           "rive_renderer_appletvsimulator_metallib",
           "spirv",
-          "spirv-binary"
+          "spirv-binary",
+          "d3d"
+        ],
+        "optional_targets": [
+          "d3d"
         ]
       }
+    },
+    {
+      "name": "glad",
+      "repo": "https://github.com/rive-app/rive-runtime.git",
+      "ref": "main",
+      "destination": "thirdparty/glad",
+      "license": "MIT",
+      "module_header": "thirdparty/glad/glad.h",
+      "module_version_from_ref": true,
+      "follow_rive_ref": true,
+      "copies": [
+        {
+          "from": "renderer/glad/include",
+          "to": "include",
+          "include_globs": [
+            "**/*.h"
+          ],
+          "preserve_globs": [
+            "glad_custom.h"
+          ]
+        },
+        {
+          "from": "renderer/glad",
+          "to": "include",
+          "include_globs": [
+            "glad_custom.h"
+          ],
+          "preserve_globs": [
+            "EGL/**",
+            "KHR/**",
+            "glad/**"
+          ]
+        },
+        {
+          "from": "renderer/glad/src",
+          "to": "source",
+          "include_globs": [
+            "**/*.c"
+          ],
+          "preserve_globs": [
+            "glad_custom.c"
+          ]
+        },
+        {
+          "from": "renderer/glad",
+          "to": "source",
+          "include_globs": [
+            "glad_custom.c"
+          ],
+          "preserve_globs": [
+            "egl.c",
+            "gles2.c"
+          ]
+        }
+      ]
     },
     {
       "name": "rive_decoders",
