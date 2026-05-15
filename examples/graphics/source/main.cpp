@@ -47,6 +47,7 @@
 #include "examples/LayoutFonts.h"
 #include "examples/OpaqueDemo.h"
 #include "examples/Paths.h"
+#include "examples/PluginHost.h"
 #include "examples/PopupMenu.h"
 #include "examples/ScrollBarDemo.h"
 #include "examples/SliderDemo.h"
@@ -149,6 +150,7 @@ public:
         registerDemo<LayoutFontsExample> ("Layout Fonts", counter++);
         registerDemo<OpaqueDemo> ("Opaque Demo", counter++);
         registerDemo<PathsExample> ("Paths", counter++);
+        registerDemo<PluginHostDemo> ("Plugin Host", counter++);
         registerDemo<PopupMenuDemo> ("Popup Menu", counter++);
         registerDemo<ScrollBarDemo> ("ScrollBar", counter++);
         registerDemo<SliderDemo> ("Sliders", counter++);

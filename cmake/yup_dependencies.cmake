@@ -77,6 +77,152 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_fetch_clap)
+    if (NOT TARGET clap)
+        _yup_message (STATUS "Fetching CLAP SDK")
+        _yup_fetchcontent_declare (clap
+            GIT_REPOSITORY https://github.com/free-audio/clap.git
+            GIT_TAG main)
+
+        FetchContent_MakeAvailable (clap)
+    endif()
+
+    if (TARGET clap-tests)
+        set_target_properties (clap-tests PROPERTIES FOLDER "Tests")
+    endif()
+endfunction()
+
+#==============================================================================
+
+function (_yup_fetch_vst3sdk)
+    if (NOT TARGET sdk)
+        _yup_message (STATUS "Fetching VST3 SDK")
+
+        set (SMTG_CREATE_MODULE_INFO OFF)
+        set (SMTG_ADD_VST3_UTILITIES OFF)
+        set (SMTG_ENABLE_VST3_HOSTING_EXAMPLES OFF)
+        set (SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF)
+        set (SMTG_ENABLE_VSTGUI_SUPPORT OFF)
+        set (SMTG_CREATE_PLUGIN_LINK OFF)
+        if (NOT YUP_PLATFORM_MAC OR XCODE)
+            set (SMTG_RUN_VST_VALIDATOR ON)
+        else()
+            set (SMTG_RUN_VST_VALIDATOR OFF)
+        endif()
+
+        _yup_fetchcontent_declare (vst3sdk
+            GIT_REPOSITORY https://github.com/steinbergmedia/vst3sdk.git
+            GIT_TAG master)
+
+        FetchContent_MakeAvailable (vst3sdk)
+    endif()
+
+    if (NOT TARGET yup_audio_plugin_host_vst3sdk)
+        add_library (yup_audio_plugin_host_vst3sdk INTERFACE)
+        target_link_libraries (yup_audio_plugin_host_vst3sdk INTERFACE sdk)
+
+        set (vst3sdk_source_dir "")
+        if (DEFINED vst3sdk_SOURCE_DIR)
+            set (vst3sdk_source_dir "${vst3sdk_SOURCE_DIR}")
+        elseif (TARGET sdk)
+            get_target_property (vst3sdk_source_dir sdk SOURCE_DIR)
+        endif()
+
+        if (vst3sdk_source_dir AND EXISTS "${vst3sdk_source_dir}/public.sdk/source/common/memorystream.cpp")
+            target_sources (yup_audio_plugin_host_vst3sdk INTERFACE
+                "${vst3sdk_source_dir}/public.sdk/source/common/memorystream.cpp")
+        endif()
+
+        if (vst3sdk_source_dir AND EXISTS "${vst3sdk_source_dir}/public.sdk/source/vst/hosting/parameterchanges.cpp")
+            target_sources (yup_audio_plugin_host_vst3sdk INTERFACE
+                "${vst3sdk_source_dir}/public.sdk/source/vst/hosting/parameterchanges.cpp")
+        endif()
+    endif()
+endfunction()
+
+#==============================================================================
+
+function (_yup_target_list_contains target_list target_name output_variable)
+    foreach (target IN LISTS target_list)
+        if ("${target}" STREQUAL "${target_name}" OR "${target}" STREQUAL "yup::${target_name}")
+            set (${output_variable} ON PARENT_SCOPE)
+            return()
+        endif()
+
+        if (TARGET "${target}")
+            get_target_property (aliased_target "${target}" ALIASED_TARGET)
+            if ("${aliased_target}" STREQUAL "${target_name}")
+                set (${output_variable} ON PARENT_SCOPE)
+                return()
+            endif()
+        endif()
+    endforeach()
+
+    set (${output_variable} OFF PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_definitions_enable definitions definition_name output_variable)
+    set (enabled OFF)
+
+    foreach (definition IN LISTS definitions)
+        string (REGEX REPLACE "^-D" "" normalized_definition "${definition}")
+
+        if (normalized_definition MATCHES "^${definition_name}($|=)")
+            set (enabled ON)
+
+            if (normalized_definition MATCHES "^${definition_name}=")
+                string (REGEX REPLACE "^${definition_name}=(.*)$" "\\1" definition_value "${normalized_definition}")
+                string (STRIP "${definition_value}" definition_value)
+                string (REGEX REPLACE "^\"(.*)\"$" "\\1" definition_value "${definition_value}")
+                string (REGEX REPLACE "^'(.*)'$" "\\1" definition_value "${definition_value}")
+                string (TOUPPER "${definition_value}" definition_value)
+
+                if ("${definition_value}" STREQUAL "0"
+                    OR "${definition_value}" STREQUAL "OFF"
+                    OR "${definition_value}" STREQUAL "FALSE"
+                    OR "${definition_value}" STREQUAL "NO")
+                    set (enabled OFF)
+                endif()
+            endif()
+        endif()
+    endforeach()
+
+    set (${output_variable} "${enabled}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_collect_audio_plugin_host_dependencies definitions output_variable)
+    set (dependencies "")
+
+    _yup_definitions_enable ("${definitions}" YUP_AUDIO_PLUGIN_HOST_ENABLE_CLAP enable_clap)
+    if (enable_clap)
+        _yup_fetch_clap()
+        list (APPEND dependencies clap)
+    endif()
+
+    _yup_definitions_enable ("${definitions}" YUP_AUDIO_PLUGIN_HOST_ENABLE_VST3 enable_vst3)
+    if (enable_vst3)
+        _yup_fetch_vst3sdk()
+        list (APPEND dependencies yup_audio_plugin_host_vst3sdk)
+    endif()
+
+    _yup_definitions_enable ("${definitions}" YUP_AUDIO_PLUGIN_HOST_ENABLE_AU enable_au)
+    if (enable_au AND YUP_PLATFORM_MAC)
+        list (APPEND dependencies
+            "-framework AudioUnit"
+            "-framework AudioToolbox"
+            "-framework CoreAudio"
+            "-framework CoreFoundation")
+    endif()
+
+    set (${output_variable} "${dependencies}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
 function (_yup_fetch_perfetto)
     if (TARGET perfetto::perfetto)
         return()

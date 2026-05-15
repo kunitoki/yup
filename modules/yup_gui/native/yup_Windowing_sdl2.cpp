@@ -23,11 +23,7 @@ namespace yup
 {
 
 //==============================================================================
-#ifndef YUP_WINDOWING_LOGGING
-#define YUP_WINDOWING_LOGGING 1
-#endif
-
-#if YUP_WINDOWING_LOGGING
+#if YUP_ENABLE_WINDOWING_EVENT_LOGGING
 #define YUP_WINDOWING_LOG(textToWrite) YUP_DBG (textToWrite)
 #else
 #define YUP_WINDOWING_LOG(textToWrite) \

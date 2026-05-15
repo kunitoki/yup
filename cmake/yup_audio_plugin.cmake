@@ -91,14 +91,19 @@ function (yup_audio_plugin)
     _yup_fetch_sdl2()
     list (APPEND additional_libraries sdl2::sdl2)
 
+    _yup_target_list_contains ("${YUP_ARG_MODULES}" yup_audio_plugin_host has_audio_plugin_host)
+    if (has_audio_plugin_host)
+        _yup_collect_audio_plugin_host_dependencies ("${YUP_ARG_DEFINITIONS}" audio_plugin_host_libraries)
+        list (APPEND additional_libraries ${audio_plugin_host_libraries})
+        if (audio_plugin_host_libraries)
+            target_link_libraries (${target_name}_shared INTERFACE
+                ${audio_plugin_host_libraries})
+        endif()
+    endif()
+
     # ==== Fetch clap SDK and build clap target
     if (YUP_ARG_PLUGIN_CREATE_CLAP)
-        _yup_message (STATUS "Fetching CLAP SDK")
-        _yup_fetchcontent_declare (clap
-            GIT_REPOSITORY https://github.com/free-audio/clap.git
-            GIT_TAG main)
-        FetchContent_MakeAvailable (clap)
-        set_target_properties (clap-tests PROPERTIES FOLDER "Tests")
+        _yup_fetch_clap()
 
         _yup_message (STATUS "Setting up CLAP plugin client")
         _yup_module_setup_plugin_client (
@@ -144,22 +149,7 @@ function (yup_audio_plugin)
 
     # ==== Fetch vst3 SDK and build vst3 target
     if (YUP_ARG_PLUGIN_CREATE_VST3)
-        _yup_message (STATUS "Fetching VST3 SDK")
-        set (SMTG_CREATE_MODULE_INFO OFF)
-        set (SMTG_ADD_VST3_UTILITIES OFF)
-        set (SMTG_ENABLE_VST3_HOSTING_EXAMPLES OFF)
-        set (SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF)
-        set (SMTG_ENABLE_VSTGUI_SUPPORT OFF)
-        set (SMTG_CREATE_PLUGIN_LINK OFF)
-        if (NOT YUP_PLATFORM_MAC OR XCODE)
-            set (SMTG_RUN_VST_VALIDATOR ON)
-        else()
-            set (SMTG_RUN_VST_VALIDATOR OFF)
-        endif()
-        _yup_fetchcontent_declare (vst3sdk
-            GIT_REPOSITORY https://github.com/steinbergmedia/vst3sdk.git
-            GIT_TAG master)
-        FetchContent_MakeAvailable (vst3sdk)
+        _yup_fetch_vst3sdk()
 
         _yup_message (STATUS "Setting up VST3 plugin client")
         smtg_enable_vst3_sdk()

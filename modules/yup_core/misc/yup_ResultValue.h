@@ -108,11 +108,21 @@ public:
     }
 
     /** Returns a copy of the value that was set when this result was created. */
-    T getValue() const
+    T getValue() const&
+        requires std::copy_constructible<T>
     {
         jassert (valueOrErrorMessage.index() == 1); // Trying to access the value of the result, when the result is holding an error instead!
 
         return std::get<1> (valueOrErrorMessage);
+    }
+
+    /** Returns a moved from value that was set when this result was created. */
+    T getValue() &&
+        requires std::move_constructible<T>
+    {
+        jassert (valueOrErrorMessage.index() == 1); // Trying to access the value of the result, when the result is holding an error instead!
+
+        return std::get<1> (std::move (valueOrErrorMessage));
     }
 
     /** Returns the mutable reference that was set when this result was created. */

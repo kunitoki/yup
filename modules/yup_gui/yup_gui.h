@@ -61,6 +61,15 @@
 #endif
 
 //==============================================================================
+/** Config: YUP_ENABLE_WINDOWING_EVENT_LOGGING
+
+    Enable logging of windowing events like movement, resizes, mouse interactions.
+*/
+#ifndef YUP_ENABLE_WINDOWING_EVENT_LOGGING
+#define YUP_ENABLE_WINDOWING_EVENT_LOGGING 0
+#endif
+
+//==============================================================================
 
 #include <tuple>
 #include <unordered_map>

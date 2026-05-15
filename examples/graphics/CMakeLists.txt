@@ -60,6 +60,9 @@ yup_standalone_app (
     TARGET_APP_NAMESPACE "org.yup"
     DEFINITIONS
         YUP_EXAMPLE_GRAPHICS_RIVE_FILE="${rive_file}"
+        YUP_AUDIO_PLUGIN_HOST_ENABLE_CLAP=1
+        YUP_AUDIO_PLUGIN_HOST_ENABLE_AU=1
+        YUP_AUDIO_PLUGIN_HOST_ENABLE_VST3=1
     PRELOAD_FILES
         "${CMAKE_CURRENT_LIST_DIR}/${rive_file}@${rive_file}"
     MODULES
@@ -73,6 +76,7 @@ yup_standalone_app (
         yup::yup_audio_gui
         yup::yup_audio_processors
         yup::yup_audio_formats
+        yup::yup_audio_plugin_host
         pffft_library
         opus_library
         flac_library
