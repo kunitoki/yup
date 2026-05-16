@@ -29,98 +29,95 @@ namespace
 
 //==============================================================================
 // Converts a four-char code to a 4-char String (e.g. 0x61756666 -> "auff").
-String fourCCToString (OSType code)
+String fourCCToString(OSType code)
 {
     char buf[5] = {};
-    buf[0] = static_cast<char> ((code >> 24) & 0xFF);
-    buf[1] = static_cast<char> ((code >> 16) & 0xFF);
-    buf[2] = static_cast<char> ((code >>  8) & 0xFF);
-    buf[3] = static_cast<char> (code & 0xFF);
-    return String (buf);
+    buf[0] = static_cast<char>((code >> 24) & 0xFF);
+    buf[1] = static_cast<char>((code >> 16) & 0xFF);
+    buf[2] = static_cast<char>((code >> 8) & 0xFF);
+    buf[3] = static_cast<char>(code & 0xFF);
+    return String(buf);
 }
 
-String copyCFString (CFStringRef string)
+String copyCFString(CFStringRef string)
 {
-    return String::fromCFString (string).trim();
+    return String::fromCFString(string).trim();
 }
 
 // Builds a stable identifier string "type/subt/mfgr" from AudioComponentDescription.
-String makeIdentifier (const AudioComponentDescription& acd)
+String makeIdentifier(const AudioComponentDescription& acd)
 {
-    return fourCCToString (acd.componentType)    + "/"
-         + fourCCToString (acd.componentSubType) + "/"
-         + fourCCToString (acd.componentManufacturer);
+    return fourCCToString(acd.componentType) + "/" + fourCCToString(acd.componentSubType) + "/" + fourCCToString(acd.componentManufacturer);
 }
 
-AudioPluginDescription descriptionFromComponent (AudioComponent comp,
-                                                  const AudioComponentDescription& acd)
+AudioPluginDescription descriptionFromComponent(AudioComponent comp,
+                                                const AudioComponentDescription& acd)
 {
     AudioPluginDescription desc;
-    desc.formatType  = AudioPluginFormatType::audioUnit;
-    desc.identifier  = makeIdentifier (acd);
+    desc.formatType = AudioPluginFormatType::audioUnit;
+    desc.identifier = makeIdentifier(acd);
 
     CFStringRef nameRef = nullptr;
-    AudioComponentCopyName (comp, &nameRef);
+    AudioComponentCopyName(comp, &nameRef);
     if (nameRef != nullptr)
     {
-        desc.name = copyCFString (nameRef);
-        CFRelease (nameRef);
+        desc.name = copyCFString(nameRef);
+        CFRelease(nameRef);
     }
 
     // Collect vendor from the manufacturer four-char code
-    desc.vendor = fourCCToString (acd.componentManufacturer);
+    desc.vendor = fourCCToString(acd.componentManufacturer);
 
     desc.isInstrument = (acd.componentType == kAudioUnitType_MusicDevice);
-    desc.isEffect     = (acd.componentType == kAudioUnitType_Effect
-                      || acd.componentType == kAudioUnitType_MusicEffect);
+    desc.isEffect = (acd.componentType == kAudioUnitType_Effect || acd.componentType == kAudioUnitType_MusicEffect);
 
     return desc;
 }
 
-String makeParameterName (const AudioUnitParameterInfo& info,
-                          AudioUnitParameterID paramId)
+String makeParameterName(const AudioUnitParameterInfo& info,
+                         AudioUnitParameterID paramId)
 {
     String name;
 
     if ((info.flags & kAudioUnitParameterFlag_HasCFNameString) != 0)
-        name = copyCFString (info.cfNameString);
+        name = copyCFString(info.cfNameString);
 
     if (name.isEmpty())
-        name = String (info.name).trim();
+        name = String(info.name).trim();
 
-    return name.isNotEmpty() ? name : "Parameter " + String (paramId);
+    return name.isNotEmpty() ? name : "Parameter " + String(paramId);
 }
 
-void releaseParameterInfoStrings (AudioUnitParameterInfo& info)
+void releaseParameterInfoStrings(AudioUnitParameterInfo& info)
 {
     if ((info.flags & kAudioUnitParameterFlag_CFNameRelease) == 0)
         return;
 
     if (info.cfNameString != nullptr)
     {
-        CFRelease (info.cfNameString);
+        CFRelease(info.cfNameString);
         info.cfNameString = nullptr;
     }
 
     if (info.unitName != nullptr)
     {
-        CFRelease (info.unitName);
+        CFRelease(info.unitName);
         info.unitName = nullptr;
     }
 }
 
-NormalisableRange<float> makeParameterRange (const AudioUnitParameterInfo& info)
+NormalisableRange<float> makeParameterRange(const AudioUnitParameterInfo& info)
 {
-    const auto minValue = static_cast<float> (info.minValue);
-    const auto maxValue = static_cast<float> (info.maxValue);
+    const auto minValue = static_cast<float>(info.minValue);
+    const auto maxValue = static_cast<float>(info.maxValue);
 
     if (maxValue > minValue)
-        return { minValue, maxValue };
+        return {minValue, maxValue};
 
-    return { 0.0f, 1.0f };
+    return {0.0f, 1.0f};
 }
 
-AudioUnitParameter makeAUParameter (AudioUnit audioUnit, AudioUnitParameterID paramId)
+AudioUnitParameter makeAUParameter(AudioUnit audioUnit, AudioUnitParameterID paramId)
 {
     AudioUnitParameter parameter;
     parameter.mAudioUnit = audioUnit;
@@ -130,13 +127,13 @@ AudioUnitParameter makeAUParameter (AudioUnit audioUnit, AudioUnitParameterID pa
     return parameter;
 }
 
-AudioUnitEvent makeAUParameterEvent (AudioUnit audioUnit,
-                                     AudioUnitParameterID paramId,
-                                     AudioUnitEventType eventType)
+AudioUnitEvent makeAUParameterEvent(AudioUnit audioUnit,
+                                    AudioUnitParameterID paramId,
+                                    AudioUnitEventType eventType)
 {
     AudioUnitEvent event;
     event.mEventType = eventType;
-    event.mArgument.mParameter = makeAUParameter (audioUnit, paramId);
+    event.mArgument.mParameter = makeAUParameter(audioUnit, paramId);
     return event;
 }
 
@@ -146,30 +143,30 @@ AudioUnitEvent makeAUParameterEvent (AudioUnit audioUnit,
 
 class AUv2Editor : public AudioProcessorEditor
 {
-public:
-    static std::unique_ptr<AUv2Editor> create (AudioUnit audioUnit)
+   public:
+    static std::unique_ptr<AUv2Editor> create(AudioUnit audioUnit)
     {
         UInt32 size = 0;
         Boolean writable = false;
 
-        if (AudioUnitGetPropertyInfo (audioUnit,
-                                      kAudioUnitProperty_CocoaUI,
-                                      kAudioUnitScope_Global, 0,
-                                      &size, &writable) != noErr)
+        if (AudioUnitGetPropertyInfo(audioUnit,
+                                     kAudioUnitProperty_CocoaUI,
+                                     kAudioUnitScope_Global, 0,
+                                     &size, &writable) != noErr)
         {
             return nullptr;
         }
 
-        if (size < offsetof (AudioUnitCocoaViewInfo, mCocoaAUViewClass) + sizeof (CFStringRef))
+        if (size < offsetof(AudioUnitCocoaViewInfo, mCocoaAUViewClass) + sizeof(CFStringRef))
             return nullptr;
 
-        std::vector<uint8_t> storage (size);
-        auto* viewInfo = reinterpret_cast<AudioUnitCocoaViewInfo*> (storage.data());
+        std::vector<uint8_t> storage(size);
+        auto* viewInfo = reinterpret_cast<AudioUnitCocoaViewInfo*>(storage.data());
 
-        if (AudioUnitGetProperty (audioUnit,
-                                  kAudioUnitProperty_CocoaUI,
-                                  kAudioUnitScope_Global, 0,
-                                  viewInfo, &size) != noErr)
+        if (AudioUnitGetProperty(audioUnit,
+                                 kAudioUnitProperty_CocoaUI,
+                                 kAudioUnitScope_Global, 0,
+                                 viewInfo, &size) != noErr)
         {
             return nullptr;
         }
@@ -180,13 +177,13 @@ public:
 
         if (viewInfo->mCocoaAUViewBundleLocation != nullptr && viewInfo->mCocoaAUViewClass[0] != nullptr)
         {
-            viewBundle = [NSBundle bundleWithURL:(__bridge NSURL*) viewInfo->mCocoaAUViewBundleLocation];
+            viewBundle = [NSBundle bundleWithURL:(__bridge NSURL*)viewInfo->mCocoaAUViewBundleLocation];
 
             if (viewBundle != nil && [viewBundle load])
             {
-                Class viewClass = [viewBundle classNamed:(__bridge NSString*) viewInfo->mCocoaAUViewClass[0]];
+                Class viewClass = [viewBundle classNamed:(__bridge NSString*)viewInfo->mCocoaAUViewClass[0]];
 
-                if (viewClass != Nil && [viewClass conformsToProtocol:@protocol (AUCocoaUIBase)])
+                if (viewClass != Nil && [viewClass conformsToProtocol:@protocol(AUCocoaUIBase)])
                 {
                     viewFactory = [[viewClass alloc] init];
                     view = [viewFactory uiViewForAudioUnit:audioUnit withSize:NSZeroSize];
@@ -195,17 +192,17 @@ public:
         }
 
         if (viewInfo->mCocoaAUViewBundleLocation != nullptr)
-            CFRelease (viewInfo->mCocoaAUViewBundleLocation);
+            CFRelease(viewInfo->mCocoaAUViewBundleLocation);
 
-        const auto numViewClasses = static_cast<int> ((size - offsetof (AudioUnitCocoaViewInfo, mCocoaAUViewClass)) / sizeof (CFStringRef));
+        const auto numViewClasses = static_cast<int>((size - offsetof(AudioUnitCocoaViewInfo, mCocoaAUViewClass)) / sizeof(CFStringRef));
         for (int i = 0; i < numViewClasses; ++i)
             if (viewInfo->mCocoaAUViewClass[i] != nullptr)
-                CFRelease (viewInfo->mCocoaAUViewClass[i]);
+                CFRelease(viewInfo->mCocoaAUViewClass[i]);
 
         if (view == nil)
             return nullptr;
 
-        return std::unique_ptr<AUv2Editor> (new AUv2Editor (view, viewBundle, viewFactory));
+        return std::unique_ptr<AUv2Editor>(new AUv2Editor(view, viewBundle, viewFactory));
     }
 
     ~AUv2Editor() override
@@ -217,9 +214,9 @@ public:
 
     Size<int> getPreferredSize() const override { return preferredSize; }
 
-    void paint (Graphics& g) override
+    void paint(Graphics& g) override
     {
-        g.setFillColor (Color (0xff101417));
+        g.setFillColor(Color(0xff101417));
         g.fillAll();
     }
 
@@ -238,11 +235,9 @@ public:
         detachCocoaView();
     }
 
-private:
-    AUv2Editor (NSView* view, NSBundle* viewBundle, id<AUCocoaUIBase> viewFactory)
-        : cocoaView (view)
-        , cocoaViewBundle (viewBundle)
-        , cocoaViewFactory (viewFactory)
+   private:
+    AUv2Editor(NSView* view, NSBundle* viewBundle, id<AUCocoaUIBase> viewFactory)
+        : cocoaView(view), cocoaViewBundle(viewBundle), cocoaViewFactory(viewFactory)
     {
         auto size = [cocoaView frame].size;
 
@@ -250,12 +245,11 @@ private:
             size = [cocoaView fittingSize];
 
         preferredSize = {
-            jmax (320, static_cast<int> (std::ceil (size.width))),
-            jmax (240, static_cast<int> (std::ceil (size.height)))
-        };
+            jmax(320, static_cast<int>(std::ceil(size.width))),
+            jmax(240, static_cast<int>(std::ceil(size.height)))};
 
         [cocoaView setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
-        [cocoaView setFrameSize:NSMakeSize (preferredSize.getWidth(), preferredSize.getHeight())];
+        [cocoaView setFrameSize:NSMakeSize(preferredSize.getWidth(), preferredSize.getHeight())];
     }
 
     void attachCocoaView()
@@ -267,7 +261,7 @@ private:
         if (nativeComponent == nullptr)
             return;
 
-        NSWindow* window = (__bridge NSWindow*) nativeComponent->getNativeHandle();
+        NSWindow* window = (__bridge NSWindow*)nativeComponent->getNativeHandle();
         NSView* contentView = [window contentView];
 
         if (contentView == nil)
@@ -294,7 +288,7 @@ private:
         if (nativeComponent == nullptr)
             return;
 
-        NSWindow* window = (__bridge NSWindow*) nativeComponent->getNativeHandle();
+        NSWindow* window = (__bridge NSWindow*)nativeComponent->getNativeHandle();
         NSView* contentView = [window contentView];
 
         if (contentView == nil)
@@ -302,34 +296,32 @@ private:
 
         const auto bounds = getBoundsRelativeToTopLevelComponent();
         const auto contentBounds = [contentView bounds];
-        const auto width = jmax (1.0f, bounds.getWidth());
-        const auto height = jmax (1.0f, bounds.getHeight());
+        const auto width = jmax(1.0f, bounds.getWidth());
+        const auto height = jmax(1.0f, bounds.getHeight());
 
-        [cocoaView setFrame:NSMakeRect (static_cast<CGFloat> (bounds.getX()),
-                                        static_cast<CGFloat> (NSHeight (contentBounds) - bounds.getY() - height),
-                                        static_cast<CGFloat> (width),
-                                        static_cast<CGFloat> (height))];
+        [cocoaView setFrame:NSMakeRect(static_cast<CGFloat>(bounds.getX()),
+                                       static_cast<CGFloat>(NSHeight(contentBounds) - bounds.getY() - height),
+                                       static_cast<CGFloat>(width),
+                                       static_cast<CGFloat>(height))];
     }
 
-    Size<int> preferredSize { 640, 480 };
+    Size<int> preferredSize{640, 480};
     NSView* __strong cocoaView = nil;
     NSBundle* __strong cocoaViewBundle = nil;
     id<AUCocoaUIBase> __strong cocoaViewFactory = nil;
 
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AUv2Editor)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AUv2Editor)
 };
 
 //==============================================================================
 
-class AUv2Instance : public AudioPluginInstance
-    , private AudioParameter::Listener
+class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listener
 {
-public:
-    AUv2Instance (const AudioPluginDescription& desc,
-                  AudioUnit unit,
-                  AudioBusLayout busLayout)
-        : AudioPluginInstance (desc, std::move (busLayout))
-        , audioUnit (unit)
+   public:
+    AUv2Instance(const AudioPluginDescription& desc,
+                 AudioUnit unit,
+                 AudioBusLayout busLayout)
+        : AudioPluginInstance(desc, std::move(busLayout)), audioUnit(unit)
     {
         buildParameterList();
     }
@@ -341,50 +333,73 @@ public:
 
         if (audioUnit != nullptr)
         {
-            AudioUnitUninitialize (audioUnit);
-            AudioComponentInstanceDispose (audioUnit);
+            AudioUnitUninitialize(audioUnit);
+            AudioComponentInstanceDispose(audioUnit);
             audioUnit = nullptr;
         }
     }
 
     //==============================================================================
 
-    void prepareToPlay (float sampleRate, int maxBlockSize) override
+    void prepareToPlay(float sampleRate, int maxBlockSize) override
     {
         releaseResources();
 
         renderSampleTime = 0.0;
 
-        const auto numHostedChannels = jmax (2,
-                                             pluginDescription.numInputChannels,
-                                             pluginDescription.numOutputChannels);
-        prepareRenderStorage (numHostedChannels, maxBlockSize);
+        const auto numHostedChannels = jmax(2,
+                                            pluginDescription.numInputChannels,
+                                            pluginDescription.numOutputChannels);
+        prepareRenderStorage(numHostedChannels, maxBlockSize);
 
-        const Float64 sampleRateValue = static_cast<Float64> (sampleRate);
-        AudioUnitSetProperty (audioUnit,
-                              kAudioUnitProperty_SampleRate,
-                              kAudioUnitScope_Global, 0,
-                              &sampleRateValue, sizeof (sampleRateValue));
+        const Float64 sampleRateValue = static_cast<Float64>(sampleRate);
+        AudioUnitSetProperty(audioUnit,
+                             kAudioUnitProperty_SampleRate,
+                             kAudioUnitScope_Global, 0,
+                             &sampleRateValue, sizeof(sampleRateValue));
 
-        UInt32 blockSize = static_cast<UInt32> (maxBlockSize);
-        AudioUnitSetProperty (audioUnit,
-                              kAudioUnitProperty_MaximumFramesPerSlice,
-                              kAudioUnitScope_Global, 0,
-                              &blockSize, sizeof (blockSize));
+        UInt32 blockSize = static_cast<UInt32>(maxBlockSize);
+        AudioUnitSetProperty(audioUnit,
+                             kAudioUnitProperty_MaximumFramesPerSlice,
+                             kAudioUnitScope_Global, 0,
+                             &blockSize, sizeof(blockSize));
 
-        configureStreamFormat (sampleRateValue, numHostedChannels);
+        configureStreamFormat(sampleRateValue, numHostedChannels);
         installInputCallback();
 
-        AudioUnitInitialize (audioUnit);
+        if (![NSThread isMainThread])
+        {
+            AudioUnitInitialize(audioUnit);
+            return;
+        }
+
+        // AudioUnitInitialize for AUv3 plugins (exposed via AUv2 API) deadlocks
+        // on the main thread: allocateRenderResources triggers WorkgroupManager
+        // init which tries to acquire HALB_Mutex while the HAL I/O thread holds
+        // it waiting on the main run loop. Dispatching to a background thread
+        // and pumping the run loop breaks the cycle.
+        AudioUnit capturedUnit = audioUnit;
+        __block bool initialized = false;
+
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+          AudioUnitInitialize(capturedUnit);
+          dispatch_async(dispatch_get_main_queue(), ^{
+            initialized = true;
+          });
+        });
+
+        while (!initialized)
+            [[NSRunLoop mainRunLoop] runMode:NSDefaultRunLoopMode
+                                  beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.005]];
     }
 
     void releaseResources() override
     {
         if (audioUnit != nullptr)
-            AudioUnitUninitialize (audioUnit);
+            AudioUnitUninitialize(audioUnit);
     }
 
-    void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer&) override
+    void processBlock(AudioBuffer<float>& audioBuffer, MidiBuffer&) override
     {
         ScopedNoDenormals noDenormals;
 
@@ -402,9 +417,9 @@ public:
 
         for (int c = 0; c < numChannels; ++c)
         {
-            std::memcpy (inputBuffer.getWritePointer (c),
-                         audioBuffer.getReadPointer (c),
-                         static_cast<std::size_t> (numSamples) * sizeof (float));
+            std::memcpy(inputBuffer.getWritePointer(c),
+                        audioBuffer.getReadPointer(c),
+                        static_cast<std::size_t>(numSamples) * sizeof(float));
         }
 
         currentInputBuffer = &inputBuffer;
@@ -417,14 +432,14 @@ public:
         timeStamp.mSampleTime = renderSampleTime;
         renderSampleTime += numSamples;
 
-        AudioBufferList* abl = makeOutputABL (audioBuffer);
+        AudioBufferList* abl = makeOutputABL(audioBuffer);
 
-        const auto status = AudioUnitRender (audioUnit,
-                                             &flags,
-                                             &timeStamp,
-                                             0, // output bus
-                                             static_cast<UInt32> (numSamples),
-                                             abl);
+        const auto status = AudioUnitRender(audioUnit,
+                                            &flags,
+                                            &timeStamp,
+                                            0, // output bus
+                                            static_cast<UInt32>(numSamples),
+                                            abl);
 
         currentInputBuffer = nullptr;
         currentInputNumChannels = 0;
@@ -432,16 +447,16 @@ public:
 
         if (status != noErr)
         {
-            copyInputBackTo (audioBuffer, numChannels, numSamples);
+            copyInputBackTo(audioBuffer, numChannels, numSamples);
             return;
         }
 
         // Copy rendered output back to the YUP buffer
         for (int c = 0; c < numChannels; ++c)
         {
-            std::memcpy (audioBuffer.getWritePointer (c),
-                         abl->mBuffers[c].mData,
-                         static_cast<std::size_t> (numSamples) * sizeof (float));
+            std::memcpy(audioBuffer.getWritePointer(c),
+                        abl->mBuffers[c].mData,
+                        static_cast<std::size_t>(numSamples) * sizeof(float));
         }
     }
 
@@ -449,36 +464,36 @@ public:
 
     int getCurrentPreset() const noexcept override { return currentPreset; }
 
-    void setCurrentPreset (int index) noexcept override
+    void setCurrentPreset(int index) noexcept override
     {
         CFArrayRef presets = nullptr;
-        UInt32 size = sizeof (presets);
+        UInt32 size = sizeof(presets);
 
-        if (AudioUnitGetProperty (audioUnit,
-                                  kAudioUnitProperty_FactoryPresets,
-                                  kAudioUnitScope_Global, 0,
-                                  &presets, &size) != noErr)
+        if (AudioUnitGetProperty(audioUnit,
+                                 kAudioUnitProperty_FactoryPresets,
+                                 kAudioUnitScope_Global, 0,
+                                 &presets, &size) != noErr)
         {
             return;
         }
 
-        if (presets == nullptr || ! isPositiveAndBelow (index, static_cast<int> (CFArrayGetCount (presets))))
+        if (presets == nullptr || !isPositiveAndBelow(index, static_cast<int>(CFArrayGetCount(presets))))
         {
             if (presets != nullptr)
-                CFRelease (presets);
+                CFRelease(presets);
 
             return;
         }
 
-        auto* auPreset = static_cast<const AUPreset*> (CFArrayGetValueAtIndex (presets, index));
+        auto* auPreset = static_cast<const AUPreset*>(CFArrayGetValueAtIndex(presets, index));
         if (auPreset != nullptr)
         {
             AUPreset preset = *auPreset;
 
-            if (AudioUnitSetProperty (audioUnit,
-                                      kAudioUnitProperty_PresentPreset,
-                                      kAudioUnitScope_Global, 0,
-                                      &preset, sizeof (preset)) == noErr)
+            if (AudioUnitSetProperty(audioUnit,
+                                     kAudioUnitProperty_PresentPreset,
+                                     kAudioUnitScope_Global, 0,
+                                     &preset, sizeof(preset)) == noErr)
             {
                 currentPreset = index;
                 syncParameterValuesFromAudioUnit();
@@ -486,111 +501,112 @@ public:
             }
         }
 
-        CFRelease (presets);
+        CFRelease(presets);
     }
 
     int getNumPresets() const override
     {
         CFArrayRef presets = nullptr;
-        UInt32 size = sizeof (presets);
+        UInt32 size = sizeof(presets);
 
-        AudioUnitGetProperty (audioUnit,
-                              kAudioUnitProperty_FactoryPresets,
-                              kAudioUnitScope_Global, 0,
-                              &presets, &size);
+        AudioUnitGetProperty(audioUnit,
+                             kAudioUnitProperty_FactoryPresets,
+                             kAudioUnitScope_Global, 0,
+                             &presets, &size);
 
         if (presets == nullptr)
             return 0;
 
-        const int count = static_cast<int> (CFArrayGetCount (presets));
-        CFRelease (presets);
+        const int count = static_cast<int>(CFArrayGetCount(presets));
+        CFRelease(presets);
         return count;
     }
 
-    String getPresetName (int index) const override
+    String getPresetName(int index) const override
     {
         CFArrayRef presets = nullptr;
-        UInt32 size = sizeof (presets);
+        UInt32 size = sizeof(presets);
 
-        AudioUnitGetProperty (audioUnit,
-                              kAudioUnitProperty_FactoryPresets,
-                              kAudioUnitScope_Global, 0,
-                              &presets, &size);
+        AudioUnitGetProperty(audioUnit,
+                             kAudioUnitProperty_FactoryPresets,
+                             kAudioUnitScope_Global, 0,
+                             &presets, &size);
 
-        if (presets == nullptr || ! isPositiveAndBelow (index, static_cast<int> (CFArrayGetCount (presets))))
+        if (presets == nullptr || !isPositiveAndBelow(index, static_cast<int>(CFArrayGetCount(presets))))
         {
-            if (presets != nullptr) CFRelease (presets);
+            if (presets != nullptr)
+                CFRelease(presets);
             return {};
         }
 
-        auto* auPreset = static_cast<const AUPreset*> (CFArrayGetValueAtIndex (presets, index));
+        auto* auPreset = static_cast<const AUPreset*>(CFArrayGetValueAtIndex(presets, index));
         const String name = auPreset->presetName != nullptr
-            ? String::fromCFString (auPreset->presetName)
-            : String();
-        CFRelease (presets);
+                                ? String::fromCFString(auPreset->presetName)
+                                : String();
+        CFRelease(presets);
         return name;
     }
 
-    void setPresetName (int, StringRef) override {}
+    void setPresetName(int, StringRef) override {}
 
     //==============================================================================
 
-    Result loadStateFromMemory (const MemoryBlock& memoryBlock) override
+    Result loadStateFromMemory(const MemoryBlock& memoryBlock) override
     {
-        CFDataRef data = CFDataCreateWithBytesNoCopy (kCFAllocatorDefault,
-                                                      static_cast<const UInt8*> (memoryBlock.getData()),
-                                                      static_cast<CFIndex> (memoryBlock.getSize()),
-                                                      kCFAllocatorNull);
+        CFDataRef data = CFDataCreateWithBytesNoCopy(kCFAllocatorDefault,
+                                                     static_cast<const UInt8*>(memoryBlock.getData()),
+                                                     static_cast<CFIndex>(memoryBlock.getSize()),
+                                                     kCFAllocatorNull);
         if (data == nullptr)
-            return Result::fail ("Failed to create CFData");
+            return Result::fail("Failed to create CFData");
 
-        CFPropertyListRef plist = CFPropertyListCreateWithData (kCFAllocatorDefault,
-                                                                 data,
-                                                                 kCFPropertyListImmutable,
-                                                                 nullptr, nullptr);
-        CFRelease (data);
+        CFPropertyListRef plist = CFPropertyListCreateWithData(kCFAllocatorDefault,
+                                                               data,
+                                                               kCFPropertyListImmutable,
+                                                               nullptr, nullptr);
+        CFRelease(data);
 
         if (plist == nullptr)
-            return Result::fail ("Failed to deserialize AU state");
+            return Result::fail("Failed to deserialize AU state");
 
-        const OSStatus status = AudioUnitSetProperty (audioUnit,
-                                                       kAudioUnitProperty_ClassInfo,
-                                                       kAudioUnitScope_Global, 0,
-                                                       &plist, sizeof (plist));
-        CFRelease (plist);
+        const OSStatus status = AudioUnitSetProperty(audioUnit,
+                                                     kAudioUnitProperty_ClassInfo,
+                                                     kAudioUnitScope_Global, 0,
+                                                     &plist, sizeof(plist));
+        CFRelease(plist);
 
         if (status != noErr)
-            return Result::fail ("AudioUnitSetProperty ClassInfo failed: " + String (status));
+            return Result::fail("AudioUnitSetProperty ClassInfo failed: " + String(status));
 
         syncParameterValuesFromAudioUnit();
         notifyAudioUnitParametersChanged();
         return Result::ok();
     }
 
-    Result saveStateIntoMemory (MemoryBlock& memoryBlock) override
+    Result saveStateIntoMemory(MemoryBlock& memoryBlock) override
     {
         CFPropertyListRef plist = nullptr;
-        UInt32 size = sizeof (plist);
+        UInt32 size = sizeof(plist);
 
-        const OSStatus status = AudioUnitGetProperty (audioUnit,
-                                                       kAudioUnitProperty_ClassInfo,
-                                                       kAudioUnitScope_Global, 0,
-                                                       &plist, &size);
+        const OSStatus status = AudioUnitGetProperty(audioUnit,
+                                                     kAudioUnitProperty_ClassInfo,
+                                                     kAudioUnitScope_Global, 0,
+                                                     &plist, &size);
         if (status != noErr || plist == nullptr)
-            return Result::fail ("AudioUnitGetProperty ClassInfo failed: " + String (status));
+            return Result::fail("AudioUnitGetProperty ClassInfo failed: " + String(status));
 
-        CFDataRef data = CFPropertyListCreateData (kCFAllocatorDefault,
-                                                    plist,
-                                                    kCFPropertyListBinaryFormat_v1_0,
-                                                    0, nullptr);
-        CFRelease (plist);
+        CFDataRef data = CFPropertyListCreateData(kCFAllocatorDefault,
+                                                  plist,
+                                                  kCFPropertyListBinaryFormat_v1_0,
+                                                  0, nullptr);
+        CFRelease(plist);
 
         if (data == nullptr)
-            return Result::fail ("Failed to serialize AU state");
+            return Result::fail("Failed to serialize AU state");
 
-        memoryBlock.replaceAll (CFDataGetBytePtr (data),
-                                static_cast<std::size_t> (CFDataGetLength (data)));
-        CFRelease (data);
+        memoryBlock.replaceAll(CFDataGetBytePtr(data),
+                               static_cast<std::size_t>(CFDataGetLength(data)));
+        CFRelease(data);
         return Result::ok();
     }
 
@@ -601,16 +617,16 @@ public:
         UInt32 size = 0;
         Boolean writable = false;
 
-        return AudioUnitGetPropertyInfo (audioUnit,
-                                         kAudioUnitProperty_CocoaUI,
-                                         kAudioUnitScope_Global, 0,
-                                         &size, &writable) == noErr
-            && size >= offsetof (AudioUnitCocoaViewInfo, mCocoaAUViewClass) + sizeof (CFStringRef);
+        return AudioUnitGetPropertyInfo(audioUnit,
+                                        kAudioUnitProperty_CocoaUI,
+                                        kAudioUnitScope_Global, 0,
+                                        &size, &writable) == noErr &&
+               size >= offsetof(AudioUnitCocoaViewInfo, mCocoaAUViewClass) + sizeof(CFStringRef);
     }
 
     AudioProcessorEditor* createEditor() override
     {
-        if (auto editor = AUv2Editor::create (audioUnit))
+        if (auto editor = AUv2Editor::create(audioUnit))
             return editor.release();
 
         return nullptr;
@@ -618,124 +634,120 @@ public:
 
     //==============================================================================
 
-    static std::unique_ptr<AUv2Instance> create (const AudioPluginDescription& desc,
-                                                   const AudioPluginHostContext&)
+    static std::unique_ptr<AUv2Instance> create(const AudioPluginDescription& desc,
+                                                const AudioPluginHostContext&)
     {
         // Parse "type/subt/mfgr" identifier
-        const auto tokens = StringArray::fromTokens (desc.identifier, "/", "");
+        const auto tokens = StringArray::fromTokens(desc.identifier, "/", "");
         if (tokens.size() != 3)
             return nullptr;
 
-        auto fourCC = [] (const String& s) -> OSType
+        auto fourCC = [](const String& s) -> OSType
         {
-            if (s.length() != 4) return 0;
-            return static_cast<OSType> (
-                (static_cast<uint32_t> (s[0]) << 24)
-              | (static_cast<uint32_t> (s[1]) << 16)
-              | (static_cast<uint32_t> (s[2]) <<  8)
-              |  static_cast<uint32_t> (s[3]));
+            if (s.length() != 4)
+                return 0;
+            return static_cast<OSType>(
+                (static_cast<uint32_t>(s[0]) << 24) | (static_cast<uint32_t>(s[1]) << 16) | (static_cast<uint32_t>(s[2]) << 8) | static_cast<uint32_t>(s[3]));
         };
 
         AudioComponentDescription acd{};
-        acd.componentType         = fourCC (tokens[0]);
-        acd.componentSubType      = fourCC (tokens[1]);
-        acd.componentManufacturer = fourCC (tokens[2]);
+        acd.componentType = fourCC(tokens[0]);
+        acd.componentSubType = fourCC(tokens[1]);
+        acd.componentManufacturer = fourCC(tokens[2]);
 
-        AudioComponent comp = AudioComponentFindNext (nullptr, &acd);
+        AudioComponent comp = AudioComponentFindNext(nullptr, &acd);
         if (comp == nullptr)
             return nullptr;
 
         AudioUnit unit = nullptr;
-        if (AudioComponentInstanceNew (comp, &unit) != noErr || unit == nullptr)
+        if (AudioComponentInstanceNew(comp, &unit) != noErr || unit == nullptr)
             return nullptr;
 
-        AudioBusLayout busLayout ({}, {});
+        AudioBusLayout busLayout({}, {});
         // TODO: query kAudioUnitProperty_ElementCount for proper bus layout
 
-        return std::make_unique<AUv2Instance> (desc, unit, std::move (busLayout));
+        return std::make_unique<AUv2Instance>(desc, unit, std::move(busLayout));
     }
 
-private:
-    void parameterValueChanged (const AudioParameter::Ptr& parameter, int indexInContainer) override
+   private:
+    void parameterValueChanged(const AudioParameter::Ptr& parameter, int indexInContainer) override
     {
-        if (audioUnit == nullptr || ! isPositiveAndBelow (indexInContainer, static_cast<int> (auParameterIds.size())))
+        if (audioUnit == nullptr || !isPositiveAndBelow(indexInContainer, static_cast<int>(auParameterIds.size())))
             return;
 
-        const auto auParameter = makeAUParameter (audioUnit, auParameterIds[static_cast<std::size_t> (indexInContainer)]);
+        const auto auParameter = makeAUParameter(audioUnit, auParameterIds[static_cast<std::size_t>(indexInContainer)]);
 
-        AUParameterSet (eventListener,
-                        this,
-                        &auParameter,
-                        static_cast<AudioUnitParameterValue> (parameter->getValue()),
-                        0);
+        AUParameterSet(eventListener,
+                       this,
+                       &auParameter,
+                       static_cast<AudioUnitParameterValue>(parameter->getValue()),
+                       0);
     }
 
-    void parameterGestureBegin (const AudioParameter::Ptr&, int indexInContainer) override
+    void parameterGestureBegin(const AudioParameter::Ptr&, int indexInContainer) override
     {
-        notifyParameterGesture (indexInContainer, kAudioUnitEvent_BeginParameterChangeGesture);
+        notifyParameterGesture(indexInContainer, kAudioUnitEvent_BeginParameterChangeGesture);
     }
 
-    void parameterGestureEnd (const AudioParameter::Ptr&, int indexInContainer) override
+    void parameterGestureEnd(const AudioParameter::Ptr&, int indexInContainer) override
     {
-        notifyParameterGesture (indexInContainer, kAudioUnitEvent_EndParameterChangeGesture);
+        notifyParameterGesture(indexInContainer, kAudioUnitEvent_EndParameterChangeGesture);
     }
 
-    void notifyParameterGesture (int indexInContainer, AudioUnitEventType eventType)
+    void notifyParameterGesture(int indexInContainer, AudioUnitEventType eventType)
     {
-        if (audioUnit == nullptr || ! isPositiveAndBelow (indexInContainer, static_cast<int> (auParameterIds.size())))
+        if (audioUnit == nullptr || !isPositiveAndBelow(indexInContainer, static_cast<int>(auParameterIds.size())))
             return;
 
-        const auto event = makeAUParameterEvent (audioUnit,
-                                                 auParameterIds[static_cast<std::size_t> (indexInContainer)],
-                                                 eventType);
+        const auto event = makeAUParameterEvent(audioUnit,
+                                                auParameterIds[static_cast<std::size_t>(indexInContainer)],
+                                                eventType);
 
-        AUEventListenerNotify (eventListener, this, &event);
+        AUEventListenerNotify(eventListener, this, &event);
     }
 
-    static void parameterEventCallback (void* userData,
-                                        void*,
-                                        const AudioUnitEvent* event,
-                                        UInt64,
-                                        AudioUnitParameterValue parameterValue)
+    static void parameterEventCallback(void* userData,
+                                       void*,
+                                       const AudioUnitEvent* event,
+                                       UInt64,
+                                       AudioUnitParameterValue parameterValue)
     {
-        auto* instance = static_cast<AUv2Instance*> (userData);
+        auto* instance = static_cast<AUv2Instance*>(userData);
         if (instance == nullptr || event == nullptr || event->mEventType != kAudioUnitEvent_ParameterValueChange)
             return;
 
-        instance->handleAudioUnitParameterChanged (event->mArgument.mParameter, parameterValue);
+        instance->handleAudioUnitParameterChanged(event->mArgument.mParameter, parameterValue);
     }
 
-    void handleAudioUnitParameterChanged (const AudioUnitParameter& parameter,
-                                          AudioUnitParameterValue parameterValue)
+    void handleAudioUnitParameterChanged(const AudioUnitParameter& parameter,
+                                         AudioUnitParameterValue parameterValue)
     {
-        if (parameter.mAudioUnit != audioUnit
-            || parameter.mScope != kAudioUnitScope_Global
-            || parameter.mElement != 0)
+        if (parameter.mAudioUnit != audioUnit || parameter.mScope != kAudioUnitScope_Global || parameter.mElement != 0)
         {
             return;
         }
 
         const auto params = getParameters();
-        const auto numParams = jmin (params.size(), auParameterIds.size());
+        const auto numParams = jmin(params.size(), auParameterIds.size());
 
         for (std::size_t i = 0; i < numParams; ++i)
         {
             if (auParameterIds[i] == parameter.mParameterID)
             {
-                params[i]->setValue (static_cast<float> (parameterValue));
+                params[i]->setValue(static_cast<float>(parameterValue));
                 return;
             }
         }
     }
 
-    static OSStatus inputRenderCallback (void* refCon,
-                                         AudioUnitRenderActionFlags*,
-                                         const AudioTimeStamp*,
-                                         UInt32,
-                                         UInt32 numFrames,
-                                         AudioBufferList* ioData)
+    static OSStatus inputRenderCallback(void* refCon,
+                                        AudioUnitRenderActionFlags*,
+                                        const AudioTimeStamp*,
+                                        UInt32,
+                                        UInt32 numFrames,
+                                        AudioBufferList* ioData)
     {
-        auto* instance = static_cast<AUv2Instance*> (refCon);
+        auto* instance = static_cast<AUv2Instance*>(refCon);
         if (ioData == nullptr)
             return noErr;
 
@@ -744,87 +756,84 @@ private:
             for (UInt32 bufferIndex = 0; bufferIndex < ioData->mNumberBuffers; ++bufferIndex)
             {
                 auto& buffer = ioData->mBuffers[bufferIndex];
-                auto* dest = static_cast<float*> (buffer.mData);
+                auto* dest = static_cast<float*>(buffer.mData);
 
                 if (dest != nullptr)
-                    FloatVectorOperations::clear (dest, static_cast<int> (numFrames));
+                    FloatVectorOperations::clear(dest, static_cast<int>(numFrames));
 
-                buffer.mDataByteSize = static_cast<UInt32> (numFrames * sizeof (float));
+                buffer.mDataByteSize = static_cast<UInt32>(numFrames * sizeof(float));
             }
 
             return noErr;
         }
 
-        const int framesToCopy = jmin (static_cast<int> (numFrames),
-                                       instance->currentInputNumSamples);
+        const int framesToCopy = jmin(static_cast<int>(numFrames),
+                                      instance->currentInputNumSamples);
 
         for (UInt32 bufferIndex = 0; bufferIndex < ioData->mNumberBuffers; ++bufferIndex)
         {
             auto& buffer = ioData->mBuffers[bufferIndex];
-            auto* dest = static_cast<float*> (buffer.mData);
+            auto* dest = static_cast<float*>(buffer.mData);
 
             if (dest == nullptr)
                 continue;
 
-            if (static_cast<int> (bufferIndex) < instance->currentInputNumChannels)
+            if (static_cast<int>(bufferIndex) < instance->currentInputNumChannels)
             {
-                FloatVectorOperations::copy (dest,
-                                             instance->currentInputBuffer->getReadPointer (static_cast<int> (bufferIndex)),
-                                             framesToCopy);
+                FloatVectorOperations::copy(dest,
+                                            instance->currentInputBuffer->getReadPointer(static_cast<int>(bufferIndex)),
+                                            framesToCopy);
             }
             else
             {
-                FloatVectorOperations::clear (dest, framesToCopy);
+                FloatVectorOperations::clear(dest, framesToCopy);
             }
 
-            if (framesToCopy < static_cast<int> (numFrames))
-                FloatVectorOperations::clear (dest + framesToCopy,
-                                              static_cast<int> (numFrames) - framesToCopy);
+            if (framesToCopy < static_cast<int>(numFrames))
+                FloatVectorOperations::clear(dest + framesToCopy,
+                                             static_cast<int>(numFrames) - framesToCopy);
 
-            buffer.mDataByteSize = static_cast<UInt32> (numFrames * sizeof (float));
+            buffer.mDataByteSize = static_cast<UInt32>(numFrames * sizeof(float));
         }
 
         return noErr;
     }
 
-    void prepareRenderStorage (int numChannels, int maxBlockSize)
+    void prepareRenderStorage(int numChannels, int maxBlockSize)
     {
-        preparedNumChannels = jmax (1, numChannels);
-        preparedMaxBlockSize = jmax (1, maxBlockSize);
+        preparedNumChannels = jmax(1, numChannels);
+        preparedMaxBlockSize = jmax(1, maxBlockSize);
 
-        inputBuffer.setSize (preparedNumChannels,
-                             preparedMaxBlockSize,
-                             false,
-                             false,
-                             true);
+        inputBuffer.setSize(preparedNumChannels,
+                            preparedMaxBlockSize,
+                            false,
+                            false,
+                            true);
 
-        outputABLStorage.resize (getAudioBufferListSize (preparedNumChannels));
+        outputABLStorage.resize(getAudioBufferListSize(preparedNumChannels));
     }
 
-    void configureStreamFormat (Float64 sampleRate, int numChannels)
+    void configureStreamFormat(Float64 sampleRate, int numChannels)
     {
         AudioStreamBasicDescription streamFormat{};
         streamFormat.mSampleRate = sampleRate;
         streamFormat.mFormatID = kAudioFormatLinearPCM;
-        streamFormat.mFormatFlags = kAudioFormatFlagIsFloat
-                                  | kAudioFormatFlagIsPacked
-                                  | kAudioFormatFlagIsNonInterleaved
-                                  | kAudioFormatFlagsNativeEndian;
-        streamFormat.mBytesPerPacket = sizeof (float);
+        streamFormat.mFormatFlags = kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked | kAudioFormatFlagIsNonInterleaved | kAudioFormatFlagsNativeEndian;
+        streamFormat.mBytesPerPacket = sizeof(float);
         streamFormat.mFramesPerPacket = 1;
-        streamFormat.mBytesPerFrame = sizeof (float);
-        streamFormat.mChannelsPerFrame = static_cast<UInt32> (numChannels);
-        streamFormat.mBitsPerChannel = static_cast<UInt32> (sizeof (float) * 8);
+        streamFormat.mBytesPerFrame = sizeof(float);
+        streamFormat.mChannelsPerFrame = static_cast<UInt32>(numChannels);
+        streamFormat.mBitsPerChannel = static_cast<UInt32>(sizeof(float) * 8);
 
-        AudioUnitSetProperty (audioUnit,
-                              kAudioUnitProperty_StreamFormat,
-                              kAudioUnitScope_Input, 0,
-                              &streamFormat, sizeof (streamFormat));
+        AudioUnitSetProperty(audioUnit,
+                             kAudioUnitProperty_StreamFormat,
+                             kAudioUnitScope_Input, 0,
+                             &streamFormat, sizeof(streamFormat));
 
-        AudioUnitSetProperty (audioUnit,
-                              kAudioUnitProperty_StreamFormat,
-                              kAudioUnitScope_Output, 0,
-                              &streamFormat, sizeof (streamFormat));
+        AudioUnitSetProperty(audioUnit,
+                             kAudioUnitProperty_StreamFormat,
+                             kAudioUnitScope_Output, 0,
+                             &streamFormat, sizeof(streamFormat));
     }
 
     void installInputCallback()
@@ -833,64 +842,63 @@ private:
         callback.inputProc = inputRenderCallback;
         callback.inputProcRefCon = this;
 
-        AudioUnitSetProperty (audioUnit,
-                              kAudioUnitProperty_SetRenderCallback,
-                              kAudioUnitScope_Input, 0,
-                              &callback, sizeof (callback));
+        AudioUnitSetProperty(audioUnit,
+                             kAudioUnitProperty_SetRenderCallback,
+                             kAudioUnitScope_Input, 0,
+                             &callback, sizeof(callback));
     }
 
-    static std::size_t getAudioBufferListSize (int numChannels)
+    static std::size_t getAudioBufferListSize(int numChannels)
     {
-        return sizeof (AudioBufferList)
-             + static_cast<std::size_t> (jmax (0, numChannels - 1)) * sizeof (::AudioBuffer);
+        return sizeof(AudioBufferList) + static_cast<std::size_t>(jmax(0, numChannels - 1)) * sizeof(::AudioBuffer);
     }
 
-    AudioBufferList* makeOutputABL (AudioBuffer<float>& buffer)
+    AudioBufferList* makeOutputABL(AudioBuffer<float>& buffer)
     {
         const int numChannels = buffer.getNumChannels();
-        auto* abl = reinterpret_cast<AudioBufferList*> (outputABLStorage.data());
-        abl->mNumberBuffers = static_cast<UInt32> (numChannels);
+        auto* abl = reinterpret_cast<AudioBufferList*>(outputABLStorage.data());
+        abl->mNumberBuffers = static_cast<UInt32>(numChannels);
 
         for (int c = 0; c < numChannels; ++c)
         {
             abl->mBuffers[c].mNumberChannels = 1;
-            abl->mBuffers[c].mDataByteSize   = static_cast<UInt32> (buffer.getNumSamples()) * sizeof (float);
-            abl->mBuffers[c].mData           = buffer.getWritePointer (c);
+            abl->mBuffers[c].mDataByteSize = static_cast<UInt32>(buffer.getNumSamples()) * sizeof(float);
+            abl->mBuffers[c].mData = buffer.getWritePointer(c);
         }
 
         return abl;
     }
 
-    void copyInputBackTo (AudioBuffer<float>& audioBuffer, int numChannels, int numSamples)
+    void copyInputBackTo(AudioBuffer<float>& audioBuffer, int numChannels, int numSamples)
     {
         for (int c = 0; c < numChannels; ++c)
         {
-            FloatVectorOperations::copy (audioBuffer.getWritePointer (c),
-                                         inputBuffer.getReadPointer (c),
-                                         numSamples);
+            FloatVectorOperations::copy(audioBuffer.getWritePointer(c),
+                                        inputBuffer.getReadPointer(c),
+                                        numSamples);
         }
     }
 
     void buildParameterList()
     {
         UInt32 size = 0;
-        if (AudioUnitGetPropertyInfo (audioUnit,
-                                      kAudioUnitProperty_ParameterList,
-                                      kAudioUnitScope_Global, 0,
-                                      &size, nullptr) != noErr)
+        if (AudioUnitGetPropertyInfo(audioUnit,
+                                     kAudioUnitProperty_ParameterList,
+                                     kAudioUnitScope_Global, 0,
+                                     &size, nullptr) != noErr)
         {
             return;
         }
 
-        const int count = static_cast<int> (size / sizeof (AudioUnitParameterID));
+        const int count = static_cast<int>(size / sizeof(AudioUnitParameterID));
         if (count == 0)
             return;
 
-        std::vector<AudioUnitParameterID> paramIds (static_cast<std::size_t> (count));
-        if (AudioUnitGetProperty (audioUnit,
-                                  kAudioUnitProperty_ParameterList,
-                                  kAudioUnitScope_Global, 0,
-                                  paramIds.data(), &size) != noErr)
+        std::vector<AudioUnitParameterID> paramIds(static_cast<std::size_t>(count));
+        if (AudioUnitGetProperty(audioUnit,
+                                 kAudioUnitProperty_ParameterList,
+                                 kAudioUnitScope_Global, 0,
+                                 paramIds.data(), &size) != noErr)
         {
             return;
         }
@@ -900,33 +908,33 @@ private:
         for (auto paramId : paramIds)
         {
             AudioUnitParameterInfo info{};
-            UInt32 infoSize = sizeof (info);
-            if (AudioUnitGetProperty (audioUnit,
-                                      kAudioUnitProperty_ParameterInfo,
-                                      kAudioUnitScope_Global, paramId,
-                                      &info, &infoSize) != noErr)
+            UInt32 infoSize = sizeof(info);
+            if (AudioUnitGetProperty(audioUnit,
+                                     kAudioUnitProperty_ParameterInfo,
+                                     kAudioUnitScope_Global, paramId,
+                                     &info, &infoSize) != noErr)
             {
                 continue;
             }
 
-            const auto name = makeParameterName (info, paramId);
-            const auto range = makeParameterRange (info);
-            releaseParameterInfoStrings (info);
+            const auto name = makeParameterName(info, paramId);
+            const auto range = makeParameterRange(info);
+            releaseParameterInfoStrings(info);
 
             auto param = AudioParameterBuilder()
-                .withID (name + "_" + String (paramId))
-                .withName (name)
-                .withRange (range)
-                .withDefault (info.defaultValue)
-                .withSmoothing (0.0f)
-                .build();
+                             .withID(name + "_" + String(paramId))
+                             .withName(name)
+                             .withRange(range)
+                             .withDefault(info.defaultValue)
+                             .withSmoothing(0.0f)
+                             .build();
 
-            param->addListener (this);
+            param->addListener(this);
 
-            auParameterIds.push_back (paramId);
-            addParameter (std::move (param));
+            auParameterIds.push_back(paramId);
+            addParameter(std::move(param));
 
-            addAudioUnitParameterListener (paramId);
+            addAudioUnitParameterListener(paramId);
         }
 
         syncParameterValuesFromAudioUnit();
@@ -937,22 +945,22 @@ private:
         if (eventListener != nullptr)
             return;
 
-        AUEventListenerCreate (parameterEventCallback,
-                               this,
-                               CFRunLoopGetMain(),
-                               kCFRunLoopCommonModes,
-                               0.02f,
-                               0.01f,
-                               &eventListener);
+        AUEventListenerCreate(parameterEventCallback,
+                              this,
+                              CFRunLoopGetMain(),
+                              kCFRunLoopCommonModes,
+                              0.02f,
+                              0.01f,
+                              &eventListener);
     }
 
-    void addAudioUnitParameterListener (AudioUnitParameterID paramId)
+    void addAudioUnitParameterListener(AudioUnitParameterID paramId)
     {
         if (eventListener == nullptr)
             return;
 
-        const auto event = makeAUParameterEvent (audioUnit, paramId, kAudioUnitEvent_ParameterValueChange);
-        AUEventListenerAddEventType (eventListener, this, &event);
+        const auto event = makeAUParameterEvent(audioUnit, paramId, kAudioUnitEvent_ParameterValueChange);
+        AUEventListenerAddEventType(eventListener, this, &event);
     }
 
     void notifyAudioUnitParametersChanged()
@@ -962,26 +970,26 @@ private:
 
         for (auto paramId : auParameterIds)
         {
-            const auto parameter = makeAUParameter (audioUnit, paramId);
-            AUParameterListenerNotify (eventListener, this, &parameter);
+            const auto parameter = makeAUParameter(audioUnit, paramId);
+            AUParameterListenerNotify(eventListener, this, &parameter);
         }
     }
 
     void syncParameterValuesFromAudioUnit() noexcept
     {
         const auto params = getParameters();
-        const auto numParams = jmin (params.size(), auParameterIds.size());
+        const auto numParams = jmin(params.size(), auParameterIds.size());
 
         for (std::size_t i = 0; i < numParams; ++i)
         {
             AudioUnitParameterValue value = 0.0f;
-            if (AudioUnitGetParameter (audioUnit,
-                                       auParameterIds[i],
-                                       kAudioUnitScope_Global,
-                                       0,
-                                       &value) == noErr)
+            if (AudioUnitGetParameter(audioUnit,
+                                      auParameterIds[i],
+                                      kAudioUnitScope_Global,
+                                      0,
+                                      &value) == noErr)
             {
-                params[i]->setValue (static_cast<float> (value));
+                params[i]->setValue(static_cast<float>(value));
             }
         }
     }
@@ -989,11 +997,11 @@ private:
     void removeParameterListeners()
     {
         for (auto& param : getParameters())
-            param->removeListener (this);
+            param->removeListener(this);
 
         if (eventListener != nullptr)
         {
-            AUListenerDispose (eventListener);
+            AUListenerDispose(eventListener);
             eventListener = nullptr;
         }
     }
@@ -1032,7 +1040,7 @@ FileSearchPath AUv2Format::getDefaultSearchPaths() const
     return {};
 }
 
-ResultValue<std::vector<AudioPluginDescription>> AUv2Format::scanFile (const File&)
+ResultValue<std::vector<AudioPluginDescription>> AUv2Format::scanFile(const File&)
 {
     // Scan by enumerating the AudioComponent registry (ignores file argument)
     std::vector<AudioPluginDescription> results;
@@ -1042,8 +1050,7 @@ ResultValue<std::vector<AudioPluginDescription>> AUv2Format::scanFile (const Fil
         kAudioUnitType_Effect,
         kAudioUnitType_MusicEffect,
         kAudioUnitType_Generator,
-        kAudioUnitType_MIDIProcessor
-    };
+        kAudioUnitType_MIDIProcessor};
 
     for (OSType type : types)
     {
@@ -1051,33 +1058,33 @@ ResultValue<std::vector<AudioPluginDescription>> AUv2Format::scanFile (const Fil
         search.componentType = type;
 
         AudioComponent comp = nullptr;
-        while ((comp = AudioComponentFindNext (comp, &search)) != nullptr)
+        while ((comp = AudioComponentFindNext(comp, &search)) != nullptr)
         {
             AudioComponentDescription acd{};
-            AudioComponentGetDescription (comp, &acd);
-            auto desc = descriptionFromComponent (comp, acd);
-            results.push_back (std::move (desc));
+            AudioComponentGetDescription(comp, &acd);
+            auto desc = descriptionFromComponent(comp, acd);
+            results.push_back(std::move(desc));
         }
     }
 
     if (results.empty())
-        return ResultValue<std::vector<AudioPluginDescription>>::fail (
+        return ResultValue<std::vector<AudioPluginDescription>>::fail(
             "No AudioComponents found in registry");
 
-    return ResultValue<std::vector<AudioPluginDescription>>::ok (std::move (results));
+    return ResultValue<std::vector<AudioPluginDescription>>::ok(std::move(results));
 }
 
-ResultValue<std::unique_ptr<AudioPluginInstance>> AUv2Format::loadPlugin (
+ResultValue<std::unique_ptr<AudioPluginInstance>> AUv2Format::loadPlugin(
     const AudioPluginDescription& description,
     const AudioPluginHostContext& context)
 {
-    auto instance = AUv2Instance::create (description, context);
+    auto instance = AUv2Instance::create(description, context);
 
     if (instance == nullptr)
-        return ResultValue<std::unique_ptr<AudioPluginInstance>>::fail (
+        return ResultValue<std::unique_ptr<AudioPluginInstance>>::fail(
             "Failed to instantiate AUv2 plugin: " + description.name);
 
-    return ResultValue<std::unique_ptr<AudioPluginInstance>>::ok (std::move (instance));
+    return ResultValue<std::unique_ptr<AudioPluginInstance>>::ok(std::move(instance));
 }
 
 } // namespace yup
