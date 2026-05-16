@@ -420,6 +420,8 @@ void ListBox::updateContent()
 
     // Update scrolling calculations
     updateScrolling();
+    updateScrollBars();
+    updateScrolling();
 
     // Layout visible rows
     layoutRows();
@@ -525,7 +527,13 @@ bool ListBox::isVariableWidthEnabled() const noexcept
 //==============================================================================
 void ListBox::setMinimumContentSize (int minSize)
 {
-    minimumContentSize = jmax (0, minSize);
+    auto newMinimumContentSize = jmax (0, minSize);
+
+    if (minimumContentSize != newMinimumContentSize)
+    {
+        minimumContentSize = newMinimumContentSize;
+        updateContent();
+    }
 }
 
 int ListBox::getMinimumContentSize() const noexcept
@@ -563,11 +571,18 @@ Rectangle<float> ListBox::getRowBounds (int rowIndex) const
 
     auto position = getRowPosition (rowIndex);
     auto size = getRowSize (rowIndex);
+    auto contentArea = getContentArea();
 
     if (orientation == Orientation::vertical)
-        return Rectangle<float> (0.0f, position - scrollOffset, getWidth(), size);
+        return Rectangle<float> (contentArea.getX(),
+                                 contentArea.getY() + position - scrollOffset,
+                                 contentArea.getWidth(),
+                                 size);
     else
-        return Rectangle<float> (position - scrollOffset, 0.0f, size, getHeight());
+        return Rectangle<float> (contentArea.getX() + position - scrollOffset,
+                                 contentArea.getY(),
+                                 size,
+                                 contentArea.getHeight());
 }
 
 //==============================================================================
@@ -637,8 +652,6 @@ void ListBox::mouseMove (const MouseEvent& event)
 
 void ListBox::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
 {
-    ignoreUnused (event);
-
     if (needsScrolling())
     {
         auto delta = (orientation == Orientation::vertical)
@@ -648,6 +661,7 @@ void ListBox::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelDa
         // Scroll by approximately 3 rows worth of content
         auto scrollAmount = delta * fixedRowHeight * 3.0f;
         scrollBy (-scrollAmount);
+        updateHoveredRow (event.getPosition());
     }
 }
 
@@ -837,6 +851,12 @@ void ListBox::layoutRows()
     visibleRowRange = Range<int> (firstVisible >= 0 ? firstVisible : 0,
                                   lastVisible >= 0 ? lastVisible + 1 : 0);
 
+    for (auto& pair : rowComponents)
+    {
+        if (! visibleRowRange.contains (pair.first))
+            pair.second->setVisible (false);
+    }
+
     // Create or update visible rows
     for (int i = visibleRowRange.getStart(); i < visibleRowRange.getEnd(); ++i)
     {
@@ -863,6 +883,12 @@ void ListBox::layoutRows()
             row->setVisible (true);
         }
     }
+
+    if (verticalScrollBar != nullptr)
+        verticalScrollBar->toFront (false);
+
+    if (horizontalScrollBar != nullptr)
+        horizontalScrollBar->toFront (false);
 }
 
 void ListBox::createOrUpdateRow (int rowIndex)
@@ -918,13 +944,19 @@ void ListBox::removeUnusedRows()
 //==============================================================================
 void ListBox::scrollBy (float delta)
 {
+    auto oldScrollOffset = scrollOffset;
+
     scrollOffset += delta;
 
     // Clamp scroll offset
     auto maxScroll = jmax (0.0f, totalContentSize - viewportSize);
     scrollOffset = jlimit (0.0f, maxScroll, scrollOffset);
 
+    if (oldScrollOffset == scrollOffset)
+        return;
+
     layoutRows();
+    updateScrollBars();
     repaint();
 }
 
@@ -955,6 +987,7 @@ void ListBox::scrollToRow (int rowIndex)
     scrollOffset = jlimit (0.0f, maxScroll, scrollOffset);
 
     layoutRows();
+    updateScrollBars();
     repaint();
 }
 
@@ -1076,13 +1109,17 @@ int ListBox::getRowIndexAt (Point<float> position) const
     if (model == nullptr)
         return -1;
 
+    auto contentArea = getContentArea();
+    if (! contentArea.contains (position))
+        return -1;
+
     auto numRows = model->getNumRows();
     if (numRows == 0)
         return -1;
 
     float searchPosition = (orientation == Orientation::vertical)
-                             ? position.getY() + scrollOffset
-                             : position.getX() + scrollOffset;
+                             ? position.getY() - contentArea.getY() + scrollOffset
+                             : position.getX() - contentArea.getX() + scrollOffset;
 
     float currentPosition = 0.0f;
 
@@ -1186,7 +1223,26 @@ ScrollBar* ListBox::getHorizontalScrollBar() const noexcept
 void ListBox::updateScrollBars()
 {
     if (model == nullptr)
+    {
+        if (verticalScrollBar != nullptr)
+            verticalScrollBar->setVisible (false);
+
+        if (horizontalScrollBar != nullptr)
+            horizontalScrollBar->setVisible (false);
+
         return;
+    }
+
+    if (orientation == Orientation::vertical)
+    {
+        if (horizontalScrollBar != nullptr)
+            horizontalScrollBar->setVisible (false);
+    }
+    else
+    {
+        if (verticalScrollBar != nullptr)
+            verticalScrollBar->setVisible (false);
+    }
 
     auto contentArea = getContentArea();
     auto totalContent = getTotalContentSize();
@@ -1194,14 +1250,20 @@ void ListBox::updateScrollBars()
     if (orientation == Orientation::vertical)
     {
         // Update vertical scrollbar
-        verticalScrollBar->setRangeLimits (0.0, totalContent);
-        verticalScrollBar->setCurrentRange (scrollOffset, scrollOffset + contentArea.getHeight());
+        if (verticalScrollBar != nullptr)
+        {
+            verticalScrollBar->setRangeLimits (0.0, totalContent);
+            verticalScrollBar->setCurrentRange (scrollOffset, scrollOffset + contentArea.getHeight());
+        }
     }
     else
     {
         // Update horizontal scrollbar
-        horizontalScrollBar->setRangeLimits (0.0, totalContent);
-        horizontalScrollBar->setCurrentRange (scrollOffset, scrollOffset + contentArea.getWidth());
+        if (horizontalScrollBar != nullptr)
+        {
+            horizontalScrollBar->setRangeLimits (0.0, totalContent);
+            horizontalScrollBar->setCurrentRange (scrollOffset, scrollOffset + contentArea.getWidth());
+        }
     }
 }
 
