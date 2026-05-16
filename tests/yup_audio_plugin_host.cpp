@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#include "yup_audio_plugin_host/AudioPluginDescription.cpp"
-#include "yup_audio_plugin_host/AudioPluginScanner.cpp"
-#include "yup_audio_plugin_host/AudioPluginInstance.cpp"
-#include "yup_audio_plugin_host/AudioPluginState.cpp"
+#include "yup_audio_plugin_host/yup_AudioPluginDescription.cpp"
+#include "yup_audio_plugin_host/yup_AudioPluginScanner.cpp"
+#include "yup_audio_plugin_host/yup_AudioPluginInstance.cpp"
+#include "yup_audio_plugin_host/yup_AudioPluginState.cpp"

@@ -29,20 +29,14 @@ bool canScanFileWithFormat (AudioPluginFormatType type, const File& file)
 {
     switch (type)
     {
-#if YUP_AUDIO_PLUGIN_HOST_ENABLE_VST3
         case AudioPluginFormatType::vst3:
             return file.hasFileExtension (".vst3");
-#endif
 
-#if YUP_AUDIO_PLUGIN_HOST_ENABLE_CLAP
         case AudioPluginFormatType::clap:
             return file.hasFileExtension (".clap");
-#endif
 
-#if YUP_AUDIO_PLUGIN_HOST_ENABLE_AU && YUP_MAC
         case AudioPluginFormatType::audioUnit:
             return false;
-#endif
 
         default:
             break;

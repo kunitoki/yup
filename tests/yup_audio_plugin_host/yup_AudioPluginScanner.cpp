@@ -30,7 +30,7 @@ public:
         desc.formatType = fakeType;
         desc.name = file.getFileNameWithoutExtension();
         desc.identifier = "fake." + file.getFileNameWithoutExtension();
-        return std::vector<AudioPluginDescription> { desc };
+        return ResultValue<std::vector<AudioPluginDescription>>::ok (std::vector<AudioPluginDescription> { desc });
     }
 
     ResultValue<std::unique_ptr<AudioPluginInstance>> loadPlugin (
