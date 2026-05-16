@@ -386,6 +386,8 @@ public:
 
     void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer&) override
     {
+        ScopedNoDenormals noDenormals;
+
         const int numSamples = audioBuffer.getNumSamples();
         const int numChannels = audioBuffer.getNumChannels();
 
@@ -441,8 +443,6 @@ public:
                          abl->mBuffers[c].mData,
                          static_cast<std::size_t> (numSamples) * sizeof (float));
         }
-
-        syncParameterValuesFromAudioUnit();
     }
 
     //==============================================================================

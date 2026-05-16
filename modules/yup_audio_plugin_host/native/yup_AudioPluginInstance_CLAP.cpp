@@ -184,6 +184,11 @@ public:
 
     void prepareToPlay (float sampleRate, int maxBlockSize) override
     {
+        const int numChannels = jmax (2, pluginDescription.numInputChannels, pluginDescription.numOutputChannels);
+        preparedInPtrs.resize (static_cast<std::size_t> (numChannels));
+        preparedOutPtrs.resize (static_cast<std::size_t> (numChannels));
+        clapInputEvents.parameterEvents.reserve (clapParameterIds.size());
+
         clapPlugin->activate (clapPlugin, sampleRate, static_cast<uint32_t> (maxBlockSize), static_cast<uint32_t> (maxBlockSize));
 
         clapPlugin->start_processing (clapPlugin);
@@ -200,27 +205,31 @@ public:
 
     void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer& /*midiBuffer*/) override
     {
+        ScopedNoDenormals noDenormals;
+
         const int numSamples = audioBuffer.getNumSamples();
         const int numChannels = audioBuffer.getNumChannels();
 
-        // Build audio buffer descriptors
-        std::vector<const float*> inPtrs (static_cast<std::size_t> (numChannels));
-        std::vector<float*> outPtrs (static_cast<std::size_t> (numChannels));
+        if (static_cast<int> (preparedInPtrs.size()) < numChannels)
+        {
+            jassertfalse;
+            return;
+        }
 
         for (int c = 0; c < numChannels; ++c)
         {
-            inPtrs[static_cast<std::size_t> (c)] = audioBuffer.getReadPointer (c);
-            outPtrs[static_cast<std::size_t> (c)] = audioBuffer.getWritePointer (c);
+            preparedInPtrs[static_cast<std::size_t> (c)] = audioBuffer.getReadPointer (c);
+            preparedOutPtrs[static_cast<std::size_t> (c)] = audioBuffer.getWritePointer (c);
         }
 
         clap_audio_buffer_t inputBuf {};
-        inputBuf.data32 = const_cast<float**> (inPtrs.data());
+        inputBuf.data32 = const_cast<float**> (preparedInPtrs.data());
         inputBuf.channel_count = static_cast<uint32_t> (numChannels);
         inputBuf.latency = 0;
         inputBuf.constant_mask = 0;
 
         clap_audio_buffer_t outputBuf {};
-        outputBuf.data32 = outPtrs.data();
+        outputBuf.data32 = preparedOutPtrs.data();
         outputBuf.channel_count = static_cast<uint32_t> (numChannels);
 
         clap_process_t process {};
@@ -231,17 +240,15 @@ public:
         process.audio_outputs = &outputBuf;
         process.audio_outputs_count = 1;
 
-        CLAPInputEvents inputEvents;
+        clapInputEvents.parameterEvents.clear();
         const auto params = getParameters();
         const auto numParams = yup::jmin (params.size(), clapParameterIds.size());
-        inputEvents.parameterEvents.reserve (numParams);
 
         for (std::size_t i = 0; i < numParams; ++i)
-            inputEvents.addParameterValue (clapParameterIds[i], static_cast<double> (params[i]->getValue()));
+            clapInputEvents.addParameterValue (clapParameterIds[i], static_cast<double> (params[i]->getValue()));
 
-        CLAPOutputEvents outputEvents;
-        process.in_events = &inputEvents.inputEvents;
-        process.out_events = &outputEvents.outputEvents;
+        process.in_events = &clapInputEvents.inputEvents;
+        process.out_events = &clapOutputEvents.outputEvents;
 
         // TODO: map MidiBuffer to CLAP event list in a later task
 
@@ -436,6 +443,10 @@ private:
     std::unique_ptr<CLAPModule> clapModule;
     std::unique_ptr<YUPCLAPHost> yupHost;
     const clap_plugin_t* clapPlugin = nullptr;
+    CLAPInputEvents clapInputEvents;
+    CLAPOutputEvents clapOutputEvents;
+    std::vector<const float*> preparedInPtrs;
+    std::vector<float*> preparedOutPtrs;
     std::vector<clap_id> clapParameterIds;
     int currentPreset = 0;
 };

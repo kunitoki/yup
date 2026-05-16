@@ -78,47 +78,6 @@ struct VST3Module
 };
 
 //==============================================================================
-// Simple VST3 parameter queue for one parameter during processBlock().
-class SingleParamQueue : public Vst::IParamValueQueue
-{
-public:
-    explicit SingleParamQueue (Vst::ParamID id)
-        : paramId (id)
-    {
-    }
-
-    Vst::ParamID PLUGIN_API getParameterId() override { return paramId; }
-
-    int32 PLUGIN_API getPointCount() override
-    {
-        return static_cast<int32> (points.size());
-    }
-
-    tresult PLUGIN_API getPoint (int32 index, int32& sampleOffset, Vst::ParamValue& value) override
-    {
-        if (index < 0 || index >= static_cast<int32> (points.size()))
-            return kResultFalse;
-
-        sampleOffset = points[static_cast<std::size_t> (index)].first;
-        value = points[static_cast<std::size_t> (index)].second;
-        return kResultOk;
-    }
-
-    tresult PLUGIN_API addPoint (int32 sampleOffset, Vst::ParamValue value, int32& index) override
-    {
-        index = static_cast<int32> (points.size());
-        points.emplace_back (sampleOffset, value);
-        return kResultOk;
-    }
-
-    DECLARE_FUNKNOWN_METHODS
-
-private:
-    Vst::ParamID paramId;
-    std::vector<std::pair<int32, Vst::ParamValue>> points;
-};
-
-//==============================================================================
 // Minimal IComponentHandler stub — required by IAudioProcessor::initialize().
 class HostComponentHandler : public Vst::IComponentHandler
 {
@@ -204,6 +163,8 @@ public:
 
     void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer) override
     {
+        ScopedNoDenormals noDenormals;
+
         Vst::ProcessData data;
         data.processMode = Vst::kRealtime;
         data.symbolicSampleSize = Vst::kSample32;
@@ -226,7 +187,7 @@ public:
         // Events (MIDI)
         // TODO: map MidiBuffer to Vst::EventList when MIDI support is added in a later task
 
-        Vst::ParameterChanges inputParameterChanges (static_cast<int32> (vst3ParameterIds.size()));
+        inputParameterChanges.clearQueue();
         const auto params = getParameters();
         const auto numParams = yup::jmin (params.size(), vst3ParameterIds.size());
 
@@ -443,6 +404,8 @@ private:
             vst3ParameterIds.push_back (info.id);
             addParameter (std::move (param));
         }
+
+        inputParameterChanges.setMaxParameters (static_cast<int32> (vst3ParameterIds.size()));
     }
 
     AudioPluginHostContext hostContext;
@@ -451,6 +414,7 @@ private:
     IPtr<Vst::IAudioProcessor> vst3Processor;
     IPtr<Vst::IEditController> vst3Controller;
     Vst::ProcessContext vst3ProcessContext {};
+    Vst::ParameterChanges inputParameterChanges;
     std::vector<Vst::ParamID> vst3ParameterIds;
     int currentPreset = 0;
     int numPresets = 0;
