@@ -89,10 +89,8 @@ bool AudioProcessor::isSuspended() const
 void AudioProcessor::setPlaybackConfiguration (float sampleRate, int samplesPerBlock)
 {
     releaseResources();
-
     this->sampleRate = sampleRate;
     this->samplesPerBlock = samplesPerBlock;
-
     prepareToPlay (sampleRate, samplesPerBlock);
 }
 

@@ -67,7 +67,11 @@ public:
 
     //==============================================================================
 
-    /** Prepares the processor for playback. */
+    /** Prepares the processor for playback.
+
+        getSampleRate() and getSamplesPerBlock() are guaranteed to return the correct
+        values when this is called. Subclasses do not need to call the base class.
+    */
     virtual void prepareToPlay (float sampleRate, int maxBlockSize) = 0;
 
     /** Releases resources. */

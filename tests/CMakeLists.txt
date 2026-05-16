@@ -58,6 +58,7 @@ set (target_modules
     yup_audio_basics
     yup_audio_devices
     yup_audio_formats
+    yup_audio_processors
     yup_dsp
     yup_events
     yup_data_model

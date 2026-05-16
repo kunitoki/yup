@@ -82,7 +82,7 @@ TEST_F (AudioPluginInstanceTests, DescriptionIsStoredCorrectly)
 
 TEST_F (AudioPluginInstanceTests, PrepareToPlaySetsPreparedFlag)
 {
-    instance.prepareToPlay (44100.0f, 512);
+    instance.setPlaybackConfiguration (44100.0f, 512);
     EXPECT_TRUE (instance.prepared);
     EXPECT_FLOAT_EQ (44100.0f, instance.getSampleRate());
     EXPECT_EQ (512, instance.getSamplesPerBlock());

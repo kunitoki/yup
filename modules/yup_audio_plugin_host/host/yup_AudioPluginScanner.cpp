@@ -148,7 +148,7 @@ AudioPluginScanner::ScanResult AudioPluginScanner::scan (const FileSearchPath& s
     for (int p = 0; p < numPaths; ++p)
     {
         Array<File> files;
-        searchPath[p].findChildFiles (files, File::findFilesAndDirectories, true, "*", File::FollowSymlinks::no);
+        searchPath[p].findChildFiles (files, File::findFilesAndDirectories, true, "*", File::FollowSymlinks::noCycles);
 
         for (const auto& file : files)
         {
