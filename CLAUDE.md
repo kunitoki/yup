@@ -57,7 +57,6 @@ For main module headers (e.g., `yup_graphics.h`), include this declaration block
     description:        Brief module description
     website:            https://github.com/kunitoki/yup
     license:            ISC
-    minimumCppStandard: 17
 
     dependencies:       yup_graphics [other_dependencies]
     searchpaths:        native
