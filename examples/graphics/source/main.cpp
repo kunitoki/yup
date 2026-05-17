@@ -39,6 +39,7 @@
 #include "examples/Artboard.h"
 #include "examples/Audio.h"
 #include "examples/AudioFileDemo.h"
+#include "examples/AudioGraphDemo.h"
 #include "examples/ColorLab.h"
 #include "examples/ConvolutionDemo.h"
 #include "examples/CrossoverDemo.h"
@@ -142,6 +143,7 @@ public:
 
         registerDemo<AudioExample> ("Audio", counter++);
         registerDemo<AudioFileDemo> ("Audio File", counter++);
+        registerDemo<AudioGraphDemo> ("Audio Graph", counter++);
         registerDemo<ColorLabDemo> ("Color Lab", counter++);
         registerDemo<ConvolutionDemo> ("Convolution Demo", counter++);
         registerDemo<CrossoverDemo> ("Crossover Demo", counter++);

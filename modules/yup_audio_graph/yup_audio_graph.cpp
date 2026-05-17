@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2025 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#ifdef YUP_AUDIO_GUI_H_INCLUDED
+#ifdef YUP_AUDIO_GRAPH_H_INCLUDED
 /* When you add this cpp file to your project, you mustn't include it in a file where you've
    already included any other headers - just put it inside a file on its own, possibly with your config
    flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
@@ -28,17 +28,7 @@
 #error "Incorrect use of YUP cpp file"
 #endif
 
-#include "yup_audio_gui.h"
+#include "yup_audio_graph.h"
 
 //==============================================================================
-
-#include "waveform/yup_AudioPeakProfile.cpp"
-#include "waveform/yup_AudioPeakProfileCache.cpp"
-#include "waveform/yup_AudioThumbnail.cpp"
-#include "keyboard/yup_MidiKeyboardComponent.cpp"
-#include "displays/yup_AudioViewComponent.cpp"
-#include "displays/yup_SpectrumAnalyzerComponent.cpp"
-#include "displays/yup_CartesianPlane.cpp"
-#include "metering/yup_KMeterComponent.cpp"
-#include "graph/yup_AudioGraphNodeView.cpp"
-#include "graph/yup_AudioGraphComponent.cpp"
+#include "graph/yup_AudioGraphProcessor.cpp"

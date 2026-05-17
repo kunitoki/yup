@@ -593,9 +593,6 @@ private:
         parameterList.setModel (&parameterListModel);
         addAndMakeVisible (parameterList);
         parameterList.setVisible (false);
-
-        // Start audio
-        audioDeviceManager.addAudioCallback (this);
     }
 
     void performScan()

@@ -160,10 +160,11 @@ void paintLinearSlider (Graphics& g, const ApplicationTheme& theme, const Slider
                                sliderValue * sliderBounds.getHeight(),
                                2.0f);
     }
-
-    // Draw thumb
-    g.setFillColor (isMouseDown ? colors.thumbDown : (isMouseOver ? colors.thumbOver : colors.thumb));
-    g.fillEllipse (thumbBounds);
+    else
+    {
+        g.setFillColor (isMouseDown ? colors.thumbDown : (isMouseOver ? colors.thumbOver : colors.thumb));
+        g.fillEllipse (thumbBounds);
+    }
 
     // Draw focus outline if needed
     if (slider.hasKeyboardFocus())
