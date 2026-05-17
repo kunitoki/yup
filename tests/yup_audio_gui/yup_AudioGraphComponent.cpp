@@ -751,6 +751,38 @@ TEST_F (AudioGraphComponentTests, RightClickEndpointRemovesAllConnectionsForEndp
     component->removeListener (&listener);
 }
 
+TEST_F (AudioGraphComponentTests, RightClickEndpointRemovesMultipleConnectionsForEndpoint)
+{
+    const auto firstNodeID = addProcessorNode();
+    const auto secondNodeID = addProcessorNode();
+    addNodeView (firstNodeID, { 100.0f, 50.0f });
+    addNodeView (secondNodeID, { 100.0f, 190.0f });
+
+    auto inputView = std::make_unique<TestNodeView> (AudioGraphNodeID::invalid(), "Graph Input", 0, 1);
+    component->setGraphInputView (std::move (inputView), { -120.0f, 50.0f });
+
+    const AudioGraphConnection firstConnection { AudioGraphEndpoint::graphInput (0),
+                                                 AudioGraphEndpoint::nodeInput (firstNodeID, 0) };
+    const AudioGraphConnection secondConnection { AudioGraphEndpoint::graphInput (0),
+                                                  AudioGraphEndpoint::nodeInput (secondNodeID, 0) };
+
+    ASSERT_TRUE (graph->addConnection (firstConnection).wasOk());
+    ASSERT_TRUE (graph->addConnection (secondConnection).wasOk());
+    ASSERT_TRUE (graph->commitChanges().wasOk());
+
+    RecordingGraphListener listener;
+    component->addListener (&listener);
+
+    component->mouseDown (mouseEventForComponent (MouseEvent::rightButton, component->getEndpointScreenPosition (firstConnection.source)));
+
+    EXPECT_TRUE (graph->getConnections().empty());
+    ASSERT_EQ (2u, listener.removedConnections.size());
+    EXPECT_EQ (firstConnection, listener.removedConnections[0]);
+    EXPECT_EQ (secondConnection, listener.removedConnections[1]);
+
+    component->removeListener (&listener);
+}
+
 TEST_F (AudioGraphComponentTests, RightClickConnectionRemovesSingleConnection)
 {
     const auto nodeID = addProcessorNode();

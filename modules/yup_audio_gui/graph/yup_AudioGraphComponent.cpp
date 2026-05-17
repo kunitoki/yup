@@ -866,11 +866,38 @@ void AudioGraphComponent::removeConnectionsForEndpoint (const AudioGraphEndpoint
         return;
 
     const auto connections = graph->getConnections();
+    std::vector<AudioGraphConnection> removedConnections;
+
     for (const auto& connection : connections)
     {
         if (endpointsMatch (connection.source, endpoint) || endpointsMatch (connection.destination, endpoint))
-            removeConnectionAndCommit (connection);
+        {
+            if (graph->removeConnection (connection))
+                removedConnections.push_back (connection);
+        }
     }
+
+    if (removedConnections.empty())
+        return;
+
+    if (graph->commitChanges().failed())
+    {
+        for (const auto& connection : removedConnections)
+            graph->addConnection (connection);
+
+        graph->commitChanges();
+        return;
+    }
+
+    for (const auto& connection : removedConnections)
+    {
+        listeners.call ([&] (Listener& listener)
+        {
+            listener.connectionRemoved (connection);
+        });
+    }
+
+    repaint();
 }
 
 bool AudioGraphComponent::isCompatiblePair (const AudioGraphEndpoint& first, const AudioGraphEndpoint& second) const noexcept

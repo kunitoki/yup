@@ -300,6 +300,86 @@ private:
     AudioBuffer<float> history;
 };
 
+class BlockingLatencyProcessor : public TestProcessor
+{
+public:
+    BlockingLatencyProcessor (std::atomic<bool>& enteredFlag, std::atomic<bool>& continueFlag)
+        : TestProcessor()
+        , entered (enteredFlag)
+        , shouldContinue (continueFlag)
+    {
+    }
+
+    int getLatencySamples() override
+    {
+        entered.store (true);
+
+        while (! shouldContinue.load())
+            std::this_thread::yield();
+
+        return 0;
+    }
+
+private:
+    std::atomic<bool>& entered;
+    std::atomic<bool>& shouldContinue;
+};
+
+class StatefulGainProcessor : public AudioProcessor
+{
+public:
+    explicit StatefulGainProcessor (float initialGain)
+        : AudioProcessor ("Stateful Gain", stereoLayout())
+        , gain (initialGain)
+    {
+    }
+
+    void prepareToPlay (float, int) override {}
+
+    void releaseResources() override {}
+
+    void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer&) override
+    {
+        for (int channel = 0; channel < audioBuffer.getNumChannels(); ++channel)
+            audioBuffer.applyGain (channel, 0, audioBuffer.getNumSamples(), gain);
+    }
+
+    int getCurrentPreset() const noexcept override { return 0; }
+
+    void setCurrentPreset (int) noexcept override {}
+
+    int getNumPresets() const override { return 0; }
+
+    String getPresetName (int) const override { return {}; }
+
+    void setPresetName (int, StringRef) override {}
+
+    Result loadStateFromMemory (const MemoryBlock& memoryBlock) override
+    {
+        if (memoryBlock.getSize() != sizeof (float))
+            return Result::fail ("Invalid gain state");
+
+        MemoryInputStream stream (memoryBlock, false);
+        gain = stream.readFloat();
+        return Result::ok();
+    }
+
+    Result saveStateIntoMemory (MemoryBlock& memoryBlock) override
+    {
+        MemoryOutputStream stream (memoryBlock, false);
+        stream.writeFloat (gain);
+        stream.flush();
+        return Result::ok();
+    }
+
+    bool hasEditor() const override { return false; }
+
+    void setGain (float newGain) noexcept { gain = newGain; }
+
+private:
+    float gain = 1.0f;
+};
+
 void fillImpulse (AudioBuffer<float>& buffer)
 {
     buffer.clear();
@@ -588,6 +668,56 @@ TEST (AudioGraphProcessorTests, ProcessesSerialAudioChain)
     EXPECT_FLOAT_EQ (1.0f, audio.getReadPointer (1)[0]);
 }
 
+TEST (AudioGraphProcessorTests, ProcessesBlocksLargerThanPreparedMaximumInChunks)
+{
+    AudioGraphProcessor graph;
+    graph.prepareToPlay (48000.0f, 16);
+
+    const auto node = graph.addNode (std::make_unique<TestProcessor> (0.5f));
+    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (graph.commitChanges().wasOk());
+
+    AudioBuffer<float> audio (2, 40);
+    MidiBuffer midi;
+
+    for (int channel = 0; channel < audio.getNumChannels(); ++channel)
+        for (int sample = 0; sample < audio.getNumSamples(); ++sample)
+            audio.getWritePointer (channel)[sample] = 1.0f;
+
+    graph.processBlock (audio, midi);
+
+    for (int channel = 0; channel < audio.getNumChannels(); ++channel)
+        for (int sample = 0; sample < audio.getNumSamples(); ++sample)
+            EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (channel)[sample]) << "channel " << channel << " sample " << sample;
+}
+
+TEST (AudioGraphProcessorTests, PreservesMidiEventsInBlocksLargerThanPreparedMaximum)
+{
+    AudioGraphProcessor graph (midiLayout());
+    graph.prepareToPlay (48000.0f, 16);
+
+    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0),
+                                        AudioGraphEndpoint::graphOutput (0) })
+                     .wasOk());
+    EXPECT_TRUE (graph.commitChanges().wasOk());
+
+    AudioBuffer<float> audio (0, 40);
+    MidiBuffer midi;
+    const uint8 noteOn[] = { 0x90, 60, 100 };
+
+    midi.addEvent (noteOn, 3, 7);
+    midi.addEvent (noteOn, 3, 17);
+    midi.addEvent (noteOn, 3, 35);
+
+    graph.processBlock (audio, midi);
+
+    EXPECT_EQ (1, countMidiEventsAt (midi, 7));
+    EXPECT_EQ (1, countMidiEventsAt (midi, 17));
+    EXPECT_EQ (1, countMidiEventsAt (midi, 35));
+    EXPECT_EQ (3, countMidiEvents (midi));
+}
+
 TEST (AudioGraphProcessorTests, MixesFanIn)
 {
     AudioGraphProcessor graph;
@@ -744,6 +874,110 @@ TEST (AudioGraphProcessorTests, MissingCommitKeepsPreviousPlan)
     graph.processBlock (audio, midi);
 
     EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (0)[0]);
+}
+
+TEST (AudioGraphProcessorTests, CommitKeepsDirtyWhenModelChangesDuringCompilation)
+{
+    AudioGraphProcessor graph;
+
+    std::atomic<bool> latencyEntered { false };
+    std::atomic<bool> allowLatencyQueryToContinue { false };
+
+    const auto blockingNode = graph.addNode (std::make_unique<BlockingLatencyProcessor> (latencyEntered, allowLatencyQueryToContinue));
+    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (blockingNode, 0) }).wasOk());
+    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (blockingNode, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+
+    std::atomic<bool> commitSucceeded { false };
+    std::thread commitThread ([&]
+    {
+        commitSucceeded.store (graph.commitChanges().wasOk());
+    });
+
+    for (int spinCount = 0; spinCount < 10000 && ! latencyEntered.load(); ++spinCount)
+        std::this_thread::yield();
+
+    const bool didEnterLatencyQuery = latencyEntered.load();
+    EXPECT_TRUE (didEnterLatencyQuery);
+
+    if (! didEnterLatencyQuery)
+    {
+        allowLatencyQueryToContinue.store (true);
+        commitThread.join();
+        return;
+    }
+
+    const auto addedDuringCommit = graph.addNode (std::make_unique<TestProcessor>());
+    EXPECT_TRUE (addedDuringCommit.isValid());
+
+    allowLatencyQueryToContinue.store (true);
+    commitThread.join();
+
+    EXPECT_TRUE (commitSucceeded.load());
+    EXPECT_TRUE (graph.hasUncommittedChanges());
+
+    EXPECT_TRUE (graph.commitChanges().wasOk());
+    EXPECT_FALSE (graph.hasUncommittedChanges());
+}
+
+TEST (AudioGraphProcessorTests, SaveAndLoadRestoresConnectionsAndNodeState)
+{
+    AudioGraphProcessor graph;
+    auto processor = std::make_unique<StatefulGainProcessor> (0.25f);
+    auto* processorPtr = processor.get();
+    const auto node = graph.addNode (std::move (processor));
+
+    const AudioGraphConnection inputConnection { AudioGraphEndpoint::graphInput (0),
+                                                 AudioGraphEndpoint::nodeInput (node, 0) };
+    const AudioGraphConnection outputConnection { AudioGraphEndpoint::nodeOutput (node, 0),
+                                                  AudioGraphEndpoint::graphOutput (0) };
+    const AudioGraphConnection bypassConnection { AudioGraphEndpoint::graphInput (0),
+                                                  AudioGraphEndpoint::graphOutput (0) };
+
+    ASSERT_TRUE (graph.addConnection (inputConnection).wasOk());
+    ASSERT_TRUE (graph.addConnection (outputConnection).wasOk());
+    ASSERT_TRUE (graph.commitChanges().wasOk());
+
+    MemoryBlock savedState;
+    EXPECT_TRUE (graph.saveStateIntoMemory (savedState).wasOk());
+
+    processorPtr->setGain (0.75f);
+    EXPECT_TRUE (graph.removeConnection (inputConnection));
+    EXPECT_TRUE (graph.removeConnection (outputConnection));
+    EXPECT_TRUE (graph.addConnection (bypassConnection).wasOk());
+    EXPECT_TRUE (graph.commitChanges().wasOk());
+
+    EXPECT_TRUE (graph.loadStateFromMemory (savedState).wasOk());
+    EXPECT_FALSE (graph.hasUncommittedChanges());
+
+    const auto connections = graph.getConnections();
+    ASSERT_EQ (2u, connections.size());
+    EXPECT_EQ (inputConnection, connections[0]);
+    EXPECT_EQ (outputConnection, connections[1]);
+
+    AudioBuffer<float> audio (2, 16);
+    MidiBuffer midi;
+    fillImpulse (audio);
+
+    graph.processBlock (audio, midi);
+
+    EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (0)[0]);
+    EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (1)[0]);
+}
+
+TEST (AudioGraphProcessorTests, LoadStateFailsWhenSavedNodesAreMissing)
+{
+    AudioGraphProcessor source;
+    const auto node = source.addNode (std::make_unique<StatefulGainProcessor> (0.25f));
+
+    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (source.commitChanges().wasOk());
+
+    MemoryBlock savedState;
+    ASSERT_TRUE (source.saveStateIntoMemory (savedState).wasOk());
+
+    AudioGraphProcessor destination;
+    EXPECT_TRUE (destination.loadStateFromMemory (savedState).failed());
 }
 
 TEST (AudioGraphProcessorTests, RemoveConnectionStopsRoutingAfterCommit)
@@ -1433,6 +1667,33 @@ TEST (AudioGraphProcessorTests, WorkerThreadCountCanBeChangedAfterProcessing)
     EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (0)[0]);
 
     graph.setNumWorkerThreads (4);
+    fillImpulse (audio);
+    graph.processBlock (audio, midi);
+    EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (0)[0]);
+
+    graph.setNumWorkerThreads (0);
+}
+
+TEST (AudioGraphProcessorTests, WorkerThreadsContinueProcessingAfterIdleReset)
+{
+    AudioGraphProcessor graph;
+    graph.setNumWorkerThreads (2);
+
+    const auto node = graph.addNode (std::make_unique<TestProcessor> (0.5f));
+    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (graph.commitChanges().wasOk());
+
+    AudioBuffer<float> audio (2, 16);
+    MidiBuffer midi;
+
+    fillImpulse (audio);
+    graph.processBlock (audio, midi);
+    EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (0)[0]);
+
+    for (int i = 0; i < 100; ++i)
+        std::this_thread::yield();
+
     fillImpulse (audio);
     graph.processBlock (audio, midi);
     EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (0)[0]);

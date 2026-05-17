@@ -73,6 +73,9 @@ bool isValidBusIndex (Span<const AudioBus> buses, int busIndex)
 {
     return busIndex >= 0 && busIndex < static_cast<int> (buses.size());
 }
+
+constexpr int audioGraphStateMagic = 0x59414731; // YAG1
+constexpr int audioGraphStateVersion = 2;
 } // namespace
 
 //==============================================================================
@@ -96,6 +99,7 @@ public:
     {
         AudioGraphNodeID id;
         std::shared_ptr<AudioProcessor> processor;
+        AudioGraphNodeProperties properties;
         float preparedSampleRate = 0.0f;
         int preparedBlockSize = 0;
         bool prepared = false;
@@ -182,6 +186,7 @@ public:
         std::vector<DelayLine> delayLines;
         AudioBuffer<float> graphInputAudio;
         MidiBuffer graphInputMidi;
+        MidiBuffer graphOutputMidi;
         AudioGraphAllocationStats stats;
     };
 
@@ -191,6 +196,13 @@ public:
         int channels = 0;
         int offset = 0;
         int nodeIndex = -1;
+    };
+
+    struct SavedNodeState
+    {
+        AudioGraphNodeID id;
+        AudioGraphNodeProperties properties;
+        MemoryBlock state;
     };
 
     class WorkerThread final : public Thread
@@ -210,12 +222,44 @@ public:
         if (processor == nullptr)
             return AudioGraphNodeID::invalid();
 
+        auto properties = makeDefaultNodeProperties (*processor);
+        return addNode (std::move (processor), std::move (properties));
+    }
+
+    AudioGraphNodeID addNode (std::unique_ptr<AudioProcessor> processor,
+                              AudioGraphNodeProperties properties)
+    {
+        if (processor == nullptr)
+            return AudioGraphNodeID::invalid();
+
         const std::lock_guard<std::mutex> lock (modelMutex);
 
         const auto id = AudioGraphNodeID (++nextNodeID);
-        modelNodes.push_back ({ id, std::shared_ptr<AudioProcessor> (std::move (processor)) });
+        if (properties.name.isEmpty())
+            properties.name = processor->getName();
+
+        modelNodes.push_back ({ id, std::shared_ptr<AudioProcessor> (std::move (processor)), std::move (properties) });
+        ++modelRevision;
         dirty.store (true);
         return id;
+    }
+
+    AudioGraphNodeID addPluginNode (std::unique_ptr<AudioPluginInstance> plugin,
+                                    float positionX,
+                                    float positionY)
+    {
+        if (plugin == nullptr)
+            return AudioGraphNodeID::invalid();
+
+        AudioGraphNodeProperties properties;
+        properties.kind = AudioGraphNodeProperties::Kind::plugin;
+        properties.identifier = plugin->getDescription().identifier;
+        properties.name = plugin->getDescription().name;
+        properties.positionX = positionX;
+        properties.positionY = positionY;
+        properties.pluginDescription = plugin->getDescription();
+
+        return addNode (std::move (plugin), std::move (properties));
     }
 
     bool removeNode (AudioGraphNodeID nodeID)
@@ -241,6 +285,7 @@ public:
         }),
                                 modelConnections.end());
 
+        ++modelRevision;
         dirty.store (true);
         return true;
     }
@@ -259,6 +304,7 @@ public:
             return Result::fail ("Audio graph connection already exists");
 
         modelConnections.push_back (connection);
+        ++modelRevision;
         dirty.store (true);
         return Result::ok();
     }
@@ -272,7 +318,10 @@ public:
 
         const bool removed = modelConnections.size() != oldSize;
         if (removed)
+        {
+            ++modelRevision;
             dirty.store (true);
+        }
 
         return removed;
     }
@@ -289,18 +338,23 @@ public:
 
         modelConnections.clear();
         modelNodes.clear();
+        ++modelRevision;
         dirty.store (true);
     }
 
     Result commitChanges()
     {
+        const std::lock_guard<std::mutex> commitLock (commitMutex);
+
         std::vector<ModelNode> nodesSnapshot;
         std::vector<AudioGraphConnection> connectionsSnapshot;
+        uint64_t snapshotRevision = 0;
 
         {
             const std::lock_guard<std::mutex> lock (modelMutex);
             nodesSnapshot = modelNodes;
             connectionsSnapshot = modelConnections;
+            snapshotRevision = modelRevision;
         }
 
         for (auto& node : nodesSnapshot)
@@ -321,8 +375,11 @@ public:
         if (! result)
             return result;
 
+        bool snapshotIsCurrent = false;
+
         {
             const std::lock_guard<std::mutex> lock (modelMutex);
+            snapshotIsCurrent = snapshotRevision == modelRevision;
 
             for (auto& modelNode : modelNodes)
             {
@@ -342,7 +399,7 @@ public:
 
         storeStats (compiled->stats);
         latestLatencySamples.store (compiled->graphLatencySamples);
-        dirty.store (false);
+        dirty.store (! snapshotIsCurrent);
 
         delete pendingPlan.exchange (compiled.release());
         deleteRetiredPlans();
@@ -387,31 +444,45 @@ public:
             return;
         }
 
-        const int numSamples = std::min (audioBuffer.getNumSamples(), graph->maxBlockSize);
-        if (numSamples <= 0)
+        const int totalSamples = audioBuffer.getNumSamples();
+        if (totalSamples <= 0)
         {
             audioBuffer.clear();
             midiBuffer.clear();
             return;
         }
 
-        captureGraphInput (*graph, audioBuffer, midiBuffer, numSamples);
+        graph->graphOutputMidi.clear();
 
-        audioBuffer.clear();
+        for (int startSample = 0; startSample < totalSamples; startSample += graph->maxBlockSize)
+        {
+            const int numSamples = std::min (graph->maxBlockSize, totalSamples - startSample);
+
+            captureGraphInput (*graph, audioBuffer, midiBuffer, startSample, numSamples);
+            audioBuffer.clear (startSample, numSamples);
+
+            if (desiredWorkerThreads.load() > 0)
+            {
+                processLevels (*graph, numSamples);
+            }
+            else
+            {
+                for (const auto nodeIndex : graph->topologicalOrder)
+                    processNode (*graph, nodeIndex, numSamples);
+            }
+
+            for (const auto connectionIndex : graph->graphOutputConnections)
+                routeConnection (*graph,
+                                 graph->connections[static_cast<size_t> (connectionIndex)],
+                                 audioBuffer,
+                                 graph->graphOutputMidi,
+                                 numSamples,
+                                 startSample,
+                                 startSample);
+        }
+
         midiBuffer.clear();
-
-        if (desiredWorkerThreads.load() > 0)
-        {
-            processLevels (*graph, numSamples);
-        }
-        else
-        {
-            for (const auto nodeIndex : graph->topologicalOrder)
-                processNode (*graph, nodeIndex, numSamples);
-        }
-
-        for (const auto connectionIndex : graph->graphOutputConnections)
-            routeConnection (*graph, graph->connections[static_cast<size_t> (connectionIndex)], audioBuffer, midiBuffer, numSamples);
+        midiBuffer.swapWith (graph->graphOutputMidi);
     }
 
     void flush()
@@ -480,6 +551,203 @@ public:
         });
 
         return iterator != modelNodes.end() ? iterator->processor.get() : nullptr;
+    }
+
+    Result saveStateIntoMemory (MemoryBlock& memoryBlock)
+    {
+        std::vector<ModelNode> nodesSnapshot;
+        std::vector<AudioGraphConnection> connectionsSnapshot;
+        uint64_t snapshotNextNodeID = 0;
+
+        {
+            const std::lock_guard<std::mutex> lock (modelMutex);
+            nodesSnapshot = modelNodes;
+            connectionsSnapshot = modelConnections;
+            snapshotNextNodeID = nextNodeID;
+        }
+
+        std::vector<SavedNodeState> savedNodes;
+        savedNodes.reserve (nodesSnapshot.size());
+
+        for (const auto& node : nodesSnapshot)
+        {
+            if (node.processor == nullptr)
+                return Result::fail ("Audio graph contains an empty node");
+
+            MemoryBlock nodeState;
+            const auto result = node.processor->saveStateIntoMemory (nodeState);
+
+            if (! result)
+                return Result::fail ("Audio graph node state save failed: " + result.getErrorMessage());
+
+            savedNodes.push_back ({ node.id, std::move (nodeState) });
+        }
+
+        MemoryOutputStream stream (memoryBlock, false);
+        stream.writeInt (audioGraphStateMagic);
+        stream.writeCompressedInt (audioGraphStateVersion);
+        stream.writeInt64 (static_cast<int64> (snapshotNextNodeID));
+        stream.writeCompressedInt (static_cast<int> (savedNodes.size()));
+
+        for (const auto& node : savedNodes)
+        {
+            stream.writeInt64 (static_cast<int64> (node.id.getRawID()));
+            stream.writeCompressedInt (static_cast<int> (node.state.getSize()));
+
+            if (! node.state.isEmpty())
+                stream.write (node.state.getData(), node.state.getSize());
+        }
+
+        stream.writeCompressedInt (static_cast<int> (connectionsSnapshot.size()));
+
+        for (const auto& connection : connectionsSnapshot)
+        {
+            writeEndpoint (stream, connection.source);
+            writeEndpoint (stream, connection.destination);
+        }
+
+        stream.flush();
+        return Result::ok();
+    }
+
+    Result loadStateFromMemory (const MemoryBlock& memoryBlock)
+    {
+        MemoryInputStream stream (memoryBlock, false);
+
+        if (stream.readInt() != audioGraphStateMagic)
+            return Result::fail ("Audio graph state has an invalid header");
+
+        if (stream.readCompressedInt() != audioGraphStateVersion)
+            return Result::fail ("Audio graph state has an unsupported version");
+
+        const auto savedNextNodeID = static_cast<uint64_t> (stream.readInt64());
+        const int numNodes = stream.readCompressedInt();
+
+        if (numNodes < 0)
+            return Result::fail ("Audio graph state has an invalid node count");
+
+        std::vector<SavedNodeState> savedNodes;
+        savedNodes.reserve (static_cast<size_t> (numNodes));
+
+        for (int i = 0; i < numNodes; ++i)
+        {
+            SavedNodeState savedNode;
+            savedNode.id = AudioGraphNodeID (static_cast<uint64_t> (stream.readInt64()));
+
+            const int stateSize = stream.readCompressedInt();
+            if (stateSize < 0)
+                return Result::fail ("Audio graph state has an invalid node state size");
+
+            savedNode.state.setSize (static_cast<size_t> (stateSize));
+
+            if (stateSize > 0 && stream.read (savedNode.state.getData(), stateSize) != stateSize)
+                return Result::fail ("Audio graph state ended while reading node state");
+
+            savedNodes.push_back (std::move (savedNode));
+        }
+
+        const int numConnections = stream.readCompressedInt();
+        if (numConnections < 0)
+            return Result::fail ("Audio graph state has an invalid connection count");
+
+        std::vector<AudioGraphConnection> savedConnections;
+        savedConnections.reserve (static_cast<size_t> (numConnections));
+
+        for (int i = 0; i < numConnections; ++i)
+        {
+            AudioGraphEndpoint source;
+            AudioGraphEndpoint destination;
+
+            if (const auto result = readEndpoint (stream, source); result.failed())
+                return result;
+
+            if (const auto result = readEndpoint (stream, destination); result.failed())
+                return result;
+
+            savedConnections.push_back ({ source, destination });
+        }
+
+        std::vector<std::shared_ptr<AudioProcessor>> processors;
+        processors.reserve (savedNodes.size());
+
+        {
+            const std::lock_guard<std::mutex> lock (modelMutex);
+
+            if (savedNodes.size() != modelNodes.size())
+                return Result::fail ("Audio graph state does not match the current node set");
+
+            for (const auto& savedNode : savedNodes)
+            {
+                const auto iterator = std::find_if (modelNodes.begin(), modelNodes.end(), [&savedNode] (const ModelNode& node)
+                {
+                    return node.id == savedNode.id;
+                });
+
+                if (iterator == modelNodes.end() || iterator->processor == nullptr)
+                    return Result::fail ("Audio graph state references a missing node");
+
+                processors.push_back (iterator->processor);
+            }
+        }
+
+        for (size_t i = 0; i < savedNodes.size(); ++i)
+        {
+            const auto result = processors[i]->loadStateFromMemory (savedNodes[i].state);
+
+            if (! result)
+                return Result::fail ("Audio graph node state load failed: " + result.getErrorMessage());
+        }
+
+        {
+            const std::lock_guard<std::mutex> lock (modelMutex);
+            modelConnections = std::move (savedConnections);
+            nextNodeID = std::max (nextNodeID, savedNextNodeID);
+            ++modelRevision;
+            dirty.store (true);
+        }
+
+        return commitChanges();
+    }
+
+    static bool writeEndpoint (OutputStream& stream, const AudioGraphEndpoint& endpoint)
+    {
+        return stream.writeCompressedInt (static_cast<int> (endpoint.getKind()))
+            && stream.writeInt64 (static_cast<int64> (endpoint.getNodeID().getRawID()))
+            && stream.writeCompressedInt (endpoint.getBusIndex());
+    }
+
+    static Result readEndpoint (InputStream& stream, AudioGraphEndpoint& endpoint)
+    {
+        const int kind = stream.readCompressedInt();
+        const auto nodeID = AudioGraphNodeID (static_cast<uint64_t> (stream.readInt64()));
+        const int busIndex = stream.readCompressedInt();
+
+        switch (static_cast<AudioGraphEndpoint::Kind> (kind))
+        {
+            case AudioGraphEndpoint::Kind::graphInput:
+                if (nodeID.isValid())
+                    return Result::fail ("Audio graph state has an invalid graph input endpoint");
+
+                endpoint = AudioGraphEndpoint::graphInput (busIndex);
+                return Result::ok();
+
+            case AudioGraphEndpoint::Kind::graphOutput:
+                if (nodeID.isValid())
+                    return Result::fail ("Audio graph state has an invalid graph output endpoint");
+
+                endpoint = AudioGraphEndpoint::graphOutput (busIndex);
+                return Result::ok();
+
+            case AudioGraphEndpoint::Kind::nodeInput:
+                endpoint = AudioGraphEndpoint::nodeInput (nodeID, busIndex);
+                return Result::ok();
+
+            case AudioGraphEndpoint::Kind::nodeOutput:
+                endpoint = AudioGraphEndpoint::nodeOutput (nodeID, busIndex);
+                return Result::ok();
+        }
+
+        return Result::fail ("Audio graph state has an invalid endpoint kind");
     }
 
     Result compileGraph (CompiledGraph& graph,
@@ -579,6 +847,7 @@ public:
         const size_t midiReserveBytes = static_cast<size_t> (std::max (1, numMidiConnections + 1)) * 4096;
 
         graph.graphInputMidi.ensureSize (midiReserveBytes);
+        graph.graphOutputMidi.ensureSize (midiReserveBytes);
 
         for (auto& node : graph.nodes)
             node.midiBuffer.ensureSize (midiReserveBytes);
@@ -777,16 +1046,17 @@ public:
     void captureGraphInput (CompiledGraph& graph,
                             AudioBuffer<float>& audioBuffer,
                             MidiBuffer& midiBuffer,
+                            int startSample,
                             int numSamples)
     {
         graph.graphInputAudio.clear (0, numSamples);
 
         const int numChannels = std::min (graph.graphInputChannels, audioBuffer.getNumChannels());
         for (int channel = 0; channel < numChannels; ++channel)
-            graph.graphInputAudio.copyFrom (channel, 0, audioBuffer, channel, 0, numSamples);
+            graph.graphInputAudio.copyFrom (channel, 0, audioBuffer, channel, startSample, numSamples);
 
         graph.graphInputMidi.clear();
-        graph.graphInputMidi.addEvents (midiBuffer, 0, numSamples, 0);
+        graph.graphInputMidi.addEvents (midiBuffer, startSample, numSamples, -startSample);
     }
 
     void processNode (CompiledGraph& graph, int nodeIndex, int numSamples)
@@ -826,6 +1096,8 @@ public:
 
             while (remainingJobs.load (std::memory_order_acquire) > 0)
                 ;
+
+            workerReadyEvent.reset();
         }
 
         activeGraph.store (nullptr, std::memory_order_relaxed);
@@ -864,16 +1136,18 @@ public:
                           CompiledConnection& connection,
                           AudioBuffer<float>& destinationAudio,
                           MidiBuffer& destinationMidi,
-                          int numSamples)
+                          int numSamples,
+                          int destinationStartSample = 0,
+                          int midiSampleOffset = 0)
     {
         if (connection.type == GraphSignalType::audio)
         {
             const auto& sourceAudio = getSourceAudioBuffer (graph, connection);
 
             if (connection.delayLineIndex >= 0)
-                routeDelayedAudio (graph.delayLines[static_cast<size_t> (connection.delayLineIndex)], sourceAudio, connection, destinationAudio, numSamples);
+                routeDelayedAudio (graph.delayLines[static_cast<size_t> (connection.delayLineIndex)], sourceAudio, connection, destinationAudio, numSamples, destinationStartSample);
             else
-                routeAudio (sourceAudio, connection, destinationAudio, numSamples);
+                routeAudio (sourceAudio, connection, destinationAudio, numSamples, destinationStartSample);
 
             return;
         }
@@ -881,9 +1155,9 @@ public:
         const auto& sourceMidi = getSourceMidiBuffer (graph, connection);
 
         if (connection.delayLineIndex >= 0)
-            routeDelayedMidi (graph.delayLines[static_cast<size_t> (connection.delayLineIndex)], sourceMidi, destinationMidi, numSamples);
+            routeDelayedMidi (graph.delayLines[static_cast<size_t> (connection.delayLineIndex)], sourceMidi, destinationMidi, numSamples, midiSampleOffset);
         else
-            destinationMidi.addEvents (sourceMidi, 0, numSamples, 0);
+            destinationMidi.addEvents (sourceMidi, 0, numSamples, midiSampleOffset);
     }
 
     const AudioBuffer<float>& getSourceAudioBuffer (CompiledGraph& graph, const CompiledConnection& connection) const
@@ -905,7 +1179,8 @@ public:
     void routeAudio (const AudioBuffer<float>& sourceAudio,
                      const CompiledConnection& connection,
                      AudioBuffer<float>& destinationAudio,
-                     int numSamples)
+                     int numSamples,
+                     int destinationStartSample)
     {
         const int channels = std::min ({ connection.channels,
                                          std::max (0, sourceAudio.getNumChannels() - connection.sourceOffset),
@@ -913,7 +1188,7 @@ public:
 
         for (int channel = 0; channel < channels; ++channel)
             destinationAudio.addFrom (connection.destinationOffset + channel,
-                                      0,
+                                      destinationStartSample,
                                       sourceAudio,
                                       connection.sourceOffset + channel,
                                       0,
@@ -924,11 +1199,12 @@ public:
                             const AudioBuffer<float>& sourceAudio,
                             const CompiledConnection& connection,
                             AudioBuffer<float>& destinationAudio,
-                            int numSamples)
+                            int numSamples,
+                            int destinationStartSample)
     {
         if (delayLine.delaySamples <= 0)
         {
-            routeAudio (sourceAudio, connection, destinationAudio, numSamples);
+            routeAudio (sourceAudio, connection, destinationAudio, numSamples, destinationStartSample);
             return;
         }
 
@@ -945,7 +1221,7 @@ public:
             for (int channel = 0; channel < channels; ++channel)
             {
                 const float delayedSample = delayLine.audio.getReadPointer (channel)[readPosition];
-                destinationAudio.addFrom (connection.destinationOffset + channel, sample, &delayedSample, 1);
+                destinationAudio.addFrom (connection.destinationOffset + channel, destinationStartSample + sample, &delayedSample, 1);
 
                 delayLine.audio.getWritePointer (channel)[delayLine.writePosition] =
                     sourceAudio.getReadPointer (connection.sourceOffset + channel)[sample];
@@ -958,14 +1234,15 @@ public:
     void routeDelayedMidi (DelayLine& delayLine,
                            const MidiBuffer& sourceMidi,
                            MidiBuffer& destinationMidi,
-                           int numSamples)
+                           int numSamples,
+                           int midiSampleOffset)
     {
         delayLine.nextPendingMidi.clear();
 
         for (const auto metadata : delayLine.pendingMidi)
         {
             if (metadata.samplePosition < numSamples)
-                destinationMidi.addEvent (metadata.data, metadata.numBytes, metadata.samplePosition);
+                destinationMidi.addEvent (metadata.data, metadata.numBytes, midiSampleOffset + metadata.samplePosition);
             else
                 delayLine.nextPendingMidi.addEvent (metadata.data, metadata.numBytes, metadata.samplePosition - numSamples);
         }
@@ -978,7 +1255,7 @@ public:
             const int delayedPosition = metadata.samplePosition + delayLine.delaySamples;
 
             if (delayedPosition < numSamples)
-                destinationMidi.addEvent (metadata.data, metadata.numBytes, delayedPosition);
+                destinationMidi.addEvent (metadata.data, metadata.numBytes, midiSampleOffset + delayedPosition);
             else
                 delayLine.nextPendingMidi.addEvent (metadata.data, metadata.numBytes, delayedPosition - numSamples);
         }
@@ -1041,11 +1318,13 @@ public:
     }
 
     AudioGraphProcessor& owner;
+    mutable std::mutex commitMutex;
     mutable std::mutex modelMutex;
     mutable std::mutex workgroupMutex;
     std::vector<ModelNode> modelNodes;
     std::vector<AudioGraphConnection> modelConnections;
     uint64_t nextNodeID = 0;
+    uint64_t modelRevision = 0;
     std::atomic<bool> dirty { true };
     std::atomic<int> desiredWorkerThreads { 0 };
     std::atomic<int> latestLatencySamples { 0 };
@@ -1212,6 +1491,16 @@ void AudioGraphProcessor::flush()
 int AudioGraphProcessor::getLatencySamples()
 {
     return pimpl->latestLatencySamples.load();
+}
+
+Result AudioGraphProcessor::loadStateFromMemory (const MemoryBlock& memoryBlock)
+{
+    return pimpl->loadStateFromMemory (memoryBlock);
+}
+
+Result AudioGraphProcessor::saveStateIntoMemory (MemoryBlock& memoryBlock)
+{
+    return pimpl->saveStateIntoMemory (memoryBlock);
 }
 
 } // namespace yup
