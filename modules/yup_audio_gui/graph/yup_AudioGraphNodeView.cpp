@@ -50,18 +50,6 @@ void fillFeatheredRoundedRect (Graphics& g, Rectangle<float> bounds, float corne
     }
 }
 
-void fillFeatheredEllipse (Graphics& g, Point<float> center, float radius, Color color)
-{
-    constexpr int numLayers = 4;
-
-    for (int i = numLayers; i > 0; --i)
-    {
-        const auto layerRadius = radius * (1.0f + (static_cast<float> (i) * 0.22f));
-        const auto alpha = 0.040f + (static_cast<float> (numLayers - i) * 0.045f);
-        g.setFillColor (color.withAlpha (alpha));
-        g.fillEllipse (ellipseBounds (center, layerRadius));
-    }
-}
 } // namespace
 
 //==============================================================================
@@ -263,14 +251,12 @@ void AudioGraphNodeView::paint (Graphics& g)
         const auto info = getInputPortInfo (i);
         const auto center = getInputPortCenter (i);
 
-        fillFeatheredEllipse (g, center, portRadius * 1.25f, info.color);
+        g.setFillColor (info.color.withAlpha (0.24f));
+        g.fillEllipse (ellipseBounds (center, portRadius * 1.8f));
         g.setFillColor (info.color);
         g.fillEllipse (ellipseBounds (center, portRadius));
         g.setFillColor (canvasBackground);
         g.fillEllipse (ellipseBounds (center, portRadius * 0.45f));
-        g.setStrokeColor (info.color.withAlpha (0.72f));
-        g.setStrokeWidth (1.2f * viewScale);
-        g.strokeEllipse (ellipseBounds (center, portRadius * 1.15f));
 
         g.setFillColor (Color (0xffd6d6d6));
         g.fillFittedText (info.name, labelFont, { center.getX() + 12.0f * viewScale, center.getY() - 8.0f * viewScale, 72.0f * viewScale, 16.0f * viewScale }, Justification::left);
@@ -281,14 +267,12 @@ void AudioGraphNodeView::paint (Graphics& g)
         const auto info = getOutputPortInfo (i);
         const auto center = getOutputPortCenter (i);
 
-        fillFeatheredEllipse (g, center, portRadius * 1.25f, info.color);
+        g.setFillColor (info.color.withAlpha (0.24f));
+        g.fillEllipse (ellipseBounds (center, portRadius * 1.8f));
         g.setFillColor (info.color);
         g.fillEllipse (ellipseBounds (center, portRadius));
         g.setFillColor (canvasBackground);
         g.fillEllipse (ellipseBounds (center, portRadius * 0.45f));
-        g.setStrokeColor (info.color.withAlpha (0.72f));
-        g.setStrokeWidth (1.2f * viewScale);
-        g.strokeEllipse (ellipseBounds (center, portRadius * 1.15f));
 
         g.setFillColor (Color (0xffd6d6d6));
         g.fillFittedText (info.name, labelFont, { center.getX() - 84.0f * viewScale, center.getY() - 8.0f * viewScale, 72.0f * viewScale, 16.0f * viewScale }, Justification::right);

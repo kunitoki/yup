@@ -33,6 +33,17 @@ bool endpointsMatch (const AudioGraphEndpoint& a, const AudioGraphEndpoint& b) n
 {
     return a == b;
 }
+
+AudioGraphNodeView* findNodeViewForEventSource (Component* source) noexcept
+{
+    if (source == nullptr)
+        return nullptr;
+
+    if (auto* nodeView = dynamic_cast<AudioGraphNodeView*> (source))
+        return nodeView;
+
+    return source->getParentComponentWithType<AudioGraphNodeView>();
+}
 } // namespace
 
 //==============================================================================
@@ -340,6 +351,9 @@ void AudioGraphComponent::mouseDown (const MouseEvent& event)
         return;
     }
 
+    if (auto* clickedNodeView = findNodeViewForEventSource (event.getSourceComponent()))
+        clickedNodeView->toFront (true);
+
     if (auto endpoint = hitTestEndpoint (screenPos))
     {
         if (interaction == Interaction::armedPort && activeEndpoint.has_value())
@@ -496,7 +510,19 @@ void AudioGraphComponent::mouseWheel (const MouseEvent& event, const MouseWheelD
 void AudioGraphComponent::keyDown (const KeyPress& keys, const Point<float>&)
 {
     if (keys.getKey() == KeyPress::spaceKey)
+    {
         spacebarDown = true;
+        return;
+    }
+
+    if (keys.getKey() == KeyPress::textFKey || keys.getKey() == KeyPress::homeKey)
+    {
+        zoomToFitNodes();
+        return;
+    }
+
+    if (keys.getKey() == KeyPress::number0Key)
+        resetView();
 }
 
 void AudioGraphComponent::keyUp (const KeyPress& keys, const Point<float>&)
