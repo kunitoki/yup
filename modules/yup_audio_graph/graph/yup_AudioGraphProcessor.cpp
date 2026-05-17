@@ -810,33 +810,42 @@ public:
             if (level.empty())
                 continue;
 
-            activeGraph = &graph;
-            activeLevel = &level;
-            activeNumSamples = numSamples;
+            const auto generation = workGeneration.load (std::memory_order_relaxed) + 1;
+
+            activeGraph.store (&graph, std::memory_order_relaxed);
+            activeLevel.store (&level, std::memory_order_relaxed);
+            activeNumSamples.store (numSamples, std::memory_order_relaxed);
             nextJobIndex.store (0, std::memory_order_relaxed);
             remainingJobs.store (static_cast<int> (level.size()), std::memory_order_release);
-            workGeneration.fetch_add (1, std::memory_order_release);
+            activeGeneration.store (generation, std::memory_order_release);
+            workGeneration.store (generation, std::memory_order_release);
             workerReadyEvent.reset();
             workerReadyEvent.signal();
 
-            drainActiveJobs();
+            drainActiveJobs (generation);
 
             while (remainingJobs.load (std::memory_order_acquire) > 0)
                 ;
         }
 
-        activeGraph = nullptr;
-        activeLevel = nullptr;
-        activeNumSamples = 0;
+        activeGraph.store (nullptr, std::memory_order_relaxed);
+        activeLevel.store (nullptr, std::memory_order_relaxed);
+        activeNumSamples.store (0, std::memory_order_relaxed);
+        activeGeneration.store (0, std::memory_order_release);
     }
 
-    void drainActiveJobs()
+    void drainActiveJobs (int generation)
     {
-        auto* graph = activeGraph;
-        auto* level = activeLevel;
+        if (activeGeneration.load (std::memory_order_acquire) != generation)
+            return;
+
+        auto* graph = activeGraph.load (std::memory_order_relaxed);
+        auto* level = activeLevel.load (std::memory_order_relaxed);
 
         if (graph == nullptr || level == nullptr)
             return;
+
+        const int numSamples = activeNumSamples.load (std::memory_order_relaxed);
 
         for (;;)
         {
@@ -845,9 +854,9 @@ public:
             if (jobIndex >= static_cast<int> (level->size()))
                 break;
 
-            processNode (*graph, (*level)[static_cast<size_t> (jobIndex)], activeNumSamples);
+            processNode (*graph, (*level)[static_cast<size_t> (jobIndex)], numSamples);
 
-            remainingJobs.fetch_sub (1, std::memory_order_release);
+            remainingJobs.fetch_sub (1, std::memory_order_acq_rel);
         }
     }
 
@@ -1059,9 +1068,10 @@ public:
     std::atomic<int> workGeneration { 0 };
     std::atomic<int> nextJobIndex { 0 };
     std::atomic<int> remainingJobs { 0 };
-    CompiledGraph* activeGraph = nullptr;
-    std::vector<int>* activeLevel = nullptr;
-    int activeNumSamples = 0;
+    std::atomic<CompiledGraph*> activeGraph { nullptr };
+    std::atomic<std::vector<int>*> activeLevel { nullptr };
+    std::atomic<int> activeNumSamples { 0 };
+    std::atomic<int> activeGeneration { 0 };
 };
 
 //==============================================================================
@@ -1095,7 +1105,7 @@ void AudioGraphProcessor::Pimpl::WorkerThread::run()
         lastGeneration = generation;
         ScopedNoDenormals noDenormals;
         owner.joinWorkgroup (workgroupToken);
-        owner.drainActiveJobs();
+        owner.drainActiveJobs (generation);
     }
 }
 

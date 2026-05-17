@@ -22,6 +22,7 @@
 #include "yup_audio_gui/yup_AudioPeakProfile.cpp"
 #include "yup_audio_gui/yup_AudioPeakProfileCache.cpp"
 #include "yup_audio_gui/yup_AudioThumbnail.cpp"
+#include "yup_audio_gui/yup_AudioGraphComponent.cpp"
 #include "yup_audio_gui/yup_AudioViewComponent.cpp"
 #include "yup_audio_gui/yup_CartesianPlane.cpp"
 #include "yup_audio_gui/yup_KMeterComponent.cpp"
