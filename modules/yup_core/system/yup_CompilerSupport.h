@@ -57,8 +57,8 @@
 #endif
 #endif
 
-#define YUP_CXX17_IS_AVAILABLE (__cplusplus >= 201703L)
 #define YUP_CXX20_IS_AVAILABLE (__cplusplus >= 202002L)
+#define YUP_CXX23_IS_AVAILABLE (__cplusplus >= 202302L)
 
 #endif
 
@@ -89,8 +89,8 @@
 #error Please upgrade to Xcode 15.1 or higher
 #endif
 
-#define YUP_CXX17_IS_AVAILABLE (__cplusplus >= 201703L)
 #define YUP_CXX20_IS_AVAILABLE (__cplusplus >= 202002L)
+#define YUP_CXX23_IS_AVAILABLE (__cplusplus >= 202302L)
 
 #endif
 
@@ -108,24 +108,11 @@
 #endif
 #endif
 
-#define YUP_CXX17_IS_AVAILABLE (_MSVC_LANG >= 201703L)
-#define YUP_CXX20_IS_AVAILABLE (_MSVC_LANG >= 202002L)
+#define YUP_CXX20_IS_AVAILABLE (_MSVC_LANG == 202002L)
+#define YUP_CXX23_IS_AVAILABLE (_MSVC_LANG > 202002L)
 #endif
 
 //==============================================================================
-#if ! YUP_CXX17_IS_AVAILABLE
-#error "YUP requires C++17 or later"
-#endif
-
-//==============================================================================
-#ifndef DOXYGEN
-// These are old flags that are now supported on all compatible build targets
-#define YUP_CXX14_IS_AVAILABLE 1
-#define YUP_COMPILER_SUPPORTS_OVERRIDE_AND_FINAL 1
-#define YUP_COMPILER_SUPPORTS_VARIADIC_TEMPLATES 1
-#define YUP_COMPILER_SUPPORTS_INITIALIZER_LISTS 1
-#define YUP_COMPILER_SUPPORTS_NOEXCEPT 1
-#define YUP_DELETED_FUNCTION = delete
-#define YUP_CONSTEXPR constexpr
-#define YUP_NODISCARD [[nodiscard]]
+#if ! YUP_CXX20_IS_AVAILABLE
+#error "YUP requires C++20 or later"
 #endif
