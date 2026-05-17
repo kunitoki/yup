@@ -24,11 +24,6 @@ namespace yup
 
 namespace
 {
-constexpr float minZoom = 0.1f;
-constexpr float maxZoom = 4.0f;
-constexpr float wireHitDistance = 8.0f;
-constexpr float dragWireThreshold = 4.0f;
-
 bool endpointsMatch (const AudioGraphEndpoint& a, const AudioGraphEndpoint& b) noexcept
 {
     return a == b;
@@ -45,6 +40,10 @@ AudioGraphNodeView* findNodeViewForEventSource (Component* source) noexcept
     return source->getParentComponentWithType<AudioGraphNodeView>();
 }
 } // namespace
+
+//==============================================================================
+const Identifier AudioGraphComponent::Style::backgroundColorId ("audioGraphBackground");
+const Identifier AudioGraphComponent::Style::gridColorId ("audioGraphGrid");
 
 //==============================================================================
 AudioGraphComponent::AudioGraphComponent (std::shared_ptr<AudioGraphProcessor> graphIn)
@@ -186,6 +185,44 @@ void AudioGraphComponent::setZoom (float newZoom)
     repaint();
 }
 
+void AudioGraphComponent::setMinZoom (float newMinZoom)
+{
+    const auto clampedMinZoom = jmax (0.001f, newMinZoom);
+    if (minZoom == clampedMinZoom)
+        return;
+
+    minZoom = clampedMinZoom;
+
+    if (maxZoom < minZoom)
+        maxZoom = minZoom;
+
+    setZoom (zoom);
+}
+
+void AudioGraphComponent::setMaxZoom (float newMaxZoom)
+{
+    const auto clampedMaxZoom = jmax (0.001f, newMaxZoom);
+    if (maxZoom == clampedMaxZoom)
+        return;
+
+    maxZoom = clampedMaxZoom;
+
+    if (minZoom > maxZoom)
+        minZoom = maxZoom;
+
+    setZoom (zoom);
+}
+
+void AudioGraphComponent::setWireHitDistance (float newWireHitDistance)
+{
+    wireHitDistance = jmax (0.0f, newWireHitDistance);
+}
+
+void AudioGraphComponent::setDragWireThreshold (float newDragWireThreshold)
+{
+    dragWireThreshold = jmax (0.0f, newDragWireThreshold);
+}
+
 void AudioGraphComponent::setCanvasOffset (Point<float> offset)
 {
     needsInitialReset = false;
@@ -206,7 +243,7 @@ void AudioGraphComponent::resetView()
 
     needsInitialReset = false;
     needsInitialZoomToFit = false;
-    zoom = 1.0f;
+    zoom = jlimit (minZoom, maxZoom, 1.0f);
 
     centerViewOnNodes();
 }
@@ -307,18 +344,8 @@ void AudioGraphComponent::resized()
 
 void AudioGraphComponent::paint (Graphics& g)
 {
-    g.setFillColor (Color (0xff101522));
-    g.fillAll();
-
-    drawGrid (g);
-
-    if (graph != nullptr)
-    {
-        for (const auto& connection : graph->getConnections())
-            drawConnection (g, connection, 1.0f);
-    }
-
-    drawPendingWire (g);
+    if (auto style = ApplicationTheme::findComponentStyle (*this))
+        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
 }
 
 //==============================================================================
@@ -773,6 +800,21 @@ Color AudioGraphComponent::getEndpointColor (const AudioGraphEndpoint& endpoint)
     return AudioGraphNodeView::getPortKindColor (AudioGraphNodeView::PortKind::audio);
 }
 
+bool AudioGraphComponent::isPendingWireVisible() const noexcept
+{
+    return activeEndpoint.has_value() && (interaction == Interaction::armedPort || interaction == Interaction::draggingWire);
+}
+
+std::optional<AudioGraphEndpoint> AudioGraphComponent::getPendingWireEndpoint() const
+{
+    return activeEndpoint;
+}
+
+Point<float> AudioGraphComponent::getPendingWireEndPosition() const noexcept
+{
+    return interaction == Interaction::draggingWire ? pendingWireEnd : lastMouseScreen;
+}
+
 bool AudioGraphComponent::tryConnect (const AudioGraphEndpoint& first, const AudioGraphEndpoint& second)
 {
     if (graph == nullptr || ! isCompatiblePair (first, second))
@@ -840,87 +882,6 @@ AudioGraphConnection AudioGraphComponent::makeConnection (const AudioGraphEndpoi
 {
     return first.isSource() ? AudioGraphConnection { first, second }
                             : AudioGraphConnection { second, first };
-}
-
-//==============================================================================
-void AudioGraphComponent::drawGrid (Graphics& g)
-{
-    const auto spacing = 24.0f * zoom;
-    if (spacing < 6.0f)
-        return;
-
-    const auto startX = std::fmod (canvasOffset.getX(), spacing);
-    const auto startY = std::fmod (canvasOffset.getY(), spacing);
-
-    g.setFillColor (Colors::white.withAlpha (0.045f));
-
-    for (auto x = startX; x < getWidth(); x += spacing)
-    {
-        for (auto y = startY; y < getHeight(); y += spacing)
-            g.fillEllipse (x - 1.0f, y - 1.0f, 2.0f, 2.0f);
-    }
-}
-
-void AudioGraphComponent::drawConnection (Graphics& g, const AudioGraphConnection& connection, float opacity)
-{
-    const auto start = getEndpointScreenPosition (connection.source);
-    const auto end = getEndpointScreenPosition (connection.destination);
-
-    if (! getLocalBounds().reduced (-200.0f).contains (start) && ! getLocalBounds().reduced (-200.0f).contains (end))
-        return;
-
-    const auto controlOffset = jmax (60.0f * zoom, std::abs (end.getX() - start.getX()) * 0.5f);
-    const auto cp1 = Point<float> { start.getX() + controlOffset, start.getY() };
-    const auto cp2 = Point<float> { end.getX() - controlOffset, end.getY() };
-
-    drawBezierHalf (g, start, cp1, cp2, end, getEndpointColor (connection.source).withMultipliedAlpha (opacity), true);
-    drawBezierHalf (g, start, cp1, cp2, end, getEndpointColor (connection.destination).withMultipliedAlpha (opacity), false);
-}
-
-void AudioGraphComponent::drawBezierHalf (Graphics& g, Point<float> p0, Point<float> p1, Point<float> p2, Point<float> p3, Color color, bool firstHalf)
-{
-    const auto p01 = (p0 + p1) * 0.5f;
-    const auto p12 = (p1 + p2) * 0.5f;
-    const auto p23 = (p2 + p3) * 0.5f;
-    const auto p012 = (p01 + p12) * 0.5f;
-    const auto p123 = (p12 + p23) * 0.5f;
-    const auto midpoint = (p012 + p123) * 0.5f;
-
-    Path path;
-    if (firstHalf)
-        path.moveTo (p0).cubicTo (p01, p012.getX(), p012.getY(), midpoint.getX(), midpoint.getY());
-    else
-        path.moveTo (midpoint).cubicTo (p123, p23.getX(), p23.getY(), p3.getX(), p3.getY());
-
-    g.setStrokeColor (color);
-    g.setStrokeWidth (jmax (1.5f, 3.0f * zoom));
-    g.setStrokeCap (StrokeCap::Round);
-    g.strokePath (path);
-}
-
-void AudioGraphComponent::drawPendingWire (Graphics& g)
-{
-    if (! activeEndpoint.has_value() || (interaction != Interaction::armedPort && interaction != Interaction::draggingWire))
-        return;
-
-    const auto start = getEndpointScreenPosition (*activeEndpoint);
-    const auto end = interaction == Interaction::draggingWire ? pendingWireEnd : lastMouseScreen;
-    const auto controlOffset = jmax (60.0f * zoom, std::abs (end.getX() - start.getX()) * 0.5f);
-    const auto cp1 = Point<float> { start.getX() + (activeEndpoint->isSource() ? controlOffset : -controlOffset), start.getY() };
-    const auto cp2 = Point<float> { end.getX() - (activeEndpoint->isSource() ? controlOffset : -controlOffset), end.getY() };
-
-    Path path;
-    path.moveTo (start).cubicTo (cp1, cp2.getX(), cp2.getY(), end.getX(), end.getY());
-
-    g.setStrokeColor (getEndpointColor (*activeEndpoint).withAlpha (0.55f));
-    g.setStrokeWidth (jmax (1.5f, 2.5f * zoom));
-    g.setStrokeCap (StrokeCap::Round);
-    g.strokePath (path);
-
-    g.setFillColor (getEndpointColor (*activeEndpoint).withAlpha (0.20f));
-    const auto center = getEndpointScreenPosition (*activeEndpoint);
-    const auto radius = 14.0f * zoom;
-    g.fillEllipse (center.getX() - radius, center.getY() - radius, radius * 2.0f, radius * 2.0f);
 }
 
 Point<float> AudioGraphComponent::cubicPoint (Point<float> p0, Point<float> p1, Point<float> p2, Point<float> p3, float t) const noexcept

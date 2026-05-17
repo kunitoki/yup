@@ -102,10 +102,12 @@ function (yup_standalone_app)
         list (APPEND additional_libraries perfetto::perfetto)
     endif()
 
-    _yup_target_list_contains ("${YUP_ARG_MODULES}" yup_audio_plugin_host has_audio_plugin_host)
-    if (has_audio_plugin_host)
-        _yup_collect_audio_plugin_host_dependencies ("${YUP_ARG_DEFINITIONS}" audio_plugin_host_libraries)
-        list (APPEND additional_libraries ${audio_plugin_host_libraries})
+    if (YUP_PLATFORM_DESKTOP)
+        _yup_target_list_contains ("${YUP_ARG_MODULES}" yup_audio_plugin_host has_audio_plugin_host)
+        if (has_audio_plugin_host)
+            _yup_collect_audio_plugin_host_dependencies ("${YUP_ARG_DEFINITIONS}" audio_plugin_host_libraries)
+            list (APPEND additional_libraries ${audio_plugin_host_libraries})
+        endif()
     endif()
 
     # ==== Prepare executable

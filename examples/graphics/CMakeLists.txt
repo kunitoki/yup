@@ -48,8 +48,17 @@ endif()
 
 # ==== Prepare target
 set (additional_modules "")
+set (additional_definitions "")
 if (YUP_PLATFORM_DESKTOP AND NOT YUP_PLATFORM_WINDOWS)
     set (additional_modules yup::yup_python)
+endif()
+
+if (YUP_PLATFORM_DESKTOP)
+    list (APPEND additional_modules yup::yup_audio_plugin_host)
+    list (APPEND additional_definitions
+        YUP_AUDIO_PLUGIN_HOST_ENABLE_CLAP=1
+        YUP_AUDIO_PLUGIN_HOST_ENABLE_AU=1
+        YUP_AUDIO_PLUGIN_HOST_ENABLE_VST3=1)
 endif()
 
 yup_standalone_app (
@@ -60,9 +69,7 @@ yup_standalone_app (
     TARGET_APP_NAMESPACE "org.yup"
     DEFINITIONS
         YUP_EXAMPLE_GRAPHICS_RIVE_FILE="${rive_file}"
-        YUP_AUDIO_PLUGIN_HOST_ENABLE_CLAP=1
-        YUP_AUDIO_PLUGIN_HOST_ENABLE_AU=1
-        YUP_AUDIO_PLUGIN_HOST_ENABLE_VST3=1
+        ${additional_definitions}
     PRELOAD_FILES
         "${CMAKE_CURRENT_LIST_DIR}/${rive_file}@${rive_file}"
     MODULES
@@ -76,7 +83,6 @@ yup_standalone_app (
         yup::yup_audio_gui
         yup::yup_audio_processors
         yup::yup_audio_formats
-        yup::yup_audio_plugin_host
         pffft_library
         opus_library
         flac_library

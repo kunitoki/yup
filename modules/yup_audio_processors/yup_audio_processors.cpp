@@ -34,4 +34,7 @@
 #include "processors/yup_AudioParameter.cpp"
 #include "processors/yup_AudioParameterBuilder.cpp"
 #include "processors/yup_AudioProcessor.cpp"
+
+#if YUP_MODULE_AVAILABLE_yup_gui
 #include "processors/yup_AudioProcessorEditor.cpp"
+#endif

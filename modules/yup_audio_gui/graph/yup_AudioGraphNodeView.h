@@ -35,6 +35,20 @@ namespace yup
 class YUP_API AudioGraphNodeView : public Component
 {
 public:
+    /** Style identifiers for theme customization. */
+    struct Style
+    {
+        static const Identifier shadowColorId;
+        static const Identifier accentBackgroundColorId;
+        static const Identifier bodyBackgroundColorId;
+        static const Identifier headerBackgroundColorId;
+        static const Identifier textColorId;
+        static const Identifier subtitleTextColorId;
+        static const Identifier parameterBackgroundColorId;
+        static const Identifier parameterValueBackgroundColorId;
+        static const Identifier portHoleColorId;
+    };
+
     /** Semantic signal type for ports and future connection routing. */
     enum class PortKind
     {
@@ -122,7 +136,7 @@ public:
     virtual ParameterInfo getParameterInfo (int parameterIndex) const;
 
     /** Paints optional custom content between the header and the port rows. */
-    virtual void paintNodeContent (Graphics& g, Rectangle<float> contentBounds);
+    virtual void paintNodeContent (Graphics& g, Rectangle<float> contentBounds) const;
 
     /** Returns the preferred width in canvas units. */
     virtual int getPreferredWidth() const;
@@ -147,6 +161,9 @@ public:
 
     /** @internal Sets the display scale applied by AudioGraphComponent. */
     void setViewScale (float newScale);
+
+    /** @internal Returns the display scale applied by AudioGraphComponent. */
+    float getViewScale() const noexcept { return viewScale; }
 
     /** @internal */
     void paint (Graphics& g) override;

@@ -64,13 +64,16 @@ set (target_modules
     yup_events
     yup_data_model
     yup_graphics
-    yup_audio_plugin_host
     dr_libs
     pffft_library
     opus_library
     flac_library
     hmp3_library
     bungee_library)
+
+if (YUP_PLATFORM_DESKTOP)
+    list (APPEND target_modules yup_audio_plugin_host)
+endif()
 
 if (NOT YUP_PLATFORM_EMSCRIPTEN)
     list (APPEND target_modules yup_gui yup_audio_gui)

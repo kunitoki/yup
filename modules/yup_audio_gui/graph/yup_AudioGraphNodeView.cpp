@@ -29,28 +29,20 @@ constexpr float basePortRowHeight = 24.0f;
 constexpr float basePortTopPadding = 8.0f;
 constexpr float baseParameterRowHeight = 25.0f;
 constexpr float basePortRadius = 6.0f;
-constexpr float baseCornerRadius = 7.0f;
 constexpr float baseContentHeight = 8.0f;
 
-Rectangle<float> ellipseBounds (Point<float> center, float radius)
-{
-    return { center.getX() - radius, center.getY() - radius, radius * 2.0f, radius * 2.0f };
-}
-
-void fillFeatheredRoundedRect (Graphics& g, Rectangle<float> bounds, float corner, Color color, float viewScale)
-{
-    constexpr int numLayers = 5;
-
-    for (int i = numLayers; i > 0; --i)
-    {
-        const auto amount = static_cast<float> (i) * 1.4f * viewScale;
-        const auto alpha = 0.020f + (static_cast<float> (numLayers - i) * 0.018f);
-        g.setFillColor (color.withAlpha (alpha));
-        g.fillRoundedRect (bounds.reduced (-amount), corner + amount);
-    }
-}
-
 } // namespace
+
+//==============================================================================
+const Identifier AudioGraphNodeView::Style::shadowColorId ("audioGraphNodeShadow");
+const Identifier AudioGraphNodeView::Style::accentBackgroundColorId ("audioGraphNodeAccentBackground");
+const Identifier AudioGraphNodeView::Style::bodyBackgroundColorId ("audioGraphNodeBodyBackground");
+const Identifier AudioGraphNodeView::Style::headerBackgroundColorId ("audioGraphNodeHeaderBackground");
+const Identifier AudioGraphNodeView::Style::textColorId ("audioGraphNodeText");
+const Identifier AudioGraphNodeView::Style::subtitleTextColorId ("audioGraphNodeSubtitleText");
+const Identifier AudioGraphNodeView::Style::parameterBackgroundColorId ("audioGraphNodeParameterBackground");
+const Identifier AudioGraphNodeView::Style::parameterValueBackgroundColorId ("audioGraphNodeParameterValueBackground");
+const Identifier AudioGraphNodeView::Style::portHoleColorId ("audioGraphNodePortHole");
 
 //==============================================================================
 AudioGraphNodeView::AudioGraphNodeView (AudioGraphNodeID nodeIDIn)
@@ -93,7 +85,7 @@ AudioGraphNodeView::ParameterInfo AudioGraphNodeView::getParameterInfo (int para
     return { String ("param ") + String (parameterIndex + 1), {}, getPortKindColor (PortKind::parameter), -1.0f, PortKind::parameter };
 }
 
-void AudioGraphNodeView::paintNodeContent (Graphics&, Rectangle<float>)
+void AudioGraphNodeView::paintNodeContent (Graphics&, Rectangle<float>) const
 {
 }
 
@@ -104,6 +96,7 @@ int AudioGraphNodeView::getPreferredWidth() const
 
 int AudioGraphNodeView::getPreferredHeight() const
 {
+    // TODO - this needs to be moved to the style somehow
     const auto portRows = jmax (1, jmax (getNumInputPorts(), getNumOutputPorts()));
     return roundToInt (baseHeaderHeight
                        + baseContentHeight
@@ -170,113 +163,8 @@ void AudioGraphNodeView::setViewScale (float newScale)
 //==============================================================================
 void AudioGraphNodeView::paint (Graphics& g)
 {
-    const auto bounds = getLocalBounds().reduced (getPortRadius() * 0.5f, 0.0f);
-    const auto bodyBounds = bounds.reduced (2.0f * viewScale);
-    const auto corner = baseCornerRadius * viewScale;
-    const auto accent = getNodeColor();
-    const auto canvasBackground = Color (0xff101522);
-    const auto headerHeight = baseHeaderHeight * viewScale;
-
-    fillFeatheredRoundedRect (g, bodyBounds.translated (0.0f, 3.0f * viewScale), corner, Colors::black, viewScale);
-
-    g.setFillColor (accent.withAlpha (0.11f));
-    g.fillRoundedRect (bodyBounds.reduced (-1.5f * viewScale), corner + 2.0f * viewScale);
-
-    g.setFillColor (Color (0xff1e2535));
-    g.fillRoundedRect (bodyBounds, corner);
-
-    auto headerBounds = bodyBounds.withHeight (headerHeight);
-    g.setFillColor (Color (0xff141a26));
-    g.fillRoundedRect (headerBounds, corner, corner, 0.0f, 0.0f);
-
-    g.setStrokeColor (accent.withAlpha (0.70f));
-    g.setStrokeWidth (1.35f * viewScale);
-    g.strokeRoundedRect (bodyBounds, corner);
-
-    const auto headerInner = headerBounds.reduced (9.0f * viewScale, 5.0f * viewScale);
-
-    const auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
-    g.setFillColor (accent);
-    g.fillFittedText (getNodeTitle(), font.withHeight (12.0f * viewScale), headerInner.withHeight (18.0f * viewScale), Justification::left);
-
-    const auto subtitle = getNodeSubtitle();
-    if (subtitle.isNotEmpty())
-    {
-        g.setFillColor (Color (0xffb8b8b8));
-        g.fillFittedText (subtitle, font.withHeight (9.0f * viewScale), headerInner.withHeight (18.0f * viewScale), Justification::right);
-    }
-
-    const auto ruleY = bodyBounds.getY() + headerHeight;
-    g.setStrokeColor (accent.withAlpha (0.16f));
-    g.strokeLine ({ bodyBounds.getX(), ruleY }, { bodyBounds.getRight(), ruleY });
-
-    auto contentBounds = bodyBounds.reduced (10.0f * viewScale, 0.0f);
-    contentBounds = contentBounds.withY (ruleY + 4.0f * viewScale).withHeight (baseContentHeight * viewScale);
-    paintNodeContent (g, contentBounds);
-
-    auto parameterBounds = bodyBounds.reduced (10.0f * viewScale, 0.0f);
-    parameterBounds = parameterBounds.withY (ruleY + (baseContentHeight + 5.0f) * viewScale);
-
-    const auto parameterFont = font.withHeight (9.5f * viewScale);
-    for (int i = 0; i < getNumParameterRows(); ++i)
-    {
-        const auto info = getParameterInfo (i);
-        auto row = parameterBounds.removeFromTop (baseParameterRowHeight * viewScale).reduced (0.0f, 2.0f * viewScale);
-        auto valueBox = row.removeFromRight (58.0f * viewScale);
-
-        g.setFillColor (Color (0xff263044));
-        g.fillRoundedRect (row.reduced (0.0f, 1.0f * viewScale), 3.0f * viewScale);
-
-        if (info.normalizedValue >= 0.0f)
-        {
-            const auto fillWidth = row.getWidth() * jlimit (0.0f, 1.0f, info.normalizedValue);
-            g.setFillColor (info.color.withAlpha (0.20f));
-            g.fillRoundedRect (row.withWidth (fillWidth).reduced (0.0f, 1.0f * viewScale), 3.0f * viewScale);
-        }
-
-        g.setFillColor (Color (0xffd1d5db));
-        g.fillFittedText (info.name, parameterFont, row.reduced (6.0f * viewScale, 0.0f), Justification::left);
-
-        g.setFillColor (Color (0xff1a2130));
-        g.fillRoundedRect (valueBox.reduced (0.0f, 1.0f * viewScale), 3.0f * viewScale);
-        g.setFillColor (info.color);
-        g.fillFittedText (info.value, parameterFont, valueBox.reduced (5.0f * viewScale, 0.0f), Justification::right);
-    }
-
-    const auto labelFont = font.withHeight (10.5f * viewScale);
-    const auto portRadius = getPortRadius();
-
-    for (int i = 0; i < getNumInputPorts(); ++i)
-    {
-        const auto info = getInputPortInfo (i);
-        const auto center = getInputPortCenter (i);
-
-        g.setFillColor (info.color.withAlpha (0.24f));
-        g.fillEllipse (ellipseBounds (center, portRadius * 1.8f));
-        g.setFillColor (info.color);
-        g.fillEllipse (ellipseBounds (center, portRadius));
-        g.setFillColor (canvasBackground);
-        g.fillEllipse (ellipseBounds (center, portRadius * 0.45f));
-
-        g.setFillColor (Color (0xffd6d6d6));
-        g.fillFittedText (info.name, labelFont, { center.getX() + 12.0f * viewScale, center.getY() - 8.0f * viewScale, 72.0f * viewScale, 16.0f * viewScale }, Justification::left);
-    }
-
-    for (int i = 0; i < getNumOutputPorts(); ++i)
-    {
-        const auto info = getOutputPortInfo (i);
-        const auto center = getOutputPortCenter (i);
-
-        g.setFillColor (info.color.withAlpha (0.24f));
-        g.fillEllipse (ellipseBounds (center, portRadius * 1.8f));
-        g.setFillColor (info.color);
-        g.fillEllipse (ellipseBounds (center, portRadius));
-        g.setFillColor (canvasBackground);
-        g.fillEllipse (ellipseBounds (center, portRadius * 0.45f));
-
-        g.setFillColor (Color (0xffd6d6d6));
-        g.fillFittedText (info.name, labelFont, { center.getX() - 84.0f * viewScale, center.getY() - 8.0f * viewScale, 72.0f * viewScale, 16.0f * viewScale }, Justification::right);
-    }
+    if (auto style = ApplicationTheme::findComponentStyle (*this))
+        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
 }
 
 Point<float> AudioGraphNodeView::getPortCenter (int busIndex, bool isInput) const

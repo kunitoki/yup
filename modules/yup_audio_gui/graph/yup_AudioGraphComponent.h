@@ -34,6 +34,16 @@ namespace yup
 class YUP_API AudioGraphComponent : public Component
 {
 public:
+    /** Style identifiers for theme customization. */
+    struct Style
+    {
+        /** Canvas background color. */
+        static const Identifier backgroundColorId;
+
+        /** Grid dot color. */
+        static const Identifier gridColorId;
+    };
+
     /** Receives notifications for graph editor gestures that committed changes. */
     struct Listener
     {
@@ -74,11 +84,38 @@ public:
     /** Returns the view for a node, or nullptr. */
     AudioGraphNodeView* getNodeView (AudioGraphNodeID nodeID) const noexcept;
 
-    /** Sets the zoom factor, clamped to [0.1, 4.0]. */
+    /** @internal Returns the graph processor currently being edited. */
+    const AudioGraphProcessor* getGraphProcessor() const noexcept { return graph.get(); }
+
+    /** Sets the zoom factor, clamped to [getMinZoom(), getMaxZoom()]. */
     void setZoom (float zoom);
 
     /** Returns the zoom factor. */
     float getZoom() const noexcept { return zoom; }
+
+    /** Sets the minimum zoom factor. */
+    void setMinZoom (float newMinZoom);
+
+    /** Returns the minimum zoom factor. */
+    float getMinZoom() const noexcept { return minZoom; }
+
+    /** Sets the maximum zoom factor. */
+    void setMaxZoom (float newMaxZoom);
+
+    /** Returns the maximum zoom factor. */
+    float getMaxZoom() const noexcept { return maxZoom; }
+
+    /** Sets the screen-space hit distance used for selecting connection wires. */
+    void setWireHitDistance (float newWireHitDistance);
+
+    /** Returns the screen-space hit distance used for selecting connection wires. */
+    float getWireHitDistance() const noexcept { return wireHitDistance; }
+
+    /** Sets the drag distance needed before an armed port starts dragging a wire. */
+    void setDragWireThreshold (float newDragWireThreshold);
+
+    /** Returns the drag distance needed before an armed port starts dragging a wire. */
+    float getDragWireThreshold() const noexcept { return dragWireThreshold; }
 
     /** Sets the canvas-to-screen offset. */
     void setCanvasOffset (Point<float> offset);
@@ -101,6 +138,21 @@ public:
     /** Converts component-local screen space to canvas space. */
     Point<float> screenToCanvas (Point<float> screenPos) const;
 
+    /** @internal Returns the screen position for an endpoint. */
+    Point<float> getEndpointScreenPosition (const AudioGraphEndpoint& endpoint) const;
+
+    /** @internal Returns the display color for an endpoint. */
+    Color getEndpointColor (const AudioGraphEndpoint& endpoint) const;
+
+    /** @internal Returns true when a pending connection wire should be painted. */
+    bool isPendingWireVisible() const noexcept;
+
+    /** @internal Returns the endpoint that started the pending connection wire. */
+    std::optional<AudioGraphEndpoint> getPendingWireEndpoint() const;
+
+    /** @internal Returns the current screen endpoint for the pending connection wire. */
+    Point<float> getPendingWireEndPosition() const noexcept;
+
     /** Adds a listener. */
     void addListener (Listener* listener);
 
@@ -109,25 +161,18 @@ public:
 
     /** @internal */
     void resized() override;
-
     /** @internal */
     void paint (Graphics& g) override;
-
     /** @internal */
     void mouseDown (const MouseEvent& event) override;
-
     /** @internal */
     void mouseDrag (const MouseEvent& event) override;
-
     /** @internal */
     void mouseUp (const MouseEvent& event) override;
-
     /** @internal */
     void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
-
     /** @internal */
     void keyDown (const KeyPress& keys, const Point<float>& position) override;
-
     /** @internal */
     void keyUp (const KeyPress& keys, const Point<float>& position) override;
 
@@ -175,20 +220,12 @@ private:
     std::optional<EndpointHit> hitTestEndpoint (Point<float> screenPos) const;
     std::optional<AudioGraphConnection> hitTestConnection (Point<float> screenPos) const;
 
-    Point<float> getEndpointScreenPosition (const AudioGraphEndpoint& endpoint) const;
-    Color getEndpointColor (const AudioGraphEndpoint& endpoint) const;
-
     bool tryConnect (const AudioGraphEndpoint& first, const AudioGraphEndpoint& second);
     bool removeConnectionAndCommit (const AudioGraphConnection& connection);
     void removeConnectionsForEndpoint (const AudioGraphEndpoint& endpoint);
 
     bool isCompatiblePair (const AudioGraphEndpoint& first, const AudioGraphEndpoint& second) const noexcept;
     AudioGraphConnection makeConnection (const AudioGraphEndpoint& first, const AudioGraphEndpoint& second) const noexcept;
-
-    void drawGrid (Graphics& g);
-    void drawConnection (Graphics& g, const AudioGraphConnection& connection, float opacity);
-    void drawBezierHalf (Graphics& g, Point<float> p0, Point<float> p1, Point<float> p2, Point<float> p3, Color color, bool firstHalf);
-    void drawPendingWire (Graphics& g);
 
     Point<float> cubicPoint (Point<float> p0, Point<float> p1, Point<float> p2, Point<float> p3, float t) const noexcept;
     float distanceToSegment (Point<float> point, Point<float> start, Point<float> end) const noexcept;
@@ -198,6 +235,10 @@ private:
     ListenerList<Listener> listeners;
 
     Interaction interaction = Interaction::idle;
+    float minZoom = 0.1f;
+    float maxZoom = 4.0f;
+    float wireHitDistance = 8.0f;
+    float dragWireThreshold = 4.0f;
     float zoom = 1.0f;
     Point<float> canvasOffset { 0.0f, 0.0f };
     bool spacebarDown = false;
