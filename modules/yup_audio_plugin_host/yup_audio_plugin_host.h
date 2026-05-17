@@ -31,7 +31,6 @@
     description:        In-process hosting of VST3, CLAP, and AUv2 audio plugins.
     website:            https://github.com/kunitoki/yup
     license:            ISC
-    minimumCppStandard: 17
 
     dependencies:       yup_audio_processors
     searchpaths:        native
