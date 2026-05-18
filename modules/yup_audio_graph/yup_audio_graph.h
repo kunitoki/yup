@@ -47,13 +47,20 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <initializer_list>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
 #include <yup_audio_processors/yup_audio_processors.h>
 
 //==============================================================================
+#include "graph/yup_AudioGraphNodeID.h"
+#include "graph/yup_AudioGraphEndpoint.h"
+#include "graph/yup_AudioGraphConnection.h"
+#include "graph/yup_AudioGraphAllocationStats.h"
+#include "graph/yup_AudioGraphNodeProperties.h"
 #include "graph/yup_AudioGraphProcessor.h"

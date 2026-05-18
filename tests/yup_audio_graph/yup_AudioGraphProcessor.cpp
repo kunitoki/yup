@@ -380,6 +380,146 @@ private:
     float gain = 1.0f;
 };
 
+AudioGraphNodeProperties statefulGainProperties (float positionX = 0.0f, float positionY = 0.0f)
+{
+    AudioGraphNodeProperties properties;
+    properties.identifier = "statefulGain";
+    properties.name = "Stateful Gain";
+    properties.positionX = positionX;
+    properties.positionY = positionY;
+    return properties;
+}
+
+AudioGraphProcessor::NodeFactory statefulGainFactory()
+{
+    return [] (const AudioGraphNodeProperties& properties) -> ResultValue<std::unique_ptr<AudioProcessor>>
+    {
+        if (properties.identifier != "statefulGain")
+            return ResultValue<std::unique_ptr<AudioProcessor>>::fail ("Unknown node type");
+
+        return ResultValue<std::unique_ptr<AudioProcessor>>::ok (std::make_unique<StatefulGainProcessor> (1.0f));
+    };
+}
+
+class StatefulExternalProcessor : public AudioProcessor
+{
+public:
+    explicit StatefulExternalProcessor (String processorName, float initialGain = 1.0f)
+        : AudioProcessor (std::move (processorName), stereoLayout())
+        , gain (initialGain)
+    {
+    }
+
+    void prepareToPlay (float, int) override {}
+
+    void releaseResources() override {}
+
+    void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer&) override
+    {
+        for (int channel = 0; channel < audioBuffer.getNumChannels(); ++channel)
+            audioBuffer.applyGain (channel, 0, audioBuffer.getNumSamples(), gain);
+    }
+
+    int getCurrentPreset() const noexcept override { return 0; }
+
+    void setCurrentPreset (int) noexcept override {}
+
+    int getNumPresets() const override { return 0; }
+
+    String getPresetName (int) const override { return {}; }
+
+    void setPresetName (int, StringRef) override {}
+
+    Result loadStateFromMemory (const MemoryBlock& memoryBlock) override
+    {
+        if (memoryBlock.getSize() != sizeof (float))
+            return Result::fail ("Invalid external processor gain state");
+
+        MemoryInputStream stream (memoryBlock, false);
+        gain = stream.readFloat();
+        return Result::ok();
+    }
+
+    Result saveStateIntoMemory (MemoryBlock& memoryBlock) override
+    {
+        MemoryOutputStream stream (memoryBlock, false);
+        stream.writeFloat (gain);
+        stream.flush();
+        return Result::ok();
+    }
+
+    bool hasEditor() const override { return false; }
+
+private:
+    float gain = 1.0f;
+};
+
+class SaveFailingProcessor : public AudioProcessor
+{
+public:
+    SaveFailingProcessor()
+        : AudioProcessor ("Save Failing", stereoLayout())
+    {
+    }
+
+    void prepareToPlay (float, int) override {}
+
+    void releaseResources() override {}
+
+    void processBlock (AudioBuffer<float>&, MidiBuffer&) override {}
+
+    int getCurrentPreset() const noexcept override { return 0; }
+
+    void setCurrentPreset (int) noexcept override {}
+
+    int getNumPresets() const override { return 0; }
+
+    String getPresetName (int) const override { return {}; }
+
+    void setPresetName (int, StringRef) override {}
+
+    Result loadStateFromMemory (const MemoryBlock&) override { return Result::ok(); }
+
+    Result saveStateIntoMemory (MemoryBlock&) override { return Result::fail ("Save failed"); }
+
+    bool hasEditor() const override { return false; }
+};
+
+AudioGraphNodeProperties externalProcessorProperties (float positionX = 0.0f, float positionY = 0.0f)
+{
+    AudioGraphNodeProperties properties;
+    properties.identifier = "externalPlugin";
+    properties.name = "External Plugin";
+    properties.positionX = positionX;
+    properties.positionY = positionY;
+
+    MemoryOutputStream stream (properties.creationData, false);
+    stream.writeString ("Fake Plugin");
+    stream.writeString ("fake.plugin");
+    stream.flush();
+
+    return properties;
+}
+
+AudioGraphProcessor::NodeFactory statefulGainAndExternalFactory (int& externalLoadCount, String& externalIdentifier)
+{
+    return [&externalLoadCount, &externalIdentifier] (const AudioGraphNodeProperties& properties) -> ResultValue<std::unique_ptr<AudioProcessor>>
+    {
+        if (properties.identifier == "statefulGain")
+            return ResultValue<std::unique_ptr<AudioProcessor>>::ok (std::make_unique<StatefulGainProcessor> (1.0f));
+
+        if (properties.identifier != "externalPlugin")
+            return ResultValue<std::unique_ptr<AudioProcessor>>::fail ("Unknown node type");
+
+        MemoryInputStream stream (properties.creationData, false);
+        const auto pluginName = stream.readString();
+        externalIdentifier = stream.readString();
+        ++externalLoadCount;
+
+        return ResultValue<std::unique_ptr<AudioProcessor>>::ok (std::make_unique<StatefulExternalProcessor> (pluginName));
+    };
+}
+
 void fillImpulse (AudioBuffer<float>& buffer)
 {
     buffer.clear();
@@ -414,6 +554,35 @@ int countMidiEvents (const MidiBuffer& midi)
             ++count;
 
     return count;
+}
+
+std::unique_ptr<XmlElement> parseMemoryBlockAsXml (const MemoryBlock& memoryBlock)
+{
+    MemoryInputStream stream (memoryBlock, false);
+    return parseXML (stream.readEntireStreamAsString());
+}
+
+MemoryBlock memoryBlockFromString (const String& text)
+{
+    MemoryBlock result;
+    MemoryOutputStream stream (result, false);
+    stream << text;
+    stream.flush();
+    return result;
+}
+
+MemoryBlock memoryBlockFromXml (const XmlElement& xml)
+{
+    MemoryBlock result;
+    MemoryOutputStream stream (result, false);
+    xml.writeTo (stream);
+    stream.flush();
+    return result;
+}
+
+String toBase64Text (const MemoryBlock& block)
+{
+    return Base64::toBase64 (block.getData(), block.getSize());
 }
 
 bool resetGraphToSingleGainPath (AudioGraphProcessor& graph, float gain)
@@ -924,7 +1093,7 @@ TEST (AudioGraphProcessorTests, SaveAndLoadRestoresConnectionsAndNodeState)
     AudioGraphProcessor graph;
     auto processor = std::make_unique<StatefulGainProcessor> (0.25f);
     auto* processorPtr = processor.get();
-    const auto node = graph.addNode (std::move (processor));
+    const auto node = graph.addNode (std::move (processor), statefulGainProperties (12.0f, 34.0f));
 
     const AudioGraphConnection inputConnection { AudioGraphEndpoint::graphInput (0),
                                                  AudioGraphEndpoint::nodeInput (node, 0) };
@@ -940,14 +1109,32 @@ TEST (AudioGraphProcessorTests, SaveAndLoadRestoresConnectionsAndNodeState)
     MemoryBlock savedState;
     EXPECT_TRUE (graph.saveStateIntoMemory (savedState).wasOk());
 
+    auto xml = parseMemoryBlockAsXml (savedState);
+    ASSERT_NE (nullptr, xml.get());
+    EXPECT_TRUE (xml->hasTagName ("YUPAudioGraphState"));
+
+    auto* savedNodeElement = xml->getChildByName ("nodes")->getChildByName ("node");
+    ASSERT_NE (nullptr, savedNodeElement);
+    auto* savedNodeStateElement = savedNodeElement->getChildByName ("state");
+    ASSERT_NE (nullptr, savedNodeStateElement);
+    EXPECT_EQ (String ("base64"), savedNodeStateElement->getStringAttribute ("encoding"));
+    EXPECT_FALSE (savedNodeStateElement->getAllSubText().trim().isEmpty());
+
     processorPtr->setGain (0.75f);
     EXPECT_TRUE (graph.removeConnection (inputConnection));
     EXPECT_TRUE (graph.removeConnection (outputConnection));
     EXPECT_TRUE (graph.addConnection (bypassConnection).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
+    graph.setNodeFactory (statefulGainFactory());
     EXPECT_TRUE (graph.loadStateFromMemory (savedState).wasOk());
     EXPECT_FALSE (graph.hasUncommittedChanges());
+
+    const auto properties = graph.getNodeProperties (node);
+    ASSERT_TRUE (properties.has_value());
+    EXPECT_EQ (String ("statefulGain"), properties->identifier);
+    EXPECT_FLOAT_EQ (12.0f, properties->positionX);
+    EXPECT_FLOAT_EQ (34.0f, properties->positionY);
 
     const auto connections = graph.getConnections();
     ASSERT_EQ (2u, connections.size());
@@ -964,10 +1151,81 @@ TEST (AudioGraphProcessorTests, SaveAndLoadRestoresConnectionsAndNodeState)
     EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (1)[0]);
 }
 
-TEST (AudioGraphProcessorTests, LoadStateFailsWhenSavedNodesAreMissing)
+TEST (AudioGraphProcessorTests, LoadStateRecreatesProcessorNodesWithFactory)
 {
     AudioGraphProcessor source;
-    const auto node = source.addNode (std::make_unique<StatefulGainProcessor> (0.25f));
+    const auto node = source.addNode (std::make_unique<StatefulGainProcessor> (0.25f),
+                                      statefulGainProperties (64.0f, 128.0f));
+
+    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (source.commitChanges().wasOk());
+
+    MemoryBlock savedState;
+    ASSERT_TRUE (source.saveStateIntoMemory (savedState).wasOk());
+
+    AudioGraphProcessor destination;
+    destination.setNodeFactory (statefulGainFactory());
+
+    EXPECT_TRUE (destination.loadStateFromMemory (savedState).wasOk());
+
+    const auto properties = destination.getNodeProperties (node);
+    ASSERT_TRUE (properties.has_value());
+    EXPECT_EQ (String ("statefulGain"), properties->identifier);
+    EXPECT_FLOAT_EQ (64.0f, properties->positionX);
+    EXPECT_FLOAT_EQ (128.0f, properties->positionY);
+
+    AudioBuffer<float> audio (2, 16);
+    MidiBuffer midi;
+    fillImpulse (audio);
+
+    destination.processBlock (audio, midi);
+
+    EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (0)[0]);
+    EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (1)[0]);
+}
+
+TEST (AudioGraphProcessorTests, CreateXmlAndRestoreFromXmlCanBeUsedDirectly)
+{
+    AudioGraphProcessor source;
+    const auto node = source.addNode (std::make_unique<StatefulGainProcessor> (0.25f),
+                                      statefulGainProperties (96.0f, 192.0f));
+
+    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (source.commitChanges().wasOk());
+
+    const auto xml = source.createXml();
+    ASSERT_NE (nullptr, xml.get());
+    EXPECT_TRUE (xml->hasTagName ("YUPAudioGraphState"));
+
+    AudioGraphProcessor destination;
+    destination.setNodeFactory (statefulGainFactory());
+
+    ASSERT_TRUE (destination.restoreFromXml (*xml).wasOk());
+    EXPECT_FALSE (destination.hasUncommittedChanges());
+
+    const auto properties = destination.getNodeProperties (node);
+    ASSERT_TRUE (properties.has_value());
+    EXPECT_EQ (String ("statefulGain"), properties->identifier);
+    EXPECT_FLOAT_EQ (96.0f, properties->positionX);
+    EXPECT_FLOAT_EQ (192.0f, properties->positionY);
+
+    AudioBuffer<float> audio (2, 16);
+    MidiBuffer midi;
+    fillImpulse (audio);
+
+    destination.processBlock (audio, midi);
+
+    EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (0)[0]);
+    EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (1)[0]);
+}
+
+TEST (AudioGraphProcessorTests, LoadStateFailsWhenFactoryIsMissing)
+{
+    AudioGraphProcessor source;
+    const auto node = source.addNode (std::make_unique<StatefulGainProcessor> (0.25f),
+                                      statefulGainProperties());
 
     ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
     ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
@@ -978,6 +1236,373 @@ TEST (AudioGraphProcessorTests, LoadStateFailsWhenSavedNodesAreMissing)
 
     AudioGraphProcessor destination;
     EXPECT_TRUE (destination.loadStateFromMemory (savedState).failed());
+}
+
+TEST (AudioGraphProcessorTests, LoadStateRecreatesExternalNodesWithOpaqueCreationData)
+{
+    AudioGraphProcessor source;
+    const auto node = source.addNode (std::make_unique<StatefulExternalProcessor> ("Fake Plugin", 0.25f),
+                                      externalProcessorProperties (4.0f, 8.0f));
+
+    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (source.commitChanges().wasOk());
+
+    MemoryBlock savedState;
+    ASSERT_TRUE (source.saveStateIntoMemory (savedState).wasOk());
+
+    auto xml = parseMemoryBlockAsXml (savedState);
+    ASSERT_NE (nullptr, xml.get());
+    auto* savedNodeElement = xml->getChildByName ("nodes")->getChildByName ("node");
+    ASSERT_NE (nullptr, savedNodeElement);
+    auto* creationDataElement = savedNodeElement->getChildByName ("creationData");
+    ASSERT_NE (nullptr, creationDataElement);
+    EXPECT_EQ (String ("base64"), creationDataElement->getStringAttribute ("encoding"));
+    EXPECT_FALSE (creationDataElement->getAllSubText().trim().isEmpty());
+
+    int externalLoadCount = 0;
+    String externalIdentifier;
+
+    AudioGraphProcessor destination;
+    destination.setNodeFactory (statefulGainAndExternalFactory (externalLoadCount, externalIdentifier));
+
+    EXPECT_TRUE (destination.loadStateFromMemory (savedState).wasOk());
+    EXPECT_EQ (1, externalLoadCount);
+    EXPECT_EQ (String ("fake.plugin"), externalIdentifier);
+
+    const auto properties = destination.getNodeProperties (node);
+    ASSERT_TRUE (properties.has_value());
+    EXPECT_EQ (String ("externalPlugin"), properties->identifier);
+    EXPECT_FALSE (properties->creationData.isEmpty());
+    EXPECT_FLOAT_EQ (4.0f, properties->positionX);
+    EXPECT_FLOAT_EQ (8.0f, properties->positionY);
+
+    AudioBuffer<float> audio (2, 16);
+    MidiBuffer midi;
+    fillImpulse (audio);
+
+    destination.processBlock (audio, midi);
+
+    EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (0)[0]);
+    EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (1)[0]);
+}
+
+TEST (AudioGraphProcessorTests, LoadStateFailureRestoresPreviousGraphModel)
+{
+    AudioGraphProcessor invalidSource;
+    ASSERT_TRUE (invalidSource.addConnection ({ AudioGraphEndpoint::nodeOutput (AudioGraphNodeID (999), 0),
+                                                AudioGraphEndpoint::graphOutput (0) })
+                     .wasOk());
+
+    MemoryBlock invalidState;
+    ASSERT_TRUE (invalidSource.saveStateIntoMemory (invalidState).wasOk());
+
+    AudioGraphProcessor destination;
+    ASSERT_TRUE (resetGraphToSingleGainPath (destination, 0.5f));
+    EXPECT_FALSE (destination.hasUncommittedChanges());
+
+    EXPECT_TRUE (destination.loadStateFromMemory (invalidState).failed());
+    EXPECT_FALSE (destination.hasUncommittedChanges());
+
+    const auto connections = destination.getConnections();
+    ASSERT_EQ (2u, connections.size());
+
+    AudioBuffer<float> audio (2, 16);
+    MidiBuffer midi;
+    fillImpulse (audio);
+
+    destination.processBlock (audio, midi);
+
+    EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (0)[0]);
+    EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (1)[0]);
+}
+
+TEST (AudioGraphProcessorTests, SaveStateWritesCompleteXmlTopology)
+{
+    AudioGraphProcessor graph;
+    const auto gainNode = graph.addNode (std::make_unique<StatefulGainProcessor> (0.5f),
+                                         statefulGainProperties (11.0f, 22.0f));
+    const auto externalNode = graph.addNode (std::make_unique<StatefulExternalProcessor> ("External", 0.25f),
+                                             externalProcessorProperties (33.0f, 44.0f));
+
+    ASSERT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (gainNode, 0) }).wasOk());
+    ASSERT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (gainNode, 0), AudioGraphEndpoint::nodeInput (externalNode, 0) }).wasOk());
+    ASSERT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (externalNode, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (graph.commitChanges().wasOk());
+
+    MemoryBlock savedState;
+    ASSERT_TRUE (graph.saveStateIntoMemory (savedState).wasOk());
+
+    const auto xml = parseMemoryBlockAsXml (savedState);
+    ASSERT_NE (nullptr, xml.get());
+    EXPECT_TRUE (xml->hasTagName ("YUPAudioGraphState"));
+    EXPECT_EQ (1, xml->getIntAttribute ("version"));
+    EXPECT_EQ (String (static_cast<int64> (externalNode.getRawID())), xml->getStringAttribute ("nextNodeID"));
+
+    auto* nodesElement = xml->getChildByName ("nodes");
+    ASSERT_NE (nullptr, nodesElement);
+    EXPECT_EQ (2, nodesElement->getNumChildElements());
+
+    auto* gainElement = nodesElement->getChildByAttribute ("id", String (static_cast<int64> (gainNode.getRawID())));
+    ASSERT_NE (nullptr, gainElement);
+    EXPECT_EQ (String ("statefulGain"), gainElement->getStringAttribute ("identifier"));
+    EXPECT_EQ (String ("Stateful Gain"), gainElement->getStringAttribute ("name"));
+    EXPECT_DOUBLE_EQ (11.0, gainElement->getDoubleAttribute ("positionX"));
+    EXPECT_DOUBLE_EQ (22.0, gainElement->getDoubleAttribute ("positionY"));
+    ASSERT_NE (nullptr, gainElement->getChildByName ("state"));
+    ASSERT_NE (nullptr, gainElement->getChildByName ("creationData"));
+
+    auto* externalElement = nodesElement->getChildByAttribute ("id", String (static_cast<int64> (externalNode.getRawID())));
+    ASSERT_NE (nullptr, externalElement);
+    EXPECT_EQ (String ("externalPlugin"), externalElement->getStringAttribute ("identifier"));
+    EXPECT_EQ (String ("External Plugin"), externalElement->getStringAttribute ("name"));
+    EXPECT_DOUBLE_EQ (33.0, externalElement->getDoubleAttribute ("positionX"));
+    EXPECT_DOUBLE_EQ (44.0, externalElement->getDoubleAttribute ("positionY"));
+    EXPECT_FALSE (externalElement->getChildByName ("creationData")->getAllSubText().trim().isEmpty());
+
+    auto* connectionsElement = xml->getChildByName ("connections");
+    ASSERT_NE (nullptr, connectionsElement);
+    EXPECT_EQ (4, connectionsElement->getNumChildElements());
+
+    auto* firstConnection = connectionsElement->getChildByName ("connection");
+    ASSERT_NE (nullptr, firstConnection);
+    ASSERT_NE (nullptr, firstConnection->getChildByName ("source"));
+    ASSERT_NE (nullptr, firstConnection->getChildByName ("destination"));
+    EXPECT_EQ (String ("graphInput"), firstConnection->getChildByName ("source")->getStringAttribute ("kind"));
+    EXPECT_EQ (String ("nodeInput"), firstConnection->getChildByName ("destination")->getStringAttribute ("kind"));
+}
+
+TEST (AudioGraphProcessorTests, LoadStateRestoresMultiNodeXmlGraphAndNextNodeID)
+{
+    AudioGraphProcessor source;
+    const auto firstNode = source.addNode (std::make_unique<StatefulGainProcessor> (0.5f),
+                                           statefulGainProperties (10.0f, 20.0f));
+    const auto secondNode = source.addNode (std::make_unique<StatefulGainProcessor> (0.25f),
+                                            statefulGainProperties (30.0f, 40.0f));
+
+    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (firstNode, 0) }).wasOk());
+    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::nodeOutput (firstNode, 0), AudioGraphEndpoint::nodeInput (secondNode, 0) }).wasOk());
+    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::nodeOutput (secondNode, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (source.commitChanges().wasOk());
+
+    MemoryBlock savedState;
+    ASSERT_TRUE (source.saveStateIntoMemory (savedState).wasOk());
+
+    AudioGraphProcessor destination;
+    destination.setNodeFactory (statefulGainFactory());
+
+    ASSERT_TRUE (destination.loadStateFromMemory (savedState).wasOk());
+    EXPECT_FALSE (destination.hasUncommittedChanges());
+
+    const auto firstProperties = destination.getNodeProperties (firstNode);
+    ASSERT_TRUE (firstProperties.has_value());
+    EXPECT_FLOAT_EQ (10.0f, firstProperties->positionX);
+    EXPECT_FLOAT_EQ (20.0f, firstProperties->positionY);
+
+    const auto secondProperties = destination.getNodeProperties (secondNode);
+    ASSERT_TRUE (secondProperties.has_value());
+    EXPECT_FLOAT_EQ (30.0f, secondProperties->positionX);
+    EXPECT_FLOAT_EQ (40.0f, secondProperties->positionY);
+
+    const auto connections = destination.getConnections();
+    ASSERT_EQ (3u, connections.size());
+
+    AudioBuffer<float> audio (2, 16);
+    MidiBuffer midi;
+    fillImpulse (audio);
+
+    destination.processBlock (audio, midi);
+
+    EXPECT_FLOAT_EQ (0.125f, audio.getReadPointer (0)[0]);
+    EXPECT_FLOAT_EQ (0.125f, audio.getReadPointer (1)[0]);
+
+    const auto nextNode = destination.addNode (std::make_unique<TestProcessor>());
+    EXPECT_GT (nextNode.getRawID(), secondNode.getRawID());
+}
+
+TEST (AudioGraphProcessorTests, SaveStateFailsWhenNodeStateSaveFails)
+{
+    AudioGraphProcessor graph;
+    const auto node = graph.addNode (std::make_unique<SaveFailingProcessor>());
+
+    ASSERT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    ASSERT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+
+    MemoryBlock savedState;
+    EXPECT_TRUE (graph.saveStateIntoMemory (savedState).failed());
+}
+
+TEST (AudioGraphProcessorTests, CreateXmlReturnsNullWhenNodeStateSaveFails)
+{
+    AudioGraphProcessor graph;
+    const auto node = graph.addNode (std::make_unique<SaveFailingProcessor>());
+
+    ASSERT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    ASSERT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+
+    auto xml = graph.createXml();
+    EXPECT_EQ (nullptr, xml.get());
+}
+
+TEST (AudioGraphProcessorTests, LoadStateRejectsMalformedXmlHeaderAndUnsupportedVersion)
+{
+    AudioGraphProcessor graph;
+    const String unsupportedVersionXml = "<YUPAudioGraphState version=\"99\" nextNodeID=\"0\">"
+                                         "<nodes />"
+                                         "<connections />"
+                                         "</YUPAudioGraphState>";
+
+    EXPECT_TRUE (graph.loadStateFromMemory (memoryBlockFromString ("not xml")).failed());
+    EXPECT_TRUE (graph.loadStateFromMemory (memoryBlockFromString ("<WrongRoot />")).failed());
+    EXPECT_TRUE (graph.loadStateFromMemory (memoryBlockFromString (unsupportedVersionXml)).failed());
+}
+
+TEST (AudioGraphProcessorTests, LoadStateRejectsMissingRequiredXmlSections)
+{
+    AudioGraphProcessor graph;
+    const String missingNodesXml = "<YUPAudioGraphState version=\"1\" nextNodeID=\"0\">"
+                                   "<connections />"
+                                   "</YUPAudioGraphState>";
+    const String missingConnectionsXml = "<YUPAudioGraphState version=\"1\" nextNodeID=\"0\">"
+                                         "<nodes />"
+                                         "</YUPAudioGraphState>";
+
+    EXPECT_TRUE (graph.loadStateFromMemory (memoryBlockFromString (missingNodesXml)).failed());
+    EXPECT_TRUE (graph.loadStateFromMemory (memoryBlockFromString (missingConnectionsXml)).failed());
+}
+
+TEST (AudioGraphProcessorTests, LoadStateRejectsInvalidBase64Payloads)
+{
+    AudioGraphProcessor source;
+    const auto node = source.addNode (std::make_unique<StatefulExternalProcessor> ("External", 0.25f),
+                                      externalProcessorProperties());
+
+    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (source.commitChanges().wasOk());
+
+    MemoryBlock savedState;
+    ASSERT_TRUE (source.saveStateIntoMemory (savedState).wasOk());
+
+    auto invalidNodeState = parseMemoryBlockAsXml (savedState);
+    ASSERT_NE (nullptr, invalidNodeState.get());
+    auto* stateElement = invalidNodeState->getChildByName ("nodes")->getChildByName ("node")->getChildByName ("state");
+    ASSERT_NE (nullptr, stateElement);
+    stateElement->deleteAllChildElements();
+    stateElement->addTextElement ("not-base64");
+
+    int externalLoadCount = 0;
+    String externalIdentifier;
+
+    AudioGraphProcessor destination;
+    destination.setNodeFactory (statefulGainAndExternalFactory (externalLoadCount, externalIdentifier));
+    EXPECT_TRUE (destination.loadStateFromMemory (memoryBlockFromXml (*invalidNodeState)).failed());
+    EXPECT_EQ (0, externalLoadCount);
+
+    auto invalidCreationData = parseMemoryBlockAsXml (savedState);
+    ASSERT_NE (nullptr, invalidCreationData.get());
+    auto* creationDataElement = invalidCreationData->getChildByName ("nodes")->getChildByName ("node")->getChildByName ("creationData");
+    ASSERT_NE (nullptr, creationDataElement);
+    creationDataElement->deleteAllChildElements();
+    creationDataElement->addTextElement ("not-base64");
+
+    EXPECT_TRUE (destination.loadStateFromMemory (memoryBlockFromXml (*invalidCreationData)).failed());
+    EXPECT_EQ (0, externalLoadCount);
+}
+
+TEST (AudioGraphProcessorTests, LoadStateRejectsInvalidConnectionXml)
+{
+    AudioGraphProcessor source;
+    const auto node = source.addNode (std::make_unique<StatefulGainProcessor> (0.5f),
+                                      statefulGainProperties());
+
+    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (source.commitChanges().wasOk());
+
+    MemoryBlock savedState;
+    ASSERT_TRUE (source.saveStateIntoMemory (savedState).wasOk());
+
+    auto invalidKind = parseMemoryBlockAsXml (savedState);
+    ASSERT_NE (nullptr, invalidKind.get());
+    auto* firstConnection = invalidKind->getChildByName ("connections")->getChildByName ("connection");
+    ASSERT_NE (nullptr, firstConnection);
+    firstConnection->getChildByName ("source")->setAttribute ("kind", "invalidKind");
+
+    AudioGraphProcessor destination;
+    destination.setNodeFactory (statefulGainFactory());
+    EXPECT_TRUE (destination.loadStateFromMemory (memoryBlockFromXml (*invalidKind)).failed());
+
+    auto missingDestination = parseMemoryBlockAsXml (savedState);
+    ASSERT_NE (nullptr, missingDestination.get());
+    firstConnection = missingDestination->getChildByName ("connections")->getChildByName ("connection");
+    ASSERT_NE (nullptr, firstConnection);
+    firstConnection->removeChildElement (firstConnection->getChildByName ("destination"), true);
+
+    EXPECT_TRUE (destination.loadStateFromMemory (memoryBlockFromXml (*missingDestination)).failed());
+}
+
+TEST (AudioGraphProcessorTests, LoadStateFailsWhenFactoryReturnsNullProcessor)
+{
+    AudioGraphProcessor source;
+    const auto node = source.addNode (std::make_unique<StatefulGainProcessor> (0.25f),
+                                      statefulGainProperties());
+
+    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (source.commitChanges().wasOk());
+
+    MemoryBlock savedState;
+    ASSERT_TRUE (source.saveStateIntoMemory (savedState).wasOk());
+
+    AudioGraphProcessor destination;
+    destination.setNodeFactory ([] (const AudioGraphNodeProperties&) -> ResultValue<std::unique_ptr<AudioProcessor>>
+    {
+        return ResultValue<std::unique_ptr<AudioProcessor>>::ok (std::unique_ptr<AudioProcessor>());
+    });
+
+    EXPECT_TRUE (destination.loadStateFromMemory (savedState).failed());
+}
+
+TEST (AudioGraphProcessorTests, LoadStateFailureFromNodeStateCallbackRestoresPreviousGraph)
+{
+    AudioGraphProcessor source;
+    const auto node = source.addNode (std::make_unique<StatefulGainProcessor> (0.25f),
+                                      statefulGainProperties());
+
+    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (source.commitChanges().wasOk());
+
+    MemoryBlock savedState;
+    ASSERT_TRUE (source.saveStateIntoMemory (savedState).wasOk());
+
+    auto xml = parseMemoryBlockAsXml (savedState);
+    ASSERT_NE (nullptr, xml.get());
+    auto* stateElement = xml->getChildByName ("nodes")->getChildByName ("node")->getChildByName ("state");
+    ASSERT_NE (nullptr, stateElement);
+    stateElement->deleteAllChildElements();
+
+    const MemoryBlock invalidState ("bad", 3);
+    stateElement->addTextElement (toBase64Text (invalidState));
+
+    AudioGraphProcessor destination;
+    destination.setNodeFactory (statefulGainFactory());
+    ASSERT_TRUE (resetGraphToSingleGainPath (destination, 0.5f));
+    EXPECT_FALSE (destination.hasUncommittedChanges());
+
+    EXPECT_TRUE (destination.loadStateFromMemory (memoryBlockFromXml (*xml)).failed());
+    EXPECT_FALSE (destination.hasUncommittedChanges());
+
+    AudioBuffer<float> audio (2, 16);
+    MidiBuffer midi;
+    fillImpulse (audio);
+
+    destination.processBlock (audio, midi);
+
+    EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (0)[0]);
+    EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (1)[0]);
 }
 
 TEST (AudioGraphProcessorTests, RemoveConnectionStopsRoutingAfterCommit)
