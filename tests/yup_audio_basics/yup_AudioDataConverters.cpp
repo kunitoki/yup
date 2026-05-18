@@ -44,10 +44,11 @@ using namespace yup;
 
 namespace
 {
+
 template <class F1, class E1, class F2, class E2>
-void testRoundTripConversion (Random& r)
+struct RoundTripConversionTest
 {
-    auto testWithInPlace = [&] (bool inPlace)
+    static void run (Random& r, bool inPlace)
     {
         const int numSamples = 2048;
         int32 original[numSamples], converted[numSamples], reversed[numSamples];
@@ -71,14 +72,14 @@ void testRoundTripConversion (Random& r)
             EXPECT_FALSE (clippingFailed);
         }
 
-        // convert data from the source to dest format..
-        std::unique_ptr<AudioData::Converter> conv (new AudioData::ConverterInstance<AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::Const>,
-                                                                                     AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::NonConst>>());
+        std::unique_ptr<AudioData::Converter> conv (new AudioData::ConverterInstance<
+                                                    AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::Const>,
+                                                    AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::NonConst>>());
         conv->convertSamples (inPlace ? reversed : converted, original, numSamples);
 
-        // ..and back again..
-        conv.reset (new AudioData::ConverterInstance<AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::Const>,
-                                                     AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::NonConst>>());
+        conv.reset (new AudioData::ConverterInstance<
+                    AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::Const>,
+                    AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::NonConst>>());
         if (! inPlace)
             zeromem (reversed, sizeof (reversed));
 
@@ -101,36 +102,42 @@ void testRoundTripConversion (Random& r)
 
             EXPECT_LE (biggestDiff, errorMargin);
         }
-    };
-
-    testWithInPlace (false);
-    testWithInPlace (true);
-}
+    }
+};
 
 template <class F1, class E1, class FormatType>
-void testAllEndianness (Random& r)
+struct AllEndiannessTest
 {
-    testRoundTripConversion<F1, E1, FormatType, AudioData::BigEndian> (r);
-    testRoundTripConversion<F1, E1, FormatType, AudioData::LittleEndian> (r);
-}
+    static void run (Random& r)
+    {
+        RoundTripConversionTest<F1, E1, FormatType, AudioData::BigEndian>::run (r, false);
+        RoundTripConversionTest<F1, E1, FormatType, AudioData::BigEndian>::run (r, true);
+        RoundTripConversionTest<F1, E1, FormatType, AudioData::LittleEndian>::run (r, false);
+        RoundTripConversionTest<F1, E1, FormatType, AudioData::LittleEndian>::run (r, true);
+    }
+};
 
 template <class FormatType, class Endianness>
-void testAllFormats (Random& r)
+struct AllFormatsTest
 {
-    testAllEndianness<FormatType, Endianness, AudioData::Int8> (r);
-    testAllEndianness<FormatType, Endianness, AudioData::UInt8> (r);
-    testAllEndianness<FormatType, Endianness, AudioData::Int16> (r);
-    testAllEndianness<FormatType, Endianness, AudioData::Int24> (r);
-    testAllEndianness<FormatType, Endianness, AudioData::Int32> (r);
-    testAllEndianness<FormatType, Endianness, AudioData::Float32> (r);
-}
+    static void run (Random& r)
+    {
+        AllEndiannessTest<FormatType, Endianness, AudioData::Int8>::run (r);
+        AllEndiannessTest<FormatType, Endianness, AudioData::UInt8>::run (r);
+        AllEndiannessTest<FormatType, Endianness, AudioData::Int16>::run (r);
+        AllEndiannessTest<FormatType, Endianness, AudioData::Int24>::run (r);
+        AllEndiannessTest<FormatType, Endianness, AudioData::Int32>::run (r);
+        AllEndiannessTest<FormatType, Endianness, AudioData::Float32>::run (r);
+    }
+};
 
 template <class FormatType>
 void testFormatWithAllEndianness (Random& r)
 {
-    testAllFormats<FormatType, AudioData::BigEndian> (r);
-    testAllFormats<FormatType, AudioData::LittleEndian> (r);
+    AllFormatsTest<FormatType, AudioData::BigEndian>::run (r);
+    AllFormatsTest<FormatType, AudioData::LittleEndian>::run (r);
 }
+
 } // namespace
 
 //==============================================================================
