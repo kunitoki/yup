@@ -48,6 +48,9 @@ public:
     /** Stable factory key for the built-in low-pass filter node. */
     static constexpr const char* lpfIdentifier = "internal.lpf";
 
+    /** Stable factory key for the built-in looping sample player node. */
+    static constexpr const char* samplePlayerIdentifier = "internal.samplePlayer";
+
 #if YUP_DESKTOP
     /** Stable factory key for VST3 plugin nodes. */
     static constexpr const char* pluginVst3Identifier = "plugin.vst3";
@@ -72,7 +75,7 @@ public:
 
     //==============================================================================
     /**
-        Registers the built-in internal node types: oscillator, gain, and low-pass filter.
+        Registers the built-in internal node types.
 
         Each entry gets a processor factory and a matching view factory. The view
         factory dynamic_casts to the concrete processor type before constructing
@@ -122,6 +125,21 @@ public:
                 return nullptr;
 
             return std::make_unique<LowPassFilterNodeView> (nodeID, *lpf);
+        }
+        };
+
+        entries[samplePlayerIdentifier] = {
+            [] (const yup::AudioGraphNodeProperties&) -> yup::ResultValue<std::unique_ptr<yup::AudioProcessor>>
+        {
+            return yup::makeResultValueOk (std::make_unique<SamplePlayerProcessor>());
+        },
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc) -> std::unique_ptr<yup::AudioGraphNodeView>
+        {
+            auto* samplePlayer = dynamic_cast<SamplePlayerProcessor*> (proc);
+            if (samplePlayer == nullptr)
+                return nullptr;
+
+            return std::make_unique<SamplePlayerNodeView> (nodeID, *samplePlayer);
         }
         };
     }
@@ -314,7 +332,7 @@ public:
     //==============================================================================
     std::vector<yup::String> getInternalNodeIdentifiers() const
     {
-        return { oscillatorIdentifier, gainIdentifier, lpfIdentifier };
+        return { oscillatorIdentifier, gainIdentifier, lpfIdentifier, samplePlayerIdentifier };
     }
 
     //==============================================================================
@@ -333,6 +351,8 @@ public:
             return "Gain";
         if (id == lpfIdentifier)
             return "Low Pass Filter";
+        if (id == samplePlayerIdentifier)
+            return "Sample Player";
 
         return id;
     }

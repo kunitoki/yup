@@ -22,6 +22,7 @@
 #include <yup_core/yup_core.h>
 #include <yup_audio_basics/yup_audio_basics.h>
 #include <yup_audio_devices/yup_audio_devices.h>
+#include <yup_audio_formats/yup_audio_formats.h>
 #include <yup_audio_processors/yup_audio_processors.h>
 #include <yup_audio_graph/yup_audio_graph.h>
 #include <yup_events/yup_events.h>
@@ -36,6 +37,7 @@
 #include "nodes/OscillatorNode.h"
 #include "nodes/GainNode.h"
 #include "nodes/LowPassFilterNode.h"
+#include "nodes/SamplePlayerNode.h"
 #include "nodes/PluginNodeView.h"
 #include "nodes/NodeRegistry.h"
 #include "ui/PluginEditorWindow.h"

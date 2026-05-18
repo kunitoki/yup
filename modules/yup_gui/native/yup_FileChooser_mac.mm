@@ -71,102 +71,99 @@ static NSArray* createAllowedFileTypes(const String& filters)
 //==============================================================================
 void FileChooser::showPlatformDialog(CompletionCallback callback, int flags)
 {
-    YUP_AUTORELEASEPOOL
+    const bool isSave = (flags & saveMode) != 0;
+    const bool canChooseFiles = (flags & canSelectFiles) != 0;
+    const bool canChooseDirectories = (flags & canSelectDirectories) != 0;
+    const bool allowsMultipleSelection = (flags & canSelectMultipleItems) != 0;
+    const bool warnAboutOverwrite = (flags & warnAboutOverwriting) != 0;
+
+    if (isSave)
     {
-        const bool isSave = (flags & saveMode) != 0;
-        const bool canChooseFiles = (flags & canSelectFiles) != 0;
-        const bool canChooseDirectories = (flags & canSelectDirectories) != 0;
-        const bool allowsMultipleSelection = (flags & canSelectMultipleItems) != 0;
-        const bool warnAboutOverwrite = (flags & warnAboutOverwriting) != 0;
+        NSSavePanel* panel = [NSSavePanel savePanel];
 
-        if (isSave)
+        [panel setTitle:[NSString stringWithUTF8String:title.toUTF8()]];
+        [panel setCanCreateDirectories:YES];
+        [panel setShowsHiddenFiles:NO];
+
+        if (warnAboutOverwrite)
+            [panel setExtensionHidden:NO];
+
+        NSArray* allowedTypes = createAllowedFileTypes(filters);
+        if (allowedTypes != nil)
         {
-            NSSavePanel* panel = [NSSavePanel savePanel];
-
-            [panel setTitle:[NSString stringWithUTF8String:title.toUTF8()]];
-            [panel setCanCreateDirectories:YES];
-            [panel setShowsHiddenFiles:NO];
-
-            if (warnAboutOverwrite)
-                [panel setExtensionHidden:NO];
-
-            NSArray* allowedTypes = createAllowedFileTypes(filters);
-            if (allowedTypes != nil)
-            {
-                [panel setAllowedFileTypes:allowedTypes];
-                [panel setAllowsOtherFileTypes:NO];
-            }
-
-            if (startingFile.exists())
-            {
-                if (startingFile.isDirectory())
-                {
-                    [panel setDirectoryURL:[NSURL fileURLWithPath:[NSString stringWithUTF8String:startingFile.getFullPathName().toUTF8()]]];
-                }
-                else
-                {
-                    [panel setDirectoryURL:[NSURL fileURLWithPath:[NSString stringWithUTF8String:startingFile.getParentDirectory().getFullPathName().toUTF8()]]];
-                    [panel setNameFieldStringValue:[NSString stringWithUTF8String:startingFile.getFileName().toUTF8()]];
-                }
-            }
-
-            [panel beginWithCompletionHandler:^(NSModalResponse result) {
-              Array<File> results;
-
-              if (result == NSModalResponseOK)
-              {
-                  auto* url = [panel URL];
-                  if (url != nil)
-                  {
-                      NSString* path = [url path];
-                      if (path != nil)
-                          results.add(File(String::fromUTF8([path UTF8String])));
-                  }
-              }
-
-              MessageManager::callAsync([this, callback = std::move(callback), result, results]
-                                        { invokeCallback(std::move(callback), result == NSModalResponseOK, results); });
-            }];
+            [panel setAllowedFileTypes:allowedTypes];
+            [panel setAllowsOtherFileTypes:NO];
         }
-        else
+
+        if (startingFile.exists())
         {
-            NSOpenPanel* panel = [NSOpenPanel openPanel];
-
-            [panel setTitle:[NSString stringWithUTF8String:title.toUTF8()]];
-            [panel setCanChooseFiles:canChooseFiles];
-            [panel setCanChooseDirectories:canChooseDirectories];
-            [panel setAllowsMultipleSelection:allowsMultipleSelection];
-            [panel setShowsHiddenFiles:NO];
-            [panel setTreatsFilePackagesAsDirectories:packageDirsAsFiles];
-
-            NSArray* allowedTypes = createAllowedFileTypes(filters);
-            if (allowedTypes != nil && canChooseFiles)
+            if (startingFile.isDirectory())
             {
-                [panel setAllowedFileTypes:allowedTypes];
-                [panel setAllowsOtherFileTypes:NO];
-            }
-
-            if (startingFile.exists())
                 [panel setDirectoryURL:[NSURL fileURLWithPath:[NSString stringWithUTF8String:startingFile.getFullPathName().toUTF8()]]];
-
-            [panel beginWithCompletionHandler:^(NSModalResponse result) {
-              Array<File> results;
-
-              auto* urls = [panel URLs];
-              if (urls != nil)
-              {
-                  for (NSURL* url in urls)
-                  {
-                      NSString* path = [url path];
-                      if (path != nil)
-                          results.add(File(String::fromUTF8([path UTF8String])));
-                  }
-              }
-
-              MessageManager::callAsync([this, callback = std::move(callback), result, results]
-                                        { invokeCallback(std::move(callback), result == NSModalResponseOK, results); });
-            }];
+            }
+            else
+            {
+                [panel setDirectoryURL:[NSURL fileURLWithPath:[NSString stringWithUTF8String:startingFile.getParentDirectory().getFullPathName().toUTF8()]]];
+                [panel setNameFieldStringValue:[NSString stringWithUTF8String:startingFile.getFileName().toUTF8()]];
+            }
         }
+
+        [panel beginWithCompletionHandler:^(NSModalResponse result) {
+          Array<File> results;
+
+          if (result == NSModalResponseOK)
+          {
+              auto* url = [panel URL];
+              if (url != nil)
+              {
+                  NSString* path = [url path];
+                  if (path != nil)
+                      results.add(File(String::fromUTF8([path UTF8String])));
+              }
+          }
+
+          MessageManager::callAsync([this, callback = std::move(callback), result, results]
+                                    { invokeCallback(std::move(callback), result == NSModalResponseOK, results); });
+        }];
+    }
+    else
+    {
+        NSOpenPanel* panel = [NSOpenPanel openPanel];
+
+        [panel setTitle:[NSString stringWithUTF8String:title.toUTF8()]];
+        [panel setCanChooseFiles:canChooseFiles];
+        [panel setCanChooseDirectories:canChooseDirectories];
+        [panel setAllowsMultipleSelection:allowsMultipleSelection];
+        [panel setShowsHiddenFiles:NO];
+        [panel setTreatsFilePackagesAsDirectories:packageDirsAsFiles];
+
+        NSArray* allowedTypes = createAllowedFileTypes(filters);
+        if (allowedTypes != nil && canChooseFiles)
+        {
+            [panel setAllowedFileTypes:allowedTypes];
+            [panel setAllowsOtherFileTypes:NO];
+        }
+
+        if (startingFile.exists())
+            [panel setDirectoryURL:[NSURL fileURLWithPath:[NSString stringWithUTF8String:startingFile.getFullPathName().toUTF8()]]];
+
+        [panel beginWithCompletionHandler:^(NSModalResponse result) {
+          Array<File> results;
+
+          auto* urls = [panel URLs];
+          if (urls != nil)
+          {
+              for (NSURL* url in urls)
+              {
+                  NSString* path = [url path];
+                  if (path != nil)
+                      results.add(File(String::fromUTF8([path UTF8String])));
+              }
+          }
+
+          MessageManager::callAsync([this, callback = std::move(callback), result, results]
+                                    { invokeCallback(std::move(callback), result == NSModalResponseOK, results); });
+        }];
     }
 }
 

@@ -58,7 +58,7 @@ private:
     {
         return yup::ComponentNative::Options()
             .withResizableWindow (editor != nullptr && editor->isResizable())
-            .withFramerateRedraw (10)
+            .withFramerateRedraw (0)
             .withRenderContinuous (false);
     }
 

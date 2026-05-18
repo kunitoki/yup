@@ -189,7 +189,8 @@ void AudioThumbnail::paintChannel (Graphics& g,
 
     // Calculate how many pixels we'll actually draw
     const int pixelColumns = jmin (static_cast<int> (pixelWidth), static_cast<int> (lane.getWidth()));
-    if (pixelColumns <= 0)
+    const int pixelRows = jmin (static_cast<int> (pixelWidth), static_cast<int> (lane.getHeight()));
+    if (pixelColumns <= 0 || pixelRows <= 0)
         return;
 
     // Calculate zoom level and select best aggregation level

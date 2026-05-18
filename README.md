@@ -122,6 +122,14 @@ YUP brings a suite of powerful features, including:
 | **Linux**                | :construction:     | :construction:     |                    |                    |                           |                       |                       |
 
 
+## Supported Plugin Hosting Formats
+|                          | **CLAP**           | **VST3**           | **VST2**           | **AUv3**           | **AUv2**                  | **AAX**               | **LV2**               |
+|--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|:---------------------:|
+| **Windows**              | :construction:     | :construction:     |                    |                    |                           |                       |                       |
+| **macOS**                | :construction:     | :construction:     |                    |                    | :white_check_mark:        |                       |                       |
+| **Linux**                | :construction:     | :construction:     |                    |                    |                           |                       |                       |
+
+
 ## Supported Sound Formats
 
 |                   | **Wav**            | **Wav64**          | **Mp3**            | **OGG**            | **Flac**           | **Opus**           | **AAC**            | **WMF**            |
@@ -138,6 +146,7 @@ YUP brings a suite of powerful features, including:
 | **Android** (dec) | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction:     |                    |
 | **iOS** (enc)     | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    |
 | **iOS** (dec)     | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    |
+
 
 ## Prerequisites
 Before building, ensure you have a:

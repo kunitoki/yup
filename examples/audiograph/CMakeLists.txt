@@ -42,6 +42,7 @@ yup_standalone_app (
         yup::yup_events
         yup::yup_graphics
         yup::yup_gui
+        yup::yup_audio_formats
         yup::yup_audio_gui
         yup::yup_audio_processors
         yup::yup_audio_graph

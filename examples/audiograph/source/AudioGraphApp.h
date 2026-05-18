@@ -442,6 +442,7 @@ private:
         internalSubMenu->addItem ("Oscillator", 1);
         internalSubMenu->addItem ("Gain", 2);
         internalSubMenu->addItem ("Low Pass Filter", 3);
+        internalSubMenu->addItem ("Sample Player", 4);
 
         activeMenu = yup::PopupMenu::create (options);
         activeMenu->addSubMenu ("Internal Nodes", internalSubMenu);
@@ -476,10 +477,11 @@ private:
             const yup::String internalIds[] = {
                 NodeRegistry::oscillatorIdentifier,
                 NodeRegistry::gainIdentifier,
-                NodeRegistry::lpfIdentifier
+                NodeRegistry::lpfIdentifier,
+                NodeRegistry::samplePlayerIdentifier
             };
 
-            if (selectedID >= 1 && selectedID <= 3)
+            if (selectedID >= 1 && selectedID <= 4)
             {
                 addInternalNode (internalIds[selectedID - 1], pendingMenuCanvasPos);
             }
