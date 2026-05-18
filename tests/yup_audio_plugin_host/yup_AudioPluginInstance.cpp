@@ -10,10 +10,11 @@ namespace
 class FakePluginInstance : public AudioPluginInstance
 {
 public:
-    FakePluginInstance()
+    explicit FakePluginInstance (bool supportsDoublePrecision = false)
         : AudioPluginInstance (makeDescription(),
                                AudioBusLayout ({ AudioBus ("Input", AudioBus::Type::Audio, AudioBus::Direction::Input, 2) },
                                                { AudioBus ("Output", AudioBus::Type::Audio, AudioBus::Direction::Output, 2) }))
+        , supportsDoublePrecision (supportsDoublePrecision)
     {
     }
 
@@ -26,6 +27,14 @@ public:
         audio.clear();
         processCallCount++;
     }
+
+    void processBlock (AudioBuffer<double>& audio, MidiBuffer&) override
+    {
+        audio.clear();
+        doubleProcessCallCount++;
+    }
+
+    bool supportsDoublePrecisionProcessing() const override { return supportsDoublePrecision; }
 
     int getCurrentPreset() const noexcept override { return 0; }
 
@@ -53,9 +62,12 @@ public:
 
     bool prepared = false;
     int processCallCount = 0;
+    int doubleProcessCallCount = 0;
     MemoryBlock lastLoadedState;
 
 private:
+    bool supportsDoublePrecision = false;
+
     static AudioPluginDescription makeDescription()
     {
         AudioPluginDescription d;
@@ -104,6 +116,52 @@ TEST_F (AudioPluginInstanceTests, ProcessBlockIncrementsCounter)
     instance.processBlock (audio, midi);
 
     EXPECT_EQ (1, instance.processCallCount);
+}
+
+TEST_F (AudioPluginInstanceTests, DefaultsToSinglePrecision)
+{
+    EXPECT_FALSE (instance.supportsDoublePrecisionProcessing());
+    EXPECT_EQ (AudioProcessor::ProcessingPrecision::singlePrecision, instance.getProcessingPrecision());
+    EXPECT_FALSE (instance.isUsingDoublePrecision());
+}
+
+TEST_F (AudioPluginInstanceTests, UsesDoublePrecisionWhenSupported)
+{
+    FakePluginInstance doublePrecisionInstance (true);
+
+    doublePrecisionInstance.setProcessingPrecision (AudioProcessor::ProcessingPrecision::doublePrecision);
+
+    EXPECT_TRUE (doublePrecisionInstance.supportsDoublePrecisionProcessing());
+    EXPECT_EQ (AudioProcessor::ProcessingPrecision::doublePrecision, doublePrecisionInstance.getProcessingPrecision());
+    EXPECT_TRUE (doublePrecisionInstance.isUsingDoublePrecision());
+}
+
+TEST_F (AudioPluginInstanceTests, CanReturnToSinglePrecisionAfterUsingDoublePrecision)
+{
+    FakePluginInstance doublePrecisionInstance (true);
+
+    doublePrecisionInstance.setProcessingPrecision (AudioProcessor::ProcessingPrecision::doublePrecision);
+    doublePrecisionInstance.setProcessingPrecision (AudioProcessor::ProcessingPrecision::singlePrecision);
+
+    EXPECT_EQ (AudioProcessor::ProcessingPrecision::singlePrecision, doublePrecisionInstance.getProcessingPrecision());
+    EXPECT_FALSE (doublePrecisionInstance.isUsingDoublePrecision());
+}
+
+TEST_F (AudioPluginInstanceTests, DoublePrecisionProcessBlockUsesDoublePath)
+{
+    FakePluginInstance doublePrecisionInstance (true);
+    AudioBuffer<double> audio (2, 512);
+    MidiBuffer midi;
+
+    audio.setSample (0, 0, 1.0);
+
+    doublePrecisionInstance.setProcessingPrecision (AudioProcessor::ProcessingPrecision::doublePrecision);
+    doublePrecisionInstance.prepareToPlay (44100.0f, 512);
+    doublePrecisionInstance.processBlock (audio, midi);
+
+    EXPECT_EQ (0, doublePrecisionInstance.processCallCount);
+    EXPECT_EQ (1, doublePrecisionInstance.doubleProcessCallCount);
+    EXPECT_DOUBLE_EQ (0.0, audio.getSample (0, 0));
 }
 
 TEST_F (AudioPluginInstanceTests, BusLayoutMatchesConstructorArg)
