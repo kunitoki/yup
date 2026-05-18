@@ -40,6 +40,24 @@ void removeActivePopup (PopupMenu* popupMenu)
     }
 }
 
+PopupMenu* findActivePopupAt (Point<float> globalPos)
+{
+    for (auto it = activePopups.rbegin(); it != activePopups.rend(); ++it)
+    {
+        auto* popupMenu = dynamic_cast<PopupMenu*> (it->get());
+        if (popupMenu != nullptr && popupMenu->getScreenBounds().contains (globalPos))
+            return popupMenu;
+    }
+
+    return nullptr;
+}
+
+MouseEvent makePopupMouseEvent (const MouseEvent& event, PopupMenu& popupMenu, Point<float> globalPos)
+{
+    return event.withPosition (popupMenu.screenToLocal (globalPos))
+        .withSourceComponent (&popupMenu);
+}
+
 void installGlobalMouseListener()
 {
     static bool mouseListenerAdded = []
@@ -48,31 +66,33 @@ void installGlobalMouseListener()
         {
             void mouseDown (const MouseEvent& event) override
             {
-                Point<float> globalPos = event.getScreenPosition().to<float>();
+                const auto globalPos = event.getScreenPosition();
 
-                bool clickedInsidePopup = false;
-                for (const auto& popup : activePopups)
+                // Walk the component hierarchy from the event source.
+                // If any ancestor is a PopupMenu the click is inside a popup — don't dismiss.
+                auto* comp = event.getSourceComponent();
+                while (comp != nullptr)
                 {
-                    auto* popupMenu = dynamic_cast<PopupMenu*> (popup.get());
-                    if (popupMenu == nullptr)
-                        continue;
-
-                    if (popupMenu->getScreenBounds().contains (globalPos))
-                    {
-                        clickedInsidePopup = true;
-                        break;
-                    }
-
-                    // Also check if clicked inside any submenu
-                    if (popupMenu->submenuContains (globalPos))
-                    {
-                        clickedInsidePopup = true;
-                        break;
-                    }
+                    if (dynamic_cast<PopupMenu*> (comp) != nullptr)
+                        return;
+                    comp = comp->getParentComponent();
                 }
 
-                if (! clickedInsidePopup && ! activePopups.empty())
+                if (auto* popupMenu = findActivePopupAt (globalPos))
+                {
+                    popupMenu->mouseDown (makePopupMouseEvent (event, *popupMenu, globalPos));
+                    return;
+                }
+
+                if (! activePopups.empty())
                     PopupMenu::dismissAllPopups();
+            }
+
+            void mouseMove (const MouseEvent& event) override
+            {
+                const auto globalPos = event.getScreenPosition();
+                if (auto* popupMenu = findActivePopupAt (globalPos))
+                    popupMenu->mouseMove (makePopupMouseEvent (event, *popupMenu, globalPos));
             }
         } globalMouseListener {};
 
@@ -509,7 +529,19 @@ void PopupMenu::positionMenu()
         availableArea = Rectangle<int> (0, 0, 1920, 1080); // TODO: Move to magic
         if (auto* desktop = Desktop::getInstance())
         {
-            if (auto screen = desktop->getScreenContaining (this))
+            Screen::Ptr screen;
+
+            if (options.positioningMode == PositioningMode::atPoint)
+                screen = desktop->getScreenContaining (options.targetPosition.to<float>());
+            else if (options.positioningMode == PositioningMode::relativeToArea)
+                screen = desktop->getScreenContaining (options.targetArea.to<float>());
+            else if (options.positioningMode == PositioningMode::relativeToComponent && options.targetComponent)
+                screen = desktop->getScreenContaining (options.targetComponent);
+
+            if (screen == nullptr)
+                screen = desktop->getScreenContaining (this);
+
+            if (screen != nullptr)
                 availableArea = screen->workArea;
         }
     }
@@ -605,6 +637,7 @@ void PopupMenu::showCustom (const Options& options, bool isSubmenu, std::functio
     if (! isSubmenu)
         dismissAllPopups();
 
+    isBeingDismissed = false;
     this->options = options;
     menuCallback = std::move (callback);
 
@@ -633,6 +666,7 @@ void PopupMenu::showCustom (const Options& options, bool isSubmenu, std::functio
             addToDesktop (nativeOptions);
     }
 
+    removeActivePopup (this);
     activePopups.push_back (this);
 
     setupMenuItems();
@@ -752,7 +786,13 @@ void PopupMenu::mouseEnter (const MouseEvent& event)
 {
     int itemIndex = getItemIndexAt (event.getPosition());
     if (itemIndex >= 0 && isItemSelectable (itemIndex))
+    {
         setSelectedItemIndex (itemIndex, true);
+
+        auto& item = *items[itemIndex];
+        if (item.isSubMenu() && item.isEnabled)
+            showSubmenu (itemIndex);
+    }
 }
 
 void PopupMenu::mouseExit (const MouseEvent& event)
@@ -895,7 +935,10 @@ PopupMenu::Placement PopupMenu::calculateSubmenuPlacement (Rectangle<float> item
         availableArea = Rectangle<float> (0, 0, 1920, 1080); // TODO: move to magic
         if (auto* desktop = Desktop::getInstance())
         {
-            if (auto screen = desktop->getPrimaryScreen())
+            Screen::Ptr screen = desktop->getScreenContaining (getScreenBounds().to<float>());
+            if (screen == nullptr)
+                screen = desktop->getPrimaryScreen();
+            if (screen != nullptr)
                 availableArea = screen->workArea.to<float>();
         }
         menuBounds = getScreenBounds().to<float>();
@@ -980,9 +1023,11 @@ void PopupMenu::cleanupSubmenu (PopupMenu::Ptr submenu)
 
 void PopupMenu::resetInternalState()
 {
+    hideSubmenus();
+
     // Reset flags that might prevent re-showing
     isBeingDismissed = false;
-    setSelectedItemIndex (-1, true);
+    setSelectedItemIndex (-1, false);
 
     // Reset scrolling state for scrollable menus
     visibleItemRange = Range<int> (0, 0);
@@ -1080,7 +1125,12 @@ void PopupMenu::selectCurrentItem()
 void PopupMenu::setSelectedItemIndex (int index, bool fromMouse)
 {
     if (selectedItemIndex == index)
+    {
+        if (fromMouse)
+            updateSubmenuVisibility (index);
+
         return;
+    }
 
     if (selectedItemIndex >= 0 && selectedItemIndex < static_cast<int> (items.size()))
         items[selectedItemIndex]->isHovered = false;
@@ -1250,18 +1300,31 @@ void PopupMenu::calculateAvailableHeight()
         // Use screen bounds
         if (auto* desktop = Desktop::getInstance())
         {
-            if (auto screen = desktop->getPrimaryScreen())
+            Screen::Ptr screen;
+
+            float menuY = 0.0f;
+            if (options.positioningMode == PositioningMode::atPoint)
+            {
+                menuY = options.targetPosition.getY();
+                screen = desktop->getScreenContaining (options.targetPosition.to<float>());
+            }
+            else if (options.positioningMode == PositioningMode::relativeToArea)
+            {
+                menuY = options.targetArea.getY();
+                screen = desktop->getScreenContaining (options.targetArea.to<float>());
+            }
+            else if (options.positioningMode == PositioningMode::relativeToComponent && options.targetComponent)
+            {
+                menuY = options.targetComponent->getScreenBounds().getY();
+                screen = desktop->getScreenContaining (options.targetComponent);
+            }
+
+            if (screen == nullptr)
+                screen = desktop->getPrimaryScreen();
+
+            if (screen != nullptr)
             {
                 auto screenBounds = screen->workArea.to<float>();
-
-                // Estimate menu position for screen coordinate calculation
-                float menuY = 0.0f;
-                if (options.positioningMode == PositioningMode::atPoint)
-                    menuY = options.targetPosition.getY();
-                else if (options.positioningMode == PositioningMode::relativeToArea)
-                    menuY = options.targetArea.getY();
-                else if (options.positioningMode == PositioningMode::relativeToComponent && options.targetComponent)
-                    menuY = options.targetComponent->getScreenBounds().getY();
 
                 availableContentHeight = screenBounds.getBottom() - menuY;
                 availableContentHeight = jmax (100.0f, availableContentHeight);

@@ -352,7 +352,7 @@ void AudioGraphComponent::mouseDown (const MouseEvent& event)
     mouseDownScreen = screenPos;
     lastMouseScreen = screenPos;
 
-    if (event.isRightButtonDown())
+    if (event.getButtons() == MouseEvent::rightButton)
     {
         if (auto endpoint = hitTestEndpoint (screenPos))
         {

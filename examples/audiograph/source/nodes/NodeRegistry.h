@@ -48,7 +48,7 @@ public:
     /** Stable factory key for the built-in low-pass filter node. */
     static constexpr const char* lpfIdentifier = "internal.lpf";
 
-#if YUP_WINDOWS || YUP_MAC || YUP_LINUX
+#if YUP_DESKTOP
     /** Stable factory key for VST3 plugin nodes. */
     static constexpr const char* pluginVst3Identifier = "plugin.vst3";
 
@@ -126,7 +126,7 @@ public:
         };
     }
 
-#if YUP_WINDOWS || YUP_MAC || YUP_LINUX
+#if YUP_DESKTOP
     //==============================================================================
     /**
         Stores the plugin scanner and host context, then registers factory entries
@@ -341,7 +341,7 @@ private:
     //==============================================================================
     std::map<yup::String, Entry> entries;
 
-#if YUP_WINDOWS || YUP_MAC || YUP_LINUX
+#if YUP_DESKTOP
     yup::AudioPluginScanner* pluginScanner = nullptr;
     yup::AudioPluginHostContext hostContext;
     std::vector<yup::AudioPluginDescription> discoveredPlugins;

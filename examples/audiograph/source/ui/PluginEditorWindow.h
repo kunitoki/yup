@@ -58,7 +58,8 @@ private:
     {
         return yup::ComponentNative::Options()
             .withResizableWindow (editor != nullptr && editor->isResizable())
-            .withRenderContinuous (editor != nullptr && editor->shouldRenderContinuous());
+            .withFramerateRedraw (10)
+            .withRenderContinuous (false);
     }
 
     std::unique_ptr<yup::AudioProcessorEditor> editor;

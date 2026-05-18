@@ -29,7 +29,7 @@
 #include <yup_gui/yup_gui.h>
 #include <yup_audio_gui/yup_audio_gui.h>
 
-#if YUP_WINDOWS || YUP_MAC || YUP_LINUX
+#if YUP_DESKTOP
 #include <yup_audio_plugin_host/yup_audio_plugin_host.h>
 #endif
 

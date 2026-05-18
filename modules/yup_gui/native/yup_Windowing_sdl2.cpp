@@ -815,7 +815,7 @@ void SDL2ComponentNative::handleMouseMoveOrDrag (const Point<float>& position)
 
 void SDL2ComponentNative::handleMouseDown (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers)
 {
-    currentMouseButtons = static_cast<MouseEvent::Buttons> (currentMouseButtons | button);
+    currentMouseButtons = static_cast<MouseEvent::Buttons> (toMouseButtons (SDL_GetMouseState (nullptr, nullptr)) | button);
     currentKeyModifiers = modifiers;
 
     auto event = MouseEvent()
@@ -823,7 +823,7 @@ void SDL2ComponentNative::handleMouseDown (const Point<float>& position, MouseEv
                      .withModifiers (currentKeyModifiers)
                      .withPosition (position);
 
-    if (lastComponentClicked == nullptr)
+    if (currentMouseButtons == button)
         lastComponentClicked = findComponentForMouseEvent (position);
 
     if (lastComponentClicked != nullptr)
@@ -843,7 +843,7 @@ void SDL2ComponentNative::handleMouseDown (const Point<float>& position, MouseEv
 
 void SDL2ComponentNative::handleMouseUp (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers)
 {
-    currentMouseButtons = static_cast<MouseEvent::Buttons> (currentMouseButtons & ~button);
+    currentMouseButtons = static_cast<MouseEvent::Buttons> (toMouseButtons (SDL_GetMouseState (nullptr, nullptr)) & ~button);
     currentKeyModifiers = modifiers;
 
     auto event = MouseEvent()
@@ -857,20 +857,22 @@ void SDL2ComponentNative::handleMouseUp (const Point<float>& position, MouseEven
     if (lastMouseDownTime)
         event = event.withLastMouseDownTime (*lastMouseDownTime);
 
-    if (lastComponentClicked != nullptr)
+    if (auto* clickedComponent = lastComponentClicked.get())
     {
         const auto currentMouseDownTime = yup::Time::getCurrentTime();
+        auto clickedComponentBailOut = Component::BailOutChecker (clickedComponent);
 
-        event = event.withSourceComponent (lastComponentClicked);
+        event = event.withSourceComponent (clickedComponent);
 
         if (lastMouseUpTime
             && *lastMouseUpTime > yup::Time()
             && currentMouseDownTime - *lastMouseUpTime < doubleClickTime)
         {
-            lastComponentClicked->internalMouseDoubleClick (event.withRelativePositionTo (lastComponentClicked));
+            clickedComponent->internalMouseDoubleClick (event.withRelativePositionTo (clickedComponent));
         }
 
-        lastComponentClicked->internalMouseUp (event.withRelativePositionTo (lastComponentClicked));
+        if (! clickedComponentBailOut.shouldBailOut())
+            clickedComponent->internalMouseUp (event.withRelativePositionTo (clickedComponent));
 
         lastMouseUpTime = currentMouseDownTime;
     }
@@ -1027,7 +1029,8 @@ void SDL2ComponentNative::handleResized (int width, int height)
         setPosition (nativeWindowPos.getTopLeft());
     }
 
-    PopupMenu::dismissAllPopups();
+    if (dynamic_cast<PopupMenu*> (&component) == nullptr)
+        PopupMenu::dismissAllPopups();
 
     repaint();
 }

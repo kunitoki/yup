@@ -139,7 +139,7 @@ public:
 
     ~AudioGraphApp() override
     {
-#if YUP_WINDOWS || YUP_MAC || YUP_LINUX
+#if YUP_DESKTOP
         scanLifetime->store (false);
 #endif
 
@@ -433,12 +433,15 @@ private:
     {
         pendingMenuCanvasPos = canvasPos;
 
+        const auto screenPos = graphComponent->localToScreen (graphComponent->canvasToScreen (canvasPos));
+        const auto options = yup::PopupMenu::Options {}.withPosition (screenPos, yup::Justification::topLeft);
+
         auto internalSubMenu = yup::PopupMenu::create();
         internalSubMenu->addItem ("Oscillator", 1);
         internalSubMenu->addItem ("Gain", 2);
         internalSubMenu->addItem ("Low Pass Filter", 3);
 
-        activeMenu = yup::PopupMenu::create();
+        activeMenu = yup::PopupMenu::create (options);
         activeMenu->addSubMenu ("Internal Nodes", internalSubMenu);
 
 #if YUP_DESKTOP
