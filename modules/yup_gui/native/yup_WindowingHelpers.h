@@ -34,4 +34,11 @@ namespace yup
  */
 Rectangle<int> getNativeWindowPosition (void* nativeWindow);
 
+/**
+    Gives focus to a native window handle when supported by the current platform.
+
+    @param nativeWindow The native window handle.
+ */
+void focusNativeWindow (void* nativeWindow);
+
 } // namespace yup

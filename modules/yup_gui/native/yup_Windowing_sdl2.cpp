@@ -71,6 +71,9 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     if (options.flags.test (allowHighDensityDisplay))
         windowFlags |= SDL_WINDOW_ALLOW_HIGHDPI;
 
+    if (options.flags.test (temporaryWindow))
+        windowFlags |= SDL_WINDOW_POPUP_MENU | SDL_WINDOW_SKIP_TASKBAR | SDL_WINDOW_ALWAYS_ON_TOP;
+
     if (! options.flags.test (decoratedWindow))
         windowFlags |= SDL_WINDOW_BORDERLESS;
 
@@ -405,10 +408,13 @@ void SDL2ComponentNative::setFocusedComponent (Component* comp)
             lastComponentFocused->repaint();
     }
 
-    if (window != nullptr)
+    if (window != nullptr && isVisible() && lastComponentFocused != nullptr)
     {
-        if ((SDL_GetWindowFlags (window) & SDL_WINDOW_INPUT_FOCUS) == 0) // SDL_WINDOW_MOUSE_FOCUS
-            SDL_SetWindowInputFocus (window);
+        SDL_RaiseWindow (window);
+
+        focusNativeWindow (getNativeHandle());
+
+        SDL_SetWindowInputFocus (window);
     }
 }
 
@@ -857,6 +863,8 @@ void SDL2ComponentNative::handleMouseUp (const Point<float>& position, MouseEven
     if (lastMouseDownTime)
         event = event.withLastMouseDownTime (*lastMouseDownTime);
 
+    auto nativeBailOut = Component::BailOutChecker (&component);
+
     if (auto* clickedComponent = lastComponentClicked.get())
     {
         const auto currentMouseDownTime = yup::Time::getCurrentTime();
@@ -876,6 +884,9 @@ void SDL2ComponentNative::handleMouseUp (const Point<float>& position, MouseEven
 
         lastMouseUpTime = currentMouseDownTime;
     }
+
+    if (nativeBailOut.shouldBailOut())
+        return;
 
     if (currentMouseButtons == MouseEvent::noButtons)
     {
@@ -1420,8 +1431,11 @@ int SDL2ComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
 
         default:
         {
-            if (auto nativeComponent = Desktop::getInstance()->getNativeComponent (userdata))
-                dynamic_cast<SDL2ComponentNative*> (nativeComponent.get())->handleEvent (event);
+            if (auto component = Desktop::getInstance()->getNativeComponent (userdata))
+            {
+                if (auto nativeComponent = dynamic_cast<SDL2ComponentNative*> (component.get()))
+                    nativeComponent->handleEvent (event);
+            }
 
             break;
         }
@@ -1608,7 +1622,7 @@ void Desktop::setMouseCursor (const MouseCursor& cursorToSet)
             { MouseCursor::ResizeUpDown, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENS) },
             { MouseCursor::ResizeTopLeftRightBottom, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENWSE) },
             { MouseCursor::ResizeBottomLeftRightTop, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENESW) },
-            { MouseCursor::ResizeAll, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_ARROW) }
+            { MouseCursor::ResizeAll, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZEALL) }
         };
     }();
 

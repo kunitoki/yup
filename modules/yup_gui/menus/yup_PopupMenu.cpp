@@ -313,6 +313,7 @@ bool PopupMenu::Item::isCustomComponent() const
 PopupMenu::Options::Options()
     : parentComponent (nullptr)
     , targetComponent (nullptr)
+    , focusComponent (nullptr)
     , alignment (Justification::topLeft)
     , placement (Placement::below())
     , positioningMode (PositioningMode::atPoint)
@@ -358,6 +359,12 @@ PopupMenu::Options& PopupMenu::Options::withRelativePosition (Component* compone
     this->positioningMode = PositioningMode::relativeToComponent;
     this->targetComponent = component;
     this->placement = placement;
+    return *this;
+}
+
+PopupMenu::Options& PopupMenu::Options::withFocusComponent (Component* component)
+{
+    this->focusComponent = component;
     return *this;
 }
 
@@ -641,6 +648,9 @@ void PopupMenu::showCustom (const Options& options, bool isSubmenu, std::functio
     this->options = options;
     menuCallback = std::move (callback);
 
+    if (! isSubmenu)
+        focusComponentToRestore = getFocusComponentForDismissal();
+
     if (isEmpty())
     {
         dismiss();
@@ -660,7 +670,8 @@ void PopupMenu::showCustom (const Options& options, bool isSubmenu, std::functio
         // When we have no parent component, add to desktop to work in screen coordinates
         auto nativeOptions = ComponentNative::Options {}
                                  .withDecoration (false)
-                                 .withResizableWindow (false);
+                                 .withResizableWindow (false)
+                                 .withTemporaryWindow (true);
 
         if (! isOnDesktop())
             addToDesktop (nativeOptions);
@@ -694,7 +705,12 @@ void PopupMenu::dismiss (int itemID)
 
     setVisible (false);
 
+    if (getParentComponent() == nullptr && isOnDesktop())
+        removeFromDesktop();
+
     selectedItemIndex = -1;
+
+    restoreFocusAfterDismissal();
 
     if (auto itemCallback = std::exchange (menuCallback, {}))
         itemCallback (itemID);
@@ -710,6 +726,34 @@ void PopupMenu::dismiss (int itemID)
 bool PopupMenu::isBeingShown() const
 {
     return isVisible() && ! isBeingDismissed;
+}
+
+//==============================================================================
+
+Component* PopupMenu::getFocusComponentForDismissal() const
+{
+    if (options.focusComponent != nullptr)
+        return options.focusComponent;
+
+    auto* referenceComponent = options.targetComponent != nullptr ? options.targetComponent
+                                                                  : options.parentComponent;
+    if (referenceComponent == nullptr)
+        return nullptr;
+
+    if (auto* nativeComponent = referenceComponent->getNativeComponent())
+        return nativeComponent->getFocusedComponent();
+
+    return nullptr;
+}
+
+void PopupMenu::restoreFocusAfterDismissal()
+{
+    auto focusToRestore = std::exchange (focusComponentToRestore, {});
+    if (focusToRestore == nullptr || focusToRestore == this)
+        return;
+
+    if (auto* nativeToRestore = focusToRestore->getNativeComponent())
+        nativeToRestore->setFocusedComponent (focusToRestore.get());
 }
 
 //==============================================================================
@@ -738,18 +782,33 @@ void PopupMenu::mouseDown (const MouseEvent& event)
     if (item.isSeparator() || ! item.isEnabled)
         return;
 
+    setSelectedItemIndex (itemIndex, true);
+
     if (item.isSubMenu())
     {
         // For submenus, we show them on hover, not on click
         showSubmenu (itemIndex);
     }
-    else
-    {
-        // Hide any visible submenus when selecting a non-separator item
-        hideSubmenus();
+}
 
-        dismiss (item.itemID);
+void PopupMenu::mouseUp (const MouseEvent& event)
+{
+    if (! getLocalBounds().contains (event.getPosition()))
+    {
+        dismiss();
+        return;
     }
+
+    auto itemIndex = getItemIndexAt (event.getPosition());
+    if (! isPositiveAndBelow (itemIndex, getNumItems()))
+        return;
+
+    auto& item = *items[itemIndex];
+    if (item.isSeparator() || ! item.isEnabled || item.isSubMenu())
+        return;
+
+    hideSubmenus();
+    dismiss (item.itemID);
 }
 
 void PopupMenu::mouseMove (const MouseEvent& event)

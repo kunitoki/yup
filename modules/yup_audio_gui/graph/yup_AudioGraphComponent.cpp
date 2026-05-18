@@ -388,10 +388,11 @@ void AudioGraphComponent::mouseDown (const MouseEvent& event)
         return;
     }
 
-    if (spacebarDown)
+    if (spacebarDown || event.getButtons() == MouseEvent::middleButton)
     {
         interaction = Interaction::panningCanvas;
         panStartOffset = canvasOffset;
+        setMouseCursor (MouseCursor::ResizeAll);
         return;
     }
 
@@ -525,6 +526,7 @@ void AudioGraphComponent::mouseUp (const MouseEvent& event)
 
         case Interaction::panningCanvas:
             interaction = Interaction::idle;
+            setMouseCursor (MouseCursor::Default);
             break;
 
         case Interaction::armedPort:
@@ -578,6 +580,7 @@ void AudioGraphComponent::keyDown (const KeyPress& keys, const Point<float>&)
     if (keys.getKey() == KeyPress::spaceKey)
     {
         spacebarDown = true;
+        setMouseCursor (MouseCursor::ResizeAll);
         return;
     }
 
@@ -594,7 +597,10 @@ void AudioGraphComponent::keyDown (const KeyPress& keys, const Point<float>&)
 void AudioGraphComponent::keyUp (const KeyPress& keys, const Point<float>&)
 {
     if (keys.getKey() == KeyPress::spaceKey)
+    {
         spacebarDown = false;
+        setMouseCursor (MouseCursor::Default);
+    }
 }
 
 //==============================================================================

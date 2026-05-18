@@ -434,7 +434,9 @@ private:
         pendingMenuCanvasPos = canvasPos;
 
         const auto screenPos = graphComponent->localToScreen (graphComponent->canvasToScreen (canvasPos));
-        const auto options = yup::PopupMenu::Options {}.withPosition (screenPos, yup::Justification::topLeft);
+        const auto options = yup::PopupMenu::Options {}
+                                 .withFocusComponent (graphComponent.get())
+                                 .withPosition (screenPos, yup::Justification::topLeft);
 
         auto internalSubMenu = yup::PopupMenu::create();
         internalSubMenu->addItem ("Oscillator", 1);
@@ -485,6 +487,7 @@ private:
             else if (selectedID >= 100)
             {
                 const auto& plugins = nodeRegistry.getDiscoveredPlugins();
+
                 const auto index = static_cast<size_t> (selectedID - 100);
                 if (index < plugins.size())
                     addPluginNode (plugins[index], pendingMenuCanvasPos);

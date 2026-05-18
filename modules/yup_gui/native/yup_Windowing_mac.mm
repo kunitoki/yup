@@ -52,4 +52,18 @@ Rectangle<int> getNativeWindowPosition(void* nativeWindow)
         static_cast<int>(NSHeight(windowRect))};
 }
 
+void focusNativeWindow (void* nativeWindow)
+{
+    if (nativeWindow == nullptr)
+        return;
+
+    id nativeObject = (__bridge id) nativeWindow;
+    NSWindow* window = [nativeObject isKindOfClass:[NSWindow class]]
+                         ? (NSWindow*) nativeObject
+                         : [nativeObject window];
+
+    [NSApp activateIgnoringOtherApps:YES];
+    [window makeKeyAndOrderFront:nil];
+}
+
 } // namespace yup

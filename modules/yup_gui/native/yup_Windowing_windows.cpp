@@ -38,4 +38,13 @@ Rectangle<int> getNativeWindowPosition (void* nativeWindow)
     };
 }
 
+void focusNativeWindow (void* nativeWindow)
+{
+    auto hwnd = reinterpret_cast<HWND> (nativeWindow);
+    if (hwnd == nullptr)
+        return;
+
+    SetForegroundWindow (hwnd);
+}
+
 } // namespace yup
