@@ -2408,6 +2408,7 @@ TEST (AudioGraphProcessorTests, RapidWorkerThreadResizeDoesNotCrash)
     }
 }
 
+#if ! defined(YUP_WASM)
 TEST (AudioGraphProcessorTests, ProcessBlockDisablesDenormals)
 {
     AudioGraphProcessor graph;
@@ -2428,6 +2429,7 @@ TEST (AudioGraphProcessorTests, ProcessBlockDisablesDenormals)
 
     EXPECT_TRUE (procPtr->denormalsWereDisabled);
 }
+#endif
 
 TEST (AudioGraphProcessorTests, ManyMidiEventsPassThroughGraphCorrectly)
 {
