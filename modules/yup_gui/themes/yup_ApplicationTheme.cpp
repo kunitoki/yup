@@ -35,7 +35,7 @@ void ApplicationTheme::setGlobalTheme (ApplicationTheme::Ptr s)
     getGlobalThemeInstance() = std::move (s);
 }
 
-ApplicationTheme::ConstPtr ApplicationTheme::getGlobalTheme()
+ApplicationTheme::Ptr ApplicationTheme::getGlobalTheme()
 {
     return getGlobalThemeInstance();
 }
@@ -48,10 +48,16 @@ ApplicationTheme::Ptr& ApplicationTheme::getGlobalThemeInstance()
 
 //==============================================================================
 
-Color ApplicationTheme::findColor (const Identifier& colorId)
+std::optional<Color> ApplicationTheme::findColor (const Identifier& colorId)
 {
-    auto it = getGlobalThemeInstance()->defaultColors.find (colorId);
-    return it != getGlobalThemeInstance()->defaultColors.end() ? it->second : Color();
+    jassert (getGlobalThemeInstance() != nullptr);
+
+    const auto& colors = getGlobalThemeInstance()->defaultColors;
+
+    if (auto it = colors.find (colorId); it != colors.end())
+        return it->second;
+
+    return std::nullopt;
 }
 
 void ApplicationTheme::setColor (const Identifier& colorId, const Color& color)
@@ -63,6 +69,25 @@ void ApplicationTheme::setColors (std::initializer_list<std::pair<const Identifi
 {
     for (const auto& entry : colors)
         defaultColors.insert_or_assign (entry.first, entry.second);
+}
+
+//==============================================================================
+
+std::optional<float> ApplicationTheme::findMetric (const Identifier& metricId)
+{
+    jassert (getGlobalThemeInstance() != nullptr);
+
+    const auto& metrics = getGlobalThemeInstance()->defaultMetrics;
+
+    if (auto it = metrics.find (metricId); it != metrics.end())
+        return it->second;
+
+    return std::nullopt;
+}
+
+void ApplicationTheme::setMetric (const Identifier& metricId, float value)
+{
+    defaultMetrics.insert_or_assign (metricId, value);
 }
 
 //==============================================================================

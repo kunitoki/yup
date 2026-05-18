@@ -1216,7 +1216,7 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
 
     // Draw keyboard background with subtle gradient shadow
     auto keyboardWidth = keyboard.getKeyStartRange().getEnd();
-    auto shadowColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyShadowColorId);
+    auto shadowColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyShadowColorId).value_or (Color());
 
     if (! shadowColor.isTransparent())
     {
@@ -1230,7 +1230,7 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
     }
 
     // Draw separator line at bottom
-    auto lineColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::keyOutlineColorId);
+    auto lineColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::keyOutlineColorId).value_or (Color());
     if (! lineColor.isTransparent())
     {
         g.setFillColor (lineColor);
@@ -1251,9 +1251,9 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
         auto isOver = keyboard.isMouseOverNote (note);
 
         // Base colors from theme
-        auto whiteKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyColorId);
-        auto pressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyPressedColorId);
-        auto outlineColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::keyOutlineColorId);
+        auto whiteKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyColorId).value_or (Color());
+        auto pressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyPressedColorId).value_or (Color());
+        auto outlineColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::keyOutlineColorId).value_or (Color());
 
         // Determine fill color based on state
         Color fillColor = whiteKeyColor;
@@ -1344,8 +1344,8 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
         auto isOver = keyboard.isMouseOverNote (note);
 
         // Base colors from theme
-        auto blackKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyColorId);
-        auto blackPressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyPressedColorId);
+        auto blackKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyColorId).value_or (Color());
+        auto blackPressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyPressedColorId).value_or (Color());
 
         // Determine fill color based on state
         Color fillColor = blackKeyColor;
