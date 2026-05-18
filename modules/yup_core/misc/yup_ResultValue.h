@@ -31,8 +31,7 @@ namespace yup
 template <class T>
 struct YUP_API OkValue
 {
-    template <class U>
-        requires std::constructible_from<T, U>
+    template <class U, std::enable_if_t<std::is_constructible_v<T, U>, int> = 0>
     explicit constexpr OkValue (U&& v) noexcept (std::is_nothrow_constructible_v<T, U>)
         : value (std::forward<U> (v))
     {
@@ -184,7 +183,6 @@ public:
 
     /** Returns a copy of the value that was set when this result was created. */
     T getValue() const&
-        requires std::copy_constructible<T>
     {
         jassert (valueOrErrorMessage.index() == 1); // Trying to access the value of the result, when the result is holding an error instead!
 
@@ -193,7 +191,6 @@ public:
 
     /** Returns a moved from value that was set when this result was created. */
     T getValue() &&
-        requires std::move_constructible<T>
     {
         jassert (valueOrErrorMessage.index() == 1); // Trying to access the value of the result, when the result is holding an error instead!
 
@@ -233,8 +230,7 @@ public:
     ResultValue& operator= (ResultValue&&) noexcept = default;
 
     /** Constructs a successful result from an OkValue, enabling type-deduced return syntax. */
-    template <class U>
-        requires std::constructible_from<T, U>
+    template <class U, std::enable_if_t<std::is_constructible_v<T, U>, int> = 0>
     ResultValue (OkValue<U>&& okVal) noexcept (std::is_nothrow_constructible_v<T, U>)
         : valueOrErrorMessage (std::in_place_index<1>, std::move (okVal.value))
     {
