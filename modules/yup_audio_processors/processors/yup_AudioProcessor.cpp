@@ -86,6 +86,20 @@ bool AudioProcessor::isSuspended() const
 
 //==============================================================================
 
+void AudioProcessor::setProcessingPrecision (ProcessingPrecision precision)
+{
+    if (precision == ProcessingPrecision::doublePrecision && ! supportsDoublePrecisionProcessing())
+    {
+        jassertfalse;
+        processingPrecision = ProcessingPrecision::singlePrecision;
+        return;
+    }
+
+    processingPrecision = precision;
+}
+
+//==============================================================================
+
 void AudioProcessor::setPlaybackConfiguration (float sampleRate, int samplesPerBlock)
 {
     releaseResources();

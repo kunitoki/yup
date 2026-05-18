@@ -270,9 +270,10 @@ public:
         if (scanner != nullptr)
             scanner->cancelPendingScans();
 
-        unloadPlugin();
         audioDeviceManager.removeAudioCallback (this);
         audioDeviceManager.closeAudioDevice();
+        unloadPlugin();
+        cleanupRetiredPlugins (true);
     }
 
     void resized() override
@@ -384,12 +385,8 @@ public:
         // If a plugin is loaded, process through it
         yup::MidiBuffer midi;
 
-        {
-            const yup::ScopedLock lock (pluginLock);
-
-            if (loadedPlugin != nullptr)
-                loadedPlugin->processBlock (processBuffer, midi);
-        }
+        if (auto plugin = getLoadedPlugin())
+            plugin->processBlock (processBuffer, midi);
 
         // Mix dry/wet into output
         const float wet = dryWetMix.getNextValue();
@@ -416,16 +413,14 @@ public:
         processBuffer.setSize (2, bs);
         dryBuffer.setSize (2, bs);
 
-        const yup::ScopedLock lock (pluginLock);
-        if (loadedPlugin != nullptr)
-            loadedPlugin->prepareToPlay (sr, bs);
+        if (auto plugin = getLoadedPlugin())
+            plugin->prepareToPlay (sr, bs);
     }
 
     void audioDeviceStopped() override
     {
-        const yup::ScopedLock lock (pluginLock);
-        if (loadedPlugin != nullptr)
-            loadedPlugin->releaseResources();
+        if (auto plugin = getLoadedPlugin())
+            plugin->releaseResources();
     }
 
     //==============================================================================
@@ -434,10 +429,10 @@ public:
     void timerCallback() override
     {
         updateStatusLine();
+        cleanupRetiredPlugins();
 
         // Update visible parameter rows from plugin values
-        const yup::ScopedLock lock (pluginLock);
-        if (loadedPlugin != nullptr)
+        if (getLoadedPlugin() != nullptr)
             refreshVisibleParameterRows();
     }
 
@@ -716,12 +711,9 @@ private:
         clearParameterSliders();
         clearPresetCombo();
 
-        {
-            const yup::ScopedLock lock (pluginLock);
-            unloadPluginInternal();
-            loadedPlugin = std::move (result).getValue();
-            loadedPlugin->prepareToPlay (hostCtx.sampleRate, hostCtx.maxBlockSize);
-        }
+        auto plugin = std::shared_ptr<yup::AudioPluginInstance> (std::move (result).getValue());
+        plugin->prepareToPlay (hostCtx.sampleRate, hostCtx.maxBlockSize);
+        retirePlugin (std::atomic_exchange (&loadedPlugin, std::move (plugin)));
 
         buildParameterSliders();
         populatePresetCombo();
@@ -737,10 +729,7 @@ private:
         clearParameterSliders();
         clearPresetCombo();
 
-        {
-            const yup::ScopedLock lock (pluginLock);
-            unloadPluginInternal();
-        }
+        unloadPluginInternal();
 
         updateEditorButtonState();
         statusText = "Plugin unloaded.";
@@ -748,11 +737,7 @@ private:
 
     void unloadPluginInternal()
     {
-        if (loadedPlugin != nullptr)
-        {
-            loadedPlugin->releaseResources();
-            loadedPlugin.reset();
-        }
+        retirePlugin (std::atomic_exchange (&loadedPlugin, std::shared_ptr<yup::AudioPluginInstance>()));
     }
 
     void openPluginEditor()
@@ -766,24 +751,22 @@ private:
         yup::AudioProcessorEditor* editor = nullptr;
         yup::String pluginName;
 
+        auto plugin = getLoadedPlugin();
+
+        if (plugin == nullptr)
         {
-            const yup::ScopedLock lock (pluginLock);
-
-            if (loadedPlugin == nullptr)
-            {
-                statusText = "No plugin loaded.";
-                return;
-            }
-
-            if (! loadedPlugin->hasEditor())
-            {
-                statusText = "Loaded plugin has no editor.";
-                return;
-            }
-
-            pluginName = loadedPlugin->getDescription().name;
-            editor = loadedPlugin->createEditor();
+            statusText = "No plugin loaded.";
+            return;
         }
+
+        if (! plugin->hasEditor())
+        {
+            statusText = "Loaded plugin has no editor.";
+            return;
+        }
+
+        pluginName = plugin->getDescription().name;
+        editor = plugin->createEditor();
 
         if (editor == nullptr)
         {
@@ -822,10 +805,8 @@ private:
     {
         bool canOpenEditor = false;
 
-        {
-            const yup::ScopedLock lock (pluginLock);
-            canOpenEditor = loadedPlugin != nullptr && loadedPlugin->hasEditor();
-        }
+        if (auto plugin = getLoadedPlugin())
+            canOpenEditor = plugin->hasEditor();
 
         openEditorButton.setEnabled (canOpenEditor);
         openEditorButton.setButtonText (pluginEditorWindow != nullptr ? "Show Editor" : "Open Editor");
@@ -835,24 +816,24 @@ private:
     {
         clearPresetCombo();
 
-        const yup::ScopedLock lock (pluginLock);
-        if (loadedPlugin == nullptr)
+        auto plugin = getLoadedPlugin();
+        if (plugin == nullptr)
             return;
 
-        const auto numPresets = loadedPlugin->getNumPresets();
+        const auto numPresets = plugin->getNumPresets();
         if (numPresets <= 0)
             return;
 
         for (int i = 0; i < numPresets; ++i)
         {
-            auto name = loadedPlugin->getPresetName (i);
+            auto name = plugin->getPresetName (i);
             if (name.isEmpty())
                 name = "Preset " + yup::String (i + 1);
 
             presetCombo.addItem (name, i + 1);
         }
 
-        const auto currentPreset = loadedPlugin->getCurrentPreset();
+        const auto currentPreset = plugin->getCurrentPreset();
         if (yup::isPositiveAndBelow (currentPreset, numPresets))
             presetCombo.setSelectedId (currentPreset + 1, yup::dontSendNotification);
 
@@ -873,14 +854,12 @@ private:
 
         yup::String presetName;
 
-        {
-            const yup::ScopedLock lock (pluginLock);
-            if (loadedPlugin == nullptr)
-                return;
+        auto plugin = getLoadedPlugin();
+        if (plugin == nullptr)
+            return;
 
-            loadedPlugin->setCurrentPreset (selectedPreset);
-            presetName = loadedPlugin->getPresetName (selectedPreset);
-        }
+        plugin->setCurrentPreset (selectedPreset);
+        presetName = plugin->getPresetName (selectedPreset);
 
         statusText = "Preset: " + (presetName.isNotEmpty() ? presetName : yup::String (selectedPreset + 1));
         refreshVisibleParameterRows();
@@ -890,13 +869,14 @@ private:
     {
         clearParameterSliders();
 
-        if (loadedPlugin == nullptr)
+        auto plugin = getLoadedPlugin();
+        if (plugin == nullptr)
             return;
 
-        const auto params = loadedPlugin->getParameters();
+        const auto params = plugin->getParameters();
         if (params.empty())
         {
-            statusText = "Loaded: " + loadedPlugin->getDescription().name + " (no adjustable parameters)";
+            statusText = "Loaded: " + plugin->getDescription().name + " (no adjustable parameters)";
             return;
         }
 
@@ -919,6 +899,32 @@ private:
         parameterList.updateContent();
         parameterList.setVisible (false);
         resized();
+    }
+
+    std::shared_ptr<yup::AudioPluginInstance> getLoadedPlugin()
+    {
+        return std::atomic_load (&loadedPlugin);
+    }
+
+    void retirePlugin (std::shared_ptr<yup::AudioPluginInstance> plugin)
+    {
+        if (plugin != nullptr)
+            retiredPlugins.push_back ({ std::move (plugin), 20 });
+    }
+
+    void cleanupRetiredPlugins (bool force = false)
+    {
+        for (auto iterator = retiredPlugins.begin(); iterator != retiredPlugins.end();)
+        {
+            if (! force && --iterator->timerTicksRemaining > 0)
+            {
+                ++iterator;
+                continue;
+            }
+
+            iterator->plugin->releaseResources();
+            iterator = retiredPlugins.erase (iterator);
+        }
     }
 
     void refreshVisibleParameterRows()
@@ -991,6 +997,12 @@ private:
         yup::Array<yup::String> items;
     };
 
+    struct RetiredPlugin
+    {
+        std::shared_ptr<yup::AudioPluginInstance> plugin;
+        int timerTicksRemaining = 0;
+    };
+
     //==============================================================================
 
     // Audio
@@ -1008,9 +1020,9 @@ private:
     std::unique_ptr<yup::AudioPluginScanner> scanner;
     std::vector<yup::AudioPluginDescription> discoveredPlugins;
     int selectedPluginIndex = -1;
-    std::unique_ptr<yup::AudioPluginInstance> loadedPlugin;
+    std::shared_ptr<yup::AudioPluginInstance> loadedPlugin;
+    std::vector<RetiredPlugin> retiredPlugins;
     std::unique_ptr<PluginEditorWindow> pluginEditorWindow;
-    yup::CriticalSection pluginLock;
 
     // Dry/wet mix
     yup::SmoothedValue<float> dryWetMix;

@@ -36,6 +36,11 @@ String toString (const Vst::TChar* src)
     return String (CharPointer_UTF16 (reinterpret_cast<const CharPointer_UTF16::CharType*> (src)));
 }
 
+String classIDToString (const TUID& cid)
+{
+    return String::toHexString (cid, static_cast<int> (sizeof (TUID)));
+}
+
 //==============================================================================
 // RAII wrapper around a dynamically loaded VST3 module.
 struct VST3Module
@@ -132,11 +137,19 @@ public:
     {
         Vst::ProcessSetup setup;
         setup.processMode = Vst::kRealtime;
-        setup.symbolicSampleSize = hostContext.preferDoublePrecision
-                                     ? Vst::kSample64
-                                     : Vst::kSample32;
+        setProcessingPrecision (hostContext.preferDoublePrecision && supportsDoublePrecisionProcessing()
+                                    ? ProcessingPrecision::doublePrecision
+                                    : ProcessingPrecision::singlePrecision);
+
+        setup.symbolicSampleSize = isUsingDoublePrecision() ? Vst::kSample64 : Vst::kSample32;
         setup.maxSamplesPerBlock = maxBlockSize;
         setup.sampleRate = sampleRate;
+
+        if (isUsingDoublePrecision())
+        {
+            const int numChannels = jmax (1, pluginDescription.numInputChannels, pluginDescription.numOutputChannels);
+            doublePrecisionBuffer.setSize (numChannels, maxBlockSize, false, true, false);
+        }
 
         vst3Processor->setupProcessing (setup);
 
@@ -165,68 +178,87 @@ public:
     {
         ScopedNoDenormals noDenormals;
 
-        Vst::ProcessData data;
-        data.processMode = Vst::kRealtime;
-        data.symbolicSampleSize = Vst::kSample32;
-        data.numSamples = audioBuffer.getNumSamples();
+        if (isUsingDoublePrecision())
+        {
+            doublePrecisionBuffer.makeCopyOf (audioBuffer, true);
+            processBlock (doublePrecisionBuffer, midiBuffer);
+
+            const int numChannels = jmin (audioBuffer.getNumChannels(), doublePrecisionBuffer.getNumChannels());
+            const int numSamples = jmin (audioBuffer.getNumSamples(), doublePrecisionBuffer.getNumSamples());
+
+            for (int channel = 0; channel < numChannels; ++channel)
+            {
+                auto* destination = audioBuffer.getWritePointer (channel);
+                const auto* source = doublePrecisionBuffer.getReadPointer (channel);
+
+                for (int sample = 0; sample < numSamples; ++sample)
+                    destination[sample] = static_cast<float> (source[sample]);
+            }
+
+            return;
+        }
+
+        Vst::ProcessData data {};
+        prepareProcessData (data, audioBuffer.getNumSamples(), Vst::kSample32);
 
         // Input busses
-        Vst::AudioBusBuffers inputBus;
+        Vst::AudioBusBuffers inputBus {};
         inputBus.numChannels = audioBuffer.getNumChannels();
         inputBus.channelBuffers32 = const_cast<float**> (audioBuffer.getArrayOfReadPointers());
         data.inputs = &inputBus;
         data.numInputs = 1;
 
         // Output busses
-        Vst::AudioBusBuffers outputBus;
+        Vst::AudioBusBuffers outputBus {};
         outputBus.numChannels = audioBuffer.getNumChannels();
         outputBus.channelBuffers32 = const_cast<float**> (audioBuffer.getArrayOfWritePointers());
         data.outputs = &outputBus;
         data.numOutputs = 1;
 
-        // Events (MIDI)
+        ignoreUnused (midiBuffer);
+
         // TODO: map MidiBuffer to Vst::EventList when MIDI support is added in a later task
 
-        inputParameterChanges.clearQueue();
-        const auto params = getParameters();
-        const auto numParams = yup::jmin (params.size(), vst3ParameterIds.size());
+        vst3Processor->process (data);
+    }
 
-        for (std::size_t i = 0; i < numParams; ++i)
+    void processBlock (AudioBuffer<double>& audioBuffer, MidiBuffer& midiBuffer) override
+    {
+        ScopedNoDenormals noDenormals;
+
+        if (! isUsingDoublePrecision())
         {
-            int32 queueIndex = 0;
-            if (auto* queue = inputParameterChanges.addParameterData (vst3ParameterIds[i], queueIndex))
-            {
-                int32 pointIndex = 0;
-                queue->addPoint (0,
-                                 static_cast<Vst::ParamValue> (params[i]->getValue()),
-                                 pointIndex);
-            }
+            jassertfalse;
+            audioBuffer.clear();
+            midiBuffer.clear();
+            return;
         }
 
-        data.inputParameterChanges = &inputParameterChanges;
+        Vst::ProcessData data {};
+        prepareProcessData (data, audioBuffer.getNumSamples(), Vst::kSample64);
 
-        // Process context
-        if (hostContext.playHead != nullptr)
-        {
-            const auto optPos = hostContext.playHead->getPosition();
+        Vst::AudioBusBuffers inputBus {};
+        inputBus.numChannels = audioBuffer.getNumChannels();
+        inputBus.channelBuffers64 = const_cast<double**> (audioBuffer.getArrayOfReadPointers());
+        data.inputs = &inputBus;
+        data.numInputs = 1;
 
-            if (optPos.has_value())
-            {
-                const auto& posInfo = optPos.value();
-                vst3ProcessContext.state = Vst::ProcessContext::kPlaying;
-                vst3ProcessContext.sampleRate = getSampleRate();
+        Vst::AudioBusBuffers outputBus {};
+        outputBus.numChannels = audioBuffer.getNumChannels();
+        outputBus.channelBuffers64 = const_cast<double**> (audioBuffer.getArrayOfWritePointers());
+        data.outputs = &outputBus;
+        data.numOutputs = 1;
 
-                if (auto timeSamples = posInfo.getTimeInSamples())
-                    vst3ProcessContext.projectTimeSamples = *timeSamples;
+        ignoreUnused (midiBuffer);
 
-                if (auto tempo = posInfo.getBpm())
-                    vst3ProcessContext.tempo = *tempo;
-
-                data.processContext = &vst3ProcessContext;
-            }
-        }
+        // TODO: map MidiBuffer to Vst::EventList when MIDI support is added in a later task
 
         vst3Processor->process (data);
+    }
+
+    bool supportsDoublePrecisionProcessing() const override
+    {
+        return vst3Processor != nullptr && vst3Processor->canProcessSampleSize (Vst::kSample64) == kResultTrue;
     }
 
     //==============================================================================
@@ -320,7 +352,13 @@ public:
             if (factory->getClassInfo (i, &classInfo) != kResultOk)
                 continue;
 
-            if (String (classInfo.name) != desc.name && classInfo.category != String ("Audio Module Class"))
+            if (String (classInfo.category) != "Audio Module Class")
+                continue;
+
+            if (desc.identifier.isNotEmpty() && ! classIDToString (classInfo.cid).equalsIgnoreCase (desc.identifier))
+                continue;
+
+            if (desc.identifier.isEmpty() && String (classInfo.name) != desc.name)
                 continue;
 
             Vst::IComponent* rawComponent = nullptr;
@@ -395,7 +433,7 @@ private:
             }
 
             auto param = AudioParameterBuilder()
-                             .withID (toString (info.title))
+                             .withID (String (static_cast<int64> (info.id)))
                              .withName (toString (info.title))
                              .withRange (0.0f, 1.0f)
                              .withDefault (static_cast<float> (info.defaultNormalizedValue))
@@ -415,9 +453,55 @@ private:
     IPtr<Vst::IEditController> vst3Controller;
     Vst::ProcessContext vst3ProcessContext {};
     Vst::ParameterChanges inputParameterChanges;
+    AudioBuffer<double> doublePrecisionBuffer;
     std::vector<Vst::ParamID> vst3ParameterIds;
     int currentPreset = 0;
     int numPresets = 0;
+
+    void prepareProcessData (Vst::ProcessData& data, int numSamples, int32 symbolicSampleSize)
+    {
+        data.processMode = Vst::kRealtime;
+        data.symbolicSampleSize = symbolicSampleSize;
+        data.numSamples = numSamples;
+
+        inputParameterChanges.clearQueue();
+        const auto params = getParameters();
+        const auto numParams = yup::jmin (params.size(), vst3ParameterIds.size());
+
+        for (std::size_t i = 0; i < numParams; ++i)
+        {
+            int32 queueIndex = 0;
+            if (auto* queue = inputParameterChanges.addParameterData (vst3ParameterIds[i], queueIndex))
+            {
+                int32 pointIndex = 0;
+                queue->addPoint (0,
+                                 static_cast<Vst::ParamValue> (params[i]->getValue()),
+                                 pointIndex);
+            }
+        }
+
+        data.inputParameterChanges = &inputParameterChanges;
+
+        if (hostContext.playHead == nullptr)
+            return;
+
+        const auto optPos = hostContext.playHead->getPosition();
+        if (! optPos.has_value())
+            return;
+
+        const auto& posInfo = optPos.value();
+        vst3ProcessContext = {};
+        vst3ProcessContext.state = Vst::ProcessContext::kPlaying;
+        vst3ProcessContext.sampleRate = getSampleRate();
+
+        if (auto timeSamples = posInfo.getTimeInSamples())
+            vst3ProcessContext.projectTimeSamples = *timeSamples;
+
+        if (auto tempo = posInfo.getBpm())
+            vst3ProcessContext.tempo = *tempo;
+
+        data.processContext = &vst3ProcessContext;
+    }
 };
 
 //==============================================================================
@@ -515,10 +599,7 @@ ResultValue<std::vector<AudioPluginDescription>> VST3Format::scanFile (const Fil
         desc.isInstrument = String (info2.subCategories).containsIgnoreCase ("Instrument");
         desc.isEffect = ! desc.isInstrument;
 
-        // Encode FUID as hex string for use as identifier
-        char uidStr[33] = {};
-        snprintf (uidStr, sizeof (uidStr), "%08X%08X%08X%08X", info2.cid[0], info2.cid[1], info2.cid[2], info2.cid[3]);
-        desc.identifier = String (uidStr);
+        desc.identifier = classIDToString (info2.cid);
 
         // Briefly instantiate the component to collect channel counts
         Vst::IComponent* rawComponent = nullptr;

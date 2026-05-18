@@ -71,6 +71,16 @@ AudioPluginDescription descriptionFromComponent(AudioComponent comp,
     desc.isInstrument = (acd.componentType == kAudioUnitType_MusicDevice);
     desc.isEffect = (acd.componentType == kAudioUnitType_Effect || acd.componentType == kAudioUnitType_MusicEffect);
 
+    if (acd.componentType == kAudioUnitType_Effect || acd.componentType == kAudioUnitType_MusicEffect)
+    {
+        desc.numInputChannels = 2;
+        desc.numOutputChannels = 2;
+    }
+    else if (acd.componentType == kAudioUnitType_MusicDevice || acd.componentType == kAudioUnitType_Generator)
+    {
+        desc.numOutputChannels = 2;
+    }
+
     return desc;
 }
 
@@ -663,13 +673,40 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
         if (AudioComponentInstanceNew(comp, &unit) != noErr || unit == nullptr)
             return nullptr;
 
-        AudioBusLayout busLayout({}, {});
-        // TODO: query kAudioUnitProperty_ElementCount for proper bus layout
+        AudioBusLayout busLayout = makeBusLayout(desc, acd.componentType);
 
         return std::make_unique<AUv2Instance>(desc, unit, std::move(busLayout));
     }
 
    private:
+    static AudioBusLayout makeBusLayout(const AudioPluginDescription& desc, OSType componentType)
+    {
+        std::vector<AudioBus> inputs;
+        std::vector<AudioBus> outputs;
+
+        int inputChannels = desc.numInputChannels;
+        int outputChannels = desc.numOutputChannels;
+
+        if (componentType == kAudioUnitType_Effect || componentType == kAudioUnitType_MusicEffect)
+        {
+            outputChannels = jmax(1, outputChannels, 2);
+            inputChannels = jmax(1, inputChannels, outputChannels);
+        }
+        else if (componentType == kAudioUnitType_MusicDevice || componentType == kAudioUnitType_Generator)
+        {
+            inputChannels = jmax(0, inputChannels);
+            outputChannels = jmax(1, outputChannels, 2);
+        }
+
+        if (inputChannels > 0)
+            inputs.emplace_back("Input", AudioBus::Type::Audio, AudioBus::Direction::Input, inputChannels);
+
+        if (outputChannels > 0)
+            outputs.emplace_back("Output", AudioBus::Type::Audio, AudioBus::Direction::Output, outputChannels);
+
+        return AudioBusLayout(std::move(inputs), std::move(outputs));
+    }
+
     void parameterValueChanged(const AudioParameter::Ptr& parameter, int indexInContainer) override
     {
         if (audioUnit == nullptr || !isPositiveAndBelow(indexInContainer, static_cast<int>(auParameterIds.size())))

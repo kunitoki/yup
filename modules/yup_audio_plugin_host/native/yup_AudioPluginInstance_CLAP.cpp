@@ -74,15 +74,21 @@ struct CLAPModule
 struct YUPCLAPHost
 {
     clap_host_t host {};
+    String hostName;
+    String hostVendor;
+    String hostVersion;
 
     YUPCLAPHost (const AudioPluginHostContext& ctx)
+        : hostName (ctx.hostName)
+        , hostVendor (ctx.hostVendor)
+        , hostVersion (ctx.hostVersion)
     {
         host.clap_version = CLAP_VERSION;
         host.host_data = this;
-        host.name = ctx.hostName.toRawUTF8();
-        host.vendor = ctx.hostVendor.toRawUTF8();
+        host.name = hostName.toRawUTF8();
+        host.vendor = hostVendor.toRawUTF8();
         host.url = "";
-        host.version = ctx.hostVersion.toRawUTF8();
+        host.version = hostVersion.toRawUTF8();
         host.get_extension = [] (const clap_host_t*, const char*) -> const void*
         {
             return nullptr;
@@ -189,7 +195,7 @@ public:
         preparedOutPtrs.resize (static_cast<std::size_t> (numChannels));
         clapInputEvents.parameterEvents.reserve (clapParameterIds.size());
 
-        clapPlugin->activate (clapPlugin, sampleRate, static_cast<uint32_t> (maxBlockSize), static_cast<uint32_t> (maxBlockSize));
+        clapPlugin->activate (clapPlugin, sampleRate, 1, static_cast<uint32_t> (jmax (1, maxBlockSize)));
 
         clapPlugin->start_processing (clapPlugin);
     }
@@ -427,7 +433,7 @@ private:
                 continue;
 
             auto param = AudioParameterBuilder()
-                             .withID (String (info.name))
+                             .withID (String (static_cast<int64> (info.id)))
                              .withName (String (info.name))
                              .withRange (static_cast<float> (info.min_value),
                                          static_cast<float> (info.max_value))
