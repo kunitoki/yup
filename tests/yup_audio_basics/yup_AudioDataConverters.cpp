@@ -48,13 +48,20 @@ namespace
 template <class F1, class E1, class F2, class E2>
 struct RoundTripConversionTest
 {
+    using WritablePtr = AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::NonConst>;
+    using ConstPtr = AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::Const>;
+    using F2WritablePtr = AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::NonConst>;
+    using F2ConstPtr = AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::Const>;
+    using FwdConv = AudioData::ConverterInstance<ConstPtr, F2WritablePtr>;
+    using RevConv = AudioData::ConverterInstance<F2ConstPtr, WritablePtr>;
+
     static void run (Random& r, bool inPlace)
     {
         const int numSamples = 2048;
         int32 original[numSamples], converted[numSamples], reversed[numSamples];
 
         {
-            AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::NonConst> d (original);
+            WritablePtr d (original);
             bool clippingFailed = false;
 
             for (int i = 0; i < numSamples / 2; ++i)
@@ -72,14 +79,10 @@ struct RoundTripConversionTest
             EXPECT_FALSE (clippingFailed);
         }
 
-        std::unique_ptr<AudioData::Converter> conv (new AudioData::ConverterInstance<
-                                                    AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::Const>,
-                                                    AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::NonConst>>());
+        std::unique_ptr<AudioData::Converter> conv (new FwdConv());
         conv->convertSamples (inPlace ? reversed : converted, original, numSamples);
 
-        conv.reset (new AudioData::ConverterInstance<
-                    AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::Const>,
-                    AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::NonConst>>());
+        conv.reset (new RevConv());
         if (! inPlace)
             zeromem (reversed, sizeof (reversed));
 
@@ -87,11 +90,11 @@ struct RoundTripConversionTest
 
         {
             int biggestDiff = 0;
-            AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::Const> d1 (original);
-            AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::Const> d2 (reversed);
+            ConstPtr d1 (original);
+            ConstPtr d2 (reversed);
 
-            const int errorMargin = 2 * AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::Const>::get32BitResolution()
-                                  + AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::Const>::get32BitResolution();
+            const int errorMargin = 2 * ConstPtr::get32BitResolution()
+                                  + F2ConstPtr::get32BitResolution();
 
             for (int i = 0; i < numSamples; ++i)
             {
@@ -108,12 +111,15 @@ struct RoundTripConversionTest
 template <class F1, class E1, class FormatType>
 struct AllEndiannessTest
 {
+    using BigTest = RoundTripConversionTest<F1, E1, FormatType, AudioData::BigEndian>;
+    using LittleTest = RoundTripConversionTest<F1, E1, FormatType, AudioData::LittleEndian>;
+
     static void run (Random& r)
     {
-        RoundTripConversionTest<F1, E1, FormatType, AudioData::BigEndian>::run (r, false);
-        RoundTripConversionTest<F1, E1, FormatType, AudioData::BigEndian>::run (r, true);
-        RoundTripConversionTest<F1, E1, FormatType, AudioData::LittleEndian>::run (r, false);
-        RoundTripConversionTest<F1, E1, FormatType, AudioData::LittleEndian>::run (r, true);
+        BigTest::run (r, false);
+        BigTest::run (r, true);
+        LittleTest::run (r, false);
+        LittleTest::run (r, true);
     }
 };
 
@@ -187,7 +193,7 @@ TEST (AudioDataConvertersTest, Float64Conversions)
 TEST (AudioDataConvertersTest, PointerAdvance)
 {
     float data[10] = { 0.0f, 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f };
-    AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> ptr (data);
+    auto ptr = AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> (data);
 
     EXPECT_FLOAT_EQ (ptr.getAsFloat(), 0.0f);
     ++ptr;
@@ -199,7 +205,7 @@ TEST (AudioDataConvertersTest, PointerAdvance)
 TEST (AudioDataConvertersTest, PointerDecrement)
 {
     float data[10] = { 0.0f, 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f };
-    AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> ptr (data + 5);
+    auto ptr = AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> (data + 5);
 
     EXPECT_FLOAT_EQ (ptr.getAsFloat(), 0.5f);
     --ptr;
@@ -209,7 +215,7 @@ TEST (AudioDataConvertersTest, PointerDecrement)
 TEST (AudioDataConvertersTest, PointerJump)
 {
     float data[10] = { 0.0f, 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f };
-    AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> ptr (data);
+    auto ptr = AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> (data);
 
     ptr += 5;
     EXPECT_FLOAT_EQ (ptr.getAsFloat(), 0.5f);
@@ -221,7 +227,7 @@ TEST (AudioDataConvertersTest, PointerJump)
 TEST (AudioDataConvertersTest, InterleavedPointer)
 {
     float data[8] = { 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f };
-    AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::Interleaved, AudioData::Const> ptr (data, 2);
+    auto ptr = AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::Interleaved, AudioData::Const> (data, 2);
 
     EXPECT_FLOAT_EQ (ptr.getAsFloat(), 0.1f);
     ++ptr;
@@ -233,7 +239,7 @@ TEST (AudioDataConvertersTest, InterleavedPointer)
 TEST (AudioDataConvertersTest, ClearSamples)
 {
     float data[10] = { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f };
-    AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::NonConst> ptr (data);
+    auto ptr = AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::NonConst> (data);
 
     ptr.clearSamples (5);
 
@@ -246,7 +252,7 @@ TEST (AudioDataConvertersTest, ClearSamples)
 TEST (AudioDataConvertersTest, FindMinAndMax)
 {
     float data[10] = { 0.1f, -0.5f, 0.8f, -0.2f, 0.4f, 0.9f, -0.7f, 0.3f, -0.1f, 0.6f };
-    AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> ptr (data);
+    auto ptr = AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> (data);
 
     auto range = ptr.findMinAndMax (10);
 
@@ -257,7 +263,7 @@ TEST (AudioDataConvertersTest, FindMinAndMax)
 TEST (AudioDataConvertersTest, FindMinAndMaxEmpty)
 {
     float data[1] = { 0.0f };
-    AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> ptr (data);
+    auto ptr = AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> (data);
 
     auto range = ptr.findMinAndMax (0);
 
@@ -270,7 +276,7 @@ TEST (AudioDataConvertersTest, FindMinAndMaxInteger)
     for (int i = 0; i < 10; ++i)
         data[i] = static_cast<int16_t> ((i - 5) * 1000);
 
-    AudioData::Pointer<AudioData::Int16, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> ptr (data);
+    auto ptr = AudioData::Pointer<AudioData::Int16, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> (data);
 
     float minVal, maxVal;
     ptr.findMinAndMax (10, minVal, maxVal);
