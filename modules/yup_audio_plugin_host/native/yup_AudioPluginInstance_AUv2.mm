@@ -1105,10 +1105,9 @@ ResultValue<std::vector<AudioPluginDescription>> AUv2Format::scanFile(const File
     }
 
     if (results.empty())
-        return ResultValue<std::vector<AudioPluginDescription>>::fail(
-            "No AudioComponents found in registry");
+        return makeResultValueFail("No AudioComponents found in registry");
 
-    return ResultValue<std::vector<AudioPluginDescription>>::ok(std::move(results));
+    return makeResultValueOk(std::move(results));
 }
 
 ResultValue<std::unique_ptr<AudioPluginInstance>> AUv2Format::loadPlugin(
@@ -1118,10 +1117,9 @@ ResultValue<std::unique_ptr<AudioPluginInstance>> AUv2Format::loadPlugin(
     auto instance = AUv2Instance::create(description, context);
 
     if (instance == nullptr)
-        return ResultValue<std::unique_ptr<AudioPluginInstance>>::fail(
-            "Failed to instantiate AUv2 plugin: " + description.name);
+        return makeResultValueFail("Failed to instantiate AUv2 plugin: " + description.name);
 
-    return ResultValue<std::unique_ptr<AudioPluginInstance>>::ok(std::move(instance));
+    return makeResultValueOk(std::move(instance));
 }
 
 } // namespace yup

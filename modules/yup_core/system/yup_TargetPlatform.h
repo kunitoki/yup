@@ -70,15 +70,19 @@
 //==============================================================================
 #if defined(_WIN32) || defined(_WIN64)
 #define YUP_WINDOWS 1
+#define F1
 
 #elif defined(ANDROID) || defined(__ANDROID__)
 #define YUP_ANDROID 1
+#define YUP_MOBILE 1
 
 #elif defined(__FreeBSD__) || defined(__OpenBSD__)
 #define YUP_BSD 1
+#define YUP_DESKTOP 1
 
 #elif defined(LINUX) || defined(__linux__)
 #define YUP_LINUX 1
+#define YUP_DESKTOP 1
 
 #elif defined(__APPLE_CPP__) || defined(__APPLE_CC__)
 #define CF_EXCLUDE_CSTD_HEADERS 1
@@ -87,19 +91,20 @@
 #if TARGET_OS_IPHONE || TARGET_IPHONE_SIMULATOR
 #define YUP_IPHONE 1
 #define YUP_IOS 1
+#define YUP_MOBILE 1
 #if TARGET_IPHONE_SIMULATOR
 #define YUP_IOS_SIMULATOR 1
 #endif
 #else
 #define YUP_MAC 1
+#define YUP_DESKTOP 1
 #endif
-
-#elif defined(__wasm__) && defined(__EMSCRIPTEN__)
-#define YUP_WASM 1
-#define YUP_EMSCRIPTEN 1
 
 #elif defined(__wasm__)
 #define YUP_WASM 1
+#if defined(__EMSCRIPTEN__)
+#define YUP_EMSCRIPTEN 1
+#endif
 
 #else
 #error "Unknown platform!"

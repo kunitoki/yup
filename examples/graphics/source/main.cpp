@@ -39,7 +39,6 @@
 #include "examples/Artboard.h"
 #include "examples/Audio.h"
 #include "examples/AudioFileDemo.h"
-#include "examples/AudioGraphDemo.h"
 #include "examples/ColorLab.h"
 #include "examples/ConvolutionDemo.h"
 #include "examples/CrossoverDemo.h"
@@ -48,7 +47,6 @@
 #include "examples/LayoutFonts.h"
 #include "examples/OpaqueDemo.h"
 #include "examples/Paths.h"
-#include "examples/PluginHost.h"
 #include "examples/PopupMenu.h"
 #include "examples/ScrollBarDemo.h"
 #include "examples/SliderDemo.h"
@@ -143,7 +141,6 @@ public:
 
         registerDemo<AudioExample> ("Audio", counter++);
         registerDemo<AudioFileDemo> ("Audio File", counter++);
-        registerDemo<AudioGraphDemo> ("Audio Graph", counter++);
         registerDemo<ColorLabDemo> ("Color Lab", counter++);
         registerDemo<ConvolutionDemo> ("Convolution Demo", counter++);
         registerDemo<CrossoverDemo> ("Crossover Demo", counter++);
@@ -152,7 +149,6 @@ public:
         registerDemo<LayoutFontsExample> ("Layout Fonts", counter++);
         registerDemo<OpaqueDemo> ("Opaque Demo", counter++);
         registerDemo<PathsExample> ("Paths", counter++);
-        registerDemo<PluginHostDemo> ("Plugin Host", counter++);
         registerDemo<PopupMenuDemo> ("Popup Menu", counter++);
         registerDemo<ScrollBarDemo> ("ScrollBar", counter++);
         registerDemo<SliderDemo> ("Sliders", counter++);

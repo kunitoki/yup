@@ -336,9 +336,9 @@ yup::Result performOperation()
 yup::ResultValue<int> maybeGetInteger()
 {
     if (preconditionFailed)
-        return yup::ResultValue<int>::fail ("Precondition not met");
+        return yup::makeResultValueFail ("Precondition not met");
 
-    return 1;
+    return 1; // or yup::makeResultValueOk (1)
 }
 
 // Use assertions for programming errors

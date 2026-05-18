@@ -190,7 +190,7 @@ ResultValue<Image> Image::loadFromData (Span<const uint8> imageData)
 {
     auto bitmap = rive::Bitmap::decode (imageData.data(), imageData.size());
     if (bitmap == nullptr)
-        return ResultValue<Image>::fail ("Unable to decode image");
+        return makeResultValueFail ("Unable to decode image");
 
     Image result;
 
@@ -202,7 +202,7 @@ ResultValue<Image> Image::loadFromData (Span<const uint8> imageData)
             : PixelFormat::RGBA,
         bitmap->detachBytes());
 
-    return ResultValue<Image>::ok (result);
+    return makeResultValueOk (result);
 }
 
 } // namespace yup

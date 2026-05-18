@@ -547,17 +547,15 @@ ResultValue<std::vector<AudioPluginDescription>> VST3Format::scanFile (const Fil
 {
     if (file.getFileExtension().toLowerCase() != ".vst3"
         && ! file.isDirectory())
-        return ResultValue<std::vector<AudioPluginDescription>>::fail ("Not a VST3 file");
+        return makeResultValueFail ("Not a VST3 file");
 
     auto mod = VST3Module::load (file);
     if (mod == nullptr)
-        return ResultValue<std::vector<AudioPluginDescription>>::fail (
-            "Failed to load VST3 module: " + file.getFullPathName());
+        return makeResultValueFail ("Failed to load VST3 module: " + file.getFullPathName());
 
     IPluginFactory* rawFactory = mod->getFactory();
     if (rawFactory == nullptr)
-        return ResultValue<std::vector<AudioPluginDescription>>::fail (
-            "No factory in " + file.getFullPathName());
+        return makeResultValueFail ("No factory in " + file.getFullPathName());
 
     IPtr<IPluginFactory> factory (rawFactory);
 
@@ -634,10 +632,9 @@ ResultValue<std::vector<AudioPluginDescription>> VST3Format::scanFile (const Fil
     }
 
     if (results.empty())
-        return ResultValue<std::vector<AudioPluginDescription>>::fail (
-            "No Audio Module Class entries in " + file.getFullPathName());
+        return makeResultValueFail ("No Audio Module Class entries in " + file.getFullPathName());
 
-    return ResultValue<std::vector<AudioPluginDescription>>::ok (std::move (results));
+    return makeResultValueOk (std::move (results));
 }
 
 ResultValue<std::unique_ptr<AudioPluginInstance>> VST3Format::loadPlugin (
@@ -647,10 +644,9 @@ ResultValue<std::unique_ptr<AudioPluginInstance>> VST3Format::loadPlugin (
     auto instance = VST3Instance::create (description, context);
 
     if (instance == nullptr)
-        return ResultValue<std::unique_ptr<AudioPluginInstance>>::fail (
-            "Failed to load VST3 plugin: " + description.name);
+        return makeResultValueFail ("Failed to load VST3 plugin: " + description.name);
 
-    return ResultValue<std::unique_ptr<AudioPluginInstance>>::ok (std::move (instance));
+    return makeResultValueOk (std::move (instance));
 }
 
 } // namespace yup

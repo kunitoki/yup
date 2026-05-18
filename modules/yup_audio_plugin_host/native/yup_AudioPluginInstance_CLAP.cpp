@@ -497,19 +497,17 @@ FileSearchPath CLAPFormat::getDefaultSearchPaths() const
 ResultValue<std::vector<AudioPluginDescription>> CLAPFormat::scanFile (const File& file)
 {
     if (file.getFileExtension().toLowerCase() != ".clap")
-        return ResultValue<std::vector<AudioPluginDescription>>::fail ("Not a CLAP file");
+        return makeResultValueFail ("Not a CLAP file");
 
     auto mod = CLAPModule::load (file);
     if (mod == nullptr)
-        return ResultValue<std::vector<AudioPluginDescription>>::fail (
-            "Failed to load CLAP module: " + file.getFullPathName());
+        return makeResultValueFail ("Failed to load CLAP module: " + file.getFullPathName());
 
     const clap_plugin_factory_t* factory = reinterpret_cast<const clap_plugin_factory_t*> (
         mod->entry->get_factory (CLAP_PLUGIN_FACTORY_ID));
 
     if (factory == nullptr)
-        return ResultValue<std::vector<AudioPluginDescription>>::fail (
-            "No plugin factory in: " + file.getFullPathName());
+        return makeResultValueFail ("No plugin factory in: " + file.getFullPathName());
 
     std::vector<AudioPluginDescription> results;
     const uint32_t count = factory->get_plugin_count (factory);
@@ -590,10 +588,9 @@ ResultValue<std::vector<AudioPluginDescription>> CLAPFormat::scanFile (const Fil
     }
 
     if (results.empty())
-        return ResultValue<std::vector<AudioPluginDescription>>::fail (
-            "No plugins found in: " + file.getFullPathName());
+        return makeResultValueFail ("No plugins found in: " + file.getFullPathName());
 
-    return ResultValue<std::vector<AudioPluginDescription>>::ok (std::move (results));
+    return makeResultValueOk (std::move (results));
 }
 
 ResultValue<std::unique_ptr<AudioPluginInstance>> CLAPFormat::loadPlugin (
@@ -603,10 +600,9 @@ ResultValue<std::unique_ptr<AudioPluginInstance>> CLAPFormat::loadPlugin (
     auto instance = CLAPInstance::create (description, context);
 
     if (instance == nullptr)
-        return ResultValue<std::unique_ptr<AudioPluginInstance>>::fail (
-            "Failed to load CLAP plugin: " + description.name);
+        return makeResultValueFail ("Failed to load CLAP plugin: " + description.name);
 
-    return ResultValue<std::unique_ptr<AudioPluginInstance>>::ok (std::move (instance));
+    return makeResultValueOk (std::move (instance));
 }
 
 } // namespace yup

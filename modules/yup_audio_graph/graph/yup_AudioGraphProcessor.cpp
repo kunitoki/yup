@@ -587,6 +587,19 @@ public:
         return iterator->properties;
     }
 
+    std::vector<AudioGraphNodeID> getNodeIDs() const
+    {
+        const std::lock_guard<std::mutex> lock (modelMutex);
+
+        std::vector<AudioGraphNodeID> result;
+        result.reserve (modelNodes.size());
+
+        for (const auto& node : modelNodes)
+            result.push_back (node.id);
+
+        return result;
+    }
+
     void setNodeFactory (AudioGraphProcessor::NodeFactory factory)
     {
         const std::lock_guard<std::mutex> lock (factoryMutex);
@@ -612,13 +625,13 @@ public:
         for (const auto& node : nodesSnapshot)
         {
             if (node.processor == nullptr)
-                return ResultValue<std::unique_ptr<XmlElement>>::fail ("Audio graph contains an empty node");
+                return makeResultValueFail ("Audio graph contains an empty node");
 
             MemoryBlock nodeState;
             const auto result = node.processor->saveStateIntoMemory (nodeState);
 
             if (! result)
-                return ResultValue<std::unique_ptr<XmlElement>>::fail ("Audio graph node state save failed: " + result.getErrorMessage());
+                return makeResultValueFail ("Audio graph node state save failed: " + result.getErrorMessage());
 
             savedNodes.push_back ({ node.id, node.properties, std::move (nodeState) });
         }
@@ -657,7 +670,7 @@ public:
             writeEndpoint (*destinationElement, connection.destination);
         }
 
-        return ResultValue<std::unique_ptr<XmlElement>>::ok (std::move (root));
+        return makeResultValueOk (std::move (root));
     }
 
     Result restoreFromXml (const XmlElement& xml)
@@ -835,7 +848,7 @@ public:
         }
 
         if (! factoryCopy)
-            return ResultValue<std::unique_ptr<AudioProcessor>>::fail ("Audio graph node factory is not configured");
+            return makeResultValueFail ("Audio graph node factory is not configured");
 
         return factoryCopy (properties);
     }
@@ -1730,6 +1743,11 @@ bool AudioGraphProcessor::setNodeProperties (AudioGraphNodeID nodeID, AudioGraph
 std::optional<AudioGraphNodeProperties> AudioGraphProcessor::getNodeProperties (AudioGraphNodeID nodeID) const
 {
     return pimpl->getNodeProperties (nodeID);
+}
+
+std::vector<AudioGraphNodeID> AudioGraphProcessor::getNodeIDs() const
+{
+    return pimpl->getNodeIDs();
 }
 
 void AudioGraphProcessor::setNodeFactory (NodeFactory factory)

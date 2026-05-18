@@ -159,6 +159,24 @@ public:
     /** Removes a listener. */
     void removeListener (Listener* listener);
 
+    /**
+        Called when the user right-clicks on an empty area of the canvas.
+        canvasPos is the click position in canvas coordinates.
+    */
+    std::function<void (Point<float> canvasPos)> onCanvasContextMenu;
+
+    /**
+        Called when the user right-clicks on a node body (not a port or wire).
+        nodeID identifies the node; canvasPos is the position in canvas coordinates.
+    */
+    std::function<void (AudioGraphNodeID nodeID, Point<float> canvasPos)> onNodeContextMenu;
+
+    /**
+        Called when the user double-clicks on a node body.
+        nodeID identifies the clicked node.
+    */
+    std::function<void (AudioGraphNodeID nodeID)> onNodeDoubleClicked;
+
     /** @internal */
     void resized() override;
     /** @internal */
@@ -169,6 +187,8 @@ public:
     void mouseDrag (const MouseEvent& event) override;
     /** @internal */
     void mouseUp (const MouseEvent& event) override;
+    /** @internal */
+    void mouseDoubleClick (const MouseEvent& event) override;
     /** @internal */
     void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
     /** @internal */

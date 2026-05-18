@@ -53,13 +53,6 @@ if (YUP_PLATFORM_DESKTOP AND NOT YUP_PLATFORM_WINDOWS)
     set (additional_modules yup::yup_python)
 endif()
 
-if (YUP_PLATFORM_DESKTOP)
-    list (APPEND additional_modules yup::yup_audio_plugin_host)
-    list (APPEND additional_definitions
-        YUP_AUDIO_PLUGIN_HOST_ENABLE_CLAP=1
-        YUP_AUDIO_PLUGIN_HOST_ENABLE_AU=1
-        YUP_AUDIO_PLUGIN_HOST_ENABLE_VST3=1)
-endif()
 
 yup_standalone_app (
     TARGET_NAME ${target_name}

@@ -395,9 +395,9 @@ AudioGraphProcessor::NodeFactory statefulGainFactory()
     return [] (const AudioGraphNodeProperties& properties) -> ResultValue<std::unique_ptr<AudioProcessor>>
     {
         if (properties.identifier != "statefulGain")
-            return ResultValue<std::unique_ptr<AudioProcessor>>::fail ("Unknown node type");
+            return makeResultValueFail ("Unknown node type");
 
-        return ResultValue<std::unique_ptr<AudioProcessor>>::ok (std::make_unique<StatefulGainProcessor> (1.0f));
+        return makeResultValueOk (std::make_unique<StatefulGainProcessor> (1.0f));
     };
 }
 
@@ -506,17 +506,17 @@ AudioGraphProcessor::NodeFactory statefulGainAndExternalFactory (int& externalLo
     return [&externalLoadCount, &externalIdentifier] (const AudioGraphNodeProperties& properties) -> ResultValue<std::unique_ptr<AudioProcessor>>
     {
         if (properties.identifier == "statefulGain")
-            return ResultValue<std::unique_ptr<AudioProcessor>>::ok (std::make_unique<StatefulGainProcessor> (1.0f));
+            return makeResultValueOk (std::make_unique<StatefulGainProcessor> (1.0f));
 
         if (properties.identifier != "externalPlugin")
-            return ResultValue<std::unique_ptr<AudioProcessor>>::fail ("Unknown node type");
+            return makeResultValueFail ("Unknown node type");
 
         MemoryInputStream stream (properties.creationData, false);
         const auto pluginName = stream.readString();
         externalIdentifier = stream.readString();
         ++externalLoadCount;
 
-        return ResultValue<std::unique_ptr<AudioProcessor>>::ok (std::make_unique<StatefulExternalProcessor> (pluginName));
+        return makeResultValueOk (std::make_unique<StatefulExternalProcessor> (pluginName));
     };
 }
 
@@ -1559,7 +1559,7 @@ TEST (AudioGraphProcessorTests, LoadStateFailsWhenFactoryReturnsNullProcessor)
     AudioGraphProcessor destination;
     destination.setNodeFactory ([] (const AudioGraphNodeProperties&) -> ResultValue<std::unique_ptr<AudioProcessor>>
     {
-        return ResultValue<std::unique_ptr<AudioProcessor>>::ok (std::unique_ptr<AudioProcessor>());
+        return makeResultValueOk (std::unique_ptr<AudioProcessor>());
     });
 
     EXPECT_TRUE (destination.loadStateFromMemory (savedState).failed());
@@ -2636,4 +2636,24 @@ TEST (AudioGraphProcessorTests, MixedAudioMidiProcessorPdcCompensatesDirectPaths
     EXPECT_EQ (1, countMidiEventsAt (midi, 2));
     EXPECT_EQ (1, countMidiEventsAt (midi, 7));
     EXPECT_EQ (2, countMidiEvents (midi));
+}
+
+TEST (AudioGraphProcessorTests, GetNodeIDsReturnsAllAddedNodes)
+{
+    AudioGraphProcessor graph;
+
+    EXPECT_TRUE (graph.getNodeIDs().empty());
+
+    const auto idA = graph.addNode (std::make_unique<TestProcessor>());
+    const auto idB = graph.addNode (std::make_unique<TestProcessor>());
+
+    const auto ids = graph.getNodeIDs();
+    EXPECT_EQ (2u, ids.size());
+    EXPECT_NE (ids.end(), std::find (ids.begin(), ids.end(), idA));
+    EXPECT_NE (ids.end(), std::find (ids.begin(), ids.end(), idB));
+
+    EXPECT_TRUE (graph.removeNode (idA));
+    const auto idsAfter = graph.getNodeIDs();
+    EXPECT_EQ (1u, idsAfter.size());
+    EXPECT_EQ (idsAfter.end(), std::find (idsAfter.begin(), idsAfter.end(), idA));
 }

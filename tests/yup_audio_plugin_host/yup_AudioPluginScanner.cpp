@@ -24,20 +24,20 @@ public:
     ResultValue<std::vector<AudioPluginDescription>> scanFile (const File& file) override
     {
         if (file.getFileName() == "bad.vst3")
-            return ResultValue<std::vector<AudioPluginDescription>>::fail ("unsupported");
+            return makeResultValueFail ("unsupported");
 
         AudioPluginDescription desc;
         desc.formatType = fakeType;
         desc.name = file.getFileNameWithoutExtension();
         desc.identifier = "fake." + file.getFileNameWithoutExtension();
-        return ResultValue<std::vector<AudioPluginDescription>>::ok (std::vector<AudioPluginDescription> { desc });
+        return makeResultValueOk (std::vector<AudioPluginDescription> { desc });
     }
 
     ResultValue<std::unique_ptr<AudioPluginInstance>> loadPlugin (
         const AudioPluginDescription&,
         const AudioPluginHostContext&) override
     {
-        return ResultValue<std::unique_ptr<AudioPluginInstance>>::fail ("not implemented");
+        return makeResultValueFail ("not implemented");
     }
 
 private:

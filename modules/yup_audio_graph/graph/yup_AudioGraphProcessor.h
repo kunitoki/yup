@@ -104,6 +104,9 @@ public:
     /** Returns persistent metadata for a node, or nullopt when the node is not present. */
     std::optional<AudioGraphNodeProperties> getNodeProperties (AudioGraphNodeID nodeID) const;
 
+    /** Returns the identifiers of all nodes currently in the control-thread graph model. */
+    std::vector<AudioGraphNodeID> getNodeIDs() const;
+
     /** Sets the factory used to recreate processor nodes during state loading. */
     void setNodeFactory (NodeFactory factory);
 

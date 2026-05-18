@@ -24,11 +24,6 @@ namespace yup
 
 namespace
 {
-bool endpointsMatch (const AudioGraphEndpoint& a, const AudioGraphEndpoint& b) noexcept
-{
-    return a == b;
-}
-
 AudioGraphNodeView* findNodeViewForEventSource (Component* source) noexcept
 {
     if (source == nullptr)
@@ -366,7 +361,29 @@ void AudioGraphComponent::mouseDown (const MouseEvent& event)
         }
 
         if (auto connection = hitTestConnection (screenPos))
+        {
             removeConnectionAndCommit (*connection);
+            return;
+        }
+
+        for (const auto& node : nodes)
+        {
+            if (node.view == nullptr || ! node.nodeID.isValid())
+                continue;
+
+            const auto localPos = node.view->getLocalPoint (this, screenPos);
+
+            if (node.view->getLocalBounds().contains (localPos))
+            {
+                if (onNodeContextMenu != nullptr)
+                    onNodeContextMenu (node.nodeID, screenToCanvas (screenPos));
+
+                return;
+            }
+        }
+
+        if (onCanvasContextMenu != nullptr)
+            onCanvasContextMenu (screenToCanvas (screenPos));
 
         return;
     }
@@ -513,6 +530,28 @@ void AudioGraphComponent::mouseUp (const MouseEvent& event)
         case Interaction::armedPort:
         case Interaction::idle:
             break;
+    }
+}
+
+void AudioGraphComponent::mouseDoubleClick (const MouseEvent& event)
+{
+    if (onNodeDoubleClicked == nullptr)
+        return;
+
+    const auto screenPos = eventPositionInThisComponent (event);
+
+    for (const auto& node : nodes)
+    {
+        if (node.view == nullptr || ! node.nodeID.isValid())
+            continue;
+
+        const auto localPos = node.view->getLocalPoint (this, screenPos);
+
+        if (node.view->getLocalBounds().contains (localPos))
+        {
+            onNodeDoubleClicked (node.nodeID);
+            return;
+        }
     }
 }
 
@@ -870,7 +909,7 @@ void AudioGraphComponent::removeConnectionsForEndpoint (const AudioGraphEndpoint
 
     for (const auto& connection : connections)
     {
-        if (endpointsMatch (connection.source, endpoint) || endpointsMatch (connection.destination, endpoint))
+        if (connection.source == endpoint || connection.destination == endpoint)
         {
             if (graph->removeConnection (connection))
                 removedConnections.push_back (connection);
