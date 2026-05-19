@@ -160,10 +160,11 @@ void paintLinearSlider (Graphics& g, const ApplicationTheme& theme, const Slider
                                sliderValue * sliderBounds.getHeight(),
                                2.0f);
     }
-
-    // Draw thumb
-    g.setFillColor (isMouseDown ? colors.thumbDown : (isMouseOver ? colors.thumbOver : colors.thumb));
-    g.fillEllipse (thumbBounds);
+    else
+    {
+        g.setFillColor (isMouseDown ? colors.thumbDown : (isMouseOver ? colors.thumbOver : colors.thumb));
+        g.fillEllipse (thumbBounds);
+    }
 
     // Draw focus outline if needed
     if (slider.hasKeyboardFocus())
@@ -944,6 +945,265 @@ void paintListBoxItem (Graphics& g, const ApplicationTheme& theme, const ListBox
 
 //==============================================================================
 #if YUP_MODULE_AVAILABLE_yup_audio_gui
+constexpr float audioGraphNodeBaseHeaderHeight = 32.0f;
+constexpr float audioGraphNodeBaseParameterRowHeight = 25.0f;
+constexpr float audioGraphNodeBaseCornerRadius = 7.0f;
+constexpr float audioGraphNodeBaseContentHeight = 8.0f;
+
+Rectangle<float> audioGraphEllipseBounds (Point<float> center, float radius)
+{
+    return { center.getX() - radius, center.getY() - radius, radius * 2.0f, radius * 2.0f };
+}
+
+void fillAudioGraphFeatheredRoundedRect (Graphics& g, Rectangle<float> bounds, float corner, Color color, float viewScale)
+{
+    constexpr int numLayers = 5;
+
+    for (int i = numLayers; i > 0; --i)
+    {
+        const auto amount = static_cast<float> (i) * 1.4f * viewScale;
+        const auto alpha = 0.020f + (static_cast<float> (numLayers - i) * 0.018f);
+        g.setFillColor (color.withAlpha (alpha));
+        g.fillRoundedRect (bounds.reduced (-amount), corner + amount);
+    }
+}
+
+void strokeAudioGraphBezierHalf (Graphics& g, Point<float> p0, Point<float> p1, Point<float> p2, Point<float> p3, Color color, float strokeWidth, bool firstHalf)
+{
+    const auto p01 = (p0 + p1) * 0.5f;
+    const auto p12 = (p1 + p2) * 0.5f;
+    const auto p23 = (p2 + p3) * 0.5f;
+    const auto p012 = (p01 + p12) * 0.5f;
+    const auto p123 = (p12 + p23) * 0.5f;
+    const auto midpoint = (p012 + p123) * 0.5f;
+
+    Path path;
+    if (firstHalf)
+        path.moveTo (p0).cubicTo (p01, p012.getX(), p012.getY(), midpoint.getX(), midpoint.getY());
+    else
+        path.moveTo (midpoint).cubicTo (p123, p23.getX(), p23.getY(), p3.getX(), p3.getY());
+
+    g.setStrokeColor (color);
+    g.setStrokeWidth (strokeWidth);
+    g.setStrokeCap (StrokeCap::Round);
+    g.strokePath (path);
+}
+
+void paintAudioGraphConnection (Graphics& g, const AudioGraphComponent& graph, const AudioGraphConnection& connection, float opacity)
+{
+    const auto zoom = graph.getZoom();
+    const auto start = graph.getEndpointScreenPosition (connection.source);
+    const auto end = graph.getEndpointScreenPosition (connection.destination);
+
+    if (! graph.getLocalBounds().reduced (-200.0f).contains (start) && ! graph.getLocalBounds().reduced (-200.0f).contains (end))
+        return;
+
+    const auto controlOffset = jmax (60.0f * zoom, std::abs (end.getX() - start.getX()) * 0.5f);
+    const auto cp1 = Point<float> { start.getX() + controlOffset, start.getY() };
+    const auto cp2 = Point<float> { end.getX() - controlOffset, end.getY() };
+    const auto strokeWidth = jmax (1.5f, 3.0f * zoom);
+
+    strokeAudioGraphBezierHalf (g, start, cp1, cp2, end, graph.getEndpointColor (connection.source).withMultipliedAlpha (opacity), strokeWidth, true);
+    strokeAudioGraphBezierHalf (g, start, cp1, cp2, end, graph.getEndpointColor (connection.destination).withMultipliedAlpha (opacity), strokeWidth, false);
+}
+
+void paintAudioGraphPendingWire (Graphics& g, const AudioGraphComponent& graph)
+{
+    if (! graph.isPendingWireVisible())
+        return;
+
+    const auto activeEndpoint = graph.getPendingWireEndpoint();
+    if (! activeEndpoint.has_value())
+        return;
+
+    const auto zoom = graph.getZoom();
+    const auto start = graph.getEndpointScreenPosition (*activeEndpoint);
+    const auto end = graph.getPendingWireEndPosition();
+    const auto controlOffset = jmax (60.0f * zoom, std::abs (end.getX() - start.getX()) * 0.5f);
+    const auto cp1 = Point<float> { start.getX() + (activeEndpoint->isSource() ? controlOffset : -controlOffset), start.getY() };
+    const auto cp2 = Point<float> { end.getX() - (activeEndpoint->isSource() ? controlOffset : -controlOffset), end.getY() };
+
+    Path path;
+    path.moveTo (start).cubicTo (cp1, cp2.getX(), cp2.getY(), end.getX(), end.getY());
+
+    const auto endpointColor = graph.getEndpointColor (*activeEndpoint);
+    g.setStrokeColor (endpointColor.withAlpha (0.55f));
+    g.setStrokeWidth (jmax (1.5f, 2.5f * zoom));
+    g.setStrokeCap (StrokeCap::Round);
+    g.strokePath (path);
+
+    g.setFillColor (endpointColor.withAlpha (0.20f));
+    const auto center = graph.getEndpointScreenPosition (*activeEndpoint);
+    const auto radius = 14.0f * zoom;
+    g.fillEllipse (center.getX() - radius, center.getY() - radius, radius * 2.0f, radius * 2.0f);
+}
+
+void paintAudioGraphComponent (Graphics& g, const ApplicationTheme&, const AudioGraphComponent& graph)
+{
+    const auto zoom = graph.getZoom();
+    const auto canvasOffset = graph.getCanvasOffset();
+    const auto backgroundColor = graph.findColor (AudioGraphComponent::Style::backgroundColorId)
+                                     .value_or (Color (0xff101522));
+    const auto gridColor = graph.findColor (AudioGraphComponent::Style::gridColorId)
+                               .value_or (Colors::white.withAlpha (0.045f));
+
+    g.setFillColor (backgroundColor);
+    g.fillAll();
+
+    const auto spacing = 24.0f * zoom;
+    if (spacing >= 6.0f && ! gridColor.isTransparent())
+    {
+        const auto startX = std::fmod (canvasOffset.getX(), spacing);
+        const auto startY = std::fmod (canvasOffset.getY(), spacing);
+
+        g.setFillColor (gridColor);
+
+        for (auto x = startX; x < graph.getWidth(); x += spacing)
+        {
+            for (auto y = startY; y < graph.getHeight(); y += spacing)
+                g.fillEllipse (x - 1.0f, y - 1.0f, 2.0f, 2.0f);
+        }
+    }
+
+    if (const auto* processor = graph.getGraphProcessor())
+    {
+        for (const auto& connection : processor->getConnections())
+            paintAudioGraphConnection (g, graph, connection, 1.0f);
+    }
+
+    paintAudioGraphPendingWire (g, graph);
+}
+
+void paintAudioGraphPort (Graphics& g,
+                          const AudioGraphNodeView& node,
+                          const Font& labelFont,
+                          const AudioGraphNodeView::PortInfo& info,
+                          Point<float> center,
+                          float viewScale,
+                          bool isInput)
+{
+    const auto portRadius = node.getPortRadius();
+    const auto portHoleColor = node.findColor (AudioGraphNodeView::Style::portHoleColorId)
+                                   .value_or (Color (0xff101522));
+    const auto textColor = node.findColor (AudioGraphNodeView::Style::textColorId)
+                               .value_or (Color (0xffd6d6d6));
+
+    g.setFillColor (info.color.withAlpha (0.24f));
+    g.fillEllipse (audioGraphEllipseBounds (center, portRadius * 1.8f));
+    g.setFillColor (info.color);
+    g.fillEllipse (audioGraphEllipseBounds (center, portRadius));
+    g.setFillColor (portHoleColor);
+    g.fillEllipse (audioGraphEllipseBounds (center, portRadius * 0.45f));
+
+    g.setFillColor (textColor);
+
+    if (isInput)
+        g.fillFittedText (info.name, labelFont, { center.getX() + 12.0f * viewScale, center.getY() - 8.0f * viewScale, 72.0f * viewScale, 16.0f * viewScale }, Justification::left);
+    else
+        g.fillFittedText (info.name, labelFont, { center.getX() - 84.0f * viewScale, center.getY() - 8.0f * viewScale, 72.0f * viewScale, 16.0f * viewScale }, Justification::right);
+}
+
+void paintAudioGraphNodeView (Graphics& g, const ApplicationTheme& theme, const AudioGraphNodeView& node)
+{
+    const auto viewScale = node.getViewScale();
+    const auto bounds = node.getLocalBounds().reduced (node.getPortRadius() * 0.5f, 0.0f);
+    const auto bodyBounds = bounds.reduced (2.0f * viewScale);
+    const auto corner = audioGraphNodeBaseCornerRadius * viewScale;
+    const auto accent = node.getNodeColor();
+    const auto headerHeight = audioGraphNodeBaseHeaderHeight * viewScale;
+
+    const auto shadowColor = node.findColor (AudioGraphNodeView::Style::shadowColorId)
+                                 .value_or (Colors::black);
+    const auto accentBackgroundColor = node.findColor (AudioGraphNodeView::Style::accentBackgroundColorId)
+                                           .value_or (accent);
+    const auto bodyBackgroundColor = node.findColor (AudioGraphNodeView::Style::bodyBackgroundColorId)
+                                         .value_or (Color (0xff1e2535));
+    const auto headerBackgroundColor = node.findColor (AudioGraphNodeView::Style::headerBackgroundColorId)
+                                           .value_or (Color (0xff141a26));
+    const auto textColor = node.findColor (AudioGraphNodeView::Style::textColorId)
+                               .value_or (Color (0xffd6d6d6));
+    const auto subtitleTextColor = node.findColor (AudioGraphNodeView::Style::subtitleTextColorId)
+                                       .value_or (Color (0xffb8b8b8));
+    const auto parameterBackgroundColor = node.findColor (AudioGraphNodeView::Style::parameterBackgroundColorId)
+                                              .value_or (Color (0xff263044));
+    const auto parameterValueBackgroundColor = node.findColor (AudioGraphNodeView::Style::parameterValueBackgroundColorId)
+                                                   .value_or (Color (0xff1a2130));
+
+    fillAudioGraphFeatheredRoundedRect (g, bodyBounds.translated (0.0f, 3.0f * viewScale), corner, shadowColor, viewScale);
+
+    g.setFillColor (accentBackgroundColor.withAlpha (0.11f));
+    g.fillRoundedRect (bodyBounds.reduced (-1.5f * viewScale), corner + 2.0f * viewScale);
+
+    g.setFillColor (bodyBackgroundColor);
+    g.fillRoundedRect (bodyBounds, corner);
+
+    auto headerBounds = bodyBounds.withHeight (headerHeight);
+    g.setFillColor (headerBackgroundColor);
+    g.fillRoundedRect (headerBounds, corner, corner, 0.0f, 0.0f);
+
+    g.setStrokeColor (accent.withAlpha (0.70f));
+    g.setStrokeWidth (1.35f * viewScale);
+    g.strokeRoundedRect (bodyBounds, corner);
+
+    const auto headerInner = headerBounds.reduced (9.0f * viewScale, 5.0f * viewScale);
+    const auto font = theme.getDefaultFont();
+
+    g.setFillColor (accent);
+    g.fillFittedText (node.getNodeTitle(), font.withHeight (12.0f * viewScale), headerInner.withHeight (18.0f * viewScale), Justification::left);
+
+    const auto subtitle = node.getNodeSubtitle();
+    if (subtitle.isNotEmpty())
+    {
+        g.setFillColor (subtitleTextColor);
+        g.fillFittedText (subtitle, font.withHeight (9.0f * viewScale), headerInner.withHeight (18.0f * viewScale), Justification::right);
+    }
+
+    const auto ruleY = bodyBounds.getY() + headerHeight;
+    g.setStrokeColor (accent.withAlpha (0.16f));
+    g.strokeLine ({ bodyBounds.getX(), ruleY }, { bodyBounds.getRight(), ruleY });
+
+    auto contentBounds = bodyBounds.reduced (10.0f * viewScale, 0.0f);
+    contentBounds = contentBounds.withY (ruleY + 4.0f * viewScale).withHeight (audioGraphNodeBaseContentHeight * viewScale);
+    node.paintNodeContent (g, contentBounds);
+
+    auto parameterBounds = bodyBounds.reduced (10.0f * viewScale, 0.0f);
+    parameterBounds = parameterBounds.withY (ruleY + (audioGraphNodeBaseContentHeight + 5.0f) * viewScale);
+
+    const auto parameterFont = font.withHeight (9.5f * viewScale);
+    for (int i = 0; i < node.getNumParameterRows(); ++i)
+    {
+        const auto info = node.getParameterInfo (i);
+        auto row = parameterBounds.removeFromTop (audioGraphNodeBaseParameterRowHeight * viewScale).reduced (0.0f, 2.0f * viewScale);
+        auto valueBox = row.removeFromRight (58.0f * viewScale);
+
+        g.setFillColor (parameterBackgroundColor);
+        g.fillRoundedRect (row.reduced (0.0f, 1.0f * viewScale), 3.0f * viewScale);
+
+        if (info.normalizedValue >= 0.0f)
+        {
+            const auto fillWidth = row.getWidth() * jlimit (0.0f, 1.0f, info.normalizedValue);
+            g.setFillColor (info.color.withAlpha (0.20f));
+            g.fillRoundedRect (row.withWidth (fillWidth).reduced (0.0f, 1.0f * viewScale), 3.0f * viewScale);
+        }
+
+        g.setFillColor (textColor);
+        g.fillFittedText (info.name, parameterFont, row.reduced (6.0f * viewScale, 0.0f), Justification::left);
+
+        g.setFillColor (parameterValueBackgroundColor);
+        g.fillRoundedRect (valueBox.reduced (0.0f, 1.0f * viewScale), 3.0f * viewScale);
+        g.setFillColor (info.color);
+        g.fillFittedText (info.value, parameterFont, valueBox.reduced (5.0f * viewScale, 0.0f), Justification::right);
+    }
+
+    const auto labelFont = font.withHeight (10.5f * viewScale);
+
+    for (int i = 0; i < node.getNumInputPorts(); ++i)
+        paintAudioGraphPort (g, node, labelFont, node.getInputPortInfo (i), node.getInputPortCenter (i), viewScale, true);
+
+    for (int i = 0; i < node.getNumOutputPorts(); ++i)
+        paintAudioGraphPort (g, node, labelFont, node.getOutputPortInfo (i), node.getOutputPortCenter (i), viewScale, false);
+}
+
 void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKeyboardComponent& keyboard)
 {
     auto bounds = keyboard.getLocalBounds();
@@ -956,7 +1216,7 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
 
     // Draw keyboard background with subtle gradient shadow
     auto keyboardWidth = keyboard.getKeyStartRange().getEnd();
-    auto shadowColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyShadowColorId);
+    auto shadowColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyShadowColorId).value_or (Color());
 
     if (! shadowColor.isTransparent())
     {
@@ -970,7 +1230,7 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
     }
 
     // Draw separator line at bottom
-    auto lineColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::keyOutlineColorId);
+    auto lineColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::keyOutlineColorId).value_or (Color());
     if (! lineColor.isTransparent())
     {
         g.setFillColor (lineColor);
@@ -991,9 +1251,9 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
         auto isOver = keyboard.isMouseOverNote (note);
 
         // Base colors from theme
-        auto whiteKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyColorId);
-        auto pressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyPressedColorId);
-        auto outlineColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::keyOutlineColorId);
+        auto whiteKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyColorId).value_or (Color());
+        auto pressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyPressedColorId).value_or (Color());
+        auto outlineColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::keyOutlineColorId).value_or (Color());
 
         // Determine fill color based on state
         Color fillColor = whiteKeyColor;
@@ -1084,8 +1344,8 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
         auto isOver = keyboard.isMouseOverNote (note);
 
         // Base colors from theme
-        auto blackKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyColorId);
-        auto blackPressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyPressedColorId);
+        auto blackKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyColorId).value_or (Color());
+        auto blackPressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyPressedColorId).value_or (Color());
 
         // Determine fill color based on state
         Color fillColor = blackKeyColor;
@@ -1529,6 +1789,20 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setColor (KMeterComponent::Style::peakLevelColorId, Color (0xffffffff));
     theme->setColor (KMeterComponent::Style::peakLevelClipColorId, Color (0xffff0000));
     theme->setColor (KMeterComponent::Style::peakHoldColorId, Color (0xffffff00));
+
+    theme->setComponentStyle<AudioGraphComponent> (ComponentStyle::createStyle<AudioGraphComponent> (paintAudioGraphComponent));
+    theme->setColor (AudioGraphComponent::Style::backgroundColorId, Color (0xff101522));
+    theme->setColor (AudioGraphComponent::Style::gridColorId, Colors::white.withAlpha (0.045f));
+
+    theme->setComponentStyle<AudioGraphNodeView> (ComponentStyle::createStyle<AudioGraphNodeView> (paintAudioGraphNodeView));
+    theme->setColor (AudioGraphNodeView::Style::shadowColorId, Colors::black);
+    theme->setColor (AudioGraphNodeView::Style::bodyBackgroundColorId, Color (0xff1e2535));
+    theme->setColor (AudioGraphNodeView::Style::headerBackgroundColorId, Color (0xff141a26));
+    theme->setColor (AudioGraphNodeView::Style::textColorId, Color (0xffd6d6d6));
+    theme->setColor (AudioGraphNodeView::Style::subtitleTextColorId, Color (0xffb8b8b8));
+    theme->setColor (AudioGraphNodeView::Style::parameterBackgroundColorId, Color (0xff263044));
+    theme->setColor (AudioGraphNodeView::Style::parameterValueBackgroundColorId, Color (0xff1a2130));
+    theme->setColor (AudioGraphNodeView::Style::portHoleColorId, Color (0xff101522));
 #endif
 
     return theme;

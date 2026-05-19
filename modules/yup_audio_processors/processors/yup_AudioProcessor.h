@@ -34,6 +34,14 @@ class YUP_API AudioProcessor
 {
 public:
     //==============================================================================
+    /** The floating-point precision used for processBlock() calls. */
+    enum class ProcessingPrecision
+    {
+        singlePrecision,
+        doublePrecision
+    };
+
+    //==============================================================================
 
     /** Constructs an AudioProcessor. */
     AudioProcessor (StringRef name, AudioBusLayout busLayout);
@@ -67,7 +75,11 @@ public:
 
     //==============================================================================
 
-    /** Prepares the processor for playback. */
+    /** Prepares the processor for playback.
+
+        getSampleRate() and getSamplesPerBlock() are guaranteed to return the correct
+        values when this is called. Subclasses do not need to call the base class.
+    */
     virtual void prepareToPlay (float sampleRate, int maxBlockSize) = 0;
 
     /** Releases resources. */
@@ -89,8 +101,42 @@ public:
     */
     virtual void processBlock (AudioBuffer<double>& audioBuffer, MidiBuffer& midiBuffer) {}
 
+    /**
+        Processes a block while the processor is bypassed.
+
+        The default implementation leaves audio and MIDI unchanged.
+
+        @param audioBuffer The audio buffer to process.
+        @param midiBuffer The MIDI buffer to process.
+    */
+    virtual void processBlockBypassed (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer);
+
+    /**
+        Processes a block while the processor is bypassed.
+
+        The default implementation leaves audio and MIDI unchanged.
+
+        @param audioBuffer The audio buffer to process.
+        @param midiBuffer The MIDI buffer to process.
+    */
+    virtual void processBlockBypassed (AudioBuffer<double>& audioBuffer, MidiBuffer& midiBuffer);
+
     /** Flushes the processor. */
     virtual void flush() {}
+
+    //==============================================================================
+
+    /** Returns true if this processor implements the double-precision processBlock(). */
+    virtual bool supportsDoublePrecisionProcessing() const { return false; }
+
+    /** Sets the preferred processing precision for future processBlock() calls. */
+    void setProcessingPrecision (ProcessingPrecision precision);
+
+    /** Returns the current processing precision. */
+    ProcessingPrecision getProcessingPrecision() const noexcept { return processingPrecision; }
+
+    /** Returns true when the current processing precision is double precision. */
+    bool isUsingDoublePrecision() const noexcept { return processingPrecision == ProcessingPrecision::doublePrecision; }
 
     //==============================================================================
 
@@ -186,6 +232,7 @@ private:
 
     float sampleRate = 44100.0f;
     int samplesPerBlock = 1024;
+    ProcessingPrecision processingPrecision = ProcessingPrecision::singlePrecision;
 
     AudioPlayHead* playHead = nullptr;
 

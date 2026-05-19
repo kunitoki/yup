@@ -32,7 +32,7 @@
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_audio_basics yup_gui
+    dependencies:       yup_audio_basics
 
   END_YUP_MODULE_DECLARATION
 
@@ -43,7 +43,10 @@
 #define YUP_AUDIO_PROCESSORS_H_INCLUDED
 
 #include <yup_audio_basics/yup_audio_basics.h>
+
+#if YUP_MODULE_AVAILABLE_yup_gui
 #include <yup_gui/yup_gui.h>
+#endif
 
 //==============================================================================
 #include "processors/yup_AudioBus.h"
@@ -52,4 +55,7 @@
 #include "processors/yup_AudioParameterBuilder.h"
 #include "processors/yup_AudioParameterHandle.h"
 #include "processors/yup_AudioProcessor.h"
+
+#if YUP_MODULE_AVAILABLE_yup_gui
 #include "processors/yup_AudioProcessorEditor.h"
+#endif

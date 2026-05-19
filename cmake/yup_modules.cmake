@@ -802,6 +802,11 @@ function (yup_add_module module_path modules_definitions module_group)
         list (APPEND module_defines ${module_definition})
     endforeach()
 
+    if ("${module_name}" STREQUAL "yup_audio_plugin_host")
+        _yup_collect_audio_plugin_host_dependencies ("${module_defines}" audio_plugin_host_dependencies)
+        list (APPEND module_dependencies ${audio_plugin_host_dependencies})
+    endif()
+
     # ==== Prepare include paths
     get_filename_component (module_include_path ${module_path} DIRECTORY)
     list (APPEND module_include_paths "${module_include_path}" "${module_path}")

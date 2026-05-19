@@ -818,7 +818,7 @@ private:
         timeLabel.setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
 
         addAndMakeVisible (timeStretchSlider);
-        timeStretchSlider.setSliderType (yup::Slider::LinearBarHorizontal);
+        timeStretchSlider.setSliderType (yup::Slider::LinearHorizontal);
         timeStretchSlider.setRange (0.5, 2.0, 0.01);
         timeStretchSlider.setValue (1.0, yup::NotificationType::dontSendNotification);
         timeStretchSlider.setDefaultValue (1.0);
@@ -837,7 +837,7 @@ private:
         pitchLabel.setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
 
         addAndMakeVisible (pitchShiftSlider);
-        pitchShiftSlider.setSliderType (yup::Slider::LinearBarHorizontal);
+        pitchShiftSlider.setSliderType (yup::Slider::LinearHorizontal);
         pitchShiftSlider.setRange (0.5, 2.0, 0.01);
         pitchShiftSlider.setValue (1.0, yup::NotificationType::dontSendNotification);
         pitchShiftSlider.setDefaultValue (1.0);

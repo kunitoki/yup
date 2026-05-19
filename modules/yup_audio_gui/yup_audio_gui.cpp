@@ -40,3 +40,5 @@
 #include "displays/yup_SpectrumAnalyzerComponent.cpp"
 #include "displays/yup_CartesianPlane.cpp"
 #include "metering/yup_KMeterComponent.cpp"
+#include "graph/yup_AudioGraphNodeView.cpp"
+#include "graph/yup_AudioGraphComponent.cpp"

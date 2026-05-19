@@ -137,3 +137,80 @@ TEST (ResultValueTests, InequalityOperator)
     EXPECT_TRUE (success1 != failure1);
     EXPECT_TRUE (failure1 != failure3);
 }
+
+TEST (ResultValueTests, MakeResultValueOkDeducesTypeFromArgument)
+{
+    ResultValue<int> result = makeResultValueOk (42);
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_FALSE (result.failed());
+    EXPECT_EQ (result.getValue(), 42);
+}
+
+TEST (ResultValueTests, MakeResultValueOkWorksWithReturnDeduction)
+{
+    auto makeInt = []() -> ResultValue<int>
+    {
+        return makeResultValueOk (1337);
+    };
+    auto makeStr = []() -> ResultValue<String>
+    {
+        return makeResultValueOk (String ("hello"));
+    };
+
+    auto intResult = makeInt();
+    EXPECT_TRUE (intResult.wasOk());
+    EXPECT_EQ (intResult.getValue(), 1337);
+
+    auto strResult = makeStr();
+    EXPECT_TRUE (strResult.wasOk());
+    EXPECT_EQ (strResult.getValue(), String ("hello"));
+}
+
+TEST (ResultValueTests, MakeResultValueOkWithImplicitConversion)
+{
+    ResultValue<double> result = makeResultValueOk (42);
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_DOUBLE_EQ (result.getValue(), 42.0);
+}
+
+TEST (ResultValueTests, MakeResultValueFailDeducesForAnyType)
+{
+    ResultValue<int> intResult = makeResultValueFail ("int error");
+    EXPECT_FALSE (intResult.wasOk());
+    EXPECT_TRUE (intResult.failed());
+    EXPECT_EQ (intResult.getErrorMessage(), "int error");
+
+    ResultValue<String> strResult = makeResultValueFail ("string error");
+    EXPECT_FALSE (strResult.wasOk());
+    EXPECT_EQ (strResult.getErrorMessage(), "string error");
+}
+
+TEST (ResultValueTests, MakeResultValueFailWorksWithReturnDeduction)
+{
+    auto makeFailure = []() -> ResultValue<int>
+    {
+        return makeResultValueFail ("something went wrong");
+    };
+
+    auto result = makeFailure();
+    EXPECT_FALSE (result.wasOk());
+    EXPECT_EQ (result.getErrorMessage(), "something went wrong");
+}
+
+TEST (ResultValueTests, MakeResultValueFailWithEmptyMessageUsesDefault)
+{
+    ResultValue<int> result = makeResultValueFail ("");
+    EXPECT_FALSE (result.wasOk());
+    EXPECT_EQ (result.getErrorMessage(), "Unknown Error");
+}
+
+TEST (ResultValueTests, MakeResultValueOkAndFailProduceEqualResults)
+{
+    ResultValue<int> a = makeResultValueOk (7);
+    ResultValue<int> b = ResultValue<int>::ok (7);
+    EXPECT_EQ (a, b);
+
+    ResultValue<int> c = makeResultValueFail ("err");
+    ResultValue<int> d = ResultValue<int>::fail ("err");
+    EXPECT_EQ (c, d);
+}

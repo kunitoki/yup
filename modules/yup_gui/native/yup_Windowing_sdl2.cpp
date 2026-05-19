@@ -23,11 +23,7 @@ namespace yup
 {
 
 //==============================================================================
-#ifndef YUP_WINDOWING_LOGGING
-#define YUP_WINDOWING_LOGGING 1
-#endif
-
-#if YUP_WINDOWING_LOGGING
+#if YUP_ENABLE_WINDOWING_EVENT_LOGGING
 #define YUP_WINDOWING_LOG(textToWrite) YUP_DBG (textToWrite)
 #else
 #define YUP_WINDOWING_LOG(textToWrite) \
@@ -74,6 +70,9 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
 
     if (options.flags.test (allowHighDensityDisplay))
         windowFlags |= SDL_WINDOW_ALLOW_HIGHDPI;
+
+    if (options.flags.test (temporaryWindow))
+        windowFlags |= SDL_WINDOW_POPUP_MENU | SDL_WINDOW_SKIP_TASKBAR | SDL_WINDOW_ALWAYS_ON_TOP;
 
     if (! options.flags.test (decoratedWindow))
         windowFlags |= SDL_WINDOW_BORDERLESS;
@@ -409,10 +408,13 @@ void SDL2ComponentNative::setFocusedComponent (Component* comp)
             lastComponentFocused->repaint();
     }
 
-    if (window != nullptr)
+    if (window != nullptr && isVisible() && lastComponentFocused != nullptr)
     {
-        if ((SDL_GetWindowFlags (window) & SDL_WINDOW_INPUT_FOCUS) == 0) // SDL_WINDOW_MOUSE_FOCUS
-            SDL_SetWindowInputFocus (window);
+        SDL_RaiseWindow (window);
+
+        focusNativeWindow (getNativeHandle());
+
+        SDL_SetWindowInputFocus (window);
     }
 }
 
@@ -819,7 +821,7 @@ void SDL2ComponentNative::handleMouseMoveOrDrag (const Point<float>& position)
 
 void SDL2ComponentNative::handleMouseDown (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers)
 {
-    currentMouseButtons = static_cast<MouseEvent::Buttons> (currentMouseButtons | button);
+    currentMouseButtons = static_cast<MouseEvent::Buttons> (toMouseButtons (SDL_GetMouseState (nullptr, nullptr)) | button);
     currentKeyModifiers = modifiers;
 
     auto event = MouseEvent()
@@ -827,7 +829,7 @@ void SDL2ComponentNative::handleMouseDown (const Point<float>& position, MouseEv
                      .withModifiers (currentKeyModifiers)
                      .withPosition (position);
 
-    if (lastComponentClicked == nullptr)
+    if (currentMouseButtons == button)
         lastComponentClicked = findComponentForMouseEvent (position);
 
     if (lastComponentClicked != nullptr)
@@ -847,7 +849,7 @@ void SDL2ComponentNative::handleMouseDown (const Point<float>& position, MouseEv
 
 void SDL2ComponentNative::handleMouseUp (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers)
 {
-    currentMouseButtons = static_cast<MouseEvent::Buttons> (currentMouseButtons & ~button);
+    currentMouseButtons = static_cast<MouseEvent::Buttons> (toMouseButtons (SDL_GetMouseState (nullptr, nullptr)) & ~button);
     currentKeyModifiers = modifiers;
 
     auto event = MouseEvent()
@@ -861,23 +863,30 @@ void SDL2ComponentNative::handleMouseUp (const Point<float>& position, MouseEven
     if (lastMouseDownTime)
         event = event.withLastMouseDownTime (*lastMouseDownTime);
 
-    if (lastComponentClicked != nullptr)
+    auto nativeBailOut = Component::BailOutChecker (&component);
+
+    if (auto* clickedComponent = lastComponentClicked.get())
     {
         const auto currentMouseDownTime = yup::Time::getCurrentTime();
+        auto clickedComponentBailOut = Component::BailOutChecker (clickedComponent);
 
-        event = event.withSourceComponent (lastComponentClicked);
+        event = event.withSourceComponent (clickedComponent);
 
         if (lastMouseUpTime
             && *lastMouseUpTime > yup::Time()
             && currentMouseDownTime - *lastMouseUpTime < doubleClickTime)
         {
-            lastComponentClicked->internalMouseDoubleClick (event.withRelativePositionTo (lastComponentClicked));
+            clickedComponent->internalMouseDoubleClick (event.withRelativePositionTo (clickedComponent));
         }
 
-        lastComponentClicked->internalMouseUp (event.withRelativePositionTo (lastComponentClicked));
+        if (! clickedComponentBailOut.shouldBailOut())
+            clickedComponent->internalMouseUp (event.withRelativePositionTo (clickedComponent));
 
         lastMouseUpTime = currentMouseDownTime;
     }
+
+    if (nativeBailOut.shouldBailOut())
+        return;
 
     if (currentMouseButtons == MouseEvent::noButtons)
     {
@@ -1031,7 +1040,8 @@ void SDL2ComponentNative::handleResized (int width, int height)
         setPosition (nativeWindowPos.getTopLeft());
     }
 
-    PopupMenu::dismissAllPopups();
+    if (dynamic_cast<PopupMenu*> (&component) == nullptr)
+        PopupMenu::dismissAllPopups();
 
     repaint();
 }
@@ -1421,8 +1431,11 @@ int SDL2ComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
 
         default:
         {
-            if (auto nativeComponent = Desktop::getInstance()->getNativeComponent (userdata))
-                dynamic_cast<SDL2ComponentNative*> (nativeComponent.get())->handleEvent (event);
+            if (auto component = Desktop::getInstance()->getNativeComponent (userdata))
+            {
+                if (auto nativeComponent = dynamic_cast<SDL2ComponentNative*> (component.get()))
+                    nativeComponent->handleEvent (event);
+            }
 
             break;
         }
@@ -1609,7 +1622,7 @@ void Desktop::setMouseCursor (const MouseCursor& cursorToSet)
             { MouseCursor::ResizeUpDown, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENS) },
             { MouseCursor::ResizeTopLeftRightBottom, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENWSE) },
             { MouseCursor::ResizeBottomLeftRightTop, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENESW) },
-            { MouseCursor::ResizeAll, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_ARROW) }
+            { MouseCursor::ResizeAll, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZEALL) }
         };
     }();
 

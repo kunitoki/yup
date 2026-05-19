@@ -55,12 +55,24 @@ void AudioProcessor::addParameter (AudioParameter::Ptr parameter)
 
 int AudioProcessor::getNumAudioOutputs() const
 {
-    return static_cast<int> (busLayout.getOutputBuses().size());
+    int count = 0;
+
+    for (const auto& bus : busLayout.getOutputBuses())
+        if (bus.getType() == AudioBus::Type::Audio)
+            ++count;
+
+    return count;
 }
 
 int AudioProcessor::getNumAudioInputs() const
 {
-    return static_cast<int> (busLayout.getInputBuses().size());
+    int count = 0;
+
+    for (const auto& bus : busLayout.getInputBuses())
+        if (bus.getType() == AudioBus::Type::Audio)
+            ++count;
+
+    return count;
 }
 
 //==============================================================================
@@ -86,13 +98,37 @@ bool AudioProcessor::isSuspended() const
 
 //==============================================================================
 
+void AudioProcessor::setProcessingPrecision (ProcessingPrecision precision)
+{
+    if (precision == ProcessingPrecision::doublePrecision && ! supportsDoublePrecisionProcessing())
+    {
+        jassertfalse;
+        processingPrecision = ProcessingPrecision::singlePrecision;
+        return;
+    }
+
+    processingPrecision = precision;
+}
+
+//==============================================================================
+
+void AudioProcessor::processBlockBypassed (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer)
+{
+    ignoreUnused (audioBuffer, midiBuffer);
+}
+
+void AudioProcessor::processBlockBypassed (AudioBuffer<double>& audioBuffer, MidiBuffer& midiBuffer)
+{
+    ignoreUnused (audioBuffer, midiBuffer);
+}
+
+//==============================================================================
+
 void AudioProcessor::setPlaybackConfiguration (float sampleRate, int samplesPerBlock)
 {
     releaseResources();
-
     this->sampleRate = sampleRate;
     this->samplesPerBlock = samplesPerBlock;
-
     prepareToPlay (sampleRate, samplesPerBlock);
 }
 
