@@ -1045,6 +1045,7 @@ TEST (AudioGraphProcessorTests, MissingCommitKeepsPreviousPlan)
     EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (0)[0]);
 }
 
+#if ! defined(YUP_WASM)
 TEST (AudioGraphProcessorTests, CommitKeepsDirtyWhenModelChangesDuringCompilation)
 {
     AudioGraphProcessor graph;
@@ -1087,6 +1088,7 @@ TEST (AudioGraphProcessorTests, CommitKeepsDirtyWhenModelChangesDuringCompilatio
     EXPECT_TRUE (graph.commitChanges().wasOk());
     EXPECT_FALSE (graph.hasUncommittedChanges());
 }
+#endif
 
 TEST (AudioGraphProcessorTests, SaveAndLoadRestoresConnectionsAndNodeState)
 {
@@ -1898,6 +1900,7 @@ TEST (AudioGraphProcessorTests, SwitchingWorkerThreadsBetweenBlocksPreservesOutp
     }
 }
 
+#if ! defined(YUP_WASM)
 TEST (AudioGraphProcessorTests, ConcurrentCommitsDoNotInvalidateAudioThreadPlan)
 {
     AudioGraphProcessor graph;
@@ -1975,6 +1978,7 @@ TEST (AudioGraphProcessorTests, ConcurrentCommitsDoNotInvalidateAudioThreadPlan)
     EXPECT_EQ (0, invalidBlocks.load());
     EXPECT_GT (processedBlocks.load(), 0);
 }
+#endif
 
 TEST (AudioGraphProcessorTests, MidiCompensationCanSpillIntoNextBlock)
 {

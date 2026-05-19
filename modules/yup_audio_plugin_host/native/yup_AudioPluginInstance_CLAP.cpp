@@ -74,6 +74,7 @@ struct CLAPModule
 struct YUPCLAPHost
 {
     clap_host_t host {};
+    clap_host_note_ports_t notePorts {};
     String hostName;
     String hostVendor;
     String hostVersion;
@@ -89,8 +90,18 @@ struct YUPCLAPHost
         host.vendor = hostVendor.toRawUTF8();
         host.url = "";
         host.version = hostVersion.toRawUTF8();
-        host.get_extension = [] (const clap_host_t*, const char*) -> const void*
+        notePorts.supported_dialects = [] (const clap_host_t*) -> uint32_t
         {
+            return CLAP_NOTE_DIALECT_CLAP | CLAP_NOTE_DIALECT_MIDI;
+        };
+        notePorts.rescan = [] (const clap_host_t*, uint32_t) {};
+
+        host.get_extension = [] (const clap_host_t* host, const char* extensionId) -> const void*
+        {
+            auto* self = static_cast<YUPCLAPHost*> (host->host_data);
+            if (std::strcmp (extensionId, CLAP_EXT_NOTE_PORTS) == 0)
+                return &self->notePorts;
+
             return nullptr;
         };
         host.request_restart = [] (const clap_host_t*) {};
@@ -101,7 +112,11 @@ struct YUPCLAPHost
 
 struct CLAPInputEvents
 {
-    std::vector<clap_event_param_value_t> parameterEvents;
+    std::deque<clap_event_param_value_t> parameterEvents;
+    std::deque<clap_event_note_t> noteEvents;
+    std::deque<clap_event_midi_t> midiEvents;
+    std::deque<clap_event_midi_sysex_t> sysexEvents;
+    std::vector<const clap_event_header_t*> eventHeaders;
     clap_input_events_t inputEvents {};
 
     CLAPInputEvents()
@@ -110,16 +125,25 @@ struct CLAPInputEvents
         inputEvents.size = [] (const clap_input_events_t* events) -> uint32_t
         {
             auto* self = static_cast<const CLAPInputEvents*> (events->ctx);
-            return static_cast<uint32_t> (self->parameterEvents.size());
+            return static_cast<uint32_t> (self->eventHeaders.size());
         };
         inputEvents.get = [] (const clap_input_events_t* events, uint32_t index) -> const clap_event_header_t*
         {
             auto* self = static_cast<const CLAPInputEvents*> (events->ctx);
-            if (index >= self->parameterEvents.size())
+            if (index >= self->eventHeaders.size())
                 return nullptr;
 
-            return &self->parameterEvents[static_cast<std::size_t> (index)].header;
+            return self->eventHeaders[static_cast<std::size_t> (index)];
         };
+    }
+
+    void clear()
+    {
+        parameterEvents.clear();
+        noteEvents.clear();
+        midiEvents.clear();
+        sysexEvents.clear();
+        eventHeaders.clear();
     }
 
     void addParameterValue (clap_id id, double value)
@@ -137,20 +161,116 @@ struct CLAPInputEvents
         event.value = value;
 
         parameterEvents.push_back (event);
+        eventHeaders.push_back (&parameterEvents.back().header);
+    }
+
+    void addMidiMessage (const MidiMessageMetadata& metadata)
+    {
+        const auto message = metadata.getMessage();
+
+        if (message.isNoteOn() || message.isNoteOff())
+        {
+            clap_event_note_t event {};
+            event.header.size = sizeof (event);
+            event.header.time = static_cast<uint32_t> (jmax (0, metadata.samplePosition));
+            event.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
+            event.header.type = message.isNoteOn() ? CLAP_EVENT_NOTE_ON : CLAP_EVENT_NOTE_OFF;
+            event.note_id = -1;
+            event.port_index = 0;
+            event.channel = static_cast<int16_t> (message.getChannel() - 1);
+            event.key = static_cast<int16_t> (message.getNoteNumber());
+            event.velocity = static_cast<double> (message.getFloatVelocity());
+
+            noteEvents.push_back (event);
+            eventHeaders.push_back (&noteEvents.back().header);
+            return;
+        }
+
+        if (message.isSysEx())
+        {
+            clap_event_midi_sysex_t event {};
+            event.header.size = sizeof (event);
+            event.header.time = static_cast<uint32_t> (jmax (0, metadata.samplePosition));
+            event.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
+            event.header.type = CLAP_EVENT_MIDI_SYSEX;
+            event.port_index = 0;
+            event.buffer = message.getSysExData();
+            event.size = static_cast<uint32_t> (message.getSysExDataSize());
+
+            sysexEvents.push_back (event);
+            eventHeaders.push_back (&sysexEvents.back().header);
+            return;
+        }
+
+        if (metadata.numBytes > 0 && metadata.numBytes <= 3)
+        {
+            clap_event_midi_t event {};
+            event.header.size = sizeof (event);
+            event.header.time = static_cast<uint32_t> (jmax (0, metadata.samplePosition));
+            event.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
+            event.header.type = CLAP_EVENT_MIDI;
+            event.port_index = 0;
+            std::memcpy (event.data, metadata.data, static_cast<std::size_t> (metadata.numBytes));
+
+            midiEvents.push_back (event);
+            eventHeaders.push_back (&midiEvents.back().header);
+        }
     }
 };
 
 struct CLAPOutputEvents
 {
     clap_output_events_t outputEvents {};
+    MidiBuffer* midiOutput = nullptr;
 
     CLAPOutputEvents()
     {
         outputEvents.ctx = this;
-        outputEvents.try_push = [] (const clap_output_events_t*, const clap_event_header_t*) -> bool
+        outputEvents.try_push = [] (const clap_output_events_t* events, const clap_event_header_t* event) -> bool
         {
+            auto* self = static_cast<CLAPOutputEvents*> (events->ctx);
+            if (self == nullptr || self->midiOutput == nullptr || event == nullptr)
+                return false;
+
+            self->addEventToMidiBuffer (*event);
             return true;
         };
+    }
+
+    void addEventToMidiBuffer (const clap_event_header_t& event)
+    {
+        if (event.space_id != CLAP_CORE_EVENT_SPACE_ID)
+            return;
+
+        const int samplePosition = static_cast<int> (event.time);
+
+        if (event.type == CLAP_EVENT_NOTE_ON
+            || event.type == CLAP_EVENT_NOTE_OFF
+            || event.type == CLAP_EVENT_NOTE_CHOKE
+            || event.type == CLAP_EVENT_NOTE_END)
+        {
+            const auto& note = *reinterpret_cast<const clap_event_note_t*> (&event);
+            const int channel = note.channel >= 0 ? note.channel + 1 : 1;
+            const int key = note.key >= 0 ? note.key : 0;
+            const auto velocity = static_cast<float> (note.velocity);
+
+            midiOutput->addEvent (event.type == CLAP_EVENT_NOTE_ON
+                                      ? MidiMessage::noteOn (channel, key, velocity)
+                                      : MidiMessage::noteOff (channel, key, velocity),
+                                  samplePosition);
+        }
+        else if (event.type == CLAP_EVENT_MIDI)
+        {
+            const auto& midi = *reinterpret_cast<const clap_event_midi_t*> (&event);
+            const int numBytes = MidiMessage::getMessageLengthFromFirstByte (midi.data[0]);
+            midiOutput->addEvent (midi.data, numBytes, samplePosition);
+        }
+        else if (event.type == CLAP_EVENT_MIDI_SYSEX)
+        {
+            const auto& sysex = *reinterpret_cast<const clap_event_midi_sysex_t*> (&event);
+            midiOutput->addEvent (MidiMessage::createSysExMessage (sysex.buffer, static_cast<int> (sysex.size)),
+                                  samplePosition);
+        }
     }
 };
 
@@ -173,6 +293,7 @@ public:
         , clapPlugin (plugin)
     {
         buildParameterList();
+        setNonRealtime (context.isNonRealtime);
     }
 
     ~CLAPInstance() override
@@ -193,9 +314,9 @@ public:
         const int numChannels = jmax (2, pluginDescription.numInputChannels, pluginDescription.numOutputChannels);
         preparedInPtrs.resize (static_cast<std::size_t> (numChannels));
         preparedOutPtrs.resize (static_cast<std::size_t> (numChannels));
-        clapInputEvents.parameterEvents.reserve (clapParameterIds.size());
 
         clapPlugin->activate (clapPlugin, sampleRate, 1, static_cast<uint32_t> (jmax (1, maxBlockSize)));
+        updateRenderMode();
 
         clapPlugin->start_processing (clapPlugin);
     }
@@ -209,14 +330,20 @@ public:
         }
     }
 
-    void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer& /*midiBuffer*/) override
+    void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer) override
     {
         ScopedNoDenormals noDenormals;
+
+        if (isBypassed())
+        {
+            processBlockBypassed (audioBuffer, midiBuffer);
+            return;
+        }
 
         const int numSamples = audioBuffer.getNumSamples();
         const int numChannels = audioBuffer.getNumChannels();
 
-        if (static_cast<int> (preparedInPtrs.size()) < numChannels)
+        if (static_cast<int> (preparedInPtrs.size()) < numChannels && numChannels > 0)
         {
             jassertfalse;
             return;
@@ -229,36 +356,50 @@ public:
         }
 
         clap_audio_buffer_t inputBuf {};
-        inputBuf.data32 = const_cast<float**> (preparedInPtrs.data());
-        inputBuf.channel_count = static_cast<uint32_t> (numChannels);
+        if (pluginDescription.numInputChannels > 0 && numChannels > 0)
+        {
+            inputBuf.data32 = const_cast<float**> (preparedInPtrs.data());
+            inputBuf.channel_count = static_cast<uint32_t> (numChannels);
+        }
         inputBuf.latency = 0;
         inputBuf.constant_mask = 0;
 
         clap_audio_buffer_t outputBuf {};
-        outputBuf.data32 = preparedOutPtrs.data();
-        outputBuf.channel_count = static_cast<uint32_t> (numChannels);
+        if (pluginDescription.numOutputChannels > 0 && numChannels > 0)
+        {
+            outputBuf.data32 = preparedOutPtrs.data();
+            outputBuf.channel_count = static_cast<uint32_t> (numChannels);
+        }
 
         clap_process_t process {};
         process.steady_time = -1;
         process.frames_count = static_cast<uint32_t> (numSamples);
-        process.audio_inputs = &inputBuf;
-        process.audio_inputs_count = 1;
-        process.audio_outputs = &outputBuf;
-        process.audio_outputs_count = 1;
+        process.audio_inputs = inputBuf.channel_count > 0 ? &inputBuf : nullptr;
+        process.audio_inputs_count = inputBuf.channel_count > 0 ? 1 : 0;
+        process.audio_outputs = outputBuf.channel_count > 0 ? &outputBuf : nullptr;
+        process.audio_outputs_count = outputBuf.channel_count > 0 ? 1 : 0;
 
-        clapInputEvents.parameterEvents.clear();
+        clapInputEvents.clear();
         const auto params = getParameters();
         const auto numParams = yup::jmin (params.size(), clapParameterIds.size());
 
         for (std::size_t i = 0; i < numParams; ++i)
             clapInputEvents.addParameterValue (clapParameterIds[i], static_cast<double> (params[i]->getValue()));
 
+        for (const auto& metadata : midiBuffer)
+            clapInputEvents.addMidiMessage (metadata);
+
         process.in_events = &clapInputEvents.inputEvents;
         process.out_events = &clapOutputEvents.outputEvents;
 
-        // TODO: map MidiBuffer to CLAP event list in a later task
+        outputMidiBuffer.clear();
+        clapOutputEvents.midiOutput = &outputMidiBuffer;
 
         clapPlugin->process (clapPlugin, &process);
+
+        clapOutputEvents.midiOutput = nullptr;
+        midiBuffer.clear();
+        midiBuffer.addEvents (outputMidiBuffer, 0, -1, 0);
     }
 
     //==============================================================================
@@ -414,6 +555,28 @@ private:
             }
         }
 
+        auto* notePortsExt = reinterpret_cast<const clap_plugin_note_ports_t*> (
+            plugin->get_extension (plugin, CLAP_EXT_NOTE_PORTS));
+
+        if (notePortsExt != nullptr)
+        {
+            const uint32_t numInputs = notePortsExt->count (plugin, true);
+            for (uint32_t i = 0; i < numInputs; ++i)
+            {
+                clap_note_port_info_t info {};
+                if (notePortsExt->get (plugin, i, true, &info))
+                    inputs.emplace_back (String (info.name), AudioBus::Type::MIDI, AudioBus::Direction::Input, 1);
+            }
+
+            const uint32_t numOutputs = notePortsExt->count (plugin, false);
+            for (uint32_t i = 0; i < numOutputs; ++i)
+            {
+                clap_note_port_info_t info {};
+                if (notePortsExt->get (plugin, i, false, &info))
+                    outputs.emplace_back (String (info.name), AudioBus::Type::MIDI, AudioBus::Direction::Output, 1);
+            }
+        }
+
         return AudioBusLayout (std::move (inputs), std::move (outputs));
     }
 
@@ -445,6 +608,23 @@ private:
         }
     }
 
+    void updateRenderMode()
+    {
+        if (clapPlugin == nullptr)
+            return;
+
+        auto* renderExt = reinterpret_cast<const clap_plugin_render_t*> (
+            clapPlugin->get_extension (clapPlugin, CLAP_EXT_RENDER));
+
+        if (renderExt != nullptr && renderExt->set != nullptr)
+            renderExt->set (clapPlugin, isNonRealtime() ? CLAP_RENDER_OFFLINE : CLAP_RENDER_REALTIME);
+    }
+
+    void nonRealtimeStateChanged() override
+    {
+        updateRenderMode();
+    }
+
     AudioPluginHostContext hostContext;
     std::unique_ptr<CLAPModule> clapModule;
     std::unique_ptr<YUPCLAPHost> yupHost;
@@ -453,6 +633,7 @@ private:
     CLAPOutputEvents clapOutputEvents;
     std::vector<const float*> preparedInPtrs;
     std::vector<float*> preparedOutPtrs;
+    MidiBuffer outputMidiBuffer;
     std::vector<clap_id> clapParameterIds;
     int currentPreset = 0;
 };
@@ -472,14 +653,18 @@ String CLAPFormat::getFormatName() const
     return "CLAP";
 }
 
+StringArray CLAPFormat::getFileExtensions() const
+{
+    return { ".clap" };
+}
+
 FileSearchPath CLAPFormat::getDefaultSearchPaths() const
 {
     FileSearchPath paths;
 
 #if YUP_MAC
     paths.add (File ("/Library/Audio/Plug-Ins/CLAP"));
-    paths.add (File::getSpecialLocation (File::userHomeDirectory)
-                   .getChildFile ("Library/Audio/Plug-Ins/CLAP"));
+    paths.add (File::getSpecialLocation (File::userHomeDirectory).getChildFile ("Library/Audio/Plug-Ins/CLAP"));
 #elif YUP_WINDOWS
     if (const char* pf = getenv ("CommonProgramFiles"))
         paths.add (File (String (pf) + "\\CLAP"));
@@ -578,6 +763,15 @@ ResultValue<std::vector<AudioPluginDescription>> CLAPFormat::scanFile (const Fil
                         if (portsExt->get (plugin, p, false, &info))
                             desc.numOutputChannels += static_cast<int> (info.channel_count);
                     }
+                }
+
+                auto* notePortsExt = reinterpret_cast<const clap_plugin_note_ports_t*> (
+                    plugin->get_extension (plugin, CLAP_EXT_NOTE_PORTS));
+
+                if (notePortsExt != nullptr)
+                {
+                    desc.numMidiInputPorts = static_cast<int> (notePortsExt->count (plugin, true));
+                    desc.numMidiOutputPorts = static_cast<int> (notePortsExt->count (plugin, false));
                 }
 
                 plugin->destroy (plugin);

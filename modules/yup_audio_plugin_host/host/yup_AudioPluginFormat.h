@@ -46,6 +46,21 @@ public:
     /** Returns a human-readable name for the format (e.g. "VST3"). */
     virtual String getFormatName() const = 0;
 
+    /**
+        Returns the file extensions this format recognises, including the leading dot
+        (e.g. { ".vst3" } or { ".clap" }).
+
+        The scanner uses these extensions to filter filesystem entries before calling
+        scanFile(). Return an empty array for registry-based formats (e.g. AUv2) that
+        do not perform file-system scanning — the scanner will call scanFile() with an
+        invalid File instead.
+
+        Platform-specific extensions (e.g. ".dll" on Windows, ".so" on Linux) should
+        be returned conditionally so only the relevant extensions are active on each
+        platform.
+    */
+    virtual StringArray getFileExtensions() const = 0;
+
     //==============================================================================
 
     /**

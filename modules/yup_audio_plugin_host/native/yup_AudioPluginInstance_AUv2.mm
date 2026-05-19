@@ -71,6 +71,14 @@ AudioPluginDescription descriptionFromComponent(AudioComponent comp,
     desc.isInstrument = (acd.componentType == kAudioUnitType_MusicDevice);
     desc.isEffect = (acd.componentType == kAudioUnitType_Effect || acd.componentType == kAudioUnitType_MusicEffect);
 
+    if (acd.componentType == kAudioUnitType_MusicDevice || acd.componentType == kAudioUnitType_MusicEffect || acd.componentType == kAudioUnitType_MIDIProcessor)
+    {
+        desc.numMidiInputPorts = 1;
+    }
+
+    if (acd.componentType == kAudioUnitType_MIDIProcessor)
+        desc.numMidiOutputPorts = 1;
+
     if (acd.componentType == kAudioUnitType_Effect || acd.componentType == kAudioUnitType_MusicEffect)
     {
         desc.numInputChannels = 2;
@@ -343,9 +351,24 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
 
         if (audioUnit != nullptr)
         {
-            AudioUnitUninitialize(audioUnit);
-            AudioComponentInstanceDispose(audioUnit);
+            // AudioComponentInstanceDispose must run on the main thread so that
+            // CoreAudio's internal timers (MAudioPluginInterface::OnTimer etc.)
+            // registered on CFRunLoopGetMain() are properly invalidated before
+            // the AudioUnit object is freed. Calling from a background thread
+            // leaves a window where those timers fire on freed memory.
+            AudioUnit capturedUnit = audioUnit;
             audioUnit = nullptr;
+
+            if ([NSThread isMainThread])
+            {
+                AudioComponentInstanceDispose (capturedUnit);
+            }
+            else
+            {
+                dispatch_sync (dispatch_get_main_queue(), ^{
+                    AudioComponentInstanceDispose (capturedUnit);
+                });
+            }
         }
     }
 
@@ -376,6 +399,7 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
 
         configureStreamFormat(sampleRateValue, numHostedChannels);
         installInputCallback();
+        installMIDIOutputCallback();
 
         if (![NSThread isMainThread])
         {
@@ -409,19 +433,37 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
             AudioUnitUninitialize(audioUnit);
     }
 
-    void processBlock(AudioBuffer<float>& audioBuffer, MidiBuffer&) override
+    void processBlock(AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer) override
     {
         ScopedNoDenormals noDenormals;
+
+        if (isBypassed())
+        {
+            processBlockBypassed(audioBuffer, midiBuffer);
+            return;
+        }
 
         const int numSamples = audioBuffer.getNumSamples();
         const int numChannels = audioBuffer.getNumChannels();
 
-        if (numSamples <= 0 || numChannels <= 0)
+        if (numSamples <= 0)
             return;
 
         if (numChannels > preparedNumChannels || numSamples > preparedMaxBlockSize)
         {
             jassertfalse;
+            return;
+        }
+
+        outputMidiBuffer.clear();
+        currentMidiOutputBuffer = &outputMidiBuffer;
+        sendMidiInputEvents(midiBuffer);
+
+        if (numChannels <= 0 || pluginDescription.numOutputChannels <= 0)
+        {
+            currentMidiOutputBuffer = nullptr;
+            midiBuffer.clear();
+            midiBuffer.addEvents(outputMidiBuffer, 0, -1, 0);
             return;
         }
 
@@ -454,6 +496,7 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
         currentInputBuffer = nullptr;
         currentInputNumChannels = 0;
         currentInputNumSamples = 0;
+        currentMidiOutputBuffer = nullptr;
 
         if (status != noErr)
         {
@@ -468,6 +511,9 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
                         abl->mBuffers[c].mData,
                         static_cast<std::size_t>(numSamples) * sizeof(float));
         }
+
+        midiBuffer.clear();
+        midiBuffer.addEvents(outputMidiBuffer, 0, -1, 0);
     }
 
     //==============================================================================
@@ -645,7 +691,7 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
     //==============================================================================
 
     static std::unique_ptr<AUv2Instance> create(const AudioPluginDescription& desc,
-                                                const AudioPluginHostContext&)
+                                                const AudioPluginHostContext& context)
     {
         // Parse "type/subt/mfgr" identifier
         const auto tokens = StringArray::fromTokens(desc.identifier, "/", "");
@@ -675,7 +721,9 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
 
         AudioBusLayout busLayout = makeBusLayout(desc, acd.componentType);
 
-        return std::make_unique<AUv2Instance>(desc, unit, std::move(busLayout));
+        auto instance = std::make_unique<AUv2Instance>(desc, unit, std::move(busLayout));
+        instance->setNonRealtime(context.isNonRealtime);
+        return instance;
     }
 
    private:
@@ -703,6 +751,12 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
 
         if (outputChannels > 0)
             outputs.emplace_back("Output", AudioBus::Type::Audio, AudioBus::Direction::Output, outputChannels);
+
+        if (desc.numMidiInputPorts > 0)
+            inputs.emplace_back("MIDI Input", AudioBus::Type::MIDI, AudioBus::Direction::Input, 1);
+
+        if (desc.numMidiOutputPorts > 0)
+            outputs.emplace_back("MIDI Output", AudioBus::Type::MIDI, AudioBus::Direction::Output, 1);
 
         return AudioBusLayout(std::move(inputs), std::move(outputs));
     }
@@ -885,6 +939,68 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
                              &callback, sizeof(callback));
     }
 
+    void installMIDIOutputCallback()
+    {
+        AUMIDIOutputCallbackStruct callback{};
+        callback.midiOutputCallback = midiOutputCallback;
+        callback.userData = this;
+
+        AudioUnitSetProperty(audioUnit,
+                             kAudioUnitProperty_MIDIOutputCallback,
+                             kAudioUnitScope_Global, 0,
+                             &callback, sizeof(callback));
+    }
+
+    void sendMidiInputEvents(const MidiBuffer& midiBuffer)
+    {
+        for (const auto& metadata : midiBuffer)
+        {
+            const auto message = metadata.getMessage();
+
+            if (message.isSysEx())
+            {
+                MusicDeviceSysEx(audioUnit,
+                                 message.getSysExData(),
+                                 static_cast<UInt32>(message.getSysExDataSize()));
+                continue;
+            }
+
+            const auto* data = message.getRawData();
+            const int size = message.getRawDataSize();
+
+            if (size <= 0)
+                continue;
+
+            MusicDeviceMIDIEvent(audioUnit,
+                                 data[0],
+                                 size > 1 ? data[1] : 0,
+                                 size > 2 ? data[2] : 0,
+                                 static_cast<UInt32>(jmax(0, metadata.samplePosition)));
+        }
+    }
+
+    static OSStatus midiOutputCallback(void* userData,
+                                       const AudioTimeStamp*,
+                                       UInt32,
+                                       const MIDIPacketList* packetList)
+    {
+        auto* instance = static_cast<AUv2Instance*>(userData);
+        if (instance == nullptr || instance->currentMidiOutputBuffer == nullptr || packetList == nullptr)
+            return noErr;
+
+        const MIDIPacket* packet = &packetList->packet[0];
+
+        for (UInt32 i = 0; i < packetList->numPackets; ++i)
+        {
+            instance->currentMidiOutputBuffer->addEvent(packet->data,
+                                                        packet->length,
+                                                        static_cast<int>(packet->timeStamp));
+            packet = MIDIPacketNext(packet);
+        }
+
+        return noErr;
+    }
+
     static std::size_t getAudioBufferListSize(int numChannels)
     {
         return sizeof(AudioBufferList) + static_cast<std::size_t>(jmax(0, numChannels - 1)) * sizeof(::AudioBuffer);
@@ -1049,7 +1165,9 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
     double renderSampleTime = 0.0;
     std::vector<AudioUnitParameterID> auParameterIds;
     AudioBuffer<float> inputBuffer;
+    MidiBuffer outputMidiBuffer;
     AudioBuffer<float>* currentInputBuffer = nullptr;
+    MidiBuffer* currentMidiOutputBuffer = nullptr;
     int currentInputNumChannels = 0;
     int currentInputNumSamples = 0;
     int preparedNumChannels = 0;
@@ -1070,6 +1188,11 @@ AudioPluginFormatType AUv2Format::getFormatType() const
 String AUv2Format::getFormatName() const
 {
     return "AUv2";
+}
+
+StringArray AUv2Format::getFileExtensions() const
+{
+    return {};
 }
 
 FileSearchPath AUv2Format::getDefaultSearchPaths() const

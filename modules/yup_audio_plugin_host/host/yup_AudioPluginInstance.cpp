@@ -22,6 +22,34 @@
 namespace yup
 {
 
+namespace
+{
+
+template <typename FloatType>
+void processPluginBypassedBlock (const AudioPluginDescription& description,
+                                 AudioBuffer<FloatType>& audioBuffer) noexcept
+{
+    const int numSamples = audioBuffer.getNumSamples();
+    const int numBufferChannels = audioBuffer.getNumChannels();
+    const int numInputs = jmin (description.numInputChannels, numBufferChannels);
+    const int numOutputs = jmin (description.numOutputChannels, numBufferChannels);
+    const int numChannelsToCopy = jmin (numInputs, numOutputs);
+
+    for (int channel = 0; channel < numChannelsToCopy; ++channel)
+    {
+        const auto* source = audioBuffer.getReadPointer (channel);
+        auto* destination = audioBuffer.getWritePointer (channel);
+
+        if (source != destination)
+            FloatVectorOperations::copy (destination, source, numSamples);
+    }
+
+    for (int channel = numChannelsToCopy; channel < numOutputs; ++channel)
+        audioBuffer.clear (channel, 0, numSamples);
+}
+
+} // namespace
+
 AudioPluginInstance::AudioPluginInstance (const AudioPluginDescription& description,
                                           AudioBusLayout busLayout)
     : AudioProcessor (description.name, std::move (busLayout))
@@ -39,6 +67,46 @@ const AudioPluginDescription& AudioPluginInstance::getDescription() const noexce
 AudioPluginFormatType AudioPluginInstance::getFormatType() const noexcept
 {
     return pluginDescription.formatType;
+}
+
+void AudioPluginInstance::setNonRealtime (bool shouldBeNonRealtime) noexcept
+{
+    if (nonRealtime == shouldBeNonRealtime)
+        return;
+
+    nonRealtime = shouldBeNonRealtime;
+    nonRealtimeStateChanged();
+}
+
+bool AudioPluginInstance::isNonRealtime() const noexcept
+{
+    return nonRealtime;
+}
+
+void AudioPluginInstance::setBypassed (bool shouldBeBypassed) noexcept
+{
+    if (bypassed == shouldBeBypassed)
+        return;
+
+    bypassed = shouldBeBypassed;
+    bypassStateChanged();
+}
+
+bool AudioPluginInstance::isBypassed() const noexcept
+{
+    return bypassed;
+}
+
+void AudioPluginInstance::processBlockBypassed (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer)
+{
+    ignoreUnused (midiBuffer);
+    processPluginBypassedBlock (pluginDescription, audioBuffer);
+}
+
+void AudioPluginInstance::processBlockBypassed (AudioBuffer<double>& audioBuffer, MidiBuffer& midiBuffer)
+{
+    ignoreUnused (midiBuffer);
+    processPluginBypassedBlock (pluginDescription, audioBuffer);
 }
 
 } // namespace yup

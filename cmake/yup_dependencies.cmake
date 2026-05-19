@@ -128,14 +128,19 @@ function (_yup_fetch_vst3sdk)
             get_target_property (vst3sdk_source_dir sdk SOURCE_DIR)
         endif()
 
-        if (vst3sdk_source_dir AND EXISTS "${vst3sdk_source_dir}/public.sdk/source/common/memorystream.cpp")
-            target_sources (yup_audio_plugin_host_vst3sdk INTERFACE
-                "${vst3sdk_source_dir}/public.sdk/source/common/memorystream.cpp")
+        set (vst3sdk_memorystream_source "${vst3sdk_source_dir}/public.sdk/source/common/memorystream.cpp")
+        if (vst3sdk_source_dir AND EXISTS "${vst3sdk_memorystream_source}")
+            target_sources (yup_audio_plugin_host_vst3sdk INTERFACE "${vst3sdk_memorystream_source}")
         endif()
 
-        if (vst3sdk_source_dir AND EXISTS "${vst3sdk_source_dir}/public.sdk/source/vst/hosting/parameterchanges.cpp")
-            target_sources (yup_audio_plugin_host_vst3sdk INTERFACE
-                "${vst3sdk_source_dir}/public.sdk/source/vst/hosting/parameterchanges.cpp")
+        set (vst3sdk_parameterchanges_source "${vst3sdk_source_dir}/public.sdk/source/vst/hosting/parameterchanges.cpp")
+        if (vst3sdk_source_dir AND EXISTS "${vst3sdk_parameterchanges_source}")
+            target_sources (yup_audio_plugin_host_vst3sdk INTERFACE "${vst3sdk_parameterchanges_source}")
+        endif()
+
+        set (vst3sdk_eventlist_source "${vst3sdk_source_dir}/public.sdk/source/vst/hosting/eventlist.cpp")
+        if (vst3sdk_source_dir AND EXISTS "${vst3sdk_eventlist_source}")
+            target_sources (yup_audio_plugin_host_vst3sdk INTERFACE "${vst3sdk_eventlist_source}")
         endif()
     endif()
 endfunction()

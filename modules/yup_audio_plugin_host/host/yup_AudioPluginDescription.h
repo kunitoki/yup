@@ -68,6 +68,12 @@ struct AudioPluginDescription
     /** Reported output channel count (sum across main audio output buses). */
     int numOutputChannels = 0;
 
+    /** Reported MIDI input port count. */
+    int numMidiInputPorts = 0;
+
+    /** Reported MIDI output port count. */
+    int numMidiOutputPorts = 0;
+
     bool operator== (const AudioPluginDescription& other) const noexcept
     {
         return formatType == other.formatType
@@ -80,7 +86,9 @@ struct AudioPluginDescription
             && isInstrument == other.isInstrument
             && isEffect == other.isEffect
             && numInputChannels == other.numInputChannels
-            && numOutputChannels == other.numOutputChannels;
+            && numOutputChannels == other.numOutputChannels
+            && numMidiInputPorts == other.numMidiInputPorts
+            && numMidiOutputPorts == other.numMidiOutputPorts;
     }
 
     bool operator!= (const AudioPluginDescription& other) const noexcept

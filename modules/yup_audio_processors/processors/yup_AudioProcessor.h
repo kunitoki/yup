@@ -101,6 +101,26 @@ public:
     */
     virtual void processBlock (AudioBuffer<double>& audioBuffer, MidiBuffer& midiBuffer) {}
 
+    /**
+        Processes a block while the processor is bypassed.
+
+        The default implementation leaves audio and MIDI unchanged.
+
+        @param audioBuffer The audio buffer to process.
+        @param midiBuffer The MIDI buffer to process.
+    */
+    virtual void processBlockBypassed (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer);
+
+    /**
+        Processes a block while the processor is bypassed.
+
+        The default implementation leaves audio and MIDI unchanged.
+
+        @param audioBuffer The audio buffer to process.
+        @param midiBuffer The MIDI buffer to process.
+    */
+    virtual void processBlockBypassed (AudioBuffer<double>& audioBuffer, MidiBuffer& midiBuffer);
+
     /** Flushes the processor. */
     virtual void flush() {}
 

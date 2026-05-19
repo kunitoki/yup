@@ -25,26 +25,6 @@ namespace yup
 namespace
 {
 
-bool canScanFileWithFormat (AudioPluginFormatType type, const File& file)
-{
-    switch (type)
-    {
-        case AudioPluginFormatType::vst3:
-            return file.hasFileExtension (".vst3");
-
-        case AudioPluginFormatType::clap:
-            return file.hasFileExtension (".clap");
-
-        case AudioPluginFormatType::audioUnit:
-            return false;
-
-        default:
-            break;
-    }
-
-    return false;
-}
-
 struct FileScanTask
 {
     File file;
@@ -128,35 +108,45 @@ AudioPluginScanner::ScanResult AudioPluginScanner::scan (const FileSearchPath& s
 {
     ScanResult result;
 
-    // AUv2 does not use file system scanning; delegate directly if registered.
-    if (auto* auFormat = getFormatForType (AudioPluginFormatType::audioUnit))
+    for (const auto& format : formats)
     {
-        // AUv2 scanFile() with an invalid File triggers registry enumeration
-        auto auResult = auFormat->scanFile (File {});
-        if (auResult.wasOk())
+        if (format->getFileExtensions().isEmpty())
         {
-            auto descriptions = auResult.getValue();
-            result.discovered.insert (result.discovered.end(),
-                                      descriptions.begin(),
-                                      descriptions.end());
+            auto scanResult = format->scanFile (File {});
+            if (scanResult.wasOk())
+            {
+                auto descriptions = scanResult.getValue();
+                result.discovered.insert (result.discovered.end(),
+                                          descriptions.begin(),
+                                          descriptions.end());
+            }
         }
     }
 
     std::vector<FileScanTask> tasks;
     const int numPaths = searchPath.getNumPaths();
 
-    for (int p = 0; p < numPaths; ++p)
+    for (const auto& format : formats)
     {
-        Array<File> files;
-        searchPath[p].findChildFiles (files, File::findFilesAndDirectories, true, "*", File::FollowSymlinks::noCycles);
-
-        for (const auto& file : files)
+        String wildcardPattern;
+        for (const auto& ext : format->getFileExtensions())
         {
-            for (const auto& format : formats)
-            {
-                if (! canScanFileWithFormat (format->getFormatType(), file))
-                    continue;
+            if (wildcardPattern.isNotEmpty())
+                wildcardPattern += ";";
 
+            wildcardPattern += "*" + ext;
+        }
+
+        if (wildcardPattern.isEmpty())
+            continue;
+
+        for (int p = 0; p < numPaths; ++p)
+        {
+            Array<File> files;
+            searchPath[p].findChildFiles (files, File::findFilesAndDirectories, true, wildcardPattern, File::FollowSymlinks::noCycles);
+
+            for (const auto& file : files)
+            {
                 FileScanTask task;
                 task.file = file;
                 task.format = format.get();

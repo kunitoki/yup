@@ -85,8 +85,8 @@ public:
         matches the format. If a format returns a success, its results are
         appended; if it fails, the path is added to ScanResult::failedPaths.
 
-        AUv2 scanning enumerates the AudioComponent registry and does not walk
-        the search path — pass an empty FileSearchPath when only AUv2 is registered.
+        Formats that return an empty array from getFileExtensions() (e.g. AUv2) use
+        registry-based discovery and are scanned independently of the search path.
     */
     ScanResult scan (const FileSearchPath& searchPath);
 

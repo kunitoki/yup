@@ -38,6 +38,7 @@ public:
 
     AudioPluginFormatType getFormatType() const override;
     String getFormatName() const override;
+    StringArray getFileExtensions() const override;
 
     /** Returns an empty FileSearchPath — AUv2 uses AudioComponent registry. */
     FileSearchPath getDefaultSearchPaths() const override;

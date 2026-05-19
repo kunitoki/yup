@@ -38,6 +38,7 @@ public:
 
     AudioPluginFormatType getFormatType() const override;
     String getFormatName() const override;
+    StringArray getFileExtensions() const override;
 
     FileSearchPath getDefaultSearchPaths() const override;
 

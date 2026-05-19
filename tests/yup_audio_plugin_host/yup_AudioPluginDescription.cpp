@@ -16,6 +16,13 @@ TEST (AudioPluginDescriptionTests, IsInstrumentDefaultsFalse)
     EXPECT_FALSE (desc.isInstrument);
 }
 
+TEST (AudioPluginDescriptionTests, MidiPortCountsDefaultToZero)
+{
+    AudioPluginDescription desc;
+    EXPECT_EQ (0, desc.numMidiInputPorts);
+    EXPECT_EQ (0, desc.numMidiOutputPorts);
+}
+
 TEST (AudioPluginDescriptionTests, EqualityMatchesAllFields)
 {
     AudioPluginDescription a;
@@ -40,4 +47,10 @@ TEST (AudioPluginHostContextTests, DefaultMaxBlockSize)
 {
     AudioPluginHostContext ctx;
     EXPECT_EQ (512, ctx.maxBlockSize);
+}
+
+TEST (AudioPluginHostContextTests, DefaultsToRealtimeRendering)
+{
+    AudioPluginHostContext ctx;
+    EXPECT_FALSE (ctx.isNonRealtime);
 }

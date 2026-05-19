@@ -25,6 +25,13 @@
 
 #include "yup_audio_plugin_host.h"
 
+#include <cstring>
+#include <deque>
+#include <map>
+#include <string>
+#include <type_traits>
+#include <vector>
+
 //==============================================================================
 #include "host/yup_AudioPluginScanner.cpp"
 #include "host/yup_AudioPluginInstance.cpp"
@@ -38,24 +45,18 @@
 #include <pluginterfaces/vst/ivstprocesscontext.h>
 #include <pluginterfaces/vst/ivstparameterchanges.h>
 #include <pluginterfaces/vst/ivstevents.h>
+#include <pluginterfaces/vst/ivstmidicontrollers.h>
 #include <pluginterfaces/vst/ivsteditcontroller.h>
 #include <pluginterfaces/vst/ivsthostapplication.h>
 #include <pluginterfaces/vst/vstpresetkeys.h>
+#include <pluginterfaces/gui/iplugview.h>
 #include <public.sdk/source/common/memorystream.h>
+#include <public.sdk/source/vst/hosting/eventlist.h>
 #include <public.sdk/source/vst/hosting/parameterchanges.h>
 
-#if YUP_WINDOWS
-#include <windows.h>
-using ModuleHandle = HMODULE;
-#define loadModule(path) LoadLibraryA (path)
-#define getFunctionAddress GetProcAddress
-#define unloadModule FreeLibrary
-#elif YUP_MAC || YUP_LINUX
-#include <dlfcn.h>
-using ModuleHandle = void*;
-#define loadModule(path) dlopen (path, RTLD_LAZY | RTLD_LOCAL)
-#define getFunctionAddress dlsym
-#define unloadModule dlclose
+#if YUP_MAC
+#import <AppKit/AppKit.h>
+#include <CoreFoundation/CoreFoundation.h>
 #endif
 
 #include "native/yup_AudioPluginInstance_VST3.cpp"
@@ -88,6 +89,7 @@ using CLAPModuleHandle = void*;
 #import <AudioToolbox/AudioToolbox.h>
 #import <AudioToolbox/AudioUnitUtilities.h>
 #import <CoreAudio/CoreAudio.h>
+#import <CoreMIDI/CoreMIDI.h>
 
 #include "native/yup_AudioPluginInstance_AUv2.mm"
 #endif

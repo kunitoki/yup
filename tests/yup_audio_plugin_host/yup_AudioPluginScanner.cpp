@@ -19,6 +19,8 @@ public:
 
     String getFormatName() const override { return "Fake"; }
 
+    StringArray getFileExtensions() const override { return { ".vst3" }; }
+
     FileSearchPath getDefaultSearchPaths() const override { return {}; }
 
     ResultValue<std::vector<AudioPluginDescription>> scanFile (const File& file) override

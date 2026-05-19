@@ -40,6 +40,9 @@ struct AudioPluginHostContext
     /** True to prefer double-precision processing where the plugin supports it. */
     bool preferDoublePrecision = false;
 
+    /** True when the host is preparing the plugin for offline/non-realtime rendering. */
+    bool isNonRealtime = false;
+
     /** Optional playhead — the host sets this before processing. */
     AudioPlayHead* playHead = nullptr;
 
