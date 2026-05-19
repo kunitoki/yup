@@ -45,13 +45,23 @@ using namespace yup;
 namespace
 {
 
+// MSVC strict-mode C++20 two-phase lookup fails to parse 4-argument template
+// instantiations with dependent types inside template struct bodies (C2059).
+// These 2-arg namespace-scope aliases sidestep that by reducing each problematic
+// 4-arg Pointer<Format, Endian, Interleaving, Constness> to a 2-arg wrapper.
+template <class Format, class Endian>
+using ADNonInterleavedWritable = AudioData::Pointer<Format, Endian, AudioData::NonInterleaved, AudioData::NonConst>;
+
+template <class Format, class Endian>
+using ADNonInterleavedConst = AudioData::Pointer<Format, Endian, AudioData::NonInterleaved, AudioData::Const>;
+
 template <class F1, class E1, class F2, class E2>
 struct RoundTripConversionTest
 {
-    using WritablePtr = AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::NonConst>;
-    using ConstPtr = AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::Const>;
-    using F2WritablePtr = AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::NonConst>;
-    using F2ConstPtr = AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::Const>;
+    using WritablePtr = ADNonInterleavedWritable<F1, E1>;
+    using ConstPtr = ADNonInterleavedConst<F1, E1>;
+    using F2WritablePtr = ADNonInterleavedWritable<F2, E2>;
+    using F2ConstPtr = ADNonInterleavedConst<F2, E2>;
     using FwdConv = AudioData::ConverterInstance<ConstPtr, F2WritablePtr>;
     using RevConv = AudioData::ConverterInstance<F2ConstPtr, WritablePtr>;
 
@@ -108,11 +118,18 @@ struct RoundTripConversionTest
     }
 };
 
+// 3-arg wrappers that fix the same MSVC 4-arg issue in AllEndiannessTest.
+template <class F1, class E1, class F2>
+using RoundTripBigEndian = RoundTripConversionTest<F1, E1, F2, AudioData::BigEndian>;
+
+template <class F1, class E1, class F2>
+using RoundTripLittleEndian = RoundTripConversionTest<F1, E1, F2, AudioData::LittleEndian>;
+
 template <class F1, class E1, class FormatType>
 struct AllEndiannessTest
 {
-    using BigTest = RoundTripConversionTest<F1, E1, FormatType, AudioData::BigEndian>;
-    using LittleTest = RoundTripConversionTest<F1, E1, FormatType, AudioData::LittleEndian>;
+    using BigTest = RoundTripBigEndian<F1, E1, FormatType>;
+    using LittleTest = RoundTripLittleEndian<F1, E1, FormatType>;
 
     static void run (Random& r)
     {
