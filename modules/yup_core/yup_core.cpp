@@ -341,6 +341,11 @@ extern char** environ;
 #include "files/yup_Watchdog.cpp"
 
 //==============================================================================
+#if YUP_MODULE_AVAILABLE_sqlite3_library
+#include "database/yup_SqliteDatabase.cpp"
+#endif
+
+//==============================================================================
 namespace yup
 {
 /*
