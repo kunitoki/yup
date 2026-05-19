@@ -45,6 +45,9 @@ public:
     /** Stable factory key for the built-in gain node. */
     static constexpr const char* gainIdentifier = "internal.gain";
 
+    /** Stable factory key for the built-in latency node. */
+    static constexpr const char* latencyIdentifier = "internal.latency";
+
     /** Stable factory key for the built-in low-pass filter node. */
     static constexpr const char* lpfIdentifier = "internal.lpf";
 
@@ -64,7 +67,7 @@ public:
 
     //==============================================================================
     using ProcessorFactory = std::function<yup::ResultValue<std::unique_ptr<yup::AudioProcessor>> (const yup::AudioGraphNodeProperties&)>;
-    using ViewFactory = std::function<std::unique_ptr<yup::AudioGraphNodeView> (yup::AudioGraphNodeID, yup::AudioProcessor*)>;
+    using ViewFactory = std::function<std::unique_ptr<yup::AudioGraphNodeView> (yup::AudioGraphNodeID, yup::AudioProcessor*, yup::AudioGraphProcessor*)>;
 
     //==============================================================================
     struct Entry
@@ -88,7 +91,7 @@ public:
         {
             return yup::makeResultValueOk (std::make_unique<OscillatorProcessor>());
         },
-            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc) -> std::unique_ptr<yup::AudioGraphNodeView>
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*) -> std::unique_ptr<yup::AudioGraphNodeView>
         {
             auto* osc = dynamic_cast<OscillatorProcessor*> (proc);
             if (osc == nullptr)
@@ -103,7 +106,7 @@ public:
         {
             return yup::makeResultValueOk (std::make_unique<GainProcessor>());
         },
-            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc) -> std::unique_ptr<yup::AudioGraphNodeView>
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*) -> std::unique_ptr<yup::AudioGraphNodeView>
         {
             auto* gain = dynamic_cast<GainProcessor*> (proc);
             if (gain == nullptr)
@@ -113,12 +116,27 @@ public:
         }
         };
 
+        entries[latencyIdentifier] = {
+            [] (const yup::AudioGraphNodeProperties&) -> yup::ResultValue<std::unique_ptr<yup::AudioProcessor>>
+        {
+            return yup::makeResultValueOk (std::make_unique<LatencyProcessor>());
+        },
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor* graph) -> std::unique_ptr<yup::AudioGraphNodeView>
+        {
+            auto* latency = dynamic_cast<LatencyProcessor*> (proc);
+            if (latency == nullptr)
+                return nullptr;
+
+            return std::make_unique<LatencyNodeView> (nodeID, *latency, graph);
+        }
+        };
+
         entries[lpfIdentifier] = {
             [] (const yup::AudioGraphNodeProperties&) -> yup::ResultValue<std::unique_ptr<yup::AudioProcessor>>
         {
             return yup::makeResultValueOk (std::make_unique<LowPassFilterProcessor>());
         },
-            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc) -> std::unique_ptr<yup::AudioGraphNodeView>
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*) -> std::unique_ptr<yup::AudioGraphNodeView>
         {
             auto* lpf = dynamic_cast<LowPassFilterProcessor*> (proc);
             if (lpf == nullptr)
@@ -133,7 +151,7 @@ public:
         {
             return yup::makeResultValueOk (std::make_unique<SamplePlayerProcessor>());
         },
-            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc) -> std::unique_ptr<yup::AudioGraphNodeView>
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*) -> std::unique_ptr<yup::AudioGraphNodeView>
         {
             auto* samplePlayer = dynamic_cast<SamplePlayerProcessor*> (proc);
             if (samplePlayer == nullptr)
@@ -168,7 +186,7 @@ public:
             return loadPluginFromProperties (props);
         };
 
-        auto viewFactory = [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc)
+        auto viewFactory = [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*)
             -> std::unique_ptr<yup::AudioGraphNodeView>
         {
             auto* instance = dynamic_cast<yup::AudioPluginInstance*> (proc);
@@ -316,23 +334,26 @@ public:
         @param nodeID      The stable graph node identifier.
         @param identifier  The registry key identifying the node type.
         @param proc        The processor that was created for this node.
+        @param graph       The graph that owns the node, used by views that need to
+                           commit metadata-affecting parameter changes.
         @returns           A new view, or nullptr if the identifier is unknown.
     */
     std::unique_ptr<yup::AudioGraphNodeView> createView (yup::AudioGraphNodeID nodeID,
                                                          const yup::String& identifier,
-                                                         yup::AudioProcessor* proc)
+                                                         yup::AudioProcessor* proc,
+                                                         yup::AudioGraphProcessor* graph = nullptr)
     {
         auto it = entries.find (identifier);
         if (it == entries.end())
             return nullptr;
 
-        return it->second.createView (nodeID, proc);
+        return it->second.createView (nodeID, proc, graph);
     }
 
     //==============================================================================
     std::vector<yup::String> getInternalNodeIdentifiers() const
     {
-        return { oscillatorIdentifier, gainIdentifier, lpfIdentifier, samplePlayerIdentifier };
+        return { oscillatorIdentifier, gainIdentifier, latencyIdentifier, lpfIdentifier, samplePlayerIdentifier };
     }
 
     //==============================================================================
@@ -349,6 +370,8 @@ public:
             return "Oscillator";
         if (id == gainIdentifier)
             return "Gain";
+        if (id == latencyIdentifier)
+            return "Latency";
         if (id == lpfIdentifier)
             return "Low Pass Filter";
         if (id == samplePlayerIdentifier)

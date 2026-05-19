@@ -36,6 +36,7 @@
 
 #include "nodes/OscillatorNode.h"
 #include "nodes/GainNode.h"
+#include "nodes/LatencyNode.h"
 #include "nodes/LowPassFilterNode.h"
 #include "nodes/SamplePlayerNode.h"
 #include "nodes/PluginNodeView.h"

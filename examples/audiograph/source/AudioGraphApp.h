@@ -411,7 +411,7 @@ private:
                 continue;
 
             auto* proc = graph->getNodeProcessor (nodeID);
-            auto view = nodeRegistry.createView (nodeID, props->identifier, proc);
+            auto view = nodeRegistry.createView (nodeID, props->identifier, proc, graph.get());
 
             if (view != nullptr)
             {
@@ -441,8 +441,9 @@ private:
         auto internalSubMenu = yup::PopupMenu::create();
         internalSubMenu->addItem ("Oscillator", 1);
         internalSubMenu->addItem ("Gain", 2);
-        internalSubMenu->addItem ("Low Pass Filter", 3);
-        internalSubMenu->addItem ("Sample Player", 4);
+        internalSubMenu->addItem ("Latency", 3);
+        internalSubMenu->addItem ("Low Pass Filter", 4);
+        internalSubMenu->addItem ("Sample Player", 5);
 
         activeMenu = yup::PopupMenu::create (options);
         activeMenu->addSubMenu ("Internal Nodes", internalSubMenu);
@@ -477,11 +478,12 @@ private:
             const yup::String internalIds[] = {
                 NodeRegistry::oscillatorIdentifier,
                 NodeRegistry::gainIdentifier,
+                NodeRegistry::latencyIdentifier,
                 NodeRegistry::lpfIdentifier,
                 NodeRegistry::samplePlayerIdentifier
             };
 
-            if (selectedID >= 1 && selectedID <= 4)
+            if (selectedID >= 1 && selectedID <= 5)
             {
                 addInternalNode (internalIds[selectedID - 1], pendingMenuCanvasPos);
             }
@@ -524,7 +526,7 @@ private:
         graph->commitChanges();
 
         auto* rawProc = graph->getNodeProcessor (nodeID);
-        auto view = nodeRegistry.createView (nodeID, identifier, rawProc);
+        auto view = nodeRegistry.createView (nodeID, identifier, rawProc, graph.get());
         if (view != nullptr)
         {
             graphComponent->addNodeView (nodeID, std::move (view), canvasPos);
@@ -566,7 +568,7 @@ private:
         graph->commitChanges();
 
         auto* rawProc = graph->getNodeProcessor (nodeID);
-        auto view = nodeRegistry.createView (nodeID, props.identifier, rawProc);
+        auto view = nodeRegistry.createView (nodeID, props.identifier, rawProc, graph.get());
         if (view != nullptr)
         {
             graphComponent->addNodeView (nodeID, std::move (view), canvasPos);
