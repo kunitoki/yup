@@ -78,6 +78,7 @@ if (YUP_BUILD_EXAMPLES)
     add_subdirectory (examples/graphics)
     if (YUP_PLATFORM_DESKTOP)
         add_subdirectory (examples/plugin)
+        add_subdirectory (examples/audiograph)
     endif()
 endif()
 

@@ -48,9 +48,11 @@ endif()
 
 # ==== Prepare target
 set (additional_modules "")
+set (additional_definitions "")
 if (YUP_PLATFORM_DESKTOP AND NOT YUP_PLATFORM_WINDOWS)
     set (additional_modules yup::yup_python)
 endif()
+
 
 yup_standalone_app (
     TARGET_NAME ${target_name}
@@ -60,6 +62,7 @@ yup_standalone_app (
     TARGET_APP_NAMESPACE "org.yup"
     DEFINITIONS
         YUP_EXAMPLE_GRAPHICS_RIVE_FILE="${rive_file}"
+        ${additional_definitions}
     PRELOAD_FILES
         "${CMAKE_CURRENT_LIST_DIR}/${rive_file}@${rive_file}"
     MODULES

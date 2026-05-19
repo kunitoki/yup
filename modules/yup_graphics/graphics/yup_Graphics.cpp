@@ -728,6 +728,9 @@ void Graphics::fillFittedText (const StyledText& text, const Rectangle<float>& r
 
 void Graphics::fillFittedText (const String& text, const Font& font, const Rectangle<float>& rect, Justification justification)
 {
+    if (text.isEmpty())
+        return;
+
     StyledText styledText;
     {
         auto modifier = styledText.startUpdate();
@@ -765,6 +768,9 @@ void Graphics::strokeFittedText (const StyledText& text, const Rectangle<float>&
 
 void Graphics::strokeFittedText (const String& text, const Font& font, const Rectangle<float>& rect, Justification justification)
 {
+    if (text.isEmpty())
+        return;
+
     StyledText styledText;
     {
         auto modifier = styledText.startUpdate();

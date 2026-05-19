@@ -295,6 +295,34 @@ public:
             return FloatType (1);
     }
 
+    /** Evaluates a Tukey window at a continuous normalised phase value.
+
+        Unlike the discrete tukey(n, N, alpha) variant which operates on integer sample
+        indices, this overload takes a continuous phase value in [0, 1] directly. It is
+        useful for per-sample window evaluation in oscillators and modulators where no
+        fixed buffer length exists.
+
+        @param phi    Normalised phase in [0, 1]
+        @param alpha  Taper ratio in (0, 1]: 1.0 produces a full Hann shape, values
+                      near 0 approach a rectangular window
+        @returns      Window amplitude in [0, 1]
+    */
+    static FloatType tukeyFromPhase (FloatType phi, FloatType alpha = FloatType (0.5)) noexcept
+    {
+        const FloatType halfAlpha = alpha / FloatType (2);
+
+        if (halfAlpha <= FloatType (0))
+            return FloatType (1);
+
+        if (phi < halfAlpha)
+            return FloatType (0.5) * (FloatType (1) + std::cos (MathConstants<FloatType>::pi * (phi / halfAlpha - FloatType (1))));
+
+        if (phi > FloatType (1) - halfAlpha)
+            return FloatType (0.5) * (FloatType (1) + std::cos (MathConstants<FloatType>::pi * ((phi - FloatType (1) + halfAlpha) / halfAlpha)));
+
+        return FloatType (1);
+    }
+
     static FloatType bartlett (int n, int N) noexcept
     {
         return FloatType (1) - FloatType (2) * std::abs (n - (N - 1) / FloatType (2)) / (N - 1);

@@ -65,7 +65,7 @@ public:
 
         @returns A reference-counted pointer to the global ApplicationTheme.
     */
-    static ApplicationTheme::ConstPtr getGlobalTheme();
+    static ApplicationTheme::Ptr getGlobalTheme();
 
     //==============================================================================
     /**
@@ -119,14 +119,38 @@ public:
     }
 
     //==============================================================================
-    /** */
-    static Color findColor (const Identifier& colorId);
+    /** Returns a color from the global theme.
+    
+        @param colorId       The identifier for the color to retrieve.
+    */
+    static std::optional<Color> findColor (const Identifier& colorId);
 
-    /** */
+    /** Sets a color in the global theme.
+
+        @param colorId       The identifier for the color to set.
+        @param color         The color to set.
+    */
     void setColor (const Identifier& colorId, const Color& color);
 
-    /** */
+    /** Sets multiple colors in the global theme.
+
+        @param colors        An initializer list of color identifier and color pairs.
+    */
     void setColors (std::initializer_list<std::pair<const Identifier&, const Color&>> colors);
+
+    //==============================================================================
+    /** Returns a named float metric from the global theme.
+    
+        Returns @p defaultValue when the metric has not been registered.
+    */
+    static std::optional<float> findMetric (const Identifier& metricId);
+
+    /** Registers a named float metric in this theme. 
+    
+        @param metricId      The identifier for the metric to set.
+        @param value         The value to set for the metric.
+    */
+    void setMetric (const Identifier& metricId, float value);
 
     //==============================================================================
     /**
@@ -164,6 +188,7 @@ private:
     //==============================================================================
     std::unordered_map<std::type_index, ComponentStyle::Ptr> componentStyles;
     std::unordered_map<Identifier, Color> defaultColors;
+    std::unordered_map<Identifier, float> defaultMetrics;
     Font defaultFont;
     Font defaultIconFont;
 
