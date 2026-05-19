@@ -1,4 +1,4 @@
-<img src="./logo.png" />
+<img src="./backdrop.jpg" />
 
 # YUP! Cross-Platform Application And Plugin Development Library
 
@@ -26,8 +26,8 @@
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
-  <a href="./examples/graphics/source/examples/AudioGraph.h"><img src="./docs/images/yup_audio_graph.png" style="width:49%;" /></a>
-  <a href="./examples/graphics/source/examples/AudioFileDemo.h"><img src="./docs/images/yup_audio_waveform.png" style="width:49%;" /></a>
+  <a href="./examples/graphics/source/examples/AudioGraph.h"><img src="./docs/images/yup_audio_graph.png" style="width:56.5%;" /></a>
+  <a href="./examples/graphics/source/examples/AudioFileDemo.h"><img src="./docs/images/yup_audio_waveform.png" style="width:41.5%;" /></a>
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
