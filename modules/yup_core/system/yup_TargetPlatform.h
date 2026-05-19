@@ -70,7 +70,7 @@
 //==============================================================================
 #if defined(_WIN32) || defined(_WIN64)
 #define YUP_WINDOWS 1
-#define F1
+#define YUP_DESKTOP 1
 
 #elif defined(ANDROID) || defined(__ANDROID__)
 #define YUP_ANDROID 1

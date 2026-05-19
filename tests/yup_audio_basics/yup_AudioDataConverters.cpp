@@ -44,34 +44,16 @@ using namespace yup;
 
 namespace
 {
-
-// MSVC strict-mode C++20 two-phase lookup fails to parse 4-argument template
-// instantiations with dependent types inside template struct bodies (C2059).
-// These 2-arg namespace-scope aliases sidestep that by reducing each problematic
-// 4-arg Pointer<Format, Endian, Interleaving, Constness> to a 2-arg wrapper.
-template <class Format, class Endian>
-using ADNonInterleavedWritable = AudioData::Pointer<Format, Endian, AudioData::NonInterleaved, AudioData::NonConst>;
-
-template <class Format, class Endian>
-using ADNonInterleavedConst = AudioData::Pointer<Format, Endian, AudioData::NonInterleaved, AudioData::Const>;
-
 template <class F1, class E1, class F2, class E2>
-struct RoundTripConversionTest
+void testRoundTripConversion (Random& r)
 {
-    using WritablePtr = ADNonInterleavedWritable<F1, E1>;
-    using ConstPtr = ADNonInterleavedConst<F1, E1>;
-    using F2WritablePtr = ADNonInterleavedWritable<F2, E2>;
-    using F2ConstPtr = ADNonInterleavedConst<F2, E2>;
-    using FwdConv = AudioData::ConverterInstance<ConstPtr, F2WritablePtr>;
-    using RevConv = AudioData::ConverterInstance<F2ConstPtr, WritablePtr>;
-
-    static void run (Random& r, bool inPlace)
+    auto testWithInPlace = [&] (bool inPlace)
     {
         const int numSamples = 2048;
         int32 original[numSamples], converted[numSamples], reversed[numSamples];
 
         {
-            WritablePtr d (original);
+            AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::NonConst> d (original);
             bool clippingFailed = false;
 
             for (int i = 0; i < numSamples / 2; ++i)
@@ -89,10 +71,14 @@ struct RoundTripConversionTest
             EXPECT_FALSE (clippingFailed);
         }
 
-        std::unique_ptr<AudioData::Converter> conv (new FwdConv());
+        // convert data from the source to dest format..
+        std::unique_ptr<AudioData::Converter> conv (new AudioData::ConverterInstance<AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::Const>,
+                                                                                     AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::NonConst>>());
         conv->convertSamples (inPlace ? reversed : converted, original, numSamples);
 
-        conv.reset (new RevConv());
+        // ..and back again..
+        conv.reset (new AudioData::ConverterInstance<AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::Const>,
+                                                     AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::NonConst>>());
         if (! inPlace)
             zeromem (reversed, sizeof (reversed));
 
@@ -100,11 +86,11 @@ struct RoundTripConversionTest
 
         {
             int biggestDiff = 0;
-            ConstPtr d1 (original);
-            ConstPtr d2 (reversed);
+            AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::Const> d1 (original);
+            AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::Const> d2 (reversed);
 
-            const int errorMargin = 2 * ConstPtr::get32BitResolution()
-                                  + F2ConstPtr::get32BitResolution();
+            const int errorMargin = 2 * AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::Const>::get32BitResolution()
+                                  + AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::Const>::get32BitResolution();
 
             for (int i = 0; i < numSamples; ++i)
             {
@@ -115,52 +101,36 @@ struct RoundTripConversionTest
 
             EXPECT_LE (biggestDiff, errorMargin);
         }
-    }
-};
+    };
 
-// 3-arg wrappers that fix the same MSVC 4-arg issue in AllEndiannessTest.
-template <class F1, class E1, class F2>
-using RoundTripBigEndian = RoundTripConversionTest<F1, E1, F2, AudioData::BigEndian>;
-
-template <class F1, class E1, class F2>
-using RoundTripLittleEndian = RoundTripConversionTest<F1, E1, F2, AudioData::LittleEndian>;
+    testWithInPlace (false);
+    testWithInPlace (true);
+}
 
 template <class F1, class E1, class FormatType>
-struct AllEndiannessTest
+void testAllEndianness (Random& r)
 {
-    using BigTest = RoundTripBigEndian<F1, E1, FormatType>;
-    using LittleTest = RoundTripLittleEndian<F1, E1, FormatType>;
-
-    static void run (Random& r)
-    {
-        BigTest::run (r, false);
-        BigTest::run (r, true);
-        LittleTest::run (r, false);
-        LittleTest::run (r, true);
-    }
-};
+    testRoundTripConversion<F1, E1, FormatType, AudioData::BigEndian> (r);
+    testRoundTripConversion<F1, E1, FormatType, AudioData::LittleEndian> (r);
+}
 
 template <class FormatType, class Endianness>
-struct AllFormatsTest
+void testAllFormats (Random& r)
 {
-    static void run (Random& r)
-    {
-        AllEndiannessTest<FormatType, Endianness, AudioData::Int8>::run (r);
-        AllEndiannessTest<FormatType, Endianness, AudioData::UInt8>::run (r);
-        AllEndiannessTest<FormatType, Endianness, AudioData::Int16>::run (r);
-        AllEndiannessTest<FormatType, Endianness, AudioData::Int24>::run (r);
-        AllEndiannessTest<FormatType, Endianness, AudioData::Int32>::run (r);
-        AllEndiannessTest<FormatType, Endianness, AudioData::Float32>::run (r);
-    }
-};
+    testAllEndianness<FormatType, Endianness, AudioData::Int8> (r);
+    testAllEndianness<FormatType, Endianness, AudioData::UInt8> (r);
+    testAllEndianness<FormatType, Endianness, AudioData::Int16> (r);
+    testAllEndianness<FormatType, Endianness, AudioData::Int24> (r);
+    testAllEndianness<FormatType, Endianness, AudioData::Int32> (r);
+    testAllEndianness<FormatType, Endianness, AudioData::Float32> (r);
+}
 
 template <class FormatType>
 void testFormatWithAllEndianness (Random& r)
 {
-    AllFormatsTest<FormatType, AudioData::BigEndian>::run (r);
-    AllFormatsTest<FormatType, AudioData::LittleEndian>::run (r);
+    testAllFormats<FormatType, AudioData::BigEndian> (r);
+    testAllFormats<FormatType, AudioData::LittleEndian> (r);
 }
-
 } // namespace
 
 //==============================================================================
@@ -210,7 +180,7 @@ TEST (AudioDataConvertersTest, Float64Conversions)
 TEST (AudioDataConvertersTest, PointerAdvance)
 {
     float data[10] = { 0.0f, 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f };
-    auto ptr = AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> (data);
+    AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> ptr (data);
 
     EXPECT_FLOAT_EQ (ptr.getAsFloat(), 0.0f);
     ++ptr;
@@ -222,7 +192,7 @@ TEST (AudioDataConvertersTest, PointerAdvance)
 TEST (AudioDataConvertersTest, PointerDecrement)
 {
     float data[10] = { 0.0f, 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f };
-    auto ptr = AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> (data + 5);
+    AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> ptr (data + 5);
 
     EXPECT_FLOAT_EQ (ptr.getAsFloat(), 0.5f);
     --ptr;
@@ -232,7 +202,7 @@ TEST (AudioDataConvertersTest, PointerDecrement)
 TEST (AudioDataConvertersTest, PointerJump)
 {
     float data[10] = { 0.0f, 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f };
-    auto ptr = AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> (data);
+    AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> ptr (data);
 
     ptr += 5;
     EXPECT_FLOAT_EQ (ptr.getAsFloat(), 0.5f);
@@ -244,7 +214,7 @@ TEST (AudioDataConvertersTest, PointerJump)
 TEST (AudioDataConvertersTest, InterleavedPointer)
 {
     float data[8] = { 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f };
-    auto ptr = AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::Interleaved, AudioData::Const> (data, 2);
+    AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::Interleaved, AudioData::Const> ptr (data, 2);
 
     EXPECT_FLOAT_EQ (ptr.getAsFloat(), 0.1f);
     ++ptr;
@@ -256,7 +226,7 @@ TEST (AudioDataConvertersTest, InterleavedPointer)
 TEST (AudioDataConvertersTest, ClearSamples)
 {
     float data[10] = { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f };
-    auto ptr = AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::NonConst> (data);
+    AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::NonConst> ptr (data);
 
     ptr.clearSamples (5);
 
@@ -269,7 +239,7 @@ TEST (AudioDataConvertersTest, ClearSamples)
 TEST (AudioDataConvertersTest, FindMinAndMax)
 {
     float data[10] = { 0.1f, -0.5f, 0.8f, -0.2f, 0.4f, 0.9f, -0.7f, 0.3f, -0.1f, 0.6f };
-    auto ptr = AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> (data);
+    AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> ptr (data);
 
     auto range = ptr.findMinAndMax (10);
 
@@ -280,7 +250,7 @@ TEST (AudioDataConvertersTest, FindMinAndMax)
 TEST (AudioDataConvertersTest, FindMinAndMaxEmpty)
 {
     float data[1] = { 0.0f };
-    auto ptr = AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> (data);
+    AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> ptr (data);
 
     auto range = ptr.findMinAndMax (0);
 
@@ -293,7 +263,7 @@ TEST (AudioDataConvertersTest, FindMinAndMaxInteger)
     for (int i = 0; i < 10; ++i)
         data[i] = static_cast<int16_t> ((i - 5) * 1000);
 
-    auto ptr = AudioData::Pointer<AudioData::Int16, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> (data);
+    AudioData::Pointer<AudioData::Int16, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const> ptr (data);
 
     float minVal, maxVal;
     ptr.findMinAndMax (10, minVal, maxVal);
