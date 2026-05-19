@@ -31,7 +31,7 @@
     description:      SQLite is a C library that provides a lightweight, disk-based database.
     website:          https://www.sqlite.org
     upstream:         https://sqlite.org/2026/sqlite-amalgamation-3530100.zip
-    license:          BSD
+    license:          Public Domain
 
     defines:          
 
