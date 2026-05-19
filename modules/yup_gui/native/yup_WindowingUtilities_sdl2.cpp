@@ -42,6 +42,22 @@ MouseEvent::Buttons toMouseButton (Uint8 sdlButton) noexcept
     }
 }
 
+MouseEvent::Buttons toMouseButtons (Uint32 sdlButtons) noexcept
+{
+    int buttons = MouseEvent::Buttons::noButtons;
+
+    if ((sdlButtons & SDL_BUTTON (SDL_BUTTON_LEFT)) != 0)
+        buttons |= MouseEvent::Buttons::leftButton;
+
+    if ((sdlButtons & SDL_BUTTON (SDL_BUTTON_RIGHT)) != 0)
+        buttons |= MouseEvent::Buttons::rightButton;
+
+    if ((sdlButtons & SDL_BUTTON (SDL_BUTTON_MIDDLE)) != 0)
+        buttons |= MouseEvent::Buttons::middleButton;
+
+    return static_cast<MouseEvent::Buttons> (buttons);
+}
+
 //==============================================================================
 
 KeyModifiers toKeyModifiers (Uint16 sdlMod) noexcept
@@ -271,6 +287,11 @@ void* getNativeDisplayHandle (SDL_Window* window)
 Rectangle<int> getNativeWindowPosition (void* nativeWindow)
 {
     return {};
+}
+
+void focusNativeWindow (void* nativeWindow)
+{
+    ignoreUnused (nativeWindow);
 }
 #endif
 

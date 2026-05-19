@@ -603,9 +603,16 @@ bool AudioPluginProcessorCLAP::initialise()
         auto wrapper = getWrapper (plugin);
         auto* audioProcessor = wrapper->audioProcessor.get();
 
-        return static_cast<uint32_t> (isInput
-                                          ? audioProcessor->getBusLayout().getInputBuses().size()
-                                          : audioProcessor->getBusLayout().getOutputBuses().size());
+        Span<const AudioBus> busses = isInput
+                                        ? audioProcessor->getBusLayout().getInputBuses()
+                                        : audioProcessor->getBusLayout().getOutputBuses();
+
+        uint32_t count = 0;
+        for (const auto& bus : busses)
+            if (bus.getType() == AudioBus::Type::Audio)
+                ++count;
+
+        return count;
     };
 
     extensionAudioPorts.get = [] (const clap_plugin_t* plugin, uint32_t index, bool isInput, clap_audio_port_info_t* info) -> bool
@@ -617,17 +624,32 @@ bool AudioPluginProcessorCLAP::initialise()
                                         ? audioProcessor->getBusLayout().getInputBuses()
                                         : audioProcessor->getBusLayout().getOutputBuses();
 
-        if (index >= static_cast<uint32_t> (busses.size()))
+        const AudioBus* audioBus = nullptr;
+        uint32_t audioBusIndex = 0;
+
+        for (const auto& bus : busses)
+        {
+            if (bus.getType() != AudioBus::Type::Audio)
+                continue;
+
+            if (audioBusIndex == index)
+            {
+                audioBus = &bus;
+                break;
+            }
+
+            ++audioBusIndex;
+        }
+
+        if (audioBus == nullptr)
             return false;
 
-        const AudioBus& bus = busses[index];
-
         info->id = index;
-        info->channel_count = bus.getNumChannels();
+        info->channel_count = audioBus->getNumChannels();
         info->flags = (index == 0) ? CLAP_AUDIO_PORT_IS_MAIN : 0;
-        info->port_type = bus.isStereo() ? CLAP_PORT_STEREO : CLAP_PORT_MONO;
+        info->port_type = audioBus->isStereo() ? CLAP_PORT_STEREO : CLAP_PORT_MONO;
         info->in_place_pair = CLAP_INVALID_ID;
-        bus.getName().copyToUTF8 (info->name, sizeof (info->name));
+        audioBus->getName().copyToUTF8 (info->name, sizeof (info->name));
 
         return true;
     };

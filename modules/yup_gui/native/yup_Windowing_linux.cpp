@@ -98,4 +98,9 @@ Rectangle<int> getNativeWindowPosition (void* nativeWindow)
     return {};
 }
 
+void focusNativeWindow (void* nativeWindow)
+{
+    ignoreUnused (nativeWindow);
+}
+
 } // namespace yup

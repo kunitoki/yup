@@ -190,10 +190,7 @@ public:
         m_renderTarget = renderContextImpl->makeRenderTarget (MTLPixelFormatBGRA8Unorm, width, height);
 
         if (m_currentTexture != nil)
-        {
-            [m_currentTexture setPurgeableState:MTLPurgeableStateEmpty];
             m_currentTexture = nil;
-        }
 
         MTLTextureDescriptor* descriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:(MTLPixelFormatBGRA8Unorm)
                                                                                               width:width

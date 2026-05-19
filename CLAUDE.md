@@ -57,7 +57,6 @@ For main module headers (e.g., `yup_graphics.h`), include this declaration block
     description:        Brief module description
     website:            https://github.com/kunitoki/yup
     license:            ISC
-    minimumCppStandard: 17
 
     dependencies:       yup_graphics [other_dependencies]
     searchpaths:        native
@@ -337,9 +336,9 @@ yup::Result performOperation()
 yup::ResultValue<int> maybeGetInteger()
 {
     if (preconditionFailed)
-        return yup::ResultValue<int>::fail ("Precondition not met");
+        return yup::makeResultValueFail ("Precondition not met");
 
-    return 1;
+    return 1; // or yup::makeResultValueOk (1)
 }
 
 // Use assertions for programming errors

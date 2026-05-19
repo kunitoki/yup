@@ -406,26 +406,26 @@ ResultValue<int> TimeStretchProcessor::process (const float* const* inputChannel
                                                 int outputFrameCount)
 {
     if (! prepared || engine == nullptr)
-        return ResultValue<int>::fail ("TimeStretchProcessor is not prepared");
+        return makeResultValueFail ("TimeStretchProcessor is not prepared");
 
     if (inputFrameCount < 0 || outputFrameCount < 0)
-        return ResultValue<int>::fail ("Invalid frame count");
+        return makeResultValueFail ("Invalid frame count");
 
     if (outputFrameCount == 0)
-        return ResultValue<int>::ok (0);
+        return makeResultValueOk (0);
 
     const bool hasInputProvider = (inputProvider != nullptr);
     if (! hasInputProvider && inputFrameCount == 0)
-        return ResultValue<int>::ok (0);
+        return makeResultValueOk (0);
 
     if ((! hasInputProvider && inputChannels == nullptr) || outputChannels == nullptr)
-        return ResultValue<int>::fail ("Null channel pointers");
+        return makeResultValueFail ("Null channel pointers");
 
     if (! hasInputProvider && inputFrameCount > spec.maximumBlockSize)
-        return ResultValue<int>::fail ("Input frame count exceeds maximum block size");
+        return makeResultValueFail ("Input frame count exceeds maximum block size");
 
     const auto processed = engine->process (inputChannels, inputFrameCount, outputChannels, outputFrameCount);
-    return ResultValue<int>::ok (processed);
+    return makeResultValueOk (processed);
 }
 
 ResultValue<int> TimeStretchProcessor::process (const AudioBuffer<float>& input,
@@ -433,10 +433,10 @@ ResultValue<int> TimeStretchProcessor::process (const AudioBuffer<float>& input,
                                                 int outputFrameCount)
 {
     if (input.getNumChannels() != spec.numChannels || output.getNumChannels() != spec.numChannels)
-        return ResultValue<int>::fail ("Channel count mismatch");
+        return makeResultValueFail ("Channel count mismatch");
 
     if (outputFrameCount > output.getNumSamples())
-        return ResultValue<int>::fail ("Output buffer too small");
+        return makeResultValueFail ("Output buffer too small");
 
     return process (input.getArrayOfReadPointers(),
                     input.getNumSamples(),
@@ -451,7 +451,7 @@ ResultValue<int> TimeStretchProcessor::processUsingTimeRatio (const float* const
 {
     const auto expectedOutput = getExpectedOutputFrameCount (inputFrameCount);
     if (expectedOutput > outputFrameCapacity)
-        return ResultValue<int>::fail ("Output buffer too small for the current time ratio");
+        return makeResultValueFail ("Output buffer too small for the current time ratio");
 
     return process (inputChannels, inputFrameCount, outputChannels, expectedOutput);
 }
@@ -461,7 +461,7 @@ ResultValue<int> TimeStretchProcessor::processUsingTimeRatio (const AudioBuffer<
 {
     const auto expectedOutput = getExpectedOutputFrameCount (input.getNumSamples());
     if (expectedOutput > output.getNumSamples())
-        return ResultValue<int>::fail ("Output buffer too small for the current time ratio");
+        return makeResultValueFail ("Output buffer too small for the current time ratio");
 
     return process (input, output, expectedOutput);
 }

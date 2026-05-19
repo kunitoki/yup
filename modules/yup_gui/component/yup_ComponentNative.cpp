@@ -66,6 +66,15 @@ ComponentNative::Options& ComponentNative::Options::withAllowedHighDensityDispla
     return *this;
 }
 
+ComponentNative::Options& ComponentNative::Options::withTemporaryWindow (bool shouldBeTemporary) noexcept
+{
+    if (shouldBeTemporary)
+        flags |= temporaryWindow;
+    else
+        flags &= ~temporaryWindow;
+    return *this;
+}
+
 ComponentNative::Options& ComponentNative::Options::withGraphicsApi (std::optional<GraphicsContext::Api> newGraphicsApi) noexcept
 {
     graphicsApi = newGraphicsApi;

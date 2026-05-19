@@ -19,6 +19,7 @@
   ==============================================================================
 */
 
+#include "yup_gui/yup_ApplicationTheme.cpp"
 #include "yup_gui/yup_ComboBox.cpp"
 #include "yup_gui/yup_Component.cpp"
 #include "yup_gui/yup_Desktop.cpp"

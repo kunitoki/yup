@@ -41,6 +41,7 @@ class YUP_API ComponentNative : public ReferenceCountedObject
 {
     struct decoratedWindowTag;
     struct resizableWindowTag;
+    struct temporaryWindowTag;
     struct renderContinuousTag;
     struct allowHighDensityDisplayTag;
 
@@ -51,7 +52,12 @@ public:
 
     //==============================================================================
     /** Type definition for window configuration flags. */
-    using Flags = FlagSet<uint32, decoratedWindowTag, resizableWindowTag, renderContinuousTag, allowHighDensityDisplayTag>;
+    using Flags = FlagSet<uint32,
+                          decoratedWindowTag,
+                          resizableWindowTag,
+                          temporaryWindowTag,
+                          renderContinuousTag,
+                          allowHighDensityDisplayTag>;
 
     /** No flags set. */
     static inline constexpr Flags noFlags = Flags();
@@ -59,6 +65,8 @@ public:
     static inline constexpr Flags decoratedWindow = Flags::declareValue<decoratedWindowTag>();
     /** Flag to enable window resizing by the user. */
     static inline constexpr Flags resizableWindow = Flags::declareValue<resizableWindowTag>();
+    /** Flag to mark the native window as a temporary popup/menu-style window. */
+    static inline constexpr Flags temporaryWindow = Flags::declareValue<temporaryWindowTag>();
     /** Flag to enable continuous rendering mode. */
     static inline constexpr Flags renderContinuous = Flags::declareValue<renderContinuousTag>();
     /** Flag to enable high-density display support. */
@@ -118,6 +126,14 @@ public:
             @return Reference to this Options object for method chaining.
         */
         Options& withAllowedHighDensityDisplay (bool shouldAllowHighDensity) noexcept;
+
+        /** Sets whether the window should be treated as a temporary popup/menu window.
+
+            @param shouldBeTemporary True for popup/menu-style windows, false for regular windows.
+
+            @return Reference to this Options object for method chaining.
+        */
+        Options& withTemporaryWindow (bool shouldBeTemporary) noexcept;
 
         /** Sets the graphics API to be used for rendering.
 
