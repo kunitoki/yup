@@ -1,4 +1,4 @@
-<img src="./logo.png" />
+<img src="./backdrop.jpg" />
 
 # YUP! Cross-Platform Application And Plugin Development Library
 
