@@ -626,12 +626,19 @@ TEST_F (SqliteDatabaseTests, ColumnOptionalFileNullopt)
 TEST_F (SqliteDatabaseTests, ColumnOptionalFileValue)
 {
     db.executeQuery ("CREATE TABLE t (v TEXT)");
-    db.executeQuery ("INSERT INTO t VALUES ('/tmp/foo.db')");
+
+    const File file = File::getSpecialLocation (File::tempDirectory).getChildFile ("foo.db");
+
+    {
+        auto ins = db.prepareStatement ("INSERT INTO t VALUES (?)");
+        EXPECT_TRUE (ins.bindText (1, file.getFullPathName()).wasOk());
+        EXPECT_EQ (SQLITE_DONE, ins.step());
+    }
 
     auto sel = db.prepareStatement ("SELECT v FROM t");
     ASSERT_EQ (SQLITE_ROW, sel.step());
     ASSERT_TRUE (sel.columnOptionalFile (0).has_value());
-    EXPECT_EQ ("/tmp/foo.db", sel.columnOptionalFile (0)->getFullPathName());
+    EXPECT_EQ (file.getFullPathName(), sel.columnOptionalFile (0)->getFullPathName());
 }
 
 TEST_F (SqliteDatabaseTests, ColumnOptionalBlobNullopt)
