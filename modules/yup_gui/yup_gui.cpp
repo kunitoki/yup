@@ -125,6 +125,13 @@
 
 //==============================================================================
 
+#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
+#include "profiling/yup_PaintProfileStats.cpp"
+#include "profiling/yup_PaintProfiler.cpp"
+#endif
+
+//==============================================================================
+
 #include "application/yup_Application.cpp"
 #include "desktop/yup_Desktop.cpp"
 #include "keyboard/yup_TextInputTarget.cpp"
@@ -133,8 +140,6 @@
 #include "clipboard/yup_SystemClipboard.cpp"
 #include "component/yup_ComponentNative.cpp"
 #include "component/yup_Component.cpp"
-#include "profiling/yup_PaintProfileStats.cpp"
-#include "profiling/yup_PaintProfiler.cpp"
 #include "menus/yup_PopupMenu.cpp"
 #include "buttons/yup_Button.cpp"
 #include "buttons/yup_TextButton.cpp"
