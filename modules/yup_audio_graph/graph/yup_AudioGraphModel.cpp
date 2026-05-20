@@ -110,14 +110,6 @@ void modelWriteBase64Element (XmlElement& parent, const char* tagName, const Mem
     parent.addChildElement (element);
 }
 
-void modelWriteOptionalBase64Element (XmlElement& parent, const char* tagName, const MemoryBlock& block)
-{
-    if (block.getSize() == 0)
-        return;
-
-    modelWriteBase64Element (parent, tagName, block);
-}
-
 Result modelReadBase64Element (const XmlElement& parent, const char* tagName, MemoryBlock& block)
 {
     auto* element = parent.getChildByName (tagName);
@@ -138,15 +130,45 @@ Result modelReadBase64Element (const XmlElement& parent, const char* tagName, Me
     return Result::ok();
 }
 
-Result modelReadOptionalBase64Element (const XmlElement& parent, const char* tagName, MemoryBlock& block)
+void modelWriteCreationDataElement (XmlElement& parent, const MemoryBlock& block)
 {
-    if (parent.getChildByName (tagName) == nullptr)
+    if (block.getSize() == 0)
+        return;
+
+    MemoryInputStream stream (block, false);
+    auto xml = parseXML (stream.readEntireStreamAsString());
+    if (xml == nullptr)
+        return;
+
+    auto* element = new XmlElement ("creationData");
+    element->addChildElement (new XmlElement (*xml));
+    parent.addChildElement (element);
+}
+
+Result modelReadCreationDataElement (const XmlElement& parent, MemoryBlock& block)
+{
+    auto* element = parent.getChildByName ("creationData");
+    if (element == nullptr)
     {
         block.reset();
         return Result::ok();
     }
 
-    return modelReadBase64Element (parent, tagName, block);
+    if (element->getStringAttribute ("encoding") == "base64")
+        return modelReadBase64Element (parent, "creationData", block);
+
+    auto* creationXml = element->getFirstChildElement();
+    if (creationXml == nullptr)
+    {
+        block.reset();
+        return Result::ok();
+    }
+
+    block.reset();
+    MemoryOutputStream stream (block, false);
+    creationXml->writeTo (stream);
+    stream.flush();
+    return Result::ok();
 }
 
 void modelWriteNodeProperties (XmlElement& element, const AudioGraphNodeProperties& properties)
@@ -155,7 +177,7 @@ void modelWriteNodeProperties (XmlElement& element, const AudioGraphNodeProperti
     element.setAttribute ("name", properties.name);
     element.setAttribute ("positionX", static_cast<double> (properties.positionX));
     element.setAttribute ("positionY", static_cast<double> (properties.positionY));
-    modelWriteOptionalBase64Element (element, "creationData", properties.creationData);
+    modelWriteCreationDataElement (element, properties.creationData);
 }
 
 Result modelReadNodeProperties (const XmlElement& element, AudioGraphNodeProperties& properties)
@@ -165,7 +187,7 @@ Result modelReadNodeProperties (const XmlElement& element, AudioGraphNodePropert
     properties.positionX = static_cast<float> (element.getDoubleAttribute ("positionX"));
     properties.positionY = static_cast<float> (element.getDoubleAttribute ("positionY"));
 
-    return modelReadOptionalBase64Element (element, "creationData", properties.creationData);
+    return modelReadCreationDataElement (element, properties.creationData);
 }
 
 String modelEndpointKindToString (AudioGraphEndpoint::Kind kind)
