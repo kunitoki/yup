@@ -1,6 +1,6 @@
 <img src="./backdrop.jpg" />
 
-# YUP! Cross-Platform Application and Plugin Development Library
+# YUP! The modern framework optimized for realtime audio and GPU-native creative software
 
 YUP is a C++20 framework for building native applications, audio tools, and audio plugins with one codebase across desktop, mobile, and the web. It combines permissively licensed JUCE7-derived foundations with modern rendering through the open source [Rive](https://rive.app/) renderer and YUP's own evolving graphics, GUI, DSP, audio graph, and plugin layers.
 
