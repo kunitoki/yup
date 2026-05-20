@@ -1382,7 +1382,9 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
         else
         {
             if (profilingActive)
+            {
                 YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED (profileScope.markSelfPaintSkipped();)
+            }
         }
 
         for (auto child : children)

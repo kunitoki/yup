@@ -102,7 +102,9 @@ void PaintProfiler::deregisterComponent (const Component& component)
 
 void PaintProfiler::enableSubtree (Component& root, PaintProfileOptions options)
 {
+#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
     root.setPaintProfilingEnabled (true, options);
+#endif
 
     for (int i = 0; i < root.getNumChildComponents(); ++i)
     {
@@ -113,7 +115,9 @@ void PaintProfiler::enableSubtree (Component& root, PaintProfileOptions options)
 
 void PaintProfiler::disableSubtree (Component& root)
 {
+#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
     root.setPaintProfilingEnabled (false);
+#endif
 
     for (int i = 0; i < root.getNumChildComponents(); ++i)
     {
@@ -182,7 +186,11 @@ PaintProfiler::Snapshot PaintProfiler::createSnapshot (PaintProfileTimeKind sort
     {
         ComponentEntry entry;
         entry.component = component;
+#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
         entry.name = component->getPaintProfileName();
+#else
+        entry.name = component->getTitle();
+#endif
         entry.stats = stats;
         entry.self = stats->summarize (PaintProfileTimeKind::self);
         entry.children = stats->summarize (PaintProfileTimeKind::children);
@@ -275,11 +283,13 @@ PaintProfiler::ScopedSession::ScopedSession (PaintProfiler& profilerRef,
 
 PaintProfiler::ScopedSession::~ScopedSession()
 {
+#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
     for (auto& weakComponent : enabledComponents)
     {
         if (auto* component = weakComponent.get())
             component->setPaintProfilingEnabled (false);
     }
+#endif
 }
 
 //==============================================================================
