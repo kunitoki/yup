@@ -353,6 +353,9 @@ void registerYupGuiBindings (py::module_& m)
 
         // Keyboard focus
         .def ("setWantsKeyboardFocus", &Component::setWantsKeyboardFocus)
+        .def ("getWantsKeyboardFocus", &Component::getWantsKeyboardFocus)
+        .def ("setClickingGrabFocus", &Component::setClickingGrabFocus)
+        .def ("getClickingGrabFocus", &Component::getClickingGrabFocus)
         .def ("takeKeyboardFocus", &Component::takeKeyboardFocus)
         .def ("leaveKeyboardFocus", &Component::leaveKeyboardFocus)
         .def ("hasKeyboardFocus", &Component::hasKeyboardFocus)
