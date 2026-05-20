@@ -84,6 +84,9 @@ public:
     /** Returns the parameters. */
     Span<const AudioParameter::Ptr> getParameters() const { return parameters; }
 
+    /** Returns a parameter by stable ID, or nullptr when no such parameter exists. */
+    AudioParameter::Ptr getParameterByID (StringRef parameterID) const;
+
     /** Adds a parameter. */
     void addParameter (AudioParameter::Ptr parameter);
 
@@ -276,7 +279,7 @@ private:
     AudioPlayHead* playHead = nullptr;
 
     CriticalSection processLock;
-    bool processIsSuspended = false;
+    std::atomic<bool> processIsSuspended { false };
 };
 
 } // namespace yup

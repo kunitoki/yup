@@ -176,6 +176,7 @@ private:
                          std::vector<AudioGraphConnection> savedConnections);
 
     ResultValue<std::unique_ptr<AudioProcessor>> createProcessorForSavedNode (const AudioGraphNodeProperties& properties);
+    Result validateConnectionLocked (const AudioGraphConnection& connection) const;
 
     void markTopologyChanged();
     void markMetadataChanged();

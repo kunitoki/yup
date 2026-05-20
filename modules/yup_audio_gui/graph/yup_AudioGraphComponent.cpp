@@ -884,6 +884,13 @@ bool AudioGraphComponent::tryConnect (const AudioGraphEndpoint& first, const Aud
 
     const auto connection = makeConnection (first, second);
 
+    if (graph != nullptr)
+    {
+        const auto validation = graph->validateConnection (connection);
+        if (validation.failed())
+            return false;
+    }
+
     if (onConnectionRequested == nullptr || ! onConnectionRequested (connection))
         return false;
 

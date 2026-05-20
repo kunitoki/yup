@@ -39,6 +39,12 @@ AudioBusLayout stereoLayout()
                            { AudioBus ("Output", AudioBus::Type::Audio, AudioBus::Direction::Output, 2) });
 }
 
+AudioBusLayout monoLayout()
+{
+    return AudioBusLayout ({ AudioBus ("Input", AudioBus::Type::Audio, AudioBus::Direction::Input, 1) },
+                           { AudioBus ("Output", AudioBus::Type::Audio, AudioBus::Direction::Output, 1) });
+}
+
 void expectPointNear (Point<float> actual, Point<float> expected, float tolerance = pointTolerance)
 {
     EXPECT_NEAR (expected.getX(), actual.getX(), tolerance);
@@ -68,6 +74,37 @@ public:
     void processBlock (AudioBuffer<float>&, MidiBuffer&) override {}
 
     int getLatencySamples() override { return 0; }
+
+    int getCurrentPreset() const noexcept override { return 0; }
+
+    void setCurrentPreset (int) noexcept override {}
+
+    int getNumPresets() const override { return 0; }
+
+    String getPresetName (int) const override { return {}; }
+
+    void setPresetName (int, StringRef) override {}
+
+    Result loadStateFromMemory (const MemoryBlock&) override { return Result::ok(); }
+
+    Result saveStateIntoMemory (MemoryBlock&) override { return Result::ok(); }
+
+    bool hasEditor() const override { return false; }
+};
+
+class MonoProcessor : public AudioProcessor
+{
+public:
+    MonoProcessor()
+        : AudioProcessor ("Graph Component Mono Processor", monoLayout())
+    {
+    }
+
+    void prepareToPlay (float, int) override {}
+
+    void releaseResources() override {}
+
+    void processBlock (AudioBuffer<float>&, MidiBuffer&) override {}
 
     int getCurrentPreset() const noexcept override { return 0; }
 
@@ -750,6 +787,25 @@ TEST_F (AudioGraphComponentTests, IncompatibleEndpointPairKeepsNewEndpointArmedA
     EXPECT_TRUE (model->getConnections().empty());
     ASSERT_TRUE (component->getPendingWireEndpoint().has_value());
     EXPECT_EQ (secondInput, *component->getPendingWireEndpoint());
+}
+
+TEST_F (AudioGraphComponentTests, IncompatibleProcessorLayoutsDoNotAddConnection)
+{
+    const auto stereoNodeID = addProcessorNode();
+    const auto monoNodeID = model->addNode (std::make_unique<MonoProcessor>());
+
+    addNodeView (stereoNodeID, { 100.0f, 50.0f });
+    addNodeView (monoNodeID, { 320.0f, 50.0f });
+
+    const auto stereoOutput = AudioGraphEndpoint::nodeOutput (stereoNodeID, 0);
+    const auto monoInput = AudioGraphEndpoint::nodeInput (monoNodeID, 0);
+
+    component->mouseDown (mouseEventForComponent (MouseEvent::leftButton, component->getEndpointScreenPosition (stereoOutput)));
+    component->mouseDown (mouseEventForComponent (MouseEvent::leftButton, component->getEndpointScreenPosition (monoInput)));
+
+    EXPECT_TRUE (model->getConnections().empty());
+    ASSERT_TRUE (component->getPendingWireEndpoint().has_value());
+    EXPECT_EQ (monoInput, *component->getPendingWireEndpoint());
 }
 
 TEST_F (AudioGraphComponentTests, RightClickEndpointRemovesAllConnectionsForEndpoint)

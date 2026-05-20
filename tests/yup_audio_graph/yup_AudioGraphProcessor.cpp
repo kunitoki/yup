@@ -817,7 +817,7 @@ TEST (AudioGraphProcessorTests, CommitPreparesNodes)
     EXPECT_EQ (128, processorPtr->preparedBlockSize);
 }
 
-TEST (AudioGraphProcessorTests, RejectsMissingNodeConnection)
+TEST (AudioGraphProcessorTests, RejectsMissingNodeConnectionImmediately)
 {
     auto model = std::make_shared<AudioGraphModel>();
     AudioGraphProcessor graph (model);
@@ -825,8 +825,7 @@ TEST (AudioGraphProcessorTests, RejectsMissingNodeConnection)
     const auto result = model->addConnection ({ AudioGraphEndpoint::nodeOutput (AudioGraphNodeID::invalid(), 0),
                                                 AudioGraphEndpoint::graphOutput (0) });
 
-    EXPECT_TRUE (result.wasOk());
-    EXPECT_TRUE (graph.commitChanges().failed());
+    EXPECT_TRUE (result.failed());
 }
 
 TEST (AudioGraphProcessorTests, RejectsCycles)
@@ -999,6 +998,34 @@ TEST (AudioGraphProcessorTests, NullNodeIsRejected)
     EXPECT_FALSE (graph.hasUncommittedChanges());
 }
 
+TEST (AudioProcessorTests, ParameterLookupUsesUniqueIDs)
+{
+    TestProcessor processor;
+
+    auto first = AudioParameterBuilder()
+                     .withID ("gain")
+                     .withName ("Gain")
+                     .withRange (0.0f, 1.0f)
+                     .withDefault (0.25f)
+                     .build();
+
+    auto duplicate = AudioParameterBuilder()
+                         .withID ("gain")
+                         .withName ("Duplicate Gain")
+                         .withRange (0.0f, 1.0f)
+                         .withDefault (0.75f)
+                         .build();
+
+    auto* firstRaw = first.get();
+    processor.addParameter (first);
+    processor.addParameter (duplicate);
+
+    EXPECT_EQ (1u, processor.getParameters().size());
+    EXPECT_EQ (0, firstRaw->getIndexInContainer());
+    EXPECT_EQ (firstRaw, processor.getParameterByID ("gain").get());
+    EXPECT_EQ (nullptr, processor.getParameterByID ("missing").get());
+}
+
 TEST (AudioGraphProcessorTests, RejectsInvalidEndpointDirectionImmediately)
 {
     auto model = std::make_shared<AudioGraphModel>();
@@ -1026,7 +1053,7 @@ TEST (AudioGraphProcessorTests, RejectsDuplicateConnectionsImmediately)
     EXPECT_TRUE (model->addConnection (connection).failed());
 }
 
-TEST (AudioGraphProcessorTests, RejectsInvalidBusIndexAtCommit)
+TEST (AudioGraphProcessorTests, RejectsInvalidNodeBusIndexImmediately)
 {
     auto model = std::make_shared<AudioGraphModel>();
     AudioGraphProcessor graph (model);
@@ -1034,11 +1061,10 @@ TEST (AudioGraphProcessorTests, RejectsInvalidBusIndexAtCommit)
 
     EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0),
                                          AudioGraphEndpoint::nodeInput (node, 99) })
-                     .wasOk());
-    EXPECT_TRUE (graph.commitChanges().failed());
+                     .failed());
 }
 
-TEST (AudioGraphProcessorTests, RejectsAudioMidiTypeMismatchAtCommit)
+TEST (AudioGraphProcessorTests, RejectsAudioMidiTypeMismatchImmediately)
 {
     auto model = std::make_shared<AudioGraphModel>();
     AudioGraphProcessor graph (model);
@@ -1047,11 +1073,10 @@ TEST (AudioGraphProcessorTests, RejectsAudioMidiTypeMismatchAtCommit)
 
     EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (audioNode, 0),
                                          AudioGraphEndpoint::nodeInput (midiNode, 0) })
-                     .wasOk());
-    EXPECT_TRUE (graph.commitChanges().failed());
+                     .failed());
 }
 
-TEST (AudioGraphProcessorTests, RejectsAudioChannelMismatchAtCommit)
+TEST (AudioGraphProcessorTests, RejectsAudioChannelMismatchImmediately)
 {
     auto model = std::make_shared<AudioGraphModel>();
     AudioGraphProcessor graph (model);
@@ -1060,8 +1085,35 @@ TEST (AudioGraphProcessorTests, RejectsAudioChannelMismatchAtCommit)
 
     EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (stereoNode, 0),
                                          AudioGraphEndpoint::nodeInput (monoNode, 0) })
+                     .failed());
+}
+
+TEST (AudioGraphProcessorTests, RejectsInvalidGraphBusIndexAtCommit)
+{
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto node = model->addNode (std::make_unique<TestProcessor>());
+
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (99),
+                                         AudioGraphEndpoint::nodeInput (node, 0) })
                      .wasOk());
     EXPECT_TRUE (graph.commitChanges().failed());
+}
+
+TEST (AudioGraphProcessorTests, FailedCommitReleasesNewlyPreparedNodes)
+{
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    auto processor = std::make_unique<TestProcessor>();
+    auto* processorPtr = processor.get();
+    const auto node = model->addNode (std::move (processor));
+
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (99),
+                                         AudioGraphEndpoint::nodeInput (node, 0) })
+                     .wasOk());
+
+    EXPECT_TRUE (graph.commitChanges().failed());
+    EXPECT_FALSE (processorPtr->prepared);
 }
 
 TEST (AudioGraphProcessorTests, MissingCommitKeepsPreviousPlan)
@@ -1126,6 +1178,11 @@ TEST (AudioGraphProcessorTests, ExternalTopologyEditsDriveDirtyRevision)
     ASSERT_NE (nullptr, processor);
 
     processor->setLatencySamplesForTest (16);
+    EXPECT_TRUE (graph.hasUncommittedChanges());
+    EXPECT_EQ (0, graph.getLatencySamples());
+    EXPECT_EQ (latencyQueriesAfterCommit, latencyQueryCount.load());
+
+    EXPECT_TRUE (graph.commitChanges().wasOk());
     EXPECT_FALSE (graph.hasUncommittedChanges());
     EXPECT_EQ (16, graph.getLatencySamples());
     EXPECT_GT (latencyQueryCount.load(), latencyQueriesAfterCommit);
@@ -1389,7 +1446,7 @@ TEST (AudioGraphProcessorTests, LoadStateFailureRestoresPreviousGraphModel)
 {
     auto invalidSourceModel = std::make_shared<AudioGraphModel>();
     AudioGraphProcessor invalidSource (invalidSourceModel);
-    ASSERT_TRUE (invalidSourceModel->addConnection ({ AudioGraphEndpoint::nodeOutput (AudioGraphNodeID (999), 0),
+    ASSERT_TRUE (invalidSourceModel->addConnection ({ AudioGraphEndpoint::graphInput (99),
                                                       AudioGraphEndpoint::graphOutput (0) })
                      .wasOk());
 

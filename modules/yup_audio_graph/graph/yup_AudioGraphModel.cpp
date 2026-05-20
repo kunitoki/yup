@@ -350,16 +350,10 @@ Result AudioGraphModel::replaceNode (AudioGraphNodeID nodeID,
 
 Result AudioGraphModel::addConnection (const AudioGraphConnection& connection)
 {
-    if (! connection.source.isSource())
-        return Result::fail ("Audio graph connection source is not a source endpoint");
-
-    if (! connection.destination.isDestination())
-        return Result::fail ("Audio graph connection destination is not a destination endpoint");
-
     const std::lock_guard<std::mutex> lock (mutex);
 
-    if (std::find (connections.begin(), connections.end(), connection) != connections.end())
-        return Result::fail ("Audio graph connection already exists");
+    if (const auto result = validateConnectionLocked (connection); result.failed())
+        return result;
 
     connections.push_back (connection);
     markTopologyChanged();
@@ -706,6 +700,64 @@ ResultValue<std::unique_ptr<AudioProcessor>> AudioGraphModel::createProcessorFor
         return makeResultValueFail ("Audio graph node factory is not configured");
 
     return factoryCopy (properties);
+}
+
+Result AudioGraphModel::validateConnectionLocked (const AudioGraphConnection& connection) const
+{
+    if (! connection.source.isSource())
+        return Result::fail ("Audio graph connection source is not a source endpoint");
+
+    if (! connection.destination.isDestination())
+        return Result::fail ("Audio graph connection destination is not a destination endpoint");
+
+    if (std::find (connections.begin(), connections.end(), connection) != connections.end())
+        return Result::fail ("Audio graph connection already exists");
+
+    const auto describeEndpoint = [this] (const AudioGraphEndpoint& endpoint) -> ResultValue<std::optional<ModelEndpointDescriptor>>
+    {
+        if (endpoint.getKind() == AudioGraphEndpoint::Kind::graphInput
+            || endpoint.getKind() == AudioGraphEndpoint::Kind::graphOutput)
+        {
+            return makeResultValueOk (std::optional<ModelEndpointDescriptor>());
+        }
+
+        const auto nodeIterator = std::find_if (nodes.begin(), nodes.end(), [nodeID = endpoint.getNodeID()] (const ModelNode& node)
+        {
+            return node.id == nodeID;
+        });
+
+        if (nodeIterator == nodes.end() || nodeIterator->processor == nullptr)
+            return makeResultValueFail ("Audio graph connection references a missing node");
+
+        const auto descriptor = modelDescribeNodeEndpoint (*nodeIterator->processor, endpoint);
+
+        if (! descriptor.valid)
+            return makeResultValueFail ("Audio graph connection references an invalid bus index");
+
+        return makeResultValueOk (std::optional<ModelEndpointDescriptor> (descriptor));
+    };
+
+    auto source = describeEndpoint (connection.source);
+    if (! source)
+        return Result::fail (source.getErrorMessage());
+
+    auto destination = describeEndpoint (connection.destination);
+    if (! destination)
+        return Result::fail (destination.getErrorMessage());
+
+    const auto sourceDescriptor = std::move (source).getValue();
+    const auto destinationDescriptor = std::move (destination).getValue();
+
+    if (sourceDescriptor.has_value() && destinationDescriptor.has_value())
+    {
+        if (sourceDescriptor->type != destinationDescriptor->type)
+            return Result::fail ("Audio graph connection mixes audio and MIDI endpoints");
+
+        if (sourceDescriptor->type == ModelSignalType::audio && sourceDescriptor->channels != destinationDescriptor->channels)
+            return Result::fail ("Audio graph connection has incompatible channel counts");
+    }
+
+    return Result::ok();
 }
 
 void AudioGraphModel::markTopologyChanged()

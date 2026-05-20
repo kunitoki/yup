@@ -30,13 +30,6 @@ enum class GraphSignalType
     midi
 };
 
-struct BusDescriptor
-{
-    GraphSignalType type = GraphSignalType::audio;
-    int channels = 0;
-    int offset = 0;
-};
-
 int getTotalAudioChannels (Span<const AudioBus> buses)
 {
     int result = 0;
@@ -259,6 +252,7 @@ public:
             nodesSnapshot.push_back ({ node.id, node.processor, node.properties });
 
         connectionsSnapshot = snapshot.connections;
+        std::vector<std::shared_ptr<AudioProcessor>> newlyPreparedNodes;
 
         for (auto& node : nodesSnapshot)
         {
@@ -276,6 +270,7 @@ public:
             {
                 node.processor->setPlayHead (owner.getPlayHead());
                 node.processor->setPlaybackConfiguration (sampleRate, maxBlockSize);
+                newlyPreparedNodes.push_back (node.processor);
             }
         }
 
@@ -283,21 +278,76 @@ public:
         const auto result = compileGraph (*compiled, nodesSnapshot, connectionsSnapshot);
 
         if (! result)
+        {
+            for (auto& processor : newlyPreparedNodes)
+                if (processor != nullptr)
+                    processor->releaseResources();
+
             return result;
+        }
 
         for (const auto& node : nodesSnapshot)
             preparedNodes[node.id.getRawID()] = { node.processor, sampleRate, maxBlockSize, true };
 
         storeStats (compiled->stats);
-        latestLatencySamples.store (compiled->graphLatencySamples);
+        const auto newLatencySamples = compiled->graphLatencySamples;
+        const auto oldLatencySamples = latestLatencySamples.exchange (newLatencySamples);
         lastCommittedTopologyRevision.store (snapshotTopologyRevision);
         lastCommittedLatencyChangeCounter.store (snapshotLatencyChangeCounter);
         lastCompiledSampleRate = sampleRate;
         lastCompiledMaxBlockSize = maxBlockSize;
         synchronizeNodeListeners (nodesSnapshot);
 
-        delete pendingPlan.exchange (compiled.release()); // TODO - make it so we don't use delete
+        delete pendingPlan.exchange (compiled.release());
+        hasPublishedPlan.store (true);
         deleteRetiredPlans();
+
+        if (oldLatencySamples != newLatencySamples)
+            owner.updateHostDisplay (AudioProcessor::ChangeDetails().withLatencyChanged (true));
+
+        return Result::ok();
+    }
+
+    Result validateConnection (const AudioGraphConnection& connection) const
+    {
+        const auto snapshot = model->createSnapshot();
+
+        if (std::find (snapshot.connections.begin(), snapshot.connections.end(), connection) != snapshot.connections.end())
+            return Result::fail ("Audio graph connection already exists");
+
+        std::vector<ModelNode> nodesSnapshot;
+        nodesSnapshot.reserve (snapshot.nodes.size());
+
+        std::unordered_map<uint64_t, int> nodeIndexByID;
+
+        for (int i = 0; i < static_cast<int> (snapshot.nodes.size()); ++i)
+        {
+            const auto& node = snapshot.nodes[static_cast<size_t> (i)];
+            nodesSnapshot.push_back ({ node.id, node.processor, node.properties });
+
+            if (node.processor == nullptr)
+                return Result::fail ("Audio graph contains an empty node");
+
+            if (! nodeIndexByID.emplace (node.id.getRawID(), i).second)
+                return Result::fail ("Audio graph contains duplicate node IDs");
+        }
+
+        auto source = resolveEndpoint (connection.source, true, nodesSnapshot, nodeIndexByID);
+        if (! source)
+            return Result::fail (source.getErrorMessage());
+
+        auto destination = resolveEndpoint (connection.destination, false, nodesSnapshot, nodeIndexByID);
+        if (! destination)
+            return Result::fail (destination.getErrorMessage());
+
+        const auto sourceEndpoint = std::move (source).getValue();
+        const auto destinationEndpoint = std::move (destination).getValue();
+
+        if (sourceEndpoint.type != destinationEndpoint.type)
+            return Result::fail ("Audio graph connection mixes audio and MIDI endpoints");
+
+        if (sourceEndpoint.type == GraphSignalType::audio && sourceEndpoint.channels != destinationEndpoint.channels)
+            return Result::fail ("Audio graph connection has incompatible channel counts");
 
         return Result::ok();
     }
@@ -336,10 +386,6 @@ public:
         if (details.latencyChanged)
         {
             latencyChangeCounter.fetch_add (1);
-            owner.updateHostDisplay (AudioProcessor::ChangeDetails().withLatencyChanged (true));
-
-            if (! commitInProgress.load())
-                ignoreUnused (commitChanges());
         }
     }
 
@@ -541,16 +587,16 @@ public:
             CompiledConnection connection;
             connection.connection = modelConnection;
 
-            const auto source = resolveEndpoint (modelConnection.source, true, nodesSnapshot, nodeIndexByID);
+            auto source = resolveEndpoint (modelConnection.source, true, nodesSnapshot, nodeIndexByID);
             if (! source)
                 return Result::fail (source.getErrorMessage());
 
-            const auto destination = resolveEndpoint (modelConnection.destination, false, nodesSnapshot, nodeIndexByID);
+            auto destination = resolveEndpoint (modelConnection.destination, false, nodesSnapshot, nodeIndexByID);
             if (! destination)
                 return Result::fail (destination.getErrorMessage());
 
-            const auto& sourceEndpoint = sourceEndpointScratch;
-            const auto& destinationEndpoint = destinationEndpointScratch;
+            const auto sourceEndpoint = std::move (source).getValue();
+            const auto destinationEndpoint = std::move (destination).getValue();
 
             if (sourceEndpoint.type != destinationEndpoint.type)
                 return Result::fail ("Audio graph connection mixes audio and MIDI endpoints");
@@ -608,19 +654,18 @@ public:
         return Result::ok();
     }
 
-    Result resolveEndpoint (const AudioGraphEndpoint& endpoint,
-                            bool source,
-                            const std::vector<ModelNode>& nodesSnapshot,
-                            const std::unordered_map<uint64_t, int>& nodeIndexByID)
+    ResultValue<ResolvedEndpoint> resolveEndpoint (const AudioGraphEndpoint& endpoint,
+                                                   bool source,
+                                                   const std::vector<ModelNode>& nodesSnapshot,
+                                                   const std::unordered_map<uint64_t, int>& nodeIndexByID) const
     {
-        auto& result = source ? sourceEndpointScratch : destinationEndpointScratch;
-        result = {};
+        ResolvedEndpoint result;
 
         if (source && ! endpoint.isSource())
-            return Result::fail ("Audio graph endpoint is not a source");
+            return makeResultValueFail ("Audio graph endpoint is not a source");
 
         if (! source && ! endpoint.isDestination())
-            return Result::fail ("Audio graph endpoint is not a destination");
+            return makeResultValueFail ("Audio graph endpoint is not a destination");
 
         Span<const AudioBus> buses;
         std::vector<int> offsets;
@@ -642,7 +687,7 @@ public:
             {
                 const auto iterator = nodeIndexByID.find (endpoint.getNodeID().getRawID());
                 if (iterator == nodeIndexByID.end())
-                    return Result::fail ("Audio graph connection references a missing node");
+                    return makeResultValueFail ("Audio graph connection references a missing node");
 
                 result.nodeIndex = iterator->second;
                 const auto& processor = *nodesSnapshot[static_cast<size_t> (result.nodeIndex)].processor;
@@ -656,13 +701,13 @@ public:
         }
 
         if (! isValidBusIndex (buses, endpoint.getBusIndex()))
-            return Result::fail ("Audio graph connection references an invalid bus index");
+            return makeResultValueFail ("Audio graph connection references an invalid bus index");
 
         const auto& bus = buses[static_cast<size_t> (endpoint.getBusIndex())];
         result.type = toSignalType (bus.getType());
         result.channels = bus.getType() == AudioBus::Type::Audio ? bus.getNumChannels() : 0;
         result.offset = bus.getType() == AudioBus::Type::Audio ? offsets[static_cast<size_t> (endpoint.getBusIndex())] : 0;
-        return Result::ok();
+        return makeResultValueOk (result);
     }
 
     Result buildTopologicalOrder (CompiledGraph& graph,
@@ -1065,7 +1110,7 @@ public:
 
     bool hasCompiledPlan() const noexcept
     {
-        return currentPlan != nullptr || pendingPlan.load() != nullptr;
+        return hasPublishedPlan.load();
     }
 
     void synchronizeNodeListeners (const std::vector<ModelNode>& nodesSnapshot)
@@ -1136,11 +1181,10 @@ public:
     int maxBlockSize = 1024;
     float lastCompiledSampleRate = 0.0f;
     int lastCompiledMaxBlockSize = 0;
+    std::atomic<bool> hasPublishedPlan { false };
     std::atomic<CompiledGraph*> pendingPlan { nullptr };
     std::atomic<CompiledGraph*> retiredPlans { nullptr };
     CompiledGraph* currentPlan = nullptr;
-    ResolvedEndpoint sourceEndpointScratch;
-    ResolvedEndpoint destinationEndpointScratch;
     std::vector<std::unique_ptr<WorkerThread>> workers;
     WaitableEvent workerReadyEvent { true };
     std::atomic<int> workGeneration { 0 };
@@ -1212,6 +1256,11 @@ std::shared_ptr<AudioGraphModel> AudioGraphProcessor::getModel() const noexcept
 Result AudioGraphProcessor::commitChanges()
 {
     return pimpl->commitChanges();
+}
+
+Result AudioGraphProcessor::validateConnection (const AudioGraphConnection& connection) const
+{
+    return pimpl->validateConnection (connection);
 }
 
 void AudioGraphProcessor::setNumWorkerThreads (int numThreads)
