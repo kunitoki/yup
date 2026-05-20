@@ -134,7 +134,7 @@ YUP is usable for experimentation, examples, prototypes, and contributors who ar
 ## Supported Plugin Formats
 |                          | **CLAP**           | **VST3**           | **VST2**           | **AUv3**           | **AUv2**                  | **AAX**               | **LV2**               |
 |--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|:---------------------:|
-| **Windows**              | :construction:     | :construction:     |                    |                    |                           |                       |                       |
+| **Windows**              | :white_check_mark: | :construction:     |                    |                    |                           |                       |                       |
 | **macOS**                | :white_check_mark: | :construction:     |                    |                    | :construction:            |                       |                       |
 | **Linux**                | :construction:     | :construction:     |                    |                    |                           |                       |                       |
 
@@ -143,7 +143,7 @@ YUP is usable for experimentation, examples, prototypes, and contributors who ar
 |                          | **CLAP**           | **VST3**           | **VST2**           | **AUv3**           | **AUv2**                  | **AAX**               | **LV2**               |
 |--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|:---------------------:|
 | **Windows**              | :construction:     | :construction:     |                    |                    |                           |                       |                       |
-| **macOS**                | :construction:     | :construction:     |                    |                    | :white_check_mark:        |                       |                       |
+| **macOS**                | :construction:     | :white_check_mark: |                    |                    | :white_check_mark:        |                       |                       |
 | **Linux**                | :construction:     | :construction:     |                    |                    |                           |                       |                       |
 
 
