@@ -37,12 +37,92 @@ AudioGraphNodeView* findNodeViewForEventSource (Component* source) noexcept
 } // namespace
 
 //==============================================================================
+struct AudioGraphComponent::ConnectionsAction : public UndoableAction
+{
+    ConnectionsAction (AudioGraphComponent& componentToUse,
+                       std::vector<AudioGraphConnection> connectionsToUse,
+                       bool shouldBeConnectedAfterRedoToUse)
+        : component (&componentToUse)
+        , connections (std::move (connectionsToUse))
+        , shouldBeConnectedAfterRedo (shouldBeConnectedAfterRedoToUse)
+    {
+    }
+
+    bool isValid() const override
+    {
+        return component.get() != nullptr && ! connections.empty();
+    }
+
+    bool perform (UndoableActionState stateToPerform) override
+    {
+        if (auto* graphComponent = component.get())
+        {
+            const auto shouldBeConnected = stateToPerform == UndoableActionState::Redo
+                                             ? shouldBeConnectedAfterRedo
+                                             : ! shouldBeConnectedAfterRedo;
+
+            for (const auto& connection : connections)
+                if (! graphComponent->performConnectionEdit (connection, shouldBeConnected))
+                    return false;
+
+            return true;
+        }
+
+        return false;
+    }
+
+private:
+    WeakReference<AudioGraphComponent> component;
+    std::vector<AudioGraphConnection> connections;
+    bool shouldBeConnectedAfterRedo = false;
+};
+
+struct AudioGraphComponent::NodeMoveAction : public UndoableAction
+{
+    NodeMoveAction (AudioGraphComponent& componentToUse,
+                    AudioGraphNodeID nodeIDToUse,
+                    Point<float> oldCanvasPosToUse,
+                    Point<float> newCanvasPosToUse)
+        : component (&componentToUse)
+        , nodeID (nodeIDToUse)
+        , oldCanvasPos (oldCanvasPosToUse)
+        , newCanvasPos (newCanvasPosToUse)
+    {
+    }
+
+    bool isValid() const override
+    {
+        return component.get() != nullptr && nodeID.isValid();
+    }
+
+    bool perform (UndoableActionState stateToPerform) override
+    {
+        if (auto* graphComponent = component.get())
+        {
+            if (stateToPerform == UndoableActionState::Redo)
+                return graphComponent->performNodeMove (nodeID, oldCanvasPos, newCanvasPos);
+
+            return graphComponent->performNodeMove (nodeID, newCanvasPos, oldCanvasPos);
+        }
+
+        return false;
+    }
+
+private:
+    WeakReference<AudioGraphComponent> component;
+    AudioGraphNodeID nodeID;
+    Point<float> oldCanvasPos;
+    Point<float> newCanvasPos;
+};
+
+//==============================================================================
 const Identifier AudioGraphComponent::Style::backgroundColorId ("audioGraphBackground");
 const Identifier AudioGraphComponent::Style::gridColorId ("audioGraphGrid");
 
 //==============================================================================
-AudioGraphComponent::AudioGraphComponent (std::shared_ptr<AudioGraphModel> modelIn)
+AudioGraphComponent::AudioGraphComponent (std::shared_ptr<AudioGraphModel> modelIn, UndoManager* undoManagerIn)
     : model (std::move (modelIn))
+    , undoManager (undoManagerIn)
 {
     setOpaque (true);
     setWantsKeyboardFocus (true);
@@ -50,8 +130,8 @@ AudioGraphComponent::AudioGraphComponent (std::shared_ptr<AudioGraphModel> model
     enableRenderingUnclipped (true);
 }
 
-AudioGraphComponent::AudioGraphComponent (std::shared_ptr<AudioGraphProcessor> graphIn)
-    : AudioGraphComponent (graphIn != nullptr ? graphIn->getModel() : nullptr)
+AudioGraphComponent::AudioGraphComponent (std::shared_ptr<AudioGraphProcessor> graphIn, UndoManager* undoManagerIn)
+    : AudioGraphComponent (graphIn != nullptr ? graphIn->getModel() : nullptr, undoManagerIn)
 {
     graph = std::move (graphIn);
 }
@@ -87,6 +167,12 @@ void AudioGraphComponent::setGraphInputView (std::unique_ptr<AudioGraphNodeView>
     if (view == nullptr)
         return;
 
+    const auto nodeID = model != nullptr ? AudioGraphModel::getGraphInputNodeID()
+                                         : AudioGraphNodeID::invalid();
+
+    if (model != nullptr)
+        model->setNodePosition (nodeID, initialCanvasPosition.getX(), initialCanvasPosition.getY());
+
     auto* item = findNodeItemByKind (NodeItem::Kind::graphInput);
     if (item != nullptr)
     {
@@ -97,11 +183,12 @@ void AudioGraphComponent::setGraphInputView (std::unique_ptr<AudioGraphNodeView>
         }
 
         item->view = std::move (view);
+        item->nodeID = nodeID;
         item->canvasPosition = initialCanvasPosition;
     }
     else
     {
-        nodes.push_back ({ AudioGraphNodeID::invalid(), std::move (view), initialCanvasPosition, NodeItem::Kind::graphInput });
+        nodes.push_back ({ nodeID, std::move (view), initialCanvasPosition, NodeItem::Kind::graphInput });
         item = &nodes.back();
     }
 
@@ -117,6 +204,12 @@ void AudioGraphComponent::setGraphOutputView (std::unique_ptr<AudioGraphNodeView
     if (view == nullptr)
         return;
 
+    const auto nodeID = model != nullptr ? AudioGraphModel::getGraphOutputNodeID()
+                                         : AudioGraphNodeID::invalid();
+
+    if (model != nullptr)
+        model->setNodePosition (nodeID, initialCanvasPosition.getX(), initialCanvasPosition.getY());
+
     auto* item = findNodeItemByKind (NodeItem::Kind::graphOutput);
     if (item != nullptr)
     {
@@ -127,11 +220,12 @@ void AudioGraphComponent::setGraphOutputView (std::unique_ptr<AudioGraphNodeView
         }
 
         item->view = std::move (view);
+        item->nodeID = nodeID;
         item->canvasPosition = initialCanvasPosition;
     }
     else
     {
-        nodes.push_back ({ AudioGraphNodeID::invalid(), std::move (view), initialCanvasPosition, NodeItem::Kind::graphOutput });
+        nodes.push_back ({ nodeID, std::move (view), initialCanvasPosition, NodeItem::Kind::graphOutput });
         item = &nodes.back();
     }
 
@@ -170,6 +264,11 @@ AudioGraphNodeView* AudioGraphComponent::getNodeView (AudioGraphNodeID nodeID) c
     });
 
     return iterator != nodes.end() ? iterator->view.get() : nullptr;
+}
+
+void AudioGraphComponent::setUndoManager (UndoManager* newUndoManager) noexcept
+{
+    undoManager = newUndoManager;
 }
 
 //==============================================================================
@@ -374,7 +473,7 @@ void AudioGraphComponent::mouseDown (const MouseEvent& event)
 
         for (const auto& node : nodes)
         {
-            if (node.view == nullptr || ! node.nodeID.isValid())
+            if (node.kind != NodeItem::Kind::processor || node.view == nullptr || ! node.nodeID.isValid())
                 continue;
 
             const auto localPos = node.view->getLocalPoint (this, screenPos);
@@ -512,28 +611,37 @@ void AudioGraphComponent::mouseUp (const MouseEvent& event)
         {
             if (isPositiveAndBelow (draggedNodeIndex, static_cast<int> (nodes.size())))
             {
-                const auto& item = nodes[static_cast<size_t> (draggedNodeIndex)];
+                auto& draggedItem = nodes[static_cast<size_t> (draggedNodeIndex)];
+                bool accepted = true;
 
-                if (item.kind == NodeItem::Kind::processor)
+                if (draggedItem.canvasPosition != dragStartNodePosition)
                 {
-                    auto& draggedItem = nodes[static_cast<size_t> (draggedNodeIndex)];
-                    bool accepted = true;
-
-                    if (onNodeMoveRequested != nullptr)
-                        accepted = onNodeMoveRequested (draggedItem.nodeID, dragStartNodePosition, draggedItem.canvasPosition);
-
-                    if (! accepted)
+                    if (undoManager != nullptr)
                     {
-                        draggedItem.canvasPosition = dragStartNodePosition;
-                        updateNodeBounds();
-                        repaint();
-                        interaction = Interaction::idle;
-                        draggedNodeIndex = -1;
-                        break;
+                        accepted = performUndoableAction (new NodeMoveAction (*this,
+                                                                              draggedItem.nodeID,
+                                                                              dragStartNodePosition,
+                                                                              draggedItem.canvasPosition),
+                                                          "Move Audio Graph Node");
                     }
-
-                    listeners.call (&Listener::nodeViewMoved, draggedItem.nodeID, draggedItem.canvasPosition);
+                    else
+                    {
+                        accepted = performNodeMove (draggedItem.nodeID, dragStartNodePosition, draggedItem.canvasPosition);
+                    }
                 }
+
+                if (! accepted)
+                {
+                    draggedItem.canvasPosition = dragStartNodePosition;
+                    updateNodeBounds();
+                    repaint();
+                    interaction = Interaction::idle;
+                    draggedNodeIndex = -1;
+                    break;
+                }
+
+                if (draggedItem.kind == NodeItem::Kind::processor)
+                    listeners.call (&Listener::nodeViewMoved, draggedItem.nodeID, draggedItem.canvasPosition);
             }
 
             interaction = Interaction::idle;
@@ -561,7 +669,7 @@ void AudioGraphComponent::mouseDoubleClick (const MouseEvent& event)
 
     for (const auto& node : nodes)
     {
-        if (node.view == nullptr || ! node.nodeID.isValid())
+        if (node.kind != NodeItem::Kind::processor || node.view == nullptr || ! node.nodeID.isValid())
             continue;
 
         const auto localPos = node.view->getLocalPoint (this, screenPos);
@@ -594,6 +702,28 @@ void AudioGraphComponent::mouseWheel (const MouseEvent& event, const MouseWheelD
 
 void AudioGraphComponent::keyDown (const KeyPress& keys, const Point<float>&)
 {
+    const auto modifiers = keys.getModifiers();
+    const bool commandDown = modifiers.isCommandDown() || modifiers.isControlDown();
+
+    if (undoManager != nullptr && commandDown)
+    {
+        if (keys.getKey() == KeyPress::textZKey)
+        {
+            if (modifiers.isShiftDown())
+                undoManager->redo();
+            else
+                undoManager->undo();
+
+            return;
+        }
+
+        if (keys.getKey() == KeyPress::textYKey)
+        {
+            undoManager->redo();
+            return;
+        }
+    }
+
     if (keys.getKey() == KeyPress::spaceKey)
     {
         spacebarDown = true;
@@ -891,8 +1021,16 @@ bool AudioGraphComponent::tryConnect (const AudioGraphEndpoint& first, const Aud
             return false;
     }
 
-    if (onConnectionRequested == nullptr || ! onConnectionRequested (connection))
-        return false;
+    if (undoManager != nullptr && onConnectionRemovalRequested != nullptr)
+    {
+        if (! performUndoableAction (new ConnectionsAction (*this, { connection }, true), "Add Audio Graph Connection"))
+            return false;
+    }
+    else
+    {
+        if (! performConnectionEdit (connection, true))
+            return false;
+    }
 
     listeners.call (&Listener::connectionAdded, connection);
 
@@ -902,8 +1040,19 @@ bool AudioGraphComponent::tryConnect (const AudioGraphEndpoint& first, const Aud
 
 bool AudioGraphComponent::requestConnectionRemoval (const AudioGraphConnection& connection)
 {
-    if (model == nullptr || onConnectionRemovalRequested == nullptr || ! onConnectionRemovalRequested (connection))
+    if (model == nullptr)
         return false;
+
+    if (undoManager != nullptr && onConnectionRequested != nullptr)
+    {
+        if (! performUndoableAction (new ConnectionsAction (*this, { connection }, false), "Remove Audio Graph Connection"))
+            return false;
+    }
+    else
+    {
+        if (! performConnectionEdit (connection, false))
+            return false;
+    }
 
     listeners.call (&Listener::connectionRemoved, connection);
 
@@ -926,13 +1075,79 @@ void AudioGraphComponent::removeConnectionsForEndpoint (const AudioGraphEndpoint
     if (removedConnections.empty())
         return;
 
-    if (! onEndpointConnectionsRemovalRequested (endpoint))
+    if (! performEndpointConnectionsRemoval (endpoint, removedConnections))
         return;
 
     for (const auto& connection : removedConnections)
         listeners.call (&Listener::connectionRemoved, connection);
 
     repaint();
+}
+
+bool AudioGraphComponent::performUndoableAction (UndoableAction::Ptr action, StringRef transactionName)
+{
+    if (undoManager == nullptr || action == nullptr)
+        return false;
+
+    UndoManager::ScopedTransaction transaction (*undoManager, transactionName);
+    return undoManager->perform (std::move (action));
+}
+
+bool AudioGraphComponent::performConnectionEdit (const AudioGraphConnection& connection, bool shouldBeConnected)
+{
+    if (shouldBeConnected)
+    {
+        if (onConnectionRequested == nullptr || ! onConnectionRequested (connection))
+            return false;
+    }
+    else
+    {
+        if (onConnectionRemovalRequested == nullptr || ! onConnectionRemovalRequested (connection))
+            return false;
+    }
+
+    repaint();
+    return true;
+}
+
+bool AudioGraphComponent::performEndpointConnectionsRemoval (const AudioGraphEndpoint& endpoint,
+                                                             const std::vector<AudioGraphConnection>& connections)
+{
+    if (undoManager != nullptr && onConnectionRequested != nullptr && onConnectionRemovalRequested != nullptr)
+        return performUndoableAction (new ConnectionsAction (*this, connections, false), "Remove Audio Graph Connections");
+
+    return onEndpointConnectionsRemovalRequested != nullptr && onEndpointConnectionsRemovalRequested (endpoint);
+}
+
+bool AudioGraphComponent::performNodeMove (AudioGraphNodeID nodeID, Point<float> oldCanvasPos, Point<float> newCanvasPos)
+{
+    if (! nodeID.isValid())
+        return false;
+
+    const auto iterator = std::find_if (nodes.begin(), nodes.end(), [nodeID] (const NodeItem& item)
+    {
+        return item.nodeID == nodeID;
+    });
+
+    if (iterator == nodes.end())
+        return false;
+
+    if (iterator->kind == NodeItem::Kind::processor && onNodeMoveRequested != nullptr)
+    {
+        if (! onNodeMoveRequested (nodeID, oldCanvasPos, newCanvasPos))
+            return false;
+    }
+    else if (model != nullptr)
+    {
+        if (! model->setNodePosition (nodeID, newCanvasPos.getX(), newCanvasPos.getY()))
+            return false;
+    }
+
+    iterator->canvasPosition = newCanvasPos;
+    updateNodeBounds();
+    repaint();
+
+    return true;
 }
 
 bool AudioGraphComponent::isCompatiblePair (const AudioGraphEndpoint& first, const AudioGraphEndpoint& second) const noexcept

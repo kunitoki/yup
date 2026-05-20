@@ -68,7 +68,7 @@ public:
 
         model->setNodeFactory (nodeRegistry.makeProcessorFactory());
 
-        graphComponent = std::make_unique<yup::AudioGraphComponent> (graph);
+        graphComponent = std::make_unique<yup::AudioGraphComponent> (graph, &undoManager);
 
         graphComponent->onConnectionRequested = [this] (const yup::AudioGraphConnection& connection)
         {
@@ -209,11 +209,6 @@ public:
 
     //==============================================================================
     // AudioGraphComponent::Listener
-    void nodeViewMoved (yup::AudioGraphNodeID nodeID, yup::Point<float> newCanvasPos) override
-    {
-        model->setNodePosition (nodeID, newCanvasPos.getX(), newCanvasPos.getY());
-    }
-
     void nodeContextMenu (yup::AudioGraphNodeID nodeID, yup::Point<float>) override
     {
         removeNode (nodeID);
@@ -267,6 +262,46 @@ private:
         addAndMakeVisible (statusLabel);
     }
 
+    void clearNodeViews()
+    {
+        for (auto& [nodeID, _] : loadedNodes)
+            graphComponent->removeNodeView (nodeID);
+
+        loadedNodes.clear();
+    }
+
+    void reloadGraphViewsFromModel()
+    {
+        clearNodeViews();
+
+        for (auto nodeID : model->getNodeIDs())
+        {
+            auto props = model->getNodeProperties (nodeID);
+            if (! props.has_value())
+                continue;
+
+            auto* proc = model->getNodeProcessor (nodeID);
+            auto view = nodeRegistry.createView (nodeID, props->identifier, proc, graph.get());
+
+            if (view != nullptr)
+            {
+                graphComponent->addNodeView (nodeID, std::move (view), { props->positionX, props->positionY });
+                loadedNodes[nodeID] = props->identifier;
+            }
+        }
+    }
+
+    void reloadGraphBoundaryViewsFromModel()
+    {
+        const auto input = model->getNodeProperties (yup::AudioGraphModel::getGraphInputNodeID())
+                               .value_or (yup::AudioGraphNodeProperties {});
+        graphComponent->setGraphInputView (std::make_unique<SoundCardInputNodeView>(), { input.positionX, input.positionY });
+
+        const auto output = model->getNodeProperties (yup::AudioGraphModel::getGraphOutputNodeID())
+                                .value_or (yup::AudioGraphNodeProperties {});
+        graphComponent->setGraphOutputView (std::make_unique<SoundCardOutputNodeView>(), { output.positionX, output.positionY });
+    }
+
     //==============================================================================
 
     void resetToEmptyGraph()
@@ -274,16 +309,15 @@ private:
         closePluginEditor();
         closeAllSubgraphEditors();
 
-        for (auto& [nodeID, _] : loadedNodes)
-            graphComponent->removeNodeView (nodeID);
-
-        loadedNodes.clear();
+        clearNodeViews();
         model->clear();
+        model->setNodePosition (yup::AudioGraphModel::getGraphInputNodeID(), 40.0f, 200.0f);
+        model->setNodePosition (yup::AudioGraphModel::getGraphOutputNodeID(), 760.0f, 200.0f);
         graph->commitChanges();
+        undoManager.clear();
         currentFilePath = yup::File();
 
-        graphComponent->setGraphInputView (std::make_unique<SoundCardInputNodeView>(), { 40.0f, 200.0f });
-        graphComponent->setGraphOutputView (std::make_unique<SoundCardOutputNodeView>(), { 760.0f, 200.0f });
+        reloadGraphBoundaryViewsFromModel();
         graphComponent->zoomToFitNodes();
     }
 
@@ -368,9 +402,7 @@ private:
         closePluginEditor();
         closeAllSubgraphEditors();
 
-        for (auto& [nodeID, _] : loadedNodes)
-            graphComponent->removeNodeView (nodeID);
-        loadedNodes.clear();
+        clearNodeViews();
 
         model->clear();
 
@@ -382,27 +414,14 @@ private:
             return;
         }
 
+        model->setNodePosition (yup::AudioGraphModel::getGraphInputNodeID(), 40.0f, 200.0f);
+        model->setNodePosition (yup::AudioGraphModel::getGraphOutputNodeID(), 760.0f, 200.0f);
         graph->commitChanges();
+        undoManager.clear();
         currentFilePath = file;
 
-        for (auto nodeID : model->getNodeIDs())
-        {
-            auto props = model->getNodeProperties (nodeID);
-            if (! props.has_value())
-                continue;
-
-            auto* proc = model->getNodeProcessor (nodeID);
-            auto view = nodeRegistry.createView (nodeID, props->identifier, proc, graph.get());
-
-            if (view != nullptr)
-            {
-                graphComponent->addNodeView (nodeID, std::move (view), { props->positionX, props->positionY });
-                loadedNodes[nodeID] = props->identifier;
-            }
-        }
-
-        graphComponent->setGraphInputView (std::make_unique<SoundCardInputNodeView>(), { 40.0f, 200.0f });
-        graphComponent->setGraphOutputView (std::make_unique<SoundCardOutputNodeView>(), { 760.0f, 200.0f });
+        reloadGraphViewsFromModel();
+        reloadGraphBoundaryViewsFromModel();
         graphComponent->zoomToFitNodes();
 
         statusLabel.setText ("Loaded: " + file.getFileName(), yup::dontSendNotification);
@@ -579,6 +598,9 @@ private:
 
     void removeNode (yup::AudioGraphNodeID nodeID)
     {
+        if (model->getNodeProcessor (nodeID) == nullptr)
+            return;
+
         if (activePluginEditorGraph == graph.get() && activePluginEditorNodeID == nodeID)
             closePluginEditor();
 
@@ -1022,6 +1044,7 @@ private:
     yup::AudioDeviceManager deviceManager;
     std::shared_ptr<yup::AudioGraphProcessor> graph;
     std::shared_ptr<yup::AudioGraphModel> model;
+    yup::UndoManager undoManager;
     std::unique_ptr<yup::AudioGraphComponent> graphComponent;
     NodeRegistry nodeRegistry;
     std::map<yup::AudioGraphNodeID, yup::String> loadedNodes;

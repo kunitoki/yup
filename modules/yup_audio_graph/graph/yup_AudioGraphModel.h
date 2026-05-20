@@ -44,9 +44,25 @@ public:
     /** Creates a processor for a saved node. */
     using NodeFactory = std::function<ResultValue<std::unique_ptr<AudioProcessor>> (const AudioGraphNodeProperties&)>;
 
+    /** Node categories owned by the graph model. */
+    enum class NodeKind
+    {
+        /** A processor node that participates in audio graph compilation. */
+        processor,
+
+        /** The graph input boundary editor node. */
+        graphInput,
+
+        /** The graph output boundary editor node. */
+        graphOutput
+    };
+
     /** Immutable node entry returned by createSnapshot(). */
     struct NodeSnapshot
     {
+        /** Node category. */
+        NodeKind kind = NodeKind::processor;
+
         /** Stable node identifier. */
         AudioGraphNodeID id;
 
@@ -84,6 +100,13 @@ public:
     ~AudioGraphModel();
 
     //==============================================================================
+    /** Returns the stable graph input boundary node identifier. */
+    static constexpr AudioGraphNodeID getGraphInputNodeID() noexcept { return AudioGraphNodeID (0xfffffffffffffffeull); }
+
+    /** Returns the stable graph output boundary node identifier. */
+    static constexpr AudioGraphNodeID getGraphOutputNodeID() noexcept { return AudioGraphNodeID (0xffffffffffffffffull); }
+
+    //==============================================================================
     /** Adds a processor node and returns its stable node identifier. */
     AudioGraphNodeID addNode (std::unique_ptr<AudioProcessor> processor);
 
@@ -114,7 +137,7 @@ public:
     /** Returns a snapshot of the current model connections. */
     std::vector<AudioGraphConnection> getConnections() const;
 
-    /** Removes all graph nodes and connections. */
+    /** Removes all processor nodes and connections. */
     void clear();
 
     //==============================================================================
@@ -130,7 +153,7 @@ public:
     /** Returns persistent metadata for a node, or nullopt when the node is not present. */
     std::optional<AudioGraphNodeProperties> getNodeProperties (AudioGraphNodeID nodeID) const;
 
-    /** Returns the identifiers of all nodes currently in the model. */
+    /** Returns the identifiers of all processor nodes currently in the model. */
     std::vector<AudioGraphNodeID> getNodeIDs() const;
 
     /** Sets the factory used to recreate processor nodes during state loading. */
@@ -159,6 +182,7 @@ public:
 private:
     struct ModelNode
     {
+        NodeKind kind = NodeKind::processor;
         AudioGraphNodeID id;
         std::shared_ptr<AudioProcessor> processor;
         AudioGraphNodeProperties properties;
@@ -178,6 +202,7 @@ private:
     ResultValue<std::unique_ptr<AudioProcessor>> createProcessorForSavedNode (const AudioGraphNodeProperties& properties);
     Result validateConnectionLocked (const AudioGraphConnection& connection) const;
 
+    void resetBoundaryNodes();
     void markTopologyChanged();
     void markMetadataChanged();
     void rebuildDataTree();

@@ -249,7 +249,8 @@ public:
 
         nodesSnapshot.reserve (snapshot.nodes.size());
         for (const auto& node : snapshot.nodes)
-            nodesSnapshot.push_back ({ node.id, node.processor, node.properties });
+            if (node.kind == AudioGraphModel::NodeKind::processor)
+                nodesSnapshot.push_back ({ node.id, node.processor, node.properties });
 
         connectionsSnapshot = snapshot.connections;
         std::vector<std::shared_ptr<AudioProcessor>> newlyPreparedNodes;
@@ -323,12 +324,16 @@ public:
         for (int i = 0; i < static_cast<int> (snapshot.nodes.size()); ++i)
         {
             const auto& node = snapshot.nodes[static_cast<size_t> (i)];
+            if (node.kind != AudioGraphModel::NodeKind::processor)
+                continue;
+
+            const auto nodeIndex = static_cast<int> (nodesSnapshot.size());
             nodesSnapshot.push_back ({ node.id, node.processor, node.properties });
 
             if (node.processor == nullptr)
                 return Result::fail ("Audio graph contains an empty node");
 
-            if (! nodeIndexByID.emplace (node.id.getRawID(), i).second)
+            if (! nodeIndexByID.emplace (node.id.getRawID(), nodeIndex).second)
                 return Result::fail ("Audio graph contains duplicate node IDs");
         }
 
@@ -367,6 +372,9 @@ public:
 
         for (const auto& node : snapshot.nodes)
         {
+            if (node.kind != AudioGraphModel::NodeKind::processor)
+                continue;
+
             const auto stateIterator = preparedNodes.find (node.id.getRawID());
             const bool isPrepared = stateIterator != preparedNodes.end()
                                  && stateIterator->second.prepared

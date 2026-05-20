@@ -46,11 +46,23 @@ public:
     };
 
     //==============================================================================
-    /** Creates an editor for a graph model. */
-    explicit AudioGraphComponent (std::shared_ptr<AudioGraphModel> model);
+    /** Creates an editor for a graph model.
 
-    /** Creates an editor for a processor's model. */
-    explicit AudioGraphComponent (std::shared_ptr<AudioGraphProcessor> graph);
+        When undoManager is not null, committed graph edit gestures are added to
+        the undo history and the component handles standard undo/redo keyboard
+        shortcuts while focused.
+    */
+    explicit AudioGraphComponent (std::shared_ptr<AudioGraphModel> model,
+                                  UndoManager* undoManager = nullptr);
+
+    /** Creates an editor for a processor's model.
+
+        When undoManager is not null, committed graph edit gestures are added to
+        the undo history and the component handles standard undo/redo keyboard
+        shortcuts while focused.
+    */
+    explicit AudioGraphComponent (std::shared_ptr<AudioGraphProcessor> graph,
+                                  UndoManager* undoManager = nullptr);
 
     /** Destructor. */
     ~AudioGraphComponent() override;
@@ -74,6 +86,20 @@ public:
 
     /** Returns the view for a node, or nullptr. */
     AudioGraphNodeView* getNodeView (AudioGraphNodeID nodeID) const noexcept;
+
+    //==============================================================================
+    /** Sets the optional undo manager used for graph edit gestures.
+
+        The component does not own the undo manager. Passing nullptr disables
+        automatic undo action creation; edit callbacks continue to be invoked
+        directly. Undoable connection edits require both connection add and
+        connection removal callbacks because redo and undo use the same request
+        path as user gestures.
+    */
+    void setUndoManager (UndoManager* newUndoManager) noexcept;
+
+    /** Returns the undo manager used by this component, or nullptr. */
+    UndoManager* getUndoManager() const noexcept { return undoManager; }
 
     //==============================================================================
     /** Sets the zoom factor, clamped to [getMinZoom(), getMaxZoom()]. */
@@ -217,6 +243,9 @@ public:
     void keyUp (const KeyPress& keys, const Point<float>& position) override;
 
 private:
+    struct ConnectionsAction;
+    struct NodeMoveAction;
+
     struct NodeItem
     {
         enum class Kind
@@ -264,6 +293,12 @@ private:
     bool requestConnectionRemoval (const AudioGraphConnection& connection);
     void removeConnectionsForEndpoint (const AudioGraphEndpoint& endpoint);
 
+    bool performUndoableAction (UndoableAction::Ptr action, StringRef transactionName);
+    bool performConnectionEdit (const AudioGraphConnection& connection, bool shouldBeConnected);
+    bool performEndpointConnectionsRemoval (const AudioGraphEndpoint& endpoint,
+                                            const std::vector<AudioGraphConnection>& connections);
+    bool performNodeMove (AudioGraphNodeID nodeID, Point<float> oldCanvasPos, Point<float> newCanvasPos);
+
     bool isCompatiblePair (const AudioGraphEndpoint& first, const AudioGraphEndpoint& second) const noexcept;
     AudioGraphConnection makeConnection (const AudioGraphEndpoint& first, const AudioGraphEndpoint& second) const noexcept;
 
@@ -272,6 +307,7 @@ private:
 
     std::shared_ptr<AudioGraphModel> model;
     std::shared_ptr<AudioGraphProcessor> graph;
+    UndoManager* undoManager = nullptr;
     std::vector<NodeItem> nodes;
     ListenerList<Listener> listeners;
 
@@ -299,6 +335,7 @@ private:
     Point<float> pendingWireEnd;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioGraphComponent)
+    YUP_DECLARE_WEAK_REFERENCEABLE (AudioGraphComponent)
 };
 
 } // namespace yup

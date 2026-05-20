@@ -26,7 +26,7 @@ class SoundCardInputNodeView final : public yup::AudioGraphNodeView
 {
 public:
     explicit SoundCardInputNodeView (yup::StringRef subtitleIn = "sound card")
-        : AudioGraphNodeView (yup::AudioGraphNodeID::invalid())
+        : AudioGraphNodeView (yup::AudioGraphModel::getGraphInputNodeID())
         , subtitle (subtitleIn)
     {
     }

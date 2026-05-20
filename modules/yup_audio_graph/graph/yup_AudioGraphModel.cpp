@@ -94,6 +94,14 @@ AudioGraphNodeProperties modelMakeDefaultNodeProperties (const AudioProcessor& p
     return properties;
 }
 
+AudioGraphNodeProperties modelMakeBoundaryNodeProperties (AudioGraphModel::NodeKind kind)
+{
+    AudioGraphNodeProperties properties;
+    properties.identifier = kind == AudioGraphModel::NodeKind::graphInput ? "graphInput" : "graphOutput";
+    properties.name = kind == AudioGraphModel::NodeKind::graphInput ? "Graph Input" : "Graph Output";
+    return properties;
+}
+
 void modelWriteBase64Element (XmlElement& parent, const char* tagName, const MemoryBlock& block)
 {
     auto* element = new XmlElement (tagName);
@@ -248,6 +256,7 @@ DataTree modelCreateEndpointTree (const Identifier& type, const AudioGraphEndpoi
 //==============================================================================
 AudioGraphModel::AudioGraphModel()
 {
+    resetBoundaryNodes();
     rebuildDataTree();
 }
 
@@ -274,7 +283,7 @@ AudioGraphNodeID AudioGraphModel::addNode (std::unique_ptr<AudioProcessor> proce
     if (properties.name.isEmpty())
         properties.name = processor->getName();
 
-    nodes.push_back ({ id, std::shared_ptr<AudioProcessor> (std::move (processor)), std::move (properties) });
+    nodes.push_back ({ NodeKind::processor, id, std::shared_ptr<AudioProcessor> (std::move (processor)), std::move (properties) });
     markTopologyChanged();
     return id;
 }
@@ -288,7 +297,7 @@ bool AudioGraphModel::removeNode (AudioGraphNodeID nodeID)
 
     const auto nodeIterator = std::find_if (nodes.begin(), nodes.end(), [nodeID] (const ModelNode& node)
     {
-        return node.id == nodeID;
+        return node.kind == NodeKind::processor && node.id == nodeID;
     });
 
     if (nodeIterator == nodes.end())
@@ -320,7 +329,7 @@ Result AudioGraphModel::replaceNode (AudioGraphNodeID nodeID,
 
     const auto nodeIterator = std::find_if (nodes.begin(), nodes.end(), [nodeID] (const ModelNode& node)
     {
-        return node.id == nodeID;
+        return node.kind == NodeKind::processor && node.id == nodeID;
     });
 
     if (nodeIterator == nodes.end())
@@ -384,7 +393,12 @@ void AudioGraphModel::clear()
 {
     const std::lock_guard<std::mutex> lock (mutex);
 
-    nodes.clear();
+    nodes.erase (std::remove_if (nodes.begin(), nodes.end(), [] (const ModelNode& node)
+    {
+        return node.kind == NodeKind::processor;
+    }),
+                 nodes.end());
+    resetBoundaryNodes();
     connections.clear();
     markTopologyChanged();
 }
@@ -418,6 +432,7 @@ bool AudioGraphModel::setNodePosition (AudioGraphNodeID nodeID, float positionX,
 
     iterator->properties.positionX = positionX;
     iterator->properties.positionY = positionY;
+
     markMetadataChanged();
     return true;
 }
@@ -465,7 +480,8 @@ std::vector<AudioGraphNodeID> AudioGraphModel::getNodeIDs() const
     result.reserve (nodes.size());
 
     for (const auto& node : nodes)
-        result.push_back (node.id);
+        if (node.kind == NodeKind::processor)
+            result.push_back (node.id);
 
     return result;
 }
@@ -485,6 +501,9 @@ ResultValue<std::unique_ptr<XmlElement>> AudioGraphModel::createXml() const
 
     for (const auto& node : snapshot.nodes)
     {
+        if (node.kind != NodeKind::processor)
+            continue;
+
         if (node.processor == nullptr)
             return makeResultValueFail ("Audio graph contains an empty node");
 
@@ -605,7 +624,7 @@ AudioGraphModel::Snapshot AudioGraphModel::createSnapshot() const
     snapshot.nodes.reserve (nodes.size());
 
     for (const auto& node : nodes)
-        snapshot.nodes.push_back ({ node.id, node.processor, node.properties });
+        snapshot.nodes.push_back ({ node.kind, node.id, node.processor, node.properties });
 
     snapshot.connections = connections;
     snapshot.nextNodeID = nextNodeID;
@@ -622,7 +641,9 @@ void AudioGraphModel::restoreSnapshot (AudioGraphModel::Snapshot snapshot)
     nodes.reserve (snapshot.nodes.size());
 
     for (auto& node : snapshot.nodes)
-        nodes.push_back ({ node.id, std::move (node.processor), std::move (node.properties) });
+        nodes.push_back ({ node.kind, node.id, std::move (node.processor), std::move (node.properties) });
+
+    resetBoundaryNodes();
 
     connections = std::move (snapshot.connections);
     nextNodeID = snapshot.nextNodeID;
@@ -667,7 +688,8 @@ Result AudioGraphModel::restoreModel (uint64_t savedNextNodeID,
         if (! result)
             return Result::fail ("Audio graph node state load failed: " + result.getErrorMessage());
 
-        loadedNodes.push_back ({ savedNode.id,
+        loadedNodes.push_back ({ NodeKind::processor,
+                                 savedNode.id,
                                  std::shared_ptr<AudioProcessor> (std::move (processor)),
                                  std::move (savedNode.properties) });
     }
@@ -680,6 +702,7 @@ Result AudioGraphModel::restoreModel (uint64_t savedNextNodeID,
         const std::lock_guard<std::mutex> lock (mutex);
         nodes = std::move (loadedNodes);
         connections = std::move (savedConnections);
+        resetBoundaryNodes();
         nextNodeID = jmax (savedNextNodeID, highestSavedNodeID);
         markTopologyChanged();
     }
@@ -700,6 +723,29 @@ ResultValue<std::unique_ptr<AudioProcessor>> AudioGraphModel::createProcessorFor
         return makeResultValueFail ("Audio graph node factory is not configured");
 
     return factoryCopy (properties);
+}
+
+void AudioGraphModel::resetBoundaryNodes()
+{
+    auto inputProperties = modelMakeBoundaryNodeProperties (NodeKind::graphInput);
+    auto outputProperties = modelMakeBoundaryNodeProperties (NodeKind::graphOutput);
+
+    for (const auto& node : nodes)
+    {
+        if (node.kind == NodeKind::graphInput)
+            inputProperties = node.properties;
+        else if (node.kind == NodeKind::graphOutput)
+            outputProperties = node.properties;
+    }
+
+    nodes.erase (std::remove_if (nodes.begin(), nodes.end(), [] (const ModelNode& node)
+    {
+        return node.kind == NodeKind::graphInput || node.kind == NodeKind::graphOutput;
+    }),
+                 nodes.end());
+
+    nodes.insert (nodes.begin(), { NodeKind::graphInput, getGraphInputNodeID(), nullptr, std::move (inputProperties) });
+    nodes.insert (nodes.begin() + 1, { NodeKind::graphOutput, getGraphOutputNodeID(), nullptr, std::move (outputProperties) });
 }
 
 Result AudioGraphModel::validateConnectionLocked (const AudioGraphConnection& connection) const
