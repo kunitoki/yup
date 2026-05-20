@@ -205,6 +205,49 @@ public:
         MemoryBlock state;
     };
 
+    struct EndpointDescriptor
+    {
+        bool valid = false;
+        GraphSignalType type = GraphSignalType::audio;
+        int channels = 0;
+    };
+
+    static EndpointDescriptor describeNodeEndpoint (const AudioProcessor& processor, const AudioGraphEndpoint& endpoint)
+    {
+        const auto buses = endpoint.getKind() == AudioGraphEndpoint::Kind::nodeInput
+                             ? processor.getBusLayout().getInputBuses()
+                             : processor.getBusLayout().getOutputBuses();
+
+        if (! isValidBusIndex (buses, endpoint.getBusIndex()))
+            return {};
+
+        const auto& bus = buses[static_cast<size_t> (endpoint.getBusIndex())];
+        return { true,
+                 toSignalType (bus.getType()),
+                 bus.getType() == AudioBus::Type::Audio ? bus.getNumChannels() : 0 };
+    }
+
+    static bool connectionEndpointIsStillCompatible (const AudioGraphEndpoint& endpoint,
+                                                     AudioGraphNodeID replacedNodeID,
+                                                     const AudioProcessor* oldProcessor,
+                                                     const AudioProcessor* newProcessor)
+    {
+        if (endpoint.getNodeID() != replacedNodeID)
+            return true;
+
+        if (endpoint.getKind() != AudioGraphEndpoint::Kind::nodeInput
+            && endpoint.getKind() != AudioGraphEndpoint::Kind::nodeOutput)
+            return true;
+
+        const auto oldDescriptor = describeNodeEndpoint (*oldProcessor, endpoint);
+        const auto newDescriptor = describeNodeEndpoint (*newProcessor, endpoint);
+
+        return oldDescriptor.valid
+            && newDescriptor.valid
+            && oldDescriptor.type == newDescriptor.type
+            && oldDescriptor.channels == newDescriptor.channels;
+    }
+
     class WorkerThread final : public Thread
     {
     public:
@@ -270,6 +313,52 @@ public:
         ++modelRevision;
         dirty.store (true);
         return true;
+    }
+
+    Result replaceNodeProcessor (AudioGraphNodeID nodeID,
+                                 std::unique_ptr<AudioProcessor> processor,
+                                 AudioGraphNodeProperties properties)
+    {
+        if (! nodeID.isValid())
+            return Result::fail ("Audio graph node ID is invalid");
+
+        if (processor == nullptr)
+            return Result::fail ("Audio graph replacement processor is empty");
+
+        const std::lock_guard<std::mutex> lock (modelMutex);
+
+        const auto nodeIterator = std::find_if (modelNodes.begin(), modelNodes.end(), [nodeID] (const ModelNode& node)
+        {
+            return node.id == nodeID;
+        });
+
+        if (nodeIterator == modelNodes.end())
+            return Result::fail ("Audio graph node does not exist");
+
+        auto replacement = std::shared_ptr<AudioProcessor> (std::move (processor));
+
+        if (properties.name.isEmpty())
+            properties.name = replacement->getName();
+
+        auto& node = *nodeIterator;
+        auto oldProcessor = node.processor;
+
+        modelConnections.erase (std::remove_if (modelConnections.begin(), modelConnections.end(), [nodeID, &oldProcessor, &replacement] (const AudioGraphConnection& connection)
+        {
+            return ! connectionEndpointIsStillCompatible (connection.source, nodeID, oldProcessor.get(), replacement.get())
+                || ! connectionEndpointIsStillCompatible (connection.destination, nodeID, oldProcessor.get(), replacement.get());
+        }),
+                                modelConnections.end());
+
+        node.processor = std::move (replacement);
+        node.properties = std::move (properties);
+        node.preparedSampleRate = 0.0f;
+        node.preparedBlockSize = 0;
+        node.prepared = false;
+
+        ++modelRevision;
+        dirty.store (true);
+        return Result::ok();
     }
 
     Result addConnection (const AudioGraphConnection& connection)
@@ -1673,6 +1762,13 @@ AudioGraphNodeID AudioGraphProcessor::addNode (std::unique_ptr<AudioProcessor> p
 bool AudioGraphProcessor::removeNode (AudioGraphNodeID nodeID)
 {
     return pimpl->removeNode (nodeID);
+}
+
+Result AudioGraphProcessor::replaceNodeProcessor (AudioGraphNodeID nodeID,
+                                                  std::unique_ptr<AudioProcessor> processor,
+                                                  AudioGraphNodeProperties properties)
+{
+    return pimpl->replaceNodeProcessor (nodeID, std::move (processor), std::move (properties));
 }
 
 Result AudioGraphProcessor::addConnection (const AudioGraphConnection& connection)

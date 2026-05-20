@@ -21,64 +21,18 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <map>
 #include <memory>
 #include <vector>
 
-//==============================================================================
-
-class SoundCardInputNodeView final : public yup::AudioGraphNodeView
-{
-public:
-    SoundCardInputNodeView()
-        : AudioGraphNodeView (yup::AudioGraphNodeID::invalid())
-    {
-    }
-
-    yup::String getNodeTitle() const override { return "INPUT"; }
-
-    yup::String getNodeSubtitle() const override { return "sound card"; }
-
-    int getNumInputPorts() const override { return 0; }
-
-    int getNumOutputPorts() const override { return 1; }
-
-    int getPreferredWidth() const override { return 150; }
-
-    yup::Color getNodeColor() const override { return yup::Color (0xfff97316); }
-
-    PortInfo getOutputPortInfo (int) const override
-    {
-        return { "audio", getPortKindColor (PortKind::audio), PortKind::audio };
-    }
-};
-
-class SoundCardOutputNodeView final : public yup::AudioGraphNodeView
-{
-public:
-    SoundCardOutputNodeView()
-        : AudioGraphNodeView (yup::AudioGraphNodeID::invalid())
-    {
-    }
-
-    yup::String getNodeTitle() const override { return "OUTPUT"; }
-
-    yup::String getNodeSubtitle() const override { return "sound card"; }
-
-    int getNumInputPorts() const override { return 1; }
-
-    int getNumOutputPorts() const override { return 0; }
-
-    int getPreferredWidth() const override { return 150; }
-
-    yup::Color getNodeColor() const override { return yup::Color (0xff06b6d4); }
-
-    PortInfo getInputPortInfo (int) const override
-    {
-        return { "audio", getPortKindColor (PortKind::audio), PortKind::audio };
-    }
-};
+#include "nodes/GraphEndpointNodeViews.h"
+#include "nodes/NodeRegistry.h"
+#include "nodes/SubgraphNode.h"
+#include "ui/AudioGraphEditorPanel.h"
+#include "ui/PluginEditorWindow.h"
+#include "ui/SubgraphEditorWindow.h"
 
 //==============================================================================
 
@@ -124,7 +78,7 @@ public:
         };
         graphComponent->onNodeDoubleClicked = [this] (yup::AudioGraphNodeID id)
         {
-            openPluginEditor (id);
+            openNodeEditor (graph, id);
         };
         graphComponent->addListener (this);
         addAndMakeVisible (*graphComponent);
@@ -144,6 +98,7 @@ public:
 #endif
 
         closePluginEditor();
+        closeAllSubgraphEditors();
 
         if (audioCallbackRegistered)
         {
@@ -293,6 +248,7 @@ private:
     void resetToEmptyGraph()
     {
         closePluginEditor();
+        closeAllSubgraphEditors();
 
         for (auto& [nodeID, _] : loadedNodes)
             graphComponent->removeNodeView (nodeID);
@@ -386,6 +342,7 @@ private:
     void loadGraphFromMemory (const yup::MemoryBlock& mb, const yup::File& file)
     {
         closePluginEditor();
+        closeAllSubgraphEditors();
 
         for (auto& [nodeID, _] : loadedNodes)
             graphComponent->removeNodeView (nodeID);
@@ -447,8 +404,15 @@ private:
             internalSubMenu->addItem (displayName, static_cast<int> (internalSubMenu->getNumItems() + 1));
         }
 
+        auto subgraphSubMenu = yup::PopupMenu::create();
+        subgraphSubMenu->addItem ("Mono Subgraph", 10);
+        subgraphSubMenu->addItem ("Stereo Subgraph", 11);
+        subgraphSubMenu->addItem ("Mono Subgraph + MIDI", 12);
+        subgraphSubMenu->addItem ("Stereo Subgraph + MIDI", 13);
+
         activeMenu = yup::PopupMenu::create (options);
         activeMenu->addSubMenu ("Internal Nodes", internalSubMenu);
+        activeMenu->addSubMenu ("Subgraphs", subgraphSubMenu);
 
 #if YUP_DESKTOP
         const auto& plugins = nodeRegistry.getDiscoveredPlugins();
@@ -481,6 +445,17 @@ private:
             {
                 addInternalNode (internalNodes[selectedID - 1], pendingMenuCanvasPos);
             }
+            else if (selectedID >= 10 && selectedID <= 13)
+            {
+                const auto preset = selectedID == 10 ? SubgraphConfig::mono
+                                  : selectedID == 11 ? SubgraphConfig::stereo
+                                  : selectedID == 12 ? SubgraphConfig::monoMidi
+                                                     : SubgraphConfig::stereoMidi;
+                const auto config = SubgraphConfig::fromPreset (preset);
+                addInternalNode (NodeRegistry::subgraphIdentifier,
+                                 pendingMenuCanvasPos,
+                                 SubgraphConfig::toCreationData (config));
+            }
 #if YUP_DESKTOP
             else if (selectedID >= 100)
             {
@@ -494,13 +469,18 @@ private:
         });
     }
 
-    void addInternalNode (const yup::String& identifier, yup::Point<float> canvasPos)
+    void addInternalNode (const yup::String& identifier,
+                          yup::Point<float> canvasPos,
+                          yup::MemoryBlock creationData = {})
     {
         yup::AudioGraphNodeProperties props;
         props.identifier = identifier;
-        props.name = NodeRegistry::identifierToDisplayName (identifier);
+        props.name = identifier == NodeRegistry::subgraphIdentifier
+                       ? SubgraphConfig::fromCreationData (creationData).getDisplayName()
+                       : NodeRegistry::identifierToDisplayName (identifier);
         props.positionX = canvasPos.getX();
         props.positionY = canvasPos.getY();
+        props.creationData = std::move (creationData);
 
         auto processorResult = nodeRegistry.makeProcessorFactory() (props);
 
@@ -575,10 +555,10 @@ private:
 
     void removeNode (yup::AudioGraphNodeID nodeID)
     {
-        if (activePluginEditorNodeID == nodeID)
-        {
+        if (activePluginEditorGraph == graph.get() && activePluginEditorNodeID == nodeID)
             closePluginEditor();
-        }
+
+        closeSubgraphEditorForNode (graph, nodeID);
 
         graphComponent->removeNodeView (nodeID);
         graph->removeNode (nodeID);
@@ -588,15 +568,30 @@ private:
 
     //==============================================================================
 
-    void openPluginEditor (yup::AudioGraphNodeID nodeID)
+    void openNodeEditor (std::shared_ptr<yup::AudioGraphProcessor> ownerGraph, yup::AudioGraphNodeID nodeID)
     {
-        if (pluginEditorWindow != nullptr && activePluginEditorNodeID == nodeID)
+        if (ownerGraph == nullptr)
+            return;
+
+        auto* proc = ownerGraph->getNodeProcessor (nodeID);
+        if (auto* subgraph = dynamic_cast<SubgraphProcessor*> (proc))
+        {
+            openSubgraphEditor (ownerGraph, nodeID, *subgraph);
+            return;
+        }
+
+        openPluginEditor (ownerGraph, nodeID);
+    }
+
+    void openPluginEditor (std::shared_ptr<yup::AudioGraphProcessor> ownerGraph, yup::AudioGraphNodeID nodeID)
+    {
+        if (pluginEditorWindow != nullptr && activePluginEditorGraph == ownerGraph.get() && activePluginEditorNodeID == nodeID)
         {
             pluginEditorWindow->toFront (true);
             return;
         }
 
-        auto* proc = graph->getNodeProcessor (nodeID);
+        auto* proc = ownerGraph->getNodeProcessor (nodeID);
         if (proc == nullptr || ! proc->hasEditor())
             return;
 
@@ -605,6 +600,7 @@ private:
             return;
 
         closePluginEditor();
+        activePluginEditorGraph = ownerGraph.get();
         activePluginEditorNodeID = nodeID;
 
         const auto preferredSize = editor->getPreferredSize();
@@ -628,8 +624,247 @@ private:
     void closePluginEditor()
     {
         pluginEditorWindow.reset();
+        activePluginEditorGraph = nullptr;
         activePluginEditorNodeID = yup::AudioGraphNodeID::invalid();
     }
+
+    struct SubgraphEditorRecord
+    {
+        const yup::AudioGraphProcessor* ownerGraphRaw = nullptr;
+        yup::AudioGraphNodeID nodeID;
+        std::shared_ptr<yup::AudioGraphProcessor> ownerGraph;
+        std::unique_ptr<SubgraphEditorWindow> window;
+    };
+
+    std::unique_ptr<AudioGraphEditorPanel> createSubgraphPanel (std::shared_ptr<yup::AudioGraphProcessor> childGraph)
+    {
+        auto panel = std::make_unique<AudioGraphEditorPanel> (std::move (childGraph), nodeRegistry, "parent graph");
+
+        panel->onNodeDoubleClicked = [this] (AudioGraphEditorPanel& editor, yup::AudioGraphNodeID nodeID)
+        {
+            openNodeEditor (editor.getGraph(), nodeID);
+        };
+
+        panel->onNodeWillBeRemoved = [this] (AudioGraphEditorPanel& editor, yup::AudioGraphNodeID nodeID)
+        {
+            if (activePluginEditorGraph == editor.getGraph().get() && activePluginEditorNodeID == nodeID)
+                closePluginEditor();
+
+            closeSubgraphEditorForNode (editor.getGraph(), nodeID);
+        };
+
+#if YUP_DESKTOP
+        panel->getDiscoveredPlugins = [this]() -> const std::vector<yup::AudioPluginDescription>&
+        {
+            return nodeRegistry.getDiscoveredPlugins();
+        };
+        panel->onPluginSelected = [this] (AudioGraphEditorPanel& editor,
+                                          const yup::AudioPluginDescription& desc,
+                                          yup::Point<float> canvasPos)
+        {
+            addPluginNodeToPanel (editor, desc, canvasPos);
+        };
+#endif
+
+        return panel;
+    }
+
+    void openSubgraphEditor (std::shared_ptr<yup::AudioGraphProcessor> ownerGraph,
+                             yup::AudioGraphNodeID nodeID,
+                             SubgraphProcessor& processor)
+    {
+        if (auto* record = findSubgraphEditorRecord (ownerGraph.get(), nodeID))
+        {
+            record->window->toFront (true);
+            return;
+        }
+
+        auto childGraph = processor.getGraph();
+        auto panel = createSubgraphPanel (childGraph);
+
+        yup::WeakReference<AudioGraphApp> weakThis (this);
+        auto window = std::make_unique<SubgraphEditorWindow> (
+            processor.getConfig().getDisplayName(),
+            std::move (panel),
+            processor.getConfig(),
+            [weakThis, ownerGraph, nodeID] (int presetID)
+        {
+            if (auto* self = weakThis.get())
+                self->reconfigureSubgraph (ownerGraph, nodeID, SubgraphConfig::fromPreset (presetID));
+        },
+            [weakThis, ownerGraph, nodeID]
+        {
+            if (auto* self = weakThis.get())
+                self->closeSubgraphEditorForNode (ownerGraph, nodeID);
+        });
+
+        subgraphEditorWindows.push_back ({ ownerGraph.get(), nodeID, ownerGraph, std::move (window) });
+        auto& record = subgraphEditorWindows.back();
+        record.window->centreWithSize ({ 900, 620 });
+        record.window->setVisible (true);
+        record.window->toFront (true);
+    }
+
+    void reconfigureSubgraph (std::shared_ptr<yup::AudioGraphProcessor> ownerGraph,
+                              yup::AudioGraphNodeID nodeID,
+                              const SubgraphConfig& config)
+    {
+        if (ownerGraph == nullptr)
+            return;
+
+        auto* oldProcessor = dynamic_cast<SubgraphProcessor*> (ownerGraph->getNodeProcessor (nodeID));
+        if (oldProcessor == nullptr || oldProcessor->getConfig().getPresetID() == config.getPresetID())
+            return;
+
+        closePluginEditor();
+        closeSubgraphEditorsForGraph (oldProcessor->getGraph().get());
+
+        yup::MemoryBlock oldState;
+        if (const auto saveResult = oldProcessor->saveStateIntoMemory (oldState); saveResult.failed())
+        {
+            statusLabel.setText ("Subgraph save failed: " + saveResult.getErrorMessage(), yup::dontSendNotification);
+            return;
+        }
+
+        auto props = ownerGraph->getNodeProperties (nodeID).value_or (yup::AudioGraphNodeProperties());
+        props.identifier = NodeRegistry::subgraphIdentifier;
+        props.name = config.getDisplayName();
+        props.creationData = SubgraphConfig::toCreationData (config);
+
+        auto replacement = std::make_unique<SubgraphProcessor> (config);
+        replacement->setNodeFactory (nodeRegistry.makeProcessorFactory());
+
+        if (const auto loadResult = replacement->loadStateFromMemory (oldState); loadResult.failed())
+        {
+            statusLabel.setText ("Subgraph reload failed: " + loadResult.getErrorMessage(), yup::dontSendNotification);
+            return;
+        }
+
+        if (const auto replaceResult = ownerGraph->replaceNodeProcessor (nodeID, std::move (replacement), props); replaceResult.failed())
+        {
+            statusLabel.setText ("Subgraph reconfigure failed: " + replaceResult.getErrorMessage(), yup::dontSendNotification);
+            return;
+        }
+
+        if (const auto commitResult = ownerGraph->commitChanges(); commitResult.failed())
+        {
+            statusLabel.setText ("Subgraph commit failed: " + commitResult.getErrorMessage(), yup::dontSendNotification);
+            return;
+        }
+
+        refreshNodeViewsForGraph (ownerGraph.get(), nodeID);
+
+        auto* newProcessor = dynamic_cast<SubgraphProcessor*> (ownerGraph->getNodeProcessor (nodeID));
+        auto* record = findSubgraphEditorRecord (ownerGraph.get(), nodeID);
+
+        if (newProcessor != nullptr && record != nullptr)
+        {
+            record->window->setTitle (config.getDisplayName());
+            record->window->setEditorPanel (createSubgraphPanel (newProcessor->getGraph()), config);
+        }
+    }
+
+    void refreshNodeViewsForGraph (const yup::AudioGraphProcessor* graphToRefresh, yup::AudioGraphNodeID nodeID)
+    {
+        if (graphToRefresh == graph.get())
+        {
+            graphComponent->removeNodeView (nodeID);
+            loadedNodes.erase (nodeID);
+
+            if (auto props = graph->getNodeProperties (nodeID))
+            {
+                auto* proc = graph->getNodeProcessor (nodeID);
+                auto view = nodeRegistry.createView (nodeID, props->identifier, proc, graph.get());
+
+                if (view != nullptr)
+                {
+                    graphComponent->addNodeView (nodeID, std::move (view), { props->positionX, props->positionY });
+                    loadedNodes[nodeID] = props->identifier;
+                }
+            }
+        }
+
+        for (auto& record : subgraphEditorWindows)
+            if (record.ownerGraphRaw == graphToRefresh && record.window != nullptr && record.window->getEditorPanel() != nullptr)
+                record.window->getEditorPanel()->refreshNodeView (nodeID);
+    }
+
+    void closeSubgraphEditorForNode (std::shared_ptr<yup::AudioGraphProcessor> ownerGraph, yup::AudioGraphNodeID nodeID)
+    {
+        if (ownerGraph == nullptr)
+            return;
+
+        if (auto* subgraph = dynamic_cast<SubgraphProcessor*> (ownerGraph->getNodeProcessor (nodeID)))
+            closeSubgraphEditorsForGraph (subgraph->getGraph().get());
+
+        subgraphEditorWindows.erase (std::remove_if (subgraphEditorWindows.begin(), subgraphEditorWindows.end(), [ownerGraphRaw = ownerGraph.get(), nodeID] (SubgraphEditorRecord& record)
+        {
+            return record.ownerGraphRaw == ownerGraphRaw && record.nodeID == nodeID;
+        }),
+                                     subgraphEditorWindows.end());
+    }
+
+    void closeSubgraphEditorsForGraph (const yup::AudioGraphProcessor* graphToClose)
+    {
+        bool removed = true;
+
+        while (removed)
+        {
+            removed = false;
+
+            for (auto& record : subgraphEditorWindows)
+            {
+                if (record.ownerGraphRaw == graphToClose)
+                {
+                    closeSubgraphEditorForNode (record.ownerGraph, record.nodeID);
+                    removed = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    void closeAllSubgraphEditors()
+    {
+        subgraphEditorWindows.clear();
+    }
+
+    SubgraphEditorRecord* findSubgraphEditorRecord (const yup::AudioGraphProcessor* ownerGraph, yup::AudioGraphNodeID nodeID)
+    {
+        const auto iterator = std::find_if (subgraphEditorWindows.begin(), subgraphEditorWindows.end(), [ownerGraph, nodeID] (const SubgraphEditorRecord& record)
+        {
+            return record.ownerGraphRaw == ownerGraph && record.nodeID == nodeID;
+        });
+
+        return iterator != subgraphEditorWindows.end() ? &*iterator : nullptr;
+    }
+
+#if YUP_DESKTOP
+    void addPluginNodeToPanel (AudioGraphEditorPanel& editor,
+                               const yup::AudioPluginDescription& desc,
+                               yup::Point<float> canvasPos)
+    {
+        auto* format = scanner->getFormatForType (desc.formatType);
+        if (format == nullptr)
+            return;
+
+        auto result = format->loadPlugin (desc, makeHostContext());
+        if (result.failed())
+        {
+            statusLabel.setText ("Load failed: " + result.getErrorMessage(), yup::dontSendNotification);
+            return;
+        }
+
+        yup::AudioGraphNodeProperties props;
+        props.identifier = NodeRegistry::identifierForDescription (desc);
+        props.name = desc.name;
+        props.positionX = canvasPos.getX();
+        props.positionY = canvasPos.getY();
+        props.creationData = NodeRegistry::descriptionToCreationData (desc);
+
+        editor.addProcessorNode (std::move (result).getValue(), std::move (props), canvasPos);
+    }
+#endif
 
     //==============================================================================
 
@@ -707,7 +942,9 @@ private:
     yup::FileChooser::Ptr fileChooser;
 
     std::unique_ptr<PluginEditorWindow> pluginEditorWindow;
+    const yup::AudioGraphProcessor* activePluginEditorGraph = nullptr;
     yup::AudioGraphNodeID activePluginEditorNodeID { yup::AudioGraphNodeID::invalid() };
+    std::vector<SubgraphEditorRecord> subgraphEditorWindows;
 
     yup::TextButton newButton;
     yup::TextButton openButton;

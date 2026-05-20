@@ -34,14 +34,6 @@
 #include <yup_audio_plugin_host/yup_audio_plugin_host.h>
 #endif
 
-#include "nodes/OscillatorNode.h"
-#include "nodes/GainNode.h"
-#include "nodes/LatencyNode.h"
-#include "nodes/LowPassFilterNode.h"
-#include "nodes/SamplePlayerNode.h"
-#include "nodes/PluginNodeView.h"
-#include "nodes/NodeRegistry.h"
-#include "ui/PluginEditorWindow.h"
 #include "AudioGraphApp.h"
 
 //==============================================================================

@@ -2663,3 +2663,69 @@ TEST (AudioGraphProcessorTests, GetNodeIDsReturnsAllAddedNodes)
     EXPECT_EQ (1u, idsAfter.size());
     EXPECT_EQ (idsAfter.end(), std::find (idsAfter.begin(), idsAfter.end(), idA));
 }
+
+TEST (AudioGraphProcessorTests, ReplaceNodeProcessorPreservesNodeIDAndCompatibleConnections)
+{
+    AudioGraphProcessor graph;
+    const auto node = graph.addNode (std::make_unique<TestProcessor> (1.0f));
+
+    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (graph.commitChanges().wasOk());
+
+    AudioGraphNodeProperties props;
+    props.identifier = "replacement";
+    props.name = "Replacement";
+
+    EXPECT_TRUE (graph.replaceNodeProcessor (node, std::make_unique<TestProcessor> (0.25f), props).wasOk());
+    EXPECT_TRUE (graph.commitChanges().wasOk());
+
+    const auto ids = graph.getNodeIDs();
+    EXPECT_EQ (1u, ids.size());
+    EXPECT_EQ (node, ids.front());
+    EXPECT_EQ (2u, graph.getConnections().size());
+
+    AudioBuffer<float> audio (2, 16);
+    MidiBuffer midi;
+    fillImpulse (audio);
+
+    graph.processBlock (audio, midi);
+
+    EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (0)[0]);
+    EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (1)[0]);
+}
+
+TEST (AudioGraphProcessorTests, ReplaceNodeProcessorPrunesIncompatibleConnections)
+{
+    AudioGraphProcessor graph;
+    const auto node = graph.addNode (std::make_unique<TestProcessor> (1.0f));
+
+    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (graph.commitChanges().wasOk());
+
+    AudioGraphNodeProperties props;
+    props.identifier = "mono";
+    props.name = "Mono";
+
+    EXPECT_TRUE (graph.replaceNodeProcessor (node, std::make_unique<MonoLayoutProcessor>(), props).wasOk());
+    EXPECT_TRUE (graph.commitChanges().wasOk());
+
+    const auto ids = graph.getNodeIDs();
+    EXPECT_EQ (1u, ids.size());
+    EXPECT_EQ (node, ids.front());
+    EXPECT_TRUE (graph.getConnections().empty());
+}
+
+TEST (AudioGraphProcessorTests, ReplaceNodeProcessorRejectsInvalidRequests)
+{
+    AudioGraphProcessor graph;
+    const auto node = graph.addNode (std::make_unique<TestProcessor>());
+
+    AudioGraphNodeProperties props;
+    props.identifier = "replacement";
+
+    EXPECT_TRUE (graph.replaceNodeProcessor (AudioGraphNodeID::invalid(), std::make_unique<TestProcessor>(), props).failed());
+    EXPECT_TRUE (graph.replaceNodeProcessor (AudioGraphNodeID (999), std::make_unique<TestProcessor>(), props).failed());
+    EXPECT_TRUE (graph.replaceNodeProcessor (node, nullptr, props).failed());
+}

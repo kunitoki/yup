@@ -26,6 +26,14 @@
 #include <memory>
 #include <vector>
 
+#include "GainNode.h"
+#include "LatencyNode.h"
+#include "LowPassFilterNode.h"
+#include "OscillatorNode.h"
+#include "PluginNodeView.h"
+#include "SamplePlayerNode.h"
+#include "SubgraphNode.h"
+
 //==============================================================================
 /**
     Maps stable string identifiers to processor and view factories.
@@ -53,6 +61,9 @@ public:
 
     /** Stable factory key for the built-in looping sample player node. */
     static constexpr const char* samplePlayerIdentifier = "internal.samplePlayer";
+
+    /** Stable factory key for the built-in recursive subgraph node. */
+    static constexpr const char* subgraphIdentifier = "internal.subgraph";
 
     /** Stable factory key for Unknown plugin nodes. */
     static constexpr const char* pluginUnknownIdentifier = "plugin.unknown";
@@ -161,6 +172,25 @@ public:
                 return nullptr;
 
             return std::make_unique<SamplePlayerNodeView> (nodeID, *samplePlayer);
+        }
+        };
+
+        entries[subgraphIdentifier] = {
+            [this] (const yup::AudioGraphNodeProperties& props) -> yup::ResultValue<std::unique_ptr<yup::AudioProcessor>>
+        {
+            auto processor = std::make_unique<SubgraphProcessor> (SubgraphConfig::fromCreationData (props.creationData));
+            processor->setNodeFactory (makeProcessorFactory());
+
+            std::unique_ptr<yup::AudioProcessor> result = std::move (processor);
+            return yup::makeResultValueOk (std::move (result));
+        },
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*) -> std::unique_ptr<yup::AudioGraphNodeView>
+        {
+            auto* subgraph = dynamic_cast<SubgraphProcessor*> (proc);
+            if (subgraph == nullptr)
+                return nullptr;
+
+            return std::make_unique<SubgraphNodeView> (nodeID, *subgraph);
         }
         };
     }
@@ -359,13 +389,7 @@ public:
     //==============================================================================
     std::vector<yup::String> getInternalNodeIdentifiers() const
     {
-        return {
-            oscillatorIdentifier,
-            gainIdentifier,
-            latencyIdentifier,
-            lpfIdentifier,
-            samplePlayerIdentifier
-        };
+        return { oscillatorIdentifier, gainIdentifier, lpfIdentifier, samplePlayerIdentifier, subgraphIdentifier };
     }
 
     //==============================================================================
@@ -392,6 +416,8 @@ public:
 
         if (id == samplePlayerIdentifier)
             return "Sample Player";
+        if (id == subgraphIdentifier)
+            return "Subgraph";
 
         return id;
     }

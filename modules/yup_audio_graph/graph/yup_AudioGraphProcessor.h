@@ -59,6 +59,18 @@ public:
     /** Removes a processor node and all connections that mention it. */
     bool removeNode (AudioGraphNodeID nodeID);
 
+    /**
+        Replaces a processor node while preserving its node identifier.
+
+        Connections that reference an input or output bus whose type or channel
+        count no longer matches the replacement processor are removed from the
+        control-thread graph model. The caller must still call commitChanges()
+        to publish the new processing plan.
+    */
+    Result replaceNodeProcessor (AudioGraphNodeID nodeID,
+                                 std::unique_ptr<AudioProcessor> processor,
+                                 AudioGraphNodeProperties properties);
+
     /** Adds a connection to the control-thread graph model. */
     Result addConnection (const AudioGraphConnection& connection);
 
