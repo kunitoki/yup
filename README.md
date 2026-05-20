@@ -148,7 +148,6 @@ YUP is usable for experimentation, examples, prototypes, and contributors who ar
 
 
 ## Supported Sound Formats
-
 |                   | **Wav**            | **Wav64**          | **Mp3**            | **OGG**            | **Flac**           | **Opus**           | **AAC**            | **WMF**            |
 |-------------------|:------------------:|:------------------:|:------------------:|:------------------:|:------------------:|:------------------:|:------------------:|:------------------:|
 | **Windows** (enc) | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
@@ -227,6 +226,7 @@ Available recipes:
     ninja PROFILING="OFF"                   # generate project using Ninja Multi-Config
     win PROFILING="OFF"                     # generate and open project in Windows using Visual Studio
 ```
+
 
 ## Preparing the build directory
 Create a dedicated build directory:
@@ -413,6 +413,7 @@ YUP is looking for collaborators who want to help shape a permissively licensed 
 - contributing DSP, GUI, audio graph, and plugin-hosting fixes.
 
 Open an issue or pull request on the [YUP repository](https://github.com/kunitoki/yup).
+
 
 ## License
 YUP is distributed under the ISC License, supporting both personal and commercial use, modification, and distribution without restrictions.
