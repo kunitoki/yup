@@ -25,6 +25,8 @@
 
 using namespace yup;
 
+#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
+
 namespace
 {
 
@@ -555,3 +557,181 @@ TEST_F (PaintProfilerFixture, MultipleFramesAccumulateGlobalStats)
 
     EXPECT_EQ (frameCount, snapshot.globalFrameTotal.sampleCount);
 }
+
+// =============================================================================
+// PaintProfileScope integration tests — exercises Component::internalPaint
+// =============================================================================
+
+namespace yup
+{
+
+class ComponentPaintProfileTestHelper
+{
+public:
+    static void triggerPaint (Component& comp,
+                              Graphics& g,
+                              const Rectangle<float>& repaintArea,
+                              bool renderContinuous = false)
+    {
+        comp.internalPaint (g, repaintArea, renderContinuous);
+    }
+};
+
+} // namespace yup
+
+namespace
+{
+
+class PaintableComponent : public yup::Component
+{
+public:
+    PaintableComponent() = default;
+
+    void paint (yup::Graphics&) override {}
+};
+
+} // namespace
+
+class PaintProfileScopeFixture : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        GraphicsContext::Options opts;
+        opts.allowHeadlessRendering = true;
+        context = GraphicsContext::createContext (GraphicsContext::Api::Headless, opts);
+        renderer = context->makeRenderer (200, 200);
+
+        profiler = &PaintProfiler::getInstance();
+        profiler->setEnabled (true);
+        profiler->resetAll();
+    }
+
+    void TearDown() override
+    {
+        profiler->setEnabled (false);
+        profiler->resetAll();
+    }
+
+    std::unique_ptr<GraphicsContext> context;
+    std::unique_ptr<rive::Renderer> renderer;
+    PaintProfiler* profiler = nullptr;
+};
+
+TEST_F (PaintProfileScopeFixture, RecordsSampleAfterPaint)
+{
+    PaintableComponent comp;
+    comp.setBounds (0, 0, 100, 100);
+    comp.setVisible (true);
+    comp.setPaintProfilingEnabled (true);
+
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentPaintProfileTestHelper::triggerPaint (comp, g, comp.getBounds());
+
+    EXPECT_EQ (1, comp.getPaintProfileStats()->getSampleCount());
+}
+
+TEST_F (PaintProfileScopeFixture, NoSampleWhenProfilerDisabled)
+{
+    profiler->setEnabled (false);
+
+    PaintableComponent comp;
+    comp.setBounds (0, 0, 100, 100);
+    comp.setVisible (true);
+    comp.setPaintProfilingEnabled (true);
+
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentPaintProfileTestHelper::triggerPaint (comp, g, comp.getBounds());
+
+    EXPECT_EQ (0, comp.getPaintProfileStats()->getSampleCount());
+}
+
+TEST_F (PaintProfileScopeFixture, NoStatsWhenComponentProfilingNotEnabled)
+{
+    PaintableComponent comp;
+    comp.setBounds (0, 0, 100, 100);
+    comp.setVisible (true);
+
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentPaintProfileTestHelper::triggerPaint (comp, g, comp.getBounds());
+
+    EXPECT_EQ (nullptr, comp.getPaintProfileStats());
+}
+
+TEST_F (PaintProfileScopeFixture, SampleHasNonNegativeTotalTime)
+{
+    PaintableComponent comp;
+    comp.setBounds (0, 0, 100, 100);
+    comp.setVisible (true);
+    comp.setPaintProfilingEnabled (true);
+
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentPaintProfileTestHelper::triggerPaint (comp, g, comp.getBounds());
+
+    auto* stats = comp.getPaintProfileStats();
+    ASSERT_EQ (1, stats->getSampleCount());
+    EXPECT_GE (stats->getLastSample().totalMicros, 0.0);
+}
+
+TEST_F (PaintProfileScopeFixture, SelfPaintSkippedWhenOpaqueChildCoversArea)
+{
+    PaintableComponent parent;
+    parent.setBounds (0, 0, 100, 100);
+    parent.setVisible (true);
+    parent.setOpaque (true);
+    parent.setPaintProfilingEnabled (true);
+
+    PaintableComponent child;
+    child.setBounds (0, 0, 100, 100);
+    child.setVisible (true);
+    child.setOpaque (true);
+    parent.addChildComponent (child);
+
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentPaintProfileTestHelper::triggerPaint (parent, g, parent.getBounds());
+
+    auto* stats = parent.getPaintProfileStats();
+    ASSERT_EQ (1, stats->getSampleCount());
+    EXPECT_TRUE (stats->getLastSample().selfPaintSkipped);
+}
+
+TEST_F (PaintProfileScopeFixture, ChildTimeContributesToParentChildrenMicros)
+{
+    PaintableComponent parent;
+    parent.setBounds (0, 0, 100, 100);
+    parent.setVisible (true);
+    parent.setPaintProfilingEnabled (true);
+
+    PaintableComponent child;
+    child.setBounds (0, 0, 50, 50);
+    child.setVisible (true);
+    child.setPaintProfilingEnabled (true);
+    parent.addChildComponent (child);
+
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentPaintProfileTestHelper::triggerPaint (parent, g, parent.getBounds());
+
+    auto* parentStats = parent.getPaintProfileStats();
+    ASSERT_EQ (1, parentStats->getSampleCount());
+    EXPECT_GE (parentStats->getLastSample().childrenMicros, 0.0);
+    EXPECT_GE (parentStats->getLastSample().totalMicros, parentStats->getLastSample().childrenMicros);
+}
+
+TEST_F (PaintProfileScopeFixture, MultiplePaintsAccumulateSamples)
+{
+    PaintableComponent comp;
+    comp.setBounds (0, 0, 100, 100);
+    comp.setVisible (true);
+    comp.setPaintProfilingEnabled (true);
+
+    constexpr int paintCount = 5;
+    for (int i = 0; i < paintCount; ++i)
+    {
+        Graphics g (*context, *renderer, 1.0f);
+        ComponentPaintProfileTestHelper::triggerPaint (comp, g, comp.getBounds());
+    }
+
+    EXPECT_EQ (paintCount, comp.getPaintProfileStats()->getSampleCount());
+}
+
+#endif

@@ -1352,6 +1352,7 @@ private:
 
 #if YUP_ENABLE_COMPONENT_PAINT_PROFILING
     friend class PaintProfileScope;
+    friend class ComponentPaintProfileTestHelper;
     std::unique_ptr<PaintProfileStats> paintProfileStats;
     static thread_local std::vector<PaintProfileScopeEntry> paintProfileScopeStack;
     static std::atomic<uint64> globalPaintIndexCounter;

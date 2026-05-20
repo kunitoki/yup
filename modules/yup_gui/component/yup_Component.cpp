@@ -1169,6 +1169,7 @@ void Component::setPaintProfilingEnabled (bool shouldBeEnabled, PaintProfileOpti
         {
             paintProfileStats = std::make_unique<PaintProfileStats> (options);
         }
+
         PaintProfiler::getInstance().registerComponent (*this, *paintProfileStats);
     }
     else
@@ -1221,11 +1222,13 @@ public:
     PaintProfileScope (Component& component,
                        const Rectangle<float>& repaintArea,
                        bool renderContinuous,
-                       uint64 frameIndex)
+                       uint64 frameIndex,
+                       bool profilingActive)
         : component (component)
         , sample()
         , totalStartMicros (ticksToMicros (Time::getHighResolutionTicks()))
         , selfStartMicros (0.0)
+        , profilingActive (profilingActive)
     {
         sample.frameIndex = frameIndex;
         sample.paintIndex = Component::globalPaintIndexCounter.fetch_add (1, std::memory_order_relaxed);
@@ -1243,13 +1246,16 @@ public:
         sample.childrenMicros = Component::paintProfileScopeStack.back().childrenMicros;
         Component::paintProfileScopeStack.pop_back();
 
-        sample.frameworkMicros = std::max (0.0,
-                                           sample.totalMicros
-                                               - sample.selfMicros
-                                               - sample.childrenMicros);
+        if (profilingActive)
+        {
+            sample.frameworkMicros = std::max (0.0,
+                                               sample.totalMicros
+                                                   - sample.selfMicros
+                                                   - sample.childrenMicros);
 
-        if (auto* stats = component.getPaintProfileStats())
-            stats->recordSample (sample);
+            if (auto* stats = component.getPaintProfileStats())
+                stats->recordSample (sample);
+        }
 
         if (! Component::paintProfileScopeStack.empty())
             Component::paintProfileScopeStack.back().childrenMicros += sample.totalMicros;
@@ -1280,6 +1286,7 @@ private:
     PaintProfileSample sample;
     double totalStartMicros;
     double selfStartMicros;
+    bool profilingActive;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PaintProfileScope)
 };
@@ -1341,7 +1348,7 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
         const bool profilingActive = PaintProfiler::getInstance().isEnabled() && paintProfileStats != nullptr;
 
         const auto frameIndex = PaintProfiler::getInstance().getCurrentFrameIndex();
-        PaintProfileScope profileScope (*this, repaintArea, renderContinuous, frameIndex);
+        PaintProfileScope profileScope (*this, repaintArea, renderContinuous, frameIndex, profilingActive);
 #else
         constexpr bool profilingActive = false;
 #endif
