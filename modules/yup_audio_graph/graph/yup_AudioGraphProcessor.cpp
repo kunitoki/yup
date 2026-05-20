@@ -79,16 +79,19 @@ constexpr const char* audioGraphStateTag = "YUPAudioGraphState";
 } // namespace
 
 //==============================================================================
-class AudioGraphProcessor::Pimpl
+class AudioGraphProcessor::Pimpl final : private AudioProcessor::Listener
 {
 public:
-    explicit Pimpl (AudioGraphProcessor& ownerIn)
+    Pimpl (AudioGraphProcessor& ownerIn, std::shared_ptr<AudioGraphModel> modelIn)
         : owner (ownerIn)
+        , model (std::move (modelIn))
     {
+        jassert (model != nullptr);
     }
 
     ~Pimpl()
     {
+        removeNodeListeners();
         resizeWorkers (0);
         delete pendingPlan.exchange (nullptr);
         delete currentPlan;
@@ -100,9 +103,30 @@ public:
         AudioGraphNodeID id;
         std::shared_ptr<AudioProcessor> processor;
         AudioGraphNodeProperties properties;
-        float preparedSampleRate = 0.0f;
-        int preparedBlockSize = 0;
+    };
+
+    struct PreparedNodeState
+    {
+        std::weak_ptr<AudioProcessor> processor;
+        float sampleRate = 0.0f;
+        int blockSize = 0;
         bool prepared = false;
+    };
+
+    struct ScopedCommitFlag
+    {
+        explicit ScopedCommitFlag (std::atomic<bool>& flagIn)
+            : flag (flagIn)
+        {
+            flag.store (true);
+        }
+
+        ~ScopedCommitFlag()
+        {
+            flag.store (false);
+        }
+
+        std::atomic<bool>& flag;
     };
 
     struct DelayLine
@@ -198,56 +222,6 @@ public:
         int nodeIndex = -1;
     };
 
-    struct SavedNodeState
-    {
-        AudioGraphNodeID id;
-        AudioGraphNodeProperties properties;
-        MemoryBlock state;
-    };
-
-    struct EndpointDescriptor
-    {
-        bool valid = false;
-        GraphSignalType type = GraphSignalType::audio;
-        int channels = 0;
-    };
-
-    static EndpointDescriptor describeNodeEndpoint (const AudioProcessor& processor, const AudioGraphEndpoint& endpoint)
-    {
-        const auto buses = endpoint.getKind() == AudioGraphEndpoint::Kind::nodeInput
-                             ? processor.getBusLayout().getInputBuses()
-                             : processor.getBusLayout().getOutputBuses();
-
-        if (! isValidBusIndex (buses, endpoint.getBusIndex()))
-            return {};
-
-        const auto& bus = buses[static_cast<size_t> (endpoint.getBusIndex())];
-        return { true,
-                 toSignalType (bus.getType()),
-                 bus.getType() == AudioBus::Type::Audio ? bus.getNumChannels() : 0 };
-    }
-
-    static bool connectionEndpointIsStillCompatible (const AudioGraphEndpoint& endpoint,
-                                                     AudioGraphNodeID replacedNodeID,
-                                                     const AudioProcessor* oldProcessor,
-                                                     const AudioProcessor* newProcessor)
-    {
-        if (endpoint.getNodeID() != replacedNodeID)
-            return true;
-
-        if (endpoint.getKind() != AudioGraphEndpoint::Kind::nodeInput
-            && endpoint.getKind() != AudioGraphEndpoint::Kind::nodeOutput)
-            return true;
-
-        const auto oldDescriptor = describeNodeEndpoint (*oldProcessor, endpoint);
-        const auto newDescriptor = describeNodeEndpoint (*newProcessor, endpoint);
-
-        return oldDescriptor.valid
-            && newDescriptor.valid
-            && oldDescriptor.type == newDescriptor.type
-            && oldDescriptor.channels == newDescriptor.channels;
-    }
-
     class WorkerThread final : public Thread
     {
     public:
@@ -260,181 +234,45 @@ public:
         Pimpl& owner;
     };
 
-    AudioGraphNodeID addNode (std::unique_ptr<AudioProcessor> processor)
-    {
-        if (processor == nullptr)
-            return AudioGraphNodeID::invalid();
-
-        auto properties = makeDefaultNodeProperties (*processor);
-        return addNode (std::move (processor), std::move (properties));
-    }
-
-    AudioGraphNodeID addNode (std::unique_ptr<AudioProcessor> processor,
-                              AudioGraphNodeProperties properties)
-    {
-        if (processor == nullptr)
-            return AudioGraphNodeID::invalid();
-
-        const std::lock_guard<std::mutex> lock (modelMutex);
-
-        const auto id = AudioGraphNodeID (++nextNodeID);
-        if (properties.name.isEmpty())
-            properties.name = processor->getName();
-
-        modelNodes.push_back ({ id, std::shared_ptr<AudioProcessor> (std::move (processor)), std::move (properties) });
-        ++modelRevision;
-        dirty.store (true);
-        return id;
-    }
-
-    bool removeNode (AudioGraphNodeID nodeID)
-    {
-        if (! nodeID.isValid())
-            return false;
-
-        const std::lock_guard<std::mutex> lock (modelMutex);
-
-        const auto nodeIterator = std::find_if (modelNodes.begin(), modelNodes.end(), [nodeID] (const ModelNode& node)
-        {
-            return node.id == nodeID;
-        });
-
-        if (nodeIterator == modelNodes.end())
-            return false;
-
-        modelNodes.erase (nodeIterator);
-
-        modelConnections.erase (std::remove_if (modelConnections.begin(), modelConnections.end(), [nodeID] (const AudioGraphConnection& connection)
-        {
-            return connection.source.getNodeID() == nodeID || connection.destination.getNodeID() == nodeID;
-        }),
-                                modelConnections.end());
-
-        ++modelRevision;
-        dirty.store (true);
-        return true;
-    }
-
-    Result replaceNodeProcessor (AudioGraphNodeID nodeID,
-                                 std::unique_ptr<AudioProcessor> processor,
-                                 AudioGraphNodeProperties properties)
-    {
-        if (! nodeID.isValid())
-            return Result::fail ("Audio graph node ID is invalid");
-
-        if (processor == nullptr)
-            return Result::fail ("Audio graph replacement processor is empty");
-
-        const std::lock_guard<std::mutex> lock (modelMutex);
-
-        const auto nodeIterator = std::find_if (modelNodes.begin(), modelNodes.end(), [nodeID] (const ModelNode& node)
-        {
-            return node.id == nodeID;
-        });
-
-        if (nodeIterator == modelNodes.end())
-            return Result::fail ("Audio graph node does not exist");
-
-        auto replacement = std::shared_ptr<AudioProcessor> (std::move (processor));
-
-        if (properties.name.isEmpty())
-            properties.name = replacement->getName();
-
-        auto& node = *nodeIterator;
-        auto oldProcessor = node.processor;
-
-        modelConnections.erase (std::remove_if (modelConnections.begin(), modelConnections.end(), [nodeID, &oldProcessor, &replacement] (const AudioGraphConnection& connection)
-        {
-            return ! connectionEndpointIsStillCompatible (connection.source, nodeID, oldProcessor.get(), replacement.get())
-                || ! connectionEndpointIsStillCompatible (connection.destination, nodeID, oldProcessor.get(), replacement.get());
-        }),
-                                modelConnections.end());
-
-        node.processor = std::move (replacement);
-        node.properties = std::move (properties);
-        node.preparedSampleRate = 0.0f;
-        node.preparedBlockSize = 0;
-        node.prepared = false;
-
-        ++modelRevision;
-        dirty.store (true);
-        return Result::ok();
-    }
-
-    Result addConnection (const AudioGraphConnection& connection)
-    {
-        if (! connection.source.isSource())
-            return Result::fail ("Audio graph connection source is not a source endpoint");
-
-        if (! connection.destination.isDestination())
-            return Result::fail ("Audio graph connection destination is not a destination endpoint");
-
-        const std::lock_guard<std::mutex> lock (modelMutex);
-
-        if (std::find (modelConnections.begin(), modelConnections.end(), connection) != modelConnections.end())
-            return Result::fail ("Audio graph connection already exists");
-
-        modelConnections.push_back (connection);
-        ++modelRevision;
-        dirty.store (true);
-        return Result::ok();
-    }
-
-    bool removeConnection (const AudioGraphConnection& connection)
-    {
-        const std::lock_guard<std::mutex> lock (modelMutex);
-        const auto oldSize = modelConnections.size();
-
-        modelConnections.erase (std::remove (modelConnections.begin(), modelConnections.end(), connection), modelConnections.end());
-
-        const bool removed = modelConnections.size() != oldSize;
-        if (removed)
-        {
-            ++modelRevision;
-            dirty.store (true);
-        }
-
-        return removed;
-    }
-
-    std::vector<AudioGraphConnection> getConnections() const
-    {
-        const std::lock_guard<std::mutex> lock (modelMutex);
-        return modelConnections;
-    }
-
-    void clear()
-    {
-        const std::lock_guard<std::mutex> lock (modelMutex);
-
-        modelConnections.clear();
-        modelNodes.clear();
-        ++modelRevision;
-        dirty.store (true);
-    }
-
     Result commitChanges()
     {
         const std::lock_guard<std::mutex> commitLock (commitMutex);
+        const ScopedCommitFlag scopedCommitFlag (commitInProgress);
 
         std::vector<ModelNode> nodesSnapshot;
         std::vector<AudioGraphConnection> connectionsSnapshot;
-        uint64_t snapshotRevision = 0;
+        const auto snapshot = model->createSnapshot();
+        const auto snapshotTopologyRevision = snapshot.topologyRevision;
+        const auto snapshotLatencyChangeCounter = latencyChangeCounter.load();
 
+        if (snapshotTopologyRevision == lastCommittedTopologyRevision.load()
+            && hasCompiledPlan()
+            && lastCompiledSampleRate == sampleRate
+            && lastCompiledMaxBlockSize == maxBlockSize
+            && snapshotLatencyChangeCounter == lastCommittedLatencyChangeCounter.load())
         {
-            const std::lock_guard<std::mutex> lock (modelMutex);
-
-            nodesSnapshot = modelNodes;
-            connectionsSnapshot = modelConnections;
-            snapshotRevision = modelRevision;
+            return Result::ok();
         }
+
+        nodesSnapshot.reserve (snapshot.nodes.size());
+        for (const auto& node : snapshot.nodes)
+            nodesSnapshot.push_back ({ node.id, node.processor, node.properties });
+
+        connectionsSnapshot = snapshot.connections;
 
         for (auto& node : nodesSnapshot)
         {
             if (node.processor == nullptr)
                 return Result::fail ("Audio graph contains an empty node");
 
-            if (! node.prepared || node.preparedSampleRate != sampleRate || node.preparedBlockSize != maxBlockSize)
+            const auto stateIterator = preparedNodes.find (node.id.getRawID());
+            const bool isPrepared = stateIterator != preparedNodes.end()
+                                 && stateIterator->second.prepared
+                                 && stateIterator->second.sampleRate == sampleRate
+                                 && stateIterator->second.blockSize == maxBlockSize
+                                 && stateIterator->second.processor.lock() == node.processor;
+
+            if (! isPrepared)
             {
                 node.processor->setPlayHead (owner.getPlayHead());
                 node.processor->setPlaybackConfiguration (sampleRate, maxBlockSize);
@@ -447,31 +285,16 @@ public:
         if (! result)
             return result;
 
-        bool snapshotIsCurrent = false;
-
-        {
-            const std::lock_guard<std::mutex> lock (modelMutex);
-            snapshotIsCurrent = snapshotRevision == modelRevision;
-
-            for (auto& modelNode : modelNodes)
-            {
-                const auto preparedIterator = std::find_if (nodesSnapshot.begin(), nodesSnapshot.end(), [&modelNode] (const ModelNode& preparedNode)
-                {
-                    return preparedNode.id == modelNode.id;
-                });
-
-                if (preparedIterator != nodesSnapshot.end())
-                {
-                    modelNode.prepared = true;
-                    modelNode.preparedSampleRate = sampleRate;
-                    modelNode.preparedBlockSize = maxBlockSize;
-                }
-            }
-        }
+        for (const auto& node : nodesSnapshot)
+            preparedNodes[node.id.getRawID()] = { node.processor, sampleRate, maxBlockSize, true };
 
         storeStats (compiled->stats);
         latestLatencySamples.store (compiled->graphLatencySamples);
-        dirty.store (! snapshotIsCurrent);
+        lastCommittedTopologyRevision.store (snapshotTopologyRevision);
+        lastCommittedLatencyChangeCounter.store (snapshotLatencyChangeCounter);
+        lastCompiledSampleRate = sampleRate;
+        lastCompiledMaxBlockSize = maxBlockSize;
+        synchronizeNodeListeners (nodesSnapshot);
 
         delete pendingPlan.exchange (compiled.release()); // TODO - make it so we don't use delete
         deleteRetiredPlans();
@@ -490,16 +313,33 @@ public:
 
     void releaseResources()
     {
-        const std::lock_guard<std::mutex> lock (modelMutex);
+        const auto snapshot = model->createSnapshot();
 
-        for (auto& node : modelNodes)
+        for (const auto& node : snapshot.nodes)
         {
-            if (node.processor != nullptr && node.prepared)
-                node.processor->releaseResources();
+            const auto stateIterator = preparedNodes.find (node.id.getRawID());
+            const bool isPrepared = stateIterator != preparedNodes.end()
+                                 && stateIterator->second.prepared
+                                 && stateIterator->second.processor.lock() == node.processor;
 
-            node.prepared = false;
-            node.preparedSampleRate = 0.0f;
-            node.preparedBlockSize = 0;
+            if (node.processor != nullptr && isPrepared)
+                node.processor->releaseResources();
+        }
+
+        preparedNodes.clear();
+        lastCompiledSampleRate = 0.0f;
+        lastCompiledMaxBlockSize = 0;
+    }
+
+    void audioProcessorChanged (AudioProcessor*, const AudioProcessor::ChangeDetails& details) override
+    {
+        if (details.latencyChanged)
+        {
+            latencyChangeCounter.fetch_add (1);
+            owner.updateHostDisplay (AudioProcessor::ChangeDetails().withLatencyChanged (true));
+
+            if (! commitInProgress.load())
+                ignoreUnused (commitChanges());
         }
     }
 
@@ -613,221 +453,25 @@ public:
         return stats;
     }
 
-    AudioProcessor* getNodeProcessor (AudioGraphNodeID nodeID) const noexcept
-    {
-        const std::lock_guard<std::mutex> lock (modelMutex);
-
-        const auto iterator = std::find_if (modelNodes.begin(), modelNodes.end(), [nodeID] (const ModelNode& node)
-        {
-            return node.id == nodeID;
-        });
-
-        return iterator != modelNodes.end() ? iterator->processor.get() : nullptr;
-    }
-
-    bool setNodePosition (AudioGraphNodeID nodeID, float positionX, float positionY)
-    {
-        const std::lock_guard<std::mutex> lock (modelMutex);
-
-        const auto iterator = std::find_if (modelNodes.begin(), modelNodes.end(), [nodeID] (const ModelNode& node)
-        {
-            return node.id == nodeID;
-        });
-
-        if (iterator == modelNodes.end())
-            return false;
-
-        iterator->properties.positionX = positionX;
-        iterator->properties.positionY = positionY;
-        return true;
-    }
-
-    bool setNodeProperties (AudioGraphNodeID nodeID, AudioGraphNodeProperties properties)
-    {
-        const std::lock_guard<std::mutex> lock (modelMutex);
-
-        const auto iterator = std::find_if (modelNodes.begin(), modelNodes.end(), [nodeID] (const ModelNode& node)
-        {
-            return node.id == nodeID;
-        });
-
-        if (iterator == modelNodes.end())
-            return false;
-
-        if (properties.name.isEmpty() && iterator->processor != nullptr)
-            properties.name = iterator->processor->getName();
-
-        iterator->properties = std::move (properties);
-        return true;
-    }
-
-    std::optional<AudioGraphNodeProperties> getNodeProperties (AudioGraphNodeID nodeID) const
-    {
-        const std::lock_guard<std::mutex> lock (modelMutex);
-
-        const auto iterator = std::find_if (modelNodes.begin(), modelNodes.end(), [nodeID] (const ModelNode& node)
-        {
-            return node.id == nodeID;
-        });
-
-        if (iterator == modelNodes.end())
-            return std::nullopt;
-
-        return iterator->properties;
-    }
-
-    std::vector<AudioGraphNodeID> getNodeIDs() const
-    {
-        const std::lock_guard<std::mutex> lock (modelMutex);
-
-        std::vector<AudioGraphNodeID> result;
-        result.reserve (modelNodes.size());
-
-        for (const auto& node : modelNodes)
-            result.push_back (node.id);
-
-        return result;
-    }
-
-    void setNodeFactory (AudioGraphProcessor::NodeFactory factory)
-    {
-        const std::lock_guard<std::mutex> lock (factoryMutex);
-        nodeFactory = std::move (factory);
-    }
-
-    ResultValue<std::unique_ptr<XmlElement>> createXml() const
-    {
-        std::vector<ModelNode> nodesSnapshot;
-        std::vector<AudioGraphConnection> connectionsSnapshot;
-        uint64_t snapshotNextNodeID = 0;
-
-        {
-            const std::lock_guard<std::mutex> lock (modelMutex);
-            nodesSnapshot = modelNodes;
-            connectionsSnapshot = modelConnections;
-            snapshotNextNodeID = nextNodeID;
-        }
-
-        std::vector<SavedNodeState> savedNodes;
-        savedNodes.reserve (nodesSnapshot.size());
-
-        for (const auto& node : nodesSnapshot)
-        {
-            if (node.processor == nullptr)
-                return makeResultValueFail ("Audio graph contains an empty node");
-
-            MemoryBlock nodeState;
-            const auto result = node.processor->saveStateIntoMemory (nodeState);
-
-            if (! result)
-                return makeResultValueFail ("Audio graph node state save failed: " + result.getErrorMessage());
-
-            savedNodes.push_back ({ node.id, node.properties, std::move (nodeState) });
-        }
-
-        auto root = std::make_unique<XmlElement> (audioGraphStateTag);
-        root->setAttribute ("version", audioGraphStateVersion);
-        root->setAttribute ("nextNodeID", String (static_cast<int64> (snapshotNextNodeID)));
-
-        auto* nodesElement = new XmlElement ("nodes");
-        root->addChildElement (nodesElement);
-
-        for (const auto& node : savedNodes)
-        {
-            auto* nodeElement = new XmlElement ("node");
-            nodesElement->addChildElement (nodeElement);
-
-            nodeElement->setAttribute ("id", String (static_cast<int64> (node.id.getRawID())));
-            writeNodeProperties (*nodeElement, node.properties);
-            writeBase64Element (*nodeElement, "state", node.state);
-        }
-
-        auto* connectionsElement = new XmlElement ("connections");
-        root->addChildElement (connectionsElement);
-
-        for (const auto& connection : connectionsSnapshot)
-        {
-            auto* connectionElement = new XmlElement ("connection");
-            connectionsElement->addChildElement (connectionElement);
-
-            auto* sourceElement = new XmlElement ("source");
-            connectionElement->addChildElement (sourceElement);
-            writeEndpoint (*sourceElement, connection.source);
-
-            auto* destinationElement = new XmlElement ("destination");
-            connectionElement->addChildElement (destinationElement);
-            writeEndpoint (*destinationElement, connection.destination);
-        }
-
-        return makeResultValueOk (std::move (root));
-    }
-
     Result restoreFromXml (const XmlElement& xml)
     {
-        if (! xml.hasTagName (audioGraphStateTag))
-            return Result::fail ("Audio graph state has an invalid header");
+        const auto previousSnapshot = model->createSnapshot();
+        const auto restoreResult = model->restoreFromXml (xml);
 
-        if (xml.getIntAttribute ("version", 0) != audioGraphStateVersion)
-            return Result::fail ("Audio graph state has an unsupported version");
+        if (restoreResult.failed())
+            return restoreResult;
 
-        const auto savedNextNodeID = static_cast<uint64_t> (xml.getStringAttribute ("nextNodeID").getLargeIntValue());
+        const auto commitResult = commitChanges();
 
-        auto* nodesElement = xml.getChildByName ("nodes");
-        if (nodesElement == nullptr)
-            return Result::fail ("Audio graph state is missing nodes");
+        if (commitResult.failed())
+            model->restoreSnapshot (previousSnapshot);
 
-        std::vector<SavedNodeState> savedNodes;
-        savedNodes.reserve (static_cast<size_t> (nodesElement->getNumChildElements()));
-
-        for (auto* nodeElement : nodesElement->getChildWithTagNameIterator ("node"))
-        {
-            SavedNodeState savedNode;
-            savedNode.id = AudioGraphNodeID (static_cast<uint64_t> (nodeElement->getStringAttribute ("id").getLargeIntValue()));
-
-            if (const auto result = readNodeProperties (*nodeElement, savedNode.properties); result.failed())
-                return result;
-
-            if (const auto result = readBase64Element (*nodeElement, "state", savedNode.state); result.failed())
-                return result;
-
-            savedNodes.push_back (std::move (savedNode));
-        }
-
-        auto* connectionsElement = xml.getChildByName ("connections");
-        if (connectionsElement == nullptr)
-            return Result::fail ("Audio graph state is missing connections");
-
-        std::vector<AudioGraphConnection> savedConnections;
-        savedConnections.reserve (static_cast<size_t> (connectionsElement->getNumChildElements()));
-
-        for (auto* connectionElement : connectionsElement->getChildWithTagNameIterator ("connection"))
-        {
-            AudioGraphEndpoint source;
-            AudioGraphEndpoint destination;
-
-            auto* sourceElement = connectionElement->getChildByName ("source");
-            if (sourceElement == nullptr)
-                return Result::fail ("Audio graph state connection is missing source endpoint");
-
-            auto* destinationElement = connectionElement->getChildByName ("destination");
-            if (destinationElement == nullptr)
-                return Result::fail ("Audio graph state connection is missing destination endpoint");
-
-            if (const auto result = readEndpoint (*sourceElement, source); result.failed())
-                return result;
-
-            if (const auto result = readEndpoint (*destinationElement, destination); result.failed())
-                return result;
-
-            savedConnections.push_back ({ source, destination });
-        }
-
-        return restoreModel (savedNextNodeID, std::move (savedNodes), std::move (savedConnections));
+        return commitResult;
     }
 
     Result saveStateIntoMemory (MemoryBlock& memoryBlock)
     {
-        auto xml = createXml();
+        auto xml = model->createXml();
 
         if (! xml)
             return Result::fail (xml.getErrorMessage());
@@ -849,247 +493,6 @@ public:
             return Result::fail ("Audio graph state has an invalid header");
 
         return restoreFromXml (*root);
-    }
-
-    Result restoreModel (uint64_t savedNextNodeID,
-                         std::vector<SavedNodeState> savedNodes,
-                         std::vector<AudioGraphConnection> savedConnections)
-    {
-        std::vector<ModelNode> loadedNodes;
-        loadedNodes.reserve (savedNodes.size());
-
-        for (auto& savedNode : savedNodes)
-        {
-            auto processorResult = createProcessorForSavedNode (savedNode.properties);
-
-            if (! processorResult)
-                return Result::fail (processorResult.getErrorMessage());
-
-            auto processor = std::move (processorResult).getValue();
-
-            if (processor == nullptr)
-                return Result::fail ("Audio graph node factory returned an empty processor");
-
-            const auto result = processor->loadStateFromMemory (savedNode.state);
-
-            if (! result)
-                return Result::fail ("Audio graph node state load failed: " + result.getErrorMessage());
-
-            loadedNodes.push_back ({ savedNode.id,
-                                     std::shared_ptr<AudioProcessor> (std::move (processor)),
-                                     std::move (savedNode.properties) });
-        }
-
-        std::vector<ModelNode> previousNodes;
-        std::vector<AudioGraphConnection> previousConnections;
-        uint64_t previousNextNodeID = 0;
-        bool previousDirty = false;
-        uint64_t highestSavedNodeID = 0;
-        uint64_t loadRevision = 0;
-
-        for (const auto& savedNode : savedNodes)
-            highestSavedNodeID = jmax (highestSavedNodeID, savedNode.id.getRawID());
-
-        {
-            const std::lock_guard<std::mutex> lock (modelMutex);
-            previousNodes = modelNodes;
-            previousConnections = modelConnections;
-            previousNextNodeID = nextNodeID;
-            previousDirty = dirty.load();
-            modelNodes = std::move (loadedNodes);
-            modelConnections = std::move (savedConnections);
-            nextNodeID = jmax (savedNextNodeID, highestSavedNodeID);
-            ++modelRevision;
-            loadRevision = modelRevision;
-            dirty.store (true);
-        }
-
-        const auto result = commitChanges();
-
-        if (! result)
-        {
-            const std::lock_guard<std::mutex> lock (modelMutex);
-
-            if (modelRevision == loadRevision)
-            {
-                modelNodes = std::move (previousNodes);
-                modelConnections = std::move (previousConnections);
-                nextNodeID = previousNextNodeID;
-                ++modelRevision;
-                dirty.store (previousDirty);
-            }
-            else
-            {
-                dirty.store (true);
-            }
-        }
-
-        return result;
-    }
-
-    ResultValue<std::unique_ptr<AudioProcessor>> createProcessorForSavedNode (const AudioGraphNodeProperties& properties)
-    {
-        AudioGraphProcessor::NodeFactory factoryCopy;
-
-        {
-            const std::lock_guard<std::mutex> lock (factoryMutex);
-            factoryCopy = nodeFactory;
-        }
-
-        if (! factoryCopy)
-            return makeResultValueFail ("Audio graph node factory is not configured");
-
-        return factoryCopy (properties);
-    }
-
-    static AudioGraphNodeProperties makeDefaultNodeProperties (const AudioProcessor& processor)
-    {
-        AudioGraphNodeProperties properties;
-        properties.identifier = processor.getName();
-        properties.name = processor.getName();
-        return properties;
-    }
-
-    static void writeNodeProperties (XmlElement& element, const AudioGraphNodeProperties& properties)
-    {
-        element.setAttribute ("identifier", properties.identifier);
-        element.setAttribute ("name", properties.name);
-        element.setAttribute ("positionX", static_cast<double> (properties.positionX));
-        element.setAttribute ("positionY", static_cast<double> (properties.positionY));
-        writeBase64Element (element, "creationData", properties.creationData);
-    }
-
-    static Result readNodeProperties (const XmlElement& element, AudioGraphNodeProperties& properties)
-    {
-        properties.identifier = element.getStringAttribute ("identifier");
-        properties.name = element.getStringAttribute ("name");
-        properties.positionX = static_cast<float> (element.getDoubleAttribute ("positionX"));
-        properties.positionY = static_cast<float> (element.getDoubleAttribute ("positionY"));
-
-        return readBase64Element (element, "creationData", properties.creationData);
-    }
-
-    static void writeBase64Element (XmlElement& parent, const char* tagName, const MemoryBlock& block)
-    {
-        auto* element = new XmlElement (tagName);
-        element->setAttribute ("encoding", "base64");
-        element->addTextElement (Base64::toBase64 (block.getData(), block.getSize()));
-        parent.addChildElement (element);
-    }
-
-    static Result readBase64Element (const XmlElement& parent, const char* tagName, MemoryBlock& block)
-    {
-        auto* element = parent.getChildByName (tagName);
-
-        if (element == nullptr)
-            return Result::fail (String ("Audio graph state is missing ") + tagName);
-
-        if (element->getStringAttribute ("encoding") != "base64")
-            return Result::fail (String ("Audio graph state has unsupported ") + tagName + " encoding");
-
-        MemoryOutputStream output (block, false);
-        const auto base64Text = element->getAllSubText().removeCharacters (" \t\r\n");
-
-        if (! Base64::convertFromBase64 (output, base64Text))
-            return Result::fail (String ("Audio graph state has invalid ") + tagName + " data");
-
-        output.flush();
-        return Result::ok();
-    }
-
-    static void writeEndpoint (XmlElement& element, const AudioGraphEndpoint& endpoint)
-    {
-        element.setAttribute ("kind", endpointKindToString (endpoint.getKind()));
-        element.setAttribute ("nodeID", String (static_cast<int64> (endpoint.getNodeID().getRawID())));
-        element.setAttribute ("busIndex", endpoint.getBusIndex());
-    }
-
-    static Result readEndpoint (const XmlElement& element, AudioGraphEndpoint& endpoint)
-    {
-        auto kind = AudioGraphEndpoint::Kind::graphInput;
-        const auto result = endpointKindFromString (element.getStringAttribute ("kind"), kind);
-
-        if (result.failed())
-            return result;
-
-        const auto nodeID = AudioGraphNodeID (static_cast<uint64_t> (element.getStringAttribute ("nodeID").getLargeIntValue()));
-        const int busIndex = element.getIntAttribute ("busIndex");
-
-        switch (kind)
-        {
-            case AudioGraphEndpoint::Kind::graphInput:
-                if (nodeID.isValid())
-                    return Result::fail ("Audio graph state has an invalid graph input endpoint");
-
-                endpoint = AudioGraphEndpoint::graphInput (busIndex);
-                return Result::ok();
-
-            case AudioGraphEndpoint::Kind::graphOutput:
-                if (nodeID.isValid())
-                    return Result::fail ("Audio graph state has an invalid graph output endpoint");
-
-                endpoint = AudioGraphEndpoint::graphOutput (busIndex);
-                return Result::ok();
-
-            case AudioGraphEndpoint::Kind::nodeInput:
-                endpoint = AudioGraphEndpoint::nodeInput (nodeID, busIndex);
-                return Result::ok();
-
-            case AudioGraphEndpoint::Kind::nodeOutput:
-                endpoint = AudioGraphEndpoint::nodeOutput (nodeID, busIndex);
-                return Result::ok();
-        }
-
-        return Result::fail ("Audio graph state has an invalid endpoint kind");
-    }
-
-    static String endpointKindToString (AudioGraphEndpoint::Kind kind)
-    {
-        switch (kind)
-        {
-            case AudioGraphEndpoint::Kind::graphInput:
-                return "graphInput";
-
-            case AudioGraphEndpoint::Kind::graphOutput:
-                return "graphOutput";
-
-            case AudioGraphEndpoint::Kind::nodeInput:
-                return "nodeInput";
-
-            case AudioGraphEndpoint::Kind::nodeOutput:
-                return "nodeOutput";
-        }
-
-        return {};
-    }
-
-    static Result endpointKindFromString (const String& text, AudioGraphEndpoint::Kind& kind)
-    {
-        if (text == "graphInput")
-        {
-            kind = AudioGraphEndpoint::Kind::graphInput;
-            return Result::ok();
-        }
-
-        if (text == "graphOutput")
-        {
-            kind = AudioGraphEndpoint::Kind::graphOutput;
-            return Result::ok();
-        }
-
-        if (text == "nodeInput")
-        {
-            kind = AudioGraphEndpoint::Kind::nodeInput;
-            return Result::ok();
-        }
-
-        if (text == "nodeOutput")
-        {
-            kind = AudioGraphEndpoint::Kind::nodeOutput;
-            return Result::ok();
-        }
-
-        return Result::fail ("Audio graph state has an invalid endpoint kind");
     }
 
     Result compileGraph (CompiledGraph& graph,
@@ -1337,7 +740,8 @@ public:
                 node.inputLatencySamples = jmax (node.inputLatencySamples,
                                                  getSourceLatency (graph, graph.connections[static_cast<size_t> (connectionIndex)]));
 
-            node.outputLatencySamples = node.inputLatencySamples + jmax (0, node.processor->getLatencySamples());
+            const auto nodeLatencySamples = jmax (0, node.processor->getLatencySamples());
+            node.outputLatencySamples = node.inputLatencySamples + nodeLatencySamples;
         }
 
         for (const auto connectionIndex : graph.graphOutputConnections)
@@ -1659,16 +1063,64 @@ public:
         }
     }
 
+    bool hasCompiledPlan() const noexcept
+    {
+        return currentPlan != nullptr || pendingPlan.load() != nullptr;
+    }
+
+    void synchronizeNodeListeners (const std::vector<ModelNode>& nodesSnapshot)
+    {
+        for (auto iterator = listenedProcessors.begin(); iterator != listenedProcessors.end();)
+        {
+            const auto nodeIterator = std::find_if (nodesSnapshot.begin(), nodesSnapshot.end(), [id = iterator->first] (const ModelNode& node)
+            {
+                return node.id.getRawID() == id;
+            });
+
+            auto processor = iterator->second.lock();
+            const bool shouldKeep = nodeIterator != nodesSnapshot.end()
+                                 && processor != nullptr
+                                 && nodeIterator->processor == processor;
+
+            if (shouldKeep)
+            {
+                ++iterator;
+                continue;
+            }
+
+            if (processor != nullptr)
+                processor->removeListener (this);
+
+            iterator = listenedProcessors.erase (iterator);
+        }
+
+        for (const auto& node : nodesSnapshot)
+        {
+            if (node.processor == nullptr || listenedProcessors.find (node.id.getRawID()) != listenedProcessors.end())
+                continue;
+
+            node.processor->addListener (this);
+            listenedProcessors[node.id.getRawID()] = node.processor;
+        }
+    }
+
+    void removeNodeListeners()
+    {
+        for (auto& [_, processorReference] : listenedProcessors)
+            if (auto processor = processorReference.lock())
+                processor->removeListener (this);
+
+        listenedProcessors.clear();
+    }
+
     AudioGraphProcessor& owner;
+    std::shared_ptr<AudioGraphModel> model;
     mutable std::mutex commitMutex;
-    mutable std::mutex modelMutex;
-    mutable std::mutex factoryMutex;
     mutable std::mutex workgroupMutex;
-    std::vector<ModelNode> modelNodes;
-    std::vector<AudioGraphConnection> modelConnections;
-    uint64_t nextNodeID = 0;
-    uint64_t modelRevision = 0;
-    std::atomic<bool> dirty { true };
+    std::atomic<uint64_t> lastCommittedTopologyRevision { 0 };
+    std::atomic<uint64_t> latencyChangeCounter { 0 };
+    std::atomic<uint64_t> lastCommittedLatencyChangeCounter { 0 };
+    std::atomic<bool> commitInProgress { false };
     std::atomic<int> desiredWorkerThreads { 0 };
     std::atomic<int> latestLatencySamples { 0 };
     std::atomic<int> latestScratchAudioBuffers { 0 };
@@ -1677,10 +1129,13 @@ public:
     std::atomic<int> latestTotalCompensationSamples { 0 };
     std::atomic<int> latestMaxPreallocatedChannels { 0 };
     std::atomic<int> latestMaxPreallocatedBlockSize { 0 };
-    AudioGraphProcessor::NodeFactory nodeFactory;
+    std::unordered_map<uint64_t, PreparedNodeState> preparedNodes;
+    std::unordered_map<uint64_t, std::weak_ptr<AudioProcessor>> listenedProcessors;
     AudioWorkgroup workgroup;
     float sampleRate = 44100.0f;
     int maxBlockSize = 1024;
+    float lastCompiledSampleRate = 0.0f;
+    int lastCompiledMaxBlockSize = 0;
     std::atomic<CompiledGraph*> pendingPlan { nullptr };
     std::atomic<CompiledGraph*> retiredPlans { nullptr };
     CompiledGraph* currentPlan = nullptr;
@@ -1740,55 +1195,18 @@ AudioBusLayout AudioGraphProcessor::createDefaultBusLayout()
                            { AudioBus ("Output", AudioBus::Type::Audio, AudioBus::Direction::Output, 2) });
 }
 
-AudioGraphProcessor::AudioGraphProcessor (AudioBusLayout busLayout)
+AudioGraphProcessor::AudioGraphProcessor (std::shared_ptr<AudioGraphModel> model,
+                                          AudioBusLayout busLayout)
     : AudioProcessor ("Audio Graph", std::move (busLayout))
-    , pimpl (std::make_unique<Pimpl> (*this))
+    , pimpl (std::make_unique<Pimpl> (*this, std::move (model)))
 {
 }
 
 AudioGraphProcessor::~AudioGraphProcessor() = default;
 
-AudioGraphNodeID AudioGraphProcessor::addNode (std::unique_ptr<AudioProcessor> processor)
+std::shared_ptr<AudioGraphModel> AudioGraphProcessor::getModel() const noexcept
 {
-    return pimpl->addNode (std::move (processor));
-}
-
-AudioGraphNodeID AudioGraphProcessor::addNode (std::unique_ptr<AudioProcessor> processor,
-                                               AudioGraphNodeProperties properties)
-{
-    return pimpl->addNode (std::move (processor), std::move (properties));
-}
-
-bool AudioGraphProcessor::removeNode (AudioGraphNodeID nodeID)
-{
-    return pimpl->removeNode (nodeID);
-}
-
-Result AudioGraphProcessor::replaceNodeProcessor (AudioGraphNodeID nodeID,
-                                                  std::unique_ptr<AudioProcessor> processor,
-                                                  AudioGraphNodeProperties properties)
-{
-    return pimpl->replaceNodeProcessor (nodeID, std::move (processor), std::move (properties));
-}
-
-Result AudioGraphProcessor::addConnection (const AudioGraphConnection& connection)
-{
-    return pimpl->addConnection (connection);
-}
-
-bool AudioGraphProcessor::removeConnection (const AudioGraphConnection& connection)
-{
-    return pimpl->removeConnection (connection);
-}
-
-std::vector<AudioGraphConnection> AudioGraphProcessor::getConnections() const
-{
-    return pimpl->getConnections();
-}
-
-void AudioGraphProcessor::clear()
-{
-    pimpl->clear();
+    return pimpl->model;
 }
 
 Result AudioGraphProcessor::commitChanges()
@@ -1818,42 +1236,13 @@ AudioGraphAllocationStats AudioGraphProcessor::getAllocationStats() const noexce
 
 bool AudioGraphProcessor::hasUncommittedChanges() const noexcept
 {
-    return pimpl->dirty.load();
-}
-
-AudioProcessor* AudioGraphProcessor::getNodeProcessor (AudioGraphNodeID nodeID) const noexcept
-{
-    return pimpl->getNodeProcessor (nodeID);
-}
-
-bool AudioGraphProcessor::setNodePosition (AudioGraphNodeID nodeID, float positionX, float positionY)
-{
-    return pimpl->setNodePosition (nodeID, positionX, positionY);
-}
-
-bool AudioGraphProcessor::setNodeProperties (AudioGraphNodeID nodeID, AudioGraphNodeProperties properties)
-{
-    return pimpl->setNodeProperties (nodeID, std::move (properties));
-}
-
-std::optional<AudioGraphNodeProperties> AudioGraphProcessor::getNodeProperties (AudioGraphNodeID nodeID) const
-{
-    return pimpl->getNodeProperties (nodeID);
-}
-
-std::vector<AudioGraphNodeID> AudioGraphProcessor::getNodeIDs() const
-{
-    return pimpl->getNodeIDs();
-}
-
-void AudioGraphProcessor::setNodeFactory (NodeFactory factory)
-{
-    pimpl->setNodeFactory (std::move (factory));
+    return pimpl->model->getTopologyRevision() != pimpl->lastCommittedTopologyRevision.load()
+        || pimpl->latencyChangeCounter.load() != pimpl->lastCommittedLatencyChangeCounter.load();
 }
 
 std::unique_ptr<XmlElement> AudioGraphProcessor::createXml() const
 {
-    auto result = pimpl->createXml();
+    auto result = pimpl->model->createXml();
 
     if (! result)
         return nullptr;

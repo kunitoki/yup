@@ -38,7 +38,7 @@
 /**
     Maps stable string identifiers to processor and view factories.
 
-    NodeRegistry drives both the AudioGraphProcessor::NodeFactory (used for
+    NodeRegistry drives both the AudioGraphModel::NodeFactory (used for
     graph state reconstruction after loading) and menu-based node creation in
     the editor. Register all internal node types via registerInternalNodes()
     and, on desktop builds, plugin format entries via registerPluginFormats().
@@ -135,13 +135,13 @@ public:
         {
             return yup::makeResultValueOk (std::make_unique<LatencyProcessor>());
         },
-            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor* graph) -> std::unique_ptr<yup::AudioGraphNodeView>
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*) -> std::unique_ptr<yup::AudioGraphNodeView>
         {
             auto* latency = dynamic_cast<LatencyProcessor*> (proc);
             if (latency == nullptr)
                 return nullptr;
 
-            return std::make_unique<LatencyNodeView> (nodeID, *latency, graph);
+            return std::make_unique<LatencyNodeView> (nodeID, *latency);
         }
         };
 
@@ -344,13 +344,13 @@ public:
 
     //==============================================================================
     /**
-        Returns an AudioGraphProcessor::NodeFactory that dispatches to the
+        Returns an AudioGraphModel::NodeFactory that dispatches to the
         registered processor factory for a given node identifier.
 
         If no entry is found for props.identifier, the factory returns a failure
         result.
     */
-    yup::AudioGraphProcessor::NodeFactory makeProcessorFactory()
+    yup::AudioGraphModel::NodeFactory makeProcessorFactory()
     {
         return [this] (const yup::AudioGraphNodeProperties& props)
                    -> yup::ResultValue<std::unique_ptr<yup::AudioProcessor>>
@@ -370,8 +370,7 @@ public:
         @param nodeID      The stable graph node identifier.
         @param identifier  The registry key identifying the node type.
         @param proc        The processor that was created for this node.
-        @param graph       The graph that owns the node, used by views that need to
-                           commit metadata-affecting parameter changes.
+        @param graph       The graph that owns the node, used by graph-aware views.
         @returns           A new view, or nullptr if the identifier is unknown.
     */
     std::unique_ptr<yup::AudioGraphNodeView> createView (yup::AudioGraphNodeID nodeID,
@@ -389,7 +388,14 @@ public:
     //==============================================================================
     std::vector<yup::String> getInternalNodeIdentifiers() const
     {
-        return { oscillatorIdentifier, gainIdentifier, lpfIdentifier, samplePlayerIdentifier, subgraphIdentifier };
+        return {
+            oscillatorIdentifier,
+            gainIdentifier,
+            lpfIdentifier,
+            latencyIdentifier,
+            samplePlayerIdentifier,
+            subgraphIdentifier
+        };
     }
 
     //==============================================================================

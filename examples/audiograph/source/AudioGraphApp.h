@@ -46,7 +46,8 @@ public:
     {
         deviceManager.initialiseWithDefaultDevices (2, 2);
 
-        graph = std::make_shared<yup::AudioGraphProcessor>();
+        model = std::make_shared<yup::AudioGraphModel>();
+        graph = std::make_shared<yup::AudioGraphProcessor> (model);
         nodeRegistry.registerInternalNodes();
 
 #if YUP_DESKTOP
@@ -65,21 +66,30 @@ public:
         nodeRegistry.registerPluginFormats (scanner.get(), makeHostContext());
 #endif
 
-        graph->setNodeFactory (nodeRegistry.makeProcessorFactory());
+        model->setNodeFactory (nodeRegistry.makeProcessorFactory());
 
         graphComponent = std::make_unique<yup::AudioGraphComponent> (graph);
-        graphComponent->onCanvasContextMenu = [this] (yup::Point<float> canvasPos)
+
+        graphComponent->onConnectionRequested = [this] (const yup::AudioGraphConnection& connection)
         {
-            showAddNodeMenu (canvasPos);
+            return addConnection (connection);
         };
-        graphComponent->onNodeContextMenu = [this] (yup::AudioGraphNodeID id, yup::Point<float>)
+
+        graphComponent->onConnectionRemovalRequested = [this] (const yup::AudioGraphConnection& connection)
         {
-            removeNode (id);
+            return removeConnection (connection);
         };
-        graphComponent->onNodeDoubleClicked = [this] (yup::AudioGraphNodeID id)
+
+        graphComponent->onEndpointConnectionsRemovalRequested = [this] (const yup::AudioGraphEndpoint& endpoint)
         {
-            openNodeEditor (graph, id);
+            return removeConnectionsForEndpoint (endpoint);
         };
+
+        graphComponent->onNodeMoveRequested = [this] (yup::AudioGraphNodeID nodeID, yup::Point<float> oldCanvasPos, yup::Point<float> newCanvasPos)
+        {
+            return moveNode (nodeID, oldCanvasPos, newCanvasPos);
+        };
+
         graphComponent->addListener (this);
         addAndMakeVisible (*graphComponent);
 
@@ -199,10 +209,24 @@ public:
 
     //==============================================================================
     // AudioGraphComponent::Listener
-
     void nodeViewMoved (yup::AudioGraphNodeID nodeID, yup::Point<float> newCanvasPos) override
     {
-        graph->setNodePosition (nodeID, newCanvasPos.getX(), newCanvasPos.getY());
+        model->setNodePosition (nodeID, newCanvasPos.getX(), newCanvasPos.getY());
+    }
+
+    void nodeContextMenu (yup::AudioGraphNodeID nodeID, yup::Point<float>) override
+    {
+        removeNode (nodeID);
+    }
+
+    void nodeDoubleClicked (yup::AudioGraphNodeID nodeID) override
+    {
+        openNodeEditor (graph, nodeID);
+    }
+
+    void canvasContextMenu (yup::Point<float> canvasPos) override
+    {
+        showAddNodeMenu (canvasPos);
     }
 
 private:
@@ -254,7 +278,7 @@ private:
             graphComponent->removeNodeView (nodeID);
 
         loadedNodes.clear();
-        graph->clear();
+        model->clear();
         graph->commitChanges();
         currentFilePath = yup::File();
 
@@ -348,7 +372,7 @@ private:
             graphComponent->removeNodeView (nodeID);
         loadedNodes.clear();
 
-        graph->clear();
+        model->clear();
 
         const auto result = graph->loadStateFromMemory (mb);
         if (result.failed())
@@ -361,13 +385,13 @@ private:
         graph->commitChanges();
         currentFilePath = file;
 
-        for (auto nodeID : graph->getNodeIDs())
+        for (auto nodeID : model->getNodeIDs())
         {
-            auto props = graph->getNodeProperties (nodeID);
+            auto props = model->getNodeProperties (nodeID);
             if (! props.has_value())
                 continue;
 
-            auto* proc = graph->getNodeProcessor (nodeID);
+            auto* proc = model->getNodeProcessor (nodeID);
             auto view = nodeRegistry.createView (nodeID, props->identifier, proc, graph.get());
 
             if (view != nullptr)
@@ -490,7 +514,7 @@ private:
             return;
         }
 
-        const auto nodeID = graph->addNode (std::move (processorResult).getValue(), props);
+        const auto nodeID = model->addNode (std::move (processorResult).getValue(), props);
         if (! nodeID.isValid())
         {
             statusLabel.setText ("Failed to add node to graph.", yup::dontSendNotification);
@@ -499,7 +523,7 @@ private:
 
         graph->commitChanges();
 
-        auto* rawProc = graph->getNodeProcessor (nodeID);
+        auto* rawProc = model->getNodeProcessor (nodeID);
         auto view = nodeRegistry.createView (nodeID, identifier, rawProc, graph.get());
         if (view != nullptr)
         {
@@ -532,7 +556,7 @@ private:
         props.positionY = canvasPos.getY();
         props.creationData = NodeRegistry::descriptionToCreationData (desc);
 
-        const auto nodeID = graph->addNode (std::move (result).getValue(), props);
+        const auto nodeID = model->addNode (std::move (result).getValue(), props);
         if (! nodeID.isValid())
         {
             statusLabel.setText ("Failed to add plugin to graph.", yup::dontSendNotification);
@@ -541,7 +565,7 @@ private:
 
         graph->commitChanges();
 
-        auto* rawProc = graph->getNodeProcessor (nodeID);
+        auto* rawProc = model->getNodeProcessor (nodeID);
         auto view = nodeRegistry.createView (nodeID, props.identifier, rawProc, graph.get());
         if (view != nullptr)
         {
@@ -561,9 +585,67 @@ private:
         closeSubgraphEditorForNode (graph, nodeID);
 
         graphComponent->removeNodeView (nodeID);
-        graph->removeNode (nodeID);
+        model->removeNode (nodeID);
         graph->commitChanges();
         loadedNodes.erase (nodeID);
+    }
+
+    bool addConnection (const yup::AudioGraphConnection& connection)
+    {
+        if (model->addConnection (connection).failed())
+            return false;
+
+        if (graph->commitChanges().wasOk())
+            return true;
+
+        model->removeConnection (connection);
+        graph->commitChanges();
+        return false;
+    }
+
+    bool removeConnection (const yup::AudioGraphConnection& connection)
+    {
+        if (! model->removeConnection (connection))
+            return false;
+
+        if (graph->commitChanges().wasOk())
+            return true;
+
+        model->addConnection (connection);
+        graph->commitChanges();
+        return false;
+    }
+
+    bool removeConnectionsForEndpoint (const yup::AudioGraphEndpoint& endpoint)
+    {
+        const auto connections = model->getConnections();
+        std::vector<yup::AudioGraphConnection> removedConnections;
+
+        for (const auto& connection : connections)
+        {
+            if (connection.source == endpoint || connection.destination == endpoint)
+            {
+                if (model->removeConnection (connection))
+                    removedConnections.push_back (connection);
+            }
+        }
+
+        if (removedConnections.empty())
+            return false;
+
+        if (graph->commitChanges().wasOk())
+            return true;
+
+        for (const auto& connection : removedConnections)
+            model->addConnection (connection);
+
+        graph->commitChanges();
+        return false;
+    }
+
+    bool moveNode (yup::AudioGraphNodeID nodeID, yup::Point<float>, yup::Point<float> newCanvasPos)
+    {
+        return model->setNodePosition (nodeID, newCanvasPos.getX(), newCanvasPos.getY());
     }
 
     //==============================================================================
@@ -573,7 +655,8 @@ private:
         if (ownerGraph == nullptr)
             return;
 
-        auto* proc = ownerGraph->getNodeProcessor (nodeID);
+        auto ownerModel = ownerGraph->getModel();
+        auto* proc = ownerModel->getNodeProcessor (nodeID);
         if (auto* subgraph = dynamic_cast<SubgraphProcessor*> (proc))
         {
             openSubgraphEditor (ownerGraph, nodeID, *subgraph);
@@ -591,7 +674,8 @@ private:
             return;
         }
 
-        auto* proc = ownerGraph->getNodeProcessor (nodeID);
+        auto ownerModel = ownerGraph->getModel();
+        auto* proc = ownerModel->getNodeProcessor (nodeID);
         if (proc == nullptr || ! proc->hasEditor())
             return;
 
@@ -712,7 +796,8 @@ private:
         if (ownerGraph == nullptr)
             return;
 
-        auto* oldProcessor = dynamic_cast<SubgraphProcessor*> (ownerGraph->getNodeProcessor (nodeID));
+        auto ownerModel = ownerGraph->getModel();
+        auto* oldProcessor = dynamic_cast<SubgraphProcessor*> (ownerModel->getNodeProcessor (nodeID));
         if (oldProcessor == nullptr || oldProcessor->getConfig().getPresetID() == config.getPresetID())
             return;
 
@@ -726,13 +811,14 @@ private:
             return;
         }
 
-        auto props = ownerGraph->getNodeProperties (nodeID).value_or (yup::AudioGraphNodeProperties());
+        auto props = ownerModel->getNodeProperties (nodeID).value_or (yup::AudioGraphNodeProperties());
         props.identifier = NodeRegistry::subgraphIdentifier;
         props.name = config.getDisplayName();
         props.creationData = SubgraphConfig::toCreationData (config);
 
         auto replacement = std::make_unique<SubgraphProcessor> (config);
-        replacement->setNodeFactory (nodeRegistry.makeProcessorFactory());
+        auto replacementModel = replacement->getModel();
+        replacementModel->setNodeFactory (nodeRegistry.makeProcessorFactory());
 
         if (const auto loadResult = replacement->loadStateFromMemory (oldState); loadResult.failed())
         {
@@ -740,7 +826,7 @@ private:
             return;
         }
 
-        if (const auto replaceResult = ownerGraph->replaceNodeProcessor (nodeID, std::move (replacement), props); replaceResult.failed())
+        if (const auto replaceResult = ownerModel->replaceNode (nodeID, std::move (replacement), props); replaceResult.failed())
         {
             statusLabel.setText ("Subgraph reconfigure failed: " + replaceResult.getErrorMessage(), yup::dontSendNotification);
             return;
@@ -754,7 +840,7 @@ private:
 
         refreshNodeViewsForGraph (ownerGraph.get(), nodeID);
 
-        auto* newProcessor = dynamic_cast<SubgraphProcessor*> (ownerGraph->getNodeProcessor (nodeID));
+        auto* newProcessor = dynamic_cast<SubgraphProcessor*> (ownerModel->getNodeProcessor (nodeID));
         auto* record = findSubgraphEditorRecord (ownerGraph.get(), nodeID);
 
         if (newProcessor != nullptr && record != nullptr)
@@ -771,9 +857,9 @@ private:
             graphComponent->removeNodeView (nodeID);
             loadedNodes.erase (nodeID);
 
-            if (auto props = graph->getNodeProperties (nodeID))
+            if (auto props = model->getNodeProperties (nodeID))
             {
-                auto* proc = graph->getNodeProcessor (nodeID);
+                auto* proc = model->getNodeProcessor (nodeID);
                 auto view = nodeRegistry.createView (nodeID, props->identifier, proc, graph.get());
 
                 if (view != nullptr)
@@ -794,7 +880,8 @@ private:
         if (ownerGraph == nullptr)
             return;
 
-        if (auto* subgraph = dynamic_cast<SubgraphProcessor*> (ownerGraph->getNodeProcessor (nodeID)))
+        auto ownerModel = ownerGraph->getModel();
+        if (auto* subgraph = dynamic_cast<SubgraphProcessor*> (ownerModel->getNodeProcessor (nodeID)))
             closeSubgraphEditorsForGraph (subgraph->getGraph().get());
 
         subgraphEditorWindows.erase (std::remove_if (subgraphEditorWindows.begin(), subgraphEditorWindows.end(), [ownerGraphRaw = ownerGraph.get(), nodeID] (SubgraphEditorRecord& record)
@@ -934,6 +1021,7 @@ private:
 
     yup::AudioDeviceManager deviceManager;
     std::shared_ptr<yup::AudioGraphProcessor> graph;
+    std::shared_ptr<yup::AudioGraphModel> model;
     std::unique_ptr<yup::AudioGraphComponent> graphComponent;
     NodeRegistry nodeRegistry;
     std::map<yup::AudioGraphNodeID, yup::String> loadedNodes;

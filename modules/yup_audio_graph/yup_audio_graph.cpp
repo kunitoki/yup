@@ -31,4 +31,5 @@
 #include "yup_audio_graph.h"
 
 //==============================================================================
+#include "graph/yup_AudioGraphModel.cpp"
 #include "graph/yup_AudioGraphProcessor.cpp"

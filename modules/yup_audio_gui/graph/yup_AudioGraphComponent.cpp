@@ -41,13 +41,19 @@ const Identifier AudioGraphComponent::Style::backgroundColorId ("audioGraphBackg
 const Identifier AudioGraphComponent::Style::gridColorId ("audioGraphGrid");
 
 //==============================================================================
-AudioGraphComponent::AudioGraphComponent (std::shared_ptr<AudioGraphProcessor> graphIn)
-    : graph (std::move (graphIn))
+AudioGraphComponent::AudioGraphComponent (std::shared_ptr<AudioGraphModel> modelIn)
+    : model (std::move (modelIn))
 {
     setOpaque (true);
     setWantsKeyboardFocus (true);
     setWantsMouseEvents (true, true);
     enableRenderingUnclipped (true);
+}
+
+AudioGraphComponent::AudioGraphComponent (std::shared_ptr<AudioGraphProcessor> graphIn)
+    : AudioGraphComponent (graphIn != nullptr ? graphIn->getModel() : nullptr)
+{
+    graph = std::move (graphIn);
 }
 
 AudioGraphComponent::~AudioGraphComponent()
@@ -362,7 +368,7 @@ void AudioGraphComponent::mouseDown (const MouseEvent& event)
 
         if (auto connection = hitTestConnection (screenPos))
         {
-            removeConnectionAndCommit (*connection);
+            requestConnectionRemoval (*connection);
             return;
         }
 
@@ -375,16 +381,12 @@ void AudioGraphComponent::mouseDown (const MouseEvent& event)
 
             if (node.view->getLocalBounds().contains (localPos))
             {
-                if (onNodeContextMenu != nullptr)
-                    onNodeContextMenu (node.nodeID, screenToCanvas (screenPos));
-
+                listeners.call (&Listener::nodeContextMenu, node.nodeID, screenToCanvas (screenPos));
                 return;
             }
         }
 
-        if (onCanvasContextMenu != nullptr)
-            onCanvasContextMenu (screenToCanvas (screenPos));
-
+        listeners.call (&Listener::canvasContextMenu, screenToCanvas (screenPos));
         return;
     }
 
@@ -513,10 +515,25 @@ void AudioGraphComponent::mouseUp (const MouseEvent& event)
                 const auto& item = nodes[static_cast<size_t> (draggedNodeIndex)];
 
                 if (item.kind == NodeItem::Kind::processor)
-                    listeners.call ([&] (Listener& listener)
+                {
+                    auto& draggedItem = nodes[static_cast<size_t> (draggedNodeIndex)];
+                    bool accepted = true;
+
+                    if (onNodeMoveRequested != nullptr)
+                        accepted = onNodeMoveRequested (draggedItem.nodeID, dragStartNodePosition, draggedItem.canvasPosition);
+
+                    if (! accepted)
                     {
-                        listener.nodeViewMoved (item.nodeID, item.canvasPosition);
-                    });
+                        draggedItem.canvasPosition = dragStartNodePosition;
+                        updateNodeBounds();
+                        repaint();
+                        interaction = Interaction::idle;
+                        draggedNodeIndex = -1;
+                        break;
+                    }
+
+                    listeners.call (&Listener::nodeViewMoved, draggedItem.nodeID, draggedItem.canvasPosition);
+                }
             }
 
             interaction = Interaction::idle;
@@ -537,7 +554,7 @@ void AudioGraphComponent::mouseUp (const MouseEvent& event)
 
 void AudioGraphComponent::mouseDoubleClick (const MouseEvent& event)
 {
-    if (onNodeDoubleClicked == nullptr)
+    if (listeners.isEmpty())
         return;
 
     const auto screenPos = eventPositionInThisComponent (event);
@@ -551,7 +568,7 @@ void AudioGraphComponent::mouseDoubleClick (const MouseEvent& event)
 
         if (node.view->getLocalBounds().contains (localPos))
         {
-            onNodeDoubleClicked (node.nodeID);
+            listeners.call (&Listener::nodeDoubleClicked, node.nodeID);
             return;
         }
     }
@@ -736,10 +753,10 @@ std::optional<AudioGraphComponent::EndpointHit> AudioGraphComponent::hitTestEndp
 
 std::optional<AudioGraphConnection> AudioGraphComponent::hitTestConnection (Point<float> screenPos) const
 {
-    if (graph == nullptr)
+    if (model == nullptr)
         return {};
 
-    for (const auto& connection : graph->getConnections())
+    for (const auto& connection : model->getConnections())
     {
         const auto start = getEndpointScreenPosition (connection.source);
         const auto end = getEndpointScreenPosition (connection.destination);
@@ -862,85 +879,51 @@ Point<float> AudioGraphComponent::getPendingWireEndPosition() const noexcept
 
 bool AudioGraphComponent::tryConnect (const AudioGraphEndpoint& first, const AudioGraphEndpoint& second)
 {
-    if (graph == nullptr || ! isCompatiblePair (first, second))
+    if (model == nullptr || ! isCompatiblePair (first, second))
         return false;
 
     const auto connection = makeConnection (first, second);
 
-    if (graph->addConnection (connection).failed())
+    if (onConnectionRequested == nullptr || ! onConnectionRequested (connection))
         return false;
 
-    if (graph->commitChanges().failed())
-    {
-        graph->removeConnection (connection);
-        graph->commitChanges();
-        return false;
-    }
+    listeners.call (&Listener::connectionAdded, connection);
 
-    listeners.call ([&] (Listener& listener)
-    {
-        listener.connectionAdded (connection);
-    });
     repaint();
     return true;
 }
 
-bool AudioGraphComponent::removeConnectionAndCommit (const AudioGraphConnection& connection)
+bool AudioGraphComponent::requestConnectionRemoval (const AudioGraphConnection& connection)
 {
-    if (graph == nullptr || ! graph->removeConnection (connection))
+    if (model == nullptr || onConnectionRemovalRequested == nullptr || ! onConnectionRemovalRequested (connection))
         return false;
 
-    if (graph->commitChanges().failed())
-    {
-        graph->addConnection (connection);
-        graph->commitChanges();
-        return false;
-    }
+    listeners.call (&Listener::connectionRemoved, connection);
 
-    listeners.call ([&] (Listener& listener)
-    {
-        listener.connectionRemoved (connection);
-    });
     repaint();
     return true;
 }
 
 void AudioGraphComponent::removeConnectionsForEndpoint (const AudioGraphEndpoint& endpoint)
 {
-    if (graph == nullptr)
+    if (model == nullptr || onEndpointConnectionsRemovalRequested == nullptr)
         return;
 
-    const auto connections = graph->getConnections();
+    const auto connections = model->getConnections();
     std::vector<AudioGraphConnection> removedConnections;
 
     for (const auto& connection : connections)
-    {
         if (connection.source == endpoint || connection.destination == endpoint)
-        {
-            if (graph->removeConnection (connection))
-                removedConnections.push_back (connection);
-        }
-    }
+            removedConnections.push_back (connection);
 
     if (removedConnections.empty())
         return;
 
-    if (graph->commitChanges().failed())
-    {
-        for (const auto& connection : removedConnections)
-            graph->addConnection (connection);
-
-        graph->commitChanges();
+    if (! onEndpointConnectionsRemovalRequested (endpoint))
         return;
-    }
 
     for (const auto& connection : removedConnections)
-    {
-        listeners.call ([&] (Listener& listener)
-        {
-            listener.connectionRemoved (connection);
-        });
-    }
+        listeners.call (&Listener::connectionRemoved, connection);
 
     repaint();
 }
@@ -952,8 +935,7 @@ bool AudioGraphComponent::isCompatiblePair (const AudioGraphEndpoint& first, con
 
 AudioGraphConnection AudioGraphComponent::makeConnection (const AudioGraphEndpoint& first, const AudioGraphEndpoint& second) const noexcept
 {
-    return first.isSource() ? AudioGraphConnection { first, second }
-                            : AudioGraphConnection { second, first };
+    return first.isSource() ? AudioGraphConnection { first, second } : AudioGraphConnection { second, first };
 }
 
 Point<float> AudioGraphComponent::cubicPoint (Point<float> p0, Point<float> p1, Point<float> p2, Point<float> p3, float t) const noexcept

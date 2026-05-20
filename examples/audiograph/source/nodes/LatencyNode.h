@@ -35,6 +35,7 @@ public:
                                                { yup::AudioBus ("Main", yup::AudioBus::Audio, yup::AudioBus::Output, 2) }))
     {
         setDelayMilliseconds (defaultDelayMilliseconds);
+        reportUpdatedLatency();
     }
 
     void prepareToPlay (float newSampleRate, int maxBlockSize) override
@@ -46,7 +47,6 @@ public:
         history.clear();
 
         writePosition = 0;
-        updateDelaySamples();
     }
 
     void releaseResources() override {}
@@ -59,8 +59,7 @@ public:
 
     void processBlock (yup::AudioBuffer<float>& audioBuffer, yup::MidiBuffer&) override
     {
-        const int currentDelaySamples = delaySamples.load (std::memory_order_relaxed);
-
+        const int currentDelaySamples = getLatencySamples();
         if (currentDelaySamples <= 0)
             return;
 
@@ -88,11 +87,6 @@ public:
         }
     }
 
-    int getLatencySamples() override
-    {
-        return delaySamples.load (std::memory_order_relaxed);
-    }
-
     int getCurrentPreset() const noexcept override { return 0; }
 
     void setCurrentPreset (int) noexcept override {}
@@ -115,6 +109,8 @@ public:
             return yup::Result::fail ("Unsupported latency node state version");
 
         setDelayMilliseconds (stream.readFloat());
+        reportUpdatedLatency();
+
         return yup::Result::ok();
     }
 
@@ -142,10 +138,17 @@ public:
         return delaySamples.load (std::memory_order_relaxed);
     }
 
-    void setDelayMilliseconds (float newDelayMilliseconds) noexcept
+    void setDelayMilliseconds (float newDelayMilliseconds)
     {
         delayMilliseconds.store (yup::jlimit (0.0f, maximumDelayMilliseconds, newDelayMilliseconds), std::memory_order_relaxed);
-        updateDelaySamples();
+
+        const auto newDelaySamples = delayMillisecondsToSamples (delayMilliseconds.load (std::memory_order_relaxed));
+        delaySamples.store (newDelaySamples, std::memory_order_relaxed);
+    }
+
+    void reportUpdatedLatency()
+    {
+        setLatencySamples (getDelaySamples());
     }
 
 private:
@@ -156,11 +159,6 @@ private:
     {
         const auto sr = sampleRate.load (std::memory_order_relaxed);
         return yup::roundToInt ((static_cast<double> (milliseconds) * static_cast<double> (sr)) / 1000.0);
-    }
-
-    void updateDelaySamples() noexcept
-    {
-        delaySamples.store (delayMillisecondsToSamples (delayMilliseconds.load (std::memory_order_relaxed)), std::memory_order_relaxed);
     }
 
     std::atomic<float> sampleRate { 44100.0f };
@@ -174,10 +172,9 @@ private:
 class LatencyNodeView final : public yup::AudioGraphNodeView
 {
 public:
-    LatencyNodeView (yup::AudioGraphNodeID nodeID, LatencyProcessor& processorIn, yup::AudioGraphProcessor* graphIn)
+    LatencyNodeView (yup::AudioGraphNodeID nodeID, LatencyProcessor& processorIn)
         : AudioGraphNodeView (nodeID)
         , processor (processorIn)
-        , graph (graphIn)
         , delaySlider (yup::Slider::LinearBarHorizontal)
     {
         NodeViewHelpers::configureParameterSlider (delaySlider, getPortKindColor (PortKind::parameter));
@@ -188,15 +185,11 @@ public:
         {
             processor.setDelayMilliseconds (static_cast<float> (value));
 
-            if (! delaySlider.isCurrentlyBeingDragged())
-                commitLatencyChange();
-
             repaint();
         };
         delaySlider.onDragEnd = [this] (const yup::MouseEvent&)
         {
-            commitLatencyChange();
-            repaint();
+            processor.reportUpdatedLatency();
         };
         addAndMakeVisible (delaySlider);
     }
@@ -233,13 +226,6 @@ public:
     }
 
 private:
-    void commitLatencyChange()
-    {
-        if (graph != nullptr)
-            graph->commitChanges();
-    }
-
     LatencyProcessor& processor;
-    yup::AudioGraphProcessor* graph = nullptr;
     yup::Slider delaySlider;
 };

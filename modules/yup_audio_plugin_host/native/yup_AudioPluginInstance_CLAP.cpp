@@ -75,6 +75,8 @@ struct YUPCLAPHost
 {
     clap_host_t host {};
     clap_host_note_ports_t notePorts {};
+    clap_host_latency_t latency {};
+    std::function<void()> latencyChanged;
     String hostName;
     String hostVendor;
     String hostVersion;
@@ -95,12 +97,21 @@ struct YUPCLAPHost
             return CLAP_NOTE_DIALECT_CLAP | CLAP_NOTE_DIALECT_MIDI;
         };
         notePorts.rescan = [] (const clap_host_t*, uint32_t) {};
+        latency.changed = [] (const clap_host_t* host)
+        {
+            auto* self = static_cast<YUPCLAPHost*> (host->host_data);
+            if (self->latencyChanged != nullptr)
+                self->latencyChanged();
+        };
 
         host.get_extension = [] (const clap_host_t* host, const char* extensionId) -> const void*
         {
             auto* self = static_cast<YUPCLAPHost*> (host->host_data);
             if (std::strcmp (extensionId, CLAP_EXT_NOTE_PORTS) == 0)
                 return &self->notePorts;
+
+            if (std::strcmp (extensionId, CLAP_EXT_LATENCY) == 0)
+                return &self->latency;
 
             return nullptr;
         };
@@ -292,6 +303,11 @@ public:
         , yupHost (std::move (clapHost))
         , clapPlugin (plugin)
     {
+        yupHost->latencyChanged = [this]
+        {
+            setLatencySamples (getLatencySamples());
+        };
+
         buildParameterList();
         setNonRealtime (context.isNonRealtime);
     }
@@ -299,6 +315,7 @@ public:
     ~CLAPInstance() override
     {
         releaseResources();
+        yupHost->latencyChanged = nullptr;
 
         if (clapPlugin != nullptr)
         {
@@ -482,6 +499,14 @@ public:
     //==============================================================================
 
     bool hasEditor() const override { return false; }
+
+    int getLatencySamples() override
+    {
+        auto* latencyExt = reinterpret_cast<const clap_plugin_latency_t*> (
+            clapPlugin->get_extension (clapPlugin, CLAP_EXT_LATENCY));
+
+        return latencyExt != nullptr ? static_cast<int> (latencyExt->get (clapPlugin)) : 0;
+    }
 
     //==============================================================================
 

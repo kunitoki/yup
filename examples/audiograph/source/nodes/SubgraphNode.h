@@ -118,7 +118,8 @@ public:
     explicit SubgraphProcessor (SubgraphConfig configIn = {})
         : AudioProcessor ("Subgraph", createBusLayout (configIn))
         , config (configIn)
-        , graph (std::make_shared<yup::AudioGraphProcessor> (createBusLayout (configIn)))
+        , model (std::make_shared<yup::AudioGraphModel>())
+        , graph (std::make_shared<yup::AudioGraphProcessor> (model, createBusLayout (configIn)))
     {
     }
 
@@ -126,9 +127,11 @@ public:
 
     std::shared_ptr<yup::AudioGraphProcessor> getGraph() const noexcept { return graph; }
 
-    void setNodeFactory (yup::AudioGraphProcessor::NodeFactory factory)
+    std::shared_ptr<yup::AudioGraphModel> getModel() const noexcept { return model; }
+
+    void setNodeFactory (yup::AudioGraphModel::NodeFactory factory)
     {
-        graph->setNodeFactory (std::move (factory));
+        model->setNodeFactory (std::move (factory));
     }
 
     void prepareToPlay (float sampleRate, int maxBlockSize) override
@@ -315,6 +318,7 @@ private:
     }
 
     SubgraphConfig config;
+    std::shared_ptr<yup::AudioGraphModel> model;
     std::shared_ptr<yup::AudioGraphProcessor> graph;
 };
 

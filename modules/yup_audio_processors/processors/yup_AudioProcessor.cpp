@@ -51,6 +51,21 @@ void AudioProcessor::addParameter (AudioParameter::Ptr parameter)
     parameters.emplace_back (std::move (parameter));
 }
 
+void AudioProcessor::addListener (Listener* listener)
+{
+    listeners.add (listener);
+}
+
+void AudioProcessor::removeListener (Listener* listener)
+{
+    listeners.remove (listener);
+}
+
+void AudioProcessor::updateHostDisplay (ChangeDetails details)
+{
+    listeners.call (&Listener::audioProcessorChanged, this, details);
+}
+
 //==============================================================================
 
 int AudioProcessor::getNumAudioOutputs() const
@@ -94,6 +109,17 @@ void AudioProcessor::suspendProcessing (bool shouldSuspend)
 bool AudioProcessor::isSuspended() const
 {
     return processIsSuspended;
+}
+
+//==============================================================================
+
+void AudioProcessor::setLatencySamples (int newLatencySamples)
+{
+    const auto clampedLatencySamples = jmax (0, newLatencySamples);
+    const auto oldLatencySamples = latencySamples.exchange (clampedLatencySamples);
+
+    if (oldLatencySamples != clampedLatencySamples)
+        updateHostDisplay (ChangeDetails().withLatencyChanged (true));
 }
 
 //==============================================================================

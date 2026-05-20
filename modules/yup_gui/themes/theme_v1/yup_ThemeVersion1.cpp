@@ -148,11 +148,12 @@ void paintLinearSlider (Graphics& g, const ApplicationTheme& theme, const Slider
     else
         g.fillRoundedRect (sliderBounds.getCenterX() - 2.0f, sliderBounds.getY(), 4.0f, sliderBounds.getHeight(), 2.0f);
 
-    // Draw value track for bar sliders
+    // Draw value track
+    g.setFillColor (isMouseDown ? colors.thumbDown : (isMouseOver ? colors.thumbOver : colors.thumb));
+
     const auto sliderType = slider.getSliderType();
     if (sliderType == Slider::LinearBarHorizontal || sliderType == Slider::LinearBarVertical)
     {
-        auto thumbColor = slider.isMouseOver() ? colors.thumbOver : colors.thumb;
         if (isHorizontal)
             g.fillRoundedRect (sliderBounds.getX(), sliderBounds.getCenterY() - 2.0f, sliderValue * sliderBounds.getWidth(), 4.0f, 2.0f);
         else
@@ -164,7 +165,6 @@ void paintLinearSlider (Graphics& g, const ApplicationTheme& theme, const Slider
     }
     else
     {
-        g.setFillColor (isMouseDown ? colors.thumbDown : (isMouseOver ? colors.thumbOver : colors.thumb));
         g.fillEllipse (thumbBounds);
     }
 
@@ -1069,9 +1069,9 @@ void paintAudioGraphComponent (Graphics& g, const ApplicationTheme&, const Audio
         }
     }
 
-    if (const auto* processor = graph.getGraphProcessor())
+    if (const auto* model = graph.getGraphModel())
     {
-        for (const auto& connection : processor->getConnections())
+        for (const auto& connection : model->getConnections())
             paintAudioGraphConnection (g, graph, connection, 1.0f);
     }
 

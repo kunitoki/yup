@@ -40,23 +40,32 @@ public:
                            NodeRegistry& nodeRegistryIn,
                            yup::StringRef endpointSubtitleIn)
         : graph (std::move (graphIn))
+        , model (graph != nullptr ? graph->getModel() : nullptr)
         , nodeRegistry (nodeRegistryIn)
         , endpointSubtitle (endpointSubtitleIn)
     {
         graphComponent = std::make_unique<yup::AudioGraphComponent> (graph);
-        graphComponent->onCanvasContextMenu = [this] (yup::Point<float> canvasPos)
+
+        graphComponent->onConnectionRequested = [this] (const yup::AudioGraphConnection& connection)
         {
-            showAddNodeMenu (canvasPos);
+            return addConnection (connection);
         };
-        graphComponent->onNodeContextMenu = [this] (yup::AudioGraphNodeID id, yup::Point<float>)
+
+        graphComponent->onConnectionRemovalRequested = [this] (const yup::AudioGraphConnection& connection)
         {
-            removeNode (id);
+            return removeConnection (connection);
         };
-        graphComponent->onNodeDoubleClicked = [this] (yup::AudioGraphNodeID id)
+
+        graphComponent->onEndpointConnectionsRemovalRequested = [this] (const yup::AudioGraphEndpoint& endpoint)
         {
-            if (onNodeDoubleClicked != nullptr)
-                onNodeDoubleClicked (*this, id);
+            return removeConnectionsForEndpoint (endpoint);
         };
+
+        graphComponent->onNodeMoveRequested = [this] (yup::AudioGraphNodeID nodeID, yup::Point<float> oldCanvasPos, yup::Point<float> newCanvasPos)
+        {
+            return moveNode (nodeID, oldCanvasPos, newCanvasPos);
+        };
+
         graphComponent->addListener (this);
         addAndMakeVisible (*graphComponent);
 
@@ -67,6 +76,8 @@ public:
     {
         graphComponent->removeListener (this);
     }
+
+    std::shared_ptr<yup::AudioGraphProcessor> getGraph() const noexcept { return graph; }
 
     void resized() override
     {
@@ -81,10 +92,24 @@ public:
 
     void nodeViewMoved (yup::AudioGraphNodeID nodeID, yup::Point<float> newCanvasPos) override
     {
-        graph->setNodePosition (nodeID, newCanvasPos.getX(), newCanvasPos.getY());
+        model->setNodePosition (nodeID, newCanvasPos.getX(), newCanvasPos.getY());
     }
 
-    std::shared_ptr<yup::AudioGraphProcessor> getGraph() const noexcept { return graph; }
+    void nodeContextMenu (yup::AudioGraphNodeID id, yup::Point<float>) override
+    {
+        removeNode (id);
+    }
+
+    void nodeDoubleClicked (yup::AudioGraphNodeID id) override
+    {
+        if (onNodeDoubleClicked != nullptr)
+            onNodeDoubleClicked (*this, id);
+    }
+
+    void canvasContextMenu (yup::Point<float> canvasPos) override
+    {
+        showAddNodeMenu (canvasPos);
+    }
 
     void reloadViews()
     {
@@ -93,7 +118,7 @@ public:
 
         loadedNodes.clear();
 
-        for (auto nodeID : graph->getNodeIDs())
+        for (auto nodeID : model->getNodeIDs())
             addViewForNode (nodeID);
 
         graphComponent->setGraphInputView (std::make_unique<GraphInputNodeView> (graph, endpointSubtitle), { 40.0f, 200.0f });
@@ -113,13 +138,13 @@ public:
                            yup::Point<float> canvasPos)
     {
         const auto identifier = props.identifier;
-        const auto nodeID = graph->addNode (std::move (processor), std::move (props));
+        const auto nodeID = model->addNode (std::move (processor), std::move (props));
         if (! nodeID.isValid())
             return;
 
         graph->commitChanges();
 
-        auto* rawProc = graph->getNodeProcessor (nodeID);
+        auto* rawProc = model->getNodeProcessor (nodeID);
         auto view = nodeRegistry.createView (nodeID, identifier, rawProc, graph.get());
         if (view != nullptr)
         {
@@ -159,11 +184,11 @@ public:
 private:
     void addViewForNode (yup::AudioGraphNodeID nodeID)
     {
-        auto props = graph->getNodeProperties (nodeID);
+        auto props = model->getNodeProperties (nodeID);
         if (! props.has_value())
             return;
 
-        auto* proc = graph->getNodeProcessor (nodeID);
+        auto* proc = model->getNodeProcessor (nodeID);
         auto view = nodeRegistry.createView (nodeID, props->identifier, proc, graph.get());
 
         if (view != nullptr)
@@ -179,9 +204,67 @@ private:
             onNodeWillBeRemoved (*this, nodeID);
 
         graphComponent->removeNodeView (nodeID);
-        graph->removeNode (nodeID);
+        model->removeNode (nodeID);
         graph->commitChanges();
         loadedNodes.erase (nodeID);
+    }
+
+    bool addConnection (const yup::AudioGraphConnection& connection)
+    {
+        if (model->addConnection (connection).failed())
+            return false;
+
+        if (graph->commitChanges().wasOk())
+            return true;
+
+        model->removeConnection (connection);
+        graph->commitChanges();
+        return false;
+    }
+
+    bool removeConnection (const yup::AudioGraphConnection& connection)
+    {
+        if (! model->removeConnection (connection))
+            return false;
+
+        if (graph->commitChanges().wasOk())
+            return true;
+
+        model->addConnection (connection);
+        graph->commitChanges();
+        return false;
+    }
+
+    bool removeConnectionsForEndpoint (const yup::AudioGraphEndpoint& endpoint)
+    {
+        const auto connections = model->getConnections();
+        std::vector<yup::AudioGraphConnection> removedConnections;
+
+        for (const auto& connection : connections)
+        {
+            if (connection.source == endpoint || connection.destination == endpoint)
+            {
+                if (model->removeConnection (connection))
+                    removedConnections.push_back (connection);
+            }
+        }
+
+        if (removedConnections.empty())
+            return false;
+
+        if (graph->commitChanges().wasOk())
+            return true;
+
+        for (const auto& connection : removedConnections)
+            model->addConnection (connection);
+
+        graph->commitChanges();
+        return false;
+    }
+
+    bool moveNode (yup::AudioGraphNodeID nodeID, yup::Point<float>, yup::Point<float> newCanvasPos)
+    {
+        return model->setNodePosition (nodeID, newCanvasPos.getX(), newCanvasPos.getY());
     }
 
     void showAddNodeMenu (yup::Point<float> canvasPos)
@@ -263,6 +346,7 @@ private:
     }
 
     std::shared_ptr<yup::AudioGraphProcessor> graph;
+    std::shared_ptr<yup::AudioGraphModel> model;
     NodeRegistry& nodeRegistry;
     yup::String endpointSubtitle;
     std::unique_ptr<yup::AudioGraphComponent> graphComponent;

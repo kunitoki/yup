@@ -591,6 +591,8 @@ struct VST3Module
 class HostComponentHandler : public Vst::IComponentHandler
 {
 public:
+    using RestartCallback = std::function<void (int32)>;
+
     HostComponentHandler()
     {
         FUNKNOWN_CTOR
@@ -609,9 +611,23 @@ public:
 
     tresult PLUGIN_API endEdit (Vst::ParamID) override { return kResultOk; }
 
-    tresult PLUGIN_API restartComponent (int32) override { return kResultOk; }
+    tresult PLUGIN_API restartComponent (int32 flags) override
+    {
+        if (restartCallback != nullptr)
+            restartCallback (flags);
+
+        return kResultOk;
+    }
+
+    void setRestartCallback (RestartCallback callback)
+    {
+        restartCallback = std::move (callback);
+    }
 
     DECLARE_FUNKNOWN_METHODS
+
+private:
+    RestartCallback restartCallback;
 };
 
 IMPLEMENT_FUNKNOWN_METHODS (HostComponentHandler, Vst::IComponentHandler, Vst::IComponentHandler::iid)
@@ -881,6 +897,12 @@ public:
         , vst3Controller (std::move (controller))
         , vst3ControllerInitialized (controllerWasInitialized)
     {
+        if (auto* handler = static_cast<HostComponentHandler*> (vst3ComponentHandler.get()))
+            handler->setRestartCallback ([this] (int32 flags)
+            {
+                handleRestartComponent (flags);
+            });
+
         connectComponentAndController();
         buildParameterList();
         setNonRealtime (context.isNonRealtime);
@@ -890,6 +912,9 @@ public:
     {
         disconnectComponentAndController();
         releaseResources();
+
+        if (auto* handler = static_cast<HostComponentHandler*> (vst3ComponentHandler.get()))
+            handler->setRestartCallback (nullptr);
 
         if (vst3Controller != nullptr)
         {
@@ -1021,6 +1046,11 @@ public:
         collectOutputEvents (midiBuffer);
     }
 
+    int getLatencySamples() override
+    {
+        return vst3Processor != nullptr ? static_cast<int> (vst3Processor->getLatencySamples()) : 0;
+    }
+
     void processBlock (AudioBuffer<double>& audioBuffer, MidiBuffer& midiBuffer) override
     {
         ScopedNoDenormals noDenormals;
@@ -1148,6 +1178,14 @@ public:
             return editor.release();
 
         return nullptr;
+    }
+
+    //==============================================================================
+
+    void handleRestartComponent (int32 flags)
+    {
+        if ((flags & Vst::kLatencyChanged) != 0)
+            setLatencySamples (getLatencySamples());
     }
 
     //==============================================================================

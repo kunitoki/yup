@@ -325,6 +325,32 @@ private:
     std::atomic<bool>& shouldContinue;
 };
 
+class CountingLatencyProcessor : public TestProcessor
+{
+public:
+    explicit CountingLatencyProcessor (std::atomic<int>& queryCountToUse)
+        : TestProcessor()
+        , queryCount (queryCountToUse)
+    {
+    }
+
+    int getLatencySamples() override
+    {
+        queryCount.fetch_add (1);
+        return latencySamples.load();
+    }
+
+    void setLatencySamplesForTest (int newLatencySamples)
+    {
+        latencySamples.store (newLatencySamples);
+        setLatencySamples (newLatencySamples);
+    }
+
+private:
+    std::atomic<int>& queryCount;
+    std::atomic<int> latencySamples { 0 };
+};
+
 class StatefulGainProcessor : public AudioProcessor
 {
 public:
@@ -390,7 +416,7 @@ AudioGraphNodeProperties statefulGainProperties (float positionX = 0.0f, float p
     return properties;
 }
 
-AudioGraphProcessor::NodeFactory statefulGainFactory()
+AudioGraphModel::NodeFactory statefulGainFactory()
 {
     return [] (const AudioGraphNodeProperties& properties) -> ResultValue<std::unique_ptr<AudioProcessor>>
     {
@@ -501,7 +527,7 @@ AudioGraphNodeProperties externalProcessorProperties (float positionX = 0.0f, fl
     return properties;
 }
 
-AudioGraphProcessor::NodeFactory statefulGainAndExternalFactory (int& externalLoadCount, String& externalIdentifier)
+AudioGraphModel::NodeFactory statefulGainAndExternalFactory (int& externalLoadCount, String& externalIdentifier)
 {
     return [&externalLoadCount, &externalIdentifier] (const AudioGraphNodeProperties& properties) -> ResultValue<std::unique_ptr<AudioProcessor>>
     {
@@ -587,19 +613,20 @@ String toBase64Text (const MemoryBlock& block)
 
 bool resetGraphToSingleGainPath (AudioGraphProcessor& graph, float gain)
 {
-    graph.clear();
+    auto model = graph.getModel();
+    model->clear();
 
-    const auto node = graph.addNode (std::make_unique<TestProcessor> (gain));
+    const auto node = model->addNode (std::make_unique<TestProcessor> (gain));
     if (! node.isValid())
         return false;
 
-    if (graph.addConnection ({ AudioGraphEndpoint::graphInput (0),
-                               AudioGraphEndpoint::nodeInput (node, 0) })
+    if (model->addConnection ({ AudioGraphEndpoint::graphInput (0),
+                                AudioGraphEndpoint::nodeInput (node, 0) })
             .failed())
         return false;
 
-    if (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0),
-                               AudioGraphEndpoint::graphOutput (0) })
+    if (model->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0),
+                                AudioGraphEndpoint::graphOutput (0) })
             .failed())
         return false;
 
@@ -773,10 +800,11 @@ private:
 
 TEST (AudioGraphProcessorTests, CommitPreparesNodes)
 {
-    AudioGraphProcessor graph;
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
     auto processor = std::make_unique<TestProcessor>();
     auto* processorPtr = processor.get();
-    const auto node = graph.addNode (std::move (processor));
+    const auto node = model->addNode (std::move (processor));
 
     EXPECT_TRUE (node.isValid());
 
@@ -791,10 +819,11 @@ TEST (AudioGraphProcessorTests, CommitPreparesNodes)
 
 TEST (AudioGraphProcessorTests, RejectsMissingNodeConnection)
 {
-    AudioGraphProcessor graph;
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
 
-    const auto result = graph.addConnection ({ AudioGraphEndpoint::nodeOutput (AudioGraphNodeID::invalid(), 0),
-                                               AudioGraphEndpoint::graphOutput (0) });
+    const auto result = model->addConnection ({ AudioGraphEndpoint::nodeOutput (AudioGraphNodeID::invalid(), 0),
+                                                AudioGraphEndpoint::graphOutput (0) });
 
     EXPECT_TRUE (result.wasOk());
     EXPECT_TRUE (graph.commitChanges().failed());
@@ -802,15 +831,16 @@ TEST (AudioGraphProcessorTests, RejectsMissingNodeConnection)
 
 TEST (AudioGraphProcessorTests, RejectsCycles)
 {
-    AudioGraphProcessor graph;
-    const auto first = graph.addNode (std::make_unique<TestProcessor>());
-    const auto second = graph.addNode (std::make_unique<TestProcessor>());
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto first = model->addNode (std::make_unique<TestProcessor>());
+    const auto second = model->addNode (std::make_unique<TestProcessor>());
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (first, 0),
-                                        AudioGraphEndpoint::nodeInput (second, 0) })
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (first, 0),
+                                         AudioGraphEndpoint::nodeInput (second, 0) })
                      .wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (second, 0),
-                                        AudioGraphEndpoint::nodeInput (first, 0) })
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (second, 0),
+                                         AudioGraphEndpoint::nodeInput (first, 0) })
                      .wasOk());
 
     EXPECT_TRUE (graph.commitChanges().failed());
@@ -818,13 +848,14 @@ TEST (AudioGraphProcessorTests, RejectsCycles)
 
 TEST (AudioGraphProcessorTests, ProcessesSerialAudioChain)
 {
-    AudioGraphProcessor graph;
-    const auto first = graph.addNode (std::make_unique<TestProcessor> (2.0f));
-    const auto second = graph.addNode (std::make_unique<TestProcessor> (0.5f));
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto first = model->addNode (std::make_unique<TestProcessor> (2.0f));
+    const auto second = model->addNode (std::make_unique<TestProcessor> (0.5f));
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (first, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (first, 0), AudioGraphEndpoint::nodeInput (second, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (second, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (first, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (first, 0), AudioGraphEndpoint::nodeInput (second, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (second, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (2, 16);
@@ -839,12 +870,13 @@ TEST (AudioGraphProcessorTests, ProcessesSerialAudioChain)
 
 TEST (AudioGraphProcessorTests, ProcessesBlocksLargerThanPreparedMaximumInChunks)
 {
-    AudioGraphProcessor graph;
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
     graph.prepareToPlay (48000.0f, 16);
 
-    const auto node = graph.addNode (std::make_unique<TestProcessor> (0.5f));
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    const auto node = model->addNode (std::make_unique<TestProcessor> (0.5f));
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (2, 40);
@@ -863,11 +895,12 @@ TEST (AudioGraphProcessorTests, ProcessesBlocksLargerThanPreparedMaximumInChunks
 
 TEST (AudioGraphProcessorTests, PreservesMidiEventsInBlocksLargerThanPreparedMaximum)
 {
-    AudioGraphProcessor graph (midiLayout());
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model, midiLayout());
     graph.prepareToPlay (48000.0f, 16);
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0),
-                                        AudioGraphEndpoint::graphOutput (0) })
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0),
+                                         AudioGraphEndpoint::graphOutput (0) })
                      .wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
@@ -889,14 +922,15 @@ TEST (AudioGraphProcessorTests, PreservesMidiEventsInBlocksLargerThanPreparedMax
 
 TEST (AudioGraphProcessorTests, MixesFanIn)
 {
-    AudioGraphProcessor graph;
-    const auto left = graph.addNode (std::make_unique<TestProcessor> (0.25f));
-    const auto right = graph.addNode (std::make_unique<TestProcessor> (0.75f));
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto left = model->addNode (std::make_unique<TestProcessor> (0.25f));
+    const auto right = model->addNode (std::make_unique<TestProcessor> (0.75f));
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (left, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (right, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (left, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (right, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (left, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (right, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (left, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (right, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (2, 16);
@@ -913,11 +947,12 @@ TEST (AudioGraphProcessorTests, PreservesMidiTimestamps)
 {
     AudioBusLayout midiLayout ({ AudioBus ("MIDI In", AudioBus::Type::MIDI, AudioBus::Direction::Input, 0) },
                                { AudioBus ("MIDI Out", AudioBus::Type::MIDI, AudioBus::Direction::Output, 0) });
-    AudioGraphProcessor graph (midiLayout);
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model, midiLayout);
 
-    const auto node = graph.addNode (std::make_unique<MidiPassthroughProcessor>());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    const auto node = model->addNode (std::make_unique<MidiPassthroughProcessor>());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (0, 32);
@@ -932,14 +967,15 @@ TEST (AudioGraphProcessorTests, PreservesMidiTimestamps)
 
 TEST (AudioGraphProcessorTests, CompensatesShorterParallelPaths)
 {
-    AudioGraphProcessor graph;
-    const auto dry = graph.addNode (std::make_unique<TestProcessor> (1.0f, 0));
-    const auto latent = graph.addNode (std::make_unique<DelayingProcessor> (4));
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto dry = model->addNode (std::make_unique<TestProcessor> (1.0f, 0));
+    const auto latent = model->addNode (std::make_unique<DelayingProcessor> (4));
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (dry, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (latent, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (dry, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (latent, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (dry, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (latent, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (dry, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (latent, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (2, 16);
@@ -956,21 +992,23 @@ TEST (AudioGraphProcessorTests, CompensatesShorterParallelPaths)
 
 TEST (AudioGraphProcessorTests, NullNodeIsRejected)
 {
-    AudioGraphProcessor graph;
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
 
-    EXPECT_FALSE (graph.addNode (nullptr).isValid());
-    EXPECT_TRUE (graph.hasUncommittedChanges());
+    EXPECT_FALSE (model->addNode (nullptr).isValid());
+    EXPECT_FALSE (graph.hasUncommittedChanges());
 }
 
 TEST (AudioGraphProcessorTests, RejectsInvalidEndpointDirectionImmediately)
 {
-    AudioGraphProcessor graph;
-    const auto node = graph.addNode (std::make_unique<TestProcessor>());
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto node = model->addNode (std::make_unique<TestProcessor>());
 
-    const auto badSource = graph.addConnection ({ AudioGraphEndpoint::nodeInput (node, 0),
-                                                  AudioGraphEndpoint::graphOutput (0) });
-    const auto badDestination = graph.addConnection ({ AudioGraphEndpoint::graphInput (0),
-                                                       AudioGraphEndpoint::nodeOutput (node, 0) });
+    const auto badSource = model->addConnection ({ AudioGraphEndpoint::nodeInput (node, 0),
+                                                   AudioGraphEndpoint::graphOutput (0) });
+    const auto badDestination = model->addConnection ({ AudioGraphEndpoint::graphInput (0),
+                                                        AudioGraphEndpoint::nodeOutput (node, 0) });
 
     EXPECT_TRUE (badSource.failed());
     EXPECT_TRUE (badDestination.failed());
@@ -978,62 +1016,67 @@ TEST (AudioGraphProcessorTests, RejectsInvalidEndpointDirectionImmediately)
 
 TEST (AudioGraphProcessorTests, RejectsDuplicateConnectionsImmediately)
 {
-    AudioGraphProcessor graph;
-    const auto node = graph.addNode (std::make_unique<TestProcessor>());
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto node = model->addNode (std::make_unique<TestProcessor>());
     const AudioGraphConnection connection { AudioGraphEndpoint::graphInput (0),
                                             AudioGraphEndpoint::nodeInput (node, 0) };
 
-    EXPECT_TRUE (graph.addConnection (connection).wasOk());
-    EXPECT_TRUE (graph.addConnection (connection).failed());
+    EXPECT_TRUE (model->addConnection (connection).wasOk());
+    EXPECT_TRUE (model->addConnection (connection).failed());
 }
 
 TEST (AudioGraphProcessorTests, RejectsInvalidBusIndexAtCommit)
 {
-    AudioGraphProcessor graph;
-    const auto node = graph.addNode (std::make_unique<TestProcessor>());
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto node = model->addNode (std::make_unique<TestProcessor>());
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0),
-                                        AudioGraphEndpoint::nodeInput (node, 99) })
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0),
+                                         AudioGraphEndpoint::nodeInput (node, 99) })
                      .wasOk());
     EXPECT_TRUE (graph.commitChanges().failed());
 }
 
 TEST (AudioGraphProcessorTests, RejectsAudioMidiTypeMismatchAtCommit)
 {
-    AudioGraphProcessor graph;
-    const auto audioNode = graph.addNode (std::make_unique<TestProcessor>());
-    const auto midiNode = graph.addNode (std::make_unique<MidiPassthroughProcessor>());
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto audioNode = model->addNode (std::make_unique<TestProcessor>());
+    const auto midiNode = model->addNode (std::make_unique<MidiPassthroughProcessor>());
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (audioNode, 0),
-                                        AudioGraphEndpoint::nodeInput (midiNode, 0) })
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (audioNode, 0),
+                                         AudioGraphEndpoint::nodeInput (midiNode, 0) })
                      .wasOk());
     EXPECT_TRUE (graph.commitChanges().failed());
 }
 
 TEST (AudioGraphProcessorTests, RejectsAudioChannelMismatchAtCommit)
 {
-    AudioGraphProcessor graph;
-    const auto stereoNode = graph.addNode (std::make_unique<TestProcessor>());
-    const auto monoNode = graph.addNode (std::make_unique<MonoLayoutProcessor>());
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto stereoNode = model->addNode (std::make_unique<TestProcessor>());
+    const auto monoNode = model->addNode (std::make_unique<MonoLayoutProcessor>());
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (stereoNode, 0),
-                                        AudioGraphEndpoint::nodeInput (monoNode, 0) })
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (stereoNode, 0),
+                                         AudioGraphEndpoint::nodeInput (monoNode, 0) })
                      .wasOk());
     EXPECT_TRUE (graph.commitChanges().failed());
 }
 
 TEST (AudioGraphProcessorTests, MissingCommitKeepsPreviousPlan)
 {
-    AudioGraphProcessor graph;
-    const auto first = graph.addNode (std::make_unique<TestProcessor> (0.5f));
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto first = model->addNode (std::make_unique<TestProcessor> (0.5f));
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (first, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (first, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (first, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (first, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
-    const auto second = graph.addNode (std::make_unique<TestProcessor> (0.25f));
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (first, 0), AudioGraphEndpoint::nodeInput (second, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (second, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    const auto second = model->addNode (std::make_unique<TestProcessor> (0.25f));
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (first, 0), AudioGraphEndpoint::nodeInput (second, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (second, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.hasUncommittedChanges());
 
     AudioBuffer<float> audio (2, 16);
@@ -1045,17 +1088,61 @@ TEST (AudioGraphProcessorTests, MissingCommitKeepsPreviousPlan)
     EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (0)[0]);
 }
 
+TEST (AudioGraphProcessorTests, ExternalTopologyEditsDriveDirtyRevision)
+{
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    std::atomic<int> latencyQueryCount { 0 };
+
+    EXPECT_EQ (model, graph.getModel());
+    EXPECT_FALSE (graph.hasUncommittedChanges());
+
+    const auto node = model->addNode (std::make_unique<CountingLatencyProcessor> (latencyQueryCount));
+    ASSERT_TRUE (node.isValid());
+    EXPECT_TRUE (graph.hasUncommittedChanges());
+
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (graph.commitChanges().wasOk());
+    EXPECT_FALSE (graph.hasUncommittedChanges());
+    const auto latencyQueriesAfterCommit = latencyQueryCount.load();
+    EXPECT_GT (latencyQueriesAfterCommit, 0);
+
+    EXPECT_TRUE (model->setNodePosition (node, 20.0f, 40.0f));
+    EXPECT_FALSE (graph.hasUncommittedChanges());
+    EXPECT_TRUE (graph.commitChanges().wasOk());
+    EXPECT_FALSE (graph.hasUncommittedChanges());
+
+    auto properties = model->getNodeProperties (node);
+    ASSERT_TRUE (properties.has_value());
+    properties->name = "Renamed Test Node";
+
+    EXPECT_TRUE (model->setNodeProperties (node, std::move (*properties)));
+    EXPECT_FALSE (graph.hasUncommittedChanges());
+    EXPECT_TRUE (graph.commitChanges().wasOk());
+    EXPECT_FALSE (graph.hasUncommittedChanges());
+
+    auto* processor = dynamic_cast<CountingLatencyProcessor*> (model->getNodeProcessor (node));
+    ASSERT_NE (nullptr, processor);
+
+    processor->setLatencySamplesForTest (16);
+    EXPECT_FALSE (graph.hasUncommittedChanges());
+    EXPECT_EQ (16, graph.getLatencySamples());
+    EXPECT_GT (latencyQueryCount.load(), latencyQueriesAfterCommit);
+}
+
 #if ! defined(YUP_WASM)
 TEST (AudioGraphProcessorTests, CommitKeepsDirtyWhenModelChangesDuringCompilation)
 {
-    AudioGraphProcessor graph;
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
 
     std::atomic<bool> latencyEntered { false };
     std::atomic<bool> allowLatencyQueryToContinue { false };
 
-    const auto blockingNode = graph.addNode (std::make_unique<BlockingLatencyProcessor> (latencyEntered, allowLatencyQueryToContinue));
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (blockingNode, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (blockingNode, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    const auto blockingNode = model->addNode (std::make_unique<BlockingLatencyProcessor> (latencyEntered, allowLatencyQueryToContinue));
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (blockingNode, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (blockingNode, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
 
     std::atomic<bool> commitSucceeded { false };
     std::thread commitThread ([&]
@@ -1076,7 +1163,7 @@ TEST (AudioGraphProcessorTests, CommitKeepsDirtyWhenModelChangesDuringCompilatio
         return;
     }
 
-    const auto addedDuringCommit = graph.addNode (std::make_unique<TestProcessor>());
+    const auto addedDuringCommit = model->addNode (std::make_unique<TestProcessor>());
     EXPECT_TRUE (addedDuringCommit.isValid());
 
     allowLatencyQueryToContinue.store (true);
@@ -1092,10 +1179,11 @@ TEST (AudioGraphProcessorTests, CommitKeepsDirtyWhenModelChangesDuringCompilatio
 
 TEST (AudioGraphProcessorTests, SaveAndLoadRestoresConnectionsAndNodeState)
 {
-    AudioGraphProcessor graph;
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
     auto processor = std::make_unique<StatefulGainProcessor> (0.25f);
     auto* processorPtr = processor.get();
-    const auto node = graph.addNode (std::move (processor), statefulGainProperties (12.0f, 34.0f));
+    const auto node = model->addNode (std::move (processor), statefulGainProperties (12.0f, 34.0f));
 
     const AudioGraphConnection inputConnection { AudioGraphEndpoint::graphInput (0),
                                                  AudioGraphEndpoint::nodeInput (node, 0) };
@@ -1104,8 +1192,8 @@ TEST (AudioGraphProcessorTests, SaveAndLoadRestoresConnectionsAndNodeState)
     const AudioGraphConnection bypassConnection { AudioGraphEndpoint::graphInput (0),
                                                   AudioGraphEndpoint::graphOutput (0) };
 
-    ASSERT_TRUE (graph.addConnection (inputConnection).wasOk());
-    ASSERT_TRUE (graph.addConnection (outputConnection).wasOk());
+    ASSERT_TRUE (model->addConnection (inputConnection).wasOk());
+    ASSERT_TRUE (model->addConnection (outputConnection).wasOk());
     ASSERT_TRUE (graph.commitChanges().wasOk());
 
     MemoryBlock savedState;
@@ -1123,22 +1211,22 @@ TEST (AudioGraphProcessorTests, SaveAndLoadRestoresConnectionsAndNodeState)
     EXPECT_FALSE (savedNodeStateElement->getAllSubText().trim().isEmpty());
 
     processorPtr->setGain (0.75f);
-    EXPECT_TRUE (graph.removeConnection (inputConnection));
-    EXPECT_TRUE (graph.removeConnection (outputConnection));
-    EXPECT_TRUE (graph.addConnection (bypassConnection).wasOk());
+    EXPECT_TRUE (model->removeConnection (inputConnection));
+    EXPECT_TRUE (model->removeConnection (outputConnection));
+    EXPECT_TRUE (model->addConnection (bypassConnection).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
-    graph.setNodeFactory (statefulGainFactory());
+    model->setNodeFactory (statefulGainFactory());
     EXPECT_TRUE (graph.loadStateFromMemory (savedState).wasOk());
     EXPECT_FALSE (graph.hasUncommittedChanges());
 
-    const auto properties = graph.getNodeProperties (node);
+    const auto properties = model->getNodeProperties (node);
     ASSERT_TRUE (properties.has_value());
     EXPECT_EQ (String ("statefulGain"), properties->identifier);
     EXPECT_FLOAT_EQ (12.0f, properties->positionX);
     EXPECT_FLOAT_EQ (34.0f, properties->positionY);
 
-    const auto connections = graph.getConnections();
+    const auto connections = model->getConnections();
     ASSERT_EQ (2u, connections.size());
     EXPECT_EQ (inputConnection, connections[0]);
     EXPECT_EQ (outputConnection, connections[1]);
@@ -1155,23 +1243,25 @@ TEST (AudioGraphProcessorTests, SaveAndLoadRestoresConnectionsAndNodeState)
 
 TEST (AudioGraphProcessorTests, LoadStateRecreatesProcessorNodesWithFactory)
 {
-    AudioGraphProcessor source;
-    const auto node = source.addNode (std::make_unique<StatefulGainProcessor> (0.25f),
-                                      statefulGainProperties (64.0f, 128.0f));
+    auto sourceModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor source (sourceModel);
+    const auto node = sourceModel->addNode (std::make_unique<StatefulGainProcessor> (0.25f),
+                                            statefulGainProperties (64.0f, 128.0f));
 
-    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (sourceModel->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    ASSERT_TRUE (sourceModel->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     ASSERT_TRUE (source.commitChanges().wasOk());
 
     MemoryBlock savedState;
     ASSERT_TRUE (source.saveStateIntoMemory (savedState).wasOk());
 
-    AudioGraphProcessor destination;
-    destination.setNodeFactory (statefulGainFactory());
+    auto destinationModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor destination (destinationModel);
+    destinationModel->setNodeFactory (statefulGainFactory());
 
     EXPECT_TRUE (destination.loadStateFromMemory (savedState).wasOk());
 
-    const auto properties = destination.getNodeProperties (node);
+    const auto properties = destinationModel->getNodeProperties (node);
     ASSERT_TRUE (properties.has_value());
     EXPECT_EQ (String ("statefulGain"), properties->identifier);
     EXPECT_FLOAT_EQ (64.0f, properties->positionX);
@@ -1189,25 +1279,27 @@ TEST (AudioGraphProcessorTests, LoadStateRecreatesProcessorNodesWithFactory)
 
 TEST (AudioGraphProcessorTests, CreateXmlAndRestoreFromXmlCanBeUsedDirectly)
 {
-    AudioGraphProcessor source;
-    const auto node = source.addNode (std::make_unique<StatefulGainProcessor> (0.25f),
-                                      statefulGainProperties (96.0f, 192.0f));
+    auto sourceModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor source (sourceModel);
+    const auto node = sourceModel->addNode (std::make_unique<StatefulGainProcessor> (0.25f),
+                                            statefulGainProperties (96.0f, 192.0f));
 
-    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (sourceModel->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    ASSERT_TRUE (sourceModel->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     ASSERT_TRUE (source.commitChanges().wasOk());
 
     const auto xml = source.createXml();
     ASSERT_NE (nullptr, xml.get());
     EXPECT_TRUE (xml->hasTagName ("YUPAudioGraphState"));
 
-    AudioGraphProcessor destination;
-    destination.setNodeFactory (statefulGainFactory());
+    auto destinationModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor destination (destinationModel);
+    destinationModel->setNodeFactory (statefulGainFactory());
 
     ASSERT_TRUE (destination.restoreFromXml (*xml).wasOk());
     EXPECT_FALSE (destination.hasUncommittedChanges());
 
-    const auto properties = destination.getNodeProperties (node);
+    const auto properties = destinationModel->getNodeProperties (node);
     ASSERT_TRUE (properties.has_value());
     EXPECT_EQ (String ("statefulGain"), properties->identifier);
     EXPECT_FLOAT_EQ (96.0f, properties->positionX);
@@ -1225,29 +1317,32 @@ TEST (AudioGraphProcessorTests, CreateXmlAndRestoreFromXmlCanBeUsedDirectly)
 
 TEST (AudioGraphProcessorTests, LoadStateFailsWhenFactoryIsMissing)
 {
-    AudioGraphProcessor source;
-    const auto node = source.addNode (std::make_unique<StatefulGainProcessor> (0.25f),
-                                      statefulGainProperties());
+    auto sourceModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor source (sourceModel);
+    const auto node = sourceModel->addNode (std::make_unique<StatefulGainProcessor> (0.25f),
+                                            statefulGainProperties());
 
-    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (sourceModel->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    ASSERT_TRUE (sourceModel->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     ASSERT_TRUE (source.commitChanges().wasOk());
 
     MemoryBlock savedState;
     ASSERT_TRUE (source.saveStateIntoMemory (savedState).wasOk());
 
-    AudioGraphProcessor destination;
+    auto destinationModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor destination (destinationModel);
     EXPECT_TRUE (destination.loadStateFromMemory (savedState).failed());
 }
 
 TEST (AudioGraphProcessorTests, LoadStateRecreatesExternalNodesWithOpaqueCreationData)
 {
-    AudioGraphProcessor source;
-    const auto node = source.addNode (std::make_unique<StatefulExternalProcessor> ("Fake Plugin", 0.25f),
-                                      externalProcessorProperties (4.0f, 8.0f));
+    auto sourceModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor source (sourceModel);
+    const auto node = sourceModel->addNode (std::make_unique<StatefulExternalProcessor> ("Fake Plugin", 0.25f),
+                                            externalProcessorProperties (4.0f, 8.0f));
 
-    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (sourceModel->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    ASSERT_TRUE (sourceModel->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     ASSERT_TRUE (source.commitChanges().wasOk());
 
     MemoryBlock savedState;
@@ -1265,14 +1360,15 @@ TEST (AudioGraphProcessorTests, LoadStateRecreatesExternalNodesWithOpaqueCreatio
     int externalLoadCount = 0;
     String externalIdentifier;
 
-    AudioGraphProcessor destination;
-    destination.setNodeFactory (statefulGainAndExternalFactory (externalLoadCount, externalIdentifier));
+    auto destinationModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor destination (destinationModel);
+    destinationModel->setNodeFactory (statefulGainAndExternalFactory (externalLoadCount, externalIdentifier));
 
     EXPECT_TRUE (destination.loadStateFromMemory (savedState).wasOk());
     EXPECT_EQ (1, externalLoadCount);
     EXPECT_EQ (String ("fake.plugin"), externalIdentifier);
 
-    const auto properties = destination.getNodeProperties (node);
+    const auto properties = destinationModel->getNodeProperties (node);
     ASSERT_TRUE (properties.has_value());
     EXPECT_EQ (String ("externalPlugin"), properties->identifier);
     EXPECT_FALSE (properties->creationData.isEmpty());
@@ -1291,22 +1387,24 @@ TEST (AudioGraphProcessorTests, LoadStateRecreatesExternalNodesWithOpaqueCreatio
 
 TEST (AudioGraphProcessorTests, LoadStateFailureRestoresPreviousGraphModel)
 {
-    AudioGraphProcessor invalidSource;
-    ASSERT_TRUE (invalidSource.addConnection ({ AudioGraphEndpoint::nodeOutput (AudioGraphNodeID (999), 0),
-                                                AudioGraphEndpoint::graphOutput (0) })
+    auto invalidSourceModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor invalidSource (invalidSourceModel);
+    ASSERT_TRUE (invalidSourceModel->addConnection ({ AudioGraphEndpoint::nodeOutput (AudioGraphNodeID (999), 0),
+                                                      AudioGraphEndpoint::graphOutput (0) })
                      .wasOk());
 
     MemoryBlock invalidState;
     ASSERT_TRUE (invalidSource.saveStateIntoMemory (invalidState).wasOk());
 
-    AudioGraphProcessor destination;
+    auto destinationModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor destination (destinationModel);
     ASSERT_TRUE (resetGraphToSingleGainPath (destination, 0.5f));
     EXPECT_FALSE (destination.hasUncommittedChanges());
 
     EXPECT_TRUE (destination.loadStateFromMemory (invalidState).failed());
     EXPECT_FALSE (destination.hasUncommittedChanges());
 
-    const auto connections = destination.getConnections();
+    const auto connections = destinationModel->getConnections();
     ASSERT_EQ (2u, connections.size());
 
     AudioBuffer<float> audio (2, 16);
@@ -1321,16 +1419,17 @@ TEST (AudioGraphProcessorTests, LoadStateFailureRestoresPreviousGraphModel)
 
 TEST (AudioGraphProcessorTests, SaveStateWritesCompleteXmlTopology)
 {
-    AudioGraphProcessor graph;
-    const auto gainNode = graph.addNode (std::make_unique<StatefulGainProcessor> (0.5f),
-                                         statefulGainProperties (11.0f, 22.0f));
-    const auto externalNode = graph.addNode (std::make_unique<StatefulExternalProcessor> ("External", 0.25f),
-                                             externalProcessorProperties (33.0f, 44.0f));
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto gainNode = model->addNode (std::make_unique<StatefulGainProcessor> (0.5f),
+                                          statefulGainProperties (11.0f, 22.0f));
+    const auto externalNode = model->addNode (std::make_unique<StatefulExternalProcessor> ("External", 0.25f),
+                                              externalProcessorProperties (33.0f, 44.0f));
 
-    ASSERT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (gainNode, 0) }).wasOk());
-    ASSERT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (gainNode, 0), AudioGraphEndpoint::nodeInput (externalNode, 0) }).wasOk());
-    ASSERT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (externalNode, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    ASSERT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (gainNode, 0) }).wasOk());
+    ASSERT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (gainNode, 0), AudioGraphEndpoint::nodeInput (externalNode, 0) }).wasOk());
+    ASSERT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (externalNode, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     ASSERT_TRUE (graph.commitChanges().wasOk());
 
     MemoryBlock savedState;
@@ -1377,37 +1476,39 @@ TEST (AudioGraphProcessorTests, SaveStateWritesCompleteXmlTopology)
 
 TEST (AudioGraphProcessorTests, LoadStateRestoresMultiNodeXmlGraphAndNextNodeID)
 {
-    AudioGraphProcessor source;
-    const auto firstNode = source.addNode (std::make_unique<StatefulGainProcessor> (0.5f),
-                                           statefulGainProperties (10.0f, 20.0f));
-    const auto secondNode = source.addNode (std::make_unique<StatefulGainProcessor> (0.25f),
-                                            statefulGainProperties (30.0f, 40.0f));
+    auto sourceModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor source (sourceModel);
+    const auto firstNode = sourceModel->addNode (std::make_unique<StatefulGainProcessor> (0.5f),
+                                                 statefulGainProperties (10.0f, 20.0f));
+    const auto secondNode = sourceModel->addNode (std::make_unique<StatefulGainProcessor> (0.25f),
+                                                  statefulGainProperties (30.0f, 40.0f));
 
-    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (firstNode, 0) }).wasOk());
-    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::nodeOutput (firstNode, 0), AudioGraphEndpoint::nodeInput (secondNode, 0) }).wasOk());
-    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::nodeOutput (secondNode, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (sourceModel->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (firstNode, 0) }).wasOk());
+    ASSERT_TRUE (sourceModel->addConnection ({ AudioGraphEndpoint::nodeOutput (firstNode, 0), AudioGraphEndpoint::nodeInput (secondNode, 0) }).wasOk());
+    ASSERT_TRUE (sourceModel->addConnection ({ AudioGraphEndpoint::nodeOutput (secondNode, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     ASSERT_TRUE (source.commitChanges().wasOk());
 
     MemoryBlock savedState;
     ASSERT_TRUE (source.saveStateIntoMemory (savedState).wasOk());
 
-    AudioGraphProcessor destination;
-    destination.setNodeFactory (statefulGainFactory());
+    auto destinationModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor destination (destinationModel);
+    destinationModel->setNodeFactory (statefulGainFactory());
 
     ASSERT_TRUE (destination.loadStateFromMemory (savedState).wasOk());
     EXPECT_FALSE (destination.hasUncommittedChanges());
 
-    const auto firstProperties = destination.getNodeProperties (firstNode);
+    const auto firstProperties = destinationModel->getNodeProperties (firstNode);
     ASSERT_TRUE (firstProperties.has_value());
     EXPECT_FLOAT_EQ (10.0f, firstProperties->positionX);
     EXPECT_FLOAT_EQ (20.0f, firstProperties->positionY);
 
-    const auto secondProperties = destination.getNodeProperties (secondNode);
+    const auto secondProperties = destinationModel->getNodeProperties (secondNode);
     ASSERT_TRUE (secondProperties.has_value());
     EXPECT_FLOAT_EQ (30.0f, secondProperties->positionX);
     EXPECT_FLOAT_EQ (40.0f, secondProperties->positionY);
 
-    const auto connections = destination.getConnections();
+    const auto connections = destinationModel->getConnections();
     ASSERT_EQ (3u, connections.size());
 
     AudioBuffer<float> audio (2, 16);
@@ -1419,17 +1520,18 @@ TEST (AudioGraphProcessorTests, LoadStateRestoresMultiNodeXmlGraphAndNextNodeID)
     EXPECT_FLOAT_EQ (0.125f, audio.getReadPointer (0)[0]);
     EXPECT_FLOAT_EQ (0.125f, audio.getReadPointer (1)[0]);
 
-    const auto nextNode = destination.addNode (std::make_unique<TestProcessor>());
+    const auto nextNode = destinationModel->addNode (std::make_unique<TestProcessor>());
     EXPECT_GT (nextNode.getRawID(), secondNode.getRawID());
 }
 
 TEST (AudioGraphProcessorTests, SaveStateFailsWhenNodeStateSaveFails)
 {
-    AudioGraphProcessor graph;
-    const auto node = graph.addNode (std::make_unique<SaveFailingProcessor>());
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto node = model->addNode (std::make_unique<SaveFailingProcessor>());
 
-    ASSERT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    ASSERT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    ASSERT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
 
     MemoryBlock savedState;
     EXPECT_TRUE (graph.saveStateIntoMemory (savedState).failed());
@@ -1437,11 +1539,12 @@ TEST (AudioGraphProcessorTests, SaveStateFailsWhenNodeStateSaveFails)
 
 TEST (AudioGraphProcessorTests, CreateXmlReturnsNullWhenNodeStateSaveFails)
 {
-    AudioGraphProcessor graph;
-    const auto node = graph.addNode (std::make_unique<SaveFailingProcessor>());
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto node = model->addNode (std::make_unique<SaveFailingProcessor>());
 
-    ASSERT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    ASSERT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    ASSERT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
 
     auto xml = graph.createXml();
     EXPECT_EQ (nullptr, xml.get());
@@ -1449,7 +1552,8 @@ TEST (AudioGraphProcessorTests, CreateXmlReturnsNullWhenNodeStateSaveFails)
 
 TEST (AudioGraphProcessorTests, LoadStateRejectsMalformedXmlHeaderAndUnsupportedVersion)
 {
-    AudioGraphProcessor graph;
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
     const String unsupportedVersionXml = "<YUPAudioGraphState version=\"99\" nextNodeID=\"0\">"
                                          "<nodes />"
                                          "<connections />"
@@ -1462,7 +1566,8 @@ TEST (AudioGraphProcessorTests, LoadStateRejectsMalformedXmlHeaderAndUnsupported
 
 TEST (AudioGraphProcessorTests, LoadStateRejectsMissingRequiredXmlSections)
 {
-    AudioGraphProcessor graph;
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
     const String missingNodesXml = "<YUPAudioGraphState version=\"1\" nextNodeID=\"0\">"
                                    "<connections />"
                                    "</YUPAudioGraphState>";
@@ -1476,12 +1581,13 @@ TEST (AudioGraphProcessorTests, LoadStateRejectsMissingRequiredXmlSections)
 
 TEST (AudioGraphProcessorTests, LoadStateRejectsInvalidBase64Payloads)
 {
-    AudioGraphProcessor source;
-    const auto node = source.addNode (std::make_unique<StatefulExternalProcessor> ("External", 0.25f),
-                                      externalProcessorProperties());
+    auto sourceModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor source (sourceModel);
+    const auto node = sourceModel->addNode (std::make_unique<StatefulExternalProcessor> ("External", 0.25f),
+                                            externalProcessorProperties());
 
-    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (sourceModel->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    ASSERT_TRUE (sourceModel->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     ASSERT_TRUE (source.commitChanges().wasOk());
 
     MemoryBlock savedState;
@@ -1497,8 +1603,9 @@ TEST (AudioGraphProcessorTests, LoadStateRejectsInvalidBase64Payloads)
     int externalLoadCount = 0;
     String externalIdentifier;
 
-    AudioGraphProcessor destination;
-    destination.setNodeFactory (statefulGainAndExternalFactory (externalLoadCount, externalIdentifier));
+    auto destinationModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor destination (destinationModel);
+    destinationModel->setNodeFactory (statefulGainAndExternalFactory (externalLoadCount, externalIdentifier));
     EXPECT_TRUE (destination.loadStateFromMemory (memoryBlockFromXml (*invalidNodeState)).failed());
     EXPECT_EQ (0, externalLoadCount);
 
@@ -1515,12 +1622,13 @@ TEST (AudioGraphProcessorTests, LoadStateRejectsInvalidBase64Payloads)
 
 TEST (AudioGraphProcessorTests, LoadStateRejectsInvalidConnectionXml)
 {
-    AudioGraphProcessor source;
-    const auto node = source.addNode (std::make_unique<StatefulGainProcessor> (0.5f),
-                                      statefulGainProperties());
+    auto sourceModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor source (sourceModel);
+    const auto node = sourceModel->addNode (std::make_unique<StatefulGainProcessor> (0.5f),
+                                            statefulGainProperties());
 
-    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (sourceModel->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    ASSERT_TRUE (sourceModel->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     ASSERT_TRUE (source.commitChanges().wasOk());
 
     MemoryBlock savedState;
@@ -1532,8 +1640,9 @@ TEST (AudioGraphProcessorTests, LoadStateRejectsInvalidConnectionXml)
     ASSERT_NE (nullptr, firstConnection);
     firstConnection->getChildByName ("source")->setAttribute ("kind", "invalidKind");
 
-    AudioGraphProcessor destination;
-    destination.setNodeFactory (statefulGainFactory());
+    auto destinationModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor destination (destinationModel);
+    destinationModel->setNodeFactory (statefulGainFactory());
     EXPECT_TRUE (destination.loadStateFromMemory (memoryBlockFromXml (*invalidKind)).failed());
 
     auto missingDestination = parseMemoryBlockAsXml (savedState);
@@ -1547,19 +1656,21 @@ TEST (AudioGraphProcessorTests, LoadStateRejectsInvalidConnectionXml)
 
 TEST (AudioGraphProcessorTests, LoadStateFailsWhenFactoryReturnsNullProcessor)
 {
-    AudioGraphProcessor source;
-    const auto node = source.addNode (std::make_unique<StatefulGainProcessor> (0.25f),
-                                      statefulGainProperties());
+    auto sourceModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor source (sourceModel);
+    const auto node = sourceModel->addNode (std::make_unique<StatefulGainProcessor> (0.25f),
+                                            statefulGainProperties());
 
-    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (sourceModel->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    ASSERT_TRUE (sourceModel->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     ASSERT_TRUE (source.commitChanges().wasOk());
 
     MemoryBlock savedState;
     ASSERT_TRUE (source.saveStateIntoMemory (savedState).wasOk());
 
-    AudioGraphProcessor destination;
-    destination.setNodeFactory ([] (const AudioGraphNodeProperties&) -> ResultValue<std::unique_ptr<AudioProcessor>>
+    auto destinationModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor destination (destinationModel);
+    destinationModel->setNodeFactory ([] (const AudioGraphNodeProperties&) -> ResultValue<std::unique_ptr<AudioProcessor>>
     {
         return makeResultValueOk (std::unique_ptr<AudioProcessor>());
     });
@@ -1569,12 +1680,13 @@ TEST (AudioGraphProcessorTests, LoadStateFailsWhenFactoryReturnsNullProcessor)
 
 TEST (AudioGraphProcessorTests, LoadStateFailureFromNodeStateCallbackRestoresPreviousGraph)
 {
-    AudioGraphProcessor source;
-    const auto node = source.addNode (std::make_unique<StatefulGainProcessor> (0.25f),
-                                      statefulGainProperties());
+    auto sourceModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor source (sourceModel);
+    const auto node = sourceModel->addNode (std::make_unique<StatefulGainProcessor> (0.25f),
+                                            statefulGainProperties());
 
-    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    ASSERT_TRUE (source.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    ASSERT_TRUE (sourceModel->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    ASSERT_TRUE (sourceModel->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     ASSERT_TRUE (source.commitChanges().wasOk());
 
     MemoryBlock savedState;
@@ -1589,8 +1701,9 @@ TEST (AudioGraphProcessorTests, LoadStateFailureFromNodeStateCallbackRestoresPre
     const MemoryBlock invalidState ("bad", 3);
     stateElement->addTextElement (toBase64Text (invalidState));
 
-    AudioGraphProcessor destination;
-    destination.setNodeFactory (statefulGainFactory());
+    auto destinationModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor destination (destinationModel);
+    destinationModel->setNodeFactory (statefulGainFactory());
     ASSERT_TRUE (resetGraphToSingleGainPath (destination, 0.5f));
     EXPECT_FALSE (destination.hasUncommittedChanges());
 
@@ -1609,17 +1722,18 @@ TEST (AudioGraphProcessorTests, LoadStateFailureFromNodeStateCallbackRestoresPre
 
 TEST (AudioGraphProcessorTests, RemoveConnectionStopsRoutingAfterCommit)
 {
-    AudioGraphProcessor graph;
-    const auto node = graph.addNode (std::make_unique<TestProcessor>());
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto node = model->addNode (std::make_unique<TestProcessor>());
     const AudioGraphConnection inputConnection { AudioGraphEndpoint::graphInput (0),
                                                  AudioGraphEndpoint::nodeInput (node, 0) };
     const AudioGraphConnection outputConnection { AudioGraphEndpoint::nodeOutput (node, 0),
                                                   AudioGraphEndpoint::graphOutput (0) };
 
-    EXPECT_TRUE (graph.addConnection (inputConnection).wasOk());
-    EXPECT_TRUE (graph.addConnection (outputConnection).wasOk());
+    EXPECT_TRUE (model->addConnection (inputConnection).wasOk());
+    EXPECT_TRUE (model->addConnection (outputConnection).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
-    EXPECT_TRUE (graph.removeConnection (outputConnection));
+    EXPECT_TRUE (model->removeConnection (outputConnection));
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (2, 16);
@@ -1629,18 +1743,19 @@ TEST (AudioGraphProcessorTests, RemoveConnectionStopsRoutingAfterCommit)
     graph.processBlock (audio, midi);
 
     EXPECT_FLOAT_EQ (0.0f, audio.getReadPointer (0)[0]);
-    EXPECT_FALSE (graph.removeConnection (outputConnection));
+    EXPECT_FALSE (model->removeConnection (outputConnection));
 }
 
 TEST (AudioGraphProcessorTests, RemoveNodePrunesConnections)
 {
-    AudioGraphProcessor graph;
-    const auto node = graph.addNode (std::make_unique<TestProcessor>());
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto node = model->addNode (std::make_unique<TestProcessor>());
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    EXPECT_TRUE (graph.removeNode (node));
-    EXPECT_EQ (nullptr, graph.getNodeProcessor (node));
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->removeNode (node));
+    EXPECT_EQ (nullptr, model->getNodeProcessor (node));
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (2, 16);
@@ -1650,19 +1765,20 @@ TEST (AudioGraphProcessorTests, RemoveNodePrunesConnections)
     graph.processBlock (audio, midi);
 
     EXPECT_FLOAT_EQ (0.0f, audio.getReadPointer (0)[0]);
-    EXPECT_FALSE (graph.removeNode (node));
+    EXPECT_FALSE (model->removeNode (node));
 }
 
 TEST (AudioGraphProcessorTests, ClearRemovesAllRouting)
 {
-    AudioGraphProcessor graph;
-    const auto node = graph.addNode (std::make_unique<TestProcessor>());
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto node = model->addNode (std::make_unique<TestProcessor>());
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
-    graph.clear();
+    model->clear();
     EXPECT_TRUE (graph.hasUncommittedChanges());
     EXPECT_TRUE (graph.commitChanges().wasOk());
     EXPECT_FALSE (graph.hasUncommittedChanges());
@@ -1678,10 +1794,11 @@ TEST (AudioGraphProcessorTests, ClearRemovesAllRouting)
 
 TEST (AudioGraphProcessorTests, ReleaseResourcesMarksPreparedNodesUnprepared)
 {
-    AudioGraphProcessor graph;
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
     auto processor = std::make_unique<TestProcessor>();
     auto* processorPtr = processor.get();
-    const auto node = graph.addNode (std::move (processor));
+    const auto node = model->addNode (std::move (processor));
 
     EXPECT_TRUE (node.isValid());
     graph.prepareToPlay (44100.0f, 64);
@@ -1694,14 +1811,15 @@ TEST (AudioGraphProcessorTests, ReleaseResourcesMarksPreparedNodesUnprepared)
 
 TEST (AudioGraphProcessorTests, ReportsAllocationStats)
 {
-    AudioGraphProcessor graph;
-    const auto first = graph.addNode (std::make_unique<TestProcessor>());
-    const auto second = graph.addNode (std::make_unique<TestProcessor>());
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto first = model->addNode (std::make_unique<TestProcessor>());
+    const auto second = model->addNode (std::make_unique<TestProcessor>());
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (first, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (second, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (first, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (second, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (first, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (second, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (first, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (second, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     const auto stats = graph.getAllocationStats();
@@ -1714,25 +1832,27 @@ TEST (AudioGraphProcessorTests, ReportsAllocationStats)
 
 TEST (AudioGraphProcessorTests, WorkerThreadOutputMatchesSingleThreadOutput)
 {
-    AudioGraphProcessor singleThreaded;
-    const auto singleLeft = singleThreaded.addNode (std::make_unique<TestProcessor> (0.25f));
-    const auto singleRight = singleThreaded.addNode (std::make_unique<TestProcessor> (0.75f));
+    auto singleThreadedModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor singleThreaded (singleThreadedModel);
+    const auto singleLeft = singleThreadedModel->addNode (std::make_unique<TestProcessor> (0.25f));
+    const auto singleRight = singleThreadedModel->addNode (std::make_unique<TestProcessor> (0.75f));
 
-    EXPECT_TRUE (singleThreaded.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (singleLeft, 0) }).wasOk());
-    EXPECT_TRUE (singleThreaded.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (singleRight, 0) }).wasOk());
-    EXPECT_TRUE (singleThreaded.addConnection ({ AudioGraphEndpoint::nodeOutput (singleLeft, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    EXPECT_TRUE (singleThreaded.addConnection ({ AudioGraphEndpoint::nodeOutput (singleRight, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (singleThreadedModel->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (singleLeft, 0) }).wasOk());
+    EXPECT_TRUE (singleThreadedModel->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (singleRight, 0) }).wasOk());
+    EXPECT_TRUE (singleThreadedModel->addConnection ({ AudioGraphEndpoint::nodeOutput (singleLeft, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (singleThreadedModel->addConnection ({ AudioGraphEndpoint::nodeOutput (singleRight, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (singleThreaded.commitChanges().wasOk());
 
-    AudioGraphProcessor threaded;
+    auto threadedModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor threaded (threadedModel);
     threaded.setNumWorkerThreads (2);
-    const auto threadedLeft = threaded.addNode (std::make_unique<TestProcessor> (0.25f));
-    const auto threadedRight = threaded.addNode (std::make_unique<TestProcessor> (0.75f));
+    const auto threadedLeft = threadedModel->addNode (std::make_unique<TestProcessor> (0.25f));
+    const auto threadedRight = threadedModel->addNode (std::make_unique<TestProcessor> (0.75f));
 
-    EXPECT_TRUE (threaded.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (threadedLeft, 0) }).wasOk());
-    EXPECT_TRUE (threaded.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (threadedRight, 0) }).wasOk());
-    EXPECT_TRUE (threaded.addConnection ({ AudioGraphEndpoint::nodeOutput (threadedLeft, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    EXPECT_TRUE (threaded.addConnection ({ AudioGraphEndpoint::nodeOutput (threadedRight, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (threadedModel->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (threadedLeft, 0) }).wasOk());
+    EXPECT_TRUE (threadedModel->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (threadedRight, 0) }).wasOk());
+    EXPECT_TRUE (threadedModel->addConnection ({ AudioGraphEndpoint::nodeOutput (threadedLeft, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (threadedModel->addConnection ({ AudioGraphEndpoint::nodeOutput (threadedRight, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (threaded.commitChanges().wasOk());
 
     AudioBuffer<float> singleAudio (2, 16);
@@ -1761,29 +1881,31 @@ TEST (AudioGraphProcessorTests, WorkerThreadsMatchSingleThreadOutputUnderLoad)
     constexpr int numSamples = 64;
     constexpr int numBlocks = 128;
 
-    AudioGraphProcessor singleThreaded;
-    AudioGraphProcessor threaded;
+    auto singleThreadedModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor singleThreaded (singleThreadedModel);
+    auto threadedModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor threaded (threadedModel);
     threaded.setNumWorkerThreads (4);
 
     for (int branch = 0; branch < numBranches; ++branch)
     {
         const float gain = 1.0f / static_cast<float> (numBranches);
-        const auto singleNode = singleThreaded.addNode (std::make_unique<TestProcessor> (gain));
-        const auto threadedNode = threaded.addNode (std::make_unique<TestProcessor> (gain));
+        const auto singleNode = singleThreadedModel->addNode (std::make_unique<TestProcessor> (gain));
+        const auto threadedNode = threadedModel->addNode (std::make_unique<TestProcessor> (gain));
 
         EXPECT_TRUE (singleNode.isValid());
         EXPECT_TRUE (threadedNode.isValid());
-        EXPECT_TRUE (singleThreaded.addConnection ({ AudioGraphEndpoint::graphInput (0),
-                                                     AudioGraphEndpoint::nodeInput (singleNode, 0) })
+        EXPECT_TRUE (singleThreadedModel->addConnection ({ AudioGraphEndpoint::graphInput (0),
+                                                           AudioGraphEndpoint::nodeInput (singleNode, 0) })
                          .wasOk());
-        EXPECT_TRUE (singleThreaded.addConnection ({ AudioGraphEndpoint::nodeOutput (singleNode, 0),
+        EXPECT_TRUE (singleThreadedModel->addConnection ({ AudioGraphEndpoint::nodeOutput (singleNode, 0),
+                                                           AudioGraphEndpoint::graphOutput (0) })
+                         .wasOk());
+        EXPECT_TRUE (threadedModel->addConnection ({ AudioGraphEndpoint::graphInput (0),
+                                                     AudioGraphEndpoint::nodeInput (threadedNode, 0) })
+                         .wasOk());
+        EXPECT_TRUE (threadedModel->addConnection ({ AudioGraphEndpoint::nodeOutput (threadedNode, 0),
                                                      AudioGraphEndpoint::graphOutput (0) })
-                         .wasOk());
-        EXPECT_TRUE (threaded.addConnection ({ AudioGraphEndpoint::graphInput (0),
-                                               AudioGraphEndpoint::nodeInput (threadedNode, 0) })
-                         .wasOk());
-        EXPECT_TRUE (threaded.addConnection ({ AudioGraphEndpoint::nodeOutput (threadedNode, 0),
-                                               AudioGraphEndpoint::graphOutput (0) })
                          .wasOk());
     }
 
@@ -1834,28 +1956,30 @@ TEST (AudioGraphProcessorTests, SwitchingWorkerThreadsBetweenBlocksPreservesOutp
     constexpr int threadCounts[] = { 0, 1, 4, 2, 0, 3 };
     constexpr int numThreadCounts = sizeof (threadCounts) / sizeof (threadCounts[0]);
 
-    AudioGraphProcessor singleThreaded;
-    AudioGraphProcessor threaded;
+    auto singleThreadedModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor singleThreaded (singleThreadedModel);
+    auto threadedModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor threaded (threadedModel);
 
     for (int branch = 0; branch < numBranches; ++branch)
     {
         const float gain = 1.0f / static_cast<float> (numBranches);
-        const auto singleNode = singleThreaded.addNode (std::make_unique<TestProcessor> (gain));
-        const auto threadedNode = threaded.addNode (std::make_unique<TestProcessor> (gain));
+        const auto singleNode = singleThreadedModel->addNode (std::make_unique<TestProcessor> (gain));
+        const auto threadedNode = threadedModel->addNode (std::make_unique<TestProcessor> (gain));
 
         EXPECT_TRUE (singleNode.isValid());
         EXPECT_TRUE (threadedNode.isValid());
-        EXPECT_TRUE (singleThreaded.addConnection ({ AudioGraphEndpoint::graphInput (0),
-                                                     AudioGraphEndpoint::nodeInput (singleNode, 0) })
+        EXPECT_TRUE (singleThreadedModel->addConnection ({ AudioGraphEndpoint::graphInput (0),
+                                                           AudioGraphEndpoint::nodeInput (singleNode, 0) })
                          .wasOk());
-        EXPECT_TRUE (singleThreaded.addConnection ({ AudioGraphEndpoint::nodeOutput (singleNode, 0),
+        EXPECT_TRUE (singleThreadedModel->addConnection ({ AudioGraphEndpoint::nodeOutput (singleNode, 0),
+                                                           AudioGraphEndpoint::graphOutput (0) })
+                         .wasOk());
+        EXPECT_TRUE (threadedModel->addConnection ({ AudioGraphEndpoint::graphInput (0),
+                                                     AudioGraphEndpoint::nodeInput (threadedNode, 0) })
+                         .wasOk());
+        EXPECT_TRUE (threadedModel->addConnection ({ AudioGraphEndpoint::nodeOutput (threadedNode, 0),
                                                      AudioGraphEndpoint::graphOutput (0) })
-                         .wasOk());
-        EXPECT_TRUE (threaded.addConnection ({ AudioGraphEndpoint::graphInput (0),
-                                               AudioGraphEndpoint::nodeInput (threadedNode, 0) })
-                         .wasOk());
-        EXPECT_TRUE (threaded.addConnection ({ AudioGraphEndpoint::nodeOutput (threadedNode, 0),
-                                               AudioGraphEndpoint::graphOutput (0) })
                          .wasOk());
     }
 
@@ -1903,7 +2027,8 @@ TEST (AudioGraphProcessorTests, SwitchingWorkerThreadsBetweenBlocksPreservesOutp
 #if ! defined(YUP_WASM)
 TEST (AudioGraphProcessorTests, ConcurrentCommitsDoNotInvalidateAudioThreadPlan)
 {
-    AudioGraphProcessor graph;
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
     graph.setNumWorkerThreads (2);
     graph.prepareToPlay (48000.0f, 32);
 
@@ -1983,12 +2108,13 @@ TEST (AudioGraphProcessorTests, ConcurrentCommitsDoNotInvalidateAudioThreadPlan)
 TEST (AudioGraphProcessorTests, MidiCompensationCanSpillIntoNextBlock)
 {
     AudioBusLayout layout = midiLayout();
-    AudioGraphProcessor graph (layout);
-    const auto latent = graph.addNode (std::make_unique<MidiPassthroughProcessor> (6));
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model, layout);
+    const auto latent = model->addNode (std::make_unique<MidiPassthroughProcessor> (6));
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (latent, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (latent, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (latent, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (latent, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (0, 8);
@@ -2009,16 +2135,17 @@ TEST (AudioGraphProcessorTests, MidiCompensationCanSpillIntoNextBlock)
 
 TEST (AudioGraphProcessorTests, PdcAccumulatesSerialPathLatencyAtGraphOutput)
 {
-    AudioGraphProcessor graph;
-    const auto dry = graph.addNode (std::make_unique<TestProcessor>());
-    const auto firstDelay = graph.addNode (std::make_unique<DelayingProcessor> (3));
-    const auto secondDelay = graph.addNode (std::make_unique<DelayingProcessor> (4));
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto dry = model->addNode (std::make_unique<TestProcessor>());
+    const auto firstDelay = model->addNode (std::make_unique<DelayingProcessor> (3));
+    const auto secondDelay = model->addNode (std::make_unique<DelayingProcessor> (4));
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (dry, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (dry, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (firstDelay, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (firstDelay, 0), AudioGraphEndpoint::nodeInput (secondDelay, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (secondDelay, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (dry, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (dry, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (firstDelay, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (firstDelay, 0), AudioGraphEndpoint::nodeInput (secondDelay, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (secondDelay, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (2, 16);
@@ -2036,16 +2163,17 @@ TEST (AudioGraphProcessorTests, PdcAccumulatesSerialPathLatencyAtGraphOutput)
 
 TEST (AudioGraphProcessorTests, PdcCompensatesFanInAtProcessorInput)
 {
-    AudioGraphProcessor graph;
-    const auto dry = graph.addNode (std::make_unique<TestProcessor>());
-    const auto delayed = graph.addNode (std::make_unique<DelayingProcessor> (5));
-    const auto summer = graph.addNode (std::make_unique<TestProcessor>());
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto dry = model->addNode (std::make_unique<TestProcessor>());
+    const auto delayed = model->addNode (std::make_unique<DelayingProcessor> (5));
+    const auto summer = model->addNode (std::make_unique<TestProcessor>());
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (dry, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (delayed, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (dry, 0), AudioGraphEndpoint::nodeInput (summer, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (delayed, 0), AudioGraphEndpoint::nodeInput (summer, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (summer, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (dry, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (delayed, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (dry, 0), AudioGraphEndpoint::nodeInput (summer, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (delayed, 0), AudioGraphEndpoint::nodeInput (summer, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (summer, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (2, 16);
@@ -2062,12 +2190,13 @@ TEST (AudioGraphProcessorTests, PdcCompensatesFanInAtProcessorInput)
 
 TEST (AudioGraphProcessorTests, PdcDelaysDirectAudioOutputToMatchLatentAudioPath)
 {
-    AudioGraphProcessor graph;
-    const auto delayed = graph.addNode (std::make_unique<DelayingProcessor> (5));
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto delayed = model->addNode (std::make_unique<DelayingProcessor> (5));
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (delayed, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (delayed, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (delayed, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (delayed, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (2, 16);
@@ -2084,14 +2213,15 @@ TEST (AudioGraphProcessorTests, PdcDelaysDirectAudioOutputToMatchLatentAudioPath
 
 TEST (AudioGraphProcessorTests, PdcAudioDelayLongerThanBlockSpillsAcrossBlocks)
 {
-    AudioGraphProcessor graph;
-    const auto dry = graph.addNode (std::make_unique<TestProcessor>());
-    const auto delayed = graph.addNode (std::make_unique<DelayingProcessor> (10));
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto dry = model->addNode (std::make_unique<TestProcessor>());
+    const auto delayed = model->addNode (std::make_unique<DelayingProcessor> (10));
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (dry, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (delayed, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (dry, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (delayed, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (dry, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (delayed, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (dry, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (delayed, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (2, 4);
@@ -2114,12 +2244,13 @@ TEST (AudioGraphProcessorTests, PdcAudioDelayLongerThanBlockSpillsAcrossBlocks)
 
 TEST (AudioGraphProcessorTests, PdcDirectAudioOutputCompensationSpillsAcrossBlocks)
 {
-    AudioGraphProcessor graph;
-    const auto delayed = graph.addNode (std::make_unique<DelayingProcessor> (6));
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto delayed = model->addNode (std::make_unique<DelayingProcessor> (6));
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (delayed, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (delayed, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (delayed, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (delayed, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (2, 4);
@@ -2137,12 +2268,13 @@ TEST (AudioGraphProcessorTests, PdcDirectAudioOutputCompensationSpillsAcrossBloc
 
 TEST (AudioGraphProcessorTests, PdcFlushClearsPendingAudioCompensation)
 {
-    AudioGraphProcessor graph;
-    const auto latencyReporter = graph.addNode (std::make_unique<TestProcessor> (0.0f, 6));
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto latencyReporter = model->addNode (std::make_unique<TestProcessor> (0.0f, 6));
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (latencyReporter, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (latencyReporter, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (latencyReporter, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (latencyReporter, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (2, 4);
@@ -2163,12 +2295,13 @@ TEST (AudioGraphProcessorTests, PdcFlushClearsPendingAudioCompensation)
 
 TEST (AudioGraphProcessorTests, PdcMidiDelayLongerThanOneBlockAlignsWithDelayedProcessor)
 {
-    AudioGraphProcessor graph (midiLayout());
-    const auto delayed = graph.addNode (std::make_unique<MidiDelayingProcessor> (18));
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model, midiLayout());
+    const auto delayed = model->addNode (std::make_unique<MidiDelayingProcessor> (18));
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (delayed, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (delayed, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (delayed, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (delayed, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (0, 8);
@@ -2195,12 +2328,13 @@ TEST (AudioGraphProcessorTests, PdcMidiDelayLongerThanOneBlockAlignsWithDelayedP
 
 TEST (AudioGraphProcessorTests, PdcFlushClearsPendingMidiCompensation)
 {
-    AudioGraphProcessor graph (midiLayout());
-    const auto latencyReporter = graph.addNode (std::make_unique<MidiPassthroughProcessor> (10));
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model, midiLayout());
+    const auto latencyReporter = model->addNode (std::make_unique<MidiPassthroughProcessor> (10));
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (latencyReporter, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (latencyReporter, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (latencyReporter, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (latencyReporter, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (0, 8);
@@ -2224,17 +2358,18 @@ TEST (AudioGraphProcessorTests, PdcFlushClearsPendingMidiCompensation)
 
 TEST (AudioGraphProcessorTests, PdcRecompileAfterRemovingLatencyPathClearsCompensation)
 {
-    AudioGraphProcessor graph;
-    const auto delayed = graph.addNode (std::make_unique<TestProcessor> (0.0f, 12));
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto delayed = model->addNode (std::make_unique<TestProcessor> (0.0f, 12));
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (delayed, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (delayed, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (delayed, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (delayed, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
     EXPECT_EQ (12, graph.getLatencySamples());
     EXPECT_EQ (1, graph.getAllocationStats().delayLines);
 
-    EXPECT_TRUE (graph.removeNode (delayed));
+    EXPECT_TRUE (model->removeNode (delayed));
     EXPECT_TRUE (graph.commitChanges().wasOk());
     EXPECT_EQ (0, graph.getLatencySamples());
     EXPECT_EQ (0, graph.getAllocationStats().delayLines);
@@ -2250,16 +2385,17 @@ TEST (AudioGraphProcessorTests, PdcRecompileAfterRemovingLatencyPathClearsCompen
 
 TEST (AudioGraphProcessorTests, WorkerThreadsProcessManyBlocksCorrectly)
 {
-    AudioGraphProcessor graph;
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
     graph.setNumWorkerThreads (2);
 
-    const auto left = graph.addNode (std::make_unique<TestProcessor> (0.5f));
-    const auto right = graph.addNode (std::make_unique<TestProcessor> (0.5f));
+    const auto left = model->addNode (std::make_unique<TestProcessor> (0.5f));
+    const auto right = model->addNode (std::make_unique<TestProcessor> (0.5f));
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (left, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (right, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (left, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (right, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (left, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (right, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (left, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (right, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (2, 16);
@@ -2275,11 +2411,12 @@ TEST (AudioGraphProcessorTests, WorkerThreadsProcessManyBlocksCorrectly)
 
 TEST (AudioGraphProcessorTests, WorkerThreadCountCanBeChangedAfterProcessing)
 {
-    AudioGraphProcessor graph;
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
 
-    const auto node = graph.addNode (std::make_unique<TestProcessor> (0.5f));
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    const auto node = model->addNode (std::make_unique<TestProcessor> (0.5f));
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (2, 16);
@@ -2305,12 +2442,13 @@ TEST (AudioGraphProcessorTests, WorkerThreadCountCanBeChangedAfterProcessing)
 
 TEST (AudioGraphProcessorTests, WorkerThreadsContinueProcessingAfterIdleReset)
 {
-    AudioGraphProcessor graph;
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
     graph.setNumWorkerThreads (2);
 
-    const auto node = graph.addNode (std::make_unique<TestProcessor> (0.5f));
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    const auto node = model->addNode (std::make_unique<TestProcessor> (0.5f));
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (2, 16);
@@ -2332,12 +2470,13 @@ TEST (AudioGraphProcessorTests, WorkerThreadsContinueProcessingAfterIdleReset)
 
 TEST (AudioGraphProcessorTests, ZeroWorkerThreadsProcessesCorrectly)
 {
-    AudioGraphProcessor graph;
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
     graph.setNumWorkerThreads (0);
 
-    const auto node = graph.addNode (std::make_unique<TestProcessor> (0.5f));
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    const auto node = model->addNode (std::make_unique<TestProcessor> (0.5f));
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (2, 16);
@@ -2355,16 +2494,17 @@ TEST (AudioGraphProcessorTests, WorkerThreadOutputMatchesSingleThreadOutputManyB
 {
     auto runGraph = [] (int numWorkers) -> std::vector<float>
     {
-        AudioGraphProcessor graph;
+        auto model = std::make_shared<AudioGraphModel>();
+        AudioGraphProcessor graph (model);
         graph.setNumWorkerThreads (numWorkers);
 
-        const auto left = graph.addNode (std::make_unique<TestProcessor> (0.25f));
-        const auto right = graph.addNode (std::make_unique<TestProcessor> (0.25f));
+        const auto left = model->addNode (std::make_unique<TestProcessor> (0.25f));
+        const auto right = model->addNode (std::make_unique<TestProcessor> (0.25f));
 
-        graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (left, 0) });
-        graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (right, 0) });
-        graph.addConnection ({ AudioGraphEndpoint::nodeOutput (left, 0), AudioGraphEndpoint::graphOutput (0) });
-        graph.addConnection ({ AudioGraphEndpoint::nodeOutput (right, 0), AudioGraphEndpoint::graphOutput (0) });
+        model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (left, 0) });
+        model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (right, 0) });
+        model->addConnection ({ AudioGraphEndpoint::nodeOutput (left, 0), AudioGraphEndpoint::graphOutput (0) });
+        model->addConnection ({ AudioGraphEndpoint::nodeOutput (right, 0), AudioGraphEndpoint::graphOutput (0) });
         graph.commitChanges();
 
         AudioBuffer<float> audio (2, 16);
@@ -2391,11 +2531,12 @@ TEST (AudioGraphProcessorTests, WorkerThreadOutputMatchesSingleThreadOutputManyB
 
 TEST (AudioGraphProcessorTests, RapidWorkerThreadResizeDoesNotCrash)
 {
-    AudioGraphProcessor graph;
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
 
-    const auto node = graph.addNode (std::make_unique<TestProcessor> (1.0f));
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    const auto node = model->addNode (std::make_unique<TestProcessor> (1.0f));
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (2, 16);
@@ -2415,14 +2556,15 @@ TEST (AudioGraphProcessorTests, RapidWorkerThreadResizeDoesNotCrash)
 #if ! defined(YUP_WASM)
 TEST (AudioGraphProcessorTests, ProcessBlockDisablesDenormals)
 {
-    AudioGraphProcessor graph;
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
 
     auto proc = std::make_unique<DenormalCheckProcessor>();
     auto* procPtr = proc.get();
-    const auto node = graph.addNode (std::move (proc));
+    const auto node = model->addNode (std::move (proc));
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (2, 16);
@@ -2438,11 +2580,12 @@ TEST (AudioGraphProcessorTests, ProcessBlockDisablesDenormals)
 TEST (AudioGraphProcessorTests, ManyMidiEventsPassThroughGraphCorrectly)
 {
     AudioBusLayout layout = midiLayout();
-    AudioGraphProcessor graph (layout);
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model, layout);
 
-    const auto node = graph.addNode (std::make_unique<MidiPassthroughProcessor>());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    const auto node = model->addNode (std::make_unique<MidiPassthroughProcessor>());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (0, 128);
@@ -2465,16 +2608,17 @@ TEST (AudioGraphProcessorTests, WorkerThreadsPdcCompensatesParallelPaths)
     // Mirror of CompensatesShorterParallelPaths with 2 worker threads.
     // Verifies that PDC delay-line insertion still aligns a zero-latency branch
     // with a 4-sample latent branch under parallel scheduling.
-    AudioGraphProcessor graph;
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
     graph.setNumWorkerThreads (2);
 
-    const auto dry = graph.addNode (std::make_unique<TestProcessor> (1.0f, 0));
-    const auto latent = graph.addNode (std::make_unique<DelayingProcessor> (4));
+    const auto dry = model->addNode (std::make_unique<TestProcessor> (1.0f, 0));
+    const auto latent = model->addNode (std::make_unique<DelayingProcessor> (4));
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (dry, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (latent, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (dry, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (latent, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (dry, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (latent, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (dry, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (latent, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (2, 16);
@@ -2496,18 +2640,19 @@ TEST (AudioGraphProcessorTests, WorkerThreadsPdcMatchesSingleThreadOutput)
     // blocks including the initial PDC fill period.
     auto buildGraph = [] (int numWorkers) -> std::unique_ptr<AudioGraphProcessor>
     {
-        auto g = std::make_unique<AudioGraphProcessor>();
+        auto model = std::make_shared<AudioGraphModel>();
+        auto g = std::make_unique<AudioGraphProcessor> (model);
         g->setNumWorkerThreads (numWorkers);
 
-        const auto dry = g->addNode (std::make_unique<TestProcessor> (1.0f, 0));
-        const auto firstDelay = g->addNode (std::make_unique<DelayingProcessor> (3));
-        const auto secondDelay = g->addNode (std::make_unique<DelayingProcessor> (4));
+        const auto dry = model->addNode (std::make_unique<TestProcessor> (1.0f, 0));
+        const auto firstDelay = model->addNode (std::make_unique<DelayingProcessor> (3));
+        const auto secondDelay = model->addNode (std::make_unique<DelayingProcessor> (4));
 
-        g->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (dry, 0) });
-        g->addConnection ({ AudioGraphEndpoint::nodeOutput (dry, 0), AudioGraphEndpoint::graphOutput (0) });
-        g->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (firstDelay, 0) });
-        g->addConnection ({ AudioGraphEndpoint::nodeOutput (firstDelay, 0), AudioGraphEndpoint::nodeInput (secondDelay, 0) });
-        g->addConnection ({ AudioGraphEndpoint::nodeOutput (secondDelay, 0), AudioGraphEndpoint::graphOutput (0) });
+        model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (dry, 0) });
+        model->addConnection ({ AudioGraphEndpoint::nodeOutput (dry, 0), AudioGraphEndpoint::graphOutput (0) });
+        model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (firstDelay, 0) });
+        model->addConnection ({ AudioGraphEndpoint::nodeOutput (firstDelay, 0), AudioGraphEndpoint::nodeInput (secondDelay, 0) });
+        model->addConnection ({ AudioGraphEndpoint::nodeOutput (secondDelay, 0), AudioGraphEndpoint::graphOutput (0) });
         g->commitChanges();
 
         return g;
@@ -2548,13 +2693,14 @@ TEST (AudioGraphProcessorTests, MixedAudioMidiProcessorPassesThroughBothSignals)
     // A single mixed-bus node (audio bus 0, MIDI bus 1) applies gain to audio
     // and passes MIDI through unchanged. Both signals must arrive at the graph
     // output with the correct values and timestamps.
-    AudioGraphProcessor graph (mixedLayout());
-    const auto node = graph.addNode (std::make_unique<MixedProcessor> (0.5f));
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model, mixedLayout());
+    const auto node = model->addNode (std::make_unique<MixedProcessor> (0.5f));
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (1), AudioGraphEndpoint::nodeInput (node, 1) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 1), AudioGraphEndpoint::graphOutput (1) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (1), AudioGraphEndpoint::nodeInput (node, 1) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 1), AudioGraphEndpoint::graphOutput (1) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (2, 16);
@@ -2575,16 +2721,17 @@ TEST (AudioGraphProcessorTests, MixedAudioMidiSerialChainProcessesBothSignals)
 {
     // Two mixed-bus nodes in series: audio gain compounds (0.5 * 0.5 = 0.25),
     // and MIDI events pass through both nodes unchanged.
-    AudioGraphProcessor graph (mixedLayout());
-    const auto first = graph.addNode (std::make_unique<MixedProcessor> (0.5f));
-    const auto second = graph.addNode (std::make_unique<MixedProcessor> (0.5f));
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model, mixedLayout());
+    const auto first = model->addNode (std::make_unique<MixedProcessor> (0.5f));
+    const auto second = model->addNode (std::make_unique<MixedProcessor> (0.5f));
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (first, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (1), AudioGraphEndpoint::nodeInput (first, 1) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (first, 0), AudioGraphEndpoint::nodeInput (second, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (first, 1), AudioGraphEndpoint::nodeInput (second, 1) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (second, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (second, 1), AudioGraphEndpoint::graphOutput (1) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (first, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (1), AudioGraphEndpoint::nodeInput (first, 1) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (first, 0), AudioGraphEndpoint::nodeInput (second, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (first, 1), AudioGraphEndpoint::nodeInput (second, 1) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (second, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (second, 1), AudioGraphEndpoint::graphOutput (1) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioBuffer<float> audio (2, 16);
@@ -2615,15 +2762,16 @@ TEST (AudioGraphProcessorTests, MixedAudioMidiProcessorPdcCompensatesDirectPaths
     // The node passes MIDI through without physical delay, so its MIDI output
     // arrives at graphOutput(1) at the original position (2), giving two total
     // events at different timestamps.
-    AudioGraphProcessor graph (mixedLayout());
-    const auto latentNode = graph.addNode (std::make_unique<MixedDelayingProcessor> (5));
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model, mixedLayout());
+    const auto latentNode = model->addNode (std::make_unique<MixedDelayingProcessor> (5));
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (latentNode, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (latentNode, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (1), AudioGraphEndpoint::graphOutput (1) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (1), AudioGraphEndpoint::nodeInput (latentNode, 1) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (latentNode, 1), AudioGraphEndpoint::graphOutput (1) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (latentNode, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (latentNode, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (1), AudioGraphEndpoint::graphOutput (1) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (1), AudioGraphEndpoint::nodeInput (latentNode, 1) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (latentNode, 1), AudioGraphEndpoint::graphOutput (1) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     EXPECT_EQ (5, graph.getLatencySamples());
@@ -2646,44 +2794,46 @@ TEST (AudioGraphProcessorTests, MixedAudioMidiProcessorPdcCompensatesDirectPaths
 
 TEST (AudioGraphProcessorTests, GetNodeIDsReturnsAllAddedNodes)
 {
-    AudioGraphProcessor graph;
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
 
-    EXPECT_TRUE (graph.getNodeIDs().empty());
+    EXPECT_TRUE (model->getNodeIDs().empty());
 
-    const auto idA = graph.addNode (std::make_unique<TestProcessor>());
-    const auto idB = graph.addNode (std::make_unique<TestProcessor>());
+    const auto idA = model->addNode (std::make_unique<TestProcessor>());
+    const auto idB = model->addNode (std::make_unique<TestProcessor>());
 
-    const auto ids = graph.getNodeIDs();
+    const auto ids = model->getNodeIDs();
     EXPECT_EQ (2u, ids.size());
     EXPECT_NE (ids.end(), std::find (ids.begin(), ids.end(), idA));
     EXPECT_NE (ids.end(), std::find (ids.begin(), ids.end(), idB));
 
-    EXPECT_TRUE (graph.removeNode (idA));
-    const auto idsAfter = graph.getNodeIDs();
+    EXPECT_TRUE (model->removeNode (idA));
+    const auto idsAfter = model->getNodeIDs();
     EXPECT_EQ (1u, idsAfter.size());
     EXPECT_EQ (idsAfter.end(), std::find (idsAfter.begin(), idsAfter.end(), idA));
 }
 
 TEST (AudioGraphProcessorTests, ReplaceNodeProcessorPreservesNodeIDAndCompatibleConnections)
 {
-    AudioGraphProcessor graph;
-    const auto node = graph.addNode (std::make_unique<TestProcessor> (1.0f));
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto node = model->addNode (std::make_unique<TestProcessor> (1.0f));
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioGraphNodeProperties props;
     props.identifier = "replacement";
     props.name = "Replacement";
 
-    EXPECT_TRUE (graph.replaceNodeProcessor (node, std::make_unique<TestProcessor> (0.25f), props).wasOk());
+    EXPECT_TRUE (model->replaceNode (node, std::make_unique<TestProcessor> (0.25f), props).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
-    const auto ids = graph.getNodeIDs();
+    const auto ids = model->getNodeIDs();
     EXPECT_EQ (1u, ids.size());
     EXPECT_EQ (node, ids.front());
-    EXPECT_EQ (2u, graph.getConnections().size());
+    EXPECT_EQ (2u, model->getConnections().size());
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
@@ -2697,35 +2847,37 @@ TEST (AudioGraphProcessorTests, ReplaceNodeProcessorPreservesNodeIDAndCompatible
 
 TEST (AudioGraphProcessorTests, ReplaceNodeProcessorPrunesIncompatibleConnections)
 {
-    AudioGraphProcessor graph;
-    const auto node = graph.addNode (std::make_unique<TestProcessor> (1.0f));
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto node = model->addNode (std::make_unique<TestProcessor> (1.0f));
 
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
-    EXPECT_TRUE (graph.addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
     AudioGraphNodeProperties props;
     props.identifier = "mono";
     props.name = "Mono";
 
-    EXPECT_TRUE (graph.replaceNodeProcessor (node, std::make_unique<MonoLayoutProcessor>(), props).wasOk());
+    EXPECT_TRUE (model->replaceNode (node, std::make_unique<MonoLayoutProcessor>(), props).wasOk());
     EXPECT_TRUE (graph.commitChanges().wasOk());
 
-    const auto ids = graph.getNodeIDs();
+    const auto ids = model->getNodeIDs();
     EXPECT_EQ (1u, ids.size());
     EXPECT_EQ (node, ids.front());
-    EXPECT_TRUE (graph.getConnections().empty());
+    EXPECT_TRUE (model->getConnections().empty());
 }
 
 TEST (AudioGraphProcessorTests, ReplaceNodeProcessorRejectsInvalidRequests)
 {
-    AudioGraphProcessor graph;
-    const auto node = graph.addNode (std::make_unique<TestProcessor>());
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto node = model->addNode (std::make_unique<TestProcessor>());
 
     AudioGraphNodeProperties props;
     props.identifier = "replacement";
 
-    EXPECT_TRUE (graph.replaceNodeProcessor (AudioGraphNodeID::invalid(), std::make_unique<TestProcessor>(), props).failed());
-    EXPECT_TRUE (graph.replaceNodeProcessor (AudioGraphNodeID (999), std::make_unique<TestProcessor>(), props).failed());
-    EXPECT_TRUE (graph.replaceNodeProcessor (node, nullptr, props).failed());
+    EXPECT_TRUE (model->replaceNode (AudioGraphNodeID::invalid(), std::make_unique<TestProcessor>(), props).failed());
+    EXPECT_TRUE (model->replaceNode (AudioGraphNodeID (999), std::make_unique<TestProcessor>(), props).failed());
+    EXPECT_TRUE (model->replaceNode (node, nullptr, props).failed());
 }
