@@ -439,11 +439,13 @@ private:
                                  .withPosition (screenPos, yup::Justification::topLeft);
 
         auto internalSubMenu = yup::PopupMenu::create();
-        internalSubMenu->addItem ("Oscillator", 1);
-        internalSubMenu->addItem ("Gain", 2);
-        internalSubMenu->addItem ("Latency", 3);
-        internalSubMenu->addItem ("Low Pass Filter", 4);
-        internalSubMenu->addItem ("Sample Player", 5);
+
+        auto internalNodes = nodeRegistry.getInternalNodeIdentifiers();
+        for (const auto& identifier : internalNodes)
+        {
+            const auto displayName = NodeRegistry::identifierToDisplayName (identifier);
+            internalSubMenu->addItem (displayName, static_cast<int> (internalSubMenu->getNumItems() + 1));
+        }
 
         activeMenu = yup::PopupMenu::create (options);
         activeMenu->addSubMenu ("Internal Nodes", internalSubMenu);
@@ -470,22 +472,14 @@ private:
         }
 #endif
 
-        activeMenu->show ([this] (int selectedID)
+        activeMenu->show ([this, internalNodes = std::move (internalNodes)] (int selectedID)
         {
             if (selectedID <= 0)
                 return;
 
-            const yup::String internalIds[] = {
-                NodeRegistry::oscillatorIdentifier,
-                NodeRegistry::gainIdentifier,
-                NodeRegistry::latencyIdentifier,
-                NodeRegistry::lpfIdentifier,
-                NodeRegistry::samplePlayerIdentifier
-            };
-
-            if (selectedID >= 1 && selectedID <= 5)
+            if (selectedID >= 1 && selectedID <= static_cast<int> (internalNodes.size()))
             {
-                addInternalNode (internalIds[selectedID - 1], pendingMenuCanvasPos);
+                addInternalNode (internalNodes[selectedID - 1], pendingMenuCanvasPos);
             }
 #if YUP_DESKTOP
             else if (selectedID >= 100)

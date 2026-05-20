@@ -65,7 +65,7 @@ private:
         addAndMakeVisible (rotarySlider.get());
 
         // Bar Horizontal Slider
-        barHorizontalSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal);
+        barHorizontalSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal);
         barHorizontalSlider->setRange (0.0, 100.0);
         barHorizontalSlider->setValue (75.0);
         barHorizontalSlider->onValueChanged = [this] (double value)

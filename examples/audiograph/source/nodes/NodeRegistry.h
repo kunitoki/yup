@@ -54,6 +54,9 @@ public:
     /** Stable factory key for the built-in looping sample player node. */
     static constexpr const char* samplePlayerIdentifier = "internal.samplePlayer";
 
+    /** Stable factory key for Unknown plugin nodes. */
+    static constexpr const char* pluginUnknownIdentifier = "plugin.unknown";
+
 #if YUP_DESKTOP
     /** Stable factory key for VST3 plugin nodes. */
     static constexpr const char* pluginVst3Identifier = "plugin.vst3";
@@ -231,12 +234,15 @@ public:
         {
             case yup::AudioPluginFormatType::vst3:
                 return pluginVst3Identifier;
+
             case yup::AudioPluginFormatType::clap:
                 return pluginClapIdentifier;
+
             case yup::AudioPluginFormatType::audioUnit:
                 return pluginAuIdentifier;
+
             default:
-                return "plugin.unknown";
+                return pluginUnknownIdentifier;
         }
     }
 
@@ -353,7 +359,13 @@ public:
     //==============================================================================
     std::vector<yup::String> getInternalNodeIdentifiers() const
     {
-        return { oscillatorIdentifier, gainIdentifier, latencyIdentifier, lpfIdentifier, samplePlayerIdentifier };
+        return {
+            oscillatorIdentifier,
+            gainIdentifier,
+            latencyIdentifier,
+            lpfIdentifier,
+            samplePlayerIdentifier
+        };
     }
 
     //==============================================================================
@@ -368,12 +380,16 @@ public:
     {
         if (id == oscillatorIdentifier)
             return "Oscillator";
+
         if (id == gainIdentifier)
             return "Gain";
+
         if (id == latencyIdentifier)
             return "Latency";
+
         if (id == lpfIdentifier)
             return "Low Pass Filter";
+
         if (id == samplePlayerIdentifier)
             return "Sample Player";
 
@@ -397,8 +413,7 @@ private:
         @returns      A ResultValue containing the loaded AudioPluginInstance on success,
                       or an error message on failure.
     */
-    yup::ResultValue<std::unique_ptr<yup::AudioProcessor>> loadPluginFromProperties (
-        const yup::AudioGraphNodeProperties& props)
+    yup::ResultValue<std::unique_ptr<yup::AudioProcessor>> loadPluginFromProperties (const yup::AudioGraphNodeProperties& props)
     {
         if (pluginScanner == nullptr)
             return yup::makeResultValueFail ("No plugin scanner available");

@@ -386,7 +386,7 @@ private:
         addAndMakeVisible (*signalTypeCombo);
 
         // Frequency control
-        frequencySlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Frequency");
+        frequencySlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Frequency");
         frequencySlider->setRange ({ 20.0, 22000.0 });
         frequencySlider->setSkewFactorFromMidpoint (440.0);
         frequencySlider->setValue (440.0);
@@ -398,7 +398,7 @@ private:
         addAndMakeVisible (*frequencySlider);
 
         // Amplitude control
-        amplitudeSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Amplitude");
+        amplitudeSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Amplitude");
         amplitudeSlider->setRange ({ 0.0, 1.0 });
         amplitudeSlider->setValue (0.5);
         amplitudeSlider->onValueChanged = [this] (double value)
@@ -409,7 +409,7 @@ private:
         addAndMakeVisible (*amplitudeSlider);
 
         // Sweep duration control
-        sweepDurationSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Sweep Duration");
+        sweepDurationSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Sweep Duration");
         sweepDurationSlider->setRange ({ 1.0, 60.0 });
         sweepDurationSlider->setValue (10.0);
         sweepDurationSlider->onValueChanged = [this] (double value)
@@ -463,7 +463,7 @@ private:
         addAndMakeVisible (*displayTypeCombo);
 
         // Release control
-        releaseSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Release");
+        releaseSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Release");
         releaseSlider->setRange ({ 0.0, 5.0 });
         releaseSlider->setValue (1.0);
         releaseSlider->onValueChanged = [this] (double value)
@@ -473,7 +473,7 @@ private:
         addAndMakeVisible (*releaseSlider);
 
         // Overlap control for responsiveness
-        overlapSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Overlap");
+        overlapSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Overlap");
         overlapSlider->setRange ({ 0.0, 0.95 });
         overlapSlider->setValue (0.75);
         overlapSlider->onValueChanged = [this] (double value)
@@ -483,7 +483,7 @@ private:
         addAndMakeVisible (*overlapSlider);
 
         // Smoothing time control
-        smoothingSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Smoothing");
+        smoothingSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Smoothing");
         smoothingSlider->setRange ({ 0.001, 0.5 });
         smoothingSlider->setValue (0.05);
         smoothingSlider->onValueChanged = [this] (double value)
