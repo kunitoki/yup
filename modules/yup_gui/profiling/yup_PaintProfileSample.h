@@ -135,6 +135,21 @@ struct PaintProfileSummary
 
 //==============================================================================
 
+/** A struct used to track the cumulative child time of nested paint calls in the current call stack.
+ 
+    This is stored in a thread_local stack in Component, and each PaintProfileScope pushes a new entry on
+    construction and pops it on destruction. The self time of a scope is accumulated separately, and the total
+    time of the scope is added to the parent's childrenMicros when the scope ends, so that the sum of selfMicros
+    and childrenMicros for a parent scope equals the total time spent in that subtree of the paint call graph.
+*/
+struct PaintProfileScopeEntry
+{
+    /** Cumulative time spent in child paint calls for the current scope. */
+    double childrenMicros = 0.0;
+};
+
+//==============================================================================
+
 /** A linear histogram of sample values for a single PaintProfileTimeKind field.
 
     The range [rangeMinMicros, rangeMaxMicros] is divided into buckets.size() equal-width

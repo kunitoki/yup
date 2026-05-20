@@ -1210,15 +1210,10 @@ String Component::getPaintProfileName() const
     return "Component";
 }
 
+thread_local std::vector<PaintProfileScopeEntry> Component::paintProfileScopeStack {};
+std::atomic<uint64> Component::globalPaintIndexCounter { 0 };
+
 //==============================================================================
-
-struct PaintProfileScopeEntry
-{
-    double childrenMicros = 0.0;
-};
-
-thread_local std::vector<PaintProfileScopeEntry> paintProfileScopeStack;
-static std::atomic<uint64> globalPaintIndexCounter { 0 };
 
 class PaintProfileScope
 {
@@ -1233,20 +1228,20 @@ public:
         , selfStartMicros (0.0)
     {
         sample.frameIndex = frameIndex;
-        sample.paintIndex = globalPaintIndexCounter.fetch_add (1, std::memory_order_relaxed);
+        sample.paintIndex = Component::globalPaintIndexCounter.fetch_add (1, std::memory_order_relaxed);
         sample.repaintArea = repaintArea;
         sample.componentBounds = component.getBoundsRelativeToTopLevelComponent().to<float>();
         sample.renderContinuous = renderContinuous;
 
-        paintProfileScopeStack.push_back ({});
+        Component::paintProfileScopeStack.push_back ({});
     }
 
     ~PaintProfileScope()
     {
         const double totalEndMicros = ticksToMicros (Time::getHighResolutionTicks());
         sample.totalMicros = totalEndMicros - totalStartMicros;
-        sample.childrenMicros = paintProfileScopeStack.back().childrenMicros;
-        paintProfileScopeStack.pop_back();
+        sample.childrenMicros = Component::paintProfileScopeStack.back().childrenMicros;
+        Component::paintProfileScopeStack.pop_back();
 
         sample.frameworkMicros = std::max (0.0,
                                            sample.totalMicros
@@ -1256,8 +1251,8 @@ public:
         if (auto* stats = component.getPaintProfileStats())
             stats->recordSample (sample);
 
-        if (! paintProfileScopeStack.empty())
-            paintProfileScopeStack.back().childrenMicros += sample.totalMicros;
+        if (! Component::paintProfileScopeStack.empty())
+            Component::paintProfileScopeStack.back().childrenMicros += sample.totalMicros;
     }
 
     void beginSelf()

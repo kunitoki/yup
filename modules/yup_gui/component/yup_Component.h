@@ -1351,7 +1351,10 @@ private:
 #endif
 
 #if YUP_ENABLE_COMPONENT_PAINT_PROFILING
+    friend class PaintProfileScope;
     std::unique_ptr<PaintProfileStats> paintProfileStats;
+    static thread_local std::vector<PaintProfileScopeEntry> paintProfileScopeStack;
+    static std::atomic<uint64> globalPaintIndexCounter;
 #endif
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Component)

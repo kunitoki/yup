@@ -123,6 +123,7 @@ yup_standalone_app (
     TARGET_CONSOLE ${target_console}
     DEFINITIONS
         YUP_USE_CURL=0
+        YUP_ENABLE_COMPONENT_PAINT_PROFILING=1
         YUP_MODAL_LOOPS_PERMITTED=1
     PRELOAD_FILES
         ${target_preloaded}
