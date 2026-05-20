@@ -49,3 +49,4 @@ __pycache__/
 .claude/
 .pytest_cache/
 .cache/
+docs/superpowers/
