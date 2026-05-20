@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <functional>
 #include <map>
 #include <memory>
@@ -36,15 +37,32 @@ class AudioGraphEditorPanel final
     , public yup::AudioGraphComponent::Listener
 {
 public:
+    struct EndpointViews
+    {
+        std::function<std::unique_ptr<yup::AudioGraphNodeView>()> createInputView;
+        std::function<std::unique_ptr<yup::AudioGraphNodeView>()> createOutputView;
+        yup::Point<float> defaultInputPosition { 40.0f, 200.0f };
+        yup::Point<float> defaultOutputPosition { 760.0f, 200.0f };
+    };
+
     AudioGraphEditorPanel (std::shared_ptr<yup::AudioGraphProcessor> graphIn,
                            NodeRegistry& nodeRegistryIn,
                            yup::StringRef endpointSubtitleIn)
+        : AudioGraphEditorPanel (graphIn,
+                                 nodeRegistryIn,
+                                 makeGraphEndpointViews (graphIn, endpointSubtitleIn))
+    {
+    }
+
+    AudioGraphEditorPanel (std::shared_ptr<yup::AudioGraphProcessor> graphIn,
+                           NodeRegistry& nodeRegistryIn,
+                           EndpointViews endpointViewsIn)
         : graph (std::move (graphIn))
         , model (graph != nullptr ? graph->getModel() : nullptr)
         , nodeRegistry (nodeRegistryIn)
-        , endpointSubtitle (endpointSubtitleIn)
+        , endpointViews (std::move (endpointViewsIn))
     {
-        graphComponent = std::make_unique<yup::AudioGraphComponent> (graph);
+        graphComponent = std::make_unique<yup::AudioGraphComponent> (graph, &undoManager);
 
         graphComponent->onConnectionRequested = [this] (const yup::AudioGraphConnection& connection)
         {
@@ -79,6 +97,16 @@ public:
 
     std::shared_ptr<yup::AudioGraphProcessor> getGraph() const noexcept { return graph; }
 
+    void clearUndoHistory()
+    {
+        undoManager.clear();
+    }
+
+    void zoomToFitNodes()
+    {
+        graphComponent->zoomToFitNodes();
+    }
+
     void resized() override
     {
         graphComponent->setBounds (getLocalBounds());
@@ -111,19 +139,25 @@ public:
         showAddNodeMenu (canvasPos);
     }
 
-    void reloadViews()
+    void reloadViews (bool shouldZoomToFit = true)
+    {
+        clearNodeViews();
+
+        for (auto nodeID : model->getNodeIDs())
+            addViewForNode (nodeID);
+
+        reloadBoundaryViews();
+
+        if (shouldZoomToFit)
+            graphComponent->zoomToFitNodes();
+    }
+
+    void clearNodeViews()
     {
         for (auto& [nodeID, _] : loadedNodes)
             graphComponent->removeNodeView (nodeID);
 
         loadedNodes.clear();
-
-        for (auto nodeID : model->getNodeIDs())
-            addViewForNode (nodeID);
-
-        graphComponent->setGraphInputView (std::make_unique<GraphInputNodeView> (graph, endpointSubtitle), { 40.0f, 200.0f });
-        graphComponent->setGraphOutputView (std::make_unique<GraphOutputNodeView> (graph, endpointSubtitle), { 760.0f, 200.0f });
-        graphComponent->zoomToFitNodes();
     }
 
     void refreshNodeView (yup::AudioGraphNodeID nodeID)
@@ -133,24 +167,17 @@ public:
         addViewForNode (nodeID);
     }
 
-    void addProcessorNode (std::unique_ptr<yup::AudioProcessor> processor,
+    bool addProcessorNode (std::unique_ptr<yup::AudioProcessor> processor,
                            yup::AudioGraphNodeProperties props,
                            yup::Point<float> canvasPos)
     {
-        const auto identifier = props.identifier;
-        const auto nodeID = model->addNode (std::move (processor), std::move (props));
+        const auto before = model->createSnapshot();
+        const auto nodeID = addProcessorNodeWithoutUndo (std::move (processor), std::move (props), canvasPos);
         if (! nodeID.isValid())
-            return;
+            return false;
 
-        graph->commitChanges();
-
-        auto* rawProc = model->getNodeProcessor (nodeID);
-        auto view = nodeRegistry.createView (nodeID, identifier, rawProc, graph.get());
-        if (view != nullptr)
-        {
-            graphComponent->addNodeView (nodeID, std::move (view), canvasPos);
-            loadedNodes[nodeID] = identifier;
-        }
+        addSnapshotUndoAction (before, model->createSnapshot(), "Add Audio Graph Node");
+        return true;
     }
 
     void addInternalNode (const yup::String& identifier,
@@ -168,20 +195,180 @@ public:
 
         auto processorResult = nodeRegistry.makeProcessorFactory() (props);
         if (processorResult.failed())
+        {
+            sendStatusMessage ("Failed: " + processorResult.getErrorMessage());
             return;
+        }
 
         addProcessorNode (std::move (processorResult).getValue(), std::move (props), canvasPos);
     }
 
+    std::function<void (const yup::String&)> onStatusMessage;
     std::function<void (AudioGraphEditorPanel&, yup::AudioGraphNodeID)> onNodeDoubleClicked;
     std::function<void (AudioGraphEditorPanel&, yup::AudioGraphNodeID)> onNodeWillBeRemoved;
 
 #if YUP_DESKTOP
     std::function<void (AudioGraphEditorPanel&, const yup::AudioPluginDescription&, yup::Point<float>)> onPluginSelected;
     std::function<const std::vector<yup::AudioPluginDescription>&()> getDiscoveredPlugins;
+    std::function<yup::String (const yup::AudioPluginDescription&)> getPluginMenuItemText;
 #endif
 
 private:
+    static EndpointViews makeGraphEndpointViews (std::shared_ptr<yup::AudioGraphProcessor> graph,
+                                                 yup::String endpointSubtitle)
+    {
+        EndpointViews views;
+        views.createInputView = [graph, endpointSubtitle]
+        {
+            return std::make_unique<GraphInputNodeView> (graph, endpointSubtitle);
+        };
+        views.createOutputView = [graph, endpointSubtitle]
+        {
+            return std::make_unique<GraphOutputNodeView> (graph, endpointSubtitle);
+        };
+        return views;
+    }
+
+    void reloadBoundaryViews()
+    {
+        if (endpointViews.createInputView != nullptr)
+        {
+            const auto input = model->getNodeProperties (yup::AudioGraphModel::getGraphInputNodeID())
+                                   .value_or (makeEndpointProperties (endpointViews.defaultInputPosition));
+            graphComponent->setGraphInputView (endpointViews.createInputView(),
+                                               getBoundaryPositionOrDefault (input, endpointViews.defaultInputPosition));
+        }
+
+        if (endpointViews.createOutputView != nullptr)
+        {
+            const auto output = model->getNodeProperties (yup::AudioGraphModel::getGraphOutputNodeID())
+                                    .value_or (makeEndpointProperties (endpointViews.defaultOutputPosition));
+            graphComponent->setGraphOutputView (endpointViews.createOutputView(),
+                                                getBoundaryPositionOrDefault (output, endpointViews.defaultOutputPosition));
+        }
+    }
+
+    static yup::AudioGraphNodeProperties makeEndpointProperties (yup::Point<float> position)
+    {
+        yup::AudioGraphNodeProperties props;
+        props.positionX = position.getX();
+        props.positionY = position.getY();
+        return props;
+    }
+
+    static yup::Point<float> getBoundaryPositionOrDefault (const yup::AudioGraphNodeProperties& props,
+                                                           yup::Point<float> defaultPosition)
+    {
+        if (props.positionX == 0.0f && props.positionY == 0.0f)
+            return defaultPosition;
+
+        return { props.positionX, props.positionY };
+    }
+
+    void sendStatusMessage (const yup::String& message)
+    {
+        if (onStatusMessage != nullptr)
+            onStatusMessage (message);
+    }
+
+    struct SnapshotAction final : public yup::UndoableAction
+    {
+        SnapshotAction (AudioGraphEditorPanel& panelToUse,
+                        yup::AudioGraphModel::Snapshot beforeToUse,
+                        yup::AudioGraphModel::Snapshot afterToUse)
+            : panel (&panelToUse)
+            , before (std::move (beforeToUse))
+            , after (std::move (afterToUse))
+        {
+        }
+
+        bool isValid() const override
+        {
+            return panel != nullptr;
+        }
+
+        bool perform (yup::UndoableActionState stateToPerform) override
+        {
+            if (panel == nullptr)
+                return false;
+
+            return panel->restoreSnapshotForUndo (stateToPerform == yup::UndoableActionState::Redo ? after : before);
+        }
+
+    private:
+        AudioGraphEditorPanel* panel = nullptr;
+        yup::AudioGraphModel::Snapshot before;
+        yup::AudioGraphModel::Snapshot after;
+    };
+
+    void addSnapshotUndoAction (const yup::AudioGraphModel::Snapshot& before,
+                                const yup::AudioGraphModel::Snapshot& after,
+                                yup::StringRef transactionName)
+    {
+        yup::UndoManager::ScopedTransaction transaction (undoManager, transactionName);
+        undoManager.perform (new SnapshotAction (*this, before, after));
+    }
+
+    bool restoreSnapshotForUndo (const yup::AudioGraphModel::Snapshot& snapshot)
+    {
+        notifyNodesRemovedBySnapshot (snapshot);
+
+        model->restoreSnapshot (snapshot);
+        const auto result = graph->commitChanges();
+        reloadViews (false);
+
+        return result.wasOk();
+    }
+
+    void notifyNodesRemovedBySnapshot (const yup::AudioGraphModel::Snapshot& snapshot)
+    {
+        if (onNodeWillBeRemoved == nullptr)
+            return;
+
+        for (auto nodeID : model->getNodeIDs())
+        {
+            const auto willStillExist = std::any_of (snapshot.nodes.begin(), snapshot.nodes.end(), [nodeID] (const yup::AudioGraphModel::NodeSnapshot& node)
+            {
+                return node.kind == yup::AudioGraphModel::NodeKind::processor && node.id == nodeID;
+            });
+
+            if (! willStillExist)
+                onNodeWillBeRemoved (*this, nodeID);
+        }
+    }
+
+    yup::AudioGraphNodeID addProcessorNodeWithoutUndo (std::unique_ptr<yup::AudioProcessor> processor,
+                                                       yup::AudioGraphNodeProperties props,
+                                                       yup::Point<float> canvasPos)
+    {
+        const auto identifier = props.identifier;
+        const auto nodeID = model->addNode (std::move (processor), std::move (props));
+        if (! nodeID.isValid())
+        {
+            sendStatusMessage ("Failed to add node to graph.");
+            return yup::AudioGraphNodeID::invalid();
+        }
+
+        const auto commitResult = graph->commitChanges();
+        if (commitResult.failed())
+        {
+            model->removeNode (nodeID);
+            graph->commitChanges();
+            sendStatusMessage ("Failed: " + commitResult.getErrorMessage());
+            return yup::AudioGraphNodeID::invalid();
+        }
+
+        auto* rawProc = model->getNodeProcessor (nodeID);
+        auto view = nodeRegistry.createView (nodeID, identifier, rawProc, graph.get());
+        if (view != nullptr)
+        {
+            graphComponent->addNodeView (nodeID, std::move (view), canvasPos);
+            loadedNodes[nodeID] = identifier;
+        }
+
+        return nodeID;
+    }
+
     void addViewForNode (yup::AudioGraphNodeID nodeID)
     {
         auto props = model->getNodeProperties (nodeID);
@@ -200,13 +387,30 @@ private:
 
     void removeNode (yup::AudioGraphNodeID nodeID)
     {
+        if (model->getNodeProcessor (nodeID) == nullptr)
+            return;
+
         if (onNodeWillBeRemoved != nullptr)
             onNodeWillBeRemoved (*this, nodeID);
 
+        const auto before = model->createSnapshot();
+
         graphComponent->removeNodeView (nodeID);
-        model->removeNode (nodeID);
-        graph->commitChanges();
+        if (! model->removeNode (nodeID))
+            return;
+
+        const auto commitResult = graph->commitChanges();
+        if (commitResult.failed())
+        {
+            model->restoreSnapshot (before);
+            graph->commitChanges();
+            refreshNodeView (nodeID);
+            sendStatusMessage ("Failed: " + commitResult.getErrorMessage());
+            return;
+        }
+
         loadedNodes.erase (nodeID);
+        addSnapshotUndoAction (before, model->createSnapshot(), "Remove Audio Graph Node");
     }
 
     bool addConnection (const yup::AudioGraphConnection& connection)
@@ -305,9 +509,17 @@ private:
                 auto pluginSubMenu = yup::PopupMenu::create();
 
                 for (int i = 0; i < static_cast<int> (plugins.size()); ++i)
-                    pluginSubMenu->addItem (plugins[static_cast<size_t> (i)].name, 100 + i);
+                {
+                    const auto& desc = plugins[static_cast<size_t> (i)];
+                    const auto menuText = getPluginMenuItemText != nullptr ? getPluginMenuItemText (desc) : desc.name;
+                    pluginSubMenu->addItem (menuText, 100 + i);
+                }
 
                 activeMenu->addSubMenu ("Plugins", pluginSubMenu);
+            }
+            else
+            {
+                activeMenu->addItem ("No plugins (click Scan)", -1, false);
             }
         }
 #endif
@@ -348,7 +560,8 @@ private:
     std::shared_ptr<yup::AudioGraphProcessor> graph;
     std::shared_ptr<yup::AudioGraphModel> model;
     NodeRegistry& nodeRegistry;
-    yup::String endpointSubtitle;
+    EndpointViews endpointViews;
+    yup::UndoManager undoManager;
     std::unique_ptr<yup::AudioGraphComponent> graphComponent;
     std::map<yup::AudioGraphNodeID, yup::String> loadedNodes;
     yup::PopupMenu::Ptr activeMenu;

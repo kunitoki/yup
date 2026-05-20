@@ -110,6 +110,14 @@ void modelWriteBase64Element (XmlElement& parent, const char* tagName, const Mem
     parent.addChildElement (element);
 }
 
+void modelWriteOptionalBase64Element (XmlElement& parent, const char* tagName, const MemoryBlock& block)
+{
+    if (block.getSize() == 0)
+        return;
+
+    modelWriteBase64Element (parent, tagName, block);
+}
+
 Result modelReadBase64Element (const XmlElement& parent, const char* tagName, MemoryBlock& block)
 {
     auto* element = parent.getChildByName (tagName);
@@ -130,13 +138,24 @@ Result modelReadBase64Element (const XmlElement& parent, const char* tagName, Me
     return Result::ok();
 }
 
+Result modelReadOptionalBase64Element (const XmlElement& parent, const char* tagName, MemoryBlock& block)
+{
+    if (parent.getChildByName (tagName) == nullptr)
+    {
+        block.reset();
+        return Result::ok();
+    }
+
+    return modelReadBase64Element (parent, tagName, block);
+}
+
 void modelWriteNodeProperties (XmlElement& element, const AudioGraphNodeProperties& properties)
 {
     element.setAttribute ("identifier", properties.identifier);
     element.setAttribute ("name", properties.name);
     element.setAttribute ("positionX", static_cast<double> (properties.positionX));
     element.setAttribute ("positionY", static_cast<double> (properties.positionY));
-    modelWriteBase64Element (element, "creationData", properties.creationData);
+    modelWriteOptionalBase64Element (element, "creationData", properties.creationData);
 }
 
 Result modelReadNodeProperties (const XmlElement& element, AudioGraphNodeProperties& properties)
@@ -146,7 +165,7 @@ Result modelReadNodeProperties (const XmlElement& element, AudioGraphNodePropert
     properties.positionX = static_cast<float> (element.getDoubleAttribute ("positionX"));
     properties.positionY = static_cast<float> (element.getDoubleAttribute ("positionY"));
 
-    return modelReadBase64Element (element, "creationData", properties.creationData);
+    return modelReadOptionalBase64Element (element, "creationData", properties.creationData);
 }
 
 String modelEndpointKindToString (AudioGraphEndpoint::Kind kind)
@@ -533,6 +552,22 @@ ResultValue<std::unique_ptr<XmlElement>> AudioGraphModel::createXml() const
         modelWriteBase64Element (*nodeElement, "state", node.state);
     }
 
+    auto* boundaryNodesElement = new XmlElement ("boundaryNodes");
+    root->addChildElement (boundaryNodesElement);
+
+    for (const auto& node : snapshot.nodes)
+    {
+        const auto isGraphInput = node.kind == NodeKind::graphInput;
+        const auto isGraphOutput = node.kind == NodeKind::graphOutput;
+
+        if (! isGraphInput && ! isGraphOutput)
+            continue;
+
+        auto* nodeElement = new XmlElement (isGraphInput ? "graphInput" : "graphOutput");
+        boundaryNodesElement->addChildElement (nodeElement);
+        modelWriteNodeProperties (*nodeElement, node.properties);
+    }
+
     auto* connectionsElement = new XmlElement ("connections");
     root->addChildElement (connectionsElement);
 
@@ -584,6 +619,30 @@ Result AudioGraphModel::restoreFromXml (const XmlElement& xml)
         savedNodes.push_back (std::move (savedNode));
     }
 
+    std::optional<AudioGraphNodeProperties> graphInputProperties;
+    std::optional<AudioGraphNodeProperties> graphOutputProperties;
+
+    if (auto* boundaryNodesElement = xml.getChildByName ("boundaryNodes"))
+    {
+        if (auto* graphInputElement = boundaryNodesElement->getChildByName ("graphInput"))
+        {
+            AudioGraphNodeProperties properties;
+            if (const auto result = modelReadNodeProperties (*graphInputElement, properties); result.failed())
+                return result;
+
+            graphInputProperties = std::move (properties);
+        }
+
+        if (auto* graphOutputElement = boundaryNodesElement->getChildByName ("graphOutput"))
+        {
+            AudioGraphNodeProperties properties;
+            if (const auto result = modelReadNodeProperties (*graphOutputElement, properties); result.failed())
+                return result;
+
+            graphOutputProperties = std::move (properties);
+        }
+    }
+
     auto* connectionsElement = xml.getChildByName ("connections");
     if (connectionsElement == nullptr)
         return Result::fail ("Audio graph state is missing connections");
@@ -613,7 +672,16 @@ Result AudioGraphModel::restoreFromXml (const XmlElement& xml)
         savedConnections.push_back ({ source, destination });
     }
 
-    return restoreModel (savedNextNodeID, std::move (savedNodes), std::move (savedConnections));
+    if (const auto result = restoreModel (savedNextNodeID, std::move (savedNodes), std::move (savedConnections)); result.failed())
+        return result;
+
+    if (graphInputProperties.has_value())
+        setNodeProperties (getGraphInputNodeID(), std::move (*graphInputProperties));
+
+    if (graphOutputProperties.has_value())
+        setNodeProperties (getGraphOutputNodeID(), std::move (*graphOutputProperties));
+
+    return Result::ok();
 }
 
 AudioGraphModel::Snapshot AudioGraphModel::createSnapshot() const
