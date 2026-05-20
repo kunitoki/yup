@@ -52,12 +52,12 @@
 #include <rive/rive.h>
 
 //==============================================================================
-/** Config: YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
+/** Config: YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
 
     Enable repaint debugging for components.
 */
-#ifndef YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
-#define YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING 0
+#ifndef YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
+#define YUP_ENABLE_COMPONENT_PAINT_DEBUGGING 0
 #endif
 
 //==============================================================================
@@ -67,6 +67,23 @@
 */
 #ifndef YUP_ENABLE_WINDOWING_EVENT_LOGGING
 #define YUP_ENABLE_WINDOWING_EVENT_LOGGING 1
+#endif
+
+//==============================================================================
+/** Config: YUP_ENABLE_COMPONENT_PAINT_PROFILING
+
+    Enable YUP component paint profiling.
+*/
+#ifndef YUP_ENABLE_COMPONENT_PAINT_PROFILING
+#define YUP_ENABLE_COMPONENT_PAINT_PROFILING 0
+#endif
+
+//==============================================================================
+
+#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
+#define YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED(CODE) CODE
+#else
+#define YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED(CODE)
 #endif
 
 //==============================================================================
@@ -87,9 +104,12 @@
 #include "clipboard/yup_SystemClipboard.h"
 #include "desktop/yup_Screen.h"
 #include "desktop/yup_Desktop.h"
+#include "profiling/yup_PaintProfileSample.h"
+#include "profiling/yup_PaintProfileStats.h"
 #include "component/yup_ComponentNative.h"
 #include "component/yup_ComponentStyle.h"
 #include "component/yup_Component.h"
+#include "profiling/yup_PaintProfiler.h"
 #include "menus/yup_PopupMenu.h"
 #include "buttons/yup_Button.h"
 #include "buttons/yup_TextButton.h"

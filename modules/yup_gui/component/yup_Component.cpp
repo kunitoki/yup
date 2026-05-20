@@ -37,6 +37,10 @@ Component::Component (StringRef componentID)
 
 Component::~Component()
 {
+#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
+    setPaintProfilingEnabled (false);
+#endif
+
     if (options.onDesktop)
         removeFromDesktop();
 
@@ -902,6 +906,21 @@ void Component::setWantsKeyboardFocus (bool wantsFocus)
     options.wantsKeyboardFocus = wantsFocus;
 }
 
+bool Component::getWantsKeyboardFocus() const
+{
+    return options.wantsKeyboardFocus;
+}
+
+void Component::setClickingGrabFocus (bool shouldGrabFocus)
+{
+    options.clickingDoesNotGrabFocus = ! shouldGrabFocus;
+}
+
+bool Component::getClickingGrabFocus() const
+{
+    return ! options.clickingDoesNotGrabFocus;
+}
+
 void Component::takeKeyboardFocus()
 {
     if (! options.wantsKeyboardFocus)
@@ -934,6 +953,20 @@ bool Component::hasKeyboardFocus() const
 void Component::focusGained() {}
 
 void Component::focusLost() {}
+
+//==============================================================================
+
+void Component::handleKeyboardFocusFromClick()
+{
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+    {
+        if (component->options.wantsKeyboardFocus && ! component->options.clickingDoesNotGrabFocus)
+        {
+            component->takeKeyboardFocus();
+            return;
+        }
+    }
+}
 
 //==============================================================================
 
@@ -1123,6 +1156,141 @@ bool Component::hasOpaqueChildCoveringArea (const Rectangle<float>& area)
     return false;
 }
 
+#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
+
+//==============================================================================
+
+void Component::setPaintProfilingEnabled (bool shouldBeEnabled, PaintProfileOptions options)
+{
+    if (shouldBeEnabled)
+    {
+        if (paintProfileStats == nullptr
+            || paintProfileStats->getCapacity() != options.sampleCapacity)
+        {
+            paintProfileStats = std::make_unique<PaintProfileStats> (options);
+        }
+        PaintProfiler::getInstance().registerComponent (*this, *paintProfileStats);
+    }
+    else
+    {
+        PaintProfiler::getInstance().deregisterComponent (*this);
+        paintProfileStats.reset();
+    }
+}
+
+bool Component::isPaintProfilingEnabled() const
+{
+    return paintProfileStats != nullptr;
+}
+
+void Component::resetPaintProfiling()
+{
+    if (paintProfileStats != nullptr)
+        paintProfileStats->reset();
+}
+
+PaintProfileStats* Component::getPaintProfileStats()
+{
+    return paintProfileStats.get();
+}
+
+const PaintProfileStats* Component::getPaintProfileStats() const
+{
+    return paintProfileStats.get();
+}
+
+String Component::getPaintProfileName() const
+{
+    if (componentTitle.isNotEmpty())
+        return componentTitle;
+
+    if (componentID.isNotEmpty())
+        return componentID;
+
+    return "Component";
+}
+
+//==============================================================================
+
+struct PaintProfileScopeEntry
+{
+    double childrenMicros = 0.0;
+};
+
+thread_local std::vector<PaintProfileScopeEntry> paintProfileScopeStack;
+static std::atomic<uint64> globalPaintIndexCounter { 0 };
+
+class PaintProfileScope
+{
+public:
+    PaintProfileScope (Component& component,
+                       const Rectangle<float>& repaintArea,
+                       bool renderContinuous,
+                       uint64 frameIndex)
+        : component (component)
+        , sample()
+        , totalStartMicros (ticksToMicros (Time::getHighResolutionTicks()))
+        , selfStartMicros (0.0)
+    {
+        sample.frameIndex = frameIndex;
+        sample.paintIndex = globalPaintIndexCounter.fetch_add (1, std::memory_order_relaxed);
+        sample.repaintArea = repaintArea;
+        sample.componentBounds = component.getBoundsRelativeToTopLevelComponent().to<float>();
+        sample.renderContinuous = renderContinuous;
+
+        paintProfileScopeStack.push_back ({});
+    }
+
+    ~PaintProfileScope()
+    {
+        const double totalEndMicros = ticksToMicros (Time::getHighResolutionTicks());
+        sample.totalMicros = totalEndMicros - totalStartMicros;
+        sample.childrenMicros = paintProfileScopeStack.back().childrenMicros;
+        paintProfileScopeStack.pop_back();
+
+        sample.frameworkMicros = std::max (0.0,
+                                           sample.totalMicros
+                                               - sample.selfMicros
+                                               - sample.childrenMicros);
+
+        if (auto* stats = component.getPaintProfileStats())
+            stats->recordSample (sample);
+
+        if (! paintProfileScopeStack.empty())
+            paintProfileScopeStack.back().childrenMicros += sample.totalMicros;
+    }
+
+    void beginSelf()
+    {
+        selfStartMicros = ticksToMicros (Time::getHighResolutionTicks());
+    }
+
+    void endSelf()
+    {
+        sample.selfMicros += ticksToMicros (Time::getHighResolutionTicks()) - selfStartMicros;
+    }
+
+    void markSelfPaintSkipped()
+    {
+        sample.selfPaintSkipped = true;
+    }
+
+private:
+    static double ticksToMicros (int64 ticks)
+    {
+        return Time::highResolutionTicksToSeconds (ticks) * 1.0e6;
+    }
+
+    Component& component;
+    PaintProfileSample sample;
+    double totalStartMicros;
+    double selfStartMicros;
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PaintProfileScope)
+};
+
+#endif // YUP_ENABLE_COMPONENT_PAINT_PROFILING
+
 //==============================================================================
 
 void Component::internalRefreshDisplay (double lastFrameTimeSeconds)
@@ -1174,6 +1342,15 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
     options.isRepainting = true;
 
     {
+#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
+        const bool profilingActive = PaintProfiler::getInstance().isEnabled() && paintProfileStats != nullptr;
+
+        const auto frameIndex = PaintProfiler::getInstance().getCurrentFrameIndex();
+        PaintProfileScope profileScope (*this, repaintArea, renderContinuous, frameIndex);
+#else
+        constexpr bool profilingActive = false;
+#endif
+
         const auto globalState = g.saveState();
 
         g.setOpacity (opacity);
@@ -1191,18 +1368,41 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
         {
             const auto paintState = g.saveState();
 
-            paint (g);
+            if (profilingActive)
+            {
+                YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED (profileScope.beginSelf();)
+                paint (g);
+                YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED (profileScope.endSelf();)
+            }
+            else
+            {
+                paint (g);
+            }
+        }
+        else
+        {
+            if (profilingActive)
+                YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED (profileScope.markSelfPaintSkipped();)
         }
 
         for (auto child : children)
             child->internalPaint (g, boundsToRedraw, renderContinuous);
 
-        paintOverChildren (g);
+        if (profilingActive)
+        {
+            YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED (profileScope.beginSelf();)
+            paintOverChildren (g);
+            YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED (profileScope.endSelf();)
+        }
+        else
+        {
+            paintOverChildren (g);
+        }
     }
 
     options.isRepainting = false;
 
-#if YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
+#if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
     g.setFillColor (debugColor);
     g.setOpacity (0.2f);
     g.fillAll();
@@ -1263,6 +1463,11 @@ void Component::internalMouseDown (const MouseEvent& event)
     updateMouseCursor();
 
     auto bailOutChecker = BailOutChecker (this);
+
+    handleKeyboardFocusFromClick();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
 
     mouseDown (event);
 

@@ -747,6 +747,32 @@ public:
     void setWantsKeyboardFocus (bool wantsFocus);
 
     /**
+        Check whether this component wants keyboard focus.
+
+        @return True if this component wants keyboard focus, false otherwise.
+     */
+    bool getWantsKeyboardFocus() const;
+
+    /**
+        Set whether clicking this component can make it grab keyboard focus.
+
+        When a component is clicked, focus handling walks from the clicked
+        component up through its parents until it finds a component that both
+        wants keyboard focus and has this flag enabled. This is enabled by
+        default.
+
+        @param shouldGrabFocus True if mouse clicks can grab keyboard focus.
+     */
+    void setClickingGrabFocus (bool shouldGrabFocus);
+
+    /**
+        Check whether clicking this component can make it grab keyboard focus.
+
+        @return True if mouse clicks can grab keyboard focus.
+     */
+    bool getClickingGrabFocus() const;
+
+    /**
         Take the focus.
      */
     void takeKeyboardFocus();
@@ -1152,6 +1178,45 @@ public:
      */
     std::optional<var> findStyleProperty (const Identifier& propertyId) const;
 
+#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
+    //==============================================================================
+    /** Enables or disables paint profiling for this component.
+
+        When enabling, a PaintProfileStats instance is created (if not already present)
+        and the component is registered with PaintProfiler. Existing samples are
+        preserved when re-enabling with the same capacity.
+
+        When disabling, the component is deregistered from PaintProfiler and the
+        stats object is destroyed.
+
+        @param shouldBeEnabled  Pass true to enable, false to disable.
+        @param options          Controls the ring buffer capacity and recording behaviour.
+    */
+    void setPaintProfilingEnabled (bool shouldBeEnabled,
+                                   PaintProfileOptions options = {});
+
+    /** Returns true if paint profiling is currently enabled for this component. */
+    bool isPaintProfilingEnabled() const;
+
+    /** Clears all paint profile samples recorded for this component. */
+    void resetPaintProfiling();
+
+    /** Returns a pointer to this component's PaintProfileStats, or nullptr if
+        profiling is not enabled. */
+    PaintProfileStats* getPaintProfileStats();
+
+    /** Returns a const pointer to this component's PaintProfileStats, or nullptr
+        if profiling is not enabled. */
+    const PaintProfileStats* getPaintProfileStats() const;
+
+    /** Returns the display name used for this component in profiling snapshots.
+
+        Prefers (in order): a non-empty component title, a non-empty component ID,
+        the demangled type name if available, then falls back to "Component".
+    */
+    String getPaintProfileName() const;
+#endif
+
     //==============================================================================
     /** A bail out checker for the component. */
     class BailOutChecker
@@ -1233,6 +1298,8 @@ private:
     void internalAttachedToNative();
     void internalDetachedFromNative();
 
+    void handleKeyboardFocusFromClick();
+
     void updateMouseCursor();
 
     bool hasOpaqueChildCoveringArea (const Rectangle<float>& area);
@@ -1266,6 +1333,7 @@ private:
         bool isTransparent : 1;
         bool unclippedRendering : 1;
         bool wantsKeyboardFocus : 1;
+        bool clickingDoesNotGrabFocus : 1;
         bool isRepainting : 1;
         bool blockSelfMouseEvents : 1;
         bool blockChildrenMouseEvents : 1;
@@ -1277,9 +1345,13 @@ private:
         Options options;
     };
 
-#if YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
+#if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
     Color debugColor = Color::opaqueRandom();
     int counter = 2;
+#endif
+
+#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
+    std::unique_ptr<PaintProfileStats> paintProfileStats;
 #endif
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Component)

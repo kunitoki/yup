@@ -813,7 +813,6 @@ TEST_F (ComponentTest, HitTesting)
 
 // =============================================================================
 
-/*
 TEST_F (ComponentTest, KeyboardFocus)
 {
     // Test default focus behavior
@@ -825,7 +824,17 @@ TEST_F (ComponentTest, KeyboardFocus)
     child->setWantsKeyboardFocus (false);
     EXPECT_FALSE (child->getWantsKeyboardFocus());
 }
-*/
+
+TEST_F (ComponentTest, ClickingGrabFocus)
+{
+    EXPECT_TRUE (child->getClickingGrabFocus());
+
+    child->setClickingGrabFocus (false);
+    EXPECT_FALSE (child->getClickingGrabFocus());
+
+    child->setClickingGrabFocus (true);
+    EXPECT_TRUE (child->getClickingGrabFocus());
+}
 
 // =============================================================================
 

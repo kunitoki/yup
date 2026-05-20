@@ -133,6 +133,8 @@
 #include "clipboard/yup_SystemClipboard.cpp"
 #include "component/yup_ComponentNative.cpp"
 #include "component/yup_Component.cpp"
+#include "profiling/yup_PaintProfileStats.cpp"
+#include "profiling/yup_PaintProfiler.cpp"
 #include "menus/yup_PopupMenu.cpp"
 #include "buttons/yup_Button.cpp"
 #include "buttons/yup_TextButton.cpp"

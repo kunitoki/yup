@@ -369,10 +369,29 @@ float SDL2ComponentNative::getOpacity() const
 
 void SDL2ComponentNative::setFocusedComponent (Component* comp)
 {
+    const auto focusNativeWindowIfNeeded = [&]
+    {
+        if (window != nullptr && isVisible() && lastComponentFocused != nullptr)
+        {
+            SDL_RaiseWindow (window);
+
+            focusNativeWindow (getNativeHandle());
+
+            SDL_SetWindowInputFocus (window);
+        }
+    };
+
+    if (lastComponentFocused == comp)
+    {
+        focusNativeWindowIfNeeded();
+        return;
+    }
+
     auto compBailOut = Component::BailOutChecker (comp);
 
     // Check if we need to stop text input for the previously focused component
     Component* previousComponent = lastComponentFocused.get();
+    WeakReference<Component> previousComponentWeak (previousComponent);
     bool previousWantsTextInput = previousComponent != nullptr && dynamic_cast<TextInputTarget*> (previousComponent) != nullptr;
 
     if (lastComponentFocused != nullptr)
@@ -386,7 +405,14 @@ void SDL2ComponentNative::setFocusedComponent (Component* comp)
     }
 
     if (compBailOut.shouldBailOut())
+    {
+        lastComponentFocused = nullptr;
+
+        if (previousWantsTextInput && previousComponentWeak.get() != nullptr)
+            stopTextInput (*previousComponentWeak.get());
+
         return;
+    }
 
     lastComponentFocused = comp;
 
@@ -395,8 +421,8 @@ void SDL2ComponentNative::setFocusedComponent (Component* comp)
     bool newWantsTextInput = newComponent != nullptr && dynamic_cast<TextInputTarget*> (newComponent) != nullptr;
 
     // Stop text input if the previous component had it but the new one doesn't
-    if (previousWantsTextInput && ! newWantsTextInput && previousComponent != nullptr)
-        stopTextInput (*previousComponent);
+    if (previousWantsTextInput && ! newWantsTextInput && previousComponentWeak.get() != nullptr)
+        stopTextInput (*previousComponentWeak.get());
 
     if (lastComponentFocused != nullptr)
     {
@@ -408,14 +434,7 @@ void SDL2ComponentNative::setFocusedComponent (Component* comp)
             lastComponentFocused->repaint();
     }
 
-    if (window != nullptr && isVisible() && lastComponentFocused != nullptr)
-    {
-        SDL_RaiseWindow (window);
-
-        focusNativeWindow (getNativeHandle());
-
-        SDL_SetWindowInputFocus (window);
-    }
+    focusNativeWindowIfNeeded();
 }
 
 Component* SDL2ComponentNative::getFocusedComponent() const
@@ -705,17 +724,27 @@ void SDL2ComponentNative::renderContext()
             context->begin (frameDescriptor);
         }
 
-        // Repaint components hierarchy
-        if (renderer != nullptr)
         {
-            const auto dpiScale = getScaleDpi();
-
-            for (auto& repaintArea : currentRepaintAreas)
+#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
+            PaintProfiler::getInstance().beginFrame();
+            const auto endFrameGuard = ErasedScopeGuard ([&]
             {
-                YUP_PROFILE_NAMED_INTERNAL_TRACE (InternalPaint);
+                PaintProfiler::getInstance().endFrame();
+            });
+#endif
 
-                Graphics g (*context, *renderer, dpiScale);
-                component.internalPaint (g, repaintArea, renderContinuous);
+            // Repaint components hierarchy
+            if (renderer != nullptr)
+            {
+                const auto dpiScale = getScaleDpi();
+
+                for (auto& repaintArea : currentRepaintAreas)
+                {
+                    YUP_PROFILE_NAMED_INTERNAL_TRACE (InternalPaint);
+
+                    Graphics g (*context, *renderer, dpiScale);
+                    component.internalPaint (g, repaintArea, renderContinuous);
+                }
             }
         }
 
@@ -1366,6 +1395,8 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_KEYDOWN:
         {
+            YUP_WINDOWING_LOG ("SDL_KEYDOWN " << event->key.keysym.sym << " " << event->key.keysym.scancode);
+
             auto cursorPosition = getCursorPosition();
             auto modifiers = toKeyModifiers (event->key.keysym.mod);
 
@@ -1377,6 +1408,8 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_KEYUP:
         {
+            YUP_WINDOWING_LOG ("SDL_KEYUP " << event->key.keysym.sym << " " << event->key.keysym.scancode);
+
             auto cursorPosition = getCursorPosition();
             auto modifiers = toKeyModifiers (event->key.keysym.mod);
 
@@ -1388,7 +1421,7 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_TEXTINPUT:
         {
-            YUP_WINDOWING_LOG ("SDL_TEXTINPUT");
+            YUP_WINDOWING_LOG ("SDL_TEXTINPUT " << String::fromUTF8 (event->text.text));
 
             // auto cursorPosition = getCursorPosition();
             // auto modifiers = toKeyModifiers (getKeyModifiers());
