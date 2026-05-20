@@ -1,6 +1,36 @@
 <img src="./backdrop.jpg" />
 
-# YUP! Cross-Platform Application And Plugin Development Library
+# YUP! The modern framework optimized for realtime audio and GPU-native creative software
+
+YUP is a C++20 framework for building native applications, audio tools, and audio plugins with one codebase across desktop, mobile, and the web. It combines permissively licensed JUCE7-derived foundations with modern rendering through the open source [Rive](https://rive.app/) renderer and YUP's own evolving graphics, GUI, DSP, audio graph, and plugin layers.
+
+[![Build And Test MacOS](https://github.com/kunitoki/yup/actions/workflows/build_macos.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_macos.yml)
+[![Build And Test Windows](https://github.com/kunitoki/yup/actions/workflows/build_windows.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_windows.yml)
+[![Build And Test Linux](https://github.com/kunitoki/yup/actions/workflows/build_linux.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_linux.yml)
+[![Build And Test Wasm](https://github.com/kunitoki/yup/actions/workflows/build_wasm.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_wasm.yml)
+[![Build And Test iOS](https://github.com/kunitoki/yup/actions/workflows/build_ios.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_ios.yml)
+[![Build And Test Android](https://github.com/kunitoki/yup/actions/workflows/build_android.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_android.yml)
+[![Coverage Job](https://github.com/kunitoki/yup/actions/workflows/coverage.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/coverage.yml)
+[![Coverage Report](https://codecov.io/gh/kunitoki/yup/branch/main/graph/badge.svg?token=IO71C3DR1A)](https://codecov.io/gh/kunitoki/yup)
+
+> [!WARNING]
+> YUP is under active early-stage development. APIs may change while the framework is being shaped, but the repository already contains working examples, tests, and platform builds.
+
+## Why YUP?
+
+- **Permissive by default:** ISC-licensed project code, with dependencies chosen for liberal licensing or public-domain availability.
+- **Modern vector rendering:** GPU-backed rendering through the Rive renderer, with Metal, Direct3D, OpenGL, WebGL, and in-progress Vulkan/WebGPU support.
+- **Audio-first application stack:** Audio devices, MIDI, formats, DSP, audio graph components, plugin hosting, and plugin client wrappers live in the same framework.
+- **Native and web targets:** Windows, macOS, Linux, Wasm, Android, and iOS are part of the regular CI surface.
+- **CMake-first workflow:** Use YUP as a standalone repository or bring it into your own app/plugin project with `FetchContent`.
+
+## Try It
+
+- Run the browser demos: [demo 1](https://kunitoki.github.io/yup/demos/web_render_0/), [demo 2](https://kunitoki.github.io/yup/demos/web_render_1/), [demo 3](https://kunitoki.github.io/yup/demos/web_render_2/), [demo 4](https://kunitoki.github.io/yup/demos/web_render_3/), [demo 5](https://kunitoki.github.io/yup/demos/web_render_4/).
+- Explore the example apps: [graphics](./examples/graphics), [audio graph](./examples/audiograph), [plugin](./examples/plugin), [console](./examples/console).
+- Read the build guides: [standalone applications](./docs/Building%20Standalone.md), [audio plugins](./docs/Building%20Plugins.md), [module format](./docs/YUP%20Module%20Format.md).
+
+## Screenshots and Demos
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
   <a href="https://kunitoki.github.io/yup/demos/web_render_0/" title="UI courtesy from https://www.drywestdesign.com/">
@@ -26,12 +56,12 @@
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
-  <a href="./examples/graphics/source/examples/AudioGraph.h"><img src="./docs/images/yup_audio_graph.png" style="width:56.5%;" /></a>
+  <a href="./examples/audiograph/"><img src="./docs/images/yup_audio_graph.png" style="width:56.5%;" /></a>
   <a href="./examples/graphics/source/examples/AudioFileDemo.h"><img src="./docs/images/yup_audio_waveform.png" style="width:41.5%;" /></a>
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
-  <a href="./examples/graphics/source/examples/AudioHost.h"><img src="./docs/images/yup_audio_host.png" style="width:99%;" /></a>
+  <a href="./examples/audiograph/"><img src="./docs/images/yup_audio_host.png" style="width:99%;" /></a>
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
@@ -42,44 +72,31 @@
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
   <a href="./examples/graphics/source/examples/AudioFileDemo.h"><img src="./docs/images/yup_audio_scope.png" style="width:99%;" /></a>
-</p>
+</div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
   <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_fill.png" style="width:99%;" /></a>
   <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_line.png" style="width:99%;" /></a>
-</p>
+</div>
 
-Example Rive animation display ([source code](./examples/render/source/main.cpp)):
-[Renderer Youtube Video](https://youtube.com/shorts/3XC4hyDlrVs)
+Example Rive animation display: [source code](./examples/graphics/source/main.cpp), [renderer video](https://youtube.com/shorts/3XC4hyDlrVs).
 
-[![Build And Test MacOS](https://github.com/kunitoki/yup/actions/workflows/build_macos.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_macos.yml)
-[![Build And Test Windows](https://github.com/kunitoki/yup/actions/workflows/build_windows.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_windows.yml)
-[![Build And Test Linux](https://github.com/kunitoki/yup/actions/workflows/build_linux.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_linux.yml)
-[![Build And Test Wasm](https://github.com/kunitoki/yup/actions/workflows/build_wasm.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_wasm.yml)
-[![Build And Test iOS](https://github.com/kunitoki/yup/actions/workflows/build_ios.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_ios.yml)
-[![Build And Test Android](https://github.com/kunitoki/yup/actions/workflows/build_android.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_android.yml)
-
-[![Coverage Job](https://github.com/kunitoki/yup/actions/workflows/coverage.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/coverage.yml)
-[![Coverage Report](https://codecov.io/gh/kunitoki/yup/branch/main/graph/badge.svg?token=IO71C3DR1A)](https://codecov.io/gh/kunitoki/yup)
+<details>
+<summary>Coverage drilldown</summary>
 
 [![Coverage Drilldown](https://codecov.io/gh/kunitoki/yup/graphs/tree.svg?token=IO71C3DR1A)](https://codecov.io/gh/kunitoki/yup)
 
-## Introduction
-YUP is an open-source library dedicated to empowering developers with advanced tools for cross-platform application and plugin development, featuring state-of-the-art rendering and audio processing. Originating from a fork of [JUCE7](https://juce.com/)'s ISC-licensed modules, YUP builds on the robust, high-performance capabilities that made JUCE7 popular among audio and visual application developers. Unlike its successor JUCE8, which moved to a restrictive AGPL license and an even more costly commercial one, YUP maintains the more permissive ISC license and ensures that all of its dependencies are either liberally licensed or public domain, remaining a freely accessible and modifiable resource for developers worldwide.
+</details>
 
+## Project Status
 
-> [!CAUTION]
-> The project is still in embryonic stage, use it at your own risk!
+YUP is usable for experimentation, examples, prototypes, and contributors who are comfortable with a fast-moving framework. The areas most ready for feedback are:
 
-
-## Features
-YUP brings a suite of powerful features, including:
-- **High-Performance Rendering:** From intricate visualizations to high-speed gaming graphics, YUP handles it all with ease and efficiency, relying on the open source [Rive](https://rive.app/) Renderer, backed by Metal, Direct3D, OpenGL, Vulkan and WebGPU.
-- **Advanced Audio Processing:** Tailored for professionals, our audio toolkit delivers pristine sound quality with minimal latency, suitable for music production, live performance tools, and more. Based on the JUCE7 module for audio/midi input and output.
-- **Open Source Audio Plugin Standards:** Facilitates the development of [CLAP](https://cleveraudio.org/) and [VST3](https://github.com/steinbergmedia/vst3sdk) plugin abstractions, providing a framework for creating versatile and compatible audio plugins.
-- **Cross-Platform Compatibility:** Consistent and reliable on Windows, macOS, Linux, Wasm, iOS and Android.
-- **Extensive Testing Infrastructure:** Massive set of unit and integration tests to validate functionality.
-- **Community-Driven Development:** As an open-source project, YUP thrives on contributions from developers around the globe.
+- graphics and GUI rendering across desktop and Wasm;
+- DSP and audio analysis components;
+- audio graph editing and visualization;
+- CLAP/VST3 plugin creation and hosting;
+- documentation, examples, and platform coverage.
 
 
 ## Supported Platforms
@@ -117,7 +134,7 @@ YUP brings a suite of powerful features, including:
 ## Supported Plugin Formats
 |                          | **CLAP**           | **VST3**           | **VST2**           | **AUv3**           | **AUv2**                  | **AAX**               | **LV2**               |
 |--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|:---------------------:|
-| **Windows**              | :construction:     | :construction:     |                    |                    |                           |                       |                       |
+| **Windows**              | :white_check_mark: | :construction:     |                    |                    |                           |                       |                       |
 | **macOS**                | :white_check_mark: | :construction:     |                    |                    | :construction:            |                       |                       |
 | **Linux**                | :construction:     | :construction:     |                    |                    |                           |                       |                       |
 
@@ -126,13 +143,12 @@ YUP brings a suite of powerful features, including:
 |                          | **CLAP**           | **VST3**           | **VST2**           | **AUv3**           | **AUv2**                  | **AAX**               | **LV2**               |
 |--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|:---------------------:|
 | **Windows**              | :construction:     | :construction:     |                    |                    |                           |                       |                       |
-| **macOS**                | :construction:     | :construction:     |                    |                    | :white_check_mark:        |                       |                       |
+| **macOS**                | :construction:     | :white_check_mark: |                    |                    | :white_check_mark:        |                       |                       |
 | **Linux**                | :construction:     | :construction:     |                    |                    |                           |                       |                       |
 
 
 ## Supported Sound Formats
-
-|                   | **Wav**            | **Wav64**          | **Mp3**            | **OGG**            | **Flac**           | **Opus**           | **AAC**            | **WMF**            |
+|                   | **Wav**            | **Wav64**          | **Mp3**            | **OGG**            | **Flac**           | **Opus**           | **AAC**            | **WMF**            |
 |-------------------|:------------------:|:------------------:|:------------------:|:------------------:|:------------------:|:------------------:|:------------------:|:------------------:|
 | **Windows** (enc) | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 | **Windows** (dec) | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
@@ -149,7 +165,7 @@ YUP brings a suite of powerful features, including:
 
 
 ## Prerequisites
-Before building, ensure you have a:
+Before building, make sure you have:
 - C++20-compliant compiler
 - CMake 3.31 or later
 
@@ -168,7 +184,7 @@ Required packages:
 ```bash
 sudo apt-get update && sudo apt-get install -y \
     libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfreetype6-dev \
-    libx11-dev libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev \
+    libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev \
     libxrandr-dev libxrender-dev libglu1-mesa-dev mesa-common-dev
 ```
 
@@ -190,27 +206,30 @@ cd yup
 ```
 
 ## Using just
-To ease bootstrapping, a provided `justfile` allows to quickly launch default configurations (see https://github.com/casey/just for more information):
+To ease bootstrapping, the provided `justfile` wraps common CMake workflows (see https://github.com/casey/just for more information):
 
 ```bash
 $ just
 Available recipes:
-    android                                 # generate and open project for Android using Android Studio
+    android                                 # generate and open project for Android
     build CONFIG="Debug"                    # build project using cmake
     clean                                   # clean project build artifacts
     c                                       # alias for `clean`
     default                                 # list available recipes
-    emscripten CONFIG="Debug"               # generate build and serve project for WASM
-    emscripten_serve CONFIG="Debug"         # serve project for WASM
+    emscripten CONFIG="Debug"               # generate and build project for WASM
+    emscripten_test CONFIG="Debug"          # run tests for WASM
+    emscripten_serve                        # serve project for WASM
     ios PLATFORM="OS64"                     # generate and open project for iOS using Xcode
     ios_simulator PLATFORM="SIMULATORARM64" # generate and open project for iOS Simulator macOS using Xcode
     linux PROFILING="OFF"                   # generate project in Linux using Ninja
     mac PROFILING="OFF"                     # generate and open project in macOS using Xcode
+    ninja PROFILING="OFF"                   # generate project using Ninja Multi-Config
     win PROFILING="OFF"                     # generate and open project in Windows using Visual Studio
 ```
 
+
 ## Preparing the build directory
-Create a Dedicated Build Directory:
+Create a dedicated build directory:
 
 ```bash
 mkdir -p build
@@ -225,7 +244,7 @@ Generate the build system files with CMake.
 For a standard desktop build with tests and examples enabled, run:
 
 ```bash
-cmake . -B build -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON
+cmake -S . -B build -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON
 cmake --build build --config Release --parallel 4
 ```
 
@@ -234,8 +253,8 @@ cmake --build build --config Release --parallel 4
 Android will rely on cmake for configuration and gradlew will again call into cmake to build the native part of yup:
 
 ```bash
-cmake -G "Ninja Multi-Config" . -B build -DYUP_TARGET_ANDROID=ON -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON
-cd build/examples/render
+cmake -G "Ninja Multi-Config" -S . -B build -DYUP_TARGET_ANDROID=ON -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON
+cd build/examples/graphics
 ./gradlew assembleRelease
 # ./gradlew assembleDebug
 ```
@@ -245,7 +264,7 @@ cd build/examples/render
 You can either use Ninja or Xcode:
 
 ```bash
-cmake -G "Ninja Multi-Config" . -B build -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake -DPLATFORM=OS64 -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+cmake -G "Ninja Multi-Config" -S . -B build -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake -DPLATFORM=OS64 -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON
 cmake --build build --config Release --parallel 4
 ```
 
@@ -254,22 +273,22 @@ cmake --build build --config Release --parallel 4
 Use Emscripten’s helper command, after having activated the emsdk (refer to https://emscripten.org/docs/getting_started/downloads.html how to install and activate Emscripten):
 
 ```bash
-emcmake cmake -G "Ninja Multi-Config" . -B build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+emcmake cmake -G "Ninja Multi-Config" -S . -B build -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON
 cmake --build build --config Release --parallel 4
 python3 -m http.server -d build
 ```
 
-These command builds the project in Release mode. Replace `Release` with `Debug` if you need a debug build.
+These commands build the project in Release mode. Replace `Release` with `Debug` if you need a debug build.
 
 
 ## Running Tests and Examples
 After compilation, you can validate the build and explore YUP’s features:
 
-- Run Tests:
-Build and execute the yup_tests target to run the automated test suite.
+- Run tests:
+Build and execute the `yup_tests` target to run the automated test suite.
 
-- Build Examples:
-Compile example targets like example_app, example_console, or example_render to see practical implementations.
+- Build examples:
+Compile example targets like `example_app`, `example_console`, or `example_graphics` to see practical implementations.
 
 
 ## Running Your First Application
@@ -323,7 +342,7 @@ struct MyApplication : yup::YUPApplication
         window = std::make_unique<MyWindow>();
         window->centreWithSize ({ 1080, 2400 });
         window->setVisible (true);
-        window->toFront(true);
+        window->toFront (true);
     }
 
     void shutdown() override
@@ -364,8 +383,9 @@ yup_standalone_app (
     TARGET_IDE_GROUP "MyApp"
     TARGET_APP_ID "my.company.${target_name}"
     TARGET_APP_NAMESPACE "my.company"
+    TARGET_CXX_STANDARD 20
     INITIAL_MEMORY 268435456
-    MODULES yup_gui)
+    MODULES yup::yup_gui)
 
 if (NOT YUP_TARGET_ANDROID)
     file (GLOB sources "${CMAKE_CURRENT_LIST_DIR}/*.cpp")
@@ -376,19 +396,28 @@ endif()
 
 
 ## Documentation
-For full documentation, including more detailed tutorials and comprehensive API references, please visit [YUP Documentation](https://yup.github.io/docs).
+Start with the guides in this repository:
 
+- [Building standalone applications](./docs/Building%20Standalone.md)
+- [Building audio plugins](./docs/Building%20Plugins.md)
+- [DataTree tutorial](./docs/tutorials/DataTree%20Tutorial.md)
+- [YUP module format](./docs/YUP%20Module%20Format.md)
 
-## Community Engagement
-Join our growing community and contribute to the YUP project. Connect with us and other YUP developers:
-- **GitHub:** [YUP Repository](https://github.com/kunitoki/yup)
+## Contributing
+YUP is looking for collaborators who want to help shape a permissively licensed C++ app, graphics, audio, and plugin framework. Useful contributions include:
 
-> [!IMPORTANT]
-> We are looking for collaborators to bring forward the framework!
+- testing examples on real hardware and DAWs;
+- improving platform-specific build and packaging paths;
+- writing focused examples and tutorials;
+- reporting API friction while building real applications;
+- contributing DSP, GUI, audio graph, and plugin-hosting fixes.
+
+Open an issue or pull request on the [YUP repository](https://github.com/kunitoki/yup).
+
 
 ## License
 YUP is distributed under the ISC License, supporting both personal and commercial use, modification, and distribution without restrictions.
 
 
 ## Acknowledgments
-YUP was born in response to JUCE8’s shift to a more restrictive licensing model. By forking JUCE7’s community-driven, ISC-licensed modules, we aim to preserve and continue a legacy of high-quality, freely accessible software development. We are grateful to the JUCE7 community for laying the groundwork for this initiative.
+YUP continues from the ISC-licensed JUCE7 modules and builds on the work of the JUCE community. The goal is to preserve that permissive foundation while evolving the rendering, audio, plugin, and cross-platform application layers in a direction that remains open for commercial and non-commercial projects.

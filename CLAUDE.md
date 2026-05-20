@@ -10,6 +10,7 @@ This document provides directive guidelines for AI assistants working on the YUP
 - **Build System:** CMake
 - **Testing Framework:** Google Test
 - **Primary Dependencies:** Rive, OpenGL/Metal/D3D
+- **C++ Standard**: >= C++20
 
 ## Code Generation Rules
 
@@ -66,6 +67,8 @@ For main module headers (e.g., `yup_graphics.h`), include this declaration block
   ==============================================================================
 */
 ```
+
+Refer to `./docs/YUP Module Format.md` for more info if needed.
 
 ### 3. Formatting Rules (Allman Style)
 ```cpp
@@ -278,16 +281,21 @@ TEST (ClassNameTests, StaticMethodBehavesCorrectly)
 
 ## AI Decision Making Rules
 
-### When implementing new features:
-1. **Check existing patterns** in similar modules first
-2. **Use YUP conventions** for similar functionality
-3. **Prefer composition over inheritance**
-4. **Make classes small and focused** (single responsibility)
-5. **Use const-correctness** throughout
-6. **Do not leak internal details**
-7. **Follow the open-closed principle**
-8. **Always provide extensive and useful doxygen documentation** for public APIs
+### Always:
+1. **Rely on the C++20 language and standard library** so use it (unless the feature is not supported in all YUP's platforms)
+2. **Check existing patterns** in similar modules first
+3. **Use YUP conventions** for similar functionality
+4. **Use YUP infrastructure** instead of reinventing the wheel
+5. **Prefer composition over inheritance**
+6. **Make classes small and focused** (single responsibility)
+6. **Use const-correctness** throughout
+7. **Do not leak internal details**
+8. **Follow the open-closed principle**
 9. **Never assume we use plain JUCE7 functionality, always check APIs** as they might have evolved
+
+### When implementing new features:
+1. **Always provide extensive and useful doxygen documentation** for public APIs
+2. **Make sure new code is always tested**
 
 ### When writing tests:
 1. **Test primarily public interfaces only**

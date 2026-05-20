@@ -84,6 +84,7 @@
 #include "yup_core/yup_Span.cpp"
 #include "yup_core/yup_SparseSet.cpp"
 #include "yup_core/yup_SpinLock.cpp"
+#include "yup_core/yup_SqliteDatabase.cpp"
 #include "yup_core/yup_StatisticsAccumulator.cpp"
 #include "yup_core/yup_String.cpp"
 #include "yup_core/yup_StringArray.cpp"

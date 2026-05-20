@@ -388,6 +388,11 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "files/yup_Watchdog.h"
 #include "streams/yup_AndroidDocumentInputSource.h"
 
+#if YUP_MODULE_AVAILABLE_sqlite3_library
+#include "sqlite3_library/sqlite3_library.h"
+#include "database/yup_SqliteDatabase.h"
+#endif
+
 #include "detail/yup_CallbackListenerList.h"
 
 #if YUP_CORE_INCLUDE_OBJC_HELPERS && (YUP_MAC || YUP_IOS)
