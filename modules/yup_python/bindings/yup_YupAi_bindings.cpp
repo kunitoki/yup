@@ -49,15 +49,143 @@ public:
     }
 };
 
+class PyMCPTransport : public MCPTransport
+{
+public:
+    Result sendMessage (const var& message) override
+    {
+        py::gil_scoped_acquire gil;
+        auto override = py::get_override (this, "sendMessage");
+
+        if (! override)
+            py::pybind11_fail ("Tried to call pure virtual function \"MCPTransport.sendMessage\"");
+
+        auto result = override (message);
+
+        if (py::isinstance<Result> (result))
+            return result.cast<Result>();
+
+        if (result.is_none() || result.cast<bool>())
+            return Result::ok();
+
+        return Result::fail ("Python MCPTransport.sendMessage returned false");
+    }
+
+    ResultValue<var> receiveMessage (int timeoutMs = -1) override
+    {
+        py::gil_scoped_acquire gil;
+        auto override = py::get_override (this, "receiveMessage");
+
+        if (! override)
+            py::pybind11_fail ("Tried to call pure virtual function \"MCPTransport.receiveMessage\"");
+
+        auto result = override (timeoutMs);
+        if (result.is_none())
+            return makeResultValueFail ("Python MCPTransport.receiveMessage returned None");
+
+        return makeResultValueOk (result.cast<var>());
+    }
+
+    void setMessageHandler (MessageHandler handler) override
+    {
+        py::gil_scoped_acquire gil;
+        auto override = py::get_override (this, "setMessageHandler");
+
+        if (! override)
+            py::pybind11_fail ("Tried to call pure virtual function \"MCPTransport.setMessageHandler\"");
+
+        override (std::move (handler));
+    }
+
+    Result start() override
+    {
+        py::gil_scoped_acquire gil;
+        auto override = py::get_override (this, "start");
+
+        if (! override)
+            py::pybind11_fail ("Tried to call pure virtual function \"MCPTransport.start\"");
+
+        auto result = override();
+
+        if (py::isinstance<Result> (result))
+            return result.cast<Result>();
+
+        if (result.is_none() || result.cast<bool>())
+            return Result::ok();
+
+        return Result::fail ("Python MCPTransport.start returned false");
+    }
+
+    void stop() override
+    {
+        py::gil_scoped_acquire gil;
+        auto override = py::get_override (this, "stop");
+
+        if (! override)
+            py::pybind11_fail ("Tried to call pure virtual function \"MCPTransport.stop\"");
+
+        override();
+    }
+
+    bool isConnected() const noexcept override
+    {
+        py::gil_scoped_acquire gil;
+        auto override = py::get_override (this, "isConnected");
+
+        if (! override)
+            return false;
+
+        try
+        {
+            return override().cast<bool>();
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+};
+
 String messageRepr (const LLMMessage& message)
 {
     return "LLMMessage(role='" + LLMMessage::roleToString (message.role) + "', content='" + message.content + "')";
+}
+
+py::object optionalJsonRpcRequestToPython (const std::optional<JsonRpcRequest>& value)
+{
+    return value.has_value() ? py::cast (*value) : py::none();
+}
+
+py::object optionalJsonRpcResponseToPython (const std::optional<JsonRpcResponse>& value)
+{
+    return value.has_value() ? py::cast (*value) : py::none();
+}
+
+py::object optionalJsonRpcErrorToPython (const std::optional<JsonRpcError>& value)
+{
+    return value.has_value() ? py::cast (*value) : py::none();
+}
+
+py::object optionalMCPToolDefinitionToPython (const std::optional<MCPToolDefinition>& value)
+{
+    return value.has_value() ? py::cast (*value) : py::none();
+}
+
+py::object optionalMCPResourceDefinitionToPython (const std::optional<MCPResourceDefinition>& value)
+{
+    return value.has_value() ? py::cast (*value) : py::none();
 }
 } // namespace
 
 void registerYupAiBindings (py::module_& m)
 {
     auto ai = m.def_submodule ("ai");
+
+    ai.attr ("MCP_PARSE_ERROR") = MCPErrorCodes::parseError;
+    ai.attr ("MCP_INVALID_REQUEST") = MCPErrorCodes::invalidRequest;
+    ai.attr ("MCP_METHOD_NOT_FOUND") = MCPErrorCodes::methodNotFound;
+    ai.attr ("MCP_INVALID_PARAMS") = MCPErrorCodes::invalidParams;
+    ai.attr ("MCP_INTERNAL_ERROR") = MCPErrorCodes::internalError;
 
     py::enum_<LLMMessage::Role> (ai, "LLMMessageRole")
         .value ("system", LLMMessage::Role::system)
@@ -226,6 +354,157 @@ void registerYupAiBindings (py::module_& m)
         .def ("embed", &EmbeddingModel::embed)
         .def ("embedBatch", &EmbeddingModel::embedBatch)
         .def_static ("cosineSimilarity", &EmbeddingModel::cosineSimilarity);
+
+    py::class_<JsonRpcError> (ai, "JsonRpcError")
+        .def (py::init<>())
+        .def_readwrite ("code", &JsonRpcError::code)
+        .def_readwrite ("message", &JsonRpcError::message)
+        .def_readwrite ("data", &JsonRpcError::data)
+        .def ("toVar", &JsonRpcError::toVar)
+        .def_static ("fromVar", [] (const var& value)
+    {
+        return optionalJsonRpcErrorToPython (JsonRpcError::fromVar (value));
+    });
+
+    py::class_<JsonRpcRequest> (ai, "JsonRpcRequest")
+        .def (py::init<>())
+        .def_readwrite ("jsonrpc", &JsonRpcRequest::jsonrpc)
+        .def_readwrite ("id", &JsonRpcRequest::id)
+        .def_readwrite ("method", &JsonRpcRequest::method)
+        .def_readwrite ("params", &JsonRpcRequest::params)
+        .def ("isNotification", &JsonRpcRequest::isNotification)
+        .def ("toVar", &JsonRpcRequest::toVar)
+        .def_static ("fromVar", [] (const var& value)
+    {
+        return optionalJsonRpcRequestToPython (JsonRpcRequest::fromVar (value));
+    });
+
+    py::class_<JsonRpcResponse> (ai, "JsonRpcResponse")
+        .def (py::init<>())
+        .def_readwrite ("jsonrpc", &JsonRpcResponse::jsonrpc)
+        .def_readwrite ("id", &JsonRpcResponse::id)
+        .def_readwrite ("result", &JsonRpcResponse::result)
+        .def_readwrite ("error", &JsonRpcResponse::error)
+        .def ("isError", &JsonRpcResponse::isError)
+        .def ("toVar", &JsonRpcResponse::toVar)
+        .def_static ("fromVar", [] (const var& value)
+    {
+        return optionalJsonRpcResponseToPython (JsonRpcResponse::fromVar (value));
+    });
+
+    py::class_<MCPCapabilities> (ai, "MCPCapabilities")
+        .def (py::init<>())
+        .def_readwrite ("supportsTools", &MCPCapabilities::supportsTools)
+        .def_readwrite ("supportsResources", &MCPCapabilities::supportsResources)
+        .def_readwrite ("supportsPrompts", &MCPCapabilities::supportsPrompts)
+        .def_readwrite ("supportsLogging", &MCPCapabilities::supportsLogging)
+        .def ("toVar", &MCPCapabilities::toVar)
+        .def_static ("fromVar", &MCPCapabilities::fromVar);
+
+    py::class_<MCPToolDefinition> (ai, "MCPToolDefinition")
+        .def (py::init<>())
+        .def_readwrite ("name", &MCPToolDefinition::name)
+        .def_readwrite ("description", &MCPToolDefinition::description)
+        .def_readwrite ("inputSchema", &MCPToolDefinition::inputSchema)
+        .def ("toVar", &MCPToolDefinition::toVar)
+        .def_static ("fromVar", [] (const var& value)
+    {
+        return optionalMCPToolDefinitionToPython (MCPToolDefinition::fromVar (value));
+    });
+
+    py::class_<MCPResourceDefinition> (ai, "MCPResourceDefinition")
+        .def (py::init<>())
+        .def_readwrite ("uri", &MCPResourceDefinition::uri)
+        .def_readwrite ("name", &MCPResourceDefinition::name)
+        .def_readwrite ("description", &MCPResourceDefinition::description)
+        .def_readwrite ("mimeType", &MCPResourceDefinition::mimeType)
+        .def ("toVar", &MCPResourceDefinition::toVar)
+        .def_static ("fromVar", [] (const var& value)
+    {
+        return optionalMCPResourceDefinitionToPython (MCPResourceDefinition::fromVar (value));
+    });
+
+    py::class_<MCPTransport, PyMCPTransport> (ai, "MCPTransport")
+        .def (py::init<>())
+        .def ("sendMessage", &MCPTransport::sendMessage)
+        .def ("receiveMessage", [] (MCPTransport& self, int timeoutMs)
+    {
+        auto result = self.receiveMessage (timeoutMs);
+        if (result.failed())
+            py::pybind11_fail (result.getErrorMessage().toRawUTF8());
+
+        return result.getValue();
+    },
+              "timeoutMs"_a = -1)
+        .def ("setMessageHandler", &MCPTransport::setMessageHandler)
+        .def ("start", &MCPTransport::start)
+        .def ("stop", &MCPTransport::stop)
+        .def ("isConnected", &MCPTransport::isConnected);
+
+    py::class_<MCPClient> (ai, "MCPClient")
+        .def (py::init<std::unique_ptr<MCPTransport>>(), "transport"_a)
+        .def ("initialize", &MCPClient::initialize, "clientCapabilities"_a = MCPCapabilities {})
+        .def ("listTools", &MCPClient::listTools)
+        .def ("callTool", [] (MCPClient& self, const String& toolName, const var& arguments)
+    {
+        auto result = self.callTool (toolName, arguments);
+        if (result.failed())
+            py::pybind11_fail (result.getErrorMessage().toRawUTF8());
+
+        return result.getValue();
+    },
+              "toolName"_a,
+              "arguments"_a)
+        .def ("listResources", &MCPClient::listResources)
+        .def ("readResource", [] (MCPClient& self, const String& uri)
+    {
+        auto result = self.readResource (uri);
+        if (result.failed())
+            py::pybind11_fail (result.getErrorMessage().toRawUTF8());
+
+        return result.getValue();
+    },
+              "uri"_a)
+        .def ("registerToolsWith", &MCPClient::registerToolsWith)
+        .def ("getTransport", &MCPClient::getTransport, py::return_value_policy::reference_internal);
+
+    py::class_<MCPServer::Options> (ai, "MCPServerOptions")
+        .def (py::init<>())
+        .def_readwrite ("serverName", &MCPServer::Options::serverName)
+        .def_readwrite ("serverVersion", &MCPServer::Options::serverVersion)
+        .def_readwrite ("capabilities", &MCPServer::Options::capabilities);
+
+    py::class_<MCPServer> (ai, "MCPServer")
+        .def (py::init<>())
+        .def (py::init<MCPServer::Options>())
+        .def ("registerTool", [] (MCPServer& self, MCPToolDefinition tool, py::function function)
+    {
+        self.registerTool (std::move (tool), [function = std::move (function)] (const var& arguments) -> var
+        {
+            py::gil_scoped_acquire gil;
+            return function (arguments).cast<var>();
+        });
+    },
+              "tool"_a,
+              "function"_a)
+        .def ("registerLLMTool", static_cast<void (MCPServer::*) (LLMTool)> (&MCPServer::registerTool), "tool"_a)
+        .def ("unregisterTool", &MCPServer::unregisterTool)
+        .def ("registerResource", [] (MCPServer& self, MCPResourceDefinition resource, py::function function)
+    {
+        self.registerResource (std::move (resource), [function = std::move (function)]() -> String
+        {
+            py::gil_scoped_acquire gil;
+            return py::str (function()).cast<String>();
+        });
+    },
+              "resource"_a,
+              "function"_a)
+        .def ("unregisterResource", &MCPServer::unregisterResource)
+        .def ("start", &MCPServer::start, "transport"_a)
+        .def ("stop", &MCPServer::stop)
+        .def ("isRunning", &MCPServer::isRunning)
+        .def ("startStdio", &MCPServer::startStdio)
+        .def ("startHttp", &MCPServer::startHttp, "port"_a);
 }
 
 } // namespace yup::Bindings

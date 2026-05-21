@@ -631,6 +631,73 @@ TEST (YupAiMCPServer, IgnoresNotifications)
     EXPECT_TRUE (transportPtr->sentMessages.empty());
 }
 
+TEST (YupAiMCPServer, UnregistersToolsAndResources)
+{
+    MCPServer server;
+    server.registerTool (makeEchoToolDefinition(), [] (const var& arguments)
+    {
+        return arguments["value"];
+    });
+
+    MCPResourceDefinition resource;
+    resource.uri = "yup://test/status";
+    resource.name = "Status";
+    resource.description = "Test status.";
+    server.registerResource (resource, []
+    {
+        return String ("ok");
+    });
+
+    server.unregisterTool ("echo");
+    server.unregisterResource ("yup://test/status");
+
+    auto transport = std::make_unique<ServerCaptureTransport>();
+    auto* transportPtr = transport.get();
+    ASSERT_TRUE (server.start (std::move (transport)).wasOk());
+
+    transportPtr->deliver (makeTestRequest (1, "tools/list").toVar());
+    auto toolsResponse = JsonRpcResponse::fromVar (transportPtr->sentMessages.back());
+    ASSERT_TRUE (toolsResponse.has_value());
+    ASSERT_TRUE (toolsResponse->result.has_value());
+    EXPECT_EQ (0, (*toolsResponse->result)["tools"].size());
+
+    transportPtr->deliver (makeTestRequest (2, "resources/list").toVar());
+    auto resourcesResponse = JsonRpcResponse::fromVar (transportPtr->sentMessages.back());
+    ASSERT_TRUE (resourcesResponse.has_value());
+    ASSERT_TRUE (resourcesResponse->result.has_value());
+    EXPECT_EQ (0, (*resourcesResponse->result)["resources"].size());
+
+    transportPtr->deliver (makeTestRequest (3, "resources/read", JSON::parse (R"({
+        "uri": "yup://test/status"
+    })"))
+                               .toVar());
+    auto readResponse = JsonRpcResponse::fromVar (transportPtr->sentMessages.back());
+    ASSERT_TRUE (readResponse.has_value());
+    ASSERT_TRUE (readResponse->error.has_value());
+    EXPECT_EQ (MCPErrorCodes::invalidParams, readResponse->error->code);
+}
+
+TEST (YupAiMCPServer, ReturnsInvalidRequestForMalformedJsonRpc)
+{
+    MCPServer server;
+    auto transport = std::make_unique<ServerCaptureTransport>();
+    auto* transportPtr = transport.get();
+    ASSERT_TRUE (server.start (std::move (transport)).wasOk());
+
+    transportPtr->deliver (JSON::parse (R"({
+        "jsonrpc": "2.0",
+        "id": 4,
+        "result": { "unexpected": true }
+    })"));
+
+    ASSERT_EQ (1u, transportPtr->sentMessages.size());
+    auto response = JsonRpcResponse::fromVar (transportPtr->sentMessages.back());
+    ASSERT_TRUE (response.has_value());
+    ASSERT_TRUE (response->error.has_value());
+    EXPECT_EQ (4, static_cast<int> (response->id));
+    EXPECT_EQ (MCPErrorCodes::invalidRequest, response->error->code);
+}
+
 TEST (YupAiMCPIntegration, ClientAndServerCommunicateOverLinkedTransports)
 {
     auto clientTransport = std::make_unique<LinkedMCPTransport>();

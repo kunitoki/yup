@@ -293,7 +293,8 @@ void MCPServer::unregisterTool (const String& name)
 void MCPServer::registerResource (MCPResourceDefinition resource, std::function<String()> reader)
 {
     const ScopedLock lock (pimpl->mutex);
-    pimpl->resourcesByUri[resource.uri] = Pimpl::ResourceEntry { std::move (resource), std::move (reader) };
+    const auto uri = resource.uri;
+    pimpl->resourcesByUri[uri] = Pimpl::ResourceEntry { std::move (resource), std::move (reader) };
     pimpl->options.capabilities.supportsResources = true;
 }
 
