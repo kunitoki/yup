@@ -25,6 +25,32 @@
 
 using namespace yup;
 
+namespace
+{
+File getStyledTextTestFontFile()
+{
+    return
+#if YUP_EMSCRIPTEN
+        File ("/")
+#else
+        File (__FILE__)
+            .getParentDirectory()
+            .getParentDirectory()
+#endif
+            .getChildFile ("data")
+            .getChildFile ("fonts")
+            .getChildFile ("Linefont-VariableFont_wdth,wght.ttf");
+}
+
+Font loadStyledTextTestFont (float height = 16.0f)
+{
+    Font font;
+    auto result = font.loadFromFile (getStyledTextTestFontFile());
+    EXPECT_TRUE (result.wasOk());
+    return font.withHeight (height);
+}
+} // namespace
+
 // ==============================================================================
 // Default Constructor and State Tests
 // ==============================================================================
@@ -962,4 +988,122 @@ TEST (StyledTextTests, AllAlignmentCombinations)
             EXPECT_EQ (vAlign, text.getVerticalAlign());
         }
     }
+}
+
+// ==============================================================================
+// Shaped Text Tests
+// ==============================================================================
+
+TEST (StyledTextTests, AppendingTextProducesLinesBoundsAndRenderStyles)
+{
+    StyledText text;
+    auto font = loadStyledTextTestFont();
+    const String testText = "Hello shaped text";
+
+    {
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize ({ 400.0f, 200.0f });
+        modifier.appendText (testText, font);
+    }
+
+    EXPECT_FALSE (text.isEmpty());
+    EXPECT_FALSE (text.needsUpdate());
+    EXPECT_FALSE (text.getOrderedLines().empty());
+    EXPECT_FALSE (text.getRenderStyles().empty());
+
+    const auto bounds = text.getComputedTextBounds();
+    EXPECT_GT (bounds.getWidth(), 0.0f);
+    EXPECT_GT (bounds.getHeight(), 0.0f);
+
+    EXPECT_TRUE (text.isValidCharacterIndex (0));
+    EXPECT_TRUE (text.isValidCharacterIndex (testText.length()));
+    EXPECT_FALSE (text.isValidCharacterIndex (testText.length() + 1));
+
+    EXPECT_FALSE (text.getCaretBounds (0).isEmpty());
+    EXPECT_FALSE (text.getCaretBounds (testText.length()).isEmpty());
+}
+
+TEST (StyledTextTests, CaretBoundsHandleNewlinesEmptyParagraphsAndTrailingNewline)
+{
+    StyledText text;
+    auto font = loadStyledTextTestFont();
+
+    {
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize ({ 400.0f, 400.0f });
+        modifier.setWrap (StyledText::wrap);
+        modifier.appendText ("first\n\nlast\n", font);
+    }
+
+    const auto firstLineNewline = text.getCaretBounds (5);
+    const auto emptyParagraphNewline = text.getCaretBounds (6);
+    const auto trailingNewline = text.getCaretBounds (12);
+
+    ASSERT_FALSE (firstLineNewline.isEmpty());
+    ASSERT_FALSE (emptyParagraphNewline.isEmpty());
+    ASSERT_FALSE (trailingNewline.isEmpty());
+
+    EXPECT_GT (emptyParagraphNewline.getY(), firstLineNewline.getY());
+    EXPECT_GT (trailingNewline.getY(), emptyParagraphNewline.getY());
+}
+
+TEST (StyledTextTests, SelectionRectanglesCoverMultipleVisualLines)
+{
+    StyledText text;
+    auto font = loadStyledTextTestFont();
+
+    {
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize ({ 400.0f, 400.0f });
+        modifier.appendText ("one\ntwo\nthree", font);
+    }
+
+    const auto rectangles = text.getSelectionRectangles (1, 11);
+
+    ASSERT_GE (rectangles.size(), 3u);
+    EXPECT_LT (rectangles[0].getY(), rectangles[1].getY());
+    EXPECT_LT (rectangles[1].getY(), rectangles[2].getY());
+}
+
+TEST (StyledTextTests, ClearRemovesPreviouslyShapedLineAndRenderData)
+{
+    StyledText text;
+    auto font = loadStyledTextTestFont();
+
+    {
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize ({ 400.0f, 400.0f });
+        modifier.appendText ("temporary text", font);
+    }
+
+    ASSERT_FALSE (text.getOrderedLines().empty());
+    ASSERT_FALSE (text.getRenderStyles().empty());
+    ASSERT_GT (text.getComputedTextBounds().getWidth(), 0.0f);
+
+    {
+        auto modifier = text.startUpdate();
+        modifier.clear();
+    }
+
+    EXPECT_TRUE (text.isEmpty());
+    EXPECT_TRUE (text.getOrderedLines().empty());
+    EXPECT_TRUE (text.getRenderStyles().empty());
+    EXPECT_TRUE (text.getComputedTextBounds().isEmpty());
+    EXPECT_TRUE (text.isValidCharacterIndex (0));
+    EXPECT_FALSE (text.isValidCharacterIndex (1));
+}
+
+TEST (StyledTextTests, AdjacentLineMovementClampsAtDocumentEdges)
+{
+    StyledText text;
+    auto font = loadStyledTextTestFont();
+
+    {
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize ({ 400.0f, 400.0f });
+        modifier.appendText ("one\ntwo", font);
+    }
+
+    EXPECT_EQ (0, text.getGlyphIndexOnAdjacentLine (0, false));
+    EXPECT_EQ (7, text.getGlyphIndexOnAdjacentLine (7, true));
 }

@@ -21,6 +21,8 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
+
 #include <yup_core/yup_core.h>
 
 using namespace yup;
@@ -60,6 +62,55 @@ TEST (ResultValueTests, ConversionOperators)
     EXPECT_FALSE (static_cast<bool> (failure));
     EXPECT_FALSE (! success);
     EXPECT_TRUE (! failure);
+}
+
+TEST (ResultValueTests, ValueOrReturnsStoredValueForSuccess)
+{
+    auto result = ResultValue<int>::ok (42);
+
+    EXPECT_EQ (result.valueOr (7), 42);
+}
+
+TEST (ResultValueTests, ValueOrReturnsDefaultValueForFailure)
+{
+    auto result = ResultValue<int>::fail ("Error");
+
+    EXPECT_EQ (result.valueOr (7), 7);
+}
+
+TEST (ResultValueTests, ValueOrAcceptsLvalueDefault)
+{
+    auto result = ResultValue<int>::fail ("Error");
+    int defaultValue = 7;
+
+    EXPECT_EQ (result.valueOr (defaultValue), defaultValue);
+}
+
+TEST (ResultValueTests, ValueOrAcceptsConvertibleDefault)
+{
+    auto result = ResultValue<double>::fail ("Error");
+
+    EXPECT_DOUBLE_EQ (result.valueOr (7), 7.0);
+}
+
+TEST (ResultValueTests, ValueOrMovesStoredValueFromRvalueResult)
+{
+    auto result = ResultValue<std::unique_ptr<int>>::ok (std::make_unique<int> (42));
+
+    auto value = std::move (result).valueOr (std::make_unique<int> (7));
+
+    ASSERT_NE (value, nullptr);
+    EXPECT_EQ (*value, 42);
+}
+
+TEST (ResultValueTests, ValueOrMovesDefaultValueFromRvalueFailure)
+{
+    auto result = ResultValue<std::unique_ptr<int>>::fail ("Error");
+
+    auto value = std::move (result).valueOr (std::make_unique<int> (7));
+
+    ASSERT_NE (value, nullptr);
+    EXPECT_EQ (*value, 7);
 }
 
 TEST (ResultValueTests, CopyConstructor)
