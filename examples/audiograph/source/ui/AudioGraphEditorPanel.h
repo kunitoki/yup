@@ -292,6 +292,12 @@ private:
             if (panel == nullptr)
                 return false;
 
+            if (stateToPerform == yup::UndoableActionState::Redo && skipNextRedo)
+            {
+                skipNextRedo = false;
+                return true;
+            }
+
             return panel->restoreSnapshotForUndo (stateToPerform == yup::UndoableActionState::Redo ? after : before);
         }
 
@@ -299,6 +305,7 @@ private:
         AudioGraphEditorPanel* panel = nullptr;
         yup::AudioGraphModel::Snapshot before;
         yup::AudioGraphModel::Snapshot after;
+        bool skipNextRedo = true;
     };
 
     void addSnapshotUndoAction (const yup::AudioGraphModel::Snapshot& before,
