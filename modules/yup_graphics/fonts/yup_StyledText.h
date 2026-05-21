@@ -170,6 +170,18 @@ public:
     */
     Rectangle<float> getCaretBounds (int characterIndex) const;
 
+    /** Returns the character index at the same horizontal position on an adjacent visual line.
+
+        This uses the shaped and wrapped line data, so soft-wrapped lines are treated the same
+        as explicit newline-separated lines.
+
+        @param characterIndex   The current caret character index
+        @param moveDown         True to move to the next visual line, false to move to the previous visual line
+
+        @returns The character index on the adjacent visual line, or the nearest valid boundary
+    */
+    int getGlyphIndexOnAdjacentLine (int characterIndex, bool moveDown) const;
+
     /** Returns all selection rectangles for multiline selections.
 
         @param startIndex   The start character index
@@ -209,6 +221,8 @@ private:
     void setWrap (TextWrap value);
 
     void update();
+    int findParagraphNewlinePosition (int orderedLineIndex) const;
+    int findParagraphNewlinePositionByIndex (int paragraphIndex) const;
 
     rive::SimpleArray<rive::Paragraph> shape;
     rive::SimpleArray<rive::SimpleArray<rive::GlyphLine>> lines;
@@ -228,6 +242,8 @@ private:
     float paragraphSpacing = 0.0f;
     Rectangle<float> bounds;
     bool isDirty = false;
+    std::vector<float> paragraphYOffsets;
+    float defaultLineHeight = 0.0f;
 };
 
 } // namespace yup
