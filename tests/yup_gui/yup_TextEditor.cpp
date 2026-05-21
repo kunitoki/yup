@@ -29,6 +29,16 @@ namespace
 {
 constexpr auto kSingleText = "Hello World";
 constexpr auto kMultilineText = "Line 1\nLine 2\nLine 3";
+
+File getTextEditorTestFontFile()
+{
+    return File (__FILE__)
+        .getParentDirectory()
+        .getParentDirectory()
+        .getChildFile ("data")
+        .getChildFile ("fonts")
+        .getChildFile ("Linefont-VariableFont_wdth,wght.ttf");
+}
 } // namespace
 
 class TextEditorTests : public ::testing::Test
@@ -36,14 +46,30 @@ class TextEditorTests : public ::testing::Test
 protected:
     void SetUp() override
     {
+        oldTheme = ApplicationTheme::getGlobalTheme();
+
+        theme = new ApplicationTheme();
+
+        Font font;
+        auto result = font.loadFromFile (getTextEditorTestFontFile());
+        ASSERT_TRUE (result.wasOk());
+
+        theme->setDefaultFont (std::move (font));
+        ApplicationTheme::setGlobalTheme (theme);
+
         editor = std::make_unique<TextEditor> ("testEditor");
     }
 
     void TearDown() override
     {
         editor.reset();
+        ApplicationTheme::setGlobalTheme (oldTheme.get());
+        theme = nullptr;
+        oldTheme = nullptr;
     }
 
+    ApplicationTheme::Ptr theme;
+    ApplicationTheme::Ptr oldTheme;
     std::unique_ptr<TextEditor> editor;
 };
 
@@ -61,6 +87,13 @@ TEST_F (TextEditorTests, SetTextUpdatesContent)
     editor->setText (kSingleText);
     EXPECT_EQ (String (kSingleText), editor->getText());
     EXPECT_EQ (0, editor->getCaretPosition());
+}
+
+TEST_F (TextEditorTests, SetTextStripsCarriageReturns)
+{
+    editor->setText ("Hello\r\nWorld\r");
+
+    EXPECT_EQ (String ("Hello\nWorld"), editor->getText());
 }
 
 TEST_F (TextEditorTests, CaretPositionHandling)
@@ -106,6 +139,55 @@ TEST_F (TextEditorTests, TextInsertion)
     EXPECT_EQ (11, editor->getCaretPosition());
 }
 
+TEST_F (TextEditorTests, InsertTextNormalizesNewlinesInSingleLineMode)
+{
+    editor->setText ("Hello");
+    editor->setCaretPosition (5);
+
+    editor->insertText ("\r\nWorld");
+
+    EXPECT_EQ (String ("Hello World"), editor->getText());
+    EXPECT_EQ (11, editor->getCaretPosition());
+}
+
+TEST_F (TextEditorTests, InsertTextReplacesSelectionWithSingleNotification)
+{
+    editor->setText ("Hello brave world", dontSendNotification);
+    editor->setSelection (Range<int> (6, 11));
+
+    int callCount = 0;
+    editor->onTextChange = [&callCount]
+    {
+        ++callCount;
+    };
+
+    editor->insertText ("small", sendNotification);
+
+    EXPECT_EQ (String ("Hello small world"), editor->getText());
+    EXPECT_EQ (11, editor->getCaretPosition());
+    EXPECT_FALSE (editor->hasSelection());
+    EXPECT_EQ (1, callCount);
+}
+
+TEST_F (TextEditorTests, InsertTextReplacingSelectionHonorsDontSendNotification)
+{
+    editor->setText ("abcdef", dontSendNotification);
+    editor->setSelection (Range<int> (1, 5));
+
+    int callCount = 0;
+    editor->onTextChange = [&callCount]
+    {
+        ++callCount;
+    };
+
+    editor->insertText ("X", dontSendNotification);
+
+    EXPECT_EQ (String ("aXf"), editor->getText());
+    EXPECT_EQ (2, editor->getCaretPosition());
+    EXPECT_FALSE (editor->hasSelection());
+    EXPECT_EQ (0, callCount);
+}
+
 TEST_F (TextEditorTests, TextDeletion)
 {
     editor->setText (kSingleText);
@@ -124,6 +206,19 @@ TEST_F (TextEditorTests, MultiLineMode)
 
     editor->setText (kMultilineText);
     EXPECT_EQ (String (kMultilineText), editor->getText());
+}
+
+TEST_F (TextEditorTests, StyledTextWrapModeFollowsMultiLineMode)
+{
+    editor->setBounds (0.0f, 0.0f, 200.0f, 100.0f);
+    editor->setText ("A long enough line to exercise styled text setup");
+
+    editor->getCaretBounds();
+    EXPECT_EQ (StyledText::noWrap, editor->getStyledText().getWrap());
+
+    editor->setMultiLine (true);
+    editor->moveCaretDown();
+    EXPECT_EQ (StyledText::wrap, editor->getStyledText().getWrap());
 }
 
 TEST_F (TextEditorTests, ReadOnlyMode)
@@ -281,6 +376,38 @@ TEST_F (TextEditorTests, MoveCaretLeftRight)
     EXPECT_EQ (4, editor->getCaretPosition());
     EXPECT_TRUE (editor->hasSelection());
     EXPECT_EQ (String ("o"), editor->getSelectedText());
+}
+
+TEST_F (TextEditorTests, MoveCaretToLineBoundariesInMultilineText)
+{
+    editor->setMultiLine (true);
+    editor->setText ("abc\ndefg\nhi");
+    editor->setCaretPosition (6);
+
+    editor->moveCaretToStartOfLine();
+    EXPECT_EQ (4, editor->getCaretPosition());
+    EXPECT_FALSE (editor->hasSelection());
+
+    editor->setCaretPosition (6);
+    editor->moveCaretToEndOfLine (true);
+    EXPECT_EQ (8, editor->getCaretPosition());
+    EXPECT_TRUE (editor->hasSelection());
+    EXPECT_EQ (String ("fg"), editor->getSelectedText());
+}
+
+TEST_F (TextEditorTests, ControlArrowKeysMoveAcrossWords)
+{
+    editor->setText ("Hello, brave world");
+    editor->setCaretPosition (7);
+
+    editor->keyDown (KeyPress (KeyPress::rightKey, KeyModifiers (KeyModifiers::controlMask)), {});
+    EXPECT_EQ (12, editor->getCaretPosition());
+    EXPECT_FALSE (editor->hasSelection());
+
+    editor->keyDown (KeyPress (KeyPress::leftKey, KeyModifiers (KeyModifiers::controlMask | KeyModifiers::shiftMask)), {});
+    EXPECT_EQ (7, editor->getCaretPosition());
+    EXPECT_TRUE (editor->hasSelection());
+    EXPECT_EQ (String ("brave"), editor->getSelectedText());
 }
 
 /* TODO: moveCaretToWordEnd/moveCaretToWordStart is private

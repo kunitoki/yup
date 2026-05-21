@@ -178,9 +178,17 @@ StyledText::TextModifier StyledText::startUpdate()
 void StyledText::clear()
 {
     styledTexts.clear();
+    shape = {};
+    lines = {};
+    orderedLines.clear();
+    ellipsisRun = {};
     styles.clear();
-
-    update();
+    renderStyles.clear();
+    glyphLookup.clear();
+    bounds = {};
+    paragraphYOffsets.clear();
+    defaultLineHeight = 0.0f;
+    isDirty = false;
 }
 
 //==============================================================================

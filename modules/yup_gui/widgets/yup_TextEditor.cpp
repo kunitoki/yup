@@ -80,7 +80,7 @@ void TextEditor::insertText (const String& textToInsert, NotificationType notifi
     if (readOnly)
         return;
 
-    deleteSelectedText();
+    deleteSelectedText (dontSendNotification);
 
     String filteredText = textToInsert.removeCharacters ("\r");
     if (! multiLine)
