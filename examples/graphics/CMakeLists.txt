@@ -76,6 +76,7 @@ yup_standalone_app (
         yup::yup_audio_gui
         yup::yup_audio_processors
         yup::yup_audio_formats
+        yup::yup_ai
         pffft_library
         opus_library
         flac_library

@@ -60,6 +60,7 @@ set (target_modules
     yup_audio_formats
     yup_audio_processors
     yup_audio_graph
+    yup_ai
     yup_dsp
     yup_events
     yup_data_model

@@ -25,6 +25,7 @@
 #include <yup_graphics/yup_graphics.h>
 #include <yup_gui/yup_gui.h>
 #include <yup_audio_gui/yup_audio_gui.h>
+#include <yup_ai/yup_ai.h>
 #if YUP_MODULE_AVAILABLE_yup_python
 #include <yup_python/yup_python.h>
 #endif
@@ -37,6 +38,7 @@
 #endif
 
 #include "examples/Artboard.h"
+#include "examples/AI.h"
 #include "examples/Audio.h"
 #include "examples/AudioFileDemo.h"
 #include "examples/ColorLab.h"
@@ -139,6 +141,7 @@ public:
 
         int counter = 0;
 
+        registerDemo<AiDemo> ("AI", counter++);
         registerDemo<AudioExample> ("Audio", counter++);
         registerDemo<AudioFileDemo> ("Audio File", counter++);
         registerDemo<ColorLabDemo> ("Color Lab", counter++);
