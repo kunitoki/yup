@@ -181,6 +181,36 @@ public:
         return valueOrErrorMessage.index() != 1;
     }
 
+    /** Returns a copy of the value that was set when this result was created,
+        or a value constructed from @p defaultValue if the result indicates a failure.
+
+        This overload is available when the held value can be copied. Use the
+        rvalue-qualified overload when working with move-only value types.
+    */
+    template <class U = T>
+    auto valueOr (U&& defaultValue) const& -> std::enable_if_t<std::is_copy_constructible_v<T> && std::is_constructible_v<T, U&&>, T>
+    {
+        if (valueOrErrorMessage.index() == 1)
+            return std::get<1> (valueOrErrorMessage);
+
+        return T (std::forward<U> (defaultValue));
+    }
+
+    /** Returns the moved value that was set when this result was created,
+        or a value constructed from @p defaultValue if the result indicates a failure.
+
+        This overload allows valueOr() to be used with move-only value types when
+        the ResultValue itself is an rvalue.
+    */
+    template <class U = T>
+    auto valueOr (U&& defaultValue) && -> std::enable_if_t<std::is_move_constructible_v<T> && std::is_constructible_v<T, U&&>, T>
+    {
+        if (valueOrErrorMessage.index() == 1)
+            return std::get<1> (std::move (valueOrErrorMessage));
+
+        return T (std::forward<U> (defaultValue));
+    }
+
     /** Returns a copy of the value that was set when this result was created. */
     T getValue() const&
     {
