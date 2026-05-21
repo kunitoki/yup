@@ -904,7 +904,7 @@ void Component::setWantsKeyboardFocus (bool wantsFocus)
 
 void Component::takeKeyboardFocus()
 {
-    if (! options.wantsKeyboardFocus)
+    if (! options.wantsKeyboardFocus || ! isEnabled())
         return;
 
     if (auto nativeComponent = getNativeComponent())
@@ -922,7 +922,7 @@ void Component::leaveKeyboardFocus()
 
 bool Component::hasKeyboardFocus() const
 {
-    if (! options.wantsKeyboardFocus)
+    if (! options.wantsKeyboardFocus || ! isEnabled())
         return false;
 
     if (auto nativeComponent = getNativeComponent())
@@ -1367,7 +1367,7 @@ void Component::internalMouseWheel (const MouseEvent& event, const MouseWheelDat
 
 void Component::internalKeyDown (const KeyPress& keys, const Point<float>& position)
 {
-    if (! isVisible())
+    if (! isVisible() || ! isEnabled())
         return;
 
     keyDown (keys, position);
@@ -1377,7 +1377,7 @@ void Component::internalKeyDown (const KeyPress& keys, const Point<float>& posit
 
 void Component::internalKeyUp (const KeyPress& keys, const Point<float>& position)
 {
-    if (! isVisible())
+    if (! isVisible() || ! isEnabled())
         return;
 
     keyUp (keys, position);
@@ -1387,7 +1387,7 @@ void Component::internalKeyUp (const KeyPress& keys, const Point<float>& positio
 
 void Component::internalTextInput (const String& text)
 {
-    if (! options.wantsKeyboardFocus || ! isVisible())
+    if (! options.wantsKeyboardFocus || ! isVisible() || ! isEnabled())
         return;
 
     textInput (text);

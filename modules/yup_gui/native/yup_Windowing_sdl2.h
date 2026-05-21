@@ -110,6 +110,7 @@ public:
     //==============================================================================
     void startTextInput (Component& component) override;
     void stopTextInput (Component& component) override;
+    void updateTextInputRect (Component& component) override;
 
     //==============================================================================
     void run() override;
@@ -158,6 +159,7 @@ private:
     void startRendering();
     void stopRendering();
     bool isRendering() const;
+    bool hasNativeKeyboardFocus() const;
 
     SDL_Window* window = nullptr;
     SDL_GLContext windowContext = nullptr;
