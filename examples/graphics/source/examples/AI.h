@@ -43,7 +43,7 @@ public:
         modelLabel.setText ("Model", yup::dontSendNotification);
         addAndMakeVisible (modelLabel);
 
-        modelEditor.setText ("llama3.2", yup::dontSendNotification);
+        modelEditor.setText ("gemma4", yup::dontSendNotification);
         modelEditor.setMultiLine (false);
         addAndMakeVisible (modelEditor);
 
@@ -67,6 +67,10 @@ public:
             askModel();
         };
         addAndMakeVisible (askButton);
+
+        toolsToggle.setButtonText ("Tools");
+        toolsToggle.setToggleState (true, yup::dontSendNotification);
+        addAndMakeVisible (toolsToggle);
 
         statusLabel.setText ("Ollama can call set_background_color for this page.", yup::dontSendNotification);
         addAndMakeVisible (statusLabel);
@@ -116,6 +120,8 @@ public:
         auto actionRow = area.removeFromTop (34);
         askButton.setBounds (actionRow.removeFromLeft (96));
         actionRow.removeFromLeft (12);
+        toolsToggle.setBounds (actionRow.removeFromLeft (86));
+        actionRow.removeFromLeft (12);
         statusLabel.setBounds (actionRow);
 
         area.removeFromTop (18);
@@ -138,12 +144,13 @@ private:
     class OllamaRequestThread final : public yup::Thread
     {
     public:
-        OllamaRequestThread (AiDemo& ownerToUse, yup::String modelToUse, yup::String baseUrlToUse, yup::String promptToUse)
+        OllamaRequestThread (AiDemo& ownerToUse, yup::String modelToUse, yup::String baseUrlToUse, yup::String promptToUse, bool useToolsToUse)
             : Thread ("OllamaRequest")
             , owner (ownerToUse)
             , model (std::move (modelToUse))
             , baseUrl (std::move (baseUrlToUse))
             , prompt (std::move (promptToUse))
+            , useTools (useToolsToUse)
             , ownerReference (&ownerToUse)
         {
         }
@@ -159,25 +166,32 @@ private:
             yup::LLMHttpClient client (std::move (options));
 
             yup::LLMClient::Request request;
-            request.systemPrompt = "You are a concise assistant inside a YUP example app. "
-                                   "If the user asks to change the page background, call set_background_color with a CSS color name, #RRGGBB value, rgb(...), or hsl(...). "
-                                   "After a tool result, briefly tell the user what changed.";
             request.messages.push_back (yup::LLMMessage::user (prompt));
             request.temperature = 0.2f;
 
             yup::LLMToolRegistry toolRegistry;
-            owner.registerTools (toolRegistry, ownerReference);
-            request.tools = toolRegistry.getAllTools();
-            request.toolChoice = "auto";
+            if (useTools)
+            {
+                request.systemPrompt = "You are a concise assistant inside a YUP example app. "
+                                       "If the user asks to change the page background, call set_background_color with a CSS color name, #RRGGBB value, rgb(...), or hsl(...). "
+                                       "After a tool result, briefly tell the user what changed.";
+
+                owner.registerTools (toolRegistry, ownerReference);
+                request.tools = toolRegistry.getAllTools();
+                request.toolChoice = "auto";
+            }
 
             auto response = client.runToolLoop (request, toolRegistry);
 
             yup::String responseText;
-            if (! response.choices.empty())
+            if (response.failed() && response.errorMessage.has_value())
+                responseText = "Ollama error: " + *response.errorMessage;
+            else if (! response.choices.empty())
                 responseText = response.choices.front().message.content.trim();
 
             if (responseText.isEmpty())
-                responseText = "No response was returned. Check that Ollama is running, the model is pulled, and the base URL is reachable.";
+                responseText = useTools ? "No response was returned. Check that Ollama is running, the model is pulled, the base URL is reachable, and the model supports tool calls."
+                                        : "No response was returned. Check that Ollama is running, the model is pulled, and the base URL is reachable.";
 
             if (threadShouldExit())
                 return;
@@ -199,6 +213,7 @@ private:
         yup::String model;
         yup::String baseUrl;
         yup::String prompt;
+        bool useTools;
         yup::WeakReference<yup::Component> ownerReference;
     };
 
@@ -215,6 +230,7 @@ private:
         const auto model = modelEditor.getText().trim();
         const auto baseUrl = baseUrlEditor.getText().trim();
         const auto prompt = promptEditor.getText().trim();
+        const auto useTools = toolsToggle.getToggleState();
 
         if (model.isEmpty() || baseUrl.isEmpty() || prompt.isEmpty())
         {
@@ -226,7 +242,7 @@ private:
         statusLabel.setText ("Waiting for Ollama...", yup::dontSendNotification);
         responseEditor.setText ("", yup::dontSendNotification);
 
-        requestThread = std::make_unique<OllamaRequestThread> (*this, model, baseUrl, prompt);
+        requestThread = std::make_unique<OllamaRequestThread> (*this, model, baseUrl, prompt, useTools);
         if (! requestThread->startThread (yup::Thread::Priority::background))
         {
             requestThread.reset();
@@ -306,6 +322,7 @@ private:
     yup::TextEditor promptEditor { "promptEditor" };
     yup::TextEditor responseEditor { "responseEditor" };
     yup::TextButton askButton { "askButton" };
+    yup::ToggleButton toolsToggle { "toolsToggle" };
 
     yup::Font titleFont;
     std::optional<yup::Color> backgroundColor;

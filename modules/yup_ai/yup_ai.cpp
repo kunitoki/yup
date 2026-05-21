@@ -38,3 +38,6 @@
 #include "llm/yup_LLMClient.cpp"
 #include "llm/yup_LLMHttpClient.cpp"
 #include "embedding/yup_EmbeddingModel.cpp"
+#include "mcp/yup_MCPTypes.cpp"
+#include "mcp/yup_MCPClient.cpp"
+#include "mcp/yup_MCPServer.cpp"

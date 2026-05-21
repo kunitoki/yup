@@ -37,6 +37,33 @@ String getOpenAiErrorMessage (const var& json)
 
     return {};
 }
+
+var parseStreamArguments (const String& arguments)
+{
+    auto parsed = JSON::parse (arguments);
+    return parsed.isVoid() ? var (arguments) : parsed;
+}
+
+String argumentsToStreamText (const var& arguments)
+{
+    if (arguments.isObject() || arguments.isArray())
+        return JSON::toString (arguments, true);
+
+    return arguments.toString();
+}
+
+LLMResponse::Choice& findOrAppendChoice (std::vector<LLMResponse::Choice>& choices, const LLMResponse::Choice& chunkChoice)
+{
+    for (auto& choice : choices)
+        if (choice.index == chunkChoice.index)
+            return choice;
+
+    choices.push_back ({});
+    auto& choice = choices.back();
+    choice.index = chunkChoice.index;
+    choice.message.role = chunkChoice.message.role;
+    return choice;
+}
 } // namespace
 
 bool LLMResponse::hasToolCalls() const noexcept
@@ -62,6 +89,60 @@ std::vector<LLMToolCall> LLMResponse::getToolCalls() const
             result.insert (result.end(), choice.message.toolCalls->begin(), choice.message.toolCalls->end());
 
     return result;
+}
+
+void LLMResponse::appendStreamChunk (const LLMResponse& chunk)
+{
+    if (chunk.errorMessage.has_value())
+    {
+        errorMessage = chunk.errorMessage;
+        return;
+    }
+
+    if (model.isEmpty())
+        model = chunk.model;
+
+    for (const auto& chunkChoice : chunk.choices)
+    {
+        auto& choice = findOrAppendChoice (choices, chunkChoice);
+
+        if (choice.message.role == LLMMessage::Role::assistant)
+            choice.message.role = chunkChoice.message.role;
+
+        choice.message.content += chunkChoice.message.content;
+
+        if (chunkChoice.finishReason.has_value())
+            choice.finishReason = chunkChoice.finishReason;
+
+        if (! chunkChoice.message.toolCalls.has_value())
+            continue;
+
+        if (! choice.message.toolCalls.has_value())
+            choice.message.toolCalls = std::vector<LLMToolCall>();
+
+        for (const auto& chunkToolCall : *chunkChoice.message.toolCalls)
+        {
+            const auto toolIndex = chunkToolCall.index;
+            if (toolIndex < 0)
+                continue;
+
+            if (toolIndex >= static_cast<int> (choice.message.toolCalls->size()))
+                choice.message.toolCalls->resize (static_cast<size_t> (toolIndex + 1));
+
+            auto& toolCall = (*choice.message.toolCalls)[static_cast<size_t> (toolIndex)];
+            toolCall.index = toolIndex;
+
+            if (chunkToolCall.id.isNotEmpty())
+                toolCall.id = chunkToolCall.id;
+
+            if (chunkToolCall.name.isNotEmpty())
+                toolCall.name = chunkToolCall.name;
+
+            const auto mergedArguments = argumentsToStreamText (toolCall.arguments) + argumentsToStreamText (chunkToolCall.arguments);
+            if (mergedArguments.isNotEmpty())
+                toolCall.arguments = parseStreamArguments (mergedArguments);
+        }
+    }
 }
 
 LLMResponse LLMResponse::fromError (const String& message)

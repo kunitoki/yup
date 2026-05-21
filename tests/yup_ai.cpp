@@ -20,3 +20,4 @@
 */
 
 #include "yup_ai/yup_LLMTypes.cpp"
+#include "yup_ai/yup_MCPTypes.cpp"

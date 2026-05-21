@@ -33,6 +33,7 @@ namespace yup
 */
 struct YUP_API LLMToolCall
 {
+    int index = 0;
     String id;
     String name;
     var arguments;

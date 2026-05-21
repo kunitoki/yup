@@ -261,6 +261,65 @@ TEST (YupAiLLMResponse, ParsesStreamingChunk)
     EXPECT_EQ ("hel", response.choices.front().message.content);
 }
 
+TEST (YupAiLLMResponse, AccumulatesStreamingToolCallArguments)
+{
+    auto first = LLMResponse::fromStreamChunk (JSON::parse (R"({
+        "model": "test-model",
+        "choices": [
+            {
+                "index": 0,
+                "delta": {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "index": 0,
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {
+                                "name": "set_background_color",
+                                "arguments": "{\"color\""
+                            }
+                        }
+                    ]
+                },
+                "finish_reason": null
+            }
+        ]
+    })"));
+
+    auto second = LLMResponse::fromStreamChunk (JSON::parse (R"({
+        "model": "test-model",
+        "choices": [
+            {
+                "index": 0,
+                "delta": {
+                    "tool_calls": [
+                        {
+                            "index": 0,
+                            "function": {
+                                "arguments": ":\"darkgreen\"}"
+                            }
+                        }
+                    ]
+                },
+                "finish_reason": "tool_calls"
+            }
+        ]
+    })"));
+
+    LLMResponse accumulated;
+    accumulated.appendStreamChunk (first);
+    accumulated.appendStreamChunk (second);
+
+    ASSERT_TRUE (accumulated.hasToolCalls());
+
+    auto toolCalls = accumulated.getToolCalls();
+    ASSERT_EQ (1u, toolCalls.size());
+    EXPECT_EQ ("call_1", toolCalls.front().id);
+    EXPECT_EQ ("set_background_color", toolCalls.front().name);
+    EXPECT_EQ ("darkgreen", toolCalls.front().arguments["color"].toString());
+}
+
 TEST (YupAiLLMClient, BuildsChatCompletionBody)
 {
     TestLLMClient client;

@@ -61,3 +61,7 @@
 #include "llm/yup_LLMClient.h"
 #include "llm/yup_LLMHttpClient.h"
 #include "embedding/yup_EmbeddingModel.h"
+#include "mcp/yup_MCPTypes.h"
+#include "mcp/yup_MCPTransport.h"
+#include "mcp/yup_MCPClient.h"
+#include "mcp/yup_MCPServer.h"

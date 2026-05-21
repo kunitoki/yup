@@ -123,6 +123,8 @@ struct LLMHttpClient::Pimpl
 
             if (stream != nullptr && statusCode >= 200 && statusCode < 300)
             {
+                LLMResponse accumulatedResponse;
+
                 while (! stream->isExhausted())
                 {
                     auto line = stream->readNextLine().trim();
@@ -136,7 +138,9 @@ struct LLMHttpClient::Pimpl
 
                     auto parsed = JSON::parse (payload);
                     auto chunk = LLMResponse::fromStreamChunk (parsed);
-                    onChunk (chunk);
+
+                    accumulatedResponse.appendStreamChunk (chunk);
+                    onChunk (accumulatedResponse);
 
                     if (chunk.failed())
                         return false;

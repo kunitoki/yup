@@ -68,6 +68,7 @@ void registerYupAiBindings (py::module_& m)
 
     py::class_<LLMToolCall> (ai, "LLMToolCall")
         .def (py::init<>())
+        .def_readwrite ("index", &LLMToolCall::index)
         .def_readwrite ("id", &LLMToolCall::id)
         .def_readwrite ("name", &LLMToolCall::name)
         .def_readwrite ("arguments", &LLMToolCall::arguments)

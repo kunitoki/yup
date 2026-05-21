@@ -58,6 +58,9 @@ public:
     /** Returns all tool calls from all choices. */
     std::vector<LLMToolCall> getToolCalls() const;
 
+    /** Appends a streaming response chunk to this response, concatenating content and tool-call arguments by choice index. */
+    void appendStreamChunk (const LLMResponse& chunk);
+
     /** Creates an error response with a diagnostic message. */
     static LLMResponse fromError (const String& message);
 

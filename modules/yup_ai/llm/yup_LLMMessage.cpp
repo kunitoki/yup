@@ -72,6 +72,7 @@ std::optional<LLMToolCall> LLMToolCall::fromVar (const var& value)
         return std::nullopt;
 
     LLMToolCall result;
+    result.index = static_cast<int> (value["index"]);
     result.id = value["id"].toString();
 
     if (auto* functionObject = value["function"].getDynamicObject())
@@ -85,7 +86,11 @@ std::optional<LLMToolCall> LLMToolCall::fromVar (const var& value)
         result.arguments = parseArguments (value["arguments"]);
     }
 
-    if (result.name.isEmpty())
+    const auto hasArguments = ! result.arguments.isVoid()
+                           && ! result.arguments.isUndefined()
+                           && result.arguments.toString().isNotEmpty();
+
+    if (result.name.isEmpty() && result.id.isEmpty() && ! hasArguments)
         return std::nullopt;
 
     return result;
