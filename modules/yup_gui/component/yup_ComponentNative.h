@@ -385,6 +385,12 @@ public:
     */
     virtual void stopTextInput (Component& component) = 0;
 
+    /** Updates the native text input rectangle for the specified component.
+
+        @param component The component whose text input rectangle has changed.
+    */
+    virtual void updateTextInputRect (Component& component) = 0;
+
     //==============================================================================
     /** Gets the DPI scale factor.
 

@@ -439,7 +439,7 @@ void SDL2ComponentNative::setFocusedComponent (Component* comp)
 
 Component* SDL2ComponentNative::getFocusedComponent() const
 {
-    return lastComponentFocused;
+    return hasNativeKeyboardFocus() ? lastComponentFocused.get() : nullptr;
 }
 
 //==============================================================================
@@ -559,6 +559,18 @@ void SDL2ComponentNative::startTextInput (Component& component)
     currentTextInputComponent = std::addressof (component);
 
     SDL_StartTextInput();
+
+    updateTextInputRect (component);
+}
+
+void SDL2ComponentNative::updateTextInputRect (Component& component)
+{
+    if (window == nullptr || currentTextInputComponent != std::addressof (component))
+        return;
+
+    auto* target = dynamic_cast<TextInputTarget*> (std::addressof (component));
+    if (target == nullptr)
+        return;
 
     SDL_Rect sdlRect;
     auto textRect = target->getTextInputRect();
@@ -1035,10 +1047,10 @@ void SDL2ComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>&
 
 void SDL2ComponentNative::handleTextInput (const String& textInput)
 {
-    if (lastComponentFocused != nullptr)
-        lastComponentFocused->internalTextInput (textInput);
-    else
-        component.internalTextInput (textInput);
+    if (! hasNativeKeyboardFocus() || currentTextInputComponent == nullptr)
+        return;
+
+    currentTextInputComponent->internalTextInput (textInput);
 }
 
 //==============================================================================
@@ -1096,16 +1108,36 @@ void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
 
         component.internalFocusChanged (true);
 
-        if (auto* comp = currentTextInputComponent.get())
+        // Re-notify the focused widget so it restarts its caret and text input.
+        // This pairs with the focusLost() call in the gotFocus=false branch below.
+        if (lastComponentFocused != nullptr && lastComponentFocused.get() != std::addressof (component))
         {
-            if (auto* target = dynamic_cast<TextInputTarget*> (comp))
-                startTextInput (*comp);
+            auto focusBailOut = Component::BailOutChecker (lastComponentFocused.get());
+
+            lastComponentFocused->focusGained();
+
+            if (! focusBailOut.shouldBailOut())
+                lastComponentFocused->repaint();
         }
     }
     else
     {
-        if (currentTextInputComponent != nullptr)
+        // Properly notify the focused widget so it stops its caret and text input
+        // via relinquishTextInput(), keeping textInputActive in sync with SDL's state.
+        if (lastComponentFocused != nullptr && lastComponentFocused.get() != std::addressof (component))
+        {
+            auto focusBailOut = Component::BailOutChecker (lastComponentFocused.get());
+
+            lastComponentFocused->focusLost();
+
+            if (! focusBailOut.shouldBailOut())
+                lastComponentFocused->repaint();
+        }
+        else if (currentTextInputComponent != nullptr)
+        {
+            currentTextInputComponent = nullptr;
             SDL_StopTextInput();
+        }
 
         component.internalFocusChanged (false);
 
@@ -1119,6 +1151,11 @@ void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
                 stopRendering();
         }
     }
+}
+
+bool SDL2ComponentNative::hasNativeKeyboardFocus() const
+{
+    return window != nullptr && (SDL_GetWindowFlags (window) & SDL_WINDOW_INPUT_FOCUS) != 0;
 }
 
 void SDL2ComponentNative::handleMinimized()
