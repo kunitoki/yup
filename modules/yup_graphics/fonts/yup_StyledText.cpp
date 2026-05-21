@@ -178,8 +178,8 @@ StyledText::TextModifier StyledText::startUpdate()
 void StyledText::clear()
 {
     styledTexts.clear();
-    shape = {};
-    lines = {};
+    shape = rive::SimpleArray<rive::Paragraph>();
+    lines = rive::SimpleArray<rive::SimpleArray<rive::GlyphLine>>();
     orderedLines.clear();
     ellipsisRun = {};
     styles.clear();
