@@ -188,6 +188,59 @@ TEST (YupAiLLMResponse, ParsesOpenAiResponse)
     EXPECT_EQ (5, response.usage->totalTokens);
 }
 
+TEST (YupAiLLMResponse, ExtractsToolCalls)
+{
+    auto json = JSON::parse (R"({
+        "model": "test-model",
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {
+                                "name": "set_background_color",
+                                "arguments": "{\"color\":\"darkgreen\"}"
+                            }
+                        }
+                    ]
+                },
+                "finish_reason": "tool_calls"
+            }
+        ]
+    })");
+
+    auto response = LLMResponse::fromOpenAiJson (json);
+
+    EXPECT_TRUE (response.hasToolCalls());
+
+    auto toolCalls = response.getToolCalls();
+    ASSERT_EQ (1u, toolCalls.size());
+    EXPECT_EQ ("call_1", toolCalls.front().id);
+    EXPECT_EQ ("set_background_color", toolCalls.front().name);
+    EXPECT_EQ ("darkgreen", toolCalls.front().arguments["color"].toString());
+}
+
+TEST (YupAiLLMResponse, ParsesOpenAiError)
+{
+    auto json = JSON::parse (R"({
+        "error": {
+            "message": "model not found",
+            "type": "invalid_request_error"
+        }
+    })");
+
+    auto response = LLMResponse::fromOpenAiJson (json);
+
+    EXPECT_TRUE (response.failed());
+    ASSERT_TRUE (response.errorMessage.has_value());
+    EXPECT_EQ ("model not found", *response.errorMessage);
+}
+
 TEST (YupAiLLMResponse, ParsesStreamingChunk)
 {
     auto chunk = JSON::parse (R"({
@@ -224,6 +277,26 @@ TEST (YupAiLLMClient, BuildsChatCompletionBody)
     EXPECT_EQ ("system", body["messages"][0]["role"].toString());
     EXPECT_EQ ("user", body["messages"][1]["role"].toString());
     EXPECT_EQ (32, static_cast<int> (body["max_tokens"]));
+}
+
+TEST (YupAiLLMClient, SerializesSpecificToolChoice)
+{
+    TestLLMClient client;
+
+    LLMClient::Request request;
+    request.messages.push_back (LLMMessage::user ("change the color"));
+    request.toolChoice = "set_background_color";
+
+    LLMTool tool;
+    tool.name = "set_background_color";
+    tool.description = "Changes the component background color.";
+    tool.parameters.push_back ({ "color", "string", "CSS color value", true });
+    request.tools.push_back (std::move (tool));
+
+    auto body = JSON::parse (client.buildBody (request, false));
+
+    EXPECT_EQ ("function", body["tool_choice"]["type"].toString());
+    EXPECT_EQ ("set_background_color", body["tool_choice"]["function"]["name"].toString());
 }
 
 TEST (YupAiEmbeddingModel, ComputesCosineSimilarity)

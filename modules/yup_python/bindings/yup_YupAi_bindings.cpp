@@ -168,8 +168,11 @@ void registerYupAiBindings (py::module_& m)
         .def_readwrite ("choices", &LLMResponse::choices)
         .def_readwrite ("usage", &LLMResponse::usage)
         .def_readwrite ("model", &LLMResponse::model)
+        .def_readwrite ("errorMessage", &LLMResponse::errorMessage)
         .def ("hasToolCalls", &LLMResponse::hasToolCalls)
+        .def ("failed", &LLMResponse::failed)
         .def ("getToolCalls", &LLMResponse::getToolCalls)
+        .def_static ("fromError", &LLMResponse::fromError)
         .def_static ("fromOpenAiJson", &LLMResponse::fromOpenAiJson)
         .def_static ("fromStreamChunk", &LLMResponse::fromStreamChunk);
 

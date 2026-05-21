@@ -21,6 +21,23 @@
 
 namespace yup
 {
+namespace
+{
+String getOpenAiErrorMessage (const var& json)
+{
+    if (json["error"].isString())
+        return json["error"].toString();
+
+    if (json["error"].isObject())
+    {
+        auto message = json["error"]["message"].toString();
+        if (message.isNotEmpty())
+            return message;
+    }
+
+    return {};
+}
+} // namespace
 
 bool LLMResponse::hasToolCalls() const noexcept
 {
@@ -29,6 +46,11 @@ bool LLMResponse::hasToolCalls() const noexcept
             return true;
 
     return false;
+}
+
+bool LLMResponse::failed() const noexcept
+{
+    return errorMessage.has_value();
 }
 
 std::vector<LLMToolCall> LLMResponse::getToolCalls() const
@@ -42,9 +64,23 @@ std::vector<LLMToolCall> LLMResponse::getToolCalls() const
     return result;
 }
 
+LLMResponse LLMResponse::fromError (const String& message)
+{
+    LLMResponse response;
+    response.errorMessage = message.isEmpty() ? String ("Unknown AI response error") : message;
+    return response;
+}
+
 LLMResponse LLMResponse::fromOpenAiJson (const var& json)
 {
     LLMResponse response;
+
+    if (json.isVoid())
+        return fromError ("Unable to parse chat completion response JSON");
+
+    if (auto error = getOpenAiErrorMessage (json); error.isNotEmpty())
+        return fromError (error);
+
     response.model = json["model"].toString();
 
     if (auto* choicesArray = json["choices"].getArray())
@@ -79,6 +115,13 @@ LLMResponse LLMResponse::fromOpenAiJson (const var& json)
 LLMResponse LLMResponse::fromStreamChunk (const var& json)
 {
     LLMResponse response;
+
+    if (json.isVoid())
+        return fromError ("Unable to parse chat completion stream JSON");
+
+    if (auto error = getOpenAiErrorMessage (json); error.isNotEmpty())
+        return fromError (error);
+
     response.model = json["model"].toString();
 
     if (auto* choicesArray = json["choices"].getArray())

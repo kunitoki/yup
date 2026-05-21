@@ -43,6 +43,27 @@ bool shouldRetryAiStatus (int statusCode)
 {
     return statusCode == 0 || statusCode == 408 || statusCode == 429 || statusCode >= 500;
 }
+
+LLMResponse makeHttpErrorResponse (int statusCode, const String& body)
+{
+    if (body.isNotEmpty())
+    {
+        auto parsed = JSON::parse (body);
+
+        if (! parsed.isVoid())
+        {
+            auto response = LLMResponse::fromOpenAiJson (parsed);
+
+            if (response.failed())
+                return response;
+        }
+    }
+
+    if (statusCode > 0)
+        return LLMResponse::fromError ("AI HTTP request failed with status " + String (statusCode));
+
+    return LLMResponse::fromError ("AI HTTP request failed");
+}
 } // namespace
 
 struct LLMHttpClient::Pimpl
@@ -68,15 +89,16 @@ struct LLMHttpClient::Pimpl
                                .withHttpRequestCmd ("POST");
 
             auto stream = url.createInputStream (options);
+            const auto responseBody = stream != nullptr ? stream->readEntireStreamAsString() : String();
 
             if (stream != nullptr && statusCode >= 200 && statusCode < 300)
-                return LLMResponse::fromOpenAiJson (JSON::parse (stream->readEntireStreamAsString()));
+                return LLMResponse::fromOpenAiJson (JSON::parse (responseBody));
 
             if (! shouldRetryAiStatus (statusCode) || attempt == owner.options.maxRetries)
-                break;
+                return makeHttpErrorResponse (statusCode, responseBody);
         }
 
-        return {};
+        return LLMResponse::fromError ("AI HTTP request failed after retries");
     }
 
     bool completeStreaming (const Request& request, ChunkCallback onChunk)
@@ -113,8 +135,11 @@ struct LLMHttpClient::Pimpl
                         return true;
 
                     auto parsed = JSON::parse (payload);
-                    if (! parsed.isVoid())
-                        onChunk (LLMResponse::fromStreamChunk (parsed));
+                    auto chunk = LLMResponse::fromStreamChunk (parsed);
+                    onChunk (chunk);
+
+                    if (chunk.failed())
+                        return false;
                 }
 
                 return true;

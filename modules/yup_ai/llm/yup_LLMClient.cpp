@@ -33,6 +33,21 @@ void setLLMClientProperty (var& object, const Identifier& name, const var& value
     if (auto* dynamicObject = object.getDynamicObject())
         dynamicObject->setProperty (name, value);
 }
+
+var toolChoiceToVar (const String& toolChoice)
+{
+    if (toolChoice == "auto" || toolChoice == "none" || toolChoice == "required")
+        return toolChoice;
+
+    auto functionObject = makeLLMClientObject();
+    setLLMClientProperty (functionObject, "name", toolChoice);
+
+    auto object = makeLLMClientObject();
+    setLLMClientProperty (object, "type", "function");
+    setLLMClientProperty (object, "function", functionObject);
+
+    return object;
+}
 } // namespace
 
 LLMClient::LLMClient (Options optionsToUse)
@@ -107,7 +122,7 @@ String LLMClient::buildChatCompletionBody (const Request& request, bool stream) 
         setLLMClientProperty (object, "tools", toolsToVar (request.tools));
 
     if (request.toolChoice.has_value())
-        setLLMClientProperty (object, "tool_choice", *request.toolChoice);
+        setLLMClientProperty (object, "tool_choice", toolChoiceToVar (*request.toolChoice));
 
     if (request.temperature.has_value())
         setLLMClientProperty (object, "temperature", static_cast<double> (*request.temperature));

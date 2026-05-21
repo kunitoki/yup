@@ -47,12 +47,19 @@ public:
     std::vector<Choice> choices;
     std::optional<Usage> usage;
     String model;
+    std::optional<String> errorMessage;
 
     /** Returns true if any choice contains assistant tool calls. */
     bool hasToolCalls() const noexcept;
 
+    /** Returns true if this response represents an API, transport, or parse error. */
+    bool failed() const noexcept;
+
     /** Returns all tool calls from all choices. */
     std::vector<LLMToolCall> getToolCalls() const;
+
+    /** Creates an error response with a diagnostic message. */
+    static LLMResponse fromError (const String& message);
 
     /** Parses a non-streaming OpenAI-compatible chat completion response. */
     static LLMResponse fromOpenAiJson (const var& json);
