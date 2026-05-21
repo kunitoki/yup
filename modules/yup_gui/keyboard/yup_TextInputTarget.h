@@ -104,6 +104,13 @@ public:
     void relinquishTextInput();
 
     /**
+        Updates the active text input rectangle for this target.
+
+        Call this after the caret or edited text area moves while text input is active.
+    */
+    void updateTextInputRect();
+
+    /**
         Returns true if this target currently has active text input.
 
         @return True if text input is currently active for this target

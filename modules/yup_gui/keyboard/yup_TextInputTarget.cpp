@@ -52,6 +52,18 @@ void TextInputTarget::relinquishTextInput()
     }
 }
 
+void TextInputTarget::updateTextInputRect()
+{
+    if (! textInputActive)
+        return;
+
+    if (auto* component = dynamic_cast<Component*> (this))
+    {
+        if (auto* nativeComponent = component->getNativeComponent())
+            nativeComponent->updateTextInputRect (*component);
+    }
+}
+
 bool TextInputTarget::isTextInputActive() const noexcept
 {
     return textInputActive;

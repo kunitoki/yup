@@ -276,6 +276,8 @@ public:
     /** @internal */
     void focusLost() override;
     /** @internal */
+    void enablementChanged() override;
+    /** @internal */
     void mouseDown (const MouseEvent& event) override;
     /** @internal */
     void mouseDrag (const MouseEvent& event) override;
@@ -283,6 +285,8 @@ public:
     void mouseUp (const MouseEvent& event) override;
     /** @internal */
     void mouseDoubleClick (const MouseEvent& event) override;
+    /** @internal */
+    void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
     /** @internal */
     void keyDown (const KeyPress& key, const Point<float>& position) override;
     /** @internal */
@@ -307,12 +311,16 @@ private:
     int getGlyphIndexAtPosition (const Point<float>& position) const;
     void handleBackspace();
     void handleDelete();
+    void clampScrollOffset();
     void startCaretBlinking();
     void stopCaretBlinking();
+    bool canUseTextInput() const noexcept;
+    void updateTextInputRectIfActive();
     int findLineStart (int position) const;
     int findLineEnd (int position) const;
     int findPreviousLinePosition (int position) const;
     int findNextLinePosition (int position) const;
+    int findVisualLinePosition (int position, bool moveDown) const;
 
     // Word navigation methods
     int findWordStart (int position) const;
@@ -337,6 +345,7 @@ private:
     bool readOnly = false;
     bool isDragging = false;
     bool caretVisible = true;
+    bool caretBlinking = false;
     bool needsUpdate = true;
 
     Point<float> scrollOffset;

@@ -309,7 +309,7 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
     auto bounds = t.getLocalBounds();
     auto textBounds = t.getTextBounds();
     auto scrollOffset = t.getScrollOffset();
-    constexpr auto cornerRadius = 6.0f;
+    constexpr auto cornerRadius = 4.0f;
 
     // Draw background
     auto backgroundColor = t.findColor (TextEditor::Style::backgroundColorId).value_or (Colors::white);
@@ -319,7 +319,7 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
     // Draw outline
     auto outlineColor = t.hasKeyboardFocus()
                           ? t.findColor (TextEditor::Style::focusedOutlineColorId).value_or (Colors::cornflowerblue)
-                          : t.findColor (TextEditor::Style::outlineColorId).value_or (Colors::gray);
+                          : t.findColor (TextEditor::Style::outlineColorId).value_or (Color (0xff232323));
     g.setStrokeColor (outlineColor);
 
     float strokeWidth = t.hasKeyboardFocus() ? 2.0f : 1.0f;
@@ -344,7 +344,7 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
     }
 
     // Draw text with scroll offset
-    auto textColor = t.findColor (TextEditor::Style::textColorId).value_or (Colors::gray);
+    auto textColor = t.findColor (TextEditor::Style::textColorId).value_or (Color (0xff232323));
     g.setFillColor (textColor);
 
     auto scrolledTextBounds = textBounds.translated (-scrollOffset.getX(), -scrollOffset.getY());
