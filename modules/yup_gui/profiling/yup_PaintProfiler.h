@@ -34,7 +34,7 @@ namespace yup
     RAII ScopedSession handle that enables profiling on a component subtree and
     automatically disables it when the handle is destroyed.
 */
-class PaintProfiler
+class PaintProfiler : private ComponentListener
 {
 public:
     //==============================================================================
@@ -43,12 +43,12 @@ public:
     struct ComponentEntry
     {
         /** Pointer to the profiled component (may be stale after the snapshot is taken). */
-        Component* component = nullptr;
+        WeakReference<Component> component;
 
         /** Display name of the component at snapshot time. */
         String name;
 
-        /** Pointer to the stats object owned by the component (may be stale). */
+        /** Pointer to the stats object owned by PaintProfiler (may be stale). */
         PaintProfileStats* stats = nullptr;
 
         /** Statistical summary for the component's own paint time. */
@@ -124,15 +124,13 @@ public:
     private:
         friend class PaintProfiler;
 
-        ScopedSession (PaintProfiler& profiler,
-                       Component& root,
-                       PaintProfileOptions options);
+        ScopedSession (PaintProfiler& profiler, Component& root, PaintProfileOptions options);
 
         PaintProfiler& profiler;
         WeakReference<Component> root;
         PaintProfileOptions options;
-        bool paused = false;
         std::vector<WeakReference<Component>> enabledComponents;
+        bool paused = false;
 
         YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ScopedSession)
     };
@@ -141,6 +139,13 @@ public:
 
     /** Returns the process-wide singleton instance. */
     static PaintProfiler& getInstance();
+
+    /** Returns true if any component is currently registered for paint profiling.
+
+        This is a cheap process-wide check intended for hot paths that need to avoid
+        constructing the PaintProfiler singleton unless there is profiling work to do.
+    */
+    static bool hasRegisteredComponents() noexcept;
 
     //==============================================================================
 
@@ -156,6 +161,9 @@ public:
     /** Returns true when global profiling is enabled. */
     bool isEnabled() const;
 
+    /** Returns true when at least one registered component can collect samples. */
+    bool isActive() const noexcept;
+
     //==============================================================================
 
     /** Enables profiling on the subtree rooted at root and returns an RAII handle.
@@ -164,16 +172,30 @@ public:
         enabled by this call, regardless of the current global enabled state.
 
         @param root     The root component of the subtree to profile.
-        @param options  Options forwarded to each component's PaintProfileStats.
+        @param options  Options used for each profiler-owned PaintProfileStats.
         @returns A unique_ptr to a ScopedSession that disables profiling on destruction.
     */
-    std::unique_ptr<ScopedSession> startSession (Component& root,
-                                                 PaintProfileOptions options = {});
+    std::unique_ptr<ScopedSession> startSession (Component& root, PaintProfileOptions options = {});
+
+    /** Enables profiling for a single component. */
+    void enableComponent (Component& component, PaintProfileOptions options = {});
+
+    /** Disables profiling for a single component. */
+    void disableComponent (Component& component);
+
+    /** Returns true if profiling is enabled for a single component. */
+    bool isComponentEnabled (const Component& component) const;
+
+    /** Clears all paint profile samples recorded for a single component. */
+    void resetComponent (Component& component);
+
+    /** Returns profiler-owned stats for a single component, or nullptr if disabled. */
+    PaintProfileStats* getStatsForComponent (const Component& component) const;
 
     /** Recursively enables profiling for root and all its current children.
 
         @param root     The root component of the subtree.
-        @param options  Options forwarded to each component's PaintProfileStats.
+        @param options  Options used for each profiler-owned PaintProfileStats.
     */
     void enableSubtree (Component& root, PaintProfileOptions options = {});
 
@@ -230,25 +252,29 @@ public:
     uint64 getCurrentFrameIndex() const noexcept { return currentFrameIndex; }
 
 private:
-    friend class Component;
+    PaintProfiler();
+    ~PaintProfiler();
 
-    /** Called by Component::setPaintProfilingEnabled to register a component. */
-    void registerComponent (Component& component, PaintProfileStats& stats);
+    void componentBeingDeleted (Component& component) override;
+    void componentPaintCompleted (Component& component, const ComponentPaintMetrics& metrics) override;
 
-    /** Called by Component::setPaintProfilingEnabled to deregister a component. */
-    void deregisterComponent (const Component& component);
+    void removeExpiredRegistryEntries() const;
+
+    struct RegistryEntry
+    {
+        WeakReference<Component> component;
+        std::unique_ptr<PaintProfileStats> stats;
+    };
 
     mutable CriticalSection registryLock;
-    std::vector<std::pair<Component*, PaintProfileStats*>> registry;
+    mutable std::vector<RegistryEntry> registry;
 
     std::unique_ptr<PaintProfileStats> globalFrameStats;
     uint64 currentFrameIndex = 0;
-    std::atomic<uint64> globalPaintIndex { 0 };
     double frameStartMicros = 0.0;
-    bool enabled = true;
-
-    PaintProfiler();
-    ~PaintProfiler();
+    std::atomic<uint64> globalPaintIndex { 0 };
+    std::atomic<bool> enabled { true };
+    static std::atomic<int> registeredComponentCount;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PaintProfiler)
 };

@@ -37,9 +37,7 @@ Component::Component (StringRef componentID)
 
 Component::~Component()
 {
-#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
-    setPaintProfilingEnabled (false);
-#endif
+    componentListeners.call (&ComponentListener::componentBeingDeleted, *this);
 
     if (options.onDesktop)
         removeFromDesktop();
@@ -162,7 +160,7 @@ void Component::setPosition (const Point<float>& newPosition)
     if (options.onDesktop && native != nullptr)
         native->setPosition (newPosition.to<int>());
 
-    moved();
+    sendMoved();
 }
 
 float Component::getX() const
@@ -207,7 +205,7 @@ void Component::setTopLeft (const Point<float>& newTopLeft)
     if (options.onDesktop && native != nullptr)
         native->setPosition (newTopLeft.to<int>());
 
-    moved();
+    sendMoved();
 }
 
 Point<float> Component::getBottomLeft() const
@@ -222,7 +220,7 @@ void Component::setBottomLeft (const Point<float>& newBottomLeft)
     if (options.onDesktop && native != nullptr)
         native->setPosition (newBottomLeft.translated (0.0f, -getHeight()).to<int>());
 
-    moved();
+    sendMoved();
 }
 
 Point<float> Component::getTopRight() const
@@ -237,7 +235,7 @@ void Component::setTopRight (const Point<float>& newTopRight)
     if (options.onDesktop && native != nullptr)
         native->setPosition (newTopRight.translated (-getWidth(), 0.0f).to<int>());
 
-    moved();
+    sendMoved();
 }
 
 Point<float> Component::getBottomRight() const
@@ -252,7 +250,7 @@ void Component::setBottomRight (const Point<float>& newBottomRight)
     if (options.onDesktop && native != nullptr)
         native->setPosition (newBottomRight.translated (-getWidth(), -getHeight()).to<int>());
 
-    moved();
+    sendMoved();
 }
 
 Point<float> Component::getCenter() const
@@ -267,7 +265,7 @@ void Component::setCenter (const Point<float>& newCenter)
     if (options.onDesktop && native != nullptr)
         native->setPosition (newCenter.translated (-getWidth() / 2.0f, -getHeight() / 2.0f).to<int>());
 
-    moved();
+    sendMoved();
 }
 
 float Component::getCenterX() const
@@ -285,7 +283,7 @@ void Component::setCenterX (float newCenterX)
         native->setPosition (newCenter.translated (-getWidth() / 2.0f, 0.0f).to<int>());
     }
 
-    moved();
+    sendMoved();
 }
 
 float Component::getCenterY() const
@@ -303,10 +301,20 @@ void Component::setCenterY (float newCenterY)
         native->setPosition (newCenter.translated (0.0f, -getHeight() / 2.0f).to<int>());
     }
 
-    moved();
+    sendMoved();
 }
 
 void Component::moved() {}
+
+void Component::sendMoved()
+{
+    moved();
+
+    componentListeners.call ([this] (ComponentListener& listener)
+    {
+        listener.componentMoved (*this);
+    });
+}
 
 //==============================================================================
 
@@ -324,7 +332,7 @@ void Component::setSize (const Size<float>& newSize)
     if (options.onDesktop && native != nullptr)
         native->setSize (newSize.to<int>());
 
-    resized();
+    sendResized();
 
     repaint (areaToRepaint);
 }
@@ -365,12 +373,12 @@ void Component::setBounds (const Rectangle<float>& newBounds)
 
     auto bailOutChecker = BailOutChecker (this);
 
-    resized();
+    sendResized();
 
     if (bailOutChecker.shouldBailOut())
         return;
 
-    moved();
+    sendMoved();
 }
 
 Rectangle<float> Component::getBounds() const
@@ -410,6 +418,16 @@ float Component::proportionOfHeight (float proportion) const
 }
 
 void Component::resized() {}
+
+void Component::sendResized()
+{
+    resized();
+
+    componentListeners.call ([this] (ComponentListener& listener)
+    {
+        listener.componentResized (*this);
+    });
+}
 
 //==============================================================================
 
@@ -513,6 +531,16 @@ void Component::enableRenderingUnclipped (bool shouldBeEnabled)
 bool Component::isRenderingUnclipped() const
 {
     return options.unclippedRendering;
+}
+
+void Component::setPaintProfilingDisabled (bool shouldBeDisabled)
+{
+    options.paintProfilingDisabled = shouldBeDisabled;
+}
+
+bool Component::isPaintProfilingDisabled() const
+{
+    return options.paintProfilingDisabled;
 }
 
 void Component::repaint()
@@ -1047,6 +1075,18 @@ void Component::removeMouseListener (MouseListener* listener)
 
 //==============================================================================
 
+void Component::addComponentListener (ComponentListener* listener)
+{
+    componentListeners.add (listener);
+}
+
+void Component::removeComponentListener (ComponentListener* listener)
+{
+    componentListeners.remove (listener);
+}
+
+//==============================================================================
+
 void Component::setStyle (ComponentStyle::Ptr newStyle)
 {
     if (style == newStyle)
@@ -1156,145 +1196,6 @@ bool Component::hasOpaqueChildCoveringArea (const Rectangle<float>& area)
     return false;
 }
 
-#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
-
-//==============================================================================
-
-void Component::setPaintProfilingEnabled (bool shouldBeEnabled, PaintProfileOptions options)
-{
-    if (shouldBeEnabled)
-    {
-        if (paintProfileStats == nullptr
-            || paintProfileStats->getCapacity() != options.sampleCapacity)
-        {
-            paintProfileStats = std::make_unique<PaintProfileStats> (options);
-        }
-
-        PaintProfiler::getInstance().registerComponent (*this, *paintProfileStats);
-    }
-    else
-    {
-        PaintProfiler::getInstance().deregisterComponent (*this);
-        paintProfileStats.reset();
-    }
-}
-
-bool Component::isPaintProfilingEnabled() const
-{
-    return paintProfileStats != nullptr;
-}
-
-void Component::resetPaintProfiling()
-{
-    if (paintProfileStats != nullptr)
-        paintProfileStats->reset();
-}
-
-PaintProfileStats* Component::getPaintProfileStats()
-{
-    return paintProfileStats.get();
-}
-
-const PaintProfileStats* Component::getPaintProfileStats() const
-{
-    return paintProfileStats.get();
-}
-
-String Component::getPaintProfileName() const
-{
-    if (componentTitle.isNotEmpty())
-        return componentTitle;
-
-    if (componentID.isNotEmpty())
-        return componentID;
-
-    return "Component";
-}
-
-thread_local std::vector<PaintProfileScopeEntry> Component::paintProfileScopeStack {};
-std::atomic<uint64> Component::globalPaintIndexCounter { 0 };
-
-//==============================================================================
-
-class PaintProfileScope
-{
-public:
-    PaintProfileScope (Component& component,
-                       const Rectangle<float>& repaintArea,
-                       bool renderContinuous,
-                       uint64 frameIndex,
-                       bool profilingActive)
-        : component (component)
-        , sample()
-        , totalStartMicros (ticksToMicros (Time::getHighResolutionTicks()))
-        , selfStartMicros (0.0)
-        , profilingActive (profilingActive)
-    {
-        sample.frameIndex = frameIndex;
-        sample.paintIndex = Component::globalPaintIndexCounter.fetch_add (1, std::memory_order_relaxed);
-        sample.repaintArea = repaintArea;
-        sample.componentBounds = component.getBoundsRelativeToTopLevelComponent().to<float>();
-        sample.renderContinuous = renderContinuous;
-
-        Component::paintProfileScopeStack.push_back ({});
-    }
-
-    ~PaintProfileScope()
-    {
-        const double totalEndMicros = ticksToMicros (Time::getHighResolutionTicks());
-        sample.totalMicros = totalEndMicros - totalStartMicros;
-        sample.childrenMicros = Component::paintProfileScopeStack.back().childrenMicros;
-        Component::paintProfileScopeStack.pop_back();
-
-        if (profilingActive)
-        {
-            sample.frameworkMicros = std::max (0.0,
-                                               sample.totalMicros
-                                                   - sample.selfMicros
-                                                   - sample.childrenMicros);
-
-            if (auto* stats = component.getPaintProfileStats())
-                stats->recordSample (sample);
-        }
-
-        if (! Component::paintProfileScopeStack.empty())
-            Component::paintProfileScopeStack.back().childrenMicros += sample.totalMicros;
-    }
-
-    void beginSelf()
-    {
-        selfStartMicros = ticksToMicros (Time::getHighResolutionTicks());
-    }
-
-    void endSelf()
-    {
-        sample.selfMicros += ticksToMicros (Time::getHighResolutionTicks()) - selfStartMicros;
-    }
-
-    void markSelfPaintSkipped()
-    {
-        sample.selfPaintSkipped = true;
-    }
-
-private:
-    static double ticksToMicros (int64 ticks)
-    {
-        return Time::highResolutionTicksToSeconds (ticks) * 1.0e6;
-    }
-
-    Component& component;
-    PaintProfileSample sample;
-    double totalStartMicros;
-    double selfStartMicros;
-    bool profilingActive;
-
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PaintProfileScope)
-};
-
-#endif // YUP_ENABLE_COMPONENT_PAINT_PROFILING
-
-//==============================================================================
-
 void Component::internalRefreshDisplay (double lastFrameTimeSeconds)
 {
     refreshDisplay (lastFrameTimeSeconds);
@@ -1344,14 +1245,19 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
     options.isRepainting = true;
 
     {
-#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
-        const bool profilingActive = PaintProfiler::getInstance().isEnabled() && paintProfileStats != nullptr;
+        const bool shouldMeasurePaint = ! options.paintProfilingDisabled && ! componentListeners.isEmpty();
 
-        const auto frameIndex = PaintProfiler::getInstance().getCurrentFrameIndex();
-        PaintProfileScope profileScope (*this, repaintArea, renderContinuous, frameIndex, profilingActive);
-#else
-        constexpr bool profilingActive = false;
-#endif
+        ComponentPaintMetrics metrics;
+        int64 totalStartTicks = 0;
+        int64 selfStartTicks = 0;
+
+        if (shouldMeasurePaint)
+        {
+            totalStartTicks = Time::getHighResolutionTicks();
+            metrics.repaintArea = repaintArea;
+            metrics.componentBounds = bounds.to<float>();
+            metrics.renderContinuous = renderContinuous;
+        }
 
         const auto globalState = g.saveState();
 
@@ -1370,11 +1276,13 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
         {
             const auto paintState = g.saveState();
 
-            if (profilingActive)
+            if (shouldMeasurePaint)
             {
-                YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED (profileScope.beginSelf();)
+                selfStartTicks = Time::getHighResolutionTicks();
+
                 paint (g);
-                YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED (profileScope.endSelf();)
+
+                metrics.selfTicks += Time::getHighResolutionTicks() - selfStartTicks;
             }
             else
             {
@@ -1383,23 +1291,35 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
         }
         else
         {
-            if (profilingActive)
-            {
-                YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED (profileScope.markSelfPaintSkipped();)
-            }
+            if (shouldMeasurePaint)
+                metrics.selfPaintSkipped = true;
         }
 
-        for (auto child : children)
-            child->internalPaint (g, boundsToRedraw, renderContinuous);
-
-        if (profilingActive)
+        if (shouldMeasurePaint)
         {
-            YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED (profileScope.beginSelf();)
+            const int64 childrenStartTicks = Time::getHighResolutionTicks();
+
+            for (auto child : children)
+                child->internalPaint (g, boundsToRedraw, renderContinuous);
+
+            metrics.childrenTicks += Time::getHighResolutionTicks() - childrenStartTicks;
+
+            selfStartTicks = Time::getHighResolutionTicks();
+
             paintOverChildren (g);
-            YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED (profileScope.endSelf();)
+
+            const int64 selfEndTicks = Time::getHighResolutionTicks();
+
+            metrics.selfTicks += selfEndTicks - selfStartTicks;
+            metrics.totalTicks = selfEndTicks - totalStartTicks;
+
+            componentListeners.call (&ComponentListener::componentPaintCompleted, *this, metrics);
         }
         else
         {
+            for (auto child : children)
+                child->internalPaint (g, boundsToRedraw, renderContinuous);
+
             paintOverChildren (g);
         }
     }
@@ -1608,7 +1528,7 @@ void Component::internalResized (int width, int height)
 {
     boundsInParent = boundsInParent.withSize (Size<int> (width, height).to<float>());
 
-    resized();
+    sendResized();
 }
 
 //==============================================================================
@@ -1617,7 +1537,7 @@ void Component::internalMoved (int xpos, int ypos)
 {
     boundsInParent = boundsInParent.withPosition (Point<int> (xpos, ypos).to<float>());
 
-    moved();
+    sendMoved();
 }
 
 //==============================================================================

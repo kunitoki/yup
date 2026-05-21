@@ -246,7 +246,18 @@ public:
      */
     void setBottomRight (const Point<float>& newBottomRight);
 
+    /**
+        Get the center position of the component relative to its parent.
+
+        @return The center position of the component relative to its parent.
+     */
     Point<float> getCenter() const;
+
+    /**
+        Set the center position of the component relative to its parent.
+
+        @param newCenter The new center position of the component relative to its parent.
+     */
     void setCenter (const Point<float>& newCenter);
 
     /**
@@ -611,6 +622,19 @@ public:
      */
     bool isRenderingUnclipped() const;
 
+    //==============================================================================
+    /** Enables or disables paint measurement suppression for this component.
+
+        When suppression is enabled, component paint listeners will not receive
+        paint measurement callbacks for this component, even if they request paint
+        measurements.
+    */
+    void setPaintProfilingDisabled (bool shouldBeDisabled);
+
+    /** Returns true if paint measurement is suppressed for this component. */
+    bool isPaintProfilingDisabled() const;
+
+    //==============================================================================
     /**
         Repaint the component.
      */
@@ -1087,6 +1111,12 @@ public:
      */
     void removeMouseListener (MouseListener* listener);
 
+    /** Add a component listener to this component. */
+    void addComponentListener (ComponentListener* listener);
+
+    /** Remove a component listener from this component. */
+    void removeComponentListener (ComponentListener* listener);
+
     //==============================================================================
     /**
         Called when a key is pressed.
@@ -1178,45 +1208,6 @@ public:
      */
     std::optional<var> findStyleProperty (const Identifier& propertyId) const;
 
-#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
-    //==============================================================================
-    /** Enables or disables paint profiling for this component.
-
-        When enabling, a PaintProfileStats instance is created (if not already present)
-        and the component is registered with PaintProfiler. Existing samples are
-        preserved when re-enabling with the same capacity.
-
-        When disabling, the component is deregistered from PaintProfiler and the
-        stats object is destroyed.
-
-        @param shouldBeEnabled  Pass true to enable, false to disable.
-        @param options          Controls the ring buffer capacity and recording behaviour.
-    */
-    void setPaintProfilingEnabled (bool shouldBeEnabled,
-                                   PaintProfileOptions options = {});
-
-    /** Returns true if paint profiling is currently enabled for this component. */
-    bool isPaintProfilingEnabled() const;
-
-    /** Clears all paint profile samples recorded for this component. */
-    void resetPaintProfiling();
-
-    /** Returns a pointer to this component's PaintProfileStats, or nullptr if
-        profiling is not enabled. */
-    PaintProfileStats* getPaintProfileStats();
-
-    /** Returns a const pointer to this component's PaintProfileStats, or nullptr
-        if profiling is not enabled. */
-    const PaintProfileStats* getPaintProfileStats() const;
-
-    /** Returns the display name used for this component in profiling snapshots.
-
-        Prefers (in order): a non-empty component title, a non-empty component ID,
-        the demangled type name if available, then falls back to "Component".
-    */
-    String getPaintProfileName() const;
-#endif
-
     //==============================================================================
     /** A bail out checker for the component. */
     class BailOutChecker
@@ -1302,12 +1293,17 @@ private:
 
     void updateMouseCursor();
 
+    void sendMoved();
+    void sendResized();
+
     bool hasOpaqueChildCoveringArea (const Rectangle<float>& area);
 
     friend class ComponentNative;
+    friend class ComponentTestHelper;
     friend class SDL2ComponentNative;
     friend class WeakReference<Component>;
 
+    using ComponentListenerList = ListenerList<ComponentListener, Array<WeakReference<ComponentListener>>>;
     using MouseListenerList = ListenerList<MouseListener, Array<WeakReference<MouseListener>>>;
 
     String componentID, componentTitle;
@@ -1318,6 +1314,7 @@ private:
     ComponentNative::Ptr native;
     WeakReference<Component>::Master masterReference;
     MouseListenerList mouseListeners;
+    ComponentListenerList componentListeners;
     ComponentStyle::Ptr style;
     NamedValueSet properties;
     MouseCursor mouseCursor;
@@ -1337,6 +1334,7 @@ private:
         bool isRepainting : 1;
         bool blockSelfMouseEvents : 1;
         bool blockChildrenMouseEvents : 1;
+        bool paintProfilingDisabled : 1;
     };
 
     union
@@ -1348,14 +1346,6 @@ private:
 #if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
     Color debugColor = Color::opaqueRandom();
     int counter = 2;
-#endif
-
-#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
-    friend class PaintProfileScope;
-    friend class ComponentPaintProfileTestHelper;
-    std::unique_ptr<PaintProfileStats> paintProfileStats;
-    static thread_local std::vector<PaintProfileScopeEntry> paintProfileScopeStack;
-    static std::atomic<uint64> globalPaintIndexCounter;
 #endif
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Component)

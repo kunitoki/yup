@@ -62,7 +62,6 @@ yup_standalone_app (
     TARGET_APP_NAMESPACE "org.yup"
     DEFINITIONS
         YUP_EXAMPLE_GRAPHICS_RIVE_FILE="${rive_file}"
-        YUP_ENABLE_COMPONENT_PAINT_PROFILING=1
         ${additional_definitions}
     PRELOAD_FILES
         "${CMAKE_CURRENT_LIST_DIR}/${rive_file}@${rive_file}"

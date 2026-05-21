@@ -125,10 +125,8 @@
 
 //==============================================================================
 
-#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
 #include "profiling/yup_PaintProfileStats.cpp"
 #include "profiling/yup_PaintProfiler.cpp"
-#endif
 
 //==============================================================================
 

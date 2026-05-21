@@ -78,16 +78,16 @@ struct PaintProfileSample
     uint64 paintIndex = 0;
 
     /** Microseconds spent inside the component's own paint callback. */
-    double selfMicros = 0.0;
+    double selfMicros = 0;
 
     /** Microseconds spent painting all children of this component. */
-    double childrenMicros = 0.0;
+    double childrenMicros = 0;
 
     /** Microseconds consumed by framework bookkeeping (transform setup, clip, etc.). */
-    double frameworkMicros = 0.0;
+    double frameworkMicros = 0;
 
     /** Total microseconds from the start to the end of the full paint pass. */
-    double totalMicros = 0.0;
+    double totalMicros = 0;
 
     /** Axis-aligned bounding rectangle of the component in its parent's coordinate space. */
     Rectangle<float> componentBounds;
@@ -131,21 +131,6 @@ struct PaintProfileSummary
 
     /** 99th-percentile value. */
     double p99Micros = 0.0;
-};
-
-//==============================================================================
-
-/** A struct used to track the cumulative child time of nested paint calls in the current call stack.
- 
-    This is stored in a thread_local stack in Component, and each PaintProfileScope pushes a new entry on
-    construction and pops it on destruction. The self time of a scope is accumulated separately, and the total
-    time of the scope is added to the parent's childrenMicros when the scope ends, so that the sum of selfMicros
-    and childrenMicros for a parent scope equals the total time spent in that subtree of the paint call graph.
-*/
-struct PaintProfileScopeEntry
-{
-    /** Cumulative time spent in child paint calls for the current scope. */
-    double childrenMicros = 0.0;
 };
 
 //==============================================================================

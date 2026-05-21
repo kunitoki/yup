@@ -725,26 +725,36 @@ void SDL2ComponentNative::renderContext()
         }
 
         {
-#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
-            PaintProfiler::getInstance().beginFrame();
-            const auto endFrameGuard = ErasedScopeGuard ([&]
+            const auto repaintComponents = [&]
             {
-                PaintProfiler::getInstance().endFrame();
-            });
-#endif
-
-            // Repaint components hierarchy
-            if (renderer != nullptr)
-            {
-                const auto dpiScale = getScaleDpi();
-
-                for (auto& repaintArea : currentRepaintAreas)
+                // Repaint components hierarchy
+                if (renderer != nullptr)
                 {
-                    YUP_PROFILE_NAMED_INTERNAL_TRACE (InternalPaint);
+                    const auto dpiScale = getScaleDpi();
 
-                    Graphics g (*context, *renderer, dpiScale);
-                    component.internalPaint (g, repaintArea, renderContinuous);
+                    for (auto& repaintArea : currentRepaintAreas)
+                    {
+                        YUP_PROFILE_NAMED_INTERNAL_TRACE (InternalPaint);
+
+                        Graphics g (*context, *renderer, dpiScale);
+                        component.internalPaint (g, repaintArea, renderContinuous);
+                    }
                 }
+            };
+
+            if (PaintProfiler::hasRegisteredComponents() && PaintProfiler::getInstance().isEnabled())
+            {
+                PaintProfiler::getInstance().beginFrame();
+                const auto endFrameGuard = ErasedScopeGuard ([&]
+                {
+                    PaintProfiler::getInstance().endFrame();
+                });
+
+                repaintComponents();
+            }
+            else
+            {
+                repaintComponents();
             }
         }
 

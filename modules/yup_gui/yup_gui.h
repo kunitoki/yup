@@ -70,28 +70,15 @@
 #endif
 
 //==============================================================================
-/** Config: YUP_ENABLE_COMPONENT_PAINT_PROFILING
 
-    Enable YUP component paint profiling.
-*/
-#ifndef YUP_ENABLE_COMPONENT_PAINT_PROFILING
-#define YUP_ENABLE_COMPONENT_PAINT_PROFILING 0
-#endif
-
-//==============================================================================
-
+#include <optional>
 #include <tuple>
 #include <unordered_map>
 
 //==============================================================================
 
-#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
-#define YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED(CODE) CODE
 #include "profiling/yup_PaintProfileSample.h"
 #include "profiling/yup_PaintProfileStats.h"
-#else
-#define YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED(CODE)
-#endif
 
 //==============================================================================
 
@@ -108,6 +95,8 @@
 #include "desktop/yup_Desktop.h"
 #include "component/yup_ComponentNative.h"
 #include "component/yup_ComponentStyle.h"
+#include "component/yup_ComponentPaintMetrics.h"
+#include "component/yup_ComponentListener.h"
 #include "component/yup_Component.h"
 #include "menus/yup_PopupMenu.h"
 #include "buttons/yup_Button.h"
@@ -130,9 +119,7 @@
 
 //==============================================================================
 
-#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
 #include "profiling/yup_PaintProfiler.h"
-#endif
 
 //==============================================================================
 

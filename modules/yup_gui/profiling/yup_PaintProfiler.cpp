@@ -22,8 +22,31 @@
 namespace yup
 {
 
+namespace
+{
+
+double ticksToMicros (double ticks)
+{
+    return Time::highResolutionTicksToSeconds (static_cast<int64> (ticks)) * 1.0e6;
+}
+
+String getComponentPaintProfileName (const Component& component)
+{
+    if (component.getTitle().isNotEmpty())
+        return component.getTitle();
+
+    if (component.getComponentID().isNotEmpty())
+        return component.getComponentID();
+
+    return "Component";
+}
+
+} // namespace
+
 //==============================================================================
-// PaintProfiler
+
+std::atomic<int> PaintProfiler::registeredComponentCount { 0 };
+
 //==============================================================================
 
 PaintProfiler::PaintProfiler()
@@ -41,16 +64,58 @@ PaintProfiler& PaintProfiler::getInstance()
     return instance;
 }
 
+bool PaintProfiler::hasRegisteredComponents() noexcept
+{
+    return registeredComponentCount.load (std::memory_order_relaxed) > 0;
+}
+
+void PaintProfiler::removeExpiredRegistryEntries() const
+{
+    const auto previousSize = registry.size();
+
+    std::erase_if (registry, [] (const auto& entry)
+    {
+        return entry.component.get() == nullptr;
+    });
+
+    const auto removedCount = previousSize - registry.size();
+
+    if (removedCount > 0)
+        registeredComponentCount.fetch_sub (static_cast<int> (removedCount), std::memory_order_release);
+}
+
 //==============================================================================
 
 void PaintProfiler::setEnabled (bool shouldBeEnabled)
 {
-    enabled = shouldBeEnabled;
+    enabled.store (shouldBeEnabled, std::memory_order_release);
+
+    const ScopedLock sl (registryLock);
+
+    removeExpiredRegistryEntries();
+
+    for (auto& entry : registry)
+    {
+        auto* component = entry.component.get();
+
+        if (component == nullptr)
+            continue;
+
+        if (shouldBeEnabled)
+            component->addComponentListener (this);
+        else
+            component->removeComponentListener (this);
+    }
 }
 
 bool PaintProfiler::isEnabled() const
 {
-    return enabled;
+    return enabled.load (std::memory_order_acquire);
+}
+
+bool PaintProfiler::isActive() const noexcept
+{
+    return isEnabled() && hasRegisteredComponents();
 }
 
 //==============================================================================
@@ -59,12 +124,12 @@ void PaintProfiler::beginFrame()
 {
     ++currentFrameIndex;
     globalPaintIndex.store (0, std::memory_order_relaxed);
-    frameStartMicros = Time::highResolutionTicksToSeconds (Time::getHighResolutionTicks()) * 1.0e6;
+    frameStartMicros = ticksToMicros (Time::getHighResolutionTicks());
 }
 
 void PaintProfiler::endFrame()
 {
-    const double endMicros = Time::highResolutionTicksToSeconds (Time::getHighResolutionTicks()) * 1.0e6;
+    const double endMicros = ticksToMicros (Time::getHighResolutionTicks());
 
     PaintProfileSample sample;
     sample.frameIndex = currentFrameIndex;
@@ -74,35 +139,101 @@ void PaintProfiler::endFrame()
 
 //==============================================================================
 
-void PaintProfiler::registerComponent (Component& component, PaintProfileStats& stats)
+void PaintProfiler::enableComponent (Component& component, PaintProfileOptions options)
 {
+    bool registeredNewComponent = false;
+
     const ScopedLock sl (registryLock);
 
-    registry.erase (std::remove_if (registry.begin(), registry.end(), [&] (const auto& entry)
-    {
-        return entry.first == &component;
-    }),
-                    registry.end());
+    removeExpiredRegistryEntries();
 
-    registry.emplace_back (&component, &stats);
+    auto existing = std::find_if (registry.begin(), registry.end(), [&] (const auto& entry)
+    {
+        return entry.component.get() == &component;
+    });
+
+    if (existing != registry.end())
+    {
+        if (existing->stats == nullptr || existing->stats->getCapacity() != options.sampleCapacity)
+            existing->stats = std::make_unique<PaintProfileStats> (options);
+
+        if (isEnabled())
+            component.addComponentListener (this);
+
+        return;
+    }
+
+    registry.push_back ({ WeakReference<Component> (&component), std::make_unique<PaintProfileStats> (options) });
+    registeredNewComponent = true;
+
+    if (isEnabled())
+        component.addComponentListener (this);
+
+    if (registeredNewComponent)
+        registeredComponentCount.fetch_add (1, std::memory_order_release);
 }
 
-void PaintProfiler::deregisterComponent (const Component& component)
+void PaintProfiler::disableComponent (Component& component)
+{
+    bool removedComponent = false;
+
+    const ScopedLock sl (registryLock);
+
+    removeExpiredRegistryEntries();
+
+    const auto previousSize = registry.size();
+
+    std::erase_if (registry, [&] (const auto& entry)
+    {
+        return entry.component.get() == &component;
+    });
+
+    removedComponent = registry.size() != previousSize;
+
+    if (removedComponent)
+        component.removeComponentListener (this);
+
+    if (removedComponent)
+        registeredComponentCount.fetch_sub (1, std::memory_order_release);
+}
+
+bool PaintProfiler::isComponentEnabled (const Component& component) const
 {
     const ScopedLock sl (registryLock);
 
-    registry.erase (std::remove_if (registry.begin(), registry.end(), [&] (const auto& entry)
+    removeExpiredRegistryEntries();
+
+    return std::any_of (registry.begin(), registry.end(), [&] (const auto& entry)
     {
-        return entry.first == &component;
-    }),
-                    registry.end());
+        return entry.component.get() == &component;
+    });
+}
+
+void PaintProfiler::resetComponent (Component& component)
+{
+    if (auto* stats = getStatsForComponent (component))
+        stats->reset();
+}
+
+PaintProfileStats* PaintProfiler::getStatsForComponent (const Component& component) const
+{
+    const ScopedLock sl (registryLock);
+
+    removeExpiredRegistryEntries();
+
+    auto found = std::find_if (registry.begin(), registry.end(), [&] (const auto& entry)
+    {
+        return entry.component.get() == &component;
+    });
+
+    return found != registry.end() ? found->stats.get() : nullptr;
 }
 
 //==============================================================================
 
 void PaintProfiler::enableSubtree (Component& root, PaintProfileOptions options)
 {
-    root.setPaintProfilingEnabled (true, options);
+    enableComponent (root, options);
 
     for (int i = 0; i < root.getNumChildComponents(); ++i)
     {
@@ -113,7 +244,7 @@ void PaintProfiler::enableSubtree (Component& root, PaintProfileOptions options)
 
 void PaintProfiler::disableSubtree (Component& root)
 {
-    root.setPaintProfilingEnabled (false);
+    disableComponent (root);
 
     for (int i = 0; i < root.getNumChildComponents(); ++i)
     {
@@ -127,11 +258,13 @@ void PaintProfiler::resetSubtree (Component& root)
     {
         const ScopedLock sl (registryLock);
 
-        for (auto& [component, stats] : registry)
+        removeExpiredRegistryEntries();
+
+        for (auto& entry : registry)
         {
-            if (component == &root)
+            if (entry.component.get() == &root)
             {
-                stats->reset();
+                entry.stats->reset();
                 break;
             }
         }
@@ -148,30 +281,38 @@ void PaintProfiler::resetAll()
 {
     const ScopedLock sl (registryLock);
 
-    for (auto& [component, stats] : registry)
-        stats->reset();
+    removeExpiredRegistryEntries();
+
+    for (auto& entry : registry)
+        entry.stats->reset();
 
     globalFrameStats->reset();
 }
 
 //==============================================================================
 
-std::unique_ptr<PaintProfiler::ScopedSession> PaintProfiler::startSession (Component& root,
-                                                                           PaintProfileOptions options)
+std::unique_ptr<PaintProfiler::ScopedSession> PaintProfiler::startSession (Component& root, PaintProfileOptions options)
 {
     return std::unique_ptr<ScopedSession> (new ScopedSession (*this, root, options));
 }
 
 //==============================================================================
 
-PaintProfiler::Snapshot PaintProfiler::createSnapshot (PaintProfileTimeKind sortBy,
-                                                       int histogramBuckets) const
+PaintProfiler::Snapshot PaintProfiler::createSnapshot (PaintProfileTimeKind sortBy, int histogramBuckets) const
 {
     std::vector<std::pair<Component*, PaintProfileStats*>> registryCopy;
 
     {
         const ScopedLock sl (registryLock);
-        registryCopy = registry;
+
+        removeExpiredRegistryEntries();
+
+        registryCopy.reserve (registry.size());
+        for (auto& entry : registry)
+        {
+            if (auto* component = entry.component.get())
+                registryCopy.emplace_back (component, entry.stats.get());
+        }
     }
 
     Snapshot snapshot;
@@ -182,7 +323,7 @@ PaintProfiler::Snapshot PaintProfiler::createSnapshot (PaintProfileTimeKind sort
     {
         ComponentEntry entry;
         entry.component = component;
-        entry.name = component->getPaintProfileName();
+        entry.name = getComponentPaintProfileName (*component);
         entry.stats = stats;
         entry.self = stats->summarize (PaintProfileTimeKind::self);
         entry.children = stats->summarize (PaintProfileTimeKind::children);
@@ -200,12 +341,16 @@ PaintProfiler::Snapshot PaintProfiler::createSnapshot (PaintProfileTimeKind sort
             {
                 case PaintProfileTimeKind::self:
                     return entry.self.p95Micros;
+
                 case PaintProfileTimeKind::children:
                     return entry.children.p95Micros;
+
                 case PaintProfileTimeKind::framework:
                     return entry.framework.p95Micros;
+
                 case PaintProfileTimeKind::total:
                     return entry.total.p95Micros;
+
                 default:
                     return entry.total.p95Micros;
             }
@@ -229,11 +374,13 @@ PaintProfileHistogram PaintProfiler::createHistogramForComponent (const Componen
     {
         const ScopedLock sl (registryLock);
 
-        for (auto& [comp, stats] : registry)
+        removeExpiredRegistryEntries();
+
+        for (auto& entry : registry)
         {
-            if (comp == &component)
+            if (entry.component.get() == &component)
             {
-                found = stats;
+                found = entry.stats.get();
                 break;
             }
         }
@@ -245,8 +392,47 @@ PaintProfileHistogram PaintProfiler::createHistogramForComponent (const Componen
     return found->createHistogram (kind, histogramBuckets);
 }
 
-//==============================================================================
-// PaintProfiler::ScopedSession
+void PaintProfiler::componentBeingDeleted (Component& component)
+{
+    bool removedComponent = false;
+
+    const ScopedLock sl (registryLock);
+
+    const auto previousSize = registry.size();
+
+    std::erase_if (registry, [&] (const auto& entry)
+    {
+        return entry.component.get() == &component;
+    });
+
+    removedComponent = registry.size() != previousSize;
+
+    if (removedComponent)
+        registeredComponentCount.fetch_sub (1, std::memory_order_release);
+}
+
+void PaintProfiler::componentPaintCompleted (Component& component, const ComponentPaintMetrics& metrics)
+{
+    if (! isEnabled())
+        return;
+
+    if (auto* stats = getStatsForComponent (component))
+    {
+        PaintProfileSample sample;
+        sample.frameIndex = currentFrameIndex;
+        sample.paintIndex = globalPaintIndex.fetch_add (1, std::memory_order_relaxed);
+        sample.selfMicros = ticksToMicros (static_cast<double> (metrics.selfTicks));
+        sample.childrenMicros = ticksToMicros (static_cast<double> (metrics.childrenTicks));
+        sample.totalMicros = ticksToMicros (static_cast<double> (metrics.totalTicks));
+        sample.frameworkMicros = jmax (0.0, sample.totalMicros - sample.selfMicros - sample.childrenMicros);
+        sample.componentBounds = metrics.componentBounds;
+        sample.repaintArea = metrics.repaintArea;
+        sample.renderContinuous = metrics.renderContinuous;
+        sample.selfPaintSkipped = metrics.selfPaintSkipped;
+        stats->recordSample (sample);
+    }
+}
+
 //==============================================================================
 
 PaintProfiler::ScopedSession::ScopedSession (PaintProfiler& profilerRef,
@@ -258,7 +444,6 @@ PaintProfiler::ScopedSession::ScopedSession (PaintProfiler& profilerRef,
 {
     profiler.enableSubtree (rootComponent, sessionOptions);
 
-    // Walk the same subtree to capture weak references for later cleanup.
     std::function<void (Component&)> collectComponents = [&] (Component& component)
     {
         enabledComponents.emplace_back (&component);
@@ -278,7 +463,7 @@ PaintProfiler::ScopedSession::~ScopedSession()
     for (auto& weakComponent : enabledComponents)
     {
         if (auto* component = weakComponent.get())
-            component->setPaintProfilingEnabled (false);
+            profiler.disableComponent (*component);
     }
 }
 
@@ -300,8 +485,7 @@ void PaintProfiler::ScopedSession::reset()
         profiler.resetSubtree (*rootComponent);
 }
 
-PaintProfiler::Snapshot PaintProfiler::ScopedSession::createSnapshot (PaintProfileTimeKind sortBy,
-                                                                      int histogramBuckets) const
+PaintProfiler::Snapshot PaintProfiler::ScopedSession::createSnapshot (PaintProfileTimeKind sortBy, int histogramBuckets) const
 {
     return profiler.createSnapshot (sortBy, histogramBuckets);
 }

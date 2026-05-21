@@ -216,14 +216,12 @@ public:
         font = theme->getDefaultFont();
     }
 
-#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
     void setSnapshot (const yup::PaintProfiler::Snapshot& newSnapshot, int selectedIndex)
     {
         snapshot = newSnapshot;
         selectedRow = selectedIndex;
         repaint();
     }
-#endif
 
     int getSelectedRow() const { return selectedRow; }
 
@@ -236,22 +234,13 @@ public:
         g.setFillColor (yup::Color (0xff1a1a2e));
         g.fillAll();
 
-#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
         const float divX = bounds.getWidth() * 0.60f;
         drawTable (g, bounds.withWidth (divX));
         drawRightPanel (g, bounds.withX (divX + 4.0f).withWidth (bounds.getWidth() - divX - 4.0f));
-#else
-        g.setFillColor (yup::Colors::lightgray);
-        g.fillFittedText ("Paint profiling not enabled (build with YUP_ENABLE_COMPONENT_PAINT_PROFILING=1)",
-                          font,
-                          bounds,
-                          yup::Justification::center);
-#endif
     }
 
     void mouseDown (const yup::MouseEvent& event) override
     {
-#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
         const float divX = getLocalBounds().to<float>().getWidth() * 0.60f;
         if (event.getPosition().getX() >= divX)
             return;
@@ -262,12 +251,9 @@ public:
         if (row >= 0 && row < (int) snapshot.components.size())
             selectedRow = row;
         repaint();
-#endif
     }
 
 private:
-#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
-
     static constexpr float kMaxColW = 62.0f;
     static constexpr float kAvgColW = 62.0f;
     static constexpr float kHeaderH = 24.0f;
@@ -511,7 +497,6 @@ private:
     }
 
     yup::PaintProfiler::Snapshot snapshot;
-#endif
 
     int selectedRow = -1;
     yup::Font font;
@@ -546,12 +531,10 @@ public:
             yup::MessageManager::callAsync (closeCallback);
     }
 
-#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
     void updateSnapshot (const yup::PaintProfiler::Snapshot& snap)
     {
         dashboard->setSnapshot (snap, dashboard->getSelectedRow());
     }
-#endif
 
 private:
     std::unique_ptr<ProfilerDashboard> dashboard;
@@ -581,9 +564,7 @@ public:
         nestedGrid = std::make_unique<NestedWidgetGrid>();
         addAndMakeVisible (nestedGrid.get());
 
-#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
         paintProfileSession = yup::PaintProfiler::getInstance().startSession (*this);
-#endif
 
         startTimerHz (10);
     }
@@ -592,10 +573,7 @@ public:
     {
         stopTimer();
         profilerWindow.reset();
-
-#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
         paintProfileSession.reset();
-#endif
     }
 
     void paint (yup::Graphics& g) override
@@ -619,7 +597,6 @@ public:
 
     void timerCallback() override
     {
-#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
         if (paintProfileSession == nullptr || paintProfileSession->isPaused())
             return;
 
@@ -628,12 +605,10 @@ public:
 
         auto snap = paintProfileSession->createSnapshot (yup::PaintProfileTimeKind::total, 32);
         profilerWindow->updateSnapshot (snap);
-#endif
     }
 
     void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
     {
-#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
         if (keys.getKey() == yup::KeyPress::textPKey)
         {
             toggleProfilerWindow();
@@ -647,7 +622,6 @@ public:
         {
             logSnapshot();
         }
-#endif
     }
 
 private:
@@ -669,7 +643,6 @@ private:
         }
     }
 
-#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
     void logSnapshot()
     {
         if (paintProfileSession == nullptr)
@@ -700,15 +673,11 @@ private:
             globalBuckets += " " + yup::String (c);
         yup::Logger::outputDebugString (globalBuckets);
     }
-#endif
 
     std::unique_ptr<OpaqueBackgroundWidget> opaqueWidget;
     std::unique_ptr<PathDrawingWidget> pathWidget;
     std::unique_ptr<TextGradientWidget> textWidget;
     std::unique_ptr<NestedWidgetGrid> nestedGrid;
     std::unique_ptr<ProfilerWindow> profilerWindow;
-
-#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
     std::unique_ptr<yup::PaintProfiler::ScopedSession> paintProfileSession;
-#endif
 };
