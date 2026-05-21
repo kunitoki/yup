@@ -61,14 +61,15 @@ TEST_F (SincTableTest, ConfigureWithCutoffSetsUnityAtZero)
     EXPECT_NEAR (table (0, 0), 1.0, tolerance);
 }
 
-TEST_F (SincTableTest, KernelDecaysAwayFromCentre)
+TEST_F (SincTableTest, KernelDecaysAwayFromCenter)
 {
     SincTable<double, factor, radius> table;
     table.configure (static_cast<double> (sampleRate));
 
-    // Magnitude at tap=1, delta=0 must be strictly less than the centre value
-    EXPECT_LT (std::abs (table (1, 0)), std::abs (table (0, 0)));
-    EXPECT_LT (std::abs (table (2, 0)), std::abs (table (1, 0)));
+    // Use a fractional phase so the full-band sinc is not sampled exactly at
+    // its integer zero crossings.
+    EXPECT_LT (std::abs (table (1, 1)), std::abs (table (0, 1)));
+    EXPECT_LT (std::abs (table (2, 1)), std::abs (table (1, 1)));
 }
 
 TEST_F (SincTableTest, SymmetryViaOperatorBracket)
@@ -127,22 +128,21 @@ TEST_F (SincTableTest, ApplyKaiserWindowReducesOuterTaps)
     EXPECT_LT (afterWindow, beforeWindow);
 }
 
-TEST_F (SincTableTest, ApplyKaiserWindowPreservesCentre)
+TEST_F (SincTableTest, ApplyKaiserWindowPreservesCenter)
 {
     SincTable<double, factor, radius> table;
     table.configure (static_cast<double> (sampleRate));
 
-    // Centre before windowing
+    // Center before windowing
     const double before = table (0, 0);
 
     table.applyKaiserWindow (5.0);
 
-    // The Kaiser window at the centre (index tableSize in the full 2*tableSize window)
-    // is close to 1 but not exactly 1 — just verify it is still close
-    EXPECT_NEAR (table (0, 0), before, 0.01);
+    // The Kaiser window is exactly 1 at the center.
+    EXPECT_DOUBLE_EQ (table (0, 0), before);
 }
 
-TEST_F (SincTableTest, ConfigureWithLowerCutoffReducesBandwidth)
+TEST_F (SincTableTest, ConfigureWithLowerCutoffWidensMainLobe)
 {
     SincTable<double, factor, radius> highCut;
     highCut.configure (static_cast<double> (sampleRate)); // cutoff = sr/2
@@ -150,8 +150,9 @@ TEST_F (SincTableTest, ConfigureWithLowerCutoffReducesBandwidth)
     SincTable<double, factor, radius> lowCut;
     lowCut.configureWithCutoff (sampleRate / 4.0, sampleRate); // cutoff = sr/4
 
-    // Lower cutoff → longer sinc zeros → tap-1 magnitude should be smaller for low-cut
-    EXPECT_LT (std::abs (lowCut (1, 0)), std::abs (highCut (1, 0)));
+    // Lower cutoff -> wider time-domain main lobe, so near-center fractional
+    // taps have a larger magnitude.
+    EXPECT_GT (std::abs (lowCut (1, 1)), std::abs (highCut (1, 1)));
 }
 
 TEST_F (SincTableTest, FloatPrecisionInstantiates)

@@ -96,6 +96,7 @@ public:
         xDecim.assign (maxChannels, std::vector<SampleType> (static_cast<std::size_t> (maxInterpolated + SincRadius * OversampleFactor), SampleType {}));
         oversampledBuffer.assign (maxChannels, std::vector<SampleType> (static_cast<std::size_t> (maxInterpolated), SampleType {}));
         currentOversampledSize = 0;
+        currentNumChannels = 0;
     }
 
     /**
@@ -123,6 +124,7 @@ public:
         for (auto& ch : oversampledBuffer)
             std::fill (ch.begin(), ch.end(), SampleType {});
         currentOversampledSize = 0;
+        currentNumChannels = 0;
     }
 
     //==============================================================================
@@ -157,6 +159,7 @@ public:
         }
 
         currentOversampledSize = numSamples * OversampleFactor;
+        currentNumChannels = numChannels;
 
         for (int ch = 0; ch < numChannels; ++ch)
         {
@@ -288,12 +291,13 @@ public:
 
         @param channel  Zero-based channel index.
         @return         Pointer to getOversampledNumSamples() contiguous samples,
-                        or nullptr if the channel index is out of range or
-                        prepare() has not been called.
+                        or nullptr if the channel index is out of range, prepare()
+                        has not been called, or the channel was not processed by
+                        the most recent upsample() call.
     */
     forcedinline SampleType* getOversampledChannelData (int channel) noexcept
     {
-        if (channel < 0 || channel >= static_cast<int> (oversampledBuffer.size()))
+        if (channel < 0 || channel >= currentNumChannels)
             return nullptr;
 
         return oversampledBuffer[static_cast<std::size_t> (channel)].data();
@@ -304,11 +308,13 @@ public:
 
         @param channel  Zero-based channel index.
         @return         Pointer to getOversampledNumSamples() contiguous samples,
-                        or nullptr if the channel index is out of range.
+                        or nullptr if the channel index is out of range or the
+                        channel was not processed by the most recent upsample()
+                        call.
     */
     const forcedinline SampleType* getOversampledChannelData (int channel) const noexcept
     {
-        if (channel < 0 || channel >= static_cast<int> (oversampledBuffer.size()))
+        if (channel < 0 || channel >= currentNumChannels)
             return nullptr;
 
         return oversampledBuffer[static_cast<std::size_t> (channel)].data();
@@ -349,6 +355,7 @@ private:
     std::vector<std::vector<SampleType>> xDecim;
     std::vector<std::vector<SampleType>> oversampledBuffer;
     int currentOversampledSize = 0;
+    int currentNumChannels = 0;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Oversampler)
 };

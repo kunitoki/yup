@@ -90,7 +90,7 @@ TEST_F (CircularBufferTest, PushMaintainsNewestAtHighestIndex)
     EXPECT_EQ (buf[0], 6);
 }
 
-TEST_F (CircularBufferTest, ClearResetsToZeroAndRewindsPointer)
+TEST_F (CircularBufferTest, ClearResetsToZeroAndPreservesHistoryOrdering)
 {
     CircularBuffer<float, 4> buf;
     buf.push (1.0f);
@@ -102,11 +102,11 @@ TEST_F (CircularBufferTest, ClearResetsToZeroAndRewindsPointer)
     for (int i = 0; i < 4; ++i)
         EXPECT_EQ (buf[i], 0.0f);
 
-    // After clear, push should start from logical index 0 again
+    // After clear, a new push becomes the newest logical entry.
     buf.push (7.0f);
-    EXPECT_EQ (buf[0], 7.0f);
-    for (int i = 1; i < 4; ++i)
+    for (int i = 0; i < 3; ++i)
         EXPECT_EQ (buf[i], 0.0f);
+    EXPECT_EQ (buf[3], 7.0f);
 }
 
 TEST_F (CircularBufferTest, WriteViaSubscriptOperator)

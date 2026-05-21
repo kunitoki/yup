@@ -115,19 +115,20 @@ public:
     /**
         Multiplies the stored half-kernel by the second half of a Kaiser window.
 
-        The full symmetric window has 2 * tableSize samples; this method applies
-        sample indices [tableSize .. 2*tableSize-1] (the descending half) to the
-        stored positive-half sinc values.
+        The full symmetric window has 2 * tableSize - 1 samples, so the stored
+        center coefficient is exactly aligned with the window center and remains
+        unchanged.
 
         @param beta  Kaiser window shape parameter (higher = more side-lobe suppression).
     */
     void applyKaiserWindow (CoeffType beta = CoeffType (5)) noexcept
     {
-        constexpr int N = tableSize * 2;
+        constexpr int N = tableSize * 2 - 1;
+        constexpr int center = tableSize - 1;
 
         for (int i = 0; i < tableSize; ++i)
             table[static_cast<std::size_t> (i)] *=
-                WindowFunctions<CoeffType>::kaiser (i + tableSize, N, beta);
+                WindowFunctions<CoeffType>::kaiser (center + i, N, beta);
     }
 
     //==============================================================================
