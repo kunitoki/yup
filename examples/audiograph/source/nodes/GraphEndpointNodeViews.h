@@ -19,5 +19,9 @@
   ==============================================================================
 */
 
-//#include "yup_audio_graph/yup_AudioGraphModel.cpp"
-#include "yup_audio_graph/yup_AudioGraphProcessor.cpp"
+#pragma once
+
+#include "GraphInputNodeView.h"
+#include "GraphOutputNodeView.h"
+#include "SoundCardInputNodeView.h"
+#include "SoundCardOutputNodeView.h"

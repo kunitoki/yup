@@ -29,7 +29,7 @@ inline void configureParameterSlider (yup::Slider& slider, yup::Color accent)
     slider.setSliderType (yup::Slider::LinearBarHorizontal);
     slider.setTextBoxStyle (yup::Slider::NoTextBox);
     slider.setColor (yup::Slider::Style::backgroundColorId, yup::Color (0xff26282c));
-    slider.setColor (yup::Slider::Style::trackColorId, accent.withAlpha (0.65f));
+    slider.setColor (yup::Slider::Style::trackColorId, yup::Color (0xff26282c).withAlpha (0.65f));
     slider.setColor (yup::Slider::Style::thumbColorId, accent);
     slider.setColor (yup::Slider::Style::thumbOverColorId, accent.brighter (0.15f));
     slider.setColor (yup::Slider::Style::thumbDownColorId, accent.darker (0.15f));

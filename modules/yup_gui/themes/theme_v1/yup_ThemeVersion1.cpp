@@ -124,6 +124,7 @@ void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider
     g.setStrokeWidth (slider.proportionOfWidth (0.075f));
     g.strokePath (foregroundArc);
 
+    /*
     if (slider.hasKeyboardFocus())
     {
         Path focusPath;
@@ -133,6 +134,7 @@ void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider
         g.setStrokeWidth (2.0f);
         g.strokePath (focusPath);
     }
+    */
 }
 
 void paintLinearSlider (Graphics& g, const ApplicationTheme& theme, const Slider& slider, Rectangle<float> sliderBounds, Rectangle<float> thumbBounds, bool isHorizontal, float sliderValue, bool isMouseOver, bool isMouseDown)
@@ -140,17 +142,18 @@ void paintLinearSlider (Graphics& g, const ApplicationTheme& theme, const Slider
     const auto colors = getSliderColors (theme, slider);
 
     // Draw track background
-    g.setFillColor (colors.background);
+    g.setFillColor (colors.track);
     if (isHorizontal)
         g.fillRoundedRect (sliderBounds.getX(), sliderBounds.getCenterY() - 2.0f, sliderBounds.getWidth(), 4.0f, 2.0f);
     else
         g.fillRoundedRect (sliderBounds.getCenterX() - 2.0f, sliderBounds.getY(), 4.0f, sliderBounds.getHeight(), 2.0f);
 
-    // Draw value track for bar sliders
+    // Draw value track
+    g.setFillColor (isMouseDown ? colors.thumbDown : (isMouseOver ? colors.thumbOver : colors.thumb));
+
     const auto sliderType = slider.getSliderType();
     if (sliderType == Slider::LinearBarHorizontal || sliderType == Slider::LinearBarVertical)
     {
-        g.setFillColor (colors.track);
         if (isHorizontal)
             g.fillRoundedRect (sliderBounds.getX(), sliderBounds.getCenterY() - 2.0f, sliderValue * sliderBounds.getWidth(), 4.0f, 2.0f);
         else
@@ -162,10 +165,10 @@ void paintLinearSlider (Graphics& g, const ApplicationTheme& theme, const Slider
     }
     else
     {
-        g.setFillColor (isMouseDown ? colors.thumbDown : (isMouseOver ? colors.thumbOver : colors.thumb));
         g.fillEllipse (thumbBounds);
     }
 
+    /*
     // Draw focus outline if needed
     if (slider.hasKeyboardFocus())
     {
@@ -173,6 +176,7 @@ void paintLinearSlider (Graphics& g, const ApplicationTheme& theme, const Slider
         g.setStrokeWidth (2.0f);
         g.strokeRoundedRect (slider.getLocalBounds().reduced (2), 2.0f);
     }
+    */
 }
 
 void paintTwoValueSlider (Graphics& g, const ApplicationTheme& theme, const Slider& slider, Rectangle<float> sliderBounds, Rectangle<float> minThumbBounds, Rectangle<float> maxThumbBounds, bool isHorizontal, float minValue, float maxValue, bool isMouseOverMinThumb, bool isMouseOverMaxThumb, bool isMouseDown)
@@ -209,6 +213,7 @@ void paintTwoValueSlider (Graphics& g, const ApplicationTheme& theme, const Slid
     g.setFillColor (isMouseDown ? colors.thumbDown : (isMouseOverMaxThumb ? colors.thumbOver : colors.thumb));
     g.fillEllipse (maxThumbBounds);
 
+    /*
     // Draw focus outline if needed
     if (slider.hasKeyboardFocus())
     {
@@ -216,6 +221,7 @@ void paintTwoValueSlider (Graphics& g, const ApplicationTheme& theme, const Slid
         g.setStrokeWidth (2.0f);
         g.strokeRoundedRect (slider.getLocalBounds().reduced (2), 2.0f);
     }
+    */
 }
 
 void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
@@ -1042,10 +1048,8 @@ void paintAudioGraphComponent (Graphics& g, const ApplicationTheme&, const Audio
 {
     const auto zoom = graph.getZoom();
     const auto canvasOffset = graph.getCanvasOffset();
-    const auto backgroundColor = graph.findColor (AudioGraphComponent::Style::backgroundColorId)
-                                     .value_or (Color (0xff101522));
-    const auto gridColor = graph.findColor (AudioGraphComponent::Style::gridColorId)
-                               .value_or (Colors::white.withAlpha (0.045f));
+    const auto backgroundColor = graph.findColor (AudioGraphComponent::Style::backgroundColorId).value_or (Color (0xff101522));
+    const auto gridColor = graph.findColor (AudioGraphComponent::Style::gridColorId).value_or (Colors::white.withAlpha (0.045f));
 
     g.setFillColor (backgroundColor);
     g.fillAll();
@@ -1065,9 +1069,9 @@ void paintAudioGraphComponent (Graphics& g, const ApplicationTheme&, const Audio
         }
     }
 
-    if (const auto* processor = graph.getGraphProcessor())
+    if (const auto* model = graph.getGraphModel())
     {
-        for (const auto& connection : processor->getConnections())
+        for (const auto& connection : model->getConnections())
             paintAudioGraphConnection (g, graph, connection, 1.0f);
     }
 
@@ -1083,10 +1087,8 @@ void paintAudioGraphPort (Graphics& g,
                           bool isInput)
 {
     const auto portRadius = node.getPortRadius();
-    const auto portHoleColor = node.findColor (AudioGraphNodeView::Style::portHoleColorId)
-                                   .value_or (Color (0xff101522));
-    const auto textColor = node.findColor (AudioGraphNodeView::Style::textColorId)
-                               .value_or (Color (0xffd6d6d6));
+    const auto portHoleColor = node.findColor (AudioGraphNodeView::Style::portHoleColorId).value_or (Color (0xff101522));
+    const auto textColor = node.findColor (AudioGraphNodeView::Style::textColorId).value_or (Color (0xffd6d6d6));
 
     g.setFillColor (info.color.withAlpha (0.24f));
     g.fillEllipse (audioGraphEllipseBounds (center, portRadius * 1.8f));
@@ -1112,22 +1114,14 @@ void paintAudioGraphNodeView (Graphics& g, const ApplicationTheme& theme, const 
     const auto accent = node.getNodeColor();
     const auto headerHeight = audioGraphNodeBaseHeaderHeight * viewScale;
 
-    const auto shadowColor = node.findColor (AudioGraphNodeView::Style::shadowColorId)
-                                 .value_or (Colors::black);
-    const auto accentBackgroundColor = node.findColor (AudioGraphNodeView::Style::accentBackgroundColorId)
-                                           .value_or (accent);
-    const auto bodyBackgroundColor = node.findColor (AudioGraphNodeView::Style::bodyBackgroundColorId)
-                                         .value_or (Color (0xff1e2535));
-    const auto headerBackgroundColor = node.findColor (AudioGraphNodeView::Style::headerBackgroundColorId)
-                                           .value_or (Color (0xff141a26));
-    const auto textColor = node.findColor (AudioGraphNodeView::Style::textColorId)
-                               .value_or (Color (0xffd6d6d6));
-    const auto subtitleTextColor = node.findColor (AudioGraphNodeView::Style::subtitleTextColorId)
-                                       .value_or (Color (0xffb8b8b8));
-    const auto parameterBackgroundColor = node.findColor (AudioGraphNodeView::Style::parameterBackgroundColorId)
-                                              .value_or (Color (0xff263044));
-    const auto parameterValueBackgroundColor = node.findColor (AudioGraphNodeView::Style::parameterValueBackgroundColorId)
-                                                   .value_or (Color (0xff1a2130));
+    const auto shadowColor = node.findColor (AudioGraphNodeView::Style::shadowColorId).value_or (Colors::black);
+    const auto accentBackgroundColor = node.findColor (AudioGraphNodeView::Style::accentBackgroundColorId).value_or (accent);
+    const auto bodyBackgroundColor = node.findColor (AudioGraphNodeView::Style::bodyBackgroundColorId).value_or (Color (0xff1e2535));
+    const auto headerBackgroundColor = node.findColor (AudioGraphNodeView::Style::headerBackgroundColorId).value_or (Color (0xff141a26));
+    const auto textColor = node.findColor (AudioGraphNodeView::Style::textColorId).value_or (Color (0xffd6d6d6));
+    const auto subtitleTextColor = node.findColor (AudioGraphNodeView::Style::subtitleTextColorId).value_or (Color (0xffb8b8b8));
+    const auto parameterBackgroundColor = node.findColor (AudioGraphNodeView::Style::parameterBackgroundColorId).value_or (Color (0xff263044));
+    const auto parameterValueBackgroundColor = node.findColor (AudioGraphNodeView::Style::parameterValueBackgroundColorId).value_or (Color (0xff1a2130));
 
     fillAudioGraphFeatheredRoundedRect (g, bodyBounds.translated (0.0f, 3.0f * viewScale), corner, shadowColor, viewScale);
 
@@ -1391,22 +1385,14 @@ void paintKMeter (Graphics& g, const ApplicationTheme& theme, const KMeterCompon
         return;
 
     // Get colors from theme
-    const auto backgroundColor = meter.findColor (KMeterComponent::Style::backgroundColorId)
-                                     .value_or (Color (0xff1a1a1a));
-    const auto greenColor = meter.findColor (KMeterComponent::Style::greenZoneColorId)
-                                .value_or (Color (0xff00cc00));
-    const auto amberColor = meter.findColor (KMeterComponent::Style::amberZoneColorId)
-                                .value_or (Color (0xffffaa00));
-    const auto redColor = meter.findColor (KMeterComponent::Style::redZoneColorId)
-                              .value_or (Color (0xffcc0000));
-    const auto averageColor = meter.findColor (KMeterComponent::Style::averageLevelColorId)
-                                  .value_or (Color (0xccffffff));
-    const auto peakColor = meter.findColor (KMeterComponent::Style::peakLevelColorId)
-                               .value_or (Color (0xffffffff));
-    const auto peakClipColor = meter.findColor (KMeterComponent::Style::peakLevelClipColorId)
-                                   .value_or (Color (0xffff0000));
-    const auto peakHoldColor = meter.findColor (KMeterComponent::Style::peakHoldColorId)
-                                   .value_or (Color (0xffffff00));
+    const auto backgroundColor = meter.findColor (KMeterComponent::Style::backgroundColorId).value_or (Color (0xff1a1a1a));
+    const auto greenColor = meter.findColor (KMeterComponent::Style::greenZoneColorId).value_or (Color (0xff00cc00));
+    const auto amberColor = meter.findColor (KMeterComponent::Style::amberZoneColorId).value_or (Color (0xffffaa00));
+    const auto redColor = meter.findColor (KMeterComponent::Style::redZoneColorId).value_or (Color (0xffcc0000));
+    const auto averageColor = meter.findColor (KMeterComponent::Style::averageLevelColorId).value_or (Color (0xccffffff));
+    const auto peakColor = meter.findColor (KMeterComponent::Style::peakLevelColorId).value_or (Color (0xffffffff));
+    const auto peakClipColor = meter.findColor (KMeterComponent::Style::peakLevelClipColorId).value_or (Color (0xffff0000));
+    const auto peakHoldColor = meter.findColor (KMeterComponent::Style::peakHoldColorId).value_or (Color (0xffffff00));
 
     // Draw background with subtle depth
     {

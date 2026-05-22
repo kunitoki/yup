@@ -42,6 +42,8 @@
 #pragma once
 #define YUP_AUDIO_PROCESSORS_H_INCLUDED
 
+#include <atomic>
+
 #include <yup_audio_basics/yup_audio_basics.h>
 
 #if YUP_MODULE_AVAILABLE_yup_gui

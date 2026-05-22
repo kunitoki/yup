@@ -1050,8 +1050,8 @@ private:
 
     yup::Label timeLabel;
     yup::Label pitchLabel;
-    yup::Slider timeStretchSlider { yup::Slider::LinearBarHorizontal, "Time Stretch" };
-    yup::Slider pitchShiftSlider { yup::Slider::LinearBarHorizontal, "Pitch Shift" };
+    yup::Slider timeStretchSlider { yup::Slider::LinearHorizontal, "Time Stretch" };
+    yup::Slider pitchShiftSlider { yup::Slider::LinearHorizontal, "Pitch Shift" };
 
     yup::Label infoLabel;
     yup::Label statusLabel;

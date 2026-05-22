@@ -207,7 +207,7 @@ private:
     std::atomic<bool> progressVisible { false };
 
     // Listeners
-    ListenerList<Listener> listeners;
+    ListenerList<Listener, Array<Listener*, CriticalSection>> listeners;
 
     WeakReference<AudioThumbnail>::Master masterReference;
     friend class WeakReference<AudioThumbnail>;

@@ -78,6 +78,7 @@
 #include <objc/runtime.h>
 #include <objc/objc.h>
 #include <objc/message.h>
+#include <objc/objc-sync.h>
 #include <poll.h>
 
 //==============================================================================

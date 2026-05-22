@@ -41,14 +41,37 @@ AudioProcessor::~AudioProcessor()
 void AudioProcessor::addParameter (AudioParameter::Ptr parameter)
 {
     jassert (parameter != nullptr);
+    if (parameter == nullptr)
+        return;
+
+    if (parameterMap.find (parameter->getID()) != parameterMap.end())
+        return;
 
     parameter->setIndexInContainer (static_cast<int> (parameters.size()));
 
-    auto [iterator, inserted] = parameterMap.try_emplace (parameter->getID(), parameter);
-    if (! inserted)
-        jassertfalse; // You added a parameter with the same id twice!
-
+    parameterMap.emplace (parameter->getID(), parameter);
     parameters.emplace_back (std::move (parameter));
+}
+
+AudioParameter::Ptr AudioProcessor::getParameterByID (StringRef parameterID) const
+{
+    const auto iterator = parameterMap.find (String (parameterID));
+    return iterator != parameterMap.end() ? iterator->second : nullptr;
+}
+
+void AudioProcessor::addListener (Listener* listener)
+{
+    listeners.add (listener);
+}
+
+void AudioProcessor::removeListener (Listener* listener)
+{
+    listeners.remove (listener);
+}
+
+void AudioProcessor::updateHostDisplay (ChangeDetails details)
+{
+    listeners.call (&Listener::audioProcessorChanged, this, details);
 }
 
 //==============================================================================
@@ -88,12 +111,23 @@ void AudioProcessor::suspendProcessing (bool shouldSuspend)
 {
     auto lock = CriticalSection::ScopedLockType (processLock);
 
-    processIsSuspended = shouldSuspend;
+    processIsSuspended.store (shouldSuspend);
 }
 
 bool AudioProcessor::isSuspended() const
 {
-    return processIsSuspended;
+    return processIsSuspended.load();
+}
+
+//==============================================================================
+
+void AudioProcessor::setLatencySamples (int newLatencySamples)
+{
+    const auto clampedLatencySamples = jmax (0, newLatencySamples);
+    const auto oldLatencySamples = latencySamples.exchange (clampedLatencySamples);
+
+    if (oldLatencySamples != clampedLatencySamples)
+        updateHostDisplay (ChangeDetails().withLatencyChanged (true));
 }
 
 //==============================================================================

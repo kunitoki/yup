@@ -33,6 +33,31 @@ class AudioProcessorEditor;
 class YUP_API AudioProcessor
 {
 public:
+    /** Details about a processor-level change notification. */
+    struct ChangeDetails
+    {
+        /** Returns a copy of these details with the latency change flag set. */
+        ChangeDetails withLatencyChanged (bool shouldBeLatencyChanged) const noexcept
+        {
+            auto copy = *this;
+            copy.latencyChanged = shouldBeLatencyChanged;
+            return copy;
+        }
+
+        /** True when the processor latency may have changed. */
+        bool latencyChanged = false;
+    };
+
+    /** Receives processor-level change notifications. */
+    class Listener
+    {
+    public:
+        virtual ~Listener() = default;
+
+        /** Called when a processor-level property changes. */
+        virtual void audioProcessorChanged (AudioProcessor* processor, const ChangeDetails& details) = 0;
+    };
+
     //==============================================================================
     /** The floating-point precision used for processBlock() calls. */
     enum class ProcessingPrecision
@@ -59,8 +84,20 @@ public:
     /** Returns the parameters. */
     Span<const AudioParameter::Ptr> getParameters() const { return parameters; }
 
+    /** Returns a parameter by stable ID, or nullptr when no such parameter exists. */
+    AudioParameter::Ptr getParameterByID (StringRef parameterID) const;
+
     /** Adds a parameter. */
     void addParameter (AudioParameter::Ptr parameter);
+
+    /** Adds a processor-level change listener. */
+    void addListener (Listener* listener);
+
+    /** Removes a processor-level change listener. */
+    void removeListener (Listener* listener);
+
+    /** Notifies listeners that processor-level details have changed. */
+    void updateHostDisplay (ChangeDetails details);
 
     //==============================================================================
 
@@ -156,7 +193,10 @@ public:
 
     virtual int getTailSamples() { return 0; }
 
-    virtual int getLatencySamples() { return 0; }
+    virtual int getLatencySamples() { return latencySamples.load(); }
+
+    /** Sets the processor latency in samples and notifies listeners when it changes. */
+    void setLatencySamples (int newLatencySamples);
 
     //==============================================================================
 
@@ -227,17 +267,19 @@ private:
 
     std::vector<AudioParameter::Ptr> parameters;
     std::unordered_map<String, AudioParameter::Ptr> parameterMap;
+    ListenerList<Listener, Array<Listener*, CriticalSection>> listeners;
 
     AudioBusLayout busLayout;
 
     float sampleRate = 44100.0f;
     int samplesPerBlock = 1024;
+    std::atomic<int> latencySamples { 0 };
     ProcessingPrecision processingPrecision = ProcessingPrecision::singlePrecision;
 
     AudioPlayHead* playHead = nullptr;
 
     CriticalSection processLock;
-    bool processIsSuspended = false;
+    std::atomic<bool> processIsSuspended { false };
 };
 
 } // namespace yup

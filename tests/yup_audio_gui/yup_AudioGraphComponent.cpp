@@ -39,6 +39,12 @@ AudioBusLayout stereoLayout()
                            { AudioBus ("Output", AudioBus::Type::Audio, AudioBus::Direction::Output, 2) });
 }
 
+AudioBusLayout monoLayout()
+{
+    return AudioBusLayout ({ AudioBus ("Input", AudioBus::Type::Audio, AudioBus::Direction::Input, 1) },
+                           { AudioBus ("Output", AudioBus::Type::Audio, AudioBus::Direction::Output, 1) });
+}
+
 void expectPointNear (Point<float> actual, Point<float> expected, float tolerance = pointTolerance)
 {
     EXPECT_NEAR (expected.getX(), actual.getX(), tolerance);
@@ -68,6 +74,37 @@ public:
     void processBlock (AudioBuffer<float>&, MidiBuffer&) override {}
 
     int getLatencySamples() override { return 0; }
+
+    int getCurrentPreset() const noexcept override { return 0; }
+
+    void setCurrentPreset (int) noexcept override {}
+
+    int getNumPresets() const override { return 0; }
+
+    String getPresetName (int) const override { return {}; }
+
+    void setPresetName (int, StringRef) override {}
+
+    Result loadStateFromMemory (const MemoryBlock&) override { return Result::ok(); }
+
+    Result saveStateIntoMemory (MemoryBlock&) override { return Result::ok(); }
+
+    bool hasEditor() const override { return false; }
+};
+
+class MonoProcessor : public AudioProcessor
+{
+public:
+    MonoProcessor()
+        : AudioProcessor ("Graph Component Mono Processor", monoLayout())
+    {
+    }
+
+    void prepareToPlay (float, int) override {}
+
+    void releaseResources() override {}
+
+    void processBlock (AudioBuffer<float>&, MidiBuffer&) override {}
 
     int getCurrentPreset() const noexcept override { return 0; }
 
@@ -183,20 +220,45 @@ class AudioGraphComponentTests : public ::testing::Test
 protected:
     void SetUp() override
     {
-        graph = std::make_shared<AudioGraphProcessor>();
+        model = std::make_shared<AudioGraphModel>();
+        graph = std::make_shared<AudioGraphProcessor> (model);
         component = std::make_unique<AudioGraphComponent> (graph);
         component->setBounds (0.0f, 0.0f, 800.0f, 600.0f);
+        component->onConnectionRequested = [this] (const AudioGraphConnection& connection)
+        {
+            return model->addConnection (connection).wasOk() && graph->commitChanges().wasOk();
+        };
+        component->onConnectionRemovalRequested = [this] (const AudioGraphConnection& connection)
+        {
+            return model->removeConnection (connection) && graph->commitChanges().wasOk();
+        };
+        component->onEndpointConnectionsRemovalRequested = [this] (const AudioGraphEndpoint& endpoint)
+        {
+            auto connections = model->getConnections();
+            bool removedAny = false;
+
+            for (const auto& connection : connections)
+                if (connection.source == endpoint || connection.destination == endpoint)
+                    removedAny = model->removeConnection (connection) || removedAny;
+
+            return removedAny && graph->commitChanges().wasOk();
+        };
+        component->onNodeMoveRequested = [this] (AudioGraphNodeID nodeID, Point<float>, Point<float> newCanvasPos)
+        {
+            return model->setNodePosition (nodeID, newCanvasPos.getX(), newCanvasPos.getY());
+        };
     }
 
     void TearDown() override
     {
         component.reset();
+        model.reset();
         graph.reset();
     }
 
     AudioGraphNodeID addProcessorNode()
     {
-        return graph->addNode (std::make_unique<TestProcessor>());
+        return model->addNode (std::make_unique<TestProcessor>());
     }
 
     TestNodeView* addNodeView (AudioGraphNodeID nodeID,
@@ -223,6 +285,7 @@ protected:
     }
 
     std::shared_ptr<AudioGraphProcessor> graph;
+    std::shared_ptr<AudioGraphModel> model;
     std::unique_ptr<AudioGraphComponent> component;
 };
 
@@ -674,7 +737,7 @@ TEST_F (AudioGraphComponentTests, ClickingCompatibleEndpointsAddsConnectionAndNo
     component->mouseDown (mouseEventForComponent (MouseEvent::leftButton, component->getEndpointScreenPosition (source)));
     component->mouseDown (mouseEventForComponent (MouseEvent::leftButton, component->getEndpointScreenPosition (destination)));
 
-    const auto connections = graph->getConnections();
+    const auto connections = model->getConnections();
     ASSERT_EQ (1u, connections.size());
     EXPECT_EQ (AudioGraphConnection (source, destination), connections.front());
 
@@ -701,11 +764,70 @@ TEST_F (AudioGraphComponentTests, DraggingCompatibleEndpointsAddsConnectionAndCl
     component->mouseDrag (mouseEventForComponent (MouseEvent::leftButton, sourcePosition + Point<float> (20.0f, 0.0f)));
     component->mouseUp (mouseEventForComponent (MouseEvent::leftButton, destinationPosition));
 
-    const auto connections = graph->getConnections();
+    const auto connections = model->getConnections();
     ASSERT_EQ (1u, connections.size());
     EXPECT_EQ (AudioGraphConnection (source, destination), connections.front());
     EXPECT_FALSE (component->isPendingWireVisible());
     EXPECT_FALSE (component->getPendingWireEndpoint().has_value());
+}
+
+TEST_F (AudioGraphComponentTests, UndoManagerRestoresConnectionAddedByGesture)
+{
+    UndoManager undoManager;
+    component->setUndoManager (&undoManager);
+
+    const auto nodeID = addProcessorNode();
+    addNodeView (nodeID, { 100.0f, 50.0f });
+
+    auto inputView = std::make_unique<TestNodeView> (AudioGraphNodeID::invalid(), "Graph Input", 0, 1);
+    component->setGraphInputView (std::move (inputView), { -120.0f, 50.0f });
+
+    const AudioGraphConnection connection { AudioGraphEndpoint::graphInput (0),
+                                            AudioGraphEndpoint::nodeInput (nodeID, 0) };
+
+    component->mouseDown (mouseEventForComponent (MouseEvent::leftButton, component->getEndpointScreenPosition (connection.source)));
+    component->mouseDown (mouseEventForComponent (MouseEvent::leftButton, component->getEndpointScreenPosition (connection.destination)));
+
+    ASSERT_EQ (1u, model->getConnections().size());
+
+    component->keyDown (KeyPress (KeyPress::textZKey, KeyModifiers (KeyModifiers::commandMask)), Point<float>());
+    EXPECT_TRUE (model->getConnections().empty());
+
+    component->keyDown (KeyPress (KeyPress::textZKey, KeyModifiers (KeyModifiers::commandMask | KeyModifiers::shiftMask)), Point<float>());
+    const auto connections = model->getConnections();
+    ASSERT_EQ (1u, connections.size());
+    EXPECT_EQ (connection, connections.front());
+}
+
+TEST_F (AudioGraphComponentTests, UndoManagerRestoresConnectionRemovedByGesture)
+{
+    UndoManager undoManager;
+    component->setUndoManager (&undoManager);
+
+    const auto nodeID = addProcessorNode();
+    addNodeView (nodeID, { 100.0f, 50.0f });
+
+    auto inputView = std::make_unique<TestNodeView> (AudioGraphNodeID::invalid(), "Graph Input", 0, 1);
+    component->setGraphInputView (std::move (inputView), { -120.0f, 50.0f });
+
+    const AudioGraphConnection connection { AudioGraphEndpoint::graphInput (0),
+                                            AudioGraphEndpoint::nodeInput (nodeID, 0) };
+    ASSERT_TRUE (model->addConnection (connection).wasOk());
+    ASSERT_TRUE (graph->commitChanges().wasOk());
+
+    const auto midpoint = (component->getEndpointScreenPosition (connection.source)
+                           + component->getEndpointScreenPosition (connection.destination))
+                        * 0.5f;
+    component->setWireHitDistance (64.0f);
+    component->mouseDown (mouseEventForComponent (MouseEvent::rightButton, midpoint));
+
+    ASSERT_TRUE (model->getConnections().empty());
+
+    EXPECT_TRUE (undoManager.undo());
+    ASSERT_EQ (1u, model->getConnections().size());
+
+    EXPECT_TRUE (undoManager.redo());
+    EXPECT_TRUE (model->getConnections().empty());
 }
 
 TEST_F (AudioGraphComponentTests, IncompatibleEndpointPairKeepsNewEndpointArmedAndDoesNotConnect)
@@ -721,9 +843,28 @@ TEST_F (AudioGraphComponentTests, IncompatibleEndpointPairKeepsNewEndpointArmedA
     component->mouseDown (mouseEventForComponent (MouseEvent::leftButton, component->getEndpointScreenPosition (firstInput)));
     component->mouseDown (mouseEventForComponent (MouseEvent::leftButton, component->getEndpointScreenPosition (secondInput)));
 
-    EXPECT_TRUE (graph->getConnections().empty());
+    EXPECT_TRUE (model->getConnections().empty());
     ASSERT_TRUE (component->getPendingWireEndpoint().has_value());
     EXPECT_EQ (secondInput, *component->getPendingWireEndpoint());
+}
+
+TEST_F (AudioGraphComponentTests, IncompatibleProcessorLayoutsDoNotAddConnection)
+{
+    const auto stereoNodeID = addProcessorNode();
+    const auto monoNodeID = model->addNode (std::make_unique<MonoProcessor>());
+
+    addNodeView (stereoNodeID, { 100.0f, 50.0f });
+    addNodeView (monoNodeID, { 320.0f, 50.0f });
+
+    const auto stereoOutput = AudioGraphEndpoint::nodeOutput (stereoNodeID, 0);
+    const auto monoInput = AudioGraphEndpoint::nodeInput (monoNodeID, 0);
+
+    component->mouseDown (mouseEventForComponent (MouseEvent::leftButton, component->getEndpointScreenPosition (stereoOutput)));
+    component->mouseDown (mouseEventForComponent (MouseEvent::leftButton, component->getEndpointScreenPosition (monoInput)));
+
+    EXPECT_TRUE (model->getConnections().empty());
+    ASSERT_TRUE (component->getPendingWireEndpoint().has_value());
+    EXPECT_EQ (monoInput, *component->getPendingWireEndpoint());
 }
 
 TEST_F (AudioGraphComponentTests, RightClickEndpointRemovesAllConnectionsForEndpoint)
@@ -736,7 +877,7 @@ TEST_F (AudioGraphComponentTests, RightClickEndpointRemovesAllConnectionsForEndp
 
     const AudioGraphConnection connection { AudioGraphEndpoint::graphInput (0),
                                             AudioGraphEndpoint::nodeInput (nodeID, 0) };
-    ASSERT_TRUE (graph->addConnection (connection).wasOk());
+    ASSERT_TRUE (model->addConnection (connection).wasOk());
     ASSERT_TRUE (graph->commitChanges().wasOk());
 
     RecordingGraphListener listener;
@@ -744,7 +885,7 @@ TEST_F (AudioGraphComponentTests, RightClickEndpointRemovesAllConnectionsForEndp
 
     component->mouseDown (mouseEventForComponent (MouseEvent::rightButton, component->getEndpointScreenPosition (connection.source)));
 
-    EXPECT_TRUE (graph->getConnections().empty());
+    EXPECT_TRUE (model->getConnections().empty());
     ASSERT_EQ (1u, listener.removedConnections.size());
     EXPECT_EQ (connection, listener.removedConnections.front());
 
@@ -766,8 +907,8 @@ TEST_F (AudioGraphComponentTests, RightClickEndpointRemovesMultipleConnectionsFo
     const AudioGraphConnection secondConnection { AudioGraphEndpoint::graphInput (0),
                                                   AudioGraphEndpoint::nodeInput (secondNodeID, 0) };
 
-    ASSERT_TRUE (graph->addConnection (firstConnection).wasOk());
-    ASSERT_TRUE (graph->addConnection (secondConnection).wasOk());
+    ASSERT_TRUE (model->addConnection (firstConnection).wasOk());
+    ASSERT_TRUE (model->addConnection (secondConnection).wasOk());
     ASSERT_TRUE (graph->commitChanges().wasOk());
 
     RecordingGraphListener listener;
@@ -775,12 +916,48 @@ TEST_F (AudioGraphComponentTests, RightClickEndpointRemovesMultipleConnectionsFo
 
     component->mouseDown (mouseEventForComponent (MouseEvent::rightButton, component->getEndpointScreenPosition (firstConnection.source)));
 
-    EXPECT_TRUE (graph->getConnections().empty());
+    EXPECT_TRUE (model->getConnections().empty());
     ASSERT_EQ (2u, listener.removedConnections.size());
     EXPECT_EQ (firstConnection, listener.removedConnections[0]);
     EXPECT_EQ (secondConnection, listener.removedConnections[1]);
 
     component->removeListener (&listener);
+}
+
+TEST_F (AudioGraphComponentTests, UndoManagerRestoresMultipleEndpointConnectionsRemovedByGesture)
+{
+    UndoManager undoManager;
+    component->setUndoManager (&undoManager);
+
+    const auto firstNodeID = addProcessorNode();
+    const auto secondNodeID = addProcessorNode();
+    addNodeView (firstNodeID, { 100.0f, 50.0f });
+    addNodeView (secondNodeID, { 100.0f, 190.0f });
+
+    auto inputView = std::make_unique<TestNodeView> (AudioGraphNodeID::invalid(), "Graph Input", 0, 1);
+    component->setGraphInputView (std::move (inputView), { -120.0f, 50.0f });
+
+    const AudioGraphConnection firstConnection { AudioGraphEndpoint::graphInput (0),
+                                                 AudioGraphEndpoint::nodeInput (firstNodeID, 0) };
+    const AudioGraphConnection secondConnection { AudioGraphEndpoint::graphInput (0),
+                                                  AudioGraphEndpoint::nodeInput (secondNodeID, 0) };
+
+    ASSERT_TRUE (model->addConnection (firstConnection).wasOk());
+    ASSERT_TRUE (model->addConnection (secondConnection).wasOk());
+    ASSERT_TRUE (graph->commitChanges().wasOk());
+
+    component->mouseDown (mouseEventForComponent (MouseEvent::rightButton, component->getEndpointScreenPosition (firstConnection.source)));
+
+    ASSERT_TRUE (model->getConnections().empty());
+
+    EXPECT_TRUE (undoManager.undo());
+    auto connections = model->getConnections();
+    ASSERT_EQ (2u, connections.size());
+    EXPECT_EQ (firstConnection, connections[0]);
+    EXPECT_EQ (secondConnection, connections[1]);
+
+    EXPECT_TRUE (undoManager.redo());
+    EXPECT_TRUE (model->getConnections().empty());
 }
 
 TEST_F (AudioGraphComponentTests, RightClickConnectionRemovesSingleConnection)
@@ -793,7 +970,7 @@ TEST_F (AudioGraphComponentTests, RightClickConnectionRemovesSingleConnection)
 
     const AudioGraphConnection connection { AudioGraphEndpoint::graphInput (0),
                                             AudioGraphEndpoint::nodeInput (nodeID, 0) };
-    ASSERT_TRUE (graph->addConnection (connection).wasOk());
+    ASSERT_TRUE (model->addConnection (connection).wasOk());
     ASSERT_TRUE (graph->commitChanges().wasOk());
 
     const auto midpoint = (component->getEndpointScreenPosition (connection.source)
@@ -803,7 +980,7 @@ TEST_F (AudioGraphComponentTests, RightClickConnectionRemovesSingleConnection)
 
     component->mouseDown (mouseEventForComponent (MouseEvent::rightButton, midpoint));
 
-    EXPECT_TRUE (graph->getConnections().empty());
+    EXPECT_TRUE (model->getConnections().empty());
 }
 
 TEST_F (AudioGraphComponentTests, DraggingNodeUpdatesCanvasPositionAndNotifiesListener)
@@ -826,6 +1003,33 @@ TEST_F (AudioGraphComponentTests, DraggingNodeUpdatesCanvasPositionAndNotifiesLi
     component->removeListener (&listener);
 }
 
+TEST_F (AudioGraphComponentTests, UndoManagerRestoresNodeMove)
+{
+    UndoManager undoManager;
+    component->setUndoManager (&undoManager);
+
+    const auto nodeID = addProcessorNode();
+    auto* view = addNodeView (nodeID, { 100.0f, 50.0f });
+
+    const auto localStart = view->getLocalBounds().getCenter();
+    component->mouseDown (mouseEventForSource (MouseEvent::leftButton, view, localStart));
+    component->mouseDrag (mouseEventForSource (MouseEvent::leftButton, view, localStart + Point<float> (25.0f, 35.0f)));
+    component->mouseUp (mouseEventForComponent (MouseEvent::leftButton, component->getLocalBounds().getCenter()));
+
+    expectPointNear (view->getBounds().getPosition(), component->canvasToScreen ({ 125.0f, 85.0f }));
+
+    EXPECT_TRUE (undoManager.undo());
+    expectPointNear (view->getBounds().getPosition(), component->canvasToScreen ({ 100.0f, 50.0f }));
+
+    auto properties = model->getNodeProperties (nodeID);
+    ASSERT_TRUE (properties.has_value());
+    EXPECT_FLOAT_EQ (100.0f, properties->positionX);
+    EXPECT_FLOAT_EQ (50.0f, properties->positionY);
+
+    EXPECT_TRUE (undoManager.redo());
+    expectPointNear (view->getBounds().getPosition(), component->canvasToScreen ({ 125.0f, 85.0f }));
+}
+
 TEST_F (AudioGraphComponentTests, DraggingGraphBoundaryViewDoesNotNotifyNodeMoveListener)
 {
     auto graphInput = std::make_unique<TestNodeView> (AudioGraphNodeID::invalid(), "Graph Input", 0, 1);
@@ -843,5 +1047,43 @@ TEST_F (AudioGraphComponentTests, DraggingGraphBoundaryViewDoesNotNotifyNodeMove
     EXPECT_EQ (0, listener.nodeMoveCount);
     expectPointNear (graphInputView->getBounds().getPosition(), component->canvasToScreen ({ -95.0f, 85.0f }));
 
+    auto properties = model->getNodeProperties (AudioGraphModel::getGraphInputNodeID());
+    ASSERT_TRUE (properties.has_value());
+    EXPECT_FLOAT_EQ (-95.0f, properties->positionX);
+    EXPECT_FLOAT_EQ (85.0f, properties->positionY);
+
     component->removeListener (&listener);
+}
+
+TEST_F (AudioGraphComponentTests, UndoManagerRestoresGraphBoundaryNodeMove)
+{
+    UndoManager undoManager;
+    component->setUndoManager (&undoManager);
+
+    auto graphInput = std::make_unique<TestNodeView> (AudioGraphNodeID::invalid(), "Graph Input", 0, 1);
+    auto* graphInputView = graphInput.get();
+    component->setGraphInputView (std::move (graphInput), { -120.0f, 50.0f });
+
+    const auto localStart = graphInputView->getLocalBounds().getCenter();
+    component->mouseDown (mouseEventForSource (MouseEvent::leftButton, graphInputView, localStart));
+    component->mouseDrag (mouseEventForSource (MouseEvent::leftButton, graphInputView, localStart + Point<float> (25.0f, 35.0f)));
+    component->mouseUp (mouseEventForComponent (MouseEvent::leftButton, component->getLocalBounds().getCenter()));
+
+    expectPointNear (graphInputView->getBounds().getPosition(), component->canvasToScreen ({ -95.0f, 85.0f }));
+
+    auto properties = model->getNodeProperties (AudioGraphModel::getGraphInputNodeID());
+    ASSERT_TRUE (properties.has_value());
+    EXPECT_FLOAT_EQ (-95.0f, properties->positionX);
+    EXPECT_FLOAT_EQ (85.0f, properties->positionY);
+
+    EXPECT_TRUE (undoManager.undo());
+    expectPointNear (graphInputView->getBounds().getPosition(), component->canvasToScreen ({ -120.0f, 50.0f }));
+
+    properties = model->getNodeProperties (AudioGraphModel::getGraphInputNodeID());
+    ASSERT_TRUE (properties.has_value());
+    EXPECT_FLOAT_EQ (-120.0f, properties->positionX);
+    EXPECT_FLOAT_EQ (50.0f, properties->positionY);
+
+    EXPECT_TRUE (undoManager.redo());
+    expectPointNear (graphInputView->getBounds().getPosition(), component->canvasToScreen ({ -95.0f, 85.0f }));
 }
