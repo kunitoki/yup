@@ -117,6 +117,7 @@ public:
 private:
     //==============================================================================
     Range<int> getValidBufferRange (int numSamples) const;
+    std::tuple<int64, Range<int>> getValidBufferRangeAndAdvance (int numSamples);
     bool readNextBufferChunk();
     void readBufferSection (int64 start, int length, int bufferOffset);
     int useTimeSlice() override;
