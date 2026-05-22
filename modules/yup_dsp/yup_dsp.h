@@ -176,3 +176,9 @@
 
 // Time-stretching and pitch-shifting
 #include "stretching/yup_TimeStretchProcessor.h"
+
+// Oversampling and sample-rate conversion
+#include "resampling/yup_CircularBuffer.h"
+#include "resampling/yup_SincTable.h"
+#include "resampling/yup_Oversampler.h"
+#include "resampling/yup_Resampler.h"
