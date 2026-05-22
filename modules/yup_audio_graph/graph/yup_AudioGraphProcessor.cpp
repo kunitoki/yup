@@ -122,6 +122,22 @@ public:
         std::atomic<bool>& flag;
     };
 
+    struct ScopedProcessBlock
+    {
+        explicit ScopedProcessBlock (std::atomic<int>& counterIn) noexcept
+            : counter (counterIn)
+        {
+            counter.fetch_add (1, std::memory_order_acq_rel);
+        }
+
+        ~ScopedProcessBlock()
+        {
+            counter.fetch_sub (1, std::memory_order_acq_rel);
+        }
+
+        std::atomic<int>& counter;
+    };
+
     struct DelayLine
     {
         void initialise (GraphSignalType signalTypeIn, int numChannels, int delaySamplesIn, int maxBlockSize, size_t midiReserveBytes = 4096)
@@ -301,7 +317,7 @@ public:
 
         delete pendingPlan.exchange (compiled.release());
         hasPublishedPlan.store (true);
-        deleteRetiredPlans();
+        deleteRetiredPlansIfUnused();
 
         if (oldLatencySamples != newLatencySamples)
             owner.updateHostDisplay (AudioProcessor::ChangeDetails().withLatencyChanged (true));
@@ -400,6 +416,7 @@ public:
     void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer)
     {
         ScopedNoDenormals noDenormals;
+        const ScopedProcessBlock scopedProcessBlock (activeProcessBlocks);
         swapPendingPlan();
 
         auto* graph = currentPlan;
@@ -1096,6 +1113,12 @@ public:
         }
     }
 
+    void deleteRetiredPlansIfUnused()
+    {
+        if (activeProcessBlocks.load (std::memory_order_acquire) == 0)
+            deleteRetiredPlans();
+    }
+
     void resizeWorkers (int newNumThreads)
     {
         while (static_cast<int> (workers.size()) > newNumThreads)
@@ -1190,6 +1213,7 @@ public:
     float lastCompiledSampleRate = 0.0f;
     int lastCompiledMaxBlockSize = 0;
     std::atomic<bool> hasPublishedPlan { false };
+    std::atomic<int> activeProcessBlocks { 0 };
     std::atomic<CompiledGraph*> pendingPlan { nullptr };
     std::atomic<CompiledGraph*> retiredPlans { nullptr };
     CompiledGraph* currentPlan = nullptr;
