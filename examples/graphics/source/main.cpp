@@ -57,6 +57,7 @@
 #include "examples/TextEditor.h"
 #include "examples/VariableFonts.h"
 #include "examples/Widgets.h"
+#include "examples/PaintProfilerDemo.h"
 #if YUP_MODULE_AVAILABLE_yup_python
 #include "examples/Python.h"
 #endif
@@ -164,6 +165,7 @@ public:
             jassert (artboard.loadArtboard());
         });
         registerDemo<SvgDemo> ("SVG", counter++);
+        registerDemo<PaintProfilerDemo> ("Paint Profiler", counter++);
 #if YUP_MODULE_AVAILABLE_yup_python
         registerDemo<PythonDemo> ("Python", counter++);
 #endif

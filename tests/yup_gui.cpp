@@ -26,6 +26,7 @@
 #include "yup_gui/yup_FileChooser.cpp"
 #include "yup_gui/yup_Label.cpp"
 #include "yup_gui/yup_ListBox.cpp"
+#include "yup_gui/yup_PaintProfiler.cpp"
 #include "yup_gui/yup_PopupMenu.cpp"
 #include "yup_gui/yup_ProgressBar.cpp"
 #include "yup_gui/yup_ScrollBar.cpp"
