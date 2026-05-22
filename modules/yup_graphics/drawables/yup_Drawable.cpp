@@ -317,8 +317,6 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
     if (element.color)
         currentColor = *element.color;
 
-    const auto transformBeforeElement = g.getTransform();
-
     YUP_DRAWABLE_LOG ("paintElement - tag: " << element.tagName
                                              << " id: " << (element.id ? *element.id : "none")
                                              << " depth: " << recursionDepth
@@ -363,9 +361,14 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
         {
             if (filter->gaussianBlurStdDeviation)
             {
-                const auto feather = jmax (g.getFeather(), *filter->gaussianBlurStdDeviation);
+                // SVG feGaussianBlur stdDeviation is sigma. Rive feather follows design-tool
+                // blur sizing as a two-standard-deviation width, then expands that internally
+                // to cover the gaussian support.
+                const auto svgStdDeviationToFeather = 2.0f;
+                const auto feather = jmax (g.getFeather(), *filter->gaussianBlurStdDeviation * svgStdDeviationToFeather);
                 YUP_DRAWABLE_LOG ("Applying GaussianBlur filter as feather - id: " << *element.filterUrl
                                                                                    << " stdDeviation: " << *filter->gaussianBlurStdDeviation
+                                                                                   << " featherScale: " << svgStdDeviationToFeather
                                                                                    << " previousFeather: " << g.getFeather()
                                                                                    << " appliedFeather: " << feather);
                 g.setFeather (feather);
@@ -459,26 +462,22 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
             {
                 combinedClipPath.setUsingNonZeroWinding (clipUsesNonZeroWinding);
 
-                const auto transformDuringClip = g.getTransform();
-                if (element.transform)
-                {
-                    YUP_DRAWABLE_LOG ("Applying clip path in pre-element transform space - id: " << *element.clipPathUrl
-                                                                                                 << " clipTransform: " << transformBeforeElement.toString()
-                                                                                                 << " elementTransform: " << element.transform->toString()
-                                                                                                 << " drawTransform: " << transformDuringClip.toString());
-                    g.setTransform (transformBeforeElement);
-                }
+                // SVG clip paths are in the drawable's current user space. Graphics::setClipPath()
+                // expects drawing-area coordinates, so resolve the active SVG transform here.
+                auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
+                auto transformedClipPath = combinedClipPath.transformed (clipTransform);
 
-                g.setClipPath (combinedClipPath);
-
-                if (element.transform)
-                    g.setTransform (transformDuringClip);
+                const auto savedClipTransform = g.getTransform();
+                g.setTransform (AffineTransform::identity());
+                g.setClipPath (transformedClipPath);
+                g.setTransform (savedClipTransform);
 
                 hasClipping = true;
                 YUP_DRAWABLE_LOG ("Applied clip path - id: " << *element.clipPathUrl
                                                              << " elements: " << clipPath->elements.size()
                                                              << " fillRule: " << (clipUsesNonZeroWinding ? "nonzero" : "evenodd")
-                                                             << " bounds: " << combinedClipPath.getBounds().toString());
+                                                             << " bounds: " << combinedClipPath.getBounds().toString()
+                                                             << " transformedBounds: " << transformedClipPath.getBounds().toString());
             }
             else
             {
@@ -2282,8 +2281,18 @@ ColorGradient Drawable::createColorGradientFromSVG (const Gradient& gradient, co
         if (gradient.radius <= 0.0f)
             return 0.0f;
 
-        const auto edgePoint = transformPoint (Point<float> (gradient.center.getX() + gradient.radius, gradient.center.getY()));
-        return Line<float> (center, edgePoint).length();
+        const Point<float> edgePoints[] = {
+            transformPoint (Point<float> (gradient.center.getX() + gradient.radius, gradient.center.getY())),
+            transformPoint (Point<float> (gradient.center.getX() - gradient.radius, gradient.center.getY())),
+            transformPoint (Point<float> (gradient.center.getX(), gradient.center.getY() + gradient.radius)),
+            transformPoint (Point<float> (gradient.center.getX(), gradient.center.getY() - gradient.radius))
+        };
+
+        float maxRadius = 0.0f;
+        for (const auto& edgePoint : edgePoints)
+            maxRadius = jmax (maxRadius, Line<float> (center, edgePoint).length());
+
+        return maxRadius;
     };
 
     const auto radius = gradient.type == Gradient::Radial ? computeRadius() : 0.0f;

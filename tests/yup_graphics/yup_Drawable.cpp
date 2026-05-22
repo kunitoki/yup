@@ -199,7 +199,7 @@ TEST (DrawableTests, ParseSVGWithParseOptionsImageResolver)
     Drawable::ParseOptions options;
     options.imageResolver = [] (StringRef href, const File&) -> std::optional<Image>
     {
-        if (href == "custom-image")
+        if (href == StringRef ("custom-image"))
         {
             Image image (2, 2, PixelFormat::RGBA);
             image.fill (0xffff0000);
@@ -834,6 +834,100 @@ TEST (DrawableTests, ParseSVGWithRadialGradient)
     EXPECT_TRUE (result);
 
     tempFile.deleteFile();
+}
+
+TEST (DrawableTests, PaintSVGWithTransformedClipPath)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVG (
+        "<svg viewBox=\"0 0 100 100\">"
+        "<defs>"
+        "<clipPath id=\"clip\"><path d=\"M 10 10 L 80 10 L 80 80 L 10 80 z\" /></clipPath>"
+        "</defs>"
+        "<path d=\"M 10 10 L 80 10 L 80 80 L 10 80 z\" transform=\"translate(5, 0)\" clip-path=\"url(#clip)\" fill=\"#666666\" />"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (64, 64);
+    Graphics graphics (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 64.0f, 64.0f));
+    });
+}
+
+TEST (DrawableTests, PaintSVGWithScimitarClipPathAndGradientStroke)
+{
+    Drawable drawable;
+
+    const String scimitarPath = "M 171.59375,-167.8125 L 153.4375,-131.09375 C 153.4375,-131.09375 240.05975,-44.592207 260.53125,61.53125 "
+                                "C 263.78902,59.713413 267.53809,58.6875 271.53125,58.6875 C 283.99674,58.687502 294.11733,68.78455 294.15625,81.25 "
+                                "L 294.15625,81.3125 C 294.15624,93.802829 284.02158,103.9375 271.53125,103.9375 "
+                                "C 269.20004,103.9375 266.9604,103.59314 264.84375,102.9375 C 265.00283,118.53432 263.43644,134.33614 259.71875,150.1875 "
+                                "C 279.93177,155.71176 336.35552,161.63753 367.0625,234.84375 C 388.95186,159.67792 354.15709,-29.134107 171.59375,-167.8125 z ";
+
+    String svg;
+    svg << "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"466.11172\" height=\"265.35126\">"
+        << "<defs>"
+        << "<linearGradient id=\"linearGradient6110\">"
+        << "<stop offset=\"0\" stop-color=\"#ffffff\" />"
+        << "<stop offset=\"1\" stop-color=\"#6e6e6e\" />"
+        << "</linearGradient>"
+        << "<linearGradient id=\"linearGradient4429\" xlink:href=\"#linearGradient6110\" gradientUnits=\"userSpaceOnUse\" spreadMethod=\"reflect\" "
+        << "x1=\"365.06906\" y1=\"318.85867\" x2=\"375.43167\" y2=\"352.76584\" "
+        << "gradientTransform=\"matrix(0.9061819,1.3321141,-1.3321141,0.9061819,401.82647,-748.87542)\" />"
+        << "<clipPath id=\"clipPath6467\"><path d=\"" << scimitarPath << "\" /></clipPath>"
+        << "</defs>"
+        << "<g transform=\"matrix(0.8057349,-1.0705499,1.0705499,0.8057349,-463.13727,65.232307)\">"
+        << "<g transform=\"matrix(0.7664195,0,0,0.7664195,-4.7078914,247.90097)\">"
+        << "<path d=\"" << scimitarPath << "\" "
+        << "style=\"fill:#c3c3c3;fill-opacity:1;fill-rule:nonzero;stroke:url(#linearGradient4429);stroke-width:5.31668139;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1\" "
+        << "clip-path=\"url(#clipPath6467)\" />"
+        << "</g>"
+        << "</g>"
+        << "</svg>";
+
+    bool result = drawable.parseSVG (svg);
+
+    EXPECT_TRUE (result);
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (96, 96);
+    Graphics graphics (*context, *renderer);
+    graphics.setDrawingArea (Rectangle<float> (23.0f, 17.0f, 96.0f, 96.0f));
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 96.0f, 96.0f));
+    });
+}
+
+TEST (DrawableTests, PaintSVGWithTransformedRadialGradient)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVG (
+        "<svg viewBox=\"0 0 100 100\">"
+        "<defs>"
+        "<radialGradient id=\"grad\" cx=\"50\" cy=\"50\" r=\"10\" gradientUnits=\"userSpaceOnUse\" gradientTransform=\"matrix(1,0,0,3,0,-100)\">"
+        "<stop offset=\"0\" stop-color=\"#ffffff\" />"
+        "<stop offset=\"1\" stop-color=\"#000000\" />"
+        "</radialGradient>"
+        "</defs>"
+        "<rect x=\"10\" y=\"10\" width=\"80\" height=\"80\" fill=\"url(#grad)\" />"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (64, 64);
+    Graphics graphics (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 64.0f, 64.0f));
+    });
 }
 
 // ==============================================================================
