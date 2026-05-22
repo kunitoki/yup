@@ -167,6 +167,35 @@ public:
     void transformChanged() override { transformChangedCalled = true; }
 };
 
+class RecordingComponentListener : public ComponentListener
+{
+public:
+    void componentMoved (Component& component) override
+    {
+        ++movedCount;
+        lastMovedComponent = &component;
+    }
+
+    void componentResized (Component& component) override
+    {
+        ++resizedCount;
+        lastResizedComponent = &component;
+    }
+
+    void componentBeingDeleted (Component& component) override
+    {
+        ++deletedCount;
+        lastDeletedComponent = &component;
+    }
+
+    int movedCount = 0;
+    int resizedCount = 0;
+    int deletedCount = 0;
+    Component* lastMovedComponent = nullptr;
+    Component* lastResizedComponent = nullptr;
+    Component* lastDeletedComponent = nullptr;
+};
+
 } // namespace
 
 // =============================================================================
@@ -813,7 +842,6 @@ TEST_F (ComponentTest, HitTesting)
 
 // =============================================================================
 
-/*
 TEST_F (ComponentTest, KeyboardFocus)
 {
     // Test default focus behavior
@@ -825,7 +853,17 @@ TEST_F (ComponentTest, KeyboardFocus)
     child->setWantsKeyboardFocus (false);
     EXPECT_FALSE (child->getWantsKeyboardFocus());
 }
-*/
+
+TEST_F (ComponentTest, ClickingGrabFocus)
+{
+    EXPECT_TRUE (child->getClickingGrabFocus());
+
+    child->setClickingGrabFocus (false);
+    EXPECT_FALSE (child->getClickingGrabFocus());
+
+    child->setClickingGrabFocus (true);
+    EXPECT_TRUE (child->getClickingGrabFocus());
+}
 
 // =============================================================================
 
@@ -1153,6 +1191,103 @@ TEST_F (ComponentMockTest, MouseListenerMethods)
 
     // Test removing listener doesn't crash
     mockComponent->removeMouseListener (listener.get());
+}
+
+TEST_F (ComponentMockTest, ComponentListenerReceivesMovedCallback)
+{
+    RecordingComponentListener listener;
+    mockComponent->addComponentListener (&listener);
+
+    mockComponent->setPosition ({ 10.0f, 20.0f });
+
+    EXPECT_EQ (1, listener.movedCount);
+    EXPECT_EQ (static_cast<Component*> (mockComponent.get()), listener.lastMovedComponent);
+    EXPECT_EQ (0, listener.resizedCount);
+}
+
+TEST_F (ComponentMockTest, ComponentListenerReceivesResizedCallback)
+{
+    RecordingComponentListener listener;
+    mockComponent->addComponentListener (&listener);
+
+    mockComponent->setSize ({ 100.0f, 80.0f });
+
+    EXPECT_EQ (1, listener.resizedCount);
+    EXPECT_EQ (static_cast<Component*> (mockComponent.get()), listener.lastResizedComponent);
+    EXPECT_EQ (0, listener.movedCount);
+}
+
+TEST_F (ComponentMockTest, ComponentListenerReceivesMovedAndResizedFromSetBounds)
+{
+    RecordingComponentListener listener;
+    mockComponent->addComponentListener (&listener);
+
+    mockComponent->setBounds (5.0f, 10.0f, 150.0f, 120.0f);
+
+    EXPECT_EQ (1, listener.movedCount);
+    EXPECT_EQ (1, listener.resizedCount);
+    EXPECT_EQ (static_cast<Component*> (mockComponent.get()), listener.lastMovedComponent);
+    EXPECT_EQ (static_cast<Component*> (mockComponent.get()), listener.lastResizedComponent);
+}
+
+TEST_F (ComponentMockTest, RemovingComponentListenerStopsCallbacks)
+{
+    RecordingComponentListener listener;
+    mockComponent->addComponentListener (&listener);
+    mockComponent->removeComponentListener (&listener);
+
+    mockComponent->setPosition ({ 10.0f, 20.0f });
+    mockComponent->setSize ({ 100.0f, 80.0f });
+
+    EXPECT_EQ (0, listener.movedCount);
+    EXPECT_EQ (0, listener.resizedCount);
+}
+
+TEST_F (ComponentMockTest, ComponentListenerIsOnlyAddedOnce)
+{
+    RecordingComponentListener listener;
+    mockComponent->addComponentListener (&listener);
+    mockComponent->addComponentListener (&listener);
+
+    mockComponent->setPosition ({ 10.0f, 20.0f });
+
+    EXPECT_EQ (1, listener.movedCount);
+}
+
+TEST_F (ComponentMockTest, DestroyedComponentListenerIsSkipped)
+{
+    auto listener = std::make_unique<RecordingComponentListener>();
+    mockComponent->addComponentListener (listener.get());
+
+    listener.reset();
+
+    const Point<float> newPosition (10.0f, 20.0f);
+    EXPECT_NO_FATAL_FAILURE (mockComponent->setPosition (newPosition));
+}
+
+TEST_F (ComponentMockTest, ComponentListenerReceivesBeingDeletedCallback)
+{
+    RecordingComponentListener listener;
+    auto component = std::make_unique<ComponentMock> ("delete-notified");
+    component->addComponentListener (&listener);
+
+    auto* componentAddress = static_cast<Component*> (component.get());
+    component.reset();
+
+    EXPECT_EQ (1, listener.deletedCount);
+    EXPECT_EQ (componentAddress, listener.lastDeletedComponent);
+}
+
+TEST_F (ComponentMockTest, RemovedComponentListenerDoesNotReceiveBeingDeletedCallback)
+{
+    RecordingComponentListener listener;
+    auto component = std::make_unique<ComponentMock> ("delete-notified");
+    component->addComponentListener (&listener);
+    component->removeComponentListener (&listener);
+
+    component.reset();
+
+    EXPECT_EQ (0, listener.deletedCount);
 }
 
 TEST_F (ComponentMockTest, StyleMethods)

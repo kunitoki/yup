@@ -125,6 +125,11 @@
 
 //==============================================================================
 
+#include "profiling/yup_PaintProfileStats.cpp"
+#include "profiling/yup_PaintProfiler.cpp"
+
+//==============================================================================
+
 #include "application/yup_Application.cpp"
 #include "desktop/yup_Desktop.cpp"
 #include "keyboard/yup_TextInputTarget.cpp"
