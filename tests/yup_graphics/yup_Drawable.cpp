@@ -156,6 +156,68 @@ TEST (DrawableTests, ParseMinimalValidSVG)
     tempFile.deleteFile();
 }
 
+TEST (DrawableTests, ParseSVGFromString)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVG ("<svg viewBox=\"0 0 20 10\"><rect width=\"20\" height=\"10\" /></svg>");
+
+    EXPECT_TRUE (result);
+    EXPECT_EQ (20.0f, drawable.getBounds().getWidth());
+    EXPECT_EQ (10.0f, drawable.getBounds().getHeight());
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (32, 32);
+    Graphics graphics (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 32.0f, 32.0f));
+    });
+}
+
+TEST (DrawableTests, ParseSVGFromStringWithCSSCascadeAndCurrentColor)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVG (
+        "<svg viewBox=\"0 0 100 100\">"
+        "<style>"
+        "rect.base { color: #ff0000; fill: currentColor; stroke: #0000ff; stroke-width: 2; }"
+        "#hidden { display: none; }"
+        "</style>"
+        "<rect class=\"base\" x=\"10\" y=\"10\" width=\"80\" height=\"80\" />"
+        "<circle id=\"hidden\" cx=\"50\" cy=\"50\" r=\"10\" />"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+}
+
+TEST (DrawableTests, ParseSVGWithParseOptionsImageResolver)
+{
+    Drawable drawable;
+
+    Drawable::ParseOptions options;
+    options.imageResolver = [] (StringRef href, const File&) -> std::optional<Image>
+    {
+        if (href == "custom-image")
+        {
+            Image image (2, 2, PixelFormat::RGBA);
+            image.fill (0xffff0000);
+            return image;
+        }
+
+        return std::nullopt;
+    };
+
+    bool result = drawable.parseSVG (
+        "<svg viewBox=\"0 0 10 10\">"
+        "<image href=\"custom-image\" x=\"1\" y=\"1\" width=\"8\" height=\"8\" />"
+        "</svg>",
+        options);
+
+    EXPECT_TRUE (result);
+}
+
 TEST (DrawableTests, ParseSVGWithViewBox)
 {
     Drawable drawable;
@@ -499,6 +561,91 @@ TEST (DrawableTests, ParseSVGWithNestedGroups)
     tempFile.deleteFile();
 }
 
+TEST (DrawableTests, ParseSVGWithSymbolAndUse)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVG (
+        "<svg viewBox=\"0 0 100 100\">"
+        "<defs>"
+        "<symbol id=\"icon\" viewBox=\"0 0 10 10\">"
+        "<rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" />"
+        "</symbol>"
+        "</defs>"
+        "<use href=\"#icon\" x=\"20\" y=\"30\" width=\"40\" height=\"40\" />"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+}
+
+TEST (DrawableTests, ParseSVGWithDefsXLinkUseAndTspanFlow)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVG (
+        "<svg xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"80\" height=\"40\">"
+        "<defs>"
+        "<rect id=\"bar\" width=\"40\" height=\"10\" fill=\"#88a4b9\" />"
+        "<line id=\"tick\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"8\" stroke=\"black\" stroke-width=\"1\" />"
+        "</defs>"
+        "<use xlink:href=\"#bar\" x=\"10\" y=\"5\" />"
+        "<use xlink:href=\"#tick\" transform=\"translate(12, 2)\" />"
+        "<text transform=\"translate(10, 20)\">"
+        "<tspan x=\"0\" dy=\"1em\">first</tspan>"
+        "<tspan x=\"0\" dy=\"1em\">second</tspan>"
+        "</text>"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (80, 40);
+    Graphics graphics (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 80.0f, 40.0f));
+    });
+}
+
+TEST (DrawableTests, ParseSVGWithUnitsNestedViewportTextAndDash)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVG (
+        "<svg width=\"2in\" height=\"1in\" viewBox=\"0 0 192 96\">"
+        "<svg x=\"10\" y=\"10\" width=\"50%\" height=\"50%\" viewBox=\"0 0 20 20\" preserveAspectRatio=\"xMidYMid meet\">"
+        "<path d=\"M 0 10 L 20 10\" fill=\"none\" stroke=\"black\" stroke-width=\"1mm\" stroke-dasharray=\"2 1\" />"
+        "<text x=\"10\" y=\"16\" text-anchor=\"middle\" font-size=\"12\">OK<tspan dx=\"2\">!</tspan></text>"
+        "</svg>"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+    EXPECT_EQ (192.0f, drawable.getBounds().getWidth());
+    EXPECT_EQ (96.0f, drawable.getBounds().getHeight());
+}
+
+TEST (DrawableTests, ParseSVGWithTransformOrigin)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVG (
+        "<svg width=\"360\" height=\"360\">"
+        "<text x=\"-15\" y=\"195\" font-size=\"20\" fill=\"black\" transform=\"rotate(-90)\" transform-origin=\"20 195\">"
+        "Sweep flag"
+        "</text>"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (360, 360);
+    Graphics graphics (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 360.0f, 360.0f));
+    });
+}
+
 // ==============================================================================
 // SVG Style Tests
 // ==============================================================================
@@ -702,8 +849,7 @@ TEST (DrawableTests, ParseSVGWithInvalidPath)
 
     bool result = drawable.parseSVG (tempFile);
 
-    // Path::fromString always returns true, so parsing succeeds even with invalid data
-    EXPECT_TRUE (result);
+    EXPECT_FALSE (result);
 
     tempFile.deleteFile();
 }

@@ -24,7 +24,7 @@ namespace yup
 
 //==============================================================================
 #ifndef YUP_DRAWABLE_LOGGING
-#define YUP_DRAWABLE_LOGGING 0
+#define YUP_DRAWABLE_LOGGING 1
 #endif
 
 #if YUP_DRAWABLE_LOGGING
@@ -45,11 +45,45 @@ Drawable::Drawable()
 
 bool Drawable::parseSVG (const File& svgFile)
 {
+    ParseOptions options;
+    options.baseDirectory = svgFile.getParentDirectory();
+
+    return parseSVG (svgFile, options);
+}
+
+bool Drawable::parseSVG (StringRef svgText)
+{
+    return parseSVG (svgText, ParseOptions());
+}
+
+bool Drawable::parseSVG (const File& svgFile, const ParseOptions& options)
+{
     clear();
+
+    parseOptions = options;
+    if (parseOptions.baseDirectory.getFullPathName().isEmpty())
+        parseOptions.baseDirectory = svgFile.getParentDirectory();
 
     XmlDocument svgDoc (svgFile);
     std::unique_ptr<XmlElement> svgRoot (svgDoc.getDocumentElement());
 
+    return parseDocument (std::move (svgRoot));
+}
+
+bool Drawable::parseSVG (StringRef svgText, const ParseOptions& options)
+{
+    clear();
+
+    parseOptions = options;
+
+    XmlDocument svgDoc (String (svgText.text));
+    std::unique_ptr<XmlElement> svgRoot (svgDoc.getDocumentElement());
+
+    return parseDocument (std::move (svgRoot));
+}
+
+bool Drawable::parseDocument (std::unique_ptr<XmlElement> svgRoot)
+{
     if (svgRoot == nullptr || ! svgRoot->hasTagName ("svg"))
         return false;
 
@@ -74,6 +108,17 @@ bool Drawable::parseSVG (const File& svgFile)
     // ViewBox transform is now calculated at render-time based on actual target area
     YUP_DRAWABLE_LOG ("Parse complete - viewBox: " << viewBox.toString() << " size: " << size.getWidth() << "x" << size.getHeight());
 
+    std::function<void (const XmlElement&)> collectStyleElements = [&] (const XmlElement& xml)
+    {
+        if (xml.hasTagName ("style"))
+            parseStyleElement (xml);
+
+        for (auto* child = xml.getFirstChildElement(); child != nullptr; child = child->getNextElement())
+            collectStyleElements (*child);
+    };
+
+    collectStyleElements (*svgRoot);
+
     auto result = parseElement (*svgRoot, true, {});
 
     if (result)
@@ -97,6 +142,7 @@ void Drawable::clear()
     gradientsById.clear();
     clipPaths.clear();
     clipPathsById.clear();
+    cssRules.clear();
 
     // Reset root element's default presentation attributes to SVG defaults
     rootHasFill = true;    // SVG default fill is black
@@ -135,7 +181,7 @@ void Drawable::paint (Graphics& g)
 
     // Pass root element's fill/stroke state to top-level elements
     for (const auto& element : elements)
-        paintElement (g, *element, rootHasFill, rootHasStroke);
+        paintElement (g, *element, rootHasFill, rootHasStroke, rootFillColor.value_or (Colors::black));
 }
 
 void Drawable::paint (Graphics& g, const Rectangle<float>& targetArea, Fitting fitting, Justification justification)
@@ -166,17 +212,22 @@ void Drawable::paint (Graphics& g, const Rectangle<float>& targetArea, Fitting f
 
     // Pass root element's fill/stroke state to top-level elements
     for (const auto& element : elements)
-        paintElement (g, *element, rootHasFill, rootHasStroke);
+        paintElement (g, *element, rootHasFill, rootHasStroke, rootFillColor.value_or (Colors::black));
 }
 
 //==============================================================================
 
-void Drawable::paintElement (Graphics& g, const Element& element, bool hasParentFillEnabled, bool hasParentStrokeEnabled)
+void Drawable::paintElement (Graphics& g, const Element& element, bool hasParentFillEnabled, bool hasParentStrokeEnabled, Color currentColor, int recursionDepth)
 {
+    if (element.hidden || recursionDepth > 64)
+        return;
+
     const auto savedState = g.saveState();
 
     bool isFillDefined = hasParentFillEnabled;
     bool isStrokeDefined = hasParentStrokeEnabled;
+    if (element.color)
+        currentColor = *element.color;
 
     YUP_DRAWABLE_LOG ("paintElement called - hasPath: " << (element.path ? "true" : "false") << " hasTransform: " << (element.transform ? "true" : "false"));
 
@@ -193,6 +244,14 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
     if (element.opacity)
         g.setOpacity (g.getOpacity() * (*element.opacity));
 
+    if (element.viewBox && element.viewportSize)
+    {
+        Rectangle<float> viewport (0.0f, 0.0f, element.viewportSize->getWidth(), element.viewportSize->getHeight());
+        auto viewBoxTransform = calculateTransformForTarget (*element.viewBox, viewport, element.preserveAspectRatioFitting, element.preserveAspectRatioJustification);
+        if (! viewBoxTransform.isIdentity())
+            g.addTransform (viewBoxTransform);
+    }
+
     // Apply clipping path if specified
     bool hasClipping = false;
     if (element.clipPathUrl)
@@ -204,7 +263,12 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
             for (const auto& clipElement : clipPath->elements)
             {
                 if (clipElement->path)
-                    combinedClipPath.appendPath (*clipElement->path);
+                {
+                    if (clipElement->transform)
+                        combinedClipPath.appendPath (*clipElement->path, *clipElement->transform);
+                    else
+                        combinedClipPath.appendPath (*clipElement->path);
+                }
             }
 
             if (! combinedClipPath.isEmpty())
@@ -219,6 +283,14 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
     if (element.fillColor)
     {
         Color fillColor = *element.fillColor;
+        if (element.fillOpacity)
+            fillColor = fillColor.withMultipliedAlpha (*element.fillOpacity);
+        g.setFillColor (fillColor);
+        isFillDefined = true;
+    }
+    else if (element.fillCurrentColor)
+    {
+        Color fillColor = currentColor;
         if (element.fillOpacity)
             fillColor = fillColor.withMultipliedAlpha (*element.fillOpacity);
         g.setFillColor (fillColor);
@@ -273,64 +345,56 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
         {
             if (auto refElement = elementsById[*element.reference]; refElement != nullptr && refElement->path)
             {
-                YUP_DRAWABLE_LOG ("Rendering use element - reference: " << *element.reference);
-                YUP_DRAWABLE_LOG ("Use element transform: " << (element.transform ? element.transform->toString() : "none"));
-                YUP_DRAWABLE_LOG ("Referenced element local transform: " << (refElement->localTransform ? refElement->localTransform->toString() : "none"));
-                YUP_DRAWABLE_LOG ("Graphics transform during use fill: " << g.getTransform().toString());
+                const bool useDefinesFill = element.fillColor || element.fillCurrentColor || element.fillUrl || element.noFill;
+                if (useDefinesFill || ! refElement->noFill)
+                {
+                    const auto savedReferenceState = g.saveState();
 
-                // For <use> elements, apply only the referenced element's own transform (not inherited parents)
-                const auto savedTransform = g.getTransform();
-                if (refElement->localTransform)
-                    g.setTransform (refElement->localTransform->followedBy (savedTransform));
+                    if (! useDefinesFill)
+                    {
+                        if (refElement->fillColor)
+                        {
+                            Color fillColor = *refElement->fillColor;
+                            if (refElement->fillOpacity)
+                                fillColor = fillColor.withMultipliedAlpha (*refElement->fillOpacity);
 
-                // SVG spec: fill is applied to both closed and unclosed paths
-                g.fillPath (*refElement->path);
+                            g.setFillColor (fillColor);
+                        }
+                        else if (refElement->fillCurrentColor)
+                        {
+                            Color fillColor = currentColor;
+                            if (refElement->fillOpacity)
+                                fillColor = fillColor.withMultipliedAlpha (*refElement->fillOpacity);
 
-                if (refElement->localTransform)
-                    g.setTransform (savedTransform);
+                            g.setFillColor (fillColor);
+                        }
+                    }
+
+                    YUP_DRAWABLE_LOG ("Rendering use element - reference: " << *element.reference);
+                    YUP_DRAWABLE_LOG ("Use element transform: " << (element.transform ? element.transform->toString() : "none"));
+                    YUP_DRAWABLE_LOG ("Referenced element local transform: " << (refElement->localTransform ? refElement->localTransform->toString() : "none"));
+                    YUP_DRAWABLE_LOG ("Graphics transform during use fill: " << g.getTransform().toString());
+
+                    // For <use> elements, apply only the referenced element's own transform (not inherited parents)
+                    const auto savedTransform = g.getTransform();
+                    if (refElement->localTransform)
+                        g.setTransform (refElement->localTransform->followedBy (savedTransform));
+
+                    // SVG spec: fill is applied to both closed and unclosed paths
+                    g.fillPath (*refElement->path);
+
+                    if (refElement->localTransform)
+                        g.setTransform (savedTransform);
+                }
             }
         }
         else if (element.text && element.textPosition)
         {
-            /*
-            // Create StyledText for text rendering
-            StyledText styledText;
-            styledText.setText (*element.text);
-
-            // Set font properties
-            if (element.fontSize)
-                styledText.setFontSize (*element.fontSize);
-            else
-                styledText.setFontSize (12.0f);
-
-            if (element.fontFamily)
-                styledText.setFontFamily (*element.fontFamily);
-
-            // Set text alignment based on text-anchor
-            if (element.textAnchor)
-            {
-                if (*element.textAnchor == "middle")
-                    styledText.setHorizontalAlignment (StyledText::HorizontalAlignment::Center);
-                else if (*element.textAnchor == "end")
-                    styledText.setHorizontalAlignment (StyledText::HorizontalAlignment::Right);
-                else
-                    styledText.setHorizontalAlignment (StyledText::HorizontalAlignment::Left);
-            }
-
-            // Render text at specified position
-            auto textBounds = styledText.getBounds();
-            g.drawStyledText (styledText, element.textPosition->getX(), element.textPosition->getY() - textBounds.getHeight());
-            */
+            renderTextElement (g, element);
         }
-        else if (element.imageHref && element.imageBounds)
+        else if ((element.imageHref || element.image) && element.imageBounds)
         {
-            // TODO: Load and render image
-            // For now, draw a placeholder rectangle
-            g.setFillColor (Colors::lightgray);
-            g.fillRect (*element.imageBounds);
-            g.setStrokeColor (Colors::darkgray);
-            g.setStrokeWidth (1.0f);
-            g.strokeRect (*element.imageBounds);
+            renderImageElement (g, element);
         }
     }
 
@@ -338,6 +402,14 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
     if (element.strokeColor)
     {
         Color strokeColor = *element.strokeColor;
+        if (element.strokeOpacity)
+            strokeColor = strokeColor.withMultipliedAlpha (*element.strokeOpacity);
+        g.setStrokeColor (strokeColor);
+        isStrokeDefined = true;
+    }
+    else if (element.strokeCurrentColor)
+    {
+        Color strokeColor = currentColor;
         if (element.strokeOpacity)
             strokeColor = strokeColor.withMultipliedAlpha (*element.strokeOpacity);
         g.setStrokeColor (strokeColor);
@@ -394,16 +466,64 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
         }
     }
 
-    if (isStrokeDefined && ! element.noStroke)
+    bool referenceDefinesStroke = false;
+    if (! isStrokeDefined && element.reference)
     {
-        if (element.path)
+        if (auto refElement = elementsById[*element.reference]; refElement != nullptr)
+            referenceDefinesStroke = (refElement->strokeColor || refElement->strokeCurrentColor || refElement->strokeUrl) && ! refElement->noStroke;
+    }
+
+    if ((isStrokeDefined || referenceDefinesStroke) && ! element.noStroke)
+    {
+        const Path* pathToStroke = element.path ? std::addressof (*element.path) : nullptr;
+        std::optional<Path> dashedPath;
+
+        if (pathToStroke != nullptr && element.strokeDashArray && ! element.strokeDashArray->isEmpty())
         {
-            g.strokePath (*element.path);
+            dashedPath = createDashedPath (*pathToStroke, *element.strokeDashArray, element.strokeDashOffset.value_or (0.0f));
+            pathToStroke = std::addressof (*dashedPath);
+        }
+
+        if (pathToStroke != nullptr)
+        {
+            g.strokePath (*pathToStroke);
         }
         else if (element.reference)
         {
             if (auto refElement = elementsById[*element.reference]; refElement != nullptr && refElement->path)
             {
+                const bool useDefinesStroke = element.strokeColor || element.strokeCurrentColor || element.strokeUrl || element.noStroke;
+                const auto savedReferenceState = g.saveState();
+
+                if (! useDefinesStroke)
+                {
+                    if (refElement->strokeColor)
+                    {
+                        Color strokeColor = *refElement->strokeColor;
+                        if (refElement->strokeOpacity)
+                            strokeColor = strokeColor.withMultipliedAlpha (*refElement->strokeOpacity);
+
+                        g.setStrokeColor (strokeColor);
+                    }
+                    else if (refElement->strokeCurrentColor)
+                    {
+                        Color strokeColor = currentColor;
+                        if (refElement->strokeOpacity)
+                            strokeColor = strokeColor.withMultipliedAlpha (*refElement->strokeOpacity);
+
+                        g.setStrokeColor (strokeColor);
+                    }
+
+                    if (refElement->strokeWidth)
+                        g.setStrokeWidth (*refElement->strokeWidth);
+
+                    if (refElement->strokeJoin)
+                        g.setStrokeJoin (*refElement->strokeJoin);
+
+                    if (refElement->strokeCap)
+                        g.setStrokeCap (*refElement->strokeCap);
+                }
+
                 YUP_DRAWABLE_LOG ("Stroking use element - reference: " << *element.reference);
                 YUP_DRAWABLE_LOG ("Graphics transform during stroke: " << g.getTransform().toString());
 
@@ -420,12 +540,36 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
         }
     }
 
+    if (element.reference)
+    {
+        if (auto refElement = elementsById[*element.reference]; refElement != nullptr && ! refElement->children.empty())
+        {
+            const auto savedTransform = g.getTransform();
+            if (refElement->localTransform)
+                g.setTransform (refElement->localTransform->followedBy (savedTransform));
+
+            if (refElement->viewBox)
+            {
+                auto viewportSizeToUse = element.viewportSize.value_or (refElement->viewportSize.value_or (Size<float> (refElement->viewBox->getWidth(), refElement->viewBox->getHeight())));
+                Rectangle<float> viewport (0.0f, 0.0f, viewportSizeToUse.getWidth(), viewportSizeToUse.getHeight());
+                auto viewBoxTransform = calculateTransformForTarget (*refElement->viewBox, viewport, refElement->preserveAspectRatioFitting, refElement->preserveAspectRatioJustification);
+                if (! viewBoxTransform.isIdentity())
+                    g.addTransform (viewBoxTransform);
+            }
+
+            for (const auto& childElement : refElement->children)
+                paintElement (g, *childElement, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke, currentColor, recursionDepth + 1);
+
+            g.setTransform (savedTransform);
+        }
+    }
+
     for (const auto& childElement : element.children)
     {
         YUP_DRAWABLE_LOG ("Rendering child element - current graphics transform: " << g.getTransform().toString());
         // Pass fill/stroke state to children, but respect explicit "none" values
         // If this element has fill="none", children should not inherit fill
-        paintElement (g, *childElement, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke);
+        paintElement (g, *childElement, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke, currentColor, recursionDepth + 1);
     }
 
     // paintDebugElement (g, element);
@@ -437,6 +581,10 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
 {
     Element::Ptr e = new Element;
     bool isRootElement = element.hasTagName ("svg");
+    e->tagName = element.getTagNameWithoutNamespace();
+
+    if (auto classes = element.getStringAttribute ("class"); classes.isNotEmpty())
+        e->classNames = StringArray::fromTokens (classes, " \t\r\n", "");
 
     if (auto id = element.getStringAttribute ("id"); id.isNotEmpty())
     {
@@ -444,12 +592,21 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
         elementsById.set (id, e);
     }
 
+    const float inheritedFontSize = parent != nullptr && parent->fontSize ? *parent->fontSize : 12.0f;
+    const float viewportWidth = viewBox.getWidth() > 0.0f ? viewBox.getWidth() : (size.getWidth() > 0.0f ? size.getWidth() : 100.0f);
+    const float viewportHeight = viewBox.getHeight() > 0.0f ? viewBox.getHeight() : (size.getHeight() > 0.0f ? size.getHeight() : 100.0f);
+    const float viewportDiagonal = std::sqrt ((viewportWidth * viewportWidth + viewportHeight * viewportHeight) * 0.5f);
+
     if (element.hasTagName ("path"))
     {
         auto path = Path();
 
         String pathData = element.getStringAttribute ("d");
-        if (pathData.isEmpty() || ! path.fromString (pathData))
+        auto trimmedPathData = pathData.trimStart();
+        if (trimmedPathData.isNotEmpty() && ! String ("MmZzLlHhVvCcSsQqTtAa").containsChar (trimmedPathData[0]))
+            return false;
+
+        if (! pathData.isEmpty() && ! path.fromString (pathData))
             return false;
 
         e->path = std::move (path);
@@ -469,12 +626,20 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
     else if (element.hasTagName ("use"))
     {
         String href = element.getStringAttribute ("href");
+        if (href.isEmpty())
+            href = element.getStringAttribute ("xlink:href");
+
         if (href.isNotEmpty() && href.startsWith ("#"))
             e->reference = href.substring (1);
 
         // Handle x,y positioning for use elements (SVG spec requirement)
-        auto x = element.getFloatAttribute ("x");
-        auto y = element.getFloatAttribute ("y");
+        auto x = parseLengthAttribute (element, "x", 0.0f, inheritedFontSize, viewportWidth);
+        auto y = parseLengthAttribute (element, "y", 0.0f, inheritedFontSize, viewportHeight);
+        auto width = parseLengthAttribute (element, "width", 0.0f, inheritedFontSize, viewportWidth);
+        auto height = parseLengthAttribute (element, "height", 0.0f, inheritedFontSize, viewportHeight);
+        if (width > 0.0f && height > 0.0f)
+            e->viewportSize = Size<float> (width, height);
+
         AffineTransform useTransform;
         if (x != 0.0f || y != 0.0f)
             useTransform = AffineTransform::translation (x, y);
@@ -494,10 +659,10 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
     }
     else if (element.hasTagName ("ellipse"))
     {
-        auto cx = element.getFloatAttribute ("cx");
-        auto cy = element.getFloatAttribute ("cy");
-        auto rx = element.getFloatAttribute ("rx");
-        auto ry = element.getFloatAttribute ("ry");
+        auto cx = parseLengthAttribute (element, "cx", 0.0f, inheritedFontSize, viewportWidth);
+        auto cy = parseLengthAttribute (element, "cy", 0.0f, inheritedFontSize, viewportHeight);
+        auto rx = parseLengthAttribute (element, "rx", 0.0f, inheritedFontSize, viewportDiagonal);
+        auto ry = parseLengthAttribute (element, "ry", 0.0f, inheritedFontSize, viewportDiagonal);
 
         auto path = Path();
         path.addCenteredEllipse (cx, cy, rx, ry);
@@ -508,9 +673,9 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
     }
     else if (element.hasTagName ("circle"))
     {
-        auto cx = element.getFloatAttribute ("cx");
-        auto cy = element.getFloatAttribute ("cy");
-        auto r = element.getFloatAttribute ("r");
+        auto cx = parseLengthAttribute (element, "cx", 0.0f, inheritedFontSize, viewportWidth);
+        auto cy = parseLengthAttribute (element, "cy", 0.0f, inheritedFontSize, viewportHeight);
+        auto r = parseLengthAttribute (element, "r", 0.0f, inheritedFontSize, viewportDiagonal);
 
         auto path = Path();
         path.addCenteredEllipse (cx, cy, r, r);
@@ -521,12 +686,12 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
     }
     else if (element.hasTagName ("rect"))
     {
-        auto x = element.getFloatAttribute ("x");
-        auto y = element.getFloatAttribute ("y");
-        auto width = element.getFloatAttribute ("width");
-        auto height = element.getFloatAttribute ("height");
-        auto rx = element.getFloatAttribute ("rx");
-        auto ry = element.getFloatAttribute ("ry");
+        auto x = parseLengthAttribute (element, "x", 0.0f, inheritedFontSize, viewportWidth);
+        auto y = parseLengthAttribute (element, "y", 0.0f, inheritedFontSize, viewportHeight);
+        auto width = parseLengthAttribute (element, "width", 0.0f, inheritedFontSize, viewportWidth);
+        auto height = parseLengthAttribute (element, "height", 0.0f, inheritedFontSize, viewportHeight);
+        auto rx = parseLengthAttribute (element, "rx", 0.0f, inheritedFontSize, viewportWidth);
+        auto ry = parseLengthAttribute (element, "ry", 0.0f, inheritedFontSize, viewportHeight);
 
         auto path = Path();
         if (rx > 0.0f || ry > 0.0f)
@@ -550,10 +715,10 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
     }
     else if (element.hasTagName ("line"))
     {
-        auto x1 = element.getFloatAttribute ("x1");
-        auto y1 = element.getFloatAttribute ("y1");
-        auto x2 = element.getFloatAttribute ("x2");
-        auto y2 = element.getFloatAttribute ("y2");
+        auto x1 = parseLengthAttribute (element, "x1", 0.0f, inheritedFontSize, viewportWidth);
+        auto y1 = parseLengthAttribute (element, "y1", 0.0f, inheritedFontSize, viewportHeight);
+        auto x2 = parseLengthAttribute (element, "x2", 0.0f, inheritedFontSize, viewportWidth);
+        auto y2 = parseLengthAttribute (element, "y2", 0.0f, inheritedFontSize, viewportHeight);
 
         auto path = Path();
         path.startNewSubPath (x1, y1);
@@ -609,19 +774,36 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
         currentTransform = parseTransform (element, currentTransform, *e);
         parseStyle (element, currentTransform, *e);
     }
-    else if (element.hasTagName ("text"))
+    else if (element.hasTagName ("text") || element.hasTagName ("tspan"))
     {
-        float x = element.getFloatAttribute ("x");
-        float y = element.getFloatAttribute ("y");
+        const auto defaultTextPosition = parent != nullptr && parent->textPosition ? *parent->textPosition : Point<float> (0.0f, 0.0f);
+        float x = parseLengthAttribute (element, "x", defaultTextPosition.getX(), inheritedFontSize, viewportWidth);
+        float y = parseLengthAttribute (element, "y", defaultTextPosition.getY(), inheritedFontSize, viewportHeight);
         e->textPosition = Point<float> (x, y);
 
-        e->text = element.getAllSubText();
+        String directText;
+        for (auto* child : element.getChildIterator())
+        {
+            if (child->isTextElement())
+                directText += child->getText();
+        }
+
+        e->text = directText.isNotEmpty() ? directText : (element.hasTagName ("tspan") ? element.getAllSubText() : String());
+
+        if (auto xList = element.getStringAttribute ("x"); xList.isNotEmpty())
+            e->textX = parseLengthList (xList, inheritedFontSize, viewportWidth);
+        if (auto yList = element.getStringAttribute ("y"); yList.isNotEmpty())
+            e->textY = parseLengthList (yList, inheritedFontSize, viewportHeight);
+        if (auto dxList = element.getStringAttribute ("dx"); dxList.isNotEmpty())
+            e->textDx = parseLengthList (dxList, inheritedFontSize, viewportWidth);
+        if (auto dyList = element.getStringAttribute ("dy"); dyList.isNotEmpty())
+            e->textDy = parseLengthList (dyList, inheritedFontSize, viewportHeight);
 
         String fontFamily = element.getStringAttribute ("font-family");
         if (fontFamily.isNotEmpty())
             e->fontFamily = fontFamily;
 
-        float fontSize = element.getFloatAttribute ("font-size");
+        float fontSize = parseLengthAttribute (element, "font-size", 0.0f, inheritedFontSize, inheritedFontSize);
         if (fontSize > 0.0f)
             e->fontSize = fontSize;
 
@@ -634,10 +816,10 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
     }
     else if (element.hasTagName ("image"))
     {
-        auto x = element.getFloatAttribute ("x");
-        auto y = element.getFloatAttribute ("y");
-        auto width = element.getFloatAttribute ("width");
-        auto height = element.getFloatAttribute ("height");
+        auto x = parseLengthAttribute (element, "x", 0.0f, inheritedFontSize, viewportWidth);
+        auto y = parseLengthAttribute (element, "y", 0.0f, inheritedFontSize, viewportHeight);
+        auto width = parseLengthAttribute (element, "width", 0.0f, inheritedFontSize, viewportWidth);
+        auto height = parseLengthAttribute (element, "height", 0.0f, inheritedFontSize, viewportHeight);
 
         e->imageBounds = Rectangle<float> (x, y, width, height);
 
@@ -646,13 +828,45 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
             href = element.getStringAttribute ("xlink:href");
 
         if (href.isNotEmpty())
+        {
             e->imageHref = href;
+            e->image = loadImageFromHref (href);
+        }
+
+        currentTransform = parseTransform (element, currentTransform, *e);
+        parseStyle (element, currentTransform, *e);
+    }
+    else if (element.hasTagName ("svg") || element.hasTagName ("symbol"))
+    {
+        e->isSymbol = element.hasTagName ("symbol");
+        if (e->isSymbol)
+            e->hidden = true;
+
+        if (auto view = element.getStringAttribute ("viewBox"); view.isNotEmpty())
+        {
+            auto coords = StringArray::fromTokens (view, " ,", "");
+            if (coords.size() == 4)
+                e->viewBox = Rectangle<float> (coords[0].getFloatValue(), coords[1].getFloatValue(), coords[2].getFloatValue(), coords[3].getFloatValue());
+        }
+
+        auto width = parseLengthAttribute (element, "width", e->viewBox ? e->viewBox->getWidth() : viewportWidth, inheritedFontSize, viewportWidth);
+        auto height = parseLengthAttribute (element, "height", e->viewBox ? e->viewBox->getHeight() : viewportHeight, inheritedFontSize, viewportHeight);
+        if (width > 0.0f && height > 0.0f)
+            e->viewportSize = Size<float> (width, height);
+
+        if (auto preserveAspectRatio = element.getStringAttribute ("preserveAspectRatio"); preserveAspectRatio.isNotEmpty())
+        {
+            e->preserveAspectRatioFitting = parsePreserveAspectRatio (preserveAspectRatio);
+            e->preserveAspectRatioJustification = parseAspectRatioAlignment (preserveAspectRatio);
+        }
 
         currentTransform = parseTransform (element, currentTransform, *e);
         parseStyle (element, currentTransform, *e);
     }
     else if (element.hasTagName ("defs"))
     {
+        e->hidden = true;
+
         // Parse definitions like gradients and clip paths
         for (auto* child = element.getFirstChildElement(); child != nullptr; child = child->getNextElement())
         {
@@ -660,7 +874,30 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
                 parseGradient (*child);
             else if (child->hasTagName ("clipPath"))
                 parseClipPath (*child);
+            else if (child->hasTagName ("style"))
+                parseStyleElement (*child);
         }
+    }
+    else if (element.hasTagName ("style"))
+    {
+        parseStyleElement (element);
+        return true;
+    }
+
+    if (parent != nullptr)
+    {
+        if (! e->fontFamily && parent->fontFamily)
+            e->fontFamily = parent->fontFamily;
+        if (! e->fontSize && parent->fontSize)
+            e->fontSize = parent->fontSize;
+        if (! e->textAnchor && parent->textAnchor)
+            e->textAnchor = parent->textAnchor;
+        if (! e->letterSpacing && parent->letterSpacing)
+            e->letterSpacing = parent->letterSpacing;
+        if (! e->wordSpacing && parent->wordSpacing)
+            e->wordSpacing = parent->wordSpacing;
+        if (! e->color && parent->color)
+            e->color = parent->color;
     }
 
     for (auto* child = element.getFirstChildElement(); child != nullptr; child = child->getNextElement())
@@ -670,8 +907,43 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
             parseGradient (*child);
         else if (child->hasTagName ("clipPath"))
             parseClipPath (*child);
+        else if (child->hasTagName ("style"))
+            parseStyleElement (*child);
         else
             parseElement (*child, isRootElement, currentTransform, e.get());
+    }
+
+    if (e->tagName == "text" || e->tagName == "tspan")
+    {
+        auto cursor = e->textPosition.value_or (Point<float> (0.0f, 0.0f));
+
+        for (auto& childElement : e->children)
+        {
+            if (childElement->tagName != "tspan")
+                continue;
+
+            auto position = cursor;
+
+            if (childElement->textX && ! childElement->textX->isEmpty())
+                position.setX (childElement->textX->getFirst());
+
+            if (childElement->textY && ! childElement->textY->isEmpty())
+                position.setY (childElement->textY->getFirst());
+
+            if (childElement->textDx && ! childElement->textDx->isEmpty())
+                position.setX (position.getX() + childElement->textDx->getFirst());
+
+            if (childElement->textDy && ! childElement->textDy->isEmpty())
+                position.setY (position.getY() + childElement->textDy->getFirst());
+
+            childElement->textPosition = position;
+            childElement->textX.reset();
+            childElement->textY.reset();
+            childElement->textDx.reset();
+            childElement->textDy.reset();
+
+            cursor = position;
+        }
     }
 
     if (isRootElement)
@@ -712,12 +984,10 @@ bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, Affin
 
 void Drawable::parseStyle (const XmlElement& element, const AffineTransform& currentTransform, Element& e)
 {
-    // Parse CSS style attribute first
     String styleAttr = element.getStringAttribute ("style");
-    if (styleAttr.isNotEmpty())
-        parseCSSStyle (styleAttr, e);
 
-    // Parse individual attributes (these override style attribute values)
+    // Parse presentation attributes first. Author CSS and inline style are applied after
+    // this block so they can override presentation attributes.
     String fill = element.getStringAttribute ("fill");
     if (fill.isNotEmpty())
     {
@@ -726,6 +996,8 @@ void Drawable::parseStyle (const XmlElement& element, const AffineTransform& cur
             String gradientUrl = extractGradientUrl (fill);
             if (gradientUrl.isNotEmpty())
                 e.fillUrl = gradientUrl;
+            else if (fill == "currentColor")
+                e.fillCurrentColor = true;
             else
             {
                 e.fillColor = Color::fromString (fill);
@@ -746,6 +1018,8 @@ void Drawable::parseStyle (const XmlElement& element, const AffineTransform& cur
             String gradientUrl = extractGradientUrl (stroke);
             if (gradientUrl.isNotEmpty())
                 e.strokeUrl = gradientUrl;
+            else if (stroke == "currentColor")
+                e.strokeCurrentColor = true;
             else
                 e.strokeColor = Color::fromString (stroke);
         }
@@ -826,6 +1100,36 @@ void Drawable::parseStyle (const XmlElement& element, const AffineTransform& cur
     String fillRule = element.getStringAttribute ("fill-rule");
     if (fillRule == "evenodd" || fillRule == "nonzero")
         e.fillRule = fillRule;
+
+    String color = element.getStringAttribute ("color");
+    if (color.isNotEmpty() && color != "currentColor")
+        e.color = Color::fromString (color);
+
+    String display = element.getStringAttribute ("display");
+    String visibility = element.getStringAttribute ("visibility");
+    if (display == "none" || visibility == "hidden" || visibility == "collapse")
+        e.hidden = true;
+
+    String fontFamily = element.getStringAttribute ("font-family");
+    if (fontFamily.isNotEmpty())
+        e.fontFamily = fontFamily;
+
+    String fontSize = element.getStringAttribute ("font-size");
+    if (fontSize.isNotEmpty())
+        e.fontSize = parseUnit (fontSize, e.fontSize.value_or (12.0f), e.fontSize.value_or (12.0f), e.fontSize.value_or (12.0f));
+
+    String letterSpacing = element.getStringAttribute ("letter-spacing");
+    if (letterSpacing.isNotEmpty() && letterSpacing != "normal")
+        e.letterSpacing = parseUnit (letterSpacing, 0.0f, e.fontSize.value_or (12.0f), e.fontSize.value_or (12.0f));
+
+    String wordSpacing = element.getStringAttribute ("word-spacing");
+    if (wordSpacing.isNotEmpty() && wordSpacing != "normal")
+        e.wordSpacing = parseUnit (wordSpacing, 0.0f, e.fontSize.value_or (12.0f), e.fontSize.value_or (12.0f));
+
+    applyStylesheetRules (element, e);
+
+    if (styleAttr.isNotEmpty())
+        parseCSSStyle (styleAttr, e);
 }
 
 //==============================================================================
@@ -837,6 +1141,17 @@ AffineTransform Drawable::parseTransform (const XmlElement& element, const Affin
     if (auto transformString = element.getStringAttribute ("transform"); transformString.isNotEmpty())
     {
         result = parseTransform (transformString);
+
+        if (auto transformOrigin = element.getStringAttribute ("transform-origin"); transformOrigin.isNotEmpty())
+        {
+            auto origin = parseLengthList (transformOrigin, 12.0f, 100.0f);
+            if (origin.size() >= 2)
+            {
+                result = AffineTransform::translation (-origin[0], -origin[1])
+                             .followedBy (result)
+                             .followedBy (AffineTransform::translation (origin[0], origin[1]));
+            }
+        }
 
         e.transform = result;
         e.localTransform = result; // Store the local transform separately for use by <use> elements
@@ -882,14 +1197,14 @@ AffineTransform Drawable::parseTransform (const String& transformString)
         Array<float> params;
         while (! data.isEmpty() && *data != ')')
         {
-            if (*data == ',' || *data == ' ')
+            if (*data == ',' || data.isWhitespace())
             {
                 ++data;
                 continue;
             }
 
             String number;
-            while (! data.isEmpty() && (*data == '-' || *data == '.' || *data == 'e' || (*data >= '0' && *data <= '9')))
+            while (! data.isEmpty() && (*data == '-' || *data == '+' || *data == '.' || *data == 'e' || *data == 'E' || (*data >= '0' && *data <= '9')))
             {
                 number += *data;
                 ++data;
@@ -1369,7 +1684,6 @@ Drawable::ClipPath::Ptr Drawable::getClipPathById (const String& id)
 
 void Drawable::parseCSSStyle (const String& styleString, Element& e)
 {
-    // Parse CSS style declarations separated by semicolons
     auto declarations = StringArray::fromTokens (styleString, ";", "");
 
     for (const auto& declaration : declarations)
@@ -1380,129 +1694,286 @@ void Drawable::parseCSSStyle (const String& styleString, Element& e)
             String property = declaration.substring (0, colonPos).trim();
             String value = declaration.substring (colonPos + 1).trim();
 
-            if (property == "fill")
-            {
-                if (value != "none")
-                {
-                    String gradientUrl = extractGradientUrl (value);
-                    if (gradientUrl.isNotEmpty())
-                        e.fillUrl = gradientUrl;
-                    else
-                        e.fillColor = Color::fromString (value);
-                }
-                else
-                {
-                    e.noFill = true;
-                }
-            }
-            else if (property == "stroke")
-            {
-                if (value != "none")
-                {
-                    String gradientUrl = extractGradientUrl (value);
-                    if (gradientUrl.isNotEmpty())
-                        e.strokeUrl = gradientUrl;
-                    else
-                        e.strokeColor = Color::fromString (value);
-                }
-                else
-                {
-                    e.noStroke = true;
-                }
-            }
-            else if (property == "stroke-width")
-            {
-                float strokeWidth = value.getFloatValue();
-                if (strokeWidth > 0.0f)
-                    e.strokeWidth = strokeWidth;
-            }
-            else if (property == "stroke-linejoin")
-            {
-                if (value == "round")
-                    e.strokeJoin = StrokeJoin::Round;
-                else if (value == "miter")
-                    e.strokeJoin = StrokeJoin::Miter;
-                else if (value == "bevel")
-                    e.strokeJoin = StrokeJoin::Bevel;
-            }
-            else if (property == "stroke-linecap")
-            {
-                if (value == "round")
-                    e.strokeCap = StrokeCap::Round;
-                else if (value == "square")
-                    e.strokeCap = StrokeCap::Square;
-                else if (value == "butt")
-                    e.strokeCap = StrokeCap::Butt;
-            }
-            else if (property == "opacity")
-            {
-                float opacity = value.getFloatValue();
-                if (opacity >= 0.0f && opacity <= 1.0f)
-                    e.opacity = opacity;
-            }
-            else if (property == "font-family")
-            {
-                e.fontFamily = value;
-            }
-            else if (property == "font-size")
-            {
-                float fontSize = value.getFloatValue();
-                if (fontSize > 0.0f)
-                    e.fontSize = fontSize;
-            }
-            else if (property == "text-anchor")
-            {
-                e.textAnchor = value;
-            }
-            else if (property == "clip-path")
-            {
-                String clipPathUrl = extractGradientUrl (value);
-                if (clipPathUrl.isNotEmpty())
-                    e.clipPathUrl = clipPathUrl;
-            }
-            else if (property == "stroke-dasharray")
-            {
-                if (value != "none")
-                {
-                    auto dashValues = StringArray::fromTokens (value, " ,", "");
-                    if (! dashValues.isEmpty())
-                    {
-                        Array<float> dashes;
-                        for (const auto& dash : dashValues)
-                        {
-                            float dashValue = parseUnit (dash);
-                            if (dashValue >= 0.0f)
-                                dashes.add (dashValue);
-                        }
-
-                        if (! dashes.isEmpty())
-                            e.strokeDashArray = dashes;
-                    }
-                }
-            }
-            else if (property == "stroke-dashoffset")
-            {
-                e.strokeDashOffset = parseUnit (value);
-            }
-            else if (property == "fill-opacity")
-            {
-                float opacity = value.getFloatValue();
-                if (opacity >= 0.0f && opacity <= 1.0f)
-                    e.fillOpacity = opacity;
-            }
-            else if (property == "stroke-opacity")
-            {
-                float opacity = value.getFloatValue();
-                if (opacity >= 0.0f && opacity <= 1.0f)
-                    e.strokeOpacity = opacity;
-            }
-            else if (property == "fill-rule")
-            {
-                if (value == "evenodd" || value == "nonzero")
-                    e.fillRule = value;
-            }
+            applyStyleProperty (property, value, e);
         }
     }
+}
+
+void Drawable::applyStyleProperty (StringRef propertyRef, StringRef valueRef, Element& e)
+{
+    String property (propertyRef.text);
+    String value (valueRef.text);
+
+    property = property.trim().toLowerCase();
+    value = value.trim();
+
+    if (property == "fill")
+    {
+        e.fillCurrentColor = false;
+        e.fillUrl.reset();
+        e.fillColor.reset();
+        e.noFill = false;
+
+        if (value == "none")
+            e.noFill = true;
+        else if (value == "currentColor")
+            e.fillCurrentColor = true;
+        else if (auto url = extractUrlId (value); url.isNotEmpty())
+            e.fillUrl = url;
+        else if (value.isNotEmpty())
+            e.fillColor = Color::fromString (value);
+    }
+    else if (property == "stroke")
+    {
+        e.strokeCurrentColor = false;
+        e.strokeUrl.reset();
+        e.strokeColor.reset();
+        e.noStroke = false;
+
+        if (value == "none")
+            e.noStroke = true;
+        else if (value == "currentColor")
+            e.strokeCurrentColor = true;
+        else if (auto url = extractUrlId (value); url.isNotEmpty())
+            e.strokeUrl = url;
+        else if (value.isNotEmpty())
+            e.strokeColor = Color::fromString (value);
+    }
+    else if (property == "color")
+    {
+        if (value != "currentColor" && value != "inherit")
+            e.color = Color::fromString (value);
+    }
+    else if (property == "stroke-width")
+    {
+        float strokeWidth = parseUnit (value, e.strokeWidth.value_or (1.0f), e.fontSize.value_or (12.0f));
+        if (strokeWidth >= 0.0f)
+            e.strokeWidth = strokeWidth;
+    }
+    else if (property == "stroke-linejoin")
+    {
+        if (value == "round")
+            e.strokeJoin = StrokeJoin::Round;
+        else if (value == "miter")
+            e.strokeJoin = StrokeJoin::Miter;
+        else if (value == "bevel")
+            e.strokeJoin = StrokeJoin::Bevel;
+    }
+    else if (property == "stroke-linecap")
+    {
+        if (value == "round")
+            e.strokeCap = StrokeCap::Round;
+        else if (value == "square")
+            e.strokeCap = StrokeCap::Square;
+        else if (value == "butt")
+            e.strokeCap = StrokeCap::Butt;
+    }
+    else if (property == "opacity")
+    {
+        float opacity = value.getFloatValue();
+        if (opacity >= 0.0f && opacity <= 1.0f)
+            e.opacity = opacity;
+    }
+    else if (property == "display")
+    {
+        if (value == "none")
+            e.hidden = true;
+    }
+    else if (property == "visibility")
+    {
+        e.hidden = value == "hidden" || value == "collapse";
+    }
+    else if (property == "font-family")
+    {
+        e.fontFamily = value.unquoted();
+    }
+    else if (property == "font-size")
+    {
+        float fontSize = parseUnit (value, e.fontSize.value_or (12.0f), e.fontSize.value_or (12.0f), e.fontSize.value_or (12.0f));
+        if (fontSize > 0.0f)
+            e.fontSize = fontSize;
+    }
+    else if (property == "text-anchor")
+    {
+        e.textAnchor = value;
+    }
+    else if (property == "letter-spacing")
+    {
+        if (value != "normal")
+            e.letterSpacing = parseUnit (value, 0.0f, e.fontSize.value_or (12.0f), e.fontSize.value_or (12.0f));
+    }
+    else if (property == "word-spacing")
+    {
+        if (value != "normal")
+            e.wordSpacing = parseUnit (value, 0.0f, e.fontSize.value_or (12.0f), e.fontSize.value_or (12.0f));
+    }
+    else if (property == "clip-path")
+    {
+        String clipPathUrl = extractUrlId (value);
+        if (clipPathUrl.isNotEmpty())
+            e.clipPathUrl = clipPathUrl;
+    }
+    else if (property == "stroke-dasharray")
+    {
+        if (value == "none")
+            e.strokeDashArray.reset();
+        else
+        {
+            auto dashes = parseLengthList (value, e.fontSize.value_or (12.0f), 100.0f);
+            if (! dashes.isEmpty())
+                e.strokeDashArray = dashes;
+        }
+    }
+    else if (property == "stroke-dashoffset")
+    {
+        e.strokeDashOffset = parseUnit (value);
+    }
+    else if (property == "fill-opacity")
+    {
+        float opacity = value.getFloatValue();
+        if (opacity >= 0.0f && opacity <= 1.0f)
+            e.fillOpacity = opacity;
+    }
+    else if (property == "stroke-opacity")
+    {
+        float opacity = value.getFloatValue();
+        if (opacity >= 0.0f && opacity <= 1.0f)
+            e.strokeOpacity = opacity;
+    }
+    else if (property == "fill-rule" || property == "clip-rule")
+    {
+        if (value == "evenodd" || value == "nonzero")
+            e.fillRule = value;
+    }
+}
+
+//==============================================================================
+
+void Drawable::applyStylesheetRules (const XmlElement& xmlElement, Element& e)
+{
+    std::vector<const CssRule*> matchedRules;
+
+    for (const auto& rule : cssRules)
+    {
+        if (matchesCssSelector (xmlElement, rule))
+            matchedRules.push_back (std::addressof (rule));
+    }
+
+    std::stable_sort (matchedRules.begin(), matchedRules.end(), [] (const CssRule* a, const CssRule* b)
+    {
+        if (a->specificity != b->specificity)
+            return a->specificity < b->specificity;
+
+        return a->order < b->order;
+    });
+
+    for (const auto* rule : matchedRules)
+    {
+        for (const auto& declaration : rule->declarations)
+        {
+            auto colonPos = declaration.indexOf (":");
+            if (colonPos > 0)
+                applyStyleProperty (declaration.substring (0, colonPos).trim(), declaration.substring (colonPos + 1).trim(), e);
+        }
+    }
+}
+
+void Drawable::parseStyleElement (const XmlElement& element)
+{
+    auto css = element.getAllSubText();
+    int ruleOrder = static_cast<int> (cssRules.size());
+
+    while (css.isNotEmpty())
+    {
+        auto openBrace = css.indexOf ("{");
+        auto closeBrace = css.indexOf ("}");
+        if (openBrace <= 0 || closeBrace <= openBrace)
+            break;
+
+        auto selectorText = css.substring (0, openBrace).trim();
+        auto declarationText = css.substring (openBrace + 1, closeBrace).trim();
+
+        css = css.substring (closeBrace + 1);
+
+        auto selectors = StringArray::fromTokens (selectorText, ",", "");
+        auto declarations = StringArray::fromTokens (declarationText, ";", "");
+
+        for (auto selector : selectors)
+        {
+            selector = selector.trim();
+            if (selector.isEmpty())
+                continue;
+
+            CssRule rule;
+            rule.selector = selector;
+            rule.declarations = declarations;
+            rule.order = ruleOrder++;
+
+            if (selector.startsWithChar ('#'))
+                rule.specificity = 100;
+            else if (selector.startsWithChar ('.'))
+                rule.specificity = 10;
+            else if (selector.containsChar ('#'))
+                rule.specificity = 101;
+            else if (selector.containsChar ('.'))
+                rule.specificity = 11;
+            else
+                rule.specificity = 1;
+
+            cssRules.push_back (std::move (rule));
+        }
+    }
+}
+
+bool Drawable::matchesCssSelector (const XmlElement& xmlElement, const CssRule& rule) const
+{
+    auto selector = rule.selector.trim();
+    if (selector.isEmpty() || selector.containsChar (' ') || selector.containsChar ('>') || selector.containsChar ('+'))
+        return false;
+
+    String tagName;
+    String id;
+    String className;
+
+    auto hashIndex = selector.indexOf ("#");
+    auto dotIndex = selector.indexOf (".");
+    auto splitIndex = -1;
+
+    if (hashIndex >= 0 && dotIndex >= 0)
+        splitIndex = jmin (hashIndex, dotIndex);
+    else
+        splitIndex = jmax (hashIndex, dotIndex);
+
+    if (splitIndex > 0)
+        tagName = selector.substring (0, splitIndex);
+
+    if (hashIndex == 0)
+        id = selector.substring (1);
+    else if (hashIndex > 0)
+        id = selector.substring (hashIndex + 1, dotIndex > hashIndex ? dotIndex : selector.length());
+
+    if (dotIndex == 0)
+        className = selector.substring (1);
+    else if (dotIndex > 0)
+        className = selector.substring (dotIndex + 1);
+
+    if (splitIndex < 0 && ! selector.startsWithChar ('#') && ! selector.startsWithChar ('.'))
+        tagName = selector;
+
+    if (tagName.isNotEmpty() && tagName != xmlElement.getTagNameWithoutNamespace())
+        return false;
+
+    if (id.isNotEmpty() && id != xmlElement.getStringAttribute ("id"))
+        return false;
+
+    if (className.isNotEmpty())
+    {
+        auto classes = StringArray::fromTokens (xmlElement.getStringAttribute ("class"), " \t\r\n", "");
+        if (! classes.contains (className))
+            return false;
+    }
+
+    return tagName.isNotEmpty() || id.isNotEmpty() || className.isNotEmpty();
 }
 
 //==============================================================================
@@ -1518,7 +1989,13 @@ float Drawable::parseUnit (const String& value, float defaultValue, float fontSi
 
     // Extract numeric part and unit
     int unitStart = 0;
-    while (unitStart < trimmed.length() && (CharacterFunctions::isDigit (trimmed[unitStart]) || trimmed[unitStart] == '.' || trimmed[unitStart] == '-' || trimmed[unitStart] == '+'))
+    while (unitStart < trimmed.length()
+           && (CharacterFunctions::isDigit (trimmed[unitStart])
+               || trimmed[unitStart] == '.'
+               || trimmed[unitStart] == '-'
+               || trimmed[unitStart] == '+'
+               || trimmed[unitStart] == 'e'
+               || trimmed[unitStart] == 'E'))
     {
         unitStart++;
     }
@@ -1556,6 +2033,260 @@ float Drawable::parseUnit (const String& value, float defaultValue, float fontSi
 
     else
         return numericValue; // Unknown unit, treat as user units
+}
+
+float Drawable::parseLengthAttribute (const XmlElement& element, StringRef attributeName, float defaultValue, float fontSize, float viewportSize)
+{
+    auto value = element.getStringAttribute (attributeName);
+    if (value.isEmpty())
+        return defaultValue;
+
+    return parseUnit (value, defaultValue, fontSize, viewportSize);
+}
+
+Array<float> Drawable::parseLengthList (const String& value, float fontSize, float viewportSize)
+{
+    Array<float> result;
+    auto tokens = StringArray::fromTokens (value, " ,\t\r\n", "");
+
+    for (const auto& token : tokens)
+    {
+        if (token.isNotEmpty())
+            result.add (parseUnit (token, 0.0f, fontSize, viewportSize));
+    }
+
+    return result;
+}
+
+std::optional<Image> Drawable::loadImageFromHref (const String& href) const
+{
+    if (parseOptions.imageResolver)
+    {
+        if (auto resolved = parseOptions.imageResolver (href, parseOptions.baseDirectory))
+            return resolved;
+    }
+
+    if (href.startsWithIgnoreCase ("http:") || href.startsWithIgnoreCase ("https:"))
+        return std::nullopt;
+
+    MemoryBlock imageData;
+
+    if (href.startsWithIgnoreCase ("data:"))
+    {
+        if (! parseOptions.allowDataImages)
+            return std::nullopt;
+
+        auto comma = href.indexOfChar (',');
+        if (comma < 0)
+            return std::nullopt;
+
+        auto metadata = href.substring (0, comma).toLowerCase();
+        auto payload = href.substring (comma + 1);
+
+        if (metadata.contains (";base64"))
+        {
+            MemoryOutputStream decoded;
+            if (! Base64::convertFromBase64 (decoded, payload))
+                return std::nullopt;
+
+            imageData = decoded.getMemoryBlock();
+        }
+        else
+        {
+            imageData = MemoryBlock (payload.toRawUTF8(), static_cast<size_t> (payload.getNumBytesAsUTF8()));
+        }
+    }
+    else
+    {
+        if (! parseOptions.allowLocalImages || parseOptions.baseDirectory.getFullPathName().isEmpty())
+            return std::nullopt;
+
+        auto imageFile = parseOptions.baseDirectory.getChildFile (href);
+        if (! imageFile.existsAsFile() || ! imageFile.loadFileAsData (imageData))
+            return std::nullopt;
+    }
+
+    if (imageData.isEmpty())
+        return std::nullopt;
+
+    auto result = Image::loadFromData (imageData.asBytes());
+    if (result.failed())
+        return std::nullopt;
+
+    return result.getValue();
+}
+
+Font Drawable::resolveFont (const Element& element) const
+{
+    const auto fontSize = element.fontSize.value_or (12.0f);
+
+    if (parseOptions.fontResolver)
+    {
+        if (auto resolved = parseOptions.fontResolver (element.fontFamily.value_or (String()), fontSize))
+            return resolved->withHeight (fontSize);
+    }
+
+    return Font().withHeight (fontSize);
+}
+
+void Drawable::renderTextElement (Graphics& g, const Element& element)
+{
+    if (! element.text || ! element.textPosition || element.text->isEmpty())
+        return;
+
+    auto position = *element.textPosition;
+
+    if (element.textX && ! element.textX->isEmpty())
+        position.setX (element.textX->getFirst());
+    if (element.textY && ! element.textY->isEmpty())
+        position.setY (element.textY->getFirst());
+    if (element.textDx && ! element.textDx->isEmpty())
+        position.setX (position.getX() + element.textDx->getFirst());
+    if (element.textDy && ! element.textDy->isEmpty())
+        position.setY (position.getY() + element.textDy->getFirst());
+
+    const auto font = resolveFont (element);
+    const auto fontSize = element.fontSize.value_or (12.0f);
+    const auto textWidth = jmax (fontSize, static_cast<float> (element.text->length()) * fontSize * 0.85f);
+    const auto textHeight = fontSize * 2.25f;
+    const auto textPadding = fontSize * 0.5f;
+
+    auto textX = position.getX();
+    if (element.textAnchor == "middle")
+        textX -= textWidth * 0.5f;
+    else if (element.textAnchor == "end")
+        textX -= textWidth;
+
+    Rectangle<float> textBounds (textX - textPadding,
+                                 position.getY() - (fontSize * 1.5f),
+                                 textWidth + (textPadding * 2.0f),
+                                 textHeight);
+
+    StyledText styledText;
+    {
+        auto modifier = styledText.startUpdate();
+        modifier.setMaxSize (Size<float> (textBounds.getWidth(), textBounds.getHeight()));
+        modifier.setWrap (StyledText::noWrap);
+        modifier.setHorizontalAlign (StyledText::left);
+        modifier.appendText (*element.text, font, -1.0f, element.letterSpacing.value_or (0.0f));
+    }
+
+    g.fillFittedText (styledText, textBounds);
+}
+
+void Drawable::renderImageElement (Graphics& g, const Element& element)
+{
+    if (! element.imageBounds)
+        return;
+
+    if (element.image)
+    {
+        g.drawImage (*element.image, *element.imageBounds);
+        return;
+    }
+
+    if (element.imageHref)
+    {
+        if (auto image = loadImageFromHref (*element.imageHref))
+            g.drawImage (*image, *element.imageBounds);
+    }
+}
+
+Path Drawable::createDashedPath (const Path& source, const Array<float>& dashArray, float dashOffset) const
+{
+    if (dashArray.isEmpty())
+        return source;
+
+    Array<float> positiveDashes;
+    for (auto dash : dashArray)
+    {
+        if (dash > 0.0f)
+            positiveDashes.add (dash);
+    }
+
+    if (positiveDashes.isEmpty())
+        return source;
+
+    Path result;
+    float totalPatternLength = 0.0f;
+    for (auto dash : positiveDashes)
+        totalPatternLength += dash;
+
+    if (totalPatternLength <= 0.0f)
+        return source;
+
+    int dashIndex = 0;
+    float patternPosition = std::fmod (jmax (0.0f, dashOffset), totalPatternLength);
+    while (patternPosition > positiveDashes[dashIndex])
+    {
+        patternPosition -= positiveDashes[dashIndex];
+        dashIndex = (dashIndex + 1) % positiveDashes.size();
+    }
+
+    auto drawLineDash = [&] (Point<float> start, Point<float> end)
+    {
+        const auto length = start.distanceTo (end);
+        if (length <= 0.0f)
+            return;
+
+        auto direction = (end - start) / length;
+        float distance = 0.0f;
+
+        while (distance < length)
+        {
+            const auto remainingInDash = positiveDashes[dashIndex] - patternPosition;
+            const auto step = jmin (remainingInDash, length - distance);
+
+            if ((dashIndex % 2) == 0 && step > 0.0f)
+            {
+                auto dashStart = start + direction * distance;
+                auto dashEnd = start + direction * (distance + step);
+                result.startNewSubPath (dashStart);
+                result.lineTo (dashEnd);
+            }
+
+            distance += step;
+            patternPosition = 0.0f;
+            dashIndex = (dashIndex + 1) % positiveDashes.size();
+        }
+    };
+
+    Point<float> current;
+    Point<float> subPathStart;
+    bool hasCurrent = false;
+
+    for (const auto& segment : source)
+    {
+        switch (segment.verb)
+        {
+            case Path::Verb::MoveTo:
+                current = segment.point;
+                subPathStart = current;
+                hasCurrent = true;
+                break;
+
+            case Path::Verb::LineTo:
+                if (hasCurrent)
+                    drawLineDash (current, segment.point);
+                current = segment.point;
+                break;
+
+            case Path::Verb::Close:
+                if (hasCurrent)
+                    drawLineDash (current, subPathStart);
+                current = subPathStart;
+                break;
+
+            case Path::Verb::QuadTo:
+            case Path::Verb::CubicTo:
+                if (hasCurrent)
+                    drawLineDash (current, segment.point);
+                current = segment.point;
+                break;
+        }
+    }
+
+    return result;
 }
 
 //==============================================================================
@@ -1725,11 +2456,13 @@ Justification Drawable::parseAspectRatioAlignment (const String& preserveAspectR
 
 String Drawable::extractGradientUrl (const String& value)
 {
-    if (! value.contains ("url(#"))
-        return String();
+    return extractUrlId (value);
+}
 
+String Drawable::extractUrlId (const String& value)
+{
     // Find the start of the URL
-    int urlStart = value.indexOf ("url(#");
+    int urlStart = value.indexOf ("url(");
     if (urlStart == -1)
         return String();
 
@@ -1738,8 +2471,11 @@ String Drawable::extractGradientUrl (const String& value)
     if (urlEnd == -1)
         return String();
 
-    // Extract the ID part (between "url(#" and ")")
-    String url = value.substring (urlStart + 5, urlEnd); // +5 to skip "url(#"
+    String url = value.substring (urlStart + 4, urlEnd).trim().unquoted();
+    if (! url.startsWithChar ('#'))
+        return String();
+
+    url = url.substring (1);
     YUP_DRAWABLE_LOG ("Extracted gradient URL: '" << url << "' from: '" << value << "'");
     return url;
 }

@@ -27,13 +27,9 @@ public:
     SvgDemo()
     {
         updateListOfSvgFiles();
+        loadDemoFont();
 
         parseSvgFile (currentSvgFileIndex);
-    }
-
-    void resized() override
-    {
-        //drawable.setBounds (getLocalBounds());
     }
 
     void mouseDown (const yup::MouseEvent& event) override
@@ -59,6 +55,8 @@ private:
                                      .getParentDirectory()
                                      .getParentDirectory();
 
+        dataDirectory = riveBasePath.getChildFile ("data");
+
         auto files = riveBasePath.getChildFile ("data/svg").findChildFiles (yup::File::findFiles, false, "*.svg");
         if (files.isEmpty())
             return;
@@ -83,12 +81,39 @@ private:
         YUP_DBG ("Showing " << svgFiles[currentSvgFileIndex].getFullPathName());
 
         drawable.clear();
-        drawable.parseSVG (svgFiles[currentSvgFileIndex]);
+        drawable.parseSVG (svgFiles[currentSvgFileIndex], createParseOptions (svgFiles[currentSvgFileIndex]));
 
         repaint();
     }
 
+    void loadDemoFont()
+    {
+        yup::Font font;
+        if (font.loadFromFile (dataDirectory.getChildFile ("RobotoFlex-VariableFont.ttf")).wasOk())
+            demoFont = std::move (font);
+    }
+
+    yup::Drawable::ParseOptions createParseOptions (const yup::File& svgFile)
+    {
+        yup::Drawable::ParseOptions options;
+        options.baseDirectory = svgFile.getParentDirectory();
+        options.fontResolver = [this] (yup::StringRef, float fontSize) -> std::optional<yup::Font>
+        {
+            if (demoFont)
+                return demoFont->withHeight (fontSize);
+
+            if (auto theme = yup::ApplicationTheme::getGlobalTheme())
+                return theme->getDefaultFont().withHeight (fontSize);
+
+            return std::nullopt;
+        };
+
+        return options;
+    }
+
     yup::Drawable drawable;
     yup::Array<yup::File> svgFiles;
+    yup::File dataDirectory;
+    std::optional<yup::Font> demoFont;
     int currentSvgFileIndex = 0;
 };

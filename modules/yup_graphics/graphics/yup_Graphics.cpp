@@ -675,8 +675,16 @@ void Graphics::renderFillPath (const Path& path, const RenderOptions& options, c
 //==============================================================================
 void Graphics::drawImageAt (const Image& image, const Point<float>& pos)
 {
+    drawImage (image, Rectangle<float> (pos.getX(), pos.getY(), static_cast<float> (image.getWidth()), static_cast<float> (image.getHeight())));
+}
+
+void Graphics::drawImage (const Image& image, const Rectangle<float>& targetArea)
+{
     auto renderContext = context.renderContext();
     if (renderContext == nullptr)
+        return;
+
+    if (targetArea.isEmpty())
         return;
 
     if (! image.createTextureIfNotPresent (context))
@@ -690,6 +698,7 @@ void Graphics::drawImageAt (const Image& image, const Point<float>& pos)
         unitRectPath->line ({ 1, 0 });
         unitRectPath->line ({ 1, 1 });
         unitRectPath->line ({ 0, 1 });
+        unitRectPath->close();
         return unitRectPath;
     }();
 
@@ -697,9 +706,12 @@ void Graphics::drawImageAt (const Image& image, const Point<float>& pos)
     paint.image (image.getTexture(), jlimit (0.0f, 1.0f, options.opacity));
     paint.blendMode (toBlendMode (options.blendMode));
 
+    const auto imageTransform = AffineTransform::scaling (targetArea.getWidth(), targetArea.getHeight())
+                                    .translated (targetArea.getX(), targetArea.getY())
+                                    .followedBy (options.getTransform());
+
     renderer.save();
-    renderer.scale (image.getWidth(), image.getHeight());
-    renderer.transform (options.getTransform().toMat2D());
+    renderer.transform (imageTransform.toMat2D());
     renderer.drawPath (unitRectPath.get(), std::addressof (paint));
     renderer.restore();
 }
@@ -795,7 +807,7 @@ void Graphics::renderFittedText (const StyledText& text, const Rectangle<float>&
 
     rive::RawPath path;
     path.addRect (rect.toAABB());
-    path.transformInPlace (options.getFixedTransform().toMat2D());
+    path.transformInPlace (options.getTransform().toMat2D());
     auto renderPath = rive::make_rcp<rive::RiveRenderPath> (rive::FillRule::clockwise, path);
     renderer.clipPath (renderPath.get());
 

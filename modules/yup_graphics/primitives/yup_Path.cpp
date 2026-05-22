@@ -1122,7 +1122,7 @@ Path& Path::addArc (const Rectangle<float>& rect,
 
 Path& Path::addCenteredArc (float centerX, float centerY, float radiusX, float radiusY, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath)
 {
-    const int segments = jlimit (2, 54, static_cast<int> ((toRadians - fromRadians) / 0.1f));
+    const int segments = jlimit (2, 54, static_cast<int> (std::ceil (std::abs (toRadians - fromRadians) / 0.1f)));
 
     const float delta = (toRadians - fromRadians) / segments;
     const float cosTheta = std::cos (rotationOfEllipse);

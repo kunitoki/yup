@@ -151,6 +151,14 @@ TEST (PathTests, AddArc)
     EXPECT_FALSE (p.getBounds().isEmpty());
 }
 
+TEST (PathTests, AddCenteredArcUsesAbsoluteSweepForSegments)
+{
+    Path p;
+    p.addCenteredArc (100.0f, 145.0f, 45.0f, 45.0f, 0.0f, -MathConstants<float>::halfPi, -MathConstants<float>::pi, true);
+
+    EXPECT_GT (p.size(), 4);
+}
+
 TEST (PathTests, AddPolygon)
 {
     Path p;

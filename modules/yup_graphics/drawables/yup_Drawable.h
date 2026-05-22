@@ -32,6 +32,26 @@ class YUP_API Drawable
 {
 public:
     //==============================================================================
+    /** Options used when parsing SVG data. */
+    struct ParseOptions
+    {
+        /** Base directory used to resolve local image hrefs. */
+        File baseDirectory;
+
+        /** Allows image data embedded as data: URIs. */
+        bool allowDataImages = true;
+
+        /** Allows local file image hrefs relative to baseDirectory. Network URLs are never loaded. */
+        bool allowLocalImages = true;
+
+        /** Optional custom image resolver. Return std::nullopt to use the default resolver. */
+        std::function<std::optional<Image> (StringRef href, const File& baseDirectory)> imageResolver;
+
+        /** Optional custom font resolver. Return std::nullopt to use the default font. */
+        std::function<std::optional<Font> (StringRef family, float size)> fontResolver;
+    };
+
+    //==============================================================================
     /** Constructor. */
     Drawable();
 
@@ -43,6 +63,20 @@ public:
         @return True if the SVG file was parsed successfully, false otherwise.
     */
     bool parseSVG (const File& svgFile);
+
+    /** Parses SVG text.
+
+        @param svgText The SVG XML text to parse.
+
+        @return True if the SVG text was parsed successfully, false otherwise.
+    */
+    bool parseSVG (StringRef svgText);
+
+    /** Parses an SVG file with custom parse options. */
+    bool parseSVG (const File& svgFile, const ParseOptions& options);
+
+    /** Parses SVG text with custom parse options. */
+    bool parseSVG (StringRef svgText, const ParseOptions& options);
 
     //==============================================================================
     /** Clears the drawable. */
@@ -80,7 +114,9 @@ private:
     {
         using Ptr = ReferenceCountedObjectPtr<Element>;
 
+        String tagName;
         std::optional<String> id;
+        StringArray classNames;
 
         std::optional<AffineTransform> transform;
         std::optional<AffineTransform> localTransform; // Transform from the element itself (not accumulated)
@@ -89,6 +125,9 @@ private:
 
         std::optional<Color> fillColor;
         std::optional<Color> strokeColor;
+        std::optional<Color> color;
+        bool fillCurrentColor = false;
+        bool strokeCurrentColor = false;
         std::optional<float> fillOpacity;
         std::optional<float> strokeOpacity;
         std::optional<float> strokeWidth;
@@ -108,6 +147,12 @@ private:
         std::optional<String> fontFamily;
         std::optional<float> fontSize;
         std::optional<String> textAnchor;
+        std::optional<float> letterSpacing;
+        std::optional<float> wordSpacing;
+        std::optional<Array<float>> textX;
+        std::optional<Array<float>> textY;
+        std::optional<Array<float>> textDx;
+        std::optional<Array<float>> textDy;
 
         // Gradient properties
         std::optional<String> fillUrl;
@@ -116,9 +161,16 @@ private:
         // Image properties
         std::optional<String> imageHref;
         std::optional<Rectangle<float>> imageBounds;
+        std::optional<Image> image;
 
         // Clipping properties
         std::optional<String> clipPathUrl;
+        std::optional<Rectangle<float>> viewBox;
+        std::optional<Size<float>> viewportSize;
+        Fitting preserveAspectRatioFitting = Fitting::scaleToFit;
+        Justification preserveAspectRatioJustification = Justification::center;
+        bool isSymbol = false;
+        bool hidden = false;
 
         std::vector<Element::Ptr> children;
     };
@@ -178,7 +230,15 @@ private:
         std::vector<Element::Ptr> elements;
     };
 
-    void paintElement (Graphics& g, const Element& element, bool hasParentFillEnabled, bool hasParentStrokeEnabled);
+    struct CssRule
+    {
+        String selector;
+        StringArray declarations;
+        int specificity = 0;
+        int order = 0;
+    };
+
+    void paintElement (Graphics& g, const Element& element, bool hasParentFillEnabled, bool hasParentStrokeEnabled, Color currentColor, int recursionDepth = 0);
     void paintDebugElement (Graphics& g, const Element& element);
     bool parseElement (const XmlElement& element, bool parentIsRoot, AffineTransform currentTransform, Element* parent = nullptr);
     void parseStyle (const XmlElement& element, const AffineTransform& currentTransform, Element& e);
@@ -190,9 +250,22 @@ private:
     void parseClipPath (const XmlElement& element);
     ClipPath::Ptr getClipPathById (const String& id);
     void parseCSSStyle (const String& styleString, Element& e);
+    void applyStyleProperty (StringRef property, StringRef value, Element& e);
+    void applyStylesheetRules (const XmlElement& xmlElement, Element& e);
+    void parseStyleElement (const XmlElement& element);
     float parseUnit (const String& value, float defaultValue = 0.0f, float fontSize = 12.0f, float viewportSize = 100.0f);
+    float parseLengthAttribute (const XmlElement& element, StringRef attributeName, float defaultValue, float fontSize, float viewportSize);
+    Array<float> parseLengthList (const String& value, float fontSize, float viewportSize);
     AffineTransform parseTransform (const String& transformString);
     String extractGradientUrl (const String& value);
+    String extractUrlId (const String& value);
+    bool parseDocument (std::unique_ptr<XmlElement> svgRoot);
+    bool matchesCssSelector (const XmlElement& xmlElement, const CssRule& rule) const;
+    std::optional<Image> loadImageFromHref (const String& href) const;
+    Font resolveFont (const Element& element) const;
+    Path createDashedPath (const Path& source, const Array<float>& dashArray, float dashOffset) const;
+    void renderTextElement (Graphics& g, const Element& element);
+    void renderImageElement (Graphics& g, const Element& element);
 
     // SVG preserveAspectRatio parsing
     Fitting parsePreserveAspectRatio (const String& preserveAspectRatio);
@@ -212,6 +285,8 @@ private:
     HashMap<String, Gradient::Ptr> gradientsById;
     std::vector<ClipPath::Ptr> clipPaths;
     HashMap<String, ClipPath::Ptr> clipPathsById;
+    std::vector<CssRule> cssRules;
+    ParseOptions parseOptions;
 
     // Root SVG element's default presentation attributes
     bool rootHasFill = true;    // SVG default fill is black

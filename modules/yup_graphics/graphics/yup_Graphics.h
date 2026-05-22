@@ -454,6 +454,13 @@ public:
     */
     void drawImageAt (const Image& image, const Point<float>& pos);
 
+    /** Draws an image into a target rectangle.
+
+        @param image The image to draw.
+        @param targetArea The destination rectangle in the current coordinate space.
+    */
+    void drawImage (const Image& image, const Rectangle<float>& targetArea);
+
     //==============================================================================
     /** Draws an attributed text.
 
