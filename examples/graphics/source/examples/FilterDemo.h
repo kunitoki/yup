@@ -978,7 +978,7 @@ private:
         addAndMakeVisible (*responseTypeCombo);
 
         // FIR-specific controls
-        firCoefficientsSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "FIR Length");
+        firCoefficientsSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "FIR Length");
         firCoefficientsSlider->setRange ({ 16.0, 256.0 });
         firCoefficientsSlider->setValue (64.0);
         firCoefficientsSlider->onValueChanged = [this] (double value)
@@ -1003,7 +1003,7 @@ private:
         addAndMakeVisible (*firWindowCombo);
 
         // FIR window parameter control (for adjustable windows like Kaiser and Rakshit-Ullah)
-        firWindowParameterSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Window Parameter");
+        firWindowParameterSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Window Parameter");
         firWindowParameterSlider->setRange ({ 0.0005, 10.0 });
         firWindowParameterSlider->setSkewFactorFromMidpoint (1.0);
         firWindowParameterSlider->setValue (1.0);
@@ -1014,7 +1014,7 @@ private:
         addAndMakeVisible (*firWindowParameterSlider);
 
         // Parameter controls with smoothed parameter updates
-        frequencySlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Frequency");
+        frequencySlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Frequency");
         frequencySlider->setRange ({ 20.0, 20000.0 });
         frequencySlider->setSkewFactorFromMidpoint (1000.0); // 1kHz at midpoint
         frequencySlider->setValue (1000.0);
@@ -1025,7 +1025,7 @@ private:
         };
         addAndMakeVisible (*frequencySlider);
 
-        frequency2Slider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Frequency 2");
+        frequency2Slider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Frequency 2");
         frequency2Slider->setRange ({ 20.0, 20000.0 });
         frequency2Slider->setSkewFactorFromMidpoint (2000.0); // 2kHz at midpoint
         frequency2Slider->setValue (2000.0);
@@ -1036,7 +1036,7 @@ private:
         };
         addAndMakeVisible (*frequency2Slider);
 
-        qSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Q / Resonance");
+        qSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Q / Resonance");
         qSlider->setRange ({ 0.0, 1.0 });
         qSlider->setSkewFactorFromMidpoint (0.3); // More resolution at lower Q values
         qSlider->setValue (0.0);
@@ -1047,7 +1047,7 @@ private:
         };
         addAndMakeVisible (*qSlider);
 
-        gainSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Gain (dB)");
+        gainSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Gain (dB)");
         gainSlider->setRange ({ -48.0, 20.0 });
         gainSlider->setSkewFactorFromMidpoint (0.0); // 0 dB at midpoint
         gainSlider->setValue (0.0);
@@ -1058,7 +1058,7 @@ private:
         };
         addAndMakeVisible (*gainSlider);
 
-        orderSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Order");
+        orderSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Order");
         orderSlider->setRange ({ 2.0, 16.0 });
         orderSlider->setValue (2.0);
         orderSlider->onValueChanged = [this] (double value)
@@ -1069,7 +1069,7 @@ private:
         addAndMakeVisible (*orderSlider);
 
         // Noise gain control
-        noiseGainSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Noise Level");
+        noiseGainSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Noise Level");
         noiseGainSlider->setRange ({ 0.0, 1.0 });
         noiseGainSlider->setValue (0.1);
         noiseGainSlider->onValueChanged = [this] (double value)
@@ -1079,7 +1079,7 @@ private:
         addAndMakeVisible (*noiseGainSlider);
 
         // Output gain control
-        outputGainSlider = std::make_unique<yup::Slider> (yup::Slider::LinearBarHorizontal, "Output Level");
+        outputGainSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Output Level");
         outputGainSlider->setRange ({ 0.0, 1.0 });
         outputGainSlider->setValue (0.5);
         outputGainSlider->onValueChanged = [this] (double value)

@@ -35,20 +35,6 @@ namespace yup
 class YUP_API AudioGraphNodeView : public Component
 {
 public:
-    /** Style identifiers for theme customization. */
-    struct Style
-    {
-        static const Identifier shadowColorId;
-        static const Identifier accentBackgroundColorId;
-        static const Identifier bodyBackgroundColorId;
-        static const Identifier headerBackgroundColorId;
-        static const Identifier textColorId;
-        static const Identifier subtitleTextColorId;
-        static const Identifier parameterBackgroundColorId;
-        static const Identifier parameterValueBackgroundColorId;
-        static const Identifier portHoleColorId;
-    };
-
     /** Semantic signal type for ports and future connection routing. */
     enum class PortKind
     {
@@ -99,12 +85,14 @@ public:
         bool isInput = false;
     };
 
+    //==============================================================================
     /** Creates a node view for a graph node identifier. */
     explicit AudioGraphNodeView (AudioGraphNodeID nodeID);
 
     /** Destructor. */
     ~AudioGraphNodeView() override;
 
+    //==============================================================================
     /** Returns the graph node identifier represented by this view. */
     AudioGraphNodeID getNodeID() const noexcept { return nodeID; }
 
@@ -135,6 +123,7 @@ public:
     /** Returns display metadata for an inline parameter row. */
     virtual ParameterInfo getParameterInfo (int parameterIndex) const;
 
+    //==============================================================================
     /** Paints optional custom content between the header and the port rows. */
     virtual void paintNodeContent (Graphics& g, Rectangle<float> contentBounds) const;
 
@@ -142,8 +131,9 @@ public:
     virtual int getPreferredWidth() const;
 
     /** Returns the computed preferred height in canvas units. */
-    int getPreferredHeight() const;
+    virtual int getPreferredHeight() const;
 
+    //==============================================================================
     /** Returns the local center of an input port. */
     Point<float> getInputPortCenter (int busIndex) const;
 
@@ -153,18 +143,36 @@ public:
     /** Returns the port radius in current local display units. */
     float getPortRadius() const;
 
-    /** Returns the port at localPos when it is within the port radius. */
-    std::optional<PortHit> hitTestPort (Point<float> localPos) const;
-
     /** Returns the default color for a semantic port kind. */
     static Color getPortKindColor (PortKind kind);
 
+    //==============================================================================
+    /** Returns the port at localPos when it is within the port radius. */
+    virtual std::optional<PortHit> hitTestPort (Point<float> localPos) const;
+
+    //==============================================================================
     /** @internal Sets the display scale applied by AudioGraphComponent. */
     void setViewScale (float newScale);
 
     /** @internal Returns the display scale applied by AudioGraphComponent. */
     float getViewScale() const noexcept { return viewScale; }
 
+    //==============================================================================
+    /** Style identifiers for theme customization. */
+    struct Style
+    {
+        static const Identifier shadowColorId;
+        static const Identifier accentBackgroundColorId;
+        static const Identifier bodyBackgroundColorId;
+        static const Identifier headerBackgroundColorId;
+        static const Identifier textColorId;
+        static const Identifier subtitleTextColorId;
+        static const Identifier parameterBackgroundColorId;
+        static const Identifier parameterValueBackgroundColorId;
+        static const Identifier portHoleColorId;
+    };
+
+    //==============================================================================
     /** @internal */
     void paint (Graphics& g) override;
 

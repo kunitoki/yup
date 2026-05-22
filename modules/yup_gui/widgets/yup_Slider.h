@@ -266,10 +266,10 @@ public:
     struct Style
     {
         static const Identifier backgroundColorId; /**< Background color for slider track/circle */
-        static const Identifier trackColorId;      /**< Color for active track or value indicator */
-        static const Identifier thumbColorId;      /**< Color for slider thumb/knob */
-        static const Identifier thumbOverColorId;  /**< Color for thumb when mouse is over */
-        static const Identifier thumbDownColorId;  /**< Color for thumb when pressed */
+        static const Identifier trackColorId;      /**< Color for active track */
+        static const Identifier thumbColorId;      /**< Color for slider thumb/knob or value indicator */
+        static const Identifier thumbOverColorId;  /**< Color for thumb/knob or value indicator when mouse is over */
+        static const Identifier thumbDownColorId;  /**< Color for thumb/knob or value indicator when pressed */
         static const Identifier textColorId;       /**< Color for text labels */
     };
 

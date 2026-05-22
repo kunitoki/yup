@@ -342,10 +342,12 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
         : AudioPluginInstance(desc, std::move(busLayout)), audioUnit(unit)
     {
         buildParameterList();
+        installLatencyListener();
     }
 
     ~AUv2Instance() override
     {
+        removeLatencyListener();
         removeParameterListeners();
         releaseResources();
 
@@ -686,6 +688,27 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
             return editor.release();
 
         return nullptr;
+    }
+
+    int getLatencySamples() override
+    {
+        if (audioUnit == nullptr)
+            return 0;
+
+        Float64 latencySeconds = 0.0;
+        UInt32 propertySize = sizeof(latencySeconds);
+
+        if (AudioUnitGetProperty(audioUnit,
+                                 kAudioUnitProperty_Latency,
+                                 kAudioUnitScope_Global,
+                                 0,
+                                 &latencySeconds,
+                                 &propertySize) != noErr)
+        {
+            return 0;
+        }
+
+        return jmax(0, roundToInt(latencySeconds * static_cast<double>(getSampleRate())));
     }
 
     //==============================================================================
@@ -1157,6 +1180,32 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
             AUListenerDispose(eventListener);
             eventListener = nullptr;
         }
+    }
+
+    void installLatencyListener()
+    {
+        if (audioUnit != nullptr)
+            AudioUnitAddPropertyListener(audioUnit, kAudioUnitProperty_Latency, latencyPropertyChanged, this);
+    }
+
+    void removeLatencyListener()
+    {
+        if (audioUnit != nullptr)
+            AudioUnitRemovePropertyListenerWithUserData(audioUnit, kAudioUnitProperty_Latency, latencyPropertyChanged, this);
+    }
+
+    static void latencyPropertyChanged(void* userData,
+                                       AudioUnit,
+                                       AudioUnitPropertyID propertyID,
+                                       AudioUnitScope,
+                                       AudioUnitElement)
+    {
+        if (propertyID != kAudioUnitProperty_Latency)
+            return;
+
+        auto* instance = static_cast<AUv2Instance*> (userData);
+        if (instance != nullptr)
+            instance->setLatencySamples(instance->getLatencySamples());
     }
 
     AudioUnit audioUnit = nullptr;

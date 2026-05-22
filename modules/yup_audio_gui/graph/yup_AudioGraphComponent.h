@@ -24,12 +24,13 @@ namespace yup
 
 //==============================================================================
 /**
-    Zoomable and pannable editor canvas for an AudioGraphProcessor.
+    Zoomable and pannable editor canvas for an AudioGraphModel.
 
-    The component owns only the visual node views. The AudioGraphProcessor remains
-    the source of truth for nodes and connections.
+    The component owns only the visual node views. The AudioGraphModel remains
+    the source of truth for nodes and connections, while graph edits are routed
+    through request callbacks supplied by the user/editor layer.
 
-    @see AudioGraphNodeView, AudioGraphProcessor
+    @see AudioGraphNodeView, AudioGraphModel, AudioGraphProcessor
 */
 class YUP_API AudioGraphComponent : public Component
 {
@@ -44,27 +45,29 @@ public:
         static const Identifier gridColorId;
     };
 
-    /** Receives notifications for graph editor gestures that committed changes. */
-    struct Listener
-    {
-        virtual ~Listener() = default;
+    //==============================================================================
+    /** Creates an editor for a graph model.
 
-        /** Called after a connection has been added and committed. */
-        virtual void connectionAdded (const AudioGraphConnection&) {}
+        When undoManager is not null, committed graph edit gestures are added to
+        the undo history and the component handles standard undo/redo keyboard
+        shortcuts while focused.
+    */
+    explicit AudioGraphComponent (std::shared_ptr<AudioGraphModel> model,
+                                  UndoManager* undoManager = nullptr);
 
-        /** Called after a connection has been removed and committed. */
-        virtual void connectionRemoved (const AudioGraphConnection&) {}
+    /** Creates an editor for a processor's model.
 
-        /** Called when a node view is released after dragging. */
-        virtual void nodeViewMoved (AudioGraphNodeID, Point<float> newCanvasPos) {}
-    };
-
-    /** Creates an editor for graph. */
-    explicit AudioGraphComponent (std::shared_ptr<AudioGraphProcessor> graph);
+        When undoManager is not null, committed graph edit gestures are added to
+        the undo history and the component handles standard undo/redo keyboard
+        shortcuts while focused.
+    */
+    explicit AudioGraphComponent (std::shared_ptr<AudioGraphProcessor> graph,
+                                  UndoManager* undoManager = nullptr);
 
     /** Destructor. */
     ~AudioGraphComponent() override;
 
+    //==============================================================================
     /** Adds or replaces the view for a node at an initial canvas position. */
     void addNodeView (AudioGraphNodeID nodeID,
                       std::unique_ptr<AudioGraphNodeView> view,
@@ -84,9 +87,21 @@ public:
     /** Returns the view for a node, or nullptr. */
     AudioGraphNodeView* getNodeView (AudioGraphNodeID nodeID) const noexcept;
 
-    /** @internal Returns the graph processor currently being edited. */
-    const AudioGraphProcessor* getGraphProcessor() const noexcept { return graph.get(); }
+    //==============================================================================
+    /** Sets the optional undo manager used for graph edit gestures.
 
+        The component does not own the undo manager. Passing nullptr disables
+        automatic undo action creation; edit callbacks continue to be invoked
+        directly. Undoable connection edits require both connection add and
+        connection removal callbacks because redo and undo use the same request
+        path as user gestures.
+    */
+    void setUndoManager (UndoManager* newUndoManager) noexcept;
+
+    /** Returns the undo manager used by this component, or nullptr. */
+    UndoManager* getUndoManager() const noexcept { return undoManager; }
+
+    //==============================================================================
     /** Sets the zoom factor, clamped to [getMinZoom(), getMaxZoom()]. */
     void setZoom (float zoom);
 
@@ -105,6 +120,7 @@ public:
     /** Returns the maximum zoom factor. */
     float getMaxZoom() const noexcept { return maxZoom; }
 
+    //==============================================================================
     /** Sets the screen-space hit distance used for selecting connection wires. */
     void setWireHitDistance (float newWireHitDistance);
 
@@ -117,12 +133,14 @@ public:
     /** Returns the drag distance needed before an armed port starts dragging a wire. */
     float getDragWireThreshold() const noexcept { return dragWireThreshold; }
 
+    //==============================================================================
     /** Sets the canvas-to-screen offset. */
     void setCanvasOffset (Point<float> offset);
 
     /** Returns the canvas-to-screen offset. */
     Point<float> getCanvasOffset() const noexcept { return canvasOffset; }
 
+    //==============================================================================
     /** Resets zoom and centers the current node views. */
     void resetView();
 
@@ -153,30 +171,58 @@ public:
     /** @internal Returns the current screen endpoint for the pending connection wire. */
     Point<float> getPendingWireEndPosition() const noexcept;
 
+    //==============================================================================
+    /** Receives notifications for graph editor gestures that committed changes. */
+    struct Listener
+    {
+        virtual ~Listener() = default;
+
+        /** Called after a connection has been added and committed. */
+        virtual void connectionAdded (const AudioGraphConnection&) {}
+
+        /** Called after a connection has been removed and committed. */
+        virtual void connectionRemoved (const AudioGraphConnection&) {}
+
+        /** Called when a node view is released after dragging. */
+        virtual void nodeViewMoved (AudioGraphNodeID, Point<float> newCanvasPos) {}
+
+        /** Called when the user requests a context menu on a node. */
+        virtual void nodeContextMenu (AudioGraphNodeID, Point<float> canvasPos) {}
+
+        /** Called when the user double-clicks on a node. */
+        virtual void nodeDoubleClicked (AudioGraphNodeID) {}
+
+        /** Called when the user requests a context menu on the canvas. */
+        virtual void canvasContextMenu (Point<float> canvasPos) {}
+    };
+
     /** Adds a listener. */
     void addListener (Listener* listener);
 
     /** Removes a listener. */
     void removeListener (Listener* listener);
 
-    /**
-        Called when the user right-clicks on an empty area of the canvas.
-        canvasPos is the click position in canvas coordinates.
-    */
-    std::function<void (Point<float> canvasPos)> onCanvasContextMenu;
+    //==============================================================================
+    /** Called when the user requests a new connection. Return true after accepting the edit. */
+    std::function<bool (const AudioGraphConnection&)> onConnectionRequested;
 
-    /**
-        Called when the user right-clicks on a node body (not a port or wire).
-        nodeID identifies the node; canvasPos is the position in canvas coordinates.
-    */
-    std::function<void (AudioGraphNodeID nodeID, Point<float> canvasPos)> onNodeContextMenu;
+    /** Called when the user requests a connection removal. Return true after accepting the edit. */
+    std::function<bool (const AudioGraphConnection&)> onConnectionRemovalRequested;
 
-    /**
-        Called when the user double-clicks on a node body.
-        nodeID identifies the clicked node.
-    */
-    std::function<void (AudioGraphNodeID nodeID)> onNodeDoubleClicked;
+    /** Called when the user requests removal of every connection touching an endpoint. Return true after accepting the edit. */
+    std::function<bool (const AudioGraphEndpoint&)> onEndpointConnectionsRemovalRequested;
 
+    /** Called when the user requests a node move. Return true after accepting the edit. */
+    std::function<bool (AudioGraphNodeID nodeID, Point<float> oldCanvasPos, Point<float> newCanvasPos)> onNodeMoveRequested;
+
+    //==============================================================================
+    /** @internal Returns the graph processor currently being edited. */
+    const AudioGraphProcessor* getGraphProcessor() const noexcept { return graph.get(); }
+
+    /** @internal Returns the graph model currently being edited. */
+    const AudioGraphModel* getGraphModel() const noexcept { return model.get(); }
+
+    //==============================================================================
     /** @internal */
     void resized() override;
     /** @internal */
@@ -197,6 +243,9 @@ public:
     void keyUp (const KeyPress& keys, const Point<float>& position) override;
 
 private:
+    struct ConnectionsAction;
+    struct NodeMoveAction;
+
     struct NodeItem
     {
         enum class Kind
@@ -241,8 +290,14 @@ private:
     std::optional<AudioGraphConnection> hitTestConnection (Point<float> screenPos) const;
 
     bool tryConnect (const AudioGraphEndpoint& first, const AudioGraphEndpoint& second);
-    bool removeConnectionAndCommit (const AudioGraphConnection& connection);
+    bool requestConnectionRemoval (const AudioGraphConnection& connection);
     void removeConnectionsForEndpoint (const AudioGraphEndpoint& endpoint);
+
+    bool performUndoableAction (UndoableAction::Ptr action, StringRef transactionName);
+    bool performConnectionEdit (const AudioGraphConnection& connection, bool shouldBeConnected);
+    bool performEndpointConnectionsRemoval (const AudioGraphEndpoint& endpoint,
+                                            const std::vector<AudioGraphConnection>& connections);
+    bool performNodeMove (AudioGraphNodeID nodeID, Point<float> oldCanvasPos, Point<float> newCanvasPos);
 
     bool isCompatiblePair (const AudioGraphEndpoint& first, const AudioGraphEndpoint& second) const noexcept;
     AudioGraphConnection makeConnection (const AudioGraphEndpoint& first, const AudioGraphEndpoint& second) const noexcept;
@@ -250,7 +305,9 @@ private:
     Point<float> cubicPoint (Point<float> p0, Point<float> p1, Point<float> p2, Point<float> p3, float t) const noexcept;
     float distanceToSegment (Point<float> point, Point<float> start, Point<float> end) const noexcept;
 
+    std::shared_ptr<AudioGraphModel> model;
     std::shared_ptr<AudioGraphProcessor> graph;
+    UndoManager* undoManager = nullptr;
     std::vector<NodeItem> nodes;
     ListenerList<Listener> listeners;
 
@@ -278,6 +335,7 @@ private:
     Point<float> pendingWireEnd;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioGraphComponent)
+    YUP_DECLARE_WEAK_REFERENCEABLE (AudioGraphComponent)
 };
 
 } // namespace yup

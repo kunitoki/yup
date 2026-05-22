@@ -26,7 +26,7 @@ function (yup_standalone_app)
         # Globals
         TARGET_NAME TARGET_VERSION TARGET_CONSOLE TARGET_IDE_GROUP TARGET_APP_NAMESPACE TARGET_ICON TARGET_WHEEL TARGET_CXX_STANDARD
         # Emscripten
-        INITIAL_MEMORY PTHREAD_POOL_SIZE CUSTOM_PLIST CUSTOM_SHELL)
+        INITIAL_MEMORY PTHREAD_POOL_SIZE STACK_SIZE CUSTOM_PLIST CUSTOM_SHELL)
     set (multi_value_args
         # Globals
         DEFINITIONS COMPILE_OPTIONS MODULES SOURCES LINK_OPTIONS
@@ -176,6 +176,7 @@ function (yup_standalone_app)
         _yup_set_default (YUP_ARG_CUSTOM_SHELL "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/${YUP_PLATFORM}/shell.html")
         _yup_set_default (YUP_ARG_INITIAL_MEMORY 33554432) # 32mb
         _yup_set_default (YUP_ARG_PTHREAD_POOL_SIZE 8)
+        _yup_set_default (YUP_ARG_STACK_SIZE 2097152) # 2mb
 
         list (APPEND additional_options
             $<$<CONFIG:DEBUG>:-O0 -g>
@@ -194,6 +195,7 @@ function (yup_standalone_app)
             -sWASM_WORKERS=1
             -sAUDIO_WORKLET=1
             -sPTHREAD_POOL_SIZE=${YUP_ARG_PTHREAD_POOL_SIZE}
+            -sSTACK_SIZE=${YUP_ARG_STACK_SIZE}
             -sSHARED_MEMORY=1
             -sALLOW_MEMORY_GROWTH=1
             -sINITIAL_MEMORY=${YUP_ARG_INITIAL_MEMORY}
