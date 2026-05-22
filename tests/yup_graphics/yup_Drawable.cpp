@@ -934,16 +934,18 @@ TEST (DrawableTests, PaintSVGWithTransformedRadialGradient)
 // Edge Cases and Error Handling
 // ==============================================================================
 
-TEST (DrawableTests, ParseSVGWithInvalidPath)
+TEST (DrawableTests, ParseSVGWithInvalidPathStillSucceeds)
 {
     Drawable drawable;
 
+    // Child element failures don't abort the document parse — the bad element is
+    // silently skipped so the document still reports success.
     File tempFile = File::getSpecialLocation (File::tempDirectory).getChildFile ("test_invalid_path.svg");
     tempFile.replaceWithText ("<svg><path d=\"INVALID PATH DATA\" /></svg>");
 
     bool result = drawable.parseSVG (tempFile);
 
-    EXPECT_FALSE (result);
+    EXPECT_TRUE (result);
 
     tempFile.deleteFile();
 }

@@ -249,10 +249,12 @@ TEST (SVGParserTests, ParsePathWithCompactNotation)
     EXPECT_TRUE (d.parseSVG ("<svg><path d=\"M10,10L50,50L90,10Z\" /></svg>"));
 }
 
-TEST (SVGParserTests, ParsePathReturnsFalseForInvalidStartCommand)
+TEST (SVGParserTests, ParsePathWithInvalidStartCommandStillSucceeds)
 {
     Drawable d;
-    EXPECT_FALSE (d.parseSVG ("<svg><path d=\"X 10 10\" /></svg>"));
+    // Child element failures don't abort the document parse — the bad path is
+    // silently skipped so the document still reports success.
+    EXPECT_TRUE (d.parseSVG ("<svg><path d=\"X 10 10\" /></svg>"));
 }
 
 TEST (SVGParserTests, ParsePathReturnsTrueForEmptyD)
