@@ -1086,13 +1086,17 @@ void registerYupGraphicsBindings (py::module_& m)
         .def_static ("fromHSL", &Color::fromHSL)
         .def_static ("fromString", &Color::fromString)
         .def_static ("fromRGB", &Color::fromRGB)
-        .def_static ("fromRGBA", &Color::fromRGBA)
+        .def_static ("fromRGBA", [] (uint8 r, uint8 g, uint8 b, uint8 a) { return Color::fromRGBA (r, g, b, a); })
+        .def_static ("fromPackedRGBA", [] (uint32 colorRGBA) { return Color::fromRGBA (colorRGBA); })
         .def_static ("fromARGB", &Color::fromARGB)
-        .def_static ("fromBGRA", &Color::fromBGRA)
+        .def_static ("fromBGRA", [] (uint8 b, uint8 g, uint8 r, uint8 a) { return Color::fromBGRA (b, g, r, a); })
+        .def_static ("fromPackedBGRA", [] (uint32 colorBGRA) { return Color::fromBGRA (colorBGRA); })
         .def_static ("opaqueRandom", &Color::opaqueRandom)
 
         // Color data access
         .def ("getARGB", &Color::getARGB)
+        .def ("getRGBA", &Color::getRGBA)
+        .def ("getBGRA", &Color::getBGRA)
         // .def (int() (py::self))  // implicit conversion to uint32
 
         // Transparency checks
