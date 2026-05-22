@@ -154,9 +154,6 @@ Result modelReadCreationDataElement (const XmlElement& parent, MemoryBlock& bloc
         return Result::ok();
     }
 
-    if (element->getStringAttribute ("encoding") == "base64")
-        return modelReadBase64Element (parent, "creationData", block);
-
     auto* creationXml = element->getFirstChildElement();
     if (creationXml == nullptr)
     {

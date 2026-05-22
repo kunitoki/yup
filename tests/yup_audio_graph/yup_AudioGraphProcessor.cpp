@@ -519,9 +519,12 @@ AudioGraphNodeProperties externalProcessorProperties (float positionX = 0.0f, fl
     properties.positionX = positionX;
     properties.positionY = positionY;
 
+    XmlElement creationData ("externalPlugin");
+    creationData.setAttribute ("pluginName", "Fake Plugin");
+    creationData.setAttribute ("pluginIdentifier", "fake.plugin");
+
     MemoryOutputStream stream (properties.creationData, false);
-    stream.writeString ("Fake Plugin");
-    stream.writeString ("fake.plugin");
+    creationData.writeTo (stream);
     stream.flush();
 
     return properties;
@@ -538,8 +541,17 @@ AudioGraphModel::NodeFactory statefulGainAndExternalFactory (int& externalLoadCo
             return makeResultValueFail ("Unknown node type");
 
         MemoryInputStream stream (properties.creationData, false);
-        const auto pluginName = stream.readString();
-        externalIdentifier = stream.readString();
+        const auto creationData = parseXML (stream.readEntireStreamAsString());
+
+        if (creationData == nullptr || ! creationData->hasTagName ("externalPlugin"))
+            return makeResultValueFail ("Invalid external plugin creation data");
+
+        const auto pluginName = creationData->getStringAttribute ("pluginName");
+        externalIdentifier = creationData->getStringAttribute ("pluginIdentifier");
+
+        if (pluginName.isEmpty() || externalIdentifier.isEmpty())
+            return makeResultValueFail ("Invalid external plugin creation data");
+
         ++externalLoadCount;
 
         return makeResultValueOk (std::make_unique<StatefulExternalProcessor> (pluginName));
@@ -1391,7 +1403,7 @@ TEST (AudioGraphProcessorTests, LoadStateFailsWhenFactoryIsMissing)
     EXPECT_TRUE (destination.loadStateFromMemory (savedState).failed());
 }
 
-TEST (AudioGraphProcessorTests, LoadStateRecreatesExternalNodesWithOpaqueCreationData)
+TEST (AudioGraphProcessorTests, LoadStateRecreatesExternalNodesWithXmlCreationData)
 {
     auto sourceModel = std::make_shared<AudioGraphModel>();
     AudioGraphProcessor source (sourceModel);
@@ -1411,8 +1423,12 @@ TEST (AudioGraphProcessorTests, LoadStateRecreatesExternalNodesWithOpaqueCreatio
     ASSERT_NE (nullptr, savedNodeElement);
     auto* creationDataElement = savedNodeElement->getChildByName ("creationData");
     ASSERT_NE (nullptr, creationDataElement);
-    EXPECT_EQ (String ("base64"), creationDataElement->getStringAttribute ("encoding"));
-    EXPECT_FALSE (creationDataElement->getAllSubText().trim().isEmpty());
+    EXPECT_TRUE (creationDataElement->getStringAttribute ("encoding").isEmpty());
+
+    auto* externalPluginElement = creationDataElement->getChildByName ("externalPlugin");
+    ASSERT_NE (nullptr, externalPluginElement);
+    EXPECT_EQ (String ("Fake Plugin"), externalPluginElement->getStringAttribute ("pluginName"));
+    EXPECT_EQ (String ("fake.plugin"), externalPluginElement->getStringAttribute ("pluginIdentifier"));
 
     int externalLoadCount = 0;
     String externalIdentifier;
@@ -1509,7 +1525,7 @@ TEST (AudioGraphProcessorTests, SaveStateWritesCompleteXmlTopology)
     EXPECT_DOUBLE_EQ (11.0, gainElement->getDoubleAttribute ("positionX"));
     EXPECT_DOUBLE_EQ (22.0, gainElement->getDoubleAttribute ("positionY"));
     ASSERT_NE (nullptr, gainElement->getChildByName ("state"));
-    ASSERT_NE (nullptr, gainElement->getChildByName ("creationData"));
+    EXPECT_EQ (nullptr, gainElement->getChildByName ("creationData"));
 
     auto* externalElement = nodesElement->getChildByAttribute ("id", String (static_cast<int64> (externalNode.getRawID())));
     ASSERT_NE (nullptr, externalElement);
@@ -1517,7 +1533,14 @@ TEST (AudioGraphProcessorTests, SaveStateWritesCompleteXmlTopology)
     EXPECT_EQ (String ("External Plugin"), externalElement->getStringAttribute ("name"));
     EXPECT_DOUBLE_EQ (33.0, externalElement->getDoubleAttribute ("positionX"));
     EXPECT_DOUBLE_EQ (44.0, externalElement->getDoubleAttribute ("positionY"));
-    EXPECT_FALSE (externalElement->getChildByName ("creationData")->getAllSubText().trim().isEmpty());
+
+    auto* creationDataElement = externalElement->getChildByName ("creationData");
+    ASSERT_NE (nullptr, creationDataElement);
+
+    auto* externalPluginElement = creationDataElement->getChildByName ("externalPlugin");
+    ASSERT_NE (nullptr, externalPluginElement);
+    EXPECT_EQ (String ("Fake Plugin"), externalPluginElement->getStringAttribute ("pluginName"));
+    EXPECT_EQ (String ("fake.plugin"), externalPluginElement->getStringAttribute ("pluginIdentifier"));
 
     auto* connectionsElement = xml->getChildByName ("connections");
     ASSERT_NE (nullptr, connectionsElement);
@@ -1636,7 +1659,7 @@ TEST (AudioGraphProcessorTests, LoadStateRejectsMissingRequiredXmlSections)
     EXPECT_TRUE (graph.loadStateFromMemory (memoryBlockFromString (missingConnectionsXml)).failed());
 }
 
-TEST (AudioGraphProcessorTests, LoadStateRejectsInvalidBase64Payloads)
+TEST (AudioGraphProcessorTests, LoadStateRejectsInvalidNodeStateAndCreationDataPayloads)
 {
     auto sourceModel = std::make_shared<AudioGraphModel>();
     AudioGraphProcessor source (sourceModel);
@@ -1671,7 +1694,7 @@ TEST (AudioGraphProcessorTests, LoadStateRejectsInvalidBase64Payloads)
     auto* creationDataElement = invalidCreationData->getChildByName ("nodes")->getChildByName ("node")->getChildByName ("creationData");
     ASSERT_NE (nullptr, creationDataElement);
     creationDataElement->deleteAllChildElements();
-    creationDataElement->addTextElement ("not-base64");
+    creationDataElement->addChildElement (new XmlElement ("externalPlugin"));
 
     EXPECT_TRUE (destination.loadStateFromMemory (memoryBlockFromXml (*invalidCreationData)).failed());
     EXPECT_EQ (0, externalLoadCount);
