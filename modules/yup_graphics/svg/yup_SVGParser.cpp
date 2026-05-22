@@ -557,6 +557,10 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
             e->fontFamily = parent->fontFamily;
         if (! e->fontSize && parent->fontSize)
             e->fontSize = parent->fontSize;
+        if (! e->fontWeight && parent->fontWeight)
+            e->fontWeight = parent->fontWeight;
+        if (! e->fontItalic && parent->fontItalic)
+            e->fontItalic = parent->fontItalic;
         if (! e->textAnchor && parent->textAnchor)
             e->textAnchor = parent->textAnchor;
         if (! e->letterSpacing && parent->letterSpacing)
@@ -799,6 +803,25 @@ void SVGParser::parseStyle (const XmlElement& element, const AffineTransform& cu
     String fontSize = element.getStringAttribute ("font-size");
     if (fontSize.isNotEmpty())
         e.fontSize = parseUnit (fontSize, e.fontSize.value_or (12.0f), e.fontSize.value_or (12.0f), e.fontSize.value_or (12.0f));
+
+    String fontWeight = element.getStringAttribute ("font-weight");
+    if (fontWeight.isNotEmpty())
+    {
+        if (fontWeight == "bold" || fontWeight == "bolder")
+            e.fontWeight = 700;
+        else if (fontWeight == "normal" || fontWeight == "lighter")
+            e.fontWeight = 400;
+        else
+        {
+            const int numericWeight = fontWeight.getIntValue();
+            if (numericWeight >= 100 && numericWeight <= 900)
+                e.fontWeight = numericWeight;
+        }
+    }
+
+    String fontStyle = element.getStringAttribute ("font-style");
+    if (fontStyle.isNotEmpty())
+        e.fontItalic = (fontStyle == "italic" || fontStyle == "oblique");
 
     String letterSpacing = element.getStringAttribute ("letter-spacing");
     if (letterSpacing.isNotEmpty() && letterSpacing != "normal")
@@ -1462,41 +1485,35 @@ float SVGParser::parseUnit (const String& value, float defaultValue, float fontS
     if (trimmed.isEmpty())
         return defaultValue;
 
-    int unitStart = 0;
-    while (unitStart < trimmed.length()
-           && (CharacterFunctions::isDigit (trimmed[unitStart])
-               || trimmed[unitStart] == '.'
-               || trimmed[unitStart] == '-'
-               || trimmed[unitStart] == '+'
-               || trimmed[unitStart] == 'e'
-               || trimmed[unitStart] == 'E'))
-    {
-        unitStart++;
-    }
+    const char* begin = trimmed.toRawUTF8();
+    char* end = nullptr;
+    const double numericValue = std::strtod (begin, &end);
 
-    float numericValue = trimmed.substring (0, unitStart).getFloatValue();
-    String unit = trimmed.substring (unitStart).trim().toLowerCase();
+    if (end == begin)
+        return defaultValue;
+
+    String unit = String (CharPointer_UTF8 (end)).trim().toLowerCase();
 
     if (unit.isEmpty() || unit == "px")
-        return numericValue;
+        return static_cast<float> (numericValue);
     if (unit == "pt")
-        return numericValue * 1.333333f;
+        return static_cast<float> (numericValue * 1.333333);
     if (unit == "pc")
-        return numericValue * 16.0f;
+        return static_cast<float> (numericValue * 16.0);
     if (unit == "mm")
-        return numericValue * 3.779528f;
+        return static_cast<float> (numericValue * 3.779528);
     if (unit == "cm")
-        return numericValue * 37.79528f;
+        return static_cast<float> (numericValue * 37.79528);
     if (unit == "in")
-        return numericValue * 96.0f;
+        return static_cast<float> (numericValue * 96.0);
     if (unit == "em")
-        return numericValue * fontSize;
+        return static_cast<float> (numericValue * fontSize);
     if (unit == "ex")
-        return numericValue * fontSize * 0.5f;
+        return static_cast<float> (numericValue * fontSize * 0.5);
     if (unit == "%")
-        return numericValue * viewportSize * 0.01f;
+        return static_cast<float> (numericValue * viewportSize * 0.01);
 
-    return numericValue;
+    return static_cast<float> (numericValue);
 }
 
 //==============================================================================

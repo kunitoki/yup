@@ -170,11 +170,20 @@ void SVGCssParser::applyStyleProperty (StringRef propertyRef, StringRef valueRef
     }
     else if (property == "font-weight")
     {
-        YUP_DRAWABLE_LOG ("CSS font-weight currently not applied - value: " << value);
+        if (value == "bold" || value == "bolder")
+            e.fontWeight = 700;
+        else if (value == "normal" || value == "lighter")
+            e.fontWeight = 400;
+        else
+        {
+            const int numericWeight = value.getIntValue();
+            if (numericWeight >= 100 && numericWeight <= 900)
+                e.fontWeight = numericWeight;
+        }
     }
     else if (property == "font-style")
     {
-        YUP_DRAWABLE_LOG ("CSS font-style currently not applied - value: " << value);
+        e.fontItalic = (value == "italic" || value == "oblique");
     }
     else if (property == "font-variant")
     {

@@ -64,6 +64,8 @@ struct SVGElement : public ReferenceCountedObject
     std::optional<Point<float>> textPosition;
     std::optional<String> fontFamily;
     std::optional<float> fontSize;
+    std::optional<int> fontWeight;
+    std::optional<bool> fontItalic;
     std::optional<String> textAnchor;
     std::optional<float> letterSpacing;
     std::optional<float> wordSpacing;

@@ -76,8 +76,13 @@ public:
         /** Optional custom image resolver. Return std::nullopt to use the default. */
         std::function<std::optional<Image> (StringRef href, const File& baseDirectory)> imageResolver;
 
-        /** Optional custom font resolver. Return std::nullopt to use the default. */
-        std::function<std::optional<Font> (StringRef family, float size)> fontResolver;
+        /** Optional custom font resolver. Return std::nullopt to use the default.
+            @param family  CSS font-family name (may be empty).
+            @param size    Font size in pixels.
+            @param weight  CSS font-weight value (400 = normal, 700 = bold).
+            @param italic  True when font-style is italic or oblique.
+        */
+        std::function<std::optional<Font> (StringRef family, float size, int weight, bool italic)> fontResolver;
     };
 
     //==============================================================================

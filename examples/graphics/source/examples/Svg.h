@@ -103,10 +103,18 @@ private:
     {
         yup::Drawable::ParseOptions options;
         options.baseDirectory = svgFile.getParentDirectory();
-        options.fontResolver = [this] (yup::StringRef, float fontSize) -> std::optional<yup::Font>
+        options.fontResolver = [this] (yup::StringRef, float fontSize, int weight, bool italic) -> std::optional<yup::Font>
         {
             if (demoFont)
-                return demoFont->withHeight (fontSize);
+            {
+                auto font = *demoFont;
+                font.setAxisValue ("wght", static_cast<float> (weight));
+                if (italic)
+                    font.setAxisValue ("slnt", -10.0f);
+                else
+                    font.setAxisValue ("slnt", 0.0f);
+                return font.withHeight (fontSize);
+            }
 
             if (auto theme = yup::ApplicationTheme::getGlobalTheme())
                 return theme->getDefaultFont().withHeight (fontSize);
