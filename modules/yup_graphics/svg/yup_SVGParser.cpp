@@ -122,6 +122,8 @@ bool SVGParser::parseDocument (std::unique_ptr<XmlElement> svgRoot)
 
     auto result = parseElement (*svgRoot, true, {});
 
+    resolvePatternHrefs();
+
     if (result)
     {
         data.bounds = document.calculateBounds();
@@ -535,6 +537,12 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
                 parseFilter (*child);
             else if (child->hasTagName ("clipPath"))
                 parseClipPath (*child);
+            else if (child->hasTagName ("mask"))
+                parseMask (*child);
+            else if (child->hasTagName ("marker"))
+                parseMarker (*child);
+            else if (child->hasTagName ("pattern"))
+                parsePattern (*child);
             else if (child->hasTagName ("style"))
                 cssParser.parseStyleElement (*child);
         }
@@ -582,6 +590,12 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
             parseFilter (*child);
         else if (child->hasTagName ("clipPath"))
             parseClipPath (*child);
+        else if (child->hasTagName ("mask"))
+            parseMask (*child);
+        else if (child->hasTagName ("marker"))
+            parseMarker (*child);
+        else if (child->hasTagName ("pattern"))
+            parsePattern (*child);
         else if (child->hasTagName ("style"))
             cssParser.parseStyleElement (*child);
         else
@@ -748,6 +762,49 @@ void SVGParser::parseStyle (const XmlElement& element, const AffineTransform& cu
             e.filterUrl = filterUrl;
     }
 
+    String mask = element.getStringAttribute ("mask");
+    if (mask.isNotEmpty())
+    {
+        if (auto maskUrl = extractUrlId (mask); maskUrl.isNotEmpty())
+            e.maskUrl = maskUrl;
+    }
+
+    String markerStart = element.getStringAttribute ("marker-start");
+    if (markerStart.isNotEmpty())
+    {
+        if (auto url = extractUrlId (markerStart); url.isNotEmpty())
+            e.markerStart = url;
+    }
+
+    String markerMid = element.getStringAttribute ("marker-mid");
+    if (markerMid.isNotEmpty())
+    {
+        if (auto url = extractUrlId (markerMid); url.isNotEmpty())
+            e.markerMid = url;
+    }
+
+    String markerEnd = element.getStringAttribute ("marker-end");
+    if (markerEnd.isNotEmpty())
+    {
+        if (auto url = extractUrlId (markerEnd); url.isNotEmpty())
+            e.markerEnd = url;
+    }
+
+    String markerShorthand = element.getStringAttribute ("marker");
+    if (markerShorthand.isNotEmpty())
+    {
+        if (auto url = extractUrlId (markerShorthand); url.isNotEmpty())
+        {
+            e.markerStart = url;
+            e.markerMid = url;
+            e.markerEnd = url;
+        }
+    }
+
+    float strokeMiterLimit = element.getFloatAttribute ("stroke-miterlimit", -1.0f);
+    if (strokeMiterLimit >= 0.0f)
+        e.strokeMiterLimit = std::max (1.0f, strokeMiterLimit);
+
     String dashArray = element.getStringAttribute ("stroke-dasharray");
     if (dashArray.isNotEmpty() && dashArray != "none")
     {
@@ -795,6 +852,41 @@ void SVGParser::parseStyle (const XmlElement& element, const AffineTransform& cu
     String visibility = element.getStringAttribute ("visibility");
     if (display == "none" || visibility == "hidden" || visibility == "collapse")
         e.hidden = true;
+
+    String mixBlendMode = element.getStringAttribute ("mix-blend-mode");
+    if (mixBlendMode.isNotEmpty())
+    {
+        if (mixBlendMode == "multiply")
+            e.blendMode = BlendMode::Multiply;
+        else if (mixBlendMode == "screen")
+            e.blendMode = BlendMode::Screen;
+        else if (mixBlendMode == "overlay")
+            e.blendMode = BlendMode::Overlay;
+        else if (mixBlendMode == "darken")
+            e.blendMode = BlendMode::Darken;
+        else if (mixBlendMode == "lighten")
+            e.blendMode = BlendMode::Lighten;
+        else if (mixBlendMode == "color-dodge")
+            e.blendMode = BlendMode::ColorDodge;
+        else if (mixBlendMode == "color-burn")
+            e.blendMode = BlendMode::ColorBurn;
+        else if (mixBlendMode == "hard-light")
+            e.blendMode = BlendMode::HardLight;
+        else if (mixBlendMode == "soft-light")
+            e.blendMode = BlendMode::SoftLight;
+        else if (mixBlendMode == "difference")
+            e.blendMode = BlendMode::Difference;
+        else if (mixBlendMode == "exclusion")
+            e.blendMode = BlendMode::Exclusion;
+        else if (mixBlendMode == "hue")
+            e.blendMode = BlendMode::Hue;
+        else if (mixBlendMode == "saturation")
+            e.blendMode = BlendMode::Saturation;
+        else if (mixBlendMode == "color")
+            e.blendMode = BlendMode::Color;
+        else if (mixBlendMode == "luminosity")
+            e.blendMode = BlendMode::Luminosity;
+    }
 
     String fontFamily = element.getStringAttribute ("font-family");
     if (fontFamily.isNotEmpty())
@@ -1419,6 +1511,220 @@ void SVGParser::parseClipPath (const XmlElement& element)
 SVGClipPath::Ptr SVGParser::getClipPathById (const String& id) const
 {
     return data.clipPathsById[id];
+}
+
+//==============================================================================
+
+void SVGParser::parseMask (const XmlElement& element)
+{
+    String id = element.getStringAttribute ("id");
+    if (id.isEmpty())
+    {
+        YUP_DRAWABLE_LOG ("parseMask skipped - missing id");
+        return;
+    }
+
+    SVGMask::Ptr mask = new SVGMask;
+    mask->id = id;
+
+    auto maskUnitsStr = element.getStringAttribute ("maskUnits", "objectBoundingBox");
+    mask->maskUnits = (maskUnitsStr == "userSpaceOnUse")
+                        ? SVGMask::UserSpaceOnUse
+                        : SVGMask::ObjectBoundingBox;
+
+    auto maskContentUnitsStr = element.getStringAttribute ("maskContentUnits", "userSpaceOnUse");
+    mask->maskContentUnits = (maskContentUnitsStr == "objectBoundingBox")
+                               ? SVGMask::ObjectBoundingBox
+                               : SVGMask::UserSpaceOnUse;
+
+    if (element.hasAttribute ("x"))
+        mask->x = parseLengthAttribute (element, "x", mask->x, 12.0f, 100.0f);
+    if (element.hasAttribute ("y"))
+        mask->y = parseLengthAttribute (element, "y", mask->y, 12.0f, 100.0f);
+    if (element.hasAttribute ("width"))
+        mask->width = parseLengthAttribute (element, "width", mask->width, 12.0f, 100.0f);
+    if (element.hasAttribute ("height"))
+        mask->height = parseLengthAttribute (element, "height", mask->height, 12.0f, 100.0f);
+
+    SVGElement::Ptr containerElement = new SVGElement;
+    containerElement->tagName = "mask";
+
+    for (auto* child = element.getFirstChildElement(); child != nullptr; child = child->getNextElement())
+    {
+        if (child->isTextElement())
+            continue;
+
+        parseElement (*child, false, AffineTransform::identity(), containerElement.get());
+    }
+
+    mask->elements = std::move (containerElement->children);
+
+    data.masks.push_back (mask);
+    data.masksById.set (id, mask);
+
+    YUP_DRAWABLE_LOG ("parseMask result - id: " << id << " elementCount: " << mask->elements.size());
+}
+
+//==============================================================================
+
+void SVGParser::parseMarker (const XmlElement& element)
+{
+    String id = element.getStringAttribute ("id");
+    if (id.isEmpty())
+    {
+        YUP_DRAWABLE_LOG ("parseMarker skipped - missing id");
+        return;
+    }
+
+    SVGMarker::Ptr marker = new SVGMarker;
+    marker->id = id;
+
+    auto markerUnitsStr = element.getStringAttribute ("markerUnits", "strokeWidth");
+    marker->markerUnits = (markerUnitsStr == "userSpaceOnUse")
+                            ? SVGMarker::UserSpaceOnUse
+                            : SVGMarker::StrokeWidth;
+
+    marker->refX = element.getStringAttribute ("refX", "0").getFloatValue();
+    marker->refY = element.getStringAttribute ("refY", "0").getFloatValue();
+    marker->markerWidth = element.getStringAttribute ("markerWidth", "3").getFloatValue();
+    marker->markerHeight = element.getStringAttribute ("markerHeight", "3").getFloatValue();
+
+    if (element.hasAttribute ("orient"))
+    {
+        auto orientStr = element.getStringAttribute ("orient");
+        if (orientStr == "auto-start-reverse")
+            marker->orientAutoStartReverse = true;
+        else if (orientStr != "auto")
+            marker->orient = orientStr.getFloatValue();
+    }
+
+    if (auto viewBoxStr = element.getStringAttribute ("viewBox"); viewBoxStr.isNotEmpty())
+    {
+        auto coords = StringArray::fromTokens (viewBoxStr, " ,", "");
+        if (coords.size() == 4)
+            marker->viewBox = Rectangle<float> (coords[0].getFloatValue(), coords[1].getFloatValue(), coords[2].getFloatValue(), coords[3].getFloatValue());
+    }
+
+    SVGElement::Ptr containerElement = new SVGElement;
+    containerElement->tagName = "marker";
+
+    for (auto* child = element.getFirstChildElement(); child != nullptr; child = child->getNextElement())
+    {
+        if (child->isTextElement())
+            continue;
+
+        parseElement (*child, false, AffineTransform::identity(), containerElement.get());
+    }
+
+    marker->elements = std::move (containerElement->children);
+
+    data.markers.push_back (marker);
+    data.markersById.set (id, marker);
+
+    YUP_DRAWABLE_LOG ("parseMarker result - id: " << id << " elementCount: " << marker->elements.size());
+}
+
+//==============================================================================
+
+void SVGParser::parsePattern (const XmlElement& element)
+{
+    String id = element.getStringAttribute ("id");
+    if (id.isEmpty())
+    {
+        YUP_DRAWABLE_LOG ("parsePattern skipped - missing id");
+        return;
+    }
+
+    SVGPattern::Ptr pattern = new SVGPattern;
+    pattern->id = id;
+
+    auto patternUnitsStr = element.getStringAttribute ("patternUnits", "objectBoundingBox");
+    pattern->patternUnits = (patternUnitsStr == "userSpaceOnUse")
+                              ? SVGPattern::UserSpaceOnUse
+                              : SVGPattern::ObjectBoundingBox;
+
+    auto patternContentUnitsStr = element.getStringAttribute ("patternContentUnits", "userSpaceOnUse");
+    pattern->patternContentUnits = (patternContentUnitsStr == "objectBoundingBox")
+                                     ? SVGPattern::ObjectBoundingBox
+                                     : SVGPattern::UserSpaceOnUse;
+
+    pattern->x = element.getStringAttribute ("x", "0").getFloatValue();
+    pattern->y = element.getStringAttribute ("y", "0").getFloatValue();
+    pattern->width = element.getStringAttribute ("width", "0").getFloatValue();
+    pattern->height = element.getStringAttribute ("height", "0").getFloatValue();
+
+    if (auto patternTransformStr = element.getStringAttribute ("patternTransform"); patternTransformStr.isNotEmpty())
+        pattern->patternTransform = parseTransform (patternTransformStr);
+
+    if (auto viewBoxStr = element.getStringAttribute ("viewBox"); viewBoxStr.isNotEmpty())
+    {
+        auto coords = StringArray::fromTokens (viewBoxStr, " ,", "");
+        if (coords.size() == 4)
+            pattern->viewBox = Rectangle<float> (coords[0].getFloatValue(), coords[1].getFloatValue(), coords[2].getFloatValue(), coords[3].getFloatValue());
+    }
+
+    String href = element.getStringAttribute ("href");
+    if (href.isEmpty())
+        href = element.getStringAttribute ("xlink:href");
+    if (href.startsWith ("#"))
+        pattern->href = href.substring (1);
+
+    SVGElement::Ptr containerElement = new SVGElement;
+    containerElement->tagName = "pattern";
+
+    for (auto* child = element.getFirstChildElement(); child != nullptr; child = child->getNextElement())
+    {
+        if (child->isTextElement())
+            continue;
+
+        parseElement (*child, false, AffineTransform::identity(), containerElement.get());
+    }
+
+    pattern->elements = std::move (containerElement->children);
+
+    data.patterns.push_back (pattern);
+    data.patternsById.set (id, pattern);
+
+    YUP_DRAWABLE_LOG ("parsePattern result - id: " << id << " elementCount: " << pattern->elements.size());
+}
+
+//==============================================================================
+
+void SVGParser::resolvePatternHrefs()
+{
+    for (auto& pattern : data.patterns)
+    {
+        if (! pattern->href)
+            continue;
+
+        auto basePattern = data.patternsById[*pattern->href];
+        if (basePattern == nullptr)
+        {
+            YUP_DRAWABLE_LOG ("resolvePatternHrefs - referenced pattern not found: " << *pattern->href);
+            continue;
+        }
+
+        if (pattern->width == 0.0f && basePattern->width != 0.0f)
+            pattern->width = basePattern->width;
+
+        if (pattern->height == 0.0f && basePattern->height != 0.0f)
+            pattern->height = basePattern->height;
+
+        if (pattern->x == 0.0f && basePattern->x != 0.0f)
+            pattern->x = basePattern->x;
+
+        if (pattern->y == 0.0f && basePattern->y != 0.0f)
+            pattern->y = basePattern->y;
+
+        if (! pattern->viewBox && basePattern->viewBox)
+            pattern->viewBox = basePattern->viewBox;
+
+        if (pattern->patternTransform.isIdentity() && ! basePattern->patternTransform.isIdentity())
+            pattern->patternTransform = basePattern->patternTransform;
+
+        if (pattern->elements.empty() && ! basePattern->elements.empty())
+            pattern->elements = basePattern->elements;
+    }
 }
 
 //==============================================================================

@@ -215,6 +215,40 @@ void SVGCssParser::applyStyleProperty (StringRef propertyRef, StringRef valueRef
         if (clipPathUrl.isNotEmpty())
             e.clipPathUrl = clipPathUrl;
     }
+    else if (property == "mask")
+    {
+        if (auto maskUrl = SVGParser::extractUrlId (value); maskUrl.isNotEmpty())
+            e.maskUrl = maskUrl;
+    }
+    else if (property == "marker-start")
+    {
+        if (auto url = SVGParser::extractUrlId (value); url.isNotEmpty())
+            e.markerStart = url;
+    }
+    else if (property == "marker-mid")
+    {
+        if (auto url = SVGParser::extractUrlId (value); url.isNotEmpty())
+            e.markerMid = url;
+    }
+    else if (property == "marker-end")
+    {
+        if (auto url = SVGParser::extractUrlId (value); url.isNotEmpty())
+            e.markerEnd = url;
+    }
+    else if (property == "marker")
+    {
+        if (auto url = SVGParser::extractUrlId (value); url.isNotEmpty())
+        {
+            e.markerStart = url;
+            e.markerMid = url;
+            e.markerEnd = url;
+        }
+    }
+    else if (property == "stroke-miterlimit")
+    {
+        float val = value.getFloatValue();
+        e.strokeMiterLimit = std::max (1.0f, val);
+    }
     else if (property == "filter")
     {
         if (value == "none")
@@ -260,6 +294,39 @@ void SVGCssParser::applyStyleProperty (StringRef propertyRef, StringRef valueRef
     {
         if (value == "evenodd" || value == "nonzero")
             e.clipRule = value;
+    }
+    else if (property == "mix-blend-mode")
+    {
+        if (value == "multiply")
+            e.blendMode = BlendMode::Multiply;
+        else if (value == "screen")
+            e.blendMode = BlendMode::Screen;
+        else if (value == "overlay")
+            e.blendMode = BlendMode::Overlay;
+        else if (value == "darken")
+            e.blendMode = BlendMode::Darken;
+        else if (value == "lighten")
+            e.blendMode = BlendMode::Lighten;
+        else if (value == "color-dodge")
+            e.blendMode = BlendMode::ColorDodge;
+        else if (value == "color-burn")
+            e.blendMode = BlendMode::ColorBurn;
+        else if (value == "hard-light")
+            e.blendMode = BlendMode::HardLight;
+        else if (value == "soft-light")
+            e.blendMode = BlendMode::SoftLight;
+        else if (value == "difference")
+            e.blendMode = BlendMode::Difference;
+        else if (value == "exclusion")
+            e.blendMode = BlendMode::Exclusion;
+        else if (value == "hue")
+            e.blendMode = BlendMode::Hue;
+        else if (value == "saturation")
+            e.blendMode = BlendMode::Saturation;
+        else if (value == "color")
+            e.blendMode = BlendMode::Color;
+        else if (value == "luminosity")
+            e.blendMode = BlendMode::Luminosity;
     }
     else
     {

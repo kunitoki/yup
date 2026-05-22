@@ -47,19 +47,20 @@ public:
     */
     bool parseSVG (const File& svgFile);
 
+    /** Parses an SVG file with custom parse options. */
+    bool parseSVG (const File& svgFile, const ParseOptions& options);
+
+    //==============================================================================
     /** Parses SVG text.
 
         @param svgText The SVG XML text to parse.
 
         @return True if the SVG text was parsed successfully, false otherwise.
     */
-    bool parseSVG (StringRef svgText);
-
-    /** Parses an SVG file with custom parse options. */
-    bool parseSVG (const File& svgFile, const ParseOptions& options);
+    bool parseSVGText (StringRef svgText);
 
     /** Parses SVG text with custom parse options. */
-    bool parseSVG (StringRef svgText, const ParseOptions& options);
+    bool parseSVGText (StringRef svgText, const ParseOptions& options);
 
     //==============================================================================
     /** Clears the drawable. */
@@ -93,7 +94,9 @@ public:
                 Justification justification = Justification::center);
 
 private:
-    void paintElement (Graphics& g, const SVGData& data, const SVGElement& element, bool hasParentFillEnabled, bool hasParentStrokeEnabled, Color currentColor, int recursionDepth = 0);
+    void paintElement (Graphics& g, const SVGData& data, const SVGElement& element, bool hasParentFillEnabled, bool hasParentStrokeEnabled, Color currentColor, std::unordered_set<const SVGElement*>& visitingElements, int recursionDepth = 0);
+    void paintMarker (Graphics& g, const SVGData& data, const SVGMarker& marker, float strokeWidth, Point<float> position, float tangentAngle, std::unordered_set<const SVGElement*>& visitingElements, int recursionDepth);
+    void paintPatternFill (Graphics& g, const SVGData& data, const Path& shape, const SVGElement& element, const SVGPattern& pattern, Color currentColor, std::unordered_set<const SVGElement*>& visitingElements, int recursionDepth);
     void paintDebugElement (Graphics& g, const SVGElement& element);
     void renderTextElement (Graphics& g, const SVGElement& element);
     void renderImageElement (Graphics& g, const SVGElement& element);

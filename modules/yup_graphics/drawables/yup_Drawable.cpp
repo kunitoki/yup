@@ -113,6 +113,21 @@ SVGClipPath::Ptr getClipPathById (const SVGData& data, const String& id)
 {
     return data.clipPathsById[id];
 }
+
+SVGMask::Ptr getMaskById (const SVGData& data, const String& id)
+{
+    return data.masksById[id];
+}
+
+SVGMarker::Ptr getMarkerById (const SVGData& data, const String& id)
+{
+    return data.markersById[id];
+}
+
+SVGPattern::Ptr getPatternById (const SVGData& data, const String& id)
+{
+    return data.patternsById[id];
+}
 } // namespace
 
 //==============================================================================
@@ -133,13 +148,6 @@ bool Drawable::parseSVG (const File& svgFile)
     return parseSVG (svgFile, options);
 }
 
-bool Drawable::parseSVG (StringRef svgText)
-{
-    YUP_DRAWABLE_LOG ("parseSVG(text) - length: " << String (svgText.text).length());
-
-    return parseSVG (svgText, ParseOptions());
-}
-
 bool Drawable::parseSVG (const File& svgFile, const ParseOptions& options)
 {
     YUP_DRAWABLE_LOG ("parseSVG(file, options) - file: " << svgFile.getFullPathName());
@@ -148,7 +156,16 @@ bool Drawable::parseSVG (const File& svgFile, const ParseOptions& options)
     return document != nullptr;
 }
 
-bool Drawable::parseSVG (StringRef svgText, const ParseOptions& options)
+//==============================================================================
+
+bool Drawable::parseSVGText (StringRef svgText)
+{
+    YUP_DRAWABLE_LOG ("parseSVG(text) - length: " << String (svgText.text).length());
+
+    return parseSVGText (svgText, ParseOptions());
+}
+
+bool Drawable::parseSVGText (StringRef svgText, const ParseOptions& options)
 {
     YUP_DRAWABLE_LOG ("parseSVG(text, options) - length: " << String (svgText.text).length());
 
@@ -202,8 +219,9 @@ void Drawable::paint (Graphics& g)
         if (! data.transform.isIdentity())
             g.addTransform (data.transform);
 
+        std::unordered_set<const SVGElement*> visiting;
         for (const auto& element : data.elements)
-            paintElement (g, data, *element, data.rootHasFill, data.rootHasStroke, data.rootFillColor.value_or (Colors::black));
+            paintElement (g, data, *element, data.rootHasFill, data.rootHasStroke, data.rootFillColor.value_or (Colors::black), visiting);
     });
 }
 
@@ -240,14 +258,15 @@ void Drawable::paint (Graphics& g, const Rectangle<float>& targetArea, Fitting f
         if (data.rootStrokeColor)
             g.setStrokeColor (*data.rootStrokeColor);
 
+        std::unordered_set<const SVGElement*> visiting;
         for (const auto& element : data.elements)
-            paintElement (g, data, *element, data.rootHasFill, data.rootHasStroke, data.rootFillColor.value_or (Colors::black));
+            paintElement (g, data, *element, data.rootHasFill, data.rootHasStroke, data.rootFillColor.value_or (Colors::black), visiting);
     });
 }
 
 //==============================================================================
 
-void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement& element, bool hasParentFillEnabled, bool hasParentStrokeEnabled, Color currentColor, int recursionDepth)
+void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement& element, bool hasParentFillEnabled, bool hasParentStrokeEnabled, Color currentColor, std::unordered_set<const SVGElement*>& visitingElements, int recursionDepth)
 {
     if (element.hidden)
     {
@@ -277,6 +296,9 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
 
     if (element.opacity)
         g.setOpacity (g.getOpacity() * (*element.opacity));
+
+    if (element.blendMode)
+        g.setBlendMode (*element.blendMode);
 
     if (element.filterUrl)
     {
@@ -328,7 +350,7 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
             {
                 if (clipElement->path)
                 {
-                    if (! clipElement->path->isUsingNonZeroWinding())
+                    if (clipElement->clipRule == "evenodd")
                         clipUsesNonZeroWinding = false;
 
                     AffineTransform clipTransform = clipElement->transform.value_or (AffineTransform::identity());
@@ -363,6 +385,65 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
                 g.setTransform (savedClipTransform);
 
                 hasClipping = true;
+            }
+        }
+    }
+
+    if (element.maskUrl)
+    {
+        if (auto mask = getMaskById (data, *element.maskUrl))
+        {
+            std::optional<Rectangle<float>> maskObjectBounds;
+
+            if (mask->maskUnits == SVGMask::ObjectBoundingBox)
+            {
+                if (element.path)
+                    maskObjectBounds = element.path->getBounds();
+                else if (element.reference)
+                {
+                    if (auto refElement = data.elementsById[*element.reference]; refElement != nullptr && refElement->path)
+                        maskObjectBounds = refElement->path->getBounds();
+                }
+                else if (element.imageBounds)
+                {
+                    maskObjectBounds = *element.imageBounds;
+                }
+            }
+
+            Path combinedMaskPath;
+
+            for (const auto& maskElement : mask->elements)
+            {
+                if (maskElement->path)
+                {
+                    AffineTransform maskTransform = maskElement->transform.value_or (AffineTransform::identity());
+
+                    if (mask->maskUnits == SVGMask::ObjectBoundingBox)
+                    {
+                        if (! maskObjectBounds || maskObjectBounds->isEmpty())
+                            continue;
+
+                        auto unitsTransform = AffineTransform::translation (maskObjectBounds->getX(), maskObjectBounds->getY())
+                                                  .scaled (maskObjectBounds->getWidth(), maskObjectBounds->getHeight());
+                        maskTransform = maskTransform.followedBy (unitsTransform);
+                    }
+
+                    if (! maskTransform.isIdentity())
+                        combinedMaskPath.appendPath (*maskElement->path, maskTransform);
+                    else
+                        combinedMaskPath.appendPath (*maskElement->path);
+                }
+            }
+
+            if (! combinedMaskPath.isEmpty())
+            {
+                auto maskClipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
+                auto transformedMaskPath = combinedMaskPath.transformed (maskClipTransform);
+
+                const auto savedMaskTransform = g.getTransform();
+                g.setTransform (AffineTransform::identity());
+                g.setClipPath (transformedMaskPath);
+                g.setTransform (savedMaskTransform);
             }
         }
     }
@@ -404,6 +485,10 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
             g.setFillColorGradient (colorGradient);
             isFillDefined = true;
         }
+        else if (getPatternById (data, *element.fillUrl))
+        {
+            isFillDefined = true;
+        }
     }
     else if (hasParentFillEnabled)
     {
@@ -414,11 +499,29 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
     {
         if (element.path)
         {
-            YUP_DRAWABLE_LOG ("Filling path - tag: " << element.tagName
-                                                     << " id: " << (element.id ? *element.id : "none")
-                                                     << " bounds: " << element.path->getBounds().toString()
-                                                     << " clip: " << (hasClipping ? "true" : "false"));
-            g.fillPath (*element.path);
+            if (element.fillUrl)
+            {
+                if (auto pattern = getPatternById (data, *element.fillUrl))
+                {
+                    paintPatternFill (g, data, *element.path, element, *pattern, currentColor, visitingElements, recursionDepth);
+                }
+                else
+                {
+                    YUP_DRAWABLE_LOG ("Filling path - tag: " << element.tagName
+                                                             << " id: " << (element.id ? *element.id : "none")
+                                                             << " bounds: " << element.path->getBounds().toString()
+                                                             << " clip: " << (hasClipping ? "true" : "false"));
+                    g.fillPath (*element.path);
+                }
+            }
+            else
+            {
+                YUP_DRAWABLE_LOG ("Filling path - tag: " << element.tagName
+                                                         << " id: " << (element.id ? *element.id : "none")
+                                                         << " bounds: " << element.path->getBounds().toString()
+                                                         << " clip: " << (hasClipping ? "true" : "false"));
+                g.fillPath (*element.path);
+            }
         }
         else if (element.reference)
         {
@@ -517,6 +620,7 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
         g.setStrokeCap (*element.strokeCap);
     if (element.strokeWidth)
         g.setStrokeWidth (*element.strokeWidth);
+    g.setStrokeMiterLimit (element.strokeMiterLimit);
 
     bool referenceDefinesStroke = false;
     if (! isStrokeDefined && element.reference)
@@ -587,34 +691,333 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
         }
     }
 
+    if (element.path && (element.markerStart || element.markerMid || element.markerEnd))
+    {
+        struct MarkerPlacement
+        {
+            Point<float> position;
+            float tangentAngle = 0.0f;
+        };
+
+        std::vector<MarkerPlacement> startPlacements, midPlacements, endPlacements;
+        Point<float> firstPoint, prevPoint, subpathStart;
+        bool hasFirstPoint = false;
+        float firstTangent = 0.0f, prevTangent = 0.0f;
+        bool firstSegmentAfterMove = false;
+
+        for (const auto& seg : *element.path)
+        {
+            switch (seg.verb)
+            {
+                case Path::Verb::MoveTo:
+                {
+                    if (hasFirstPoint && ! endPlacements.empty())
+                    {
+                        // Flush pending end for the previous sub-path
+                    }
+
+                    firstPoint = seg.point;
+                    prevPoint = seg.point;
+                    subpathStart = seg.point;
+                    hasFirstPoint = true;
+                    firstSegmentAfterMove = true;
+                    firstTangent = 0.0f;
+                    prevTangent = 0.0f;
+                    endPlacements.clear();
+                    break;
+                }
+
+                case Path::Verb::LineTo:
+                {
+                    if (! hasFirstPoint)
+                        break;
+
+                    const float dx = seg.point.getX() - prevPoint.getX();
+                    const float dy = seg.point.getY() - prevPoint.getY();
+                    const float angle = std::atan2 (dy, dx);
+
+                    if (firstSegmentAfterMove)
+                    {
+                        startPlacements.push_back ({ firstPoint, angle });
+                        firstTangent = angle;
+                        firstSegmentAfterMove = false;
+                    }
+                    else
+                    {
+                        midPlacements.push_back ({ prevPoint, prevTangent });
+                    }
+
+                    prevPoint = seg.point;
+                    prevTangent = angle;
+                    endPlacements = { { seg.point, angle } };
+                    break;
+                }
+
+                case Path::Verb::QuadTo:
+                {
+                    if (! hasFirstPoint)
+                        break;
+
+                    const float dx = seg.point.getX() - seg.controlPoint1.getX();
+                    const float dy = seg.point.getY() - seg.controlPoint1.getY();
+                    const float angle = std::atan2 (dy, dx);
+                    const float startDx = seg.controlPoint1.getX() - prevPoint.getX();
+                    const float startDy = seg.controlPoint1.getY() - prevPoint.getY();
+                    const float startAngle = std::atan2 (startDy, startDx);
+
+                    if (firstSegmentAfterMove)
+                    {
+                        startPlacements.push_back ({ firstPoint, startAngle });
+                        firstTangent = startAngle;
+                        firstSegmentAfterMove = false;
+                    }
+                    else
+                    {
+                        midPlacements.push_back ({ prevPoint, prevTangent });
+                    }
+
+                    prevPoint = seg.point;
+                    prevTangent = angle;
+                    endPlacements = { { seg.point, angle } };
+                    break;
+                }
+
+                case Path::Verb::CubicTo:
+                {
+                    if (! hasFirstPoint)
+                        break;
+
+                    const float dx = seg.point.getX() - seg.controlPoint2.getX();
+                    const float dy = seg.point.getY() - seg.controlPoint2.getY();
+                    const float angle = std::atan2 (dy, dx);
+                    const float startDx = seg.controlPoint1.getX() - prevPoint.getX();
+                    const float startDy = seg.controlPoint1.getY() - prevPoint.getY();
+                    const float startAngle = std::atan2 (startDy, startDx);
+
+                    if (firstSegmentAfterMove)
+                    {
+                        startPlacements.push_back ({ firstPoint, startAngle });
+                        firstTangent = startAngle;
+                        firstSegmentAfterMove = false;
+                    }
+                    else
+                    {
+                        midPlacements.push_back ({ prevPoint, prevTangent });
+                    }
+
+                    prevPoint = seg.point;
+                    prevTangent = angle;
+                    endPlacements = { { seg.point, angle } };
+                    break;
+                }
+
+                case Path::Verb::Close:
+                {
+                    if (! hasFirstPoint)
+                        break;
+
+                    if (! firstSegmentAfterMove)
+                        midPlacements.push_back ({ prevPoint, prevTangent });
+
+                    prevPoint = subpathStart;
+                    firstSegmentAfterMove = true;
+                    endPlacements.clear();
+                    break;
+                }
+            }
+        }
+
+        const float sw = element.strokeWidth.value_or (1.0f);
+
+        if (element.markerStart)
+        {
+            if (auto marker = getMarkerById (data, *element.markerStart))
+            {
+                for (const auto& p : startPlacements)
+                {
+                    float angle = p.tangentAngle;
+                    if (marker->orientAutoStartReverse)
+                        angle += MathConstants<float>::pi;
+
+                    paintMarker (g, data, *marker, sw, p.position, angle, visitingElements, recursionDepth);
+                }
+            }
+        }
+
+        if (element.markerMid)
+        {
+            if (auto marker = getMarkerById (data, *element.markerMid))
+            {
+                for (const auto& p : midPlacements)
+                    paintMarker (g, data, *marker, sw, p.position, p.tangentAngle, visitingElements, recursionDepth);
+            }
+        }
+
+        if (element.markerEnd)
+        {
+            if (auto marker = getMarkerById (data, *element.markerEnd))
+            {
+                for (const auto& p : endPlacements)
+                    paintMarker (g, data, *marker, sw, p.position, p.tangentAngle, visitingElements, recursionDepth);
+            }
+        }
+    }
+
     if (element.reference)
     {
         if (auto refElement = data.elementsById[*element.reference]; refElement != nullptr && ! refElement->children.empty())
         {
-            const auto savedTransform = g.getTransform();
-            if (refElement->localTransform)
-                g.setTransform (refElement->localTransform->followedBy (savedTransform));
-
-            if (refElement->viewBox)
+            if (visitingElements.count (refElement.get()) != 0)
             {
-                auto viewportSizeToUse = element.viewportSize.value_or (refElement->viewportSize.value_or (Size<float> (refElement->viewBox->getWidth(), refElement->viewBox->getHeight())));
-                Rectangle<float> viewport (0.0f, 0.0f, viewportSizeToUse.getWidth(), viewportSizeToUse.getHeight());
-                auto viewBoxTransform = calculateTransformForTarget (*refElement->viewBox, viewport, refElement->preserveAspectRatioFitting, refElement->preserveAspectRatioJustification);
-                if (! viewBoxTransform.isIdentity())
-                    g.addTransform (viewBoxTransform);
+                YUP_DRAWABLE_LOG ("paintElement skipped - cycle detected in use reference id: " << *element.reference);
             }
+            else
+            {
+                struct ScopeErase
+                {
+                    std::unordered_set<const SVGElement*>& set;
+                    const SVGElement* elem;
 
-            for (const auto& childElement : refElement->children)
-                paintElement (g, data, *childElement, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke, currentColor, recursionDepth + 1);
+                    ~ScopeErase() { set.erase (elem); }
+                } eraseGuard { visitingElements, refElement.get() };
 
-            g.setTransform (savedTransform);
+                visitingElements.insert (refElement.get());
+
+                const auto savedTransform = g.getTransform();
+                if (refElement->localTransform)
+                    g.setTransform (refElement->localTransform->followedBy (savedTransform));
+
+                if (refElement->viewBox)
+                {
+                    auto viewportSizeToUse = element.viewportSize.value_or (refElement->viewportSize.value_or (Size<float> (refElement->viewBox->getWidth(), refElement->viewBox->getHeight())));
+                    Rectangle<float> viewport (0.0f, 0.0f, viewportSizeToUse.getWidth(), viewportSizeToUse.getHeight());
+                    auto viewBoxTransform = calculateTransformForTarget (*refElement->viewBox, viewport, refElement->preserveAspectRatioFitting, refElement->preserveAspectRatioJustification);
+                    if (! viewBoxTransform.isIdentity())
+                        g.addTransform (viewBoxTransform);
+                }
+
+                for (const auto& childElement : refElement->children)
+                    paintElement (g, data, *childElement, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke, currentColor, visitingElements, recursionDepth + 1);
+
+                g.setTransform (savedTransform);
+            }
         }
     }
 
     for (const auto& childElement : element.children)
-        paintElement (g, data, *childElement, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke, currentColor, recursionDepth + 1);
+        paintElement (g, data, *childElement, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke, currentColor, visitingElements, recursionDepth + 1);
 
     // paintDebugElement (g, element);
+}
+
+//==============================================================================
+
+void Drawable::paintMarker (Graphics& g,
+                            const SVGData& data,
+                            const SVGMarker& marker,
+                            float strokeWidth,
+                            Point<float> position,
+                            float tangentAngle,
+                            std::unordered_set<const SVGElement*>& visitingElements,
+                            int recursionDepth)
+{
+    const auto savedState = g.saveState();
+
+    float scale = (marker.markerUnits == SVGMarker::StrokeWidth) ? strokeWidth : 1.0f;
+
+    if (marker.viewBox
+        && marker.viewBox->getWidth() > 0.0f
+        && marker.viewBox->getHeight() > 0.0f)
+    {
+        const float scaleX = marker.markerWidth / marker.viewBox->getWidth();
+        const float scaleY = marker.markerHeight / marker.viewBox->getHeight();
+        scale *= std::min (scaleX, scaleY);
+    }
+
+    // Build the marker transform: T(position) * R(angle) * S(scale) * T(-refX, -refY)
+    // Each followedBy call appends a transform that is applied AFTER the current one.
+    const float angle = marker.orient ? degreesToRadians (*marker.orient) : tangentAngle;
+
+    const AffineTransform markerTransform = AffineTransform::translation (-marker.refX, -marker.refY)
+                                                .followedBy (AffineTransform::scaling (scale))
+                                                .followedBy (AffineTransform::rotation (angle))
+                                                .followedBy (AffineTransform::translation (position.getX(), position.getY()));
+
+    g.addTransform (markerTransform);
+
+    for (const auto& element : marker.elements)
+        paintElement (g, data, *element, true, false, Colors::black, visitingElements, recursionDepth + 1);
+}
+
+//==============================================================================
+
+void Drawable::paintPatternFill (Graphics& g,
+                                 const SVGData& data,
+                                 const Path& shape,
+                                 const SVGElement& element,
+                                 const SVGPattern& pattern,
+                                 Color currentColor,
+                                 std::unordered_set<const SVGElement*>& visitingElements,
+                                 int recursionDepth)
+{
+    float tileW = pattern.width;
+    float tileH = pattern.height;
+    float originX = pattern.x;
+    float originY = pattern.y;
+
+    if (pattern.patternUnits == SVGPattern::ObjectBoundingBox)
+    {
+        const auto bounds = shape.getBounds();
+        tileW *= bounds.getWidth();
+        tileH *= bounds.getHeight();
+        originX = bounds.getX() + pattern.x * bounds.getWidth();
+        originY = bounds.getY() + pattern.y * bounds.getHeight();
+    }
+
+    if (tileW <= 0.0f || tileH <= 0.0f)
+        return;
+
+    const auto savedState = g.saveState();
+
+    // Clip rendering to the filled shape
+    {
+        auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
+        auto transformedShape = shape.transformed (clipTransform);
+        const auto savedClipTransform = g.getTransform();
+        g.setTransform (AffineTransform::identity());
+        g.setClipPath (transformedShape);
+        g.setTransform (savedClipTransform);
+    }
+
+    if (! pattern.patternTransform.isIdentity())
+        g.addTransform (pattern.patternTransform);
+
+    const auto shapeBounds = shape.getBounds();
+    const float startX = std::floor ((shapeBounds.getX() - originX) / tileW) * tileW + originX;
+    const float startY = std::floor ((shapeBounds.getY() - originY) / tileH) * tileH + originY;
+
+    for (float tileY = startY; tileY < shapeBounds.getBottom(); tileY += tileH)
+    {
+        for (float tileX = startX; tileX < shapeBounds.getRight(); tileX += tileW)
+        {
+            const auto savedTileState = g.saveState();
+
+            g.addTransform (AffineTransform::translation (tileX, tileY));
+
+            if (pattern.viewBox
+                && pattern.viewBox->getWidth() > 0.0f
+                && pattern.viewBox->getHeight() > 0.0f)
+            {
+                const float scaleX = tileW / pattern.viewBox->getWidth();
+                const float scaleY = tileH / pattern.viewBox->getHeight();
+                g.addTransform (AffineTransform::scaling (scaleX, scaleY)
+                                    .translated (-pattern.viewBox->getX(), -pattern.viewBox->getY()));
+            }
+
+            for (const auto& patternElement : pattern.elements)
+                paintElement (g, data, *patternElement, true, false, currentColor, visitingElements, recursionDepth + 1);
+        }
+    }
 }
 
 //==============================================================================

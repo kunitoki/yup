@@ -209,6 +209,12 @@ public:
     */
     StrokeCap getStrokeCap() const;
 
+    /** Sets the miter limit used when drawing stroked paths with miter joins.
+        The miter limit controls when miter joins are clipped to bevel joins.
+        The SVG default is 4.0. The value is clamped to a minimum of 1.0.
+    */
+    void setStrokeMiterLimit (float limit);
+
     //==============================================================================
     /** Sets the blend mode for subsequent drawing operations.
 

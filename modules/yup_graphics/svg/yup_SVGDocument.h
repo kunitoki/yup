@@ -42,6 +42,15 @@ struct SVGData
     std::vector<SVGClipPath::Ptr> clipPaths;
     HashMap<String, SVGClipPath::Ptr> clipPathsById;
 
+    std::vector<SVGMask::Ptr> masks;
+    HashMap<String, SVGMask::Ptr> masksById;
+
+    std::vector<SVGMarker::Ptr> markers;
+    HashMap<String, SVGMarker::Ptr> markersById;
+
+    std::vector<SVGPattern::Ptr> patterns;
+    HashMap<String, SVGPattern::Ptr> patternsById;
+
     std::vector<SVGCssRule> cssRules;
 
     bool rootHasFill = true;

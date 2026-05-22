@@ -160,7 +160,7 @@ TEST (DrawableTests, ParseSVGFromString)
 {
     Drawable drawable;
 
-    bool result = drawable.parseSVG ("<svg viewBox=\"0 0 20 10\"><rect width=\"20\" height=\"10\" /></svg>");
+    bool result = drawable.parseSVGText ("<svg viewBox=\"0 0 20 10\"><rect width=\"20\" height=\"10\" /></svg>");
 
     EXPECT_TRUE (result);
     EXPECT_EQ (20.0f, drawable.getBounds().getWidth());
@@ -179,7 +179,7 @@ TEST (DrawableTests, ParseSVGFromStringWithCSSCascadeAndCurrentColor)
 {
     Drawable drawable;
 
-    bool result = drawable.parseSVG (
+    bool result = drawable.parseSVGText (
         "<svg viewBox=\"0 0 100 100\">"
         "<style>"
         "rect.base { color: #ff0000; fill: currentColor; stroke: #0000ff; stroke-width: 2; }"
@@ -209,7 +209,7 @@ TEST (DrawableTests, ParseSVGWithParseOptionsImageResolver)
         return std::nullopt;
     };
 
-    bool result = drawable.parseSVG (
+    bool result = drawable.parseSVGText (
         "<svg viewBox=\"0 0 10 10\">"
         "<image href=\"custom-image\" x=\"1\" y=\"1\" width=\"8\" height=\"8\" />"
         "</svg>",
@@ -565,7 +565,7 @@ TEST (DrawableTests, ParseSVGWithSymbolAndUse)
 {
     Drawable drawable;
 
-    bool result = drawable.parseSVG (
+    bool result = drawable.parseSVGText (
         "<svg viewBox=\"0 0 100 100\">"
         "<defs>"
         "<symbol id=\"icon\" viewBox=\"0 0 10 10\">"
@@ -582,7 +582,7 @@ TEST (DrawableTests, ParseSVGWithDefsXLinkUseAndTspanFlow)
 {
     Drawable drawable;
 
-    bool result = drawable.parseSVG (
+    bool result = drawable.parseSVGText (
         "<svg xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"80\" height=\"40\">"
         "<defs>"
         "<rect id=\"bar\" width=\"40\" height=\"10\" fill=\"#88a4b9\" />"
@@ -611,7 +611,7 @@ TEST (DrawableTests, ParseSVGWithUnitsNestedViewportTextAndDash)
 {
     Drawable drawable;
 
-    bool result = drawable.parseSVG (
+    bool result = drawable.parseSVGText (
         "<svg width=\"2in\" height=\"1in\" viewBox=\"0 0 192 96\">"
         "<svg x=\"10\" y=\"10\" width=\"50%\" height=\"50%\" viewBox=\"0 0 20 20\" preserveAspectRatio=\"xMidYMid meet\">"
         "<path d=\"M 0 10 L 20 10\" fill=\"none\" stroke=\"black\" stroke-width=\"1mm\" stroke-dasharray=\"2 1\" />"
@@ -628,7 +628,7 @@ TEST (DrawableTests, ParseSVGWithTransformOrigin)
 {
     Drawable drawable;
 
-    bool result = drawable.parseSVG (
+    bool result = drawable.parseSVGText (
         "<svg width=\"360\" height=\"360\">"
         "<text x=\"-15\" y=\"195\" font-size=\"20\" fill=\"black\" transform=\"rotate(-90)\" transform-origin=\"20 195\">"
         "Sweep flag"
@@ -840,7 +840,7 @@ TEST (DrawableTests, PaintSVGWithTransformedClipPath)
 {
     Drawable drawable;
 
-    bool result = drawable.parseSVG (
+    bool result = drawable.parseSVGText (
         "<svg viewBox=\"0 0 100 100\">"
         "<defs>"
         "<clipPath id=\"clip\"><path d=\"M 10 10 L 80 10 L 80 80 L 10 80 z\" /></clipPath>"
@@ -908,7 +908,7 @@ TEST (DrawableTests, PaintSVGWithTransformedRadialGradient)
 {
     Drawable drawable;
 
-    bool result = drawable.parseSVG (
+    bool result = drawable.parseSVGText (
         "<svg viewBox=\"0 0 100 100\">"
         "<defs>"
         "<radialGradient id=\"grad\" cx=\"50\" cy=\"50\" r=\"10\" gradientUnits=\"userSpaceOnUse\" gradientTransform=\"matrix(1,0,0,3,0,-100)\">"
@@ -1055,4 +1055,176 @@ TEST (DrawableTests, GetBoundsWithViewBoxTakesPrecedence)
     EXPECT_EQ (100.0f, bounds.getHeight());
 
     tempFile.deleteFile();
+}
+
+// ==============================================================================
+// SVG 1.1 Feature Tests
+// ==============================================================================
+
+TEST (DrawableTests, PaintSVGWithMask)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVGText (
+        "<svg viewBox=\"0 0 100 100\">"
+        "<defs>"
+        "<mask id=\"m\">"
+        "<circle cx=\"50\" cy=\"50\" r=\"40\" fill=\"white\" />"
+        "</mask>"
+        "</defs>"
+        "<rect x=\"10\" y=\"10\" width=\"80\" height=\"80\" fill=\"red\" mask=\"url(#m)\" />"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (64, 64);
+    Graphics graphics (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 64.0f, 64.0f));
+    });
+}
+
+TEST (DrawableTests, PaintSVGWithMarkerEnd)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVGText (
+        "<svg viewBox=\"0 0 100 100\">"
+        "<defs>"
+        "<marker id=\"arrow\" markerWidth=\"10\" markerHeight=\"10\" refX=\"5\" refY=\"5\" orient=\"auto\">"
+        "<path d=\"M 0 0 L 10 5 L 0 10 z\" fill=\"black\" />"
+        "</marker>"
+        "</defs>"
+        "<path d=\"M 10 50 L 80 50\" stroke=\"black\" stroke-width=\"2\" marker-end=\"url(#arrow)\" />"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (64, 64);
+    Graphics graphics (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 64.0f, 64.0f));
+    });
+}
+
+TEST (DrawableTests, PaintSVGWithPattern)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVGText (
+        "<svg viewBox=\"0 0 100 100\">"
+        "<defs>"
+        "<pattern id=\"pat\" patternUnits=\"userSpaceOnUse\" width=\"20\" height=\"20\">"
+        "<rect x=\"2\" y=\"2\" width=\"16\" height=\"16\" fill=\"blue\" />"
+        "</pattern>"
+        "</defs>"
+        "<rect x=\"0\" y=\"0\" width=\"100\" height=\"100\" fill=\"url(#pat)\" />"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (64, 64);
+    Graphics graphics (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 64.0f, 64.0f));
+    });
+}
+
+TEST (DrawableTests, PaintSVGWithCyclicUseDoesNotCrash)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVGText (
+        "<svg viewBox=\"0 0 100 100\">"
+        "<defs>"
+        "<g id=\"cycle\">"
+        "<use href=\"#cycle\" />"
+        "</g>"
+        "</defs>"
+        "<use href=\"#cycle\" />"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (64, 64);
+    Graphics graphics (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 64.0f, 64.0f));
+    });
+}
+
+TEST (DrawableTests, PaintSVGWithStrokeMiterLimit)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVGText (
+        "<svg viewBox=\"0 0 100 100\">"
+        "<path d=\"M 50 10 L 61 40 L 98 40 L 68 60 L 79 90 L 50 70 L 21 90 L 32 60 L 2 40 L 39 40 z\""
+        " fill=\"none\" stroke=\"black\" stroke-width=\"3\" stroke-miterlimit=\"1\" />"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (64, 64);
+    Graphics graphics (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 64.0f, 64.0f));
+    });
+}
+
+TEST (DrawableTests, PaintSVGWithClipRuleEvenOdd)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVGText (
+        "<svg viewBox=\"0 0 100 100\">"
+        "<defs>"
+        "<clipPath id=\"star-clip\">"
+        "<path d=\"M 50 10 L 61 40 L 98 40 L 68 60 L 79 90 L 50 70 L 21 90 L 32 60 L 2 40 L 39 40 z\""
+        " clip-rule=\"evenodd\" />"
+        "</clipPath>"
+        "</defs>"
+        "<rect x=\"0\" y=\"0\" width=\"100\" height=\"100\" fill=\"gold\" clip-path=\"url(#star-clip)\" />"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (64, 64);
+    Graphics graphics (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 64.0f, 64.0f));
+    });
+}
+
+TEST (DrawableTests, PaintSVGWithMixBlendMode)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVGText (
+        "<svg viewBox=\"0 0 100 100\">"
+        "<rect x=\"10\" y=\"10\" width=\"60\" height=\"60\" fill=\"red\" />"
+        "<rect x=\"30\" y=\"30\" width=\"60\" height=\"60\" fill=\"blue\" style=\"mix-blend-mode: multiply\" />"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (64, 64);
+    Graphics graphics (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 64.0f, 64.0f));
+    });
 }

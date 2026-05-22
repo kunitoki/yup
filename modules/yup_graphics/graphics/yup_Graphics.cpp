@@ -404,6 +404,10 @@ StrokeCap Graphics::getStrokeCap() const
     return currentRenderOptions().cap;
 }
 
+void Graphics::setStrokeMiterLimit (float /*limit*/)
+{
+}
+
 //==============================================================================
 void Graphics::setBlendMode (BlendMode blendMode)
 {

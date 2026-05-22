@@ -83,6 +83,12 @@ struct SVGElement : public ReferenceCountedObject
     std::optional<Image> image;
 
     std::optional<String> clipPathUrl;
+    std::optional<String> maskUrl;
+    std::optional<String> markerStart;
+    std::optional<String> markerMid;
+    std::optional<String> markerEnd;
+    float strokeMiterLimit = 4.0f;
+    std::optional<BlendMode> blendMode;
     std::optional<Rectangle<float>> viewBox;
     std::optional<Size<float>> viewportSize;
     Fitting preserveAspectRatioFitting = Fitting::scaleToFit;

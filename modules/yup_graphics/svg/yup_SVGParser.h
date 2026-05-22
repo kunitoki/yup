@@ -78,6 +78,10 @@ private:
     SVGFilter::Ptr resolveFilter (SVGFilter::Ptr filter) const;
     void parseClipPath (const XmlElement& element);
     SVGClipPath::Ptr getClipPathById (const String& id) const;
+    void parseMask (const XmlElement& element);
+    void parseMarker (const XmlElement& element);
+    void parsePattern (const XmlElement& element);
+    void resolvePatternHrefs();
     float parseLengthAttribute (const XmlElement& element, StringRef attributeName, float defaultValue, float fontSize, float viewportSize) const;
     Fitting parsePreserveAspectRatio (const String& preserveAspectRatio) const;
     Justification parseAspectRatioAlignment (const String& preserveAspectRatio) const;
