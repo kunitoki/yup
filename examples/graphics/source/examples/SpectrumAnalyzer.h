@@ -25,6 +25,10 @@
 #include <yup_audio_gui/yup_audio_gui.h>
 #include <yup_audio_basics/yup_audio_basics.h>
 
+#include <array>
+#include <cmath>
+#include <vector>
+
 //==============================================================================
 
 class SignalGenerator
@@ -39,12 +43,23 @@ public:
         brownNoise
     };
 
+    enum class SweepPlaybackMode
+    {
+        direct,
+        resampled,
+        resampledOversampled2x,
+        resampledOversampled4x,
+        resampledOversampled8x
+    };
+
     SignalGenerator()
         : sampleRate (44100.0)
+        , sourceSampleRate (sampleRate * resamplerSourceRateMultiplier)
         , frequency (440.0)
         , phase (0.0)
         , amplitude (0.5f)
-        , signalType (SignalType::singleTone)
+        , signalType (SignalType::frequencySweep)
+        , sweepPlaybackMode (SweepPlaybackMode::resampled)
         , sweepStartFreq (20.0)
         , sweepEndFreq (22000.0)
         , sweepDurationSeconds (10.0)
@@ -54,6 +69,8 @@ public:
         , smoothedFrequency (440.0)
         , smoothedAmplitude (0.5f)
     {
+        initialiseSineTable();
+
         // Initialize pink noise filter state
         for (int i = 0; i < 7; ++i)
             pinkFilters[i] = 0.0;
@@ -61,11 +78,20 @@ public:
         // Set default smoothing time (50ms)
         smoothedFrequency.reset (sampleRate, 0.05);
         smoothedAmplitude.reset (sampleRate, 0.05);
+
+        prepareResampling (defaultMaxBlockSize);
+    }
+
+    void prepare (double newSampleRate, int maxBlockSize)
+    {
+        setSampleRate (newSampleRate);
+        prepareResampling (maxBlockSize);
     }
 
     void setSampleRate (double newSampleRate)
     {
-        sampleRate = newSampleRate;
+        sampleRate = newSampleRate > 0.0 ? newSampleRate : 44100.0;
+        sourceSampleRate = sampleRate * resamplerSourceRateMultiplier;
         updatePhaseIncrement();
 
         // Update smoothing times with new sample rate
@@ -90,21 +116,45 @@ public:
     {
         signalType = type;
         if (type == SignalType::frequencySweep)
-            sweepProgress = 0.0;
+            resetSweepPlaybackState();
+    }
+
+    void setSweepPlaybackMode (SweepPlaybackMode mode)
+    {
+        if (sweepPlaybackMode == mode)
+            return;
+
+        sweepPlaybackMode = mode;
+        resetSweepPlaybackState();
     }
 
     void setSweepParameters (double startFreq, double endFreq, double durationSeconds)
     {
         sweepStartFreq = startFreq;
         sweepEndFreq = endFreq;
-        sweepDurationSeconds = durationSeconds;
-        sweepProgress = 0.0;
+        sweepDurationSeconds = yup::jmax (0.001, durationSeconds);
+        resetSweepPlaybackState();
     }
 
     void setSmoothingTime (float timeInSeconds)
     {
         smoothedFrequency.reset (sampleRate, timeInSeconds);
         smoothedAmplitude.reset (sampleRate, timeInSeconds);
+    }
+
+    void renderNextBlock (float* output, int numSamples)
+    {
+        if (output == nullptr || numSamples <= 0)
+            return;
+
+        if (signalType == SignalType::frequencySweep && sweepPlaybackMode != SweepPlaybackMode::direct)
+        {
+            renderResampledSweepBlock (output, numSamples);
+            return;
+        }
+
+        for (int sample = 0; sample < numSamples; ++sample)
+            output[sample] = getNextSample();
     }
 
     float getNextSample()
@@ -138,34 +188,181 @@ public:
     }
 
 private:
+    static constexpr int wavetableSize = 2048;
+    static constexpr int defaultMaxBlockSize = 512;
+    static constexpr double resamplerSourceRateMultiplier = 2.0;
+
+    void initialiseSineTable()
+    {
+        for (int i = 0; i <= wavetableSize; ++i)
+        {
+            const double phaseInRadians = yup::MathConstants<double>::twoPi * static_cast<double> (i) / static_cast<double> (wavetableSize);
+            sineTable[static_cast<std::size_t> (i)] = static_cast<float> (std::sin (phaseInRadians));
+        }
+    }
+
+    void prepareResampling (int maxBlockSize)
+    {
+        maxOutputBlockSize = yup::jmax (1, maxBlockSize);
+        sourceBlockCapacity = maxOutputBlockSize * static_cast<int> (resamplerSourceRateMultiplier) + 64;
+        resampledBlockCapacity = maxOutputBlockSize + 64;
+
+        sourceBuffer.assign (static_cast<std::size_t> (sourceBlockCapacity), 0.0f);
+        silenceBuffer.assign (static_cast<std::size_t> (sourceBlockCapacity), 0.0f);
+        resampledBuffer.assign (static_cast<std::size_t> (resampledBlockCapacity), 0.0f);
+
+        resampler.prepare (sourceSampleRate, sampleRate, 1, sourceBlockCapacity);
+        oversampler2x.prepare (sourceSampleRate, 1, sourceBlockCapacity);
+        oversampler4x.prepare (sourceSampleRate, 1, sourceBlockCapacity);
+        oversampler8x.prepare (sourceSampleRate, 1, sourceBlockCapacity);
+
+        resetSweepPlaybackState();
+    }
+
+    void ensurePreparedForBlock (int numSamples)
+    {
+        if (numSamples > maxOutputBlockSize)
+            prepareResampling (numSamples);
+    }
+
+    void resetSweepPlaybackState()
+    {
+        phase = 0.0;
+        sweepProgress = 0.0;
+        pendingOutputSamples = 0;
+        pendingReadPosition = 0;
+
+        resampler.reset();
+        oversampler2x.reset();
+        oversampler4x.reset();
+        oversampler8x.reset();
+    }
+
+    void renderResampledSweepBlock (float* output, int numSamples)
+    {
+        ensurePreparedForBlock (numSamples);
+
+        int outputPosition = 0;
+
+        while (outputPosition < numSamples)
+        {
+            if (pendingReadPosition >= pendingOutputSamples)
+            {
+                const int remainingOutputSamples = numSamples - outputPosition;
+                const int sourceSamplesNeeded = yup::jmin (sourceBlockCapacity,
+                                                           yup::jmax (1, remainingOutputSamples * static_cast<int> (resamplerSourceRateMultiplier) + 32));
+
+                renderSourceSweepBlock (sourceSamplesNeeded);
+
+                const float* inputPtrs[] = { sourceBuffer.data() };
+                float* outputPtrs[] = { resampledBuffer.data() };
+
+                pendingOutputSamples = resampler.resample (inputPtrs, outputPtrs, 1, sourceSamplesNeeded);
+                pendingReadPosition = 0;
+
+                if (pendingOutputSamples <= 0)
+                {
+                    while (outputPosition < numSamples)
+                        output[outputPosition++] = 0.0f;
+
+                    return;
+                }
+            }
+
+            const int samplesToCopy = yup::jmin (numSamples - outputPosition, pendingOutputSamples - pendingReadPosition);
+
+            for (int i = 0; i < samplesToCopy; ++i)
+            {
+                const float currentAmp = smoothedAmplitude.getNextValue();
+                output[outputPosition++] = resampledBuffer[static_cast<std::size_t> (pendingReadPosition++)] * currentAmp;
+            }
+        }
+    }
+
+    void renderSourceSweepBlock (int numSamples)
+    {
+        switch (sweepPlaybackMode)
+        {
+            case SweepPlaybackMode::direct:
+            case SweepPlaybackMode::resampled:
+                renderWavetableSweepBlock (sourceBuffer.data(), numSamples, sourceSampleRate);
+                break;
+
+            case SweepPlaybackMode::resampledOversampled2x:
+                renderOversampledSourceBlock (oversampler2x, 2, numSamples);
+                break;
+
+            case SweepPlaybackMode::resampledOversampled4x:
+                renderOversampledSourceBlock (oversampler4x, 4, numSamples);
+                break;
+
+            case SweepPlaybackMode::resampledOversampled8x:
+                renderOversampledSourceBlock (oversampler8x, 8, numSamples);
+                break;
+        }
+    }
+
+    template <typename OversamplerType>
+    void renderOversampledSourceBlock (OversamplerType& oversampler, int oversampleFactor, int numSamples)
+    {
+        const float* inputPtrs[] = { silenceBuffer.data() };
+        oversampler.upsample (inputPtrs, 1, numSamples);
+
+        auto* oversampledData = oversampler.getOversampledChannelData (0);
+        renderWavetableSweepBlock (oversampledData, oversampler.getOversampledNumSamples(), sourceSampleRate * static_cast<double> (oversampleFactor));
+
+        float* outputPtrs[] = { sourceBuffer.data() };
+        oversampler.downsample (outputPtrs, 1, numSamples);
+    }
+
+    void renderWavetableSweepBlock (float* output, int numSamples, double generationSampleRate)
+    {
+        for (int i = 0; i < numSamples; ++i)
+            output[i] = generateSweepAtRate (generationSampleRate);
+    }
+
+    float readSineTable() const
+    {
+        const double tablePosition = phase * static_cast<double> (wavetableSize);
+        const int index = static_cast<int> (tablePosition);
+        const float fraction = static_cast<float> (tablePosition - static_cast<double> (index));
+
+        const float sample0 = sineTable[static_cast<std::size_t> (index)];
+        const float sample1 = sineTable[static_cast<std::size_t> (index + 1)];
+
+        return sample0 + (sample1 - sample0) * fraction;
+    }
+
+    void advancePhase (double freq, double generationSampleRate)
+    {
+        phase += freq / generationSampleRate;
+
+        while (phase >= 1.0)
+            phase -= 1.0;
+    }
+
     float generateSine (double freq)
     {
-        // Calculate phase increment for the smoothed frequency
-        double currentPhaseIncrement = yup::MathConstants<double>::twoPi * freq / sampleRate;
-
-        float sample = std::sin (phase);
-        phase += currentPhaseIncrement;
-
-        if (phase >= yup::MathConstants<double>::twoPi)
-            phase -= yup::MathConstants<double>::twoPi;
+        float sample = readSineTable();
+        advancePhase (freq, sampleRate);
 
         return sample;
     }
 
     float generateSweep()
     {
+        return generateSweepAtRate (sampleRate);
+    }
+
+    float generateSweepAtRate (double generationSampleRate)
+    {
         // Linear frequency sweep
         double currentFreq = sweepStartFreq + (sweepEndFreq - sweepStartFreq) * sweepProgress;
-        double currentPhaseIncrement = yup::MathConstants<double>::twoPi * currentFreq / sampleRate;
-
-        float sample = std::sin (phase);
-        phase += currentPhaseIncrement;
-
-        if (phase >= yup::MathConstants<double>::twoPi)
-            phase -= yup::MathConstants<double>::twoPi;
+        float sample = readSineTable();
+        advancePhase (currentFreq, generationSampleRate);
 
         // Update sweep progress
-        sweepProgress += 1.0 / (sweepDurationSeconds * sampleRate);
+        sweepProgress += 1.0 / (sweepDurationSeconds * generationSampleRate);
         if (sweepProgress >= 1.0)
             sweepProgress = 0.0; // Loop the sweep
 
@@ -205,16 +402,20 @@ private:
 
     void updatePhaseIncrement()
     {
-        phaseIncrement = yup::MathConstants<double>::twoPi * frequency / sampleRate;
+        phaseIncrement = frequency / sampleRate;
     }
 
+    std::array<float, wavetableSize + 1> sineTable;
+
     double sampleRate;
+    double sourceSampleRate;
     double frequency;
     double phase;
     double phaseIncrement = 0.0;
     float amplitude;
 
     SignalType signalType;
+    SweepPlaybackMode sweepPlaybackMode;
 
     // Sweep parameters
     double sweepStartFreq, sweepEndFreq, sweepDurationSeconds;
@@ -228,6 +429,20 @@ private:
     // Smoothed parameter values
     yup::SmoothedValue<double> smoothedFrequency;
     yup::SmoothedValue<float> smoothedAmplitude;
+
+    // Resampling state
+    yup::ResamplerFloat resampler;
+    yup::Oversampler2xFloat oversampler2x;
+    yup::Oversampler4xFloat oversampler4x;
+    yup::Oversampler8xFloat oversampler8x;
+    std::vector<float> sourceBuffer;
+    std::vector<float> silenceBuffer;
+    std::vector<float> resampledBuffer;
+    int maxOutputBlockSize = 0;
+    int sourceBlockCapacity = 0;
+    int resampledBlockCapacity = 0;
+    int pendingOutputSamples = 0;
+    int pendingReadPosition = 0;
 };
 
 //==============================================================================
@@ -326,11 +541,14 @@ public:
                                            int numSamples,
                                            const yup::AudioIODeviceCallbackContext& context) override
     {
-        // Generate test audio samples
+        if (monoOutputBuffer.size() < static_cast<std::size_t> (numSamples))
+            monoOutputBuffer.resize (static_cast<std::size_t> (numSamples), 0.0f);
+
+        signalGenerator.renderNextBlock (monoOutputBuffer.data(), numSamples);
+
         for (int sample = 0; sample < numSamples; ++sample)
         {
-            // Generate audio sample using signal generator
-            const float audioSample = signalGenerator.getNextSample();
+            const float audioSample = monoOutputBuffer[static_cast<std::size_t> (sample)];
 
             // Output to all channels
             for (int channel = 0; channel < numOutputChannels; ++channel)
@@ -344,12 +562,14 @@ public:
     void audioDeviceAboutToStart (yup::AudioIODevice* device) override
     {
         double sampleRate = device->getCurrentSampleRate();
+        const int maxBlockSize = yup::jmax (1, device->getCurrentBufferSizeSamples());
 
         // Setup signal generator
-        signalGenerator.setSampleRate (sampleRate);
+        signalGenerator.prepare (sampleRate, maxBlockSize);
         signalGenerator.setFrequency (currentFrequency);
         signalGenerator.setAmplitude (currentAmplitude);
         signalGenerator.setSweepParameters (20.0, 22000.0, sweepDurationSeconds);
+        monoOutputBuffer.assign (static_cast<std::size_t> (maxBlockSize), 0.0f);
 
         // Configure spectrum analyzer
         analyzerComponent.setSampleRate (sampleRate);
@@ -374,11 +594,15 @@ private:
         // Signal type selector
         signalTypeCombo = std::make_unique<yup::ComboBox> ("SignalType");
         signalTypeCombo->addItem ("Single Tone", 1);
-        signalTypeCombo->addItem ("Sweep", 2);
-        signalTypeCombo->addItem ("White Noise", 3);
-        signalTypeCombo->addItem ("Pink Noise", 4);
-        signalTypeCombo->addItem ("Brown Noise", 5);
-        signalTypeCombo->setSelectedId (1);
+        signalTypeCombo->addItem ("Sweep Direct", 2);
+        signalTypeCombo->addItem ("Sweep Resampler", 3);
+        signalTypeCombo->addItem ("Sweep 2x", 4);
+        signalTypeCombo->addItem ("Sweep 4x", 5);
+        signalTypeCombo->addItem ("Sweep 8x", 6);
+        signalTypeCombo->addItem ("White Noise", 7);
+        signalTypeCombo->addItem ("Pink Noise", 8);
+        signalTypeCombo->addItem ("Brown Noise", 9);
+        signalTypeCombo->setSelectedId (3);
         signalTypeCombo->onSelectedItemChanged = [this]
         {
             updateSignalType();
@@ -533,6 +757,8 @@ private:
             label->setFont (labelFont);
             addAndMakeVisible (*label);
         }
+
+        updateSignalType();
     }
 
     void setupAudio()
@@ -609,6 +835,7 @@ private:
     void updateSignalType()
     {
         SignalGenerator::SignalType signalType = SignalGenerator::SignalType::singleTone;
+        auto sweepPlaybackMode = SignalGenerator::SweepPlaybackMode::resampled;
 
         switch (signalTypeCombo->getSelectedId())
         {
@@ -617,22 +844,39 @@ private:
                 break;
             case 2:
                 signalType = SignalGenerator::SignalType::frequencySweep;
+                sweepPlaybackMode = SignalGenerator::SweepPlaybackMode::direct;
                 break;
             case 3:
-                signalType = SignalGenerator::SignalType::whiteNoise;
+                signalType = SignalGenerator::SignalType::frequencySweep;
+                sweepPlaybackMode = SignalGenerator::SweepPlaybackMode::resampled;
                 break;
             case 4:
-                signalType = SignalGenerator::SignalType::pinkNoise;
+                signalType = SignalGenerator::SignalType::frequencySweep;
+                sweepPlaybackMode = SignalGenerator::SweepPlaybackMode::resampledOversampled2x;
                 break;
             case 5:
+                signalType = SignalGenerator::SignalType::frequencySweep;
+                sweepPlaybackMode = SignalGenerator::SweepPlaybackMode::resampledOversampled4x;
+                break;
+            case 6:
+                signalType = SignalGenerator::SignalType::frequencySweep;
+                sweepPlaybackMode = SignalGenerator::SweepPlaybackMode::resampledOversampled8x;
+                break;
+            case 7:
+                signalType = SignalGenerator::SignalType::whiteNoise;
+                break;
+            case 8:
+                signalType = SignalGenerator::SignalType::pinkNoise;
+                break;
+            case 9:
                 signalType = SignalGenerator::SignalType::brownNoise;
                 break;
         }
 
         signalGenerator.setSignalType (signalType);
+        signalGenerator.setSweepPlaybackMode (sweepPlaybackMode);
 
         // Enable/disable frequency and sweep controls based on signal type
-        bool isToneOrSweep = (signalType == SignalGenerator::SignalType::singleTone || signalType == SignalGenerator::SignalType::frequencySweep);
         frequencySlider->setEnabled (signalType == SignalGenerator::SignalType::singleTone);
         sweepDurationSlider->setEnabled (signalType == SignalGenerator::SignalType::frequencySweep);
     }
@@ -743,6 +987,7 @@ private:
     std::unique_ptr<yup::Label> fftInfoLabel;
 
     yup::OwnedArray<yup::Label> parameterLabels;
+    std::vector<float> monoOutputBuffer;
 
     // Parameters
     double currentFrequency = 440.0;
