@@ -22,6 +22,7 @@
 #include "yup_dsp/yup_BiquadCascade.cpp"
 #include "yup_dsp/yup_BiquadFilter.cpp"
 #include "yup_dsp/yup_ButterworthFilter.cpp"
+#include "yup_dsp/yup_CircularBuffer.cpp"
 #include "yup_dsp/yup_DirectFIR.cpp"
 #include "yup_dsp/yup_FFTProcessor.cpp"
 #include "yup_dsp/yup_FilterDesigner.cpp"
@@ -31,12 +32,16 @@
 #include "yup_dsp/yup_LinkwitzRileyFilter.cpp"
 #include "yup_dsp/yup_LoudnessFilter.cpp"
 #include "yup_dsp/yup_NoiseGenerators.cpp"
+#include "yup_dsp/yup_Oversampler.cpp"
 #include "yup_dsp/yup_PartitionedConvolver.cpp"
 #include "yup_dsp/yup_RbjFilter.cpp"
+#include "yup_dsp/yup_Resampler.cpp"
+#include "yup_dsp/yup_SincTable.cpp"
 #include "yup_dsp/yup_SoftClipper.cpp"
 #include "yup_dsp/yup_SpectrumAnalyzerState.cpp"
 #include "yup_dsp/yup_StateVariableFilter.cpp"
 #include "yup_dsp/yup_WindowFunctions.cpp"
+
 #if YUP_MODULE_AVAILABLE_bungee_library
 #include "yup_dsp/yup_TimeStretchProcessor.cpp"
 #endif
