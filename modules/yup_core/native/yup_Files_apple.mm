@@ -316,7 +316,7 @@ File File::getSpecialLocation(const SpecialLocationType type)
                 File tmp(MacFileHelpers::getIOSSystemLocation(NSCachesDirectory));
                 tmp = tmp.getChildFile(yup_getExecutableFile().getFileNameWithoutExtension());
                 tmp.createDirectory();
-                return File(tmp.getFullPathName();
+                return File(tmp.getFullPathName());
             }
 
 #else
