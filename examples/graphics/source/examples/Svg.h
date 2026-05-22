@@ -34,7 +34,10 @@ public:
 
     void mouseDown (const yup::MouseEvent& event) override
     {
-        ++currentSvgFileIndex;
+        if (event.isLeftButtonDown())
+            ++currentSvgFileIndex;
+        else if (event.isRightButtonDown())
+            --currentSvgFileIndex;
 
         parseSvgFile (currentSvgFileIndex);
     }

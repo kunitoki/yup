@@ -92,7 +92,7 @@ public:
 
         @returns true if the left button is down
     */
-    bool isLeftButtoDown() const noexcept;
+    bool isLeftButtonDown() const noexcept;
 
     /** Returns true if the middle mouse button is currently held down.
 
