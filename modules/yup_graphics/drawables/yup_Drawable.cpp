@@ -269,7 +269,6 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
 
     bool isFillDefined = hasParentFillEnabled;
     bool isStrokeDefined = hasParentStrokeEnabled;
-    float filterFeather = 0.0f;
     if (element.color)
         currentColor = *element.color;
 
@@ -286,8 +285,8 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
             if (filter->gaussianBlurStdDeviation)
             {
                 const auto svgStdDeviationToFeather = 2.0f;
-                filterFeather = *filter->gaussianBlurStdDeviation * svgStdDeviationToFeather;
-                g.setFeather (jmax (g.getFeather(), filterFeather));
+                const auto feather = jmax (g.getFeather(), *filter->gaussianBlurStdDeviation * svgStdDeviationToFeather);
+                g.setFeather (feather);
             }
         }
     }
@@ -542,11 +541,7 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
             YUP_DRAWABLE_LOG ("Stroking path - tag: " << element.tagName
                                                       << " id: " << (element.id ? *element.id : "none")
                                                       << " bounds: " << pathToStroke->getBounds().toString());
-
-            if (filterFeather > 0.0f && ! (isFillDefined && ! element.noFill))
-                renderSoftStrokeElement (g, *pathToStroke, filterFeather);
-            else
-                g.strokePath (*pathToStroke);
+            g.strokePath (*pathToStroke);
         }
         else if (element.reference)
         {
@@ -749,33 +744,6 @@ void Drawable::renderImageElement (Graphics& g, const SVGElement& element)
             if (auto image = SVGParser::loadImageFromHref (document->getParseOptions(), *element.imageHref))
                 g.drawImage (*image, *element.imageBounds);
         }
-    }
-}
-
-//==============================================================================
-
-void Drawable::renderSoftStrokeElement (Graphics& g, const Path& path, float feather) const
-{
-    const auto baseOpacity = g.getOpacity();
-    const auto baseStrokeWidth = g.getStrokeWidth();
-    const auto layerCount = jlimit (4, 12, static_cast<int> (std::ceil (feather / 3.0f)));
-    const auto maxStrokeOutset = feather;
-
-    for (int i = layerCount; i >= 0; --i)
-    {
-        const auto position = static_cast<float> (i) / static_cast<float> (layerCount);
-        const auto gaussian = std::exp (-0.5f * (position * 3.0f) * (position * 3.0f));
-        const auto layerOpacity = (i == 0 ? 0.18f : 0.12f) * gaussian;
-
-        if (layerOpacity <= 0.001f)
-            continue;
-
-        const auto savedLayerState = g.saveState();
-
-        g.setFeather (0.0f);
-        g.setOpacity (baseOpacity * layerOpacity);
-        g.setStrokeWidth (baseStrokeWidth + maxStrokeOutset * 2.0f * position);
-        g.strokePath (path);
     }
 }
 
