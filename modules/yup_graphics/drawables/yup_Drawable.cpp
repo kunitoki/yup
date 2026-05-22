@@ -1054,10 +1054,10 @@ void Drawable::paintDebugElement (Graphics& g, const SVGElement& element)
 Font Drawable::resolveFont (const SVGElement& element) const
 {
     if (document == nullptr)
-        return Font().withHeight (element.fontSize.value_or (12.0f));
+        return Font().withHeight (element.fontSize.value_or (16.0f));
 
     const auto& options = document->getParseOptions();
-    const auto fontSize = element.fontSize.value_or (12.0f);
+    const auto fontSize = element.fontSize.value_or (16.0f);
     const auto fontWeight = element.fontWeight.value_or (400);
     const auto fontItalic = element.fontItalic.value_or (false);
 
@@ -1089,7 +1089,7 @@ void Drawable::renderTextElement (Graphics& g, const SVGElement& element)
         position.setY (position.getY() + element.textDy->getFirst());
 
     const auto font = resolveFont (element);
-    const auto fontSize = element.fontSize.value_or (12.0f);
+    const auto fontSize = element.fontSize.value_or (16.0f);
 
     StyledText styledText;
     {
@@ -1134,9 +1134,26 @@ void Drawable::renderImageElement (Graphics& g, const SVGElement& element)
     if (! element.imageBounds)
         return;
 
+    auto drawImage = [this, &g, &element] (const Image& image)
+    {
+        if (! image.isValid())
+            return;
+
+        const Rectangle<float> imageSourceBounds (0.0f, 0.0f, static_cast<float> (image.getWidth()), static_cast<float> (image.getHeight()));
+        const auto imageTransform = calculateTransformForTarget (imageSourceBounds,
+                                                                 *element.imageBounds,
+                                                                 element.preserveAspectRatioFitting,
+                                                                 element.preserveAspectRatioJustification);
+        const auto fittedImageBounds = imageSourceBounds.transformed (imageTransform);
+
+        const auto savedState = g.saveState();
+        g.setClipPath (*element.imageBounds);
+        g.drawImage (image, fittedImageBounds);
+    };
+
     if (element.image)
     {
-        g.drawImage (*element.image, *element.imageBounds);
+        drawImage (*element.image);
         return;
     }
 
@@ -1145,7 +1162,7 @@ void Drawable::renderImageElement (Graphics& g, const SVGElement& element)
         if (document != nullptr)
         {
             if (auto image = SVGParser::loadImageFromHref (document->getParseOptions(), *element.imageHref))
-                g.drawImage (*image, *element.imageBounds);
+                drawImage (*image);
         }
     }
 }

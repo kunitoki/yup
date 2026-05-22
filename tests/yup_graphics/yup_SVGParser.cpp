@@ -655,6 +655,37 @@ TEST (SVGParserTests, ParseImageWithMissingHref)
     EXPECT_TRUE (d.parseSVG ("<svg><image x=\"0\" y=\"0\" width=\"50\" height=\"50\" /></svg>"));
 }
 
+TEST (SVGParserTests, ParseImageDefaultsToPreservingAspectRatio)
+{
+    auto doc = SVGParser::parse ("<svg><image x=\"0\" y=\"0\" width=\"50\" height=\"25\" /></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+
+        const auto& image = *data.elements.front();
+        EXPECT_EQ (Fitting::scaleToFit, image.preserveAspectRatioFitting);
+        EXPECT_TRUE (image.preserveAspectRatioJustification.testFlags (Justification::center));
+    });
+}
+
+TEST (SVGParserTests, ParseImagePreserveAspectRatioAttribute)
+{
+    auto doc = SVGParser::parse ("<svg><image x=\"0\" y=\"0\" width=\"50\" height=\"25\" preserveAspectRatio=\"xMaxYMin slice\" /></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+
+        const auto& image = *data.elements.front();
+        EXPECT_EQ (Fitting::scaleToFill, image.preserveAspectRatioFitting);
+        EXPECT_TRUE (image.preserveAspectRatioJustification.testFlags (Justification::right));
+        EXPECT_TRUE (image.preserveAspectRatioJustification.testFlags (Justification::top));
+    });
+}
+
 // ==============================================================================
 // Gradients
 // ==============================================================================

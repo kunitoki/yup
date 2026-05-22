@@ -471,6 +471,12 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
 
         e->imageBounds = Rectangle<float> (x, y, width, height);
 
+        if (auto preserveAspectRatio = element.getStringAttribute ("preserveAspectRatio"); preserveAspectRatio.isNotEmpty())
+        {
+            e->preserveAspectRatioFitting = parsePreserveAspectRatio (preserveAspectRatio);
+            e->preserveAspectRatioJustification = parseAspectRatioAlignment (preserveAspectRatio);
+        }
+
         String href = element.getStringAttribute ("href");
         if (href.isEmpty())
             href = element.getStringAttribute ("xlink:href");

@@ -99,10 +99,59 @@ private:
             demoFont = std::move (font);
     }
 
+    std::optional<yup::Image> fetchHttpImage (const yup::String& href)
+    {
+        if (! href.startsWithIgnoreCase ("http:") && ! href.startsWithIgnoreCase ("https:"))
+            return std::nullopt;
+
+        if (httpImageCache.contains (href))
+            return httpImageCache[href];
+
+        yup::MemoryBlock imageData;
+        int statusCode = 0;
+
+        auto streamOptions = yup::URL::InputStreamOptions (yup::URL::ParameterHandling::inAddress)
+                                 .withConnectionTimeoutMs (5000)
+                                 .withNumRedirectsToFollow (5)
+                                 .withStatusCode (&statusCode)
+                                 .withExtraHeaders ("User-Agent: YUP SVG Demo\r\nAccept: image/*\r\n");
+
+        auto stream = yup::URL (href).createInputStream (streamOptions);
+        if (stream == nullptr)
+        {
+            YUP_DBG ("Unable to fetch SVG image href: " << href);
+            return std::nullopt;
+        }
+
+        stream->readIntoMemoryBlock (imageData);
+
+        if ((statusCode != 0 && (statusCode < 200 || statusCode >= 300)) || imageData.isEmpty())
+        {
+            YUP_DBG ("Unable to fetch SVG image href: " << href << " status: " << statusCode);
+            return std::nullopt;
+        }
+
+        auto imageResult = yup::Image::loadFromData (imageData.asBytes());
+        if (imageResult.failed())
+        {
+            YUP_DBG ("Unable to decode SVG image href: " << href << " error: " << imageResult.getErrorMessage());
+            return std::nullopt;
+        }
+
+        auto image = imageResult.getValue();
+        httpImageCache.set (href, image);
+        return image;
+    }
+
     yup::Drawable::ParseOptions createParseOptions (const yup::File& svgFile)
     {
         yup::Drawable::ParseOptions options;
         options.baseDirectory = svgFile.getParentDirectory();
+        options.imageResolver = [this] (yup::StringRef href, const yup::File&) -> std::optional<yup::Image>
+        {
+            return fetchHttpImage (yup::String (href.text));
+        };
+
         options.fontResolver = [this] (yup::StringRef, float fontSize, int weight, bool italic) -> std::optional<yup::Font>
         {
             if (demoFont)
@@ -129,5 +178,6 @@ private:
     yup::Array<yup::File> svgFiles;
     yup::File dataDirectory;
     std::optional<yup::Font> demoFont;
+    yup::HashMap<yup::String, yup::Image> httpImageCache;
     int currentSvgFileIndex = 0;
 };
