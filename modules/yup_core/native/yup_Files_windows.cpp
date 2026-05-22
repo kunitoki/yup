@@ -687,7 +687,7 @@ void File::findFileSystemRoots (Array<File>& destArray)
     roots.sort (true);
 
     for (int i = 0; i < roots.size(); ++i)
-        destArray.add (roots[i]);
+        destArray.add (File (roots[i]));
 }
 
 //==============================================================================
