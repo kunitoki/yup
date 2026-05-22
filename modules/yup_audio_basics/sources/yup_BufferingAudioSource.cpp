@@ -107,16 +107,12 @@ void BufferingAudioSource::releaseResources()
 
     buffer.setSize (numberOfChannels, 0);
 
-    // MSVC2017 seems to need this if statement to not generate a warning during linking.
-    // As source is set in the constructor, there is no way that source could
-    // ever equal this, but it seems to make MSVC2017 happy.
-    if (source != this)
-        source->releaseResources();
+    source->releaseResources();
 }
 
 void BufferingAudioSource::getNextAudioBlock (const AudioSourceChannelInfo& info)
 {
-    const auto bufferRange = getValidBufferRange (info.numSamples);
+    auto [playPos, bufferRange] = getValidBufferRangeAndAdvance (info.numSamples);
 
     if (bufferRange.isEmpty())
     {
@@ -143,8 +139,8 @@ void BufferingAudioSource::getNextAudioBlock (const AudioSourceChannelInfo& info
         {
             jassert (buffer.getNumSamples() > 0);
 
-            const auto startBufferIndex = (int) ((validStart + nextPlayPos) % buffer.getNumSamples());
-            const auto endBufferIndex = (int) ((validEnd + nextPlayPos) % buffer.getNumSamples());
+            const auto startBufferIndex = (int) ((validStart + playPos) % buffer.getNumSamples());
+            const auto endBufferIndex = (int) ((validEnd + playPos) % buffer.getNumSamples());
 
             if (startBufferIndex < endBufferIndex)
             {
@@ -155,13 +151,10 @@ void BufferingAudioSource::getNextAudioBlock (const AudioSourceChannelInfo& info
                 const auto initialSize = buffer.getNumSamples() - startBufferIndex;
 
                 info.buffer->copyFrom (chan, info.startSample + validStart, buffer, chan, startBufferIndex, initialSize);
-
                 info.buffer->copyFrom (chan, info.startSample + validStart + initialSize, buffer, chan, 0, (validEnd - validStart) - initialSize);
             }
         }
     }
-
-    nextPlayPos += info.numSamples;
 }
 
 bool BufferingAudioSource::waitForNextAudioBlockReady (const AudioSourceChannelInfo& info, uint32 timeout)
@@ -233,6 +226,18 @@ Range<int> BufferingAudioSource::getValidBufferRange (int numSamples) const
 
     return { (int) (jlimit (bufferValidStart, bufferValidEnd, pos) - pos),
              (int) (jlimit (bufferValidStart, bufferValidEnd, pos + numSamples) - pos) };
+}
+
+std::tuple<int64, Range<int>> BufferingAudioSource::getValidBufferRangeAndAdvance (int numSamples)
+{
+    const ScopedLock sl (bufferRangeLock);
+
+    const auto pos = nextPlayPos.load();
+
+    nextPlayPos = pos + numSamples;
+
+    return std::make_tuple (
+        pos, Range<int> { (int) (jlimit (bufferValidStart, bufferValidEnd, pos) - pos), (int) (jlimit (bufferValidStart, bufferValidEnd, pos + numSamples) - pos) });
 }
 
 bool BufferingAudioSource::readNextBufferChunk()

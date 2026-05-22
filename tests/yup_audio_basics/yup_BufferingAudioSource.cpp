@@ -247,6 +247,8 @@ TEST_F (BufferingAudioSourceTests, ReleaseResources)
 //==============================================================================
 TEST_F (BufferingAudioSourceTests, GetNextAudioBlockEmpty)
 {
+    EXPECT_EQ (buffering->getNextReadPosition(), 0);
+
     // Without prepareToPlay, should get cache miss (line 121-126)
     AudioBuffer<float> buffer (2, 512);
     for (int ch = 0; ch < 2; ++ch)
@@ -263,6 +265,8 @@ TEST_F (BufferingAudioSourceTests, GetNextAudioBlockEmpty)
     info.numSamples = 512;
 
     buffering->getNextAudioBlock (info);
+
+    EXPECT_EQ (buffering->getNextReadPosition(), 512);
 
     // Buffer should be cleared (cache miss)
     for (int ch = 0; ch < 2; ++ch)

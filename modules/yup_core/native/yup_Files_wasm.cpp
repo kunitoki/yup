@@ -135,7 +135,7 @@ File File::getSpecialLocation (const SpecialLocationType type)
     }
     */
 
-    return { "/" };
+    return File ("/");
 }
 
 //==============================================================================

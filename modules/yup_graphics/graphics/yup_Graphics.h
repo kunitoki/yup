@@ -209,6 +209,12 @@ public:
     */
     StrokeCap getStrokeCap() const;
 
+    /** Sets the miter limit used when drawing stroked paths with miter joins.
+        The miter limit controls when miter joins are clipped to bevel joins.
+        The SVG default is 4.0. The value is clamped to a minimum of 1.0.
+    */
+    void setStrokeMiterLimit (float limit);
+
     //==============================================================================
     /** Sets the blend mode for subsequent drawing operations.
 
@@ -454,6 +460,13 @@ public:
     */
     void drawImageAt (const Image& image, const Point<float>& pos);
 
+    /** Draws an image into a target rectangle.
+
+        @param image The image to draw.
+        @param targetArea The destination rectangle in the current coordinate space.
+    */
+    void drawImage (const Image& image, const Rectangle<float>& targetArea);
+
     //==============================================================================
     /** Draws an attributed text.
 
@@ -538,7 +551,7 @@ private:
 
         bool isStrokeColorGradient() const noexcept
         {
-            return ! isCurrentFillColor;
+            return ! isCurrentStrokeColor;
         }
 
         ColorGradient getFillColorGradient() const noexcept
@@ -588,8 +601,9 @@ private:
 
         AffineTransform getTransform (float offsetX, float offsetY) const noexcept
         {
-            return transform
-                .translated (drawingArea.getX() + offsetX, drawingArea.getY() + offsetY)
+            return AffineTransform::translation (offsetX, offsetY)
+                .followedBy (transform)
+                .translated (drawingArea.getX(), drawingArea.getY())
                 .scaled (scale);
         }
 

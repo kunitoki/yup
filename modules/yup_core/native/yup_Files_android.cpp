@@ -251,12 +251,12 @@ File AndroidContentUriResolver::getLocalFileFromContentUri (const URL& url)
         if (type == "image")
             type = "images";
 
-        return getCursorDataColumn (URL ("content://media/external/" + type + "/media"),
-                                    "_id=?",
-                                    StringArray { mediaId });
+        return File (getCursorDataColumn (URL ("content://media/external/" + type + "/media"),
+                                          "_id=?",
+                                          StringArray { mediaId }));
     }
 
-    return getCursorDataColumn (url);
+    return File (getCursorDataColumn (url));
 }
 
 String AndroidContentUriResolver::getFileNameFromContentUri (const URL& url)
@@ -745,7 +745,7 @@ static File getAppDataDir (bool dataDir)
     LocalRef<jobject> applicationInfo (env->CallObjectMethod (getAppContext().get(), AndroidContext.getApplicationInfo));
     LocalRef<jobject> jString (env->GetObjectField (applicationInfo.get(), dataDir ? AndroidApplicationInfo.dataDir : AndroidApplicationInfo.publicSourceDir));
 
-    return { yupString ((jstring) jString.get()) };
+    return File (yupString ((jstring) jString.get()));
 }
 
 File File::getSpecialLocation (const SpecialLocationType type)

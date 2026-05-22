@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2025 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,19 +19,31 @@
   ==============================================================================
 */
 
-#include "yup_graphics/yup_AffineTransform.cpp"
-#include "yup_graphics/yup_Color.cpp"
-#include "yup_graphics/yup_ColorGradient.cpp"
-#include "yup_graphics/yup_Drawable.cpp"
-#include "yup_graphics/yup_Font.cpp"
-#include "yup_graphics/yup_Graphics.cpp"
-#include "yup_graphics/yup_Line.cpp"
-#include "yup_graphics/yup_Path.cpp"
-#include "yup_graphics/yup_Point.cpp"
-#include "yup_graphics/yup_Rectangle.cpp"
-#include "yup_graphics/yup_RectangleList.cpp"
-#include "yup_graphics/yup_Size.cpp"
-#include "yup_graphics/yup_StrokeType.cpp"
-#include "yup_graphics/yup_StyledText.cpp"
-#include "yup_graphics/yup_SVGDocument.cpp"
-#include "yup_graphics/yup_SVGParser.cpp"
+namespace yup
+{
+
+/** A parsed SVG pattern element for tiling fills. */
+struct SVGPattern : public ReferenceCountedObject
+{
+    using Ptr = ReferenceCountedObjectPtr<SVGPattern>;
+
+    enum Units
+    {
+        UserSpaceOnUse,
+        ObjectBoundingBox
+    };
+
+    String id;
+    Units patternUnits = ObjectBoundingBox;
+    Units patternContentUnits = UserSpaceOnUse;
+    float x = 0.0f;
+    float y = 0.0f;
+    float width = 0.0f;
+    float height = 0.0f;
+    AffineTransform patternTransform;
+    std::optional<Rectangle<float>> viewBox;
+    std::optional<String> href;
+    std::vector<SVGElement::Ptr> elements;
+};
+
+} // namespace yup

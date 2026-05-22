@@ -81,7 +81,7 @@ public:
         On the Mac/Linux, the path can include "~" notation for referring to
         user home directories.
     */
-    File (const String& absolutePath);
+    explicit File (const String& absolutePath);
 
     /** Creates a copy of another file object. */
     File (const File&);

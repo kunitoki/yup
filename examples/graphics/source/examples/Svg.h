@@ -27,18 +27,17 @@ public:
     SvgDemo()
     {
         updateListOfSvgFiles();
+        loadDemoFont();
 
         parseSvgFile (currentSvgFileIndex);
     }
 
-    void resized() override
-    {
-        //drawable.setBounds (getLocalBounds());
-    }
-
     void mouseDown (const yup::MouseEvent& event) override
     {
-        ++currentSvgFileIndex;
+        if (event.isLeftButtonDown())
+            ++currentSvgFileIndex;
+        else if (event.isRightButtonDown())
+            --currentSvgFileIndex;
 
         parseSvgFile (currentSvgFileIndex);
     }
@@ -59,12 +58,17 @@ private:
                                      .getParentDirectory()
                                      .getParentDirectory();
 
+        dataDirectory = riveBasePath.getChildFile ("data");
+
         auto files = riveBasePath.getChildFile ("data/svg").findChildFiles (yup::File::findFiles, false, "*.svg");
         if (files.isEmpty())
             return;
 
         for (const auto& svgFile : files)
+        {
+            //if (svgFile.getFileName() == "mozilla2.svg")
             svgFiles.add (svgFile);
+        }
     }
 
     void parseSvgFile (int index)
@@ -83,12 +87,97 @@ private:
         YUP_DBG ("Showing " << svgFiles[currentSvgFileIndex].getFullPathName());
 
         drawable.clear();
-        drawable.parseSVG (svgFiles[currentSvgFileIndex]);
+        drawable.parseSVG (svgFiles[currentSvgFileIndex], createParseOptions (svgFiles[currentSvgFileIndex]));
 
         repaint();
     }
 
+    void loadDemoFont()
+    {
+        yup::Font font;
+        if (font.loadFromFile (dataDirectory.getChildFile ("RobotoFlex-VariableFont.ttf")).wasOk())
+            demoFont = std::move (font);
+    }
+
+    std::optional<yup::Image> fetchHttpImage (const yup::String& href)
+    {
+        if (! href.startsWithIgnoreCase ("http:") && ! href.startsWithIgnoreCase ("https:"))
+            return std::nullopt;
+
+        if (httpImageCache.contains (href))
+            return httpImageCache[href];
+
+        yup::MemoryBlock imageData;
+        int statusCode = 0;
+
+        auto streamOptions = yup::URL::InputStreamOptions (yup::URL::ParameterHandling::inAddress)
+                                 .withConnectionTimeoutMs (5000)
+                                 .withNumRedirectsToFollow (5)
+                                 .withStatusCode (&statusCode)
+                                 .withExtraHeaders ("User-Agent: YUP SVG Demo\r\nAccept: image/*\r\n");
+
+        auto stream = yup::URL (href).createInputStream (streamOptions);
+        if (stream == nullptr)
+        {
+            YUP_DBG ("Unable to fetch SVG image href: " << href);
+            return std::nullopt;
+        }
+
+        stream->readIntoMemoryBlock (imageData);
+
+        if ((statusCode != 0 && (statusCode < 200 || statusCode >= 300)) || imageData.isEmpty())
+        {
+            YUP_DBG ("Unable to fetch SVG image href: " << href << " status: " << statusCode);
+            return std::nullopt;
+        }
+
+        auto imageResult = yup::Image::loadFromData (imageData.asBytes());
+        if (imageResult.failed())
+        {
+            YUP_DBG ("Unable to decode SVG image href: " << href << " error: " << imageResult.getErrorMessage());
+            return std::nullopt;
+        }
+
+        auto image = imageResult.getValue();
+        httpImageCache.set (href, image);
+        return image;
+    }
+
+    yup::Drawable::ParseOptions createParseOptions (const yup::File& svgFile)
+    {
+        yup::Drawable::ParseOptions options;
+        options.baseDirectory = svgFile.getParentDirectory();
+        options.imageResolver = [this] (yup::StringRef href, const yup::File&) -> std::optional<yup::Image>
+        {
+            return fetchHttpImage (yup::String (href.text));
+        };
+
+        options.fontResolver = [this] (yup::StringRef, float fontSize, int weight, bool italic) -> std::optional<yup::Font>
+        {
+            if (demoFont)
+            {
+                auto font = *demoFont;
+                font.setAxisValue ("wght", static_cast<float> (weight));
+                if (italic)
+                    font.setAxisValue ("slnt", -10.0f);
+                else
+                    font.setAxisValue ("slnt", 0.0f);
+                return font.withHeight (fontSize);
+            }
+
+            if (auto theme = yup::ApplicationTheme::getGlobalTheme())
+                return theme->getDefaultFont().withHeight (fontSize);
+
+            return std::nullopt;
+        };
+
+        return options;
+    }
+
     yup::Drawable drawable;
     yup::Array<yup::File> svgFiles;
+    yup::File dataDirectory;
+    std::optional<yup::Font> demoFont;
+    yup::HashMap<yup::String, yup::Image> httpImageCache;
     int currentSvgFileIndex = 0;
 };
