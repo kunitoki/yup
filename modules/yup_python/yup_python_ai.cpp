@@ -19,4 +19,6 @@
   ==============================================================================
 */
 
+#if YUP_MODULE_AVAILABLE_yup_ai
 #include "bindings/yup_YupAi_bindings.cpp"
+#endif

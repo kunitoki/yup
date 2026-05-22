@@ -21,7 +21,11 @@
 
 #pragma once
 
+#if ! YUP_MODULE_AVAILABLE_yup_ai
+#error This binding file requires adding the yup_ai module in the project
+#else
 #include <yup_ai/yup_ai.h>
+#endif
 
 #include "yup_YupCore_bindings.h"
 
