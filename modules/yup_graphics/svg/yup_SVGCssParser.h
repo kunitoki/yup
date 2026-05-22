@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2025 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,19 +19,27 @@
   ==============================================================================
 */
 
-#include "yup_graphics/yup_AffineTransform.cpp"
-#include "yup_graphics/yup_Color.cpp"
-#include "yup_graphics/yup_ColorGradient.cpp"
-#include "yup_graphics/yup_Drawable.cpp"
-#include "yup_graphics/yup_Font.cpp"
-#include "yup_graphics/yup_Graphics.cpp"
-#include "yup_graphics/yup_Line.cpp"
-#include "yup_graphics/yup_Path.cpp"
-#include "yup_graphics/yup_Point.cpp"
-#include "yup_graphics/yup_Rectangle.cpp"
-#include "yup_graphics/yup_RectangleList.cpp"
-#include "yup_graphics/yup_Size.cpp"
-#include "yup_graphics/yup_StrokeType.cpp"
-#include "yup_graphics/yup_StyledText.cpp"
-#include "yup_graphics/yup_SVGDocument.cpp"
-#include "yup_graphics/yup_SVGParser.cpp"
+namespace yup
+{
+
+/** Handles all CSS / style-related parsing for an SVG document.
+
+    Constructed with a reference to the mutable SVGData being built.
+    The SVGParser drives this class during a parse pass.
+*/
+class SVGCssParser
+{
+public:
+    explicit SVGCssParser (SVGData& data);
+
+    void parseCSSStyle (const String& styleString, SVGElement& e);
+    void applyStyleProperty (StringRef property, StringRef value, SVGElement& e);
+    void applyStylesheetRules (const XmlElement& xmlElement, SVGElement& e);
+    void parseStyleElement (const XmlElement& element);
+    bool matchesCssSelector (const XmlElement& xmlElement, const SVGCssRule& rule) const;
+
+private:
+    SVGData& data;
+};
+
+} // namespace yup

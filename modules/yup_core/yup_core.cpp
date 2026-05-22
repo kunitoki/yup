@@ -323,13 +323,12 @@ extern char** environ;
 #include "threads/yup_HighResolutionTimer.cpp"
 #include "threads/yup_WaitableEvent.cpp"
 #include "network/yup_URL.cpp"
+#include "network/yup_WebInputStream.cpp"
+#include "streams/yup_URLInputSource.cpp"
 
 #if ! YUP_WASM
 #include "threads/yup_ChildProcess.cpp"
 #endif
-
-#include "network/yup_WebInputStream.cpp"
-#include "streams/yup_URLInputSource.cpp"
 
 //==============================================================================
 #include <zlib/zlib.h>

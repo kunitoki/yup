@@ -109,4 +109,22 @@
 #include "graphics/yup_Color.cpp"
 #include "graphics/yup_Colors.cpp"
 #include "graphics/yup_Graphics.cpp"
+
+//==============================================================================
+
+#ifndef YUP_DRAWABLE_LOGGING
+#define YUP_DRAWABLE_LOGGING 0
+#endif
+
+#if YUP_DRAWABLE_LOGGING
+#define YUP_DRAWABLE_LOG(x) YUP_DBG (x)
+#else
+#define YUP_DRAWABLE_LOG(x)
+#endif
+
+//==============================================================================
+
+#include "svg/yup_SVGDocument.cpp"
+#include "svg/yup_SVGCssParser.cpp"
+#include "svg/yup_SVGParser.cpp"
 #include "drawables/yup_Drawable.cpp"

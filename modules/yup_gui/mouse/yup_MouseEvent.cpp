@@ -54,7 +54,7 @@ MouseEvent::MouseEvent (Buttons newButtons,
 
 //==============================================================================
 
-bool MouseEvent::isLeftButtoDown() const noexcept
+bool MouseEvent::isLeftButtonDown() const noexcept
 {
     return buttons & leftButton;
 }
