@@ -62,7 +62,10 @@ private:
             return;
 
         for (const auto& svgFile : files)
+        {
+            //if (svgFile.getFileName() == "mozilla2.svg")
             svgFiles.add (svgFile);
+        }
     }
 
     void parseSvgFile (int index)
