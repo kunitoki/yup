@@ -221,6 +221,7 @@ public:
         : processor (processorIn)
         , thumbnail (waveformColor)
         , accentColor (waveformColor)
+        , playheadColor (yup::Colors::yellow)
     {
         thumbnail.addListener (this);
         setOpaque (false);
@@ -285,13 +286,13 @@ public:
                                                                                          processor.getPlaybackPositionSamples()
                                                                                              / static_cast<double> (thumbnail.getTotalSamples()))));
 
-        g.setFillColor (accentColor.withAlpha (0.95f));
+        g.setFillColor (playheadColor.withAlpha (0.95f));
         g.fillRect ({ playheadX, laneBounds.getY(), 1.5f, laneBounds.getHeight() });
 
         if (thumbnail.isProgressVisible())
         {
             const auto progressBounds = bounds.withY (bounds.getBottom() - 3.0f).withHeight (3.0f);
-            g.setFillColor (accentColor.withAlpha (0.80f));
+            g.setFillColor (playheadColor.withAlpha (0.80f));
             g.fillRect (progressBounds.withWidth (progressBounds.getWidth() * static_cast<float> (thumbnail.getProgress())));
         }
     }
@@ -305,7 +306,7 @@ private:
 
     SamplePlayerProcessor& processor;
     SampleWaveformThumbnail thumbnail;
-    yup::Color accentColor;
+    yup::Color accentColor, playheadColor;
     std::shared_ptr<const SamplePlayerProcessor::SampleData> currentSample;
 };
 

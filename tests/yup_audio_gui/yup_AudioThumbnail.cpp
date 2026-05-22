@@ -21,6 +21,8 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+
 #include <yup_audio_gui/yup_audio_gui.h>
 
 using namespace yup;
@@ -58,21 +60,21 @@ public:
     void thumbnailChanged (AudioThumbnail& thumb) override
     {
         ignoreUnused (thumb);
-        changedCallCount++;
+        changedCallCount.fetch_add (1);
     }
 
     void thumbnailProgressChanged (AudioThumbnail& thumb, double progress, bool visible) override
     {
         ignoreUnused (thumb);
-        lastProgress = progress;
-        lastProgressVisible = visible;
-        progressCallCount++;
+        lastProgress.store (progress);
+        lastProgressVisible.store (visible);
+        progressCallCount.fetch_add (1);
     }
 
-    int changedCallCount = 0;
-    int progressCallCount = 0;
-    double lastProgress = 0.0;
-    bool lastProgressVisible = false;
+    std::atomic<int> changedCallCount { 0 };
+    std::atomic<int> progressCallCount { 0 };
+    std::atomic<double> lastProgress { 0.0 };
+    std::atomic<bool> lastProgressVisible { false };
 };
 } // namespace
 
@@ -149,7 +151,7 @@ TEST_F (AudioThumbnailTests, SetSourceWithBufferPointer)
 
     waitForProfileReady();
     EXPECT_NE (nullptr, thumbnail->getPeakProfile());
-    EXPECT_GE (listener->changedCallCount, 1);
+    EXPECT_GE (listener->changedCallCount.load(), 1);
 }
 
 TEST_F (AudioThumbnailTests, SetSourceWithBufferByReference)
@@ -229,7 +231,7 @@ TEST_F (AudioThumbnailTests, ProgressNotifications)
     syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
 
     // Should have received progress updates
-    EXPECT_GT (syncListener.progressCallCount, 0);
+    EXPECT_GT (syncListener.progressCallCount.load(), 0);
 }
 
 TEST_F (AudioThumbnailTests, GetProgressReturnsValue)
@@ -264,7 +266,7 @@ TEST_F (AudioThumbnailTests, SharedCacheBetweenThumbnails)
     runDispatchLoopUntil (100);
     EXPECT_NE (nullptr, thumbnail2.getPeakProfile());
     // Gets 2 notifications: one from setSource, one from profileReady
-    EXPECT_GE (listener2.changedCallCount, 1);
+    EXPECT_GE (listener2.changedCallCount.load(), 1);
 }
 
 TEST_F (AudioThumbnailTests, DiskCacheIntegration)
@@ -314,23 +316,23 @@ TEST_F (AudioThumbnailTests, MultipleSetSourceCallsHandledCorrectly)
     waitForProfileReady();
     EXPECT_EQ (1, thumbnail->getNumChannels());
 
-    listener->changedCallCount = 0;
+    listener->changedCallCount.store (0);
 
     thumbnail->setSource (&buffer2, kThumbnailSampleRate);
     waitForProfileReady();
     EXPECT_EQ (2, thumbnail->getNumChannels());
-    EXPECT_GE (listener->changedCallCount, 1);
+    EXPECT_GE (listener->changedCallCount.load(), 1);
 }
 
 TEST_F (AudioThumbnailTests, ListenerNotificationsWork)
 {
     auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
 
-    int initialChangedCount = listener->changedCallCount;
+    int initialChangedCount = listener->changedCallCount.load();
     thumbnail->setSource (&buffer, kThumbnailSampleRate);
     waitForProfileReady();
 
-    EXPECT_GT (listener->changedCallCount, initialChangedCount);
+    EXPECT_GT (listener->changedCallCount.load(), initialChangedCount);
 }
 
 TEST_F (AudioThumbnailTests, RemoveListenerStopsNotifications)
@@ -341,7 +343,7 @@ TEST_F (AudioThumbnailTests, RemoveListenerStopsNotifications)
     thumbnail->setSource (&buffer, kThumbnailSampleRate);
     waitForProfileReady();
 
-    EXPECT_EQ (0, listener->changedCallCount);
+    EXPECT_EQ (0, listener->changedCallCount.load());
 }
 
 TEST_F (AudioThumbnailTests, SetSourceWithZeroSampleRateUsesDefault)
@@ -900,9 +902,9 @@ TEST_F (AudioThumbnailTests, MultipleListeners)
     waitForProfileReady();
 
     // All listeners should be notified
-    EXPECT_GT (listener->changedCallCount, 0);
-    EXPECT_GT (listener2.changedCallCount, 0);
-    EXPECT_GT (listener3.changedCallCount, 0);
+    EXPECT_GT (listener->changedCallCount.load(), 0);
+    EXPECT_GT (listener2.changedCallCount.load(), 0);
+    EXPECT_GT (listener3.changedCallCount.load(), 0);
 }
 
 //==============================================================================

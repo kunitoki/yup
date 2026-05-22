@@ -33,7 +33,7 @@
     license:            ISC
     minimumCppStandard: 17
 
-    dependencies:       yup_audio_processors
+    dependencies:       yup_audio_processors yup_data_model
     searchpaths:        native
 
   END_YUP_MODULE_DECLARATION
@@ -56,6 +56,7 @@
 #include <vector>
 
 #include <yup_audio_processors/yup_audio_processors.h>
+#include <yup_data_model/yup_data_model.h>
 
 //==============================================================================
 #include "graph/yup_AudioGraphNodeID.h"
@@ -63,4 +64,5 @@
 #include "graph/yup_AudioGraphConnection.h"
 #include "graph/yup_AudioGraphAllocationStats.h"
 #include "graph/yup_AudioGraphNodeProperties.h"
+#include "graph/yup_AudioGraphModel.h"
 #include "graph/yup_AudioGraphProcessor.h"

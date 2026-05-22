@@ -60,6 +60,8 @@ yup_standalone_app (
     TARGET_IDE_GROUP "Examples"
     TARGET_APP_ID "org.yup.${target_name}"
     TARGET_APP_NAMESPACE "org.yup"
+    PTHREAD_POOL_SIZE 16
+    STACK_SIZE 4194304
     DEFINITIONS
         YUP_EXAMPLE_GRAPHICS_RIVE_FILE="${rive_file}"
         ${additional_definitions}

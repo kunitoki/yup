@@ -26,56 +26,44 @@ namespace yup
 /**
     An AudioProcessor that owns and executes an acyclic graph of AudioProcessor nodes.
 
-    Edits are made to a control-thread graph model. commitChanges() validates the
-    model, prepares newly compiled nodes for the current playback configuration, and
-    publishes an immutable processing plan. processBlock() only swaps pending plans at
-    block boundaries and keeps retired plans alive until a later control-thread commit
-    or destruction.
+    Topology edits are made to a control-thread graph model. commitChanges()
+    validates the model, prepares newly compiled nodes for the current playback
+    configuration, and publishes an immutable processing plan. Child processor
+    latency notifications mark the graph dirty; call commitChanges() from the
+    control thread to rebuild delay compensation. Metadata edits such as node
+    positions and properties are saved by the model without invalidating the
+    compiled plan. processBlock() only swaps pending plans at block boundaries
+    and keeps retired plans alive until a later control-thread commit or destruction.
 */
 class YUP_API AudioGraphProcessor final : public AudioProcessor
 {
 public:
-    /** Creates a processor for a saved node. */
-    using NodeFactory = std::function<ResultValue<std::unique_ptr<AudioProcessor>> (const AudioGraphNodeProperties&)>;
-
     /** Creates the default stereo graph bus layout. */
     static AudioBusLayout createDefaultBusLayout();
 
     //==============================================================================
-    /** Constructs an audio graph with the supplied graph input/output bus layout. */
-    explicit AudioGraphProcessor (AudioBusLayout busLayout = createDefaultBusLayout());
+
+    /** Constructs an audio graph that compiles and processes an external graph model. */
+    explicit AudioGraphProcessor (std::shared_ptr<AudioGraphModel> model,
+                                  AudioBusLayout busLayout = createDefaultBusLayout());
 
     /** Destructs the graph and releases all owned processors. */
     ~AudioGraphProcessor() override;
 
     //==============================================================================
-    /** Adds a processor node and returns its stable node identifier. */
-    AudioGraphNodeID addNode (std::unique_ptr<AudioProcessor> processor);
 
-    /** Adds a processor node with persistent metadata and returns its stable node identifier. */
-    AudioGraphNodeID addNode (std::unique_ptr<AudioProcessor> processor,
-                              AudioGraphNodeProperties properties);
-
-    /** Removes a processor node and all connections that mention it. */
-    bool removeNode (AudioGraphNodeID nodeID);
-
-    /** Adds a connection to the control-thread graph model. */
-    Result addConnection (const AudioGraphConnection& connection);
-
-    /** Removes a connection from the control-thread graph model. */
-    bool removeConnection (const AudioGraphConnection& connection);
-
-    /** Returns a snapshot of the current control-thread graph model connections. */
-    std::vector<AudioGraphConnection> getConnections() const;
-
-    /** Removes all graph nodes and connections. */
-    void clear();
+    /** Returns the editable graph model consumed by this processor. */
+    std::shared_ptr<AudioGraphModel> getModel() const noexcept;
 
     //==============================================================================
-    /** Validates, compiles, and publishes the current graph model. */
+
+    /** Validates, compiles, and publishes the current graph topology when needed. */
     Result commitChanges();
 
-    /** Returns true when graph edits have not yet been committed. */
+    /** Validates one connection against the current model and graph bus layout. */
+    Result validateConnection (const AudioGraphConnection& connection) const;
+
+    /** Returns true when topology edits have not yet been committed. */
     bool hasUncommittedChanges() const noexcept;
 
     //==============================================================================
@@ -90,25 +78,6 @@ public:
 
     /** Returns diagnostics for the last successfully compiled graph. */
     AudioGraphAllocationStats getAllocationStats() const noexcept;
-
-    /** Returns the processor for a node, or nullptr when the node is not present. */
-    AudioProcessor* getNodeProcessor (AudioGraphNodeID nodeID) const noexcept;
-
-    //==============================================================================
-    /** Updates the saved canvas position for a node. */
-    bool setNodePosition (AudioGraphNodeID nodeID, float positionX, float positionY);
-
-    /** Updates the persistent metadata for a node. */
-    bool setNodeProperties (AudioGraphNodeID nodeID, AudioGraphNodeProperties properties);
-
-    /** Returns persistent metadata for a node, or nullopt when the node is not present. */
-    std::optional<AudioGraphNodeProperties> getNodeProperties (AudioGraphNodeID nodeID) const;
-
-    /** Returns the identifiers of all nodes currently in the control-thread graph model. */
-    std::vector<AudioGraphNodeID> getNodeIDs() const;
-
-    /** Sets the factory used to recreate processor nodes during state loading. */
-    void setNodeFactory (NodeFactory factory);
 
     //==============================================================================
     /** Creates an XML representation of the current graph, including node state. */

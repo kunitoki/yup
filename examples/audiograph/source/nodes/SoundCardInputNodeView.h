@@ -19,17 +19,35 @@
   ==============================================================================
 */
 
-#ifdef YUP_AUDIO_GRAPH_H_INCLUDED
-/* When you add this cpp file to your project, you mustn't include it in a file where you've
-   already included any other headers - just put it inside a file on its own, possibly with your config
-   flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
-   header files that the compiler may be using.
-*/
-#error "Incorrect use of YUP cpp file"
-#endif
-
-#include "yup_audio_graph.h"
+#pragma once
 
 //==============================================================================
-#include "graph/yup_AudioGraphModel.cpp"
-#include "graph/yup_AudioGraphProcessor.cpp"
+class SoundCardInputNodeView final : public yup::AudioGraphNodeView
+{
+public:
+    explicit SoundCardInputNodeView (yup::StringRef subtitleIn = "sound card")
+        : AudioGraphNodeView (yup::AudioGraphModel::getGraphInputNodeID())
+        , subtitle (subtitleIn)
+    {
+    }
+
+    yup::String getNodeTitle() const override { return "INPUT"; }
+
+    yup::String getNodeSubtitle() const override { return subtitle; }
+
+    int getNumInputPorts() const override { return 0; }
+
+    int getNumOutputPorts() const override { return 1; }
+
+    int getPreferredWidth() const override { return 150; }
+
+    yup::Color getNodeColor() const override { return yup::Color (0xfff97316); }
+
+    PortInfo getOutputPortInfo (int) const override
+    {
+        return { "audio", getPortKindColor (PortKind::audio), PortKind::audio };
+    }
+
+private:
+    yup::String subtitle;
+};

@@ -26,11 +26,19 @@
 #include <memory>
 #include <vector>
 
+#include "GainNode.h"
+#include "LatencyNode.h"
+#include "LowPassFilterNode.h"
+#include "OscillatorNode.h"
+#include "PluginNodeView.h"
+#include "SamplePlayerNode.h"
+#include "SubgraphNode.h"
+
 //==============================================================================
 /**
     Maps stable string identifiers to processor and view factories.
 
-    NodeRegistry drives both the AudioGraphProcessor::NodeFactory (used for
+    NodeRegistry drives both the AudioGraphModel::NodeFactory (used for
     graph state reconstruction after loading) and menu-based node creation in
     the editor. Register all internal node types via registerInternalNodes()
     and, on desktop builds, plugin format entries via registerPluginFormats().
@@ -45,11 +53,20 @@ public:
     /** Stable factory key for the built-in gain node. */
     static constexpr const char* gainIdentifier = "internal.gain";
 
+    /** Stable factory key for the built-in latency node. */
+    static constexpr const char* latencyIdentifier = "internal.latency";
+
     /** Stable factory key for the built-in low-pass filter node. */
     static constexpr const char* lpfIdentifier = "internal.lpf";
 
     /** Stable factory key for the built-in looping sample player node. */
     static constexpr const char* samplePlayerIdentifier = "internal.samplePlayer";
+
+    /** Stable factory key for the built-in recursive subgraph node. */
+    static constexpr const char* subgraphIdentifier = "internal.subgraph";
+
+    /** Stable factory key for Unknown plugin nodes. */
+    static constexpr const char* pluginUnknownIdentifier = "plugin.unknown";
 
 #if YUP_DESKTOP
     /** Stable factory key for VST3 plugin nodes. */
@@ -64,7 +81,7 @@ public:
 
     //==============================================================================
     using ProcessorFactory = std::function<yup::ResultValue<std::unique_ptr<yup::AudioProcessor>> (const yup::AudioGraphNodeProperties&)>;
-    using ViewFactory = std::function<std::unique_ptr<yup::AudioGraphNodeView> (yup::AudioGraphNodeID, yup::AudioProcessor*)>;
+    using ViewFactory = std::function<std::unique_ptr<yup::AudioGraphNodeView> (yup::AudioGraphNodeID, yup::AudioProcessor*, yup::AudioGraphProcessor*)>;
 
     //==============================================================================
     struct Entry
@@ -88,7 +105,7 @@ public:
         {
             return yup::makeResultValueOk (std::make_unique<OscillatorProcessor>());
         },
-            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc) -> std::unique_ptr<yup::AudioGraphNodeView>
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*) -> std::unique_ptr<yup::AudioGraphNodeView>
         {
             auto* osc = dynamic_cast<OscillatorProcessor*> (proc);
             if (osc == nullptr)
@@ -103,7 +120,7 @@ public:
         {
             return yup::makeResultValueOk (std::make_unique<GainProcessor>());
         },
-            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc) -> std::unique_ptr<yup::AudioGraphNodeView>
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*) -> std::unique_ptr<yup::AudioGraphNodeView>
         {
             auto* gain = dynamic_cast<GainProcessor*> (proc);
             if (gain == nullptr)
@@ -113,12 +130,27 @@ public:
         }
         };
 
+        entries[latencyIdentifier] = {
+            [] (const yup::AudioGraphNodeProperties&) -> yup::ResultValue<std::unique_ptr<yup::AudioProcessor>>
+        {
+            return yup::makeResultValueOk (std::make_unique<LatencyProcessor>());
+        },
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*) -> std::unique_ptr<yup::AudioGraphNodeView>
+        {
+            auto* latency = dynamic_cast<LatencyProcessor*> (proc);
+            if (latency == nullptr)
+                return nullptr;
+
+            return std::make_unique<LatencyNodeView> (nodeID, *latency);
+        }
+        };
+
         entries[lpfIdentifier] = {
             [] (const yup::AudioGraphNodeProperties&) -> yup::ResultValue<std::unique_ptr<yup::AudioProcessor>>
         {
             return yup::makeResultValueOk (std::make_unique<LowPassFilterProcessor>());
         },
-            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc) -> std::unique_ptr<yup::AudioGraphNodeView>
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*) -> std::unique_ptr<yup::AudioGraphNodeView>
         {
             auto* lpf = dynamic_cast<LowPassFilterProcessor*> (proc);
             if (lpf == nullptr)
@@ -133,13 +165,32 @@ public:
         {
             return yup::makeResultValueOk (std::make_unique<SamplePlayerProcessor>());
         },
-            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc) -> std::unique_ptr<yup::AudioGraphNodeView>
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*) -> std::unique_ptr<yup::AudioGraphNodeView>
         {
             auto* samplePlayer = dynamic_cast<SamplePlayerProcessor*> (proc);
             if (samplePlayer == nullptr)
                 return nullptr;
 
             return std::make_unique<SamplePlayerNodeView> (nodeID, *samplePlayer);
+        }
+        };
+
+        entries[subgraphIdentifier] = {
+            [this] (const yup::AudioGraphNodeProperties& props) -> yup::ResultValue<std::unique_ptr<yup::AudioProcessor>>
+        {
+            auto processor = std::make_unique<SubgraphProcessor> (SubgraphConfig::fromCreationData (props.creationData));
+            processor->setNodeFactory (makeProcessorFactory());
+
+            std::unique_ptr<yup::AudioProcessor> result = std::move (processor);
+            return yup::makeResultValueOk (std::move (result));
+        },
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*) -> std::unique_ptr<yup::AudioGraphNodeView>
+        {
+            auto* subgraph = dynamic_cast<SubgraphProcessor*> (proc);
+            if (subgraph == nullptr)
+                return nullptr;
+
+            return std::make_unique<SubgraphNodeView> (nodeID, *subgraph);
         }
         };
     }
@@ -168,7 +219,7 @@ public:
             return loadPluginFromProperties (props);
         };
 
-        auto viewFactory = [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc)
+        auto viewFactory = [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*)
             -> std::unique_ptr<yup::AudioGraphNodeView>
         {
             auto* instance = dynamic_cast<yup::AudioPluginInstance*> (proc);
@@ -213,12 +264,15 @@ public:
         {
             case yup::AudioPluginFormatType::vst3:
                 return pluginVst3Identifier;
+
             case yup::AudioPluginFormatType::clap:
                 return pluginClapIdentifier;
+
             case yup::AudioPluginFormatType::audioUnit:
                 return pluginAuIdentifier;
+
             default:
-                return "plugin.unknown";
+                return pluginUnknownIdentifier;
         }
     }
 
@@ -290,13 +344,13 @@ public:
 
     //==============================================================================
     /**
-        Returns an AudioGraphProcessor::NodeFactory that dispatches to the
+        Returns an AudioGraphModel::NodeFactory that dispatches to the
         registered processor factory for a given node identifier.
 
         If no entry is found for props.identifier, the factory returns a failure
         result.
     */
-    yup::AudioGraphProcessor::NodeFactory makeProcessorFactory()
+    yup::AudioGraphModel::NodeFactory makeProcessorFactory()
     {
         return [this] (const yup::AudioGraphNodeProperties& props)
                    -> yup::ResultValue<std::unique_ptr<yup::AudioProcessor>>
@@ -316,23 +370,32 @@ public:
         @param nodeID      The stable graph node identifier.
         @param identifier  The registry key identifying the node type.
         @param proc        The processor that was created for this node.
+        @param graph       The graph that owns the node, used by graph-aware views.
         @returns           A new view, or nullptr if the identifier is unknown.
     */
     std::unique_ptr<yup::AudioGraphNodeView> createView (yup::AudioGraphNodeID nodeID,
                                                          const yup::String& identifier,
-                                                         yup::AudioProcessor* proc)
+                                                         yup::AudioProcessor* proc,
+                                                         yup::AudioGraphProcessor* graph = nullptr)
     {
         auto it = entries.find (identifier);
         if (it == entries.end())
             return nullptr;
 
-        return it->second.createView (nodeID, proc);
+        return it->second.createView (nodeID, proc, graph);
     }
 
     //==============================================================================
     std::vector<yup::String> getInternalNodeIdentifiers() const
     {
-        return { oscillatorIdentifier, gainIdentifier, lpfIdentifier, samplePlayerIdentifier };
+        return {
+            oscillatorIdentifier,
+            gainIdentifier,
+            lpfIdentifier,
+            latencyIdentifier,
+            samplePlayerIdentifier,
+            subgraphIdentifier
+        };
     }
 
     //==============================================================================
@@ -347,12 +410,20 @@ public:
     {
         if (id == oscillatorIdentifier)
             return "Oscillator";
+
         if (id == gainIdentifier)
             return "Gain";
+
+        if (id == latencyIdentifier)
+            return "Latency";
+
         if (id == lpfIdentifier)
             return "Low Pass Filter";
+
         if (id == samplePlayerIdentifier)
             return "Sample Player";
+        if (id == subgraphIdentifier)
+            return "Subgraph";
 
         return id;
     }
@@ -374,8 +445,7 @@ private:
         @returns      A ResultValue containing the loaded AudioPluginInstance on success,
                       or an error message on failure.
     */
-    yup::ResultValue<std::unique_ptr<yup::AudioProcessor>> loadPluginFromProperties (
-        const yup::AudioGraphNodeProperties& props)
+    yup::ResultValue<std::unique_ptr<yup::AudioProcessor>> loadPluginFromProperties (const yup::AudioGraphNodeProperties& props)
     {
         if (pluginScanner == nullptr)
             return yup::makeResultValueFail ("No plugin scanner available");
