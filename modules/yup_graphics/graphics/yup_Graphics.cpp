@@ -458,7 +458,7 @@ void Graphics::setClipPath (const Path& clipPath)
     options.clipPath = clipPath;
 
     auto renderPath = rive::make_rcp<rive::RiveRenderPath>();
-    renderPath->fillRule (rive::FillRule::nonZero);
+    renderPath->fillRule (clipPath.isUsingNonZeroWinding() ? rive::FillRule::nonZero : rive::FillRule::evenOdd);
     renderPath->addRenderPath (clipPath.getRenderPath(), options.getLocalTransform().toMat2D());
 
     renderer.clipPath (renderPath.get());
@@ -642,6 +642,7 @@ void Graphics::renderStrokePath (const Path& path, const RenderOptions& options,
     paint.thickness (options.getStrokeWidth());
     paint.join (toStrokeJoin (options.join));
     paint.cap (toStrokeCap (options.cap));
+    paint.feather (options.feather);
 
     if (options.isStrokeColor())
         paint.color ((rive::ColorInt) options.getStrokeColor());
@@ -805,13 +806,16 @@ void Graphics::renderFittedText (const StyledText& text, const Rectangle<float>&
 
     renderer.save();
 
-    rive::RawPath path;
-    path.addRect (rect.toAABB());
-    path.transformInPlace (options.getTransform().toMat2D());
-    auto renderPath = rive::make_rcp<rive::RiveRenderPath> (rive::FillRule::clockwise, path);
-    renderer.clipPath (renderPath.get());
+    if (text.getOverflow() != StyledText::visible)
+    {
+        rive::RawPath path;
+        path.addRect (rect.toAABB());
+        path.transformInPlace (options.getTransform().toMat2D());
+        auto renderPath = rive::make_rcp<rive::RiveRenderPath> (rive::FillRule::clockwise, path);
+        renderer.clipPath (renderPath.get());
+    }
 
-    auto offset = text.getOffset (rect); // We will just use vertical offset
+    auto offset = text.getOffset (rect); // Horizontal alignment is already baked into the shaped glyph paths.
     auto transform = options.getTransform (rect.getX(), rect.getY() + offset.getY());
     renderer.transform (transform.toMat2D());
 

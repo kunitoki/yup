@@ -136,6 +136,7 @@ private:
         std::optional<Array<float>> strokeDashArray;
         std::optional<float> strokeDashOffset;
         std::optional<String> fillRule; // "evenodd" or "nonzero"
+        std::optional<String> clipRule; // "evenodd" or "nonzero"
         bool noFill = false;
         bool noStroke = false;
 
@@ -157,6 +158,7 @@ private:
         // Gradient properties
         std::optional<String> fillUrl;
         std::optional<String> strokeUrl;
+        std::optional<String> filterUrl;
 
         // Image properties
         std::optional<String> imageHref;
@@ -202,6 +204,7 @@ private:
         String id;
         Units units = ObjectBoundingBox; // Default per SVG spec
         String href;                     // xlink:href reference to another gradient
+        String spreadMethod = "pad";
 
         // Linear gradient properties
         Point<float> start;
@@ -220,14 +223,32 @@ private:
         bool hasCenter = false;
         bool hasRadius = false;
         bool hasFocal = false;
+        bool hasUnits = false;
+        bool hasSpreadMethod = false;
     };
 
     struct ClipPath : public ReferenceCountedObject
     {
         using Ptr = ReferenceCountedObjectPtr<ClipPath>;
 
+        enum Units
+        {
+            UserSpaceOnUse,
+            ObjectBoundingBox
+        };
+
         String id;
+        Units units = UserSpaceOnUse;
         std::vector<Element::Ptr> elements;
+    };
+
+    struct Filter : public ReferenceCountedObject
+    {
+        using Ptr = ReferenceCountedObjectPtr<Filter>;
+
+        String id;
+        String href;
+        std::optional<float> gaussianBlurStdDeviation;
     };
 
     struct CssRule
@@ -247,6 +268,9 @@ private:
     Gradient::Ptr getGradientById (const String& id);
     Gradient::Ptr resolveGradient (Gradient::Ptr gradient);
     ColorGradient createColorGradientFromSVG (const Gradient& gradient, const Rectangle<float>* objectBounds = nullptr);
+    void parseFilter (const XmlElement& element);
+    Filter::Ptr getFilterById (const String& id);
+    Filter::Ptr resolveFilter (Filter::Ptr filter);
     void parseClipPath (const XmlElement& element);
     ClipPath::Ptr getClipPathById (const String& id);
     void parseCSSStyle (const String& styleString, Element& e);
@@ -283,6 +307,8 @@ private:
     HashMap<String, Element::Ptr> elementsById;
     std::vector<Gradient::Ptr> gradients;
     HashMap<String, Gradient::Ptr> gradientsById;
+    std::vector<Filter::Ptr> filters;
+    HashMap<String, Filter::Ptr> filtersById;
     std::vector<ClipPath::Ptr> clipPaths;
     HashMap<String, ClipPath::Ptr> clipPathsById;
     std::vector<CssRule> cssRules;

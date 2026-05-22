@@ -545,7 +545,7 @@ private:
 
         bool isStrokeColorGradient() const noexcept
         {
-            return ! isCurrentFillColor;
+            return ! isCurrentStrokeColor;
         }
 
         ColorGradient getFillColorGradient() const noexcept
@@ -595,8 +595,9 @@ private:
 
         AffineTransform getTransform (float offsetX, float offsetY) const noexcept
         {
-            return transform
-                .translated (drawingArea.getX() + offsetX, drawingArea.getY() + offsetY)
+            return AffineTransform::translation (offsetX, offsetY)
+                .followedBy (transform)
+                .translated (drawingArea.getX(), drawingArea.getY())
                 .scaled (scale);
         }
 
