@@ -326,9 +326,10 @@ extern char** environ;
 
 #if ! YUP_WASM
 #include "threads/yup_ChildProcess.cpp"
+#endif
+
 #include "network/yup_WebInputStream.cpp"
 #include "streams/yup_URLInputSource.cpp"
-#endif
 
 //==============================================================================
 #include <zlib/zlib.h>
