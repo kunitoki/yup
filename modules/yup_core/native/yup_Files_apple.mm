@@ -314,9 +314,9 @@ File File::getSpecialLocation(const SpecialLocationType type)
             case tempDirectory:
             {
                 File tmp(MacFileHelpers::getIOSSystemLocation(NSCachesDirectory));
-                tmp = tmp.getChildFile(File(yup_getExecutableFile().getFileNameWithoutExtension()));
+                tmp = tmp.getChildFile(yup_getExecutableFile().getFileNameWithoutExtension());
                 tmp.createDirectory();
-                return tmp.getFullPathName();
+                return File(tmp.getFullPathName();
             }
 
 #else
