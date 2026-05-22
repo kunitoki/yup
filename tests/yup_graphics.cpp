@@ -33,3 +33,5 @@
 #include "yup_graphics/yup_Size.cpp"
 #include "yup_graphics/yup_StrokeType.cpp"
 #include "yup_graphics/yup_StyledText.cpp"
+#include "yup_graphics/yup_SVGDocument.cpp"
+#include "yup_graphics/yup_SVGParser.cpp"

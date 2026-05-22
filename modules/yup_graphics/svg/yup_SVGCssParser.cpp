@@ -399,7 +399,15 @@ void SVGCssParser::parseStyleElement (const XmlElement& element)
         css = css.substring (closeBrace + 1);
 
         auto selectors = StringArray::fromTokens (selectorText, ",", "");
-        auto declarations = StringArray::fromTokens (declarationText, ";", "");
+        auto declarationTokens = StringArray::fromTokens (declarationText, ";", "");
+        StringArray declarations;
+
+        for (const auto& declaration : declarationTokens)
+        {
+            auto trimmedDeclaration = declaration.trim();
+            if (trimmedDeclaration.isNotEmpty())
+                declarations.add (trimmedDeclaration);
+        }
 
         for (auto selector : selectors)
         {

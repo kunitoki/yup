@@ -2058,6 +2058,268 @@ TEST (SVGDocumentTests, CSSRuleDeclarationsContainPropertyColon)
     });
 }
 
+TEST (SVGDocumentTests, SVGCssParserInlineStyleAppliesPresentationProperties)
+{
+    SVGData data;
+    SVGCssParser parser (data);
+    SVGElement element;
+    element.tagName = "rect";
+
+    parser.parseCSSStyle ("fill: none;"
+                          "stroke: currentColor;"
+                          "stroke-width: 3.5;"
+                          "stroke-linejoin: round;"
+                          "stroke-linecap: square;"
+                          "opacity: 0.25;"
+                          "visibility: collapse;"
+                          "font-family: \"Yup Sans\";"
+                          "font-size: 18px;"
+                          "text-anchor: middle;"
+                          "letter-spacing: 2px;"
+                          "word-spacing: 3px;"
+                          "font-weight: bolder;"
+                          "font-style: oblique;"
+                          "clip-path: url(#clip);"
+                          "mask: url(#mask);"
+                          "marker-start: url(#start);"
+                          "marker-mid: url(#mid);"
+                          "marker-end: url(#end);"
+                          "stroke-miterlimit: 0.25;"
+                          "filter: url(#blur);"
+                          "stroke-dasharray: 4 6;"
+                          "stroke-dashoffset: 2;"
+                          "clip-rule: evenodd;"
+                          "unsupported-property: ignored",
+                          element);
+
+    EXPECT_TRUE (element.noFill);
+    EXPECT_TRUE (element.strokeCurrentColor);
+    ASSERT_TRUE (element.strokeWidth.has_value());
+    EXPECT_FLOAT_EQ (3.5f, *element.strokeWidth);
+    ASSERT_TRUE (element.strokeJoin.has_value());
+    EXPECT_EQ (StrokeJoin::Round, *element.strokeJoin);
+    ASSERT_TRUE (element.strokeCap.has_value());
+    EXPECT_EQ (StrokeCap::Square, *element.strokeCap);
+    ASSERT_TRUE (element.opacity.has_value());
+    EXPECT_FLOAT_EQ (0.25f, *element.opacity);
+    EXPECT_TRUE (element.hidden);
+    ASSERT_TRUE (element.fontFamily.has_value());
+    EXPECT_EQ (String ("Yup Sans"), *element.fontFamily);
+    ASSERT_TRUE (element.fontSize.has_value());
+    EXPECT_FLOAT_EQ (18.0f, *element.fontSize);
+    ASSERT_TRUE (element.textAnchor.has_value());
+    EXPECT_EQ (String ("middle"), *element.textAnchor);
+    ASSERT_TRUE (element.letterSpacing.has_value());
+    EXPECT_FLOAT_EQ (2.0f, *element.letterSpacing);
+    ASSERT_TRUE (element.wordSpacing.has_value());
+    EXPECT_FLOAT_EQ (3.0f, *element.wordSpacing);
+    ASSERT_TRUE (element.fontWeight.has_value());
+    EXPECT_EQ (700, *element.fontWeight);
+    ASSERT_TRUE (element.fontItalic.has_value());
+    EXPECT_TRUE (*element.fontItalic);
+    ASSERT_TRUE (element.clipPathUrl.has_value());
+    EXPECT_EQ (String ("clip"), *element.clipPathUrl);
+    ASSERT_TRUE (element.maskUrl.has_value());
+    EXPECT_EQ (String ("mask"), *element.maskUrl);
+    ASSERT_TRUE (element.markerStart.has_value());
+    EXPECT_EQ (String ("start"), *element.markerStart);
+    ASSERT_TRUE (element.markerMid.has_value());
+    EXPECT_EQ (String ("mid"), *element.markerMid);
+    ASSERT_TRUE (element.markerEnd.has_value());
+    EXPECT_EQ (String ("end"), *element.markerEnd);
+    EXPECT_FLOAT_EQ (1.0f, element.strokeMiterLimit);
+    ASSERT_TRUE (element.filterUrl.has_value());
+    EXPECT_EQ (String ("blur"), *element.filterUrl);
+    ASSERT_TRUE (element.strokeDashArray.has_value());
+    ASSERT_EQ (2, element.strokeDashArray->size());
+    EXPECT_FLOAT_EQ (4.0f, (*element.strokeDashArray)[0]);
+    EXPECT_FLOAT_EQ (6.0f, (*element.strokeDashArray)[1]);
+    ASSERT_TRUE (element.strokeDashOffset.has_value());
+    EXPECT_FLOAT_EQ (2.0f, *element.strokeDashOffset);
+    ASSERT_TRUE (element.clipRule.has_value());
+    EXPECT_EQ (String ("evenodd"), *element.clipRule);
+}
+
+TEST (SVGDocumentTests, SVGCssParserApplyStylePropertyCoversAlternateBranches)
+{
+    SVGData data;
+    SVGCssParser parser (data);
+    SVGElement element;
+
+    parser.applyStyleProperty ("fill", "url(#gradient)", element);
+    ASSERT_TRUE (element.fillUrl.has_value());
+    EXPECT_EQ (String ("gradient"), *element.fillUrl);
+
+    parser.applyStyleProperty ("stroke", "none", element);
+    EXPECT_TRUE (element.noStroke);
+
+    parser.applyStyleProperty ("stroke", "currentColor", element);
+    EXPECT_TRUE (element.strokeCurrentColor);
+
+    parser.applyStyleProperty ("stroke-linejoin", "miter", element);
+    ASSERT_TRUE (element.strokeJoin.has_value());
+    EXPECT_EQ (StrokeJoin::Miter, *element.strokeJoin);
+
+    parser.applyStyleProperty ("stroke-linejoin", "bevel", element);
+    EXPECT_EQ (StrokeJoin::Bevel, *element.strokeJoin);
+
+    parser.applyStyleProperty ("stroke-linecap", "round", element);
+    ASSERT_TRUE (element.strokeCap.has_value());
+    EXPECT_EQ (StrokeCap::Round, *element.strokeCap);
+
+    parser.applyStyleProperty ("stroke-linecap", "butt", element);
+    EXPECT_EQ (StrokeCap::Butt, *element.strokeCap);
+
+    parser.applyStyleProperty ("font-weight", "lighter", element);
+    ASSERT_TRUE (element.fontWeight.has_value());
+    EXPECT_EQ (400, *element.fontWeight);
+
+    parser.applyStyleProperty ("font-weight", "600", element);
+    EXPECT_EQ (600, *element.fontWeight);
+
+    parser.applyStyleProperty ("font-style", "normal", element);
+    ASSERT_TRUE (element.fontItalic.has_value());
+    EXPECT_FALSE (*element.fontItalic);
+
+    parser.applyStyleProperty ("marker", "url(#marker)", element);
+    ASSERT_TRUE (element.markerStart.has_value());
+    ASSERT_TRUE (element.markerMid.has_value());
+    ASSERT_TRUE (element.markerEnd.has_value());
+    EXPECT_EQ (String ("marker"), *element.markerStart);
+    EXPECT_EQ (String ("marker"), *element.markerMid);
+    EXPECT_EQ (String ("marker"), *element.markerEnd);
+
+    element.filterUrl = String ("previous");
+    parser.applyStyleProperty ("filter", "none", element);
+    EXPECT_FALSE (element.filterUrl.has_value());
+
+    parser.applyStyleProperty ("filter", "blur(2px)", element);
+    EXPECT_FALSE (element.filterUrl.has_value());
+
+    element.strokeDashArray = Array<float> ({ 1.0f, 2.0f });
+    parser.applyStyleProperty ("stroke-dasharray", "none", element);
+    EXPECT_FALSE (element.strokeDashArray.has_value());
+
+    parser.applyStyleProperty ("fill-rule", "nonzero", element);
+    ASSERT_TRUE (element.fillRule.has_value());
+    EXPECT_EQ (String ("nonzero"), *element.fillRule);
+
+    parser.applyStyleProperty ("font-variant", "small-caps", element);
+    parser.applyStyleProperty ("font-stretch", "condensed", element);
+    parser.applyStyleProperty ("font", "italic 12px serif", element);
+    parser.applyStyleProperty ("dominant-baseline", "middle", element);
+    parser.applyStyleProperty ("alignment-baseline", "central", element);
+    parser.applyStyleProperty ("baseline-shift", "super", element);
+}
+
+TEST (SVGDocumentTests, SVGCssParserApplyStylePropertyCoversBlendModes)
+{
+    struct BlendModeCase
+    {
+        const char* cssValue;
+        BlendMode expectedMode;
+    };
+
+    const BlendModeCase cases[] = {
+        { "multiply", BlendMode::Multiply },
+        { "screen", BlendMode::Screen },
+        { "overlay", BlendMode::Overlay },
+        { "darken", BlendMode::Darken },
+        { "lighten", BlendMode::Lighten },
+        { "color-dodge", BlendMode::ColorDodge },
+        { "color-burn", BlendMode::ColorBurn },
+        { "hard-light", BlendMode::HardLight },
+        { "soft-light", BlendMode::SoftLight },
+        { "difference", BlendMode::Difference },
+        { "exclusion", BlendMode::Exclusion },
+        { "hue", BlendMode::Hue },
+        { "saturation", BlendMode::Saturation },
+        { "color", BlendMode::Color },
+        { "luminosity", BlendMode::Luminosity }
+    };
+
+    SVGData data;
+    SVGCssParser parser (data);
+
+    for (const auto& testCase : cases)
+    {
+        SVGElement element;
+        parser.applyStyleProperty ("mix-blend-mode", testCase.cssValue, element);
+
+        ASSERT_TRUE (element.blendMode.has_value()) << testCase.cssValue;
+        EXPECT_EQ (testCase.expectedMode, *element.blendMode) << testCase.cssValue;
+    }
+}
+
+TEST (SVGDocumentTests, SVGCssParserParseStyleElementStoresSpecificityAndOrder)
+{
+    SVGData data;
+    SVGCssParser parser (data);
+    XmlElement styleElement ("style");
+    styleElement.addTextElement (" , #target { fill: red; }"
+                                 ".highlight { stroke: blue; }"
+                                 "rect#target { opacity: 0.5; }"
+                                 "circle.highlight { fill: green; }"
+                                 "path { stroke-width: 2; }");
+
+    parser.parseStyleElement (styleElement);
+
+    ASSERT_EQ (5u, data.cssRules.size());
+    EXPECT_EQ (String ("#target"), data.cssRules[0].selector);
+    EXPECT_EQ (100, data.cssRules[0].specificity);
+    EXPECT_EQ (0, data.cssRules[0].order);
+    EXPECT_EQ (String (".highlight"), data.cssRules[1].selector);
+    EXPECT_EQ (10, data.cssRules[1].specificity);
+    EXPECT_EQ (1, data.cssRules[1].order);
+    EXPECT_EQ (String ("rect#target"), data.cssRules[2].selector);
+    EXPECT_EQ (101, data.cssRules[2].specificity);
+    EXPECT_EQ (2, data.cssRules[2].order);
+    EXPECT_EQ (String ("circle.highlight"), data.cssRules[3].selector);
+    EXPECT_EQ (11, data.cssRules[3].specificity);
+    EXPECT_EQ (3, data.cssRules[3].order);
+    EXPECT_EQ (String ("path"), data.cssRules[4].selector);
+    EXPECT_EQ (1, data.cssRules[4].specificity);
+    EXPECT_EQ (4, data.cssRules[4].order);
+}
+
+TEST (SVGDocumentTests, SVGCssParserMatchesSimpleSelectors)
+{
+    SVGData data;
+    SVGCssParser parser (data);
+    XmlElement rect ("rect");
+    rect.setAttribute ("id", "target");
+    rect.setAttribute ("class", "highlight selected");
+
+    EXPECT_TRUE (parser.matchesCssSelector (rect, SVGCssRule { "rect", {}, 0, 0 }));
+    EXPECT_TRUE (parser.matchesCssSelector (rect, SVGCssRule { "#target", {}, 0, 0 }));
+    EXPECT_TRUE (parser.matchesCssSelector (rect, SVGCssRule { ".highlight", {}, 0, 0 }));
+    EXPECT_TRUE (parser.matchesCssSelector (rect, SVGCssRule { "rect#target.highlight", {}, 0, 0 }));
+
+    EXPECT_FALSE (parser.matchesCssSelector (rect, SVGCssRule { "", {}, 0, 0 }));
+    EXPECT_FALSE (parser.matchesCssSelector (rect, SVGCssRule { "g rect", {}, 0, 0 }));
+    EXPECT_FALSE (parser.matchesCssSelector (rect, SVGCssRule { ".missing", {}, 0, 0 }));
+    EXPECT_FALSE (parser.matchesCssSelector (rect, SVGCssRule { "circle.highlight", {}, 0, 0 }));
+}
+
+TEST (SVGDocumentTests, SVGCssParserApplyStylesheetRulesUsesSpecificityOrder)
+{
+    SVGData data;
+    data.cssRules.push_back ({ "rect", { "fill: red" }, 1, 1 });
+    data.cssRules.push_back ({ ".highlight", { "fill: blue" }, 10, 0 });
+    data.cssRules.push_back ({ "#target", { "fill: green" }, 100, 2 });
+
+    SVGCssParser parser (data);
+    XmlElement rect ("rect");
+    rect.setAttribute ("id", "target");
+    rect.setAttribute ("class", "highlight");
+
+    SVGElement element;
+    element.tagName = "rect";
+    parser.applyStylesheetRules (rect, element);
+
+    ASSERT_TRUE (element.fillColor.has_value());
+}
+
 // ==============================================================================
 // SVGElement class names
 // ==============================================================================

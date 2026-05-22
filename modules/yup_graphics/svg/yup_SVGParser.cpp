@@ -153,7 +153,7 @@ bool SVGParser::parseDocument (std::unique_ptr<XmlElement> svgRoot)
 bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, AffineTransform currentTransform, SVGElement* parent)
 {
     SVGElement::Ptr e = new SVGElement;
-    bool isRootElement = element.hasTagName ("svg");
+    bool isDocumentRoot = parent == nullptr && element.hasTagName ("svg");
     e->tagName = element.getTagNameWithoutNamespace();
 
     YUP_DRAWABLE_LOG ("parseElement - tag: " << e->tagName
@@ -534,29 +534,10 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
         e->hidden = true;
 
         YUP_DRAWABLE_LOG ("Parsing defs - id: " << element.getStringAttribute ("id", "none"));
-
-        for (auto* child = element.getFirstChildElement(); child != nullptr; child = child->getNextElement())
-        {
-            if (child->hasTagName ("linearGradient") || child->hasTagName ("radialGradient"))
-                parseGradient (*child);
-            else if (child->hasTagName ("filter"))
-                parseFilter (*child);
-            else if (child->hasTagName ("clipPath"))
-                parseClipPath (*child);
-            else if (child->hasTagName ("mask"))
-                parseMask (*child);
-            else if (child->hasTagName ("marker"))
-                parseMarker (*child);
-            else if (child->hasTagName ("pattern"))
-                parsePattern (*child);
-            else if (child->hasTagName ("style"))
-                cssParser.parseStyleElement (*child);
-        }
     }
     else if (element.hasTagName ("style"))
     {
         YUP_DRAWABLE_LOG ("Parsing style element");
-        cssParser.parseStyleElement (element);
         return true;
     }
     else
@@ -603,9 +584,9 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
         else if (child->hasTagName ("pattern"))
             parsePattern (*child);
         else if (child->hasTagName ("style"))
-            cssParser.parseStyleElement (*child);
+            continue;
         else
-            parseElement (*child, isRootElement, currentTransform, e.get());
+            parseElement (*child, isDocumentRoot, currentTransform, e.get());
     }
 
     if (e->tagName == "text" || e->tagName == "tspan")
@@ -641,7 +622,7 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
         }
     }
 
-    if (isRootElement)
+    if (isDocumentRoot)
     {
         if (e->fillColor)
         {
@@ -1105,7 +1086,10 @@ void SVGParser::parseGradient (const XmlElement& element)
         return value.getFloatValue();
     };
 
-    String href = element.getStringAttribute ("xlink:href");
+    String href = element.getStringAttribute ("href");
+    if (href.isEmpty())
+        href = element.getStringAttribute ("xlink:href");
+
     if (href.isNotEmpty() && href.startsWith ("#"))
     {
         gradient->href = href.substring (1);
@@ -1316,7 +1300,11 @@ void SVGParser::parseFilter (const XmlElement& element)
     SVGFilter::Ptr filter = new SVGFilter;
     filter->id = id;
 
-    if (auto href = element.getStringAttribute ("xlink:href"); href.isNotEmpty() && href.startsWith ("#"))
+    auto href = element.getStringAttribute ("href");
+    if (href.isEmpty())
+        href = element.getStringAttribute ("xlink:href");
+
+    if (href.isNotEmpty() && href.startsWith ("#"))
         filter->href = href.substring (1);
 
     YUP_DRAWABLE_LOG ("parseFilter - id: " << id);

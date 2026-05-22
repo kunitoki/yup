@@ -158,14 +158,14 @@ bool Drawable::parseSVG (const File& svgFile, const ParseOptions& options)
 
 //==============================================================================
 
-bool Drawable::parseSVGText (StringRef svgText)
+bool Drawable::parseSVG (StringRef svgText)
 {
     YUP_DRAWABLE_LOG ("parseSVG(text) - length: " << String (svgText.text).length());
 
-    return parseSVGText (svgText, ParseOptions());
+    return parseSVG (svgText, ParseOptions());
 }
 
-bool Drawable::parseSVGText (StringRef svgText, const ParseOptions& options)
+bool Drawable::parseSVG (StringRef svgText, const ParseOptions& options)
 {
     YUP_DRAWABLE_LOG ("parseSVG(text, options) - length: " << String (svgText.text).length());
 

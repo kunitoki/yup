@@ -32,8 +32,8 @@ auto makeHeadlessGraphics (int w = 64, int h = 64)
 {
     struct HeadlessGfx
     {
-        GraphicsContext::Ptr ctx;
-        std::unique_ptr<GraphicsRenderer> renderer;
+        std::unique_ptr<GraphicsContext> ctx;
+        std::unique_ptr<rive::Renderer> renderer;
         std::unique_ptr<Graphics> graphics;
     };
 

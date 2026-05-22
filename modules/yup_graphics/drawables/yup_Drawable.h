@@ -57,10 +57,10 @@ public:
 
         @return True if the SVG text was parsed successfully, false otherwise.
     */
-    bool parseSVGText (StringRef svgText);
+    bool parseSVG (StringRef svgText);
 
     /** Parses SVG text with custom parse options. */
-    bool parseSVGText (StringRef svgText, const ParseOptions& options);
+    bool parseSVG (StringRef svgText, const ParseOptions& options);
 
     //==============================================================================
     /** Clears the drawable. */
