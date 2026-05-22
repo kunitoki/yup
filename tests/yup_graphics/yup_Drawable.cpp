@@ -890,7 +890,7 @@ TEST (DrawableTests, PaintSVGWithScimitarClipPathAndGradientStroke)
         << "</g>"
         << "</svg>";
 
-    bool result = drawable.parseSVG (svg);
+    bool result = drawable.parseSVGText (svg);
 
     EXPECT_TRUE (result);
 

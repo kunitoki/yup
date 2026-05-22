@@ -854,7 +854,7 @@ File URL::fileFromFileSchemeURL (const URL& fileURL)
         path = path.substring (1);
 #endif
 
-    return path;
+    return File (path);
 }
 
 int URL::getPort() const
