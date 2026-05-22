@@ -52,12 +52,12 @@
 #include <rive/rive.h>
 
 //==============================================================================
-/** Config: YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
+/** Config: YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
 
     Enable repaint debugging for components.
 */
-#ifndef YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
-#define YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING 0
+#ifndef YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
+#define YUP_ENABLE_COMPONENT_PAINT_DEBUGGING 0
 #endif
 
 //==============================================================================
@@ -71,8 +71,14 @@
 
 //==============================================================================
 
+#include <optional>
 #include <tuple>
 #include <unordered_map>
+
+//==============================================================================
+
+#include "profiling/yup_PaintProfileSample.h"
+#include "profiling/yup_PaintProfileStats.h"
 
 //==============================================================================
 
@@ -89,6 +95,8 @@
 #include "desktop/yup_Desktop.h"
 #include "component/yup_ComponentNative.h"
 #include "component/yup_ComponentStyle.h"
+#include "component/yup_ComponentPaintMetrics.h"
+#include "component/yup_ComponentListener.h"
 #include "component/yup_Component.h"
 #include "menus/yup_PopupMenu.h"
 #include "buttons/yup_Button.h"
@@ -108,6 +116,10 @@
 #include "artboard/yup_Artboard.h"
 #include "windowing/yup_DocumentWindow.h"
 #include "dialogs/yup_FileChooser.h"
+
+//==============================================================================
+
+#include "profiling/yup_PaintProfiler.h"
 
 //==============================================================================
 

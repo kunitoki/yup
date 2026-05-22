@@ -736,17 +736,37 @@ void SDL2ComponentNative::renderContext()
             context->begin (frameDescriptor);
         }
 
-        // Repaint components hierarchy
-        if (renderer != nullptr)
         {
-            const auto dpiScale = getScaleDpi();
-
-            for (auto& repaintArea : currentRepaintAreas)
+            const auto repaintComponents = [&]
             {
-                YUP_PROFILE_NAMED_INTERNAL_TRACE (InternalPaint);
+                // Repaint components hierarchy
+                if (renderer != nullptr)
+                {
+                    const auto dpiScale = getScaleDpi();
 
-                Graphics g (*context, *renderer, dpiScale);
-                component.internalPaint (g, repaintArea, renderContinuous);
+                    for (auto& repaintArea : currentRepaintAreas)
+                    {
+                        YUP_PROFILE_NAMED_INTERNAL_TRACE (InternalPaint);
+
+                        Graphics g (*context, *renderer, dpiScale);
+                        component.internalPaint (g, repaintArea, renderContinuous);
+                    }
+                }
+            };
+
+            if (PaintProfiler::hasRegisteredComponents() && PaintProfiler::getInstance().isEnabled())
+            {
+                PaintProfiler::getInstance().beginFrame();
+                const auto endFrameGuard = ErasedScopeGuard ([&]
+                {
+                    PaintProfiler::getInstance().endFrame();
+                });
+
+                repaintComponents();
+            }
+            else
+            {
+                repaintComponents();
             }
         }
 
@@ -1422,6 +1442,8 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_KEYDOWN:
         {
+            YUP_WINDOWING_LOG ("SDL_KEYDOWN " << event->key.keysym.sym << " " << event->key.keysym.scancode);
+
             auto cursorPosition = getCursorPosition();
             auto modifiers = toKeyModifiers (event->key.keysym.mod);
 
@@ -1433,6 +1455,8 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_KEYUP:
         {
+            YUP_WINDOWING_LOG ("SDL_KEYUP " << event->key.keysym.sym << " " << event->key.keysym.scancode);
+
             auto cursorPosition = getCursorPosition();
             auto modifiers = toKeyModifiers (event->key.keysym.mod);
 
@@ -1444,7 +1468,7 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_TEXTINPUT:
         {
-            YUP_WINDOWING_LOG ("SDL_TEXTINPUT");
+            YUP_WINDOWING_LOG ("SDL_TEXTINPUT " << String::fromUTF8 (event->text.text));
 
             // auto cursorPosition = getCursorPosition();
             // auto modifiers = toKeyModifiers (getKeyModifiers());

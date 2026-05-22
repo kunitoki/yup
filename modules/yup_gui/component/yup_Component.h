@@ -246,7 +246,18 @@ public:
      */
     void setBottomRight (const Point<float>& newBottomRight);
 
+    /**
+        Get the center position of the component relative to its parent.
+
+        @return The center position of the component relative to its parent.
+     */
     Point<float> getCenter() const;
+
+    /**
+        Set the center position of the component relative to its parent.
+
+        @param newCenter The new center position of the component relative to its parent.
+     */
     void setCenter (const Point<float>& newCenter);
 
     /**
@@ -611,6 +622,19 @@ public:
      */
     bool isRenderingUnclipped() const;
 
+    //==============================================================================
+    /** Enables or disables paint measurement suppression for this component.
+
+        When suppression is enabled, component paint listeners will not receive
+        paint measurement callbacks for this component, even if they request paint
+        measurements.
+    */
+    void setPaintProfilingDisabled (bool shouldBeDisabled);
+
+    /** Returns true if paint measurement is suppressed for this component. */
+    bool isPaintProfilingDisabled() const;
+
+    //==============================================================================
     /**
         Repaint the component.
      */
@@ -745,6 +769,32 @@ public:
         @param wantsFocus True if the component wants keyboard focus, false otherwise.
      */
     void setWantsKeyboardFocus (bool wantsFocus);
+
+    /**
+        Check whether this component wants keyboard focus.
+
+        @return True if this component wants keyboard focus, false otherwise.
+     */
+    bool getWantsKeyboardFocus() const;
+
+    /**
+        Set whether clicking this component can make it grab keyboard focus.
+
+        When a component is clicked, focus handling walks from the clicked
+        component up through its parents until it finds a component that both
+        wants keyboard focus and has this flag enabled. This is enabled by
+        default.
+
+        @param shouldGrabFocus True if mouse clicks can grab keyboard focus.
+     */
+    void setClickingGrabFocus (bool shouldGrabFocus);
+
+    /**
+        Check whether clicking this component can make it grab keyboard focus.
+
+        @return True if mouse clicks can grab keyboard focus.
+     */
+    bool getClickingGrabFocus() const;
 
     /**
         Take the focus.
@@ -1061,6 +1111,12 @@ public:
      */
     void removeMouseListener (MouseListener* listener);
 
+    /** Add a component listener to this component. */
+    void addComponentListener (ComponentListener* listener);
+
+    /** Remove a component listener from this component. */
+    void removeComponentListener (ComponentListener* listener);
+
     //==============================================================================
     /**
         Called when a key is pressed.
@@ -1233,14 +1289,21 @@ private:
     void internalAttachedToNative();
     void internalDetachedFromNative();
 
+    void handleKeyboardFocusFromClick();
+
     void updateMouseCursor();
+
+    void sendMoved();
+    void sendResized();
 
     bool hasOpaqueChildCoveringArea (const Rectangle<float>& area);
 
     friend class ComponentNative;
+    friend class ComponentTestHelper;
     friend class SDL2ComponentNative;
     friend class WeakReference<Component>;
 
+    using ComponentListenerList = ListenerList<ComponentListener, Array<WeakReference<ComponentListener>>>;
     using MouseListenerList = ListenerList<MouseListener, Array<WeakReference<MouseListener>>>;
 
     String componentID, componentTitle;
@@ -1251,6 +1314,7 @@ private:
     ComponentNative::Ptr native;
     WeakReference<Component>::Master masterReference;
     MouseListenerList mouseListeners;
+    ComponentListenerList componentListeners;
     ComponentStyle::Ptr style;
     NamedValueSet properties;
     MouseCursor mouseCursor;
@@ -1266,9 +1330,11 @@ private:
         bool isTransparent : 1;
         bool unclippedRendering : 1;
         bool wantsKeyboardFocus : 1;
+        bool clickingDoesNotGrabFocus : 1;
         bool isRepainting : 1;
         bool blockSelfMouseEvents : 1;
         bool blockChildrenMouseEvents : 1;
+        bool paintProfilingDisabled : 1;
     };
 
     union
@@ -1277,7 +1343,7 @@ private:
         Options options;
     };
 
-#if YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
+#if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
     Color debugColor = Color::opaqueRandom();
     int counter = 2;
 #endif
