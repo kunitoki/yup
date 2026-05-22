@@ -306,6 +306,7 @@ File File::getSpecialLocation(const SpecialLocationType type)
             case userDocumentsDirectory:
                 resultPath = MacFileHelpers::getIOSSystemLocation(NSDocumentDirectory);
                 break;
+
             case userDesktopDirectory:
                 resultPath = MacFileHelpers::getIOSSystemLocation(NSDesktopDirectory);
                 break;
@@ -315,13 +316,14 @@ File File::getSpecialLocation(const SpecialLocationType type)
                 File tmp(MacFileHelpers::getIOSSystemLocation(NSCachesDirectory));
                 tmp = tmp.getChildFile(yup_getExecutableFile().getFileNameWithoutExtension());
                 tmp.createDirectory();
-                return tmp.getFullPathName();
+                return File(tmp.getFullPathName());
             }
 
 #else
             case userDocumentsDirectory:
                 resultPath = "~/Documents";
                 break;
+
             case userDesktopDirectory:
                 resultPath = "~/Desktop";
                 break;
@@ -336,21 +338,27 @@ File File::getSpecialLocation(const SpecialLocationType type)
             case userMusicDirectory:
                 resultPath = "~/Music";
                 break;
+
             case userMoviesDirectory:
                 resultPath = "~/Movies";
                 break;
+
             case userPicturesDirectory:
                 resultPath = "~/Pictures";
                 break;
+
             case userApplicationDataDirectory:
                 resultPath = "~/Library";
                 break;
+
             case commonApplicationDataDirectory:
                 resultPath = "/Library";
                 break;
+
             case commonDocumentsDirectory:
                 resultPath = "/Users/Shared";
                 break;
+
             case globalApplicationsDirectory:
                 resultPath = "/Applications";
                 break;

@@ -138,7 +138,7 @@ void FileSearchPath::removeRedundantPaths()
     {
         const auto checkedIsChildOf = [&] (const auto& a, const auto& b)
         {
-            return File::isAbsolutePath (a) && File::isAbsolutePath (b) && File (a).isAChildOf (b);
+            return File::isAbsolutePath (a) && File::isAbsolutePath (b) && File (a).isAChildOf (File (b));
         };
 
         const auto fContainsDirectory = [&] (const auto& f)

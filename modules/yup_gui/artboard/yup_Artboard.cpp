@@ -406,7 +406,7 @@ void Artboard::mouseExit (const MouseEvent& event)
 
 void Artboard::mouseDown (const MouseEvent& event)
 {
-    if (scene == nullptr || ! event.isLeftButtoDown())
+    if (scene == nullptr || ! event.isLeftButtonDown())
         return;
 
     auto [x, y] = transformPoint (event.getPosition());
@@ -439,7 +439,7 @@ void Artboard::mouseMove (const MouseEvent& event)
 
 void Artboard::mouseDrag (const MouseEvent& event)
 {
-    if (scene == nullptr || ! event.isLeftButtoDown())
+    if (scene == nullptr || ! event.isLeftButtonDown())
         return;
 
     auto [x, y] = transformPoint (event.getPosition());
