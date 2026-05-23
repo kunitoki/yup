@@ -394,9 +394,6 @@ void registerYupGuiBindings (py::module_& m)
         .def ("setColor", &Component::setColor)
         .def ("getColor", &Component::getColor)
         .def ("findColor", &Component::findColor)
-        .def ("setStyleProperty", &Component::setStyleProperty)
-        .def ("getStyleProperty", &Component::getStyleProperty)
-        .def ("findStyleProperty", &Component::findStyleProperty)
     ;
 
     // ============================================================================================ yup::DocumentWindow

@@ -48,12 +48,12 @@ struct SliderColors
 SliderColors getSliderColors (const ApplicationTheme& theme, const Slider& slider)
 {
     SliderColors colors;
-    colors.background = slider.findColor (Slider::Style::backgroundColorId).value_or (Color (0xff3d3d3d));
-    colors.track = slider.findColor (Slider::Style::trackColorId).value_or (Color (0xff636363));
-    colors.thumb = slider.findColor (Slider::Style::thumbColorId).value_or (Color (0xff4ebfff));
-    colors.thumbOver = slider.findColor (Slider::Style::thumbOverColorId).value_or (colors.thumb.brighter (0.3f));
-    colors.thumbDown = slider.findColor (Slider::Style::thumbDownColorId).value_or (colors.thumb.darker (0.2f));
-    colors.text = slider.findColor (Slider::Style::textColorId).value_or (Colors::white);
+    colors.background = theme.findColor (slider, Slider::Style::backgroundColorId).value_or (Color (0xff3d3d3d));
+    colors.track = theme.findColor (slider, Slider::Style::trackColorId).value_or (Color (0xff636363));
+    colors.thumb = theme.findColor (slider, Slider::Style::thumbColorId).value_or (Color (0xff4ebfff));
+    colors.thumbOver = theme.findColor (slider, Slider::Style::thumbOverColorId).value_or (colors.thumb.brighter (0.3f));
+    colors.thumbDown = theme.findColor (slider, Slider::Style::thumbDownColorId).value_or (colors.thumb.darker (0.2f));
+    colors.text = theme.findColor (slider, Slider::Style::textColorId).value_or (Colors::white);
     return colors;
 }
 
@@ -1225,7 +1225,7 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
 
     // Draw keyboard background with subtle gradient shadow
     auto keyboardWidth = keyboard.getKeyStartRange().getEnd();
-    auto shadowColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyShadowColorId).value_or (Color());
+    auto shadowColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::whiteKeyShadowColorId).value_or (Color());
 
     if (! shadowColor.isTransparent())
     {
@@ -1239,7 +1239,7 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
     }
 
     // Draw separator line at bottom
-    auto lineColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::keyOutlineColorId).value_or (Color());
+    auto lineColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::keyOutlineColorId).value_or (Color());
     if (! lineColor.isTransparent())
     {
         g.setFillColor (lineColor);
@@ -1260,9 +1260,9 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
         auto isOver = keyboard.isMouseOverNote (note);
 
         // Base colors from theme
-        auto whiteKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyColorId).value_or (Color());
-        auto pressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::whiteKeyPressedColorId).value_or (Color());
-        auto outlineColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::keyOutlineColorId).value_or (Color());
+        auto whiteKeyColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::whiteKeyColorId).value_or (Color());
+        auto pressedColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::whiteKeyPressedColorId).value_or (Color());
+        auto outlineColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::keyOutlineColorId).value_or (Color());
 
         // Determine fill color based on state
         Color fillColor = whiteKeyColor;
@@ -1353,8 +1353,8 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
         auto isOver = keyboard.isMouseOverNote (note);
 
         // Base colors from theme
-        auto blackKeyColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyColorId).value_or (Color());
-        auto blackPressedColor = ApplicationTheme::findColor (MidiKeyboardComponent::Style::blackKeyPressedColorId).value_or (Color());
+        auto blackKeyColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::blackKeyColorId).value_or (Color());
+        auto blackPressedColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::blackKeyPressedColorId).value_or (Color());
 
         // Determine fill color based on state
         Color fillColor = blackKeyColor;
@@ -1400,14 +1400,14 @@ void paintKMeter (Graphics& g, const ApplicationTheme& theme, const KMeterCompon
         return;
 
     // Get colors from theme
-    const auto backgroundColor = meter.findColor (KMeterComponent::Style::backgroundColorId).value_or (Color (0xff1a1a1a));
-    const auto greenColor = meter.findColor (KMeterComponent::Style::greenZoneColorId).value_or (Color (0xff00cc00));
-    const auto amberColor = meter.findColor (KMeterComponent::Style::amberZoneColorId).value_or (Color (0xffffaa00));
-    const auto redColor = meter.findColor (KMeterComponent::Style::redZoneColorId).value_or (Color (0xffcc0000));
-    const auto averageColor = meter.findColor (KMeterComponent::Style::averageLevelColorId).value_or (Color (0xccffffff));
-    const auto peakColor = meter.findColor (KMeterComponent::Style::peakLevelColorId).value_or (Color (0xffffffff));
-    const auto peakClipColor = meter.findColor (KMeterComponent::Style::peakLevelClipColorId).value_or (Color (0xffff0000));
-    const auto peakHoldColor = meter.findColor (KMeterComponent::Style::peakHoldColorId).value_or (Color (0xffffff00));
+    const auto backgroundColor = theme.findColor (meter, KMeterComponent::Style::backgroundColorId).value_or (Color (0xff1a1a1a));
+    const auto greenColor = theme.findColor (meter, KMeterComponent::Style::greenZoneColorId).value_or (Color (0xff00cc00));
+    const auto amberColor = theme.findColor (meter, KMeterComponent::Style::amberZoneColorId).value_or (Color (0xffffaa00));
+    const auto redColor = theme.findColor (meter, KMeterComponent::Style::redZoneColorId).value_or (Color (0xffcc0000));
+    const auto averageColor = theme.findColor (meter, KMeterComponent::Style::averageLevelColorId).value_or (Color (0xccffffff));
+    const auto peakColor = theme.findColor (meter, KMeterComponent::Style::peakLevelColorId).value_or (Color (0xffffffff));
+    const auto peakClipColor = theme.findColor (meter, KMeterComponent::Style::peakLevelClipColorId).value_or (Color (0xffff0000));
+    const auto peakHoldColor = theme.findColor (meter, KMeterComponent::Style::peakHoldColorId).value_or (Color (0xffffff00));
 
     // Draw background with subtle depth
     {

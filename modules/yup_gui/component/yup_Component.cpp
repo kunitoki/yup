@@ -1170,37 +1170,6 @@ std::optional<float> Component::findMetric (const Identifier& metricId) const
     if (parentComponent != nullptr)
         return parentComponent->findMetric (metricId);
 
-    return ApplicationTheme::findMetric (metricId);
-}
-
-//==============================================================================
-
-void Component::setStyleProperty (const Identifier& propertyId, const std::optional<var>& property)
-{
-    if (property)
-        properties.set (propertyId, *property);
-    else
-        properties.remove (propertyId);
-
-    styleChanged();
-}
-
-std::optional<var> Component::getStyleProperty (const Identifier& propertyId) const
-{
-    if (auto property = properties.getVarPointer (propertyId); property != nullptr && ! property->isVoid())
-        return *property;
-
-    return std::nullopt;
-}
-
-std::optional<var> Component::findStyleProperty (const Identifier& propertyId) const
-{
-    if (auto property = getStyleProperty (propertyId))
-        return property;
-
-    if (parentComponent != nullptr)
-        return parentComponent->findStyleProperty (propertyId);
-
     return std::nullopt;
 }
 

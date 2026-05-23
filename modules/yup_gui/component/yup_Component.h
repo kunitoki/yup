@@ -1216,31 +1216,6 @@ public:
     std::optional<float> findMetric (const Identifier& metricId) const;
 
     //==============================================================================
-
-    /** Set a style property for the component.
-
-        @param propertyId The identifier of the property to set.
-        @param property The property to set.
-     */
-    void setStyleProperty (const Identifier& propertyId, const std::optional<var>& property);
-
-    /** Get a style property for the component.
-
-        @param propertyId The identifier of the property to get.
-
-        @return The property of the component.
-     */
-    std::optional<var> getStyleProperty (const Identifier& propertyId) const;
-
-    /** Find a style property for the component.
-
-        @param propertyId The identifier of the property to find.
-
-        @return The property of the component.
-     */
-    std::optional<var> findStyleProperty (const Identifier& propertyId) const;
-
-    //==============================================================================
     /** A bail out checker for the component. */
     class BailOutChecker
     {

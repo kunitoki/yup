@@ -48,13 +48,19 @@ ApplicationTheme::Ptr& ApplicationTheme::getGlobalThemeInstance()
 
 //==============================================================================
 
-std::optional<Color> ApplicationTheme::findColor (const Identifier& colorId)
+std::optional<Color> ApplicationTheme::findComponentColor (const Component& component, const Identifier& colorId)
 {
     jassert (getGlobalThemeInstance() != nullptr);
 
-    const auto& colors = getGlobalThemeInstance()->defaultColors;
+    return getGlobalThemeInstance()->findColor (component, colorId);
+}
 
-    if (auto it = colors.find (colorId); it != colors.end())
+std::optional<Color> ApplicationTheme::findColor (const Component& component, const Identifier& colorId) const
+{
+    if (auto color = component.findColor (colorId))
+        return color;
+
+    if (auto it = defaultColors.find (colorId); it != defaultColors.end())
         return it->second;
 
     return std::nullopt;
@@ -73,13 +79,19 @@ void ApplicationTheme::setColors (std::initializer_list<std::pair<const Identifi
 
 //==============================================================================
 
-std::optional<float> ApplicationTheme::findMetric (const Identifier& metricId)
+std::optional<float> ApplicationTheme::findComponentMetric (const Component& component, const Identifier& metricId)
 {
     jassert (getGlobalThemeInstance() != nullptr);
 
-    const auto& metrics = getGlobalThemeInstance()->defaultMetrics;
+    return getGlobalThemeInstance()->findMetric (component, metricId);
+}
 
-    if (auto it = metrics.find (metricId); it != metrics.end())
+std::optional<float> ApplicationTheme::findMetric (const Component& component, const Identifier& metricId) const
+{
+    if (auto metric = component.findMetric (metricId))
+        return metric;
+
+    if (auto it = defaultMetrics.find (metricId); it != defaultMetrics.end())
         return it->second;
 
     return std::nullopt;
@@ -88,6 +100,12 @@ std::optional<float> ApplicationTheme::findMetric (const Identifier& metricId)
 void ApplicationTheme::setMetric (const Identifier& metricId, float value)
 {
     defaultMetrics.insert_or_assign (metricId, value);
+}
+
+void ApplicationTheme::setMetrics (std::initializer_list<std::pair<const Identifier&, float>> metrics)
+{
+    for (const auto& entry : metrics)
+        defaultMetrics.insert_or_assign (entry.first, entry.second);
 }
 
 //==============================================================================

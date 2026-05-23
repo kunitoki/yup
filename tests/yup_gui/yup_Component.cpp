@@ -1551,37 +1551,6 @@ TEST_F (ComponentMockTest, ColorMethods)
     EXPECT_FALSE (notFoundColor.has_value());
 }
 
-TEST_F (ComponentMockTest, StylePropertyMethods)
-{
-    Identifier propertyId ("testProperty");
-    var testProperty = var (42);
-
-    // Test setting style property
-    mockComponent->setStyleProperty (propertyId, testProperty);
-
-    // Test getting style property
-    auto retrievedProperty = mockComponent->getStyleProperty (propertyId);
-    EXPECT_TRUE (retrievedProperty.has_value());
-    if (retrievedProperty.has_value())
-    {
-        EXPECT_EQ (static_cast<int> (retrievedProperty.value()), 42);
-    }
-
-    // Test finding style property
-    auto foundProperty = mockComponent->findStyleProperty (propertyId);
-    EXPECT_TRUE (foundProperty.has_value());
-
-    // Test setting null style property
-    mockComponent->setStyleProperty (propertyId, std::nullopt);
-    auto nullProperty = mockComponent->getStyleProperty (propertyId);
-    EXPECT_FALSE (nullProperty.has_value());
-
-    // Test finding non-existent property
-    Identifier nonExistentId ("nonExistent");
-    auto notFoundProperty = mockComponent->findStyleProperty (nonExistentId);
-    EXPECT_FALSE (notFoundProperty.has_value());
-}
-
 TEST_F (ComponentMockTest, UnclippedRenderingMethods)
 {
     // Test default unclipped rendering state
