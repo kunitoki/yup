@@ -90,7 +90,7 @@ public:
     // AudioProcessor
     void prepareToPlay (float sampleRate, int maxBlockSize) override;
     void releaseResources() override;
-    void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer) override;
+    void processBlock (AudioProcessContext<float>& context) override;
     void flush() override;
 
     int getLatencySamples() override;

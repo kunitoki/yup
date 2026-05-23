@@ -31,6 +31,7 @@ using namespace yup;
 
 namespace
 {
+
 AudioBusLayout stereoLayout()
 {
     return AudioBusLayout ({ AudioBus ("Input", AudioBus::Type::Audio, AudioBus::Direction::Input, 2) },
@@ -68,8 +69,9 @@ public:
 
     void releaseResources() override { prepared = false; }
 
-    void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer&) override
+    void processBlock (AudioProcessContext<float>& context) override
     {
+        auto& audioBuffer = context.audio;
         for (int channel = 0; channel < audioBuffer.getNumChannels(); ++channel)
             audioBuffer.applyGain (channel, 0, audioBuffer.getNumSamples(), gain);
     }
@@ -114,7 +116,7 @@ public:
 
     void releaseResources() override {}
 
-    void processBlock (AudioBuffer<float>&, MidiBuffer&) override {}
+    void processBlock (AudioProcessContext<float>&) override {}
 
     int getLatencySamples() override { return latency; }
 
@@ -167,8 +169,10 @@ public:
         nextPendingMidi.clear();
     }
 
-    void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer) override
+    void processBlock (AudioProcessContext<float>& context) override
     {
+        auto& audioBuffer = context.audio;
+        auto& midiBuffer = context.midi;
         const int numSamples = audioBuffer.getNumSamples();
         const MidiBuffer inputMidi = midiBuffer;
 
@@ -245,7 +249,7 @@ public:
 
     void releaseResources() override {}
 
-    void processBlock (AudioBuffer<float>&, MidiBuffer&) override {}
+    void processBlock (AudioProcessContext<float>&) override {}
 
     int getCurrentPreset() const noexcept override { return 0; }
 
@@ -275,8 +279,9 @@ public:
         history.clear();
     }
 
-    void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer&) override
+    void processBlock (AudioProcessContext<float>& context) override
     {
+        auto& audioBuffer = context.audio;
         const int ringSize = history.getNumSamples();
 
         for (int sample = 0; sample < audioBuffer.getNumSamples(); ++sample)
@@ -364,8 +369,9 @@ public:
 
     void releaseResources() override {}
 
-    void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer&) override
+    void processBlock (AudioProcessContext<float>& context) override
     {
+        auto& audioBuffer = context.audio;
         for (int channel = 0; channel < audioBuffer.getNumChannels(); ++channel)
             audioBuffer.applyGain (channel, 0, audioBuffer.getNumSamples(), gain);
     }
@@ -440,8 +446,9 @@ public:
 
     void releaseResources() override {}
 
-    void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer&) override
+    void processBlock (AudioProcessContext<float>& context) override
     {
+        auto& audioBuffer = context.audio;
         for (int channel = 0; channel < audioBuffer.getNumChannels(); ++channel)
             audioBuffer.applyGain (channel, 0, audioBuffer.getNumSamples(), gain);
     }
@@ -492,7 +499,7 @@ public:
 
     void releaseResources() override {}
 
-    void processBlock (AudioBuffer<float>&, MidiBuffer&) override {}
+    void processBlock (AudioProcessContext<float>&) override {}
 
     int getCurrentPreset() const noexcept override { return 0; }
 
@@ -663,8 +670,9 @@ public:
 
     void releaseResources() override {}
 
-    void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer&) override
+    void processBlock (AudioProcessContext<float>& context) override
     {
+        auto& audioBuffer = context.audio;
         for (int channel = 0; channel < audioBuffer.getNumChannels(); ++channel)
             audioBuffer.applyGain (channel, 0, audioBuffer.getNumSamples(), 1.0f);
 
@@ -712,8 +720,9 @@ public:
 
     void releaseResources() override {}
 
-    void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer&) override
+    void processBlock (AudioProcessContext<float>& context) override
     {
+        auto& audioBuffer = context.audio;
         for (int channel = 0; channel < audioBuffer.getNumChannels(); ++channel)
             audioBuffer.applyGain (channel, 0, audioBuffer.getNumSamples(), gain);
     }
@@ -766,8 +775,9 @@ public:
         writePosition = 0;
     }
 
-    void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer&) override
+    void processBlock (AudioProcessContext<float>& context) override
     {
+        auto& audioBuffer = context.audio;
         const int ringSize = history.getNumSamples();
 
         for (int sample = 0; sample < audioBuffer.getNumSamples(); ++sample)
@@ -871,9 +881,12 @@ TEST (AudioGraphProcessorTests, ProcessesSerialAudioChain)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (1.0f, audio.getReadPointer (0)[0]);
     EXPECT_FLOAT_EQ (1.0f, audio.getReadPointer (1)[0]);
@@ -893,11 +906,14 @@ TEST (AudioGraphProcessorTests, ProcessesBlocksLargerThanPreparedMaximumInChunks
     AudioBuffer<float> audio (2, 40);
     MidiBuffer midi;
 
+    ParameterChangeBuffer params;
+
     for (int channel = 0; channel < audio.getNumChannels(); ++channel)
         for (int sample = 0; sample < audio.getNumSamples(); ++sample)
             audio.getWritePointer (channel)[sample] = 1.0f;
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     for (int channel = 0; channel < audio.getNumChannels(); ++channel)
         for (int sample = 0; sample < audio.getNumSamples(); ++sample)
@@ -917,13 +933,15 @@ TEST (AudioGraphProcessorTests, PreservesMidiEventsInBlocksLargerThanPreparedMax
 
     AudioBuffer<float> audio (0, 40);
     MidiBuffer midi;
-    const uint8 noteOn[] = { 0x90, 60, 100 };
+    ParameterChangeBuffer params;
 
+    const uint8 noteOn[] = { 0x90, 60, 100 };
     midi.addEvent (noteOn, 3, 7);
     midi.addEvent (noteOn, 3, 17);
     midi.addEvent (noteOn, 3, 35);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_EQ (1, countMidiEventsAt (midi, 7));
     EXPECT_EQ (1, countMidiEventsAt (midi, 17));
@@ -946,9 +964,12 @@ TEST (AudioGraphProcessorTests, MixesFanIn)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (1.0f, audio.getReadPointer (0)[0]);
     EXPECT_FLOAT_EQ (1.0f, audio.getReadPointer (1)[0]);
@@ -968,10 +989,13 @@ TEST (AudioGraphProcessorTests, PreservesMidiTimestamps)
 
     AudioBuffer<float> audio (0, 32);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     const uint8 noteOn[] = { 0x90, 60, 100 };
     midi.addEvent (noteOn, 3, 7);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_EQ (1, countMidiEventsAt (midi, 7));
 }
@@ -991,9 +1015,12 @@ TEST (AudioGraphProcessorTests, CompensatesShorterParallelPaths)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.0f, audio.getReadPointer (0)[0]);
     EXPECT_FLOAT_EQ (2.0f, audio.getReadPointer (0)[4]);
@@ -1145,9 +1172,12 @@ TEST (AudioGraphProcessorTests, MissingCommitKeepsPreviousPlan)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (0)[0]);
 }
@@ -1302,9 +1332,12 @@ TEST (AudioGraphProcessorTests, SaveAndLoadRestoresConnectionsAndNodeState)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (0)[0]);
     EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (1)[0]);
@@ -1338,9 +1371,12 @@ TEST (AudioGraphProcessorTests, LoadStateRecreatesProcessorNodesWithFactory)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    destination.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    destination.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (0)[0]);
     EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (1)[0]);
@@ -1376,9 +1412,12 @@ TEST (AudioGraphProcessorTests, CreateXmlAndRestoreFromXmlCanBeUsedDirectly)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    destination.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    destination.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (0)[0]);
     EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (1)[0]);
@@ -1450,9 +1489,12 @@ TEST (AudioGraphProcessorTests, LoadStateRecreatesExternalNodesWithXmlCreationDa
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    destination.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    destination.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (0)[0]);
     EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (1)[0]);
@@ -1482,9 +1524,12 @@ TEST (AudioGraphProcessorTests, LoadStateFailureRestoresPreviousGraphModel)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    destination.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    destination.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (0)[0]);
     EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (1)[0]);
@@ -1593,9 +1638,12 @@ TEST (AudioGraphProcessorTests, LoadStateRestoresMultiNodeXmlGraphAndNextNodeID)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    destination.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    destination.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.125f, audio.getReadPointer (0)[0]);
     EXPECT_FLOAT_EQ (0.125f, audio.getReadPointer (1)[0]);
@@ -1792,9 +1840,12 @@ TEST (AudioGraphProcessorTests, LoadStateFailureFromNodeStateCallbackRestoresPre
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    destination.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    destination.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (0)[0]);
     EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (1)[0]);
@@ -1818,9 +1869,12 @@ TEST (AudioGraphProcessorTests, RemoveConnectionStopsRoutingAfterCommit)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.0f, audio.getReadPointer (0)[0]);
     EXPECT_FALSE (model->removeConnection (outputConnection));
@@ -1840,9 +1894,12 @@ TEST (AudioGraphProcessorTests, RemoveNodePrunesConnections)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.0f, audio.getReadPointer (0)[0]);
     EXPECT_FALSE (model->removeNode (node));
@@ -1865,9 +1922,12 @@ TEST (AudioGraphProcessorTests, ClearRemovesAllRouting)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.0f, audio.getReadPointer (0)[0]);
 }
@@ -1939,11 +1999,16 @@ TEST (AudioGraphProcessorTests, WorkerThreadOutputMatchesSingleThreadOutput)
     AudioBuffer<float> threadedAudio (2, 16);
     MidiBuffer singleMidi;
     MidiBuffer threadedMidi;
+    ParameterChangeBuffer singleParams;
+    ParameterChangeBuffer threadedParams;
     fillImpulse (singleAudio);
     fillImpulse (threadedAudio);
 
-    singleThreaded.processBlock (singleAudio, singleMidi);
-    threaded.processBlock (threadedAudio, threadedMidi);
+    AudioProcessContext<float> singleCtx { singleAudio, singleMidi, singleParams };
+    singleThreaded.processBlock (singleCtx);
+
+    AudioProcessContext<float> threadedCtx { threadedAudio, threadedMidi, threadedParams };
+    threaded.processBlock (threadedCtx);
 
     for (int channel = 0; channel < 2; ++channel)
     {
@@ -1996,6 +2061,8 @@ TEST (AudioGraphProcessorTests, WorkerThreadsMatchSingleThreadOutputUnderLoad)
     AudioBuffer<float> threadedAudio (2, numSamples);
     MidiBuffer singleMidi;
     MidiBuffer threadedMidi;
+    ParameterChangeBuffer singleParams;
+    ParameterChangeBuffer threadedParams;
 
     for (int block = 0; block < numBlocks; ++block)
     {
@@ -2014,8 +2081,10 @@ TEST (AudioGraphProcessorTests, WorkerThreadsMatchSingleThreadOutputUnderLoad)
             }
         }
 
-        singleThreaded.processBlock (singleAudio, singleMidi);
-        threaded.processBlock (threadedAudio, threadedMidi);
+        AudioProcessContext<float> singleCtx { singleAudio, singleMidi, singleParams };
+        singleThreaded.processBlock (singleCtx);
+        AudioProcessContext<float> threadedCtx { threadedAudio, threadedMidi, threadedParams };
+        threaded.processBlock (threadedCtx);
 
         for (int channel = 0; channel < 2; ++channel)
         {
@@ -2070,6 +2139,8 @@ TEST (AudioGraphProcessorTests, SwitchingWorkerThreadsBetweenBlocksPreservesOutp
     AudioBuffer<float> threadedAudio (2, numSamples);
     MidiBuffer singleMidi;
     MidiBuffer threadedMidi;
+    ParameterChangeBuffer singleParams;
+    ParameterChangeBuffer threadedParams;
 
     for (int block = 0; block < numBlocks; ++block)
     {
@@ -2090,8 +2161,10 @@ TEST (AudioGraphProcessorTests, SwitchingWorkerThreadsBetweenBlocksPreservesOutp
             }
         }
 
-        singleThreaded.processBlock (singleAudio, singleMidi);
-        threaded.processBlock (threadedAudio, threadedMidi);
+        AudioProcessContext<float> singleCtx { singleAudio, singleMidi, singleParams };
+        singleThreaded.processBlock (singleCtx);
+        AudioProcessContext<float> threadedCtx { threadedAudio, threadedMidi, threadedParams };
+        threaded.processBlock (threadedCtx);
 
         for (int channel = 0; channel < 2; ++channel)
         {
@@ -2124,6 +2197,7 @@ TEST (AudioGraphProcessorTests, ConcurrentCommitsDoNotInvalidateAudioThreadPlan)
     {
         AudioBuffer<float> audio (2, 32);
         MidiBuffer midi;
+        ParameterChangeBuffer params;
 
         while (! startProcessing.load())
             std::this_thread::yield();
@@ -2137,7 +2211,8 @@ TEST (AudioGraphProcessorTests, ConcurrentCommitsDoNotInvalidateAudioThreadPlan)
                 for (int sample = 0; sample < audio.getNumSamples(); ++sample)
                     audio.getWritePointer (channel)[sample] = 1.0f;
 
-            graph.processBlock (audio, midi);
+            AudioProcessContext<float> ctx { audio, midi, params };
+            graph.processBlock (ctx);
 
             for (int channel = 0; channel < audio.getNumChannels(); ++channel)
             {
@@ -2199,16 +2274,22 @@ TEST (AudioGraphProcessorTests, MidiCompensationCanSpillIntoNextBlock)
 
     AudioBuffer<float> audio (0, 8);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     const uint8 noteOn[] = { 0x90, 64, 100 };
     midi.addEvent (noteOn, 3, 5);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_EQ (1, countMidiEventsAt (midi, 5));
     EXPECT_EQ (1, countMidiEvents (midi));
 
     midi.clear();
-    graph.processBlock (audio, midi);
+    {
+        AudioProcessContext<float> ctx { audio, midi, params };
+        graph.processBlock (ctx);
+    }
 
     EXPECT_EQ (1, countMidiEventsAt (midi, 3));
 }
@@ -2230,9 +2311,12 @@ TEST (AudioGraphProcessorTests, PdcAccumulatesSerialPathLatencyAtGraphOutput)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.0f, audio.getReadPointer (0)[0]);
     EXPECT_FLOAT_EQ (2.0f, audio.getReadPointer (0)[7]);
@@ -2258,9 +2342,12 @@ TEST (AudioGraphProcessorTests, PdcCompensatesFanInAtProcessorInput)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.0f, audio.getReadPointer (0)[0]);
     EXPECT_FLOAT_EQ (2.0f, audio.getReadPointer (0)[5]);
@@ -2281,9 +2368,12 @@ TEST (AudioGraphProcessorTests, PdcDelaysDirectAudioOutputToMatchLatentAudioPath
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulseAt (audio, 3);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.0f, audio.getReadPointer (0)[3]);
     EXPECT_FLOAT_EQ (2.0f, audio.getReadPointer (0)[8]);
@@ -2306,17 +2396,22 @@ TEST (AudioGraphProcessorTests, PdcAudioDelayLongerThanBlockSpillsAcrossBlocks)
 
     AudioBuffer<float> audio (2, 4);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx1 { audio, midi, params };
+    graph.processBlock (ctx1);
     EXPECT_FLOAT_EQ (0.0f, audio.getReadPointer (0)[0]);
 
     audio.clear();
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx2 { audio, midi, params };
+    graph.processBlock (ctx2);
     EXPECT_FLOAT_EQ (0.0f, audio.getReadPointer (0)[0]);
 
     audio.clear();
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx3 { audio, midi, params };
+    graph.processBlock (ctx3);
     EXPECT_FLOAT_EQ (0.0f, audio.getReadPointer (0)[1]);
     EXPECT_FLOAT_EQ (2.0f, audio.getReadPointer (0)[2]);
     EXPECT_FLOAT_EQ (0.0f, audio.getReadPointer (0)[3]);
@@ -2335,13 +2430,17 @@ TEST (AudioGraphProcessorTests, PdcDirectAudioOutputCompensationSpillsAcrossBloc
 
     AudioBuffer<float> audio (2, 4);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulseAt (audio, 1);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx1 { audio, midi, params };
+    graph.processBlock (ctx1);
     EXPECT_FLOAT_EQ (0.0f, audio.getReadPointer (0)[1]);
 
     audio.clear();
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx2 { audio, midi, params };
+    graph.processBlock (ctx2);
     EXPECT_FLOAT_EQ (0.0f, audio.getReadPointer (0)[2]);
     EXPECT_FLOAT_EQ (2.0f, audio.getReadPointer (0)[3]);
 }
@@ -2359,17 +2458,22 @@ TEST (AudioGraphProcessorTests, PdcFlushClearsPendingAudioCompensation)
 
     AudioBuffer<float> audio (2, 4);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx1 { audio, midi, params };
+    graph.processBlock (ctx1);
     graph.flush();
 
     audio.clear();
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx2 { audio, midi, params };
+    graph.processBlock (ctx2);
     EXPECT_FLOAT_EQ (0.0f, audio.getReadPointer (0)[0]);
 
     audio.clear();
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx3 { audio, midi, params };
+    graph.processBlock (ctx3);
     EXPECT_FLOAT_EQ (0.0f, audio.getReadPointer (0)[2]);
 }
 
@@ -2386,22 +2490,28 @@ TEST (AudioGraphProcessorTests, PdcMidiDelayLongerThanOneBlockAlignsWithDelayedP
 
     AudioBuffer<float> audio (0, 8);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     const uint8 noteOn[] = { 0x90, 67, 100 };
     midi.addEvent (noteOn, 3, 6);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx1 { audio, midi, params };
+    graph.processBlock (ctx1);
     EXPECT_EQ (0, countMidiEvents (midi));
 
     midi.clear();
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx2 { audio, midi, params };
+    graph.processBlock (ctx2);
     EXPECT_EQ (0, countMidiEvents (midi));
 
     midi.clear();
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx3 { audio, midi, params };
+    graph.processBlock (ctx3);
     EXPECT_EQ (0, countMidiEvents (midi));
 
     midi.clear();
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx4 { audio, midi, params };
+    graph.processBlock (ctx4);
     EXPECT_EQ (2, countMidiEventsAt (midi, 0));
     EXPECT_EQ (2, countMidiEvents (midi));
 }
@@ -2419,20 +2529,25 @@ TEST (AudioGraphProcessorTests, PdcFlushClearsPendingMidiCompensation)
 
     AudioBuffer<float> audio (0, 8);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     const uint8 noteOn[] = { 0x90, 69, 100 };
     midi.addEvent (noteOn, 3, 7);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx1 { audio, midi, params };
+    graph.processBlock (ctx1);
     EXPECT_EQ (1, countMidiEventsAt (midi, 7));
 
     graph.flush();
 
     midi.clear();
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx2 { audio, midi, params };
+    graph.processBlock (ctx2);
     EXPECT_EQ (0, countMidiEvents (midi));
 
     midi.clear();
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx3 { audio, midi, params };
+    graph.processBlock (ctx3);
     EXPECT_EQ (0, countMidiEvents (midi));
 }
 
@@ -2456,9 +2571,12 @@ TEST (AudioGraphProcessorTests, PdcRecompileAfterRemovingLatencyPathClearsCompen
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (1.0f, audio.getReadPointer (0)[0]);
 }
@@ -2480,11 +2598,15 @@ TEST (AudioGraphProcessorTests, WorkerThreadsProcessManyBlocksCorrectly)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
 
     for (int block = 0; block < 1000; ++block)
     {
         fillImpulse (audio);
-        graph.processBlock (audio, midi);
+
+        AudioProcessContext<float> ctx { audio, midi, params };
+        graph.processBlock (ctx);
+
         EXPECT_FLOAT_EQ (1.0f, audio.getReadPointer (0)[0]) << "block " << block;
     }
 }
@@ -2501,20 +2623,25 @@ TEST (AudioGraphProcessorTests, WorkerThreadCountCanBeChangedAfterProcessing)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
 
     graph.setNumWorkerThreads (2);
     fillImpulse (audio);
-    graph.processBlock (audio, midi);
+
+    AudioProcessContext<float> ctx1 { audio, midi, params };
+    graph.processBlock (ctx1);
     EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (0)[0]);
 
     graph.setNumWorkerThreads (0);
     fillImpulse (audio);
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx2 { audio, midi, params };
+    graph.processBlock (ctx2);
     EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (0)[0]);
 
     graph.setNumWorkerThreads (4);
     fillImpulse (audio);
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx3 { audio, midi, params };
+    graph.processBlock (ctx3);
     EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (0)[0]);
 
     graph.setNumWorkerThreads (0);
@@ -2533,16 +2660,20 @@ TEST (AudioGraphProcessorTests, WorkerThreadsContinueProcessingAfterIdleReset)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
 
     fillImpulse (audio);
-    graph.processBlock (audio, midi);
+
+    AudioProcessContext<float> ctx1 { audio, midi, params };
+    graph.processBlock (ctx1);
     EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (0)[0]);
 
     for (int i = 0; i < 100; ++i)
         std::this_thread::yield();
 
     fillImpulse (audio);
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx2 { audio, midi, params };
+    graph.processBlock (ctx2);
     EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (0)[0]);
 
     graph.setNumWorkerThreads (0);
@@ -2561,11 +2692,15 @@ TEST (AudioGraphProcessorTests, ZeroWorkerThreadsProcessesCorrectly)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
 
     for (int block = 0; block < 10; ++block)
     {
         fillImpulse (audio);
-        graph.processBlock (audio, midi);
+
+        AudioProcessContext<float> ctx { audio, midi, params };
+        graph.processBlock (ctx);
+
         EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (0)[0]) << "block " << block;
     }
 }
@@ -2589,12 +2724,16 @@ TEST (AudioGraphProcessorTests, WorkerThreadOutputMatchesSingleThreadOutputManyB
 
         AudioBuffer<float> audio (2, 16);
         MidiBuffer midi;
+        ParameterChangeBuffer params;
 
         std::vector<float> results;
         for (int block = 0; block < 100; ++block)
         {
             fillImpulse (audio);
-            graph.processBlock (audio, midi);
+
+            AudioProcessContext<float> ctx { audio, midi, params };
+            graph.processBlock (ctx);
+
             results.push_back (audio.getReadPointer (0)[0]);
         }
 
@@ -2621,6 +2760,7 @@ TEST (AudioGraphProcessorTests, RapidWorkerThreadResizeDoesNotCrash)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
 
     const int threadCounts[] = { 0, 1, 2, 4, 2, 1, 0, 3, 0 };
 
@@ -2628,7 +2768,10 @@ TEST (AudioGraphProcessorTests, RapidWorkerThreadResizeDoesNotCrash)
     {
         graph.setNumWorkerThreads (count);
         fillImpulse (audio);
-        graph.processBlock (audio, midi);
+
+        AudioProcessContext<float> ctx { audio, midi, params };
+        graph.processBlock (ctx);
+
         EXPECT_FLOAT_EQ (1.0f, audio.getReadPointer (0)[0]);
     }
 }
@@ -2649,9 +2792,12 @@ TEST (AudioGraphProcessorTests, ProcessBlockDisablesDenormals)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_TRUE (procPtr->denormalsWereDisabled);
 }
@@ -2670,6 +2816,7 @@ TEST (AudioGraphProcessorTests, ManyMidiEventsPassThroughGraphCorrectly)
 
     AudioBuffer<float> audio (0, 128);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
 
     const int numEvents = 64;
     for (int i = 0; i < numEvents; ++i)
@@ -2678,7 +2825,8 @@ TEST (AudioGraphProcessorTests, ManyMidiEventsPassThroughGraphCorrectly)
         midi.addEvent (noteOn, 3, i % 128);
     }
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_EQ (numEvents, countMidiEvents (midi));
 }
@@ -2703,9 +2851,12 @@ TEST (AudioGraphProcessorTests, WorkerThreadsPdcCompensatesParallelPaths)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.0f, audio.getReadPointer (0)[0]);
     EXPECT_FLOAT_EQ (2.0f, audio.getReadPointer (0)[4]);
@@ -2747,14 +2898,18 @@ TEST (AudioGraphProcessorTests, WorkerThreadsPdcMatchesSingleThreadOutput)
     AudioBuffer<float> multiAudio (2, 16);
     MidiBuffer singleMidi;
     MidiBuffer multiMidi;
+    ParameterChangeBuffer singleParams;
+    ParameterChangeBuffer multiParams;
 
     for (int block = 0; block < 8; ++block)
     {
         fillImpulse (singleAudio);
         fillImpulse (multiAudio);
 
-        single->processBlock (singleAudio, singleMidi);
-        multi->processBlock (multiAudio, multiMidi);
+        AudioProcessContext<float> singleCtx { singleAudio, singleMidi, singleParams };
+        single->processBlock (singleCtx);
+        AudioProcessContext<float> multiCtx { multiAudio, multiMidi, multiParams };
+        multi->processBlock (multiCtx);
 
         for (int channel = 0; channel < 2; ++channel)
         {
@@ -2785,11 +2940,15 @@ TEST (AudioGraphProcessorTests, MixedAudioMidiProcessorPassesThroughBothSignals)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
+
     const uint8 noteOn[] = { 0x90, 60, 100 };
     midi.addEvent (noteOn, 3, 5);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (0)[0]);
     EXPECT_FLOAT_EQ (0.5f, audio.getReadPointer (1)[0]);
@@ -2816,11 +2975,15 @@ TEST (AudioGraphProcessorTests, MixedAudioMidiSerialChainProcessesBothSignals)
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
+
     const uint8 noteOn[] = { 0x90, 60, 100 };
     midi.addEvent (noteOn, 3, 3);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (0)[0]);
     EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (1)[0]);
@@ -2859,11 +3022,15 @@ TEST (AudioGraphProcessorTests, MixedAudioMidiProcessorPdcCompensatesDirectPaths
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulseAt (audio, 2);
+
     const uint8 noteOn[] = { 0x90, 60, 100 };
     midi.addEvent (noteOn, 3, 2);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.0f, audio.getReadPointer (0)[2]);
     EXPECT_FLOAT_EQ (2.0f, audio.getReadPointer (0)[7]);
@@ -2917,9 +3084,12 @@ TEST (AudioGraphProcessorTests, ReplaceNodeProcessorPreservesNodeIDAndCompatible
 
     AudioBuffer<float> audio (2, 16);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
+
     fillImpulse (audio);
 
-    graph.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    graph.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (0)[0]);
     EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (1)[0]);

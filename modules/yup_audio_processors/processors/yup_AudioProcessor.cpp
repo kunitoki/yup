@@ -146,14 +146,20 @@ void AudioProcessor::setProcessingPrecision (ProcessingPrecision precision)
 
 //==============================================================================
 
-void AudioProcessor::processBlockBypassed (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer)
+void AudioProcessor::processBlock (AudioProcessContext<float>& context)
 {
-    ignoreUnused (audioBuffer, midiBuffer);
+    ignoreUnused (context);
+    jassertfalse;
 }
 
-void AudioProcessor::processBlockBypassed (AudioBuffer<double>& audioBuffer, MidiBuffer& midiBuffer)
+void AudioProcessor::processBlockBypassed (AudioProcessContext<float>& context)
 {
-    ignoreUnused (audioBuffer, midiBuffer);
+    ignoreUnused (context);
+}
+
+void AudioProcessor::processBlockBypassed (AudioProcessContext<double>& context)
+{
+    ignoreUnused (context);
 }
 
 //==============================================================================

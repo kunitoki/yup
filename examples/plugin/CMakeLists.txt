@@ -43,6 +43,7 @@ yup_audio_plugin (
     PLUGIN_IS_MONO OFF
     PLUGIN_CREATE_CLAP ON
     PLUGIN_CREATE_VST3 ON
+    PLUGIN_CREATE_AU ON
     PLUGIN_CREATE_STANDALONE ON
     MODULES
         yup::yup_gui

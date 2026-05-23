@@ -123,40 +123,46 @@ public:
     virtual void releaseResources() = 0;
 
     /**
-        Processes a block of audio.
+        Primary single-precision processing entry point.
 
-        @param audioBuffer The audio buffer to process.
-        @param midiBuffer The MIDI buffer to process.
+        Override this to process a block of audio and MIDI. The context provides
+        sample-accurate parameter automation via @c context.params and the transport
+        position via @c context.samplePosition.
+
+        The base-class implementation asserts false so unoverridden processors are
+        caught at runtime in debug builds.
+
+        @param context  All per-block inputs: audio, MIDI, parameter changes, position.
     */
-    virtual void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer) = 0;
+    virtual void processBlock (AudioProcessContext<float>& context);
 
     /**
-        Processes a block of audio.
+        Double-precision processing entry point.
 
-        @param audioBuffer The audio buffer to process.
-        @param midiBuffer The MIDI buffer to process.
+        Override this and return true from supportsDoublePrecisionProcessing() to
+        support 64-bit audio. The default implementation does nothing.
+
+        @param context  All per-block inputs with double-precision audio.
     */
-    virtual void processBlock (AudioBuffer<double>& audioBuffer, MidiBuffer& midiBuffer) {}
+    virtual void processBlock (AudioProcessContext<double>& context) {}
 
     /**
-        Processes a block while the processor is bypassed.
+        Called by plugin wrappers when the processor is bypassed (single-precision).
 
-        The default implementation leaves audio and MIDI unchanged.
+        The default implementation routes inputs to outputs, or clears extra outputs.
 
-        @param audioBuffer The audio buffer to process.
-        @param midiBuffer The MIDI buffer to process.
+        @param context  All per-block inputs.
     */
-    virtual void processBlockBypassed (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer);
+    virtual void processBlockBypassed (AudioProcessContext<float>& context);
 
     /**
-        Processes a block while the processor is bypassed.
+        Called by plugin wrappers when the processor is bypassed (double-precision).
 
-        The default implementation leaves audio and MIDI unchanged.
+        The default implementation routes inputs to outputs, or clears extra outputs.
 
-        @param audioBuffer The audio buffer to process.
-        @param midiBuffer The MIDI buffer to process.
+        @param context  All per-block inputs.
     */
-    virtual void processBlockBypassed (AudioBuffer<double>& audioBuffer, MidiBuffer& midiBuffer);
+    virtual void processBlockBypassed (AudioProcessContext<double>& context);
 
     /** Flushes the processor. */
     virtual void flush() {}
@@ -197,6 +203,18 @@ public:
 
     /** Sets the processor latency in samples and notifies listeners when it changes. */
     void setLatencySamples (int newLatencySamples);
+
+    /** Returns the number of simultaneous voices this processor can produce.
+        Returns 0 for effects and MIDI-only processors. Override in instruments. */
+    virtual int getNumVoices() const { return 0; }
+
+    //==============================================================================
+
+    /** Returns true when the processor is running in offline (non-realtime) mode. */
+    bool isOfflineProcessing() const noexcept { return offlineProcessing.load(); }
+
+    /** Called by the plugin wrapper to indicate offline vs. realtime rendering. */
+    void setOfflineProcessing (bool offline) { offlineProcessing.store (offline); }
 
     //==============================================================================
 
@@ -280,6 +298,7 @@ private:
 
     CriticalSection processLock;
     std::atomic<bool> processIsSuspended { false };
+    std::atomic<bool> offlineProcessing { false };
 };
 
 } // namespace yup

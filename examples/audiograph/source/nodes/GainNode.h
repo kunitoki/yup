@@ -40,9 +40,9 @@ public:
 
     void releaseResources() override {}
 
-    void processBlock (yup::AudioBuffer<float>& audioBuffer, yup::MidiBuffer&) override
+    void processBlock (yup::AudioProcessContext<float>& context) override
     {
-        audioBuffer.applyGain (gain.load (std::memory_order_relaxed));
+        context.audio.applyGain (gain.load (std::memory_order_relaxed));
     }
 
     int getCurrentPreset() const noexcept override { return 0; }

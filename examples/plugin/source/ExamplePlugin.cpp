@@ -56,8 +56,11 @@ void ExamplePlugin::releaseResources()
     voices.free();
 }
 
-void ExamplePlugin::processBlock (yup::AudioSampleBuffer& audioBuffer, yup::MidiBuffer& midiBuffer)
+void ExamplePlugin::processBlock (yup::AudioProcessContext<float>& context)
 {
+    auto& audioBuffer = context.audio;
+    auto& midiBuffer = context.midi;
+
     int numSamples = audioBuffer.getNumSamples();
     float* outputL = audioBuffer.getWritePointer (0);
     float* outputR = audioBuffer.getWritePointer (1);
@@ -65,10 +68,12 @@ void ExamplePlugin::processBlock (yup::AudioSampleBuffer& audioBuffer, yup::Midi
     int nextEventSample = midiBuffer.getNumEvents() ? 0 : numSamples;
     auto midiIterator = midiBuffer.begin();
 
-    gainHandle.updateNextAudioBlock();
+    gainHandle.prepareBlock (context.params, gainParameter->getIndexInContainer());
 
     for (int currentSample = 0; currentSample < numSamples;)
     {
+        gainHandle.advanceToSample (currentSample);
+
         while (midiIterator != midiBuffer.end() && nextEventSample == currentSample)
         {
             const auto& event = *midiIterator;

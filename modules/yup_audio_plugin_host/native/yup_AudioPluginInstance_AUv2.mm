@@ -435,13 +435,16 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
             AudioUnitUninitialize(audioUnit);
     }
 
-    void processBlock(AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer) override
+    void processBlock (AudioProcessContext<float>& context) override
     {
+        auto& audioBuffer = context.audio;
+        auto& midiBuffer = context.midi;
+
         ScopedNoDenormals noDenormals;
 
         if (isBypassed())
         {
-            processBlockBypassed(audioBuffer, midiBuffer);
+            processBlockBypassed (context);
             return;
         }
 

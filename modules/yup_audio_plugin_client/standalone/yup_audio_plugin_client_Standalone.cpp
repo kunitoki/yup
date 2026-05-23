@@ -131,7 +131,9 @@ public:
         }
 
         MidiBuffer midiBuffer;
-        processor->processBlock (audioBuffer, midiBuffer);
+        ParameterChangeBuffer emptyParams;
+        AudioProcessContext<float> ctx { audioBuffer, midiBuffer, emptyParams };
+        processor->processBlock (ctx);
 
         AudioBuffer<float> outputBuffer { outputChannelData, numOutputChannels, numSamples };
         for (int outputIndex = 0; outputIndex < numOutputChannels; ++outputIndex)

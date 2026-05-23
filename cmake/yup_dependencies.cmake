@@ -77,6 +77,45 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_fetch_apple_ausdk)
+    if (NOT TARGET base-sdk-auv2)
+        if (NOT AUDIOUNIT_SDK_ROOT)
+            _yup_message (STATUS "Fetching Apple AudioUnitSDK")
+            _yup_fetchcontent_declare (AudioUnitSDK
+                GIT_REPOSITORY https://github.com/apple/AudioUnitSDK.git
+                GIT_TAG        AudioUnitSDK-1.1.0)
+            FetchContent_MakeAvailable (AudioUnitSDK)
+            set (AUDIOUNIT_SDK_ROOT "${audiounitsdk_SOURCE_DIR}")
+        endif()
+
+        set (AUSDK_SRC "${AUDIOUNIT_SDK_ROOT}/src/AudioUnitSDK")
+
+        add_library (base-sdk-auv2 STATIC
+            "${AUSDK_SRC}/AUBase.cpp"
+            "${AUSDK_SRC}/AUBuffer.cpp"
+            "${AUSDK_SRC}/AUBufferAllocator.cpp"
+            "${AUSDK_SRC}/AUEffectBase.cpp"
+            "${AUSDK_SRC}/AUInputElement.cpp"
+            "${AUSDK_SRC}/AUMIDIBase.cpp"
+            "${AUSDK_SRC}/AUMIDIEffectBase.cpp"
+            "${AUSDK_SRC}/AUOutputElement.cpp"
+            "${AUSDK_SRC}/AUPlugInDispatch.cpp"
+            "${AUSDK_SRC}/AUScopeElement.cpp"
+            "${AUSDK_SRC}/ComponentBase.cpp"
+            "${AUSDK_SRC}/MusicDeviceBase.cpp")
+
+        target_include_directories (base-sdk-auv2 PUBLIC "${AUDIOUNIT_SDK_ROOT}/include")
+        target_compile_features (base-sdk-auv2 PUBLIC cxx_std_17)
+        target_compile_options (base-sdk-auv2 PRIVATE -Wno-deprecated-declarations)
+
+        set_target_properties (base-sdk-auv2 PROPERTIES
+            POSITION_INDEPENDENT_CODE ON
+            FOLDER "Thirdparty")
+    endif()
+endfunction()
+
+#==============================================================================
+
 function (_yup_fetch_clap)
     if (NOT TARGET clap)
         _yup_message (STATUS "Fetching CLAP SDK")

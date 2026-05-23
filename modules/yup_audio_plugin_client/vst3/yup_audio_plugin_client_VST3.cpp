@@ -28,6 +28,7 @@
 #include <public.sdk/source/vst/vstaudioeffect.h>
 #include <public.sdk/source/vst/vsteditcontroller.h>
 #include <public.sdk/source/main/pluginfactory.h>
+#include <pluginterfaces/base/ibstream.h>
 #include <pluginterfaces/base/ftypes.h>
 #include <pluginterfaces/base/funknown.h>
 #include <pluginterfaces/gui/iplugview.h>
@@ -125,6 +126,23 @@ struct VST3ScopedYupInitialiser
 
 static const auto YupPlugin_Processor_UID = toFUID (YupPlugin_Id);
 static const auto YupPlugin_Controller_UID = toFUID (YupPlugin_Id ".controller");
+
+//==============================================================================
+
+static Vst::SpeakerArrangement speakerArrForChannels (int channels)
+{
+    switch (channels)
+    {
+        case 1:
+            return Vst::SpeakerArr::kMono;
+        case 6:
+            return Vst::SpeakerArr::k51;
+        case 8:
+            return Vst::SpeakerArr::k71CineFullFront;
+        default:
+            return Vst::SpeakerArr::kStereo;
+    }
+}
 
 //==============================================================================
 
@@ -460,21 +478,10 @@ public:
 
     //==============================================================================
 
-    int32 PLUGIN_API getParameterCount() override
-    {
-        if (processor == nullptr)
-            return 0;
-
-        return static_cast<int32> (processor->getParameters().size());
-    }
-
     tresult PLUGIN_API getParameterInfo (int32 paramIndex, Vst::ParameterInfo& info) override
     {
         if (processor == nullptr)
             return kInternalError;
-
-        if (! isPositiveAndBelow (paramIndex, getParameterCount()))
-            return kInvalidArgument;
 
         if (auto parameter = parameters.getParameterByIndex (paramIndex))
         {
@@ -490,13 +497,18 @@ public:
         if (processor == nullptr)
             return kInternalError;
 
-        if (! isPositiveAndBelow (static_cast<int32> (tag), getParameterCount()))
-            return kInvalidArgument;
+        const auto processorParamCount = static_cast<Vst::ParamID> (processor->getParameters().size());
 
-        if (auto parameter = processor->getParameters()[tag])
+        if (tag >= processorParamCount)
+        {
+            // Bypass parameter
+            toString128 (valueNormalized >= 0.5 ? "On" : "Off", string);
+            return kResultOk;
+        }
+
+        if (auto parameter = processor->getParameters()[static_cast<int> (tag)])
         {
             toString128 (parameter->convertToString (parameter->convertToDenormalizedValue (valueNormalized)), string);
-
             return kResultOk;
         }
 
@@ -508,13 +520,19 @@ public:
         if (processor == nullptr)
             return kInternalError;
 
-        if (! isPositiveAndBelow (static_cast<int32> (tag), getParameterCount()))
-            return kInvalidArgument;
+        const auto processorParamCount = static_cast<Vst::ParamID> (processor->getParameters().size());
 
-        if (auto parameter = processor->getParameters()[tag])
+        if (tag >= processorParamCount)
+        {
+            // Bypass parameter
+            const auto str = toString (string);
+            valueNormalized = (str == "On" || str == "1") ? 1.0 : 0.0;
+            return kResultOk;
+        }
+
+        if (auto parameter = processor->getParameters()[static_cast<int> (tag)])
         {
             valueNormalized = parameter->convertToNormalizedValue (parameter->convertFromString (toString (string)));
-
             return kResultOk;
         }
 
@@ -526,10 +544,11 @@ public:
         if (processor == nullptr)
             return valueNormalized;
 
-        if (! isPositiveAndBelow (static_cast<int32> (tag), getParameterCount()))
+        const auto processorParamCount = static_cast<Vst::ParamID> (processor->getParameters().size());
+        if (tag >= processorParamCount)
             return valueNormalized;
 
-        if (auto parameter = processor->getParameters()[tag])
+        if (auto parameter = processor->getParameters()[static_cast<int> (tag)])
             return parameter->convertToDenormalizedValue (valueNormalized);
 
         return valueNormalized;
@@ -540,10 +559,11 @@ public:
         if (processor == nullptr)
             return plainValue;
 
-        if (! isPositiveAndBelow (static_cast<int32> (tag), getParameterCount()))
+        const auto processorParamCount = static_cast<Vst::ParamID> (processor->getParameters().size());
+        if (tag >= processorParamCount)
             return plainValue;
 
-        if (auto parameter = processor->getParameters()[tag])
+        if (auto parameter = processor->getParameters()[static_cast<int> (tag)])
             return parameter->convertToNormalizedValue (plainValue);
 
         return plainValue;
@@ -554,10 +574,11 @@ public:
         if (processor == nullptr)
             return 0.0;
 
-        if (! isPositiveAndBelow (static_cast<int32> (tag), getParameterCount()))
-            return 0.0;
+        const auto processorParamCount = static_cast<Vst::ParamID> (processor->getParameters().size());
+        if (tag >= processorParamCount)
+            return 0.0; // bypass defaults to not bypassed
 
-        if (auto parameter = processor->getParameters()[tag])
+        if (auto parameter = processor->getParameters()[static_cast<int> (tag)])
             return parameter->getNormalizedValue();
 
         return 0.0;
@@ -568,12 +589,13 @@ public:
         if (processor == nullptr)
             return kInternalError;
 
-        if (! isPositiveAndBelow (static_cast<int32> (tag), getParameterCount()))
-            return kInvalidArgument;
+        const auto processorParamCount = static_cast<Vst::ParamID> (processor->getParameters().size());
+        if (tag >= processorParamCount)
+            return kResultOk; // bypass handled by the processor side
 
-        if (auto parameter = processor->getParameters()[tag])
+        if (auto parameter = processor->getParameters()[static_cast<int> (tag)])
         {
-            parameter->setNormalizedValue (value);
+            parameter->setNormalizedValue (static_cast<float> (value));
             return kResultOk;
         }
 
@@ -587,8 +609,7 @@ public:
         if (processor == nullptr)
             return kInternalError;
 
-        const auto numParams = static_cast<int> (processor->getParameters().size());
-        if (oldParamID >= 0 && oldParamID < numParams)
+        if (oldParamID < static_cast<Vst::ParamID> (parameters.getParameterCount()))
         {
             newParamID = oldParamID;
             return kResultOk;
@@ -604,7 +625,17 @@ public:
                                                     Vst::CtrlNumber midiControllerNumber,
                                                     Vst::ParamID& id) override
     {
-        return kNotImplemented;
+        if (processor == nullptr)
+            return kResultFalse;
+
+        const auto numParams = static_cast<int32> (processor->getParameters().size());
+        if (midiControllerNumber < numParams)
+        {
+            id = static_cast<Vst::ParamID> (midiControllerNumber);
+            return kResultOk;
+        }
+
+        return kResultFalse;
     }
 
     //==============================================================================
@@ -777,11 +808,22 @@ private:
                 nullptr,                           // units
                 0,                                 // step count
                 parameter->getNormalizedValue(),   // normalized value
-                Vst::ParameterInfo::kCanAutomate,  // flags (Vst::ParameterInfo::kNoFlags)
+                Vst::ParameterInfo::kCanAutomate,  // flags
                 static_cast<int> (parameterIndex), // tag
                 Vst::kRootUnitId,                  // unit
                 nullptr);                          // short title
         }
+
+        // VST3 bypass parameter (always the last parameter)
+        parameters.addParameter (
+            STR16 ("Bypass"),
+            nullptr,
+            1, // step count 1 = toggle
+            0, // default: not bypassed
+            Vst::ParameterInfo::kCanAutomate | Vst::ParameterInfo::kIsBypass,
+            static_cast<Vst::ParamID> (processor->getParameters().size()),
+            Vst::kRootUnitId,
+            nullptr);
     }
 
     AudioProcessor* processor = nullptr;
@@ -824,17 +866,27 @@ public:
         for (const auto& inputBus : processor->getBusLayout().getInputBuses())
         {
             const auto nameUTF16 = inputBus.getName().toUTF16();
-            addAudioInput (toTChar (nameUTF16), Vst::SpeakerArr::kStereo);
+
+            if (inputBus.getType() == AudioBus::Type::Audio)
+                addAudioInput (toTChar (nameUTF16), speakerArrForChannels (inputBus.getNumChannels()));
+            else if (inputBus.getType() == AudioBus::Type::MIDI)
+                addEventInput (toTChar (nameUTF16));
         }
 
         for (const auto& outputBus : processor->getBusLayout().getOutputBuses())
         {
             const auto nameUTF16 = outputBus.getName().toUTF16();
-            addAudioOutput (toTChar (nameUTF16), Vst::SpeakerArr::kStereo);
+
+            if (outputBus.getType() == AudioBus::Type::Audio)
+                addAudioOutput (toTChar (nameUTF16), speakerArrForChannels (outputBus.getNumChannels()));
+            else if (outputBus.getType() == AudioBus::Type::MIDI)
+                addEventOutput (toTChar (nameUTF16));
         }
 
+        // Fallback: synths without an explicit MIDI input bus always get one
 #if YupPlugin_IsSynth
-        addEventInput (STR16 ("Midi In"));
+        if (getBusCount (Vst::kEvent, Vst::kInput) == 0)
+            addEventInput (STR16 ("Midi In"));
 #endif
 
         return kResultOk;
@@ -891,17 +943,43 @@ public:
         if (processor == nullptr)
             return kResultFalse;
 
-        // TODO - check compatibility of bus arrangement
+        const auto& busLayout = processor->getBusLayout();
 
-        if (numIns == 1
-            && numOuts == 1
-            && inputs[0] == Vst::SpeakerArr::kStereo
-            && outputs[0] == Vst::SpeakerArr::kStereo)
+        int32 audioInputCount = 0;
+        int32 audioOutputCount = 0;
+
+        for (const auto& bus : busLayout.getInputBuses())
+            if (bus.getType() == AudioBus::Type::Audio)
+                ++audioInputCount;
+
+        for (const auto& bus : busLayout.getOutputBuses())
+            if (bus.getType() == AudioBus::Type::Audio)
+                ++audioOutputCount;
+
+        if (numIns != audioInputCount || numOuts != audioOutputCount)
+            return kResultFalse;
+
+        int32 idx = 0;
+        for (const auto& bus : busLayout.getInputBuses())
         {
-            return kResultOk;
+            if (bus.getType() != AudioBus::Type::Audio)
+                continue;
+            if (Vst::SpeakerArr::getChannelCount (inputs[idx]) != bus.getNumChannels())
+                return kResultFalse;
+            ++idx;
         }
 
-        return kResultFalse;
+        idx = 0;
+        for (const auto& bus : busLayout.getOutputBuses())
+        {
+            if (bus.getType() != AudioBus::Type::Audio)
+                continue;
+            if (Vst::SpeakerArr::getChannelCount (outputs[idx]) != bus.getNumChannels())
+                return kResultFalse;
+            ++idx;
+        }
+
+        return kResultOk;
     }
 
     //==============================================================================
@@ -921,6 +999,39 @@ public:
 
     //==============================================================================
 
+    tresult PLUGIN_API getState (IBStream* stream) override
+    {
+        if (processor == nullptr || stream == nullptr)
+            return kResultFalse;
+
+        MemoryBlock data;
+        if (processor->saveStateIntoMemory (data).failed())
+            return kResultFalse;
+
+        int32 written = 0;
+        return stream->write (data.getData(), static_cast<int32> (data.getSize()), &written);
+    }
+
+    tresult PLUGIN_API setState (IBStream* stream) override
+    {
+        if (processor == nullptr || stream == nullptr)
+            return kResultFalse;
+
+        MemoryBlock data;
+        char buf[4096];
+        int32 bytesRead = 0;
+
+        while (stream->read (buf, sizeof (buf), &bytesRead) == kResultOk && bytesRead > 0)
+            data.append (buf, static_cast<size_t> (bytesRead));
+
+        if (data.isEmpty())
+            return kResultFalse;
+
+        return processor->loadStateFromMemory (data).wasOk() ? kResultOk : kResultFalse;
+    }
+
+    //==============================================================================
+
     tresult PLUGIN_API setupProcessing (Vst::ProcessSetup& setup) override
     {
         if (processor == nullptr)
@@ -929,16 +1040,12 @@ public:
         processSetup = setup;
 
         processor->setPlaybackConfiguration (setup.sampleRate, setup.maxSamplesPerBlock);
-
-        /*
-        if (setup.processMode != Vst::kOffline)
-            processor->setIsRealtime (true);
-        else
-            processor->setIsRealtime (false);
-        */
+        processor->setOfflineProcessing (setup.processMode == Vst::kOffline);
 
         midiBuffer.ensureSize (4096);
         midiBuffer.clear();
+
+        paramChangeBuffer.reserve (static_cast<int> (processor->getParameters().size()) * 4 + 32);
 
         return kResultOk;
     }
@@ -948,27 +1055,65 @@ public:
     tresult PLUGIN_API process (Vst::ProcessData& data) override
     {
         if (data.processContext != nullptr)
+        {
             processContext = *data.processContext;
+            processor->setOfflineProcessing ((processContext.state & Vst::kOfflineProcessing) != 0);
+        }
 
         // --- Process Parameters ---
+        bool bypassed = isBypassed;
+        paramChangeBuffer.clear();
+
         if (data.inputParameterChanges)
         {
-            int32 numParams = data.inputParameterChanges->getParameterCount();
-            for (int32 i = 0; i < numParams; i++)
+            const auto parameters = processor->getParameters();
+            const auto bypassTag = static_cast<Vst::ParamID> (parameters.size());
+
+            const int32 numParams = data.inputParameterChanges->getParameterCount();
+            for (int32 i = 0; i < numParams; ++i)
             {
                 Vst::IParamValueQueue* queue = data.inputParameterChanges->getParameterData (i);
                 if (queue == nullptr)
                     continue;
 
-                int32 numPoints = queue->getPointCount();
+                const int32 numPoints = queue->getPointCount();
                 if (numPoints <= 0)
                     continue;
 
-                int32 sampleOffset;
-                Vst::ParamValue value;
-                if (queue->getPoint (numPoints - 1, sampleOffset, value) == kResultOk)
-                    processor->getParameters()[i]->setNormalizedValue (static_cast<float> (value));
+                const auto tag = queue->getParameterId();
+
+                if (tag == bypassTag)
+                {
+                    // Take final bypass state from the last point in the queue
+                    int32 sampleOffset;
+                    Vst::ParamValue value;
+                    if (queue->getPoint (numPoints - 1, sampleOffset, value) == kResultOk)
+                    {
+                        bypassed = (value >= 0.5);
+                        isBypassed = bypassed;
+                    }
+                }
+                else if (tag < static_cast<Vst::ParamID> (parameters.size()))
+                {
+                    // Collect ALL automation points for sample-accurate delivery
+                    for (int32 p = 0; p < numPoints; ++p)
+                    {
+                        int32 sampleOffset;
+                        Vst::ParamValue value;
+                        if (queue->getPoint (p, sampleOffset, value) == kResultOk)
+                            paramChangeBuffer.addChange (static_cast<int> (tag),
+                                                         static_cast<float> (value),
+                                                         sampleOffset);
+                    }
+                }
             }
+
+            // Sort by sample position, then apply each value so the parameter's atomic
+            // ends up at the final (last) value — backward-compat for processors that
+            // only read the atomic value rather than iterating the buffer.
+            paramChangeBuffer.sort();
+            for (const auto& change : paramChangeBuffer)
+                parameters[change.parameterIndex]->setNormalizedValue (change.normalizedValue);
         }
 
         // --- Process Events ---
@@ -986,23 +1131,36 @@ public:
                 switch (e.type)
                 {
                     case Vst::Event::kNoteOnEvent:
-                        midiBuffer.addEvent (MidiMessage::noteOn (e.noteOn.channel + 1, e.noteOn.pitch, e.noteOn.velocity), e.sampleOffset);
+                        midiBuffer.addEvent (MidiMessage::noteOn (e.noteOn.channel + 1,
+                                                                  e.noteOn.pitch,
+                                                                  static_cast<uint8> (e.noteOn.velocity * 127.0f)),
+                                             e.sampleOffset);
                         break;
 
                     case Vst::Event::kNoteOffEvent:
-                        midiBuffer.addEvent (MidiMessage::noteOff (e.noteOff.channel + 1, e.noteOff.pitch, e.noteOff.velocity), e.sampleOffset);
+                        midiBuffer.addEvent (MidiMessage::noteOff (e.noteOff.channel + 1,
+                                                                   e.noteOff.pitch,
+                                                                   static_cast<uint8> (e.noteOff.velocity * 127.0f)),
+                                             e.sampleOffset);
                         break;
 
                     case Vst::Event::kPolyPressureEvent:
-                        // handle poly pressure if needed
-                        break;
-
-                    case Vst::Event::kDataEvent:
-                        // optional: handle MIDI SysEx or other custom events
+                        midiBuffer.addEvent (MidiMessage::aftertouchChange (e.polyPressure.channel + 1,
+                                                                            e.polyPressure.pitch,
+                                                                            static_cast<int> (e.polyPressure.pressure * 127.0f)),
+                                             e.sampleOffset);
                         break;
 
                     case Vst::Event::kLegacyMIDICCOutEvent:
-                        // handle legacy CC output
+                        midiBuffer.addEvent (MidiMessage::controllerEvent (e.midiCCOut.channel + 1,
+                                                                           e.midiCCOut.controlNumber,
+                                                                           e.midiCCOut.value),
+                                             e.sampleOffset);
+                        break;
+
+                    case Vst::Event::kDataEvent:
+                        if (e.data.type == Vst::DataEvent::kMidiSysEx)
+                            midiBuffer.addEvent (e.data.bytes, static_cast<int> (e.data.size), e.sampleOffset);
                         break;
 
                     default:
@@ -1014,14 +1172,67 @@ public:
         // --- Process Audio ---
         if (data.numSamples > 0 && data.outputs != nullptr)
         {
-            Vst::AudioBusBuffers& outBus = data.outputs[0];
+            // Copy input audio into output buffers for effects
+            if (data.inputs != nullptr)
+            {
+                for (int32 busIdx = 0; busIdx < std::min (data.numInputs, data.numOutputs); ++busIdx)
+                {
+                    auto& inBus = data.inputs[busIdx];
+                    auto& outBus = data.outputs[busIdx];
 
-            AudioSampleBuffer audioBuffer (
-                reinterpret_cast<float**> (outBus.channelBuffers32),
-                outBus.numChannels,
-                data.numSamples);
+                    for (int32 ch = 0; ch < std::min (inBus.numChannels, outBus.numChannels); ++ch)
+                    {
+                        auto* in = reinterpret_cast<const float*> (inBus.channelBuffers32[ch]);
+                        auto* out = reinterpret_cast<float*> (outBus.channelBuffers32[ch]);
+                        if (in != out)
+                            std::memcpy (out, in, static_cast<size_t> (data.numSamples) * sizeof (float));
+                    }
+                }
+            }
 
-            processor->processBlock (audioBuffer, midiBuffer);
+            // Build a flat channel pointer array across all output buses
+            std::vector<float*> outputChannels;
+            for (int32 busIdx = 0; busIdx < data.numOutputs; ++busIdx)
+                for (int32 ch = 0; ch < data.outputs[busIdx].numChannels; ++ch)
+                    outputChannels.push_back (reinterpret_cast<float*> (data.outputs[busIdx].channelBuffers32[ch]));
+
+            const int64_t samplePosition = (data.processContext != nullptr)
+                                             ? data.processContext->projectTimeSamples
+                                             : 0;
+
+            if (processSetup.symbolicSampleSize == Vst::kSample64 && processor->supportsDoublePrecisionProcessing())
+            {
+                std::vector<double*> outputChannels64;
+                for (int32 busIdx = 0; busIdx < data.numOutputs; ++busIdx)
+                    for (int32 ch = 0; ch < data.outputs[busIdx].numChannels; ++ch)
+                        outputChannels64.push_back (reinterpret_cast<double*> (data.outputs[busIdx].channelBuffers64[ch]));
+
+                AudioBuffer<double> audioBuffer (outputChannels64.data(),
+                                                 static_cast<int> (outputChannels64.size()),
+                                                 0,
+                                                 data.numSamples);
+
+                AudioProcessContext<double> doubleCtx { audioBuffer, midiBuffer, paramChangeBuffer, samplePosition };
+
+                if (bypassed)
+                    processor->processBlockBypassed (doubleCtx);
+                else
+                    processor->processBlock (doubleCtx);
+            }
+            else
+            {
+                AudioSampleBuffer audioBuffer (outputChannels.data(),
+                                               static_cast<int> (outputChannels.size()),
+                                               0,
+                                               data.numSamples);
+
+                AudioProcessContext<float> context { audioBuffer, midiBuffer, paramChangeBuffer, samplePosition };
+
+                if (bypassed)
+                    processor->processBlockBypassed (context);
+                else
+                    processor->processBlock (context);
+            }
         }
 
         return kResultOk;
@@ -1036,10 +1247,12 @@ private:
     Vst::ProcessSetup processSetup;
 
     MidiBuffer midiBuffer;
+    ParameterChangeBuffer paramChangeBuffer;
+    bool isBypassed = false;
 };
 
 #if YupPlugin_IsSynth
-const auto YupPlugin_Category = Vst::PlugType::kInstrument;
+const auto YupPlugin_Category = Vst::PlugType::kInstrumentSynth;
 #else
 const auto YupPlugin_Category = Vst::PlugType::kFx;
 #endif
@@ -1059,7 +1272,7 @@ DEF_CLASS2 (
     kVstAudioEffectClass,       // Component category (do not change this)
     YupPlugin_Name,             // Plugin name
     Vst::kDistributable,        // Distribution status
-    yup::YupPlugin_Category,    // Subcategory (effect)
+    yup::YupPlugin_Category,    // Subcategory
     YupPlugin_Version,          // Plugin version
     kVstVersionString,          // The VST 3 SDK version (do not change this, always use this define)
     yup::AudioPluginProcessorVST3::createInstance)

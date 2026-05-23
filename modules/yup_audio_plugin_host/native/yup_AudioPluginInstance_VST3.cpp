@@ -987,20 +987,24 @@ public:
         processingPrepared = false;
     }
 
-    void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer) override
+    void processBlock (AudioProcessContext<float>& context) override
     {
         ScopedNoDenormals noDenormals;
 
         if (isBypassed())
         {
-            processBlockBypassed (audioBuffer, midiBuffer);
+            processBlockBypassed (context);
             return;
         }
+
+        auto& audioBuffer = context.audio;
+        auto& midiBuffer = context.midi;
 
         if (isUsingDoublePrecision())
         {
             doublePrecisionBuffer.makeCopyOf (audioBuffer, true);
-            processBlock (doublePrecisionBuffer, midiBuffer);
+            AudioProcessContext<double> doubleCtx { doublePrecisionBuffer, midiBuffer, context.params, context.samplePosition };
+            processBlock (doubleCtx);
 
             const int numChannels = jmin (audioBuffer.getNumChannels(), doublePrecisionBuffer.getNumChannels());
             const int numSamples = jmin (audioBuffer.getNumSamples(), doublePrecisionBuffer.getNumSamples());
@@ -1051,15 +1055,18 @@ public:
         return vst3Processor != nullptr ? static_cast<int> (vst3Processor->getLatencySamples()) : 0;
     }
 
-    void processBlock (AudioBuffer<double>& audioBuffer, MidiBuffer& midiBuffer) override
+    void processBlock (AudioProcessContext<double>& context) override
     {
         ScopedNoDenormals noDenormals;
 
         if (isBypassed())
         {
-            processBlockBypassed (audioBuffer, midiBuffer);
+            processBlockBypassed (context);
             return;
         }
+
+        auto& audioBuffer = context.audio;
+        auto& midiBuffer = context.midi;
 
         if (! isUsingDoublePrecision())
         {

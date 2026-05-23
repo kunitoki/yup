@@ -347,15 +347,18 @@ public:
         }
     }
 
-    void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer) override
+    void processBlock (AudioProcessContext<float>& context) override
     {
         ScopedNoDenormals noDenormals;
 
         if (isBypassed())
         {
-            processBlockBypassed (audioBuffer, midiBuffer);
+            processBlockBypassed (context);
             return;
         }
+
+        auto& audioBuffer = context.audio;
+        auto& midiBuffer = context.midi;
 
         const int numSamples = audioBuffer.getNumSamples();
         const int numChannels = audioBuffer.getNumChannels();

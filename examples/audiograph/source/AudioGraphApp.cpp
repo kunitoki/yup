@@ -165,7 +165,9 @@ void AudioGraphApp::audioDeviceIOCallbackWithContext (const float* const* inputC
     }
 
     yup::MidiBuffer midi;
-    graph->processBlock (outputBuffer, midi);
+    yup::ParameterChangeBuffer emptyParams;
+    yup::AudioProcessContext<float> ctx { outputBuffer, midi, emptyParams };
+    graph->processBlock (ctx);
 }
 
 void AudioGraphApp::audioDeviceAboutToStart (yup::AudioIODevice* device)

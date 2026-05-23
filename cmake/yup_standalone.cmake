@@ -128,6 +128,13 @@ function (yup_standalone_app)
         add_executable (${target_name} ${executable_options})
     endif()
 
+    set_target_properties (${target_name} PROPERTIES
+        C_VISIBILITY_PRESET hidden
+        CXX_VISIBILITY_PRESET hidden
+        OBJC_VISIBILITY_PRESET hidden
+        OBJCXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON)
+
     target_compile_features (${target_name} PRIVATE cxx_std_${target_cxx_standard})
     target_include_directories (${target_name} PRIVATE ${module_include_dirs})
 

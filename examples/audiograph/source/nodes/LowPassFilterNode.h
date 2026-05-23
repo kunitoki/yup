@@ -46,8 +46,9 @@ public:
 
     void releaseResources() override {}
 
-    void processBlock (yup::AudioBuffer<float>& audioBuffer, yup::MidiBuffer&) override
+    void processBlock (yup::AudioProcessContext<float>& context) override
     {
+        auto& audioBuffer = context.audio;
         const auto currentCutoff = static_cast<double> (cutoff.load (std::memory_order_relaxed));
         const auto alpha = static_cast<float> (1.0 - std::exp (-yup::MathConstants<double>::twoPi * currentCutoff / static_cast<double> (sampleRate)));
 

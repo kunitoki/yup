@@ -413,8 +413,11 @@ public:
         }
     }
 
-    void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer)
+    void processBlock (AudioProcessContext<float>& context)
     {
+        auto& audioBuffer = context.audio;
+        auto& midiBuffer = context.midi;
+
         ScopedNoDenormals noDenormals;
         const ScopedProcessBlock scopedProcessBlock (activeProcessBlocks);
         swapPendingPlan();
@@ -886,7 +889,9 @@ public:
         for (const auto connectionIndex : node.incomingConnections)
             routeConnection (graph, graph.connections[static_cast<size_t> (connectionIndex)], node.audioBuffer, node.midiBuffer, numSamples);
 
-        node.processor->processBlock (node.audioBuffer, node.midiBuffer);
+        ParameterChangeBuffer emptyParams;
+        AudioProcessContext<float> nodeCtx { node.audioBuffer, node.midiBuffer, emptyParams };
+        node.processor->processBlock (nodeCtx);
     }
 
     void processLevels (CompiledGraph& graph, int numSamples)
@@ -1346,9 +1351,9 @@ void AudioGraphProcessor::releaseResources()
     pimpl->releaseResources();
 }
 
-void AudioGraphProcessor::processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer)
+void AudioGraphProcessor::processBlock (AudioProcessContext<float>& context)
 {
-    pimpl->processBlock (audioBuffer, midiBuffer);
+    pimpl->processBlock (context);
 }
 
 void AudioGraphProcessor::flush()
