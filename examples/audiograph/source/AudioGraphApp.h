@@ -133,6 +133,7 @@ private:
     std::unique_ptr<AudioGraphEditorPanel> editorPanel;
 
     yup::MidiMessageCollector midiCollector;
+    yup::MidiBuffer midiBuffer;
 
     yup::File currentFilePath;
     yup::FileChooser::Ptr fileChooser;

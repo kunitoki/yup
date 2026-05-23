@@ -178,11 +178,10 @@ void AudioGraphApp::audioDeviceIOCallbackWithContext (const float* const* inputC
             yup::FloatVectorOperations::copy (outputChannelData[ch], inputChannelData[ch], numSamples);
     }
 
-    yup::MidiBuffer midi;
-    midi.ensureSize (2048);
-    midiCollector.removeNextBlockOfMessages (midi, numSamples);
+    midiCollector.removeNextBlockOfMessages (midiBuffer, numSamples);
+
     yup::ParameterChangeBuffer emptyParams;
-    yup::AudioProcessContext<float> ctx { outputBuffer, midi, emptyParams };
+    yup::AudioProcessContext<float> ctx { outputBuffer, midiBuffer, emptyParams };
     graph->processBlock (ctx);
 }
 
@@ -193,6 +192,8 @@ void AudioGraphApp::audioDeviceAboutToStart (yup::AudioIODevice* device)
 
     const auto sampleRate = device->getCurrentSampleRate();
     midiCollector.reset (sampleRate);
+
+    midiBuffer.ensureSize (4096);
 
 #if YUP_DESKTOP
     yup::AudioPluginHostContext ctx;
