@@ -132,6 +132,8 @@ private:
     NodeRegistry nodeRegistry;
     std::unique_ptr<AudioGraphEditorPanel> editorPanel;
 
+    yup::MidiMessageCollector midiCollector;
+
     yup::File currentFilePath;
     yup::FileChooser::Ptr fileChooser;
 
