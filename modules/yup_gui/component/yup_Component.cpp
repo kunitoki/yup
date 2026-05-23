@@ -1144,6 +1144,37 @@ std::optional<Color> Component::findColor (const Identifier& colorId) const
 
 //==============================================================================
 
+void Component::setMetric (const Identifier& metricId, const std::optional<float>& metric)
+{
+    if (metric)
+        properties.set (metricId, static_cast<double> (*metric));
+    else
+        properties.remove (metricId);
+
+    styleChanged();
+}
+
+std::optional<float> Component::getMetric (const Identifier& metricId) const
+{
+    if (auto value = properties.getVarPointer (metricId); value != nullptr && value->isDouble())
+        return static_cast<float> (static_cast<double> (*value));
+
+    return std::nullopt;
+}
+
+std::optional<float> Component::findMetric (const Identifier& metricId) const
+{
+    if (auto metric = getMetric (metricId))
+        return metric;
+
+    if (parentComponent != nullptr)
+        return parentComponent->findMetric (metricId);
+
+    return ApplicationTheme::findMetric (metricId);
+}
+
+//==============================================================================
+
 void Component::setStyleProperty (const Identifier& propertyId, const std::optional<var>& property)
 {
     if (property)

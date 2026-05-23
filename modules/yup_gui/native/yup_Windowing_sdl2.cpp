@@ -34,6 +34,9 @@ namespace yup
 //==============================================================================
 
 std::atomic_flag SDL2ComponentNative::isInitialised = ATOMIC_FLAG_INIT;
+int SDL2ComponentNative::mouseCaptureRequestCount = 0;
+uint32_t SDL2ComponentNative::lastCapturedMouseButtonState = 0;
+bool SDL2ComponentNative::popupDismissalCheckPending = false;
 
 //==============================================================================
 
@@ -50,6 +53,7 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     , desiredFrameRate (options.framerateRedraw.value_or (60.0f))
     , shouldRenderContinuous (options.flags.test (renderContinuous))
     , updateOnlyWhenFocused (options.updateOnlyWhenFocused)
+    , shouldCaptureMouse (options.flags.test (captureMouse))
 {
     incReferenceCount();
 
@@ -89,7 +93,10 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
                                1,
                                windowFlags);
     if (window == nullptr)
+    {
+        YUP_WINDOWING_LOG ("Unable to create heavyweight window " << SDL_GetError());
         return; // TODO - raise something ?
+    }
 
     SDL_SetWindowData (window, "self", this);
 
@@ -100,7 +107,10 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     {
         windowContext = SDL_GL_CreateContext (window);
         if (windowContext == nullptr)
+        {
+            YUP_WINDOWING_LOG ("Unable to create GL context " << SDL_GetError());
             return; // TODO - raise something ?
+        }
 
         SDL_GL_MakeCurrent (window, windowContext);
     }
@@ -111,7 +121,10 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     graphicsOptions.loaderFunction = SDL_GL_GetProcAddress;
     context = GraphicsContext::createContext (currentGraphicsApi, graphicsOptions);
     if (context == nullptr)
+    {
+        YUP_WINDOWING_LOG ("Unable to create YUP GraphicsContext");
         return; // TODO - raise something ?
+    }
 
     // Resize after callbacks are in place
     setBounds (
@@ -120,12 +133,18 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
           jmax (1, screenBounds.getWidth()),
           jmax (1, screenBounds.getHeight()) });
 
+    // Check mouse capture
+    if (shouldCaptureMouse && isVisible())
+        updateMouseCapture (true);
+
     // Start the rendering
     startRendering();
 }
 
 SDL2ComponentNative::~SDL2ComponentNative()
 {
+    updateMouseCapture (false);
+
     // Remove event watch
     SDL_DelEventWatch (eventDispatcher, this);
 
@@ -178,9 +197,15 @@ void SDL2ComponentNative::setVisible (bool shouldBeVisible)
         return;
 
     if (shouldBeVisible)
+    {
         SDL_ShowWindow (window);
+        updateMouseCapture (true);
+    }
     else
+    {
+        updateMouseCapture (false);
         SDL_HideWindow (window);
+    }
 }
 
 bool SDL2ComponentNative::isVisible() const
@@ -655,6 +680,8 @@ void SDL2ComponentNative::timerCallback()
 void SDL2ComponentNative::renderContext()
 {
     YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderContext);
+
+    pollCapturedMouseState();
 
     if (context == nullptr)
         return;
@@ -1150,6 +1177,8 @@ void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
             if (isRendering())
                 stopRendering();
         }
+
+        triggerPopupDismissalCheck();
     }
 }
 
@@ -1515,6 +1544,8 @@ int SDL2ComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
             {
                 if (auto nativeComponent = dynamic_cast<SDL2ComponentNative*> (component.get()))
                     nativeComponent->handleEvent (event);
+                else
+                    YUP_WINDOWING_LOG ("Received event for unknown component");
             }
 
             break;
@@ -1522,6 +1553,157 @@ int SDL2ComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
     }
 
     return 0;
+}
+
+//==============================================================================
+
+void SDL2ComponentNative::triggerPopupDismissalCheck()
+{
+    if (popupDismissalCheckPending)
+        return;
+
+    popupDismissalCheckPending = true;
+
+    if (! MessageManager::callAsync ([]
+    {
+        dismissPopupsIfNoNativeWindowHasFocus();
+    }))
+    {
+        popupDismissalCheckPending = false;
+    }
+}
+
+void SDL2ComponentNative::dismissPopupsIfNoNativeWindowHasFocus()
+{
+    popupDismissalCheckPending = false;
+
+    if (anyNativeWindowHasKeyboardFocus())
+        return;
+
+    PopupMenu::dismissAllPopups();
+}
+
+bool SDL2ComponentNative::anyNativeWindowHasKeyboardFocus()
+{
+    auto* desktop = Desktop::getInstanceWithoutCreating();
+
+    if (desktop == nullptr)
+        return false;
+
+    for (const auto& [userdata, nativeComponent] : desktop->nativeComponents)
+    {
+        ignoreUnused (userdata);
+
+        if (auto* sdlNativeComponent = dynamic_cast<SDL2ComponentNative*> (nativeComponent))
+        {
+            if (sdlNativeComponent->hasNativeKeyboardFocus())
+                return true;
+        }
+    }
+
+    return false;
+}
+
+bool SDL2ComponentNative::anyNativeWindowContains (Point<float> screenPosition)
+{
+    auto* desktop = Desktop::getInstanceWithoutCreating();
+
+    if (desktop == nullptr)
+        return false;
+
+    for (const auto& [userdata, nativeComponent] : desktop->nativeComponents)
+    {
+        ignoreUnused (userdata);
+
+        if (nativeComponent != nullptr
+            && nativeComponent->isVisible()
+            && nativeComponent->getBounds().to<float>().contains (screenPosition))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+//==============================================================================
+
+void SDL2ComponentNative::updateMouseCapture (bool shouldBeActive)
+{
+    if (! shouldCaptureMouse)
+        shouldBeActive = false;
+
+    if (shouldBeActive == mouseCaptureActive)
+        return;
+
+    if (shouldBeActive)
+    {
+        mouseCaptureActive = requestMouseCapture();
+        return;
+    }
+
+    releaseMouseCapture();
+    mouseCaptureActive = false;
+}
+
+void SDL2ComponentNative::pollCapturedMouseState()
+{
+    if (mouseCaptureRequestCount <= 0 || SDL_WasInit (SDL_INIT_VIDEO) == 0)
+        return;
+
+    int x = 0;
+    int y = 0;
+    const auto currentButtons = SDL_GetGlobalMouseState (&x, &y);
+    const auto hadButtonsDown = lastCapturedMouseButtonState != 0;
+    const auto hasButtonsDown = currentButtons != 0;
+
+    lastCapturedMouseButtonState = currentButtons;
+
+    if (hadButtonsDown || ! hasButtonsDown)
+        return;
+
+    if (anyNativeWindowContains ({ static_cast<float> (x), static_cast<float> (y) }))
+        return;
+
+    MessageManager::callAsync ([]
+    {
+        PopupMenu::dismissAllPopups();
+    });
+}
+
+bool SDL2ComponentNative::requestMouseCapture()
+{
+    if (SDL_WasInit (SDL_INIT_VIDEO) == 0)
+        return false;
+
+    const bool shouldEnableCapture = mouseCaptureRequestCount == 0;
+
+    if (shouldEnableCapture && SDL_CaptureMouse (SDL_TRUE) != 0)
+        return false;
+
+    ++mouseCaptureRequestCount;
+    lastCapturedMouseButtonState = SDL_GetGlobalMouseState (nullptr, nullptr);
+
+    if (shouldEnableCapture)
+        YUP_WINDOWING_LOG ("Enabled SDL Mouse Capture");
+
+    return true;
+}
+
+void SDL2ComponentNative::releaseMouseCapture()
+{
+    if (mouseCaptureRequestCount <= 0)
+        return;
+
+    --mouseCaptureRequestCount;
+
+    if (mouseCaptureRequestCount == 0 && SDL_WasInit (SDL_INIT_VIDEO) != 0)
+    {
+        SDL_CaptureMouse (SDL_FALSE);
+        lastCapturedMouseButtonState = 0;
+
+        YUP_WINDOWING_LOG ("Disabled SDL Mouse Capture");
+    }
 }
 
 //==============================================================================

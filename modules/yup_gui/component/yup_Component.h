@@ -1185,6 +1185,38 @@ public:
 
     //==============================================================================
 
+    /** Set a metric value for the component.
+
+        Metrics are numeric values like corner radius, padding, or spacing that
+        can be themed globally and overridden per-component, following the same
+        pattern as component colors.
+
+        @param metricId The identifier of the metric to set.
+        @param metric The metric value to set. Pass std::nullopt to remove the override.
+    */
+    void setMetric (const Identifier& metricId, const std::optional<float>& metric);
+
+    /** Get the metric override for this component (does not walk parents).
+
+        @param metricId The identifier of the metric to get.
+
+        @return The metric value, or std::nullopt if not set on this specific component.
+    */
+    std::optional<float> getMetric (const Identifier& metricId) const;
+
+    /** Find the metric value, walking up the parent hierarchy.
+
+        Checks this component first, then walks up the parent chain. If no override
+        is found, falls back to the value registered in the global ApplicationTheme.
+
+        @param metricId The identifier of the metric to find.
+
+        @return The metric value, or std::nullopt if not found anywhere.
+    */
+    std::optional<float> findMetric (const Identifier& metricId) const;
+
+    //==============================================================================
+
     /** Set a style property for the component.
 
         @param propertyId The identifier of the property to set.

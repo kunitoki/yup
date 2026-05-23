@@ -66,6 +66,15 @@ ComponentNative::Options& ComponentNative::Options::withAllowedHighDensityDispla
     return *this;
 }
 
+ComponentNative::Options& ComponentNative::Options::withMouseCapture (bool shouldCaptureMouse) noexcept
+{
+    if (shouldCaptureMouse)
+        flags |= captureMouse;
+    else
+        flags &= ~captureMouse;
+    return *this;
+}
+
 ComponentNative::Options& ComponentNative::Options::withTemporaryWindow (bool shouldBeTemporary) noexcept
 {
     if (shouldBeTemporary)

@@ -46,9 +46,13 @@ void removeActivePopup (PopupMenu* popupMenu)
     for (auto it = activePopups.begin(); it != activePopups.end();)
     {
         if (it->get() == popupMenu)
+        {
             it = activePopups.erase (it);
+        }
         else
+        {
             ++it;
+        }
     }
 }
 
@@ -747,7 +751,8 @@ void PopupMenu::showCustom (const Options& options, bool isSubmenu, std::functio
         auto nativeOptions = ComponentNative::Options {}
                                  .withDecoration (false)
                                  .withResizableWindow (false)
-                                 .withTemporaryWindow (true);
+                                 .withTemporaryWindow (true)
+                                 .withMouseCapture (true);
 
         if (! isOnDesktop())
             addToDesktop (nativeOptions);
