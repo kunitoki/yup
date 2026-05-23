@@ -630,6 +630,9 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
         ++itemIndex;
         const auto rect = item->area;
 
+        if (rect.isEmpty())
+            continue;
+
         // Skip custom components as they render themselves
         if (item->isCustomComponent())
             continue;
@@ -685,12 +688,21 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
 
             auto textRect = rect.reduced (12.0f, 2.0f);
             if (anyItemIsTicked)
-                textRect.setX (textRect.getX() + 8.0f);
+                textRect = textRect.withTrimmedLeft (8.0f);
+
+            if (item->shortcutKeyText.isNotEmpty())
+                textRect = textRect.withTrimmedRight (80.0f);
+
+            if (item->isSubMenu())
+                textRect = textRect.withTrimmedRight (24.0f);
 
             {
                 auto styledText = yup::StyledText();
                 {
                     auto modifier = styledText.startUpdate();
+                    modifier.setMaxSize (textRect.getSize());
+                    modifier.setOverflow (yup::StyledText::ellipsis);
+                    modifier.setWrap (yup::StyledText::noWrap);
                     modifier.appendText (item->text, itemFont.withHeight (14.0f));
                 }
 
@@ -715,6 +727,9 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
                 auto styledText = yup::StyledText();
                 {
                     auto modifier = styledText.startUpdate();
+                    modifier.setMaxSize (shortcutRect.getSize());
+                    modifier.setOverflow (yup::StyledText::ellipsis);
+                    modifier.setWrap (yup::StyledText::noWrap);
                     modifier.setHorizontalAlign (yup::StyledText::right);
                     modifier.appendText (item->shortcutKeyText, itemFont.withHeight (13.0f));
                 }
