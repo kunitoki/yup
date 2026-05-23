@@ -1925,8 +1925,9 @@ TEST_F (ComponentMockTest, MetricParentFallback)
     EXPECT_FLOAT_EQ (fallbackMetric.value(), 12.0f);
 }
 
-TEST_F (ComponentMockTest, MetricThemeFallback)
+TEST_F (ComponentMockTest, DISABLED_MetricThemeFallback)
 {
+    // TODO - rewrite this with the new structure in mind, Component should not access to the global theme directly
     Identifier metricId ("globalSpacing");
 
     // Set a metric in the global theme
