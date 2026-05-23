@@ -915,8 +915,7 @@ public:
                   IPtr<Vst::IAudioProcessor> processor,
                   IPtr<Vst::IEditController> controller,
                   bool controllerWasInitialized)
-        : AudioPluginInstance (desc,
-                               buildBusLayout (component.get()))
+        : AudioPluginInstance (desc, buildBusLayout (component.get()))
         , hostContext (context)
         , vst3Module (std::move (module))
         , vst3HostApplication (std::move (hostApplication))
@@ -927,10 +926,12 @@ public:
         , vst3ControllerInitialized (controllerWasInitialized)
     {
         if (auto* handler = static_cast<HostComponentHandler*> (vst3ComponentHandler.get()))
+        {
             handler->setRestartCallback ([this] (int32 flags)
             {
                 handleRestartComponent (flags);
             });
+        }
 
         connectComponentAndController();
         buildParameterList();
@@ -1064,8 +1065,7 @@ public:
                 auto* destination = audioBuffer.getWritePointer (channel);
                 const auto* source = doublePrecisionBuffer.getReadPointer (channel);
 
-                for (int sample = 0; sample < numSamples; ++sample)
-                    destination[sample] = static_cast<float> (source[sample]);
+                FloatVectorOperations::convertDoubleToFloat (destination, source, numSamples);
             }
 
             return;
@@ -1098,11 +1098,6 @@ public:
         vst3Processor->process (data);
 
         collectOutputEvents (midiBuffer);
-    }
-
-    int getLatencySamples() override
-    {
-        return vst3Processor != nullptr ? static_cast<int> (vst3Processor->getLatencySamples()) : 0;
     }
 
     void processBlock (AudioProcessContext<double>& context) override
@@ -1156,6 +1151,13 @@ public:
     bool supportsDoublePrecisionProcessing() const override
     {
         return vst3Processor != nullptr && vst3Processor->canProcessSampleSize (Vst::kSample64) == kResultTrue;
+    }
+
+    //==============================================================================
+
+    int getLatencySamples() override
+    {
+        return vst3Processor != nullptr ? static_cast<int> (vst3Processor->getLatencySamples()) : 0;
     }
 
     //==============================================================================
@@ -1447,25 +1449,6 @@ private:
             params[static_cast<std::size_t> (index)]->endChangeGesture();
     }
 
-    AudioPluginHostContext hostContext;
-    std::unique_ptr<VST3Module> vst3Module;
-    IPtr<Vst::IHostApplication> vst3HostApplication;
-    IPtr<Vst::IComponentHandler> vst3ComponentHandler;
-    IPtr<Vst::IComponent> vst3Component;
-    IPtr<Vst::IAudioProcessor> vst3Processor;
-    IPtr<Vst::IEditController> vst3Controller;
-    Vst::ProcessContext vst3ProcessContext {};
-    Vst::ParameterChanges inputParameterChanges;
-    Vst::EventList inputEvents;
-    Vst::EventList outputEvents;
-    AudioBuffer<double> doublePrecisionBuffer;
-    std::vector<Vst::ParamID> vst3ParameterIds;
-    int currentPreset = 0;
-    int numPresets = 0;
-    bool processingPrepared = false;
-    bool vst3ControllerInitialized = false;
-    bool vst3ComponentsConnected = false;
-
     bool connectComponentAndController()
     {
         if (vst3Component == nullptr || vst3Controller == nullptr)
@@ -1633,6 +1616,25 @@ private:
         setup.sampleRate = getSampleRate();
         vst3Processor->setupProcessing (setup);
     }
+
+    AudioPluginHostContext hostContext;
+    std::unique_ptr<VST3Module> vst3Module;
+    IPtr<Vst::IHostApplication> vst3HostApplication;
+    IPtr<Vst::IComponentHandler> vst3ComponentHandler;
+    IPtr<Vst::IComponent> vst3Component;
+    IPtr<Vst::IAudioProcessor> vst3Processor;
+    IPtr<Vst::IEditController> vst3Controller;
+    Vst::ProcessContext vst3ProcessContext {};
+    Vst::ParameterChanges inputParameterChanges;
+    Vst::EventList inputEvents;
+    Vst::EventList outputEvents;
+    AudioBuffer<double> doublePrecisionBuffer;
+    std::vector<Vst::ParamID> vst3ParameterIds;
+    int currentPreset = 0;
+    int numPresets = 0;
+    bool processingPrepared = false;
+    bool vst3ControllerInitialized = false;
+    bool vst3ComponentsConnected = false;
 };
 
 //==============================================================================

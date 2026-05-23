@@ -74,7 +74,10 @@ class ParameterChangeBuffer
 {
 public:
     //==============================================================================
+    /** Default constructor. */
+    ParameterChangeBuffer() = default;
 
+    //==============================================================================
     /** Reserves capacity for automation events.
 
         Call at prepare time (not on the audio thread). A good default is
@@ -89,7 +92,6 @@ public:
     }
 
     //==============================================================================
-
     /** Clears all events without releasing memory. Safe to call on the audio thread. */
     void clear() noexcept
     {
@@ -109,7 +111,6 @@ public:
     }
 
     //==============================================================================
-
     /** Adds a parameter automation event.
 
         Safe on the audio thread when the buffer was reserved with sufficient capacity.
@@ -146,7 +147,6 @@ public:
     }
 
     //==============================================================================
-
     /** Returns a pointer to the first event (sorted by sampleOffset). */
     const ParameterChange* begin() const noexcept
     {

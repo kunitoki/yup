@@ -50,6 +50,13 @@ AudioGraphApp::AudioGraphApp()
 {
     deviceManager.initialiseWithDefaultDevices (2, 2);
 
+    if (auto defaultMidiIn = yup::MidiInput::getDefaultDevice();
+        defaultMidiIn != yup::MidiDeviceInfo())
+    {
+        deviceManager.setMidiInputDeviceEnabled (defaultMidiIn.identifier, true);
+        deviceManager.addMidiInputDeviceCallback (defaultMidiIn.identifier, &midiCollector);
+    }
+
     model = std::make_shared<yup::AudioGraphModel>();
     graph = std::make_shared<yup::AudioGraphProcessor> (model);
     nodeRegistry.registerInternalNodes();
@@ -88,6 +95,13 @@ AudioGraphApp::~AudioGraphApp()
 #if YUP_DESKTOP
     scanLifetime->store (false);
 #endif
+
+    if (auto defaultMidiIn = yup::MidiInput::getDefaultDevice();
+        defaultMidiIn != yup::MidiDeviceInfo())
+    {
+        deviceManager.removeMidiInputDeviceCallback (defaultMidiIn.identifier, &midiCollector);
+        deviceManager.setMidiInputDeviceEnabled (defaultMidiIn.identifier, false);
+    }
 
     closePluginEditor();
     closeAllSubgraphEditors();
@@ -165,6 +179,8 @@ void AudioGraphApp::audioDeviceIOCallbackWithContext (const float* const* inputC
     }
 
     yup::MidiBuffer midi;
+    midi.ensureSize (2048);
+    midiCollector.removeNextBlockOfMessages (midi, numSamples);
     yup::ParameterChangeBuffer emptyParams;
     yup::AudioProcessContext<float> ctx { outputBuffer, midi, emptyParams };
     graph->processBlock (ctx);
@@ -174,6 +190,9 @@ void AudioGraphApp::audioDeviceAboutToStart (yup::AudioIODevice* device)
 {
     if (graph == nullptr || device == nullptr)
         return;
+
+    const auto sampleRate = device->getCurrentSampleRate();
+    midiCollector.reset (sampleRate);
 
 #if YUP_DESKTOP
     yup::AudioPluginHostContext ctx;
@@ -426,13 +445,13 @@ struct SubgraphEditorRecord
 std::unique_ptr<AudioGraphEditorPanel> AudioGraphApp::createMainPanel()
 {
     AudioGraphEditorPanel::EndpointViews endpointViews;
-    endpointViews.createInputView = []
+    endpointViews.createInputView = [this]
     {
-        return std::make_unique<SoundCardInputNodeView>();
+        return std::make_unique<SoundCardInputNodeView> (graph, "sound card");
     };
-    endpointViews.createOutputView = []
+    endpointViews.createOutputView = [this]
     {
-        return std::make_unique<SoundCardOutputNodeView>();
+        return std::make_unique<SoundCardOutputNodeView> (graph, "sound card");
     };
 
     auto panel = std::make_unique<AudioGraphEditorPanel> (graph, nodeRegistry, std::move (endpointViews));
