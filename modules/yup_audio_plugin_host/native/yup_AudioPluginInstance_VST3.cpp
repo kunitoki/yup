@@ -592,6 +592,8 @@ class HostComponentHandler : public Vst::IComponentHandler
 {
 public:
     using RestartCallback = std::function<void (int32)>;
+    using ParameterGestureCallback = std::function<void (Vst::ParamID)>;
+    using ParameterEditCallback = std::function<void (Vst::ParamID, Vst::ParamValue)>;
 
     HostComponentHandler()
     {
@@ -602,14 +604,29 @@ public:
         FUNKNOWN_DTOR
     }
 
-    tresult PLUGIN_API beginEdit (Vst::ParamID) override
+    tresult PLUGIN_API beginEdit (Vst::ParamID tag) override
     {
+        if (beginEditCallback != nullptr)
+            beginEditCallback (tag);
+
         return kResultOk;
     }
 
-    tresult PLUGIN_API performEdit (Vst::ParamID, Vst::ParamValue) override { return kResultOk; }
+    tresult PLUGIN_API performEdit (Vst::ParamID tag, Vst::ParamValue value) override
+    {
+        if (performEditCallback != nullptr)
+            performEditCallback (tag, value);
 
-    tresult PLUGIN_API endEdit (Vst::ParamID) override { return kResultOk; }
+        return kResultOk;
+    }
+
+    tresult PLUGIN_API endEdit (Vst::ParamID tag) override
+    {
+        if (endEditCallback != nullptr)
+            endEditCallback (tag);
+
+        return kResultOk;
+    }
 
     tresult PLUGIN_API restartComponent (int32 flags) override
     {
@@ -624,10 +641,22 @@ public:
         restartCallback = std::move (callback);
     }
 
+    void setParameterEditCallbacks (ParameterGestureCallback beginCallback,
+                                    ParameterEditCallback performCallback,
+                                    ParameterGestureCallback endCallback)
+    {
+        beginEditCallback = std::move (beginCallback);
+        performEditCallback = std::move (performCallback);
+        endEditCallback = std::move (endCallback);
+    }
+
     DECLARE_FUNKNOWN_METHODS
 
 private:
     RestartCallback restartCallback;
+    ParameterGestureCallback beginEditCallback;
+    ParameterEditCallback performEditCallback;
+    ParameterGestureCallback endEditCallback;
 };
 
 IMPLEMENT_FUNKNOWN_METHODS (HostComponentHandler, Vst::IComponentHandler, Vst::IComponentHandler::iid)
@@ -905,6 +934,24 @@ public:
 
         connectComponentAndController();
         buildParameterList();
+
+        if (auto* handler = static_cast<HostComponentHandler*> (vst3ComponentHandler.get()))
+        {
+            handler->setParameterEditCallbacks (
+                [this] (Vst::ParamID id)
+            {
+                handleParameterGestureBegin (id);
+            },
+                [this] (Vst::ParamID id, Vst::ParamValue value)
+            {
+                handleParameterEdit (id, value);
+            },
+                [this] (Vst::ParamID id)
+            {
+                handleParameterGestureEnd (id);
+            });
+        }
+
         setNonRealtime (context.isNonRealtime);
     }
 
@@ -914,7 +961,10 @@ public:
         releaseResources();
 
         if (auto* handler = static_cast<HostComponentHandler*> (vst3ComponentHandler.get()))
+        {
             handler->setRestartCallback (nullptr);
+            handler->setParameterEditCallbacks (nullptr, nullptr, nullptr);
+        }
 
         if (vst3Controller != nullptr)
         {
@@ -1022,7 +1072,7 @@ public:
         }
 
         Vst::ProcessData data {};
-        prepareProcessData (data, audioBuffer.getNumSamples(), Vst::kSample32);
+        prepareProcessData (data, audioBuffer.getNumSamples(), Vst::kSample32, context.params);
         prepareMidiInputEvents (midiBuffer);
 
         // Input busses
@@ -1077,7 +1127,7 @@ public:
         }
 
         Vst::ProcessData data {};
-        prepareProcessData (data, audioBuffer.getNumSamples(), Vst::kSample64);
+        prepareProcessData (data, audioBuffer.getNumSamples(), Vst::kSample64, context.params);
         prepareMidiInputEvents (midiBuffer);
 
         Vst::AudioBusBuffers inputBus {};
@@ -1361,6 +1411,42 @@ private:
         inputParameterChanges.setMaxParameters (static_cast<int32> (vst3ParameterIds.size()));
     }
 
+    int findParameterIndexForVST3Id (Vst::ParamID id) const
+    {
+        const auto iter = std::find (vst3ParameterIds.begin(), vst3ParameterIds.end(), id);
+        if (iter == vst3ParameterIds.end())
+            return -1;
+
+        return static_cast<int> (std::distance (vst3ParameterIds.begin(), iter));
+    }
+
+    void handleParameterGestureBegin (Vst::ParamID id)
+    {
+        const auto index = findParameterIndexForVST3Id (id);
+        const auto params = getParameters();
+
+        if (isPositiveAndBelow (index, static_cast<int> (params.size())))
+            params[static_cast<std::size_t> (index)]->beginChangeGesture();
+    }
+
+    void handleParameterEdit (Vst::ParamID id, Vst::ParamValue value)
+    {
+        const auto index = findParameterIndexForVST3Id (id);
+        const auto params = getParameters();
+
+        if (isPositiveAndBelow (index, static_cast<int> (params.size())))
+            params[static_cast<std::size_t> (index)]->setNormalizedValue (static_cast<float> (value));
+    }
+
+    void handleParameterGestureEnd (Vst::ParamID id)
+    {
+        const auto index = findParameterIndexForVST3Id (id);
+        const auto params = getParameters();
+
+        if (isPositiveAndBelow (index, static_cast<int> (params.size())))
+            params[static_cast<std::size_t> (index)]->endChangeGesture();
+    }
+
     AudioPluginHostContext hostContext;
     std::unique_ptr<VST3Module> vst3Module;
     IPtr<Vst::IHostApplication> vst3HostApplication;
@@ -1449,24 +1535,28 @@ private:
         vst3ComponentsConnected = false;
     }
 
-    void prepareProcessData (Vst::ProcessData& data, int numSamples, int32 symbolicSampleSize)
+    void prepareProcessData (Vst::ProcessData& data,
+                             int numSamples,
+                             int32 symbolicSampleSize,
+                             const ParameterChangeBuffer& parameterChanges)
     {
         data.processMode = isNonRealtime() ? Vst::kOffline : Vst::kRealtime;
         data.symbolicSampleSize = symbolicSampleSize;
         data.numSamples = numSamples;
 
         inputParameterChanges.clearQueue();
-        const auto params = getParameters();
-        const auto numParams = yup::jmin (params.size(), vst3ParameterIds.size());
 
-        for (std::size_t i = 0; i < numParams; ++i)
+        for (const auto& change : parameterChanges)
         {
+            if (! isPositiveAndBelow (change.parameterIndex, static_cast<int> (vst3ParameterIds.size())))
+                continue;
+
             int32 queueIndex = 0;
-            if (auto* queue = inputParameterChanges.addParameterData (vst3ParameterIds[i], queueIndex))
+            if (auto* queue = inputParameterChanges.addParameterData (vst3ParameterIds[static_cast<std::size_t> (change.parameterIndex)], queueIndex))
             {
                 int32 pointIndex = 0;
-                queue->addPoint (0,
-                                 static_cast<Vst::ParamValue> (params[i]->getValue()),
+                queue->addPoint (change.sampleOffset,
+                                 static_cast<Vst::ParamValue> (change.normalizedValue),
                                  pointIndex);
             }
         }

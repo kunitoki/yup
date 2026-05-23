@@ -413,7 +413,7 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
             COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_target_path}"
             COMMAND ${CMAKE_COMMAND} -E rm -f "${plugin_path}"
             COMMAND ${CMAKE_COMMAND} -E create_symlink "$<TARGET_FILE:${dependency_target}>" "${plugin_path}"
-            COMMENT "Symlinking ${plugin_type_upper} plugin to ${plugin_path}"
+            COMMENT "Symlinking CLAP plugin ${plugin_type_upper} plugin to ${plugin_path}"
             VERBATIM)
     elseif ("${plugin_type}" STREQUAL "vst3")
         get_target_property (source_plugin_path ${dependency_target} SMTG_PLUGIN_PACKAGE_PATH)
@@ -423,15 +423,15 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
 
         add_custom_command(TARGET ${dependency_target} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
-            COMMAND ${CMAKE_COMMAND} -E copy_directory "${source_plugin_path}" "${plugin_path}"
-            COMMENT "Copying ${plugin_type_upper} plugin to ${plugin_path}"
+            COMMAND ${CMAKE_COMMAND} -E create_symlink "${source_plugin_path}" "${plugin_path}"
+            COMMENT "Symlinking VST3 plugin ${plugin_type_upper} plugin to ${plugin_path}"
             VERBATIM)
     elseif ("${plugin_type}" STREQUAL "au")
         add_custom_command(TARGET ${dependency_target} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
-            COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
+            COMMAND ${CMAKE_COMMAND} -E create_symlink "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
             COMMAND codesign --force --sign - "${plugin_path}"
-            COMMENT "Copying AU plugin to ${plugin_path}"
+            COMMENT "Symlinking AU plugin ${plugin_type_upper} to ${plugin_path}"
             VERBATIM)
     else()
         _yup_message (FATAL_ERROR "Unsupported plugin type ${plugin_type} for copying bundle")

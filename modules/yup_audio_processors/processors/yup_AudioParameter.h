@@ -124,7 +124,7 @@ public:
 
     void endChangeGesture();
 
-    bool isPerformingChangeGesture() const { return isInsideGesture != 0; }
+    bool isPerformingChangeGesture() const { return isInsideGesture.load() != 0; }
 
     //==============================================================================
 
@@ -241,7 +241,7 @@ private:
     ListenersType listeners;
     float smoothingTimeMs = 0.0f;
     bool smoothingEnabled = false;
-    int isInsideGesture = 0;
+    std::atomic<int> isInsideGesture = 0;
 };
 
 } // namespace yup

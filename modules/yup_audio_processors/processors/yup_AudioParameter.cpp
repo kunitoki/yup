@@ -91,19 +91,23 @@ AudioParameter::~AudioParameter()
 
 void AudioParameter::beginChangeGesture()
 {
-    ++isInsideGesture;
+    const auto newGestureDepth = isInsideGesture.fetch_add (1) + 1;
 
-    if (isInsideGesture == 1)
+    if (newGestureDepth == 1)
         listeners.call (&Listener::parameterGestureBegin, this, paramIndex);
 }
 
 void AudioParameter::endChangeGesture()
 {
-    jassert (isInsideGesture > 0); // Unbalanced calls to begin and end change gesture found!
+    const auto currentGestureDepth = isInsideGesture.load();
 
-    --isInsideGesture;
+    jassert (currentGestureDepth > 0); // Unbalanced calls to begin and end change gesture found!
+    if (currentGestureDepth <= 0)
+        return;
 
-    if (isInsideGesture == 0)
+    const auto newGestureDepth = isInsideGesture.fetch_sub (1) - 1;
+
+    if (newGestureDepth == 0)
         listeners.call (&Listener::parameterGestureEnd, this, paramIndex);
 }
 

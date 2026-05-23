@@ -44,7 +44,9 @@
 #include <pluginterfaces/vst/vstpresetkeys.h>
 
 #include <atomic>
+#include <memory>
 #include <string_view>
+#include <vector>
 
 //==============================================================================
 
@@ -57,8 +59,6 @@ using namespace Steinberg;
 
 namespace
 {
-
-//==============================================================================
 
 FUID toFUID (const String& source)
 {
@@ -373,6 +373,7 @@ class AudioPluginControllerVST3
     , public Vst::IUnitInfo
     , public Vst::IRemapParamID
     , public Vst::ChannelContext::IInfoListener
+    , private AudioParameter::Listener
 {
 public:
     //==============================================================================
@@ -405,6 +406,7 @@ public:
 
     ~AudioPluginControllerVST3()
     {
+        removeParameterListeners();
     }
 
     //==============================================================================
@@ -420,6 +422,9 @@ public:
 
     tresult PLUGIN_API terminate() override
     {
+        removeParameterListeners();
+        processor = nullptr;
+
         return Vst::EditController::terminate();
     }
 
@@ -427,13 +432,14 @@ public:
 
     tresult PLUGIN_API connect (Vst::IConnectionPoint* other) override
     {
-        return kResultTrue;
+        return Vst::EditController::connect (other);
     }
 
     tresult PLUGIN_API disconnect (Vst::IConnectionPoint* other) override
     {
+        removeParameterListeners();
         processor = nullptr;
-        return kResultTrue;
+        return Vst::EditController::disconnect (other);
     }
 
     tresult PLUGIN_API notify (Vst::IMessage* message) override
@@ -576,7 +582,7 @@ public:
 
         const auto processorParamCount = static_cast<Vst::ParamID> (processor->getParameters().size());
         if (tag >= processorParamCount)
-            return 0.0; // bypass defaults to not bypassed
+            return Vst::EditController::getParamNormalized (tag);
 
         if (auto parameter = processor->getParameters()[static_cast<int> (tag)])
             return parameter->getNormalizedValue();
@@ -591,11 +597,12 @@ public:
 
         const auto processorParamCount = static_cast<Vst::ParamID> (processor->getParameters().size());
         if (tag >= processorParamCount)
-            return kResultOk; // bypass handled by the processor side
+            return Vst::EditController::setParamNormalized (tag, value);
 
         if (auto parameter = processor->getParameters()[static_cast<int> (tag)])
         {
             parameter->setNormalizedValue (static_cast<float> (value));
+            Vst::EditController::setParamNormalized (tag, value);
             return kResultOk;
         }
 
@@ -796,6 +803,9 @@ public:
 private:
     void setupParameters()
     {
+        removeParameterListeners();
+        parameters.removeAll();
+
         if (processor == nullptr)
             return;
 
@@ -812,6 +822,9 @@ private:
                 static_cast<int> (parameterIndex), // tag
                 Vst::kRootUnitId,                  // unit
                 nullptr);                          // short title
+
+            parameter->addListener (this);
+            listenedParameters.push_back (parameter);
         }
 
         // VST3 bypass parameter (always the last parameter)
@@ -826,7 +839,46 @@ private:
             nullptr);
     }
 
+    void removeParameterListeners()
+    {
+        for (auto& parameter : listenedParameters)
+            parameter->removeListener (this);
+
+        listenedParameters.clear();
+    }
+
+    void parameterValueChanged (const AudioParameter::Ptr& parameter, int indexInContainer) override
+    {
+        if (! isValidProcessorParameterIndex (indexInContainer))
+            return;
+
+        const auto tag = static_cast<Vst::ParamID> (indexInContainer);
+        const auto normalizedValue = static_cast<Vst::ParamValue> (parameter->getNormalizedValue());
+
+        Vst::EditController::setParamNormalized (tag, normalizedValue);
+        Vst::EditController::performEdit (tag, normalizedValue);
+    }
+
+    void parameterGestureBegin (const AudioParameter::Ptr&, int indexInContainer) override
+    {
+        if (isValidProcessorParameterIndex (indexInContainer))
+            Vst::EditController::beginEdit (static_cast<Vst::ParamID> (indexInContainer));
+    }
+
+    void parameterGestureEnd (const AudioParameter::Ptr&, int indexInContainer) override
+    {
+        if (isValidProcessorParameterIndex (indexInContainer))
+            Vst::EditController::endEdit (static_cast<Vst::ParamID> (indexInContainer));
+    }
+
+    bool isValidProcessorParameterIndex (int indexInContainer) const
+    {
+        return processor != nullptr
+            && isPositiveAndBelow (indexInContainer, static_cast<int> (processor->getParameters().size()));
+    }
+
     AudioProcessor* processor = nullptr;
+    std::vector<AudioParameter::Ptr> listenedParameters;
 };
 
 //==============================================================================
@@ -1084,7 +1136,6 @@ public:
 
                 if (tag == bypassTag)
                 {
-                    // Take final bypass state from the last point in the queue
                     int32 sampleOffset;
                     Vst::ParamValue value;
                     if (queue->getPoint (numPoints - 1, sampleOffset, value) == kResultOk)
@@ -1095,22 +1146,19 @@ public:
                 }
                 else if (tag < static_cast<Vst::ParamID> (parameters.size()))
                 {
-                    // Collect ALL automation points for sample-accurate delivery
+                    if (parameters[static_cast<int> (tag)]->isPerformingChangeGesture())
+                        continue;
+
                     for (int32 p = 0; p < numPoints; ++p)
                     {
                         int32 sampleOffset;
                         Vst::ParamValue value;
                         if (queue->getPoint (p, sampleOffset, value) == kResultOk)
-                            paramChangeBuffer.addChange (static_cast<int> (tag),
-                                                         static_cast<float> (value),
-                                                         sampleOffset);
+                            paramChangeBuffer.addChange (static_cast<int> (tag), static_cast<float> (value), sampleOffset);
                     }
                 }
             }
 
-            // Sort by sample position, then apply each value so the parameter's atomic
-            // ends up at the final (last) value — backward-compat for processors that
-            // only read the atomic value rather than iterating the buffer.
             paramChangeBuffer.sort();
             for (const auto& change : paramChangeBuffer)
                 parameters[change.parameterIndex]->setNormalizedValue (change.normalizedValue);
