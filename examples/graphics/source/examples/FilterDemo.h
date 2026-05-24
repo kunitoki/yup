@@ -531,7 +531,10 @@ public:
             return;
         }
 
-        const int numPoints = 512;
+        const int numPoints = isCombFilter() ? 4096 : 512;
+
+        minDb = isCombFilter() ? -80.0 : -60.0;
+        maxDb = isCombFilter() ? 40.0 : 20.0;
 
         responseData.clear();
         responseData.resize (numPoints);
@@ -629,7 +632,9 @@ private:
         }
 
         // Horizontal dB lines
-        for (double db = -60.0; db <= 20.0; db += 20.0)
+        const auto gridStepDb = isCombFilter() ? 40.0 : 20.0;
+
+        for (double db = minDb; db <= maxDb; db += gridStepDb)
         {
             float y = dbToY (db, bounds);
             g.strokeLine ({ bounds.getX(), y }, { bounds.getRight(), y });
@@ -700,7 +705,9 @@ private:
         }
 
         // dB labels
-        for (double db = -60.0; db <= 20.0; db += 20.0)
+        const auto gridStepDb = isCombFilter() ? 40.0 : 20.0;
+
+        for (double db = minDb; db <= maxDb; db += gridStepDb)
         {
             float y = dbToY (db, bounds);
             yup::String label = yup::String (db, 0) + " dB";
@@ -718,6 +725,11 @@ private:
     {
         double ratio = (db - minDb) / (maxDb - minDb);
         return static_cast<float> (bounds.getBottom() - ratio * bounds.getHeight());
+    }
+
+    bool isCombFilter() const
+    {
+        return dynamic_cast<yup::CombFilter<float>*> (filter.get()) != nullptr;
     }
 
     std::shared_ptr<yup::FilterBase<float, double>> filter;

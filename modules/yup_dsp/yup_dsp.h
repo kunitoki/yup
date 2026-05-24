@@ -139,10 +139,6 @@
 #include "frequency/yup_FFTProcessor.h"
 #include "frequency/yup_SpectrumAnalyzerState.h"
 
-// Wavetable and antialiased oscillators (before FilterDesigner for AA-IIR2 coefficient types)
-#include "oscillators/yup_Wavetable.h"
-#include "oscillators/yup_AaIir2Oscillator.h"
-
 // Base filter interfaces and common structures
 #include "base/yup_FilterMode.h"
 #include "base/yup_FilterBase.h"

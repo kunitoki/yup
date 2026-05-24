@@ -209,13 +209,13 @@ public:
     */
     Complex<CoeffType> getComplexResponse (CoeffType responseFrequency) const override
     {
-        const auto omega = frequencyToAngular (responseFrequency, static_cast<CoeffType> (this->sampleRate));
-        const auto delay = getDelayForResponse();
-        const auto delayed = polar (static_cast<CoeffType> (1), -omega * delay);
+        const auto delayed = getFractionalDelayResponse (responseFrequency);
         const auto denominator = Complex<CoeffType> (static_cast<CoeffType> (1)) - delayLineFeedback * delayed;
 
         if (std::abs (denominator) <= std::numeric_limits<CoeffType>::epsilon())
-            return Complex<CoeffType> (static_cast<CoeffType> (1));
+            return Complex<CoeffType> (static_cast<CoeffType> (1))
+                 + (static_cast<CoeffType> (0.5) * delayed)
+                       / (denominator + Complex<CoeffType> (std::numeric_limits<CoeffType>::epsilon()));
 
         return Complex<CoeffType> (static_cast<CoeffType> (1))
              + (static_cast<CoeffType> (0.5) * delayed) / denominator;
@@ -357,6 +357,26 @@ private:
                        static_cast<CoeffType> (1),
                        static_cast<CoeffType> (delayLineSizeInSamples - 1),
                        static_cast<CoeffType> (this->sampleRate) / frequency);
+    }
+
+    Complex<CoeffType> getFractionalDelayResponse (CoeffType responseFrequency) const noexcept
+    {
+        const auto delay = getDelayForResponse();
+        const auto readDelay = static_cast<CoeffType> (std::ceil (delay));
+        const auto fraction = readDelay - delay;
+        const auto fraction2 = fraction * fraction;
+        const auto fraction3 = fraction2 * fraction;
+
+        const auto weight0 = static_cast<CoeffType> (-0.5) * fraction + fraction2 - static_cast<CoeffType> (0.5) * fraction3;
+        const auto weight1 = static_cast<CoeffType> (1) - static_cast<CoeffType> (2.5) * fraction2 + static_cast<CoeffType> (1.5) * fraction3;
+        const auto weight2 = static_cast<CoeffType> (0.5) * fraction + static_cast<CoeffType> (2) * fraction2 - static_cast<CoeffType> (1.5) * fraction3;
+        const auto weight3 = static_cast<CoeffType> (-0.5) * fraction2 + static_cast<CoeffType> (0.5) * fraction3;
+        const auto omega = frequencyToAngular (responseFrequency, static_cast<CoeffType> (this->sampleRate));
+
+        return weight0 * polar (static_cast<CoeffType> (1), -omega * (readDelay + static_cast<CoeffType> (1)))
+             + weight1 * polar (static_cast<CoeffType> (1), -omega * readDelay)
+             + weight2 * polar (static_cast<CoeffType> (1), -omega * (readDelay - static_cast<CoeffType> (1)))
+             + weight3 * polar (static_cast<CoeffType> (1), -omega * (readDelay - static_cast<CoeffType> (2)));
     }
 
     //==============================================================================

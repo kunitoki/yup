@@ -124,3 +124,22 @@ TEST (CombFilterTests, ComplexResponseIsFinite)
     EXPECT_TRUE (std::isfinite (response.real()));
     EXPECT_TRUE (std::isfinite (response.imag()));
 }
+
+TEST (CombFilterTests, ComplexResponseMatchesIntegerDelayFeedForwardComb)
+{
+    CombFilter<double> filter;
+    filter.prepare (sampleRate, blockSize);
+    filter.setParameters (sampleRate / 8.0, 0.0, 0.0, sampleRate);
+
+    EXPECT_NEAR (std::abs (filter.getComplexResponse (0.0)), 1.5, 1e-9);
+    EXPECT_NEAR (std::abs (filter.getComplexResponse (sampleRate / 16.0)), 0.5, 1e-9);
+}
+
+TEST (CombFilterTests, ComplexResponseIncludesFeedbackResonance)
+{
+    CombFilter<double> filter;
+    filter.prepare (sampleRate, blockSize);
+    filter.setParameters (sampleRate / 8.0, 0.81, 0.0, sampleRate);
+
+    EXPECT_NEAR (std::abs (filter.getComplexResponse (sampleRate / 8.0)), 6.0, 1e-9);
+}
