@@ -20,8 +20,10 @@
 */
 
 #include "yup_dsp/yup_BiquadCascade.cpp"
+#include "yup_dsp/yup_AnalogFilters.cpp"
 #include "yup_dsp/yup_BiquadFilter.cpp"
 #include "yup_dsp/yup_ButterworthFilter.cpp"
+#include "yup_dsp/yup_CombFilter.cpp"
 #include "yup_dsp/yup_CircularBuffer.cpp"
 #include "yup_dsp/yup_DirectFIR.cpp"
 #include "yup_dsp/yup_FFTProcessor.cpp"

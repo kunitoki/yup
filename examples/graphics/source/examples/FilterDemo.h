@@ -510,13 +510,11 @@ public:
     {
         sampleRate = newSampleRate;
         maxFreq = sampleRate * 0.45; // Nyquist - some margin
-        updateResponseData();
     }
 
     void setFilter (std::shared_ptr<yup::FilterBase<float, double>> newFilter)
     {
         filter = newFilter;
-        updateResponseData();
     }
 
     const std::vector<yup::Complex<float>>& getPhaseData() const { return phaseData; }
@@ -537,15 +535,55 @@ public:
 
         responseData.clear();
         responseData.resize (numPoints);
-        yup::calculateFilterMagnitudeResponse (*filter, yup::Span (responseData), minFreq, maxFreq);
 
         phaseData.clear();
         phaseData.resize (numPoints);
-        yup::calculateFilterPhaseResponse (*filter, yup::Span (phaseData), minFreq, maxFreq);
 
         groupDelayData.clear();
         groupDelayData.resize (numPoints);
-        yup::calculateFilterGroupDelay (*filter, yup::Span (groupDelayData), minFreq, maxFreq, sampleRate);
+
+        std::vector<double> phaseRadians;
+        phaseRadians.resize (numPoints);
+
+        for (int i = 0; i < numPoints; ++i)
+        {
+            const double ratio = static_cast<double> (i) / static_cast<double> (numPoints - 1);
+            const double freq = minFreq * std::pow (maxFreq / minFreq, ratio);
+            const auto response = filter->getComplexResponse (freq);
+            const double magnitudeDb = 20.0 * std::log10 (yup::jmax (std::abs (response), 1.0e-12));
+            double phase = std::arg (response);
+            const double displayPhase = phase;
+
+            if (i > 0)
+            {
+                while (phase - phaseRadians[static_cast<std::size_t> (i - 1)] > yup::MathConstants<double>::pi)
+                    phase -= yup::MathConstants<double>::twoPi;
+                while (phase - phaseRadians[static_cast<std::size_t> (i - 1)] < -yup::MathConstants<double>::pi)
+                    phase += yup::MathConstants<double>::twoPi;
+            }
+
+            phaseRadians[static_cast<std::size_t> (i)] = phase;
+            responseData[static_cast<std::size_t> (i)] = { static_cast<float> (freq), static_cast<float> (magnitudeDb) };
+            phaseData[static_cast<std::size_t> (i)] = { static_cast<float> (freq), static_cast<float> (displayPhase * 180.0 / yup::MathConstants<double>::pi) };
+        }
+
+        for (int i = 1; i < numPoints - 1; ++i)
+        {
+            const auto previousFrequency = static_cast<double> (std::real (phaseData[static_cast<std::size_t> (i - 1)]));
+            const auto nextFrequency = static_cast<double> (std::real (phaseData[static_cast<std::size_t> (i + 1)]));
+            const auto previousOmega = yup::MathConstants<double>::twoPi * previousFrequency / sampleRate;
+            const auto nextOmega = yup::MathConstants<double>::twoPi * nextFrequency / sampleRate;
+            const auto delay = -(phaseRadians[static_cast<std::size_t> (i + 1)] - phaseRadians[static_cast<std::size_t> (i - 1)])
+                             / (nextOmega - previousOmega);
+
+            groupDelayData[static_cast<std::size_t> (i)] = { std::real (phaseData[static_cast<std::size_t> (i)]), static_cast<float> (delay) };
+        }
+
+        if (numPoints > 1)
+        {
+            groupDelayData.front() = { std::real (phaseData.front()), std::imag (groupDelayData[1]) };
+            groupDelayData.back() = { std::real (phaseData.back()), std::imag (groupDelayData[static_cast<std::size_t> (numPoints - 2)]) };
+        }
 
         stepResponseData.clear();
         stepResponseData.resize (100);
@@ -830,6 +868,9 @@ public:
 
         if (oscilloscope.isVisible())
             oscilloscope.repaint();
+
+        if (analysisUpdatePending.exchange (false))
+            updateAnalysisDisplays();
     }
 
     void visibilityChanged() override
@@ -952,6 +993,12 @@ private:
         filterTypeCombo->addItem ("First Order", 4);
         filterTypeCombo->addItem ("Butterworth", 5);
         filterTypeCombo->addItem ("FIR Filter", 6);
+        filterTypeCombo->addItem ("Analog Two Pole", 7);
+        filterTypeCombo->addItem ("Analog Vowel", 8);
+        filterTypeCombo->addItem ("Analog Korg35", 9);
+        filterTypeCombo->addItem ("Analog Moog Ladder", 10);
+        filterTypeCombo->addItem ("Analog Roland Diode", 11);
+        filterTypeCombo->addItem ("Comb", 12);
         filterTypeCombo->setSelectedId (1);
         filterTypeCombo->onSelectedItemChanged = [this]
         {
@@ -961,15 +1008,7 @@ private:
 
         // Response type selector
         responseTypeCombo = std::make_unique<yup::ComboBox> ("ResponseType");
-        responseTypeCombo->addItem ("Lowpass", 1);
-        responseTypeCombo->addItem ("Highpass", 2);
-        responseTypeCombo->addItem ("Bandpass CSG", 3);
-        responseTypeCombo->addItem ("Bandpass CPG", 4);
-        responseTypeCombo->addItem ("Bandstop", 5);
-        responseTypeCombo->addItem ("Peak", 6);
-        responseTypeCombo->addItem ("Low Shelf", 7);
-        responseTypeCombo->addItem ("High Shelf", 8);
-        responseTypeCombo->addItem ("Allpass", 9);
+        addFullResponseTypes();
         responseTypeCombo->setSelectedId (1);
         responseTypeCombo->onSelectedItemChanged = [this]
         {
@@ -983,7 +1022,7 @@ private:
         firCoefficientsSlider->setValue (64.0);
         firCoefficientsSlider->onValueChanged = [this] (double value)
         {
-            updateAnalysisDisplays();
+            requestAnalysisUpdate();
         };
         addAndMakeVisible (*firCoefficientsSlider);
 
@@ -998,7 +1037,7 @@ private:
         firWindowCombo->onSelectedItemChanged = [this]
         {
             updateWindowParameterRange();
-            updateAnalysisDisplays();
+            requestAnalysisUpdate();
         };
         addAndMakeVisible (*firWindowCombo);
 
@@ -1009,7 +1048,7 @@ private:
         firWindowParameterSlider->setValue (1.0);
         firWindowParameterSlider->onValueChanged = [this] (double value)
         {
-            updateAnalysisDisplays();
+            requestAnalysisUpdate();
         };
         addAndMakeVisible (*firWindowParameterSlider);
 
@@ -1021,7 +1060,7 @@ private:
         frequencySlider->onValueChanged = [this] (double value)
         {
             smoothedFrequency.setTargetValue ((float) value);
-            updateAnalysisDisplays();
+            requestAnalysisUpdate();
         };
         addAndMakeVisible (*frequencySlider);
 
@@ -1032,7 +1071,7 @@ private:
         frequency2Slider->onValueChanged = [this] (double value)
         {
             smoothedFrequency2.setTargetValue ((float) value);
-            updateAnalysisDisplays();
+            requestAnalysisUpdate();
         };
         addAndMakeVisible (*frequency2Slider);
 
@@ -1043,7 +1082,7 @@ private:
         qSlider->onValueChanged = [this] (double value)
         {
             smoothedQ.setTargetValue ((float) value);
-            updateAnalysisDisplays();
+            requestAnalysisUpdate();
         };
         addAndMakeVisible (*qSlider);
 
@@ -1054,7 +1093,7 @@ private:
         gainSlider->onValueChanged = [this] (double value)
         {
             smoothedGain.setTargetValue ((float) value);
-            updateAnalysisDisplays();
+            requestAnalysisUpdate();
         };
         addAndMakeVisible (*gainSlider);
 
@@ -1064,7 +1103,7 @@ private:
         orderSlider->onValueChanged = [this] (double value)
         {
             smoothedOrder.setTargetValue ((float) value);
-            updateAnalysisDisplays();
+            requestAnalysisUpdate();
         };
         addAndMakeVisible (*orderSlider);
 
@@ -1155,6 +1194,12 @@ private:
         audioFirstOrder = std::make_shared<yup::FirstOrderFilter<float>>();
         audioButterworthFilter = std::make_shared<yup::ButterworthFilter<float>>();
         audioDirectFIR = std::make_shared<yup::DirectFIR<float>>();
+        audioAnalogTwoPole = std::make_shared<yup::AnalogTwoPoleFilter<float>>();
+        audioAnalogVowel = std::make_shared<yup::AnalogVowelFilter<float>>();
+        audioAnalogKorg35 = std::make_shared<yup::AnalogKorg35Filter<float>>();
+        audioAnalogMoogLadder = std::make_shared<yup::AnalogMoogLadderFilter<float>>();
+        audioAnalogRolandDiode = std::make_shared<yup::AnalogRolandDiodeFilter<float>>();
+        audioCombFilter = std::make_shared<yup::CombFilter<float>>();
 
         // Create instances of all filter types for UI thread
         uiRbj = std::make_shared<yup::RbjFilter<float>>();
@@ -1163,14 +1208,20 @@ private:
         uiFirstOrder = std::make_shared<yup::FirstOrderFilter<float>>();
         uiButterworthFilter = std::make_shared<yup::ButterworthFilter<float>>();
         uiDirectFIR = std::make_shared<yup::DirectFIR<float>>();
+        uiAnalogTwoPole = std::make_shared<yup::AnalogTwoPoleFilter<float>>();
+        uiAnalogVowel = std::make_shared<yup::AnalogVowelFilter<float>>();
+        uiAnalogKorg35 = std::make_shared<yup::AnalogKorg35Filter<float>>();
+        uiAnalogMoogLadder = std::make_shared<yup::AnalogMoogLadderFilter<float>>();
+        uiAnalogRolandDiode = std::make_shared<yup::AnalogRolandDiodeFilter<float>>();
+        uiCombFilter = std::make_shared<yup::CombFilter<float>>();
 
         // Store in arrays for easy management
         allAudioFilters = {
-            audioRbj, audioZoelzer, audioSvf, audioFirstOrder, audioButterworthFilter, audioDirectFIR
+            audioRbj, audioZoelzer, audioSvf, audioFirstOrder, audioButterworthFilter, audioDirectFIR, audioAnalogTwoPole, audioAnalogVowel, audioAnalogKorg35, audioAnalogMoogLadder, audioAnalogRolandDiode, audioCombFilter
         };
 
         allUIFilters = {
-            uiRbj, uiZoelzer, uiSvf, uiFirstOrder, uiButterworthFilter, uiDirectFIR
+            uiRbj, uiZoelzer, uiSvf, uiFirstOrder, uiButterworthFilter, uiDirectFIR, uiAnalogTwoPole, uiAnalogVowel, uiAnalogKorg35, uiAnalogMoogLadder, uiAnalogRolandDiode, uiCombFilter
         };
 
         // Set default filters
@@ -1218,10 +1269,32 @@ private:
             case 6:
                 currentUIFilter = uiDirectFIR;
                 break;
+            case 7:
+                currentUIFilter = uiAnalogTwoPole;
+                break;
+            case 8:
+                currentUIFilter = uiAnalogVowel;
+                break;
+            case 9:
+                currentUIFilter = uiAnalogKorg35;
+                break;
+            case 10:
+                currentUIFilter = uiAnalogMoogLadder;
+                break;
+            case 11:
+                currentUIFilter = uiAnalogRolandDiode;
+                break;
+            case 12:
+                currentUIFilter = uiCombFilter;
+                break;
             default:
                 currentUIFilter = uiRbj;
                 break;
         }
+
+        // Adjust available response modes and parameter ranges before reading values.
+        updateControlVisibility();
+        currentResponseTypeId = responseTypeCombo->getSelectedId();
 
         // Synchronize smoothed values with current UI values when switching filters
         smoothedFrequency.setCurrentAndTargetValue (static_cast<float> (frequencySlider->getValue()));
@@ -1236,13 +1309,9 @@ private:
         // Update UI filter with current parameters
         updateUIFilterParameters();
 
-        // Update control visibility based on filter type
-        updateControlVisibility();
-
         // Update displays using UI filter
         frequencyResponsePlot.setFilter (currentUIFilter);
-        frequencyResponsePlot.updateResponseData();
-        updateAnalysisDisplays();
+        requestAnalysisUpdate();
     }
 
     void updateAudioFilterParameters()
@@ -1300,6 +1369,30 @@ private:
         {
             updateFIRFilterParameters (fir, coefficients, freq, freq2);
         }
+        else if (auto analogTwoPole = dynamic_cast<yup::AnalogTwoPoleFilter<float>*> (filter))
+        {
+            analogTwoPole->setParameters (getFilterMode (currentResponseTypeId), freq, q, gain, currentSampleRate);
+        }
+        else if (auto analogVowel = dynamic_cast<yup::AnalogVowelFilter<float>*> (filter))
+        {
+            analogVowel->setParameters (freq, q, gain, currentSampleRate);
+        }
+        else if (auto analogKorg35 = dynamic_cast<yup::AnalogKorg35Filter<float>*> (filter))
+        {
+            analogKorg35->setParameters (getFilterMode (currentResponseTypeId), freq, q, gain, currentSampleRate);
+        }
+        else if (auto analogMoogLadder = dynamic_cast<yup::AnalogMoogLadderFilter<float>*> (filter))
+        {
+            analogMoogLadder->setParameters (getMoogLadderMode (currentResponseTypeId), freq, q, gain, currentSampleRate);
+        }
+        else if (auto analogRolandDiode = dynamic_cast<yup::AnalogRolandDiodeFilter<float>*> (filter))
+        {
+            analogRolandDiode->setParameters (freq, q, gain, currentSampleRate);
+        }
+        else if (auto combFilter = dynamic_cast<yup::CombFilter<float>*> (filter))
+        {
+            combFilter->setParameters (freq, q, gain, currentSampleRate);
+        }
     }
 
     void updateCurrentAudioFilter()
@@ -1324,6 +1417,24 @@ private:
                 break;
             case 6:
                 currentAudioFilter = audioDirectFIR;
+                break;
+            case 7:
+                currentAudioFilter = audioAnalogTwoPole;
+                break;
+            case 8:
+                currentAudioFilter = audioAnalogVowel;
+                break;
+            case 9:
+                currentAudioFilter = audioAnalogKorg35;
+                break;
+            case 10:
+                currentAudioFilter = audioAnalogMoogLadder;
+                break;
+            case 11:
+                currentAudioFilter = audioAnalogRolandDiode;
+                break;
+            case 12:
+                currentAudioFilter = audioCombFilter;
                 break;
             default:
                 currentAudioFilter = audioRbj;
@@ -1354,28 +1465,36 @@ private:
         frequencyResponsePlot.updateResponseData();
 
         // Update phase response
-        auto phaseData = frequencyResponsePlot.getPhaseData();
+        const auto& phaseData = frequencyResponsePlot.getPhaseData();
         std::vector<yup::Point<double>> phaseDataDouble;
+        phaseDataDouble.reserve (phaseData.size());
         for (const auto& data : phaseData)
             phaseDataDouble.push_back ({ static_cast<double> (std::real (data)), static_cast<double> (std::imag (data)) });
         phaseResponseDisplay.updateResponse (phaseDataDouble);
 
         // Update group delay
-        auto groupDelayData = frequencyResponsePlot.getGroupDelayData();
+        const auto& groupDelayData = frequencyResponsePlot.getGroupDelayData();
         std::vector<yup::Point<double>> groupDelayDataDouble;
+        groupDelayDataDouble.reserve (groupDelayData.size());
         for (const auto& data : groupDelayData)
             groupDelayDataDouble.push_back ({ static_cast<double> (std::real (data)), static_cast<double> (std::imag (data)) });
         groupDelayDisplay.updateResponse (groupDelayDataDouble);
 
         // Update step response
-        auto stepData = frequencyResponsePlot.getStepResponseData();
+        const auto& stepData = frequencyResponsePlot.getStepResponseData();
         std::vector<yup::Point<double>> stepDataDouble;
+        stepDataDouble.reserve (stepData.size());
         for (const auto& data : stepData)
             stepDataDouble.push_back ({ static_cast<double> (std::real (data)), static_cast<double> (std::imag (data)) });
         stepResponseDisplay.updateResponse (stepDataDouble);
 
         // Update poles and zeros
         updatePolesZerosDisplay();
+    }
+
+    void requestAnalysisUpdate()
+    {
+        analysisUpdatePending = true;
     }
 
     void updateDisplayParameters()
@@ -1386,8 +1505,7 @@ private:
         // Update UI filter parameters and displays
         updateUIFilterParameters();
         frequencyResponsePlot.setFilter (currentUIFilter);
-        frequencyResponsePlot.updateResponseData();
-        updateAnalysisDisplays();
+        requestAnalysisUpdate();
     }
 
     void updatePolesZerosDisplay()
@@ -1401,9 +1519,164 @@ private:
         polesZerosDisplay.updatePolesZeros (poles, zeros);
     }
 
+    void addFullResponseTypes()
+    {
+        responseTypeCombo->addItem ("Lowpass", 1);
+        responseTypeCombo->addItem ("Highpass", 2);
+        responseTypeCombo->addItem ("Bandpass CSG", 3);
+        responseTypeCombo->addItem ("Bandpass CPG", 4);
+        responseTypeCombo->addItem ("Bandstop", 5);
+        responseTypeCombo->addItem ("Peak", 6);
+        responseTypeCombo->addItem ("Low Shelf", 7);
+        responseTypeCombo->addItem ("High Shelf", 8);
+        responseTypeCombo->addItem ("Allpass", 9);
+    }
+
+    void addFIRResponseTypes()
+    {
+        responseTypeCombo->addItem ("Lowpass", 1);
+        responseTypeCombo->addItem ("Highpass", 2);
+        responseTypeCombo->addItem ("Bandpass", 3);
+        responseTypeCombo->addItem ("Bandstop", 5);
+    }
+
+    void addAnalogTwoPoleResponseTypes()
+    {
+        responseTypeCombo->addItem ("Lowpass", 1);
+        responseTypeCombo->addItem ("Highpass", 2);
+        responseTypeCombo->addItem ("Bandpass CSG", 3);
+        responseTypeCombo->addItem ("Bandpass CPG", 4);
+        responseTypeCombo->addItem ("Bandstop", 5);
+        responseTypeCombo->addItem ("Peak", 6);
+    }
+
+    void addKorg35ResponseTypes()
+    {
+        responseTypeCombo->addItem ("Lowpass", 1);
+        responseTypeCombo->addItem ("Highpass", 2);
+        responseTypeCombo->addItem ("Bandpass", 3);
+    }
+
+    void addMoogLadderResponseTypes()
+    {
+        responseTypeCombo->addItem ("Lowpass 24 dB", 10);
+        responseTypeCombo->addItem ("Highpass 24 dB", 11);
+        responseTypeCombo->addItem ("Lowpass 18 dB", 12);
+        responseTypeCombo->addItem ("Highpass 18 dB", 13);
+        responseTypeCombo->addItem ("Lowpass 12 dB", 14);
+        responseTypeCombo->addItem ("Highpass 12 dB", 15);
+        responseTypeCombo->addItem ("Lowpass 6 dB", 16);
+        responseTypeCombo->addItem ("Highpass 6 dB", 17);
+        responseTypeCombo->addItem ("Bandpass 12 dB", 18);
+        responseTypeCombo->addItem ("Bandpass 6 dB", 19);
+    }
+
+    void updateResponseTypeList()
+    {
+        const int filterType = currentFilterTypeId;
+        const int currentResponse = responseTypeCombo->getSelectedId();
+
+        responseTypeCombo->clear();
+
+        switch (filterType)
+        {
+            case 6:
+                addFIRResponseTypes();
+                break;
+
+            case 7:
+                addAnalogTwoPoleResponseTypes();
+                break;
+
+            case 8:
+                responseTypeCombo->addItem ("Vowel Formants", 6);
+                break;
+
+            case 9:
+                addKorg35ResponseTypes();
+                break;
+
+            case 10:
+                addMoogLadderResponseTypes();
+                break;
+
+            case 11:
+                responseTypeCombo->addItem ("Lowpass", 1);
+                break;
+
+            case 12:
+                responseTypeCombo->addItem ("Comb", 20);
+                break;
+
+            default:
+                addFullResponseTypes();
+                break;
+        }
+
+        if (isResponseTypeSupported (filterType, currentResponse))
+            responseTypeCombo->setSelectedId (currentResponse, yup::dontSendNotification);
+        else
+            responseTypeCombo->setSelectedId (getDefaultResponseType (filterType), yup::dontSendNotification);
+    }
+
+    static bool isAnalogFilterType (int filterTypeId)
+    {
+        return filterTypeId >= 7 && filterTypeId <= 12;
+    }
+
+    static bool isResponseTypeSupported (int filterTypeId, int responseTypeId)
+    {
+        switch (filterTypeId)
+        {
+            case 6:
+                return responseTypeId == 1 || responseTypeId == 2 || responseTypeId == 3 || responseTypeId == 5;
+
+            case 7:
+                return responseTypeId >= 1 && responseTypeId <= 6;
+
+            case 8:
+                return responseTypeId == 6;
+
+            case 9:
+                return responseTypeId == 1 || responseTypeId == 2 || responseTypeId == 3;
+
+            case 10:
+                return responseTypeId >= 10 && responseTypeId <= 19;
+
+            case 11:
+                return responseTypeId == 1;
+
+            case 12:
+                return responseTypeId == 20;
+
+            default:
+                return responseTypeId >= 1 && responseTypeId <= 9;
+        }
+    }
+
+    static int getDefaultResponseType (int filterTypeId)
+    {
+        switch (filterTypeId)
+        {
+            case 8:
+                return 6;
+
+            case 10:
+                return 10;
+
+            case 12:
+                return 20;
+
+            default:
+                return 1;
+        }
+    }
+
     void updateControlVisibility()
     {
         bool isFIRFilter = (currentFilterTypeId == 6);
+        bool isAnalogFilter = isAnalogFilterType (currentFilterTypeId);
+        bool isVowelFilter = (currentFilterTypeId == 8);
 
         // Show/hide FIR-specific controls
         firCoefficientsSlider->setVisible (isFIRFilter);
@@ -1419,53 +1692,53 @@ private:
         // Show/hide standard filter controls
         qSlider->setVisible (! isFIRFilter);
         gainSlider->setVisible (! isFIRFilter);
-        orderSlider->setVisible (! isFIRFilter || currentFilterTypeId == 5);        // Show for Butterworth and FIR
-        parameterLabels[4]->setVisible (! isFIRFilter);                             // Q label
-        parameterLabels[5]->setVisible (! isFIRFilter);                             // Gain label
-        parameterLabels[6]->setVisible (! isFIRFilter || currentFilterTypeId == 5); // Order label
+        orderSlider->setVisible (currentFilterTypeId == 5);        // Show for Butterworth
+        parameterLabels[4]->setVisible (! isFIRFilter);            // Q label
+        parameterLabels[5]->setVisible (! isFIRFilter);            // Gain label
+        parameterLabels[6]->setVisible (currentFilterTypeId == 5); // Order label
 
-        // Frequency 2 is only visible for bandpass/bandstop filters
-        bool needsFreq2 = (currentResponseTypeId >= 3 && currentResponseTypeId <= 5);
-        frequency2Slider->setVisible (needsFreq2);
-        parameterLabels[3]->setVisible (needsFreq2); // Frequency 2 label
+        parameterLabels[2]->setText (isVowelFilter ? "Vowel:" : "Frequency:");
+        parameterLabels[4]->setText (isAnalogFilter ? "Resonance:" : "Q/Resonance:");
+        parameterLabels[5]->setText (isAnalogFilter ? "Saturation:" : "Gain (dB):");
 
-        // Update restricted response types for FIR
-        if (isFIRFilter)
+        if (isVowelFilter)
         {
-            // Save current selection
-            int currentResponse = responseTypeCombo->getSelectedId();
+            frequencySlider->setRange ({ 0.0, 1.0 });
+            frequencySlider->setSkewFactorFromMidpoint (0.5);
 
-            // Clear and repopulate with FIR-compatible responses
-            responseTypeCombo->clear();
-            responseTypeCombo->addItem ("Lowpass", 1);
-            responseTypeCombo->addItem ("Highpass", 2);
-            responseTypeCombo->addItem ("Bandpass", 3);
-            responseTypeCombo->addItem ("Bandstop", 5);
-
-            // Restore selection if compatible, otherwise default to lowpass
-            if (currentResponse == 1 || currentResponse == 2 || currentResponse == 3 || currentResponse == 5)
-                responseTypeCombo->setSelectedId (currentResponse, yup::dontSendNotification);
-            else
-                responseTypeCombo->setSelectedId (1, yup::dontSendNotification);
+            if (frequencySlider->getValue() > 1.0)
+                frequencySlider->setValue (0.5, yup::dontSendNotification);
         }
         else
         {
-            // Restore full response type list for IIR filters
-            int currentResponse = responseTypeCombo->getSelectedId();
-            responseTypeCombo->clear();
-            responseTypeCombo->addItem ("Lowpass", 1);
-            responseTypeCombo->addItem ("Highpass", 2);
-            responseTypeCombo->addItem ("Bandpass CSG", 3);
-            responseTypeCombo->addItem ("Bandpass CPG", 4);
-            responseTypeCombo->addItem ("Bandstop", 5);
-            responseTypeCombo->addItem ("Peak", 6);
-            responseTypeCombo->addItem ("Low Shelf", 7);
-            responseTypeCombo->addItem ("High Shelf", 8);
-            responseTypeCombo->addItem ("Allpass", 9);
+            frequencySlider->setRange ({ 20.0, isAnalogFilter ? getAnalogFilterMaxFrequency() : 20000.0 });
+            frequencySlider->setSkewFactorFromMidpoint (1000.0);
 
-            // Restore selection
-            responseTypeCombo->setSelectedId (currentResponse, yup::dontSendNotification);
+            if (frequencySlider->getValue() <= 1.0)
+                frequencySlider->setValue (1000.0, yup::dontSendNotification);
         }
+
+        if (isAnalogFilter)
+        {
+            gainSlider->setRange ({ 0.0, 1.0 });
+            gainSlider->setSkewFactorFromMidpoint (0.3);
+
+            if (gainSlider->getValue() < 0.0 || gainSlider->getValue() > 1.0)
+                gainSlider->setValue (0.2, yup::dontSendNotification);
+        }
+        else
+        {
+            gainSlider->setRange ({ -48.0, 20.0 });
+            gainSlider->setSkewFactorFromMidpoint (0.0);
+        }
+
+        updateResponseTypeList();
+        currentResponseTypeId = responseTypeCombo->getSelectedId();
+
+        // Frequency 2 is only visible for bandpass/bandstop filters
+        bool needsFreq2 = isFIRFilter && (currentResponseTypeId == 3 || currentResponseTypeId == 5);
+        frequency2Slider->setVisible (needsFreq2);
+        parameterLabels[3]->setVisible (needsFreq2); // Frequency 2 label
 
         repaint();
     }
@@ -1496,6 +1769,11 @@ private:
         }
 
         updateControlVisibility();
+    }
+
+    double getAnalogFilterMaxFrequency() const
+    {
+        return yup::jmax (20.0, (currentSampleRate * 0.5) / (22050.0 / 18000.0));
     }
 
     void updateFIRFilterParameters (yup::DirectFIR<float>* fir, std::vector<double>& coeffs, double freq, double freq2)
@@ -1564,8 +1842,49 @@ private:
                 return yup::FilterMode::highshelf;
             case 9:
                 return yup::FilterMode::allpass;
+            case 10:
+            case 12:
+            case 14:
+            case 16:
+                return yup::FilterMode::lowpass;
+            case 11:
+            case 13:
+            case 15:
+            case 17:
+                return yup::FilterMode::highpass;
+            case 18:
+            case 19:
+                return yup::FilterMode::bandpassCsg;
             default:
                 return yup::FilterMode::lowpass;
+        }
+    }
+
+    yup::AnalogMoogLadderMode getMoogLadderMode (int responseTypeId)
+    {
+        switch (responseTypeId)
+        {
+            case 11:
+                return yup::AnalogMoogLadderMode::highpass24;
+            case 12:
+                return yup::AnalogMoogLadderMode::lowpass18;
+            case 13:
+                return yup::AnalogMoogLadderMode::highpass18;
+            case 14:
+                return yup::AnalogMoogLadderMode::lowpass12;
+            case 15:
+                return yup::AnalogMoogLadderMode::highpass12;
+            case 16:
+                return yup::AnalogMoogLadderMode::lowpass6;
+            case 17:
+                return yup::AnalogMoogLadderMode::highpass6;
+            case 18:
+                return yup::AnalogMoogLadderMode::bandpass12;
+            case 19:
+                return yup::AnalogMoogLadderMode::bandpass6;
+            case 10:
+            default:
+                return yup::AnalogMoogLadderMode::lowpass24;
         }
     }
 
@@ -1603,6 +1922,12 @@ private:
     std::shared_ptr<yup::FirstOrderFilter<float>> audioFirstOrder;
     std::shared_ptr<yup::ButterworthFilter<float>> audioButterworthFilter;
     std::shared_ptr<yup::DirectFIR<float>> audioDirectFIR;
+    std::shared_ptr<yup::AnalogTwoPoleFilter<float>> audioAnalogTwoPole;
+    std::shared_ptr<yup::AnalogVowelFilter<float>> audioAnalogVowel;
+    std::shared_ptr<yup::AnalogKorg35Filter<float>> audioAnalogKorg35;
+    std::shared_ptr<yup::AnalogMoogLadderFilter<float>> audioAnalogMoogLadder;
+    std::shared_ptr<yup::AnalogRolandDiodeFilter<float>> audioAnalogRolandDiode;
+    std::shared_ptr<yup::CombFilter<float>> audioCombFilter;
 
     // UI thread filter instances
     std::shared_ptr<yup::RbjFilter<float>> uiRbj;
@@ -1611,6 +1936,12 @@ private:
     std::shared_ptr<yup::FirstOrderFilter<float>> uiFirstOrder;
     std::shared_ptr<yup::ButterworthFilter<float>> uiButterworthFilter;
     std::shared_ptr<yup::DirectFIR<float>> uiDirectFIR;
+    std::shared_ptr<yup::AnalogTwoPoleFilter<float>> uiAnalogTwoPole;
+    std::shared_ptr<yup::AnalogVowelFilter<float>> uiAnalogVowel;
+    std::shared_ptr<yup::AnalogKorg35Filter<float>> uiAnalogKorg35;
+    std::shared_ptr<yup::AnalogMoogLadderFilter<float>> uiAnalogMoogLadder;
+    std::shared_ptr<yup::AnalogRolandDiodeFilter<float>> uiAnalogRolandDiode;
+    std::shared_ptr<yup::CombFilter<float>> uiCombFilter;
 
     std::vector<std::shared_ptr<yup::FilterBase<float>>> allAudioFilters;
     std::vector<std::shared_ptr<yup::FilterBase<float>>> allUIFilters;
@@ -1646,4 +1977,5 @@ private:
     std::vector<float> renderData;
     yup::CriticalSection renderMutex;
     std::atomic_int readPos { 0 };
+    std::atomic_bool analysisUpdatePending { false };
 };

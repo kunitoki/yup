@@ -139,6 +139,10 @@
 #include "frequency/yup_FFTProcessor.h"
 #include "frequency/yup_SpectrumAnalyzerState.h"
 
+// Wavetable and antialiased oscillators (before FilterDesigner for AA-IIR2 coefficient types)
+#include "oscillators/yup_Wavetable.h"
+#include "oscillators/yup_AaIir2Oscillator.h"
+
 // Base filter interfaces and common structures
 #include "base/yup_FilterMode.h"
 #include "base/yup_FilterBase.h"
@@ -146,6 +150,7 @@
 #include "base/yup_FirstOrderCoefficients.h"
 #include "base/yup_BiquadCoefficients.h"
 #include "base/yup_StateVariableCoefficients.h"
+#include "base/yup_AnalogFilterCoefficients.h"
 #include "base/yup_FirstOrder.h"
 #include "base/yup_Biquad.h"
 #include "base/yup_BiquadCascade.h"
@@ -157,6 +162,7 @@
 
 // Filter designers and coefficient calculators
 #include "designers/yup_FilterDesigner.h"
+#include "designers/yup_AnalogFilterDesigner.h"
 
 // Filter implementations
 #include "filters/yup_FirstOrderFilter.h"
@@ -167,6 +173,8 @@
 #include "filters/yup_ButterworthFilter.h"
 #include "filters/yup_LinkwitzRileyFilter.h"
 #include "filters/yup_DirectFIR.h"
+#include "filters/yup_AnalogFilters.h"
+#include "filters/yup_CombFilter.h"
 
 // Dynamics processors
 #include "dynamics/yup_SoftClipper.h"
