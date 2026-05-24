@@ -70,8 +70,9 @@ public:
     /** Backends supported by the time-stretch processor. */
     enum class Backend
     {
-        automatic, /**< Automatically select the best available backend. */
-        bungee     /**< Use the Bungee backend if available. */
+        automatic,  /**< Automatically select the best available backend. */
+        timeDomain, /**< Use the built-in time-domain backend for tempo changes without independent pitch shifting. */
+        bungee      /**< Use the Bungee backend if available. */
     };
 
     //==============================================================================

@@ -122,6 +122,18 @@ TEST_F (TimeStretchProcessorTests, PrepareWithAutomaticBackend)
     EXPECT_TRUE (processor.isPrepared());
 }
 
+TEST_F (TimeStretchProcessorTests, PrepareWithTimeDomainBackend)
+{
+    TimeStretchProcessor processor;
+    auto result = processor.prepare (spec, TimeStretchProcessor::Backend::timeDomain);
+
+    ASSERT_TRUE (result.wasOk());
+    EXPECT_TRUE (processor.isPrepared());
+    EXPECT_EQ (processor.getBackend(), TimeStretchProcessor::Backend::timeDomain);
+    EXPECT_EQ (processor.getBackendName(), "Time Domain");
+}
+
+#if YUP_ENABLE_BUNGEE
 TEST_F (TimeStretchProcessorTests, PrepareWithBungeeBackend)
 {
     TimeStretchProcessor processor;
@@ -132,6 +144,7 @@ TEST_F (TimeStretchProcessorTests, PrepareWithBungeeBackend)
     EXPECT_EQ (processor.getBackend(), TimeStretchProcessor::Backend::bungee);
     EXPECT_EQ (processor.getBackendName(), "Bungee");
 }
+#endif
 
 TEST_F (TimeStretchProcessorTests, PrepareWithInvalidSampleRate)
 {
@@ -192,7 +205,10 @@ TEST_F (TimeStretchProcessorTests, PrepareWithDifferentOutputSampleRate)
 TEST_F (TimeStretchProcessorTests, BackendAvailability)
 {
     EXPECT_TRUE (TimeStretchProcessor::isBackendAvailable (TimeStretchProcessor::Backend::automatic));
+    EXPECT_TRUE (TimeStretchProcessor::isBackendAvailable (TimeStretchProcessor::Backend::timeDomain));
+#if YUP_ENABLE_BUNGEE
     EXPECT_TRUE (TimeStretchProcessor::isBackendAvailable (TimeStretchProcessor::Backend::bungee));
+#endif
 }
 
 TEST_F (TimeStretchProcessorTests, GetAvailableBackends)
@@ -200,9 +216,13 @@ TEST_F (TimeStretchProcessorTests, GetAvailableBackends)
     auto backends = TimeStretchProcessor::getAvailableBackends();
 
     EXPECT_FALSE (backends.empty());
+    EXPECT_TRUE (std::find (backends.begin(), backends.end(), TimeStretchProcessor::Backend::timeDomain) != backends.end());
+#if YUP_ENABLE_BUNGEE
     EXPECT_TRUE (std::find (backends.begin(), backends.end(), TimeStretchProcessor::Backend::bungee) != backends.end());
+#endif
 }
 
+#if YUP_ENABLE_BUNGEE
 TEST_F (TimeStretchProcessorTests, SetBackendBeforePrepare)
 {
     TimeStretchProcessor processor;
@@ -211,7 +231,9 @@ TEST_F (TimeStretchProcessorTests, SetBackendBeforePrepare)
     ASSERT_TRUE (result.wasOk());
     EXPECT_EQ (processor.getBackend(), TimeStretchProcessor::Backend::bungee);
 }
+#endif
 
+#if YUP_ENABLE_BUNGEE
 TEST_F (TimeStretchProcessorTests, SetBackendAfterPrepare)
 {
     TimeStretchProcessor processor;
@@ -222,7 +244,21 @@ TEST_F (TimeStretchProcessorTests, SetBackendAfterPrepare)
     ASSERT_TRUE (result.wasOk());
     EXPECT_EQ (processor.getBackend(), TimeStretchProcessor::Backend::bungee);
 }
+#endif
 
+TEST_F (TimeStretchProcessorTests, SetTimeDomainBackendAfterPrepare)
+{
+    TimeStretchProcessor processor;
+    ASSERT_TRUE (processor.prepare (spec).wasOk());
+
+    auto result = processor.setBackend (TimeStretchProcessor::Backend::timeDomain);
+
+    ASSERT_TRUE (result.wasOk());
+    EXPECT_EQ (processor.getBackend(), TimeStretchProcessor::Backend::timeDomain);
+    EXPECT_EQ (processor.getBackendName(), "Time Domain");
+}
+
+#if YUP_ENABLE_BUNGEE
 TEST_F (TimeStretchProcessorTests, SetSameBackend)
 {
     TimeStretchProcessor processor;
@@ -232,6 +268,7 @@ TEST_F (TimeStretchProcessorTests, SetSameBackend)
 
     ASSERT_TRUE (result.wasOk());
 }
+#endif
 
 //==============================================================================
 TEST_F (TimeStretchProcessorTests, SetTimeRatio)
@@ -523,6 +560,39 @@ TEST_F (TimeStretchProcessorTests, ProcessWithValidInput)
             }
         }
     }
+    EXPECT_TRUE (hasNonZeroSamples);
+}
+
+TEST_F (TimeStretchProcessorTests, TimeDomainBackendProcessesInput)
+{
+    TimeStretchProcessor processor;
+    ASSERT_TRUE (processor.prepare (spec, TimeStretchProcessor::Backend::timeDomain).wasOk());
+
+    processor.setTimeRatio (1.5);
+    const int outputFrames = processor.getExpectedOutputFrameCount (inputBuffer.getNumSamples());
+
+    auto result = processor.process (inputBuffer.getArrayOfReadPointers(),
+                                     inputBuffer.getNumSamples(),
+                                     outputBuffer.getArrayOfWritePointers(),
+                                     outputFrames);
+
+    ASSERT_TRUE (result.wasOk());
+    EXPECT_EQ (result.getValue(), outputFrames);
+
+    bool hasNonZeroSamples = false;
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        const auto* channelData = outputBuffer.getReadPointer (ch);
+        for (int i = 0; i < result.getValue(); ++i)
+        {
+            if (std::abs (channelData[i]) > 0.0001f)
+            {
+                hasNonZeroSamples = true;
+                break;
+            }
+        }
+    }
+
     EXPECT_TRUE (hasNonZeroSamples);
 }
 
