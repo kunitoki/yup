@@ -27,22 +27,22 @@ using namespace yup;
 
 namespace
 {
-constexpr double sampleRate = 44100.0;
-constexpr int blockSize = 128;
+constexpr double analogSampleRate = 44100.0;
+constexpr int analogBlockSize = 128;
 
 template <typename SampleType>
-std::vector<SampleType> makeInput()
+std::vector<SampleType> makeAnalogInput()
 {
-    std::vector<SampleType> input (blockSize);
+    std::vector<SampleType> input (analogBlockSize);
 
-    for (int i = 0; i < blockSize; ++i)
+    for (int i = 0; i < analogBlockSize; ++i)
         input[static_cast<std::size_t> (i)] = static_cast<SampleType> ((i % 17) / 17.0 - 0.5);
 
     return input;
 }
 
 template <typename SampleType>
-void expectFiniteBuffer (const std::vector<SampleType>& buffer)
+void expectFiniteAnalogBuffer (const std::vector<SampleType>& buffer)
 {
     for (auto sample : buffer)
         EXPECT_TRUE (std::isfinite (sample));
@@ -53,9 +53,9 @@ void expectFiniteBuffer (const std::vector<SampleType>& buffer)
 
 TEST (AnalogFilterDesignerTests, DesignsFiniteTwoPoleCoefficients)
 {
-    const auto lowpass = AnalogFilterDesigner<double>::designTwoPole (FilterMode::lowpass, 1000.0, sampleRate, 0.5);
-    const auto bandpass = AnalogFilterDesigner<double>::designTwoPole (FilterMode::bandpassCpg, 1000.0, sampleRate, 0.5);
-    const auto peak = AnalogFilterDesigner<double>::designTwoPole (FilterMode::peak, 1000.0, sampleRate, 0.5);
+    const auto lowpass = AnalogFilterDesigner<double>::designTwoPole (FilterMode::lowpass, 1000.0, analogSampleRate, 0.5);
+    const auto bandpass = AnalogFilterDesigner<double>::designTwoPole (FilterMode::bandpassCpg, 1000.0, analogSampleRate, 0.5);
+    const auto peak = AnalogFilterDesigner<double>::designTwoPole (FilterMode::peak, 1000.0, analogSampleRate, 0.5);
 
     EXPECT_TRUE (std::isfinite (lowpass.g));
     EXPECT_TRUE (std::isfinite (lowpass.h));
@@ -65,9 +65,9 @@ TEST (AnalogFilterDesignerTests, DesignsFiniteTwoPoleCoefficients)
 
 TEST (AnalogFilterDesignerTests, DesignsFiniteLadderCoefficients)
 {
-    const auto korg = AnalogFilterDesigner<double>::designKorg35 (FilterMode::lowpass, 1200.0, sampleRate, 0.7, 0.25);
-    const auto moog = AnalogFilterDesigner<double>::designMoogLadder (AnalogMoogLadderMode::lowpass24, 1200.0, sampleRate, 0.7, 0.25);
-    const auto diode = AnalogFilterDesigner<double>::designRolandDiode (1200.0, sampleRate, 0.7, 0.25);
+    const auto korg = AnalogFilterDesigner<double>::designKorg35 (FilterMode::lowpass, 1200.0, analogSampleRate, 0.7, 0.25);
+    const auto moog = AnalogFilterDesigner<double>::designMoogLadder (AnalogMoogLadderMode::lowpass24, 1200.0, analogSampleRate, 0.7, 0.25);
+    const auto diode = AnalogFilterDesigner<double>::designRolandDiode (1200.0, analogSampleRate, 0.7, 0.25);
 
     EXPECT_TRUE (std::isfinite (korg.alpha0));
     EXPECT_TRUE (std::isfinite (korg.feedback));
@@ -79,7 +79,7 @@ TEST (AnalogFilterDesignerTests, DesignsFiniteLadderCoefficients)
 
 TEST (AnalogFilterDesignerTests, DesignsVowelFormants)
 {
-    const auto vowel = AnalogFilterDesigner<double>::designVowel (0.35, sampleRate, 0.8);
+    const auto vowel = AnalogFilterDesigner<double>::designVowel (0.35, analogSampleRate, 0.8);
 
     EXPECT_TRUE (std::isfinite (vowel.gainCompensation));
 
@@ -96,93 +96,93 @@ TEST (AnalogFilterDesignerTests, DesignsVowelFormants)
 TEST (AnalogFilterTests, TwoPoleProcessesFiniteOutput)
 {
     AnalogTwoPoleFilter<float> filter;
-    filter.prepare (sampleRate, blockSize);
-    filter.setParameters (FilterMode::bandpassCpg, 1000.0f, 0.75f, 0.2f, sampleRate);
+    filter.prepare (analogSampleRate, analogBlockSize);
+    filter.setParameters (FilterMode::bandpassCpg, 1000.0f, 0.75f, 0.2f, analogSampleRate);
 
-    const auto input = makeInput<float>();
-    std::vector<float> output (blockSize);
+    const auto input = makeAnalogInput<float>();
+    std::vector<float> output (analogBlockSize);
 
-    filter.processBlock (input.data(), output.data(), blockSize);
+    filter.processBlock (input.data(), output.data(), analogBlockSize);
 
-    expectFiniteBuffer (output);
+    expectFiniteAnalogBuffer (output);
 }
 
 TEST (AnalogFilterTests, VowelProcessesFiniteOutput)
 {
     AnalogVowelFilter<float> filter;
-    filter.prepare (sampleRate, blockSize);
-    filter.setParameters (0.5f, 0.75f, 0.2f, sampleRate);
+    filter.prepare (analogSampleRate, analogBlockSize);
+    filter.setParameters (0.5f, 0.75f, 0.2f, analogSampleRate);
 
-    const auto input = makeInput<float>();
-    std::vector<float> output (blockSize);
+    const auto input = makeAnalogInput<float>();
+    std::vector<float> output (analogBlockSize);
 
-    filter.processBlock (input.data(), output.data(), blockSize);
+    filter.processBlock (input.data(), output.data(), analogBlockSize);
 
-    expectFiniteBuffer (output);
+    expectFiniteAnalogBuffer (output);
 }
 
 TEST (AnalogFilterTests, Korg35ProcessesAllModes)
 {
-    const auto input = makeInput<float>();
+    const auto input = makeAnalogInput<float>();
 
     for (auto mode : { FilterMode::lowpass, FilterMode::bandpassCsg, FilterMode::highpass })
     {
         AnalogKorg35Filter<float> filter;
-        filter.prepare (sampleRate, blockSize);
-        filter.setParameters (mode, 1000.0f, 0.6f, 0.2f, sampleRate);
+        filter.prepare (analogSampleRate, analogBlockSize);
+        filter.setParameters (mode, 1000.0f, 0.6f, 0.2f, analogSampleRate);
 
-        std::vector<float> output (blockSize);
-        filter.processBlock (input.data(), output.data(), blockSize);
+        std::vector<float> output (analogBlockSize);
+        filter.processBlock (input.data(), output.data(), analogBlockSize);
 
-        expectFiniteBuffer (output);
+        expectFiniteAnalogBuffer (output);
     }
 }
 
 TEST (AnalogFilterTests, MoogLadderProcessesRepresentativeModes)
 {
-    const auto input = makeInput<float>();
+    const auto input = makeAnalogInput<float>();
 
     for (auto mode : { AnalogMoogLadderMode::lowpass24, AnalogMoogLadderMode::highpass12, AnalogMoogLadderMode::bandpass6 })
     {
         AnalogMoogLadderFilter<float> filter;
-        filter.prepare (sampleRate, blockSize);
-        filter.setParameters (mode, 1000.0f, 0.6f, 0.2f, sampleRate);
+        filter.prepare (analogSampleRate, analogBlockSize);
+        filter.setParameters (mode, 1000.0f, 0.6f, 0.2f, analogSampleRate);
 
-        std::vector<float> output (blockSize);
-        filter.processBlock (input.data(), output.data(), blockSize);
+        std::vector<float> output (analogBlockSize);
+        filter.processBlock (input.data(), output.data(), analogBlockSize);
 
-        expectFiniteBuffer (output);
+        expectFiniteAnalogBuffer (output);
     }
 }
 
 TEST (AnalogFilterTests, RolandDiodeProcessesFiniteOutput)
 {
     AnalogRolandDiodeFilter<float> filter;
-    filter.prepare (sampleRate, blockSize);
-    filter.setParameters (1000.0f, 0.6f, 0.2f, sampleRate);
+    filter.prepare (analogSampleRate, analogBlockSize);
+    filter.setParameters (1000.0f, 0.6f, 0.2f, analogSampleRate);
 
-    const auto input = makeInput<float>();
-    std::vector<float> output (blockSize);
+    const auto input = makeAnalogInput<float>();
+    std::vector<float> output (analogBlockSize);
 
-    filter.processBlock (input.data(), output.data(), blockSize);
+    filter.processBlock (input.data(), output.data(), analogBlockSize);
 
-    expectFiniteBuffer (output);
+    expectFiniteAnalogBuffer (output);
 }
 
 TEST (AnalogFilterTests, ResetRestoresDeterministicState)
 {
     AnalogMoogLadderFilter<float> filter;
-    filter.prepare (sampleRate, blockSize);
-    filter.setParameters (AnalogMoogLadderMode::lowpass24, 1000.0f, 0.5f, 0.1f, sampleRate);
+    filter.prepare (analogSampleRate, analogBlockSize);
+    filter.setParameters (AnalogMoogLadderMode::lowpass24, 1000.0f, 0.5f, 0.1f, analogSampleRate);
 
-    const auto input = makeInput<float>();
-    std::vector<float> firstOutput (blockSize);
-    std::vector<float> secondOutput (blockSize);
+    const auto input = makeAnalogInput<float>();
+    std::vector<float> firstOutput (analogBlockSize);
+    std::vector<float> secondOutput (analogBlockSize);
 
-    filter.processBlock (input.data(), firstOutput.data(), blockSize);
+    filter.processBlock (input.data(), firstOutput.data(), analogBlockSize);
     filter.reset();
-    filter.processBlock (input.data(), secondOutput.data(), blockSize);
+    filter.processBlock (input.data(), secondOutput.data(), analogBlockSize);
 
-    for (int i = 0; i < blockSize; ++i)
+    for (int i = 0; i < analogBlockSize; ++i)
         EXPECT_FLOAT_EQ (firstOutput[static_cast<std::size_t> (i)], secondOutput[static_cast<std::size_t> (i)]);
 }
