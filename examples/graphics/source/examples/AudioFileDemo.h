@@ -221,9 +221,12 @@ private:
 class TimeStretchAudioSource : public yup::PositionableAudioSource
 {
 public:
-    TimeStretchAudioSource (yup::PositionableAudioSource* sourceToWrap, int numChannelsToUse)
+    TimeStretchAudioSource (yup::PositionableAudioSource* sourceToWrap,
+                            int numChannelsToUse,
+                            yup::TimeStretchProcessor::Backend backendToUse)
         : source (sourceToWrap)
         , numChannels (numChannelsToUse)
+        , preferredBackend (backendToUse)
     {
     }
 
@@ -243,7 +246,7 @@ public:
         spec.maximumBlockSize = maxInputBlockSize;
         spec.numChannels = numChannels;
 
-        const auto result = timeStretchProcessor.prepare (spec);
+        const auto result = timeStretchProcessor.prepare (spec, preferredBackend);
         timeStretchAvailable = result.wasOk();
 
         if (timeStretchAvailable)
@@ -420,9 +423,11 @@ private:
             muteHead = static_cast<int> (clampedBegin - beginFrame);
             muteTail = static_cast<int> ((beginFrame + numFrames) - clampedEnd);
             const int validFrames = static_cast<int> (clampedEnd - clampedBegin);
+            const int framesToRead = yup::jmin (validFrames, tempBuffer.getNumSamples());
+            muteTail = yup::jlimit (0, numFrames - muteHead, muteTail + validFrames - framesToRead);
 
             source->setNextReadPosition (clampedBegin);
-            yup::AudioSourceChannelInfo info (&tempBuffer, 0, validFrames);
+            yup::AudioSourceChannelInfo info (&tempBuffer, 0, framesToRead);
             source->getNextAudioBlock (info);
 
             for (int ch = 0; ch < numChannels; ++ch)
@@ -431,11 +436,11 @@ private:
                     std::fill (destChannels[ch], destChannels[ch] + muteHead, 0.0f);
 
                 std::copy (tempBuffer.getReadPointer (ch),
-                           tempBuffer.getReadPointer (ch) + validFrames,
+                           tempBuffer.getReadPointer (ch) + framesToRead,
                            destChannels[ch] + muteHead);
 
                 if (muteTail > 0)
-                    std::fill (destChannels[ch] + muteHead + validFrames,
+                    std::fill (destChannels[ch] + numFrames - muteTail,
                                destChannels[ch] + numFrames,
                                0.0f);
             }
@@ -468,6 +473,7 @@ private:
     double sampleRate = 0.0;
     yup::int64 outputPosition = 0;
     bool timeStretchAvailable = false;
+    yup::TimeStretchProcessor::Backend preferredBackend = yup::TimeStretchProcessor::Backend::automatic;
 
     std::atomic<double> timeRatio { 1.0 };
     std::atomic<double> pitchRatio { 1.0 };
@@ -593,7 +599,8 @@ public:
         header.removeFromTop (4);
         auto stretchRow = header.removeFromTop (buttonHeight);
         const int sliderLabelWidth = 70;
-        const int sliderWidth = 180;
+        const int sliderWidth = 165;
+        const int backendWidth = 150;
 
         timeLabel.setBounds (stretchRow.removeFromLeft (sliderLabelWidth));
         stretchRow.removeFromLeft (buttonMargin);
@@ -602,6 +609,10 @@ public:
         pitchLabel.setBounds (stretchRow.removeFromLeft (sliderLabelWidth));
         stretchRow.removeFromLeft (buttonMargin);
         pitchShiftSlider.setBounds (stretchRow.removeFromLeft (sliderWidth));
+        stretchRow.removeFromLeft (buttonMargin * 2);
+        backendLabel.setBounds (stretchRow.removeFromLeft (sliderLabelWidth));
+        stretchRow.removeFromLeft (buttonMargin);
+        backendComboBox.setBounds (stretchRow.removeFromLeft (backendWidth));
 
         bounds.removeFromTop (6);
         infoLabel.setBounds (bounds.removeFromTop (22));
@@ -850,10 +861,31 @@ private:
                 timeStretchSource->setPitchRatio (pitchShiftRatio);
         };
 
+        addAndMakeVisible (backendLabel);
+        backendLabel.setText ("Backend", yup::NotificationType::dontSendNotification);
+        backendLabel.setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
+
+        addAndMakeVisible (backendComboBox);
+        backendComboBox.addItem ("Auto", backendAutomaticId);
+        backendComboBox.addItem ("Time Domain", backendTimeDomainId);
+
+        if (yup::TimeStretchProcessor::isBackendAvailable (yup::TimeStretchProcessor::Backend::bungee))
+            backendComboBox.addItem ("Bungee", backendBungeeId);
+
+        backendComboBox.setSelectedId (getBackendId (selectedTimeStretchBackend),
+                                       yup::NotificationType::dontSendNotification);
+        backendComboBox.onSelectedItemChanged = [this]
+        {
+            const auto backend = getBackendForId (backendComboBox.getSelectedId());
+            setTimeStretchBackend (backend);
+        };
+
         timeStretchSlider.setEnabled (timeStretchSupported);
         pitchShiftSlider.setEnabled (timeStretchSupported);
+        backendComboBox.setEnabled (timeStretchSupported);
         timeLabel.setEnabled (timeStretchSupported);
         pitchLabel.setEnabled (timeStretchSupported);
+        backendLabel.setEnabled (timeStretchSupported);
 
         addAndMakeVisible (waveformDisplay);
         waveformDisplay.setSelectable (true);
@@ -875,6 +907,40 @@ private:
             infoLabel.setText (currentFileName + "  |  " + positionText, yup::NotificationType::dontSendNotification);
         else
             infoLabel.setText (currentFileName + "  |  " + positionText + "  |  Stopped", yup::NotificationType::dontSendNotification);
+    }
+
+    void setTimeStretchBackend (yup::TimeStretchProcessor::Backend backend)
+    {
+        if (selectedTimeStretchBackend == backend)
+            return;
+
+        selectedTimeStretchBackend = backend;
+
+        if (hasLoadedAudio && memorySource != nullptr)
+            rebuildTimeStretchSource();
+
+        updateStatus ("Time stretch backend: " + getBackendName (selectedTimeStretchBackend));
+        updatePlaybackStatus();
+    }
+
+    void rebuildTimeStretchSource()
+    {
+        const bool wasPlaying = transportSource.isPlaying();
+        const double previousPosition = transportSource.getCurrentPosition();
+
+        transportSource.stop();
+        transportSource.setSource (nullptr);
+
+        timeStretchSource = std::make_unique<TimeStretchAudioSource> (memorySource.get(),
+                                                                      audioBuffer.getNumChannels(),
+                                                                      selectedTimeStretchBackend);
+        timeStretchSource->setTimeRatio (timeStretchRatio);
+        timeStretchSource->setPitchRatio (pitchShiftRatio);
+        transportSource.setSource (timeStretchSource.get(), 0, nullptr, loadedSampleRate, audioBuffer.getNumChannels());
+        transportSource.setPosition (previousPosition);
+
+        if (wasPlaying)
+            transportSource.start();
     }
 
     void togglePlayback()
@@ -939,7 +1005,9 @@ private:
         transportSource.stop();
         transportSource.setSource (nullptr);
         memorySource = std::make_unique<yup::MemoryAudioSource> (audioBuffer, false, loopEnabled);
-        timeStretchSource = std::make_unique<TimeStretchAudioSource> (memorySource.get(), numChannels);
+        timeStretchSource = std::make_unique<TimeStretchAudioSource> (memorySource.get(),
+                                                                      numChannels,
+                                                                      selectedTimeStretchBackend);
         timeStretchSource->setTimeRatio (timeStretchRatio);
         timeStretchSource->setPitchRatio (pitchShiftRatio);
         transportSource.setSource (timeStretchSource.get(), 0, nullptr, loadedSampleRate, numChannels);
@@ -1022,6 +1090,56 @@ private:
         return "*.wav;*.aiff;*.aif;*.flac;*.mp3;*.opus;*.m4a;*.wma;*.ogg";
     }
 
+    static int getBackendId (yup::TimeStretchProcessor::Backend backend)
+    {
+        switch (backend)
+        {
+            case yup::TimeStretchProcessor::Backend::automatic:
+                return backendAutomaticId;
+
+            case yup::TimeStretchProcessor::Backend::timeDomain:
+                return backendTimeDomainId;
+
+            case yup::TimeStretchProcessor::Backend::bungee:
+                return backendBungeeId;
+        }
+
+        return backendAutomaticId;
+    }
+
+    static yup::TimeStretchProcessor::Backend getBackendForId (int backendId)
+    {
+        switch (backendId)
+        {
+            case backendTimeDomainId:
+                return yup::TimeStretchProcessor::Backend::timeDomain;
+
+            case backendBungeeId:
+                return yup::TimeStretchProcessor::Backend::bungee;
+
+            case backendAutomaticId:
+            default:
+                return yup::TimeStretchProcessor::Backend::automatic;
+        }
+    }
+
+    static yup::String getBackendName (yup::TimeStretchProcessor::Backend backend)
+    {
+        switch (backend)
+        {
+            case yup::TimeStretchProcessor::Backend::automatic:
+                return "Auto";
+
+            case yup::TimeStretchProcessor::Backend::timeDomain:
+                return "Time Domain";
+
+            case yup::TimeStretchProcessor::Backend::bungee:
+                return "Bungee";
+        }
+
+        return "Auto";
+    }
+
     yup::AudioFormatManager formatManager;
     yup::AudioDeviceManager deviceManager;
     yup::AudioSourcePlayer sourcePlayer;
@@ -1050,8 +1168,10 @@ private:
 
     yup::Label timeLabel;
     yup::Label pitchLabel;
+    yup::Label backendLabel;
     yup::Slider timeStretchSlider { yup::Slider::LinearHorizontal, "Time Stretch" };
     yup::Slider pitchShiftSlider { yup::Slider::LinearHorizontal, "Pitch Shift" };
+    yup::ComboBox backendComboBox { "TimeStretchBackend" };
 
     yup::Label infoLabel;
     yup::Label statusLabel;
@@ -1068,7 +1188,12 @@ private:
     double audioLengthSeconds = 0.0;
     double timeStretchRatio = 1.0;
     double pitchShiftRatio = 1.0;
+    yup::TimeStretchProcessor::Backend selectedTimeStretchBackend = yup::TimeStretchProcessor::Backend::automatic;
     bool hasLoadedAudio = false;
     bool loopEnabled = false;
     bool timeStretchSupported = false;
+
+    static constexpr int backendAutomaticId = 1;
+    static constexpr int backendTimeDomainId = 2;
+    static constexpr int backendBungeeId = 3;
 };
