@@ -71,7 +71,7 @@ public:
     enum class Backend
     {
         automatic,  /**< Automatically select the best available backend. */
-        timeDomain, /**< Use the built-in time-domain backend for tempo changes without independent pitch shifting. */
+        timeDomain, /**< Use the built-in time-domain backend for tempo changes and resampling-based pitch shifting. */
         bungee      /**< Use the Bungee backend if available. */
     };
 
@@ -142,7 +142,31 @@ public:
     bool isPrepared() const noexcept { return prepared; }
 
     //==============================================================================
-    /** Set a custom input provider for granular backends. */
+    /** Set a custom input provider for granular backends.
+    
+        The provider is a callback function that fills the given destination buffers
+        with input audio for a specified frame range. This is used by granular
+        backends to fetch input data on demand.
+
+        The provider should write numFrames of audio starting from beginFrame into
+        destChannels, which is an array of pointers to the destination buffers for
+        each channel. channelStride indicates the byte offset between consecutive
+        channels in destChannels.
+
+        The provider can also set muteHead and muteTail to indicate if the beginning
+        or end of the provided block should be muted (e.g., for handling edge cases
+        at the start or end of the input).
+
+        If no provider is set, the processor will use a default internal buffer for input.
+
+        @code
+        processor.setInputProvider ([](int64 beginFrame, int numFrames, float* const* destChannels, int channelStride, int& muteHead, int& muteTail)
+        {
+            // Fill destChannels with input audio for the specified frame range.
+            // Set muteHead and muteTail as needed.
+        });
+        @endcode
+    */
     void setInputProvider (InputProvider provider);
 
     //==============================================================================

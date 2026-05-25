@@ -426,6 +426,20 @@ TEST_F (TimeStretchProcessorTests, GetMaxInputFrameCount)
     EXPECT_GT (processor.getMaxInputFrameCount(), 0);
 }
 
+TEST_F (TimeStretchProcessorTests, TimeDomainMaxInputFrameCountCoversPitchChanges)
+{
+    TimeStretchProcessor processor;
+    ASSERT_TRUE (processor.prepare (spec, TimeStretchProcessor::Backend::timeDomain).wasOk());
+
+    const int preparedMaxInputFrames = processor.getMaxInputFrameCount();
+    EXPECT_GT (preparedMaxInputFrames, 0);
+
+    processor.setTimeRatio (0.5);
+    processor.setPitchRatio (0.5);
+
+    EXPECT_LE (processor.getMaxInputFrameCount(), preparedMaxInputFrames);
+}
+
 TEST_F (TimeStretchProcessorTests, GetLatencyInFrames)
 {
     TimeStretchProcessor processor;
@@ -586,6 +600,195 @@ TEST_F (TimeStretchProcessorTests, TimeDomainBackendProcessesInput)
         for (int i = 0; i < result.getValue(); ++i)
         {
             if (std::abs (channelData[i]) > 0.0001f)
+            {
+                hasNonZeroSamples = true;
+                break;
+            }
+        }
+    }
+
+    EXPECT_TRUE (hasNonZeroSamples);
+}
+
+TEST_F (TimeStretchProcessorTests, TimeDomainBackendSupportsPitchShift)
+{
+    TimeStretchProcessor processor;
+    ASSERT_TRUE (processor.prepare (spec, TimeStretchProcessor::Backend::timeDomain).wasOk());
+
+    processor.setPitchRatio (2.0);
+    const int outputFrames = processor.getExpectedOutputFrameCount (inputBuffer.getNumSamples());
+
+    auto result = processor.process (inputBuffer.getArrayOfReadPointers(),
+                                     inputBuffer.getNumSamples(),
+                                     outputBuffer.getArrayOfWritePointers(),
+                                     outputFrames);
+
+    ASSERT_TRUE (result.wasOk());
+    EXPECT_EQ (result.getValue(), outputFrames);
+
+    bool hasNonZeroSamples = false;
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        const auto* channelData = outputBuffer.getReadPointer (ch);
+        for (int i = 0; i < result.getValue(); ++i)
+        {
+            if (std::abs (channelData[i]) > 0.0001f)
+            {
+                hasNonZeroSamples = true;
+                break;
+            }
+        }
+    }
+
+    EXPECT_TRUE (hasNonZeroSamples);
+}
+
+TEST_F (TimeStretchProcessorTests, TimeDomainProviderMuteRegionsAreApplied)
+{
+    TimeStretchProcessor processor;
+    ASSERT_TRUE (processor.prepare (spec, TimeStretchProcessor::Backend::timeDomain).wasOk());
+
+    int providerCallCount = 0;
+    processor.setInputProvider ([&providerCallCount, numChannels = this->numChannels] (int64 beginFrame,
+                                                                                       int numFrames,
+                                                                                       float* const* destChannels,
+                                                                                       int channelStride,
+                                                                                       int& muteHead,
+                                                                                       int& muteTail)
+    {
+        (void) beginFrame;
+        (void) channelStride;
+
+        ++providerCallCount;
+        muteHead = 3;
+        muteTail = jmax (0, numFrames - 16);
+
+        for (int ch = 0; ch < numChannels; ++ch)
+            std::fill (destChannels[ch], destChannels[ch] + numFrames, static_cast<float> (ch + 1));
+    });
+
+    AudioBuffer<float> providerOutput (numChannels, 32);
+    auto result = processor.process (nullptr,
+                                     0,
+                                     providerOutput.getArrayOfWritePointers(),
+                                     providerOutput.getNumSamples());
+
+    ASSERT_TRUE (result.wasOk());
+    EXPECT_EQ (result.getValue(), providerOutput.getNumSamples());
+    EXPECT_GT (providerCallCount, 0);
+
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        const auto expectedValue = static_cast<float> (ch + 1);
+        const auto* samples = providerOutput.getReadPointer (ch);
+
+        for (int i = 0; i < 3; ++i)
+            EXPECT_FLOAT_EQ (samples[i], 0.0f);
+
+        for (int i = 3; i < 16; ++i)
+            EXPECT_FLOAT_EQ (samples[i], expectedValue);
+
+        for (int i = 16; i < providerOutput.getNumSamples(); ++i)
+            EXPECT_FLOAT_EQ (samples[i], 0.0f);
+    }
+}
+
+TEST_F (TimeStretchProcessorTests, TimeDomainUnityTempoCopiesProviderInput)
+{
+    TimeStretchProcessor processor;
+    ASSERT_TRUE (processor.prepare (spec, TimeStretchProcessor::Backend::timeDomain).wasOk());
+
+    int lastRequestedFrameCount = 0;
+    processor.setInputProvider ([&lastRequestedFrameCount, numChannels = this->numChannels] (int64 beginFrame,
+                                                                                             int numFrames,
+                                                                                             float* const* destChannels,
+                                                                                             int channelStride,
+                                                                                             int& muteHead,
+                                                                                             int& muteTail)
+    {
+        (void) channelStride;
+
+        lastRequestedFrameCount = numFrames;
+        muteHead = 0;
+        muteTail = 0;
+
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            for (int i = 0; i < numFrames; ++i)
+                destChannels[ch][i] = static_cast<float> ((beginFrame + i) * (ch + 1));
+        }
+    });
+
+    AudioBuffer<float> providerOutput (numChannels, 64);
+    auto result = processor.process (nullptr,
+                                     0,
+                                     providerOutput.getArrayOfWritePointers(),
+                                     providerOutput.getNumSamples());
+
+    ASSERT_TRUE (result.wasOk());
+    EXPECT_EQ (result.getValue(), providerOutput.getNumSamples());
+    EXPECT_GE (lastRequestedFrameCount, providerOutput.getNumSamples());
+
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        const auto* samples = providerOutput.getReadPointer (ch);
+        for (int i = 0; i < providerOutput.getNumSamples(); ++i)
+            EXPECT_FLOAT_EQ (samples[i], static_cast<float> (i * (ch + 1)));
+    }
+}
+
+TEST_F (TimeStretchProcessorTests, TimeDomainStretchUsesOverlapSearchWithProviderInput)
+{
+    TimeStretchProcessor processor;
+    ASSERT_TRUE (processor.prepare (spec, TimeStretchProcessor::Backend::timeDomain).wasOk());
+
+    int providerCallCount = 0;
+    int64 lastBeginFrame = 0;
+    processor.setInputProvider ([&providerCallCount, &lastBeginFrame, numChannels = this->numChannels, sampleRate = this->sampleRate] (int64 beginFrame,
+                                                                                                                                       int numFrames,
+                                                                                                                                       float* const* destChannels,
+                                                                                                                                       int channelStride,
+                                                                                                                                       int& muteHead,
+                                                                                                                                       int& muteTail)
+    {
+        (void) channelStride;
+
+        ++providerCallCount;
+        lastBeginFrame = beginFrame;
+        muteHead = 0;
+        muteTail = 0;
+
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            for (int i = 0; i < numFrames; ++i)
+            {
+                const double phase = 2.0 * MathConstants<double>::pi * 220.0
+                                   * static_cast<double> (beginFrame + i) / sampleRate;
+                destChannels[ch][i] = static_cast<float> (0.5 * std::sin (phase));
+            }
+        }
+    });
+
+    processor.setTimeRatio (1.5);
+
+    AudioBuffer<float> stretchedOutput (numChannels, 4096);
+    auto result = processor.process (nullptr,
+                                     0,
+                                     stretchedOutput.getArrayOfWritePointers(),
+                                     stretchedOutput.getNumSamples());
+
+    ASSERT_TRUE (result.wasOk());
+    EXPECT_EQ (result.getValue(), stretchedOutput.getNumSamples());
+    EXPECT_GT (providerCallCount, 1);
+    EXPECT_GT (lastBeginFrame, 0);
+
+    bool hasNonZeroSamples = false;
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        const auto* samples = stretchedOutput.getReadPointer (ch);
+        for (int i = 0; i < result.getValue(); ++i)
+        {
+            if (std::abs (samples[i]) > 0.0001f)
             {
                 hasNonZeroSamples = true;
                 break;
