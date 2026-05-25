@@ -241,6 +241,18 @@ public:
     void clearHistory();
 
     //==============================================================================
+    /** Returns the current spectrogram image.
+
+        The returned image contains the waterfall history used by paint() when
+        rendering the component. The image may be invalid until the spectrogram
+        has allocated its history buffer, for example after setNumHistoryFrames()
+        or after processing FFT data on a visible component.
+
+        @returns the current spectrogram image.
+    */
+    Image getSpectrogramImage() const noexcept { return spectrogramImage; }
+
+    //==============================================================================
     /** @internal */
     void paint (Graphics& g) override;
     /** @internal */
