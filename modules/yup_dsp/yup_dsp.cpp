@@ -87,6 +87,9 @@
 #include "designers/yup_FilterDesigner.cpp"
 #include "designers/yup_AnalogFilterDesigner.cpp"
 #include "convolution/yup_PartitionedConvolver.cpp"
+#include "stretching/yup_TimeStretchProcessorEngine.h"
+#include "stretching/yup_TimeStretchTimeDomainBackend.h"
+#include "stretching/yup_TimeStretchBungeeBackend.h"
 #include "stretching/yup_TimeStretchProcessor.cpp"
 #include "utilities/yup_DspMath.cpp"
 

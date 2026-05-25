@@ -44,6 +44,4 @@
 #include "yup_dsp/yup_StateVariableFilter.cpp"
 #include "yup_dsp/yup_WindowFunctions.cpp"
 
-#if YUP_MODULE_AVAILABLE_bungee_library
 #include "yup_dsp/yup_TimeStretchProcessor.cpp"
-#endif
