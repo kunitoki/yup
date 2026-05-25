@@ -187,6 +187,13 @@ void registerYupAiBindings (py::module_& m)
     ai.attr ("MCP_INVALID_PARAMS") = MCPErrorCodes::invalidParams;
     ai.attr ("MCP_INTERNAL_ERROR") = MCPErrorCodes::internalError;
 
+    py::enum_<LLMClient::Provider> (ai, "LLMProvider")
+        .value ("OpenAIChat", LLMClient::Provider::OpenAIChat)
+        .value ("OpenAIResponses", LLMClient::Provider::OpenAIResponses)
+        .value ("Anthropic", LLMClient::Provider::Anthropic)
+        .value ("Gemini", LLMClient::Provider::Gemini)
+        .export_values();
+
     py::enum_<LLMMessage::Role> (ai, "LLMMessageRole")
         .value ("system", LLMMessage::Role::system)
         .value ("user", LLMMessage::Role::user)
@@ -301,6 +308,7 @@ void registerYupAiBindings (py::module_& m)
         .def ("hasToolCalls", &LLMResponse::hasToolCalls)
         .def ("failed", &LLMResponse::failed)
         .def ("getToolCalls", &LLMResponse::getToolCalls)
+        .def ("appendStreamChunk", &LLMResponse::appendStreamChunk, "chunk"_a)
         .def_static ("fromError", &LLMResponse::fromError)
         .def_static ("fromOpenAiJson", &LLMResponse::fromOpenAiJson)
         .def_static ("fromStreamChunk", &LLMResponse::fromStreamChunk);
@@ -314,15 +322,26 @@ void registerYupAiBindings (py::module_& m)
         .def_readwrite ("temperature", &LLMClient::Request::temperature)
         .def_readwrite ("topP", &LLMClient::Request::topP)
         .def_readwrite ("maxTokens", &LLMClient::Request::maxTokens)
-        .def_readwrite ("stopSequences", &LLMClient::Request::stopSequences);
+        .def_readwrite ("stopSequences", &LLMClient::Request::stopSequences)
+        .def_readwrite ("schema", &LLMClient::Request::schema)
+        .def_readwrite ("grammar", &LLMClient::Request::grammar)
+        .def_readwrite ("grammarToolName", &LLMClient::Request::grammarToolName)
+        .def_readwrite ("grammarToolDescription", &LLMClient::Request::grammarToolDescription);
 
     py::class_<LLMClient::Options> (ai, "LLMOptions")
         .def (py::init<>())
+        .def_readwrite ("provider", &LLMClient::Options::provider)
         .def_readwrite ("model", &LLMClient::Options::model)
         .def_readwrite ("baseUrl", &LLMClient::Options::baseUrl)
         .def_readwrite ("apiKey", &LLMClient::Options::apiKey)
         .def_readwrite ("timeoutMs", &LLMClient::Options::timeoutMs)
-        .def_readwrite ("maxRetries", &LLMClient::Options::maxRetries);
+        .def_readwrite ("maxRetries", &LLMClient::Options::maxRetries)
+        .def_readwrite ("maxTokens", &LLMClient::Options::maxTokens)
+        .def_readwrite ("reasoningEffort", &LLMClient::Options::reasoningEffort)
+        .def_readwrite ("grammar", &LLMClient::Options::grammar)
+        .def_readwrite ("noTemperature", &LLMClient::Options::noTemperature)
+        .def_readwrite ("userAgent", &LLMClient::Options::userAgent)
+        .def_readwrite ("appUrl", &LLMClient::Options::appUrl);
 
     py::class_<LLMClient, PyLLMClient> (ai, "LLMClient")
         .def (py::init<LLMClient::Options>())
@@ -333,8 +352,77 @@ void registerYupAiBindings (py::module_& m)
         .def ("runToolLoop", &LLMClient::runToolLoop)
         .def ("getOptions", &LLMClient::getOptions, py::return_value_policy::reference_internal);
 
-    py::class_<LLMHttpClient, LLMClient> (ai, "LLMHttpClient")
-        .def (py::init<LLMClient::Options>());
+    // LLMHttpClient is an abstract base — not directly constructible from Python.
+    // Use LLMClientFactory to create provider-specific clients.
+    py::class_<LLMHttpClient, LLMClient> (ai, "LLMHttpClient");
+
+    py::class_<LLMClientFactory> (ai, "LLMClientFactory")
+        .def_static ("create", &LLMClientFactory::create, "options"_a)
+        .def_static ("openAIChat",
+                     &LLMClientFactory::openAIChat,
+                     "model"_a,
+                     "baseUrl"_a = String ("http://localhost:11434/v1"),
+                     "apiKey"_a = String {})
+        .def_static ("openAIResponses",
+                     &LLMClientFactory::openAIResponses,
+                     "model"_a,
+                     "apiKey"_a,
+                     "baseUrl"_a = String ("https://api.openai.com/v1"))
+        .def_static ("anthropic",
+                     &LLMClientFactory::anthropic,
+                     "model"_a,
+                     "apiKey"_a,
+                     "baseUrl"_a = String ("https://api.anthropic.com/v1"))
+        .def_static ("gemini",
+                     &LLMClientFactory::gemini,
+                     "model"_a,
+                     "apiKey"_a,
+                     "baseUrl"_a = String ("https://generativelanguage.googleapis.com"));
+
+    py::class_<LLMSchema> (ai, "LLMSchema")
+        .def_static ("string", &LLMSchema::string)
+        .def_static ("number", &LLMSchema::number)
+        .def_static ("integer", &LLMSchema::integer)
+        .def_static ("boolean", &LLMSchema::boolean)
+        .def_static ("array", &LLMSchema::array, "itemSchema"_a)
+        .def_static ("object", [] (const std::vector<std::pair<String, var>>& fields)
+    {
+        // Convert from Python list-of-tuples to the initializer_list-based helper.
+        // We replicate the helper logic to avoid the initializer_list limitation.
+        auto properties = var (std::make_unique<DynamicObject>());
+        var requiredArray;
+
+        for (const auto& [name, fieldSchema] : fields)
+        {
+            if (auto* obj = properties.getDynamicObject())
+                obj->setProperty (name, fieldSchema);
+            requiredArray.append (name);
+        }
+
+        auto result = var (std::make_unique<DynamicObject>());
+        auto* obj = result.getDynamicObject();
+        obj->setProperty ("type", String ("object"));
+        obj->setProperty ("properties", properties);
+        obj->setProperty ("required", requiredArray);
+        obj->setProperty ("additionalProperties", false);
+        return result;
+    },
+                     "fields"_a)
+        .def_static ("oneOf", [] (const std::vector<String>& values)
+    {
+        var enumArray;
+
+        for (const auto& v : values)
+            enumArray.append (v);
+
+        auto result = var (std::make_unique<DynamicObject>());
+        auto* obj = result.getDynamicObject();
+        obj->setProperty ("type", String ("string"));
+        obj->setProperty ("enum", enumArray);
+        return result;
+    },
+                     "values"_a)
+        .def_static ("toJsonString", &LLMSchema::toJsonString, "schema"_a);
 
     py::class_<EmbeddingModel::Options> (ai, "EmbeddingOptions")
         .def (py::init<>())

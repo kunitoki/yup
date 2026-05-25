@@ -36,31 +36,88 @@ public:
         auto theme = yup::ApplicationTheme::getGlobalTheme();
         titleFont = theme->getDefaultFont();
 
-        titleLabel.setText ("Ollama Tools", yup::dontSendNotification);
+        //======================================================================
+        // Title
+        titleLabel.setText ("AI Providers", yup::dontSendNotification);
         titleLabel.setFont (titleFont);
         addAndMakeVisible (titleLabel);
 
+        //======================================================================
+        // Provider selector buttons
+        providerOpenAIChatButton.setButtonText ("OpenAI Chat");
+        providerOpenAIChatButton.onClick = [this]
+        {
+            selectProvider (SelectedProvider::OpenAIChat);
+        };
+        addAndMakeVisible (providerOpenAIChatButton);
+
+        providerOpenAIResponsesButton.setButtonText ("OpenAI Responses");
+        providerOpenAIResponsesButton.onClick = [this]
+        {
+            selectProvider (SelectedProvider::OpenAIResponses);
+        };
+        addAndMakeVisible (providerOpenAIResponsesButton);
+
+        providerAnthropicButton.setButtonText ("Anthropic");
+        providerAnthropicButton.onClick = [this]
+        {
+            selectProvider (SelectedProvider::Anthropic);
+        };
+        addAndMakeVisible (providerAnthropicButton);
+
+        providerGeminiButton.setButtonText ("Gemini");
+        providerGeminiButton.onClick = [this]
+        {
+            selectProvider (SelectedProvider::Gemini);
+        };
+        addAndMakeVisible (providerGeminiButton);
+
+        //======================================================================
+        // Model
         modelLabel.setText ("Model", yup::dontSendNotification);
         addAndMakeVisible (modelLabel);
 
-        modelEditor.setText ("gemma4", yup::dontSendNotification);
         modelEditor.setMultiLine (false);
         addAndMakeVisible (modelEditor);
 
+        //======================================================================
+        // Base URL
         baseUrlLabel.setText ("Base URL", yup::dontSendNotification);
         addAndMakeVisible (baseUrlLabel);
 
-        baseUrlEditor.setText ("http://localhost:11434/v1", yup::dontSendNotification);
         baseUrlEditor.setMultiLine (false);
         addAndMakeVisible (baseUrlEditor);
 
+        //======================================================================
+        // API Key
+        apiKeyLabel.setText ("API Key", yup::dontSendNotification);
+        addAndMakeVisible (apiKeyLabel);
+
+        apiKeyEditor.setMultiLine (false);
+        apiKeyEditor.setText ("", yup::dontSendNotification);
+        addAndMakeVisible (apiKeyEditor);
+
+        //======================================================================
+        // Reasoning effort (for OpenAI Responses / Gemini 2.5 — leave empty to disable)
+        reasoningLabel.setText ("Reasoning (low/med/high)", yup::dontSendNotification);
+        addAndMakeVisible (reasoningLabel);
+
+        reasoningEditor.setMultiLine (false);
+        reasoningEditor.setText ("", yup::dontSendNotification);
+        addAndMakeVisible (reasoningEditor);
+
+        //======================================================================
+        // Prompt
         promptLabel.setText ("Prompt", yup::dontSendNotification);
         addAndMakeVisible (promptLabel);
 
-        promptEditor.setText ("Change this component background to dark green, then say what you changed.", yup::dontSendNotification);
         promptEditor.setMultiLine (true);
+        promptEditor.setText ("Change this component background to dark green, then say what you changed.",
+                              yup::dontSendNotification);
         addAndMakeVisible (promptEditor);
 
+        //======================================================================
+        // Action row
         askButton.setButtonText ("Ask");
         askButton.onClick = [this]
         {
@@ -68,13 +125,16 @@ public:
         };
         addAndMakeVisible (askButton);
 
+        // Tools are supported by OpenAI Chat and Gemini providers.
         toolsToggle.setButtonText ("Tools");
         toolsToggle.setToggleState (true, yup::dontSendNotification);
         addAndMakeVisible (toolsToggle);
 
-        statusLabel.setText ("Ollama can call set_background_color for this page.", yup::dontSendNotification);
+        statusLabel.setText ("Select a provider and ask a question.", yup::dontSendNotification);
         addAndMakeVisible (statusLabel);
 
+        //======================================================================
+        // Response
         responseLabel.setText ("Response", yup::dontSendNotification);
         addAndMakeVisible (responseLabel);
 
@@ -82,6 +142,9 @@ public:
         responseEditor.setReadOnly (true);
         responseEditor.setText ("", yup::dontSendNotification);
         addAndMakeVisible (responseEditor);
+
+        // Apply defaults for the initial provider.
+        selectProvider (SelectedProvider::OpenAIChat);
     }
 
     ~AiDemo() override
@@ -94,61 +157,167 @@ public:
     {
         auto area = getLocalBounds().reduced (20);
 
+        // Title
         titleLabel.setBounds (area.removeFromTop (40));
+        area.removeFromTop (8);
+
+        // Provider selector — four equal-width buttons.
+        {
+            auto row = area.removeFromTop (30);
+            const int w = row.getWidth() / 4;
+            providerOpenAIChatButton.setBounds (row.removeFromLeft (w));
+            providerOpenAIResponsesButton.setBounds (row.removeFromLeft (w));
+            providerAnthropicButton.setBounds (row.removeFromLeft (w));
+            providerGeminiButton.setBounds (row);
+        }
         area.removeFromTop (10);
 
-        auto settings = area.removeFromTop (58);
-        auto columnWidth = (settings.getWidth() - 12) / 2;
+        constexpr int columnGap = 12;
+        constexpr int labelH = 20;
+        constexpr int editorH = 28;
+        constexpr int rowH = labelH + 4 + editorH;
 
-        auto modelColumn = settings.removeFromLeft (columnWidth);
-        settings.removeFromLeft (12);
-        auto baseUrlColumn = settings;
+        // Row 1: Model (left) | Base URL (right)
+        {
+            auto row = area.removeFromTop (rowH);
+            auto left = row.removeFromLeft ((row.getWidth() - columnGap) / 2);
+            row.removeFromLeft (columnGap);
 
-        modelLabel.setBounds (modelColumn.removeFromTop (22));
-        modelEditor.setBounds (modelColumn.removeFromTop (30));
+            modelLabel.setBounds (left.removeFromTop (labelH));
+            left.removeFromTop (4);
+            modelEditor.setBounds (left);
 
-        baseUrlLabel.setBounds (baseUrlColumn.removeFromTop (22));
-        baseUrlEditor.setBounds (baseUrlColumn.removeFromTop (30));
+            baseUrlLabel.setBounds (row.removeFromTop (labelH));
+            row.removeFromTop (4);
+            baseUrlEditor.setBounds (row);
+        }
+        area.removeFromTop (8);
 
+        // Row 2: API Key (left) | Reasoning effort (right)
+        {
+            auto row = area.removeFromTop (rowH);
+            auto left = row.removeFromLeft ((row.getWidth() - columnGap) / 2);
+            row.removeFromLeft (columnGap);
+
+            apiKeyLabel.setBounds (left.removeFromTop (labelH));
+            left.removeFromTop (4);
+            apiKeyEditor.setBounds (left);
+
+            reasoningLabel.setBounds (row.removeFromTop (labelH));
+            row.removeFromTop (4);
+            reasoningEditor.setBounds (row);
+        }
         area.removeFromTop (14);
 
-        promptLabel.setBounds (area.removeFromTop (22));
-        promptEditor.setBounds (area.removeFromTop (120));
-
+        // Prompt
+        promptLabel.setBounds (area.removeFromTop (labelH));
+        area.removeFromTop (4);
+        promptEditor.setBounds (area.removeFromTop (90));
         area.removeFromTop (12);
 
-        auto actionRow = area.removeFromTop (34);
-        askButton.setBounds (actionRow.removeFromLeft (96));
-        actionRow.removeFromLeft (12);
-        toolsToggle.setBounds (actionRow.removeFromLeft (86));
-        actionRow.removeFromLeft (12);
-        statusLabel.setBounds (actionRow);
+        // Action row
+        {
+            auto row = area.removeFromTop (30);
+            askButton.setBounds (row.removeFromLeft (80));
+            row.removeFromLeft (10);
+            toolsToggle.setBounds (row.removeFromLeft (80));
+            row.removeFromLeft (10);
+            statusLabel.setBounds (row);
+        }
+        area.removeFromTop (14);
 
-        area.removeFromTop (18);
-
-        responseLabel.setBounds (area.removeFromTop (22));
+        // Response
+        responseLabel.setBounds (area.removeFromTop (labelH));
+        area.removeFromTop (4);
         responseEditor.setBounds (area);
     }
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (backgroundColor.value_or (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray)));
+        g.setFillColor (backgroundColor.value_or (
+            findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray)));
         g.fillAll();
 
         g.setStrokeColor (yup::Colors::darkgray);
         g.setStrokeWidth (1.0f);
-        g.strokeLine (20.0f, 66.0f, getWidth() - 20.0f, 66.0f);
+        g.strokeLine (20.0f, 56.0f, getWidth() - 20.0f, 56.0f); // below title
+        g.strokeLine (20.0f, 96.0f, getWidth() - 20.0f, 96.0f); // below provider row
     }
 
 private:
-    class OllamaRequestThread final : public yup::Thread
+    //==========================================================================
+    enum class SelectedProvider
+    {
+        OpenAIChat,
+        OpenAIResponses,
+        Anthropic,
+        Gemini
+    };
+    SelectedProvider currentProvider = SelectedProvider::OpenAIChat;
+
+    //==========================================================================
+    // Provider selection — updates button labels, defaults, and enabled states.
+    void selectProvider (SelectedProvider p)
+    {
+        currentProvider = p;
+
+        // Use a bullet marker on the active button text.
+        providerOpenAIChatButton.setButtonText (p == SelectedProvider::OpenAIChat ? "• OpenAI Chat" : "OpenAI Chat");
+        providerOpenAIResponsesButton.setButtonText (p == SelectedProvider::OpenAIResponses ? "• OpenAI Responses" : "OpenAI Responses");
+        providerAnthropicButton.setButtonText (p == SelectedProvider::Anthropic ? "• Anthropic" : "Anthropic");
+        providerGeminiButton.setButtonText (p == SelectedProvider::Gemini ? "• Gemini" : "Gemini");
+
+        // Apply per-provider defaults (model + base URL).
+        switch (p)
+        {
+            case SelectedProvider::OpenAIChat:
+                modelEditor.setText ("gemma4", yup::dontSendNotification);
+                baseUrlEditor.setText ("http://localhost:11434/v1", yup::dontSendNotification);
+                statusLabel.setText ("OpenAI Chat / Ollama - supports tools, streaming, and structured output.", yup::dontSendNotification);
+                break;
+
+            case SelectedProvider::OpenAIResponses:
+                modelEditor.setText ("gpt-4.1", yup::dontSendNotification);
+                baseUrlEditor.setText ("https://api.openai.com/v1", yup::dontSendNotification);
+                statusLabel.setText ("OpenAI Responses API - supports reasoning effort and structured output.", yup::dontSendNotification);
+                break;
+
+            case SelectedProvider::Anthropic:
+                modelEditor.setText ("claude-opus-4-5", yup::dontSendNotification);
+                baseUrlEditor.setText ("https://api.anthropic.com/v1", yup::dontSendNotification);
+                statusLabel.setText ("Anthropic Claude - requires an API key. Prompt cached automatically.", yup::dontSendNotification);
+                break;
+
+            case SelectedProvider::Gemini:
+                modelEditor.setText ("gemini-2.5-flash", yup::dontSendNotification);
+                baseUrlEditor.setText ("https://generativelanguage.googleapis.com", yup::dontSendNotification);
+                statusLabel.setText ("Google Gemini - supports tools and thinking budget via Reasoning field.", yup::dontSendNotification);
+                break;
+        }
+
+        // Tools are supported by OpenAI Chat and Gemini.
+        const bool supportsTools = (p == SelectedProvider::OpenAIChat || p == SelectedProvider::Gemini);
+        toolsToggle.setEnabled (supportsTools);
+        if (! supportsTools)
+            toolsToggle.setToggleState (false, yup::dontSendNotification);
+
+        // Reasoning is meaningful for OpenAI Responses and Gemini.
+        reasoningEditor.setEnabled (p == SelectedProvider::OpenAIResponses || p == SelectedProvider::Gemini);
+        if (p == SelectedProvider::OpenAIChat || p == SelectedProvider::Anthropic)
+            reasoningEditor.setText ("", yup::dontSendNotification);
+    }
+
+    //==========================================================================
+    class AiRequestThread final : public yup::Thread
     {
     public:
-        OllamaRequestThread (AiDemo& ownerToUse, yup::String modelToUse, yup::String baseUrlToUse, yup::String promptToUse, bool useToolsToUse)
-            : Thread ("OllamaRequest")
+        AiRequestThread (AiDemo& ownerToUse,
+                         yup::LLMClient::Options optionsToUse,
+                         yup::String promptToUse,
+                         bool useToolsToUse)
+            : Thread ("AiRequest")
             , owner (ownerToUse)
-            , model (std::move (modelToUse))
-            , baseUrl (std::move (baseUrlToUse))
+            , clientOptions (std::move (optionsToUse))
             , prompt (std::move (promptToUse))
             , useTools (useToolsToUse)
             , ownerReference (&ownerToUse)
@@ -157,13 +326,12 @@ private:
 
         void run() override
         {
-            yup::LLMClient::Options options;
-            options.model = model;
-            options.baseUrl = baseUrl;
-            options.timeoutMs = 120000;
-            options.maxRetries = 0;
-
-            yup::LLMHttpClient client (std::move (options));
+            auto client = yup::LLMClientFactory::create (clientOptions);
+            if (client == nullptr)
+            {
+                reportResult ("Error: unknown provider.");
+                return;
+            }
 
             yup::LLMClient::Request request;
             request.messages.push_back (yup::LLMMessage::user (prompt));
@@ -172,51 +340,57 @@ private:
             yup::LLMToolRegistry toolRegistry;
             if (useTools)
             {
-                request.systemPrompt = "You are a concise assistant inside a YUP example app. "
-                                       "If the user asks to change the page background, call set_background_color with a CSS color name, #RRGGBB value, rgb(...), or hsl(...). "
-                                       "After a tool result, briefly tell the user what changed.";
+                request.systemPrompt =
+                    "You are a concise assistant inside a YUP example app. "
+                    "If the user asks to change the page background, call set_background_color "
+                    "with a CSS color name, #RRGGBB value, rgb(...), or hsl(...). "
+                    "After a tool result, briefly tell the user what changed.";
 
                 owner.registerTools (toolRegistry, ownerReference);
                 request.tools = toolRegistry.getAllTools();
                 request.toolChoice = "auto";
             }
 
-            auto response = client.runToolLoop (request, toolRegistry);
+            auto response = client->runToolLoop (request, toolRegistry);
 
             yup::String responseText;
             if (response.failed() && response.errorMessage.has_value())
-                responseText = "Ollama error: " + *response.errorMessage;
+                responseText = "Error: " + *response.errorMessage;
             else if (! response.choices.empty())
                 responseText = response.choices.front().message.content.trim();
 
             if (responseText.isEmpty())
-                responseText = useTools ? "No response was returned. Check that Ollama is running, the model is pulled, the base URL is reachable, and the model supports tool calls."
-                                        : "No response was returned. Check that Ollama is running, the model is pulled, and the base URL is reachable.";
+                responseText = "No response returned. Check your connection, model name, and API key.";
 
+            reportResult (responseText);
+        }
+
+    private:
+        void reportResult (const yup::String& result)
+        {
             if (threadShouldExit())
                 return;
 
             auto ownerPtr = std::addressof (owner);
             auto weakOwner = ownerReference;
 
-            yup::MessageManager::callAsync ([ownerPtr, weakOwner, responseText]
+            yup::MessageManager::callAsync ([ownerPtr, weakOwner, result]
             {
                 if (weakOwner.get() == nullptr)
                     return;
 
-                ownerPtr->handleResponse (responseText);
+                ownerPtr->handleResponse (result);
             });
         }
 
-    private:
         AiDemo& owner;
-        yup::String model;
-        yup::String baseUrl;
+        yup::LLMClient::Options clientOptions;
         yup::String prompt;
         bool useTools;
         yup::WeakReference<yup::Component> ownerReference;
     };
 
+    //==========================================================================
     void askModel()
     {
         if (requestThread != nullptr && requestThread->isThreadRunning())
@@ -229,8 +403,10 @@ private:
 
         const auto model = modelEditor.getText().trim();
         const auto baseUrl = baseUrlEditor.getText().trim();
+        const auto apiKey = apiKeyEditor.getText().trim();
+        const auto reasoning = reasoningEditor.getText().trim();
         const auto prompt = promptEditor.getText().trim();
-        const auto useTools = toolsToggle.getToggleState();
+        const auto useTools = toolsToggle.getToggleState() && toolsToggle.isEnabled();
 
         if (model.isEmpty() || baseUrl.isEmpty() || prompt.isEmpty())
         {
@@ -238,16 +414,44 @@ private:
             return;
         }
 
+        yup::LLMClient::Options options;
+        options.model = model;
+        options.baseUrl = baseUrl;
+        options.apiKey = apiKey;
+        options.timeoutMs = 120000;
+        options.maxRetries = 0;
+        options.reasoningEffort = reasoning;
+
+        switch (currentProvider)
+        {
+            case SelectedProvider::OpenAIChat:
+                options.provider = yup::LLMClient::Provider::OpenAIChat;
+                break;
+
+            case SelectedProvider::OpenAIResponses:
+                options.provider = yup::LLMClient::Provider::OpenAIResponses;
+                options.noTemperature = true; // Responses API does not accept temperature
+                break;
+
+            case SelectedProvider::Anthropic:
+                options.provider = yup::LLMClient::Provider::Anthropic;
+                break;
+
+            case SelectedProvider::Gemini:
+                options.provider = yup::LLMClient::Provider::Gemini;
+                break;
+        }
+
         askButton.setEnabled (false);
-        statusLabel.setText ("Waiting for Ollama...", yup::dontSendNotification);
+        statusLabel.setText ("Waiting for response...", yup::dontSendNotification);
         responseEditor.setText ("", yup::dontSendNotification);
 
-        requestThread = std::make_unique<OllamaRequestThread> (*this, model, baseUrl, prompt, useTools);
+        requestThread = std::make_unique<AiRequestThread> (*this, std::move (options), prompt, useTools);
+
         if (! requestThread->startThread (yup::Thread::Priority::background))
         {
             requestThread.reset();
-            responseEditor.setText ("", yup::dontSendNotification);
-            statusLabel.setText ("Unable to start background request thread.", yup::dontSendNotification);
+            statusLabel.setText ("Unable to start request thread.", yup::dontSendNotification);
             askButton.setEnabled (true);
         }
     }
@@ -255,29 +459,36 @@ private:
     void handleResponse (const yup::String& responseText)
     {
         responseEditor.setText (responseText, yup::dontSendNotification);
-        statusLabel.setText ("Complete", yup::dontSendNotification);
+        statusLabel.setText ("Complete.", yup::dontSendNotification);
         askButton.setEnabled (true);
+
+        // Re-enable tools toggle for providers that support tools.
+        toolsToggle.setEnabled (currentProvider == SelectedProvider::OpenAIChat
+                                || currentProvider == SelectedProvider::Gemini);
     }
 
-    void registerTools (yup::LLMToolRegistry& registry, yup::WeakReference<yup::Component> ownerReference)
+    void registerTools (yup::LLMToolRegistry& registry,
+                        yup::WeakReference<yup::Component> ownerReference)
     {
         yup::LLMTool colorTool;
         colorTool.name = "set_background_color";
         colorTool.description = "Changes the visible background color of the current YUP example component.";
 
-        yup::LLMTool::Parameter colorParameter;
-        colorParameter.name = "color";
-        colorParameter.type = "string";
-        colorParameter.description = "CSS color name, #RRGGBB, rgb(...), rgba(...), hsl(...), or hsla(...) value.";
-        colorParameter.required = true;
-        colorTool.parameters.push_back (std::move (colorParameter));
+        yup::LLMTool::Parameter colorParam;
+        colorParam.name = "color";
+        colorParam.type = "string";
+        colorParam.description = "CSS color name, #RRGGBB, rgb(...), rgba(...), hsl(...), or hsla(...) value.";
+        colorParam.required = true;
+        colorTool.parameters.push_back (std::move (colorParam));
 
-        auto ownerPtr = this;
+        auto* ownerPtr = this;
 
         colorTool.setHandler ([ownerPtr, ownerReference] (const yup::var& arguments)
         {
             const auto colorText = arguments["color"].toString().trim();
-            const auto colorValue = colorText.startsWithChar ('#') || colorText.startsWithIgnoreCase ("rgb") || colorText.startsWithIgnoreCase ("hsl")
+            const auto colorValue = colorText.startsWithChar ('#')
+                                         || colorText.startsWithIgnoreCase ("rgb")
+                                         || colorText.startsWithIgnoreCase ("hsl")
                                       ? colorText
                                       : colorText.removeCharacters (" ");
             const auto color = yup::Color::fromString (colorValue);
@@ -291,11 +502,11 @@ private:
             });
 
             auto result = yup::var (std::make_unique<yup::DynamicObject>());
-            if (auto* object = result.getDynamicObject())
+            if (auto* obj = result.getDynamicObject())
             {
-                object->setProperty ("success", true);
-                object->setProperty ("color", colorValue);
-                object->setProperty ("message", "Background color updated.");
+                obj->setProperty ("success", true);
+                obj->setProperty ("color", colorValue);
+                obj->setProperty ("message", yup::String ("Background color updated."));
             }
 
             return result;
@@ -310,21 +521,44 @@ private:
         repaint();
     }
 
+    //==========================================================================
+    // Title
     yup::Label titleLabel { "titleLabel" };
-    yup::Label modelLabel { "modelLabel" };
-    yup::Label baseUrlLabel { "baseUrlLabel" };
-    yup::Label promptLabel { "promptLabel" };
-    yup::Label statusLabel { "statusLabel" };
-    yup::Label responseLabel { "responseLabel" };
+    yup::Font titleFont;
 
+    // Provider selector
+    yup::TextButton providerOpenAIChatButton { "providerOpenAIChatButton" };
+    yup::TextButton providerOpenAIResponsesButton { "providerOpenAIResponsesButton" };
+    yup::TextButton providerAnthropicButton { "providerAnthropicButton" };
+    yup::TextButton providerGeminiButton { "providerGeminiButton" };
+
+    // Settings fields
+    yup::Label modelLabel { "modelLabel" };
     yup::TextEditor modelEditor { "modelEditor" };
+
+    yup::Label baseUrlLabel { "baseUrlLabel" };
     yup::TextEditor baseUrlEditor { "baseUrlEditor" };
+
+    yup::Label apiKeyLabel { "apiKeyLabel" };
+    yup::TextEditor apiKeyEditor { "apiKeyEditor" };
+
+    yup::Label reasoningLabel { "reasoningLabel" };
+    yup::TextEditor reasoningEditor { "reasoningEditor" };
+
+    // Prompt
+    yup::Label promptLabel { "promptLabel" };
     yup::TextEditor promptEditor { "promptEditor" };
-    yup::TextEditor responseEditor { "responseEditor" };
+
+    // Action row
     yup::TextButton askButton { "askButton" };
     yup::ToggleButton toolsToggle { "toolsToggle" };
+    yup::Label statusLabel { "statusLabel" };
 
-    yup::Font titleFont;
+    // Response
+    yup::Label responseLabel { "responseLabel" };
+    yup::TextEditor responseEditor { "responseEditor" };
+
+    // State
     std::optional<yup::Color> backgroundColor;
-    std::unique_ptr<OllamaRequestThread> requestThread;
+    std::unique_ptr<AiRequestThread> requestThread;
 };

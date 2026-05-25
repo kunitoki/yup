@@ -335,7 +335,7 @@ TEST (YupAiLLMClient, BuildsChatCompletionBody)
     EXPECT_TRUE (static_cast<bool> (body["stream"]));
     EXPECT_EQ ("system", body["messages"][0]["role"].toString());
     EXPECT_EQ ("user", body["messages"][1]["role"].toString());
-    EXPECT_EQ (32, static_cast<int> (body["max_tokens"]));
+    EXPECT_EQ (32, static_cast<int> (body["max_completion_tokens"]));
 }
 
 TEST (YupAiLLMClient, SerializesSpecificToolChoice)

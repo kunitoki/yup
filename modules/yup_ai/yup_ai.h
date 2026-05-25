@@ -54,14 +54,29 @@
 #include <vector>
 
 //==============================================================================
+// Core LLM types and abstract client.
 #include "llm/yup_LLMMessage.h"
 #include "llm/yup_LLMTool.h"
 #include "llm/yup_LLMToolRegistry.h"
 #include "llm/yup_LLMResponse.h"
 #include "llm/yup_LLMClient.h"
 #include "llm/yup_LLMHttpClient.h"
+#include "llm/yup_LLMSchema.h"
+
+// Embedding.
 #include "embedding/yup_EmbeddingModel.h"
+
+// MCP (Model Context Protocol).
 #include "mcp/yup_MCPTypes.h"
 #include "mcp/yup_MCPTransport.h"
 #include "mcp/yup_MCPClient.h"
 #include "mcp/yup_MCPServer.h"
+
+// Provider implementations (include before the factory).
+#include "providers/yup_LLMOpenAIChatClient.h"
+#include "providers/yup_LLMAnthropicClient.h"
+#include "providers/yup_LLMGeminiClient.h"
+#include "providers/yup_LLMOpenAIResponsesClient.h"
+
+// Factory — depends on all provider types above.
+#include "llm/yup_LLMClientFactory.h"

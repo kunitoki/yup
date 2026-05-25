@@ -91,7 +91,10 @@ LLMResponse LLMClient::runToolLoop (const Request& request, LLMToolRegistry& too
         for (const auto& toolCall : response.getToolCalls())
         {
             auto result = tools.dispatchToolCall (toolCall.name, toolCall.arguments);
-            current.messages.push_back (LLMMessage::toolResult (toolCall.id, JSON::toString (result, true)));
+
+            auto toolResultMsg = LLMMessage::toolResult (toolCall.id, JSON::toString (result, true));
+            toolResultMsg.name = toolCall.name; // preserved for providers that need name + id separately (e.g. Gemini)
+            current.messages.push_back (std::move (toolResultMsg));
         }
 
         response = complete (current);
@@ -124,14 +127,19 @@ String LLMClient::buildChatCompletionBody (const Request& request, bool stream) 
     if (request.toolChoice.has_value())
         setLLMClientProperty (object, "tool_choice", toolChoiceToVar (*request.toolChoice));
 
-    if (request.temperature.has_value())
-        setLLMClientProperty (object, "temperature", static_cast<double> (*request.temperature));
+    if (! options.noTemperature)
+    {
+        if (request.temperature.has_value())
+            setLLMClientProperty (object, "temperature", static_cast<double> (*request.temperature));
+    }
 
     if (request.topP.has_value())
         setLLMClientProperty (object, "top_p", static_cast<double> (*request.topP));
 
-    if (request.maxTokens.has_value())
-        setLLMClientProperty (object, "max_tokens", *request.maxTokens);
+    // Per-request maxTokens overrides options.maxTokens; use max_completion_tokens for OpenAI-compatible APIs.
+    const int effectiveMaxTokens = request.maxTokens.value_or (options.maxTokens);
+    if (effectiveMaxTokens > 0)
+        setLLMClientProperty (object, "max_completion_tokens", effectiveMaxTokens);
 
     if (request.stopSequences.has_value())
     {
@@ -142,6 +150,40 @@ String LLMClient::buildChatCompletionBody (const Request& request, bool stream) 
 
         setLLMClientProperty (object, "stop", stop);
     }
+
+    // Reasoning effort for o-series / GPT-5 models.
+    if (options.reasoningEffort.isNotEmpty())
+        setLLMClientProperty (object, "reasoning_effort", options.reasoningEffort);
+
+    // GBNF grammar for llama-server constrained decoding (per-request overrides config).
+    const auto& effectiveGrammar = request.grammar.isNotEmpty() ? request.grammar : options.grammar;
+    if (effectiveGrammar.isNotEmpty())
+        setLLMClientProperty (object, "grammar", effectiveGrammar);
+
+    // Prompt caching — bucket by application identity, retain for 24h.
+    if (options.userAgent.isNotEmpty())
+    {
+        setLLMClientProperty (object, "prompt_cache_key", options.userAgent);
+        setLLMClientProperty (object, "prompt_cache_retention", String ("24h"));
+    }
+
+    // Structured output via JSON Schema (built with LLMSchema helpers).
+    if (! request.schema.isVoid())
+    {
+        auto schemaWrapper = makeLLMClientObject();
+        setLLMClientProperty (schemaWrapper, "name", String ("response"));
+        setLLMClientProperty (schemaWrapper, "strict", true);
+        setLLMClientProperty (schemaWrapper, "schema", request.schema);
+
+        auto responseFormat = makeLLMClientObject();
+        setLLMClientProperty (responseFormat, "type", String ("json_schema"));
+        setLLMClientProperty (responseFormat, "json_schema", schemaWrapper);
+
+        setLLMClientProperty (object, "response_format", responseFormat);
+    }
+
+    // OpenRouter — application identification headers are injected at HTTP level,
+    // but some frontends read X-Title from the body; we skip that here.
 
     return JSON::toString (object, true);
 }

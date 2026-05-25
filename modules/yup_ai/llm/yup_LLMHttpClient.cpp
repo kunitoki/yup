@@ -23,46 +23,9 @@ namespace yup
 {
 namespace
 {
-String makeAiEndpointUrl (const String& baseUrl, const String& path)
-{
-    return baseUrl.endsWithChar ('/') ? baseUrl.dropLastCharacters (1) + path
-                                      : baseUrl + path;
-}
-
-String makeAiHeaders (const String& apiKey)
-{
-    String headers = "Content-Type: application/json\r\nAccept: application/json\r\n";
-
-    if (apiKey.isNotEmpty())
-        headers += "Authorization: Bearer " + apiKey + "\r\n";
-
-    return headers;
-}
-
 bool shouldRetryAiStatus (int statusCode)
 {
     return statusCode == 0 || statusCode == 408 || statusCode == 429 || statusCode >= 500;
-}
-
-LLMResponse makeHttpErrorResponse (int statusCode, const String& body)
-{
-    if (body.isNotEmpty())
-    {
-        auto parsed = JSON::parse (body);
-
-        if (! parsed.isVoid())
-        {
-            auto response = LLMResponse::fromOpenAiJson (parsed);
-
-            if (response.failed())
-                return response;
-        }
-    }
-
-    if (statusCode > 0)
-        return LLMResponse::fromError ("AI HTTP request failed with status " + String (statusCode));
-
-    return LLMResponse::fromError ("AI HTTP request failed");
 }
 } // namespace
 
@@ -75,15 +38,16 @@ struct LLMHttpClient::Pimpl
 
     LLMResponse complete (const Request& request)
     {
-        const auto body = owner.buildChatCompletionBody (request, false);
-        const auto endpoint = makeAiEndpointUrl (owner.options.baseUrl, "/chat/completions");
+        const auto body = owner.buildPayload (request);
+        const auto endpoint = owner.getEndpointUrl();
+        const auto headers = owner.buildHeaders();
 
         for (int attempt = 0; attempt <= owner.options.maxRetries; ++attempt)
         {
             int statusCode = 0;
             auto url = URL (endpoint).withPOSTData (body);
             auto options = URL::InputStreamOptions (URL::ParameterHandling::inPostData)
-                               .withExtraHeaders (makeAiHeaders (owner.options.apiKey))
+                               .withExtraHeaders (headers)
                                .withConnectionTimeoutMs (owner.options.timeoutMs)
                                .withStatusCode (&statusCode)
                                .withHttpRequestCmd ("POST");
@@ -92,29 +56,51 @@ struct LLMHttpClient::Pimpl
             const auto responseBody = stream != nullptr ? stream->readEntireStreamAsString() : String();
 
             if (stream != nullptr && statusCode >= 200 && statusCode < 300)
-                return LLMResponse::fromOpenAiJson (JSON::parse (responseBody));
+                return owner.parseResponse (JSON::parse (responseBody));
 
-            if (! shouldRetryAiStatus (statusCode) || attempt == owner.options.maxRetries)
-                return makeHttpErrorResponse (statusCode, responseBody);
+            // Build a meaningful error from the body before deciding whether to retry.
+            LLMResponse errorResponse;
+            if (responseBody.isNotEmpty())
+            {
+                auto parsed = JSON::parse (responseBody);
+                if (! parsed.isVoid())
+                    errorResponse = owner.parseResponse (parsed);
+            }
+
+            if (errorResponse.failed())
+            {
+                if (! shouldRetryAiStatus (statusCode) || attempt == owner.options.maxRetries)
+                    return errorResponse;
+            }
+            else
+            {
+                const auto msg = statusCode > 0
+                                   ? "AI HTTP request failed with status " + String (statusCode)
+                                   : "AI HTTP request failed";
+
+                if (! shouldRetryAiStatus (statusCode) || attempt == owner.options.maxRetries)
+                    return LLMResponse::fromError (msg);
+            }
         }
 
         return LLMResponse::fromError ("AI HTTP request failed after retries");
     }
 
-    bool completeStreaming (const Request& request, ChunkCallback onChunk)
+    bool completeStreaming (const Request& request, LLMHttpClient::ChunkCallback onChunk)
     {
         if (! onChunk)
             return false;
 
-        const auto body = owner.buildChatCompletionBody (request, true);
-        const auto endpoint = makeAiEndpointUrl (owner.options.baseUrl, "/chat/completions");
+        const auto body = owner.buildStreamingPayload (request);
+        const auto endpoint = owner.getStreamingEndpointUrl();
+        const auto headers = owner.buildHeaders();
 
         for (int attempt = 0; attempt <= owner.options.maxRetries; ++attempt)
         {
             int statusCode = 0;
             auto url = URL (endpoint).withPOSTData (body);
             auto options = URL::InputStreamOptions (URL::ParameterHandling::inPostData)
-                               .withExtraHeaders (makeAiHeaders (owner.options.apiKey))
+                               .withExtraHeaders (headers)
                                .withConnectionTimeoutMs (owner.options.timeoutMs)
                                .withStatusCode (&statusCode)
                                .withHttpRequestCmd ("POST");
@@ -137,7 +123,7 @@ struct LLMHttpClient::Pimpl
                         return true;
 
                     auto parsed = JSON::parse (payload);
-                    auto chunk = LLMResponse::fromStreamChunk (parsed);
+                    auto chunk = owner.parseChunk (parsed);
 
                     accumulatedResponse.appendStreamChunk (chunk);
                     onChunk (accumulatedResponse);
@@ -159,6 +145,7 @@ struct LLMHttpClient::Pimpl
     LLMHttpClient& owner;
 };
 
+//==============================================================================
 LLMHttpClient::LLMHttpClient (Options options)
     : LLMClient (std::move (options))
     , pimpl (std::make_unique<Pimpl> (*this))
@@ -175,6 +162,28 @@ LLMResponse LLMHttpClient::complete (const Request& request)
 bool LLMHttpClient::completeStreaming (const Request& request, ChunkCallback onChunk)
 {
     return pimpl->completeStreaming (request, std::move (onChunk));
+}
+
+//==============================================================================
+String LLMHttpClient::makeProviderUrl (const String& baseUrl, const String& path)
+{
+    return baseUrl.endsWithChar ('/') ? baseUrl.dropLastCharacters (1) + path
+                                      : baseUrl + path;
+}
+
+String LLMHttpClient::getStreamingEndpointUrl() const
+{
+    return getEndpointUrl();
+}
+
+String LLMHttpClient::buildStreamingPayload (const Request& request) const
+{
+    return buildPayload (request);
+}
+
+LLMResponse LLMHttpClient::parseChunk (const var& /*json*/) const
+{
+    return LLMResponse {};
 }
 
 } // namespace yup

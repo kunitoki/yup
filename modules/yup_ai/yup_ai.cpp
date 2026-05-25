@@ -31,13 +31,27 @@
 #include "yup_ai.h"
 
 //==============================================================================
+// Core LLM.
 #include "llm/yup_LLMMessage.cpp"
 #include "llm/yup_LLMTool.cpp"
 #include "llm/yup_LLMToolRegistry.cpp"
 #include "llm/yup_LLMResponse.cpp"
 #include "llm/yup_LLMClient.cpp"
 #include "llm/yup_LLMHttpClient.cpp"
+
+// Embedding.
 #include "embedding/yup_EmbeddingModel.cpp"
+
+// MCP.
 #include "mcp/yup_MCPTypes.cpp"
 #include "mcp/yup_MCPClient.cpp"
 #include "mcp/yup_MCPServer.cpp"
+
+// Provider implementations.
+#include "providers/yup_LLMOpenAIChatClient.cpp"
+#include "providers/yup_LLMAnthropicClient.cpp"
+#include "providers/yup_LLMGeminiClient.cpp"
+#include "providers/yup_LLMOpenAIResponsesClient.cpp"
+
+// Factory.
+#include "llm/yup_LLMClientFactory.cpp"
