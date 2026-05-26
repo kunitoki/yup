@@ -182,9 +182,9 @@ public:
 
         const auto input = static_cast<CoeffType> (inputSample) * inverseSignalRange;
         const auto delayedSignal = readDelayedSample (currentDelaySamples);
-        const auto feedbackInput = input + delayLineFeedback * delayedSignal;
+        const auto delayLineInput = input + clipResonance (delayLineFeedback * delayedSignal);
 
-        delayLine[writeIndex] = static_cast<SampleType> (clipResonance (feedbackInput));
+        delayLine[writeIndex] = static_cast<SampleType> (delayLineInput);
         writeIndex = (writeIndex + 1) & delayLineMask;
 
         const auto output = saturateOutput (input + delayedSignal * static_cast<CoeffType> (0.5));
