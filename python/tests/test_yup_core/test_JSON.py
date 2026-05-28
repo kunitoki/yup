@@ -1,6 +1,6 @@
 import pytest
 
-from ..utilities import get_runtime_data_file
+from utilities import get_runtime_data_file
 import yup
 
 #==================================================================================================
