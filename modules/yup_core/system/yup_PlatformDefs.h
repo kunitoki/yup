@@ -220,7 +220,7 @@ constexpr bool isConstantEvaluated() noexcept
 /** Assertion are enabled in debug unless explicitly disabled. */
 #define YUP_ASSERTIONS_ENABLED 1
 
-/** Writes a string to the standard error stream.
+/** Writes a string to the current logger, eventually going to the error stream if not set.
 
     Note that as well as a single string, you can use this to write multiple items as a stream, e.g.
 
@@ -231,11 +231,11 @@ constexpr bool isConstantEvaluated() noexcept
     The macro is only enabled in a debug build, so be careful not to use it with expressions
     that have important side-effects!
 
-    @see Logger::outputDebugString
+    @see Logger::outputDebugString, Logger::writeToLog
 */
-#define YUP_DBG(textToWrite) YUP_BLOCK_WITH_FORCED_SEMICOLON (\
-    yup::String tempDbgBuf;                                   \
-    tempDbgBuf << textToWrite;                                \
+#define YUP_DBG(textToWrite) YUP_BLOCK_WITH_FORCED_SEMICOLON ( \
+    yup::String tempDbgBuf;                                    \
+    tempDbgBuf << textToWrite;                                 \
     yup::Logger::outputDebugString (tempDbgBuf);)
 
 /** Module-specific debug logging macro.
@@ -250,8 +250,7 @@ constexpr bool isConstantEvaluated() noexcept
     The macro is only enabled in a debug build, so be careful not to use it with expressions
     that have important side-effects!
 
-    @see Logger::outputDebugString
-
+    @see YUP_DBG
 */
 #define YUP_MODULE_DBG(module, textToWrite) \
     YUP_MODULE_DBG_RESOLVE_ (YUP_ENABLE_##module##_LOGGING, module, textToWrite)
@@ -262,10 +261,10 @@ constexpr bool isConstantEvaluated() noexcept
 #define YUP_MODULE_DBG_RESOLVE__(flag, module, textToWrite) \
     YUP_CONCAT (YUP_MODULE_DBG_EMIT_, flag) (module, textToWrite)
 
-#define YUP_MODULE_DBG_EMIT_1(module, textToWrite)                                  \
-    YUP_BLOCK_WITH_FORCED_SEMICOLON (yup::String tempDbgBuf;                        \
-                                     tempDbgBuf << "[" #module "] " << textToWrite; \
-                                     yup::Logger::outputDebugString (tempDbgBuf);)
+#define YUP_MODULE_DBG_EMIT_1(module, textToWrite) YUP_BLOCK_WITH_FORCED_SEMICOLON ( \
+    yup::String tempDbgBuf;                                                          \
+    tempDbgBuf << "[" #module "] " << textToWrite;                                   \
+    yup::Logger::writeToLog (tempDbgBuf);)
 
 #define YUP_MODULE_DBG_EMIT_0(module, textToWrite) YUP_BLOCK_WITH_FORCED_SEMICOLON ({})
 

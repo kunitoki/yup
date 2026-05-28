@@ -42,6 +42,31 @@
 #pragma once
 #define YUP_AUDIO_PLUGIN_CLIENT_H_INCLUDED
 
-#include <yup_audio_processors/yup_audio_processors.h>
+//==============================================================================
+/** Config: YUP_ENABLE_PLUGIN_CLIENT_AU_LOGGING
+
+    Enable debug logging for AUv2 plugin client.
+*/
+#ifndef YUP_ENABLE_PLUGIN_CLIENT_AU_LOGGING
+#define YUP_ENABLE_PLUGIN_CLIENT_AU_LOGGING 0
+#endif
+
+/** Config: YUP_ENABLE_PLUGIN_CLIENT_CLAP_LOGGING
+
+    Enable debug logging for CLAP plugin client.
+*/
+#ifndef YUP_ENABLE_PLUGIN_CLIENT_CLAP_LOGGING
+#define YUP_ENABLE_PLUGIN_CLIENT_CLAP_LOGGING 0
+#endif
+
+/** Config: YUP_ENABLE_PLUGIN_CLIENT_VST3_LOGGING
+
+    Enable debug logging for VST3 plugin client.
+*/
+#ifndef YUP_ENABLE_PLUGIN_CLIENT_VST3_LOGGING
+#define YUP_ENABLE_PLUGIN_CLIENT_VST3_LOGGING 0
+#endif
 
 //==============================================================================
+
+#include <yup_audio_processors/yup_audio_processors.h>

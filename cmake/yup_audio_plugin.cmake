@@ -395,9 +395,9 @@ function (yup_audio_plugin)
     endif()
 
     add_custom_target (${target_name} DEPENDS ${_all_plugin_targets})
-
     set_target_properties (${target_name} PROPERTIES
-        FOLDER "${YUP_ARG_TARGET_IDE_GROUP}")
+        FOLDER "${YUP_ARG_TARGET_IDE_GROUP}"
+        XCODE_GENERATE_SCHEME ON)
 
 endfunction()
 

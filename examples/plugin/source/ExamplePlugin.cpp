@@ -22,12 +22,72 @@
 #include "ExamplePlugin.h"
 #include "ExampleEditor.h"
 
+#include <memory>
+
+//==============================================================================
+
+namespace
+{
+
+const char* getPluginFormatName()
+{
+#if YUP_AUDIO_PLUGIN_ENABLE_AU
+    return "au";
+#elif YUP_AUDIO_PLUGIN_ENABLE_CLAP
+    return "clap";
+#elif YUP_AUDIO_PLUGIN_ENABLE_VST3
+    return "vst3";
+#elif YUP_AUDIO_PLUGIN_ENABLE_STANDALONE
+    return "standalone";
+#else
+    return "unknown";
+#endif
+}
+
+class ExamplePluginLogger final
+{
+public:
+    ExamplePluginLogger()
+    {
+        const auto logFileName = yup::String (YupPlugin_Name) + "_" + getPluginFormatName() + ".log";
+        logger.reset (new yup::FileLogger (yup::FileLogger::getSystemLogFileFolder().getChildFile (logFileName),
+                                           yup::String (YupPlugin_Name) + " " + getPluginFormatName() + " log"));
+
+        yup::Logger::setCurrentLogger (logger.get());
+        yup::Logger::writeToLog ("Logger initialised: " + logger->getLogFile().getFullPathName());
+    }
+
+    void setAsCurrentLogger()
+    {
+        yup::Logger::setCurrentLogger (logger.get());
+    }
+
+    ~ExamplePluginLogger()
+    {
+        if (yup::Logger::getCurrentLogger() == logger.get())
+            yup::Logger::setCurrentLogger (nullptr);
+    }
+
+private:
+    std::unique_ptr<yup::FileLogger> logger;
+};
+
+void initialiseExamplePluginLogger()
+{
+    static ExamplePluginLogger logger;
+    logger.setAsCurrentLogger();
+}
+
+} // namespace
+
 //==============================================================================
 
 ExamplePlugin::ExamplePlugin()
     : yup::AudioProcessor ("MyPlugin",
                            yup::AudioBusLayout ({}, { yup::AudioBus ("main", yup::AudioBus::Audio, yup::AudioBus::Output, 2) }))
 {
+    initialiseExamplePluginLogger();
+
     addParameter (gainParameter = yup::AudioParameterBuilder()
                                       .withID ("volume")
                                       .withName ("Volume")

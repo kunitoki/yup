@@ -49,7 +49,7 @@
     Enable debug logging for AUv2 plugin scanning and loading.
 */
 #ifndef YUP_ENABLE_PLUGIN_HOST_AU_LOGGING
-#define YUP_ENABLE_PLUGIN_HOST_AU_LOGGING 1
+#define YUP_ENABLE_PLUGIN_HOST_AU_LOGGING 0
 #endif
 
 /** Config: YUP_ENABLE_PLUGIN_HOST_CLAP_LOGGING

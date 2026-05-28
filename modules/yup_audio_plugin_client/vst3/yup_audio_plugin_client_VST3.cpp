@@ -20,6 +20,7 @@
 */
 
 #include "../yup_audio_plugin_client.h"
+
 #include "../common/yup_AudioPluginUtilities.h"
 
 #if ! defined(YUP_AUDIO_PLUGIN_ENABLE_VST3)
