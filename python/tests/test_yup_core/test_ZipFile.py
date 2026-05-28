@@ -4,7 +4,7 @@ import sys
 
 import yup
 
-from ..utilities import get_runtime_data_folder
+from utilities import get_runtime_data_folder
 
 
 #==================================================================================================

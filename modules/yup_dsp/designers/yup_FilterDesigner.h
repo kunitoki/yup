@@ -432,115 +432,110 @@ public:
 
     /** Butterworth implementation with mode selection */
     static int designButterworth (
+        std::vector<BiquadCoefficients<CoeffType>>& coefficients,
         FilterModeType filterMode,
         int order,
         CoeffType frequency,
         CoeffType frequency2,
-        double sampleRate,
-        std::vector<BiquadCoefficients<CoeffType>>& coefficients) noexcept;
+        double sampleRate) noexcept;
 
     /**
         Designs Butterworth lowpass filter coefficients.
 
+        @param coefficients   Output vector for biquad coefficients
         @param order          The filter order (2, 4, 8, 16, 32)
         @param frequency      The cutoff frequency in Hz
         @param sampleRate     The sample rate in Hz
-        @param workspace      Pre-allocated workspace to avoid allocations
-        @param coefficients   Output vector for biquad coefficients
 
         @returns              Number of biquad sections created
     */
     static int designButterworthLowpass (
+        std::vector<BiquadCoefficients<CoeffType>>& coefficients,
         int order,
         CoeffType frequency,
-        double sampleRate,
-        std::vector<BiquadCoefficients<CoeffType>>& coefficients) noexcept
+        double sampleRate) noexcept
     {
-        return designButterworth (FilterMode::lowpass, order, frequency, static_cast<CoeffType> (0.0), sampleRate, coefficients);
+        return designButterworth (coefficients, FilterMode::lowpass, order, frequency, static_cast<CoeffType> (0.0), sampleRate);
     }
 
     /**
         Designs Butterworth highpass filter coefficients.
 
+        @param coefficients   Output vector for biquad coefficients
         @param order          The filter order (2, 4, 8, 16, 32)
         @param frequency      The cutoff frequency in Hz
         @param sampleRate     The sample rate in Hz
-        @param workspace      Pre-allocated workspace to avoid allocations
-        @param coefficients   Output vector for biquad coefficients
 
         @returns              Number of biquad sections created
     */
     static int designButterworthHighpass (
+        std::vector<BiquadCoefficients<CoeffType>>& coefficients,
         int order,
         CoeffType frequency,
-        double sampleRate,
-        std::vector<BiquadCoefficients<CoeffType>>& coefficients) noexcept
+        double sampleRate) noexcept
     {
-        return designButterworth (FilterMode::highpass, order, frequency, static_cast<CoeffType> (0.0), sampleRate, coefficients);
+        return designButterworth (coefficients, FilterMode::highpass, order, frequency, static_cast<CoeffType> (0.0), sampleRate);
     }
 
     /**
         Designs Butterworth bandpass filter coefficients.
 
+        @param coefficients   Output vector for biquad coefficients
         @param order          The filter order (2, 4, 8, 16, 32)
         @param lowFreq        The lower cutoff frequency in Hz
         @param highFreq       The upper cutoff frequency in Hz
         @param sampleRate     The sample rate in Hz
-        @param workspace      Pre-allocated workspace to avoid allocations
-        @param coefficients   Output vector for biquad coefficients
 
         @returns              Number of biquad sections created
     */
     static int designButterworthBandpass (
+        std::vector<BiquadCoefficients<CoeffType>>& coefficients,
         int order,
         CoeffType lowFreq,
         CoeffType highFreq,
-        double sampleRate,
-        std::vector<BiquadCoefficients<CoeffType>>& coefficients) noexcept
+        double sampleRate) noexcept
     {
-        return designButterworth (FilterMode::bandpass, order, lowFreq, highFreq, sampleRate, coefficients);
+        return designButterworth (coefficients, FilterMode::bandpass, order, lowFreq, highFreq, sampleRate);
     }
 
     /**
         Designs Butterworth bandstop filter coefficients.
 
+        @param coefficients   Output vector for biquad coefficients
         @param order          The filter order (2, 4, 8, 16, 32)
         @param lowFreq        The lower cutoff frequency in Hz
         @param highFreq       The upper cutoff frequency in Hz
         @param sampleRate     The sample rate in Hz
-        @param workspace      Pre-allocated workspace to avoid allocations
-        @param coefficients   Output vector for biquad coefficients
 
         @returns              Number of biquad sections created
     */
     static int designButterworthBandstop (
+        std::vector<BiquadCoefficients<CoeffType>>& coefficients,
         int order,
         CoeffType lowFreq,
         CoeffType highFreq,
-        double sampleRate,
-        std::vector<BiquadCoefficients<CoeffType>>& coefficients) noexcept
+        double sampleRate) noexcept
     {
-        return designButterworth (FilterMode::bandstop, order, lowFreq, highFreq, sampleRate, coefficients);
+        return designButterworth (coefficients, FilterMode::bandstop, order, lowFreq, highFreq, sampleRate);
     }
 
     /**
         Designs Butterworth allpass filter coefficients.
 
+        @param coefficients   Output vector for biquad coefficients
         @param order          The filter order (2, 4, 8, 16, 32)
         @param frequency      The characteristic frequency in Hz
         @param sampleRate     The sample rate in Hz
-        @param workspace      Pre-allocated workspace to avoid allocations
-        @param coefficients   Output vector for biquad coefficients
 
         @returns              Number of biquad sections created
     */
     static int designButterworthAllpass (
+        std::vector<BiquadCoefficients<CoeffType>>& coefficients,
         int order,
         CoeffType frequency,
-        double sampleRate,
-        std::vector<BiquadCoefficients<CoeffType>>& coefficients) noexcept
+        double sampleRate) noexcept
     {
-        return designButterworth (FilterMode::allpass, order, frequency, static_cast<CoeffType> (0.0), sampleRate, coefficients);
+        return designButterworth (coefficients, FilterMode::allpass, order, frequency, static_cast<CoeffType> (0.0), sampleRate);
     }
 
     //==============================================================================
@@ -550,20 +545,20 @@ public:
     /**
         General Linkwitz-Riley crossover designer with order specification.
 
+        @param lowCoeffs      Output vector for lowpass biquad coefficients
+        @param highCoeffs     Output vector for highpass biquad coefficients
         @param order          The filter order (2, 4, 8, 16)
         @param crossoverFreq  The crossover frequency in Hz
         @param sampleRate     The sample rate in Hz
-        @param lowCoeffs      Output vector for lowpass biquad coefficients
-        @param highCoeffs     Output vector for highpass biquad coefficients
 
         @returns              Number of biquad sections created
     */
     static int designLinkwitzRiley (
+        std::vector<BiquadCoefficients<CoeffType>>& lowCoeffs,
+        std::vector<BiquadCoefficients<CoeffType>>& highCoeffs,
         int order,
         CoeffType crossoverFreq,
-        double sampleRate,
-        std::vector<BiquadCoefficients<CoeffType>>& lowCoeffs,
-        std::vector<BiquadCoefficients<CoeffType>>& highCoeffs) noexcept;
+        double sampleRate) noexcept;
 
     /**
         Designs Linkwitz-Riley (LR2) 2nd order crossover coefficients.
@@ -572,58 +567,58 @@ public:
         filters, resulting in complementary magnitude responses that sum to unity
         gain with phase alignment at the crossover frequency.
 
-        @param crossoverFreq  The crossover frequency in Hz
-        @param sampleRate     The sample rate in Hz
         @param lowCoeffs      Output coefficients for lowpass section
         @param highCoeffs     Output coefficients for highpass section
+        @param crossoverFreq  The crossover frequency in Hz
+        @param sampleRate     The sample rate in Hz
 
         @returns              True if coefficients were successfully calculated
     */
     static bool designLinkwitzRiley2 (
-        CoeffType crossoverFreq,
-        double sampleRate,
         std::vector<BiquadCoefficients<CoeffType>>& lowCoeffs,
-        std::vector<BiquadCoefficients<CoeffType>>& highCoeffs) noexcept
+        std::vector<BiquadCoefficients<CoeffType>>& highCoeffs,
+        CoeffType crossoverFreq,
+        double sampleRate) noexcept
     {
-        return designLinkwitzRiley (2, crossoverFreq, sampleRate, lowCoeffs, highCoeffs);
+        return designLinkwitzRiley (lowCoeffs, highCoeffs, 2, crossoverFreq, sampleRate);
     }
 
     /**
         Designs Linkwitz-Riley 4th order crossover coefficients.
 
-        @param crossoverFreq  The crossover frequency in Hz
-        @param sampleRate     The sample rate in Hz
         @param lowCoeffs      Output vector for lowpass biquad coefficients
         @param highCoeffs     Output vector for highpass biquad coefficients
+        @param crossoverFreq  The crossover frequency in Hz
+        @param sampleRate     The sample rate in Hz
 
         @returns              Number of biquad sections created (2 for LR4)
     */
     static int designLinkwitzRiley4 (
-        CoeffType crossoverFreq,
-        double sampleRate,
         std::vector<BiquadCoefficients<CoeffType>>& lowCoeffs,
-        std::vector<BiquadCoefficients<CoeffType>>& highCoeffs) noexcept
+        std::vector<BiquadCoefficients<CoeffType>>& highCoeffs,
+        CoeffType crossoverFreq,
+        double sampleRate) noexcept
     {
-        return designLinkwitzRiley (4, crossoverFreq, sampleRate, lowCoeffs, highCoeffs);
+        return designLinkwitzRiley (lowCoeffs, highCoeffs, 4, crossoverFreq, sampleRate);
     }
 
     /**
         Designs Linkwitz-Riley 8th order crossover coefficients.
 
-        @param crossoverFreq  The crossover frequency in Hz
-        @param sampleRate     The sample rate in Hz
         @param lowCoeffs      Output vector for lowpass biquad coefficients
         @param highCoeffs     Output vector for highpass biquad coefficients
+        @param crossoverFreq  The crossover frequency in Hz
+        @param sampleRate     The sample rate in Hz
 
         @returns              Number of biquad sections created (4 for LR8)
     */
     static int designLinkwitzRiley8 (
-        CoeffType crossoverFreq,
-        double sampleRate,
         std::vector<BiquadCoefficients<CoeffType>>& lowCoeffs,
-        std::vector<BiquadCoefficients<CoeffType>>& highCoeffs) noexcept
+        std::vector<BiquadCoefficients<CoeffType>>& highCoeffs,
+        CoeffType crossoverFreq,
+        double sampleRate) noexcept
     {
-        return designLinkwitzRiley (8, crossoverFreq, sampleRate, lowCoeffs, highCoeffs);
+        return designLinkwitzRiley (lowCoeffs, highCoeffs, 8, crossoverFreq, sampleRate);
     }
 
     //==============================================================================

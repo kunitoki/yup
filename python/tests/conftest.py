@@ -1,8 +1,15 @@
 import sys
+from pathlib import Path
+
 import pytest
 
-from . import common
-from .utilities import get_runtime_data_folder, remove_directory_recursively
+tests_folder = str(Path(__file__).parent)
+
+if tests_folder not in sys.path:
+    sys.path.insert(0, tests_folder)
+
+import common
+from utilities import get_runtime_data_folder, remove_directory_recursively
 
 import yup
 

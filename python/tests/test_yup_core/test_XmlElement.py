@@ -2,7 +2,7 @@ import os
 import sys
 import pytest
 
-from ..utilities import get_runtime_data_folder
+from utilities import get_runtime_data_folder
 import yup
 
 

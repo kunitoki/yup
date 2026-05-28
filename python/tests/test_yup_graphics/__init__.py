@@ -1,6 +1,6 @@
 import pytest
 
-from .. import common
+import common
 
 import yup
 

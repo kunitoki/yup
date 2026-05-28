@@ -362,6 +362,48 @@ TEST_F (FilterDesignerTests, FloatPrecisionConsistency)
 }
 
 //==============================================================================
+// Butterworth Filter Design Tests
+//==============================================================================
+
+TEST_F (FilterDesignerTests, ButterworthDesignersUseCoefficientVectorFirst)
+{
+    std::vector<BiquadCoefficients<double>> coeffs;
+
+    auto sections = FilterDesigner<double>::designButterworth (coeffs, FilterMode::lowpass, 4, frequency, 0.0, sampleRate);
+    EXPECT_EQ (coeffs.size(), static_cast<size_t> (sections));
+    EXPECT_GT (sections, 0);
+
+    sections = FilterDesigner<double>::designButterworthLowpass (coeffs, 4, frequency, sampleRate);
+    EXPECT_EQ (coeffs.size(), static_cast<size_t> (sections));
+    EXPECT_GT (sections, 0);
+
+    sections = FilterDesigner<double>::designButterworthHighpass (coeffs, 4, frequency, sampleRate);
+    EXPECT_EQ (coeffs.size(), static_cast<size_t> (sections));
+    EXPECT_GT (sections, 0);
+
+    sections = FilterDesigner<double>::designButterworthBandpass (coeffs, 4, 800.0, 1200.0, sampleRate);
+    EXPECT_EQ (coeffs.size(), static_cast<size_t> (sections));
+    EXPECT_GT (sections, 0);
+
+    sections = FilterDesigner<double>::designButterworthBandstop (coeffs, 4, 800.0, 1200.0, sampleRate);
+    EXPECT_EQ (coeffs.size(), static_cast<size_t> (sections));
+    EXPECT_GT (sections, 0);
+
+    sections = FilterDesigner<double>::designButterworthAllpass (coeffs, 4, frequency, sampleRate);
+    EXPECT_EQ (coeffs.size(), static_cast<size_t> (sections));
+    EXPECT_GT (sections, 0);
+
+    for (const auto& coeff : coeffs)
+    {
+        EXPECT_TRUE (std::isfinite (coeff.b0));
+        EXPECT_TRUE (std::isfinite (coeff.b1));
+        EXPECT_TRUE (std::isfinite (coeff.b2));
+        EXPECT_TRUE (std::isfinite (coeff.a1));
+        EXPECT_TRUE (std::isfinite (coeff.a2));
+    }
+}
+
+//==============================================================================
 // FIR Filter Design Tests
 //==============================================================================
 
