@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from . import common
+import common
 
 import yup
 

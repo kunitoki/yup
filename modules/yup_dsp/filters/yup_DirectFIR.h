@@ -45,14 +45,15 @@ namespace yup
     DirectFIR<float> fir;
 
     // Set filter coefficients (e.g., lowpass filter)
-    auto coeffs = FilterDesigner<float>::designFIRLowpass(64, 1000.0f, 44100.0);
-    fir.setCoefficients(coeffs);
+    std::vector<float> coeffs;
+    FilterDesigner<float>::designFIRLowpass (coeffs, 64, 1000.0f, 44100.0);
+    fir.setCoefficients (coeffs);
 
     // Prepare for processing
-    fir.prepare(44100.0, 512);
+    fir.prepare (44100.0, 512);
 
     // In audio callback:
-    fir.processBlock(inputBuffer, outputBuffer, numSamples);
+    fir.processBlock (inputBuffer, outputBuffer, numSamples);
     @endcode
 
     @tparam SampleType  Type for audio samples (float or double)
