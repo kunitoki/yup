@@ -468,14 +468,11 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
             if (event->type == CLAP_EVENT_PARAM_VALUE)
             {
                 const auto* paramEvent = reinterpret_cast<const clap_event_param_value_t*> (event);
-                const auto paramIndex = audioProcessor.getParameterIndexByHostID (paramEvent->param_id);
-
-                if (isPositiveAndBelow (paramIndex, static_cast<int> (audioProcessor.getParameters().size())))
-                {
-                    wrapper->paramChangeBuffer.addChange (paramIndex,
-                                                          static_cast<float> (paramEvent->value),
-                                                          static_cast<int> (event->time));
-                }
+                addParameterChangeByHostParameterID (audioProcessor,
+                                                     wrapper->paramChangeBuffer,
+                                                     paramEvent->param_id,
+                                                     static_cast<float> (paramEvent->value),
+                                                     static_cast<int> (event->time));
             }
             else if (auto convertedEvent = clapEventToMidiMessage (event))
             {
@@ -484,8 +481,7 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
         }
 
         // CLAP events arrive sorted — no sort needed; apply final values for backward compat
-        for (const auto& change : wrapper->paramChangeBuffer)
-            audioProcessor.getParameters()[change.parameterIndex]->setNormalizedValue (change.normalizedValue);
+        applyParameterChangesToProcessor (audioProcessor, wrapper->paramChangeBuffer);
 
         // Copy input audio into output buffers for effect processors
         for (uint32_t busIdx = 0; busIdx < std::min (process->audio_inputs_count, process->audio_outputs_count); ++busIdx)

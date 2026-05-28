@@ -104,17 +104,7 @@ Vst::ParamID getVST3ParameterID (const AudioParameter::Ptr& parameter)
 
 Vst::ParamID getVST3BypassParameterID (const AudioProcessor& processor)
 {
-    auto parameterID = static_cast<uint32> (processor.getParameters().size());
-
-    while (processor.getParameterByHostID (parameterID) != nullptr
-           && parameterID < AudioParameter::maximumHostParameterID)
-    {
-        ++parameterID;
-    }
-
-    jassert (parameterID <= AudioParameter::maximumHostParameterID);
-    jassert (processor.getParameterByHostID (parameterID) == nullptr);
-    return static_cast<Vst::ParamID> (parameterID);
+    return static_cast<Vst::ParamID> (getBypassHostParameterID (processor));
 }
 
 class AudioPluginPlayHeadVST3 final : public AudioPlayHead
@@ -1166,7 +1156,6 @@ public:
 
         if (data.inputParameterChanges)
         {
-            const auto parameters = processor->getParameters();
             const auto bypassTag = getVST3BypassParameterID (*processor);
 
             const int32 numParams = data.inputParameterChanges->getParameterCount();
@@ -1194,11 +1183,8 @@ public:
                 }
                 else
                 {
-                    const auto parameterIndex = processor->getParameterIndexByHostID (static_cast<uint32> (tag));
-                    if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
-                        continue;
-
-                    if (parameters[parameterIndex]->isPerformingChangeGesture())
+                    const auto parameter = processor->getParameterByHostID (static_cast<uint32> (tag));
+                    if (parameter == nullptr || parameter->isPerformingChangeGesture())
                         continue;
 
                     for (int32 p = 0; p < numPoints; ++p)
@@ -1206,14 +1192,17 @@ public:
                         int32 sampleOffset;
                         Vst::ParamValue value;
                         if (queue->getPoint (p, sampleOffset, value) == kResultOk)
-                            paramChangeBuffer.addChange (parameterIndex, static_cast<float> (value), sampleOffset);
+                            addParameterChangeByHostParameterID (*processor,
+                                                                 paramChangeBuffer,
+                                                                 static_cast<uint32> (tag),
+                                                                 static_cast<float> (value),
+                                                                 sampleOffset);
                     }
                 }
             }
 
             paramChangeBuffer.sort();
-            for (const auto& change : paramChangeBuffer)
-                parameters[change.parameterIndex]->setNormalizedValue (change.normalizedValue);
+            applyParameterChangesToProcessor (*processor, paramChangeBuffer);
         }
 
         // --- Process Events ---
