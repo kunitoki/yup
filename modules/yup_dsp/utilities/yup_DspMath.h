@@ -170,9 +170,6 @@ void extractPolesZerosFromSecondOrderBiquad (FloatType b0, FloatType b1, FloatTy
 {
     const auto epsilon = static_cast<FloatType> (1e-12);
 
-    // Calculate poles from denominator: 1 + a1*z^-1 + a2*z^-2 = 0
-    // Multiplying by z^2: z^2 + a1*z + a2 = 0
-    // Using quadratic formula: z = (-a1 ± √(a1² - 4*a2)) / 2
     if (std::abs (a2) > epsilon)
     {
         auto discriminant = a1 * a1 - 4 * a2;
@@ -194,26 +191,20 @@ void extractPolesZerosFromSecondOrderBiquad (FloatType b0, FloatType b1, FloatTy
     }
     else if (std::abs (a1) > epsilon)
     {
-        // First-order: 1 + a1*z^-1 = 0 -> z = -1/a1
         poles.push_back (Complex<FloatType> (-1 / a1, 0));
     }
 
-    // Calculate zeros from numerator: b0 + b1*z^-1 + b2*z^-2 = 0
-    // Multiplying by z^2: b0*z^2 + b1*z + b2 = 0
-    // Using quadratic formula: z = (-b1 ± √(b1² - 4*b0*b2)) / (2*b0)
     if (std::abs (b0) > epsilon && std::abs (b2) > epsilon)
     {
         auto discriminant = b1 * b1 - 4 * b0 * b2;
         if (discriminant >= 0)
         {
-            // Real zeros
             auto sqrtDisc = std::sqrt (discriminant);
             zeros.push_back (Complex<FloatType> ((-b1 + sqrtDisc) / (2 * b0), 0));
             zeros.push_back (Complex<FloatType> ((-b1 - sqrtDisc) / (2 * b0), 0));
         }
         else
         {
-            // Complex conjugate zeros
             auto real = -b1 / (2 * b0);
             auto imag = std::sqrt (-discriminant) / (2 * b0);
             zeros.push_back (Complex<FloatType> (real, imag));
@@ -222,49 +213,31 @@ void extractPolesZerosFromSecondOrderBiquad (FloatType b0, FloatType b1, FloatTy
     }
     else if (std::abs (b1) > epsilon && std::abs (b0) > epsilon)
     {
-        // First-order: b0 + b1*z^-1 = 0 -> z = -b0/b1
         zeros.push_back (Complex<FloatType> (-b0 / b1, 0));
     }
     else if (std::abs (b2) > epsilon)
     {
-        // Zero at origin (b0 = 0): b1*z^-1 + b2*z^-2 = 0 -> z*(b1 + b2*z^-1) = 0
-        // One zero at z = 0, another at z = -b1/b2
         zeros.push_back (Complex<FloatType> (0, 0));
         if (std::abs (b1) > epsilon)
             zeros.push_back (Complex<FloatType> (-b1 / b2, 0));
     }
 }
 
+//==============================================================================
+
 /** Extract poles and zeros from fourth-order section coefficients */
 template <typename FloatType>
 void extractPolesZerosFromFourthOrderBiquad (FloatType b0, FloatType b1, FloatType b2, FloatType b3, FloatType b4, FloatType a0, FloatType a1, FloatType a2, FloatType a3, FloatType a4, ComplexVector<FloatType>& poles, ComplexVector<FloatType>& zeros)
 {
-    // For fourth-order polynomials, we can try to factor them into quadratic pairs
-    // This is a simplified approach - for full accuracy, a robust polynomial root finder would be needed
-
-    // First, try to factor the denominator polynomial (poles)
-    // a4*z^4 + a3*z^3 + a2*z^2 + a1*z + a0 = 0
-
-    // For Butterworth filters designed using our method, we can often decompose this way:
-    // Split into two biquads with shared characteristics
-
-    // Simple approach: assume it can be factored as (z^2 + p1*z + q1)(z^2 + p2*z + q2)
-
     const auto epsilon = static_cast<FloatType> (1e-12);
 
     if (std::abs (a4) > epsilon)
     {
-        // Attempt to find characteristic polynomial roots
-        // This is a simplified extraction - in practice, you'd want a full polynomial solver
-
-        // Try to extract first biquad-like section
         auto a1_norm = a1 / a4;
         auto a2_norm = a2 / a4;
         auto a3_norm = a3 / a4;
         auto a0_norm = a0 / a4;
 
-        // Use approximation method for 4th order Butterworth characteristics
-        // Extract two approximate biquad sections
         auto q1 = std::sqrt (std::abs (a0_norm));
         auto p1 = a1_norm / 2;
 
@@ -286,7 +259,6 @@ void extractPolesZerosFromFourthOrderBiquad (FloatType b0, FloatType b1, FloatTy
             }
         }
 
-        // Second pair (approximation)
         auto p2 = a3_norm / 2;
         auto q2 = a2_norm - q1;
 
@@ -309,7 +281,6 @@ void extractPolesZerosFromFourthOrderBiquad (FloatType b0, FloatType b1, FloatTy
         }
     }
 
-    // Similar approach for zeros (numerator polynomial)
     if (std::abs (b4) > epsilon)
     {
         auto b1_norm = b1 / b4;
@@ -359,6 +330,116 @@ void extractPolesZerosFromFourthOrderBiquad (FloatType b0, FloatType b1, FloatTy
             }
         }
     }
+}
+
+//==============================================================================
+
+template <std::size_t numStates, typename CoeffType>
+struct LinearStepResult
+{
+    CoeffType output = static_cast<CoeffType> (0);
+    std::array<CoeffType, numStates> state {};
+};
+
+template <std::size_t numStates, typename CoeffType, typename StepFunction>
+Complex<CoeffType> getLinearizedComplexResponse (
+    StepFunction&& stepFunction,
+    CoeffType frequency,
+    double sampleRate) noexcept
+{
+    using ComplexType = Complex<CoeffType>;
+    using State = std::array<CoeffType, numStates>;
+
+    const auto zeroStep = stepFunction (static_cast<CoeffType> (0), State {});
+    const auto inputStep = stepFunction (static_cast<CoeffType> (1), State {});
+
+    std::array<std::array<CoeffType, numStates>, numStates> stateMatrix {};
+    std::array<CoeffType, numStates> inputVector {};
+    std::array<CoeffType, numStates> outputVector {};
+
+    for (std::size_t row = 0; row < numStates; ++row)
+        inputVector[row] = inputStep.state[row] - zeroStep.state[row];
+
+    const auto directGain = inputStep.output - zeroStep.output;
+
+    for (std::size_t column = 0; column < numStates; ++column)
+    {
+        State basis {};
+        basis[column] = static_cast<CoeffType> (1);
+
+        const auto basisStep = stepFunction (static_cast<CoeffType> (0), basis);
+
+        for (std::size_t row = 0; row < numStates; ++row)
+            stateMatrix[row][column] = basisStep.state[row] - zeroStep.state[row];
+
+        outputVector[column] = basisStep.output - zeroStep.output;
+    }
+
+    const auto z = polar (static_cast<CoeffType> (1), frequencyToAngular (frequency, static_cast<CoeffType> (sampleRate)));
+    std::array<std::array<ComplexType, numStates>, numStates> matrix {};
+    std::array<ComplexType, numStates> vector {};
+
+    for (std::size_t row = 0; row < numStates; ++row)
+    {
+        for (std::size_t column = 0; column < numStates; ++column)
+            matrix[row][column] = (row == column ? z : ComplexType {}) - stateMatrix[row][column];
+
+        vector[row] = inputVector[row];
+    }
+
+    for (std::size_t pivot = 0; pivot < numStates; ++pivot)
+    {
+        auto pivotRow = pivot;
+        auto pivotMagnitude = std::abs (matrix[pivot][pivot]);
+
+        for (std::size_t row = pivot + 1; row < numStates; ++row)
+        {
+            const auto rowMagnitude = std::abs (matrix[row][pivot]);
+            if (rowMagnitude > pivotMagnitude)
+            {
+                pivotMagnitude = rowMagnitude;
+                pivotRow = row;
+            }
+        }
+
+        if (pivotRow != pivot)
+        {
+            std::swap (matrix[pivot], matrix[pivotRow]);
+            std::swap (vector[pivot], vector[pivotRow]);
+        }
+
+        if (std::abs (matrix[pivot][pivot]) <= std::numeric_limits<CoeffType>::epsilon())
+            matrix[pivot][pivot] += ComplexType (std::numeric_limits<CoeffType>::epsilon());
+
+        const auto pivotValue = matrix[pivot][pivot];
+
+        for (std::size_t column = pivot; column < numStates; ++column)
+            matrix[pivot][column] /= pivotValue;
+
+        vector[pivot] /= pivotValue;
+
+        for (std::size_t row = 0; row < numStates; ++row)
+        {
+            if (row == pivot)
+                continue;
+
+            const auto scale = matrix[row][pivot];
+            if (std::abs (scale) <= std::numeric_limits<CoeffType>::epsilon())
+                continue;
+
+            for (std::size_t column = pivot; column < numStates; ++column)
+                matrix[row][column] -= scale * matrix[pivot][column];
+
+            vector[row] -= scale * vector[pivot];
+        }
+    }
+
+    auto response = ComplexType (directGain);
+
+    for (std::size_t column = 0; column < numStates; ++column)
+        response += outputVector[column] * vector[column];
+
+    return response;
 }
 
 } // namespace yup
