@@ -773,17 +773,44 @@ private:
 //==============================================================================
 // Objective-C editor view
 
+@class AudioPluginEditorViewAU;
+
+namespace yup
+{
+
+class AudioPluginEditorViewAUListener final : public ComponentListener
+{
+public:
+    explicit AudioPluginEditorViewAUListener (AudioPluginEditorViewAU* owner)
+        : owner (owner)
+    {
+    }
+
+    void componentResized (Component& component) override;
+
+private:
+    AudioPluginEditorViewAU* owner = nil;
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginEditorViewAUListener)
+};
+
+} // namespace yup
+
 @interface AudioPluginEditorViewAU : NSView
 {
     yup::ScopedYupInitialiser_Windowing _scopeInitialiser;
     yup::AudioProcessor* _processor;
     std::unique_ptr<yup::AudioProcessorEditor> _processorEditor;
+    std::unique_ptr<yup::AudioPluginEditorViewAUListener> _processorEditorListener;
+    bool _resizingEditorToBounds;
 }
 - (instancetype)initWithProcessor:(yup::AudioProcessor*)processor
                     preferredSize:(NSSize)size;
 - (void)attachEditorIfNeeded;
 - (void)detachEditorIfNeeded;
 - (void)resizeEditorToBounds;
+- (void)resizeViewToEditorSize;
+- (void)processorEditorResized;
 @end
 
 @implementation AudioPluginEditorViewAU
@@ -797,6 +824,8 @@ private:
     {
         YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor view initialised: view=" << yup::describePointer ((__bridge void*) self));
         _processor = processor;
+        _resizingEditorToBounds = false;
+        [self setPostsFrameChangedNotifications:YES];
 
         if (processor != nullptr && processor->hasEditor())
         {
@@ -806,6 +835,14 @@ private:
             {
                 const auto preferredSize = _processorEditor->getPreferredSize();
                 YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "created editor: preferredWidth=" << yup::String (preferredSize.getWidth()) << ", preferredHeight=" << yup::String (preferredSize.getHeight()) << ", editor=" << yup::describePointer (_processorEditor.get()));
+
+                if (_processorEditor->isResizable())
+                    [self setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+                else
+                    [self setAutoresizingMask:NSViewNotSizable];
+
+                _processorEditorListener = std::make_unique<yup::AudioPluginEditorViewAUListener> (self);
+                _processorEditor->addComponentListener (_processorEditorListener.get());
 
                 [self setFrameSize:NSMakeSize (preferredSize.getWidth(), preferredSize.getHeight())];
                 [self resizeEditorToBounds];
@@ -922,10 +959,36 @@ private:
 
     YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "resizing editor to bounds: width=" << yup::String (static_cast<double> (NSWidth (bounds))) << ", height=" << yup::String (static_cast<double> (NSHeight (bounds))) << ", editor=" << yup::describePointer (_processorEditor.get()));
 
+    const auto scoped = yup::ScopedValueSetter<bool> (_resizingEditorToBounds, true);
+
     _processorEditor->setBounds ({ 0.0f,
                                    0.0f,
                                    yup::jmax (1.0f, static_cast<float> (NSWidth (bounds))),
                                    yup::jmax (1.0f, static_cast<float> (NSHeight (bounds))) });
+}
+
+- (void)resizeViewToEditorSize
+{
+    if (_processorEditor == nullptr || ! _processorEditor->isResizable())
+        return;
+
+    const auto newSize = NSMakeSize (yup::jmax (1.0f, _processorEditor->getWidth()),
+                                     yup::jmax (1.0f, _processorEditor->getHeight()));
+
+    if (NSEqualSizes ([self frame].size, newSize))
+        return;
+
+    YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "resizing editor view to editor: width=" << yup::String (static_cast<double> (newSize.width)) << ", height=" << yup::String (static_cast<double> (newSize.height)) << ", editor=" << yup::describePointer (_processorEditor.get()));
+
+    [super setFrameSize:newSize];
+}
+
+- (void)processorEditorResized
+{
+    if (_resizingEditorToBounds)
+        return;
+
+    [self resizeViewToEditorSize];
 }
 
 - (void)dealloc
@@ -936,11 +999,28 @@ private:
 
     yup::endActiveParameterGestures (_processor);
 
+    if (_processorEditor != nullptr && _processorEditorListener != nullptr)
+        _processorEditor->removeComponentListener (_processorEditorListener.get());
+
+    _processorEditorListener.reset();
     _processorEditor.reset();
     _processor = nullptr;
 }
 
 @end
+
+namespace yup
+{
+
+void AudioPluginEditorViewAUListener::componentResized (Component& component)
+{
+    ignoreUnused (component);
+
+    if (owner != nil)
+        [owner processorEditorResized];
+}
+
+} // namespace yup
 
 //==============================================================================
 // Cocoa view factory
