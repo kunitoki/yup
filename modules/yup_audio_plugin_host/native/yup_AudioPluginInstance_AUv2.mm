@@ -381,6 +381,7 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
         releaseResources();
 
         renderSampleTime = 0.0;
+        updateOfflineRenderMode();
 
         const auto numHostedChannels = jmax(2,
                                             pluginDescription.numInputChannels,
@@ -433,6 +434,11 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
     {
         if (audioUnit != nullptr)
             AudioUnitUninitialize(audioUnit);
+    }
+
+    void nonRealtimeStateChanged() override
+    {
+        updateOfflineRenderMode();
     }
 
     void processBlock (AudioProcessContext<float>& context) override
@@ -1195,6 +1201,20 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
     {
         if (audioUnit != nullptr)
             AudioUnitRemovePropertyListenerWithUserData(audioUnit, kAudioUnitProperty_Latency, latencyPropertyChanged, this);
+    }
+
+    void updateOfflineRenderMode()
+    {
+        if (audioUnit == nullptr)
+            return;
+
+        UInt32 offline = isNonRealtime() ? 1u : 0u;
+        AudioUnitSetProperty(audioUnit,
+                             kAudioUnitProperty_OfflineRender,
+                             kAudioUnitScope_Global,
+                             0,
+                             &offline,
+                             sizeof(offline));
     }
 
     static void latencyPropertyChanged(void* userData,

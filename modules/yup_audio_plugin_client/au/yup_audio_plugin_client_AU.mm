@@ -168,6 +168,7 @@ class AudioPluginProcessorAU final : public AudioPluginAUBase
         if (processor == nullptr)
             return kAudioUnitErr_FailedInitialization;
 
+        processor->setOfflineProcessing(renderingOffline);
         processor->setPlaybackConfiguration(static_cast<float>(getCurrentSampleRate()),
                                             static_cast<int>(GetMaxFramesPerSlice()));
 
@@ -522,6 +523,16 @@ class AudioPluginProcessorAU final : public AudioPluginAUBase
                              UInt32& outDataSize,
                              bool& outWritable) override
     {
+        if (inID == kAudioUnitProperty_OfflineRender)
+        {
+            if (inScope != kAudioUnitScope_Global)
+                return kAudioUnitErr_InvalidScope;
+
+            outDataSize = sizeof(UInt32);
+            outWritable = true;
+            return noErr;
+        }
+
         if (inID == kAudioUnitProperty_CocoaUI)
         {
             if (processor != nullptr && processor->hasEditor())
@@ -541,6 +552,31 @@ class AudioPluginProcessorAU final : public AudioPluginAUBase
                          AudioUnitScope inScope,
                          AudioUnitElement inElement,
                          void* outData) override; // Implemented below (needs ObjC)
+
+    OSStatus SetProperty(AudioUnitPropertyID inID,
+                         AudioUnitScope inScope,
+                         AudioUnitElement inElement,
+                         const void* inData,
+                         UInt32 inDataSize) override
+    {
+        if (inID == kAudioUnitProperty_OfflineRender)
+        {
+            if (inScope != kAudioUnitScope_Global)
+                return kAudioUnitErr_InvalidScope;
+
+            if (inData == nullptr || inDataSize < sizeof(UInt32))
+                return kAudioUnitErr_InvalidPropertyValue;
+
+            renderingOffline = *static_cast<const UInt32*>(inData) != 0;
+
+            if (processor != nullptr)
+                processor->setOfflineProcessing(renderingOffline);
+
+            return noErr;
+        }
+
+        return AudioPluginAUBase::SetProperty(inID, inScope, inElement, inData, inDataSize);
+    }
 
     //==============================================================================
 
@@ -592,6 +628,7 @@ class AudioPluginProcessorAU final : public AudioPluginAUBase
     std::mutex midiMutex;
     std::vector<AUChannelInfo> channelInfoCache;
     AudioUnit componentInstance = nullptr;
+    bool renderingOffline = false;
 };
 
 } // namespace yup
@@ -697,6 +734,18 @@ OSStatus AudioPluginProcessorAU::GetProperty(AudioUnitPropertyID inID,
                                              AudioUnitElement inElement,
                                              void* outData)
 {
+    if (inID == kAudioUnitProperty_OfflineRender)
+    {
+        if (inScope != kAudioUnitScope_Global)
+            return kAudioUnitErr_InvalidScope;
+
+        if (outData == nullptr)
+            return kAudioUnitErr_InvalidPropertyValue;
+
+        *static_cast<UInt32*>(outData) = renderingOffline ? 1u : 0u;
+        return noErr;
+    }
+
     if (inID == kAudioUnitProperty_CocoaUI)
     {
         if (processor == nullptr || !processor->hasEditor())

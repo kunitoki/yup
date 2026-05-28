@@ -76,7 +76,12 @@ struct YUPCLAPHost
     clap_host_t host {};
     clap_host_note_ports_t notePorts {};
     clap_host_latency_t latency {};
+    clap_host_gui_t gui {};
     std::function<void()> latencyChanged;
+    std::function<bool (uint32_t, uint32_t)> guiResizeRequested;
+    std::function<bool()> guiShowRequested;
+    std::function<bool()> guiHideRequested;
+    std::function<void (bool)> guiClosed;
     String hostName;
     String hostVendor;
     String hostVersion;
@@ -103,6 +108,40 @@ struct YUPCLAPHost
             if (self->latencyChanged != nullptr)
                 self->latencyChanged();
         };
+        gui.resize_hints_changed = [] (const clap_host_t*) {};
+        gui.request_resize = [] (const clap_host_t* host, uint32_t width, uint32_t height) -> bool
+        {
+            if (! MessageManager::existsAndIsCurrentThread())
+                return false;
+
+            auto* self = static_cast<YUPCLAPHost*> (host->host_data);
+            return self->guiResizeRequested != nullptr && self->guiResizeRequested (width, height);
+        };
+        gui.request_show = [] (const clap_host_t* host) -> bool
+        {
+            if (! MessageManager::existsAndIsCurrentThread())
+                return false;
+
+            auto* self = static_cast<YUPCLAPHost*> (host->host_data);
+            return self->guiShowRequested != nullptr && self->guiShowRequested();
+        };
+        gui.request_hide = [] (const clap_host_t* host) -> bool
+        {
+            if (! MessageManager::existsAndIsCurrentThread())
+                return false;
+
+            auto* self = static_cast<YUPCLAPHost*> (host->host_data);
+            return self->guiHideRequested != nullptr && self->guiHideRequested();
+        };
+        gui.closed = [] (const clap_host_t* host, bool wasDestroyed)
+        {
+            if (! MessageManager::existsAndIsCurrentThread())
+                return;
+
+            auto* self = static_cast<YUPCLAPHost*> (host->host_data);
+            if (self->guiClosed != nullptr)
+                self->guiClosed (wasDestroyed);
+        };
 
         host.get_extension = [] (const clap_host_t* host, const char* extensionId) -> const void*
         {
@@ -113,12 +152,286 @@ struct YUPCLAPHost
             if (std::strcmp (extensionId, CLAP_EXT_LATENCY) == 0)
                 return &self->latency;
 
+            if (std::strcmp (extensionId, CLAP_EXT_GUI) == 0)
+                return &self->gui;
+
             return nullptr;
         };
         host.request_restart = [] (const clap_host_t*) {};
         host.request_process = [] (const clap_host_t*) {};
         host.request_callback = [] (const clap_host_t*) {};
     }
+};
+
+//==============================================================================
+#if YUP_MAC
+void* getCLAPParentViewFromNativeHandle (void* nativeHandle)
+{
+    if (nativeHandle == nullptr)
+        return nullptr;
+
+    id nativeObject = (__bridge id) nativeHandle;
+    if ([nativeObject isKindOfClass:[NSWindow class]])
+        return (__bridge void*) [(NSWindow*) nativeObject contentView];
+
+    if ([nativeObject isKindOfClass:[NSView class]])
+        return nativeHandle;
+
+    return nullptr;
+}
+#endif
+
+const char* getCLAPWindowApi()
+{
+#if YUP_MAC
+    return CLAP_WINDOW_API_COCOA;
+#elif YUP_WINDOWS
+    return CLAP_WINDOW_API_WIN32;
+#elif YUP_LINUX
+    return CLAP_WINDOW_API_X11;
+#else
+    return nullptr;
+#endif
+}
+
+bool initialiseCLAPWindow (clap_window_t& window, void* nativeHandle)
+{
+    if (nativeHandle == nullptr)
+        return false;
+
+    window.api = getCLAPWindowApi();
+    if (window.api == nullptr)
+        return false;
+
+#if YUP_MAC
+    window.cocoa = getCLAPParentViewFromNativeHandle (nativeHandle);
+    return window.cocoa != nullptr;
+#elif YUP_WINDOWS
+    window.win32 = nativeHandle;
+    return true;
+#elif YUP_LINUX
+    window.x11 = static_cast<clap_xwnd> (reinterpret_cast<std::uintptr_t> (nativeHandle));
+    return window.x11 != 0;
+#else
+    ignoreUnused (window);
+    return false;
+#endif
+}
+
+bool canCreateCLAPEditor (const clap_plugin_t* plugin)
+{
+    if (plugin == nullptr)
+        return false;
+
+    const auto* gui = reinterpret_cast<const clap_plugin_gui_t*> (
+        plugin->get_extension (plugin, CLAP_EXT_GUI));
+
+    const auto* windowApi = getCLAPWindowApi();
+    return gui != nullptr
+        && windowApi != nullptr
+        && gui->is_api_supported != nullptr
+        && gui->is_api_supported (plugin, windowApi, false);
+}
+
+class CLAPEditor final : public AudioProcessorEditor
+{
+public:
+    static std::unique_ptr<CLAPEditor> create (const clap_plugin_t* plugin, YUPCLAPHost& host)
+    {
+        if (! canCreateCLAPEditor (plugin))
+            return nullptr;
+
+        const auto* gui = reinterpret_cast<const clap_plugin_gui_t*> (
+            plugin->get_extension (plugin, CLAP_EXT_GUI));
+
+        if (gui == nullptr || gui->create == nullptr || ! gui->create (plugin, getCLAPWindowApi(), false))
+            return nullptr;
+
+        return std::unique_ptr<CLAPEditor> (new CLAPEditor (plugin, gui, host));
+    }
+
+    ~CLAPEditor() override
+    {
+        detachPlugView();
+
+        host.guiResizeRequested = nullptr;
+        host.guiShowRequested = nullptr;
+        host.guiHideRequested = nullptr;
+        host.guiClosed = nullptr;
+
+        if (gui != nullptr && gui->destroy != nullptr)
+            gui->destroy (clapPlugin);
+    }
+
+    bool isResizable() const override
+    {
+        return gui != nullptr && gui->can_resize != nullptr && gui->can_resize (clapPlugin);
+    }
+
+    Size<int> getPreferredSize() const override { return preferredSize; }
+
+    void paint (Graphics& g) override
+    {
+        g.setFillColor (Color (0xff101417));
+        g.fillAll();
+    }
+
+    void resized() override
+    {
+        resizePlugViewToBounds();
+    }
+
+    void attachedToNative() override
+    {
+        attachPlugView();
+    }
+
+    void detachedFromNative() override
+    {
+        detachPlugView();
+    }
+
+private:
+    CLAPEditor (const clap_plugin_t* plugin, const clap_plugin_gui_t* guiExtension, YUPCLAPHost& hostToUse)
+        : clapPlugin (plugin)
+        , gui (guiExtension)
+        , host (hostToUse)
+    {
+        uint32_t width = 0;
+        uint32_t height = 0;
+
+        if (gui != nullptr
+            && gui->get_size != nullptr
+            && gui->get_size (clapPlugin, &width, &height)
+            && width > 0
+            && height > 0)
+        {
+            preferredSize = {
+                jmax (320, static_cast<int> (width)),
+                jmax (240, static_cast<int> (height))
+            };
+        }
+
+        setSize (preferredSize.to<float>());
+
+        host.guiResizeRequested = [this] (uint32_t widthToUse, uint32_t heightToUse)
+        {
+            return handleResizeRequest (widthToUse, heightToUse);
+        };
+        host.guiShowRequested = [this]
+        {
+            return handleShowRequest();
+        };
+        host.guiHideRequested = [this]
+        {
+            return handleHideRequest();
+        };
+        host.guiClosed = [this] (bool)
+        {
+            shown = false;
+            attached = false;
+        };
+    }
+
+    bool handleResizeRequest (uint32_t width, uint32_t height)
+    {
+        if (width == 0 || height == 0)
+            return false;
+
+        preferredSize = {
+            jmax (1, static_cast<int> (width)),
+            jmax (1, static_cast<int> (height))
+        };
+
+        if (auto* topLevel = getTopLevelComponent())
+            topLevel->setSize (preferredSize.to<float>());
+        else
+            setSize (preferredSize.to<float>());
+
+        return true;
+    }
+
+    bool handleShowRequest()
+    {
+        if (auto* topLevel = getTopLevelComponent())
+        {
+            topLevel->setVisible (true);
+            return true;
+        }
+
+        return false;
+    }
+
+    bool handleHideRequest()
+    {
+        if (auto* topLevel = getTopLevelComponent())
+        {
+            topLevel->setVisible (false);
+            return true;
+        }
+
+        return false;
+    }
+
+    void attachPlugView()
+    {
+        if (gui == nullptr || clapPlugin == nullptr || attached)
+            return;
+
+        auto* nativeComponent = getNativeComponent();
+        if (nativeComponent == nullptr)
+            return;
+
+        clap_window_t parentWindow {};
+        if (! initialiseCLAPWindow (parentWindow, nativeComponent->getNativeHandle()))
+            return;
+
+        if (gui->set_parent == nullptr || ! gui->set_parent (clapPlugin, &parentWindow))
+            return;
+
+        attached = true;
+        resizePlugViewToBounds();
+
+        if (! shown && gui->show != nullptr)
+            shown = gui->show (clapPlugin);
+    }
+
+    void detachPlugView()
+    {
+        if (gui == nullptr || clapPlugin == nullptr)
+            return;
+
+        if (shown && gui->hide != nullptr)
+            gui->hide (clapPlugin);
+
+        shown = false;
+        attached = false;
+    }
+
+    void resizePlugViewToBounds()
+    {
+        if (gui == nullptr || clapPlugin == nullptr || ! attached || gui->set_size == nullptr)
+            return;
+
+        const auto bounds = getBoundsRelativeToTopLevelComponent();
+        uint32_t width = static_cast<uint32_t> (jmax (1.0f, bounds.getWidth()));
+        uint32_t height = static_cast<uint32_t> (jmax (1.0f, bounds.getHeight()));
+
+        if (gui->adjust_size != nullptr)
+            gui->adjust_size (clapPlugin, &width, &height);
+
+        if (width > 0 && height > 0)
+            gui->set_size (clapPlugin, width, height);
+    }
+
+    const clap_plugin_t* clapPlugin = nullptr;
+    const clap_plugin_gui_t* gui = nullptr;
+    YUPCLAPHost& host;
+    Size<int> preferredSize { 640, 480 };
+    bool attached = false;
+    bool shown = false;
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CLAPEditor)
 };
 
 struct CLAPInputEvents
@@ -332,6 +645,7 @@ public:
         preparedInPtrs.resize (static_cast<std::size_t> (numChannels));
         preparedOutPtrs.resize (static_cast<std::size_t> (numChannels));
 
+        updateRenderMode();
         clapPlugin->activate (clapPlugin, sampleRate, 1, static_cast<uint32_t> (jmax (1, maxBlockSize)));
         updateRenderMode();
 
@@ -344,6 +658,7 @@ public:
         {
             clapPlugin->stop_processing (clapPlugin);
             clapPlugin->deactivate (clapPlugin);
+            currentRenderMode = -1;
         }
     }
 
@@ -501,7 +816,18 @@ public:
 
     //==============================================================================
 
-    bool hasEditor() const override { return false; }
+    bool hasEditor() const override
+    {
+        return canCreateCLAPEditor (clapPlugin);
+    }
+
+    AudioProcessorEditor* createEditor() override
+    {
+        if (auto editor = CLAPEditor::create (clapPlugin, *yupHost))
+            return editor.release();
+
+        return nullptr;
+    }
 
     int getLatencySamples() override
     {
@@ -641,11 +967,25 @@ private:
         if (clapPlugin == nullptr)
             return;
 
+        const auto mode = isNonRealtime() ? CLAP_RENDER_OFFLINE : CLAP_RENDER_REALTIME;
+        if (currentRenderMode == mode)
+            return;
+
         auto* renderExt = reinterpret_cast<const clap_plugin_render_t*> (
             clapPlugin->get_extension (clapPlugin, CLAP_EXT_RENDER));
 
         if (renderExt != nullptr && renderExt->set != nullptr)
-            renderExt->set (clapPlugin, isNonRealtime() ? CLAP_RENDER_OFFLINE : CLAP_RENDER_REALTIME);
+        {
+            if (mode == CLAP_RENDER_OFFLINE
+                && renderExt->has_hard_realtime_requirement != nullptr
+                && renderExt->has_hard_realtime_requirement (clapPlugin))
+            {
+                return;
+            }
+
+            if (renderExt->set (clapPlugin, mode))
+                currentRenderMode = mode;
+        }
     }
 
     void nonRealtimeStateChanged() override
@@ -663,6 +1003,7 @@ private:
     std::vector<float*> preparedOutPtrs;
     MidiBuffer outputMidiBuffer;
     std::vector<clap_id> clapParameterIds;
+    clap_plugin_render_mode currentRenderMode = -1;
     int currentPreset = 0;
 };
 
