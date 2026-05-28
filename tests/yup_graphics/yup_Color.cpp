@@ -111,6 +111,15 @@ TEST (ColorTests, Uint32_Constructor)
     EXPECT_TRUE (c.isSemiTransparent());
 }
 
+TEST (ColorTests, PackedByteOrderAccessors)
+{
+    const Color c (0x80123456);
+
+    EXPECT_EQ (c.getARGB(), 0x80123456u);
+    EXPECT_EQ (c.getRGBA(), 0x12345680u);
+    EXPECT_EQ (c.getBGRA(), 0x56341280u);
+}
+
 TEST (ColorTests, RGB_Constructor)
 {
     Color c (255, 128, 64);
@@ -129,6 +138,24 @@ TEST (ColorTests, ARGB_Constructor)
     EXPECT_EQ (c.getGreen(), 128);
     EXPECT_EQ (c.getBlue(), 64);
     EXPECT_TRUE (c.isSemiTransparent());
+}
+
+TEST (ColorTests, ComponentFactoriesCreateExpectedPackedColors)
+{
+    EXPECT_EQ (Color::fromRGB (0x12, 0x34, 0x56).getARGB(), 0xff123456u);
+    EXPECT_EQ (Color::fromARGB (0x80, 0x12, 0x34, 0x56).getARGB(), 0x80123456u);
+    EXPECT_EQ (Color::fromRGBA (0x12, 0x34, 0x56, 0x80).getARGB(), 0x80123456u);
+    EXPECT_EQ (Color::fromBGRA (0x56, 0x34, 0x12, 0x80).getARGB(), 0x80123456u);
+}
+
+TEST (ColorTests, PackedFactoriesCreateExpectedColors)
+{
+    EXPECT_EQ (Color::fromRGBA (0x12345680).getARGB(), 0x80123456u);
+    EXPECT_EQ (Color::fromBGRA (0x56341280).getARGB(), 0x80123456u);
+
+    const Color transparent = Color::fromRGBA (0x12345600);
+    EXPECT_EQ (transparent.getARGB(), 0x00123456u);
+    EXPECT_TRUE (transparent.isTransparent());
 }
 
 TEST (ColorTests, Copy_And_Move_Constructors)

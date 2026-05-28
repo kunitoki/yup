@@ -22,6 +22,74 @@
 namespace yup
 {
 
+namespace
+{
+uint8 premultiplyComponent (uint8 component, uint8 alpha) noexcept
+{
+    return static_cast<uint8> ((static_cast<uint32> (component) * static_cast<uint32> (alpha) + 127u) / 255u);
+}
+
+uint8 unpremultiplyComponent (uint8 component, uint8 alpha) noexcept
+{
+    if (alpha == 0)
+        return 0;
+
+    const auto value = (static_cast<uint32> (component) * 255u + static_cast<uint32> (alpha) / 2u) / static_cast<uint32> (alpha);
+    return static_cast<uint8> (value > 255u ? 255u : value);
+}
+
+void writeARGBAsRGBAPremultiplied (uint32 argb, uint8* destination) noexcept
+{
+    const auto alpha = static_cast<uint8> ((argb >> 24) & 0xFF);
+
+    destination[0] = premultiplyComponent (static_cast<uint8> ((argb >> 16) & 0xFF), alpha);
+    destination[1] = premultiplyComponent (static_cast<uint8> ((argb >> 8) & 0xFF), alpha);
+    destination[2] = premultiplyComponent (static_cast<uint8> (argb & 0xFF), alpha);
+    destination[3] = alpha;
+}
+
+std::unique_ptr<const uint8[]> copyRGBAPremultipliedAsRGBA (const rive::Bitmap& bitmap)
+{
+    const auto numPixels = static_cast<size_t> (bitmap.width()) * static_cast<size_t> (bitmap.height());
+    auto destination = std::make_unique<uint8[]> (numPixels * 4u);
+
+    const auto* source = bitmap.bytes();
+    auto* target = destination.get();
+
+    for (size_t i = 0; i < numPixels; ++i)
+    {
+        const auto alpha = source[3];
+
+        target[0] = unpremultiplyComponent (source[0], alpha);
+        target[1] = unpremultiplyComponent (source[1], alpha);
+        target[2] = unpremultiplyComponent (source[2], alpha);
+        target[3] = alpha;
+
+        source += 4;
+        target += 4;
+    }
+
+    return std::unique_ptr<const uint8[]> (destination.release());
+}
+} // namespace
+
+//==============================================================================
+void BitmapData::setPixelColor (int x, int y, Color color)
+{
+    setPixel (x, y, color.getARGB());
+}
+
+Color BitmapData::getPixelColor (int x, int y) const
+{
+    return Color (getPixel (x, y));
+}
+
+void BitmapData::fillColor (Color color)
+{
+    fill (color.getARGB());
+}
+
+//==============================================================================
 Image::Image (int w, int h, PixelFormat fmt)
     : bitmapData (new BitmapData (w, h, fmt))
 {
@@ -89,23 +157,42 @@ int Image::getPixelStride() const noexcept
 }
 
 //==============================================================================
-void Image::setPixel (int x, int y, uint32_t color)
+void Image::setPixel (int x, int y, uint32 color)
 {
     jassert (bitmapData != nullptr);
 
     bitmapData->setPixel (x, y, color);
 }
 
-uint32_t Image::getPixel (int x, int y) const
+void Image::setPixelColor (int x, int y, Color color)
+{
+    jassert (bitmapData != nullptr);
+
+    bitmapData->setPixelColor (x, y, color);
+}
+
+uint32 Image::getPixel (int x, int y) const
 {
     jassert (bitmapData != nullptr);
 
     return bitmapData->getPixel (x, y);
 }
 
-void Image::fill (uint32_t color)
+Color Image::getPixelColor (int x, int y) const
+{
+    jassert (bitmapData != nullptr);
+
+    return bitmapData->getPixelColor (x, y);
+}
+
+void Image::fill (uint32 color)
 {
     bitmapData->fill (color);
+}
+
+void Image::fillColor (Color color)
+{
+    bitmapData->fillColor (color);
 }
 
 void Image::clear()
@@ -169,14 +256,31 @@ bool Image::createTextureIfNotPresent (GraphicsContext& context) const
     if (renderContext == nullptr || renderContext->impl() == nullptr)
         return false;
 
+    std::vector<uint8> texturePixels (static_cast<size_t> (width) * static_cast<size_t> (height) * 4u);
+    auto* destination = texturePixels.data();
+
+    for (int y = 0; y < height; ++y)
+    {
+        for (int x = 0; x < width; ++x)
+        {
+            writeARGBAsRGBAPremultiplied (bitmapData->getPixel (x, y), destination);
+            destination += 4;
+        }
+    }
+
     texture = renderContext->impl()->makeImageTexture (
         width,
         height,
         rive::math::msb (width | height),
         rive::GPUTextureFormat::rgba32,
-        getRawData().data());
+        texturePixels.data());
 
     return true;
+}
+
+void Image::invalidateTexture()
+{
+    texture = nullptr;
 }
 
 rive::rcp<rive::gpu::Texture> Image::getTexture() const
@@ -194,13 +298,15 @@ ResultValue<Image> Image::loadFromData (Span<const uint8> imageData)
 
     Image result;
 
-    result.bitmapData = new BitmapData (
-        bitmap->width(),
-        bitmap->height(),
-        (bitmap->pixelFormat() == rive::Bitmap::PixelFormat::RGB)
-            ? PixelFormat::RGB
-            : PixelFormat::RGBA,
-        bitmap->detachBytes());
+    const auto pixelFormat = bitmap->pixelFormat();
+    const auto imagePixelFormat = pixelFormat == rive::Bitmap::PixelFormat::RGB
+                                    ? PixelFormat::RGB
+                                    : PixelFormat::RGBA;
+    auto pixelData = pixelFormat == rive::Bitmap::PixelFormat::RGBAPremul
+                       ? copyRGBAPremultipliedAsRGBA (*bitmap)
+                       : bitmap->detachBytes();
+
+    result.bitmapData = new BitmapData (bitmap->width(), bitmap->height(), imagePixelFormat, std::move (pixelData));
 
     return makeResultValueOk (result);
 }
