@@ -211,54 +211,6 @@ static const char* const preferredApi = CLAP_WINDOW_API_WIN32;
 static const char* const preferredApi = CLAP_WINDOW_API_X11;
 #endif
 
-struct CLAPScopedGuiInitialiser
-{
-    CLAPScopedGuiInitialiser()
-    {
-        if (numCLAPScopedGuiInitInstances.fetch_add (1) == 0)
-        {
-            initialiseYup_GUI();
-        }
-    }
-
-    ~CLAPScopedGuiInitialiser()
-    {
-        if (numCLAPScopedGuiInitInstances.fetch_sub (1) == 1)
-        {
-            shutdownYup_GUI();
-        }
-    }
-
-private:
-    static std::atomic_int numCLAPScopedGuiInitInstances;
-};
-
-std::atomic_int CLAPScopedGuiInitialiser::numCLAPScopedGuiInitInstances = 0;
-
-struct CLAPScopedWindowingInitialiser
-{
-    CLAPScopedWindowingInitialiser()
-    {
-        if (numCLAPScopedGuiInitInstances.fetch_add (1) == 0)
-        {
-            initialiseYup_Windowing();
-        }
-    }
-
-    ~CLAPScopedWindowingInitialiser()
-    {
-        if (numCLAPScopedGuiInitInstances.fetch_sub (1) == 1)
-        {
-            shutdownYup_Windowing();
-        }
-    }
-
-private:
-    static std::atomic_int numCLAPScopedGuiInitInstances;
-};
-
-std::atomic_int CLAPScopedWindowingInitialiser::numCLAPScopedGuiInitInstances = 0;
-
 //==============================================================================
 
 class AudioPluginProcessorCLAP;
@@ -343,8 +295,7 @@ public:
     void resized() override;
 
 private:
-    CLAPScopedWindowingInitialiser scopedWindowingInitialiser;
-
+    ScopedYupInitialiser_Windowing scopeInitialiser;
     AudioPluginProcessorCLAP* wrapper = nullptr;
     std::unique_ptr<AudioProcessorEditor> processorEditor;
 };
@@ -378,7 +329,7 @@ public:
     ScopedValueSetter<bool> scopedHostEditorResizing();
 
 private:
-    CLAPScopedGuiInitialiser scopedGuiInitialiser;
+    ScopedYupInitialiser_GUI scopeInitialiser;
 
     std::unique_ptr<AudioProcessor> audioProcessor;
     std::unique_ptr<AudioPluginEditorCLAP> audioPluginEditor;

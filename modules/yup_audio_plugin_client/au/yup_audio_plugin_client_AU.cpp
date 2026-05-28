@@ -757,7 +757,7 @@ private:
         return Output (0).GetStreamFormat().mSampleRate;
     }
 
-    AUScopedYupInitialiser scopeInitialiser;
+    ScopedYupInitialiser_GUI scopeInitialiser;
     std::unique_ptr<AudioProcessor> processor;
 
     MidiBuffer midiBuffer;
@@ -775,7 +775,7 @@ private:
 
 @interface AudioPluginEditorViewAU : NSView
 {
-    yup::AUScopedYupWindowingInitialiser _scopeInitialiser;
+    yup::ScopedYupInitialiser_Windowing _scopeInitialiser;
     yup::AudioProcessor* _processor;
     std::unique_ptr<yup::AudioProcessorEditor> _processorEditor;
 }

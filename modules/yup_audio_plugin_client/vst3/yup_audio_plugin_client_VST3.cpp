@@ -117,31 +117,6 @@ Vst::ParamID getVST3BypassParameterID (const AudioProcessor& processor)
     return static_cast<Vst::ParamID> (parameterID);
 }
 
-//==============================================================================
-
-static std::atomic_int numScopedInitInstancesGui = 0;
-
-struct VST3ScopedYupInitialiser
-{
-    VST3ScopedYupInitialiser()
-    {
-        if (numScopedInitInstancesGui.fetch_add (1) == 0)
-        {
-            initialiseYup_GUI();
-            initialiseYup_Windowing();
-        }
-    }
-
-    ~VST3ScopedYupInitialiser()
-    {
-        if (numScopedInitInstancesGui.fetch_add (-1) == 1)
-        {
-            shutdownYup_Windowing();
-            shutdownYup_GUI();
-        }
-    }
-};
-
 } // namespace
 
 //==============================================================================
@@ -380,6 +355,7 @@ public:
     }
 
 private:
+    ScopedYupInitialiser_Windowing scopeInitialiser;
     AudioProcessor* processor = nullptr;
     std::unique_ptr<AudioProcessorEditor> editor;
     bool hostTriggeredResizing = false;
@@ -1312,7 +1288,7 @@ public:
     }
 
 private:
-    VST3ScopedYupInitialiser scopeInitialiser;
+    ScopedYupInitialiser_GUI scopeInitialiser;
 
     std::unique_ptr<AudioProcessor> processor;
 

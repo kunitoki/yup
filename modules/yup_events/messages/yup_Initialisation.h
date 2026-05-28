@@ -93,6 +93,9 @@ class YUP_API ScopedYupInitialiser_GUI final
 
     YUP_DECLARE_NON_COPYABLE(ScopedYupInitialiser_GUI)
     YUP_DECLARE_NON_MOVEABLE(ScopedYupInitialiser_GUI)
+
+   private:
+    static std::atomic_int numScopedInitInstances;
 };
 
 //==============================================================================

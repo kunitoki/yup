@@ -2016,7 +2016,7 @@ void Desktop::setCurrentMouseLocation (const Point<float>& location)
 
 //==============================================================================
 
-void initialiseYup_Windowing()
+YUP_API void YUP_CALLTYPE initialiseYup_Windowing()
 {
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: initialising windowing");
 
@@ -2108,7 +2108,7 @@ void initialiseYup_Windowing()
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: windowing initialised");
 }
 
-void shutdownYup_Windowing()
+YUP_API void YUP_CALLTYPE shutdownYup_Windowing()
 {
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: shutting down windowing");
 
@@ -2145,6 +2145,21 @@ void shutdownYup_Windowing()
     std::atexit (&SDL_Quit);
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: registered SDL_Quit at exit");
 #endif
+}
+
+//==============================================================================
+std::atomic_int ScopedYupInitialiser_Windowing::numScopedInitInstances = 0;
+
+ScopedYupInitialiser_Windowing::ScopedYupInitialiser_Windowing()
+{
+    if (numScopedInitInstances.fetch_add (1) == 0)
+        initialiseYup_Windowing();
+}
+
+ScopedYupInitialiser_Windowing::~ScopedYupInitialiser_Windowing()
+{
+    if (numScopedInitInstances.fetch_add (-1) == 1)
+        shutdownYup_Windowing();
 }
 
 } // namespace yup
