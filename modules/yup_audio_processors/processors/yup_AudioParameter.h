@@ -48,6 +48,17 @@ public:
     /** A function that converts a string to a real value. */
     using StringToValue = std::function<float (const String&)>;
 
+    /** Sentinel used when a parameter does not provide an explicit host-facing ID. */
+    static constexpr uint32 invalidHostParameterID = 0xffffffffu;
+
+    /**
+        Highest host-facing parameter ID that is portable across VST3, AUv2, and CLAP.
+
+        VST3 reserves the upper half of the 32-bit parameter ID range for hosts, so
+        explicit IDs used by YUP plugins must stay in the lower half.
+    */
+    static constexpr uint32 maximumHostParameterID = 0x7fffffffu;
+
     //==============================================================================
 
     /**
@@ -60,6 +71,9 @@ public:
         @param defaultValue     The default real value.
         @param valueToString    Converts real value to display string (optional).
         @param stringToValue    Parses display string to real value (optional).
+        @param hostParameterID  Optional stable host-facing automation ID. Leave this
+                                as invalidHostParameterID to use the parameter's
+                                addParameter() index for backward compatibility.
     */
     AudioParameter (const String& id,
                     const String& name,
@@ -69,7 +83,8 @@ public:
                     ValueToString valueToString = nullptr,
                     StringToValue stringToValue = nullptr,
                     bool smoothingEnabled = false,
-                    float smoothingTimeMs = 0.0f);
+                    float smoothingTimeMs = 0.0f,
+                    uint32 hostParameterID = invalidHostParameterID);
 
     /**
         Constructs an AudioParameter instance.
@@ -80,6 +95,9 @@ public:
         @param defaultValue     The default real value.
         @param valueToString    Converts real value to display string (optional).
         @param stringToValue    Parses display string to real value (optional).
+        @param hostParameterID  Optional stable host-facing automation ID. Leave this
+                                as invalidHostParameterID to use the parameter's
+                                addParameter() index for backward compatibility.
     */
     AudioParameter (const String& id,
                     const String& name,
@@ -88,7 +106,8 @@ public:
                     ValueToString valueToString = nullptr,
                     StringToValue stringToValue = nullptr,
                     bool smoothingEnabled = false,
-                    float smoothingTimeMs = 0.0f);
+                    float smoothingTimeMs = 0.0f,
+                    uint32 hostParameterID = invalidHostParameterID);
 
     /** Destructor. */
     ~AudioParameter();
@@ -100,6 +119,28 @@ public:
 
     /** Returns the parameter name. */
     const String& getName() const { return paramName; }
+
+    /**
+        Returns true when this parameter has an explicit host-facing automation ID.
+
+        Explicit IDs should be stable forever once a plugin version ships. Do not
+        reuse an old ID for a different parameter, even if the original parameter is
+        removed from the plugin UI.
+    */
+    bool hasExplicitHostParameterID() const noexcept { return hostParameterID != invalidHostParameterID; }
+
+    /**
+        Returns the host-facing automation ID for this parameter.
+
+        If no explicit ID was provided, this returns the parameter's index assigned
+        by AudioProcessor::addParameter(), preserving the legacy index-based mapping.
+    */
+    uint32 getHostParameterID() const noexcept
+    {
+        return hasExplicitHostParameterID()
+                 ? hostParameterID
+                 : (paramIndex >= 0 ? static_cast<uint32> (paramIndex) : invalidHostParameterID);
+    }
 
     //==============================================================================
 
@@ -231,6 +272,7 @@ private:
 
     String paramID;
     String paramName;
+    uint32 hostParameterID = invalidHostParameterID;
     int paramVersion = 0;
     int paramIndex = -1;
     std::atomic<float> currentValue = 0.0f;

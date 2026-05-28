@@ -49,9 +49,11 @@ AudioParameter::AudioParameter (const String& id,
                                 ValueToString valueToString,
                                 StringToValue stringToValue,
                                 bool smoothingEnabled,
-                                float smoothingTimeMs)
+                                float smoothingTimeMs,
+                                uint32 hostParameterID)
     : paramID (id)
     , paramName (name)
+    , hostParameterID (hostParameterID)
     , valueRange (minValue, maxValue)
     , defaultValue (defaultValue)
     , valueToString (valueToString ? valueToString : defaultToString)
@@ -59,6 +61,8 @@ AudioParameter::AudioParameter (const String& id,
     , smoothingEnabled (smoothingEnabled)
     , smoothingTimeMs (smoothingTimeMs)
 {
+    jassert (hostParameterID == invalidHostParameterID || hostParameterID <= maximumHostParameterID);
+
     setValue (defaultValue);
 }
 
@@ -69,9 +73,11 @@ AudioParameter::AudioParameter (const String& id,
                                 ValueToString valueToString,
                                 StringToValue stringToValue,
                                 bool smoothingEnabled,
-                                float smoothingTimeMs)
+                                float smoothingTimeMs,
+                                uint32 hostParameterID)
     : paramID (id)
     , paramName (name)
+    , hostParameterID (hostParameterID)
     , valueRange (std::move (valueRange))
     , defaultValue (defaultValue)
     , valueToString (valueToString ? valueToString : defaultToString)
@@ -79,6 +85,8 @@ AudioParameter::AudioParameter (const String& id,
     , smoothingEnabled (smoothingEnabled)
     , smoothingTimeMs (smoothingTimeMs)
 {
+    jassert (hostParameterID == invalidHostParameterID || hostParameterID <= maximumHostParameterID);
+
     setValue (defaultValue);
 }
 

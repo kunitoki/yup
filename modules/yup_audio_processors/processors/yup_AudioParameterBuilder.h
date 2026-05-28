@@ -58,6 +58,16 @@ public:
     AudioParameterBuilder& withName (const String& paramName);
 
     /**
+        Sets the stable host-facing automation ID.
+
+        Use this for plugins that need automation compatibility when parameters are
+        reordered or when reserved parameter slots are kept for future expansion.
+        Once released, an ID should never be reused for a different parameter.
+        Values must be less than or equal to AudioParameter::maximumHostParameterID.
+    */
+    AudioParameterBuilder& withHostID (uint32 hostParameterID);
+
+    /**
         Sets the parameter's value range.
 
         @param min The minimum allowed value.
@@ -98,6 +108,7 @@ public:
 private:
     String id;
     String name;
+    uint32 hostParameterID = AudioParameter::invalidHostParameterID;
     NormalisableRange<float> valueRange = { 0.0f, 1.0f };
     float defaultValue = 0.5f;
     bool smoothingEnabled = false;

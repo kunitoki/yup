@@ -110,9 +110,8 @@ void clapEventToParameterChange (const clap_event_header_t* event, AudioProcesso
 
     const clap_event_param_value_t* paramEvent = reinterpret_cast<const clap_event_param_value_t*> (event);
 
+    auto parameterIndex = audioProcessor.getParameterIndexByHostID (paramEvent->param_id);
     auto parameters = audioProcessor.getParameters();
-
-    auto parameterIndex = static_cast<int> (paramEvent->param_id);
     if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
         return;
 
@@ -498,7 +497,7 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
             if (event->type == CLAP_EVENT_PARAM_VALUE)
             {
                 const auto* paramEvent = reinterpret_cast<const clap_event_param_value_t*> (event);
-                const auto paramIndex = static_cast<int> (paramEvent->param_id);
+                const auto paramIndex = audioProcessor.getParameterIndexByHostID (paramEvent->param_id);
 
                 if (isPositiveAndBelow (paramIndex, static_cast<int> (audioProcessor.getParameters().size())))
                 {
@@ -635,7 +634,7 @@ bool AudioPluginProcessorCLAP::initialise()
 
         auto& parameter = parameters[index];
 
-        information->id = index;
+        information->id = parameter->getHostParameterID();
         information->cookie = parameter.get();
         information->flags = CLAP_PARAM_IS_AUTOMATABLE | CLAP_PARAM_IS_MODULATABLE | CLAP_PARAM_IS_MODULATABLE_PER_NOTE_ID;
         information->min_value = parameter->getMinimumValue();
@@ -651,10 +650,11 @@ bool AudioPluginProcessorCLAP::initialise()
         auto wrapper = getWrapper (plugin);
         auto parameters = wrapper->audioProcessor->getParameters();
 
-        if (parameterId >= static_cast<uint32_t> (parameters.size()))
+        const auto parameterIndex = wrapper->audioProcessor->getParameterIndexByHostID (parameterId);
+        if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
             return false;
 
-        *value = parameters[parameterId]->getValue();
+        *value = parameters[parameterIndex]->getValue();
 
         return true;
     };
@@ -664,10 +664,11 @@ bool AudioPluginProcessorCLAP::initialise()
         auto wrapper = getWrapper (plugin);
         auto parameters = wrapper->audioProcessor->getParameters();
 
-        if (parameterId >= static_cast<uint32_t> (parameters.size()))
+        const auto parameterIndex = wrapper->audioProcessor->getParameterIndexByHostID (parameterId);
+        if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
             return false;
 
-        const auto text = parameters[parameterId]->convertToString (static_cast<float> (value));
+        const auto text = parameters[parameterIndex]->convertToString (static_cast<float> (value));
         text.copyToUTF8 (display, size);
 
         return true;
@@ -678,10 +679,11 @@ bool AudioPluginProcessorCLAP::initialise()
         auto wrapper = getWrapper (plugin);
         auto parameters = wrapper->audioProcessor->getParameters();
 
-        if (parameterId >= static_cast<uint32_t> (parameters.size()))
+        const auto parameterIndex = wrapper->audioProcessor->getParameterIndexByHostID (parameterId);
+        if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
             return false;
 
-        *value = static_cast<double> (parameters[parameterId]->convertFromString (display));
+        *value = static_cast<double> (parameters[parameterIndex]->convertFromString (display));
 
         return true;
     };

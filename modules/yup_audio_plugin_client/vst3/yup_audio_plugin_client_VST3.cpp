@@ -95,6 +95,26 @@ void toString128 (const String& source, Vst::String128 destination)
     destination[length] = 0;
 }
 
+Vst::ParamID getVST3ParameterID (const AudioParameter::Ptr& parameter)
+{
+    return static_cast<Vst::ParamID> (parameter->getHostParameterID());
+}
+
+Vst::ParamID getVST3BypassParameterID (const AudioProcessor& processor)
+{
+    auto parameterID = static_cast<uint32> (processor.getParameters().size());
+
+    while (processor.getParameterByHostID (parameterID) != nullptr
+           && parameterID < AudioParameter::maximumHostParameterID)
+    {
+        ++parameterID;
+    }
+
+    jassert (parameterID <= AudioParameter::maximumHostParameterID);
+    jassert (processor.getParameterByHostID (parameterID) == nullptr);
+    return static_cast<Vst::ParamID> (parameterID);
+}
+
 //==============================================================================
 
 static std::atomic_int numScopedInitInstancesGui = 0;
@@ -503,16 +523,16 @@ public:
         if (processor == nullptr)
             return kInternalError;
 
-        const auto processorParamCount = static_cast<Vst::ParamID> (processor->getParameters().size());
+        const auto bypassParameterID = getVST3BypassParameterID (*processor);
 
-        if (tag >= processorParamCount)
+        if (tag == bypassParameterID)
         {
             // Bypass parameter
             toString128 (valueNormalized >= 0.5 ? "On" : "Off", string);
             return kResultOk;
         }
 
-        if (auto parameter = processor->getParameters()[static_cast<int> (tag)])
+        if (auto parameter = processor->getParameterByHostID (static_cast<uint32> (tag)))
         {
             toString128 (parameter->convertToString (parameter->convertToDenormalizedValue (valueNormalized)), string);
             return kResultOk;
@@ -526,9 +546,9 @@ public:
         if (processor == nullptr)
             return kInternalError;
 
-        const auto processorParamCount = static_cast<Vst::ParamID> (processor->getParameters().size());
+        const auto bypassParameterID = getVST3BypassParameterID (*processor);
 
-        if (tag >= processorParamCount)
+        if (tag == bypassParameterID)
         {
             // Bypass parameter
             const auto str = toString (string);
@@ -536,7 +556,7 @@ public:
             return kResultOk;
         }
 
-        if (auto parameter = processor->getParameters()[static_cast<int> (tag)])
+        if (auto parameter = processor->getParameterByHostID (static_cast<uint32> (tag)))
         {
             valueNormalized = parameter->convertToNormalizedValue (parameter->convertFromString (toString (string)));
             return kResultOk;
@@ -550,11 +570,10 @@ public:
         if (processor == nullptr)
             return valueNormalized;
 
-        const auto processorParamCount = static_cast<Vst::ParamID> (processor->getParameters().size());
-        if (tag >= processorParamCount)
+        if (tag == getVST3BypassParameterID (*processor))
             return valueNormalized;
 
-        if (auto parameter = processor->getParameters()[static_cast<int> (tag)])
+        if (auto parameter = processor->getParameterByHostID (static_cast<uint32> (tag)))
             return parameter->convertToDenormalizedValue (valueNormalized);
 
         return valueNormalized;
@@ -565,11 +584,10 @@ public:
         if (processor == nullptr)
             return plainValue;
 
-        const auto processorParamCount = static_cast<Vst::ParamID> (processor->getParameters().size());
-        if (tag >= processorParamCount)
+        if (tag == getVST3BypassParameterID (*processor))
             return plainValue;
 
-        if (auto parameter = processor->getParameters()[static_cast<int> (tag)])
+        if (auto parameter = processor->getParameterByHostID (static_cast<uint32> (tag)))
             return parameter->convertToNormalizedValue (plainValue);
 
         return plainValue;
@@ -580,11 +598,10 @@ public:
         if (processor == nullptr)
             return 0.0;
 
-        const auto processorParamCount = static_cast<Vst::ParamID> (processor->getParameters().size());
-        if (tag >= processorParamCount)
+        if (tag == getVST3BypassParameterID (*processor))
             return Vst::EditController::getParamNormalized (tag);
 
-        if (auto parameter = processor->getParameters()[static_cast<int> (tag)])
+        if (auto parameter = processor->getParameterByHostID (static_cast<uint32> (tag)))
             return parameter->getNormalizedValue();
 
         return 0.0;
@@ -595,11 +612,10 @@ public:
         if (processor == nullptr)
             return kInternalError;
 
-        const auto processorParamCount = static_cast<Vst::ParamID> (processor->getParameters().size());
-        if (tag >= processorParamCount)
+        if (tag == getVST3BypassParameterID (*processor))
             return Vst::EditController::setParamNormalized (tag, value);
 
-        if (auto parameter = processor->getParameters()[static_cast<int> (tag)])
+        if (auto parameter = processor->getParameterByHostID (static_cast<uint32> (tag)))
         {
             parameter->setNormalizedValue (static_cast<float> (value));
             Vst::EditController::setParamNormalized (tag, value);
@@ -616,7 +632,8 @@ public:
         if (processor == nullptr)
             return kInternalError;
 
-        if (oldParamID < static_cast<Vst::ParamID> (parameters.getParameterCount()))
+        if (processor->getParameterByHostID (static_cast<uint32> (oldParamID)) != nullptr
+            || oldParamID == getVST3BypassParameterID (*processor))
         {
             newParamID = oldParamID;
             return kResultOk;
@@ -635,10 +652,10 @@ public:
         if (processor == nullptr)
             return kResultFalse;
 
-        const auto numParams = static_cast<int32> (processor->getParameters().size());
-        if (midiControllerNumber < numParams)
+        const auto parameters = processor->getParameters();
+        if (midiControllerNumber < static_cast<int32> (parameters.size()))
         {
-            id = static_cast<Vst::ParamID> (midiControllerNumber);
+            id = getVST3ParameterID (parameters[static_cast<int> (midiControllerNumber)]);
             return kResultOk;
         }
 
@@ -815,13 +832,13 @@ private:
 
             parameters.addParameter (
                 reinterpret_cast<const Vst::TChar*> (parameter->getName().toUTF16().getAddress()),
-                nullptr,                           // units
-                0,                                 // step count
-                parameter->getNormalizedValue(),   // normalized value
-                Vst::ParameterInfo::kCanAutomate,  // flags
-                static_cast<int> (parameterIndex), // tag
-                Vst::kRootUnitId,                  // unit
-                nullptr);                          // short title
+                nullptr,                          // units
+                0,                                // step count
+                parameter->getNormalizedValue(),  // normalized value
+                Vst::ParameterInfo::kCanAutomate, // flags
+                getVST3ParameterID (parameter),   // tag
+                Vst::kRootUnitId,                 // unit
+                nullptr);                         // short title
 
             parameter->addListener (this);
             listenedParameters.push_back (parameter);
@@ -834,7 +851,7 @@ private:
             1, // step count 1 = toggle
             0, // default: not bypassed
             Vst::ParameterInfo::kCanAutomate | Vst::ParameterInfo::kIsBypass,
-            static_cast<Vst::ParamID> (processor->getParameters().size()),
+            getVST3BypassParameterID (*processor),
             Vst::kRootUnitId,
             nullptr);
     }
@@ -852,7 +869,7 @@ private:
         if (! isValidProcessorParameterIndex (indexInContainer))
             return;
 
-        const auto tag = static_cast<Vst::ParamID> (indexInContainer);
+        const auto tag = getVST3ParameterID (parameter);
         const auto normalizedValue = static_cast<Vst::ParamValue> (parameter->getNormalizedValue());
 
         Vst::EditController::setParamNormalized (tag, normalizedValue);
@@ -862,13 +879,13 @@ private:
     void parameterGestureBegin (const AudioParameter::Ptr&, int indexInContainer) override
     {
         if (isValidProcessorParameterIndex (indexInContainer))
-            Vst::EditController::beginEdit (static_cast<Vst::ParamID> (indexInContainer));
+            Vst::EditController::beginEdit (getVST3ParameterID (processor->getParameters()[indexInContainer]));
     }
 
     void parameterGestureEnd (const AudioParameter::Ptr&, int indexInContainer) override
     {
         if (isValidProcessorParameterIndex (indexInContainer))
-            Vst::EditController::endEdit (static_cast<Vst::ParamID> (indexInContainer));
+            Vst::EditController::endEdit (getVST3ParameterID (processor->getParameters()[indexInContainer]));
     }
 
     bool isValidProcessorParameterIndex (int indexInContainer) const
@@ -1119,7 +1136,7 @@ public:
         if (data.inputParameterChanges)
         {
             const auto parameters = processor->getParameters();
-            const auto bypassTag = static_cast<Vst::ParamID> (parameters.size());
+            const auto bypassTag = getVST3BypassParameterID (*processor);
 
             const int32 numParams = data.inputParameterChanges->getParameterCount();
             for (int32 i = 0; i < numParams; ++i)
@@ -1144,9 +1161,13 @@ public:
                         isBypassed = bypassed;
                     }
                 }
-                else if (tag < static_cast<Vst::ParamID> (parameters.size()))
+                else
                 {
-                    if (parameters[static_cast<int> (tag)]->isPerformingChangeGesture())
+                    const auto parameterIndex = processor->getParameterIndexByHostID (static_cast<uint32> (tag));
+                    if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
+                        continue;
+
+                    if (parameters[parameterIndex]->isPerformingChangeGesture())
                         continue;
 
                     for (int32 p = 0; p < numPoints; ++p)
@@ -1154,7 +1175,7 @@ public:
                         int32 sampleOffset;
                         Vst::ParamValue value;
                         if (queue->getPoint (p, sampleOffset, value) == kResultOk)
-                            paramChangeBuffer.addChange (static_cast<int> (tag), static_cast<float> (value), sampleOffset);
+                            paramChangeBuffer.addChange (parameterIndex, static_cast<float> (value), sampleOffset);
                     }
                 }
             }

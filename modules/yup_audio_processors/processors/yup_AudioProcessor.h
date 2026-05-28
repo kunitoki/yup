@@ -87,6 +87,12 @@ public:
     /** Returns a parameter by stable ID, or nullptr when no such parameter exists. */
     AudioParameter::Ptr getParameterByID (StringRef parameterID) const;
 
+    /** Returns a parameter by host-facing automation ID, or nullptr when no such parameter exists. */
+    AudioParameter::Ptr getParameterByHostID (uint32 hostParameterID) const;
+
+    /** Returns a parameter index by host-facing automation ID, or -1 when no such parameter exists. */
+    int getParameterIndexByHostID (uint32 hostParameterID) const;
+
     /** Adds a parameter. */
     void addParameter (AudioParameter::Ptr parameter);
 
@@ -134,7 +140,7 @@ public:
 
         @param context  All per-block inputs: audio, MIDI, parameter changes, position.
     */
-    virtual void processBlock (AudioProcessContext<float>& context);
+    virtual void processBlock (AudioProcessContext<float>& context) = 0;
 
     /**
         Double-precision processing entry point.
@@ -144,7 +150,7 @@ public:
 
         @param context  All per-block inputs with double-precision audio.
     */
-    virtual void processBlock (AudioProcessContext<double>& context) {}
+    virtual void processBlock (AudioProcessContext<double>& context) { ignoreUnused (context); }
 
     /**
         Called by plugin wrappers when the processor is bypassed (single-precision).
@@ -153,7 +159,7 @@ public:
 
         @param context  All per-block inputs.
     */
-    virtual void processBlockBypassed (AudioProcessContext<float>& context);
+    virtual void processBlockBypassed (AudioProcessContext<float>& context) { ignoreUnused (context); }
 
     /**
         Called by plugin wrappers when the processor is bypassed (double-precision).
@@ -162,7 +168,7 @@ public:
 
         @param context  All per-block inputs.
     */
-    virtual void processBlockBypassed (AudioProcessContext<double>& context);
+    virtual void processBlockBypassed (AudioProcessContext<double>& context) { ignoreUnused (context); }
 
     /** Flushes the processor. */
     virtual void flush() {}
@@ -285,6 +291,7 @@ private:
 
     std::vector<AudioParameter::Ptr> parameters;
     std::unordered_map<String, AudioParameter::Ptr> parameterMap;
+    std::unordered_map<uint32, AudioParameter::Ptr> parameterHostIDMap;
     ListenerList<Listener, Array<Listener*, CriticalSection>> listeners;
 
     AudioBusLayout busLayout;

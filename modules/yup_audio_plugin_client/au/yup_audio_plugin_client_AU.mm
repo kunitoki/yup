@@ -187,6 +187,28 @@ class AudioPluginProcessorAU final : public AudioPluginAUBase
 
     //==============================================================================
 
+    OSStatus GetParameterList(AudioUnitScope inScope,
+                              AudioUnitParameterID* outParameterList,
+                              UInt32& outNumParameters) override
+    {
+        if (inScope != kAudioUnitScope_Global || processor == nullptr)
+        {
+            outNumParameters = 0;
+            return kAudioUnitErr_InvalidParameter;
+        }
+
+        const auto parameters = processor->getParameters();
+
+        if (outParameterList != nullptr)
+        {
+            for (size_t i = 0; i < parameters.size(); ++i)
+                outParameterList[i] = static_cast<AudioUnitParameterID>(parameters[i]->getHostParameterID());
+        }
+
+        outNumParameters = static_cast<UInt32>(parameters.size());
+        return noErr;
+    }
+
     OSStatus GetParameterInfo(AudioUnitScope inScope,
                               AudioUnitParameterID inParameterID,
                               AudioUnitParameterInfo& outParameterInfo) override
@@ -195,10 +217,11 @@ class AudioPluginProcessorAU final : public AudioPluginAUBase
             return kAudioUnitErr_InvalidParameter;
 
         const auto parameters = processor->getParameters();
-        if (inParameterID >= static_cast<AudioUnitParameterID>(parameters.size()))
+        const auto parameterIndex = processor->getParameterIndexByHostID(static_cast<uint32>(inParameterID));
+        if (! isPositiveAndBelow(parameterIndex, static_cast<int>(parameters.size())))
             return kAudioUnitErr_InvalidParameter;
 
-        const auto& param = parameters[static_cast<int>(inParameterID)];
+        const auto& param = parameters[parameterIndex];
 
         outParameterInfo.flags = kAudioUnitParameterFlag_IsReadable | kAudioUnitParameterFlag_IsWritable | kAudioUnitParameterFlag_HasCFNameString;
 
@@ -223,10 +246,11 @@ class AudioPluginProcessorAU final : public AudioPluginAUBase
             return kAudioUnitErr_InvalidParameter;
 
         const auto parameters = processor->getParameters();
-        if (inID >= static_cast<AudioUnitParameterID>(parameters.size()))
+        const auto parameterIndex = processor->getParameterIndexByHostID(static_cast<uint32>(inID));
+        if (! isPositiveAndBelow(parameterIndex, static_cast<int>(parameters.size())))
             return kAudioUnitErr_InvalidParameter;
 
-        outValue = static_cast<AudioUnitParameterValue>(parameters[static_cast<int>(inID)]->getValue());
+        outValue = static_cast<AudioUnitParameterValue>(parameters[parameterIndex]->getValue());
         return noErr;
     }
 
@@ -240,10 +264,11 @@ class AudioPluginProcessorAU final : public AudioPluginAUBase
             return kAudioUnitErr_InvalidParameter;
 
         const auto parameters = processor->getParameters();
-        if (inID >= static_cast<AudioUnitParameterID>(parameters.size()))
+        const auto parameterIndex = processor->getParameterIndexByHostID(static_cast<uint32>(inID));
+        if (! isPositiveAndBelow(parameterIndex, static_cast<int>(parameters.size())))
             return kAudioUnitErr_InvalidParameter;
 
-        parameters[static_cast<int>(inID)]->setValue(static_cast<float>(inValue));
+        parameters[parameterIndex]->setValue(static_cast<float>(inValue));
         return noErr;
     }
 

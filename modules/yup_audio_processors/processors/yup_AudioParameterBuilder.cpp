@@ -36,6 +36,14 @@ AudioParameterBuilder& AudioParameterBuilder::withName (const String& paramName)
     return *this;
 }
 
+AudioParameterBuilder& AudioParameterBuilder::withHostID (uint32 hostParameterID)
+{
+    jassert (hostParameterID <= AudioParameter::maximumHostParameterID);
+
+    this->hostParameterID = hostParameterID;
+    return *this;
+}
+
 AudioParameterBuilder& AudioParameterBuilder::withRange (float minValue, float maxValue)
 {
     valueRange = { minValue, maxValue };
@@ -87,7 +95,8 @@ AudioParameter::Ptr AudioParameterBuilder::build() const
         std::move (valueToString),
         std::move (stringToValue),
         smoothingEnabled,
-        smoothingTimeMs));
+        smoothingTimeMs,
+        hostParameterID));
 }
 
 } // namespace yup
