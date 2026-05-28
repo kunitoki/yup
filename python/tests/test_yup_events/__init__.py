@@ -1,7 +1,7 @@
 import pytest
 import sys
 
-from .. import common
+import common
 
 import yup
 
