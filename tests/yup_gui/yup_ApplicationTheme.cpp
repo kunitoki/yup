@@ -107,6 +107,28 @@ TEST_F (ApplicationThemeTest, SetColorOverwritesExistingColor)
     EXPECT_EQ (result.value(), second);
 }
 
+TEST_F (ApplicationThemeTest, ComponentColorOverridesRegisteredColor)
+{
+    auto c = Component ("testComponent");
+
+    const Identifier id ("accentColor");
+    const Color themeColor = Color::fromRGBA (1, 2, 3, 255);
+    const Color componentColor = Color::fromRGBA (4, 5, 6, 255);
+
+    theme->setColor (id, themeColor);
+    c.setColor (id, componentColor);
+
+    auto result = ApplicationTheme::findComponentColor (c, id);
+    ASSERT_TRUE (result.has_value());
+    EXPECT_EQ (result.value(), componentColor);
+
+    c.setColor (id, std::nullopt);
+
+    result = ApplicationTheme::findComponentColor (c, id);
+    ASSERT_TRUE (result.has_value());
+    EXPECT_EQ (result.value(), themeColor);
+}
+
 TEST_F (ApplicationThemeTest, FindColorUnregisteredIdDoesNotAffectOtherIds)
 {
     auto c = Component ("testComponent");
@@ -154,6 +176,44 @@ TEST_F (ApplicationThemeTest, SetMetricOverwritesExistingValue)
     auto result = ApplicationTheme::findComponentMetric (c, id);
     ASSERT_TRUE (result.has_value());
     EXPECT_FLOAT_EQ (result.value(), 3.5f);
+}
+
+TEST_F (ApplicationThemeTest, SetMetricsRegistersMultipleValues)
+{
+    auto c = Component ("testComponent");
+
+    const Identifier idA ("smallSpacing");
+    const Identifier idB ("largeSpacing");
+
+    theme->setMetrics ({ { idA, 4.0f }, { idB, 12.0f } });
+
+    auto resultA = ApplicationTheme::findComponentMetric (c, idA);
+    auto resultB = ApplicationTheme::findComponentMetric (c, idB);
+
+    ASSERT_TRUE (resultA.has_value());
+    EXPECT_FLOAT_EQ (resultA.value(), 4.0f);
+    ASSERT_TRUE (resultB.has_value());
+    EXPECT_FLOAT_EQ (resultB.value(), 12.0f);
+}
+
+TEST_F (ApplicationThemeTest, ComponentMetricOverridesRegisteredMetric)
+{
+    auto c = Component ("testComponent");
+
+    const Identifier id ("cornerRadius");
+
+    theme->setMetric (id, 8.0f);
+    c.setMetric (id, 12.0f);
+
+    auto result = ApplicationTheme::findComponentMetric (c, id);
+    ASSERT_TRUE (result.has_value());
+    EXPECT_FLOAT_EQ (result.value(), 12.0f);
+
+    c.setMetric (id, std::nullopt);
+
+    result = ApplicationTheme::findComponentMetric (c, id);
+    ASSERT_TRUE (result.has_value());
+    EXPECT_FLOAT_EQ (result.value(), 8.0f);
 }
 
 TEST_F (ApplicationThemeTest, FindMetricUnregisteredIdDoesNotAffectOtherIds)
