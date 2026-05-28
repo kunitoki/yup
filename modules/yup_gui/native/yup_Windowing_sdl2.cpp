@@ -1986,9 +1986,11 @@ void shutdownYup_Windowing()
     SDL2ComponentNative::isInitialised.clear();
 
     // Shutdown desktop
-    SDL_DelEventWatch (displayEventDispatcher, Desktop::getInstance());
     if (auto desktop = Desktop::getInstanceWithoutCreating())
+    {
+        SDL_DelEventWatch (displayEventDispatcher, desktop);
         desktop->deleteInstance();
+    }
 
     // Unregister theme
     {
