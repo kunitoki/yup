@@ -410,6 +410,11 @@ public:
         if (details.latencyChanged)
         {
             latencyChangeCounter.fetch_add (1);
+
+            if (! commitInProgress.load())
+            {
+                ignoreUnused (commitChanges());
+            }
         }
     }
 

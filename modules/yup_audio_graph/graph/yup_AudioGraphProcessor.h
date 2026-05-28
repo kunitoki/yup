@@ -29,11 +29,11 @@ namespace yup
     Topology edits are made to a control-thread graph model. commitChanges()
     validates the model, prepares newly compiled nodes for the current playback
     configuration, and publishes an immutable processing plan. Child processor
-    latency notifications mark the graph dirty; call commitChanges() from the
-    control thread to rebuild delay compensation. Metadata edits such as node
-    positions and properties are saved by the model without invalidating the
-    compiled plan. processBlock() only swaps pending plans at block boundaries
-    and keeps retired plans alive until a later control-thread commit or destruction.
+    latency notifications are handled by the graph as host notifications and
+    rebuild delay compensation. Metadata edits such as node positions and
+    properties are saved by the model without invalidating the compiled plan.
+    processBlock() only swaps pending plans at block boundaries and keeps retired
+    plans alive until a later control-thread commit or destruction.
 */
 class YUP_API AudioGraphProcessor final : public AudioProcessor
 {

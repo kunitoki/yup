@@ -1220,11 +1220,6 @@ TEST (AudioGraphProcessorTests, ExternalTopologyEditsDriveDirtyRevision)
     ASSERT_NE (nullptr, processor);
 
     processor->setLatencySamplesForTest (16);
-    EXPECT_TRUE (graph.hasUncommittedChanges());
-    EXPECT_EQ (0, graph.getLatencySamples());
-    EXPECT_EQ (latencyQueriesAfterCommit, latencyQueryCount.load());
-
-    EXPECT_TRUE (graph.commitChanges().wasOk());
     EXPECT_FALSE (graph.hasUncommittedChanges());
     EXPECT_EQ (16, graph.getLatencySamples());
     EXPECT_GT (latencyQueryCount.load(), latencyQueriesAfterCommit);
