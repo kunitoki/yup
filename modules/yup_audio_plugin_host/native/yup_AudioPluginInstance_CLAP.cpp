@@ -1053,15 +1053,23 @@ ResultValue<std::vector<AudioPluginDescription>> CLAPFormat::scanFile (const Fil
     if (file.getFileExtension().toLowerCase() != ".clap")
         return makeResultValueFail ("Not a CLAP file");
 
+    YUP_MODULE_DBG (PLUGIN_HOST_CLAP, "scanning: " << file.getFullPathName());
+
     auto mod = CLAPModule::load (file);
     if (mod == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_HOST_CLAP, "failed to load module: " << file.getFullPathName());
         return makeResultValueFail ("Failed to load CLAP module: " + file.getFullPathName());
+    }
 
     const clap_plugin_factory_t* factory = reinterpret_cast<const clap_plugin_factory_t*> (
         mod->entry->get_factory (CLAP_PLUGIN_FACTORY_ID));
 
     if (factory == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_HOST_CLAP, "no plugin factory in: " << file.getFullPathName());
         return makeResultValueFail ("No plugin factory in: " + file.getFullPathName());
+    }
 
     std::vector<AudioPluginDescription> results;
     const uint32_t count = factory->get_plugin_count (factory);
@@ -1147,8 +1155,11 @@ ResultValue<std::vector<AudioPluginDescription>> CLAPFormat::scanFile (const Fil
             }
         }
 
+        YUP_MODULE_DBG (PLUGIN_HOST_CLAP, "scan found: " << desc.name << " [" << desc.identifier << "]");
         results.push_back (std::move (desc));
     }
+
+    YUP_MODULE_DBG (PLUGIN_HOST_CLAP, "scan complete: " << results.size() << " plugins in " << file.getFileName());
 
     if (results.empty())
         return makeResultValueFail ("No plugins found in: " + file.getFullPathName());
@@ -1160,11 +1171,17 @@ ResultValue<std::unique_ptr<AudioPluginInstance>> CLAPFormat::loadPlugin (
     const AudioPluginDescription& description,
     const AudioPluginHostContext& context)
 {
+    YUP_MODULE_DBG (PLUGIN_HOST_CLAP, "loading: " << description.name << " [" << description.identifier << "]");
+
     auto instance = CLAPInstance::create (description, context);
 
     if (instance == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_HOST_CLAP, "load failed: " << description.name);
         return makeResultValueFail ("Failed to load CLAP plugin: " + description.name);
+    }
 
+    YUP_MODULE_DBG (PLUGIN_HOST_CLAP, "loaded: " << description.name);
     return makeResultValueOk (std::move (instance));
 }
 

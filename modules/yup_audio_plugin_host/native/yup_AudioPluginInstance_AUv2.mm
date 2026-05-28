@@ -1295,9 +1295,12 @@ ResultValue<std::vector<AudioPluginDescription>> AUv2Format::scanFile(const File
             AudioComponentDescription acd{};
             AudioComponentGetDescription(comp, &acd);
             auto desc = descriptionFromComponent(comp, acd);
+            YUP_MODULE_DBG (PLUGIN_HOST_AU, "scan found: " << desc.name << " [" << desc.identifier << "]");
             results.push_back(std::move(desc));
         }
     }
+
+    YUP_MODULE_DBG (PLUGIN_HOST_AU, "scan complete: " << results.size() << " AudioComponents found");
 
     if (results.empty())
         return makeResultValueFail("No AudioComponents found in registry");
@@ -1309,11 +1312,17 @@ ResultValue<std::unique_ptr<AudioPluginInstance>> AUv2Format::loadPlugin(
     const AudioPluginDescription& description,
     const AudioPluginHostContext& context)
 {
+    YUP_MODULE_DBG (PLUGIN_HOST_AU, "loading: " << description.name << " [" << description.identifier << "]");
+
     auto instance = AUv2Instance::create(description, context);
 
     if (instance == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_HOST_AU, "load failed: " << description.name);
         return makeResultValueFail("Failed to instantiate AUv2 plugin: " + description.name);
+    }
 
+    YUP_MODULE_DBG (PLUGIN_HOST_AU, "loaded: " << description.name);
     return makeResultValueOk(std::move(instance));
 }
 

@@ -43,6 +43,32 @@
 #pragma once
 #define YUP_AUDIO_PLUGIN_HOST_H_INCLUDED
 
+//==============================================================================
+/** Config: YUP_ENABLE_PLUGIN_HOST_AU_LOGGING
+
+    Enable debug logging for AUv2 plugin scanning and loading.
+*/
+#ifndef YUP_ENABLE_PLUGIN_HOST_AU_LOGGING
+#define YUP_ENABLE_PLUGIN_HOST_AU_LOGGING 1
+#endif
+
+/** Config: YUP_ENABLE_PLUGIN_HOST_CLAP_LOGGING
+
+    Enable debug logging for CLAP plugin scanning and loading.
+*/
+#ifndef YUP_ENABLE_PLUGIN_HOST_CLAP_LOGGING
+#define YUP_ENABLE_PLUGIN_HOST_CLAP_LOGGING 0
+#endif
+
+/** Config: YUP_ENABLE_PLUGIN_HOST_VST3_LOGGING
+
+    Enable debug logging for VST3 plugin scanning and loading.
+*/
+#ifndef YUP_ENABLE_PLUGIN_HOST_VST3_LOGGING
+#define YUP_ENABLE_PLUGIN_HOST_VST3_LOGGING 0
+#endif
+
+//==============================================================================
 #include <yup_audio_processors/yup_audio_processors.h>
 
 //==============================================================================

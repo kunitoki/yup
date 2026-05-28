@@ -1687,13 +1687,21 @@ ResultValue<std::vector<AudioPluginDescription>> VST3Format::scanFile (const Fil
         && ! file.isDirectory())
         return makeResultValueFail ("Not a VST3 file");
 
+    YUP_MODULE_DBG (PLUGIN_HOST_VST3, "scanning: " << file.getFullPathName());
+
     auto mod = VST3Module::load (file);
     if (mod == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_HOST_VST3, "failed to load module: " << file.getFullPathName());
         return makeResultValueFail ("Failed to load VST3 module: " + file.getFullPathName());
+    }
 
     IPluginFactory* rawFactory = mod->getFactory();
     if (rawFactory == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_HOST_VST3, "no factory in: " << file.getFullPathName());
         return makeResultValueFail ("No factory in " + file.getFullPathName());
+    }
 
     IPtr<IPluginFactory> factory (rawFactory);
 
@@ -1723,7 +1731,10 @@ ResultValue<std::vector<AudioPluginDescription>> VST3Format::scanFile (const Fil
         }
 
         if (String (info2.category) != "Audio Module Class")
+        {
+            YUP_MODULE_DBG (PLUGIN_HOST_VST3, "skipped class " << info2.name << " (category: " << info2.category << ")");
             continue;
+        }
 
         AudioPluginDescription desc;
         desc.formatType = AudioPluginFormatType::vst3;
@@ -1749,8 +1760,11 @@ ResultValue<std::vector<AudioPluginDescription>> VST3Format::scanFile (const Fil
             desc.numOutputChannels = 2;
         }
 
+        YUP_MODULE_DBG (PLUGIN_HOST_VST3, "scan found: " << desc.name << " [" << desc.identifier << "]");
         results.push_back (std::move (desc));
     }
+
+    YUP_MODULE_DBG (PLUGIN_HOST_VST3, "scan complete: " << results.size() << " plugins in " << file.getFileName());
 
     if (results.empty())
         return makeResultValueFail ("No Audio Module Class entries in " + file.getFullPathName());
@@ -1762,11 +1776,17 @@ ResultValue<std::unique_ptr<AudioPluginInstance>> VST3Format::loadPlugin (
     const AudioPluginDescription& description,
     const AudioPluginHostContext& context)
 {
+    YUP_MODULE_DBG (PLUGIN_HOST_VST3, "loading: " << description.name << " [" << description.identifier << "]");
+
     auto instance = VST3Instance::create (description, context);
 
     if (instance == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_HOST_VST3, "load failed: " << description.name);
         return makeResultValueFail ("Failed to load VST3 plugin: " + description.name);
+    }
 
+    YUP_MODULE_DBG (PLUGIN_HOST_VST3, "loaded: " << description.name);
     return makeResultValueOk (std::move (instance));
 }
 
