@@ -379,6 +379,26 @@ function (yup_audio_plugin)
         endif()
     endif()
 
+    # ==== Create composite target for all enabled plugin formats
+    set (_all_plugin_targets "")
+    if (YUP_ARG_PLUGIN_CREATE_CLAP)
+        list (APPEND _all_plugin_targets ${target_name}_clap_plugin)
+    endif()
+    if (YUP_ARG_PLUGIN_CREATE_VST3)
+        list (APPEND _all_plugin_targets ${target_name}_vst3_plugin)
+    endif()
+    if (YUP_ARG_PLUGIN_CREATE_STANDALONE)
+        list (APPEND _all_plugin_targets ${target_name}_standalone_plugin)
+    endif()
+    if (YUP_ARG_PLUGIN_CREATE_AU AND YUP_PLATFORM_MAC)
+        list (APPEND _all_plugin_targets ${target_name}_au_plugin)
+    endif()
+
+    add_custom_target (${target_name} DEPENDS ${_all_plugin_targets})
+
+    set_target_properties (${target_name} PROPERTIES
+        FOLDER "${YUP_ARG_TARGET_IDE_GROUP}")
+
 endfunction()
 
 #==============================================================================

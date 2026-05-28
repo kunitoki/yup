@@ -40,7 +40,7 @@
 */
 
 #pragma once
-#define YUP_AUDIO_PPLUGIN_CLIENT_H_INCLUDED
+#define YUP_AUDIO_PLUGIN_CLIENT_H_INCLUDED
 
 #include <yup_audio_processors/yup_audio_processors.h>
 

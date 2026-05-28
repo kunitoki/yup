@@ -190,6 +190,7 @@ void SDL2ComponentNative::setVisible (bool shouldBeVisible)
     if (shouldBeVisible)
     {
         SDL_ShowWindow (window);
+        repaint();
         updateMouseCapture (true);
     }
     else
@@ -682,6 +683,9 @@ void SDL2ComponentNative::renderContext()
     auto contentHeight = contentSize.getHeight();
 
     if (contentWidth == 0 || contentHeight == 0)
+        return;
+
+    if (! isVisible())
         return;
 
     if (currentContentWidth != contentWidth || currentContentHeight != contentHeight)
@@ -1917,7 +1921,7 @@ void initialiseYup_Windowing()
 
     // Initialise SDL
     SDL_SetMainReady();
-    if (SDL_Init (SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
+    if (SDL_InitSubSystem (SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
     {
         YUP_DBG ("Error initialising SDL: " << SDL_GetError());
 
@@ -1992,8 +1996,9 @@ void shutdownYup_Windowing()
     if (auto messageManager = MessageManager::getInstanceWithoutCreating())
         messageManager->registerEventLoopCallback (nullptr);
 
-    // Quit SDL
-    SDL_Quit();
+    // Quit only the subsystems YUP initialised. SDL_Quit() is process-wide and
+    // can tear down other plugin formats loaded in the same host process.
+    SDL_QuitSubSystem (SDL_INIT_VIDEO | SDL_INIT_EVENTS);
 }
 
 } // namespace yup

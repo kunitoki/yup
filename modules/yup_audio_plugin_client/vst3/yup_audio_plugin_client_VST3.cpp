@@ -188,10 +188,8 @@ public:
 
         if (size != nullptr)
         {
-            setBounds ({ static_cast<float> (size->left),
-                         static_cast<float> (size->top),
-                         static_cast<float> (size->getWidth()),
-                         static_cast<float> (size->getHeight()) });
+            setSize ({ static_cast<float> (size->getWidth()),
+                       static_cast<float> (size->getHeight()) });
         }
         else
         {
@@ -205,6 +203,7 @@ public:
     {
         if (editor != nullptr)
         {
+            endActiveParameterGestures (processor);
             setVisible (false);
             removeFromDesktop();
 
@@ -220,10 +219,10 @@ public:
         if (plugFrame != nullptr && ! hostTriggeredResizing)
         {
             ViewRect viewRect;
-            viewRect.left = getX();
-            viewRect.top = getY();
-            viewRect.right = viewRect.left + getWidth();
-            viewRect.bottom = viewRect.top + getHeight();
+            viewRect.left = 0;
+            viewRect.top = 0;
+            viewRect.right = getWidth();
+            viewRect.bottom = getHeight();
 
             plugFrame->resizeView (this, std::addressof (viewRect));
         }
@@ -259,6 +258,7 @@ public:
     {
         if (editor != nullptr)
         {
+            endActiveParameterGestures (processor);
             setVisible (false);
             removeFromDesktop();
         }
@@ -313,10 +313,8 @@ public:
 
             const auto scoped = ScopedValueSetter<bool> (hostTriggeredResizing, true);
 
-            setBounds ({ static_cast<float> (rect.left),
-                         static_cast<float> (rect.top),
-                         static_cast<float> (rect.getWidth()),
-                         static_cast<float> (rect.getHeight()) });
+            setSize ({ static_cast<float> (rect.getWidth()),
+                       static_cast<float> (rect.getHeight()) });
         }
 
         return kResultTrue;
@@ -332,18 +330,18 @@ public:
 
         if (editor->isResizable() && editor->getWidth() != 0 && editor->getHeight() != 0)
         {
-            size->left = getX();
-            size->top = getY();
-            size->right = size->left + getWidth();
-            size->bottom = size->top + getHeight();
+            size->left = 0;
+            size->top = 0;
+            size->right = getWidth();
+            size->bottom = getHeight();
         }
         else
         {
             const auto preferredSize = editor->getPreferredSize();
-            size->left = getX();
-            size->top = getY();
-            size->right = size->left + preferredSize.getWidth();
-            size->bottom = size->top + preferredSize.getHeight();
+            size->left = 0;
+            size->top = 0;
+            size->right = preferredSize.getWidth();
+            size->bottom = preferredSize.getHeight();
         }
 
         return kResultTrue;
