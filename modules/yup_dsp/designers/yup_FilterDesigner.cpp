@@ -387,12 +387,12 @@ BiquadCoefficients<CoeffType> FilterDesigner<CoeffType>::designZoelzer (
 
 template <typename CoeffType>
 int FilterDesigner<CoeffType>::designButterworth (
+    std::vector<BiquadCoefficients<CoeffType>>& coefficients,
     FilterModeType filterMode,
     int order,
     CoeffType frequency,
     CoeffType frequency2,
-    double sampleRate,
-    std::vector<BiquadCoefficients<CoeffType>>& coefficients) noexcept
+    double sampleRate) noexcept
 {
     // Validate inputs
     jassert (order >= 2 && order <= 16);
@@ -540,11 +540,11 @@ int FilterDesigner<CoeffType>::designButterworth (
 
 template <typename CoeffType>
 int FilterDesigner<CoeffType>::designLinkwitzRiley (
+    std::vector<BiquadCoefficients<CoeffType>>& lowCoeffs,
+    std::vector<BiquadCoefficients<CoeffType>>& highCoeffs,
     int order,
     CoeffType crossoverFreq,
-    double sampleRate,
-    std::vector<BiquadCoefficients<CoeffType>>& lowCoeffs,
-    std::vector<BiquadCoefficients<CoeffType>>& highCoeffs) noexcept
+    double sampleRate) noexcept
 {
     jassert (order >= 2 && order <= 16);
     jassert ((order & 1) == 0); // Must be even

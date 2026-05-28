@@ -144,12 +144,14 @@
 #include "base/yup_FilterBase.h"
 #include "base/yup_FilterCharacteristics.h"
 #include "base/yup_FirstOrderCoefficients.h"
-#include "base/yup_BiquadCoefficients.h"
-#include "base/yup_StateVariableCoefficients.h"
-#include "base/yup_AnalogFilterCoefficients.h"
 #include "base/yup_FirstOrder.h"
+#include "base/yup_BiquadCoefficients.h"
 #include "base/yup_Biquad.h"
 #include "base/yup_BiquadCascade.h"
+#include "base/yup_AnalogSaturator.h"
+#include "base/yup_AnalogFilterCoefficients.h"
+#include "base/yup_AnalogPoles.h"
+#include "base/yup_StateVariableCoefficients.h"
 
 // Metering and level measurement (after Biquad definition)
 #include "metering/yup_LevelProcessor.h"

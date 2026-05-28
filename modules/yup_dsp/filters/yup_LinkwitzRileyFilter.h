@@ -269,7 +269,7 @@ private:
             return;
 
         // Use FilterDesigner to calculate Linkwitz-Riley coefficients
-        const int numSections = FilterDesigner<CoeffType>::designLinkwitzRiley (Order, frequency, sampleRate, lowCoeffs, highCoeffs);
+        const int numSections = FilterDesigner<CoeffType>::designLinkwitzRiley (lowCoeffs, highCoeffs, Order, frequency, sampleRate);
 
         if (numSections != numStages * 2)
             return;

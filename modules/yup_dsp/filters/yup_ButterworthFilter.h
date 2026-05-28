@@ -240,12 +240,12 @@ private:
 
         // Use FilterDesigner to calculate coefficients
         const auto numSections = FilterDesigner<CoeffType>::designButterworth (
+            coefficients,
             filterMode,
             order,
             frequency,
             frequency2,
-            this->sampleRate,
-            coefficients);
+            this->sampleRate);
 
         // Update the biquad cascade
         if (numSections > 0)
