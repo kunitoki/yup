@@ -1054,7 +1054,7 @@ public:
         if (isUsingDoublePrecision())
         {
             doublePrecisionBuffer.makeCopyOf (audioBuffer, true);
-            AudioProcessContext<double> doubleCtx { doublePrecisionBuffer, midiBuffer, context.params, context.samplePosition };
+            AudioProcessContext<double> doubleCtx { doublePrecisionBuffer, midiBuffer, context.params, context.playHead };
             processBlock (doubleCtx);
 
             const int numChannels = jmin (audioBuffer.getNumChannels(), doublePrecisionBuffer.getNumChannels());
@@ -1072,7 +1072,7 @@ public:
         }
 
         Vst::ProcessData data {};
-        prepareProcessData (data, audioBuffer.getNumSamples(), Vst::kSample32, context.params);
+        prepareProcessData (data, audioBuffer.getNumSamples(), Vst::kSample32, context.params, context.playHead);
         prepareMidiInputEvents (midiBuffer);
 
         // Input busses
@@ -1122,7 +1122,7 @@ public:
         }
 
         Vst::ProcessData data {};
-        prepareProcessData (data, audioBuffer.getNumSamples(), Vst::kSample64, context.params);
+        prepareProcessData (data, audioBuffer.getNumSamples(), Vst::kSample64, context.params, context.playHead);
         prepareMidiInputEvents (midiBuffer);
 
         Vst::AudioBusBuffers inputBus {};
@@ -1521,7 +1521,8 @@ private:
     void prepareProcessData (Vst::ProcessData& data,
                              int numSamples,
                              int32 symbolicSampleSize,
-                             const ParameterChangeBuffer& parameterChanges)
+                             const ParameterChangeBuffer& parameterChanges,
+                             AudioPlayHead* playHead)
     {
         data.processMode = isNonRealtime() ? Vst::kOffline : Vst::kRealtime;
         data.symbolicSampleSize = symbolicSampleSize;
@@ -1551,23 +1552,66 @@ private:
         inputEvents.clear();
         outputEvents.clear();
 
-        if (hostContext.playHead == nullptr)
+        if (playHead == nullptr)
             return;
 
-        const auto optPos = hostContext.playHead->getPosition();
+        const auto optPos = playHead->getPosition();
         if (! optPos.has_value())
             return;
 
         const auto& posInfo = optPos.value();
         vst3ProcessContext = {};
-        vst3ProcessContext.state = Vst::ProcessContext::kPlaying;
         vst3ProcessContext.sampleRate = getSampleRate();
+
+        if (posInfo.getIsPlaying())
+            vst3ProcessContext.state |= Vst::ProcessContext::kPlaying;
+
+        if (posInfo.getIsRecording())
+            vst3ProcessContext.state |= Vst::ProcessContext::kRecording;
+
+        if (posInfo.getIsLooping())
+            vst3ProcessContext.state |= Vst::ProcessContext::kCycleActive;
 
         if (auto timeSamples = posInfo.getTimeInSamples())
             vst3ProcessContext.projectTimeSamples = *timeSamples;
 
         if (auto tempo = posInfo.getBpm())
+        {
+            vst3ProcessContext.state |= Vst::ProcessContext::kTempoValid;
             vst3ProcessContext.tempo = *tempo;
+        }
+
+        if (auto ppq = posInfo.getPpqPosition())
+        {
+            vst3ProcessContext.state |= Vst::ProcessContext::kProjectTimeMusicValid;
+            vst3ProcessContext.projectTimeMusic = *ppq;
+        }
+
+        if (auto barPosition = posInfo.getPpqPositionOfLastBarStart())
+        {
+            vst3ProcessContext.state |= Vst::ProcessContext::kBarPositionValid;
+            vst3ProcessContext.barPositionMusic = *barPosition;
+        }
+
+        if (auto loopPoints = posInfo.getLoopPoints())
+        {
+            vst3ProcessContext.state |= Vst::ProcessContext::kCycleValid;
+            vst3ProcessContext.cycleStartMusic = loopPoints->ppqStart;
+            vst3ProcessContext.cycleEndMusic = loopPoints->ppqEnd;
+        }
+
+        if (auto continuousTime = posInfo.getContinuousTimeInSamples())
+        {
+            vst3ProcessContext.state |= Vst::ProcessContext::kContTimeValid;
+            vst3ProcessContext.continousTimeSamples = *continuousTime;
+        }
+
+        if (auto timeSignature = posInfo.getTimeSignature())
+        {
+            vst3ProcessContext.state |= Vst::ProcessContext::kTimeSigValid;
+            vst3ProcessContext.timeSigNumerator = timeSignature->numerator;
+            vst3ProcessContext.timeSigDenominator = timeSignature->denominator;
+        }
 
         data.processContext = &vst3ProcessContext;
     }

@@ -285,7 +285,6 @@ public:
 
             if (! isPrepared)
             {
-                node.processor->setPlayHead (owner.getPlayHead());
                 node.processor->setPlaybackConfiguration (sampleRate, maxBlockSize);
                 newlyPreparedNodes.push_back (node.processor);
             }
@@ -454,15 +453,16 @@ public:
 
             if (desiredWorkerThreads.load() > 0)
             {
-                processLevels (*graph, numSamples);
+                processLevels (*graph, numSamples, context.playHead);
             }
             else
             {
                 for (const auto nodeIndex : graph->topologicalOrder)
-                    processNode (*graph, nodeIndex, numSamples);
+                    processNode (*graph, nodeIndex, numSamples, context.playHead);
             }
 
             for (const auto connectionIndex : graph->graphOutputConnections)
+            {
                 routeConnection (*graph,
                                  graph->connections[static_cast<size_t> (connectionIndex)],
                                  audioBuffer,
@@ -470,6 +470,7 @@ public:
                                  numSamples,
                                  startSample,
                                  startSample);
+            }
         }
 
         midiBuffer.clear();
@@ -883,7 +884,10 @@ public:
         graph.graphInputMidi.addEvents (midiBuffer, startSample, numSamples, -startSample);
     }
 
-    void processNode (CompiledGraph& graph, int nodeIndex, int numSamples)
+    void processNode (CompiledGraph& graph,
+                      int nodeIndex,
+                      int numSamples,
+                      AudioPlayHead* playHead)
     {
         auto& node = graph.nodes[static_cast<size_t> (nodeIndex)];
 
@@ -895,11 +899,11 @@ public:
             routeConnection (graph, graph.connections[static_cast<size_t> (connectionIndex)], node.audioBuffer, node.midiBuffer, numSamples);
 
         ParameterChangeBuffer emptyParams;
-        AudioProcessContext<float> nodeCtx { node.audioBuffer, node.midiBuffer, emptyParams };
+        AudioProcessContext<float> nodeCtx { node.audioBuffer, node.midiBuffer, emptyParams, playHead };
         node.processor->processBlock (nodeCtx);
     }
 
-    void processLevels (CompiledGraph& graph, int numSamples)
+    void processLevels (CompiledGraph& graph, int numSamples, AudioPlayHead* playHead)
     {
         for (auto& level : graph.executionLevels)
         {
@@ -911,6 +915,7 @@ public:
             activeGraph.store (&graph, std::memory_order_relaxed);
             activeLevel.store (&level, std::memory_order_relaxed);
             activeNumSamples.store (numSamples, std::memory_order_relaxed);
+            activePlayHead.store (playHead, std::memory_order_relaxed);
             nextJobIndex.store (0, std::memory_order_relaxed);
             remainingJobs.store (static_cast<int> (level.size()), std::memory_order_release);
             activeGeneration.store (generation, std::memory_order_release);
@@ -929,6 +934,7 @@ public:
         activeGraph.store (nullptr, std::memory_order_relaxed);
         activeLevel.store (nullptr, std::memory_order_relaxed);
         activeNumSamples.store (0, std::memory_order_relaxed);
+        activePlayHead.store (nullptr, std::memory_order_relaxed);
         activeGeneration.store (0, std::memory_order_release);
     }
 
@@ -944,6 +950,7 @@ public:
             return;
 
         const int numSamples = activeNumSamples.load (std::memory_order_relaxed);
+        auto* const playHead = activePlayHead.load (std::memory_order_relaxed);
 
         for (;;)
         {
@@ -952,7 +959,7 @@ public:
             if (jobIndex >= static_cast<int> (level->size()))
                 break;
 
-            processNode (*graph, (*level)[static_cast<size_t> (jobIndex)], numSamples);
+            processNode (*graph, (*level)[static_cast<size_t> (jobIndex)], numSamples, playHead);
 
             remainingJobs.fetch_sub (1, std::memory_order_acq_rel);
         }
@@ -1235,6 +1242,7 @@ public:
     std::atomic<CompiledGraph*> activeGraph { nullptr };
     std::atomic<std::vector<int>*> activeLevel { nullptr };
     std::atomic<int> activeNumSamples { 0 };
+    std::atomic<AudioPlayHead*> activePlayHead { nullptr };
     std::atomic<int> activeGeneration { 0 };
 };
 

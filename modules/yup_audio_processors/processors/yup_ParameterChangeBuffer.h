@@ -64,7 +64,7 @@ struct ParameterChange
                                 automationPoint.sampleOffset);
         paramBuf.sort();
 
-        AudioProcessContext<float> ctx { audioBuffer, midiBuffer, paramBuf, transportPosition };
+        AudioProcessContext<float> ctx { audioBuffer, midiBuffer, paramBuf, transportPosition, playHead };
         processor.processBlock (ctx);
     @endcode
 

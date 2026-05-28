@@ -161,6 +161,30 @@ using AudioPluginAUBase = ausdk::AUEffectBase;
 class AudioPluginProcessorAU final : public AudioPluginAUBase
 {
 public:
+    class AudioPluginPlayHeadAU final : public AudioPlayHead
+    {
+    public:
+        AudioPluginPlayHeadAU (AudioPluginProcessorAU& owner, const AudioTimeStamp* timeStamp)
+            : owner (owner)
+            , timeStamp (timeStamp)
+        {
+        }
+
+        bool canControlTransport() override
+        {
+            return false;
+        }
+
+        std::optional<PositionInfo> getPosition() const override
+        {
+            return owner.createPositionInfo (timeStamp);
+        }
+
+    private:
+        AudioPluginProcessorAU& owner;
+        const AudioTimeStamp* timeStamp = nullptr;
+    };
+
     //==============================================================================
 
     AudioPluginProcessorAU (AudioComponentInstance component)
@@ -392,6 +416,85 @@ public:
 
     //==============================================================================
 
+    std::optional<AudioPlayHead::PositionInfo> createPositionInfo (const AudioTimeStamp* timeStamp)
+    {
+        AudioPlayHead::PositionInfo result;
+        bool hasPosition = false;
+
+        if (timeStamp != nullptr && (timeStamp->mFlags & kAudioTimeStampSampleTimeValid) != 0)
+        {
+            const auto timeInSamples = static_cast<int64_t> (timeStamp->mSampleTime);
+            result.setTimeInSamples (timeInSamples);
+
+            const auto sampleRate = getCurrentSampleRate();
+            if (sampleRate > 0.0)
+                result.setTimeInSeconds (static_cast<double> (timeInSamples) / sampleRate);
+
+            hasPosition = true;
+        }
+
+        Float64 currentBeat = 0.0;
+        Float64 currentTempo = 0.0;
+        if (CallHostBeatAndTempo (&currentBeat, &currentTempo) == noErr)
+        {
+            result.setPpqPosition (currentBeat);
+            result.setBpm (currentTempo);
+            hasPosition = true;
+        }
+
+        UInt32 deltaSamplesToNextBeat = 0;
+        Float32 timeSignatureNumerator = 0.0f;
+        UInt32 timeSignatureDenominator = 0;
+        Float64 currentMeasureDownBeat = 0.0;
+        if (CallHostMusicalTimeLocation (&deltaSamplesToNextBeat,
+                                         &timeSignatureNumerator,
+                                         &timeSignatureDenominator,
+                                         &currentMeasureDownBeat)
+            == noErr)
+        {
+            ignoreUnused (deltaSamplesToNextBeat);
+            result.setTimeSignature (AudioPlayHead::TimeSignature {
+                static_cast<int> (timeSignatureNumerator),
+                static_cast<int> (timeSignatureDenominator) });
+            result.setPpqPositionOfLastBarStart (currentMeasureDownBeat);
+            hasPosition = true;
+        }
+
+        Boolean isPlaying = false;
+        Boolean transportStateChanged = false;
+        Float64 currentSampleInTimeline = 0.0;
+        Boolean isCycling = false;
+        Float64 cycleStartBeat = 0.0;
+        Float64 cycleEndBeat = 0.0;
+        if (CallHostTransportState (&isPlaying,
+                                    &transportStateChanged,
+                                    &currentSampleInTimeline,
+                                    &isCycling,
+                                    &cycleStartBeat,
+                                    &cycleEndBeat)
+            == noErr)
+        {
+            ignoreUnused (transportStateChanged);
+            result.setIsPlaying (isPlaying);
+            result.setIsLooping (isCycling);
+
+            if (isCycling)
+                result.setLoopPoints (AudioPlayHead::LoopPoints { cycleStartBeat, cycleEndBeat });
+
+            result.setTimeInSamples (static_cast<int64_t> (currentSampleInTimeline));
+
+            const auto sampleRate = getCurrentSampleRate();
+            if (sampleRate > 0.0)
+                result.setTimeInSeconds (currentSampleInTimeline / sampleRate);
+
+            hasPosition = true;
+        }
+
+        return hasPosition ? std::make_optional (result) : std::nullopt;
+    }
+
+    //==============================================================================
+
 #if YupPlugin_IsSynth
     // Instrument: render audio and drain the MIDI buffer
     OSStatus RenderBus (AudioUnitRenderActionFlags& ioActionFlags,
@@ -417,8 +520,12 @@ public:
                                        static_cast<int> (inNumberFrames));
 
         {
+            AudioPluginPlayHeadAU playHead (*this, &inTimeStamp);
             std::lock_guard<std::mutex> lock (midiMutex);
-            AudioProcessContext<float> context { audioBuffer, midiBuffer, emptyParamChanges };
+            AudioProcessContext<float> context { audioBuffer,
+                                                 midiBuffer,
+                                                 emptyParamChanges,
+                                                 &playHead };
             processor->processBlock (context);
             midiBuffer.clear();
         }
@@ -493,7 +600,11 @@ public:
                                        0,
                                        static_cast<int> (inFramesToProcess));
 
-        AudioProcessContext<float> context { audioBuffer, midiBuffer, emptyParamChanges };
+        AudioPluginPlayHeadAU playHead (*this, nullptr);
+        AudioProcessContext<float> context { audioBuffer,
+                                             midiBuffer,
+                                             emptyParamChanges,
+                                             &playHead };
         processor->processBlock (context);
         midiBuffer.clear();
 

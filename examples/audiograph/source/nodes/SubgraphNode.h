@@ -136,7 +136,6 @@ public:
 
     void prepareToPlay (float sampleRate, int maxBlockSize) override
     {
-        graph->setPlayHead (getPlayHead());
         graph->prepareToPlay (sampleRate, maxBlockSize);
     }
 

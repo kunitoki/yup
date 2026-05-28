@@ -598,6 +598,76 @@ struct CLAPOutputEvents
     }
 };
 
+std::optional<clap_event_transport_t> createCLAPTransport (AudioPlayHead* playHead, double sampleRate)
+{
+    if (playHead == nullptr)
+        return std::nullopt;
+
+    const auto optPosition = playHead->getPosition();
+    if (! optPosition.has_value())
+        return std::nullopt;
+
+    const auto& position = optPosition.value();
+
+    clap_event_transport_t transport {};
+    transport.header.size = sizeof (transport);
+    transport.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
+    transport.header.type = CLAP_EVENT_TRANSPORT;
+
+    if (auto timeInSeconds = position.getTimeInSeconds())
+    {
+        transport.flags |= CLAP_TRANSPORT_HAS_SECONDS_TIMELINE;
+        transport.song_pos_seconds = static_cast<decltype (transport.song_pos_seconds)> (*timeInSeconds * CLAP_SECTIME_FACTOR);
+    }
+    else if (auto timeInSamples = position.getTimeInSamples(); timeInSamples && sampleRate > 0.0)
+    {
+        transport.flags |= CLAP_TRANSPORT_HAS_SECONDS_TIMELINE;
+        transport.song_pos_seconds = static_cast<decltype (transport.song_pos_seconds)> ((*timeInSamples / sampleRate) * CLAP_SECTIME_FACTOR);
+    }
+
+    if (auto ppq = position.getPpqPosition())
+    {
+        transport.flags |= CLAP_TRANSPORT_HAS_BEATS_TIMELINE;
+        transport.song_pos_beats = static_cast<decltype (transport.song_pos_beats)> (*ppq * CLAP_BEATTIME_FACTOR);
+    }
+
+    if (auto tempo = position.getBpm())
+    {
+        transport.flags |= CLAP_TRANSPORT_HAS_TEMPO;
+        transport.tempo = *tempo;
+    }
+
+    if (auto timeSignature = position.getTimeSignature())
+    {
+        transport.flags |= CLAP_TRANSPORT_HAS_TIME_SIGNATURE;
+        transport.tsig_num = static_cast<uint16_t> (timeSignature->numerator);
+        transport.tsig_denom = static_cast<uint16_t> (timeSignature->denominator);
+    }
+
+    if (auto loopPoints = position.getLoopPoints())
+    {
+        transport.loop_start_beats = static_cast<decltype (transport.loop_start_beats)> (loopPoints->ppqStart * CLAP_BEATTIME_FACTOR);
+        transport.loop_end_beats = static_cast<decltype (transport.loop_end_beats)> (loopPoints->ppqEnd * CLAP_BEATTIME_FACTOR);
+    }
+
+    if (auto barStart = position.getPpqPositionOfLastBarStart())
+        transport.bar_start = static_cast<decltype (transport.bar_start)> (*barStart * CLAP_BEATTIME_FACTOR);
+
+    if (auto barCount = position.getBarCount())
+        transport.bar_number = static_cast<int32_t> (*barCount);
+
+    if (position.getIsPlaying())
+        transport.flags |= CLAP_TRANSPORT_IS_PLAYING;
+
+    if (position.getIsRecording())
+        transport.flags |= CLAP_TRANSPORT_IS_RECORDING;
+
+    if (position.getIsLooping())
+        transport.flags |= CLAP_TRANSPORT_IS_LOOP_ACTIVE;
+
+    return transport;
+}
+
 } // namespace
 
 //==============================================================================
@@ -713,6 +783,9 @@ public:
         process.audio_inputs_count = inputBuf.channel_count > 0 ? 1 : 0;
         process.audio_outputs = outputBuf.channel_count > 0 ? &outputBuf : nullptr;
         process.audio_outputs_count = outputBuf.channel_count > 0 ? 1 : 0;
+
+        const auto transport = createCLAPTransport (context.playHead, getSampleRate());
+        process.transport = transport.has_value() ? &*transport : nullptr;
 
         clapInputEvents.clear();
         const auto params = getParameters();

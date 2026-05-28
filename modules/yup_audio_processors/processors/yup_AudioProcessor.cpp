@@ -125,13 +125,6 @@ int AudioProcessor::getNumAudioInputs() const
 
 //==============================================================================
 
-void AudioProcessor::setPlayHead (AudioPlayHead* playHead)
-{
-    this->playHead = playHead;
-}
-
-//==============================================================================
-
 void AudioProcessor::suspendProcessing (bool shouldSuspend)
 {
     auto lock = CriticalSection::ScopedLockType (processLock);

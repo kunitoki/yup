@@ -133,12 +133,12 @@ public:
 
         Override this to process a block of audio and MIDI. The context provides
         sample-accurate parameter automation via @c context.params and the transport
-        position via @c context.samplePosition.
+        state via @c context.playHead when available.
 
         The base-class implementation asserts false so unoverridden processors are
         caught at runtime in debug builds.
 
-        @param context  All per-block inputs: audio, MIDI, parameter changes, position.
+        @param context  All per-block inputs: audio, MIDI, parameter changes, and position.
     */
     virtual void processBlock (AudioProcessContext<float>& context) = 0;
 
@@ -224,12 +224,6 @@ public:
 
     //==============================================================================
 
-    void setPlayHead (AudioPlayHead* playHead);
-
-    AudioPlayHead* getPlayHead() { return playHead; }
-
-    //==============================================================================
-
     /**
         Returns the current preset index.
     */
@@ -300,8 +294,6 @@ private:
     int samplesPerBlock = 1024;
     std::atomic<int> latencySamples { 0 };
     ProcessingPrecision processingPrecision = ProcessingPrecision::singlePrecision;
-
-    AudioPlayHead* playHead = nullptr;
 
     CriticalSection processLock;
     std::atomic<bool> processIsSuspended { false };

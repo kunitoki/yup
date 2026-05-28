@@ -402,6 +402,7 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
 
         configureStreamFormat(sampleRateValue, numHostedChannels);
         installInputCallback();
+        installHostCallbacks();
         installMIDIOutputCallback();
 
         if (![NSThread isMainThread])
@@ -488,6 +489,9 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
         currentInputBuffer = &inputBuffer;
         currentInputNumChannels = numChannels;
         currentInputNumSamples = numSamples;
+        currentPlayHead = context.playHead;
+        currentPlayHeadPositionQueried = false;
+        currentPlayHeadPosition = std::nullopt;
 
         AudioUnitRenderActionFlags flags = 0;
         AudioTimeStamp timeStamp{};
@@ -508,6 +512,9 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
         currentInputNumChannels = 0;
         currentInputNumSamples = 0;
         currentMidiOutputBuffer = nullptr;
+        currentPlayHead = nullptr;
+        currentPlayHeadPositionQueried = false;
+        currentPlayHeadPosition = std::nullopt;
 
         if (status != noErr)
         {
@@ -971,6 +978,21 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
                              &callback, sizeof(callback));
     }
 
+    void installHostCallbacks()
+    {
+        HostCallbackInfo callbacks {};
+        callbacks.hostUserData = this;
+        callbacks.beatAndTempoProc = hostBeatAndTempoCallback;
+        callbacks.musicalTimeLocationProc = hostMusicalTimeLocationCallback;
+        callbacks.transportStateProc = hostTransportStateCallback;
+        callbacks.transportStateProc2 = hostTransportState2Callback;
+
+        AudioUnitSetProperty(audioUnit,
+                             kAudioUnitProperty_HostCallbacks,
+                             kAudioUnitScope_Global, 0,
+                             &callbacks, sizeof(callbacks));
+    }
+
     void installMIDIOutputCallback()
     {
         AUMIDIOutputCallbackStruct callback{};
@@ -981,6 +1003,183 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
                              kAudioUnitProperty_MIDIOutputCallback,
                              kAudioUnitScope_Global, 0,
                              &callback, sizeof(callback));
+    }
+
+    static OSStatus hostBeatAndTempoCallback(void* userData,
+                                             Float64* outCurrentBeat,
+                                             Float64* outCurrentTempo)
+    {
+        auto* instance = static_cast<AUv2Instance*>(userData);
+        if (instance == nullptr)
+            return kAudioUnitErr_CannotDoInCurrentContext;
+
+        const auto* position = instance->getCurrentPlayHeadPosition();
+        if (position == nullptr)
+            return kAudioUnitErr_CannotDoInCurrentContext;
+
+        if (outCurrentBeat != nullptr)
+        {
+            const auto ppq = position->getPpqPosition();
+            if (! ppq.has_value())
+                return kAudioUnitErr_CannotDoInCurrentContext;
+
+            *outCurrentBeat = *ppq;
+        }
+
+        if (outCurrentTempo != nullptr)
+        {
+            const auto bpm = position->getBpm();
+            if (! bpm.has_value())
+                return kAudioUnitErr_CannotDoInCurrentContext;
+
+            *outCurrentTempo = *bpm;
+        }
+
+        return noErr;
+    }
+
+    static OSStatus hostMusicalTimeLocationCallback(void* userData,
+                                                    UInt32* outDeltaSampleOffsetToNextBeat,
+                                                    Float32* outTimeSigNumerator,
+                                                    UInt32* outTimeSigDenominator,
+                                                    Float64* outCurrentMeasureDownBeat)
+    {
+        auto* instance = static_cast<AUv2Instance*>(userData);
+        if (instance == nullptr)
+            return kAudioUnitErr_CannotDoInCurrentContext;
+
+        const auto* position = instance->getCurrentPlayHeadPosition();
+        if (position == nullptr)
+            return kAudioUnitErr_CannotDoInCurrentContext;
+
+        if (outDeltaSampleOffsetToNextBeat != nullptr)
+        {
+            const auto ppq = position->getPpqPosition();
+            const auto bpm = position->getBpm();
+            const auto sampleRate = instance->getSampleRate();
+
+            if (! ppq.has_value() || ! bpm.has_value() || sampleRate <= 0.0)
+                return kAudioUnitErr_CannotDoInCurrentContext;
+
+            const auto nextBeat = std::ceil (*ppq);
+            const auto beatsToNext = jmax (0.0, nextBeat - *ppq);
+            *outDeltaSampleOffsetToNextBeat = static_cast<UInt32> (beatsToNext * (60.0 / *bpm) * sampleRate);
+        }
+
+        if (outTimeSigNumerator != nullptr || outTimeSigDenominator != nullptr)
+        {
+            const auto timeSignature = position->getTimeSignature();
+            if (! timeSignature.has_value())
+                return kAudioUnitErr_CannotDoInCurrentContext;
+
+            if (outTimeSigNumerator != nullptr)
+                *outTimeSigNumerator = static_cast<Float32> (timeSignature->numerator);
+
+            if (outTimeSigDenominator != nullptr)
+                *outTimeSigDenominator = static_cast<UInt32> (timeSignature->denominator);
+        }
+
+        if (outCurrentMeasureDownBeat != nullptr)
+        {
+            const auto barStart = position->getPpqPositionOfLastBarStart();
+            if (! barStart.has_value())
+                return kAudioUnitErr_CannotDoInCurrentContext;
+
+            *outCurrentMeasureDownBeat = *barStart;
+        }
+
+        return noErr;
+    }
+
+    static OSStatus hostTransportStateCallback(void* userData,
+                                               Boolean* outIsPlaying,
+                                               Boolean* outTransportStateChanged,
+                                               Float64* outCurrentSampleInTimeLine,
+                                               Boolean* outIsCycling,
+                                               Float64* outCycleStartBeat,
+                                               Float64* outCycleEndBeat)
+    {
+        return fillHostTransportState(userData,
+                                      outIsPlaying,
+                                      nullptr,
+                                      outTransportStateChanged,
+                                      outCurrentSampleInTimeLine,
+                                      outIsCycling,
+                                      outCycleStartBeat,
+                                      outCycleEndBeat);
+    }
+
+    static OSStatus hostTransportState2Callback(void* userData,
+                                                Boolean* outIsPlaying,
+                                                Boolean* outIsRecording,
+                                                Boolean* outTransportStateChanged,
+                                                Float64* outCurrentSampleInTimeLine,
+                                                Boolean* outIsCycling,
+                                                Float64* outCycleStartBeat,
+                                                Float64* outCycleEndBeat)
+    {
+        return fillHostTransportState(userData,
+                                      outIsPlaying,
+                                      outIsRecording,
+                                      outTransportStateChanged,
+                                      outCurrentSampleInTimeLine,
+                                      outIsCycling,
+                                      outCycleStartBeat,
+                                      outCycleEndBeat);
+    }
+
+    static OSStatus fillHostTransportState(void* userData,
+                                           Boolean* outIsPlaying,
+                                           Boolean* outIsRecording,
+                                           Boolean* outTransportStateChanged,
+                                           Float64* outCurrentSampleInTimeLine,
+                                           Boolean* outIsCycling,
+                                           Float64* outCycleStartBeat,
+                                           Float64* outCycleEndBeat)
+    {
+        auto* instance = static_cast<AUv2Instance*>(userData);
+        if (instance == nullptr)
+            return kAudioUnitErr_CannotDoInCurrentContext;
+
+        const auto* position = instance->getCurrentPlayHeadPosition();
+        if (position == nullptr)
+            return kAudioUnitErr_CannotDoInCurrentContext;
+
+        if (outIsPlaying != nullptr)
+            *outIsPlaying = position->getIsPlaying();
+
+        if (outIsRecording != nullptr)
+            *outIsRecording = position->getIsRecording();
+
+        if (outTransportStateChanged != nullptr)
+            *outTransportStateChanged = false;
+
+        if (outCurrentSampleInTimeLine != nullptr)
+        {
+            const auto timeInSamples = position->getTimeInSamples();
+            if (! timeInSamples.has_value())
+                return kAudioUnitErr_CannotDoInCurrentContext;
+
+            *outCurrentSampleInTimeLine = static_cast<Float64> (*timeInSamples);
+        }
+
+        if (outIsCycling != nullptr)
+            *outIsCycling = position->getIsLooping();
+
+        if (outCycleStartBeat != nullptr || outCycleEndBeat != nullptr)
+        {
+            const auto loopPoints = position->getLoopPoints();
+            if (! loopPoints.has_value())
+                return kAudioUnitErr_CannotDoInCurrentContext;
+
+            if (outCycleStartBeat != nullptr)
+                *outCycleStartBeat = loopPoints->ppqStart;
+
+            if (outCycleEndBeat != nullptr)
+                *outCycleEndBeat = loopPoints->ppqEnd;
+        }
+
+        return noErr;
     }
 
     void sendMidiInputEvents(const MidiBuffer& midiBuffer)
@@ -1231,6 +1430,20 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
             instance->setLatencySamples(instance->getLatencySamples());
     }
 
+    const AudioPlayHead::PositionInfo* getCurrentPlayHeadPosition()
+    {
+        if (currentPlayHead == nullptr)
+            return nullptr;
+
+        if (! currentPlayHeadPositionQueried)
+        {
+            currentPlayHeadPosition = currentPlayHead->getPosition();
+            currentPlayHeadPositionQueried = true;
+        }
+
+        return currentPlayHeadPosition.has_value() ? &*currentPlayHeadPosition : nullptr;
+    }
+
     AudioUnit audioUnit = nullptr;
     AUEventListenerRef eventListener = nullptr;
     int currentPreset = 0;
@@ -1240,6 +1453,9 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
     MidiBuffer outputMidiBuffer;
     AudioBuffer<float>* currentInputBuffer = nullptr;
     MidiBuffer* currentMidiOutputBuffer = nullptr;
+    AudioPlayHead* currentPlayHead = nullptr;
+    bool currentPlayHeadPositionQueried = false;
+    std::optional<AudioPlayHead::PositionInfo> currentPlayHeadPosition;
     int currentInputNumChannels = 0;
     int currentInputNumSamples = 0;
     int preparedNumChannels = 0;

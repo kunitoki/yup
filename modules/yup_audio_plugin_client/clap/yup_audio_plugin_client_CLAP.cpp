@@ -221,7 +221,7 @@ class AudioPluginPlayHeadCLAP final : public AudioPlayHead
 {
 public:
     explicit AudioPluginPlayHeadCLAP (float sampleRate, const clap_process_t* process)
-        : process (*process)
+        : process (process)
         , sampleRate (sampleRate)
     {
     }
@@ -251,30 +251,48 @@ public:
 
     std::optional<PositionInfo> getPosition() const override
     {
-        if (process.transport == nullptr)
+        if (process == nullptr || process->transport == nullptr)
             return {};
 
+        const auto& transport = *process->transport;
         PositionInfo result;
 
-        result.setTimeInSeconds (process.transport->song_pos_seconds / (double) CLAP_SECTIME_FACTOR);
-        result.setTimeInSamples ((int64) (sampleRate * (process.transport->song_pos_seconds / (double) CLAP_SECTIME_FACTOR)));
-        result.setTimeSignature (TimeSignature { process.transport->tsig_num, process.transport->tsig_denom });
-        result.setBpm (process.transport->tempo);
-        result.setBarCount (process.transport->bar_number);
-        result.setPpqPositionOfLastBarStart (process.transport->bar_start / (double) CLAP_BEATTIME_FACTOR);
-        result.setIsPlaying (process.transport->flags & CLAP_TRANSPORT_IS_PLAYING);
-        result.setIsRecording (process.transport->flags & CLAP_TRANSPORT_IS_RECORDING);
-        result.setIsLooping (process.transport->flags & CLAP_TRANSPORT_IS_LOOP_ACTIVE);
-        result.setLoopPoints (LoopPoints {
-            process.transport->loop_start_beats / (double) CLAP_BEATTIME_FACTOR,
-            process.transport->loop_end_beats / (double) CLAP_BEATTIME_FACTOR });
+        if ((transport.flags & CLAP_TRANSPORT_HAS_SECONDS_TIMELINE) != 0)
+        {
+            const auto timeInSeconds = transport.song_pos_seconds / (double) CLAP_SECTIME_FACTOR;
+            result.setTimeInSeconds (timeInSeconds);
+            result.setTimeInSamples ((int64) (sampleRate * timeInSeconds));
+        }
+
+        if ((transport.flags & CLAP_TRANSPORT_HAS_BEATS_TIMELINE) != 0)
+        {
+            result.setPpqPosition (transport.song_pos_beats / (double) CLAP_BEATTIME_FACTOR);
+            result.setPpqPositionOfLastBarStart (transport.bar_start / (double) CLAP_BEATTIME_FACTOR);
+            result.setBarCount (transport.bar_number);
+        }
+
+        if ((transport.flags & CLAP_TRANSPORT_HAS_TIME_SIGNATURE) != 0)
+            result.setTimeSignature (TimeSignature { transport.tsig_num, transport.tsig_denom });
+
+        if ((transport.flags & CLAP_TRANSPORT_HAS_TEMPO) != 0)
+            result.setBpm (transport.tempo);
+
+        result.setIsPlaying ((transport.flags & CLAP_TRANSPORT_IS_PLAYING) != 0);
+        result.setIsRecording ((transport.flags & CLAP_TRANSPORT_IS_RECORDING) != 0);
+        result.setIsLooping ((transport.flags & CLAP_TRANSPORT_IS_LOOP_ACTIVE) != 0);
+
+        if ((transport.flags & CLAP_TRANSPORT_IS_LOOP_ACTIVE) != 0)
+            result.setLoopPoints (LoopPoints {
+                transport.loop_start_beats / (double) CLAP_BEATTIME_FACTOR,
+                transport.loop_end_beats / (double) CLAP_BEATTIME_FACTOR });
+
         result.setFrameRate (AudioPlayHead::fpsUnknown);
 
         return result;
     }
 
 private:
-    clap_process_t process;
+    const clap_process_t* process = nullptr;
     float sampleRate = 44100.0f;
 };
 
@@ -497,17 +515,10 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
                                        static_cast<int> (process->frames_count));
 
         AudioPluginPlayHeadCLAP playHead (audioProcessor.getSampleRate(), process);
-        audioProcessor.setPlayHead (&playHead);
+        auto* const playHeadPtr = process->transport != nullptr ? &playHead : nullptr;
 
-        const int64_t samplePosition = (process->transport != nullptr)
-                                         ? static_cast<int64_t> (process->transport->song_pos_seconds
-                                                                 * audioProcessor.getSampleRate())
-                                         : 0;
-
-        AudioProcessContext<float> context { audioBuffer, midiBuffer, wrapper->paramChangeBuffer, samplePosition };
+        AudioProcessContext<float> context { audioBuffer, midiBuffer, wrapper->paramChangeBuffer, playHeadPtr };
         audioProcessor.processBlock (context);
-
-        audioProcessor.setPlayHead (nullptr);
 
         // Send output events back to host
         for (const MidiMessageMetadata metadata : midiBuffer)

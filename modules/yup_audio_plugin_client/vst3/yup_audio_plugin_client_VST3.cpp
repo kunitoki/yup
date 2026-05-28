@@ -117,6 +117,57 @@ Vst::ParamID getVST3BypassParameterID (const AudioProcessor& processor)
     return static_cast<Vst::ParamID> (parameterID);
 }
 
+class AudioPluginPlayHeadVST3 final : public AudioPlayHead
+{
+public:
+    explicit AudioPluginPlayHeadVST3 (const Vst::ProcessContext* processContext)
+        : processContext (processContext)
+    {
+    }
+
+    bool canControlTransport() override
+    {
+        return false;
+    }
+
+    std::optional<PositionInfo> getPosition() const override
+    {
+        if (processContext == nullptr)
+            return {};
+
+        PositionInfo result;
+
+        result.setTimeInSamples (static_cast<int64_t> (processContext->projectTimeSamples));
+
+        if (processContext->sampleRate > 0.0)
+            result.setTimeInSeconds (static_cast<double> (processContext->projectTimeSamples) / processContext->sampleRate);
+
+        if ((processContext->state & Vst::ProcessContext::kTempoValid) != 0)
+            result.setBpm (processContext->tempo);
+
+        if ((processContext->state & Vst::ProcessContext::kTimeSigValid) != 0)
+            result.setTimeSignature (TimeSignature { processContext->timeSigNumerator, processContext->timeSigDenominator });
+
+        if ((processContext->state & Vst::ProcessContext::kProjectTimeMusicValid) != 0)
+            result.setPpqPosition (processContext->projectTimeMusic);
+
+        if ((processContext->state & Vst::ProcessContext::kBarPositionValid) != 0)
+            result.setPpqPositionOfLastBarStart (processContext->barPositionMusic);
+
+        if ((processContext->state & Vst::ProcessContext::kCycleValid) != 0)
+            result.setLoopPoints (LoopPoints { processContext->cycleStartMusic, processContext->cycleEndMusic });
+
+        result.setIsPlaying ((processContext->state & Vst::ProcessContext::kPlaying) != 0);
+        result.setIsRecording ((processContext->state & Vst::ProcessContext::kRecording) != 0);
+        result.setIsLooping ((processContext->state & Vst::ProcessContext::kCycleActive) != 0);
+
+        return result;
+    }
+
+private:
+    const Vst::ProcessContext* processContext = nullptr;
+};
+
 } // namespace
 
 //==============================================================================
@@ -1245,9 +1296,8 @@ public:
                 for (int32 ch = 0; ch < data.outputs[busIdx].numChannels; ++ch)
                     outputChannels.push_back (reinterpret_cast<float*> (data.outputs[busIdx].channelBuffers32[ch]));
 
-            const int64_t samplePosition = (data.processContext != nullptr)
-                                             ? data.processContext->projectTimeSamples
-                                             : 0;
+            AudioPluginPlayHeadVST3 playHead (data.processContext);
+            auto* const playHeadPtr = data.processContext != nullptr ? &playHead : nullptr;
 
             if (processSetup.symbolicSampleSize == Vst::kSample64 && processor->supportsDoublePrecisionProcessing())
             {
@@ -1261,7 +1311,7 @@ public:
                                                  0,
                                                  data.numSamples);
 
-                AudioProcessContext<double> doubleCtx { audioBuffer, midiBuffer, paramChangeBuffer, samplePosition };
+                AudioProcessContext<double> doubleCtx { audioBuffer, midiBuffer, paramChangeBuffer, playHeadPtr };
 
                 if (bypassed)
                     processor->processBlockBypassed (doubleCtx);
@@ -1275,7 +1325,7 @@ public:
                                                0,
                                                data.numSamples);
 
-                AudioProcessContext<float> context { audioBuffer, midiBuffer, paramChangeBuffer, samplePosition };
+                AudioProcessContext<float> context { audioBuffer, midiBuffer, paramChangeBuffer, playHeadPtr };
 
                 if (bypassed)
                     processor->processBlockBypassed (context);
