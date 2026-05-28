@@ -1414,7 +1414,7 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
             auto cursorPosition = Point<float> { static_cast<float> (event->motion.x), static_cast<float> (event->motion.y) };
 
-            if (event->window.windowID == SDL_GetWindowID (window))
+            if (event->motion.windowID == SDL_GetWindowID (window))
                 handleMouseMoveOrDrag (cursorPosition);
 
             break;
@@ -1428,8 +1428,6 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
             if (event->button.windowID == SDL_GetWindowID (window))
                 handleMouseDown (cursorPosition, toMouseButton (event->button.button), KeyModifiers (SDL_GetModState()));
-            else
-                ; // TODO - when opening a window in mouse down, mouse up is sent to the other window
 
             break;
         }
@@ -1442,8 +1440,9 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
             if (event->button.windowID == SDL_GetWindowID (window))
                 handleMouseUp (cursorPosition, toMouseButton (event->button.button), KeyModifiers (SDL_GetModState()));
-            else
-                ; // TODO - when opening a window in mouse down, mouse up is sent to the other window
+
+            else if (lastComponentClicked != nullptr)
+                handleMouseUp (cursorPosition, toMouseButton (event->button.button), KeyModifiers (SDL_GetModState()));
 
             break;
         }
