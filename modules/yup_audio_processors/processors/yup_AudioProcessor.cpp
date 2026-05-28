@@ -32,9 +32,7 @@ AudioProcessor::AudioProcessor (StringRef name, AudioBusLayout busLayout)
 
 //==============================================================================
 
-AudioProcessor::~AudioProcessor()
-{
-}
+AudioProcessor::~AudioProcessor() = default;
 
 //==============================================================================
 

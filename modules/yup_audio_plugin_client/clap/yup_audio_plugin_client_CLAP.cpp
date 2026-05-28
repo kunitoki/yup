@@ -20,6 +20,7 @@
 */
 
 #include "../yup_audio_plugin_client.h"
+#include "../common/yup_AudioPluginUtilities.h"
 
 #if ! defined(YUP_AUDIO_PLUGIN_ENABLE_CLAP)
 #error "YUP_AUDIO_PLUGIN_ENABLE_CLAP must be defined"
@@ -604,6 +605,7 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
 
 AudioPluginProcessorCLAP::~AudioPluginProcessorCLAP()
 {
+    endActiveParameterGestures (audioProcessor.get());
 }
 
 //==============================================================================

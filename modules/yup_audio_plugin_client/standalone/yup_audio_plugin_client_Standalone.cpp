@@ -20,6 +20,7 @@
 */
 
 #include "../yup_audio_plugin_client.h"
+#include "../common/yup_AudioPluginUtilities.h"
 
 #include <yup_audio_devices/yup_audio_devices.h>
 

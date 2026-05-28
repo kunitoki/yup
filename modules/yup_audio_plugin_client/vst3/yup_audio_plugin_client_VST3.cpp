@@ -20,6 +20,7 @@
 */
 
 #include "../yup_audio_plugin_client.h"
+#include "../common/yup_AudioPluginUtilities.h"
 
 #if ! defined(YUP_AUDIO_PLUGIN_ENABLE_VST3)
 #error "YUP_AUDIO_PLUGIN_ENABLE_VST3 must be defined"
@@ -914,6 +915,7 @@ public:
 
     virtual ~AudioPluginProcessorVST3()
     {
+        endActiveParameterGestures (processor.get());
         processor.reset();
     }
 
@@ -964,7 +966,10 @@ public:
     tresult PLUGIN_API terminate() override
     {
         if (processor != nullptr)
+        {
+            endActiveParameterGestures (processor.get());
             processor->releaseResources();
+        }
 
         return AudioEffect::terminate();
     }

@@ -429,9 +429,9 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
     elseif ("${plugin_type}" STREQUAL "au")
         add_custom_command(TARGET ${dependency_target} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
-            COMMAND ${CMAKE_COMMAND} -E create_symlink "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
             COMMAND codesign --force --sign - "${plugin_path}"
-            COMMENT "Symlinking AU plugin ${plugin_type_upper} to ${plugin_path}"
+            COMMENT "Copying AU plugin ${plugin_type_upper} to ${plugin_path}"
             VERBATIM)
     else()
         _yup_message (FATAL_ERROR "Unsupported plugin type ${plugin_type} for copying bundle")

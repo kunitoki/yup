@@ -20,13 +20,13 @@
 */
 
 #include "../yup_audio_plugin_client.h"
+#include "../common/yup_AudioPluginUtilities.h"
 
 #if !defined(YUP_AUDIO_PLUGIN_ENABLE_AU)
 #error "YUP_AUDIO_PLUGIN_ENABLE_AU must be defined"
 #endif
 
 #if YUP_MAC
-
 #include <AudioUnitSDK/AUBase.h>
 #include <AudioUnitSDK/AUEffectBase.h>
 #include <AudioUnitSDK/AUMIDIBase.h>
@@ -35,6 +35,7 @@
 
 #import <AppKit/AppKit.h>
 #import <AudioUnit/AudioUnit.h>
+#import <AudioUnit/AUCocoaUIView.h>
 #import <CoreMIDI/CoreMIDI.h>
 #import <Foundation/Foundation.h>
 
@@ -153,6 +154,7 @@ class AudioPluginProcessorAU final : public AudioPluginAUBase
 
     ~AudioPluginProcessorAU() override
     {
+        endActiveParameterGestures(processor.get());
         unregisterInstance(componentInstance);
         processor.reset();
     }
@@ -268,6 +270,9 @@ class AudioPluginProcessorAU final : public AudioPluginAUBase
         const auto parameterIndex = processor->getParameterIndexByHostID(static_cast<uint32>(inID));
         if (! isPositiveAndBelow(parameterIndex, static_cast<int>(parameters.size())))
             return kAudioUnitErr_InvalidParameter;
+
+        if (parameters[parameterIndex]->isPerformingChangeGesture())
+            return noErr;
 
         parameters[parameterIndex]->setValue(static_cast<float>(inValue));
         return noErr;
@@ -535,6 +540,9 @@ class AudioPluginProcessorAU final : public AudioPluginAUBase
 
         if (inID == kAudioUnitProperty_CocoaUI)
         {
+            if (inScope != kAudioUnitScope_Global)
+                return kAudioUnitErr_InvalidScope;
+
             if (processor != nullptr && processor->hasEditor())
             {
                 outDataSize = sizeof(AudioUnitCocoaViewInfo);
@@ -639,10 +647,14 @@ class AudioPluginProcessorAU final : public AudioPluginAUBase
 @interface AudioPluginEditorViewAU : NSView
 {
     yup::AUScopedYupWindowingInitialiser _scopeInitialiser;
+    yup::AudioProcessor* _processor;
     std::unique_ptr<yup::AudioProcessorEditor> _processorEditor;
 }
 - (instancetype)initWithProcessor:(yup::AudioProcessor*)processor
                     preferredSize:(NSSize)size;
+- (void)attachEditorIfNeeded;
+- (void)detachEditorIfNeeded;
+- (void)resizeEditorToBounds;
 @end
 
 @implementation AudioPluginEditorViewAU
@@ -653,6 +665,8 @@ class AudioPluginProcessorAU final : public AudioPluginAUBase
 
     if ((self = [super initWithFrame:NSMakeRect(0, 0, size.width, size.height)]))
     {
+        _processor = processor;
+
         if (processor != nullptr && processor->hasEditor())
         {
             _processorEditor.reset(processor->createEditor());
@@ -662,33 +676,78 @@ class AudioPluginProcessorAU final : public AudioPluginAUBase
                 const auto preferredSize = _processorEditor->getPreferredSize();
 
                 [self setFrameSize:NSMakeSize(preferredSize.getWidth(), preferredSize.getHeight())];
-
-                yup::ComponentNative::Flags flags = yup::ComponentNative::defaultFlags & ~yup::ComponentNative::decoratedWindow;
-
-                if (_processorEditor->shouldRenderContinuous())
-                    flags.set(yup::ComponentNative::renderContinuous);
-
-                auto options = yup::ComponentNative::Options()
-                                   .withFlags(flags)
-                                   .withResizableWindow(_processorEditor->isResizable());
-
-                _processorEditor->addToDesktop(options, (__bridge void*)self);
-                _processorEditor->setVisible(true);
-                _processorEditor->attachedToNative();
+                [self resizeEditorToBounds];
             }
         }
     }
     return self;
 }
 
+- (void)viewDidMoveToWindow
+{
+    [super viewDidMoveToWindow];
+
+    if ([self window] != nil)
+        [self attachEditorIfNeeded];
+    else
+        [self detachEditorIfNeeded];
+}
+
+- (void)setFrameSize:(NSSize)newSize
+{
+    [super setFrameSize:newSize];
+    [self resizeEditorToBounds];
+}
+
+- (void)attachEditorIfNeeded
+{
+    if (_processorEditor == nullptr || _processorEditor->isOnDesktop())
+        return;
+
+    [self resizeEditorToBounds];
+
+    yup::ComponentNative::Flags flags = yup::ComponentNative::defaultFlags & ~yup::ComponentNative::decoratedWindow;
+
+    if (_processorEditor->shouldRenderContinuous())
+        flags.set(yup::ComponentNative::renderContinuous);
+
+    auto options = yup::ComponentNative::Options()
+                       .withFlags(flags)
+                       .withResizableWindow(_processorEditor->isResizable());
+
+    _processorEditor->addToDesktop(options, (__bridge void*)self);
+    _processorEditor->setVisible(true);
+    _processorEditor->attachedToNative();
+}
+
+- (void)detachEditorIfNeeded
+{
+    if (_processorEditor == nullptr || ! _processorEditor->isOnDesktop())
+        return;
+
+    yup::endActiveParameterGestures(_processor);
+    _processorEditor->setVisible(false);
+    _processorEditor->removeFromDesktop();
+}
+
+- (void)resizeEditorToBounds
+{
+    if (_processorEditor == nullptr)
+        return;
+
+    const auto bounds = [self bounds];
+    _processorEditor->setBounds({0.0f,
+                                 0.0f,
+                                 yup::jmax(1.0f, static_cast<float>(NSWidth(bounds))),
+                                 yup::jmax(1.0f, static_cast<float>(NSHeight(bounds)))});
+}
+
 - (void)dealloc
 {
-    if (_processorEditor != nullptr)
-    {
-        _processorEditor->setVisible(false);
-        _processorEditor->removeFromDesktop();
-        _processorEditor.reset();
-    }
+    [self detachEditorIfNeeded];
+    yup::endActiveParameterGestures(_processor);
+    _processorEditor.reset();
+    _processor = nullptr;
 }
 
 @end
@@ -696,7 +755,7 @@ class AudioPluginProcessorAU final : public AudioPluginAUBase
 //==============================================================================
 // Cocoa view factory
 
-@interface AudioPluginProcessorAUViewFactory : NSObject
+@interface AudioPluginProcessorAUViewFactory : NSObject <AUCocoaUIBase>
 @end
 
 @implementation AudioPluginProcessorAUViewFactory
@@ -748,15 +807,23 @@ OSStatus AudioPluginProcessorAU::GetProperty(AudioUnitPropertyID inID,
 
     if (inID == kAudioUnitProperty_CocoaUI)
     {
+        if (inScope != kAudioUnitScope_Global)
+            return kAudioUnitErr_InvalidScope;
+
         if (processor == nullptr || !processor->hasEditor())
             return kAudioUnitErr_PropertyNotInUse;
+
+        if (outData == nullptr)
+            return kAudioUnitErr_InvalidPropertyValue;
 
         auto* info = static_cast<AudioUnitCocoaViewInfo*>(outData);
 
         // The bundle location is this plugin's own bundle
         NSBundle* bundle = [NSBundle bundleForClass:[AudioPluginProcessorAUViewFactory class]];
         info->mCocoaAUViewBundleLocation = (__bridge_retained CFURLRef)[bundle bundleURL];
-        info->mCocoaAUViewClass[0] = CFSTR("AudioPluginProcessorAUViewFactory");
+        info->mCocoaAUViewClass[0] = CFStringCreateWithCString(kCFAllocatorDefault,
+                                                               "AudioPluginProcessorAUViewFactory",
+                                                               kCFStringEncodingUTF8);
 
         return noErr;
     }

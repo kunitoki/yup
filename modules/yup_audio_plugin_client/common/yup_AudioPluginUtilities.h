@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2024 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,4 +19,23 @@
   ==============================================================================
 */
 
-#include "yup_audio_plugin_client_CLAP.cpp"
+#pragma once
+
+//==============================================================================
+namespace yup
+{
+
+/** Ends any active parameter gestures before a plugin wrapper tears down its processor. */
+inline void endActiveParameterGestures (AudioProcessor* processor)
+{
+    if (processor == nullptr)
+        return;
+
+    for (auto& parameter : processor->getParameters())
+    {
+        while (parameter->isPerformingChangeGesture())
+            parameter->endChangeGesture();
+    }
+}
+
+} // namespace yup
