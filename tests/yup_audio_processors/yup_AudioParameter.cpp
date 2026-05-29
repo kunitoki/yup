@@ -110,3 +110,84 @@ TEST (AudioParameterTests, UsesExplicitStableHostIDWhenProvided)
     EXPECT_EQ (parameter.get(), processor.getParameterByHostID (1001u).get());
     EXPECT_EQ (nullptr, processor.getParameterByHostID (0u).get());
 }
+
+TEST (AudioParameterTests, IsNotModulatableByDefault)
+{
+    auto parameter = makeParameter ("gain", "Gain");
+
+    EXPECT_FALSE (parameter->isModulatable());
+    EXPECT_FALSE (parameter->isPerNoteModulatable());
+}
+
+TEST (AudioParameterTests, WithModulatableSetsFlag)
+{
+    auto parameter = AudioParameterBuilder()
+                         .withID ("gain")
+                         .withName ("Gain")
+                         .withRange (0.0f, 1.0f)
+                         .withDefault (0.5f)
+                         .withModulatable (true)
+                         .build();
+
+    EXPECT_TRUE (parameter->isModulatable());
+    EXPECT_FALSE (parameter->isPerNoteModulatable());
+}
+
+TEST (AudioParameterTests, WithPerNoteModulatableImpliesModulatable)
+{
+    auto parameter = AudioParameterBuilder()
+                         .withID ("gain")
+                         .withName ("Gain")
+                         .withRange (0.0f, 1.0f)
+                         .withDefault (0.5f)
+                         .withPerNoteModulatable (true)
+                         .build();
+
+    EXPECT_TRUE (parameter->isModulatable());
+    EXPECT_TRUE (parameter->isPerNoteModulatable());
+}
+
+TEST (AudioParameterTests, ClearingPerNoteModulatablePreservesModulatable)
+{
+    auto parameter = AudioParameterBuilder()
+                         .withID ("gain")
+                         .withName ("Gain")
+                         .withRange (0.0f, 1.0f)
+                         .withDefault (0.5f)
+                         .withModulatable (true)
+                         .withPerNoteModulatable (true)
+                         .withPerNoteModulatable (false)
+                         .build();
+
+    EXPECT_TRUE (parameter->isModulatable());
+    EXPECT_FALSE (parameter->isPerNoteModulatable());
+}
+
+TEST (AudioParameterTests, ReadOnlyParameterIsNotAutomatable)
+{
+    auto parameter = AudioParameterBuilder()
+                         .withID ("gain")
+                         .withName ("Gain")
+                         .withRange (0.0f, 1.0f)
+                         .withDefault (0.5f)
+                         .withReadOnly (true)
+                         .build();
+
+    EXPECT_TRUE (parameter->isReadOnly());
+    EXPECT_FALSE (parameter->isAutomatable());
+}
+
+TEST (AudioParameterTests, AutomatableParameterIsNotReadOnly)
+{
+    auto parameter = AudioParameterBuilder()
+                         .withID ("gain")
+                         .withName ("Gain")
+                         .withRange (0.0f, 1.0f)
+                         .withDefault (0.5f)
+                         .withReadOnly (true)
+                         .withAutomatable (true)
+                         .build();
+
+    EXPECT_FALSE (parameter->isReadOnly());
+    EXPECT_TRUE (parameter->isAutomatable());
+}

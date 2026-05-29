@@ -97,6 +97,7 @@ ExamplePlugin::ExamplePlugin()
                                       .withRange (0.0f, 1.0f)
                                       .withDefault (0.5f)
                                       .withSmoothing (20.0f)
+                                      .withModulatable (true)
                                       .build());
 }
 
@@ -190,7 +191,9 @@ void ExamplePlugin::processBlock (yup::AudioProcessContext<float>& context)
                 }
             }
 
-            // TODO - clap supports per voice modulations: clap_event_param_mod_t
+            // Per-voice (polyphonic) modulation is not yet supported; global modulation
+            // via CLAP_EVENT_PARAM_MOD is handled by the plugin wrapper and already
+            // reflected in the value returned by gainHandle.getNextValue().
         }
 
         if (midiIterator == midiBuffer.end())

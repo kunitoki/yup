@@ -169,10 +169,35 @@ void clapEventToParameterChange (const clap_event_header_t* event, AudioProcesso
     if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
         return;
 
-    if (parameters[parameterIndex]->isPerformingChangeGesture())
+    if (parameters[parameterIndex]->isReadOnly()
+        || parameters[parameterIndex]->isPerformingChangeGesture())
+    {
         return;
+    }
 
     parameters[parameterIndex]->setValue (static_cast<float> (paramEvent->value));
+}
+
+bool addParameterModByCLAPEvent (AudioProcessor& processor,
+                                 const clap_event_param_mod_t* modEvent)
+{
+    if (modEvent->note_id != -1 || modEvent->key != -1)
+        return false; // per-voice modulation needs voice infrastructure
+
+    const auto parameters = processor.getParameters();
+    const auto parameterIndex = processor.getParameterIndexByHostID (modEvent->param_id);
+
+    if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
+        return false;
+
+    const auto& param = parameters[parameterIndex];
+
+    if (! param->isModulatable() || param->isReadOnly())
+        return false;
+
+    const float modulatedValue = param->getValue() + static_cast<float> (modEvent->amount);
+    param->setValue (modulatedValue);
+    return true;
 }
 
 bool addParameterChangeByCLAPValue (AudioProcessor& processor,
@@ -187,12 +212,40 @@ bool addParameterChangeByCLAPValue (AudioProcessor& processor,
     if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
         return false;
 
-    if (parameters[parameterIndex]->isPerformingChangeGesture())
+    if (parameters[parameterIndex]->isReadOnly()
+        || parameters[parameterIndex]->isPerformingChangeGesture())
+    {
         return false;
+    }
 
     return changes.addChange (parameterIndex,
                               parameters[parameterIndex]->convertToNormalizedValue (value),
                               sampleOffset);
+}
+
+clap_param_info_flags getCLAPParameterFlags (const AudioParameter& parameter) noexcept
+{
+    clap_param_info_flags flags = 0;
+
+    if (parameter.isStepped() || parameter.isEnum())
+        flags |= CLAP_PARAM_IS_STEPPED;
+
+    if (parameter.isEnum())
+        flags |= CLAP_PARAM_IS_ENUM;
+
+    if (parameter.isReadOnly())
+        flags |= CLAP_PARAM_IS_READONLY;
+
+    if (parameter.isAutomatable() && ! parameter.isReadOnly())
+        flags |= CLAP_PARAM_IS_AUTOMATABLE;
+
+    if (parameter.isModulatable())
+        flags |= CLAP_PARAM_IS_MODULATABLE;
+
+    if (parameter.isPerNoteModulatable())
+        flags |= CLAP_PARAM_IS_MODULATABLE | CLAP_PARAM_IS_MODULATABLE_PER_NOTE_ID;
+
+    return flags;
 }
 
 static bool writeAllToCLAPStream (const clap_ostream_t* stream, const void* data, size_t dataSize)
@@ -404,6 +457,8 @@ public:
 
     AudioProcessorEditor* getAudioProcessorEditor() { return processorEditor.get(); }
 
+    void contentScaleChanged (float dpiScale) override;
+
     void resized() override;
 
 private:
@@ -414,7 +469,9 @@ private:
 
 //==============================================================================
 
-class AudioPluginProcessorCLAP final : private AudioParameter::Listener
+class AudioPluginProcessorCLAP final
+    : private AudioParameter::Listener
+    , private AudioProcessor::Listener
 {
 public:
     AudioPluginProcessorCLAP (const clap_host_t* host);
@@ -449,9 +506,14 @@ private:
     void parameterGestureBegin (const AudioParameter::Ptr& parameter, int indexInContainer) override;
     void parameterGestureEnd (const AudioParameter::Ptr& parameter, int indexInContainer) override;
 
+    void audioProcessorChanged (AudioProcessor* processor, const AudioProcessor::ChangeDetails& details) override;
+
     void enqueueParameterEvent (uint16 eventType, clap_id parameterId, double value = 0.0) noexcept;
     void drainParameterEvents (const clap_output_events_t* out) noexcept;
     void requestParameterFlush() const noexcept;
+    void requestMainThreadCallback() const noexcept;
+    void handleMainThreadNotifications() noexcept;
+    void handleAudioThreadNotifications() noexcept;
 
     ScopedYupInitialiser_GUI scopeInitialiser;
 
@@ -486,7 +548,14 @@ private:
     MidiBuffer midiEvents;
     ParameterChangeBuffer paramChangeBuffer;
     std::vector<AudioParameter::Ptr> listenedParameters;
+    std::vector<float*> outputChannelsFloat;
+    std::vector<double*> outputChannelsDouble;
+    std::atomic<bool> isActive { false };
     std::atomic<bool> isInsideProcessBlock { false };
+    std::atomic<bool> callLatencyChangeOnNextActivate { false };
+    std::atomic<bool> tailChangedPending { false };
+    std::atomic<bool> stateDirtyPending { false };
+    std::atomic<uint32> parameterRescanFlagsPending { 0 };
 
     struct QueuedParameterEvent
     {
@@ -565,6 +634,7 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
         auto& audioProcessor = *wrapper->audioProcessor;
         auto& midiBuffer = wrapper->midiEvents;
 
+        wrapper->handleAudioThreadNotifications();
         wrapper->drainParameterEvents (process->out_events);
 
         auto lock = CriticalSection::ScopedTryLockType (audioProcessor.getProcessLock());
@@ -595,6 +665,11 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
                                                static_cast<float> (paramEvent->value),
                                                static_cast<int> (event->time));
             }
+            else if (event->type == CLAP_EVENT_PARAM_MOD)
+            {
+                const auto* modEvent = reinterpret_cast<const clap_event_param_mod_t*> (event);
+                addParameterModByCLAPEvent (audioProcessor, modEvent);
+            }
             else if (auto convertedEvent = clapEventToMidiMessage (event))
             {
                 midiBuffer.addEvent (*convertedEvent, static_cast<int> (event->time));
@@ -604,42 +679,83 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
         // CLAP events arrive sorted — no sort needed; apply final values for backward compat
         applyParameterChangesToProcessor (audioProcessor, wrapper->paramChangeBuffer);
 
-        // Copy input audio into output buffers for effect processors
-        for (uint32_t busIdx = 0; busIdx < std::min (process->audio_inputs_count, process->audio_outputs_count); ++busIdx)
-        {
-            const auto& inBus = process->audio_inputs[busIdx];
-            const auto& outBus = process->audio_outputs[busIdx];
-            const uint32_t chCount = std::min (inBus.channel_count, outBus.channel_count);
-
-            for (uint32_t ch = 0; ch < chCount; ++ch)
-            {
-                const auto* in = inBus.data32[ch];
-                auto* out = outBus.data32[ch];
-                if (in != out)
-                    std::memcpy (out, in, process->frames_count * sizeof (float));
-            }
-        }
-
-        // Build flat channel pointer array across all output buses
-        std::vector<float*> outputChannels;
-        for (uint32_t busIdx = 0; busIdx < process->audio_outputs_count; ++busIdx)
-            for (uint32_t ch = 0; ch < process->audio_outputs[busIdx].channel_count; ++ch)
-                outputChannels.push_back (process->audio_outputs[busIdx].data32[ch]);
-
-        AudioSampleBuffer audioBuffer (outputChannels.data(),
-                                       static_cast<int> (outputChannels.size()),
-                                       0,
-                                       static_cast<int> (process->frames_count));
-
         AudioPluginPlayHeadCLAP playHead (audioProcessor.getSampleRate(), process);
         auto* const playHeadPtr = process->transport != nullptr ? &playHead : nullptr;
 
-        AudioProcessContext<float> context { audioBuffer, midiBuffer, wrapper->paramChangeBuffer, playHeadPtr };
+        const bool useDoublePrecision = audioProcessor.supportsDoublePrecisionProcessing()
+                                     && process->audio_outputs_count > 0
+                                     && process->audio_outputs[0].data64 != nullptr;
 
-        wrapper->isInsideProcessBlock.store (true);
-        audioProcessor.processBlock (context);
-        wrapper->isInsideProcessBlock.store (false);
+        if (useDoublePrecision)
+        {
+            // Copy input audio into output buffers for effect processors (double)
+            for (uint32_t busIdx = 0; busIdx < std::min (process->audio_inputs_count, process->audio_outputs_count); ++busIdx)
+            {
+                const auto& inBus = process->audio_inputs[busIdx];
+                const auto& outBus = process->audio_outputs[busIdx];
+                const uint32_t chCount = std::min (inBus.channel_count, outBus.channel_count);
 
+                for (uint32_t ch = 0; ch < chCount; ++ch)
+                {
+                    const auto* in = inBus.data64[ch];
+                    auto* out = outBus.data64[ch];
+                    if (in != out)
+                        std::memcpy (out, in, process->frames_count * sizeof (double));
+                }
+            }
+
+            wrapper->outputChannelsDouble.clear();
+            for (uint32_t busIdx = 0; busIdx < process->audio_outputs_count; ++busIdx)
+                for (uint32_t ch = 0; ch < process->audio_outputs[busIdx].channel_count; ++ch)
+                    wrapper->outputChannelsDouble.push_back (process->audio_outputs[busIdx].data64[ch]);
+
+            AudioBuffer<double> audioBuffer (wrapper->outputChannelsDouble.data(),
+                                             static_cast<int> (wrapper->outputChannelsDouble.size()),
+                                             0,
+                                             static_cast<int> (process->frames_count));
+
+            AudioProcessContext<double> context { audioBuffer, midiBuffer, wrapper->paramChangeBuffer, playHeadPtr };
+
+            wrapper->isInsideProcessBlock.store (true);
+            audioProcessor.processBlock (context);
+            wrapper->isInsideProcessBlock.store (false);
+        }
+        else
+        {
+            // Copy input audio into output buffers for effect processors (float)
+            for (uint32_t busIdx = 0; busIdx < std::min (process->audio_inputs_count, process->audio_outputs_count); ++busIdx)
+            {
+                const auto& inBus = process->audio_inputs[busIdx];
+                const auto& outBus = process->audio_outputs[busIdx];
+                const uint32_t chCount = std::min (inBus.channel_count, outBus.channel_count);
+
+                for (uint32_t ch = 0; ch < chCount; ++ch)
+                {
+                    const auto* in = inBus.data32[ch];
+                    auto* out = outBus.data32[ch];
+                    if (in != out)
+                        std::memcpy (out, in, process->frames_count * sizeof (float));
+                }
+            }
+
+            wrapper->outputChannelsFloat.clear();
+            for (uint32_t busIdx = 0; busIdx < process->audio_outputs_count; ++busIdx)
+                for (uint32_t ch = 0; ch < process->audio_outputs[busIdx].channel_count; ++ch)
+                    wrapper->outputChannelsFloat.push_back (process->audio_outputs[busIdx].data32[ch]);
+
+            AudioSampleBuffer audioBuffer (wrapper->outputChannelsFloat.data(),
+                                           static_cast<int> (wrapper->outputChannelsFloat.size()),
+                                           0,
+                                           static_cast<int> (process->frames_count));
+
+            AudioProcessContext<float> context { audioBuffer, midiBuffer, wrapper->paramChangeBuffer, playHeadPtr };
+
+            wrapper->isInsideProcessBlock.store (true);
+            audioProcessor.processBlock (context);
+            wrapper->isInsideProcessBlock.store (false);
+        }
+
+        wrapper->handleAudioThreadNotifications();
         wrapper->drainParameterEvents (process->out_events);
 
         // Send output events back to host
@@ -683,7 +799,10 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
         return getWrapper (plugin)->getExtension (id);
     };
 
-    plugin.on_main_thread = [] (const clap_plugin* plugin) {};
+    plugin.on_main_thread = [] (const clap_plugin* plugin)
+    {
+        getWrapper (plugin)->handleMainThreadNotifications();
+    };
 }
 
 //==============================================================================
@@ -723,11 +842,12 @@ bool AudioPluginProcessorCLAP::initialise()
 
         information->id = parameter->getHostParameterID();
         information->cookie = parameter.get();
-        information->flags = CLAP_PARAM_IS_AUTOMATABLE | CLAP_PARAM_IS_MODULATABLE | CLAP_PARAM_IS_MODULATABLE_PER_NOTE_ID;
+        information->flags = getCLAPParameterFlags (*parameter);
         information->min_value = parameter->getMinimumValue();
         information->max_value = parameter->getMaximumValue();
         information->default_value = parameter->getDefaultValue();
         parameter->getName().copyToUTF8 (information->name, CLAP_NAME_SIZE);
+        parameter->getModulePath().copyToUTF8 (information->module, CLAP_PATH_SIZE);
 
         return true;
     };
@@ -784,7 +904,17 @@ bool AudioPluginProcessorCLAP::initialise()
         const uint32_t count = in->size (in);
 
         for (uint32_t i = 0; i < count; ++i)
-            clapEventToParameterChange (in->get (in, i), *wrapper->audioProcessor);
+        {
+            const clap_event_header_t* event = in->get (in, i);
+
+            if (event->space_id != CLAP_CORE_EVENT_SPACE_ID)
+                continue;
+
+            if (event->type == CLAP_EVENT_PARAM_VALUE)
+                clapEventToParameterChange (event, *wrapper->audioProcessor);
+            else if (event->type == CLAP_EVENT_PARAM_MOD)
+                addParameterModByCLAPEvent (*wrapper->audioProcessor, reinterpret_cast<const clap_event_param_mod_t*> (event));
+        }
     };
 
     // ==== Setup extensions: note ports
@@ -894,9 +1024,28 @@ bool AudioPluginProcessorCLAP::initialise()
 
         info->id = index;
         info->channel_count = audioBus->getNumChannels();
-        info->flags = (index == 0) ? CLAP_AUDIO_PORT_IS_MAIN : 0;
+
+        uint32_t flags = (index == 0) ? CLAP_AUDIO_PORT_IS_MAIN : 0;
+        if (audioProcessor->supportsDoublePrecisionProcessing())
+            flags |= CLAP_AUDIO_PORT_SUPPORTS_64BITS | CLAP_AUDIO_PORT_PREFERS_64BITS | CLAP_AUDIO_PORT_REQUIRES_COMMON_SAMPLE_SIZE;
+        info->flags = flags;
+
         info->port_type = audioBus->isStereo() ? CLAP_PORT_STEREO : CLAP_PORT_MONO;
-        info->in_place_pair = CLAP_INVALID_ID;
+
+        // For output ports, advertise in-place processing when a corresponding input bus exists
+        if (! isInput)
+        {
+            uint32_t inputAudioCount = 0;
+            for (const auto& bus : audioProcessor->getBusLayout().getInputBuses())
+                if (bus.getType() == AudioBus::Type::Audio)
+                    ++inputAudioCount;
+            info->in_place_pair = (inputAudioCount > index) ? static_cast<clap_id> (index) : CLAP_INVALID_ID;
+        }
+        else
+        {
+            info->in_place_pair = CLAP_INVALID_ID;
+        }
+
         audioBus->getName().copyToUTF8 (info->name, sizeof (info->name));
 
         return true;
@@ -1056,7 +1205,12 @@ bool AudioPluginProcessorCLAP::initialise()
 
     extensionGUI.set_scale = [] (const clap_plugin_t* plugin, double scale) -> bool
     {
-        return false;
+        auto wrapper = getWrapper (plugin);
+        if (wrapper->audioPluginEditor == nullptr)
+            return false;
+
+        wrapper->audioPluginEditor->contentScaleChanged (static_cast<float> (scale));
+        return true;
     };
 
     extensionGUI.get_size = [] (const clap_plugin_t* plugin, uint32_t* width, uint32_t* height) -> bool
@@ -1231,7 +1385,13 @@ bool AudioPluginProcessorCLAP::initialise()
     hostTimerSupport = reinterpret_cast<const clap_host_timer_support_t*> (host->get_extension (host, CLAP_EXT_TIMER_SUPPORT));
     hostGUI = reinterpret_cast<const clap_host_gui_t*> (host->get_extension (host, CLAP_EXT_GUI));
 
+    audioProcessor->addListener (this);
     addParameterListeners();
+
+#if YUP_LINUX
+    if (instancesCount.fetch_add (1) == 0)
+        registerTimer (16, &guiTimerId);
+#endif
 
     return true;
 }
@@ -1242,6 +1402,14 @@ void AudioPluginProcessorCLAP::destroy()
 {
     removeParameterListeners();
 
+    if (audioProcessor != nullptr)
+        audioProcessor->removeListener (this);
+
+#if YUP_LINUX
+    if (instancesCount.fetch_sub (1) == 1)
+        unregisterTimer (guiTimerId);
+#endif
+
     plugin.plugin_data = nullptr;
     delete this;
 }
@@ -1250,15 +1418,23 @@ void AudioPluginProcessorCLAP::destroy()
 
 bool AudioPluginProcessorCLAP::activate (float sampleRate, int samplesPerBlock)
 {
-#if YUP_LINUX
-    if (instancesCount.fetch_add (1) == 0)
-        registerTimer (16, &guiTimerId);
-#endif
-
     audioProcessor->setPlaybackConfiguration (sampleRate, samplesPerBlock);
+
+    if (callLatencyChangeOnNextActivate.exchange (false)
+        && hostLatency != nullptr
+        && hostLatency->changed != nullptr)
+    {
+        hostLatency->changed (host);
+    }
 
     midiEvents.ensureSize (4096);
     paramChangeBuffer.reserve (static_cast<int> (audioProcessor->getParameters().size()) * 4 + 32);
+
+    const int totalOutputChannels = audioProcessor->getNumAudioOutputs();
+    outputChannelsFloat.reserve (static_cast<size_t> (totalOutputChannels));
+    outputChannelsDouble.reserve (static_cast<size_t> (totalOutputChannels));
+
+    isActive.store (true);
 
     return true;
 }
@@ -1267,12 +1443,8 @@ bool AudioPluginProcessorCLAP::activate (float sampleRate, int samplesPerBlock)
 
 void AudioPluginProcessorCLAP::deactivate()
 {
+    isActive.store (false);
     audioProcessor->releaseResources();
-
-#if YUP_LINUX
-    if (instancesCount.fetch_sub (1) == 1)
-        unregisterTimer (guiTimerId);
-#endif
 }
 
 //==============================================================================
@@ -1405,6 +1577,49 @@ void AudioPluginProcessorCLAP::parameterGestureEnd (const AudioParameter::Ptr& p
     requestParameterFlush();
 }
 
+void AudioPluginProcessorCLAP::audioProcessorChanged (AudioProcessor* processor, const AudioProcessor::ChangeDetails& details)
+{
+    ignoreUnused (processor);
+
+    if (details.latencyChanged)
+    {
+        callLatencyChangeOnNextActivate.store (true);
+
+        if (isActive.load() && host != nullptr && host->request_restart != nullptr)
+            host->request_restart (host);
+    }
+
+    if (details.tailChanged)
+    {
+        tailChangedPending.store (true);
+
+        if (host != nullptr && host->request_process != nullptr)
+            host->request_process (host);
+    }
+
+    uint32 parameterRescanFlags = 0;
+
+    if (details.parameterValuesChanged)
+        parameterRescanFlags |= CLAP_PARAM_RESCAN_VALUES;
+
+    if (details.parameterInfoChanged)
+        parameterRescanFlags |= CLAP_PARAM_RESCAN_VALUES
+                              | CLAP_PARAM_RESCAN_TEXT
+                              | CLAP_PARAM_RESCAN_INFO;
+
+    if (parameterRescanFlags != 0)
+    {
+        parameterRescanFlagsPending.fetch_or (parameterRescanFlags);
+        requestMainThreadCallback();
+    }
+
+    if (details.nonParameterStateChanged)
+    {
+        stateDirtyPending.store (true);
+        requestMainThreadCallback();
+    }
+}
+
 void AudioPluginProcessorCLAP::enqueueParameterEvent (uint16 eventType, clap_id parameterId, double value) noexcept
 {
     int start1, size1, start2, size2;
@@ -1486,6 +1701,40 @@ void AudioPluginProcessorCLAP::requestParameterFlush() const noexcept
     }
 }
 
+void AudioPluginProcessorCLAP::requestMainThreadCallback() const noexcept
+{
+    if (host != nullptr && host->request_callback != nullptr)
+        host->request_callback (host);
+}
+
+void AudioPluginProcessorCLAP::handleMainThreadNotifications() noexcept
+{
+    const auto parameterRescanFlags = parameterRescanFlagsPending.exchange (0);
+    if (parameterRescanFlags != 0
+        && hostParams != nullptr
+        && hostParams->rescan != nullptr)
+    {
+        hostParams->rescan (host, parameterRescanFlags);
+    }
+
+    if (stateDirtyPending.exchange (false)
+        && hostState != nullptr
+        && hostState->mark_dirty != nullptr)
+    {
+        hostState->mark_dirty (host);
+    }
+}
+
+void AudioPluginProcessorCLAP::handleAudioThreadNotifications() noexcept
+{
+    if (tailChangedPending.exchange (false)
+        && hostTail != nullptr
+        && hostTail->changed != nullptr)
+    {
+        hostTail->changed (host);
+    }
+}
+
 //==============================================================================
 
 void AudioPluginProcessorCLAP::editorResized()
@@ -1503,6 +1752,14 @@ ScopedValueSetter<bool> AudioPluginProcessorCLAP::scopedHostEditorResizing()
 }
 
 //==============================================================================
+
+void AudioPluginEditorCLAP::contentScaleChanged (float dpiScale)
+{
+    if (processorEditor == nullptr)
+        return;
+
+    processorEditor->contentScaleChanged (dpiScale);
+}
 
 void AudioPluginEditorCLAP::resized()
 {

@@ -956,16 +956,19 @@ private:
         for (size_t parameterIndex = 0; parameterIndex < processor->getParameters().size(); ++parameterIndex)
         {
             const auto parameter = processor->getParameters()[parameterIndex];
+            const auto flags = (parameter->isAutomatable() && ! parameter->isReadOnly())
+                                 ? Vst::ParameterInfo::kCanAutomate
+                                 : 0;
 
             parameters.addParameter (
                 reinterpret_cast<const Vst::TChar*> (parameter->getName().toUTF16().getAddress()),
-                nullptr,                          // units
-                0,                                // step count
-                parameter->getNormalizedValue(),  // normalized value
-                Vst::ParameterInfo::kCanAutomate, // flags
-                getVST3ParameterID (parameter),   // tag
-                Vst::kRootUnitId,                 // unit
-                nullptr);                         // short title
+                nullptr,                         // units
+                parameter->getNumSteps(),        // step count
+                parameter->getNormalizedValue(), // normalized value
+                flags,                           // flags
+                getVST3ParameterID (parameter),  // tag
+                Vst::kRootUnitId,                // unit
+                nullptr);                        // short title
 
             parameter->addListener (this);
             listenedParameters.push_back (parameter);
@@ -999,20 +1002,33 @@ private:
         const auto tag = getVST3ParameterID (parameter);
         const auto normalizedValue = static_cast<Vst::ParamValue> (parameter->getNormalizedValue());
 
+        if (parameter->isReadOnly())
+            return;
+
         Vst::EditController::setParamNormalized (tag, normalizedValue);
-        Vst::EditController::performEdit (tag, normalizedValue);
+
+        if (parameter->isAutomatable())
+            Vst::EditController::performEdit (tag, normalizedValue);
     }
 
-    void parameterGestureBegin (const AudioParameter::Ptr&, int indexInContainer) override
+    void parameterGestureBegin (const AudioParameter::Ptr& parameter, int indexInContainer) override
     {
-        if (isValidProcessorParameterIndex (indexInContainer))
+        if (isValidProcessorParameterIndex (indexInContainer)
+            && parameter->isAutomatable()
+            && ! parameter->isReadOnly())
+        {
             Vst::EditController::beginEdit (getVST3ParameterID (processor->getParameters()[indexInContainer]));
+        }
     }
 
-    void parameterGestureEnd (const AudioParameter::Ptr&, int indexInContainer) override
+    void parameterGestureEnd (const AudioParameter::Ptr& parameter, int indexInContainer) override
     {
-        if (isValidProcessorParameterIndex (indexInContainer))
+        if (isValidProcessorParameterIndex (indexInContainer)
+            && parameter->isAutomatable()
+            && ! parameter->isReadOnly())
+        {
             Vst::EditController::endEdit (getVST3ParameterID (processor->getParameters()[indexInContainer]));
+        }
     }
 
     void syncProcessorParametersToController()
@@ -1315,8 +1331,12 @@ public:
                 else
                 {
                     const auto parameter = processor->getParameterByHostID (static_cast<uint32> (tag));
-                    if (parameter == nullptr || parameter->isPerformingChangeGesture())
+                    if (parameter == nullptr
+                        || parameter->isReadOnly()
+                        || parameter->isPerformingChangeGesture())
+                    {
                         continue;
+                    }
 
                     for (int32 p = 0; p < numPoints; ++p)
                     {

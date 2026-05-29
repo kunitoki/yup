@@ -42,52 +42,17 @@ float defaultFromString (const String& string)
 //==============================================================================
 
 AudioParameter::AudioParameter (const String& id,
-                                const String& name,
-                                float minValue,
-                                float maxValue,
-                                float defaultValue,
+                                Metadata metadata,
                                 ValueToString valueToString,
-                                StringToValue stringToValue,
-                                bool smoothingEnabled,
-                                float smoothingTimeMs,
-                                uint32 hostParameterID)
+                                StringToValue stringToValue)
     : paramID (id)
-    , paramName (name)
-    , hostParameterID (hostParameterID)
-    , valueRange (minValue, maxValue)
-    , defaultValue (defaultValue)
+    , metadata (std::move (metadata))
     , valueToString (valueToString ? valueToString : defaultToString)
     , stringToValue (stringToValue ? stringToValue : defaultFromString)
-    , smoothingEnabled (smoothingEnabled)
-    , smoothingTimeMs (smoothingTimeMs)
 {
-    jassert (hostParameterID == invalidHostParameterID || hostParameterID <= maximumHostParameterID);
+    jassert (this->metadata.hostParameterID == invalidHostParameterID || this->metadata.hostParameterID <= maximumHostParameterID);
 
-    setValue (defaultValue);
-}
-
-AudioParameter::AudioParameter (const String& id,
-                                const String& name,
-                                NormalisableRange<float> valueRange,
-                                float defaultValue,
-                                ValueToString valueToString,
-                                StringToValue stringToValue,
-                                bool smoothingEnabled,
-                                float smoothingTimeMs,
-                                uint32 hostParameterID)
-    : paramID (id)
-    , paramName (name)
-    , hostParameterID (hostParameterID)
-    , valueRange (std::move (valueRange))
-    , defaultValue (defaultValue)
-    , valueToString (valueToString ? valueToString : defaultToString)
-    , stringToValue (stringToValue ? stringToValue : defaultFromString)
-    , smoothingEnabled (smoothingEnabled)
-    , smoothingTimeMs (smoothingTimeMs)
-{
-    jassert (hostParameterID == invalidHostParameterID || hostParameterID <= maximumHostParameterID);
-
-    setValue (defaultValue);
+    setValue (this->metadata.defaultValue);
 }
 
 AudioParameter::~AudioParameter()

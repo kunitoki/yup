@@ -304,7 +304,10 @@ public:
 
         const auto& param = parameters[parameterIndex];
 
-        outParameterInfo.flags = kAudioUnitParameterFlag_IsReadable | kAudioUnitParameterFlag_IsWritable | kAudioUnitParameterFlag_HasCFNameString;
+        outParameterInfo.flags = kAudioUnitParameterFlag_IsReadable | kAudioUnitParameterFlag_HasCFNameString;
+
+        if (! param->isReadOnly())
+            outParameterInfo.flags |= kAudioUnitParameterFlag_IsWritable;
 
         outParameterInfo.cfNameString = param->getName().toCFString();
         param->getName().copyToUTF8 (outParameterInfo.name, sizeof (outParameterInfo.name));
@@ -349,8 +352,11 @@ public:
         if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
             return kAudioUnitErr_InvalidParameter;
 
-        if (parameters[parameterIndex]->isPerformingChangeGesture())
+        if (parameters[parameterIndex]->isReadOnly()
+            || parameters[parameterIndex]->isPerformingChangeGesture())
+        {
             return noErr;
+        }
 
         parameters[parameterIndex]->setValue (static_cast<float> (inValue));
         return noErr;

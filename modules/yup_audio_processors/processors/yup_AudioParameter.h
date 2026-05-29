@@ -59,55 +59,114 @@ public:
     */
     static constexpr uint32 maximumHostParameterID = 0x7fffffffu;
 
+    /** Metadata used by processors and plugin wrappers when describing this parameter. */
+    struct Metadata
+    {
+    private:
+        /** Bit flags used to store optional parameter capabilities compactly. */
+        enum Flag : uint8
+        {
+            automatableFlag = 1 << 0,
+            readOnlyFlag = 1 << 1,
+            steppedFlag = 1 << 2,
+            enumeratedFlag = 1 << 3,
+            modulatableFlag = 1 << 4,
+            perNoteModulatableFlag = 1 << 5,
+            smoothingEnabledFlag = 1 << 6
+        };
+
+        /** Returns true if the supplied flag is set. */
+        bool isFlagSet (Flag flag) const noexcept { return (flags & flag) != 0; }
+
+        /** Enables or disables the supplied flag. */
+        void setFlag (Flag flag, bool shouldBeSet) noexcept
+        {
+            if (shouldBeSet)
+                flags = static_cast<uint8> (flags | flag);
+            else
+                flags = static_cast<uint8> (flags & ~static_cast<uint8> (flag));
+        }
+
+    public:
+        /** Returns true when hosts may automate this parameter. */
+        bool isAutomatable() const noexcept { return isFlagSet (automatableFlag); }
+
+        /** Sets whether hosts may automate this parameter. */
+        void setAutomatable (bool shouldBeAutomatable) noexcept { setFlag (automatableFlag, shouldBeAutomatable); }
+
+        /** Returns true when hosts may display but not change this parameter. */
+        bool isReadOnly() const noexcept { return isFlagSet (readOnlyFlag); }
+
+        /** Sets whether hosts may display but not change this parameter. */
+        void setReadOnly (bool shouldBeReadOnly) noexcept { setFlag (readOnlyFlag, shouldBeReadOnly); }
+
+        /** Returns true when this parameter accepts only discrete step values. */
+        bool isStepped() const noexcept { return isFlagSet (steppedFlag); }
+
+        /** Sets whether this parameter accepts only discrete step values. */
+        void setStepped (bool shouldBeStepped) noexcept { setFlag (steppedFlag, shouldBeStepped); }
+
+        /** Returns true when this stepped parameter represents an enumerated value. */
+        bool isEnum() const noexcept { return isFlagSet (enumeratedFlag); }
+
+        /** Sets whether this stepped parameter represents an enumerated value. */
+        void setEnum (bool shouldBeEnum) noexcept { setFlag (enumeratedFlag, shouldBeEnum); }
+
+        /** Returns true when this parameter supports CLAP modulation events. */
+        bool isModulatable() const noexcept { return isFlagSet (modulatableFlag); }
+
+        /** Sets whether this parameter supports CLAP modulation events. */
+        void setModulatable (bool shouldBeModulatable) noexcept { setFlag (modulatableFlag, shouldBeModulatable); }
+
+        /** Returns true when this parameter supports CLAP per-note modulation events. */
+        bool isPerNoteModulatable() const noexcept { return isFlagSet (perNoteModulatableFlag); }
+
+        /** Sets whether this parameter supports CLAP per-note modulation events. */
+        void setPerNoteModulatable (bool shouldBePerNoteModulatable) noexcept { setFlag (perNoteModulatableFlag, shouldBePerNoteModulatable); }
+
+        /** Returns true if smoothing is enabled. */
+        bool isSmoothingEnabled() const noexcept { return isFlagSet (smoothingEnabledFlag); }
+
+        /** Sets whether smoothing is enabled. */
+        void setSmoothingEnabled (bool shouldBeEnabled) noexcept { setFlag (smoothingEnabledFlag, shouldBeEnabled); }
+
+        /** The parameter display name. */
+        String name;
+
+        /** Optional stable host-facing automation ID. */
+        uint32 hostParameterID = invalidHostParameterID;
+
+        /** The parameter value range. */
+        NormalisableRange<float> valueRange = { 0.0f, 1.0f };
+
+        /** The default real value. */
+        float defaultValue = 0.0f;
+
+        /** The smoothing time in milliseconds. */
+        float smoothingTimeMs = 0.0f;
+
+        /** Optional host-facing module path, using "/" as a separator. */
+        String modulePath;
+
+    private:
+        uint8 flags = automatableFlag;
+    };
+
     //==============================================================================
 
     /**
         Constructs an AudioParameter instance.
 
-        @param id               The parameter ID (used in the state tree).
-        @param name             The display name.
-        @param minValue         The minimum real value.
-        @param maxValue         The maximum real value.
-        @param defaultValue     The default real value.
-        @param valueToString    Converts real value to display string (optional).
-        @param stringToValue    Parses display string to real value (optional).
-        @param hostParameterID  Optional stable host-facing automation ID. Leave this
-                                as invalidHostParameterID to use the parameter's
-                                addParameter() index for backward compatibility.
+        @param id               The parameter ID used in processor state.
+        @param metadata         The parameter display, range, default, smoothing,
+                                and host-facing metadata.
+        @param valueToString    Converts real values to display strings.
+        @param stringToValue    Parses display strings back to real values.
     */
     AudioParameter (const String& id,
-                    const String& name,
-                    float minValue,
-                    float maxValue,
-                    float defaultValue,
+                    Metadata metadata,
                     ValueToString valueToString = nullptr,
-                    StringToValue stringToValue = nullptr,
-                    bool smoothingEnabled = false,
-                    float smoothingTimeMs = 0.0f,
-                    uint32 hostParameterID = invalidHostParameterID);
-
-    /**
-        Constructs an AudioParameter instance.
-
-        @param id               The parameter ID (used in the state tree).
-        @param name             The display name.
-        @param valueRange         The value range.
-        @param defaultValue     The default real value.
-        @param valueToString    Converts real value to display string (optional).
-        @param stringToValue    Parses display string to real value (optional).
-        @param hostParameterID  Optional stable host-facing automation ID. Leave this
-                                as invalidHostParameterID to use the parameter's
-                                addParameter() index for backward compatibility.
-    */
-    AudioParameter (const String& id,
-                    const String& name,
-                    NormalisableRange<float> valueRange,
-                    float defaultValue,
-                    ValueToString valueToString = nullptr,
-                    StringToValue stringToValue = nullptr,
-                    bool smoothingEnabled = false,
-                    float smoothingTimeMs = 0.0f,
-                    uint32 hostParameterID = invalidHostParameterID);
+                    StringToValue stringToValue = nullptr);
 
     /** Destructor. */
     ~AudioParameter();
@@ -118,7 +177,7 @@ public:
     const String& getID() const { return paramID; }
 
     /** Returns the parameter name. */
-    const String& getName() const { return paramName; }
+    const String& getName() const { return metadata.name; }
 
     /**
         Returns true when this parameter has an explicit host-facing automation ID.
@@ -127,7 +186,10 @@ public:
         reuse an old ID for a different parameter, even if the original parameter is
         removed from the plugin UI.
     */
-    bool hasExplicitHostParameterID() const noexcept { return hostParameterID != invalidHostParameterID; }
+    bool hasExplicitHostParameterID() const noexcept
+    {
+        return metadata.hostParameterID != invalidHostParameterID;
+    }
 
     /**
         Returns the host-facing automation ID for this parameter.
@@ -138,33 +200,81 @@ public:
     uint32 getHostParameterID() const noexcept
     {
         return hasExplicitHostParameterID()
-                 ? hostParameterID
+                 ? metadata.hostParameterID
                  : (paramIndex >= 0 ? static_cast<uint32> (paramIndex) : invalidHostParameterID);
     }
 
     //==============================================================================
 
+    /** Returns the index of this parameter in its container. */
     int getIndexInContainer() const { return paramIndex; }
 
+    /** Sets the index of this parameter in its container. */
     void setIndexInContainer (int newIndex) { paramIndex = newIndex; }
 
     //==============================================================================
 
     /** Returns the minimum value. */
-    float getMinimumValue() const { return valueRange.start; }
+    float getMinimumValue() const { return metadata.valueRange.start; }
 
     /** Returns the maximum value. */
-    float getMaximumValue() const { return valueRange.end; }
+    float getMaximumValue() const { return metadata.valueRange.end; }
 
     /** Returns the default value. */
-    float getDefaultValue() const { return defaultValue; }
+    float getDefaultValue() const { return metadata.defaultValue; }
+
+    /** Returns true when hosts may automate this parameter. */
+    bool isAutomatable() const noexcept { return metadata.isAutomatable(); }
+
+    /** Returns true when hosts may display but not change this parameter. */
+    bool isReadOnly() const noexcept { return metadata.isReadOnly(); }
+
+    /** Returns true when this parameter accepts only discrete step values. */
+    bool isStepped() const noexcept { return metadata.isStepped() || metadata.valueRange.interval > 0.0f; }
+
+    /** Returns the number of discrete steps, or 0 for continuous parameters. */
+    int getNumSteps() const noexcept
+    {
+        if (! isStepped())
+            return 0;
+
+        if (metadata.valueRange.interval <= 0.0f || metadata.valueRange.end <= metadata.valueRange.start)
+            return 1;
+
+        return jmax (1, static_cast<int> (std::floor (((metadata.valueRange.end - metadata.valueRange.start) / metadata.valueRange.interval) + 0.5f)));
+    }
+
+    /** Returns true when this stepped parameter represents an enumerated value. */
+    bool isEnum() const noexcept { return metadata.isEnum(); }
+
+    /** Returns true when this parameter supports CLAP modulation events. */
+    bool isModulatable() const noexcept { return metadata.isModulatable(); }
+
+    /** Returns true when this parameter supports CLAP per-note modulation events. */
+    bool isPerNoteModulatable() const noexcept { return metadata.isPerNoteModulatable(); }
+
+    /** Returns the module path of this parameter. */
+    String getModulePath() const { return metadata.modulePath; }
 
     //==============================================================================
 
+    /** Begins a change gesture for this parameter.
+    
+        Gestures can be nested, but each beginChangeGesture() call must be balanced with a corresponding endChangeGesture() call.
+
+        Hosts typically use change gestures to group multiple parameter changes into a single undo step and to indicate when to update automation envelopes.
+    */
     void beginChangeGesture();
 
+    /** Ends a change gesture for this parameter.
+    
+        Gestures can be nested, but each endChangeGesture() call must be balanced with a corresponding beginChangeGesture() call.
+
+        Hosts typically use change gestures to group multiple parameter changes into a single undo step and to indicate when to update automation envelopes.
+    */
     void endChangeGesture();
 
+    /** Returns true if a change gesture is currently being performed. */
     bool isPerformingChangeGesture() const { return isInsideGesture.load() != 0; }
 
     //==============================================================================
@@ -183,7 +293,7 @@ public:
     */
     void setValue (float newValue)
     {
-        currentValue.store (valueRange.snapToLegalValue (newValue));
+        currentValue.store (metadata.valueRange.snapToLegalValue (newValue));
     }
 
     /** Gets the real (un-normalized) parameter value. */
@@ -207,16 +317,22 @@ public:
 
     //==============================================================================
 
-    /** */
+    /** Converts a real value to a normalized [0..1] value.
+    
+        @param denormalizedValue The real value to convert.
+    */
     float convertToNormalizedValue (float denormalizedValue) const
     {
-        return valueRange.convertTo0to1 (denormalizedValue);
+        return metadata.valueRange.convertTo0to1 (denormalizedValue);
     }
 
-    /** */
+    /** Converts a normalized [0..1] value to a real value.
+    
+        @param normalizedValue The normalized value to convert.
+    */
     float convertToDenormalizedValue (float normalizedValue) const
     {
-        return valueRange.convertFrom0to1 (normalizedValue);
+        return metadata.valueRange.convertFrom0to1 (normalizedValue);
     }
 
     //==============================================================================
@@ -229,19 +345,19 @@ public:
 
     //==============================================================================
 
-    /** */
+    /** Converts a real value to its display string. */
     String convertToString (float value) const { return valueToString (value); }
 
-    /** */
+    /** Parses a string into a real parameter value. */
     float convertFromString (const String& string) const { return stringToValue (string); }
 
     //==============================================================================
 
     /** Returns true if smoothing is enabled. */
-    bool isSmoothingEnabled() const { return smoothingEnabled; }
+    bool isSmoothingEnabled() const { return metadata.isSmoothingEnabled(); }
 
     /** Returns the smoothing time in milliseconds. */
-    float getSmoothingTimeMs() const { return smoothingTimeMs; }
+    float getSmoothingTimeMs() const { return metadata.smoothingTimeMs; }
 
     //==============================================================================
 
@@ -271,18 +387,12 @@ private:
     using ListenersType = ListenerList<Listener, Array<Listener*, CriticalSection>>;
 
     String paramID;
-    String paramName;
-    uint32 hostParameterID = invalidHostParameterID;
-    int paramVersion = 0;
     int paramIndex = -1;
     std::atomic<float> currentValue = 0.0f;
-    NormalisableRange<float> valueRange = { 0.0f, 1.0f };
-    float defaultValue = 0.0f;
+    Metadata metadata;
+    ListenersType listeners;
     ValueToString valueToString = nullptr;
     StringToValue stringToValue = nullptr;
-    ListenersType listeners;
-    float smoothingTimeMs = 0.0f;
-    bool smoothingEnabled = false;
     std::atomic<int> isInsideGesture = 0;
 };
 

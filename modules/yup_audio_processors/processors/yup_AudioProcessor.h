@@ -44,8 +44,52 @@ public:
             return copy;
         }
 
+        /** Returns a copy of these details with the tail length change flag set. */
+        ChangeDetails withTailChanged (bool shouldBeTailChanged) const noexcept
+        {
+            auto copy = *this;
+            copy.tailChanged = shouldBeTailChanged;
+            return copy;
+        }
+
+        /** Returns a copy of these details with the parameter value change flag set. */
+        ChangeDetails withParameterValuesChanged (bool shouldBeParameterValuesChanged) const noexcept
+        {
+            auto copy = *this;
+            copy.parameterValuesChanged = shouldBeParameterValuesChanged;
+            return copy;
+        }
+
+        /** Returns a copy of these details with the parameter metadata change flag set. */
+        ChangeDetails withParameterInfoChanged (bool shouldBeParameterInfoChanged) const noexcept
+        {
+            auto copy = *this;
+            copy.parameterInfoChanged = shouldBeParameterInfoChanged;
+            return copy;
+        }
+
+        /** Returns a copy of these details with the non-parameter state change flag set. */
+        ChangeDetails withNonParameterStateChanged (bool shouldBeNonParameterStateChanged) const noexcept
+        {
+            auto copy = *this;
+            copy.nonParameterStateChanged = shouldBeNonParameterStateChanged;
+            return copy;
+        }
+
         /** True when the processor latency may have changed. */
         bool latencyChanged = false;
+
+        /** True when the processor tail length may have changed. */
+        bool tailChanged = false;
+
+        /** True when one or more parameter values may have changed without a host automation event. */
+        bool parameterValuesChanged = false;
+
+        /** True when one or more parameter names, ranges, or display conversions may have changed. */
+        bool parameterInfoChanged = false;
+
+        /** True when non-parameter processor state may have changed. */
+        bool nonParameterStateChanged = false;
     };
 
     /** Receives processor-level change notifications. */
