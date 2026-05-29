@@ -1176,4 +1176,26 @@ private:
     };
 };
 
+/** Converts a Color to a normalized RGBA vector. */
+inline Vec4f toVec4f (Color color) noexcept
+{
+    return {
+        color.getRedFloat(),
+        color.getGreenFloat(),
+        color.getBlueFloat(),
+        color.getAlphaFloat()
+    };
+}
+
+/** Converts a normalized RGBA vector to a Color. */
+inline Color toColor (Vec4f color) noexcept
+{
+    return {
+        static_cast<uint8> (roundToInt (jlimit (0.0f, 1.0f, color.a) * 255.0f)),
+        static_cast<uint8> (roundToInt (jlimit (0.0f, 1.0f, color.r) * 255.0f)),
+        static_cast<uint8> (roundToInt (jlimit (0.0f, 1.0f, color.g) * 255.0f)),
+        static_cast<uint8> (roundToInt (jlimit (0.0f, 1.0f, color.b) * 255.0f))
+    };
+}
+
 } // namespace yup

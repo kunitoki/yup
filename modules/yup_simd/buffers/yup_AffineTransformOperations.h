@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2025 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,8 +19,20 @@
   ==============================================================================
 */
 
-#include "yup_simd/yup_FloatVectorOperations.cpp"
-#include "yup_simd/yup_ComplexVectorOperations.cpp"
-#include "yup_simd/yup_AffineTransformOperations.cpp"
-#include "yup_simd/yup_ColorVectorOperations.cpp"
-#include "yup_simd/yup_SIMDRegister.cpp"
+#pragma once
+
+namespace yup
+{
+
+//==============================================================================
+class YUP_API AffineTransformOperations
+{
+public:
+    /** Transforms points stored in separate x/y arrays in-place. */
+    static void YUP_CALLTYPE transformPoints (float* xs, float* ys, int numPoints, float sx, float shx, float tx, float shy, float sy, float ty) noexcept;
+
+    /** Transforms points stored in separate x/y source arrays into destination arrays. */
+    static void YUP_CALLTYPE transformPoints (const float* srcXs, const float* srcYs, float* dstXs, float* dstYs, int numPoints, float sx, float shx, float tx, float shy, float sy, float ty) noexcept;
+};
+
+} // namespace yup

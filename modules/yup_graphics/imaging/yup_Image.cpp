@@ -24,11 +24,6 @@ namespace yup
 
 namespace
 {
-uint8 premultiplyComponent (uint8 component, uint8 alpha) noexcept
-{
-    return static_cast<uint8> ((static_cast<uint32> (component) * static_cast<uint32> (alpha) + 127u) / 255u);
-}
-
 uint8 unpremultiplyComponent (uint8 component, uint8 alpha) noexcept
 {
     if (alpha == 0)
@@ -36,16 +31,6 @@ uint8 unpremultiplyComponent (uint8 component, uint8 alpha) noexcept
 
     const auto value = (static_cast<uint32> (component) * 255u + static_cast<uint32> (alpha) / 2u) / static_cast<uint32> (alpha);
     return static_cast<uint8> (value > 255u ? 255u : value);
-}
-
-void writeARGBAsRGBAPremultiplied (uint32 argb, uint8* destination) noexcept
-{
-    const auto alpha = static_cast<uint8> ((argb >> 24) & 0xFF);
-
-    destination[0] = premultiplyComponent (static_cast<uint8> ((argb >> 16) & 0xFF), alpha);
-    destination[1] = premultiplyComponent (static_cast<uint8> ((argb >> 8) & 0xFF), alpha);
-    destination[2] = premultiplyComponent (static_cast<uint8> (argb & 0xFF), alpha);
-    destination[3] = alpha;
 }
 
 std::unique_ptr<const uint8[]> copyRGBAPremultipliedAsRGBA (const rive::Bitmap& bitmap)
@@ -256,16 +241,26 @@ bool Image::createTextureIfNotPresent (GraphicsContext& context) const
     if (renderContext == nullptr || renderContext->impl() == nullptr)
         return false;
 
-    std::vector<uint8> texturePixels (static_cast<size_t> (width) * static_cast<size_t> (height) * 4u);
-    auto* destination = texturePixels.data();
+    const auto numPixels = static_cast<size_t> (width) * static_cast<size_t> (height);
+    std::vector<uint8> texturePixels (numPixels * 4u);
 
-    for (int y = 0; y < height; ++y)
+    const auto sourceData = bitmapData->getRawData();
+    const auto* source = sourceData.data();
+
+    switch (bitmapData->getPixelFormat())
     {
-        for (int x = 0; x < width; ++x)
-        {
-            writeARGBAsRGBAPremultiplied (bitmapData->getPixel (x, y), destination);
-            destination += 4;
-        }
+        case PixelFormat::Grayscale:
+            ColorVectorOperations::convertGrayscaleToRGBA (source, texturePixels.data(), static_cast<int> (numPixels));
+            break;
+
+        case PixelFormat::RGB:
+            ColorVectorOperations::convertRGBToRGBA (source, texturePixels.data(), static_cast<int> (numPixels));
+            break;
+
+        case PixelFormat::RGBA:
+            std::memcpy (texturePixels.data(), source, texturePixels.size());
+            ColorVectorOperations::premultiplyRGBA (texturePixels.data(), static_cast<int> (numPixels));
+            break;
     }
 
     texture = renderContext->impl()->makeImageTexture (

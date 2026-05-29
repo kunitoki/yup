@@ -32,7 +32,7 @@
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_core rive rive_renderer
+    dependencies:       yup_core yup_simd rive rive_renderer
     appleFrameworks:    Metal
     searchpaths:        native
 
@@ -45,6 +45,7 @@
 #define YUP_GRAPHICS_H_INCLUDED
 
 #include <yup_core/yup_core.h>
+#include <yup_simd/yup_simd.h>
 
 #include <rive_renderer/rive_renderer.h>
 #include <rive_decoders/rive_decoders.h>

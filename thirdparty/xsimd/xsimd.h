@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2025 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,8 +19,27 @@
   ==============================================================================
 */
 
-#include "yup_simd/yup_FloatVectorOperations.cpp"
-#include "yup_simd/yup_ComplexVectorOperations.cpp"
-#include "yup_simd/yup_AffineTransformOperations.cpp"
-#include "yup_simd/yup_ColorVectorOperations.cpp"
-#include "yup_simd/yup_SIMDRegister.cpp"
+/*
+  ==============================================================================
+
+  BEGIN_YUP_MODULE_DECLARATION
+
+    ID:               xsimd
+    vendor:           xtensor-stack
+    version:          14.2.0
+    name:             xsimd C++ library for SIMD intrinsics
+    description:      xsimd is a C++ library for SIMD intrinsics.
+    website:          https://github.com/xtensor-stack/xsimd
+    upstream:         https://github.com/xtensor-stack/xsimd/archive/refs/tags/14.2.0.tar.gz
+    license:          BSD-3-Clause
+
+    searchpaths:      include
+
+  END_YUP_MODULE_DECLARATION
+
+  ==============================================================================
+*/
+
+#pragma once
+
+#include <xsimd/xsimd.hpp>

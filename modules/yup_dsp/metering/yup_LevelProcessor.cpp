@@ -73,16 +73,7 @@ void LevelProcessor::processPeak (const float* samples, int numSamples, float& p
     jassert (samples != nullptr);
     jassert (numSamples >= 0);
 
-    float peak = 0.0f;
-
-    for (int i = 0; i < numSamples; ++i)
-    {
-        const float absSample = std::abs (samples[i]);
-        if (absSample > peak)
-            peak = absSample;
-    }
-
-    peakOut = peak;
+    peakOut = FloatVectorOperations::maxAbs (samples, numSamples);
 }
 
 void LevelProcessor::processRMS (const float* samples, int numSamples, float& rmsOut) noexcept
@@ -93,12 +84,7 @@ void LevelProcessor::processRMS (const float* samples, int numSamples, float& rm
     if (rmsBuffer.empty() || rmsBufferSize == 0)
     {
         // Fallback: simple RMS if buffer not initialized
-        double sumSquares = 0.0;
-        for (int i = 0; i < numSamples; ++i)
-        {
-            const float sample = samples[i];
-            sumSquares += sample * sample;
-        }
+        const double sumSquares = FloatVectorOperations::sumSquares (samples, numSamples);
         rmsOut = numSamples > 0 ? static_cast<float> (std::sqrt (sumSquares / numSamples)) : 0.0f;
         return;
     }

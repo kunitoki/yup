@@ -1508,6 +1508,156 @@ double findMaximum (const double* src, Size num) noexcept
 #endif
 }
 
+template <typename Type, typename Size>
+Type sumSquares (const Type* src, Size num) noexcept
+{
+    if (num <= 0)
+        return {};
+
+#if YUP_USE_VDSP_FRAMEWORK
+    Type result = {};
+
+    if constexpr (std::is_same_v<Type, float>)
+        vDSP_svesq (src, 1, &result, (vDSP_Length) num);
+    else
+        vDSP_svesqD (src, 1, &result, (vDSP_Length) num);
+
+    return result;
+#else
+    Type result = {};
+    Size i = 0;
+
+#if YUP_USE_SSE_INTRINSICS || YUP_USE_ARM_NEON
+    using Mode = typename FloatVectorHelpers::ModeType<sizeof (Type)>::Mode;
+
+    typename Mode::ParallelType accumulator = Mode::load1 (Type {});
+
+    for (; i + Mode::numParallel <= num; i += Mode::numParallel)
+    {
+        const auto values = Mode::loadU (src + i);
+        accumulator = Mode::add (accumulator, Mode::mul (values, values));
+    }
+
+    Type lanes[Mode::numParallel];
+    Mode::storeU (lanes, accumulator);
+
+    for (int lane = 0; lane < Mode::numParallel; ++lane)
+        result += lanes[lane];
+#endif
+
+    for (; i < num; ++i)
+        result += src[i] * src[i];
+
+    return result;
+#endif
+}
+
+template <typename Type, typename Size>
+Type dotProduct (const Type* src1, const Type* src2, Size num) noexcept
+{
+    if (num <= 0)
+        return {};
+
+#if YUP_USE_VDSP_FRAMEWORK
+    Type result = {};
+
+    if constexpr (std::is_same_v<Type, float>)
+        vDSP_dotpr (src1, 1, src2, 1, &result, (vDSP_Length) num);
+    else
+        vDSP_dotprD (src1, 1, src2, 1, &result, (vDSP_Length) num);
+
+    return result;
+#else
+    Type result = {};
+    Size i = 0;
+
+#if YUP_USE_SSE_INTRINSICS || YUP_USE_ARM_NEON
+    using Mode = typename FloatVectorHelpers::ModeType<sizeof (Type)>::Mode;
+
+    typename Mode::ParallelType accumulator = Mode::load1 (Type {});
+
+    for (; i + Mode::numParallel <= num; i += Mode::numParallel)
+    {
+        const auto values1 = Mode::loadU (src1 + i);
+        const auto values2 = Mode::loadU (src2 + i);
+        accumulator = Mode::add (accumulator, Mode::mul (values1, values2));
+    }
+
+    Type lanes[Mode::numParallel];
+    Mode::storeU (lanes, accumulator);
+
+    for (int lane = 0; lane < Mode::numParallel; ++lane)
+        result += lanes[lane];
+#endif
+
+    for (; i < num; ++i)
+        result += src1[i] * src2[i];
+
+    return result;
+#endif
+}
+
+template <typename Type, typename Size>
+Type rms (const Type* src, Size num) noexcept
+{
+    return num > 0 ? static_cast<Type> (std::sqrt (sumSquares (src, num) / static_cast<Type> (num))) : Type {};
+}
+
+template <typename Type, typename Size>
+Type maxAbs (const Type* src, Size num) noexcept
+{
+    if (num <= 0)
+        return {};
+
+#if YUP_USE_VDSP_FRAMEWORK
+    Type result = {};
+
+    if constexpr (std::is_same_v<Type, float>)
+        vDSP_maxmgv (src, 1, &result, (vDSP_Length) num);
+    else
+        vDSP_maxmgvD (src, 1, &result, (vDSP_Length) num);
+
+    return result;
+#else
+    Type result = {};
+    Size i = 0;
+
+#if YUP_USE_SSE_INTRINSICS || YUP_USE_ARM_NEON
+    using Mode = typename FloatVectorHelpers::ModeType<sizeof (Type)>::Mode;
+
+    typename Mode::ParallelType accumulator = Mode::load1 (Type {});
+
+    if constexpr (std::is_same_v<Type, float>)
+    {
+        [[maybe_unused]] FloatVectorHelpers::signMask32 signMask;
+        signMask.i = 0x7fffffffUL;
+
+        const auto mask = Mode::load1 (signMask.f);
+
+        for (; i + Mode::numParallel <= num; i += Mode::numParallel)
+            accumulator = Mode::max (accumulator, Mode::bit_and (Mode::loadU (src + i), mask));
+    }
+    else
+    {
+        [[maybe_unused]] FloatVectorHelpers::signMask64 signMask;
+        signMask.i = 0x7fffffffffffffffULL;
+
+        const auto mask = Mode::load1 (signMask.d);
+
+        for (; i + Mode::numParallel <= num; i += Mode::numParallel)
+            accumulator = Mode::max (accumulator, Mode::bit_and (Mode::loadU (src + i), mask));
+    }
+
+    result = Mode::max (accumulator);
+#endif
+
+    for (; i < num; ++i)
+        result = jmax (result, static_cast<Type> (std::abs (src[i])));
+
+    return result;
+#endif
+}
+
 template <typename Size>
 void convertFixedToFloat (float* dest, const int* src, float multiplier, Size num) noexcept
 {
@@ -2042,6 +2192,35 @@ FloatType YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::findMaxi
                                                                                      CountType numValues) noexcept
 {
     return FloatVectorHelpers::findMaximum (src, numValues);
+}
+
+template <typename FloatType, typename CountType>
+FloatType YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::sumSquares (const FloatType* src,
+                                                                                    CountType numValues) noexcept
+{
+    return FloatVectorHelpers::sumSquares (src, numValues);
+}
+
+template <typename FloatType, typename CountType>
+FloatType YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::rms (const FloatType* src,
+                                                                             CountType numValues) noexcept
+{
+    return FloatVectorHelpers::rms (src, numValues);
+}
+
+template <typename FloatType, typename CountType>
+FloatType YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::dotProduct (const FloatType* src1,
+                                                                                    const FloatType* src2,
+                                                                                    CountType numValues) noexcept
+{
+    return FloatVectorHelpers::dotProduct (src1, src2, numValues);
+}
+
+template <typename FloatType, typename CountType>
+FloatType YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::maxAbs (const FloatType* src,
+                                                                                CountType numValues) noexcept
+{
+    return FloatVectorHelpers::maxAbs (src, numValues);
 }
 
 //==============================================================================

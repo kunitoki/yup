@@ -378,6 +378,55 @@ TEST_F (FloatVectorOperationsTests, ComputeCorrelationMatchesScalar)
     EXPECT_NEAR (correlation, reference, 1.0e-5);
 }
 
+TEST_F (FloatVectorOperationsTests, ReductionsMatchScalarReferences)
+{
+    const float data1[] = { -1.0f, 2.0f, -3.0f, 4.0f, -5.0f };
+    const float data2[] = { 0.5f, -1.0f, 1.5f, -2.0f, 2.5f };
+
+    float expectedSumSquares = 0.0f;
+    float expectedDotProduct = 0.0f;
+    float expectedMaxAbs = 0.0f;
+
+    for (int i = 0; i < 5; ++i)
+    {
+        expectedSumSquares += data1[i] * data1[i];
+        expectedDotProduct += data1[i] * data2[i];
+        expectedMaxAbs = jmax (expectedMaxAbs, std::abs (data1[i]));
+    }
+
+    EXPECT_NEAR (FloatVectorOperations::sumSquares (data1, 5), expectedSumSquares, 1.0e-5f);
+    EXPECT_NEAR (FloatVectorOperations::rms (data1, 5), std::sqrt (expectedSumSquares / 5.0f), 1.0e-5f);
+    EXPECT_NEAR (FloatVectorOperations::dotProduct (data1, data2, 5), expectedDotProduct, 1.0e-5f);
+    EXPECT_NEAR (FloatVectorOperations::maxAbs (data1, 5), expectedMaxAbs, 1.0e-5f);
+
+    EXPECT_FLOAT_EQ (FloatVectorOperations::sumSquares (data1, 0), 0.0f);
+    EXPECT_FLOAT_EQ (FloatVectorOperations::rms (data1, 0), 0.0f);
+    EXPECT_FLOAT_EQ (FloatVectorOperations::dotProduct (data1, data2, 0), 0.0f);
+    EXPECT_FLOAT_EQ (FloatVectorOperations::maxAbs (data1, 0), 0.0f);
+}
+
+TEST_F (FloatVectorOperationsTests, DoubleReductionsMatchScalarReferences)
+{
+    const double data1[] = { -0.25, 0.5, -0.75, 1.0 };
+    const double data2[] = { 2.0, -3.0, 4.0, -5.0 };
+
+    double expectedSumSquares = 0.0;
+    double expectedDotProduct = 0.0;
+    double expectedMaxAbs = 0.0;
+
+    for (int i = 0; i < 4; ++i)
+    {
+        expectedSumSquares += data1[i] * data1[i];
+        expectedDotProduct += data1[i] * data2[i];
+        expectedMaxAbs = jmax (expectedMaxAbs, std::abs (data1[i]));
+    }
+
+    EXPECT_NEAR (FloatVectorOperations::sumSquares (data1, 4), expectedSumSquares, 1.0e-12);
+    EXPECT_NEAR (FloatVectorOperations::rms (data1, 4), std::sqrt (expectedSumSquares / 4.0), 1.0e-12);
+    EXPECT_NEAR (FloatVectorOperations::dotProduct (data1, data2, 4), expectedDotProduct, 1.0e-12);
+    EXPECT_NEAR (FloatVectorOperations::maxAbs (data1, 4), expectedMaxAbs, 1.0e-12);
+}
+
 TEST_F (FloatVectorOperationsTests, FloatToDoubleAndBack)
 {
     Random& random = Random::getSystemRandom();
