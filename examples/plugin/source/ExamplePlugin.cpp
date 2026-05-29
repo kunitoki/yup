@@ -29,6 +29,9 @@
 namespace
 {
 
+constexpr char examplePluginStateMagic[] = { 'Y', 'U', 'P', 'S' };
+constexpr int examplePluginStateVersion = 1;
+
 const char* getPluginFormatName()
 {
 #if YUP_AUDIO_PLUGIN_ENABLE_AU
@@ -253,7 +256,10 @@ void ExamplePlugin::setCurrentPreset (int index) noexcept
         return;
 
     if (yup::isPositiveAndBelow (index, yup::numElementsInArray (presets)))
+    {
+        currentPreset = index;
         gainParameter->setValue (presets[index].gainValue);
+    }
 }
 
 int ExamplePlugin::getNumPresets() const
@@ -279,12 +285,51 @@ void ExamplePlugin::setPresetName (int index, yup::StringRef newName)
 
 yup::Result ExamplePlugin::loadStateFromMemory (const yup::MemoryBlock& memoryBlock)
 {
-    return yup::Result::fail ("Not implemented");
+    constexpr size_t expectedSize = sizeof (examplePluginStateMagic) + (sizeof (int) * 2) + sizeof (float);
+
+    if (memoryBlock.getSize() != expectedSize)
+        return yup::Result::fail ("Invalid example plugin state size");
+
+    yup::MemoryInputStream stream (memoryBlock, false);
+
+    char magic[sizeof (examplePluginStateMagic)] {};
+    if (stream.read (magic, sizeof (magic)) != static_cast<int> (sizeof (magic)))
+        return yup::Result::fail ("Invalid example plugin state header");
+
+    for (size_t i = 0; i < sizeof (examplePluginStateMagic); ++i)
+        if (magic[i] != examplePluginStateMagic[i])
+            return yup::Result::fail ("Invalid example plugin state header");
+
+    const auto version = stream.readInt();
+    if (version != examplePluginStateVersion)
+        return yup::Result::fail ("Unsupported example plugin state version");
+
+    const auto presetIndex = stream.readInt();
+    if (! yup::isPositiveAndBelow (presetIndex, yup::numElementsInArray (presets)))
+        return yup::Result::fail ("Invalid example plugin preset index");
+
+    const auto gainValue = stream.readFloat();
+    if (! (gainValue >= gainParameter->getMinimumValue() && gainValue <= gainParameter->getMaximumValue()))
+        return yup::Result::fail ("Invalid example plugin gain value");
+
+    currentPreset = presetIndex;
+    gainParameter->setValue (gainValue);
+
+    return yup::Result::ok();
 }
 
 yup::Result ExamplePlugin::saveStateIntoMemory (yup::MemoryBlock& memoryBlock)
 {
-    return yup::Result::fail ("Not implemented");
+    yup::MemoryOutputStream stream (memoryBlock, false);
+
+    if (! stream.write (examplePluginStateMagic, sizeof (examplePluginStateMagic))
+        || ! stream.writeInt (examplePluginStateVersion)
+        || ! stream.writeInt (currentPreset)
+        || ! stream.writeFloat (gainParameter->getValue()))
+        return yup::Result::fail ("Failed to write example plugin state");
+
+    stream.flush();
+    return yup::Result::ok();
 }
 
 //==============================================================================

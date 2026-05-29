@@ -120,7 +120,11 @@ function (yup_audio_plugin)
 
         # Create CLAP plugin target
         _yup_message (STATUS "Creating CLAP plugin target")
-        add_library (${target_name}_clap_plugin SHARED)
+        if (YUP_PLATFORM_MAC)
+            add_library (${target_name}_clap_plugin MODULE)
+        else()
+            add_library (${target_name}_clap_plugin SHARED)
+        endif()
 
         target_compile_features (${target_name}_clap_plugin PRIVATE cxx_std_20)
 
@@ -150,9 +154,29 @@ function (yup_audio_plugin)
             OBJC_VISIBILITY_PRESET hidden
             OBJCXX_VISIBILITY_PRESET hidden
             VISIBILITY_INLINES_HIDDEN ON
-            SUFFIX ".clap"
             FOLDER "${YUP_ARG_TARGET_IDE_GROUP}"
             XCODE_GENERATE_SCHEME ON)
+
+        if (YUP_PLATFORM_MAC)
+            set_target_properties (${target_name}_clap_plugin PROPERTIES
+                BUNDLE TRUE
+                BUNDLE_EXTENSION "clap"
+                MACOSX_BUNDLE TRUE
+                MACOSX_BUNDLE_BUNDLE_NAME "${target_name}_clap_plugin"
+                MACOSX_BUNDLE_GUI_IDENTIFIER "${target_bundle_id}.clap"
+                PREFIX "")
+
+            set (clap_plugin_path "$<TARGET_BUNDLE_DIR:${target_name}_clap_plugin>")
+        else()
+            set_target_properties (${target_name}_clap_plugin PROPERTIES
+                SUFFIX ".clap")
+
+            set (clap_plugin_path "$<TARGET_FILE:${target_name}_clap_plugin>")
+        endif()
+
+        yup_codesign_target (${target_name}_clap_plugin "${clap_plugin_path}")
+
+        yup_validate_clap_plugin (${target_name}_clap_plugin "${clap_plugin_path}")
 
         yup_audio_plugin_copy_bundle (${target_name} clap)
     endif()
@@ -201,27 +225,6 @@ function (yup_audio_plugin)
             ${additional_libraries}
             ${YUP_ARG_MODULES})
 
-        if (YUP_PLATFORM_MAC)
-            smtg_target_set_bundle (${target_name}_vst3_plugin
-                BUNDLE_IDENTIFIER "${target_bundle_id}"
-                COMPANY_NAME "kunitoki")
-
-            #smtg_target_set_debug_executable(MyPlugin
-            #    "/Applications/VST3PluginTestHost.app"
-            #    "--pluginfolder;$(BUILT_PRODUCTS_DIR)")
-
-            if (NOT XCODE)
-                add_custom_command(
-                    TARGET ${target_name}_vst3_plugin POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E echo [SMTG] Validator started...
-                    COMMAND
-                        $<TARGET_FILE:validator>
-                        "${CMAKE_BINARY_DIR}/VST3/${CMAKE_BUILD_TYPE}/${CMAKE_BUILD_TYPE}/${target_name}_vst3_plugin.vst3"
-                        WORKING_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
-                    COMMAND ${CMAKE_COMMAND} -E echo [SMTG] Validator finished.)
-            endif()
-        endif()
-
         set_target_properties (${target_name}_vst3_plugin PROPERTIES
             C_VISIBILITY_PRESET hidden
             CXX_VISIBILITY_PRESET hidden
@@ -231,6 +234,27 @@ function (yup_audio_plugin)
             SUFFIX ".vst3"
             FOLDER "${YUP_ARG_TARGET_IDE_GROUP}"
             XCODE_GENERATE_SCHEME ON)
+
+        set (vst3_plugin_binary_path "$<TARGET_FILE:${target_name}_vst3_plugin>")
+        set (vst3_pluginval_path "${vst3_plugin_binary_path}")
+        get_target_property (vst3_plugin_package_path ${target_name}_vst3_plugin SMTG_PLUGIN_PACKAGE_PATH)
+        if (vst3_plugin_package_path)
+            set (vst3_pluginval_path "${vst3_plugin_package_path}")
+        else()
+            set (vst3_plugin_package_path "${vst3_plugin_binary_path}")
+        endif()
+        if (YUP_PLATFORM_MAC)
+            smtg_target_set_bundle (${target_name}_vst3_plugin
+                BUNDLE_IDENTIFIER "${target_bundle_id}"
+                COMPANY_NAME "kunitoki") # TODO - make company name configurable
+            if ("${vst3_plugin_package_path}" STREQUAL "${vst3_plugin_binary_path}")
+                set (vst3_plugin_package_path "$<TARGET_BUNDLE_DIR:${target_name}_vst3_plugin>")
+            endif()
+            set (vst3_pluginval_path "${vst3_plugin_package_path}")
+        endif()
+        yup_validate_smtg_vst3_plugin (${target_name}_vst3_plugin "${vst3_plugin_package_path}")
+
+        yup_validate_pluginval (${target_name}_vst3_plugin "${vst3_pluginval_path}")
 
         yup_audio_plugin_copy_bundle (${target_name} vst3)
     endif()
@@ -375,7 +399,22 @@ function (yup_audio_plugin)
                 COMMENT "Generating AU PkgInfo"
                 VERBATIM)
 
+            yup_codesign_target (${target_name}_au_plugin "$<TARGET_BUNDLE_DIR:${target_name}_au_plugin>")
+
             yup_audio_plugin_copy_bundle (${target_name} au)
+
+            set (au_pluginval_path "$ENV{HOME}/Library/Audio/Plug-Ins/Components/${target_name}_au_plugin.component")
+
+            yup_validate_au_plugin (
+                ${target_name}_au_plugin
+                "${AU_ARGS_PLUGIN_NAME}"
+                "${au_bundle_type}"
+                "${AU_ARGS_PLUGIN_AU_SUBTYPE}"
+                "${AU_ARGS_PLUGIN_AU_MANUFACTURER}")
+
+            yup_validate_pluginval (
+                ${target_name}_au_plugin
+                "${au_pluginval_path}")
         endif()
     endif()
 
@@ -431,8 +470,8 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
     if ("${plugin_type}" STREQUAL "clap")
         add_custom_command(TARGET ${dependency_target} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_target_path}"
-            COMMAND ${CMAKE_COMMAND} -E rm -f "${plugin_path}"
-            COMMAND ${CMAKE_COMMAND} -E create_symlink "$<TARGET_FILE:${dependency_target}>" "${plugin_path}"
+            COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
+            COMMAND ${CMAKE_COMMAND} -E create_symlink "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
             COMMENT "Symlinking CLAP plugin ${plugin_type_upper} plugin to ${plugin_path}"
             VERBATIM)
     elseif ("${plugin_type}" STREQUAL "vst3")
@@ -450,7 +489,6 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
         add_custom_command(TARGET ${dependency_target} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
             COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
-            COMMAND codesign --force --sign - "${plugin_path}"
             COMMENT "Copying AU plugin ${plugin_type_upper} to ${plugin_path}"
             VERBATIM)
     else()

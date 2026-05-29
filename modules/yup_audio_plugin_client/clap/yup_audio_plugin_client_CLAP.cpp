@@ -41,51 +41,99 @@ namespace yup
 
 std::optional<MidiMessage> clapEventToMidiMessage (const clap_event_header_t* event)
 {
+    const auto clampMidiChannel = [] (int channel) noexcept
+    {
+        return jlimit (1, 16, channel < 0 ? 1 : channel + 1);
+    };
+
+    const auto clampMidiValue = [] (double value) noexcept
+    {
+        if (! (value >= 0.0))
+            return 0;
+
+        if (value >= 127.0)
+            return 127;
+
+        return static_cast<int> (value);
+    };
+
+    const auto clampPitchBendValue = [] (double value) noexcept
+    {
+        if (! (value >= 0.0))
+            return 0;
+
+        if (value >= 16383.0)
+            return 16383;
+
+        return static_cast<int> (value);
+    };
+
     switch (event->type)
     {
         case CLAP_EVENT_NOTE_ON:
         {
             const auto* noteEvent = reinterpret_cast<const clap_event_note_t*> (event);
-            const int channel = noteEvent->channel < 0 ? 1 : noteEvent->channel + 1;
-            return MidiMessage::noteOn (channel, noteEvent->key, static_cast<uint8> (noteEvent->velocity * 127.0f));
+            if (! isPositiveAndBelow (noteEvent->key, 128))
+                return std::nullopt;
+
+            return MidiMessage::noteOn (clampMidiChannel (noteEvent->channel),
+                                        noteEvent->key,
+                                        static_cast<uint8> (clampMidiValue (noteEvent->velocity * 127.0)));
         }
 
         case CLAP_EVENT_NOTE_OFF:
         {
             const auto* noteEvent = reinterpret_cast<const clap_event_note_t*> (event);
-            const int channel = noteEvent->channel < 0 ? 1 : noteEvent->channel + 1;
-            return MidiMessage::noteOff (channel, noteEvent->key, static_cast<uint8> (noteEvent->velocity * 127.0f));
+            if (! isPositiveAndBelow (noteEvent->key, 128))
+                return std::nullopt;
+
+            return MidiMessage::noteOff (clampMidiChannel (noteEvent->channel),
+                                         noteEvent->key,
+                                         static_cast<uint8> (clampMidiValue (noteEvent->velocity * 127.0)));
         }
 
         case CLAP_EVENT_NOTE_CHOKE:
         {
             const auto* noteEvent = reinterpret_cast<const clap_event_note_t*> (event);
-            const int channel = noteEvent->channel < 0 ? 1 : noteEvent->channel + 1;
-            return MidiMessage::noteOff (channel, noteEvent->key);
+            if (! isPositiveAndBelow (noteEvent->key, 128))
+                return std::nullopt;
+
+            return MidiMessage::noteOff (clampMidiChannel (noteEvent->channel), noteEvent->key);
         }
 
         case CLAP_EVENT_MIDI:
         {
             const auto* midiEvent = reinterpret_cast<const clap_event_midi_t*> (event);
-            return MidiMessage (midiEvent->data, 3);
+            if (midiEvent->data[0] < 0x80)
+                return std::nullopt;
+
+            const int messageLength = MidiMessage::getMessageLengthFromFirstByte (midiEvent->data[0]);
+            if (messageLength <= 0 || messageLength > 3)
+                return std::nullopt;
+
+            for (int byteIndex = 1; byteIndex < messageLength; ++byteIndex)
+                if (midiEvent->data[byteIndex] >= 0x80)
+                    return std::nullopt;
+
+            return MidiMessage (midiEvent->data, messageLength);
         }
 
         case CLAP_EVENT_NOTE_EXPRESSION:
         {
             const auto* ev = reinterpret_cast<const clap_event_note_expression_t*> (event);
-            const int channel = ev->channel < 0 ? 1 : ev->channel + 1;
+            const int channel = clampMidiChannel (ev->channel);
 
             if (ev->expression_id == CLAP_NOTE_EXPRESSION_TUNING)
             {
-                const int pitchBendValue = jlimit (0, 16383, static_cast<int> (ev->value * 8192.0 + 8192.0));
+                const int pitchBendValue = clampPitchBendValue (ev->value * 8192.0 + 8192.0);
                 return MidiMessage::pitchWheel (channel, pitchBendValue);
             }
 
             if (ev->expression_id == CLAP_NOTE_EXPRESSION_PRESSURE)
-                return MidiMessage::channelPressureChange (channel, static_cast<int> (ev->value * 127.0));
+                return MidiMessage::channelPressureChange (channel, clampMidiValue (ev->value * 127.0));
 
             if (ev->expression_id == CLAP_NOTE_EXPRESSION_BRIGHTNESS)
-                return MidiMessage::controllerEvent (channel, 74, static_cast<int> (ev->value * 127.0));
+                return MidiMessage::controllerEvent (channel, 74, clampMidiValue (ev->value * 127.0));
 
             break;
         }
@@ -93,6 +141,9 @@ std::optional<MidiMessage> clapEventToMidiMessage (const clap_event_header_t* ev
         case CLAP_EVENT_MIDI_SYSEX:
         {
             const auto* sysexEvent = reinterpret_cast<const clap_event_midi_sysex_t*> (event);
+            if (sysexEvent->buffer == nullptr || sysexEvent->size == 0)
+                return std::nullopt;
+
             return MidiMessage (sysexEvent->buffer, static_cast<int> (sysexEvent->size));
         }
 
@@ -118,6 +169,25 @@ void clapEventToParameterChange (const clap_event_header_t* event, AudioProcesso
         return;
 
     parameters[parameterIndex]->setValue (static_cast<float> (paramEvent->value));
+}
+
+static bool writeAllToCLAPStream (const clap_ostream_t* stream, const void* data, size_t dataSize)
+{
+    const auto* bytes = static_cast<const char*> (data);
+    size_t bytesWritten = 0;
+
+    while (bytesWritten < dataSize)
+    {
+        const auto remaining = dataSize - bytesWritten;
+        const auto written = stream->write (stream, bytes + bytesWritten, static_cast<uint64_t> (remaining));
+
+        if (written <= 0 || static_cast<uint64_t> (written) > remaining)
+            return false;
+
+        bytesWritten += static_cast<size_t> (written);
+    }
+
+    return true;
 }
 
 //==============================================================================
@@ -786,8 +856,7 @@ bool AudioPluginProcessorCLAP::initialise()
         if (! saved)
             return false;
 
-        return stream->write (stream, data.getData(), static_cast<uint64_t> (data.getSize()))
-            == static_cast<int64_t> (data.getSize());
+        return writeAllToCLAPStream (stream, data.getData(), data.getSize());
     };
 
     extensionState.load = [] (const clap_plugin_t* plugin, const clap_istream_t* stream) -> bool
@@ -799,8 +868,12 @@ bool AudioPluginProcessorCLAP::initialise()
         for (;;)
         {
             const int64_t n = stream->read (stream, buf, sizeof (buf));
-            if (n <= 0)
+            if (n < 0)
+                return false;
+
+            if (n == 0)
                 break;
+
             data.append (buf, static_cast<size_t> (n));
         }
 
