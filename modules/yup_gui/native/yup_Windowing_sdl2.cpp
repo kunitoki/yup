@@ -2119,19 +2119,28 @@ YUP_API void YUP_CALLTYPE shutdownYup_Windowing()
     {
         SDL_DelEventWatch (displayEventDispatcher, desktop);
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unregistered display event watch");
+
         desktop->deleteInstance();
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: deleted desktop instance");
     }
 
+    auto messageManager = MessageManager::getInstanceWithoutCreating();
+
     // Unregister theme
+    if (messageManager == nullptr)
+    {
+        ApplicationTheme::setGlobalTheme (nullptr);
+    }
+    else
     {
         const MessageManagerLock mmLock;
         ApplicationTheme::setGlobalTheme (nullptr);
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unregistered default theme");
     }
 
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unregistered default theme");
+
     // Unregister event loop
-    if (auto messageManager = MessageManager::getInstanceWithoutCreating())
+    if (messageManager != nullptr)
     {
         messageManager->registerEventLoopCallback (nullptr);
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unregistered event loop callback");
