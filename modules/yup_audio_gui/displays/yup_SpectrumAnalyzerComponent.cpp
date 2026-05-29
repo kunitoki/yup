@@ -101,14 +101,14 @@ void SpectrumAnalyzerComponent::processFFT()
     // Perform FFT
     fftProcessor->performRealFFTForward (fftInputBuffer.data(), fftOutputBuffer.data());
 
-    // Pre-compute magnitudes with window gain compensation
+    // Pre-compute raw FFT magnitudes. Calibration is applied when bins are mapped to display levels.
     const int numBins = fftSize / 2 + 1;
 
     for (int binIndex = 0; binIndex < numBins; ++binIndex)
     {
         const float real = fftOutputBuffer[static_cast<size_t> (binIndex * 2)];
         const float imag = fftOutputBuffer[static_cast<size_t> (binIndex * 2 + 1)];
-        const float magnitude = std::sqrt (real * real + imag * imag) * windowGain;
+        const float magnitude = std::sqrt (real * real + imag * imag);
 
         magnitudeBuffer[static_cast<size_t> (binIndex)] = magnitude;
     }
@@ -117,8 +117,6 @@ void SpectrumAnalyzerComponent::processFFT()
 void SpectrumAnalyzerComponent::updateDisplay (bool hasNewFFTData)
 {
     // Always apply consistent smoothing to prevent pulsating
-    const int numBins = fftSize / 2 + 1;
-
     // Process display bins
     for (int i = 0; i < scopeSize; ++i)
     {
@@ -162,36 +160,8 @@ void SpectrumAnalyzerComponent::updateDisplay (bool hasNewFFTData)
             const float endBin = (freqRangeEnd * float (fftSize)) / float (sampleRate);
             const float binSpan = endBin - startBin;
 
-            float magnitude = 0.0f;
-
-            if (binSpan <= 1.5f)
-            {
-                // Low frequencies: Use interpolation for smooth transitions
-                const float exactBin = (centerFreq * float (fftSize)) / float (sampleRate);
-                const int bin1 = jlimit (0, numBins - 1, static_cast<int> (exactBin));
-                const int bin2 = jlimit (0, numBins - 1, bin1 + 1);
-                const float fraction = exactBin - float (bin1);
-
-                const float mag1 = magnitudeBuffer[static_cast<size_t> (bin1)];
-                const float mag2 = magnitudeBuffer[static_cast<size_t> (bin2)];
-
-                // Linear interpolation for smooth low-frequency response
-                magnitude = mag1 + fraction * (mag2 - mag1);
-            }
-            else
-            {
-                // High frequencies: Aggregate multiple bins using peak-hold
-                const int binStart = jlimit (0, numBins - 1, static_cast<int> (startBin));
-                const int binEnd = jlimit (0, numBins - 1, static_cast<int> (endBin + 0.5f));
-
-                for (int binIndex = binStart; binIndex <= binEnd; ++binIndex)
-                    magnitude = jmax (magnitude, magnitudeBuffer[static_cast<size_t> (binIndex)]);
-            }
-
-            // Convert to decibels with proper calibration
-            const float magnitudeDb = magnitude > 0.0f
-                                        ? 20.0f * std::log10 (magnitude / float (fftSize))
-                                        : minDecibels;
+            const float exactBin = (centerFreq * float (fftSize)) / float (sampleRate);
+            const float magnitudeDb = getDisplayDecibelsForBinRange (startBin, endBin, exactBin);
 
             // Map to display range [0.0, 1.0]
             targetLevel = jmap (jlimit (minDecibels, maxDecibels, magnitudeDb), minDecibels, maxDecibels, 0.0f, 1.0f);
@@ -243,13 +213,175 @@ void SpectrumAnalyzerComponent::generateWindow()
 {
     WindowFunctions<float>::generate (currentWindowType, windowBuffer.data(), windowBuffer.size());
 
-    // Calculate window gain compensation
     float windowSum = 0.0f;
+    float windowPowerSum = 0.0f;
     for (int i = 0; i < fftSize; ++i)
-        windowSum += windowBuffer[static_cast<size_t> (i)];
+    {
+        const float windowValue = windowBuffer[static_cast<size_t> (i)];
+        windowSum += windowValue;
+        windowPowerSum += windowValue * windowValue;
+    }
 
-    // Gain compensation factor to restore energy after windowing
-    windowGain = windowSum > 0.0f ? float (fftSize) / windowSum : 1.0f;
+    windowCoherentGain = windowSum > 0.0f ? windowSum / float (fftSize) : 1.0f;
+
+    equivalentNoiseBandwidthBins = (windowSum > 0.0f && windowPowerSum > 0.0f)
+                                     ? (float (fftSize) * windowPowerSum) / (windowSum * windowSum)
+                                     : 1.0f;
+}
+
+float SpectrumAnalyzerComponent::getBinPeakAmplitude (int binIndex) const noexcept
+{
+    const int lastBin = fftSize / 2;
+
+    if (! isPositiveAndBelow (binIndex, lastBin + 1))
+        return 0.0f;
+
+    const float coherentGain = windowCoherentGain > 0.0f ? windowCoherentGain : 1.0f;
+    const float oneSidedScale = (binIndex > 0 && binIndex < lastBin) ? 2.0f : 1.0f;
+    const float rawMagnitude = magnitudeBuffer[static_cast<size_t> (binIndex)];
+
+    return (oneSidedScale * rawMagnitude) / (coherentGain * float (fftSize));
+}
+
+float SpectrumAnalyzerComponent::getBinRMSAmplitude (int binIndex) const noexcept
+{
+    const int lastBin = fftSize / 2;
+    const float peakAmplitude = getBinPeakAmplitude (binIndex);
+
+    if (binIndex <= 0 || binIndex >= lastBin)
+        return peakAmplitude;
+
+    return peakAmplitude * 0.7071067811865475f;
+}
+
+float SpectrumAnalyzerComponent::getBinPower (int binIndex) const noexcept
+{
+    const float rmsAmplitude = getBinRMSAmplitude (binIndex);
+    return rmsAmplitude * rmsAmplitude;
+}
+
+float SpectrumAnalyzerComponent::getBinPowerSpectralDensity (int binIndex) const noexcept
+{
+    const float enbwHz = getEquivalentNoiseBandwidthHz();
+    return enbwHz > 0.0f ? getBinPower (binIndex) / enbwHz : 0.0f;
+}
+
+float SpectrumAnalyzerComponent::getBinLinearLevel (int binIndex) const noexcept
+{
+    switch (levelMode)
+    {
+        case LevelMode::peakDecibels:
+            return getBinPeakAmplitude (binIndex);
+
+        case LevelMode::rmsDecibels:
+            return getBinRMSAmplitude (binIndex);
+
+        case LevelMode::powerDecibels:
+            return getBinPower (binIndex);
+
+        case LevelMode::powerSpectralDensity:
+            return getBinPowerSpectralDensity (binIndex);
+    }
+
+    return getBinPeakAmplitude (binIndex);
+}
+
+float SpectrumAnalyzerComponent::linearLevelToDecibels (float level) const noexcept
+{
+    if (level <= 0.0f)
+        return minDecibels;
+
+    return (isPowerMode() ? 10.0f : 20.0f) * std::log10 (level);
+}
+
+float SpectrumAnalyzerComponent::getInterpolatedPeakDecibels (float exactBin) const noexcept
+{
+    const int numBins = fftSize / 2 + 1;
+    const int lastBin = numBins - 1;
+    const int nearestBin = jlimit (0, lastBin, roundToInt (exactBin));
+
+    int peakBin = nearestBin;
+    float peakLevel = getBinLinearLevel (nearestBin);
+
+    const int searchStart = jmax (0, nearestBin - 1);
+    const int searchEnd = jmin (lastBin, nearestBin + 1);
+
+    for (int binIndex = searchStart; binIndex <= searchEnd; ++binIndex)
+    {
+        const float binLevel = getBinLinearLevel (binIndex);
+
+        if (binLevel > peakLevel)
+        {
+            peakLevel = binLevel;
+            peakBin = binIndex;
+        }
+    }
+
+    const float peakDecibels = linearLevelToDecibels (peakLevel);
+
+    if (peakBin <= 0 || peakBin >= lastBin)
+        return peakDecibels;
+
+    const float y0 = linearLevelToDecibels (getBinLinearLevel (peakBin - 1));
+    const float y1 = peakDecibels;
+    const float y2 = linearLevelToDecibels (getBinLinearLevel (peakBin + 1));
+    const float denominator = y0 - 2.0f * y1 + y2;
+
+    if (std::abs (denominator) < 1.0e-6f || denominator >= 0.0f)
+        return y1;
+
+    const float offset = jlimit (-1.0f, 1.0f, 0.5f * (y0 - y2) / denominator);
+    return y1 - 0.25f * (y0 - y2) * offset;
+}
+
+float SpectrumAnalyzerComponent::getDisplayDecibelsForBinRange (float startBin, float endBin, float centerBin) const noexcept
+{
+    const int numBins = fftSize / 2 + 1;
+    const int lastBin = numBins - 1;
+    const float binSpan = endBin - startBin;
+
+    if (binSpan <= 1.5f && ! isPowerMode())
+        return getInterpolatedPeakDecibels (centerBin);
+
+    const int binStart = jlimit (0, lastBin, static_cast<int> (std::floor (startBin)));
+    const int binEnd = jlimit (0, lastBin, static_cast<int> (std::ceil (endBin)));
+
+    if (levelMode == LevelMode::powerDecibels)
+    {
+        float bandPower = 0.0f;
+
+        for (int binIndex = binStart; binIndex <= binEnd; ++binIndex)
+            bandPower += getBinPower (binIndex);
+
+        return linearLevelToDecibels (bandPower);
+    }
+
+    if (levelMode == LevelMode::powerSpectralDensity)
+    {
+        float densitySum = 0.0f;
+        int densityCount = 0;
+
+        for (int binIndex = binStart; binIndex <= binEnd; ++binIndex)
+        {
+            densitySum += getBinPowerSpectralDensity (binIndex);
+            ++densityCount;
+        }
+
+        return linearLevelToDecibels (densityCount > 0 ? densitySum / float (densityCount) : 0.0f);
+    }
+
+    float peakLevel = 0.0f;
+
+    for (int binIndex = binStart; binIndex <= binEnd; ++binIndex)
+        peakLevel = jmax (peakLevel, getBinLinearLevel (binIndex));
+
+    return linearLevelToDecibels (peakLevel);
+}
+
+bool SpectrumAnalyzerComponent::isPowerMode() const noexcept
+{
+    return levelMode == LevelMode::powerDecibels
+        || levelMode == LevelMode::powerSpectralDensity;
 }
 
 //==============================================================================
@@ -485,8 +617,10 @@ void SpectrumAnalyzerComponent::setWindowType (WindowType type)
     if (currentWindowType != type)
     {
         currentWindowType = type;
+        generateWindow();
+        needsWindowUpdate = false;
 
-        needsWindowUpdate = true;
+        repaint();
     }
 }
 
@@ -549,6 +683,20 @@ void SpectrumAnalyzerComponent::setDisplayType (DisplayType type)
         displayType = type;
         repaint();
     }
+}
+
+void SpectrumAnalyzerComponent::setLevelMode (LevelMode mode)
+{
+    if (levelMode != mode)
+    {
+        levelMode = mode;
+        repaint();
+    }
+}
+
+float SpectrumAnalyzerComponent::getEquivalentNoiseBandwidthHz() const noexcept
+{
+    return equivalentNoiseBandwidthBins * (float (sampleRate) / float (fftSize));
 }
 
 //==============================================================================
