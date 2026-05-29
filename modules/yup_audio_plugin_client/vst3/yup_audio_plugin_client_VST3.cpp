@@ -39,6 +39,7 @@
 #include <pluginterfaces/vst/ivstparameterchanges.h>
 #include <pluginterfaces/vst/ivsteditcontroller.h>
 #include <pluginterfaces/vst/ivstevents.h>
+#include <pluginterfaces/vst/ivstmidicontrollers.h>
 #include <pluginterfaces/vst/ivstremapparamid.h>
 #include <pluginterfaces/vst/ivstcomponent.h>
 #include <pluginterfaces/vst/ivstmessage.h>
@@ -46,7 +47,6 @@
 #include <pluginterfaces/vst/vstpresetkeys.h>
 
 #include <atomic>
-#include <limits>
 #include <memory>
 #include <string_view>
 #include <vector>
@@ -111,14 +111,6 @@ Vst::ParamID getVST3BypassParameterID (const AudioProcessor& processor)
 constexpr int vst3WrapperStateMagic = 0x33535659; // "YVS3"
 constexpr int vst3WrapperStateVersion = 1;
 
-struct VST3WrapperState
-{
-    bool hasWrapperState = false;
-    bool isBypassed = false;
-    bool hasProcessorState = false;
-    MemoryBlock processorState;
-};
-
 MemoryBlock readVST3StreamData (IBStream& stream)
 {
     MemoryBlock data;
@@ -129,66 +121,6 @@ MemoryBlock readVST3StreamData (IBStream& stream)
         data.append (buffer, static_cast<size_t> (bytesRead));
 
     return data;
-}
-
-void writeVST3WrapperState (MemoryBlock& data,
-                            bool isBypassed,
-                            const MemoryBlock& processorState,
-                            bool hasProcessorState)
-{
-    MemoryOutputStream output (data, false);
-    output.writeInt (vst3WrapperStateMagic);
-    output.writeInt (vst3WrapperStateVersion);
-    output.writeBool (isBypassed);
-    output.writeBool (hasProcessorState);
-    output.writeInt64 (hasProcessorState ? static_cast<int64> (processorState.getSize()) : 0);
-
-    if (hasProcessorState && ! processorState.isEmpty())
-        output.write (processorState.getData(), processorState.getSize());
-
-    output.flush();
-}
-
-VST3WrapperState readVST3WrapperState (const MemoryBlock& data)
-{
-    VST3WrapperState result;
-
-    MemoryInputStream input (data, false);
-
-    if (input.readInt() != vst3WrapperStateMagic
-        || input.readInt() != vst3WrapperStateVersion)
-    {
-        result.processorState = data;
-        return result;
-    }
-
-    result.hasWrapperState = true;
-    result.isBypassed = input.readBool();
-    result.hasProcessorState = input.readBool();
-
-    const auto processorStateSize = input.readInt64();
-    if (processorStateSize < 0
-        || processorStateSize > input.getNumBytesRemaining()
-        || processorStateSize > static_cast<int64> (std::numeric_limits<int>::max()))
-    {
-        result.hasWrapperState = false;
-        result.hasProcessorState = false;
-        result.processorState = data;
-        return result;
-    }
-
-    result.processorState.setSize (static_cast<size_t> (processorStateSize));
-
-    const auto bytesToRead = static_cast<int> (processorStateSize);
-    if (bytesToRead > 0
-        && input.read (result.processorState.getData(), bytesToRead) != bytesToRead)
-    {
-        result.hasWrapperState = false;
-        result.hasProcessorState = false;
-        result.processorState = data;
-    }
-
-    return result;
 }
 
 class AudioPluginPlayHeadVST3 final : public AudioPlayHead
@@ -263,6 +195,96 @@ static Vst::SpeakerArrangement speakerArrForChannels (int channels)
             return Vst::SpeakerArr::k71CineFullFront;
         default:
             return Vst::SpeakerArr::kStereo;
+    }
+}
+
+static void writeMidiBufferToVST3EventList (const MidiBuffer& midiBuffer,
+                                            Vst::IEventList& outputEvents,
+                                            int numSamples)
+{
+    for (const MidiMessageMetadata metadata : midiBuffer)
+    {
+        const auto& message = metadata.getMessage();
+
+        Vst::Event event {};
+        event.busIndex = 0;
+        event.sampleOffset = jlimit (0, jmax (0, numSamples - 1), metadata.samplePosition);
+        event.ppqPosition = 0.0;
+        event.flags = 0;
+
+        if (message.isNoteOn())
+        {
+            event.type = Vst::Event::kNoteOnEvent;
+            event.noteOn.channel = static_cast<int16> (message.getChannel() - 1);
+            event.noteOn.pitch = static_cast<int16> (message.getNoteNumber());
+            event.noteOn.tuning = 0.0f;
+            event.noteOn.velocity = message.getFloatVelocity();
+            event.noteOn.length = 0;
+            event.noteOn.noteId = -1;
+        }
+        else if (message.isNoteOff())
+        {
+            event.type = Vst::Event::kNoteOffEvent;
+            event.noteOff.channel = static_cast<int16> (message.getChannel() - 1);
+            event.noteOff.pitch = static_cast<int16> (message.getNoteNumber());
+            event.noteOff.velocity = message.getFloatVelocity();
+            event.noteOff.noteId = -1;
+            event.noteOff.tuning = 0.0f;
+        }
+        else if (message.isAftertouch())
+        {
+            event.type = Vst::Event::kPolyPressureEvent;
+            event.polyPressure.channel = static_cast<int16> (message.getChannel() - 1);
+            event.polyPressure.pitch = static_cast<int16> (message.getNoteNumber());
+            event.polyPressure.pressure = static_cast<float> (message.getAfterTouchValue()) / 127.0f;
+            event.polyPressure.noteId = -1;
+        }
+        else if (message.isController())
+        {
+            event.type = Vst::Event::kLegacyMIDICCOutEvent;
+            event.midiCCOut.channel = static_cast<int8> (jlimit (0, 15, message.getChannel() - 1));
+            event.midiCCOut.controlNumber = static_cast<uint8> (message.getControllerNumber());
+            event.midiCCOut.value = static_cast<int8> (message.getControllerValue());
+            event.midiCCOut.value2 = 0;
+        }
+        else if (message.isProgramChange())
+        {
+            event.type = Vst::Event::kLegacyMIDICCOutEvent;
+            event.midiCCOut.channel = static_cast<int8> (jlimit (0, 15, message.getChannel() - 1));
+            event.midiCCOut.controlNumber = static_cast<uint8> (Vst::kCtrlProgramChange);
+            event.midiCCOut.value = static_cast<int8> (message.getProgramChangeNumber());
+            event.midiCCOut.value2 = 0;
+        }
+        else if (message.isPitchWheel())
+        {
+            const auto value = jlimit (0, 0x3fff, message.getPitchWheelValue());
+            event.type = Vst::Event::kLegacyMIDICCOutEvent;
+            event.midiCCOut.channel = static_cast<int8> (jlimit (0, 15, message.getChannel() - 1));
+            event.midiCCOut.controlNumber = static_cast<uint8> (Vst::kPitchBend);
+            event.midiCCOut.value = static_cast<int8> (value & 0x7f);
+            event.midiCCOut.value2 = static_cast<int8> ((value >> 7) & 0x7f);
+        }
+        else if (message.isChannelPressure())
+        {
+            event.type = Vst::Event::kLegacyMIDICCOutEvent;
+            event.midiCCOut.channel = static_cast<int8> (jlimit (0, 15, message.getChannel() - 1));
+            event.midiCCOut.controlNumber = static_cast<uint8> (Vst::kAfterTouch);
+            event.midiCCOut.value = static_cast<int8> (message.getChannelPressureValue());
+            event.midiCCOut.value2 = 0;
+        }
+        else if (message.isSysEx())
+        {
+            event.type = Vst::Event::kDataEvent;
+            event.data.size = static_cast<uint32> (message.getSysExDataSize());
+            event.data.type = Vst::DataEvent::kMidiSysEx;
+            event.data.bytes = message.getSysExData();
+        }
+        else
+        {
+            continue;
+        }
+
+        outputEvents.addEvent (event);
     }
 }
 
@@ -495,6 +517,7 @@ class AudioPluginControllerVST3
     , public Vst::IRemapParamID
     , public Vst::ChannelContext::IInfoListener
     , private AudioParameter::Listener
+    , private AudioProcessor::Listener
 {
 public:
     //==============================================================================
@@ -528,6 +551,7 @@ public:
     ~AudioPluginControllerVST3()
     {
         removeParameterListeners();
+        removeProcessorListener();
     }
 
     //==============================================================================
@@ -544,6 +568,7 @@ public:
     tresult PLUGIN_API terminate() override
     {
         removeParameterListeners();
+        removeProcessorListener();
         processor = nullptr;
 
         return Vst::EditController::terminate();
@@ -559,6 +584,7 @@ public:
     tresult PLUGIN_API disconnect (Vst::IConnectionPoint* other) override
     {
         removeParameterListeners();
+        removeProcessorListener();
         processor = nullptr;
         return Vst::EditController::disconnect (other);
     }
@@ -580,9 +606,11 @@ public:
             auto result = attributes->getBinary ("data", msgData, msgSize);
             if (result == kResultTrue && msgSize == sizeof (void*))
             {
+                removeProcessorListener();
                 processor = static_cast<AudioProcessor*> (*reinterpret_cast<void* const*> (msgData));
 
                 setupParameters();
+                addProcessorListener();
 
                 return result;
             }
@@ -614,7 +642,9 @@ public:
         if (processor == nullptr || state == nullptr)
             return kResultFalse;
 
-        const auto wrapperState = readVST3WrapperState (readVST3StreamData (*state));
+        const auto wrapperState = readWrapperBypassState (readVST3StreamData (*state),
+                                                          vst3WrapperStateMagic,
+                                                          vst3WrapperStateVersion);
         if (! wrapperState.hasWrapperState)
         {
             syncProcessorParametersToController();
@@ -879,7 +909,7 @@ public:
         if (processor == nullptr)
             return kInternalError;
 
-        if (listId != Vst::kNoProgramListId)
+        if (listId != 0)
             return kResultFalse;
 
         if (isPositiveAndBelow (programIndex, processor->getNumPresets()))
@@ -899,7 +929,7 @@ public:
         if (processor == nullptr)
             return kInternalError;
 
-        if (listId != Vst::kNoProgramListId)
+        if (listId != 0)
             return kResultFalse;
 
         if (std::string_view (attributeId) != Vst::PresetAttributes::kName)
@@ -994,6 +1024,18 @@ private:
         listenedParameters.clear();
     }
 
+    void addProcessorListener()
+    {
+        if (processor != nullptr)
+            processor->addListener (this);
+    }
+
+    void removeProcessorListener()
+    {
+        if (processor != nullptr)
+            processor->removeListener (this);
+    }
+
     void parameterValueChanged (const AudioParameter::Ptr& parameter, int indexInContainer) override
     {
         if (! isValidProcessorParameterIndex (indexInContainer))
@@ -1042,6 +1084,31 @@ private:
                 getVST3ParameterID (parameter),
                 static_cast<Vst::ParamValue> (parameter->getNormalizedValue()));
         }
+    }
+
+    void audioProcessorChanged (AudioProcessor* processor, const AudioProcessor::ChangeDetails& details) override
+    {
+        ignoreUnused (processor);
+
+        int32 restartFlags = 0;
+
+        if (details.latencyChanged)
+            restartFlags |= Vst::kLatencyChanged;
+
+        if (details.parameterValuesChanged)
+            restartFlags |= Vst::kParamValuesChanged;
+
+        if (details.parameterInfoChanged)
+            restartFlags |= Vst::kParamValuesChanged
+                          | Vst::kParamTitlesChanged
+                          | Vst::kMidiCCAssignmentChanged;
+
+        if (restartFlags != 0)
+            if (auto* handler = getComponentHandler())
+                handler->restartComponent (restartFlags);
+
+        if (details.nonParameterStateChanged)
+            setDirty (true);
     }
 
     bool isValidProcessorParameterIndex (int indexInContainer) const
@@ -1228,6 +1295,51 @@ public:
 
     //==============================================================================
 
+    tresult PLUGIN_API canProcessSampleSize (int32 symbolicSampleSize) override
+    {
+        if (symbolicSampleSize == Vst::kSample32)
+            return kResultTrue;
+
+        if (symbolicSampleSize == Vst::kSample64
+            && processor != nullptr
+            && processor->supportsDoublePrecisionProcessing())
+        {
+            return kResultTrue;
+        }
+
+        return kResultFalse;
+    }
+
+    uint32 PLUGIN_API getLatencySamples() override
+    {
+        return processor != nullptr ? static_cast<uint32> (jmax (0, processor->getLatencySamples()))
+                                    : 0u;
+    }
+
+    uint32 PLUGIN_API getTailSamples() override
+    {
+        if (processor == nullptr)
+            return Vst::kNoTail;
+
+        const auto tailSamples = processor->getTailSamples();
+        return tailSamples > 0 ? static_cast<uint32> (tailSamples) : Vst::kNoTail;
+    }
+
+    tresult PLUGIN_API setProcessing (TBool state) override
+    {
+        if (processor == nullptr)
+            return kResultFalse;
+
+        processor->suspendProcessing (! state);
+
+        if (! state)
+            processor->flush();
+
+        return kResultOk;
+    }
+
+    //==============================================================================
+
     tresult PLUGIN_API getState (IBStream* stream) override
     {
         if (processor == nullptr || stream == nullptr)
@@ -1236,8 +1348,11 @@ public:
         MemoryBlock processorState;
         const auto hasProcessorState = processor->saveStateIntoMemory (processorState).wasOk();
 
-        MemoryBlock data;
-        writeVST3WrapperState (data, isBypassed, processorState, hasProcessorState);
+        auto data = writeWrapperBypassState (vst3WrapperStateMagic,
+                                             vst3WrapperStateVersion,
+                                             isBypassed,
+                                             processorState,
+                                             hasProcessorState);
 
         int32 written = 0;
         return stream->write (data.getData(), static_cast<int32> (data.getSize()), &written) == kResultOk
@@ -1255,7 +1370,7 @@ public:
         if (data.isEmpty())
             return kResultFalse;
 
-        const auto wrapperState = readVST3WrapperState (data);
+        const auto wrapperState = readWrapperBypassState (data, vst3WrapperStateMagic, vst3WrapperStateVersion);
         if (! wrapperState.hasWrapperState)
             return processor->loadStateFromMemory (wrapperState.processorState).wasOk() ? kResultOk : kResultFalse;
 
@@ -1282,7 +1397,10 @@ public:
         midiBuffer.ensureSize (4096);
         midiBuffer.clear();
 
-        paramChangeBuffer.reserve (static_cast<int> (processor->getParameters().size()) * 4 + 32);
+        paramChangeBuffer.reserve (getDefaultParameterChangeCapacity (*processor));
+        const auto totalOutputChannels = getTotalAudioOutputChannels (*processor);
+        outputChannelsFloat.reserve (static_cast<size_t> (totalOutputChannels));
+        outputChannelsDouble.reserve (static_cast<size_t> (totalOutputChannels));
 
         return kResultOk;
     }
@@ -1412,6 +1530,9 @@ public:
         // --- Process Audio ---
         if (data.numSamples > 0 && data.outputs != nullptr)
         {
+            const bool useDoublePrecision = processSetup.symbolicSampleSize == Vst::kSample64
+                                         && processor->supportsDoublePrecisionProcessing();
+
             // Copy input audio into output buffers for effects
             if (data.inputs != nullptr)
             {
@@ -1422,57 +1543,63 @@ public:
 
                     for (int32 ch = 0; ch < std::min (inBus.numChannels, outBus.numChannels); ++ch)
                     {
-                        auto* in = reinterpret_cast<const float*> (inBus.channelBuffers32[ch]);
-                        auto* out = reinterpret_cast<float*> (outBus.channelBuffers32[ch]);
-                        if (in != out)
-                            std::memcpy (out, in, static_cast<size_t> (data.numSamples) * sizeof (float));
+                        if (useDoublePrecision)
+                        {
+                            auto* in = reinterpret_cast<const double*> (inBus.channelBuffers64[ch]);
+                            auto* out = reinterpret_cast<double*> (outBus.channelBuffers64[ch]);
+                            if (in != out)
+                                std::memcpy (out, in, static_cast<size_t> (data.numSamples) * sizeof (double));
+                        }
+                        else
+                        {
+                            auto* in = reinterpret_cast<const float*> (inBus.channelBuffers32[ch]);
+                            auto* out = reinterpret_cast<float*> (outBus.channelBuffers32[ch]);
+                            if (in != out)
+                                std::memcpy (out, in, static_cast<size_t> (data.numSamples) * sizeof (float));
+                        }
                     }
                 }
             }
 
-            // Build a flat channel pointer array across all output buses
-            std::vector<float*> outputChannels;
-            for (int32 busIdx = 0; busIdx < data.numOutputs; ++busIdx)
-                for (int32 ch = 0; ch < data.outputs[busIdx].numChannels; ++ch)
-                    outputChannels.push_back (reinterpret_cast<float*> (data.outputs[busIdx].channelBuffers32[ch]));
-
             AudioPluginPlayHeadVST3 playHead (data.processContext);
             auto* const playHeadPtr = data.processContext != nullptr ? &playHead : nullptr;
 
-            if (processSetup.symbolicSampleSize == Vst::kSample64 && processor->supportsDoublePrecisionProcessing())
+            if (useDoublePrecision)
             {
-                std::vector<double*> outputChannels64;
+                outputChannelsDouble.clear();
                 for (int32 busIdx = 0; busIdx < data.numOutputs; ++busIdx)
                     for (int32 ch = 0; ch < data.outputs[busIdx].numChannels; ++ch)
-                        outputChannels64.push_back (reinterpret_cast<double*> (data.outputs[busIdx].channelBuffers64[ch]));
+                        outputChannelsDouble.push_back (reinterpret_cast<double*> (data.outputs[busIdx].channelBuffers64[ch]));
 
-                AudioBuffer<double> audioBuffer (outputChannels64.data(),
-                                                 static_cast<int> (outputChannels64.size()),
+                AudioBuffer<double> audioBuffer (outputChannelsDouble.data(),
+                                                 static_cast<int> (outputChannelsDouble.size()),
                                                  0,
                                                  data.numSamples);
 
                 AudioProcessContext<double> doubleCtx { audioBuffer, midiBuffer, paramChangeBuffer, playHeadPtr };
 
-                if (bypassed)
-                    processor->processBlockBypassed (doubleCtx);
-                else
-                    processor->processBlock (doubleCtx);
+                processAudioBlock (*processor, doubleCtx, bypassed);
             }
             else
             {
-                AudioSampleBuffer audioBuffer (outputChannels.data(),
-                                               static_cast<int> (outputChannels.size()),
+                outputChannelsFloat.clear();
+                for (int32 busIdx = 0; busIdx < data.numOutputs; ++busIdx)
+                    for (int32 ch = 0; ch < data.outputs[busIdx].numChannels; ++ch)
+                        outputChannelsFloat.push_back (reinterpret_cast<float*> (data.outputs[busIdx].channelBuffers32[ch]));
+
+                AudioSampleBuffer audioBuffer (outputChannelsFloat.data(),
+                                               static_cast<int> (outputChannelsFloat.size()),
                                                0,
                                                data.numSamples);
 
                 AudioProcessContext<float> context { audioBuffer, midiBuffer, paramChangeBuffer, playHeadPtr };
 
-                if (bypassed)
-                    processor->processBlockBypassed (context);
-                else
-                    processor->processBlock (context);
+                processAudioBlock (*processor, context, bypassed);
             }
         }
+
+        if (data.outputEvents != nullptr)
+            writeMidiBufferToVST3EventList (midiBuffer, *data.outputEvents, data.numSamples);
 
         return kResultOk;
     }
@@ -1487,6 +1614,8 @@ private:
 
     MidiBuffer midiBuffer;
     ParameterChangeBuffer paramChangeBuffer;
+    std::vector<float*> outputChannelsFloat;
+    std::vector<double*> outputChannelsDouble;
     bool isBypassed = false;
 };
 

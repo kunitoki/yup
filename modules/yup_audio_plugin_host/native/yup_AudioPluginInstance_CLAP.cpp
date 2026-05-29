@@ -33,10 +33,68 @@ struct CLAPModule
     CLAPModuleHandle handle = nullptr;
     const clap_plugin_entry_t* entry = nullptr;
 
+#if YUP_MAC
+    template <typename CFType>
+    struct CFObjectDeleter
+    {
+        void operator() (CFType object) const noexcept
+        {
+            if (object != nullptr)
+                CFRelease (object);
+        }
+    };
+
+    template <typename CFType>
+    using CFUniquePtr = std::unique_ptr<std::remove_pointer_t<CFType>, CFObjectDeleter<CFType>>;
+
+    static CFUniquePtr<CFBundleRef> createBundle (const File& file)
+    {
+        const auto path = file.getFullPathName();
+        CFUniquePtr<CFURLRef> url (CFURLCreateFromFileSystemRepresentation (kCFAllocatorDefault,
+                                                                            reinterpret_cast<const UInt8*> (path.toRawUTF8()),
+                                                                            static_cast<CFIndex> (path.getNumBytesAsUTF8()),
+                                                                            true));
+
+        if (url == nullptr)
+            return {};
+
+        return CFUniquePtr<CFBundleRef> (CFBundleCreate (kCFAllocatorDefault, url.get()));
+    }
+
+    static File getBundleExecutableFile (CFBundleRef bundleToUse, const File& bundleFile)
+    {
+        const auto macOSFolder = bundleFile.getChildFile ("Contents/MacOS");
+
+        if (bundleToUse != nullptr)
+        {
+            auto* executableValue = CFBundleGetValueForInfoDictionaryKey (bundleToUse, kCFBundleExecutableKey);
+
+            if (executableValue != nullptr && CFGetTypeID (executableValue) == CFStringGetTypeID())
+                return macOSFolder.getChildFile (String::fromCFString (static_cast<CFStringRef> (executableValue)));
+        }
+
+        return macOSFolder.getChildFile (bundleFile.getFileNameWithoutExtension());
+    }
+#endif
+
     static std::unique_ptr<CLAPModule> load (const File& file)
     {
         auto m = std::make_unique<CLAPModule>();
-        m->handle = clapLoadModule (file.getFullPathName().toRawUTF8());
+        auto libraryFile = file;
+
+#if YUP_MAC
+        if (file.isDirectory())
+        {
+            auto bundle = createBundle (file);
+
+            if (bundle == nullptr)
+                return nullptr;
+
+            libraryFile = getBundleExecutableFile (bundle.get(), file);
+        }
+#endif
+
+        m->handle = clapLoadModule (libraryFile.getFullPathName().toRawUTF8());
 
         if (m->handle == nullptr)
             return nullptr;

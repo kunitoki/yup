@@ -68,6 +68,7 @@
 
 #if YUP_MAC
 #import <AppKit/AppKit.h>
+#include <CoreFoundation/CoreFoundation.h>
 #endif
 
 #if YUP_WINDOWS

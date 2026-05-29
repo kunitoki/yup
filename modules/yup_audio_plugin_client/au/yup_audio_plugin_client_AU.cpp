@@ -165,7 +165,9 @@ using AudioPluginAUBase = ausdk::AUEffectBase;
     Supports both effects (AUEffectBase) and instruments (MusicDeviceBase)
     depending on the YupPlugin_IsSynth compile-time setting.
 */
-class AudioPluginProcessorAU final : public AudioPluginAUBase
+class AudioPluginProcessorAU final
+    : public AudioPluginAUBase
+    , private AudioParameter::Listener
 {
 public:
     class AudioPluginPlayHeadAU final : public AudioPlayHead
@@ -211,6 +213,7 @@ public:
         if (processor == nullptr)
             YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "createPluginProcessor returned null");
 
+        addParameterListeners();
         registerInstance (componentInstance, this);
     }
 
@@ -218,6 +221,7 @@ public:
     {
         YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "destroying processor instance: wrapper=" << yup::describePointer (this) << ", component=" << yup::describePointer (componentInstance) << ", processor=" << yup::describePointer (processor.get()));
 
+        removeParameterListeners();
         yup::endActiveParameterGestures (processor.get());
 
         unregisterInstance (componentInstance);
@@ -250,6 +254,11 @@ public:
 
         midiBuffer.ensureSize (4096);
         midiBuffer.clear();
+        emptyMidiBuffer.ensureSize (4096);
+        emptyMidiBuffer.clear();
+        paramChangeBuffer.reserve (getDefaultParameterChangeCapacity (*processor));
+        emptyParamChangeBuffer.reserve (getDefaultParameterChangeCapacity (*processor));
+        audioChannels.reserve (static_cast<size_t> (getTotalAudioOutputChannels (*processor)));
 
         YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "Initialize completed: sampleRate=" << String (getCurrentSampleRate()) << ", maxFramesPerSlice=" << String (static_cast<int> (GetMaxFramesPerSlice())));
 
@@ -359,6 +368,17 @@ public:
         }
 
         parameters[parameterIndex]->setValue (static_cast<float> (inValue));
+
+        std::unique_lock<std::mutex> lock (parameterChangeMutex, std::try_to_lock);
+        if (lock.owns_lock())
+        {
+            addParameterChangeByHostParameterID (*processor,
+                                                 paramChangeBuffer,
+                                                 static_cast<uint32> (inID),
+                                                 parameters[parameterIndex]->convertToNormalizedValue (static_cast<float> (inValue)),
+                                                 static_cast<int> (inBufferOffsetInFrames));
+        }
+
         return noErr;
     }
 
@@ -523,24 +543,30 @@ public:
         outputBus.PrepareBuffer (inNumberFrames);
         AudioBufferList& outBufList = outputBus.GetBufferList();
 
-        std::vector<float*> channels;
+        audioChannels.clear();
         for (UInt32 ch = 0; ch < outBufList.mNumberBuffers; ++ch)
-            channels.push_back (static_cast<float*> (outBufList.mBuffers[ch].mData));
+            audioChannels.push_back (static_cast<float*> (outBufList.mBuffers[ch].mData));
 
-        AudioSampleBuffer audioBuffer (channels.data(),
-                                       static_cast<int> (channels.size()),
+        AudioSampleBuffer audioBuffer (audioChannels.data(),
+                                       static_cast<int> (audioChannels.size()),
                                        0,
                                        static_cast<int> (inNumberFrames));
 
         {
             AudioPluginPlayHeadAU playHead (*this, &inTimeStamp);
-            std::lock_guard<std::mutex> lock (midiMutex);
+            std::unique_lock<std::mutex> lock (midiMutex, std::try_to_lock);
+            auto& processMidiBuffer = lock.owns_lock() ? midiBuffer : emptyMidiBuffer;
+            std::unique_lock<std::mutex> parameterLock (parameterChangeMutex, std::try_to_lock);
+            auto& processParamChangeBuffer = parameterLock.owns_lock() ? paramChangeBuffer : emptyParamChangeBuffer;
+
             AudioProcessContext<float> context { audioBuffer,
-                                                 midiBuffer,
-                                                 emptyParamChanges,
+                                                 processMidiBuffer,
+                                                 processParamChangeBuffer,
                                                  &playHead };
-            processor->processBlock (context);
-            midiBuffer.clear();
+            processAudioBlock (*processor, context, isBypassed);
+
+            processMidiBuffer.clear();
+            processParamChangeBuffer.clear();
         }
 
         return noErr;
@@ -550,7 +576,9 @@ public:
 
     OSStatus HandleMIDIEvent (UInt8 status, UInt8 channel, UInt8 data1, UInt8 data2, UInt32 offsetSampleFrame) override
     {
-        std::lock_guard<std::mutex> lock (midiMutex);
+        std::unique_lock<std::mutex> lock (midiMutex, std::try_to_lock);
+        if (! lock.owns_lock())
+            return noErr;
 
         const uint8_t rawData[3] = {
             static_cast<uint8_t> (status | channel),
@@ -576,7 +604,9 @@ public:
 
     OSStatus HandleSysEx (const UInt8* inData, UInt32 inLength) override
     {
-        std::lock_guard<std::mutex> lock (midiMutex);
+        std::unique_lock<std::mutex> lock (midiMutex, std::try_to_lock);
+        if (! lock.owns_lock())
+            return noErr;
 
         if (inData != nullptr && inLength > 0)
             midiBuffer.addEvent (inData, static_cast<int> (inLength), 0);
@@ -596,7 +626,7 @@ public:
 
         const UInt32 numBuffers = std::min (inBuffer.mNumberBuffers, outBuffer.mNumberBuffers);
 
-        std::vector<float*> channels;
+        audioChannels.clear();
         for (UInt32 ch = 0; ch < numBuffers; ++ch)
         {
             const auto* in = static_cast<const float*> (inBuffer.mBuffers[ch].mData);
@@ -605,21 +635,25 @@ public:
             if (in != out)
                 std::memcpy (out, in, inFramesToProcess * sizeof (float));
 
-            channels.push_back (out);
+            audioChannels.push_back (out);
         }
 
-        AudioSampleBuffer audioBuffer (channels.data(),
-                                       static_cast<int> (channels.size()),
+        AudioSampleBuffer audioBuffer (audioChannels.data(),
+                                       static_cast<int> (audioChannels.size()),
                                        0,
                                        static_cast<int> (inFramesToProcess));
 
         AudioPluginPlayHeadAU playHead (*this, nullptr);
+        std::unique_lock<std::mutex> parameterLock (parameterChangeMutex, std::try_to_lock);
+        auto& processParamChangeBuffer = parameterLock.owns_lock() ? paramChangeBuffer : emptyParamChangeBuffer;
+
         AudioProcessContext<float> context { audioBuffer,
                                              midiBuffer,
-                                             emptyParamChanges,
+                                             processParamChangeBuffer,
                                              &playHead };
-        processor->processBlock (context);
+        processAudioBlock (*processor, context, isBypassed);
         midiBuffer.clear();
+        processParamChangeBuffer.clear();
 
         return noErr;
     }
@@ -812,6 +846,16 @@ public:
             return noErr;
         }
 
+        if (inID == kAudioUnitProperty_BypassEffect)
+        {
+            if (inScope != kAudioUnitScope_Global)
+                return kAudioUnitErr_InvalidScope;
+
+            outDataSize = sizeof (UInt32);
+            outWritable = true;
+            return noErr;
+        }
+
         if (inID == kAudioUnitProperty_CocoaUI)
         {
             YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "GetPropertyInfo CocoaUI requested: " << describeScopeAndElement (inScope, inElement));
@@ -879,6 +923,18 @@ public:
             return noErr;
         }
 
+        if (inID == kAudioUnitProperty_BypassEffect)
+        {
+            if (inScope != kAudioUnitScope_Global)
+                return kAudioUnitErr_InvalidScope;
+
+            if (inData == nullptr || inDataSize < sizeof (UInt32))
+                return kAudioUnitErr_InvalidPropertyValue;
+
+            isBypassed = *static_cast<const UInt32*> (inData) != 0;
+            return noErr;
+        }
+
         const auto result = AudioPluginAUBase::SetProperty (inID, inScope, inElement, inData, inDataSize);
         if (result != noErr)
         {
@@ -935,6 +991,56 @@ private:
         YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "unregistered instance: component=" << describePointer (component) << ", removed=" << String (static_cast<int> (numRemoved)) << ", registeredInstances=" << String (static_cast<int> (getInstanceRegistry().size())));
     }
 
+    void addParameterListeners()
+    {
+        removeParameterListeners();
+
+        if (processor == nullptr)
+            return;
+
+        for (const auto& parameter : processor->getParameters())
+        {
+            parameter->addListener (this);
+            listenedParameters.push_back (parameter);
+        }
+    }
+
+    void removeParameterListeners()
+    {
+        for (auto& parameter : listenedParameters)
+            parameter->removeListener (this);
+
+        listenedParameters.clear();
+    }
+
+    bool isValidProcessorParameterIndex (int indexInContainer) const
+    {
+        return processor != nullptr
+            && isPositiveAndBelow (indexInContainer, static_cast<int> (processor->getParameters().size()));
+    }
+
+    void parameterValueChanged (const AudioParameter::Ptr& parameter, int indexInContainer) override
+    {
+        if (! isValidProcessorParameterIndex (indexInContainer) || parameter->isReadOnly())
+            return;
+
+        AudioPluginAUBase::SetParameter (static_cast<AudioUnitParameterID> (parameter->getHostParameterID()),
+                                         kAudioUnitScope_Global,
+                                         0,
+                                         static_cast<AudioUnitParameterValue> (parameter->getValue()),
+                                         0);
+    }
+
+    void parameterGestureBegin (const AudioParameter::Ptr& parameter, int indexInContainer) override
+    {
+        ignoreUnused (parameter, indexInContainer);
+    }
+
+    void parameterGestureEnd (const AudioParameter::Ptr& parameter, int indexInContainer) override
+    {
+        ignoreUnused (parameter, indexInContainer);
+    }
+
     Float64 getCurrentSampleRate()
     {
         return Output (0).GetStreamFormat().mSampleRate;
@@ -944,11 +1050,17 @@ private:
     std::unique_ptr<AudioProcessor> processor;
 
     MidiBuffer midiBuffer;
-    ParameterChangeBuffer emptyParamChanges; // AU delivers param changes via SetParameter, not in the audio stream
+    MidiBuffer emptyMidiBuffer;
+    ParameterChangeBuffer paramChangeBuffer;
+    ParameterChangeBuffer emptyParamChangeBuffer;
     std::mutex midiMutex;
+    std::mutex parameterChangeMutex;
     std::vector<AUChannelInfo> channelInfoCache;
+    std::vector<AudioParameter::Ptr> listenedParameters;
+    std::vector<float*> audioChannels;
     AudioUnit componentInstance = nullptr;
     bool renderingOffline = false;
+    bool isBypassed = false;
 };
 
 } // namespace yup
@@ -1277,6 +1389,18 @@ OSStatus AudioPluginProcessorAU::GetProperty (AudioUnitPropertyID inID,
 
         *static_cast<UInt32*> (outData) = renderingOffline ? 1u : 0u;
         YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "GetProperty OfflineRender returned " << String (renderingOffline ? "true" : "false"));
+        return noErr;
+    }
+
+    if (inID == kAudioUnitProperty_BypassEffect)
+    {
+        if (inScope != kAudioUnitScope_Global)
+            return kAudioUnitErr_InvalidScope;
+
+        if (outData == nullptr)
+            return kAudioUnitErr_InvalidPropertyValue;
+
+        *static_cast<UInt32*> (outData) = isBypassed ? 1u : 0u;
         return noErr;
     }
 

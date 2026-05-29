@@ -27,9 +27,9 @@
 #error "YUP_AUDIO_PLUGIN_ENABLE_CLAP must be defined"
 #endif
 
-#include <string_view>
-#include <optional>
 #include <array>
+#include <optional>
+#include <string_view>
 
 #include <clap/clap.h>
 
@@ -179,6 +179,7 @@ void clapEventToParameterChange (const clap_event_header_t* event, AudioProcesso
 }
 
 bool addParameterModByCLAPEvent (AudioProcessor& processor,
+                                 ParameterChangeBuffer& changes,
                                  const clap_event_param_mod_t* modEvent)
 {
     if (modEvent->note_id != -1 || modEvent->key != -1)
@@ -195,9 +196,13 @@ bool addParameterModByCLAPEvent (AudioProcessor& processor,
     if (! param->isModulatable() || param->isReadOnly())
         return false;
 
-    const float modulatedValue = param->getValue() + static_cast<float> (modEvent->amount);
-    param->setValue (modulatedValue);
-    return true;
+    const auto modulatedValue = jlimit (param->getMinimumValue(),
+                                        param->getMaximumValue(),
+                                        param->getValue() + static_cast<float> (modEvent->amount));
+
+    return changes.addChange (parameterIndex,
+                              param->convertToNormalizedValue (modulatedValue),
+                              static_cast<int> (modEvent->header.time));
 }
 
 bool addParameterChangeByCLAPValue (AudioProcessor& processor,
@@ -247,6 +252,9 @@ clap_param_info_flags getCLAPParameterFlags (const AudioParameter& parameter) no
 
     return flags;
 }
+
+constexpr int clapWrapperStateMagic = 0x504c4359; // "YCLP"
+constexpr int clapWrapperStateVersion = 1;
 
 static bool writeAllToCLAPStream (const clap_ostream_t* stream, const void* data, size_t dataSize)
 {
@@ -547,9 +555,11 @@ private:
 
     MidiBuffer midiEvents;
     ParameterChangeBuffer paramChangeBuffer;
+    ParameterChangeBuffer hostParameterChangeBuffer;
     std::vector<AudioParameter::Ptr> listenedParameters;
     std::vector<float*> outputChannelsFloat;
     std::vector<double*> outputChannelsDouble;
+    bool isBypassed = false;
     std::atomic<bool> isActive { false };
     std::atomic<bool> isInsideProcessBlock { false };
     std::atomic<bool> callLatencyChangeOnNextActivate { false };
@@ -647,6 +657,10 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
         // Process incoming parameter and MIDI events (CLAP guarantees time-sorted order)
         midiBuffer.clear();
         wrapper->paramChangeBuffer.clear();
+        wrapper->hostParameterChangeBuffer.clear();
+
+        bool bypassed = wrapper->isBypassed;
+        const auto bypassParameterID = getBypassHostParameterID (audioProcessor);
 
         const uint32_t inputEventCount = process->in_events->size (process->in_events);
         for (uint32_t eventIndex = 0; eventIndex < inputEventCount; ++eventIndex)
@@ -659,8 +673,22 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
             if (event->type == CLAP_EVENT_PARAM_VALUE)
             {
                 const auto* paramEvent = reinterpret_cast<const clap_event_param_value_t*> (event);
+
+                if (paramEvent->param_id == bypassParameterID)
+                {
+                    bypassed = paramEvent->value >= 0.5;
+                    wrapper->isBypassed = bypassed;
+                    continue;
+                }
+
                 addParameterChangeByCLAPValue (audioProcessor,
                                                wrapper->paramChangeBuffer,
+                                               paramEvent->param_id,
+                                               static_cast<float> (paramEvent->value),
+                                               static_cast<int> (event->time));
+
+                addParameterChangeByCLAPValue (audioProcessor,
+                                               wrapper->hostParameterChangeBuffer,
                                                paramEvent->param_id,
                                                static_cast<float> (paramEvent->value),
                                                static_cast<int> (event->time));
@@ -668,7 +696,7 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
             else if (event->type == CLAP_EVENT_PARAM_MOD)
             {
                 const auto* modEvent = reinterpret_cast<const clap_event_param_mod_t*> (event);
-                addParameterModByCLAPEvent (audioProcessor, modEvent);
+                addParameterModByCLAPEvent (audioProcessor, wrapper->paramChangeBuffer, modEvent);
             }
             else if (auto convertedEvent = clapEventToMidiMessage (event))
             {
@@ -677,7 +705,7 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
         }
 
         // CLAP events arrive sorted — no sort needed; apply final values for backward compat
-        applyParameterChangesToProcessor (audioProcessor, wrapper->paramChangeBuffer);
+        applyParameterChangesToProcessor (audioProcessor, wrapper->hostParameterChangeBuffer);
 
         AudioPluginPlayHeadCLAP playHead (audioProcessor.getSampleRate(), process);
         auto* const playHeadPtr = process->transport != nullptr ? &playHead : nullptr;
@@ -717,7 +745,7 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
             AudioProcessContext<double> context { audioBuffer, midiBuffer, wrapper->paramChangeBuffer, playHeadPtr };
 
             wrapper->isInsideProcessBlock.store (true);
-            audioProcessor.processBlock (context);
+            processAudioBlock (audioProcessor, context, bypassed);
             wrapper->isInsideProcessBlock.store (false);
         }
         else
@@ -751,7 +779,7 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
             AudioProcessContext<float> context { audioBuffer, midiBuffer, wrapper->paramChangeBuffer, playHeadPtr };
 
             wrapper->isInsideProcessBlock.store (true);
-            audioProcessor.processBlock (context);
+            processAudioBlock (audioProcessor, context, bypassed);
             wrapper->isInsideProcessBlock.store (false);
         }
 
@@ -759,35 +787,38 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
         wrapper->drainParameterEvents (process->out_events);
 
         // Send output events back to host
-        for (const MidiMessageMetadata metadata : midiBuffer)
+        if (process->out_events != nullptr)
         {
-            const auto& message = metadata.getMessage();
+            for (const MidiMessageMetadata metadata : midiBuffer)
+            {
+                const auto& message = metadata.getMessage();
 
-            if (message.isNoteOff())
-            {
-                clap_event_note_t ev = {};
-                ev.header.size = sizeof (ev);
-                ev.header.time = static_cast<uint32_t> (metadata.samplePosition);
-                ev.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
-                ev.header.type = CLAP_EVENT_NOTE_END;
-                ev.header.flags = 0;
-                ev.note_id = -1;
-                ev.key = message.getNoteNumber();
-                ev.channel = message.getChannel() - 1;
-                ev.port_index = 0;
-                process->out_events->try_push (process->out_events, &ev.header);
-            }
-            else if (message.getRawDataSize() > 0 && message.getRawDataSize() <= 3)
-            {
-                clap_event_midi_t ev = {};
-                ev.header.size = sizeof (ev);
-                ev.header.time = static_cast<uint32_t> (metadata.samplePosition);
-                ev.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
-                ev.header.type = CLAP_EVENT_MIDI;
-                ev.header.flags = 0;
-                ev.port_index = 0;
-                std::memcpy (ev.data, message.getRawData(), static_cast<size_t> (message.getRawDataSize()));
-                process->out_events->try_push (process->out_events, &ev.header);
+                if (message.isNoteOff())
+                {
+                    clap_event_note_t ev = {};
+                    ev.header.size = sizeof (ev);
+                    ev.header.time = static_cast<uint32_t> (metadata.samplePosition);
+                    ev.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
+                    ev.header.type = CLAP_EVENT_NOTE_END;
+                    ev.header.flags = 0;
+                    ev.note_id = -1;
+                    ev.key = message.getNoteNumber();
+                    ev.channel = message.getChannel() - 1;
+                    ev.port_index = 0;
+                    process->out_events->try_push (process->out_events, &ev.header);
+                }
+                else if (message.getRawDataSize() > 0 && message.getRawDataSize() <= 3)
+                {
+                    clap_event_midi_t ev = {};
+                    ev.header.size = sizeof (ev);
+                    ev.header.time = static_cast<uint32_t> (metadata.samplePosition);
+                    ev.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
+                    ev.header.type = CLAP_EVENT_MIDI;
+                    ev.header.flags = 0;
+                    ev.port_index = 0;
+                    std::memcpy (ev.data, message.getRawData(), static_cast<size_t> (message.getRawDataSize()));
+                    process->out_events->try_push (process->out_events, &ev.header);
+                }
             }
         }
 
@@ -825,7 +856,7 @@ bool AudioPluginProcessorCLAP::initialise()
     // ==== Setup extensions: parameters
     extensionParams.count = [] (const clap_plugin_t* plugin) -> uint32_t
     {
-        return static_cast<uint32_t> (getWrapper (plugin)->audioProcessor->getParameters().size());
+        return static_cast<uint32_t> (getWrapper (plugin)->audioProcessor->getParameters().size() + 1);
     };
 
     extensionParams.get_info = [] (const clap_plugin_t* plugin, uint32_t index, clap_param_info_t* information) -> bool
@@ -835,8 +866,19 @@ bool AudioPluginProcessorCLAP::initialise()
         auto wrapper = getWrapper (plugin);
         auto parameters = wrapper->audioProcessor->getParameters();
 
-        if (index >= static_cast<uint32_t> (parameters.size()))
+        if (index > static_cast<uint32_t> (parameters.size()))
             return false;
+
+        if (index == static_cast<uint32_t> (parameters.size()))
+        {
+            information->id = getBypassHostParameterID (*wrapper->audioProcessor);
+            information->flags = CLAP_PARAM_IS_AUTOMATABLE | CLAP_PARAM_IS_STEPPED | CLAP_PARAM_IS_BYPASS;
+            information->min_value = 0.0;
+            information->max_value = 1.0;
+            information->default_value = 0.0;
+            std::snprintf (information->name, sizeof (information->name), "%s", "Bypass");
+            return true;
+        }
 
         auto& parameter = parameters[index];
 
@@ -859,7 +901,15 @@ bool AudioPluginProcessorCLAP::initialise()
 
         const auto parameterIndex = wrapper->audioProcessor->getParameterIndexByHostID (parameterId);
         if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
+        {
+            if (parameterId == getBypassHostParameterID (*wrapper->audioProcessor))
+            {
+                *value = wrapper->isBypassed ? 1.0 : 0.0;
+                return true;
+            }
+
             return false;
+        }
 
         *value = parameters[parameterIndex]->getValue();
 
@@ -873,7 +923,16 @@ bool AudioPluginProcessorCLAP::initialise()
 
         const auto parameterIndex = wrapper->audioProcessor->getParameterIndexByHostID (parameterId);
         if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
+        {
+            if (parameterId == getBypassHostParameterID (*wrapper->audioProcessor))
+            {
+                const auto text = value >= 0.5 ? String ("On") : String ("Off");
+                text.copyToUTF8 (display, size);
+                return true;
+            }
+
             return false;
+        }
 
         const auto text = parameters[parameterIndex]->convertToString (static_cast<float> (value));
         text.copyToUTF8 (display, size);
@@ -888,7 +947,16 @@ bool AudioPluginProcessorCLAP::initialise()
 
         const auto parameterIndex = wrapper->audioProcessor->getParameterIndexByHostID (parameterId);
         if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
+        {
+            if (parameterId == getBypassHostParameterID (*wrapper->audioProcessor))
+            {
+                const String text (display);
+                *value = (text == "On" || text == "1") ? 1.0 : 0.0;
+                return true;
+            }
+
             return false;
+        }
 
         *value = static_cast<double> (parameters[parameterIndex]->convertFromString (display));
 
@@ -901,7 +969,11 @@ bool AudioPluginProcessorCLAP::initialise()
 
         wrapper->drainParameterEvents (out);
 
+        if (in == nullptr)
+            return;
+
         const uint32_t count = in->size (in);
+        const auto bypassParameterID = getBypassHostParameterID (*wrapper->audioProcessor);
 
         for (uint32_t i = 0; i < count; ++i)
         {
@@ -911,9 +983,21 @@ bool AudioPluginProcessorCLAP::initialise()
                 continue;
 
             if (event->type == CLAP_EVENT_PARAM_VALUE)
+            {
+                const auto* paramEvent = reinterpret_cast<const clap_event_param_value_t*> (event);
+
+                if (paramEvent->param_id == bypassParameterID)
+                {
+                    wrapper->isBypassed = paramEvent->value >= 0.5;
+                    continue;
+                }
+
                 clapEventToParameterChange (event, *wrapper->audioProcessor);
+            }
             else if (event->type == CLAP_EVENT_PARAM_MOD)
-                addParameterModByCLAPEvent (*wrapper->audioProcessor, reinterpret_cast<const clap_event_param_mod_t*> (event));
+            {
+                // Modulation is transient audio-block data; there is no processor context during flush().
+            }
         }
     };
 
@@ -1061,10 +1145,13 @@ bool AudioPluginProcessorCLAP::initialise()
         const bool saved = wrapper->audioProcessor->saveStateIntoMemory (data).wasOk();
         wrapper->audioProcessor->suspendProcessing (false);
 
-        if (! saved)
-            return false;
+        const auto wrapperState = writeWrapperBypassState (clapWrapperStateMagic,
+                                                           clapWrapperStateVersion,
+                                                           wrapper->isBypassed,
+                                                           data,
+                                                           saved);
 
-        return writeAllToCLAPStream (stream, data.getData(), data.getSize());
+        return writeAllToCLAPStream (stream, wrapperState.getData(), wrapperState.getSize());
     };
 
     extensionState.load = [] (const clap_plugin_t* plugin, const clap_istream_t* stream) -> bool
@@ -1088,8 +1175,19 @@ bool AudioPluginProcessorCLAP::initialise()
         if (data.isEmpty())
             return false;
 
+        const auto wrapperState = readWrapperBypassState (data, clapWrapperStateMagic, clapWrapperStateVersion);
+        if (wrapperState.hasWrapperState)
+        {
+            wrapper->isBypassed = wrapperState.isBypassed;
+
+            if (! wrapperState.hasProcessorState)
+                return true;
+        }
+
+        const auto& processorState = wrapperState.hasWrapperState ? wrapperState.processorState : data;
+
         wrapper->audioProcessor->suspendProcessing (true);
-        const bool ok = wrapper->audioProcessor->loadStateFromMemory (data).wasOk();
+        const bool ok = wrapper->audioProcessor->loadStateFromMemory (processorState).wasOk();
         wrapper->audioProcessor->suspendProcessing (false);
 
         return ok;
@@ -1428,9 +1526,10 @@ bool AudioPluginProcessorCLAP::activate (float sampleRate, int samplesPerBlock)
     }
 
     midiEvents.ensureSize (4096);
-    paramChangeBuffer.reserve (static_cast<int> (audioProcessor->getParameters().size()) * 4 + 32);
+    paramChangeBuffer.reserve (getDefaultParameterChangeCapacity (*audioProcessor));
+    hostParameterChangeBuffer.reserve (getDefaultParameterChangeCapacity (*audioProcessor));
 
-    const int totalOutputChannels = audioProcessor->getNumAudioOutputs();
+    const int totalOutputChannels = getTotalAudioOutputChannels (*audioProcessor);
     outputChannelsFloat.reserve (static_cast<size_t> (totalOutputChannels));
     outputChannelsDouble.reserve (static_cast<size_t> (totalOutputChannels));
 

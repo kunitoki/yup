@@ -19,6 +19,13 @@
 
 #==============================================================================
 
+function (_yup_configure_audio_plugin_bundle_info_plist output_file package_type)
+    set (YUP_AUDIO_PLUGIN_BUNDLE_PACKAGE_TYPE "${package_type}")
+    configure_file ("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/mac/AudioPluginInfo.plist.in" "${output_file}" @ONLY)
+endfunction()
+
+#==============================================================================
+
 function (yup_audio_plugin)
     # ==== Fetch options
     set (options CONSOLE)
@@ -158,18 +165,27 @@ function (yup_audio_plugin)
             XCODE_GENERATE_SCHEME ON)
 
         if (YUP_PLATFORM_MAC)
+            set (clap_plist_output "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_clap_plugin.plist")
+            _yup_configure_audio_plugin_bundle_info_plist ("${clap_plist_output}" "BNDL")
+
             set_target_properties (${target_name}_clap_plugin PROPERTIES
                 BUNDLE TRUE
                 BUNDLE_EXTENSION "clap"
                 MACOSX_BUNDLE TRUE
+                MACOSX_BUNDLE_INFO_PLIST "${clap_plist_output}"
                 MACOSX_BUNDLE_BUNDLE_NAME "${target_name}_clap_plugin"
+                MACOSX_BUNDLE_BUNDLE_VERSION "${target_version}"
+                MACOSX_BUNDLE_SHORT_VERSION_STRING "${target_version}"
                 MACOSX_BUNDLE_GUI_IDENTIFIER "${target_bundle_id}.clap"
+                XCODE_ATTRIBUTE_GENERATE_PKGINFO_FILE YES
+                XCODE_ATTRIBUTE_PRODUCT_BUNDLE_PACKAGE_TYPE BNDL
                 XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${target_bundle_id}.clap"
                 PREFIX "")
 
             set (clap_plugin_path "$<TARGET_BUNDLE_DIR:${target_name}_clap_plugin>")
         else()
             set_target_properties (${target_name}_clap_plugin PROPERTIES
+                PREFIX ""
                 SUFFIX ".clap")
 
             set (clap_plugin_path "$<TARGET_FILE:${target_name}_clap_plugin>")
@@ -248,6 +264,18 @@ function (yup_audio_plugin)
             smtg_target_set_bundle (${target_name}_vst3_plugin
                 BUNDLE_IDENTIFIER "${target_bundle_id}"
                 COMPANY_NAME "kunitoki") # TODO - make company name configurable
+
+            set (vst3_plist_output "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_vst3_plugin.plist")
+            _yup_configure_audio_plugin_bundle_info_plist ("${vst3_plist_output}" "BNDL")
+
+            set_target_properties (${target_name}_vst3_plugin PROPERTIES
+                MACOSX_BUNDLE_INFO_PLIST "${vst3_plist_output}"
+                MACOSX_BUNDLE_BUNDLE_NAME "${target_name}_vst3_plugin"
+                MACOSX_BUNDLE_BUNDLE_VERSION "${target_version}"
+                MACOSX_BUNDLE_SHORT_VERSION_STRING "${target_version}"
+                MACOSX_BUNDLE_GUI_IDENTIFIER "${target_bundle_id}"
+                XCODE_ATTRIBUTE_INFOPLIST_FILE "${vst3_plist_output}"
+                XCODE_ATTRIBUTE_PRODUCT_BUNDLE_PACKAGE_TYPE BNDL)
 
             if (XCODE)
                 get_target_property (vst3_plugin_package_path ${target_name}_vst3_plugin SMTG_PLUGIN_PACKAGE_PATH)
@@ -362,7 +390,7 @@ function (yup_audio_plugin)
                 ${YUP_ARG_MODULES})
 
             # Generate the AU Info.plist from our template
-            set (au_plist_template "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/mac/AUInfo.plist")
+            set (au_plist_template "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/mac/AudioUnitInfo.plist.in")
             set (au_plist_output "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_au_plugin.plist")
 
             set (PLUGIN_AU_TYPE "${au_bundle_type}")

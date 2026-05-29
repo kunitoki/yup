@@ -532,10 +532,40 @@ struct VST3Module
     }
 #endif
 
+    static File findFirstPackageBinary (const File& package, const String& wildcardPattern)
+    {
+        Array<File> files;
+        package.getChildFile ("Contents").findChildFiles (files, File::findFiles, true, wildcardPattern, File::FollowSymlinks::noCycles);
+
+        const auto expectedName = package.getFileNameWithoutExtension();
+
+        for (const auto& file : files)
+            if (file.getFileNameWithoutExtension() == expectedName)
+                return file;
+
+        return files.isEmpty() ? File() : files.getFirst();
+    }
+
+    static File getPackageBinaryFile (const File& file)
+    {
+        if (! file.isDirectory())
+            return file;
+
+#if YUP_MAC
+        return {};
+#elif YUP_WINDOWS
+        return findFirstPackageBinary (file, "*.vst3");
+#elif YUP_LINUX
+        return findFirstPackageBinary (file, "*.so");
+#else
+        return file;
+#endif
+    }
+
     static std::unique_ptr<VST3Module> load (const File& file)
     {
         auto m = std::make_unique<VST3Module>();
-        auto libraryFile = file;
+        auto libraryFile = getPackageBinaryFile (file);
 
 #if YUP_MAC
         if (file.isDirectory())
@@ -1727,8 +1757,7 @@ FileSearchPath VST3Format::getDefaultSearchPaths() const
 
 ResultValue<std::vector<AudioPluginDescription>> VST3Format::scanFile (const File& file)
 {
-    if (file.getFileExtension().toLowerCase() != ".vst3"
-        && ! file.isDirectory())
+    if (file.getFileExtension().toLowerCase() != ".vst3")
         return makeResultValueFail ("Not a VST3 file");
 
     YUP_MODULE_DBG (PLUGIN_HOST_VST3, "scanning: " << file.getFullPathName());
