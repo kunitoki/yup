@@ -46,6 +46,7 @@
 #include <pluginterfaces/vst/vstpresetkeys.h>
 
 #include <atomic>
+#include <limits>
 #include <memory>
 #include <string_view>
 #include <vector>
@@ -105,6 +106,89 @@ Vst::ParamID getVST3ParameterID (const AudioParameter::Ptr& parameter)
 Vst::ParamID getVST3BypassParameterID (const AudioProcessor& processor)
 {
     return static_cast<Vst::ParamID> (getBypassHostParameterID (processor));
+}
+
+constexpr int vst3WrapperStateMagic = 0x33535659; // "YVS3"
+constexpr int vst3WrapperStateVersion = 1;
+
+struct VST3WrapperState
+{
+    bool hasWrapperState = false;
+    bool isBypassed = false;
+    bool hasProcessorState = false;
+    MemoryBlock processorState;
+};
+
+MemoryBlock readVST3StreamData (IBStream& stream)
+{
+    MemoryBlock data;
+    char buffer[4096];
+    int32 bytesRead = 0;
+
+    while (stream.read (buffer, sizeof (buffer), &bytesRead) == kResultOk && bytesRead > 0)
+        data.append (buffer, static_cast<size_t> (bytesRead));
+
+    return data;
+}
+
+void writeVST3WrapperState (MemoryBlock& data,
+                            bool isBypassed,
+                            const MemoryBlock& processorState,
+                            bool hasProcessorState)
+{
+    MemoryOutputStream output (data, false);
+    output.writeInt (vst3WrapperStateMagic);
+    output.writeInt (vst3WrapperStateVersion);
+    output.writeBool (isBypassed);
+    output.writeBool (hasProcessorState);
+    output.writeInt64 (hasProcessorState ? static_cast<int64> (processorState.getSize()) : 0);
+
+    if (hasProcessorState && ! processorState.isEmpty())
+        output.write (processorState.getData(), processorState.getSize());
+
+    output.flush();
+}
+
+VST3WrapperState readVST3WrapperState (const MemoryBlock& data)
+{
+    VST3WrapperState result;
+
+    MemoryInputStream input (data, false);
+
+    if (input.readInt() != vst3WrapperStateMagic
+        || input.readInt() != vst3WrapperStateVersion)
+    {
+        result.processorState = data;
+        return result;
+    }
+
+    result.hasWrapperState = true;
+    result.isBypassed = input.readBool();
+    result.hasProcessorState = input.readBool();
+
+    const auto processorStateSize = input.readInt64();
+    if (processorStateSize < 0
+        || processorStateSize > input.getNumBytesRemaining()
+        || processorStateSize > static_cast<int64> (std::numeric_limits<int>::max()))
+    {
+        result.hasWrapperState = false;
+        result.hasProcessorState = false;
+        result.processorState = data;
+        return result;
+    }
+
+    result.processorState.setSize (static_cast<size_t> (processorStateSize));
+
+    const auto bytesToRead = static_cast<int> (processorStateSize);
+    if (bytesToRead > 0
+        && input.read (result.processorState.getData(), bytesToRead) != bytesToRead)
+    {
+        result.hasWrapperState = false;
+        result.hasProcessorState = false;
+        result.processorState = data;
+    }
+
+    return result;
 }
 
 class AudioPluginPlayHeadVST3 final : public AudioPlayHead
@@ -511,12 +595,38 @@ public:
 
     tresult PLUGIN_API setState (IBStream* state) override
     {
-        return kResultFalse;
+        if (state == nullptr)
+            return kInvalidArgument;
+
+        return kResultOk;
     }
 
     tresult PLUGIN_API getState (IBStream* state) override
     {
-        return kResultFalse;
+        if (state == nullptr)
+            return kInvalidArgument;
+
+        return kResultOk;
+    }
+
+    tresult PLUGIN_API setComponentState (IBStream* state) override
+    {
+        if (processor == nullptr || state == nullptr)
+            return kResultFalse;
+
+        const auto wrapperState = readVST3WrapperState (readVST3StreamData (*state));
+        if (! wrapperState.hasWrapperState)
+        {
+            syncProcessorParametersToController();
+            return kResultOk;
+        }
+
+        Vst::EditController::setParamNormalized (getVST3BypassParameterID (*processor),
+                                                 wrapperState.isBypassed ? 1.0 : 0.0);
+
+        syncProcessorParametersToController();
+
+        return kResultOk;
     }
 
     //==============================================================================
@@ -905,6 +1015,19 @@ private:
             Vst::EditController::endEdit (getVST3ParameterID (processor->getParameters()[indexInContainer]));
     }
 
+    void syncProcessorParametersToController()
+    {
+        if (processor == nullptr)
+            return;
+
+        for (const auto& parameter : processor->getParameters())
+        {
+            Vst::EditController::setParamNormalized (
+                getVST3ParameterID (parameter),
+                static_cast<Vst::ParamValue> (parameter->getNormalizedValue()));
+        }
+    }
+
     bool isValidProcessorParameterIndex (int indexInContainer) const
     {
         return processor != nullptr
@@ -1094,12 +1217,17 @@ public:
         if (processor == nullptr || stream == nullptr)
             return kResultFalse;
 
+        MemoryBlock processorState;
+        const auto hasProcessorState = processor->saveStateIntoMemory (processorState).wasOk();
+
         MemoryBlock data;
-        if (processor->saveStateIntoMemory (data).failed())
-            return kResultFalse;
+        writeVST3WrapperState (data, isBypassed, processorState, hasProcessorState);
 
         int32 written = 0;
-        return stream->write (data.getData(), static_cast<int32> (data.getSize()), &written);
+        return stream->write (data.getData(), static_cast<int32> (data.getSize()), &written) == kResultOk
+                    && written == static_cast<int32> (data.getSize())
+                 ? kResultOk
+                 : kResultFalse;
     }
 
     tresult PLUGIN_API setState (IBStream* stream) override
@@ -1107,17 +1235,20 @@ public:
         if (processor == nullptr || stream == nullptr)
             return kResultFalse;
 
-        MemoryBlock data;
-        char buf[4096];
-        int32 bytesRead = 0;
-
-        while (stream->read (buf, sizeof (buf), &bytesRead) == kResultOk && bytesRead > 0)
-            data.append (buf, static_cast<size_t> (bytesRead));
-
+        const auto data = readVST3StreamData (*stream);
         if (data.isEmpty())
             return kResultFalse;
 
-        return processor->loadStateFromMemory (data).wasOk() ? kResultOk : kResultFalse;
+        const auto wrapperState = readVST3WrapperState (data);
+        if (! wrapperState.hasWrapperState)
+            return processor->loadStateFromMemory (wrapperState.processorState).wasOk() ? kResultOk : kResultFalse;
+
+        isBypassed = wrapperState.isBypassed;
+
+        if (! wrapperState.hasProcessorState)
+            return kResultOk;
+
+        return processor->loadStateFromMemory (wrapperState.processorState).wasOk() ? kResultOk : kResultFalse;
     }
 
     //==============================================================================

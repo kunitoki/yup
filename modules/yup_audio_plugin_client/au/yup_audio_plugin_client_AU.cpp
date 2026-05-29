@@ -77,6 +77,13 @@ namespace
 
 //==============================================================================
 
+static CFStringRef getProcessorStateKey()
+{
+    return CFSTR ("YUPProcessorState");
+}
+
+//==============================================================================
+
 struct AUScopedYupInitialiser
 {
     AUScopedYupInitialiser()
@@ -618,25 +625,46 @@ public:
     {
         YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "SaveState requested");
 
-        if (processor == nullptr || outData == nullptr)
+        if (outData == nullptr)
         {
-            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "SaveState failed: processor=" << describePointer (processor.get()) << ", outData=" << describePointer (outData));
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "SaveState failed: outData is null");
             return kAudioUnitErr_InvalidPropertyValue;
+        }
+
+        const auto baseResult = AudioPluginAUBase::SaveState (outData);
+        if (baseResult != noErr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "SaveState failed: base status=" << describeStatus (baseResult));
+            return baseResult;
+        }
+
+        if (processor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "SaveState completed without processor state: processor is null");
+            return noErr;
         }
 
         MemoryBlock data;
         const auto result = processor->saveStateIntoMemory (data);
         if (result.failed())
         {
-            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "SaveState failed: " << result.getErrorMessage());
-            return kAudioUnitErr_InvalidPropertyValue;
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "SaveState completed without processor state: " << result.getErrorMessage());
+            return noErr;
         }
 
-        NSData* nsData = [NSData dataWithBytes:data.getData()
-                                        length:data.getSize()];
-        *outData = (__bridge_retained CFPropertyListRef) nsData;
+        if (*outData != nullptr && CFGetTypeID (*outData) == CFDictionaryGetTypeID())
+        {
+            NSData* nsData = data.getSize() > 0
+                               ? [NSData dataWithBytes:data.getData() length:data.getSize()]
+                               : [NSData data];
 
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "SaveState completed: bytes=" << String (static_cast<int64> (data.getSize())));
+            auto* stateDictionary = const_cast<CFMutableDictionaryRef> (static_cast<CFDictionaryRef> (*outData));
+            CFDictionarySetValue (stateDictionary,
+                                  getProcessorStateKey(),
+                                  (__bridge CFDataRef) nsData);
+        }
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "SaveState completed with processor state: bytes=" << String (static_cast<int64> (data.getSize())));
 
         return noErr;
     }
@@ -645,15 +673,53 @@ public:
     {
         YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "RestoreState requested");
 
-        if (processor == nullptr || inData == nullptr)
+        if (inData == nullptr)
         {
-            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "RestoreState failed: processor=" << describePointer (processor.get()) << ", inData=" << describePointer (inData));
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "RestoreState failed: inData is null");
             return kAudioUnitErr_InvalidPropertyValue;
         }
 
-        NSData* nsData = (__bridge NSData*) inData;
+        CFDataRef processorState = nullptr;
+        OSStatus baseResult = noErr;
 
-        MemoryBlock data ([nsData bytes], [nsData length]);
+        if (CFGetTypeID (inData) == CFDictionaryGetTypeID())
+        {
+            processorState = static_cast<CFDataRef> (CFDictionaryGetValue (static_cast<CFDictionaryRef> (inData),
+                                                                           getProcessorStateKey()));
+
+            if (processorState != nullptr && CFGetTypeID (processorState) != CFDataGetTypeID())
+                return kAudioUnitErr_InvalidPropertyValue;
+
+            baseResult = AudioPluginAUBase::RestoreState (inData);
+            if (baseResult != noErr)
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "RestoreState failed: base status=" << describeStatus (baseResult));
+                return baseResult;
+            }
+        }
+        else if (CFGetTypeID (inData) == CFDataGetTypeID())
+        {
+            processorState = static_cast<CFDataRef> (inData);
+        }
+        else
+        {
+            return kAudioUnitErr_InvalidPropertyValue;
+        }
+
+        if (processorState == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "RestoreState completed without processor state");
+            return baseResult;
+        }
+
+        if (processor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "RestoreState failed: processor is null");
+            return kAudioUnitErr_InvalidPropertyValue;
+        }
+
+        MemoryBlock data (CFDataGetBytePtr (processorState),
+                          static_cast<size_t> (CFDataGetLength (processorState)));
 
         processor->suspendProcessing (true);
         const auto result = processor->loadStateFromMemory (data);
