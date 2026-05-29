@@ -463,6 +463,18 @@ public:
         addAndMakeVisible (*processorEditor);
     }
 
+    ~AudioPluginEditorCLAP() override
+    {
+        if (processorEditor != nullptr)
+        {
+            setVisible (false);
+            removeFromDesktop();
+
+            removeChildComponent (processorEditor.get());
+            processorEditor.reset();
+        }
+    }
+
     AudioProcessorEditor* getAudioProcessorEditor() { return processorEditor.get(); }
 
     void contentScaleChanged (float dpiScale) override;
@@ -1298,6 +1310,7 @@ bool AudioPluginProcessorCLAP::initialise()
     extensionGUI.destroy = [] (const clap_plugin_t* plugin)
     {
         auto wrapper = getWrapper (plugin);
+        endActiveParameterGestures (wrapper->audioProcessor.get());
         wrapper->audioPluginEditor.reset();
     };
 

@@ -52,6 +52,8 @@
 
 extern "C" yup::AudioProcessor* createPluginProcessor();
 
+@class AudioPluginEditorViewAU;
+
 namespace yup
 {
 
@@ -221,6 +223,7 @@ public:
     {
         YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "destroying processor instance: wrapper=" << yup::describePointer (this) << ", component=" << yup::describePointer (componentInstance) << ", processor=" << yup::describePointer (processor.get()));
 
+        closeEditorViews();
         removeParameterListeners();
         yup::endActiveParameterGestures (processor.get());
 
@@ -948,6 +951,26 @@ public:
 
     AudioProcessor* getProcessor() const { return processor.get(); }
 
+    void registerEditorView (AudioPluginEditorViewAU* view)
+    {
+        if (view == nil)
+            return;
+
+        std::lock_guard<std::mutex> lock (editorViewsMutex);
+        editorViews.push_back ((__bridge void*) view);
+    }
+
+    void unregisterEditorView (AudioPluginEditorViewAU* view)
+    {
+        if (view == nil)
+            return;
+
+        std::lock_guard<std::mutex> lock (editorViewsMutex);
+        editorViews.erase (std::remove (editorViews.begin(), editorViews.end(), (__bridge void*) view), editorViews.end());
+    }
+
+    void closeEditorViews();
+
     static AudioPluginProcessorAU* findInstance (AudioUnit component)
     {
         std::lock_guard<std::mutex> lock (getInstanceRegistryMutex());
@@ -1047,6 +1070,7 @@ private:
     }
 
     ScopedYupInitialiser_GUI scopeInitialiser;
+    ScopedYupInitialiser_Windowing scopeWindowingInitialiser;
     std::unique_ptr<AudioProcessor> processor;
 
     MidiBuffer midiBuffer;
@@ -1055,9 +1079,11 @@ private:
     ParameterChangeBuffer emptyParamChangeBuffer;
     std::mutex midiMutex;
     std::mutex parameterChangeMutex;
+    std::mutex editorViewsMutex;
     std::vector<AUChannelInfo> channelInfoCache;
     std::vector<AudioParameter::Ptr> listenedParameters;
     std::vector<float*> audioChannels;
+    std::vector<void*> editorViews;
     AudioUnit componentInstance = nullptr;
     bool renderingOffline = false;
     bool isBypassed = false;
@@ -1067,8 +1093,6 @@ private:
 
 //==============================================================================
 // Objective-C editor view
-
-@class AudioPluginEditorViewAU;
 
 namespace yup
 {
@@ -1093,16 +1117,18 @@ private:
 
 @interface AudioPluginEditorViewAU : NSView
 {
-    yup::ScopedYupInitialiser_Windowing _scopeInitialiser;
+    yup::AudioPluginProcessorAU* _processorWrapper;
     yup::AudioProcessor* _processor;
     std::unique_ptr<yup::AudioProcessorEditor> _processorEditor;
     std::unique_ptr<yup::AudioPluginEditorViewAUListener> _processorEditorListener;
     bool _resizingEditorToBounds;
 }
-- (instancetype)initWithProcessor:(yup::AudioProcessor*)processor
-                    preferredSize:(NSSize)size;
+- (instancetype)initWithAudioUnitWrapper:(yup::AudioPluginProcessorAU*)processorWrapper
+                           preferredSize:(NSSize)size;
 - (void)attachEditorIfNeeded;
 - (void)detachEditorIfNeeded;
+- (void)closeEditorIfNeeded;
+- (void)closeEditorForProcessorDestruction;
 - (void)resizeEditorToBounds;
 - (void)resizeViewToEditorSize;
 - (void)processorEditorResized;
@@ -1110,21 +1136,25 @@ private:
 
 @implementation AudioPluginEditorViewAU
 
-- (instancetype)initWithProcessor:(yup::AudioProcessor*)processor
-                    preferredSize:(NSSize)size
+- (instancetype)initWithAudioUnitWrapper:(yup::AudioPluginProcessorAU*)processorWrapper
+                           preferredSize:(NSSize)size
 {
-    YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "creating editor view: requestedWidth=" << yup::String (static_cast<double> (size.width)) << ", requestedHeight=" << yup::String (static_cast<double> (size.height)) << ", processor=" << yup::describePointer (processor) << ", view=" << yup::describePointer ((__bridge void*) self));
+    YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "creating editor view: requestedWidth=" << yup::String (static_cast<double> (size.width)) << ", requestedHeight=" << yup::String (static_cast<double> (size.height)) << ", wrapper=" << yup::describePointer (processorWrapper) << ", view=" << yup::describePointer ((__bridge void*) self));
 
     if ((self = [super initWithFrame:NSMakeRect (0, 0, size.width, size.height)]))
     {
         YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor view initialised: view=" << yup::describePointer ((__bridge void*) self));
-        _processor = processor;
+        _processorWrapper = processorWrapper;
+        _processor = processorWrapper != nullptr ? processorWrapper->getProcessor() : nullptr;
         _resizingEditorToBounds = false;
         [self setPostsFrameChangedNotifications:YES];
 
-        if (processor != nullptr && processor->hasEditor())
+        if (_processorWrapper != nullptr)
+            _processorWrapper->registerEditorView (self);
+
+        if (_processor != nullptr && _processor->hasEditor())
         {
-            _processorEditor.reset (processor->createEditor());
+            _processorEditor.reset (_processor->createEditor());
 
             if (_processorEditor != nullptr)
             {
@@ -1245,6 +1275,27 @@ private:
     YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor detached from native view: isOnDesktop=" << yup::String (_processorEditor->isOnDesktop() ? "true" : "false"));
 }
 
+- (void)closeEditorIfNeeded
+{
+    [self detachEditorIfNeeded];
+
+    yup::endActiveParameterGestures (_processor);
+
+    if (_processorEditor != nullptr && _processorEditorListener != nullptr)
+        _processorEditor->removeComponentListener (_processorEditorListener.get());
+
+    _processorEditorListener.reset();
+    _processorEditor.reset();
+}
+
+- (void)closeEditorForProcessorDestruction
+{
+    [self closeEditorIfNeeded];
+
+    _processorWrapper = nullptr;
+    _processor = nullptr;
+}
+
 - (void)resizeEditorToBounds
 {
     if (_processorEditor == nullptr)
@@ -1290,15 +1341,12 @@ private:
 {
     YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "destroying editor view: view=" << yup::describePointer ((__bridge void*) self) << ", editor=" << yup::describePointer (_processorEditor.get()) << ", processor=" << yup::describePointer (_processor));
 
-    [self detachEditorIfNeeded];
+    [self closeEditorIfNeeded];
 
-    yup::endActiveParameterGestures (_processor);
+    if (_processorWrapper != nullptr)
+        _processorWrapper->unregisterEditorView (self);
 
-    if (_processorEditor != nullptr && _processorEditorListener != nullptr)
-        _processorEditor->removeComponentListener (_processorEditorListener.get());
-
-    _processorEditorListener.reset();
-    _processorEditor.reset();
+    _processorWrapper = nullptr;
     _processor = nullptr;
 }
 
@@ -1313,6 +1361,20 @@ void AudioPluginEditorViewAUListener::componentResized (Component& component)
 
     if (owner != nil)
         [owner processorEditorResized];
+}
+
+void AudioPluginProcessorAU::closeEditorViews()
+{
+    std::vector<void*> viewsToClose;
+
+    {
+        std::lock_guard<std::mutex> lock (editorViewsMutex);
+        viewsToClose.swap (editorViews);
+    }
+
+    for (auto* view : viewsToClose)
+        if (view != nullptr)
+            [(__bridge AudioPluginEditorViewAU*) view closeEditorForProcessorDestruction];
 }
 
 } // namespace yup
@@ -1354,8 +1416,8 @@ void AudioPluginEditorViewAUListener::componentResized (Component& component)
         return nil;
     }
 
-    return [[AudioPluginEditorViewAU alloc] initWithProcessor:proc->getProcessor()
-                                                preferredSize:inPreferredSize];
+    return [[AudioPluginEditorViewAU alloc] initWithAudioUnitWrapper:proc
+                                                       preferredSize:inPreferredSize];
 }
 
 @end
