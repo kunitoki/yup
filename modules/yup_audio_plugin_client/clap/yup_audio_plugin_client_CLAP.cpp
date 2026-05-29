@@ -29,6 +29,7 @@
 
 #include <string_view>
 #include <optional>
+#include <array>
 
 #include <clap/clap.h>
 
@@ -168,7 +169,30 @@ void clapEventToParameterChange (const clap_event_header_t* event, AudioProcesso
     if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
         return;
 
+    if (parameters[parameterIndex]->isPerformingChangeGesture())
+        return;
+
     parameters[parameterIndex]->setValue (static_cast<float> (paramEvent->value));
+}
+
+bool addParameterChangeByCLAPValue (AudioProcessor& processor,
+                                    ParameterChangeBuffer& changes,
+                                    uint32 hostParameterID,
+                                    float value,
+                                    int sampleOffset)
+{
+    const auto parameters = processor.getParameters();
+    const auto parameterIndex = processor.getParameterIndexByHostID (hostParameterID);
+
+    if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
+        return false;
+
+    if (parameters[parameterIndex]->isPerformingChangeGesture())
+        return false;
+
+    return changes.addChange (parameterIndex,
+                              parameters[parameterIndex]->convertToNormalizedValue (value),
+                              sampleOffset);
 }
 
 static bool writeAllToCLAPStream (const clap_ostream_t* stream, const void* data, size_t dataSize)
@@ -390,7 +414,7 @@ private:
 
 //==============================================================================
 
-class AudioPluginProcessorCLAP final
+class AudioPluginProcessorCLAP final : private AudioParameter::Listener
 {
 public:
     AudioPluginProcessorCLAP (const clap_host_t* host);
@@ -417,6 +441,18 @@ public:
     ScopedValueSetter<bool> scopedHostEditorResizing();
 
 private:
+    void addParameterListeners();
+    void removeParameterListeners();
+    bool isValidProcessorParameterIndex (int indexInContainer) const;
+
+    void parameterValueChanged (const AudioParameter::Ptr& parameter, int indexInContainer) override;
+    void parameterGestureBegin (const AudioParameter::Ptr& parameter, int indexInContainer) override;
+    void parameterGestureEnd (const AudioParameter::Ptr& parameter, int indexInContainer) override;
+
+    void enqueueParameterEvent (uint16 eventType, clap_id parameterId, double value = 0.0) noexcept;
+    void drainParameterEvents (const clap_output_events_t* out) noexcept;
+    void requestParameterFlush() const noexcept;
+
     ScopedYupInitialiser_GUI scopeInitialiser;
 
     std::unique_ptr<AudioProcessor> audioProcessor;
@@ -449,6 +485,19 @@ private:
 
     MidiBuffer midiEvents;
     ParameterChangeBuffer paramChangeBuffer;
+    std::vector<AudioParameter::Ptr> listenedParameters;
+    std::atomic<bool> isInsideProcessBlock { false };
+
+    struct QueuedParameterEvent
+    {
+        uint16 eventType = 0;
+        clap_id parameterId = CLAP_INVALID_ID;
+        double value = 0.0;
+    };
+
+    static constexpr int parameterEventQueueSize = 4096;
+    AbstractFifo parameterEventFifo { parameterEventQueueSize };
+    std::array<QueuedParameterEvent, parameterEventQueueSize> parameterEvents {};
 
     static std::atomic_int instancesCount;
 };
@@ -516,6 +565,8 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
         auto& audioProcessor = *wrapper->audioProcessor;
         auto& midiBuffer = wrapper->midiEvents;
 
+        wrapper->drainParameterEvents (process->out_events);
+
         auto lock = CriticalSection::ScopedTryLockType (audioProcessor.getProcessLock());
         if (! lock.isLocked() || audioProcessor.isSuspended())
             return CLAP_PROCESS_CONTINUE;
@@ -538,11 +589,11 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
             if (event->type == CLAP_EVENT_PARAM_VALUE)
             {
                 const auto* paramEvent = reinterpret_cast<const clap_event_param_value_t*> (event);
-                addParameterChangeByHostParameterID (audioProcessor,
-                                                     wrapper->paramChangeBuffer,
-                                                     paramEvent->param_id,
-                                                     static_cast<float> (paramEvent->value),
-                                                     static_cast<int> (event->time));
+                addParameterChangeByCLAPValue (audioProcessor,
+                                               wrapper->paramChangeBuffer,
+                                               paramEvent->param_id,
+                                               static_cast<float> (paramEvent->value),
+                                               static_cast<int> (event->time));
             }
             else if (auto convertedEvent = clapEventToMidiMessage (event))
             {
@@ -584,7 +635,12 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
         auto* const playHeadPtr = process->transport != nullptr ? &playHead : nullptr;
 
         AudioProcessContext<float> context { audioBuffer, midiBuffer, wrapper->paramChangeBuffer, playHeadPtr };
+
+        wrapper->isInsideProcessBlock.store (true);
         audioProcessor.processBlock (context);
+        wrapper->isInsideProcessBlock.store (false);
+
+        wrapper->drainParameterEvents (process->out_events);
 
         // Send output events back to host
         for (const MidiMessageMetadata metadata : midiBuffer)
@@ -722,6 +778,9 @@ bool AudioPluginProcessorCLAP::initialise()
     extensionParams.flush = [] (const clap_plugin_t* plugin, const clap_input_events_t* in, const clap_output_events_t* out)
     {
         auto wrapper = getWrapper (plugin);
+
+        wrapper->drainParameterEvents (out);
+
         const uint32_t count = in->size (in);
 
         for (uint32_t i = 0; i < count; ++i)
@@ -1172,6 +1231,8 @@ bool AudioPluginProcessorCLAP::initialise()
     hostTimerSupport = reinterpret_cast<const clap_host_timer_support_t*> (host->get_extension (host, CLAP_EXT_TIMER_SUPPORT));
     hostGUI = reinterpret_cast<const clap_host_gui_t*> (host->get_extension (host, CLAP_EXT_GUI));
 
+    addParameterListeners();
+
     return true;
 }
 
@@ -1179,6 +1240,8 @@ bool AudioPluginProcessorCLAP::initialise()
 
 void AudioPluginProcessorCLAP::destroy()
 {
+    removeParameterListeners();
+
     plugin.plugin_data = nullptr;
     delete this;
 }
@@ -1281,6 +1344,146 @@ const void* AudioPluginProcessorCLAP::getExtension (std::string_view id)
 const clap_plugin_t* AudioPluginProcessorCLAP::getPlugin() const
 {
     return std::addressof (plugin);
+}
+
+//==============================================================================
+
+void AudioPluginProcessorCLAP::addParameterListeners()
+{
+    removeParameterListeners();
+
+    if (audioProcessor == nullptr)
+        return;
+
+    for (const auto& parameter : audioProcessor->getParameters())
+    {
+        parameter->addListener (this);
+        listenedParameters.push_back (parameter);
+    }
+}
+
+void AudioPluginProcessorCLAP::removeParameterListeners()
+{
+    for (auto& parameter : listenedParameters)
+        parameter->removeListener (this);
+
+    listenedParameters.clear();
+}
+
+bool AudioPluginProcessorCLAP::isValidProcessorParameterIndex (int indexInContainer) const
+{
+    return audioProcessor != nullptr
+        && isPositiveAndBelow (indexInContainer, static_cast<int> (audioProcessor->getParameters().size()));
+}
+
+void AudioPluginProcessorCLAP::parameterValueChanged (const AudioParameter::Ptr& parameter, int indexInContainer)
+{
+    if (! isValidProcessorParameterIndex (indexInContainer))
+        return;
+
+    enqueueParameterEvent (CLAP_EVENT_PARAM_VALUE,
+                           parameter->getHostParameterID(),
+                           static_cast<double> (parameter->getValue()));
+    requestParameterFlush();
+}
+
+void AudioPluginProcessorCLAP::parameterGestureBegin (const AudioParameter::Ptr& parameter, int indexInContainer)
+{
+    if (! isValidProcessorParameterIndex (indexInContainer))
+        return;
+
+    enqueueParameterEvent (CLAP_EVENT_PARAM_GESTURE_BEGIN, parameter->getHostParameterID());
+    requestParameterFlush();
+}
+
+void AudioPluginProcessorCLAP::parameterGestureEnd (const AudioParameter::Ptr& parameter, int indexInContainer)
+{
+    if (! isValidProcessorParameterIndex (indexInContainer))
+        return;
+
+    enqueueParameterEvent (CLAP_EVENT_PARAM_GESTURE_END, parameter->getHostParameterID());
+    requestParameterFlush();
+}
+
+void AudioPluginProcessorCLAP::enqueueParameterEvent (uint16 eventType, clap_id parameterId, double value) noexcept
+{
+    int start1, size1, start2, size2;
+    parameterEventFifo.prepareToWrite (1, start1, size1, start2, size2);
+
+    ignoreUnused (start2, size2);
+
+    if (size1 <= 0)
+    {
+        jassertfalse; // Increase parameterEventQueueSize if hosts drop CLAP parameter feedback.
+        parameterEventFifo.finishedWrite (0);
+        return;
+    }
+
+    parameterEvents[static_cast<size_t> (start1)] = { eventType, parameterId, value };
+    parameterEventFifo.finishedWrite (1);
+}
+
+void AudioPluginProcessorCLAP::drainParameterEvents (const clap_output_events_t* out) noexcept
+{
+    if (out == nullptr)
+        return;
+
+    for (;;)
+    {
+        int start1, size1, start2, size2;
+        parameterEventFifo.prepareToRead (1, start1, size1, start2, size2);
+
+        ignoreUnused (start2, size2);
+
+        if (size1 <= 0)
+        {
+            parameterEventFifo.finishedRead (0);
+            return;
+        }
+
+        const auto event = parameterEvents[static_cast<size_t> (start1)];
+        parameterEventFifo.finishedRead (1);
+
+        if (event.eventType == CLAP_EVENT_PARAM_VALUE)
+        {
+            clap_event_param_value_t paramEvent {};
+            paramEvent.header.size = sizeof (paramEvent);
+            paramEvent.header.time = 0;
+            paramEvent.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
+            paramEvent.header.type = CLAP_EVENT_PARAM_VALUE;
+            paramEvent.header.flags = 0;
+            paramEvent.param_id = event.parameterId;
+            paramEvent.cookie = nullptr;
+            paramEvent.note_id = -1;
+            paramEvent.port_index = -1;
+            paramEvent.channel = -1;
+            paramEvent.key = -1;
+            paramEvent.value = event.value;
+            out->try_push (out, &paramEvent.header);
+        }
+        else if (event.eventType == CLAP_EVENT_PARAM_GESTURE_BEGIN
+                 || event.eventType == CLAP_EVENT_PARAM_GESTURE_END)
+        {
+            clap_event_param_gesture_t gestureEvent {};
+            gestureEvent.header.size = sizeof (gestureEvent);
+            gestureEvent.header.time = 0;
+            gestureEvent.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
+            gestureEvent.header.type = event.eventType;
+            gestureEvent.header.flags = 0;
+            gestureEvent.param_id = event.parameterId;
+            out->try_push (out, &gestureEvent.header);
+        }
+    }
+}
+
+void AudioPluginProcessorCLAP::requestParameterFlush() const noexcept
+{
+    if (! isInsideProcessBlock.load()
+        && hostParams != nullptr
+        && hostParams->request_flush != nullptr)
+    {
+        hostParams->request_flush (host);
+    }
 }
 
 //==============================================================================
