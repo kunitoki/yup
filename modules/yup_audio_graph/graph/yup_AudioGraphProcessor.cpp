@@ -122,6 +122,26 @@ public:
         std::atomic<bool>& flag;
     };
 
+    struct ScopedWorkerDrain
+    {
+        ScopedWorkerDrain (std::atomic<int>& counterIn, bool enabledIn) noexcept
+            : counter (counterIn)
+            , enabled (enabledIn)
+        {
+            if (enabled)
+                counter.fetch_add (1, std::memory_order_acq_rel);
+        }
+
+        ~ScopedWorkerDrain()
+        {
+            if (enabled)
+                counter.fetch_sub (1, std::memory_order_acq_rel);
+        }
+
+        std::atomic<int>& counter;
+        bool enabled;
+    };
+
     struct ScopedProcessBlock
     {
         explicit ScopedProcessBlock (std::atomic<int>& counterIn) noexcept
@@ -945,26 +965,6 @@ public:
 
     void drainActiveJobs (int generation, bool workerThread)
     {
-        struct ScopedWorkerDrain
-        {
-            ScopedWorkerDrain (std::atomic<int>& counterIn, bool enabledIn) noexcept
-                : counter (counterIn)
-                , enabled (enabledIn)
-            {
-                if (enabled)
-                    counter.fetch_add (1, std::memory_order_acq_rel);
-            }
-
-            ~ScopedWorkerDrain()
-            {
-                if (enabled)
-                    counter.fetch_sub (1, std::memory_order_acq_rel);
-            }
-
-            std::atomic<int>& counter;
-            bool enabled;
-        };
-
         const ScopedWorkerDrain scopedWorkerDrain (activeWorkerDrains, workerThread);
 
         if (activeGeneration.load (std::memory_order_acquire) != generation)
