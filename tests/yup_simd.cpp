@@ -24,3 +24,4 @@
 #include "yup_simd/yup_AffineTransformOperations.cpp"
 #include "yup_simd/yup_ColorVectorOperations.cpp"
 #include "yup_simd/yup_SIMDRegister.cpp"
+#include "yup_simd/yup_Vec.cpp"

@@ -55,6 +55,7 @@ set (target_gtest_modules "")
 set (target_preloaded "")
 set (target_modules
     yup_core
+    yup_simd
     yup_audio_basics
     yup_audio_devices
     yup_audio_formats
