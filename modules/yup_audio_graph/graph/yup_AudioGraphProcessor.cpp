@@ -923,9 +923,14 @@ public:
             workerReadyEvent.reset();
             workerReadyEvent.signal();
 
-            drainActiveJobs (generation);
+            drainActiveJobs (generation, false);
 
             while (remainingJobs.load (std::memory_order_acquire) > 0)
+                ;
+
+            activeGeneration.store (0, std::memory_order_release);
+
+            while (activeWorkerDrains.load (std::memory_order_acquire) > 0)
                 ;
 
             workerReadyEvent.reset();
@@ -938,8 +943,30 @@ public:
         activeGeneration.store (0, std::memory_order_release);
     }
 
-    void drainActiveJobs (int generation)
+    void drainActiveJobs (int generation, bool workerThread)
     {
+        struct ScopedWorkerDrain
+        {
+            ScopedWorkerDrain (std::atomic<int>& counterIn, bool enabledIn) noexcept
+                : counter (counterIn)
+                , enabled (enabledIn)
+            {
+                if (enabled)
+                    counter.fetch_add (1, std::memory_order_acq_rel);
+            }
+
+            ~ScopedWorkerDrain()
+            {
+                if (enabled)
+                    counter.fetch_sub (1, std::memory_order_acq_rel);
+            }
+
+            std::atomic<int>& counter;
+            bool enabled;
+        };
+
+        const ScopedWorkerDrain scopedWorkerDrain (activeWorkerDrains, workerThread);
+
         if (activeGeneration.load (std::memory_order_acquire) != generation)
             return;
 
@@ -954,6 +981,9 @@ public:
 
         for (;;)
         {
+            if (activeGeneration.load (std::memory_order_acquire) != generation)
+                break;
+
             const int jobIndex = nextJobIndex.fetch_add (1);
 
             if (jobIndex >= static_cast<int> (level->size()))
@@ -1244,6 +1274,7 @@ public:
     std::atomic<int> activeNumSamples { 0 };
     std::atomic<AudioPlayHead*> activePlayHead { nullptr };
     std::atomic<int> activeGeneration { 0 };
+    std::atomic<int> activeWorkerDrains { 0 };
 };
 
 //==============================================================================
@@ -1278,7 +1309,7 @@ void AudioGraphProcessor::Pimpl::WorkerThread::run()
 
         ScopedNoDenormals noDenormals;
         owner.joinWorkgroup (workgroupToken);
-        owner.drainActiveJobs (generation);
+        owner.drainActiveJobs (generation, true);
     }
 }
 
