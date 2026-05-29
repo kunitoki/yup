@@ -45,9 +45,9 @@ ExampleEditor::ExampleEditor (ExamplePlugin& processor)
     {
         gainParameter->beginChangeGesture();
     };
-    x->onValueChanged = [this] (float value)
+    x->onValueChanged = [this] (double value)
     {
-        gainParameter->setValueNotifyingHost (value);
+        gainParameter->setValueNotifyingHost (static_cast<float> (value));
     };
     x->onDragEnd = [this] (const yup::MouseEvent&)
     {

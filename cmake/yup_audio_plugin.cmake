@@ -164,6 +164,7 @@ function (yup_audio_plugin)
                 MACOSX_BUNDLE TRUE
                 MACOSX_BUNDLE_BUNDLE_NAME "${target_name}_clap_plugin"
                 MACOSX_BUNDLE_GUI_IDENTIFIER "${target_bundle_id}.clap"
+                XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${target_bundle_id}.clap"
                 PREFIX "")
 
             set (clap_plugin_path "$<TARGET_BUNDLE_DIR:${target_name}_clap_plugin>")
@@ -247,9 +248,13 @@ function (yup_audio_plugin)
             smtg_target_set_bundle (${target_name}_vst3_plugin
                 BUNDLE_IDENTIFIER "${target_bundle_id}"
                 COMPANY_NAME "kunitoki") # TODO - make company name configurable
-            if ("${vst3_plugin_package_path}" STREQUAL "${vst3_plugin_binary_path}")
+
+            if (XCODE)
+                get_target_property (vst3_plugin_package_path ${target_name}_vst3_plugin SMTG_PLUGIN_PACKAGE_PATH)
+            else()
                 set (vst3_plugin_package_path "$<TARGET_BUNDLE_DIR:${target_name}_vst3_plugin>")
             endif()
+
             set (vst3_pluginval_path "${vst3_plugin_package_path}")
         endif()
         yup_validate_smtg_vst3_plugin (${target_name}_vst3_plugin "${vst3_plugin_package_path}")
@@ -475,9 +480,13 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
             COMMENT "Symlinking CLAP plugin ${plugin_type_upper} plugin to ${plugin_path}"
             VERBATIM)
     elseif ("${plugin_type}" STREQUAL "vst3")
-        get_target_property (source_plugin_path ${dependency_target} SMTG_PLUGIN_PACKAGE_PATH)
-        if (NOT source_plugin_path)
+        if (YUP_PLATFORM_MAC AND NOT XCODE)
             set (source_plugin_path "$<TARGET_BUNDLE_DIR:${dependency_target}>")
+        else()
+            get_target_property (source_plugin_path ${dependency_target} SMTG_PLUGIN_PACKAGE_PATH)
+            if (NOT source_plugin_path)
+                set (source_plugin_path "$<TARGET_BUNDLE_DIR:${dependency_target}>")
+            endif()
         endif()
 
         add_custom_command(TARGET ${dependency_target} POST_BUILD

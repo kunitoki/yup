@@ -1343,26 +1343,26 @@ static const clap_plugin_factory_t plugin_factory = []
 
 //==============================================================================
 
-extern "C" const CLAP_EXPORT clap_plugin_entry_t clap_entry = []
+static bool clapInit (const char*) noexcept
 {
-    clap_plugin_entry_t plugin;
+    return true;
+}
 
-    plugin.clap_version = CLAP_VERSION_INIT;
+static void clapDeinit() noexcept
+{
+}
 
-    plugin.init = [] (const char*) -> bool
-    {
-        return true;
-    };
+static const void* clapGetFactory (const char* factoryId) noexcept
+{
+    if (std::string_view (factoryId) == CLAP_PLUGIN_FACTORY_ID)
+        return std::addressof (plugin_factory);
 
-    plugin.deinit = [] {};
+    return nullptr;
+}
 
-    plugin.get_factory = [] (const char* factoryId) -> const void*
-    {
-        if (std::string_view (factoryId) == CLAP_PLUGIN_FACTORY_ID)
-            return std::addressof (plugin_factory);
-
-        return nullptr;
-    };
-
-    return plugin;
-}();
+extern "C" const CLAP_EXPORT clap_plugin_entry_t clap_entry = {
+    CLAP_VERSION_INIT,
+    clapInit,
+    clapDeinit,
+    clapGetFactory
+};
