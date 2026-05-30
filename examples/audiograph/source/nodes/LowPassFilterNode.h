@@ -75,9 +75,31 @@ public:
 
     void setPresetName (int, yup::StringRef) override {}
 
-    yup::Result loadStateFromMemory (const yup::MemoryBlock&) override { return yup::Result::ok(); }
+    yup::Result loadStateFromMemory (const yup::MemoryBlock& data) override
+    {
+        if (data.isEmpty())
+            return yup::Result::ok();
 
-    yup::Result saveStateIntoMemory (yup::MemoryBlock&) override { return yup::Result::ok(); }
+        yup::MemoryInputStream stream (data, false);
+
+        const int version = stream.readInt();
+        if (version != 1)
+            return yup::Result::fail ("Unsupported low-pass filter node state version");
+
+        setCutoff (stream.readFloat());
+
+        return yup::Result::ok();
+    }
+
+    yup::Result saveStateIntoMemory (yup::MemoryBlock& data) override
+    {
+        yup::MemoryOutputStream stream (data, false);
+        stream.writeInt (1);
+        stream.writeFloat (cutoff.load (std::memory_order_relaxed));
+        stream.flush();
+
+        return yup::Result::ok();
+    }
 
     bool hasEditor() const override { return false; }
 
@@ -142,7 +164,7 @@ public:
 
     void resized() override
     {
-        cutoffSlider.setBounds (NodeViewHelpers::getInlineSliderBounds (*this, getPreferredWidth()));
+        cutoffSlider.setBounds (NodeViewHelpers::getInlineSliderBounds (*this, getPreferredWidth(), 0));
     }
 
 private:

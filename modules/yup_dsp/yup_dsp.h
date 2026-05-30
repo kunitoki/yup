@@ -177,6 +177,9 @@
 // Dynamics processors
 #include "dynamics/yup_SoftClipper.h"
 
+// Delay lines
+#include "delays/yup_FractionallyAddressedDelay.h"
+
 // Convolution processors
 #include "convolution/yup_PartitionedConvolver.h"
 

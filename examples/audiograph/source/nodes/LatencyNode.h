@@ -222,7 +222,7 @@ public:
 
     void resized() override
     {
-        delaySlider.setBounds (NodeViewHelpers::getInlineSliderBounds (*this, getPreferredWidth()));
+        delaySlider.setBounds (NodeViewHelpers::getInlineSliderBounds (*this, getPreferredWidth(), 0));
     }
 
 private:

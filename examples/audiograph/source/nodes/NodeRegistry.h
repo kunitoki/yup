@@ -26,6 +26,7 @@
 #include <memory>
 #include <vector>
 
+#include "FractionalDelayNode.h"
 #include "GainNode.h"
 #include "LatencyNode.h"
 #include "LowPassFilterNode.h"
@@ -55,6 +56,9 @@ public:
 
     /** Stable factory key for the built-in latency node. */
     static constexpr const char* latencyIdentifier = "internal.latency";
+
+    /** Stable factory key for the built-in fractional delay node. */
+    static constexpr const char* fractionalDelayIdentifier = "internal.fractionalDelay";
 
     /** Stable factory key for the built-in low-pass filter node. */
     static constexpr const char* lpfIdentifier = "internal.lpf";
@@ -142,6 +146,21 @@ public:
                 return nullptr;
 
             return std::make_unique<LatencyNodeView> (nodeID, *latency);
+        }
+        };
+
+        entries[fractionalDelayIdentifier] = {
+            [] (const yup::AudioGraphNodeProperties&) -> yup::ResultValue<std::unique_ptr<yup::AudioProcessor>>
+        {
+            return yup::makeResultValueOk (std::make_unique<FractionalDelayProcessor>());
+        },
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*) -> std::unique_ptr<yup::AudioGraphNodeView>
+        {
+            auto* delay = dynamic_cast<FractionalDelayProcessor*> (proc);
+            if (delay == nullptr)
+                return nullptr;
+
+            return std::make_unique<FractionalDelayNodeView> (nodeID, *delay);
         }
         };
 
@@ -393,6 +412,7 @@ public:
             gainIdentifier,
             lpfIdentifier,
             latencyIdentifier,
+            fractionalDelayIdentifier,
             samplePlayerIdentifier,
             subgraphIdentifier
         };
@@ -416,6 +436,9 @@ public:
 
         if (id == latencyIdentifier)
             return "Latency";
+
+        if (id == fractionalDelayIdentifier)
+            return "Fractional Delay";
 
         if (id == lpfIdentifier)
             return "Low Pass Filter";

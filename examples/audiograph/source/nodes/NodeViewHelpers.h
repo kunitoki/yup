@@ -35,12 +35,12 @@ inline void configureParameterSlider (yup::Slider& slider, yup::Color accent)
     slider.setColor (yup::Slider::Style::thumbDownColorId, accent.darker (0.15f));
 }
 
-inline yup::Rectangle<float> getInlineSliderBounds (const yup::Component& component, int preferredWidth)
+inline yup::Rectangle<float> getInlineSliderBounds (const yup::Component& component, int preferredWidth, int rowIndex)
 {
     const auto bounds = component.getLocalBounds();
     const auto scale = bounds.getWidth() / static_cast<float> (preferredWidth);
     return { 62.0f * scale,
-             49.0f * scale,
+             (49.0f + 25.0f * static_cast<float> (rowIndex)) * scale,
              yup::jmax (42.0f * scale, bounds.getWidth() - (150.0f * scale)),
              20.0f * scale };
 }

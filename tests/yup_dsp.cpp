@@ -29,6 +29,7 @@
 #include "yup_dsp/yup_FFTProcessor.cpp"
 #include "yup_dsp/yup_FilterDesigner.cpp"
 #include "yup_dsp/yup_FirstOrderFilter.cpp"
+#include "yup_dsp/yup_FractionallyAddressedDelay.cpp"
 #include "yup_dsp/yup_KMeterState.cpp"
 #include "yup_dsp/yup_LevelProcessor.cpp"
 #include "yup_dsp/yup_LinkwitzRileyFilter.cpp"
