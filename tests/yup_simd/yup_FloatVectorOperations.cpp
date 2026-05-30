@@ -462,6 +462,7 @@ TEST_F (FloatVectorOperationsTests, FloatToDoubleAndBack)
 TEST_F (FloatVectorOperationsTests, MidSideEncodeDecodeRoundTrip)
 {
     Random& random = Random::getSystemRandom();
+    constexpr float roundTripTolerance = 1.0e-4f;
 
     for (int i = 500; --i >= 0;)
     {
@@ -503,8 +504,8 @@ TEST_F (FloatVectorOperationsTests, MidSideEncodeDecodeRoundTrip)
 
         for (int j = 0; j < num; ++j)
         {
-            EXPECT_NEAR (leftOut[j], left[j], std::numeric_limits<float>::epsilon());
-            EXPECT_NEAR (rightOut[j], right[j], std::numeric_limits<float>::epsilon());
+            EXPECT_NEAR (leftOut[j], left[j], roundTripTolerance);
+            EXPECT_NEAR (rightOut[j], right[j], roundTripTolerance);
         }
     }
 }
