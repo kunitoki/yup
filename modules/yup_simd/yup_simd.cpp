@@ -53,3 +53,6 @@
 #endif
 
 #include "buffers/yup_FloatVectorOperations.cpp"
+#include "buffers/yup_ComplexVectorOperations.cpp"
+#include "buffers/yup_AffineTransformOperations.cpp"
+#include "buffers/yup_ColorVectorOperations.cpp"

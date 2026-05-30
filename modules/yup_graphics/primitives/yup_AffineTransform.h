@@ -949,6 +949,12 @@ constexpr float get (const AffineTransform& transform) noexcept
         static_assert (dependentFalse<I>);
 }
 
+/** Transforms separate x/y point arrays in-place using an AffineTransform. */
+inline void batchTransformPoints (float* xs, float* ys, int numPoints, const AffineTransform& transform) noexcept
+{
+    AffineTransformOperations::transformPoints (xs, ys, numPoints, transform.getScaleX(), transform.getShearX(), transform.getTranslateX(), transform.getShearY(), transform.getScaleY(), transform.getTranslateY());
+}
+
 } // namespace yup
 
 #ifndef DOXYGEN
