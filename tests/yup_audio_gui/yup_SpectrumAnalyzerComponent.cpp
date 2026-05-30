@@ -163,6 +163,57 @@ TEST_F (SpectrumAnalyzerComponentTests, ToggleWindowTypes)
     EXPECT_EQ (WindowType::hann, analyzer->getWindowType());
 }
 
+TEST_F (SpectrumAnalyzerComponentTests, RectangularWindowHasUnityCalibration)
+{
+    analyzer->setWindowType (WindowType::rectangular);
+
+    EXPECT_FLOAT_EQ (1.0f, analyzer->getWindowCoherentGain());
+    EXPECT_FLOAT_EQ (1.0f, analyzer->getEquivalentNoiseBandwidthBins());
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, HannWindowReportsExpectedNoiseBandwidth)
+{
+    analyzer->setWindowType (WindowType::hann);
+
+    EXPECT_NEAR (0.5f, analyzer->getWindowCoherentGain(), 0.001f);
+    EXPECT_NEAR (1.5f, analyzer->getEquivalentNoiseBandwidthBins(), 0.01f);
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, EquivalentNoiseBandwidthHzFollowsSampleRate)
+{
+    analyzer->setWindowType (WindowType::rectangular);
+    analyzer->setSampleRate (48000.0);
+
+    EXPECT_NEAR (48000.0f / 2048.0f, analyzer->getEquivalentNoiseBandwidthHz(), 0.001f);
+}
+
+//==============================================================================
+// Level Mode Tests
+//==============================================================================
+
+TEST_F (SpectrumAnalyzerComponentTests, DefaultLevelModeIsPeakDecibels)
+{
+    EXPECT_EQ (SpectrumAnalyzerComponent::LevelMode::peakDecibels, analyzer->getLevelMode());
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, SetLevelModeToRMSDecibels)
+{
+    analyzer->setLevelMode (SpectrumAnalyzerComponent::LevelMode::rmsDecibels);
+    EXPECT_EQ (SpectrumAnalyzerComponent::LevelMode::rmsDecibels, analyzer->getLevelMode());
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, SetLevelModeToPowerDecibels)
+{
+    analyzer->setLevelMode (SpectrumAnalyzerComponent::LevelMode::powerDecibels);
+    EXPECT_EQ (SpectrumAnalyzerComponent::LevelMode::powerDecibels, analyzer->getLevelMode());
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, SetLevelModeToPowerSpectralDensity)
+{
+    analyzer->setLevelMode (SpectrumAnalyzerComponent::LevelMode::powerSpectralDensity);
+    EXPECT_EQ (SpectrumAnalyzerComponent::LevelMode::powerSpectralDensity, analyzer->getLevelMode());
+}
+
 //==============================================================================
 // Update Rate Tests
 //==============================================================================

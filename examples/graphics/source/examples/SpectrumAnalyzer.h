@@ -715,6 +715,19 @@ private:
         };
         addAndMakeVisible (*displayTypeCombo);
 
+        // Level mode selector
+        levelModeCombo = std::make_unique<yup::ComboBox> ("LevelMode");
+        levelModeCombo->addItem ("Peak dBFS", 1);
+        levelModeCombo->addItem ("RMS dBFS", 2);
+        levelModeCombo->addItem ("Power dBFS", 3);
+        levelModeCombo->addItem ("PSD dBFS/Hz", 4);
+        levelModeCombo->setSelectedId (1);
+        levelModeCombo->onSelectedItemChanged = [this]
+        {
+            updateLevelMode();
+        };
+        addAndMakeVisible (*levelModeCombo);
+
         // Release control
         releaseSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Release");
         releaseSlider->setRange ({ 0.0, 5.0 });
@@ -815,7 +828,7 @@ private:
         // Create parameter labels with proper font sizing
         auto labelFont = font.withHeight (12.0f);
 
-        for (const auto& labelText : { "Signal Type:", "Frequency:", "Amplitude:", "Sweep Duration:", "FFT Size:", "Window:", "Display:", "View Mode:", "Color Map:", "Release:", "Overlap:", "Smoothing:" })
+        for (const auto& labelText : { "Signal Type:", "Frequency:", "Amplitude:", "Sweep Duration:", "FFT Size:", "Window:", "Display:", "View Mode:", "Color Map:", "Release:", "Overlap:", "Smoothing:", "Level Mode:" })
         {
             auto label = parameterLabels.add (std::make_unique<yup::Label> (labelText));
             label->setText (labelText);
@@ -898,12 +911,16 @@ private:
         auto row3 = bounds.removeFromTop (rowHeight);
         auto releaseSection = row3.removeFromLeft (colWidth);
         auto overlapSection = row3.removeFromLeft (colWidth);
+        auto levelModeSection = row3.removeFromLeft (colWidth);
 
         parameterLabels[9]->setBounds (releaseSection.removeFromTop (labelHeight));
         releaseSlider->setBounds (releaseSection.removeFromTop (controlHeight));
 
         parameterLabels[10]->setBounds (overlapSection.removeFromTop (labelHeight));
         overlapSlider->setBounds (overlapSection.removeFromTop (controlHeight));
+
+        parameterLabels[12]->setBounds (levelModeSection.removeFromTop (labelHeight));
+        levelModeCombo->setBounds (levelModeSection.removeFromTop (controlHeight));
 
         // Fourth row: Status labels
         auto row4 = bounds.removeFromTop (30);
@@ -1038,6 +1055,29 @@ private:
         analyzerComponent.setDisplayType (displayType);
     }
 
+    void updateLevelMode()
+    {
+        auto levelMode = yup::SpectrumAnalyzerComponent::LevelMode::peakDecibels;
+
+        switch (levelModeCombo->getSelectedId())
+        {
+            case 1:
+                levelMode = yup::SpectrumAnalyzerComponent::LevelMode::peakDecibels;
+                break;
+            case 2:
+                levelMode = yup::SpectrumAnalyzerComponent::LevelMode::rmsDecibels;
+                break;
+            case 3:
+                levelMode = yup::SpectrumAnalyzerComponent::LevelMode::powerDecibels;
+                break;
+            case 4:
+                levelMode = yup::SpectrumAnalyzerComponent::LevelMode::powerSpectralDensity;
+                break;
+        }
+
+        analyzerComponent.setLevelMode (levelMode);
+    }
+
     void updateViewMode()
     {
         switch (viewModeCombo->getSelectedId())
@@ -1114,6 +1154,7 @@ private:
     std::unique_ptr<yup::ComboBox> fftSizeCombo;
     std::unique_ptr<yup::ComboBox> windowTypeCombo;
     std::unique_ptr<yup::ComboBox> displayTypeCombo;
+    std::unique_ptr<yup::ComboBox> levelModeCombo;
     std::unique_ptr<yup::Slider> releaseSlider;
     std::unique_ptr<yup::Slider> overlapSlider;
     std::unique_ptr<yup::Slider> smoothingSlider;

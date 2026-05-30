@@ -50,7 +50,7 @@
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_core
+    dependencies:       yup_core xsimd
     appleFrameworks:    Accelerate
 
   END_YUP_MODULE_DECLARATION
@@ -62,6 +62,7 @@
 #define YUP_SIMD_H_INCLUDED
 
 #include <yup_core/yup_core.h>
+#include <xsimd/xsimd.hpp>
 
 //==============================================================================
 #ifndef YUP_USE_SSE_INTRINSICS
@@ -127,10 +128,29 @@
 #endif
 
 //==============================================================================
+#if YUP_MODULE_AVAILABLE_eigen
+#include <eigen/eigen.h>
+#endif
+
+//==============================================================================
 #include <chrono>
+#include <array>
+#include <cmath>
+#include <cstdint>
 #include <type_traits>
 
 //==============================================================================
 YUP_BEGIN_IGNORE_WARNINGS_MSVC (4661)
+
+#include "types/yup_SIMDRegister.h"
+#include "types/yup_Vec.h"
 #include "buffers/yup_FloatVectorOperations.h"
+#include "buffers/yup_ComplexVectorOperations.h"
+#include "buffers/yup_AffineTransformOperations.h"
+#include "buffers/yup_ColorVectorOperations.h"
+
+#if YUP_MODULE_AVAILABLE_eigen
+#include "types/yup_EigenAdapters.h"
+#endif
+
 YUP_END_IGNORE_WARNINGS_MSVC

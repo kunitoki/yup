@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2025 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,15 +19,25 @@
   ==============================================================================
 */
 
+#pragma once
+
+#if YUP_MODULE_AVAILABLE_eigen
+
 namespace yup
 {
 
-//==============================================================================
-
-template <>
-float dotProduct (const float* __restrict a, const float* __restrict b, std::size_t length) noexcept
+inline Eigen::Matrix3f toEigenMatrix (float sx, float shx, float tx, float shy, float sy, float ty) noexcept
 {
-    return FloatVectorOperations::dotProduct (a, b, length);
+    Eigen::Matrix3f matrix;
+    matrix << sx, shx, tx, shy, sy, ty, 0.0f, 0.0f, 1.0f;
+    return matrix;
+}
+
+inline Eigen::Vector2f toEigenVector (float x, float y) noexcept
+{
+    return Eigen::Vector2f (x, y);
 }
 
 } // namespace yup
+
+#endif

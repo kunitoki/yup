@@ -64,6 +64,15 @@ public:
         filled ///< Draw spectrum as smooth filled area
     };
 
+    /** Level calculation mode for spectrum magnitudes. */
+    enum class LevelMode
+    {
+        peakDecibels,        ///< Peak amplitude in dBFS, where a full-scale sine peak is 0 dBFS
+        rmsDecibels,         ///< RMS amplitude in dBFS, where a full-scale sine is approximately -3.01 dBFS
+        powerDecibels,       ///< RMS power in dBFS, summed across each displayed frequency band
+        powerSpectralDensity ///< RMS power spectral density in dBFS/Hz, corrected for window ENBW
+    };
+
     //==============================================================================
     /** Display constants */
     enum
@@ -160,6 +169,25 @@ public:
     DisplayType getDisplayType() const noexcept { return displayType; }
 
     //==============================================================================
+    /** Sets the level calculation mode.
+
+        @param mode    the level mode to use when converting FFT bins to decibels
+    */
+    void setLevelMode (LevelMode mode);
+
+    /** Returns the current level calculation mode. */
+    LevelMode getLevelMode() const noexcept { return levelMode; }
+
+    /** Returns the coherent gain of the current window. */
+    float getWindowCoherentGain() const noexcept { return windowCoherentGain; }
+
+    /** Returns the equivalent noise bandwidth of the current window in FFT bins. */
+    float getEquivalentNoiseBandwidthBins() const noexcept { return equivalentNoiseBandwidthBins; }
+
+    /** Returns the equivalent noise bandwidth of the current window in Hz. */
+    float getEquivalentNoiseBandwidthHz() const noexcept;
+
+    //==============================================================================
     /** Sets the release time for spectrum falloff.
 
         @param timeSeconds    release time in seconds (0.0 = immediate falloff, 5.0 = 5 second falloff)
@@ -214,6 +242,16 @@ private:
     void drawFrequencyGrid (Graphics& g, const Rectangle<float>& bounds);
     void drawDecibelGrid (Graphics& g, const Rectangle<float>& bounds);
 
+    float getBinPeakAmplitude (int binIndex) const noexcept;
+    float getBinRMSAmplitude (int binIndex) const noexcept;
+    float getBinPower (int binIndex) const noexcept;
+    float getBinPowerSpectralDensity (int binIndex) const noexcept;
+    float getBinLinearLevel (int binIndex) const noexcept;
+    float linearLevelToDecibels (float level) const noexcept;
+    float getInterpolatedPeakDecibels (float exactBin) const noexcept;
+    float getDisplayDecibelsForBinRange (float startBin, float endBin, float centerBin) const noexcept;
+    bool isPowerMode() const noexcept;
+
     float frequencyToX (float frequency, const Rectangle<float>& bounds) const noexcept;
     float decibelToY (float decibel, const Rectangle<float>& bounds) const noexcept;
     float binToY (int binIndex, float height) const noexcept;
@@ -235,6 +273,7 @@ private:
     // Configuration
     WindowType currentWindowType = WindowType::hann;
     DisplayType displayType = DisplayType::filled;
+    LevelMode levelMode = LevelMode::peakDecibels;
     int fftSize = 4096;
     float minFrequency = 20.0f;
     float maxFrequency = 20000.0f;
@@ -246,7 +285,8 @@ private:
     float releaseTimeSeconds = 1.0f;
 
     // Window compensation
-    float windowGain = 1.0f;
+    float windowCoherentGain = 1.0f;
+    float equivalentNoiseBandwidthBins = 1.0f;
     bool needsWindowUpdate = true;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SpectrumAnalyzerComponent)

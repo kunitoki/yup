@@ -74,6 +74,60 @@ TEST (ImageTests, GrayscaleBitmapStoresLuminanceAndReturnsOpaqueARGBColor)
     EXPECT_EQ (image.getPixel (0, 0), 0xff363636u);
 }
 
+TEST (ImageTests, GrayscaleBitmapConvertsToOpaqueRGBATextureBytes)
+{
+    Image image (3, 1, PixelFormat::Grayscale);
+
+    auto raw = image.getRawData();
+    ASSERT_EQ (raw.size(), 3u);
+    raw[0] = 0;
+    raw[1] = 127;
+    raw[2] = 255;
+
+    uint8 textureBytes[12] = {};
+    ColorVectorOperations::convertGrayscaleToRGBA (raw.data(), textureBytes, 3);
+
+    const uint8 expected[] = { 0, 0, 0, 255, 127, 127, 127, 255, 255, 255, 255, 255 };
+
+    for (size_t i = 0; i < std::size (expected); ++i)
+        EXPECT_EQ (textureBytes[i], expected[i]);
+}
+
+TEST (ImageTests, RgbBitmapConvertsToOpaqueRGBATextureBytes)
+{
+    Image image (2, 1, PixelFormat::RGB);
+
+    image.setPixel (0, 0, 0x80123456);
+    image.setPixel (1, 0, 0xffabcdef);
+
+    const auto raw = image.getRawData();
+    uint8 textureBytes[8] = {};
+    ColorVectorOperations::convertRGBToRGBA (raw.data(), textureBytes, 2);
+
+    const uint8 expected[] = { 0x12, 0x34, 0x56, 0xff, 0xab, 0xcd, 0xef, 0xff };
+
+    for (size_t i = 0; i < std::size (expected); ++i)
+        EXPECT_EQ (textureBytes[i], expected[i]);
+}
+
+TEST (ImageTests, RgbaBitmapConvertsToPremultipliedRGBATextureBytes)
+{
+    Image image (2, 1, PixelFormat::RGBA);
+
+    image.setPixel (0, 0, 0x80102040);
+    image.setPixel (1, 0, 0xff010203);
+
+    const auto raw = image.getRawData();
+    uint8 textureBytes[8] = {};
+    std::memcpy (textureBytes, raw.data(), raw.size());
+    ColorVectorOperations::premultiplyRGBA (textureBytes, 2);
+
+    const uint8 expected[] = { 8, 16, 32, 128, 1, 2, 3, 255 };
+
+    for (size_t i = 0; i < std::size (expected); ++i)
+        EXPECT_EQ (textureBytes[i], expected[i]);
+}
+
 TEST (ImageTests, ColorCanConvertToExplicitPackedByteOrders)
 {
     const Color color (0x80123456);
