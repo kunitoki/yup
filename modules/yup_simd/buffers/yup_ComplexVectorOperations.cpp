@@ -30,20 +30,22 @@ void complexMultiply (const float* __restrict a, const float* __restrict b, floa
 
 #if YUP_USE_AVX_INTRINSICS && YUP_USE_FMA_INTRINSICS
     constexpr int simdWidth = 4;
+    const __m256 signs = _mm256_set_ps (1.0f, -1.0f, 1.0f, -1.0f, 1.0f, -1.0f, 1.0f, -1.0f);
+
     for (; i <= complexPairs - simdWidth; i += simdWidth)
     {
         const int idx = i * 2;
 
-        __m256 av = _mm256_loadu_ps (a + idx);
-        __m256 bv = _mm256_loadu_ps (b + idx);
+        const __m256 av = _mm256_loadu_ps (a + idx);
+        const __m256 bv = _mm256_loadu_ps (b + idx);
 
-        const __m256 aShuffled = _mm256_permute_ps (av, _MM_SHUFFLE (2, 3, 0, 1));
-        const __m256 bShuffled = _mm256_permute_ps (bv, _MM_SHUFFLE (2, 3, 0, 1));
+        const __m256 aReal = _mm256_permute_ps (av, _MM_SHUFFLE (2, 2, 0, 0));
+        const __m256 aImag = _mm256_permute_ps (av, _MM_SHUFFLE (3, 3, 1, 1));
+        const __m256 bSwapped = _mm256_permute_ps (bv, _MM_SHUFFLE (2, 3, 0, 1));
+        const __m256 realProducts = _mm256_mul_ps (aReal, bv);
+        const __m256 imagProducts = _mm256_mul_ps (aImag, bSwapped);
 
-        __m256 realPart = _mm256_fmsub_ps (av, bv, _mm256_mul_ps (aShuffled, bShuffled));
-        __m256 imagPart = _mm256_fmadd_ps (av, bShuffled, _mm256_mul_ps (aShuffled, bv));
-
-        __m256 interleaved = _mm256_blend_ps (realPart, imagPart, 0b10101010);
+        __m256 interleaved = _mm256_fmadd_ps (imagProducts, signs, realProducts);
 
         if (accumulate)
             interleaved = _mm256_add_ps (_mm256_loadu_ps (y + idx), interleaved);
@@ -53,20 +55,22 @@ void complexMultiply (const float* __restrict a, const float* __restrict b, floa
 
 #elif YUP_USE_SSE_INTRINSICS
     constexpr int simdWidth = 2;
+    const __m128 signs = _mm_set_ps (1.0f, -1.0f, 1.0f, -1.0f);
+
     for (; i <= complexPairs - simdWidth; i += simdWidth)
     {
         const int idx = i * 2;
 
-        __m128 av = _mm_loadu_ps (a + idx);
-        __m128 bv = _mm_loadu_ps (b + idx);
+        const __m128 av = _mm_loadu_ps (a + idx);
+        const __m128 bv = _mm_loadu_ps (b + idx);
 
-        const __m128 aShuffled = _mm_shuffle_ps (av, av, _MM_SHUFFLE (2, 3, 0, 1));
-        const __m128 bShuffled = _mm_shuffle_ps (bv, bv, _MM_SHUFFLE (2, 3, 0, 1));
+        const __m128 aReal = _mm_shuffle_ps (av, av, _MM_SHUFFLE (2, 2, 0, 0));
+        const __m128 aImag = _mm_shuffle_ps (av, av, _MM_SHUFFLE (3, 3, 1, 1));
+        const __m128 bSwapped = _mm_shuffle_ps (bv, bv, _MM_SHUFFLE (2, 3, 0, 1));
+        const __m128 realProducts = _mm_mul_ps (aReal, bv);
+        const __m128 imagProducts = _mm_mul_ps (aImag, bSwapped);
 
-        __m128 realPart = _mm_sub_ps (_mm_mul_ps (av, bv), _mm_mul_ps (aShuffled, bShuffled));
-        __m128 imagPart = _mm_add_ps (_mm_mul_ps (av, bShuffled), _mm_mul_ps (aShuffled, bv));
-
-        __m128 interleaved = _mm_unpacklo_ps (realPart, imagPart);
+        __m128 interleaved = _mm_add_ps (realProducts, _mm_mul_ps (imagProducts, signs));
 
         if (accumulate)
             interleaved = _mm_add_ps (_mm_loadu_ps (y + idx), interleaved);
