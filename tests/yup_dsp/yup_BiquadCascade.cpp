@@ -400,9 +400,9 @@ TEST_F (BiquadCascadeFilterTests, StabilityCheck)
 
     // Process white noise-like signal
     std::vector<float> noiseInput (blockSize);
-    WhiteNoise noise;
+    WhiteNoise noise (12345);
     for (int i = 0; i < blockSize; ++i)
-        noiseInput[i] = noise.getNextSample();
+        noiseInput[i] = 0.1f * noise.getNextSample();
 
     cascadeFloat.processBlock (noiseInput.data(), outputData.data(), blockSize);
 
