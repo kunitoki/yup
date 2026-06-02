@@ -31,7 +31,7 @@
 #include "FractionalDelayNode.h"
 #include "GainNode.h"
 #include "LatencyNode.h"
-#include "LowPassFilterNode.h"
+#include "StateVariableFilterNode.h"
 #include "OscillatorNode.h"
 #include "PluginNodeView.h"
 #include "RecorderNode.h"
@@ -63,8 +63,8 @@ public:
     /** Stable factory key for the built-in fractional delay node. */
     static constexpr const char* fractionalDelayIdentifier = "internal.fractionalDelay";
 
-    /** Stable factory key for the built-in low-pass filter node. */
-    static constexpr const char* lpfIdentifier = "internal.lpf";
+    /** Stable factory key for the built-in state variable filter node. */
+    static constexpr const char* svfIdentifier = "internal.svf";
 
     /** Stable factory key for the built-in oscilloscope node. */
     static constexpr const char* oscilloscopeIdentifier = "internal.oscilloscope";
@@ -185,18 +185,18 @@ public:
         }
         };
 
-        entries[lpfIdentifier] = {
+        entries[svfIdentifier] = {
             [] (const yup::AudioGraphNodeProperties&) -> yup::ResultValue<std::unique_ptr<yup::AudioProcessor>>
         {
-            return yup::makeResultValueOk (std::make_unique<LowPassFilterProcessor>());
+            return yup::makeResultValueOk (std::make_unique<StateVariableFilterProcessor>());
         },
             [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*) -> std::unique_ptr<yup::AudioGraphNodeView>
         {
-            auto* lpf = dynamic_cast<LowPassFilterProcessor*> (proc);
-            if (lpf == nullptr)
+            auto* svf = dynamic_cast<StateVariableFilterProcessor*> (proc);
+            if (svf == nullptr)
                 return nullptr;
 
-            return std::make_unique<LowPassFilterNodeView> (nodeID, *lpf);
+            return std::make_unique<StateVariableFilterNodeView> (nodeID, *svf);
         }
         };
 
@@ -519,19 +519,19 @@ public:
     std::vector<yup::String> getInternalNodeIdentifiers() const
     {
         return {
-            oscillatorIdentifier,
-            gainIdentifier,
-            lpfIdentifier,
-            oscilloscopeIdentifier,
-            spectrumAnalyzerIdentifier,
-            tanhDistortionIdentifier,
-            blunterSoftClipperIdentifier,
             aaIirHardClipperIdentifier,
-            latencyIdentifier,
+            blunterSoftClipperIdentifier,
             fractionalDelayIdentifier,
-            samplePlayerIdentifier,
+            gainIdentifier,
+            latencyIdentifier,
+            oscillatorIdentifier,
+            oscilloscopeIdentifier,
             recorderIdentifier,
-            subgraphIdentifier
+            samplePlayerIdentifier,
+            spectrumAnalyzerIdentifier,
+            subgraphIdentifier,
+            svfIdentifier,
+            tanhDistortionIdentifier,
         };
     }
 
@@ -557,8 +557,8 @@ public:
         if (id == fractionalDelayIdentifier)
             return "Fractional Delay";
 
-        if (id == lpfIdentifier)
-            return "Low Pass Filter";
+        if (id == svfIdentifier)
+            return "State Variable Filter";
 
         if (id == oscilloscopeIdentifier)
             return "Oscilloscope";

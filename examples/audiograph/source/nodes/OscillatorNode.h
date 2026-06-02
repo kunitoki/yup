@@ -34,7 +34,7 @@ public:
                           yup::AudioBusLayout ({},
                                                { yup::AudioBus ("Main", yup::AudioBus::Audio, yup::AudioBus::Output, 2) }))
     {
-        frequency = NodeViewHelpers::createParameter ("frequency", "Frequency", 40.0f, 2000.0f, 440.0f);
+        frequency = NodeViewHelpers::createParameter ("frequency", "Frequency", 40.0f, 22050.0f, 440.0f);
         sweepEnabled = NodeViewHelpers::createParameter ("sweepEnabled", "Sweep", 0.0f, 1.0f, 0.0f, 1.0f);
 
         addParameter (frequency);

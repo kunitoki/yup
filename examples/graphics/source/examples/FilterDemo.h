@@ -1544,6 +1544,14 @@ private:
         responseTypeCombo->addItem ("Allpass", 9);
     }
 
+    void addSVFResponseTypes()
+    {
+        responseTypeCombo->addItem ("Lowpass", 1);
+        responseTypeCombo->addItem ("Highpass", 2);
+        responseTypeCombo->addItem ("Bandpass", 3);
+        responseTypeCombo->addItem ("Notch", 5);
+    }
+
     void addFIRResponseTypes()
     {
         responseTypeCombo->addItem ("Lowpass", 1);
@@ -1592,6 +1600,10 @@ private:
 
         switch (filterType)
         {
+            case 3:
+                addSVFResponseTypes();
+                break;
+
             case 6:
                 addFIRResponseTypes();
                 break;
