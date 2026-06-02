@@ -46,8 +46,8 @@ AudioBusLayout monoLayout()
 
 AudioBusLayout midiLayout()
 {
-    return AudioBusLayout ({ AudioBus ("MIDI In", AudioBus::Type::MIDI, AudioBus::Direction::Input, 0) },
-                           { AudioBus ("MIDI Out", AudioBus::Type::MIDI, AudioBus::Direction::Output, 0) });
+    return AudioBusLayout ({ AudioBus ("MIDI In", AudioBus::Type::Midi, AudioBus::Direction::Input, 0) },
+                           { AudioBus ("MIDI Out", AudioBus::Type::Midi, AudioBus::Direction::Output, 0) });
 }
 
 class TestProcessor : public AudioProcessor
@@ -433,6 +433,88 @@ AudioGraphModel::NodeFactory statefulGainFactory()
     };
 }
 
+class TreeStateProcessor final : public AudioProcessor
+{
+public:
+    static const yup::Identifier stateType;
+
+    explicit TreeStateProcessor (float initialGain = 1.0f)
+        : AudioProcessor ("Tree State", stereoLayout())
+        , gain (initialGain)
+    {
+    }
+
+    void prepareToPlay (float, int) override {}
+
+    void releaseResources() override {}
+
+    void processBlock (AudioProcessContext<float>& context) override
+    {
+        auto& audioBuffer = context.audio;
+        for (int channel = 0; channel < audioBuffer.getNumChannels(); ++channel)
+            audioBuffer.applyGain (channel, 0, audioBuffer.getNumSamples(), gain);
+    }
+
+    int getCurrentPreset() const noexcept override { return 0; }
+
+    void setCurrentPreset (int) noexcept override {}
+
+    int getNumPresets() const override { return 0; }
+
+    String getPresetName (int) const override { return {}; }
+
+    void setPresetName (int, StringRef) override {}
+
+    bool supportsDataTreeState() const noexcept override { return true; }
+
+    Result loadStateFromDataTree (const DataTree& state) override
+    {
+        if (! state.isValid() || state.getType() != stateType)
+            return Result::fail ("Invalid tree processor state");
+
+        gain = static_cast<float> (static_cast<double> (state.getProperty ("gain", 1.0)));
+        return Result::ok();
+    }
+
+    Result saveStateIntoDataTree (DataTree& state) override
+    {
+        state = DataTree (stateType);
+        auto transaction = state.beginTransaction();
+        transaction.setProperty ("gain", gain);
+        return Result::ok();
+    }
+
+    bool hasEditor() const override { return false; }
+
+    void setGain (float newGain) noexcept { gain = newGain; }
+
+    float getGain() const noexcept { return gain; }
+
+private:
+    float gain = 1.0f;
+};
+
+const yup::Identifier TreeStateProcessor::stateType = "TreeStateProcessorState";
+
+AudioGraphNodeProperties treeStateProperties()
+{
+    AudioGraphNodeProperties properties;
+    properties.identifier = "treeState";
+    properties.name = "Tree State";
+    return properties;
+}
+
+AudioGraphModel::NodeFactory treeStateFactory()
+{
+    return [] (const AudioGraphNodeProperties& properties) -> ResultValue<std::unique_ptr<AudioProcessor>>
+    {
+        if (properties.identifier != "treeState")
+            return makeResultValueFail ("Unknown node type");
+
+        return makeResultValueOk (std::make_unique<TreeStateProcessor>());
+    };
+}
+
 class StatefulExternalProcessor : public AudioProcessor
 {
 public:
@@ -701,9 +783,9 @@ public:
 AudioBusLayout mixedLayout()
 {
     return AudioBusLayout ({ AudioBus ("Audio In", AudioBus::Type::Audio, AudioBus::Direction::Input, 2),
-                             AudioBus ("MIDI In", AudioBus::Type::MIDI, AudioBus::Direction::Input, 0) },
+                             AudioBus ("MIDI In", AudioBus::Type::Midi, AudioBus::Direction::Input, 0) },
                            { AudioBus ("Audio Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 2),
-                             AudioBus ("MIDI Out", AudioBus::Type::MIDI, AudioBus::Direction::Output, 0) });
+                             AudioBus ("MIDI Out", AudioBus::Type::Midi, AudioBus::Direction::Output, 0) });
 }
 
 class MixedProcessor : public AudioProcessor
@@ -977,8 +1059,8 @@ TEST (AudioGraphProcessorTests, MixesFanIn)
 
 TEST (AudioGraphProcessorTests, PreservesMidiTimestamps)
 {
-    AudioBusLayout midiLayout ({ AudioBus ("MIDI In", AudioBus::Type::MIDI, AudioBus::Direction::Input, 0) },
-                               { AudioBus ("MIDI Out", AudioBus::Type::MIDI, AudioBus::Direction::Output, 0) });
+    AudioBusLayout midiLayout ({ AudioBus ("MIDI In", AudioBus::Type::Midi, AudioBus::Direction::Input, 0) },
+                               { AudioBus ("MIDI Out", AudioBus::Type::Midi, AudioBus::Direction::Output, 0) });
     auto model = std::make_shared<AudioGraphModel>();
     AudioGraphProcessor graph (model, midiLayout);
 
@@ -1336,6 +1418,116 @@ TEST (AudioGraphProcessorTests, SaveAndLoadRestoresConnectionsAndNodeState)
 
     EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (0)[0]);
     EXPECT_FLOAT_EQ (0.25f, audio.getReadPointer (1)[0]);
+}
+
+TEST (AudioGraphProcessorTests, DataTreeProcessorStateSavesAsReadableStateTree)
+{
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+
+    auto processor = std::make_unique<TreeStateProcessor> (0.25f);
+    auto* processorPtr = processor.get();
+    const auto node = model->addNode (std::move (processor), treeStateProperties());
+
+    ASSERT_TRUE (graph.commitChanges().wasOk());
+
+    MemoryBlock savedState;
+    ASSERT_TRUE (graph.saveStateIntoMemory (savedState).wasOk());
+
+    auto xml = parseMemoryBlockAsXml (savedState);
+    ASSERT_NE (nullptr, xml.get());
+
+    auto* savedNodeElement = xml->getChildByName ("nodes")->getChildByName ("node");
+    ASSERT_NE (nullptr, savedNodeElement);
+    EXPECT_EQ (nullptr, savedNodeElement->getChildByName ("state"));
+
+    auto* stateTreeElement = savedNodeElement->getChildByName ("stateTree");
+    ASSERT_NE (nullptr, stateTreeElement);
+
+    auto* stateElement = stateTreeElement->getChildByName (TreeStateProcessor::stateType);
+    ASSERT_NE (nullptr, stateElement);
+    EXPECT_DOUBLE_EQ (0.25, stateElement->getDoubleAttribute ("gain"));
+
+    processorPtr->setGain (0.75f);
+    model->setNodeFactory (treeStateFactory());
+    ASSERT_TRUE (graph.loadStateFromMemory (savedState).wasOk());
+
+    auto* restored = dynamic_cast<TreeStateProcessor*> (model->getNodeProcessor (node));
+    ASSERT_NE (nullptr, restored);
+    EXPECT_FLOAT_EQ (0.25f, restored->getGain());
+}
+
+TEST (AudioGraphProcessorTests, DataTreeProcessorCanLoadLegacyXmlBackedBinaryState)
+{
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+
+    const auto node = model->addNode (std::make_unique<TreeStateProcessor> (0.5f), treeStateProperties());
+    ASSERT_TRUE (graph.commitChanges().wasOk());
+
+    MemoryBlock savedState;
+    ASSERT_TRUE (graph.saveStateIntoMemory (savedState).wasOk());
+
+    auto xml = parseMemoryBlockAsXml (savedState);
+    ASSERT_NE (nullptr, xml.get());
+
+    auto* savedNodeElement = xml->getChildByName ("nodes")->getChildByName ("node");
+    ASSERT_NE (nullptr, savedNodeElement);
+
+    auto* stateTreeElement = savedNodeElement->getChildByName ("stateTree");
+    ASSERT_NE (nullptr, stateTreeElement);
+    auto* stateElement = stateTreeElement->getFirstChildElement();
+    ASSERT_NE (nullptr, stateElement);
+
+    MemoryBlock xmlBackedState;
+    MemoryOutputStream stateStream (xmlBackedState, false);
+    stateElement->writeTo (stateStream);
+    stateStream.flush();
+
+    savedNodeElement->removeChildElement (stateTreeElement, true);
+
+    auto* legacyStateElement = new XmlElement ("state");
+    legacyStateElement->setAttribute ("encoding", "base64");
+    legacyStateElement->addTextElement (Base64::toBase64 (xmlBackedState.getData(), xmlBackedState.getSize()));
+    savedNodeElement->addChildElement (legacyStateElement);
+
+    auto destinationModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor destination (destinationModel);
+    destinationModel->setNodeFactory (treeStateFactory());
+
+    ASSERT_TRUE (destination.loadStateFromMemory (memoryBlockFromXml (*xml)).wasOk());
+
+    auto* restored = dynamic_cast<TreeStateProcessor*> (destinationModel->getNodeProcessor (node));
+    ASSERT_NE (nullptr, restored);
+    EXPECT_FLOAT_EQ (0.5f, restored->getGain());
+}
+
+TEST (AudioGraphProcessorTests, DataTreeProcessorStateTreeLoadFailureIsNotBinaryFallback)
+{
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+
+    model->addNode (std::make_unique<TreeStateProcessor> (0.5f), treeStateProperties());
+    ASSERT_TRUE (graph.commitChanges().wasOk());
+
+    MemoryBlock savedState;
+    ASSERT_TRUE (graph.saveStateIntoMemory (savedState).wasOk());
+
+    auto xml = parseMemoryBlockAsXml (savedState);
+    ASSERT_NE (nullptr, xml.get());
+
+    auto* stateElement = xml->getChildByName ("nodes")
+                             ->getChildByName ("node")
+                             ->getChildByName ("stateTree")
+                             ->getFirstChildElement();
+    ASSERT_NE (nullptr, stateElement);
+    stateElement->setTagName ("WrongState");
+
+    auto destinationModel = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor destination (destinationModel);
+    destinationModel->setNodeFactory (treeStateFactory());
+
+    EXPECT_TRUE (destination.loadStateFromMemory (memoryBlockFromXml (*xml)).failed());
 }
 
 TEST (AudioGraphProcessorTests, LoadStateRecreatesProcessorNodesWithFactory)

@@ -56,8 +56,15 @@ public:
 
     void getNextAudioBlock (const AudioSourceChannelInfo& info) override
     {
+        getNextAudioBlockCallCount.fetch_add (1);
         getNextAudioBlockCalled.store (true);
 
+        fillNextAudioBlock (info);
+    }
+
+protected:
+    void fillNextAudioBlock (const AudioSourceChannelInfo& info)
+    {
         const auto startPosition = currentPosition.fetch_add (info.numSamples);
 
         // Fill with a pattern based on current position
@@ -71,6 +78,7 @@ public:
         }
     }
 
+public:
     void setNextReadPosition (int64 newPosition) override
     {
         setNextReadPositionCalled.store (true);
@@ -101,11 +109,41 @@ public:
     std::atomic<bool> releaseResourcesCalled { false };
     std::atomic<bool> getNextAudioBlockCalled { false };
     std::atomic<bool> setNextReadPositionCalled { false };
+    std::atomic<int> getNextAudioBlockCallCount { 0 };
     std::atomic<int> lastSamplesPerBlock { 0 };
     std::atomic<double> lastSampleRate { 0.0 };
     std::atomic<int64> totalLength;
     std::atomic<int64> currentPosition;
     std::atomic<bool> looping;
+};
+
+class BlockingReadMockPositionableAudioSource : public MockPositionableAudioSource
+{
+public:
+    explicit BlockingReadMockPositionableAudioSource (int callIndexToBlock)
+        : callIndexToBlock (callIndexToBlock)
+    {
+    }
+
+    void getNextAudioBlock (const AudioSourceChannelInfo& info) override
+    {
+        const auto callIndex = getNextAudioBlockCallCount.fetch_add (1) + 1;
+        getNextAudioBlockCalled.store (true);
+
+        if (callIndex == callIndexToBlock)
+        {
+            blockedReadStarted.signal();
+            allowBlockedReadToFinish.wait (1000);
+        }
+
+        fillNextAudioBlock (info);
+    }
+
+    WaitableEvent blockedReadStarted;
+    WaitableEvent allowBlockedReadToFinish;
+
+private:
+    const int callIndexToBlock;
 };
 
 bool waitForFlag (const std::atomic<bool>& flag, int timeoutMs = 1000)
@@ -119,6 +157,19 @@ bool waitForFlag (const std::atomic<bool>& flag, int timeoutMs = 1000)
     }
 
     return flag.load();
+}
+
+bool waitForValueAtLeast (const std::atomic<int>& value, int minimumValue, int timeoutMs = 1000)
+{
+    for (int elapsedMs = 0; elapsedMs < timeoutMs; elapsedMs += 5)
+    {
+        if (value.load() >= minimumValue)
+            return true;
+
+        Thread::sleep (5);
+    }
+
+    return value.load() >= minimumValue;
 }
 } // namespace
 
@@ -498,7 +549,7 @@ TEST_F (BufferingAudioSourceTests, GetNextReadPosition)
 
 TEST_F (BufferingAudioSourceTests, GetNextReadPositionWithLooping)
 {
-    mockSource->setLooping (true);
+    buffering->setLooping (true);
 
     buffering->prepareToPlay (512, 44100.0);
     Thread::sleep (50);
@@ -608,13 +659,35 @@ TEST_F (BufferingAudioSourceTests, ReadNextBufferChunkLoopingChange)
     mockSource->getNextAudioBlockCalled.store (false);
 
     // Change looping state to trigger buffer reset (line 245-250)
-    mockSource->setLooping (true);
+    buffering->setLooping (true);
     EXPECT_TRUE (waitForFlag (mockSource->getNextAudioBlockCalled));
 
     mockSource->getNextAudioBlockCalled.store (false);
-    mockSource->setLooping (false);
+    buffering->setLooping (false);
 
     EXPECT_TRUE (waitForFlag (mockSource->getNextAudioBlockCalled));
+}
+
+TEST_F (BufferingAudioSourceTests, LoopingChangeDuringReadDiscardsStaleBufferRange)
+{
+    auto* source = new BlockingReadMockPositionableAudioSource (4);
+    auto blockingBuffering = std::make_unique<BufferingAudioSource> (source, *thread, true, 8192, 2, false);
+
+    blockingBuffering->prepareToPlay (512, 44100.0);
+
+    const auto blockedReadStarted = source->blockedReadStarted.wait (1000);
+    EXPECT_TRUE (blockedReadStarted);
+
+    if (! blockedReadStarted)
+    {
+        source->allowBlockedReadToFinish.signal();
+        return;
+    }
+
+    blockingBuffering->setLooping (true);
+    source->allowBlockedReadToFinish.signal();
+
+    EXPECT_TRUE (waitForValueAtLeast (source->getNextAudioBlockCallCount, 5));
 }
 
 //==============================================================================

@@ -358,8 +358,6 @@ void AudioGraphApp::loadGraphFromMemory (const yup::MemoryBlock& mb, const yup::
         return;
     }
 
-    model->setNodePosition (yup::AudioGraphModel::getGraphInputNodeID(), 40.0f, 200.0f);
-    model->setNodePosition (yup::AudioGraphModel::getGraphOutputNodeID(), 760.0f, 200.0f);
     graph->commitChanges();
     editorPanel->clearUndoHistory();
     currentFilePath = file;

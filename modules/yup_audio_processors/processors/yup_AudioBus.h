@@ -36,7 +36,7 @@ public:
     enum Type
     {
         Audio,
-        MIDI
+        Midi
     };
 
     /** The direction of the bus. */

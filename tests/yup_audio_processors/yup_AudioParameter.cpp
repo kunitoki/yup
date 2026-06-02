@@ -121,6 +121,62 @@ public:
     AudioProcessor::ChangeDetails lastDetails;
 };
 
+class DefaultStateAudioProcessor : public AudioProcessor
+{
+public:
+    DefaultStateAudioProcessor()
+        : AudioProcessor ("Default State", AudioBusLayout ({}, {}))
+    {
+    }
+
+    void prepareToPlay (float, int) override {}
+
+    void releaseResources() override {}
+
+    void processBlock (AudioProcessContext<float>& context) override
+    {
+        ignoreUnused (context);
+    }
+
+    int getCurrentPreset() const noexcept override { return 0; }
+
+    void setCurrentPreset (int) noexcept override {}
+
+    int getNumPresets() const override { return 0; }
+
+    String getPresetName (int) const override { return {}; }
+
+    void setPresetName (int, StringRef) override {}
+
+    bool hasEditor() const override { return false; }
+};
+
+class DataTreeStateAudioProcessor final : public DefaultStateAudioProcessor
+{
+public:
+    bool supportsDataTreeState() const noexcept override { return true; }
+
+    Result loadStateFromDataTree (const DataTree& state) override
+    {
+        if (! state.isValid() || state.getType() != stateType)
+            return Result::fail ("Invalid state");
+
+        value = static_cast<float> (static_cast<double> (state.getProperty ("value", 0.0)));
+        return Result::ok();
+    }
+
+    Result saveStateIntoDataTree (DataTree& state) override
+    {
+        state = DataTree (stateType);
+        auto transaction = state.beginTransaction();
+        transaction.setProperty ("value", value);
+        return Result::ok();
+    }
+
+    const yup::Identifier stateType = "DataTreeStateAudioProcessorState";
+    float value = 0.0f;
+};
+
 AudioParameter::Ptr makeParameter (StringRef id, StringRef name)
 {
     return AudioParameterBuilder()
@@ -129,6 +185,15 @@ AudioParameter::Ptr makeParameter (StringRef id, StringRef name)
         .withRange (0.0f, 1.0f)
         .withDefault (0.5f)
         .build();
+}
+
+MemoryBlock memoryBlockFromString (const String& text)
+{
+    MemoryBlock result;
+    MemoryOutputStream stream (result, false);
+    stream << text;
+    stream.flush();
+    return result;
 }
 
 } // namespace
@@ -148,6 +213,44 @@ TEST (AudioParameterTests, UsesIndexAsHostIDByDefault)
     EXPECT_EQ (1u, second->getHostParameterID());
     EXPECT_EQ (first.get(), processor.getParameterByHostID (0u).get());
     EXPECT_EQ (second.get(), processor.getParameterByHostID (1u).get());
+}
+
+TEST (AudioProcessorStateTests, DefaultBinaryStateFailsWithoutDataTreeSupport)
+{
+    DefaultStateAudioProcessor processor;
+    MemoryBlock state;
+
+    EXPECT_FALSE (processor.supportsDataTreeState());
+    EXPECT_TRUE (processor.saveStateIntoMemory (state).failed());
+    EXPECT_TRUE (processor.loadStateFromMemory (state).failed());
+}
+
+TEST (AudioProcessorStateTests, DataTreeStateRoundTripsThroughBinaryXml)
+{
+    DataTreeStateAudioProcessor source;
+    source.value = 12.5f;
+
+    MemoryBlock state;
+    ASSERT_TRUE (source.saveStateIntoMemory (state).wasOk());
+    EXPECT_FALSE (state.isEmpty());
+
+    MemoryInputStream stream (state, false);
+    auto xml = parseXML (stream.readEntireStreamAsString());
+    ASSERT_NE (nullptr, xml.get());
+    EXPECT_TRUE (xml->hasTagName (source.stateType));
+    EXPECT_DOUBLE_EQ (12.5, xml->getDoubleAttribute ("value"));
+
+    DataTreeStateAudioProcessor destination;
+    ASSERT_TRUE (destination.loadStateFromMemory (state).wasOk());
+    EXPECT_FLOAT_EQ (12.5f, destination.value);
+}
+
+TEST (AudioProcessorStateTests, DataTreeBinaryStateRejectsInvalidXml)
+{
+    DataTreeStateAudioProcessor processor;
+
+    EXPECT_TRUE (processor.loadStateFromMemory (memoryBlockFromString ("not xml")).failed());
+    EXPECT_TRUE (processor.loadStateFromMemory (memoryBlockFromString ("<WrongState />")).failed());
 }
 
 TEST (AudioParameterTests, UsesExplicitStableHostIDWhenProvided)
@@ -429,9 +532,9 @@ TEST (AudioProcessorTests, CountsOnlyAudioBuses)
 {
     TestAudioProcessor processor (AudioBusLayout (
         { AudioBus ("Audio In", AudioBus::Type::Audio, AudioBus::Direction::Input, 2),
-          AudioBus ("MIDI In", AudioBus::Type::MIDI, AudioBus::Direction::Input, 0) },
+          AudioBus ("MIDI In", AudioBus::Type::Midi, AudioBus::Direction::Input, 0) },
         { AudioBus ("Audio Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 2),
-          AudioBus ("MIDI Out", AudioBus::Type::MIDI, AudioBus::Direction::Output, 0) }));
+          AudioBus ("MIDI Out", AudioBus::Type::Midi, AudioBus::Direction::Output, 0) }));
 
     EXPECT_EQ (1, processor.getNumAudioInputs());
     EXPECT_EQ (1, processor.getNumAudioOutputs());

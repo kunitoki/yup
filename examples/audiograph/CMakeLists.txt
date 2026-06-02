@@ -46,7 +46,8 @@ yup_standalone_app (
         yup::yup_audio_gui
         yup::yup_audio_processors
         yup::yup_audio_graph
-        yup::yup_audio_plugin_host)
+        yup::yup_audio_plugin_host
+        dr_libs)
 
 file (GLOB_RECURSE sources
     "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp"

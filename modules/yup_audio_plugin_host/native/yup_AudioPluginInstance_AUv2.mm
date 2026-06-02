@@ -792,10 +792,10 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
             outputs.emplace_back("Output", AudioBus::Type::Audio, AudioBus::Direction::Output, outputChannels);
 
         if (desc.numMidiInputPorts > 0)
-            inputs.emplace_back("MIDI Input", AudioBus::Type::MIDI, AudioBus::Direction::Input, 1);
+            inputs.emplace_back("MIDI Input", AudioBus::Type::Midi, AudioBus::Direction::Input, 1);
 
         if (desc.numMidiOutputPorts > 0)
-            outputs.emplace_back("MIDI Output", AudioBus::Type::MIDI, AudioBus::Direction::Output, 1);
+            outputs.emplace_back("MIDI Output", AudioBus::Type::Midi, AudioBus::Direction::Output, 1);
 
         return AudioBusLayout(std::move(inputs), std::move(outputs));
     }

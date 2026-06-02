@@ -1162,7 +1162,7 @@ public:
 
             if (inputBus.getType() == AudioBus::Type::Audio)
                 addAudioInput (toTChar (nameUTF16), speakerArrForChannels (inputBus.getNumChannels()));
-            else if (inputBus.getType() == AudioBus::Type::MIDI)
+            else if (inputBus.getType() == AudioBus::Type::Midi)
                 addEventInput (toTChar (nameUTF16));
         }
 
@@ -1172,7 +1172,7 @@ public:
 
             if (outputBus.getType() == AudioBus::Type::Audio)
                 addAudioOutput (toTChar (nameUTF16), speakerArrForChannels (outputBus.getNumChannels()));
-            else if (outputBus.getType() == AudioBus::Type::MIDI)
+            else if (outputBus.getType() == AudioBus::Type::Midi)
                 addEventOutput (toTChar (nameUTF16));
         }
 

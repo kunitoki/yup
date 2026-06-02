@@ -35,14 +35,69 @@ inline void configureParameterSlider (yup::Slider& slider, yup::Color accent)
     slider.setColor (yup::Slider::Style::thumbDownColorId, accent.darker (0.15f));
 }
 
-inline yup::Rectangle<float> getInlineSliderBounds (const yup::Component& component, int preferredWidth)
+inline yup::Rectangle<float> getInlineSliderBounds (const yup::Component& component, int preferredWidth, int rowIndex)
 {
     const auto bounds = component.getLocalBounds();
     const auto scale = bounds.getWidth() / static_cast<float> (preferredWidth);
     return { 62.0f * scale,
-             49.0f * scale,
+             (49.0f + 25.0f * static_cast<float> (rowIndex)) * scale,
              yup::jmax (42.0f * scale, bounds.getWidth() - (150.0f * scale)),
              20.0f * scale };
+}
+
+inline yup::AudioParameter::Ptr createParameter (yup::StringRef id,
+                                                 yup::StringRef name,
+                                                 float minValue,
+                                                 float maxValue,
+                                                 float defaultValue,
+                                                 float interval = 0.0f)
+{
+    auto builder = yup::AudioParameterBuilder()
+                       .withID (id)
+                       .withName (name)
+                       .withRange (yup::NormalisableRange<float> (minValue, maxValue, interval))
+                       .withDefault (defaultValue);
+
+    if (interval > 0.0f)
+        builder.withStepped (true);
+
+    return builder.build();
+}
+
+inline yup::DataTree createParameterState (const yup::Identifier& type, yup::Span<const yup::AudioParameter::Ptr> parameters)
+{
+    yup::DataTree state (type);
+    auto transaction = state.beginTransaction();
+    transaction.setProperty ("version", 1);
+
+    for (const auto& parameter : parameters)
+        if (parameter != nullptr)
+            transaction.setProperty (parameter->getID(), parameter->getValue());
+
+    return state;
+}
+
+inline yup::Result loadParameterState (const yup::DataTree& state,
+                                       const yup::Identifier& expectedType,
+                                       yup::Span<const yup::AudioParameter::Ptr> parameters)
+{
+    if (! state.isValid() || state.getType() != expectedType)
+        return yup::Result::fail ("Invalid node state");
+
+    if (static_cast<int> (state.getProperty ("version", 0)) != 1)
+        return yup::Result::fail ("Unsupported node state version");
+
+    for (const auto& parameter : parameters)
+    {
+        if (parameter == nullptr)
+            continue;
+
+        const yup::Identifier propertyName (parameter->getID());
+        if (state.hasProperty (propertyName))
+            parameter->setValue (static_cast<float> (static_cast<double> (state.getProperty (propertyName, parameter->getValue()))));
+    }
+
+    return yup::Result::ok();
 }
 
 } // namespace NodeViewHelpers

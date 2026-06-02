@@ -106,14 +106,17 @@ public:
 
     void setPresetName (int, yup::StringRef) override {}
 
-    yup::Result loadStateFromMemory (const yup::MemoryBlock& data) override
+    bool supportsDataTreeState() const noexcept override { return true; }
+
+    yup::Result loadStateFromDataTree (const yup::DataTree& state) override
     {
-        if (data.isEmpty())
-            return yup::Result::ok();
+        if (! state.isValid() || state.getType() != stateType)
+            return yup::Result::fail ("Invalid sample player state");
 
-        yup::MemoryInputStream stream (data, false);
-        const auto path = stream.readEntireStreamAsString();
+        if (static_cast<int> (state.getProperty ("version", 0)) != 1)
+            return yup::Result::fail ("Unsupported sample player state version");
 
+        const auto path = state.getProperty ("path", {}).toString();
         if (path.isEmpty())
             return yup::Result::ok();
 
@@ -121,17 +124,16 @@ public:
         return result.wasOk() ? result : yup::Result::ok();
     }
 
-    yup::Result saveStateIntoMemory (yup::MemoryBlock& data) override
+    yup::Result saveStateIntoDataTree (yup::DataTree& state) override
     {
-        yup::MemoryOutputStream stream (data, false);
-        stream.writeText (getSampleFile().getFullPathName(), false, false, nullptr);
-        stream.flush();
+        state = yup::DataTree (stateType);
+        auto transaction = state.beginTransaction();
+        transaction.setProperty ("version", 1);
+        transaction.setProperty ("path", getSampleFile().getFullPathName());
         return yup::Result::ok();
     }
 
     bool hasEditor() const override { return false; }
-
-    yup::AudioProcessorEditor* createEditor() override { return nullptr; }
 
     yup::Result loadSampleFile (const yup::File& file)
     {
@@ -185,9 +187,10 @@ public:
     }
 
 private:
+    const yup::Identifier stateType = "SamplePlayerState";
+
     std::atomic<const SampleData*> currentSample { nullptr };
     std::shared_ptr<const SampleData> currentSampleForUi;
-    // Keeps previously loaded buffers alive because the audio thread reads currentSample as a raw pointer.
     std::vector<std::shared_ptr<const SampleData>> retainedSamples;
     std::atomic<double> playbackPosition { 0.0 };
     std::atomic<float> playbackSampleRate { 44100.0f };

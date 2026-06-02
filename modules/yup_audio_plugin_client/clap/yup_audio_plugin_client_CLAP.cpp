@@ -1023,7 +1023,7 @@ bool AudioPluginProcessorCLAP::initialise()
 
         uint32_t count = 0;
         for (const auto& bus : busses)
-            if (bus.getType() == AudioBus::Type::MIDI)
+            if (bus.getType() == AudioBus::Type::Midi)
                 ++count;
 
         // Fallback: synths with no declared MIDI input bus always get one
@@ -1043,7 +1043,7 @@ bool AudioPluginProcessorCLAP::initialise()
         uint32_t midiIndex = 0;
         for (const auto& bus : busses)
         {
-            if (bus.getType() != AudioBus::Type::MIDI)
+            if (bus.getType() != AudioBus::Type::Midi)
                 continue;
 
             if (midiIndex == index)

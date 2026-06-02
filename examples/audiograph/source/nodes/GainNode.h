@@ -21,8 +21,6 @@
 
 #pragma once
 
-#include <atomic>
-
 #include "NodeViewHelpers.h"
 
 //==============================================================================
@@ -34,15 +32,22 @@ public:
                           yup::AudioBusLayout ({ yup::AudioBus ("Main", yup::AudioBus::Audio, yup::AudioBus::Input, 2) },
                                                { yup::AudioBus ("Main", yup::AudioBus::Audio, yup::AudioBus::Output, 2) }))
     {
+        gain = NodeViewHelpers::createParameter ("gain", "Gain", 0.0f, 1.5f, 0.75f);
+        addParameter (gain);
     }
 
-    void prepareToPlay (float, int) override {}
+    void prepareToPlay (float newSampleRate, int) override
+    {
+        smoothedGain.reset (newSampleRate, 0.02);
+        smoothedGain.setCurrentAndTargetValue (getGain());
+    }
 
     void releaseResources() override {}
 
     void processBlock (yup::AudioProcessContext<float>& context) override
     {
-        context.audio.applyGain (gain.load (std::memory_order_relaxed));
+        smoothedGain.setTargetValue (getGain());
+        smoothedGain.applyGain (context.audio, context.audio.getNumSamples());
     }
 
     int getCurrentPreset() const noexcept override { return 0; }
@@ -55,23 +60,33 @@ public:
 
     void setPresetName (int, yup::StringRef) override {}
 
-    yup::Result loadStateFromMemory (const yup::MemoryBlock&) override { return yup::Result::ok(); }
+    bool supportsDataTreeState() const noexcept override { return true; }
 
-    yup::Result saveStateIntoMemory (yup::MemoryBlock&) override { return yup::Result::ok(); }
+    yup::Result loadStateFromDataTree (const yup::DataTree& state) override
+    {
+        return NodeViewHelpers::loadParameterState (state, stateType, getParameters());
+    }
+
+    yup::Result saveStateIntoDataTree (yup::DataTree& state) override
+    {
+        state = NodeViewHelpers::createParameterState (stateType, getParameters());
+        return yup::Result::ok();
+    }
 
     bool hasEditor() const override { return false; }
 
-    yup::AudioProcessorEditor* createEditor() override { return nullptr; }
-
-    float getGain() const noexcept { return gain.load (std::memory_order_relaxed); }
+    float getGain() const noexcept { return gain->getValue(); }
 
     void setGain (float newGain) noexcept
     {
-        gain.store (yup::jlimit (0.0f, 1.5f, newGain), std::memory_order_relaxed);
+        gain->setValue (newGain);
     }
 
 private:
-    std::atomic<float> gain { 0.75f };
+    static constexpr const char* stateType = "GainState";
+
+    yup::AudioParameter::Ptr gain;
+    yup::SmoothedValue<float> smoothedGain;
 };
 
 //==============================================================================
@@ -119,7 +134,7 @@ public:
 
     void resized() override
     {
-        gainSlider.setBounds (NodeViewHelpers::getInlineSliderBounds (*this, getPreferredWidth()));
+        gainSlider.setBounds (NodeViewHelpers::getInlineSliderBounds (*this, getPreferredWidth(), 0));
     }
 
 private:

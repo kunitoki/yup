@@ -34,6 +34,9 @@ public:
                           yup::AudioBusLayout ({ yup::AudioBus ("Main", yup::AudioBus::Audio, yup::AudioBus::Input, 2) },
                                                { yup::AudioBus ("Main", yup::AudioBus::Audio, yup::AudioBus::Output, 2) }))
     {
+        delayMilliseconds = NodeViewHelpers::createParameter ("delayMilliseconds", "Delay", 0.0f, maximumDelayMilliseconds, defaultDelayMilliseconds, 1.0f);
+        addParameter (delayMilliseconds);
+
         setDelayMilliseconds (defaultDelayMilliseconds);
         reportUpdatedLatency();
     }
@@ -98,40 +101,29 @@ public:
 
     void setPresetName (int, yup::StringRef) override {}
 
-    yup::Result loadStateFromMemory (const yup::MemoryBlock& data) override
+    bool supportsDataTreeState() const noexcept override { return true; }
+
+    yup::Result loadStateFromDataTree (const yup::DataTree& state) override
     {
-        if (data.isEmpty())
-            return yup::Result::ok();
+        if (const auto result = NodeViewHelpers::loadParameterState (state, stateType, getParameters()); result.failed())
+            return result;
 
-        yup::MemoryInputStream stream (data, false);
-
-        const int version = stream.readInt();
-        if (version != 1)
-            return yup::Result::fail ("Unsupported latency node state version");
-
-        setDelayMilliseconds (stream.readFloat());
+        setDelayMilliseconds (getDelayMilliseconds());
         reportUpdatedLatency();
-
         return yup::Result::ok();
     }
 
-    yup::Result saveStateIntoMemory (yup::MemoryBlock& data) override
+    yup::Result saveStateIntoDataTree (yup::DataTree& state) override
     {
-        yup::MemoryOutputStream stream (data, false);
-        stream.writeInt (1);
-        stream.writeFloat (delayMilliseconds.load (std::memory_order_relaxed));
-        stream.flush();
-
+        state = NodeViewHelpers::createParameterState (stateType, getParameters());
         return yup::Result::ok();
     }
 
     bool hasEditor() const override { return false; }
 
-    yup::AudioProcessorEditor* createEditor() override { return nullptr; }
-
     float getDelayMilliseconds() const noexcept
     {
-        return delayMilliseconds.load (std::memory_order_relaxed);
+        return delayMilliseconds->getValue();
     }
 
     int getDelaySamples() const noexcept
@@ -141,9 +133,9 @@ public:
 
     void setDelayMilliseconds (float newDelayMilliseconds)
     {
-        delayMilliseconds.store (yup::jlimit (0.0f, maximumDelayMilliseconds, newDelayMilliseconds), std::memory_order_relaxed);
+        delayMilliseconds->setValue (newDelayMilliseconds);
 
-        const auto newDelaySamples = delayMillisecondsToSamples (delayMilliseconds.load (std::memory_order_relaxed));
+        const auto newDelaySamples = delayMillisecondsToSamples (getDelayMilliseconds());
         delaySamples.store (newDelaySamples, std::memory_order_relaxed);
     }
 
@@ -153,6 +145,8 @@ public:
     }
 
 private:
+    static constexpr const char* stateType = "LatencyState";
+
     static constexpr float defaultDelayMilliseconds = 100.0f;
     static constexpr float maximumDelayMilliseconds = 1000.0f;
 
@@ -163,7 +157,7 @@ private:
     }
 
     std::atomic<float> sampleRate { 44100.0f };
-    std::atomic<float> delayMilliseconds { defaultDelayMilliseconds };
+    yup::AudioParameter::Ptr delayMilliseconds;
     std::atomic<int> delaySamples { 0 };
     int writePosition = 0;
     yup::AudioBuffer<float> history;
@@ -223,7 +217,7 @@ public:
 
     void resized() override
     {
-        delaySlider.setBounds (NodeViewHelpers::getInlineSliderBounds (*this, getPreferredWidth()));
+        delaySlider.setBounds (NodeViewHelpers::getInlineSliderBounds (*this, getPreferredWidth(), 0));
     }
 
 private:

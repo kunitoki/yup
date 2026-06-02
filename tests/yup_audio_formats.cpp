@@ -32,6 +32,8 @@
 #endif
 
 #include "yup_audio_formats/yup_AudioFormatManager.cpp"
+#include "yup_audio_formats/yup_AudioFormatReader.cpp"
+#include "yup_audio_formats/yup_AudioFormatWriter.cpp"
 
 #if YUP_MODULE_AVAILABLE_dr_libs && YUP_AUDIO_FORMAT_WAVE
 #include "yup_audio_formats/yup_WaveAudioFormat.cpp"

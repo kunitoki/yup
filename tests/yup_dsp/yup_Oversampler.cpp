@@ -128,21 +128,69 @@ TEST_F (OversamplerTest, UpsampleDCSignalHasCorrectMagnitude)
 
 TEST_F (OversamplerTest, ProcessOversampledBlockCallbackReceivesCorrectSize)
 {
-    std::vector<float> ch0 (blockSize, 0.0f), ch1 (blockSize, 0.0f);
-    const float* inputPtrs[] = { ch0.data(), ch1.data() };
-    os2x.upsample (inputPtrs, 2, blockSize);
+    constexpr int shortBlockSize = 64;
+    std::vector<float> ch0 (shortBlockSize, 0.0f);
+    const float* inputPtrs[] = { ch0.data() };
+    os2x.upsample (inputPtrs, 1, shortBlockSize);
 
     int callbackChannels = 0;
     int callbackSamples = 0;
     os2x.processOversampledBlock ([&] (auto& buf)
     {
-        callbackChannels = static_cast<int> (buf.size());
-        if (! buf.empty())
-            callbackSamples = static_cast<int> (buf[0].size());
+        callbackChannels = buf.getNumChannels();
+        callbackSamples = buf.getNumSamples();
     });
 
-    EXPECT_EQ (callbackChannels, maxChannels);
-    EXPECT_EQ (callbackSamples, blockSize * 2);
+    EXPECT_EQ (callbackChannels, 1);
+    EXPECT_EQ (callbackSamples, shortBlockSize * 2);
+}
+
+TEST_F (OversamplerTest, ProcessOversampledBlockReceivesEmptyBufferWithoutPendingBlock)
+{
+    int callbackChannels = -1;
+    int callbackSamples = -1;
+
+    os2x.processOversampledBlock ([&] (auto& buf)
+    {
+        callbackChannels = buf.getNumChannels();
+        callbackSamples = buf.getNumSamples();
+    });
+
+    EXPECT_EQ (callbackChannels, 0);
+    EXPECT_EQ (callbackSamples, 0);
+}
+
+TEST_F (OversamplerTest, DownsampleConsumesPendingOversampledBlock)
+{
+    std::vector<float> ch0 (blockSize, 0.0f);
+    std::vector<float> output (blockSize, 0.0f);
+    const float* inputPtrs[] = { ch0.data() };
+    float* outputPtrs[] = { output.data() };
+
+    os2x.upsample (inputPtrs, 1, blockSize);
+    ASSERT_EQ (os2x.getOversampledNumSamples(), blockSize * 2);
+
+    os2x.downsample (outputPtrs, 1, blockSize);
+
+    EXPECT_EQ (os2x.getOversampledNumSamples(), 0);
+    EXPECT_EQ (os2x.getOversampledChannelData (0), nullptr);
+}
+
+TEST_F (OversamplerTest, UpsampleThenDownsamplePreservesDCMagnitude)
+{
+    constexpr float dcValue = 0.5f;
+    std::vector<float> input (blockSize, dcValue);
+    std::vector<float> output (blockSize, 0.0f);
+    const float* inputPtrs[] = { input.data() };
+    float* outputPtrs[] = { output.data() };
+
+    for (int b = 0; b < 10; ++b)
+    {
+        os2x.upsample (inputPtrs, 1, blockSize);
+        os2x.downsample (outputPtrs, 1, blockSize);
+    }
+
+    EXPECT_NEAR (calculateRMS (output.data(), blockSize), dcValue, 0.02f);
 }
 
 TEST_F (OversamplerTest, UpsampleThenDownsamplePreservesLowFrequencySine)

@@ -84,8 +84,7 @@ void BufferingAudioSource::prepareToPlay (int samplesPerBlockExpected, double ne
 
         const ScopedLock sl (bufferRangeLock);
 
-        bufferValidStart = 0;
-        bufferValidEnd = 0;
+        invalidateBufferRange();
 
         backgroundThread.addTimeSliceClient (this);
 
@@ -210,6 +209,25 @@ int64 BufferingAudioSource::getNextReadPosition() const
              : pos;
 }
 
+void BufferingAudioSource::setLooping (bool shouldLoop)
+{
+    {
+        const ScopedLock sl (bufferRangeLock);
+
+        source->setLooping (shouldLoop);
+
+        const auto isSourceLooping = source->isLooping();
+
+        if (wasSourceLooping != isSourceLooping)
+        {
+            wasSourceLooping = isSourceLooping;
+            invalidateBufferRange();
+        }
+    }
+
+    backgroundThread.moveToFrontOfQueue (this);
+}
+
 void BufferingAudioSource::setNextReadPosition (int64 newPosition)
 {
     const ScopedLock sl (bufferRangeLock);
@@ -240,9 +258,17 @@ std::tuple<int64, Range<int>> BufferingAudioSource::getValidBufferRangeAndAdvanc
         pos, Range<int> { (int) (jlimit (bufferValidStart, bufferValidEnd, pos) - pos), (int) (jlimit (bufferValidStart, bufferValidEnd, pos + numSamples) - pos) });
 }
 
+void BufferingAudioSource::invalidateBufferRange()
+{
+    bufferValidStart = 0;
+    bufferValidEnd = 0;
+    ++bufferRangeGeneration;
+}
+
 bool BufferingAudioSource::readNextBufferChunk()
 {
     int64 newBVS, newBVE, sectionToReadStart, sectionToReadEnd;
+    uint64 readGeneration;
 
     {
         const ScopedLock sl (bufferRangeLock);
@@ -250,8 +276,7 @@ bool BufferingAudioSource::readNextBufferChunk()
         if (wasSourceLooping != isLooping())
         {
             wasSourceLooping = isLooping();
-            bufferValidStart = 0;
-            bufferValidEnd = 0;
+            invalidateBufferRange();
         }
 
         newBVS = jmax ((int64) 0, nextPlayPos.load());
@@ -268,8 +293,7 @@ bool BufferingAudioSource::readNextBufferChunk()
             sectionToReadStart = newBVS;
             sectionToReadEnd = newBVE;
 
-            bufferValidStart = 0;
-            bufferValidEnd = 0;
+            invalidateBufferRange();
         }
         else if (std::abs ((int) (newBVS - bufferValidStart)) > 512
                  || std::abs ((int) (newBVE - bufferValidEnd)) > 512)
@@ -282,6 +306,8 @@ bool BufferingAudioSource::readNextBufferChunk()
             bufferValidStart = newBVS;
             bufferValidEnd = jmin (bufferValidEnd, newBVE);
         }
+
+        readGeneration = bufferRangeGeneration;
     }
 
     if (sectionToReadStart == sectionToReadEnd)
@@ -313,6 +339,9 @@ bool BufferingAudioSource::readNextBufferChunk()
 
     {
         const ScopedLock sl2 (bufferRangeLock);
+
+        if (readGeneration != bufferRangeGeneration)
+            return true;
 
         bufferValidStart = newBVS;
         bufferValidEnd = newBVE;

@@ -1050,7 +1050,7 @@ private:
             {
                 clap_note_port_info_t info {};
                 if (notePortsExt->get (plugin, i, true, &info))
-                    inputs.emplace_back (String (info.name), AudioBus::Type::MIDI, AudioBus::Direction::Input, 1);
+                    inputs.emplace_back (String (info.name), AudioBus::Type::Midi, AudioBus::Direction::Input, 1);
             }
 
             const uint32_t numOutputs = notePortsExt->count (plugin, false);
@@ -1058,7 +1058,7 @@ private:
             {
                 clap_note_port_info_t info {};
                 if (notePortsExt->get (plugin, i, false, &info))
-                    outputs.emplace_back (String (info.name), AudioBus::Type::MIDI, AudioBus::Direction::Output, 1);
+                    outputs.emplace_back (String (info.name), AudioBus::Type::Midi, AudioBus::Direction::Output, 1);
             }
         }
 
