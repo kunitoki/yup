@@ -32,6 +32,10 @@
 #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
 #pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
 #pragma GCC diagnostic ignored "-Wincompatible-pointer-types"
+#elif _MSC_VER
+#pragma warning (push)
+#pragma warning (disable : 4311)
+#pragma warning (disable : 4312)
 #endif
 
 #define mdct_init hmp3_mdct_init
@@ -44,4 +48,6 @@
 #pragma clang diagnostic pop
 #elif __GNUC__
 #pragma GCC diagnostic pop
+#elif _MSC_VER
+#pragma warning (pop)
 #endif

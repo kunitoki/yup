@@ -498,7 +498,7 @@ TEST_F (BufferingAudioSourceTests, GetNextReadPosition)
 
 TEST_F (BufferingAudioSourceTests, GetNextReadPositionWithLooping)
 {
-    mockSource->setLooping (true);
+    buffering->setLooping (true);
 
     buffering->prepareToPlay (512, 44100.0);
     Thread::sleep (50);
@@ -608,11 +608,11 @@ TEST_F (BufferingAudioSourceTests, ReadNextBufferChunkLoopingChange)
     mockSource->getNextAudioBlockCalled.store (false);
 
     // Change looping state to trigger buffer reset (line 245-250)
-    mockSource->setLooping (true);
+    buffering->setLooping (true);
     EXPECT_TRUE (waitForFlag (mockSource->getNextAudioBlockCalled));
 
     mockSource->getNextAudioBlockCalled.store (false);
-    mockSource->setLooping (false);
+    buffering->setLooping (false);
 
     EXPECT_TRUE (waitForFlag (mockSource->getNextAudioBlockCalled));
 }

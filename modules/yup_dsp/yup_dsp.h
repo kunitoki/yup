@@ -176,6 +176,7 @@
 
 // Dynamics processors
 #include "dynamics/yup_SoftClipper.h"
+#include "dynamics/yup_BlunterClipper.h"
 
 // Delay lines
 #include "delays/yup_FractionallyAddressedDelay.h"

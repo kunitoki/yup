@@ -45,4 +45,9 @@ inline yup::Rectangle<float> getInlineSliderBounds (const yup::Component& compon
              20.0f * scale };
 }
 
+inline yup::Rectangle<float> getInlineSliderBounds (const yup::Component& component, int preferredWidth)
+{
+    return getInlineSliderBounds (component, preferredWidth, 0);
+}
+
 } // namespace NodeViewHelpers
