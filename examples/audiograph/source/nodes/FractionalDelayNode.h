@@ -64,7 +64,7 @@ public:
         feedbackState = {};
     }
 
-    void processBlock (yup::AudioBuffer<float>& audioBuffer, yup::MidiBuffer&) override
+    void processBlock (yup::AudioProcessContext<float>& context) override
     {
         if (delayLines[0].getBufferSize() == 0 || delayLines[1].getBufferSize() == 0)
             return;
@@ -74,6 +74,8 @@ public:
 
         delayLines[0].setDelaySamples (currentDelayLeftSamples);
         delayLines[1].setDelaySamples (currentDelayRightSamples);
+
+        auto& audioBuffer = context.audio;
 
         const auto currentFeedback = feedback.load (std::memory_order_relaxed);
         const auto currentDryWet = dryWet.load (std::memory_order_relaxed);
