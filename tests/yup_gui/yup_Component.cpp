@@ -1039,11 +1039,25 @@ class ComponentMockTest : public ::testing::Test
 protected:
     void SetUp() override
     {
+        oldTheme = ApplicationTheme::getGlobalTheme();
+        theme = new ApplicationTheme();
+        ApplicationTheme::setGlobalTheme (theme);
+
         mockComponent = std::make_unique<ComponentMock> ("mockComponent");
         mockComponent->resetCallTracking();
     }
 
+    void TearDown() override
+    {
+        mockComponent.reset();
+        ApplicationTheme::setGlobalTheme (oldTheme.get());
+        theme = nullptr;
+        oldTheme = nullptr;
+    }
+
     std::unique_ptr<ComponentMock> mockComponent;
+    ApplicationTheme::Ptr theme;
+    ApplicationTheme::Ptr oldTheme;
 };
 
 // =============================================================================
@@ -1537,37 +1551,6 @@ TEST_F (ComponentMockTest, ColorMethods)
     EXPECT_FALSE (notFoundColor.has_value());
 }
 
-TEST_F (ComponentMockTest, StylePropertyMethods)
-{
-    Identifier propertyId ("testProperty");
-    var testProperty = var (42);
-
-    // Test setting style property
-    mockComponent->setStyleProperty (propertyId, testProperty);
-
-    // Test getting style property
-    auto retrievedProperty = mockComponent->getStyleProperty (propertyId);
-    EXPECT_TRUE (retrievedProperty.has_value());
-    if (retrievedProperty.has_value())
-    {
-        EXPECT_EQ (static_cast<int> (retrievedProperty.value()), 42);
-    }
-
-    // Test finding style property
-    auto foundProperty = mockComponent->findStyleProperty (propertyId);
-    EXPECT_TRUE (foundProperty.has_value());
-
-    // Test setting null style property
-    mockComponent->setStyleProperty (propertyId, std::nullopt);
-    auto nullProperty = mockComponent->getStyleProperty (propertyId);
-    EXPECT_FALSE (nullProperty.has_value());
-
-    // Test finding non-existent property
-    Identifier nonExistentId ("nonExistent");
-    auto notFoundProperty = mockComponent->findStyleProperty (nonExistentId);
-    EXPECT_FALSE (notFoundProperty.has_value());
-}
-
 TEST_F (ComponentMockTest, UnclippedRenderingMethods)
 {
     // Test default unclipped rendering state
@@ -1877,4 +1860,111 @@ TEST_F (ComponentMockTest, CoordinateTransformationMethods)
     auto backToLocalRect = child->screenToLocal (screenRect);
 
     EXPECT_TRUE (true); // Methods completed without crashing
+}
+
+TEST_F (ComponentMockTest, MetricMethods)
+{
+    Identifier metricId ("cornerRadius");
+
+    // Test setting metric
+    mockComponent->setMetric (metricId, 8.0f);
+
+    // Test getting metric
+    auto retrievedMetric = mockComponent->getMetric (metricId);
+    ASSERT_TRUE (retrievedMetric.has_value());
+    EXPECT_FLOAT_EQ (retrievedMetric.value(), 8.0f);
+
+    // Test finding metric
+    auto foundMetric = mockComponent->findMetric (metricId);
+    ASSERT_TRUE (foundMetric.has_value());
+    EXPECT_FLOAT_EQ (foundMetric.value(), 8.0f);
+
+    // Test setting null metric (removing override)
+    mockComponent->setMetric (metricId, std::nullopt);
+    auto nullMetric = mockComponent->getMetric (metricId);
+    EXPECT_FALSE (nullMetric.has_value());
+
+    // Test finding non-existent metric (not in theme either)
+    Identifier nonExistentId ("nonExistentMetric");
+    auto notFoundMetric = mockComponent->findMetric (nonExistentId);
+    EXPECT_FALSE (notFoundMetric.has_value());
+}
+
+TEST_F (ComponentMockTest, MetricParentFallback)
+{
+    auto parent = std::make_unique<ComponentMock> ("parent");
+    auto child = std::make_unique<ComponentMock> ("child");
+
+    parent->addAndMakeVisible (*child);
+
+    Identifier metricId ("padding");
+
+    // Set metric on parent
+    parent->setMetric (metricId, 12.0f);
+
+    // Child should find parent's metric via parent chain fallback
+    auto childMetric = child->findMetric (metricId);
+    ASSERT_TRUE (childMetric.has_value());
+    EXPECT_FLOAT_EQ (childMetric.value(), 12.0f);
+
+    // Child override should take precedence
+    child->setMetric (metricId, 16.0f);
+    auto overriddenMetric = child->findMetric (metricId);
+    ASSERT_TRUE (overriddenMetric.has_value());
+    EXPECT_FLOAT_EQ (overriddenMetric.value(), 16.0f);
+
+    // Parent's metric should be unchanged
+    auto parentMetric = parent->getMetric (metricId);
+    ASSERT_TRUE (parentMetric.has_value());
+    EXPECT_FLOAT_EQ (parentMetric.value(), 12.0f);
+
+    // Clearing child override falls back to parent
+    child->setMetric (metricId, std::nullopt);
+    auto fallbackMetric = child->findMetric (metricId);
+    ASSERT_TRUE (fallbackMetric.has_value());
+    EXPECT_FLOAT_EQ (fallbackMetric.value(), 12.0f);
+}
+
+TEST_F (ComponentMockTest, DISABLED_MetricThemeFallback)
+{
+    // TODO - rewrite this with the new structure in mind, Component should not access to the global theme directly
+    Identifier metricId ("globalSpacing");
+
+    // Set a metric in the global theme
+    theme->setMetric (metricId, 20.0f);
+
+    // Component should find it via findMetric -> theme fallback
+    auto metric = mockComponent->findMetric (metricId);
+    ASSERT_TRUE (metric.has_value());
+    EXPECT_FLOAT_EQ (metric.value(), 20.0f);
+
+    // Component override should take precedence over theme
+    mockComponent->setMetric (metricId, 24.0f);
+    auto overriddenMetric = mockComponent->findMetric (metricId);
+    ASSERT_TRUE (overriddenMetric.has_value());
+    EXPECT_FLOAT_EQ (overriddenMetric.value(), 24.0f);
+
+    // Clearing override falls back to theme
+    mockComponent->setMetric (metricId, std::nullopt);
+    auto themeFallback = mockComponent->findMetric (metricId);
+    ASSERT_TRUE (themeFallback.has_value());
+    EXPECT_FLOAT_EQ (themeFallback.value(), 20.0f);
+}
+
+TEST_F (ComponentMockTest, MetricAcceptsZeroAndNegative)
+{
+    Identifier zeroId ("zeroMetric");
+    Identifier negativeId ("negativeMetric");
+
+    mockComponent->setMetric (zeroId, 0.0f);
+    mockComponent->setMetric (negativeId, -2.5f);
+
+    auto zero = mockComponent->getMetric (zeroId);
+    auto negative = mockComponent->getMetric (negativeId);
+
+    ASSERT_TRUE (zero.has_value());
+    EXPECT_FLOAT_EQ (zero.value(), 0.0f);
+
+    ASSERT_TRUE (negative.has_value());
+    EXPECT_FLOAT_EQ (negative.value(), -2.5f);
 }

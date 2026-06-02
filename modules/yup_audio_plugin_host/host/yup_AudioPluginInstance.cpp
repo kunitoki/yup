@@ -97,16 +97,14 @@ bool AudioPluginInstance::isBypassed() const noexcept
     return bypassed;
 }
 
-void AudioPluginInstance::processBlockBypassed (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer)
+void AudioPluginInstance::processBlockBypassed (AudioProcessContext<float>& context)
 {
-    ignoreUnused (midiBuffer);
-    processPluginBypassedBlock (pluginDescription, audioBuffer);
+    processPluginBypassedBlock (pluginDescription, context.audio);
 }
 
-void AudioPluginInstance::processBlockBypassed (AudioBuffer<double>& audioBuffer, MidiBuffer& midiBuffer)
+void AudioPluginInstance::processBlockBypassed (AudioProcessContext<double>& context)
 {
-    ignoreUnused (midiBuffer);
-    processPluginBypassedBlock (pluginDescription, audioBuffer);
+    processPluginBypassedBlock (pluginDescription, context.audio);
 }
 
 } // namespace yup

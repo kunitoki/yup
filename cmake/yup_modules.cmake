@@ -509,7 +509,7 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
     endif()
 
     set (options "")
-    set (one_value_args PLUGIN_ID PLUGIN_NAME PLUGIN_VENDOR PLUGIN_VERSION PLUGIN_DESCRIPTION PLUGIN_URL PLUGIN_EMAIL PLUGIN_IS_SYNTH PLUGIN_IS_MONO)
+    set (one_value_args PLUGIN_ID PLUGIN_NAME PLUGIN_VENDOR PLUGIN_VERSION PLUGIN_DESCRIPTION PLUGIN_URL PLUGIN_EMAIL PLUGIN_IS_SYNTH PLUGIN_IS_MONO PLUGIN_AU_SUBTYPE PLUGIN_AU_MANUFACTURER)
     set (multi_value_args "")
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
@@ -523,8 +523,11 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
     elseif (plugin_type STREQUAL "standalone")
         set (custom_target_name "${target_name}_standalone")
         set (plugin_define "YUP_AUDIO_PLUGIN_ENABLE_STANDALONE=1")
+    elseif (plugin_type STREQUAL "au")
+        set (custom_target_name "${target_name}_au")
+        set (plugin_define "YUP_AUDIO_PLUGIN_ENABLE_AU=1")
     else()
-        _yup_message (FATAL_ERROR "Invalid plugin type: ${plugin_type}. Must be either 'vst3', 'clap' or 'standalone'")
+        _yup_message (FATAL_ERROR "Invalid plugin type: ${plugin_type}. Must be either 'vst3', 'clap', 'au' or 'standalone'")
     endif()
 
     add_library (${custom_target_name} INTERFACE)
@@ -560,6 +563,14 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
         list (APPEND module_defines YupPlugin_IsMono=1)
     else()
         list (APPEND module_defines YupPlugin_IsMono=0)
+    endif()
+
+    if (YUP_ARG_PLUGIN_AU_SUBTYPE)
+        list (APPEND module_defines "YupPlugin_AUSubType=\"${YUP_ARG_PLUGIN_AU_SUBTYPE}\"")
+    endif()
+
+    if (YUP_ARG_PLUGIN_AU_MANUFACTURER)
+        list (APPEND module_defines "YupPlugin_AUManufacturer=\"${YUP_ARG_PLUGIN_AU_MANUFACTURER}\"")
     endif()
 
     if (YUP_PLATFORM_APPLE)

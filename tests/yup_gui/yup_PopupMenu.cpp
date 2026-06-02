@@ -554,6 +554,33 @@ TEST_F (PopupMenuTest, VeryLongItemText)
     EXPECT_EQ (1, menu->getNumItems());
 }
 
+TEST_F (PopupMenuTest, WidthUsesTextSizeAndRespectsLimits)
+{
+    auto oldTheme = ApplicationTheme::getGlobalTheme();
+    auto theme = createThemeVersion1();
+    ApplicationTheme::setGlobalTheme (theme);
+    const ScopeGuard restoreTheme { [&]
+    {
+        ApplicationTheme::setGlobalTheme (oldTheme.get());
+    } };
+
+    PopupMenu::Options options;
+    options.withParentComponent (parentComponent.get())
+        .withPosition (Point<int> (10, 10))
+        .withMinimumWidth (120)
+        .withMaximumWidth (260);
+
+    auto menu = PopupMenu::create (options);
+    menu->addItem ("A very long popup menu item that should be measured before the menu is shown", kPopupTestId1);
+    menu->show();
+
+    EXPECT_GE (menu->getWidth(), 120);
+    EXPECT_LE (menu->getWidth(), 260);
+    EXPECT_EQ (260, menu->getWidth());
+
+    menu->dismiss();
+}
+
 TEST_F (PopupMenuTest, SpecialCharactersInText)
 {
     auto menu = PopupMenu::create();
@@ -678,6 +705,20 @@ TEST_F (PopupMenuTest, MenuWithManyItemsInSmallSpace)
     // The menu height should be constrained by the parent
     EXPECT_LE (menu->getHeight(), smallParent->getHeight());
 
+    int laidOutItems = 0;
+    int hiddenItems = 0;
+    for (const auto& item : *menu)
+    {
+        if (item->area.isEmpty())
+            ++hiddenItems;
+        else
+            ++laidOutItems;
+    }
+
+    EXPECT_GT (laidOutItems, 0);
+    EXPECT_GT (hiddenItems, 0);
+    EXPECT_LT (laidOutItems, menu->getNumItems());
+
     // With the new approach, the menu should show even with limited space
     EXPECT_TRUE (menu->isVisible());
 }
@@ -714,10 +755,47 @@ TEST_F (PopupMenuTest, MouseWheelEventHandling)
     for (int i = 0; i < 5; ++i)
         EXPECT_NO_THROW (menu->mouseWheel (mouseEvent, wheelDown));
 
+    EXPECT_TRUE (menu->canScrollUp());
+
     for (int i = 0; i < 3; ++i)
         EXPECT_NO_THROW (menu->mouseWheel (mouseEvent, wheelUp));
 
     EXPECT_TRUE (menu->isVisible());
+}
+
+TEST_F (PopupMenuTest, ScrollingKeepsRowsAdjacentToScrollIndicators)
+{
+    auto smallParent = std::make_unique<Component> ("smallParent");
+    smallParent->setBounds (0, 0, 220, 130);
+
+    PopupMenu::Options options;
+    options.withParentComponent (smallParent.get())
+        .withPosition (Point<int> (10, 10));
+
+    auto menu = PopupMenu::create (options);
+    for (int i = 1; i <= 40; ++i)
+        menu->addItem (String ("Item ") + String (i), i);
+
+    menu->show();
+
+    MouseEvent mouseEvent (MouseEvent::leftButton, KeyModifiers(), Point<float> (50, 50));
+    MouseWheelData wheelDown (0.0f, -1.0f);
+    for (int i = 0; i < 100; ++i)
+        menu->mouseWheel (mouseEvent, wheelDown);
+
+    EXPECT_TRUE (menu->canScrollUp());
+    EXPECT_FALSE (menu->canScrollDown());
+
+    float lastVisibleItemBottom = 0.0f;
+    for (const auto& item : *menu)
+    {
+        if (! item->area.isEmpty())
+            lastVisibleItemBottom = jmax (lastVisibleItemBottom, item->area.getBottom());
+    }
+
+    const auto downIndicatorTop = menu->getScrollDownIndicatorBounds().getY();
+    EXPECT_LE (lastVisibleItemBottom, downIndicatorTop);
+    EXPECT_LE (downIndicatorTop - lastVisibleItemBottom, 4.0f);
 }
 
 TEST_F (PopupMenuTest, ScrollingWithCustomComponents)

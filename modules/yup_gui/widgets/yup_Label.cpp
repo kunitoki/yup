@@ -28,6 +28,7 @@ const Identifier Label::Style::textFillColorId { "Label_textFillColorId" };
 const Identifier Label::Style::textStrokeColorId { "Label_textStrokeColorId" };
 const Identifier Label::Style::backgroundColorId { "Label_backgroundColorId" };
 const Identifier Label::Style::outlineColorId { "Label_outlineColorId" };
+const Identifier Label::Style::textHeightProportionMetricId { "Label_textHeightProportionMetricId" };
 
 //==============================================================================
 

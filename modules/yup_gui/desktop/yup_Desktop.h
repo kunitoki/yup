@@ -31,7 +31,7 @@ class ComponentNative;
     access to multiple screens connected to the system. It allows querying and management
     of different screen properties through the `Screen` objects.
 */
-class YUP_API Desktop
+class YUP_API Desktop : private DeletedAtShutdown
 {
 public:
     //==============================================================================

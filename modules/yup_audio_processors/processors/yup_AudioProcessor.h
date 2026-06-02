@@ -44,8 +44,52 @@ public:
             return copy;
         }
 
+        /** Returns a copy of these details with the tail length change flag set. */
+        ChangeDetails withTailChanged (bool shouldBeTailChanged) const noexcept
+        {
+            auto copy = *this;
+            copy.tailChanged = shouldBeTailChanged;
+            return copy;
+        }
+
+        /** Returns a copy of these details with the parameter value change flag set. */
+        ChangeDetails withParameterValuesChanged (bool shouldBeParameterValuesChanged) const noexcept
+        {
+            auto copy = *this;
+            copy.parameterValuesChanged = shouldBeParameterValuesChanged;
+            return copy;
+        }
+
+        /** Returns a copy of these details with the parameter metadata change flag set. */
+        ChangeDetails withParameterInfoChanged (bool shouldBeParameterInfoChanged) const noexcept
+        {
+            auto copy = *this;
+            copy.parameterInfoChanged = shouldBeParameterInfoChanged;
+            return copy;
+        }
+
+        /** Returns a copy of these details with the non-parameter state change flag set. */
+        ChangeDetails withNonParameterStateChanged (bool shouldBeNonParameterStateChanged) const noexcept
+        {
+            auto copy = *this;
+            copy.nonParameterStateChanged = shouldBeNonParameterStateChanged;
+            return copy;
+        }
+
         /** True when the processor latency may have changed. */
         bool latencyChanged = false;
+
+        /** True when the processor tail length may have changed. */
+        bool tailChanged = false;
+
+        /** True when one or more parameter values may have changed without a host automation event. */
+        bool parameterValuesChanged = false;
+
+        /** True when one or more parameter names, ranges, or display conversions may have changed. */
+        bool parameterInfoChanged = false;
+
+        /** True when non-parameter processor state may have changed. */
+        bool nonParameterStateChanged = false;
     };
 
     /** Receives processor-level change notifications. */
@@ -87,6 +131,12 @@ public:
     /** Returns a parameter by stable ID, or nullptr when no such parameter exists. */
     AudioParameter::Ptr getParameterByID (StringRef parameterID) const;
 
+    /** Returns a parameter by host-facing automation ID, or nullptr when no such parameter exists. */
+    AudioParameter::Ptr getParameterByHostID (uint32 hostParameterID) const;
+
+    /** Returns a parameter index by host-facing automation ID, or -1 when no such parameter exists. */
+    int getParameterIndexByHostID (uint32 hostParameterID) const;
+
     /** Adds a parameter. */
     void addParameter (AudioParameter::Ptr parameter);
 
@@ -123,40 +173,46 @@ public:
     virtual void releaseResources() = 0;
 
     /**
-        Processes a block of audio.
+        Primary single-precision processing entry point.
 
-        @param audioBuffer The audio buffer to process.
-        @param midiBuffer The MIDI buffer to process.
+        Override this to process a block of audio and MIDI. The context provides
+        sample-accurate parameter automation via @c context.params and the transport
+        state via @c context.playHead when available.
+
+        The base-class implementation asserts false so unoverridden processors are
+        caught at runtime in debug builds.
+
+        @param context  All per-block inputs: audio, MIDI, parameter changes, and position.
     */
-    virtual void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer) = 0;
+    virtual void processBlock (AudioProcessContext<float>& context) = 0;
 
     /**
-        Processes a block of audio.
+        Double-precision processing entry point.
 
-        @param audioBuffer The audio buffer to process.
-        @param midiBuffer The MIDI buffer to process.
+        Override this and return true from supportsDoublePrecisionProcessing() to
+        support 64-bit audio. The default implementation does nothing.
+
+        @param context  All per-block inputs with double-precision audio.
     */
-    virtual void processBlock (AudioBuffer<double>& audioBuffer, MidiBuffer& midiBuffer) {}
+    virtual void processBlock (AudioProcessContext<double>& context) { ignoreUnused (context); }
 
     /**
-        Processes a block while the processor is bypassed.
+        Called by plugin wrappers when the processor is bypassed (single-precision).
 
-        The default implementation leaves audio and MIDI unchanged.
+        The default implementation routes inputs to outputs, or clears extra outputs.
 
-        @param audioBuffer The audio buffer to process.
-        @param midiBuffer The MIDI buffer to process.
+        @param context  All per-block inputs.
     */
-    virtual void processBlockBypassed (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer);
+    virtual void processBlockBypassed (AudioProcessContext<float>& context) { ignoreUnused (context); }
 
     /**
-        Processes a block while the processor is bypassed.
+        Called by plugin wrappers when the processor is bypassed (double-precision).
 
-        The default implementation leaves audio and MIDI unchanged.
+        The default implementation routes inputs to outputs, or clears extra outputs.
 
-        @param audioBuffer The audio buffer to process.
-        @param midiBuffer The MIDI buffer to process.
+        @param context  All per-block inputs.
     */
-    virtual void processBlockBypassed (AudioBuffer<double>& audioBuffer, MidiBuffer& midiBuffer);
+    virtual void processBlockBypassed (AudioProcessContext<double>& context) { ignoreUnused (context); }
 
     /** Flushes the processor. */
     virtual void flush() {}
@@ -198,11 +254,17 @@ public:
     /** Sets the processor latency in samples and notifies listeners when it changes. */
     void setLatencySamples (int newLatencySamples);
 
+    /** Returns the number of simultaneous voices this processor can produce.
+        Returns 0 for effects and MIDI-only processors. Override in instruments. */
+    virtual int getNumVoices() const { return 0; }
+
     //==============================================================================
 
-    void setPlayHead (AudioPlayHead* playHead);
+    /** Returns true when the processor is running in offline (non-realtime) mode. */
+    bool isOfflineProcessing() const noexcept { return offlineProcessing.load(); }
 
-    AudioPlayHead* getPlayHead() { return playHead; }
+    /** Called by the plugin wrapper to indicate offline vs. realtime rendering. */
+    void setOfflineProcessing (bool offline) { offlineProcessing.store (offline); }
 
     //==============================================================================
 
@@ -267,6 +329,7 @@ private:
 
     std::vector<AudioParameter::Ptr> parameters;
     std::unordered_map<String, AudioParameter::Ptr> parameterMap;
+    std::unordered_map<uint32, AudioParameter::Ptr> parameterHostIDMap;
     ListenerList<Listener, Array<Listener*, CriticalSection>> listeners;
 
     AudioBusLayout busLayout;
@@ -276,10 +339,9 @@ private:
     std::atomic<int> latencySamples { 0 };
     ProcessingPrecision processingPrecision = ProcessingPrecision::singlePrecision;
 
-    AudioPlayHead* playHead = nullptr;
-
     CriticalSection processLock;
     std::atomic<bool> processIsSuspended { false };
+    std::atomic<bool> offlineProcessing { false };
 };
 
 } // namespace yup

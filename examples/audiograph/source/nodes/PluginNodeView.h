@@ -43,12 +43,22 @@ public:
 
     int getNumInputPorts() const override
     {
-        return desc.numInputChannels > 0 ? 1 : 0;
+        int count = 0;
+        if (desc.numInputChannels > 0)
+            ++count;
+        if (desc.numMidiInputPorts > 0)
+            ++count;
+        return count;
     }
 
     int getNumOutputPorts() const override
     {
-        return desc.numOutputChannels > 0 ? 1 : 0;
+        int count = 0;
+        if (desc.numOutputChannels > 0)
+            ++count;
+        if (desc.numMidiOutputPorts > 0)
+            ++count;
+        return count;
     }
 
     int getPreferredWidth() const override
@@ -61,14 +71,20 @@ public:
         return desc.isInstrument ? yup::Color (0xffe11d48) : yup::Color (0xff0891b2);
     }
 
-    PortInfo getInputPortInfo (int) const override
+    PortInfo getInputPortInfo (int portIndex) const override
     {
-        return { "audio", getPortKindColor (PortKind::audio), PortKind::audio };
+        if (desc.numInputChannels > 0 && portIndex == 0)
+            return { "audio", getPortKindColor (PortKind::audio), PortKind::audio };
+
+        return { "MIDI", getPortKindColor (PortKind::midi), PortKind::midi };
     }
 
-    PortInfo getOutputPortInfo (int) const override
+    PortInfo getOutputPortInfo (int portIndex) const override
     {
-        return { "audio", getPortKindColor (PortKind::audio), PortKind::audio };
+        if (desc.numOutputChannels > 0 && portIndex == 0)
+            return { "audio", getPortKindColor (PortKind::audio), PortKind::audio };
+
+        return { "MIDI", getPortKindColor (PortKind::midi), PortKind::midi };
     }
 
     int getNumParameterRows() const override { return 0; }

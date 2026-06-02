@@ -49,13 +49,23 @@ class AudioParameterBuilder
 {
 public:
     /** Constructs a new AudioParameterBuilder. */
-    AudioParameterBuilder() = default;
+    AudioParameterBuilder();
 
     /** Sets the parameter ID (used in the state tree and automation). */
     AudioParameterBuilder& withID (const String& paramID);
 
     /** Sets the parameter display name. */
     AudioParameterBuilder& withName (const String& paramName);
+
+    /**
+        Sets the stable host-facing automation ID.
+
+        Use this for plugins that need automation compatibility when parameters are
+        reordered or when reserved parameter slots are kept for future expansion.
+        Once released, an ID should never be reused for a different parameter.
+        Values must be less than or equal to AudioParameter::maximumHostParameterID.
+    */
+    AudioParameterBuilder& withHostID (uint32 hostParameterID);
 
     /**
         Sets the parameter's value range.
@@ -88,6 +98,27 @@ public:
     /** Sets the smoothing time for the parameter. */
     AudioParameterBuilder& withSmoothing (float smoothingTimeMs);
 
+    /** Sets whether hosts may automate this parameter. */
+    AudioParameterBuilder& withAutomatable (bool shouldBeAutomatable);
+
+    /** Sets whether hosts may display but not change this parameter. */
+    AudioParameterBuilder& withReadOnly (bool shouldBeReadOnly);
+
+    /** Sets whether this parameter accepts only discrete step values. */
+    AudioParameterBuilder& withStepped (bool shouldBeStepped);
+
+    /** Sets whether this stepped parameter represents an enumerated value. */
+    AudioParameterBuilder& withEnum (bool shouldBeEnum);
+
+    /** Sets whether this parameter supports CLAP modulation events. */
+    AudioParameterBuilder& withModulatable (bool shouldBeModulatable);
+
+    /** Sets whether this parameter supports CLAP per-note modulation events. */
+    AudioParameterBuilder& withPerNoteModulatable (bool shouldBePerNoteModulatable);
+
+    /** Sets the optional host-facing module path, using "/" as a separator. */
+    AudioParameterBuilder& withModulePath (const String& modulePath);
+
     /**
         Finalizes the builder and returns a fully constructed AudioProcessorParameter instance.
 
@@ -97,11 +128,7 @@ public:
 
 private:
     String id;
-    String name;
-    NormalisableRange<float> valueRange = { 0.0f, 1.0f };
-    float defaultValue = 0.5f;
-    bool smoothingEnabled = false;
-    float smoothingTimeMs = 0.0f;
+    AudioParameter::Metadata metadata;
     AudioParameter::ValueToString valueToString = nullptr;
     AudioParameter::StringToValue stringToValue = nullptr;
 };

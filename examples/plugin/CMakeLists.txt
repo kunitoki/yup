@@ -32,8 +32,8 @@ yup_audio_plugin (
     TARGET_APP_ID "org.yup.${target_name}"
     TARGET_APP_NAMESPACE "org.yup"
     TARGET_CXX_STANDARD 20
-    PLUGIN_ID "org.yup.YupCLAP"
-    PLUGIN_NAME "YupCLAPPZ"
+    PLUGIN_ID "org.yup.YupSynth"
+    PLUGIN_NAME "YupSynth"
     PLUGIN_VENDOR "org.yup"
     PLUGIN_EMAIL "kunitoki@gmail.com"
     PLUGIN_VERSION "${target_version}"
@@ -43,6 +43,7 @@ yup_audio_plugin (
     PLUGIN_IS_MONO OFF
     PLUGIN_CREATE_CLAP ON
     PLUGIN_CREATE_VST3 ON
+    PLUGIN_CREATE_AU ON
     PLUGIN_CREATE_STANDALONE ON
     MODULES
         yup::yup_gui

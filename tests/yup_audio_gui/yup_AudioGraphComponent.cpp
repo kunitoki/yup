@@ -71,7 +71,7 @@ public:
 
     void releaseResources() override {}
 
-    void processBlock (AudioBuffer<float>&, MidiBuffer&) override {}
+    void processBlock (AudioProcessContext<float>&) override {}
 
     int getLatencySamples() override { return 0; }
 
@@ -104,7 +104,7 @@ public:
 
     void releaseResources() override {}
 
-    void processBlock (AudioBuffer<float>&, MidiBuffer&) override {}
+    void processBlock (AudioProcessContext<float>&) override {}
 
     int getCurrentPreset() const noexcept override { return 0; }
 
