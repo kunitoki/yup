@@ -32,9 +32,7 @@ AudioProcessor::AudioProcessor (StringRef name, AudioBusLayout busLayout)
 
 //==============================================================================
 
-AudioProcessor::~AudioProcessor()
-{
-}
+AudioProcessor::~AudioProcessor() = default;
 
 //==============================================================================
 
@@ -47,9 +45,22 @@ void AudioProcessor::addParameter (AudioParameter::Ptr parameter)
     if (parameterMap.find (parameter->getID()) != parameterMap.end())
         return;
 
+    const auto hostParameterID = parameter->hasExplicitHostParameterID()
+                                   ? parameter->getHostParameterID()
+                                   : static_cast<uint32> (parameters.size());
+    jassert (hostParameterID != AudioParameter::invalidHostParameterID);
+    jassert (hostParameterID <= AudioParameter::maximumHostParameterID);
+
+    if (parameterHostIDMap.find (hostParameterID) != parameterHostIDMap.end())
+    {
+        jassertfalse;
+        return;
+    }
+
     parameter->setIndexInContainer (static_cast<int> (parameters.size()));
 
     parameterMap.emplace (parameter->getID(), parameter);
+    parameterHostIDMap.emplace (hostParameterID, parameter);
     parameters.emplace_back (std::move (parameter));
 }
 
@@ -57,6 +68,20 @@ AudioParameter::Ptr AudioProcessor::getParameterByID (StringRef parameterID) con
 {
     const auto iterator = parameterMap.find (String (parameterID));
     return iterator != parameterMap.end() ? iterator->second : nullptr;
+}
+
+AudioParameter::Ptr AudioProcessor::getParameterByHostID (uint32 hostParameterID) const
+{
+    const auto iterator = parameterHostIDMap.find (hostParameterID);
+    return iterator != parameterHostIDMap.end() ? iterator->second : nullptr;
+}
+
+int AudioProcessor::getParameterIndexByHostID (uint32 hostParameterID) const
+{
+    if (auto parameter = getParameterByHostID (hostParameterID))
+        return parameter->getIndexInContainer();
+
+    return -1;
 }
 
 void AudioProcessor::addListener (Listener* listener)
@@ -100,13 +125,6 @@ int AudioProcessor::getNumAudioInputs() const
 
 //==============================================================================
 
-void AudioProcessor::setPlayHead (AudioPlayHead* playHead)
-{
-    this->playHead = playHead;
-}
-
-//==============================================================================
-
 void AudioProcessor::suspendProcessing (bool shouldSuspend)
 {
     auto lock = CriticalSection::ScopedLockType (processLock);
@@ -142,18 +160,6 @@ void AudioProcessor::setProcessingPrecision (ProcessingPrecision precision)
     }
 
     processingPrecision = precision;
-}
-
-//==============================================================================
-
-void AudioProcessor::processBlockBypassed (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer)
-{
-    ignoreUnused (audioBuffer, midiBuffer);
-}
-
-void AudioProcessor::processBlockBypassed (AudioBuffer<double>& audioBuffer, MidiBuffer& midiBuffer)
-{
-    ignoreUnused (audioBuffer, midiBuffer);
 }
 
 //==============================================================================

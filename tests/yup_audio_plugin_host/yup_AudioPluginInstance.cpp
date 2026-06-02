@@ -22,15 +22,15 @@ public:
 
     void releaseResources() override { prepared = false; }
 
-    void processBlock (AudioBuffer<float>& audio, MidiBuffer&) override
+    void processBlock (AudioProcessContext<float>& context) override
     {
-        audio.clear();
+        context.audio.clear();
         processCallCount++;
     }
 
-    void processBlock (AudioBuffer<double>& audio, MidiBuffer&) override
+    void processBlock (AudioProcessContext<double>& context) override
     {
-        audio.clear();
+        context.audio.clear();
         doubleProcessCallCount++;
     }
 
@@ -92,7 +92,7 @@ public:
 
     void releaseResources() override {}
 
-    void processBlock (AudioBuffer<float>&, MidiBuffer&) override {}
+    void processBlock (AudioProcessContext<float>&) override {}
 
     int getCurrentPreset() const noexcept override { return 0; }
 
@@ -134,15 +134,15 @@ public:
 
     void releaseResources() override {}
 
-    void processBlock (AudioBuffer<float>& audio, MidiBuffer& midi) override
+    void processBlock (AudioProcessContext<float>& context) override
     {
         if (isBypassed())
         {
-            processBlockBypassed (audio, midi);
+            processBlockBypassed (context);
             return;
         }
 
-        audio.clear();
+        context.audio.clear();
     }
 
     int getCurrentPreset() const noexcept override { return 0; }
@@ -221,9 +221,11 @@ TEST_F (AudioPluginInstanceTests, ProcessBlockIncrementsCounter)
 {
     AudioBuffer<float> audio (2, 512);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
 
     instance.prepareToPlay (44100.0f, 512);
-    instance.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    instance.processBlock (ctx);
 
     EXPECT_EQ (1, instance.processCallCount);
 }
@@ -262,12 +264,14 @@ TEST_F (AudioPluginInstanceTests, DoublePrecisionProcessBlockUsesDoublePath)
     FakePluginInstance doublePrecisionInstance (true);
     AudioBuffer<double> audio (2, 512);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
 
     audio.setSample (0, 0, 1.0);
 
     doublePrecisionInstance.setProcessingPrecision (AudioProcessor::ProcessingPrecision::doublePrecision);
     doublePrecisionInstance.prepareToPlay (44100.0f, 512);
-    doublePrecisionInstance.processBlock (audio, midi);
+    AudioProcessContext<double> ctx { audio, midi, params };
+    doublePrecisionInstance.processBlock (ctx);
 
     EXPECT_EQ (0, doublePrecisionInstance.processCallCount);
     EXPECT_EQ (1, doublePrecisionInstance.doubleProcessCallCount);
@@ -308,12 +312,14 @@ TEST (AudioPluginInstanceBypassTests, CopiesMatchingInputChannelsAndClearsExtraO
     BypassPluginInstance bypassInstance (1, 2);
     AudioBuffer<float> audio (2, 8);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
 
     audio.setSample (0, 0, 0.75f);
     audio.setSample (1, 0, 0.5f);
 
     bypassInstance.setBypassed (true);
-    bypassInstance.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    bypassInstance.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.75f, audio.getSample (0, 0));
     EXPECT_FLOAT_EQ (0.0f, audio.getSample (1, 0));
@@ -324,12 +330,14 @@ TEST (AudioPluginInstanceBypassTests, ClearsInstrumentOutputsWithoutInputs)
     BypassPluginInstance bypassInstance (0, 2);
     AudioBuffer<float> audio (2, 8);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
 
     audio.setSample (0, 0, 0.75f);
     audio.setSample (1, 0, 0.5f);
 
     bypassInstance.setBypassed (true);
-    bypassInstance.processBlock (audio, midi);
+    AudioProcessContext<float> ctx { audio, midi, params };
+    bypassInstance.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (0.0f, audio.getSample (0, 0));
     EXPECT_FLOAT_EQ (0.0f, audio.getSample (1, 0));
@@ -340,11 +348,13 @@ TEST (AudioPluginInstanceBypassTests, SupportsDoublePrecisionBypass)
     BypassPluginInstance bypassInstance (1, 2);
     AudioBuffer<double> audio (2, 8);
     MidiBuffer midi;
+    ParameterChangeBuffer params;
 
     audio.setSample (0, 0, 0.75);
     audio.setSample (1, 0, 0.5);
 
-    bypassInstance.processBlockBypassed (audio, midi);
+    AudioProcessContext<double> ctx { audio, midi, params };
+    bypassInstance.processBlockBypassed (ctx);
 
     EXPECT_DOUBLE_EQ (0.75, audio.getSample (0, 0));
     EXPECT_DOUBLE_EQ (0.0, audio.getSample (1, 0));

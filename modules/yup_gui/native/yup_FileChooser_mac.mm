@@ -122,8 +122,8 @@ void FileChooser::showPlatformDialog(CompletionCallback callback, int flags)
               }
           }
 
-          MessageManager::callAsync([this, callback = std::move(callback), result, results]
-                                    { invokeCallback(std::move(callback), result == NSModalResponseOK, results); });
+          MessageManager::callAsync([callback = std::move(callback), result, results]() mutable
+                                    { callback(result == NSModalResponseOK, results); });
         }];
     }
     else
@@ -161,8 +161,8 @@ void FileChooser::showPlatformDialog(CompletionCallback callback, int flags)
               }
           }
 
-          MessageManager::callAsync([this, callback = std::move(callback), result, results]
-                                    { invokeCallback(std::move(callback), result == NSModalResponseOK, results); });
+          MessageManager::callAsync([callback = std::move(callback), result, results]() mutable
+                                    { callback(result == NSModalResponseOK, results); });
         }];
     }
 }

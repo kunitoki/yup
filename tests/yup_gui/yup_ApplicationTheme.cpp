@@ -53,22 +53,28 @@ protected:
 
 TEST_F (ApplicationThemeTest, FindColorReturnsNulloptWhenColorNotRegistered)
 {
-    auto result = ApplicationTheme::findColor (Identifier ("unknownColor"));
+    auto c = Component ("testComponent");
+
+    auto result = ApplicationTheme::findComponentColor (c, Identifier ("unknownColor"));
     EXPECT_FALSE (result.has_value());
 }
 
 TEST_F (ApplicationThemeTest, FindColorReturnsRegisteredColor)
 {
+    auto c = Component ("testComponent");
+
     const Color expected = Color::fromRGBA (255, 128, 0, 255);
     theme->setColor (Identifier ("testColor"), expected);
 
-    auto result = ApplicationTheme::findColor (Identifier ("testColor"));
+    auto result = ApplicationTheme::findComponentColor (c, Identifier ("testColor"));
     ASSERT_TRUE (result.has_value());
     EXPECT_EQ (result.value(), expected);
 }
 
 TEST_F (ApplicationThemeTest, SetColorsRegistersMultipleColors)
 {
+    auto c = Component ("testComponent");
+
     const Identifier idA ("colorA");
     const Identifier idB ("colorB");
     const Color colorA = Color::fromRGBA (10, 20, 30, 255);
@@ -76,8 +82,8 @@ TEST_F (ApplicationThemeTest, SetColorsRegistersMultipleColors)
 
     theme->setColors ({ { idA, colorA }, { idB, colorB } });
 
-    auto resultA = ApplicationTheme::findColor (idA);
-    auto resultB = ApplicationTheme::findColor (idB);
+    auto resultA = ApplicationTheme::findComponentColor (c, idA);
+    auto resultB = ApplicationTheme::findComponentColor (c, idB);
 
     ASSERT_TRUE (resultA.has_value());
     EXPECT_EQ (resultA.value(), colorA);
@@ -87,6 +93,8 @@ TEST_F (ApplicationThemeTest, SetColorsRegistersMultipleColors)
 
 TEST_F (ApplicationThemeTest, SetColorOverwritesExistingColor)
 {
+    auto c = Component ("testComponent");
+
     const Identifier id ("myColor");
     const Color first = Color::fromRGBA (1, 2, 3, 255);
     const Color second = Color::fromRGBA (4, 5, 6, 255);
@@ -94,70 +102,142 @@ TEST_F (ApplicationThemeTest, SetColorOverwritesExistingColor)
     theme->setColor (id, first);
     theme->setColor (id, second);
 
-    auto result = ApplicationTheme::findColor (id);
+    auto result = ApplicationTheme::findComponentColor (c, id);
     ASSERT_TRUE (result.has_value());
     EXPECT_EQ (result.value(), second);
 }
 
+TEST_F (ApplicationThemeTest, ComponentColorOverridesRegisteredColor)
+{
+    auto c = Component ("testComponent");
+
+    const Identifier id ("accentColor");
+    const Color themeColor = Color::fromRGBA (1, 2, 3, 255);
+    const Color componentColor = Color::fromRGBA (4, 5, 6, 255);
+
+    theme->setColor (id, themeColor);
+    c.setColor (id, componentColor);
+
+    auto result = ApplicationTheme::findComponentColor (c, id);
+    ASSERT_TRUE (result.has_value());
+    EXPECT_EQ (result.value(), componentColor);
+
+    c.setColor (id, std::nullopt);
+
+    result = ApplicationTheme::findComponentColor (c, id);
+    ASSERT_TRUE (result.has_value());
+    EXPECT_EQ (result.value(), themeColor);
+}
+
 TEST_F (ApplicationThemeTest, FindColorUnregisteredIdDoesNotAffectOtherIds)
 {
+    auto c = Component ("testComponent");
+
     const Identifier registered ("registered");
     const Identifier unregistered ("unregistered");
     const Color color = Color::fromRGBA (0, 0, 255, 255);
 
     theme->setColor (registered, color);
 
-    EXPECT_TRUE (ApplicationTheme::findColor (registered).has_value());
-    EXPECT_FALSE (ApplicationTheme::findColor (unregistered).has_value());
+    EXPECT_TRUE (ApplicationTheme::findComponentColor (c, registered).has_value());
+    EXPECT_FALSE (ApplicationTheme::findComponentColor (c, unregistered).has_value());
 }
 
 // =============================================================================
 
 TEST_F (ApplicationThemeTest, FindMetricReturnsNulloptWhenMetricNotRegistered)
 {
-    auto result = ApplicationTheme::findMetric (Identifier ("unknownMetric"));
+    auto c = Component ("testComponent");
+
+    auto result = ApplicationTheme::findComponentMetric (c, Identifier ("unknownMetric"));
     EXPECT_FALSE (result.has_value());
 }
 
 TEST_F (ApplicationThemeTest, FindMetricReturnsRegisteredValue)
 {
+    auto c = Component ("testComponent");
+
     theme->setMetric (Identifier ("cornerRadius"), 8.0f);
 
-    auto result = ApplicationTheme::findMetric (Identifier ("cornerRadius"));
+    auto result = ApplicationTheme::findComponentMetric (c, Identifier ("cornerRadius"));
     ASSERT_TRUE (result.has_value());
     EXPECT_FLOAT_EQ (result.value(), 8.0f);
 }
 
 TEST_F (ApplicationThemeTest, SetMetricOverwritesExistingValue)
 {
+    auto c = Component ("testComponent");
+
     const Identifier id ("borderWidth");
 
     theme->setMetric (id, 1.0f);
     theme->setMetric (id, 3.5f);
 
-    auto result = ApplicationTheme::findMetric (id);
+    auto result = ApplicationTheme::findComponentMetric (c, id);
     ASSERT_TRUE (result.has_value());
     EXPECT_FLOAT_EQ (result.value(), 3.5f);
 }
 
+TEST_F (ApplicationThemeTest, SetMetricsRegistersMultipleValues)
+{
+    auto c = Component ("testComponent");
+
+    const Identifier idA ("smallSpacing");
+    const Identifier idB ("largeSpacing");
+
+    theme->setMetrics ({ { idA, 4.0f }, { idB, 12.0f } });
+
+    auto resultA = ApplicationTheme::findComponentMetric (c, idA);
+    auto resultB = ApplicationTheme::findComponentMetric (c, idB);
+
+    ASSERT_TRUE (resultA.has_value());
+    EXPECT_FLOAT_EQ (resultA.value(), 4.0f);
+    ASSERT_TRUE (resultB.has_value());
+    EXPECT_FLOAT_EQ (resultB.value(), 12.0f);
+}
+
+TEST_F (ApplicationThemeTest, ComponentMetricOverridesRegisteredMetric)
+{
+    auto c = Component ("testComponent");
+
+    const Identifier id ("cornerRadius");
+
+    theme->setMetric (id, 8.0f);
+    c.setMetric (id, 12.0f);
+
+    auto result = ApplicationTheme::findComponentMetric (c, id);
+    ASSERT_TRUE (result.has_value());
+    EXPECT_FLOAT_EQ (result.value(), 12.0f);
+
+    c.setMetric (id, std::nullopt);
+
+    result = ApplicationTheme::findComponentMetric (c, id);
+    ASSERT_TRUE (result.has_value());
+    EXPECT_FLOAT_EQ (result.value(), 8.0f);
+}
+
 TEST_F (ApplicationThemeTest, FindMetricUnregisteredIdDoesNotAffectOtherIds)
 {
+    auto c = Component ("testComponent");
+
     const Identifier registered ("spacing");
     const Identifier unregistered ("padding");
 
     theme->setMetric (registered, 4.0f);
 
-    EXPECT_TRUE (ApplicationTheme::findMetric (registered).has_value());
-    EXPECT_FALSE (ApplicationTheme::findMetric (unregistered).has_value());
+    EXPECT_TRUE (ApplicationTheme::findComponentMetric (c, registered).has_value());
+    EXPECT_FALSE (ApplicationTheme::findComponentMetric (c, unregistered).has_value());
 }
 
 TEST_F (ApplicationThemeTest, SetMetricAcceptsZeroAndNegativeValues)
 {
+    auto c = Component ("testComponent");
+
     theme->setMetric (Identifier ("zeroMetric"), 0.0f);
     theme->setMetric (Identifier ("negativeMetric"), -2.5f);
 
-    auto zero = ApplicationTheme::findMetric (Identifier ("zeroMetric"));
-    auto negative = ApplicationTheme::findMetric (Identifier ("negativeMetric"));
+    auto zero = ApplicationTheme::findComponentMetric (c, Identifier ("zeroMetric"));
+    auto negative = ApplicationTheme::findComponentMetric (c, Identifier ("negativeMetric"));
 
     ASSERT_TRUE (zero.has_value());
     EXPECT_FLOAT_EQ (zero.value(), 0.0f);

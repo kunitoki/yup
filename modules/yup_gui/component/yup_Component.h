@@ -1185,28 +1185,35 @@ public:
 
     //==============================================================================
 
-    /** Set a style property for the component.
+    /** Set a metric value for the component.
 
-        @param propertyId The identifier of the property to set.
-        @param property The property to set.
-     */
-    void setStyleProperty (const Identifier& propertyId, const std::optional<var>& property);
+        Metrics are numeric values like corner radius, padding, or spacing that
+        can be themed globally and overridden per-component, following the same
+        pattern as component colors.
 
-    /** Get a style property for the component.
+        @param metricId The identifier of the metric to set.
+        @param metric The metric value to set. Pass std::nullopt to remove the override.
+    */
+    void setMetric (const Identifier& metricId, const std::optional<float>& metric);
 
-        @param propertyId The identifier of the property to get.
+    /** Get the metric override for this component (does not walk parents).
 
-        @return The property of the component.
-     */
-    std::optional<var> getStyleProperty (const Identifier& propertyId) const;
+        @param metricId The identifier of the metric to get.
 
-    /** Find a style property for the component.
+        @return The metric value, or std::nullopt if not set on this specific component.
+    */
+    std::optional<float> getMetric (const Identifier& metricId) const;
 
-        @param propertyId The identifier of the property to find.
+    /** Find the metric value, walking up the parent hierarchy.
 
-        @return The property of the component.
-     */
-    std::optional<var> findStyleProperty (const Identifier& propertyId) const;
+        Checks this component first, then walks up the parent chain. If no override
+        is found, falls back to the value registered in the global ApplicationTheme.
+
+        @param metricId The identifier of the metric to find.
+
+        @return The metric value, or std::nullopt if not found anywhere.
+    */
+    std::optional<float> findMetric (const Identifier& metricId) const;
 
     //==============================================================================
     /** A bail out checker for the component. */

@@ -57,8 +57,9 @@ public:
         writePosition = 0;
     }
 
-    void processBlock (yup::AudioBuffer<float>& audioBuffer, yup::MidiBuffer&) override
+    void processBlock (yup::AudioProcessContext<float>& context) override
     {
+        auto& audioBuffer = context.audio;
         const int currentDelaySamples = getLatencySamples();
         if (currentDelaySamples <= 0)
             return;

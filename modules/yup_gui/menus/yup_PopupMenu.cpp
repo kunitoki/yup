@@ -29,14 +29,30 @@ namespace
 
 static std::vector<PopupMenu::Ptr> activePopups;
 
+constexpr float separatorHeight = 8.0f;    // TODO: move to Options
+constexpr float verticalPadding = 4.0f;    // TODO: move to Style
+constexpr float itemHeight = 22.0f;        // TODO: move to Options
+constexpr float defaultMenuWidth = 200.0f; // TODO: move to Options
+constexpr float horizontalTextPadding = 12.0f;
+constexpr float tickedTextIndent = 8.0f;
+constexpr float submenuArrowWidth = 24.0f;
+constexpr float shortcutTextWidth = 80.0f;
+constexpr float itemTextHeight = 14.0f;
+constexpr float shortcutTextHeight = 13.0f;
+constexpr float screenEdgePadding = 5.0f;
+
 void removeActivePopup (PopupMenu* popupMenu)
 {
     for (auto it = activePopups.begin(); it != activePopups.end();)
     {
         if (it->get() == popupMenu)
+        {
             it = activePopups.erase (it);
+        }
         else
+        {
             ++it;
+        }
     }
 }
 
@@ -50,6 +66,11 @@ PopupMenu* findActivePopupAt (Point<float> globalPos)
     }
 
     return nullptr;
+}
+
+bool isInsideAnyActivePopup (Point<float> globalPos)
+{
+    return findActivePopupAt (globalPos) != nullptr;
 }
 
 MouseEvent makePopupMouseEvent (const MouseEvent& event, PopupMenu& popupMenu, Point<float> globalPos)
@@ -67,6 +88,14 @@ void installGlobalMouseListener()
             void mouseDown (const MouseEvent& event) override
             {
                 const auto globalPos = event.getScreenPosition();
+
+                if (! isInsideAnyActivePopup (globalPos))
+                {
+                    if (! activePopups.empty())
+                        PopupMenu::dismissAllPopups();
+
+                    return;
+                }
 
                 // Walk the component hierarchy from the event source.
                 // If any ancestor is a PopupMenu the click is inside a popup — don't dismiss.
@@ -230,8 +259,7 @@ Point<int> constrainPositionToAvailableArea (Point<int> desiredPosition,
                                              const Rectangle<int>& targetArea)
 {
     // Add padding to keep menu slightly away from screen edges
-    const int padding = 5;
-    auto constrainedArea = availableArea.reduced (padding);
+    auto constrainedArea = availableArea.reduced (static_cast<int> (screenEdgePadding));
 
     Point<int> position = desiredPosition;
 
@@ -264,6 +292,29 @@ Point<int> constrainPositionToAvailableArea (Point<int> desiredPosition,
     }
 
     return position;
+}
+
+float measureMenuTextWidth (const String& text, const Font& font)
+{
+    if (text.isEmpty())
+        return 0.0f;
+
+    auto styledText = StyledText();
+    {
+        auto modifier = styledText.startUpdate();
+        modifier.setWrap (StyledText::noWrap);
+        modifier.appendText (text, font);
+    }
+
+    return styledText.getComputedTextBounds().getWidth();
+}
+
+float getItemHeight (const PopupMenu::Item& item)
+{
+    if (item.isCustomComponent())
+        return item.customComponent->getHeight();
+
+    return item.isSeparator() ? separatorHeight : itemHeight;
 }
 
 } // namespace
@@ -457,11 +508,26 @@ void PopupMenu::clear()
 
 void PopupMenu::setupMenuItems()
 {
-    constexpr float separatorHeight = 8.0f; // TODO: move to Options
-    constexpr float verticalPadding = 4.0f; // TODO: move to Style ?
+    const auto globalTheme = ApplicationTheme::getGlobalTheme();
+    const auto defaultFont = globalTheme != nullptr ? globalTheme->getDefaultFont()
+                                                    : Font();
+    const auto itemFont = defaultFont.withHeight (itemTextHeight);
+    const auto shortcutFont = defaultFont.withHeight (shortcutTextHeight);
+    bool anyItemIsTicked = false;
+    for (const auto& item : items)
+    {
+        if (item->isTicked)
+        {
+            anyItemIsTicked = true;
+            break;
+        }
+    }
 
-    float itemHeight = static_cast<float> (22);    // TODO: move to Options
-    float width = options.minWidth.value_or (200); // TODO: move to magic
+    const auto minimumWidth = static_cast<float> (jmax (0, options.minWidth.value_or (static_cast<int> (defaultMenuWidth))));
+    const auto maximumWidth = static_cast<float> (jmax (static_cast<int> (minimumWidth),
+                                                        options.maxWidth.value_or (std::numeric_limits<int>::max())));
+
+    float width = minimumWidth;
 
     // First pass: calculate total content height and determine width
     totalContentHeight = verticalPadding; // Top padding
@@ -469,16 +535,34 @@ void PopupMenu::setupMenuItems()
     {
         if (item->isCustomComponent())
         {
-            width = jmax (width, item->customComponent->getWidth());
+            width = jmax (width, static_cast<float> (item->customComponent->getWidth()));
             totalContentHeight += item->customComponent->getHeight();
         }
         else
         {
-            const auto height = item->isSeparator() ? separatorHeight : itemHeight;
-            totalContentHeight += height;
+            totalContentHeight += item->isSeparator() ? separatorHeight : itemHeight;
+
+            if (! item->isSeparator())
+            {
+                auto itemWidth = horizontalTextPadding * 2.0f
+                               + measureMenuTextWidth (item->text, itemFont);
+
+                if (anyItemIsTicked)
+                    itemWidth += tickedTextIndent;
+
+                if (item->shortcutKeyText.isNotEmpty())
+                    itemWidth += jmax (shortcutTextWidth,
+                                       measureMenuTextWidth (item->shortcutKeyText, shortcutFont) + horizontalTextPadding);
+
+                if (item->isSubMenu())
+                    itemWidth += submenuArrowWidth;
+
+                width = jmax (width, itemWidth);
+            }
         }
     }
     totalContentHeight += verticalPadding; // Bottom padding
+    width = jlimit (minimumWidth, maximumWidth, width);
 
     // Calculate available content height properly (without depending on current position)
     calculateAvailableHeight();
@@ -492,15 +576,11 @@ void PopupMenu::setupMenuItems()
 
     updateVisibleItemRange();
 
-    // Set menu bounds based on available space - do this only once
-    if (getWidth() == 0 || getHeight() == 0) // Only set size if not already set
-    {
-        float menuHeight = jmin (totalContentHeight, availableContentHeight);
-        if (showScrollIndicators)
-            menuHeight -= scrollIndicatorHeight * 2.0f; // Reserve space for indicators
-
-        setSize (static_cast<int> (width), static_cast<int> (menuHeight));
-    }
+    const auto menuHeight = verticalPadding * 2.0f
+                          + getVisibleItemsHeight()
+                          + (showScrollIndicators ? scrollIndicatorHeight * 2.0f : 0.0f);
+    setSize (static_cast<int> (std::ceil (width)),
+             static_cast<int> (std::ceil (jmax (itemHeight, menuHeight))));
 
     // Remove all child components first
     for (auto& item : items)
@@ -671,7 +751,8 @@ void PopupMenu::showCustom (const Options& options, bool isSubmenu, std::functio
         auto nativeOptions = ComponentNative::Options {}
                                  .withDecoration (false)
                                  .withResizableWindow (false)
-                                 .withTemporaryWindow (true);
+                                 .withTemporaryWindow (true)
+                                 .withMouseCapture (true);
 
         if (! isOnDesktop())
             addToDesktop (nativeOptions);
@@ -877,7 +958,7 @@ void PopupMenu::keyDown (const KeyPress& key, const Point<float>& position)
     auto keyCode = key.getKey();
 
     if (keyCode == KeyPress::escapeKey)
-        dismiss();
+        dismissAllPopups();
 
     else if (keyCode == KeyPress::upKey)
         navigateUp();
@@ -920,8 +1001,11 @@ void PopupMenu::showSubmenu (int itemIndex)
     if (! currentSubmenu)
         return;
 
+    currentSubmenu->parentMenu = this;
+
     // Reset the submenu's state before showing to ensure clean positioning
     currentSubmenu->resetInternalState();
+    currentSubmenu->parentMenu = this;
 
     // Configure submenu options
     auto submenuOptions = prepareSubmenuOptions (currentSubmenu);
@@ -1312,100 +1396,43 @@ int PopupMenu::getPreviousSelectableItemIndex (int currentIndex) const
 
 void PopupMenu::calculateAvailableHeight()
 {
+    const auto minimumMenuHeight = itemHeight + (verticalPadding * 2.0f);
+
     if (options.parentComponent)
     {
-        // Calculate available height within parent component bounds
-        auto parentBounds = options.parentComponent->getLocalBounds().to<float>();
-
-        // Use the target position/area to determine where the menu will be positioned
-        float menuY = 0.0f;
-
-        switch (options.positioningMode)
-        {
-            case PositioningMode::atPoint:
-                menuY = options.targetPosition.getY();
-                break;
-
-            case PositioningMode::relativeToArea:
-                menuY = options.targetArea.getY();
-                if (options.placement.side == Side::below)
-                    menuY = options.targetArea.getBottom();
-                else if (options.placement.side == Side::above)
-                    menuY = options.targetArea.getY(); // Will be adjusted later
-                break;
-
-            case PositioningMode::relativeToComponent:
-                if (options.targetComponent)
-                {
-                    Rectangle<int> targetArea;
-                    if (options.targetComponent->getParentComponent() == options.parentComponent)
-                        targetArea = options.targetComponent->getBounds().to<int>();
-                    else
-                        targetArea = options.parentComponent->getLocalArea (options.targetComponent, options.targetComponent->getLocalBounds()).to<int>();
-
-                    menuY = targetArea.getY();
-                    if (options.placement.side == Side::below)
-                        menuY = targetArea.getBottom();
-                }
-                break;
-        }
-
-        // Calculate available space from anticipated position to parent bottom
-        availableContentHeight = parentBounds.getBottom() - menuY;
-        availableContentHeight = jmax (100.0f, availableContentHeight); // Minimum height
+        const auto parentBounds = options.parentComponent->getLocalBounds().to<float>();
+        availableContentHeight = jmax (minimumMenuHeight, parentBounds.getHeight() - (screenEdgePadding * 2.0f));
+        return;
     }
-    else
+
+    // Use screen bounds
+    if (auto* desktop = Desktop::getInstance())
     {
-        // Use screen bounds
-        if (auto* desktop = Desktop::getInstance())
-        {
-            Screen::Ptr screen;
+        Screen::Ptr screen;
 
-            float menuY = 0.0f;
-            if (options.positioningMode == PositioningMode::atPoint)
-            {
-                menuY = options.targetPosition.getY();
-                screen = desktop->getScreenContaining (options.targetPosition.to<float>());
-            }
-            else if (options.positioningMode == PositioningMode::relativeToArea)
-            {
-                menuY = options.targetArea.getY();
-                screen = desktop->getScreenContaining (options.targetArea.to<float>());
-            }
-            else if (options.positioningMode == PositioningMode::relativeToComponent && options.targetComponent)
-            {
-                menuY = options.targetComponent->getScreenBounds().getY();
-                screen = desktop->getScreenContaining (options.targetComponent);
-            }
+        if (options.positioningMode == PositioningMode::atPoint)
+            screen = desktop->getScreenContaining (options.targetPosition.to<float>());
+        else if (options.positioningMode == PositioningMode::relativeToArea)
+            screen = desktop->getScreenContaining (options.targetArea.to<float>());
+        else if (options.positioningMode == PositioningMode::relativeToComponent && options.targetComponent)
+            screen = desktop->getScreenContaining (options.targetComponent);
 
-            if (screen == nullptr)
-                screen = desktop->getPrimaryScreen();
+        if (screen == nullptr)
+            screen = desktop->getPrimaryScreen();
 
-            if (screen != nullptr)
-            {
-                auto screenBounds = screen->workArea.to<float>();
-
-                availableContentHeight = screenBounds.getBottom() - menuY;
-                availableContentHeight = jmax (100.0f, availableContentHeight);
-            }
-            else
-            {
-                availableContentHeight = 800.0f; // Fallback
-            }
-        }
+        if (screen != nullptr)
+            availableContentHeight = jmax (minimumMenuHeight, screen->workArea.getHeight() - (screenEdgePadding * 2.0f));
         else
-        {
             availableContentHeight = 800.0f; // Fallback
-        }
+
+        return;
     }
+
+    availableContentHeight = 800.0f; // Fallback
 }
 
 void PopupMenu::layoutVisibleItems (float width)
 {
-    constexpr float separatorHeight = 8.0f; // TODO: move to Options
-    constexpr float verticalPadding = 4.0f; // TODO: move to Style
-    const float itemHeight = 22.0f;         // TODO: move to Options
-
     // Clear all item areas first to prevent rendering artifacts
     for (auto& item : items)
     {
@@ -1456,11 +1483,6 @@ void PopupMenu::updateVisibleItemRange()
         return;
     }
 
-    // Calculate how many items can fit in the available space
-    constexpr float separatorHeight = 8.0f; // TODO: move to Options
-    constexpr float verticalPadding = 4.0f; // TODO: move to Style
-    const float itemHeight = 22.0f;         // TODO: move to Options
-
     float availableHeight = availableContentHeight;
     if (showScrollIndicators)
         availableHeight -= 2 * scrollIndicatorHeight;
@@ -1479,13 +1501,7 @@ void PopupMenu::updateVisibleItemRange()
 
     for (int i = startIndex; i < static_cast<int> (items.size()); ++i)
     {
-        const auto& item = *items[i];
-        float itemHeightToAdd;
-
-        if (item.isCustomComponent())
-            itemHeightToAdd = item.customComponent->getHeight();
-        else
-            itemHeightToAdd = item.isSeparator() ? separatorHeight : itemHeight;
+        const auto itemHeightToAdd = getItemHeight (*items[i]);
 
         if (usedHeight + itemHeightToAdd > availableHeight)
             break;
@@ -1498,7 +1514,28 @@ void PopupMenu::updateVisibleItemRange()
     if (visibleCount == 0 && startIndex < static_cast<int> (items.size()))
         visibleCount = 1;
 
+    while (startIndex > 0)
+    {
+        const auto previousItemHeight = getItemHeight (*items[startIndex - 1]);
+        if (usedHeight + previousItemHeight > availableHeight)
+            break;
+
+        --startIndex;
+        ++visibleCount;
+        usedHeight += previousItemHeight;
+    }
+
     visibleItemRange = Range<int> (startIndex, startIndex + visibleCount);
+}
+
+float PopupMenu::getVisibleItemsHeight() const
+{
+    float height = 0.0f;
+
+    for (int i = visibleItemRange.getStart(); i < visibleItemRange.getEnd() && i < static_cast<int> (items.size()); ++i)
+        height += getItemHeight (*items[i]);
+
+    return height;
 }
 
 void PopupMenu::scrollUp()
@@ -1512,7 +1549,11 @@ void PopupMenu::scrollUp()
         // Recalculate the end based on available space
         updateVisibleItemRange();
 
-        // Re-layout visible items without changing menu size
+        // Re-layout visible items using the exact height of the visible rows.
+        const auto menuHeight = verticalPadding * 2.0f
+                              + getVisibleItemsHeight()
+                              + (showScrollIndicators ? scrollIndicatorHeight * 2.0f : 0.0f);
+        setSize (getWidth(), static_cast<int> (std::ceil (jmax (itemHeight, menuHeight))));
         layoutVisibleItems (getWidth());
 
         // Repaint to update the display
@@ -1531,7 +1572,11 @@ void PopupMenu::scrollDown()
         // Recalculate the end based on available space
         updateVisibleItemRange();
 
-        // Re-layout visible items without changing menu size
+        // Re-layout visible items using the exact height of the visible rows.
+        const auto menuHeight = verticalPadding * 2.0f
+                              + getVisibleItemsHeight()
+                              + (showScrollIndicators ? scrollIndicatorHeight * 2.0f : 0.0f);
+        setSize (getWidth(), static_cast<int> (std::ceil (jmax (itemHeight, menuHeight))));
         layoutVisibleItems (getWidth());
 
         // Repaint to update the display

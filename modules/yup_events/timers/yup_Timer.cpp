@@ -48,7 +48,8 @@ class Timer::TimerThread final : private Thread
 public:
     using LockType = CriticalSection; // (mysteriously, using a SpinLock here causes problems on some XP machines..)
 
-    YUP_DECLARE_SINGLETON (TimerThread, true)
+    // Plugin hosts can tear down and recreate YUP inside the same process.
+    YUP_DECLARE_SINGLETON (TimerThread, false)
 
     TimerThread()
         : Thread ("YUP Timer")
