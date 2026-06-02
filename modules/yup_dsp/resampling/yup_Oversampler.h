@@ -92,9 +92,15 @@ public:
         decimBeginBufs.assign (maxChannels, CircularBuffer<SampleType, SincRadius * OversampleFactor> {});
         decimEndBufs.assign (maxChannels, CircularBuffer<SampleType, SincRadius * OversampleFactor> {});
 
-        xInterp.assign (maxChannels, std::vector<SampleType> (static_cast<std::size_t> (maxBlockSize + SincRadius), SampleType {}));
-        xDecim.assign (maxChannels, std::vector<SampleType> (static_cast<std::size_t> (maxInterpolated + SincRadius * OversampleFactor), SampleType {}));
-        oversampledBuffer.assign (maxChannels, std::vector<SampleType> (static_cast<std::size_t> (maxInterpolated), SampleType {}));
+        xInterp.setSize (maxChannels, maxBlockSize + SincRadius);
+        xInterp.clear();
+
+        xDecim.setSize (maxChannels, maxInterpolated + SincRadius * OversampleFactor);
+        xDecim.clear();
+
+        oversampledBuffer.setSize (maxChannels, maxInterpolated);
+        oversampledBuffer.clear();
+
         currentOversampledSize = 0;
         currentNumChannels = 0;
     }
@@ -110,19 +116,20 @@ public:
     {
         for (auto& b : interpolBeginBufs)
             b.clear();
+
         for (auto& b : interpolEndBufs)
             b.clear();
+
         for (auto& b : decimBeginBufs)
             b.clear();
+
         for (auto& b : decimEndBufs)
             b.clear();
 
-        for (auto& ch : xInterp)
-            std::fill (ch.begin(), ch.end(), SampleType {});
-        for (auto& ch : xDecim)
-            std::fill (ch.begin(), ch.end(), SampleType {});
-        for (auto& ch : oversampledBuffer)
-            std::fill (ch.begin(), ch.end(), SampleType {});
+        xInterp.clear();
+        xDecim.clear();
+        oversampledBuffer.clear();
+
         currentOversampledSize = 0;
         currentNumChannels = 0;
     }
@@ -142,20 +149,18 @@ public:
     void upsample (const SampleType* const* input, int numChannels, int numSamples) noexcept
     {
         jassert (numChannels > 0 && numSamples > 0);
-        jassert (numChannels <= static_cast<int> (xInterp.size()));
-        jassert (numSamples + SincRadius <= static_cast<int> (xInterp[0].size()));
+        jassert (numChannels <= xInterp.getNumChannels());
+        jassert (numSamples + SincRadius <= xInterp.getNumSamples());
 
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            auto& xBuf = xInterp[static_cast<std::size_t> (ch)];
+            const auto* inputData = input[ch];
+
+            auto* xBuf = xInterp.getWritePointer (ch);
             auto& endBuf = interpolEndBufs[static_cast<std::size_t> (ch)];
 
             for (int i = 0; i < numSamples + SincRadius; ++i)
-            {
-                xBuf[static_cast<std::size_t> (i)] = (i >= SincRadius)
-                                                       ? input[ch][i - SincRadius]
-                                                       : endBuf[i];
-            }
+                *xBuf++ = (i >= SincRadius) ? inputData[i - SincRadius] : endBuf[i];
         }
 
         currentOversampledSize = numSamples * OversampleFactor;
@@ -163,12 +168,12 @@ public:
 
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            auto& xBuf = xInterp[static_cast<std::size_t> (ch)];
-            auto& outBuf = oversampledBuffer[static_cast<std::size_t> (ch)];
+            auto* xBuf = xInterp.getReadPointer (ch);
             auto& beginBuf = interpolBeginBufs[static_cast<std::size_t> (ch)];
             auto& endBuf = interpolEndBufs[static_cast<std::size_t> (ch)];
 
-            outBuf[0] = xBuf[0];
+            auto* outBuf = oversampledBuffer.getWritePointer (ch);
+            *outBuf++ = *xBuf;
 
             for (int k = 1; k < currentOversampledSize; ++k)
             {
@@ -180,18 +185,16 @@ public:
                     CoeffType acc = CoeffType (0);
 
                     for (int n = -SincRadius; n <= 0; ++n)
-                        acc += sincTable (n, delta)
-                             * static_cast<CoeffType> (xBuf[static_cast<std::size_t> (index - n)]);
+                        acc += sincTable (n, delta) * static_cast<CoeffType> (xBuf[static_cast<std::size_t> (index - n)]);
 
                     for (int n = 1; n <= SincRadius; ++n)
-                        acc += sincTable (n, delta)
-                             * static_cast<CoeffType> (beginBuf[SincRadius - n]);
+                        acc += sincTable (n, delta) * static_cast<CoeffType> (beginBuf[SincRadius - n]);
 
-                    outBuf[static_cast<std::size_t> (k)] = static_cast<SampleType> (acc);
+                    *outBuf++ = static_cast<SampleType> (acc);
                 }
                 else
                 {
-                    outBuf[static_cast<std::size_t> (k)] = xBuf[static_cast<std::size_t> (index)];
+                    *outBuf++ = xBuf[static_cast<std::size_t> (index)];
                     beginBuf.push (xBuf[static_cast<std::size_t> (index - 1)]);
                 }
             }
@@ -218,28 +221,31 @@ public:
     void downsample (SampleType* const* output, int numChannels, int numSamples) noexcept
     {
         jassert (numChannels > 0 && numSamples > 0);
-        jassert (numChannels <= static_cast<int> (xDecim.size()));
+        jassert (numChannels <= xDecim.getNumChannels());
         jassert (currentOversampledSize > 0);
 
         const int interpolatedSize = currentOversampledSize;
 
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            auto& xBuf = xDecim[static_cast<std::size_t> (ch)];
-            auto& inBuf = oversampledBuffer[static_cast<std::size_t> (ch)];
+            auto* inBuf = oversampledBuffer.getReadPointer (ch);
+
+            auto* xBuf = xDecim.getWritePointer (ch);
             auto& dEndBuf = decimEndBufs[static_cast<std::size_t> (ch)];
 
             for (int i = 0; i < interpolatedSize + SincRadius * OversampleFactor; ++i)
             {
-                xBuf[static_cast<std::size_t> (i)] = (i >= SincRadius * OversampleFactor)
-                                                       ? inBuf[static_cast<std::size_t> (i - SincRadius * OversampleFactor)]
-                                                       : dEndBuf[i];
+                auto* currentBuf = inBuf + static_cast<std::size_t> (i - SincRadius * OversampleFactor);
+
+                *xBuf++ = (i >= SincRadius * OversampleFactor) ? *currentBuf : dEndBuf[i];
             }
         }
 
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            auto& xBuf = xDecim[static_cast<std::size_t> (ch)];
+            auto* outputData = output[ch];
+
+            auto* xBuf = xDecim.getReadPointer (ch);
             auto& beginBuf = decimBeginBufs[static_cast<std::size_t> (ch)];
             auto& dEndBuf = decimEndBufs[static_cast<std::size_t> (ch)];
 
@@ -249,17 +255,15 @@ public:
                 CoeffType acc = CoeffType (0);
 
                 for (int n = 1; n <= SincRadius * OversampleFactor; ++n)
-                    acc += sincTable[n]
-                         * static_cast<CoeffType> (beginBuf[SincRadius * OversampleFactor - n]);
+                    acc += sincTable[n] * static_cast<CoeffType> (beginBuf[SincRadius * OversampleFactor - n]);
 
                 for (int n = 0; n >= -(SincRadius * OversampleFactor); --n)
-                    acc += sincTable[n]
-                         * static_cast<CoeffType> (xBuf[static_cast<std::size_t> (index - n)]);
+                    acc += sincTable[n] * static_cast<CoeffType> (xBuf[static_cast<std::size_t> (index - n)]);
 
                 for (int i = 0; i < OversampleFactor; ++i)
                     beginBuf.push (xBuf[static_cast<std::size_t> (index + i)]);
 
-                output[ch][k] = static_cast<SampleType> (acc / static_cast<CoeffType> (OversampleFactor));
+                outputData[k] = static_cast<SampleType> (acc / static_cast<CoeffType> (OversampleFactor));
             }
 
             for (int i = 0; i < SincRadius * OversampleFactor; ++i)
@@ -271,13 +275,11 @@ public:
     /**
         Invokes a callback with the internal oversampled multi-channel buffer.
 
-        The callback receives a reference to the internal
-        `std::vector<std::vector<SampleType>>`, where each inner vector has
-        getOversampledNumSamples() elements. Use this to apply processing at the
-        elevated sample rate.
+        The callback receives a reference to the internal `AudioBuffer<SampleType>`, where each inner
+        vector has getOversampledNumSamples() elements. Use this to apply processing at the elevated
+        sample rate.
 
-        @param callback  Callable with signature
-                         `void(std::vector<std::vector<SampleType>>&)`.
+        @param callback  Callable with signature `void(AudioBuffer<SampleType>&)`.
     */
     template <typename Callable>
     void processOversampledBlock (Callable&& callback)
@@ -300,7 +302,7 @@ public:
         if (channel < 0 || channel >= currentNumChannels)
             return nullptr;
 
-        return oversampledBuffer[static_cast<std::size_t> (channel)].data();
+        return oversampledBuffer.getWritePointer (channel);
     }
 
     /**
@@ -317,7 +319,7 @@ public:
         if (channel < 0 || channel >= currentNumChannels)
             return nullptr;
 
-        return oversampledBuffer[static_cast<std::size_t> (channel)].data();
+        return oversampledBuffer.getReadPointer (channel);
     }
 
     /**
@@ -351,9 +353,9 @@ private:
     std::vector<CircularBuffer<SampleType, SincRadius * OversampleFactor>> decimBeginBufs;
     std::vector<CircularBuffer<SampleType, SincRadius * OversampleFactor>> decimEndBufs;
 
-    std::vector<std::vector<SampleType>> xInterp;
-    std::vector<std::vector<SampleType>> xDecim;
-    std::vector<std::vector<SampleType>> oversampledBuffer;
+    AudioBuffer<SampleType> xInterp;
+    AudioBuffer<SampleType> xDecim;
+    AudioBuffer<SampleType> oversampledBuffer;
     int currentOversampledSize = 0;
     int currentNumChannels = 0;
 

@@ -136,9 +136,8 @@ TEST_F (OversamplerTest, ProcessOversampledBlockCallbackReceivesCorrectSize)
     int callbackSamples = 0;
     os2x.processOversampledBlock ([&] (auto& buf)
     {
-        callbackChannels = static_cast<int> (buf.size());
-        if (! buf.empty())
-            callbackSamples = static_cast<int> (buf[0].size());
+        callbackChannels = buf.getNumChannels();
+        callbackSamples = buf.getNumSamples();
     });
 
     EXPECT_EQ (callbackChannels, maxChannels);
