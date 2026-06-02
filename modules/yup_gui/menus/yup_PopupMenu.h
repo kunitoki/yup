@@ -380,6 +380,7 @@ private:
     void layoutVisibleItems (float width);
     Rectangle<float> getMenuContentBounds() const;
     void updateVisibleItemRange();
+    float getVisibleItemsHeight() const;
     void scrollUp();
     void scrollDown();
     int getVisibleItemCount() const;

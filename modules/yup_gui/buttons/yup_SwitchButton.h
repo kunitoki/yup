@@ -79,6 +79,7 @@ public:
 
     //==============================================================================
     /** Called when the toggle state changes.
+
         Override this to perform custom actions when the switch is toggled.
     */
     virtual void toggleStateChanged() {}
@@ -94,6 +95,9 @@ public:
 
     //==============================================================================
     /** @internal */
+    Rectangle<float> getSwitchCircleBounds() const { return switchCircleBounds; }
+
+    /** @internal */
     void refreshDisplay (double lastFrameTimeSeconds) override;
     /** @internal */
     void paintButton (Graphics& g) override;
@@ -101,9 +105,6 @@ public:
     void resized() override;
     /** @internal */
     void mouseUp (const MouseEvent& event) override;
-
-    /** @internal */
-    Rectangle<float> getSwitchCircleBounds() const { return switchCircleBounds; }
 
 private:
     //==============================================================================

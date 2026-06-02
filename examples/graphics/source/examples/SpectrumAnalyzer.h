@@ -453,9 +453,17 @@ class SpectrumAnalyzerDemo
     , public yup::Timer
 {
 public:
+    enum class ViewMode
+    {
+        spectrumFilled,
+        spectrumLines,
+        spectrogram
+    };
+
     SpectrumAnalyzerDemo()
         : Component ("SpectrumAnalyzerDemo")
         , analyzerComponent (analyzerState)
+        , spectrogramComponent (analyzerState)
     {
         setupUI();
         setupAudio();
@@ -483,16 +491,24 @@ public:
         titleLabel->setBounds (titleBounds.reduced (margin, 8));
 
         // Control panel
-        auto controlHeight = 180;
+        auto controlHeight = 220;
         auto controlPanel = bounds.removeFromTop (controlHeight);
         layoutControlPanel (controlPanel.reduced (margin));
 
-        // Small gap before spectrum analyzer
+        // Small gap before display
         bounds.removeFromTop (5);
 
-        // Spectrum analyzer takes the rest with proper margins for labels
-        auto analyzerBounds = bounds.reduced (margin);
-        analyzerComponent.setBounds (analyzerBounds);
+        // Display area takes the rest
+        auto displayBounds = bounds.reduced (margin);
+
+        const bool showingSpectrogram = (currentViewMode == ViewMode::spectrogram);
+        analyzerComponent.setVisible (! showingSpectrogram);
+        spectrogramComponent.setVisible (showingSpectrogram);
+
+        if (showingSpectrogram)
+            spectrogramComponent.setBounds (displayBounds);
+        else
+            analyzerComponent.setBounds (displayBounds);
     }
 
     void visibilityChanged() override
@@ -564,12 +580,16 @@ public:
         double sampleRate = device->getCurrentSampleRate();
         const int maxBlockSize = yup::jmax (1, device->getCurrentBufferSizeSamples());
 
-        // Setup signal generator
-        signalGenerator.prepare (sampleRate, maxBlockSize);
-        signalGenerator.setFrequency (currentFrequency);
-        signalGenerator.setAmplitude (currentAmplitude);
-        signalGenerator.setSweepParameters (20.0, 22000.0, sweepDurationSeconds);
-        monoOutputBuffer.assign (static_cast<std::size_t> (maxBlockSize), 0.0f);
+        {
+            const yup::ScopedLock lock (deviceManager.getAudioCallbackLock());
+
+            // Setup signal generator
+            signalGenerator.prepare (sampleRate, maxBlockSize);
+            signalGenerator.setFrequency (currentFrequency);
+            signalGenerator.setAmplitude (currentAmplitude);
+            signalGenerator.setSweepParameters (20.0, 22000.0, sweepDurationSeconds);
+            monoOutputBuffer.assign (static_cast<std::size_t> (maxBlockSize), 0.0f);
+        }
 
         // Configure spectrum analyzer
         analyzerComponent.setSampleRate (sampleRate);
@@ -617,7 +637,10 @@ private:
         frequencySlider->onValueChanged = [this] (double value)
         {
             currentFrequency = (float) value;
-            signalGenerator.setFrequency ((float) value);
+            updateSignalGenerator ([value] (SignalGenerator& generator)
+            {
+                generator.setFrequency ((float) value);
+            });
         };
         addAndMakeVisible (*frequencySlider);
 
@@ -628,7 +651,10 @@ private:
         amplitudeSlider->onValueChanged = [this] (double value)
         {
             currentAmplitude = (float) value;
-            signalGenerator.setAmplitude ((float) value);
+            updateSignalGenerator ([value] (SignalGenerator& generator)
+            {
+                generator.setAmplitude ((float) value);
+            });
         };
         addAndMakeVisible (*amplitudeSlider);
 
@@ -639,7 +665,10 @@ private:
         sweepDurationSlider->onValueChanged = [this] (double value)
         {
             sweepDurationSeconds = (float) value;
-            signalGenerator.setSweepParameters (20.0, 22000.0, (float) value);
+            updateSignalGenerator ([value] (SignalGenerator& generator)
+            {
+                generator.setSweepParameters (20.0, 22000.0, (float) value);
+            });
         };
         addAndMakeVisible (*sweepDurationSlider);
 
@@ -686,6 +715,19 @@ private:
         };
         addAndMakeVisible (*displayTypeCombo);
 
+        // Level mode selector
+        levelModeCombo = std::make_unique<yup::ComboBox> ("LevelMode");
+        levelModeCombo->addItem ("Peak dBFS", 1);
+        levelModeCombo->addItem ("RMS dBFS", 2);
+        levelModeCombo->addItem ("Power dBFS", 3);
+        levelModeCombo->addItem ("PSD dBFS/Hz", 4);
+        levelModeCombo->setSelectedId (1);
+        levelModeCombo->onSelectedItemChanged = [this]
+        {
+            updateLevelMode();
+        };
+        addAndMakeVisible (*levelModeCombo);
+
         // Release control
         releaseSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Release");
         releaseSlider->setRange ({ 0.0, 5.0 });
@@ -715,6 +757,32 @@ private:
             setSmoothingTime ((float) value);
         };
         addAndMakeVisible (*smoothingSlider);
+
+        // View mode selector
+        viewModeCombo = std::make_unique<yup::ComboBox> ("ViewMode");
+        viewModeCombo->addItem ("Spectrum Filled", 1);
+        viewModeCombo->addItem ("Spectrum Lines", 2);
+        viewModeCombo->addItem ("Spectrogram", 3);
+        viewModeCombo->setSelectedId (1);
+        viewModeCombo->onSelectedItemChanged = [this]
+        {
+            updateViewMode();
+        };
+        addAndMakeVisible (*viewModeCombo);
+
+        // Color map selector (for spectrogram)
+        colorMapCombo = std::make_unique<yup::ComboBox> ("ColorMap");
+        colorMapCombo->addItem ("Heatmap", 1);
+        colorMapCombo->addItem ("Grayscale", 2);
+        colorMapCombo->addItem ("Cool", 3);
+        colorMapCombo->addItem ("Warm", 4);
+        colorMapCombo->addItem ("Viridis", 5);
+        colorMapCombo->setSelectedId (1);
+        colorMapCombo->onSelectedItemChanged = [this]
+        {
+            updateColorMap();
+        };
+        addAndMakeVisible (*colorMapCombo);
 
         // Status labels with appropriate font size
         auto statusFont = font.withHeight (11.0f);
@@ -746,10 +814,21 @@ private:
         analyzerComponent.setOverlapFactor (0.75f); // 75% overlap for better responsiveness
         addAndMakeVisible (analyzerComponent);
 
+        // Configure spectrogram
+        spectrogramComponent.setWindowType (yup::WindowType::hann);
+        spectrogramComponent.setFrequencyRange (20.0f, 22000.0f);
+        spectrogramComponent.setDecibelRange (-100.0f, 10.0f);
+        spectrogramComponent.setUpdateRate (25);
+        spectrogramComponent.setSampleRate (44100.0);
+        spectrogramComponent.setOverlapFactor (0.75f);
+        spectrogramComponent.setColorMap (yup::SpectrogramColorMap::Type::heatmap);
+        spectrogramComponent.setVisible (false);
+        addAndMakeVisible (spectrogramComponent);
+
         // Create parameter labels with proper font sizing
         auto labelFont = font.withHeight (12.0f);
 
-        for (const auto& labelText : { "Signal Type:", "Frequency:", "Amplitude:", "Sweep Duration:", "FFT Size:", "Window:", "Display:", "Release:", "Overlap:", "Smoothing:" })
+        for (const auto& labelText : { "Signal Type:", "Frequency:", "Amplitude:", "Sweep Duration:", "FFT Size:", "Window:", "Display:", "View Mode:", "Color Map:", "Release:", "Overlap:", "Smoothing:", "Level Mode:" })
         {
             auto label = parameterLabels.add (std::make_unique<yup::Label> (labelText));
             label->setText (labelText);
@@ -759,6 +838,13 @@ private:
         }
 
         updateSignalType();
+    }
+
+    template <typename Callback>
+    void updateSignalGenerator (Callback&& callback)
+    {
+        const yup::ScopedLock lock (deviceManager.getAudioCallbackLock());
+        callback (signalGenerator);
     }
 
     void setupAudio()
@@ -795,16 +881,16 @@ private:
         parameterLabels[3]->setBounds (sweepSection.removeFromTop (labelHeight));
         sweepDurationSlider->setBounds (sweepSection.removeFromTop (controlHeight));
 
-        parameterLabels[9]->setBounds (smoothingParamSection.removeFromTop (labelHeight));
+        parameterLabels[11]->setBounds (smoothingParamSection.removeFromTop (labelHeight));
         smoothingSlider->setBounds (smoothingParamSection.removeFromTop (controlHeight));
 
-        // Second row: FFT controls
+        // Second row: FFT and view mode controls
         auto row2 = bounds.removeFromTop (rowHeight);
         auto fftSizeSection = row2.removeFromLeft (colWidth);
         auto windowSection = row2.removeFromLeft (colWidth);
         auto displaySection = row2.removeFromLeft (colWidth);
-        auto releaseSection = row2.removeFromLeft (colWidth);
-        auto overlapSection = row2.removeFromLeft (colWidth);
+        auto viewModeSection = row2.removeFromLeft (colWidth);
+        auto colorMapSection = row2.removeFromLeft (colWidth);
 
         parameterLabels[4]->setBounds (fftSizeSection.removeFromTop (labelHeight));
         fftSizeCombo->setBounds (fftSizeSection.removeFromTop (controlHeight));
@@ -815,17 +901,32 @@ private:
         parameterLabels[6]->setBounds (displaySection.removeFromTop (labelHeight));
         displayTypeCombo->setBounds (displaySection.removeFromTop (controlHeight));
 
-        parameterLabels[7]->setBounds (releaseSection.removeFromTop (labelHeight));
+        parameterLabels[7]->setBounds (viewModeSection.removeFromTop (labelHeight));
+        viewModeCombo->setBounds (viewModeSection.removeFromTop (controlHeight));
+
+        parameterLabels[8]->setBounds (colorMapSection.removeFromTop (labelHeight));
+        colorMapCombo->setBounds (colorMapSection.removeFromTop (controlHeight));
+
+        // Third row: Release and overlap controls
+        auto row3 = bounds.removeFromTop (rowHeight);
+        auto releaseSection = row3.removeFromLeft (colWidth);
+        auto overlapSection = row3.removeFromLeft (colWidth);
+        auto levelModeSection = row3.removeFromLeft (colWidth);
+
+        parameterLabels[9]->setBounds (releaseSection.removeFromTop (labelHeight));
         releaseSlider->setBounds (releaseSection.removeFromTop (controlHeight));
 
-        parameterLabels[8]->setBounds (overlapSection.removeFromTop (labelHeight));
+        parameterLabels[10]->setBounds (overlapSection.removeFromTop (labelHeight));
         overlapSlider->setBounds (overlapSection.removeFromTop (controlHeight));
 
-        // Third row: Status labels
-        auto row3 = bounds.removeFromTop (30);
-        auto freqStatus = row3.removeFromLeft (bounds.getWidth() / 3);
-        auto ampStatus = row3.removeFromLeft (bounds.getWidth() / 3);
-        auto fftStatus = row3.removeFromLeft (bounds.getWidth() / 3);
+        parameterLabels[12]->setBounds (levelModeSection.removeFromTop (labelHeight));
+        levelModeCombo->setBounds (levelModeSection.removeFromTop (controlHeight));
+
+        // Fourth row: Status labels
+        auto row4 = bounds.removeFromTop (30);
+        auto freqStatus = row4.removeFromLeft (bounds.getWidth() / 3);
+        auto ampStatus = row4.removeFromLeft (bounds.getWidth() / 3);
+        auto fftStatus = row4.removeFromLeft (bounds.getWidth() / 3);
 
         frequencyLabel->setBounds (freqStatus);
         amplitudeLabel->setBounds (ampStatus);
@@ -873,8 +974,11 @@ private:
                 break;
         }
 
-        signalGenerator.setSignalType (signalType);
-        signalGenerator.setSweepPlaybackMode (sweepPlaybackMode);
+        updateSignalGenerator ([signalType, sweepPlaybackMode] (SignalGenerator& generator)
+        {
+            generator.setSignalType (signalType);
+            generator.setSweepPlaybackMode (sweepPlaybackMode);
+        });
 
         // Enable/disable frequency and sweep controls based on signal type
         frequencySlider->setEnabled (signalType == SignalGenerator::SignalType::singleTone);
@@ -951,9 +1055,81 @@ private:
         analyzerComponent.setDisplayType (displayType);
     }
 
+    void updateLevelMode()
+    {
+        auto levelMode = yup::SpectrumAnalyzerComponent::LevelMode::peakDecibels;
+
+        switch (levelModeCombo->getSelectedId())
+        {
+            case 1:
+                levelMode = yup::SpectrumAnalyzerComponent::LevelMode::peakDecibels;
+                break;
+            case 2:
+                levelMode = yup::SpectrumAnalyzerComponent::LevelMode::rmsDecibels;
+                break;
+            case 3:
+                levelMode = yup::SpectrumAnalyzerComponent::LevelMode::powerDecibels;
+                break;
+            case 4:
+                levelMode = yup::SpectrumAnalyzerComponent::LevelMode::powerSpectralDensity;
+                break;
+        }
+
+        analyzerComponent.setLevelMode (levelMode);
+    }
+
+    void updateViewMode()
+    {
+        switch (viewModeCombo->getSelectedId())
+        {
+            case 1:
+                currentViewMode = ViewMode::spectrumFilled;
+                analyzerComponent.setDisplayType (yup::SpectrumAnalyzerComponent::DisplayType::filled);
+                break;
+            case 2:
+                currentViewMode = ViewMode::spectrumLines;
+                analyzerComponent.setDisplayType (yup::SpectrumAnalyzerComponent::DisplayType::lines);
+                break;
+            case 3:
+                currentViewMode = ViewMode::spectrogram;
+                break;
+        }
+
+        resized();
+    }
+
+    void updateColorMap()
+    {
+        yup::SpectrogramColorMap::Type colorMapType = yup::SpectrogramColorMap::Type::heatmap;
+
+        switch (colorMapCombo->getSelectedId())
+        {
+            case 1:
+                colorMapType = yup::SpectrogramColorMap::Type::heatmap;
+                break;
+            case 2:
+                colorMapType = yup::SpectrogramColorMap::Type::grayscale;
+                break;
+            case 3:
+                colorMapType = yup::SpectrogramColorMap::Type::cool;
+                break;
+            case 4:
+                colorMapType = yup::SpectrogramColorMap::Type::warm;
+                break;
+            case 5:
+                colorMapType = yup::SpectrogramColorMap::Type::viridis;
+                break;
+        }
+
+        spectrogramComponent.setColorMap (colorMapType);
+    }
+
     void setSmoothingTime (float timeInSeconds)
     {
-        signalGenerator.setSmoothingTime (timeInSeconds);
+        updateSignalGenerator ([timeInSeconds] (SignalGenerator& generator)
+        {
+            generator.setSmoothingTime (timeInSeconds);
+        });
     }
 
     // Audio components
@@ -963,6 +1139,7 @@ private:
     // Spectrum analyzer
     yup::SpectrumAnalyzerState analyzerState;
     yup::SpectrumAnalyzerComponent analyzerComponent;
+    yup::SpectrogramComponent spectrogramComponent;
 
     // UI components
     std::unique_ptr<yup::Label> titleLabel;
@@ -977,9 +1154,15 @@ private:
     std::unique_ptr<yup::ComboBox> fftSizeCombo;
     std::unique_ptr<yup::ComboBox> windowTypeCombo;
     std::unique_ptr<yup::ComboBox> displayTypeCombo;
+    std::unique_ptr<yup::ComboBox> levelModeCombo;
     std::unique_ptr<yup::Slider> releaseSlider;
     std::unique_ptr<yup::Slider> overlapSlider;
     std::unique_ptr<yup::Slider> smoothingSlider;
+
+    // View mode controls
+    std::unique_ptr<yup::ComboBox> viewModeCombo;
+    std::unique_ptr<yup::ComboBox> colorMapCombo;
+    ViewMode currentViewMode = ViewMode::spectrumFilled;
 
     // Status labels
     std::unique_ptr<yup::Label> frequencyLabel;

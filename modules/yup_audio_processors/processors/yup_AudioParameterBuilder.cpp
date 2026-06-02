@@ -24,33 +24,49 @@ namespace yup
 
 //==============================================================================
 
+AudioParameterBuilder::AudioParameterBuilder() = default;
+
+//==============================================================================
+
 AudioParameterBuilder& AudioParameterBuilder::withID (const String& paramID)
 {
+    jassert (paramID.isNotEmpty());
+
     id = paramID;
     return *this;
 }
 
 AudioParameterBuilder& AudioParameterBuilder::withName (const String& paramName)
 {
-    name = paramName;
+    jassert (paramName.isNotEmpty());
+
+    metadata.name = paramName;
+    return *this;
+}
+
+AudioParameterBuilder& AudioParameterBuilder::withHostID (uint32 hostParameterID)
+{
+    jassert (hostParameterID <= AudioParameter::maximumHostParameterID);
+
+    metadata.hostParameterID = hostParameterID;
     return *this;
 }
 
 AudioParameterBuilder& AudioParameterBuilder::withRange (float minValue, float maxValue)
 {
-    valueRange = { minValue, maxValue };
+    metadata.valueRange = { minValue, maxValue };
     return *this;
 }
 
 AudioParameterBuilder& AudioParameterBuilder::withRange (NormalisableRange<float> valueRange)
 {
-    this->valueRange = std::move (valueRange);
+    metadata.valueRange = std::move (valueRange);
     return *this;
 }
 
 AudioParameterBuilder& AudioParameterBuilder::withDefault (float defaultValue)
 {
-    this->defaultValue = defaultValue;
+    metadata.defaultValue = defaultValue;
     return *this;
 }
 
@@ -68,8 +84,79 @@ AudioParameterBuilder& AudioParameterBuilder::withStringToValue (AudioParameter:
 
 AudioParameterBuilder& AudioParameterBuilder::withSmoothing (float smoothingTimeMs)
 {
-    smoothingEnabled = true;
-    this->smoothingTimeMs = smoothingTimeMs;
+    if (smoothingTimeMs > 0.0f)
+    {
+        metadata.setSmoothingEnabled (true);
+        metadata.smoothingTimeMs = smoothingTimeMs;
+    }
+    else
+    {
+        metadata.setSmoothingEnabled (false);
+        metadata.smoothingTimeMs = 0.0f;
+    }
+
+    return *this;
+}
+
+AudioParameterBuilder& AudioParameterBuilder::withAutomatable (bool shouldBeAutomatable)
+{
+    if (shouldBeAutomatable && metadata.isReadOnly())
+        metadata.setReadOnly (false);
+
+    metadata.setAutomatable (shouldBeAutomatable);
+
+    return *this;
+}
+
+AudioParameterBuilder& AudioParameterBuilder::withReadOnly (bool shouldBeReadOnly)
+{
+    if (shouldBeReadOnly && metadata.isAutomatable())
+        metadata.setAutomatable (false);
+
+    metadata.setReadOnly (shouldBeReadOnly);
+
+    return *this;
+}
+
+AudioParameterBuilder& AudioParameterBuilder::withStepped (bool shouldBeStepped)
+{
+    if (! shouldBeStepped && metadata.isEnum())
+        metadata.setEnum (false);
+
+    metadata.setStepped (shouldBeStepped);
+
+    return *this;
+}
+
+AudioParameterBuilder& AudioParameterBuilder::withEnum (bool shouldBeEnum)
+{
+    if (shouldBeEnum)
+        metadata.setStepped (true);
+
+    metadata.setEnum (shouldBeEnum);
+
+    return *this;
+}
+
+AudioParameterBuilder& AudioParameterBuilder::withModulatable (bool shouldBeModulatable)
+{
+    metadata.setModulatable (shouldBeModulatable);
+    return *this;
+}
+
+AudioParameterBuilder& AudioParameterBuilder::withPerNoteModulatable (bool shouldBePerNoteModulatable)
+{
+    if (shouldBePerNoteModulatable)
+        metadata.setModulatable (true);
+
+    metadata.setPerNoteModulatable (shouldBePerNoteModulatable);
+
+    return *this;
+}
+
+AudioParameterBuilder& AudioParameterBuilder::withModulePath (const String& modulePath)
+{
+    metadata.modulePath = modulePath;
     return *this;
 }
 
@@ -77,17 +164,15 @@ AudioParameterBuilder& AudioParameterBuilder::withSmoothing (float smoothingTime
 
 AudioParameter::Ptr AudioParameterBuilder::build() const
 {
-    jassert (! id.isEmpty() && ! name.isEmpty());
+    jassert (! id.isEmpty() && ! metadata.name.isEmpty());
 
-    return AudioParameter::Ptr (new AudioParameter (
-        id,
-        name,
-        valueRange,
-        valueRange.snapToLegalValue (defaultValue),
-        std::move (valueToString),
-        std::move (stringToValue),
-        smoothingEnabled,
-        smoothingTimeMs));
+    auto parameterMetadata = metadata;
+    parameterMetadata.defaultValue = parameterMetadata.valueRange.snapToLegalValue (parameterMetadata.defaultValue);
+
+    return AudioParameter::Ptr (new AudioParameter (id,
+                                                    std::move (parameterMetadata),
+                                                    valueToString,
+                                                    stringToValue));
 }
 
 } // namespace yup

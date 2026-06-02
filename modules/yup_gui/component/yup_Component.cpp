@@ -1144,31 +1144,31 @@ std::optional<Color> Component::findColor (const Identifier& colorId) const
 
 //==============================================================================
 
-void Component::setStyleProperty (const Identifier& propertyId, const std::optional<var>& property)
+void Component::setMetric (const Identifier& metricId, const std::optional<float>& metric)
 {
-    if (property)
-        properties.set (propertyId, *property);
+    if (metric)
+        properties.set (metricId, static_cast<double> (*metric));
     else
-        properties.remove (propertyId);
+        properties.remove (metricId);
 
     styleChanged();
 }
 
-std::optional<var> Component::getStyleProperty (const Identifier& propertyId) const
+std::optional<float> Component::getMetric (const Identifier& metricId) const
 {
-    if (auto property = properties.getVarPointer (propertyId); property != nullptr && ! property->isVoid())
-        return *property;
+    if (auto value = properties.getVarPointer (metricId); value != nullptr && value->isDouble())
+        return static_cast<float> (static_cast<double> (*value));
 
     return std::nullopt;
 }
 
-std::optional<var> Component::findStyleProperty (const Identifier& propertyId) const
+std::optional<float> Component::findMetric (const Identifier& metricId) const
 {
-    if (auto property = getStyleProperty (propertyId))
-        return property;
+    if (auto metric = getMetric (metricId))
+        return metric;
 
     if (parentComponent != nullptr)
-        return parentComponent->findStyleProperty (propertyId);
+        return parentComponent->findMetric (metricId);
 
     return std::nullopt;
 }

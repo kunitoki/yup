@@ -25,6 +25,7 @@
 
 #include "yup_audio_plugin_host.h"
 
+#include <cstdint>
 #include <cstring>
 #include <deque>
 #include <map>
@@ -64,6 +65,11 @@
 
 #if YUP_AUDIO_PLUGIN_HOST_ENABLE_CLAP
 #include <clap/clap.h>
+
+#if YUP_MAC
+#import <AppKit/AppKit.h>
+#include <CoreFoundation/CoreFoundation.h>
+#endif
 
 #if YUP_WINDOWS
 #include <windows.h>

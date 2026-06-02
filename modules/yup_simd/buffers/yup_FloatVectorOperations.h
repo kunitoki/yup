@@ -173,6 +173,18 @@ struct FloatVectorOperationsBase
 
     /** Finds the maximum value in the given array. */
     static FloatType YUP_CALLTYPE findMaximum (const FloatType* src, CountType numValues) noexcept;
+
+    /** Returns the sum of the squared values in the given array. */
+    static FloatType YUP_CALLTYPE sumSquares (const FloatType* src, CountType numValues) noexcept;
+
+    /** Returns the root mean square of the values in the given array. */
+    static FloatType YUP_CALLTYPE rms (const FloatType* src, CountType numValues) noexcept;
+
+    /** Returns the dot product of two arrays. */
+    static FloatType YUP_CALLTYPE dotProduct (const FloatType* src1, const FloatType* src2, CountType numValues) noexcept;
+
+    /** Returns the maximum absolute value in the given array. */
+    static FloatType YUP_CALLTYPE maxAbs (const FloatType* src, CountType numValues) noexcept;
 };
 
 #if ! DOXYGEN
@@ -201,7 +213,11 @@ struct NameForwarder : public Bases...
         Bases::clip...,
         Bases::findMinAndMax...,
         Bases::findMinimum...,
-        Bases::findMaximum...;
+        Bases::findMaximum...,
+        Bases::sumSquares...,
+        Bases::rms...,
+        Bases::dotProduct...,
+        Bases::maxAbs...;
 };
 
 } // namespace detail

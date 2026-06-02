@@ -44,6 +44,7 @@ class YUP_API ComponentNative : public ReferenceCountedObject
     struct temporaryWindowTag;
     struct renderContinuousTag;
     struct allowHighDensityDisplayTag;
+    struct captureMouseTag;
 
 public:
     //==============================================================================
@@ -57,7 +58,8 @@ public:
                           resizableWindowTag,
                           temporaryWindowTag,
                           renderContinuousTag,
-                          allowHighDensityDisplayTag>;
+                          allowHighDensityDisplayTag,
+                          captureMouseTag>;
 
     /** No flags set. */
     static inline constexpr Flags noFlags = Flags();
@@ -71,6 +73,8 @@ public:
     static inline constexpr Flags renderContinuous = Flags::declareValue<renderContinuousTag>();
     /** Flag to enable high-density display support. */
     static inline constexpr Flags allowHighDensityDisplay = Flags::declareValue<allowHighDensityDisplayTag>();
+    /** Flag to capture mouse input outside the native window while the component is on the desktop. */
+    static inline constexpr Flags captureMouse = Flags::declareValue<captureMouseTag>();
     /** Default flags combining decoratedWindow, resizableWindow, and allowHighDensityDisplay. */
     static inline constexpr Flags defaultFlags = decoratedWindow | resizableWindow | allowHighDensityDisplay;
 
@@ -126,6 +130,14 @@ public:
             @return Reference to this Options object for method chaining.
         */
         Options& withAllowedHighDensityDisplay (bool shouldAllowHighDensity) noexcept;
+
+        /** Sets whether the native window should capture mouse input outside its bounds.
+
+            @param shouldCaptureMouse True to capture mouse input, false to use normal window-local input.
+
+            @return Reference to this Options object for method chaining.
+        */
+        Options& withMouseCapture (bool shouldCaptureMouse) noexcept;
 
         /** Sets whether the window should be treated as a temporary popup/menu window.
 

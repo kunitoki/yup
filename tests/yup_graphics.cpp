@@ -25,6 +25,7 @@
 #include "yup_graphics/yup_Drawable.cpp"
 #include "yup_graphics/yup_Font.cpp"
 #include "yup_graphics/yup_Graphics.cpp"
+#include "yup_graphics/yup_Image.cpp"
 #include "yup_graphics/yup_Line.cpp"
 #include "yup_graphics/yup_Path.cpp"
 #include "yup_graphics/yup_Point.cpp"

@@ -128,13 +128,20 @@ function (yup_standalone_app)
         add_executable (${target_name} ${executable_options})
     endif()
 
+    set_target_properties (${target_name} PROPERTIES
+        C_VISIBILITY_PRESET hidden
+        CXX_VISIBILITY_PRESET hidden
+        OBJC_VISIBILITY_PRESET hidden
+        OBJCXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON)
+
     target_compile_features (${target_name} PRIVATE cxx_std_${target_cxx_standard})
     target_include_directories (${target_name} PRIVATE ${module_include_dirs})
 
     # ==== Per platform configuration
     if (YUP_PLATFORM_APPLE)
         if (NOT "${target_console}" AND NOT "${target_wheel}")
-            _yup_set_default (YUP_ARG_CUSTOM_PLIST "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/${YUP_PLATFORM}/Info.plist")
+            _yup_set_default (YUP_ARG_CUSTOM_PLIST "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/${YUP_PLATFORM}/ApplicationInfo.plist")
             _yup_valid_identifier_string ("${target_app_identifier}" target_app_identifier)
 
             _yup_message (STATUS "${target_name} - Converting application input icon to apple .icns format")

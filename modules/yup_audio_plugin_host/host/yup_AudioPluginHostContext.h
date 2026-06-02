@@ -43,9 +43,6 @@ struct AudioPluginHostContext
     /** True when the host is preparing the plugin for offline/non-realtime rendering. */
     bool isNonRealtime = false;
 
-    /** Optional playhead — the host sets this before processing. */
-    AudioPlayHead* playHead = nullptr;
-
     /** Host application name reported to the plugin. */
     String hostName = "YUP Audio Plugin Host";
 

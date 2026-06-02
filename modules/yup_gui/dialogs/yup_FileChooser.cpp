@@ -22,6 +22,23 @@
 namespace yup
 {
 
+namespace
+{
+
+CriticalSection& getActiveFileChoosersLock()
+{
+    static CriticalSection lock;
+    return lock;
+}
+
+std::vector<FileChooser::Ptr>& getActiveFileChoosers()
+{
+    static std::vector<FileChooser::Ptr> activeChoosers;
+    return activeChoosers;
+}
+
+} // namespace
+
 //==============================================================================
 #if ! YUP_LINUX && ! YUP_WINDOWS && ! YUP_ANDROID
 class FileChooser::FileChooserImpl
@@ -107,18 +124,27 @@ void FileChooser::showDialog (CompletionCallback callback, int flags)
     if (packageDirsAsFiles)
         flags |= treatFilePackagesAsDirs;
 
+    addToActiveFileChoosers();
+
     auto capturedCallback = createCapturingCallback (std::move (callback));
-    auto showOnMessageThread = [self = Ptr { this }, flags, callback = std::move (capturedCallback)]() mutable
+    WeakReference<FileChooser> weakThis (this);
+    auto showOnMessageThread = [weakThis, flags, callback = std::move (capturedCallback)]() mutable
     {
-        self->showPlatformDialog (std::move (callback), flags);
+        if (auto* self = weakThis.get())
+        {
+            Ptr retainedSelf (self);
+            retainedSelf->showPlatformDialog (std::move (callback), flags);
+        }
     };
 
     if (! MessageManager::existsAndIsCurrentThread())
     {
-        MessageManager::callAsync ([show = std::move (showOnMessageThread)]() mutable
+        if (! MessageManager::callAsync ([show = std::move (showOnMessageThread)]() mutable
         {
             show();
-        });
+        }))
+            removeFromActiveFileChoosers();
+
         return;
     }
 
@@ -145,10 +171,63 @@ void FileChooser::invokeCallback (CompletionCallback callback, bool success, con
 
 FileChooser::CompletionCallback FileChooser::createCapturingCallback (CompletionCallback callback)
 {
-    return [self = Ptr { this }, callback = std::move (callback)] (bool success, const Array<File>& results)
+    WeakReference<FileChooser> weakThis (this);
+
+    return [weakThis, callback = std::move (callback)] (bool success, const Array<File>& results) mutable
     {
-        callback (success, results);
+        auto* chooser = weakThis.get();
+        if (chooser == nullptr)
+            return;
+
+        chooser->removeFromActiveFileChoosers();
+
+        if (callback)
+            callback (success, results);
     };
+}
+
+void FileChooser::addToActiveFileChoosers()
+{
+    static bool installShutdownCallback = []
+    {
+        MessageManager::getInstance()->registerShutdownCallback ([]
+        {
+            FileChooser::releaseAllActiveFileChoosers();
+        });
+        return true;
+    }();
+
+    ignoreUnused (installShutdownCallback);
+
+    const ScopedLock lock (getActiveFileChoosersLock());
+    getActiveFileChoosers().push_back (this);
+}
+
+void FileChooser::removeFromActiveFileChoosers()
+{
+    const ScopedLock lock (getActiveFileChoosersLock());
+    auto& activeChoosers = getActiveFileChoosers();
+
+    for (auto it = activeChoosers.begin(); it != activeChoosers.end();)
+    {
+        if (it->get() == this)
+            it = activeChoosers.erase (it);
+        else
+            ++it;
+    }
+}
+
+void FileChooser::releaseAllActiveFileChoosers()
+{
+    std::vector<FileChooser::Ptr> activeChoosers;
+
+    {
+        const ScopedLock lock (getActiveFileChoosersLock());
+        activeChoosers.swap (getActiveFileChoosers());
+    }
+
+    for (auto& chooser : activeChoosers)
+        chooser->impl.reset();
 }
 
 } // namespace yup

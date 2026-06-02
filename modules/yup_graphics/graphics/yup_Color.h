@@ -32,20 +32,20 @@ enum class ColorSpace : unsigned int
 };
 
 //==============================================================================
-/** Represents an RGBA color for graphical use.
+/** Represents a color for graphical use.
 
-    This class encapsulates color information in RGBA format, where each component (red, green, blue, alpha)
-    is represented as an 8-bit value. It provides methods for adjusting color components individually,
-    converting to and from HSL (Hue, Saturation, Luminance), and for performing operations like brightening,
-    darkening, and contrasting.
+    This class encapsulates color information as 8-bit red, green, blue, and alpha components.
+    Packed integer APIs use ARGB order (`0xAARRGGBB`) to match Rive ColorInt and the rest of
+    the YUP graphics API. Use getRGBA(), getBGRA(), fromRGBA(), and fromBGRA() when exchanging
+    explicitly packed values with systems that use a different component order.
 */
 class YUP_API Color
 {
 public:
     //==============================================================================
-    /** Default constructor, initializes the color to transparent black.
+    /** Default constructor, initializes the color to opaque black.
 
-        Creates a color with all components set to zero, which is fully transparent black.
+        Creates a color with red, green, and blue set to zero, and alpha set to fully opaque.
     */
     constexpr Color() noexcept
         : data (0xff000000)
@@ -121,6 +121,34 @@ public:
     constexpr uint32 getARGB() const noexcept
     {
         return data;
+    }
+
+    /** Returns the color as a 32-bit integer in RGBA format.
+
+        The returned value is packed as `0xRRGGBBAA`.
+
+        @return The color as a 32-bit integer in RGBA component order.
+    */
+    constexpr uint32 getRGBA() const noexcept
+    {
+        return (static_cast<uint32> (r) << 24)
+             | (static_cast<uint32> (g) << 16)
+             | (static_cast<uint32> (b) << 8)
+             | static_cast<uint32> (a);
+    }
+
+    /** Returns the color as a 32-bit integer in BGRA format.
+
+        The returned value is packed as `0xBBGGRRAA`.
+
+        @return The color as a 32-bit integer in BGRA component order.
+    */
+    constexpr uint32 getBGRA() const noexcept
+    {
+        return (static_cast<uint32> (b) << 24)
+             | (static_cast<uint32> (g) << 16)
+             | (static_cast<uint32> (r) << 8)
+             | static_cast<uint32> (a);
     }
 
     /** Explicit conversion to a 32-bit integer.
@@ -1006,6 +1034,22 @@ public:
         return { a, r, g, b };
     }
 
+    /** Creates a Color object from a packed RGBA value.
+
+        @param colorRGBA The color packed as `0xRRGGBBAA`.
+
+        @return A Color object with the specified RGBA values.
+    */
+    static constexpr Color fromRGBA (uint32 colorRGBA) noexcept
+    {
+        return {
+            static_cast<uint8> (colorRGBA & 0xFF),
+            static_cast<uint8> ((colorRGBA >> 24) & 0xFF),
+            static_cast<uint8> ((colorRGBA >> 16) & 0xFF),
+            static_cast<uint8> ((colorRGBA >> 8) & 0xFF)
+        };
+    }
+
     /** Creates a Color object from ARGB components.
 
         This static method constructs a Color object using the specified alpha, red, green, and blue components.
@@ -1036,6 +1080,22 @@ public:
     static Color fromBGRA (uint8 b, uint8 g, uint8 r, uint8 a) noexcept
     {
         return { a, r, g, b };
+    }
+
+    /** Creates a Color object from a packed BGRA value.
+
+        @param colorBGRA The color packed as `0xBBGGRRAA`.
+
+        @return A Color object with the specified BGRA values.
+    */
+    static constexpr Color fromBGRA (uint32 colorBGRA) noexcept
+    {
+        return {
+            static_cast<uint8> (colorBGRA & 0xFF),
+            static_cast<uint8> ((colorBGRA >> 8) & 0xFF),
+            static_cast<uint8> ((colorBGRA >> 16) & 0xFF),
+            static_cast<uint8> ((colorBGRA >> 24) & 0xFF)
+        };
     }
 
     //==============================================================================
@@ -1107,11 +1167,35 @@ private:
     {
         uint32 data = 0xff000000;
 
+        // Component access reflects little-endian storage for the ARGB integer.
+        // Public APIs should expose explicit packed formats instead of relying on this layout.
         struct
         {
             uint8 b, g, r, a;
         };
     };
 };
+
+/** Converts a Color to a normalized RGBA vector. */
+inline Vec4f toVec4f (Color color) noexcept
+{
+    return {
+        color.getRedFloat(),
+        color.getGreenFloat(),
+        color.getBlueFloat(),
+        color.getAlphaFloat()
+    };
+}
+
+/** Converts a normalized RGBA vector to a Color. */
+inline Color toColor (Vec4f color) noexcept
+{
+    return {
+        static_cast<uint8> (roundToInt (jlimit (0.0f, 1.0f, color.a) * 255.0f)),
+        static_cast<uint8> (roundToInt (jlimit (0.0f, 1.0f, color.r) * 255.0f)),
+        static_cast<uint8> (roundToInt (jlimit (0.0f, 1.0f, color.g) * 255.0f)),
+        static_cast<uint8> (roundToInt (jlimit (0.0f, 1.0f, color.b) * 255.0f))
+    };
+}
 
 } // namespace yup

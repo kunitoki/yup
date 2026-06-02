@@ -398,11 +398,11 @@ TEST_F (BiquadCascadeFilterTests, StabilityCheck)
     auto coeffs = FilterDesigner<double>::designRbjLowpass (5000.0, 50.0, sampleRate);
     cascadeFloat.setSectionCoefficients (0, coeffs);
 
-    // Process white noise-like signal
+    // Process deterministic white noise-like signal
     std::vector<float> noiseInput (blockSize);
-    WhiteNoise noise;
+    WhiteNoise noise (12345);
     for (int i = 0; i < blockSize; ++i)
-        noiseInput[i] = noise.getNextSample();
+        noiseInput[i] = 0.1f * noise.getNextSample();
 
     cascadeFloat.processBlock (noiseInput.data(), outputData.data(), blockSize);
 

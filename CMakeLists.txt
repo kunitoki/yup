@@ -36,9 +36,13 @@ set_property (GLOBAL PROPERTY USE_FOLDERS ON)
 # Options
 option (YUP_TARGET_ANDROID "Target Android project" OFF)
 option (YUP_TARGET_ANDROID_BUILD_GRADLE "When building for Android, build the gradle infrastructure" OFF)
+option (YUP_EXPORT_MODULES "Export the modules to the parent project" ON)
 option (YUP_ENABLE_PROFILING "Enable the profiling code using Perfetto SDK" OFF)
 option (YUP_ENABLE_COVERAGE "Enable code coverage collection for tests" OFF)
-option (YUP_EXPORT_MODULES "Export the modules to the parent project" ON)
+option (YUP_ENABLE_VST3_VALIDATOR "Enable the Steinberg VST3 validator for VST3 plugins" ${PROJECT_IS_TOP_LEVEL})
+option (YUP_ENABLE_CLAP_VALIDATOR "Enable clap-validator validation for CLAP plugins" ${PROJECT_IS_TOP_LEVEL})
+option (YUP_ENABLE_AUVAL_VALIDATOR "Enable auval validation for AU plugins" ${PROJECT_IS_TOP_LEVEL})
+option (YUP_ENABLE_PLUGINVAL "Enable pluginval validation for VST3/AU plugins" ${PROJECT_IS_TOP_LEVEL})
 option (YUP_ENABLE_STATIC_PYTHON_LIBS "Use static Python libraries" OFF)
 option (YUP_BUILD_JAVA_SUPPORT "Build the Java support" OFF)
 option (YUP_BUILD_EXAMPLES "Build the examples" ${PROJECT_IS_TOP_LEVEL})
@@ -68,6 +72,17 @@ endif()
 if (YUP_ENABLE_PROFILING)
     _yup_message (STATUS "Enabling profiling")
     _yup_fetch_perfetto()
+endif()
+
+# Setup validation tools
+if (YUP_ENABLE_PLUGINVAL)
+    _yup_message (STATUS "Setting up pluginval")
+    yup_setup_pluginval()
+endif()
+
+if (YUP_ENABLE_CLAP_VALIDATOR)
+    _yup_message (STATUS "Setting up clap-validator")
+    yup_setup_clap_validator()
 endif()
 
 # Targets

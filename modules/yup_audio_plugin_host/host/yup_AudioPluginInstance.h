@@ -69,12 +69,12 @@ public:
     /** Processes a bypassed single-precision block by copying matching inputs to
         outputs and clearing outputs without matching inputs.
     */
-    void processBlockBypassed (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer) override;
+    void processBlockBypassed (AudioProcessContext<float>& context) override;
 
     /** Processes a bypassed double-precision block by copying matching inputs to
         outputs and clearing outputs without matching inputs.
     */
-    void processBlockBypassed (AudioBuffer<double>& audioBuffer, MidiBuffer& midiBuffer) override;
+    void processBlockBypassed (AudioProcessContext<double>& context) override;
 
 protected:
     AudioPluginDescription pluginDescription;

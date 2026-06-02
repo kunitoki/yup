@@ -23,28 +23,54 @@ namespace yup
 {
 
 //==============================================================================
+/** A base class for buttons.
+
+    To create a custom button, inherit from this class and implement the paintButton() method.
+
+    The button will automatically track mouse events to determine when it is being hovered over
+    or clicked, and will call the onClick callback when it is clicked.
+
+    @see Component, DrawableButton
+*/
 class YUP_API Button : public Component
 {
 public:
     //==============================================================================
+    /** Creates a button with the given component ID. */
     Button (StringRef componentID);
 
     //==============================================================================
+    /** Returns true if the button is currently being hovered over. */
     bool isButtonOver() const { return isButtonCurrentlyOver; }
 
+    /** Returns true if the button is currently being clicked. */
     bool isButtonDown() const { return isButtonCurrentlyDown; }
 
     //==============================================================================
+    /** Paints the button.
+    
+        This method must be implemented by subclasses to define how the button should be drawn.
+        The button's current state (hovered, clicked) can be determined using the isButtonOver() and
+        isButtonDown() methods.
+
+        @param g The graphics context to use for drawing.
+    */
     virtual void paintButton (Graphics& g) = 0;
 
     //==============================================================================
+    /** A callback that is called when the button is clicked. */
     std::function<void()> onClick;
 
     //==============================================================================
+    /** @internal */
     void paint (Graphics& g) override;
+    /** @internal */
     void mouseEnter (const MouseEvent& event) override;
+    /** @internal */
     void mouseExit (const MouseEvent& event) override;
+    /** @internal */
     void mouseDown (const MouseEvent& event) override;
+    /** @internal */
     void mouseUp (const MouseEvent& event) override;
 
 private:

@@ -55,6 +55,8 @@
 #include "processors/yup_AudioBusLayout.h"
 #include "processors/yup_AudioParameter.h"
 #include "processors/yup_AudioParameterBuilder.h"
+#include "processors/yup_ParameterChangeBuffer.h"
+#include "processors/yup_AudioProcessContext.h"
 #include "processors/yup_AudioParameterHandle.h"
 #include "processors/yup_AudioProcessor.h"
 

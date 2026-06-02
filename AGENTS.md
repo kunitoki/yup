@@ -16,6 +16,42 @@ This document provides directive guidelines for AI assistants working on the YUP
 
 **NEVER EVER run bash commands to configure, compile or test the implementation, acknowledge that we should test and we'll run and report any issue.**
 
+## AI Decision Making Rules
+
+### Always:
+1. **Rely on the C++20 language and standard library** so use it (unless the feature is not supported in all YUP's platforms)
+2. **Check existing patterns** in similar modules first
+3. **Use YUP conventions** for similar functionality
+4. **Use YUP infrastructure** instead of reinventing the wheel
+5. **If the same functionality can be provided with less code and complexity** prefer less code
+6. **Always prefer reusing code than creating duplicated code**
+7. **Prefer composition over inheritance**
+8. **Make classes small and focused** (single responsibility)
+9. **Use const-correctness** throughout
+10. **Do not leak internal details**
+11. **Follow the open-closed principle**
+12. **Never assume we use plain JUCE7 functionality, always check APIs** as they might have evolved
+
+### When implementing new features:
+1. **Always provide extensive and useful doxygen documentation** for public APIs
+2. **Make sure new code is always tested**
+
+### When writing tests:
+1. **Test primarily public interfaces only**
+2. **Cover normal, edge, and error cases**
+3. **Use descriptive test names** (e.g., `ReturnsNullForInvalidInput`)
+4. **Group related tests** in test fixtures
+5. **Keep tests independent** and deterministic
+6. **Never Use C or C++ macros (like M_PI)** use yup alternatives
+
+### When suggesting refactoring:
+1. **Maintain existing API contracts**
+2. **Follow established module patterns**
+3. **Preserve platform-specific code organization**
+4. **Update tests accordingly**
+5. **Consider performance implications**
+6. **Keep API usage simple and effective**
+
 ### 1. File Headers
 **ALWAYS** start new files with this exact header:
 
@@ -71,44 +107,6 @@ For main module headers (e.g., `yup_graphics.h`), include this declaration block
 Refer to `./docs/YUP Module Format.md` for more info if needed.
 
 ### 3. Formatting Rules (Allman Style)
-```cpp
-// Classes
-class MyClass
-{
-public:
-    MyClass();
-    ~MyClass();
-
-private:
-    int memberVariable;
-};
-
-// Functions
-void functionName()
-{
-    // implementation
-}
-
-// Control structures
-if (condition)
-{
-    // code
-}
-else
-{
-    // code
-}
-
-for (int i = 0; i < count; ++i)
-{
-    // code
-}
-
-while (condition)
-{
-    // code
-}
-```
 
 ### 4. Naming Conventions
 - **Classes:** `PascalCase` (e.g., `GraphicsContext`)
@@ -125,32 +123,30 @@ while (condition)
 // 1. Own module header (if in .cpp file)
 #include <yup_graphics/yup_graphics.h>
 
-// 2. Standard library
-#include <memory>
-#include <vector>
-
-// 3. External libraries (Rive, etc.)
-#include <rive/rive.h>
-
-// 4. Other project modules
+// 2. Other project modules
 #include "yup_core/yup_core.h"
 
-// 5. Same module headers
+// 3. Same module headers
 #include "graphics/yup_Color.h"
 #include "primitives/yup_Point.h"
+
+// 5. External libraries (Rive, etc.)
+#include <rive/rive.h>
+
+// 4. Standard library
+#include <memory>
+#include <vector>
 ```
 
 ### 6. Namespace Usage
 ```cpp
-// NEVER use "using namespace"
-// In test files: OK for widely used namespaces
+// NEVER use "using namespace" except in test files
 using namespace yup;
 
 // Prefer limited scope usage
 TEST (MyClassTests, someFunction)
 {
     using namespace std::chrono;
-    // use chrono types without std::chrono:: prefix
 }
 ```
 
@@ -166,8 +162,13 @@ modules/yup_module_name/
 │   ├── yup_ClassName.h
 │   └── yup_ClassName.cpp
 └── native/                    // Platform-specific code
-    ├── yup_ClassName_win32.cpp
+    ├── yup_ClassName_android.cpp
+    ├── yup_ClassName_windows.cpp
     ├── yup_ClassName_linux.cpp
+    ├── yup_ClassName_wasm.cpp
+    ├── yup_ClassName_emscripten.cpp
+    ├── yup_ClassName_mac.mm
+    ├── yup_ClassName_ios.mm
     └── yup_ClassName_apple.mm
 ```
 Avoid going deeply nested into modules. Prefer a single subdirectory whenever possible for YUP modules (might be ok for thirdparties as we don't control the upstream structure).
@@ -183,33 +184,6 @@ tests/module_name/
 
 ## Class Design Templates
 
-### Basic Class Template
-```cpp
-class ClassName
-{
-public:
-    ClassName();
-    ~ClassName();
-
-    // Copy/move constructors if needed
-    ClassName (const ClassName& other) = delete;
-    ClassName& operator= (const ClassName& other) = delete;
-
-    // Public interface
-    void doSomething (int arg);
-    int getValue() const;
-    bool isValid() const;
-
-private:
-    // Member variables
-    int value;
-    bool initialized;
-
-    // Helper methods
-    void initialize();
-};
-```
-
 ### YUP-Style Class (with leak detector)
 ```cpp
 class YupStyleClass
@@ -221,6 +195,8 @@ public:
     void publicMethod();
 
 private:
+    void privateMethod();
+
     int memberVar;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (YupStyleClass)
@@ -239,15 +215,17 @@ using namespace yup;
 
 namespace
 {
-    // Test helpers and constants
-    constexpr int kTestValue = 42;
 
-    class TestHelper
-    {
-    public:
-        static void setupTestData() { /* ... */ }
-    };
-}
+// Test helpers and constants, prefer move them into fixtures so they don't clash in unity builds
+constexpr int kTestValue = 42;
+
+class TestHelper
+{
+public:
+    static void setupTestData() { /* ... */ }
+};
+
+} // namespace
 
 class ClassNameTests : public ::testing::Test
 {
@@ -279,54 +257,17 @@ TEST (ClassNameTests, StaticMethodBehavesCorrectly)
 }
 ```
 
-## AI Decision Making Rules
-
-### Always:
-1. **Rely on the C++20 language and standard library** so use it (unless the feature is not supported in all YUP's platforms)
-2. **Check existing patterns** in similar modules first
-3. **Use YUP conventions** for similar functionality
-4. **Use YUP infrastructure** instead of reinventing the wheel
-5. **Prefer composition over inheritance**
-6. **Make classes small and focused** (single responsibility)
-6. **Use const-correctness** throughout
-7. **Do not leak internal details**
-8. **Follow the open-closed principle**
-9. **Never assume we use plain JUCE7 functionality, always check APIs** as they might have evolved
-
-### When implementing new features:
-1. **Always provide extensive and useful doxygen documentation** for public APIs
-2. **Make sure new code is always tested**
-
-### When writing tests:
-1. **Test primarily public interfaces only**
-2. **Cover normal, edge, and error cases**
-3. **Use descriptive test names** (e.g., `ReturnsNullForInvalidInput`)
-4. **Group related tests** in test fixtures
-5. **Keep tests independent** and deterministic
-6. **Never Use C or C++ macros (like M_PI)** use yup alternatives
-
-### When suggesting refactoring:
-1. **Maintain existing API contracts**
-2. **Follow established module patterns**
-3. **Preserve platform-specific code organization**
-4. **Update tests accordingly**
-5. **Consider performance implications**
-6. **Keep API usage simple and effective**
-
 ### Platform-specific code:
 ```cpp
-#if YUP_WINDOWS
-    // Windows implementation
-#elif YUP_MAC
-    // macOS implementation
-#elif YUP_IOS
-    // iOS implementation
-#elif YUP_LINUX
-    // Linux implementation
-#elif YUP_ANDROID
-    // Android implementation
-#elif YUP_WASM
-    // WebAssembly implementation
+#if YUP_WINDOWS // Windows
+#elif YUP_MAC // macOS
+#elif YUP_IOS // iOS
+#elif YUP_LINUX // Linux
+#elif YUP_ANDROID // Android
+#elif YUP_WASM // WebAssembly (including emscripten)
+#elif YUP_EMSCRIPTEN // WebAssembly (only emscripten)
+#elif YUP_DESKTOP // Windows/macOS/Linux
+#elif YUP_MOBILE // Android/iOS
 #endif
 ```
 
@@ -374,34 +315,6 @@ Before suggesting code, verify:
 - [ ] No memory leaks (prefer RAII/smart pointers)
 - [ ] Thread safety considerations if applicable
 - [ ] Documentation for public APIs
-
-## Common Patterns to Follow
-
-### Resource Management
-```cpp
-// Prefer RAII and smart pointers
-class ResourceManager
-{
-private:
-    std::unique_ptr<Resource> resource;
-    std::vector<std::shared_ptr<Item>> items;
-};
-```
-
-### Optional Values
-```cpp
-// Use yup::var for dynamic types
-// Use std::optional for optional values
-std::optional<int> findValue (const String& key);
-```
-
-### String Handling
-```cpp
-// Use yup::String for most string operations
-void processText (const yup::String& text);
-
-// Use std::string only when interfacing with non-YUP code
-```
 
 ## Differences with JUCE
 

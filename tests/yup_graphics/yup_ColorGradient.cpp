@@ -23,6 +23,7 @@
 
 #include <yup_graphics/yup_graphics.h>
 
+#include <array>
 #include <cmath>
 #include <vector>
 
@@ -744,4 +745,43 @@ TEST (ColorGradientTests, GetColorAt_XY_Radial_ZeroRadius)
     ColorGradient gradient (start, 2.0f, 2.0f, end, 2.0f, 2.0f, ColorGradient::Radial);
 
     EXPECT_EQ (gradient.getColorAt (10.0f, 10.0f).getARGB(), start.getARGB());
+}
+
+TEST (ColorGradientTests, FillGradient_FillsProvidedSpan)
+{
+    const Color start (0xffff0000);
+    const Color end (0x800000ff);
+    const ColorGradient gradient (ColorGradient::Linear,
+                                  {
+                                      ColorGradient::ColorStop (start, 0.0f, 0.0f, 0.0f),
+                                      ColorGradient::ColorStop (end, 10.0f, 0.0f, 1.0f),
+                                  });
+
+    std::array<uint32, 3> colors {};
+    gradient.fillGradient (colors);
+
+    EXPECT_EQ (colors[0], start.getARGB());
+    EXPECT_EQ (colors[1], start.mixedWith (end, 0.5f, ColorSpace::SRGB).getARGB());
+    EXPECT_EQ (colors[2], end.getARGB());
+}
+
+TEST (ColorGradientTests, FillGradient_HandlesEmptyAndSingleStopGradients)
+{
+    std::array<uint32, 2> emptyColors {};
+    ColorGradient().fillGradient (emptyColors);
+    EXPECT_EQ (emptyColors[0], Color().getARGB());
+    EXPECT_EQ (emptyColors[1], Color().getARGB());
+
+    const Color only (0xff123456);
+    const ColorGradient single (ColorGradient::Linear,
+                                {
+                                    ColorGradient::ColorStop (only, 4.0f, 5.0f, 0.3f),
+                                });
+
+    std::array<uint32, 3> singleColors {};
+    single.fillGradient (singleColors);
+
+    EXPECT_EQ (singleColors[0], only.getARGB());
+    EXPECT_EQ (singleColors[1], only.getARGB());
+    EXPECT_EQ (singleColors[2], only.getARGB());
 }

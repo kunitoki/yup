@@ -53,8 +53,9 @@ public:
 
     void releaseResources() override {}
 
-    void processBlock (yup::AudioBuffer<float>& audioBuffer, yup::MidiBuffer&) override
+    void processBlock (yup::AudioProcessContext<float>& context) override
     {
+        auto& audioBuffer = context.audio;
         audioBuffer.clear();
 
         const auto* sample = currentSample.load (std::memory_order_acquire);

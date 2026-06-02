@@ -152,6 +152,19 @@ public:
     static std::atomic_flag isInitialised;
 
 private:
+    static bool requestMouseCapture();
+    static void releaseMouseCapture();
+    static int mouseCaptureRequestCount;
+    static uint32_t lastCapturedMouseButtonState;
+    static bool popupDismissalCheckPending;
+
+    void updateMouseCapture (bool shouldBeActive);
+    static void pollCapturedMouseState();
+    static void triggerPopupDismissalCheck();
+    static void dismissPopupsIfNoNativeWindowHasFocus();
+    static bool anyNativeWindowHasKeyboardFocus();
+    static bool anyNativeWindowContains (Point<float> screenPosition);
+
     Component* findComponentForMouseEvent (const Point<float>& position);
     void updateComponentUnderMouse (const MouseEvent& event);
     void renderContext();
@@ -184,6 +197,7 @@ private:
     WeakReference<Component> lastComponentClicked;
     WeakReference<Component> lastComponentFocused;
     WeakReference<Component> lastComponentUnderMouse;
+    WeakReference<Component> currentTextInputComponent;
 
     HashMap<int, char> keyState;
     MouseEvent::Buttons currentMouseButtons = MouseEvent::noButtons;
@@ -209,8 +223,8 @@ private:
     bool renderAtomicMode = false;
     bool renderWireframe = false;
     bool updateOnlyWhenFocused = false;
-
-    WeakReference<Component> currentTextInputComponent;
+    bool shouldCaptureMouse = false;
+    bool mouseCaptureActive = false;
 };
 
 } // namespace yup

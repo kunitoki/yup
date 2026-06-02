@@ -93,10 +93,14 @@ public:
 
     struct Style
     {
+        //! Colors
         static const Identifier textFillColorId;
         static const Identifier textStrokeColorId;
         static const Identifier backgroundColorId;
         static const Identifier outlineColorId;
+
+        //! Metrics
+        static const Identifier textHeightProportionMetricId;
     };
 
     //==============================================================================
