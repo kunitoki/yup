@@ -658,6 +658,56 @@ public:
     void setNotClear() noexcept { isClear = false; }
 
     //==============================================================================
+    /** Fills all the samples in all channels by a value.
+
+        This method will do nothing if the buffer has been marked as cleared (i.e. the
+        hasBeenCleared method returns true.)
+    */
+    void fill (Type value) noexcept
+    {
+        for (int i = 0; i < numChannels; ++i)
+            FloatVectorOperations::fill (channels[i], value, size);
+
+        isClear = false;
+    }
+
+    /** Fills a specified region of all the channels.
+
+        For speed, this doesn't check whether the channel and sample number
+        are in-range, so be careful!
+    */
+    void fill (int startSample, int numSamples, Type value) noexcept
+    {
+        jassert (startSample >= 0 && startSample + numSamples <= size);
+
+        if (numSamples <= 0)
+            return;
+
+        for (int i = 0; i < numChannels; ++i)
+            FloatVectorOperations::fill (channels[i] + startSample, value, numSamples);
+
+        isClear = false;
+    }
+
+    /** Fills a specified region of just one channel.
+
+        For speed, this doesn't check whether the channel and sample number
+        are in-range, so be careful!
+    */
+    void fill (int channel, int startSample, int numSamples, Type value) noexcept
+    {
+        jassert (isPositiveAndBelow (channel, numChannels));
+        jassert (startSample >= 0 && startSample + numSamples <= size);
+
+        if (numSamples <= 0)
+            return;
+
+        FloatVectorOperations::fill (channels[channel] + startSample, value, numSamples);
+
+        isClear = false;
+    }
+
+    //==============================================================================
     /** Returns a sample from the buffer.
 
         The channel and index are not checked - they are expected to be in-range. If not,

@@ -64,6 +64,7 @@
 #include "yup_core/yup_NamedPipe.cpp"
 #include "yup_core/yup_NormalisableRange.cpp"
 #include "yup_core/yup_OwnedArray.cpp"
+#include "yup_core/yup_PerformanceCounter.cpp"
 #include "yup_core/yup_PlatformDefs.cpp"
 #include "yup_core/yup_Process.cpp"
 #include "yup_core/yup_Profiler.cpp"
