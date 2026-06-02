@@ -121,6 +121,7 @@ private:
     //==============================================================================
     Range<int> getValidBufferRange (int numSamples) const;
     std::tuple<int64, Range<int>> getValidBufferRangeAndAdvance (int numSamples);
+    void invalidateBufferRange();
     bool readNextBufferChunk();
     void readBufferSection (int64 start, int length, int bufferOffset);
     int useTimeSlice() override;
@@ -133,6 +134,7 @@ private:
     CriticalSection callbackLock, bufferRangeLock;
     WaitableEvent bufferReadyEvent;
     int64 bufferValidStart = 0, bufferValidEnd = 0;
+    uint64 bufferRangeGeneration = 0;
     std::atomic<int64> nextPlayPos { 0 };
     double sampleRate = 0;
     bool wasSourceLooping = false, isPrepared = false;
