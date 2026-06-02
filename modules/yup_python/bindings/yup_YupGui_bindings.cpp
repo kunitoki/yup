@@ -193,6 +193,7 @@ void registerYupGuiBindings (py::module_& m)
         .def ("withResizableWindow", &ComponentNative::Options::withResizableWindow)
         .def ("withRenderContinuous", &ComponentNative::Options::withRenderContinuous)
         .def ("withAllowedHighDensityDisplay", &ComponentNative::Options::withAllowedHighDensityDisplay)
+        .def ("withMouseCapture", &ComponentNative::Options::withMouseCapture)
         //.def ("withGraphicsApi", &ComponentNative::Options::withGraphicsApi)
         .def ("withFramerateRedraw", &ComponentNative::Options::withFramerateRedraw)
         .def ("withClearColor", &ComponentNative::Options::withClearColor)
@@ -393,9 +394,6 @@ void registerYupGuiBindings (py::module_& m)
         .def ("setColor", &Component::setColor)
         .def ("getColor", &Component::getColor)
         .def ("findColor", &Component::findColor)
-        .def ("setStyleProperty", &Component::setStyleProperty)
-        .def ("getStyleProperty", &Component::getStyleProperty)
-        .def ("findStyleProperty", &Component::findStyleProperty)
     ;
 
     // ============================================================================================ yup::DocumentWindow

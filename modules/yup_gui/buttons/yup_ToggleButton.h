@@ -70,6 +70,7 @@ public:
 
     //==============================================================================
     /** Called when the toggle state changes.
+
         Override this to perform custom actions when the button is toggled.
     */
     virtual void toggleStateChanged() {}
@@ -87,6 +88,9 @@ public:
 
     //==============================================================================
     /** @internal */
+    StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
+
+    /** @internal */
     void paintButton (Graphics& g) override;
     /** @internal */
     void resized() override;
@@ -96,9 +100,6 @@ public:
     void focusGained() override;
     /** @internal */
     void focusLost() override;
-
-    /** @internal */
-    StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
 
 private:
     String buttonText;

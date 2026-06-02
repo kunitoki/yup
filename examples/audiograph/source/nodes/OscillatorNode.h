@@ -45,8 +45,9 @@ public:
 
     void releaseResources() override {}
 
-    void processBlock (yup::AudioBuffer<float>& audioBuffer, yup::MidiBuffer&) override
+    void processBlock (yup::AudioProcessContext<float>& context) override
     {
+        auto& audioBuffer = context.audio;
         const auto currentFrequency = static_cast<double> (frequency.load (std::memory_order_relaxed));
         const auto increment = yup::MathConstants<double>::twoPi * currentFrequency / static_cast<double> (sampleRate);
 

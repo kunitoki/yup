@@ -122,6 +122,26 @@ public:
         std::atomic<bool>& flag;
     };
 
+    struct ScopedWorkerDrain
+    {
+        ScopedWorkerDrain (std::atomic<int>& counterIn, bool enabledIn) noexcept
+            : counter (counterIn)
+            , enabled (enabledIn)
+        {
+            if (enabled)
+                counter.fetch_add (1, std::memory_order_acq_rel);
+        }
+
+        ~ScopedWorkerDrain()
+        {
+            if (enabled)
+                counter.fetch_sub (1, std::memory_order_acq_rel);
+        }
+
+        std::atomic<int>& counter;
+        bool enabled;
+    };
+
     struct ScopedProcessBlock
     {
         explicit ScopedProcessBlock (std::atomic<int>& counterIn) noexcept
@@ -285,7 +305,6 @@ public:
 
             if (! isPrepared)
             {
-                node.processor->setPlayHead (owner.getPlayHead());
                 node.processor->setPlaybackConfiguration (sampleRate, maxBlockSize);
                 newlyPreparedNodes.push_back (node.processor);
             }
@@ -410,11 +429,19 @@ public:
         if (details.latencyChanged)
         {
             latencyChangeCounter.fetch_add (1);
+
+            if (! commitInProgress.load())
+            {
+                ignoreUnused (commitChanges());
+            }
         }
     }
 
-    void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer)
+    void processBlock (AudioProcessContext<float>& context)
     {
+        auto& audioBuffer = context.audio;
+        auto& midiBuffer = context.midi;
+
         ScopedNoDenormals noDenormals;
         const ScopedProcessBlock scopedProcessBlock (activeProcessBlocks);
         swapPendingPlan();
@@ -446,15 +473,16 @@ public:
 
             if (desiredWorkerThreads.load() > 0)
             {
-                processLevels (*graph, numSamples);
+                processLevels (*graph, numSamples, context.playHead);
             }
             else
             {
                 for (const auto nodeIndex : graph->topologicalOrder)
-                    processNode (*graph, nodeIndex, numSamples);
+                    processNode (*graph, nodeIndex, numSamples, context.playHead);
             }
 
             for (const auto connectionIndex : graph->graphOutputConnections)
+            {
                 routeConnection (*graph,
                                  graph->connections[static_cast<size_t> (connectionIndex)],
                                  audioBuffer,
@@ -462,6 +490,7 @@ public:
                                  numSamples,
                                  startSample,
                                  startSample);
+            }
         }
 
         midiBuffer.clear();
@@ -875,7 +904,10 @@ public:
         graph.graphInputMidi.addEvents (midiBuffer, startSample, numSamples, -startSample);
     }
 
-    void processNode (CompiledGraph& graph, int nodeIndex, int numSamples)
+    void processNode (CompiledGraph& graph,
+                      int nodeIndex,
+                      int numSamples,
+                      AudioPlayHead* playHead)
     {
         auto& node = graph.nodes[static_cast<size_t> (nodeIndex)];
 
@@ -886,10 +918,12 @@ public:
         for (const auto connectionIndex : node.incomingConnections)
             routeConnection (graph, graph.connections[static_cast<size_t> (connectionIndex)], node.audioBuffer, node.midiBuffer, numSamples);
 
-        node.processor->processBlock (node.audioBuffer, node.midiBuffer);
+        ParameterChangeBuffer emptyParams;
+        AudioProcessContext<float> nodeCtx { node.audioBuffer, node.midiBuffer, emptyParams, playHead };
+        node.processor->processBlock (nodeCtx);
     }
 
-    void processLevels (CompiledGraph& graph, int numSamples)
+    void processLevels (CompiledGraph& graph, int numSamples, AudioPlayHead* playHead)
     {
         for (auto& level : graph.executionLevels)
         {
@@ -901,6 +935,7 @@ public:
             activeGraph.store (&graph, std::memory_order_relaxed);
             activeLevel.store (&level, std::memory_order_relaxed);
             activeNumSamples.store (numSamples, std::memory_order_relaxed);
+            activePlayHead.store (playHead, std::memory_order_relaxed);
             nextJobIndex.store (0, std::memory_order_relaxed);
             remainingJobs.store (static_cast<int> (level.size()), std::memory_order_release);
             activeGeneration.store (generation, std::memory_order_release);
@@ -908,9 +943,14 @@ public:
             workerReadyEvent.reset();
             workerReadyEvent.signal();
 
-            drainActiveJobs (generation);
+            drainActiveJobs (generation, false);
 
             while (remainingJobs.load (std::memory_order_acquire) > 0)
+                ;
+
+            activeGeneration.store (0, std::memory_order_release);
+
+            while (activeWorkerDrains.load (std::memory_order_acquire) > 0)
                 ;
 
             workerReadyEvent.reset();
@@ -919,11 +959,14 @@ public:
         activeGraph.store (nullptr, std::memory_order_relaxed);
         activeLevel.store (nullptr, std::memory_order_relaxed);
         activeNumSamples.store (0, std::memory_order_relaxed);
+        activePlayHead.store (nullptr, std::memory_order_relaxed);
         activeGeneration.store (0, std::memory_order_release);
     }
 
-    void drainActiveJobs (int generation)
+    void drainActiveJobs (int generation, bool workerThread)
     {
+        const ScopedWorkerDrain scopedWorkerDrain (activeWorkerDrains, workerThread);
+
         if (activeGeneration.load (std::memory_order_acquire) != generation)
             return;
 
@@ -934,15 +977,19 @@ public:
             return;
 
         const int numSamples = activeNumSamples.load (std::memory_order_relaxed);
+        auto* const playHead = activePlayHead.load (std::memory_order_relaxed);
 
         for (;;)
         {
+            if (activeGeneration.load (std::memory_order_acquire) != generation)
+                break;
+
             const int jobIndex = nextJobIndex.fetch_add (1);
 
             if (jobIndex >= static_cast<int> (level->size()))
                 break;
 
-            processNode (*graph, (*level)[static_cast<size_t> (jobIndex)], numSamples);
+            processNode (*graph, (*level)[static_cast<size_t> (jobIndex)], numSamples, playHead);
 
             remainingJobs.fetch_sub (1, std::memory_order_acq_rel);
         }
@@ -1225,7 +1272,9 @@ public:
     std::atomic<CompiledGraph*> activeGraph { nullptr };
     std::atomic<std::vector<int>*> activeLevel { nullptr };
     std::atomic<int> activeNumSamples { 0 };
+    std::atomic<AudioPlayHead*> activePlayHead { nullptr };
     std::atomic<int> activeGeneration { 0 };
+    std::atomic<int> activeWorkerDrains { 0 };
 };
 
 //==============================================================================
@@ -1260,15 +1309,17 @@ void AudioGraphProcessor::Pimpl::WorkerThread::run()
 
         ScopedNoDenormals noDenormals;
         owner.joinWorkgroup (workgroupToken);
-        owner.drainActiveJobs (generation);
+        owner.drainActiveJobs (generation, true);
     }
 }
 
 //==============================================================================
 AudioBusLayout AudioGraphProcessor::createDefaultBusLayout()
 {
-    return AudioBusLayout ({ AudioBus ("Input", AudioBus::Type::Audio, AudioBus::Direction::Input, 2) },
-                           { AudioBus ("Output", AudioBus::Type::Audio, AudioBus::Direction::Output, 2) });
+    return AudioBusLayout ({ AudioBus ("Input", AudioBus::Type::Audio, AudioBus::Direction::Input, 2),
+                             AudioBus ("MIDI Input", AudioBus::Type::MIDI, AudioBus::Direction::Input, 1) },
+                           { AudioBus ("Output", AudioBus::Type::Audio, AudioBus::Direction::Output, 2),
+                             AudioBus ("MIDI Output", AudioBus::Type::MIDI, AudioBus::Direction::Output, 1) });
 }
 
 AudioGraphProcessor::AudioGraphProcessor (std::shared_ptr<AudioGraphModel> model,
@@ -1346,9 +1397,9 @@ void AudioGraphProcessor::releaseResources()
     pimpl->releaseResources();
 }
 
-void AudioGraphProcessor::processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer)
+void AudioGraphProcessor::processBlock (AudioProcessContext<float>& context)
 {
-    pimpl->processBlock (audioBuffer, midiBuffer);
+    pimpl->processBlock (context);
 }
 
 void AudioGraphProcessor::flush()

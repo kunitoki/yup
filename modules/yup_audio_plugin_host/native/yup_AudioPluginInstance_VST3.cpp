@@ -532,10 +532,40 @@ struct VST3Module
     }
 #endif
 
+    static File findFirstPackageBinary (const File& package, const String& wildcardPattern)
+    {
+        Array<File> files;
+        package.getChildFile ("Contents").findChildFiles (files, File::findFiles, true, wildcardPattern, File::FollowSymlinks::noCycles);
+
+        const auto expectedName = package.getFileNameWithoutExtension();
+
+        for (const auto& file : files)
+            if (file.getFileNameWithoutExtension() == expectedName)
+                return file;
+
+        return files.isEmpty() ? File() : files.getFirst();
+    }
+
+    static File getPackageBinaryFile (const File& file)
+    {
+        if (! file.isDirectory())
+            return file;
+
+#if YUP_MAC
+        return {};
+#elif YUP_WINDOWS
+        return findFirstPackageBinary (file, "*.vst3");
+#elif YUP_LINUX
+        return findFirstPackageBinary (file, "*.so");
+#else
+        return file;
+#endif
+    }
+
     static std::unique_ptr<VST3Module> load (const File& file)
     {
         auto m = std::make_unique<VST3Module>();
-        auto libraryFile = file;
+        auto libraryFile = getPackageBinaryFile (file);
 
 #if YUP_MAC
         if (file.isDirectory())
@@ -592,6 +622,8 @@ class HostComponentHandler : public Vst::IComponentHandler
 {
 public:
     using RestartCallback = std::function<void (int32)>;
+    using ParameterGestureCallback = std::function<void (Vst::ParamID)>;
+    using ParameterEditCallback = std::function<void (Vst::ParamID, Vst::ParamValue)>;
 
     HostComponentHandler()
     {
@@ -602,14 +634,29 @@ public:
         FUNKNOWN_DTOR
     }
 
-    tresult PLUGIN_API beginEdit (Vst::ParamID) override
+    tresult PLUGIN_API beginEdit (Vst::ParamID tag) override
     {
+        if (beginEditCallback != nullptr)
+            beginEditCallback (tag);
+
         return kResultOk;
     }
 
-    tresult PLUGIN_API performEdit (Vst::ParamID, Vst::ParamValue) override { return kResultOk; }
+    tresult PLUGIN_API performEdit (Vst::ParamID tag, Vst::ParamValue value) override
+    {
+        if (performEditCallback != nullptr)
+            performEditCallback (tag, value);
 
-    tresult PLUGIN_API endEdit (Vst::ParamID) override { return kResultOk; }
+        return kResultOk;
+    }
+
+    tresult PLUGIN_API endEdit (Vst::ParamID tag) override
+    {
+        if (endEditCallback != nullptr)
+            endEditCallback (tag);
+
+        return kResultOk;
+    }
 
     tresult PLUGIN_API restartComponent (int32 flags) override
     {
@@ -624,10 +671,22 @@ public:
         restartCallback = std::move (callback);
     }
 
+    void setParameterEditCallbacks (ParameterGestureCallback beginCallback,
+                                    ParameterEditCallback performCallback,
+                                    ParameterGestureCallback endCallback)
+    {
+        beginEditCallback = std::move (beginCallback);
+        performEditCallback = std::move (performCallback);
+        endEditCallback = std::move (endCallback);
+    }
+
     DECLARE_FUNKNOWN_METHODS
 
 private:
     RestartCallback restartCallback;
+    ParameterGestureCallback beginEditCallback;
+    ParameterEditCallback performEditCallback;
+    ParameterGestureCallback endEditCallback;
 };
 
 IMPLEMENT_FUNKNOWN_METHODS (HostComponentHandler, Vst::IComponentHandler, Vst::IComponentHandler::iid)
@@ -886,8 +945,7 @@ public:
                   IPtr<Vst::IAudioProcessor> processor,
                   IPtr<Vst::IEditController> controller,
                   bool controllerWasInitialized)
-        : AudioPluginInstance (desc,
-                               buildBusLayout (component.get()))
+        : AudioPluginInstance (desc, buildBusLayout (component.get()))
         , hostContext (context)
         , vst3Module (std::move (module))
         , vst3HostApplication (std::move (hostApplication))
@@ -898,13 +956,33 @@ public:
         , vst3ControllerInitialized (controllerWasInitialized)
     {
         if (auto* handler = static_cast<HostComponentHandler*> (vst3ComponentHandler.get()))
+        {
             handler->setRestartCallback ([this] (int32 flags)
             {
                 handleRestartComponent (flags);
             });
+        }
 
         connectComponentAndController();
         buildParameterList();
+
+        if (auto* handler = static_cast<HostComponentHandler*> (vst3ComponentHandler.get()))
+        {
+            handler->setParameterEditCallbacks (
+                [this] (Vst::ParamID id)
+            {
+                handleParameterGestureBegin (id);
+            },
+                [this] (Vst::ParamID id, Vst::ParamValue value)
+            {
+                handleParameterEdit (id, value);
+            },
+                [this] (Vst::ParamID id)
+            {
+                handleParameterGestureEnd (id);
+            });
+        }
+
         setNonRealtime (context.isNonRealtime);
     }
 
@@ -914,7 +992,10 @@ public:
         releaseResources();
 
         if (auto* handler = static_cast<HostComponentHandler*> (vst3ComponentHandler.get()))
+        {
             handler->setRestartCallback (nullptr);
+            handler->setParameterEditCallbacks (nullptr, nullptr, nullptr);
+        }
 
         if (vst3Controller != nullptr)
         {
@@ -987,20 +1068,24 @@ public:
         processingPrepared = false;
     }
 
-    void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer) override
+    void processBlock (AudioProcessContext<float>& context) override
     {
         ScopedNoDenormals noDenormals;
 
         if (isBypassed())
         {
-            processBlockBypassed (audioBuffer, midiBuffer);
+            processBlockBypassed (context);
             return;
         }
+
+        auto& audioBuffer = context.audio;
+        auto& midiBuffer = context.midi;
 
         if (isUsingDoublePrecision())
         {
             doublePrecisionBuffer.makeCopyOf (audioBuffer, true);
-            processBlock (doublePrecisionBuffer, midiBuffer);
+            AudioProcessContext<double> doubleCtx { doublePrecisionBuffer, midiBuffer, context.params, context.playHead };
+            processBlock (doubleCtx);
 
             const int numChannels = jmin (audioBuffer.getNumChannels(), doublePrecisionBuffer.getNumChannels());
             const int numSamples = jmin (audioBuffer.getNumSamples(), doublePrecisionBuffer.getNumSamples());
@@ -1010,15 +1095,14 @@ public:
                 auto* destination = audioBuffer.getWritePointer (channel);
                 const auto* source = doublePrecisionBuffer.getReadPointer (channel);
 
-                for (int sample = 0; sample < numSamples; ++sample)
-                    destination[sample] = static_cast<float> (source[sample]);
+                FloatVectorOperations::convertDoubleToFloat (destination, source, numSamples);
             }
 
             return;
         }
 
         Vst::ProcessData data {};
-        prepareProcessData (data, audioBuffer.getNumSamples(), Vst::kSample32);
+        prepareProcessData (data, audioBuffer.getNumSamples(), Vst::kSample32, context.params, context.playHead);
         prepareMidiInputEvents (midiBuffer);
 
         // Input busses
@@ -1046,20 +1130,18 @@ public:
         collectOutputEvents (midiBuffer);
     }
 
-    int getLatencySamples() override
-    {
-        return vst3Processor != nullptr ? static_cast<int> (vst3Processor->getLatencySamples()) : 0;
-    }
-
-    void processBlock (AudioBuffer<double>& audioBuffer, MidiBuffer& midiBuffer) override
+    void processBlock (AudioProcessContext<double>& context) override
     {
         ScopedNoDenormals noDenormals;
 
         if (isBypassed())
         {
-            processBlockBypassed (audioBuffer, midiBuffer);
+            processBlockBypassed (context);
             return;
         }
+
+        auto& audioBuffer = context.audio;
+        auto& midiBuffer = context.midi;
 
         if (! isUsingDoublePrecision())
         {
@@ -1070,7 +1152,7 @@ public:
         }
 
         Vst::ProcessData data {};
-        prepareProcessData (data, audioBuffer.getNumSamples(), Vst::kSample64);
+        prepareProcessData (data, audioBuffer.getNumSamples(), Vst::kSample64, context.params, context.playHead);
         prepareMidiInputEvents (midiBuffer);
 
         Vst::AudioBusBuffers inputBus {};
@@ -1099,6 +1181,13 @@ public:
     bool supportsDoublePrecisionProcessing() const override
     {
         return vst3Processor != nullptr && vst3Processor->canProcessSampleSize (Vst::kSample64) == kResultTrue;
+    }
+
+    //==============================================================================
+
+    int getLatencySamples() override
+    {
+        return vst3Processor != nullptr ? static_cast<int> (vst3Processor->getLatencySamples()) : 0;
     }
 
     //==============================================================================
@@ -1354,24 +1443,41 @@ private:
         inputParameterChanges.setMaxParameters (static_cast<int32> (vst3ParameterIds.size()));
     }
 
-    AudioPluginHostContext hostContext;
-    std::unique_ptr<VST3Module> vst3Module;
-    IPtr<Vst::IHostApplication> vst3HostApplication;
-    IPtr<Vst::IComponentHandler> vst3ComponentHandler;
-    IPtr<Vst::IComponent> vst3Component;
-    IPtr<Vst::IAudioProcessor> vst3Processor;
-    IPtr<Vst::IEditController> vst3Controller;
-    Vst::ProcessContext vst3ProcessContext {};
-    Vst::ParameterChanges inputParameterChanges;
-    Vst::EventList inputEvents;
-    Vst::EventList outputEvents;
-    AudioBuffer<double> doublePrecisionBuffer;
-    std::vector<Vst::ParamID> vst3ParameterIds;
-    int currentPreset = 0;
-    int numPresets = 0;
-    bool processingPrepared = false;
-    bool vst3ControllerInitialized = false;
-    bool vst3ComponentsConnected = false;
+    int findParameterIndexForVST3Id (Vst::ParamID id) const
+    {
+        const auto iter = std::find (vst3ParameterIds.begin(), vst3ParameterIds.end(), id);
+        if (iter == vst3ParameterIds.end())
+            return -1;
+
+        return static_cast<int> (std::distance (vst3ParameterIds.begin(), iter));
+    }
+
+    void handleParameterGestureBegin (Vst::ParamID id)
+    {
+        const auto index = findParameterIndexForVST3Id (id);
+        const auto params = getParameters();
+
+        if (isPositiveAndBelow (index, static_cast<int> (params.size())))
+            params[static_cast<std::size_t> (index)]->beginChangeGesture();
+    }
+
+    void handleParameterEdit (Vst::ParamID id, Vst::ParamValue value)
+    {
+        const auto index = findParameterIndexForVST3Id (id);
+        const auto params = getParameters();
+
+        if (isPositiveAndBelow (index, static_cast<int> (params.size())))
+            params[static_cast<std::size_t> (index)]->setNormalizedValue (static_cast<float> (value));
+    }
+
+    void handleParameterGestureEnd (Vst::ParamID id)
+    {
+        const auto index = findParameterIndexForVST3Id (id);
+        const auto params = getParameters();
+
+        if (isPositiveAndBelow (index, static_cast<int> (params.size())))
+            params[static_cast<std::size_t> (index)]->endChangeGesture();
+    }
 
     bool connectComponentAndController()
     {
@@ -1442,24 +1548,29 @@ private:
         vst3ComponentsConnected = false;
     }
 
-    void prepareProcessData (Vst::ProcessData& data, int numSamples, int32 symbolicSampleSize)
+    void prepareProcessData (Vst::ProcessData& data,
+                             int numSamples,
+                             int32 symbolicSampleSize,
+                             const ParameterChangeBuffer& parameterChanges,
+                             AudioPlayHead* playHead)
     {
         data.processMode = isNonRealtime() ? Vst::kOffline : Vst::kRealtime;
         data.symbolicSampleSize = symbolicSampleSize;
         data.numSamples = numSamples;
 
         inputParameterChanges.clearQueue();
-        const auto params = getParameters();
-        const auto numParams = yup::jmin (params.size(), vst3ParameterIds.size());
 
-        for (std::size_t i = 0; i < numParams; ++i)
+        for (const auto& change : parameterChanges)
         {
+            if (! isPositiveAndBelow (change.parameterIndex, static_cast<int> (vst3ParameterIds.size())))
+                continue;
+
             int32 queueIndex = 0;
-            if (auto* queue = inputParameterChanges.addParameterData (vst3ParameterIds[i], queueIndex))
+            if (auto* queue = inputParameterChanges.addParameterData (vst3ParameterIds[static_cast<std::size_t> (change.parameterIndex)], queueIndex))
             {
                 int32 pointIndex = 0;
-                queue->addPoint (0,
-                                 static_cast<Vst::ParamValue> (params[i]->getValue()),
+                queue->addPoint (change.sampleOffset,
+                                 static_cast<Vst::ParamValue> (change.normalizedValue),
                                  pointIndex);
             }
         }
@@ -1471,23 +1582,66 @@ private:
         inputEvents.clear();
         outputEvents.clear();
 
-        if (hostContext.playHead == nullptr)
+        if (playHead == nullptr)
             return;
 
-        const auto optPos = hostContext.playHead->getPosition();
+        const auto optPos = playHead->getPosition();
         if (! optPos.has_value())
             return;
 
         const auto& posInfo = optPos.value();
         vst3ProcessContext = {};
-        vst3ProcessContext.state = Vst::ProcessContext::kPlaying;
         vst3ProcessContext.sampleRate = getSampleRate();
+
+        if (posInfo.getIsPlaying())
+            vst3ProcessContext.state |= Vst::ProcessContext::kPlaying;
+
+        if (posInfo.getIsRecording())
+            vst3ProcessContext.state |= Vst::ProcessContext::kRecording;
+
+        if (posInfo.getIsLooping())
+            vst3ProcessContext.state |= Vst::ProcessContext::kCycleActive;
 
         if (auto timeSamples = posInfo.getTimeInSamples())
             vst3ProcessContext.projectTimeSamples = *timeSamples;
 
         if (auto tempo = posInfo.getBpm())
+        {
+            vst3ProcessContext.state |= Vst::ProcessContext::kTempoValid;
             vst3ProcessContext.tempo = *tempo;
+        }
+
+        if (auto ppq = posInfo.getPpqPosition())
+        {
+            vst3ProcessContext.state |= Vst::ProcessContext::kProjectTimeMusicValid;
+            vst3ProcessContext.projectTimeMusic = *ppq;
+        }
+
+        if (auto barPosition = posInfo.getPpqPositionOfLastBarStart())
+        {
+            vst3ProcessContext.state |= Vst::ProcessContext::kBarPositionValid;
+            vst3ProcessContext.barPositionMusic = *barPosition;
+        }
+
+        if (auto loopPoints = posInfo.getLoopPoints())
+        {
+            vst3ProcessContext.state |= Vst::ProcessContext::kCycleValid;
+            vst3ProcessContext.cycleStartMusic = loopPoints->ppqStart;
+            vst3ProcessContext.cycleEndMusic = loopPoints->ppqEnd;
+        }
+
+        if (auto continuousTime = posInfo.getContinuousTimeInSamples())
+        {
+            vst3ProcessContext.state |= Vst::ProcessContext::kContTimeValid;
+            vst3ProcessContext.continousTimeSamples = *continuousTime;
+        }
+
+        if (auto timeSignature = posInfo.getTimeSignature())
+        {
+            vst3ProcessContext.state |= Vst::ProcessContext::kTimeSigValid;
+            vst3ProcessContext.timeSigNumerator = timeSignature->numerator;
+            vst3ProcessContext.timeSigDenominator = timeSignature->denominator;
+        }
 
         data.processContext = &vst3ProcessContext;
     }
@@ -1536,6 +1690,25 @@ private:
         setup.sampleRate = getSampleRate();
         vst3Processor->setupProcessing (setup);
     }
+
+    AudioPluginHostContext hostContext;
+    std::unique_ptr<VST3Module> vst3Module;
+    IPtr<Vst::IHostApplication> vst3HostApplication;
+    IPtr<Vst::IComponentHandler> vst3ComponentHandler;
+    IPtr<Vst::IComponent> vst3Component;
+    IPtr<Vst::IAudioProcessor> vst3Processor;
+    IPtr<Vst::IEditController> vst3Controller;
+    Vst::ProcessContext vst3ProcessContext {};
+    Vst::ParameterChanges inputParameterChanges;
+    Vst::EventList inputEvents;
+    Vst::EventList outputEvents;
+    AudioBuffer<double> doublePrecisionBuffer;
+    std::vector<Vst::ParamID> vst3ParameterIds;
+    int currentPreset = 0;
+    int numPresets = 0;
+    bool processingPrepared = false;
+    bool vst3ControllerInitialized = false;
+    bool vst3ComponentsConnected = false;
 };
 
 //==============================================================================
@@ -1584,17 +1757,24 @@ FileSearchPath VST3Format::getDefaultSearchPaths() const
 
 ResultValue<std::vector<AudioPluginDescription>> VST3Format::scanFile (const File& file)
 {
-    if (file.getFileExtension().toLowerCase() != ".vst3"
-        && ! file.isDirectory())
+    if (file.getFileExtension().toLowerCase() != ".vst3")
         return makeResultValueFail ("Not a VST3 file");
+
+    YUP_MODULE_DBG (PLUGIN_HOST_VST3, "scanning: " << file.getFullPathName());
 
     auto mod = VST3Module::load (file);
     if (mod == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_HOST_VST3, "failed to load module: " << file.getFullPathName());
         return makeResultValueFail ("Failed to load VST3 module: " + file.getFullPathName());
+    }
 
     IPluginFactory* rawFactory = mod->getFactory();
     if (rawFactory == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_HOST_VST3, "no factory in: " << file.getFullPathName());
         return makeResultValueFail ("No factory in " + file.getFullPathName());
+    }
 
     IPtr<IPluginFactory> factory (rawFactory);
 
@@ -1624,7 +1804,10 @@ ResultValue<std::vector<AudioPluginDescription>> VST3Format::scanFile (const Fil
         }
 
         if (String (info2.category) != "Audio Module Class")
+        {
+            YUP_MODULE_DBG (PLUGIN_HOST_VST3, "skipped class " << info2.name << " (category: " << info2.category << ")");
             continue;
+        }
 
         AudioPluginDescription desc;
         desc.formatType = AudioPluginFormatType::vst3;
@@ -1650,8 +1833,11 @@ ResultValue<std::vector<AudioPluginDescription>> VST3Format::scanFile (const Fil
             desc.numOutputChannels = 2;
         }
 
+        YUP_MODULE_DBG (PLUGIN_HOST_VST3, "scan found: " << desc.name << " [" << desc.identifier << "]");
         results.push_back (std::move (desc));
     }
+
+    YUP_MODULE_DBG (PLUGIN_HOST_VST3, "scan complete: " << results.size() << " plugins in " << file.getFileName());
 
     if (results.empty())
         return makeResultValueFail ("No Audio Module Class entries in " + file.getFullPathName());
@@ -1663,11 +1849,17 @@ ResultValue<std::unique_ptr<AudioPluginInstance>> VST3Format::loadPlugin (
     const AudioPluginDescription& description,
     const AudioPluginHostContext& context)
 {
+    YUP_MODULE_DBG (PLUGIN_HOST_VST3, "loading: " << description.name << " [" << description.identifier << "]");
+
     auto instance = VST3Instance::create (description, context);
 
     if (instance == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_HOST_VST3, "load failed: " << description.name);
         return makeResultValueFail ("Failed to load VST3 plugin: " + description.name);
+    }
 
+    YUP_MODULE_DBG (PLUGIN_HOST_VST3, "loaded: " << description.name);
     return makeResultValueOk (std::move (instance));
 }
 

@@ -61,12 +61,12 @@
 #endif
 
 //==============================================================================
-/** Config: YUP_ENABLE_WINDOWING_EVENT_LOGGING
+/** Config: YUP_ENABLE_GUI_WINDOWING_LOGGING
 
     Enable logging of windowing events like movement, resizes, mouse interactions.
 */
-#ifndef YUP_ENABLE_WINDOWING_EVENT_LOGGING
-#define YUP_ENABLE_WINDOWING_EVENT_LOGGING 0
+#ifndef YUP_ENABLE_GUI_WINDOWING_LOGGING
+#define YUP_ENABLE_GUI_WINDOWING_LOGGING 1
 #endif
 
 //==============================================================================

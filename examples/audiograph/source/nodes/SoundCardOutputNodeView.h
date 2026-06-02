@@ -25,8 +25,10 @@
 class SoundCardOutputNodeView final : public yup::AudioGraphNodeView
 {
 public:
-    explicit SoundCardOutputNodeView (yup::StringRef subtitleIn = "sound card")
+    explicit SoundCardOutputNodeView (std::shared_ptr<yup::AudioGraphProcessor> graphIn,
+                                      yup::StringRef subtitleIn = "sound card")
         : AudioGraphNodeView (yup::AudioGraphModel::getGraphOutputNodeID())
+        , graph (std::move (graphIn))
         , subtitle (subtitleIn)
     {
     }
@@ -35,7 +37,10 @@ public:
 
     yup::String getNodeSubtitle() const override { return subtitle; }
 
-    int getNumInputPorts() const override { return 1; }
+    int getNumInputPorts() const override
+    {
+        return graph != nullptr ? static_cast<int> (graph->getBusLayout().getOutputBuses().size()) : 1;
+    }
 
     int getNumOutputPorts() const override { return 0; }
 
@@ -43,11 +48,25 @@ public:
 
     yup::Color getNodeColor() const override { return yup::Color (0xff06b6d4); }
 
-    PortInfo getInputPortInfo (int) const override
+    PortInfo getInputPortInfo (int busIndex) const override
     {
-        return { "audio", getPortKindColor (PortKind::audio), PortKind::audio };
+        if (graph == nullptr)
+            return { "audio", getPortKindColor (PortKind::audio), PortKind::audio };
+
+        return getPortInfo (graph->getBusLayout().getOutputBuses(), busIndex);
     }
 
 private:
+    static PortInfo getPortInfo (yup::Span<const yup::AudioBus> buses, int busIndex)
+    {
+        if (busIndex < 0 || busIndex >= static_cast<int> (buses.size()))
+            return { "?", getPortKindColor (PortKind::audio), PortKind::audio };
+
+        const auto& bus = buses[static_cast<size_t> (busIndex)];
+        const auto kind = bus.getType() == yup::AudioBus::Type::Audio ? PortKind::audio : PortKind::midi;
+        return { bus.getName(), getPortKindColor (kind), kind };
+    }
+
+    std::shared_ptr<yup::AudioGraphProcessor> graph;
     yup::String subtitle;
 };

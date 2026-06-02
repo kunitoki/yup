@@ -200,6 +200,9 @@ private:
     String getFilePatternsForPlatform() const;
     void invokeCallback (CompletionCallback callback, bool success, const Array<File>& results);
     CompletionCallback createCapturingCallback (CompletionCallback callback);
+    void addToActiveFileChoosers();
+    void removeFromActiveFileChoosers();
+    static void releaseAllActiveFileChoosers();
 
     String title, filters;
     File startingFile;
@@ -210,6 +213,7 @@ private:
     std::unique_ptr<FileChooserImpl> impl;
 
     //==============================================================================
+    YUP_DECLARE_WEAK_REFERENCEABLE (FileChooser)
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FileChooser)
 };
 

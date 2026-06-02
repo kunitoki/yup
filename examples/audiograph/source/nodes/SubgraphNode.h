@@ -136,7 +136,6 @@ public:
 
     void prepareToPlay (float sampleRate, int maxBlockSize) override
     {
-        graph->setPlayHead (getPlayHead());
         graph->prepareToPlay (sampleRate, maxBlockSize);
     }
 
@@ -145,9 +144,9 @@ public:
         graph->releaseResources();
     }
 
-    void processBlock (yup::AudioBuffer<float>& audioBuffer, yup::MidiBuffer& midiBuffer) override
+    void processBlock (yup::AudioProcessContext<float>& context) override
     {
-        graph->processBlock (audioBuffer, midiBuffer);
+        graph->processBlock (context);
     }
 
     void flush() override

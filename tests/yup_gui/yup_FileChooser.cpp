@@ -19,8 +19,6 @@
   ==============================================================================
 */
 
-#if 0
-
 #include <gtest/gtest.h>
 
 #include <yup_gui/yup_gui.h>
@@ -29,174 +27,89 @@ using namespace yup;
 
 namespace
 {
-    // Mock component for testing
-    class MockComponent : public Component
-    {
-    public:
-        MockComponent() = default;
-        ~MockComponent() override = default;
-    };
-
-    // Test helper to track callback invocations
-    struct CallbackTracker
-    {
-        bool called = false;
-        bool success = false;
-        Array<File> results;
-
-        void reset()
-        {
-            called = false;
-            success = false;
-            results.clear();
-        }
-
-        FileChooser::CompletionCallback makeCallback()
-        {
-            return [this] (bool callbackSuccess, const Array<File>& callbackResults)
-            {
-                called = true;
-                success = callbackSuccess;
-                results = callbackResults;
-            };
-        }
-    };
-}
-
-class FileChooserTests : public ::testing::Test
+struct CallbackTracker
 {
-protected:
-    void SetUp() override
+    bool called = false;
+    bool success = false;
+    Array<File> results;
+
+    void reset()
     {
-        tracker.reset();
+        called = false;
+        success = false;
+        results.clear();
     }
 
-    CallbackTracker tracker;
-    MockComponent component;
+    FileChooser::CompletionCallback makeCallback()
+    {
+        return [this] (bool callbackSuccess, const Array<File>& callbackResults)
+        {
+            called = true;
+            success = callbackSuccess;
+            results = callbackResults;
+        };
+    }
 };
 
-TEST_F (FileChooserTests, ConstructorInitializesCorrectly)
+File makeTemporaryFile()
 {
-    FileChooser chooser ("Test Dialog", File::getSpecialLocation (File::userHomeDirectory), "*.txt");
+    auto file = File::getSpecialLocation (File::tempDirectory)
+                    .getNonexistentChildFile ("yup_file_chooser_test", ".txt");
 
-    // Constructor should complete without issues
-    EXPECT_TRUE (true);
+    EXPECT_TRUE (file.create().wasOk());
+    return file;
+}
+} // namespace
+
+TEST (FileChooserTests, CreateUsesHomeDirectoryWhenInitialFileIsDefault)
+{
+    auto chooser = FileChooser::create ("Test Dialog");
+    EXPECT_NE (nullptr, chooser.get());
 }
 
-TEST_F (FileChooserTests, ConstructorWithEmptyFileUsesHomeDirectory)
+TEST (FileChooserTests, CreateAcceptsInitialDirectoryAndFilters)
 {
-    FileChooser chooser ("Test Dialog");
+    auto chooser = FileChooser::create ("Test Dialog",
+                                        File::getSpecialLocation (File::userHomeDirectory),
+                                        "*.txt;*.doc");
 
-    // Should default to home directory when no file is specified
-    EXPECT_TRUE (true);
+    EXPECT_NE (nullptr, chooser.get());
 }
 
-TEST_F (FileChooserTests, ConstructorWithFileUsesParentDirectory)
+TEST (FileChooserTests, CreateAcceptsInitialFile)
 {
-    File testFile = File::getSpecialLocation (File::userHomeDirectory).getChildFile ("test.txt");
-    FileChooser chooser ("Test Dialog", testFile);
-
-    // Should use parent directory when file is specified
-    EXPECT_TRUE (true);
-}
-
-TEST_F (FileChooserTests, BrowseForFileToOpenHasCorrectSignature)
-{
-    FileChooser chooser ("Test Dialog");
-
-    // Test that the method exists and has correct signature
-    auto callback = tracker.makeCallback();
-
-    // This should compile without errors
-    // Note: We don't actually call it in tests since it would show a dialog
-    EXPECT_TRUE (true);
-}
-
-TEST_F (FileChooserTests, BrowseForMultipleFilesToOpenHasCorrectSignature)
-{
-    FileChooser chooser ("Test Dialog");
-
-    // Test that the method exists and has correct signature
-    auto callback = tracker.makeCallback();
-
-    // This should compile without errors
-    EXPECT_TRUE (true);
-}
-
-TEST_F (FileChooserTests, BrowseForFileToSaveHasCorrectSignature)
-{
-    FileChooser chooser ("Test Dialog");
-
-    // Test that the method exists and has correct signature
-    auto callback = tracker.makeCallback();
-
-    // This should compile without errors
-    EXPECT_TRUE (true);
-}
-
-TEST_F (FileChooserTests, BrowseForDirectoryHasCorrectSignature)
-{
-    FileChooser chooser ("Test Dialog");
-
-    // Test that the method exists and has correct signature
-    auto callback = tracker.makeCallback();
-
-    // This should compile without errors
-    EXPECT_TRUE (true);
-}
-
-TEST_F (FileChooserTests, InvokeCallbackWorksCorrectly)
-{
-    FileChooser chooser ("Test Dialog");
-
-    Array<File> testResults;
-    testResults.add (File::getSpecialLocation (File::userHomeDirectory));
-
-    auto callback = tracker.makeCallback();
-
-    // Test invokeCallback method
-    chooser.invokeCallback (std::move (callback), true, testResults);
-
-    // Note: The callback is invoked asynchronously on the message thread
-    // In a real test environment, we would need to wait for message processing
-    // For now, we just verify the method exists and can be called
-    EXPECT_TRUE (true);
-}
-
-TEST_F (FileChooserTests, GetFilePatternsForPlatformReturnsFilters)
-{
-    FileChooser chooser ("Test Dialog", File(), "*.txt;*.doc");
-
-    String patterns = chooser.getFilePatternsForPlatform();
-    EXPECT_EQ (patterns, "*.txt;*.doc");
-}
-
-TEST_F (FileChooserTests, GetFilePatternsForPlatformReturnsEmptyWhenNoFilters)
-{
-    FileChooser chooser ("Test Dialog");
-
-    String patterns = chooser.getFilePatternsForPlatform();
-    EXPECT_TRUE (patterns.isEmpty());
-}
-
-TEST_F (FileChooserTests, MultipleFileExtensionsAreSupported)
-{
-    FileChooser chooser ("Test Dialog", File(), "*.txt,*.doc;*.pdf");
-
-    String patterns = chooser.getFilePatternsForPlatform();
-    EXPECT_EQ (patterns, "*.txt,*.doc;*.pdf");
-}
-
-TEST_F (FileChooserTests, CallbackTypesAreCorrect)
-{
-    // Test that callback types are properly defined
-    FileChooser::CompletionCallback callback = [] (bool success, const Array<File>& results)
+    const auto file = makeTemporaryFile();
+    const ScopeGuard deleteFile { [&file]
     {
-        // This should compile correctly
-        EXPECT_TRUE (true);
-    };
+        file.deleteFile();
+    } };
 
-    EXPECT_TRUE (callback != nullptr);
+    auto chooser = FileChooser::create ("Test Dialog", file, "*.txt");
+    EXPECT_NE (nullptr, chooser.get());
 }
 
-#endif
+TEST (FileChooserTests, CreateAcceptsPackageDirectoryOption)
+{
+    auto chooser = FileChooser::create ("Test Dialog",
+                                        File::getSpecialLocation (File::userHomeDirectory),
+                                        "*",
+                                        true,
+                                        true);
+
+    EXPECT_NE (nullptr, chooser.get());
+}
+
+TEST (FileChooserTests, CompletionCallbackReceivesResults)
+{
+    CallbackTracker tracker;
+    Array<File> results;
+    results.add (File::getSpecialLocation (File::userHomeDirectory));
+
+    auto callback = tracker.makeCallback();
+    callback (true, results);
+
+    EXPECT_TRUE (tracker.called);
+    EXPECT_TRUE (tracker.success);
+    ASSERT_EQ (1, tracker.results.size());
+    EXPECT_EQ (results[0], tracker.results[0]);
+}
