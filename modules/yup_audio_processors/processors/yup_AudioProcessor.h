@@ -28,11 +28,16 @@ class AudioProcessorEditor;
 /**
     Base class for all audio processors.
 
+    The AudioProcessor class is the base class for all audio processing modules in the framework.
+    It provides a common interface for processing audio and MIDI data, managing parameters, and
+    communicating with hosts.
+
     @see AudioProcessorEditor
 */
 class YUP_API AudioProcessor
 {
 public:
+    //==============================================================================
     /** Details about a processor-level change notification. */
     struct ChangeDetails
     {
@@ -92,6 +97,7 @@ public:
         bool nonParameterStateChanged = false;
     };
 
+    //==============================================================================
     /** Receives processor-level change notifications. */
     class Listener
     {
@@ -111,7 +117,6 @@ public:
     };
 
     //==============================================================================
-
     /** Constructs an AudioProcessor. */
     AudioProcessor (StringRef name, AudioBusLayout busLayout);
 
@@ -119,12 +124,10 @@ public:
     virtual ~AudioProcessor();
 
     //==============================================================================
-
     /** Returns the name of the processor. */
     String getName() const { return processorName; }
 
     //==============================================================================
-
     /** Returns the parameters. */
     Span<const AudioParameter::Ptr> getParameters() const { return parameters; }
 
@@ -140,6 +143,7 @@ public:
     /** Adds a parameter. */
     void addParameter (AudioParameter::Ptr parameter);
 
+    //==============================================================================
     /** Adds a processor-level change listener. */
     void addListener (Listener* listener);
 
@@ -150,7 +154,6 @@ public:
     void updateHostDisplay (ChangeDetails details);
 
     //==============================================================================
-
     /** Returns the bus layout. */
     const AudioBusLayout& getBusLayout() const noexcept { return busLayout; }
 
@@ -160,8 +163,9 @@ public:
     /** Returns the number of audio inputs. */
     int getNumAudioInputs() const;
 
-    //==============================================================================
+    // TODO - add support for custom midi inputs and outputs
 
+    //==============================================================================
     /** Prepares the processor for playback.
 
         getSampleRate() and getSamplesPerBlock() are guaranteed to return the correct
@@ -218,7 +222,6 @@ public:
     virtual void flush() {}
 
     //==============================================================================
-
     /** Returns true if this processor implements the double-precision processBlock(). */
     virtual bool supportsDoublePrecisionProcessing() const { return false; }
 
@@ -232,23 +235,27 @@ public:
     bool isUsingDoublePrecision() const noexcept { return processingPrecision == ProcessingPrecision::doublePrecision; }
 
     //==============================================================================
-
+    /** Returns the critical section used to protect the audio processing code. */
     CriticalSection& getProcessLock() { return processLock; }
 
+    /** Returns true if the processor is currently suspended. */
     bool isSuspended() const;
 
+    /** Suspends or resumes the processor. */
     virtual void suspendProcessing (bool shouldSuspend);
 
     //==============================================================================
-
+    /** Returns the current sample rate. */
     float getSampleRate() const { return sampleRate; }
 
+    /** Returns the current block size in samples. */
     int getSamplesPerBlock() const { return samplesPerBlock; }
 
     //==============================================================================
-
+    /** Returns the number of tail samples. */
     virtual int getTailSamples() { return 0; }
 
+    /** Returns the latency in samples. */
     virtual int getLatencySamples() { return latencySamples.load(); }
 
     /** Sets the processor latency in samples and notifies listeners when it changes. */
@@ -259,7 +266,6 @@ public:
     virtual int getNumVoices() const { return 0; }
 
     //==============================================================================
-
     /** Returns true when the processor is running in offline (non-realtime) mode. */
     bool isOfflineProcessing() const noexcept { return offlineProcessing.load(); }
 
@@ -267,44 +273,42 @@ public:
     void setOfflineProcessing (bool offline) { offlineProcessing.store (offline); }
 
     //==============================================================================
-
-    /**
-        Returns the current preset index.
-    */
+    /** Returns the current preset index. */
     virtual int getCurrentPreset() const noexcept = 0;
 
-    /**
-        Sets the current preset index.
+    /** Sets the current preset index.
+
+        @param index The index of the preset to select.
     */
     virtual void setCurrentPreset (int index) noexcept = 0;
 
-    /**
-        Returns the number of available user presets.
-    */
+    /** Returns the number of available user presets. */
     virtual int getNumPresets() const = 0;
 
-    /**
-        Returns the name of a preset by index.
+    /** Returns the name of a preset by index.
+      
+        @param index The index of the preset.
+
+        @return The name of the preset.
     */
     virtual String getPresetName (int index) const = 0;
 
-    /**
-        Returns the name of a preset by index.
+    /** Sets the name of a preset by index.
+
+        @param index The index of the preset.
+        @param newName The new name for the preset.
     */
     virtual void setPresetName (int index, StringRef newName) = 0;
 
     //==============================================================================
-
-    /**
-        Loads a preset from a memory block.
+    /** Loads a preset from a memory block.
 
         @param memoryBlock The memory block to load the state from.
         @return The result of the operation.
     */
     virtual Result loadStateFromMemory (const MemoryBlock& memoryBlock) = 0;
 
-    /**
-        Saves the current state as a memory block.
+    /** Saves the current state as a memory block.
 
         @param memoryBlock The memory block to save the state to.
         @return The result of the operation.
@@ -312,7 +316,6 @@ public:
     virtual Result saveStateIntoMemory (MemoryBlock& memoryBlock) = 0;
 
     //==============================================================================
-
     /** Returns true if the processor has an editor. */
     virtual bool hasEditor() const = 0;
 
@@ -320,7 +323,6 @@ public:
     virtual AudioProcessorEditor* createEditor() { return nullptr; }
 
     //==============================================================================
-
     /** @internal Used by plugin wrappers. */
     void setPlaybackConfiguration (float sampleRate, int samplesPerBlock);
 
