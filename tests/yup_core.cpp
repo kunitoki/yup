@@ -54,6 +54,7 @@
 #include "yup_core/yup_LinkedListPointer.cpp"
 #include "yup_core/yup_ListenerList.cpp"
 #include "yup_core/yup_LocalisedStrings.cpp"
+#include "yup_core/yup_Logger.cpp"
 #include "yup_core/yup_MACAddress.cpp"
 #include "yup_core/yup_MathFunctions.cpp"
 #include "yup_core/yup_MemoryInputStream.cpp"
