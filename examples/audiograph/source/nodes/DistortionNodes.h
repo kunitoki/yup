@@ -229,7 +229,24 @@ private:
 
     void updateLatency()
     {
-        setLatencySamples (getOversamplingIndex() == 0 ? 0 : oversampler2x.getLatencyInSamples());
+        int latencySamples = 0;
+
+        switch (getOversamplingIndex())
+        {
+            case 1:
+                latencySamples = oversampler2x.getLatencyInSamples();
+                break;
+            case 2:
+                latencySamples = oversampler4x.getLatencyInSamples();
+                break;
+            case 3:
+                latencySamples = oversampler8x.getLatencyInSamples();
+                break;
+            default:
+                break;
+        }
+
+        setLatencySamples (latencySamples);
     }
 
     std::atomic<float> drive { 4.0f };
