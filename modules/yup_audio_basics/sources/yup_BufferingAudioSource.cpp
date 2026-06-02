@@ -210,6 +210,26 @@ int64 BufferingAudioSource::getNextReadPosition() const
              : pos;
 }
 
+void BufferingAudioSource::setLooping (bool shouldLoop)
+{
+    {
+        const ScopedLock sl (bufferRangeLock);
+
+        source->setLooping (shouldLoop);
+
+        const auto isSourceLooping = source->isLooping();
+
+        if (wasSourceLooping != isSourceLooping)
+        {
+            wasSourceLooping = isSourceLooping;
+            bufferValidStart = 0;
+            bufferValidEnd = 0;
+        }
+    }
+
+    backgroundThread.moveToFrontOfQueue (this);
+}
+
 void BufferingAudioSource::setNextReadPosition (int64 newPosition)
 {
     const ScopedLock sl (bufferRangeLock);

@@ -108,6 +108,9 @@ public:
     /** Implements the PositionableAudioSource method. */
     bool isLooping() const override { return source->isLooping(); }
 
+    /** Implements the PositionableAudioSource method. */
+    void setLooping (bool shouldLoop) override;
+
     /** A useful function to block until the next the buffer info can be filled.
 
         This is useful for offline rendering.

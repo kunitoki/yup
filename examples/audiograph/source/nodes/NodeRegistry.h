@@ -26,6 +26,7 @@
 #include <memory>
 #include <vector>
 
+#include "DistortionNodes.h"
 #include "GainNode.h"
 #include "LatencyNode.h"
 #include "LowPassFilterNode.h"
@@ -58,6 +59,12 @@ public:
 
     /** Stable factory key for the built-in low-pass filter node. */
     static constexpr const char* lpfIdentifier = "internal.lpf";
+
+    /** Stable factory key for the built-in tanh distortion node. */
+    static constexpr const char* tanhDistortionIdentifier = "internal.tanhDistortion";
+
+    /** Stable factory key for the built-in Blunter soft clipper node. */
+    static constexpr const char* blunterSoftClipperIdentifier = "internal.blunterSoftClipper";
 
     /** Stable factory key for the built-in looping sample player node. */
     static constexpr const char* samplePlayerIdentifier = "internal.samplePlayer";
@@ -157,6 +164,36 @@ public:
                 return nullptr;
 
             return std::make_unique<LowPassFilterNodeView> (nodeID, *lpf);
+        }
+        };
+
+        entries[tanhDistortionIdentifier] = {
+            [] (const yup::AudioGraphNodeProperties&) -> yup::ResultValue<std::unique_ptr<yup::AudioProcessor>>
+        {
+            return yup::makeResultValueOk (std::make_unique<TanhDistortionProcessor>());
+        },
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*) -> std::unique_ptr<yup::AudioGraphNodeView>
+        {
+            auto* distortion = dynamic_cast<TanhDistortionProcessor*> (proc);
+            if (distortion == nullptr)
+                return nullptr;
+
+            return std::make_unique<TanhDistortionNodeView> (nodeID, *distortion);
+        }
+        };
+
+        entries[blunterSoftClipperIdentifier] = {
+            [] (const yup::AudioGraphNodeProperties&) -> yup::ResultValue<std::unique_ptr<yup::AudioProcessor>>
+        {
+            return yup::makeResultValueOk (std::make_unique<BlunterSoftClipperProcessor>());
+        },
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*) -> std::unique_ptr<yup::AudioGraphNodeView>
+        {
+            auto* clipper = dynamic_cast<BlunterSoftClipperProcessor*> (proc);
+            if (clipper == nullptr)
+                return nullptr;
+
+            return std::make_unique<BlunterSoftClipperNodeView> (nodeID, *clipper);
         }
         };
 
@@ -392,6 +429,8 @@ public:
             oscillatorIdentifier,
             gainIdentifier,
             lpfIdentifier,
+            tanhDistortionIdentifier,
+            blunterSoftClipperIdentifier,
             latencyIdentifier,
             samplePlayerIdentifier,
             subgraphIdentifier
@@ -419,6 +458,12 @@ public:
 
         if (id == lpfIdentifier)
             return "Low Pass Filter";
+
+        if (id == tanhDistortionIdentifier)
+            return "Tanh Distortion";
+
+        if (id == blunterSoftClipperIdentifier)
+            return "Blunter Soft Clip";
 
         if (id == samplePlayerIdentifier)
             return "Sample Player";
