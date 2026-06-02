@@ -26,13 +26,15 @@
 #include <memory>
 #include <vector>
 
-#include "FractionalDelayNode.h"
+#include "AnalyzerNodes.h"
 #include "DistortionNodes.h"
+#include "FractionalDelayNode.h"
 #include "GainNode.h"
 #include "LatencyNode.h"
 #include "LowPassFilterNode.h"
 #include "OscillatorNode.h"
 #include "PluginNodeView.h"
+#include "RecorderNode.h"
 #include "SamplePlayerNode.h"
 #include "SubgraphNode.h"
 
@@ -64,14 +66,26 @@ public:
     /** Stable factory key for the built-in low-pass filter node. */
     static constexpr const char* lpfIdentifier = "internal.lpf";
 
+    /** Stable factory key for the built-in oscilloscope node. */
+    static constexpr const char* oscilloscopeIdentifier = "internal.oscilloscope";
+
+    /** Stable factory key for the built-in spectrum analyzer node. */
+    static constexpr const char* spectrumAnalyzerIdentifier = "internal.spectrumAnalyzer";
+
     /** Stable factory key for the built-in tanh distortion node. */
     static constexpr const char* tanhDistortionIdentifier = "internal.tanhDistortion";
 
     /** Stable factory key for the built-in Blunter soft clipper node. */
     static constexpr const char* blunterSoftClipperIdentifier = "internal.blunterSoftClipper";
 
+    /** Stable factory key for the built-in AA-IIR antialiased hard clipper node. */
+    static constexpr const char* aaIirHardClipperIdentifier = "internal.aaIirHardClipper";
+
     /** Stable factory key for the built-in looping sample player node. */
     static constexpr const char* samplePlayerIdentifier = "internal.samplePlayer";
+
+    /** Stable factory key for the built-in recorder node. */
+    static constexpr const char* recorderIdentifier = "internal.recorder";
 
     /** Stable factory key for the built-in recursive subgraph node. */
     static constexpr const char* subgraphIdentifier = "internal.subgraph";
@@ -186,6 +200,36 @@ public:
         }
         };
 
+        entries[oscilloscopeIdentifier] = {
+            [] (const yup::AudioGraphNodeProperties&) -> yup::ResultValue<std::unique_ptr<yup::AudioProcessor>>
+        {
+            return yup::makeResultValueOk (std::make_unique<OscilloscopeProcessor>());
+        },
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*) -> std::unique_ptr<yup::AudioGraphNodeView>
+        {
+            auto* oscilloscope = dynamic_cast<OscilloscopeProcessor*> (proc);
+            if (oscilloscope == nullptr)
+                return nullptr;
+
+            return std::make_unique<OscilloscopeNodeView> (nodeID, *oscilloscope);
+        }
+        };
+
+        entries[spectrumAnalyzerIdentifier] = {
+            [] (const yup::AudioGraphNodeProperties&) -> yup::ResultValue<std::unique_ptr<yup::AudioProcessor>>
+        {
+            return yup::makeResultValueOk (std::make_unique<SpectrumAnalyzerProcessor>());
+        },
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*) -> std::unique_ptr<yup::AudioGraphNodeView>
+        {
+            auto* spectrumAnalyzer = dynamic_cast<SpectrumAnalyzerProcessor*> (proc);
+            if (spectrumAnalyzer == nullptr)
+                return nullptr;
+
+            return std::make_unique<SpectrumAnalyzerNodeView> (nodeID, *spectrumAnalyzer);
+        }
+        };
+
         entries[tanhDistortionIdentifier] = {
             [] (const yup::AudioGraphNodeProperties&) -> yup::ResultValue<std::unique_ptr<yup::AudioProcessor>>
         {
@@ -216,6 +260,21 @@ public:
         }
         };
 
+        entries[aaIirHardClipperIdentifier] = {
+            [] (const yup::AudioGraphNodeProperties&) -> yup::ResultValue<std::unique_ptr<yup::AudioProcessor>>
+        {
+            return yup::makeResultValueOk (std::make_unique<AaIirHardClipperProcessor>());
+        },
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*) -> std::unique_ptr<yup::AudioGraphNodeView>
+        {
+            auto* clipper = dynamic_cast<AaIirHardClipperProcessor*> (proc);
+            if (clipper == nullptr)
+                return nullptr;
+
+            return std::make_unique<AaIirHardClipperNodeView> (nodeID, *clipper);
+        }
+        };
+
         entries[samplePlayerIdentifier] = {
             [] (const yup::AudioGraphNodeProperties&) -> yup::ResultValue<std::unique_ptr<yup::AudioProcessor>>
         {
@@ -228,6 +287,21 @@ public:
                 return nullptr;
 
             return std::make_unique<SamplePlayerNodeView> (nodeID, *samplePlayer);
+        }
+        };
+
+        entries[recorderIdentifier] = {
+            [] (const yup::AudioGraphNodeProperties&) -> yup::ResultValue<std::unique_ptr<yup::AudioProcessor>>
+        {
+            return yup::makeResultValueOk (std::make_unique<RecorderProcessor>());
+        },
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*) -> std::unique_ptr<yup::AudioGraphNodeView>
+        {
+            auto* recorder = dynamic_cast<RecorderProcessor*> (proc);
+            if (recorder == nullptr)
+                return nullptr;
+
+            return std::make_unique<RecorderNodeView> (nodeID, *recorder);
         }
         };
 
@@ -448,11 +522,15 @@ public:
             oscillatorIdentifier,
             gainIdentifier,
             lpfIdentifier,
+            oscilloscopeIdentifier,
+            spectrumAnalyzerIdentifier,
             tanhDistortionIdentifier,
             blunterSoftClipperIdentifier,
+            aaIirHardClipperIdentifier,
             latencyIdentifier,
             fractionalDelayIdentifier,
             samplePlayerIdentifier,
+            recorderIdentifier,
             subgraphIdentifier
         };
     }
@@ -482,14 +560,27 @@ public:
         if (id == lpfIdentifier)
             return "Low Pass Filter";
 
+        if (id == oscilloscopeIdentifier)
+            return "Oscilloscope";
+
+        if (id == spectrumAnalyzerIdentifier)
+            return "Spectrum Analyzer";
+
         if (id == tanhDistortionIdentifier)
             return "Tanh Distortion";
 
         if (id == blunterSoftClipperIdentifier)
             return "Blunter Soft Clip";
 
+        if (id == aaIirHardClipperIdentifier)
+            return "AA-IIR Hard Clip";
+
         if (id == samplePlayerIdentifier)
             return "Sample Player";
+
+        if (id == recorderIdentifier)
+            return "Recorder";
+
         if (id == subgraphIdentifier)
             return "Subgraph";
 

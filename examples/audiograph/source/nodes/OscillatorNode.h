@@ -35,13 +35,18 @@ public:
                                                { yup::AudioBus ("Main", yup::AudioBus::Audio, yup::AudioBus::Output, 2) }))
     {
         frequency = NodeViewHelpers::createParameter ("frequency", "Frequency", 40.0f, 2000.0f, 440.0f);
+        sweepEnabled = NodeViewHelpers::createParameter ("sweepEnabled", "Sweep", 0.0f, 1.0f, 0.0f, 1.0f);
+
         addParameter (frequency);
+        addParameter (sweepEnabled);
     }
 
     void prepareToPlay (float newSampleRate, int) override
     {
         sampleRate = newSampleRate;
         phase = 0.0;
+        sweepPositionSeconds = 0.0;
+        wasSweepActive = false;
     }
 
     void releaseResources() override {}
@@ -49,11 +54,18 @@ public:
     void processBlock (yup::AudioProcessContext<float>& context) override
     {
         auto& audioBuffer = context.audio;
-        const auto currentFrequency = getFrequency();
-        const auto increment = yup::MathConstants<double>::twoPi * currentFrequency / static_cast<double> (sampleRate);
+        const auto baseFrequency = getFrequency();
+        const auto nyquist = static_cast<double> (sampleRate) * 0.5;
+        const auto sweepActive = isSweepEnabled() && nyquist > sweepStartFrequency;
+
+        if (sweepActive && ! wasSweepActive)
+            sweepPositionSeconds = 0.0;
 
         for (int sample = 0; sample < audioBuffer.getNumSamples(); ++sample)
         {
+            const auto currentFrequency = sweepActive ? getSweepFrequency (nyquist)
+                                                      : baseFrequency;
+            const auto increment = yup::MathConstants<double>::twoPi * currentFrequency / static_cast<double> (sampleRate);
             const auto value = static_cast<float> (std::sin (phase) * 0.22);
 
             for (int channel = 0; channel < audioBuffer.getNumChannels(); ++channel)
@@ -62,7 +74,20 @@ public:
             phase += increment;
             if (phase >= yup::MathConstants<double>::twoPi)
                 phase -= yup::MathConstants<double>::twoPi;
+
+            if (sweepActive)
+            {
+                sweepPositionSeconds += 1.0 / static_cast<double> (sampleRate);
+                while (sweepPositionSeconds >= sweepDurationSeconds)
+                    sweepPositionSeconds -= sweepDurationSeconds;
+            }
+            else
+            {
+                sweepPositionSeconds = 0.0;
+            }
         }
+
+        wasSweepActive = sweepActive;
     }
 
     int getCurrentPreset() const noexcept override { return 0; }
@@ -97,12 +122,35 @@ public:
         frequency->setValue (static_cast<float> (newFrequency));
     }
 
+    bool isSweepEnabled() const noexcept { return sweepEnabled->getValue() >= 0.5f; }
+
+    void setSweepEnabled (bool shouldBeEnabled) noexcept
+    {
+        sweepEnabled->setValue (shouldBeEnabled ? 1.0f : 0.0f);
+    }
+
 private:
     static constexpr const char* stateType = "OscillatorState";
+    static constexpr double sweepStartFrequency = 20.0;
+    static constexpr double sweepDurationSeconds = 10.0;
+
+    double getSweepProgress() const noexcept
+    {
+        return sweepPositionSeconds / sweepDurationSeconds;
+    }
+
+    double getSweepFrequency (double nyquist) const noexcept
+    {
+        const auto progress = yup::jlimit (0.0, 1.0, getSweepProgress());
+        return sweepStartFrequency * std::pow (nyquist / sweepStartFrequency, progress);
+    }
 
     double sampleRate = 44100.0;
     double phase = 0.0;
+    double sweepPositionSeconds = 0.0;
+    bool wasSweepActive = false;
     yup::AudioParameter::Ptr frequency;
+    yup::AudioParameter::Ptr sweepEnabled;
 };
 
 //==============================================================================
@@ -124,6 +172,15 @@ public:
             repaint();
         };
         addAndMakeVisible (frequencySlider);
+
+        sweepButton.setButtonText ("Sweep");
+        sweepButton.setToggleState (processor.isSweepEnabled(), yup::dontSendNotification);
+        sweepButton.onClick = [this]
+        {
+            processor.setSweepEnabled (sweepButton.getToggleState());
+            repaint();
+        };
+        addAndMakeVisible (sweepButton);
     }
 
     yup::String getNodeTitle() const override { return "OSC"; }
@@ -136,23 +193,39 @@ public:
 
     yup::Color getNodeColor() const override { return yup::Color (0xff2563eb); }
 
-    yup::String getNodeSubtitle() const override { return yup::String (processor.getFrequency(), 0) + " Hz"; }
+    yup::String getNodeSubtitle() const override
+    {
+        if (! processor.isSweepEnabled())
+            return yup::String (processor.getFrequency(), 0) + " Hz";
+
+        return "20 Hz-Nyq / 10 s";
+    }
 
     PortInfo getOutputPortInfo (int) const override { return { "audio", getPortKindColor (PortKind::audio), PortKind::audio }; }
 
-    int getNumParameterRows() const override { return 1; }
+    int getNumParameterRows() const override { return 2; }
 
-    ParameterInfo getParameterInfo (int) const override
+    ParameterInfo getParameterInfo (int parameterIndex) const override
     {
-        return { "Frequency", yup::String (processor.getFrequency(), 0), getPortKindColor (PortKind::parameter), -1.0f, PortKind::parameter };
+        if (parameterIndex == 0)
+            return { "Frequency", yup::String (processor.getFrequency(), 0), getPortKindColor (PortKind::parameter), -1.0f, PortKind::parameter };
+
+        return { "Sweep", processor.isSweepEnabled() ? "20 Hz-Nyq" : "off", getPortKindColor (PortKind::parameter), -1.0f, PortKind::parameter };
     }
 
     void resized() override
     {
         frequencySlider.setBounds (NodeViewHelpers::getInlineSliderBounds (*this, getPreferredWidth(), 0));
+
+        const auto scale = getLocalBounds().getWidth() / static_cast<float> (getPreferredWidth());
+        sweepButton.setBounds (62.0f * scale,
+                               74.0f * scale,
+                               72.0f * scale,
+                               20.0f * scale);
     }
 
 private:
     OscillatorProcessor& processor;
     yup::Slider frequencySlider;
+    yup::ToggleButton sweepButton;
 };

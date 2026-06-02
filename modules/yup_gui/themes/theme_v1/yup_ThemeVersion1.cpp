@@ -1069,18 +1069,35 @@ void paintAudioGraphComponent (Graphics& g, const ApplicationTheme&, const Audio
     g.setFillColor (backgroundColor);
     g.fillAll();
 
-    const auto spacing = 24.0f * zoom;
-    if (spacing >= 6.0f && ! gridColor.isTransparent())
+    const auto baseSpacing = 24.0f * zoom;
+    if (baseSpacing >= 1.0f && ! gridColor.isTransparent())
     {
+        constexpr float minGridSpacing = 18.0f;
+        constexpr int maxGridDots = 6000;
+
+        auto gridStep = jmax (1, static_cast<int> (std::ceil (minGridSpacing / baseSpacing)));
+        auto spacing = baseSpacing * static_cast<float> (gridStep);
+        auto estimatedDots = static_cast<int> (std::ceil (static_cast<float> (graph.getWidth()) / spacing))
+                           * static_cast<int> (std::ceil (static_cast<float> (graph.getHeight()) / spacing));
+
+        while (estimatedDots > maxGridDots)
+        {
+            ++gridStep;
+            spacing = baseSpacing * static_cast<float> (gridStep);
+            estimatedDots = static_cast<int> (std::ceil (static_cast<float> (graph.getWidth()) / spacing))
+                          * static_cast<int> (std::ceil (static_cast<float> (graph.getHeight()) / spacing));
+        }
+
         const auto startX = std::fmod (canvasOffset.getX(), spacing);
         const auto startY = std::fmod (canvasOffset.getY(), spacing);
+        const auto dotRadius = spacing >= 28.0f ? 1.0f : 0.75f;
 
         g.setFillColor (gridColor);
 
         for (auto x = startX; x < graph.getWidth(); x += spacing)
         {
             for (auto y = startY; y < graph.getHeight(); y += spacing)
-                g.fillEllipse (x - 1.0f, y - 1.0f, 2.0f, 2.0f);
+                g.fillEllipse (x - dotRadius, y - dotRadius, dotRadius * 2.0f, dotRadius * 2.0f);
         }
     }
 
