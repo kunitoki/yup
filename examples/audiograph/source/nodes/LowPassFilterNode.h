@@ -21,7 +21,6 @@
 
 #pragma once
 
-#include <atomic>
 #include <cmath>
 
 #include "NodeViewHelpers.h"
@@ -35,6 +34,8 @@ public:
                           yup::AudioBusLayout ({ yup::AudioBus ("Main", yup::AudioBus::Audio, yup::AudioBus::Input, 2) },
                                                { yup::AudioBus ("Main", yup::AudioBus::Audio, yup::AudioBus::Output, 2) }))
     {
+        cutoff = NodeViewHelpers::createParameter ("cutoff", "Cutoff", 80.0f, 12000.0f, 800.0f);
+        addParameter (cutoff);
     }
 
     void prepareToPlay (float newSampleRate, int) override
@@ -49,7 +50,7 @@ public:
     void processBlock (yup::AudioProcessContext<float>& context) override
     {
         auto& audioBuffer = context.audio;
-        const auto currentCutoff = static_cast<double> (cutoff.load (std::memory_order_relaxed));
+        const auto currentCutoff = getCutoff();
         const auto alpha = static_cast<float> (1.0 - std::exp (-yup::MathConstants<double>::twoPi * currentCutoff / static_cast<double> (sampleRate)));
 
         for (int channel = 0; channel < audioBuffer.getNumChannels(); ++channel)
@@ -76,46 +77,33 @@ public:
 
     void setPresetName (int, yup::StringRef) override {}
 
-    yup::Result loadStateFromMemory (const yup::MemoryBlock& data) override
+    bool supportsDataTreeState() const noexcept override { return true; }
+
+    yup::Result loadStateFromDataTree (const yup::DataTree& state) override
     {
-        if (data.isEmpty())
-            return yup::Result::ok();
-
-        yup::MemoryInputStream stream (data, false);
-
-        const int version = stream.readInt();
-        if (version != 1)
-            return yup::Result::fail ("Unsupported low-pass filter node state version");
-
-        setCutoff (stream.readFloat());
-
-        return yup::Result::ok();
+        return NodeViewHelpers::loadParameterState (state, stateType, getParameters());
     }
 
-    yup::Result saveStateIntoMemory (yup::MemoryBlock& data) override
+    yup::Result saveStateIntoDataTree (yup::DataTree& state) override
     {
-        yup::MemoryOutputStream stream (data, false);
-        stream.writeInt (1);
-        stream.writeFloat (cutoff.load (std::memory_order_relaxed));
-        stream.flush();
-
+        state = NodeViewHelpers::createParameterState (stateType, getParameters());
         return yup::Result::ok();
     }
 
     bool hasEditor() const override { return false; }
 
-    yup::AudioProcessorEditor* createEditor() override { return nullptr; }
-
-    double getCutoff() const noexcept { return static_cast<double> (cutoff.load (std::memory_order_relaxed)); }
+    double getCutoff() const noexcept { return static_cast<double> (cutoff->getValue()); }
 
     void setCutoff (double newCutoff) noexcept
     {
-        cutoff.store (static_cast<float> (yup::jlimit (80.0, 12000.0, newCutoff)), std::memory_order_relaxed);
+        cutoff->setValue (static_cast<float> (newCutoff));
     }
 
 private:
+    static constexpr const char* stateType = "LowPassFilterState";
+
     float sampleRate = 44100.0f;
-    std::atomic<float> cutoff { 800.0f };
+    yup::AudioParameter::Ptr cutoff;
     float state[2] {};
 };
 

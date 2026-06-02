@@ -1396,7 +1396,7 @@ private:
         {
             Vst::BusInfo info;
             component->getBusInfo (Vst::kEvent, Vst::kInput, i, info);
-            inputs.emplace_back (toString (info.name), AudioBus::Type::MIDI, AudioBus::Direction::Input, 1);
+            inputs.emplace_back (toString (info.name), AudioBus::Type::Midi, AudioBus::Direction::Input, 1);
         }
 
         const int numMidiOutputs = component->getBusCount (Vst::kEvent, Vst::kOutput);
@@ -1404,7 +1404,7 @@ private:
         {
             Vst::BusInfo info;
             component->getBusInfo (Vst::kEvent, Vst::kOutput, i, info);
-            outputs.emplace_back (toString (info.name), AudioBus::Type::MIDI, AudioBus::Direction::Output, 1);
+            outputs.emplace_back (toString (info.name), AudioBus::Type::Midi, AudioBus::Direction::Output, 1);
         }
 
         return AudioBusLayout (std::move (inputs), std::move (outputs));

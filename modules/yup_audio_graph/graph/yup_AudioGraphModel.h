@@ -192,7 +192,9 @@ private:
     {
         AudioGraphNodeID id;
         AudioGraphNodeProperties properties;
+        DataTree stateTree;
         MemoryBlock state;
+        bool hasStateTree = false;
     };
 
     Result restoreModel (uint64_t savedNextNodeID,

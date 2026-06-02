@@ -163,7 +163,12 @@ public:
     /** Returns the number of audio inputs. */
     int getNumAudioInputs() const;
 
-    // TODO - add support for custom midi inputs and outputs
+    //==============================================================================
+    /** Returns true if the processor accepts MIDI input. */
+    virtual bool acceptsMidi() const noexcept;
+
+    /** Returns true if the processor produces MIDI output. */
+    virtual bool producesMidi() const noexcept;
 
     //==============================================================================
     /** Prepares the processor for playback.
@@ -301,26 +306,68 @@ public:
     virtual void setPresetName (int index, StringRef newName) = 0;
 
     //==============================================================================
-    /** Loads a preset from a memory block.
+    /** Returns true when this processor supports structured DataTree state.
 
-        @param memoryBlock The memory block to load the state from.
+        Processors that return true can use the default binary state transport,
+        which serializes the DataTree state as XML into a MemoryBlock.
+    */
+    virtual bool supportsDataTreeState() const noexcept { return false; }
+
+    /** Loads a preset from a structured DataTree.
+
+        The default implementation returns a failure. Override this together with
+        saveStateIntoDataTree() and supportsDataTreeState() for processors that
+        want XML-readable state while still using MemoryBlock transport in plugin
+        wrappers.
+
+        @param state The structured state to load.
+
         @return The result of the operation.
     */
-    virtual Result loadStateFromMemory (const MemoryBlock& memoryBlock) = 0;
+    virtual Result loadStateFromDataTree (const DataTree& state);
+
+    /** Saves the current state into a structured DataTree.
+
+        The implementation should assign a valid DataTree to @p state.
+
+        @param state The structured state destination.
+
+        @return The result of the operation.
+    */
+    virtual Result saveStateIntoDataTree (DataTree& state);
+
+    /** Loads a preset from a memory block.
+
+        The default implementation is available to processors that return true
+        from supportsDataTreeState(): it parses XML from the memory block and
+        forwards the resulting DataTree to loadStateFromDataTree(). Processors
+        that need opaque binary state should override this method.
+
+        @param memoryBlock The memory block to load the state from.
+
+        @return The result of the operation.
+    */
+    virtual Result loadStateFromMemory (const MemoryBlock& memoryBlock);
 
     /** Saves the current state as a memory block.
 
+        The default implementation is available to processors that return true
+        from supportsDataTreeState(): it calls saveStateIntoDataTree() and writes
+        the resulting XML into the memory block. Processors that need opaque
+        binary state should override this method.
+
         @param memoryBlock The memory block to save the state to.
+
         @return The result of the operation.
     */
-    virtual Result saveStateIntoMemory (MemoryBlock& memoryBlock) = 0;
+    virtual Result saveStateIntoMemory (MemoryBlock& memoryBlock);
 
     //==============================================================================
     /** Returns true if the processor has an editor. */
     virtual bool hasEditor() const = 0;
 
     /** Creates an editor for the processor. */
-    virtual AudioProcessorEditor* createEditor() { return nullptr; }
+    virtual AudioProcessorEditor* createEditor();
 
     //==============================================================================
     /** @internal Used by plugin wrappers. */

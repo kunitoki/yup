@@ -1317,9 +1317,9 @@ void AudioGraphProcessor::Pimpl::WorkerThread::run()
 AudioBusLayout AudioGraphProcessor::createDefaultBusLayout()
 {
     return AudioBusLayout ({ AudioBus ("Input", AudioBus::Type::Audio, AudioBus::Direction::Input, 2),
-                             AudioBus ("MIDI Input", AudioBus::Type::MIDI, AudioBus::Direction::Input, 1) },
+                             AudioBus ("MIDI Input", AudioBus::Type::Midi, AudioBus::Direction::Input, 1) },
                            { AudioBus ("Output", AudioBus::Type::Audio, AudioBus::Direction::Output, 2),
-                             AudioBus ("MIDI Output", AudioBus::Type::MIDI, AudioBus::Direction::Output, 1) });
+                             AudioBus ("MIDI Output", AudioBus::Type::Midi, AudioBus::Direction::Output, 1) });
 }
 
 AudioGraphProcessor::AudioGraphProcessor (std::shared_ptr<AudioGraphModel> model,

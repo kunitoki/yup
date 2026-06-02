@@ -21,7 +21,6 @@
 
 #pragma once
 
-#include <atomic>
 #include <cmath>
 
 #include "NodeViewHelpers.h"
@@ -35,6 +34,8 @@ public:
                           yup::AudioBusLayout ({},
                                                { yup::AudioBus ("Main", yup::AudioBus::Audio, yup::AudioBus::Output, 2) }))
     {
+        frequency = NodeViewHelpers::createParameter ("frequency", "Frequency", 40.0f, 2000.0f, 440.0f);
+        addParameter (frequency);
     }
 
     void prepareToPlay (float newSampleRate, int) override
@@ -48,7 +49,7 @@ public:
     void processBlock (yup::AudioProcessContext<float>& context) override
     {
         auto& audioBuffer = context.audio;
-        const auto currentFrequency = static_cast<double> (frequency.load (std::memory_order_relaxed));
+        const auto currentFrequency = getFrequency();
         const auto increment = yup::MathConstants<double>::twoPi * currentFrequency / static_cast<double> (sampleRate);
 
         for (int sample = 0; sample < audioBuffer.getNumSamples(); ++sample)
@@ -74,47 +75,34 @@ public:
 
     void setPresetName (int, yup::StringRef) override {}
 
-    yup::Result loadStateFromMemory (const yup::MemoryBlock& data) override
+    bool supportsDataTreeState() const noexcept override { return true; }
+
+    yup::Result loadStateFromDataTree (const yup::DataTree& state) override
     {
-        if (data.isEmpty())
-            return yup::Result::ok();
-
-        yup::MemoryInputStream stream (data, false);
-
-        const int version = stream.readInt();
-        if (version != 1)
-            return yup::Result::fail ("Unsupported oscillator node state version");
-
-        setFrequency (stream.readFloat());
-
-        return yup::Result::ok();
+        return NodeViewHelpers::loadParameterState (state, stateType, getParameters());
     }
 
-    yup::Result saveStateIntoMemory (yup::MemoryBlock& data) override
+    yup::Result saveStateIntoDataTree (yup::DataTree& state) override
     {
-        yup::MemoryOutputStream stream (data, false);
-        stream.writeInt (1);
-        stream.writeFloat (frequency.load (std::memory_order_relaxed));
-        stream.flush();
-
+        state = NodeViewHelpers::createParameterState (stateType, getParameters());
         return yup::Result::ok();
     }
 
     bool hasEditor() const override { return false; }
 
-    yup::AudioProcessorEditor* createEditor() override { return nullptr; }
-
-    double getFrequency() const noexcept { return static_cast<double> (frequency.load (std::memory_order_relaxed)); }
+    double getFrequency() const noexcept { return static_cast<double> (frequency->getValue()); }
 
     void setFrequency (double newFrequency) noexcept
     {
-        frequency.store (static_cast<float> (yup::jlimit (40.0, 2000.0, newFrequency)), std::memory_order_relaxed);
+        frequency->setValue (static_cast<float> (newFrequency));
     }
 
 private:
+    static constexpr const char* stateType = "OscillatorState";
+
     double sampleRate = 44100.0;
     double phase = 0.0;
-    std::atomic<float> frequency { 440.0f };
+    yup::AudioParameter::Ptr frequency;
 };
 
 //==============================================================================

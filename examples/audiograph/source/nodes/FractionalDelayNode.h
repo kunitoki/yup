@@ -38,6 +38,15 @@ public:
                           yup::AudioBusLayout ({ yup::AudioBus ("Main", yup::AudioBus::Audio, yup::AudioBus::Input, 2) },
                                                { yup::AudioBus ("Main", yup::AudioBus::Audio, yup::AudioBus::Output, 2) }))
     {
+        delayLeftMilliseconds = NodeViewHelpers::createParameter ("delayLeftMilliseconds", "L Time", 1.0f, maximumDelayMilliseconds, defaultDelayLeftMilliseconds, 1.0f);
+        delayRightMilliseconds = NodeViewHelpers::createParameter ("delayRightMilliseconds", "R Time", 1.0f, maximumDelayMilliseconds, defaultDelayRightMilliseconds, 1.0f);
+        feedback = NodeViewHelpers::createParameter ("feedback", "Feedback", 0.0f, maximumFeedback, 0.35f, 0.01f);
+        dryWet = NodeViewHelpers::createParameter ("dryWet", "Dry/Wet", 0.0f, 1.0f, 0.5f, 0.01f);
+
+        addParameter (delayLeftMilliseconds);
+        addParameter (delayRightMilliseconds);
+        addParameter (feedback);
+        addParameter (dryWet);
     }
 
     void prepareToPlay (float newSampleRate, int) override
@@ -77,8 +86,8 @@ public:
 
         auto& audioBuffer = context.audio;
 
-        const auto currentFeedback = feedback.load (std::memory_order_relaxed);
-        const auto currentDryWet = dryWet.load (std::memory_order_relaxed);
+        const auto currentFeedback = getFeedback();
+        const auto currentDryWet = getDryWet();
         const auto dryGain = 1.0f - currentDryWet;
 
         const int channels = yup::jmin (audioBuffer.getNumChannels(), static_cast<int> (delayLines.size()));
@@ -110,8 +119,24 @@ public:
 
     void setPresetName (int, yup::StringRef) override {}
 
+    bool supportsDataTreeState() const noexcept override { return true; }
+
+    yup::Result loadStateFromDataTree (const yup::DataTree& state) override
+    {
+        return NodeViewHelpers::loadParameterState (state, stateType, getParameters());
+    }
+
+    yup::Result saveStateIntoDataTree (yup::DataTree& state) override
+    {
+        state = NodeViewHelpers::createParameterState (stateType, getParameters());
+        return yup::Result::ok();
+    }
+
     yup::Result loadStateFromMemory (const yup::MemoryBlock& data) override
     {
+        if (const auto result = AudioProcessor::loadStateFromMemory (data); result.wasOk())
+            return result;
+
         if (data.isEmpty())
             return yup::Result::ok();
 
@@ -131,15 +156,7 @@ public:
 
     yup::Result saveStateIntoMemory (yup::MemoryBlock& data) override
     {
-        yup::MemoryOutputStream stream (data, false);
-        stream.writeInt (1);
-        stream.writeFloat (getDelayLeftMilliseconds());
-        stream.writeFloat (getDelayRightMilliseconds());
-        stream.writeFloat (getFeedback());
-        stream.writeFloat (getDryWet());
-        stream.flush();
-
-        return yup::Result::ok();
+        return AudioProcessor::saveStateIntoMemory (data);
     }
 
     bool hasEditor() const override { return false; }
@@ -148,45 +165,47 @@ public:
 
     float getDelayLeftMilliseconds() const noexcept
     {
-        return delayLeftMilliseconds.load (std::memory_order_relaxed);
+        return delayLeftMilliseconds->getValue();
     }
 
     float getDelayRightMilliseconds() const noexcept
     {
-        return delayRightMilliseconds.load (std::memory_order_relaxed);
+        return delayRightMilliseconds->getValue();
     }
 
     float getFeedback() const noexcept
     {
-        return feedback.load (std::memory_order_relaxed);
+        return feedback->getValue();
     }
 
     float getDryWet() const noexcept
     {
-        return dryWet.load (std::memory_order_relaxed);
+        return dryWet->getValue();
     }
 
     void setDelayLeftMilliseconds (float newDelayMilliseconds) noexcept
     {
-        delayLeftMilliseconds.store (limitDelayMilliseconds (newDelayMilliseconds), std::memory_order_relaxed);
+        delayLeftMilliseconds->setValue (limitDelayMilliseconds (newDelayMilliseconds));
     }
 
     void setDelayRightMilliseconds (float newDelayMilliseconds) noexcept
     {
-        delayRightMilliseconds.store (limitDelayMilliseconds (newDelayMilliseconds), std::memory_order_relaxed);
+        delayRightMilliseconds->setValue (limitDelayMilliseconds (newDelayMilliseconds));
     }
 
     void setFeedback (float newFeedback) noexcept
     {
-        feedback.store (yup::jlimit (0.0f, maximumFeedback, newFeedback), std::memory_order_relaxed);
+        feedback->setValue (newFeedback);
     }
 
     void setDryWet (float newDryWet) noexcept
     {
-        dryWet.store (yup::jlimit (0.0f, 1.0f, newDryWet), std::memory_order_relaxed);
+        dryWet->setValue (newDryWet);
     }
 
 private:
+    static constexpr const char* stateType = "FractionalDelayState";
+
     static constexpr float defaultDelayLeftMilliseconds = 250.0f;
     static constexpr float defaultDelayRightMilliseconds = 375.0f;
     static constexpr float maximumDelayMilliseconds = 2000.0f;
@@ -204,10 +223,10 @@ private:
     }
 
     std::atomic<float> sampleRate { 44100.0f };
-    std::atomic<float> delayLeftMilliseconds { defaultDelayLeftMilliseconds };
-    std::atomic<float> delayRightMilliseconds { defaultDelayRightMilliseconds };
-    std::atomic<float> feedback { 0.35f };
-    std::atomic<float> dryWet { 0.5f };
+    yup::AudioParameter::Ptr delayLeftMilliseconds;
+    yup::AudioParameter::Ptr delayRightMilliseconds;
+    yup::AudioParameter::Ptr feedback;
+    yup::AudioParameter::Ptr dryWet;
     std::array<yup::FractionallyAddressedDelayFloat, 2> delayLines;
     std::array<float, 2> feedbackState {};
 };
