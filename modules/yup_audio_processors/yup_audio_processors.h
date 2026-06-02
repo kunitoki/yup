@@ -32,7 +32,7 @@
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_audio_basics
+    dependencies:       yup_audio_basics yup_data_model
 
   END_YUP_MODULE_DECLARATION
 
@@ -45,6 +45,7 @@
 #include <atomic>
 
 #include <yup_audio_basics/yup_audio_basics.h>
+#include <yup_data_model/yup_data_model.h>
 
 #if YUP_MODULE_AVAILABLE_yup_gui
 #include <yup_gui/yup_gui.h>

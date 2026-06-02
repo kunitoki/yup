@@ -130,6 +130,35 @@ Result modelReadBase64Element (const XmlElement& parent, const char* tagName, Me
     return Result::ok();
 }
 
+void modelWriteDataTreeElement (XmlElement& parent, const char* tagName, const DataTree& state)
+{
+    auto xml = state.createXml();
+    if (xml == nullptr)
+        return;
+
+    auto* element = new XmlElement (tagName);
+    element->addChildElement (xml.release());
+    parent.addChildElement (element);
+}
+
+Result modelReadDataTreeElement (const XmlElement& parent, const char* tagName, DataTree& state)
+{
+    auto* element = parent.getChildByName (tagName);
+
+    if (element == nullptr)
+        return Result::fail (String ("Audio graph state is missing ") + tagName);
+
+    auto* stateXml = element->getFirstChildElement();
+    if (stateXml == nullptr)
+        return Result::fail (String ("Audio graph state has invalid ") + tagName + " data");
+
+    state = DataTree::fromXml (*stateXml);
+    if (! state.isValid())
+        return Result::fail (String ("Audio graph state has invalid ") + tagName + " DataTree");
+
+    return Result::ok();
+}
+
 void modelWriteCreationDataElement (XmlElement& parent, const MemoryBlock& block)
 {
     if (block.getSize() == 0)
@@ -545,13 +574,30 @@ ResultValue<std::unique_ptr<XmlElement>> AudioGraphModel::createXml() const
         if (node.processor == nullptr)
             return makeResultValueFail ("Audio graph contains an empty node");
 
-        MemoryBlock nodeState;
-        const auto result = node.processor->saveStateIntoMemory (nodeState);
+        SavedNodeState savedNode;
+        savedNode.id = node.id;
+        savedNode.properties = node.properties;
 
-        if (! result)
-            return makeResultValueFail ("Audio graph node state save failed: " + result.getErrorMessage());
+        if (node.processor->supportsDataTreeState())
+        {
+            savedNode.hasStateTree = true;
+            const auto result = node.processor->saveStateIntoDataTree (savedNode.stateTree);
 
-        savedNodes.push_back ({ node.id, node.properties, std::move (nodeState) });
+            if (! result)
+                return makeResultValueFail ("Audio graph node DataTree state save failed: " + result.getErrorMessage());
+
+            if (! savedNode.stateTree.isValid())
+                return makeResultValueFail ("Audio graph node DataTree state save failed: invalid state");
+        }
+        else
+        {
+            const auto result = node.processor->saveStateIntoMemory (savedNode.state);
+
+            if (! result)
+                return makeResultValueFail ("Audio graph node state save failed: " + result.getErrorMessage());
+        }
+
+        savedNodes.push_back (std::move (savedNode));
     }
 
     auto root = std::make_unique<XmlElement> (audioGraphModelStateTag);
@@ -568,7 +614,11 @@ ResultValue<std::unique_ptr<XmlElement>> AudioGraphModel::createXml() const
 
         nodeElement->setAttribute ("id", String (static_cast<int64> (node.id.getRawID())));
         modelWriteNodeProperties (*nodeElement, node.properties);
-        modelWriteBase64Element (*nodeElement, "state", node.state);
+
+        if (node.hasStateTree)
+            modelWriteDataTreeElement (*nodeElement, "stateTree", node.stateTree);
+        else
+            modelWriteBase64Element (*nodeElement, "state", node.state);
     }
 
     auto* boundaryNodesElement = new XmlElement ("boundaryNodes");
@@ -632,8 +682,17 @@ Result AudioGraphModel::restoreFromXml (const XmlElement& xml)
         if (const auto result = modelReadNodeProperties (*nodeElement, savedNode.properties); result.failed())
             return result;
 
-        if (const auto result = modelReadBase64Element (*nodeElement, "state", savedNode.state); result.failed())
+        if (nodeElement->getChildByName ("stateTree") != nullptr)
+        {
+            savedNode.hasStateTree = true;
+
+            if (const auto result = modelReadDataTreeElement (*nodeElement, "stateTree", savedNode.stateTree); result.failed())
+                return result;
+        }
+        else if (const auto result = modelReadBase64Element (*nodeElement, "state", savedNode.state); result.failed())
+        {
             return result;
+        }
 
         savedNodes.push_back (std::move (savedNode));
     }
@@ -770,7 +829,11 @@ Result AudioGraphModel::restoreModel (uint64_t savedNextNodeID,
         if (processor == nullptr)
             return Result::fail ("Audio graph node factory returned an empty processor");
 
-        const auto result = processor->loadStateFromMemory (savedNode.state);
+        const auto result = savedNode.hasStateTree
+                              ? (processor->supportsDataTreeState()
+                                     ? processor->loadStateFromDataTree (savedNode.stateTree)
+                                     : Result::fail ("Audio graph node does not support DataTree state"))
+                              : processor->loadStateFromMemory (savedNode.state);
 
         if (! result)
             return Result::fail ("Audio graph node state load failed: " + result.getErrorMessage());

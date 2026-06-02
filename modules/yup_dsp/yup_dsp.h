@@ -153,6 +153,9 @@
 #include "base/yup_AnalogPoles.h"
 #include "base/yup_StateVariableCoefficients.h"
 
+// Nonlinear processors
+#include "nonlinear/yup_AaIirAntialiaser.h"
+
 // Metering and level measurement (after Biquad definition)
 #include "metering/yup_LevelProcessor.h"
 #include "metering/yup_LoudnessFilter.h"
@@ -175,8 +178,12 @@
 #include "filters/yup_CombFilter.h"
 
 // Dynamics processors
-#include "dynamics/yup_SoftClipper.h"
 #include "dynamics/yup_BlunterClipper.h"
+#include "dynamics/yup_HardClipper.h"
+#include "dynamics/yup_SoftClipper.h"
+
+// Delay lines
+#include "delays/yup_FractionallyAddressedDelay.h"
 
 // Convolution processors
 #include "convolution/yup_PartitionedConvolver.h"

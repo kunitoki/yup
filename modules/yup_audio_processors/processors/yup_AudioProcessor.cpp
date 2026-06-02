@@ -101,6 +101,58 @@ void AudioProcessor::updateHostDisplay (ChangeDetails details)
 
 //==============================================================================
 
+Result AudioProcessor::loadStateFromDataTree (const DataTree& state)
+{
+    ignoreUnused (state);
+    return Result::fail ("Processor does not support DataTree state");
+}
+
+Result AudioProcessor::saveStateIntoDataTree (DataTree& state)
+{
+    ignoreUnused (state);
+    return Result::fail ("Processor does not support DataTree state");
+}
+
+Result AudioProcessor::loadStateFromMemory (const MemoryBlock& memoryBlock)
+{
+    if (! supportsDataTreeState())
+        return Result::fail ("Processor does not support binary state");
+
+    MemoryInputStream stream (memoryBlock, false);
+    auto xml = parseXML (stream.readEntireStreamAsString());
+
+    if (xml == nullptr)
+        return Result::fail ("Processor state is not valid XML");
+
+    auto state = DataTree::fromXml (*xml);
+    if (! state.isValid())
+        return Result::fail ("Processor state is not a valid DataTree");
+
+    return loadStateFromDataTree (state);
+}
+
+Result AudioProcessor::saveStateIntoMemory (MemoryBlock& memoryBlock)
+{
+    if (! supportsDataTreeState())
+        return Result::fail ("Processor does not support binary state");
+
+    DataTree state;
+    if (const auto result = saveStateIntoDataTree (state); result.failed())
+        return result;
+
+    auto xml = state.createXml();
+    if (xml == nullptr)
+        return Result::fail ("Processor DataTree state is invalid");
+
+    MemoryOutputStream stream (memoryBlock, false);
+    xml->writeTo (stream);
+    stream.flush();
+
+    return Result::ok();
+}
+
+//==============================================================================
+
 int AudioProcessor::getNumAudioOutputs() const
 {
     int count = 0;
@@ -121,6 +173,26 @@ int AudioProcessor::getNumAudioInputs() const
             ++count;
 
     return count;
+}
+
+//==============================================================================
+
+bool AudioProcessor::acceptsMidi() const noexcept
+{
+    for (const auto& bus : busLayout.getInputBuses())
+        if (bus.getType() == AudioBus::Type::Midi)
+            return true;
+
+    return false;
+}
+
+bool AudioProcessor::producesMidi() const noexcept
+{
+    for (const auto& bus : busLayout.getOutputBuses())
+        if (bus.getType() == AudioBus::Type::Midi)
+            return true;
+
+    return false;
 }
 
 //==============================================================================
@@ -160,6 +232,14 @@ void AudioProcessor::setProcessingPrecision (ProcessingPrecision precision)
     }
 
     processingPrecision = precision;
+}
+
+//==============================================================================
+
+AudioProcessorEditor* AudioProcessor::createEditor()
+{
+    jassert (hasEditor());
+    return nullptr;
 }
 
 //==============================================================================

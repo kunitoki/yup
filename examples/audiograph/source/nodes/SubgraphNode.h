@@ -169,41 +169,33 @@ public:
 
     void setPresetName (int, yup::StringRef) override {}
 
-    yup::Result loadStateFromMemory (const yup::MemoryBlock& data) override
+    bool supportsDataTreeState() const noexcept override { return true; }
+
+    yup::Result loadStateFromDataTree (const yup::DataTree& state) override
     {
-        if (data.getSize() == 0)
-            return yup::Result::ok();
-
-        yup::MemoryInputStream stream (data, false);
-        auto xml = yup::parseXML (stream.readEntireStreamAsString());
-
-        if (xml == nullptr || ! xml->hasTagName ("SubgraphState"))
+        if (! state.isValid() || state.getType() != stateType)
             return yup::Result::fail ("Invalid subgraph state");
 
-        if (xml->getIntAttribute ("version", 0) != 1)
+        if (static_cast<int> (state.getProperty ("version", 0)) != 1)
             return yup::Result::fail ("Unsupported subgraph state version");
 
-        auto* graphState = xml->getChildByName ("graphState");
-        if (graphState == nullptr || graphState->getStringAttribute ("encoding") != "base64")
+        const auto graphXml = state.getProperty ("graphXml", {}).toString();
+        if (graphXml.isEmpty())
             return yup::Result::fail ("Subgraph state is missing graph data");
 
         yup::MemoryBlock graphBlock;
         yup::MemoryOutputStream output (graphBlock, false);
-        const auto base64Text = graphState->getAllSubText().removeCharacters (" \t\r\n");
-
-        if (! yup::Base64::convertFromBase64 (output, base64Text))
-            return yup::Result::fail ("Subgraph state has invalid graph data");
-
+        output.writeText (graphXml, false, false, nullptr);
         output.flush();
 
         SubgraphConfig savedConfig;
-        savedConfig.audioChannels = yup::jlimit (1, 2, xml->getIntAttribute ("audioChannels", config.audioChannels));
-        savedConfig.midiEnabled = xml->getBoolAttribute ("midiEnabled", config.midiEnabled);
+        savedConfig.audioChannels = yup::jlimit (1, 2, static_cast<int> (state.getProperty ("audioChannels", config.audioChannels)));
+        savedConfig.midiEnabled = static_cast<bool> (state.getProperty ("midiEnabled", config.midiEnabled));
 
         return loadPrunedGraphState (graphBlock, savedConfig);
     }
 
-    yup::Result saveStateIntoMemory (yup::MemoryBlock& data) override
+    yup::Result saveStateIntoDataTree (yup::DataTree& state) override
     {
         yup::MemoryBlock graphBlock;
         const auto result = graph->saveStateIntoMemory (graphBlock);
@@ -211,25 +203,21 @@ public:
         if (result.failed())
             return result;
 
-        yup::XmlElement xml ("SubgraphState");
-        xml.setAttribute ("version", 1);
-        xml.setAttribute ("audioChannels", yup::jlimit (1, 2, config.audioChannels));
-        xml.setAttribute ("midiEnabled", config.midiEnabled ? 1 : 0);
+        yup::MemoryInputStream input (graphBlock, false);
 
-        auto* graphState = new yup::XmlElement ("graphState");
-        graphState->setAttribute ("encoding", "base64");
-        graphState->addTextElement (yup::Base64::toBase64 (graphBlock.getData(), graphBlock.getSize()));
-        xml.addChildElement (graphState);
-
-        yup::MemoryOutputStream stream (data, false);
-        xml.writeTo (stream);
-        stream.flush();
+        state = yup::DataTree (stateType);
+        auto transaction = state.beginTransaction();
+        transaction.setProperty ("version", 1);
+        transaction.setProperty ("audioChannels", yup::jlimit (1, 2, config.audioChannels));
+        transaction.setProperty ("midiEnabled", config.midiEnabled);
+        transaction.setProperty ("graphXml", input.readEntireStreamAsString());
         return yup::Result::ok();
     }
 
     bool hasEditor() const override { return false; }
 
-    yup::AudioProcessorEditor* createEditor() override { return nullptr; }
+private:
+    const yup::Identifier stateType = "SubgraphState";
 
     static yup::AudioBusLayout createBusLayout (const SubgraphConfig& config)
     {
@@ -242,14 +230,13 @@ public:
 
         if (config.midiEnabled)
         {
-            inputs.emplace_back ("MIDI In", yup::AudioBus::Type::MIDI, yup::AudioBus::Direction::Input, 0);
-            outputs.emplace_back ("MIDI Out", yup::AudioBus::Type::MIDI, yup::AudioBus::Direction::Output, 0);
+            inputs.emplace_back ("MIDI In", yup::AudioBus::Type::Midi, yup::AudioBus::Direction::Input, 0);
+            outputs.emplace_back ("MIDI Out", yup::AudioBus::Type::Midi, yup::AudioBus::Direction::Output, 0);
         }
 
         return yup::AudioBusLayout (std::move (inputs), std::move (outputs));
     }
 
-private:
     yup::Result loadPrunedGraphState (const yup::MemoryBlock& graphBlock, const SubgraphConfig& savedConfig)
     {
         yup::MemoryInputStream stream (graphBlock, false);

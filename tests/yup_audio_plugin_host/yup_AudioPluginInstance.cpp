@@ -83,8 +83,8 @@ class CountOnlyPluginInstance : public AudioPluginInstance
 public:
     CountOnlyPluginInstance()
         : AudioPluginInstance (makeDescription(),
-                               AudioBusLayout ({ AudioBus ("MIDI Input", AudioBus::Type::MIDI, AudioBus::Direction::Input, 1) },
-                                               { AudioBus ("MIDI Output", AudioBus::Type::MIDI, AudioBus::Direction::Output, 1) }))
+                               AudioBusLayout ({ AudioBus ("MIDI Input", AudioBus::Type::Midi, AudioBus::Direction::Input, 1) },
+                                               { AudioBus ("MIDI Output", AudioBus::Type::Midi, AudioBus::Direction::Output, 1) }))
     {
     }
 
