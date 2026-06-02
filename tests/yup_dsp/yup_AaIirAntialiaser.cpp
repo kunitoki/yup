@@ -32,7 +32,7 @@ template <typename FloatType>
 class AaIirAntialiaserTests : public ::testing::Test
 {
 public:
-    using Clipper = yup::HardClipperAaIir<FloatType>;
+    using Clipper = yup::HardClipper<FloatType>;
     using Config = typename Clipper::PoleConfig;
 
     static constexpr double kSampleRate = 44100.0;
