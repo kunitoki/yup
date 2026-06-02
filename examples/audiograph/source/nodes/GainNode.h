@@ -36,13 +36,18 @@ public:
         addParameter (gain);
     }
 
-    void prepareToPlay (float, int) override {}
+    void prepareToPlay (float newSampleRate, int) override
+    {
+        smoothedGain.reset (newSampleRate, 0.02);
+        smoothedGain.setCurrentAndTargetValue (getGain());
+    }
 
     void releaseResources() override {}
 
     void processBlock (yup::AudioProcessContext<float>& context) override
     {
-        context.audio.applyGain (getGain());
+        smoothedGain.setTargetValue (getGain());
+        smoothedGain.applyGain (context.audio, context.audio.getNumSamples());
     }
 
     int getCurrentPreset() const noexcept override { return 0; }
@@ -81,6 +86,7 @@ private:
     static constexpr const char* stateType = "GainState";
 
     yup::AudioParameter::Ptr gain;
+    yup::SmoothedValue<float> smoothedGain;
 };
 
 //==============================================================================

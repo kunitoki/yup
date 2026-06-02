@@ -43,6 +43,8 @@ public:
         sampleRate = newSampleRate;
         state[0] = 0.0f;
         state[1] = 0.0f;
+        smoothedCutoff.reset (newSampleRate, 0.02);
+        smoothedCutoff.setCurrentAndTargetValue (static_cast<float> (getCutoff()));
     }
 
     void releaseResources() override {}
@@ -50,20 +52,22 @@ public:
     void processBlock (yup::AudioProcessContext<float>& context) override
     {
         auto& audioBuffer = context.audio;
-        const auto currentCutoff = getCutoff();
-        const auto alpha = static_cast<float> (1.0 - std::exp (-yup::MathConstants<double>::twoPi * currentCutoff / static_cast<double> (sampleRate)));
+        const int numSamples = audioBuffer.getNumSamples();
+        const int numChannels = audioBuffer.getNumChannels();
+        const auto twoPi = static_cast<float> (yup::MathConstants<double>::twoPi);
 
-        for (int channel = 0; channel < audioBuffer.getNumChannels(); ++channel)
+        smoothedCutoff.setTargetValue (static_cast<float> (getCutoff()));
+
+        for (int sample = 0; sample < numSamples; ++sample)
         {
-            auto y = state[static_cast<size_t> (yup::jmin (channel, 1))];
+            const float alpha = 1.0f - std::exp (-twoPi * smoothedCutoff.getNextValue() / sampleRate);
 
-            for (int sample = 0; sample < audioBuffer.getNumSamples(); ++sample)
+            for (int channel = 0; channel < numChannels; ++channel)
             {
-                y += alpha * (audioBuffer.getSample (channel, sample) - y);
-                audioBuffer.setSample (channel, sample, y);
+                const auto stateIdx = static_cast<size_t> (yup::jmin (channel, 1));
+                state[stateIdx] += alpha * (audioBuffer.getSample (channel, sample) - state[stateIdx]);
+                audioBuffer.setSample (channel, sample, state[stateIdx]);
             }
-
-            state[static_cast<size_t> (yup::jmin (channel, 1))] = y;
         }
     }
 
@@ -104,6 +108,7 @@ private:
 
     float sampleRate = 44100.0f;
     yup::AudioParameter::Ptr cutoff;
+    yup::SmoothedValue<float> smoothedCutoff;
     float state[2] {};
 };
 

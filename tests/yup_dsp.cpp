@@ -42,6 +42,7 @@
 #include "yup_dsp/yup_SincTable.cpp"
 #include "yup_dsp/yup_SoftClipper.cpp"
 #include "yup_dsp/yup_BlunterClipper.cpp"
+#include "yup_dsp/yup_AaIirAntialiaser.cpp"
 #include "yup_dsp/yup_SpectrumAnalyzerState.cpp"
 #include "yup_dsp/yup_StateVariableFilter.cpp"
 #include "yup_dsp/yup_WindowFunctions.cpp"

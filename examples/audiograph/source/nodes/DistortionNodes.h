@@ -56,6 +56,9 @@ public:
         oversampler8x.prepare (sampleRate, maximumOversampledChannels, blockSize);
         oversamplersPrepared = true;
 
+        smoothedDrive.reset (newSampleRate, 0.02);
+        smoothedDrive.setCurrentAndTargetValue (getDrive());
+
         updateLatency();
     }
 
@@ -78,36 +81,45 @@ public:
         if (numChannels <= 0 || numSamples <= 0)
             return;
 
-        const auto currentDrive = getDrive();
+        smoothedDrive.setTargetValue (getDrive());
         const auto currentOversamplingIndex = getOversamplingIndex();
 
         if (! oversamplersPrepared || currentOversamplingIndex == 0)
         {
-            processChannelsInPlace (audioBuffer, 0, numChannels, currentDrive);
+            for (int sample = 0; sample < numSamples; ++sample)
+            {
+                const float drive = smoothedDrive.getNextValue();
+                for (int channel = 0; channel < numChannels; ++channel)
+                {
+                    auto* channelData = audioBuffer.getWritePointer (channel);
+                    channelData[sample] = processSample (channelData[sample], drive);
+                }
+            }
             return;
         }
 
+        const float effectiveDrive = smoothedDrive.skip (numSamples);
         const int oversampledChannels = yup::jmin (numChannels, maximumOversampledChannels);
 
         switch (currentOversamplingIndex)
         {
             case 1:
-                processOversampled (oversampler2x, audioBuffer, oversampledChannels, numSamples, currentDrive);
+                processOversampled (oversampler2x, audioBuffer, oversampledChannels, numSamples, effectiveDrive);
                 break;
 
             case 2:
-                processOversampled (oversampler4x, audioBuffer, oversampledChannels, numSamples, currentDrive);
+                processOversampled (oversampler4x, audioBuffer, oversampledChannels, numSamples, effectiveDrive);
                 break;
 
             case 3:
-                processOversampled (oversampler8x, audioBuffer, oversampledChannels, numSamples, currentDrive);
+                processOversampled (oversampler8x, audioBuffer, oversampledChannels, numSamples, effectiveDrive);
                 break;
 
             default:
                 break;
         }
 
-        processChannelsInPlace (audioBuffer, oversampledChannels, numChannels, currentDrive);
+        processChannelsInPlace (audioBuffer, oversampledChannels, numChannels, effectiveDrive);
     }
 
     int getCurrentPreset() const noexcept override { return 0; }
@@ -244,6 +256,7 @@ private:
 
     yup::AudioParameter::Ptr drive;
     yup::AudioParameter::Ptr oversamplingIndex;
+    yup::SmoothedValue<float> smoothedDrive;
     yup::Oversampler2xFloat oversampler2x;
     yup::Oversampler4xFloat oversampler4x;
     yup::Oversampler8xFloat oversampler8x;
@@ -270,6 +283,11 @@ public:
     {
         for (auto& clipper : clippers)
             clipper.prepare (newSampleRate, maxBlockSize);
+
+        smoothedDrive.reset (newSampleRate, 0.02);
+        smoothedDrive.setCurrentAndTargetValue (getDrive());
+        smoothedOutput.reset (newSampleRate, 0.02);
+        smoothedOutput.setCurrentAndTargetValue (getOutput());
     }
 
     void releaseResources() override {}
@@ -284,19 +302,25 @@ public:
     {
         auto& audioBuffer = context.audio;
 
-        const auto currentDrive = getDrive();
-        const auto currentOutput = getOutput();
-        const int clipperChannels = static_cast<int> (clippers.size());
+        const int numChannels = audioBuffer.getNumChannels();
+        const int numSamples = audioBuffer.getNumSamples();
+        const int clipperChans = static_cast<int> (clippers.size());
 
-        for (auto& clipper : clippers)
-            clipper.setParameters (currentDrive, currentOutput);
+        smoothedDrive.setTargetValue (getDrive());
+        smoothedOutput.setTargetValue (getOutput());
 
-        for (int channel = 0; channel < audioBuffer.getNumChannels(); ++channel)
+        for (int sample = 0; sample < numSamples; ++sample)
         {
-            auto* channelData = audioBuffer.getWritePointer (channel);
-            auto& clipper = clippers[static_cast<std::size_t> (yup::jmin (channel, clipperChannels - 1))];
+            const float drive = smoothedDrive.getNextValue();
+            const float out = smoothedOutput.getNextValue();
 
-            clipper.processInPlace (channelData, audioBuffer.getNumSamples());
+            for (int channel = 0; channel < numChannels; ++channel)
+            {
+                auto& clipper = clippers[static_cast<std::size_t> (yup::jmin (channel, clipperChans - 1))];
+                clipper.setParameters (drive, out);
+                auto* channelData = audioBuffer.getWritePointer (channel);
+                channelData[sample] = clipper.processSample (channelData[sample]);
+            }
         }
     }
 
@@ -377,6 +401,8 @@ private:
 
     yup::AudioParameter::Ptr drive;
     yup::AudioParameter::Ptr output;
+    yup::SmoothedValue<float> smoothedDrive;
+    yup::SmoothedValue<float> smoothedOutput;
     std::array<yup::BlunterClipperFloat, 2> clippers;
 };
 
@@ -570,6 +596,11 @@ public:
     {
         for (auto& clipper : clippers)
             clipper.prepare (static_cast<double> (newSampleRate), maxBlockSize);
+
+        smoothedDrive.reset (newSampleRate, 0.02);
+        smoothedDrive.setCurrentAndTargetValue (getDrive());
+        smoothedOutput.reset (newSampleRate, 0.02);
+        smoothedOutput.setCurrentAndTargetValue (getOutput());
     }
 
     void releaseResources() override {}
@@ -584,16 +615,23 @@ public:
     {
         auto& audioBuffer = context.audio;
 
-        const float currentDrive = getDrive();
-        const float currentOutput = getOutput();
+        const int numChannels = audioBuffer.getNumChannels();
+        const int numSamples = audioBuffer.getNumSamples();
 
-        for (int channel = 0; channel < audioBuffer.getNumChannels(); ++channel)
+        smoothedDrive.setTargetValue (getDrive());
+        smoothedOutput.setTargetValue (getOutput());
+
+        for (int sample = 0; sample < numSamples; ++sample)
         {
-            auto* channelData = audioBuffer.getWritePointer (channel);
-            auto& clipper = clippers[static_cast<std::size_t> (yup::jmin (channel, clipperChannels - 1))];
+            const float drive = smoothedDrive.getNextValue();
+            const float out = smoothedOutput.getNextValue();
 
-            for (int i = 0; i < audioBuffer.getNumSamples(); ++i)
-                channelData[i] = clipper.processSample (channelData[i] * currentDrive) * currentOutput;
+            for (int channel = 0; channel < numChannels; ++channel)
+            {
+                auto* channelData = audioBuffer.getWritePointer (channel);
+                auto& clipper = clippers[static_cast<std::size_t> (yup::jmin (channel, clipperChannels - 1))];
+                channelData[sample] = clipper.processSample (channelData[sample] * drive) * out;
+            }
         }
     }
 
@@ -675,6 +713,8 @@ private:
 
     yup::AudioParameter::Ptr drive;
     yup::AudioParameter::Ptr output;
+    yup::SmoothedValue<float> smoothedDrive;
+    yup::SmoothedValue<float> smoothedOutput;
     std::array<yup::HardClipperFloat, clipperChannels> clippers;
 };
 
