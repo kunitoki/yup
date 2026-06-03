@@ -427,6 +427,64 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_module_normalize_dependency_target dependency output_variable)
+    set (normalized_dependency "${dependency}")
+
+    if (TARGET "${normalized_dependency}")
+        get_target_property (aliased_target "${normalized_dependency}" ALIASED_TARGET)
+        if (aliased_target)
+            set (normalized_dependency "${aliased_target}")
+        endif()
+    elseif ("${normalized_dependency}" MATCHES "^yup::(.+)$")
+        string (REGEX REPLACE "^yup::" "" normalized_dependency "${normalized_dependency}")
+    endif()
+
+    set (${output_variable} "${normalized_dependency}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_check_dependency_cycle module_name context_name active_stack)
+    _yup_module_normalize_dependency_target ("${module_name}" module_target)
+
+    if (NOT TARGET "${module_target}")
+        return()
+    endif()
+
+    get_target_property (module_path "${module_target}" YUP_MODULE_PATH)
+    if (NOT module_path)
+        return()
+    endif()
+
+    list (FIND active_stack "${module_target}" cycle_start)
+    if (NOT cycle_start EQUAL -1)
+        list (LENGTH active_stack active_stack_length)
+        math (EXPR cycle_length "${active_stack_length} - ${cycle_start}")
+        list (SUBLIST active_stack ${cycle_start} ${cycle_length} cycle_path)
+        list (APPEND cycle_path "${module_target}")
+        list (JOIN cycle_path " -> " cycle_message)
+
+        _yup_message (FATAL_ERROR "${context_name} introduces a circular YUP module dependency: ${cycle_message}")
+    endif()
+
+    list (APPEND active_stack "${module_target}")
+
+    get_target_property (module_dependencies "${module_target}" YUP_MODULE_DEPENDENCIES)
+    foreach (module_dependency IN LISTS module_dependencies)
+        _yup_module_check_dependency_cycle ("${module_dependency}" "${context_name}" "${active_stack}")
+    endforeach()
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_check_circular_dependencies context_name module_targets)
+    foreach (module_target IN LISTS module_targets)
+        _yup_module_check_dependency_cycle ("${module_target}" "${context_name}" "")
+    endforeach()
+endfunction()
+
+#==============================================================================
+
 function (_yup_module_setup_target module_name
                                    module_path
                                    module_cpp_standard

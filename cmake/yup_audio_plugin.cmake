@@ -72,6 +72,13 @@ function (yup_audio_plugin)
         return()
     endif()
 
+    set (target_modules "${YUP_ARG_MODULES}")
+    list (APPEND target_modules yup_audio_plugin_client)
+    if (YUP_ARG_PLUGIN_CREATE_STANDALONE)
+        list (APPEND target_modules yup_audio_devices)
+    endif()
+    _yup_module_check_circular_dependencies ("${target_name} audio plugin" "${target_modules}")
+
     # ==== Create static library for user's plugin code
     _yup_message (STATUS "Creating static library for user's plugin code")
     add_library (${target_name}_shared INTERFACE)
