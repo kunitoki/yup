@@ -77,6 +77,9 @@ function (yup_standalone_app)
         return()
     endif()
 
+    # ==== Check for modules circular dependencies
+    _yup_module_check_circular_dependencies ("${target_name} standalone application" "${YUP_ARG_MODULES}")
+
     # ==== Find modules includes
     set (module_include_dirs "")
     foreach (module IN ITEMS ${YUP_ARG_MODULES})
