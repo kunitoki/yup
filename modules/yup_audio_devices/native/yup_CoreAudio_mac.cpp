@@ -271,6 +271,16 @@ public:
 static_assert (sizeof (AudioStream) == sizeof (AudioObject));
 
 //==============================================================================
+static String stringFromRetainedCFString (CFStringRef string)
+{
+    if (string == nullptr)
+        return {};
+
+    const CFUniquePtr<CFStringRef> holder { string };
+    return String::fromCFString (holder.get());
+}
+
+//==============================================================================
 class AudioDevice : public AudioObject
 {
     static constexpr AudioObjectPropertySelector mainVolumeSelector =
@@ -285,20 +295,12 @@ public:
 
     String getName() const
     {
-        const auto cf = getProperty<CFStringRef> (PropertyAddress (kAudioDevicePropertyDeviceNameCFString));
-        if (! cf || ! *cf)
-            return {};
-        const CFUniquePtr<CFStringRef> holder { *cf };
-        return String::fromCFString (holder.get());
+        return stringFromRetainedCFString (getProperty<CFStringRef> (PropertyAddress (kAudioDevicePropertyDeviceNameCFString)).value_or (nullptr));
     }
 
     String getUid() const
     {
-        const auto cf = getProperty<CFStringRef> (PropertyAddress (kAudioDevicePropertyDeviceUID));
-        if (! cf || ! *cf)
-            return {};
-        const CFUniquePtr<CFStringRef> holder { *cf };
-        return String::fromCFString (holder.get());
+        return stringFromRetainedCFString (getProperty<CFStringRef> (PropertyAddress (kAudioDevicePropertyDeviceUID)).value_or (nullptr));
     }
 
     double getSampleRate() const
@@ -387,11 +389,7 @@ public:
     String getChannelName (PlaybackDirection direction, int index) const
     {
         const auto element = static_cast<AudioObjectPropertyElement> (index + 1);
-        const auto cf = getProperty<CFStringRef> (PropertyAddress (kAudioObjectPropertyElementName, direction, element));
-        if (! cf || ! *cf)
-            return {};
-        const CFUniquePtr<CFStringRef> holder { *cf };
-        return String::fromCFString (holder.get());
+        return stringFromRetainedCFString (getProperty<CFStringRef> (PropertyAddress (kAudioObjectPropertyElementName, direction, element)).value_or (nullptr));
     }
 
     float getMainVolume() const
@@ -516,11 +514,7 @@ public:
 
         for (const auto selector : { (AudioObjectPropertySelector) kAudioAggregateDevicePropertyClockDevice, (AudioObjectPropertySelector) mainSubDeviceSelector })
         {
-            const auto cf = getProperty<CFStringRef> (PropertyAddress (selector));
-            if (! cf || ! *cf)
-                continue;
-            const CFUniquePtr<CFStringRef> holder { *cf };
-            const auto uid = String::fromCFString (holder.get());
+            const auto uid = stringFromRetainedCFString (getProperty<CFStringRef> (PropertyAddress (selector)).value_or (nullptr));
             if (uid.isNotEmpty())
                 return uid;
         }
@@ -735,9 +729,14 @@ static String createPrivateAggregateDeviceName (const String& deviceName)
     return String (yupPrivateAggregateDeviceNamePrefix) + yupPrivateAggregateDevicePIDMarker + String ((int) ::getpid()) + " " + deviceName;
 }
 
+static bool isPrivateAggregateDeviceName (const String& name)
+{
+    return name.startsWith (yupPrivateAggregateDeviceNamePrefix);
+}
+
 static pid_t getPrivateAggregateDeviceProcessID (const String& name)
 {
-    if (! name.startsWith (yupPrivateAggregateDeviceNamePrefix))
+    if (! isPrivateAggregateDeviceName (name))
         return 0;
 
     const auto suffix = name.fromFirstOccurrenceOf (yupPrivateAggregateDeviceNamePrefix, false, false).trimStart();
@@ -762,18 +761,14 @@ static int getDirectionIndex (bool input) noexcept
     return static_cast<int> (toDirectionIndex (input ? PlaybackDirection::input : PlaybackDirection::output));
 }
 
+static String audioObjectGetStringProperty (AudioObjectID objectID, PropertyAddress address)
+{
+    return stringFromRetainedCFString (audioObjectGetProperty<CFStringRef> (objectID, address).value_or (nullptr));
+}
+
 static String audioObjectGetStringProperty (AudioObjectID objectID, AudioObjectPropertySelector selector)
 {
-    if (auto retainedString = audioObjectGetProperty<CFStringRef> (objectID, PropertyAddress (selector)))
-    {
-        if (*retainedString != nullptr)
-        {
-            const CFUniquePtr<CFStringRef> stringHolder { *retainedString };
-            return String::fromCFString (stringHolder.get());
-        }
-    }
-
-    return {};
+    return audioObjectGetStringProperty (objectID, PropertyAddress (selector));
 }
 
 static String getAudioDeviceUID (AudioDeviceID deviceID)
@@ -1903,14 +1898,9 @@ struct CoreAudioClasses
 
                 auto names = visitChannels (isInput, parent, [&] (const auto& args) -> std::optional<String>
                 {
-                    String name;
                     const auto element = static_cast<AudioObjectPropertyElement> (args.chanNum + 1);
 
-                    if (auto retainedName = audioObjectGetProperty<CFStringRef> (channelDeviceID, PropertyAddress (kAudioObjectPropertyElementName, getScope (isInput), element)).value_or (nullptr))
-                    {
-                        const CFUniquePtr<CFStringRef> nameString { retainedName };
-                        name = String::fromCFString (nameString.get());
-                    }
+                    String name = audioObjectGetStringProperty (channelDeviceID, PropertyAddress (kAudioObjectPropertyElementName, getScope (isInput), element));
 
                     if (name.isEmpty())
                         name << (isInput ? "Input " : "Output ") << (args.chanNum + 1);
@@ -2531,7 +2521,7 @@ struct CoreAudioClasses
 
                 const auto name = device.getName();
 
-                if (! name.startsWith (yupPrivateAggregateDeviceNamePrefix))
+                if (! isPrivateAggregateDeviceName (name))
                     continue;
 
                 const auto pid = getPrivateAggregateDeviceProcessID (name);
@@ -2582,31 +2572,26 @@ struct CoreAudioClasses
 
             for (const auto audioDevice : audioDevices)
             {
-                if (const auto optionalName = audioObjectGetProperty<CFStringRef> (audioDevice, PropertyAddress (kAudioDevicePropertyDeviceNameCFString, kAudioObjectPropertyScopeWildcard)))
+                if (const auto nameString = audioObjectGetStringProperty (audioDevice, PropertyAddress (kAudioDevicePropertyDeviceNameCFString, kAudioObjectPropertyScopeWildcard)); nameString.isNotEmpty())
                 {
-                    if (const CFUniquePtr<CFStringRef> name { *optionalName })
+                    if (isAggregateAudioDevice (audioDevice) && isPrivateAggregateDeviceName (nameString))
                     {
-                        const auto nameString = String::fromCFString (name.get());
-
-                        if (isAggregateAudioDevice (audioDevice) && nameString.startsWith (yupPrivateAggregateDeviceNamePrefix))
-                        {
-                            YUP_MODULE_DBG (CORE_AUDIO, "Skipping private aggregate during scan: " << nameString << " [" << String (audioDevice) << "]");
-                            continue;
-                        }
-
-                        const auto uidString = getAudioDeviceUID (audioDevice);
-                        const auto numIns = getNumChannels (audioDevice, true);
-                        const auto numOuts = getNumChannels (audioDevice, false);
-
-                        YUP_MODULE_DBG (CORE_AUDIO, "Found device: " << nameString << " [" << String (audioDevice) << "]"
-                                                                     << ", uid=" << uidString << ", inputs=" << String (numIns) << ", outputs=" << String (numOuts));
-
-                        if (numIns > 0)
-                            inputDevices.push_back ({ nameString, uidString, audioDevice });
-
-                        if (numOuts > 0)
-                            outputDevices.push_back ({ nameString, uidString, audioDevice });
+                        YUP_MODULE_DBG (CORE_AUDIO, "Skipping private aggregate during scan: " << nameString << " [" << String (audioDevice) << "]");
+                        continue;
                     }
+
+                    const auto uidString = getAudioDeviceUID (audioDevice);
+                    const auto numIns = getNumChannels (audioDevice, true);
+                    const auto numOuts = getNumChannels (audioDevice, false);
+
+                    YUP_MODULE_DBG (CORE_AUDIO, "Found device: " << nameString << " [" << String (audioDevice) << "]"
+                                                                 << ", uid=" << uidString << ", inputs=" << String (numIns) << ", outputs=" << String (numOuts));
+
+                    if (numIns > 0)
+                        inputDevices.push_back ({ nameString, uidString, audioDevice });
+
+                    if (numOuts > 0)
+                        outputDevices.push_back ({ nameString, uidString, audioDevice });
                 }
             }
 
