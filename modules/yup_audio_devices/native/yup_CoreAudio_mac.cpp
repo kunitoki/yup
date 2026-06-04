@@ -2071,7 +2071,7 @@ struct CoreAudioClasses
         CoreAudioTimeConversions timeConversions;
         AudioIODeviceCallback* callback = nullptr;
         CriticalSection callbackLock;
-        bool audioDeviceStopPending = false;
+        std::atomic<bool> audioDeviceStopPending { false };
         std::atomic<bool> playing { false };
         double sampleRate = 0;
         int bufferSize = 0;
