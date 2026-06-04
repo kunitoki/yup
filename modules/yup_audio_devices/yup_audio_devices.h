@@ -171,6 +171,14 @@
 #define YUP_DISABLE_AUDIO_MIXING_WITH_OTHER_APPS 0
 #endif
 
+/** Config: YUP_ENABLE_CORE_AUDIO_LOGGING
+
+    Enable logging of audio device events on macOS, such as device changes and errors.
+*/
+#ifndef YUP_ENABLE_CORE_AUDIO_LOGGING
+#define YUP_ENABLE_CORE_AUDIO_LOGGING 1
+#endif
+
 //==============================================================================
 #include "midi_io/yup_MidiDevices.h"
 #include "midi_io/yup_MidiMessageCollector.h"
