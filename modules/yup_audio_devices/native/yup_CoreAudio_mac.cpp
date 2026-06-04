@@ -1010,57 +1010,6 @@ static bool tryMultiple (Fn predicate, int maxTries)
 }
 
 //==============================================================================
-class ScopedCFArray;
-
-class ScopedCFDictionary
-{
-public:
-    void setString (const String& key, const String& value)
-    {
-        const CFUniquePtr<CFStringRef> cfValue { value.toCFString() };
-        setRawValue (key, cfValue.get());
-    }
-
-    void setInt (const String& key, UInt32 value)
-    {
-        const CFUniquePtr<CFNumberRef> cfValue { CFNumberCreate (nullptr, kCFNumberIntType, &value) };
-        setRawValue (key, cfValue.get());
-    }
-
-    void setArray (const String& key, const ScopedCFArray& array);
-
-    CFDictionaryRef get() const noexcept { return dict.get(); }
-
-private:
-    void setRawValue (const String& key, const void* value)
-    {
-        const CFUniquePtr<CFStringRef> cfKey { key.toCFString() };
-        CFDictionarySetValue (dict.get(), cfKey.get(), value);
-    }
-
-    CFUniquePtr<CFMutableDictionaryRef> dict { CFDictionaryCreateMutable (nullptr, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks) };
-};
-
-class ScopedCFArray
-{
-public:
-    void appendDictionary (const ScopedCFDictionary& dictionary)
-    {
-        CFArrayAppendValue (array.get(), dictionary.get());
-    }
-
-    CFArrayRef get() const noexcept { return array.get(); }
-
-private:
-    CFUniquePtr<CFMutableArrayRef> array { CFArrayCreateMutable (nullptr, 0, &kCFTypeArrayCallBacks) };
-};
-
-inline void ScopedCFDictionary::setArray (const String& key, const ScopedCFArray& arr)
-{
-    setRawValue (key, arr.get());
-}
-
-//==============================================================================
 struct AggregateDeviceDescription
 {
     struct SubDevice
@@ -1207,10 +1156,6 @@ struct CoreAudioClasses
     class CoreAudioInternal final : private Timer
         , private AsyncUpdater
     {
-    private:
-        // members with deduced return types need to be defined before they
-        // are used, so define it here. decltype doesn't help as you can't
-        // capture anything in lambdas inside a decltype context.
         auto err2log() const
         {
             return [this] (OSStatus err)
@@ -1564,10 +1509,6 @@ struct CoreAudioClasses
                 return "Couldn't change buffer size";
             }
 
-            // Annoyingly, after changing the rate and buffer size, some devices fail to
-            // correctly report their new settings until some random time in the future, so
-            // after calling updateDetailsFromDevice, we need to manually bodge these values
-            // to make sure we're using the correct numbers..
             updateDetailsFromDevice (ins, outs);
             sampleRate = newSampleRate;
             bufferSize = bufferSizeSamples;
@@ -1653,14 +1594,16 @@ struct CoreAudioClasses
             {
                 audioDeviceStopPending = true;
 
-                // wait until AudioDeviceStop() has been called on the IO thread
-                for (int i = 40; --i >= 0;)
                 {
-                    if (audioDeviceStopPending == false)
-                        break;
-
                     const ScopedUnlock ul (callbackLock);
-                    Thread::sleep (50);
+
+                    for (int i = 40; --i >= 0;)
+                    {
+                        if (audioDeviceStopPending == false)
+                            break;
+
+                        Thread::sleep (50);
+                    }
                 }
 
                 scopedProcID = {};
@@ -1684,7 +1627,6 @@ struct CoreAudioClasses
             const ScopedTryLock sl (callbackLock);
             if (! sl.isLocked())
             {
-                // Device state is being mutated; keep CoreAudio moving and try again next callback.
                 clearOutputBuffers (outOutputData);
                 return;
             }

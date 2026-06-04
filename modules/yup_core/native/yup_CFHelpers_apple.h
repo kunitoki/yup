@@ -43,6 +43,8 @@
 namespace yup
 {
 
+//==============================================================================
+
 template <typename CFType>
 struct CFObjectDeleter
 {
@@ -55,6 +57,8 @@ struct CFObjectDeleter
 
 template <typename CFType>
 using CFUniquePtr = std::unique_ptr<std::remove_pointer_t<CFType>, CFObjectDeleter<CFType>>;
+
+//==============================================================================
 
 template <typename CFType>
 struct CFObjectHolder
@@ -81,5 +85,58 @@ struct CFObjectHolder
     // Public to facilitate passing the pointer address to functions
     CFType object = nullptr;
 };
+
+//==============================================================================
+class ScopedCFArray;
+
+class ScopedCFDictionary
+{
+public:
+    void setString (const String& key, const String& value)
+    {
+        const CFUniquePtr<CFStringRef> cfValue { value.toCFString() };
+        setRawValue (key, cfValue.get());
+    }
+
+    void setInt (const String& key, UInt32 value)
+    {
+        const CFUniquePtr<CFNumberRef> cfValue { CFNumberCreate (nullptr, kCFNumberIntType, &value) };
+        setRawValue (key, cfValue.get());
+    }
+
+    void setArray (const String& key, const ScopedCFArray& array);
+
+    CFDictionaryRef get() const noexcept { return dict.get(); }
+
+private:
+    void setRawValue (const String& key, const void* value)
+    {
+        const CFUniquePtr<CFStringRef> cfKey { key.toCFString() };
+        CFDictionarySetValue (dict.get(), cfKey.get(), value);
+    }
+
+    CFUniquePtr<CFMutableDictionaryRef> dict { CFDictionaryCreateMutable (nullptr, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks) };
+};
+
+//==============================================================================
+
+class ScopedCFArray
+{
+public:
+    void appendDictionary (const ScopedCFDictionary& dictionary)
+    {
+        CFArrayAppendValue (array.get(), dictionary.get());
+    }
+
+    CFArrayRef get() const noexcept { return array.get(); }
+
+private:
+    CFUniquePtr<CFMutableArrayRef> array { CFArrayCreateMutable (nullptr, 0, &kCFTypeArrayCallBacks) };
+};
+
+inline void ScopedCFDictionary::setArray (const String& key, const ScopedCFArray& arr)
+{
+    setRawValue (key, arr.get());
+}
 
 } // namespace yup
