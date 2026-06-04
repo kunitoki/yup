@@ -1624,8 +1624,8 @@ struct CoreAudioClasses
                     // The same mutex is locked before calling the audioIOProc.
                     // If we get very unlucky, then we can end up with thread A taking the callbackLock
                     // and calling AudioDeviceStart, followed by thread B taking the CoreAudio lock
-                    // and calling into audioIOProc, which waits on the callbackLock. When thread A
-                    // continues it attempts to take the CoreAudio lock, and the program deadlocks.
+                    // and calling into audioIOProc while thread A then attempts to take the CoreAudio
+                    // lock. Keep AudioDeviceStart outside callbackLock to preserve the lock order.
 
                     if (auto* procID = nextProcID.get())
                     {
@@ -1686,7 +1686,13 @@ struct CoreAudioClasses
                             const AudioBufferList* inInputData,
                             AudioBufferList* outOutputData)
         {
-            const ScopedLock sl (callbackLock);
+            const ScopedTryLock sl (callbackLock);
+            if (! sl.isLocked())
+            {
+                // Device state is being mutated; keep CoreAudio moving and try again next callback.
+                clearOutputBuffers (outOutputData);
+                return;
+            }
 
             if (audioDeviceStopPending)
             {
@@ -1732,11 +1738,7 @@ struct CoreAudioClasses
                 callback->audioDeviceIOCallbackWithContext (getTempBuffers (inStream), numInputChans, getTempBuffers (outStream), numOutputChans, bufferSize, context);
 
                 if (! getChannelMap (false).empty())
-                {
-                    for (UInt32 i = 0; i < outOutputData->mNumberBuffers; ++i)
-                        zeromem (outOutputData->mBuffers[i].mData,
-                                 outOutputData->mBuffers[i].mDataByteSize);
-                }
+                    clearOutputBuffers (outOutputData);
 
                 for (int i = numOutputChans; --i >= 0;)
                 {
@@ -1757,9 +1759,7 @@ struct CoreAudioClasses
             }
             else
             {
-                for (UInt32 i = 0; i < outOutputData->mNumberBuffers; ++i)
-                    zeromem (outOutputData->mBuffers[i].mData,
-                             outOutputData->mBuffers[i].mDataByteSize);
+                clearOutputBuffers (outOutputData);
             }
 
             for (auto* stream : getStreams())
@@ -2087,6 +2087,17 @@ struct CoreAudioClasses
         int bufferSize = 0;
         HeapBlock<float> audioBuffer;
         Atomic<int> callbacksAllowed { 1 };
+
+        //==============================================================================
+        static void clearOutputBuffers (AudioBufferList* outputData) noexcept
+        {
+            if (outputData == nullptr)
+                return;
+
+            for (UInt32 i = 0; i < outputData->mNumberBuffers; ++i)
+                zeromem (outputData->mBuffers[i].mData,
+                         outputData->mBuffers[i].mDataByteSize);
+        }
 
         //==============================================================================
         void timerCallback() override
