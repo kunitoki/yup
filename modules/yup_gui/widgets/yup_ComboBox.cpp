@@ -207,10 +207,10 @@ void ComboBox::mouseDown (const MouseEvent& event)
 {
     takeKeyboardFocus();
 
-    if (popupMenu == nullptr || ! popupMenu->isBeingShown())
-        showPopup();
-    else
+    if (isPopupShown())
         hidePopup();
+    else
+        showPopup();
 
     repaint();
 }
@@ -297,6 +297,8 @@ void ComboBox::updateDisplayText()
         modifier.setMaxSize (textBounds.getSize());
         modifier.setHorizontalAlign (StyledText::left);
         modifier.setVerticalAlign (StyledText::middle);
+        modifier.setOverflow (StyledText::ellipsis);
+        modifier.setWrap (StyledText::noWrap);
         modifier.clear();
 
         if (displayText.isNotEmpty())

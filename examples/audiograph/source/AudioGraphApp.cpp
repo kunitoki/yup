@@ -127,6 +127,7 @@ void AudioGraphApp::resized()
     saveButton.setBounds (toolbar.removeFromLeft (70).reduced (4, 4));
     toolbar.removeFromLeft (8);
     scanButton.setBounds (toolbar.removeFromLeft (100).reduced (4, 4));
+    settingsButton.setBounds (toolbar.removeFromLeft (80).reduced (4, 4));
     statusLabel.setBounds (toolbar.reduced (4, 4));
 
     editorPanel->setBounds (bounds);
@@ -244,6 +245,16 @@ void AudioGraphApp::setupToolbar()
         startPluginScan();
     };
     addAndMakeVisible (scanButton);
+
+    settingsButton.setButtonText ("Settings");
+    settingsButton.onClick = [this]
+    {
+        if (deviceManagerWindow == nullptr)
+            deviceManagerWindow = std::make_unique<yup::AudioDeviceManagerWindow> (deviceManager);
+        deviceManagerWindow->setVisible (true);
+        deviceManagerWindow->toFront (true);
+    };
+    addAndMakeVisible (settingsButton);
 
     statusLabel.setText ("Ready.", yup::dontSendNotification);
     addAndMakeVisible (statusLabel);

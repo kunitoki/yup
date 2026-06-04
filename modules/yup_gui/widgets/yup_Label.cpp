@@ -126,8 +126,8 @@ void Label::prepareText()
     if (! needsUpdate)
         return;
 
-    auto fontSize = getHeight() * 0.8f; // TODO - needs config
-    auto fontToUse = ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (fontSize);
+    //auto fontSize = getHeight() * 0.8f; // TODO - needs config
+    auto fontToUse = ApplicationTheme::getGlobalTheme()->getDefaultFont(); // .withHeight (fontSize);
     if (font)
         fontToUse = *font;
 
