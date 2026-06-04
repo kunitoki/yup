@@ -728,6 +728,34 @@ static AudioObjectPropertyScope getAudioDevicePropertyScope (bool input) noexcep
 }
 
 constexpr auto yupPrivateAggregateDeviceNamePrefix = "YUP Aggregate ";
+constexpr auto yupPrivateAggregateDevicePIDMarker = "pid=";
+
+static String createPrivateAggregateDeviceName (const String& deviceName)
+{
+    return String (yupPrivateAggregateDeviceNamePrefix) + yupPrivateAggregateDevicePIDMarker + String ((int) ::getpid()) + " " + deviceName;
+}
+
+static pid_t getPrivateAggregateDeviceProcessID (const String& name)
+{
+    if (! name.startsWith (yupPrivateAggregateDeviceNamePrefix))
+        return 0;
+
+    const auto suffix = name.fromFirstOccurrenceOf (yupPrivateAggregateDeviceNamePrefix, false, false).trimStart();
+    if (! suffix.startsWith (yupPrivateAggregateDevicePIDMarker))
+        return 0;
+
+    const auto pidAndName = suffix.fromFirstOccurrenceOf (yupPrivateAggregateDevicePIDMarker, false, false);
+    const auto pidString = pidAndName.initialSectionContainingOnly ("0123456789");
+
+    if (pidString.isEmpty())
+        return 0;
+
+    const auto numDigits = pidString.length();
+    if (pidAndName.length() <= numDigits || ! CharacterFunctions::isWhitespace (pidAndName[numDigits]))
+        return 0;
+
+    return (pid_t) pidString.getIntValue();
+}
 
 static int getDirectionIndex (bool input) noexcept
 {
@@ -1338,9 +1366,6 @@ struct CoreAudioClasses
 
             if (! isDeviceAlive())
                 return false;
-
-            // this collects all the new details from the device without any locking, then
-            // locks + swaps them afterwards.
 
             auto newSampleRate = getNominalSampleRate();
             auto newBufferSize = getFrameSizeFromDevice();
@@ -2181,9 +2206,13 @@ struct CoreAudioClasses
         CoreAudioIODevice (CoreAudioIODeviceType* dt,
                            const String& deviceName,
                            AudioDeviceID inputDeviceId,
-                           AudioDeviceID outputDeviceId)
+                           AudioDeviceID outputDeviceId,
+                           int inputDeviceIndexIn,
+                           int outputDeviceIndexIn)
             : AudioIODevice (deviceName, "CoreAudio")
             , deviceType (dt)
+            , inputDeviceIndex (inputDeviceIndexIn)
+            , outputDeviceIndex (outputDeviceIndexIn)
         {
             internal = [this, &deviceName, &inputDeviceId, &outputDeviceId]() -> std::unique_ptr<CoreAudioInternal>
             {
@@ -2208,7 +2237,7 @@ struct CoreAudioClasses
                                                                 outputDeviceId);
                 }
 
-                const AggregateDeviceDescription aggregateDesc (String (yupPrivateAggregateDeviceNamePrefix) + deviceName,
+                const AggregateDeviceDescription aggregateDesc (createPrivateAggregateDeviceName (deviceName),
                                                                 inputDeviceId,
                                                                 outputDeviceId);
 
@@ -2236,7 +2265,8 @@ struct CoreAudioClasses
                                                             std::move (channelMaps));
             }();
 
-            jassert (internal != nullptr);
+            if (internal == nullptr)
+                return;
 
             const PropertyAddress wildcardAddress { kAudioObjectPropertySelectorWildcard, kAudioObjectPropertyScopeWildcard, kAudioObjectPropertyElementWildcard };
             AudioObjectAddPropertyListener (kAudioObjectSystemObject, wildcardAddress.get(), hardwareListenerProc, internal.get());
@@ -2244,10 +2274,13 @@ struct CoreAudioClasses
 
         ~CoreAudioIODevice() override
         {
-            close();
+            if (internal != nullptr)
+            {
+                close();
 
-            const PropertyAddress wildcardAddress { kAudioObjectPropertySelectorWildcard, kAudioObjectPropertyScopeWildcard, kAudioObjectPropertyElementWildcard };
-            AudioObjectRemovePropertyListener (kAudioObjectSystemObject, wildcardAddress.get(), hardwareListenerProc, internal.get());
+                const PropertyAddress wildcardAddress { kAudioObjectPropertySelectorWildcard, kAudioObjectPropertyScopeWildcard, kAudioObjectPropertyElementWildcard };
+                AudioObjectRemovePropertyListener (kAudioObjectSystemObject, wildcardAddress.get(), hardwareListenerProc, internal.get());
+            }
 
             if (aggregateDeviceID != 0)
             {
@@ -2274,7 +2307,13 @@ struct CoreAudioClasses
 
         int getXRunCount() const noexcept override { return internal->xruns.load (std::memory_order_relaxed); }
 
-        int getIndexOfDevice (bool asInput) const { return deviceType->getDeviceNames (asInput).indexOf (getName()); }
+        bool isValid() const noexcept { return internal != nullptr; }
+
+        int getIndexOfDevice (bool asInput) const
+        {
+            return asInput ? inputDeviceIndex
+                           : outputDeviceIndex;
+        }
 
         int getDefaultBufferSize() override
         {
@@ -2322,6 +2361,9 @@ struct CoreAudioClasses
 
         void close() override
         {
+            if (internal == nullptr)
+                return;
+
             YUP_MODULE_DBG (CORE_AUDIO, "Close requested: " << getName() << ", isOpen=" << (isOpen_ ? "true" : "false") << ", isPlaying=" << (internal->isPlaying() ? "true" : "false"));
 
             isOpen_ = false;
@@ -2421,6 +2463,7 @@ struct CoreAudioClasses
     private:
         std::unique_ptr<CoreAudioInternal> internal;
         AudioDeviceID aggregateDeviceID = 0;
+        int inputDeviceIndex = -1, outputDeviceIndex = -1;
         bool isOpen_ = false, restartDevice = true;
         String lastError;
         AudioIODeviceCallback* previousCallback = nullptr;
@@ -2480,7 +2523,10 @@ struct CoreAudioClasses
                 if (! name.startsWith (yupPrivateAggregateDeviceNamePrefix))
                     continue;
 
-                const auto pid = (pid_t) name.fromFirstOccurrenceOf (yupPrivateAggregateDeviceNamePrefix, false, false).getIntValue();
+                const auto pid = getPrivateAggregateDeviceProcessID (name);
+                if (pid <= 0)
+                    continue;
+
                 const auto processExists = pid > 0 && (::kill (pid, 0) == 0 || errno != ESRCH);
 
                 if (! processExists)
@@ -2659,7 +2705,15 @@ struct CoreAudioClasses
                                                                  : outputDeviceName;
 
             YUP_MODULE_DBG (CORE_AUDIO, "createDevice using CoreAudioIODevice: name=" << combinedName);
-            return std::make_unique<CoreAudioIODevice> (this, combinedName, inputDeviceID, outputDeviceID).release();
+            auto device = std::make_unique<CoreAudioIODevice> (this, combinedName, inputDeviceID, outputDeviceID, inputIndex, outputIndex);
+
+            if (! device->isValid())
+            {
+                YUP_MODULE_DBG (CORE_AUDIO, "createDevice failed: couldn't initialise CoreAudioIODevice");
+                return nullptr;
+            }
+
+            return device.release();
         }
 
         void audioDeviceListChanged()
