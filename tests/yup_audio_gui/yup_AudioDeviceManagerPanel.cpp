@@ -39,43 +39,6 @@ StringArray makeChannelNames (int count)
 } // namespace
 
 //==============================================================================
-class ButtonsSectionTests : public ::testing::Test
-{
-};
-
-TEST_F (ButtonsSectionTests, ConstructsWithoutCrash)
-{
-    ButtonsSection section;
-    EXPECT_EQ (section.getNumChildComponents(), 2);
-}
-
-TEST_F (ButtonsSectionTests, ApplyCallbackFires)
-{
-    ButtonsSection section;
-    bool called = false;
-    section.onApply = [&]
-    {
-        called = true;
-    };
-
-    section.onApply();
-    EXPECT_TRUE (called);
-}
-
-TEST_F (ButtonsSectionTests, CloseCallbackFires)
-{
-    ButtonsSection section;
-    bool called = false;
-    section.onClose = [&]
-    {
-        called = true;
-    };
-
-    section.onClose();
-    EXPECT_TRUE (called);
-}
-
-//==============================================================================
 class ChannelSectionTests : public ::testing::Test
 {
 };
@@ -172,7 +135,7 @@ TEST_F (AudioDeviceManagerPanelTests, HasExpectedChildComponentCount)
 {
     AudioDeviceManager manager;
     AudioDeviceManagerPanel panel (manager);
-    // 7 direct children: type selector, IO selector, 2x channel section,
-    // rate+buffer selector, MIDI section, buttons section
-    EXPECT_EQ (panel.getNumChildComponents(), 7);
+    // 6 direct children: type selector, IO selector, 2x channel section,
+    // rate+buffer selector, MIDI section
+    EXPECT_EQ (panel.getNumChildComponents(), 6);
 }
