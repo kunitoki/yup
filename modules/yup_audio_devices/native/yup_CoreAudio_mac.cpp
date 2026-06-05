@@ -42,6 +42,7 @@ namespace yup
 
 YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wnonnull")
 
+//==============================================================================
 constexpr auto yupAudioObjectPropertyElementMain =
 #if defined(MAC_OS_VERSION_12_0)
     kAudioObjectPropertyElementMain;
@@ -596,7 +597,7 @@ struct IgnoreUnused
 template <typename T>
 static auto getDataPtrAndSize (T& t)
 {
-    static_assert (std::is_pod_v<T>);
+    static_assert (std::is_standard_layout_v<T>);
     return std::make_tuple (&t, (UInt32) sizeof (T));
 }
 
