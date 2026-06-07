@@ -1,0 +1,63 @@
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2026 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+#ifndef @YupPluginPrefix@_YUP_SDL_SYMBOLS_PATCH_H
+#define @YupPluginPrefix@_YUP_SDL_SYMBOLS_PATCH_H
+
+// SDL is linked statically into plugin bundles, so its Objective-C runtime
+// classes must be private to the plugin image.
+#define Cocoa_WindowListener @YupPluginPrefix@_YupPlugin_Cocoa_WindowListener
+#define METAL_RenderData @YupPluginPrefix@_YupPlugin_METAL_RenderData
+#define METAL_TextureData @YupPluginPrefix@_YupPlugin_METAL_TextureData
+#define SDLEAGLContext @YupPluginPrefix@_YupPlugin_SDLEAGLContext
+#define SDLOpenGLContext @YupPluginPrefix@_YupPlugin_SDLOpenGLContext
+#define SDLApplication @YupPluginPrefix@_YupPlugin_SDLApplication
+#define SDLAppDelegate @YupPluginPrefix@_YupPlugin_SDLAppDelegate
+#define SDLInterruptionListener @YupPluginPrefix@_YupPlugin_SDLInterruptionListener
+#define SDLLaunchScreenController @YupPluginPrefix@_YupPlugin_SDLLaunchScreenController
+#define SDLLaunchStoryboardViewController @YupPluginPrefix@_YupPlugin_SDLLaunchStoryboardViewController
+#define SDLMessageBoxPresenter @YupPluginPrefix@_YupPlugin_SDLMessageBoxPresenter
+#define SDLTranslatorResponder @YupPluginPrefix@_YupPlugin_SDLTranslatorResponder
+#define SDLView @YupPluginPrefix@_YupPlugin_SDLView
+#define SDLWindow @YupPluginPrefix@_YupPlugin_SDLWindow
+#define SDL_CocoaClosure @YupPluginPrefix@_YupPlugin_SDL_CocoaClosure
+#define SDL_DisplayData @YupPluginPrefix@_YupPlugin_SDL_DisplayData
+#define SDL_DisplayModeData @YupPluginPrefix@_YupPlugin_SDL_DisplayModeData
+#define SDL_DisplayWatch @YupPluginPrefix@_YupPlugin_SDL_DisplayWatch
+#define SDL_LifecycleObserver @YupPluginPrefix@_YupPlugin_SDL_LifecycleObserver
+#define SDL_RumbleContext @YupPluginPrefix@_YupPlugin_SDL_RumbleContext
+#define SDL_RumbleMotor @YupPluginPrefix@_YupPlugin_SDL_RumbleMotor
+#define SDL_ShapeData @YupPluginPrefix@_YupPlugin_SDL_ShapeData
+#define SDL_VideoData @YupPluginPrefix@_YupPlugin_SDL_VideoData
+#define SDL_WindowData @YupPluginPrefix@_YupPlugin_SDL_WindowData
+#define SDL_cocoametalview @YupPluginPrefix@_YupPlugin_SDL_cocoametalview
+#define SDL_uikitmetalview @YupPluginPrefix@_YupPlugin_SDL_uikitmetalview
+#define SDL_uikitopenglview @YupPluginPrefix@_YupPlugin_SDL_uikitopenglview
+#define SDL_uikitview @YupPluginPrefix@_YupPlugin_SDL_uikitview
+#define SDL_uikitviewcontroller @YupPluginPrefix@_YupPlugin_SDL_uikitviewcontroller
+#define SDL_uikitwindow @YupPluginPrefix@_YupPlugin_SDL_uikitwindow
+#define SDLUIKitDelegate @YupPluginPrefix@_YupPlugin_SDLUIKitDelegate
+#define SDLUITextField @YupPluginPrefix@_YupPlugin_SDLUITextField
+
+#define HIDBLEDevice @YupPluginPrefix@_YupPlugin_HIDBLEDevice
+#define HIDBLEManager @YupPluginPrefix@_YupPlugin_HIDBLEManager
+
+#endif // @YupPluginPrefix@_YUP_SDL_SYMBOLS_PATCH_H

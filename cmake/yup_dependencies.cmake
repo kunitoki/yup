@@ -60,7 +60,9 @@ function (_yup_fetch_sdl2)
     FetchContent_MakeAvailable (SDL2)
 
     if (APPLE)
-        target_compile_options (SDL2-static PRIVATE -Wno-deprecated-declarations)
+        target_compile_options (SDL2-static PRIVATE
+            -Wno-deprecated-declarations
+            -Wno-gnu-folding-constant)
     endif()
 
     set_target_properties (SDL2-static PROPERTIES

@@ -108,7 +108,6 @@ function (yup_audio_plugin)
     # ==== Find dependencies
     include (FetchContent)
     _yup_fetch_sdl2()
-    list (APPEND additional_libraries sdl2::sdl2)
 
     _yup_target_list_contains ("${YUP_ARG_MODULES}" yup_audio_plugin_host has_audio_plugin_host)
     if (has_audio_plugin_host)
@@ -146,12 +145,18 @@ function (yup_audio_plugin)
             YUP_AUDIO_PLUGIN_ENABLE_CLAP=1
             YUP_STANDALONE_APPLICATION=0)
 
+        _yup_sdl_configure_symbols_patch ("${target_name}_clap_plugin" clap_sdl_symbols_patch_target clap_sdl_symbols_sdl_target)
+        set (clap_plugin_bundle_libraries
+            ${clap_sdl_symbols_sdl_target}
+            ${clap_sdl_symbols_patch_target})
+
         target_link_libraries (${target_name}_clap_plugin PRIVATE
             ${target_name}_shared
             yup_audio_plugin_client
             clap
             ${target_name}_clap
             ${additional_libraries}
+            ${clap_plugin_bundle_libraries}
             ${YUP_ARG_MODULES})
 
         _yup_module_apply_arc_to_target_sources (${target_name}_clap_plugin
@@ -160,6 +165,7 @@ function (yup_audio_plugin)
             clap
             ${target_name}_clap
             ${additional_libraries}
+            ${clap_plugin_bundle_libraries}
             ${YUP_ARG_MODULES})
 
         set_target_properties (${target_name}_clap_plugin PROPERTIES
@@ -233,12 +239,18 @@ function (yup_audio_plugin)
             YUP_AUDIO_PLUGIN_ENABLE_VST3=1
             YUP_STANDALONE_APPLICATION=0)
 
+        _yup_sdl_configure_symbols_patch ("${target_name}_vst3_plugin" vst3_sdl_symbols_patch_target vst3_sdl_symbols_sdl_target)
+        set (vst3_plugin_bundle_libraries
+            ${vst3_sdl_symbols_sdl_target}
+            ${vst3_sdl_symbols_patch_target})
+
         target_link_libraries (${target_name}_vst3_plugin PRIVATE
             ${target_name}_shared
             yup_audio_plugin_client
             sdk
             ${target_name}_vst3
             ${additional_libraries}
+            ${vst3_plugin_bundle_libraries}
             ${YUP_ARG_MODULES})
 
         _yup_module_apply_arc_to_target_sources (${target_name}_vst3_plugin
@@ -247,6 +259,7 @@ function (yup_audio_plugin)
             sdk
             ${target_name}_vst3
             ${additional_libraries}
+            ${vst3_plugin_bundle_libraries}
             ${YUP_ARG_MODULES})
 
         set_target_properties (${target_name}_vst3_plugin PROPERTIES
@@ -375,12 +388,18 @@ function (yup_audio_plugin)
                 YUP_AUDIO_PLUGIN_ENABLE_AU=1
                 YUP_STANDALONE_APPLICATION=0)
 
+            _yup_sdl_configure_symbols_patch ("${target_name}_au_plugin" au_sdl_symbols_patch_target au_sdl_symbols_sdl_target)
+            set (au_plugin_bundle_libraries
+                ${au_sdl_symbols_sdl_target}
+                ${au_sdl_symbols_patch_target})
+
             target_link_libraries (${target_name}_au_plugin PRIVATE
                 ${target_name}_shared
                 yup_audio_plugin_client
                 base-sdk-auv2
                 ${target_name}_au
                 ${additional_libraries}
+                ${au_plugin_bundle_libraries}
                 ${YUP_ARG_MODULES}
                 "-framework AudioUnit"
                 "-framework AudioToolbox"
@@ -394,6 +413,7 @@ function (yup_audio_plugin)
                 base-sdk-auv2
                 ${target_name}_au
                 ${additional_libraries}
+                ${au_plugin_bundle_libraries}
                 ${YUP_ARG_MODULES})
 
             # Generate the AU Info.plist from our template
