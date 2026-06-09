@@ -294,6 +294,27 @@ TEST_F (ComboBoxTest, ComponentIdIsSet)
     EXPECT_EQ (String ("uniqueComboBoxId"), newComboBox->getComponentID());
 }
 
+TEST_F (ComboBoxTest, PopupDismissalClickDoesNotReopenPopup)
+{
+    comboBox->addItem (kTestText1, kTestId1);
+    comboBox->addItem (kTestText2, kTestId2);
+
+    MouseEvent clickEvent (MouseEvent::leftButton, KeyModifiers(), Point<float> (10.0f, 10.0f), comboBox.get());
+
+    comboBox->mouseDown (clickEvent);
+    ASSERT_TRUE (comboBox->isPopupShown());
+
+    PopupMenu::dismissAllPopups();
+
+    comboBox->mouseDown (clickEvent);
+    EXPECT_FALSE (comboBox->isPopupShown());
+
+    comboBox->mouseDown (clickEvent);
+    EXPECT_TRUE (comboBox->isPopupShown());
+
+    PopupMenu::dismissAllPopups();
+}
+
 TEST_F (ComboBoxTest, BoundsAndSizeWork)
 {
     Rectangle<int> bounds (10, 20, 150, 25);
