@@ -36,9 +36,9 @@ public:
         addParameter (gain);
     }
 
-    void prepareToPlay (float newSampleRate, int) override
+    void prepareToPlay (const yup::AudioSpec& spec) override
     {
-        smoothedGain.reset (newSampleRate, 0.02);
+        smoothedGain.reset (spec.sampleRate, 0.02);
         smoothedGain.setCurrentAndTargetValue (getGain());
     }
 

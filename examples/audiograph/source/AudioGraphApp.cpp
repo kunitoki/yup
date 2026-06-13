@@ -202,8 +202,10 @@ void AudioGraphApp::audioDeviceAboutToStart (yup::AudioIODevice* device)
     nodeRegistry.setPluginScanner (scanner.get(), ctx);
 #endif
 
-    graph->prepareToPlay (static_cast<float> (device->getCurrentSampleRate()),
-                          device->getCurrentBufferSizeSamples());
+    const auto spec = yup::AudioSpec (
+        static_cast<float> (device->getCurrentSampleRate()),
+        device->getCurrentBufferSizeSamples());
+    graph->prepareToPlay (spec);
 }
 
 void AudioGraphApp::audioDeviceStopped()

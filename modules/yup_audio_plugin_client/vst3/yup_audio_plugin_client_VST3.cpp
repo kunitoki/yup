@@ -1086,7 +1086,7 @@ private:
         }
     }
 
-    void audioProcessorChanged (AudioProcessor* processor, const AudioProcessor::ChangeDetails& details) override
+    void audioProcessorChanged (AudioProcessorBase* processor, const AudioProcessor::ChangeDetails& details) override
     {
         ignoreUnused (processor);
 

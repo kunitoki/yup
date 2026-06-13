@@ -134,9 +134,9 @@ public:
         model->setNodeFactory (std::move (factory));
     }
 
-    void prepareToPlay (float sampleRate, int maxBlockSize) override
+    void prepareToPlay (const yup::AudioSpec& spec) override
     {
-        graph->prepareToPlay (sampleRate, maxBlockSize);
+        graph->prepareToPlay (spec);
     }
 
     void releaseResources() override

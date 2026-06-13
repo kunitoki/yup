@@ -41,12 +41,12 @@ public:
         reportUpdatedLatency();
     }
 
-    void prepareToPlay (float newSampleRate, int maxBlockSize) override
+    void prepareToPlay (const yup::AudioSpec& spec) override
     {
-        sampleRate.store (yup::jmax (1.0f, newSampleRate), std::memory_order_relaxed);
+        sampleRate.store (yup::jmax (1.0f, spec.sampleRate), std::memory_order_relaxed);
 
         const int maxDelaySamples = delayMillisecondsToSamples (maximumDelayMilliseconds);
-        history.setSize (2, maxDelaySamples + yup::jmax (1, maxBlockSize) + 1);
+        history.setSize (2, maxDelaySamples + yup::jmax (1, spec.maxBlockSize) + 1);
         history.clear();
 
         writePosition = 0;

@@ -24,7 +24,7 @@ namespace yup
 
 //==============================================================================
 
-AudioProcessor::AudioProcessor (StringRef name, AudioBusLayout busLayout)
+SpectralProcessor::SpectralProcessor (StringRef name, AudioBusLayout busLayout)
     : BaseDomainProcessor (name)
     , busLayout (std::move (busLayout))
 {
@@ -32,11 +32,11 @@ AudioProcessor::AudioProcessor (StringRef name, AudioBusLayout busLayout)
 
 //==============================================================================
 
-AudioProcessor::~AudioProcessor() = default;
+SpectralProcessor::~SpectralProcessor() = default;
 
 //==============================================================================
 
-int AudioProcessor::getNumAudioOutputs() const
+int SpectralProcessor::getNumAudioOutputs() const
 {
     int count = 0;
 
@@ -47,7 +47,7 @@ int AudioProcessor::getNumAudioOutputs() const
     return count;
 }
 
-int AudioProcessor::getNumAudioInputs() const
+int SpectralProcessor::getNumAudioInputs() const
 {
     int count = 0;
 
@@ -60,7 +60,7 @@ int AudioProcessor::getNumAudioInputs() const
 
 //==============================================================================
 
-bool AudioProcessor::acceptsMidi() const noexcept
+bool SpectralProcessor::acceptsMidi() const noexcept
 {
     for (const auto& bus : busLayout.getInputBuses())
         if (bus.getType() == AudioBus::Type::Midi)
@@ -69,7 +69,7 @@ bool AudioProcessor::acceptsMidi() const noexcept
     return false;
 }
 
-bool AudioProcessor::producesMidi() const noexcept
+bool SpectralProcessor::producesMidi() const noexcept
 {
     for (const auto& bus : busLayout.getOutputBuses())
         if (bus.getType() == AudioBus::Type::Midi)
@@ -80,21 +80,23 @@ bool AudioProcessor::producesMidi() const noexcept
 
 //==============================================================================
 
-AudioProcessorEditor* AudioProcessor::createEditor()
+/*
+AudioProcessorEditor* SpectralProcessor::createEditor()
 {
     jassert (hasEditor());
     return nullptr;
 }
+*/
 
 //==============================================================================
 
-void AudioProcessor::setPlaybackConfiguration (float sampleRate, int samplesPerBlock)
+void SpectralProcessor::setPlaybackConfiguration (float sampleRate, int samplesPerBlock)
 {
     releaseResources();
 
     AudioProcessorBase::setPlaybackConfiguration (sampleRate, samplesPerBlock);
 
-    prepareToPlay (AudioSpec (sampleRate, samplesPerBlock));
+    prepareToPlay (SpectralSpec (sampleRate, samplesPerBlock));
 }
 
 } // namespace yup
