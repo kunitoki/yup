@@ -207,10 +207,23 @@ void ComboBox::mouseDown (const MouseEvent& event)
 {
     takeKeyboardFocus();
 
-    if (isPopupShown())
-        hidePopup();
-    else
+    if (ignoreMouseDownAfterPopupDismissal)
+    {
+        ignoreMouseDownAfterPopupDismissal = false;
+        popupMenu = nullptr;
+        repaint();
+        return;
+    }
+
+    if (popupMenu == nullptr || ! popupMenu->isBeingShown())
+    {
         showPopup();
+    }
+    else
+    {
+        const auto dismissingFromThisMouseDown = ScopedValueSetter<bool> (dismissingPopupFromMouseDown, true);
+        hidePopup();
+    }
 
     repaint();
 }
@@ -251,7 +264,20 @@ void ComboBox::showPopup()
     popupMenu->show ([this] (int selectedItemID)
     {
         if (selectedItemID != 0)
+        {
             setSelectedId (selectedItemID);
+        }
+        else if (! dismissingPopupFromMouseDown)
+        {
+            ignoreMouseDownAfterPopupDismissal = true;
+
+            WeakReference<Component> self = this;
+            MessageManager::callAsync ([this, self]
+            {
+                if (self.get() != nullptr)
+                    ignoreMouseDownAfterPopupDismissal = false;
+            });
+        }
 
         takeKeyboardFocus();
     });
