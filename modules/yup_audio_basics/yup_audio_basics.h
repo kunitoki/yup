@@ -74,6 +74,7 @@
 //==============================================================================
 #include "buffers/yup_AudioDataConverters.h"
 #include "buffers/yup_AudioSampleBuffer.h"
+#include "buffers/yup_AudioSpectralBuffer.h"
 #include "buffers/yup_AudioChannelSet.h"
 #include "buffers/yup_AudioProcessLoadMeasurer.h"
 #include "utilities/yup_Decibels.h"

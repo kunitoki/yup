@@ -155,7 +155,7 @@ public:
         analyzerState.setOverlapFactor (0.0f);
     }
 
-    void prepareToPlay (float, int) override
+    void prepareToPlay (const yup::AudioSpec&) override
     {
         analyzerState.reset();
         peakLevel.store (0.0f, std::memory_order_relaxed);
@@ -379,7 +379,7 @@ public:
         analyzerState.setOverlapFactor (0.5f);
     }
 
-    void prepareToPlay (float, int) override
+    void prepareToPlay (const yup::AudioSpec&) override
     {
         analyzerState.reset();
         peakLevel.store (0.0f, std::memory_order_relaxed);

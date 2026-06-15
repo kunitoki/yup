@@ -144,7 +144,7 @@ public:
 
     void audioDeviceAboutToStart (AudioIODevice* device) override
     {
-        processor->prepareToPlay (device->getCurrentSampleRate(), device->getCurrentBufferSizeSamples());
+        processor->prepareToPlay (AudioSpec (device->getCurrentSampleRate(), device->getCurrentBufferSizeSamples()));
 
         audioBuffer.setSize (
             jmax (

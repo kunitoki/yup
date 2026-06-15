@@ -767,14 +767,14 @@ public:
 
     //==============================================================================
 
-    void prepareToPlay (float sampleRate, int maxBlockSize) override
+    void prepareToPlay (const AudioSpec& spec) override
     {
         const int numChannels = jmax (2, pluginDescription.numInputChannels, pluginDescription.numOutputChannels);
         preparedInPtrs.resize (static_cast<std::size_t> (numChannels));
         preparedOutPtrs.resize (static_cast<std::size_t> (numChannels));
 
         updateRenderMode();
-        clapPlugin->activate (clapPlugin, sampleRate, 1, static_cast<uint32_t> (jmax (1, maxBlockSize)));
+        clapPlugin->activate (clapPlugin, spec.sampleRate, 1, static_cast<uint32_t> (jmax (1, spec.maxBlockSize)));
         updateRenderMode();
 
         clapPlugin->start_processing (clapPlugin);

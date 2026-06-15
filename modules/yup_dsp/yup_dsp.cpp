@@ -68,7 +68,7 @@
 #endif
 
 #if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_OOURA
-#include "yup_OouraFFT8g.h"
+#include "frequency/yup_OouraFFT8g.h"
 #define YUP_FFT_USING_OOURA 1
 #define YUP_FFT_FOUND_BACKEND 1
 #endif

@@ -49,9 +49,9 @@ public:
         addParameter (dryWet);
     }
 
-    void prepareToPlay (float newSampleRate, int) override
+    void prepareToPlay (const yup::AudioSpec& spec) override
     {
-        sampleRate.store (yup::jmax (1.0f, newSampleRate), std::memory_order_relaxed);
+        sampleRate.store (yup::jmax (1.0f, spec.sampleRate), std::memory_order_relaxed);
 
         const int maxDelaySamples = yup::roundToInt (delayMillisecondsToSamples (maximumDelayMilliseconds));
         for (auto& delayLine : delayLines)

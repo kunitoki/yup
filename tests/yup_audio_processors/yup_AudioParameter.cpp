@@ -36,11 +36,11 @@ public:
     {
     }
 
-    void prepareToPlay (float newSampleRate, int newSamplesPerBlock) override
+    void prepareToPlay (const AudioSpec& spec) override
     {
         ++prepareCallCount;
-        preparedSampleRate = newSampleRate;
-        preparedSamplesPerBlock = newSamplesPerBlock;
+        preparedSampleRate = spec.sampleRate;
+        preparedSamplesPerBlock = spec.maxBlockSize;
     }
 
     void releaseResources() override
@@ -109,10 +109,10 @@ public:
 class ProcessorListener final : public AudioProcessor::Listener
 {
 public:
-    void audioProcessorChanged (AudioProcessor* processor, const AudioProcessor::ChangeDetails& details) override
+    void audioProcessorChanged (AudioProcessorBase* processor, const AudioProcessor::ChangeDetails& details) override
     {
         ++changedCount;
-        lastProcessor = processor;
+        lastProcessor = dynamic_cast<AudioProcessor*> (processor);
         lastDetails = details;
     }
 
@@ -129,7 +129,7 @@ public:
     {
     }
 
-    void prepareToPlay (float, int) override {}
+    void prepareToPlay (const AudioSpec&) override {}
 
     void releaseResources() override {}
 

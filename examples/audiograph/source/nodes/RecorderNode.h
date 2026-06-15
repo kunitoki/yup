@@ -83,9 +83,9 @@ public:
         fifoBuffer.resize (fifoCapacity);
     }
 
-    void prepareToPlay (float sampleRate, int) override
+    void prepareToPlay (const yup::AudioSpec& spec) override
     {
-        currentSampleRate.store (sampleRate > 0.0f ? sampleRate : 44100.0f, std::memory_order_relaxed);
+        currentSampleRate.store (spec.sampleRate > 0.0f ? spec.sampleRate : 44100.0f, std::memory_order_relaxed);
     }
 
     void releaseResources() override {}

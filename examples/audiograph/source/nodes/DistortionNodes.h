@@ -46,17 +46,17 @@ public:
         updateLatency();
     }
 
-    void prepareToPlay (float newSampleRate, int maxBlockSize) override
+    void prepareToPlay (const yup::AudioSpec& spec) override
     {
-        const auto sampleRate = yup::jmax (1.0f, newSampleRate);
-        const auto blockSize = yup::jmax (1, maxBlockSize);
+        const auto sampleRate = yup::jmax (1.0f, spec.sampleRate);
+        const auto blockSize = yup::jmax (1, spec.maxBlockSize);
 
         oversampler2x.prepare (sampleRate, maximumOversampledChannels, blockSize);
         oversampler4x.prepare (sampleRate, maximumOversampledChannels, blockSize);
         oversampler8x.prepare (sampleRate, maximumOversampledChannels, blockSize);
         oversamplersPrepared = true;
 
-        smoothedDrive.reset (newSampleRate, 0.02);
+        smoothedDrive.reset (sampleRate, 0.02);
         smoothedDrive.setCurrentAndTargetValue (getDrive());
 
         updateLatency();
@@ -279,14 +279,14 @@ public:
         addParameter (output);
     }
 
-    void prepareToPlay (float newSampleRate, int maxBlockSize) override
+    void prepareToPlay (const yup::AudioSpec& spec) override
     {
         for (auto& clipper : clippers)
-            clipper.prepare (newSampleRate, maxBlockSize);
+            clipper.prepare (spec.sampleRate, spec.maxBlockSize);
 
-        smoothedDrive.reset (newSampleRate, 0.02);
+        smoothedDrive.reset (spec.sampleRate, 0.02);
         smoothedDrive.setCurrentAndTargetValue (getDrive());
-        smoothedOutput.reset (newSampleRate, 0.02);
+        smoothedOutput.reset (spec.sampleRate, 0.02);
         smoothedOutput.setCurrentAndTargetValue (getOutput());
     }
 
@@ -592,14 +592,14 @@ public:
         addParameter (output);
     }
 
-    void prepareToPlay (float newSampleRate, int maxBlockSize) override
+    void prepareToPlay (const yup::AudioSpec& spec) override
     {
         for (auto& clipper : clippers)
-            clipper.prepare (static_cast<double> (newSampleRate), maxBlockSize);
+            clipper.prepare (static_cast<double> (spec.sampleRate), spec.maxBlockSize);
 
-        smoothedDrive.reset (newSampleRate, 0.02);
+        smoothedDrive.reset (spec.sampleRate, 0.02);
         smoothedDrive.setCurrentAndTargetValue (getDrive());
-        smoothedOutput.reset (newSampleRate, 0.02);
+        smoothedOutput.reset (spec.sampleRate, 0.02);
         smoothedOutput.setCurrentAndTargetValue (getOutput());
     }
 

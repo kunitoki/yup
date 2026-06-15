@@ -376,7 +376,7 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
 
     //==============================================================================
 
-    void prepareToPlay(float sampleRate, int maxBlockSize) override
+    void prepareToPlay(const AudioSpec& spec) override
     {
         releaseResources();
 
@@ -386,15 +386,15 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
         const auto numHostedChannels = jmax(2,
                                             pluginDescription.numInputChannels,
                                             pluginDescription.numOutputChannels);
-        prepareRenderStorage(numHostedChannels, maxBlockSize);
+        prepareRenderStorage(numHostedChannels, spec.maxBlockSize);
 
-        const Float64 sampleRateValue = static_cast<Float64>(sampleRate);
+        const Float64 sampleRateValue = static_cast<Float64>(spec.sampleRate);
         AudioUnitSetProperty(audioUnit,
                              kAudioUnitProperty_SampleRate,
                              kAudioUnitScope_Global, 0,
                              &sampleRateValue, sizeof(sampleRateValue));
 
-        UInt32 blockSize = static_cast<UInt32>(maxBlockSize);
+        UInt32 blockSize = static_cast<UInt32>(spec.maxBlockSize);
         AudioUnitSetProperty(audioUnit,
                              kAudioUnitProperty_MaximumFramesPerSlice,
                              kAudioUnitScope_Global, 0,

@@ -40,17 +40,15 @@ public:
         addParameter (resonance);
     }
 
-    void prepareToPlay (float newSampleRate, int blockSize) override
+    void prepareToPlay (const yup::AudioSpec& spec) override
     {
-        sampleRate = newSampleRate;
-
         for (auto& f : filters)
-            f.prepare (newSampleRate, blockSize);
+            f.prepare (spec.sampleRate, spec.maxBlockSize);
 
-        smoothedCutoff.reset (newSampleRate, 0.02);
+        smoothedCutoff.reset (spec.sampleRate, 0.02);
         smoothedCutoff.setCurrentAndTargetValue (static_cast<float> (getCutoff()));
 
-        smoothedResonance.reset (newSampleRate, 0.02);
+        smoothedResonance.reset (spec.sampleRate, 0.02);
         smoothedResonance.setCurrentAndTargetValue (static_cast<float> (getResonance()));
     }
 
@@ -75,7 +73,7 @@ public:
             for (int channel = 0; channel < numChannels; ++channel)
             {
                 const auto idx = static_cast<size_t> (yup::jmin (channel, 1));
-                filters[idx].setParameters (filterMode, freq, q, sampleRate);
+                filters[idx].setParameters (filterMode, freq, q, getSampleRate());
                 audioBuffer.setSample (channel, sample, filters[idx].processSample (audioBuffer.getSample (channel, sample)));
             }
         }
@@ -145,7 +143,6 @@ private:
         }
     }
 
-    float sampleRate = 44100.0f;
     yup::AudioParameter::Ptr mode;
     yup::AudioParameter::Ptr cutoff;
     yup::AudioParameter::Ptr resonance;
