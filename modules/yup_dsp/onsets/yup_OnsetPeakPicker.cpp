@@ -106,9 +106,18 @@ void OnsetPeakPicker::detect (const float* activations, int numFrames)
 
         avg /= static_cast<double> (avgStop - avgStart + 1);
 
-        // Must exceed average + threshold
-        if (static_cast<double> (activations[frame]) < avg + static_cast<double> (params.threshold))
-            continue;
+        // When the average window is empty, use absolute threshold instead
+        if (preAvgLen == 0 && postAvgLen == 0)
+        {
+            if (static_cast<double> (activations[frame]) < static_cast<double> (params.threshold))
+                continue;
+        }
+        else
+        {
+            // Must exceed average + threshold
+            if (static_cast<double> (activations[frame]) < avg + static_cast<double> (params.threshold))
+                continue;
+        }
 
         // --- Convert to time and apply delay ---
         const double time = static_cast<double> (frame) / static_cast<double> (fps) + delaySeconds;

@@ -128,6 +128,9 @@ void OnsetDetector::reset()
 {
     spectrogram.reset();
     peakPicker.reset();
+
+    if (odf != nullptr)
+        odf->reset();
 }
 
 const std::vector<float>& OnsetDetector::getActivationFunction() const noexcept

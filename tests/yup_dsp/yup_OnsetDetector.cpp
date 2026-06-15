@@ -440,36 +440,34 @@ TEST_F (OnsetPeakPickerTests, OnlineModeIgnoresFuture)
 {
     OnsetPeakPicker online, offline;
 
-    online.prepare ({ .threshold = 0.5f, .onlineMode = true, .postMaxSec = 1.0f, .postAvgSec = 1.0f }, fps);
+    // Zero pre-windows so that online mode has no context at all, and offline
+    // relies purely on forward-looking windows. This forces different results.
+    online.prepare ({ .threshold = 0.5f, .preAvgSec = 0.0f, .preMaxSec = 0.0f, .onlineMode = true, .postMaxSec = 1.0f, .postAvgSec = 1.0f }, fps);
 
-    offline.prepare ({ .threshold = 0.5f, .onlineMode = false, .postMaxSec = 1.0f, .postAvgSec = 1.0f }, fps);
+    offline.prepare ({ .threshold = 0.5f, .preAvgSec = 0.0f, .preMaxSec = 0.0f, .onlineMode = false, .postMaxSec = 1.0f, .postAvgSec = 1.0f }, fps);
 
-    // Create a ramp: values go 0.1, 0.1, 2.0, 2.0, 0.1, 0.1
-    // Offline: the 2.0 values are a local max because they see future zeros
-    // Online: they might or might not be, depends on window
+    // Triangular peak: frame 3 is the global max. Online mode sees frame 2
+    // (0.5 >= threshold) as the first detection; offline mode rejects frame 2
+    // because the forward-looking max test sees the larger value at frame 3.
     constexpr int numFrames = 6;
-    std::vector<float> activations = { 0.1f, 0.1f, 2.0f, 2.0f, 0.1f, 0.1f };
+    std::vector<float> activations = { 0.1f, 0.1f, 0.5f, 2.0f, 0.5f, 0.1f };
 
     online.detect (activations.data(), numFrames);
     offline.detect (activations.data(), numFrames);
 
-    // Both should detect at least one onset
     EXPECT_FALSE (online.getOnsetTimes().empty());
     EXPECT_FALSE (offline.getOnsetTimes().empty());
 
-    // The detected frame indices may differ between online/offline with large windows
-    if (online.getOnsetTimes().size() == offline.getOnsetTimes().size())
+    // The detected frame indices should differ between online/offline.
+    bool differs = false;
+
+    for (std::size_t i = 0; i < jmin (online.getOnsetTimes().size(), offline.getOnsetTimes().size()) && ! differs; ++i)
     {
-        bool differs = false;
-
-        for (std::size_t i = 0; i < online.getOnsetTimes().size() && ! differs; ++i)
-        {
-            if (std::abs (online.getOnsetTimes()[i] - offline.getOnsetTimes()[i]) > 1e-6)
-                differs = true;
-        }
-
-        EXPECT_TRUE (differs);
+        if (std::abs (online.getOnsetTimes()[i] - offline.getOnsetTimes()[i]) > 1e-6)
+            differs = true;
     }
+
+    EXPECT_TRUE (differs);
 }
 
 TEST_F (OnsetPeakPickerTests, DelayShiftsOnsetTimes)

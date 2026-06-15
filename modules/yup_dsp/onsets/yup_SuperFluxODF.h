@@ -80,6 +80,10 @@ public:
     void compute (const Spectrogram& spec) override;
 
     //==============================================================================
+    /** @see OnsetDetectionFunction::reset */
+    void reset() override;
+
+    //==============================================================================
     /** @see OnsetDetectionFunction::getActivations */
     const std::vector<float>& getActivations() const noexcept override { return activations; }
 

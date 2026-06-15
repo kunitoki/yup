@@ -52,6 +52,10 @@ public:
     virtual void compute (const Spectrogram& spec) = 0;
 
     //==============================================================================
+    /** Clears the computed activation function values. */
+    virtual void reset() = 0;
+
+    //==============================================================================
     /** Returns the activation function values (one per frame). */
     virtual const std::vector<float>& getActivations() const noexcept = 0;
 };

@@ -43,6 +43,12 @@ void SuperFluxODF::prepare (const Parameters& p, const float* window, int window
 }
 
 //==============================================================================
+void SuperFluxODF::reset()
+{
+    activations.clear();
+}
+
+//==============================================================================
 void SuperFluxODF::compute (const Spectrogram& spec)
 {
     const int numFrames = spec.getNumFrames();

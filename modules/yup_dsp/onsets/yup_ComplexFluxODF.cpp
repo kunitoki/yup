@@ -45,6 +45,12 @@ void ComplexFluxODF::prepare (const Parameters& p, const float* window, int wind
 }
 
 //==============================================================================
+void ComplexFluxODF::reset()
+{
+    activations.clear();
+}
+
+//==============================================================================
 void ComplexFluxODF::compute (const Spectrogram& spec)
 {
     const int numFrames = spec.getNumFrames();
