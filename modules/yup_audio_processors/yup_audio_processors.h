@@ -32,7 +32,7 @@
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_audio_basics yup_data_model
+    dependencies:       yup_audio_basics yup_data_model yup_dsp
 
   END_YUP_MODULE_DECLARATION
 
@@ -46,6 +46,7 @@
 
 #include <yup_audio_basics/yup_audio_basics.h>
 #include <yup_data_model/yup_data_model.h>
+#include <yup_dsp/yup_dsp.h>
 
 #if YUP_MODULE_AVAILABLE_yup_gui
 #include <yup_gui/yup_gui.h>
@@ -57,9 +58,16 @@
 #include "processors/yup_AudioParameter.h"
 #include "processors/yup_AudioParameterBuilder.h"
 #include "processors/yup_ParameterChangeBuffer.h"
-#include "processors/yup_AudioProcessContext.h"
 #include "processors/yup_AudioParameterHandle.h"
+#include "processors/yup_AudioProcessorBase.h"
+#include "processors/yup_DomainProcessor.h"
+#include "processors/yup_AudioSpec.h"
+#include "processors/yup_AudioProcessContext.h"
 #include "processors/yup_AudioProcessor.h"
+#include "spectral/yup_SpectralSpec.h"
+#include "spectral/yup_SpectralProcessContext.h"
+#include "spectral/yup_SpectralProcessor.h"
+#include "spectral/yup_SpectralBridge.h"
 
 #if YUP_MODULE_AVAILABLE_yup_gui
 #include "processors/yup_AudioProcessorEditor.h"

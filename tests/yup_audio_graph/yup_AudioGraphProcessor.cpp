@@ -60,10 +60,10 @@ public:
     {
     }
 
-    void prepareToPlay (float sampleRate, int maxBlockSize) override
+    void prepareToPlay (const AudioSpec& spec) override
     {
-        preparedSampleRate = sampleRate;
-        preparedBlockSize = maxBlockSize;
+        preparedSampleRate = spec.sampleRate;
+        preparedBlockSize = spec.maxBlockSize;
         prepared = true;
     }
 
@@ -112,7 +112,7 @@ public:
     {
     }
 
-    void prepareToPlay (float, int) override {}
+    void prepareToPlay (const AudioSpec&) override {}
 
     void releaseResources() override {}
 
@@ -151,7 +151,7 @@ public:
         nextPendingMidi.ensureSize (4096);
     }
 
-    void prepareToPlay (float, int) override
+    void prepareToPlay (const AudioSpec&) override
     {
         pendingMidi.clear();
         nextPendingMidi.clear();
@@ -245,7 +245,7 @@ public:
     {
     }
 
-    void prepareToPlay (float, int) override {}
+    void prepareToPlay (const AudioSpec&) override {}
 
     void releaseResources() override {}
 
@@ -365,7 +365,7 @@ public:
     {
     }
 
-    void prepareToPlay (float, int) override {}
+    void prepareToPlay (const AudioSpec&) override {}
 
     void releaseResources() override {}
 
@@ -444,7 +444,7 @@ public:
     {
     }
 
-    void prepareToPlay (float, int) override {}
+    void prepareToPlay (const AudioSpec&) override {}
 
     void releaseResources() override {}
 
@@ -524,7 +524,7 @@ public:
     {
     }
 
-    void prepareToPlay (float, int) override {}
+    void prepareToPlay (const AudioSpec&) override {}
 
     void releaseResources() override {}
 
@@ -577,7 +577,7 @@ public:
     {
     }
 
-    void prepareToPlay (float, int) override {}
+    void prepareToPlay (const AudioSpec&) override {}
 
     void releaseResources() override {}
 
@@ -748,7 +748,7 @@ public:
     {
     }
 
-    void prepareToPlay (float, int) override {}
+    void prepareToPlay (const AudioSpec&) override {}
 
     void releaseResources() override {}
 
@@ -798,7 +798,7 @@ public:
     {
     }
 
-    void prepareToPlay (float, int) override {}
+    void prepareToPlay (const AudioSpec&) override {}
 
     void releaseResources() override {}
 
@@ -843,7 +843,7 @@ public:
         history.clear();
     }
 
-    void prepareToPlay (float, int) override
+    void prepareToPlay (const AudioSpec&) override
     {
         history.clear();
         writePosition = 0;
@@ -912,7 +912,7 @@ TEST (AudioGraphProcessorTests, CommitPreparesNodes)
 
     EXPECT_TRUE (node.isValid());
 
-    graph.prepareToPlay (48000.0f, 128);
+    graph.prepareToPlay (AudioSpec (48000.0f, 128));
     const auto result = graph.commitChanges();
 
     EXPECT_TRUE (result.wasOk());
@@ -978,7 +978,7 @@ TEST (AudioGraphProcessorTests, ProcessesBlocksLargerThanPreparedMaximumInChunks
 {
     auto model = std::make_shared<AudioGraphModel>();
     AudioGraphProcessor graph (model);
-    graph.prepareToPlay (48000.0f, 16);
+    graph.prepareToPlay (AudioSpec (48000.0f, 16));
 
     const auto node = model->addNode (std::make_unique<TestProcessor> (0.5f));
     EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
@@ -1006,7 +1006,7 @@ TEST (AudioGraphProcessorTests, PreservesMidiEventsInBlocksLargerThanPreparedMax
 {
     auto model = std::make_shared<AudioGraphModel>();
     AudioGraphProcessor graph (model, midiLayout());
-    graph.prepareToPlay (48000.0f, 16);
+    graph.prepareToPlay (AudioSpec (48000.0f, 16));
 
     EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0),
                                          AudioGraphEndpoint::graphOutput (0) })
@@ -2128,7 +2128,7 @@ TEST (AudioGraphProcessorTests, ReleaseResourcesMarksPreparedNodesUnprepared)
     const auto node = model->addNode (std::move (processor));
 
     EXPECT_TRUE (node.isValid());
-    graph.prepareToPlay (44100.0f, 64);
+    graph.prepareToPlay (AudioSpec (44100.0f, 64));
     EXPECT_TRUE (processorPtr->prepared);
 
     graph.releaseResources();
@@ -2370,7 +2370,7 @@ TEST (AudioGraphProcessorTests, ConcurrentCommitsDoNotInvalidateAudioThreadPlan)
     auto model = std::make_shared<AudioGraphModel>();
     AudioGraphProcessor graph (model);
     graph.setNumWorkerThreads (2);
-    graph.prepareToPlay (48000.0f, 32);
+    graph.prepareToPlay (AudioSpec (48000.0f, 32));
 
     ASSERT_TRUE (resetGraphToSingleGainPath (graph, 0.25f));
 

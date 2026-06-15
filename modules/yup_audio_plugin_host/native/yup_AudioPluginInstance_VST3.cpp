@@ -1015,7 +1015,7 @@ public:
 
     //==============================================================================
 
-    void prepareToPlay (float sampleRate, int maxBlockSize) override
+    void prepareToPlay (const AudioSpec& spec) override
     {
         Vst::ProcessSetup setup;
         setup.processMode = isNonRealtime() ? Vst::kOffline : Vst::kRealtime;
@@ -1024,8 +1024,8 @@ public:
                                     : ProcessingPrecision::singlePrecision);
 
         setup.symbolicSampleSize = isUsingDoublePrecision() ? Vst::kSample64 : Vst::kSample32;
-        setup.maxSamplesPerBlock = maxBlockSize;
-        setup.sampleRate = sampleRate;
+        setup.maxSamplesPerBlock = spec.maxBlockSize;
+        setup.sampleRate = spec.sampleRate;
 
         const int numInputs = vst3Component->getBusCount (Vst::kAudio, Vst::kInput);
         const int numOutputs = vst3Component->getBusCount (Vst::kAudio, Vst::kOutput);
@@ -1033,7 +1033,7 @@ public:
         if (isUsingDoublePrecision())
         {
             const int numChannels = jmax (1, numInputs, numOutputs);
-            doublePrecisionBuffer.setSize (numChannels, maxBlockSize, false, true, false);
+            doublePrecisionBuffer.setSize (numChannels, spec.maxBlockSize, false, true, false);
         }
 
         vst3Processor->setupProcessing (setup);

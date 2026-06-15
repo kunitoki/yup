@@ -16,7 +16,7 @@ public:
     {
     }
 
-    void prepareToPlay (float, int) override {}
+    void prepareToPlay (const AudioSpec&) override {}
 
     void releaseResources() override {}
 

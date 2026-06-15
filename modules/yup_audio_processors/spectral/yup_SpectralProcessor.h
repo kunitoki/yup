@@ -22,29 +22,27 @@
 namespace yup
 {
 
-class AudioProcessorEditor;
-
 //==============================================================================
 /**
-    Base class for all audio processors.
+    Base class for all spectral processors.
 
-    The AudioProcessor class is the base class for all audio processing modules in the framework.
-    It provides a common interface for processing audio and MIDI data, managing parameters, and
+    The SpectralProcessor class is the base class for all spectral processing modules in the framework.
+    It provides a common interface for processing spectral bins, managing parameters, and
     communicating with hosts.
 
     @see AudioProcessorEditor
 */
-class YUP_API AudioProcessor : public DomainProcessor<AudioProcessContext, AudioSpec>
+class YUP_API SpectralProcessor : public DomainProcessor<SpectralProcessContext, SpectralSpec>
 {
-    using BaseDomainProcessor = DomainProcessor<AudioProcessContext, AudioSpec>;
+    using BaseDomainProcessor = DomainProcessor<SpectralProcessContext, SpectralSpec>;
 
 public:
     //==============================================================================
-    /** Constructs an AudioProcessor. */
-    AudioProcessor (StringRef name, AudioBusLayout busLayout);
+    /** Constructs a SpectralProcessor. */
+    SpectralProcessor (StringRef name, AudioBusLayout busLayout);
 
-    /** Destructs an AudioProcessor. */
-    ~AudioProcessor() override;
+    /** Destructs a SpectralProcessor. */
+    ~SpectralProcessor() override;
 
     //==============================================================================
     /** Returns the bus layout. */
@@ -62,18 +60,6 @@ public:
 
     /** Returns true if the processor produces MIDI output. */
     virtual bool producesMidi() const noexcept;
-
-    //==============================================================================
-    /** Returns the number of simultaneous voices this processor can produce.
-        Returns 0 for effects and MIDI-only processors. Override in instruments. */
-    virtual int getNumVoices() const { return 0; }
-
-    //==============================================================================
-    /** Returns true if the processor has an editor. */
-    virtual bool hasEditor() const = 0;
-
-    /** Creates an editor for the processor. */
-    virtual AudioProcessorEditor* createEditor();
 
     //==============================================================================
     /** @internal Used by plugin wrappers. */

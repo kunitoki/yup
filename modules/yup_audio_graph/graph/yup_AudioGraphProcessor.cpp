@@ -392,10 +392,10 @@ public:
         return Result::ok();
     }
 
-    void prepareToPlay (float newSampleRate, int newMaxBlockSize)
+    void prepareToPlay (const AudioSpec& spec)
     {
-        sampleRate = newSampleRate;
-        maxBlockSize = jmax (1, newMaxBlockSize);
+        sampleRate = spec.sampleRate;
+        maxBlockSize = jmax (1, spec.maxBlockSize);
 
         const auto result = commitChanges();
         jassert (result.wasOk());
@@ -424,7 +424,7 @@ public:
         lastCompiledMaxBlockSize = 0;
     }
 
-    void audioProcessorChanged (AudioProcessor*, const AudioProcessor::ChangeDetails& details) override
+    void audioProcessorChanged (AudioProcessorBase*, const AudioProcessor::ChangeDetails& details) override
     {
         if (details.latencyChanged)
         {
@@ -1387,9 +1387,9 @@ Result AudioGraphProcessor::restoreFromXml (const XmlElement& xml)
     return pimpl->restoreFromXml (xml);
 }
 
-void AudioGraphProcessor::prepareToPlay (float sampleRate, int maxBlockSize)
+void AudioGraphProcessor::prepareToPlay (const AudioSpec& spec)
 {
-    pimpl->prepareToPlay (sampleRate, maxBlockSize);
+    pimpl->prepareToPlay (spec);
 }
 
 void AudioGraphProcessor::releaseResources()

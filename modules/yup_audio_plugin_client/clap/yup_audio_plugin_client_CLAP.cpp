@@ -526,7 +526,7 @@ private:
     void parameterGestureBegin (const AudioParameter::Ptr& parameter, int indexInContainer) override;
     void parameterGestureEnd (const AudioParameter::Ptr& parameter, int indexInContainer) override;
 
-    void audioProcessorChanged (AudioProcessor* processor, const AudioProcessor::ChangeDetails& details) override;
+    void audioProcessorChanged (AudioProcessorBase* processor, const AudioProcessor::ChangeDetails& details) override;
 
     void enqueueParameterEvent (uint16 eventType, clap_id parameterId, double value = 0.0) noexcept;
     void drainParameterEvents (const clap_output_events_t* out) noexcept;
@@ -1689,7 +1689,7 @@ void AudioPluginProcessorCLAP::parameterGestureEnd (const AudioParameter::Ptr& p
     requestParameterFlush();
 }
 
-void AudioPluginProcessorCLAP::audioProcessorChanged (AudioProcessor* processor, const AudioProcessor::ChangeDetails& details)
+void AudioPluginProcessorCLAP::audioProcessorChanged (AudioProcessorBase* processor, const AudioProcessor::ChangeDetails& details)
 {
     ignoreUnused (processor);
 

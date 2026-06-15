@@ -46,9 +46,9 @@ public:
     {
     }
 
-    void prepareToPlay (float newSampleRate, int) override
+    void prepareToPlay (const yup::AudioSpec& spec) override
     {
-        playbackSampleRate.store (newSampleRate > 0.0f ? newSampleRate : 44100.0f, std::memory_order_relaxed);
+        playbackSampleRate.store (spec.sampleRate > 0.0f ? spec.sampleRate : 44100.0f, std::memory_order_relaxed);
     }
 
     void releaseResources() override {}

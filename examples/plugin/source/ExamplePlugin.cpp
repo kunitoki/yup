@@ -108,11 +108,11 @@ ExamplePlugin::~ExamplePlugin()
 
 //==============================================================================
 
-void ExamplePlugin::prepareToPlay (float sampleRate, int maxBlockSize)
+void ExamplePlugin::prepareToPlay (const yup::AudioSpec& spec)
 {
-    this->sampleRate = sampleRate;
+    this->sampleRate = spec.sampleRate;
 
-    gainHandle = yup::AudioParameterHandle (*gainParameter, sampleRate);
+    gainHandle = yup::AudioParameterHandle (*gainParameter, spec.sampleRate);
 }
 
 void ExamplePlugin::releaseResources()

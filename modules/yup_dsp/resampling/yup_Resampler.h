@@ -154,7 +154,7 @@ public:
             }
         }
 
-        const int outputCount = static_cast<int> ((numSamples - currentPhase) * oversampleFactor);
+        const int outputCount = static_cast<int> (std::ceil ((numSamples - currentPhase) * oversampleFactor));
         const CoeffType gainScale = (oversampleFactor < 1.0)
                                       ? static_cast<CoeffType> (oversampleFactor)
                                       : CoeffType (1);
@@ -202,7 +202,7 @@ public:
                 endBufs[static_cast<std::size_t> (ch)].push (xBuf[static_cast<std::size_t> (numSamples + i)]);
         }
 
-        currentPhase = (currentPhase + static_cast<double> (outputCount) / oversampleFactor) - numSamples;
+        currentPhase = std::max (0.0, (currentPhase + static_cast<double> (outputCount) / oversampleFactor) - numSamples);
         return outputCount;
     }
 

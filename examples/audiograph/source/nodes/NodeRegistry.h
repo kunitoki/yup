@@ -36,6 +36,7 @@
 #include "PluginNodeView.h"
 #include "RecorderNode.h"
 #include "SamplePlayerNode.h"
+#include "SpectralPassthroughNode.h"
 #include "SubgraphNode.h"
 
 //==============================================================================
@@ -86,6 +87,9 @@ public:
 
     /** Stable factory key for the built-in recorder node. */
     static constexpr const char* recorderIdentifier = "internal.recorder";
+
+    /** Stable factory key for the built-in spectral passthrough node. */
+    static constexpr const char* spectralPassthroughIdentifier = "internal.spectralPassthrough";
 
     /** Stable factory key for the built-in recursive subgraph node. */
     static constexpr const char* subgraphIdentifier = "internal.subgraph";
@@ -302,6 +306,21 @@ public:
                 return nullptr;
 
             return std::make_unique<RecorderNodeView> (nodeID, *recorder);
+        }
+        };
+
+        entries[spectralPassthroughIdentifier] = {
+            [] (const yup::AudioGraphNodeProperties&) -> yup::ResultValue<std::unique_ptr<yup::AudioProcessor>>
+        {
+            return yup::makeResultValueOk (std::make_unique<SpectralPassthroughProcessor>());
+        },
+            [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*) -> std::unique_ptr<yup::AudioGraphNodeView>
+        {
+            auto* spectral = dynamic_cast<SpectralPassthroughProcessor*> (proc);
+            if (spectral == nullptr)
+                return nullptr;
+
+            return std::make_unique<SpectralPassthroughNodeView> (nodeID, *spectral);
         }
         };
 
@@ -528,6 +547,7 @@ public:
             oscilloscopeIdentifier,
             recorderIdentifier,
             samplePlayerIdentifier,
+            spectralPassthroughIdentifier,
             spectrumAnalyzerIdentifier,
             subgraphIdentifier,
             svfIdentifier,
@@ -580,6 +600,9 @@ public:
 
         if (id == recorderIdentifier)
             return "Recorder";
+
+        if (id == spectralPassthroughIdentifier)
+            return "Spectral Passthrough";
 
         if (id == subgraphIdentifier)
             return "Subgraph";
