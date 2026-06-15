@@ -23,6 +23,28 @@ namespace yup
 {
 
 //==============================================================================
+void ComplexFluxODF::prepare (const Parameters& p, const float* window, int windowSize, int hopSize)
+{
+    jassert (window != nullptr);
+    jassert (windowSize > 0 && hopSize > 0);
+    jassert (p.maxFilterBins > 0);
+    jassert (p.temporalFilter >= 0);
+
+    maxFilterBins = p.maxFilterBins;
+    maxFilterHalf = maxFilterBins / 2;
+    temporalFilter = p.temporalFilter;
+    temporalOrigin = p.temporalOrigin;
+
+    if (p.diffFrames > 0)
+        diffFrames = p.diffFrames;
+    else
+        diffFrames = SuperFluxODF::deriveDiffFrames (window, windowSize, p.windowMagRatio, hopSize);
+
+    jassert (diffFrames >= 1);
+    activations.clear();
+}
+
+//==============================================================================
 void ComplexFluxODF::compute (const Spectrogram& spec)
 {
     const int numFrames = spec.getNumFrames();

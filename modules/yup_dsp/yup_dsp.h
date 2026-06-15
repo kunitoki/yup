@@ -143,6 +143,8 @@
 #include "onsets/yup_FilterBank.h"
 #include "onsets/yup_Spectrogram.h"
 #include "onsets/yup_OnsetDetectionFunction.h"
+#include "onsets/yup_SuperFluxODF.h"
+#include "onsets/yup_ComplexFluxODF.h"
 #include "onsets/yup_OnsetPeakPicker.h"
 #include "onsets/yup_OnsetDetector.h"
 

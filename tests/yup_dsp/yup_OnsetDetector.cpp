@@ -488,7 +488,7 @@ TEST_F (OnsetPeakPickerTests, DelayShiftsOnsetTimes)
 }
 
 //==============================================================================
-// OnsetDetector (SuperFlux) End-to-End Tests
+// OnsetDetector (OnsetDetector) End-to-End Tests
 //==============================================================================
 
 class OnsetDetectorTests : public ::testing::Test
@@ -509,29 +509,29 @@ protected:
 
 TEST_F (OnsetDetectorTests, PrepareInitializesComponents)
 {
-    SuperFlux sf;
-    sf.prepare ({}, sampleRate);
+    OnsetDetector onsetDetector;
+    onsetDetector.prepare ({}, sampleRate);
 
-    EXPECT_EQ (0, sf.getNumFrames());
+    EXPECT_EQ (0, onsetDetector.getNumFrames());
 }
 
 TEST_F (OnsetDetectorTests, EndToEndSilenceYieldsNoOnsets)
 {
-    SuperFlux sf;
-    sf.prepare ({ .spectrogram = { .fftSize = 1024, .fps = 200 },
-                  .useFilterBank = false,
-                  .peakPicker = { .threshold = 1.0f } },
-                sampleRate);
+    OnsetDetector onsetDetector;
+    onsetDetector.prepare ({ .spectrogram = { .fftSize = 1024, .fps = 200 },
+                             .useFilterBank = false,
+                             .peakPicker = { .threshold = 1.0f } },
+                           sampleRate);
 
     auto data = makeSilence (44100);
     auto buffer = makeAudioBuffer (data);
 
-    sf.processOffline (buffer);
+    onsetDetector.processOffline (buffer);
 
-    EXPECT_TRUE (sf.getOnsetTimes().empty());
+    EXPECT_TRUE (onsetDetector.getOnsetTimes().empty());
 
     // Activation function should be near zero
-    const auto& act = sf.getActivationFunction();
+    const auto& act = onsetDetector.getActivationFunction();
 
     for (auto v : act)
         EXPECT_NEAR (0.0f, v, 1e-4f);
@@ -539,19 +539,19 @@ TEST_F (OnsetDetectorTests, EndToEndSilenceYieldsNoOnsets)
 
 TEST_F (OnsetDetectorTests, EndToEndClickTrainDetectsOnsets)
 {
-    SuperFlux sf;
-    sf.prepare ({ .spectrogram = { .fftSize = 1024, .fps = 200 },
-                  .useFilterBank = true,
-                  .peakPicker = { .threshold = 0.5f, .combineSec = 0.2f } },
-                sampleRate);
+    OnsetDetector onsetDetector;
+    onsetDetector.prepare ({ .spectrogram = { .fftSize = 1024, .fps = 200 },
+                             .useFilterBank = true,
+                             .peakPicker = { .threshold = 0.5f, .combineSec = 0.2f } },
+                           sampleRate);
 
     // 120 BPM click train, 2 seconds = 4 clicks at 0, 0.5, 1.0, 1.5 seconds
     auto data = makeClickTrain (88200, sampleRate, 120.0f); // 2 seconds
     auto buffer = makeAudioBuffer (data);
 
-    sf.processOffline (buffer);
+    onsetDetector.processOffline (buffer);
 
-    const auto& onsets = sf.getOnsetTimes();
+    const auto& onsets = onsetDetector.getOnsetTimes();
 
     // Should detect 3-4 onsets (first might be missed)
     EXPECT_GE (onsets.size(), 2u);
@@ -569,16 +569,16 @@ TEST_F (OnsetDetectorTests, EndToEndClickTrainDetectsOnsets)
     }
 }
 
-TEST_F (OnsetDetectorTests, SuperFluxVsComplexFlux)
+TEST_F (OnsetDetectorTests, OnsetDetectorVsComplexFlux)
 {
     constexpr float localSampleRate = 44100.0f;
 
-    SuperFlux sf;
+    OnsetDetector sf;
     sf.prepare ({ .spectrogram = { .fftSize = 1024, .fps = 200 },
                   .useFilterBank = false },
                 localSampleRate);
 
-    ComplexFlux cf;
+    OnsetDetector cf;
     cf.prepare ({ .spectrogram = { .fftSize = 1024, .fps = 200 },
                   .useFilterBank = false,
                   .useComplexFlux = true },
@@ -608,10 +608,10 @@ TEST_F (OnsetDetectorTests, SuperFluxVsComplexFlux)
 
 TEST_F (OnsetDetectorTests, StereoBufferProcessedAsMono)
 {
-    SuperFlux sf;
-    sf.prepare ({ .spectrogram = { .fftSize = 1024, .fps = 200 },
-                  .useFilterBank = false },
-                sampleRate);
+    OnsetDetector onsetDetector;
+    onsetDetector.prepare ({ .spectrogram = { .fftSize = 1024, .fps = 200 },
+                             .useFilterBank = false },
+                           sampleRate);
 
     constexpr int numSamples = 44100;
     AudioBuffer<float> stereo (2, numSamples);
@@ -622,25 +622,25 @@ TEST_F (OnsetDetectorTests, StereoBufferProcessedAsMono)
         stereo.setSample (1, i, (i % 22050 == 0) ? 1.0f : 0.0f);
     }
 
-    EXPECT_NO_THROW (sf.processOffline (stereo));
-    EXPECT_GT (sf.getNumFrames(), 0);
+    EXPECT_NO_THROW (onsetDetector.processOffline (stereo));
+    EXPECT_GT (onsetDetector.getNumFrames(), 0);
 }
 
 TEST_F (OnsetDetectorTests, ResetClearsResults)
 {
-    SuperFlux sf;
-    sf.prepare ({ .spectrogram = { .fftSize = 1024, .fps = 200 },
-                  .useFilterBank = false },
-                sampleRate);
+    OnsetDetector onsetDetector;
+    onsetDetector.prepare ({ .spectrogram = { .fftSize = 1024, .fps = 200 },
+                             .useFilterBank = false },
+                           sampleRate);
 
     auto data = makeClickTrain (44100, sampleRate, 120.0f);
     auto buffer = makeAudioBuffer (data);
 
-    sf.processOffline (buffer);
-    EXPECT_GT (sf.getNumFrames(), 0);
+    onsetDetector.processOffline (buffer);
+    EXPECT_GT (onsetDetector.getNumFrames(), 0);
 
-    sf.reset();
-    EXPECT_EQ (0, sf.getNumFrames());
-    EXPECT_TRUE (sf.getOnsetTimes().empty());
-    EXPECT_TRUE (sf.getActivationFunction().empty());
+    onsetDetector.reset();
+    EXPECT_EQ (0, onsetDetector.getNumFrames());
+    EXPECT_TRUE (onsetDetector.getOnsetTimes().empty());
+    EXPECT_TRUE (onsetDetector.getActivationFunction().empty());
 }
