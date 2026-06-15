@@ -81,6 +81,11 @@
 
 #include "frequency/yup_FFTProcessor.cpp"
 #include "frequency/yup_SpectrumAnalyzerState.cpp"
+#include "onsets/yup_Spectrogram.cpp"
+#include "onsets/yup_FilterBank.cpp"
+#include "onsets/yup_OnsetDetectionFunction.cpp"
+#include "onsets/yup_OnsetPeakPicker.cpp"
+#include "onsets/yup_OnsetDetector.cpp"
 #include "metering/yup_LevelProcessor.cpp"
 #include "metering/yup_LoudnessFilter.cpp"
 #include "metering/yup_KMeterState.cpp"

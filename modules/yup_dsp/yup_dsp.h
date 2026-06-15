@@ -139,6 +139,13 @@
 #include "frequency/yup_FFTProcessor.h"
 #include "frequency/yup_SpectrumAnalyzerState.h"
 
+// Onset detection
+#include "onsets/yup_FilterBank.h"
+#include "onsets/yup_Spectrogram.h"
+#include "onsets/yup_OnsetDetectionFunction.h"
+#include "onsets/yup_OnsetPeakPicker.h"
+#include "onsets/yup_OnsetDetector.h"
+
 // Base filter interfaces and common structures
 #include "base/yup_FilterMode.h"
 #include "base/yup_FilterBase.h"
