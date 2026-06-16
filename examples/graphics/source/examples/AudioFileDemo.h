@@ -1057,8 +1057,8 @@ private:
         waveformThreadPool.addJob ([this]
         {
             superFlux.prepare ({ .spectrogram = { .fftSize = 2048, .fps = 200 },
-                                 .useFilterBank = true,
                                  .peakPicker = { .threshold = 0.8f },
+                                 .useFilterBank = true,
                                  .refineOnsets = true },
                                loadedSampleRate);
 
