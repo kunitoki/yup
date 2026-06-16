@@ -322,8 +322,19 @@ TEST_F (SuperFluxODFTests, MaxFilterWidthChangesOutput)
     sp.fps = 200;
     spec.prepare (sp, sampleRate);
 
-    auto data = makeClickTrain (44100, sampleRate, 120.0f);
-    spec.processOffline (data.data(), 44100);
+    constexpr int numSamples = 44100;
+    std::vector<float> data (static_cast<std::size_t> (numSamples));
+    const double duration = static_cast<double> (numSamples) / sampleRate;
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        const double t = static_cast<double> (i) / sampleRate;
+        const double freq = 200.0 + 2000.0 * t / duration;
+        const double phase = MathConstants<double>::twoPi * (200.0 * t + 0.5 * 2000.0 / duration * t * t);
+        data[static_cast<std::size_t> (i)] = static_cast<float> (std::sin (phase));
+    }
+
+    spec.processOffline (data.data(), numSamples);
 
     odf1.compute (spec);
     odf3.compute (spec);
