@@ -473,7 +473,7 @@ TEST_F (OnsetPeakPickerTests, OnlineModeIgnoresFuture)
 TEST_F (OnsetPeakPickerTests, DelayShiftsOnsetTimes)
 {
     OnsetPeakPicker picker;
-    picker.prepare ({ .threshold = 0.5f, .delaySec = 0.05f, .preAvgSec = 0.0f, .postAvgSec = 0.0f, .postMaxSec = 0.0f, .preMaxSec = 0.0f }, fps);
+    picker.prepare ({ .threshold = 0.5f, .delaySec = 0.05f, .preAvgSec = 0.0f, .preMaxSec = 0.0f, .postMaxSec = 0.0f, .postAvgSec = 0.0f }, fps);
 
     constexpr int numFrames = 200;
     std::vector<float> activations (static_cast<std::size_t> (numFrames), 0.1f);
@@ -517,8 +517,8 @@ TEST_F (OnsetDetectorTests, EndToEndSilenceYieldsNoOnsets)
 {
     OnsetDetector onsetDetector;
     onsetDetector.prepare ({ .spectrogram = { .fftSize = 1024, .fps = 200 },
-                             .useFilterBank = false,
-                             .peakPicker = { .threshold = 1.0f } },
+                             .peakPicker = { .threshold = 1.0f },
+                             .useFilterBank = false },
                            sampleRate);
 
     auto data = makeSilence (44100);
@@ -539,8 +539,8 @@ TEST_F (OnsetDetectorTests, EndToEndClickTrainDetectsOnsets)
 {
     OnsetDetector onsetDetector;
     onsetDetector.prepare ({ .spectrogram = { .fftSize = 1024, .fps = 200 },
-                             .useFilterBank = true,
-                             .peakPicker = { .threshold = 0.5f, .combineSec = 0.2f } },
+                             .peakPicker = { .threshold = 0.5f, .combineSec = 0.2f },
+                             .useFilterBank = true },
                            sampleRate);
 
     // 120 BPM click train, 2 seconds = 4 clicks at 0, 0.5, 1.0, 1.5 seconds
