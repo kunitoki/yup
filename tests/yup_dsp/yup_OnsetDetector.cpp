@@ -404,7 +404,7 @@ TEST_F (OnsetPeakPickerTests, BelowThresholdYieldsNoOnsets)
 TEST_F (OnsetPeakPickerTests, SinglePeakDetected)
 {
     OnsetPeakPicker picker;
-    picker.prepare ({ .threshold = 0.5f, .preAvgSec = 0.0f, .postAvgSec = 0.0f, .preMaxSec = 0.0f, .postMaxSec = 0.0f }, fps);
+    picker.prepare ({ .threshold = 0.5f, .preAvgSec = 0.0f, .preMaxSec = 0.0f, .postAvgSec = 0.0f, .postMaxSec = 0.0f }, fps);
 
     // Frame 10 has a peak
     constexpr int numFrames = 200;
@@ -422,7 +422,7 @@ TEST_F (OnsetPeakPickerTests, SinglePeakDetected)
 TEST_F (OnsetPeakPickerTests, CombineSuppressesCloseOnsets)
 {
     OnsetPeakPicker picker;
-    picker.prepare ({ .threshold = 0.5f, .combineSec = 0.05f, .preAvgSec = 0.0f, .postAvgSec = 0.0f, .preMaxSec = 0.0f, .postMaxSec = 0.0f }, fps);
+    picker.prepare ({ .threshold = 0.5f, .combineSec = 0.05f, .preAvgSec = 0.0f, .preMaxSec = 0.0f, .postAvgSec = 0.0f, .postMaxSec = 0.0f }, fps);
 
     constexpr int numFrames = 200;
     std::vector<float> activations (static_cast<std::size_t> (numFrames), 0.1f);
@@ -442,9 +442,9 @@ TEST_F (OnsetPeakPickerTests, OnlineModeIgnoresFuture)
 
     // Zero pre-windows so that online mode has no context at all, and offline
     // relies purely on forward-looking windows. This forces different results.
-    online.prepare ({ .threshold = 0.5f, .preAvgSec = 0.0f, .preMaxSec = 0.0f, .onlineMode = true, .postMaxSec = 1.0f, .postAvgSec = 1.0f }, fps);
+    online.prepare ({ .threshold = 0.5f, .preAvgSec = 0.0f, .preMaxSec = 0.0f, .postMaxSec = 1.0f, .postAvgSec = 1.0f, .onlineMode = true }, fps);
 
-    offline.prepare ({ .threshold = 0.5f, .preAvgSec = 0.0f, .preMaxSec = 0.0f, .onlineMode = false, .postMaxSec = 1.0f, .postAvgSec = 1.0f }, fps);
+    offline.prepare ({ .threshold = 0.5f, .preAvgSec = 0.0f, .preMaxSec = 0.0f, .postMaxSec = 1.0f, .postAvgSec = 1.0f, .onlineMode = false }, fps);
 
     // Triangular peak: frame 3 is the global max. Online mode sees frame 2
     // (0.5 >= threshold) as the first detection; offline mode rejects frame 2
@@ -473,7 +473,7 @@ TEST_F (OnsetPeakPickerTests, OnlineModeIgnoresFuture)
 TEST_F (OnsetPeakPickerTests, DelayShiftsOnsetTimes)
 {
     OnsetPeakPicker picker;
-    picker.prepare ({ .threshold = 0.5f, .delaySec = 0.05f, .preAvgSec = 0.0f, .postAvgSec = 0.0f, .preMaxSec = 0.0f, .postMaxSec = 0.0f }, fps);
+    picker.prepare ({ .threshold = 0.5f, .delaySec = 0.05f, .preAvgSec = 0.0f, .postAvgSec = 0.0f, .postMaxSec = 0.0f, .preMaxSec = 0.0f }, fps);
 
     constexpr int numFrames = 200;
     std::vector<float> activations (static_cast<std::size_t> (numFrames), 0.1f);
