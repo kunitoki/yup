@@ -195,7 +195,7 @@ void SVGCssParser::applyStyleProperty (StringRef propertyRef, StringRef valueRef
     }
     else if (property == "font")
     {
-        YUP_DRAWABLE_LOG ("CSS font shorthand currently not parsed - value: " << value);
+        YUP_DRAWABLE_LOG ("CSS font shorthand currently not applied - value: " << value);
     }
     else if (property == "dominant-baseline")
     {

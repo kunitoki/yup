@@ -592,7 +592,7 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
             ColorGradient colorGradient = createColorGradientFromSVG (*resolvedGradient,
                                                                       gradientBounds ? std::addressof (*gradientBounds) : nullptr);
 
-            if (resolvedGradient->type == SVGGradient::Radial && element.path && gradientBounds)
+            if (resolvedGradient->type == SVGGradient::Radial && element.path && gradientBounds && ! resolvedGradient->transform.isIdentity())
             {
                 const auto gradientSpaceTransform = createGradientSpaceTransform (*resolvedGradient, std::addressof (*gradientBounds));
 

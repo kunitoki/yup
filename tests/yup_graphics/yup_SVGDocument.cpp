@@ -136,6 +136,26 @@ TEST (SVGDocumentTests, BoundsMatchWidthHeightWhenNoViewBox)
     EXPECT_FLOAT_EQ (250.0f, doc->getBounds().getHeight());
 }
 
+TEST (SVGDocumentTests, BoundsIncludeNestedGroupContentWhenNoViewBoxOrSize)
+{
+    auto doc = parse ("<svg><g transform=\"translate(10,20)\"><circle cx=\"100\" cy=\"50\" r=\"25\" /></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    auto bounds = doc->getBounds();
+    EXPECT_FLOAT_EQ (85.0f, bounds.getX());
+    EXPECT_FLOAT_EQ (45.0f, bounds.getY());
+    EXPECT_FLOAT_EQ (50.0f, bounds.getWidth());
+    EXPECT_FLOAT_EQ (50.0f, bounds.getHeight());
+
+    doc->visit ([] (const SVGData& data)
+    {
+        EXPECT_FLOAT_EQ (85.0f, data.viewBox.getX());
+        EXPECT_FLOAT_EQ (45.0f, data.viewBox.getY());
+        EXPECT_FLOAT_EQ (50.0f, data.viewBox.getWidth());
+        EXPECT_FLOAT_EQ (50.0f, data.viewBox.getHeight());
+    });
+}
+
 // ==============================================================================
 // SVGData root fill / stroke flags
 // ==============================================================================
