@@ -118,7 +118,7 @@ TEST_F (ScriptPythonTest, RunPythonTests)
                 sys.argv = old_argv
             import pytest
 
-        assert pytest.main(['-x', '{{test_path}}', '-vvv']) == 0
+        assert pytest.main(['-x', '{{test_path}}', '-vvv', '-p', 'no:cacheprovider']) == 0
     )");
 
     script = script
