@@ -365,6 +365,7 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
         {
             auto path = Path();
             auto coords = StringArray::fromTokens (points, " ,", "");
+            coords.removeEmptyStrings();
 
             if (coords.size() >= 4 && coords.size() % 2 == 0)
             {
@@ -397,6 +398,7 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
         {
             auto path = Path();
             auto coords = StringArray::fromTokens (points, " ,", "");
+            coords.removeEmptyStrings();
 
             if (coords.size() >= 4 && coords.size() % 2 == 0)
             {
@@ -404,6 +406,14 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
 
                 for (int i = 2; i < coords.size(); i += 2)
                     path.lineTo (coords[i].getFloatValue(), coords[i + 1].getFloatValue());
+
+                auto fillPath = Path();
+                fillPath.startNewSubPath (coords[0].getFloatValue(), coords[1].getFloatValue());
+                for (int i = 2; i < coords.size(); i += 2)
+                    fillPath.lineTo (coords[i].getFloatValue(), coords[i + 1].getFloatValue());
+                fillPath.lineTo (coords[0].getFloatValue(), coords[1].getFloatValue());
+                fillPath.closeSubPath();
+                e->fillPath = std::move (fillPath);
             }
 
             e->path = std::move (path);
@@ -1670,6 +1680,7 @@ void SVGParser::parseClipPath (const XmlElement& element)
         {
             String points = child->getStringAttribute ("points");
             auto coords = StringArray::fromTokens (points, " ,", "");
+            coords.removeEmptyStrings();
             auto path = Path();
 
             if (coords.size() >= 4 && coords.size() % 2 == 0)

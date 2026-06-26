@@ -399,6 +399,51 @@ TEST (SVGParserTests, ParsePolylineOpenPath)
     EXPECT_TRUE (d.parseSVG ("<svg><polyline points=\"10,50 30,10 50,50 70,10 90,50\" /></svg>"));
 }
 
+TEST (SVGParserTests, ParsePolylineCreatesClosedFillPath)
+{
+    auto doc = SVGParser::parse ("<svg><polyline fill=\"blue\" stroke=\"lime\" points=\"10,50 35,10 60,50\" /></svg>");
+
+    ASSERT_NE (nullptr, doc.get());
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+
+        const auto& polyline = *data.elements[0];
+        ASSERT_TRUE (polyline.path.has_value());
+        ASSERT_TRUE (polyline.fillPath.has_value());
+
+        EXPECT_FALSE (polyline.path->isExplicitlyClosed());
+        EXPECT_TRUE (polyline.fillPath->isExplicitlyClosed());
+    });
+}
+
+TEST (SVGParserTests, ParsePolygonAndPolylineIgnoreEmptyPointTokens)
+{
+    auto doc = SVGParser::parse (
+        "<svg viewBox=\"0 0 480 360\">"
+        "<polygon points=\"270,225 300,245 320,225 340,245 280,280                   390,280 420,240 280,185\" />"
+        "<polyline points=\"270,225 300,245 320,225 340,245 280,280                   390,280 420,240 280,185\" />"
+        "</svg>");
+
+    ASSERT_NE (nullptr, doc.get());
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (2u, data.elements.size());
+
+        for (const auto& element : data.elements)
+        {
+            ASSERT_TRUE (element->path.has_value());
+            const auto bounds = element->path->getBounds();
+            EXPECT_FLOAT_EQ (270.0f, bounds.getX());
+            EXPECT_FLOAT_EQ (185.0f, bounds.getY());
+            EXPECT_FLOAT_EQ (150.0f, bounds.getWidth());
+            EXPECT_FLOAT_EQ (95.0f, bounds.getHeight());
+        }
+    });
+}
+
 // ==============================================================================
 // Groups and structural elements
 // ==============================================================================
