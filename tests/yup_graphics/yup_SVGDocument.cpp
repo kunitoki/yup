@@ -672,7 +672,8 @@ TEST (SVGDocumentTests, StrokeMiterLimitAttribute)
     doc->visit ([] (const SVGData& data)
     {
         ASSERT_EQ (1u, data.elements.size());
-        EXPECT_FLOAT_EQ (2.5f, data.elements[0]->strokeMiterLimit);
+        ASSERT_TRUE (data.elements[0]->strokeMiterLimit);
+        EXPECT_FLOAT_EQ (2.5f, *data.elements[0]->strokeMiterLimit);
     });
 }
 
@@ -684,7 +685,8 @@ TEST (SVGDocumentTests, StrokeMiterLimitBelowOneIsClampedToOne)
     doc->visit ([] (const SVGData& data)
     {
         ASSERT_EQ (1u, data.elements.size());
-        EXPECT_FLOAT_EQ (1.0f, data.elements[0]->strokeMiterLimit);
+        ASSERT_TRUE (data.elements[0]->strokeMiterLimit);
+        EXPECT_FLOAT_EQ (1.0f, *data.elements[0]->strokeMiterLimit);
     });
 }
 
@@ -696,7 +698,8 @@ TEST (SVGDocumentTests, DefaultStrokeMiterLimitIsFour)
     doc->visit ([] (const SVGData& data)
     {
         ASSERT_EQ (1u, data.elements.size());
-        EXPECT_FLOAT_EQ (4.0f, data.elements[0]->strokeMiterLimit);
+        ASSERT_TRUE (data.elements[0]->strokeMiterLimit);
+        EXPECT_FLOAT_EQ (4.0f, *data.elements[0]->strokeMiterLimit);
     });
 }
 
@@ -2411,7 +2414,8 @@ TEST (SVGDocumentTests, SVGCssParserInlineStyleAppliesPresentationProperties)
     EXPECT_EQ (String ("mid"), *element.markerMid);
     ASSERT_TRUE (element.markerEnd.has_value());
     EXPECT_EQ (String ("end"), *element.markerEnd);
-    EXPECT_FLOAT_EQ (1.0f, element.strokeMiterLimit);
+    ASSERT_TRUE (element.strokeMiterLimit);
+    EXPECT_FLOAT_EQ (1.0f, *element.strokeMiterLimit);
     ASSERT_TRUE (element.filterUrl.has_value());
     EXPECT_EQ (String ("blur"), *element.filterUrl);
     ASSERT_TRUE (element.strokeDashArray.has_value());
