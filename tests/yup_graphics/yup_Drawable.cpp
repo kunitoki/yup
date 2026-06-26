@@ -171,7 +171,164 @@ TEST (DrawableTests, ParseSVGFromString)
     Graphics graphics (*context, *renderer);
 
     EXPECT_NO_THROW ({
-        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 32.0f, 32.0f));
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 64.0f, 64.0f));
+    });
+}
+
+TEST (DrawableTests, PaintSVGWithClipPathUseElement)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVG (
+        "<svg viewBox=\"0 0 200 200\">"
+        "<defs>"
+        "<clipPath id=\"star\"><polygon id=\"starShape\" points=\"100,10 190,180 10,60 190,60 10,180\" /></clipPath>"
+        "<clipPath id=\"union\">"
+        "<use xlink:href=\"#starShape\" />"
+        "<circle cx=\"100\" cy=\"100\" r=\"50\" />"
+        "</clipPath>"
+        "</defs>"
+        "<rect x=\"0\" y=\"0\" width=\"200\" height=\"200\" fill=\"red\" clip-path=\"url(#union)\" />"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (64, 64);
+    Graphics graphics (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 64.0f, 64.0f));
+    });
+}
+
+TEST (DrawableTests, PaintSVGWithNestedClipPath)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVG (
+        "<svg viewBox=\"0 0 200 200\">"
+        "<defs>"
+        "<clipPath id=\"outer\"><circle cx=\"100\" cy=\"100\" r=\"60\" /></clipPath>"
+        "<clipPath id=\"inner\" clip-path=\"url(#outer)\"><circle cx=\"100\" cy=\"100\" r=\"40\" /></clipPath>"
+        "</defs>"
+        "<rect x=\"0\" y=\"0\" width=\"200\" height=\"200\" fill=\"red\" clip-path=\"url(#inner)\" />"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (64, 64);
+    Graphics graphics (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 64.0f, 64.0f));
+    });
+}
+
+TEST (DrawableTests, PaintSVGWithRadialGradientFocalPoint)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVG (
+        "<svg viewBox=\"0 0 100 100\">"
+        "<defs>"
+        "<radialGradient id=\"rg\" cx=\"0.5\" cy=\"0.5\" r=\"0.5\" fx=\"0.3\" fy=\"0.3\">"
+        "<stop offset=\"0\" stop-color=\"yellow\" />"
+        "<stop offset=\"1\" stop-color=\"red\" />"
+        "</radialGradient>"
+        "</defs>"
+        "<rect x=\"10\" y=\"10\" width=\"80\" height=\"80\" fill=\"url(#rg)\" />"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (64, 64);
+    Graphics graphics (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 64.0f, 64.0f));
+    });
+}
+
+TEST (DrawableTests, PaintSVGWithUserSpaceOnUseGradient)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVG (
+        "<svg viewBox=\"0 0 500 500\">"
+        "<defs>"
+        "<linearGradient id=\"lg\" gradientUnits=\"xuserSpaceOnUse\" x1=\"0\" y1=\"0\" x2=\"500\" y2=\"0\">"
+        "<stop offset=\"0\" stop-color=\"blue\" />"
+        "<stop offset=\"1\" stop-color=\"red\" />"
+        "</linearGradient>"
+        "</defs>"
+        "<rect x=\"50\" y=\"50\" width=\"400\" height=\"150\" fill=\"url(#lg)\" />"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (64, 64);
+    Graphics graphics (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 64.0f, 64.0f));
+    });
+}
+
+TEST (DrawableTests, PaintSVGWithStrokeWidthUnits)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVG (
+        "<svg viewBox=\"0 0 100 100\">"
+        "<circle cx=\"50\" cy=\"50\" r=\"30\" fill=\"none\" stroke=\"red\" stroke-width=\"0.5cm\" />"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (64, 64);
+    Graphics graphics (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 64.0f, 64.0f));
+    });
+}
+
+TEST (DrawableTests, PaintClipPathSVGFromFilePaints)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVG (
+        "<svg viewBox=\"0 0 744 1052\">"
+        "<defs>"
+        "<clipPath id=\"clip1\">"
+        "<polygon id=\"clip1Shape\" points=\"100,10 190,180 10,60 190,60 10,180\" />"
+        "</clipPath>"
+        "<clipPath id=\"clip2\"><circle id=\"clip2Shape\" cx=\"100\" cy=\"100\" r=\"65\" /></clipPath>"
+        "<clipPath id=\"clipUnion\">"
+        "<use xlink:href=\"#clip1Shape\" />"
+        "<use xlink:href=\"#clip2Shape\" />"
+        "</clipPath>"
+        "<clipPath id=\"clipIntersection\" clip-path=\"url(#clip1)\">"
+        "<use xlink:href=\"#clip2Shape\" />"
+        "</clipPath>"
+        "</defs>"
+        "<rect x=\"10\" y=\"10\" width=\"180\" height=\"180\" fill=\"red\" clip-path=\"url(#clipIntersection)\" />"
+        "<rect x=\"10\" y=\"10\" width=\"180\" height=\"180\" fill=\"red\" clip-path=\"url(#clipUnion)\" />"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (128, 128);
+    Graphics graphics (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 128.0f, 128.0f));
     });
 }
 
@@ -930,6 +1087,35 @@ TEST (DrawableTests, PaintSVGWithTransformedRadialGradient)
     });
 }
 
+TEST (DrawableTests, PaintSVGWithReflectedRadialGradient)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVG (
+        "<svg viewBox=\"0 0 406.25 206.25\">"
+        "<defs>"
+        "<linearGradient id=\"stops\">"
+        "<stop offset=\"0\" stop-color=\"#323232\" />"
+        "<stop offset=\"1\" stop-color=\"#969696\" />"
+        "</linearGradient>"
+        "<radialGradient id=\"grad\" href=\"#stops\" gradientUnits=\"userSpaceOnUse\" "
+        "gradientTransform=\"matrix(0.793492,0,0,1.26025,-124.125,-349.237)\" "
+        "spreadMethod=\"reflect\" cx=\"195.33907\" cy=\"367.99432\" fx=\"195.33907\" fy=\"367.99432\" r=\"10.189606\" />"
+        "</defs>"
+        "<rect x=\"25.875\" y=\"3.1253552\" width=\"375\" height=\"200\" rx=\"20\" ry=\"20\" fill=\"url(#grad)\" />"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (96, 96);
+    Graphics graphics (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 96.0f, 96.0f));
+    });
+}
+
 // ==============================================================================
 // Edge Cases and Error Handling
 // ==============================================================================
@@ -1218,6 +1404,86 @@ TEST (DrawableTests, PaintSVGWithMixBlendMode)
         "<svg viewBox=\"0 0 100 100\">"
         "<rect x=\"10\" y=\"10\" width=\"60\" height=\"60\" fill=\"red\" />"
         "<rect x=\"30\" y=\"30\" width=\"60\" height=\"60\" fill=\"blue\" style=\"mix-blend-mode: multiply\" />"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (64, 64);
+    Graphics graphics (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 64.0f, 64.0f));
+    });
+}
+
+TEST (DrawableTests, PaintSVGWithFEBlendMultiply)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVG (
+        "<svg viewBox=\"0 0 100 100\">"
+        "<defs>"
+        "<filter id=\"mul\"><feBlend mode=\"multiply\" in=\"SourceGraphic\" in2=\"SourceGraphic\" /></filter>"
+        "</defs>"
+        "<rect x=\"10\" y=\"10\" width=\"80\" height=\"80\" fill=\"red\" filter=\"url(#mul)\" />"
+        "</svg>");
+
+    EXPECT_TRUE (result);
+
+    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto renderer = context->makeRenderer (64, 64);
+    Graphics graphics (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 64.0f, 64.0f));
+    });
+}
+
+TEST (DrawableTests, PaintSVGWithFEBlendAllModes)
+{
+    static const char* modes[] = {
+        "normal", "multiply", "screen", "overlay", "darken", "lighten", "color-dodge", "color-burn", "hard-light", "soft-light", "difference", "exclusion", "hue", "saturation", "color", "luminosity"
+    };
+
+    for (auto* mode : modes)
+    {
+        Drawable drawable;
+        auto svg = String ("<svg viewBox=\"0 0 100 100\">"
+                           "<defs>"
+                           "<filter id=\"f\"><feBlend mode=\"")
+                 + mode
+                 + String ("\" in=\"SourceGraphic\" in2=\"SourceGraphic\" /></filter>"
+                           "</defs>"
+                           "<rect x=\"10\" y=\"10\" width=\"80\" height=\"80\" fill=\"red\" filter=\"url(#f)\" />"
+                           "</svg>");
+
+        bool result = drawable.parseSVG (svg);
+        EXPECT_TRUE (result) << mode;
+
+        auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+        auto renderer = context->makeRenderer (64, 64);
+        Graphics graphics (*context, *renderer);
+
+        EXPECT_NO_THROW ({
+            drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 64.0f, 64.0f));
+        }) << mode;
+    }
+}
+
+TEST (DrawableTests, PaintSVGWithFilterChainBlurThenBlend)
+{
+    Drawable drawable;
+
+    bool result = drawable.parseSVG (
+        "<svg viewBox=\"0 0 100 100\">"
+        "<defs>"
+        "<filter id=\"f\">"
+        "<feGaussianBlur stdDeviation=\"2\" result=\"blur\" />"
+        "<feBlend mode=\"screen\" in=\"SourceGraphic\" in2=\"blur\" />"
+        "</filter>"
+        "</defs>"
+        "<rect x=\"10\" y=\"10\" width=\"80\" height=\"80\" fill=\"blue\" filter=\"url(#f)\" />"
         "</svg>");
 
     EXPECT_TRUE (result);

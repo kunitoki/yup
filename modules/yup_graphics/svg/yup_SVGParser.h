@@ -74,6 +74,8 @@ private:
     SVGGradient::Ptr getGradientById (const String& id) const;
     SVGGradient::Ptr resolveGradient (SVGGradient::Ptr gradient) const;
     void parseFilter (const XmlElement& element);
+    void parseFEBlend (const XmlElement& element, SVGFilter& filter);
+    void parseFEGaussianBlur (const XmlElement& element, SVGFilter& filter);
     SVGFilter::Ptr getFilterById (const String& id) const;
     SVGFilter::Ptr resolveFilter (SVGFilter::Ptr filter) const;
     void parseClipPath (const XmlElement& element);

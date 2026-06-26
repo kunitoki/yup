@@ -35,6 +35,7 @@ struct SVGClipPath : public ReferenceCountedObject
 
     String id;
     Units units = UserSpaceOnUse;
+    std::optional<String> clipPathUrl;
     std::vector<SVGElement::Ptr> elements;
 };
 

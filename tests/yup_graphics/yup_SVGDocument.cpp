@@ -1484,8 +1484,124 @@ TEST (SVGDocumentTests, FilterParsedAndStored)
         ASSERT_EQ (1u, data.filters.size());
         const auto& f = *data.filters[0];
         EXPECT_EQ (String ("blur"), f.id);
-        ASSERT_TRUE (f.gaussianBlurStdDeviation.has_value());
-        EXPECT_FLOAT_EQ (4.0f, *f.gaussianBlurStdDeviation);
+        ASSERT_EQ (1u, f.primitives.size());
+        auto blur = dynamic_cast<const SVGFEGaussianBlur*> (f.primitives[0].get());
+        ASSERT_NE (nullptr, blur);
+        EXPECT_FLOAT_EQ (4.0f, blur->stdDeviation);
+    });
+}
+
+TEST (SVGDocumentTests, FEBlendParsedAndStored)
+{
+    auto doc = parse ("<svg>"
+                      "<defs><filter id=\"f\"><feBlend mode=\"multiply\" in=\"SourceGraphic\" in2=\"SourceGraphic\" /></filter></defs>"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.filters.size());
+        const auto& f = *data.filters[0];
+        EXPECT_EQ (String ("f"), f.id);
+        ASSERT_EQ (1u, f.primitives.size());
+        auto blend = dynamic_cast<const SVGFEBlend*> (f.primitives[0].get());
+        ASSERT_NE (nullptr, blend);
+        EXPECT_EQ (BlendMode::Multiply, blend->mode);
+        EXPECT_EQ (String ("SourceGraphic"), blend->in);
+        EXPECT_EQ (String ("SourceGraphic"), blend->in2);
+    });
+}
+
+TEST (SVGDocumentTests, FEBlendAllModes)
+{
+    struct ModeTest
+    {
+        const char* modeStr;
+        BlendMode expectedMode;
+    };
+
+    static const ModeTest tests[] = {
+        { "normal", BlendMode::SrcOver },
+        { "multiply", BlendMode::Multiply },
+        { "screen", BlendMode::Screen },
+        { "overlay", BlendMode::Overlay },
+        { "darken", BlendMode::Darken },
+        { "lighten", BlendMode::Lighten },
+        { "color-dodge", BlendMode::ColorDodge },
+        { "color-burn", BlendMode::ColorBurn },
+        { "hard-light", BlendMode::HardLight },
+        { "soft-light", BlendMode::SoftLight },
+        { "difference", BlendMode::Difference },
+        { "exclusion", BlendMode::Exclusion },
+        { "hue", BlendMode::Hue },
+        { "saturation", BlendMode::Saturation },
+        { "color", BlendMode::Color },
+        { "luminosity", BlendMode::Luminosity },
+    };
+
+    for (const auto& t : tests)
+    {
+        String svg = "<svg><defs><filter id=\"f\"><feBlend mode=\"";
+        svg += t.modeStr;
+        svg += "\" /></filter></defs></svg>";
+
+        auto doc = parse (svg.toRawUTF8());
+        ASSERT_NE (nullptr, doc) << t.modeStr;
+
+        doc->visit ([&] (const SVGData& data)
+        {
+            ASSERT_EQ (1u, data.filters.size());
+            ASSERT_EQ (1u, data.filters[0]->primitives.size());
+            auto blend = dynamic_cast<const SVGFEBlend*> (data.filters[0]->primitives[0].get());
+            ASSERT_NE (nullptr, blend) << t.modeStr;
+            EXPECT_EQ (t.expectedMode, blend->mode) << t.modeStr;
+        });
+    }
+}
+
+TEST (SVGDocumentTests, FEBlendDefaultsInWhenEmpty)
+{
+    auto doc = parse ("<svg>"
+                      "<defs><filter id=\"f\"><feBlend mode=\"screen\" /></filter></defs>"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.filters.size());
+        ASSERT_EQ (1u, data.filters[0]->primitives.size());
+        auto blend = dynamic_cast<const SVGFEBlend*> (data.filters[0]->primitives[0].get());
+        ASSERT_NE (nullptr, blend);
+        EXPECT_EQ (String ("SourceGraphic"), blend->in);
+    });
+}
+
+TEST (SVGDocumentTests, FilterChainMultiplePrimitives)
+{
+    auto doc = parse ("<svg>"
+                      "<defs><filter id=\"f\">"
+                      "<feGaussianBlur stdDeviation=\"3\" result=\"blur\" />"
+                      "<feBlend mode=\"multiply\" in=\"SourceGraphic\" in2=\"blur\" />"
+                      "</filter></defs>"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.filters.size());
+        const auto& f = *data.filters[0];
+        ASSERT_EQ (2u, f.primitives.size());
+
+        auto blur = dynamic_cast<const SVGFEGaussianBlur*> (f.primitives[0].get());
+        ASSERT_NE (nullptr, blur);
+        EXPECT_FLOAT_EQ (3.0f, blur->stdDeviation);
+        EXPECT_EQ (String ("blur"), blur->result);
+
+        auto blend = dynamic_cast<const SVGFEBlend*> (f.primitives[1].get());
+        ASSERT_NE (nullptr, blend);
+        EXPECT_EQ (BlendMode::Multiply, blend->mode);
+        EXPECT_EQ (String ("SourceGraphic"), blend->in);
+        EXPECT_EQ (String ("blur"), blend->in2);
     });
 }
 
@@ -1522,6 +1638,51 @@ TEST (SVGDocumentTests, FilterOnElementStoredAsUrl)
             }
         }
         ADD_FAILURE() << "rect not found";
+    });
+}
+
+// ==============================================================================
+// Gradient parsing edge cases
+// ==============================================================================
+
+TEST (SVGDocumentTests, GradientUnitsHandlesInkscapeNamespacePrefix)
+{
+    auto doc = parse ("<svg>"
+                      "<defs>"
+                      "<linearGradient id=\"g1\" gradientUnits=\"xuserSpaceOnUse\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">"
+                      "<stop offset=\"0\" stop-color=\"red\" />"
+                      "<stop offset=\"1\" stop-color=\"blue\" />"
+                      "</linearGradient>"
+                      "</defs>"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.gradients.size());
+        EXPECT_EQ (SVGGradient::UserSpaceOnUse, data.gradients[0]->units);
+    });
+}
+
+TEST (SVGDocumentTests, RadialGradientWithFocalPoint)
+{
+    auto doc = parse ("<svg>"
+                      "<defs>"
+                      "<radialGradient id=\"rg\" cx=\"0.5\" cy=\"0.5\" r=\"0.5\" fx=\"0.3\" fy=\"0.3\">"
+                      "<stop offset=\"0\" stop-color=\"yellow\" />"
+                      "<stop offset=\"1\" stop-color=\"red\" />"
+                      "</radialGradient>"
+                      "</defs>"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.gradients.size());
+        const auto& g = *data.gradients[0];
+        EXPECT_TRUE (g.hasFocal);
+        EXPECT_FLOAT_EQ (0.3f, g.focal.getX());
+        EXPECT_FLOAT_EQ (0.3f, g.focal.getY());
     });
 }
 
@@ -1614,6 +1775,65 @@ TEST (SVGDocumentTests, ClipRuleOnClipPathChildElement)
         ASSERT_EQ (1u, cp.elements.size());
         ASSERT_TRUE (cp.elements[0]->clipRule.has_value());
         EXPECT_EQ (String ("evenodd"), *cp.elements[0]->clipRule);
+    });
+}
+
+TEST (SVGDocumentTests, ClipPathRegistersChildIds)
+{
+    auto doc = parse ("<svg>"
+                      "<defs><clipPath id=\"cp\"><circle id=\"c1\" cx=\"10\" cy=\"10\" r=\"5\" /></clipPath></defs>"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        EXPECT_TRUE (data.elementsById.contains ("c1"));
+        auto elem = data.elementsById["c1"];
+        ASSERT_NE (nullptr, elem);
+        ASSERT_TRUE (elem->path.has_value());
+    });
+}
+
+TEST (SVGDocumentTests, ClipPathWithUseElement)
+{
+    auto doc = parse ("<svg>"
+                      "<defs>"
+                      "<clipPath id=\"star\"><polygon id=\"starShape\" points=\"100,10 190,180 10,60 190,60 10,180\" /></clipPath>"
+                      "<clipPath id=\"union\">"
+                      "<use xlink:href=\"#starShape\" />"
+                      "<circle id=\"circ\" cx=\"100\" cy=\"100\" r=\"50\" />"
+                      "</clipPath>"
+                      "</defs>"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        auto unionCp = data.clipPathsById["union"];
+        ASSERT_NE (nullptr, unionCp);
+        ASSERT_EQ (2u, unionCp->elements.size());
+        EXPECT_TRUE (unionCp->elements[0]->path.has_value());
+        EXPECT_TRUE (unionCp->elements[1]->path.has_value());
+    });
+}
+
+TEST (SVGDocumentTests, ClipPathWithNestedClipPath)
+{
+    auto doc = parse ("<svg>"
+                      "<defs>"
+                      "<clipPath id=\"outer\"><circle cx=\"50\" cy=\"50\" r=\"30\" /></clipPath>"
+                      "<clipPath id=\"inner\" clip-path=\"url(#outer)\"><circle cx=\"50\" cy=\"50\" r=\"20\" /></clipPath>"
+                      "</defs>"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        auto innerCp = data.clipPathsById["inner"];
+        ASSERT_NE (nullptr, innerCp);
+        ASSERT_TRUE (innerCp->clipPathUrl.has_value());
+        EXPECT_EQ (String ("outer"), *innerCp->clipPathUrl);
+        ASSERT_EQ (1u, innerCp->elements.size());
     });
 }
 
