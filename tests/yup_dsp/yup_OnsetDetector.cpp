@@ -391,6 +391,142 @@ TEST (ComplexFluxODFTests, SilenceYieldsZero)
         EXPECT_NEAR (0.0f, act[i], 1e-4f);
 }
 
+TEST (ComplexFluxODFTests, SilenceWithFilterBankYieldsZero)
+{
+    constexpr float sampleRate = 44100.0f;
+    constexpr int fftSize = 2048;
+    constexpr int hopSize = 220;
+    constexpr int numRawBins = fftSize / 2;
+
+    std::vector<float> window (static_cast<std::size_t> (fftSize));
+    WindowFunctions<float>::generate (WindowType::hann, window.data(), window.size());
+
+    FilterBank fb;
+    fb.build (24, 30.0f, 17000.0f, numRawBins, sampleRate);
+
+    ComplexFluxODF odf;
+    odf.prepare ({ .diffFrames = 3 }, window.data(), fftSize, hopSize);
+
+    Spectrogram spec;
+    Spectrogram::Parameters sp;
+    sp.fftSize = fftSize;
+    sp.fps = 200;
+    sp.computeLGD = true;
+    sp.filterBank = &fb;
+    spec.prepare (sp, sampleRate);
+
+    auto data = makeSilence (44100);
+    spec.processOffline (data.data(), 44100);
+
+    odf.compute (spec);
+
+    const auto& act = odf.getActivations();
+
+    for (std::size_t i = 0; i < act.size(); ++i)
+        EXPECT_NEAR (0.0f, act[i], 1e-4f);
+}
+
+TEST (ComplexFluxODFTests, ClickTrainWithFilterBankProducesActivations)
+{
+    constexpr float sampleRate = 44100.0f;
+    constexpr int fftSize = 2048;
+    constexpr int hopSize = 220;
+    constexpr int numRawBins = fftSize / 2;
+
+    std::vector<float> window (static_cast<std::size_t> (fftSize));
+    WindowFunctions<float>::generate (WindowType::hann, window.data(), window.size());
+
+    FilterBank fb;
+    fb.build (24, 30.0f, 17000.0f, numRawBins, sampleRate);
+
+    ComplexFluxODF odf;
+    odf.prepare ({ .diffFrames = 3 }, window.data(), fftSize, hopSize);
+
+    Spectrogram spec;
+    Spectrogram::Parameters sp;
+    sp.fftSize = fftSize;
+    sp.fps = 200;
+    sp.computeLGD = true;
+    sp.filterBank = &fb;
+    spec.prepare (sp, sampleRate);
+
+    auto data = makeClickTrain (44100, sampleRate, 120.0f);
+    spec.processOffline (data.data(), 44100);
+
+    odf.compute (spec);
+
+    const auto& act = odf.getActivations();
+    ASSERT_GT (act.size(), 0u);
+
+    bool hasNonZero = false;
+
+    for (std::size_t i = 0; i < act.size() && ! hasNonZero; ++i)
+    {
+        if (act[i] > 1e-6f)
+            hasNonZero = true;
+    }
+
+    EXPECT_TRUE (hasNonZero);
+}
+
+TEST (ComplexFluxODFTests, FilterBankChangesOutput)
+{
+    constexpr float sampleRate = 44100.0f;
+    constexpr int fftSize = 2048;
+    constexpr int hopSize = 220;
+    constexpr int numRawBins = fftSize / 2;
+
+    std::vector<float> window (static_cast<std::size_t> (fftSize));
+    WindowFunctions<float>::generate (WindowType::hann, window.data(), window.size());
+
+    FilterBank fb;
+    fb.build (24, 30.0f, 17000.0f, numRawBins, sampleRate);
+
+    ComplexFluxODF odfWithFB, odfWithoutFB;
+    odfWithFB.prepare ({ .diffFrames = 3 }, window.data(), fftSize, hopSize);
+    odfWithoutFB.prepare ({ .diffFrames = 3 }, window.data(), fftSize, hopSize);
+
+    Spectrogram::Parameters spWithFB;
+    spWithFB.fftSize = fftSize;
+    spWithFB.fps = 200;
+    spWithFB.computeLGD = true;
+    spWithFB.filterBank = &fb;
+
+    Spectrogram::Parameters spWithoutFB;
+    spWithoutFB.fftSize = fftSize;
+    spWithoutFB.fps = 200;
+    spWithoutFB.computeLGD = true;
+    spWithoutFB.filterBank = nullptr;
+
+    auto data = makeClickTrain (44100, sampleRate, 120.0f);
+
+    Spectrogram specWithFB;
+    specWithFB.prepare (spWithFB, sampleRate);
+    specWithFB.processOffline (data.data(), 44100);
+
+    Spectrogram specWithoutFB;
+    specWithoutFB.prepare (spWithoutFB, sampleRate);
+    specWithoutFB.processOffline (data.data(), 44100);
+
+    odfWithFB.compute (specWithFB);
+    odfWithoutFB.compute (specWithoutFB);
+
+    const auto& actWithFB = odfWithFB.getActivations();
+    const auto& actWithoutFB = odfWithoutFB.getActivations();
+
+    ASSERT_EQ (actWithFB.size(), actWithoutFB.size());
+
+    bool differs = false;
+
+    for (std::size_t i = 0; i < actWithFB.size() && ! differs; ++i)
+    {
+        if (std::abs (actWithFB[i] - actWithoutFB[i]) > 1e-6f)
+            differs = true;
+    }
+
+    EXPECT_TRUE (differs);
+}
+
 //==============================================================================
 // OnsetPeakPicker Tests
 //==============================================================================
