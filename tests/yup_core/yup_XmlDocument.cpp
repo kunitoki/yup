@@ -270,7 +270,32 @@ TEST_F (XmlDocumentTests, ParseWithNestedEntities)
     XmlDocument doc (xml);
     auto element = doc.getDocumentElement();
     ASSERT_NE (element, nullptr);
-    // Note: nested entity expansion may have limitations
+    EXPECT_EQ (element->getAllSubText(), "Hello World");
+}
+
+TEST_F (XmlDocumentTests, ParseEntityWithElementMarkup)
+{
+    String xml = "<?xml version=\"1.0\"?>\n"
+                 "<!DOCTYPE root [\n"
+                 "  <!ENTITY item \"\n"
+                 "<child value='1'/>\n"
+                 "<child value='2'/>\n"
+                 "\">\n"
+                 "]>\n"
+                 "<root>&item;</root>";
+
+    auto element = XmlDocument::parse (xml);
+    ASSERT_NE (element, nullptr);
+
+    auto* firstChild = element->getFirstChildElement();
+    ASSERT_NE (firstChild, nullptr);
+    EXPECT_TRUE (firstChild->hasTagName ("child"));
+    EXPECT_EQ (firstChild->getStringAttribute ("value"), "1");
+
+    auto* secondChild = firstChild->getNextElement();
+    ASSERT_NE (secondChild, nullptr);
+    EXPECT_TRUE (secondChild->hasTagName ("child"));
+    EXPECT_EQ (secondChild->getStringAttribute ("value"), "2");
 }
 
 TEST_F (XmlDocumentTests, ParseUnknownEntity)

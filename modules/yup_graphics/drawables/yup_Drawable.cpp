@@ -385,12 +385,22 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
         }
     }
 
-    if (element.viewBox && element.viewportSize)
+    if (element.viewBox && (element.viewportBounds || element.viewportSize))
     {
-        Rectangle<float> viewport (0.0f, 0.0f, element.viewportSize->getWidth(), element.viewportSize->getHeight());
+        auto viewport = element.viewportBounds
+                          ? *element.viewportBounds
+                          : Rectangle<float> (0.0f, 0.0f, element.viewportSize->getWidth(), element.viewportSize->getHeight());
+        if (element.tagName == "svg" && element.viewportBounds)
+            g.setClipPath (viewport);
+
         auto viewBoxTransform = calculateTransformForTarget (*element.viewBox, viewport, element.preserveAspectRatioFitting, element.preserveAspectRatioJustification);
         if (! viewBoxTransform.isIdentity())
             g.addTransform (viewBoxTransform);
+    }
+    else if (element.tagName == "svg" && element.viewportBounds)
+    {
+        g.setClipPath (*element.viewportBounds);
+        g.addTransform (AffineTransform::translation (element.viewportBounds->getX(), element.viewportBounds->getY()));
     }
 
     bool hasClipping = false;

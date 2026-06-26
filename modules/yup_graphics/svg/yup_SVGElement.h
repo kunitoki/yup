@@ -90,6 +90,7 @@ struct SVGElement : public ReferenceCountedObject
     float strokeMiterLimit = 4.0f;
     std::optional<BlendMode> blendMode;
     std::optional<Rectangle<float>> viewBox;
+    std::optional<Rectangle<float>> viewportBounds;
     std::optional<Size<float>> viewportSize;
     Fitting preserveAspectRatioFitting = Fitting::scaleToFit;
     Justification preserveAspectRatioJustification = Justification::center;

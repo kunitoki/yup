@@ -513,10 +513,15 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
                 YUP_DRAWABLE_LOG ("Invalid nested viewBox - tag: " << e->tagName << " value: " << view << " coordinateCount: " << coords.size());
         }
 
-        auto width = parseLengthAttribute (element, "width", e->viewBox ? e->viewBox->getWidth() : viewportWidth, inheritedFontSize, viewportWidth);
-        auto height = parseLengthAttribute (element, "height", e->viewBox ? e->viewBox->getHeight() : viewportHeight, inheritedFontSize, viewportHeight);
-        if (width > 0.0f && height > 0.0f)
-            e->viewportSize = Size<float> (width, height);
+        if (! e->isSymbol)
+        {
+            auto x = parseLengthAttribute (element, "x", 0.0f, inheritedFontSize, viewportWidth);
+            auto y = parseLengthAttribute (element, "y", 0.0f, inheritedFontSize, viewportHeight);
+            auto width = parseLengthAttribute (element, "width", e->viewBox ? e->viewBox->getWidth() : viewportWidth, inheritedFontSize, viewportWidth);
+            auto height = parseLengthAttribute (element, "height", e->viewBox ? e->viewBox->getHeight() : viewportHeight, inheritedFontSize, viewportHeight);
+            if (width > 0.0f && height > 0.0f)
+                e->viewportBounds = Rectangle<float> (x, y, width, height);
+        }
 
         if (auto preserveAspectRatio = element.getStringAttribute ("preserveAspectRatio"); preserveAspectRatio.isNotEmpty())
         {

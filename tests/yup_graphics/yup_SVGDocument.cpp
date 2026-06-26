@@ -1056,9 +1056,12 @@ TEST (SVGDocumentTests, NestedSVGHasViewBoxSet)
         ASSERT_TRUE (svgElem.viewBox.has_value());
         EXPECT_FLOAT_EQ (50.0f, svgElem.viewBox->getWidth());
         EXPECT_FLOAT_EQ (50.0f, svgElem.viewBox->getHeight());
-        ASSERT_TRUE (svgElem.viewportSize.has_value());
-        EXPECT_FLOAT_EQ (40.0f, svgElem.viewportSize->getWidth());
-        EXPECT_FLOAT_EQ (40.0f, svgElem.viewportSize->getHeight());
+        ASSERT_TRUE (svgElem.viewportBounds.has_value());
+        EXPECT_FLOAT_EQ (10.0f, svgElem.viewportBounds->getX());
+        EXPECT_FLOAT_EQ (10.0f, svgElem.viewportBounds->getY());
+        EXPECT_FLOAT_EQ (40.0f, svgElem.viewportBounds->getWidth());
+        EXPECT_FLOAT_EQ (40.0f, svgElem.viewportBounds->getHeight());
+        EXPECT_FALSE (svgElem.viewportSize.has_value());
     });
 }
 

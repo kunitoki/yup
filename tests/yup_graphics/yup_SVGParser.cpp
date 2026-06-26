@@ -1710,6 +1710,51 @@ TEST (SVGParserTests, ParsePreserveAspectRatioXMaxYMax)
     EXPECT_TRUE (d.parseSVG ("<svg viewBox=\"0 0 100 100\" preserveAspectRatio=\"xMaxYMax slice\"></svg>"));
 }
 
+TEST (SVGParserTests, ParsePreserveAspectRatioWithInternalEntities)
+{
+    auto doc = SVGParser::parse (
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        "<!DOCTYPE svg ["
+        "<!ENTITY Smile \""
+        "\n"
+        "<rect x='.5' y='.5' width='29' height='39' fill='black' stroke='red'/>"
+        "\n"
+        "<g transform='translate(0, 5)'>"
+        "\n"
+        "<circle cx='15' cy='15' r='10' fill='yellow'/>"
+        "\n"
+        "</g>"
+        "\n"
+        "\">"
+        "<!ENTITY Viewport \"<rect x='.5' y='.5' width='49' height='29' fill='none' stroke='blue'/>\">"
+        "]>"
+        "<svg width=\"100\" height=\"100\" viewBox=\"0 0 100 100\" xmlns=\"http://www.w3.org/2000/svg\">"
+        "<g transform=\"translate(10, 10)\">&Viewport;"
+        "<svg preserveAspectRatio=\"xMidYMid meet\" viewBox=\"0 0 30 40\" width=\"50\" height=\"30\">&Smile;</svg>"
+        "</g>"
+        "</svg>");
+
+    ASSERT_NE (doc, nullptr);
+
+    bool foundSmileCircle = false;
+    doc->visit ([&] (const SVGData& data)
+    {
+        std::function<void (const SVGElement&)> visitElement = [&] (const SVGElement& element)
+        {
+            if (element.tagName == "circle")
+                foundSmileCircle = true;
+
+            for (const auto& child : element.children)
+                visitElement (*child);
+        };
+
+        for (const auto& element : data.elements)
+            visitElement (*element);
+    });
+
+    EXPECT_TRUE (foundSmileCircle);
+}
+
 TEST (SVGParserTests, ParsePreserveAspectRatioOnSymbol)
 {
     Drawable d;
