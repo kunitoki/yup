@@ -85,8 +85,8 @@ public:
         auto viewportHeight = bounds.getHeight() - scrollBarSize;
 
         // Clamp scroll positions to valid range
-        scrollX = yup::jlimit (0.0f, canvasWidth - viewportWidth, scrollX);
-        scrollY = yup::jlimit (0.0f, canvasHeight - viewportHeight, scrollY);
+        scrollX = yup::jlimit (0.0f, yup::jmax (0.0f, canvasWidth - viewportWidth), scrollX);
+        scrollY = yup::jlimit (0.0f, yup::jmax (0.0f, canvasHeight - viewportHeight), scrollY);
 
         // Update scrollbar ranges - the range represents the visible portion
         verticalScrollBar->setCurrentRange (scrollY, scrollY + viewportHeight);
