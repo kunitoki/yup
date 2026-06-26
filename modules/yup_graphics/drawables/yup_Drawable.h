@@ -94,7 +94,16 @@ public:
                 Justification justification = Justification::center);
 
 private:
-    void paintElement (Graphics& g, const SVGData& data, const SVGElement& element, bool hasParentFillEnabled, bool hasParentStrokeEnabled, Color currentColor, std::unordered_set<const SVGElement*>& visitingElements, int recursionDepth = 0);
+    void paintElement (Graphics& g,
+                       const SVGData& data,
+                       const SVGElement& element,
+                       bool hasParentFillEnabled,
+                       bool hasParentStrokeEnabled,
+                       Color currentColor,
+                       std::unordered_set<const SVGElement*>& visitingElements,
+                       std::optional<Array<float>> inheritedStrokeDashArray = std::nullopt,
+                       float inheritedStrokeDashOffset = 0.0f,
+                       int recursionDepth = 0);
     void paintMarker (Graphics& g, const SVGData& data, const SVGMarker& marker, float strokeWidth, Point<float> position, float tangentAngle, std::unordered_set<const SVGElement*>& visitingElements, int recursionDepth);
     void paintPatternFill (Graphics& g, const SVGData& data, const Path& shape, const SVGElement& element, const SVGPattern& pattern, Color currentColor, std::unordered_set<const SVGElement*>& visitingElements, int recursionDepth);
     void paintDebugElement (Graphics& g, const SVGElement& element);

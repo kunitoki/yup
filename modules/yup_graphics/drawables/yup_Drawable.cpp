@@ -331,7 +331,16 @@ void Drawable::paint (Graphics& g, const Rectangle<float>& targetArea, Fitting f
 
 //==============================================================================
 
-void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement& element, bool hasParentFillEnabled, bool hasParentStrokeEnabled, Color currentColor, std::unordered_set<const SVGElement*>& visitingElements, int recursionDepth)
+void Drawable::paintElement (Graphics& g,
+                             const SVGData& data,
+                             const SVGElement& element,
+                             bool hasParentFillEnabled,
+                             bool hasParentStrokeEnabled,
+                             Color currentColor,
+                             std::unordered_set<const SVGElement*>& visitingElements,
+                             std::optional<Array<float>> inheritedStrokeDashArray,
+                             float inheritedStrokeDashOffset,
+                             int recursionDepth)
 {
     if (element.hidden)
     {
@@ -367,6 +376,14 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
 
     if (element.blendMode)
         g.setBlendMode (*element.blendMode);
+
+    auto currentStrokeDashArray = inheritedStrokeDashArray;
+    if (element.strokeDashArrayNone)
+        currentStrokeDashArray.reset();
+    else if (element.strokeDashArray)
+        currentStrokeDashArray = element.strokeDashArray;
+
+    const auto currentStrokeDashOffset = element.strokeDashOffset.value_or (inheritedStrokeDashOffset);
 
     if (element.filterUrl)
     {
@@ -805,9 +822,9 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
         const Path* pathToStroke = element.path ? std::addressof (*element.path) : nullptr;
         std::optional<Path> dashedPath;
 
-        if (pathToStroke != nullptr && element.strokeDashArray && ! element.strokeDashArray->isEmpty())
+        if (pathToStroke != nullptr && currentStrokeDashArray && ! currentStrokeDashArray->isEmpty())
         {
-            dashedPath = createDashedPath (*pathToStroke, *element.strokeDashArray, element.strokeDashOffset.value_or (0.0f));
+            dashedPath = createDashedPath (*pathToStroke, *currentStrokeDashArray, currentStrokeDashOffset);
             pathToStroke = std::addressof (*dashedPath);
         }
 
@@ -854,7 +871,23 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
                 if (refElement->localTransform)
                     g.setTransform (refElement->localTransform->followedBy (savedTransform));
 
-                g.strokePath (*refElement->path);
+                const Path* referencePathToStroke = std::addressof (*refElement->path);
+                std::optional<Path> dashedReferencePath;
+                auto referenceStrokeDashArray = currentStrokeDashArray;
+                if (refElement->strokeDashArrayNone)
+                    referenceStrokeDashArray.reset();
+                else if (refElement->strokeDashArray)
+                    referenceStrokeDashArray = refElement->strokeDashArray;
+
+                const auto referenceStrokeDashOffset = refElement->strokeDashOffset.value_or (currentStrokeDashOffset);
+
+                if (referenceStrokeDashArray && ! referenceStrokeDashArray->isEmpty())
+                {
+                    dashedReferencePath = createDashedPath (*referencePathToStroke, *referenceStrokeDashArray, referenceStrokeDashOffset);
+                    referencePathToStroke = std::addressof (*dashedReferencePath);
+                }
+
+                g.strokePath (*referencePathToStroke);
 
                 if (refElement->localTransform)
                     g.setTransform (savedTransform);
@@ -1068,7 +1101,7 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
                 }
 
                 for (const auto& childElement : refElement->children)
-                    paintElement (g, data, *childElement, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke, currentColor, visitingElements, recursionDepth + 1);
+                    paintElement (g, data, *childElement, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke, currentColor, visitingElements, currentStrokeDashArray, currentStrokeDashOffset, recursionDepth + 1);
 
                 g.setTransform (savedTransform);
             }
@@ -1076,7 +1109,7 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
     }
 
     for (const auto& childElement : element.children)
-        paintElement (g, data, *childElement, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke, currentColor, visitingElements, recursionDepth + 1);
+        paintElement (g, data, *childElement, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke, currentColor, visitingElements, currentStrokeDashArray, currentStrokeDashOffset, recursionDepth + 1);
 
     // paintDebugElement (g, element);
 }
@@ -1117,7 +1150,7 @@ void Drawable::paintMarker (Graphics& g,
     g.addTransform (markerTransform);
 
     for (const auto& element : marker.elements)
-        paintElement (g, data, *element, true, false, Colors::black, visitingElements, recursionDepth + 1);
+        paintElement (g, data, *element, true, false, Colors::black, visitingElements, std::nullopt, 0.0f, recursionDepth + 1);
 }
 
 //==============================================================================
@@ -1186,7 +1219,7 @@ void Drawable::paintPatternFill (Graphics& g,
             }
 
             for (const auto& patternElement : pattern.elements)
-                paintElement (g, data, *patternElement, true, false, currentColor, visitingElements, recursionDepth + 1);
+                paintElement (g, data, *patternElement, true, false, currentColor, visitingElements, std::nullopt, 0.0f, recursionDepth + 1);
         }
     }
 }
@@ -1355,6 +1388,13 @@ Path Drawable::createDashedPath (const Path& source, const Array<float>& dashArr
     if (positiveDashes.isEmpty())
         return source;
 
+    if ((positiveDashes.size() % 2) != 0)
+    {
+        const auto originalSize = positiveDashes.size();
+        for (int i = 0; i < originalSize; ++i)
+            positiveDashes.add (positiveDashes[i]);
+    }
+
     Path result;
     float totalPatternLength = 0.0f;
     for (auto dash : positiveDashes)
@@ -1363,13 +1403,24 @@ Path Drawable::createDashedPath (const Path& source, const Array<float>& dashArr
     if (totalPatternLength <= 0.0f)
         return source;
 
-    int dashIndex = 0;
-    float patternPosition = std::fmod (jmax (0.0f, dashOffset), totalPatternLength);
-    while (patternPosition > positiveDashes[dashIndex])
+    auto dashIndex = 0;
+    auto patternPosition = 0.0f;
+
+    const auto resetDashPosition = [&]
     {
-        patternPosition -= positiveDashes[dashIndex];
-        dashIndex = (dashIndex + 1) % positiveDashes.size();
-    }
+        dashIndex = 0;
+        patternPosition = std::fmod (dashOffset, totalPatternLength);
+        if (patternPosition < 0.0f)
+            patternPosition += totalPatternLength;
+
+        while (patternPosition > positiveDashes[dashIndex])
+        {
+            patternPosition -= positiveDashes[dashIndex];
+            dashIndex = (dashIndex + 1) % positiveDashes.size();
+        }
+    };
+
+    resetDashPosition();
 
     auto drawLineDash = [&] (Point<float> start, Point<float> end)
     {
@@ -1411,6 +1462,7 @@ Path Drawable::createDashedPath (const Path& source, const Array<float>& dashArr
                 current = segment.point;
                 subPathStart = current;
                 hasCurrent = true;
+                resetDashPosition();
                 break;
 
             case Path::Verb::LineTo:

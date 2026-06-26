@@ -716,6 +716,25 @@ TEST (SVGDocumentTests, StrokeDashArrayAttribute)
     });
 }
 
+TEST (SVGDocumentTests, StrokeDashArrayNoneAttributeOverridesInheritedDashArray)
+{
+    auto doc = parse ("<svg><g stroke-dasharray=\"5 3\"><path d=\"M 0 0 L 100 0\" stroke=\"black\" stroke-dasharray=\"none\" fill=\"none\" /></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+        const auto& group = *data.elements[0];
+        ASSERT_TRUE (group.strokeDashArray.has_value());
+        EXPECT_FALSE (group.strokeDashArrayNone);
+        ASSERT_EQ (1u, group.children.size());
+
+        const auto& path = *group.children[0];
+        EXPECT_FALSE (path.strokeDashArray.has_value());
+        EXPECT_TRUE (path.strokeDashArrayNone);
+    });
+}
+
 TEST (SVGDocumentTests, StrokeDashOffsetAttribute)
 {
     auto doc = parse ("<svg><path d=\"M 0 0 L 100 0\" stroke=\"black\" stroke-dasharray=\"5 3\" stroke-dashoffset=\"2\" fill=\"none\" /></svg>");
@@ -727,6 +746,28 @@ TEST (SVGDocumentTests, StrokeDashOffsetAttribute)
         const auto& elem = *data.elements[0];
         ASSERT_TRUE (elem.strokeDashOffset.has_value());
         EXPECT_FLOAT_EQ (2.0f, *elem.strokeDashOffset);
+    });
+}
+
+TEST (SVGDocumentTests, StrokeDashAttributesOnGroupAndChild)
+{
+    auto doc = parse ("<svg><g stroke=\"black\" stroke-dasharray=\"4,2\"><path d=\"M 0 0 L 100 0\" /><path d=\"M 0 10 L 100 10\" stroke-dashoffset=\"3\" /></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+        const auto& group = *data.elements[0];
+        ASSERT_TRUE (group.strokeDashArray.has_value());
+        ASSERT_EQ (2, group.strokeDashArray->size());
+        EXPECT_FLOAT_EQ (4.0f, (*group.strokeDashArray)[0]);
+        EXPECT_FLOAT_EQ (2.0f, (*group.strokeDashArray)[1]);
+        ASSERT_EQ (2u, group.children.size());
+
+        EXPECT_FALSE (group.children[0]->strokeDashArray.has_value());
+        EXPECT_FALSE (group.children[0]->strokeDashOffset.has_value());
+        ASSERT_TRUE (group.children[1]->strokeDashOffset.has_value());
+        EXPECT_FLOAT_EQ (3.0f, *group.children[1]->strokeDashOffset);
     });
 }
 
@@ -2442,6 +2483,7 @@ TEST (SVGDocumentTests, SVGCssParserApplyStylePropertyCoversAlternateBranches)
     element.strokeDashArray = Array<float> ({ 1.0f, 2.0f });
     parser.applyStyleProperty ("stroke-dasharray", "none", element);
     EXPECT_FALSE (element.strokeDashArray.has_value());
+    EXPECT_TRUE (element.strokeDashArrayNone);
 
     parser.applyStyleProperty ("fill-rule", "nonzero", element);
     ASSERT_TRUE (element.fillRule.has_value());

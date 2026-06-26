@@ -52,6 +52,7 @@ struct SVGElement : public ReferenceCountedObject
     std::optional<StrokeJoin> strokeJoin;
     std::optional<StrokeCap> strokeCap;
     std::optional<Array<float>> strokeDashArray;
+    bool strokeDashArrayNone = false;
     std::optional<float> strokeDashOffset;
     std::optional<String> fillRule;
     std::optional<String> clipRule;

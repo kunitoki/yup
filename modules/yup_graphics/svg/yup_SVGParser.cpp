@@ -810,21 +810,28 @@ void SVGParser::parseStyle (const XmlElement& element, const AffineTransform& cu
         e.strokeMiterLimit = std::max (1.0f, strokeMiterLimit);
 
     String dashArray = element.getStringAttribute ("stroke-dasharray");
-    if (dashArray.isNotEmpty() && dashArray != "none")
+    if (dashArray == "none")
     {
-        auto dashValues = StringArray::fromTokens (dashArray, " ,", "");
+        e.strokeDashArray.reset();
+        e.strokeDashArrayNone = true;
+    }
+    else if (dashArray.isNotEmpty())
+    {
+        auto dashValues = parseLengthList (dashArray, e.fontSize.value_or (12.0f), 100.0f);
         if (! dashValues.isEmpty())
         {
             Array<float> dashes;
             for (const auto& dash : dashValues)
             {
-                float value = parseUnit (dash);
-                if (value >= 0.0f)
-                    dashes.add (value);
+                if (dash >= 0.0f)
+                    dashes.add (dash);
             }
 
             if (! dashes.isEmpty())
+            {
                 e.strokeDashArray = dashes;
+                e.strokeDashArrayNone = false;
+            }
         }
     }
 
