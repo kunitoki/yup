@@ -581,6 +581,53 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
             e->wordSpacing = parent->wordSpacing;
         if (! e->color && parent->color)
             e->color = parent->color;
+
+        const bool childHasExplicitFill = e->fillColor || e->noFill || e->fillCurrentColor || e->fillUrl;
+        if (! childHasExplicitFill)
+        {
+            e->fillColor = parent->fillColor;
+            e->noFill = parent->noFill;
+            e->fillCurrentColor = parent->fillCurrentColor;
+            e->fillUrl = parent->fillUrl;
+        }
+        if (! e->fillOpacity && parent->fillOpacity)
+            e->fillOpacity = parent->fillOpacity;
+        if (! e->fillRule && parent->fillRule)
+            e->fillRule = parent->fillRule;
+
+        const bool childHasExplicitStroke = e->strokeColor || e->noStroke || e->strokeCurrentColor || e->strokeUrl;
+        if (! childHasExplicitStroke)
+        {
+            e->strokeColor = parent->strokeColor;
+            e->noStroke = parent->noStroke;
+            e->strokeCurrentColor = parent->strokeCurrentColor;
+            e->strokeUrl = parent->strokeUrl;
+        }
+        if (! e->strokeOpacity && parent->strokeOpacity)
+            e->strokeOpacity = parent->strokeOpacity;
+        if (! e->strokeWidth && parent->strokeWidth)
+            e->strokeWidth = parent->strokeWidth;
+        if (! e->strokeJoin && parent->strokeJoin)
+            e->strokeJoin = parent->strokeJoin;
+        if (! e->strokeCap && parent->strokeCap)
+            e->strokeCap = parent->strokeCap;
+        if (! e->strokeDashArray && parent->strokeDashArray)
+            e->strokeDashArray = parent->strokeDashArray;
+        if (! e->strokeDashOffset && parent->strokeDashOffset)
+            e->strokeDashOffset = parent->strokeDashOffset;
+        if (! e->strokeMiterLimit && parent->strokeMiterLimit)
+            e->strokeMiterLimit = parent->strokeMiterLimit;
+
+        if (! e->clipRule && parent->clipRule)
+            e->clipRule = parent->clipRule;
+        if (! e->markerStart && parent->markerStart)
+            e->markerStart = parent->markerStart;
+        if (! e->markerMid && parent->markerMid)
+            e->markerMid = parent->markerMid;
+        if (! e->markerEnd && parent->markerEnd)
+            e->markerEnd = parent->markerEnd;
+        if (! e->hidden && parent->hidden)
+            e->hidden = parent->hidden;
     }
 
     for (auto* child = element.getFirstChildElement(); child != nullptr; child = child->getNextElement())

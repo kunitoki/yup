@@ -2675,3 +2675,150 @@ TEST (SVGDocumentTests, ClearResetsViewBoxToEmpty)
         EXPECT_EQ (0u, data.cssRules.size());
     });
 }
+
+// ==============================================================================
+// CSS presentation attribute inheritance
+// ==============================================================================
+
+TEST (SVGInheritanceTests, InheritsFillColorFromGroup)
+{
+    auto doc = parse ("<svg><g fill=\"red\"><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" /></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+        ASSERT_EQ (1u, data.elements[0]->children.size());
+        const auto& rect = *data.elements[0]->children[0];
+        EXPECT_TRUE (rect.fillColor.has_value());
+        EXPECT_FALSE (rect.noFill);
+    });
+}
+
+TEST (SVGInheritanceTests, InheritsStrokeFromGroup)
+{
+    auto doc = parse ("<svg><g stroke=\"blue\" stroke-width=\"3\"><circle cx=\"5\" cy=\"5\" r=\"5\" /></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+        ASSERT_EQ (1u, data.elements[0]->children.size());
+        const auto& circle = *data.elements[0]->children[0];
+        EXPECT_TRUE (circle.strokeColor.has_value());
+        ASSERT_TRUE (circle.strokeWidth.has_value());
+        EXPECT_FLOAT_EQ (3.0f, *circle.strokeWidth);
+    });
+}
+
+TEST (SVGInheritanceTests, InheritsFillRuleFromGroup)
+{
+    auto doc = parse ("<svg><g fill-rule=\"evenodd\"><path d=\"M 0 0 L 10 0 L 10 10 Z\" /></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+        ASSERT_EQ (1u, data.elements[0]->children.size());
+        const auto& path = *data.elements[0]->children[0];
+        ASSERT_TRUE (path.fillRule.has_value());
+        EXPECT_EQ (String ("evenodd"), *path.fillRule);
+    });
+}
+
+TEST (SVGInheritanceTests, ChildExplicitFillOverridesParent)
+{
+    auto doc = parse ("<svg><g fill=\"red\"><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" fill=\"green\" /></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+        ASSERT_EQ (1u, data.elements[0]->children.size());
+        const auto& rect = *data.elements[0]->children[0];
+        ASSERT_TRUE (rect.fillColor.has_value());
+        EXPECT_EQ (Colors::green, *rect.fillColor);
+    });
+}
+
+TEST (SVGInheritanceTests, ChildNoneFillOverridesParent)
+{
+    auto doc = parse ("<svg><g fill=\"red\"><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" fill=\"none\" /></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+        ASSERT_EQ (1u, data.elements[0]->children.size());
+        const auto& rect = *data.elements[0]->children[0];
+        EXPECT_TRUE (rect.noFill);
+        EXPECT_FALSE (rect.fillColor.has_value());
+    });
+}
+
+TEST (SVGInheritanceTests, InheritsMarkersFromGroup)
+{
+    auto doc = parse ("<svg>"
+                      "<defs><marker id=\"a\"><path d=\"M 0 0 L 5 5\" /></marker></defs>"
+                      "<g marker-start=\"url(#a)\"><path d=\"M 0 0 L 10 0\" /></g>"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        // defs is element[0], g is element[1]
+        ASSERT_GE (data.elements.size(), 2u);
+        const auto& g = *data.elements[1];
+        ASSERT_EQ (1u, g.children.size());
+        const auto& path = *g.children[0];
+        ASSERT_TRUE (path.markerStart.has_value());
+        EXPECT_EQ (String ("a"), *path.markerStart);
+    });
+}
+
+TEST (SVGInheritanceTests, InheritsVisibilityFromGroup)
+{
+    auto doc = parse ("<svg><g visibility=\"hidden\"><circle cx=\"5\" cy=\"5\" r=\"5\" /></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+        ASSERT_EQ (1u, data.elements[0]->children.size());
+        const auto& circle = *data.elements[0]->children[0];
+        EXPECT_TRUE (circle.hidden);
+    });
+}
+
+TEST (SVGInheritanceTests, DeepNestingInheritance)
+{
+    auto doc = parse ("<svg><g fill=\"purple\"><g><g><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" /></g></g></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+        ASSERT_EQ (1u, data.elements[0]->children.size());
+        const auto& g2 = *data.elements[0]->children[0];
+        ASSERT_EQ (1u, g2.children.size());
+        const auto& g3 = *g2.children[0];
+        ASSERT_EQ (1u, g3.children.size());
+        const auto& rect = *g3.children[0];
+        EXPECT_TRUE (rect.fillColor.has_value());
+    });
+}
+
+TEST (SVGInheritanceTests, InheritsStrokeMiterLimit)
+{
+    auto doc = parse ("<svg><g stroke-miterlimit=\"2\"><path d=\"M 0 0 L 10 0\" /></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+        ASSERT_EQ (1u, data.elements[0]->children.size());
+        const auto& path = *data.elements[0]->children[0];
+        ASSERT_TRUE (path.strokeMiterLimit.has_value());
+        EXPECT_FLOAT_EQ (2.0f, *path.strokeMiterLimit);
+    });
+}

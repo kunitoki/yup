@@ -808,7 +808,7 @@ void Drawable::paintElement (Graphics& g,
         g.setStrokeCap (*element.strokeCap);
     if (element.strokeWidth)
         g.setStrokeWidth (*element.strokeWidth);
-    g.setStrokeMiterLimit (element.strokeMiterLimit);
+    g.setStrokeMiterLimit (element.strokeMiterLimit.value_or (4.0f));
 
     bool referenceDefinesStroke = false;
     if (! isStrokeDefined && element.reference)
