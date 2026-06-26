@@ -107,6 +107,13 @@ bool SVGParser::parseDocument (std::unique_ptr<XmlElement> svgRoot)
     auto height = svgRoot->getFloatAttribute ("height");
     data.size.setHeight (height == 0.0f ? data.viewBox.getHeight() : height);
 
+    if (auto preserveAspectRatio = svgRoot->getStringAttribute ("preserveAspectRatio"); preserveAspectRatio.isNotEmpty())
+    {
+        data.rootHasPreserveAspectRatio = true;
+        data.rootPreserveAspectRatioFitting = parsePreserveAspectRatio (preserveAspectRatio);
+        data.rootPreserveAspectRatioJustification = parseAspectRatioAlignment (preserveAspectRatio);
+    }
+
     YUP_DRAWABLE_LOG ("Parse complete - viewBox: " << data.viewBox.toString() << " size: " << data.size.getWidth() << "x" << data.size.getHeight());
 
     std::function<void (const XmlElement&)> collectStyleElements = [&] (const XmlElement& xml)

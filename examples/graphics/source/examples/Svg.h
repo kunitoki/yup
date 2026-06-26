@@ -65,7 +65,10 @@ private:
             return;
 
         for (const auto& svgFile : files)
+        {
+            // if (svgFile.getFileName() == "preserveAspectRatio.svg")
             svgFiles.add (svgFile);
+        }
 
         svgFiles.sort();
     }

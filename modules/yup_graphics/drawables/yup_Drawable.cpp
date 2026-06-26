@@ -305,7 +305,10 @@ void Drawable::paint (Graphics& g, const Rectangle<float>& targetArea, Fitting f
         const auto savedState = g.saveState();
 
         auto finalBounds = data.viewBox.isEmpty() ? data.bounds : data.viewBox;
-        auto finalTransform = calculateTransformForTarget (finalBounds, targetArea, fitting, justification);
+        auto finalTransform = calculateTransformForTarget (finalBounds,
+                                                           targetArea,
+                                                           data.rootHasPreserveAspectRatio ? data.rootPreserveAspectRatioFitting : fitting,
+                                                           data.rootHasPreserveAspectRatio ? data.rootPreserveAspectRatioJustification : justification);
 
         if (! finalTransform.isIdentity())
             g.addTransform (finalTransform);
@@ -385,22 +388,40 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
         }
     }
 
+    const auto setViewportClip = [&g] (const Rectangle<float>& viewportBounds)
+    {
+        Path viewportClip;
+        viewportClip.addRectangle (viewportBounds);
+        auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
+        auto transformedViewportClip = viewportClip.transformed (clipTransform);
+
+        const auto savedClipTransform = g.getTransform();
+        g.setTransform (AffineTransform::identity());
+        g.setClipPath (transformedViewportClip);
+        g.setTransform (savedClipTransform);
+    };
+
     if (element.viewBox && (element.viewportBounds || element.viewportSize))
     {
-        auto viewport = element.viewportBounds
-                          ? *element.viewportBounds
+        auto viewport = element.viewportBounds != std::nullopt
+                          ? Rectangle<float> (0.0f, 0.0f, element.viewportBounds->getWidth(), element.viewportBounds->getHeight())
                           : Rectangle<float> (0.0f, 0.0f, element.viewportSize->getWidth(), element.viewportSize->getHeight());
-        if (element.tagName == "svg" && element.viewportBounds)
-            g.setClipPath (viewport);
 
-        auto viewBoxTransform = calculateTransformForTarget (*element.viewBox, viewport, element.preserveAspectRatioFitting, element.preserveAspectRatioJustification);
-        if (! viewBoxTransform.isIdentity())
-            g.addTransform (viewBoxTransform);
+        auto viewportTransform = calculateTransformForTarget (*element.viewBox, viewport, element.preserveAspectRatioFitting, element.preserveAspectRatioJustification);
+        if (element.tagName == "svg" && element.viewportBounds)
+        {
+            setViewportClip (*element.viewportBounds);
+            viewportTransform = viewportTransform.followedBy (AffineTransform::translation (element.viewportBounds->getX(), element.viewportBounds->getY()));
+        }
+
+        if (! viewportTransform.isIdentity())
+            g.setTransform (viewportTransform.followedBy (g.getTransform()));
     }
     else if (element.tagName == "svg" && element.viewportBounds)
     {
-        g.setClipPath (*element.viewportBounds);
-        g.addTransform (AffineTransform::translation (element.viewportBounds->getX(), element.viewportBounds->getY()));
+        setViewportClip (*element.viewportBounds);
+        auto viewportTransform = AffineTransform::translation (element.viewportBounds->getX(), element.viewportBounds->getY());
+        g.setTransform (viewportTransform.followedBy (g.getTransform()));
     }
 
     bool hasClipping = false;
@@ -1489,8 +1510,8 @@ AffineTransform Drawable::calculateTransformForTarget (const Rectangle<float>& s
         offsetY += targetArea.getHeight() - scaledHeight;
 
     return AffineTransform::translation (-sourceBounds.getX(), -sourceBounds.getY())
-        .scaled (scaleX, scaleY)
-        .translated (offsetX, offsetY);
+        .followedBy (AffineTransform::scaling (scaleX, scaleY))
+        .followedBy (AffineTransform::translation (offsetX, offsetY));
 }
 
 //==============================================================================

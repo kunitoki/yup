@@ -1688,26 +1688,52 @@ TEST (SVGParserTests, ParseFontSizeWithUnits)
 
 TEST (SVGParserTests, ParsePreserveAspectRatioNone)
 {
-    Drawable d;
-    EXPECT_TRUE (d.parseSVG ("<svg viewBox=\"0 0 100 100\" preserveAspectRatio=\"none\"></svg>"));
+    auto doc = SVGParser::parse ("<svg viewBox=\"0 0 100 100\" preserveAspectRatio=\"none\"></svg>");
+    ASSERT_NE (doc, nullptr);
+    doc->visit ([] (const SVGData& data)
+    {
+        EXPECT_TRUE (data.rootHasPreserveAspectRatio);
+        EXPECT_EQ (Fitting::fill, data.rootPreserveAspectRatioFitting);
+    });
 }
 
 TEST (SVGParserTests, ParsePreserveAspectRatioXMidYMid)
 {
-    Drawable d;
-    EXPECT_TRUE (d.parseSVG ("<svg viewBox=\"0 0 100 100\" preserveAspectRatio=\"xMidYMid meet\"></svg>"));
+    auto doc = SVGParser::parse ("<svg viewBox=\"0 0 100 100\" preserveAspectRatio=\"xMidYMid meet\"></svg>");
+    ASSERT_NE (doc, nullptr);
+    doc->visit ([] (const SVGData& data)
+    {
+        EXPECT_TRUE (data.rootHasPreserveAspectRatio);
+        EXPECT_EQ (Fitting::scaleToFit, data.rootPreserveAspectRatioFitting);
+        EXPECT_TRUE (data.rootPreserveAspectRatioJustification.testFlags (Justification::horizontalCenter));
+        EXPECT_TRUE (data.rootPreserveAspectRatioJustification.testFlags (Justification::verticalCenter));
+    });
 }
 
 TEST (SVGParserTests, ParsePreserveAspectRatioXMinYMin)
 {
-    Drawable d;
-    EXPECT_TRUE (d.parseSVG ("<svg viewBox=\"0 0 100 100\" preserveAspectRatio=\"xMinYMin meet\"></svg>"));
+    auto doc = SVGParser::parse ("<svg viewBox=\"0 0 100 100\" preserveAspectRatio=\"xMinYMin meet\"></svg>");
+    ASSERT_NE (doc, nullptr);
+    doc->visit ([] (const SVGData& data)
+    {
+        EXPECT_TRUE (data.rootHasPreserveAspectRatio);
+        EXPECT_EQ (Fitting::scaleToFit, data.rootPreserveAspectRatioFitting);
+        EXPECT_TRUE (data.rootPreserveAspectRatioJustification.testFlags (Justification::left));
+        EXPECT_TRUE (data.rootPreserveAspectRatioJustification.testFlags (Justification::top));
+    });
 }
 
 TEST (SVGParserTests, ParsePreserveAspectRatioXMaxYMax)
 {
-    Drawable d;
-    EXPECT_TRUE (d.parseSVG ("<svg viewBox=\"0 0 100 100\" preserveAspectRatio=\"xMaxYMax slice\"></svg>"));
+    auto doc = SVGParser::parse ("<svg viewBox=\"0 0 100 100\" preserveAspectRatio=\"xMaxYMax slice\"></svg>");
+    ASSERT_NE (doc, nullptr);
+    doc->visit ([] (const SVGData& data)
+    {
+        EXPECT_TRUE (data.rootHasPreserveAspectRatio);
+        EXPECT_EQ (Fitting::scaleToFill, data.rootPreserveAspectRatioFitting);
+        EXPECT_TRUE (data.rootPreserveAspectRatioJustification.testFlags (Justification::right));
+        EXPECT_TRUE (data.rootPreserveAspectRatioJustification.testFlags (Justification::bottom));
+    });
 }
 
 TEST (SVGParserTests, ParsePreserveAspectRatioWithInternalEntities)
@@ -1736,23 +1762,25 @@ TEST (SVGParserTests, ParsePreserveAspectRatioWithInternalEntities)
 
     ASSERT_NE (doc, nullptr);
 
-    bool foundSmileCircle = false;
+    int nestedSmileCircles = 0;
     doc->visit ([&] (const SVGData& data)
     {
-        std::function<void (const SVGElement&)> visitElement = [&] (const SVGElement& element)
+        std::function<void (const SVGElement&, bool)> visitElement = [&] (const SVGElement& element, bool insideNestedSVG)
         {
-            if (element.tagName == "circle")
-                foundSmileCircle = true;
+            const auto isNestedSVG = insideNestedSVG || (element.tagName == "svg" && element.viewBox.has_value());
+
+            if (isNestedSVG && element.tagName == "circle")
+                ++nestedSmileCircles;
 
             for (const auto& child : element.children)
-                visitElement (*child);
+                visitElement (*child, isNestedSVG);
         };
 
         for (const auto& element : data.elements)
-            visitElement (*element);
+            visitElement (*element, false);
     });
 
-    EXPECT_TRUE (foundSmileCircle);
+    EXPECT_EQ (1, nestedSmileCircles);
 }
 
 TEST (SVGParserTests, ParsePreserveAspectRatioOnSymbol)
