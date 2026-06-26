@@ -100,28 +100,32 @@ public:
 
     //==============================================================================
     /**
-        Refines onset times by finding the precise transient start in the raw audio.
+        Refines onset times to sample-accurate positions using RMS envelope
+        analysis and zero-crossing alignment.
 
-        Scans the audio waveform backward from each detected onset, computing
-        short-term RMS energy to locate the first sample where signal rises above
-        the background noise floor. This corrects for the ~hop-size temporal
-        granularity inherent in spectral onset detection.
-
-        For each onset, the algorithm:
-        1. Finds the peak absolute amplitude in a search window around the onset
-        2. Sets an amplitude threshold as threshold * peakAmplitude
-        3. Scans from the onset position backward to find the first sample
-           exceeding the threshold
+        Algorithm (per onset):
+         1. Computes a prefix-sum of squared samples for O(1) RMS queries.
+         2. Builds a causal RMS envelope (only samples up to each frame are
+            used, avoiding early-onset bias from centered windows).
+         3. Estimates a noise floor from the 10th-percentile RMS and computes
+            a dynamic trigger threshold (noise + threshold × dynamic range).
+         4. Walks backward from the peak-RMS frame to find the first frame in
+            the above-threshold region leading into the peak.
+         5. Interpolates between envelope frames for sub-hop precision.
+         6. Searches backward from the candidate for the nearest zero
+            crossing (or falls back to the lowest-amplitude sample).
 
         @param samples       Mono audio sample data
         @param numSamples    Total number of samples
         @param sampleRate    Audio sample rate in Hz
-        @param maxRefineSec  Maximum seconds to search forward/backward for transient
-        @param threshold     Ratio of local peak absolute amplitude below which
-                             signal is considered "silence" (0.0 to 1.0).
-                             Higher values = tighter alignment to transient peak.
+        @param maxRefineSec  Maximum seconds to search forward/backward for
+                             the transient (default 0.008s).
+        @param threshold     Ratio of local peak RMS below which the signal
+                             is considered "silence" (0.0 to 1.0).
+                             Higher values = tighter alignment to transient.
+                             (default 0.05).
     */
-    void refineOnsetTimes (const float* samples, int numSamples, float sampleRate, double maxRefineSec = 0.05, float threshold = 0.15f);
+    void refineOnsetTimes (const float* samples, int numSamples, float sampleRate, double maxRefineSec = 0.008, float threshold = 0.05f);
 
     //==============================================================================
     /** Resets the detected onsets. */

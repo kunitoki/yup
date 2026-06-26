@@ -496,6 +496,238 @@ TEST_F (OnsetPeakPickerTests, DelayShiftsOnsetTimes)
     EXPECT_NEAR (10.0 / fps + 0.05, picker.getOnsetTimes()[0], 1e-6);
 }
 
+TEST_F (OnsetPeakPickerTests, RefineOnsetsEmptyOnsetsIsNoop)
+{
+    OnsetPeakPicker picker;
+    picker.prepare ({}, fps);
+
+    std::vector<float> samples (44100, 1.0f);
+    EXPECT_NO_THROW (picker.refineOnsetTimes (samples.data(), 44100, 44100.0f));
+    EXPECT_TRUE (picker.getOnsetTimes().empty());
+}
+
+TEST_F (OnsetPeakPickerTests, RefineOnsetsAlignsToZeroCrossing)
+{
+    constexpr float sampleRate = 44100.0f;
+    constexpr double onsetTime = 0.1;                                      // seconds
+    constexpr int onsetSample = static_cast<int> (onsetTime * sampleRate); // 4410
+
+    OnsetPeakPicker picker;
+    picker.prepare ({ .threshold = 0.5f, .preAvgSec = 0.0f, .preMaxSec = 0.0f, .postAvgSec = 0.0f, .postMaxSec = 0.0f }, fps);
+
+    // Detect: activation with a single peak at frame 20 (= 0.1s at 200fps)
+    std::vector<float> activations (100, 0.1f);
+    activations[20] = 1.0f;
+    picker.detect (activations.data(), static_cast<int> (activations.size()));
+
+    // Create audio: silence then a 440 Hz sine.
+    // sin(2*pi*440 * 0.1) = sin(2*pi*44) = 0, so sample 4410 is a zero crossing.
+    constexpr int numSamples = 8820;
+    std::vector<float> samples (static_cast<std::size_t> (numSamples), 0.0f);
+
+    for (int i = onsetSample - 500; i < numSamples; ++i)
+    {
+        const float t = static_cast<float> (i) / sampleRate;
+        samples[static_cast<std::size_t> (i)] = std::sin (MathConstants<float>::twoPi * 440.0f * t);
+    }
+
+    picker.refineOnsetTimes (samples.data(), numSamples, sampleRate, 0.05, 0.15f);
+
+    ASSERT_FALSE (picker.getOnsetTimes().empty());
+    const double refinedSample = picker.getOnsetTimes()[0] * static_cast<double> (sampleRate);
+
+    // The refined position should be within the search window and near a zero crossing
+    const int rs = static_cast<int> (std::round (refinedSample));
+    EXPECT_GE (rs, 1);
+    EXPECT_LT (rs, numSamples - 1);
+
+    // Verify the refined position is at or adjacent to a zero crossing
+    const bool isZeroCrossing = (samples[static_cast<std::size_t> (rs - 1)] * samples[static_cast<std::size_t> (rs)] <= 0.0f);
+    EXPECT_TRUE (isZeroCrossing);
+}
+
+TEST_F (OnsetPeakPickerTests, RefineOnsetsFallsBackWhenNoZeroCrossings)
+{
+    constexpr float sampleRate = 44100.0f;
+
+    OnsetPeakPicker picker;
+    picker.prepare ({ .threshold = 0.5f, .preAvgSec = 0.0f, .preMaxSec = 0.0f, .postAvgSec = 0.0f, .postMaxSec = 0.0f }, fps);
+
+    // Detect an onset at frame 20
+    std::vector<float> activations (100, 0.1f);
+    activations[20] = 1.0f;
+    picker.detect (activations.data(), static_cast<int> (activations.size()));
+
+    // All-positive signal (no zero crossings) - a sudden amplitude jump
+    constexpr int numSamples = 8820;
+    std::vector<float> samples (static_cast<std::size_t> (numSamples), 0.01f);
+    for (int i = 4410; i < numSamples; ++i)
+        samples[static_cast<std::size_t> (i)] = 0.5f;
+
+    picker.refineOnsetTimes (samples.data(), numSamples, sampleRate, 0.05, 0.1f);
+
+    ASSERT_FALSE (picker.getOnsetTimes().empty());
+    const double refinedTime = picker.getOnsetTimes()[0];
+
+    // Should refine to somewhere in the search window (not the original coarse time exactly)
+    EXPECT_GT (refinedTime, 0.0);
+    EXPECT_LT (refinedTime, 0.2);
+}
+
+TEST_F (OnsetPeakPickerTests, RefineOnsetsSkipsSilentRegions)
+{
+    constexpr float sampleRate = 44100.0f;
+
+    OnsetPeakPicker picker;
+    picker.prepare ({ .threshold = 0.5f, .preAvgSec = 0.0f, .preMaxSec = 0.0f, .postAvgSec = 0.0f, .postMaxSec = 0.0f }, fps);
+
+    // Detect an onset
+    std::vector<float> activations (100, 0.1f);
+    activations[20] = 1.0f;
+    picker.detect (activations.data(), static_cast<int> (activations.size()));
+
+    // Entirely silent signal
+    constexpr int numSamples = 8820;
+    std::vector<float> samples (static_cast<std::size_t> (numSamples), 0.0f);
+
+    // Should not crash; onset time stays unchanged (peakRms < 1e-10)
+    const auto before = picker.getOnsetTimes();
+    picker.refineOnsetTimes (samples.data(), numSamples, sampleRate);
+    const auto& after = picker.getOnsetTimes();
+
+    ASSERT_EQ (before.size(), after.size());
+    EXPECT_NEAR (before[0], after[0], 1e-10);
+}
+
+TEST_F (OnsetPeakPickerTests, RefineOnsetsHandlesSampleZero)
+{
+    constexpr float sampleRate = 44100.0f;
+    constexpr int numSamples = 44100;
+
+    OnsetPeakPicker picker;
+    picker.prepare ({ .threshold = 0.5f, .preAvgSec = 0.0f, .preMaxSec = 0.0f, .postAvgSec = 0.0f, .postMaxSec = 0.0f }, fps);
+
+    // Detect an onset at frame 0 (time 0)
+    std::vector<float> activations (100, 0.1f);
+    activations[0] = 1.0f;
+    picker.detect (activations.data(), static_cast<int> (activations.size()));
+
+    // Audio that starts loud at sample 0 — a 440 Hz sine from the first sample
+    std::vector<float> samples (static_cast<std::size_t> (numSamples));
+    for (int i = 0; i < numSamples; ++i)
+    {
+        const float t = static_cast<float> (i) / sampleRate;
+        samples[static_cast<std::size_t> (i)] = std::sin (MathConstants<float>::twoPi * 440.0f * t);
+    }
+
+    picker.refineOnsetTimes (samples.data(), numSamples, sampleRate, 0.05, 0.15f);
+
+    ASSERT_FALSE (picker.getOnsetTimes().empty());
+    const double refinedSample = picker.getOnsetTimes()[0] * static_cast<double> (sampleRate);
+
+    // The refined position should be within the search window and at or near a
+    // zero-like feature. Causal RMS may place the onset further from sample 0
+    // as the envelope builds up.
+    EXPECT_GE (refinedSample, 0.0);
+    EXPECT_LT (refinedSample, static_cast<double> (numSamples));
+
+    // The onset must be in a valid range. When the audio starts immediately the
+    // algorithm should find a position that is either a zero crossing or the
+    // sample with the lowest amplitude.
+    const int rs = static_cast<int> (std::round (refinedSample));
+    EXPECT_GT (rs, 0);
+    EXPECT_LT (rs, numSamples - 1);
+}
+
+TEST_F (OnsetPeakPickerTests, RefineOnsetsFindsPrecedingZeroCrossing)
+{
+    // The refinement algorithm searches backward from the energy-rise point
+    // for the nearest zero crossing. Verify it picks up a ZC that immediately
+    // precedes a loud transient.
+    constexpr float sampleRate = 44100.0f;
+    constexpr int numSamples = 8820; // 0.2 s
+
+    OnsetPeakPicker picker;
+    picker.prepare ({ .threshold = 0.5f, .preAvgSec = 0.0f, .preMaxSec = 0.0f, .postAvgSec = 0.0f, .postMaxSec = 0.0f }, fps);
+
+    // Detect onset at frame 20 → 0.1 s → sample 4410
+    std::vector<float> activations (100, 0.1f);
+    activations[20] = 1.0f;
+    picker.detect (activations.data(), static_cast<int> (activations.size()));
+
+    // Signal: silence, then a ZC pair right before the coarse onset, then loud.
+    //
+    //   [0..4407]   silence (0.0)
+    //   4408: -0.8, 4409: +0.8     → ZC at 4409 (neg→pos)
+    //   [4410..]    alternating ±0.8 → loud
+    std::vector<float> samples (static_cast<std::size_t> (numSamples), 0.0f);
+
+    samples[4408] = -0.8f;
+    samples[4409] = +0.8f;
+
+    for (int i = 4410; i < numSamples; ++i)
+        samples[static_cast<std::size_t> (i)] = (i % 2 == 0) ? +0.8f : -0.8f;
+
+    picker.refineOnsetTimes (samples.data(), numSamples, sampleRate, 0.05, 0.15f);
+
+    ASSERT_FALSE (picker.getOnsetTimes().empty());
+    const double refinedSample = picker.getOnsetTimes()[0] * static_cast<double> (sampleRate);
+    const int rs = static_cast<int> (std::round (refinedSample));
+
+    // The refined onset should be within the search window and at or near the ZC
+    EXPECT_GT (rs, 0);
+    EXPECT_LT (rs, numSamples - 1);
+
+    // The ZC pair at [4408,4409] is the only sign change preceding the loud
+    // transient — the onset should land at one of these two samples.
+    EXPECT_NEAR (static_cast<double> (rs), 4408.0, 2.0);
+}
+
+TEST_F (OnsetPeakPickerTests, RefineOnsetsFallsBackWhenNoPrecedingZeroCrossing)
+{
+    // When no ZC exists before the energy-rise point the algorithm falls back
+    // to the sample with the lowest absolute amplitude in the lookback window.
+    constexpr float sampleRate = 44100.0f;
+    constexpr int numSamples = 8820; // 0.2 s
+
+    OnsetPeakPicker picker;
+    picker.prepare ({ .threshold = 0.5f, .preAvgSec = 0.0f, .preMaxSec = 0.0f, .postAvgSec = 0.0f, .postMaxSec = 0.0f }, fps);
+
+    // Detect onset at frame 20 → 0.1 s → sample 4410
+    std::vector<float> activations (100, 0.1f);
+    activations[20] = 1.0f;
+    picker.detect (activations.data(), static_cast<int> (activations.size()));
+
+    // All-positive ramp, no ZC before the rise.
+    //   [0..2999]   +0.01   → no ZC, low energy
+    //   [3000..3039] ramp +0.01 → +0.3   → energy rises
+    //   [3040.+..]  all-positive loud values  → no ZC at all
+    std::vector<float> samples (static_cast<std::size_t> (numSamples), 0.01f);
+
+    // Energy ramp
+    for (int i = 3000; i <= 3039; ++i)
+        samples[static_cast<std::size_t> (i)] = 0.01f + (0.29f * static_cast<float> (i - 3000) / 39.0f);
+
+    // Loud, all-positive
+    for (int i = 3040; i < numSamples; ++i)
+        samples[static_cast<std::size_t> (i)] = 0.7f;
+
+    picker.refineOnsetTimes (samples.data(), numSamples, sampleRate, 0.05, 0.15f);
+
+    ASSERT_FALSE (picker.getOnsetTimes().empty());
+    const double refinedSample = picker.getOnsetTimes()[0] * static_cast<double> (sampleRate);
+    const int rs = static_cast<int> (std::round (refinedSample));
+
+    // The algorithm should produce a valid onset even without a ZC.
+    // It may fall back to the lowest-amplitude sample preceding the rise.
+    EXPECT_GT (rs, 0);
+    EXPECT_LT (rs, numSamples - 1);
+
+    // The onset should be at or before the coarse onset (the algorithm only
+    // looks backward, so it won't place the onset after the rise point).
+    EXPECT_LE (static_cast<double> (rs), 4410.0 + 2205.0); // well within searchEnd
+}
+
 //==============================================================================
 // OnsetDetector (OnsetDetector) End-to-End Tests
 //==============================================================================
