@@ -107,6 +107,13 @@ bool SVGParser::parseDocument (std::unique_ptr<XmlElement> svgRoot)
     auto height = svgRoot->getFloatAttribute ("height");
     data.size.setHeight (height == 0.0f ? data.viewBox.getHeight() : height);
 
+    if (auto preserveAspectRatio = svgRoot->getStringAttribute ("preserveAspectRatio"); preserveAspectRatio.isNotEmpty())
+    {
+        data.rootHasPreserveAspectRatio = true;
+        data.rootPreserveAspectRatioFitting = parsePreserveAspectRatio (preserveAspectRatio);
+        data.rootPreserveAspectRatioJustification = parseAspectRatioAlignment (preserveAspectRatio);
+    }
+
     YUP_DRAWABLE_LOG ("Parse complete - viewBox: " << data.viewBox.toString() << " size: " << data.size.getWidth() << "x" << data.size.getHeight());
 
     std::function<void (const XmlElement&)> collectStyleElements = [&] (const XmlElement& xml)
@@ -127,6 +134,9 @@ bool SVGParser::parseDocument (std::unique_ptr<XmlElement> svgRoot)
     if (result)
     {
         data.bounds = document.calculateBounds();
+
+        if (data.viewBox.isEmpty() && ! data.bounds.isEmpty())
+            data.viewBox = data.bounds;
         YUP_DRAWABLE_LOG ("parseDocument result - success: true"
                           << " topLevelElements: " << data.elements.size()
                           << " ids: " << data.elementsById.size()
@@ -355,6 +365,7 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
         {
             auto path = Path();
             auto coords = StringArray::fromTokens (points, " ,", "");
+            coords.removeEmptyStrings();
 
             if (coords.size() >= 4 && coords.size() % 2 == 0)
             {
@@ -387,6 +398,7 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
         {
             auto path = Path();
             auto coords = StringArray::fromTokens (points, " ,", "");
+            coords.removeEmptyStrings();
 
             if (coords.size() >= 4 && coords.size() % 2 == 0)
             {
@@ -510,10 +522,15 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
                 YUP_DRAWABLE_LOG ("Invalid nested viewBox - tag: " << e->tagName << " value: " << view << " coordinateCount: " << coords.size());
         }
 
-        auto width = parseLengthAttribute (element, "width", e->viewBox ? e->viewBox->getWidth() : viewportWidth, inheritedFontSize, viewportWidth);
-        auto height = parseLengthAttribute (element, "height", e->viewBox ? e->viewBox->getHeight() : viewportHeight, inheritedFontSize, viewportHeight);
-        if (width > 0.0f && height > 0.0f)
-            e->viewportSize = Size<float> (width, height);
+        if (! e->isSymbol)
+        {
+            auto x = parseLengthAttribute (element, "x", 0.0f, inheritedFontSize, viewportWidth);
+            auto y = parseLengthAttribute (element, "y", 0.0f, inheritedFontSize, viewportHeight);
+            auto width = parseLengthAttribute (element, "width", e->viewBox ? e->viewBox->getWidth() : viewportWidth, inheritedFontSize, viewportWidth);
+            auto height = parseLengthAttribute (element, "height", e->viewBox ? e->viewBox->getHeight() : viewportHeight, inheritedFontSize, viewportHeight);
+            if (width > 0.0f && height > 0.0f)
+                e->viewportBounds = Rectangle<float> (x, y, width, height);
+        }
 
         if (auto preserveAspectRatio = element.getStringAttribute ("preserveAspectRatio"); preserveAspectRatio.isNotEmpty())
         {
@@ -564,7 +581,55 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
             e->wordSpacing = parent->wordSpacing;
         if (! e->color && parent->color)
             e->color = parent->color;
+
+        const bool childHasExplicitFill = e->fillColor || e->noFill || e->fillCurrentColor || e->fillUrl;
+        if (! childHasExplicitFill)
+        {
+            e->fillColor = parent->fillColor;
+            e->noFill = parent->noFill;
+            e->fillCurrentColor = parent->fillCurrentColor;
+            e->fillUrl = parent->fillUrl;
+        }
+        if (! e->fillOpacity && parent->fillOpacity)
+            e->fillOpacity = parent->fillOpacity;
+        if (! e->fillRule && parent->fillRule)
+            e->fillRule = parent->fillRule;
+
+        const bool childHasExplicitStroke = e->strokeColor || e->noStroke || e->strokeCurrentColor || e->strokeUrl;
+        if (! childHasExplicitStroke)
+        {
+            e->strokeColor = parent->strokeColor;
+            e->noStroke = parent->noStroke;
+            e->strokeCurrentColor = parent->strokeCurrentColor;
+            e->strokeUrl = parent->strokeUrl;
+        }
+        if (! e->strokeOpacity && parent->strokeOpacity)
+            e->strokeOpacity = parent->strokeOpacity;
+        if (! e->strokeWidth && parent->strokeWidth)
+            e->strokeWidth = parent->strokeWidth;
+        if (! e->strokeJoin && parent->strokeJoin)
+            e->strokeJoin = parent->strokeJoin;
+        if (! e->strokeCap && parent->strokeCap)
+            e->strokeCap = parent->strokeCap;
+        if (! e->strokeDashOffset && parent->strokeDashOffset)
+            e->strokeDashOffset = parent->strokeDashOffset;
+        if (! e->strokeMiterLimit && parent->strokeMiterLimit)
+            e->strokeMiterLimit = parent->strokeMiterLimit;
+
+        if (! e->clipRule && parent->clipRule)
+            e->clipRule = parent->clipRule;
+        if (! e->markerStart && parent->markerStart)
+            e->markerStart = parent->markerStart;
+        if (! e->markerMid && parent->markerMid)
+            e->markerMid = parent->markerMid;
+        if (! e->markerEnd && parent->markerEnd)
+            e->markerEnd = parent->markerEnd;
+        if (! e->hidden && parent->hidden)
+            e->hidden = parent->hidden;
     }
+
+    if (! e->strokeMiterLimit)
+        e->strokeMiterLimit = 4.0f;
 
     for (auto* child = element.getFirstChildElement(); child != nullptr; child = child->getNextElement())
     {
@@ -724,7 +789,7 @@ void SVGParser::parseStyle (const XmlElement& element, const AffineTransform& cu
     else if (strokeCap == "butt")
         e.strokeCap = StrokeCap::Butt;
 
-    float strokeWidth = element.getFloatAttribute ("stroke-width", -1.0f);
+    float strokeWidth = parseLengthAttribute (element, "stroke-width", -1.0f, e.fontSize.value_or (12.0f), 100.0f);
     if (strokeWidth > 0.0f)
         e.strokeWidth = strokeWidth;
 
@@ -793,21 +858,28 @@ void SVGParser::parseStyle (const XmlElement& element, const AffineTransform& cu
         e.strokeMiterLimit = std::max (1.0f, strokeMiterLimit);
 
     String dashArray = element.getStringAttribute ("stroke-dasharray");
-    if (dashArray.isNotEmpty() && dashArray != "none")
+    if (dashArray == "none")
     {
-        auto dashValues = StringArray::fromTokens (dashArray, " ,", "");
+        e.strokeDashArray.reset();
+        e.strokeDashArrayNone = true;
+    }
+    else if (dashArray.isNotEmpty())
+    {
+        auto dashValues = parseLengthList (dashArray, e.fontSize.value_or (12.0f), 100.0f);
         if (! dashValues.isEmpty())
         {
             Array<float> dashes;
             for (const auto& dash : dashValues)
             {
-                float value = parseUnit (dash);
-                if (value >= 0.0f)
-                    dashes.add (value);
+                if (dash >= 0.0f)
+                    dashes.add (dash);
             }
 
             if (! dashes.isEmpty())
+            {
                 e.strokeDashArray = dashes;
+                e.strokeDashArrayNone = false;
+            }
         }
     }
 
@@ -1072,7 +1144,23 @@ void SVGParser::parseGradient (const XmlElement& element)
     gradient->radius = 0.5f;
     gradient->focal = gradient->center;
 
-    auto parseCoordinate = [&element] (const String& name, float defaultValue, bool& hasValue) -> float
+    String gradientUnits = element.getStringAttribute ("gradientUnits");
+    if (gradientUnits.isNotEmpty())
+    {
+        gradient->hasUnits = true;
+        gradient->units = (gradientUnits.contains ("userSpaceOnUse")) ? SVGGradient::UserSpaceOnUse : SVGGradient::ObjectBoundingBox;
+    }
+    else
+    {
+        gradient->units = SVGGradient::ObjectBoundingBox;
+    }
+
+    const bool isUserSpaceOnUse = gradient->units == SVGGradient::UserSpaceOnUse;
+
+    const float viewportWidth = data.viewBox.getWidth() > 0.0f ? data.viewBox.getWidth() : (data.size.getWidth() > 0.0f ? data.size.getWidth() : 100.0f);
+    const float viewportHeight = data.viewBox.getHeight() > 0.0f ? data.viewBox.getHeight() : (data.size.getHeight() > 0.0f ? data.size.getHeight() : 100.0f);
+
+    auto parseCoordX = [&element, isUserSpaceOnUse, viewportWidth] (const String& name, float defaultValue, bool& hasValue) -> float
     {
         const auto value = element.getStringAttribute (name);
         if (value.isEmpty())
@@ -1081,7 +1169,31 @@ void SVGParser::parseGradient (const XmlElement& element)
         hasValue = true;
 
         if (value.containsChar ('%'))
-            return value.upToFirstOccurrenceOf ("%", false, false).getFloatValue() / 100.0f;
+        {
+            const auto numericPart = value.upToFirstOccurrenceOf ("%", false, false).getFloatValue();
+            if (isUserSpaceOnUse)
+                return numericPart * viewportWidth / 100.0f;
+            return numericPart / 100.0f;
+        }
+
+        return value.getFloatValue();
+    };
+
+    auto parseCoordY = [&element, isUserSpaceOnUse, viewportHeight] (const String& name, float defaultValue, bool& hasValue) -> float
+    {
+        const auto value = element.getStringAttribute (name);
+        if (value.isEmpty())
+            return defaultValue;
+
+        hasValue = true;
+
+        if (value.containsChar ('%'))
+        {
+            const auto numericPart = value.upToFirstOccurrenceOf ("%", false, false).getFloatValue();
+            if (isUserSpaceOnUse)
+                return numericPart * viewportHeight / 100.0f;
+            return numericPart / 100.0f;
+        }
 
         return value.getFloatValue();
     };
@@ -1100,8 +1212,8 @@ void SVGParser::parseGradient (const XmlElement& element)
     {
         gradient->type = SVGGradient::Linear;
         bool hasX1 = false, hasY1 = false, hasX2 = false, hasY2 = false;
-        gradient->start = { parseCoordinate ("x1", gradient->start.getX(), hasX1), parseCoordinate ("y1", gradient->start.getY(), hasY1) };
-        gradient->end = { parseCoordinate ("x2", gradient->end.getX(), hasX2), parseCoordinate ("y2", gradient->end.getY(), hasY2) };
+        gradient->start = { parseCoordX ("x1", gradient->start.getX(), hasX1), parseCoordY ("y1", gradient->start.getY(), hasY1) };
+        gradient->end = { parseCoordX ("x2", gradient->end.getX(), hasX2), parseCoordY ("y2", gradient->end.getY(), hasY2) };
         gradient->hasStart = hasX1 || hasY1;
         gradient->hasEnd = hasX2 || hasY2;
     }
@@ -1110,26 +1222,15 @@ void SVGParser::parseGradient (const XmlElement& element)
         gradient->type = SVGGradient::Radial;
         bool hasCx = false, hasCy = false, hasR = false;
         bool hasFx = false, hasFy = false;
-        gradient->center = { parseCoordinate ("cx", gradient->center.getX(), hasCx), parseCoordinate ("cy", gradient->center.getY(), hasCy) };
-        gradient->radius = parseCoordinate ("r", gradient->radius, hasR);
+        gradient->center = { parseCoordX ("cx", gradient->center.getX(), hasCx), parseCoordY ("cy", gradient->center.getY(), hasCy) };
+        gradient->radius = parseCoordX ("r", gradient->radius, hasR);
 
-        auto fx = parseCoordinate ("fx", gradient->center.getX(), hasFx);
-        auto fy = parseCoordinate ("fy", gradient->center.getY(), hasFy);
+        auto fx = parseCoordX ("fx", gradient->center.getX(), hasFx);
+        auto fy = parseCoordY ("fy", gradient->center.getY(), hasFy);
         gradient->focal = { fx, fy };
         gradient->hasCenter = hasCx || hasCy;
         gradient->hasRadius = hasR;
         gradient->hasFocal = hasFx || hasFy;
-    }
-
-    String gradientUnits = element.getStringAttribute ("gradientUnits");
-    if (gradientUnits.isNotEmpty())
-    {
-        gradient->hasUnits = true;
-        gradient->units = (gradientUnits == "userSpaceOnUse") ? SVGGradient::UserSpaceOnUse : SVGGradient::ObjectBoundingBox;
-    }
-    else
-    {
-        gradient->units = SVGGradient::ObjectBoundingBox;
     }
 
     String gradientTransform = element.getStringAttribute ("gradientTransform");
@@ -1253,19 +1354,39 @@ SVGGradient::Ptr SVGParser::resolveGradient (SVGGradient::Ptr gradient) const
     resolvedGradient->focal = referencedGradient->focal;
     resolvedGradient->transform = referencedGradient->transform;
     resolvedGradient->stops = referencedGradient->stops;
+    resolvedGradient->hasStart = referencedGradient->hasStart;
+    resolvedGradient->hasEnd = referencedGradient->hasEnd;
+    resolvedGradient->hasCenter = referencedGradient->hasCenter;
+    resolvedGradient->hasRadius = referencedGradient->hasRadius;
+    resolvedGradient->hasFocal = referencedGradient->hasFocal;
     resolvedGradient->hasUnits = referencedGradient->hasUnits;
     resolvedGradient->hasSpreadMethod = referencedGradient->hasSpreadMethod;
 
     if (gradient->hasStart)
+    {
         resolvedGradient->start = gradient->start;
+        resolvedGradient->hasStart = true;
+    }
     if (gradient->hasEnd)
+    {
         resolvedGradient->end = gradient->end;
+        resolvedGradient->hasEnd = true;
+    }
     if (gradient->hasCenter)
+    {
         resolvedGradient->center = gradient->center;
+        resolvedGradient->hasCenter = true;
+    }
     if (gradient->hasRadius)
+    {
         resolvedGradient->radius = gradient->radius;
+        resolvedGradient->hasRadius = true;
+    }
     if (gradient->hasFocal)
+    {
         resolvedGradient->focal = gradient->focal;
+        resolvedGradient->hasFocal = true;
+    }
 
     if (! gradient->transform.isIdentity())
         resolvedGradient->transform = gradient->transform;
@@ -1311,39 +1432,138 @@ void SVGParser::parseFilter (const XmlElement& element)
 
     for (auto* child = element.getFirstChildElement(); child != nullptr; child = child->getNextElement())
     {
-        if (! child->hasTagName ("feGaussianBlur"))
-        {
+        if (child->hasTagName ("feBlend"))
+            parseFEBlend (*child, *filter);
+        else if (child->hasTagName ("feGaussianBlur"))
+            parseFEGaussianBlur (*child, *filter);
+        else
             YUP_DRAWABLE_LOG ("Unsupported filter primitive ignored - filter: " << id << " tag: " << child->getTagNameWithoutNamespace());
-            continue;
-        }
-
-        const auto stdDeviationString = child->getStringAttribute ("stdDeviation");
-        if (stdDeviationString.isEmpty())
-        {
-            YUP_DRAWABLE_LOG ("GaussianBlur primitive missing stdDeviation - filter: " << id);
-            continue;
-        }
-
-        const auto values = StringArray::fromTokens (stdDeviationString, " ,", "");
-        float stdDeviation = 0.0f;
-
-        if (values.size() >= 2)
-        {
-            const auto stdDeviationX = parseUnit (values[0]);
-            const auto stdDeviationY = parseUnit (values[1]);
-            stdDeviation = jmax (stdDeviationX, stdDeviationY);
-        }
-        else if (values.size() == 1)
-        {
-            stdDeviation = parseUnit (values[0]);
-        }
-
-        if (stdDeviation > 0.0f)
-            filter->gaussianBlurStdDeviation = jmax (filter->gaussianBlurStdDeviation.value_or (0.0f), stdDeviation);
     }
 
     data.filters.push_back (filter);
     data.filtersById.set (id, filter);
+}
+
+//==============================================================================
+
+void SVGParser::parseFEBlend (const XmlElement& element, SVGFilter& filter)
+{
+    SVGFEBlend::Ptr blend = new SVGFEBlend;
+
+    blend->in = element.getStringAttribute ("in");
+    blend->in2 = element.getStringAttribute ("in2");
+    blend->result = element.getStringAttribute ("result");
+
+    auto mode = element.getStringAttribute ("mode");
+    if (mode.isEmpty())
+    {
+        blend->mode = BlendMode::SrcOver;
+    }
+    else if (mode == "normal")
+    {
+        blend->mode = BlendMode::SrcOver;
+    }
+    else if (mode == "multiply")
+    {
+        blend->mode = BlendMode::Multiply;
+    }
+    else if (mode == "screen")
+    {
+        blend->mode = BlendMode::Screen;
+    }
+    else if (mode == "overlay")
+    {
+        blend->mode = BlendMode::Overlay;
+    }
+    else if (mode == "darken")
+    {
+        blend->mode = BlendMode::Darken;
+    }
+    else if (mode == "lighten")
+    {
+        blend->mode = BlendMode::Lighten;
+    }
+    else if (mode == "color-dodge")
+    {
+        blend->mode = BlendMode::ColorDodge;
+    }
+    else if (mode == "color-burn")
+    {
+        blend->mode = BlendMode::ColorBurn;
+    }
+    else if (mode == "hard-light")
+    {
+        blend->mode = BlendMode::HardLight;
+    }
+    else if (mode == "soft-light")
+    {
+        blend->mode = BlendMode::SoftLight;
+    }
+    else if (mode == "difference")
+    {
+        blend->mode = BlendMode::Difference;
+    }
+    else if (mode == "exclusion")
+    {
+        blend->mode = BlendMode::Exclusion;
+    }
+    else if (mode == "hue")
+    {
+        blend->mode = BlendMode::Hue;
+    }
+    else if (mode == "saturation")
+    {
+        blend->mode = BlendMode::Saturation;
+    }
+    else if (mode == "color")
+    {
+        blend->mode = BlendMode::Color;
+    }
+    else if (mode == "luminosity")
+    {
+        blend->mode = BlendMode::Luminosity;
+    }
+
+    if (blend->in.isEmpty() && blend->in2.isEmpty())
+        blend->in = "SourceGraphic";
+
+    filter.primitives.push_back (std::move (blend));
+}
+
+//==============================================================================
+
+void SVGParser::parseFEGaussianBlur (const XmlElement& element, SVGFilter& filter)
+{
+    const auto stdDeviationString = element.getStringAttribute ("stdDeviation");
+    if (stdDeviationString.isEmpty())
+    {
+        YUP_DRAWABLE_LOG ("GaussianBlur primitive missing stdDeviation - filter: " << filter.id);
+        return;
+    }
+
+    const auto values = StringArray::fromTokens (stdDeviationString, " ,", "");
+    float stdDeviation = 0.0f;
+
+    if (values.size() >= 2)
+    {
+        const auto stdDeviationX = parseUnit (values[0]);
+        const auto stdDeviationY = parseUnit (values[1]);
+        stdDeviation = jmax (stdDeviationX, stdDeviationY);
+    }
+    else if (values.size() == 1)
+    {
+        stdDeviation = parseUnit (values[0]);
+    }
+
+    if (stdDeviation <= 0.0f)
+        return;
+
+    SVGFEGaussianBlur::Ptr blur = new SVGFEGaussianBlur;
+    blur->in = element.getStringAttribute ("in");
+    blur->result = element.getStringAttribute ("result");
+    blur->stdDeviation = stdDeviation;
+
+    filter.primitives.push_back (std::move (blur));
 }
 
 //==============================================================================
@@ -1370,9 +1590,11 @@ SVGFilter::Ptr SVGParser::resolveFilter (SVGFilter::Ptr filter) const
     SVGFilter::Ptr resolvedFilter = new SVGFilter;
     resolvedFilter->id = filter->id;
     resolvedFilter->href = filter->href;
-    resolvedFilter->gaussianBlurStdDeviation = filter->gaussianBlurStdDeviation
-                                                 ? filter->gaussianBlurStdDeviation
-                                                 : referencedFilter->gaussianBlurStdDeviation;
+
+    if (! filter->primitives.empty())
+        resolvedFilter->primitives = filter->primitives;
+    else
+        resolvedFilter->primitives = referencedFilter->primitives;
 
     YUP_DRAWABLE_LOG ("Resolved filter " << filter->id << " from reference " << filter->href);
     return resolvedFilter;
@@ -1395,16 +1617,58 @@ void SVGParser::parseClipPath (const XmlElement& element)
     if (element.getStringAttribute ("clipPathUnits") == "objectBoundingBox")
         clipPath->units = SVGClipPath::ObjectBoundingBox;
 
+    auto clipPathAttr = element.getStringAttribute ("clip-path");
+    if (clipPathAttr.isNotEmpty())
+        if (auto clipPathUrl = extractGradientUrl (clipPathAttr); clipPathUrl.isNotEmpty())
+            clipPath->clipPathUrl = clipPathUrl;
+
     YUP_DRAWABLE_LOG ("parseClipPath - id: " << id
                                              << " units: " << (clipPath->units == SVGClipPath::ObjectBoundingBox ? "objectBoundingBox" : "userSpaceOnUse"));
 
     for (auto* child = element.getFirstChildElement(); child != nullptr; child = child->getNextElement())
     {
+        if (child->hasTagName ("use"))
+        {
+            auto href = child->getStringAttribute ("href");
+            if (href.isEmpty())
+                href = child->getStringAttribute ("xlink:href");
+
+            if (href.startsWith ("#"))
+            {
+                auto refId = href.substring (1);
+                SVGElement::Ptr clipElement = nullptr;
+
+                if (auto refElement = data.elementsById[refId]; refElement != nullptr && refElement->path)
+                {
+                    clipElement = new SVGElement;
+                    clipElement->tagName = refElement->tagName;
+                    clipElement->path = refElement->path;
+                    clipElement->transform = child->getStringAttribute ("transform").isEmpty()
+                                               ? refElement->transform
+                                               : parseTransform (*child, AffineTransform::identity(), *clipElement);
+                }
+
+                if (clipElement != nullptr && clipElement->path)
+                {
+                    clipPath->elements.push_back (clipElement);
+                    if (auto clipChildId = child->getStringAttribute ("id"); clipChildId.isNotEmpty())
+                    {
+                        clipElement->id = clipChildId;
+                        data.elementsById.set (clipChildId, clipElement);
+                    }
+                }
+            }
+            continue;
+        }
+
         SVGElement::Ptr clipElement = new SVGElement;
         clipElement->tagName = child->getTagNameWithoutNamespace();
 
         if (auto childId = child->getStringAttribute ("id"); childId.isNotEmpty())
+        {
             clipElement->id = childId;
+            data.elementsById.set (childId, clipElement);
+        }
 
         if (child->hasTagName ("path"))
         {
@@ -1415,12 +1679,12 @@ void SVGParser::parseClipPath (const XmlElement& element)
         }
         else if (child->hasTagName ("rect"))
         {
-            auto x = child->getFloatAttribute ("x");
-            auto y = child->getFloatAttribute ("y");
-            auto width = child->getFloatAttribute ("width");
-            auto height = child->getFloatAttribute ("height");
-            auto rx = child->getFloatAttribute ("rx");
-            auto ry = child->getFloatAttribute ("ry");
+            auto x = parseLengthAttribute (*child, "x", 0.0f, 12.0f, 100.0f);
+            auto y = parseLengthAttribute (*child, "y", 0.0f, 12.0f, 100.0f);
+            auto width = parseLengthAttribute (*child, "width", 0.0f, 12.0f, 100.0f);
+            auto height = parseLengthAttribute (*child, "height", 0.0f, 12.0f, 100.0f);
+            auto rx = parseLengthAttribute (*child, "rx", 0.0f, 12.0f, 100.0f);
+            auto ry = parseLengthAttribute (*child, "ry", 0.0f, 12.0f, 100.0f);
 
             auto path = Path();
             if (rx > 0.0f || ry > 0.0f)
@@ -1440,9 +1704,9 @@ void SVGParser::parseClipPath (const XmlElement& element)
         }
         else if (child->hasTagName ("circle"))
         {
-            auto cx = child->getFloatAttribute ("cx");
-            auto cy = child->getFloatAttribute ("cy");
-            auto r = child->getFloatAttribute ("r");
+            auto cx = parseLengthAttribute (*child, "cx", 0.0f, 12.0f, 100.0f);
+            auto cy = parseLengthAttribute (*child, "cy", 0.0f, 12.0f, 100.0f);
+            auto r = parseLengthAttribute (*child, "r", 0.0f, 12.0f, 100.0f);
 
             auto path = Path();
             path.addCenteredEllipse (cx, cy, r, r);
@@ -1450,10 +1714,10 @@ void SVGParser::parseClipPath (const XmlElement& element)
         }
         else if (child->hasTagName ("ellipse"))
         {
-            auto cx = child->getFloatAttribute ("cx");
-            auto cy = child->getFloatAttribute ("cy");
-            auto rx = child->getFloatAttribute ("rx");
-            auto ry = child->getFloatAttribute ("ry");
+            auto cx = parseLengthAttribute (*child, "cx", 0.0f, 12.0f, 100.0f);
+            auto cy = parseLengthAttribute (*child, "cy", 0.0f, 12.0f, 100.0f);
+            auto rx = parseLengthAttribute (*child, "rx", 0.0f, 12.0f, 100.0f);
+            auto ry = parseLengthAttribute (*child, "ry", 0.0f, 12.0f, 100.0f);
 
             auto path = Path();
             path.addCenteredEllipse (cx, cy, rx, ry);
@@ -1463,6 +1727,7 @@ void SVGParser::parseClipPath (const XmlElement& element)
         {
             String points = child->getStringAttribute ("points");
             auto coords = StringArray::fromTokens (points, " ,", "");
+            coords.removeEmptyStrings();
             auto path = Path();
 
             if (coords.size() >= 4 && coords.size() % 2 == 0)

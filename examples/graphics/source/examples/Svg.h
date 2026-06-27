@@ -66,9 +66,11 @@ private:
 
         for (const auto& svgFile : files)
         {
-            //if (svgFile.getFileName() == "mozilla2.svg")
+            // if (svgFile.getFileName() == "preserveAspectRatio.svg")
             svgFiles.add (svgFile);
         }
+
+        svgFiles.sort();
     }
 
     void parseSvgFile (int index)
