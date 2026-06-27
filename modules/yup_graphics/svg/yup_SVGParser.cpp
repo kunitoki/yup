@@ -611,8 +611,6 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
             e->strokeJoin = parent->strokeJoin;
         if (! e->strokeCap && parent->strokeCap)
             e->strokeCap = parent->strokeCap;
-        if (! e->strokeDashArray && parent->strokeDashArray)
-            e->strokeDashArray = parent->strokeDashArray;
         if (! e->strokeDashOffset && parent->strokeDashOffset)
             e->strokeDashOffset = parent->strokeDashOffset;
         if (! e->strokeMiterLimit && parent->strokeMiterLimit)
@@ -629,6 +627,9 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
         if (! e->hidden && parent->hidden)
             e->hidden = parent->hidden;
     }
+
+    if (! e->strokeMiterLimit)
+        e->strokeMiterLimit = 4.0f;
 
     for (auto* child = element.getFirstChildElement(); child != nullptr; child = child->getNextElement())
     {
