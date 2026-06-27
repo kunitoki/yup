@@ -33,7 +33,7 @@
     license:            MIT
 
     dependencies:       harfbuzz sheenbidi_library yoga_library luau libhydrogen
-    defines:            WITH_RIVE_TEXT=1 WITH_RIVE_YOGA=1 WITH_RIVE_LAYOUT=1 WITH_RIVE_SCRIPTING=1
+    defines:            WITH_RIVE_TEXT=1 WITH_RIVE_YOGA=1 WITH_RIVE_LAYOUT=1 WITH_RIVE_SCRIPTING=1 RIVE_CANVAS=1
     appleFrameworks:    CoreText
     searchpaths:        include
 

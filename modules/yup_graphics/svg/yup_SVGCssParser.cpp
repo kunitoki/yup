@@ -195,7 +195,7 @@ void SVGCssParser::applyStyleProperty (StringRef propertyRef, StringRef valueRef
     }
     else if (property == "font")
     {
-        YUP_DRAWABLE_LOG ("CSS font shorthand currently not parsed - value: " << value);
+        YUP_DRAWABLE_LOG ("CSS font shorthand currently not applied - value: " << value);
     }
     else if (property == "dominant-baseline")
     {
@@ -261,12 +261,24 @@ void SVGCssParser::applyStyleProperty (StringRef propertyRef, StringRef valueRef
     else if (property == "stroke-dasharray")
     {
         if (value == "none")
+        {
             e.strokeDashArray.reset();
+            e.strokeDashArrayNone = true;
+        }
         else
         {
-            auto dashes = SVGParser::parseLengthList (value, e.fontSize.value_or (12.0f), 100.0f);
+            Array<float> dashes;
+            for (const auto dash : SVGParser::parseLengthList (value, e.fontSize.value_or (12.0f), 100.0f))
+            {
+                if (dash >= 0.0f)
+                    dashes.add (dash);
+            }
+
             if (! dashes.isEmpty())
+            {
                 e.strokeDashArray = dashes;
+                e.strokeDashArrayNone = false;
+            }
         }
     }
     else if (property == "stroke-dashoffset")

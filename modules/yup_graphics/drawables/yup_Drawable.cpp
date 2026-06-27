@@ -54,19 +54,39 @@ SVGGradient::Ptr resolveGradient (const SVGData& data, SVGGradient::Ptr gradient
     resolved->focal = referencedGradient->focal;
     resolved->transform = referencedGradient->transform;
     resolved->stops = referencedGradient->stops;
+    resolved->hasStart = referencedGradient->hasStart;
+    resolved->hasEnd = referencedGradient->hasEnd;
+    resolved->hasCenter = referencedGradient->hasCenter;
+    resolved->hasRadius = referencedGradient->hasRadius;
+    resolved->hasFocal = referencedGradient->hasFocal;
     resolved->hasUnits = referencedGradient->hasUnits;
     resolved->hasSpreadMethod = referencedGradient->hasSpreadMethod;
 
     if (gradient->hasStart)
+    {
         resolved->start = gradient->start;
+        resolved->hasStart = true;
+    }
     if (gradient->hasEnd)
+    {
         resolved->end = gradient->end;
+        resolved->hasEnd = true;
+    }
     if (gradient->hasCenter)
+    {
         resolved->center = gradient->center;
+        resolved->hasCenter = true;
+    }
     if (gradient->hasRadius)
+    {
         resolved->radius = gradient->radius;
+        resolved->hasRadius = true;
+    }
     if (gradient->hasFocal)
+    {
         resolved->focal = gradient->focal;
+        resolved->hasFocal = true;
+    }
 
     if (! gradient->transform.isIdentity())
         resolved->transform = gradient->transform;
@@ -103,10 +123,52 @@ SVGFilter::Ptr resolveFilter (const SVGData& data, SVGFilter::Ptr filter)
     SVGFilter::Ptr resolved = new SVGFilter;
     resolved->id = filter->id;
     resolved->href = filter->href;
-    resolved->gaussianBlurStdDeviation = filter->gaussianBlurStdDeviation
-                                           ? filter->gaussianBlurStdDeviation
-                                           : referencedFilter->gaussianBlurStdDeviation;
+
+    if (! filter->primitives.empty())
+        resolved->primitives = filter->primitives;
+    else
+        resolved->primitives = referencedFilter->primitives;
+
     return resolved;
+}
+
+AffineTransform createGradientSpaceTransform (const SVGGradient& gradient, const Rectangle<float>* objectBounds)
+{
+    const bool hasBounds = objectBounds != nullptr && objectBounds->getWidth() > 0.0f && objectBounds->getHeight() > 0.0f;
+    AffineTransform unitsTransform = AffineTransform::identity();
+
+    if (gradient.units == SVGGradient::ObjectBoundingBox && hasBounds)
+    {
+        unitsTransform = AffineTransform::scaling (objectBounds->getWidth(), objectBounds->getHeight())
+                             .translated (objectBounds->getX(), objectBounds->getY());
+    }
+
+    return unitsTransform.followedBy (gradient.transform);
+}
+
+SVGGradient createLocalGradientSpaceGradient (const SVGGradient& gradient)
+{
+    SVGGradient localGradient;
+
+    localGradient.type = gradient.type;
+    localGradient.id = gradient.id;
+    localGradient.units = SVGGradient::UserSpaceOnUse;
+    localGradient.spreadMethod = gradient.spreadMethod;
+    localGradient.start = gradient.start;
+    localGradient.end = gradient.end;
+    localGradient.center = gradient.center;
+    localGradient.radius = gradient.radius;
+    localGradient.focal = gradient.focal;
+    localGradient.stops = gradient.stops;
+    localGradient.hasStart = gradient.hasStart;
+    localGradient.hasEnd = gradient.hasEnd;
+    localGradient.hasCenter = gradient.hasCenter;
+    localGradient.hasRadius = gradient.hasRadius;
+    localGradient.hasFocal = gradient.hasFocal;
+    localGradient.hasUnits = true;
+    localGradient.hasSpreadMethod = gradient.hasSpreadMethod;
+
+    return localGradient;
 }
 
 SVGClipPath::Ptr getClipPathById (const SVGData& data, const String& id)
@@ -243,7 +305,10 @@ void Drawable::paint (Graphics& g, const Rectangle<float>& targetArea, Fitting f
         const auto savedState = g.saveState();
 
         auto finalBounds = data.viewBox.isEmpty() ? data.bounds : data.viewBox;
-        auto finalTransform = calculateTransformForTarget (finalBounds, targetArea, fitting, justification);
+        auto finalTransform = calculateTransformForTarget (finalBounds,
+                                                           targetArea,
+                                                           data.rootHasPreserveAspectRatio ? data.rootPreserveAspectRatioFitting : fitting,
+                                                           data.rootHasPreserveAspectRatio ? data.rootPreserveAspectRatioJustification : justification);
 
         if (! finalTransform.isIdentity())
             g.addTransform (finalTransform);
@@ -266,7 +331,16 @@ void Drawable::paint (Graphics& g, const Rectangle<float>& targetArea, Fitting f
 
 //==============================================================================
 
-void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement& element, bool hasParentFillEnabled, bool hasParentStrokeEnabled, Color currentColor, std::unordered_set<const SVGElement*>& visitingElements, int recursionDepth)
+void Drawable::paintElement (Graphics& g,
+                             const SVGData& data,
+                             const SVGElement& element,
+                             bool hasParentFillEnabled,
+                             bool hasParentStrokeEnabled,
+                             Color currentColor,
+                             std::unordered_set<const SVGElement*>& visitingElements,
+                             std::optional<Array<float>> inheritedStrokeDashArray,
+                             float inheritedStrokeDashOffset,
+                             int recursionDepth)
 {
     if (element.hidden)
     {
@@ -288,6 +362,9 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
 
     bool isFillDefined = hasParentFillEnabled;
     bool isStrokeDefined = hasParentStrokeEnabled;
+    std::optional<Path> localGradientFillPath;
+    std::optional<AffineTransform> localGradientFillTransform;
+
     if (element.color)
         currentColor = *element.color;
 
@@ -300,25 +377,68 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
     if (element.blendMode)
         g.setBlendMode (*element.blendMode);
 
+    auto currentStrokeDashArray = inheritedStrokeDashArray;
+    if (element.strokeDashArrayNone)
+        currentStrokeDashArray.reset();
+    else if (element.strokeDashArray)
+        currentStrokeDashArray = element.strokeDashArray;
+
+    const auto currentStrokeDashOffset = element.strokeDashOffset.value_or (inheritedStrokeDashOffset);
+
     if (element.filterUrl)
     {
         if (auto filter = resolveFilter (data, getFilterById (data, *element.filterUrl)))
         {
-            if (filter->gaussianBlurStdDeviation)
+            for (const auto& primitive : filter->primitives)
             {
-                const auto svgStdDeviationToFeather = 2.0f;
-                const auto feather = jmax (g.getFeather(), *filter->gaussianBlurStdDeviation * svgStdDeviationToFeather);
-                g.setFeather (feather);
+                if (auto blur = dynamic_cast<const SVGFEGaussianBlur*> (primitive.get()))
+                {
+                    const auto svgStdDeviationToFeather = 2.0f;
+                    const auto feather = jmax (g.getFeather(), blur->stdDeviation * svgStdDeviationToFeather);
+                    g.setFeather (feather);
+                }
+                else if (auto blend = dynamic_cast<const SVGFEBlend*> (primitive.get()))
+                {
+                    g.setBlendMode (blend->mode);
+                }
             }
         }
     }
 
-    if (element.viewBox && element.viewportSize)
+    const auto setViewportClip = [&g] (const Rectangle<float>& viewportBounds)
     {
-        Rectangle<float> viewport (0.0f, 0.0f, element.viewportSize->getWidth(), element.viewportSize->getHeight());
-        auto viewBoxTransform = calculateTransformForTarget (*element.viewBox, viewport, element.preserveAspectRatioFitting, element.preserveAspectRatioJustification);
-        if (! viewBoxTransform.isIdentity())
-            g.addTransform (viewBoxTransform);
+        Path viewportClip;
+        viewportClip.addRectangle (viewportBounds);
+        auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
+        auto transformedViewportClip = viewportClip.transformed (clipTransform);
+
+        const auto savedClipTransform = g.getTransform();
+        g.setTransform (AffineTransform::identity());
+        g.setClipPath (transformedViewportClip);
+        g.setTransform (savedClipTransform);
+    };
+
+    if (element.viewBox && (element.viewportBounds || element.viewportSize))
+    {
+        auto viewport = element.viewportBounds != std::nullopt
+                          ? Rectangle<float> (0.0f, 0.0f, element.viewportBounds->getWidth(), element.viewportBounds->getHeight())
+                          : Rectangle<float> (0.0f, 0.0f, element.viewportSize->getWidth(), element.viewportSize->getHeight());
+
+        auto viewportTransform = calculateTransformForTarget (*element.viewBox, viewport, element.preserveAspectRatioFitting, element.preserveAspectRatioJustification);
+        if (element.tagName == "svg" && element.viewportBounds)
+        {
+            setViewportClip (*element.viewportBounds);
+            viewportTransform = viewportTransform.followedBy (AffineTransform::translation (element.viewportBounds->getX(), element.viewportBounds->getY()));
+        }
+
+        if (! viewportTransform.isIdentity())
+            g.setTransform (viewportTransform.followedBy (g.getTransform()));
+    }
+    else if (element.tagName == "svg" && element.viewportBounds)
+    {
+        setViewportClip (*element.viewportBounds);
+        auto viewportTransform = AffineTransform::translation (element.viewportBounds->getX(), element.viewportBounds->getY());
+        g.setTransform (viewportTransform.followedBy (g.getTransform()));
     }
 
     bool hasClipping = false;
@@ -326,6 +446,52 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
     {
         if (auto clipPath = getClipPathById (data, *element.clipPathUrl))
         {
+            const auto buildClipShape = [&] (const SVGClipPath& clip, const Rectangle<float>& objectBounds) -> Path
+            {
+                std::optional<Rectangle<float>> clipObjectBounds;
+
+                if (clip.units == SVGClipPath::ObjectBoundingBox)
+                {
+                    if (! objectBounds.isEmpty())
+                        clipObjectBounds = objectBounds;
+                }
+
+                Path result;
+
+                for (const auto& clipElement : clip.elements)
+                {
+                    const auto* elementPath = clipElement->path ? std::addressof (*clipElement->path) : nullptr;
+
+                    if (elementPath == nullptr && clipElement->reference)
+                    {
+                        if (auto refElement = data.elementsById[*clipElement->reference]; refElement != nullptr && refElement->path)
+                            elementPath = std::addressof (*refElement->path);
+                    }
+
+                    if (elementPath == nullptr)
+                        continue;
+
+                    AffineTransform clipTransform = clipElement->transform.value_or (AffineTransform::identity());
+
+                    if (clip.units == SVGClipPath::ObjectBoundingBox)
+                    {
+                        if (! clipObjectBounds || clipObjectBounds->isEmpty())
+                            continue;
+
+                        auto unitsTransform = AffineTransform::translation (clipObjectBounds->getX(), clipObjectBounds->getY())
+                                                  .scaled (clipObjectBounds->getWidth(), clipObjectBounds->getHeight());
+                        clipTransform = clipTransform.followedBy (unitsTransform);
+                    }
+
+                    if (! clipTransform.isIdentity())
+                        result.appendPath (*elementPath, clipTransform);
+                    else
+                        result.appendPath (*elementPath);
+                }
+
+                return result;
+            };
+
             std::optional<Rectangle<float>> clipObjectBounds;
 
             if (clipPath->units == SVGClipPath::ObjectBoundingBox)
@@ -343,47 +509,38 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
                 }
             }
 
-            Path combinedClipPath;
-            bool clipUsesNonZeroWinding = true;
+            const auto clipBounds = clipObjectBounds.value_or (Rectangle<float>());
 
-            for (const auto& clipElement : clipPath->elements)
+            const auto setClipPath = [&] (const Path& shape)
             {
-                if (clipElement->path)
-                {
-                    if (clipElement->clipRule == "evenodd")
-                        clipUsesNonZeroWinding = false;
-
-                    AffineTransform clipTransform = clipElement->transform.value_or (AffineTransform::identity());
-
-                    if (clipPath->units == SVGClipPath::ObjectBoundingBox)
-                    {
-                        if (! clipObjectBounds || clipObjectBounds->isEmpty())
-                            continue;
-
-                        auto unitsTransform = AffineTransform::translation (clipObjectBounds->getX(), clipObjectBounds->getY())
-                                                  .scaled (clipObjectBounds->getWidth(), clipObjectBounds->getHeight());
-                        clipTransform = clipTransform.followedBy (unitsTransform);
-                    }
-
-                    if (! clipTransform.isIdentity())
-                        combinedClipPath.appendPath (*clipElement->path, clipTransform);
-                    else
-                        combinedClipPath.appendPath (*clipElement->path);
-                }
-            }
-
-            if (! combinedClipPath.isEmpty())
-            {
-                combinedClipPath.setUsingNonZeroWinding (clipUsesNonZeroWinding);
-
                 auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
-                auto transformedClipPath = combinedClipPath.transformed (clipTransform);
+                auto transformedClipPath = shape.transformed (clipTransform);
 
                 const auto savedClipTransform = g.getTransform();
                 g.setTransform (AffineTransform::identity());
                 g.setClipPath (transformedClipPath);
                 g.setTransform (savedClipTransform);
+            };
 
+            // If the clipPath itself has a nested clip-path, apply it first (intersection)
+            if (clipPath->clipPathUrl)
+            {
+                if (auto nestedClipPath = getClipPathById (data, *clipPath->clipPathUrl))
+                {
+                    auto nestedClipShape = buildClipShape (*nestedClipPath, clipBounds);
+                    if (! nestedClipShape.isEmpty())
+                    {
+                        setClipPath (nestedClipShape);
+                        hasClipping = true;
+                    }
+                }
+            }
+
+            // Apply the clipPath's own elements (intersects with nested clip if present)
+            auto clipShape = buildClipShape (*clipPath, clipBounds);
+            if (! clipShape.isEmpty())
+            {
+                setClipPath (clipShape);
                 hasClipping = true;
             }
         }
@@ -482,6 +639,22 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
 
             ColorGradient colorGradient = createColorGradientFromSVG (*resolvedGradient,
                                                                       gradientBounds ? std::addressof (*gradientBounds) : nullptr);
+
+            if (resolvedGradient->type == SVGGradient::Radial && element.path && gradientBounds && ! resolvedGradient->transform.isIdentity())
+            {
+                const auto gradientSpaceTransform = createGradientSpaceTransform (*resolvedGradient, std::addressof (*gradientBounds));
+
+                if (! gradientSpaceTransform.isIdentity() && std::abs (gradientSpaceTransform.getDeterminant()) > 1.0e-6f)
+                {
+                    localGradientFillPath = element.path->transformed (gradientSpaceTransform.inverted());
+                    localGradientFillTransform = gradientSpaceTransform;
+
+                    const auto localGradient = createLocalGradientSpaceGradient (*resolvedGradient);
+                    const auto localGradientBounds = localGradientFillPath->getBounds();
+                    colorGradient = createColorGradientFromSVG (localGradient, std::addressof (localGradientBounds));
+                }
+            }
+
             g.setFillColorGradient (colorGradient);
             isFillDefined = true;
         }
@@ -497,6 +670,21 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
 
     if (isFillDefined && ! element.noFill)
     {
+        const auto fillElementPath = [&]
+        {
+            if (localGradientFillPath && localGradientFillTransform)
+            {
+                const auto savedFillTransform = g.getTransform();
+                g.setTransform (localGradientFillTransform->followedBy (savedFillTransform));
+                g.fillPath (*localGradientFillPath);
+                g.setTransform (savedFillTransform);
+            }
+            else
+            {
+                g.fillPath (*element.path);
+            }
+        };
+
         if (element.path)
         {
             if (element.fillUrl)
@@ -511,7 +699,7 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
                                                              << " id: " << (element.id ? *element.id : "none")
                                                              << " bounds: " << element.path->getBounds().toString()
                                                              << " clip: " << (hasClipping ? "true" : "false"));
-                    g.fillPath (*element.path);
+                    fillElementPath();
                 }
             }
             else
@@ -520,7 +708,7 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
                                                          << " id: " << (element.id ? *element.id : "none")
                                                          << " bounds: " << element.path->getBounds().toString()
                                                          << " clip: " << (hasClipping ? "true" : "false"));
-                g.fillPath (*element.path);
+                fillElementPath();
             }
         }
         else if (element.reference)
@@ -620,7 +808,7 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
         g.setStrokeCap (*element.strokeCap);
     if (element.strokeWidth)
         g.setStrokeWidth (*element.strokeWidth);
-    g.setStrokeMiterLimit (element.strokeMiterLimit);
+    g.setStrokeMiterLimit (element.strokeMiterLimit.value_or (4.0f));
 
     bool referenceDefinesStroke = false;
     if (! isStrokeDefined && element.reference)
@@ -634,9 +822,9 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
         const Path* pathToStroke = element.path ? std::addressof (*element.path) : nullptr;
         std::optional<Path> dashedPath;
 
-        if (pathToStroke != nullptr && element.strokeDashArray && ! element.strokeDashArray->isEmpty())
+        if (pathToStroke != nullptr && currentStrokeDashArray && ! currentStrokeDashArray->isEmpty())
         {
-            dashedPath = createDashedPath (*pathToStroke, *element.strokeDashArray, element.strokeDashOffset.value_or (0.0f));
+            dashedPath = createDashedPath (*pathToStroke, *currentStrokeDashArray, currentStrokeDashOffset);
             pathToStroke = std::addressof (*dashedPath);
         }
 
@@ -683,7 +871,23 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
                 if (refElement->localTransform)
                     g.setTransform (refElement->localTransform->followedBy (savedTransform));
 
-                g.strokePath (*refElement->path);
+                const Path* referencePathToStroke = std::addressof (*refElement->path);
+                std::optional<Path> dashedReferencePath;
+                auto referenceStrokeDashArray = currentStrokeDashArray;
+                if (refElement->strokeDashArrayNone)
+                    referenceStrokeDashArray.reset();
+                else if (refElement->strokeDashArray)
+                    referenceStrokeDashArray = refElement->strokeDashArray;
+
+                const auto referenceStrokeDashOffset = refElement->strokeDashOffset.value_or (currentStrokeDashOffset);
+
+                if (referenceStrokeDashArray && ! referenceStrokeDashArray->isEmpty())
+                {
+                    dashedReferencePath = createDashedPath (*referencePathToStroke, *referenceStrokeDashArray, referenceStrokeDashOffset);
+                    referencePathToStroke = std::addressof (*dashedReferencePath);
+                }
+
+                g.strokePath (*referencePathToStroke);
 
                 if (refElement->localTransform)
                     g.setTransform (savedTransform);
@@ -897,7 +1101,7 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
                 }
 
                 for (const auto& childElement : refElement->children)
-                    paintElement (g, data, *childElement, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke, currentColor, visitingElements, recursionDepth + 1);
+                    paintElement (g, data, *childElement, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke, currentColor, visitingElements, currentStrokeDashArray, currentStrokeDashOffset, recursionDepth + 1);
 
                 g.setTransform (savedTransform);
             }
@@ -905,7 +1109,7 @@ void Drawable::paintElement (Graphics& g, const SVGData& data, const SVGElement&
     }
 
     for (const auto& childElement : element.children)
-        paintElement (g, data, *childElement, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke, currentColor, visitingElements, recursionDepth + 1);
+        paintElement (g, data, *childElement, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke, currentColor, visitingElements, currentStrokeDashArray, currentStrokeDashOffset, recursionDepth + 1);
 
     // paintDebugElement (g, element);
 }
@@ -946,7 +1150,7 @@ void Drawable::paintMarker (Graphics& g,
     g.addTransform (markerTransform);
 
     for (const auto& element : marker.elements)
-        paintElement (g, data, *element, true, false, Colors::black, visitingElements, recursionDepth + 1);
+        paintElement (g, data, *element, true, false, Colors::black, visitingElements, std::nullopt, 0.0f, recursionDepth + 1);
 }
 
 //==============================================================================
@@ -1015,7 +1219,7 @@ void Drawable::paintPatternFill (Graphics& g,
             }
 
             for (const auto& patternElement : pattern.elements)
-                paintElement (g, data, *patternElement, true, false, currentColor, visitingElements, recursionDepth + 1);
+                paintElement (g, data, *patternElement, true, false, currentColor, visitingElements, std::nullopt, 0.0f, recursionDepth + 1);
         }
     }
 }
@@ -1184,6 +1388,13 @@ Path Drawable::createDashedPath (const Path& source, const Array<float>& dashArr
     if (positiveDashes.isEmpty())
         return source;
 
+    if ((positiveDashes.size() % 2) != 0)
+    {
+        const auto originalSize = positiveDashes.size();
+        for (int i = 0; i < originalSize; ++i)
+            positiveDashes.add (positiveDashes[i]);
+    }
+
     Path result;
     float totalPatternLength = 0.0f;
     for (auto dash : positiveDashes)
@@ -1192,13 +1403,24 @@ Path Drawable::createDashedPath (const Path& source, const Array<float>& dashArr
     if (totalPatternLength <= 0.0f)
         return source;
 
-    int dashIndex = 0;
-    float patternPosition = std::fmod (jmax (0.0f, dashOffset), totalPatternLength);
-    while (patternPosition > positiveDashes[dashIndex])
+    auto dashIndex = 0;
+    auto patternPosition = 0.0f;
+
+    const auto resetDashPosition = [&]
     {
-        patternPosition -= positiveDashes[dashIndex];
-        dashIndex = (dashIndex + 1) % positiveDashes.size();
-    }
+        dashIndex = 0;
+        patternPosition = std::fmod (dashOffset, totalPatternLength);
+        if (patternPosition < 0.0f)
+            patternPosition += totalPatternLength;
+
+        while (patternPosition > positiveDashes[dashIndex])
+        {
+            patternPosition -= positiveDashes[dashIndex];
+            dashIndex = (dashIndex + 1) % positiveDashes.size();
+        }
+    };
+
+    resetDashPosition();
 
     auto drawLineDash = [&] (Point<float> start, Point<float> end)
     {
@@ -1240,6 +1462,7 @@ Path Drawable::createDashedPath (const Path& source, const Array<float>& dashArr
                 current = segment.point;
                 subPathStart = current;
                 hasCurrent = true;
+                resetDashPosition();
                 break;
 
             case Path::Verb::LineTo:
@@ -1339,8 +1562,8 @@ AffineTransform Drawable::calculateTransformForTarget (const Rectangle<float>& s
         offsetY += targetArea.getHeight() - scaledHeight;
 
     return AffineTransform::translation (-sourceBounds.getX(), -sourceBounds.getY())
-        .scaled (scaleX, scaleY)
-        .translated (offsetX, offsetY);
+        .followedBy (AffineTransform::scaling (scaleX, scaleY))
+        .followedBy (AffineTransform::translation (offsetX, offsetY));
 }
 
 //==============================================================================
@@ -1357,16 +1580,7 @@ ColorGradient Drawable::createColorGradientFromSVG (const SVGGradient& gradient,
         return ColorGradient();
     }
 
-    const bool hasBounds = objectBounds != nullptr && objectBounds->getWidth() > 0.0f && objectBounds->getHeight() > 0.0f;
-    AffineTransform unitsTransform = AffineTransform::identity();
-
-    if (gradient.units == SVGGradient::ObjectBoundingBox && hasBounds)
-    {
-        unitsTransform = AffineTransform::translation (objectBounds->getX(), objectBounds->getY())
-                             .scaled (objectBounds->getWidth(), objectBounds->getHeight());
-    }
-
-    const AffineTransform gradientSpaceTransform = unitsTransform.followedBy (gradient.transform);
+    const AffineTransform gradientSpaceTransform = createGradientSpaceTransform (gradient, objectBounds);
 
     auto transformPoint = [&gradientSpaceTransform] (Point<float> p)
     {
@@ -1380,8 +1594,9 @@ ColorGradient Drawable::createColorGradientFromSVG (const SVGGradient& gradient,
     const Point<float> start = transformPoint (gradient.start);
     const Point<float> end = transformPoint (gradient.end);
     const Point<float> center = transformPoint (gradient.center);
+    const Point<float> focal = gradient.hasFocal ? transformPoint (gradient.focal) : center;
 
-    auto computeRadius = [&]() -> float
+    auto computeRadiusFrom = [&] (Point<float> origin) -> float
     {
         if (gradient.radius <= 0.0f)
             return 0.0f;
@@ -1395,12 +1610,12 @@ ColorGradient Drawable::createColorGradientFromSVG (const SVGGradient& gradient,
 
         float maxRadius = 0.0f;
         for (const auto& edgePoint : edgePoints)
-            maxRadius = jmax (maxRadius, Line<float> (center, edgePoint).length());
+            maxRadius = jmax (maxRadius, Line<float> (origin, edgePoint).length());
 
         return maxRadius;
     };
 
-    const auto radius = gradient.type == SVGGradient::Radial ? computeRadius() : 0.0f;
+    const auto radius = gradient.type == SVGGradient::Radial ? computeRadiusFrom (center) : 0.0f;
 
     std::vector<ColorGradient::ColorStop> colorStops;
     colorStops.reserve (gradient.stops.size());
@@ -1473,23 +1688,88 @@ ColorGradient Drawable::createColorGradientFromSVG (const SVGGradient& gradient,
         }
     }
 
+    if (gradient.type == SVGGradient::Radial
+        && objectBounds != nullptr
+        && (gradient.spreadMethod == "reflect" || gradient.spreadMethod == "repeat"))
+    {
+        const auto radialCenter = gradient.hasFocal ? focal : center;
+        const auto radialRadius = gradient.hasFocal ? computeRadiusFrom (focal) : radius;
+
+        if (radialRadius > 0.0f)
+        {
+            const Point<float> corners[] = {
+                objectBounds->getTopLeft(),
+                objectBounds->getTopRight(),
+                objectBounds->getBottomLeft(),
+                objectBounds->getBottomRight()
+            };
+
+            float maxT = 1.0f;
+
+            for (const auto& corner : corners)
+                maxT = jmax (maxT, Line<float> (radialCenter, corner).length() / radialRadius);
+
+            int repeatEnd = static_cast<int> (std::ceil (maxT));
+
+            constexpr int maxGradientRepeats = 64;
+            repeatEnd = jlimit (1, maxGradientRepeats, repeatEnd);
+
+            const auto repeatRange = static_cast<float> (repeatEnd);
+            const auto expandedRadius = radialRadius * repeatRange;
+
+            colorStops.reserve (gradient.stops.size() * static_cast<size_t> (repeatEnd));
+
+            const auto appendStop = [&] (const SVGGradientStop& stop, float repeatedOffset)
+            {
+                const auto normalizedOffset = repeatedOffset / repeatRange;
+                const auto radialPoint = Point<float> (radialCenter.getX() + expandedRadius * normalizedOffset,
+                                                       radialCenter.getY());
+
+                colorStops.emplace_back (stop.color.withMultipliedAlpha (stop.opacity), radialPoint, jlimit (0.0f, 1.0f, normalizedOffset));
+            };
+
+            for (int repeat = 0; repeat < repeatEnd; ++repeat)
+            {
+                const bool reflected = gradient.spreadMethod == "reflect" && (repeat % 2) == 1;
+
+                if (reflected)
+                {
+                    for (auto stop = gradient.stops.rbegin(); stop != gradient.stops.rend(); ++stop)
+                        appendStop (*stop, static_cast<float> (repeat) + (1.0f - stop->offset));
+                }
+                else
+                {
+                    for (const auto& stop : gradient.stops)
+                        appendStop (stop, static_cast<float> (repeat) + stop.offset);
+                }
+            }
+        }
+    }
+
     if (colorStops.empty())
     {
-        for (const auto& stop : gradient.stops)
+        if (gradient.type == SVGGradient::Radial)
         {
-            Color color = stop.color.withMultipliedAlpha (stop.opacity);
+            const auto radialCenter = gradient.hasFocal ? focal : center;
+            const auto radialRadius = gradient.hasFocal ? computeRadiusFrom (focal) : radius;
+            const auto effectiveRadius = (radialRadius > 0.0f) ? radialRadius : 1.0f;
 
-            if (gradient.type == SVGGradient::Linear)
+            for (const auto& stop : gradient.stops)
             {
+                const auto offset = jlimit (0.0f, 1.0f, stop.offset);
+                const auto radialPoint = Point<float> (radialCenter.getX() + effectiveRadius * offset,
+                                                       radialCenter.getY());
+                colorStops.emplace_back (stop.color.withMultipliedAlpha (stop.opacity), radialPoint, offset);
+            }
+        }
+        else
+        {
+            for (const auto& stop : gradient.stops)
+            {
+                Color color = stop.color.withMultipliedAlpha (stop.opacity);
                 const auto interpolated = Point<float> (start.getX() + stop.offset * (end.getX() - start.getX()),
                                                         start.getY() + stop.offset * (end.getY() - start.getY()));
-
                 colorStops.emplace_back (color, interpolated, stop.offset);
-            }
-            else
-            {
-                const auto radialPoint = Point<float> (center.getX() + radius * stop.offset, center.getY());
-                colorStops.emplace_back (color, radialPoint, stop.offset);
             }
         }
     }
