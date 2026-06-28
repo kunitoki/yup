@@ -262,6 +262,14 @@ public:
         m_device.Tick();
     }
 
+    std::unique_ptr<OffscreenTarget> createOffscreenTarget (int, int) override { return nullptr; }
+
+    void beginOffscreen (OffscreenTarget&, const rive::gpu::RenderContext::FrameDescriptor&) override {}
+
+    void endOffscreen (OffscreenTarget&) override {}
+
+    bool readOffscreenPixels (OffscreenTarget&, void*, size_t) override { return false; }
+
 private:
     const LowLevelRenderContext::Options m_options;
     WGPUDevice m_backendDevice = {};

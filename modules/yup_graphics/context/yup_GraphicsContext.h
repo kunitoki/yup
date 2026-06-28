@@ -140,6 +140,42 @@ public:
     virtual void tick() {}
 
     //==============================================================================
+    /** Opaque platform-specific GPU resources for a fixed-size offscreen render.
+        Created by createOffscreenTarget(); passed to beginOffscreen/endOffscreen and readOffscreenPixels. */
+    class YUP_API OffscreenTarget
+    {
+    public:
+        virtual ~OffscreenTarget() = default;
+
+        /** Returns the width of this offscreen target in pixels. */
+        virtual int getWidth() const noexcept = 0;
+
+        /** Returns the height of this offscreen target in pixels. */
+        virtual int getHeight() const noexcept = 0;
+
+        /** Returns the underlying Rive render target. */
+        virtual rive::gpu::RenderTarget* getRenderTarget() noexcept = 0;
+
+        /** Returns the rendered result as a sampled Rive GPU texture suitable for use in drawImage.
+            Must be called after endOffscreen(). Returns nullptr on failure. */
+        virtual rive::rcp<rive::gpu::Texture> adoptAsTexture() = 0;
+    };
+
+    /** Creates platform-specific GPU offscreen resources for the given dimensions.
+        Returns nullptr on failure. Must NOT be called between begin() and end(). */
+    virtual std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) = 0;
+
+    /** Begins a standalone GPU frame targeting the given offscreen surface. */
+    virtual void beginOffscreen (OffscreenTarget& target, const rive::gpu::RenderContext::FrameDescriptor& frameDesc) = 0;
+
+    /** Flushes GPU commands into the offscreen target. */
+    virtual void endOffscreen (OffscreenTarget& target) = 0;
+
+    /** Reads RGBA pixels from the completed offscreen frame into CPU memory.
+        Must be called after endOffscreen(). Rows are top-to-bottom. Returns false on failure. */
+    virtual bool readOffscreenPixels (OffscreenTarget& target, void* dst, size_t dstSize) = 0;
+
+    //==============================================================================
     /** Static factory method to create a graphics context using a specific graphics API.
 
         @param graphicsApi The graphics API to use.

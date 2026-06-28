@@ -134,6 +134,130 @@ public:
         m_renderTarget->setTargetTexture (nullptr);
     }
 
+    //==============================================================================
+
+    struct OffscreenTargetD3D : public OffscreenTarget
+    {
+        int width = 0;
+        int height = 0;
+        ComPtr<ID3D11Texture2D> renderTexture;
+        ComPtr<ID3D11Texture2D> stagingTexture;
+        rive::rcp<rive::gpu::RenderTargetD3D> riveRenderTarget;
+        ID3D11DeviceContext* gpuContext = nullptr;
+        rive::gpu::RenderContext* renderContext = nullptr;
+
+        int getWidth() const noexcept override { return width; }
+
+        int getHeight() const noexcept override { return height; }
+
+        rive::gpu::RenderTarget* getRenderTarget() noexcept override { return riveRenderTarget.get(); }
+
+        rive::rcp<rive::gpu::Texture> adoptAsTexture() override
+        {
+            if (renderContext == nullptr || renderTexture == nullptr)
+                return nullptr;
+
+            auto* d3dImpl = renderContext->static_impl_cast<rive::gpu::RenderContextD3DImpl>();
+            return d3dImpl->adoptImageTexture (renderTexture,
+                                               static_cast<uint32_t> (width),
+                                               static_cast<uint32_t> (height));
+        }
+    };
+
+    std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
+    {
+        if (width <= 0 || height <= 0)
+            return nullptr;
+
+        auto target = std::make_unique<OffscreenTargetD3D>();
+        target->width = width;
+        target->height = height;
+        target->gpuContext = m_gpuContext.Get();
+        target->renderContext = m_renderContext.get();
+
+        D3D11_TEXTURE2D_DESC renderDesc {};
+        renderDesc.Width = static_cast<UINT> (width);
+        renderDesc.Height = static_cast<UINT> (height);
+        renderDesc.MipLevels = 1;
+        renderDesc.ArraySize = 1;
+        renderDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        renderDesc.SampleDesc.Count = 1;
+        renderDesc.Usage = D3D11_USAGE_DEFAULT;
+        renderDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+        HRESULT hr = m_gpu->CreateTexture2D (&renderDesc, nullptr, target->renderTexture.ReleaseAndGetAddressOf());
+        if (FAILED (hr))
+            return nullptr;
+
+        D3D11_TEXTURE2D_DESC stagingDesc {};
+        stagingDesc.Width = static_cast<UINT> (width);
+        stagingDesc.Height = static_cast<UINT> (height);
+        stagingDesc.MipLevels = 1;
+        stagingDesc.ArraySize = 1;
+        stagingDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        stagingDesc.SampleDesc.Count = 1;
+        stagingDesc.Usage = D3D11_USAGE_STAGING;
+        stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        hr = m_gpu->CreateTexture2D (&stagingDesc, nullptr, target->stagingTexture.ReleaseAndGetAddressOf());
+        if (FAILED (hr))
+            return nullptr;
+
+        auto renderContextImpl = m_renderContext->static_impl_cast<rive::gpu::RenderContextD3DImpl>();
+        target->riveRenderTarget = renderContextImpl->makeRenderTarget (static_cast<uint32_t> (width),
+                                                                        static_cast<uint32_t> (height));
+        target->riveRenderTarget->setTargetTexture (target->renderTexture);
+
+        return target;
+    }
+
+    void beginOffscreen (OffscreenTarget& baseTarget, const rive::gpu::RenderContext::FrameDescriptor& frameDesc) override
+    {
+        m_renderContext->beginFrame (frameDesc);
+    }
+
+    void endOffscreen (OffscreenTarget& baseTarget) override
+    {
+        auto& target = static_cast<OffscreenTargetD3D&> (baseTarget);
+
+        rive::gpu::RenderContext::FlushResources flushDesc;
+        flushDesc.renderTarget = target.riveRenderTarget.get();
+        m_renderContext->flush (flushDesc);
+
+        m_gpuContext->CopyResource (target.stagingTexture.Get(), target.renderTexture.Get());
+
+        target.riveRenderTarget->setTargetTexture (nullptr);
+    }
+
+    bool readOffscreenPixels (OffscreenTarget& baseTarget, void* dst, size_t dstSize) override
+    {
+        auto& target = static_cast<OffscreenTargetD3D&> (baseTarget);
+
+        if (target.stagingTexture == nullptr || dst == nullptr)
+            return false;
+
+        const size_t bytesPerRow = static_cast<size_t> (target.width) * 4u;
+        if (dstSize < bytesPerRow * static_cast<size_t> (target.height))
+            return false;
+
+        D3D11_MAPPED_SUBRESOURCE mapped {};
+        HRESULT hr = m_gpuContext->Map (target.stagingTexture.Get(), 0, D3D11_MAP_READ, 0, &mapped);
+        if (FAILED (hr))
+            return false;
+
+        auto* dstBytes = static_cast<uint8_t*> (dst);
+        const auto* srcBytes = static_cast<const uint8_t*> (mapped.pData);
+
+        for (int row = 0; row < target.height; ++row)
+        {
+            std::memcpy (dstBytes + static_cast<size_t> (row) * bytesPerRow,
+                         srcBytes + static_cast<size_t> (row) * mapped.RowPitch,
+                         bytesPerRow);
+        }
+
+        m_gpuContext->Unmap (target.stagingTexture.Get(), 0);
+
+        return true;
+    }
+
 private:
     const bool m_isHeadless;
     ComPtr<IDXGIFactory2> m_d3dFactory;

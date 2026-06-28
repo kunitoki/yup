@@ -227,12 +227,71 @@ void Graphics::SavedState::restore()
 Graphics::Graphics (GraphicsContext& context, rive::Renderer& renderer, float scale) noexcept
     : context (context)
     , factory (*context.factory())
+    , ownedRenderer (nullptr)
     , renderer (renderer)
     , contextScale (scale)
 {
     renderOptions.emplace_back();
 
     currentRenderOptions().scale = scale;
+}
+
+Graphics::Graphics (GraphicsContext& context, Image& image, uint32_t clearColor) noexcept
+    : context (context)
+    , factory (*context.factory())
+    , ownedRenderer (context.makeRenderer (image.getWidth(), image.getHeight()))
+    , renderer (*ownedRenderer)
+    , contextScale (1.0f)
+    , offscreenTargetImage (&image)
+{
+    offscreenTarget = context.createOffscreenTarget (image.getWidth(), image.getHeight());
+    if (! offscreenTarget)
+        return;
+
+    rive::gpu::RenderContext::FrameDescriptor frameDesc;
+    frameDesc.renderTargetWidth = static_cast<uint32_t> (image.getWidth());
+    frameDesc.renderTargetHeight = static_cast<uint32_t> (image.getHeight());
+    frameDesc.loadAction = rive::gpu::LoadAction::clear;
+    frameDesc.clearColor = clearColor;
+
+    context.beginOffscreen (*offscreenTarget, frameDesc);
+
+    renderOptions.emplace_back();
+    currentRenderOptions().scale = 1.0f;
+    currentRenderOptions().drawingArea = { 0.0f, 0.0f, static_cast<float> (image.getWidth()), static_cast<float> (image.getHeight()) };
+}
+
+//==============================================================================
+
+bool Graphics::isOffscreen() const noexcept
+{
+    return offscreenTarget != nullptr;
+}
+
+bool Graphics::commitToImage()
+{
+    if (! offscreenTarget || ! offscreenTargetImage || committed)
+        return false;
+
+    context.endOffscreen (*offscreenTarget);
+    committed = true;
+
+    if (auto tex = offscreenTarget->adoptAsTexture())
+        offscreenTargetImage->adoptTexture (std::move (tex));
+
+    return true;
+}
+
+bool Graphics::readPixelsToImage()
+{
+    if (! offscreenTarget || ! offscreenTargetImage)
+        return false;
+
+    if (! committed)
+        commitToImage();
+
+    auto span = offscreenTargetImage->getRawData();
+    return context.readOffscreenPixels (*offscreenTarget, span.data(), span.size());
 }
 
 //==============================================================================
@@ -243,6 +302,11 @@ float Graphics::getContextScale() const
 }
 
 //==============================================================================
+GraphicsContext& Graphics::getGraphicsContext()
+{
+    return context;
+}
+
 rive::Factory* Graphics::getFactory()
 {
     return std::addressof (factory);
@@ -404,8 +468,9 @@ StrokeCap Graphics::getStrokeCap() const
     return currentRenderOptions().cap;
 }
 
-void Graphics::setStrokeMiterLimit (float /*limit*/)
+void Graphics::setStrokeMiterLimit ([[maybe_unused]] float limit)
 {
+    // Rive has a hardcoded miter limit of 4.0, so we don't need to set it here.
 }
 
 //==============================================================================

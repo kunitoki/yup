@@ -527,9 +527,23 @@ public:
     Span<uint8> getRawData() noexcept;
 
     //==============================================================================
-    /*
-    Image duplicate() const;
+    /** Duplicate the image.
+     
+        This will just duplicate the image on the CPU and won't duplicate the GPU texture if it exists.
+        
+        Use this method to create a new image with the same pixel data.
+
+        @return A new Image object that is a duplicate of the current image.
     */
+    Image duplicate() const;
+
+    //==============================================================================
+    /** Loads an image from raw data.
+
+        @param imageData    The raw image data.
+        @return             A ResultValue containing the loaded image or an error message.
+    */
+    static ResultValue<Image> loadFromData (Span<const uint8> imageData);
 
     //==============================================================================
     /** Creates a texture on the GPU for the image if it doesn't already exist.
@@ -542,16 +556,12 @@ public:
     /** Invalidates the existing texture, forcing a new texture to be created on the next request. */
     void invalidateTexture();
 
-    /** Returns the GPU texture associated with this image, or nullptr if no texture exists. */
-    rive::rcp<rive::gpu::Texture> getTexture() const;
-
     //==============================================================================
-    /** Loads an image from raw data.
+    /** @internal Sets the GPU texture directly, bypassing the BitmapData upload path. */
+    void adoptTexture (rive::rcp<rive::gpu::Texture> t);
 
-        @param imageData    The raw image data.
-        @return             A ResultValue containing the loaded image or an error message.
-    */
-    static ResultValue<Image> loadFromData (Span<const uint8> imageData);
+    /** @internal Returns the GPU texture associated with this image, or nullptr if no texture exists. */
+    rive::rcp<rive::gpu::Texture> getTexture() const;
 
 private:
     //==============================================================================

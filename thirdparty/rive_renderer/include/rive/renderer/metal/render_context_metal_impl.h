@@ -141,6 +141,8 @@ public:
                                   GPUTextureFormat format,
                                   const uint8_t imageDataRGBAPremul[]) override;
 
+    rcp<Texture> adoptImageTexture(id<MTLTexture> texture, uint32_t width, uint32_t height);
+
 #ifdef RIVE_CANVAS
     rcp<RenderCanvas> makeRenderCanvas(uint32_t width,
                                        uint32_t height) override;

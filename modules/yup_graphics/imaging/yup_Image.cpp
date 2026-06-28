@@ -214,7 +214,6 @@ Span<uint8> Image::getRawData() noexcept
 }
 
 //==============================================================================
-/*
 Image Image::duplicate() const
 {
     Image result;
@@ -224,8 +223,31 @@ Image Image::duplicate() const
 
     return result;
 }
-*/
 
+//==============================================================================
+
+ResultValue<Image> Image::loadFromData (Span<const uint8> imageData)
+{
+    auto bitmap = rive::Bitmap::decode (imageData.data(), imageData.size());
+    if (bitmap == nullptr)
+        return makeResultValueFail ("Unable to decode image");
+
+    Image result;
+
+    const auto pixelFormat = bitmap->pixelFormat();
+    const auto imagePixelFormat = pixelFormat == rive::Bitmap::PixelFormat::RGB
+                                    ? PixelFormat::RGB
+                                    : PixelFormat::RGBA;
+    auto pixelData = pixelFormat == rive::Bitmap::PixelFormat::RGBAPremul
+                       ? copyRGBAPremultipliedAsRGBA (*bitmap)
+                       : bitmap->detachBytes();
+
+    result.bitmapData = new BitmapData (bitmap->width(), bitmap->height(), imagePixelFormat, std::move (pixelData));
+
+    return makeResultValueOk (result);
+}
+
+//==============================================================================
 bool Image::createTextureIfNotPresent (GraphicsContext& context) const
 {
     if (texture != nullptr)
@@ -278,32 +300,15 @@ void Image::invalidateTexture()
     texture = nullptr;
 }
 
+//==============================================================================
+void Image::adoptTexture (rive::rcp<rive::gpu::Texture> t)
+{
+    texture = std::move (t);
+}
+
 rive::rcp<rive::gpu::Texture> Image::getTexture() const
 {
     return texture;
-}
-
-//==============================================================================
-
-ResultValue<Image> Image::loadFromData (Span<const uint8> imageData)
-{
-    auto bitmap = rive::Bitmap::decode (imageData.data(), imageData.size());
-    if (bitmap == nullptr)
-        return makeResultValueFail ("Unable to decode image");
-
-    Image result;
-
-    const auto pixelFormat = bitmap->pixelFormat();
-    const auto imagePixelFormat = pixelFormat == rive::Bitmap::PixelFormat::RGB
-                                    ? PixelFormat::RGB
-                                    : PixelFormat::RGBA;
-    auto pixelData = pixelFormat == rive::Bitmap::PixelFormat::RGBAPremul
-                       ? copyRGBAPremultipliedAsRGBA (*bitmap)
-                       : bitmap->detachBytes();
-
-    result.bitmapData = new BitmapData (bitmap->width(), bitmap->height(), imagePixelFormat, std::move (pixelData));
-
-    return makeResultValueOk (result);
 }
 
 } // namespace yup

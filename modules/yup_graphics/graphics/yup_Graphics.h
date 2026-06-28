@@ -77,6 +77,17 @@ public:
     */
     Graphics (GraphicsContext& context, rive::Renderer& renderer, float scale = 1.0f) noexcept;
 
+    /** Constructs a Graphics object for rendering into an Image on the GPU.
+
+        The image must have valid dimensions. Begins the offscreen GPU frame immediately.
+        Must NOT be called between GraphicsContext::begin() and end().
+
+        @param context      Reference to the GraphicsContext to use for offscreen rendering.
+        @param targetImage  Reference to the Image that will receive the rendered result.
+        @param clearColor   ARGB clear color applied at the start of the offscreen frame.
+    */
+    Graphics (GraphicsContext& context, Image& targetImage, uint32_t clearColor = 0) noexcept;
+
     //==============================================================================
     /** Saves the current state of the Graphics object.
 
@@ -503,10 +514,34 @@ public:
     void strokeFittedText (const String& text, const Font& font, const Rectangle<float>& rect, Justification justification = Justification::center);
 
     //==============================================================================
+    /** Returns true if this Graphics renders to an offscreen Image target. */
+    bool isOffscreen() const noexcept;
+
+    /** Flushes the offscreen GPU frame and sets the rendered GPU texture on the target Image.
+
+        After this call, the Image can be passed to drawImage() without any CPU round-trip.
+
+        Returns false if not an offscreen context or already committed.
+    */
+    bool commitToImage();
+
+    /** Reads the rendered pixels back to the Image's CPU pixel buffer.
+
+        Implicitly calls commitToImage() first if not yet done.
+        After this call, Image::getRawData() contains the rendered content.
+        
+        Returns false if not an offscreen context.
+    */
+    bool readPixelsToImage();
+
+    //==============================================================================
     /** Retrieves the global context scale, the one used to construct the graphics instance. */
     float getContextScale() const;
 
     //==============================================================================
+    /** Retrieves the graphics context this object was created with. */
+    GraphicsContext& getGraphicsContext();
+
     /** Retrieves the factory used for creating graphical objects.
 
         @return Pointer to a rive::Factory object.
@@ -640,8 +675,13 @@ private:
     GraphicsContext& context;
 
     rive::Factory& factory;
+    std::unique_ptr<rive::Renderer> ownedRenderer;
     rive::Renderer& renderer;
     float contextScale = 1.0f;
+
+    std::unique_ptr<GraphicsContext::OffscreenTarget> offscreenTarget;
+    Image* offscreenTargetImage = nullptr;
+    bool committed = false;
 
     std::vector<RenderOptions> renderOptions;
 };

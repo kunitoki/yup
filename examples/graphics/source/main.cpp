@@ -56,6 +56,7 @@
 #include "examples/VariableFonts.h"
 #include "examples/Widgets.h"
 #include "examples/PaintProfilerDemo.h"
+#include "examples/OffscreenRenderDemo.h"
 #if YUP_MODULE_AVAILABLE_yup_python
 #include "examples/Python.h"
 #endif
@@ -163,6 +164,7 @@ public:
         });
         registerDemo<SvgDemo> ("SVG", counter++);
         registerDemo<PaintProfilerDemo> ("Paint Profiler", counter++);
+        registerDemo<OffscreenRenderDemo> ("Offscreen Render", counter++);
 #if YUP_MODULE_AVAILABLE_yup_python
         registerDemo<PythonDemo> ("Python", counter++);
 #endif
