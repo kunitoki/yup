@@ -29,6 +29,8 @@
 #include "yup_graphics/yup_ImageFormatManager.cpp"
 #include "yup_graphics/yup_ImageFormatReader.cpp"
 #include "yup_graphics/yup_ImageFormatWriter.cpp"
+#include "yup_graphics/yup_ImageFileIO.cpp"
+#include "yup_graphics/yup_ImageDataFiles.cpp"
 #include "yup_graphics/yup_Line.cpp"
 #include "yup_graphics/yup_Path.cpp"
 #include "yup_graphics/yup_Point.cpp"
@@ -50,4 +52,7 @@
 #endif
 #if YUP_MODULE_AVAILABLE_libwebp && YUP_IMAGE_FORMAT_WEBP
 #include "yup_graphics/yup_WebPImageFormat.cpp"
+#endif
+#if YUP_MODULE_AVAILABLE_libgif && YUP_IMAGE_FORMAT_GIF
+#include "yup_graphics/yup_GifImageFormat.cpp"
 #endif

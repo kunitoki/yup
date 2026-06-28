@@ -142,40 +142,44 @@ inline File ensureTestImage (const String& filename, int w, int h, PixelFormat f
 
     auto file = dir.getChildFile (filename);
 
-    if (! file.existsAsFile())
-    {
-        Image img (w, h, fmt);
-        img.fill (argb);
+    // Always overwrite to avoid stale/corrupt files from previous runs.
+    file.deleteFile();
 
-        auto* fos = file.createOutputStream().release();
-        if (fos == nullptr)
-            return file;
+    Image img (w, h, fmt);
+    img.fill (argb);
 
-        auto ext = filename.fromLastOccurrenceOf (".", false, false).toLowerCase();
+    auto* fos = file.createOutputStream().release();
+    if (fos == nullptr)
+        return file;
 
-        if (ext == ".bmp")
-            BmpImageFormatWriter (fos, fmt).writeImage (img);
-        else if (ext == ".ppm" || ext == ".pgm")
-            PpmImageFormatWriter (fos, fmt).writeImage (img);
+    auto ext = file.getFileExtension().toLowerCase();
+
+    bool ok = false;
+
+    if (ext == ".bmp")
+        ok = BmpImageFormatWriter (fos, fmt).writeImage (img);
+    else if (ext == ".ppm" || ext == ".pgm")
+        ok = PpmImageFormatWriter (fos, fmt).writeImage (img);
 #if YUP_IMAGE_FORMAT_PNG
-        else if (ext == ".png")
-            PngImageFormatWriter (fos, fmt).writeImage (img);
+    else if (ext == ".png")
+        ok = PngImageFormatWriter (fos, fmt).writeImage (img);
 #endif
 #if YUP_IMAGE_FORMAT_JPEG
-        else if (ext == ".jpg" || ext == ".jpeg")
-            JpegImageFormatWriter (fos, fmt, 0).writeImage (img);
+    else if (ext == ".jpg" || ext == ".jpeg")
+        ok = JpegImageFormatWriter (fos, fmt, 0).writeImage (img);
 #endif
 #if YUP_IMAGE_FORMAT_WEBP
-        else if (ext == ".webp")
-            WebPImageFormatWriter (fos, fmt, 0).writeImage (img);
+    else if (ext == ".webp")
+        ok = WebPImageFormatWriter (fos, fmt, 0).writeImage (img);
 #endif
 #if YUP_IMAGE_FORMAT_GIF
-        else if (ext == ".gif")
-            GifImageFormatWriter (fos, fmt).writeImage (img);
+    else if (ext == ".gif")
+        ok = GifImageFormatWriter (fos, fmt).writeImage (img);
 #endif
-        else
-            delete fos;
-    }
+    else
+        delete fos;
+
+    ignoreUnused (ok);
 
     return file;
 }

@@ -31,7 +31,11 @@ ImageFormatWriter::ImageFormatWriter (OutputStream* destStream,
 {
 }
 
-ImageFormatWriter::~ImageFormatWriter() = default;
+ImageFormatWriter::~ImageFormatWriter()
+{
+    if (output != nullptr)
+        output->flush();
+}
 
 bool ImageFormatWriter::flush()
 {

@@ -123,7 +123,7 @@ PngImageFormatReader::PngImageFormatReader (InputStream* stream)
     if (png_get_text (pngPtr, infoPtr, &textPtr, &numText) > 0)
     {
         for (int i = 0; i < numText; ++i)
-            metadataValues.set (String (textPtr[i].key), String (textPtr[i].text));
+            metadataValues.set (String::fromUTF8 (textPtr[i].key), String::fromUTF8 (textPtr[i].text));
     }
 
     png_destroy_read_struct (&pngPtr, &infoPtr, nullptr);

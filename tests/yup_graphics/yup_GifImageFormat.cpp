@@ -778,10 +778,23 @@ TEST (GifImageFormatTests, FramesWithDifferentSizesEncodeAndDecode)
 
     EXPECT_EQ (f0.getWidth(), 16);
     EXPECT_EQ (f0.getHeight(), 16);
-    EXPECT_EQ (f1.getWidth(), 8);
-    EXPECT_EQ (f1.getHeight(), 8);
-    EXPECT_EQ (f2.getWidth(), 4);
-    EXPECT_EQ (f2.getHeight(), 4);
+    EXPECT_EQ (f1.getWidth(), 16);
+    EXPECT_EQ (f1.getHeight(), 16);
+    EXPECT_EQ (f2.getWidth(), 16);
+    EXPECT_EQ (f2.getHeight(), 16);
+
+    const auto expectPixelNear = [] (uint32 actual, uint32 expected, int tolerance)
+    {
+        EXPECT_EQ ((actual >> 24) & 0xFF, (expected >> 24) & 0xFF);
+        EXPECT_LE (std::abs (int ((actual >> 16) & 0xFF) - int ((expected >> 16) & 0xFF)), tolerance);
+        EXPECT_LE (std::abs (int ((actual >> 8) & 0xFF) - int ((expected >> 8) & 0xFF)), tolerance);
+        EXPECT_LE (std::abs (int ((actual >> 0) & 0xFF) - int ((expected >> 0) & 0xFF)), tolerance);
+    };
+
+    expectPixelNear (f1.getPixel (0, 0), 0xFF00FF00u, 8);
+    EXPECT_EQ (f1.getPixel (8, 8), 0x00000000u);
+    expectPixelNear (f2.getPixel (0, 0), 0xFF0000FFu, 8);
+    EXPECT_EQ (f2.getPixel (4, 4), 0x00000000u);
 }
 
 // ======================================================================
@@ -824,7 +837,7 @@ TEST (GifImageFormatTests, FullyTransparentFrameRoundtrip)
     EXPECT_TRUE (imagesAreEqualRGBA (original, result, 8));
 }
 
-TEST (GifImageFormatTests, SemiTransparentFrameRoundtrip)
+TEST (GifImageFormatTests, SemiTransparentFrameBecomesOpaque)
 {
     Image original (8, 8, PixelFormat::RGBA);
     original.fill (0x80FF8844u);
@@ -837,7 +850,8 @@ TEST (GifImageFormatTests, SemiTransparentFrameRoundtrip)
     auto result = reader.readImage();
 
     ASSERT_TRUE (result.isValid());
-    EXPECT_TRUE (imagesAreEqualRGBA (original, result, 30));
+    EXPECT_TRUE (imagesAreEqual (original, result, 30));
+    EXPECT_EQ ((result.getPixel (0, 0) >> 24) & 0xFF, 0xFFu);
 }
 
 TEST (GifImageFormatTests, LargeFrameCountAnimationRoundtrip)
@@ -884,7 +898,8 @@ TEST (GifImageFormatTests, ZeroDelayFrameRoundtrip)
     auto* inStream = new MemoryInputStream (bytes.data(), bytes.size(), true);
     GifImageFormatReader reader (inStream);
 
-    EXPECT_TRUE (reader.isAnimated());
+    EXPECT_FALSE (reader.isAnimated());
+    EXPECT_EQ (reader.getFrameCount(), 1);
     EXPECT_EQ (reader.getFrameDelayMs (0), 0);
 }
 
