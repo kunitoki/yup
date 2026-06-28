@@ -38,4 +38,22 @@ bool ImageFormatWriter::flush()
     return true;
 }
 
+bool ImageFormatWriter::beginAnimation (int /*loopCount*/)
+{
+    jassertfalse;
+    return false;
+}
+
+bool ImageFormatWriter::writeFrame (const Image& /*frame*/, int /*delayMs*/)
+{
+    jassertfalse;
+    return false;
+}
+
+bool ImageFormatWriter::endAnimation()
+{
+    jassertfalse;
+    return false;
+}
+
 } // namespace yup

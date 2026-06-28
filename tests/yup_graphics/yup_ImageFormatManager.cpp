@@ -25,6 +25,10 @@
 
 using namespace yup;
 
+// ======================================================================
+// BMP format registration and file handling
+// ======================================================================
+
 TEST (ImageFormatManagerTests, BmpFormatHandlesBmpExtension)
 {
     BmpImageFormat fmt;
@@ -50,16 +54,18 @@ TEST (ImageFormatManagerTests, PpmFormatHandlesPpmPgmPbmExtensions)
 TEST (ImageFormatManagerTests, BmpFormatNameIsCorrect)
 {
     BmpImageFormat fmt;
-
     EXPECT_EQ (fmt.getFormatName(), String ("BMP Image"));
 }
 
 TEST (ImageFormatManagerTests, PpmFormatNameIsCorrect)
 {
     PpmImageFormat fmt;
-
     EXPECT_EQ (fmt.getFormatName(), String ("PPM/PGM/PBM Image"));
 }
+
+// ======================================================================
+// Manager file-based reader/writer creation
+// ======================================================================
 
 TEST (ImageFormatManagerTests, RegisteredManagerReturnsNullWriterForUnknownExtension)
 {
@@ -67,7 +73,6 @@ TEST (ImageFormatManagerTests, RegisteredManagerReturnsNullWriterForUnknownExten
     manager.registerDefaultFormats();
 
     auto writer = manager.createWriterFor (File ("/nonexistent/image.xyz"));
-
     EXPECT_EQ (writer, nullptr);
 }
 
@@ -77,9 +82,21 @@ TEST (ImageFormatManagerTests, RegisteredManagerReturnsNullReaderForNonExistentF
     manager.registerDefaultFormats();
 
     auto reader = manager.createReaderFor (File ("/nonexistent/image.bmp"));
-
     EXPECT_EQ (reader, nullptr);
 }
+
+TEST (ImageFormatManagerTests, RegisteredManagerReturnsNullWriterForEmptyExtension)
+{
+    ImageFormatManager manager;
+    manager.registerDefaultFormats();
+
+    auto writer = manager.createWriterFor (File ("/nonexistent/image"));
+    EXPECT_EQ (writer, nullptr);
+}
+
+// ======================================================================
+// BMP stream detection
+// ======================================================================
 
 TEST (ImageFormatManagerTests, BmpCanHandleStreamWithBmpMagicBytes)
 {
@@ -102,6 +119,10 @@ TEST (ImageFormatManagerTests, BmpCanHandleStreamReturnsFalseForNonBmpBytes)
     EXPECT_FALSE (fmt.canHandleStream (stream, ImageFormat::forReading));
     EXPECT_EQ (stream.getPosition(), 0);
 }
+
+// ======================================================================
+// PPM stream detection
+// ======================================================================
 
 TEST (ImageFormatManagerTests, PpmCanHandleStreamWithAllNetpbmMagics)
 {
@@ -127,6 +148,10 @@ TEST (ImageFormatManagerTests, PpmCanHandleStreamReturnsFalseForNonPpmBytes)
     EXPECT_EQ (stream.getPosition(), 0);
 }
 
+// ======================================================================
+// Manager stream-based reader creation
+// ======================================================================
+
 TEST (ImageFormatManagerTests, CreateReaderForStreamReturnsBmpReaderForBmpData)
 {
     const Image source = generateTestImage (4, 4, PixelFormat::RGB);
@@ -149,6 +174,22 @@ TEST (ImageFormatManagerTests, CreateReaderForStreamReturnsBmpReaderForBmpData)
     EXPECT_EQ (reader->height, 4);
 }
 
+TEST (ImageFormatManagerTests, CreateReaderForStreamReturnsPpmReaderForPpmData)
+{
+    auto* rawStream = new MemoryOutputStream();
+    PpmImageFormatWriter writer (rawStream, PixelFormat::RGB);
+    ASSERT_TRUE (writer.writeImage (generateTestImage (4, 4, PixelFormat::RGB)));
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+
+    ImageFormatManager manager;
+    manager.registerDefaultFormats();
+
+    auto reader = manager.createReaderFor (inStream);
+    ASSERT_NE (reader, nullptr);
+    EXPECT_EQ (reader->getFormatName(), String ("PPM/PGM/PBM Image"));
+}
+
 TEST (ImageFormatManagerTests, CreateReaderForStreamReturnsNullForGarbageData)
 {
     const uint8 garbage[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x01, 0x02, 0x03 };
@@ -157,7 +198,6 @@ TEST (ImageFormatManagerTests, CreateReaderForStreamReturnsNullForGarbageData)
     manager.registerDefaultFormats();
 
     auto reader = manager.createReaderFor (new MemoryInputStream (garbage, std::size (garbage), false));
-
     EXPECT_EQ (reader, nullptr);
 }
 
@@ -167,6 +207,351 @@ TEST (ImageFormatManagerTests, CreateReaderForStreamReturnsNullForNullStream)
     manager.registerDefaultFormats();
 
     auto reader = manager.createReaderFor (static_cast<InputStream*> (nullptr));
-
     EXPECT_EQ (reader, nullptr);
+}
+
+// ======================================================================
+// Manager file-based roundtrip tests
+// ======================================================================
+
+TEST (ImageFormatManagerTests, ManagerBmpFileRoundtrip)
+{
+    auto original = generateTestImage (10, 8, PixelFormat::RGB);
+    auto tempFile = File::createTempFile (".bmp");
+
+    ImageFormatManager manager;
+    manager.registerDefaultFormats();
+
+    {
+        auto writer = manager.createWriterFor (tempFile, PixelFormat::RGB);
+        ASSERT_NE (writer, nullptr);
+        ASSERT_TRUE (writer->writeImage (original));
+    }
+
+    {
+        auto reader = manager.createReaderFor (tempFile);
+        ASSERT_NE (reader, nullptr);
+        EXPECT_EQ (reader->getFormatName(), String ("BMP Image"));
+
+        auto result = reader->readImage();
+        ASSERT_TRUE (result.isValid());
+        EXPECT_TRUE (imagesAreEqual (original, result, 0));
+    }
+
+    tempFile.deleteFile();
+}
+
+TEST (ImageFormatManagerTests, ManagerPpmFileRoundtrip)
+{
+    auto original = generateTestImage (10, 8, PixelFormat::RGB);
+    auto tempFile = File::createTempFile (".ppm");
+
+    ImageFormatManager manager;
+    manager.registerDefaultFormats();
+
+    {
+        auto writer = manager.createWriterFor (tempFile, PixelFormat::RGB);
+        ASSERT_NE (writer, nullptr);
+        ASSERT_TRUE (writer->writeImage (original));
+    }
+
+    {
+        auto reader = manager.createReaderFor (tempFile);
+        ASSERT_NE (reader, nullptr);
+        EXPECT_EQ (reader->getFormatName(), String ("PPM/PGM/PBM Image"));
+
+        auto result = reader->readImage();
+        ASSERT_TRUE (result.isValid());
+        EXPECT_TRUE (imagesAreEqual (original, result, 0));
+    }
+
+    tempFile.deleteFile();
+}
+
+#if YUP_IMAGE_FORMAT_PNG
+TEST (ImageFormatManagerTests, ManagerPngFileRoundtrip)
+{
+    auto original = generateTestImage (10, 8, PixelFormat::RGBA);
+    auto tempFile = File::createTempFile (".png");
+
+    ImageFormatManager manager;
+    manager.registerDefaultFormats();
+
+    {
+        auto writer = manager.createWriterFor (tempFile, PixelFormat::RGBA);
+        ASSERT_NE (writer, nullptr);
+        ASSERT_TRUE (writer->writeImage (original));
+    }
+
+    {
+        auto reader = manager.createReaderFor (tempFile);
+        ASSERT_NE (reader, nullptr);
+        EXPECT_EQ (reader->getFormatName(), String ("PNG Image"));
+
+        auto result = reader->readImage();
+        ASSERT_TRUE (result.isValid());
+        EXPECT_TRUE (imagesAreEqual (original, result, 0));
+    }
+
+    tempFile.deleteFile();
+}
+
+TEST (ImageFormatManagerTests, CreateReaderForStreamReturnsPngReaderForPngData)
+{
+    auto* rawStream = new MemoryOutputStream();
+    PngImageFormatWriter writer (rawStream, PixelFormat::RGB);
+    ASSERT_TRUE (writer.writeImage (generateTestImage (4, 4, PixelFormat::RGB)));
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+
+    ImageFormatManager manager;
+    manager.registerDefaultFormats();
+
+    auto reader = manager.createReaderFor (inStream);
+    ASSERT_NE (reader, nullptr);
+    EXPECT_EQ (reader->getFormatName(), String ("PNG Image"));
+}
+#endif
+
+#if YUP_IMAGE_FORMAT_JPEG
+TEST (ImageFormatManagerTests, ManagerJpegFileRoundtrip)
+{
+    Image original (10, 8, PixelFormat::RGB);
+    original.fill (0xFF445566u);
+    auto tempFile = File::createTempFile (".jpg");
+
+    ImageFormatManager manager;
+    manager.registerDefaultFormats();
+
+    {
+        auto writer = manager.createWriterFor (tempFile, PixelFormat::RGB);
+        ASSERT_NE (writer, nullptr);
+        ASSERT_TRUE (writer->writeImage (original));
+    }
+
+    {
+        auto reader = manager.createReaderFor (tempFile);
+        ASSERT_NE (reader, nullptr);
+        EXPECT_EQ (reader->getFormatName(), String ("JPEG Image"));
+
+        auto result = reader->readImage();
+        ASSERT_TRUE (result.isValid());
+        EXPECT_TRUE (imagesAreEqual (original, result, 3));
+    }
+
+    tempFile.deleteFile();
+}
+
+TEST (ImageFormatManagerTests, ManagerJpegFileRoundtripViaJpegExtension)
+{
+    Image original (8, 8, PixelFormat::RGB);
+    original.fill (0xFF778899u);
+    auto tempFile = File::createTempFile (".jpeg");
+
+    ImageFormatManager manager;
+    manager.registerDefaultFormats();
+
+    {
+        auto writer = manager.createWriterFor (tempFile, PixelFormat::RGB);
+        ASSERT_NE (writer, nullptr);
+        ASSERT_TRUE (writer->writeImage (original));
+    }
+
+    {
+        auto reader = manager.createReaderFor (tempFile);
+        ASSERT_NE (reader, nullptr);
+        EXPECT_EQ (reader->getFormatName(), String ("JPEG Image"));
+        auto result = reader->readImage();
+        ASSERT_TRUE (result.isValid());
+    }
+
+    tempFile.deleteFile();
+}
+
+TEST (ImageFormatManagerTests, CreateReaderForStreamReturnsJpegReaderForJpegData)
+{
+    Image source (4, 4, PixelFormat::RGB);
+    source.fill (0xFFFF0000u);
+
+    auto* rawStream = new MemoryOutputStream();
+    JpegImageFormatWriter writer (rawStream, PixelFormat::RGB, 0);
+    ASSERT_TRUE (writer.writeImage (source));
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+
+    ImageFormatManager manager;
+    manager.registerDefaultFormats();
+
+    auto reader = manager.createReaderFor (inStream);
+    ASSERT_NE (reader, nullptr);
+    EXPECT_EQ (reader->getFormatName(), String ("JPEG Image"));
+}
+#endif
+
+#if YUP_IMAGE_FORMAT_WEBP
+TEST (ImageFormatManagerTests, ManagerWebPFileRoundtrip)
+{
+    auto original = generateTestImage (10, 8, PixelFormat::RGBA);
+    auto tempFile = File::createTempFile (".webp");
+
+    ImageFormatManager manager;
+    manager.registerDefaultFormats();
+
+    {
+        auto writer = manager.createWriterFor (tempFile, PixelFormat::RGBA);
+        ASSERT_NE (writer, nullptr);
+        ASSERT_TRUE (writer->writeImage (original));
+    }
+
+    {
+        auto reader = manager.createReaderFor (tempFile);
+        ASSERT_NE (reader, nullptr);
+        EXPECT_EQ (reader->getFormatName(), String ("WebP Image"));
+
+        auto result = reader->readImage();
+        ASSERT_TRUE (result.isValid());
+        EXPECT_TRUE (imagesAreEqual (original, result, 0));
+    }
+
+    tempFile.deleteFile();
+}
+
+TEST (ImageFormatManagerTests, CreateReaderForStreamReturnsWebPReaderForWebPData)
+{
+    auto* rawStream = new MemoryOutputStream();
+    WebPImageFormatWriter writer (rawStream, PixelFormat::RGB, 0);
+    ASSERT_TRUE (writer.writeImage (generateTestImage (4, 4, PixelFormat::RGB)));
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+
+    ImageFormatManager manager;
+    manager.registerDefaultFormats();
+
+    auto reader = manager.createReaderFor (inStream);
+    ASSERT_NE (reader, nullptr);
+    EXPECT_EQ (reader->getFormatName(), String ("WebP Image"));
+}
+#endif
+
+#if YUP_IMAGE_FORMAT_GIF
+TEST (ImageFormatManagerTests, ManagerGifFileRoundtrip)
+{
+    Image original (10, 8, PixelFormat::RGBA);
+    original.fill (0xFFAA7744u);
+    auto tempFile = File::createTempFile (".gif");
+
+    ImageFormatManager manager;
+    manager.registerDefaultFormats();
+
+    {
+        auto writer = manager.createWriterFor (tempFile, PixelFormat::RGBA);
+        ASSERT_NE (writer, nullptr);
+        ASSERT_TRUE (writer->writeImage (original));
+    }
+
+    {
+        auto reader = manager.createReaderFor (tempFile);
+        ASSERT_NE (reader, nullptr);
+        EXPECT_EQ (reader->getFormatName(), String ("GIF Image"));
+
+        auto result = reader->readImage();
+        ASSERT_TRUE (result.isValid());
+        EXPECT_TRUE (imagesAreEqual (original, result, 8));
+    }
+
+    tempFile.deleteFile();
+}
+
+TEST (ImageFormatManagerTests, CreateReaderForStreamReturnsGifReaderForGifData)
+{
+    auto* rawStream = new MemoryOutputStream();
+    GifImageFormatWriter writer (rawStream, PixelFormat::RGBA);
+    ASSERT_TRUE (writer.writeImage (generateSolidImage (4, 4, PixelFormat::RGBA, 0xFFCC4400u)));
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+
+    ImageFormatManager manager;
+    manager.registerDefaultFormats();
+
+    auto reader = manager.createReaderFor (inStream);
+    ASSERT_NE (reader, nullptr);
+    EXPECT_EQ (reader->getFormatName(), String ("GIF Image"));
+}
+#endif
+
+// ======================================================================
+// Manager registration tests
+// ======================================================================
+
+TEST (ImageFormatManagerTests, SelectiveFormatRegistration)
+{
+    {
+        ImageFormatManager manager;
+        manager.registerDefaultFormats (ImageFormatType::bmp);
+
+        auto tempFile = File::createTempFile (".bmp");
+        EXPECT_NE (manager.createWriterFor (tempFile, PixelFormat::RGB), nullptr);
+
+        auto ppmTempFile = File::createTempFile (".ppm");
+        EXPECT_EQ (manager.createWriterFor (ppmTempFile, PixelFormat::RGB), nullptr);
+
+        tempFile.deleteFile();
+        ppmTempFile.deleteFile();
+    }
+    {
+        ImageFormatManager manager;
+        manager.registerDefaultFormats (ImageFormatType::ppm);
+
+        auto tempFile = File::createTempFile (".ppm");
+        EXPECT_NE (manager.createWriterFor (tempFile, PixelFormat::RGB), nullptr);
+
+        auto bmpTempFile = File::createTempFile (".bmp");
+        EXPECT_EQ (manager.createWriterFor (bmpTempFile, PixelFormat::RGB), nullptr);
+
+        tempFile.deleteFile();
+        bmpTempFile.deleteFile();
+    }
+}
+
+TEST (ImageFormatManagerTests, RegisterAllFormatsByDefault)
+{
+    ImageFormatManager manager;
+    manager.registerDefaultFormats();
+
+    auto bmpFile = File::createTempFile (".bmp");
+    auto ppmFile = File::createTempFile (".ppm");
+
+    EXPECT_NE (manager.createWriterFor (bmpFile, PixelFormat::RGB), nullptr);
+    EXPECT_NE (manager.createWriterFor (ppmFile, PixelFormat::RGB), nullptr);
+
+    bmpFile.deleteFile();
+    ppmFile.deleteFile();
+}
+
+// ======================================================================
+// Reader/writer format name tests via manager
+// ======================================================================
+
+TEST (ImageFormatManagerTests, BmpReaderHasCorrectFormatName)
+{
+    auto* rawStream = new MemoryOutputStream();
+    BmpImageFormatWriter writer (rawStream, PixelFormat::RGB);
+    ASSERT_TRUE (writer.writeImage (generateSolidImage (4, 4, PixelFormat::RGB)));
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+    BmpImageFormatReader reader (inStream);
+
+    EXPECT_EQ (reader.getFormatName(), String ("BMP Image"));
+}
+
+TEST (ImageFormatManagerTests, PpmReaderHasCorrectFormatName)
+{
+    auto* rawStream = new MemoryOutputStream();
+    PpmImageFormatWriter writer (rawStream, PixelFormat::RGB);
+    ASSERT_TRUE (writer.writeImage (generateSolidImage (4, 4, PixelFormat::RGB)));
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+    PpmImageFormatReader reader (inStream);
+
+    EXPECT_EQ (reader.getFormatName(), String ("PPM/PGM/PBM Image"));
 }

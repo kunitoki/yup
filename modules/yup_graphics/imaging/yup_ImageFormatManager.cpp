@@ -52,6 +52,11 @@ void ImageFormatManager::registerDefaultFormats (ImageFormatType types)
     if (hasBitValueSet (types, ImageFormatType::webp))
         registerFormat (std::make_unique<WebPImageFormat>());
 #endif
+
+#if YUP_IMAGE_FORMAT_GIF
+    if (hasBitValueSet (types, ImageFormatType::gif))
+        registerFormat (std::make_unique<GifImageFormat>());
+#endif
 }
 
 void ImageFormatManager::registerFormat (std::unique_ptr<ImageFormat> format)

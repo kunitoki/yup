@@ -49,6 +49,14 @@ inline Image generateTestImage (int w, int h, PixelFormat fmt)
     return img;
 }
 
+/** Generates a solid-colour test image filled with the given ARGB value. */
+inline Image generateSolidImage (int w, int h, PixelFormat fmt, uint32 argb = 0xFFFF0000u)
+{
+    Image img (w, h, fmt);
+    img.fill (argb);
+    return img;
+}
+
 /** Compares two images pixel-by-pixel (RGB channels only) within the given per-channel tolerance. */
 inline bool imagesAreEqual (const Image& a, const Image& b, int tolerance = 0)
 {
@@ -75,4 +83,120 @@ inline bool imagesAreEqual (const Image& a, const Image& b, int tolerance = 0)
     }
 
     return true;
+}
+
+/** Returns the tests/data/images/ directory. */
+inline File getTestDataImagesDirectory()
+{
+    return File (__FILE__)
+        .getParentDirectory()
+        .getParentDirectory()
+        .getChildFile ("data")
+        .getChildFile ("images");
+}
+
+/** Returns the tests/ directory. */
+inline File getTestDirectory()
+{
+    return File (__FILE__)
+        .getParentDirectory()
+        .getParentDirectory();
+}
+
+/** Ensures a test image exists on disk in tests/data/images/ by generating it if missing.
+    Returns the File pointing to the image. */
+inline File ensureTestImage (const String& filename, int w, int h, PixelFormat fmt, uint32 argb)
+{
+    auto dir = getTestDataImagesDirectory();
+    dir.createDirectory();
+
+    auto file = dir.getChildFile (filename);
+
+    if (! file.existsAsFile())
+    {
+        Image img (w, h, fmt);
+        img.fill (argb);
+
+        auto* fos = file.createOutputStream().release();
+        if (fos == nullptr)
+            return file;
+
+        auto ext = filename.fromLastOccurrenceOf (".", false, false).toLowerCase();
+
+        if (ext == ".bmp")
+            BmpImageFormatWriter (fos, fmt).writeImage (img);
+        else if (ext == ".ppm" || ext == ".pgm")
+            PpmImageFormatWriter (fos, fmt).writeImage (img);
+#if YUP_IMAGE_FORMAT_PNG
+        else if (ext == ".png")
+            PngImageFormatWriter (fos, fmt).writeImage (img);
+#endif
+#if YUP_IMAGE_FORMAT_JPEG
+        else if (ext == ".jpg" || ext == ".jpeg")
+            JpegImageFormatWriter (fos, fmt, 0).writeImage (img);
+#endif
+#if YUP_IMAGE_FORMAT_WEBP
+        else if (ext == ".webp")
+            WebPImageFormatWriter (fos, fmt, 0).writeImage (img);
+#endif
+#if YUP_IMAGE_FORMAT_GIF
+        else if (ext == ".gif")
+            GifImageFormatWriter (fos, fmt).writeImage (img);
+#endif
+        else
+            delete fos;
+    }
+
+    return file;
+}
+
+/** Writes an Image to a File using the format determined by the file extension. */
+inline bool writeImageToFile (const Image& image, const File& file, int qualityIndex = 0)
+{
+    auto* fos = file.createOutputStream().release();
+    if (fos == nullptr)
+        return false;
+
+    auto ext = file.getFileExtension().toLowerCase();
+
+    if (ext == ".bmp")
+        return BmpImageFormatWriter (fos, image.getPixelFormat()).writeImage (image);
+    if (ext == ".ppm" || ext == ".pgm")
+        return PpmImageFormatWriter (fos, image.getPixelFormat()).writeImage (image);
+#if YUP_IMAGE_FORMAT_PNG
+    if (ext == ".png")
+        return PngImageFormatWriter (fos, image.getPixelFormat()).writeImage (image);
+#endif
+#if YUP_IMAGE_FORMAT_JPEG
+    if (ext == ".jpg" || ext == ".jpeg")
+        return JpegImageFormatWriter (fos, image.getPixelFormat(), qualityIndex).writeImage (image);
+#endif
+#if YUP_IMAGE_FORMAT_WEBP
+    if (ext == ".webp")
+        return WebPImageFormatWriter (fos, image.getPixelFormat(), qualityIndex).writeImage (image);
+#endif
+#if YUP_IMAGE_FORMAT_GIF
+    if (ext == ".gif")
+        return GifImageFormatWriter (fos, image.getPixelFormat()).writeImage (image);
+#endif
+
+    delete fos;
+    return false;
+}
+
+/** Reads an Image from a File, auto-detecting the format from the extension. */
+inline Image readImageFromFile (const File& file)
+{
+    auto* fis = file.createInputStream().release();
+    if (fis == nullptr)
+        return {};
+
+    ImageFormatManager manager;
+    manager.registerDefaultFormats();
+
+    auto reader = manager.createReaderFor (fis);
+    if (reader == nullptr)
+        return {};
+
+    return reader->readImage();
 }

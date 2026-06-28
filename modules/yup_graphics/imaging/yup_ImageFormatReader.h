@@ -51,6 +51,61 @@ public:
     virtual Image readImage() = 0;
 
     //==============================================================================
+    /** Decodes and returns a single animation frame by index.
+
+        The default implementation calls readImage() for frame 0 and returns an
+        invalid Image for any other index. Override in animated-format readers.
+
+        @param frameIndex  Zero-based frame index.
+        @returns The decoded frame Image, or an invalid Image on failure.
+    */
+    virtual Image readFrame (int frameIndex);
+
+    /** Decodes a single animation frame into an existing Image, reusing its buffer
+        when dimensions and pixel format match (zero allocation on reuse).
+
+        If dest already has the correct width, height, and PixelFormat::RGBA,
+        the implementation writes directly into dest's raw data — no allocation.
+        If dest has wrong dimensions or format, it is reallocated first.
+
+        The default implementation calls readFrame(frameIndex) and moves the result
+        into dest.
+
+        @param frameIndex  Zero-based frame index.
+        @param dest        Image to decode into (may be reallocated).
+        @returns true if the frame was decoded successfully.
+    */
+    virtual bool readFrame (int frameIndex, Image& dest);
+
+    //==============================================================================
+    /** Returns true if this image contains more than one animation frame.
+
+        The default implementation returns false. Override in animated-format readers.
+    */
+    virtual bool isAnimated() const { return false; }
+
+    /** Returns the total number of frames.
+
+        The default implementation returns 1. Override in animated-format readers.
+    */
+    virtual int getFrameCount() const { return 1; }
+
+    /** Returns the loop count for the animation.
+
+        0 means loop infinitely; 1 means play once; N means play N times.
+        The default implementation returns 1. Override in animated-format readers.
+    */
+    virtual int getLoopCount() const { return 1; }
+
+    /** Returns the display duration of a frame in milliseconds.
+
+        The default implementation returns 0. Override in animated-format readers.
+
+        @param frameIndex  Zero-based frame index.
+    */
+    virtual int getFrameDelayMs (int frameIndex) const { return 0; }
+
+    //==============================================================================
     /** The image width in pixels (populated after construction). */
     int width = 0;
 

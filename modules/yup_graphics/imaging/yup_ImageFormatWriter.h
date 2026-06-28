@@ -57,6 +57,52 @@ public:
     */
     virtual bool flush();
 
+    //==============================================================================
+    /** Returns true if this writer supports animated output.
+
+        The default implementation returns false. Only GIF writers return true.
+    */
+    virtual bool supportsAnimation() const { return false; }
+
+    /** Begins an animated sequence.
+
+        Must be called before writeFrame(). Writes the format header and, if
+        loopCount != 1, the NETSCAPE2.0 loop extension block.
+
+        0 = loop infinitely; 1 = play once; N = play N times.
+
+        Calling this on a writer that does not support animation triggers
+        jassertfalse and returns false.
+
+        @param loopCount  Number of times to loop the animation.
+        @returns true on success.
+    */
+    virtual bool beginAnimation (int loopCount = 0);
+
+    /** Encodes and appends one animation frame.
+
+        Must be called between beginAnimation() and endAnimation(). Each call
+        quantizes the frame to a 256-color palette, writes a Graphic Control
+        Extension, and appends the image descriptor and raster data.
+
+        Calling this on a non-animation writer triggers jassertfalse and returns false.
+
+        @param frame    The frame to encode (RGBA pixel format expected).
+        @param delayMs  Display duration for this frame in milliseconds.
+        @returns true on success.
+    */
+    virtual bool writeFrame (const Image& frame, int delayMs);
+
+    /** Finalises an animated sequence.
+
+        Writes the GIF trailer byte. Must be called after the last writeFrame().
+
+        Calling this on a non-animation writer triggers jassertfalse and returns false.
+
+        @returns true on success.
+    */
+    virtual bool endAnimation();
+
     /** The output stream, for use by subclasses. */
     std::unique_ptr<OutputStream> output;
 

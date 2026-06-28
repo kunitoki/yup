@@ -110,6 +110,17 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #endif
 #endif
 
+/** Config: YUP_IMAGE_FORMAT_GIF
+
+    Enable GIF image format support (read and write, including animation).
+    Requires libgif (YUP_MODULE_AVAILABLE_libgif).
+*/
+#ifndef YUP_IMAGE_FORMAT_GIF
+#if YUP_MODULE_AVAILABLE_libgif
+#define YUP_IMAGE_FORMAT_GIF 1
+#endif
+#endif
+
 //==============================================================================
 
 #if YUP_IMAGE_FORMAT_PNG && ! YUP_MODULE_AVAILABLE_libpng
@@ -125,6 +136,11 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #if YUP_IMAGE_FORMAT_WEBP && ! YUP_MODULE_AVAILABLE_libwebp
 #undef YUP_IMAGE_FORMAT_WEBP
 #define YUP_IMAGE_FORMAT_WEBP 0
+#endif
+
+#if YUP_IMAGE_FORMAT_GIF && ! YUP_MODULE_AVAILABLE_libgif
+#undef YUP_IMAGE_FORMAT_GIF
+#define YUP_IMAGE_FORMAT_GIF 0
 #endif
 
 //==============================================================================
@@ -187,4 +203,9 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 #if YUP_IMAGE_FORMAT_WEBP
 #include "formats/yup_WebPImageFormat.h"
+#endif
+
+#if YUP_IMAGE_FORMAT_GIF
+#include <libgif/libgif.h>
+#include "formats/yup_GifImageFormat.h"
 #endif

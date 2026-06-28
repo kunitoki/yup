@@ -33,6 +33,7 @@ enum class ImageFormatType
     png = 1 << 2,
     jpeg = 1 << 3,
     webp = 1 << 4,
+    gif = 1 << 5,
     all = ~0
 };
 
@@ -76,6 +77,7 @@ public:
         - PNG requires libpng (YUP_IMAGE_FORMAT_PNG)
         - JPEG requires libjpeg-turbo (YUP_IMAGE_FORMAT_JPEG)
         - WebP requires libwebp (YUP_IMAGE_FORMAT_WEBP)
+        - GIF requires libgif (YUP_IMAGE_FORMAT_GIF)
 
         @param types  Bitmask of ImageFormatType values to register. Defaults to all.
     */

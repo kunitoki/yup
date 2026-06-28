@@ -19,26 +19,27 @@
   ==============================================================================
 */
 
-namespace yup
-{
+#include "libgif.h"
 
-ImageFormatReader::ImageFormatReader (InputStream* sourceStream, const String& formatName_)
-    : input (sourceStream)
-    , formatName (formatName_)
-{
-}
+#if defined (__clang__)
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wshorten-64-to-32"
+ #pragma clang diagnostic ignored "-Wconversion"
+#elif defined (__GNUC__)
+ #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wconversion"
+#endif
 
-Image ImageFormatReader::readFrame (int frameIndex)
-{
-    if (frameIndex == 0)
-        return readImage();
-    return {};
-}
+#include "upstream/dgif_lib.c"
+#include "upstream/egif_lib.c"
+#include "upstream/gif_err.c"
+#include "upstream/gif_hash.c"
+#include "upstream/gifalloc.c"
+#include "upstream/quantize.c"
+#include "upstream/openbsd-reallocarray.c"
 
-bool ImageFormatReader::readFrame (int frameIndex, Image& dest)
-{
-    dest = std::move (readFrame (frameIndex));
-    return dest.isValid();
-}
-
-} // namespace yup
+#if defined (__clang__)
+ #pragma clang diagnostic pop
+#elif defined (__GNUC__)
+ #pragma GCC diagnostic pop
+#endif

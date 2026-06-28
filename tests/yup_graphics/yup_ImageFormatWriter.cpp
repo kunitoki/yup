@@ -25,30 +25,160 @@
 
 using namespace yup;
 
-TEST (ImageFormatWriterTests, WriterHasCorrectFormatName)
+// ======================================================================
+// Writer format name tests
+// ======================================================================
+
+TEST (ImageFormatWriterTests, PpmWriterHasCorrectFormatName)
 {
     PpmImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB);
-
     EXPECT_EQ (writer.getFormatName(), String ("PPM/PGM/PBM Image"));
 }
 
-TEST (ImageFormatWriterTests, WriterFlushReturnsTrue)
+TEST (ImageFormatWriterTests, BmpWriterHasCorrectFormatName)
+{
+    BmpImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB);
+    EXPECT_EQ (writer.getFormatName(), String ("BMP Image"));
+}
+
+#if YUP_IMAGE_FORMAT_PNG
+TEST (ImageFormatWriterTests, PngWriterHasCorrectFormatName)
+{
+    PngImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB);
+    EXPECT_EQ (writer.getFormatName(), String ("PNG Image"));
+}
+#endif
+
+#if YUP_IMAGE_FORMAT_JPEG
+TEST (ImageFormatWriterTests, JpegWriterHasCorrectFormatName)
+{
+    JpegImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB, 0);
+    EXPECT_EQ (writer.getFormatName(), String ("JPEG Image"));
+}
+#endif
+
+#if YUP_IMAGE_FORMAT_WEBP
+TEST (ImageFormatWriterTests, WebPWriterHasCorrectFormatName)
+{
+    WebPImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB, 0);
+    EXPECT_EQ (writer.getFormatName(), String ("WebP Image"));
+}
+#endif
+
+#if YUP_IMAGE_FORMAT_GIF
+TEST (ImageFormatWriterTests, GifWriterHasCorrectFormatName)
+{
+    GifImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGBA);
+    EXPECT_EQ (writer.getFormatName(), String ("GIF Image"));
+}
+#endif
+
+// ======================================================================
+// Writer flush tests
+// ======================================================================
+
+TEST (ImageFormatWriterTests, PpmWriterFlushReturnsTrue)
 {
     PpmImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB);
-
     EXPECT_TRUE (writer.flush());
 }
 
-TEST (ImageFormatWriterTests, WriterReturnsCorrectPixelFormat)
+TEST (ImageFormatWriterTests, BmpWriterFlushReturnsTrue)
 {
-    PpmImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB);
-
-    EXPECT_EQ (writer.getPixelFormat(), PixelFormat::RGB);
+    BmpImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB);
+    EXPECT_TRUE (writer.flush());
 }
 
-TEST (ImageFormatWriterTests, WriterReturnsCorrectGrayscalePixelFormat)
+#if YUP_IMAGE_FORMAT_PNG
+TEST (ImageFormatWriterTests, PngWriterFlushReturnsTrue)
 {
-    PpmImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::Grayscale);
+    PngImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB);
+    EXPECT_TRUE (writer.flush());
+}
+#endif
 
-    EXPECT_EQ (writer.getPixelFormat(), PixelFormat::Grayscale);
+#if YUP_IMAGE_FORMAT_JPEG
+TEST (ImageFormatWriterTests, JpegWriterFlushReturnsTrue)
+{
+    JpegImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB, 0);
+    EXPECT_TRUE (writer.flush());
+}
+#endif
+
+#if YUP_IMAGE_FORMAT_WEBP
+TEST (ImageFormatWriterTests, WebPWriterFlushReturnsTrue)
+{
+    WebPImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB, 0);
+    EXPECT_TRUE (writer.flush());
+}
+#endif
+
+#if YUP_IMAGE_FORMAT_GIF
+TEST (ImageFormatWriterTests, GifWriterFlushReturnsTrue)
+{
+    GifImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGBA);
+    EXPECT_TRUE (writer.flush());
+}
+
+TEST (ImageFormatWriterTests, GifWriterSupportsAnimation)
+{
+    GifImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGBA);
+    EXPECT_TRUE (writer.supportsAnimation());
+}
+#endif
+
+// ======================================================================
+// Writer pixel format tests
+// ======================================================================
+
+TEST (ImageFormatWriterTests, PpmWriterReturnsCorrectPixelFormat)
+{
+    {
+        PpmImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB);
+        EXPECT_EQ (writer.getPixelFormat(), PixelFormat::RGB);
+    }
+    {
+        PpmImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::Grayscale);
+        EXPECT_EQ (writer.getPixelFormat(), PixelFormat::Grayscale);
+    }
+}
+
+TEST (ImageFormatWriterTests, BmpWriterReturnsCorrectPixelFormat)
+{
+    {
+        BmpImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB);
+        EXPECT_EQ (writer.getPixelFormat(), PixelFormat::RGB);
+    }
+    {
+        BmpImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGBA);
+        EXPECT_EQ (writer.getPixelFormat(), PixelFormat::RGBA);
+    }
+}
+
+// ======================================================================
+// Writer writeImage tests
+// ======================================================================
+
+TEST (ImageFormatWriterTests, BmpWriterWriteImageSucceedsForValidRgbImage)
+{
+    auto* rawStream = new MemoryOutputStream();
+    BmpImageFormatWriter writer (rawStream, PixelFormat::RGB);
+
+    Image source (4, 4, PixelFormat::RGB);
+    source.fill (0xFFFF0000u);
+
+    EXPECT_TRUE (writer.writeImage (source));
+    EXPECT_GT (rawStream->getDataSize(), 0u);
+}
+
+TEST (ImageFormatWriterTests, PpmWriterWriteImageSucceedsForValidRgbImage)
+{
+    auto* rawStream = new MemoryOutputStream();
+    PpmImageFormatWriter writer (rawStream, PixelFormat::RGB);
+
+    Image source (4, 4, PixelFormat::RGB);
+    source.fill (0xFFFF0000u);
+
+    EXPECT_TRUE (writer.writeImage (source));
+    EXPECT_GT (rawStream->getDataSize(), 0u);
 }

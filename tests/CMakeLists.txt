@@ -74,7 +74,8 @@ set (target_modules
     sqlite3_library
     libpng
     libwebp
-    libjpeg)
+    libjpeg
+    libgif)
 
 if (YUP_PLATFORM_DESKTOP)
     list (APPEND target_modules yup_audio_plugin_host)

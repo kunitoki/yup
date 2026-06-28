@@ -29,6 +29,10 @@
 
 using namespace yup;
 
+// ======================================================================
+// Image / BitmapData pixel format tests
+// ======================================================================
+
 TEST (ImageTests, RgbaBitmapStoresRGBABytesAndReturnsARGBColor)
 {
     Image image (1, 1, PixelFormat::RGBA);
@@ -138,6 +142,10 @@ TEST (ImageTests, ColorCanConvertToExplicitPackedByteOrders)
     EXPECT_EQ (Color::fromRGBA (0x12345680), color);
     EXPECT_EQ (Color::fromBGRA (0x56341280), color);
 }
+
+// ======================================================================
+// BitmapData tests
+// ======================================================================
 
 TEST (BitmapDataTests, RgbaSetPixelWritesAtCorrectRowOffset)
 {
@@ -326,6 +334,10 @@ TEST (BitmapDataTests, PixelAccessRejectsOutOfRangeCoordinates)
     EXPECT_THROW (bitmap.getPixelColor (0, 2), std::out_of_range);
 }
 
+// ======================================================================
+// Image lifecycle tests
+// ======================================================================
+
 TEST (ImageTests, DefaultConstructorCreatesInvalidImage)
 {
     const Image image;
@@ -450,10 +462,45 @@ TEST (ImageTests, PixelAccessRejectsOutOfRangeCoordinates)
     EXPECT_THROW (image.getPixelColor (0, 2), std::out_of_range);
 }
 
+TEST (ImageTests, GrayscaleImageGetPixelStrideIsOne)
+{
+    Image image (4, 4, PixelFormat::Grayscale);
+    EXPECT_EQ (image.getPixelStride(), 1);
+}
+
+TEST (ImageTests, RgbImageGetPixelStrideIsThree)
+{
+    Image image (4, 4, PixelFormat::RGB);
+    EXPECT_EQ (image.getPixelStride(), 3);
+}
+
+TEST (ImageTests, RgbaImageGetPixelStrideIsFour)
+{
+    Image image (4, 4, PixelFormat::RGBA);
+    EXPECT_EQ (image.getPixelStride(), 4);
+}
+
+TEST (ImageTests, DuplicateCreatesIndependentCopy)
+{
+    Image original (2, 2, PixelFormat::RGBA);
+    original.setPixel (0, 0, 0x80123456);
+
+    Image copy = original.duplicate();
+
+    EXPECT_EQ (copy.getPixel (0, 0), 0x80123456u);
+
+    copy.setPixel (0, 0, 0xFFFFFFFFu);
+    EXPECT_EQ (original.getPixel (0, 0), 0x80123456u);
+    EXPECT_EQ (copy.getPixel (0, 0), 0xFFFFFFFFu);
+}
+
+// ======================================================================
+// Image::loadFromData tests
+// ======================================================================
+
 TEST (ImageTests, LoadFromDataFailsForEmptyInput)
 {
     const auto result = Image::loadFromData ({});
-
     EXPECT_FALSE (result.wasOk());
 }
 
@@ -461,7 +508,6 @@ TEST (ImageTests, LoadFromDataFailsForGarbageInput)
 {
     const uint8 garbage[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05 };
     const auto result = Image::loadFromData (Span<const uint8> (garbage, std::size (garbage)));
-
     EXPECT_FALSE (result.wasOk());
 }
 
@@ -548,3 +594,122 @@ TEST (ImageTests, LoadFromDataRoundTripWebP)
     EXPECT_TRUE (imagesAreEqual (source, decoded));
 }
 #endif
+
+#if YUP_IMAGE_FORMAT_JPEG
+TEST (ImageTests, LoadFromDataRoundTripJpeg)
+{
+    Image source (8, 6, PixelFormat::RGB);
+    source.fill (0xFF445566u);
+
+    auto* rawStream = new MemoryOutputStream();
+    JpegImageFormatWriter writer (rawStream, PixelFormat::RGB, 0);
+    ASSERT_TRUE (writer.writeImage (source));
+
+    const auto* bytes = static_cast<const uint8*> (rawStream->getData());
+    const auto size = rawStream->getDataSize();
+
+    const auto result = Image::loadFromData (Span<const uint8> (bytes, size));
+    ASSERT_TRUE (result.wasOk());
+
+    const Image& decoded = result.getValue();
+    EXPECT_EQ (decoded.getWidth(), source.getWidth());
+    EXPECT_EQ (decoded.getHeight(), source.getHeight());
+    EXPECT_TRUE (imagesAreEqual (source, decoded, 3));
+}
+#endif
+
+#if YUP_IMAGE_FORMAT_GIF
+TEST (ImageTests, LoadFromDataRoundTripGif)
+{
+    Image source (8, 6, PixelFormat::RGBA);
+    source.fill (0xFFAA7744u);
+
+    auto* rawStream = new MemoryOutputStream();
+    GifImageFormatWriter writer (rawStream, PixelFormat::RGBA);
+    ASSERT_TRUE (writer.writeImage (source));
+
+    const auto* bytes = static_cast<const uint8*> (rawStream->getData());
+    const auto size = rawStream->getDataSize();
+
+    const auto result = Image::loadFromData (Span<const uint8> (bytes, size));
+    ASSERT_TRUE (result.wasOk());
+
+    const Image& decoded = result.getValue();
+    EXPECT_EQ (decoded.getWidth(), source.getWidth());
+    EXPECT_EQ (decoded.getHeight(), source.getHeight());
+    EXPECT_TRUE (imagesAreEqual (source, decoded, 8));
+}
+#endif
+
+// ======================================================================
+// Generated test image helpers
+// ======================================================================
+
+TEST (ImageTests, GenerateTestImageCreatesValidCheckerboard)
+{
+    auto img = generateTestImage (8, 8, PixelFormat::RGB);
+
+    EXPECT_TRUE (img.isValid());
+    EXPECT_EQ (img.getWidth(), 8);
+    EXPECT_EQ (img.getHeight(), 8);
+    EXPECT_EQ (img.getPixelFormat(), PixelFormat::RGB);
+
+    EXPECT_EQ (img.getPixel (0, 0), 0xFFFF0000u);
+    EXPECT_EQ (img.getPixel (4, 0), 0xFF0000FFu);
+}
+
+TEST (ImageTests, GenerateTestImageRgbaHasAlphaValues)
+{
+    auto img = generateTestImage (8, 8, PixelFormat::RGBA);
+
+    EXPECT_EQ (img.getPixel (0, 0), 0x80FF0000u);
+    EXPECT_EQ (img.getPixel (4, 0), 0x800000FFu);
+}
+
+TEST (ImageTests, GenerateSolidImageCreatesUniformImage)
+{
+    auto img = generateSolidImage (4, 4, PixelFormat::RGBA, 0xCC998877u);
+
+    EXPECT_TRUE (img.isValid());
+    for (int y = 0; y < 4; ++y)
+    {
+        for (int x = 0; x < 4; ++x)
+            EXPECT_EQ (img.getPixel (x, y), 0xCC998877u);
+    }
+}
+
+TEST (ImageTests, ImagesAreEqualDetectsDifferences)
+{
+    auto a = generateSolidImage (4, 4, PixelFormat::RGB, 0xFFFF0000u);
+    auto b = generateSolidImage (4, 4, PixelFormat::RGB, 0xFFFF0000u);
+
+    EXPECT_TRUE (imagesAreEqual (a, b, 0));
+
+    b.setPixel (0, 0, 0xFF0000FFu);
+    EXPECT_FALSE (imagesAreEqual (a, b, 0));
+}
+
+TEST (ImageTests, ImagesAreEqualRejectsDifferentSizes)
+{
+    auto a = generateSolidImage (4, 4, PixelFormat::RGB);
+    auto b = generateSolidImage (8, 8, PixelFormat::RGB);
+
+    EXPECT_FALSE (imagesAreEqual (a, b));
+}
+
+TEST (ImageTests, ImagesAreEqualRejectsDifferentFormats)
+{
+    auto a = generateSolidImage (4, 4, PixelFormat::RGB);
+    auto b = generateSolidImage (4, 4, PixelFormat::RGBA);
+
+    EXPECT_FALSE (imagesAreEqual (a, b));
+}
+
+TEST (ImageTests, ImagesAreEqualWithTolerance)
+{
+    auto a = generateSolidImage (4, 4, PixelFormat::RGB, 0xFF102030u);
+    auto b = generateSolidImage (4, 4, PixelFormat::RGB, 0xFF132433u);
+
+    EXPECT_FALSE (imagesAreEqual (a, b, 0));
+    EXPECT_TRUE (imagesAreEqual (a, b, 5));
+}

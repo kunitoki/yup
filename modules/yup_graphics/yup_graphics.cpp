@@ -147,3 +147,7 @@
 #include <libwebp/libwebp.h>
 #include "formats/yup_WebPImageFormat.cpp"
 #endif
+
+#if YUP_IMAGE_FORMAT_GIF
+#include "formats/yup_GifImageFormat.cpp"
+#endif
