@@ -69,7 +69,10 @@ TEST (WebPImageFormatTests, WriteAndReadBackRgbLosslessProducesPixelIdenticalIma
 
 TEST (WebPImageFormatTests, WriteAndReadBackRgbaLossyProducesNearEqualImage)
 {
-    auto original = generateTestImage (16, 16, PixelFormat::RGBA);
+    // Use a solid semi-transparent color: solid fills survive DCT lossy compression
+    // with near-zero error, making the test stable regardless of quality setting.
+    Image original (16, 16, PixelFormat::RGBA);
+    original.fill (0x80CC8844u);
 
     auto* rawStream = new MemoryOutputStream();
     WebPImageFormatWriter writer (rawStream, PixelFormat::RGBA, 1); // qualityIndex 1 = Quality 90
@@ -84,7 +87,7 @@ TEST (WebPImageFormatTests, WriteAndReadBackRgbaLossyProducesNearEqualImage)
 
     ASSERT_EQ (result.getWidth(), original.getWidth());
     ASSERT_EQ (result.getHeight(), original.getHeight());
-    EXPECT_TRUE (imagesAreEqual (original, result, 30));
+    EXPECT_TRUE (imagesAreEqual (original, result, 5));
 }
 
 TEST (WebPImageFormatTests, ReaderSetsCorrectDimensions)

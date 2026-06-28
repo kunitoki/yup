@@ -43,6 +43,11 @@ void ImageFormatManager::registerDefaultFormats (ImageFormatType types)
         registerFormat (std::make_unique<PngImageFormat>());
 #endif
 
+#if YUP_IMAGE_FORMAT_JPEG
+    if (hasBitValueSet (types, ImageFormatType::jpeg))
+        registerFormat (std::make_unique<JpegImageFormat>());
+#endif
+
 #if YUP_IMAGE_FORMAT_WEBP
     if (hasBitValueSet (types, ImageFormatType::webp))
         registerFormat (std::make_unique<WebPImageFormat>());

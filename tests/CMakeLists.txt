@@ -73,7 +73,8 @@ set (target_modules
     bungee_library
     sqlite3_library
     libpng
-    libwebp)
+    libwebp
+    libjpeg)
 
 if (YUP_PLATFORM_DESKTOP)
     list (APPEND target_modules yup_audio_plugin_host)

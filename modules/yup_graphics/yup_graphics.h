@@ -90,6 +90,16 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #endif
 #endif
 
+/** Config: YUP_IMAGE_FORMAT_JPEG
+
+    Enable JPEG image format support.
+*/
+#ifndef YUP_IMAGE_FORMAT_JPEG
+#if YUP_MODULE_AVAILABLE_libjpeg_turbo
+#define YUP_IMAGE_FORMAT_JPEG 1
+#endif
+#endif
+
 /** Config: YUP_IMAGE_FORMAT_WEBP
 
     Enable WebP image format support.
@@ -105,6 +115,11 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #if YUP_IMAGE_FORMAT_PNG && ! YUP_MODULE_AVAILABLE_libpng
 #undef YUP_IMAGE_FORMAT_PNG
 #define YUP_IMAGE_FORMAT_PNG 0
+#endif
+
+#if YUP_IMAGE_FORMAT_JPEG && ! YUP_MODULE_AVAILABLE_libjpeg
+#undef YUP_IMAGE_FORMAT_JPEG
+#define YUP_IMAGE_FORMAT_JPEG 0
 #endif
 
 #if YUP_IMAGE_FORMAT_WEBP && ! YUP_MODULE_AVAILABLE_libwebp
@@ -164,6 +179,10 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 #if YUP_IMAGE_FORMAT_PNG
 #include "formats/yup_PngImageFormat.h"
+#endif
+
+#if YUP_IMAGE_FORMAT_JPEG
+#include "formats/yup_JpegImageFormat.h"
 #endif
 
 #if YUP_IMAGE_FORMAT_WEBP

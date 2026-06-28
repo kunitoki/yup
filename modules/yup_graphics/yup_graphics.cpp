@@ -32,16 +32,6 @@
 
 //==============================================================================
 
-#if YUP_IMAGE_FORMAT_PNG
-#include <libpng/libpng.h>
-#endif
-
-#if YUP_IMAGE_FORMAT_WEBP
-#include <libwebp/libwebp.h>
-#endif
-
-//==============================================================================
-
 #include <rive/text/font_hb.hpp>
 
 //==============================================================================
@@ -144,9 +134,16 @@
 #endif
 
 #if YUP_IMAGE_FORMAT_PNG
+#include <libpng/libpng.h>
 #include "formats/yup_PngImageFormat.cpp"
 #endif
 
+#if YUP_IMAGE_FORMAT_JPEG
+#include <libjpeg/libjpeg.h>
+#include "formats/yup_JpegImageFormat.cpp"
+#endif
+
 #if YUP_IMAGE_FORMAT_WEBP
+#include <libwebp/libwebp.h>
 #include "formats/yup_WebPImageFormat.cpp"
 #endif

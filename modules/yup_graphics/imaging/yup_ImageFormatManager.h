@@ -31,7 +31,8 @@ enum class ImageFormatType
     bmp = 1 << 0,
     ppm = 1 << 1,
     png = 1 << 2,
-    webp = 1 << 3,
+    jpeg = 1 << 3,
+    webp = 1 << 4,
     all = ~0
 };
 
@@ -73,6 +74,7 @@ public:
         - BMP is always registered (no external dependency)
         - PPM/PGM/PBM is always registered (no external dependency)
         - PNG requires libpng (YUP_IMAGE_FORMAT_PNG)
+        - JPEG requires libjpeg-turbo (YUP_IMAGE_FORMAT_JPEG)
         - WebP requires libwebp (YUP_IMAGE_FORMAT_WEBP)
 
         @param types  Bitmask of ImageFormatType values to register. Defaults to all.
