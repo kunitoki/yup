@@ -85,6 +85,36 @@ inline bool imagesAreEqual (const Image& a, const Image& b, int tolerance = 0)
     return true;
 }
 
+/** Compares two RGBA images pixel-by-pixel (all 4 channels) within the given per-channel tolerance. */
+inline bool imagesAreEqualRGBA (const Image& a, const Image& b, int tolerance = 0)
+{
+    if (a.getWidth() != b.getWidth() || a.getHeight() != b.getHeight())
+        return false;
+
+    if (a.getPixelFormat() != b.getPixelFormat())
+        return false;
+
+    for (int y = 0; y < a.getHeight(); ++y)
+    {
+        for (int x = 0; x < a.getWidth(); ++x)
+        {
+            uint32 pa = a.getPixel (x, y);
+            uint32 pb = b.getPixel (x, y);
+
+            if (std::abs (int ((pa >> 24) & 0xFF) - int ((pb >> 24) & 0xFF)) > tolerance)
+                return false;
+            if (std::abs (int ((pa >> 16) & 0xFF) - int ((pb >> 16) & 0xFF)) > tolerance)
+                return false;
+            if (std::abs (int ((pa >> 8) & 0xFF) - int ((pb >> 8) & 0xFF)) > tolerance)
+                return false;
+            if (std::abs (int ((pa >> 0) & 0xFF) - int ((pb >> 0) & 0xFF)) > tolerance)
+                return false;
+        }
+    }
+
+    return true;
+}
+
 /** Returns the tests/data/images/ directory. */
 inline File getTestDataImagesDirectory()
 {

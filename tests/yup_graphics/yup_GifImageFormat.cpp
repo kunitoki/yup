@@ -641,10 +641,10 @@ TEST (GifImageFormatTests, ReadFrameReusesBufferWhenDimensionsMatch)
     GifImageFormatReader reader (inStream);
 
     Image dest (8, 8, PixelFormat::RGBA);
-    const auto* ptrBefore = static_cast<const uint8_t*> (dest.getRawData());
+    const auto* ptrBefore = dest.getRawData().data();
 
     ASSERT_TRUE (reader.readFrame (0, dest));
-    const auto* ptrAfter = static_cast<const uint8_t*> (dest.getRawData());
+    const auto* ptrAfter = dest.getRawData().data();
 
     EXPECT_EQ (ptrBefore, ptrAfter);
 }
@@ -821,7 +821,7 @@ TEST (GifImageFormatTests, FullyTransparentFrameRoundtrip)
     ASSERT_TRUE (result.isValid());
     EXPECT_EQ (result.getWidth(), original.getWidth());
     EXPECT_EQ (result.getHeight(), original.getHeight());
-    EXPECT_TRUE (imagesAreEqual (original, result, 8));
+    EXPECT_TRUE (imagesAreEqualRGBA (original, result, 8));
 }
 
 TEST (GifImageFormatTests, SemiTransparentFrameRoundtrip)
@@ -837,7 +837,7 @@ TEST (GifImageFormatTests, SemiTransparentFrameRoundtrip)
     auto result = reader.readImage();
 
     ASSERT_TRUE (result.isValid());
-    EXPECT_TRUE (imagesAreEqual (original, result, 30));
+    EXPECT_TRUE (imagesAreEqualRGBA (original, result, 30));
 }
 
 TEST (GifImageFormatTests, LargeFrameCountAnimationRoundtrip)

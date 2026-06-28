@@ -78,6 +78,7 @@ yup_standalone_app (
         yup::yup_audio_gui
         yup::yup_audio_processors
         yup::yup_audio_formats
+        bungee_library
         pffft_library
         opus_library
         flac_library
@@ -86,7 +87,8 @@ yup_standalone_app (
         libvorbis
         libpng
         libwebp
-        bungee_library
+        libjpeg
+        libgif
         ${additional_modules}
         ${link_libraries})
 

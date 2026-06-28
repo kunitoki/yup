@@ -262,14 +262,14 @@ void GifImageFormatReader::compositeFrame (int frameIndex)
         else if (prevDisposal == 3 && previousCanvas.isValid())
         {
             // Restore to previous canvas state
-            canvas = previousCanvas;
+            canvas = previousCanvas.duplicate();
         }
     }
 
     // Save current canvas before drawing if this frame uses disposal=3
     const int thisDisposal = disposalMethods[static_cast<size_t> (frameIndex)];
     if (thisDisposal == 3)
-        previousCanvas = canvas;
+        previousCanvas = canvas.duplicate();
 
     // Parse GCE for this frame to find transparency
     int delayMs = 0, disposal = 0, transparentIndex = -1;
@@ -432,6 +432,8 @@ bool GifImageFormatWriter::writeFrame (const Image& frame, int delayMs)
         GifQuantizeBuffer (static_cast<unsigned> (w), static_cast<unsigned> (h), &colorCount, r.data(), g.data(), b.data(), indices.data(), palette.data());
 
         ColorMapObject* globalMap = GifMakeMapObject (256, palette.data());
+        if (globalMap == nullptr)
+            return false;
         EGifPutScreenDesc (animGif.get(), w, h, 8, 0, globalMap);
         GifFreeMapObject (globalMap);
 
@@ -518,6 +520,8 @@ bool GifImageFormatWriter::writeFrameInternal (GifFileType* gif, const Image& fr
     }
 
     ColorMapObject* localMap = GifMakeMapObject (256, palette.data());
+    if (localMap == nullptr)
+        return false;
 
     if (writeScreenDesc)
         EGifPutScreenDesc (gif, globalWidth, globalHeight, 8, 0, localMap);
