@@ -95,7 +95,7 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
     Enable JPEG image format support.
 */
 #ifndef YUP_IMAGE_FORMAT_JPEG
-#if YUP_MODULE_AVAILABLE_libjpeg_turbo
+#if YUP_MODULE_AVAILABLE_libjpeg
 #define YUP_IMAGE_FORMAT_JPEG 1
 #endif
 #endif

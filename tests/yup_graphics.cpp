@@ -45,7 +45,7 @@
 #if YUP_MODULE_AVAILABLE_libpng && YUP_IMAGE_FORMAT_PNG
 #include "yup_graphics/yup_PngImageFormat.cpp"
 #endif
-#if YUP_MODULE_AVAILABLE_libjpeg_turbo && YUP_IMAGE_FORMAT_JPEG
+#if YUP_MODULE_AVAILABLE_libjpeg && YUP_IMAGE_FORMAT_JPEG
 #include "yup_graphics/yup_JpegImageFormat.cpp"
 #endif
 #if YUP_MODULE_AVAILABLE_libwebp && YUP_IMAGE_FORMAT_WEBP

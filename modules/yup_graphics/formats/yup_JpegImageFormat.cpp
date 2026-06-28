@@ -68,7 +68,7 @@ JpegImageFormatReader::JpegImageFormatReader (InputStream* stream)
     : ImageFormatReader (stream, "JPEG Image")
 {
     uint8 chunk[4096];
-    int bytesRead = 0;
+    long bytesRead = 0;
 
     while ((bytesRead = input->read (chunk, sizeof (chunk))) > 0)
         fileData.insert (fileData.end(), chunk, chunk + bytesRead);

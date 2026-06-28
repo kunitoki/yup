@@ -23,7 +23,7 @@
 
 #include "yup_ImageFormatTools.h"
 
-#if YUP_MODULE_AVAILABLE_libjpeg_turbo && YUP_IMAGE_FORMAT_JPEG
+#if YUP_MODULE_AVAILABLE_libjpeg && YUP_IMAGE_FORMAT_JPEG
 
 TEST (JpegImageFormatTests, WriteAndReadBackRgbPreservesDimensionsAndApproximatePixels)
 {
@@ -118,4 +118,4 @@ TEST (JpegImageFormatTests, DefaultManagerCreatesReaderForJpegStream)
     EXPECT_EQ (reader->getFormatName(), String ("JPEG Image"));
 }
 
-#endif // YUP_MODULE_AVAILABLE_libjpeg_turbo && YUP_IMAGE_FORMAT_JPEG
+#endif // YUP_MODULE_AVAILABLE_libjpeg && YUP_IMAGE_FORMAT_JPEG

@@ -30,10 +30,9 @@
     name:             libjpeg-turbo JPEG codec library
     description:      libjpeg-turbo is a JPEG image codec that uses SIMD instructions to accelerate baseline JPEG compression and decompression.
     website:          https://libjpeg-turbo.org/
-    upstream:         https://github.com/libjpeg-turbo/libjpeg-turbo/archive/refs/tags/3.1.4.1.tar.gz
     license:          IJG/BSD-3-Clause/Zlib
 
-    searchpaths:      src
+    searchpaths:      upstream/src
 
   END_YUP_MODULE_DECLARATION
 
