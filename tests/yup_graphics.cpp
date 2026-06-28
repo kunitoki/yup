@@ -26,6 +26,9 @@
 #include "yup_graphics/yup_Font.cpp"
 #include "yup_graphics/yup_Graphics.cpp"
 #include "yup_graphics/yup_Image.cpp"
+#include "yup_graphics/yup_ImageFormatManager.cpp"
+#include "yup_graphics/yup_ImageFormatReader.cpp"
+#include "yup_graphics/yup_ImageFormatWriter.cpp"
 #include "yup_graphics/yup_Line.cpp"
 #include "yup_graphics/yup_Path.cpp"
 #include "yup_graphics/yup_Point.cpp"
@@ -36,3 +39,12 @@
 #include "yup_graphics/yup_StyledText.cpp"
 #include "yup_graphics/yup_SVGDocument.cpp"
 #include "yup_graphics/yup_SVGParser.cpp"
+
+#include "yup_graphics/yup_BmpImageFormat.cpp"
+#include "yup_graphics/yup_PpmImageFormat.cpp"
+#if YUP_MODULE_AVAILABLE_libpng && YUP_IMAGE_FORMAT_PNG
+#include "yup_graphics/yup_PngImageFormat.cpp"
+#endif
+#if YUP_MODULE_AVAILABLE_libwebp && YUP_IMAGE_FORMAT_WEBP
+#include "yup_graphics/yup_WebPImageFormat.cpp"
+#endif

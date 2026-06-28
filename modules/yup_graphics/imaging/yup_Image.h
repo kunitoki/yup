@@ -52,6 +52,7 @@ public:
     BitmapData() = default;
 
     /** Constructs bitmap data with specified dimensions and pixel format.
+ 
         @param w        The width of the bitmap in pixels.
         @param h        The height of the bitmap in pixels.
         @param fmt      The pixel format of the bitmap.
@@ -70,6 +71,36 @@ public:
         pixelBuffer = std::make_unique<uint8[]> (totalSizeBytes);
     }
 
+    /** Constructs bitmap data with specified dimensions and pixel format.
+ 
+        @param w            The width of the bitmap in pixels.
+        @param h            The height of the bitmap in pixels.
+        @param fmt          The pixel format of the bitmap.
+        @param pixelData    The pixel data bytes.
+    */
+    BitmapData (int w, int h, PixelFormat fmt, Span<const uint8> pixelData)
+        : width (w)
+        , height (h)
+        , format (fmt)
+    {
+        if (w <= 0 || h <= 0)
+            throw std::invalid_argument ("Width and Height must be positive integers.");
+
+        pixelStride = getBytesPerPixel (fmt);
+        lineStride = static_cast<size_t> (w) * static_cast<size_t> (pixelStride);
+        totalSizeBytes = static_cast<size_t> (h) * lineStride;
+        pixelBuffer = std::make_unique<uint8[]> (totalSizeBytes);
+
+        std::memcpy (pixelBuffer.get(), pixelData.data(), totalSizeBytes);
+    }
+
+    /** Constructs bitmap data with specified dimensions and pixel format.
+ 
+        @param w            The width of the bitmap in pixels.
+        @param h            The height of the bitmap in pixels.
+        @param fmt          The pixel format of the bitmap.
+        @param pixelData    The pixel data bytes.
+    */
     BitmapData (int w, int h, PixelFormat fmt, std::unique_ptr<const uint8[]> pixelData)
         : width (w)
         , height (h)

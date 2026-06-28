@@ -21,7 +21,7 @@
 
 #include <gtest/gtest.h>
 
-#include <yup_graphics/yup_graphics.h>
+#include "yup_ImageFormatTools.h"
 
 #include <memory>
 #include <stdexcept>
@@ -449,3 +449,102 @@ TEST (ImageTests, PixelAccessRejectsOutOfRangeCoordinates)
     EXPECT_THROW (image.getPixel (2, 0), std::out_of_range);
     EXPECT_THROW (image.getPixelColor (0, 2), std::out_of_range);
 }
+
+TEST (ImageTests, LoadFromDataFailsForEmptyInput)
+{
+    const auto result = Image::loadFromData ({});
+
+    EXPECT_FALSE (result.wasOk());
+}
+
+TEST (ImageTests, LoadFromDataFailsForGarbageInput)
+{
+    const uint8 garbage[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05 };
+    const auto result = Image::loadFromData (Span<const uint8> (garbage, std::size (garbage)));
+
+    EXPECT_FALSE (result.wasOk());
+}
+
+TEST (ImageTests, LoadFromDataRoundTripBmp)
+{
+    const Image source = generateTestImage (8, 6, PixelFormat::RGB);
+
+    auto* rawStream = new MemoryOutputStream();
+    BmpImageFormatWriter writer (rawStream, PixelFormat::RGB);
+    ASSERT_TRUE (writer.writeImage (source));
+
+    const auto* bytes = static_cast<const uint8*> (rawStream->getData());
+    const auto size = rawStream->getDataSize();
+
+    const auto result = Image::loadFromData (Span<const uint8> (bytes, size));
+    ASSERT_TRUE (result.wasOk());
+
+    const Image& decoded = result.getValue();
+    EXPECT_EQ (decoded.getWidth(), source.getWidth());
+    EXPECT_EQ (decoded.getHeight(), source.getHeight());
+    EXPECT_TRUE (imagesAreEqual (source, decoded));
+}
+
+TEST (ImageTests, LoadFromDataRoundTripPpm)
+{
+    const Image source = generateTestImage (8, 6, PixelFormat::RGB);
+
+    auto* rawStream = new MemoryOutputStream();
+    PpmImageFormatWriter writer (rawStream, PixelFormat::RGB);
+    ASSERT_TRUE (writer.writeImage (source));
+
+    const auto* bytes = static_cast<const uint8*> (rawStream->getData());
+    const auto size = rawStream->getDataSize();
+
+    const auto result = Image::loadFromData (Span<const uint8> (bytes, size));
+    ASSERT_TRUE (result.wasOk());
+
+    const Image& decoded = result.getValue();
+    EXPECT_EQ (decoded.getWidth(), source.getWidth());
+    EXPECT_EQ (decoded.getHeight(), source.getHeight());
+    EXPECT_TRUE (imagesAreEqual (source, decoded));
+}
+
+#if YUP_IMAGE_FORMAT_PNG
+TEST (ImageTests, LoadFromDataRoundTripPng)
+{
+    const Image source = generateTestImage (8, 6, PixelFormat::RGB);
+
+    auto* rawStream = new MemoryOutputStream();
+    PngImageFormatWriter writer (rawStream, PixelFormat::RGB);
+    ASSERT_TRUE (writer.writeImage (source));
+
+    const auto* bytes = static_cast<const uint8*> (rawStream->getData());
+    const auto size = rawStream->getDataSize();
+
+    const auto result = Image::loadFromData (Span<const uint8> (bytes, size));
+    ASSERT_TRUE (result.wasOk());
+
+    const Image& decoded = result.getValue();
+    EXPECT_EQ (decoded.getWidth(), source.getWidth());
+    EXPECT_EQ (decoded.getHeight(), source.getHeight());
+    EXPECT_TRUE (imagesAreEqual (source, decoded));
+}
+#endif
+
+#if YUP_IMAGE_FORMAT_WEBP
+TEST (ImageTests, LoadFromDataRoundTripWebP)
+{
+    const Image source = generateTestImage (8, 6, PixelFormat::RGB);
+
+    auto* rawStream = new MemoryOutputStream();
+    WebPImageFormatWriter writer (rawStream, PixelFormat::RGB, 0);
+    ASSERT_TRUE (writer.writeImage (source));
+
+    const auto* bytes = static_cast<const uint8*> (rawStream->getData());
+    const auto size = rawStream->getDataSize();
+
+    const auto result = Image::loadFromData (Span<const uint8> (bytes, size));
+    ASSERT_TRUE (result.wasOk());
+
+    const Image& decoded = result.getValue();
+    EXPECT_EQ (decoded.getWidth(), source.getWidth());
+    EXPECT_EQ (decoded.getHeight(), source.getHeight());
+    EXPECT_TRUE (imagesAreEqual (source, decoded));
+}
+#endif

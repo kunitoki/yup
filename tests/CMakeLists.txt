@@ -71,7 +71,9 @@ set (target_modules
     flac_library
     hmp3_library
     bungee_library
-    sqlite3_library)
+    sqlite3_library
+    libpng
+    libwebp)
 
 if (YUP_PLATFORM_DESKTOP)
     list (APPEND target_modules yup_audio_plugin_host)

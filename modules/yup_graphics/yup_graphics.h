@@ -48,7 +48,6 @@
 #include <yup_simd/yup_simd.h>
 
 #include <rive_renderer/rive_renderer.h>
-#include <rive_decoders/rive_decoders.h>
 
 //==============================================================================
 
@@ -65,6 +64,55 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include <tuple>
 
 //==============================================================================
+/** Config: YUP_IMAGE_FORMAT_BMP
+
+    Enable BMP image format support.
+*/
+#ifndef YUP_IMAGE_FORMAT_BMP
+#define YUP_IMAGE_FORMAT_BMP 1
+#endif
+
+/** Config: YUP_IMAGE_FORMAT_PPM
+
+    Enable PPM/PGM/PBM image format support.
+*/
+#ifndef YUP_IMAGE_FORMAT_PPM
+#define YUP_IMAGE_FORMAT_PPM 1
+#endif
+
+/** Config: YUP_IMAGE_FORMAT_PNG
+
+    Enable PNG image format support.
+*/
+#ifndef YUP_IMAGE_FORMAT_PNG
+#if YUP_MODULE_AVAILABLE_libpng
+#define YUP_IMAGE_FORMAT_PNG 1
+#endif
+#endif
+
+/** Config: YUP_IMAGE_FORMAT_WEBP
+
+    Enable WebP image format support.
+*/
+#ifndef YUP_IMAGE_FORMAT_WEBP
+#if YUP_MODULE_AVAILABLE_libwebp
+#define YUP_IMAGE_FORMAT_WEBP 1
+#endif
+#endif
+
+//==============================================================================
+
+#if YUP_IMAGE_FORMAT_PNG && ! YUP_MODULE_AVAILABLE_libpng
+#undef YUP_IMAGE_FORMAT_PNG
+#define YUP_IMAGE_FORMAT_PNG 0
+#endif
+
+#if YUP_IMAGE_FORMAT_WEBP && ! YUP_MODULE_AVAILABLE_libwebp
+#undef YUP_IMAGE_FORMAT_WEBP
+#define YUP_IMAGE_FORMAT_WEBP 0
+#endif
+
+//==============================================================================
 
 #include "layout/yup_Justification.h"
 #include "layout/yup_Fitting.h"
@@ -78,6 +126,10 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "fonts/yup_Font.h"
 #include "fonts/yup_StyledText.h"
 #include "imaging/yup_Image.h"
+#include "imaging/yup_ImageFormat.h"
+#include "imaging/yup_ImageFormatReader.h"
+#include "imaging/yup_ImageFormatWriter.h"
+#include "imaging/yup_ImageFormatManager.h"
 #include "graphics/yup_BlendMode.h"
 #include "graphics/yup_Color.h"
 #include "graphics/yup_ColorGradient.h"
@@ -100,3 +152,20 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "svg/yup_SVGCssParser.h"
 #include "svg/yup_SVGParser.h"
 #include "drawables/yup_Drawable.h"
+
+//==============================================================================
+#if YUP_IMAGE_FORMAT_BMP
+#include "formats/yup_BmpImageFormat.h"
+#endif
+
+#if YUP_IMAGE_FORMAT_PPM
+#include "formats/yup_PpmImageFormat.h"
+#endif
+
+#if YUP_IMAGE_FORMAT_PNG
+#include "formats/yup_PngImageFormat.h"
+#endif
+
+#if YUP_IMAGE_FORMAT_WEBP
+#include "formats/yup_WebPImageFormat.h"
+#endif
