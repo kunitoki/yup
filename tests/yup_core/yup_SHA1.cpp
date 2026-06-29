@@ -72,3 +72,29 @@ TEST (SHA1Tests, CopyConstructorProducesSameHash)
     EXPECT_EQ (original.toHexString(), copy.toHexString());
     EXPECT_TRUE (original == copy);
 }
+
+TEST (SHA1Tests, KnownVectorAbc)
+{
+    SHA1 hash ("abc", 3);
+    EXPECT_EQ (hash.toHexString(), String ("a9993e364706816aba3e25717850c26c9cd0d89d"));
+}
+
+TEST (SHA1Tests, MultiBlockInputViaStream)
+{
+    // NIST SHA-1 test vector: 112-byte input spanning two 64-byte blocks
+    const char* input = "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu";
+    const size_t len = std::strlen (input);
+    EXPECT_GT (len, (size_t) 64); // Verify truly multi-block
+    SHA1 hash (input, len);
+    EXPECT_EQ (hash.toHexString(), String ("a49b2446a02c645bf419f995b67091253a04a259"));
+}
+
+TEST (SHA1Tests, SameInputAlwaysProducesSameHash)
+{
+    const char* data = "deterministic input";
+    const size_t len = std::strlen (data);
+    SHA1 hash1 (data, len);
+    SHA1 hash2 (data, len);
+    EXPECT_EQ (hash1.toHexString(), hash2.toHexString());
+    EXPECT_TRUE (hash1 == hash2);
+}

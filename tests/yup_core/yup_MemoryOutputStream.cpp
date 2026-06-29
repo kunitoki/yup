@@ -84,3 +84,48 @@ TEST (MemoryOutputStreamTests, ResetClearsDataSize)
     stream.reset();
     EXPECT_EQ (stream.getDataSize(), (size_t) 0);
 }
+
+TEST (MemoryOutputStreamTests, GetPositionTracksWrittenBytes)
+{
+    MemoryOutputStream stream;
+    EXPECT_EQ (stream.getPosition(), (int64) 0);
+
+    const uint8 data[] = { 0xAA, 0xBB, 0xCC };
+    stream.write (data, sizeof (data));
+    EXPECT_EQ (stream.getPosition(), (int64) 3);
+
+    stream.write (data, sizeof (data));
+    EXPECT_EQ (stream.getPosition(), (int64) 6);
+}
+
+TEST (MemoryOutputStreamTests, GetMemoryBlockMatchesWrittenData)
+{
+    MemoryOutputStream stream;
+    const uint8 data[] = { 0x11, 0x22, 0x33, 0x44 };
+    stream.write (data, sizeof (data));
+
+    MemoryBlock block = stream.getMemoryBlock();
+    EXPECT_EQ (block.getSize(), sizeof (data));
+    EXPECT_EQ (memcmp (block.getData(), data, sizeof (data)), 0);
+}
+
+TEST (MemoryOutputStreamTests, WriteByteProducesOneByte)
+{
+    MemoryOutputStream stream;
+    EXPECT_TRUE (stream.writeByte ('Z'));
+    EXPECT_EQ (stream.getDataSize(), (size_t) 1);
+
+    const auto* bytes = static_cast<const uint8*> (stream.getData());
+    EXPECT_EQ (bytes[0], static_cast<uint8> ('Z'));
+}
+
+TEST (MemoryOutputStreamTests, PreallocateDoesNotAffectDataSize)
+{
+    MemoryOutputStream stream;
+    stream.preallocate (1024);
+    EXPECT_EQ (stream.getDataSize(), (size_t) 0);
+
+    const uint8 data[] = { 1, 2, 3 };
+    stream.write (data, sizeof (data));
+    EXPECT_EQ (stream.getDataSize(), sizeof (data));
+}

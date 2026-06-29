@@ -124,3 +124,53 @@ TEST_F (SharedResourcePointerTests, CreateObjectsWithPrivateConstructors)
 
     SharedResourcePointer<ObjectWithPrivateConstructor> instance;
 }
+
+TEST_F (SharedResourcePointerTests, ArrowOperatorProvidesAccessToMembers)
+{
+    struct DataHolder
+    {
+        int value = 99;
+    };
+
+    SharedResourcePointer<DataHolder> p;
+    EXPECT_EQ (p->value, 99);
+    p->value = 42;
+    EXPECT_EQ (p->value, 42);
+}
+
+TEST_F (SharedResourcePointerTests, DereferenceOperatorReturnsSameObjectAsGet)
+{
+    struct DataHolder
+    {
+    };
+
+    SharedResourcePointer<DataHolder> p;
+    EXPECT_EQ (&(*p), &p.get());
+    EXPECT_EQ (&p.getObject(), &p.get());
+}
+
+TEST_F (SharedResourcePointerTests, ImplicitConversionToPointerIsNonNull)
+{
+    struct DataHolder
+    {
+    };
+
+    SharedResourcePointer<DataHolder> p;
+    DataHolder* raw = p;
+    EXPECT_NE (raw, nullptr);
+    EXPECT_EQ (raw, &p.get());
+}
+
+TEST_F (SharedResourcePointerTests, CopySharesSameUnderlyingObject)
+{
+    struct DataHolder
+    {
+        int value = 7;
+    };
+
+    SharedResourcePointer<DataHolder> a;
+    SharedResourcePointer<DataHolder> b (a);
+    EXPECT_EQ (&a.get(), &b.get());
+    a->value = 123;
+    EXPECT_EQ (b->value, 123);
+}

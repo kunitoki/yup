@@ -81,6 +81,49 @@ TEST (GZIPCompressorOutputStreamTests, KnownDataRoundTrip)
     EXPECT_EQ (0, memcmp (uncompressed.getData(), originalText, len));
 }
 
+TEST (GZIPCompressorOutputStreamTests, AllByteValuesRoundTrip)
+{
+    // Ensure all 256 possible byte values survive compression/decompression
+    unsigned char allBytes[256];
+    for (int i = 0; i < 256; ++i)
+        allBytes[i] = static_cast<unsigned char> (i);
+
+    MemoryOutputStream compressed;
+    {
+        GZIPCompressorOutputStream zipper (compressed, 6);
+        zipper.write (allBytes, sizeof (allBytes));
+    }
+
+    MemoryInputStream compressedInput (compressed.getData(), compressed.getDataSize(), false);
+    GZIPDecompressorInputStream unzipper (compressedInput);
+
+    MemoryOutputStream uncompressed;
+    uncompressed << unzipper;
+
+    EXPECT_EQ (uncompressed.getDataSize(), sizeof (allBytes));
+    EXPECT_EQ (memcmp (uncompressed.getData(), allBytes, sizeof (allBytes)), 0);
+}
+
+TEST (GZIPCompressorOutputStreamTests, SingleByteRoundTrip)
+{
+    const unsigned char singleByte = 0x42;
+
+    MemoryOutputStream compressed;
+    {
+        GZIPCompressorOutputStream zipper (compressed, 6);
+        zipper.write (&singleByte, 1);
+    }
+
+    MemoryInputStream compressedInput (compressed.getData(), compressed.getDataSize(), false);
+    GZIPDecompressorInputStream unzipper (compressedInput);
+
+    MemoryOutputStream uncompressed;
+    uncompressed << unzipper;
+
+    ASSERT_EQ (uncompressed.getDataSize(), (size_t) 1);
+    EXPECT_EQ (static_cast<const unsigned char*> (uncompressed.getData())[0], singleByte);
+}
+
 TEST (GZIPCompressorOutputStreamTests, Zipping)
 {
     Random& rng = Random::getSystemRandom();
