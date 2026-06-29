@@ -52,6 +52,13 @@ public:
                                    bool keepAspectRatio = true);
 
 private:
+    static void renderComposition (Graphics& g,
+                                   const AnimationComposition& comp,
+                                   float frameNo,
+                                   Rectangle<float> bounds,
+                                   bool keepAspectRatio,
+                                   float opacity);
+
     //==============================================================================
     // Per-render context built once per frame
     struct RenderContext
@@ -59,6 +66,7 @@ private:
         const AnimationComposition& comp;
         float frameNo;
         AffineTransform viewTransform; ///< composition-space → screen-space
+        float opacity = 1.0f;
 
         /** Maps layer id → accumulated world-space transform (parents resolved). */
         HashMap<int, AffineTransform> parentTransforms;
@@ -68,20 +76,26 @@ private:
     };
 
     //==============================================================================
-    static void renderLayer (Graphics& g, const AnimationLayer& layer, const RenderContext& ctx);
+    static void renderLayer (Graphics& g,
+                             const AnimationLayer& layer,
+                             const RenderContext& ctx,
+                             const AnimationLayer* matteSource = nullptr);
     static void renderShapeLayer (Graphics& g, const ShapeLayer& layer, const RenderContext& ctx, float opacity);
     static void renderSolidLayer (Graphics& g, const SolidLayer& layer, const RenderContext& ctx, float opacity);
     static void renderImageLayer (Graphics& g, const ImageLayer& layer, const RenderContext& ctx, float opacity);
     static void renderPrecompLayer (Graphics& g, const PrecompLayer& layer, const RenderContext& ctx, float opacity);
 
     static void applyMasks (Graphics& g, const AnimationLayer& layer, float frameNo);
+    static void applyMatteSourceClip (Graphics& g, const AnimationLayer& matteSource, const RenderContext& ctx);
 
     static void renderGroup (Graphics& g,
                              const AnimationGroup& group,
                              float frameNo,
-                             float opacity);
+                             float opacity,
+                             const AnimationRoundedCorner* parentRoundedCorner = nullptr);
 
     static void applyTrim (Path& path, const AnimationTrim& trim, float frameNo);
+    static void applyTrimIndividually (std::vector<Path>& paths, const AnimationTrim& trim, float frameNo);
 
     static void applyFill (Graphics& g, const Path& path, const FillPaint& fill, float frameNo, float opacity);
     static void applyStroke (Graphics& g, const Path& path, const StrokePaint& stroke, float frameNo, float opacity);

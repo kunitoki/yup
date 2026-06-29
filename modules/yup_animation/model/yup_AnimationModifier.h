@@ -131,4 +131,29 @@ public:
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AnimationMask)
 };
 
+//==============================================================================
+/** Rounded corner modifier. Lottie type "rd".
+
+    Applies rounded corners to the adjacent rect and polystar shapes.
+    The radius is a 0-1 value that scales with the shape dimensions.
+*/
+class YUP_API AnimationRoundedCorner : public ReferenceCountedObject
+{
+public:
+    using Ptr = ReferenceCountedObjectPtr<AnimationRoundedCorner>;
+
+    //==============================================================================
+    AnimationRoundedCorner() = default;
+
+    //==============================================================================
+    String name;
+    bool hidden = false;
+    FloatProperty radius { FloatProperty::staticValue (0.0f) }; ///< 0-1 ratio
+
+    //==============================================================================
+    [[nodiscard]] float radiusAt (float frameNo) const;
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AnimationRoundedCorner)
+};
+
 } // namespace yup

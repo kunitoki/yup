@@ -77,4 +77,15 @@ AnimationRepeater* AnimationGroup::addRepeater()
     return raw;
 }
 
+AnimationRoundedCorner* AnimationGroup::addRoundedCorner()
+{
+    auto rc = new AnimationRoundedCorner();
+    AnimationRoundedCorner* raw = rc;
+    ChildItem item;
+    item.kind = ChildKind::RoundedCorner;
+    item.roundedCorner = rc;
+    children.push_back (std::move (item));
+    return raw;
+}
+
 } // namespace yup

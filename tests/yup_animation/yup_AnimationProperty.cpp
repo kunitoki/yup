@@ -51,6 +51,17 @@ TEST_F (AnimationPropertyTests, AnimatedFloatInterpolatesCorrectly)
     EXPECT_NEAR (prop.getValueAt (10.0f), 100.0f, 0.1f);
 }
 
+TEST_F (AnimationPropertyTests, ExplicitEndValueControlsCurrentInterval)
+{
+    auto prop = FloatProperty::Builder {}
+                    .keyframe (0.0f, 0.0f, 20.0f, AnimationEasing::linear())
+                    .keyframe (10.0f, 100.0f, AnimationEasing::linear())
+                    .build();
+
+    EXPECT_NEAR (prop.getValueAt (5.0f), 10.0f, 0.001f);
+    EXPECT_NEAR (prop.getValueAt (10.0f), 100.0f, 0.001f);
+}
+
 TEST_F (AnimationPropertyTests, ClampsBelowFirstKeyframe)
 {
     auto prop = FloatProperty::Builder {}

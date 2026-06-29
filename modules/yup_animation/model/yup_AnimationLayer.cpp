@@ -27,7 +27,10 @@ float AnimationLayer::localFrame (float compFrame) const noexcept
     if (timeRemap.has_value())
         return timeRemap->getValueAt (compFrame);
 
-    return (compFrame - startFrame) * timeStretch;
+    if (std::abs (timeStretch) <= 1.0e-6f)
+        return compFrame - startFrame;
+
+    return (compFrame - startFrame) / timeStretch;
 }
 
 bool AnimationLayer::isVisibleAt (float compFrame) const noexcept

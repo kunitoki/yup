@@ -198,6 +198,10 @@ var LottieWriter::serializeChildItem (const AnimationGroup::ChildItem& item)
             if (item.repeater != nullptr)
                 return serializeRepeater (*item.repeater);
             break;
+        case AnimationGroup::ChildKind::RoundedCorner:
+            if (item.roundedCorner != nullptr)
+                return serializeRoundedCorner (*item.roundedCorner);
+            break;
     }
     return {};
 }
@@ -348,28 +352,45 @@ var LottieWriter::serializeStroke (const StrokePaint& stroke)
 var LottieWriter::serializeGradient (const AnimationGradient& gradient)
 {
     // Lottie packs gradient stops as a flat float array: [pos r g b a, pos r g b a, ...]
-    // We use n=number of color stops; k = animated property holding the flat array.
-    // For simplicity we output a static property.
     DynamicObject* obj = new DynamicObject();
-    obj->setProperty ("p", var ((int) gradient.colorStops.size()));
-
-    Array<var> flat;
-    for (const auto& stop : gradient.colorStops)
-    {
-        const float pos = stop.position.getValueAt (0.0f);
-        const Color col = stop.color.getValueAt (0.0f);
-        flat.add (var ((double) pos));
-        flat.add (var ((double) col.getRedFloat()));
-        flat.add (var ((double) col.getGreenFloat()));
-        flat.add (var ((double) col.getBlueFloat()));
-        flat.add (var ((double) col.getAlphaFloat()));
-    }
+    obj->setProperty ("p", var (gradient.numColorPoints > 0 ? gradient.numColorPoints : static_cast<int> (gradient.colorStops.size())));
 
     DynamicObject* kProp = new DynamicObject();
-    kProp->setProperty ("a", var (0));
-    kProp->setProperty ("k", var (flat));
-    obj->setProperty ("k", var (kProp));
 
+    if (! gradient.animatedStops.empty())
+    {
+        kProp->setProperty ("a", var (1));
+        Array<var> kfArray;
+        for (const auto& gkf : gradient.animatedStops)
+        {
+            DynamicObject* kfObj = new DynamicObject();
+            kfObj->setProperty ("t", var ((double) gkf.frame));
+            Array<var> flatArr;
+            for (float v : gkf.values)
+                flatArr.add (var ((double) v));
+            kfObj->setProperty ("s", var (flatArr));
+            kfArray.add (var (kfObj));
+        }
+        kProp->setProperty ("k", var (kfArray));
+    }
+    else
+    {
+        kProp->setProperty ("a", var (0));
+        Array<var> flat;
+        for (const auto& stop : gradient.colorStops)
+        {
+            const float pos = stop.position.getValueAt (0.0f);
+            const Color col = stop.color.getValueAt (0.0f);
+            flat.add (var ((double) pos));
+            flat.add (var ((double) col.getRedFloat()));
+            flat.add (var ((double) col.getGreenFloat()));
+            flat.add (var ((double) col.getBlueFloat()));
+            flat.add (var ((double) col.getAlphaFloat()));
+        }
+        kProp->setProperty ("k", var (flat));
+    }
+
+    obj->setProperty ("k", var (kProp));
     return var (obj);
 }
 
@@ -410,6 +431,16 @@ var LottieWriter::serializeRepeater (const AnimationRepeater& repeater)
     return var (obj);
 }
 
+var LottieWriter::serializeRoundedCorner (const AnimationRoundedCorner& rc)
+{
+    DynamicObject* obj = new DynamicObject();
+    obj->setProperty ("ty", var ("rd"));
+    obj->setProperty ("nm", var (rc.name));
+    obj->setProperty ("hd", var (rc.hidden));
+    obj->setProperty ("r", serializeProperty<float> (rc.radius, serializeFloat));
+    return var (obj);
+}
+
 var LottieWriter::serializeTransform (const AnimationTransform& t)
 {
     DynamicObject* obj = new DynamicObject();
@@ -418,6 +449,36 @@ var LottieWriter::serializeTransform (const AnimationTransform& t)
     {
         obj->setProperty ("px", serializeProperty<float> (t.positionX, serializeFloat));
         obj->setProperty ("py", serializeProperty<float> (t.positionY, serializeFloat));
+    }
+    else if (! t.spatialKeyframes.empty())
+    {
+        // Write position with tangent data for spatial interpolation
+        DynamicObject* pObj = new DynamicObject();
+        pObj->setProperty ("a", var (1));
+
+        Array<var> kfArray;
+        for (const auto& spk : t.spatialKeyframes)
+        {
+            DynamicObject* kfObj = new DynamicObject();
+            kfObj->setProperty ("t", var ((double) spk.frame));
+            kfObj->setProperty ("s", serializePoint (spk.value));
+            if (spk.endValue.has_value())
+                kfObj->setProperty ("e", serializePoint (*spk.endValue));
+            kfObj->setProperty ("ti", serializePoint (spk.tangentIn));
+            kfObj->setProperty ("to", serializePoint (spk.tangentOut));
+
+            const var easingData = serializeEasing (spk.easing);
+            if (const auto* easingObj = easingData.getDynamicObject())
+            {
+                if (easingObj->hasProperty ("o"))
+                    kfObj->setProperty ("o", easingObj->getProperty ("o"));
+                if (easingObj->hasProperty ("i"))
+                    kfObj->setProperty ("i", easingObj->getProperty ("i"));
+            }
+            kfArray.add (var (kfObj));
+        }
+        pObj->setProperty ("k", var (kfArray));
+        obj->setProperty ("p", var (pObj));
     }
     else
     {
@@ -643,16 +704,16 @@ var LottieWriter::serializeProperty (const AnimationProperty<T>& prop, std::func
                 kfObj->setProperty ("s", var (sArr));
             }
 
-            // End value from next keyframe (Lottie convention)
-            if (i + 1 < keyframes.size())
+            // End value for this keyframe interval (Lottie "e").
+            if (kf.endValue.has_value() || i + 1 < keyframes.size())
             {
-                var nextSerialized = serializer (keyframes[i + 1].value);
-                if (nextSerialized.isArray())
-                    kfObj->setProperty ("e", nextSerialized);
+                var endSerialized = serializer (kf.endValue.has_value() ? *kf.endValue : keyframes[i + 1].value);
+                if (endSerialized.isArray())
+                    kfObj->setProperty ("e", endSerialized);
                 else
                 {
                     Array<var> eArr;
-                    eArr.add (nextSerialized);
+                    eArr.add (endSerialized);
                     kfObj->setProperty ("e", var (eArr));
                 }
             }

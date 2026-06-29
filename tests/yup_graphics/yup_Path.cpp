@@ -284,6 +284,84 @@ TEST (PathTests, GetPointAlongPath)
     EXPECT_TRUE (mid.getY() >= 0 && mid.getY() <= 10);
 }
 
+TEST (PathTests, GetLengthReturnsTotalDrawableLength)
+{
+    Path p;
+    p.moveTo (0, 0).lineTo (10, 0).lineTo (10, 10);
+
+    EXPECT_NEAR (p.getLength(), 20.0f, 1.0e-4f);
+}
+
+TEST (PathTests, GetTrimmedPathReturnsRequestedLineRange)
+{
+    Path p;
+    p.moveTo (0, 0).lineTo (10, 0);
+
+    const Path trimmed = p.getTrimmedPath (0.2f, 0.7f);
+
+    EXPECT_NEAR (trimmed.getLength(), 5.0f, 1.0e-4f);
+    expectPointNear (trimmed.getPointAlongPath (0.0f), Point<float> (2.0f, 0.0f));
+    expectPointNear (trimmed.getPointAlongPath (1.0f), Point<float> (7.0f, 0.0f));
+}
+
+TEST (PathTests, GetTrimmedPathWrapsAroundEnd)
+{
+    Path p;
+    p.moveTo (0, 0).lineTo (10, 0);
+
+    const Path trimmed = p.getTrimmedPath (0.75f, 0.25f);
+
+    EXPECT_NEAR (trimmed.getLength(), 5.0f, 1.0e-4f);
+    expectPointNear (trimmed.getPointAlongPath (0.0f), Point<float> (7.5f, 0.0f));
+    expectPointNear (trimmed.getPointAlongPath (1.0f), Point<float> (2.5f, 0.0f));
+}
+
+TEST (PathTests, GetTrimmedPathAppliesOffset)
+{
+    Path p;
+    p.moveTo (0, 0).lineTo (10, 0);
+
+    const Path trimmed = p.getTrimmedPath (0.0f, 0.5f, 0.25f);
+
+    EXPECT_NEAR (trimmed.getLength(), 5.0f, 1.0e-4f);
+    expectPointNear (trimmed.getPointAlongPath (0.0f), Point<float> (2.5f, 0.0f));
+    expectPointNear (trimmed.getPointAlongPath (1.0f), Point<float> (7.5f, 0.0f));
+}
+
+TEST (PathTests, TrimReplacesPathInPlace)
+{
+    Path p;
+    p.moveTo (0, 0).lineTo (10, 0);
+
+    p.trim (0.1f, 0.4f);
+
+    EXPECT_NEAR (p.getLength(), 3.0f, 1.0e-4f);
+    expectPointNear (p.getPointAlongPath (0.0f), Point<float> (1.0f, 0.0f));
+    expectPointNear (p.getPointAlongPath (1.0f), Point<float> (4.0f, 0.0f));
+}
+
+TEST (PathTests, GetTrimmedPathPreservesCubicSegments)
+{
+    Path p;
+    p.moveTo (0, 0).cubicTo (0, 10, 10, 10, 10, 0);
+
+    const Path trimmed = p.getTrimmedPath (0.25f, 0.75f, 0.0f, 0.01f);
+
+    int cubicCount = 0;
+    int lineCount = 0;
+    for (const auto segment : trimmed)
+    {
+        if (segment.verb == Path::Verb::CubicTo)
+            ++cubicCount;
+        else if (segment.verb == Path::Verb::LineTo)
+            ++lineCount;
+    }
+
+    EXPECT_EQ (cubicCount, 1);
+    EXPECT_EQ (lineCount, 0);
+    EXPECT_GT (trimmed.getLength (0.01f), 0.0f);
+}
+
 TEST (PathTests, CreateStrokePolygon)
 {
     Path p;

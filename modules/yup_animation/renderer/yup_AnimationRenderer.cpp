@@ -52,14 +52,14 @@ void AnimationRenderer::RenderContext::buildParentTransforms()
             if (layer->parentId < 0)
             {
                 // No parent — local transform only
-                parentTransforms.set (layer->id, layer->transform.toAffineTransform (layer->localFrame (frameNo)));
+                parentTransforms.set (layer->id, layer->transform.toAffineTransform (frameNo));
                 resolved[i] = true;
                 anyResolved = true;
             }
             else if (parentTransforms.contains (layer->parentId))
             {
                 const AffineTransform parentXf = parentTransforms[layer->parentId];
-                parentTransforms.set (layer->id, layer->transform.toAffineTransform (layer->localFrame (frameNo)).followedBy (parentXf));
+                parentTransforms.set (layer->id, layer->transform.toAffineTransform (frameNo).followedBy (parentXf));
                 resolved[i] = true;
                 anyResolved = true;
             }
@@ -72,7 +72,7 @@ void AnimationRenderer::RenderContext::buildParentTransforms()
         if (! resolved[i] && comp.layers[i] != nullptr)
         {
             const AnimationLayer* layer = comp.layers[i].get();
-            parentTransforms.set (layer->id, layer->transform.toAffineTransform (layer->localFrame (frameNo)));
+            parentTransforms.set (layer->id, layer->transform.toAffineTransform (frameNo));
         }
     }
 }
@@ -81,7 +81,7 @@ AffineTransform AnimationRenderer::RenderContext::resolveLayerTransform (const A
 {
     if (parentTransforms.contains (layer.id))
         return parentTransforms[layer.id].followedBy (viewTransform);
-    return layer.transform.toAffineTransform (layer.localFrame (frameNo)).followedBy (viewTransform);
+    return layer.transform.toAffineTransform (frameNo).followedBy (viewTransform);
 }
 
 //==============================================================================
@@ -92,6 +92,16 @@ void AnimationRenderer::renderComposition (Graphics& g,
                                            float frameNo,
                                            Rectangle<float> bounds,
                                            bool keepAspectRatio)
+{
+    renderComposition (g, comp, frameNo, bounds, keepAspectRatio, 1.0f);
+}
+
+void AnimationRenderer::renderComposition (Graphics& g,
+                                           const AnimationComposition& comp,
+                                           float frameNo,
+                                           Rectangle<float> bounds,
+                                           bool keepAspectRatio,
+                                           float opacity)
 {
     const Size<float> compSize = comp.size;
     if (compSize.getWidth() <= 0.0f || compSize.getHeight() <= 0.0f)
@@ -127,28 +137,47 @@ void AnimationRenderer::renderComposition (Graphics& g,
     g.setClipPath (transformedViewportClip);
     g.setTransform (savedTransform);
 
-    RenderContext ctx { comp, frameNo, viewXf };
+    RenderContext ctx { comp, frameNo, viewXf, opacity };
     ctx.buildParentTransforms();
 
-    // Lottie: layer 0 is topmost visually → render bottom-up (last index first)
+    // Lottie: layer 0 is topmost visually → render bottom-up (last index first).
+    // Matte pairs: a layer with isMatteSource=true (td=1) sits just ABOVE the matte
+    // target (the layer with matteType != None, tt>0). Array index i-1 is the matte
+    // source for layer i when layer i has tt>0. Matte sources must not render normally.
     for (int i = (int) comp.layers.size() - 1; i >= 0; --i)
     {
         const AnimationLayer* layer = comp.layers[(size_t) i].get();
         if (layer == nullptr || layer->hidden)
             continue;
+
+        // Matte source layers (td=1) are consumed by the adjacent matte target; skip.
+        if (layer->isMatteSource)
+            continue;
+
         if (! layer->isVisibleAt (frameNo))
             continue;
 
-        renderLayer (g, *layer, ctx);
+        // If this layer is a matte target, the matte source is at array index i-1.
+        const AnimationLayer* matteSource = nullptr;
+        if (layer->matteType != AnimationLayer::MatteType::None && i >= 1)
+        {
+            const AnimationLayer* candidate = comp.layers[(size_t) (i - 1)].get();
+            if (candidate != nullptr && candidate->isMatteSource)
+                matteSource = candidate;
+        }
+
+        renderLayer (g, *layer, ctx, matteSource);
     }
 }
 
 //==============================================================================
 
-void AnimationRenderer::renderLayer (Graphics& g, const AnimationLayer& layer, const RenderContext& ctx)
+void AnimationRenderer::renderLayer (Graphics& g,
+                                     const AnimationLayer& layer,
+                                     const RenderContext& ctx,
+                                     const AnimationLayer* matteSource)
 {
-    const float localFrame = layer.localFrame (ctx.frameNo);
-    const float opacity = layer.transform.opacityAt (localFrame);
+    const float opacity = ctx.opacity * layer.transform.opacityAt (ctx.frameNo);
 
     if (opacity <= 0.0f)
         return;
@@ -159,14 +188,13 @@ void AnimationRenderer::renderLayer (Graphics& g, const AnimationLayer& layer, c
     const AffineTransform xf = ctx.resolveLayerTransform (layer);
     g.setTransform (xf.followedBy (g.getTransform()));
 
-    // Apply masks as clip
-    if (! layer.masks.empty())
-        applyMasks (g, layer, localFrame);
+    // Apply alpha matte clip (tt=1 only — inverted matte requires offscreen compositing)
+    if (matteSource != nullptr && layer.matteType == AnimationLayer::MatteType::Alpha)
+        applyMatteSourceClip (g, *matteSource, ctx);
 
-    // Set opacity via color (approximate — Graphics doesn't have a global opacity knob,
-    // so we use withMultipliedAlpha on subsequent draw calls via layer-level fade)
-    // NOTE: For a proper alpha composite, each draw call would need alpha applied.
-    // We set a modulation factor here as context; individual painters respect it.
+    // Apply shape masks as clip
+    if (! layer.masks.empty())
+        applyMasks (g, layer, ctx.frameNo);
 
     switch (layer.getType())
     {
@@ -189,8 +217,6 @@ void AnimationRenderer::renderLayer (Graphics& g, const AnimationLayer& layer, c
 
 void AnimationRenderer::renderShapeLayer (Graphics& g, const ShapeLayer& layer, const RenderContext& ctx, float opacity)
 {
-    const float localFrame = layer.localFrame (ctx.frameNo);
-
     // Groups are rendered back-to-front (last group first in Lottie order)
     for (int i = (int) layer.groups.size() - 1; i >= 0; --i)
     {
@@ -198,7 +224,7 @@ void AnimationRenderer::renderShapeLayer (Graphics& g, const ShapeLayer& layer, 
         if (group == nullptr || group->hidden)
             continue;
 
-        renderGroup (g, *group, localFrame, opacity);
+        renderGroup (g, *group, ctx.frameNo, opacity);
     }
 }
 
@@ -217,7 +243,7 @@ void AnimationRenderer::renderImageLayer (Graphics& g, const ImageLayer& layer, 
     if (! layer.image.has_value())
         return;
 
-    g.setOpacity (opacity);
+    g.setOpacity (g.getOpacity() * opacity);
     g.drawImage (*layer.image, { 0.0f, 0.0f, (float) layer.image->getWidth(), (float) layer.image->getHeight() });
 }
 
@@ -239,8 +265,7 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
     tempComp->startFrame = ctx.comp.startFrame;
     tempComp->endFrame = ctx.comp.endFrame;
 
-    g.setOpacity (opacity);
-    renderComposition (g, *tempComp, localFrame, precompBounds, false);
+    renderComposition (g, *tempComp, localFrame, precompBounds, false, opacity);
 }
 
 //==============================================================================
@@ -301,10 +326,56 @@ void AnimationRenderer::applyMasks (Graphics& g, const AnimationLayer& layer, fl
 
 //==============================================================================
 
+void AnimationRenderer::applyMatteSourceClip (Graphics& g,
+                                              const AnimationLayer& matteSource,
+                                              const RenderContext& ctx)
+{
+    // Only shape layers are supported as matte sources here — other types
+    // (precomp, image) require offscreen compositing not yet available.
+    if (matteSource.getType() != AnimationLayer::Type::Shape)
+        return;
+
+    const auto& shapeLayer = static_cast<const ShapeLayer&> (matteSource);
+
+    Path clipPath;
+    for (const auto& group : shapeLayer.groups)
+    {
+        if (group == nullptr || group->hidden)
+            continue;
+        for (const auto& child : group->children)
+        {
+            if (child.kind == AnimationGroup::ChildKind::Shape
+                && child.shape != nullptr
+                && ! child.shape->isHidden())
+            {
+                clipPath.appendPath (child.shape->buildPath (ctx.frameNo));
+            }
+        }
+    }
+
+    if (clipPath.isEmpty())
+        return;
+
+    // Transform the matte source paths into device space using the source layer's
+    // own resolved transform (not the target's current transform in g).
+    const AffineTransform matteXf = ctx.resolveLayerTransform (matteSource);
+    const auto offset = g.getDrawingArea().getTopLeft();
+    const auto clipTransform = matteXf.translated ((float) offset.getX(), (float) offset.getY());
+    const auto transformedClipPath = clipPath.transformed (clipTransform);
+    const auto savedTransform = g.getTransform();
+
+    g.setTransform (AffineTransform::identity());
+    g.setClipPath (transformedClipPath);
+    g.setTransform (savedTransform);
+}
+
+//==============================================================================
+
 void AnimationRenderer::renderGroup (Graphics& g,
                                      const AnimationGroup& group,
                                      float frameNo,
-                                     float opacity)
+                                     float opacity,
+                                     const AnimationRoundedCorner* parentRoundedCorner)
 {
     if (group.hidden)
         return;
@@ -320,9 +391,10 @@ void AnimationRenderer::renderGroup (Graphics& g,
     // Children are ordered: shapes first, then paints — we gather paths then paint.
     // Groups inside iterate recursively.
 
-    // Collect trim modifiers (they affect all shapes in this scope)
+    // Collect trim and repeater modifiers (they affect all shapes in this scope)
     const AnimationTrim* activeTrim = nullptr;
     const AnimationRepeater* activeRepeater = nullptr;
+    const AnimationRoundedCorner* activeRoundedCorner = parentRoundedCorner;
 
     for (const auto& child : group.children)
     {
@@ -330,16 +402,41 @@ void AnimationRenderer::renderGroup (Graphics& g,
             activeTrim = child.trim.get();
         if (child.kind == AnimationGroup::ChildKind::Repeater && child.repeater != nullptr)
             activeRepeater = child.repeater.get();
+        if (child.kind == AnimationGroup::ChildKind::RoundedCorner && child.roundedCorner != nullptr)
+            activeRoundedCorner = child.roundedCorner.get(); // local overrides parent
     }
 
     auto preparePaths = [&] (const std::vector<Path>& sourcePaths)
     {
         std::vector<Path> paths = sourcePaths;
 
+        if (activeRoundedCorner != nullptr && ! activeRoundedCorner->hidden)
+        {
+            const float radiusRatio = activeRoundedCorner->radiusAt (frameNo);
+            if (radiusRatio > 1e-5f)
+            {
+                for (auto& path : paths)
+                {
+                    auto bounds = path.getBounds();
+                    const float minDim = jmin (bounds.getWidth(), bounds.getHeight());
+                    const float cornerRadius = minDim * radiusRatio * 0.5f;
+                    if (cornerRadius > 1e-5f)
+                        path = path.withRoundedCorners (cornerRadius);
+                }
+            }
+        }
+
         if (activeTrim != nullptr && ! activeTrim->hidden)
         {
-            for (auto& path : paths)
-                applyTrim (path, *activeTrim, frameNo);
+            if (activeTrim->mode == AnimationTrim::TrimMode::Simultaneously)
+            {
+                for (auto& path : paths)
+                    applyTrim (path, *activeTrim, frameNo);
+            }
+            else
+            {
+                applyTrimIndividually (paths, *activeTrim, frameNo);
+            }
         }
 
         if (activeRepeater == nullptr || activeRepeater->hidden)
@@ -418,7 +515,7 @@ void AnimationRenderer::renderGroup (Graphics& g,
         }
         else if (child.kind == AnimationGroup::ChildKind::Group && child.group != nullptr)
         {
-            renderGroup (g, *child.group, frameNo, opacity);
+            renderGroup (g, *child.group, frameNo, opacity, activeRoundedCorner);
         }
     }
 }
@@ -426,12 +523,87 @@ void AnimationRenderer::renderGroup (Graphics& g,
 void AnimationRenderer::applyTrim (Path& path, const AnimationTrim& trim, float frameNo)
 {
     const auto segment = trim.getSegment (frameNo);
-    if (segment.start <= 0.0f && segment.end >= 1.0f)
-        return; // No trimming needed
+    path.trim (segment.start, segment.end);
+}
 
-    // Path trim requires arc-length parameterisation which is not yet exposed
-    // by yup::Path. This is a known limitation; trimmed shapes render untrimmed.
-    (void) path;
+void AnimationRenderer::applyTrimIndividually (std::vector<Path>& paths, const AnimationTrim& trim, float frameNo)
+{
+    const auto segment = trim.getSegment (frameNo);
+
+    if (std::abs (segment.start - segment.end) <= 1.0e-5f)
+    {
+        for (auto& path : paths)
+            path.clear();
+
+        return;
+    }
+
+    if (segment.start <= 0.0f && segment.end >= 1.0f)
+        return;
+
+    float totalLength = 0.0f;
+    for (const auto& path : paths)
+        totalLength += path.getLength();
+
+    if (totalLength <= 1.0e-5f)
+    {
+        for (auto& path : paths)
+            path.clear();
+
+        return;
+    }
+
+    auto appendDistributedRange = [] (Path& result,
+                                      const Path& source,
+                                      float sourceStart,
+                                      float sourceEnd,
+                                      float rangeStart,
+                                      float rangeEnd)
+    {
+        const float overlapStart = jmax (sourceStart, rangeStart);
+        const float overlapEnd = jmin (sourceEnd, rangeEnd);
+
+        if (overlapEnd <= overlapStart)
+            return;
+
+        const float sourceLength = sourceEnd - sourceStart;
+        if (sourceLength <= 1.0e-5f)
+            return;
+
+        if (overlapStart <= sourceStart + 1.0e-5f && overlapEnd >= sourceEnd - 1.0e-5f)
+        {
+            result.appendPath (source);
+            return;
+        }
+
+        const float localStart = (overlapStart - sourceStart) / sourceLength;
+        const float localEnd = (overlapEnd - sourceStart) / sourceLength;
+        result.appendPath (source.getTrimmedPath (localStart, localEnd));
+    };
+
+    const float startDistance = segment.start * totalLength;
+    const float endDistance = segment.end * totalLength;
+    float pathStart = 0.0f;
+
+    for (auto& path : paths)
+    {
+        const float pathLength = path.getLength();
+        const float pathEnd = pathStart + pathLength;
+        Path trimmed;
+
+        if (segment.start < segment.end)
+        {
+            appendDistributedRange (trimmed, path, pathStart, pathEnd, startDistance, endDistance);
+        }
+        else
+        {
+            appendDistributedRange (trimmed, path, pathStart, pathEnd, startDistance, totalLength);
+            appendDistributedRange (trimmed, path, pathStart, pathEnd, 0.0f, endDistance);
+        }
+
+        path = std::move (trimmed);
+        pathStart = pathEnd;
+    }
 }
 
 void AnimationRenderer::applyFill (Graphics& g, const Path& path, const FillPaint& fill, float frameNo, float opacity)

@@ -33,27 +33,114 @@ void AnimationGradient::addColorStop (float pos, Color color)
     colorStops.push_back (std::move (stop));
 }
 
+std::vector<std::pair<float, Color>> AnimationGradient::parseStopsFromFlatArray (
+    const std::vector<float>& flat,
+    int colorPoints)
+{
+    std::vector<std::pair<float, Color>> stops;
+    const int totalSize = static_cast<int> (flat.size());
+    const int count = jmin (colorPoints, totalSize / 4);
+    const int colorDataEnd = count * 4;
+
+    // Collect opacity stops (position, opacity) from the tail of the array.
+    std::vector<std::pair<float, float>> opacityStops;
+    for (int i = colorDataEnd; i + 1 < totalSize; i += 2)
+        opacityStops.push_back ({ flat[static_cast<size_t> (i)], flat[static_cast<size_t> (i + 1)] });
+
+    // Linear interpolation of opacity at a given position.
+    auto getOpacityAt = [&] (float pos) -> float
+    {
+        if (opacityStops.empty())
+            return 1.0f;
+        if (pos <= opacityStops.front().first)
+            return opacityStops.front().second;
+        if (pos >= opacityStops.back().first)
+            return opacityStops.back().second;
+        for (size_t j = 1; j < opacityStops.size(); ++j)
+        {
+            if (opacityStops[j].first >= pos)
+            {
+                const float span = opacityStops[j].first - opacityStops[j - 1].first;
+                const float tVal = span > 1e-6f ? (pos - opacityStops[j - 1].first) / span : 1.0f;
+                return opacityStops[j - 1].second + tVal * (opacityStops[j].second - opacityStops[j - 1].second);
+            }
+        }
+        return 1.0f;
+    };
+
+    for (int i = 0; i < count; ++i)
+    {
+        const float pos = flat[static_cast<size_t> (i * 4)];
+        const float r = flat[static_cast<size_t> (i * 4 + 1)];
+        const float g = flat[static_cast<size_t> (i * 4 + 2)];
+        const float b = flat[static_cast<size_t> (i * 4 + 3)];
+        const float alpha = getOpacityAt (pos);
+        stops.push_back ({ pos, Color::fromRGBA (static_cast<uint8> (r * 255.0f), static_cast<uint8> (g * 255.0f), static_cast<uint8> (b * 255.0f), static_cast<uint8> (alpha * 255.0f)) });
+    }
+    return stops;
+}
+
 ColorGradient AnimationGradient::toColorGradient (float frameNo) const
 {
     const Point<float> start = startPoint.getValueAt (frameNo);
     const Point<float> end = endPoint.getValueAt (frameNo);
 
-    if (colorStops.empty())
+    auto resolveStops = [this] (float fn) -> std::vector<std::pair<float, Color>>
+    {
+        // If animated, interpolate the flat value arrays from keyframes
+        if (! animatedStops.empty())
+        {
+            if (fn <= animatedStops.front().frame)
+                return parseStopsFromFlatArray (animatedStops.front().values, numColorPoints);
+            if (fn >= animatedStops.back().frame)
+                return parseStopsFromFlatArray (animatedStops.back().values, numColorPoints);
+
+            int lo = 0;
+            int hi = static_cast<int> (animatedStops.size()) - 2;
+            while (lo < hi)
+            {
+                const int mid = (lo + hi + 1) / 2;
+                if (animatedStops[mid].frame <= fn)
+                    lo = mid;
+                else
+                    hi = mid - 1;
+            }
+
+            const auto& k0 = animatedStops[lo];
+            const auto& k1 = animatedStops[lo + 1];
+            const float span = k1.frame - k0.frame;
+            if (span < 1e-6f)
+                return parseStopsFromFlatArray (k0.values, numColorPoints);
+
+            const float t = (fn - k0.frame) / span;
+            std::vector<float> interpolated;
+            interpolated.resize (k0.values.size());
+            for (size_t i = 0; i < k0.values.size(); ++i)
+                interpolated[i] = k0.values[i] + (k1.values[i] - k0.values[i]) * t;
+
+            return parseStopsFromFlatArray (interpolated, numColorPoints);
+        }
+
+        // Static stops
+        std::vector<std::pair<float, Color>> stops;
+        for (const auto& cs : colorStops)
+            stops.push_back ({ cs.position.getValueAt (fn), cs.color.getValueAt (fn) });
+        return stops;
+    };
+
+    const auto stops = resolveStops (frameNo);
+
+    if (stops.empty())
         return ColorGradient (Color(), start, Color(), end, gradientType == GradientType::Radial ? ColorGradient::Type::Radial : ColorGradient::Type::Linear);
 
-    const Color c0 = colorStops.front().color.getValueAt (frameNo);
-    const Color c1 = colorStops.back().color.getValueAt (frameNo);
+    const ColorGradient gradient (
+        stops.front().second, start, stops.back().second, end, gradientType == GradientType::Radial ? ColorGradient::Type::Radial : ColorGradient::Type::Linear);
 
-    ColorGradient gradient (c0, start, c1, end, gradientType == GradientType::Radial ? ColorGradient::Type::Radial : ColorGradient::Type::Linear);
+    ColorGradient result (gradient);
+    for (size_t i = 1; i + 1 < stops.size(); ++i)
+        result.addColorStop (stops[i].second, stops[i].first);
 
-    for (size_t i = 1; i + 1 < colorStops.size(); ++i)
-    {
-        const float delta = colorStops[i].position.getValueAt (frameNo);
-        const Color col = colorStops[i].color.getValueAt (frameNo);
-        gradient.addColorStop (col, delta);
-    }
-
-    return gradient;
+    return result;
 }
 
 //==============================================================================

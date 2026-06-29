@@ -92,6 +92,7 @@ struct AnimationKeyframe
 {
     float frame = 0.0f;
     T value {};
+    std::optional<T> endValue;
     AnimationEasing easing;
 };
 
@@ -172,7 +173,7 @@ public:
             return keyframes_.front().value;
 
         if (frameNo >= keyframes_.back().frame)
-            return keyframes_.back().value;
+            return keyframes_.back().endValue.value_or (keyframes_.back().value);
 
         // Binary search for the active keyframe interval
         int lo = 0;
@@ -195,10 +196,10 @@ public:
 
         const float span = k1.frame - k0.frame;
         if (span < 1e-6f)
-            return k1.value;
+            return k0.endValue.value_or (k1.value);
 
         const float t = k0.easing.evaluate ((frameNo - k0.frame) / span);
-        return AnimationLerp<T>::lerp (k0.value, k1.value, t);
+        return AnimationLerp<T>::lerp (k0.value, k0.endValue.has_value() ? *k0.endValue : k1.value, t);
     }
 
     //==============================================================================
@@ -215,7 +216,16 @@ public:
     AnimationProperty& addKeyframe (float frame, T value, AnimationEasing easing = AnimationEasing::linear())
     {
         animated_ = true;
-        keyframes_.push_back ({ frame, std::move (value), easing });
+        keyframes_.push_back ({ frame, std::move (value), std::nullopt, easing });
+        sortKeyframes();
+        return *this;
+    }
+
+    /** Adds a keyframe with an explicit interval end value. */
+    AnimationProperty& addKeyframe (float frame, T value, T endValue, AnimationEasing easing = AnimationEasing::linear())
+    {
+        animated_ = true;
+        keyframes_.push_back ({ frame, std::move (value), std::move (endValue), easing });
         sortKeyframes();
         return *this;
     }
@@ -234,7 +244,13 @@ public:
     public:
         Builder& keyframe (float frame, T value, AnimationEasing easing = AnimationEasing::linear())
         {
-            keyframes_.push_back ({ frame, std::move (value), std::move (easing) });
+            keyframes_.push_back ({ frame, std::move (value), std::nullopt, std::move (easing) });
+            return *this;
+        }
+
+        Builder& keyframe (float frame, T value, T endValue, AnimationEasing easing = AnimationEasing::linear())
+        {
+            keyframes_.push_back ({ frame, std::move (value), std::move (endValue), std::move (easing) });
             return *this;
         }
 

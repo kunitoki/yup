@@ -23,6 +23,22 @@ namespace yup
 {
 
 //==============================================================================
+/** A spatial position keyframe with bezier tangents for curved motion paths.
+
+    When a position property has `ti` and `to` tangent vectors, the motion path
+    between consecutive keyframes follows a cubic bezier curve instead of a straight line.
+*/
+struct SpatialPositionKeyframe
+{
+    float frame = 0.0f;
+    Point<float> value {};
+    std::optional<Point<float>> endValue;
+    Point<float> tangentIn {};  ///< "ti" — in tangent (relative to this keyframe)
+    Point<float> tangentOut {}; ///< "to" — out tangent (relative to this keyframe)
+    AnimationEasing easing;
+};
+
+//==============================================================================
 /** Bundles all Lottie transform channels as animated properties.
 
     Call toAffineTransform(frameNo) to collapse all channels into a single
@@ -46,6 +62,10 @@ public:
     FloatProperty positionX { AnimationProperty<float>::staticValue (0.0f) };
     FloatProperty positionY { AnimationProperty<float>::staticValue (0.0f) };
 
+    /** Spatial keyframes for position motion path (bezier interpolation).
+        When populated, overrides the linear interpolation in position.getValueAt(). */
+    std::vector<SpatialPositionKeyframe> spatialKeyframes;
+
     //==============================================================================
     /** Evaluates all channels and returns the composed AffineTransform at frameNo. */
     [[nodiscard]] AffineTransform toAffineTransform (float frameNo) const;
@@ -55,6 +75,11 @@ public:
 
     /** Returns true when all channels are static (no keyframe animation). */
     [[nodiscard]] bool isStatic() const noexcept;
+
+    //==============================================================================
+    /** Evaluates position with spatial bezier interpolation when spatialKeyframes
+        are present, otherwise uses the position property's linear interpolation. */
+    [[nodiscard]] Point<float> positionAt (float frameNo) const;
 };
 
 } // namespace yup

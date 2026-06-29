@@ -30,11 +30,7 @@ AffineTransform AnimationTransform::toAffineTransform (float frameNo) const
     const float sk = skew.getValueAt (frameNo);
     const float sa = skewAxis.getValueAt (frameNo);
 
-    Point<float> p;
-    if (separatePosition)
-        p = { positionX.getValueAt (frameNo), positionY.getValueAt (frameNo) };
-    else
-        p = position.getValueAt (frameNo);
+    const Point<float> p = positionAt (frameNo);
 
     // Compose: translate(p) * rotate(r) * skew * scale(s/100) * translate(-a)
     AffineTransform t;
@@ -69,7 +65,62 @@ bool AnimationTransform::isStatic() const noexcept
         && rotation.isStatic()
         && opacity.isStatic()
         && skew.isStatic()
-        && skewAxis.isStatic();
+        && skewAxis.isStatic()
+        && spatialKeyframes.empty();
+}
+
+Point<float> AnimationTransform::positionAt (float frameNo) const
+{
+    if (separatePosition)
+        return { positionX.getValueAt (frameNo), positionY.getValueAt (frameNo) };
+
+    if (spatialKeyframes.empty())
+        return position.getValueAt (frameNo);
+
+    // Spatial bezier interpolation with position tangents
+    if (frameNo <= spatialKeyframes.front().frame)
+        return spatialKeyframes.front().value;
+
+    if (frameNo >= spatialKeyframes.back().frame)
+        return spatialKeyframes.back().endValue.value_or (spatialKeyframes.back().value);
+
+    int lo = 0;
+    int hi = static_cast<int> (spatialKeyframes.size()) - 2;
+    while (lo < hi)
+    {
+        const int mid = (lo + hi + 1) / 2;
+        if (spatialKeyframes[static_cast<size_t> (mid)].frame <= frameNo)
+            lo = mid;
+        else
+            hi = mid - 1;
+    }
+
+    const auto& k0 = spatialKeyframes[static_cast<size_t> (lo)];
+    const auto& k1 = spatialKeyframes[static_cast<size_t> (lo + 1)];
+
+    const float span = k1.frame - k0.frame;
+    if (span < 1e-6f)
+        return k0.endValue.value_or (k1.value);
+
+    // Apply temporal easing
+    const float t = k0.easing.isHold() ? 0.0f : k0.easing.evaluate ((frameNo - k0.frame) / span);
+
+    // Cubic bezier: B(t) = (1-t)³ P0 + 3(1-t)² t P1 + 3(1-t)t² P2 + t³ P3
+    const auto P0 = k0.value;
+    const auto P1 = k0.value + k0.tangentOut;
+    const auto P3 = k0.endValue.value_or (k1.value);
+    const auto P2 = P3 + k1.tangentIn;
+
+    const float oneMinusT = 1.0f - t;
+    const float oneMinusT2 = oneMinusT * oneMinusT;
+    const float oneMinusT3 = oneMinusT2 * oneMinusT;
+    const float t2 = t * t;
+    const float t3 = t2 * t;
+
+    return {
+        oneMinusT3 * P0.getX() + 3.0f * oneMinusT2 * t * P1.getX() + 3.0f * oneMinusT * t2 * P2.getX() + t3 * P3.getX(),
+        oneMinusT3 * P0.getY() + 3.0f * oneMinusT2 * t * P1.getY() + 3.0f * oneMinusT * t2 * P2.getY() + t3 * P3.getY()
+    };
 }
 
 } // namespace yup

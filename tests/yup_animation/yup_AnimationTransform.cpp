@@ -93,3 +93,23 @@ TEST_F (AnimationTransformTests, AnimatedPositionChangesOverTime)
     EXPECT_NEAR (origin.transformedBy (xf0).getX(), 0.0f, 0.1f);
     EXPECT_NEAR (origin.transformedBy (xf10).getX(), 100.0f, 0.1f);
 }
+
+TEST_F (AnimationTransformTests, SpatialPositionUsesExplicitEndValue)
+{
+    AnimationTransform t;
+    t.spatialKeyframes.push_back ({ 0.0f,
+                                    Point<float> (0.0f, 0.0f),
+                                    Point<float> (20.0f, 0.0f),
+                                    Point<float> {},
+                                    Point<float> {},
+                                    AnimationEasing::linear() });
+    t.spatialKeyframes.push_back ({ 10.0f,
+                                    Point<float> (100.0f, 0.0f),
+                                    std::nullopt,
+                                    Point<float> {},
+                                    Point<float> {},
+                                    AnimationEasing::linear() });
+
+    EXPECT_NEAR (t.positionAt (5.0f).getX(), 10.0f, 0.001f);
+    EXPECT_NEAR (t.positionAt (10.0f).getX(), 100.0f, 0.001f);
+}

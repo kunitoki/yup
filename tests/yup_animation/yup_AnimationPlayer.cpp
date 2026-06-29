@@ -189,3 +189,51 @@ TEST_F (AnimationPlayerTests, UsesCompositionStartFrameAsInitialFrame)
     player.stop();
     EXPECT_NEAR (player.currentFrame(), 10.0f, 0.001f);
 }
+
+TEST (AnimationTrimTests, FullRangeRemainsFullWhenOffset)
+{
+    AnimationTrim trim;
+    trim.start = FloatProperty::staticValue (0.0f);
+    trim.end = FloatProperty::staticValue (100.0f);
+    trim.offset = FloatProperty::staticValue (90.0f);
+
+    const auto segment = trim.getSegment (0.0f);
+
+    EXPECT_NEAR (segment.start, 0.0f, 1.0e-6f);
+    EXPECT_NEAR (segment.end, 1.0f, 1.0e-6f);
+}
+
+TEST (AnimationTrimTests, NegativeOffsetWrapsIntoNormalizedRange)
+{
+    AnimationTrim trim;
+    trim.start = FloatProperty::staticValue (25.0f);
+    trim.end = FloatProperty::staticValue (75.0f);
+    trim.offset = FloatProperty::staticValue (-180.0f);
+
+    const auto segment = trim.getSegment (0.0f);
+
+    EXPECT_NEAR (segment.start, 0.75f, 1.0e-6f);
+    EXPECT_NEAR (segment.end, 0.25f, 1.0e-6f);
+}
+
+TEST (AnimationTrimTests, ReversedStartAndEndWithoutOffsetDoesNotWrap)
+{
+    AnimationTrim trim;
+    trim.start = FloatProperty::staticValue (75.0f);
+    trim.end = FloatProperty::staticValue (25.0f);
+    trim.offset = FloatProperty::staticValue (0.0f);
+
+    const auto segment = trim.getSegment (0.0f);
+
+    EXPECT_NEAR (segment.start, 0.25f, 1.0e-6f);
+    EXPECT_NEAR (segment.end, 0.75f, 1.0e-6f);
+}
+
+TEST (AnimationLayerTests, TimeStretchDividesLocalFrame)
+{
+    NullLayer layer;
+    layer.startFrame = 10.0f;
+    layer.timeStretch = 2.0f;
+
+    EXPECT_NEAR (layer.localFrame (30.0f), 10.0f, 1.0e-6f);
+}

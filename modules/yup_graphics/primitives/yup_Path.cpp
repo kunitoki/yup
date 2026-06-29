@@ -1886,195 +1886,526 @@ bool Path::fromString (const String& pathData)
 
 //==============================================================================
 
+namespace
+{
+
+struct PathMeasureSegment
+{
+    Path::Verb verb = Path::Verb::LineTo;
+    Point<float> start;
+    Point<float> controlPoint1;
+    Point<float> controlPoint2;
+    Point<float> end;
+    float startDistance = 0.0f;
+    float endDistance = 0.0f;
+    bool startsSubPath = false;
+};
+
+[[nodiscard]] float positiveModulo (float value, float modulus) noexcept
+{
+    const float result = std::fmod (value, modulus);
+    return result < 0.0f ? result + modulus : result;
+}
+
+[[nodiscard]] Point<float> evaluateQuadratic (Point<float> p0, Point<float> p1, Point<float> p2, float t) noexcept
+{
+    const float u = 1.0f - t;
+    return {
+        u * u * p0.getX() + 2.0f * u * t * p1.getX() + t * t * p2.getX(),
+        u * u * p0.getY() + 2.0f * u * t * p1.getY() + t * t * p2.getY()
+    };
+}
+
+[[nodiscard]] Point<float> evaluateCubic (Point<float> p0, Point<float> p1, Point<float> p2, Point<float> p3, float t) noexcept
+{
+    const float u = 1.0f - t;
+    const float uu = u * u;
+    const float tt = t * t;
+    return {
+        uu * u * p0.getX() + 3.0f * uu * t * p1.getX() + 3.0f * u * tt * p2.getX() + tt * t * p3.getX(),
+        uu * u * p0.getY() + 3.0f * uu * t * p1.getY() + 3.0f * u * tt * p2.getY() + tt * t * p3.getY()
+    };
+}
+
+[[nodiscard]] float magnitude (Point<float> p) noexcept
+{
+    return std::sqrt (p.getX() * p.getX() + p.getY() * p.getY());
+}
+
+[[nodiscard]] float quadraticSpeed (Point<float> p0, Point<float> p1, Point<float> p2, float t) noexcept
+{
+    const float u = 1.0f - t;
+    return magnitude ({ 2.0f * u * (p1.getX() - p0.getX()) + 2.0f * t * (p2.getX() - p1.getX()),
+                        2.0f * u * (p1.getY() - p0.getY()) + 2.0f * t * (p2.getY() - p1.getY()) });
+}
+
+[[nodiscard]] float cubicSpeed (Point<float> p0, Point<float> p1, Point<float> p2, Point<float> p3, float t) noexcept
+{
+    const float u = 1.0f - t;
+    return magnitude ({ 3.0f * u * u * (p1.getX() - p0.getX()) + 6.0f * u * t * (p2.getX() - p1.getX()) + 3.0f * t * t * (p3.getX() - p2.getX()),
+                        3.0f * u * u * (p1.getY() - p0.getY()) + 6.0f * u * t * (p2.getY() - p1.getY()) + 3.0f * t * t * (p3.getY() - p2.getY()) });
+}
+
+template <typename SpeedFunction>
+[[nodiscard]] float integrateSpeedRange (float start, float end, const SpeedFunction& speed)
+{
+    static constexpr float points[] = { -0.9061798459f, -0.5384693101f, 0.0f, 0.5384693101f, 0.9061798459f };
+    static constexpr float weights[] = { 0.2369268850f, 0.4786286705f, 0.5688888889f, 0.4786286705f, 0.2369268850f };
+
+    start = jlimit (0.0f, 1.0f, start);
+    end = jlimit (0.0f, 1.0f, end);
+
+    if (end <= start)
+        return 0.0f;
+
+    const float halfRange = (end - start) * 0.5f;
+    const float center = (start + end) * 0.5f;
+    float length = 0.0f;
+
+    for (int i = 0; i < 5; ++i)
+        length += weights[i] * speed (halfRange * points[i] + center);
+
+    return length * halfRange;
+}
+
+template <typename SpeedFunction>
+[[nodiscard]] float integrateSpeedAdaptive (float start, float end, float tolerance, int depth, const SpeedFunction& speed)
+{
+    const float whole = integrateSpeedRange (start, end, speed);
+    const float mid = (start + end) * 0.5f;
+    const float split = integrateSpeedRange (start, mid, speed) + integrateSpeedRange (mid, end, speed);
+
+    if (depth >= 8 || std::abs (split - whole) <= tolerance)
+        return split;
+
+    return integrateSpeedAdaptive (start, mid, tolerance * 0.5f, depth + 1, speed)
+         + integrateSpeedAdaptive (mid, end, tolerance * 0.5f, depth + 1, speed);
+}
+
+[[nodiscard]] float getSegmentLengthAt (const PathMeasureSegment& segment, float t, float tolerance)
+{
+    const float effectiveTolerance = jmax (1.0e-5f, tolerance);
+
+    switch (segment.verb)
+    {
+        case Path::Verb::LineTo:
+        case Path::Verb::Close:
+            return segment.start.distanceTo (segment.end) * jlimit (0.0f, 1.0f, t);
+
+        case Path::Verb::QuadTo:
+        {
+            const auto speed = [&] (float u)
+            {
+                return quadraticSpeed (segment.start, segment.controlPoint1, segment.end, u);
+            };
+
+            return integrateSpeedAdaptive (0.0f, t, effectiveTolerance, 0, speed);
+        }
+
+        case Path::Verb::CubicTo:
+        {
+            const auto speed = [&] (float u)
+            {
+                return cubicSpeed (segment.start, segment.controlPoint1, segment.controlPoint2, segment.end, u);
+            };
+
+            return integrateSpeedAdaptive (0.0f, t, effectiveTolerance, 0, speed);
+        }
+
+        case Path::Verb::MoveTo:
+            break;
+    }
+
+    return 0.0f;
+}
+
+[[nodiscard]] float getSegmentSpeed (const PathMeasureSegment& segment, float t)
+{
+    switch (segment.verb)
+    {
+        case Path::Verb::LineTo:
+        case Path::Verb::Close:
+            return segment.start.distanceTo (segment.end);
+
+        case Path::Verb::QuadTo:
+            return quadraticSpeed (segment.start, segment.controlPoint1, segment.end, t);
+
+        case Path::Verb::CubicTo:
+            return cubicSpeed (segment.start, segment.controlPoint1, segment.controlPoint2, segment.end, t);
+
+        case Path::Verb::MoveTo:
+            break;
+    }
+
+    return 0.0f;
+}
+
+[[nodiscard]] float findParameterForDistance (const PathMeasureSegment& segment, float distance, float tolerance)
+{
+    const float segmentLength = segment.endDistance - segment.startDistance;
+
+    if (distance <= 0.0f)
+        return 0.0f;
+
+    if (distance >= segmentLength)
+        return 1.0f;
+
+    float lower = 0.0f;
+    float upper = 1.0f;
+    float t = jlimit (0.0f, 1.0f, distance / segmentLength);
+    const float lengthTolerance = jmax (1.0e-5f, tolerance * 0.01f);
+
+    for (int i = 0; i < 20; ++i)
+    {
+        const float measured = getSegmentLengthAt (segment, t, tolerance);
+        const float error = measured - distance;
+
+        if (std::abs (error) <= lengthTolerance)
+            break;
+
+        if (error > 0.0f)
+            upper = t;
+        else
+            lower = t;
+
+        const float speed = getSegmentSpeed (segment, t);
+        const float candidate = speed > 1.0e-6f ? t - error / speed : (lower + upper) * 0.5f;
+
+        t = (candidate > lower && candidate < upper) ? candidate : (lower + upper) * 0.5f;
+    }
+
+    return jlimit (0.0f, 1.0f, t);
+}
+
+void appendMeasuredSegment (std::vector<PathMeasureSegment>& segments,
+                            Path::Verb verb,
+                            Point<float> start,
+                            Point<float> controlPoint1,
+                            Point<float> controlPoint2,
+                            Point<float> end,
+                            float tolerance,
+                            float& totalLength,
+                            bool& startsSubPath)
+{
+    PathMeasureSegment segment;
+    segment.verb = verb;
+    segment.start = start;
+    segment.controlPoint1 = controlPoint1;
+    segment.controlPoint2 = controlPoint2;
+    segment.end = end;
+    segment.startDistance = totalLength;
+    segment.startsSubPath = startsSubPath;
+
+    const float length = getSegmentLengthAt (segment, 1.0f, tolerance);
+    if (length <= 1.0e-5f)
+        return;
+
+    segment.endDistance = totalLength + length;
+    segments.push_back (segment);
+    totalLength += length;
+    startsSubPath = false;
+}
+
+void splitQuadratic (Point<float> p0,
+                     Point<float> p1,
+                     Point<float> p2,
+                     float t,
+                     Point<float> left[3],
+                     Point<float> right[3]) noexcept
+{
+    const auto p01 = p0.pointBetween (p1, t);
+    const auto p12 = p1.pointBetween (p2, t);
+    const auto p012 = p01.pointBetween (p12, t);
+
+    left[0] = p0;
+    left[1] = p01;
+    left[2] = p012;
+    right[0] = p012;
+    right[1] = p12;
+    right[2] = p2;
+}
+
+void splitCubic (Point<float> p0,
+                 Point<float> p1,
+                 Point<float> p2,
+                 Point<float> p3,
+                 float t,
+                 Point<float> left[4],
+                 Point<float> right[4]) noexcept
+{
+    const auto p01 = p0.pointBetween (p1, t);
+    const auto p12 = p1.pointBetween (p2, t);
+    const auto p23 = p2.pointBetween (p3, t);
+    const auto p012 = p01.pointBetween (p12, t);
+    const auto p123 = p12.pointBetween (p23, t);
+    const auto p0123 = p012.pointBetween (p123, t);
+
+    left[0] = p0;
+    left[1] = p01;
+    left[2] = p012;
+    left[3] = p0123;
+    right[0] = p0123;
+    right[1] = p123;
+    right[2] = p23;
+    right[3] = p3;
+}
+
+void appendTrimmedQuadratic (Path& result, const PathMeasureSegment& segment, float t0, float t1)
+{
+    Point<float> left[3];
+    Point<float> right[3];
+    splitQuadratic (segment.start, segment.controlPoint1, segment.end, t1, left, right);
+
+    Point<float> piece[3] = { left[0], left[1], left[2] };
+    if (t0 > 0.0f)
+    {
+        const float localT = t1 > 0.0f ? t0 / t1 : 0.0f;
+        splitQuadratic (piece[0], piece[1], piece[2], localT, left, right);
+        piece[0] = right[0];
+        piece[1] = right[1];
+        piece[2] = right[2];
+    }
+
+    result.quadTo (piece[2].getX(), piece[2].getY(), piece[1].getX(), piece[1].getY());
+}
+
+void appendTrimmedCubic (Path& result, const PathMeasureSegment& segment, float t0, float t1)
+{
+    Point<float> left[4];
+    Point<float> right[4];
+    splitCubic (segment.start, segment.controlPoint1, segment.controlPoint2, segment.end, t1, left, right);
+
+    Point<float> piece[4] = { left[0], left[1], left[2], left[3] };
+    if (t0 > 0.0f)
+    {
+        const float localT = t1 > 0.0f ? t0 / t1 : 0.0f;
+        splitCubic (piece[0], piece[1], piece[2], piece[3], localT, left, right);
+        piece[0] = right[0];
+        piece[1] = right[1];
+        piece[2] = right[2];
+        piece[3] = right[3];
+    }
+
+    result.cubicTo (piece[1].getX(), piece[1].getY(), piece[2].getX(), piece[2].getY(), piece[3].getX(), piece[3].getY());
+}
+
+[[nodiscard]] std::vector<PathMeasureSegment> collectMeasuredSegments (const Path& path, float tolerance, float& totalLength)
+{
+    std::vector<PathMeasureSegment> segments;
+    totalLength = 0.0f;
+
+    Point<float> current;
+    Point<float> subPathStart;
+    bool hasCurrent = false;
+    bool startsSubPath = true;
+
+    for (const auto segment : path)
+    {
+        switch (segment.verb)
+        {
+            case Path::Verb::MoveTo:
+                current = segment.point;
+                subPathStart = current;
+                hasCurrent = true;
+                startsSubPath = true;
+                break;
+
+            case Path::Verb::LineTo:
+                if (hasCurrent)
+                    appendMeasuredSegment (segments, Path::Verb::LineTo, current, {}, {}, segment.point, tolerance, totalLength, startsSubPath);
+
+                current = segment.point;
+                hasCurrent = true;
+                break;
+
+            case Path::Verb::QuadTo:
+                if (hasCurrent)
+                    appendMeasuredSegment (segments, Path::Verb::QuadTo, current, segment.controlPoint1, {}, segment.point, tolerance, totalLength, startsSubPath);
+
+                current = segment.point;
+                hasCurrent = true;
+                break;
+
+            case Path::Verb::CubicTo:
+                if (hasCurrent)
+                    appendMeasuredSegment (segments, Path::Verb::CubicTo, current, segment.controlPoint1, segment.controlPoint2, segment.point, tolerance, totalLength, startsSubPath);
+
+                current = segment.point;
+                hasCurrent = true;
+                break;
+
+            case Path::Verb::Close:
+                if (hasCurrent)
+                    appendMeasuredSegment (segments, Path::Verb::Close, current, {}, {}, subPathStart, tolerance, totalLength, startsSubPath);
+
+                current = subPathStart;
+                hasCurrent = false;
+                startsSubPath = true;
+                break;
+        }
+    }
+
+    return segments;
+}
+
+void appendMeasuredRange (Path& result,
+                          const std::vector<PathMeasureSegment>& segments,
+                          float totalLength,
+                          float rangeStart,
+                          float rangeEnd,
+                          float tolerance)
+{
+    const float startDistance = jlimit (0.0f, totalLength, rangeStart * totalLength);
+    const float endDistance = jlimit (0.0f, totalLength, rangeEnd * totalLength);
+
+    if (endDistance <= startDistance)
+        return;
+
+    bool hasOpenSubPath = false;
+    float previousDistance = -1.0f;
+
+    for (const auto& segment : segments)
+    {
+        const float overlapStart = jmax (segment.startDistance, startDistance);
+        const float overlapEnd = jmin (segment.endDistance, endDistance);
+
+        if (overlapEnd <= overlapStart)
+            continue;
+
+        const float t0 = findParameterForDistance (segment, overlapStart - segment.startDistance, tolerance);
+        const float t1 = findParameterForDistance (segment, overlapEnd - segment.startDistance, tolerance);
+
+        if (t1 <= t0 + 1.0e-6f)
+            continue;
+
+        const auto p0 = [&]
+        {
+            switch (segment.verb)
+            {
+                case Path::Verb::QuadTo:
+                    return evaluateQuadratic (segment.start, segment.controlPoint1, segment.end, t0);
+
+                case Path::Verb::CubicTo:
+                    return evaluateCubic (segment.start, segment.controlPoint1, segment.controlPoint2, segment.end, t0);
+
+                case Path::Verb::LineTo:
+                case Path::Verb::Close:
+                case Path::Verb::MoveTo:
+                    return segment.start.pointBetween (segment.end, t0);
+            }
+
+            return segment.start;
+        }();
+
+        if (! hasOpenSubPath || segment.startsSubPath || std::abs (overlapStart - previousDistance) > 1.0e-3f)
+        {
+            result.moveTo (p0);
+            hasOpenSubPath = true;
+        }
+
+        switch (segment.verb)
+        {
+            case Path::Verb::QuadTo:
+                appendTrimmedQuadratic (result, segment, t0, t1);
+                break;
+
+            case Path::Verb::CubicTo:
+                appendTrimmedCubic (result, segment, t0, t1);
+                break;
+
+            case Path::Verb::LineTo:
+            case Path::Verb::Close:
+            case Path::Verb::MoveTo:
+                result.lineTo (segment.start.pointBetween (segment.end, t1));
+                break;
+        }
+
+        previousDistance = overlapEnd;
+    }
+}
+
+} // namespace
+
+float Path::getLength (float tolerance) const
+{
+    float totalLength = 0.0f;
+    (void) collectMeasuredSegments (*this, tolerance, totalLength);
+    return totalLength;
+}
+
 Point<float> Path::getPointAlongPath (float distance) const
 {
-    // Clamp distance to valid range
-    distance = jlimit (0.0f, 1.0f, distance);
+    const float normalizedDistance = jlimit (0.0f, 1.0f, distance);
 
-    const auto& rawPath = path->getRawPath();
-    const auto& points = rawPath.points();
-    const auto& verbs = rawPath.verbs();
-
-    if (points.empty() || verbs.empty())
-        return Point<float> (0.0f, 0.0f);
-
-    // Calculate total path length by walking through all segments
     float totalLength = 0.0f;
-    std::vector<float> segmentLengths;
-    segmentLengths.resize (verbs.size());
-    Point<float> currentPoint (0.0f, 0.0f);
-    Point<float> lastMovePoint (0.0f, 0.0f);
+    const auto segments = collectMeasuredSegments (*this, 0.5f, totalLength);
 
-    for (size_t i = 0, pointIndex = 0; i < verbs.size(); ++i)
-    {
-        auto verb = verbs[i];
-
-        switch (verb)
-        {
-            case rive::PathVerb::move:
-                if (pointIndex < points.size())
-                {
-                    currentPoint = Point<float> (points[pointIndex].x, points[pointIndex].y);
-                    lastMovePoint = currentPoint;
-                    pointIndex++;
-                }
-                segmentLengths.push_back (0.0f);
-                break;
-
-            case rive::PathVerb::line:
-                if (pointIndex < points.size())
-                {
-                    Point<float> nextPoint (points[pointIndex].x, points[pointIndex].y);
-                    float segmentLength = currentPoint.distanceTo (nextPoint);
-                    segmentLengths.push_back (segmentLength);
-                    totalLength += segmentLength;
-                    currentPoint = nextPoint;
-                    pointIndex++;
-                }
-                break;
-
-            case rive::PathVerb::quad:
-                if (pointIndex + 1 < points.size())
-                {
-                    Point<float> control (points[pointIndex].x, points[pointIndex].y);
-                    Point<float> end (points[pointIndex + 1].x, points[pointIndex + 1].y);
-
-                    // Approximate quadratic curve length using control polygon
-                    float segmentLength = currentPoint.distanceTo (control) + control.distanceTo (end);
-                    segmentLengths.push_back (segmentLength * 0.8f); // Approximation factor
-                    totalLength += segmentLength * 0.8f;
-                    currentPoint = end;
-                    pointIndex += 2;
-                }
-                break;
-
-            case rive::PathVerb::cubic:
-                if (pointIndex + 2 < points.size())
-                {
-                    Point<float> control1 (points[pointIndex].x, points[pointIndex].y);
-                    Point<float> control2 (points[pointIndex + 1].x, points[pointIndex + 1].y);
-                    Point<float> end (points[pointIndex + 2].x, points[pointIndex + 2].y);
-
-                    // Approximate cubic curve length using control polygon
-                    float segmentLength = currentPoint.distanceTo (control1) + control1.distanceTo (control2) + control2.distanceTo (end);
-                    segmentLengths.push_back (segmentLength * 0.75f); // Approximation factor
-                    totalLength += segmentLength * 0.75f;
-                    currentPoint = end;
-                    pointIndex += 3;
-                }
-                break;
-
-            case rive::PathVerb::close:
-            {
-                float segmentLength = currentPoint.distanceTo (lastMovePoint);
-                segmentLengths.push_back (segmentLength);
-                totalLength += segmentLength;
-                currentPoint = lastMovePoint;
-            }
-            break;
-        }
-    }
-
-    if (totalLength == 0.0f)
+    if (segments.empty() || totalLength <= 1.0e-5f)
         return Point<float> (0.0f, 0.0f);
 
-    // Find the segment containing the target distance
-    float targetDistance = distance * totalLength;
-    float accumulatedLength = 0.0f;
-
-    currentPoint = Point<float> (0.0f, 0.0f);
-    lastMovePoint = Point<float> (0.0f, 0.0f);
-
-    for (size_t i = 0, pointIndex = 0; i < verbs.size() && i < segmentLengths.size(); ++i)
+    const float targetDistance = normalizedDistance * totalLength;
+    for (const auto& segment : segments)
     {
-        auto verb = verbs[i];
-        float segmentLength = segmentLengths[i];
-
-        if (accumulatedLength + segmentLength >= targetDistance)
+        if (targetDistance <= segment.endDistance)
         {
-            // Found the segment, interpolate within it
-            float segmentProgress = segmentLength > 0.0f ? (targetDistance - accumulatedLength) / segmentLength : 0.0f;
+            const float t = findParameterForDistance (segment, targetDistance - segment.startDistance, 0.5f);
 
-            switch (verb)
+            switch (segment.verb)
             {
-                case rive::PathVerb::move:
-                    if (pointIndex < points.size())
-                        return Point<float> (points[pointIndex].x, points[pointIndex].y);
-                    break;
+                case Path::Verb::QuadTo:
+                    return evaluateQuadratic (segment.start, segment.controlPoint1, segment.end, t);
 
-                case rive::PathVerb::line:
-                    if (pointIndex < points.size())
-                    {
-                        Point<float> nextPoint (points[pointIndex].x, points[pointIndex].y);
-                        return currentPoint.pointBetween (nextPoint, segmentProgress);
-                    }
-                    break;
+                case Path::Verb::CubicTo:
+                    return evaluateCubic (segment.start, segment.controlPoint1, segment.controlPoint2, segment.end, t);
 
-                case rive::PathVerb::quad:
-                case rive::PathVerb::cubic:
-                    // For curves, approximate with linear interpolation to end point
-                    if (pointIndex < points.size())
-                    {
-                        size_t endIndex = verb == rive::PathVerb::quad ? pointIndex + 1 : pointIndex + 2;
-                        if (endIndex < points.size())
-                        {
-                            Point<float> endPoint (points[endIndex].x, points[endIndex].y);
-                            return currentPoint.pointBetween (endPoint, segmentProgress);
-                        }
-                    }
-                    break;
-
-                case rive::PathVerb::close:
-                    return currentPoint.pointBetween (lastMovePoint, segmentProgress);
+                case Path::Verb::LineTo:
+                case Path::Verb::Close:
+                case Path::Verb::MoveTo:
+                    return segment.start.pointBetween (segment.end, t);
             }
-        }
-
-        accumulatedLength += segmentLength;
-
-        // Update current point based on verb
-        switch (verb)
-        {
-            case rive::PathVerb::move:
-                if (pointIndex < points.size())
-                {
-                    currentPoint = Point<float> (points[pointIndex].x, points[pointIndex].y);
-                    lastMovePoint = currentPoint;
-                    pointIndex++;
-                }
-                break;
-
-            case rive::PathVerb::line:
-                if (pointIndex < points.size())
-                {
-                    currentPoint = Point<float> (points[pointIndex].x, points[pointIndex].y);
-                    pointIndex++;
-                }
-                break;
-
-            case rive::PathVerb::quad:
-                if (pointIndex + 1 < points.size())
-                {
-                    currentPoint = Point<float> (points[pointIndex + 1].x, points[pointIndex + 1].y);
-                    pointIndex += 2;
-                }
-                break;
-
-            case rive::PathVerb::cubic:
-                if (pointIndex + 2 < points.size())
-                {
-                    currentPoint = Point<float> (points[pointIndex + 2].x, points[pointIndex + 2].y);
-                    pointIndex += 3;
-                }
-                break;
-
-            case rive::PathVerb::close:
-                currentPoint = lastMovePoint;
-                break;
         }
     }
 
-    // If we reach here, return the last point
-    return currentPoint;
+    return segments.back().end;
+}
+
+Path Path::getTrimmedPath (float start, float end, float offset, float tolerance) const
+{
+    const float span = end - start;
+    if (std::abs (span) >= 1.0f)
+        return createCopy();
+
+    const float normalizedStart = positiveModulo (start + offset, 1.0f);
+    const float normalizedEnd = positiveModulo (end + offset, 1.0f);
+
+    if (std::abs (normalizedStart - normalizedEnd) <= 1.0e-6f)
+        return {};
+
+    float totalLength = 0.0f;
+    const auto segments = collectMeasuredSegments (*this, tolerance, totalLength);
+
+    if (segments.empty() || totalLength <= 1.0e-5f)
+        return {};
+
+    Path result;
+    if (normalizedStart < normalizedEnd)
+    {
+        appendMeasuredRange (result, segments, totalLength, normalizedStart, normalizedEnd, tolerance);
+    }
+    else
+    {
+        appendMeasuredRange (result, segments, totalLength, normalizedStart, 1.0f, tolerance);
+        appendMeasuredRange (result, segments, totalLength, 0.0f, normalizedEnd, tolerance);
+    }
+
+    result.setUsingNonZeroWinding (isUsingNonZeroWinding());
+    return result;
+}
+
+Path& Path::trim (float start, float end, float offset, float tolerance)
+{
+    *this = getTrimmedPath (start, end, offset, tolerance);
+    return *this;
 }
 
 //==============================================================================

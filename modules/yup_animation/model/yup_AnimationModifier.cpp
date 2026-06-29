@@ -25,16 +25,53 @@ namespace yup
 //==============================================================================
 // AnimationTrim
 
+namespace
+{
+
+[[nodiscard]] AnimationTrim::TrimSegment noLoop (float start, float end) noexcept
+{
+    return { jmin (start, end), jmax (start, end) };
+}
+
+[[nodiscard]] AnimationTrim::TrimSegment loop (float start, float end) noexcept
+{
+    return { jmax (start, end), jmin (start, end) };
+}
+
+} // namespace
+
 AnimationTrim::TrimSegment AnimationTrim::getSegment (float frameNo) const
 {
     const float rawStart = start.getValueAt (frameNo) / 100.0f;
     const float rawEnd = end.getValueAt (frameNo) / 100.0f;
-    const float rawOffset = offset.getValueAt (frameNo) / 360.0f;
+    const float rawOffset = std::fmod (offset.getValueAt (frameNo), 360.0f) / 360.0f;
 
-    const float s = std::fmod (rawStart + rawOffset, 1.0f);
-    const float e = std::fmod (rawEnd + rawOffset, 1.0f);
+    if (std::abs (rawEnd - rawStart) >= 1.0f)
+        return { 0.0f, 1.0f };
 
-    return { jlimit (0.0f, 1.0f, s), jlimit (0.0f, 1.0f, e) };
+    float startWithOffset = rawStart + rawOffset;
+    float endWithOffset = rawEnd + rawOffset;
+
+    if (rawOffset > 0.0f)
+    {
+        if (startWithOffset <= 1.0f && endWithOffset <= 1.0f)
+            return noLoop (startWithOffset, endWithOffset);
+
+        if (startWithOffset > 1.0f && endWithOffset > 1.0f)
+            return noLoop (startWithOffset - 1.0f, endWithOffset - 1.0f);
+
+        return startWithOffset > 1.0f ? loop (startWithOffset - 1.0f, endWithOffset)
+                                      : loop (startWithOffset, endWithOffset - 1.0f);
+    }
+
+    if (startWithOffset >= 0.0f && endWithOffset >= 0.0f)
+        return noLoop (startWithOffset, endWithOffset);
+
+    if (startWithOffset < 0.0f && endWithOffset < 0.0f)
+        return noLoop (1.0f + startWithOffset, 1.0f + endWithOffset);
+
+    return startWithOffset < 0.0f ? loop (1.0f + startWithOffset, endWithOffset)
+                                  : loop (startWithOffset, 1.0f + endWithOffset);
 }
 
 //==============================================================================
@@ -71,6 +108,14 @@ Path AnimationMask::shapeAt (float frameNo) const
 float AnimationMask::opacityAt (float frameNo) const
 {
     return jlimit (0.0f, 1.0f, opacity.getValueAt (frameNo) / 100.0f);
+}
+
+//==============================================================================
+// AnimationRoundedCorner
+
+float AnimationRoundedCorner::radiusAt (float frameNo) const
+{
+    return jlimit (0.0f, 1.0f, radius.getValueAt (frameNo) / 100.0f);
 }
 
 } // namespace yup

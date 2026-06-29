@@ -94,6 +94,8 @@ private:
     void parseMasks (const var& masksArray, AnimationLayer& layer);
     void parseAssets (const var& assetsArray, AnimationComposition& comp);
 
+    void resolveLayerAssets (AnimationComposition& comp);
+
     // Value extractors
     [[nodiscard]] static Color extractColor (const var& v);
     [[nodiscard]] static Point<float> extractPoint (const var& v);

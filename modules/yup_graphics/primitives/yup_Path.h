@@ -760,6 +760,46 @@ public:
     */
     Point<float> getPointAlongPath (float distance) const;
 
+    /** Calculates the approximate arc length of this path.
+
+        Curved segments are measured with adaptive Gaussian quadrature. Smaller
+        tolerances produce more accurate lengths at a higher CPU cost.
+
+        @param tolerance Maximum numerical integration error in path units.
+        @return The approximate total length of all drawable path contours.
+    */
+    float getLength (float tolerance = 0.5f) const;
+
+    /** Returns a path containing a normalized arc-length range of this path.
+
+        @p start and @p end are normalized positions on the path, where 0.0 is the
+        beginning and 1.0 is the end. If @p start is greater than @p end, the range
+        wraps around the end of the path. @p offset is also normalized and is added
+        to both endpoints before trimming.
+
+        Curved segments are split with De Casteljau subdivision, so the returned
+        path preserves line, quadratic, and cubic segment types where possible.
+
+        @param start Normalized start position.
+        @param end Normalized end position.
+        @param offset Normalized offset added to start and end.
+        @param tolerance Maximum numerical integration error in path units.
+        @return A new path containing the trimmed section.
+    */
+    Path getTrimmedPath (float start, float end, float offset = 0.0f, float tolerance = 0.5f) const;
+
+    /** Replaces this path with a normalized arc-length range of itself.
+
+        This is the mutating counterpart of getTrimmedPath().
+
+        @param start Normalized start position.
+        @param end Normalized end position.
+        @param offset Normalized offset added to start and end.
+        @param tolerance Maximum numerical integration error in path units.
+        @return A reference to this path after trimming.
+    */
+    Path& trim (float start, float end, float offset = 0.0f, float tolerance = 0.5f);
+
     //==============================================================================
     /** Converts the path to an SVG path data string.
 

@@ -54,12 +54,10 @@
 #include <algorithm>
 
 //==============================================================================
-// core
 #include "core/yup_AnimationEasing.h"
 #include "core/yup_AnimationProperty.h"
 #include "core/yup_AnimationTransform.h"
-
-// model — order matters: forward-declared types come first
+#include "model/yup_AnimationPathData.h"
 #include "model/yup_AnimationShape.h"
 #include "model/yup_AnimationPaint.h"
 #include "model/yup_AnimationModifier.h"
@@ -67,15 +65,9 @@
 #include "model/yup_AnimationLayer.h"
 #include "model/yup_ShapeLayer.h"
 #include "model/yup_AnimationComposition.h"
-
-// io
 #include "io/yup_LottieReader.h"
 #include "io/yup_LottieWriter.h"
-
-// animation
 #include "animation/yup_Animation.h"
 #include "animation/yup_AnimationPlayer.h"
-
-// renderer
 #include "renderer/yup_AnimationRenderer.h"
 #include "renderer/yup_AnimationFrameExporter.h"

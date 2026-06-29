@@ -45,6 +45,13 @@ public:
         ColorProperty color { ColorProperty::staticValue (Color()) };
     };
 
+    /** A keyframe for animated gradient stops — stores a flat float array for interpolation. */
+    struct GradientKeyframe
+    {
+        float frame = 0.0f;
+        std::vector<float> values; ///< Flat array: [pos, r, g, b, ...] × colorPoints, then [pos, opacity] pairs
+    };
+
     //==============================================================================
     AnimationGradient() = default;
 
@@ -57,11 +64,22 @@ public:
 
     std::vector<ColorStop> colorStops;
 
+    /** When non-empty, color stops are animated and interpolated from these keyframes. */
+    std::vector<GradientKeyframe> animatedStops;
+    int numColorPoints = 0;
+
     //==============================================================================
     void addColorStop (float pos, Color color);
 
     /** Evaluates to a yup::ColorGradient at the given frame. */
     [[nodiscard]] ColorGradient toColorGradient (float frameNo) const;
+
+    /** Parses a flat Lottie float array into color-stop pairs.
+        Format: [pos, r, g, b, ...] × colorPoints, then [pos, opacity, ...] pairs.
+    */
+    [[nodiscard]] static std::vector<std::pair<float, Color>> parseStopsFromFlatArray (
+        const std::vector<float>& flat,
+        int colorPoints);
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AnimationGradient)
 };

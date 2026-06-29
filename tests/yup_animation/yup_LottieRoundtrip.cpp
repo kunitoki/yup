@@ -135,6 +135,46 @@ constexpr const char* kAnimatedPathJson = R"json({
     ]
 })json";
 
+constexpr const char* kTerminalKeyframeJson = R"json({
+    "v": "5.5.2",
+    "nm": "TerminalKeyframe",
+    "ip": 0,
+    "op": 20,
+    "fr": 10.0,
+    "w": 100,
+    "h": 100,
+    "ddd": 0,
+    "assets": [],
+    "layers": [
+        {
+            "ty": 4,
+            "nm": "ShapeLayer",
+            "ind": 1,
+            "ip": 0,
+            "op": 20,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [0, 0] },
+                "s": {
+                    "a": 1,
+                    "k": [
+                        { "t": 0, "s": [100, 100, 100], "e": [130, 80, 100] },
+                        { "t": 10, "s": [130, 80, 100], "e": [100, 100, 100] },
+                        { "t": 17 }
+                    ]
+                },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            },
+            "shapes": []
+        }
+    ]
+})json";
+
 } // namespace
 
 class LottieRoundtripTests : public ::testing::Test
@@ -238,4 +278,18 @@ TEST_F (LottieRoundtripTests, AnimatedPathKeyframesUnwrapShapeValues)
     ASSERT_EQ (endPath.vertices.size(), 3u);
     EXPECT_NEAR (startPath.vertices[1].getX(), 10.0f, 0.01f);
     EXPECT_NEAR (endPath.vertices[1].getX(), 20.0f, 0.01f);
+}
+
+TEST_F (LottieRoundtripTests, TerminalKeyframeUsesPreviousEndValue)
+{
+    auto comp = LottieReader::parseData (kTerminalKeyframeJson);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 1u);
+
+    const auto* layer = static_cast<const ShapeLayer*> (comp->layers[0].get());
+    ASSERT_NE (layer, nullptr);
+
+    const auto scaleAtEnd = layer->transform.scale.getValueAt (17.0f);
+    EXPECT_NEAR (scaleAtEnd.getWidth(), 100.0f, 0.01f);
+    EXPECT_NEAR (scaleAtEnd.getHeight(), 100.0f, 0.01f);
 }

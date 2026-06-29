@@ -44,7 +44,8 @@ public:
         Fill,
         Stroke,
         Trim,
-        Repeater
+        Repeater,
+        RoundedCorner
     };
 
     struct ChildItem
@@ -56,6 +57,7 @@ public:
         StrokePaint::Ptr stroke;
         AnimationTrim::Ptr trim;
         AnimationRepeater::Ptr repeater;
+        AnimationRoundedCorner::Ptr roundedCorner;
     };
 
     //==============================================================================
@@ -98,6 +100,9 @@ public:
 
     /** Adds an AnimationRepeater modifier and returns a raw pointer. */
     AnimationRepeater* addRepeater();
+
+    /** Adds an AnimationRoundedCorner modifier and returns a raw pointer. */
+    AnimationRoundedCorner* addRoundedCorner();
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AnimationGroup)
 };

@@ -240,6 +240,7 @@ AnimationComposition::Ptr LottieReader::parseRoot (const var& root)
 
     parseAssets (root["assets"], *comp);
     parseLayers (root["layers"], comp->layers);
+    resolveLayerAssets (*comp);
 
     if (const auto* markersArr = safeArray (root["markers"]))
     {
@@ -282,7 +283,27 @@ void LottieReader::parseAssets (const var& assetsVal, AnimationComposition& comp
             asset->width = varInt (assetVar["w"]);
             asset->height = varInt (assetVar["h"]);
 
-            if (options_.imageResolver)
+            // Handle embedded (base64) images: "e" is a flag (0 or 1),
+            // and the "p" field contains a data: URI when embedded.
+            const bool embeddedResource = (bool) assetVar["e"];
+            if (embeddedResource)
+            {
+                const String imagePath = varString (assetVar["p"]);
+                if (imagePath.startsWith ("data:") && imagePath.indexOf (",") > 0)
+                {
+                    const int commaPos = imagePath.indexOf (",");
+                    const String b64Data = imagePath.substring (commaPos + 1);
+                    MemoryOutputStream binaryData;
+                    if (Base64::convertFromBase64 (binaryData, b64Data))
+                    {
+                        const auto imgResult = Image::loadFromData (Span<const uint8> (static_cast<const uint8*> (binaryData.getData()), binaryData.getDataSize()));
+                        if (imgResult.wasOk())
+                            asset->bitmap = imgResult.getValue();
+                    }
+                }
+            }
+
+            if (! asset->bitmap.has_value() && options_.imageResolver)
             {
                 auto img = options_.imageResolver (asset->path, options_.resourceDirectory);
                 if (img.has_value())
@@ -291,6 +312,36 @@ void LottieReader::parseAssets (const var& assetsVal, AnimationComposition& comp
         }
 
         comp.assets.set (asset->id, asset);
+    }
+}
+
+//==============================================================================
+void LottieReader::resolveLayerAssets (AnimationComposition& comp)
+{
+    for (auto& layer : comp.layers)
+    {
+        if (layer == nullptr)
+            continue;
+
+        if (layer->getType() == AnimationLayer::Type::Image)
+        {
+            auto& imageLayer = static_cast<ImageLayer&> (*layer);
+            auto assetPtr = comp.assets[imageLayer.assetRefId];
+            if (assetPtr != nullptr && assetPtr->bitmap.has_value())
+                imageLayer.image = assetPtr->bitmap;
+        }
+        else if (layer->getType() == AnimationLayer::Type::Precomp)
+        {
+            auto& precompLayer = static_cast<PrecompLayer&> (*layer);
+            auto assetPtr = comp.assets[precompLayer.precompRefId];
+            if (assetPtr != nullptr && ! assetPtr->layers.empty())
+            {
+                if (precompLayer.layerSize.getWidth() <= 0.0f || precompLayer.layerSize.getHeight() <= 0.0f)
+                {
+                    precompLayer.layerSize = comp.size;
+                }
+            }
+        }
     }
 }
 
@@ -363,6 +414,7 @@ AnimationLayer::Ptr LottieReader::parseLayer (const var& layerObj)
 
     const int matteType = varInt (layerObj["tt"]);
     layer->matteType = static_cast<AnimationLayer::MatteType> (matteType);
+    layer->isMatteSource = varInt (layerObj["td"]) != 0;
 
     parseTransform (layerObj["ks"], layer->transform);
     parseMasks (layerObj["masksProperties"], *layer);
@@ -589,6 +641,13 @@ void LottieReader::parseSingleItem (const var& itemObj, AnimationGroup& group)
             rp->endOpacity = parseProperty<float> (tr["eo"], extractFloat);
         }
     }
+    else if (ty == "rd") // Rounded Corner
+    {
+        auto* rd = group.addRoundedCorner();
+        rd->name = varString (itemObj["nm"]);
+        rd->hidden = (bool) itemObj["hd"];
+        rd->radius = parseProperty<float> (itemObj["r"], extractFloat);
+    }
 }
 
 //==============================================================================
@@ -608,6 +667,7 @@ void LottieReader::parseGradient (const var& gradObj, AnimationGradient& gradien
     }
 
     const int colorPoints = varInt (gradObj["g"]["p"]);
+    gradient.numColorPoints = colorPoints;
     const var& gk = gradObj["g"]["k"];
 
     // Parse gradient stops from the flat float array
@@ -615,71 +675,34 @@ void LottieReader::parseGradient (const var& gradObj, AnimationGradient& gradien
     {
         const bool isAnimated = varInt (gk["a"]) == 1;
 
-        // Lottie packs color stops and opacity stops in one flat array:
-        //   [pos, R, G, B, ...] × colorPoints, then [pos, opacity, ...] pairs for the remainder.
-        auto parseStopsFromArray = [&] (const var& arr) -> std::vector<std::pair<float, Color>>
-        {
-            std::vector<std::pair<float, Color>> stops;
-            const auto* a = safeArray (arr);
-            if (a == nullptr)
-                return stops;
-
-            const int totalSize = static_cast<int> (a->size());
-            const int count = jmin (colorPoints, totalSize / 4);
-            const int colorDataEnd = count * 4;
-
-            // Collect opacity stops (position, opacity) from the tail of the array.
-            std::vector<std::pair<float, float>> opacityStops;
-            for (int i = colorDataEnd; i + 1 < totalSize; i += 2)
-                opacityStops.push_back ({ varFloat ((*a)[i]), varFloat ((*a)[i + 1]) });
-
-            // Linear interpolation of opacity at a given position.
-            auto getOpacityAt = [&] (float pos) -> float
-            {
-                if (opacityStops.empty())
-                    return 1.0f;
-                if (pos <= opacityStops.front().first)
-                    return opacityStops.front().second;
-                if (pos >= opacityStops.back().first)
-                    return opacityStops.back().second;
-                for (size_t j = 1; j < opacityStops.size(); ++j)
-                {
-                    if (opacityStops[j].first >= pos)
-                    {
-                        const float span = opacityStops[j].first - opacityStops[j - 1].first;
-                        const float t = span > 1e-6f ? (pos - opacityStops[j - 1].first) / span : 1.0f;
-                        return opacityStops[j - 1].second + t * (opacityStops[j].second - opacityStops[j - 1].second);
-                    }
-                }
-                return 1.0f;
-            };
-
-            for (int i = 0; i < count; ++i)
-            {
-                const float pos = varFloat ((*a)[i * 4]);
-                const float r = varFloat ((*a)[i * 4 + 1]);
-                const float g = varFloat ((*a)[i * 4 + 2]);
-                const float b = varFloat ((*a)[i * 4 + 3]);
-                const float alpha = getOpacityAt (pos);
-                stops.push_back ({ pos, Color::fromRGBA (static_cast<uint8> (r * 255.0f), static_cast<uint8> (g * 255.0f), static_cast<uint8> (b * 255.0f), static_cast<uint8> (alpha * 255.0f)) });
-            }
-            return stops;
-        };
-
         if (! isAnimated)
         {
-            for (const auto& [pos, col] : parseStopsFromArray (gk["k"]))
-                gradient.addColorStop (pos, col);
+            // Static gradient — parse the flat array once
+            if (const auto* arr = safeArray (gk["k"]))
+            {
+                std::vector<float> flat;
+                for (const var& v : *arr)
+                    flat.push_back (varFloat (v));
+                for (const auto& [pos, col] : AnimationGradient::parseStopsFromFlatArray (flat, colorPoints))
+                    gradient.addColorStop (pos, col);
+            }
         }
         else
         {
-            // Use first keyframe stops for a static approximation
+            // Animated gradient — store all keyframes for runtime interpolation
             if (const auto* kfs = safeArray (gk["k"]))
             {
-                if (! kfs->isEmpty())
+                for (const var& kf : *kfs)
                 {
-                    for (const auto& [pos, col] : parseStopsFromArray ((*kfs)[0]["s"]))
-                        gradient.addColorStop (pos, col);
+                    AnimationGradient::GradientKeyframe gkf;
+                    gkf.frame = varFloat (kf["t"]);
+
+                    if (const auto* sArr = safeArray (kf["s"]))
+                    {
+                        for (const var& v : *sArr)
+                            gkf.values.push_back (varFloat (v));
+                    }
+                    gradient.animatedStops.push_back (std::move (gkf));
                 }
             }
         }
@@ -739,7 +762,90 @@ void LottieReader::parseTransform (const var& ksObj, AnimationTransform& t)
     }
     else
     {
-        t.position = parseProperty<Point<float>> (pObj, extractPoint);
+        // Parse position with spatial keyframe support
+        const int animated = varInt (pObj["a"]);
+        const var& k = pObj["k"];
+
+        if (animated == 0 || k.isVoid())
+        {
+            if (k.isVoid())
+                t.position = AnimationProperty<Point<float>>::staticValue (extractPoint (pObj));
+            else
+                t.position = AnimationProperty<Point<float>>::staticValue (extractPoint (k));
+        }
+        else
+        {
+            const auto* kfs = safeArray (k);
+            if (kfs != nullptr)
+            {
+                const bool hasSpatial = kfs->size() >= 1 && ! (*kfs)[0]["ti"].isVoid();
+
+                if (hasSpatial)
+                {
+                    // Parse position with spatial tangents — store keyframes and tangents
+                    typename AnimationProperty<Point<float>>::Builder builder;
+                    bool hasPreviousValue = false;
+                    Point<float> previousValue {};
+                    bool hasPreviousEndValue = false;
+                    Point<float> previousEndValue {};
+
+                    for (int i = 0; i < kfs->size(); ++i)
+                    {
+                        const var& kf = (*kfs)[i];
+                        const float frame = varFloat (kf["t"]);
+                        const var& startVal = kf["s"];
+                        const var& endVal = kf["e"];
+
+                        Point<float> value {};
+                        if (! startVal.isVoid() && ! startVal.isUndefined())
+                            value = extractPoint (startVal);
+                        else if (hasPreviousEndValue)
+                            value = previousEndValue;
+                        else if (hasPreviousValue)
+                            value = previousValue;
+                        else if (! endVal.isVoid() && ! endVal.isUndefined())
+                            value = extractPoint (endVal);
+
+                        AnimationEasing easing = parseEasing (kf);
+
+                        SpatialPositionKeyframe spk;
+                        spk.frame = frame;
+                        spk.value = value;
+                        if (! endVal.isVoid() && ! endVal.isUndefined())
+                        {
+                            const Point<float> endValue = extractPoint (endVal);
+                            spk.endValue = endValue;
+                            builder.keyframe (frame, value, endValue, easing);
+                            previousEndValue = endValue;
+                            hasPreviousEndValue = true;
+                        }
+                        else
+                        {
+                            builder.keyframe (frame, value, easing);
+                            previousEndValue = value;
+                            hasPreviousEndValue = true;
+                        }
+
+                        spk.tangentIn = extractPoint (kf["ti"]);
+                        spk.tangentOut = extractPoint (kf["to"]);
+                        spk.easing = std::move (easing);
+                        t.spatialKeyframes.push_back (std::move (spk));
+
+                        previousValue = value;
+                        hasPreviousValue = true;
+                    }
+                    t.position = builder.build();
+                }
+                else
+                {
+                    t.position = parseProperty<Point<float>> (pObj, extractPoint);
+                }
+            }
+            else
+            {
+                t.position = parseProperty<Point<float>> (pObj, extractPoint);
+            }
+        }
     }
 
     t.scale = parseProperty<Size<float>> (ksObj["s"], extractSize);
@@ -771,24 +877,69 @@ AnimationProperty<T> LottieReader::parseProperty (const var& propObj,
     if (kfs == nullptr || kfs->size() < 2)
     {
         if (kfs != nullptr && kfs->size() == 1)
-            return AnimationProperty<T>::staticValue (extractor ((*kfs)[0]["s"]));
+        {
+            const var& single = (*kfs)[0];
+            const var& startVal = single["s"];
+            const var& endVal = single["e"];
+
+            if (! startVal.isVoid() && ! startVal.isUndefined())
+                return AnimationProperty<T>::staticValue (extractor (startVal));
+
+            if (! endVal.isVoid() && ! endVal.isUndefined())
+                return AnimationProperty<T>::staticValue (extractor (endVal));
+        }
+
         return {};
     }
 
     typename AnimationProperty<T>::Builder builder;
+    bool hasPreviousValue = false;
+    T previousValue {};
+    bool hasPreviousEndValue = false;
+    T previousEndValue {};
 
     for (int i = 0; i < kfs->size(); ++i)
     {
         const var& kf = (*kfs)[i];
         const float frame = varFloat (kf["t"]);
         const var& startVal = kf["s"];
+        const var& endVal = kf["e"];
 
         T value {};
-        if (! startVal.isVoid())
+        if (! startVal.isVoid() && ! startVal.isUndefined())
+        {
             value = extractor (startVal);
+        }
+        else if (hasPreviousEndValue)
+        {
+            value = previousEndValue;
+        }
+        else if (hasPreviousValue)
+        {
+            value = previousValue;
+        }
+        else if (! endVal.isVoid() && ! endVal.isUndefined())
+        {
+            value = extractor (endVal);
+        }
 
         AnimationEasing easing = parseEasing (kf);
-        builder.keyframe (frame, std::move (value), std::move (easing));
+
+        previousValue = value;
+        hasPreviousValue = true;
+
+        if (! endVal.isVoid() && ! endVal.isUndefined())
+        {
+            previousEndValue = extractor (endVal);
+            hasPreviousEndValue = true;
+            builder.keyframe (frame, value, previousEndValue, std::move (easing));
+        }
+        else
+        {
+            previousEndValue = previousValue;
+            hasPreviousEndValue = true;
+            builder.keyframe (frame, value, std::move (easing));
+        }
     }
 
     return builder.build();

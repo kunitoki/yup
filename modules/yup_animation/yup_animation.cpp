@@ -31,11 +31,9 @@
 #include "yup_animation.h"
 
 //==============================================================================
-// core/
 #include "core/yup_AnimationEasing.cpp"
 #include "core/yup_AnimationTransform.cpp"
-
-// model/
+#include "model/yup_AnimationPathData.cpp"
 #include "model/yup_AnimationShape.cpp"
 #include "model/yup_AnimationPaint.cpp"
 #include "model/yup_AnimationModifier.cpp"
@@ -43,15 +41,9 @@
 #include "model/yup_AnimationLayer.cpp"
 #include "model/yup_ShapeLayer.cpp"
 #include "model/yup_AnimationComposition.cpp"
-
-// io/
 #include "io/yup_LottieReader.cpp"
 #include "io/yup_LottieWriter.cpp"
-
-// renderer/
 #include "renderer/yup_AnimationRenderer.cpp"
 #include "renderer/yup_AnimationFrameExporter.cpp"
-
-// animation/
 #include "animation/yup_Animation.cpp"
 #include "animation/yup_AnimationPlayer.cpp"

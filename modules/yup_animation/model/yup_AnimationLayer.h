@@ -72,7 +72,8 @@ public:
     // Visual state
     AnimationTransform transform;
     BlendMode blendMode = BlendMode::SrcOver;
-    MatteType matteType = MatteType::None;
+    MatteType matteType = MatteType::None; ///< "tt" — this layer is the matte target
+    bool isMatteSource = false;            ///< "td" — this layer is the matte source (not rendered directly)
     bool is3D = false;
     bool hidden = false;
     bool autoOrient = false;
