@@ -126,6 +126,28 @@ TEST_F (AnimationPlayerTests, LoopingWrapsAround)
     EXPECT_TRUE (player.isPlaying()); // still playing because looping
 }
 
+TEST_F (AnimationPlayerTests, LoopingDoesNotSkipLastFrame)
+{
+    AnimationPlayer player (anim);
+    player.setLooping (true);
+    player.seekToFrame (48.0f);
+    player.play();
+
+    int loops = 0;
+    player.onLoopCompleted = [&]
+    {
+        ++loops;
+    };
+
+    player.advanceTime (1.0f / 25.0f);
+    EXPECT_NEAR (player.currentFrame(), 49.0f, 0.001f);
+    EXPECT_EQ (loops, 0);
+
+    player.advanceTime (1.0f / 25.0f);
+    EXPECT_NEAR (player.currentFrame(), 0.0f, 0.001f);
+    EXPECT_EQ (loops, 1);
+}
+
 TEST_F (AnimationPlayerTests, NoLoopingStopsAtEnd)
 {
     AnimationPlayer player (anim);

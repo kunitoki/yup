@@ -146,18 +146,32 @@ bool AnimationPlayer::advanceTime (float deltaSeconds)
     const float frameDelta = deltaSeconds * fps * speed_;
     const float start = rangeStart();
     const float end = rangeEnd();
+    const float endExclusive = end + 1.0f;
     const float prevFrame = currentFrame_;
+    const float duration = endExclusive - start;
+
+    auto wrapFrame = [start, duration] (float frame) noexcept
+    {
+        if (duration <= 1.0e-6f)
+            return start;
+
+        const float wrapped = std::fmod (frame - start, duration);
+        return start + (wrapped < 0.0f ? wrapped + duration : wrapped);
+    };
 
     auto advanceForward = [&]()
     {
         currentFrame_ += frameDelta;
-        if (currentFrame_ >= end)
+        if (currentFrame_ > end)
         {
             if (looping_)
             {
-                currentFrame_ = start + std::fmod (currentFrame_ - start, end - start);
-                if (onLoopCompleted)
-                    onLoopCompleted();
+                if (duration > 1.0e-6f && currentFrame_ >= endExclusive)
+                {
+                    currentFrame_ = wrapFrame (currentFrame_);
+                    if (onLoopCompleted)
+                        onLoopCompleted();
+                }
             }
             else
             {
@@ -172,11 +186,11 @@ bool AnimationPlayer::advanceTime (float deltaSeconds)
     auto advanceReverse = [&]()
     {
         currentFrame_ -= frameDelta;
-        if (currentFrame_ <= start)
+        if (currentFrame_ < start)
         {
             if (looping_)
             {
-                currentFrame_ = end - std::fmod (start - currentFrame_, end - start);
+                currentFrame_ = wrapFrame (currentFrame_);
                 if (onLoopCompleted)
                     onLoopCompleted();
             }
@@ -204,7 +218,7 @@ bool AnimationPlayer::advanceTime (float deltaSeconds)
             if (pingPongForward_)
             {
                 currentFrame_ += frameDelta;
-                if (currentFrame_ >= end)
+                if (currentFrame_ > end)
                 {
                     currentFrame_ = end;
                     pingPongForward_ = false;
@@ -215,7 +229,7 @@ bool AnimationPlayer::advanceTime (float deltaSeconds)
             else
             {
                 currentFrame_ -= frameDelta;
-                if (currentFrame_ <= start)
+                if (currentFrame_ < start)
                 {
                     currentFrame_ = start;
                     pingPongForward_ = true;

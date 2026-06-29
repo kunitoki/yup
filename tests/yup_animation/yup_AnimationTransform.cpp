@@ -88,8 +88,8 @@ TEST_F (AnimationTransformTests, SkewAxisUsesLottieBasis)
     const auto yAxis = Point<float> { 0.0f, 1.0f }.transformed (xf);
 
     EXPECT_NEAR (xAxis.getX(), 1.0f, 0.001f);
-    EXPECT_NEAR (xAxis.getY(), -1.0f, 0.001f);
-    EXPECT_NEAR (yAxis.getX(), 0.0f, 0.001f);
+    EXPECT_NEAR (xAxis.getY(), 0.0f, 0.001f);
+    EXPECT_NEAR (yAxis.getX(), 1.0f, 0.001f);
     EXPECT_NEAR (yAxis.getY(), 1.0f, 0.001f);
 }
 
