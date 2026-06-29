@@ -205,17 +205,28 @@ void AnimationRenderer::renderLayer (Graphics& g,
         applyMatteSourceClip (g, layer, *matteSource, ctx, layer.matteType == AnimationLayer::MatteType::AlphaInv);
     }
 
-    if (! ctx.paintOverride.has_value()
+    RenderContext layerCtx = ctx;
+
+    if (! layerCtx.paintOverride.has_value()
+        && layer.fillEffect.has_value()
+        && layer.fillEffect->enabled)
+    {
+        const float fillEffectOpacity = layer.fillEffect->opacityAt (ctx.frameNo);
+        if (fillEffectOpacity > 0.0f)
+            layerCtx.paintOverride = layer.fillEffect->colorAt (ctx.frameNo).withMultipliedAlpha (fillEffectOpacity);
+    }
+
+    if (! layerCtx.paintOverride.has_value()
         && layer.dropShadow.has_value()
         && layer.dropShadow->enabled)
     {
-        renderDropShadow (g, layer, ctx, opacity);
+        renderDropShadow (g, layer, layerCtx, opacity);
 
         if (layer.dropShadow->shadowOnly)
             return;
     }
 
-    renderLayerContent (g, layer, ctx, opacity);
+    renderLayerContent (g, layer, layerCtx, opacity);
 }
 
 void AnimationRenderer::renderLayerContent (Graphics& g, const AnimationLayer& layer, const RenderContext& ctx, float opacity)
@@ -357,6 +368,9 @@ ClipPathResult buildLayerMaskClipPath (const AnimationLayer& layer, float frameN
     for (const auto& mask : layer.masks)
     {
         if (mask == nullptr)
+            continue;
+
+        if (mask->mode == AnimationMask::Mode::None)
             continue;
 
         hasAnyMask = true;

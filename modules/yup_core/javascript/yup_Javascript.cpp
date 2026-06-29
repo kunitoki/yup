@@ -98,8 +98,15 @@ struct JavascriptEngine::RootObject final : public DynamicObject
 
     void execute (const String& code)
     {
+        executeWithResult (code);
+    }
+
+    var executeWithResult (const String& code)
+    {
         ExpressionTreeBuilder tb (code);
-        std::unique_ptr<BlockStatement> (tb.parseStatementList())->perform (Scope ({}, *this, *this), nullptr);
+        var statementResult = var::undefined();
+        std::unique_ptr<BlockStatement> (tb.parseStatementList())->perform (Scope ({}, *this, *this, &statementResult), &statementResult);
+        return statementResult;
     }
 
     var evaluate (const String& code)
@@ -177,16 +184,21 @@ struct JavascriptEngine::RootObject final : public DynamicObject
     //==============================================================================
     struct Scope
     {
-        Scope (const Scope* p, ReferenceCountedObjectPtr<RootObject> rt, DynamicObject::Ptr scp) noexcept
+        Scope (const Scope* p,
+               ReferenceCountedObjectPtr<RootObject> rt,
+               DynamicObject::Ptr scp,
+               var* statementResultIn = nullptr) noexcept
             : parent (p)
             , root (std::move (rt))
             , scope (std::move (scp))
+            , statementResult (statementResultIn)
         {
         }
 
         const Scope* const parent;
         ReferenceCountedObjectPtr<RootObject> root;
         DynamicObject::Ptr scope;
+        var* statementResult = nullptr;
 
         var findFunctionCall (const CodeLocation& location, const var& targetObject, const Identifier& functionName) const
         {
@@ -330,7 +342,11 @@ struct JavascriptEngine::RootObject final : public DynamicObject
 
         ResultCode perform (const Scope& s, var*) const override
         {
-            getResult (s);
+            const var result = getResult (s);
+
+            if (s.statementResult != nullptr)
+                *s.statementResult = result;
+
             return ok;
         }
     };
@@ -2485,6 +2501,12 @@ void JavascriptEngine::registerNativeObject (const Identifier& name, DynamicObje
     root->setProperty (name, object);
 }
 
+void JavascriptEngine::registerNativeFunction (const Identifier& functionName, var::NativeFunction function)
+{
+    if (functionName.isValid() && ! functionName.toString().containsChar ('.'))
+        root->setProperty (functionName, function);
+}
+
 Result JavascriptEngine::execute (const String& code)
 {
     try
@@ -2498,6 +2520,19 @@ Result JavascriptEngine::execute (const String& code)
     }
 
     return Result::ok();
+}
+
+ResultValue<var> JavascriptEngine::executeWithResult (const String& code)
+{
+    try
+    {
+        prepareTimeout();
+        return makeResultValueOk (root->executeWithResult (code));
+    }
+    catch (String& error)
+    {
+        return makeResultValueFail (error);
+    }
 }
 
 var JavascriptEngine::evaluate (const String& code, Result* result)

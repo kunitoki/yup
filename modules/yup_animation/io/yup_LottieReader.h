@@ -76,10 +76,31 @@ private:
 
     AnimationComposition::Ptr parseRoot (const var& root);
 
-    void parseLayers (const var& layersArray, std::vector<AnimationLayer::Ptr>& out);
+    void parseLayers (const var& layersArray,
+                      std::vector<AnimationLayer::Ptr>& out,
+                      std::vector<int>& parsedIndicesOut);
     AnimationLayer::Ptr parseLayer (const var& layerObj);
+
+    void resolveLayerExpressions (const AnimationComposition& comp,
+                                  const Array<var>& layerArray,
+                                  std::vector<AnimationLayer::Ptr>& layers,
+                                  size_t firstLayerIndex,
+                                  const std::vector<int>& parsedLayerIndices);
+
+    static void applyLayerPropertyRef (const String& property,
+                                       const AnimationLayer& source,
+                                       AnimationTransform& target);
+
+    static void applyStaticTransformValue (const String& propName,
+                                           const var& value,
+                                           AnimationTransform& transform);
+
     void parseShapeContents (const var& itemsArray, ShapeLayer& layer);
+    void resolveShapeLayerExpressions (const Array<var>& itemsArray, ShapeLayer& layer);
+
     void parseGroupItems (const var& itemsArray, AnimationGroup& group);
+    void resolveGroupExpressions (const Array<var>& itemsArray, AnimationGroup& group);
+
     void parseSingleItem (const var& itemObj, AnimationGroup& group);
 
     void parseTransform (const var& ksObj, AnimationTransform& transform, bool ddd = false);

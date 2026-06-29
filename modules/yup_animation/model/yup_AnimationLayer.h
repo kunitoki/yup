@@ -90,6 +90,30 @@ public:
         [[nodiscard]] Point<float> offsetAt (float frameNo) const;
     };
 
+    /** A layer-level Fill effect parsed from Lottie's `ADBE Fill`.
+
+        The effect recolors the rendered layer content. Partial effect opacity is
+        retained as alpha on the override color; exact blending with the original
+        layer content is renderer-dependent.
+    */
+    struct FillEffect
+    {
+        /** Replacement color. */
+        ColorProperty color { ColorProperty::staticValue (Color (0xFF000000)) };
+
+        /** Effect opacity. Some Lottie exporters encode this as 0-1, others as 0-100. */
+        FloatProperty opacity { FloatProperty::staticValue (1.0f) };
+
+        /** Whether the effect is enabled. */
+        bool enabled = true;
+
+        /** Returns the effect opacity in [0, 1] at the given frame. */
+        [[nodiscard]] float opacityAt (float frameNo) const;
+
+        /** Returns the replacement color at the given frame. */
+        [[nodiscard]] Color colorAt (float frameNo) const;
+    };
+
     //==============================================================================
     virtual ~AnimationLayer() = default;
 
@@ -123,6 +147,9 @@ public:
 
     /** Optional drop shadow effect applied to this layer. */
     std::optional<DropShadow> dropShadow;
+
+    /** Optional Fill effect applied to this layer. */
+    std::optional<FillEffect> fillEffect;
 
     //==============================================================================
     /** Maps a composition frame number to the layer's local frame, accounting

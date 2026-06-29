@@ -52,6 +52,48 @@ inline Array<var>* safeArray (const var& v)
     return v.getArray();
 }
 
+AnimationGroup* findChildGroupByName (const AnimationGroup& group, const String& name)
+{
+    for (const auto& child : group.children)
+    {
+        if (child.kind == AnimationGroup::ChildKind::Group
+            && child.group != nullptr
+            && child.group->name == name)
+        {
+            return child.group.get();
+        }
+    }
+
+    return nullptr;
+}
+
+AnimationGroup* findShapeLayerGroupByName (const ShapeLayer& layer, const String& name)
+{
+    for (const auto& group : layer.groups)
+    {
+        if (group != nullptr && group->name == name)
+            return group.get();
+    }
+
+    return nullptr;
+}
+
+BezierPathShape* findBezierPathByName (const AnimationGroup& group, const String& name)
+{
+    for (const auto& child : group.children)
+    {
+        if (child.kind == AnimationGroup::ChildKind::Shape
+            && child.shape != nullptr
+            && child.shape->getKind() == AnimationShape::Kind::BezierPath
+            && child.shape->getName() == name)
+        {
+            return static_cast<BezierPathShape*> (child.shape.get());
+        }
+    }
+
+    return nullptr;
+}
+
 // Parse a hex colour string like "#ff0000"
 inline Color parseHexColor (const String& hex)
 {
@@ -239,7 +281,14 @@ AnimationComposition::Ptr LottieReader::parseRoot (const var& root)
     comp->endFrame = varFloat (root["op"], 60.0f);
 
     parseAssets (root["assets"], *comp);
-    parseLayers (root["layers"], comp->layers);
+
+    const var& layersVar = root["layers"];
+    const size_t firstLayerIdx = comp->layers.size();
+    std::vector<int> parsedLayerIndices;
+    parseLayers (layersVar, comp->layers, parsedLayerIndices);
+    if (const auto* arr = safeArray (layersVar))
+        resolveLayerExpressions (*comp, *arr, comp->layers, firstLayerIdx, parsedLayerIndices);
+
     resolveLayerAssets (*comp);
 
     // Validate composition (gap 22)
@@ -287,7 +336,8 @@ void LottieReader::parseAssets (const var& assetsVal, AnimationComposition& comp
         {
             // Precomp
             asset->assetType = AnimationAsset::AssetType::Precomp;
-            parseLayers (assetVar["layers"], asset->layers);
+            std::vector<int> ignored;
+            parseLayers (assetVar["layers"], asset->layers, ignored);
         }
         else
         {
@@ -376,16 +426,185 @@ void LottieReader::resolveLayerAssets (AnimationComposition& comp,
 
 //==============================================================================
 void LottieReader::parseLayers (const var& layersVal,
-                                std::vector<AnimationLayer::Ptr>& out)
+                                std::vector<AnimationLayer::Ptr>& out,
+                                std::vector<int>& parsedIndicesOut)
 {
     const auto* arr = safeArray (layersVal);
     if (arr == nullptr)
         return;
 
-    for (const var& layerVar : *arr)
+    for (int i = 0; i < arr->size(); ++i)
     {
+        const var& layerVar = (*arr)[i];
         if (auto layer = parseLayer (layerVar))
+        {
+            parsedIndicesOut.push_back (i);
             out.push_back (std::move (layer));
+        }
+    }
+}
+
+void LottieReader::resolveLayerExpressions (const AnimationComposition& comp,
+                                            const Array<var>& layerArray,
+                                            std::vector<AnimationLayer::Ptr>& layers,
+                                            size_t firstLayerIndex,
+                                            const std::vector<int>& parsedLayerIndices)
+{
+    LottieExpressionEvaluator::CompositionContext ctx;
+    ctx.size = comp.size;
+    ctx.frameRate = comp.frameRate;
+
+    for (size_t i = firstLayerIndex; i < layers.size(); ++i)
+    {
+        if (layers[i] != nullptr)
+            ctx.layers.push_back ({ layers[i]->name, layers[i]->id, &layers[i]->transform });
+    }
+
+    HashMap<String, AnimationLayer*> layersByName;
+    HashMap<int, AnimationLayer*> layersById;
+    for (size_t i = firstLayerIndex; i < layers.size(); ++i)
+    {
+        if (layers[i] == nullptr)
+            continue;
+        if (layers[i]->name.isNotEmpty())
+            layersByName.set (layers[i]->name, layers[i].get());
+        layersById.set (layers[i]->id, layers[i].get());
+    }
+
+    LottieExpressionEvaluator evaluator;
+    evaluator.setupCompositionContext (ctx);
+
+    static const std::pair<const char*, const char*> kTransformProps[] = {
+        { "p", "position" }, { "r", "rotation" }, { "s", "scale" }, { "o", "opacity" }, { "a", "anchor" }
+    };
+
+    for (size_t i = 0; i < parsedLayerIndices.size(); ++i)
+    {
+        const size_t layerIndex = firstLayerIndex + i;
+        if (layerIndex >= layers.size() || layers[layerIndex] == nullptr)
+            continue;
+
+        const int sourceIndex = parsedLayerIndices[i];
+        if (sourceIndex < 0 || sourceIndex >= layerArray.size())
+            continue;
+
+        const var& ksObj = layerArray[sourceIndex]["ks"];
+        AnimationTransform& t = layers[layerIndex]->transform;
+
+        for (const auto& [jsonKey, propName] : kTransformProps)
+        {
+            const String expr = varString (ksObj[jsonKey]["x"]);
+            if (expr.isEmpty())
+                continue;
+
+            const auto result = evaluator.evaluate (expr);
+
+            if (result.kind == LottieExpressionEvaluator::EvalResult::Kind::LayerPropertyRef)
+            {
+                AnimationLayer* refLayer = nullptr;
+                if (result.referencedLayerName.isNotEmpty())
+                    refLayer = layersByName[result.referencedLayerName];
+                else if (result.referencedLayerId >= 0)
+                    refLayer = layersById[result.referencedLayerId];
+
+                if (refLayer != nullptr)
+                    applyLayerPropertyRef (result.referencedProperty, *refLayer, t);
+            }
+            else if (result.kind == LottieExpressionEvaluator::EvalResult::Kind::StaticValue)
+            {
+                applyStaticTransformValue (propName, result.value, t);
+            }
+        }
+
+        // Separate X/Y position expressions
+        const var& pObj = ksObj["p"];
+        if (pObj.isObject() && (bool) pObj["s"])
+        {
+            const String exprX = varString (pObj["x"]["x"]);
+            if (exprX.isNotEmpty())
+            {
+                const auto rx = evaluator.evaluate (exprX);
+                if (rx.kind == LottieExpressionEvaluator::EvalResult::Kind::StaticValue)
+                    t.positionX = AnimationProperty<float>::staticValue (
+                        static_cast<float> (static_cast<double> (rx.value)));
+            }
+
+            const String exprY = varString (pObj["y"]["x"]);
+            if (exprY.isNotEmpty())
+            {
+                const auto ry = evaluator.evaluate (exprY);
+                if (ry.kind == LottieExpressionEvaluator::EvalResult::Kind::StaticValue)
+                    t.positionY = AnimationProperty<float>::staticValue (
+                        static_cast<float> (static_cast<double> (ry.value)));
+            }
+        }
+    }
+}
+
+void LottieReader::applyLayerPropertyRef (const String& property,
+                                          const AnimationLayer& source,
+                                          AnimationTransform& target)
+{
+    if (property == "transform.position")
+    {
+        target.separatePosition = source.transform.separatePosition;
+        target.position = source.transform.position;
+        target.positionX = source.transform.positionX;
+        target.positionY = source.transform.positionY;
+        target.spatialKeyframes = source.transform.spatialKeyframes;
+    }
+    else if (property == "transform.rotation")
+    {
+        target.rotation = source.transform.rotation;
+    }
+    else if (property == "transform.scale")
+    {
+        target.scale = source.transform.scale;
+    }
+    else if (property == "transform.opacity")
+    {
+        target.opacity = source.transform.opacity;
+    }
+    else if (property == "transform.anchorPoint" || property == "transform.anchor")
+    {
+        target.anchor = source.transform.anchor;
+    }
+}
+
+void LottieReader::applyStaticTransformValue (const String& propName,
+                                              const var& value,
+                                              AnimationTransform& transform)
+{
+    if (propName == "position")
+    {
+        if (const auto* arr = value.getArray(); arr != nullptr && arr->size() >= 2)
+            transform.position = AnimationProperty<Point<float>>::staticValue (
+                { static_cast<float> (static_cast<double> ((*arr)[0])),
+                  static_cast<float> (static_cast<double> ((*arr)[1])) });
+    }
+    else if (propName == "rotation")
+    {
+        transform.rotation = AnimationProperty<float>::staticValue (
+            static_cast<float> (static_cast<double> (value)));
+    }
+    else if (propName == "scale")
+    {
+        if (const auto* arr = value.getArray(); arr != nullptr && arr->size() >= 2)
+            transform.scale = AnimationProperty<Size<float>>::staticValue (
+                { static_cast<float> (static_cast<double> ((*arr)[0])),
+                  static_cast<float> (static_cast<double> ((*arr)[1])) });
+    }
+    else if (propName == "opacity")
+    {
+        transform.opacity = AnimationProperty<float>::staticValue (
+            static_cast<float> (static_cast<double> (value)));
+    }
+    else if (propName == "anchor")
+    {
+        if (const auto* arr = value.getArray(); arr != nullptr && arr->size() >= 2)
+            transform.anchor = AnimationProperty<Point<float>>::staticValue (
+                { static_cast<float> (static_cast<double> ((*arr)[0])),
+                  static_cast<float> (static_cast<double> ((*arr)[1])) });
     }
 }
 
@@ -517,6 +736,71 @@ void LottieReader::parseShapeContents (const var& shapesVal, ShapeLayer& layer)
             parseSingleItem (item, *layer.getGroup (0));
         }
     }
+
+    resolveShapeLayerExpressions (*arr, layer);
+}
+
+void LottieReader::resolveShapeLayerExpressions (const Array<var>& itemsArray, ShapeLayer& layer)
+{
+    LottieExpressionEvaluator evaluator;
+    evaluator.setupShapeContext (layer);
+
+    for (const var& item : itemsArray)
+    {
+        if (varString (item["ty"]) != "gr")
+            continue;
+
+        AnimationGroup* targetGroup = findShapeLayerGroupByName (layer, varString (item["nm"]));
+        if (targetGroup == nullptr)
+            continue;
+
+        const auto* childItems = safeArray (item["it"]);
+        if (childItems == nullptr)
+            continue;
+
+        for (const var& childItem : *childItems)
+        {
+            const String childType = varString (childItem["ty"]);
+
+            if (childType == "sh")
+            {
+                const String expr = varString (childItem["ks"]["x"]);
+                if (expr.isEmpty())
+                    continue;
+
+                const auto result = evaluator.evaluate (expr);
+                if (result.kind != LottieExpressionEvaluator::EvalResult::Kind::ShapeContentRef)
+                    continue;
+                if (result.contentProperty != "path")
+                    continue;
+
+                const AnimationGroup* sourceGroup = findShapeLayerGroupByName (layer, result.contentGroupName);
+                if (sourceGroup == nullptr)
+                    continue;
+
+                const auto* sourcePath = findBezierPathByName (*sourceGroup, result.contentItemName);
+                auto* targetPath = findBezierPathByName (*targetGroup, varString (childItem["nm"]));
+                if (sourcePath != nullptr && targetPath != nullptr)
+                    targetPath->pathData = sourcePath->pathData;
+            }
+            else if (childType == "tr")
+            {
+                const String expr = varString (childItem["r"]["x"]);
+                if (expr.isEmpty())
+                    continue;
+
+                const auto result = evaluator.evaluate (expr);
+                if (result.kind != LottieExpressionEvaluator::EvalResult::Kind::ShapeContentRef)
+                    continue;
+                if (result.contentProperty != "transform.rotation")
+                    continue;
+
+                const AnimationGroup* sourceGroup = findShapeLayerGroupByName (layer, result.contentGroupName);
+                if (sourceGroup != nullptr)
+                    targetGroup->transform.rotation = sourceGroup->transform.rotation;
+            }
+        }
+    }
 }
 
 //==============================================================================
@@ -542,6 +826,71 @@ void LottieReader::parseGroupItems (const var& itemsVal, AnimationGroup& group)
         else
         {
             parseSingleItem (item, group);
+        }
+    }
+
+    resolveGroupExpressions (*arr, group);
+}
+
+void LottieReader::resolveGroupExpressions (const Array<var>& itemsArray, AnimationGroup& group)
+{
+    LottieExpressionEvaluator evaluator;
+    evaluator.setupGroupContext (group);
+
+    for (const var& item : itemsArray)
+    {
+        if (varString (item["ty"]) != "gr")
+            continue;
+
+        AnimationGroup* targetGroup = findChildGroupByName (group, varString (item["nm"]));
+        if (targetGroup == nullptr)
+            continue;
+
+        const auto* childItems = safeArray (item["it"]);
+        if (childItems == nullptr)
+            continue;
+
+        for (const var& childItem : *childItems)
+        {
+            const String childType = varString (childItem["ty"]);
+
+            if (childType == "sh")
+            {
+                const String expr = varString (childItem["ks"]["x"]);
+                if (expr.isEmpty())
+                    continue;
+
+                const auto result = evaluator.evaluate (expr);
+                if (result.kind != LottieExpressionEvaluator::EvalResult::Kind::ShapeContentRef)
+                    continue;
+                if (result.contentProperty != "path")
+                    continue;
+
+                const AnimationGroup* sourceGroup = findChildGroupByName (group, result.contentGroupName);
+                if (sourceGroup == nullptr)
+                    continue;
+
+                const auto* sourcePath = findBezierPathByName (*sourceGroup, result.contentItemName);
+                auto* targetPath = findBezierPathByName (*targetGroup, varString (childItem["nm"]));
+                if (sourcePath != nullptr && targetPath != nullptr)
+                    targetPath->pathData = sourcePath->pathData;
+            }
+            else if (childType == "tr")
+            {
+                const String expr = varString (childItem["r"]["x"]);
+                if (expr.isEmpty())
+                    continue;
+
+                const auto result = evaluator.evaluate (expr);
+                if (result.kind != LottieExpressionEvaluator::EvalResult::Kind::ShapeContentRef)
+                    continue;
+                if (result.contentProperty != "transform.rotation")
+                    continue;
+
+                const AnimationGroup* sourceGroup = findChildGroupByName (group, result.contentGroupName);
+                if (sourceGroup != nullptr)
+                    targetGroup->transform.rotation = sourceGroup->transform.rotation;
+            }
         }
     }
 }
@@ -839,6 +1188,31 @@ void LottieReader::parseEffects (const var& effectsVal, AnimationLayer& layer)
         const String effectName = varString (effect["nm"]);
         const String effectMatchName = varString (effect["mn"]);
 
+        if (effectMatchName == "ADBE Fill" || effectName == "Fill")
+        {
+            AnimationLayer::FillEffect fill;
+            fill.enabled = effect["en"].isVoid() || (bool) effect["en"];
+
+            const auto* params = safeArray (effect["ef"]);
+            if (params != nullptr)
+            {
+                for (const var& param : *params)
+                {
+                    const String paramName = varString (param["nm"]);
+                    const String paramMatchName = varString (param["mn"]);
+                    const var& value = param["v"];
+
+                    if (paramName == "Color" || paramMatchName == "ADBE Fill-0002")
+                        fill.color = parseProperty<Color> (value, extractColor);
+                    else if (paramName == "Opacity" || paramMatchName == "ADBE Fill-0005")
+                        fill.opacity = parseProperty<float> (value, extractFloat);
+                }
+            }
+
+            layer.fillEffect = std::move (fill);
+            continue;
+        }
+
         if (effectMatchName != "ADBE Drop Shadow" && effectName != "Drop Shadow")
             continue;
 
@@ -849,7 +1223,7 @@ void LottieReader::parseEffects (const var& effectsVal, AnimationLayer& layer)
         if (params == nullptr)
         {
             layer.dropShadow = std::move (shadow);
-            return;
+            continue;
         }
 
         for (const var& param : *params)
@@ -873,7 +1247,6 @@ void LottieReader::parseEffects (const var& effectsVal, AnimationLayer& layer)
         }
 
         layer.dropShadow = std::move (shadow);
-        return;
     }
 }
 

@@ -160,6 +160,9 @@ ColorGradient AnimationGradient::toColorGradient (float frameNo) const
     for (size_t i = 1; i + 1 < stops.size(); ++i)
         result.addColorStop (stops[i].second, stops[i].first);
 
+    if (spread != ColorGradient::Spread::Pad)
+        result = result.withSpread (spread);
+
     return result;
 }
 

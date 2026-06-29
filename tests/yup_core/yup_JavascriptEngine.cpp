@@ -40,6 +40,41 @@ TEST (JavascriptEngineTests, ExecuteInvalidCode)
     EXPECT_FALSE (result.wasOk());
 }
 
+TEST (JavascriptEngineTests, ExecuteWithResultReturnsLastExpressionStatement)
+{
+    JavascriptEngine engine;
+
+    auto result = engine.executeWithResult ("var x = 10; var y = 20; x + y;");
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_EQ (static_cast<int> (result.getReference()), 30);
+}
+
+TEST (JavascriptEngineTests, ExecuteWithResultReturnsAssignmentValue)
+{
+    JavascriptEngine engine;
+
+    auto result = engine.executeWithResult ("var $bm_rt; $bm_rt = 42;");
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_EQ (static_cast<int> (result.getReference()), 42);
+}
+
+TEST (JavascriptEngineTests, ExecuteWithResultReturnsReturnStatementValue)
+{
+    JavascriptEngine engine;
+
+    auto result = engine.executeWithResult ("return 42;");
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_EQ (static_cast<int> (result.getReference()), 42);
+}
+
+TEST (JavascriptEngineTests, ExecuteWithResultInvalidCode)
+{
+    JavascriptEngine engine;
+
+    auto result = engine.executeWithResult ("var x = 10; var y = ;");
+    EXPECT_FALSE (result.wasOk());
+}
+
 TEST (JavascriptEngineTests, EvaluateValidExpression)
 {
     JavascriptEngine engine;

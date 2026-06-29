@@ -67,6 +67,7 @@
 #include "model/yup_AnimationKeyPath.h"
 #include "model/yup_AnimationComposition.h"
 #include "io/yup_LottieReader.h"
+#include "io/yup_LottieExpressionEvaluator.h"
 #include "io/yup_LottieWriter.h"
 #include "animation/yup_Animation.h"
 #include "animation/yup_AnimationPlayer.h"

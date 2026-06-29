@@ -35,6 +35,19 @@ Point<float> AnimationLayer::DropShadow::offsetAt (float frameNo) const
     return { std::cos (angle) * offset, std::sin (angle) * offset };
 }
 
+float AnimationLayer::FillEffect::opacityAt (float frameNo) const
+{
+    const float rawOpacity = opacity.getValueAt (frameNo);
+    const float normalizedOpacity = rawOpacity > 1.0f ? rawOpacity / 100.0f : rawOpacity;
+
+    return jlimit (0.0f, 1.0f, normalizedOpacity);
+}
+
+Color AnimationLayer::FillEffect::colorAt (float frameNo) const
+{
+    return color.getValueAt (frameNo);
+}
+
 float AnimationLayer::localFrame (float compFrame) const noexcept
 {
     if (timeRemap.has_value())

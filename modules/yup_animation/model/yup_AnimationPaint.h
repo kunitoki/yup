@@ -62,6 +62,9 @@ public:
     FloatProperty highlightLen { FloatProperty::staticValue (0.0f) };
     FloatProperty highlightAngle { FloatProperty::staticValue (0.0f) };
 
+    /** Gradient spread mode — defaults to Pad (clamped). */
+    ColorGradient::Spread spread = ColorGradient::Spread::Pad;
+
     std::vector<ColorStop> colorStops;
 
     /** When non-empty, color stops are animated and interpolated from these keyframes. */
