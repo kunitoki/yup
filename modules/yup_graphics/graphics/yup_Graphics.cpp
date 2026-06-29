@@ -193,6 +193,24 @@ StyledText::VerticalAlign toVerticalAlign (Justification justification)
         return StyledText::middle;
 }
 
+rive::Factory* getOffscreenFactory (GraphicsContext& context, const std::unique_ptr<GraphicsContext::OffscreenTarget>& target) noexcept
+{
+    if (target != nullptr)
+        if (auto* renderContext = target->getRenderContext())
+            return renderContext;
+
+    return context.factory();
+}
+
+std::unique_ptr<rive::Renderer> makeOffscreenRenderer (GraphicsContext& context, const std::unique_ptr<GraphicsContext::OffscreenTarget>& target, int width, int height)
+{
+    if (target != nullptr)
+        if (auto* renderContext = target->getRenderContext())
+            return std::make_unique<rive::RiveRenderer> (renderContext);
+
+    return context.makeRenderer (width, height);
+}
+
 } // namespace
 
 //==============================================================================
@@ -226,6 +244,7 @@ void Graphics::SavedState::restore()
 //==============================================================================
 Graphics::Graphics (GraphicsContext& context, rive::Renderer& renderer, float scale) noexcept
     : context (context)
+    , offscreenTarget (nullptr)
     , factory (*context.factory())
     , ownedRenderer (nullptr)
     , renderer (renderer)
@@ -238,13 +257,13 @@ Graphics::Graphics (GraphicsContext& context, rive::Renderer& renderer, float sc
 
 Graphics::Graphics (GraphicsContext& context, Image& image, uint32_t clearColor) noexcept
     : context (context)
-    , factory (*context.factory())
-    , ownedRenderer (context.makeRenderer (image.getWidth(), image.getHeight()))
+    , offscreenTarget (context.createOffscreenTarget (image.getWidth(), image.getHeight()))
+    , factory (*getOffscreenFactory (context, offscreenTarget))
+    , ownedRenderer (makeOffscreenRenderer (context, offscreenTarget, image.getWidth(), image.getHeight()))
     , renderer (*ownedRenderer)
     , contextScale (1.0f)
     , offscreenTargetImage (&image)
 {
-    offscreenTarget = context.createOffscreenTarget (image.getWidth(), image.getHeight());
     if (! offscreenTarget)
         return;
 
@@ -276,7 +295,9 @@ bool Graphics::commitToImage()
     context.endOffscreen (*offscreenTarget);
     committed = true;
 
-    if (auto tex = offscreenTarget->adoptAsTexture())
+    if (auto canvas = offscreenTarget->refRenderCanvas())
+        offscreenTargetImage->adoptRenderCanvas (std::move (canvas));
+    else if (auto tex = offscreenTarget->adoptAsTexture())
         offscreenTargetImage->adoptTexture (std::move (tex));
 
     return true;
@@ -757,10 +778,11 @@ void Graphics::drawImage (const Image& image, const Rectangle<float>& targetArea
     if (targetArea.isEmpty())
         return;
 
+    const auto& options = currentRenderOptions();
+    const auto blendMode = toBlendMode (options.blendMode);
+
     if (! image.createTextureIfNotPresent (context))
         return;
-
-    const auto& options = currentRenderOptions();
 
     static const auto unitRectPath = []
     {
@@ -774,7 +796,7 @@ void Graphics::drawImage (const Image& image, const Rectangle<float>& targetArea
 
     rive::RiveRenderPaint paint;
     paint.image (image.getTexture(), jlimit (0.0f, 1.0f, options.opacity));
-    paint.blendMode (toBlendMode (options.blendMode));
+    paint.blendMode (blendMode);
 
     const auto imageTransform = AffineTransform::scaling (targetArea.getWidth(), targetArea.getHeight())
                                     .translated (targetArea.getX(), targetArea.getY())

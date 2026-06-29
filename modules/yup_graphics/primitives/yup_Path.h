@@ -49,6 +49,20 @@ public:
         Close    /**< Close the current sub-path. */
     };
 
+    /** Boolean operations for closed filled paths.
+
+        These operations are intended for closed filled paths, clip paths, and Lottie-style
+        mask composition. Curves are flattened before clipping because the underlying
+        clipping engine operates on polygon contours.
+    */
+    enum class BooleanOperation
+    {
+        Union,     /**< Fills the area covered by either path. */
+        Intersect, /**< Fills the area shared by both paths. */
+        Subtract,  /**< Fills this path with the other path removed. */
+        Xor        /**< Fills areas covered by exactly one of the paths. */
+    };
+
     //==============================================================================
     /** Represents a segment in a path with its verb and associated points. */
     struct Segment
@@ -665,6 +679,28 @@ public:
         @return True if using non-zero winding rule, false if using even-odd rule.
     */
     bool isUsingNonZeroWinding() const;
+
+    //==============================================================================
+    /** Combines this path with another path using a boolean-style operation.
+
+        The returned path contains closed line contours produced by clipping flattened
+        versions of the input paths.
+
+        @param other      The path to combine with this path.
+        @param operation  The boolean-style operation to apply.
+
+        @return A new composed path.
+    */
+    [[nodiscard]] Path combinedWith (const Path& other, BooleanOperation operation) const;
+
+    /** Replaces this path with the result of combining it with another path.
+
+        @param other      The path to combine with this path.
+        @param operation  The boolean-style operation to apply.
+
+        @return A reference to this path.
+    */
+    Path& combineWith (const Path& other, BooleanOperation operation);
 
     //==============================================================================
     /** Appends another path to this one.

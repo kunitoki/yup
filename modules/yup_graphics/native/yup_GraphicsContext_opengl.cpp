@@ -92,7 +92,8 @@ public:
 #endif
 
         m_renderContext = rive::gpu::RenderContextGLImpl::MakeContext (rive::gpu::RenderContextGLImpl::ContextOptions());
-        if (! m_renderContext)
+        m_offscreenRenderContext = rive::gpu::RenderContextGLImpl::MakeContext (rive::gpu::RenderContextGLImpl::ContextOptions());
+        if (! m_renderContext || ! m_offscreenRenderContext)
         {
             fprintf (stderr, "Failed to create a renderer.\n");
             return;
@@ -190,116 +191,92 @@ public:
     {
         int width = 0;
         int height = 0;
-        GLuint texture = 0;
-        GLuint framebuffer = 0;
-        rive::rcp<rive::gpu::FramebufferRenderTargetGL> riveRenderTarget;
-
-        ~OffscreenTargetGL() override
-        {
-            riveRenderTarget.reset();
-
-            if (framebuffer != 0)
-            {
-                glDeleteFramebuffers (1, &framebuffer);
-                framebuffer = 0;
-            }
-
-            if (texture != 0)
-            {
-                glDeleteTextures (1, &texture);
-                texture = 0;
-            }
-        }
+        rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
+        rive::gpu::RenderContext* renderContext = nullptr;
 
         int getWidth() const noexcept override { return width; }
 
         int getHeight() const noexcept override { return height; }
 
-        rive::gpu::RenderTarget* getRenderTarget() noexcept override { return riveRenderTarget.get(); }
+        rive::gpu::RenderTarget* getRenderTarget() noexcept override
+        {
+            return renderCanvas != nullptr ? renderCanvas->renderTarget() : nullptr;
+        }
+
+        rive::gpu::RenderContext* getRenderContext() noexcept override
+        {
+            return renderContext;
+        }
+
+        rive::rcp<rive::gpu::RenderCanvas> refRenderCanvas() noexcept override
+        {
+            return renderCanvas;
+        }
 
         rive::rcp<rive::gpu::Texture> adoptAsTexture() override
         {
-            if (renderContext == nullptr || texture == 0)
+            if (renderCanvas == nullptr)
                 return nullptr;
 
-            auto* glImpl = renderContext->static_impl_cast<rive::gpu::RenderContextGLImpl>();
-            auto adoptedTexture = glImpl->adoptImageTexture (static_cast<uint32_t> (width),
-                                                             static_cast<uint32_t> (height),
-                                                             texture);
-            // Rive now owns the texture ID; prevent destructor from deleting it again.
-            texture = 0;
-            return adoptedTexture;
+            return renderCanvas->renderImage()->refTexture();
         }
-
-        rive::gpu::RenderContext* renderContext = nullptr;
     };
 
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
     {
-        if (width <= 0 || height <= 0)
+        if (width <= 0 || height <= 0 || m_offscreenRenderContext == nullptr)
             return nullptr;
 
         auto target = std::make_unique<OffscreenTargetGL>();
         target->width = width;
         target->height = height;
-        target->renderContext = m_renderContext.get();
-
-        glGenTextures (1, &target->texture);
-        glBindTexture (GL_TEXTURE_2D, target->texture);
-        glTexImage2D (GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-        glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glBindTexture (GL_TEXTURE_2D, 0);
-
-        glGenFramebuffers (1, &target->framebuffer);
-        glBindFramebuffer (GL_FRAMEBUFFER, target->framebuffer);
-        glFramebufferTexture2D (GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, target->texture, 0);
-
-        GLenum status = glCheckFramebufferStatus (GL_FRAMEBUFFER);
-        glBindFramebuffer (GL_FRAMEBUFFER, 0);
-
-        if (status != GL_FRAMEBUFFER_COMPLETE)
+        target->renderContext = m_offscreenRenderContext.get();
+        target->renderCanvas = m_offscreenRenderContext->makeRenderCanvas (static_cast<uint32_t> (width),
+                                                                           static_cast<uint32_t> (height));
+        if (target->renderCanvas == nullptr)
             return nullptr;
-
-        target->riveRenderTarget = rive::make_rcp<rive::gpu::FramebufferRenderTargetGL> (
-            static_cast<uint32_t> (width),
-            static_cast<uint32_t> (height),
-            target->framebuffer,
-            0);
 
         return target;
     }
 
     void beginOffscreen (OffscreenTarget& baseTarget, const rive::gpu::RenderContext::FrameDescriptor& frameDesc) override
     {
-        m_renderContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->invalidateGLState();
+        auto& target = static_cast<OffscreenTargetGL&> (baseTarget);
+        auto* renderContext = target.getRenderContext();
 
-        m_renderContext->beginFrame (frameDesc);
+        if (renderContext == nullptr)
+            return;
+
+        renderContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->invalidateGLState();
+        renderContext->beginFrame (frameDesc);
     }
 
     void endOffscreen (OffscreenTarget& baseTarget) override
     {
         auto& target = static_cast<OffscreenTargetGL&> (baseTarget);
+        auto* renderContext = target.getRenderContext();
 
-        m_renderContext->flush ({ target.riveRenderTarget.get() });
+        if (renderContext == nullptr)
+            return;
 
-        m_renderContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->unbindGLInternalResources();
+        renderContext->flush ({ target.getRenderTarget() });
+
+        renderContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->unbindGLInternalResources();
     }
 
     bool readOffscreenPixels (OffscreenTarget& baseTarget, void* dst, size_t dstSize) override
     {
         auto& target = static_cast<OffscreenTargetGL&> (baseTarget);
 
-        if (target.framebuffer == 0 || dst == nullptr)
+        if (target.getRenderTarget() == nullptr || dst == nullptr)
             return false;
 
         const size_t bytesPerRow = static_cast<size_t> (target.width) * 4u;
         if (dstSize < bytesPerRow * static_cast<size_t> (target.height))
             return false;
 
-        glBindFramebuffer (GL_READ_FRAMEBUFFER, target.framebuffer);
+        auto* renderTarget = static_cast<rive::gpu::RenderTargetGL*> (target.getRenderTarget());
+        renderTarget->bindDestinationFramebuffer (GL_READ_FRAMEBUFFER);
         glReadPixels (0, 0, target.width, target.height, GL_RGBA, GL_UNSIGNED_BYTE, dst);
         glBindFramebuffer (GL_READ_FRAMEBUFFER, 0);
 
@@ -395,6 +372,7 @@ private:
 private:
     Options m_options;
     std::unique_ptr<rive::gpu::RenderContext> m_renderContext;
+    std::unique_ptr<rive::gpu::RenderContext> m_offscreenRenderContext;
     rive::rcp<rive::gpu::RenderTargetGL> m_offscreenRenderTarget;
 
     // Offscreen rendering resources

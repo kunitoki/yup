@@ -32,7 +32,7 @@
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_core yup_simd rive rive_renderer
+    dependencies:       yup_core yup_simd rive rive_renderer libclipper2
     appleFrameworks:    Metal
     searchpaths:        native
 

@@ -153,8 +153,10 @@ var LottieWriter::serializeGroups (const std::vector<AnimationGroup::Ptr>& group
 {
     Array<var> arr;
     for (const auto& g : groups)
+    {
         if (g != nullptr)
             arr.add (serializeGroup (*g));
+    }
     return var (arr);
 }
 
@@ -185,31 +187,38 @@ var LottieWriter::serializeChildItem (const AnimationGroup::ChildItem& item)
             if (item.shape != nullptr)
                 return serializeShape (*item.shape);
             break;
+
         case AnimationGroup::ChildKind::Group:
             if (item.group != nullptr)
                 return serializeGroup (*item.group);
             break;
+
         case AnimationGroup::ChildKind::Fill:
             if (item.fill != nullptr)
                 return serializeFill (*item.fill);
             break;
+
         case AnimationGroup::ChildKind::Stroke:
             if (item.stroke != nullptr)
                 return serializeStroke (*item.stroke);
             break;
+
         case AnimationGroup::ChildKind::Trim:
             if (item.trim != nullptr)
                 return serializeTrim (*item.trim);
             break;
+
         case AnimationGroup::ChildKind::Repeater:
             if (item.repeater != nullptr)
                 return serializeRepeater (*item.repeater);
             break;
+
         case AnimationGroup::ChildKind::RoundedCorner:
             if (item.roundedCorner != nullptr)
                 return serializeRoundedCorner (*item.roundedCorner);
             break;
     }
+
     return {};
 }
 
@@ -229,6 +238,7 @@ var LottieWriter::serializeShape (const AnimationShape& shape)
             obj->setProperty ("s", serializeProperty<Size<float>> (el.size, serializeSize));
             break;
         }
+
         case AnimationShape::Kind::Rect:
         {
             obj->setProperty ("ty", var ("rc"));
@@ -238,6 +248,7 @@ var LottieWriter::serializeShape (const AnimationShape& shape)
             obj->setProperty ("r", serializeProperty<float> (rc.roundness, serializeFloat));
             break;
         }
+
         case AnimationShape::Kind::BezierPath:
         {
             obj->setProperty ("ty", var ("sh"));
@@ -245,6 +256,7 @@ var LottieWriter::serializeShape (const AnimationShape& shape)
             obj->setProperty ("ks", serializeProperty<AnimationPathData> (sh.pathData, serializePath));
             break;
         }
+
         case AnimationShape::Kind::Polystar:
         {
             obj->setProperty ("ty", var ("sr"));
@@ -340,16 +352,20 @@ var LottieWriter::serializeStroke (const StrokePaint& stroke)
                 case StrokeDash::Kind::Dash:
                     de->setProperty ("n", var ("d"));
                     break;
+
                 case StrokeDash::Kind::Gap:
                     de->setProperty ("n", var ("g"));
                     break;
+
                 case StrokeDash::Kind::Offset:
                     de->setProperty ("n", var ("o"));
                     break;
             }
+
             de->setProperty ("v", serializeProperty<float> (d.value, serializeFloat));
             dashes.add (var (de));
         }
+
         obj->setProperty ("d", var (dashes));
     }
 
@@ -367,22 +383,27 @@ var LottieWriter::serializeGradient (const AnimationGradient& gradient)
     if (! gradient.animatedStops.empty())
     {
         kProp->setProperty ("a", var (1));
+
         Array<var> kfArray;
         for (const auto& gkf : gradient.animatedStops)
         {
             DynamicObject* kfObj = new DynamicObject();
             kfObj->setProperty ("t", var ((double) gkf.frame));
+
             Array<var> flatArr;
             for (float v : gkf.values)
                 flatArr.add (var ((double) v));
+
             kfObj->setProperty ("s", var (flatArr));
             kfArray.add (var (kfObj));
         }
+
         kProp->setProperty ("k", var (kfArray));
     }
     else
     {
         kProp->setProperty ("a", var (0));
+
         Array<var> flat;
         for (const auto& stop : gradient.colorStops)
         {
@@ -394,6 +415,7 @@ var LottieWriter::serializeGradient (const AnimationGradient& gradient)
             flat.add (var ((double) col.getBlueFloat()));
             flat.add (var ((double) col.getAlphaFloat()));
         }
+
         kProp->setProperty ("k", var (flat));
     }
 
@@ -452,6 +474,7 @@ var LottieWriter::serializeTransform (const AnimationTransform& t)
 {
     DynamicObject* obj = new DynamicObject();
     obj->setProperty ("a", serializeProperty<Point<float>> (t.anchor, serializePoint));
+
     if (t.separatePosition)
     {
         obj->setProperty ("px", serializeProperty<float> (t.positionX, serializeFloat));
@@ -482,8 +505,10 @@ var LottieWriter::serializeTransform (const AnimationTransform& t)
                 if (easingObj->hasProperty ("i"))
                     kfObj->setProperty ("i", easingObj->getProperty ("i"));
             }
+
             kfArray.add (var (kfObj));
         }
+
         pObj->setProperty ("k", var (kfArray));
         obj->setProperty ("p", var (pObj));
     }
@@ -491,14 +516,17 @@ var LottieWriter::serializeTransform (const AnimationTransform& t)
     {
         obj->setProperty ("p", serializeProperty<Point<float>> (t.position, serializePoint));
     }
+
     obj->setProperty ("s", serializeProperty<Size<float>> (t.scale, serializeSize));
     obj->setProperty ("r", serializeProperty<float> (t.rotation, serializeFloat));
     obj->setProperty ("o", serializeProperty<float> (t.opacity, serializeFloat));
+
     if (t.skew.isAnimated() || t.skew.getValueAt (0.0f) != 0.0f)
     {
         obj->setProperty ("sk", serializeProperty<float> (t.skew, serializeFloat));
         obj->setProperty ("sa", serializeProperty<float> (t.skewAxis, serializeFloat));
     }
+
     if (t.is3DData)
     {
         if (t.rotationX.isAnimated() || t.rotationX.getValueAt (0.0f) != 0.0f)
@@ -508,15 +536,20 @@ var LottieWriter::serializeTransform (const AnimationTransform& t)
         if (t.rotationZ.isAnimated() || t.rotationZ.getValueAt (0.0f) != 0.0f)
             obj->setProperty ("rz", serializeProperty<float> (t.rotationZ, serializeFloat));
     }
+
     return var (obj);
 }
 
 var LottieWriter::serializeMasks (const std::vector<AnimationMask::Ptr>& masks)
 {
     Array<var> arr;
+
     for (const auto& m : masks)
+    {
         if (m != nullptr)
             arr.add (serializeMask (*m));
+    }
+
     return var (arr);
 }
 
@@ -532,22 +565,28 @@ var LottieWriter::serializeMask (const AnimationMask& mask)
         case AnimationMask::Mode::Add:
             modeStr = "a";
             break;
+
         case AnimationMask::Mode::Subtract:
             modeStr = "s";
             break;
+
         case AnimationMask::Mode::Intersect:
             modeStr = "i";
             break;
+
         case AnimationMask::Mode::Difference:
             modeStr = "d";
             break;
+
         default:
             modeStr = "n";
             break;
     }
+
     obj->setProperty ("mode", var (modeStr));
     obj->setProperty ("pt", serializeProperty<AnimationPathData> (mask.shape, serializePath));
     obj->setProperty ("o", serializeProperty<float> (mask.opacity, serializeFloat));
+
     return var (obj);
 }
 
@@ -578,12 +617,14 @@ var LottieWriter::serializeAssets (const HashMap<String, AnimationAsset::Ptr>& a
 
         arr.add (var (obj));
     }
+
     return var (arr);
 }
 
 var LottieWriter::serializeMarkers (const std::vector<AnimationMarker>& markers)
 {
     Array<var> arr;
+
     for (const auto& m : markers)
     {
         DynamicObject* obj = new DynamicObject();
@@ -592,6 +633,7 @@ var LottieWriter::serializeMarkers (const std::vector<AnimationMarker>& markers)
         obj->setProperty ("dr", var ((double) m.duration));
         arr.add (var (obj));
     }
+
     return var (arr);
 }
 

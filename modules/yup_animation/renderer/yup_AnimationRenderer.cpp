@@ -130,7 +130,12 @@ void AnimationRenderer::renderComposition (Graphics& g,
     viewportClip.addRectangle (bounds);
 
     const auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
-    const auto transformedViewportClip = viewportClip.transformed (clipTransform);
+
+    auto transformedViewportClip = viewportClip.transformed (clipTransform);
+    const auto currentClipPath = g.getClipPath();
+    if (! transformedViewportClip.isEmpty() && ! currentClipPath.isEmpty())
+        transformedViewportClip = currentClipPath.combinedWith (transformedViewportClip, Path::BooleanOperation::Intersect);
+
     const auto savedTransform = g.getTransform();
 
     g.setTransform (AffineTransform::identity());
@@ -189,33 +194,37 @@ void AnimationRenderer::renderLayer (Graphics& g,
     const AffineTransform xf = ctx.resolveLayerTransform (layer);
     g.setTransform (xf.followedBy (baseTransform));
 
+    if (! applyMasks (g, layer, ctx.frameNo, ctx.comp.size))
+        return;
+
     if (matteSource != nullptr
         && (layer.matteType == AnimationLayer::MatteType::Alpha
             || layer.matteType == AnimationLayer::MatteType::AlphaInv))
     {
-        applyMatteSourceClip (g, *matteSource, ctx, baseTransform, layer.matteType == AnimationLayer::MatteType::AlphaInv);
+        applyMatteSourceClip (g, layer, *matteSource, ctx, layer.matteType == AnimationLayer::MatteType::AlphaInv);
     }
-
-    // Apply shape masks as clip
-    if (! layer.masks.empty())
-        applyMasks (g, layer, ctx.frameNo);
 
     switch (layer.getType())
     {
         case AnimationLayer::Type::Shape:
             renderShapeLayer (g, static_cast<const ShapeLayer&> (layer), ctx, opacity);
             break;
+
         case AnimationLayer::Type::Solid:
             renderSolidLayer (g, static_cast<const SolidLayer&> (layer), ctx, opacity);
             break;
+
         case AnimationLayer::Type::Image:
             renderImageLayer (g, static_cast<const ImageLayer&> (layer), ctx, opacity);
             break;
+
         case AnimationLayer::Type::Precomp:
             renderPrecompLayer (g, static_cast<const PrecompLayer&> (layer), ctx, opacity);
             break;
+
         case AnimationLayer::Type::Text:
             break; // Text layers are not implemented yet
+
         case AnimationLayer::Type::Null:
             break; // Null layers have no visual output
     }
@@ -276,58 +285,135 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
 
 //==============================================================================
 
-void AnimationRenderer::applyMasks (Graphics& g, const AnimationLayer& layer, float frameNo)
+namespace
 {
-    if (layer.masks.empty())
-        return;
 
-    // Build a combined clip path from all masks
+struct ClipPathResult
+{
+    Path path;
+    bool active = false;
+};
+
+Rectangle<float> getLayerContentBounds (const AnimationLayer& layer, Size<float> compSize)
+{
+    Size<float> size = compSize;
+
+    switch (layer.getType())
+    {
+        case AnimationLayer::Type::Solid:
+            size = static_cast<const SolidLayer&> (layer).layerSize;
+            break;
+
+        case AnimationLayer::Type::Image:
+            if (const auto& image = static_cast<const ImageLayer&> (layer).image)
+                size = { static_cast<float> (image->getWidth()), static_cast<float> (image->getHeight()) };
+            break;
+
+        case AnimationLayer::Type::Precomp:
+            size = static_cast<const PrecompLayer&> (layer).layerSize;
+            break;
+
+        case AnimationLayer::Type::Shape:
+        case AnimationLayer::Type::Text:
+        case AnimationLayer::Type::Null:
+            break;
+    }
+
+    if (size.getWidth() <= 0.0f || size.getHeight() <= 0.0f)
+        size = compSize;
+
+    return { 0.0f, 0.0f, size.getWidth(), size.getHeight() };
+}
+
+Path createRectanglePath (Rectangle<float> bounds)
+{
+    Path path;
+    path.addRectangle (bounds);
+    return path;
+}
+
+ClipPathResult buildLayerMaskClipPath (const AnimationLayer& layer, float frameNo, Size<float> compSize)
+{
+    const auto maskBoundsPath = createRectanglePath (getLayerContentBounds (layer, compSize));
+
     Path clipPath;
-    bool first = true;
+    bool hasAnyMask = false;
 
     for (const auto& mask : layer.masks)
     {
         if (mask == nullptr)
             continue;
 
+        hasAnyMask = true;
+
         Path maskPath = mask->shapeAt (frameNo);
         if (mask->inverted)
-        {
-            // Inverted mask: use the bounding-box complement
-            // (approximate: not implemented for non-rectangular compositors)
-        }
+            maskPath = maskBoundsPath.combinedWith (maskPath, Path::BooleanOperation::Subtract);
 
-        if (first)
+        switch (mask->mode)
         {
-            clipPath = maskPath;
-            first = false;
-        }
-        else
-        {
-            switch (mask->mode)
-            {
-                case AnimationMask::Mode::Add:
-                    clipPath.appendPath (maskPath);
-                    break;
-                case AnimationMask::Mode::Subtract:
-                case AnimationMask::Mode::Intersect:
-                case AnimationMask::Mode::Difference:
-                case AnimationMask::Mode::None:
-                    break;
-            }
+            case AnimationMask::Mode::Add:
+                clipPath = clipPath.isEmpty() ? maskPath
+                                              : clipPath.combinedWith (maskPath, Path::BooleanOperation::Union);
+                break;
+
+            case AnimationMask::Mode::Subtract:
+                clipPath = clipPath.isEmpty() ? maskBoundsPath.combinedWith (maskPath, Path::BooleanOperation::Subtract)
+                                              : clipPath.combinedWith (maskPath, Path::BooleanOperation::Subtract);
+                break;
+
+            case AnimationMask::Mode::Intersect:
+                clipPath = clipPath.isEmpty() ? maskBoundsPath.combinedWith (maskPath, Path::BooleanOperation::Intersect)
+                                              : clipPath.combinedWith (maskPath, Path::BooleanOperation::Intersect);
+                break;
+
+            case AnimationMask::Mode::Difference:
+                clipPath = clipPath.isEmpty() ? maskPath
+                                              : clipPath.combinedWith (maskPath, Path::BooleanOperation::Xor);
+                break;
+
+            case AnimationMask::Mode::None:
+                break;
         }
     }
 
-    if (! first)
-    {
-        const auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
-        const auto transformedClipPath = clipPath.transformed (clipTransform);
-        const auto savedTransform = g.getTransform();
+    return { clipPath, hasAnyMask };
+}
 
-        g.setTransform (AffineTransform::identity());
-        g.setClipPath (transformedClipPath);
-        g.setTransform (savedTransform);
-    }
+void applyClipPathInCurrentTransform (Graphics& g, const Path& clipPath, bool allowEmpty = false)
+{
+    if (clipPath.isEmpty() && ! allowEmpty)
+        return;
+
+    const auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
+    auto transformedClipPath = clipPath.transformed (clipTransform);
+    const auto currentClipPath = g.getClipPath();
+    if (! transformedClipPath.isEmpty() && ! currentClipPath.isEmpty())
+        transformedClipPath = currentClipPath.combinedWith (transformedClipPath, Path::BooleanOperation::Intersect);
+
+    const auto savedTransform = g.getTransform();
+
+    g.setTransform (AffineTransform::identity());
+    g.setClipPath (transformedClipPath);
+    g.setTransform (savedTransform);
+}
+
+} // namespace
+
+bool AnimationRenderer::applyMasks (Graphics& g, const AnimationLayer& layer, float frameNo, Size<float> compSize)
+{
+    if (layer.masks.empty())
+        return true;
+
+    const auto clipPath = buildLayerMaskClipPath (layer, frameNo, compSize);
+    if (! clipPath.active)
+        return true;
+
+    if (clipPath.path.isEmpty())
+        return false;
+
+    applyClipPathInCurrentTransform (g, clipPath.path);
+    return true;
 }
 
 //==============================================================================
@@ -363,92 +449,72 @@ Path buildMatteClipPathForGroup (const AnimationGroup& group,
     return clipPath;
 }
 
-void addRectangleIfNotEmpty (Path& path, const Rectangle<float>& rect)
+Path buildLayerAlphaPath (const AnimationLayer& layer, float frameNo, Size<float> compSize)
 {
-    if (rect.getWidth() > 0.0f && rect.getHeight() > 0.0f)
-        path.addRectangle (rect);
+    switch (layer.getType())
+    {
+        case AnimationLayer::Type::Shape:
+        {
+            const auto& shapeLayer = static_cast<const ShapeLayer&> (layer);
+
+            Path clipPath;
+            for (const auto& group : shapeLayer.groups)
+            {
+                if (group != nullptr)
+                    clipPath.appendPath (buildMatteClipPathForGroup (*group, frameNo, AffineTransform::identity()));
+            }
+            return clipPath;
+        }
+
+        case AnimationLayer::Type::Solid:
+        case AnimationLayer::Type::Image:
+        case AnimationLayer::Type::Precomp:
+            return createRectanglePath (getLayerContentBounds (layer, compSize));
+
+        case AnimationLayer::Type::Text:
+        case AnimationLayer::Type::Null:
+            break;
+    }
+
+    return {};
 }
 
 } // namespace
 
 void AnimationRenderer::applyMatteSourceClip (Graphics& g,
+                                              const AnimationLayer& layer,
                                               const AnimationLayer& matteSource,
                                               const RenderContext& ctx,
-                                              const AffineTransform& baseTransform,
                                               bool inverted)
 {
-    // Geometric fallback for shape alpha mattes. Proper arbitrary matte compositing
-    // requires an offscreen pass that can run outside the active render frame.
-    if (matteSource.getType() != AnimationLayer::Type::Shape)
-        return;
+    Path layerAlphaPath = buildLayerAlphaPath (layer, ctx.frameNo, ctx.comp.size);
+    Path clipPath = buildLayerAlphaPath (matteSource, ctx.frameNo, ctx.comp.size);
 
-    const auto& shapeLayer = static_cast<const ShapeLayer&> (matteSource);
-
-    Path clipPath;
-    for (const auto& group : shapeLayer.groups)
+    if (! matteSource.masks.empty())
     {
-        if (group != nullptr)
-            clipPath.appendPath (buildMatteClipPathForGroup (*group, ctx.frameNo, AffineTransform::identity()));
+        const auto matteMaskPath = buildLayerMaskClipPath (matteSource, ctx.frameNo, ctx.comp.size);
+        if (matteMaskPath.active)
+            clipPath = clipPath.combinedWith (matteMaskPath.path, Path::BooleanOperation::Intersect);
     }
 
     if (clipPath.isEmpty())
+    {
+        if (! inverted)
+            applyClipPathInCurrentTransform (g, clipPath, true);
+
         return;
+    }
 
+    const AffineTransform layerXf = ctx.resolveLayerTransform (layer);
     const AffineTransform matteXf = ctx.resolveLayerTransform (matteSource);
-    const auto offset = g.getDrawingArea().getTopLeft();
-    const auto drawingAreaOffset = AffineTransform::translation ((float) offset.getX(), (float) offset.getY());
+    const auto matteToLayerXf = matteXf.followedBy (layerXf.inverted());
+    const auto mattePathInLayerSpace = clipPath.transformed (matteToLayerXf);
 
-    Path transformedClipPath;
-    if (inverted)
-    {
-        Path compBoundsPath;
-        compBoundsPath.addRectangle (Rectangle<float> (0.0f, 0.0f, ctx.comp.size.getWidth(), ctx.comp.size.getHeight()));
+    const auto matteClipPath = inverted
+                                 ? layerAlphaPath.combinedWith (mattePathInLayerSpace, Path::BooleanOperation::Subtract)
+                                 : layerAlphaPath.combinedWith (mattePathInLayerSpace, Path::BooleanOperation::Intersect);
 
-        const auto outerBounds = compBoundsPath.getBoundsTransformed (ctx.viewTransform.followedBy (baseTransform).followedBy (drawingAreaOffset));
-        const auto matteBounds = clipPath.getBoundsTransformed (matteXf.followedBy (baseTransform).followedBy (drawingAreaOffset));
-        const auto clipBounds = outerBounds.intersection (matteBounds);
-
-        if (clipBounds.isEmpty())
-        {
-            transformedClipPath.addRectangle (outerBounds);
-        }
-        else
-        {
-            addRectangleIfNotEmpty (transformedClipPath,
-                                    { outerBounds.getX(),
-                                      outerBounds.getY(),
-                                      outerBounds.getWidth(),
-                                      clipBounds.getY() - outerBounds.getY() });
-
-            addRectangleIfNotEmpty (transformedClipPath,
-                                    { outerBounds.getX(),
-                                      clipBounds.getBottom(),
-                                      outerBounds.getWidth(),
-                                      outerBounds.getBottom() - clipBounds.getBottom() });
-
-            addRectangleIfNotEmpty (transformedClipPath,
-                                    { outerBounds.getX(),
-                                      clipBounds.getY(),
-                                      clipBounds.getX() - outerBounds.getX(),
-                                      clipBounds.getHeight() });
-
-            addRectangleIfNotEmpty (transformedClipPath,
-                                    { clipBounds.getRight(),
-                                      clipBounds.getY(),
-                                      outerBounds.getRight() - clipBounds.getRight(),
-                                      clipBounds.getHeight() });
-        }
-    }
-    else
-    {
-        transformedClipPath = clipPath.transformed (matteXf.followedBy (baseTransform).followedBy (drawingAreaOffset));
-    }
-
-    const auto savedTransform = g.getTransform();
-
-    g.setTransform (AffineTransform::identity());
-    g.setClipPath (transformedClipPath);
-    g.setTransform (savedTransform);
+    applyClipPathInCurrentTransform (g, matteClipPath, true);
 }
 
 //==============================================================================

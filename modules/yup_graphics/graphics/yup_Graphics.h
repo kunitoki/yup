@@ -674,12 +674,13 @@ private:
 
     GraphicsContext& context;
 
+    std::unique_ptr<GraphicsContext::OffscreenTarget> offscreenTarget;
+
     rive::Factory& factory;
     std::unique_ptr<rive::Renderer> ownedRenderer;
     rive::Renderer& renderer;
     float contextScale = 1.0f;
 
-    std::unique_ptr<GraphicsContext::OffscreenTarget> offscreenTarget;
     Image* offscreenTargetImage = nullptr;
     bool committed = false;
 

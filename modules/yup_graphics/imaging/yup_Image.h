@@ -591,13 +591,23 @@ public:
     /** @internal Sets the GPU texture directly, bypassing the BitmapData upload path. */
     void adoptTexture (rive::rcp<rive::gpu::Texture> t);
 
+    /** @internal Sets the GPU render canvas directly, preserving render-to-texture resources. */
+    void adoptRenderCanvas (rive::rcp<rive::gpu::RenderCanvas> canvas);
+
     /** @internal Returns the GPU texture associated with this image, or nullptr if no texture exists. */
     rive::rcp<rive::gpu::Texture> getTexture() const;
+
+    /** @internal Returns the GPU render canvas associated with this image, or nullptr if none exists. */
+    rive::rcp<rive::gpu::RenderCanvas> getRenderCanvas() const;
+
+    /** @internal Returns the render image associated with this image, or nullptr if none exists. */
+    rive::RenderImage* getRenderImage() const;
 
 private:
     //==============================================================================
     BitmapData::Ptr bitmapData;
     mutable rive::rcp<rive::gpu::Texture> texture;
+    mutable rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
 };
 
 } // namespace yup

@@ -156,6 +156,12 @@ public:
         /** Returns the underlying Rive render target. */
         virtual rive::gpu::RenderTarget* getRenderTarget() noexcept = 0;
 
+        /** Returns the Rive render context used by this offscreen target, if any. */
+        virtual rive::gpu::RenderContext* getRenderContext() noexcept { return nullptr; }
+
+        /** Returns the underlying Rive render canvas, if this target is backed by one. */
+        virtual rive::rcp<rive::gpu::RenderCanvas> refRenderCanvas() noexcept { return nullptr; }
+
         /** Returns the rendered result as a sampled Rive GPU texture suitable for use in drawImage.
             Must be called after endOffscreen(). Returns nullptr on failure. */
         virtual rive::rcp<rive::gpu::Texture> adoptAsTexture() = 0;

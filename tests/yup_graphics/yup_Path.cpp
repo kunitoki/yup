@@ -1281,3 +1281,75 @@ TEST (PathTests, FillRule_IndependentBetweenPaths)
     EXPECT_FALSE (p1.isUsingNonZeroWinding()); // p1 should remain even-odd
     EXPECT_TRUE (p2.isUsingNonZeroWinding());
 }
+
+TEST (PathTests, BooleanOperation_UnionCombinesOverlappingPaths)
+{
+    Path left;
+    left.addRectangle (0.0f, 0.0f, 10.0f, 10.0f);
+
+    Path right;
+    right.addRectangle (5.0f, 0.0f, 10.0f, 10.0f);
+
+    const auto result = left.combinedWith (right, Path::BooleanOperation::Union);
+    const auto bounds = result.getBounds();
+
+    EXPECT_FALSE (result.isEmpty());
+    EXPECT_NEAR (0.0f, bounds.getX(), 1.0e-3f);
+    EXPECT_NEAR (0.0f, bounds.getY(), 1.0e-3f);
+    EXPECT_NEAR (15.0f, bounds.getWidth(), 1.0e-3f);
+    EXPECT_NEAR (10.0f, bounds.getHeight(), 1.0e-3f);
+}
+
+TEST (PathTests, BooleanOperation_IntersectReturnsOverlap)
+{
+    Path left;
+    left.addRectangle (0.0f, 0.0f, 10.0f, 10.0f);
+
+    Path right;
+    right.addRectangle (5.0f, 0.0f, 10.0f, 10.0f);
+
+    const auto result = left.combinedWith (right, Path::BooleanOperation::Intersect);
+    const auto bounds = result.getBounds();
+
+    EXPECT_FALSE (result.isEmpty());
+    EXPECT_NEAR (5.0f, bounds.getX(), 1.0e-3f);
+    EXPECT_NEAR (0.0f, bounds.getY(), 1.0e-3f);
+    EXPECT_NEAR (5.0f, bounds.getWidth(), 1.0e-3f);
+    EXPECT_NEAR (10.0f, bounds.getHeight(), 1.0e-3f);
+}
+
+TEST (PathTests, BooleanOperation_SubtractRemovesOverlap)
+{
+    Path left;
+    left.addRectangle (0.0f, 0.0f, 10.0f, 10.0f);
+
+    Path right;
+    right.addRectangle (5.0f, 0.0f, 10.0f, 10.0f);
+
+    const auto result = left.combinedWith (right, Path::BooleanOperation::Subtract);
+    const auto bounds = result.getBounds();
+
+    EXPECT_FALSE (result.isEmpty());
+    EXPECT_NEAR (0.0f, bounds.getX(), 1.0e-3f);
+    EXPECT_NEAR (0.0f, bounds.getY(), 1.0e-3f);
+    EXPECT_NEAR (5.0f, bounds.getWidth(), 1.0e-3f);
+    EXPECT_NEAR (10.0f, bounds.getHeight(), 1.0e-3f);
+}
+
+TEST (PathTests, BooleanOperation_XorKeepsNonOverlappingRegions)
+{
+    Path left;
+    left.addRectangle (0.0f, 0.0f, 10.0f, 10.0f);
+
+    Path right;
+    right.addRectangle (5.0f, 0.0f, 10.0f, 10.0f);
+
+    const auto result = left.combinedWith (right, Path::BooleanOperation::Xor);
+    const auto bounds = result.getBounds();
+
+    EXPECT_FALSE (result.isEmpty());
+    EXPECT_NEAR (0.0f, bounds.getX(), 1.0e-3f);
+    EXPECT_NEAR (0.0f, bounds.getY(), 1.0e-3f);
+    EXPECT_NEAR (15.0f, bounds.getWidth(), 1.0e-3f);
+    EXPECT_NEAR (10.0f, bounds.getHeight(), 1.0e-3f);
+}

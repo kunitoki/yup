@@ -186,7 +186,7 @@ public:
 
         if (player.getAnimation().isValid())
         {
-            g.setFillColor (yup::Colors::black.withAlpha (0.25f));
+            g.setFillColor (yup::Colors::white);
             g.fillRoundedRect (bounds, 6.0f);
 
             player.render (g, bounds.reduced (4.0f), true);

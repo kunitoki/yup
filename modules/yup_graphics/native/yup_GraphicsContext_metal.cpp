@@ -88,6 +88,7 @@ public:
             metalOptions.disableFramebufferReads = true;
 
         m_renderContext = rive::gpu::RenderContextMetalImpl::MakeContext (m_gpu, metalOptions);
+        m_offscreenRenderContext = rive::gpu::RenderContextMetalImpl::MakeContext (m_gpu, metalOptions);
 
         NSError* error = nil;
 
@@ -274,48 +275,64 @@ public:
     {
         int width = 0;
         int height = 0;
-        id<MTLTexture> renderTexture = nil;
         id<MTLTexture> stagingTexture = nil;
-        rive::rcp<rive::gpu::RenderTargetMetal> riveRenderTarget;
+        rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
         rive::gpu::RenderContext* renderContext = nullptr;
 
         int getWidth() const noexcept override { return width; }
 
         int getHeight() const noexcept override { return height; }
 
-        rive::gpu::RenderTarget* getRenderTarget() noexcept override { return riveRenderTarget.get(); }
+        rive::gpu::RenderTarget* getRenderTarget() noexcept override
+        {
+            return renderCanvas != nullptr ? renderCanvas->renderTarget() : nullptr;
+        }
+
+        rive::gpu::RenderContext* getRenderContext() noexcept override
+        {
+            return renderContext;
+        }
+
+        rive::rcp<rive::gpu::RenderCanvas> refRenderCanvas() noexcept override
+        {
+            return renderCanvas;
+        }
 
         rive::rcp<rive::gpu::Texture> adoptAsTexture() override
         {
-            if (renderTexture == nil || renderContext == nullptr)
+            if (renderCanvas == nullptr)
                 return nullptr;
 
-            auto* renderContextImpl = renderContext->static_impl_cast<rive::gpu::RenderContextMetalImpl>();
-            return renderContextImpl->adoptImageTexture (renderTexture,
-                                                         static_cast<uint32_t> (width),
-                                                         static_cast<uint32_t> (height));
+            return renderCanvas->renderImage()->refTexture();
+        }
+
+        id<MTLTexture> targetTexture() const
+        {
+            if (renderCanvas == nullptr)
+                return nil;
+
+            if (auto* target = static_cast<rive::gpu::RenderTargetMetal*> (renderCanvas->renderTarget()))
+                return target->targetTexture();
+
+            return nil;
         }
     };
 
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
     {
-        if (width <= 0 || height <= 0)
+        if (width <= 0 || height <= 0 || m_offscreenRenderContext == nullptr)
             return nullptr;
 
         auto target = std::make_unique<OffscreenTargetMetal>();
         target->width = width;
         target->height = height;
-        target->renderContext = m_renderContext.get();
+        target->renderContext = m_offscreenRenderContext.get();
+        target->renderCanvas = m_offscreenRenderContext->makeRenderCanvas (static_cast<uint32_t> (width),
+                                                                           static_cast<uint32_t> (height));
+        if (target->renderCanvas == nullptr)
+            return nullptr;
 
-        MTLTextureDescriptor* renderDesc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
-                                                                                              width:static_cast<NSUInteger> (width)
-                                                                                             height:static_cast<NSUInteger> (height)
-                                                                                          mipmapped:NO];
-        renderDesc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
-        renderDesc.storageMode = MTLStorageModePrivate;
-        target->renderTexture = [m_gpu newTextureWithDescriptor:renderDesc];
-
-        MTLTextureDescriptor* stagingDesc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+        MTLTextureDescriptor* stagingDesc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
                                                                                                width:static_cast<NSUInteger> (width)
                                                                                               height:static_cast<NSUInteger> (height)
                                                                                            mipmapped:NO];
@@ -327,12 +344,7 @@ public:
 #endif
         target->stagingTexture = [m_gpu newTextureWithDescriptor:stagingDesc];
 
-        auto renderContextImpl = m_renderContext->static_impl_cast<rive::gpu::RenderContextMetalImpl>();
-        target->riveRenderTarget = renderContextImpl->makeRenderTarget (MTLPixelFormatBGRA8Unorm,
-                                                                        static_cast<uint32_t> (width),
-                                                                        static_cast<uint32_t> (height));
-
-        if (target->renderTexture == nil || target->stagingTexture == nil || target->riveRenderTarget == nullptr)
+        if (target->targetTexture() == nil || target->stagingTexture == nil)
             return nullptr;
 
         return target;
@@ -341,37 +353,27 @@ public:
     void beginOffscreen (OffscreenTarget& baseTarget, const rive::gpu::RenderContext::FrameDescriptor& frameDesc) override
     {
         auto& target = static_cast<OffscreenTargetMetal&> (baseTarget);
+        auto* renderContext = target.getRenderContext();
 
-        m_renderContext->beginFrame (frameDesc);
+        if (renderContext == nullptr)
+            return;
 
-        if (frameDesc.loadAction == rive::gpu::LoadAction::clear)
-        {
-            id<MTLCommandBuffer> clearCommandBuffer = [m_queue commandBuffer];
-
-            MTLRenderPassDescriptor* passDescriptor = [MTLRenderPassDescriptor renderPassDescriptor];
-            passDescriptor.colorAttachments[0].texture = target.renderTexture;
-            passDescriptor.colorAttachments[0].loadAction = MTLLoadActionClear;
-            passDescriptor.colorAttachments[0].clearColor = MTLClearColorFromARGB (frameDesc.clearColor);
-            passDescriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
-
-            id<MTLRenderCommandEncoder> encoder = [clearCommandBuffer renderCommandEncoderWithDescriptor:passDescriptor];
-            [encoder setRenderPipelineState:m_pipelineState];
-            [encoder endEncoding];
-            [clearCommandBuffer commit];
-        }
+        renderContext->beginFrame (frameDesc);
     }
 
     void endOffscreen (OffscreenTarget& baseTarget) override
     {
         auto& target = static_cast<OffscreenTargetMetal&> (baseTarget);
+        auto* renderContext = target.getRenderContext();
 
-        target.riveRenderTarget->setTargetTexture (target.renderTexture);
+        if (renderContext == nullptr)
+            return;
 
         id<MTLCommandBuffer> commandBuffer = [m_queue commandBuffer];
-        m_renderContext->flush ({ .renderTarget = target.riveRenderTarget.get(), .externalCommandBuffer = (__bridge void*) commandBuffer });
+        renderContext->flush ({ .renderTarget = target.getRenderTarget(), .externalCommandBuffer = (__bridge void*) commandBuffer });
 
         id<MTLBlitCommandEncoder> blitEncoder = [commandBuffer blitCommandEncoder];
-        [blitEncoder copyFromTexture:target.renderTexture
+        [blitEncoder copyFromTexture:target.targetTexture()
                          sourceSlice:0
                          sourceLevel:0
                         sourceOrigin:MTLOriginMake (0, 0, 0)
@@ -387,8 +389,6 @@ public:
 
         [commandBuffer commit];
         [commandBuffer waitUntilCompleted];
-
-        target.riveRenderTarget->setTargetTexture (nil);
     }
 
     bool readOffscreenPixels (OffscreenTarget& baseTarget, void* dst, size_t dstSize) override
@@ -410,20 +410,13 @@ public:
                              fromRegion:MTLRegionMake2D (0, 0, w, h)
                             mipmapLevel:0];
 
-        // Swap B and R channels in-place (BGRA -> RGBA)
-        auto* pixels = static_cast<uint8_t*> (dst);
-        for (size_t i = 0; i < w * h; ++i)
-        {
-            std::swap (pixels[0], pixels[2]);
-            pixels += 4;
-        }
-
         return true;
     }
 
 private:
     const Options m_fiddleOptions;
     std::unique_ptr<rive::gpu::RenderContext> m_renderContext;
+    std::unique_ptr<rive::gpu::RenderContext> m_offscreenRenderContext;
     id<MTLDevice> m_gpu = MTLCreateSystemDefaultDevice();
     id<MTLCommandQueue> m_queue = [m_gpu newCommandQueue];
     CAMetalLayer* m_swapchain = nil;

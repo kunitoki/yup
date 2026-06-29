@@ -19,6 +19,10 @@
   ==============================================================================
 */
 
+#include <clipper2/clipper.engine.h>
+
+#include <cmath>
+
 namespace yup
 {
 
@@ -638,6 +642,219 @@ void addRoundedSubpath (Path& targetPath, const std::vector<Point<float>>& point
     {
         targetPath.close();
     }
+}
+
+//==============================================================================
+
+using ClipperPathD = Clipper2Lib::PathD;
+using ClipperPathsD = Clipper2Lib::PathsD;
+
+[[nodiscard]] bool isFinitePoint (const Point<float>& point) noexcept
+{
+    return std::isfinite (point.getX()) && std::isfinite (point.getY());
+}
+
+[[nodiscard]] bool pointsNearlyEqual (const Point<float>& lhs, const Point<float>& rhs) noexcept
+{
+    return lhs.distanceTo (rhs) <= 1.0e-4f;
+}
+
+void appendClipperPoint (ClipperPathD& path, const Point<float>& point)
+{
+    if (! isFinitePoint (point))
+        return;
+
+    if (! path.empty()
+        && std::abs (path.back().x - static_cast<double> (point.getX())) <= 1.0e-6
+        && std::abs (path.back().y - static_cast<double> (point.getY())) <= 1.0e-6)
+    {
+        return;
+    }
+
+    path.emplace_back (static_cast<double> (point.getX()),
+                       static_cast<double> (point.getY()));
+}
+
+void finishClipperContour (ClipperPathsD& paths, ClipperPathD& contour)
+{
+    if (contour.size() >= 2
+        && std::abs (contour.front().x - contour.back().x) <= 1.0e-6
+        && std::abs (contour.front().y - contour.back().y) <= 1.0e-6)
+    {
+        contour.pop_back();
+    }
+
+    if (contour.size() >= 3)
+        paths.push_back (std::move (contour));
+
+    contour.clear();
+}
+
+[[nodiscard]] Point<float> evaluateClipperQuadratic (const Point<float>& start,
+                                                     const Point<float>& control,
+                                                     const Point<float>& end,
+                                                     float t)
+{
+    const float u = 1.0f - t;
+    const float uu = u * u;
+    const float tt = t * t;
+
+    return { uu * start.getX() + 2.0f * u * t * control.getX() + tt * end.getX(),
+             uu * start.getY() + 2.0f * u * t * control.getY() + tt * end.getY() };
+}
+
+[[nodiscard]] Point<float> evaluateClipperCubic (const Point<float>& start,
+                                                 const Point<float>& control1,
+                                                 const Point<float>& control2,
+                                                 const Point<float>& end,
+                                                 float t)
+{
+    const float u = 1.0f - t;
+    const float uu = u * u;
+    const float uuu = uu * u;
+    const float tt = t * t;
+    const float ttt = tt * t;
+
+    return { uuu * start.getX() + 3.0f * uu * t * control1.getX() + 3.0f * u * tt * control2.getX() + ttt * end.getX(),
+             uuu * start.getY() + 3.0f * uu * t * control1.getY() + 3.0f * u * tt * control2.getY() + ttt * end.getY() };
+}
+
+[[nodiscard]] int estimateCurveSegments (float controlPolygonLength)
+{
+    return jlimit (4, 96, static_cast<int> (std::ceil (controlPolygonLength / 2.0f)));
+}
+
+void appendQuadraticAsLines (ClipperPathD& path,
+                             const Point<float>& start,
+                             const Point<float>& control,
+                             const Point<float>& end)
+{
+    const float controlLength = start.distanceTo (control) + control.distanceTo (end);
+    const int numSegments = estimateCurveSegments (controlLength);
+
+    for (int i = 1; i <= numSegments; ++i)
+        appendClipperPoint (path, evaluateClipperQuadratic (start, control, end, static_cast<float> (i) / static_cast<float> (numSegments)));
+}
+
+void appendCubicAsLines (ClipperPathD& path,
+                         const Point<float>& start,
+                         const Point<float>& control1,
+                         const Point<float>& control2,
+                         const Point<float>& end)
+{
+    const float controlLength = start.distanceTo (control1) + control1.distanceTo (control2) + control2.distanceTo (end);
+    const int numSegments = estimateCurveSegments (controlLength);
+
+    for (int i = 1; i <= numSegments; ++i)
+        appendClipperPoint (path, evaluateClipperCubic (start, control1, control2, end, static_cast<float> (i) / static_cast<float> (numSegments)));
+}
+
+[[nodiscard]] ClipperPathsD toClipperPaths (const Path& source)
+{
+    ClipperPathsD paths;
+    ClipperPathD contour;
+    Point<float> current;
+    Point<float> contourStart;
+    bool hasCurrent = false;
+
+    for (const auto& segment : source)
+    {
+        switch (segment.verb)
+        {
+            case Path::Verb::MoveTo:
+                finishClipperContour (paths, contour);
+                current = segment.point;
+                contourStart = current;
+                hasCurrent = true;
+                appendClipperPoint (contour, current);
+                break;
+
+            case Path::Verb::LineTo:
+                if (hasCurrent)
+                {
+                    appendClipperPoint (contour, segment.point);
+                    current = segment.point;
+                }
+                break;
+
+            case Path::Verb::QuadTo:
+                if (hasCurrent)
+                {
+                    appendQuadraticAsLines (contour, current, segment.controlPoint1, segment.point);
+                    current = segment.point;
+                }
+                break;
+
+            case Path::Verb::CubicTo:
+                if (hasCurrent)
+                {
+                    appendCubicAsLines (contour, current, segment.controlPoint1, segment.controlPoint2, segment.point);
+                    current = segment.point;
+                }
+                break;
+
+            case Path::Verb::Close:
+                if (hasCurrent)
+                {
+                    if (! pointsNearlyEqual (current, contourStart))
+                        appendClipperPoint (contour, contourStart);
+
+                    finishClipperContour (paths, contour);
+                    hasCurrent = false;
+                }
+                break;
+        }
+    }
+
+    finishClipperContour (paths, contour);
+
+    return paths;
+}
+
+[[nodiscard]] Clipper2Lib::FillRule toClipperFillRule (const Path& path) noexcept
+{
+    return path.isUsingNonZeroWinding() ? Clipper2Lib::FillRule::NonZero
+                                        : Clipper2Lib::FillRule::EvenOdd;
+}
+
+[[nodiscard]] Clipper2Lib::ClipType toClipperClipType (Path::BooleanOperation operation) noexcept
+{
+    switch (operation)
+    {
+        case Path::BooleanOperation::Union:
+            return Clipper2Lib::ClipType::Union;
+        case Path::BooleanOperation::Intersect:
+            return Clipper2Lib::ClipType::Intersection;
+        case Path::BooleanOperation::Subtract:
+            return Clipper2Lib::ClipType::Difference;
+        case Path::BooleanOperation::Xor:
+            return Clipper2Lib::ClipType::Xor;
+    }
+
+    return Clipper2Lib::ClipType::Union;
+}
+
+[[nodiscard]] Path fromClipperPaths (const ClipperPathsD& paths)
+{
+    Path result;
+
+    for (const auto& contour : paths)
+    {
+        if (contour.size() < 3)
+            continue;
+
+        result.moveTo (static_cast<float> (contour.front().x),
+                       static_cast<float> (contour.front().y));
+
+        for (size_t i = 1; i < contour.size(); ++i)
+            result.lineTo (static_cast<float> (contour[i].x),
+                           static_cast<float> (contour[i].y));
+
+        result.closeSubPath();
+    }
+
+    result.setUsingNonZeroWinding (true);
+    return result;
 }
 
 } // namespace
@@ -1552,6 +1769,35 @@ void Path::setUsingNonZeroWinding (bool shouldUseNonZeroWinding)
 bool Path::isUsingNonZeroWinding() const
 {
     return path->getFillRule() == rive::FillRule::nonZero;
+}
+
+//==============================================================================
+
+Path Path::combinedWith (const Path& other, BooleanOperation operation) const
+{
+    static constexpr int clipperDecimalPrecision = 3;
+
+    const auto subjectPaths = toClipperPaths (*this);
+    if (subjectPaths.empty())
+        return (operation == BooleanOperation::Union || operation == BooleanOperation::Xor) ? other : Path();
+
+    const auto clipPaths = toClipperPaths (other);
+    if (clipPaths.empty())
+        return operation == BooleanOperation::Intersect ? Path() : *this;
+
+    ClipperPathsD resultPaths;
+    Clipper2Lib::ClipperD clipper (clipperDecimalPrecision);
+    clipper.AddSubject (subjectPaths);
+    clipper.AddClip (clipPaths);
+    clipper.Execute (toClipperClipType (operation), toClipperFillRule (*this), resultPaths);
+
+    return fromClipperPaths (resultPaths);
+}
+
+Path& Path::combineWith (const Path& other, BooleanOperation operation)
+{
+    *this = combinedWith (other, operation);
+    return *this;
 }
 
 //==============================================================================

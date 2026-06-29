@@ -98,3 +98,14 @@ TEST_F (GraphicsOffscreenTests, AdoptTextureStoresTexture)
     image.adoptTexture (nullptr);
     EXPECT_EQ (image.getTexture(), nullptr);
 }
+
+TEST_F (GraphicsOffscreenTests, AdoptRenderCanvasStoresCanvas)
+{
+    Image image (32, 32);
+    EXPECT_EQ (image.getRenderCanvas(), nullptr);
+    EXPECT_EQ (image.getRenderImage(), nullptr);
+
+    image.adoptRenderCanvas (nullptr);
+    EXPECT_EQ (image.getRenderCanvas(), nullptr);
+    EXPECT_EQ (image.getRenderImage(), nullptr);
+}

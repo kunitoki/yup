@@ -51,13 +51,19 @@ Image::Image (const Image& other)
 
 Image::Image (Image&& other) noexcept
     : bitmapData (std::exchange (other.bitmapData, {}))
+    , texture (std::exchange (other.texture, {}))
+    , renderCanvas (std::exchange (other.renderCanvas, {}))
 {
 }
 
 Image& Image::operator= (const Image& other)
 {
     if (this != &other)
+    {
         bitmapData = other.bitmapData;
+        texture = nullptr;
+        renderCanvas = nullptr;
+    }
 
     return *this;
 }
@@ -65,7 +71,11 @@ Image& Image::operator= (const Image& other)
 Image& Image::operator= (Image&& other) noexcept
 {
     if (this != &other)
+    {
         bitmapData = std::exchange (other.bitmapData, {});
+        texture = std::exchange (other.texture, {});
+        renderCanvas = std::exchange (other.renderCanvas, {});
+    }
 
     return *this;
 }
@@ -217,7 +227,7 @@ ResultValue<Image> Image::loadFromData (Span<const uint8> imageData)
 //==============================================================================
 bool Image::createTextureIfNotPresent (GraphicsContext& context) const
 {
-    if (texture != nullptr)
+    if (getTexture() != nullptr)
         return true;
 
     if (bitmapData == nullptr)
@@ -259,23 +269,49 @@ bool Image::createTextureIfNotPresent (GraphicsContext& context) const
         rive::GPUTextureFormat::rgba32,
         texturePixels.data());
 
+    renderCanvas = nullptr;
+
     return true;
 }
 
 void Image::invalidateTexture()
 {
     texture = nullptr;
+    renderCanvas = nullptr;
 }
 
 //==============================================================================
 void Image::adoptTexture (rive::rcp<rive::gpu::Texture> t)
 {
     texture = std::move (t);
+    renderCanvas = nullptr;
+}
+
+void Image::adoptRenderCanvas (rive::rcp<rive::gpu::RenderCanvas> canvas)
+{
+    renderCanvas = std::move (canvas);
+    texture = nullptr;
 }
 
 rive::rcp<rive::gpu::Texture> Image::getTexture() const
 {
+    if (renderCanvas != nullptr)
+        return renderCanvas->renderImage()->refTexture();
+
     return texture;
+}
+
+rive::rcp<rive::gpu::RenderCanvas> Image::getRenderCanvas() const
+{
+    return renderCanvas;
+}
+
+rive::RenderImage* Image::getRenderImage() const
+{
+    if (renderCanvas != nullptr)
+        return renderCanvas->renderImage();
+
+    return nullptr;
 }
 
 } // namespace yup
