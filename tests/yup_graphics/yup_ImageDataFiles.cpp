@@ -21,6 +21,8 @@
 
 #include <gtest/gtest.h>
 
+#if ! YUP_WASM
+
 #include "yup_ImageFormatTools.h"
 
 using namespace yup;
@@ -377,3 +379,5 @@ TEST (ImageDataFilesTests, ReadNonExistentFileReturnsInvalid)
     auto image = readImageFromFile (file);
     EXPECT_FALSE (image.isValid());
 }
+
+#endif // !YUP_WASM
