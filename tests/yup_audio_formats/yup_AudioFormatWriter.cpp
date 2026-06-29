@@ -130,6 +130,30 @@ static void expectFloatArrayEquals (const std::vector<float>& actual, std::initi
 }
 } // namespace
 
+TEST (AudioFormatWriterTests, ConstructorAttributesAreAccessible)
+{
+    MockAudioFormatWriter mono (1, 16, 44100.0);
+    EXPECT_EQ (1, mono.getNumChannels());
+    EXPECT_EQ (16u, mono.getBitsPerSample());
+    EXPECT_DOUBLE_EQ (44100.0, mono.getSampleRate());
+
+    MockAudioFormatWriter stereo (2, 24, 48000.0);
+    EXPECT_EQ (2, stereo.getNumChannels());
+    EXPECT_EQ (24u, stereo.getBitsPerSample());
+    EXPECT_DOUBLE_EQ (48000.0, stereo.getSampleRate());
+}
+
+TEST (AudioFormatWriterTests, WriteFromAudioSampleBufferZeroSamplesDoesNothing)
+{
+    MockAudioFormatWriter writer (2, 16);
+    AudioBuffer<float> source (2, 4);
+    fillWriterChannel (source, 0, { 0.1f, 0.2f, 0.3f, 0.4f });
+    fillWriterChannel (source, 1, { -0.1f, -0.2f, -0.3f, -0.4f });
+
+    EXPECT_TRUE (writer.writeFromAudioSampleBuffer (source, 0, 0));
+    EXPECT_EQ (0, writer.writeCalls);
+}
+
 TEST (AudioFormatWriterTests, WriteFromAudioSampleBufferCopiesAvailableChannels)
 {
     MockAudioFormatWriter writer (3, 16);

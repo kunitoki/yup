@@ -104,6 +104,46 @@ public:
 
 } // namespace
 
+TEST (AtomicTests, DefaultConstructedIsZero)
+{
+    Atomic<int> a;
+    EXPECT_EQ (a.get(), 0);
+}
+
+TEST (AtomicTests, SetAndGetRoundTrips)
+{
+    Atomic<int> a;
+    a.set (42);
+    EXPECT_EQ (a.get(), 42);
+    a.set (-7);
+    EXPECT_EQ (a.get(), -7);
+}
+
+TEST (AtomicTests, CompareAndSetBoolSucceedsOnMatch)
+{
+    Atomic<int> a;
+    a.set (10);
+    EXPECT_TRUE (a.compareAndSetBool (20, 10));
+    EXPECT_EQ (a.get(), 20);
+}
+
+TEST (AtomicTests, CompareAndSetBoolFailsOnMismatch)
+{
+    Atomic<int> a;
+    a.set (10);
+    EXPECT_FALSE (a.compareAndSetBool (20, 99));
+    EXPECT_EQ (a.get(), 10); // unchanged
+}
+
+TEST (AtomicTests, ExchangeReturnsOldValue)
+{
+    Atomic<int> a;
+    a.set (100);
+    const int old = a.exchange (200);
+    EXPECT_EQ (old, 100);
+    EXPECT_EQ (a.get(), 200);
+}
+
 TEST (AtomicTests, Misc)
 {
     char a1[7];

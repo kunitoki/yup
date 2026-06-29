@@ -184,3 +184,97 @@ TEST (ImageFormatReaderTests, BmpReaderSetsCorrectPixelFormatRgba)
 
     EXPECT_EQ (reader.pixelFormat, PixelFormat::RGBA);
 }
+
+// ======================================================================
+// readImage round-trip tests
+// ======================================================================
+
+TEST (ImageFormatReaderTests, PpmReaderReadImageReturnsValidImage)
+{
+    Image source (4, 4, PixelFormat::RGB);
+    source.fill (0xFFFF0000u);
+
+    auto* rawStream = new MemoryOutputStream();
+    PpmImageFormatWriter writer (rawStream, PixelFormat::RGB);
+    ASSERT_TRUE (writer.writeImage (source));
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+    PpmImageFormatReader reader (inStream);
+
+    const Image result = reader.readImage();
+    EXPECT_TRUE (result.isValid());
+    EXPECT_EQ (result.getWidth(), 4);
+    EXPECT_EQ (result.getHeight(), 4);
+}
+
+TEST (ImageFormatReaderTests, BmpReaderReadImageReturnsCorrectSize)
+{
+    auto* rawStream = new MemoryOutputStream();
+    BmpImageFormatWriter writer (rawStream, PixelFormat::RGB);
+    ASSERT_TRUE (writer.writeImage (generateSolidImage (8, 6, PixelFormat::RGB)));
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+    BmpImageFormatReader reader (inStream);
+
+    const Image result = reader.readImage();
+    ASSERT_TRUE (result.isValid());
+    EXPECT_EQ (result.getWidth(), 8);
+    EXPECT_EQ (result.getHeight(), 6);
+}
+
+// ======================================================================
+// isAnimated / frame count / loop count / frame delay
+// ======================================================================
+
+TEST (ImageFormatReaderTests, BmpReaderIsNotAnimated)
+{
+    auto* rawStream = new MemoryOutputStream();
+    BmpImageFormatWriter writer (rawStream, PixelFormat::RGB);
+    ASSERT_TRUE (writer.writeImage (generateSolidImage (1, 1, PixelFormat::RGB)));
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+    BmpImageFormatReader reader (inStream);
+
+    EXPECT_FALSE (reader.isAnimated());
+    EXPECT_EQ (reader.getFrameCount(), 1);
+    EXPECT_EQ (reader.getLoopCount(), 1);
+    EXPECT_EQ (reader.getFrameDelayMs (0), 0);
+}
+
+TEST (ImageFormatReaderTests, PpmReaderIsNotAnimated)
+{
+    const char data[] = "P6\n2 2\n255\n\xFF\x00\x00\xFF\x00\x00\xFF\x00\x00\xFF\x00\x00";
+    auto* stream = new MemoryInputStream (data, sizeof (data) - 1, false);
+    PpmImageFormatReader reader (stream);
+
+    EXPECT_FALSE (reader.isAnimated());
+    EXPECT_EQ (reader.getFrameCount(), 1);
+    EXPECT_EQ (reader.getLoopCount(), 1);
+    EXPECT_EQ (reader.getFrameDelayMs (0), 0);
+}
+
+// ======================================================================
+// readFrame
+// ======================================================================
+
+TEST (ImageFormatReaderTests, BmpReaderReadFrameZeroMatchesReadImage)
+{
+    auto* rawStream = new MemoryOutputStream();
+    BmpImageFormatWriter writer (rawStream, PixelFormat::RGB);
+    ASSERT_TRUE (writer.writeImage (generateSolidImage (4, 4, PixelFormat::RGB)));
+
+    const auto encoded = rawStream->getMemoryBlock();
+
+    auto* inStream1 = new MemoryInputStream (encoded.getData(), encoded.getSize(), false);
+    BmpImageFormatReader reader1 (inStream1);
+    const Image fromReadImage = reader1.readImage();
+
+    auto* inStream2 = new MemoryInputStream (encoded.getData(), encoded.getSize(), false);
+    BmpImageFormatReader reader2 (inStream2);
+    const Image fromReadFrame = reader2.readFrame (0);
+
+    ASSERT_TRUE (fromReadImage.isValid());
+    ASSERT_TRUE (fromReadFrame.isValid());
+    EXPECT_EQ (fromReadImage.getWidth(), fromReadFrame.getWidth());
+    EXPECT_EQ (fromReadImage.getHeight(), fromReadFrame.getHeight());
+}

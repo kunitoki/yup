@@ -308,3 +308,51 @@ TEST_F (CubicBezierTests, AngleAt_VerticalLineIsHalfPiRadians)
     auto b = makeVerticalLine (100.0f);
     EXPECT_NEAR (b.angleAt (0.5f), yup::MathConstants<float>::pi / 2.0f, 1e-3f);
 }
+
+TEST_F (CubicBezierTests, AngleAt_DiagonalLineIsQuarterPiRadians)
+{
+    // Diagonal line (1,0)→(1,1) as a cubic: both interior control points on line
+    CubicBezier b ({ 0.0f, 0.0f }, { 50.0f, 50.0f }, { 50.0f, 50.0f }, { 100.0f, 100.0f });
+    EXPECT_NEAR (b.angleAt (0.5f), yup::MathConstants<float>::pi / 4.0f, 1e-2f);
+}
+
+// =============================================================================
+// derivative
+// =============================================================================
+
+TEST_F (CubicBezierTests, Derivative_HorizontalLineAtMidIsPositiveX)
+{
+    // Horizontal line from (0,0) to (100,0)
+    auto b = makeHorizontalLine (100.0f);
+    const auto d = b.derivative (0.5f);
+    EXPECT_GT (d.getX(), 0.0f);          // moving right
+    EXPECT_NEAR (d.getY(), 0.0f, 1e-3f); // no vertical component
+}
+
+TEST_F (CubicBezierTests, Derivative_VerticalLineAtMidIsPositiveY)
+{
+    auto b = makeVerticalLine (100.0f);
+    const auto d = b.derivative (0.5f);
+    EXPECT_NEAR (d.getX(), 0.0f, 1e-3f);
+    EXPECT_GT (d.getY(), 0.0f);
+}
+
+TEST_F (CubicBezierTests, Derivative_AtZeroMatchesFirstSegmentDirection)
+{
+    // Start tangent = 3 * (P1 - P0)
+    CubicBezier b ({ 0.0f, 0.0f }, { 10.0f, 0.0f }, { 90.0f, 0.0f }, { 100.0f, 0.0f });
+    const auto d = b.derivative (0.0f);
+    // 3 * (10 - 0) = 30 in X
+    EXPECT_NEAR (d.getX(), 30.0f, 1.0f);
+    EXPECT_NEAR (d.getY(), 0.0f, 1e-3f);
+}
+
+TEST_F (CubicBezierTests, Derivative_AtOneMatchesLastSegmentDirection)
+{
+    // End tangent = 3 * (P3 - P2)
+    CubicBezier b ({ 0.0f, 0.0f }, { 10.0f, 0.0f }, { 90.0f, 0.0f }, { 100.0f, 0.0f });
+    const auto d = b.derivative (1.0f);
+    // 3 * (100 - 90) = 30 in X
+    EXPECT_NEAR (d.getX(), 30.0f, 1.0f);
+    EXPECT_NEAR (d.getY(), 0.0f, 1e-3f);
+}

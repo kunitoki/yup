@@ -937,3 +937,72 @@ TEST_F (GraphicsTest, OffscreenRendering_ImageBackedContextNotOffscreenOnHeadles
         offscreen.readPixelsToImage();
     });
 }
+
+// =============================================================================
+// getClipPath
+// =============================================================================
+
+TEST_F (GraphicsTest, GetClipPath_DefaultIsEmpty)
+{
+    const Path clip = graphics->getClipPath();
+    EXPECT_TRUE (clip.isEmpty());
+}
+
+TEST_F (GraphicsTest, GetClipPath_ReturnsSetRectangleClip)
+{
+    const Rectangle<float> clipRect (10.0f, 20.0f, 80.0f, 60.0f);
+    graphics->setClipPath (clipRect);
+
+    const Path clip = graphics->getClipPath();
+    EXPECT_FALSE (clip.isEmpty());
+}
+
+TEST_F (GraphicsTest, GetClipPath_ReturnsSetPathClip)
+{
+    Path clipPath;
+    clipPath.addEllipse (20.0f, 20.0f, 60.0f, 60.0f);
+    graphics->setClipPath (clipPath);
+
+    const Path clip = graphics->getClipPath();
+    EXPECT_FALSE (clip.isEmpty());
+}
+
+// =============================================================================
+// setStrokeMiterLimit
+// =============================================================================
+
+TEST_F (GraphicsTest, SetStrokeMiterLimit_DoesNotCrash)
+{
+    EXPECT_NO_THROW ({
+        graphics->setStrokeMiterLimit (4.0f);
+        graphics->setStrokeMiterLimit (1.0f);
+        graphics->setStrokeMiterLimit (10.0f);
+    });
+}
+
+// =============================================================================
+// fillFittedText / strokeFittedText with String + Justification
+// =============================================================================
+
+TEST_F (GraphicsTest, FillFittedText_StringWithJustificationDoesNotCrash)
+{
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+    graphics->setFillColor (Color (0xFF000000));
+
+    EXPECT_NO_THROW ({
+        graphics->fillFittedText ("Hello", Font().withHeight (14.0f), Rectangle<float> (10.0f, 10.0f, 100.0f, 30.0f), Justification::topLeft);
+        graphics->fillFittedText ("Hello", Font().withHeight (14.0f), Rectangle<float> (10.0f, 50.0f, 100.0f, 30.0f), Justification::center);
+        graphics->fillFittedText ("Hello", Font().withHeight (14.0f), Rectangle<float> (10.0f, 90.0f, 100.0f, 30.0f), Justification::bottomRight);
+    });
+}
+
+TEST_F (GraphicsTest, StrokeFittedText_StringWithJustificationDoesNotCrash)
+{
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+    graphics->setStrokeColor (Color (0xFF000000));
+    graphics->setStrokeWidth (1.0f);
+
+    EXPECT_NO_THROW ({
+        graphics->strokeFittedText ("World", Font().withHeight (16.0f), Rectangle<float> (10.0f, 10.0f, 120.0f, 40.0f), Justification::center);
+    });
+}

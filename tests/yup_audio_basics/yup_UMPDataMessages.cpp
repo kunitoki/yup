@@ -103,3 +103,39 @@ TEST (UMPDataMessagesTests, SysEx7PacketPayloadHelpers)
     EXPECT_EQ (m.getPayloadByte (0), 0x12);
     EXPECT_EQ (m.getPayloadByte (1), 0x34);
 }
+
+TEST (UMPDataMessagesTests, SysEx7PacketSetPayloadByte)
+{
+    auto m = makeSysEx7CompletePacket();
+    m.addPayloadByte (0x00);
+    m.addPayloadByte (0x00);
+    m.setPayloadByte (0, 0x2B);
+    m.setPayloadByte (1, 0x4D);
+
+    EXPECT_EQ (m.getPayloadByte (0), 0x2Bu);
+    EXPECT_EQ (m.getPayloadByte (1), 0x4Du);
+}
+
+TEST (UMPDataMessagesTests, SysEx7MaxPayloadIs6Bytes)
+{
+    auto m = makeSysEx7CompletePacket();
+    for (int i = 0; i < 6; ++i)
+        m.addPayloadByte (static_cast<uint8_t> (i));
+
+    EXPECT_EQ (m.getPayloadSize(), 6u);
+
+    // Verify each byte was stored correctly
+    for (int i = 0; i < 6; ++i)
+        EXPECT_EQ (m.getPayloadByte (static_cast<size_t> (i)), static_cast<uint8_t> (i));
+}
+
+TEST (UMPDataMessagesTests, SysEx7GroupIsPreservedInStart)
+{
+    auto start = makeSysEx7StartPacket (7);
+    auto cont = makeSysEx7ContinuePacket (7);
+    auto end = makeSysEx7EndPacket (7);
+
+    EXPECT_EQ (start.getGroup(), 7u);
+    EXPECT_EQ (cont.getGroup(), 7u);
+    EXPECT_EQ (end.getGroup(), 7u);
+}

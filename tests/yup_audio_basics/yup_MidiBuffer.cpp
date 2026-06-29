@@ -43,6 +43,49 @@
 
 using namespace yup;
 
+TEST (MidiBufferTests, DefaultIsEmpty)
+{
+    MidiBuffer buffer;
+    EXPECT_TRUE (buffer.isEmpty());
+    EXPECT_EQ (0, buffer.getNumEvents());
+}
+
+TEST (MidiBufferTests, AddEventMakesNonEmpty)
+{
+    MidiBuffer buffer;
+    buffer.addEvent (MidiMessage::noteOn (1, 60, 0.5f), 0);
+    EXPECT_FALSE (buffer.isEmpty());
+    EXPECT_EQ (1, buffer.getNumEvents());
+}
+
+TEST (MidiBufferTests, ClearAllRemovesAllEvents)
+{
+    MidiBuffer buffer;
+    buffer.addEvent (MidiMessage::noteOn (1, 60, 0.5f), 0);
+    buffer.addEvent (MidiMessage::noteOff (1, 60), 10);
+    buffer.clear();
+    EXPECT_TRUE (buffer.isEmpty());
+    EXPECT_EQ (0, buffer.getNumEvents());
+}
+
+TEST (MidiBufferTests, IterationYieldsEventsInOrder)
+{
+    MidiBuffer buffer;
+    buffer.addEvent (MidiMessage::noteOn (1, 60, 0.5f), 0);
+    buffer.addEvent (MidiMessage::noteOn (1, 64, 0.5f), 10);
+    buffer.addEvent (MidiMessage::noteOff (1, 60), 20);
+
+    int prevPos = -1;
+    int count = 0;
+    for (const auto& meta : buffer)
+    {
+        EXPECT_GE (meta.samplePosition, prevPos);
+        prevPos = meta.samplePosition;
+        ++count;
+    }
+    EXPECT_EQ (3, count);
+}
+
 TEST (MidiBufferTests, Clear)
 {
     const auto message = MidiMessage::noteOn (1, 64, 0.5f);

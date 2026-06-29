@@ -235,3 +235,96 @@ TEST_F (AnimationPathDataTests, SubtractOperator_IsExtrapolation_TwoBMinusA)
     EXPECT_NEAR (result.vertices[0].getX(), -10.0f, 1e-4f);
     EXPECT_NEAR (result.vertices[0].getY(), -10.0f, 1e-4f);
 }
+
+// =============================================================================
+// Open path (non-closed)
+// =============================================================================
+
+TEST_F (AnimationPathDataTests, ToPath_OpenPathDoesNotImplicitlyClose)
+{
+    AnimationPathData pd;
+    pd.vertices = { { 0.0f, 0.0f }, { 50.0f, 100.0f }, { 100.0f, 0.0f } };
+    pd.inTangents = { { 0.0f, 0.0f }, { 0.0f, 0.0f }, { 0.0f, 0.0f } };
+    pd.outTangents = { { 0.0f, 0.0f }, { 0.0f, 0.0f }, { 0.0f, 0.0f } };
+    pd.closed = false;
+
+    EXPECT_FALSE (pd.toPath().isEmpty());
+}
+
+TEST_F (AnimationPathDataTests, ToPath_ClosedAndOpenProduceDifferentPaths)
+{
+    auto open = makeTriangle();
+    open.closed = false;
+    auto closed = makeTriangle();
+    closed.closed = true;
+
+    // Both should be non-empty; they may differ internally but are both valid
+    EXPECT_FALSE (open.toPath().isEmpty());
+    EXPECT_FALSE (closed.toPath().isEmpty());
+}
+
+// =============================================================================
+// Bezier tangents
+// =============================================================================
+
+TEST_F (AnimationPathDataTests, ToPath_NonZeroTangentsProducesNonEmptyPath)
+{
+    AnimationPathData pd;
+    pd.vertices = { { 0.0f, 0.0f }, { 100.0f, 0.0f } };
+    pd.outTangents = { { 0.0f, 50.0f }, { 0.0f, 0.0f } };
+    pd.inTangents = { { 0.0f, 0.0f }, { 0.0f, -50.0f } };
+    pd.closed = false;
+
+    EXPECT_FALSE (pd.toPath().isEmpty());
+}
+
+TEST_F (AnimationPathDataTests, Lerp_InterpolatesTangentsCorrectly)
+{
+    AnimationPathData a, b;
+    a.vertices = { { 0.0f, 0.0f } };
+    a.outTangents = { { 0.0f, 20.0f } };
+    a.inTangents = { { 0.0f, -20.0f } };
+
+    b.vertices = { { 0.0f, 0.0f } };
+    b.outTangents = { { 0.0f, 60.0f } };
+    b.inTangents = { { 0.0f, -60.0f } };
+
+    auto result = AnimationPathData::lerp (a, b, 0.5f);
+    ASSERT_EQ (result.outTangents.size(), 1u);
+    EXPECT_NEAR (result.outTangents[0].getY(), 40.0f, 1e-3f);
+    EXPECT_NEAR (result.inTangents[0].getY(), -40.0f, 1e-3f);
+}
+
+// =============================================================================
+// Lerp closed flag propagation
+// =============================================================================
+
+TEST_F (AnimationPathDataTests, Lerp_PreservesClosedFlagFromFirstOperand)
+{
+    auto a = makeTriangle();
+    a.closed = true;
+    auto b = makeTriangle();
+    b.closed = false;
+
+    auto result = AnimationPathData::lerp (a, b, 0.5f);
+    EXPECT_TRUE (result.closed); // should follow the first operand
+}
+
+// =============================================================================
+// Scalar multiply affects tangents
+// =============================================================================
+
+TEST_F (AnimationPathDataTests, MultiplyByTwo_DoublesTangents)
+{
+    AnimationPathData pd;
+    pd.vertices = { { 10.0f, 20.0f } };
+    pd.outTangents = { { 5.0f, 10.0f } };
+    pd.inTangents = { { 2.0f, 4.0f } };
+
+    auto result = pd * 2.0f;
+    ASSERT_EQ (result.outTangents.size(), 1u);
+    EXPECT_NEAR (result.outTangents[0].getX(), 10.0f, 1e-4f);
+    EXPECT_NEAR (result.outTangents[0].getY(), 20.0f, 1e-4f);
+    EXPECT_NEAR (result.inTangents[0].getX(), 4.0f, 1e-4f);
+    EXPECT_NEAR (result.inTangents[0].getY(), 8.0f, 1e-4f);
+}

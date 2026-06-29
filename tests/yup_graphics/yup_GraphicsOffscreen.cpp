@@ -109,3 +109,48 @@ TEST_F (GraphicsOffscreenTests, AdoptRenderCanvasStoresCanvas)
     EXPECT_EQ (image.getRenderCanvas(), nullptr);
     EXPECT_EQ (image.getRenderImage(), nullptr);
 }
+
+TEST_F (GraphicsOffscreenTests, SmallImageOffscreenConstructorDoesNotCrash)
+{
+    Image image (1, 1);
+    EXPECT_NO_THROW ({ Graphics g (*context, image); });
+}
+
+TEST_F (GraphicsOffscreenTests, LargeImageOffscreenConstructorDoesNotCrash)
+{
+    Image image (2048, 2048);
+    EXPECT_NO_THROW ({ Graphics g (*context, image); });
+}
+
+TEST_F (GraphicsOffscreenTests, CommitCalledTwiceReturnsFalseOnSecondCall)
+{
+    Image image (64, 64);
+    Graphics g (*context, image);
+
+    const bool first = g.commitToImage();
+    const bool second = g.commitToImage();
+
+    // Both should return false in headless (no GPU), but the contract is that
+    // the second call is also not a crash.
+    EXPECT_FALSE (second);
+    (void) first;
+}
+
+TEST_F (GraphicsOffscreenTests, ReadPixelsAfterCommitDoesNotCrash)
+{
+    Image image (32, 32);
+    Graphics g (*context, image);
+
+    g.commitToImage();
+    EXPECT_NO_THROW ({ g.readPixelsToImage(); });
+}
+
+TEST_F (GraphicsOffscreenTests, RegularGraphicsContextRenderSize)
+{
+    auto renderer = context->makeRenderer (128, 64);
+    ASSERT_NE (renderer, nullptr);
+    Graphics g (*context, *renderer);
+
+    EXPECT_FALSE (g.isOffscreen());
+    EXPECT_FALSE (g.commitToImage());
+}

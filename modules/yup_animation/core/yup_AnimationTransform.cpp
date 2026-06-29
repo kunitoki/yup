@@ -50,11 +50,11 @@ AffineTransform AnimationTransform::toAffineTransform (float frameNo) const
 
     if (std::abs (sk) > 1e-5f)
     {
-        const float skRad = degreesToRadians (sk);
+        const float skRad = degreesToRadians (-sk);
         const float saRad = degreesToRadians (sa);
         const AffineTransform skewMtx = AffineTransform (1.0f, std::tan (skRad), 0.0f, 0.0f, 1.0f, 0.0f);
-        const AffineTransform rot1 = AffineTransform::rotation (-saRad);
-        const AffineTransform rot2 = AffineTransform::rotation (saRad);
+        const AffineTransform rot1 = AffineTransform::rotation (saRad);
+        const AffineTransform rot2 = AffineTransform::rotation (-saRad);
         t = t.followedBy (rot1).followedBy (skewMtx).followedBy (rot2);
     }
 

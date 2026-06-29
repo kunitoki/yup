@@ -25,6 +25,26 @@
 
 using namespace yup;
 
+TEST (ParameterChangeBufferTests, DefaultIsEmpty)
+{
+    ParameterChangeBuffer changes;
+    EXPECT_TRUE (changes.isEmpty());
+    EXPECT_EQ (0, changes.getNumChanges());
+}
+
+TEST (ParameterChangeBufferTests, ClearOnDefaultDoesNotCrash)
+{
+    ParameterChangeBuffer changes;
+    EXPECT_NO_THROW ({ changes.clear(); });
+    EXPECT_TRUE (changes.isEmpty());
+}
+
+TEST (ParameterChangeBufferTests, FindNextSamplePositionOnEmptyReturnsEnd)
+{
+    ParameterChangeBuffer changes;
+    EXPECT_EQ (changes.end(), changes.findNextSamplePosition (0));
+}
+
 TEST (ParameterChangeBufferTests, AddsAndClearsReservedChanges)
 {
     ParameterChangeBuffer changes;

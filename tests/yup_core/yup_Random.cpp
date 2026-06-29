@@ -62,6 +62,44 @@ TEST (RandomTests, RandomNumbers)
     }
 }
 
+TEST (RandomTests, SeedProducesRepeatableSequence)
+{
+    Random r1 (42LL);
+    Random r2 (42LL);
+
+    for (int i = 0; i < 20; ++i)
+        EXPECT_EQ (r1.nextInt(), r2.nextInt());
+}
+
+TEST (RandomTests, NextBoolReturnsBothValues)
+{
+    Random r (99LL);
+
+    bool seenTrue = false, seenFalse = false;
+
+    for (int i = 0; i < 100; ++i)
+    {
+        const bool v = r.nextBool();
+        seenTrue |= v;
+        seenFalse |= ! v;
+    }
+
+    EXPECT_TRUE (seenTrue);
+    EXPECT_TRUE (seenFalse);
+}
+
+TEST (RandomTests, NextIntRangeAlwaysInBounds)
+{
+    Random r (123LL);
+
+    for (int i = 0; i < 1000; ++i)
+    {
+        const int v = r.nextInt (7);
+        EXPECT_GE (v, 0);
+        EXPECT_LT (v, 7);
+    }
+}
+
 TEST (RandomTests, Concurrent)
 {
     class FastWaitableEvent

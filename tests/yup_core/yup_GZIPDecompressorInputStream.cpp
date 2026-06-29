@@ -115,3 +115,62 @@ TEST (GZIPDecompressorInputStreamTests, Skip)
     EXPECT_EQ (stream.getNumBytesRemaining(), (int64) 0);
     EXPECT_TRUE (stream.isExhausted());
 }
+
+TEST (GZIPDecompressorInputStreamTests, TotalLengthMatchesKnownLength)
+{
+    const MemoryBlock data ("hello world", 11);
+
+    MemoryOutputStream mo;
+    GZIPCompressorOutputStream gzipOutputStream (mo);
+    gzipOutputStream.write (data.getData(), data.getSize());
+    gzipOutputStream.flush();
+
+    MemoryInputStream mi (mo.getData(), mo.getDataSize(), false);
+    GZIPDecompressorInputStream stream (&mi, false, GZIPDecompressorInputStream::zlibFormat, (int64) data.getSize());
+
+    EXPECT_EQ (stream.getTotalLength(), (int64) data.getSize());
+    EXPECT_EQ (stream.getNumBytesRemaining(), (int64) data.getSize());
+    EXPECT_FALSE (stream.isExhausted());
+}
+
+TEST (GZIPDecompressorInputStreamTests, NumBytesRemainingDecreasesOnRead)
+{
+    const MemoryBlock data ("abcdefgh", 8);
+
+    MemoryOutputStream mo;
+    GZIPCompressorOutputStream gzipOutputStream (mo);
+    gzipOutputStream.write (data.getData(), data.getSize());
+    gzipOutputStream.flush();
+
+    MemoryInputStream mi (mo.getData(), mo.getDataSize(), false);
+    GZIPDecompressorInputStream stream (&mi, false, GZIPDecompressorInputStream::zlibFormat, (int64) data.getSize());
+
+    EXPECT_EQ (stream.getNumBytesRemaining(), (int64) 8);
+
+    char buf[3];
+    stream.read (buf, 3);
+
+    EXPECT_EQ (stream.getPosition(), (int64) 3);
+    EXPECT_EQ (stream.getNumBytesRemaining(), (int64) 5);
+    EXPECT_FALSE (stream.isExhausted());
+}
+
+TEST (GZIPDecompressorInputStreamTests, DecompressedContentMatchesOriginal)
+{
+    const char* originalText = "The quick brown fox jumps over the lazy dog";
+    const size_t len = std::strlen (originalText);
+    const MemoryBlock data (originalText, len);
+
+    MemoryOutputStream mo;
+    GZIPCompressorOutputStream gzipOutputStream (mo);
+    gzipOutputStream.write (data.getData(), data.getSize());
+    gzipOutputStream.flush();
+
+    MemoryInputStream mi (mo.getData(), mo.getDataSize(), false);
+    GZIPDecompressorInputStream stream (&mi, false, GZIPDecompressorInputStream::zlibFormat, (int64) data.getSize());
+
+    MemoryBlock result (len);
+    stream.read (result.getData(), (int) len);
+
+    EXPECT_EQ (0, memcmp (result.getData(), originalText, len));
+}

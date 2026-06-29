@@ -88,3 +88,32 @@ TEST (ThreadLocalValueTests, ValuesArePerInstance)
     EXPECT_EQ (a.get(), 1);
     EXPECT_EQ (b.get(), 2);
 }
+
+TEST (ThreadLocalValueTests, DefaultValueIsZeroInitialized)
+{
+    ThreadLocalValue<int> t;
+    EXPECT_EQ (t.get(), 0);
+}
+
+TEST (ThreadLocalValueTests, UpdateValueInSameThread)
+{
+    ThreadLocalValue<int> t;
+    t.get() = 99;
+    EXPECT_EQ (t.get(), 99);
+
+    t.get() = -42;
+    EXPECT_EQ (t.get(), -42);
+}
+
+TEST (ThreadLocalValueTests, ThreeIndependentInstancesDoNotInterfere)
+{
+    ThreadLocalValue<int> x, y, z;
+
+    x.get() = 10;
+    y.get() = 20;
+    z.get() = 30;
+
+    EXPECT_EQ (x.get(), 10);
+    EXPECT_EQ (y.get(), 20);
+    EXPECT_EQ (z.get(), 30);
+}

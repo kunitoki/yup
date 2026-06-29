@@ -733,8 +733,8 @@ void AnimationRenderer::renderGroup (Graphics& g,
 
         const int numCopies = activeRepeater->copiesAt (frameNo);
 
-        // Per-copy transform matching rlottie: position and rotation scale linearly
-        // with the copy index, while scale scales exponentially (pow(s, copyIndex)).
+        // The path is still in group-local coordinates here; Graphics applies the
+        // group's transform later. Keep repeater copies in that same local space.
         const AnimationTransform& xf = activeRepeater->copyTransform;
         const Point<float> anchor = xf.anchor.getValueAt (frameNo);
         const Size<float> sc = xf.scale.getValueAt (frameNo);
@@ -756,13 +756,6 @@ void AnimationRenderer::renderGroup (Graphics& g,
             return t;
         };
 
-        // The copy transform C must be composed with the existing graphics transform G
-        // so that the final result is C * G (copy applied after group) rather than
-        // G * C (copy applied before group). This matches rlottie's render order.
-        // We compute X = G^-1 * C * G so that G * X = C * G.
-        const AffineTransform G = g.getTransform();
-        const AffineTransform invG = G.inverted();
-
         std::vector<Path> repeatedPaths;
         for (int copy = 0; copy < numCopies; ++copy)
         {
@@ -771,12 +764,9 @@ void AnimationRenderer::renderGroup (Graphics& g,
                                     + activeRepeater->endOpacityAt (frameNo) * t;
             (void) copyOpacity; // TODO: per-copy opacity via Graphics state
 
-            const float multiplier = static_cast<float> (copy) + activeRepeater->offsetAt (frameNo);
-            const AffineTransform C = buildCopyTransform (multiplier);
-            const AffineTransform X = G.followedBy (C).followedBy (invG);
-
+            const AffineTransform copyXfm = buildCopyTransform (static_cast<float> (copy) + activeRepeater->offsetAt (frameNo));
             for (const auto& p : paths)
-                repeatedPaths.push_back (p.transformed (X));
+                repeatedPaths.push_back (p.transformed (copyXfm));
         }
         return repeatedPaths;
     };

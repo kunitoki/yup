@@ -62,3 +62,30 @@ TEST (PlatformDefsTests, ConstexprJassertfalse)
 
     static_assert (x == true);
 }
+
+TEST (PlatformDefsTests, JminReturnsSmallerValue)
+{
+    EXPECT_EQ (jmin (3, 5), 3);
+    EXPECT_EQ (jmin (5, 3), 3);
+    EXPECT_EQ (jmin (-1, 0), -1);
+    EXPECT_EQ (jmin (0, 0), 0);
+    EXPECT_FLOAT_EQ (jmin (1.5f, 2.5f), 1.5f);
+}
+
+TEST (PlatformDefsTests, JmaxReturnsLargerValue)
+{
+    EXPECT_EQ (jmax (3, 5), 5);
+    EXPECT_EQ (jmax (5, 3), 5);
+    EXPECT_EQ (jmax (-1, 0), 0);
+    EXPECT_EQ (jmax (0, 0), 0);
+    EXPECT_FLOAT_EQ (jmax (1.5f, 2.5f), 2.5f);
+}
+
+TEST (PlatformDefsTests, JlimitConstrainsToRange)
+{
+    EXPECT_EQ (jlimit (0, 10, 5), 5);
+    EXPECT_EQ (jlimit (0, 10, -1), 0);
+    EXPECT_EQ (jlimit (0, 10, 11), 10);
+    EXPECT_EQ (jlimit (0, 10, 0), 0);
+    EXPECT_EQ (jlimit (0, 10, 10), 10);
+}

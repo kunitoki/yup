@@ -143,6 +143,29 @@ protected:
     }
 };
 
+TEST_F (BufferedInputStreamTests, InitialStateIsAtStart)
+{
+    const MemoryBlock data ("hello", 5);
+    MemoryInputStream mi (data, true);
+    BufferedInputStream stream (mi, 64);
+
+    EXPECT_EQ (stream.getPosition(), (int64) 0);
+    EXPECT_EQ (stream.getTotalLength(), (int64) 5);
+    EXPECT_FALSE (stream.isExhausted());
+}
+
+TEST_F (BufferedInputStreamTests, ExhaustedAfterReadAll)
+{
+    const MemoryBlock data ("hello", 5);
+    MemoryInputStream mi (data, true);
+    BufferedInputStream stream (mi, 64);
+
+    char buf[5];
+    stream.read (buf, 5);
+    EXPECT_TRUE (stream.isExhausted());
+    EXPECT_EQ (stream.getNumBytesRemaining(), (int64) 0);
+}
+
 TEST_F (BufferedInputStreamTests, ReadAndSkipCombinations)
 {
     const MemoryBlock testBufferA ("abcdefghijklmnopqrstuvwxyz", 26);

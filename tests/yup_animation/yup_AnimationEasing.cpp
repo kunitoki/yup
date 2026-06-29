@@ -104,3 +104,52 @@ TEST_F (AnimationEasingTests, MonotonicallyIncreasing)
         prev = v;
     }
 }
+
+TEST_F (AnimationEasingTests, EaseInOutSymmetricAtHalf)
+{
+    auto easing = AnimationEasing::easeInOut();
+    // At t=0.5 easeInOut should be at 0.5 exactly (symmetric curve)
+    EXPECT_NEAR (easing.evaluate (0.5f), 0.5f, 0.05f);
+}
+
+TEST_F (AnimationEasingTests, LinearEasingSatisfiesAdditivity)
+{
+    auto easing = AnimationEasing::linear();
+    // For linear: evaluate(a) + evaluate(b) ≈ evaluate(a + b) only when a+b <= 1
+    // More directly: f(0.3) + f(0.7) should equal f(1.0) = 1.0
+    EXPECT_NEAR (easing.evaluate (0.3f) + easing.evaluate (0.7f), 1.0f, 0.001f);
+}
+
+TEST_F (AnimationEasingTests, CustomTangentsProduceValuesBetween0And1)
+{
+    const Point<float> outT { 0.25f, 0.1f };
+    const Point<float> inT { 0.75f, 0.9f };
+    auto easing = AnimationEasing::fromLottieTangents (outT, inT);
+
+    for (int i = 0; i <= 10; ++i)
+    {
+        const float t = (float) i / 10.0f;
+        const float v = easing.evaluate (t);
+        EXPECT_GE (v, -0.01f) << "t=" << t;
+        EXPECT_LE (v, 1.01f) << "t=" << t;
+    }
+}
+
+TEST_F (AnimationEasingTests, AllBuiltInEasingTypesAreNotHold)
+{
+    EXPECT_FALSE (AnimationEasing::linear().isHold());
+    EXPECT_FALSE (AnimationEasing::easeIn().isHold());
+    EXPECT_FALSE (AnimationEasing::easeOut().isHold());
+    EXPECT_FALSE (AnimationEasing::easeInOut().isHold());
+}
+
+TEST_F (AnimationEasingTests, EaseInIsNotEaseOut)
+{
+    auto eIn = AnimationEasing::easeIn();
+    auto eOut = AnimationEasing::easeOut();
+
+    // At t=0.3: easeIn < linear < easeOut
+    const float vIn = eIn.evaluate (0.3f);
+    const float vOut = eOut.evaluate (0.3f);
+    EXPECT_LT (vIn, vOut);
+}

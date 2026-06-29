@@ -50,7 +50,7 @@ Image AnimationFrameExporter::renderFrame (GraphicsContext& ctx,
 
     {
         Graphics g (ctx, img, 0x00000000u);
-        anim.renderFrame (g, frameNo, { 0.0f, 0.0f, (float) sz.getWidth(), (float) sz.getHeight() }, false);
+        anim.renderFrame (g, frameNo, { 0.0f, 0.0f, (float) sz.getWidth(), (float) sz.getHeight() }, true);
         g.readPixelsToImage();
     }
 

@@ -54,7 +54,8 @@ public:
         @param anim        The animation to render.
         @param frameNo     The frame number to render.
         @param targetSize  Desired output pixel size. Pass {0,0} to use the
-                           composition's native size.
+                           composition's native size. The animation is fitted
+                           into this size while preserving its aspect ratio.
         @return            An RGBA Image, or an invalid Image on failure.
     */
     [[nodiscard]] static Image renderFrame (GraphicsContext& ctx,
@@ -68,6 +69,8 @@ public:
         @param ctx         Graphics context used for GPU-backed offscreen rendering.
         @param anim        The animation to render.
         @param targetSize  Desired output pixel size. {0,0} = native composition size.
+                           The animation is fitted into this size while preserving
+                           its aspect ratio.
         @return            One Image per frame in frame order, or an error.
     */
     [[nodiscard]] static ResultValue<std::vector<Image>> renderAllFrames (GraphicsContext& ctx,

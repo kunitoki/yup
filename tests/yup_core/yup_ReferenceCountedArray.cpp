@@ -87,6 +87,39 @@ struct DestructorObj final : public ReferenceCountedObject
 };
 } // namespace
 
+TEST (ReferenceCountedArrayTests, DefaultIsEmpty)
+{
+    ReferenceCountedArray<TestBaseObj> arr;
+    EXPECT_TRUE (arr.isEmpty());
+    EXPECT_EQ (0, arr.size());
+    EXPECT_EQ (nullptr, arr.getFirst());
+    EXPECT_EQ (nullptr, arr.getLast());
+}
+
+TEST (ReferenceCountedArrayTests, AddIncreasesSize)
+{
+    ReferenceCountedArray<TestBaseObj> arr;
+    arr.add (new TestBaseObj());
+    EXPECT_EQ (1, arr.size());
+    EXPECT_FALSE (arr.isEmpty());
+    arr.add (new TestBaseObj());
+    EXPECT_EQ (2, arr.size());
+}
+
+TEST (ReferenceCountedArrayTests, ClearDecrementsRefCount)
+{
+    TestBaseObj::Ptr obj = new TestBaseObj();
+    EXPECT_EQ (1, obj->getReferenceCount());
+
+    ReferenceCountedArray<TestBaseObj> arr;
+    arr.add (obj);
+    EXPECT_EQ (2, obj->getReferenceCount());
+
+    arr.clear();
+    EXPECT_TRUE (arr.isEmpty());
+    EXPECT_EQ (1, obj->getReferenceCount());
+}
+
 TEST (ReferenceCountedArrayTests, AddDerivedObjects)
 {
     ReferenceCountedArray<TestDerivedObj> derivedArray;

@@ -65,3 +65,52 @@ TEST (AudioProcessContextTests, CarriesPlayHeadPointer)
     ASSERT_TRUE (context.playHead->getPosition().has_value());
     EXPECT_EQ (128, *context.playHead->getPosition()->getTimeInSamples());
 }
+
+TEST (AudioProcessContextTests, CarriesAudioBufferReference)
+{
+    AudioBuffer<float> audio (2, 64);
+    MidiBuffer midi;
+    ParameterChangeBuffer params;
+
+    AudioProcessContext<float> context { audio, midi, params };
+
+    EXPECT_EQ (2, context.audio.getNumChannels());
+    EXPECT_EQ (64, context.audio.getNumSamples());
+}
+
+TEST (AudioProcessContextTests, CarriesMidiBufferReference)
+{
+    AudioBuffer<float> audio (1, 8);
+    MidiBuffer midi;
+    ParameterChangeBuffer params;
+
+    AudioProcessContext<float> context { audio, midi, params };
+
+    EXPECT_TRUE (context.midi.isEmpty());
+}
+
+TEST (AudioProcessContextTests, CarriesParameterChangeBufferReference)
+{
+    AudioBuffer<float> audio (1, 8);
+    MidiBuffer midi;
+    ParameterChangeBuffer params;
+    params.reserve (1);
+    EXPECT_TRUE (params.addChange (0, 0.5f, 0));
+
+    AudioProcessContext<float> context { audio, midi, params };
+
+    EXPECT_EQ (1, context.params.getNumChanges());
+}
+
+TEST (AudioProcessContextTests, DoubleBufferVersion)
+{
+    AudioBuffer<double> audio (2, 32);
+    MidiBuffer midi;
+    ParameterChangeBuffer params;
+
+    AudioProcessContext<double> context { audio, midi, params };
+
+    EXPECT_EQ (2, context.audio.getNumChannels());
+    EXPECT_EQ (32, context.audio.getNumSamples());
+    EXPECT_EQ (nullptr, context.playHead);
+}

@@ -36,3 +36,4 @@
 #include "yup_animation/yup_AnimationShape.cpp"
 #include "yup_animation/yup_AnimationFrameExporter.cpp"
 #include "yup_animation/yup_Animation.cpp"
+#include "yup_animation/yup_LottieReader.cpp"

@@ -47,3 +47,40 @@ TEST (MemoryOutputStreamTests, WriteTextUtf16SupportsFullUnicodeCodepoints)
             EXPECT_EQ (*currentOriginal, *writtenPtr);
     }
 }
+
+TEST (MemoryOutputStreamTests, DefaultConstructedIsEmpty)
+{
+    MemoryOutputStream stream;
+    EXPECT_EQ (stream.getDataSize(), (size_t) 0);
+    EXPECT_NE (stream.getData(), nullptr);
+}
+
+TEST (MemoryOutputStreamTests, WriteBytesIncreasesSize)
+{
+    MemoryOutputStream stream;
+    const uint8 data[] = { 0x01, 0x02, 0x03 };
+    EXPECT_TRUE (stream.write (data, sizeof (data)));
+    EXPECT_EQ (stream.getDataSize(), sizeof (data));
+}
+
+TEST (MemoryOutputStreamTests, WriteRepeatedByteProducesCorrectSize)
+{
+    MemoryOutputStream stream;
+    EXPECT_TRUE (stream.writeRepeatedByte (0xFF, 10));
+    EXPECT_EQ (stream.getDataSize(), (size_t) 10);
+
+    const auto* bytes = static_cast<const uint8*> (stream.getData());
+    for (size_t i = 0; i < 10; ++i)
+        EXPECT_EQ (bytes[i], 0xFF);
+}
+
+TEST (MemoryOutputStreamTests, ResetClearsDataSize)
+{
+    MemoryOutputStream stream;
+    const uint8 data[] = { 1, 2, 3, 4, 5 };
+    stream.write (data, sizeof (data));
+    EXPECT_EQ (stream.getDataSize(), sizeof (data));
+
+    stream.reset();
+    EXPECT_EQ (stream.getDataSize(), (size_t) 0);
+}

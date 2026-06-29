@@ -101,9 +101,11 @@ public:
     /** Returns a new bezier representing the sub-curve on parameter interval [t0, t1]. */
     [[nodiscard]] CubicBezier onInterval (float t0, float t1) const noexcept;
 
-private:
+    //==============================================================================
+    /** Returns the derivative at t. */
     [[nodiscard]] Point<float> derivative (float t) const noexcept;
 
+private:
     float x1 = 0.0f, y1 = 0.0f;
     float x2 = 0.0f, y2 = 0.0f;
     float x3 = 0.0f, y3 = 0.0f;

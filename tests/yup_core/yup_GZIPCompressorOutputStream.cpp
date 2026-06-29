@@ -43,6 +43,44 @@
 
 using namespace yup;
 
+TEST (GZIPCompressorOutputStreamTests, EmptyInputProducesDecompressableOutput)
+{
+    MemoryOutputStream compressed;
+    {
+        GZIPCompressorOutputStream zipper (compressed, 6);
+        // Write nothing
+    }
+
+    MemoryInputStream compressedInput (compressed.getData(), compressed.getDataSize(), false);
+    GZIPDecompressorInputStream unzipper (compressedInput);
+
+    MemoryOutputStream uncompressed;
+    uncompressed << unzipper;
+
+    EXPECT_EQ ((size_t) 0, uncompressed.getDataSize());
+}
+
+TEST (GZIPCompressorOutputStreamTests, KnownDataRoundTrip)
+{
+    const char* originalText = "Hello, GZIP compression test!";
+    const size_t len = std::strlen (originalText);
+
+    MemoryOutputStream compressed;
+    {
+        GZIPCompressorOutputStream zipper (compressed, 6);
+        zipper.write (originalText, len);
+    }
+
+    MemoryInputStream compressedInput (compressed.getData(), compressed.getDataSize(), false);
+    GZIPDecompressorInputStream unzipper (compressedInput);
+
+    MemoryOutputStream uncompressed;
+    uncompressed << unzipper;
+
+    EXPECT_EQ (len, uncompressed.getDataSize());
+    EXPECT_EQ (0, memcmp (uncompressed.getData(), originalText, len));
+}
+
 TEST (GZIPCompressorOutputStreamTests, Zipping)
 {
     Random& rng = Random::getSystemRandom();

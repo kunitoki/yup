@@ -143,6 +143,36 @@ protected:
     }
 };
 
+TEST_F (MPESynthesiserBaseTest, EmptyMidiBufferProducesSingleBlock)
+{
+    const int blockSize = 512;
+    AudioBuffer<float> audio (1, blockSize);
+
+    MockSynthesiser synth;
+    synth.setMinimumRenderingSubdivisionSize (1, false);
+    synth.setCurrentPlaybackSampleRate (44100);
+    synth.renderNextBlock (audio, MidiBuffer {}, 0, blockSize);
+
+    EXPECT_EQ (synth.events.blocks.size(), 1u);
+    EXPECT_EQ (synth.events.messages.size(), 0u);
+    EXPECT_EQ (sumBlockLengths (synth.events.blocks), blockSize);
+    EXPECT_EQ (synth.events.blocks[0], (StartAndLength { 0, blockSize }));
+}
+
+TEST_F (MPESynthesiserBaseTest, ZeroLengthRenderProducesNoBlocks)
+{
+    const int blockSize = 512;
+    AudioBuffer<float> audio (1, blockSize);
+
+    MockSynthesiser synth;
+    synth.setMinimumRenderingSubdivisionSize (1, false);
+    synth.setCurrentPlaybackSampleRate (44100);
+    synth.renderNextBlock (audio, MidiBuffer {}, 0, 0);
+
+    EXPECT_EQ (synth.events.blocks.size(), 0u);
+    EXPECT_EQ (synth.events.messages.size(), 0u);
+}
+
 TEST_F (MPESynthesiserBaseTest, RenderingSparseSubblocksWorks)
 {
     const int blockSize = 512;
