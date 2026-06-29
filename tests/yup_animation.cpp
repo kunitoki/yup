@@ -25,3 +25,5 @@
 #include "yup_animation/yup_LottieRoundtrip.cpp"
 #include "yup_animation/yup_LottieExpressionEvaluator.cpp"
 #include "yup_animation/yup_AnimationPlayer.cpp"
+#include "yup_animation/yup_AnimationRenderer.cpp"
+#include "yup_animation/yup_LottieWriter.cpp"

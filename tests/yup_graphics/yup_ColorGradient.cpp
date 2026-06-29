@@ -785,3 +785,171 @@ TEST (ColorGradientTests, FillGradient_HandlesEmptyAndSingleStopGradients)
     EXPECT_EQ (singleColors[1], only.getARGB());
     EXPECT_EQ (singleColors[2], only.getARGB());
 }
+
+// =============================================================================
+// Spread getter / setter
+// =============================================================================
+
+TEST (ColorGradientTests, Spread_DefaultIsPad)
+{
+    EXPECT_EQ (ColorGradient().getSpread(), ColorGradient::Spread::Pad);
+
+    const Color black (0xff000000);
+    const Color white (0xffffffff);
+    ColorGradient gradient (black, 0.0f, 0.0f, white, 100.0f, 0.0f);
+    EXPECT_EQ (gradient.getSpread(), ColorGradient::Spread::Pad);
+}
+
+TEST (ColorGradientTests, Spread_WithSpreadReturnsCopyLeavingOriginalUnchanged)
+{
+    const Color black (0xff000000);
+    const Color white (0xffffffff);
+    ColorGradient original (black, 0.0f, 0.0f, white, 100.0f, 0.0f);
+
+    const auto withRepeat = original.withSpread (ColorGradient::Spread::Repeat);
+    const auto withReflect = original.withSpread (ColorGradient::Spread::Reflect);
+    const auto withPad = original.withSpread (ColorGradient::Spread::Pad);
+
+    EXPECT_EQ (withRepeat.getSpread(), ColorGradient::Spread::Repeat);
+    EXPECT_EQ (withReflect.getSpread(), ColorGradient::Spread::Reflect);
+    EXPECT_EQ (withPad.getSpread(), ColorGradient::Spread::Pad);
+
+    // original must remain Pad
+    EXPECT_EQ (original.getSpread(), ColorGradient::Spread::Pad);
+}
+
+TEST (ColorGradientTests, Spread_WithSpreadPreservesOtherProperties)
+{
+    const Color black (0xff000000);
+    const Color white (0xffffffff);
+    const ColorGradient original (black, 10.0f, 20.0f, white, 110.0f, 20.0f);
+
+    const auto copy = original.withSpread (ColorGradient::Spread::Repeat);
+
+    EXPECT_EQ (copy.getType(), original.getType());
+    EXPECT_EQ (copy.getNumStops(), original.getNumStops());
+    EXPECT_EQ (copy.getStartColor(), original.getStartColor());
+    EXPECT_EQ (copy.getFinishColor(), original.getFinishColor());
+    EXPECT_FLOAT_EQ (copy.getStartX(), original.getStartX());
+    EXPECT_FLOAT_EQ (copy.getStartY(), original.getStartY());
+    EXPECT_FLOAT_EQ (copy.getFinishX(), original.getFinishX());
+    EXPECT_FLOAT_EQ (copy.getFinishY(), original.getFinishY());
+}
+
+// =============================================================================
+// Spread::Pad — coordinates outside the gradient boundary clamp to endpoint colors
+// =============================================================================
+
+TEST (ColorGradientTests, Spread_Pad_ClampsToEndpointColorsLinear)
+{
+    const Color black (0xff000000);
+    const Color white (0xffffffff);
+    const ColorGradient gradient = ColorGradient (black, 0.0f, 0.0f, white, 100.0f, 0.0f)
+                                       .withSpread (ColorGradient::Spread::Pad);
+
+    // Midpoint is same as the interpolated value at t=0.5
+    EXPECT_EQ (gradient.getColorAt (50.0f, 0.0f), gradient.getColorAt (0.5f));
+
+    // Beyond end clamps to white
+    EXPECT_EQ (gradient.getColorAt (150.0f, 0.0f), white);
+    EXPECT_EQ (gradient.getColorAt (300.0f, 0.0f), white);
+
+    // Before start clamps to black
+    EXPECT_EQ (gradient.getColorAt (-50.0f, 0.0f), black);
+    EXPECT_EQ (gradient.getColorAt (-200.0f, 0.0f), black);
+}
+
+TEST (ColorGradientTests, Spread_Pad_ClampsToEndpointColorsRadial)
+{
+    const Color inner (0xff000000);
+    const Color outer (0xffffffff);
+    // Radial gradient centred at (50,50), outer stop at (150,50) → radius = 100
+    const ColorGradient gradient = ColorGradient (inner, 50.0f, 50.0f, outer, 150.0f, 50.0f, ColorGradient::Radial)
+                                       .withSpread (ColorGradient::Spread::Pad);
+
+    // At center: inner color
+    EXPECT_EQ (gradient.getColorAt (50.0f, 50.0f), inner);
+
+    // At edge: outer color
+    EXPECT_EQ (gradient.getColorAt (150.0f, 50.0f), outer);
+
+    // Beyond the radius clamps to outer color
+    EXPECT_EQ (gradient.getColorAt (250.0f, 50.0f), outer);
+    EXPECT_EQ (gradient.getColorAt (-100.0f, 50.0f), outer);
+}
+
+// =============================================================================
+// Spread::Repeat — coordinates beyond the boundary tile the gradient
+// =============================================================================
+
+TEST (ColorGradientTests, Spread_Repeat_TilesGradientPattern)
+{
+    const Color black (0xff000000);
+    const Color white (0xffffffff);
+    const ColorGradient gradient = ColorGradient (black, 0.0f, 0.0f, white, 100.0f, 0.0f)
+                                       .withSpread (ColorGradient::Spread::Repeat);
+
+    const Color mid = gradient.getColorAt (0.5f);
+
+    // Within [0,100]: normal interpolation
+    EXPECT_EQ (gradient.getColorAt (50.0f, 0.0f), mid);
+
+    // t=1.5 (x=150) → frac(1.5) = 0.5 → midpoint
+    EXPECT_EQ (gradient.getColorAt (150.0f, 0.0f), mid);
+
+    // t=2.5 (x=250) → frac(2.5) = 0.5 → midpoint
+    EXPECT_EQ (gradient.getColorAt (250.0f, 0.0f), mid);
+
+    // t=2.0 (x=200) → frac(2.0) = 0.0 → black
+    EXPECT_EQ (gradient.getColorAt (200.0f, 0.0f), black);
+
+    // t=-0.5 (x=-50) → frac(-0.5) = 0.5 → midpoint
+    EXPECT_EQ (gradient.getColorAt (-50.0f, 0.0f), mid);
+}
+
+// =============================================================================
+// Spread::Reflect — coordinates beyond the boundary mirror the gradient
+// =============================================================================
+
+TEST (ColorGradientTests, Spread_Reflect_MirrorsGradientPattern)
+{
+    const Color black (0xff000000);
+    const Color white (0xffffffff);
+    const ColorGradient gradient = ColorGradient (black, 0.0f, 0.0f, white, 100.0f, 0.0f)
+                                       .withSpread (ColorGradient::Spread::Reflect);
+
+    const Color mid = gradient.getColorAt (0.5f);
+
+    // Within [0,100]: normal interpolation
+    EXPECT_EQ (gradient.getColorAt (50.0f, 0.0f), mid);
+
+    // t=1.5 (x=150): reflect → 0.5 → midpoint
+    EXPECT_EQ (gradient.getColorAt (150.0f, 0.0f), mid);
+
+    // t=2.0 (x=200): reflect → 0.0 → black
+    EXPECT_EQ (gradient.getColorAt (200.0f, 0.0f), black);
+
+    // t=2.5 (x=250): reflect → 0.5 → midpoint
+    EXPECT_EQ (gradient.getColorAt (250.0f, 0.0f), mid);
+
+    // t=-0.5 (x=-50): reflect → 0.5 → midpoint
+    EXPECT_EQ (gradient.getColorAt (-50.0f, 0.0f), mid);
+}
+
+TEST (ColorGradientTests, Spread_Reflect_RadialMirrorsPattern)
+{
+    const Color inner (0xff000000);
+    const Color outer (0xffffffff);
+    const ColorGradient gradient = ColorGradient (inner, 0.0f, 0.0f, outer, 100.0f, 0.0f, ColorGradient::Radial)
+                                       .withSpread (ColorGradient::Spread::Reflect);
+
+    // At center: inner color
+    EXPECT_EQ (gradient.getColorAt (0.0f, 0.0f), inner);
+
+    // At distance 50 (t=0.5): midpoint
+    const Color mid = gradient.getColorAt (0.5f);
+    EXPECT_EQ (gradient.getColorAt (50.0f, 0.0f), mid);
+
+    // At distance 200 (t=2.0): reflect to 0.0 → inner
+    EXPECT_EQ (gradient.getColorAt (200.0f, 0.0f), inner);
+}

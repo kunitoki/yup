@@ -22,6 +22,19 @@
 namespace yup
 {
 
+namespace
+{
+
+float lastRenderableFrame (const AnimationComposition& comp) noexcept
+{
+    if (comp.endFrame <= comp.startFrame)
+        return comp.startFrame;
+
+    return std::nextafter (comp.endFrame, comp.startFrame);
+}
+
+} // namespace
+
 AnimationComposition::Ptr AnimationComposition::create (Size<float> compSize, float fps)
 {
     AnimationComposition::Ptr comp = new AnimationComposition();
@@ -32,12 +45,16 @@ AnimationComposition::Ptr AnimationComposition::create (Size<float> compSize, fl
 
 float AnimationComposition::frameAtProgress (float p) const noexcept
 {
-    return startFrame + jlimit (0.0f, 1.0f, p) * totalFrames();
+    return jlimit (startFrame,
+                   lastRenderableFrame (*this),
+                   startFrame + jlimit (0.0f, 1.0f, p) * totalFrames());
 }
 
 float AnimationComposition::frameAtTime (float timeSeconds) const noexcept
 {
-    return startFrame + timeSeconds * frameRate;
+    return jlimit (startFrame,
+                   lastRenderableFrame (*this),
+                   startFrame + timeSeconds * frameRate);
 }
 
 const AnimationMarker* AnimationComposition::findMarker (const String& markerName) const noexcept

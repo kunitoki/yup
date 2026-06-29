@@ -187,6 +187,26 @@ TEST_F (AnimationPlayerTests, SeekToProgress)
     EXPECT_NEAR (player.currentProgress(), 0.5f, 0.01f);
 }
 
+TEST_F (AnimationPlayerTests, CompositionProgressDoesNotSampleOutPoint)
+{
+    const auto* comp = anim.getComposition();
+    ASSERT_NE (comp, nullptr);
+
+    const float frame = comp->frameAtProgress (1.0f);
+    EXPECT_GE (frame, comp->startFrame);
+    EXPECT_LT (frame, comp->endFrame);
+}
+
+TEST_F (AnimationPlayerTests, CompositionTimeDoesNotSampleOutPoint)
+{
+    const auto* comp = anim.getComposition();
+    ASSERT_NE (comp, nullptr);
+
+    const float frame = comp->frameAtTime (anim.duration());
+    EXPECT_GE (frame, comp->startFrame);
+    EXPECT_LT (frame, comp->endFrame);
+}
+
 TEST_F (AnimationPlayerTests, ReverseDirection)
 {
     AnimationPlayer player (anim);

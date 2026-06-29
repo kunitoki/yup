@@ -28,7 +28,7 @@ namespace yup
 String LottieWriter::toJson (const AnimationComposition& comp, bool prettyPrint)
 {
     var root = serializeComposition (comp);
-    return JSON::toString (root, prettyPrint);
+    return JSON::toString (root, ! prettyPrint);
 }
 
 Result LottieWriter::toFile (const AnimationComposition& comp, const File& destination, bool prettyPrint)
