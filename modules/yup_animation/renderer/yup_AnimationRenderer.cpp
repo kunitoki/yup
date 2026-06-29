@@ -590,7 +590,6 @@ void AnimationRenderer::applyMatteSourceClip (Graphics& g,
                                               const RenderContext& ctx,
                                               bool inverted)
 {
-    Path layerAlphaPath = buildLayerAlphaPath (layer, ctx.comp, ctx.frameNo);
     Path clipPath = buildLayerAlphaPath (matteSource, ctx.comp, ctx.frameNo);
 
     if (! matteSource.masks.empty())
@@ -612,10 +611,13 @@ void AnimationRenderer::applyMatteSourceClip (Graphics& g,
     const AffineTransform matteXf = ctx.resolveLayerTransform (matteSource);
     const auto matteToLayerXf = matteXf.followedBy (layerXf.inverted());
     const auto mattePathInLayerSpace = clipPath.transformed (matteToLayerXf);
+    const auto layerBoundsPath = createRectanglePath (getLayerContentBounds (layer, ctx.comp.size));
 
+    // Alpha mattes mask the target content directly. Intersecting with a derived
+    // target alpha path can punch holes when child paths have mixed winding.
     const auto matteClipPath = inverted
-                                 ? layerAlphaPath.combinedWith (mattePathInLayerSpace, Path::BooleanOperation::Subtract)
-                                 : layerAlphaPath.combinedWith (mattePathInLayerSpace, Path::BooleanOperation::Intersect);
+                                 ? layerBoundsPath.combinedWith (mattePathInLayerSpace, Path::BooleanOperation::Subtract)
+                                 : mattePathInLayerSpace;
 
     applyClipPathInCurrentTransform (g, matteClipPath, true);
 }
