@@ -71,6 +71,8 @@ public:
             art->advanceAndApply (i * art->durationSeconds());
         }
 
+        resized();
+
         return true;
     }
 
@@ -81,12 +83,6 @@ public:
 
     void resized() override
     {
-        //for (int i = 0; i < totalRows * totalColumns; ++i)
-        //    artboards.getUnchecked (i)->setBounds (getLocalBounds().reduced (100.0f));
-
-        if (artboards.size() != totalRows * totalColumns)
-            return;
-
         auto bounds = getLocalBounds().reduced (10, 20);
         auto controls = bounds.removeFromTop (30);
 
@@ -101,6 +97,12 @@ public:
         controls.removeFromLeft (spacing);
         alignmentLabel.setBounds (controls.removeFromLeft (labelWidth).withHeight (labelHeight));
         alignmentCombo.setBounds (controls.removeFromLeft (comboWidth).withHeight (comboHeight));
+
+        if (artboards.size() != totalRows * totalColumns)
+            return;
+
+        //for (int i = 0; i < totalRows * totalColumns; ++i)
+        //    artboards.getUnchecked (i)->setBounds (getLocalBounds().reduced (100.0f));
 
         bounds.removeFromTop (10);
         auto width = bounds.getWidth() / totalColumns;
@@ -124,9 +126,13 @@ public:
     }
 
 private:
-    void attachedToNative() override
+    void visibilityChanged() override
     {
-        loadArtboard();
+        if (isVisible())
+        {
+            if (auto topLevelComponent = getTopLevelComponent(); topLevelComponent != nullptr && topLevelComponent->isOnDesktop())
+                loadArtboard();
+        }
     }
 
     void setupControls()
