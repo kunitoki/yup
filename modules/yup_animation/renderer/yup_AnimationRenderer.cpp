@@ -185,12 +185,16 @@ void AnimationRenderer::renderLayer (Graphics& g,
     auto saveState = g.saveState();
 
     // Apply layer transform
+    const AffineTransform baseTransform = g.getTransform();
     const AffineTransform xf = ctx.resolveLayerTransform (layer);
-    g.setTransform (xf.followedBy (g.getTransform()));
+    g.setTransform (xf.followedBy (baseTransform));
 
-    // Apply alpha matte clip (tt=1 only — inverted matte requires offscreen compositing)
-    if (matteSource != nullptr && layer.matteType == AnimationLayer::MatteType::Alpha)
-        applyMatteSourceClip (g, *matteSource, ctx);
+    if (matteSource != nullptr
+        && (layer.matteType == AnimationLayer::MatteType::Alpha
+            || layer.matteType == AnimationLayer::MatteType::AlphaInv))
+    {
+        applyMatteSourceClip (g, *matteSource, ctx, baseTransform, layer.matteType == AnimationLayer::MatteType::AlphaInv);
+    }
 
     // Apply shape masks as clip
     if (! layer.masks.empty())
@@ -357,16 +361,22 @@ Path buildMatteClipPathForGroup (const AnimationGroup& group,
     return clipPath;
 }
 
-} // namespace
+void addRectangleIfNotEmpty (Path& path, const Rectangle<float>& rect)
+{
+    if (rect.getWidth() > 0.0f && rect.getHeight() > 0.0f)
+        path.addRectangle (rect);
+}
 
-//==============================================================================
+} // namespace
 
 void AnimationRenderer::applyMatteSourceClip (Graphics& g,
                                               const AnimationLayer& matteSource,
-                                              const RenderContext& ctx)
+                                              const RenderContext& ctx,
+                                              const AffineTransform& baseTransform,
+                                              bool inverted)
 {
-    // Only shape layers are supported as matte sources here — other types
-    // (precomp, image) require offscreen compositing not yet available.
+    // Geometric fallback for shape alpha mattes. Proper arbitrary matte compositing
+    // requires an offscreen pass that can run outside the active render frame.
     if (matteSource.getType() != AnimationLayer::Type::Shape)
         return;
 
@@ -382,12 +392,56 @@ void AnimationRenderer::applyMatteSourceClip (Graphics& g,
     if (clipPath.isEmpty())
         return;
 
-    // Transform the matte source paths into device space using the source layer's
-    // own resolved transform (not the target's current transform in g).
     const AffineTransform matteXf = ctx.resolveLayerTransform (matteSource);
     const auto offset = g.getDrawingArea().getTopLeft();
-    const auto clipTransform = matteXf.translated ((float) offset.getX(), (float) offset.getY());
-    const auto transformedClipPath = clipPath.transformed (clipTransform);
+    const auto drawingAreaOffset = AffineTransform::translation ((float) offset.getX(), (float) offset.getY());
+
+    Path transformedClipPath;
+    if (inverted)
+    {
+        Path compBoundsPath;
+        compBoundsPath.addRectangle (Rectangle<float> (0.0f, 0.0f, ctx.comp.size.getWidth(), ctx.comp.size.getHeight()));
+
+        const auto outerBounds = compBoundsPath.getBoundsTransformed (ctx.viewTransform.followedBy (baseTransform).followedBy (drawingAreaOffset));
+        const auto matteBounds = clipPath.getBoundsTransformed (matteXf.followedBy (baseTransform).followedBy (drawingAreaOffset));
+        const auto clipBounds = outerBounds.intersection (matteBounds);
+
+        if (clipBounds.isEmpty())
+        {
+            transformedClipPath.addRectangle (outerBounds);
+        }
+        else
+        {
+            addRectangleIfNotEmpty (transformedClipPath,
+                                    { outerBounds.getX(),
+                                      outerBounds.getY(),
+                                      outerBounds.getWidth(),
+                                      clipBounds.getY() - outerBounds.getY() });
+
+            addRectangleIfNotEmpty (transformedClipPath,
+                                    { outerBounds.getX(),
+                                      clipBounds.getBottom(),
+                                      outerBounds.getWidth(),
+                                      outerBounds.getBottom() - clipBounds.getBottom() });
+
+            addRectangleIfNotEmpty (transformedClipPath,
+                                    { outerBounds.getX(),
+                                      clipBounds.getY(),
+                                      clipBounds.getX() - outerBounds.getX(),
+                                      clipBounds.getHeight() });
+
+            addRectangleIfNotEmpty (transformedClipPath,
+                                    { clipBounds.getRight(),
+                                      clipBounds.getY(),
+                                      outerBounds.getRight() - clipBounds.getRight(),
+                                      clipBounds.getHeight() });
+        }
+    }
+    else
+    {
+        transformedClipPath = clipPath.transformed (matteXf.followedBy (baseTransform).followedBy (drawingAreaOffset));
+    }
+
     const auto savedTransform = g.getTransform();
 
     g.setTransform (AffineTransform::identity());

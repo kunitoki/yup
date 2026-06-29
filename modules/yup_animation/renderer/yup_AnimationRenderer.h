@@ -86,7 +86,11 @@ private:
     static void renderPrecompLayer (Graphics& g, const PrecompLayer& layer, const RenderContext& ctx, float opacity);
 
     static void applyMasks (Graphics& g, const AnimationLayer& layer, float frameNo);
-    static void applyMatteSourceClip (Graphics& g, const AnimationLayer& matteSource, const RenderContext& ctx);
+    static void applyMatteSourceClip (Graphics& g,
+                                      const AnimationLayer& matteSource,
+                                      const RenderContext& ctx,
+                                      const AffineTransform& baseTransform,
+                                      bool inverted);
 
     static void renderGroup (Graphics& g,
                              const AnimationGroup& group,
