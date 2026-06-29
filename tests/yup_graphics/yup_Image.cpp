@@ -713,3 +713,103 @@ TEST (ImageTests, ImagesAreEqualWithTolerance)
     EXPECT_FALSE (imagesAreEqual (a, b, 0));
     EXPECT_TRUE (imagesAreEqual (a, b, 5));
 }
+
+// ======================================================================
+// Image invalidation tests
+// ======================================================================
+
+TEST (ImageTests, InvalidateTextureDoesNotCrash)
+{
+    Image image (2, 2, PixelFormat::RGBA);
+    image.fill (0xFF112233u);
+
+    EXPECT_NO_THROW (image.invalidateTexture());
+
+    // Pixel data is unchanged after invalidation.
+    EXPECT_EQ (image.getPixel (0, 0), 0xFF112233u);
+}
+
+TEST (ImageTests, InvalidateTextureOnDefaultConstructedImageDoesNotCrash)
+{
+    Image image;
+    EXPECT_NO_THROW (image.invalidateTexture());
+}
+
+// ======================================================================
+// Image duplicate — edge cases
+// ======================================================================
+
+TEST (ImageTests, DuplicateOfDefaultConstructedImageIsInvalid)
+{
+    Image image;
+    Image copy = image.duplicate();
+    EXPECT_FALSE (copy.isValid());
+}
+
+TEST (ImageTests, DuplicatePreservesPixelFormat)
+{
+    Image image (2, 2, PixelFormat::RGB);
+    image.fill (0xFF334455u);
+
+    Image copy = image.duplicate();
+
+    ASSERT_TRUE (copy.isValid());
+    EXPECT_EQ (copy.getPixelFormat(), PixelFormat::RGB);
+    EXPECT_EQ (copy.getPixelStride(), 3);
+}
+
+TEST (ImageTests, DuplicatePreservesAllPixels)
+{
+    Image image (3, 2, PixelFormat::RGBA);
+    image.setPixel (0, 0, 0x11223344u);
+    image.setPixel (1, 0, 0x55667788u);
+    image.setPixel (2, 0, 0x99AABBCCu);
+    image.setPixel (0, 1, 0xDDEEFF00u);
+
+    Image copy = image.duplicate();
+    ASSERT_TRUE (copy.isValid());
+
+    EXPECT_EQ (copy.getPixel (0, 0), 0x11223344u);
+    EXPECT_EQ (copy.getPixel (1, 0), 0x55667788u);
+    EXPECT_EQ (copy.getPixel (2, 0), 0x99AABBCCu);
+    EXPECT_EQ (copy.getPixel (0, 1), 0xDDEEFF00u);
+}
+
+// ======================================================================
+// Image fill / clear tests
+// ======================================================================
+
+TEST (ImageTests, FillWithArgbColorSetsAllPixels)
+{
+    Image image (3, 3, PixelFormat::RGBA);
+    image.fill (0xAA667788u);
+
+    for (int y = 0; y < 3; ++y)
+        for (int x = 0; x < 3; ++x)
+            EXPECT_EQ (image.getPixel (x, y), 0xAA667788u);
+}
+
+TEST (ImageTests, ClearSetsAllPixelsToZero)
+{
+    Image image (3, 3, PixelFormat::RGBA);
+    image.fill (0xFFFFFFFFu);
+    image.clear();
+
+    for (int y = 0; y < 3; ++y)
+        for (int x = 0; x < 3; ++x)
+            EXPECT_EQ (image.getPixel (x, y), 0u);
+}
+
+TEST (ImageTests, CopyAssignmentClearsTextureMeta)
+{
+    Image source (1, 1, PixelFormat::RGBA);
+    source.setPixel (0, 0, 0x80AABBCC);
+
+    Image target (2, 2, PixelFormat::RGB);
+    target = source;
+
+    // After copy-assignment pixel data must match source.
+    EXPECT_EQ (target.getPixel (0, 0), 0x80AABBCCu);
+    EXPECT_EQ (target.getWidth(), 1);
+    EXPECT_EQ (target.getHeight(), 1);
+}

@@ -182,3 +182,61 @@ TEST (ImageFormatWriterTests, PpmWriterWriteImageSucceedsForValidRgbImage)
     EXPECT_TRUE (writer.writeImage (source));
     EXPECT_GT (rawStream->getDataSize(), 0u);
 }
+
+TEST (ImageFormatWriterTests, BmpWriterWriteImageReturnsFalseForInvalidImage)
+{
+    auto* rawStream = new MemoryOutputStream();
+    BmpImageFormatWriter writer (rawStream, PixelFormat::RGB);
+
+    Image invalid;
+    EXPECT_FALSE (writer.writeImage (invalid));
+}
+
+TEST (ImageFormatWriterTests, PpmWriterWriteImageReturnsFalseForInvalidImage)
+{
+    auto* rawStream = new MemoryOutputStream();
+    PpmImageFormatWriter writer (rawStream, PixelFormat::RGB);
+
+    Image invalid;
+    EXPECT_FALSE (writer.writeImage (invalid));
+}
+
+// ======================================================================
+// supportsAnimation tests
+// ======================================================================
+
+TEST (ImageFormatWriterTests, BmpWriterDoesNotSupportAnimation)
+{
+    BmpImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB);
+    EXPECT_FALSE (writer.supportsAnimation());
+}
+
+TEST (ImageFormatWriterTests, PpmWriterDoesNotSupportAnimation)
+{
+    PpmImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB);
+    EXPECT_FALSE (writer.supportsAnimation());
+}
+
+#if YUP_IMAGE_FORMAT_PNG
+TEST (ImageFormatWriterTests, PngWriterDoesNotSupportAnimation)
+{
+    PngImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB);
+    EXPECT_FALSE (writer.supportsAnimation());
+}
+#endif
+
+#if YUP_IMAGE_FORMAT_JPEG
+TEST (ImageFormatWriterTests, JpegWriterDoesNotSupportAnimation)
+{
+    JpegImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB, 0);
+    EXPECT_FALSE (writer.supportsAnimation());
+}
+#endif
+
+#if YUP_IMAGE_FORMAT_WEBP
+TEST (ImageFormatWriterTests, WebPWriterDoesNotSupportAnimation)
+{
+    WebPImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB, 0);
+    EXPECT_FALSE (writer.supportsAnimation());
+}
+#endif
