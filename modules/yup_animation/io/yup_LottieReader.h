@@ -96,6 +96,7 @@ private:
 
     void parseGradient (const var& gradObj, AnimationGradient& gradient);
     void parseMasks (const var& masksArray, AnimationLayer& layer);
+    void parseEffects (const var& effectsArray, AnimationLayer& layer);
     void parseAssets (const var& assetsArray, AnimationComposition& comp);
 
     void resolveLayerAssets (AnimationComposition& comp);

@@ -53,6 +53,44 @@ public:
     };
 
     //==============================================================================
+    /** A layer-level drop shadow effect parsed from Lottie's `ADBE Drop Shadow`.
+
+        The effect is rendered as an offset duplicate of the layer's alpha using
+        the configured shadow color. Soft blurred shadows are not modelled yet;
+        a non-zero softness value is retained so renderers can add blur support
+        without changing the parsed data model.
+    */
+    struct DropShadow
+    {
+        /** Shadow color. */
+        ColorProperty color { ColorProperty::staticValue (Color (0xFF000000)) };
+
+        /** Shadow opacity in Lottie's 0-100 range. */
+        FloatProperty opacity { FloatProperty::staticValue (100.0f) };
+
+        /** Shadow direction in degrees. */
+        FloatProperty direction { FloatProperty::staticValue (0.0f) };
+
+        /** Shadow distance in layer-space pixels. */
+        FloatProperty distance { FloatProperty::staticValue (0.0f) };
+
+        /** Shadow softness in pixels. Currently stored but rendered as a hard shadow. */
+        FloatProperty softness { FloatProperty::staticValue (0.0f) };
+
+        /** Whether only the generated shadow should be rendered. */
+        bool shadowOnly = false;
+
+        /** Whether the effect is enabled. */
+        bool enabled = true;
+
+        /** Returns the shadow opacity in [0, 1] at the given frame. */
+        [[nodiscard]] float opacityAt (float frameNo) const;
+
+        /** Returns the layer-space shadow offset at the given frame. */
+        [[nodiscard]] Point<float> offsetAt (float frameNo) const;
+    };
+
+    //==============================================================================
     virtual ~AnimationLayer() = default;
 
     [[nodiscard]] virtual Type getType() const noexcept = 0;
@@ -82,10 +120,22 @@ public:
     /** Masks applied to this layer. */
     std::vector<AnimationMask::Ptr> masks;
 
+    /** Optional drop shadow effect applied to this layer. */
+    std::optional<DropShadow> dropShadow;
+
     //==============================================================================
     /** Maps a composition frame number to the layer's local frame, accounting
         for startFrame, timeStretch, and optional timeRemap. */
     [[nodiscard]] float localFrame (float compFrame) const noexcept;
+
+    /** Maps a composition frame number to the layer's local frame.
+
+        Lottie time-remap (`tm`) values are encoded in seconds, so @p frameRate
+        is used to convert remapped time values back into local frame numbers.
+        Layers without time remap use the same startFrame/timeStretch mapping
+        as localFrame(float).
+    */
+    [[nodiscard]] float localFrame (float compFrame, float frameRate) const noexcept;
 
     /** Returns true when this layer is visible at the given composition frame. */
     [[nodiscard]] bool isVisibleAt (float compFrame) const noexcept;

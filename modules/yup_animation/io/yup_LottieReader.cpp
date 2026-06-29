@@ -462,6 +462,7 @@ AnimationLayer::Ptr LottieReader::parseLayer (const var& layerObj)
 
     parseTransform (layerObj["ks"], layer->transform, (bool) layerObj["ddd"]);
     parseMasks (layerObj["masksProperties"], *layer);
+    parseEffects (layerObj["ef"], *layer);
 
     if (! layerObj["tm"].isVoid())
     {
@@ -805,6 +806,55 @@ void LottieReader::parseMasks (const var& masksVal, AnimationLayer& layer)
             mask->mode = AnimationMask::Mode::None;
 
         layer.masks.push_back (mask);
+    }
+}
+
+void LottieReader::parseEffects (const var& effectsVal, AnimationLayer& layer)
+{
+    const auto* arr = safeArray (effectsVal);
+    if (arr == nullptr)
+        return;
+
+    for (const var& effect : *arr)
+    {
+        const String effectName = varString (effect["nm"]);
+        const String effectMatchName = varString (effect["mn"]);
+
+        if (effectMatchName != "ADBE Drop Shadow" && effectName != "Drop Shadow")
+            continue;
+
+        AnimationLayer::DropShadow shadow;
+        shadow.enabled = effect["en"].isVoid() || (bool) effect["en"];
+
+        const auto* params = safeArray (effect["ef"]);
+        if (params == nullptr)
+        {
+            layer.dropShadow = std::move (shadow);
+            return;
+        }
+
+        for (const var& param : *params)
+        {
+            const String paramName = varString (param["nm"]);
+            const String paramMatchName = varString (param["mn"]);
+            const var& value = param["v"];
+
+            if (paramName == "Shadow Color" || paramMatchName == "ADBE Drop Shadow-0001")
+                shadow.color = parseProperty<Color> (value, extractColor);
+            else if (paramName == "Opacity" || paramMatchName == "ADBE Drop Shadow-0002")
+                shadow.opacity = parseProperty<float> (value, extractFloat);
+            else if (paramName == "Direction" || paramMatchName == "ADBE Drop Shadow-0003")
+                shadow.direction = parseProperty<float> (value, extractFloat);
+            else if (paramName == "Distance" || paramMatchName == "ADBE Drop Shadow-0004")
+                shadow.distance = parseProperty<float> (value, extractFloat);
+            else if (paramName == "Softness" || paramMatchName == "ADBE Drop Shadow-0005")
+                shadow.softness = parseProperty<float> (value, extractFloat);
+            else if (paramName == "Shadow Only" || paramMatchName == "ADBE Drop Shadow-0006")
+                shadow.shadowOnly = varFloat (value["k"]) != 0.0f;
+        }
+
+        layer.dropShadow = std::move (shadow);
+        return;
     }
 }
 

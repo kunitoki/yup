@@ -237,3 +237,14 @@ TEST (AnimationLayerTests, TimeStretchDividesLocalFrame)
 
     EXPECT_NEAR (layer.localFrame (30.0f), 10.0f, 1.0e-6f);
 }
+
+TEST (AnimationLayerTests, TimeRemapSecondsConvertToFrames)
+{
+    NullLayer layer;
+    auto builder = FloatProperty::animated();
+    builder.keyframe (0.0f, 0.0f, 1.0f, AnimationEasing::linear());
+    builder.keyframe (30.0f, 1.0f, AnimationEasing::linear());
+    layer.timeRemap = builder.build();
+
+    EXPECT_NEAR (layer.localFrame (30.0f, 30.0f), 30.0f, 1.0e-6f);
+}

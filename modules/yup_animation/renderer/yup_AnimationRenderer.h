@@ -57,7 +57,8 @@ private:
                                    float frameNo,
                                    Rectangle<float> bounds,
                                    bool keepAspectRatio,
-                                   float opacity);
+                                   float opacity,
+                                   std::optional<Color> paintOverride = std::nullopt);
 
     //==============================================================================
     // Per-render context built once per frame
@@ -67,6 +68,7 @@ private:
         float frameNo;
         AffineTransform viewTransform; ///< composition-space → screen-space
         float opacity = 1.0f;
+        std::optional<Color> paintOverride;
 
         /** Maps layer id → accumulated world-space transform (parents resolved). */
         HashMap<int, AffineTransform> parentTransforms;
@@ -80,6 +82,7 @@ private:
                              const AnimationLayer& layer,
                              const RenderContext& ctx,
                              const AnimationLayer* matteSource = nullptr);
+    static void renderLayerContent (Graphics& g, const AnimationLayer& layer, const RenderContext& ctx, float opacity);
     static void renderShapeLayer (Graphics& g, const ShapeLayer& layer, const RenderContext& ctx, float opacity);
     static void renderSolidLayer (Graphics& g, const SolidLayer& layer, const RenderContext& ctx, float opacity);
     static void renderImageLayer (Graphics& g, const ImageLayer& layer, const RenderContext& ctx, float opacity);
@@ -94,15 +97,15 @@ private:
 
     static void renderGroup (Graphics& g,
                              const AnimationGroup& group,
-                             float frameNo,
+                             const RenderContext& ctx,
                              float opacity,
                              const AnimationRoundedCorner* parentRoundedCorner = nullptr);
 
     static void applyTrim (Path& path, const AnimationTrim& trim, float frameNo);
     static void applyTrimIndividually (std::vector<Path>& paths, const AnimationTrim& trim, float frameNo);
 
-    static void applyFill (Graphics& g, const Path& path, const FillPaint& fill, float frameNo, float opacity);
-    static void applyStroke (Graphics& g, const Path& path, const StrokePaint& stroke, float frameNo, float opacity);
+    static void applyFill (Graphics& g, const Path& path, const FillPaint& fill, const RenderContext& ctx, float opacity);
+    static void applyStroke (Graphics& g, const Path& path, const StrokePaint& stroke, const RenderContext& ctx, float opacity);
 };
 
 } // namespace yup

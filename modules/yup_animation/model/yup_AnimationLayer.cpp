@@ -22,6 +22,19 @@
 namespace yup
 {
 
+float AnimationLayer::DropShadow::opacityAt (float frameNo) const
+{
+    return jlimit (0.0f, 1.0f, opacity.getValueAt (frameNo) / 100.0f);
+}
+
+Point<float> AnimationLayer::DropShadow::offsetAt (float frameNo) const
+{
+    const float angle = degreesToRadians (direction.getValueAt (frameNo));
+    const float offset = distance.getValueAt (frameNo);
+
+    return { std::cos (angle) * offset, std::sin (angle) * offset };
+}
+
 float AnimationLayer::localFrame (float compFrame) const noexcept
 {
     if (timeRemap.has_value())
@@ -31,6 +44,14 @@ float AnimationLayer::localFrame (float compFrame) const noexcept
         return compFrame - startFrame;
 
     return (compFrame - startFrame) / timeStretch;
+}
+
+float AnimationLayer::localFrame (float compFrame, float frameRate) const noexcept
+{
+    if (timeRemap.has_value())
+        return timeRemap->getValueAt (compFrame) * frameRate;
+
+    return localFrame (compFrame);
 }
 
 bool AnimationLayer::isVisibleAt (float compFrame) const noexcept

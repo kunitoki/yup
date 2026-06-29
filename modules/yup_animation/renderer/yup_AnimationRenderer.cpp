@@ -93,7 +93,7 @@ void AnimationRenderer::renderComposition (Graphics& g,
                                            Rectangle<float> bounds,
                                            bool keepAspectRatio)
 {
-    renderComposition (g, comp, frameNo, bounds, keepAspectRatio, 1.0f);
+    renderComposition (g, comp, frameNo, bounds, keepAspectRatio, 1.0f, std::nullopt);
 }
 
 void AnimationRenderer::renderComposition (Graphics& g,
@@ -101,7 +101,8 @@ void AnimationRenderer::renderComposition (Graphics& g,
                                            float frameNo,
                                            Rectangle<float> bounds,
                                            bool keepAspectRatio,
-                                           float opacity)
+                                           float opacity,
+                                           std::optional<Color> paintOverride)
 {
     const Size<float> compSize = comp.size;
     if (compSize.getWidth() <= 0.0f || compSize.getHeight() <= 0.0f)
@@ -142,7 +143,7 @@ void AnimationRenderer::renderComposition (Graphics& g,
     g.setClipPath (transformedViewportClip);
     g.setTransform (savedTransform);
 
-    RenderContext ctx { comp, frameNo, viewXf, opacity };
+    RenderContext ctx { comp, frameNo, viewXf, opacity, std::move (paintOverride) };
     ctx.buildParentTransforms();
 
     // Lottie: layer 0 is topmost visually → render bottom-up (last index first).
@@ -204,6 +205,31 @@ void AnimationRenderer::renderLayer (Graphics& g,
         applyMatteSourceClip (g, layer, *matteSource, ctx, layer.matteType == AnimationLayer::MatteType::AlphaInv);
     }
 
+    if (! ctx.paintOverride.has_value()
+        && layer.dropShadow.has_value()
+        && layer.dropShadow->enabled)
+    {
+        const auto& shadow = *layer.dropShadow;
+        const float shadowOpacity = opacity * shadow.opacityAt (ctx.frameNo);
+
+        if (shadowOpacity > 0.0f)
+        {
+            auto shadowState = g.saveState();
+            RenderContext shadowCtx = ctx;
+            shadowCtx.paintOverride = shadow.color.getValueAt (ctx.frameNo);
+            g.setTransform (AffineTransform::translation (shadow.offsetAt (ctx.frameNo)).followedBy (g.getTransform()));
+            renderLayerContent (g, layer, shadowCtx, shadowOpacity);
+        }
+
+        if (shadow.shadowOnly)
+            return;
+    }
+
+    renderLayerContent (g, layer, ctx, opacity);
+}
+
+void AnimationRenderer::renderLayerContent (Graphics& g, const AnimationLayer& layer, const RenderContext& ctx, float opacity)
+{
     switch (layer.getType())
     {
         case AnimationLayer::Type::Shape:
@@ -239,15 +265,14 @@ void AnimationRenderer::renderShapeLayer (Graphics& g, const ShapeLayer& layer, 
         if (group == nullptr || group->hidden)
             continue;
 
-        renderGroup (g, *group, ctx.frameNo, opacity);
+        renderGroup (g, *group, ctx, opacity);
     }
 }
 
 void AnimationRenderer::renderSolidLayer (Graphics& g, const SolidLayer& layer, const RenderContext& ctx, float opacity)
 {
-    (void) ctx;
-
-    g.setFillColor (layer.solidColor.withMultipliedAlpha (opacity));
+    const Color fillColor = ctx.paintOverride.value_or (layer.solidColor);
+    g.setFillColor (fillColor.withMultipliedAlpha (opacity));
     g.fillRect (Rectangle<float> (0.0f, 0.0f, layer.layerSize.getWidth(), layer.layerSize.getHeight()));
 }
 
@@ -270,7 +295,7 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
     if (asset == nullptr)
         return;
 
-    const float localFrame = layer.localFrame (ctx.frameNo);
+    const float localFrame = layer.localFrame (ctx.frameNo, ctx.comp.frameRate);
     const Rectangle<float> precompBounds (0.0f, 0.0f, layer.layerSize.getWidth(), layer.layerSize.getHeight());
 
     // Build a temporary composition from the precomp asset and render it
@@ -280,7 +305,7 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
     tempComp->startFrame = ctx.comp.startFrame;
     tempComp->endFrame = ctx.comp.endFrame;
 
-    renderComposition (g, *tempComp, localFrame, precompBounds, false, opacity);
+    renderComposition (g, *tempComp, localFrame, precompBounds, false, opacity, ctx.paintOverride);
 }
 
 //==============================================================================
@@ -521,7 +546,7 @@ void AnimationRenderer::applyMatteSourceClip (Graphics& g,
 
 void AnimationRenderer::renderGroup (Graphics& g,
                                      const AnimationGroup& group,
-                                     float frameNo,
+                                     const RenderContext& ctx,
                                      float opacity,
                                      const AnimationRoundedCorner* parentRoundedCorner)
 {
@@ -530,6 +555,7 @@ void AnimationRenderer::renderGroup (Graphics& g,
 
     auto saveState = g.saveState();
 
+    const float frameNo = ctx.frameNo;
     g.setTransform (group.transform.toAffineTransform (frameNo).followedBy (g.getTransform()));
     opacity *= group.transform.opacityAt (frameNo);
     if (opacity <= 0.0f)
@@ -647,7 +673,7 @@ void AnimationRenderer::renderGroup (Graphics& g,
                 for (const auto& path : preparePaths (currentPaths))
                     combinedPath.appendPath (path);
 
-                applyStroke (g, combinedPath, *child.stroke, frameNo, opacity);
+                applyStroke (g, combinedPath, *child.stroke, ctx, opacity);
             }
         }
         else if (child.kind == AnimationGroup::ChildKind::Fill && child.fill != nullptr)
@@ -658,12 +684,12 @@ void AnimationRenderer::renderGroup (Graphics& g,
                 for (const auto& path : preparePaths (currentPaths))
                     combinedPath.appendPath (path);
 
-                applyFill (g, combinedPath, *child.fill, frameNo, opacity);
+                applyFill (g, combinedPath, *child.fill, ctx, opacity);
             }
         }
         else if (child.kind == AnimationGroup::ChildKind::Group && child.group != nullptr)
         {
-            renderGroup (g, *child.group, frameNo, opacity, activeRoundedCorner);
+            renderGroup (g, *child.group, ctx, opacity, activeRoundedCorner);
         }
     }
 }
@@ -754,16 +780,21 @@ void AnimationRenderer::applyTrimIndividually (std::vector<Path>& paths, const A
     }
 }
 
-void AnimationRenderer::applyFill (Graphics& g, const Path& path, const FillPaint& fill, float frameNo, float opacity)
+void AnimationRenderer::applyFill (Graphics& g, const Path& path, const FillPaint& fill, const RenderContext& ctx, float opacity)
 {
     if (! fill.enabled)
         return;
 
+    const float frameNo = ctx.frameNo;
     const float finalOpacity = opacity * fill.opacityAt (frameNo);
     if (finalOpacity <= 0.0f)
         return;
 
-    if (fill.gradient != nullptr)
+    if (ctx.paintOverride.has_value())
+    {
+        g.setFillColor (ctx.paintOverride->withMultipliedAlpha (finalOpacity));
+    }
+    else if (fill.gradient != nullptr)
     {
         ColorGradient cg = fill.gradient->toColorGradient (frameNo).withMultipliedAlpha (finalOpacity);
         g.setFillColorGradient (cg);
@@ -779,16 +810,21 @@ void AnimationRenderer::applyFill (Graphics& g, const Path& path, const FillPain
     g.fillPath (pathToFill);
 }
 
-void AnimationRenderer::applyStroke (Graphics& g, const Path& path, const StrokePaint& stroke, float frameNo, float opacity)
+void AnimationRenderer::applyStroke (Graphics& g, const Path& path, const StrokePaint& stroke, const RenderContext& ctx, float opacity)
 {
     if (! stroke.enabled)
         return;
 
+    const float frameNo = ctx.frameNo;
     const float finalOpacity = opacity * stroke.opacityAt (frameNo);
     if (finalOpacity <= 0.0f)
         return;
 
-    if (stroke.gradient != nullptr)
+    if (ctx.paintOverride.has_value())
+    {
+        g.setStrokeColor (ctx.paintOverride->withMultipliedAlpha (finalOpacity));
+    }
+    else if (stroke.gradient != nullptr)
     {
         ColorGradient cg = stroke.gradient->toColorGradient (frameNo).withMultipliedAlpha (finalOpacity);
         g.setStrokeColorGradient (cg);

@@ -61,6 +61,55 @@ constexpr const char* kMinimalLottieJson = R"json({
     ]
 })json";
 
+constexpr const char* kDropShadowJson = R"json({
+    "v": "5.5.2",
+    "nm": "DropShadow",
+    "ip": 0,
+    "op": 30,
+    "fr": 30.0,
+    "w": 100,
+    "h": 100,
+    "ddd": 0,
+    "assets": [],
+    "layers": [
+        {
+            "ty": 4,
+            "nm": "ShadowLayer",
+            "ind": 1,
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [0, 0] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            },
+            "ef": [
+                {
+                    "ty": 25,
+                    "nm": "Drop Shadow",
+                    "mn": "ADBE Drop Shadow",
+                    "en": 1,
+                    "ef": [
+                        { "ty": 2, "nm": "Shadow Color", "mn": "ADBE Drop Shadow-0001", "v": { "a": 0, "k": [0, 0, 0, 1] } },
+                        { "ty": 0, "nm": "Opacity", "mn": "ADBE Drop Shadow-0002", "v": { "a": 0, "k": 51 } },
+                        { "ty": 0, "nm": "Direction", "mn": "ADBE Drop Shadow-0003", "v": { "a": 0, "k": 135 } },
+                        { "ty": 0, "nm": "Distance", "mn": "ADBE Drop Shadow-0004", "v": { "a": 0, "k": 6 } },
+                        { "ty": 0, "nm": "Softness", "mn": "ADBE Drop Shadow-0005", "v": { "a": 0, "k": 0 } },
+                        { "ty": 7, "nm": "Shadow Only", "mn": "ADBE Drop Shadow-0006", "v": { "a": 0, "k": 0 } }
+                    ]
+                }
+            ],
+            "shapes": []
+        }
+    ]
+})json";
+
 constexpr const char* kAnimatedPathJson = R"json({
     "v": "5.5.2",
     "nm": "AnimatedPath",
@@ -218,6 +267,24 @@ TEST_F (LottieRoundtripTests, WriteAndReparse)
     EXPECT_EQ (reparsed->name, original->name);
     EXPECT_NEAR (reparsed->frameRate, original->frameRate, 0.01f);
     EXPECT_EQ (reparsed->layers.size(), original->layers.size());
+}
+
+TEST_F (LottieRoundtripTests, ParsesDropShadowEffect)
+{
+    auto comp = LottieReader::parseData (kDropShadowJson);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 1u);
+
+    const auto* layer = comp->layers[0].get();
+    ASSERT_NE (layer, nullptr);
+    ASSERT_TRUE (layer->dropShadow.has_value());
+
+    const auto& shadow = *layer->dropShadow;
+    EXPECT_TRUE (shadow.enabled);
+    EXPECT_FALSE (shadow.shadowOnly);
+    EXPECT_NEAR (shadow.opacityAt (0.0f), 0.51f, 1.0e-6f);
+    EXPECT_NEAR (shadow.distance.getValueAt (0.0f), 6.0f, 1.0e-6f);
+    EXPECT_NEAR (shadow.direction.getValueAt (0.0f), 135.0f, 1.0e-6f);
 }
 
 TEST_F (LottieRoundtripTests, AnimationLoadFromData)
