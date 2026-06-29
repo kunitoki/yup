@@ -508,7 +508,7 @@ constexpr const char* kDropShadowJson = R"json({
     ]
 })json";
 
-constexpr const char* kFillEffectJson = R"json({
+constexpr const char* kFillEffectExampleJson = R"json({
     "v": "5.5.2",
     "nm": "FillEffect",
     "ip": 0,
@@ -984,7 +984,7 @@ TEST_F (LottieRoundtripTests, ParsesDropShadowEffect)
 
 TEST_F (LottieRoundtripTests, ParsesFillEffect)
 {
-    auto comp = LottieReader::parseData (kFillEffectJson);
+    auto comp = LottieReader::parseData (kFillEffectExampleJson);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 1u);
 

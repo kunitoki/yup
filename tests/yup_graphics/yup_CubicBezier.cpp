@@ -21,7 +21,7 @@
 
 #include <gtest/gtest.h>
 
-#include <yup_animation/yup_animation.h>
+#include <yup_graphics/yup_graphics.h>
 
 #include <cmath>
 

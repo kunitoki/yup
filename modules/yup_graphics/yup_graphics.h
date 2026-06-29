@@ -154,6 +154,7 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "primitives/yup_Rectangle.h"
 #include "primitives/yup_RectangleList.h"
 #include "primitives/yup_Path.h"
+#include "primitives/yup_CubicBezier.h"
 #include "fonts/yup_Font.h"
 #include "fonts/yup_StyledText.h"
 #include "imaging/yup_Image.h"

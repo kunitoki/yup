@@ -114,6 +114,7 @@
 
 //==============================================================================
 #include "primitives/yup_Path.cpp"
+#include "primitives/yup_CubicBezier.cpp"
 #include "fonts/yup_Font.cpp"
 #include "fonts/yup_StyledText.cpp"
 #include "imaging/yup_Image.cpp"

@@ -109,6 +109,273 @@ constexpr const char* kMarkerJson = R"json({
     "layers": []
 })json";
 
+constexpr const char* kSolidLayerExampleJson = R"json({
+    "v": "5.5.2",
+    "nm": "SolidComp",
+    "ip": 0,
+    "op": 30,
+    "fr": 25.0,
+    "w": 200,
+    "h": 150,
+    "ddd": 0,
+    "assets": [],
+    "layers": [
+        {
+            "ty": 1,
+            "nm": "MySolid",
+            "ind": 1,
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "sc": "#ff0000",
+            "sw": 200,
+            "sh": 150,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [100, 75] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            }
+        }
+    ]
+})json";
+
+constexpr const char* kShapeWithFillJson = R"json({
+    "v": "5.5.2",
+    "nm": "ShapeFillComp",
+    "ip": 0,
+    "op": 30,
+    "fr": 25.0,
+    "w": 100,
+    "h": 100,
+    "ddd": 0,
+    "assets": [],
+    "layers": [
+        {
+            "ty": 4,
+            "nm": "FillLayer",
+            "ind": 1,
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [50, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            },
+            "shapes": [
+                {
+                    "ty": "gr",
+                    "nm": "Group1",
+                    "it": [
+                        { "ty": "rc", "nm": "Rect", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [40, 40] }, "r": { "a": 0, "k": 0 } },
+                        { "ty": "fl", "nm": "RedFill", "c": { "a": 0, "k": [1, 0, 0, 1] }, "o": { "a": 0, "k": 100 }, "r": 1 }
+                    ]
+                }
+            ]
+        }
+    ]
+})json";
+
+constexpr const char* kShapeWithStrokeJson = R"json({
+    "v": "5.5.2",
+    "nm": "ShapeStrokeComp",
+    "ip": 0,
+    "op": 30,
+    "fr": 25.0,
+    "w": 100,
+    "h": 100,
+    "ddd": 0,
+    "assets": [],
+    "layers": [
+        {
+            "ty": 4,
+            "nm": "StrokeLayer",
+            "ind": 1,
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [50, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            },
+            "shapes": [
+                {
+                    "ty": "gr",
+                    "nm": "Group1",
+                    "it": [
+                        { "ty": "el", "nm": "Ellipse", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [40, 30] } },
+                        { "ty": "st", "nm": "BlueStroke", "c": { "a": 0, "k": [0, 0, 1, 1] }, "o": { "a": 0, "k": 100 }, "w": { "a": 0, "k": 3 } }
+                    ]
+                }
+            ]
+        }
+    ]
+})json";
+
+constexpr const char* kShapeWithEllipseJson = R"json({
+    "v": "5.5.2",
+    "nm": "EllipseComp",
+    "ip": 0,
+    "op": 30,
+    "fr": 25.0,
+    "w": 100,
+    "h": 100,
+    "ddd": 0,
+    "assets": [],
+    "layers": [
+        {
+            "ty": 4,
+            "nm": "EllipseLayer",
+            "ind": 1,
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [50, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            },
+            "shapes": [
+                {
+                    "ty": "gr",
+                    "nm": "EllipseGroup",
+                    "it": [
+                        { "ty": "el", "nm": "MyEllipse", "p": { "a": 0, "k": [10, 20] }, "s": { "a": 0, "k": [50, 30] } },
+                        { "ty": "fl", "nm": "Fill", "c": { "a": 0, "k": [0, 1, 0, 1] }, "o": { "a": 0, "k": 100 }, "r": 1 }
+                    ]
+                }
+            ]
+        }
+    ]
+})json";
+
+constexpr const char* kShapeWithMaskJson = R"json({
+    "v": "5.5.2",
+    "nm": "MaskComp",
+    "ip": 0,
+    "op": 30,
+    "fr": 25.0,
+    "w": 100,
+    "h": 100,
+    "ddd": 0,
+    "assets": [],
+    "layers": [
+        {
+            "ty": 4,
+            "nm": "MaskedLayer",
+            "ind": 1,
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [0, 0] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            },
+            "masksProperties": [
+                {
+                    "inv": false,
+                    "mode": "a",
+                    "pt": { "a": 0, "k": { "i": [[0,0],[0,0],[0,0],[0,0]], "o": [[0,0],[0,0],[0,0],[0,0]], "v": [[10,10],[90,10],[90,90],[10,90]], "c": true } },
+                    "o": { "a": 0, "k": 100 }
+                }
+            ],
+            "shapes": []
+        }
+    ]
+})json";
+
+constexpr const char* kHiddenShapeLayerJson = R"json({
+    "v": "5.5.2",
+    "nm": "HiddenLayerComp",
+    "ip": 0,
+    "op": 30,
+    "fr": 25.0,
+    "w": 100,
+    "h": 100,
+    "ddd": 0,
+    "assets": [],
+    "layers": [
+        {
+            "ty": 4,
+            "nm": "HiddenShape",
+            "ind": 1,
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": true,
+            "bm": 0,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [50, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            },
+            "shapes": []
+        }
+    ]
+})json";
+
+constexpr const char* kLayerWithInOutJson = R"json({
+    "v": "5.5.2",
+    "nm": "InOutComp",
+    "ip": 0,
+    "op": 90,
+    "fr": 30.0,
+    "w": 100,
+    "h": 100,
+    "ddd": 0,
+    "assets": [],
+    "layers": [
+        {
+            "ty": 3,
+            "nm": "TimedNull",
+            "ind": 1,
+            "ip": 10,
+            "op": 80,
+            "st": 5,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [50, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 0 }
+            }
+        }
+    ]
+})json";
+
 } // namespace
 
 class LottieWriterTests : public ::testing::Test
@@ -415,4 +682,268 @@ TEST_F (LottieWriterTests, Roundtrip_StatsAreConsistentAfterWriteAndRead)
     EXPECT_EQ (readbackStats.shapeLayerCount, originalStats.shapeLayerCount);
     EXPECT_EQ (readbackStats.nullLayerCount, originalStats.nullLayerCount);
     EXPECT_EQ (readbackStats.totalLayerCount(), originalStats.totalLayerCount());
+}
+
+// =============================================================================
+// Solid layer roundtrip
+// =============================================================================
+
+TEST_F (LottieWriterTests, Roundtrip_SolidLayerPreservesType)
+{
+    auto comp = LottieReader::parseData (kSolidLayerExampleJson);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 1u);
+    EXPECT_EQ (comp->layers[0]->getType(), AnimationLayer::Type::Solid);
+
+    const String json = LottieWriter::toJson (*comp);
+    auto readback = LottieReader::parseData (json);
+
+    ASSERT_NE (readback, nullptr);
+    ASSERT_EQ (readback->layers.size(), 1u);
+    EXPECT_EQ (readback->layers[0]->getType(), AnimationLayer::Type::Solid);
+}
+
+TEST_F (LottieWriterTests, Roundtrip_SolidLayerPreservesSize)
+{
+    auto comp = LottieReader::parseData (kSolidLayerExampleJson);
+    ASSERT_NE (comp, nullptr);
+
+    const String json = LottieWriter::toJson (*comp);
+    auto readback = LottieReader::parseData (json);
+    ASSERT_NE (readback, nullptr);
+    ASSERT_EQ (readback->layers.size(), 1u);
+
+    const auto* solid = dynamic_cast<const SolidLayer*> (readback->layers[0].get());
+    ASSERT_NE (solid, nullptr);
+    EXPECT_FLOAT_EQ (solid->layerSize.getWidth(), 200.0f);
+    EXPECT_FLOAT_EQ (solid->layerSize.getHeight(), 150.0f);
+}
+
+TEST_F (LottieWriterTests, ToJson_SolidLayerContainsSolidColorField)
+{
+    auto comp = LottieReader::parseData (kSolidLayerExampleJson);
+    ASSERT_NE (comp, nullptr);
+
+    const std::string json = LottieWriter::toJson (*comp).toStdString();
+    EXPECT_NE (json.find ("\"sc\""), std::string::npos);
+    EXPECT_NE (json.find ("\"sw\""), std::string::npos);
+    EXPECT_NE (json.find ("\"sh\""), std::string::npos);
+}
+
+// =============================================================================
+// Shape layer with fill roundtrip
+// =============================================================================
+
+TEST_F (LottieWriterTests, Roundtrip_ShapeLayerWithFillPreservesLayerType)
+{
+    auto comp = LottieReader::parseData (kShapeWithFillJson);
+    ASSERT_NE (comp, nullptr);
+
+    const String json = LottieWriter::toJson (*comp);
+    auto readback = LottieReader::parseData (json);
+
+    ASSERT_NE (readback, nullptr);
+    ASSERT_EQ (readback->layers.size(), 1u);
+    EXPECT_EQ (readback->layers[0]->getType(), AnimationLayer::Type::Shape);
+}
+
+TEST_F (LottieWriterTests, ToJson_ShapeLayerWithFillContainsShapesField)
+{
+    auto comp = LottieReader::parseData (kShapeWithFillJson);
+    ASSERT_NE (comp, nullptr);
+
+    const std::string json = LottieWriter::toJson (*comp).toStdString();
+    EXPECT_NE (json.find ("\"shapes\""), std::string::npos);
+    EXPECT_NE (json.find ("\"fl\""), std::string::npos);
+}
+
+TEST_F (LottieWriterTests, Roundtrip_ShapeLayerWithFillPreservesGroupCount)
+{
+    auto comp = LottieReader::parseData (kShapeWithFillJson);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 1u);
+    const auto* sl = dynamic_cast<const ShapeLayer*> (comp->layers[0].get());
+    ASSERT_NE (sl, nullptr);
+    const auto originalGroupCount = sl->groups.size();
+
+    const String json = LottieWriter::toJson (*comp);
+    auto readback = LottieReader::parseData (json);
+
+    ASSERT_NE (readback, nullptr);
+    ASSERT_EQ (readback->layers.size(), 1u);
+    const auto* readbackSl = dynamic_cast<const ShapeLayer*> (readback->layers[0].get());
+    ASSERT_NE (readbackSl, nullptr);
+    EXPECT_EQ (readbackSl->groups.size(), originalGroupCount);
+}
+
+// =============================================================================
+// Shape layer with stroke roundtrip
+// =============================================================================
+
+TEST_F (LottieWriterTests, Roundtrip_ShapeLayerWithStrokePreservesType)
+{
+    auto comp = LottieReader::parseData (kShapeWithStrokeJson);
+    ASSERT_NE (comp, nullptr);
+
+    const String json = LottieWriter::toJson (*comp);
+    auto readback = LottieReader::parseData (json);
+
+    ASSERT_NE (readback, nullptr);
+    ASSERT_EQ (readback->layers.size(), 1u);
+    EXPECT_EQ (readback->layers[0]->getType(), AnimationLayer::Type::Shape);
+}
+
+TEST_F (LottieWriterTests, ToJson_ShapeLayerWithStrokeContainsStrokeType)
+{
+    auto comp = LottieReader::parseData (kShapeWithStrokeJson);
+    ASSERT_NE (comp, nullptr);
+
+    const std::string json = LottieWriter::toJson (*comp).toStdString();
+    EXPECT_NE (json.find ("\"st\""), std::string::npos);
+}
+
+// =============================================================================
+// Ellipse shape roundtrip
+// =============================================================================
+
+TEST_F (LottieWriterTests, Roundtrip_ShapeLayerWithEllipsePreservesType)
+{
+    auto comp = LottieReader::parseData (kShapeWithEllipseJson);
+    ASSERT_NE (comp, nullptr);
+
+    const String json = LottieWriter::toJson (*comp);
+    auto readback = LottieReader::parseData (json);
+
+    ASSERT_NE (readback, nullptr);
+    ASSERT_EQ (readback->layers.size(), 1u);
+    EXPECT_EQ (readback->layers[0]->getType(), AnimationLayer::Type::Shape);
+}
+
+TEST_F (LottieWriterTests, ToJson_ShapeLayerWithEllipseContainsEllipseType)
+{
+    auto comp = LottieReader::parseData (kShapeWithEllipseJson);
+    ASSERT_NE (comp, nullptr);
+
+    const std::string json = LottieWriter::toJson (*comp).toStdString();
+    EXPECT_NE (json.find ("\"el\""), std::string::npos);
+}
+
+// =============================================================================
+// Layer mask roundtrip
+// =============================================================================
+
+TEST_F (LottieWriterTests, Roundtrip_LayerWithMaskPreservesMaskCount)
+{
+    auto comp = LottieReader::parseData (kShapeWithMaskJson);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 1u);
+    EXPECT_EQ (comp->layers[0]->masks.size(), 1u);
+
+    const String json = LottieWriter::toJson (*comp);
+    auto readback = LottieReader::parseData (json);
+
+    ASSERT_NE (readback, nullptr);
+    ASSERT_EQ (readback->layers.size(), 1u);
+    EXPECT_EQ (readback->layers[0]->masks.size(), 1u);
+}
+
+TEST_F (LottieWriterTests, ToJson_LayerWithMaskContainsMasksPropertiesField)
+{
+    auto comp = LottieReader::parseData (kShapeWithMaskJson);
+    ASSERT_NE (comp, nullptr);
+
+    const std::string json = LottieWriter::toJson (*comp).toStdString();
+    EXPECT_NE (json.find ("\"masksProperties\""), std::string::npos);
+}
+
+// =============================================================================
+// Hidden layer roundtrip
+// =============================================================================
+
+TEST_F (LottieWriterTests, Roundtrip_HiddenLayerPreservesHiddenState)
+{
+    auto comp = LottieReader::parseData (kHiddenShapeLayerJson);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 1u);
+    EXPECT_TRUE (comp->layers[0]->hidden);
+
+    const String json = LottieWriter::toJson (*comp);
+    auto readback = LottieReader::parseData (json);
+
+    ASSERT_NE (readback, nullptr);
+    ASSERT_EQ (readback->layers.size(), 1u);
+    EXPECT_TRUE (readback->layers[0]->hidden);
+}
+
+// =============================================================================
+// Layer in/out frames roundtrip
+// =============================================================================
+
+TEST_F (LottieWriterTests, Roundtrip_LayerInOutFramesArePreserved)
+{
+    auto comp = LottieReader::parseData (kLayerWithInOutJson);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 1u);
+    EXPECT_FLOAT_EQ (comp->layers[0]->inFrame, 10.0f);
+    EXPECT_FLOAT_EQ (comp->layers[0]->outFrame, 80.0f);
+
+    const String json = LottieWriter::toJson (*comp);
+    auto readback = LottieReader::parseData (json);
+
+    ASSERT_NE (readback, nullptr);
+    ASSERT_EQ (readback->layers.size(), 1u);
+    EXPECT_FLOAT_EQ (readback->layers[0]->inFrame, 10.0f);
+    EXPECT_FLOAT_EQ (readback->layers[0]->outFrame, 80.0f);
+}
+
+TEST_F (LottieWriterTests, Roundtrip_LayerStartFrameIsPreserved)
+{
+    auto comp = LottieReader::parseData (kLayerWithInOutJson);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 1u);
+    EXPECT_FLOAT_EQ (comp->layers[0]->startFrame, 5.0f);
+
+    const String json = LottieWriter::toJson (*comp);
+    auto readback = LottieReader::parseData (json);
+
+    ASSERT_NE (readback, nullptr);
+    ASSERT_EQ (readback->layers.size(), 1u);
+    EXPECT_FLOAT_EQ (readback->layers[0]->startFrame, 5.0f);
+}
+
+// =============================================================================
+// Programmatic solid / shape layer
+// =============================================================================
+
+TEST_F (LottieWriterTests, Roundtrip_ProgrammaticSolidLayer)
+{
+    auto comp = AnimationComposition::create ({ 100.0f, 100.0f }, 25.0f);
+    ASSERT_NE (comp, nullptr);
+    comp->addSolidLayer ("RedSolid", Color (0xFFFF0000), { 80.0f, 60.0f });
+
+    const String json = LottieWriter::toJson (*comp);
+    auto readback = LottieReader::parseData (json);
+
+    ASSERT_NE (readback, nullptr);
+    ASSERT_EQ (readback->layers.size(), 1u);
+    EXPECT_EQ (readback->layers[0]->getType(), AnimationLayer::Type::Solid);
+    EXPECT_EQ (readback->layers[0]->name, String ("RedSolid"));
+
+    const auto* solid = dynamic_cast<const SolidLayer*> (readback->layers[0].get());
+    ASSERT_NE (solid, nullptr);
+    EXPECT_FLOAT_EQ (solid->layerSize.getWidth(), 80.0f);
+    EXPECT_FLOAT_EQ (solid->layerSize.getHeight(), 60.0f);
+}
+
+// =============================================================================
+// Transform serialization — ks fields
+// =============================================================================
+
+TEST_F (LottieWriterTests, ToJson_LayerContainsTransformField)
+{
+    auto comp = LottieReader::parseData (kShapeWithFillJson);
+    ASSERT_NE (comp, nullptr);
+
+    const std::string json = LottieWriter::toJson (*comp).toStdString();
+    EXPECT_NE (json.find ("\"ks\""), std::string::npos);
 }

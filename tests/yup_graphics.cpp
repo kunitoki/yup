@@ -22,6 +22,7 @@
 #include "yup_graphics/yup_AffineTransform.cpp"
 #include "yup_graphics/yup_Color.cpp"
 #include "yup_graphics/yup_ColorGradient.cpp"
+#include "yup_graphics/yup_CubicBezier.cpp"
 #include "yup_graphics/yup_Drawable.cpp"
 #include "yup_graphics/yup_Font.cpp"
 #include "yup_graphics/yup_Graphics.cpp"

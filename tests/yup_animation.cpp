@@ -34,4 +34,4 @@
 #include "yup_animation/yup_AnimationPaint.cpp"
 #include "yup_animation/yup_AnimationPathData.cpp"
 #include "yup_animation/yup_AnimationShape.cpp"
-#include "yup_animation/yup_CubicBezier.cpp"
+#include "yup_animation/yup_AnimationFrameExporter.cpp"
