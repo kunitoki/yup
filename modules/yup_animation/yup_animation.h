@@ -64,6 +64,7 @@
 #include "model/yup_AnimationGroup.h"
 #include "model/yup_AnimationLayer.h"
 #include "model/yup_ShapeLayer.h"
+#include "model/yup_AnimationKeyPath.h"
 #include "model/yup_AnimationComposition.h"
 #include "io/yup_LottieReader.h"
 #include "io/yup_LottieWriter.h"

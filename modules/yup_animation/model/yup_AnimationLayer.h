@@ -39,7 +39,8 @@ public:
         Solid = 1,
         Image = 2,
         Null = 3,
-        Shape = 4
+        Shape = 4,
+        Text = 5
     };
 
     enum class MatteType : uint8_t

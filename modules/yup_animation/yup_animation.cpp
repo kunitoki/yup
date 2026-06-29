@@ -41,6 +41,7 @@
 #include "model/yup_AnimationLayer.cpp"
 #include "model/yup_ShapeLayer.cpp"
 #include "model/yup_AnimationComposition.cpp"
+#include "model/yup_AnimationKeyPath.cpp"
 #include "io/yup_LottieReader.cpp"
 #include "io/yup_LottieWriter.cpp"
 #include "renderer/yup_AnimationRenderer.cpp"

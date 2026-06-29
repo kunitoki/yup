@@ -326,6 +326,41 @@ void AnimationRenderer::applyMasks (Graphics& g, const AnimationLayer& layer, fl
 
 //==============================================================================
 
+namespace
+{
+
+Path buildMatteClipPathForGroup (const AnimationGroup& group,
+                                 float frameNo,
+                                 const AffineTransform& parentTransform)
+{
+    if (group.hidden || group.transform.opacityAt (frameNo) <= 0.0f)
+        return {};
+
+    const AffineTransform groupTransform = group.transform.toAffineTransform (frameNo).followedBy (parentTransform);
+
+    Path clipPath;
+    for (const auto& child : group.children)
+    {
+        if (child.kind == AnimationGroup::ChildKind::Shape
+            && child.shape != nullptr
+            && ! child.shape->isHidden())
+        {
+            clipPath.appendPath (child.shape->buildPath (frameNo), groupTransform);
+        }
+        else if (child.kind == AnimationGroup::ChildKind::Group
+                 && child.group != nullptr)
+        {
+            clipPath.appendPath (buildMatteClipPathForGroup (*child.group, frameNo, groupTransform));
+        }
+    }
+
+    return clipPath;
+}
+
+} // namespace
+
+//==============================================================================
+
 void AnimationRenderer::applyMatteSourceClip (Graphics& g,
                                               const AnimationLayer& matteSource,
                                               const RenderContext& ctx)
@@ -340,17 +375,8 @@ void AnimationRenderer::applyMatteSourceClip (Graphics& g,
     Path clipPath;
     for (const auto& group : shapeLayer.groups)
     {
-        if (group == nullptr || group->hidden)
-            continue;
-        for (const auto& child : group->children)
-        {
-            if (child.kind == AnimationGroup::ChildKind::Shape
-                && child.shape != nullptr
-                && ! child.shape->isHidden())
-            {
-                clipPath.appendPath (child.shape->buildPath (ctx.frameNo));
-            }
-        }
+        if (group != nullptr)
+            clipPath.appendPath (buildMatteClipPathForGroup (*group, ctx.frameNo, AffineTransform::identity()));
     }
 
     if (clipPath.isEmpty())
@@ -646,6 +672,146 @@ void AnimationRenderer::applyStroke (Graphics& g, const Path& path, const Stroke
     }
 
     g.setStrokeType (stroke.strokeTypeAt (frameNo));
+
+    // Apply dash pattern if present
+    if (! stroke.dashArray.empty())
+    {
+        // Convert Lottie dash format to interleaved dash/gap array.
+        // Lottie: [dash, gap, dash, gap, ...] + optional offset.
+        // If even length, copy last dash as gap per Lottie winding spec.
+        std::vector<float> dashValues;
+        for (const auto& d : stroke.dashArray)
+            dashValues.push_back (d.value.getValueAt (frameNo));
+
+        float dashOffset = 0.0f;
+        if (dashValues.size() > 1)
+        {
+            if ((dashValues.size() % 2) == 0)
+            {
+                // Even length: copy last dash value as gap, then move offset
+                dashOffset = dashValues.back();
+                const float lastDash = dashValues[dashValues.size() - 2];
+                dashValues.back() = lastDash;
+                dashValues.push_back (dashOffset);
+            }
+            else
+            {
+                // Odd length: last value is offset
+                dashOffset = dashValues.back();
+                dashValues.pop_back();
+            }
+
+            // Create dashed path
+            Array<float> dashArray;
+            for (float v : dashValues)
+            {
+                if (v > 0.0f)
+                    dashArray.add (v);
+            }
+
+            if (! dashArray.isEmpty())
+            {
+                // Ensure even dash count by duplicating if odd
+                if ((dashArray.size() % 2) != 0)
+                {
+                    const int originalSize = dashArray.size();
+                    for (int i = 0; i < originalSize; ++i)
+                        dashArray.add (dashArray[i]);
+                }
+
+                float totalLen = 0.0f;
+                for (auto d : dashArray)
+                    totalLen += d;
+
+                if (totalLen > 0.0f)
+                {
+                    // Apply dash offset
+                    if (dashOffset != 0.0f)
+                        dashOffset = std::fmod (std::abs (dashOffset), totalLen);
+
+                    int dashIdx = 0;
+                    float patternPos = dashOffset;
+                    while (patternPos >= dashArray[dashIdx])
+                    {
+                        patternPos -= dashArray[dashIdx];
+                        dashIdx = (dashIdx + 1) % dashArray.size();
+                    }
+
+                    // Walk path and build dashed version
+                    Path dashedPath;
+                    Point<float> currentPt;
+                    Point<float> subPathStart;
+                    bool hasCurrent = false;
+
+                    auto addDashSegment = [&] (Point<float> p1, Point<float> p2)
+                    {
+                        const float len = p1.distanceTo (p2);
+                        if (len <= 0.0f)
+                            return;
+
+                        const auto dir = (p2 - p1) / len;
+                        float travelled = 0.0f;
+
+                        while (travelled < len)
+                        {
+                            const float remainingInDash = dashArray[dashIdx] - patternPos;
+                            const float step = jmin (remainingInDash, len - travelled);
+
+                            if ((dashIdx % 2) == 0 && step > 0.0f)
+                            {
+                                const auto segStart = p1 + dir * travelled;
+                                const auto segEnd = p1 + dir * (travelled + step);
+                                dashedPath.startNewSubPath (segStart);
+                                dashedPath.lineTo (segEnd);
+                            }
+
+                            travelled += step;
+                            patternPos = 0.0f;
+                            dashIdx = (dashIdx + 1) % dashArray.size();
+                        }
+                    };
+
+                    for (const auto& segment : path)
+                    {
+                        switch (segment.verb)
+                        {
+                            case Path::Verb::MoveTo:
+                                currentPt = segment.point;
+                                subPathStart = currentPt;
+                                hasCurrent = true;
+                                dashIdx = 0;
+                                patternPos = dashOffset;
+                                while (patternPos >= dashArray[dashIdx])
+                                {
+                                    patternPos -= dashArray[dashIdx];
+                                    dashIdx = (dashIdx + 1) % dashArray.size();
+                                }
+                                break;
+
+                            case Path::Verb::LineTo:
+                                if (hasCurrent)
+                                    addDashSegment (currentPt, segment.point);
+                                currentPt = segment.point;
+                                break;
+
+                            case Path::Verb::Close:
+                                if (hasCurrent)
+                                    addDashSegment (currentPt, subPathStart);
+                                currentPt = subPathStart;
+                                break;
+
+                            default:
+                                break;
+                        }
+                    }
+
+                    g.strokePath (dashedPath);
+                    return;
+                }
+            }
+        }
+    }
+
     g.strokePath (path);
 }
 

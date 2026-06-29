@@ -492,6 +492,15 @@ var LottieWriter::serializeTransform (const AnimationTransform& t)
         obj->setProperty ("sk", serializeProperty<float> (t.skew, serializeFloat));
         obj->setProperty ("sa", serializeProperty<float> (t.skewAxis, serializeFloat));
     }
+    if (t.is3DData)
+    {
+        if (t.rotationX.isAnimated() || t.rotationX.getValueAt (0.0f) != 0.0f)
+            obj->setProperty ("rx", serializeProperty<float> (t.rotationX, serializeFloat));
+        if (t.rotationY.isAnimated() || t.rotationY.getValueAt (0.0f) != 0.0f)
+            obj->setProperty ("ry", serializeProperty<float> (t.rotationY, serializeFloat));
+        if (t.rotationZ.isAnimated() || t.rotationZ.getValueAt (0.0f) != 0.0f)
+            obj->setProperty ("rz", serializeProperty<float> (t.rotationZ, serializeFloat));
+    }
     return var (obj);
 }
 

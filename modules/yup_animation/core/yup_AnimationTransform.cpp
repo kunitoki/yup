@@ -26,7 +26,7 @@ AffineTransform AnimationTransform::toAffineTransform (float frameNo) const
 {
     const Point<float> a = anchor.getValueAt (frameNo);
     const Size<float> s = scale.getValueAt (frameNo);
-    const float r = rotation.getValueAt (frameNo);
+    const float r = is3DData ? rotationZ.getValueAt (frameNo) : rotation.getValueAt (frameNo);
     const float sk = skew.getValueAt (frameNo);
     const float sa = skewAxis.getValueAt (frameNo);
 
@@ -36,6 +36,17 @@ AffineTransform AnimationTransform::toAffineTransform (float frameNo) const
     AffineTransform t;
     t = t.translated (-a.getX(), -a.getY());
     t = t.scaled (s.getWidth() / 100.0f, s.getHeight() / 100.0f);
+
+    if (is3DData)
+    {
+        const float rx = degreesToRadians (rotationX.getValueAt (frameNo));
+        const float ry = degreesToRadians (rotationY.getValueAt (frameNo));
+        // Approximate 3D rotation via scale — cos(angle) on the perpendicular axis
+        if (std::abs (rx) > 1e-5f)
+            t = t.scaled (1.0f, std::cos (rx));
+        if (std::abs (ry) > 1e-5f)
+            t = t.scaled (std::cos (ry), 1.0f);
+    }
 
     if (std::abs (sk) > 1e-5f)
     {
@@ -66,6 +77,9 @@ bool AnimationTransform::isStatic() const noexcept
         && opacity.isStatic()
         && skew.isStatic()
         && skewAxis.isStatic()
+        && rotationX.isStatic()
+        && rotationY.isStatic()
+        && rotationZ.isStatic()
         && spatialKeyframes.empty();
 }
 

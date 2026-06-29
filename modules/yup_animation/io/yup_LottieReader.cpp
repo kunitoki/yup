@@ -393,6 +393,10 @@ AnimationLayer::Ptr LottieReader::parseLayer (const var& layerObj)
         il->assetRefId = varString (layerObj["refId"]);
         layer = il;
     }
+    else if (ty == 5) // Text — parsed as NullLayer (text rendering not yet supported)
+    {
+        layer = new NullLayer();
+    }
     else // Null (ty == 3) or unknown
     {
         layer = new NullLayer();
@@ -416,7 +420,7 @@ AnimationLayer::Ptr LottieReader::parseLayer (const var& layerObj)
     layer->matteType = static_cast<AnimationLayer::MatteType> (matteType);
     layer->isMatteSource = varInt (layerObj["td"]) != 0;
 
-    parseTransform (layerObj["ks"], layer->transform);
+    parseTransform (layerObj["ks"], layer->transform, (bool) layerObj["ddd"]);
     parseMasks (layerObj["masksProperties"], *layer);
 
     if (! layerObj["tm"].isVoid())
@@ -741,16 +745,25 @@ void LottieReader::parseMasks (const var& masksVal, AnimationLayer& layer)
 }
 
 //==============================================================================
-void LottieReader::parseTransform (const var& ksObj, AnimationTransform& t)
+void LottieReader::parseTransform (const var& ksObj, AnimationTransform& t, bool ddd)
 {
     if (ksObj.isVoid())
         return;
+
+    t.is3DData = ddd;
 
     t.anchor = parseProperty<Point<float>> (ksObj["a"], extractPoint);
     t.rotation = parseProperty<float> (ksObj["r"], extractFloat);
     t.opacity = parseProperty<float> (ksObj["o"], extractFloat);
     t.skew = parseProperty<float> (ksObj["sk"], extractFloat);
     t.skewAxis = parseProperty<float> (ksObj["sa"], extractFloat);
+
+    if (ddd)
+    {
+        t.rotationX = parseProperty<float> (ksObj["rx"], extractFloat);
+        t.rotationY = parseProperty<float> (ksObj["ry"], extractFloat);
+        t.rotationZ = parseProperty<float> (ksObj["rz"], extractFloat);
+    }
 
     // Lottie encodes separate X/Y position inside the "p" object as { s: true, x: {}, y: {} }.
     const var& pObj = ksObj["p"];

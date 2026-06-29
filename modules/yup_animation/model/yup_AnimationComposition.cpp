@@ -101,4 +101,11 @@ SolidLayer* AnimationComposition::addSolidLayer (const String& layerName,
     return raw;
 }
 
+PropertyOverrideSet* AnimationComposition::getPropertyOverride (const String& keyPath)
+{
+    if (propertyOverrides.contains (keyPath))
+        return &propertyOverrides.getReference (keyPath);
+    return nullptr;
+}
+
 } // namespace yup

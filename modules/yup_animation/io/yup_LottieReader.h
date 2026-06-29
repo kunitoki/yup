@@ -82,7 +82,7 @@ private:
     void parseGroupItems (const var& itemsArray, AnimationGroup& group);
     void parseSingleItem (const var& itemObj, AnimationGroup& group);
 
-    void parseTransform (const var& ksObj, AnimationTransform& transform);
+    void parseTransform (const var& ksObj, AnimationTransform& transform, bool ddd = false);
 
     template <typename T>
     AnimationProperty<T> parseProperty (const var& propObj,

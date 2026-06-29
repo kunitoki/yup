@@ -57,6 +57,13 @@ public:
     FloatProperty skew { AnimationProperty<float>::staticValue (0.0f) };
     FloatProperty skewAxis { AnimationProperty<float>::staticValue (0.0f) };
 
+    /** 3D rotation channels (Lottie "rx", "ry", "rz").
+        When is3DData is true, these replace the 2D rotation for 3D layers. */
+    bool is3DData = false;
+    FloatProperty rotationX { AnimationProperty<float>::staticValue (0.0f) }; ///< "rx" — rotation around X axis
+    FloatProperty rotationY { AnimationProperty<float>::staticValue (0.0f) }; ///< "ry" — rotation around Y axis
+    FloatProperty rotationZ { AnimationProperty<float>::staticValue (0.0f) }; ///< "rz" — rotation around Z axis
+
     /** When true, the layer has separate X/Y position channels. */
     bool separatePosition = false;
     FloatProperty positionX { AnimationProperty<float>::staticValue (0.0f) };

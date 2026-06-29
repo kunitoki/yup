@@ -126,10 +126,57 @@ public:
     /** Appends any already-constructed layer. */
     void addLayer (AnimationLayer::Ptr layer);
 
+    //==============================================================================
+    /** Registers a property override for the given keypath.
+        When the renderer encounters a matching property, the override callback
+        is evaluated instead of the stored property value.
+
+        @param keyPath   Dot-separated path like "layer.fill.color"
+        @param id        Which property to override
+        @param override  Callback that returns std::nullopt to skip, or the value
+    */
+    template <typename T>
+    void setPropertyOverride (const String& keyPath, AnimationPropertyID id, AnimationPropertyOverride<T> override)
+    {
+        auto& set = propertyOverrides.getReference (keyPath);
+        setPropertyOverrideImpl (set, id, std::move (override));
+    }
+
+    /** Returns the override set for the given keypath, or nullptr. */
+    [[nodiscard]] PropertyOverrideSet* getPropertyOverride (const String& keyPath);
+
+    /** Returns all registered overrides. */
+    [[nodiscard]] const HashMap<String, PropertyOverrideSet>& getPropertyOverrides() const noexcept
+    {
+        return propertyOverrides;
+    }
+
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AnimationComposition)
 
 private:
     AnimationComposition() = default;
+
+    HashMap<String, PropertyOverrideSet> propertyOverrides;
+
+    static void setPropertyOverrideImpl (PropertyOverrideSet& set, AnimationPropertyID id, AnimationPropertyOverride<float> override)
+    {
+        set.setFloatOverride (id, std::move (override));
+    }
+
+    static void setPropertyOverrideImpl (PropertyOverrideSet& set, AnimationPropertyID id, AnimationPropertyOverride<Color> override)
+    {
+        set.setColorOverride (id, std::move (override));
+    }
+
+    static void setPropertyOverrideImpl (PropertyOverrideSet& set, AnimationPropertyID id, AnimationPropertyOverride<Point<float>> override)
+    {
+        set.setPointOverride (id, std::move (override));
+    }
+
+    static void setPropertyOverrideImpl (PropertyOverrideSet& set, AnimationPropertyID id, AnimationPropertyOverride<Size<float>> override)
+    {
+        set.setSizeOverride (id, std::move (override));
+    }
 };
 
 } // namespace yup
