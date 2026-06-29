@@ -119,22 +119,15 @@ Point<float> AnimationTransform::positionAt (float frameNo) const
     // Apply temporal easing
     const float t = k0.easing.isHold() ? 0.0f : k0.easing.evaluate ((frameNo - k0.frame) / span);
 
-    // Cubic bezier: B(t) = (1-t)³ P0 + 3(1-t)² t P1 + 3(1-t)t² P2 + t³ P3
+    // Match rlottie: temporal easing gives progress, then spatial bezier is
+    // sampled at the corresponding arc length rather than raw parameter t.
     const auto P0 = k0.value;
     const auto P1 = k0.value + k0.tangentOut;
     const auto P3 = k0.endValue.value_or (k1.value);
     const auto P2 = P3 + k1.tangentIn;
 
-    const float oneMinusT = 1.0f - t;
-    const float oneMinusT2 = oneMinusT * oneMinusT;
-    const float oneMinusT3 = oneMinusT2 * oneMinusT;
-    const float t2 = t * t;
-    const float t3 = t2 * t;
-
-    return {
-        oneMinusT3 * P0.getX() + 3.0f * oneMinusT2 * t * P1.getX() + 3.0f * oneMinusT * t2 * P2.getX() + t3 * P3.getX(),
-        oneMinusT3 * P0.getY() + 3.0f * oneMinusT2 * t * P1.getY() + 3.0f * oneMinusT * t2 * P2.getY() + t3 * P3.getY()
-    };
+    const auto bezier = CubicBezier::fromPoints (P0, P1, P2, P3);
+    return bezier.pointAt (bezier.tAtLength (t * bezier.length()));
 }
 
 } // namespace yup

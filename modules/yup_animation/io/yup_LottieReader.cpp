@@ -1493,8 +1493,14 @@ AnimationEasing LottieReader::parseEasing (const var& kfObj)
     const float ix = getFirstOrValue (i["x"]);
     const float iy = getFirstOrValue (i["y"]);
 
-    // Check for named interpolator reference ("n" key)
-    const String namedInterpolator = varString (kfObj["n"]);
+    // Check for named interpolator reference ("n" key). Lottie commonly stores
+    // this as a single-item array; use that item instead of stringifying the array.
+    String namedInterpolator;
+    if (const auto* names = safeArray (kfObj["n"]))
+        namedInterpolator = names->isEmpty() ? String() : varString ((*names)[0]);
+    else
+        namedInterpolator = varString (kfObj["n"]);
+
     if (namedInterpolator.isNotEmpty())
         return lookupInterpolator (namedInterpolator, ox, oy, ix, iy);
 

@@ -188,6 +188,18 @@ void AnimationRenderer::renderLayer (Graphics& g,
     if (opacity <= 0.0f)
         return;
 
+    if (opacity < 1.0f && renderLayerIsolated (g, layer, ctx, matteSource, opacity))
+        return;
+
+    renderLayerDirect (g, layer, ctx, matteSource, opacity);
+}
+
+void AnimationRenderer::renderLayerDirect (Graphics& g,
+                                           const AnimationLayer& layer,
+                                           const RenderContext& ctx,
+                                           const AnimationLayer* matteSource,
+                                           float opacity)
+{
     auto saveState = g.saveState();
 
     // Apply layer transform
@@ -227,6 +239,42 @@ void AnimationRenderer::renderLayer (Graphics& g,
     }
 
     renderLayerContent (g, layer, layerCtx, opacity);
+}
+
+bool AnimationRenderer::renderLayerIsolated (Graphics& g,
+                                             const AnimationLayer& layer,
+                                             const RenderContext& ctx,
+                                             const AnimationLayer* matteSource,
+                                             float opacity)
+{
+    const int width = static_cast<int> (std::ceil (ctx.comp.size.getWidth()));
+    const int height = static_cast<int> (std::ceil (ctx.comp.size.getHeight()));
+
+    if (width <= 0 || height <= 0)
+        return false;
+
+    Image layerImage (width, height, PixelFormat::RGBA);
+    Graphics layerGraphics (g.getGraphicsContext(), layerImage, 0x00000000);
+
+    if (! layerGraphics.isOffscreen())
+        return false;
+
+    RenderContext layerCtx = ctx;
+    layerCtx.viewTransform = AffineTransform::identity();
+    layerCtx.opacity = 1.0f;
+
+    renderLayerDirect (layerGraphics, layer, layerCtx, matteSource, 1.0f);
+
+    if (! layerGraphics.commitToImage())
+        return false;
+
+    auto saveState = g.saveState();
+    const AffineTransform baseTransform = g.getTransform();
+    g.setTransform (ctx.viewTransform.followedBy (baseTransform));
+    g.setOpacity (g.getOpacity() * opacity);
+    g.drawImage (layerImage, { 0.0f, 0.0f, ctx.comp.size.getWidth(), ctx.comp.size.getHeight() });
+
+    return true;
 }
 
 void AnimationRenderer::renderLayerContent (Graphics& g, const AnimationLayer& layer, const RenderContext& ctx, float opacity)
@@ -721,6 +769,13 @@ void AnimationRenderer::renderGroup (Graphics& g,
             return t;
         };
 
+        // The copy transform C must be composed with the existing graphics transform G
+        // so that the final result is C * G (copy applied after group) rather than
+        // G * C (copy applied before group). This matches rlottie's render order.
+        // We compute X = G^-1 * C * G so that G * X = C * G.
+        const AffineTransform G = g.getTransform();
+        const AffineTransform invG = G.inverted();
+
         std::vector<Path> repeatedPaths;
         for (int copy = 0; copy < numCopies; ++copy)
         {
@@ -729,9 +784,12 @@ void AnimationRenderer::renderGroup (Graphics& g,
                                     + activeRepeater->endOpacityAt (frameNo) * t;
             (void) copyOpacity; // TODO: per-copy opacity via Graphics state
 
-            const AffineTransform copyXfm = buildCopyTransform (static_cast<float> (copy) + activeRepeater->offsetAt (frameNo));
+            const float multiplier = static_cast<float> (copy) + activeRepeater->offsetAt (frameNo);
+            const AffineTransform C = buildCopyTransform (multiplier);
+            const AffineTransform X = G.followedBy (C).followedBy (invG);
+
             for (const auto& p : paths)
-                repeatedPaths.push_back (p.transformed (copyXfm));
+                repeatedPaths.push_back (p.transformed (X));
         }
         return repeatedPaths;
     };

@@ -82,6 +82,16 @@ private:
                              const AnimationLayer& layer,
                              const RenderContext& ctx,
                              const AnimationLayer* matteSource = nullptr);
+    static void renderLayerDirect (Graphics& g,
+                                   const AnimationLayer& layer,
+                                   const RenderContext& ctx,
+                                   const AnimationLayer* matteSource,
+                                   float opacity);
+    static bool renderLayerIsolated (Graphics& g,
+                                     const AnimationLayer& layer,
+                                     const RenderContext& ctx,
+                                     const AnimationLayer* matteSource,
+                                     float opacity);
     static void renderDropShadow (Graphics& g, const AnimationLayer& layer, const RenderContext& ctx, float opacity);
     static void renderLayerContent (Graphics& g, const AnimationLayer& layer, const RenderContext& ctx, float opacity);
     static void renderShapeLayer (Graphics& g, const ShapeLayer& layer, const RenderContext& ctx, float opacity);
