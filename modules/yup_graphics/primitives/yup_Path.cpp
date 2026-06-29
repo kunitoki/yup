@@ -19,10 +19,6 @@
   ==============================================================================
 */
 
-#include <clipper2/clipper.engine.h>
-
-#include <cmath>
-
 namespace yup
 {
 
