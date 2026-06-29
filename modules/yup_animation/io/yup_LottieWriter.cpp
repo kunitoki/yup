@@ -109,6 +109,7 @@ var LottieWriter::serializeLayer (const AnimationLayer& layer)
             obj->setProperty ("shapes", serializeGroups (sl.groups));
             break;
         }
+
         case AnimationLayer::Type::Solid:
         {
             obj->setProperty ("ty", var (1));
@@ -118,6 +119,7 @@ var LottieWriter::serializeLayer (const AnimationLayer& layer)
             obj->setProperty ("sh", var ((int) sl.layerSize.getHeight()));
             break;
         }
+
         case AnimationLayer::Type::Image:
         {
             obj->setProperty ("ty", var (2));
@@ -125,9 +127,11 @@ var LottieWriter::serializeLayer (const AnimationLayer& layer)
             obj->setProperty ("refId", var (il.assetRefId));
             break;
         }
+
         case AnimationLayer::Type::Null:
             obj->setProperty ("ty", var (3));
             break;
+
         case AnimationLayer::Type::Precomp:
         {
             obj->setProperty ("ty", var (0));
@@ -137,6 +141,9 @@ var LottieWriter::serializeLayer (const AnimationLayer& layer)
             obj->setProperty ("h", var ((int) pl.layerSize.getHeight()));
             break;
         }
+
+        case AnimationLayer::Type::Text:
+            break;
     }
 
     return var (obj);

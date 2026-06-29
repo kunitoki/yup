@@ -214,6 +214,8 @@ void AnimationRenderer::renderLayer (Graphics& g,
         case AnimationLayer::Type::Precomp:
             renderPrecompLayer (g, static_cast<const PrecompLayer&> (layer), ctx, opacity);
             break;
+        case AnimationLayer::Type::Text:
+            break; // Text layers are not implemented yet
         case AnimationLayer::Type::Null:
             break; // Null layers have no visual output
     }
