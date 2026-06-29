@@ -1047,7 +1047,7 @@ AnimationEasing LottieReader::parseEasing (const var& kfObj)
     if (namedInterpolator.isNotEmpty())
         return lookupInterpolator (namedInterpolator, ox, oy, ix, iy);
 
-    return AnimationEasing::fromLottieTangents (ox, oy, ix, iy);
+    return AnimationEasing::fromLottieTangents ({ ox, oy }, { ix, iy });
 }
 
 AnimationEasing LottieReader::lookupInterpolator (const String& name, float ox, float oy, float ix, float iy)
