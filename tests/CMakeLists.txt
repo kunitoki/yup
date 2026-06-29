@@ -65,6 +65,7 @@ set (target_modules
     yup_events
     yup_data_model
     yup_graphics
+    yup_animation
     dr_libs
     pffft_library
     opus_library

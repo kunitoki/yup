@@ -1,0 +1,162 @@
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2026 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+namespace yup
+{
+
+//==============================================================================
+/** Abstract base class for all Lottie layer types.
+
+    Carries all timing, transform, blend mode, matte, and mask data common
+    to every layer. Subclasses hold type-specific content.
+*/
+class YUP_API AnimationLayer : public ReferenceCountedObject
+{
+public:
+    using Ptr = ReferenceCountedObjectPtr<AnimationLayer>;
+
+    enum class Type : uint8_t
+    {
+        Precomp = 0,
+        Solid = 1,
+        Image = 2,
+        Null = 3,
+        Shape = 4
+    };
+
+    enum class MatteType : uint8_t
+    {
+        None = 0,
+        Alpha = 1,
+        AlphaInv = 2,
+        Luma = 3,
+        LumaInv = 4
+    };
+
+    //==============================================================================
+    virtual ~AnimationLayer() = default;
+
+    [[nodiscard]] virtual Type getType() const noexcept = 0;
+
+    //==============================================================================
+    // Identity and timing
+    String name;
+    int id = -1;              ///< "ind"
+    int parentId = -1;        ///< "parent" — -1 means no parent
+    float inFrame = 0.0f;     ///< "ip"
+    float outFrame = 0.0f;    ///< "op"
+    float startFrame = 0.0f;  ///< "st" — local time offset
+    float timeStretch = 1.0f; ///< "sr"
+
+    // Optional time remapping (overrides startFrame when set)
+    std::optional<FloatProperty> timeRemap;
+
+    // Visual state
+    AnimationTransform transform;
+    BlendMode blendMode = BlendMode::SrcOver;
+    MatteType matteType = MatteType::None;
+    bool is3D = false;
+    bool hidden = false;
+    bool autoOrient = false;
+
+    /** Masks applied to this layer. */
+    std::vector<AnimationMask::Ptr> masks;
+
+    //==============================================================================
+    /** Maps a composition frame number to the layer's local frame, accounting
+        for startFrame, timeStretch, and optional timeRemap. */
+    [[nodiscard]] float localFrame (float compFrame) const noexcept;
+
+    /** Returns true when this layer is visible at the given composition frame. */
+    [[nodiscard]] bool isVisibleAt (float compFrame) const noexcept;
+
+    YUP_DECLARE_NON_COPYABLE (AnimationLayer)
+
+protected:
+    AnimationLayer() = default;
+};
+
+//==============================================================================
+/** A null (transform-only) layer. Useful as a parent for layer parenting. */
+class YUP_API NullLayer : public AnimationLayer
+{
+public:
+    using Ptr = ReferenceCountedObjectPtr<NullLayer>;
+
+    NullLayer() = default;
+
+    [[nodiscard]] Type getType() const noexcept override { return Type::Null; }
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (NullLayer)
+};
+
+//==============================================================================
+/** A solid colour fill layer. */
+class YUP_API SolidLayer : public AnimationLayer
+{
+public:
+    using Ptr = ReferenceCountedObjectPtr<SolidLayer>;
+
+    SolidLayer() = default;
+
+    [[nodiscard]] Type getType() const noexcept override { return Type::Solid; }
+
+    Color solidColor;
+    Size<float> layerSize { 100.0f, 100.0f };
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SolidLayer)
+};
+
+//==============================================================================
+/** An image layer. References an image asset by id. */
+class YUP_API ImageLayer : public AnimationLayer
+{
+public:
+    using Ptr = ReferenceCountedObjectPtr<ImageLayer>;
+
+    ImageLayer() = default;
+
+    [[nodiscard]] Type getType() const noexcept override { return Type::Image; }
+
+    String assetRefId;
+    std::optional<Image> image; ///< Resolved at parse time
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ImageLayer)
+};
+
+//==============================================================================
+/** A pre-composition layer embedding another composition by asset reference. */
+class YUP_API PrecompLayer : public AnimationLayer
+{
+public:
+    using Ptr = ReferenceCountedObjectPtr<PrecompLayer>;
+
+    PrecompLayer() = default;
+
+    [[nodiscard]] Type getType() const noexcept override { return Type::Precomp; }
+
+    String precompRefId;
+    Size<float> layerSize { 0.0f, 0.0f };
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PrecompLayer)
+};
+
+} // namespace yup

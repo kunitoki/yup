@@ -23,6 +23,7 @@
 #include <yup_audio_devices/yup_audio_devices.h>
 #include <yup_events/yup_events.h>
 #include <yup_graphics/yup_graphics.h>
+#include <yup_animation/yup_animation.h>
 #include <yup_gui/yup_gui.h>
 #include <yup_audio_gui/yup_audio_gui.h>
 #if YUP_MODULE_AVAILABLE_yup_python
@@ -58,6 +59,7 @@
 #include "examples/Images.h"
 #include "examples/PaintProfilerDemo.h"
 #include "examples/OffscreenRenderDemo.h"
+#include "examples/LottieDemo.h"
 #if YUP_MODULE_AVAILABLE_yup_python
 #include "examples/Python.h"
 #endif
@@ -167,6 +169,7 @@ public:
         registerDemo<ImagesDemo> ("Images", counter++);
         registerDemo<PaintProfilerDemo> ("Paint Profiler", counter++);
         registerDemo<OffscreenRenderDemo> ("Offscreen Render", counter++);
+        registerDemo<LottieDemo> ("Lottie", counter++);
 #if YUP_MODULE_AVAILABLE_yup_python
         registerDemo<PythonDemo> ("Python", counter++);
 #endif
