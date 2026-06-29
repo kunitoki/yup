@@ -706,29 +706,28 @@ void AnimationRenderer::renderGroup (Graphics& g,
                                    ? Point<float> { xf.positionX.getValueAt (frameNo), xf.positionY.getValueAt (frameNo) }
                                    : xf.position.getValueAt (frameNo);
 
-        auto buildCopyTransform = [&] (int copyIdx) -> AffineTransform
+        auto buildCopyTransform = [&] (float multiplier) -> AffineTransform
         {
-            const float m = static_cast<float> (copyIdx);
-            const float sx = std::pow (sc.getWidth() / 100.0f, m);
-            const float sy = std::pow (sc.getHeight() / 100.0f, m);
+            const float sx = std::pow (sc.getWidth() / 100.0f, multiplier);
+            const float sy = std::pow (sc.getHeight() / 100.0f, multiplier);
             AffineTransform t;
             t = t.translated (-anchor.getX(), -anchor.getY());
-            t = t.rotated (degreesToRadians (rot * m));
+            t = t.rotated (degreesToRadians (rot * multiplier));
             t = t.scaled (sx, sy);
             t = t.translated (anchor.getX(), anchor.getY());
-            t = t.translated (pos.getX() * m, pos.getY() * m);
+            t = t.translated (pos.getX() * multiplier, pos.getY() * multiplier);
             return t;
         };
 
         std::vector<Path> repeatedPaths;
         for (int copy = 0; copy < numCopies; ++copy)
         {
-            const float t = (numCopies > 1) ? static_cast<float> (copy) / static_cast<float> (numCopies - 1) : 0.0f;
+            const float t = numCopies > 0 ? static_cast<float> (copy) / static_cast<float> (numCopies) : 0.0f;
             const float copyOpacity = activeRepeater->startOpacityAt (frameNo) * (1.0f - t)
                                     + activeRepeater->endOpacityAt (frameNo) * t;
             (void) copyOpacity; // TODO: per-copy opacity via Graphics state
 
-            const AffineTransform copyXfm = buildCopyTransform (copy);
+            const AffineTransform copyXfm = buildCopyTransform (static_cast<float> (copy) + activeRepeater->offsetAt (frameNo));
             for (const auto& p : paths)
                 repeatedPaths.push_back (p.transformed (copyXfm));
         }

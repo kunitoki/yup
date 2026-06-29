@@ -44,7 +44,7 @@ TEST (JavascriptEngineTests, ExecuteWithResultReturnsLastExpressionStatement)
 {
     JavascriptEngine engine;
 
-    auto result = engine.executeWithResult ("var x = 10; var y = 20; x + y");
+    auto result = engine.executeWithResult ("var x = 10; var y = 20; x + y;");
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
     EXPECT_EQ (static_cast<int> (result.getReference()), 30);
 }
@@ -53,16 +53,33 @@ TEST (JavascriptEngineTests, ExecuteWithResultReturnsAssignmentValue)
 {
     JavascriptEngine engine;
 
-    auto result = engine.executeWithResult ("var $bm_rt; $bm_rt = 42");
+    {
+        auto result = engine.executeWithResult ("var $bm_rt; $bm_rt = 42;");
+        ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+        EXPECT_EQ (static_cast<int> (result.getReference()), 42);
+    }
+
+    {
+        auto result = engine.executeWithResult ("var $bm_rt; $bm_rt = 13");
+        ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+        EXPECT_EQ (static_cast<int> (result.getReference()), 13);
+    }
+}
+
+TEST (JavascriptEngineTests, ExecuteWithResultReturnsNothingOnNoExpression)
+{
+    JavascriptEngine engine;
+
+    auto result = engine.executeWithResult ("var $bm_rt;");
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_EQ (static_cast<int> (result.getReference()), 42);
+    EXPECT_TRUE (result.getReference().isUndefined());
 }
 
 TEST (JavascriptEngineTests, ExecuteWithResultReturnsReturnStatementValue)
 {
     JavascriptEngine engine;
 
-    auto result = engine.executeWithResult ("return 42");
+    auto result = engine.executeWithResult ("return 42;");
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
     EXPECT_EQ (static_cast<int> (result.getReference()), 42);
 }

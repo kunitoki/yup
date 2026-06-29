@@ -343,6 +343,122 @@ constexpr const char* kShapeContentExpressionJson = R"json({
     ]
 })json";
 
+constexpr const char* kShapeTransformSkewJson = R"json({
+    "v": "5.5.2",
+    "nm": "ShapeTransformSkew",
+    "ip": 0,
+    "op": 30,
+    "fr": 30.0,
+    "w": 100,
+    "h": 100,
+    "ddd": 0,
+    "assets": [],
+    "layers": [
+        {
+            "ty": 4,
+            "nm": "ShapeLayer",
+            "ind": 1,
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [0, 0] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            },
+            "shapes": [
+                {
+                    "ty": "gr",
+                    "nm": "SkewedShape",
+                    "it": [
+                        { "ty": "el", "nm": "Ellipse Path 1", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [20, 10] } },
+                        { "ty": "fl", "nm": "Fill 1", "c": { "a": 0, "k": [1, 0, 0, 1] }, "o": { "a": 0, "k": 100 } },
+                        {
+                            "ty": "tr",
+                            "p": { "a": 0, "k": [0, 0] },
+                            "a": { "a": 0, "k": [0, 0] },
+                            "s": { "a": 0, "k": [100, 100] },
+                            "r": { "a": 0, "k": 0 },
+                            "o": { "a": 0, "k": 100 },
+                            "sk": { "a": 0, "k": -46 },
+                            "sa": { "a": 0, "k": 18 }
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+})json";
+
+constexpr const char* kShapeRepeaterOffsetJson = R"json({
+    "v": "5.5.2",
+    "nm": "ShapeRepeaterOffset",
+    "ip": 0,
+    "op": 30,
+    "fr": 30.0,
+    "w": 100,
+    "h": 100,
+    "ddd": 0,
+    "assets": [],
+    "layers": [
+        {
+            "ty": 4,
+            "nm": "ShapeLayer",
+            "ind": 1,
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [0, 0] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            },
+            "shapes": [
+                {
+                    "ty": "gr",
+                    "nm": "RepeatedShape",
+                    "it": [
+                        { "ty": "rc", "nm": "Rectangle Path 1", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [10, 20] }, "r": { "a": 0, "k": 0 } },
+                        { "ty": "fl", "nm": "Fill 1", "c": { "a": 0, "k": [1, 0, 0, 1] }, "o": { "a": 0, "k": 100 } },
+                        {
+                            "ty": "rp",
+                            "nm": "Repeater 1",
+                            "c": { "a": 0, "k": 45 },
+                            "o": { "a": 0, "k": -14 },
+                            "tr": {
+                                "p": { "a": 0, "k": [99, 30] },
+                                "a": { "a": 0, "k": [0, 0] },
+                                "s": { "a": 0, "k": [100, 100] },
+                                "r": { "a": 0, "k": 0 },
+                                "so": { "a": 0, "k": 100 },
+                                "eo": { "a": 0, "k": 100 }
+                            }
+                        },
+                        {
+                            "ty": "tr",
+                            "p": { "a": 0, "k": [0, 0] },
+                            "a": { "a": 0, "k": [0, 0] },
+                            "s": { "a": 0, "k": [100, 100] },
+                            "r": { "a": 0, "k": 0 },
+                            "o": { "a": 0, "k": 100 }
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+})json";
+
 constexpr const char* kDropShadowJson = R"json({
     "v": "5.5.2",
     "nm": "DropShadow",
@@ -797,6 +913,39 @@ TEST_F (LottieRoundtripTests, ResolvesShapeContentExpressionReferences)
     EXPECT_NEAR (startPath.vertices[1].getX(), 10.0f, 0.001f);
     EXPECT_NEAR (endPath.vertices[1].getX(), 20.0f, 0.001f);
     EXPECT_NEAR (layer->groups[0]->transform.rotation.getValueAt (10.0f), 90.0f, 0.001f);
+}
+
+TEST_F (LottieRoundtripTests, ParsesShapeTransformSkew)
+{
+    auto comp = LottieReader::parseData (kShapeTransformSkewJson);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 1u);
+
+    auto* layer = static_cast<ShapeLayer*> (comp->layers[0].get());
+    ASSERT_NE (layer, nullptr);
+    ASSERT_EQ (layer->groups.size(), 1u);
+
+    EXPECT_NEAR (layer->groups[0]->transform.skew.getValueAt (0.0f), -46.0f, 0.001f);
+    EXPECT_NEAR (layer->groups[0]->transform.skewAxis.getValueAt (0.0f), 18.0f, 0.001f);
+}
+
+TEST_F (LottieRoundtripTests, ParsesRepeaterOffset)
+{
+    auto comp = LottieReader::parseData (kShapeRepeaterOffsetJson);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 1u);
+
+    auto* layer = static_cast<ShapeLayer*> (comp->layers[0].get());
+    ASSERT_NE (layer, nullptr);
+    ASSERT_EQ (layer->groups.size(), 1u);
+
+    const auto& children = layer->groups[0]->children;
+    ASSERT_GE (children.size(), 3u);
+    ASSERT_EQ (children[2].kind, AnimationGroup::ChildKind::Repeater);
+    ASSERT_NE (children[2].repeater, nullptr);
+
+    EXPECT_EQ (children[2].repeater->copiesAt (0.0f), 45);
+    EXPECT_NEAR (children[2].repeater->offsetAt (0.0f), -14.0f, 0.001f);
 }
 
 TEST_F (LottieRoundtripTests, WriteAndReparse)

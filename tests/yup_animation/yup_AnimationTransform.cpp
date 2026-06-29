@@ -76,6 +76,23 @@ TEST_F (AnimationTransformTests, ScaleProducesCorrectTransform)
     EXPECT_NEAR (transformed.getY(), 2.0f, 0.1f);
 }
 
+TEST_F (AnimationTransformTests, SkewAxisUsesLottieBasis)
+{
+    AnimationTransform t;
+    t.skew = FloatProperty::staticValue (45.0f);
+    t.skewAxis = FloatProperty::staticValue (0.0f);
+
+    const AffineTransform xf = t.toAffineTransform (0.0f);
+
+    const auto xAxis = Point<float> { 1.0f, 0.0f }.transformed (xf);
+    const auto yAxis = Point<float> { 0.0f, 1.0f }.transformed (xf);
+
+    EXPECT_NEAR (xAxis.getX(), 1.0f, 0.001f);
+    EXPECT_NEAR (xAxis.getY(), -1.0f, 0.001f);
+    EXPECT_NEAR (yAxis.getX(), 0.0f, 0.001f);
+    EXPECT_NEAR (yAxis.getY(), 1.0f, 0.001f);
+}
+
 TEST_F (AnimationTransformTests, AnimatedPositionChangesOverTime)
 {
     AnimationTransform t;

@@ -722,6 +722,8 @@ void LottieReader::parseShapeContents (const var& shapesVal, ShapeLayer& layer)
     if (arr == nullptr)
         return;
 
+    AnimationGroup* implicitGroup = nullptr;
+
     for (const var& item : *arr)
     {
         const String ty = varString (item["ty"]);
@@ -730,13 +732,17 @@ void LottieReader::parseShapeContents (const var& shapesVal, ShapeLayer& layer)
         {
             auto* group = layer.addGroup (varString (item["nm"]));
             parseGroupItems (item["it"], *group);
+            implicitGroup = nullptr;
         }
         else
         {
-            // Top-level shapes outside a group go into an implicit group
-            if (layer.getNumGroups() == 0)
-                layer.addGroup();
-            parseSingleItem (item, *layer.getGroup (0));
+            // Top-level shape items outside a group go into an implicit group.
+            // Start a new implicit group after real groups so trailing paints do
+            // not accidentally apply to the first named group.
+            if (implicitGroup == nullptr)
+                implicitGroup = layer.addGroup();
+
+            parseSingleItem (item, *implicitGroup);
         }
     }
 
