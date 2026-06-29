@@ -57,7 +57,7 @@ TEST_F (AnimationTransformTests, TranslationProducesCorrectTransform)
 
     // A point at origin should map to (100, 200) after translation
     Point<float> origin { 0.0f, 0.0f };
-    const auto transformed = origin.transformedBy (xf);
+    const auto transformed = origin.transformed (xf);
     EXPECT_NEAR (transformed.getX(), 100.0f, 0.1f);
     EXPECT_NEAR (transformed.getY(), 200.0f, 0.1f);
 }
@@ -66,12 +66,12 @@ TEST_F (AnimationTransformTests, ScaleProducesCorrectTransform)
 {
     AnimationTransform t;
     // Lottie scale is percentage: 200% = 2x
-    t.scale = Vec2Property::staticValue ({ 200.0f, 200.0f });
+    t.scale = SizeProperty::staticValue ({ 200.0f, 200.0f });
 
     const AffineTransform xf = t.toAffineTransform (0.0f);
 
     Point<float> p { 1.0f, 1.0f };
-    const auto transformed = p.transformedBy (xf);
+    const auto transformed = p.transformed (xf);
     EXPECT_NEAR (transformed.getX(), 2.0f, 0.1f);
     EXPECT_NEAR (transformed.getY(), 2.0f, 0.1f);
 }
@@ -90,8 +90,8 @@ TEST_F (AnimationTransformTests, AnimatedPositionChangesOverTime)
     const AffineTransform xf10 = t.toAffineTransform (10.0f);
 
     Point<float> origin { 0.0f, 0.0f };
-    EXPECT_NEAR (origin.transformedBy (xf0).getX(), 0.0f, 0.1f);
-    EXPECT_NEAR (origin.transformedBy (xf10).getX(), 100.0f, 0.1f);
+    EXPECT_NEAR (origin.transformed (xf0).getX(), 0.0f, 0.1f);
+    EXPECT_NEAR (origin.transformed (xf10).getX(), 100.0f, 0.1f);
 }
 
 TEST_F (AnimationTransformTests, SpatialPositionUsesExplicitEndValue)

@@ -49,7 +49,25 @@ float AnimationLayer::localFrame (float compFrame) const noexcept
 float AnimationLayer::localFrame (float compFrame, float frameRate) const noexcept
 {
     if (timeRemap.has_value())
-        return timeRemap->getValueAt (compFrame) * frameRate;
+    {
+        float remapFrame = compFrame;
+
+        if (timeRemapLoopOutCycle && timeRemap->isAnimated())
+        {
+            const auto& keyframes = timeRemap->getKeyframes();
+            if (keyframes.size() >= 2)
+            {
+                const float firstFrame = keyframes.front().frame;
+                const float lastFrame = keyframes.back().frame;
+                const float duration = lastFrame - firstFrame;
+
+                if (duration > 1.0e-6f && remapFrame >= lastFrame)
+                    remapFrame = firstFrame + std::fmod (remapFrame - firstFrame, duration);
+            }
+        }
+
+        return timeRemap->getValueAt (remapFrame) * frameRate;
+    }
 
     return localFrame (compFrame);
 }

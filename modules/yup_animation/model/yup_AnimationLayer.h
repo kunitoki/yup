@@ -107,6 +107,7 @@ public:
 
     // Optional time remapping (overrides startFrame when set)
     std::optional<FloatProperty> timeRemap;
+    bool timeRemapLoopOutCycle = false;
 
     // Visual state
     AnimationTransform transform;

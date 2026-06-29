@@ -46,5 +46,6 @@
 #include "io/yup_LottieWriter.cpp"
 #include "renderer/yup_AnimationRenderer.cpp"
 #include "renderer/yup_AnimationFrameExporter.cpp"
+#include "renderer/yup_CubicBezier.cpp"
 #include "animation/yup_Animation.cpp"
 #include "animation/yup_AnimationPlayer.cpp"

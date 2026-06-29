@@ -35,7 +35,7 @@ AnimationEasing::AnimationEasing (float x1, float y1, float x2, float y2) noexce
 float AnimationEasing::evaluate (float t) const noexcept
 {
     if (holdFrame || t <= 0.0f)
-        return t <= 0.0f ? 0.0f : 1.0f;
+        return 0.0f;
 
     if (t >= 1.0f)
         return 1.0f;

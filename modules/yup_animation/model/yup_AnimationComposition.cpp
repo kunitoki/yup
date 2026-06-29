@@ -108,4 +108,36 @@ PropertyOverrideSet* AnimationComposition::getPropertyOverride (const String& ke
     return nullptr;
 }
 
+AnimationComposition::Stats AnimationComposition::computeStats() const noexcept
+{
+    Stats s;
+    for (const auto& layer : layers)
+    {
+        if (layer == nullptr)
+            continue;
+        switch (layer->getType())
+        {
+            case AnimationLayer::Type::Precomp:
+                ++s.precompLayerCount;
+                break;
+            case AnimationLayer::Type::Solid:
+                ++s.solidLayerCount;
+                break;
+            case AnimationLayer::Type::Image:
+                ++s.imageLayerCount;
+                break;
+            case AnimationLayer::Type::Null:
+                ++s.nullLayerCount;
+                break;
+            case AnimationLayer::Type::Shape:
+                ++s.shapeLayerCount;
+                break;
+            case AnimationLayer::Type::Text:
+                ++s.textLayerCount;
+                break;
+        }
+    }
+    return s;
+}
+
 } // namespace yup

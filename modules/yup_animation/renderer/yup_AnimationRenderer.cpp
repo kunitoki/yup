@@ -209,19 +209,9 @@ void AnimationRenderer::renderLayer (Graphics& g,
         && layer.dropShadow.has_value()
         && layer.dropShadow->enabled)
     {
-        const auto& shadow = *layer.dropShadow;
-        const float shadowOpacity = opacity * shadow.opacityAt (ctx.frameNo);
+        renderDropShadow (g, layer, ctx, opacity);
 
-        if (shadowOpacity > 0.0f)
-        {
-            auto shadowState = g.saveState();
-            RenderContext shadowCtx = ctx;
-            shadowCtx.paintOverride = shadow.color.getValueAt (ctx.frameNo);
-            g.setTransform (AffineTransform::translation (shadow.offsetAt (ctx.frameNo)).followedBy (g.getTransform()));
-            renderLayerContent (g, layer, shadowCtx, shadowOpacity);
-        }
-
-        if (shadow.shadowOnly)
+        if (layer.dropShadow->shadowOnly)
             return;
     }
 
@@ -474,7 +464,34 @@ Path buildMatteClipPathForGroup (const AnimationGroup& group,
     return clipPath;
 }
 
-Path buildLayerAlphaPath (const AnimationLayer& layer, float frameNo, Size<float> compSize)
+const AnimationLayer* findLayerById (const std::vector<AnimationLayer::Ptr>& layers, int layerId)
+{
+    for (const auto& layer : layers)
+    {
+        if (layer != nullptr && layer->id == layerId)
+            return layer.get();
+    }
+
+    return nullptr;
+}
+
+AffineTransform buildLayerTransformInAsset (const AnimationLayer& layer,
+                                            const std::vector<AnimationLayer::Ptr>& layers,
+                                            float frameNo,
+                                            int depth = 0)
+{
+    AffineTransform transform = layer.transform.toAffineTransform (frameNo);
+
+    if (layer.parentId < 0 || depth > 32)
+        return transform;
+
+    if (const auto* parent = findLayerById (layers, layer.parentId))
+        transform = transform.followedBy (buildLayerTransformInAsset (*parent, layers, frameNo, depth + 1));
+
+    return transform;
+}
+
+Path buildLayerAlphaPath (const AnimationLayer& layer, const AnimationComposition& comp, float frameNo)
 {
     switch (layer.getType())
     {
@@ -493,8 +510,34 @@ Path buildLayerAlphaPath (const AnimationLayer& layer, float frameNo, Size<float
 
         case AnimationLayer::Type::Solid:
         case AnimationLayer::Type::Image:
+            return createRectanglePath (getLayerContentBounds (layer, comp.size));
+
         case AnimationLayer::Type::Precomp:
-            return createRectanglePath (getLayerContentBounds (layer, compSize));
+        {
+            const auto& precompLayer = static_cast<const PrecompLayer&> (layer);
+            const AnimationAsset* asset = comp.assets.contains (precompLayer.precompRefId)
+                                            ? comp.assets[precompLayer.precompRefId].get()
+                                            : nullptr;
+            if (asset == nullptr)
+                return createRectanglePath (getLayerContentBounds (layer, comp.size));
+
+            const float localFrame = precompLayer.localFrame (frameNo, comp.frameRate);
+
+            Path clipPath;
+            for (const auto& childLayer : asset->layers)
+            {
+                if (childLayer == nullptr || childLayer->hidden || childLayer->isMatteSource || ! childLayer->isVisibleAt (localFrame))
+                    continue;
+
+                Path childPath = buildLayerAlphaPath (*childLayer, comp, localFrame);
+                if (childPath.isEmpty())
+                    continue;
+
+                clipPath.appendPath (childPath.transformed (buildLayerTransformInAsset (*childLayer, asset->layers, localFrame)));
+            }
+
+            return clipPath;
+        }
 
         case AnimationLayer::Type::Text:
         case AnimationLayer::Type::Null:
@@ -506,14 +549,35 @@ Path buildLayerAlphaPath (const AnimationLayer& layer, float frameNo, Size<float
 
 } // namespace
 
+void AnimationRenderer::renderDropShadow (Graphics& g, const AnimationLayer& layer, const RenderContext& ctx, float opacity)
+{
+    if (! layer.dropShadow.has_value())
+        return;
+
+    const auto& shadow = *layer.dropShadow;
+    const float shadowOpacity = opacity * shadow.opacityAt (ctx.frameNo);
+    if (shadowOpacity <= 0.0f)
+        return;
+
+    Path shadowPath = buildLayerAlphaPath (layer, ctx.comp, ctx.frameNo);
+    if (shadowPath.isEmpty())
+        return;
+
+    shadowPath = shadowPath.transformed (AffineTransform::translation (shadow.offsetAt (ctx.frameNo)));
+
+    auto shadowState = g.saveState();
+    g.setFillColor (shadow.color.getValueAt (ctx.frameNo).withMultipliedAlpha (shadowOpacity));
+    g.fillPath (shadowPath);
+}
+
 void AnimationRenderer::applyMatteSourceClip (Graphics& g,
                                               const AnimationLayer& layer,
                                               const AnimationLayer& matteSource,
                                               const RenderContext& ctx,
                                               bool inverted)
 {
-    Path layerAlphaPath = buildLayerAlphaPath (layer, ctx.frameNo, ctx.comp.size);
-    Path clipPath = buildLayerAlphaPath (matteSource, ctx.frameNo, ctx.comp.size);
+    Path layerAlphaPath = buildLayerAlphaPath (layer, ctx.comp, ctx.frameNo);
+    Path clipPath = buildLayerAlphaPath (matteSource, ctx.comp, ctx.frameNo);
 
     if (! matteSource.masks.empty())
     {

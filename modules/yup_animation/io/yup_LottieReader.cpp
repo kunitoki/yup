@@ -332,7 +332,15 @@ void LottieReader::parseAssets (const var& assetsVal, AnimationComposition& comp
 //==============================================================================
 void LottieReader::resolveLayerAssets (AnimationComposition& comp)
 {
-    for (auto& layer : comp.layers)
+    StringArray resolvingPrecomps;
+    resolveLayerAssets (comp, comp.layers, resolvingPrecomps);
+}
+
+void LottieReader::resolveLayerAssets (AnimationComposition& comp,
+                                       std::vector<AnimationLayer::Ptr>& layers,
+                                       StringArray& resolvingPrecomps)
+{
+    for (auto& layer : layers)
     {
         if (layer == nullptr)
             continue;
@@ -353,6 +361,13 @@ void LottieReader::resolveLayerAssets (AnimationComposition& comp)
                 if (precompLayer.layerSize.getWidth() <= 0.0f || precompLayer.layerSize.getHeight() <= 0.0f)
                 {
                     precompLayer.layerSize = comp.size;
+                }
+
+                if (! resolvingPrecomps.contains (precompLayer.precompRefId))
+                {
+                    resolvingPrecomps.add (precompLayer.precompRefId);
+                    resolveLayerAssets (comp, assetPtr->layers, resolvingPrecomps);
+                    resolvingPrecomps.removeString (precompLayer.precompRefId);
                 }
             }
         }
@@ -469,6 +484,10 @@ AnimationLayer::Ptr LottieReader::parseLayer (const var& layerObj)
         FloatProperty tr;
         tr = parseProperty<float> (layerObj["tm"], extractFloat);
         layer->timeRemap = std::move (tr);
+
+        const String expression = varString (layerObj["tm"]["x"]);
+        layer->timeRemapLoopOutCycle = expression.containsIgnoreCase ("loopOut")
+                                    && expression.containsIgnoreCase ("cycle");
     }
 
     return layer;

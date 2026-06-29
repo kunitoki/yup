@@ -72,3 +72,4 @@
 #include "animation/yup_AnimationPlayer.h"
 #include "renderer/yup_AnimationRenderer.h"
 #include "renderer/yup_AnimationFrameExporter.h"
+#include "renderer/yup_CubicBezier.h"

@@ -248,3 +248,15 @@ TEST (AnimationLayerTests, TimeRemapSecondsConvertToFrames)
 
     EXPECT_NEAR (layer.localFrame (30.0f, 30.0f), 30.0f, 1.0e-6f);
 }
+
+TEST (AnimationLayerTests, TimeRemapLoopOutCycleWrapsAfterLastKeyframe)
+{
+    NullLayer layer;
+    auto builder = FloatProperty::animated();
+    builder.keyframe (0.0f, 0.0f, 1.0f, AnimationEasing::linear());
+    builder.keyframe (30.0f, 1.0f, AnimationEasing::linear());
+    layer.timeRemap = builder.build();
+    layer.timeRemapLoopOutCycle = true;
+
+    EXPECT_NEAR (layer.localFrame (45.0f, 30.0f), 15.0f, 1.0e-6f);
+}

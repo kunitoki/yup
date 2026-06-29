@@ -100,6 +100,9 @@ private:
     void parseAssets (const var& assetsArray, AnimationComposition& comp);
 
     void resolveLayerAssets (AnimationComposition& comp);
+    void resolveLayerAssets (AnimationComposition& comp,
+                             std::vector<AnimationLayer::Ptr>& layers,
+                             StringArray& resolvingPrecomps);
 
     // Value extractors
     [[nodiscard]] static Color extractColor (const var& v);

@@ -66,7 +66,7 @@ public:
     [[nodiscard]] static AnimationEasing easeIn() noexcept;
     [[nodiscard]] static AnimationEasing easeOut() noexcept;
     [[nodiscard]] static AnimationEasing easeInOut() noexcept;
-    /** A hold easing that immediately jumps to the end value. */
+    /** A hold easing that keeps the start value until the next keyframe. */
     [[nodiscard]] static AnimationEasing hold() noexcept;
     /** @} */
 

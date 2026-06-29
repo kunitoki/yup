@@ -102,9 +102,9 @@ TEST_F (AnimationPropertyTests, ColorPropertyInterpolatesPerChannel)
                     .build();
 
     const Color mid = prop.getValueAt (5.0f);
-    EXPECT_NEAR (mid.getFloatRed(), 0.5f, 0.05f);
-    EXPECT_NEAR (mid.getFloatGreen(), 0.5f, 0.05f);
-    EXPECT_NEAR (mid.getFloatBlue(), 0.5f, 0.05f);
+    EXPECT_NEAR (mid.getRedFloat(), 0.5f, 0.05f);
+    EXPECT_NEAR (mid.getGreenFloat(), 0.5f, 0.05f);
+    EXPECT_NEAR (mid.getBlueFloat(), 0.5f, 0.05f);
 }
 
 TEST_F (AnimationPropertyTests, Vec2PropertyInterpolatesBothAxes)

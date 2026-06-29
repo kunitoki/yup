@@ -97,6 +97,27 @@ public:
     std::vector<AnimationMarker> markers;
 
     //==============================================================================
+    /** Layer type statistics for introspection (gap 25). */
+    struct Stats
+    {
+        int precompLayerCount = 0;
+        int solidLayerCount = 0;
+        int imageLayerCount = 0;
+        int nullLayerCount = 0;
+        int shapeLayerCount = 0;
+        int textLayerCount = 0;
+
+        int totalLayerCount() const noexcept
+        {
+            return precompLayerCount + solidLayerCount + imageLayerCount
+                 + nullLayerCount + shapeLayerCount + textLayerCount;
+        }
+    };
+
+    /** Returns statistics about the layer types in this composition. */
+    [[nodiscard]] Stats computeStats() const noexcept;
+
+    //==============================================================================
     [[nodiscard]] float totalFrames() const noexcept { return endFrame - startFrame; }
 
     [[nodiscard]] float duration() const noexcept { return frameRate > 0.0f ? totalFrames() / frameRate : 0.0f; }

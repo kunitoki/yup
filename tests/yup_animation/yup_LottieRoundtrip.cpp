@@ -224,6 +224,94 @@ constexpr const char* kTerminalKeyframeJson = R"json({
     ]
 })json";
 
+constexpr const char* kNestedPrecompImageJson = R"json({
+    "v": "5.5.2",
+    "nm": "NestedPrecompImage",
+    "ip": 0,
+    "op": 30,
+    "fr": 30.0,
+    "w": 1,
+    "h": 1,
+    "ddd": 0,
+    "assets": [
+        {
+            "id": "image_0",
+            "w": 1,
+            "h": 1,
+            "u": "",
+            "p": "nested.png",
+            "e": 0
+        },
+        {
+            "id": "comp_b",
+            "layers": [
+                {
+                    "ty": 2,
+                    "nm": "NestedImage",
+                    "ind": 1,
+                    "refId": "image_0",
+                    "ip": 0,
+                    "op": 30,
+                    "st": 0,
+                    "sr": 1,
+                    "ks": {
+                        "a": { "a": 0, "k": [0, 0] },
+                        "p": { "a": 0, "k": [0, 0] },
+                        "s": { "a": 0, "k": [100, 100] },
+                        "r": { "a": 0, "k": 0 },
+                        "o": { "a": 0, "k": 100 }
+                    }
+                }
+            ]
+        },
+        {
+            "id": "comp_a",
+            "layers": [
+                {
+                    "ty": 0,
+                    "nm": "NestedPrecomp",
+                    "ind": 1,
+                    "refId": "comp_b",
+                    "w": 1,
+                    "h": 1,
+                    "ip": 0,
+                    "op": 30,
+                    "st": 0,
+                    "sr": 1,
+                    "ks": {
+                        "a": { "a": 0, "k": [0, 0] },
+                        "p": { "a": 0, "k": [0, 0] },
+                        "s": { "a": 0, "k": [100, 100] },
+                        "r": { "a": 0, "k": 0 },
+                        "o": { "a": 0, "k": 100 }
+                    }
+                }
+            ]
+        }
+    ],
+    "layers": [
+        {
+            "ty": 0,
+            "nm": "RootPrecomp",
+            "ind": 1,
+            "refId": "comp_a",
+            "w": 1,
+            "h": 1,
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [0, 0] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            }
+        }
+    ]
+})json";
+
 } // namespace
 
 class LottieRoundtripTests : public ::testing::Test
@@ -359,4 +447,31 @@ TEST_F (LottieRoundtripTests, TerminalKeyframeUsesPreviousEndValue)
     const auto scaleAtEnd = layer->transform.scale.getValueAt (17.0f);
     EXPECT_NEAR (scaleAtEnd.getWidth(), 100.0f, 0.01f);
     EXPECT_NEAR (scaleAtEnd.getHeight(), 100.0f, 0.01f);
+}
+
+TEST_F (LottieRoundtripTests, ResolvesImageLayersInsideNestedPrecomps)
+{
+    LottieLoadOptions options;
+    options.imageResolver = [] (const String& ref, const File&) -> std::optional<Image>
+    {
+        if (ref == "nested.png")
+            return Image (1, 1, PixelFormat::RGBA);
+
+        return std::nullopt;
+    };
+
+    auto comp = LottieReader::parseData (kNestedPrecompImageJson, options);
+    ASSERT_NE (comp, nullptr);
+
+    auto compB = comp->assets["comp_b"];
+    ASSERT_NE (compB, nullptr);
+    ASSERT_EQ (compB->layers.size(), 1u);
+
+    const auto* layer = compB->layers[0].get();
+    ASSERT_NE (layer, nullptr);
+    ASSERT_EQ (layer->getType(), AnimationLayer::Type::Image);
+
+    const auto* imageLayer = static_cast<const ImageLayer*> (layer);
+    ASSERT_NE (imageLayer, nullptr);
+    EXPECT_TRUE (imageLayer->image.has_value());
 }
