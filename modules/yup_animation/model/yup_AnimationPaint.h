@@ -103,6 +103,7 @@ public:
     //==============================================================================
     String name;
     bool hidden = false;
+    bool enabled = true; ///< "fillEnabled" — defaults to true (Lottie spec)
     FillRule fillRule = FillRule::NonZero;
     ColorProperty color { ColorProperty::staticValue (Color (0xFF000000)) };
     FloatProperty opacity { FloatProperty::staticValue (100.0f) };
@@ -144,6 +145,7 @@ public:
     //==============================================================================
     String name;
     bool hidden = false;
+    bool enabled = true; ///< "fillEnabled" — defaults to true (Lottie spec)
     ColorProperty color { ColorProperty::staticValue (Color (0xFF000000)) };
     FloatProperty opacity { FloatProperty::staticValue (100.0f) };
     FloatProperty width { FloatProperty::staticValue (2.0f) };

@@ -688,6 +688,9 @@ void AnimationRenderer::applyTrimIndividually (std::vector<Path>& paths, const A
 
 void AnimationRenderer::applyFill (Graphics& g, const Path& path, const FillPaint& fill, float frameNo, float opacity)
 {
+    if (! fill.enabled)
+        return;
+
     const float finalOpacity = opacity * fill.opacityAt (frameNo);
     if (finalOpacity <= 0.0f)
         return;
@@ -710,6 +713,9 @@ void AnimationRenderer::applyFill (Graphics& g, const Path& path, const FillPain
 
 void AnimationRenderer::applyStroke (Graphics& g, const Path& path, const StrokePaint& stroke, float frameNo, float opacity)
 {
+    if (! stroke.enabled)
+        return;
+
     const float finalOpacity = opacity * stroke.opacityAt (frameNo);
     if (finalOpacity <= 0.0f)
         return;

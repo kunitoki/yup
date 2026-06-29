@@ -90,6 +90,10 @@ private:
 
     AnimationEasing parseEasing (const var& kfObj);
 
+    /** Looks up or creates a cached interpolator by name/string key.
+        Named interpolators ("n" key) reference previously defined easing curves. */
+    AnimationEasing lookupInterpolator (const String& name, float ox, float oy, float ix, float iy);
+
     void parseGradient (const var& gradObj, AnimationGradient& gradient);
     void parseMasks (const var& masksArray, AnimationLayer& layer);
     void parseAssets (const var& assetsArray, AnimationComposition& comp);
@@ -105,6 +109,7 @@ private:
 
     LottieLoadOptions options_;
     String* errorOut_ = nullptr;
+    HashMap<String, AnimationEasing> interpolatorCache;
 };
 
 } // namespace yup

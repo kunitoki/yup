@@ -133,8 +133,28 @@ ColorGradient AnimationGradient::toColorGradient (float frameNo) const
     if (stops.empty())
         return ColorGradient (Color(), start, Color(), end, gradientType == GradientType::Radial ? ColorGradient::Type::Radial : ColorGradient::Type::Linear);
 
+    // Radial gradient highlight (focal point) — adjusts the center point along the
+    // start→end axis by highlightLength ratio, rotated by highlightAngle.
+    Point<float> gradStart = start;
+    if (gradientType == GradientType::Radial)
+    {
+        const float hLen = highlightLen.getValueAt (frameNo);
+        const float hAngle = highlightAngle.getValueAt (frameNo);
+        if (std::abs (hLen) > 1e-5f || std::abs (hAngle) > 1e-5f)
+        {
+            float progress = hLen / 100.0f;
+            if (std::abs (progress - 1.0f) < 1e-5f)
+                progress = 0.99f;
+            const float radius = start.distanceTo (end);
+            const float startAngle = std::atan2 (end.getY() - start.getY(), end.getX() - start.getX());
+            const float angle = startAngle + degreesToRadians (hAngle);
+            gradStart.setX (start.getX() + std::cos (angle) * progress * radius);
+            gradStart.setY (start.getY() + std::sin (angle) * progress * radius);
+        }
+    }
+
     const ColorGradient gradient (
-        stops.front().second, start, stops.back().second, end, gradientType == GradientType::Radial ? ColorGradient::Type::Radial : ColorGradient::Type::Linear);
+        stops.front().second, gradStart, stops.back().second, end, gradientType == GradientType::Radial ? ColorGradient::Type::Radial : ColorGradient::Type::Linear);
 
     ColorGradient result (gradient);
     for (size_t i = 1; i + 1 < stops.size(); ++i)

@@ -242,6 +242,20 @@ AnimationComposition::Ptr LottieReader::parseRoot (const var& root)
     parseLayers (root["layers"], comp->layers);
     resolveLayerAssets (*comp);
 
+    // Validate composition (gap 22)
+    if (comp->version.isEmpty())
+    {
+        if (errorOut_ != nullptr)
+            *errorOut_ = "Invalid Lottie: missing version";
+        return {};
+    }
+    if (comp->startFrame > comp->endFrame)
+    {
+        if (errorOut_ != nullptr)
+            *errorOut_ = "Invalid Lottie: startFrame > endFrame";
+        return {};
+    }
+
     if (const auto* markersArr = safeArray (root["markers"]))
     {
         for (const var& m : *markersArr)
@@ -405,6 +419,32 @@ AnimationLayer::Ptr LottieReader::parseLayer (const var& layerObj)
     if (layer == nullptr)
         return {};
 
+    // Self-parenting check (gap 22)
+    if (layer->parentId >= 0 && layer->id == layer->parentId)
+    {
+        if (errorOut_ != nullptr)
+            *errorOut_ = "Invalid Lottie: layer references itself as parent";
+        return {};
+    }
+
+    // Hidden layers — downgrade to Null to save resources (gap 23)
+    if (layer->hidden)
+    {
+        layer = new NullLayer();
+        layer->name = varString (layerObj["nm"]);
+        layer->id = varInt (layerObj["ind"], -1);
+        layer->parentId = varInt (layerObj["parent"], -1);
+        layer->inFrame = varFloat (layerObj["ip"]);
+        layer->outFrame = varFloat (layerObj["op"]);
+        layer->startFrame = varFloat (layerObj["st"]);
+        layer->timeStretch = varFloat (layerObj["sr"], 1.0f);
+        layer->hidden = true;
+        layer->blendMode = static_cast<BlendMode> (varInt (layerObj["bm"]));
+        layer->isMatteSource = varInt (layerObj["td"]) != 0;
+        parseTransform (layerObj["ks"], layer->transform, (bool) layerObj["ddd"]);
+        return layer;
+    }
+
     layer->name = varString (layerObj["nm"]);
     layer->id = varInt (layerObj["ind"], -1);
     layer->parentId = varInt (layerObj["parent"], -1);
@@ -537,6 +577,7 @@ void LottieReader::parseSingleItem (const var& itemObj, AnimationGroup& group)
         auto* fl = group.addFill();
         fl->name = varString (itemObj["nm"]);
         fl->hidden = (bool) itemObj["hd"];
+        fl->enabled = ! itemObj["fillEnabled"].isVoid() ? (bool) itemObj["fillEnabled"] : true;
         fl->color = parseProperty<Color> (itemObj["c"], extractColor);
         fl->opacity = parseProperty<float> (itemObj["o"], extractFloat);
         fl->fillRule = (varInt (itemObj["r"]) == 2) ? FillPaint::FillRule::EvenOdd
@@ -547,6 +588,7 @@ void LottieReader::parseSingleItem (const var& itemObj, AnimationGroup& group)
         auto* st = group.addStroke();
         st->name = varString (itemObj["nm"]);
         st->hidden = (bool) itemObj["hd"];
+        st->enabled = ! itemObj["fillEnabled"].isVoid() ? (bool) itemObj["fillEnabled"] : true;
         st->color = parseProperty<Color> (itemObj["c"], extractColor);
         st->opacity = parseProperty<float> (itemObj["o"], extractFloat);
         st->width = parseProperty<float> (itemObj["w"], extractFloat);
@@ -589,6 +631,7 @@ void LottieReader::parseSingleItem (const var& itemObj, AnimationGroup& group)
             auto* gs = group.addStroke();
             gs->name = varString (itemObj["nm"]);
             gs->hidden = (bool) itemObj["hd"];
+            gs->enabled = ! itemObj["fillEnabled"].isVoid() ? (bool) itemObj["fillEnabled"] : true;
             gs->opacity = parseProperty<float> (itemObj["o"], extractFloat);
             gs->width = parseProperty<float> (itemObj["w"], extractFloat);
 
@@ -609,6 +652,7 @@ void LottieReader::parseSingleItem (const var& itemObj, AnimationGroup& group)
             auto* gf = group.addFill();
             gf->name = varString (itemObj["nm"]);
             gf->hidden = (bool) itemObj["hd"];
+            gf->enabled = ! itemObj["fillEnabled"].isVoid() ? (bool) itemObj["fillEnabled"] : true;
             gf->opacity = parseProperty<float> (itemObj["o"], extractFloat);
             gf->fillRule = (varInt (itemObj["r"]) == 2) ? FillPaint::FillRule::EvenOdd
                                                         : FillPaint::FillRule::NonZero;
@@ -637,6 +681,21 @@ void LottieReader::parseSingleItem (const var& itemObj, AnimationGroup& group)
         rp->copies = parseProperty<float> (itemObj["c"], extractFloat);
         rp->offset = parseProperty<float> (itemObj["o"], extractFloat);
 
+        // Pre-compute max copies across all keyframes
+        {
+            float maxCopy = 0.0f;
+            if (rp->copies.isAnimated())
+            {
+                for (const auto& kf : rp->copies.getKeyframes())
+                    maxCopy = jmax (maxCopy, kf.value);
+            }
+            else
+            {
+                maxCopy = rp->copies.getStaticValue();
+            }
+            rp->maxCopies = jmax (1.0f, maxCopy);
+        }
+
         const var& tr = itemObj["tr"];
         if (! tr.isVoid())
         {
@@ -651,6 +710,11 @@ void LottieReader::parseSingleItem (const var& itemObj, AnimationGroup& group)
         rd->name = varString (itemObj["nm"]);
         rd->hidden = (bool) itemObj["hd"];
         rd->radius = parseProperty<float> (itemObj["r"], extractFloat);
+    }
+    else if (ty == "mm") // Merge Paths — not yet supported (gap 26)
+    {
+        if (errorOut_ != nullptr)
+            *errorOut_ = "Merge Path (mm) is not supported yet";
     }
 }
 
@@ -966,9 +1030,6 @@ AnimationEasing LottieReader::parseEasing (const var& kfObj)
     const var& o = kfObj["o"];
     const var& i = kfObj["i"];
 
-    if (o.isVoid() || i.isVoid())
-        return AnimationEasing::linear();
-
     auto getFirstOrValue = [] (const var& v) -> float
     {
         if (const auto* arr = v.getArray())
@@ -981,7 +1042,22 @@ AnimationEasing LottieReader::parseEasing (const var& kfObj)
     const float ix = getFirstOrValue (i["x"]);
     const float iy = getFirstOrValue (i["y"]);
 
-    return AnimationEasing (ox, oy, ix, iy);
+    // Check for named interpolator reference ("n" key)
+    const String namedInterpolator = varString (kfObj["n"]);
+    if (namedInterpolator.isNotEmpty())
+        return lookupInterpolator (namedInterpolator, ox, oy, ix, iy);
+
+    return AnimationEasing::fromLottieTangents (ox, oy, ix, iy);
+}
+
+AnimationEasing LottieReader::lookupInterpolator (const String& name, float ox, float oy, float ix, float iy)
+{
+    if (interpolatorCache.contains (name))
+        return interpolatorCache[name];
+
+    AnimationEasing easing = AnimationEasing::fromLottieTangents ({ ox, oy }, { ix, iy });
+    interpolatorCache.set (name, easing);
+    return easing;
 }
 
 //==============================================================================

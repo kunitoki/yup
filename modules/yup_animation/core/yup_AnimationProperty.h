@@ -266,6 +266,25 @@ public:
     /** Returns a Builder to construct an animated property. */
     [[nodiscard]] static Builder animated() { return Builder {}; }
 
+    //==============================================================================
+    /** Returns true when any keyframe is active in the frame range [prevFrame, curFrame).
+        Useful for dirty-tracking — skip re-evaluation when nothing changed.
+    */
+    [[nodiscard]] bool changed (float prevFrame, float curFrame) const noexcept
+    {
+        if (isStatic())
+            return false;
+
+        if (keyframes_.empty())
+            return false;
+
+        const float first = keyframes_.front().frame;
+        const float last = keyframes_.back().frame;
+
+        return ! ((first > prevFrame && first > curFrame)
+                  || (last < prevFrame && last < curFrame));
+    }
+
 private:
     void sortKeyframes()
     {

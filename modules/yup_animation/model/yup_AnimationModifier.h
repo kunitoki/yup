@@ -81,6 +81,9 @@ public:
     FloatProperty copies { FloatProperty::staticValue (1.0f) };
     FloatProperty offset { FloatProperty::staticValue (0.0f) };
 
+    /** Pre-computed maximum copy count across all keyframes (for buffer sizing). */
+    float maxCopies = 1.0f;
+
     /** Per-copy transform increment applied additively to each copy. */
     AnimationTransform copyTransform;
 
