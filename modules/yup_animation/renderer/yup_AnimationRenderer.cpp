@@ -247,34 +247,21 @@ bool AnimationRenderer::renderLayerIsolated (Graphics& g,
                                              const AnimationLayer* matteSource,
                                              float opacity)
 {
-    const int width = static_cast<int> (std::ceil (ctx.comp.size.getWidth()));
-    const int height = static_cast<int> (std::ceil (ctx.comp.size.getHeight()));
-
-    if (width <= 0 || height <= 0)
-        return false;
-
-    Image layerImage (width, height, PixelFormat::RGBA);
-    Graphics layerGraphics (g.getGraphicsContext(), layerImage, 0x00000000);
-
-    if (! layerGraphics.isOffscreen())
+    auto transparencyLayer = g.beginTransparencyLayer ({ 0.0f, 0.0f, ctx.comp.size.getWidth(), ctx.comp.size.getHeight() }, opacity);
+    if (! transparencyLayer.isValid())
         return false;
 
     RenderContext layerCtx = ctx;
     layerCtx.viewTransform = AffineTransform::identity();
     layerCtx.opacity = 1.0f;
 
-    renderLayerDirect (layerGraphics, layer, layerCtx, matteSource, 1.0f);
-
-    if (! layerGraphics.commitToImage())
-        return false;
+    renderLayerDirect (transparencyLayer.getGraphics(), layer, layerCtx, matteSource, 1.0f);
 
     auto saveState = g.saveState();
     const AffineTransform baseTransform = g.getTransform();
     g.setTransform (ctx.viewTransform.followedBy (baseTransform));
-    g.setOpacity (g.getOpacity() * opacity);
-    g.drawImage (layerImage, { 0.0f, 0.0f, ctx.comp.size.getWidth(), ctx.comp.size.getHeight() });
 
-    return true;
+    return transparencyLayer.commit();
 }
 
 void AnimationRenderer::renderLayerContent (Graphics& g, const AnimationLayer& layer, const RenderContext& ctx, float opacity)

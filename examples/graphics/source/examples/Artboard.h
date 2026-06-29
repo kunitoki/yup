@@ -124,6 +124,11 @@ public:
     }
 
 private:
+    void attachedToNative() override
+    {
+        loadArtboard();
+    }
+
     void setupControls()
     {
         auto labelFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
