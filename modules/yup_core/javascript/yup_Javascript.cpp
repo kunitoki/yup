@@ -553,8 +553,7 @@ struct JavascriptEngine::RootObject final : public DynamicObject
             }
 
             if (auto* o = p.getDynamicObject())
-                if (auto* v = getPropertyPointer (*o, child))
-                    return *v;
+                return o->getProperty (child);
 
             return var::undefined();
         }
@@ -589,8 +588,7 @@ struct JavascriptEngine::RootObject final : public DynamicObject
 
             if (auto* o = arrayVar.getDynamicObject())
                 if (key.isString())
-                    if (auto* v = getPropertyPointer (*o, Identifier (key)))
-                        return *v;
+                    return o->getProperty (Identifier (key));
 
             return var::undefined();
         }
@@ -1210,9 +1208,15 @@ struct JavascriptEngine::RootObject final : public DynamicObject
     private:
         String::CharPointerType p;
 
-        static bool isIdentifierStart (yup_wchar c) noexcept { return CharacterFunctions::isLetter (c) || c == '_'; }
+        static bool isIdentifierStart (yup_wchar c) noexcept
+        {
+            return CharacterFunctions::isLetter (c) || c == '_' || c == '$';
+        }
 
-        static bool isIdentifierBody (yup_wchar c) noexcept { return CharacterFunctions::isLetterOrDigit (c) || c == '_'; }
+        static bool isIdentifierBody (yup_wchar c) noexcept
+        {
+            return CharacterFunctions::isLetterOrDigit (c) || c == '_' || c == '$';
+        }
 
         TokenType matchNextToken()
         {

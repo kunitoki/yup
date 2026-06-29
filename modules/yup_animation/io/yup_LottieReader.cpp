@@ -336,8 +336,11 @@ void LottieReader::parseAssets (const var& assetsVal, AnimationComposition& comp
         {
             // Precomp
             asset->assetType = AnimationAsset::AssetType::Precomp;
-            std::vector<int> ignored;
-            parseLayers (assetVar["layers"], asset->layers, ignored);
+            std::vector<int> parsedLayerIndices;
+            parseLayers (assetVar["layers"], asset->layers, parsedLayerIndices);
+
+            if (const auto* layersArray = safeArray (assetVar["layers"]))
+                resolveLayerExpressions (comp, *layersArray, asset->layers, 0, parsedLayerIndices);
         }
         else
         {

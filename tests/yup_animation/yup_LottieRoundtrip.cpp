@@ -184,6 +184,69 @@ constexpr const char* kMultiLayerPositionExpressionJson = R"json({
     ]
 })json";
 
+constexpr const char* kPrecompAssetLayerExpressionJson = R"json({
+    "v": "5.5.2",
+    "nm": "PrecompAssetLayerExpression",
+    "ip": 0,
+    "op": 30,
+    "fr": 30.0,
+    "w": 200,
+    "h": 200,
+    "ddd": 0,
+    "assets": [
+        {
+            "id": "pre_0",
+            "layers": [
+                {
+                    "ty": 4,
+                    "nm": "AssetLayer",
+                    "ind": 1,
+                    "ip": 0, "op": 30, "st": 0, "sr": 1, "hd": false, "bm": 0,
+                    "ks": {
+                        "a": { "a": 0, "k": [0, 0] },
+                        "p": { "a": 0, "k": [50, 60], "x": "var $bm_rt;\n$bm_rt = thisComp.layer('Asset Null').transform.position;" },
+                        "s": { "a": 0, "k": [100, 100] },
+                        "r": { "a": 0, "k": 0 },
+                        "o": { "a": 0, "k": 100 }
+                    },
+                    "shapes": []
+                },
+                {
+                    "ty": 3,
+                    "nm": "Asset Null",
+                    "ind": 2,
+                    "ip": 0, "op": 30, "st": 0, "sr": 1, "hd": false, "bm": 0,
+                    "ks": {
+                        "a": { "a": 0, "k": [0, 0] },
+                        "p": { "a": 0, "k": [12, 34] },
+                        "s": { "a": 0, "k": [100, 100] },
+                        "r": { "a": 0, "k": 0 },
+                        "o": { "a": 0, "k": 0 }
+                    }
+                }
+            ]
+        }
+    ],
+    "layers": [
+        {
+            "ty": 0,
+            "nm": "Precomp",
+            "ind": 1,
+            "refId": "pre_0",
+            "w": 200,
+            "h": 200,
+            "ip": 0, "op": 30, "st": 0, "sr": 1, "hd": false, "bm": 0,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [0, 0] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            }
+        }
+    ]
+})json";
+
 constexpr const char* kShapeContentExpressionJson = R"json({
     "v": "5.5.2",
     "nm": "ShapeContentExpression",
@@ -694,6 +757,23 @@ TEST_F (LottieRoundtripTests, ResolvesMultipleLayersWithSamePositionExpression)
         EXPECT_NEAR (end.getX(), 30.0f, 0.001f) << "layer " << li << " end X";
         EXPECT_NEAR (end.getY(), 40.0f, 0.001f) << "layer " << li << " end Y";
     }
+}
+
+TEST_F (LottieRoundtripTests, ResolvesPrecompAssetLayerPositionExpressionReferences)
+{
+    auto comp = LottieReader::parseData (kPrecompAssetLayerExpressionJson);
+    ASSERT_NE (comp, nullptr);
+
+    auto asset = comp->assets["pre_0"];
+    ASSERT_NE (asset, nullptr);
+    ASSERT_EQ (asset->layers.size(), 2u);
+
+    const auto* targetLayer = asset->layers[0].get();
+    ASSERT_NE (targetLayer, nullptr);
+
+    const Point<float> position = targetLayer->transform.positionAt (0.0f);
+    EXPECT_NEAR (position.getX(), 12.0f, 0.001f);
+    EXPECT_NEAR (position.getY(), 34.0f, 0.001f);
 }
 
 TEST_F (LottieRoundtripTests, ResolvesShapeContentExpressionReferences)
