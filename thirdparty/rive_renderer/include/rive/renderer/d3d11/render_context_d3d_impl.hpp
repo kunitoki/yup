@@ -65,20 +65,50 @@ struct D3D11DrawVertexShader
     ComPtr<ID3D11VertexShader> shader;
 };
 
-class D3D11PipelineManager
-    : public D3DPipelineManager<D3D11DrawVertexShader,
-                                ComPtr<ID3D11PixelShader>,
-                                ID3D11Device>
+struct D3D11DrawPixelShader
 {
-public:
-    D3D11PipelineManager(ComPtr<ID3D11DeviceContext> context,
-                         ComPtr<ID3D11Device> device,
-                         const D3DCapabilities& capabilities);
+    ComPtr<ID3D11PixelShader> shader;
+};
 
-    void setPipelineState(rive::gpu::DrawType,
-                          rive::gpu::ShaderFeatures,
-                          rive::gpu::InterlockMode,
-                          rive::gpu::ShaderMiscFlags);
+struct D3D11DrawPipeline
+{
+    using VertexShaderType = D3D11DrawVertexShader;
+    using FragmentShaderType = D3D11DrawPixelShader;
+    using PipelineProps = gpu::StandardPipelineProps;
+
+    VertexShaderType m_vertexShader;
+    FragmentShaderType m_pixelShader;
+
+    bool succeeded() const
+    {
+        return m_vertexShader.shader != nullptr &&
+               m_pixelShader.shader != nullptr;
+    }
+};
+
+class D3D11PipelineManager
+    : public D3DPipelineManager<D3D11DrawPipeline, ID3D11Device>
+{
+    using Super = D3DPipelineManager<D3D11DrawPipeline, ID3D11Device>;
+
+public:
+    D3D11PipelineManager(ComPtr<ID3D11DeviceContext>,
+                         ComPtr<ID3D11Device>,
+                         const D3DCapabilities&,
+                         ShaderCompilationMode);
+
+    ~D3D11PipelineManager() { shutdownBackgroundThread(); }
+
+    [[nodiscard]] bool setPipelineState(DrawType,
+                                        ShaderFeatures,
+                                        InterlockMode,
+                                        ShaderMiscFlags,
+                                        const PlatformFeatures&
+#ifdef WITH_RIVE_TOOLS
+                                        ,
+                                        SynthesizedFailureType
+#endif
+    );
 
     void setColorRampState() const
     {
@@ -111,10 +141,16 @@ public:
     }
 
 protected:
-    virtual void compileBlobToFinalType(const ShaderCompileRequest&,
-                                        ComPtr<ID3DBlob> vertexShader,
-                                        ComPtr<ID3DBlob> pixelShader,
-                                        ShaderCompileResult*) override;
+    virtual std::unique_ptr<D3D11DrawPixelShader>
+        compilePixelShaderBlobToFinalType(ComPtr<ID3DBlob>) override;
+
+    virtual std::unique_ptr<D3D11DrawVertexShader>
+        compileVertexShaderBlobToFinalType(DrawType, ComPtr<ID3DBlob>) override;
+
+    virtual std::unique_ptr<D3D11DrawPipeline> linkPipeline(
+        const PipelineProps&,
+        const D3D11DrawVertexShader&,
+        const D3D11DrawPixelShader&) override;
 
 private:
     ComPtr<ID3D11DeviceContext> m_context;
@@ -147,6 +183,15 @@ public:
         return make_rcp<RenderTargetD3D>(this, width, height);
     }
 
+    rcp<Texture> adoptImageTexture(ComPtr<ID3D11Texture2D> image,
+                                   uint32_t width,
+                                   uint32_t height);
+
+#ifdef RIVE_CANVAS
+    rcp<RenderCanvas> makeRenderCanvas(uint32_t width,
+                                       uint32_t height) override;
+#endif
+
     const D3DCapabilities& d3dCapabilities() const { return m_d3dCapabilities; }
     ID3D11Device* gpu() const { return m_gpu.Get(); }
     ID3D11DeviceContext* gpuContext() const { return m_gpuContext.Get(); }
@@ -167,7 +212,8 @@ public:
 private:
     RenderContextD3DImpl(ComPtr<ID3D11Device>,
                          ComPtr<ID3D11DeviceContext>,
-                         const D3DCapabilities&);
+                         const D3DCapabilities&,
+                         const D3DContextOptions&);
 
     rcp<RenderBuffer> makeRenderBuffer(RenderBufferType,
                                        RenderBufferFlags,
@@ -176,6 +222,7 @@ private:
     rcp<Texture> makeImageTexture(uint32_t width,
                                   uint32_t height,
                                   uint32_t mipLevelCount,
+                                  GPUTextureFormat,
                                   const uint8_t imageDataRGBAPremul[]) override;
 
     std::unique_ptr<BufferRing> makeUniformBufferRing(
@@ -243,7 +290,8 @@ private:
     ComPtr<ID3D11SamplerState>
         m_samplerStates[rive::ImageSampler::MAX_SAMPLER_PERMUTATIONS];
 
-    ComPtr<ID3D11RasterizerState> m_atlasRasterState;
+    ComPtr<ID3D11RasterizerState> m_atlasFillRasterState;
+    ComPtr<ID3D11RasterizerState> m_atlasStrokeRasterState;
     ComPtr<ID3D11RasterizerState> m_backCulledRasterState[2];
     ComPtr<ID3D11RasterizerState> m_doubleSidedRasterState[2];
 

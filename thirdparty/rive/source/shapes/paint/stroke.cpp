@@ -1,7 +1,6 @@
 #include "rive/artboard.hpp"
 #include "rive/shapes/paint/stroke.hpp"
 #include "rive/shapes/paint/stroke_cap.hpp"
-#include "rive/shapes/paint/stroke_effect.hpp"
 #include "rive/shapes/paint/stroke_join.hpp"
 
 using namespace rive;
@@ -20,17 +19,6 @@ RenderPaint* Stroke::initRenderPaint(ShapePaintMutator* mutator)
     return renderPaint;
 }
 
-void Stroke::update(ComponentDirt value)
-{
-    Super::update(value);
-    if (hasDirt(value, ComponentDirt::Path) && m_Effect != nullptr)
-    {
-        auto container = ShapePaintContainer::from(parent());
-        auto path = pickPath(container);
-        m_Effect->updateEffect(path);
-    }
-}
-
 void Stroke::applyTo(RenderPaint* renderPaint, float opacityModifier)
 {
     renderPaint->style(RenderPaintStyle::stroke);
@@ -46,40 +34,29 @@ bool Stroke::isVisible() const
     return Super::isVisible() && thickness() > 0.0f;
 }
 
-void Stroke::thicknessChanged()
-{
-    assert(m_RenderPaint != nullptr);
-    m_RenderPaint->thickness(thickness());
-}
+void Stroke::thicknessChanged() { addDirt(ComponentDirt::Paint); }
 
-void Stroke::capChanged()
-{
-    assert(m_RenderPaint != nullptr);
-    m_RenderPaint->cap((StrokeCap)cap());
-}
+void Stroke::capChanged() { addDirt(ComponentDirt::Paint); }
 
-void Stroke::joinChanged()
-{
-    assert(m_RenderPaint != nullptr);
-    m_RenderPaint->join((StrokeJoin)join());
-}
+void Stroke::joinChanged() { addDirt(ComponentDirt::Paint); }
 
-void Stroke::addStrokeEffect(StrokeEffect* effect) { m_Effect = effect; }
-
-void Stroke::invalidateEffects()
+void Stroke::update(ComponentDirt value)
 {
-    if (m_Effect != nullptr)
+    Super::update(value);
+    if (hasDirt(value, ComponentDirt::Paint))
     {
-        m_Effect->invalidateEffect();
+        assert(m_RenderPaint != nullptr);
+        m_RenderPaint->thickness(thickness());
+        m_RenderPaint->cap((StrokeCap)cap());
+        m_RenderPaint->join((StrokeJoin)join());
     }
-    invalidateRendering();
 }
 
 void Stroke::invalidateRendering()
 {
     assert(m_RenderPaint != nullptr);
     m_RenderPaint->invalidateStroke();
-    addDirt(ComponentDirt::Path);
+    Super::invalidateRendering();
 }
 
 ShapePaintPath* Stroke::pickPath(ShapePaintContainer* shape) const
@@ -89,24 +66,6 @@ ShapePaintPath* Stroke::pickPath(ShapePaintContainer* shape) const
         return shape->localPath();
     }
     return shape->worldPath();
-}
-
-void Stroke::draw(Renderer* renderer,
-                  ShapePaintPath* shapePaintPath,
-                  const Mat2D& transform,
-                  bool usePathFillRule,
-                  RenderPaint* overridePaint)
-{
-    if (m_Effect != nullptr)
-    {
-        shapePaintPath = m_Effect->effectPath();
-    }
-
-    Super::draw(renderer,
-                shapePaintPath,
-                transform,
-                usePathFillRule,
-                overridePaint);
 }
 
 void Stroke::buildDependencies()

@@ -21,6 +21,8 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+
 #include <yup_audio_basics/yup_audio_basics.h>
 
 using namespace yup;
@@ -42,68 +44,133 @@ public:
 
     void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override
     {
-        prepareToPlayCalled = true;
-        lastSamplesPerBlock = samplesPerBlockExpected;
-        lastSampleRate = sampleRate;
+        prepareToPlayCalled.store (true);
+        lastSamplesPerBlock.store (samplesPerBlockExpected);
+        lastSampleRate.store (sampleRate);
     }
 
     void releaseResources() override
     {
-        releaseResourcesCalled = true;
+        releaseResourcesCalled.store (true);
     }
 
     void getNextAudioBlock (const AudioSourceChannelInfo& info) override
     {
-        getNextAudioBlockCalled = true;
+        getNextAudioBlockCallCount.fetch_add (1);
+        getNextAudioBlockCalled.store (true);
+
+        fillNextAudioBlock (info);
+    }
+
+protected:
+    void fillNextAudioBlock (const AudioSourceChannelInfo& info)
+    {
+        const auto startPosition = currentPosition.fetch_add (info.numSamples);
 
         // Fill with a pattern based on current position
         for (int ch = 0; ch < info.buffer->getNumChannels(); ++ch)
         {
             for (int i = 0; i < info.numSamples; ++i)
             {
-                const float value = std::sin ((currentPosition + i) * 0.01f) * 0.5f;
+                const float value = std::sin ((startPosition + i) * 0.01f) * 0.5f;
                 info.buffer->setSample (ch, info.startSample + i, value);
             }
         }
-        currentPosition += info.numSamples;
     }
 
+public:
     void setNextReadPosition (int64 newPosition) override
     {
-        setNextReadPositionCalled = true;
-        currentPosition = newPosition;
+        setNextReadPositionCalled.store (true);
+        currentPosition.store (newPosition);
     }
 
     int64 getNextReadPosition() const override
     {
-        return currentPosition;
+        return currentPosition.load();
     }
 
     int64 getTotalLength() const override
     {
-        return totalLength;
+        return totalLength.load();
     }
 
     bool isLooping() const override
     {
-        return looping;
+        return looping.load();
     }
 
     void setLooping (bool shouldLoop) override
     {
-        looping = shouldLoop;
+        looping.store (shouldLoop);
     }
 
-    bool prepareToPlayCalled = false;
-    bool releaseResourcesCalled = false;
-    bool getNextAudioBlockCalled = false;
-    bool setNextReadPositionCalled = false;
-    int lastSamplesPerBlock = 0;
-    double lastSampleRate = 0.0;
-    int64 totalLength;
-    int64 currentPosition;
-    bool looping;
+    std::atomic<bool> prepareToPlayCalled { false };
+    std::atomic<bool> releaseResourcesCalled { false };
+    std::atomic<bool> getNextAudioBlockCalled { false };
+    std::atomic<bool> setNextReadPositionCalled { false };
+    std::atomic<int> getNextAudioBlockCallCount { 0 };
+    std::atomic<int> lastSamplesPerBlock { 0 };
+    std::atomic<double> lastSampleRate { 0.0 };
+    std::atomic<int64> totalLength;
+    std::atomic<int64> currentPosition;
+    std::atomic<bool> looping;
 };
+
+class BlockingReadMockPositionableAudioSource : public MockPositionableAudioSource
+{
+public:
+    explicit BlockingReadMockPositionableAudioSource (int callIndexToBlock)
+        : callIndexToBlock (callIndexToBlock)
+    {
+    }
+
+    void getNextAudioBlock (const AudioSourceChannelInfo& info) override
+    {
+        const auto callIndex = getNextAudioBlockCallCount.fetch_add (1) + 1;
+        getNextAudioBlockCalled.store (true);
+
+        if (callIndex == callIndexToBlock)
+        {
+            blockedReadStarted.signal();
+            allowBlockedReadToFinish.wait (1000);
+        }
+
+        fillNextAudioBlock (info);
+    }
+
+    WaitableEvent blockedReadStarted;
+    WaitableEvent allowBlockedReadToFinish;
+
+private:
+    const int callIndexToBlock;
+};
+
+bool waitForFlag (const std::atomic<bool>& flag, int timeoutMs = 1000)
+{
+    for (int elapsedMs = 0; elapsedMs < timeoutMs; elapsedMs += 5)
+    {
+        if (flag.load())
+            return true;
+
+        Thread::sleep (5);
+    }
+
+    return flag.load();
+}
+
+bool waitForValueAtLeast (const std::atomic<int>& value, int minimumValue, int timeoutMs = 1000)
+{
+    for (int elapsedMs = 0; elapsedMs < timeoutMs; elapsedMs += 5)
+    {
+        if (value.load() >= minimumValue)
+            return true;
+
+        Thread::sleep (5);
+    }
+
+    return value.load() >= minimumValue;
+}
 } // namespace
 
 //==============================================================================
@@ -173,9 +240,9 @@ TEST_F (BufferingAudioSourceTests, PrepareToPlay)
     buffering->prepareToPlay (512, 44100.0);
 
     // Should call prepareToPlay on source (line 80)
-    EXPECT_TRUE (mockSource->prepareToPlayCalled);
-    EXPECT_EQ (mockSource->lastSamplesPerBlock, 512);
-    EXPECT_DOUBLE_EQ (mockSource->lastSampleRate, 44100.0);
+    EXPECT_TRUE (mockSource->prepareToPlayCalled.load());
+    EXPECT_EQ (mockSource->lastSamplesPerBlock.load(), 512);
+    EXPECT_DOUBLE_EQ (mockSource->lastSampleRate.load(), 44100.0);
 
     // Give background thread time to start buffering
     Thread::sleep (50);
@@ -190,7 +257,7 @@ TEST_F (BufferingAudioSourceTests, PrepareToPlayMultipleTimes)
     buffering->prepareToPlay (512, 44100.0);
     Thread::sleep (50);
 
-    EXPECT_TRUE (mockSource->prepareToPlayCalled);
+    EXPECT_TRUE (mockSource->prepareToPlayCalled.load());
 }
 
 TEST_F (BufferingAudioSourceTests, PrepareToPlayDifferentSampleRate)
@@ -202,7 +269,7 @@ TEST_F (BufferingAudioSourceTests, PrepareToPlayDifferentSampleRate)
     buffering->prepareToPlay (512, 48000.0);
     Thread::sleep (50);
 
-    EXPECT_DOUBLE_EQ (mockSource->lastSampleRate, 48000.0);
+    EXPECT_DOUBLE_EQ (mockSource->lastSampleRate.load(), 48000.0);
 }
 
 TEST_F (BufferingAudioSourceTests, PrepareToPlayDifferentBufferSize)
@@ -217,7 +284,7 @@ TEST_F (BufferingAudioSourceTests, PrepareToPlayDifferentBufferSize)
     Thread::sleep (50);
 
     // The source might still have old value if buffer didn't need resize
-    EXPECT_GE (mockSource->lastSamplesPerBlock, 512);
+    EXPECT_GE (mockSource->lastSamplesPerBlock.load(), 512);
 }
 
 TEST_F (BufferingAudioSourceTests, PrepareToPlayWithPrefill)
@@ -229,7 +296,7 @@ TEST_F (BufferingAudioSourceTests, PrepareToPlayWithPrefill)
     // This should block until buffer is partially filled (line 98-99)
     bufferingWithPrefill->prepareToPlay (512, 44100.0);
 
-    EXPECT_TRUE (source->prepareToPlayCalled);
+    EXPECT_TRUE (source->prepareToPlayCalled.load());
 }
 
 //==============================================================================
@@ -241,12 +308,14 @@ TEST_F (BufferingAudioSourceTests, ReleaseResources)
     buffering->releaseResources();
 
     // Should call releaseResources on source (line 114)
-    EXPECT_TRUE (mockSource->releaseResourcesCalled);
+    EXPECT_TRUE (mockSource->releaseResourcesCalled.load());
 }
 
 //==============================================================================
 TEST_F (BufferingAudioSourceTests, GetNextAudioBlockEmpty)
 {
+    EXPECT_EQ (buffering->getNextReadPosition(), 0);
+
     // Without prepareToPlay, should get cache miss (line 121-126)
     AudioBuffer<float> buffer (2, 512);
     for (int ch = 0; ch < 2; ++ch)
@@ -263,6 +332,8 @@ TEST_F (BufferingAudioSourceTests, GetNextAudioBlockEmpty)
     info.numSamples = 512;
 
     buffering->getNextAudioBlock (info);
+
+    EXPECT_EQ (buffering->getNextReadPosition(), 512);
 
     // Buffer should be cleared (cache miss)
     for (int ch = 0; ch < 2; ++ch)
@@ -376,7 +447,7 @@ TEST_F (BufferingAudioSourceTests, GetNextAudioBlockWithStartSample)
 TEST_F (BufferingAudioSourceTests, WaitForNextAudioBlockReadyNullSource)
 {
     // Create buffering with source that has zero length
-    mockSource->totalLength = 0;
+    mockSource->totalLength.store (0);
 
     AudioBuffer<float> buffer (2, 512);
     AudioSourceChannelInfo info;
@@ -478,10 +549,10 @@ TEST_F (BufferingAudioSourceTests, GetNextReadPosition)
 
 TEST_F (BufferingAudioSourceTests, GetNextReadPositionWithLooping)
 {
+    buffering->setLooping (true);
+
     buffering->prepareToPlay (512, 44100.0);
     Thread::sleep (50);
-
-    mockSource->setLooping (true);
 
     // Set position past total length
     buffering->setNextReadPosition (mockSource->getTotalLength() + 1000);
@@ -521,24 +592,20 @@ TEST_F (BufferingAudioSourceTests, ReadNextBufferChunkInitial)
 {
     buffering->prepareToPlay (512, 44100.0);
 
-    // Background thread should call readNextBufferChunk (line 238-318)
-    Thread::sleep (100);
-
-    // Verify source was called
-    EXPECT_TRUE (mockSource->getNextAudioBlockCalled);
+    EXPECT_TRUE (waitForFlag (mockSource->getNextAudioBlockCalled));
 }
 
 TEST_F (BufferingAudioSourceTests, ReadNextBufferChunkCacheMiss)
 {
     buffering->prepareToPlay (512, 44100.0);
-    Thread::sleep (100);
+    EXPECT_TRUE (waitForFlag (mockSource->getNextAudioBlockCalled));
+
+    mockSource->setNextReadPositionCalled.store (false);
 
     // Seek far away to trigger cache miss (line 259-268)
     buffering->setNextReadPosition (200000);
-    Thread::sleep (100);
 
-    // Should have read new buffer section
-    EXPECT_TRUE (mockSource->setNextReadPositionCalled);
+    EXPECT_TRUE (waitForFlag (mockSource->setNextReadPositionCalled));
 }
 
 TEST_F (BufferingAudioSourceTests, ReadNextBufferChunkIncrementalRead)
@@ -561,7 +628,7 @@ TEST_F (BufferingAudioSourceTests, ReadNextBufferChunkIncrementalRead)
     }
 
     // Should trigger incremental reads (line 269-279)
-    EXPECT_TRUE (mockSource->getNextAudioBlockCalled);
+    EXPECT_TRUE (waitForFlag (mockSource->getNextAudioBlockCalled));
 }
 
 TEST_F (BufferingAudioSourceTests, ReadNextBufferChunkWrapAround)
@@ -587,16 +654,40 @@ TEST_F (BufferingAudioSourceTests, ReadNextBufferChunkWrapAround)
 TEST_F (BufferingAudioSourceTests, ReadNextBufferChunkLoopingChange)
 {
     buffering->prepareToPlay (512, 44100.0);
-    Thread::sleep (100);
+    EXPECT_TRUE (waitForFlag (mockSource->getNextAudioBlockCalled));
+
+    mockSource->getNextAudioBlockCalled.store (false);
 
     // Change looping state to trigger buffer reset (line 245-250)
-    mockSource->setLooping (true);
-    Thread::sleep (100);
+    buffering->setLooping (true);
+    EXPECT_TRUE (waitForFlag (mockSource->getNextAudioBlockCalled));
 
-    mockSource->setLooping (false);
-    Thread::sleep (100);
+    mockSource->getNextAudioBlockCalled.store (false);
+    buffering->setLooping (false);
 
-    EXPECT_TRUE (mockSource->getNextAudioBlockCalled);
+    EXPECT_TRUE (waitForFlag (mockSource->getNextAudioBlockCalled));
+}
+
+TEST_F (BufferingAudioSourceTests, LoopingChangeDuringReadDiscardsStaleBufferRange)
+{
+    auto* source = new BlockingReadMockPositionableAudioSource (4);
+    auto blockingBuffering = std::make_unique<BufferingAudioSource> (source, *thread, true, 8192, 2, false);
+
+    blockingBuffering->prepareToPlay (512, 44100.0);
+
+    const auto blockedReadStarted = source->blockedReadStarted.wait (1000);
+    EXPECT_TRUE (blockedReadStarted);
+
+    if (! blockedReadStarted)
+    {
+        source->allowBlockedReadToFinish.signal();
+        return;
+    }
+
+    blockingBuffering->setLooping (true);
+    source->allowBlockedReadToFinish.signal();
+
+    EXPECT_TRUE (waitForValueAtLeast (source->getNextAudioBlockCallCount, 5));
 }
 
 //==============================================================================
@@ -604,11 +695,7 @@ TEST_F (BufferingAudioSourceTests, UseTimeSlice)
 {
     buffering->prepareToPlay (512, 44100.0);
 
-    // useTimeSlice is called by background thread (line 331-334)
-    Thread::sleep (100);
-
-    // Should have processed some chunks
-    EXPECT_TRUE (mockSource->getNextAudioBlockCalled);
+    EXPECT_TRUE (waitForFlag (mockSource->getNextAudioBlockCalled));
 }
 
 TEST_F (BufferingAudioSourceTests, MultipleChannels)
@@ -649,7 +736,7 @@ TEST_F (BufferingAudioSourceTests, StressTestContinuousPlayback)
         Thread::sleep (5);
     }
 
-    EXPECT_TRUE (mockSource->getNextAudioBlockCalled);
+    EXPECT_TRUE (waitForFlag (mockSource->getNextAudioBlockCalled));
 }
 
 TEST_F (BufferingAudioSourceTests, StressTestRandomSeeks)
@@ -676,5 +763,5 @@ TEST_F (BufferingAudioSourceTests, StressTestRandomSeeks)
         buffering->getNextAudioBlock (info);
     }
 
-    EXPECT_TRUE (mockSource->setNextReadPositionCalled);
+    EXPECT_TRUE (waitForFlag (mockSource->setNextReadPositionCalled));
 }

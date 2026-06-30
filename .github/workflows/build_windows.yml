@@ -31,8 +31,9 @@ concurrency:
 jobs:
   build_tests_debug:
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON
@@ -43,8 +44,9 @@ jobs:
 
   build_tests_release:
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON
@@ -56,7 +58,7 @@ jobs:
   build_console:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
@@ -66,7 +68,7 @@ jobs:
   build_app:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
@@ -76,7 +78,7 @@ jobs:
   build_graphics:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
@@ -86,7 +88,7 @@ jobs:
   build_plugin:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON

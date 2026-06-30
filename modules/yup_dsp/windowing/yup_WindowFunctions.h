@@ -94,7 +94,8 @@ public:
         @param n         The sample index (0 to N-1)
         @param N         The window length
         @param parameter Optional parameter for parameterizable windows (Kaiser beta, Gaussian sigma, etc.)
-        @returns         The window value at sample n
+
+        @return          The window value at sample n
     */
     static FloatType getValue (WindowType type, int n, int N, FloatType parameter = FloatType (8)) noexcept
     {
@@ -232,22 +233,50 @@ public:
     //==============================================================================
     /** Method-based API for backwards compatibility and direct access */
 
+    /** Evaluates a rectangular window function at sample n.
+
+        @param n The sample index (0 to N-1)
+        @param N The window length
+
+        @return The window value at sample n
+     */
     static FloatType rectangular (int n, int N) noexcept
     {
         ignoreUnused (n, N);
         return FloatType (1);
     }
 
+    /** Evaluates a Hann window function at sample n.
+
+        @param n The sample index (0 to N-1)
+        @param N The window length
+
+        @return The window value at sample n
+     */
     static FloatType hann (int n, int N) noexcept
     {
         return FloatType (0.5) * (FloatType (1) - std::cos (MathConstants<FloatType>::twoPi * n / (N - 1)));
     }
 
+    /** Evaluates a Hamming window function at sample n.
+
+        @param n The sample index (0 to N-1)
+        @param N The window length
+
+        @return The window value at sample n
+     */
     static FloatType hamming (int n, int N) noexcept
     {
         return FloatType (0.54) - FloatType (0.46) * std::cos (MathConstants<FloatType>::twoPi * n / (N - 1));
     }
 
+    /** Evaluates a Blackman window function at sample n.
+
+        @param n The sample index (0 to N-1)
+        @param N The window length
+
+        @return The window value at sample n
+     */
     static FloatType blackman (int n, int N) noexcept
     {
         const auto a0 = FloatType (0.42);
@@ -258,6 +287,13 @@ public:
         return a0 - a1 * std::cos (factor) + a2 * std::cos (FloatType (2) * factor);
     }
 
+    /** Evaluates a Blackman-Harris window function at sample n.
+
+        @param n The sample index (0 to N-1)
+        @param N The window length
+
+        @return The window value at sample n
+     */
     static FloatType blackmanHarris (int n, int N) noexcept
     {
         const auto a0 = FloatType (0.35875);
@@ -269,6 +305,14 @@ public:
         return a0 - a1 * std::cos (factor) + a2 * std::cos (FloatType (2) * factor) - a3 * std::cos (FloatType (3) * factor);
     }
 
+    /** Evaluates a Kaiser window function at sample n.
+
+        @param n         The sample index (0 to N-1)
+        @param N         The window length
+        @param beta      The shape parameter (higher values produce a more tapered window)
+
+        @return The window value at sample n
+     */
     static FloatType kaiser (int n, int N, FloatType beta) noexcept
     {
         const auto arg = FloatType (2) * n / (N - 1) - FloatType (1);
@@ -277,12 +321,28 @@ public:
         return modifiedBesselI0 (x) / modifiedBesselI0 (beta);
     }
 
+    /** Evaluates a Gaussian window function at sample n.
+
+        @param n     The sample index (0 to N-1)
+        @param N     The window length
+        @param sigma The standard deviation (controls the width of the Gaussian)
+
+        @return The window value at sample n
+     */
     static FloatType gaussian (int n, int N, FloatType sigma = FloatType (0.4)) noexcept
     {
         const auto arg = (n - (N - 1) / FloatType (2)) / (sigma * (N - 1) / FloatType (2));
         return std::exp (FloatType (-0.5) * arg * arg);
     }
 
+    /** Evaluates a Tukey window function at sample n.
+
+        @param n The sample index (0 to N-1)
+        @param N The window length
+        @param alpha The taper ratio (0 to 1)
+
+        @return The window value at sample n
+     */
     static FloatType tukey (int n, int N, FloatType alpha = FloatType (0.5)) noexcept
     {
         const auto halfAlphaN = alpha * (N - 1) / FloatType (2);
@@ -295,17 +355,66 @@ public:
             return FloatType (1);
     }
 
+    /** Evaluates a Tukey window at a continuous normalised phase value.
+
+        Unlike the discrete tukey(n, N, alpha) variant which operates on integer sample
+        indices, this overload takes a continuous phase value in [0, 1] directly. It is
+        useful for per-sample window evaluation in oscillators and modulators where no
+        fixed buffer length exists.
+
+        @param phi    Normalised phase in [0, 1]
+        @param alpha  Taper ratio in (0, 1]: 1.0 produces a full Hann shape, values
+                      near 0 approach a rectangular window
+        @return     Window amplitude in [0, 1]
+    */
+    static FloatType tukeyFromPhase (FloatType phi, FloatType alpha = FloatType (0.5)) noexcept
+    {
+        const FloatType halfAlpha = alpha / FloatType (2);
+
+        if (halfAlpha <= FloatType (0))
+            return FloatType (1);
+
+        if (phi < halfAlpha)
+            return FloatType (0.5) * (FloatType (1) + std::cos (MathConstants<FloatType>::pi * (phi / halfAlpha - FloatType (1))));
+
+        if (phi > FloatType (1) - halfAlpha)
+            return FloatType (0.5) * (FloatType (1) + std::cos (MathConstants<FloatType>::pi * ((phi - FloatType (1) + halfAlpha) / halfAlpha)));
+
+        return FloatType (1);
+    }
+
+    /** Evaluates a Bartlett window function at sample n.
+
+        @param n The sample index (0 to N-1)
+        @param N The window length
+
+        @return The window value at sample n
+     */
     static FloatType bartlett (int n, int N) noexcept
     {
         return FloatType (1) - FloatType (2) * std::abs (n - (N - 1) / FloatType (2)) / (N - 1);
     }
 
+    /** Evaluates a Welch window function at sample n.
+
+        @param n The sample index (0 to N-1)
+        @param N The window length
+
+        @return The window value at sample n
+     */
     static FloatType welch (int n, int N) noexcept
     {
         const auto arg = (n - (N - 1) / FloatType (2)) / ((N - 1) / FloatType (2));
         return FloatType (1) - arg * arg;
     }
 
+    /** Evaluates a Flattop window function at sample n.
+
+        @param n The sample index (0 to N-1)
+        @param N The window length
+
+        @return The window value at sample n
+     */
     static FloatType flattop (int n, int N) noexcept
     {
         const auto a0 = FloatType (0.21557895);
@@ -319,11 +428,25 @@ public:
              - a3 * std::cos (FloatType (3) * factor) + a4 * std::cos (FloatType (4) * factor);
     }
 
+    /** Evaluates a Cosine window function at sample n.
+
+        @param n The sample index (0 to N-1)
+        @param N The window length
+
+        @return The window value at sample n
+    */
     static FloatType cosine (int n, int N) noexcept
     {
         return std::sin (MathConstants<FloatType>::pi * n / (N - 1));
     }
 
+    /** Evaluates a Lanczos window function at sample n.
+    
+        @param n The sample index (0 to N-1)
+        @param N The window length
+
+        @return The window value at sample n
+    */
     static FloatType lanczos (int n, int N) noexcept
     {
         const auto x = FloatType (2) * n / (N - 1) - FloatType (1);
@@ -334,6 +457,13 @@ public:
         return std::sin (px) / px;
     }
 
+    /** Evaluates a Nuttall window function at sample n.
+
+        @param n The sample index (0 to N-1)
+        @param N The window length
+
+        @return The window value at sample n
+    */
     static FloatType nuttall (int n, int N) noexcept
     {
         const auto a0 = FloatType (0.355768);
@@ -345,6 +475,13 @@ public:
         return a0 - a1 * std::cos (factor) + a2 * std::cos (FloatType (2) * factor) - a3 * std::cos (FloatType (3) * factor);
     }
 
+    /** Evaluates a Blackman-Nuttall window function at sample n.
+
+        @param n The sample index (0 to N-1)
+        @param N The window length
+
+        @return The window value at sample n
+    */
     static FloatType blackmanNuttall (int n, int N) noexcept
     {
         const auto a0 = FloatType (0.3635819);
@@ -365,7 +502,8 @@ public:
         @param n Sample index (0 to N-1)
         @param N Window length
         @param r Controlling parameter (default 1.0). Higher values give better side-lobe roll-off.
-               Common values: 0.0005, 1.18, 1.618, 30, 75
+                 Common values: 0.0005, 1.18, 1.618, 30, 75
+
         @return Window value at sample n
 
         @note Reference: "FIR Filter Design Using An Adjustable Novel Window and Its Applications"

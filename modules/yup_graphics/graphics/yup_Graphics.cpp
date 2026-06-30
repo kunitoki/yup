@@ -404,6 +404,10 @@ StrokeCap Graphics::getStrokeCap() const
     return currentRenderOptions().cap;
 }
 
+void Graphics::setStrokeMiterLimit (float /*limit*/)
+{
+}
+
 //==============================================================================
 void Graphics::setBlendMode (BlendMode blendMode)
 {
@@ -458,7 +462,7 @@ void Graphics::setClipPath (const Path& clipPath)
     options.clipPath = clipPath;
 
     auto renderPath = rive::make_rcp<rive::RiveRenderPath>();
-    renderPath->fillRule (rive::FillRule::nonZero);
+    renderPath->fillRule (clipPath.isUsingNonZeroWinding() ? rive::FillRule::nonZero : rive::FillRule::evenOdd);
     renderPath->addRenderPath (clipPath.getRenderPath(), options.getLocalTransform().toMat2D());
 
     renderer.clipPath (renderPath.get());
@@ -642,6 +646,7 @@ void Graphics::renderStrokePath (const Path& path, const RenderOptions& options,
     paint.thickness (options.getStrokeWidth());
     paint.join (toStrokeJoin (options.join));
     paint.cap (toStrokeCap (options.cap));
+    paint.feather (options.feather);
 
     if (options.isStrokeColor())
         paint.color ((rive::ColorInt) options.getStrokeColor());
@@ -675,8 +680,16 @@ void Graphics::renderFillPath (const Path& path, const RenderOptions& options, c
 //==============================================================================
 void Graphics::drawImageAt (const Image& image, const Point<float>& pos)
 {
+    drawImage (image, Rectangle<float> (pos.getX(), pos.getY(), static_cast<float> (image.getWidth()), static_cast<float> (image.getHeight())));
+}
+
+void Graphics::drawImage (const Image& image, const Rectangle<float>& targetArea)
+{
     auto renderContext = context.renderContext();
     if (renderContext == nullptr)
+        return;
+
+    if (targetArea.isEmpty())
         return;
 
     if (! image.createTextureIfNotPresent (context))
@@ -690,6 +703,7 @@ void Graphics::drawImageAt (const Image& image, const Point<float>& pos)
         unitRectPath->line ({ 1, 0 });
         unitRectPath->line ({ 1, 1 });
         unitRectPath->line ({ 0, 1 });
+        unitRectPath->close();
         return unitRectPath;
     }();
 
@@ -697,9 +711,12 @@ void Graphics::drawImageAt (const Image& image, const Point<float>& pos)
     paint.image (image.getTexture(), jlimit (0.0f, 1.0f, options.opacity));
     paint.blendMode (toBlendMode (options.blendMode));
 
+    const auto imageTransform = AffineTransform::scaling (targetArea.getWidth(), targetArea.getHeight())
+                                    .translated (targetArea.getX(), targetArea.getY())
+                                    .followedBy (options.getTransform());
+
     renderer.save();
-    renderer.scale (image.getWidth(), image.getHeight());
-    renderer.transform (options.getTransform().toMat2D());
+    renderer.transform (imageTransform.toMat2D());
     renderer.drawPath (unitRectPath.get(), std::addressof (paint));
     renderer.restore();
 }
@@ -728,6 +745,9 @@ void Graphics::fillFittedText (const StyledText& text, const Rectangle<float>& r
 
 void Graphics::fillFittedText (const String& text, const Font& font, const Rectangle<float>& rect, Justification justification)
 {
+    if (text.isEmpty())
+        return;
+
     StyledText styledText;
     {
         auto modifier = styledText.startUpdate();
@@ -765,6 +785,9 @@ void Graphics::strokeFittedText (const StyledText& text, const Rectangle<float>&
 
 void Graphics::strokeFittedText (const String& text, const Font& font, const Rectangle<float>& rect, Justification justification)
 {
+    if (text.isEmpty())
+        return;
+
     StyledText styledText;
     {
         auto modifier = styledText.startUpdate();
@@ -787,13 +810,16 @@ void Graphics::renderFittedText (const StyledText& text, const Rectangle<float>&
 
     renderer.save();
 
-    rive::RawPath path;
-    path.addRect (rect.toAABB());
-    path.transformInPlace (options.getFixedTransform().toMat2D());
-    auto renderPath = rive::make_rcp<rive::RiveRenderPath> (rive::FillRule::clockwise, path);
-    renderer.clipPath (renderPath.get());
+    if (text.getOverflow() != StyledText::visible)
+    {
+        rive::RawPath path;
+        path.addRect (rect.toAABB());
+        path.transformInPlace (options.getTransform().toMat2D());
+        auto renderPath = rive::make_rcp<rive::RiveRenderPath> (rive::FillRule::clockwise, path);
+        renderer.clipPath (renderPath.get());
+    }
 
-    auto offset = text.getOffset (rect); // We will just use vertical offset
+    auto offset = text.getOffset (rect); // Horizontal alignment is already baked into the shaped glyph paths.
     auto transform = options.getTransform (rect.getX(), rect.getY() + offset.getY());
     renderer.transform (transform.toMat2D());
 

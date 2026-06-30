@@ -848,6 +848,44 @@ public:
         return { xy, 0, 0 };
     }
 
+    /** Returns a new rectangle with the specified size while keeping the center point at the same position.
+
+        This method creates a new rectangle with a different size but positioned so that its center
+        matches the center of the original rectangle.
+
+        @param newWidth The new width for the rectangle.
+        @param newHeight The new height for the rectangle.
+
+        @return A new rectangle with the updated size, centered at the same position.
+    */
+    [[nodiscard]] constexpr Rectangle withSizeKeepingCenter (ValueType newWidth, ValueType newHeight) const noexcept
+    {
+        auto center = getCenter();
+        return {
+            center.getX() - newWidth / static_cast<ValueType> (2),
+            center.getY() - newHeight / static_cast<ValueType> (2),
+            newWidth,
+            newHeight
+        };
+    }
+
+    /** Returns a new rectangle with the specified size while keeping the center point at the same position.
+
+        This method creates a new rectangle with a different size but positioned so that its center
+        matches the center of the original rectangle.
+
+        @param newSize The new size for the rectangle.
+
+        @return A new rectangle with the updated size, centered at the same position.
+    */
+    template <class T = ValueType>
+    [[nodiscard]] constexpr Rectangle withSizeKeepingCenter (const Size<T>& newSize) const noexcept
+    {
+        static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
+
+        return withSizeKeepingCenter (static_cast<ValueType> (newSize.getWidth()), static_cast<ValueType> (newSize.getHeight()));
+    }
+
     //==============================================================================
     /** Sets the bounds of the rectangle.
 

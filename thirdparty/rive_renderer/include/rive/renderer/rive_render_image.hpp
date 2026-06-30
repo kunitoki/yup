@@ -4,7 +4,11 @@
 
 #pragma once
 
+#include "rive/renderer.hpp"
 #include "rive/renderer/texture.hpp"
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 
 namespace rive
 {
@@ -18,7 +22,7 @@ public:
     }
 
     rcp<gpu::Texture> refTexture() const { return m_texture; }
-    const gpu::Texture* getTexture() const { return m_texture.get(); }
+    gpu::Texture* getTexture() { return m_texture.get(); }
 
 protected:
     RiveRenderImage(int width, int height)

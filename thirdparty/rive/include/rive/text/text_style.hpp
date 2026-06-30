@@ -5,6 +5,7 @@
 #include "rive/assets/file_asset.hpp"
 #include "rive/assets/font_asset.hpp"
 #include "rive/text/text_interface.hpp"
+#include "rive/text/text_variation_helper.hpp"
 
 namespace rive
 {
@@ -26,16 +27,14 @@ public:
     TextStyle();
     void buildDependencies() override;
     const rcp<Font> font() const;
-    void setAsset(FileAsset*) override;
+    void setAsset(rcp<FileAsset>) override;
     uint32_t assetId() override;
     StatusCode import(ImportStack& importStack) override;
-
-    FontAsset* fontAsset() const { return (FontAsset*)m_fileAsset; }
 
     Core* clone() const override;
     void addVariation(TextStyleAxis* axis);
     void addFeature(TextStyleFeature* feature);
-    void updateVariableFont();
+    void updateVariableFont() const;
     StatusCode onAddedClean(CoreContext* context) override;
     void onDirty(ComponentDirt dirt) override;
     bool validate(CoreContext* context) override;
@@ -44,16 +43,17 @@ protected:
     void fontSizeChanged() override;
     void lineHeightChanged() override;
     void letterSpacingChanged() override;
+    FontAsset* fontAsset() const { return (FontAsset*)m_fileAsset.get(); }
 
 private:
     std::unique_ptr<TextVariationHelper> m_variationHelper;
-    rcp<Font> m_variableFont;
+    mutable rcp<Font> m_variableFont;
 
-    std::vector<Font::Coord> m_coords;
+    mutable std::vector<Font::Coord> m_coords;
     std::vector<TextStyleAxis*> m_variations;
     std::vector<TextStyleFeature*> m_styleFeatures;
-    std::vector<Font::Feature> m_features;
-    TextInterface* m_text;
+    mutable std::vector<Font::Feature> m_features;
+    TextInterface* m_text = nullptr;
 };
 } // namespace rive
 

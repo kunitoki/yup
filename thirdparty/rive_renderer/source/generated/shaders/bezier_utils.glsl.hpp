@@ -1,21 +1,21 @@
 #pragma once
 
-#include "bezier_utils.exports.h"
+#include "bezier_utils.glsl.exports.h"
 
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char bezier_utils[] = R"===(#ifndef fa
-#define fa f
+const char bezier_utils[] = R"===(#ifndef Cb
+#define Cb g
 #endif
-#ifndef J5
-#define J5 c
+#ifndef J6
+#define J6 c
 #endif
-d float C8(c k,c b){float Qc=dot(k,b);float ga=dot(k,k)*dot(b,b);return(ga==.0)?1.:clamp(Qc*inversesqrt(ga),-1.,1.);}d void Rc(c o0,c p0,c x0,c z0,k1(c)o,k1(c)r,k1(c)L1){L1=p0-o0;c K5=x0-p0;c X6=z0-o0;r=K5-L1;o=-3.*K5+X6;}d S D8(c o0,c p0,c x0,c z0){S t;t[0]=(any(notEqual(o0,p0))?p0:any(notEqual(p0,x0))?x0:z0)-o0;t[1]=z0-(any(notEqual(z0,x0))?x0:any(notEqual(x0,p0))?p0:o0);return t;}d float Sc(c o0,c p0,c x0,c z0,float c1,float Tc){c o,r,L1;Rc(o0,p0,x0,z0,o,r,L1);c L5=3.*(((o*c1)+2.*r)*c1+L1);float ha=length(L5);if(ha==.0){return.0;}L5*=1./ha;float Y6=2.*dot(o,L5);float M5=3.*(Y6*c1+4.*dot(r,L5))*c1+6.*dot(L1,L5);float E8=min(c1,1.-c1);float Uc=(Y6*E8*E8+M5)*E8;float ia=min(Tc,Uc*.9999);float A2;if(Y6==.0){A2=ia/M5;}else{float d0=1./Y6;float b=M5*d0,B0=-ia*d0;float N5=(-1./3.)*b,O5=.5*B0;float ja=O5*O5-N5*N5*N5;if(ja<.0){float Z6=sqrt(N5);float O0=acos(O5/(Z6*Z6*Z6));A2=-2.*Z6*cos(O0*(1./3.)+(-O2*2./3.));}else{float o=pow(abs(O5)+sqrt(ja),1./3.);if(O5<.0)o=-o;A2=o!=.0?o+N5/o:.0;}}A2=abs(A2);f t0011=c1+fa(-A2,-A2,A2,A2);f ka=(o.xyxy*t0011+2.*r.xyxy)*t0011+L1.xyxy;S d2=D8(o0,p0,x0,z0);c Vc=t0011.x<1e-3?d2[0]:ka.xy;c Wc=t0011.z>1.-1e-3?d2[1]:ka.zw;return acos(C8(Vc,Wc));}d float a7(float k,float b){k=b<.0?-k:k;b=abs(b);return k>.0?(k<b?k/b:1.):.0;}float Xc(c o0,c p0,c x0,c z0,k1(float)F8){c la=z0-o0;float ma=length(z0-o0);if(ma==.0){F8=.5;return.0;}c B2=J5(-la.y,la.x)/ma;float na=dot(B2,x0-o0);float C3=dot(B2,p0-o0);float D3=C3-na;
+e float K9(c o,c b){float Fe=dot(o,b);float Db=dot(o,o)*dot(b,b);return(Db==.0)?1.:clamp(Fe*inversesqrt(Db),-1.,1.);}e void Ge(c w0,c x0,c E0,c I0,g1(c)A,g1(c)F,g1(c)d2){d2=x0-w0;c K6=E0-x0;c h8=I0-w0;F=K6-d2;A=-3.*K6+h8;}e a0 L9(c w0,c x0,c E0,c I0){a0 t;t[0]=(any(notEqual(w0,x0))?x0:any(notEqual(x0,E0))?E0:I0)-w0;t[1]=I0-(any(notEqual(I0,E0))?E0:any(notEqual(E0,x0))?x0:w0);return t;}e float He(c w0,c x0,c E0,c I0,float w1,float Ie){c A,F,d2;Ge(w0,x0,E0,I0,A,F,d2);c L6=3.*(((A*w1)+2.*F)*w1+d2);float Eb=length(L6);if(Eb==.0){return.0;}L6*=1./Eb;float i8=2.*dot(A,L6);float M6=3.*(i8*w1+4.*dot(F,L6))*w1+6.*dot(d2,L6);float M9=min(w1,1.-w1);float Je=(i8*M9*M9+M6)*M9;float Fb=min(Ie,Je*.9999);float S2;if(i8==.0){S2=Fb/M6;}else{float H=1./i8;float b=M6*H,J1=-Fb*H;float N6=(-1./3.)*b,O6=.5*J1;float Gb=O6*O6-N6*N6*N6;if(Gb<.0){float j8=sqrt(N6);float j1=acos(O6/(j8*j8*j8));S2=-2.*j8*cos(j1*(1./3.)+(-x3*2./3.));}else{float A=pow(abs(O6)+sqrt(Gb),1./3.);if(O6<.0)A=-A;S2=A!=.0?A+N6/A:.0;}}S2=abs(S2);g t0011=w1+Cb(-S2,-S2,S2,S2);g Hb=(A.xyxy*t0011+2.*F.xyxy)*t0011+d2.xyxy;a0 E2=L9(w0,x0,E0,I0);c Ke=t0011.x<1e-3?E2[0]:Hb.xy;c Le=t0011.z>1.-1e-3?E2[1]:Hb.zw;return acos(K9(Ke,Le));}e float k8(float o,float b){o=b<.0?-o:o;b=abs(b);return o>.0?(o<b?o/b:1.):.0;}float Me(c w0,c x0,c E0,c I0,g1(float)N9){c Ib=I0-w0;float Jb=length(I0-w0);if(Jb==.0){N9=.5;return.0;}c T2=J6(-Ib.y,Ib.x)/Jb;float Kb=dot(T2,E0-w0);float z4=dot(T2,x0-w0);float A4=z4-Kb;
 #if 0
-float k=3.*D3;float oa=D3+C3;float B0=C3;float V1=sqrt(max(D3*D3+na*C3,.0));if(oa<.0)V1=-V1;V1+=oa;c P5=J5(a7(V1,k),a7(B0,V1));c X4=3.*(P5*(P5*(P5*D3-(C3+D3))+C3));X4=abs(X4);F8=X4.x>X4.y?P5.x:P5.y;return max(X4.x,X4.y);
+float o=3.*A4;float Lb=A4+z4;float J1=z4;float q2=sqrt(max(A4*A4+Kb*z4,.0));if(Lb<.0)q2=-q2;q2+=Lb;c P6=J6(k8(q2,o),k8(J1,q2));c T5=3.*(P6*(P6*(P6*A4-(z4+A4))+z4));T5=abs(T5);N9=T5.x>T5.y?P6.x:P6.y;return max(T5.x,T5.y);
 #else
-float pa=3.*D3;float r=-C3-D3;float L1=C3;float t=.5;for(int C=0;C<3;++C){float qa=pa*t;t=a7(qa*t-L1,2.*(qa+r));}F8=t;return abs(t*(t*(t*pa+3.*r)+3.*L1));
+float Mb=3.*A4;float F=-z4-A4;float d2=z4;float t=.5;for(int D0=0;D0<3;++D0){float Nb=Mb*t;t=k8(Nb*t-d2,2.*(Nb+F));}N9=t;return abs(t*(t*(t*Mb+3.*F)+3.*d2));
 #endif
 }
 )===";

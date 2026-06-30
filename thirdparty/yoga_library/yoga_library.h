@@ -41,4 +41,8 @@
 
 #pragma once
 
+#ifndef YOGA_EXPORT
+#define YOGA_EXPORT
+#endif
+
 #include "upstream/yoga/Yoga.h"

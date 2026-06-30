@@ -26,7 +26,7 @@
 
     ID:                 rive_renderer
     vendor:             rive
-    version:            1.0
+    version:            0.1.62
     name:               Rive Renderer.
     description:        The Rive Renderer is a vector and raster graphics renderer custom-built for Rive content, for animation, and for runtime.
     website:            https://github.com/rive-app/rive-runtime
@@ -46,7 +46,6 @@
     androidDefines:     RIVE_ANDROID=1
     androidLibs:        EGL GLESv3
     windowsCppStandard: 20
-    enableARC:          1
 
   END_YUP_MODULE_DECLARATION
 

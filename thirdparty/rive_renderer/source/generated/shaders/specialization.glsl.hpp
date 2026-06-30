@@ -1,21 +1,38 @@
 #pragma once
 
-#include "specialization.exports.h"
+#include "specialization.glsl.exports.h"
 
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char specialization[] = R"===(layout(constant_id=zd)const bool Le=true;layout(constant_id=Ad)const bool Me=true;layout(constant_id=Bd)const bool Ne=true;layout(constant_id=Cd)const bool Oe=true;layout(constant_id=Dd)const bool Pe=true;layout(constant_id=Ed)const bool Qe=true;layout(constant_id=Fd)const bool Re=true;layout(constant_id=Gd)const bool Se=true;layout(constant_id=Hd)const bool Te=true;layout(constant_id=Id)const uint Ue=0;
-#define T Le
-#define BB Me
-#define FB Ne
-#define EB Oe
-#define IC Pe
-#define CD Qe
-#define XB Re
-#define AD Se
-#define OC Te
-#define BD Ue
+const char specialization[] = R"===(#ifndef ME
+layout(constant_id=xf)const bool Gg=true;layout(constant_id=yf)const bool Hg=true;layout(constant_id=zf)const bool Ig=true;layout(constant_id=Af)const bool Jg=true;layout(constant_id=Bf)const bool Kg=true;layout(constant_id=Cf)const bool Lg=true;layout(constant_id=Df)const bool Mg=true;layout(constant_id=Ef)const bool Ng=true;layout(constant_id=Ff)const bool Og=true;layout(constant_id=Gf)const bool Pg=true;layout(constant_id=Hf)const bool Qg=true;layout(constant_id=If)const uint Rg=0;
+#define M Gg
+#define Z Hg
+#define FB Ig
+#define GB Jg
+#define IC Kg
+#define NC Lg
+#define SB Mg
+#define IB Ng
+#define YC Og
+#define QB Pg
+#define SC Qg
+#define RC Rg
+#else
+#define M true
+#define Z true
+#define FB true
+#define GB true
+#define IC true
+#define NC true
+#define SB true
+#define IB true
+#define YC true
+#define QB false
+#define SC false
+#define RC 0
+#endif
 )===";
 } // namespace glsl
 } // namespace gpu

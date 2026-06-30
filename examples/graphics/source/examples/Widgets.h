@@ -116,6 +116,38 @@ private:
         textEditor->setText ("Type some text here...", yup::dontSendNotification);
         textEditor->setMultiLine (true);
         addAndMakeVisible (textEditor.get());
+
+        // Progress Bar (normal mode - linked to slider)
+        progressBar = std::make_unique<yup::ProgressBar> ("progressBar");
+        progressBar->setProgress (0.5, yup::dontSendNotification);
+        progressBar->onProgressChanged = [this] (double value)
+        {
+            if (value >= 0.0)
+                updateStatus ("Progress: " + yup::String (value * 100.0, 0) + "%");
+        };
+        addAndMakeVisible (progressBar.get());
+
+        // Progress Bar Label
+        progressBarLabel = std::make_unique<yup::Label> ("progressBarLabel");
+        progressBarLabel->setText ("Progress Bar (linked to slider):", yup::dontSendNotification);
+        addAndMakeVisible (progressBarLabel.get());
+
+        // Indeterminate Progress Bar
+        indeterminateProgressBar = std::make_unique<yup::ProgressBar> ("indeterminateProgressBar");
+        indeterminateProgressBar->setProgress (-1.0, yup::dontSendNotification);
+        addAndMakeVisible (indeterminateProgressBar.get());
+
+        // Indeterminate Progress Bar Label
+        indeterminateLabel = std::make_unique<yup::Label> ("indeterminateLabel");
+        indeterminateLabel->setText ("Indeterminate Progress Bar:", yup::dontSendNotification);
+        addAndMakeVisible (indeterminateLabel.get());
+
+        // Update slider to control progress bar
+        slider->onValueChanged = [this] (double value)
+        {
+            updateStatus ("Slider value: " + yup::String (value, 1));
+            progressBar->setProgress (value / 100.0, yup::dontSendNotification);
+        };
     }
 
     void setupLayout()
@@ -162,11 +194,22 @@ private:
         textEditor->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), 100.0f));
         y += 110;
 
-        // Viewport
-        //viewport->setBounds (yup::Rectangle<float> (static_cast<float>(margin), static_cast<float>(y), static_cast<float>(inputWidth), 150.0f));
-
         // Slider
         slider->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (inputWidth / 2), static_cast<float> (inputWidth / 2)));
+        y += static_cast<int> (inputWidth / 2) + spacing * 2;
+
+        // Progress Bar (normal mode)
+        progressBarLabel->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), 20.0f));
+        y += 25;
+
+        progressBar->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), static_cast<float> (componentHeight)));
+        y += componentHeight + spacing * 2;
+
+        // Indeterminate Progress Bar
+        indeterminateLabel->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), 20.0f));
+        y += 25;
+
+        indeterminateProgressBar->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), static_cast<float> (componentHeight)));
     }
 
     void paint (yup::Graphics& g) override
@@ -211,6 +254,10 @@ private:
     std::unique_ptr<yup::Label> contentLabel;
     std::unique_ptr<yup::Slider> slider;
     std::unique_ptr<yup::TextEditor> textEditor;
+    std::unique_ptr<yup::ProgressBar> progressBar;
+    std::unique_ptr<yup::Label> progressBarLabel;
+    std::unique_ptr<yup::ProgressBar> indeterminateProgressBar;
+    std::unique_ptr<yup::Label> indeterminateLabel;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WidgetsDemo)
 };

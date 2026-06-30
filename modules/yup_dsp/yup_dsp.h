@@ -32,7 +32,7 @@
     website:              https://github.com/kunitoki/yup
     license:              ISC
 
-    dependencies:         yup_core yup_audio_basics
+    dependencies:         yup_core yup_audio_basics yup_simd
     appleFrameworks:      Accelerate
 
   END_YUP_MODULE_DECLARATION
@@ -45,6 +45,7 @@
 
 #include <yup_core/yup_core.h>
 #include <yup_audio_basics/yup_audio_basics.h>
+#include <yup_simd/yup_simd.h>
 
 //==============================================================================
 /** Config: YUP_ENABLE_FFTW3
@@ -91,11 +92,33 @@
 #define YUP_ENABLE_OOURA 1
 #endif
 
+/** Config: YUP_ENABLE_BUNGEE
+
+    Enable Bungee backend for time-stretching/pitch-shifting.
+*/
+#ifndef YUP_ENABLE_BUNGEE
+#if YUP_MODULE_AVAILABLE_bungee_library
+#define YUP_ENABLE_BUNGEE 1
+#else
+#define YUP_ENABLE_BUNGEE 0
+#endif
+#endif
+
 //==============================================================================
 
+#if YUP_ENABLE_BUNGEE && ! YUP_MODULE_AVAILABLE_bungee_library
+#undef YUP_ENABLE_BUNGEE
+#define YUP_ENABLE_BUNGEE 0
+#endif
+
+//==============================================================================
+
+#include <algorithm>
+#include <functional>
 #include <array>
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -116,19 +139,40 @@
 #include "frequency/yup_FFTProcessor.h"
 #include "frequency/yup_SpectrumAnalyzerState.h"
 
+// Onset detection
+#include "onsets/yup_FilterBank.h"
+#include "onsets/yup_Spectrogram.h"
+#include "onsets/yup_OnsetDetectionFunction.h"
+#include "onsets/yup_SuperFluxODF.h"
+#include "onsets/yup_ComplexFluxODF.h"
+#include "onsets/yup_OnsetPeakPicker.h"
+#include "onsets/yup_OnsetDetector.h"
+
 // Base filter interfaces and common structures
 #include "base/yup_FilterMode.h"
 #include "base/yup_FilterBase.h"
 #include "base/yup_FilterCharacteristics.h"
 #include "base/yup_FirstOrderCoefficients.h"
-#include "base/yup_BiquadCoefficients.h"
-#include "base/yup_StateVariableCoefficients.h"
 #include "base/yup_FirstOrder.h"
+#include "base/yup_BiquadCoefficients.h"
 #include "base/yup_Biquad.h"
 #include "base/yup_BiquadCascade.h"
+#include "base/yup_AnalogFilterCoefficients.h"
+#include "base/yup_AnalogSaturator.h"
+#include "base/yup_AnalogPoles.h"
+#include "base/yup_StateVariableCoefficients.h"
+
+// Nonlinear processors
+#include "nonlinear/yup_AaIirAntialiaser.h"
+
+// Metering and level measurement (after Biquad definition)
+#include "metering/yup_LevelProcessor.h"
+#include "metering/yup_LoudnessFilter.h"
+#include "metering/yup_KMeterState.h"
 
 // Filter designers and coefficient calculators
 #include "designers/yup_FilterDesigner.h"
+#include "designers/yup_AnalogFilterDesigner.h"
 
 // Filter implementations
 #include "filters/yup_FirstOrderFilter.h"
@@ -139,9 +183,25 @@
 #include "filters/yup_ButterworthFilter.h"
 #include "filters/yup_LinkwitzRileyFilter.h"
 #include "filters/yup_DirectFIR.h"
+#include "filters/yup_AnalogFilters.h"
+#include "filters/yup_CombFilter.h"
 
 // Dynamics processors
+#include "dynamics/yup_BlunterClipper.h"
+#include "dynamics/yup_HardClipper.h"
 #include "dynamics/yup_SoftClipper.h"
+
+// Delay lines
+#include "delays/yup_FractionallyAddressedDelay.h"
 
 // Convolution processors
 #include "convolution/yup_PartitionedConvolver.h"
+
+// Time-stretching and pitch-shifting
+#include "stretching/yup_TimeStretchProcessor.h"
+
+// Oversampling and sample-rate conversion
+#include "resampling/yup_CircularBuffer.h"
+#include "resampling/yup_SincTable.h"
+#include "resampling/yup_Oversampler.h"
+#include "resampling/yup_Resampler.h"

@@ -31,11 +31,23 @@ ViewModelProperty* ViewModel::property(size_t index)
     return nullptr;
 }
 
-ViewModelProperty* ViewModel::property(const std::string& name)
+ViewModelProperty* ViewModel::property(const std::string& propName)
 {
     for (auto property : m_Properties)
     {
-        if (property->name() == name)
+        if (property->name() == propName)
+        {
+            return property;
+        }
+    }
+    return nullptr;
+}
+
+ViewModelProperty* ViewModel::property(const SymbolType symbolType)
+{
+    for (auto property : m_Properties)
+    {
+        if (property->symbolTypeValue() == static_cast<int>(symbolType))
         {
             return property;
         }
@@ -81,3 +93,22 @@ ViewModelInstance* ViewModel::instance(const std::string& name)
 }
 
 size_t ViewModel::instanceCount() const { return m_Instances.size(); }
+
+rcp<ViewModelInstance> ViewModel::createInstance()
+{
+    if (m_file)
+    {
+        return m_file->createViewModelInstance(this);
+    }
+    return nullptr;
+}
+
+rcp<ViewModelInstance> ViewModel::createFromInstance(
+    const std::string& instanceName)
+{
+    if (m_file)
+    {
+        return m_file->createViewModelInstance(this->name(), instanceName);
+    }
+    return nullptr;
+}

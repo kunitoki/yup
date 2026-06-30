@@ -81,16 +81,10 @@ public:
     MouseEvent (Buttons newButtons, KeyModifiers newModifiers, const Point<float>& newPosition, Component* sourceComponent) noexcept;
 
     //==============================================================================
-    /** Copy constructor. */
+    /** Copy constructor and assignment operators. */
     MouseEvent (const MouseEvent& other) noexcept = default;
-
-    /** Move constructor. */
     MouseEvent (MouseEvent&& other) noexcept = default;
-
-    /** Copy assignment operator. */
     MouseEvent& operator= (const MouseEvent& other) noexcept = default;
-
-    /** Move assignment operator. */
     MouseEvent& operator= (MouseEvent&& other) noexcept = default;
 
     //==============================================================================
@@ -98,7 +92,7 @@ public:
 
         @returns true if the left button is down
     */
-    bool isLeftButtoDown() const noexcept;
+    bool isLeftButtonDown() const noexcept;
 
     /** Returns true if the middle mouse button is currently held down.
 

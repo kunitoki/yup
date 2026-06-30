@@ -217,25 +217,26 @@ public:
     Path& quadTo (const Point<float>& p, float x1, float y1);
 
     //==============================================================================
-    /** Draws a cubic Bezier curve to specified coordinates with two control points.
+    /** Draws a cubic Bezier curve with two control points and an endpoint.
 
-        This method draws a cubic Bezier curve from the current point to the point (x, y), using
-        (x1, y1) and (x2, y2) as the control points. The current point is then updated to (x, y).
+        This method draws a cubic Bezier curve from the current point using (x, y) as the first
+        control point, (x1, y1) as the second control point, and (x2, y2) as the endpoint. The
+        current point is then updated to (x2, y2).
 
-        @param x The x-coordinate of the endpoint.
-        @param y The y-coordinate of the endpoint.
-        @param x1 The x-coordinate of the first control point.
-        @param y1 The y-coordinate of the first control point.
-        @param x2 The x-coordinate of the second control point.
-        @param y2 The y-coordinate of the second control point.
+        @param x The x-coordinate of the first control point.
+        @param y The y-coordinate of the first control point.
+        @param x1 The x-coordinate of the second control point.
+        @param y1 The y-coordinate of the second control point.
+        @param x2 The x-coordinate of the endpoint.
+        @param y2 The y-coordinate of the endpoint.
     */
     Path& cubicTo (float x, float y, float x1, float y1, float x2, float y2);
 
-    /** Draws a cubic Bezier curve to specified coordinates with two control points.
+    /** Draws a cubic Bezier curve with two control points and an endpoint.
 
-        This method draws a cubic Bezier curve from the current point to the endpoint (x1, y1),
-        using the given point p and (x2, y2) as the control points. The current point is then updated
-        to (x1, y1).
+        This method draws a cubic Bezier curve from the current point using p as the first control
+        point, (x1, y1) as the second control point, and (x2, y2) as the endpoint. The current point
+        is then updated to (x2, y2).
 
         @param p The first control point.
         @param x1 The x-coordinate of the second control point.
@@ -506,6 +507,35 @@ public:
         @param p3 The third vertex of the triangle.
     */
     void addTriangle (const Point<float>& p1, const Point<float>& p2, const Point<float>& p3);
+
+    //==============================================================================
+    /** Adds a quadrilateral to the path.
+
+        This method appends a quadrilateral with the specified vertices to the path.
+        The vertices should be provided in order (clockwise or counter-clockwise).
+
+        @param x1 The x-coordinate of the first vertex.
+        @param y1 The y-coordinate of the first vertex.
+        @param x2 The x-coordinate of the second vertex.
+        @param y2 The y-coordinate of the second vertex.
+        @param x3 The x-coordinate of the third vertex.
+        @param y3 The y-coordinate of the third vertex.
+        @param x4 The x-coordinate of the fourth vertex.
+        @param y4 The y-coordinate of the fourth vertex.
+    */
+    void addQuadrilateral (float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4);
+
+    /** Adds a quadrilateral to the path.
+
+        This method appends a quadrilateral with the specified vertices to the path.
+        The vertices should be provided in order (clockwise or counter-clockwise).
+
+        @param p1 The first vertex of the quadrilateral.
+        @param p2 The second vertex of the quadrilateral.
+        @param p3 The third vertex of the quadrilateral.
+        @param p4 The fourth vertex of the quadrilateral.
+    */
+    void addQuadrilateral (const Point<float>& p1, const Point<float>& p2, const Point<float>& p3, const Point<float>& p4);
 
     //==============================================================================
     /** Adds a regular polygon to the path.

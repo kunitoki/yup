@@ -21,8 +21,11 @@
 
 #include "rive_decoders.h"
 
+// BEGIN YUP GENERATED RIVE DECODER INCLUDES
 #include "source/bitmap_decoder.cpp"
 #include "source/bitmap_decoder_thirdparty.cpp"
+// END YUP GENERATED RIVE DECODER INCLUDES
+
 
 #if RIVE_JPEG
 #include "source/decode_jpeg.cpp"

@@ -36,7 +36,6 @@
     appleFrameworks:      Metal
     iosWeakFrameworks:    UniformTypeIdentifiers
     iosSimWeakFrameworks: UniformTypeIdentifiers
-    enableARC:            1
 
   END_YUP_MODULE_DECLARATION
 
@@ -53,24 +52,40 @@
 #include <rive/rive.h>
 
 //==============================================================================
-/** Config: YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
+/** Config: YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
 
     Enable repaint debugging for components.
 */
-#ifndef YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
-#define YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING 0
+#ifndef YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
+#define YUP_ENABLE_COMPONENT_PAINT_DEBUGGING 0
+#endif
+
+//==============================================================================
+/** Config: YUP_ENABLE_GUI_WINDOWING_LOGGING
+
+    Enable logging of windowing events like movement, resizes, mouse interactions.
+*/
+#ifndef YUP_ENABLE_GUI_WINDOWING_LOGGING
+#define YUP_ENABLE_GUI_WINDOWING_LOGGING 0
 #endif
 
 //==============================================================================
 
+#include <optional>
 #include <tuple>
 #include <unordered_map>
+
+//==============================================================================
+
+#include "profiling/yup_PaintProfileSample.h"
+#include "profiling/yup_PaintProfileStats.h"
 
 //==============================================================================
 
 #include "application/yup_Application.h"
 #include "keyboard/yup_KeyModifiers.h"
 #include "keyboard/yup_KeyPress.h"
+#include "keyboard/yup_TextInputTarget.h"
 #include "mouse/yup_MouseEvent.h"
 #include "mouse/yup_MouseCursor.h"
 #include "mouse/yup_MouseWheelData.h"
@@ -80,6 +95,8 @@
 #include "desktop/yup_Desktop.h"
 #include "component/yup_ComponentNative.h"
 #include "component/yup_ComponentStyle.h"
+#include "component/yup_ComponentPaintMetrics.h"
+#include "component/yup_ComponentListener.h"
 #include "component/yup_Component.h"
 #include "menus/yup_PopupMenu.h"
 #include "buttons/yup_Button.h"
@@ -91,10 +108,18 @@
 #include "widgets/yup_Label.h"
 #include "widgets/yup_Slider.h"
 #include "widgets/yup_ComboBox.h"
+#include "widgets/yup_ScrollBar.h"
+#include "widgets/yup_ProgressBar.h"
+#include "widgets/yup_ListBoxItem.h"
+#include "widgets/yup_ListBox.h"
 #include "artboard/yup_ArtboardFile.h"
 #include "artboard/yup_Artboard.h"
 #include "windowing/yup_DocumentWindow.h"
 #include "dialogs/yup_FileChooser.h"
+
+//==============================================================================
+
+#include "profiling/yup_PaintProfiler.h"
 
 //==============================================================================
 
@@ -104,3 +129,4 @@
 
 #include "themes/yup_ApplicationTheme.h"
 #include "themes/theme_v1/yup_ThemeVersion1.h"
+#include "themes/theme_v1/yup_ThemeVersion1_Icons.h"

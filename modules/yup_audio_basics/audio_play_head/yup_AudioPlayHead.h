@@ -45,10 +45,11 @@ namespace yup
     A subclass of AudioPlayHead can supply information about the position and
     status of a moving play head during audio playback.
 
-    One of these can be supplied to an AudioProcessor object so that it can find
-    out about the position of the audio that it is rendering.
+    One of these can be supplied in an AudioProcessContext so that an
+    AudioProcessor can find out about the position of the audio that it is
+    rendering.
 
-    @see AudioProcessor::setPlayHead, AudioProcessor::getPlayHead
+    @see AudioProcessContext
 
     @tags{Audio}
 */

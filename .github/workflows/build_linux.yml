@@ -37,7 +37,7 @@ jobs:
   configure:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - name: Install Dependencies
@@ -50,7 +50,7 @@ jobs:
         cmake --build ${{ runner.workspace }}/build --config Release --target SDL2-static
     - name: Cache Configure
       id: cache-build
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       with:
         path: ${{ runner.workspace }}/build
         key: linux-build-${{ github.sha }}
@@ -58,12 +58,13 @@ jobs:
   build_tests_debug:
     runs-on: ubuntu-latest
     needs: [configure]
+    timeout-minutes: 45
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build
@@ -78,12 +79,13 @@ jobs:
   build_tests_release:
     runs-on: ubuntu-latest
     needs: [configure]
+    timeout-minutes: 45
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build
@@ -99,11 +101,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: [configure]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build
@@ -118,11 +120,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: [configure]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build
@@ -137,11 +139,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: [configure]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build
@@ -156,11 +158,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: [configure]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build

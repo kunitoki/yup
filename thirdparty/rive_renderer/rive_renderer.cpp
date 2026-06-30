@@ -29,12 +29,13 @@
  #pragma GCC diagnostic ignored "-Wattributes"
  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #elif _MSC_VER
- __pragma (warning (push))
- __pragma (warning (disable: 4244))
+ #pragma warning (push)
+ #pragma warning (disable: 4244)
 #endif
 
 #include "rive_renderer.h"
 
+// BEGIN YUP GENERATED RIVE RENDERER INCLUDES
 #include "source/rive_renderer.cpp"
 #include "source/render_context.cpp"
 #include "source/rive_render_paint.cpp"
@@ -48,11 +49,14 @@
 #include "source/gpu.cpp"
 #include "source/rive_render_factory.cpp"
 #include "source/render_context_helper_impl.cpp"
+#include "source/gpu_resource.cpp"
+// END YUP GENERATED RIVE RENDERER INCLUDES
+
 
 #if __clang__
  #pragma clang diagnostic pop
 #elif __GNUC__
  #pragma GCC diagnostic pop
 #elif _MSC_VER
- __pragma (warning (pop))
+ #pragma warning (pop)
 #endif

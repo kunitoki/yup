@@ -30,7 +30,7 @@ namespace yup
     It provides a common interface for all components, and is used to create and manage GUI components.
     It is a lightweight class that is used to create and manage GUI components.
  */
-class YUP_API Component
+class YUP_API Component : public MouseListener
 {
 public:
     //==============================================================================
@@ -246,7 +246,18 @@ public:
      */
     void setBottomRight (const Point<float>& newBottomRight);
 
+    /**
+        Get the center position of the component relative to its parent.
+
+        @return The center position of the component relative to its parent.
+     */
     Point<float> getCenter() const;
+
+    /**
+        Set the center position of the component relative to its parent.
+
+        @param newCenter The new center position of the component relative to its parent.
+     */
     void setCenter (const Point<float>& newCenter);
 
     /**
@@ -611,6 +622,19 @@ public:
      */
     bool isRenderingUnclipped() const;
 
+    //==============================================================================
+    /** Enables or disables paint measurement suppression for this component.
+
+        When suppression is enabled, component paint listeners will not receive
+        paint measurement callbacks for this component, even if they request paint
+        measurements.
+    */
+    void setPaintProfilingDisabled (bool shouldBeDisabled);
+
+    /** Returns true if paint measurement is suppressed for this component. */
+    bool isPaintProfilingDisabled() const;
+
+    //==============================================================================
     /**
         Repaint the component.
      */
@@ -745,6 +769,32 @@ public:
         @param wantsFocus True if the component wants keyboard focus, false otherwise.
      */
     void setWantsKeyboardFocus (bool wantsFocus);
+
+    /**
+        Check whether this component wants keyboard focus.
+
+        @return True if this component wants keyboard focus, false otherwise.
+     */
+    bool getWantsKeyboardFocus() const;
+
+    /**
+        Set whether clicking this component can make it grab keyboard focus.
+
+        When a component is clicked, focus handling walks from the clicked
+        component up through its parents until it finds a component that both
+        wants keyboard focus and has this flag enabled. This is enabled by
+        default.
+
+        @param shouldGrabFocus True if mouse clicks can grab keyboard focus.
+     */
+    void setClickingGrabFocus (bool shouldGrabFocus);
+
+    /**
+        Check whether clicking this component can make it grab keyboard focus.
+
+        @return True if mouse clicks can grab keyboard focus.
+     */
+    bool getClickingGrabFocus() const;
 
     /**
         Take the focus.
@@ -994,49 +1044,49 @@ public:
 
         @param event The mouse event.
      */
-    virtual void mouseEnter (const MouseEvent& event);
+    void mouseEnter (const MouseEvent& event) override;
 
     /**
         Called when the mouse exits the component.
 
         @param event The mouse event.
      */
-    virtual void mouseExit (const MouseEvent& event);
+    void mouseExit (const MouseEvent& event) override;
 
     /**
         Called when the mouse button is pressed.
 
         @param event The mouse event.
      */
-    virtual void mouseDown (const MouseEvent& event);
+    void mouseDown (const MouseEvent& event) override;
 
     /**
         Called when the mouse is moved.
 
         @param event The mouse event.
      */
-    virtual void mouseMove (const MouseEvent& event);
+    void mouseMove (const MouseEvent& event) override;
 
     /**
         Called when the mouse is dragged.
 
         @param event The mouse event.
      */
-    virtual void mouseDrag (const MouseEvent& event);
+    void mouseDrag (const MouseEvent& event) override;
 
     /**
         Called when the mouse button is released.
 
         @param event The mouse event.
      */
-    virtual void mouseUp (const MouseEvent& event);
+    void mouseUp (const MouseEvent& event) override;
 
     /**
         Called when the mouse button is double clicked.
 
         @param event The mouse event.
      */
-    virtual void mouseDoubleClick (const MouseEvent& event);
+    void mouseDoubleClick (const MouseEvent& event) override;
 
     /**
         Called when the mouse wheel is scrolled.
@@ -1044,7 +1094,7 @@ public:
         @param event The mouse event.
         @param wheelData The mouse wheel data.
      */
-    virtual void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
+    void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
 
     //==============================================================================
     /**
@@ -1060,6 +1110,12 @@ public:
         @param listener The mouse listener to remove.
      */
     void removeMouseListener (MouseListener* listener);
+
+    /** Add a component listener to this component. */
+    void addComponentListener (ComponentListener* listener);
+
+    /** Remove a component listener from this component. */
+    void removeComponentListener (ComponentListener* listener);
 
     //==============================================================================
     /**
@@ -1129,28 +1185,35 @@ public:
 
     //==============================================================================
 
-    /** Set a style property for the component.
+    /** Set a metric value for the component.
 
-        @param propertyId The identifier of the property to set.
-        @param property The property to set.
-     */
-    void setStyleProperty (const Identifier& propertyId, const std::optional<var>& property);
+        Metrics are numeric values like corner radius, padding, or spacing that
+        can be themed globally and overridden per-component, following the same
+        pattern as component colors.
 
-    /** Get a style property for the component.
+        @param metricId The identifier of the metric to set.
+        @param metric The metric value to set. Pass std::nullopt to remove the override.
+    */
+    void setMetric (const Identifier& metricId, const std::optional<float>& metric);
 
-        @param propertyId The identifier of the property to get.
+    /** Get the metric override for this component (does not walk parents).
 
-        @return The property of the component.
-     */
-    std::optional<var> getStyleProperty (const Identifier& propertyId) const;
+        @param metricId The identifier of the metric to get.
 
-    /** Find a style property for the component.
+        @return The metric value, or std::nullopt if not set on this specific component.
+    */
+    std::optional<float> getMetric (const Identifier& metricId) const;
 
-        @param propertyId The identifier of the property to find.
+    /** Find the metric value, walking up the parent hierarchy.
 
-        @return The property of the component.
-     */
-    std::optional<var> findStyleProperty (const Identifier& propertyId) const;
+        Checks this component first, then walks up the parent chain. If no override
+        is found, falls back to the value registered in the global ApplicationTheme.
+
+        @param metricId The identifier of the metric to find.
+
+        @return The metric value, or std::nullopt if not found anywhere.
+    */
+    std::optional<float> findMetric (const Identifier& metricId) const;
 
     //==============================================================================
     /** A bail out checker for the component. */
@@ -1233,14 +1296,21 @@ private:
     void internalAttachedToNative();
     void internalDetachedFromNative();
 
+    void handleKeyboardFocusFromClick();
+
     void updateMouseCursor();
+
+    void sendMoved();
+    void sendResized();
 
     bool hasOpaqueChildCoveringArea (const Rectangle<float>& area);
 
     friend class ComponentNative;
+    friend class ComponentTestHelper;
     friend class SDL2ComponentNative;
     friend class WeakReference<Component>;
 
+    using ComponentListenerList = ListenerList<ComponentListener, Array<WeakReference<ComponentListener>>>;
     using MouseListenerList = ListenerList<MouseListener, Array<WeakReference<MouseListener>>>;
 
     String componentID, componentTitle;
@@ -1251,6 +1321,7 @@ private:
     ComponentNative::Ptr native;
     WeakReference<Component>::Master masterReference;
     MouseListenerList mouseListeners;
+    ComponentListenerList componentListeners;
     ComponentStyle::Ptr style;
     NamedValueSet properties;
     MouseCursor mouseCursor;
@@ -1266,9 +1337,11 @@ private:
         bool isTransparent : 1;
         bool unclippedRendering : 1;
         bool wantsKeyboardFocus : 1;
+        bool clickingDoesNotGrabFocus : 1;
         bool isRepainting : 1;
         bool blockSelfMouseEvents : 1;
         bool blockChildrenMouseEvents : 1;
+        bool paintProfilingDisabled : 1;
     };
 
     union
@@ -1277,7 +1350,7 @@ private:
         Options options;
     };
 
-#if YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
+#if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
     Color debugColor = Color::opaqueRandom();
     int counter = 2;
 #endif

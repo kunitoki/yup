@@ -32,7 +32,7 @@
     website:              https://github.com/kunitoki/yup
     license:              ISC
 
-    dependencies:         yup_audio_basics yup_dsp yup_gui
+    dependencies:         yup_audio_basics yup_audio_formats yup_audio_processors yup_audio_graph yup_dsp yup_gui
 
   END_YUP_MODULE_DECLARATION
 
@@ -43,11 +43,22 @@
 #define YUP_AUDIO_GUI_H_INCLUDED
 
 #include <yup_audio_basics/yup_audio_basics.h>
+#include <yup_audio_formats/yup_audio_formats.h>
+#include <yup_audio_processors/yup_audio_processors.h>
+#include <yup_audio_graph/yup_audio_graph.h>
 #include <yup_dsp/yup_dsp.h>
 #include <yup_gui/yup_gui.h>
 
 //==============================================================================
 
+#include "waveform/yup_AudioPeakProfile.h"
+#include "waveform/yup_AudioPeakProfileCache.h"
+#include "waveform/yup_AudioThumbnail.h"
 #include "keyboard/yup_MidiKeyboardComponent.h"
+#include "displays/yup_AudioViewComponent.h"
 #include "displays/yup_SpectrumAnalyzerComponent.h"
+#include "displays/yup_SpectrogramComponent.h"
 #include "displays/yup_CartesianPlane.h"
+#include "metering/yup_KMeterComponent.h"
+#include "graph/yup_AudioGraphNodeView.h"
+#include "graph/yup_AudioGraphComponent.h"

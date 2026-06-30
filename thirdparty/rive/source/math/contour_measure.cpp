@@ -7,6 +7,7 @@
 #include "rive/math/contour_measure.hpp"
 #include "rive/math/math_types.hpp"
 #include "rive/math/wangs_formula.hpp"
+#include "rive/profiler/profiler_macros.h"
 #include <cmath>
 #include <limits>
 
@@ -272,6 +273,8 @@ void ContourMeasure::getSegment(float startDist,
                                 RawPath* dst,
                                 bool startWithMove) const
 {
+    RIVE_PROF_SCOPE_L(3)
+
     // sanitize the inputs
     startDist = std::max(0.f, startDist);
     endDist = std::min(m_length, endDist);
@@ -279,15 +282,25 @@ void ContourMeasure::getSegment(float startDist,
     {
         return;
     }
-
-    const auto startIndex = this->findSegment(startDist);
+    auto startIndex = this->findSegment(startDist);
     const auto endIndex = this->findSegment(endDist);
 
-    const auto start = m_segments[startIndex];
+    auto start = m_segments[startIndex];
     const auto end = m_segments[endIndex];
 
-    const auto startT = compute_t(m_segments, startIndex, startDist);
+    auto startT = compute_t(m_segments, startIndex, startDist);
     const auto endT = compute_t(m_segments, endIndex, endDist);
+
+    // If we have a startT very close to 1.0 this will end up creating a cubic
+    // with near identical points. If we have an edncap then there is not enough
+    // precision left to determine the orientation of endcaps if they have one.
+    // Solution is to skip this bezier and move to the next
+    if ((1.0f - startT < math::EPSILON) && (startIndex < endIndex))
+    {
+        startIndex++;
+        start = m_segments[startIndex];
+        startT = 0.0f;
+    }
 
     if (start.m_ptIndex == end.m_ptIndex)
     {

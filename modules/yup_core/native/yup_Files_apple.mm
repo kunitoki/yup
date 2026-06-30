@@ -163,11 +163,11 @@ bool openDocument(const String& fileName, const String& parameters, const Array<
                 StringArray params;
                 params.addTokens(parameters, true);
 
-                NSMutableArray* paramArray = [[NSMutableArray new] autorelease];
+                NSMutableArray* paramArray = [NSMutableArray array];
                 for (int i = 0; i < params.size(); ++i)
                     [paramArray addObject:yupStringToNS(params[i])];
 
-                NSMutableDictionary* envDict = [[NSMutableDictionary new] autorelease];
+                NSMutableDictionary* envDict = [NSMutableDictionary dictionary];
                 if (environment)
                 {
                     for (int i = 0; i < environment->size(); ++i)
@@ -202,7 +202,7 @@ bool openDocument(const String& fileName, const String& parameters, const Array<
 
                 YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
-                NSMutableDictionary* dict = [[NSMutableDictionary new] autorelease];
+                NSMutableDictionary* dict = [NSMutableDictionary dictionary];
 
                 if (params.size())
                 {
@@ -306,6 +306,7 @@ File File::getSpecialLocation(const SpecialLocationType type)
             case userDocumentsDirectory:
                 resultPath = MacFileHelpers::getIOSSystemLocation(NSDocumentDirectory);
                 break;
+
             case userDesktopDirectory:
                 resultPath = MacFileHelpers::getIOSSystemLocation(NSDesktopDirectory);
                 break;
@@ -315,13 +316,14 @@ File File::getSpecialLocation(const SpecialLocationType type)
                 File tmp(MacFileHelpers::getIOSSystemLocation(NSCachesDirectory));
                 tmp = tmp.getChildFile(yup_getExecutableFile().getFileNameWithoutExtension());
                 tmp.createDirectory();
-                return tmp.getFullPathName();
+                return File(tmp.getFullPathName());
             }
 
 #else
             case userDocumentsDirectory:
                 resultPath = "~/Documents";
                 break;
+
             case userDesktopDirectory:
                 resultPath = "~/Desktop";
                 break;
@@ -336,21 +338,27 @@ File File::getSpecialLocation(const SpecialLocationType type)
             case userMusicDirectory:
                 resultPath = "~/Music";
                 break;
+
             case userMoviesDirectory:
                 resultPath = "~/Movies";
                 break;
+
             case userPicturesDirectory:
                 resultPath = "~/Pictures";
                 break;
+
             case userApplicationDataDirectory:
                 resultPath = "~/Library";
                 break;
+
             case commonApplicationDataDirectory:
                 resultPath = "/Library";
                 break;
+
             case commonDocumentsDirectory:
                 resultPath = "/Users/Shared";
                 break;
+
             case globalApplicationsDirectory:
                 resultPath = "/Applications";
                 break;
@@ -481,14 +489,11 @@ class DirectoryIterator::NativeIterator::Pimpl
     {
         YUP_AUTORELEASEPOOL
         {
-            enumerator = [[[NSFileManager defaultManager] enumeratorAtPath:yupStringToNS(directory.getFullPathName())] retain];
+            enumerator = [[NSFileManager defaultManager] enumeratorAtPath:yupStringToNS(directory.getFullPathName())];
         }
     }
 
-    ~Pimpl()
-    {
-        [enumerator release];
-    }
+    ~Pimpl() = default;
 
     bool next(String& filenameFound,
               bool* const isDir,

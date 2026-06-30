@@ -1,7 +1,8 @@
 #include "rive/nested_artboard_layout.hpp"
 #include "rive/artboard.hpp"
-#include "rive/math/aabb.hpp"
+#include "rive/animation/keyframe_interpolator.hpp"
 #include "rive/layout/layout_data.hpp"
+#include "rive/math/aabb.hpp"
 
 using namespace rive;
 
@@ -9,25 +10,14 @@ Core* NestedArtboardLayout::clone() const
 {
     NestedArtboardLayout* nestedArtboard =
         static_cast<NestedArtboardLayout*>(NestedArtboardLayoutBase::clone());
-    if (m_Artboard == nullptr)
+    nestedArtboard->file(file());
+    if (m_referencedArtboard == nullptr)
     {
         return nestedArtboard;
     }
-    auto ni = m_Artboard->instance();
-    nestedArtboard->nest(ni.release());
+    auto ni = m_referencedArtboard->instance();
+    nestedArtboard->referencedArtboard(ni.release());
     return nestedArtboard;
-}
-
-float NestedArtboardLayout::actualInstanceWidth()
-{
-    return instanceWidth() == -1.0f ? artboardInstance()->originalWidth()
-                                    : instanceWidth();
-}
-
-float NestedArtboardLayout::actualInstanceHeight()
-{
-    return instanceHeight() == -1.0f ? artboardInstance()->originalHeight()
-                                     : instanceHeight();
 }
 
 AABB NestedArtboardLayout::layoutBounds()
@@ -58,6 +48,7 @@ void NestedArtboardLayout::markHostingLayoutDirty(
     if (artboard() != nullptr)
     {
         artboard()->markLayoutDirty(this->artboardInstance());
+        artboard()->markLayoutStyleDirty();
     }
 }
 
@@ -130,34 +121,31 @@ void NestedArtboardLayout::updateLayoutBounds(bool animate)
 #endif
 }
 
+#ifdef WITH_RIVE_LAYOUT
+bool NestedArtboardLayout::cascadeLayoutStyle(
+    LayoutStyleInterpolation inheritedInterpolation,
+    KeyFrameInterpolator* inheritedInterpolator,
+    float inheritedInterpolationTime,
+    LayoutDirection direction)
+{
+    if (artboardInstance() != nullptr)
+    {
+        artboardInstance()->cascadeLayoutStyle(inheritedInterpolation,
+                                               inheritedInterpolator,
+                                               inheritedInterpolationTime,
+                                               direction);
+    }
+    return false;
+}
+#endif
+
 void NestedArtboardLayout::updateWidthOverride()
 {
     if (artboardInstance() == nullptr)
     {
         return;
     }
-    auto isRow = parent()->is<LayoutComponent>()
-                     ? parent()->as<LayoutComponent>()->mainAxisIsRow()
-                     : true;
-    if (instanceWidthScaleType() == 0) // LayoutScaleType::fixed
-    {
-        // If we're set to fixed, pass the unit value (points|percent)
-        artboardInstance()->widthIntrinsicallySizeOverride(false);
-        artboardInstance()->widthOverride(actualInstanceWidth(),
-                                          instanceWidthUnitsValue(),
-                                          isRow);
-    }
-    else if (instanceWidthScaleType() == 1) // LayoutScaleType::fill
-    {
-        // If we're set to fill, pass auto
-        artboardInstance()->widthIntrinsicallySizeOverride(false);
-        artboardInstance()->widthOverride(actualInstanceWidth(), 3, isRow);
-    }
-    else if (instanceWidthScaleType() == 2)
-    {
-        artboardInstance()->widthIntrinsicallySizeOverride(true);
-    }
-    markHostingLayoutDirty(artboardInstance());
+    m_styleOverrider.updateWidthOverride(artboardInstance());
 }
 
 void NestedArtboardLayout::updateHeightOverride()
@@ -166,28 +154,14 @@ void NestedArtboardLayout::updateHeightOverride()
     {
         return;
     }
-    auto isRow = parent()->is<LayoutComponent>()
-                     ? parent()->as<LayoutComponent>()->mainAxisIsRow()
-                     : true;
-    if (instanceHeightScaleType() == 0) // LayoutScaleType::fixed
-    {
-        // If we're set to fixed, pass the unit value (points|percent)
-        artboardInstance()->heightIntrinsicallySizeOverride(false);
-        artboardInstance()->heightOverride(actualInstanceHeight(),
-                                           instanceHeightUnitsValue(),
-                                           isRow);
-    }
-    else if (instanceHeightScaleType() == 1) // LayoutScaleType::fill
-    {
-        // If we're set to fill, pass auto
-        artboardInstance()->heightIntrinsicallySizeOverride(false);
-        artboardInstance()->heightOverride(actualInstanceHeight(), 3, isRow);
-    }
-    else if (instanceWidthScaleType() == 2)
-    {
-        artboardInstance()->heightIntrinsicallySizeOverride(true);
-    }
-    markHostingLayoutDirty(artboardInstance());
+    m_styleOverrider.updateHeightOverride(artboardInstance());
+}
+
+bool NestedArtboardLayout::isRow()
+{
+    return parent()->is<LayoutComponent>()
+               ? parent()->as<LayoutComponent>()->mainAxisIsRow()
+               : true;
 }
 
 void NestedArtboardLayout::instanceWidthChanged() { updateWidthOverride(); }
@@ -216,9 +190,29 @@ void NestedArtboardLayout::instanceHeightScaleTypeChanged()
 
 bool NestedArtboardLayout::syncStyleChanges()
 {
-    if (m_Artboard == nullptr)
+    if (m_referencedArtboard == nullptr)
     {
         return false;
     }
-    return m_Artboard->syncStyleChanges();
+    return m_referencedArtboard->syncStyleChanges();
+}
+
+void NestedArtboardLayout::updateArtboard(
+    ViewModelInstanceArtboard* viewModelInstanceArtboard)
+{
+#ifdef WITH_RIVE_LAYOUT
+    if (parent()->is<LayoutComponent>())
+    {
+        parent()->as<LayoutComponent>()->clearLayoutChildren();
+    }
+#endif
+    NestedArtboard::updateArtboard(viewModelInstanceArtboard);
+    updateWidthOverride();
+    updateHeightOverride();
+#ifdef WITH_RIVE_LAYOUT
+    if (parent()->is<LayoutComponent>())
+    {
+        parent()->as<LayoutComponent>()->syncLayoutChildren();
+    }
+#endif
 }

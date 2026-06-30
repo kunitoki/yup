@@ -43,37 +43,7 @@ void Drawable::addClippingShape(ClippingShape* shape)
     m_ClippingShapes.push_back(shape);
 }
 
-ClipResult Drawable::applyClip(Renderer* renderer) const
-{
-    if (m_ClippingShapes.size() == 0)
-    {
-        return ClipResult::noClip;
-    }
-
-    renderer->save();
-
-    for (auto clippingShape : m_ClippingShapes)
-    {
-        if (!clippingShape->isVisible())
-        {
-            continue;
-        }
-
-        ShapePaintPath* path = clippingShape->path();
-        if (path == nullptr)
-        {
-            return ClipResult::emptyClip;
-        }
-        RenderPath* renderPath = path->renderPath(this);
-        if (renderPath == nullptr)
-        {
-            return ClipResult::emptyClip;
-        }
-
-        renderer->clipPath(renderPath);
-    }
-    return ClipResult::clip;
-}
+bool Drawable::willDraw() { return !isHidden(); }
 
 bool Drawable::isChildOfLayout(LayoutComponent* layout)
 {
@@ -87,6 +57,24 @@ bool Drawable::isChildOfLayout(LayoutComponent* layout)
         }
     }
     return false;
+}
+
+bool Drawable::hitTestPoint(const Vec2D& position,
+                            bool skipOnUnclipped,
+                            bool isPrimaryHit)
+{
+    if (isHidden())
+    {
+        return false;
+    }
+    auto hComponent = hittableComponent();
+    if (hComponent != this && hComponent != nullptr)
+    {
+        return hComponent->hitTestPoint(position,
+                                        skipOnUnclipped,
+                                        isPrimaryHit);
+    }
+    return Component::hitTestPoint(position, skipOnUnclipped, isPrimaryHit);
 }
 
 Drawable* DrawableProxy::hittableComponent()

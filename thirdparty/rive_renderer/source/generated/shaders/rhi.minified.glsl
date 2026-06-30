@@ -1,156 +1,217 @@
 #pragma warning(disable:3550)
 #pragma warning(disable:4000)
 #ifndef _ARE_TOKEN_NAMES_PRESERVED
-#define g half
-#define G half2
-#define A half3
+#define d half
+#define D half2
+#define r half3
 #define i half4
-#define a0 ushort
+#define X ushort
 #define c float2
-#define Z float3
-#define f float4
-#define a5 bool2
-#define G7 bool3
-#define N0 uint2
-#define M uint4
-#define c0 int2
-#define h7 int4
-#define a0 ushort
-#define S float2x2
-#define U5 half3x3
-#define V5 half2x3
+#define V float3
+#define g float4
+#define F4 bool2
+#define n6 bool3
+#define w7 bool4
+#define W0 uint2
+#define Q uint4
+#define U int2
+#define Z5 int4
+#define X ushort
+#define a0 float2x2
+#define V6 half3x3
+#define W6 half2x3
+#define g5 half4x4
 #endif
-typedef Z a4;
+typedef V I3;
 #ifdef ENABLE_MIN_16_PRECISION
-#if Ie
-typedef min16uint a0;
+#if Dg
+typedef min16uint X;
 #endif
 #else
-#if Ie
-typedef uint a0;
+#if Dg
+typedef uint X;
 #endif
 #endif
-#define Tb(o,r) o##r
-#define d inline
-#define k1(P1) out P1
-#define i4(P1) inout P1
-#define U0(a) struct a{
-#define i0(e,W,a) W a:Tb(Sf,e)
-#define V0 };
-#define l0(H7,B,a,W) W a=B.a
-#define e5(e,a) cbuffer a{struct{
-#define W5(a) }a;}
-#define o1 struct k0{
-#define n0 noperspective
+#define yd(A,F) A##F
+#define e inline
+#define g1(g2) out g2
+#define U4(g2) inout g2
+#define A1(a) struct a{
+#define r0(f,W,a) W a:yd(li,f)
+#define B1 };
+#define v0(N8,G,a,W) W a=G.a
+#define l6(f,a) cbuffer a{struct{
+#define v7(a) }a;}
+#define h2 struct g0{
+#define J0 noperspective
 #define OPTIONALLY_FLAT nointerpolation
-#define L2 nointerpolation
-#define H(e,W,a) W a:Tb(TEXCOORD,e)
-#define p1 f g1:SV_Position;};
-#define L(a,W) W a
-#define P(a) X.a=a
-#define N(a,W) W a=X.a
+#define S4 nointerpolation
+#define d0(f,W,a) W a:yd(TEXCOORD,f)
+#ifdef NEEDS_CLIP_DISTANCE
+#define Z1 g L0:SV_Position;g Eg:SV_ClipDistance;};
+#else
+#define Z1 g L0:SV_Position;};
+#endif
+#define Y(a,W) W a
+#define l0(a) R.a=a
+#define B(a,W) W a=R.a
 #ifdef VERTEX
-#define P2
-#define Q2
+#define P3
+#define Q3
 #endif
 #ifdef FRAGMENT
-#define R2
-#define S2
+#define y3
+#define z3
 #endif
-#define p4
-#define q4
-#define I3(g0,e,a) uniform Texture2D<M>a
-#define r4(g0,e,a) uniform Texture2D<f>a
-#define C2(g0,e,a) uniform Texture2D<Je i>a
-#define y4(g0,e,a) uniform Texture2D<g>a
-#define l5(g0,e,a) uniform Texture2DArray<g>a
-#define F4(m2,a) SamplerState a;
-#define P3 F4
-#define G3 F4
-#define d1(a,l) a[l]
-#define D4(a,p,l) a.Sample(p,l)
-#define T1(a,p,l,G0) a.SampleLevel(p,l,G0)
-#define p5(a,p,l,X2) a.Gather(p,(l)*(X2))
-#define T5(a,p,m,w5,K7,G0) a.SampleLevel(p,Z(m,0.5,w5),G0)
-#define o4(A0,p,l) D4(A0,p,l)
-#define C7(A0,p,l,G0) T1(A0,p,l,G0)
-#define h2
-#define j2
+#define Z4
+#define a5
+#define E4(N,f,a) uniform Texture2D<Q>a
+#define d5(N,f,a) uniform Texture2D<g>a
+#ifdef SOURCE_TEXTURE_MSAA
+#define Ne(N,f,a) uniform Texture2DMS<i>a
+#endif
+#define U2(N,f,a) uniform Texture2D<i>a
+#define j5(N,f,a) uniform Texture2D<d>a
+#define e6(N,f,a) uniform Texture2DArray<d>a
+#define v5(f,a) SamplerState a;
+#define V3 v5
+#define o6(N,f,a) v5(f,a)
+#define S3(a) v5(R3,a)
+#ifdef oi
+#define m8(a,Fg,l) a.pi(l,Fg)
+#endif
+#define F1(a,l) a[l]
+#define p5(a,p,l) a.Sample(p,l)
+#define m2(a,p,l,X0) a.SampleLevel(p,l,X0)
+#define q5(a,p,l,P1) a.SampleBias(p,l,P1)
+#define U6(a,p,q,p6,P8,X0) a.SampleLevel(p,V(q,0.5,p6),X0)
+#define g8(h0,p,l) p5(h0,p,l)
+#define Q6(h0,p,l,X0) m2(h0,p,l,X0)
+#define y7(h0,p,l,P1) q5(h0,p,l,P1)
+#define v2
+#define w2
 #ifdef ENABLE_RASTERIZER_ORDERED_VIEWS
-#define n2 RasterizerOrderedTexture2D
+#define J2 RasterizerOrderedTexture2D
 #else
-#define n2 RWTexture2D
+#define J2 RWTexture2D
 #endif
-#define x2
+#if defined(FRAGMENT)&&defined(RENDER_MODE_MSAA)
+#ifdef SUPPORTS_SUBPASS_LOAD
+#define g7(a) [[ri::input_attachment_index(P2)]]SubpassInputMS<i>a
+#define S8(a) jc(g5(a.Ja(0),a.Ja(1),a.Ja(2),a.Ja(3)),Ka)
+#else
+#define g7(a) Texture2D a
+#define S8(a) a[E]
+#endif
+#endif
+#define K1
+#define L1
 #ifdef ENABLE_TYPED_UAV_LOAD_STORE
-#define M0(e,a) uniform n2<Je i>a
+#define p0(f,a) uniform J2<si i>a
 #else
-#define M0(e,a) uniform n2<uint>a
+#define p0(f,a) uniform J2<uint>a
 #endif
-#define O4 M0
-#define Y0(e,a) uniform n2<uint>a
-#define f4 Y0
-#define m4 j1
-#define n4 l1
-#define y2
+#define m4 p0
+#define f1(f,a) uniform J2<uint>a
+#define N3 e1
+#define O3 h1
+#if COMPILER_METAL||FORCE_ATOMIC_BUFFER
+#define o4(f,a) uniform RWBuffer<uint>a
+#define N3(h) h[c1]
+#define O3(h,C) h[c1]=C
+#else
+#define o4 f1
+#define N3 e1
+#define O3 h1
+#endif
 #ifdef ENABLE_TYPED_UAV_LOAD_STORE
-#define I0(h) h[I]
+#define H0(h) h[E]
 #else
-#define I0(h) unpackUnorm4x8(h[I])
+#define H0(h) unpackUnorm4x8(h[E])
 #endif
-#define j1(h) h[I]
+#define e1(h) h[E]
 #ifdef ENABLE_TYPED_UAV_LOAD_STORE
-#define T0(h,F) h[I]=(F)
+#define C0(h,C) h[E]=(C)
 #else
-#define T0(h,F) h[I]=packUnorm4x8(F)
+#define C0(h,C) h[E]=packUnorm4x8(C)
 #endif
-#define l1(h,F) h[I]=(F)
-d uint r6(n2<uint>G4,c0 I,uint x){uint B1;InterlockedMax(G4[I],x,B1);return B1;}
-#define G5(h,m) r6(h,I,m)
-d uint v6(n2<uint>G4,c0 I,uint x){uint B1;InterlockedAdd(G4[I],x,B1);return B1;}
-#define H5(h,m) v6(h,I,m)
-#define E2(h)
-#define i2(h)
-#define q5
-#define Y1
-#define n5
-#define x1
-#define q1(a,f0,B,n,K) uint baseInstance;k0 a(f0 B,uint n:SV_VertexID,uint A9:SV_InstanceID){uint K=A9+baseInstance;k0 X;
-#define G6(a,f0,B,n,K) k0 a(f0 B,uint n:SV_VertexID){k0 X;f g1;
-#define N4(a,a2,c2,v2,w2,n) k0 a(a2 c2,v2 w2,uint n:SV_VertexID){k0 X;f g1;
-#define h1(w6) X.g1=w6;}return X;
-#define e2(E4,a) E4 a(k0 X):SV_Target{
-#define f2(F) return F;}
-#define C5 ,c y0
-#define Y2 ,y0
-#define y3 ,c0 I
-#define G1 ,I
-#define z2(a) Ke void a(k0 X){c y0=X.g1.xy;c0 I=c0(floor(y0));
-#define R4(a) z2(a)
-#define M2 }
-#define A3(a) Ke i a(k0 X):SV_Target{c y0=X.g1.xy;c0 I=c0(floor(y0));i K1;
-#define F5(a) A3(a)
-#define P4 }return K1;
+#define h1(h,C) h[E]=(C)
+#if COMPILER_METAL||FORCE_ATOMIC_BUFFER
+e uint w5(RWBuffer<uint>m3,uint c1,uint x){uint a1;InterlockedMax(m3[c1],x,a1);return a1;}
+#define O5(h,q) w5(h,c1,q)
+e uint x5(RWBuffer<uint>m3,uint c1,uint x){uint a1;InterlockedAdd(m3[c1],x,a1);return a1;}
+#define Q5(h,q) x5(h,c1,q)
+#else
+e uint w5(J2<uint>m3,U E,uint x){uint a1;InterlockedMax(m3[E],x,a1);return a1;}
+#define O5(h,q) w5(h,E,q)
+e uint x5(J2<uint>m3,U E,uint x){uint a1;InterlockedAdd(m3[E],x,a1);return a1;}
+#define Q5(h,q) x5(h,E,q)
+#endif
+#define r2(h)
+#define X1(h)
+#define h6
+#define p3
+#define C3
+#define i1
+#ifdef NO_VARYING
+#define C1(a,c0,G,v,S) uint baseInstance;g a(c0 G,uint v:SV_VertexID,uint D7:SV_InstanceID):SV_Position{uint S=D7+baseInstance;
+#define D1(y5) return y5;}
+#else
+#define C1(a,c0,G,v,S) uint baseInstance;g0 a(c0 G,uint v:SV_VertexID,uint D7:SV_InstanceID){uint S=D7+baseInstance;g0 R;
+#define S7(a,c0,G,v,S) g0 a(c0 G,uint v:SV_VertexID){g0 R;g L0;
+#define E6(a,e3,f3,q3,r3,v) g0 a(e3 f3,q3 r3,uint v:SV_VertexID){g0 R;g L0;
+#define D1(y5) R.L0=y5;}return R;
+#endif
+#ifdef NO_VARYING
+#define V2(Q1,a) EARLYDEPTHSTENCIL Q1 a(g L0:SV_Position):SV_Target{c T=L0.xy;
+#define q6(Q1,a) ti Q1 a(g L0:SV_Position,uint Ka:SV_Coverage,bool La:SV_IsFrontFace):SV_Target{c T=L0.xy;bool r6=!La;
+#else
+#define V2(Q1,a) EARLYDEPTHSTENCIL Q1 a(g0 R,uint Ka:SV_Coverage):SV_Target{c T=R.L0.xy;U E=U(floor(T));uint c1=E.y*k.m6+E.x;
+#define q6(Q1,a) Q1 a(g0 R,uint Ka:SV_Coverage,bool La:SV_IsFrontFace):SV_Target{c T=R.L0.xy;U E=U(floor(T));uint c1=E.y*k.m6+E.x;bool r6=!La;
+#endif
+#define F2(C) return C;}
+#ifdef NEEDS_CLIP_DISTANCE
+#define a7 ,out g gl_ClipDistance
+#define r5 ,R.Eg
+#else
+#define a7
+#define r5
+#endif
+#define G6 ,c T
+#define R2 ,T
+#define r4 ,U E
+#define U1 ,E
+#define v1(a) EARLYDEPTHSTENCIL void a(g0 R){c T=R.L0.xy;U E=U(floor(T));uint c1=E.y*k.m6+E.x;
+#define M5(a) v1(a)
+#if defined(FIXED_FUNCTION_COLOR_OUTPUT)&&defined(DRAW_IMAGE_MESH)
+#define c2 i3
+#else
+#define c2 }
+#endif
+#define o2(a) EARLYDEPTHSTENCIL i a(g0 R):SV_Target{c T=R.L0.xy;U E=U(floor(T));uint c1=E.y*k.m6+E.x;i m1;
+#define v4(a) o2(a)
+#define i3 }return m1;
 #define uintBitsToFloat asfloat
 #define floatBitsToInt asint
 #define floatBitsToUint asuint
 #define inversesqrt rsqrt
-#define equal(o,r) ((o)==(r))
-#define notEqual(o,r) ((o)!=(r))
-#define lessThan(o,r) ((o)<(r))
-#define C0(o,r) mul(r,o)
-#define E3
-#define F3
-#define w3
-#define x3
-#define g4(e,f1,a) StructuredBuffer<N0>a
-#define O3(e,f1,a) StructuredBuffer<M>a
-#define h4(e,f1,a) StructuredBuffer<f>a
-#define w0(a,v0) a[v0]
-#define k4(a,v0) a[v0]
-d G unpackHalf2x16(uint u){uint y=(u>>16);uint x=u&0xffffu;return G(f16tof32(x),f16tof32(y));}d uint packHalf2x16(c M1){uint x=f32tof16(M1.x);uint y=f32tof16(M1.y);return(y<<16)|x;}d i unpackUnorm4x8(uint u){M A1=M(u&0xffu,(u>>8)&0xffu,(u>>16)&0xffu,u>>24);return i(A1)*(1./255.);}d uint packUnorm4x8(i j){M A1=(M(j*255.)&0xff)<<M(0,8,16,24);A1.xy|=A1.zw;A1.x|=A1.y;return A1.x;}d S inverse(S W0){S B9=S(W0[1][1],-W0[0][1],-W0[1][0],W0[0][0]);return B9*(1./determinant(W0));}d float mix(float x,float y,float s){return lerp(x,y,s);}d c mix(c x,c y,c s){return lerp(x,y,s);}d Z mix(Z x,Z y,Z s){return lerp(x,y,s);}d f mix(f x,f y,f s){return lerp(x,y,s);}d float fract(float x){return frac(x);}d c fract(c x){return frac(x);}d Z fract(Z x){return frac(x);}d f fract(f x){return frac(x);}d float mod(float x,float y){return fmod(x,y);}d float o2(float x){return sign(x);}d c o2(c x){return sign(x);}d Z o2(Z x){return sign(x);}d f o2(f x){return sign(x);}
-#define sign o2
-d float p2(float x){return abs(x);}d c p2(c x){return abs(x);}d Z p2(Z x){return abs(x);}d f p2(f x){return abs(x);}
-#define abs p2
-d float q2(float x){return sqrt(x);}d c q2(c x){return sqrt(x);}d Z q2(Z x){return sqrt(x);}d f q2(f x){return sqrt(x);}
-#define sqrt q2
+#define equal(A,F) ((A)==(F))
+#define notEqual(A,F) ((A)!=(F))
+#define lessThan(A,F) ((A)<(F))
+#define greaterThan(A,F) ((A)>(F))
+#define Z0(A,F) mul(F,A)
+#define B4
+#define C4
+#define K3
+#define L3
+#define H5(f,y1,a) StructuredBuffer<W0>a
+#define G4(f,y1,a) StructuredBuffer<Q>a
+#define I5(f,y1,a) StructuredBuffer<g>a
+#define P0(a,y0) a[y0]
+#define J5(a,y0) a[y0]
+e D unpackHalf2x16(uint u){uint y=(u>>16);uint x=u&0xffffu;return D(f16tof32(x),f16tof32(y));}e uint packHalf2x16(c e2){uint x=f32tof16(e2.x);uint y=f32tof16(e2.y);return(y<<16)|x;}e i unpackUnorm4x8(uint u){Q R1=Q(u&0xffu,(u>>8)&0xffu,(u>>16)&0xffu,u>>24);return i(R1)*(1./255.);}e uint packUnorm4x8(i j){Q R1=(Q(j*255.)&0xff)<<Q(0,8,16,24);R1.xy|=R1.zw;R1.x|=R1.y;return R1.x;}e a0 inverse(a0 o1){a0 Ga=a0(o1[1][1],-o1[0][1],-o1[1][0],o1[0][0]);return Ga*(1./determinant(o1));}e float mix(float x,float y,float s){return lerp(x,y,s);}e c mix(c x,c y,c s){return lerp(x,y,s);}e V mix(V x,V y,V s){return lerp(x,y,s);}e g mix(g x,g y,g s){return lerp(x,y,s);}e float fract(float x){return frac(x);}e c fract(c x){return frac(x);}e V fract(V x){return frac(x);}e g fract(g x){return frac(x);}e float mod(float x,float y){return fmod(x,y);}e float K2(float x){return sign(x);}e c K2(c x){return sign(x);}e V K2(V x){return sign(x);}e g K2(g x){return sign(x);}
+#define sign K2
+e float L2(float x){return abs(x);}e c L2(c x){return abs(x);}e V L2(V x){return abs(x);}e g L2(g x){return abs(x);}
+#define abs L2
+e float M2(float x){return sqrt(x);}e c M2(c x){return sqrt(x);}e V M2(V x){return sqrt(x);}e g M2(g x){return sqrt(x);}
+#define sqrt M2

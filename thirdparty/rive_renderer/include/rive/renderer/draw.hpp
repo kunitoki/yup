@@ -58,7 +58,23 @@ public:
     gpu::DrawContents drawContents() const { return m_drawContents; }
     bool isOpaque() const
     {
-        return m_drawContents & gpu::DrawContents::opaquePaint;
+        return enums::is_flag_set(m_drawContents,
+                                  gpu::DrawContents::opaquePaint);
+    }
+    bool isClipUpdate() const
+    {
+        return enums::is_flag_set(m_drawContents,
+                                  gpu::DrawContents::clipUpdate);
+    }
+    bool hasActiveClip() const
+    {
+        return enums::is_flag_set(m_drawContents,
+                                  gpu::DrawContents::activeClip);
+    }
+    bool hasAdvancedBlend() const
+    {
+        return enums::is_flag_set(m_drawContents,
+                                  gpu::DrawContents::advancedBlend);
     }
     uint32_t clipID() const { return m_clipID; }
     bool hasClipRect() const { return m_clipRectInverseMatrix != nullptr; }
@@ -130,8 +146,8 @@ public:
     //
     // NOTE: Subpasses are not necessarily rendered one after the other.
     // Separate, non-overlapping draws may have gotten sorted between subpasses.
-    virtual void pushToRenderContext(RenderContext::LogicalFlush*,
-                                     int subpassIndex) = 0;
+    virtual gpu::DrawBatch* pushToRenderContext(RenderContext::LogicalFlush*,
+                                                int subpassIndex) = 0;
 
     // We can't have a destructor because we're block-allocated. Instead, the
     // client calls this method before clearing the drawList to release all our
@@ -176,6 +192,7 @@ protected:
     // WebGL msaa), this is a linked list of all the draws from a single batch
     // whose bounding boxes needs to be blitted to the "dstRead" texture before
     // drawing.
+public:
     const Draw mutable* m_nextDstRead = nullptr;
 };
 
@@ -195,6 +212,7 @@ public:
                               rcp<const RiveRenderPath>,
                               FillRule,
                               const RiveRenderPaint*,
+                              float modulatedOpacity,
                               RawPath* scratchPath);
 
     // Determines how coverage is calculated for antialiasing and feathers.
@@ -204,6 +222,7 @@ public:
     enum class CoverageType
     {
         pixelLocalStorage, // InterlockMode::rasterOrdering and atomics
+        clockwise,         // InterlockMode::clockwise
         clockwiseAtomic,   // InterlockMode::clockwiseAtomic
         msaa,              // InterlockMode::msaa
         atlas, // Any InterlockMode may opt to use atlas coverage for large
@@ -215,6 +234,7 @@ public:
              rcp<const RiveRenderPath>,
              FillRule,
              const RiveRenderPaint*,
+             float modulatedOpacity,
              CoverageType,
              const RenderContext::FrameDescriptor&);
 
@@ -239,6 +259,16 @@ public:
         return m_contourDirections;
     }
 
+    // Is the draw an "outermost" (i.e., non-nested) clip update?
+    // Outermost clip updates reset the clip buffer entirely, rather than
+    // subtracting coverage from what's already there.
+    bool isOutermostClipUpdate() const
+    {
+        return (m_drawContents & (gpu::DrawContents::clipUpdate |
+                                  gpu::DrawContents::activeClip)) ==
+               gpu::DrawContents::clipUpdate;
+    }
+
     // Only used when rendering coverage via the atlas.
     const gpu::AtlasTransform& atlasTransform() const
     {
@@ -252,14 +282,29 @@ public:
     {
         return m_coverageBufferRange;
     }
+    // Returns true if this path will need borrowed coverage prepass(es) in
+    // clockwiseAtomic mode.
+    // NOTE: Since the interlock mode isn't known at this level, the
+    // responsibility is on the caller to only use this method in
+    // clockwiseAtomic mode. Otherwise, there are never borrowed coverage
+    // prepasses.
+    bool needsBorrowedCoveragePrepass() const
+    {
+        assert(m_coverageType == CoverageType::clockwiseAtomic);
+        return !isStroke() && // Strokes don't have negative coverage.
+               !isOutermostClipUpdate(); // Outermost (i.e., non-nested)
+                                         // clockwiseAtomic clips render
+                                         // directly to the clip buffer in a
+                                         // single pass.
+    }
 
     GrInnerFanTriangulator* triangulator() const { return m_triangulator; }
 
     bool allocateResources(RenderContext::LogicalFlush*) override;
     void countSubpasses() override;
 
-    void pushToRenderContext(RenderContext::LogicalFlush*,
-                             int subpassIndex) override;
+    gpu::DrawBatch* pushToRenderContext(RenderContext::LogicalFlush*,
+                                        int subpassIndex) override;
 
     // Called after pushToRenderContext(), and only when this draw uses an atlas
     // for tessellation. In the CoverageType::atlas case, pushToRenderContext()
@@ -305,7 +350,7 @@ protected:
 
     // Calls LogicalFlush::pushOuterCubicsDraw() or
     // LogicalFlush::pushMidpointFanDraw() for this PathDraw.
-    void pushTessellationDraw(
+    gpu::DrawBatch& pushTessellationDraw(
         RenderContext::LogicalFlush*,
         uint32_t tessVertexCount,
         uint32_t tessLocation,
@@ -355,7 +400,7 @@ protected:
 
     const RiveRenderPath* const m_pathRef;
     const FillRule m_pathFillRule; // Fill rule can mutate on RenderPath.
-    const Gradient* m_gradientRef;
+    const Gradient* m_gradientRef; // Already modulated if opacity != 1.0
     const gpu::PaintType m_paintType;
     const CoverageType m_coverageType;
     float m_strokeRadius = 0;
@@ -449,8 +494,8 @@ public:
 
     float opacity() const { return m_opacity; }
 
-    void pushToRenderContext(RenderContext::LogicalFlush*,
-                             int subpassIndex) override;
+    gpu::DrawBatch* pushToRenderContext(RenderContext::LogicalFlush*,
+                                        int subpassIndex) override;
 
 protected:
     const float m_opacity;
@@ -477,8 +522,8 @@ public:
     uint32_t indexCount() const { return m_indexCount; }
     float opacity() const { return m_opacity; }
 
-    void pushToRenderContext(RenderContext::LogicalFlush*,
-                             int subpassIndex) override;
+    gpu::DrawBatch* pushToRenderContext(RenderContext::LogicalFlush*,
+                                        int subpassIndex) override;
 
     void releaseRefs() override;
 
@@ -490,10 +535,9 @@ protected:
     const float m_opacity;
 };
 
-// Resets the stencil clip by either entirely erasing the existing clip, or
-// intersecting it with a nested clip (i.e., erasing the region outside the
-// nested clip).
-class StencilClipReset : public Draw
+// Resets the clip by either entirely erasing the existing clip, or intersecting
+// it with a nested clip (i.e., erasing the region outside the nested clip).
+class ClipReset : public Draw
 {
 public:
     enum class ResetAction
@@ -502,15 +546,15 @@ public:
         intersectPreviousClip,
     };
 
-    StencilClipReset(RenderContext*,
-                     uint32_t previousClipID,
-                     gpu::DrawContents previousClipDrawContents,
-                     ResetAction);
+    ClipReset(RenderContext*,
+              uint32_t previousClipID,
+              gpu::DrawContents previousClipDrawContents,
+              ResetAction);
 
     uint32_t previousClipID() const { return m_previousClipID; }
 
-    void pushToRenderContext(RenderContext::LogicalFlush*,
-                             int subpassIndex) override;
+    gpu::DrawBatch* pushToRenderContext(RenderContext::LogicalFlush*,
+                                        int subpassIndex) override;
 
 protected:
     const uint32_t m_previousClipID;

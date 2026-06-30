@@ -2,16 +2,22 @@
 #include "rive/artboard.hpp"
 #include "rive/data_bind_flags.hpp"
 #include "rive/generated/core_registry.hpp"
+#include "rive/data_bind/bindable_property_artboard.hpp"
 #include "rive/data_bind/bindable_property_asset.hpp"
 #include "rive/data_bind/bindable_property_number.hpp"
 #include "rive/data_bind/bindable_property_string.hpp"
 #include "rive/data_bind/bindable_property_color.hpp"
 #include "rive/data_bind/bindable_property_enum.hpp"
+#include "rive/data_bind/bindable_property_list.hpp"
 #include "rive/data_bind/bindable_property_boolean.hpp"
 #include "rive/data_bind/bindable_property_trigger.hpp"
 #include "rive/data_bind/bindable_property_integer.hpp"
+#include "rive/data_bind/bindable_property_viewmodel.hpp"
+#include "rive/data_bind/data_bind_container.hpp"
 #include "rive/data_bind/context/context_value.hpp"
+#include "rive/data_bind/context/context_value_any.hpp"
 #include "rive/data_bind/context/context_value_asset_image.hpp"
+#include "rive/data_bind/context/context_value_artboard.hpp"
 #include "rive/data_bind/context/context_value_boolean.hpp"
 #include "rive/data_bind/context/context_value_number.hpp"
 #include "rive/data_bind/context/context_value_string.hpp"
@@ -20,14 +26,17 @@
 #include "rive/data_bind/context/context_value_color.hpp"
 #include "rive/data_bind/context/context_value_trigger.hpp"
 #include "rive/data_bind/context/context_value_symbol_list_index.hpp"
+#include "rive/data_bind/context/context_value_viewmodel.hpp"
 #include "rive/data_bind/data_values/data_type.hpp"
 #include "rive/data_bind/converters/data_converter.hpp"
 #include "rive/data_bind/converters/formula/formula_token.hpp"
 #include "rive/animation/transition_viewmodel_condition.hpp"
 #include "rive/animation/state_machine.hpp"
+#include "rive/artboard_component_list.hpp"
 #include "rive/importers/artboard_importer.hpp"
 #include "rive/importers/state_machine_importer.hpp"
 #include "rive/importers/backboard_importer.hpp"
+#include "rive/component.hpp"
 
 using namespace rive;
 
@@ -54,7 +63,32 @@ StatusCode DataBind::import(ImportStack& importStack)
     backboardImporter->addDataConverterReferencer(this);
     if (target())
     {
-        if (target()->is<DataConverter>())
+        initialize();
+        auto input = ScriptInput::from(target());
+        if (input != nullptr)
+        {
+            bool ownsDataBind = true;
+            if (input->scriptedObject() != nullptr)
+            {
+                if (input->scriptedObject()->component() != nullptr)
+                {
+                    auto importer = importStack.latest<ArtboardImporter>(
+                        ArtboardBase::typeKey);
+                    if (importer != nullptr)
+                    {
+                        ownsDataBind = false;
+                        importer->addDataBind(this);
+                    }
+                }
+                else if (input->scriptedObject()->addDataBindFromScriptedObject(
+                             this))
+                {
+                    ownsDataBind = false;
+                }
+            }
+            input->dataBind(this, ownsDataBind);
+        }
+        else if (target()->is<DataConverter>())
         {
             target()->as<DataConverter>()->addDataBind(this);
         }
@@ -70,10 +104,13 @@ StatusCode DataBind::import(ImportStack& importStack)
                 case BindablePropertyStringBase::typeKey:
                 case BindablePropertyBooleanBase::typeKey:
                 case BindablePropertyEnumBase::typeKey:
+                case BindablePropertyArtboardBase::typeKey:
                 case BindablePropertyColorBase::typeKey:
                 case BindablePropertyTriggerBase::typeKey:
                 case BindablePropertyIntegerBase::typeKey:
                 case BindablePropertyAssetBase::typeKey:
+                case BindablePropertyViewModelBase::typeKey:
+                case BindablePropertyListBase::typeKey:
                 case TransitionPropertyViewModelComparatorBase::typeKey:
                 case StateTransitionBase::typeKey:
                 {
@@ -90,6 +127,21 @@ StatusCode DataBind::import(ImportStack& importStack)
                 }
                 default:
                 {
+                    // Prefer the artboard that actually owns the target object.
+                    // Relying on latest<ArtboardImporter> can attach binds to
+                    // the wrong source artboard when multiple artboards are
+                    // loaded.
+                    if (target()->is<Component>())
+                    {
+                        auto comp = target()->as<Component>();
+                        auto parentArtboard = comp->artboard();
+                        if (parentArtboard != nullptr)
+                        {
+                            parentArtboard->addDataBind(this);
+                            return Super::import(importStack);
+                        }
+                    }
+
                     auto artboardImporter =
                         importStack.latest<ArtboardImporter>(
                             ArtboardBase::typeKey);
@@ -109,42 +161,64 @@ StatusCode DataBind::import(ImportStack& importStack)
 
 DataType DataBind::outputType()
 {
-    if (converter())
+    if (converter() && converter()->outputType() != DataType::input &&
+        converter() && converter()->outputType() != DataType::none)
     {
         return converter()->outputType();
     }
-    switch (m_Source->coreType())
+    return sourceOutputType();
+}
+
+DataType DataBind::sourceOutputType()
+{
+    if (m_Source != nullptr)
     {
-        case ViewModelInstanceNumberBase::typeKey:
-            return DataType::number;
-        case ViewModelInstanceStringBase::typeKey:
-            return DataType::string;
-        case ViewModelInstanceEnumBase::typeKey:
-            return DataType::enumType;
-        case ViewModelInstanceColorBase::typeKey:
-            return DataType::color;
-        case ViewModelInstanceBooleanBase::typeKey:
-            return DataType::boolean;
-        case ViewModelInstanceListBase::typeKey:
-            return DataType::list;
-        case ViewModelInstanceTriggerBase::typeKey:
-            return DataType::trigger;
-        case ViewModelInstanceSymbolListIndexBase::typeKey:
-            return DataType::symbolListIndex;
-        case ViewModelInstanceAssetImageBase::typeKey:
-            return DataType::assetImage;
+        switch (m_Source->coreType())
+        {
+            case ViewModelInstanceNumberBase::typeKey:
+                return DataType::number;
+            case ViewModelInstanceStringBase::typeKey:
+                return DataType::string;
+            case ViewModelInstanceEnumBase::typeKey:
+                return DataType::enumType;
+            case ViewModelInstanceColorBase::typeKey:
+                return DataType::color;
+            case ViewModelInstanceBooleanBase::typeKey:
+                return DataType::boolean;
+            case ViewModelInstanceListBase::typeKey:
+                return DataType::list;
+            case ViewModelInstanceTriggerBase::typeKey:
+                return DataType::trigger;
+            case ViewModelInstanceSymbolListIndexBase::typeKey:
+                return DataType::symbolListIndex;
+            case ViewModelInstanceAssetImageBase::typeKey:
+                return DataType::assetImage;
+            case ViewModelInstanceArtboardBase::typeKey:
+                return DataType::artboard;
+            case ViewModelInstanceViewModelBase::typeKey:
+                return DataType::viewModel;
+        }
     }
     return DataType::none;
 }
 
-void DataBind::source(ViewModelInstanceValue* value)
+void DataBind::source(rcp<ViewModelInstanceValue> value)
 {
     if (!bindsOnce())
     {
         value->addDependent(this);
-        value->ref();
     }
     m_Source = value;
+
+    // We treat this as a special case. If an ArtboardComponentList's list
+    // property is bound to a number instance, we know that the component
+    // will be provided with dettached view model instances that need to be
+    // advanced explicitly
+    if (m_Source && target() && target()->is<ArtboardComponentList>())
+    {
+        target()->as<ArtboardComponentList>()->shouldResetInstances(
+            m_Source->coreType() == ViewModelInstanceNumberBase::typeKey);
+    }
 }
 
 void DataBind::clearSource()
@@ -155,11 +229,6 @@ void DataBind::clearSource()
         if (!bindsOnce())
         {
             m_Source->removeDependent(this);
-            m_Source->unref();
-        }
-        if (m_dataConverter != nullptr)
-        {
-            m_dataConverter->unbind();
         }
         m_Source = nullptr;
     }
@@ -167,7 +236,7 @@ void DataBind::clearSource()
 
 DataBind::~DataBind()
 {
-    clearSource();
+    unbind();
     delete m_ContextValue;
     m_ContextValue = nullptr;
     delete m_dataConverter;
@@ -207,8 +276,21 @@ void DataBind::bind()
         case DataType::assetImage:
             m_ContextValue = new DataBindContextValueAssetImage(this);
             break;
+        case DataType::artboard:
+            m_ContextValue = new DataBindContextValueArtboard(this);
+            break;
+        case DataType::viewModel:
+            m_ContextValue = new DataBindContextValueViewModel(this);
+            break;
+        case DataType::any:
+            m_ContextValue = new DataBindContextValueAny(this);
+            break;
         default:
             break;
+    }
+    if (m_dataConverter)
+    {
+        m_dataConverter->reset();
     }
     addDirt(ComponentDirt::Bindings, true);
 }
@@ -216,6 +298,10 @@ void DataBind::bind()
 void DataBind::unbind()
 {
     clearSource();
+    if (m_dataConverter != nullptr)
+    {
+        m_dataConverter->unbind();
+    }
     if (m_ContextValue != nullptr)
     {
         delete m_ContextValue;
@@ -223,13 +309,15 @@ void DataBind::unbind()
     }
 }
 
+bool DataBind::canSkip()
+{
+    return m_target && m_target->is<Component>() &&
+           m_target->as<Component>()->isCollapsed() &&
+           propertyKey() != LayoutComponentStyleBase::displayValuePropertyKey;
+}
+
 void DataBind::update(ComponentDirt value)
 {
-    if ((value & ComponentDirt::Dependents) == ComponentDirt::Dependents &&
-        m_dataConverter != nullptr)
-    {
-        m_dataConverter->update();
-    }
     if (m_Source != nullptr && m_ContextValue != nullptr)
     {
         if ((value & ComponentDirt::Bindings) == ComponentDirt::Bindings)
@@ -249,15 +337,16 @@ void DataBind::update(ComponentDirt value)
     }
 }
 
-void DataBind::updateSourceBinding(bool invalidate)
+void DataBind::updateDependents()
 {
-    if ((m_Dirt & ComponentDirt::Dependents) == ComponentDirt::Dependents &&
-        m_dataConverter != nullptr)
+    if (m_dataConverter)
     {
-        m_Dirt &= ~ComponentDirt::Dependents;
         m_dataConverter->update();
     }
-    auto flagsValue = static_cast<DataBindFlags>(flags());
+}
+
+void DataBind::updateSourceBinding(bool invalidate)
+{
     if (toSource())
     {
         if (m_ContextValue != nullptr)
@@ -266,13 +355,24 @@ void DataBind::updateSourceBinding(bool invalidate)
             {
                 m_ContextValue->invalidate();
             }
-            m_ContextValue->applyToSource(
-                m_target,
-                propertyKey(),
-                (flagsValue & DataBindFlags::Direction) ==
-                    DataBindFlags::ToSource);
+            m_ContextValue->applyToSource(m_target,
+                                          propertyKey(),
+                                          isMainToSource());
         }
     }
+}
+
+bool DataBind::isMainToSource()
+{
+    auto flagsValue = static_cast<DataBindFlags>(flags());
+    return (flagsValue & DataBindFlags::Direction) == DataBindFlags::ToSource;
+}
+
+bool DataBind::sourceToTargetRunsFirst()
+{
+    auto flagsValue = static_cast<DataBindFlags>(flags());
+    return (flagsValue & DataBindFlags::SourceToTargetRunsFirst) ==
+           DataBindFlags::SourceToTargetRunsFirst;
 }
 
 void DataBind::addDirt(ComponentDirt value, bool recurse)
@@ -290,58 +390,82 @@ void DataBind::addDirt(ComponentDirt value, bool recurse)
         m_changedCallback();
     }
 #endif
-    if (target() != nullptr)
-    {
-        if (target()->is<DataConverter>())
-        {
-
-            target()->as<DataConverter>()->markConverterDirty();
-        }
-        else if (target()->is<FormulaToken>())
-        {
-
-            target()->as<FormulaToken>()->markDirty();
-        }
-        else if (target()->is<Component>())
-        {
-            auto artboard = target()->as<Component>()->artboard();
-            if (artboard != nullptr)
-            {
-                artboard->onComponentDirty(target()->as<Component>());
-            }
-        }
-    }
-    if ((m_Dirt & ComponentDirt::Dependents) != 0 && m_ContextValue != nullptr)
+    if (enums::is_flag_set(m_Dirt, ComponentDirt::Dependents) &&
+        m_ContextValue != nullptr)
     {
         m_ContextValue->invalidate();
     }
+    if (m_container && !m_isCollapsed)
+    {
+        m_container->addDirtyDataBind(this);
+    }
 }
+
+void DataBind::container(DataBindContainer* container)
+{
+    m_container = container;
+}
+
+void DataBind::relinkDataBind() { m_container->rebuildDataBind(this); }
 
 bool DataBind::bindsOnce()
 {
     auto flagsValue = static_cast<DataBindFlags>(flags());
-    return (flagsValue & DataBindFlags::Once) == DataBindFlags::Once;
+    return enums::is_flag_set(flagsValue, DataBindFlags::Once);
 }
 
 bool DataBind::toSource()
 {
     auto flagsValue = static_cast<DataBindFlags>(flags());
-    return (flagsValue & (DataBindFlags::TwoWay | DataBindFlags::ToSource)) !=
-           0;
+    return enums::any_flag_set(flagsValue,
+                               DataBindFlags::TwoWay | DataBindFlags::ToSource);
 }
 
 bool DataBind::toTarget()
 {
     auto flagsValue = static_cast<DataBindFlags>(flags());
-    return (flagsValue & DataBindFlags::TwoWay) != 0 ||
-           (flagsValue & DataBindFlags::ToSource) == 0;
+    return enums::is_flag_set(flagsValue, DataBindFlags::TwoWay) ||
+           !enums::is_flag_set(flagsValue, DataBindFlags::ToSource);
+}
+
+bool DataBind::isNameBased()
+{
+    auto flagsValue = static_cast<DataBindFlags>(flags());
+    return enums::is_flag_set(flagsValue, DataBindFlags::NameBased);
 }
 
 bool DataBind::advance(float elapsedTime)
 {
-    if (converter())
+    if (converter() && m_Source && !m_isCollapsed)
     {
         return converter()->advance(elapsedTime);
     }
     return false;
+}
+
+void DataBind::file(File* value) { m_file = value; };
+
+File* DataBind::file() const { return m_file; };
+
+void DataBind::collapse(bool isCollapsed)
+{
+    if (m_isCollapsed == isCollapsed ||
+        propertyKey() == LayoutComponentStyleBase::displayValuePropertyKey ||
+        toSource())
+    {
+        return;
+    }
+    m_isCollapsed = isCollapsed;
+    if (!m_isCollapsed && m_Dirt != ComponentDirt::None && m_container)
+    {
+        m_container->addDirtyDataBind(this);
+    }
+}
+
+void DataBind::initialize()
+{
+    if (target() && target()->is<Component>())
+    {
+        target()->as<Component>()->addCollapsable(this);
+    }
 }

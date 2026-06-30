@@ -13,6 +13,8 @@
 #define GL_SHADER_PIXEL_LOCAL_STORAGE_EXT 0x8F64
 #define GL_FRAMEBUFFER_FETCH_NONCOHERENT_QCOM 0x96A2
 #define glFramebufferFetchBarrierQCOM(...) RIVE_UNREACHABLE()
+#define glFramebufferPixelLocalStorageSizeEXT(...) RIVE_UNREACHABLE()
+#define glClearPixelLocalStorageuiEXT(...) RIVE_UNREACHABLE()
 #endif
 
 #ifdef RIVE_ANDROID
@@ -49,12 +51,12 @@
 #define GL_PIXEL_LOCAL_CLEAR_VALUE_INT_ANGLE 0x96EC
 #define GL_PIXEL_LOCAL_CLEAR_VALUE_UNSIGNED_INT_ANGLE 0x96ED
 extern bool webgl_enable_WEBGL_shader_pixel_local_storage_coherent();
-extern bool webgl_enable_WEBGL_provoking_vertex();
 extern bool webgl_shader_pixel_local_storage_is_coherent();
 extern void glFramebufferTexturePixelLocalStorageANGLE(GLint plane,
                                                        GLuint backingtexture,
                                                        GLint level,
-                                                       GLint layer);
+                                                       GLint layer,
+                                                       GLenum usage);
 extern void glFramebufferPixelLocalClearValuefvANGLE(GLint plane,
                                                      const GLfloat value[4]);
 extern void glBeginPixelLocalStorageANGLE(GLsizei n, const GLenum loadops[]);
@@ -69,6 +71,7 @@ extern void glGetFramebufferPixelLocalStorageParameterivANGLE(GLint plane,
 #define GL_FIRST_VERTEX_CONVENTION_ANGLE 0x8E4D
 #define GL_LAST_VERTEX_CONVENTION_ANGLE 0x8E4E
 #define GL_PROVOKING_VERTEX_ANGLE 0x8E4F
+extern bool webgl_enable_WEBGL_provoking_vertex();
 extern void glProvokingVertexANGLE(GLenum provokeMode);
 #endif
 
@@ -90,6 +93,7 @@ extern void glProvokingVertexANGLE(GLenum provokeMode);
 #define GL_HSL_COLOR_KHR 0x92AF
 #define GL_HSL_LUMINOSITY_KHR 0x92B0
 #define GL_BLEND_ADVANCED_COHERENT_KHR 0x9285
+#define glBlendBarrierKHR(...) RIVE_UNREACHABLE()
 #endif
 
 #ifndef GL_EXT_clip_cull_distance
@@ -98,6 +102,12 @@ extern void glProvokingVertexANGLE(GLenum provokeMode);
 #define GL_CLIP_DISTANCE1_EXT 0x3001
 #define GL_CLIP_DISTANCE2_EXT 0x3002
 #define GL_CLIP_DISTANCE3_EXT 0x3003
+#endif
+
+#ifndef GL_KHR_parallel_shader_compile
+#define GL_KHR_parallel_shader_compile 1
+#define GL_MAX_SHADER_COMPILER_THREADS_KHR 0x91B0
+#define GL_COMPLETION_STATUS_KHR 0x91B1
 #endif
 
 #endif // RIVE_WEBGL
@@ -113,32 +123,65 @@ struct GLCapabilities
 {
     GLCapabilities() { memset(this, 0, sizeof(*this)); }
 
-    bool isContextVersionAtLeast(int major, int minor) const
+    static bool IsVersionAtLeast(uint32_t aMajor,
+                                 uint32_t aMinor,
+                                 uint32_t bMajor,
+                                 uint32_t bMinor)
     {
-        return ((contextVersionMajor << 16) | contextVersionMinor) >=
-               ((major << 16) | minor);
+        uint64_t a = (static_cast<uint64_t>(aMajor) << 32) | aMinor;
+        uint64_t b = (static_cast<uint64_t>(bMajor) << 32) | bMinor;
+        return a >= b;
     }
-
-    // GL version.
-    int contextVersionMajor;
-    int contextVersionMinor;
+    bool isContextVersionAtLeast(uint32_t major, uint32_t minor) const
+    {
+        return IsVersionAtLeast(contextVersionMajor,
+                                contextVersionMinor,
+                                major,
+                                minor);
+    }
+    bool isVendorDriverVersionAtLeast(uint32_t major, uint32_t minor) const
+    {
+        return IsVersionAtLeast(vendorDriverVersionMajor,
+                                vendorDriverVersionMinor,
+                                major,
+                                minor);
+    }
 
     // Driver info.
     bool isGLES : 1;
-    bool isANGLEOrWebGL : 1;
+    // Is the system OpenGL driver ANGLE? (Not WebGL via ANGLE, but the actual
+    // system driver (which can also be true in a situation like
+    // WebGL (probably ANGLE) -> System OpenGL ES (also ANGLE) -> Vulkan)).
+    bool isANGLESystemDriver : 1;
     bool isAdreno : 1;
     bool isMali : 1;
     bool isPowerVR : 1;
 
+    // GL version.
+    uint32_t contextVersionMajor;
+    uint32_t contextVersionMinor;
+    uint32_t vendorDriverVersionMajor;
+    uint32_t vendorDriverVersionMinor;
+    uint32_t adrenoSeries;
+
     // Workarounds.
-    // Some devices crash when issuing draw commands with a large instancecount.
-    uint32_t maxSupportedInstancesPerDrawCommand = ~0u;
+    // Many devices crash on draw commands with a large instancecount, or when
+    // drawing many instances without a glFlush to break them up.
+    uint32_t maxSupportedInstancesPerFlush;
     // Chrome 136 crashes when trying to run Rive because it attempts to enable
     // blending on the tessellation texture, which is invalid for an integer
     // render target. The workaround is to use a floating-point tessellation
     // texture.
     // https://issues.chromium.org/issues/416294709
-    bool needsFloatingPointTessellationTexture = false;
+    bool needsFloatingPointTessellationTexture;
+    // PowerVR Rogue GE8300, OpenGL ES 3.2 build 1.10@5187610 has severe pixel
+    // local storage corruption issues with our renderer. Using some of the
+    // EXT_shader_pixel_local_storage2 API is an apparent workaround that comes
+    // with worse performance and other, less severe visual artifacts.
+    bool usePixelLocalStorage2AsWorkaround;
+    // ANGLE_shader_pixel_local_storage is currently broken with
+    // GL_TEXTURE_2D_ARRAY on ANGLE's d3d11 renderer.
+    bool avoidTexture2DArrayWithWebGLPLS;
 
     // Extensions
     bool ANGLE_base_vertex_base_instance_shader_builtin : 1;
@@ -150,31 +193,63 @@ struct GLCapabilities
     bool ARB_fragment_shader_interlock : 1;
     bool ARB_shader_image_load_store : 1;
     bool ARB_shader_storage_buffer_object : 1;
+    bool OES_shader_image_atomic : 1;
     bool KHR_blend_equation_advanced : 1;
     bool KHR_blend_equation_advanced_coherent : 1;
+    bool KHR_parallel_shader_compile : 1;
     bool EXT_base_instance : 1;
     bool EXT_clip_cull_distance : 1;
     bool EXT_color_buffer_half_float : 1;
-    bool EXT_float_blend : 1; // Implies EXT_color_buffer_float.
+    bool OES_texture_half_float_linear : 1;
+    bool EXT_color_buffer_float : 1;
+    bool EXT_float_blend : 1;
     bool EXT_multisampled_render_to_texture : 1;
     bool EXT_shader_framebuffer_fetch : 1;
     bool EXT_shader_pixel_local_storage : 1;
+    bool EXT_shader_pixel_local_storage2 : 1;
     bool INTEL_fragment_shader_ordering : 1;
     bool QCOM_shader_framebuffer_fetch_noncoherent : 1;
+
+    // Texture compression extensions.
+    bool EXT_texture_compression_s3tc : 1; // BC1/BC2/BC3
+    bool EXT_texture_compression_bptc : 1; // BC7
+    bool KHR_texture_compression_astc_ldr : 1;
+    // ETC2 is core in GLES 3.0+; tracked here for desktop GL (ARB_ES3_compat).
+    bool supportsETC2 : 1;
 };
 
 #ifdef RIVE_ANDROID
-// Android doesn't load extension functions for us.
+// EXT_base_instance.
 extern PFNGLDRAWARRAYSINSTANCEDBASEINSTANCEEXTPROC
     glDrawArraysInstancedBaseInstanceEXT;
 extern PFNGLDRAWELEMENTSINSTANCEDBASEINSTANCEEXTPROC
     glDrawElementsInstancedBaseInstanceEXT;
 extern PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEEXTPROC
     glDrawElementsInstancedBaseVertexBaseInstanceEXT;
+
+// QCOM_shader_framebuffer_fetch_noncoherent.
 extern PFNGLFRAMEBUFFERFETCHBARRIERQCOMPROC glFramebufferFetchBarrierQCOM;
+
+// EXT_multisampled_render_to_texture.
 extern PFNGLFRAMEBUFFERTEXTURE2DMULTISAMPLEEXTPROC
     glFramebufferTexture2DMultisampleEXT;
 extern PFNGLRENDERBUFFERSTORAGEMULTISAMPLEEXTPROC
     glRenderbufferStorageMultisampleEXT;
-void LoadGLESExtensions(const GLCapabilities&);
+
+// KHR_blend_equation_advanced.
+extern PFNGLBLENDBARRIERKHRPROC glBlendBarrierKHR;
+
+// EXT_shader_pixel_local_storage2.
+extern PFNGLFRAMEBUFFERPIXELLOCALSTORAGESIZEEXTPROC
+    glFramebufferPixelLocalStorageSizeEXT;
+extern PFNGLCLEARPIXELLOCALSTORAGEUIEXTPROC glClearPixelLocalStorageuiEXT;
+
+// KHR_parallel_shader_compilation
+extern PFNGLMAXSHADERCOMPILERTHREADSKHRPROC glMaxShaderCompilerThreadsKHR;
+
+// Android doesn't load extension functions for us (also, possibly some
+// extensions are reported as present but the functions don't actually exist,
+// this call will clear the capabilities flags for extensions that don't load,
+// accordingly).
+void LoadAndValidateGLESExtensions(GLCapabilities*);
 #endif

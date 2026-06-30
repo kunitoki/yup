@@ -148,6 +148,12 @@ TEST_F (WaveAudioFormatTests, IsNotCompressed)
     EXPECT_FALSE (format->isCompressed());
 }
 
+TEST_F (WaveAudioFormatTests, QualityOptionsAreEmpty)
+{
+    auto qualityOptions = format->getQualityOptions();
+    EXPECT_TRUE (qualityOptions.isEmpty());
+}
+
 TEST_F (WaveAudioFormatTests, CreateReaderForNullStream)
 {
     auto reader = format->createReaderFor (nullptr);

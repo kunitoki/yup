@@ -341,7 +341,7 @@ private:
 
         void OnTestPartResult (const testing::TestPartResult& result) override
         {
-            if (result.failed())
+            if (result.failed() && failureStream)
             {
                 failureStream << result.file_name() << ":" << result.line_number() << ": "
                               << result.summary() << '\n';

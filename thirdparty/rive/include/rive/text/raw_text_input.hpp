@@ -113,6 +113,7 @@ public:
 
     std::string text() const;
     void text(std::string value);
+    void textPreserveCursor(std::string value);
     // Length of the input text.
     size_t length() const;
 
@@ -157,6 +158,7 @@ private:
 
     const OrderedLine* orderedLine(CursorPosition position) const;
 
+    void ensureShape();
     void buildTextPaths(Factory* factory);
     void computeVisualPositionFromCursor();
     void setTextPrivate(std::string value);
@@ -228,7 +230,6 @@ inline RawTextInput::Delineator operator&(const RawTextInput::Delineator& a,
 {
     return (RawTextInput::Delineator)((uint8_t)a & (uint8_t)b);
 }
-RIVE_MAKE_ENUM_BITSET(RawTextInput::Flags);
 } // namespace rive
 
 #endif

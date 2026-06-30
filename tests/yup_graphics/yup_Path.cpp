@@ -151,6 +151,14 @@ TEST (PathTests, AddArc)
     EXPECT_FALSE (p.getBounds().isEmpty());
 }
 
+TEST (PathTests, AddCenteredArcUsesAbsoluteSweepForSegments)
+{
+    Path p;
+    p.addCenteredArc (100.0f, 145.0f, 45.0f, 45.0f, 0.0f, -MathConstants<float>::halfPi, -MathConstants<float>::pi, true);
+
+    EXPECT_GT (p.size(), 4);
+}
+
 TEST (PathTests, AddPolygon)
 {
     Path p;
@@ -167,6 +175,29 @@ TEST (PathTests, AddStar)
     p.addStar (center, 5, 4, 8, 0.0f);
     p.addStar (center, 3, 2, 5, MathConstants<float>::halfPi);
     EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, AddQuadrilateral)
+{
+    Path pp;
+    pp.addQuadrilateral (0, 0, 10, 0, 10, 10, 0, 10);
+    EXPECT_FALSE (pp.getBounds().isEmpty());
+    EXPECT_EQ (0, pp.getBounds().getX());
+    EXPECT_EQ (0, pp.getBounds().getY());
+    EXPECT_EQ (10, pp.getBounds().getWidth());
+    EXPECT_EQ (10, pp.getBounds().getHeight());
+
+    Path pp2;
+    Point<float> p1 (5, 5);
+    Point<float> p2 (15, 5);
+    Point<float> p3 (15, 15);
+    Point<float> p4 (5, 15);
+    pp2.addQuadrilateral (p1, p2, p3, p4);
+    EXPECT_FALSE (pp2.getBounds().isEmpty());
+    EXPECT_EQ (5, pp2.getBounds().getX());
+    EXPECT_EQ (5, pp2.getBounds().getY());
+    EXPECT_EQ (10, pp2.getBounds().getWidth());
+    EXPECT_EQ (10, pp2.getBounds().getHeight());
 }
 
 TEST (PathTests, AddBubble)
@@ -359,6 +390,26 @@ TEST (PathTests, AddStarEdgeCases)
     EXPECT_FALSE (p.getBounds().isEmpty());
 
     p.addStar (center, 5, 2, 0, 0.0f);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, AddQuadrilateralEdgeCases)
+{
+    Path p;
+
+    // Degenerate quadrilateral (all points the same)
+    p.addQuadrilateral (0, 0, 0, 0, 0, 0, 0, 0);
+    EXPECT_TRUE (p.getBounds().isEmpty());
+
+    // Quadrilateral collapsed to a line
+    p.clear();
+    p.addQuadrilateral (0, 0, 10, 0, 10, 0, 0, 0);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+    EXPECT_EQ (0, p.getBounds().getHeight());
+
+    // Self-intersecting quadrilateral
+    p.clear();
+    p.addQuadrilateral (0, 0, 10, 10, 10, 0, 0, 10);
     EXPECT_FALSE (p.getBounds().isEmpty());
 }
 
@@ -667,6 +718,103 @@ TEST (PathTests, FromStringCubicBezierRelative)
     EXPECT_FALSE (p.getBounds().isEmpty());
 }
 
+TEST (PathTests, FromStringCubicBezierPreservesSVGCoordinateOrder)
+{
+    Path p;
+    bool ok = p.fromString ("M 0 0 C 10 0, 20 10, 30 0");
+    EXPECT_TRUE (ok);
+
+    auto it = p.begin();
+    ASSERT_NE (it, p.end());
+    EXPECT_EQ ((*it).verb, Path::Verb::MoveTo);
+
+    ++it;
+    ASSERT_NE (it, p.end());
+
+    const auto segment = *it;
+    EXPECT_EQ (segment.verb, Path::Verb::CubicTo);
+    expectPointNear (segment.controlPoint1, Point<float> (10.0f, 0.0f));
+    expectPointNear (segment.controlPoint2, Point<float> (20.0f, 10.0f));
+    expectPointNear (segment.point, Point<float> (30.0f, 0.0f));
+}
+
+TEST (PathTests, FromStringParsesScimitarCubicPath)
+{
+    Path p;
+    bool ok = p.fromString (
+        "M 171.59375,-167.8125 L 153.4375,-131.09375 C 153.4375,-131.09375 240.05975,-44.592207 260.53125,61.53125 "
+        "C 263.78902,59.713413 267.53809,58.6875 271.53125,58.6875 C 283.99674,58.687502 294.11733,68.78455 294.15625,81.25 "
+        "L 294.15625,81.3125 C 294.15624,93.802829 284.02158,103.9375 271.53125,103.9375 "
+        "C 269.20004,103.9375 266.9604,103.59314 264.84375,102.9375 C 265.00283,118.53432 263.43644,134.33614 259.71875,150.1875 "
+        "C 279.93177,155.71176 336.35552,161.63753 367.0625,234.84375 C 388.95186,159.67792 354.15709,-29.134107 171.59375,-167.8125 z ");
+
+    EXPECT_TRUE (ok);
+    EXPECT_EQ (12, p.size());
+
+    auto it = p.begin();
+    ASSERT_NE (it, p.end());
+    EXPECT_EQ ((*it).verb, Path::Verb::MoveTo);
+    expectPointNear ((*it).point, Point<float> (171.59375f, -167.8125f));
+
+    ++it;
+    ASSERT_NE (it, p.end());
+    EXPECT_EQ ((*it).verb, Path::Verb::LineTo);
+    expectPointNear ((*it).point, Point<float> (153.4375f, -131.09375f));
+
+    ++it;
+    ASSERT_NE (it, p.end());
+
+    const auto segment = *it;
+    EXPECT_EQ (segment.verb, Path::Verb::CubicTo);
+    expectPointNear (segment.controlPoint1, Point<float> (153.4375f, -131.09375f));
+    expectPointNear (segment.controlPoint2, Point<float> (240.05975f, -44.592207f));
+    expectPointNear (segment.point, Point<float> (260.53125f, 61.53125f));
+}
+
+TEST (PathTests, FromStringQuadraticBezierConvertsUsingSVGCoordinateOrder)
+{
+    Path p;
+    bool ok = p.fromString ("M 0 0 Q 30 30, 60 0");
+    EXPECT_TRUE (ok);
+
+    auto it = p.begin();
+    ASSERT_NE (it, p.end());
+    EXPECT_EQ ((*it).verb, Path::Verb::MoveTo);
+
+    ++it;
+    ASSERT_NE (it, p.end());
+
+    const auto segment = *it;
+    EXPECT_EQ (segment.verb, Path::Verb::CubicTo);
+    expectPointNear (segment.controlPoint1, Point<float> (20.0f, 20.0f));
+    expectPointNear (segment.controlPoint2, Point<float> (40.0f, 20.0f));
+    expectPointNear (segment.point, Point<float> (60.0f, 0.0f));
+}
+
+TEST (PathTests, FromStringParsesSignedExponentCoordinates)
+{
+    Path p;
+    bool ok = p.fromString ("M +1e1 -2e1 L 2.5e1,+3.5e1 C +3e1 -4e1 4e1 -5e1 5e1 -6e1");
+    EXPECT_TRUE (ok);
+
+    auto it = p.begin();
+    ASSERT_NE (it, p.end());
+    expectPointNear ((*it).point, Point<float> (10.0f, -20.0f));
+
+    ++it;
+    ASSERT_NE (it, p.end());
+    expectPointNear ((*it).point, Point<float> (25.0f, 35.0f));
+
+    ++it;
+    ASSERT_NE (it, p.end());
+
+    const auto segment = *it;
+    EXPECT_EQ (segment.verb, Path::Verb::CubicTo);
+    expectPointNear (segment.controlPoint1, Point<float> (30.0f, -40.0f));
+    expectPointNear (segment.controlPoint2, Point<float> (40.0f, -50.0f));
+    expectPointNear (segment.point, Point<float> (50.0f, -60.0f));
+}
+
 TEST (PathTests, FromStringSmoothCubicAbsolute)
 {
     Path p;
@@ -688,6 +836,24 @@ TEST (PathTests, FromStringEllipticalArcAbsolute)
     Path p;
     bool ok = p.fromString ("M 10 20 A 20 20 0 0 1 50 20");
     EXPECT_TRUE (ok);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, FromStringEllipticalArcParsesCompactFlags)
+{
+    Path p;
+    bool ok = p.fromString ("M 0 0 A 10 10 0 0150 0");
+    EXPECT_TRUE (ok);
+    EXPECT_GT (p.size(), 1);
+    EXPECT_FALSE (p.getBounds().isEmpty());
+}
+
+TEST (PathTests, FromStringEllipticalArcUsesAbsoluteRadii)
+{
+    Path p;
+    bool ok = p.fromString ("M 0 0 A -10 -10 0 0 1 50 0");
+    EXPECT_TRUE (ok);
+    EXPECT_GT (p.size(), 1);
     EXPECT_FALSE (p.getBounds().isEmpty());
 }
 

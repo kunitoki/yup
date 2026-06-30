@@ -126,6 +126,16 @@ public:
         */
         Options& withRelativePosition (Component* component, Placement placement = Placement::below());
 
+        /** Sets the component that should regain focus when the menu closes.
+
+            This does not affect menu positioning or parenting. It is useful for desktop popup
+            menus that are shown in their own native window but should return focus to the
+            component that opened them.
+
+            @param component    The component to focus after the menu closes
+        */
+        Options& withFocusComponent (Component* component);
+
         /** Minimum width for the menu. */
         Options& withMinimumWidth (int minWidth);
 
@@ -134,6 +144,7 @@ public:
 
         Component* parentComponent;
         Component* targetComponent;
+        Component* focusComponent;
         Point<int> targetPosition;
         Rectangle<int> targetArea;
         Justification alignment;
@@ -322,6 +333,8 @@ public:
     /** @internal */
     void mouseDown (const MouseEvent& event) override;
     /** @internal */
+    void mouseUp (const MouseEvent& event) override;
+    /** @internal */
     void mouseMove (const MouseEvent& event) override;
     /** @internal */
     void mouseEnter (const MouseEvent& event) override;
@@ -342,6 +355,8 @@ private:
     void setupMenuItems();
     void positionMenu();
     void resetInternalState();
+    Component* getFocusComponentForDismissal() const;
+    void restoreFocusAfterDismissal();
 
     // Submenu functionality
     void showSubmenu (int itemIndex);
@@ -365,6 +380,7 @@ private:
     void layoutVisibleItems (float width);
     Rectangle<float> getMenuContentBounds() const;
     void updateVisibleItemRange();
+    float getVisibleItemsHeight() const;
     void scrollUp();
     void scrollDown();
     int getVisibleItemCount() const;
@@ -391,6 +407,7 @@ private:
     Options options;
     int selectedItemIndex = -1; // For keyboard navigation
     bool isBeingDismissed = false;
+    WeakReference<Component> focusComponentToRestore;
 
     std::function<void (int)> menuCallback;
 

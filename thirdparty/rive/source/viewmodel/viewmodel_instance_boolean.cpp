@@ -16,4 +16,10 @@ void ViewModelInstanceBoolean::propertyValueChanged()
         m_changedCallback(this, propertyValue());
     }
 #endif
+    onValueChanged();
+}
+
+void ViewModelInstanceBoolean::applyValue(DataValueBoolean* dataValue)
+{
+    propertyValue(dataValue->value());
 }

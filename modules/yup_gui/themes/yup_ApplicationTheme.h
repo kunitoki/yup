@@ -45,6 +45,7 @@ public:
     /** Constructs an ApplicationTheme object. */
     ApplicationTheme();
 
+    /** Destructor for the ApplicationTheme object. */
     ~ApplicationTheme();
 
     //==============================================================================
@@ -65,7 +66,7 @@ public:
 
         @returns A reference-counted pointer to the global ApplicationTheme.
     */
-    static ApplicationTheme::ConstPtr getGlobalTheme();
+    static ApplicationTheme::Ptr getGlobalTheme();
 
     //==============================================================================
     /**
@@ -119,29 +120,110 @@ public:
     }
 
     //==============================================================================
-    /** */
-    static Color findColor (const Identifier& colorId);
+    /** Returns a color from the global theme.
 
-    /** */
+        This method looks for the color in the component's properties first, then in the global theme. If no color
+        is found, it returns std::nullopt.
+
+        @param component     The component for which to find the color.
+        @param colorId       The identifier for the color to retrieve.
+
+        @return The color associated with the given identifier, or std::nullopt if not found.
+    */
+    static std::optional<Color> findComponentColor (const Component& component, const Identifier& colorId);
+
+    /** Returns a color from this theme.
+
+        This method looks for the color in the component's properties first, then in this theme. If no color
+        is found, it returns std::nullopt.
+
+        @param component     The component for which to find the color.
+        @param colorId       The identifier for the color to retrieve.
+
+        @return The color associated with the given identifier, or std::nullopt if not found.
+    */
+    std::optional<Color> findColor (const Component& component, const Identifier& colorId) const;
+
+    /** Sets a color in this theme.
+
+        @param colorId       The identifier for the color to set.
+        @param color         The color to set.
+    */
     void setColor (const Identifier& colorId, const Color& color);
 
-    /** */
+    /** Sets multiple colors in this theme.
+
+        @param colors        An initializer list of color identifier and color pairs.
+    */
     void setColors (std::initializer_list<std::pair<const Identifier&, const Color&>> colors);
 
     //==============================================================================
-    /**
-        Sets the default font for the application theme.
+    /** Returns a named float metric from the global theme.
+    
+        This method looks for the metric in the component's properties first, then in the global theme. If no metric
+        is found, it returns std::nullopt.
 
-        @param font  The font to set as the default.
+        @param component     The component for which to find the metric.
+        @param metricId      The identifier for the metric to retrieve.
+
+        @return The metric associated with the given identifier, or std::nullopt if not found.
+    */
+    static std::optional<float> findComponentMetric (const Component& component, const Identifier& metricId);
+
+    /** Returns a named float metric from this theme.
+    
+        This method looks for the metric in the component's properties first, then in this theme. If no metric
+        is found, it returns std::nullopt.
+
+        @param component     The component for which to find the metric.
+        @param metricId      The identifier for the metric to retrieve.
+
+        @return The metric associated with the given identifier, or std::nullopt if not found.
+    */
+    std::optional<float> findMetric (const Component& component, const Identifier& metricId) const;
+
+    /** Registers a named float metric in this theme. 
+    
+        @param metricId      The identifier for the metric to set.
+        @param value         The value to set for the metric.
+    */
+    void setMetric (const Identifier& metricId, float value);
+
+    /** Sets multiple metrics in the global theme.
+
+        @param metrics        An initializer list of metric identifier and value pairs.
+    */
+    void setMetrics (std::initializer_list<std::pair<const Identifier&, float>> metrics);
+
+    //==============================================================================
+    /**
+        Sets the default text font for the application theme.
+
+        @param font  The font to set as the default font (for text).
     */
     void setDefaultFont (Font font);
 
     /**
-        Returns the default font for the application theme.
+        Returns the default text font for the application theme.
 
-        @returns  The default font.
+        @returns  The default text font.
     */
     const Font& getDefaultFont() const;
+
+    //==============================================================================
+    /**
+        Sets the default icon font for the application theme.
+
+        @param font  The font to set as the default font (for icons).
+    */
+    void setDefaultIconFont (Font font);
+
+    /**
+        Returns the default icon font for the application theme.
+
+        @returns  The default icon font.
+    */
+    const Font& getDefaultIconFont() const;
 
 private:
     static ApplicationTheme::Ptr& getGlobalThemeInstance();
@@ -149,7 +231,9 @@ private:
     //==============================================================================
     std::unordered_map<std::type_index, ComponentStyle::Ptr> componentStyles;
     std::unordered_map<Identifier, Color> defaultColors;
+    std::unordered_map<Identifier, float> defaultMetrics;
     Font defaultFont;
+    Font defaultIconFont;
 
     YUP_LEAK_DETECTOR (ApplicationTheme)
 };

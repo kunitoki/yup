@@ -41,8 +41,10 @@ class YUP_API ComponentNative : public ReferenceCountedObject
 {
     struct decoratedWindowTag;
     struct resizableWindowTag;
+    struct temporaryWindowTag;
     struct renderContinuousTag;
     struct allowHighDensityDisplayTag;
+    struct captureMouseTag;
 
 public:
     //==============================================================================
@@ -51,7 +53,13 @@ public:
 
     //==============================================================================
     /** Type definition for window configuration flags. */
-    using Flags = FlagSet<uint32, decoratedWindowTag, resizableWindowTag, renderContinuousTag, allowHighDensityDisplayTag>;
+    using Flags = FlagSet<uint32,
+                          decoratedWindowTag,
+                          resizableWindowTag,
+                          temporaryWindowTag,
+                          renderContinuousTag,
+                          allowHighDensityDisplayTag,
+                          captureMouseTag>;
 
     /** No flags set. */
     static inline constexpr Flags noFlags = Flags();
@@ -59,10 +67,14 @@ public:
     static inline constexpr Flags decoratedWindow = Flags::declareValue<decoratedWindowTag>();
     /** Flag to enable window resizing by the user. */
     static inline constexpr Flags resizableWindow = Flags::declareValue<resizableWindowTag>();
+    /** Flag to mark the native window as a temporary popup/menu-style window. */
+    static inline constexpr Flags temporaryWindow = Flags::declareValue<temporaryWindowTag>();
     /** Flag to enable continuous rendering mode. */
     static inline constexpr Flags renderContinuous = Flags::declareValue<renderContinuousTag>();
     /** Flag to enable high-density display support. */
     static inline constexpr Flags allowHighDensityDisplay = Flags::declareValue<allowHighDensityDisplayTag>();
+    /** Flag to capture mouse input outside the native window while the component is on the desktop. */
+    static inline constexpr Flags captureMouse = Flags::declareValue<captureMouseTag>();
     /** Default flags combining decoratedWindow, resizableWindow, and allowHighDensityDisplay. */
     static inline constexpr Flags defaultFlags = decoratedWindow | resizableWindow | allowHighDensityDisplay;
 
@@ -118,6 +130,22 @@ public:
             @return Reference to this Options object for method chaining.
         */
         Options& withAllowedHighDensityDisplay (bool shouldAllowHighDensity) noexcept;
+
+        /** Sets whether the native window should capture mouse input outside its bounds.
+
+            @param shouldCaptureMouse True to capture mouse input, false to use normal window-local input.
+
+            @return Reference to this Options object for method chaining.
+        */
+        Options& withMouseCapture (bool shouldCaptureMouse) noexcept;
+
+        /** Sets whether the window should be treated as a temporary popup/menu window.
+
+            @param shouldBeTemporary True for popup/menu-style windows, false for regular windows.
+
+            @return Reference to this Options object for method chaining.
+        */
+        Options& withTemporaryWindow (bool shouldBeTemporary) noexcept;
 
         /** Sets the graphics API to be used for rendering.
 
@@ -355,6 +383,25 @@ public:
         @return The list of areas scheduled for repainting.
     */
     virtual const RectangleList<float>& getRepaintAreas() const = 0;
+
+    //==============================================================================
+    /** Starts text input for the specified component.
+
+        @param component The component to start text input for.
+    */
+    virtual void startTextInput (Component& component) = 0;
+
+    /** Stops text input for the specified component.
+
+        @param component The component to stop text input for.
+    */
+    virtual void stopTextInput (Component& component) = 0;
+
+    /** Updates the native text input rectangle for the specified component.
+
+        @param component The component whose text input rectangle has changed.
+    */
+    virtual void updateTextInputRect (Component& component) = 0;
 
     //==============================================================================
     /** Gets the DPI scale factor.

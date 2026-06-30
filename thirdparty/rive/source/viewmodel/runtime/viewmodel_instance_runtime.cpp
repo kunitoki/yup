@@ -43,6 +43,11 @@ const std::string& ViewModelInstanceRuntime::name() const
     return m_viewModelInstance->name();
 }
 
+const std::string& ViewModelInstanceRuntime::viewModelName() const
+{
+    return m_viewModelInstance->viewModel()->name();
+}
+
 size_t ViewModelInstanceRuntime::propertyCount() const
 {
     return m_viewModelInstance->propertyValues().size();
@@ -103,6 +108,24 @@ ViewModelInstanceValueRuntime* ViewModelInstanceRuntime::property(
                             propertyName);
                     case DataType::boolean:
                         return viewModelInstanceRuntime->propertyBoolean(
+                            propertyName);
+                    case DataType::color:
+                        return viewModelInstanceRuntime->propertyColor(
+                            propertyName);
+                    case DataType::assetImage:
+                        return viewModelInstanceRuntime->propertyImage(
+                            propertyName);
+                    case DataType::artboard:
+                        return viewModelInstanceRuntime->propertyArtboard(
+                            propertyName);
+                    case DataType::list:
+                        return viewModelInstanceRuntime->propertyList(
+                            propertyName);
+                    case DataType::enumType:
+                        return viewModelInstanceRuntime->propertyEnum(
+                            propertyName);
+                    case DataType::trigger:
+                        return viewModelInstanceRuntime->propertyTrigger(
                             propertyName);
                     default:
                         break;
@@ -265,27 +288,27 @@ rcp<ViewModelInstanceRuntime> ViewModelInstanceRuntime::instanceRuntime(
     auto itr = m_viewModelInstances.find(name);
     if (itr != m_viewModelInstances.end())
     {
-        return static_cast<rcp<ViewModelInstanceRuntime>>(itr->second);
+        return itr->second;
     }
     auto viewModelInstance = viewModelInstanceProperty(name);
     if (viewModelInstance != nullptr)
     {
-        auto viewModelInstanceRef = rcp<ViewModelInstanceRuntime>(
-            new ViewModelInstanceRuntime(viewModelInstance));
+        auto viewModelInstanceRef =
+            make_rcp<ViewModelInstanceRuntime>(viewModelInstance);
         m_viewModelInstances[name] = viewModelInstanceRef;
         return viewModelInstanceRef;
     }
     return nullptr;
 }
 
-ViewModelInstanceRuntime* ViewModelInstanceRuntime::propertyViewModel(
+rcp<ViewModelInstanceRuntime> ViewModelInstanceRuntime::propertyViewModel(
     const std::string& path) const
 {
     const auto propertyName = getPropertyNameFromPath(path);
     auto viewModelInstance = viewModelInstanceFromFullPath(path);
     if (viewModelInstance != nullptr)
     {
-        return viewModelInstance->instanceRuntime(propertyName).get();
+        return viewModelInstance->instanceRuntime(propertyName);
     }
     return nullptr;
 }
@@ -301,6 +324,22 @@ ViewModelInstanceAssetImageRuntime* ViewModelInstanceRuntime::propertyImage(
         return viewModelInstance
             ->getPropertyInstance<ViewModelInstanceAssetImage,
                                   ViewModelInstanceAssetImageRuntime>(
+                propertyName);
+    }
+    return nullptr;
+}
+
+ViewModelInstanceArtboardRuntime* ViewModelInstanceRuntime::propertyArtboard(
+    const std::string& path) const
+{
+    const auto propertyName = getPropertyNameFromPath(path);
+    auto viewModelInstance = viewModelInstanceFromFullPath(path);
+    if (viewModelInstance != nullptr)
+    {
+
+        return viewModelInstance
+            ->getPropertyInstance<ViewModelInstanceArtboard,
+                                  ViewModelInstanceArtboardRuntime>(
                 propertyName);
     }
     return nullptr;
@@ -336,8 +375,7 @@ bool ViewModelInstanceRuntime::replaceViewModelByName(
         }
         if (!isStored)
         {
-            value->ref();
-            m_viewModelInstances[name] = rcp<ViewModelInstanceRuntime>(value);
+            m_viewModelInstances[name] = ref_rcp(value);
         }
         return true;
     }

@@ -7,7 +7,11 @@
 #include "rive/math/vec2d.hpp"
 #include "rive/renderer/gpu.hpp"
 #include "rive/renderer/rive_render_factory.hpp"
+#ifdef RIVE_CANVAS
+#include "rive/renderer/render_canvas.hpp"
+#endif
 #include "rive/renderer/render_target.hpp"
+#include "rive/renderer/shader_compilation_mode.hpp"
 #include "rive/renderer/sk_rectanizer_skyline.hpp"
 #include "rive/renderer/trivial_block_allocator.hpp"
 #include "rive/shapes/paint/color.hpp"
@@ -30,11 +34,20 @@ class GradientLibrary;
 class IntersectionBoard;
 class ImageMeshDraw;
 class ImageRectDraw;
-class StencilClipReset;
+class ClipReset;
 class Draw;
 class Gradient;
 class RenderContextImpl;
 class PathDraw;
+
+// Various types of ordered dithering we can add to reduce banding
+// https://en.wikipedia.org/wiki/Ordered_dithering
+// https://blog.demofox.org/2022/01/01/interleaved-gradient-noise-a-different-kind-of-low-discrepancy-sequence/
+enum class DitherMode
+{
+    none,
+    interleavedGradientNoise,
+};
 
 // Used as a key for complex gradients.
 class GradientContentKey
@@ -91,9 +104,23 @@ public:
         ColorInt clearColor = 0;
         // If nonzero, the number of MSAA samples to use.
         // Setting this to a nonzero value forces msaa mode.
-        int msaaSampleCount = 0;
+        uint32_t msaaSampleCount = 0;
         // Use atomic mode (preferred) or msaa instead of rasterOrdering.
         bool disableRasterOrdering = false;
+        DitherMode ditherMode = DitherMode::interleavedGradientNoise;
+
+        // If nonzero, frames are split up into virtual tiles of this size.
+        //
+        // As of now, each tile gets drawn in a separate render pass. The
+        // purpose of these virtual tiles, for now, is to break the frame up
+        // into smaller chunks so that Rive can be pre-empted by other rendering
+        // processes. This is only supported on Vulkan/non-msaa.
+        //
+        // TODO: We could also explore a different type of virtual tiling that
+        // reduces barriers in atomic mode, but that is not how this feature
+        // works currently.
+        uint32_t virtualTileWidth = 0;
+        uint32_t virtualTileHeight = 0;
 
         // Testing flags.
         bool wireframe = false;
@@ -107,7 +134,8 @@ public:
         // gracefully. (e.g., by falling back on an uber shader or at least not
         // crashing.) Valid compilations may fail in the real world if the
         // device is pressed for resources or in a bad state.
-        bool synthesizeCompilationFailures = false;
+        gpu::SynthesizedFailureType synthesizedFailureType =
+            gpu::SynthesizedFailureType::none;
 #endif
     };
 
@@ -210,6 +238,7 @@ public:
         // Command buffer that rendering commands will be added to.
         //  - VkCommandBuffer on Vulkan.
         //  - id<MTLCommandBuffer> on Metal.
+        //  - WGPUCommandEncoder on WebGPU.
         //  - Unused otherwise.
         void* externalCommandBuffer = nullptr;
 
@@ -274,12 +303,18 @@ public:
                                        size_t) override;
     rcp<RenderImage> decodeImage(Span<const uint8_t>) override;
 
+#ifdef RIVE_CANVAS
+    // Creates a RenderCanvas: a GPU texture usable as both a render target
+    // (for rendering into) and a render image (for compositing into draws).
+    rcp<RenderCanvas> makeRenderCanvas(uint32_t width, uint32_t height);
+#endif
+
 private:
     friend class Draw;
     friend class PathDraw;
     friend class ImageRectDraw;
     friend class ImageMeshDraw;
-    friend class StencilClipReset;
+    friend class ClipReset;
     friend class ::PushRetrofittedTrianglesGMDraw; // For testing.
     friend class ::RenderContextTest;              // For testing.
 
@@ -299,7 +334,7 @@ private:
     // LogicalFlush::LayoutCounters.
     struct ResourceAllocationCounts
     {
-        constexpr static int NUM_ELEMENTS = 14;
+        constexpr static int NUM_ELEMENTS = 19;
         using VecType = simd::gvec<size_t, NUM_ELEMENTS>;
 
         RIVE_ALWAYS_INLINE VecType toVec() const
@@ -311,14 +346,15 @@ private:
             return vec;
         }
 
-        RIVE_ALWAYS_INLINE ResourceAllocationCounts(const VecType& vec)
+        static RIVE_ALWAYS_INLINE ResourceAllocationCounts
+        FromVec(const VecType& vec)
         {
-            static_assert(sizeof(*this) == sizeof(size_t) * NUM_ELEMENTS);
-            static_assert(sizeof(VecType) >= sizeof(*this));
-            RIVE_INLINE_MEMCPY(this, &vec, sizeof(*this));
+            ResourceAllocationCounts allocs;
+            static_assert(sizeof(allocs) == sizeof(size_t) * NUM_ELEMENTS);
+            static_assert(sizeof(VecType) >= sizeof(allocs));
+            RIVE_INLINE_MEMCPY(&allocs, &vec, sizeof(allocs));
+            return allocs;
         }
-
-        ResourceAllocationCounts() = default;
 
         size_t flushUniformBufferCount = 0;
         size_t imageDrawUniformBufferCount = 0;
@@ -333,7 +369,12 @@ private:
         size_t tessTextureHeight = 0;
         size_t atlasTextureWidth = 0;
         size_t atlasTextureHeight = 0;
-        size_t coverageBufferLength = 0; // clockwiseAtomic mode only.
+        size_t plsTransientBackingWidth = 0;
+        size_t plsTransientBackingHeight = 0;
+        size_t plsTransientBackingPlaneCount = 0;
+        size_t plsAtomicCoverageBackingWidth = 0;  // atomic mode only.
+        size_t plsAtomicCoverageBackingHeight = 0; // atomic mode only.
+        size_t coverageBufferLength = 0;           // clockwiseAtomic mode only.
     };
 
     // Reallocates GPU resources and updates m_currentResourceAllocations.
@@ -341,7 +382,7 @@ private:
     // size would not change.
     void setResourceSizes(ResourceAllocationCounts, bool forceRealloc = false);
 
-    void mapResourceBuffers(const ResourceAllocationCounts&);
+    [[nodiscard]] bool mapResourceBuffers(const ResourceAllocationCounts&);
     void unmapResourceBuffers(const ResourceAllocationCounts&);
 
     // Returns the next coverage buffer prefix to use in a logical flush.
@@ -549,6 +590,7 @@ private:
             uint32_t maxTessTextureHeight = 0;
             uint32_t maxAtlasWidth = 0;
             uint32_t maxAtlasHeight = 0;
+            uint32_t maxPLSTransientBackingPlaneCount = 0;
             size_t maxCoverageBufferLength = 0;
         };
 
@@ -653,12 +695,16 @@ private:
         // contour ID that is guaranteed to not be the same ID as any neighbors.
         void pushPaddingVertices(uint32_t count, uint32_t tessLocation);
 
+        // Schedules barriers that will be issued immediately before the next
+        // draw.
+        void pushBarriers(BarrierFlags);
+
         // Pushes a "midpointFanPatches" draw to the list. Path, contour, and
         // cubic data are pushed separately.
         //
         // Also adds the PathDraw to a dstRead list if one is
         // required, and if this is the path's first subpass.
-        void pushMidpointFanDraw(
+        gpu::DrawBatch& pushMidpointFanDraw(
             const PathDraw*,
             gpu::DrawType,
             uint32_t tessVertexCount,
@@ -670,7 +716,7 @@ private:
         //
         // Also adds the PathDraw to a dstRead list if one is
         // required, and if this is the path's first subpass.
-        void pushOuterCubicsDraw(
+        gpu::DrawBatch& pushOuterCubicsDraw(
             const PathDraw*,
             gpu::DrawType,
             uint32_t tessVertexCount,
@@ -680,27 +726,27 @@ private:
         // Writes out triangle verties for the desired WindingFaces and pushes
         // an "interiorTriangulation" draw to the list.
         // Returns the number of vertices actually written.
-        size_t pushInteriorTriangulationDraw(
+        gpu::DrawBatch* pushInteriorTriangulationDraw(
             const PathDraw*,
             uint32_t pathID,
             gpu::WindingFaces,
-            gpu::ShaderMiscFlags = gpu::ShaderMiscFlags::none);
+            gpu::ShaderMiscFlags RIVE_DEBUG_CODE(, size_t* vertexCounter));
 
         // Pushes a screen-space rectangle to the draw list, whose pixel
         // coverage is determined by the atlas region associated with the given
         // pathID.
-        void pushAtlasBlit(PathDraw*, uint32_t pathID);
+        gpu::DrawBatch& pushAtlasBlit(PathDraw*, uint32_t pathID);
 
         // Pushes an "imageRect" to the draw list.
         // This should only be used when we in atomic mode. Otherwise, images
         // should be drawn as rectangular paths with an image paint.
-        void pushImageRectDraw(ImageRectDraw*);
+        gpu::DrawBatch& pushImageRectDraw(ImageRectDraw*);
 
         // Pushes an "imageMesh" draw to the list.
-        void pushImageMeshDraw(ImageMeshDraw*);
+        gpu::DrawBatch& pushImageMeshDraw(ImageMeshDraw*);
 
-        // Pushes a "stencilClipReset" draw to the list.
-        void pushStencilClipResetDraw(StencilClipReset*);
+        // Pushes a "clipReset" draw to the list.
+        gpu::DrawBatch& pushClipResetDraw(ClipReset*);
 
     private:
         friend class TessellationWriter;
@@ -721,6 +767,17 @@ private:
                             gpu::PaintType,
                             uint32_t elementCount,
                             uint32_t baseElement);
+
+        // Adds a batch to the list of draws that use a dstBarrier.
+        void addBatchToDstBarrierList(DrawBatch* batch)
+        {
+            assert(m_dstBlendBarrierListTail != nullptr);
+            assert(*m_dstBlendBarrierListTail == nullptr);
+            assert(batch->nextDstBlendBarrier == nullptr);
+            assert(enums::is_flag_set(batch->barriers, BarrierFlags::dstBlend));
+            *m_dstBlendBarrierListTail = batch;
+            m_dstBlendBarrierListTail = &batch->nextDstBlendBarrier;
+        }
 
         // Instance pointer to the outer parent class.
         RenderContext* const m_ctx;
@@ -757,8 +814,9 @@ private:
         // gpu::DrawBatch objects during writeResources().
         std::vector<DrawUniquePtr> m_draws;
         IAABB m_combinedDrawBounds;
+        gpu::DrawContents m_combinedDrawContents;
 
-        // Layout state.
+        // State computed during layout.
         uint32_t m_pathPaddingCount;
         uint32_t m_paintPaddingCount;
         uint32_t m_paintAuxPaddingCount;
@@ -768,12 +826,17 @@ private:
         uint32_t m_outerCubicTessEndLocation;
         uint32_t m_outerCubicTessVertexIdx;
         uint32_t m_midpointFanTessVertexIdx;
-
         gpu::GradTextureLayout m_gradTextureLayout;
+        gpu::ShaderMiscFlags m_baselineShaderMiscFlags;
 
         gpu::FlushDescriptor m_flushDesc;
 
         BlockAllocatedLinkedList<DrawBatch> m_drawList;
+        const DrawBatch* m_firstDstBlendBarrier;
+        // Final "next" pointer in the list of DrawBatches that have dstBlend
+        // barriers.
+        const DrawBatch** m_dstBlendBarrierListTail;
+
         gpu::ShaderFeatures m_combinedShaderFeatures;
 
         // Most recent path and contour state.
@@ -781,7 +844,7 @@ private:
         uint32_t m_currentContourID;
 
         // Atlas for offscreen feathering.
-        std::unique_ptr<skgpu::RectanizerSkyline> m_atlasRectanizer;
+        std::unique_ptr<rive::RectanizerSkyline> m_atlasRectanizer;
         uint32_t m_atlasMaxX = 0;
         uint32_t m_atlasMaxY = 0;
         std::vector<PathDraw*> m_pendingAtlasDraws;

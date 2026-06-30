@@ -187,7 +187,7 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
         YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
         addMethod(@selector(setPushNotificationsDelegate:), [](id self, SEL, NSObject<NSApplicationDelegate, NSUserNotificationCenterDelegate>* delegate)
         {
-            object_setInstanceVariable(self, "pushNotificationsDelegate", delegate);
+            setIvar(self, "pushNotificationsDelegate", delegate);
         });
         YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
@@ -347,7 +347,6 @@ struct AppDelegate
                                                                      object:nil];
         }
 
-        [delegate release];
     }
 
     static NSString* getBroadcastEventName()
@@ -523,7 +522,6 @@ struct MountedVolumeListChangeDetector::Pimpl
     ~Pimpl()
     {
         [[[NSWorkspace sharedWorkspace] notificationCenter] removeObserver:delegate];
-        [delegate release];
     }
 
    private:
@@ -546,7 +544,7 @@ struct MountedVolumeListChangeDetector::Pimpl
         }
 
         static Pimpl* getOwner(id self) { return getIvar<Pimpl*>(self, "owner"); }
-        static void setOwner(id self, Pimpl* owner) { object_setInstanceVariable(self, "owner", owner); }
+        static void setOwner(id self, Pimpl* owner) { setIvar(self, "owner", owner); }
 
         static void changed(id self, SEL, NSNotification*)
         {

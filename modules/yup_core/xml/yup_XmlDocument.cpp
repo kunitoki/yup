@@ -620,13 +620,14 @@ void XmlDocument::readChildElements (XmlElement& parent)
                 {
                     String entity;
                     readEntity (entity);
+                    auto entityMarkup = entity.trimStart();
 
-                    if (entity.startsWithChar ('<') && entity[1] != 0)
+                    if (entityMarkup.startsWithChar ('<') && entityMarkup[1] != 0)
                     {
                         auto oldInput = input;
                         auto oldOutOfData = outOfData;
 
-                        input = entity.getCharPointer();
+                        input = entityMarkup.getCharPointer();
                         outOfData = false;
 
                         while (auto* n = readNextElement (true))
@@ -885,7 +886,7 @@ String XmlDocument::expandExternalEntity (const String& entity)
 
                 while (ampersand >= 0)
                 {
-                    auto semiColon = ent.indexOf (i + 1, ";");
+                    auto semiColon = ent.indexOf (ampersand + 1, ";");
 
                     if (semiColon < 0)
                     {
@@ -893,7 +894,7 @@ String XmlDocument::expandExternalEntity (const String& entity)
                         break;
                     }
 
-                    auto resolved = expandEntity (ent.substring (i + 1, semiColon));
+                    auto resolved = expandEntity (ent.substring (ampersand + 1, semiColon));
 
                     ent = ent.substring (0, ampersand)
                         + resolved

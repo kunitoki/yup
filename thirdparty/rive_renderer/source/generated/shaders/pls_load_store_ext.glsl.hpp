@@ -1,69 +1,73 @@
 #pragma once
 
-#include "pls_load_store_ext.exports.h"
+#include "pls_load_store_ext.glsl.exports.h"
 
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char pls_load_store_ext[] = R"===(#ifdef AB
-void main(){gl_Position=vec4(mix(vec2(-1,1),vec2(1,-1),equal(gl_VertexID&ivec2(1,2),ivec2(0))),0,1);}
+const char pls_load_store_ext[] = R"===(#ifdef BB
+void main(){gl_Position=vec4(mix(vec2(-1,1),vec2(1,-1),equal(gl_VertexID&ivec2(1,2),ivec2(0))),0,1);
+#ifdef JC
+gl_Position.y=-gl_Position.y;
 #endif
-#ifdef HB
+}
+#endif
+#ifdef EB
 #extension GL_EXT_shader_pixel_local_storage:require
 #ifdef GL_ARM_shader_framebuffer_fetch
 #extension GL_ARM_shader_framebuffer_fetch:require
 #else
 #extension GL_EXT_shader_framebuffer_fetch:require
 #endif
-#ifdef RD
+#ifdef DE
 #if __VERSION__>=310
-layout(binding=0,std140)uniform Rf{uniform highp vec4 Fe;}Ge;
+layout(binding=0,std140)uniform ki{uniform highp vec4 zg;}Ag;
 #else
-uniform mediump vec4 SD;
+uniform mediump vec4 EE;
 #endif
 #endif
 #ifdef GL_EXT_shader_pixel_local_storage
-#ifdef FD
-__pixel_local_inEXT z1
+#ifdef PD
+__pixel_local_inEXT n1
 #else
-__pixel_local_outEXT z1
+__pixel_local_outEXT n1
 #endif
-{layout(rgba8)mediump vec4 H0;layout(r32ui)highp uint r1;layout(rgba8)mediump vec4 N3;layout(r32ui)highp uint x4;};
+{layout(rgba8)mediump vec4 j0;layout(r32ui)highp uint e0;layout(rgba8)mediump vec4 f4;layout(r32ui)highp uint H7;};
 #ifndef GL_ARM_shader_framebuffer_fetch
-#ifdef TD
-layout(location=0)inout mediump vec4 D9;
+#ifdef FE
+layout(location=0)inout mediump vec4 Ia;
 #endif
 #endif
-#ifdef FD
-layout(location=0)out mediump vec4 D9;
+#ifdef PD
+layout(location=0)out mediump vec4 Ia;
 #endif
 void main(){
-#ifdef RD
+#ifdef DE
 #if __VERSION__>=310
-H0=Ge.Fe;
+j0=Ag.zg;
 #else
-H0=SD;
+j0=EE;
 #endif
 #endif
-#ifdef TD
+#ifdef FE
 #ifdef GL_ARM_shader_framebuffer_fetch
-H0=gl_LastFragColorARM;
+j0=gl_LastFragColorARM;
 #else
-H0=D9;
+j0=Ia;
 #endif
 #endif
-#ifdef NE
-x4=0u;
+#ifdef QD
+H7=0u;
 #endif
-#ifdef OE
-r1=0u;
+#ifdef HF
+e0=0u;
 #endif
-#ifdef FD
-D9=H0;
+#ifdef PD
+Ia=j0;
 #endif
 }
 #else
-layout(location=0)out mediump vec4 He;void main(){He=vec4(0,1,0,1);}
+layout(location=0)out mediump vec4 Bg;void main(){Bg=vec4(0,1,0,1);}
 #endif
 #endif
 )===";

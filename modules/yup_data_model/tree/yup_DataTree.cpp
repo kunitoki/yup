@@ -1710,17 +1710,17 @@ Result DataTree::ValidatedTransaction::addChild (const DataTree& child, int inde
 ResultValue<DataTree> DataTree::ValidatedTransaction::createAndAddChild (const Identifier& childType, int index)
 {
     if (! transaction || ! transaction->isActive() || ! schema)
-        return ResultValue<DataTree>::fail ("Transaction is not active");
+        return makeResultValueFail ("Transaction is not active");
 
     DataTree child = schema->createChildNode (nodeType, childType);
     if (! child.isValid())
-        return ResultValue<DataTree>::fail ("Could not create child of type '" + childType.toString() + "'");
+        return makeResultValueFail ("Could not create child of type '" + childType.toString() + "'");
 
     auto addResult = addChild (child, index);
     if (addResult.failed())
-        return ResultValue<DataTree>::fail (addResult.getErrorMessage());
+        return makeResultValueFail (addResult.getErrorMessage());
 
-    return ResultValue<DataTree>::ok (child);
+    return makeResultValueOk (child);
 }
 
 Result DataTree::ValidatedTransaction::removeChild (const DataTree& child)

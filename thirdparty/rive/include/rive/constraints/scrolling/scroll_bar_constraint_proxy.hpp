@@ -21,9 +21,12 @@ public:
     }
     ~ThumbDraggableProxy() {}
     bool isOpaque() override { return true; }
-    void startDrag(Vec2D mousePosition) override;
-    void drag(Vec2D mousePosition) override;
-    void endDrag(Vec2D mousePosition) override {}
+    bool startDrag(Vec2D mousePosition, float timeStamp = 0) override;
+    bool drag(Vec2D mousePosition, float timeStamp = 0) override;
+    bool endDrag(Vec2D mousePosition, float timeStamp = 0) override
+    {
+        return true;
+    }
 };
 
 class TrackDraggableProxy : public DraggableProxy
@@ -38,10 +41,15 @@ public:
         m_hittable = hittable;
     }
     ~TrackDraggableProxy() {}
-    bool isOpaque() override { return true; }
-    void startDrag(Vec2D mousePosition) override;
-    void drag(Vec2D mousePosition) override {}
-    void endDrag(Vec2D mousePosition) override {}
+    bool startDrag(Vec2D mousePosition, float timeStamp = 0) override;
+    bool drag(Vec2D mousePosition, float timeStamp = 0) override
+    {
+        return true;
+    }
+    bool endDrag(Vec2D mousePosition, float timeStamp = 0) override
+    {
+        return true;
+    }
 };
 } // namespace rive
 

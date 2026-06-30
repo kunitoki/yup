@@ -21,6 +21,8 @@
 
 #include "../yup_audio_plugin_client.h"
 
+#include "../common/yup_AudioPluginUtilities.h"
+
 #include <yup_audio_devices/yup_audio_devices.h>
 
 #if ! defined(YUP_AUDIO_PLUGIN_ENABLE_STANDALONE)
@@ -131,7 +133,9 @@ public:
         }
 
         MidiBuffer midiBuffer;
-        processor->processBlock (audioBuffer, midiBuffer);
+        ParameterChangeBuffer emptyParams;
+        AudioProcessContext<float> ctx { audioBuffer, midiBuffer, emptyParams };
+        processor->processBlock (ctx);
 
         AudioBuffer<float> outputBuffer { outputChannelData, numOutputChannels, numSamples };
         for (int outputIndex = 0; outputIndex < numOutputChannels; ++outputIndex)
@@ -140,7 +144,7 @@ public:
 
     void audioDeviceAboutToStart (AudioIODevice* device) override
     {
-        processor->prepareToPlay (device->getCurrentSampleRate(), device->getCurrentBufferSizeSamples());
+        processor->prepareToPlay (AudioSpec (device->getCurrentSampleRate(), device->getCurrentBufferSizeSamples()));
 
         audioBuffer.setSize (
             jmax (

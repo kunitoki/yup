@@ -32,7 +32,7 @@
     website:              https://github.com/kunitoki/yup
     license:              ISC
 
-    dependencies:         yup_audio_basics
+    dependencies:         yup_audio_basics yup_simd
     appleFrameworks:      AudioToolbox CoreAudio CoreFoundation
 
   END_YUP_MODULE_DECLARATION
@@ -44,6 +44,7 @@
 #define YUP_AUDIO_FORMATS_H_INCLUDED
 
 #include <yup_audio_basics/yup_audio_basics.h>
+#include <yup_simd/yup_simd.h>
 
 //==============================================================================
 /** Config: YUP_AUDIO_FORMAT_WAVE

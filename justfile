@@ -57,7 +57,7 @@ android:
 [doc("generate and open project for Android using Android Studio (windows)")]
 [windows]
 android:
-  cmake -G "Visual Studio 17 2022" -B build -DYUP_TARGET_ANDROID=ON
+  cmake -G "Visual Studio 18 2026" -B build -DYUP_TARGET_ANDROID=ON
 
 [doc("generate and open project for Android using Android Studio (linux)")]
 [linux]
@@ -97,3 +97,6 @@ python_uninstall:
 [working-directory: 'python']
 python_test *TEST_OPTS:
   python -m pytest -s {{TEST_OPTS}}
+
+rive_update REF="runtime-v0.1.62":
+  uv run python tools/rive_update.py --rive-ref {{REF}} --allow-dirty --keep-work-dir

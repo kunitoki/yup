@@ -342,6 +342,66 @@ public:
         return getColorAt (p.getX(), p.getY());
     }
 
+    /** Fills a lookup table with colors sampled evenly along this gradient.
+
+        The output values are packed as `0xAARRGGBB`, matching Color, Rive
+        ColorInt, and image pixel APIs such as BitmapData::setPixel().
+
+        @param colors    the destination lookup table to fill
+    */
+    void fillGradient (Span<uint32> colors) const noexcept
+    {
+        if (colors.empty())
+            return;
+
+        if (stops.empty())
+        {
+            std::fill (colors.begin(), colors.end(), Color().getARGB());
+            return;
+        }
+
+        if (stops.size() == 1 || colors.size() == 1)
+        {
+            std::fill (colors.begin(), colors.end(), stops.front().color.getARGB());
+            return;
+        }
+
+        size_t stopIndex = 0;
+
+        for (size_t i = 0; i < colors.size(); ++i)
+        {
+            const float t = static_cast<float> (i) / static_cast<float> (colors.size() - 1);
+
+            if (t <= stops.front().delta)
+            {
+                colors[i] = stops.front().color.getARGB();
+                continue;
+            }
+
+            if (t >= stops.back().delta)
+            {
+                colors[i] = stops.back().color.getARGB();
+                continue;
+            }
+
+            while (stopIndex + 1 < stops.size() && stops[stopIndex + 1].delta <= t)
+                ++stopIndex;
+
+            const auto& start = stops[stopIndex];
+            const auto& end = stops[stopIndex + 1];
+            const float deltaRange = end.delta - start.delta;
+
+            if (deltaRange <= 0.0f)
+            {
+                colors[i] = end.color.getARGB();
+                continue;
+            }
+
+            const float localT = (t - start.delta) / deltaRange;
+            colors[i] = start.color.mixedWith (end.color, localT, ColorSpace::SRGB).getARGB();
+        }
+    }
+
     /** Adds a color stop to the gradient.
 
         @param color The color of the new stop.

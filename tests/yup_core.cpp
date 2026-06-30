@@ -1,3 +1,24 @@
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2025 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
 #include "yup_core/yup_AbstractFifo.cpp"
 #include "yup_core/yup_ArrayBase.cpp"
 #include "yup_core/yup_Atomic.cpp"
@@ -33,6 +54,7 @@
 #include "yup_core/yup_LinkedListPointer.cpp"
 #include "yup_core/yup_ListenerList.cpp"
 #include "yup_core/yup_LocalisedStrings.cpp"
+#include "yup_core/yup_Logger.cpp"
 #include "yup_core/yup_MACAddress.cpp"
 #include "yup_core/yup_MathFunctions.cpp"
 #include "yup_core/yup_MemoryInputStream.cpp"
@@ -42,6 +64,7 @@
 #include "yup_core/yup_NamedPipe.cpp"
 #include "yup_core/yup_NormalisableRange.cpp"
 #include "yup_core/yup_OwnedArray.cpp"
+#include "yup_core/yup_PerformanceCounter.cpp"
 #include "yup_core/yup_PlatformDefs.cpp"
 #include "yup_core/yup_Process.cpp"
 #include "yup_core/yup_Profiler.cpp"
@@ -63,6 +86,7 @@
 #include "yup_core/yup_Span.cpp"
 #include "yup_core/yup_SparseSet.cpp"
 #include "yup_core/yup_SpinLock.cpp"
+#include "yup_core/yup_SqliteDatabase.cpp"
 #include "yup_core/yup_StatisticsAccumulator.cpp"
 #include "yup_core/yup_String.cpp"
 #include "yup_core/yup_StringArray.cpp"

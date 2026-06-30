@@ -1,5 +1,7 @@
 #ifndef _RIVE_DATA_BIND_LIST_ITEM_PROVIDER_HPP_
 #define _RIVE_DATA_BIND_LIST_ITEM_PROVIDER_HPP_
+#include "rive/core.hpp"
+#include "rive/refcnt.hpp"
 namespace rive
 {
 class ViewModelInstanceListItem;
@@ -9,8 +11,8 @@ class DataBindListItemConsumer
 public:
     static DataBindListItemConsumer* from(Core* component);
 
-    virtual void updateList(int propertyKey,
-                            std::vector<ViewModelInstanceListItem*>* list) = 0;
+    virtual void updateList(
+        std::vector<rcp<ViewModelInstanceListItem>>* list) = 0;
 };
 } // namespace rive
 

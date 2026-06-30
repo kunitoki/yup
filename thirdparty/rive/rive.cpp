@@ -37,6 +37,12 @@
 #define _RIVE_INTERNAL_ 1
 #endif
 
+#if !defined(YG_DEPRECATED)
+ #define YUP_RIVE_DEFINED_YG_DEPRECATED 1
+ #define YG_DEPRECATED(message)
+#endif
+
+// BEGIN YUP GENERATED RIVE INCLUDES
 #include "source/generated/nested_artboard_layout_base.cpp"
 #include "source/generated/viewmodel/viewmodel_instance_list_base.cpp"
 #include "source/generated/viewmodel/viewmodel_instance_enum_base.cpp"
@@ -293,16 +299,72 @@
 #include "source/core/field_types/core_double_type.cpp"
 #include "source/core/field_types/core_string_type.cpp"
 #include "source/core/field_types/core_color_type.cpp"
+#define is_big_endian yup_rive_binary_data_reader_is_big_endian
+#define decode_uint_leb yup_rive_binary_data_reader_decode_uint_leb
+#define decode_uint_leb32 yup_rive_binary_data_reader_decode_uint_leb32
+#define decode_string yup_rive_binary_data_reader_decode_string
+#define decode_double yup_rive_binary_data_reader_decode_double
+#define decode_float yup_rive_binary_data_reader_decode_float
+#define decode_uint_8 yup_rive_binary_data_reader_decode_uint_8
+#define decode_uint_16 yup_rive_binary_data_reader_decode_uint_16
+#define decode_uint_32 yup_rive_binary_data_reader_decode_uint_32
 #include "source/core/binary_data_reader.cpp"
+#undef is_big_endian
+#undef decode_uint_leb
+#undef decode_uint_leb32
+#undef decode_string
+#undef decode_double
+#undef decode_float
+#undef decode_uint_8
+#undef decode_uint_16
+#undef decode_uint_32
+#define is_big_endian yup_rive_binary_reader_is_big_endian
+#define decode_uint_leb yup_rive_binary_reader_decode_uint_leb
+#define decode_uint_leb32 yup_rive_binary_reader_decode_uint_leb32
+#define decode_string yup_rive_binary_reader_decode_string
+#define decode_double yup_rive_binary_reader_decode_double
+#define decode_float yup_rive_binary_reader_decode_float
+#define decode_uint_8 yup_rive_binary_reader_decode_uint_8
+#define decode_uint_16 yup_rive_binary_reader_decode_uint_16
+#define decode_uint_32 yup_rive_binary_reader_decode_uint_32
 #include "source/core/binary_reader.cpp"
+#undef is_big_endian
+#undef decode_uint_leb
+#undef decode_uint_leb32
+#undef decode_string
+#undef decode_double
+#undef decode_float
+#undef decode_uint_8
+#undef decode_uint_16
+#undef decode_uint_32
+#define is_big_endian yup_rive_binary_writer_is_big_endian
+#define decode_uint_leb yup_rive_binary_writer_decode_uint_leb
+#define decode_uint_leb32 yup_rive_binary_writer_decode_uint_leb32
+#define decode_string yup_rive_binary_writer_decode_string
+#define decode_double yup_rive_binary_writer_decode_double
+#define decode_float yup_rive_binary_writer_decode_float
+#define decode_uint_8 yup_rive_binary_writer_decode_uint_8
+#define decode_uint_16 yup_rive_binary_writer_decode_uint_16
+#define decode_uint_32 yup_rive_binary_writer_decode_uint_32
 #include "source/core/binary_writer.cpp"
+#undef is_big_endian
+#undef decode_uint_leb
+#undef decode_uint_leb32
+#undef decode_string
+#undef decode_double
+#undef decode_float
+#undef decode_uint_8
+#undef decode_uint_16
+#undef decode_uint_32
 #include "source/scene.cpp"
 #include "source/simple_array.cpp"
 #include "source/nested_artboard.cpp"
 #include "source/constraints/transform_constraint.cpp"
 #include "source/constraints/distance_constraint.cpp"
 #include "source/constraints/follow_path_constraint.cpp"
+#define identity yup_rive_constraint_identity
 #include "source/constraints/constraint.cpp"
+#undef identity
 #include "source/constraints/rotation_constraint.cpp"
 #include "source/constraints/ik_constraint.cpp"
 #include "source/constraints/scale_constraint.cpp"
@@ -354,9 +416,10 @@
 #include "source/layout.cpp"
 #include "source/layout_component.cpp"
 #include "source/animation/blend_state_1d_input.cpp"
-#include "source/animation/transition_value_string_comparator.cpp"
 #include "source/animation/cubic_interpolator_solver.cpp"
+#define StateMachineInstance YUPRiveNestedTriggerStateMachineInstance
 #include "source/animation/nested_trigger.cpp"
+#undef StateMachineInstance
 #include "source/animation/keyframe_color.cpp"
 #include "source/animation/blend_state_1d_viewmodel.cpp"
 #include "source/animation/keyframe_callback.cpp"
@@ -365,7 +428,9 @@
 #include "source/animation/state_machine_instance.cpp"
 #include "source/animation/keyframe_interpolator.cpp"
 #include "source/animation/transition_input_condition.cpp"
+#define StateMachineInstance YUPRiveNestedBoolStateMachineInstance
 #include "source/animation/nested_bool.cpp"
+#undef StateMachineInstance
 #include "source/animation/blend_state_direct.cpp"
 #include "source/animation/animation_state.cpp"
 #include "source/animation/nested_animation.cpp"
@@ -393,13 +458,13 @@
 #include "source/animation/linear_animation_instance.cpp"
 #include "source/animation/keyframe_double.cpp"
 #include "source/animation/listener_input_change.cpp"
-#include "source/animation/hittable.cpp"
 #include "source/animation/blend_animation_direct.cpp"
 #include "source/animation/transition_property_comparator.cpp"
 #include "source/animation/cubic_ease_interpolator.cpp"
 #include "source/animation/blend_state_transition.cpp"
+#define StateMachineInstance YUPRiveNestedNumberStateMachineInstance
 #include "source/animation/nested_number.cpp"
-#include "source/animation/transition_property_artboard_comparator.cpp"
+#undef StateMachineInstance
 #include "source/animation/transition_number_condition.cpp"
 #include "source/animation/listener_bool_change.cpp"
 #include "source/animation/keyframe.cpp"
@@ -409,14 +474,11 @@
 #include "source/animation/state_machine_layer.cpp"
 #include "source/animation/listener_align_target.cpp"
 #include "source/animation/blend_animation_1d.cpp"
-#include "source/animation/transition_value_enum_comparator.cpp"
 #include "source/animation/blend_state_1d.cpp"
 #include "source/animation/cubic_value_interpolator.cpp"
 #include "source/animation/cubic_interpolator_component.cpp"
 #include "source/animation/state_instance.cpp"
-#include "source/animation/transition_value_color_comparator.cpp"
 #include "source/animation/listener_trigger_change.cpp"
-#include "source/animation/transition_value_boolean_comparator.cpp"
 #include "source/animation/cubic_interpolator.cpp"
 #include "source/animation/keyed_property.cpp"
 #include "source/animation/transition_bool_condition.cpp"
@@ -424,7 +486,6 @@
 #include "source/animation/animation_reset.cpp"
 #include "source/animation/nested_remap_animation.cpp"
 #include "source/animation/layer_state.cpp"
-#include "source/animation/transition_value_number_comparator.cpp"
 #include "source/animation/system_state_instance.cpp"
 #include "source/animation/state_transition.cpp"
 #include "source/animation/listener_viewmodel_change.cpp"
@@ -469,15 +530,25 @@
 #include "source/shapes/cubic_mirrored_vertex.cpp"
 #include "source/shapes/vertex.cpp"
 #include "source/shapes/ellipse.cpp"
+#define identity yup_rive_clipping_shape_identity
 #include "source/shapes/clipping_shape.cpp"
+#undef identity
 #include "source/math/contour_measure.cpp"
 #include "source/math/raw_path.cpp"
 #include "source/math/bezier_utils.cpp"
 #include "source/math/bit_field_loc.cpp"
+#include "rive/math/hit_test.hpp"
+#include "rive/math/mat2d.hpp"
+#define graphics_roundf yup_rive_hit_test_graphics_roundf
+#define graphics_round yup_rive_hit_test_graphics_round
+#define lerp yup_rive_hit_test_lerp
+#include "source/math/hit_test.cpp"
+#undef graphics_roundf
+#undef graphics_round
+#undef lerp
 #include "source/math/aabb.cpp"
 #include "source/math/mat2d_find_max_scale.cpp"
 #include "source/math/path_measure.cpp"
-#include "source/math/hit_test.cpp"
 #include "source/math/raw_path_utils.cpp"
 #include "source/math/rectangles_to_contour.cpp"
 #include "source/math/vec2d.cpp"
@@ -581,6 +652,187 @@
 #include "source/renderer.cpp"
 #include "source/audio_event.cpp"
 #include "source/nested_artboard_leaf.cpp"
+#include "source/animation/focus_action_target.cpp"
+#include "source/animation/focus_action_traversal.cpp"
+#include "source/animation/focus_listener_group.cpp"
+#include "source/animation/keyboard_listener_group.cpp"
+#include "source/animation/listener_invocation.cpp"
+#include "source/animation/listener_types/listener_input_type.cpp"
+#include "source/animation/listener_types/listener_input_type_keyboard.cpp"
+#include "source/animation/listener_types/listener_input_type_semantic.cpp"
+#include "source/animation/listener_types/listener_input_type_viewmodel.cpp"
+#include "source/animation/property_recorder.cpp"
+#include "source/animation/scripted_listener_action.cpp"
+#include "source/animation/scripted_transition_condition.cpp"
+#include "source/animation/semantic_listener_group.cpp"
+#include "source/animation/state_machine_fire_action.cpp"
+#include "source/animation/state_machine_fire_trigger.cpp"
+#include "source/animation/state_machine_listener_single.cpp"
+#include "source/animation/text_input_listener_group.cpp"
+#include "source/artboard_list_map_rule.cpp"
+#include "source/artboard_referencer.cpp"
+#include "source/assets/blob_asset.cpp"
+#include "source/assets/manifest_asset.cpp"
+#include "source/assets/script_asset.cpp"
+#include "source/assets/shader_asset.cpp"
+#include "source/async/work_pool.cpp"
+#include "source/bindable_artboard.cpp"
+#include "source/constraints/constrainable_list.cpp"
+#include "source/constraints/draggable_constraint.cpp"
+#include "source/constraints/list_constraint.cpp"
+#include "source/constraints/list_follow_path_constraint.cpp"
+#include "source/constraints/scrolling/scroll_virtualizer.cpp"
+#include "source/custom_property_container.cpp"
+#include "source/data_bind/context/context_target_value.cpp"
+#include "source/data_bind/context/context_value_any.cpp"
+#include "source/data_bind/context/context_value_artboard.cpp"
+#include "source/data_bind/context/context_value_viewmodel.cpp"
+#include "source/data_bind/converters/data_converter_list_to_length.cpp"
+#include "source/data_bind/converters/data_converter_to_number.cpp"
+#include "source/data_bind/data_bind_container.cpp"
+#include "source/data_bind/data_bind_path.cpp"
+#include "source/data_bind/data_bind_viewmodel_consumer.cpp"
+#include "source/data_bind_path_referencer.cpp"
+#include "source/focus_data.cpp"
+#include "source/generated/animation/focus_action_base.cpp"
+#include "source/generated/animation/focus_action_target_base.cpp"
+#include "source/generated/animation/focus_action_traversal_base.cpp"
+#include "source/generated/animation/listener_types/listener_input_type_base.cpp"
+#include "source/generated/animation/listener_types/listener_input_type_event_base.cpp"
+#include "source/generated/animation/listener_types/listener_input_type_keyboard_base.cpp"
+#include "source/generated/animation/listener_types/listener_input_type_semantic_base.cpp"
+#include "source/generated/animation/listener_types/listener_input_type_text_base.cpp"
+#include "source/generated/animation/listener_types/listener_input_type_viewmodel_base.cpp"
+#include "source/generated/animation/scripted_listener_action_base.cpp"
+#include "source/generated/animation/scripted_transition_condition_base.cpp"
+#include "source/generated/animation/state_machine_fire_action_base.cpp"
+#include "source/generated/animation/state_machine_fire_trigger_base.cpp"
+#include "source/generated/animation/state_machine_listener_single_base.cpp"
+#include "source/generated/animation/transition_property_component_comparator_base.cpp"
+#include "source/generated/animation/transition_self_comparator_base.cpp"
+#include "source/generated/animation/transition_value_artboard_comparator_base.cpp"
+#include "source/generated/animation/transition_value_asset_comparator_base.cpp"
+#include "source/generated/animation/transition_value_id_comparator_base.cpp"
+#include "source/generated/artboard_list_map_rule_base.cpp"
+#include "source/generated/assets/blob_asset_base.cpp"
+#include "source/generated/assets/manifest_asset_base.cpp"
+#include "source/generated/assets/script_asset_base.cpp"
+#include "source/generated/assets/shader_asset_base.cpp"
+#include "source/generated/constraints/list_follow_path_constraint_base.cpp"
+#include "source/generated/custom_property_color_base.cpp"
+#include "source/generated/custom_property_enum_base.cpp"
+#include "source/generated/custom_property_trigger_base.cpp"
+#include "source/generated/data_bind/bindable_property_artboard_base.cpp"
+#include "source/generated/data_bind/bindable_property_list_base.cpp"
+#include "source/generated/data_bind/bindable_property_viewmodel_base.cpp"
+#include "source/generated/data_bind/converters/data_converter_list_to_length_base.cpp"
+#include "source/generated/data_bind/converters/data_converter_to_number_base.cpp"
+#include "source/generated/data_bind/data_bind_path_base.cpp"
+#include "source/generated/focus_data_base.cpp"
+#include "source/generated/inputs/keyboard_input_base.cpp"
+#include "source/generated/inputs/semantic_input_base.cpp"
+#include "source/generated/inputs/user_input_base.cpp"
+#include "source/generated/layout/artboard_component_list_override_base.cpp"
+#include "source/generated/script_input_artboard_base.cpp"
+#include "source/generated/script_input_boolean_base.cpp"
+#include "source/generated/script_input_color_base.cpp"
+#include "source/generated/script_input_number_base.cpp"
+#include "source/generated/script_input_string_base.cpp"
+#include "source/generated/script_input_trigger_base.cpp"
+#include "source/generated/script_input_viewmodel_property_base.cpp"
+#include "source/generated/scripted/scripted_data_converter_base.cpp"
+#include "source/generated/scripted/scripted_drawable_base.cpp"
+#include "source/generated/scripted/scripted_layout_base.cpp"
+#include "source/generated/scripted/scripted_path_effect_base.cpp"
+#include "source/generated/semantic/semantic_data_base.cpp"
+#include "source/generated/shapes/list_path_base.cpp"
+#include "source/generated/shapes/paint/group_effect_base.cpp"
+#include "source/generated/shapes/paint/target_effect_base.cpp"
+#include "source/generated/viewmodel/viewmodel_instance_artboard_base.cpp"
+#include "source/generated/viewmodel/viewmodel_instance_value_base.cpp"
+#include "source/generated/viewmodel/viewmodel_property_artboard_base.cpp"
+#include "source/importers/data_bind_path_importer.cpp"
+#include "source/importers/listener_input_type_keyboard_importer.cpp"
+#include "source/importers/listener_input_type_semantic_importer.cpp"
+#include "source/importers/scripted_object_importer.cpp"
+#include "source/importers/text_asset_importer.cpp"
+#include "source/input/focus_manager.cpp"
+#include "source/input/focus_node.cpp"
+#include "source/input/focusable.cpp"
+#include "source/inputs/keyboard_input.cpp"
+#include "source/inputs/semantic_input.cpp"
+#include "source/layout/artboard_component_list_override.cpp"
+#include "source/listener_group.cpp"
+#include "source/lua/lua_artboards.cpp"
+#include "source/lua/lua_audio.cpp"
+#include "source/lua/lua_buffer_ext.cpp"
+#define data_value_namecall yup_rive_lua_data_context_namecall
+#include "source/lua/lua_data_context.cpp"
+#undef data_value_namecall
+#define data_value_namecall yup_rive_lua_data_value_namecall
+#include "source/lua/lua_data_value.cpp"
+#undef data_value_namecall
+#include "source/lua/lua_image_decode.cpp"
+#include "source/lua/lua_listener_invocation.cpp"
+#include "source/lua/lua_promise.cpp"
+#include "source/lua/lua_properties.cpp"
+#include "source/lua/lua_rive_base.cpp"
+#include "source/lua/lua_scripted_context.cpp"
+#include "source/lua/lua_state.cpp"
+#include "source/lua/math/lua_color.cpp"
+#include "source/lua/math/lua_input.cpp"
+#include "source/lua/math/lua_mat2d.cpp"
+#include "source/lua/math/lua_mat4.cpp"
+#include "source/lua/math/lua_math.cpp"
+#include "source/lua/math/lua_vec2d.cpp"
+#include "source/lua/renderer/lua_blob.cpp"
+#include "source/lua/renderer/lua_gpu.cpp"
+#include "source/lua/renderer/lua_gradient.cpp"
+#include "source/lua/renderer/lua_image.cpp"
+#include "source/lua/renderer/lua_mesh.cpp"
+#include "source/lua/renderer/lua_paint.cpp"
+#include "source/lua/renderer/lua_path.cpp"
+#include "source/lua/renderer/lua_renderer.cpp"
+#include "source/lua/renderer/lua_renderer_library.cpp"
+#include "source/lua/rive_lua_libs.cpp"
+#include "source/math/random.cpp"
+#include "source/parent_traversal.cpp"
+#include "source/profiler/profiler.cpp"
+#include "source/profiler/rive_profile.cpp"
+#include "source/resetting_component.cpp"
+#include "source/script_input_artboard.cpp"
+#include "source/script_input_boolean.cpp"
+#include "source/script_input_color.cpp"
+#include "source/script_input_number.cpp"
+#include "source/script_input_string.cpp"
+#include "source/script_input_trigger.cpp"
+#include "source/script_input_viewmodel_property.cpp"
+#include "source/scripted/scripted_data_converter.cpp"
+#include "source/scripted/scripted_drawable.cpp"
+#include "source/scripted/scripted_layout.cpp"
+#include "source/scripted/scripted_object.cpp"
+#include "source/scripted/scripted_path_effect.cpp"
+#include "source/semantic/semantic_data.cpp"
+#include "source/semantic/semantic_inference_registry.cpp"
+#include "source/semantic/semantic_manager.cpp"
+#include "source/semantic/semantic_provider.cpp"
+#include "source/shapes/list_path.cpp"
+#include "source/shapes/paint/effects_container.cpp"
+#include "source/shapes/paint/group_effect.cpp"
+#include "source/shapes/paint/stroke_effect.cpp"
+#include "source/shapes/paint/target_effect.cpp"
+#include "source/shapes/points_common_path.cpp"
+#include "source/texture_archive.cpp"
+#include "source/viewmodel/property_symbol_dependent.cpp"
+#include "source/viewmodel/runtime/viewmodel_instance_artboard_runtime.cpp"
+#include "source/viewmodel/viewmodel_instance_artboard.cpp"
+#include "source/virtualizing_component.cpp"
+// END YUP GENERATED RIVE INCLUDES
+
+#if defined(YUP_RIVE_DEFINED_YG_DEPRECATED)
+ #undef YG_DEPRECATED
+ #undef YUP_RIVE_DEFINED_YG_DEPRECATED
+#endif
 
 #if __clang__
  #pragma clang diagnostic pop

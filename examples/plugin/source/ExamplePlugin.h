@@ -112,9 +112,9 @@ public:
     ExamplePlugin();
     ~ExamplePlugin() override;
 
-    void prepareToPlay (float sampleRate, int maxBlockSize) override;
+    void prepareToPlay (const yup::AudioSpec& spec) override;
     void releaseResources() override;
-    void processBlock (yup::AudioSampleBuffer& audioBuffer, yup::MidiBuffer& midiBuffer) override;
+    void processBlock (yup::AudioProcessContext<float>& context) override;
     void flush() override;
 
     int getCurrentPreset() const noexcept override;

@@ -200,10 +200,10 @@ constexpr bool isConstantEvaluated() noexcept
 // clang-format off
 #if YUP_MSVC && ! defined(DOXYGEN)
 #define YUP_BLOCK_WITH_FORCED_SEMICOLON(x) \
-    __pragma (warning (push))               \
-    __pragma (warning (disable : 4127))     \
-    __pragma (warning (disable : 4390))     \
-    do { x } while (false)                  \
+    __pragma (warning (push))              \
+    __pragma (warning (disable : 4127))    \
+    __pragma (warning (disable : 4390))    \
+    do { x } while (false)                 \
     __pragma (warning (pop))
 #else
 /** This is the good old C++ trick for creating a macro that forces the user to put
@@ -220,7 +220,7 @@ constexpr bool isConstantEvaluated() noexcept
 /** Assertion are enabled in debug unless explicitly disabled. */
 #define YUP_ASSERTIONS_ENABLED 1
 
-/** Writes a string to the standard error stream.
+/** Writes a string to the current logger, eventually going to the error stream if not set.
 
     Note that as well as a single string, you can use this to write multiple items as a stream, e.g.
 
@@ -231,12 +231,42 @@ constexpr bool isConstantEvaluated() noexcept
     The macro is only enabled in a debug build, so be careful not to use it with expressions
     that have important side-effects!
 
-    @see Logger::outputDebugString
+    @see Logger::outputDebugString, Logger::writeToLog
 */
-#define YUP_DBG(textToWrite) YUP_BLOCK_WITH_FORCED_SEMICOLON (\
+#define YUP_DBG(textToWrite) YUP_BLOCK_WITH_FORCED_SEMICOLON ( \
     yup::String tempDbgBuf;                                    \
-    tempDbgBuf << textToWrite;                                  \
+    tempDbgBuf << textToWrite;                                 \
     yup::Logger::outputDebugString (tempDbgBuf);)
+
+/** Module-specific debug logging macro.
+
+    This is a convenient way to write debug messages that are tagged with the name of the
+    module they came from, and which can be enabled or disabled on a per-module basis.
+
+    To enable logging for a module, define YUP_ENABLE_<module>_LOGGING to 1 in your
+    project settings. For example, if you have a module called "Audio", you would define
+    YUP_ENABLE_AUDIO_LOGGING to 1 to enable logging for that module.
+
+    The macro is only enabled in a debug build, so be careful not to use it with expressions
+    that have important side-effects!
+
+    @see YUP_DBG
+*/
+#define YUP_MODULE_DBG(module, textToWrite) \
+    YUP_MODULE_DBG_RESOLVE_ (YUP_ENABLE_##module##_LOGGING, module, textToWrite)
+
+#define YUP_MODULE_DBG_RESOLVE_(flag, module, textToWrite) \
+    YUP_MODULE_DBG_RESOLVE__ (flag, module, textToWrite)
+
+#define YUP_MODULE_DBG_RESOLVE__(flag, module, textToWrite) \
+    YUP_CONCAT (YUP_MODULE_DBG_EMIT_, flag) (module, textToWrite)
+
+#define YUP_MODULE_DBG_EMIT_1(module, textToWrite) YUP_BLOCK_WITH_FORCED_SEMICOLON ( \
+    yup::String tempDbgBuf;                                                          \
+    tempDbgBuf << "[" #module "] " << textToWrite;                                   \
+    yup::Logger::writeToLog (tempDbgBuf);)
+
+#define YUP_MODULE_DBG_EMIT_0(module, textToWrite) YUP_BLOCK_WITH_FORCED_SEMICOLON ({})
 
 //==============================================================================
 /** This will always cause an assertion failure.
@@ -244,18 +274,18 @@ constexpr bool isConstantEvaluated() noexcept
 
     @see jassert
 */
-#define jassertfalse YUP_BLOCK_WITH_FORCED_SEMICOLON (\
-    if (! yup::isConstantEvaluated())                 \
+#define jassertfalse YUP_BLOCK_WITH_FORCED_SEMICOLON ( \
+    if (! yup::isConstantEvaluated())                  \
     {                                                  \
-        YUP_LOG_CURRENT_ASSERTION;                    \
-        if (yup::yup_isRunningUnderDebugger())       \
-            { YUP_BREAK_IN_DEBUGGER }                 \
+        YUP_LOG_CURRENT_ASSERTION;                     \
+        if (yup::yup_isRunningUnderDebugger())         \
+            { YUP_BREAK_IN_DEBUGGER }                  \
         else                                           \
-            { YUP_ANALYZER_NORETURN }                 \
+            { YUP_ANALYZER_NORETURN }                  \
     }                                                  \
     else                                               \
     {                                                  \
-        YUP_ANALYZER_NORETURN                         \
+        YUP_ANALYZER_NORETURN                          \
     })
 
 //==============================================================================
@@ -281,6 +311,8 @@ constexpr bool isConstantEvaluated() noexcept
 #define YUP_ASSERTIONS_ENABLED 0
 
 #define YUP_DBG(textToWrite)
+#define YUP_MODULE_DBG(module, text)
+
 #define jassertfalse YUP_BLOCK_WITH_FORCED_SEMICOLON (if (! yup::isConstantEvaluated()) YUP_LOG_CURRENT_ASSERTION;)
 
 #if YUP_LOG_ASSERTIONS

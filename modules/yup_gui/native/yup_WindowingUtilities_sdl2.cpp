@@ -42,6 +42,22 @@ MouseEvent::Buttons toMouseButton (Uint8 sdlButton) noexcept
     }
 }
 
+MouseEvent::Buttons toMouseButtons (Uint32 sdlButtons) noexcept
+{
+    int buttons = MouseEvent::Buttons::noButtons;
+
+    if ((sdlButtons & SDL_BUTTON (SDL_BUTTON_LEFT)) != 0)
+        buttons |= MouseEvent::Buttons::leftButton;
+
+    if ((sdlButtons & SDL_BUTTON (SDL_BUTTON_RIGHT)) != 0)
+        buttons |= MouseEvent::Buttons::rightButton;
+
+    if ((sdlButtons & SDL_BUTTON (SDL_BUTTON_MIDDLE)) != 0)
+        buttons |= MouseEvent::Buttons::middleButton;
+
+    return static_cast<MouseEvent::Buttons> (buttons);
+}
+
 //==============================================================================
 
 KeyModifiers toKeyModifiers (Uint16 sdlMod) noexcept
@@ -272,6 +288,11 @@ Rectangle<int> getNativeWindowPosition (void* nativeWindow)
 {
     return {};
 }
+
+void focusNativeWindow (void* nativeWindow)
+{
+    ignoreUnused (nativeWindow);
+}
 #endif
 
 //==============================================================================
@@ -291,8 +312,8 @@ void setNativeParent (void* nativeWindow, SDL_Window* window)
     SetWindowPos (hwnd, nullptr, 0, 0, 0, 0, SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
 
 #elif YUP_MAC
-    NSWindow* parentWindow = [reinterpret_cast<NSView*> (nativeWindow) window];
-    NSWindow* currentWindow = reinterpret_cast<NSWindow*> (getNativeWindowHandle (window));
+    NSWindow* parentWindow = [(__bridge NSView*) nativeWindow window];
+    NSWindow* currentWindow = (__bridge NSWindow*) getNativeWindowHandle (window);
     [parentWindow addChildWindow:currentWindow ordered:NSWindowAbove];
 
 #elif YUP_LINUX

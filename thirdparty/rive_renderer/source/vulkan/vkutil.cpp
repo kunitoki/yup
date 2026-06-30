@@ -10,6 +10,42 @@
 
 namespace rive::gpu::vkutil
 {
+#define STR_CASE(result)                                                       \
+    case VK_##result:                                                          \
+        return #result
+
+const char* string_from_vk_result(VkResult result)
+{
+    switch (result)
+    {
+        STR_CASE(SUCCESS);
+        STR_CASE(NOT_READY);
+        STR_CASE(TIMEOUT);
+        STR_CASE(EVENT_SET);
+        STR_CASE(EVENT_RESET);
+        STR_CASE(INCOMPLETE);
+        STR_CASE(ERROR_OUT_OF_HOST_MEMORY);
+        STR_CASE(ERROR_OUT_OF_DEVICE_MEMORY);
+        STR_CASE(ERROR_INITIALIZATION_FAILED);
+        STR_CASE(ERROR_DEVICE_LOST);
+        STR_CASE(ERROR_MEMORY_MAP_FAILED);
+        STR_CASE(ERROR_LAYER_NOT_PRESENT);
+        STR_CASE(ERROR_EXTENSION_NOT_PRESENT);
+        STR_CASE(ERROR_FEATURE_NOT_PRESENT);
+        STR_CASE(ERROR_INCOMPATIBLE_DRIVER);
+        STR_CASE(ERROR_TOO_MANY_OBJECTS);
+        STR_CASE(ERROR_FORMAT_NOT_SUPPORTED);
+        STR_CASE(ERROR_SURFACE_LOST_KHR);
+        STR_CASE(SUBOPTIMAL_KHR);
+        STR_CASE(ERROR_OUT_OF_DATE_KHR);
+        STR_CASE(ERROR_INCOMPATIBLE_DISPLAY_KHR);
+        STR_CASE(ERROR_NATIVE_WINDOW_IN_USE_KHR);
+        STR_CASE(ERROR_VALIDATION_FAILED_EXT);
+        STR_CASE(ERROR_OUT_OF_POOL_MEMORY);
+        default:
+            return "<unknown>";
+    }
+}
 Resource::Resource(rcp<VulkanContext> vk) : GPUResource(std::move(vk)) {}
 
 VulkanContext* Resource::vk() const
@@ -159,7 +195,9 @@ rcp<vkutil::Buffer> BufferPool::acquire()
     return buffer;
 }
 
-Image::Image(rcp<VulkanContext> vulkanContext, const VkImageCreateInfo& info) :
+Image::Image(rcp<VulkanContext> vulkanContext,
+             const VkImageCreateInfo& info,
+             const char* name) :
     Resource(std::move(vulkanContext)), m_info(info)
 {
     m_info = info;
@@ -200,6 +238,9 @@ Image::Image(rcp<VulkanContext> vulkanContext, const VkImageCreateInfo& info) :
                            &m_vmaAllocation,
                            nullptr) == VK_SUCCESS)
         {
+            vk()->setDebugNameIfEnabled(uint64_t(m_vkImage),
+                                        VK_OBJECT_TYPE_IMAGE,
+                                        name);
             return;
         }
     }
@@ -214,6 +255,9 @@ Image::Image(rcp<VulkanContext> vulkanContext, const VkImageCreateInfo& info) :
                             &m_vkImage,
                             &m_vmaAllocation,
                             nullptr));
+    vk()->setDebugNameIfEnabled(uint64_t(m_vkImage),
+                                VK_OBJECT_TYPE_IMAGE,
+                                name);
 }
 
 Image::~Image()
@@ -226,15 +270,28 @@ Image::~Image()
 
 ImageView::ImageView(rcp<VulkanContext> vulkanContext,
                      rcp<Image> textureRef,
-                     const VkImageViewCreateInfo& info) :
+                     const VkImageViewCreateInfo& info,
+                     const char* name) :
     Resource(std::move(vulkanContext)),
     m_textureRefOrNull(std::move(textureRef)),
     m_info(info)
 {
-    assert(m_textureRefOrNull == nullptr || info.image == *m_textureRefOrNull);
+    if (m_info.image == VK_NULL_HANDLE)
+    {
+        assert(m_textureRefOrNull != nullptr);
+        m_info.image = *m_textureRefOrNull;
+    }
+    else
+    {
+        assert(m_textureRefOrNull == nullptr ||
+               m_info.image == *m_textureRefOrNull);
+    }
     m_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     VK_CHECK(
         vk()->CreateImageView(vk()->device, &m_info, nullptr, &m_vkImageView));
+    vk()->setDebugNameIfEnabled(uint64_t(m_vkImageView),
+                                VK_OBJECT_TYPE_IMAGE_VIEW,
+                                name);
 }
 
 ImageView::~ImageView()
@@ -242,7 +299,9 @@ ImageView::~ImageView()
     vk()->DestroyImageView(vk()->device, m_vkImageView, nullptr);
 }
 
-Texture2D::Texture2D(rcp<VulkanContext> vk, VkImageCreateInfo info) :
+Texture2D::Texture2D(rcp<VulkanContext> vk,
+                     VkImageCreateInfo info,
+                     const char* name) :
     rive::gpu::Texture(info.extent.width, info.extent.height),
     m_lastAccess({
         .pipelineStages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
@@ -264,26 +323,33 @@ Texture2D::Texture2D(rcp<VulkanContext> vk, VkImageCreateInfo info) :
         info.usage =
             VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     }
-    m_image = vk->makeImage(info);
-    m_imageView = vk->makeImageView(m_image);
+    m_image = vk->makeImage(info, name);
+    m_imageView = vk->makeImageView(m_image, name);
 }
 
-void Texture2D::stageContentsForUpload(const void* imageData,
-                                       size_t imageDataSizeInBytes)
+void Texture2D::scheduleUpload(const void* imageDataRGBAPremul,
+                               size_t imageDataSizeInBytes)
 {
-    m_imageUploadBuffer = m_image->vk()->makeBuffer(
+    rcp<vkutil::Buffer> imageBufferRGBAPremul = m_image->vk()->makeBuffer(
         {
             .size = imageDataSizeInBytes,
             .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         },
         vkutil::Mappability::writeOnly);
-    memcpy(m_imageUploadBuffer->contents(), imageData, imageDataSizeInBytes);
-    m_imageUploadBuffer->flushContents();
+    memcpy(imageBufferRGBAPremul->contents(),
+           imageDataRGBAPremul,
+           imageDataSizeInBytes);
+    imageBufferRGBAPremul->flushContents();
+    scheduleUpload(std::move(imageBufferRGBAPremul));
 }
 
-void Texture2D::synchronize(VkCommandBuffer commandBuffer)
+void Texture2D::scheduleUpload(rcp<vkutil::Buffer> imageBufferRGBAPremul)
 {
-    assert(hasUpdates());
+    m_imageUploadBuffer = std::move(imageBufferRGBAPremul);
+}
+
+void Texture2D::applyImageUploadBuffer(VkCommandBuffer commandBuffer)
+{
     assert(m_imageUploadBuffer != nullptr);
 
     VkBufferImageCopy bufferImageCopy = {
@@ -325,6 +391,9 @@ void Texture2D::barrier(VkCommandBuffer commandBuffer,
                         vkutil::ImageAccessAction imageAccessAction,
                         VkDependencyFlags dependencyFlags)
 {
+    // Always perform the barrier, even if m_lastAccess == dstAccess, because
+    // a pipeline barrier may still be needed even if we aren't transitioning
+    // the image or interacting with other stages.
     m_lastAccess = m_image->vk()->simpleImageMemoryBarrier(commandBuffer,
                                                            m_lastAccess,
                                                            dstAccess,

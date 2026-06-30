@@ -173,7 +173,6 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 - (void)dealloc
 {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
-    [super dealloc];
 }
 
 - (void)audioSessionChangedInterruptionType:(NSNotification*)notification
@@ -769,9 +768,11 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
                                              &dataSize);
         if (err == noErr)
         {
+            auto hostNSURL = (__bridge NSURL*) hostUrl;
+
             if (@available (iOS 10.0, *))
             {
-                [[UIApplication sharedApplication] openURL:(NSURL*) hostUrl
+                [[UIApplication sharedApplication] openURL:hostNSURL
                                                    options:@{}
                                          completionHandler:nil];
 
@@ -779,7 +780,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
             }
 
             YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
-            [[UIApplication sharedApplication] openURL:(NSURL*) hostUrl];
+            [[UIApplication sharedApplication] openURL:hostNSURL];
             YUP_END_IGNORE_DEPRECATION_WARNINGS
         }
     }
@@ -1541,7 +1542,7 @@ void iOSAudioIODeviceType::handleAsyncUpdate()
 //==============================================================================
 AudioSessionHolder::AudioSessionHolder() { nativeSession = [[iOSAudioSessionNative alloc] init:this]; }
 
-AudioSessionHolder::~AudioSessionHolder() { [nativeSession release]; }
+AudioSessionHolder::~AudioSessionHolder() = default;
 
 void AudioSessionHolder::handleStatusChange (bool enabled, const char* reason) const
 {

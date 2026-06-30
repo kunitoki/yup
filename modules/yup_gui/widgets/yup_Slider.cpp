@@ -373,6 +373,9 @@ void Slider::mouseDown (const MouseEvent& event)
 
     if (dragMode != notDragging)
     {
+        if (onDragStart)
+            onDragStart (event);
+
         // For linear sliders, implement improved click behavior
         bool shouldJumpToClickPosition = false;
 
@@ -427,9 +430,6 @@ void Slider::mouseDown (const MouseEvent& event)
         valueOnMouseDown = currentValue;
         minValueOnMouseDown = minValue;
         maxValueOnMouseDown = maxValue;
-
-        if (onDragStart)
-            onDragStart (event);
     }
 
     takeKeyboardFocus();

@@ -108,6 +108,11 @@ public:
     void* getNativeHandle() const override;
 
     //==============================================================================
+    void startTextInput (Component& component) override;
+    void stopTextInput (Component& component) override;
+    void updateTextInputRect (Component& component) override;
+
+    //==============================================================================
     void run() override;
     void handleAsyncUpdate() override;
     void timerCallback() override;
@@ -147,6 +152,19 @@ public:
     static std::atomic_flag isInitialised;
 
 private:
+    static bool requestMouseCapture();
+    static void releaseMouseCapture();
+    static int mouseCaptureRequestCount;
+    static uint32_t lastCapturedMouseButtonState;
+    static bool popupDismissalCheckPending;
+
+    void updateMouseCapture (bool shouldBeActive);
+    static void pollCapturedMouseState();
+    static void triggerPopupDismissalCheck();
+    static void dismissPopupsIfNoNativeWindowHasFocus();
+    static bool anyNativeWindowHasKeyboardFocus();
+    static bool anyNativeWindowContains (Point<float> screenPosition);
+
     Component* findComponentForMouseEvent (const Point<float>& position);
     void updateComponentUnderMouse (const MouseEvent& event);
     void renderContext();
@@ -154,6 +172,7 @@ private:
     void startRendering();
     void stopRendering();
     bool isRendering() const;
+    bool hasNativeKeyboardFocus() const;
 
     SDL_Window* window = nullptr;
     SDL_GLContext windowContext = nullptr;
@@ -178,6 +197,7 @@ private:
     WeakReference<Component> lastComponentClicked;
     WeakReference<Component> lastComponentFocused;
     WeakReference<Component> lastComponentUnderMouse;
+    WeakReference<Component> currentTextInputComponent;
 
     HashMap<int, char> keyState;
     MouseEvent::Buttons currentMouseButtons = MouseEvent::noButtons;
@@ -203,6 +223,8 @@ private:
     bool renderAtomicMode = false;
     bool renderWireframe = false;
     bool updateOnlyWhenFocused = false;
+    bool shouldCaptureMouse = false;
+    bool mouseCaptureActive = false;
 };
 
 } // namespace yup

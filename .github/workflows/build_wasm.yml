@@ -36,7 +36,7 @@ jobs:
   build_tests_debug:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
@@ -53,7 +53,7 @@ jobs:
   build_tests_release:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
@@ -70,7 +70,7 @@ jobs:
   build_console:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
@@ -86,7 +86,7 @@ jobs:
   build_app:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
@@ -102,7 +102,7 @@ jobs:
   build_graphics:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}

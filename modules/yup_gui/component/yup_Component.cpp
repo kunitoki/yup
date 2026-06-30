@@ -37,6 +37,8 @@ Component::Component (StringRef componentID)
 
 Component::~Component()
 {
+    componentListeners.call (&ComponentListener::componentBeingDeleted, *this);
+
     if (options.onDesktop)
         removeFromDesktop();
 
@@ -158,7 +160,7 @@ void Component::setPosition (const Point<float>& newPosition)
     if (options.onDesktop && native != nullptr)
         native->setPosition (newPosition.to<int>());
 
-    moved();
+    sendMoved();
 }
 
 float Component::getX() const
@@ -203,7 +205,7 @@ void Component::setTopLeft (const Point<float>& newTopLeft)
     if (options.onDesktop && native != nullptr)
         native->setPosition (newTopLeft.to<int>());
 
-    moved();
+    sendMoved();
 }
 
 Point<float> Component::getBottomLeft() const
@@ -218,7 +220,7 @@ void Component::setBottomLeft (const Point<float>& newBottomLeft)
     if (options.onDesktop && native != nullptr)
         native->setPosition (newBottomLeft.translated (0.0f, -getHeight()).to<int>());
 
-    moved();
+    sendMoved();
 }
 
 Point<float> Component::getTopRight() const
@@ -233,7 +235,7 @@ void Component::setTopRight (const Point<float>& newTopRight)
     if (options.onDesktop && native != nullptr)
         native->setPosition (newTopRight.translated (-getWidth(), 0.0f).to<int>());
 
-    moved();
+    sendMoved();
 }
 
 Point<float> Component::getBottomRight() const
@@ -248,7 +250,7 @@ void Component::setBottomRight (const Point<float>& newBottomRight)
     if (options.onDesktop && native != nullptr)
         native->setPosition (newBottomRight.translated (-getWidth(), -getHeight()).to<int>());
 
-    moved();
+    sendMoved();
 }
 
 Point<float> Component::getCenter() const
@@ -263,7 +265,7 @@ void Component::setCenter (const Point<float>& newCenter)
     if (options.onDesktop && native != nullptr)
         native->setPosition (newCenter.translated (-getWidth() / 2.0f, -getHeight() / 2.0f).to<int>());
 
-    moved();
+    sendMoved();
 }
 
 float Component::getCenterX() const
@@ -281,7 +283,7 @@ void Component::setCenterX (float newCenterX)
         native->setPosition (newCenter.translated (-getWidth() / 2.0f, 0.0f).to<int>());
     }
 
-    moved();
+    sendMoved();
 }
 
 float Component::getCenterY() const
@@ -299,10 +301,20 @@ void Component::setCenterY (float newCenterY)
         native->setPosition (newCenter.translated (0.0f, -getHeight() / 2.0f).to<int>());
     }
 
-    moved();
+    sendMoved();
 }
 
 void Component::moved() {}
+
+void Component::sendMoved()
+{
+    moved();
+
+    componentListeners.call ([this] (ComponentListener& listener)
+    {
+        listener.componentMoved (*this);
+    });
+}
 
 //==============================================================================
 
@@ -320,7 +332,7 @@ void Component::setSize (const Size<float>& newSize)
     if (options.onDesktop && native != nullptr)
         native->setSize (newSize.to<int>());
 
-    resized();
+    sendResized();
 
     repaint (areaToRepaint);
 }
@@ -352,6 +364,8 @@ void Component::setBounds (float x, float y, float width, float height)
 
 void Component::setBounds (const Rectangle<float>& newBounds)
 {
+    repaint();
+
     boundsInParent = newBounds;
 
     if (options.onDesktop && native != nullptr)
@@ -359,12 +373,12 @@ void Component::setBounds (const Rectangle<float>& newBounds)
 
     auto bailOutChecker = BailOutChecker (this);
 
-    resized();
+    sendResized();
 
     if (bailOutChecker.shouldBailOut())
         return;
 
-    moved();
+    sendMoved();
 }
 
 Rectangle<float> Component::getBounds() const
@@ -404,6 +418,16 @@ float Component::proportionOfHeight (float proportion) const
 }
 
 void Component::resized() {}
+
+void Component::sendResized()
+{
+    resized();
+
+    componentListeners.call ([this] (ComponentListener& listener)
+    {
+        listener.componentResized (*this);
+    });
+}
 
 //==============================================================================
 
@@ -507,6 +531,16 @@ void Component::enableRenderingUnclipped (bool shouldBeEnabled)
 bool Component::isRenderingUnclipped() const
 {
     return options.unclippedRendering;
+}
+
+void Component::setPaintProfilingDisabled (bool shouldBeDisabled)
+{
+    options.paintProfilingDisabled = shouldBeDisabled;
+}
+
+bool Component::isPaintProfilingDisabled() const
+{
+    return options.paintProfilingDisabled;
 }
 
 void Component::repaint()
@@ -900,9 +934,24 @@ void Component::setWantsKeyboardFocus (bool wantsFocus)
     options.wantsKeyboardFocus = wantsFocus;
 }
 
+bool Component::getWantsKeyboardFocus() const
+{
+    return options.wantsKeyboardFocus;
+}
+
+void Component::setClickingGrabFocus (bool shouldGrabFocus)
+{
+    options.clickingDoesNotGrabFocus = ! shouldGrabFocus;
+}
+
+bool Component::getClickingGrabFocus() const
+{
+    return ! options.clickingDoesNotGrabFocus;
+}
+
 void Component::takeKeyboardFocus()
 {
-    if (! options.wantsKeyboardFocus)
+    if (! options.wantsKeyboardFocus || ! isEnabled())
         return;
 
     if (auto nativeComponent = getNativeComponent())
@@ -920,7 +969,7 @@ void Component::leaveKeyboardFocus()
 
 bool Component::hasKeyboardFocus() const
 {
-    if (! options.wantsKeyboardFocus)
+    if (! options.wantsKeyboardFocus || ! isEnabled())
         return false;
 
     if (auto nativeComponent = getNativeComponent())
@@ -932,6 +981,20 @@ bool Component::hasKeyboardFocus() const
 void Component::focusGained() {}
 
 void Component::focusLost() {}
+
+//==============================================================================
+
+void Component::handleKeyboardFocusFromClick()
+{
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+    {
+        if (component->options.wantsKeyboardFocus && ! component->options.clickingDoesNotGrabFocus)
+        {
+            component->takeKeyboardFocus();
+            return;
+        }
+    }
+}
 
 //==============================================================================
 
@@ -1012,6 +1075,18 @@ void Component::removeMouseListener (MouseListener* listener)
 
 //==============================================================================
 
+void Component::addComponentListener (ComponentListener* listener)
+{
+    componentListeners.add (listener);
+}
+
+void Component::removeComponentListener (ComponentListener* listener)
+{
+    componentListeners.remove (listener);
+}
+
+//==============================================================================
+
 void Component::setStyle (ComponentStyle::Ptr newStyle)
 {
     if (style == newStyle)
@@ -1069,31 +1144,31 @@ std::optional<Color> Component::findColor (const Identifier& colorId) const
 
 //==============================================================================
 
-void Component::setStyleProperty (const Identifier& propertyId, const std::optional<var>& property)
+void Component::setMetric (const Identifier& metricId, const std::optional<float>& metric)
 {
-    if (property)
-        properties.set (propertyId, *property);
+    if (metric)
+        properties.set (metricId, static_cast<double> (*metric));
     else
-        properties.remove (propertyId);
+        properties.remove (metricId);
 
     styleChanged();
 }
 
-std::optional<var> Component::getStyleProperty (const Identifier& propertyId) const
+std::optional<float> Component::getMetric (const Identifier& metricId) const
 {
-    if (auto property = properties.getVarPointer (propertyId); property != nullptr && ! property->isVoid())
-        return *property;
+    if (auto value = properties.getVarPointer (metricId); value != nullptr && value->isDouble())
+        return static_cast<float> (static_cast<double> (*value));
 
     return std::nullopt;
 }
 
-std::optional<var> Component::findStyleProperty (const Identifier& propertyId) const
+std::optional<float> Component::findMetric (const Identifier& metricId) const
 {
-    if (auto property = getStyleProperty (propertyId))
-        return property;
+    if (auto metric = getMetric (metricId))
+        return metric;
 
     if (parentComponent != nullptr)
-        return parentComponent->findStyleProperty (propertyId);
+        return parentComponent->findMetric (metricId);
 
     return std::nullopt;
 }
@@ -1120,8 +1195,6 @@ bool Component::hasOpaqueChildCoveringArea (const Rectangle<float>& area)
 
     return false;
 }
-
-//==============================================================================
 
 void Component::internalRefreshDisplay (double lastFrameTimeSeconds)
 {
@@ -1172,6 +1245,20 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
     options.isRepainting = true;
 
     {
+        const bool shouldMeasurePaint = ! options.paintProfilingDisabled && ! componentListeners.isEmpty();
+
+        ComponentPaintMetrics metrics;
+        int64 totalStartTicks = 0;
+        int64 selfStartTicks = 0;
+
+        if (shouldMeasurePaint)
+        {
+            totalStartTicks = Time::getHighResolutionTicks();
+            metrics.repaintArea = repaintArea;
+            metrics.componentBounds = bounds.to<float>();
+            metrics.renderContinuous = renderContinuous;
+        }
+
         const auto globalState = g.saveState();
 
         g.setOpacity (opacity);
@@ -1189,18 +1276,57 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
         {
             const auto paintState = g.saveState();
 
-            paint (g);
+            if (shouldMeasurePaint)
+            {
+                selfStartTicks = Time::getHighResolutionTicks();
+
+                paint (g);
+
+                metrics.selfTicks += Time::getHighResolutionTicks() - selfStartTicks;
+            }
+            else
+            {
+                paint (g);
+            }
+        }
+        else
+        {
+            if (shouldMeasurePaint)
+                metrics.selfPaintSkipped = true;
         }
 
-        for (auto child : children)
-            child->internalPaint (g, boundsToRedraw, renderContinuous);
+        if (shouldMeasurePaint)
+        {
+            const int64 childrenStartTicks = Time::getHighResolutionTicks();
 
-        paintOverChildren (g);
+            for (auto child : children)
+                child->internalPaint (g, boundsToRedraw, renderContinuous);
+
+            metrics.childrenTicks += Time::getHighResolutionTicks() - childrenStartTicks;
+
+            selfStartTicks = Time::getHighResolutionTicks();
+
+            paintOverChildren (g);
+
+            const int64 selfEndTicks = Time::getHighResolutionTicks();
+
+            metrics.selfTicks += selfEndTicks - selfStartTicks;
+            metrics.totalTicks = selfEndTicks - totalStartTicks;
+
+            componentListeners.call (&ComponentListener::componentPaintCompleted, *this, metrics);
+        }
+        else
+        {
+            for (auto child : children)
+                child->internalPaint (g, boundsToRedraw, renderContinuous);
+
+            paintOverChildren (g);
+        }
     }
 
     options.isRepainting = false;
 
-#if YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
+#if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
     g.setFillColor (debugColor);
     g.setOpacity (0.2f);
     g.fillAll();
@@ -1261,6 +1387,11 @@ void Component::internalMouseDown (const MouseEvent& event)
     updateMouseCursor();
 
     auto bailOutChecker = BailOutChecker (this);
+
+    handleKeyboardFocusFromClick();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
 
     mouseDown (event);
 
@@ -1365,7 +1496,7 @@ void Component::internalMouseWheel (const MouseEvent& event, const MouseWheelDat
 
 void Component::internalKeyDown (const KeyPress& keys, const Point<float>& position)
 {
-    if (! isVisible())
+    if (! isVisible() || ! isEnabled())
         return;
 
     keyDown (keys, position);
@@ -1375,7 +1506,7 @@ void Component::internalKeyDown (const KeyPress& keys, const Point<float>& posit
 
 void Component::internalKeyUp (const KeyPress& keys, const Point<float>& position)
 {
-    if (! isVisible())
+    if (! isVisible() || ! isEnabled())
         return;
 
     keyUp (keys, position);
@@ -1385,7 +1516,7 @@ void Component::internalKeyUp (const KeyPress& keys, const Point<float>& positio
 
 void Component::internalTextInput (const String& text)
 {
-    if (! options.wantsKeyboardFocus || ! isVisible())
+    if (! options.wantsKeyboardFocus || ! isVisible() || ! isEnabled())
         return;
 
     textInput (text);
@@ -1397,7 +1528,7 @@ void Component::internalResized (int width, int height)
 {
     boundsInParent = boundsInParent.withSize (Size<int> (width, height).to<float>());
 
-    resized();
+    sendResized();
 }
 
 //==============================================================================
@@ -1406,7 +1537,7 @@ void Component::internalMoved (int xpos, int ypos)
 {
     boundsInParent = boundsInParent.withPosition (Point<int> (xpos, ypos).to<float>());
 
-    moved();
+    sendMoved();
 }
 
 //==============================================================================

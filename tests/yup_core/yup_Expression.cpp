@@ -59,6 +59,9 @@ public:
         if (functionName == "add" && numParams == 2)
             return parameters[0] + parameters[1];
 
+        if (functionName == "zero" && numParams == 0)
+            return 123.0;
+
         return Expression::Scope::evaluateFunction (functionName, parameters, numParams);
     }
 
@@ -109,6 +112,23 @@ public:
         {
             Expression::Scope::visitRelativeScope (scopeName, visitor);
         }
+    }
+};
+
+class RecursiveScope : public Expression::Scope
+{
+public:
+    String getScopeUID() const override
+    {
+        return "RecursiveScope";
+    }
+
+    Expression getSymbolValue (const String& symbol) const override
+    {
+        if (symbol == "self")
+            return Expression::symbol ("self");
+
+        return Expression::Scope::getSymbolValue (symbol);
     }
 };
 } // namespace
@@ -318,6 +338,29 @@ TEST (ExpressionTests, ParseWhitespaceOnly)
     EXPECT_EQ (0.0, e.evaluate());
 }
 
+TEST (ExpressionTests, GetInputFromConstantReturnsEmptyExpression)
+{
+#if YUP_ASSERTIONS_ENABLED
+    GTEST_SKIP() << "Skipping invalid input access test in assertion-enabled builds";
+#else
+    Expression e (42.0);
+    auto input = e.getInput (0);
+
+    EXPECT_EQ (0.0, input.evaluate());
+#endif
+}
+
+TEST (ExpressionTests, GetSymbolOrFunctionForConstantReturnsEmptyString)
+{
+#if YUP_ASSERTIONS_ENABLED
+    GTEST_SKIP() << "Skipping invalid name access test in assertion-enabled builds";
+#else
+    Expression e (42.0);
+
+    EXPECT_TRUE (e.getSymbolOrFunction().isEmpty());
+#endif
+}
+
 // ==============================================================================
 // Arithmetic Operator Tests
 // ==============================================================================
@@ -385,6 +428,41 @@ TEST (ExpressionTests, DivisionByZeroReturnsInfinity)
 
     double value = result.evaluate();
     EXPECT_TRUE (std::isinf (value));
+}
+
+TEST (ExpressionTests, ToStringWrapsRightAssociativeSubtraction)
+{
+    String error;
+    Expression e ("10 - (3 - 1)", error);
+
+    EXPECT_TRUE (error.isEmpty());
+    EXPECT_EQ ("10 - (3 - 1)", e.toString());
+    EXPECT_EQ (8.0, e.evaluate());
+}
+
+TEST (ExpressionTests, NegatedSymbolExposesInputAndName)
+{
+    auto e = -Expression::symbol ("x");
+
+    EXPECT_EQ (Expression::operatorType, e.getType());
+    EXPECT_EQ ("-", e.getSymbolOrFunction());
+    EXPECT_EQ (1, e.getNumInputs());
+    EXPECT_EQ ("x", e.getInput (0).toString());
+    EXPECT_EQ ("-x", e.toString());
+}
+
+TEST (ExpressionTests, NegatedOperatorUsesParenthesesInString)
+{
+    auto e = -(Expression::symbol ("x") + Expression (1.0));
+
+    EXPECT_EQ ("-(x + 1)", e.toString());
+}
+
+TEST (ExpressionTests, DoubleNegatedSymbolReturnsOriginalSymbol)
+{
+    auto e = -(-Expression::symbol ("x"));
+
+    EXPECT_EQ ("x", e.toString());
 }
 
 // ==============================================================================
@@ -491,6 +569,16 @@ TEST (ExpressionTests, ParseEmptyFunctionCall)
     Expression e ("cos()", error);
 
     EXPECT_TRUE (error.isEmpty());
+}
+
+TEST (ExpressionTests, EvaluateParameterlessFunctionWithCustomScope)
+{
+    String error;
+    Expression e ("zero()", error);
+    TestScope scope;
+
+    EXPECT_TRUE (error.isEmpty());
+    EXPECT_EQ (123.0, e.evaluate (scope));
 }
 
 // ==============================================================================
@@ -654,6 +742,20 @@ TEST (ExpressionTests, FunctionWithSymbolArguments)
 
     EXPECT_TRUE (error.isEmpty());
     EXPECT_EQ (25.0, e.evaluate (scope)); // x=5, so square(5)=25
+}
+
+TEST (ExpressionTests, AdjustedFunctionAddsOuterConstant)
+{
+    Array<Expression> params;
+    params.add (Expression (5.0));
+
+    auto e = Expression::function ("square", params);
+    TestScope scope;
+
+    auto adjusted = e.adjustedToGiveNewResult (30.0, scope);
+
+    EXPECT_EQ (30.0, adjusted.evaluate (scope));
+    EXPECT_EQ ("square (5) + 5", adjusted.toString());
 }
 
 // ==============================================================================
@@ -947,6 +1049,32 @@ TEST (ExpressionTests, AdjustedToGiveNewResultWithResolutionTarget)
     EXPECT_EQ (20.0, adjusted.evaluate (scope));
 }
 
+TEST (ExpressionTests, AdjustedToGiveNewResultThroughNestedParent)
+{
+    String error;
+    Expression e ("(x + @2) * 3", error);
+    TestScope scope;
+
+    auto adjusted = e.adjustedToGiveNewResult (30.0, scope);
+
+    EXPECT_TRUE (error.isEmpty());
+    EXPECT_EQ (30.0, adjusted.evaluate (scope));
+    EXPECT_EQ ("(x + @5) * 3", adjusted.toString());
+}
+
+TEST (ExpressionTests, AdjustedToGiveNewResultThroughNegation)
+{
+    String error;
+    Expression e ("-(x + @5)", error);
+    TestScope scope;
+
+    auto adjusted = e.adjustedToGiveNewResult (-12.0, scope);
+
+    EXPECT_TRUE (error.isEmpty());
+    EXPECT_EQ (-12.0, adjusted.evaluate (scope));
+    EXPECT_EQ ("-(x + @7)", adjusted.toString());
+}
+
 // ==============================================================================
 // Dot Operator Tests
 // ==============================================================================
@@ -987,6 +1115,79 @@ TEST (ExpressionTests, DotOperatorInComplexExpression)
 
     EXPECT_TRUE (error.isEmpty());
     EXPECT_EQ (84.0, e.evaluate (scope));
+}
+
+TEST (ExpressionTests, DotOperatorReportsOperatorName)
+{
+    String error;
+    Expression e ("inner.value", error);
+
+    EXPECT_TRUE (error.isEmpty());
+    EXPECT_EQ (".", e.getSymbolOrFunction());
+}
+
+TEST (ExpressionTests, DotOperatorFindsSymbolsInRelativeScope)
+{
+    String error;
+    Expression e ("inner.value + 1", error);
+    OuterScope scope;
+
+    Array<Expression::Symbol> symbols;
+    e.findReferencedSymbols (symbols, scope);
+
+    EXPECT_TRUE (error.isEmpty());
+    EXPECT_TRUE (symbols.contains (Expression::Symbol ("OuterScope", "inner")));
+    EXPECT_TRUE (symbols.contains (Expression::Symbol ("NestedScope", "value")));
+}
+
+TEST (ExpressionTests, DotOperatorReferencesSymbolsInRelativeScope)
+{
+    String error;
+    Expression e ("inner.value + 1", error);
+    OuterScope scope;
+
+    EXPECT_TRUE (error.isEmpty());
+    EXPECT_TRUE (e.referencesSymbol (Expression::Symbol ("OuterScope", "inner"), scope));
+    EXPECT_TRUE (e.referencesSymbol (Expression::Symbol ("NestedScope", "value"), scope));
+    EXPECT_FALSE (e.referencesSymbol (Expression::Symbol ("OuterScope", "value"), scope));
+}
+
+TEST (ExpressionTests, DotOperatorIgnoresMissingRelativeScopeWhenFindingSymbols)
+{
+    String error;
+    Expression e ("missing.value", error);
+    OuterScope scope;
+
+    Array<Expression::Symbol> symbols;
+    e.findReferencedSymbols (symbols, scope);
+
+    EXPECT_TRUE (error.isEmpty());
+    EXPECT_EQ (1, symbols.size());
+    EXPECT_TRUE (symbols.contains (Expression::Symbol ("OuterScope", "missing")));
+}
+
+TEST (ExpressionTests, DotOperatorRenamesSymbolInRelativeScope)
+{
+    String error;
+    Expression e ("inner.value", error);
+    OuterScope scope;
+
+    auto renamed = e.withRenamedSymbol (Expression::Symbol ("NestedScope", "value"), "renamed", scope);
+
+    EXPECT_TRUE (error.isEmpty());
+    EXPECT_EQ ("inner.renamed", renamed.toString());
+}
+
+TEST (ExpressionTests, DotOperatorRenamesOuterSymbolWhenRelativeScopeIsMissing)
+{
+    String error;
+    Expression e ("missing.value", error);
+    OuterScope scope;
+
+    auto renamed = e.withRenamedSymbol (Expression::Symbol ("OuterScope", "missing"), "renamed", scope);
+
+    EXPECT_TRUE (error.isEmpty());
+    EXPECT_EQ ("renamed.value", renamed.toString());
 }
 
 // ==============================================================================
@@ -1185,6 +1386,17 @@ TEST (ExpressionTests, ScopeThrowsOnUnknownRelativeScope)
 
     Expression e = Expression::symbol ("unknown");
     e.evaluate (scope, error);
+
+    EXPECT_FALSE (error.isEmpty());
+}
+
+TEST (ExpressionTests, RecursiveSymbolReferencesReturnEvaluationError)
+{
+    RecursiveScope scope;
+    String error;
+
+    auto e = Expression::symbol ("self");
+    EXPECT_EQ (0.0, e.evaluate (scope, error));
 
     EXPECT_FALSE (error.isEmpty());
 }

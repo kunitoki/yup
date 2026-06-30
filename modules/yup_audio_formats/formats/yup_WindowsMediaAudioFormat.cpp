@@ -248,7 +248,7 @@ public:
         }
 
         asyncResult->SetStatus (hr);
-        
+
         // Use MFInvokeCallback to queue the callback on a work queue thread
         if (pCallback != nullptr)
             MFInvokeCallback (asyncResult);
@@ -529,7 +529,7 @@ public:
         }
 
         asyncResult->SetStatus (hr);
-        
+
         // Use MFInvokeCallback to queue the callback on a work queue thread
         if (pCallback != nullptr)
             MFInvokeCallback (asyncResult);

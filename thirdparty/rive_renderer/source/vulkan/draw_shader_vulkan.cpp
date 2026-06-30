@@ -2,430 +2,479 @@
  * Copyright 2023 Rive
  */
 
-#include "draw_shader_vulkan.hpp"
-
-#include "rive/renderer/vulkan/vkutil.hpp"
 #include "rive/renderer/vulkan/vulkan_context.hpp"
-#include "shaders/constants.glsl"
+#include "draw_shader_vulkan.hpp"
+#include "vulkan_shaders.hpp"
 
 namespace rive::gpu
 {
-namespace spirv_embedded
-{
-// Draw setup shaders.
-#include "generated/shaders/spirv/color_ramp.vert.h"
-#include "generated/shaders/spirv/color_ramp.frag.h"
-#include "generated/shaders/spirv/tessellate.vert.h"
-#include "generated/shaders/spirv/tessellate.frag.h"
-#include "generated/shaders/spirv/render_atlas.vert.h"
-#include "generated/shaders/spirv/render_atlas_fill.frag.h"
-#include "generated/shaders/spirv/render_atlas_stroke.frag.h"
-
-// InterlockMode::rasterOrdering shaders.
-#include "generated/shaders/spirv/draw_path.vert.h"
-#include "generated/shaders/spirv/draw_path.frag.h"
-#include "generated/shaders/spirv/draw_interior_triangles.vert.h"
-#include "generated/shaders/spirv/draw_interior_triangles.frag.h"
-#include "generated/shaders/spirv/draw_atlas_blit.vert.h"
-#include "generated/shaders/spirv/draw_atlas_blit.frag.h"
-#include "generated/shaders/spirv/draw_image_mesh.vert.h"
-#include "generated/shaders/spirv/draw_image_mesh.frag.h"
-
-// InterlockMode::atomics shaders.
-#include "generated/shaders/spirv/atomic_draw_path.vert.h"
-#include "generated/shaders/spirv/atomic_draw_path.frag.h"
-#include "generated/shaders/spirv/atomic_draw_path.fixedcolor_frag.h"
-#include "generated/shaders/spirv/atomic_draw_interior_triangles.vert.h"
-#include "generated/shaders/spirv/atomic_draw_interior_triangles.frag.h"
-#include "generated/shaders/spirv/atomic_draw_interior_triangles.fixedcolor_frag.h"
-#include "generated/shaders/spirv/atomic_draw_atlas_blit.vert.h"
-#include "generated/shaders/spirv/atomic_draw_atlas_blit.frag.h"
-#include "generated/shaders/spirv/atomic_draw_atlas_blit.fixedcolor_frag.h"
-#include "generated/shaders/spirv/atomic_draw_image_rect.vert.h"
-#include "generated/shaders/spirv/atomic_draw_image_rect.frag.h"
-#include "generated/shaders/spirv/atomic_draw_image_rect.fixedcolor_frag.h"
-#include "generated/shaders/spirv/atomic_draw_image_mesh.vert.h"
-#include "generated/shaders/spirv/atomic_draw_image_mesh.frag.h"
-#include "generated/shaders/spirv/atomic_draw_image_mesh.fixedcolor_frag.h"
-#include "generated/shaders/spirv/atomic_resolve.vert.h"
-#include "generated/shaders/spirv/atomic_resolve.frag.h"
-#include "generated/shaders/spirv/atomic_resolve.fixedcolor_frag.h"
-#include "generated/shaders/spirv/atomic_resolve_coalesced.vert.h"
-#include "generated/shaders/spirv/atomic_resolve_coalesced.frag.h"
-
-// InterlockMode::clockwiseAtomic shaders.
-#include "generated/shaders/spirv/draw_clockwise_path.vert.h"
-#include "generated/shaders/spirv/draw_clockwise_path.frag.h"
-#include "generated/shaders/spirv/draw_clockwise_interior_triangles.vert.h"
-#include "generated/shaders/spirv/draw_clockwise_interior_triangles.frag.h"
-#include "generated/shaders/spirv/draw_clockwise_atlas_blit.vert.h"
-#include "generated/shaders/spirv/draw_clockwise_atlas_blit.frag.h"
-#include "generated/shaders/spirv/draw_clockwise_image_mesh.vert.h"
-#include "generated/shaders/spirv/draw_clockwise_image_mesh.frag.h"
-}; // namespace spirv_embedded
-
-namespace spirv
-{
-rive::Span<const uint32_t> color_ramp_vert =
-    rive::make_span(spirv_embedded::color_ramp_vert);
-rive::Span<const uint32_t> color_ramp_frag =
-    rive::make_span(spirv_embedded::color_ramp_frag);
-rive::Span<const uint32_t> tessellate_vert =
-    rive::make_span(spirv_embedded::tessellate_vert);
-rive::Span<const uint32_t> tessellate_frag =
-    rive::make_span(spirv_embedded::tessellate_frag);
-rive::Span<const uint32_t> render_atlas_vert =
-    rive::make_span(spirv_embedded::render_atlas_vert);
-rive::Span<const uint32_t> render_atlas_fill_frag =
-    rive::make_span(spirv_embedded::render_atlas_fill_frag);
-rive::Span<const uint32_t> render_atlas_stroke_frag =
-    rive::make_span(spirv_embedded::render_atlas_stroke_frag);
-rive::Span<const uint32_t> draw_path_vert =
-    rive::make_span(spirv_embedded::draw_path_vert);
-rive::Span<const uint32_t> draw_path_frag =
-    rive::make_span(spirv_embedded::draw_path_frag);
-rive::Span<const uint32_t> draw_interior_triangles_vert =
-    rive::make_span(spirv_embedded::draw_interior_triangles_vert);
-rive::Span<const uint32_t> draw_interior_triangles_frag =
-    rive::make_span(spirv_embedded::draw_interior_triangles_frag);
-rive::Span<const uint32_t> draw_atlas_blit_vert =
-    rive::make_span(spirv_embedded::draw_atlas_blit_vert);
-rive::Span<const uint32_t> draw_atlas_blit_frag =
-    rive::make_span(spirv_embedded::draw_atlas_blit_frag);
-rive::Span<const uint32_t> draw_image_mesh_vert =
-    rive::make_span(spirv_embedded::draw_image_mesh_vert);
-rive::Span<const uint32_t> draw_image_mesh_frag =
-    rive::make_span(spirv_embedded::draw_image_mesh_frag);
-rive::Span<const uint32_t> atomic_draw_path_vert =
-    rive::make_span(spirv_embedded::atomic_draw_path_vert);
-rive::Span<const uint32_t> atomic_draw_path_frag =
-    rive::make_span(spirv_embedded::atomic_draw_path_frag);
-rive::Span<const uint32_t> atomic_draw_path_fixedcolor_frag = rive::make_span(
-    spirv_embedded::atomic_draw_path_fixedcolor_frag,
-    std::size(spirv_embedded::atomic_draw_path_fixedcolor_frag));
-rive::Span<const uint32_t> atomic_draw_interior_triangles_vert =
-    rive::make_span(spirv_embedded::atomic_draw_interior_triangles_vert);
-rive::Span<const uint32_t> atomic_draw_interior_triangles_frag =
-    rive::make_span(spirv_embedded::atomic_draw_interior_triangles_frag);
-rive::Span<const uint32_t> atomic_draw_interior_triangles_fixedcolor_frag =
-    rive::make_span(
-        spirv_embedded::atomic_draw_interior_triangles_fixedcolor_frag);
-rive::Span<const uint32_t> atomic_draw_atlas_blit_vert =
-    rive::make_span(spirv_embedded::atomic_draw_atlas_blit_vert);
-rive::Span<const uint32_t> atomic_draw_atlas_blit_frag =
-    rive::make_span(spirv_embedded::atomic_draw_atlas_blit_frag);
-rive::Span<const uint32_t> atomic_draw_atlas_blit_fixedcolor_frag =
-    rive::make_span(spirv_embedded::atomic_draw_atlas_blit_fixedcolor_frag);
-rive::Span<const uint32_t> atomic_draw_image_rect_vert =
-    rive::make_span(spirv_embedded::atomic_draw_image_rect_vert);
-rive::Span<const uint32_t> atomic_draw_image_rect_frag =
-    rive::make_span(spirv_embedded::atomic_draw_image_rect_frag);
-rive::Span<const uint32_t> atomic_draw_image_rect_fixedcolor_frag =
-    rive::make_span(spirv_embedded::atomic_draw_image_rect_fixedcolor_frag);
-rive::Span<const uint32_t> atomic_draw_image_mesh_vert =
-    rive::make_span(spirv_embedded::atomic_draw_image_mesh_vert);
-rive::Span<const uint32_t> atomic_draw_image_mesh_frag =
-    rive::make_span(spirv_embedded::atomic_draw_image_mesh_frag);
-rive::Span<const uint32_t> atomic_draw_image_mesh_fixedcolor_frag =
-    rive::make_span(spirv_embedded::atomic_draw_image_mesh_fixedcolor_frag);
-rive::Span<const uint32_t> atomic_resolve_vert =
-    rive::make_span(spirv_embedded::atomic_resolve_vert);
-rive::Span<const uint32_t> atomic_resolve_frag =
-    rive::make_span(spirv_embedded::atomic_resolve_frag);
-rive::Span<const uint32_t> atomic_resolve_fixedcolor_frag =
-    rive::make_span(spirv_embedded::atomic_resolve_fixedcolor_frag,
-                    std::size(spirv_embedded::atomic_resolve_fixedcolor_frag));
-rive::Span<const uint32_t> atomic_resolve_coalesced_vert =
-    rive::make_span(spirv_embedded::atomic_resolve_coalesced_vert);
-rive::Span<const uint32_t> atomic_resolve_coalesced_frag =
-    rive::make_span(spirv_embedded::atomic_resolve_coalesced_frag);
-rive::Span<const uint32_t> draw_clockwise_path_vert =
-    rive::make_span(spirv_embedded::draw_clockwise_path_vert);
-rive::Span<const uint32_t> draw_clockwise_path_frag =
-    rive::make_span(spirv_embedded::draw_clockwise_path_frag);
-rive::Span<const uint32_t> draw_clockwise_interior_triangles_vert =
-    rive::make_span(spirv_embedded::draw_clockwise_interior_triangles_vert);
-rive::Span<const uint32_t> draw_clockwise_interior_triangles_frag =
-    rive::make_span(spirv_embedded::draw_clockwise_interior_triangles_frag);
-rive::Span<const uint32_t> draw_clockwise_atlas_blit_vert =
-    rive::make_span(spirv_embedded::draw_clockwise_atlas_blit_vert);
-rive::Span<const uint32_t> draw_clockwise_atlas_blit_frag =
-    rive::make_span(spirv_embedded::draw_clockwise_atlas_blit_frag);
-rive::Span<const uint32_t> draw_clockwise_image_mesh_vert =
-    rive::make_span(spirv_embedded::draw_clockwise_image_mesh_vert);
-rive::Span<const uint32_t> draw_clockwise_image_mesh_frag =
-    rive::make_span(spirv_embedded::draw_clockwise_image_mesh_frag);
-
-void hotload_shaders(rive::Span<const uint32_t> spirvData)
-{
-    size_t spirvIndex = 0;
-    auto readNextBytecodeSpan = [spirvData,
-                                 &spirvIndex]() -> rive::Span<const uint32_t> {
-        size_t insnCount = spirvData[spirvIndex++];
-        const uint32_t* insnData = spirvData.data() + spirvIndex;
-        spirvIndex += insnCount;
-        return rive::make_span(insnData, insnCount);
-    };
-
-    spirv::color_ramp_vert = readNextBytecodeSpan();
-    spirv::color_ramp_frag = readNextBytecodeSpan();
-    spirv::tessellate_vert = readNextBytecodeSpan();
-    spirv::tessellate_frag = readNextBytecodeSpan();
-    spirv::render_atlas_vert = readNextBytecodeSpan();
-    spirv::render_atlas_fill_frag = readNextBytecodeSpan();
-    spirv::render_atlas_stroke_frag = readNextBytecodeSpan();
-    spirv::draw_path_vert = readNextBytecodeSpan();
-    spirv::draw_path_frag = readNextBytecodeSpan();
-    spirv::draw_interior_triangles_vert = readNextBytecodeSpan();
-    spirv::draw_interior_triangles_frag = readNextBytecodeSpan();
-    spirv::draw_atlas_blit_vert = readNextBytecodeSpan();
-    spirv::draw_atlas_blit_frag = readNextBytecodeSpan();
-    spirv::draw_image_mesh_vert = readNextBytecodeSpan();
-    spirv::draw_image_mesh_frag = readNextBytecodeSpan();
-    spirv::atomic_draw_path_vert = readNextBytecodeSpan();
-    spirv::atomic_draw_path_frag = readNextBytecodeSpan();
-    spirv::atomic_draw_path_fixedcolor_frag = readNextBytecodeSpan();
-    spirv::atomic_draw_interior_triangles_vert = readNextBytecodeSpan();
-    spirv::atomic_draw_interior_triangles_frag = readNextBytecodeSpan();
-    spirv::atomic_draw_interior_triangles_fixedcolor_frag =
-        readNextBytecodeSpan();
-    spirv::atomic_draw_atlas_blit_vert = readNextBytecodeSpan();
-    spirv::atomic_draw_atlas_blit_frag = readNextBytecodeSpan();
-    spirv::atomic_draw_atlas_blit_fixedcolor_frag = readNextBytecodeSpan();
-    spirv::atomic_draw_image_rect_vert = readNextBytecodeSpan();
-    spirv::atomic_draw_image_rect_frag = readNextBytecodeSpan();
-    spirv::atomic_draw_image_rect_fixedcolor_frag = readNextBytecodeSpan();
-    spirv::atomic_draw_image_mesh_vert = readNextBytecodeSpan();
-    spirv::atomic_draw_image_mesh_frag = readNextBytecodeSpan();
-    spirv::atomic_draw_image_mesh_fixedcolor_frag = readNextBytecodeSpan();
-    spirv::atomic_resolve_vert = readNextBytecodeSpan();
-    spirv::atomic_resolve_frag = readNextBytecodeSpan();
-    spirv::atomic_resolve_fixedcolor_frag = readNextBytecodeSpan();
-    spirv::atomic_resolve_coalesced_vert = readNextBytecodeSpan();
-    spirv::atomic_resolve_coalesced_frag = readNextBytecodeSpan();
-    spirv::draw_clockwise_path_vert = readNextBytecodeSpan();
-    spirv::draw_clockwise_path_frag = readNextBytecodeSpan();
-    spirv::draw_clockwise_interior_triangles_vert = readNextBytecodeSpan();
-    spirv::draw_clockwise_interior_triangles_frag = readNextBytecodeSpan();
-    spirv::draw_clockwise_atlas_blit_vert = readNextBytecodeSpan();
-    spirv::draw_clockwise_atlas_blit_frag = readNextBytecodeSpan();
-    spirv::draw_clockwise_image_mesh_vert = readNextBytecodeSpan();
-    spirv::draw_clockwise_image_mesh_frag = readNextBytecodeSpan();
-}
-}; // namespace spirv
-
-DrawShaderVulkan::DrawShaderVulkan(VulkanContext* vk,
-                                   gpu::DrawType drawType,
-                                   gpu::InterlockMode interlockMode,
-                                   gpu::ShaderFeatures shaderFeatures,
-                                   gpu::ShaderMiscFlags shaderMiscFlags) :
+DrawShaderVulkan::DrawShaderVulkan(Type type,
+                                   VulkanContext* vk,
+                                   DrawType drawType,
+                                   ShaderFeatures shaderFeatures,
+                                   InterlockMode interlockMode,
+                                   ShaderMiscFlags shaderMiscFlags) :
     m_vk(ref_rcp(vk))
 {
-    VkShaderModuleCreateInfo vsInfo = {
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-    VkShaderModuleCreateInfo fsInfo = {
+    VkShaderModuleCreateInfo createInfo = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
 
-    if (interlockMode == gpu::InterlockMode::rasterOrdering)
+    const bool fixedFunctionColorOutput =
+        enums::is_flag_set(shaderMiscFlags,
+                           gpu::ShaderMiscFlags::fixedFunctionColorOutput);
+
+    if (type == Type::fragment && interlockMode == InterlockMode::msaa &&
+        drawType != DrawType::renderPassInitialize &&
+        drawType != DrawType::renderPassResolve)
     {
-        switch (drawType)
-        {
-            case DrawType::midpointFanPatches:
-            case DrawType::midpointFanCenterAAPatches:
-            case DrawType::outerCurvePatches:
-                vkutil::set_shader_code(vsInfo, spirv::draw_path_vert);
-                vkutil::set_shader_code(fsInfo, spirv::draw_path_frag);
-                break;
-
-            case DrawType::interiorTriangulation:
-                vkutil::set_shader_code(vsInfo,
-                                        spirv::draw_interior_triangles_vert);
-                vkutil::set_shader_code(fsInfo,
-                                        spirv::draw_interior_triangles_frag);
-                break;
-
-            case DrawType::atlasBlit:
-                vkutil::set_shader_code(vsInfo, spirv::draw_atlas_blit_vert);
-                vkutil::set_shader_code(fsInfo, spirv::draw_atlas_blit_frag);
-                break;
-
-            case DrawType::imageMesh:
-                vkutil::set_shader_code(vsInfo, spirv::draw_image_mesh_vert);
-                vkutil::set_shader_code(fsInfo, spirv::draw_image_mesh_frag);
-                break;
-
-            case DrawType::imageRect:
-            case DrawType::atomicResolve:
-            case DrawType::atomicInitialize:
-            case DrawType::msaaStrokes:
-            case DrawType::msaaMidpointFanBorrowedCoverage:
-            case DrawType::msaaMidpointFans:
-            case DrawType::msaaMidpointFanStencilReset:
-            case DrawType::msaaMidpointFanPathsStencil:
-            case DrawType::msaaMidpointFanPathsCover:
-            case DrawType::msaaOuterCubics:
-            case DrawType::msaaStencilClipReset:
-                RIVE_UNREACHABLE();
-        }
-    }
-    else if (interlockMode == gpu::InterlockMode::atomics)
-    {
-        assert(interlockMode == gpu::InterlockMode::atomics);
-        bool fixedFunctionColorOutput =
-            shaderMiscFlags & gpu::ShaderMiscFlags::fixedFunctionColorOutput;
-        switch (drawType)
-        {
-            case DrawType::midpointFanPatches:
-            case DrawType::midpointFanCenterAAPatches:
-            case DrawType::outerCurvePatches:
-                vkutil::set_shader_code(vsInfo, spirv::atomic_draw_path_vert);
-                vkutil::set_shader_code_if_then_else(
-                    fsInfo,
-                    fixedFunctionColorOutput,
-                    spirv::atomic_draw_path_fixedcolor_frag,
-                    spirv::atomic_draw_path_frag);
-                break;
-
-            case DrawType::interiorTriangulation:
-                vkutil::set_shader_code(
-                    vsInfo,
-                    spirv::atomic_draw_interior_triangles_vert);
-                vkutil::set_shader_code_if_then_else(
-                    fsInfo,
-                    fixedFunctionColorOutput,
-                    spirv::atomic_draw_interior_triangles_fixedcolor_frag,
-                    spirv::atomic_draw_interior_triangles_frag);
-                break;
-
-            case DrawType::atlasBlit:
-                vkutil::set_shader_code(vsInfo,
-                                        spirv::atomic_draw_atlas_blit_vert);
-                vkutil::set_shader_code_if_then_else(
-                    fsInfo,
-                    fixedFunctionColorOutput,
-                    spirv::atomic_draw_atlas_blit_fixedcolor_frag,
-                    spirv::atomic_draw_atlas_blit_frag);
-                break;
-
-            case DrawType::imageRect:
-                vkutil::set_shader_code(vsInfo,
-                                        spirv::atomic_draw_image_rect_vert);
-                vkutil::set_shader_code_if_then_else(
-                    fsInfo,
-                    fixedFunctionColorOutput,
-                    spirv::atomic_draw_image_rect_fixedcolor_frag,
-                    spirv::atomic_draw_image_rect_frag);
-                break;
-
-            case DrawType::imageMesh:
-                vkutil::set_shader_code(vsInfo,
-                                        spirv::atomic_draw_image_mesh_vert);
-                vkutil::set_shader_code_if_then_else(
-                    fsInfo,
-                    fixedFunctionColorOutput,
-                    spirv::atomic_draw_image_mesh_fixedcolor_frag,
-                    spirv::atomic_draw_image_mesh_frag);
-                break;
-
-            case DrawType::atomicResolve:
-                if (shaderMiscFlags &
-                    gpu::ShaderMiscFlags::coalescedResolveAndTransfer)
-                {
-                    vkutil::set_shader_code(
-                        vsInfo,
-                        spirv::atomic_resolve_coalesced_vert);
-                    vkutil::set_shader_code(
-                        fsInfo,
-                        spirv::atomic_resolve_coalesced_frag);
-                }
-                else
-                {
-                    vkutil::set_shader_code(vsInfo, spirv::atomic_resolve_vert);
-                    vkutil::set_shader_code_if_then_else(
-                        fsInfo,
-                        fixedFunctionColorOutput,
-                        spirv::atomic_resolve_fixedcolor_frag,
-                        spirv::atomic_resolve_frag);
-                }
-                break;
-
-            case DrawType::atomicInitialize:
-            case DrawType::msaaStrokes:
-            case DrawType::msaaMidpointFanBorrowedCoverage:
-            case DrawType::msaaMidpointFans:
-            case DrawType::msaaMidpointFanStencilReset:
-            case DrawType::msaaMidpointFanPathsStencil:
-            case DrawType::msaaMidpointFanPathsCover:
-            case DrawType::msaaOuterCubics:
-            case DrawType::msaaStencilClipReset:
-                RIVE_UNREACHABLE();
-        }
-    }
-    else
-    {
-        assert(interlockMode == gpu::InterlockMode::clockwiseAtomic);
-        switch (drawType)
-        {
-            case DrawType::midpointFanPatches:
-            case DrawType::midpointFanCenterAAPatches:
-            case DrawType::outerCurvePatches:
-                vkutil::set_shader_code(vsInfo,
-                                        spirv::draw_clockwise_path_vert);
-                vkutil::set_shader_code(fsInfo,
-                                        spirv::draw_clockwise_path_frag);
-                break;
-
-            case DrawType::interiorTriangulation:
-                vkutil::set_shader_code(
-                    vsInfo,
-                    spirv::draw_clockwise_interior_triangles_vert);
-                vkutil::set_shader_code(
-                    fsInfo,
-                    spirv::draw_clockwise_interior_triangles_frag);
-                break;
-
-            case DrawType::atlasBlit:
-                vkutil::set_shader_code(vsInfo,
-                                        spirv::draw_clockwise_atlas_blit_vert);
-                vkutil::set_shader_code(fsInfo,
-                                        spirv::draw_clockwise_atlas_blit_frag);
-                break;
-
-            case DrawType::imageMesh:
-                vkutil::set_shader_code(vsInfo,
-                                        spirv::draw_clockwise_image_mesh_vert);
-                vkutil::set_shader_code(fsInfo,
-                                        spirv::draw_clockwise_image_mesh_frag);
-                break;
-
-            case DrawType::imageRect:
-            case DrawType::atomicResolve:
-            case DrawType::atomicInitialize:
-            case DrawType::msaaStrokes:
-            case DrawType::msaaMidpointFanBorrowedCoverage:
-            case DrawType::msaaMidpointFans:
-            case DrawType::msaaMidpointFanStencilReset:
-            case DrawType::msaaMidpointFanPathsStencil:
-            case DrawType::msaaMidpointFanPathsCover:
-            case DrawType::msaaOuterCubics:
-            case DrawType::msaaStencilClipReset:
-                RIVE_UNREACHABLE();
-        }
+        // Fixed function color output and advanced blend are mutually exclusive
+        // and one of them should always be set in msaa mode.
+        assert(fixedFunctionColorOutput !=
+               bool(shaderFeatures & ShaderFeatures::ENABLE_ADVANCED_BLEND));
     }
 
-    VK_CHECK(m_vk->CreateShaderModule(m_vk->device,
-                                      &vsInfo,
-                                      nullptr,
-                                      &m_vertexModule));
-    VK_CHECK(m_vk->CreateShaderModule(m_vk->device,
-                                      &fsInfo,
-                                      nullptr,
-                                      &m_fragmentModule));
+    Span<const uint32_t> vertCode;
+    Span<const uint32_t> fragCode;
+
+    switch (interlockMode)
+    {
+        case gpu::InterlockMode::rasterOrdering:
+        {
+            switch (drawType)
+            {
+                case DrawType::midpointFanPatches:
+                case DrawType::midpointFanCenterAAPatches:
+                case DrawType::outerCurvePatches:
+                    vertCode = spirv::draw_path_vert;
+                    fragCode = spirv::draw_path_frag;
+                    break;
+
+                case DrawType::interiorTriangulation:
+                    vertCode = spirv::draw_interior_triangles_vert;
+                    fragCode = spirv::draw_interior_triangles_frag;
+                    break;
+
+                case DrawType::atlasBlit:
+                    vertCode = spirv::draw_atlas_blit_vert;
+                    fragCode = spirv::draw_atlas_blit_frag;
+                    break;
+
+                case DrawType::imageMesh:
+                    vertCode = spirv::draw_image_mesh_vert;
+                    fragCode = spirv::draw_image_mesh_frag;
+                    break;
+
+                case DrawType::renderPassResolve:
+                    vertCode = spirv::draw_fullscreen_quad_vert;
+                    fragCode = spirv::draw_input_attachment_frag;
+                    break;
+
+                case DrawType::imageRect:
+                case DrawType::msaaStrokes:
+                case DrawType::msaaMidpointFanBorrowedCoverage:
+                case DrawType::msaaMidpointFans:
+                case DrawType::msaaMidpointFanStencilReset:
+                case DrawType::msaaMidpointFanPathsStencil:
+                case DrawType::msaaMidpointFanPathsCover:
+                case DrawType::msaaOuterCubics:
+                case DrawType::clipReset:
+                case DrawType::renderPassInitialize:
+                    RIVE_UNREACHABLE();
+            }
+            break;
+        }
+
+        case gpu::InterlockMode::atomics:
+        {
+            switch (drawType)
+            {
+                case DrawType::midpointFanPatches:
+                case DrawType::midpointFanCenterAAPatches:
+                case DrawType::outerCurvePatches:
+                    vertCode = spirv::atomic_draw_path_vert;
+                    fragCode = fixedFunctionColorOutput
+                                   ? spirv::atomic_draw_path_fixedcolor_frag
+                                   : spirv::atomic_draw_path_frag;
+                    break;
+
+                case DrawType::interiorTriangulation:
+                    vertCode = spirv::atomic_draw_interior_triangles_vert;
+                    fragCode =
+                        fixedFunctionColorOutput
+                            ? spirv::
+                                  atomic_draw_interior_triangles_fixedcolor_frag
+                            : spirv::atomic_draw_interior_triangles_frag;
+                    break;
+
+                case DrawType::atlasBlit:
+                    vertCode = spirv::atomic_draw_atlas_blit_vert;
+                    fragCode =
+                        fixedFunctionColorOutput
+                            ? spirv::atomic_draw_atlas_blit_fixedcolor_frag
+                            : spirv::atomic_draw_atlas_blit_frag;
+                    break;
+
+                case DrawType::imageRect:
+                    vertCode = spirv::atomic_draw_image_rect_vert;
+                    fragCode =
+                        fixedFunctionColorOutput
+                            ? spirv::atomic_draw_image_rect_fixedcolor_frag
+                            : spirv::atomic_draw_image_rect_frag;
+                    break;
+
+                case DrawType::imageMesh:
+                    vertCode = spirv::atomic_draw_image_mesh_vert;
+                    fragCode =
+                        fixedFunctionColorOutput
+                            ? spirv::atomic_draw_image_mesh_fixedcolor_frag
+                            : spirv::atomic_draw_image_mesh_frag;
+                    break;
+
+                case DrawType::renderPassResolve:
+                    if (enums::is_flag_set(
+                            shaderMiscFlags,
+                            gpu::ShaderMiscFlags::coalescedResolveAndTransfer))
+                    {
+                        vertCode = spirv::atomic_resolve_coalesced_vert;
+                        fragCode = spirv::atomic_resolve_coalesced_frag;
+                    }
+                    else
+                    {
+                        vertCode = spirv::atomic_resolve_vert;
+                        fragCode = fixedFunctionColorOutput
+                                       ? spirv::atomic_resolve_fixedcolor_frag
+                                       : spirv::atomic_resolve_frag;
+                    }
+                    break;
+
+                case DrawType::msaaStrokes:
+                case DrawType::msaaMidpointFanBorrowedCoverage:
+                case DrawType::msaaMidpointFans:
+                case DrawType::msaaMidpointFanStencilReset:
+                case DrawType::msaaMidpointFanPathsStencil:
+                case DrawType::msaaMidpointFanPathsCover:
+                case DrawType::msaaOuterCubics:
+                case DrawType::clipReset:
+                case DrawType::renderPassInitialize:
+                    RIVE_UNREACHABLE();
+            }
+            break;
+        }
+
+        case gpu::InterlockMode::clockwise:
+        {
+#ifndef RIVE_ANDROID
+            switch (drawType)
+            {
+                case DrawType::midpointFanPatches:
+                case DrawType::midpointFanCenterAAPatches:
+                case DrawType::outerCurvePatches:
+                    vertCode = spirv::draw_clockwise_path_vert;
+                    fragCode =
+                        enums::is_flag_set(shaderMiscFlags,
+                                           gpu::ShaderMiscFlags::clipUpdateOnly)
+                            ? fixedFunctionColorOutput
+                                  ? spirv::draw_clockwise_clip_fixedcolor_frag
+                                  : spirv::draw_clockwise_clip_frag
+                        : fixedFunctionColorOutput
+                            ? spirv::draw_clockwise_path_fixedcolor_frag
+                            : spirv::draw_clockwise_path_frag;
+                    break;
+
+                case DrawType::interiorTriangulation:
+                    vertCode = spirv::draw_clockwise_interior_triangles_vert;
+                    fragCode =
+                        enums::is_flag_set(shaderMiscFlags,
+                                           gpu::ShaderMiscFlags::clipUpdateOnly)
+                            ? fixedFunctionColorOutput
+                                  ? spirv::
+                                        draw_clockwise_clip_interior_triangles_fixedcolor_frag
+
+                                  : spirv::
+                                        draw_clockwise_clip_interior_triangles_frag
+                        : fixedFunctionColorOutput
+                            ? spirv::
+                                  draw_clockwise_interior_triangles_fixedcolor_frag
+                            : spirv::draw_clockwise_interior_triangles_frag;
+                    break;
+
+                case DrawType::atlasBlit:
+                    vertCode = spirv::draw_clockwise_atlas_blit_vert;
+                    fragCode =
+                        fixedFunctionColorOutput
+                            ? spirv::draw_clockwise_atlas_blit_fixedcolor_frag
+                            : spirv::draw_clockwise_atlas_blit_frag;
+                    break;
+
+                case DrawType::imageMesh:
+                    vertCode = spirv::draw_clockwise_image_mesh_vert;
+                    fragCode =
+                        fixedFunctionColorOutput
+                            ? spirv::draw_clockwise_image_mesh_fixedcolor_frag
+                            : spirv::draw_clockwise_image_mesh_frag;
+                    break;
+
+                case DrawType::imageRect:
+                case DrawType::msaaStrokes:
+                case DrawType::msaaMidpointFanBorrowedCoverage:
+                case DrawType::msaaMidpointFans:
+                case DrawType::msaaMidpointFanStencilReset:
+                case DrawType::msaaMidpointFanPathsStencil:
+                case DrawType::msaaMidpointFanPathsCover:
+                case DrawType::msaaOuterCubics:
+                case DrawType::clipReset:
+                case DrawType::renderPassResolve:
+                case DrawType::renderPassInitialize:
+                    RIVE_UNREACHABLE();
+            }
+            break;
+#else
+            RIVE_UNREACHABLE();
+#endif
+        }
+
+        case gpu::InterlockMode::clockwiseAtomic:
+        {
+            // Since advanced blend is done via input attachments in
+            // clockwiseAtomic mode, we can swap out the "_fixedcolor" shader
+            // variants on a per-draw basis instead of per render pass.
+            const bool drawUsesAdvancedBlend =
+                enums::is_flag_set(shaderFeatures,
+                                   gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND);
+            switch (drawType)
+            {
+                case DrawType::midpointFanPatches:
+                case DrawType::midpointFanCenterAAPatches:
+                case DrawType::outerCurvePatches:
+                    vertCode = spirv::draw_clockwise_atomic_path_vert;
+                    if (enums::is_flag_set(
+                            shaderMiscFlags,
+                            gpu::ShaderMiscFlags::borrowedCoveragePass))
+                    {
+                        assert(fixedFunctionColorOutput);
+                        assert(!enums::any_flag_set(
+                            shaderMiscFlags,
+                            gpu::ShaderMiscFlags::clipUpdateOnly |
+                                gpu::ShaderMiscFlags::nestedClipUpdateOnly));
+                        assert(!drawUsesAdvancedBlend);
+                        fragCode =
+                            spirv::draw_clockwise_atomic_borrowed_coverage_frag;
+                    }
+                    else if (enums::any_flag_set(
+                                 shaderMiscFlags,
+                                 gpu::ShaderMiscFlags::clipUpdateOnly |
+                                     gpu::ShaderMiscFlags::
+                                         nestedClipUpdateOnly))
+                    {
+                        fragCode =
+                            !drawUsesAdvancedBlend
+                                ? spirv::
+                                      draw_clockwise_atomic_clip_fixedcolor_frag
+                                : spirv::draw_clockwise_atomic_clip_frag;
+                    }
+                    else
+                    {
+                        fragCode =
+                            !drawUsesAdvancedBlend
+                                ? spirv::
+                                      draw_clockwise_atomic_path_fixedcolor_frag
+                                : spirv::draw_clockwise_atomic_path_frag;
+                    }
+                    break;
+
+                case DrawType::interiorTriangulation:
+                    vertCode =
+                        spirv::draw_clockwise_atomic_interior_triangles_vert;
+                    if (enums::is_flag_set(
+                            shaderMiscFlags,
+                            gpu::ShaderMiscFlags::borrowedCoveragePass))
+                    {
+                        assert(fixedFunctionColorOutput);
+                        assert(!enums::any_flag_set(
+                            shaderMiscFlags,
+                            gpu::ShaderMiscFlags::clipUpdateOnly |
+                                gpu::ShaderMiscFlags::nestedClipUpdateOnly));
+                        assert(!drawUsesAdvancedBlend);
+                        fragCode = spirv::
+                            draw_clockwise_atomic_borrowed_coverage_interior_triangles_frag;
+                    }
+                    else if (enums::any_flag_set(
+                                 shaderMiscFlags,
+                                 gpu::ShaderMiscFlags::clipUpdateOnly |
+                                     gpu::ShaderMiscFlags::
+                                         nestedClipUpdateOnly))
+                    {
+                        fragCode =
+                            !drawUsesAdvancedBlend
+                                ? spirv::
+                                      draw_clockwise_atomic_clip_interior_triangles_fixedcolor_frag
+                                : spirv::
+                                      draw_clockwise_atomic_clip_interior_triangles_frag;
+                    }
+                    else
+                    {
+                        fragCode =
+                            !drawUsesAdvancedBlend
+                                ? spirv::
+                                      draw_clockwise_atomic_interior_triangles_fixedcolor_frag
+                                : spirv::
+                                      draw_clockwise_atomic_interior_triangles_frag;
+                    }
+                    break;
+
+                case DrawType::atlasBlit:
+                    vertCode = spirv::draw_clockwise_atomic_atlas_blit_vert;
+                    fragCode =
+                        !drawUsesAdvancedBlend
+                            ? spirv::
+                                  draw_clockwise_atomic_atlas_blit_fixedcolor_frag
+                            : spirv::draw_clockwise_atomic_atlas_blit_frag;
+                    break;
+
+                case DrawType::imageMesh:
+                    vertCode = spirv::draw_clockwise_atomic_image_mesh_vert;
+                    fragCode =
+                        !drawUsesAdvancedBlend
+                            ? spirv::
+                                  draw_clockwise_atomic_image_mesh_fixedcolor_frag
+                            : spirv::draw_clockwise_atomic_image_mesh_frag;
+                    break;
+
+                case DrawType::clipReset:
+                    vertCode = spirv::clear_clockwise_atomic_clip_vert;
+                    fragCode =
+                        !drawUsesAdvancedBlend
+                            ? spirv::clear_clockwise_atomic_clip_fixedcolor_frag
+                            : spirv::clear_clockwise_atomic_clip_frag;
+                    break;
+
+                case DrawType::renderPassInitialize:
+                    vertCode = spirv::draw_fullscreen_quad_vert;
+                    fragCode =
+                        fixedFunctionColorOutput
+                            ? spirv::
+                                  init_clockwise_atomic_workaround_fixedcolor_frag
+                            : spirv::init_clockwise_atomic_workaround_frag;
+                    break;
+
+                case DrawType::imageRect:
+                case DrawType::msaaStrokes:
+                case DrawType::msaaMidpointFanBorrowedCoverage:
+                case DrawType::msaaMidpointFans:
+                case DrawType::msaaMidpointFanStencilReset:
+                case DrawType::msaaMidpointFanPathsStencil:
+                case DrawType::msaaMidpointFanPathsCover:
+                case DrawType::msaaOuterCubics:
+                case DrawType::renderPassResolve:
+                    RIVE_UNREACHABLE();
+            }
+            break;
+        }
+
+        case gpu::InterlockMode::msaa:
+        {
+            switch (drawType)
+            {
+                case DrawType::midpointFanPatches:
+                case DrawType::midpointFanCenterAAPatches:
+                case DrawType::outerCurvePatches:
+                    RIVE_UNREACHABLE();
+
+                case DrawType::msaaOuterCubics:
+                case DrawType::msaaStrokes:
+                case DrawType::msaaMidpointFanBorrowedCoverage:
+                case DrawType::msaaMidpointFans:
+                case DrawType::msaaMidpointFanStencilReset:
+                case DrawType::msaaMidpointFanPathsStencil:
+                case DrawType::msaaMidpointFanPathsCover:
+                    vertCode =
+                        enums::is_flag_set(shaderFeatures,
+                                           ShaderFeatures::ENABLE_CLIP_RECT)
+                            ? spirv::draw_msaa_path_vert
+                            : spirv::draw_msaa_path_noclipdistance_vert;
+                    fragCode = fixedFunctionColorOutput
+                                   ? spirv::draw_msaa_path_fixedcolor_frag
+                                   : spirv::draw_msaa_path_frag;
+                    break;
+
+                case DrawType::clipReset:
+                    vertCode = spirv::draw_msaa_stencil_vert;
+                    fragCode = spirv::draw_msaa_stencil_frag;
+                    break;
+
+                case DrawType::interiorTriangulation:
+                    // Interior triangulation is not yet implemented for MSAA.
+                    RIVE_UNREACHABLE();
+                    break;
+
+                case DrawType::atlasBlit:
+                    vertCode =
+                        enums::is_flag_set(shaderFeatures,
+                                           ShaderFeatures::ENABLE_CLIP_RECT)
+                            ? spirv::draw_msaa_atlas_blit_vert
+                            : spirv::draw_msaa_atlas_blit_noclipdistance_vert;
+                    fragCode = fixedFunctionColorOutput
+                                   ? spirv::draw_msaa_atlas_blit_fixedcolor_frag
+                                   : spirv::draw_msaa_atlas_blit_frag;
+                    break;
+
+                case DrawType::imageMesh:
+                    vertCode =
+                        enums::is_flag_set(shaderFeatures,
+                                           ShaderFeatures::ENABLE_CLIP_RECT)
+                            ? spirv::draw_msaa_image_mesh_vert
+                            : spirv::draw_msaa_image_mesh_noclipdistance_vert;
+                    fragCode = fixedFunctionColorOutput
+                                   ? spirv::draw_msaa_image_mesh_fixedcolor_frag
+                                   : spirv::draw_msaa_image_mesh_frag;
+                    break;
+
+                case DrawType::renderPassInitialize:
+                    // MSAA render passes get initialized by drawing the
+                    // previous contents into the framebuffer.
+                    // (LoadAction::preserveRenderTarget only.)
+                    vertCode = spirv::draw_fullscreen_quad_vert;
+                    fragCode = spirv::draw_msaa_color_seed_attachment_frag;
+                    break;
+
+                case DrawType::renderPassResolve:
+                    vertCode = spirv::draw_fullscreen_quad_vert;
+                    fragCode = spirv::draw_msaa_resolve_frag;
+                    break;
+
+                case DrawType::imageRect:
+                    RIVE_UNREACHABLE();
+            }
+            break;
+        }
+    }
+
+    Span<const uint32_t> code;
+    switch (type)
+    {
+        case Type::vertex:
+            code = vertCode;
+            break;
+        case Type::fragment:
+            code = fragCode;
+            break;
+    }
+
+    assert(code.size_bytes() > 0);
+    createInfo.pCode = code.data();
+    createInfo.codeSize = code.size_bytes();
+
+    if (m_vk->CreateShaderModule(m_vk->device,
+                                 &createInfo,
+                                 nullptr,
+                                 &m_module) != VK_SUCCESS)
+    {
+        m_module = VK_NULL_HANDLE;
+    }
 }
 
 DrawShaderVulkan::~DrawShaderVulkan()
 {
-    m_vk->DestroyShaderModule(m_vk->device, m_vertexModule, nullptr);
-    m_vk->DestroyShaderModule(m_vk->device, m_fragmentModule, nullptr);
+    m_vk->DestroyShaderModule(m_vk->device, m_module, nullptr);
 }
 } // namespace rive::gpu

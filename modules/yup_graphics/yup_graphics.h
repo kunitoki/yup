@@ -32,10 +32,9 @@
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_core rive rive_renderer
+    dependencies:       yup_core yup_simd rive rive_renderer
     appleFrameworks:    Metal
     searchpaths:        native
-    enableARC:          1
 
   END_YUP_MODULE_DECLARATION
 
@@ -46,6 +45,7 @@
 #define YUP_GRAPHICS_H_INCLUDED
 
 #include <yup_core/yup_core.h>
+#include <yup_simd/yup_simd.h>
 
 #include <rive_renderer/rive_renderer.h>
 #include <rive_decoders/rive_decoders.h>
@@ -88,4 +88,15 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "graphics/yup_FillType.h"
 #include "graphics/yup_Graphics.h"
 #include "context/yup_GraphicsContext.h"
+#include "svg/yup_SVGElement.h"
+#include "svg/yup_SVGGradient.h"
+#include "svg/yup_SVGClipPath.h"
+#include "svg/yup_SVGMask.h"
+#include "svg/yup_SVGMarker.h"
+#include "svg/yup_SVGPattern.h"
+#include "svg/yup_SVGFilter.h"
+#include "svg/yup_SVGCssRule.h"
+#include "svg/yup_SVGDocument.h"
+#include "svg/yup_SVGCssParser.h"
+#include "svg/yup_SVGParser.h"
 #include "drawables/yup_Drawable.h"

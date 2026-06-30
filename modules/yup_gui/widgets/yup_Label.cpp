@@ -28,6 +28,7 @@ const Identifier Label::Style::textFillColorId { "Label_textFillColorId" };
 const Identifier Label::Style::textStrokeColorId { "Label_textStrokeColorId" };
 const Identifier Label::Style::backgroundColorId { "Label_backgroundColorId" };
 const Identifier Label::Style::outlineColorId { "Label_outlineColorId" };
+const Identifier Label::Style::textHeightProportionMetricId { "Label_textHeightProportionMetricId" };
 
 //==============================================================================
 
@@ -125,23 +126,29 @@ void Label::prepareText()
     if (! needsUpdate)
         return;
 
-    auto fontSize = getHeight() * 0.8f; // TODO - needs config
-    auto fontToUse = ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (fontSize);
-    if (font)
-        fontToUse = *font;
+    auto fontToUse = font.value_or (ApplicationTheme::getGlobalTheme()->getDefaultFont());
 
+    auto setup = [&] (const Font& f)
     {
         auto modifier = styledText.startUpdate();
         modifier.setMaxSize (getSize());
         modifier.setHorizontalAlign (StyledText::horizontalAlignFromJustification (justification));
         modifier.setVerticalAlign (StyledText::verticalAlignFromJustification (justification));
-        modifier.setOverflow (StyledText::ellipsis);
+        modifier.setOverflow (StyledText::visible);
         modifier.setWrap (StyledText::noWrap);
-
         modifier.clear();
-
         if (text.isNotEmpty())
-            modifier.appendText (text, fontToUse);
+            modifier.appendText (text, f);
+    };
+
+    setup (fontToUse);
+
+    if (text.isNotEmpty())
+    {
+        const float availableWidth = static_cast<float> (getWidth());
+        const float textWidth = styledText.getComputedTextBounds().getWidth();
+        if (availableWidth > 0.0f && textWidth > availableWidth)
+            setup (fontToUse.withHeight (fontToUse.getHeight() * (availableWidth / textWidth)));
     }
 
     needsUpdate = false;

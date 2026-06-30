@@ -31,7 +31,7 @@ namespace
 
 bool isControlMarker (String::CharPointerType data)
 {
-    return ! data.isEmpty() && String ("MmLlHhVvQqCcSsZz").containsChar (*data);
+    return ! data.isEmpty() && String ("MmLlHhVvQqTtCcSsAaZz").containsChar (*data);
 }
 
 void skipWhitespace (String::CharPointerType& data)
@@ -50,80 +50,98 @@ void skipWhitespaceOrComma (String::CharPointerType& data)
 
 bool parseFlag (String::CharPointerType& data, int& flag)
 {
-    skipWhitespace (data);
+    skipWhitespaceOrComma (data);
 
-    String number;
+    if (data.isEmpty() || (*data != '0' && *data != '1'))
+        return false;
 
-    while (! data.isEmpty())
-    {
-        if (data.isWhitespace() || *data == '.' || *data == ',' || *data == '-' || isControlMarker (data))
-            break;
-
-        if (! (*data >= '0' && *data <= '9'))
-            break;
-
-        number += *data;
-        ++data;
-    }
-
-    if (number.isNotEmpty())
-    {
-        flag = number.getIntValue();
-
-        skipWhitespaceOrComma (data);
-        return true;
-    }
-
-    return false;
+    flag = *data - '0';
+    ++data;
+    skipWhitespaceOrComma (data);
+    return true;
 }
 
 //==============================================================================
 
 bool parseCoordinate (String::CharPointerType& data, float& coord)
 {
-    skipWhitespace (data);
+    skipWhitespaceOrComma (data);
+
+    auto start = data;
+
+    if (data.isEmpty() || isControlMarker (data))
+        return false;
 
     String number;
-    bool isNegative = false;
-    bool pointFound = false;
+    bool hasDigits = false;
 
-    if (*data == '-')
+    if (*data == '-' || *data == '+')
     {
-        isNegative = true;
-        ++data;
-    }
-
-    while (! data.isEmpty())
-    {
-        if (data.isWhitespace() || *data == ',' || *data == '-' || isControlMarker (data))
-            break;
-
-        if (*data == '.')
-        {
-            if (pointFound)
-                break;
-            pointFound = true;
-        }
-        else if (! (*data >= '0' && *data <= '9'))
-        {
-            break;
-        }
-
         number += *data;
         ++data;
     }
 
-    if (number.isNotEmpty())
+    while (! data.isEmpty() && *data >= '0' && *data <= '9')
     {
-        coord = number.getFloatValue();
-        if (isNegative)
-            coord = -coord;
-
-        skipWhitespaceOrComma (data);
-        return true;
+        hasDigits = true;
+        number += *data;
+        ++data;
     }
 
-    return false;
+    if (! data.isEmpty() && *data == '.')
+    {
+        number += *data;
+        ++data;
+
+        while (! data.isEmpty() && *data >= '0' && *data <= '9')
+        {
+            hasDigits = true;
+            number += *data;
+            ++data;
+        }
+    }
+
+    if (! hasDigits)
+    {
+        data = start;
+        return false;
+    }
+
+    if (! data.isEmpty() && (*data == 'e' || *data == 'E'))
+    {
+        auto exponentStart = data;
+        String exponent;
+
+        exponent += *data;
+        ++data;
+
+        if (! data.isEmpty() && (*data == '-' || *data == '+'))
+        {
+            exponent += *data;
+            ++data;
+        }
+
+        bool hasExponentDigits = false;
+        while (! data.isEmpty() && *data >= '0' && *data <= '9')
+        {
+            hasExponentDigits = true;
+            exponent += *data;
+            ++data;
+        }
+
+        if (hasExponentDigits)
+        {
+            number += exponent;
+        }
+        else
+        {
+            data = exponentStart;
+        }
+    }
+
+    coord = number.getFloatValue();
+    skipWhitespaceOrComma (data);
+    return true;
 }
 
 //==============================================================================
@@ -421,6 +439,9 @@ void handleEllipticalArc (String::CharPointerType& data, Path& path, float& curr
             && parseFlag (data, sweep)
             && parseCoordinates (data, x, y))
         {
+            rx = std::abs (rx);
+            ry = std::abs (ry);
+
             if (relative)
             {
                 x += currentX;
@@ -1122,7 +1143,7 @@ Path& Path::addArc (const Rectangle<float>& rect,
 
 Path& Path::addCenteredArc (float centerX, float centerY, float radiusX, float radiusY, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath)
 {
-    const int segments = jlimit (2, 54, static_cast<int> ((toRadians - fromRadians) / 0.1f));
+    const int segments = jlimit (2, 54, static_cast<int> (std::ceil (std::abs (toRadians - fromRadians) / 0.1f)));
 
     const float delta = (toRadians - fromRadians) / segments;
     const float cosTheta = std::cos (rotationOfEllipse);
@@ -1185,6 +1206,24 @@ void Path::addTriangle (const Point<float>& p1, const Point<float>& p2, const Po
     moveTo (p1);
     lineTo (p2);
     lineTo (p3);
+    close();
+}
+
+//==============================================================================
+
+void Path::addQuadrilateral (float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4)
+{
+    addQuadrilateral ({ x1, y1 }, { x2, y2 }, { x3, y3 }, { x4, y4 });
+}
+
+void Path::addQuadrilateral (const Point<float>& p1, const Point<float>& p2, const Point<float>& p3, const Point<float>& p4)
+{
+    reserveSpace (size() + 5);
+
+    moveTo (p1);
+    lineTo (p2);
+    lineTo (p3);
+    lineTo (p4);
     close();
 }
 

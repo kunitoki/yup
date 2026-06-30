@@ -35,7 +35,7 @@ void ApplicationTheme::setGlobalTheme (ApplicationTheme::Ptr s)
     getGlobalThemeInstance() = std::move (s);
 }
 
-ApplicationTheme::ConstPtr ApplicationTheme::getGlobalTheme()
+ApplicationTheme::Ptr ApplicationTheme::getGlobalTheme()
 {
     return getGlobalThemeInstance();
 }
@@ -48,10 +48,22 @@ ApplicationTheme::Ptr& ApplicationTheme::getGlobalThemeInstance()
 
 //==============================================================================
 
-Color ApplicationTheme::findColor (const Identifier& colorId)
+std::optional<Color> ApplicationTheme::findComponentColor (const Component& component, const Identifier& colorId)
 {
-    auto it = getGlobalThemeInstance()->defaultColors.find (colorId);
-    return it != getGlobalThemeInstance()->defaultColors.end() ? it->second : Color();
+    jassert (getGlobalThemeInstance() != nullptr);
+
+    return getGlobalThemeInstance()->findColor (component, colorId);
+}
+
+std::optional<Color> ApplicationTheme::findColor (const Component& component, const Identifier& colorId) const
+{
+    if (auto color = component.findColor (colorId))
+        return color;
+
+    if (auto it = defaultColors.find (colorId); it != defaultColors.end())
+        return it->second;
+
+    return std::nullopt;
 }
 
 void ApplicationTheme::setColor (const Identifier& colorId, const Color& color)
@@ -67,6 +79,37 @@ void ApplicationTheme::setColors (std::initializer_list<std::pair<const Identifi
 
 //==============================================================================
 
+std::optional<float> ApplicationTheme::findComponentMetric (const Component& component, const Identifier& metricId)
+{
+    jassert (getGlobalThemeInstance() != nullptr);
+
+    return getGlobalThemeInstance()->findMetric (component, metricId);
+}
+
+std::optional<float> ApplicationTheme::findMetric (const Component& component, const Identifier& metricId) const
+{
+    if (auto metric = component.findMetric (metricId))
+        return metric;
+
+    if (auto it = defaultMetrics.find (metricId); it != defaultMetrics.end())
+        return it->second;
+
+    return std::nullopt;
+}
+
+void ApplicationTheme::setMetric (const Identifier& metricId, float value)
+{
+    defaultMetrics.insert_or_assign (metricId, value);
+}
+
+void ApplicationTheme::setMetrics (std::initializer_list<std::pair<const Identifier&, float>> metrics)
+{
+    for (const auto& entry : metrics)
+        defaultMetrics.insert_or_assign (entry.first, entry.second);
+}
+
+//==============================================================================
+
 void ApplicationTheme::setDefaultFont (Font font)
 {
     defaultFont = std::move (font);
@@ -75,6 +118,16 @@ void ApplicationTheme::setDefaultFont (Font font)
 const Font& ApplicationTheme::getDefaultFont() const
 {
     return defaultFont;
+}
+
+void ApplicationTheme::setDefaultIconFont (Font font)
+{
+    defaultIconFont = std::move (font);
+}
+
+const Font& ApplicationTheme::getDefaultIconFont() const
+{
+    return defaultIconFont;
 }
 
 } // namespace yup

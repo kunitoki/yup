@@ -180,6 +180,19 @@ TEST (BigIntegerTests, EnsureSizeWithExistingHeapAllocation)
     EXPECT_TRUE (big[300]);
 }
 
+TEST (BigIntegerTests, ReallocationClearsNewStorage)
+{
+    BigInteger big;
+
+    big.setBit (130);
+    big.setBit (900);
+
+    EXPECT_TRUE (big[130]);
+    EXPECT_TRUE (big[900]);
+    EXPECT_FALSE (big[512]);
+    EXPECT_EQ (2, big.countNumberOfSetBits());
+}
+
 TEST (BigIntegerTests, AdditionEdgeCases)
 {
     // Test adding to itself
@@ -338,6 +351,31 @@ TEST (BigIntegerTests, BitwiseOrOperator)
     EXPECT_EQ (42, orWithZero.toInteger());
 }
 
+TEST (BigIntegerTests, BitwiseOrWithSelfIsUnchanged)
+{
+    BigInteger value;
+    value.setBit (4);
+    value.setBit (140);
+
+    const auto original = value;
+    value |= value;
+
+    EXPECT_TRUE (value == original);
+}
+
+TEST (BigIntegerTests, BitwiseOrExtendsToOtherHighestBit)
+{
+    BigInteger value (1);
+    BigInteger other;
+    other.setBit (180);
+
+    value |= other;
+
+    EXPECT_TRUE (value[0]);
+    EXPECT_TRUE (value[180]);
+    EXPECT_EQ (180, value.getHighestBit());
+}
+
 TEST (BigIntegerTests, BitwiseAndOperator)
 {
     BigInteger a (0b1010);
@@ -351,6 +389,32 @@ TEST (BigIntegerTests, BitwiseAndOperator)
     EXPECT_TRUE (andWithZero.isZero());
 }
 
+TEST (BigIntegerTests, BitwiseAndWithSelfIsUnchanged)
+{
+    BigInteger value;
+    value.setBit (3);
+    value.setBit (170);
+
+    const auto original = value;
+    value &= value;
+
+    EXPECT_TRUE (value == original);
+}
+
+TEST (BigIntegerTests, BitwiseAndClearsWordsAboveOtherAllocation)
+{
+    BigInteger value;
+    value.setBit (3);
+    value.setBit (220);
+
+    BigInteger mask (0b1000);
+    value &= mask;
+
+    EXPECT_EQ (0b1000, value.toInteger());
+    EXPECT_FALSE (value[220]);
+    EXPECT_EQ (3, value.getHighestBit());
+}
+
 TEST (BigIntegerTests, BitwiseXorOperator)
 {
     BigInteger a (0b1010);
@@ -361,6 +425,30 @@ TEST (BigIntegerTests, BitwiseXorOperator)
     BigInteger value (42);
     BigInteger xorWithItself = value ^ value;
     EXPECT_TRUE (xorWithItself.isZero());
+}
+
+TEST (BigIntegerTests, BitwiseXorWithSelfClearsValue)
+{
+    BigInteger value;
+    value.setBit (8);
+    value.setBit (160);
+
+    value ^= value;
+
+    EXPECT_TRUE (value.isZero());
+}
+
+TEST (BigIntegerTests, BitwiseXorExtendsToOtherHighestBit)
+{
+    BigInteger value (1);
+    BigInteger other;
+    other.setBit (190);
+
+    value ^= other;
+
+    EXPECT_TRUE (value[0]);
+    EXPECT_TRUE (value[190]);
+    EXPECT_EQ (190, value.getHighestBit());
 }
 
 TEST (BigIntegerTests, CompareEqual)
@@ -394,6 +482,39 @@ TEST (BigIntegerTests, ShiftRightWithStartBit)
     EXPECT_FALSE (value[12]); // Cleared
 }
 
+TEST (BigIntegerTests, BitRangeAsIntCanCrossWordBoundary)
+{
+    BigInteger value;
+    value.setBitRangeAsInt (28, 8, 0xabu);
+
+    EXPECT_EQ (0xabu, value.getBitRangeAsInt (28, 8));
+}
+
+TEST (BigIntegerTests, BitRangeAsIntClampsToThirtyTwoBits)
+{
+#if YUP_ASSERTIONS_ENABLED
+    GTEST_SKIP() << "Skipping invalid bit range test in assertion-enabled builds";
+#else
+    BigInteger value;
+    value.setRange (0, 40, true);
+
+    EXPECT_EQ (0xffffffffu, value.getBitRangeAsInt (0, 64));
+#endif
+}
+
+TEST (BigIntegerTests, SetBitRangeAsIntClampsToThirtyTwoBits)
+{
+#if YUP_ASSERTIONS_ENABLED
+    GTEST_SKIP() << "Skipping invalid bit range test in assertion-enabled builds";
+#else
+    BigInteger value;
+    value.setBitRangeAsInt (4, 40, 0xffffffffu);
+
+    EXPECT_EQ (0xffffffffu, value.getBitRangeAsInt (4, 32));
+    EXPECT_FALSE (value[36]);
+#endif
+}
+
 TEST (BigIntegerTests, FindGreatestCommonDivisorComplex)
 {
     // Test the complex path that creates temp2
@@ -412,6 +533,16 @@ TEST (BigIntegerTests, FindGreatestCommonDivisorComplex)
     BigInteger gcd2 = large.findGreatestCommonDivisor (small);
     // GCD(2^100 + 1000000, 1000) = GCD(1000000, 1000) = 1000
     EXPECT_EQ (8, gcd2.toInteger());
+}
+
+TEST (BigIntegerTests, FindGreatestCommonDivisorWithZeroReturnsValue)
+{
+    BigInteger value (123456);
+    BigInteger zero;
+
+    auto gcd = value.findGreatestCommonDivisor (zero);
+
+    EXPECT_EQ (123456, gcd.toInteger());
 }
 
 TEST (BigIntegerTests, ExponentModuloComplexPath)
@@ -433,6 +564,30 @@ TEST (BigIntegerTests, ExponentModuloComplexPath)
     base2.exponentModulo (exp2, mod2);
     EXPECT_TRUE (base2.toInteger() >= 0);
     EXPECT_TRUE (base2.toInteger() < 17);
+}
+
+TEST (BigIntegerTests, ExponentModuloUsesMontgomeryPathForLargeOddModulus)
+{
+    BigInteger base (1234567);
+    BigInteger exponent (13);
+    BigInteger modulus;
+    modulus.setBit (40);
+    modulus += 87;
+
+    BigInteger expected (1);
+    const BigInteger multiplier (1234567);
+
+    for (int i = 0; i < 13; ++i)
+    {
+        expected *= multiplier;
+        expected %= modulus;
+    }
+
+    base.exponentModulo (exponent, modulus);
+
+    EXPECT_TRUE (base == expected);
+    EXPECT_GE (base.compare (BigInteger()), 0);
+    EXPECT_LT (base.compare (modulus), 0);
 }
 
 TEST (BigIntegerTests, MontgomeryMultiplicationNegative)
@@ -488,6 +643,50 @@ TEST (BigIntegerTests, ExtendedEuclideanSwapPath)
     BigInteger diff2 = check1 - check2;
 
     EXPECT_TRUE (gcd2.compareAbsolute (diff1) == 0 || gcd2.compareAbsolute (diff2) == 0);
+}
+
+TEST (BigIntegerTests, ExtendedEuclideanHandlesInputsRequiringCoefficientSwap)
+{
+    BigInteger a (13);
+    BigInteger b (17);
+    BigInteger x, y;
+    BigInteger gcd;
+
+    gcd.extendedEuclidean (a, b, x, y);
+
+    const auto check = (a * x) - (b * y);
+
+    EXPECT_EQ (1, gcd.toInteger());
+    EXPECT_EQ (0, gcd.compareAbsolute (check));
+}
+
+TEST (BigIntegerTests, InverseModuloClearsForInvalidModulus)
+{
+    BigInteger oneModulus (3);
+    oneModulus.inverseModulo (BigInteger (1));
+    EXPECT_TRUE (oneModulus.isZero());
+
+    BigInteger negativeModulus (3);
+    negativeModulus.inverseModulo (BigInteger (-11));
+    EXPECT_TRUE (negativeModulus.isZero());
+}
+
+TEST (BigIntegerTests, InverseModuloReducesLargeInput)
+{
+    BigInteger value (45);
+
+    value.inverseModulo (BigInteger (13));
+
+    EXPECT_EQ (11, value.toInteger());
+}
+
+TEST (BigIntegerTests, InverseModuloClearsWhenNotInvertible)
+{
+    BigInteger value (6);
+
+    value.inverseModulo (BigInteger (9));
+
+    EXPECT_TRUE (value.isZero());
 }
 
 TEST (BigIntegerTests, OutputStreamOperator)
@@ -551,4 +750,13 @@ TEST (BigIntegerTests, ParseStringBase10)
     manualNegative.setNegative (true);
     EXPECT_EQ (-6789, manualNegative.toInteger());
     EXPECT_TRUE (manualNegative.isNegative());
+}
+
+TEST (BigIntegerTests, ToStringReturnsEmptyForUnsupportedBase)
+{
+#if YUP_ASSERTIONS_ENABLED
+    GTEST_SKIP() << "Skipping invalid base test in assertion-enabled builds";
+#else
+    EXPECT_TRUE (BigInteger (123).toString (3).isEmpty());
+#endif
 }

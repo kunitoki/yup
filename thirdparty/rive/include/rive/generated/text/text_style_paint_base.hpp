@@ -1,8 +1,6 @@
 #ifndef _RIVE_TEXT_STYLE_PAINT_BASE_HPP_
 #define _RIVE_TEXT_STYLE_PAINT_BASE_HPP_
-
 #include "rive/text/text_style.hpp"
-
 namespace rive
 {
 class TextStylePaintBase : public TextStyle

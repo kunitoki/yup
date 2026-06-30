@@ -22,109 +22,6 @@
 namespace yup
 {
 
-//==============================================================================
-
-/** Performs Y += A * B (complex multiply accumulate) where A, B, and Y
-    are arrays of interleaved complex<float> values [real, imag, real, imag...].
-
-    @param A pointer to input complex array
-    @param B pointer to input complex array
-    @param Y pointer to output complex array (accumulated)
-    @param complexPairs number of complex pairs (not number of floats!)
-*/
-static void complexMultiplyAccumulate (const float* __restrict A, const float* __restrict B, float* __restrict Y, int complexPairs) noexcept
-{
-    int i = 0;
-
-#if YUP_USE_AVX_INTRINSICS
-    constexpr int simdWidth = 4; // AVX2 path: process 4 complex pairs (8 floats) at a time
-    for (; i <= complexPairs - simdWidth; i += simdWidth)
-    {
-        const int idx = i * 2;
-
-        __m256 a = _mm256_loadu_ps (A + idx);
-        __m256 b = _mm256_loadu_ps (B + idx);
-        __m256 y = _mm256_loadu_ps (Y + idx);
-
-        const __m256 a_shuffled = _mm256_permute_ps (a, _MM_SHUFFLE (2, 3, 0, 1));
-        const __m256 b_shuffled = _mm256_permute_ps (b, _MM_SHUFFLE (2, 3, 0, 1));
-
-        __m256 realPart = _mm256_fmsub_ps (a, b, _mm256_mul_ps (a_shuffled, b_shuffled));
-        __m256 imagPart = _mm256_fmadd_ps (a, b_shuffled, _mm256_mul_ps (a_shuffled, b));
-
-        const __m256 interleaved = _mm256_blend_ps (realPart, imagPart, 0b10101010);
-
-        y = _mm256_add_ps (y, interleaved);
-        _mm256_storeu_ps (Y + idx, y);
-    }
-
-#elif YUP_USE_SSE_INTRINSICS
-    constexpr int simdWidth = 2; // SSE path: process 2 complex pairs (4 floats) at a time
-    for (; i <= complexPairs - simdWidth; i += simdWidth)
-    {
-        const int idx = i * 2;
-
-        __m128 a = _mm_loadu_ps (A + idx);
-        __m128 b = _mm_loadu_ps (B + idx);
-        __m128 y = _mm_loadu_ps (Y + idx);
-
-        const __m128 a_shuffled = _mm_shuffle_ps (a, a, _MM_SHUFFLE (2, 3, 0, 1));
-        const __m128 b_shuffled = _mm_shuffle_ps (b, b, _MM_SHUFFLE (2, 3, 0, 1));
-
-        __m128 realPart = _mm_sub_ps (_mm_mul_ps (a, b), _mm_mul_ps (a_shuffled, b_shuffled));
-        __m128 imagPart = _mm_add_ps (_mm_mul_ps (a, b_shuffled), _mm_mul_ps (a_shuffled, b));
-
-        const __m128 interleaved = _mm_unpacklo_ps (realPart, imagPart);
-
-        y = _mm_add_ps (y, interleaved);
-        _mm_storeu_ps (Y + idx, y);
-    }
-
-#elif YUP_USE_ARM_NEON
-    constexpr int simdWidth = 4;
-    for (; i <= complexPairs - simdWidth; i += simdWidth)
-    {
-        const int idx = i * 2;
-
-        float32x4x2_t a = vld2q_f32 (A + idx);
-        float32x4x2_t b = vld2q_f32 (B + idx);
-        float32x4x2_t y = vld2q_f32 (Y + idx);
-
-        float32x4_t ar = a.val[0], ai = a.val[1];
-        float32x4_t br = b.val[0], bi = b.val[1];
-        float32x4_t yr = y.val[0], yi = y.val[1];
-
-        float32x4_t real = vmulq_f32 (ar, br);
-        real = vfmsq_f32 (real, ai, bi);
-        float32x4_t imag = vmulq_f32 (ar, bi);
-        imag = vfmaq_f32 (imag, ai, br);
-
-        yr = vaddq_f32 (yr, real);
-        yi = vaddq_f32 (yi, imag);
-
-        float32x4x2_t out = { yr, yi };
-        vst2q_f32 (Y + idx, out); // interleave back
-    }
-
-#endif
-
-    for (; i < complexPairs; ++i)
-    {
-        const int ri = i * 2;
-        const int ii = ri + 1;
-
-        const float ar = A[ri];
-        const float ai = A[ii];
-        const float br = B[ri];
-        const float bi = B[ii];
-
-        Y[ri] += ar * br - ai * bi;
-        Y[ii] += ar * bi + ai * br;
-    }
-}
-
-//==============================================================================
-
 class PartitionedConvolver::FFTLayer
 {
 public:
@@ -254,7 +151,7 @@ public:
             const float* H = frequencyPartitions[p].data();
 
             // fftSize_/2 gives the number of complex pairs for real FFT
-            complexMultiplyAccumulate (X, H, frequencyBuffer.data(), fftSize / 2);
+            ComplexVectorOperations::multiplyAccumulate (X, H, frequencyBuffer.data(), fftSize / 2);
 
             // Move to next older spectrum
             xIndex++;

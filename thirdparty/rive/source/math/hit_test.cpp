@@ -14,9 +14,9 @@
 
 using namespace rive;
 
-//static inline float graphics_roundf(float x) { return std::floor(x + 0.5f); }
+static inline float graphics_roundf(float x) { return std::floor(x + 0.5f); }
 
-//static inline int graphics_round(float x) { return (int)graphics_roundf(x); }
+static inline int graphics_round(float x) { return (int)graphics_roundf(x); }
 
 struct Point
 {
@@ -44,7 +44,7 @@ struct Point
     friend Point operator*(float s, Point v) { return {v.x * s, v.y * s}; }
 };
 
-//template <typename T> T lerp(T a, T b, float t) { return a + (b - a) * t; }
+template <typename T> T lerp(T a, T b, float t) { return a + (b - a) * t; }
 
 template <typename T> T ave(T a, T b) { return lerp(a, b, 0.5f); }
 

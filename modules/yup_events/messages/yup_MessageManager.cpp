@@ -153,8 +153,10 @@ void MessageManager::runDispatchLoop()
 
 void MessageManager::stopDispatchLoop()
 {
-    (new QuitMessage())->post();
+    quitMessageReceived = true;
     quitMessagePosted = true;
+
+    (new QuitMessage())->post();
 }
 
 #if YUP_MODAL_LOOPS_PERMITTED
@@ -575,7 +577,8 @@ YUP_API void YUP_CALLTYPE shutdownYup_GUI()
     }
 }
 
-static std::atomic_int numScopedInitInstances = 0;
+//==============================================================================
+std::atomic_int ScopedYupInitialiser_GUI::numScopedInitInstances = 0;
 
 ScopedYupInitialiser_GUI::ScopedYupInitialiser_GUI()
 {

@@ -48,9 +48,11 @@ endif()
 
 # ==== Prepare target
 set (additional_modules "")
+set (additional_definitions "")
 if (YUP_PLATFORM_DESKTOP AND NOT YUP_PLATFORM_WINDOWS)
     set (additional_modules yup::yup_python)
 endif()
+
 
 yup_standalone_app (
     TARGET_NAME ${target_name}
@@ -58,8 +60,11 @@ yup_standalone_app (
     TARGET_IDE_GROUP "Examples"
     TARGET_APP_ID "org.yup.${target_name}"
     TARGET_APP_NAMESPACE "org.yup"
+    PTHREAD_POOL_SIZE 16
+    STACK_SIZE 4194304
     DEFINITIONS
         YUP_EXAMPLE_GRAPHICS_RIVE_FILE="${rive_file}"
+        ${additional_definitions}
     PRELOAD_FILES
         "${CMAKE_CURRENT_LIST_DIR}/${rive_file}@${rive_file}"
     MODULES
@@ -81,6 +86,7 @@ yup_standalone_app (
         libvorbis
         libpng
         libwebp
+        bungee_library
         ${additional_modules}
         ${link_libraries})
 

@@ -37,17 +37,22 @@
   ==============================================================================
 */
 
+extern "C"
+{
+    void* objc_autoreleasePoolPush();
+    void objc_autoreleasePoolPop (void*);
+}
+
 namespace yup
 {
-
 ScopedAutoReleasePool::ScopedAutoReleasePool()
 {
-    pool = [[NSAutoreleasePool alloc] init];
+    pool = objc_autoreleasePoolPush();
 }
 
 ScopedAutoReleasePool::~ScopedAutoReleasePool()
 {
-    [((NSAutoreleasePool*)pool) release];
+    objc_autoreleasePoolPop(pool);
 }
 
 //==============================================================================
@@ -454,7 +459,7 @@ bool SystemStats::isAppSandboxEnabled()
 
         const void* flag = nullptr;
 
-        if (!CFDictionaryGetValueIfPresent(static_cast<CFDictionaryRef>(entitlementsDict), @"com.apple.security.app-sandbox", &flag))
+        if (!CFDictionaryGetValueIfPresent(static_cast<CFDictionaryRef>(entitlementsDict), CFSTR("com.apple.security.app-sandbox"), &flag))
             return false;
 
         return static_cast<bool>(CFBooleanGetValue(static_cast<CFBooleanRef>(flag)));

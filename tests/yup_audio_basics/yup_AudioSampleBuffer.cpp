@@ -253,6 +253,87 @@ TYPED_TEST (AudioBufferTests, ClearAndHasBeenCleared)
     EXPECT_TRUE (approximatelyEqual (buffer.getSample (0, 0), static_cast<TypeParam> (0)));
 }
 
+// Test fill methods
+TYPED_TEST (AudioBufferTests, FillAllChannels)
+{
+    using BufferType = typename TestFixture::BufferType;
+
+    BufferType buffer (3, 5);
+    buffer.clear();
+    EXPECT_TRUE (buffer.hasBeenCleared());
+
+    buffer.fill (static_cast<TypeParam> (2.5));
+
+    EXPECT_FALSE (buffer.hasBeenCleared());
+
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+            EXPECT_TRUE (approximatelyEqual (buffer.getSample (ch, i), static_cast<TypeParam> (2.5)));
+}
+
+TYPED_TEST (AudioBufferTests, FillRegionInAllChannels)
+{
+    using BufferType = typename TestFixture::BufferType;
+
+    BufferType buffer;
+    this->initializeBuffer (buffer, 2, 6);
+
+    buffer.fill (2, 3, static_cast<TypeParam> (-4.0));
+
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+    {
+        EXPECT_TRUE (approximatelyEqual (buffer.getSample (ch, 0), static_cast<TypeParam> (1.0)));
+        EXPECT_TRUE (approximatelyEqual (buffer.getSample (ch, 1), static_cast<TypeParam> (2.0)));
+        EXPECT_TRUE (approximatelyEqual (buffer.getSample (ch, 2), static_cast<TypeParam> (-4.0)));
+        EXPECT_TRUE (approximatelyEqual (buffer.getSample (ch, 3), static_cast<TypeParam> (-4.0)));
+        EXPECT_TRUE (approximatelyEqual (buffer.getSample (ch, 4), static_cast<TypeParam> (-4.0)));
+        EXPECT_TRUE (approximatelyEqual (buffer.getSample (ch, 5), static_cast<TypeParam> (6.0)));
+    }
+
+    EXPECT_FALSE (buffer.hasBeenCleared());
+}
+
+TYPED_TEST (AudioBufferTests, FillRegionInSingleChannel)
+{
+    using BufferType = typename TestFixture::BufferType;
+
+    BufferType buffer;
+    this->initializeBuffer (buffer, 3, 5);
+
+    buffer.fill (1, 1, 3, static_cast<TypeParam> (9.0));
+
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+    {
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+        {
+            const auto expected = (ch == 1 && i >= 1 && i <= 3) ? static_cast<TypeParam> (9.0)
+                                                                : static_cast<TypeParam> (i + 1);
+
+            EXPECT_TRUE (approximatelyEqual (buffer.getSample (ch, i), expected));
+        }
+    }
+
+    EXPECT_FALSE (buffer.hasBeenCleared());
+}
+
+TYPED_TEST (AudioBufferTests, FillWithZeroSamplesDoesNothing)
+{
+    using BufferType = typename TestFixture::BufferType;
+
+    BufferType buffer (2, 4);
+    buffer.clear();
+    EXPECT_TRUE (buffer.hasBeenCleared());
+
+    buffer.fill (1, 0, static_cast<TypeParam> (3.0));
+    buffer.fill (0, 1, 0, static_cast<TypeParam> (4.0));
+
+    EXPECT_TRUE (buffer.hasBeenCleared());
+
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+            EXPECT_TRUE (approximatelyEqual (buffer.getSample (ch, i), static_cast<TypeParam> (0)));
+}
+
 // Test getSample and setSample methods
 TYPED_TEST (AudioBufferTests, GetAndSetSample)
 {

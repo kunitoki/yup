@@ -48,7 +48,7 @@ void TextButton::setButtonText (StringRef newButtonText)
     {
         buttonText = newButtonText;
 
-        resized();
+        updateTextLayout();
     }
 }
 
@@ -64,6 +64,13 @@ void TextButton::paintButton (Graphics& g)
 
 void TextButton::resized()
 {
+    updateTextLayout();
+}
+
+//==============================================================================
+
+void TextButton::updateTextLayout()
+{
     auto textBounds = getTextBounds();
     auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
@@ -77,6 +84,8 @@ void TextButton::resized()
 
     if (buttonText.isNotEmpty())
         modifier.appendText (buttonText, font.withHeight (getHeight() * 0.35f));
+
+    repaint();
 }
 
 //==============================================================================

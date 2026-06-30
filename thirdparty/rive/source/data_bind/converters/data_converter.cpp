@@ -7,13 +7,7 @@
 
 using namespace rive;
 
-DataConverter::~DataConverter()
-{
-    for (auto dataBind : m_dataBinds)
-    {
-        delete dataBind;
-    }
-}
+DataConverter::~DataConverter() { deleteDataBinds(); }
 
 StatusCode DataConverter::import(ImportStack& importStack)
 {
@@ -28,53 +22,32 @@ StatusCode DataConverter::import(ImportStack& importStack)
     return Super::import(importStack);
 }
 
-void DataConverter::addDataBind(DataBind* dataBind)
-{
-    m_dataBinds.push_back(dataBind);
-}
-
 void DataConverter::bindFromContext(DataContext* dataContext,
                                     DataBind* dataBind)
 {
     m_parentDataBind = dataBind;
-    for (auto dataBind : m_dataBinds)
-    {
-        if (dataBind->is<DataBindContext>())
-        {
-
-            dataBind->as<DataBindContext>()->bindFromContext(dataContext);
-        }
-    }
+    bindDataBindsFromContext(dataContext);
 }
 
-void DataConverter::unbind()
-{
-    for (auto dataBind : m_dataBinds)
-    {
-        dataBind->unbind();
-    }
-}
+void DataConverter::unbind() { unbindDataBinds(); }
 
 void DataConverter::markConverterDirty()
 {
-    m_parentDataBind->addDirt(ComponentDirt::Dependents |
-                                  ComponentDirt::Bindings,
-                              false);
-}
-
-void DataConverter::update()
-{
-    for (auto dataBind : m_dataBinds)
+    if (m_parentDataBind != nullptr)
     {
-        auto d = dataBind->dirt();
-        if (d == ComponentDirt::None)
-        {
-            continue;
-        }
-        dataBind->dirt(ComponentDirt::None);
-        dataBind->update(d);
+        m_parentDataBind->addDirt(ComponentDirt::Dependents |
+                                      ComponentDirt::Bindings,
+                                  false);
     }
 }
+
+void DataConverter::addDirtyDataBind(DataBind* dataBind)
+{
+    markConverterDirty();
+    DataBindContainer::addDirtyDataBind(dataBind);
+}
+
+void DataConverter::update() { updateDataBinds(false); }
 
 void DataConverter::copy(const DataConverter& object)
 {

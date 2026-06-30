@@ -101,7 +101,7 @@
 #
 # ENABLE_BITCODE: (ON|OFF) Enables or disables bitcode support. Default OFF
 #
-# ENABLE_ARC: (ON|OFF) Enables or disables ARC support. Default ON (ARC enabled by default)
+# ENABLE_ARC: ARC is always enabled for YUP Apple builds.
 #
 # ENABLE_VISIBILITY: (ON|OFF) Enables or disables symbol visibility support. Default OFF (visibility hidden by default)
 #
@@ -655,13 +655,9 @@ if(NOT DEFINED ENABLE_BITCODE)
 endif()
 set(ENABLE_BITCODE_INT ${ENABLE_BITCODE} CACHE BOOL
         "Whether or not to enable bitcode" FORCE)
-# Use ARC or not
-if(NOT DEFINED ENABLE_ARC)
-  # Unless specified, enable ARC support by default
-  set(ENABLE_ARC ON)
-  message(STATUS "[DEFAULTS] Enabling ARC support by default. ENABLE_ARC not provided!")
-endif()
-set(ENABLE_ARC_INT ${ENABLE_ARC} CACHE BOOL "Whether or not to enable ARC" FORCE)
+# ARC is required by YUP's Apple implementation.
+set(ENABLE_ARC ON)
+set(ENABLE_ARC_INT ON CACHE BOOL "Whether or not to enable ARC" FORCE)
 # Use hidden visibility or not
 if(NOT DEFINED ENABLE_VISIBILITY)
   # Unless specified, disable symbols visibility by default
@@ -917,13 +913,8 @@ else()
   set(CMAKE_XCODE_ATTRIBUTE_ENABLE_BITCODE "NO")
 endif()
 
-if(ENABLE_ARC_INT)
-  set(FOBJC_ARC "-fobjc-arc")
-  set(CMAKE_XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC "YES")
-else()
-  set(FOBJC_ARC "-fno-objc-arc")
-  set(CMAKE_XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC "NO")
-endif()
+set(FOBJC_ARC "-fobjc-arc")
+set(CMAKE_XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC "YES")
 
 if(NAMED_LANGUAGE_SUPPORT_INT)
   set(OBJC_VARS "-fobjc-abi-version=2 -DOBJC_OLD_DISPATCH_PROTOTYPES=0")
@@ -1027,11 +1018,7 @@ else()
   message(STATUS "Bitcode: Disabled")
 endif()
 
-if(ENABLE_ARC_INT)
-  message(STATUS "ARC: Enabled")
-else()
-  message(STATUS "ARC: Disabled")
-endif()
+message(STATUS "ARC: Enabled")
 
 if(ENABLE_VISIBILITY_INT)
   message(STATUS "Hiding symbols: Disabled")

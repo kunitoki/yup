@@ -1510,3 +1510,269 @@ TEST (RectangleTests, Self_Operations)
     Rectangle<float> selfUnion = r.unionWith (r);
     EXPECT_EQ (selfUnion, r);
 }
+
+TEST (RectangleTests, WithSizeKeepingCenter_BasicFloat)
+{
+    // Original rectangle: center at (20, 20), size 20x20
+    Rectangle<float> r (10.0f, 10.0f, 20.0f, 20.0f);
+    auto center = r.getCenter();
+    EXPECT_FLOAT_EQ (center.getX(), 20.0f);
+    EXPECT_FLOAT_EQ (center.getY(), 20.0f);
+
+    // Resize to 10x10, center should stay at (20, 20)
+    auto resized = r.withSizeKeepingCenter (10.0f, 10.0f);
+    EXPECT_FLOAT_EQ (resized.getX(), 15.0f);
+    EXPECT_FLOAT_EQ (resized.getY(), 15.0f);
+    EXPECT_FLOAT_EQ (resized.getWidth(), 10.0f);
+    EXPECT_FLOAT_EQ (resized.getHeight(), 10.0f);
+
+    auto newCenter = resized.getCenter();
+    EXPECT_FLOAT_EQ (newCenter.getX(), 20.0f);
+    EXPECT_FLOAT_EQ (newCenter.getY(), 20.0f);
+
+    // Resize to 40x30, center should still stay at (20, 20)
+    resized = r.withSizeKeepingCenter (40.0f, 30.0f);
+    EXPECT_FLOAT_EQ (resized.getX(), 0.0f);
+    EXPECT_FLOAT_EQ (resized.getY(), 5.0f);
+    EXPECT_FLOAT_EQ (resized.getWidth(), 40.0f);
+    EXPECT_FLOAT_EQ (resized.getHeight(), 30.0f);
+
+    newCenter = resized.getCenter();
+    EXPECT_FLOAT_EQ (newCenter.getX(), 20.0f);
+    EXPECT_FLOAT_EQ (newCenter.getY(), 20.0f);
+}
+
+TEST (RectangleTests, WithSizeKeepingCenter_BasicInt)
+{
+    // Original rectangle: center at (15, 15), size 20x20
+    Rectangle<int> r (5, 5, 20, 20);
+    auto center = r.getCenter();
+    EXPECT_EQ (center.getX(), 15);
+    EXPECT_EQ (center.getY(), 15);
+
+    // Resize to 10x10, center should stay at (15, 15)
+    auto resized = r.withSizeKeepingCenter (10, 10);
+    EXPECT_EQ (resized.getX(), 10);
+    EXPECT_EQ (resized.getY(), 10);
+    EXPECT_EQ (resized.getWidth(), 10);
+    EXPECT_EQ (resized.getHeight(), 10);
+
+    auto newCenter = resized.getCenter();
+    EXPECT_EQ (newCenter.getX(), 15);
+    EXPECT_EQ (newCenter.getY(), 15);
+
+    // Resize to 30x40
+    resized = r.withSizeKeepingCenter (30, 40);
+    EXPECT_EQ (resized.getX(), 0);
+    EXPECT_EQ (resized.getY(), -5);
+    EXPECT_EQ (resized.getWidth(), 30);
+    EXPECT_EQ (resized.getHeight(), 40);
+
+    newCenter = resized.getCenter();
+    EXPECT_EQ (newCenter.getX(), 15);
+    EXPECT_EQ (newCenter.getY(), 15);
+}
+
+TEST (RectangleTests, WithSizeKeepingCenter_SizeObject)
+{
+    Rectangle<float> r (10.0f, 10.0f, 20.0f, 20.0f);
+    auto center = r.getCenter();
+
+    // Use Size object
+    Size<float> newSize (30.0f, 15.0f);
+    auto resized = r.withSizeKeepingCenter (newSize);
+
+    EXPECT_FLOAT_EQ (resized.getX(), 5.0f);
+    EXPECT_FLOAT_EQ (resized.getY(), 12.5f);
+    EXPECT_FLOAT_EQ (resized.getWidth(), 30.0f);
+    EXPECT_FLOAT_EQ (resized.getHeight(), 15.0f);
+
+    auto newCenter = resized.getCenter();
+    EXPECT_FLOAT_EQ (newCenter.getX(), center.getX());
+    EXPECT_FLOAT_EQ (newCenter.getY(), center.getY());
+}
+
+TEST (RectangleTests, WithSizeKeepingCenter_SizeObjectDifferentType)
+{
+    Rectangle<float> r (10.0f, 10.0f, 20.0f, 20.0f);
+    auto center = r.getCenter();
+
+    // Use Size<int> with Rectangle<float> (widening conversion is safe)
+    Size<int> newSize (30, 15);
+    auto resized = r.withSizeKeepingCenter (newSize);
+
+    EXPECT_FLOAT_EQ (resized.getX(), 5.0f);
+    EXPECT_FLOAT_EQ (resized.getY(), 12.5f);
+    EXPECT_FLOAT_EQ (resized.getWidth(), 30.0f);
+    EXPECT_FLOAT_EQ (resized.getHeight(), 15.0f);
+
+    auto newCenter = resized.getCenter();
+    EXPECT_FLOAT_EQ (newCenter.getX(), center.getX());
+    EXPECT_FLOAT_EQ (newCenter.getY(), center.getY());
+}
+
+TEST (RectangleTests, WithSizeKeepingCenter_AspectRatioChanges)
+{
+    Rectangle<float> square (0.0f, 0.0f, 100.0f, 100.0f);
+    auto center = square.getCenter();
+    EXPECT_FLOAT_EQ (center.getX(), 50.0f);
+    EXPECT_FLOAT_EQ (center.getY(), 50.0f);
+
+    // Square to wide rectangle
+    auto wide = square.withSizeKeepingCenter (200.0f, 50.0f);
+    EXPECT_FLOAT_EQ (wide.getX(), -50.0f);
+    EXPECT_FLOAT_EQ (wide.getY(), 25.0f);
+    EXPECT_FLOAT_EQ (wide.getWidth(), 200.0f);
+    EXPECT_FLOAT_EQ (wide.getHeight(), 50.0f);
+    auto wideCenter = wide.getCenter();
+    EXPECT_FLOAT_EQ (wideCenter.getX(), 50.0f);
+    EXPECT_FLOAT_EQ (wideCenter.getY(), 50.0f);
+
+    // Square to tall rectangle
+    auto tall = square.withSizeKeepingCenter (50.0f, 200.0f);
+    EXPECT_FLOAT_EQ (tall.getX(), 25.0f);
+    EXPECT_FLOAT_EQ (tall.getY(), -50.0f);
+    EXPECT_FLOAT_EQ (tall.getWidth(), 50.0f);
+    EXPECT_FLOAT_EQ (tall.getHeight(), 200.0f);
+    auto tallCenter = tall.getCenter();
+    EXPECT_FLOAT_EQ (tallCenter.getX(), 50.0f);
+    EXPECT_FLOAT_EQ (tallCenter.getY(), 50.0f);
+
+    // Wide to tall
+    auto wideToTall = wide.withSizeKeepingCenter (60.0f, 180.0f);
+    auto wideToTallCenter = wideToTall.getCenter();
+    EXPECT_FLOAT_EQ (wideToTallCenter.getX(), 50.0f);
+    EXPECT_FLOAT_EQ (wideToTallCenter.getY(), 50.0f);
+}
+
+TEST (RectangleTests, WithSizeKeepingCenter_ZeroSize)
+{
+    Rectangle<float> r (10.0f, 10.0f, 20.0f, 20.0f);
+    auto center = r.getCenter();
+
+    // Resize to zero width and height
+    auto resized = r.withSizeKeepingCenter (0.0f, 0.0f);
+    EXPECT_FLOAT_EQ (resized.getX(), 20.0f);
+    EXPECT_FLOAT_EQ (resized.getY(), 20.0f);
+    EXPECT_FLOAT_EQ (resized.getWidth(), 0.0f);
+    EXPECT_FLOAT_EQ (resized.getHeight(), 0.0f);
+    EXPECT_TRUE (resized.isEmpty());
+
+    // Center should be at the original center
+    auto newCenter = resized.getCenter();
+    EXPECT_FLOAT_EQ (newCenter.getX(), center.getX());
+    EXPECT_FLOAT_EQ (newCenter.getY(), center.getY());
+
+    // Resize to zero width only
+    resized = r.withSizeKeepingCenter (0.0f, 10.0f);
+    EXPECT_FLOAT_EQ (resized.getX(), 20.0f);
+    EXPECT_FLOAT_EQ (resized.getY(), 15.0f);
+    EXPECT_FLOAT_EQ (resized.getWidth(), 0.0f);
+    EXPECT_FLOAT_EQ (resized.getHeight(), 10.0f);
+}
+
+TEST (RectangleTests, WithSizeKeepingCenter_NegativePosition)
+{
+    // Rectangle with negative position
+    Rectangle<float> r (-10.0f, -20.0f, 30.0f, 40.0f);
+    auto center = r.getCenter();
+    EXPECT_FLOAT_EQ (center.getX(), 5.0f);
+    EXPECT_FLOAT_EQ (center.getY(), 0.0f);
+
+    auto resized = r.withSizeKeepingCenter (20.0f, 20.0f);
+    EXPECT_FLOAT_EQ (resized.getX(), -5.0f);
+    EXPECT_FLOAT_EQ (resized.getY(), -10.0f);
+    EXPECT_FLOAT_EQ (resized.getWidth(), 20.0f);
+    EXPECT_FLOAT_EQ (resized.getHeight(), 20.0f);
+
+    auto newCenter = resized.getCenter();
+    EXPECT_FLOAT_EQ (newCenter.getX(), 5.0f);
+    EXPECT_FLOAT_EQ (newCenter.getY(), 0.0f);
+}
+
+TEST (RectangleTests, WithSizeKeepingCenter_LargeValues)
+{
+    Rectangle<float> r (0.0f, 0.0f, 1000.0f, 1000.0f);
+    auto center = r.getCenter();
+    EXPECT_FLOAT_EQ (center.getX(), 500.0f);
+    EXPECT_FLOAT_EQ (center.getY(), 500.0f);
+
+    // Resize to very large size
+    auto resized = r.withSizeKeepingCenter (5000.0f, 3000.0f);
+    EXPECT_FLOAT_EQ (resized.getX(), -2000.0f);
+    EXPECT_FLOAT_EQ (resized.getY(), -1000.0f);
+    EXPECT_FLOAT_EQ (resized.getWidth(), 5000.0f);
+    EXPECT_FLOAT_EQ (resized.getHeight(), 3000.0f);
+
+    auto newCenter = resized.getCenter();
+    EXPECT_FLOAT_EQ (newCenter.getX(), 500.0f);
+    EXPECT_FLOAT_EQ (newCenter.getY(), 500.0f);
+}
+
+TEST (RectangleTests, WithSizeKeepingCenter_OddSizeInteger)
+{
+    // Test with odd sizes to verify integer division behavior
+    Rectangle<int> r (10, 10, 21, 21);
+    auto center = r.getCenter();
+    EXPECT_EQ (center.getX(), 20);
+    EXPECT_EQ (center.getY(), 20);
+
+    // Resize to odd width and height
+    // New position: center - newSize/2 = (20 - 15/2, 20 - 13/2) = (20 - 7, 20 - 6) = (13, 14)
+    auto resized = r.withSizeKeepingCenter (15, 13);
+    EXPECT_EQ (resized.getX(), 13);
+    EXPECT_EQ (resized.getY(), 14);
+    EXPECT_EQ (resized.getWidth(), 15);
+    EXPECT_EQ (resized.getHeight(), 13);
+
+    // Center is preserved correctly with integer division
+    // New center: (13 + 15/2, 14 + 13/2) = (13 + 7, 14 + 6) = (20, 20)
+    auto newCenter = resized.getCenter();
+    EXPECT_EQ (newCenter.getX(), 20);
+    EXPECT_EQ (newCenter.getY(), 20);
+}
+
+TEST (RectangleTests, WithSizeKeepingCenter_SameSize)
+{
+    Rectangle<float> r (10.0f, 15.0f, 30.0f, 40.0f);
+
+    // Resize to same size should create identical rectangle
+    auto resized = r.withSizeKeepingCenter (30.0f, 40.0f);
+    EXPECT_EQ (resized, r);
+}
+
+TEST (RectangleTests, WithSizeKeepingCenter_EmptyRectangle)
+{
+    Rectangle<float> empty;
+    EXPECT_TRUE (empty.isEmpty());
+
+    auto center = empty.getCenter();
+
+    // Resize empty rectangle
+    auto resized = empty.withSizeKeepingCenter (10.0f, 10.0f);
+    EXPECT_FLOAT_EQ (resized.getX(), -5.0f);
+    EXPECT_FLOAT_EQ (resized.getY(), -5.0f);
+    EXPECT_FLOAT_EQ (resized.getWidth(), 10.0f);
+    EXPECT_FLOAT_EQ (resized.getHeight(), 10.0f);
+
+    auto newCenter = resized.getCenter();
+    EXPECT_FLOAT_EQ (newCenter.getX(), center.getX());
+    EXPECT_FLOAT_EQ (newCenter.getY(), center.getY());
+}
+
+TEST (RectangleTests, WithSizeKeepingCenter_FractionalValues)
+{
+    // Test with fractional dimensions
+    Rectangle<float> r (5.5f, 7.25f, 12.5f, 15.75f);
+    auto center = r.getCenter();
+    EXPECT_FLOAT_EQ (center.getX(), 11.75f);
+    EXPECT_FLOAT_EQ (center.getY(), 15.125f);
+
+    auto resized = r.withSizeKeepingCenter (8.3f, 10.6f);
+    EXPECT_FLOAT_EQ (resized.getWidth(), 8.3f);
+    EXPECT_FLOAT_EQ (resized.getHeight(), 10.6f);
+
+    auto newCenter = resized.getCenter();
+    EXPECT_FLOAT_EQ (newCenter.getX(), 11.75f);
+    EXPECT_FLOAT_EQ (newCenter.getY(), 15.125f);
+}

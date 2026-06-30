@@ -23,16 +23,30 @@ namespace yup
 {
 
 //==============================================================================
+/** A button that displays text.
+
+    To create a custom text button, inherit from this class and implement the paintButton() method.
+
+    The button will automatically track mouse events to determine when it is being hovered over
+    or clicked, and will call the onClick callback when it is clicked.
+
+    @see Button, Component
+*/
 class YUP_API TextButton : public Button
 {
 public:
     //==============================================================================
+    /** Creates a text button with the given component ID. */
     TextButton (StringRef componentID = {});
 
     //==============================================================================
-
+    /** Returns the text displayed on the button. */
     String getButtonText() const { return buttonText; }
 
+    /** Sets the text displayed on the button
+    
+        @param newButtonText The new text to display on the button.
+    */
     void setButtonText (StringRef newButtonText);
 
     //==============================================================================
@@ -47,18 +61,22 @@ public:
         static const Identifier outlineFocusedColorId;
     };
 
+    //==============================================================================
+    /** Returns the bounds of the text within the button. */
     Rectangle<float> getTextBounds() const;
 
     //==============================================================================
+    /** @internal */
+    StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
+
     /** @internal */
     void paintButton (Graphics& g) override;
     /** @internal */
     void resized() override;
 
-    /** @internal */
-    StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
-
 private:
+    void updateTextLayout();
+
     String buttonText;
     StyledText styledText;
 };

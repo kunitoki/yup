@@ -24,27 +24,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#if defined(_MSC_VER)
-#pragma warning (push)
-#pragma warning (disable: 4309)
-#pragma warning (disable: 4305)
-#pragma warning (disable: 4365)
-#pragma warning (disable: 6385)
-#pragma warning (disable: 6326)
-#pragma warning (disable: 6340)
-#else
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wconversion"
-#pragma clang diagnostic ignored "-Wsign-conversion"
-#pragma clang diagnostic ignored "-Wshadow"
-#pragma clang diagnostic ignored "-Wdeprecated-register"
-#pragma clang diagnostic ignored "-Wswitch-enum"
-#pragma clang diagnostic ignored "-Wswitch-default"
-#pragma clang diagnostic ignored "-Wredundant-decls"
-#pragma clang diagnostic ignored "-Wimplicit-fallthrough"
-#pragma clang diagnostic ignored "-Wzero-as-null-pointer-constant"
-#pragma clang diagnostic ignored "-Wcomma"
-#endif
+YUP_ZLIB_BEGIN_IGNORE_WARNINGS
 
 #include "src/adler32.c"
 #include "src/compress.c"
@@ -52,21 +32,8 @@
 #undef DO8
 #include "src/crc32.c"
 #include "src/deflate.c"
-#include "src/inffast.c"
-#undef PULLBYTE
-#undef LOAD
-#undef RESTORE
-#undef INITBITS
-#undef NEEDBITS
-#undef DROPBITS
-#undef BYTEBITS
-#include "src/inflate.c"
-#include "src/inftrees.c"
 #include "src/trees.c"
+#undef GZIP
 #include "src/zutil.c"
 
-#if _MSC_VER
-#pragma warning (pop)
-#else
-#pragma clang diagnostic pop
-#endif
+YUP_ZLIB_END_IGNORE_WARNINGS

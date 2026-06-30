@@ -12,12 +12,21 @@ template <typename T> class TypedChild
 public:
     TypedChild(Core** child, Core** end) : m_child(child), m_end(end) {}
 
-    T* operator*() const { return (*m_child)->template as<T>(); }
+    T* operator*() const
+    {
+        auto child = *m_child;
+        if (child == nullptr)
+        {
+            return nullptr;
+        }
+        return child->template as<T>();
+    }
+
     TypedChild& operator++()
     {
         m_child++;
-        while (m_child != m_end && (*m_child) != nullptr &&
-               !(*m_child)->template is<T>())
+        while (m_child != m_end &&
+               ((*m_child) == nullptr || !(*m_child)->template is<T>()))
         {
             m_child++;
         }
@@ -42,7 +51,8 @@ public:
     {
         size_t size = m_children.size();
         size_t index = 0;
-        while (index < size && !m_children[index]->template is<T>())
+        while (index < size && (m_children[index] == nullptr ||
+                                !m_children[index]->template is<T>()))
         {
             index++;
         }

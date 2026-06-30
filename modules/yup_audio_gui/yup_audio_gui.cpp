@@ -32,6 +32,14 @@
 
 //==============================================================================
 
+#include "waveform/yup_AudioPeakProfile.cpp"
+#include "waveform/yup_AudioPeakProfileCache.cpp"
+#include "waveform/yup_AudioThumbnail.cpp"
 #include "keyboard/yup_MidiKeyboardComponent.cpp"
+#include "displays/yup_AudioViewComponent.cpp"
 #include "displays/yup_SpectrumAnalyzerComponent.cpp"
+#include "displays/yup_SpectrogramComponent.cpp"
 #include "displays/yup_CartesianPlane.cpp"
+#include "metering/yup_KMeterComponent.cpp"
+#include "graph/yup_AudioGraphNodeView.cpp"
+#include "graph/yup_AudioGraphComponent.cpp"

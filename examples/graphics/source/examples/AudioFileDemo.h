@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2025 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -21,12 +21,17 @@
 
 #pragma once
 
+#include <atomic>
+#include <cmath>
 #include <memory>
 #include <vector>
 
 #include <yup_audio_basics/yup_audio_basics.h>
 #include <yup_audio_devices/yup_audio_devices.h>
 #include <yup_audio_formats/yup_audio_formats.h>
+#include <yup_audio_gui/yup_audio_gui.h>
+#include <yup_core/yup_core.h>
+#include <yup_dsp/yup_dsp.h>
 #include <yup_gui/yup_gui.h>
 
 //==============================================================================
@@ -34,288 +39,495 @@
 /**
     Draws a multi-channel waveform with one horizontal lane per channel.
 */
-class AudioWaveformDisplay : public yup::Component
+class AudioFileWaveform : public yup::AudioViewComponent
 {
 public:
-    AudioWaveformDisplay()
+    AudioFileWaveform (std::shared_ptr<yup::AudioPeakProfileCache> cacheToUse)
+        : yup::AudioViewComponent (std::move (cacheToUse))
     {
         addAndMakeVisible (playhead);
+        playhead.setVisible (false);
     }
 
-    /** Assigns the buffer to render and refreshes the waveform cache. */
-    void setAudioBuffer (const yup::AudioBuffer<float>* newBuffer)
-    {
-        audioBuffer = newBuffer;
-
-        playhead.setLaneBounds (getWaveformBounds());
-
-        rebuildCache();
-        repaint();
-    }
-
-    /** Clears the waveform display back to its empty placeholder state. */
     void clear()
     {
-        audioBuffer = nullptr;
+        AudioViewComponent::clear();
         playheadSeconds = 0.0;
         lengthSeconds = 0.0;
-        channelPeaks.clear();
+        onsetTimes.clear();
+        hasOnsets = false;
+        updatePlayheadPosition();
+    }
 
-        updatePlayheadBounds();
-
+    /** Sets onset markers to overlay on the waveform. */
+    void setOnsetData (const std::vector<double>& times)
+    {
+        onsetTimes = times;
+        hasOnsets = ! times.empty();
         repaint();
     }
 
-    /** Updates the playhead marker position in seconds. */
+    /** Updates the playhead without repainting the full waveform. */
     void setPlayhead (double newPlayheadSeconds, double newLengthSeconds)
     {
         playheadSeconds = newPlayheadSeconds;
         lengthSeconds = newLengthSeconds;
-
-        updatePlayheadBounds();
+        updatePlayheadPosition();
     }
 
+protected:
     void resized() override
     {
-        rebuildCache();
-
-        playhead.setLaneBounds (getWaveformBounds());
-
-        updatePlayheadBounds();
+        AudioViewComponent::resized();
+        updatePlayheadPosition();
     }
 
     void paint (yup::Graphics& g) override
     {
-        auto bounds = getLocalBounds().reduced (8);
-        g.setFillColor (yup::Color (0xFF101010));
-        g.fillAll();
+        AudioViewComponent::paint (g);
 
-        if (audioBuffer == nullptr || audioBuffer->getNumSamples() == 0)
-        {
-            g.setFillColor (yup::Colors::lightgray);
-            auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (14.0f);
-            g.fillFittedText ("Load an audio file to view its waveform.",
-                              font,
-                              bounds,
-                              yup::Justification::center);
-            return;
-        }
-
-        auto labelArea = bounds.removeFromLeft (labelWidth);
-        auto waveformArea = bounds;
-        const int numChannels = static_cast<int> (channelPeaks.size());
-
-        if (numChannels == 0)
+        if (! hasOnsets || getSampleRate() <= 0.0)
             return;
 
-        const float laneHeight = waveformArea.getHeight() / static_cast<float> (numChannels);
-        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
+        const auto waveformBounds = getWaveformBounds();
+        const auto viewRange = getViewRangeSamples();
 
-        for (int channel = 0; channel < numChannels; ++channel)
+        g.setStrokeColor (yup::Color (0xFF00FF00).withAlpha (0.4f));
+
+        for (auto t : onsetTimes)
         {
-            yup::Rectangle<float> lane (waveformArea.getX(),
-                                        waveformArea.getY() + laneHeight * channel,
-                                        waveformArea.getWidth(),
-                                        laneHeight);
+            const double sample = timeToSample (t);
 
-            g.setFillColor (yup::Color (0xFF181818));
-            g.fillRect (lane);
+            if (sample < viewRange.getStart())
+                continue;
+            else if (sample > viewRange.getEnd())
+                break;
 
-            g.setStrokeColor (yup::Color (0xFF2A2A2A));
-            g.setStrokeWidth (1.0f);
-            g.strokeRect (lane);
-
-            auto labelBounds = labelArea.withY (lane.getY()).withHeight (lane.getHeight());
-            g.setFillColor (yup::Colors::white);
-            g.fillFittedText ("Ch " + yup::String (channel + 1),
-                              font,
-                              labelBounds,
-                              yup::Justification::center);
-
-            drawChannelWaveform (g, lane, channel);
+            const float x = sampleToX (sample, waveformBounds);
+            g.strokeLine (x, waveformBounds.getY(), x, waveformBounds.getBottom());
         }
     }
 
 private:
-    class PlayheadComponent : public yup::Component
+    class PlayheadMarker : public yup::Component
     {
     public:
-        PlayheadComponent()
-        {
-            setOpaque (false);
-        }
-
-        void setPlayheadX (float newX)
-        {
-            playheadX = newX;
-
-            updateBounds();
-        }
-
-        void setLaneBounds (const yup::Rectangle<float>& newBounds)
-        {
-            laneBounds = newBounds;
-
-            updateBounds();
-        }
-
-    private:
         void paint (yup::Graphics& g) override
         {
             g.setFillColor (yup::Color (0xFFFFCC33));
             g.fillRect (getLocalBounds());
         }
+    };
 
-        void updateBounds()
+    void updatePlayheadPosition()
+    {
+        const double sampleRate = getSampleRate();
+        if (lengthSeconds <= 0.0 || sampleRate <= 0.0 || getTotalSamples() <= 0)
         {
-            if (laneBounds.getWidth() <= 0.0f || playheadX < 0.0f)
+            playhead.setVisible (false);
+            return;
+        }
+
+        const auto waveformBounds = getWaveformBounds();
+        if (waveformBounds.getWidth() <= 0.0f)
+        {
+            playhead.setVisible (false);
+            return;
+        }
+
+        const double clamped = yup::jlimit (0.0, lengthSeconds, playheadSeconds);
+        const double samplePosition = clamped * sampleRate;
+        const auto viewRange = getViewRangeSamples();
+
+        if (viewRange.isEmpty()
+            || samplePosition < viewRange.getStart()
+            || samplePosition > viewRange.getEnd())
+        {
+            playhead.setVisible (false);
+            return;
+        }
+
+        const float x = sampleToX (samplePosition, waveformBounds);
+        const float lineWidth = 2.0f;
+        playhead.setBounds (x - lineWidth * 0.5f,
+                            waveformBounds.getY(),
+                            lineWidth,
+                            waveformBounds.getHeight());
+        playhead.setVisible (true);
+        playhead.repaint();
+    }
+
+    PlayheadMarker playhead;
+    double playheadSeconds = 0.0;
+    double lengthSeconds = 0.0;
+    std::vector<double> onsetTimes;
+    bool hasOnsets = false;
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioFileWaveform)
+};
+
+//==============================================================================
+
+/**
+    Wraps an AudioSource and taps the audio stream to send to a KMeterState.
+*/
+class MeteringAudioSource : public yup::PositionableAudioSource
+{
+public:
+    MeteringAudioSource (yup::PositionableAudioSource* sourceToWrap, yup::KMeterState& meterState)
+        : source (sourceToWrap)
+        , meter (meterState)
+    {
+    }
+
+    void prepareToPlay (int samplesPerBlockExpected, double newSampleRate) override
+    {
+        if (source != nullptr)
+            source->prepareToPlay (samplesPerBlockExpected, newSampleRate);
+
+        meter.prepare (newSampleRate, 2);
+    }
+
+    void releaseResources() override
+    {
+        if (source != nullptr)
+            source->releaseResources();
+    }
+
+    void getNextAudioBlock (const yup::AudioSourceChannelInfo& bufferToFill) override
+    {
+        if (source != nullptr)
+        {
+            source->getNextAudioBlock (bufferToFill);
+
+            // Tap the audio and push to meter
+            const int numChannels = yup::jmin (bufferToFill.buffer->getNumChannels(), 2);
+            if (numChannels > 0 && bufferToFill.numSamples > 0)
             {
-                setVisible (false);
+                const float* channels[2] = { nullptr, nullptr };
+                for (int i = 0; i < numChannels; ++i)
+                    channels[i] = bufferToFill.buffer->getReadPointer (i, bufferToFill.startSample);
+
+                meter.pushSamples (channels, numChannels, bufferToFill.numSamples);
+                meter.processPendingAudio();
+            }
+        }
+        else
+        {
+            bufferToFill.clearActiveBufferRegion();
+        }
+    }
+
+    void setNextReadPosition (yup::int64 newPosition) override
+    {
+        if (source != nullptr)
+            source->setNextReadPosition (newPosition);
+    }
+
+    yup::int64 getNextReadPosition() const override
+    {
+        return source != nullptr ? source->getNextReadPosition() : 0;
+    }
+
+    yup::int64 getTotalLength() const override
+    {
+        return source != nullptr ? source->getTotalLength() : 0;
+    }
+
+    bool isLooping() const override
+    {
+        return source != nullptr ? source->isLooping() : false;
+    }
+
+    void setLooping (bool shouldLoop) override
+    {
+        if (source != nullptr)
+            source->setLooping (shouldLoop);
+    }
+
+private:
+    yup::PositionableAudioSource* source;
+    yup::KMeterState& meter;
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MeteringAudioSource)
+};
+
+//==============================================================================
+/**
+    Wraps a PositionableAudioSource with time-stretching and pitch-shifting.
+*/
+class TimeStretchAudioSource : public yup::PositionableAudioSource
+{
+public:
+    TimeStretchAudioSource (yup::PositionableAudioSource* sourceToWrap,
+                            int numChannelsToUse,
+                            yup::TimeStretchProcessor::Backend backendToUse)
+        : source (sourceToWrap)
+        , numChannels (numChannelsToUse)
+        , preferredBackend (backendToUse)
+    {
+    }
+
+    void prepareToPlay (int samplesPerBlockExpected, double newSampleRate) override
+    {
+        sampleRate = newSampleRate;
+        maxInputBlockSize = static_cast<int> (std::ceil (static_cast<double> (samplesPerBlockExpected) / minTimeRatio));
+        maxInputBlockSize = yup::jmax (maxInputBlockSize, samplesPerBlockExpected);
+        outputPointers.resize (static_cast<size_t> (numChannels));
+
+        if (source != nullptr)
+            source->prepareToPlay (maxInputBlockSize, newSampleRate);
+
+        yup::TimeStretchProcessor::ProcessSpec spec;
+        spec.inputSampleRate = newSampleRate;
+        spec.outputSampleRate = newSampleRate;
+        spec.maximumBlockSize = maxInputBlockSize;
+        spec.numChannels = numChannels;
+
+        const auto result = timeStretchProcessor.prepare (spec, preferredBackend);
+        timeStretchAvailable = result.wasOk();
+
+        if (timeStretchAvailable)
+        {
+            timeStretchProcessor.setTimeRatio (timeRatio);
+            timeStretchProcessor.setPitchRatio (pitchRatio);
+            setupInputProvider();
+        }
+    }
+
+    void releaseResources() override
+    {
+        if (source != nullptr)
+            source->releaseResources();
+    }
+
+    void getNextAudioBlock (const yup::AudioSourceChannelInfo& bufferToFill) override
+    {
+        if (source == nullptr)
+        {
+            bufferToFill.clearActiveBufferRegion();
+            return;
+        }
+
+        applyPendingParameters();
+
+        const int outputFrames = bufferToFill.numSamples;
+        if (outputFrames <= 0)
+            return;
+
+        if (! timeStretchAvailable)
+        {
+            source->getNextAudioBlock (bufferToFill);
+            outputPosition += outputFrames;
+            currentInputPosition.store (source->getNextReadPosition());
+            return;
+        }
+
+        const int channelsToProcess = yup::jmin (numChannels, bufferToFill.buffer->getNumChannels());
+        for (int channel = 0; channel < channelsToProcess; ++channel)
+            outputPointers[static_cast<size_t> (channel)] = bufferToFill.buffer->getWritePointer (channel, bufferToFill.startSample);
+
+        const auto result = timeStretchProcessor.process (nullptr, 0, outputPointers.data(), outputFrames);
+
+        if (result.failed())
+        {
+            bufferToFill.clearActiveBufferRegion();
+        }
+        else
+        {
+            const int renderedFrames = result.getValue();
+            if (renderedFrames < outputFrames)
+            {
+                const int framesToClear = outputFrames - renderedFrames;
+                for (int channel = 0; channel < channelsToProcess; ++channel)
+                    bufferToFill.buffer->clear (channel,
+                                                bufferToFill.startSample + renderedFrames,
+                                                framesToClear);
+            }
+        }
+
+        outputPosition += outputFrames;
+    }
+
+    void setNextReadPosition (yup::int64 newPosition) override
+    {
+        const auto oldPosition = outputPosition;
+        outputPosition = newPosition;
+
+        const auto inputPos = getInputPositionForOutput (newPosition);
+
+        if (source != nullptr)
+            source->setNextReadPosition (inputPos);
+
+        currentInputPosition.store (inputPos);
+
+        // Only reset if this is a discontinuous seek
+        if (timeStretchAvailable && std::abs (newPosition - oldPosition) > 64)
+            timeStretchProcessor.setInputPosition (inputPos);
+    }
+
+    yup::int64 getNextReadPosition() const override
+    {
+        return outputPosition;
+    }
+
+    yup::int64 getTotalLength() const override
+    {
+        if (source == nullptr)
+            return 0;
+
+        const auto ratio = timeStretchAvailable ? timeRatio.load() : 1.0;
+        return static_cast<yup::int64> (std::round (static_cast<double> (source->getTotalLength()) * ratio));
+    }
+
+    bool isLooping() const override
+    {
+        return source != nullptr ? source->isLooping() : false;
+    }
+
+    void setLooping (bool shouldLoop) override
+    {
+        if (source != nullptr)
+            source->setLooping (shouldLoop);
+    }
+
+    void setTimeRatio (double newTimeRatio)
+    {
+        const auto clamped = yup::jlimit (minTimeRatio, maxTimeRatio, newTimeRatio);
+        if (timeRatio.load() == clamped)
+            return;
+
+        timeRatio.store (clamped);
+        parametersDirty.store (true);
+    }
+
+    void setPitchRatio (double newPitchRatio)
+    {
+        const auto clamped = yup::jlimit (minPitchRatio, maxPitchRatio, newPitchRatio);
+        if (pitchRatio.load() == clamped)
+            return;
+
+        pitchRatio.store (clamped);
+        parametersDirty.store (true);
+    }
+
+    double getTimeRatio() const noexcept { return timeRatio.load(); }
+
+    double getPitchRatio() const noexcept { return pitchRatio.load(); }
+
+    yup::int64 getInputPosition() const noexcept { return currentInputPosition.load(); }
+
+private:
+    void setupInputProvider()
+    {
+        if (source == nullptr)
+            return;
+
+        const int maxFrames = timeStretchProcessor.getMaxInputFrameCount();
+        tempBuffer.setSize (numChannels, maxFrames);
+
+        timeStretchProcessor.setInputProvider ([this] (yup::int64 beginFrame,
+                                                       int numFrames,
+                                                       float* const* destChannels,
+                                                       int channelStride,
+                                                       int& muteHead,
+                                                       int& muteTail)
+        {
+            (void) channelStride;
+            muteHead = 0;
+            muteTail = 0;
+
+            // Track the center of the grain as the current input position
+            currentInputPosition.store (beginFrame + numFrames / 2);
+
+            if (source == nullptr || numFrames <= 0)
+            {
+                muteHead = numFrames;
                 return;
             }
 
-            setVisible (true);
-            const float snappedX = static_cast<float> (static_cast<int> (playheadX));
-            setBounds (laneBounds.withX (laneBounds.getX() + snappedX).withWidth (1.0f).toNearestInt());
+            const auto totalLength = source->getTotalLength();
+            const yup::int64 clampedBegin = yup::jlimit<yup::int64> (0, totalLength, beginFrame);
+            const yup::int64 clampedEnd = yup::jlimit<yup::int64> (0, totalLength, beginFrame + numFrames);
 
-            repaint();
-        }
-
-        yup::Rectangle<float> laneBounds;
-        float playheadX = -1.0f;
-    };
-
-    struct ChannelPeaks
-    {
-        std::vector<float> minValues;
-        std::vector<float> maxValues;
-    };
-
-    yup::Rectangle<float> getWaveformBounds() const
-    {
-        auto bounds = getLocalBounds().reduced (8);
-        bounds.removeFromLeft (labelWidth);
-        return bounds;
-    }
-
-    void rebuildCache()
-    {
-        channelPeaks.clear();
-        if (audioBuffer == nullptr)
-            return;
-
-        const int numSamples = audioBuffer->getNumSamples();
-        const int numChannels = audioBuffer->getNumChannels();
-        auto waveformBounds = getWaveformBounds();
-        const int waveformWidth = static_cast<int> (waveformBounds.getWidth());
-
-        if (numSamples <= 0 || numChannels <= 0 || waveformWidth <= 0)
-            return;
-
-        const int columns = yup::jmax (1, yup::jmin (waveformWidth, numSamples));
-        const int samplesPerColumn = yup::jmax (1, numSamples / columns);
-
-        channelPeaks.resize (static_cast<size_t> (numChannels));
-        for (int channel = 0; channel < numChannels; ++channel)
-        {
-            auto& peaks = channelPeaks[static_cast<size_t> (channel)];
-            peaks.minValues.assign (static_cast<size_t> (columns), 0.0f);
-            peaks.maxValues.assign (static_cast<size_t> (columns), 0.0f);
-
-            for (int column = 0; column < columns; ++column)
+            if (clampedBegin >= clampedEnd)
             {
-                const int startSample = column * samplesPerColumn;
-                const int endSample = (column == columns - 1)
-                                        ? numSamples
-                                        : yup::jmin (numSamples, startSample + samplesPerColumn);
-
-                float minValue = 1.0f;
-                float maxValue = -1.0f;
-
-                for (int sample = startSample; sample < endSample; ++sample)
-                {
-                    const float value = audioBuffer->getSample (channel, sample);
-                    minValue = yup::jmin (minValue, value);
-                    maxValue = yup::jmax (maxValue, value);
-                }
-
-                peaks.minValues[static_cast<size_t> (column)] = minValue;
-                peaks.maxValues[static_cast<size_t> (column)] = maxValue;
+                muteHead = numFrames;
+                for (int ch = 0; ch < numChannels; ++ch)
+                    std::fill (destChannels[ch], destChannels[ch] + numFrames, 0.0f);
+                return;
             }
-        }
+
+            muteHead = static_cast<int> (clampedBegin - beginFrame);
+            muteTail = static_cast<int> ((beginFrame + numFrames) - clampedEnd);
+            const int validFrames = static_cast<int> (clampedEnd - clampedBegin);
+            const int framesToRead = yup::jmin (validFrames, tempBuffer.getNumSamples());
+            muteTail = yup::jlimit (0, numFrames - muteHead, muteTail + validFrames - framesToRead);
+
+            source->setNextReadPosition (clampedBegin);
+            yup::AudioSourceChannelInfo info (&tempBuffer, 0, framesToRead);
+            source->getNextAudioBlock (info);
+
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                if (muteHead > 0)
+                    std::fill (destChannels[ch], destChannels[ch] + muteHead, 0.0f);
+
+                std::copy (tempBuffer.getReadPointer (ch),
+                           tempBuffer.getReadPointer (ch) + framesToRead,
+                           destChannels[ch] + muteHead);
+
+                if (muteTail > 0)
+                    std::fill (destChannels[ch] + numFrames - muteTail,
+                               destChannels[ch] + numFrames,
+                               0.0f);
+            }
+        });
     }
 
-    void updatePlayheadBounds()
+    void applyPendingParameters()
     {
-        if (lengthSeconds <= 0.0)
-        {
-            playhead.setPlayheadX (-1.0f);
+        if (! timeStretchAvailable)
             return;
-        }
 
-        auto waveformBounds = getWaveformBounds();
-        playhead.setLaneBounds (waveformBounds);
+        if (! parametersDirty.exchange (false))
+            return;
 
-        const double clamped = yup::jlimit (0.0, lengthSeconds, playheadSeconds);
-        const float x = static_cast<float> (clamped / lengthSeconds) * waveformBounds.getWidth();
-        playhead.setPlayheadX (x);
+        const auto newTimeRatio = timeRatio.load();
+        const auto newPitchRatio = pitchRatio.load();
+        timeStretchProcessor.setTimeRatio (newTimeRatio);
+        timeStretchProcessor.setPitchRatio (newPitchRatio);
     }
 
-    void drawChannelWaveform (yup::Graphics& g, const yup::Rectangle<float>& lane, int channelIndex)
+    yup::int64 getInputPositionForOutput (yup::int64 outputFrames) const
     {
-        if (channelIndex < 0 || channelIndex >= static_cast<int> (channelPeaks.size()))
-            return;
-
-        const auto& peaks = channelPeaks[static_cast<size_t> (channelIndex)];
-        if (peaks.minValues.empty() || peaks.maxValues.empty())
-            return;
-
-        const float centerY = lane.getCenterY();
-        const float amplitude = lane.getHeight() * 0.45f;
-        const float startX = lane.getX();
-        const float stepX = lane.getWidth() / static_cast<float> (peaks.minValues.size());
-
-        g.setStrokeColor (getChannelColor (channelIndex));
-        g.setStrokeWidth (1.0f);
-
-        for (size_t i = 0; i < peaks.minValues.size(); ++i)
-        {
-            float x = startX + static_cast<float> (i) * stepX;
-            float minValue = peaks.minValues[i];
-            float maxValue = peaks.maxValues[i];
-
-            float y1 = centerY - maxValue * amplitude;
-            float y2 = centerY - minValue * amplitude;
-
-            g.strokeLine ({ x, y1 }, { x, y2 });
-        }
-
-        g.setStrokeColor (yup::Color (0xFF3A3A3A));
-        g.setStrokeWidth (1.0f);
-        g.strokeLine ({ lane.getX(), centerY }, { lane.getRight(), centerY });
+        const auto ratio = timeStretchAvailable ? timeRatio.load() : 1.0;
+        return static_cast<yup::int64> (std::floor (static_cast<double> (outputFrames) / ratio));
     }
 
-    yup::Color getChannelColor (int channelIndex) const
-    {
-        static const yup::Color colors[] = {
-            yup::Color (0xFF5BC0EB),
-            yup::Color (0xFFFDE74C),
-            yup::Color (0xFF9BC53D),
-            yup::Color (0xFFE55934),
-            yup::Color (0xFFFA7921),
-            yup::Color (0xFF9D4EDD)
-        };
+    yup::PositionableAudioSource* source = nullptr;
+    int numChannels = 0;
+    int maxInputBlockSize = 0;
+    double sampleRate = 0.0;
+    yup::int64 outputPosition = 0;
+    bool timeStretchAvailable = false;
+    yup::TimeStretchProcessor::Backend preferredBackend = yup::TimeStretchProcessor::Backend::automatic;
 
-        const int colorIndex = channelIndex % (static_cast<int> (sizeof (colors) / sizeof (colors[0])));
-        return colors[colorIndex];
-    }
+    std::atomic<double> timeRatio { 1.0 };
+    std::atomic<double> pitchRatio { 1.0 };
+    std::atomic<bool> parametersDirty { false };
+    std::atomic<yup::int64> currentInputPosition { 0 };
 
-    const yup::AudioBuffer<float>* audioBuffer = nullptr;
-    std::vector<ChannelPeaks> channelPeaks;
-    double playheadSeconds = 0.0;
-    double lengthSeconds = 0.0;
-    const int labelWidth = 48;
-    PlayheadComponent playhead;
+    yup::AudioBuffer<float> tempBuffer;
+    std::vector<float*> outputPointers;
+    yup::TimeStretchProcessor timeStretchProcessor;
+
+    static constexpr double minTimeRatio = 0.5;
+    static constexpr double maxTimeRatio = 2.0;
+    static constexpr double minPitchRatio = 0.5;
+    static constexpr double maxPitchRatio = 2.0;
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TimeStretchAudioSource)
 };
 
 //==============================================================================
@@ -324,32 +536,48 @@ private:
     Demonstrates loading, visualizing, playing, and exporting audio files.
 */
 class AudioFileDemo : public yup::Component
-    , public yup::Timer
 {
 public:
     AudioFileDemo()
         : Component ("AudioFileDemo")
+        , waveformCache (std::make_shared<yup::AudioPeakProfileCache>())
         , loadButton ("Load Audio")
         , playButton ("Play")
         , stopButton ("Stop")
         , saveButton ("Save As")
         , loopButton ("Loop")
+        , labelsButton ("Labels")
+        , waveformDisplay (waveformCache)
+        , meterState (48000.0, 2)
+        , leftMeter (meterState, 0)
+        , rightMeter (meterState, 1)
+        , meteringSource (&transportSource, meterState)
     {
         formatManager.registerDefaultFormats (
             yup::AudioFormatType::all & ~yup::AudioFormatType::coreAudio);
 
         deviceManager.initialiseWithDefaultDevices (0, 2);
         deviceManager.addAudioCallback (&sourcePlayer);
-        sourcePlayer.setSource (&transportSource);
+        sourcePlayer.setSource (&meteringSource);
+
+        // Configure K-Meters
+        meterState.setScale (yup::KMeterState::Scale::k20);
+        leftMeter.setShowPeakHold (true);
+        rightMeter.setShowPeakHold (true);
+
+        // Configure the waveform cache
+        waveformCache->setThreadPool (&waveformThreadPool);
+
+        timeStretchSupported = yup::TimeStretchProcessor::isBackendAvailable (yup::TimeStretchProcessor::Backend::automatic);
 
         setupUi();
-        startTimerHz (30);
     }
 
     ~AudioFileDemo() override
     {
         stopPlayback();
         transportSource.setSource (nullptr);
+        meteringSource.setLooping (false);
         sourcePlayer.setSource (nullptr);
         deviceManager.removeAudioCallback (&sourcePlayer);
         deviceManager.closeAudioDevice();
@@ -358,12 +586,15 @@ public:
     void resized() override
     {
         auto bounds = getLocalBounds().reduced (8);
-        auto header = bounds.removeFromTop (38);
+        auto header = bounds.removeFromTop (156);
 
         const int buttonHeight = 28;
-        const int buttonWidth = 110;
+        const int buttonWidth = 100;
+        const int smallButtonWidth = 60;
+        const int mediumButtonWidth = 85;
         const int buttonMargin = 6;
 
+        // First row of buttons
         auto buttonRow = header.removeFromTop (buttonHeight);
         loadButton.setBounds (buttonRow.removeFromLeft (buttonWidth));
         buttonRow.removeFromLeft (buttonMargin);
@@ -374,12 +605,70 @@ public:
         saveButton.setBounds (buttonRow.removeFromLeft (buttonWidth));
         buttonRow.removeFromLeft (buttonMargin);
         loopButton.setBounds (buttonRow.removeFromLeft (buttonWidth));
+        buttonRow.removeFromLeft (buttonMargin);
+        labelsButton.setBounds (buttonRow.removeFromLeft (buttonWidth));
+
+        // Second row for K-scale buttons
+        header.removeFromTop (4);
+        auto scaleRow = header.removeFromTop (buttonHeight);
+        k20Button.setBounds (scaleRow.removeFromLeft (smallButtonWidth));
+        scaleRow.removeFromLeft (buttonMargin);
+        k14Button.setBounds (scaleRow.removeFromLeft (smallButtonWidth));
+        scaleRow.removeFromLeft (buttonMargin);
+        k12Button.setBounds (scaleRow.removeFromLeft (smallButtonWidth));
+
+        // Third row for metering standard buttons
+        header.removeFromTop (4);
+        auto standardRow = header.removeFromTop (buttonHeight);
+        rmsButton.setBounds (standardRow.removeFromLeft (mediumButtonWidth));
+        standardRow.removeFromLeft (buttonMargin);
+        ituButton.setBounds (standardRow.removeFromLeft (mediumButtonWidth));
+        standardRow.removeFromLeft (buttonMargin);
+        ebuButton.setBounds (standardRow.removeFromLeft (mediumButtonWidth));
+
+        // Fourth row for over counter mode buttons
+        header.removeFromTop (4);
+        auto modeRow = header.removeFromTop (buttonHeight);
+        contiguousButton.setBounds (modeRow.removeFromLeft (mediumButtonWidth));
+        modeRow.removeFromLeft (buttonMargin);
+        totalButton.setBounds (modeRow.removeFromLeft (mediumButtonWidth));
+
+        // Fifth row for time/pitch controls
+        header.removeFromTop (4);
+        auto stretchRow = header.removeFromTop (buttonHeight);
+        const int sliderLabelWidth = 70;
+        const int sliderWidth = 165;
+        const int backendWidth = 150;
+
+        timeLabel.setBounds (stretchRow.removeFromLeft (sliderLabelWidth));
+        stretchRow.removeFromLeft (buttonMargin);
+        timeStretchSlider.setBounds (stretchRow.removeFromLeft (sliderWidth));
+        stretchRow.removeFromLeft (buttonMargin * 2);
+        pitchLabel.setBounds (stretchRow.removeFromLeft (sliderLabelWidth));
+        stretchRow.removeFromLeft (buttonMargin);
+        pitchShiftSlider.setBounds (stretchRow.removeFromLeft (sliderWidth));
+        stretchRow.removeFromLeft (buttonMargin * 2);
+        backendLabel.setBounds (stretchRow.removeFromLeft (sliderLabelWidth));
+        stretchRow.removeFromLeft (buttonMargin);
+        backendComboBox.setBounds (stretchRow.removeFromLeft (backendWidth));
 
         bounds.removeFromTop (6);
         infoLabel.setBounds (bounds.removeFromTop (22));
         statusLabel.setBounds (bounds.removeFromTop (22));
         bounds.removeFromTop (6);
 
+        // Reserve space for K-Meters on the right
+        const int meterWidth = 60;
+        const int meterGap = 8;
+        const int meterSectionWidth = (meterWidth * 2) + (meterGap * 3);
+
+        auto meterArea = bounds.removeFromRight (meterSectionWidth);
+        leftMeter.setBounds (meterArea.removeFromLeft (meterWidth));
+        meterArea.removeFromLeft (meterGap);
+        rightMeter.setBounds (meterArea.removeFromLeft (meterWidth));
+
+        // Rest is for waveform
+        bounds.removeFromRight (meterGap);
         waveformDisplay.setBounds (bounds);
     }
 
@@ -389,9 +678,32 @@ public:
         g.fillAll();
     }
 
+    void refreshDisplay (double) override
+    {
+        if (! hasLoadedAudio)
+            return;
+
+        if (transportSource.hasStreamFinished())
+            stopPlayback();
+
+        // Get the actual input position being read from the time stretch source
+        double inputSeconds = 0.0;
+        if (timeStretchSource != nullptr && loadedSampleRate > 0.0)
+        {
+            const auto inputPos = timeStretchSource->getInputPosition();
+            inputSeconds = static_cast<double> (inputPos) / loadedSampleRate;
+        }
+
+        waveformDisplay.setPlayhead (inputSeconds, audioLengthSeconds);
+        updatePlaybackStatus();
+    }
+
 private:
     void setupUi()
     {
+        addAndMakeVisible (leftMeter);
+        addAndMakeVisible (rightMeter);
+
         addAndMakeVisible (loadButton);
         loadButton.onClick = [this]
         {
@@ -434,6 +746,114 @@ private:
                 memorySource->setLooping (loopEnabled);
         };
 
+        addAndMakeVisible (labelsButton);
+        labelsButton.setToggleState (true, yup::NotificationType::dontSendNotification);
+        labelsButton.onClick = [this]
+        {
+            waveformDisplay.setChannelLabelsVisible (labelsButton.getToggleState());
+        };
+
+        // K-Scale selection buttons (manual radio button behavior)
+        addAndMakeVisible (k20Button);
+        k20Button.setButtonText ("K-20");
+        k20Button.setToggleState (true, yup::NotificationType::dontSendNotification);
+        k20Button.onClick = [this]
+        {
+            k20Button.setToggleState (true, yup::NotificationType::dontSendNotification);
+            k14Button.setToggleState (false, yup::NotificationType::dontSendNotification);
+            k12Button.setToggleState (false, yup::NotificationType::dontSendNotification);
+            meterState.setScale (yup::KMeterState::Scale::k20);
+            leftMeter.repaint();
+            rightMeter.repaint();
+        };
+
+        addAndMakeVisible (k14Button);
+        k14Button.setButtonText ("K-14");
+        k14Button.setToggleState (false, yup::NotificationType::dontSendNotification);
+        k14Button.onClick = [this]
+        {
+            k20Button.setToggleState (false, yup::NotificationType::dontSendNotification);
+            k14Button.setToggleState (true, yup::NotificationType::dontSendNotification);
+            k12Button.setToggleState (false, yup::NotificationType::dontSendNotification);
+            meterState.setScale (yup::KMeterState::Scale::k14);
+            leftMeter.repaint();
+            rightMeter.repaint();
+        };
+
+        addAndMakeVisible (k12Button);
+        k12Button.setButtonText ("K-12");
+        k12Button.setToggleState (false, yup::NotificationType::dontSendNotification);
+        k12Button.onClick = [this]
+        {
+            k20Button.setToggleState (false, yup::NotificationType::dontSendNotification);
+            k14Button.setToggleState (false, yup::NotificationType::dontSendNotification);
+            k12Button.setToggleState (true, yup::NotificationType::dontSendNotification);
+            meterState.setScale (yup::KMeterState::Scale::k12);
+            leftMeter.repaint();
+            rightMeter.repaint();
+        };
+
+        // Metering standard selection buttons
+        addAndMakeVisible (rmsButton);
+        rmsButton.setButtonText ("RMS Flat");
+        rmsButton.setToggleState (true, yup::NotificationType::dontSendNotification);
+        rmsButton.onClick = [this]
+        {
+            rmsButton.setToggleState (true, yup::NotificationType::dontSendNotification);
+            ituButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+            ebuButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+            meterState.setMeteringStandard (yup::KMeterState::MeteringStandard::rmsFlat);
+            leftMeter.repaint();
+            rightMeter.repaint();
+        };
+
+        addAndMakeVisible (ituButton);
+        ituButton.setButtonText ("ITU BS.1770-4");
+        ituButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+        ituButton.onClick = [this]
+        {
+            rmsButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+            ituButton.setToggleState (true, yup::NotificationType::dontSendNotification);
+            ebuButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+            meterState.setMeteringStandard (yup::KMeterState::MeteringStandard::ituBS1770_4);
+            leftMeter.repaint();
+            rightMeter.repaint();
+        };
+
+        addAndMakeVisible (ebuButton);
+        ebuButton.setButtonText ("EBU R128");
+        ebuButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+        ebuButton.onClick = [this]
+        {
+            rmsButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+            ituButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+            ebuButton.setToggleState (true, yup::NotificationType::dontSendNotification);
+            meterState.setMeteringStandard (yup::KMeterState::MeteringStandard::ebuR128);
+            leftMeter.repaint();
+            rightMeter.repaint();
+        };
+
+        // Over counter mode selection buttons
+        addAndMakeVisible (contiguousButton);
+        contiguousButton.setButtonText ("Contiguous");
+        contiguousButton.setToggleState (true, yup::NotificationType::dontSendNotification);
+        contiguousButton.onClick = [this]
+        {
+            contiguousButton.setToggleState (true, yup::NotificationType::dontSendNotification);
+            totalButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+            meterState.setOverCounterMode (yup::KMeterState::OverCounterMode::contiguous);
+        };
+
+        addAndMakeVisible (totalButton);
+        totalButton.setButtonText ("Total");
+        totalButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+        totalButton.onClick = [this]
+        {
+            contiguousButton.setToggleState (false, yup::NotificationType::dontSendNotification);
+            totalButton.setToggleState (true, yup::NotificationType::dontSendNotification);
+            meterState.setOverCounterMode (yup::KMeterState::OverCounterMode::total);
+        };
+
         addAndMakeVisible (infoLabel);
         infoLabel.setText ("No audio loaded.", yup::NotificationType::dontSendNotification);
         infoLabel.setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
@@ -442,20 +862,72 @@ private:
         statusLabel.setText ("Choose an audio file to begin.", yup::NotificationType::dontSendNotification);
         statusLabel.setColor (yup::Label::Style::textFillColorId, yup::Colors::lightgray);
 
+        addAndMakeVisible (timeLabel);
+        timeLabel.setText ("Time", yup::NotificationType::dontSendNotification);
+        timeLabel.setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
+
+        addAndMakeVisible (timeStretchSlider);
+        timeStretchSlider.setSliderType (yup::Slider::LinearHorizontal);
+        timeStretchSlider.setRange (0.5, 2.0, 0.01);
+        timeStretchSlider.setValue (1.0, yup::NotificationType::dontSendNotification);
+        timeStretchSlider.setDefaultValue (1.0);
+        timeStretchSlider.setNumDecimalPlacesToDisplay (2);
+        timeStretchSlider.setTextBoxStyle (yup::Slider::TextBoxRight, false, 60, 20);
+        timeStretchSlider.onValueChanged = [this] (double value)
+        {
+            timeStretchRatio = value;
+            if (timeStretchSource != nullptr)
+                timeStretchSource->setTimeRatio (timeStretchRatio);
+            updatePlaybackStatus();
+        };
+
+        addAndMakeVisible (pitchLabel);
+        pitchLabel.setText ("Pitch", yup::NotificationType::dontSendNotification);
+        pitchLabel.setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
+
+        addAndMakeVisible (pitchShiftSlider);
+        pitchShiftSlider.setSliderType (yup::Slider::LinearHorizontal);
+        pitchShiftSlider.setRange (0.5, 2.0, 0.01);
+        pitchShiftSlider.setValue (1.0, yup::NotificationType::dontSendNotification);
+        pitchShiftSlider.setDefaultValue (1.0);
+        pitchShiftSlider.setNumDecimalPlacesToDisplay (2);
+        pitchShiftSlider.setTextBoxStyle (yup::Slider::TextBoxRight, false, 60, 20);
+        pitchShiftSlider.onValueChanged = [this] (double value)
+        {
+            pitchShiftRatio = value;
+            if (timeStretchSource != nullptr)
+                timeStretchSource->setPitchRatio (pitchShiftRatio);
+        };
+
+        addAndMakeVisible (backendLabel);
+        backendLabel.setText ("Backend", yup::NotificationType::dontSendNotification);
+        backendLabel.setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
+
+        addAndMakeVisible (backendComboBox);
+        backendComboBox.addItem ("Auto", backendAutomaticId);
+        backendComboBox.addItem ("Time Domain", backendTimeDomainId);
+
+        if (yup::TimeStretchProcessor::isBackendAvailable (yup::TimeStretchProcessor::Backend::bungee))
+            backendComboBox.addItem ("Bungee", backendBungeeId);
+
+        backendComboBox.setSelectedId (getBackendId (selectedTimeStretchBackend),
+                                       yup::NotificationType::dontSendNotification);
+        backendComboBox.onSelectedItemChanged = [this]
+        {
+            const auto backend = getBackendForId (backendComboBox.getSelectedId());
+            setTimeStretchBackend (backend);
+        };
+
+        timeStretchSlider.setEnabled (timeStretchSupported);
+        pitchShiftSlider.setEnabled (timeStretchSupported);
+        backendComboBox.setEnabled (timeStretchSupported);
+        timeLabel.setEnabled (timeStretchSupported);
+        pitchLabel.setEnabled (timeStretchSupported);
+        backendLabel.setEnabled (timeStretchSupported);
+
         addAndMakeVisible (waveformDisplay);
-    }
-
-    void timerCallback() override
-    {
-        if (! hasLoadedAudio)
-            return;
-
-        if (transportSource.hasStreamFinished())
-            stopPlayback();
-
-        waveformDisplay.setPlayhead (transportSource.getCurrentPosition(),
-                                     audioLengthSeconds);
-        updatePlaybackStatus();
+        waveformDisplay.setSelectable (true);
+        waveformDisplay.setChannelLabelsVisible (labelsButton.getToggleState());
     }
 
     void updateStatus (const yup::String& newStatus)
@@ -465,7 +937,7 @@ private:
 
     void updatePlaybackStatus()
     {
-        const double lengthSeconds = audioLengthSeconds;
+        const double lengthSeconds = audioLengthSeconds * (timeStretchRatio > 0.0 ? timeStretchRatio : 1.0);
         const double positionSeconds = transportSource.getCurrentPosition();
         yup::String positionText = formatTime (positionSeconds) + " / " + formatTime (lengthSeconds);
 
@@ -473,6 +945,40 @@ private:
             infoLabel.setText (currentFileName + "  |  " + positionText, yup::NotificationType::dontSendNotification);
         else
             infoLabel.setText (currentFileName + "  |  " + positionText + "  |  Stopped", yup::NotificationType::dontSendNotification);
+    }
+
+    void setTimeStretchBackend (yup::TimeStretchProcessor::Backend backend)
+    {
+        if (selectedTimeStretchBackend == backend)
+            return;
+
+        selectedTimeStretchBackend = backend;
+
+        if (hasLoadedAudio && memorySource != nullptr)
+            rebuildTimeStretchSource();
+
+        updateStatus ("Time stretch backend: " + getBackendName (selectedTimeStretchBackend));
+        updatePlaybackStatus();
+    }
+
+    void rebuildTimeStretchSource()
+    {
+        const bool wasPlaying = transportSource.isPlaying();
+        const double previousPosition = transportSource.getCurrentPosition();
+
+        transportSource.stop();
+        transportSource.setSource (nullptr);
+
+        timeStretchSource = std::make_unique<TimeStretchAudioSource> (memorySource.get(),
+                                                                      audioBuffer.getNumChannels(),
+                                                                      selectedTimeStretchBackend);
+        timeStretchSource->setTimeRatio (timeStretchRatio);
+        timeStretchSource->setPitchRatio (pitchShiftRatio);
+        transportSource.setSource (timeStretchSource.get(), 0, nullptr, loadedSampleRate, audioBuffer.getNumChannels());
+        transportSource.setPosition (previousPosition);
+
+        if (wasPlaying)
+            transportSource.start();
     }
 
     void togglePlayback()
@@ -503,6 +1009,8 @@ private:
         transportSource.stop();
         transportSource.setPosition (0.0);
         playButton.setButtonText ("Play");
+        waveformDisplay.setPlayhead (0.0, audioLengthSeconds);
+        updatePlaybackStatus();
     }
 
     void loadAudioFile (const yup::File& file)
@@ -535,9 +1043,35 @@ private:
         transportSource.stop();
         transportSource.setSource (nullptr);
         memorySource = std::make_unique<yup::MemoryAudioSource> (audioBuffer, false, loopEnabled);
-        transportSource.setSource (memorySource.get(), 0, nullptr, loadedSampleRate, numChannels);
+        timeStretchSource = std::make_unique<TimeStretchAudioSource> (memorySource.get(),
+                                                                      numChannels,
+                                                                      selectedTimeStretchBackend);
+        timeStretchSource->setTimeRatio (timeStretchRatio);
+        timeStretchSource->setPitchRatio (pitchShiftRatio);
+        transportSource.setSource (timeStretchSource.get(), 0, nullptr, loadedSampleRate, numChannels);
 
-        waveformDisplay.setAudioBuffer (&audioBuffer);
+        waveformDisplay.setSource (&audioBuffer, loadedSampleRate);
+        waveformDisplay.setPlayhead (0.0, audioLengthSeconds);
+
+        // Compute onsets in background
+        waveformThreadPool.addJob ([this]
+        {
+            superFlux.prepare ({ .spectrogram = { .fftSize = 2048, .fps = 200 },
+                                 .peakPicker = { .threshold = 0.8f },
+                                 .useFilterBank = true,
+                                 .refineOnsets = true },
+                               loadedSampleRate);
+
+            superFlux.processOffline (audioBuffer);
+            onsetTimes = superFlux.getOnsetTimes();
+            hasOnsets = true;
+
+            yup::MessageManager::callAsync ([this]
+            {
+                waveformDisplay.setOnsetData (onsetTimes);
+            });
+        });
+
         updateStatus ("Loaded " + file.getFileName() + " | " + yup::String (numChannels)
                       + " ch | " + yup::String (loadedSampleRate, 1) + " Hz | "
                       + formatTime (audioLengthSeconds));
@@ -610,7 +1144,58 @@ private:
 
     yup::String getAudioFileFilter() const
     {
+        // TODO - Add methods to audioformatmanager to get supported formats dynamically
         return "*.wav;*.aiff;*.aif;*.flac;*.mp3;*.opus;*.m4a;*.wma;*.ogg";
+    }
+
+    static int getBackendId (yup::TimeStretchProcessor::Backend backend)
+    {
+        switch (backend)
+        {
+            case yup::TimeStretchProcessor::Backend::automatic:
+                return backendAutomaticId;
+
+            case yup::TimeStretchProcessor::Backend::timeDomain:
+                return backendTimeDomainId;
+
+            case yup::TimeStretchProcessor::Backend::bungee:
+                return backendBungeeId;
+        }
+
+        return backendAutomaticId;
+    }
+
+    static yup::TimeStretchProcessor::Backend getBackendForId (int backendId)
+    {
+        switch (backendId)
+        {
+            case backendTimeDomainId:
+                return yup::TimeStretchProcessor::Backend::timeDomain;
+
+            case backendBungeeId:
+                return yup::TimeStretchProcessor::Backend::bungee;
+
+            case backendAutomaticId:
+            default:
+                return yup::TimeStretchProcessor::Backend::automatic;
+        }
+    }
+
+    static yup::String getBackendName (yup::TimeStretchProcessor::Backend backend)
+    {
+        switch (backend)
+        {
+            case yup::TimeStretchProcessor::Backend::automatic:
+                return "Auto";
+
+            case yup::TimeStretchProcessor::Backend::timeDomain:
+                return "Time Domain";
+
+            case yup::TimeStretchProcessor::Backend::bungee:
+                return "Bungee";
+        }
+
+        return "Auto";
     }
 
     yup::AudioFormatManager formatManager;
@@ -618,21 +1203,59 @@ private:
     yup::AudioSourcePlayer sourcePlayer;
     yup::AudioTransportSource transportSource;
     std::unique_ptr<yup::MemoryAudioSource> memorySource;
+    std::unique_ptr<TimeStretchAudioSource> timeStretchSource;
     yup::AudioBuffer<float> audioBuffer;
+
+    yup::ThreadPool waveformThreadPool;
+    std::shared_ptr<yup::AudioPeakProfileCache> waveformCache;
 
     yup::TextButton loadButton;
     yup::TextButton playButton;
     yup::TextButton stopButton;
     yup::TextButton saveButton;
     yup::ToggleButton loopButton;
+    yup::ToggleButton labelsButton;
+    yup::ToggleButton k20Button;
+    yup::ToggleButton k14Button;
+    yup::ToggleButton k12Button;
+    yup::ToggleButton rmsButton;
+    yup::ToggleButton ituButton;
+    yup::ToggleButton ebuButton;
+    yup::ToggleButton contiguousButton;
+    yup::ToggleButton totalButton;
+
+    yup::Label timeLabel;
+    yup::Label pitchLabel;
+    yup::Label backendLabel;
+    yup::Slider timeStretchSlider { yup::Slider::LinearHorizontal, "Time Stretch" };
+    yup::Slider pitchShiftSlider { yup::Slider::LinearHorizontal, "Pitch Shift" };
+    yup::ComboBox backendComboBox { "TimeStretchBackend" };
 
     yup::Label infoLabel;
     yup::Label statusLabel;
-    AudioWaveformDisplay waveformDisplay;
+    AudioFileWaveform waveformDisplay;
+
+    // K-Meter components
+    yup::KMeterState meterState;
+    yup::KMeterComponent leftMeter;
+    yup::KMeterComponent rightMeter;
+    MeteringAudioSource meteringSource;
 
     yup::String currentFileName { "No audio loaded" };
     double loadedSampleRate = 0.0;
     double audioLengthSeconds = 0.0;
+    double timeStretchRatio = 1.0;
+    double pitchShiftRatio = 1.0;
+    yup::TimeStretchProcessor::Backend selectedTimeStretchBackend = yup::TimeStretchProcessor::Backend::automatic;
     bool hasLoadedAudio = false;
     bool loopEnabled = false;
+    bool timeStretchSupported = false;
+
+    yup::OnsetDetector superFlux;
+    std::vector<double> onsetTimes;
+    bool hasOnsets = false;
+
+    static constexpr int backendAutomaticId = 1;
+    static constexpr int backendTimeDomainId = 2;
+    static constexpr int backendBungeeId = 3;
 };

@@ -39,13 +39,6 @@ public:
 
 //==============================================================================
 
-class NoOpRenderShader : public rive::RenderShader
-{
-public:
-};
-
-//==============================================================================
-
 class NoOpRenderImage : public rive::RenderImage
 {
 public:
@@ -86,7 +79,7 @@ public:
 
     void addPath (rive::CommandPath*, const rive::Mat2D&) override {}
 
-    void addRenderPath (rive::RenderPath*, const rive::Mat2D&) override {}
+    void addRenderPath (const rive::RenderPath*, const rive::Mat2D&) override {}
 
     void moveTo (float, float) override {}
 
@@ -123,7 +116,7 @@ public:
         const float stops[],
         size_t count) override
     {
-        return rive::make_rcp<NoOpRenderShader>();
+        return nullptr;
     }
 
     rive::rcp<rive::RenderShader> makeRadialGradient (
@@ -134,7 +127,7 @@ public:
         const float stops[],
         size_t count) override
     {
-        return rive::make_rcp<NoOpRenderShader>();
+        return nullptr;
     }
 
     rive::rcp<rive::RenderPath> makeRenderPath (rive::RawPath&, rive::FillRule) override
@@ -186,6 +179,8 @@ public:
                         uint32_t indexCount,
                         rive::BlendMode,
                         float) override {}
+
+    void modulateOpacity (float) override {}
 };
 
 //==============================================================================

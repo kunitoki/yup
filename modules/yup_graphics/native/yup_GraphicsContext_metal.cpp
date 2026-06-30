@@ -82,7 +82,7 @@ public:
         rive::gpu::RenderContextMetalImpl::ContextOptions metalOptions;
 
         if (m_fiddleOptions.synchronousShaderCompilations)
-            metalOptions.synchronousShaderCompilations = true;
+            metalOptions.shaderCompilationMode = rive::gpu::ShaderCompilationMode::alwaysSynchronous;
 
         if (m_fiddleOptions.disableRasterOrdering)
             metalOptions.disableFramebufferReads = true;
@@ -190,11 +190,7 @@ public:
         m_renderTarget = renderContextImpl->makeRenderTarget (MTLPixelFormatBGRA8Unorm, width, height);
 
         if (m_currentTexture != nil)
-        {
-            [m_currentTexture setPurgeableState:MTLPurgeableStateEmpty];
-            [m_currentTexture release];
             m_currentTexture = nil;
-        }
 
         MTLTextureDescriptor* descriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:(MTLPixelFormatBGRA8Unorm)
                                                                                               width:width

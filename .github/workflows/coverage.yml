@@ -13,9 +13,11 @@ on:
       - "!**/native/java*/**"
       - "!**/native/*_android.*"
       - "!**/native/*_apple.*"
+      - "!**/native/*_curl.*"
       - "!**/native/*_emscripten.*"
       - "!**/native/*_ios.*"
       - "!**/native/*_mac.*"
+      - "!**/native/*_sdl2.*"
       - "!**/native/*_wasm.*"
       - "!**/native/*_windows.*"
     branches:
@@ -32,9 +34,11 @@ on:
       - "!**/native/java*/**"
       - "!**/native/*_android.*"
       - "!**/native/*_apple.*"
+      - "!**/native/*_curl.*"
       - "!**/native/*_emscripten.*"
       - "!**/native/*_ios.*"
       - "!**/native/*_mac.*"
+      - "!**/native/*_sdl2.*"
       - "!**/native/*_wasm.*"
       - "!**/native/*_windows.*"
     branches:
@@ -55,9 +59,10 @@ env:
 jobs:
   cpp-coverage:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - name: Install Dependencies
@@ -92,6 +97,15 @@ jobs:
           "*/usr/*" \
           "*/opt/*" \
           "*/CMakeFiles/*" \
+          "*/native/*_android.*" \
+          "*/native/*_apple.*" \
+          "*/native/*_curl.*" \
+          "*/native/*_emscripten.*" \
+          "*/native/*_ios.*" \
+          "*/native/*_mac.*" \
+          "*/native/*_sdl2.*" \
+          "*/native/*_wasm.*" \
+          "*/native/*_windows.*" \
           --output-file coverage/coverage_final.info --ignore-errors ${IGNORE_ERRORS}
         lcov --list coverage/coverage_final.info
     - name: Upload Coverage to Codecov

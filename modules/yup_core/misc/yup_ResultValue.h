@@ -23,18 +23,92 @@ namespace yup
 {
 
 //==============================================================================
+/** Helper type returned by yup::makeResultValueOk(), implicitly convertible to a successful ResultValue<T>.
+
+    @see makeResultValueOk, ResultValue
+    @tags{Core}
+*/
+template <class T>
+struct YUP_API OkValue
+{
+    template <class U, std::enable_if_t<std::is_constructible_v<T, U>, int> = 0>
+    explicit constexpr OkValue (U&& v) noexcept (std::is_nothrow_constructible_v<T, U>)
+        : value (std::forward<U> (v))
+    {
+    }
+
+    T value;
+};
+
+/** Helper type returned by yup::makeResultValueFail(), implicitly convertible to a failed ResultValue<T>.
+
+    @see makeResultValueFail, ResultValue
+    @tags{Core}
+*/
+struct YUP_API FailValue
+{
+    explicit FailValue (StringRef errorMessage) noexcept
+        : message (errorMessage.isEmpty() ? StringRef ("Unknown Error") : errorMessage)
+    {
+    }
+
+    String message;
+};
+
+//==============================================================================
+/** Creates an OkValue that implicitly converts to a successful ResultValue<T>, allowing
+    return-site type deduction without naming ResultValue<T> explicitly.
+
+    @code
+    ResultValue<int> myOperation()
+    {
+        return yup::makeResultValueOk (1337); // T is deduced from the argument
+    }
+    @endcode
+
+    @see ResultValue, makeResultValueFail
+    @tags{Core}
+*/
+template <class T>
+[[nodiscard]] constexpr auto makeResultValueOk (T&& value) noexcept (std::is_nothrow_constructible_v<std::decay_t<T>, T>)
+    -> OkValue<std::decay_t<T>>
+{
+    return OkValue<std::decay_t<T>> (std::forward<T> (value));
+}
+
+/** Creates a FailValue that implicitly converts to a failed ResultValue<T>, allowing
+    return-site failure without naming ResultValue<T> explicitly.
+
+    @code
+    ResultValue<int> myOperation()
+    {
+        return yup::makeResultValueFail ("something went wrong"); // Works for any ResultValue<T>
+    }
+    @endcode
+
+    @see ResultValue, makeResultValueOk
+    @tags{Core}
+*/
+[[nodiscard]] inline FailValue makeResultValueFail (StringRef errorMessage) noexcept
+{
+    return FailValue (errorMessage);
+}
+
+//==============================================================================
 /**
     Represents the 'success' or 'failure' of an operation that returns a value, and holds an associated
     error message to describe the error when there's a failure.
 
-    E.g.
+    Prefer the free functions yup::makeResultValueOk (..) and yup::makeResultValueFail() over the static methods to avoid
+    having to repeat the template type at the call site:
+
     @code
     ResultValue<int> myOperation()
     {
         if (doSomeKindOfFoobar())
-            return ResultValue<int>::ok (1337);
+            return yup::makeResultValueOk (1337);
         else
-            return ResultValue<int>::fail ("foobar didn't work!");
+            return yup::makeResultValueFail ("foobar didn't work!");
     }
 
     const ResultValue<int> result (myOperation());
@@ -107,12 +181,50 @@ public:
         return valueOrErrorMessage.index() != 1;
     }
 
+    /** Returns a copy of the value that was set when this result was created,
+        or a value constructed from @p defaultValue if the result indicates a failure.
+
+        This overload is available when the held value can be copied. Use the
+        rvalue-qualified overload when working with move-only value types.
+    */
+    template <class U = T>
+    auto valueOr (U&& defaultValue) const& -> std::enable_if_t<std::is_copy_constructible_v<T> && std::is_constructible_v<T, U&&>, T>
+    {
+        if (valueOrErrorMessage.index() == 1)
+            return std::get<1> (valueOrErrorMessage);
+
+        return T (std::forward<U> (defaultValue));
+    }
+
+    /** Returns the moved value that was set when this result was created,
+        or a value constructed from @p defaultValue if the result indicates a failure.
+
+        This overload allows valueOr() to be used with move-only value types when
+        the ResultValue itself is an rvalue.
+    */
+    template <class U = T>
+    auto valueOr (U&& defaultValue) && -> std::enable_if_t<std::is_move_constructible_v<T> && std::is_constructible_v<T, U&&>, T>
+    {
+        if (valueOrErrorMessage.index() == 1)
+            return std::get<1> (std::move (valueOrErrorMessage));
+
+        return T (std::forward<U> (defaultValue));
+    }
+
     /** Returns a copy of the value that was set when this result was created. */
-    T getValue() const
+    T getValue() const&
     {
         jassert (valueOrErrorMessage.index() == 1); // Trying to access the value of the result, when the result is holding an error instead!
 
         return std::get<1> (valueOrErrorMessage);
+    }
+
+    /** Returns a moved from value that was set when this result was created. */
+    T getValue() &&
+    {
+        jassert (valueOrErrorMessage.index() == 1); // Trying to access the value of the result, when the result is holding an error instead!
+
+        return std::get<1> (std::move (valueOrErrorMessage));
     }
 
     /** Returns the mutable reference that was set when this result was created. */
@@ -146,6 +258,19 @@ public:
     ResultValue& operator= (const ResultValue&) = default;
     ResultValue (ResultValue&&) noexcept = default;
     ResultValue& operator= (ResultValue&&) noexcept = default;
+
+    /** Constructs a successful result from an OkValue, enabling type-deduced return syntax. */
+    template <class U, std::enable_if_t<std::is_constructible_v<T, U>, int> = 0>
+    ResultValue (OkValue<U>&& okVal) noexcept (std::is_nothrow_constructible_v<T, U>)
+        : valueOrErrorMessage (std::in_place_index<1>, std::move (okVal.value))
+    {
+    }
+
+    /** Constructs a failed result from a FailValue, enabling type-deduced return syntax. */
+    ResultValue (FailValue&& failVal) noexcept
+        : valueOrErrorMessage (std::in_place_index<2>, std::move (failVal.message))
+    {
+    }
 
     bool operator== (const ResultValue& other) const noexcept
     {

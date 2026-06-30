@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2025 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -23,17 +23,174 @@ namespace yup
 {
 
 //==============================================================================
-#ifndef YUP_DRAWABLE_LOGGING
-#define YUP_DRAWABLE_LOGGING 0
-#endif
 
-#if YUP_DRAWABLE_LOGGING
-#define YUP_DRAWABLE_LOG(textToWrite) YUP_DBG (textToWrite)
-#else
-#define YUP_DRAWABLE_LOG(textToWrite) \
-    {                                 \
+namespace
+{
+SVGGradient::Ptr getGradientById (const SVGData& data, const String& id)
+{
+    return data.gradientsById[id];
+}
+
+SVGGradient::Ptr resolveGradient (const SVGData& data, SVGGradient::Ptr gradient)
+{
+    if (gradient == nullptr || gradient->href.isEmpty())
+        return gradient;
+
+    auto referencedGradient = getGradientById (data, gradient->href);
+    if (referencedGradient == nullptr)
+        return gradient;
+
+    referencedGradient = resolveGradient (data, referencedGradient);
+
+    SVGGradient::Ptr resolved = new SVGGradient;
+    resolved->type = gradient->type;
+    resolved->id = gradient->id;
+    resolved->units = referencedGradient->units;
+    resolved->spreadMethod = referencedGradient->spreadMethod;
+    resolved->start = referencedGradient->start;
+    resolved->end = referencedGradient->end;
+    resolved->center = referencedGradient->center;
+    resolved->radius = referencedGradient->radius;
+    resolved->focal = referencedGradient->focal;
+    resolved->transform = referencedGradient->transform;
+    resolved->stops = referencedGradient->stops;
+    resolved->hasStart = referencedGradient->hasStart;
+    resolved->hasEnd = referencedGradient->hasEnd;
+    resolved->hasCenter = referencedGradient->hasCenter;
+    resolved->hasRadius = referencedGradient->hasRadius;
+    resolved->hasFocal = referencedGradient->hasFocal;
+    resolved->hasUnits = referencedGradient->hasUnits;
+    resolved->hasSpreadMethod = referencedGradient->hasSpreadMethod;
+
+    if (gradient->hasStart)
+    {
+        resolved->start = gradient->start;
+        resolved->hasStart = true;
     }
-#endif
+    if (gradient->hasEnd)
+    {
+        resolved->end = gradient->end;
+        resolved->hasEnd = true;
+    }
+    if (gradient->hasCenter)
+    {
+        resolved->center = gradient->center;
+        resolved->hasCenter = true;
+    }
+    if (gradient->hasRadius)
+    {
+        resolved->radius = gradient->radius;
+        resolved->hasRadius = true;
+    }
+    if (gradient->hasFocal)
+    {
+        resolved->focal = gradient->focal;
+        resolved->hasFocal = true;
+    }
+
+    if (! gradient->transform.isIdentity())
+        resolved->transform = gradient->transform;
+    if (gradient->hasUnits)
+    {
+        resolved->units = gradient->units;
+        resolved->hasUnits = true;
+    }
+    if (gradient->hasSpreadMethod)
+    {
+        resolved->spreadMethod = gradient->spreadMethod;
+        resolved->hasSpreadMethod = true;
+    }
+    if (! gradient->stops.empty())
+        resolved->stops = gradient->stops;
+
+    return resolved;
+}
+
+SVGFilter::Ptr getFilterById (const SVGData& data, const String& id)
+{
+    return data.filtersById[id];
+}
+
+SVGFilter::Ptr resolveFilter (const SVGData& data, SVGFilter::Ptr filter)
+{
+    if (filter == nullptr || filter->href.isEmpty())
+        return filter;
+
+    auto referencedFilter = resolveFilter (data, getFilterById (data, filter->href));
+    if (referencedFilter == nullptr)
+        return filter;
+
+    SVGFilter::Ptr resolved = new SVGFilter;
+    resolved->id = filter->id;
+    resolved->href = filter->href;
+
+    if (! filter->primitives.empty())
+        resolved->primitives = filter->primitives;
+    else
+        resolved->primitives = referencedFilter->primitives;
+
+    return resolved;
+}
+
+AffineTransform createGradientSpaceTransform (const SVGGradient& gradient, const Rectangle<float>* objectBounds)
+{
+    const bool hasBounds = objectBounds != nullptr && objectBounds->getWidth() > 0.0f && objectBounds->getHeight() > 0.0f;
+    AffineTransform unitsTransform = AffineTransform::identity();
+
+    if (gradient.units == SVGGradient::ObjectBoundingBox && hasBounds)
+    {
+        unitsTransform = AffineTransform::scaling (objectBounds->getWidth(), objectBounds->getHeight())
+                             .translated (objectBounds->getX(), objectBounds->getY());
+    }
+
+    return unitsTransform.followedBy (gradient.transform);
+}
+
+SVGGradient createLocalGradientSpaceGradient (const SVGGradient& gradient)
+{
+    SVGGradient localGradient;
+
+    localGradient.type = gradient.type;
+    localGradient.id = gradient.id;
+    localGradient.units = SVGGradient::UserSpaceOnUse;
+    localGradient.spreadMethod = gradient.spreadMethod;
+    localGradient.start = gradient.start;
+    localGradient.end = gradient.end;
+    localGradient.center = gradient.center;
+    localGradient.radius = gradient.radius;
+    localGradient.focal = gradient.focal;
+    localGradient.stops = gradient.stops;
+    localGradient.hasStart = gradient.hasStart;
+    localGradient.hasEnd = gradient.hasEnd;
+    localGradient.hasCenter = gradient.hasCenter;
+    localGradient.hasRadius = gradient.hasRadius;
+    localGradient.hasFocal = gradient.hasFocal;
+    localGradient.hasUnits = true;
+    localGradient.hasSpreadMethod = gradient.hasSpreadMethod;
+
+    return localGradient;
+}
+
+SVGClipPath::Ptr getClipPathById (const SVGData& data, const String& id)
+{
+    return data.clipPathsById[id];
+}
+
+SVGMask::Ptr getMaskById (const SVGData& data, const String& id)
+{
+    return data.masksById[id];
+}
+
+SVGMarker::Ptr getMarkerById (const SVGData& data, const String& id)
+{
+    return data.markersById[id];
+}
+
+SVGPattern::Ptr getPatternById (const SVGData& data, const String& id)
+{
+    return data.patternsById[id];
+}
+} // namespace
 
 //==============================================================================
 
@@ -45,177 +202,410 @@ Drawable::Drawable()
 
 bool Drawable::parseSVG (const File& svgFile)
 {
-    clear();
+    YUP_DRAWABLE_LOG ("parseSVG(file) - file: " << svgFile.getFullPathName());
 
-    XmlDocument svgDoc (svgFile);
-    std::unique_ptr<XmlElement> svgRoot (svgDoc.getDocumentElement());
+    ParseOptions options;
+    options.baseDirectory = svgFile.getParentDirectory();
 
-    if (svgRoot == nullptr || ! svgRoot->hasTagName ("svg"))
-        return false;
+    return parseSVG (svgFile, options);
+}
 
-    if (auto view = svgRoot->getStringAttribute ("viewBox"); view.isNotEmpty())
-    {
-        auto coords = StringArray::fromTokens (view, " ,", "");
-        if (coords.size() == 4)
-        {
-            viewBox.setX (coords.getReference (0).getFloatValue());
-            viewBox.setY (coords.getReference (1).getFloatValue());
-            viewBox.setWidth (coords.getReference (2).getFloatValue());
-            viewBox.setHeight (coords.getReference (3).getFloatValue());
-        }
-    }
+bool Drawable::parseSVG (const File& svgFile, const ParseOptions& options)
+{
+    YUP_DRAWABLE_LOG ("parseSVG(file, options) - file: " << svgFile.getFullPathName());
 
-    auto width = svgRoot->getFloatAttribute ("width");
-    size.setWidth (width == 0.0f ? viewBox.getWidth() : width);
+    document = SVGParser::parse (svgFile, options);
+    return document != nullptr;
+}
 
-    auto height = svgRoot->getFloatAttribute ("height");
-    size.setHeight (height == 0.0f ? viewBox.getHeight() : height);
+//==============================================================================
 
-    // ViewBox transform is now calculated at render-time based on actual target area
-    YUP_DRAWABLE_LOG ("Parse complete - viewBox: " << viewBox.toString() << " size: " << size.getWidth() << "x" << size.getHeight());
+bool Drawable::parseSVG (StringRef svgText)
+{
+    YUP_DRAWABLE_LOG ("parseSVG(text) - length: " << String (svgText.text).length());
 
-    auto result = parseElement (*svgRoot, true, {});
+    return parseSVG (svgText, ParseOptions());
+}
 
-    if (result)
-        bounds = calculateBounds();
+bool Drawable::parseSVG (StringRef svgText, const ParseOptions& options)
+{
+    YUP_DRAWABLE_LOG ("parseSVG(text, options) - length: " << String (svgText.text).length());
 
-    return result;
+    document = SVGParser::parse (svgText, options);
+    return document != nullptr;
 }
 
 //==============================================================================
 
 void Drawable::clear()
 {
-    viewBox = { 0.0f, 0.0f, 0.0f, 0.0f };
-    size = { 0.0f, 0.0f };
-    bounds = { 0.0f, 0.0f, 0.0f, 0.0f };
-    transform = AffineTransform::identity();
-
-    elements.clear();
-    elementsById.clear();
-    gradients.clear();
-    gradientsById.clear();
-    clipPaths.clear();
-    clipPathsById.clear();
-
-    // Reset root element's default presentation attributes to SVG defaults
-    rootHasFill = true;    // SVG default fill is black
-    rootHasStroke = false; // SVG default stroke is none
-    rootFillColor = std::nullopt;
-    rootStrokeColor = std::nullopt;
+    document = nullptr;
 }
 
 //==============================================================================
 
 Rectangle<float> Drawable::getBounds() const
 {
-    return bounds;
+    if (document == nullptr)
+        return {};
+
+    return document->getBounds();
 }
 
 //==============================================================================
 
 void Drawable::paint (Graphics& g)
 {
-    const auto savedState = g.saveState();
+    if (document == nullptr)
+        return;
 
-    g.setStrokeWidth (1.0f);
+    document->visit ([&] (const SVGData& data)
+    {
+        YUP_DRAWABLE_LOG ("paint - bounds: " << data.bounds.toString()
+                                             << " topLevelElements: " << data.elements.size()
+                                             << " rootHasFill: " << (data.rootHasFill ? "true" : "false")
+                                             << " rootHasStroke: " << (data.rootHasStroke ? "true" : "false"));
 
-    // Set default fill color based on root SVG element or SVG default (black)
-    if (rootFillColor)
-        g.setFillColor (*rootFillColor);
-    else
-        g.setFillColor (Colors::black);
+        const auto savedState = g.saveState();
 
-    // Set default stroke color if root SVG element specified one
-    if (rootStrokeColor)
-        g.setStrokeColor (*rootStrokeColor);
+        g.setStrokeWidth (1.0f);
 
-    if (! transform.isIdentity())
-        g.addTransform (transform);
+        if (data.rootFillColor)
+            g.setFillColor (*data.rootFillColor);
+        else
+            g.setFillColor (Colors::black);
 
-    // Pass root element's fill/stroke state to top-level elements
-    for (const auto& element : elements)
-        paintElement (g, *element, rootHasFill, rootHasStroke);
+        if (data.rootStrokeColor)
+            g.setStrokeColor (*data.rootStrokeColor);
+
+        if (! data.transform.isIdentity())
+            g.addTransform (data.transform);
+
+        std::unordered_set<const SVGElement*> visiting;
+        for (const auto& element : data.elements)
+            paintElement (g, data, *element, data.rootHasFill, data.rootHasStroke, data.rootFillColor.value_or (Colors::black), visiting);
+    });
 }
 
 void Drawable::paint (Graphics& g, const Rectangle<float>& targetArea, Fitting fitting, Justification justification)
 {
-    YUP_DRAWABLE_LOG ("Fitted paint called - bounds: " << bounds.toString() << " targetArea: " << targetArea.toString());
-
-    if (bounds.isEmpty())
+    if (document == nullptr)
         return;
 
-    const auto savedState = g.saveState();
+    document->visit ([&] (const SVGData& data)
+    {
+        YUP_DRAWABLE_LOG ("Fitted paint called - bounds: " << data.bounds.toString() << " targetArea: " << targetArea.toString());
 
-    auto finalBounds = viewBox.isEmpty() ? bounds : viewBox;
-    auto finalTransform = calculateTransformForTarget (finalBounds, targetArea, fitting, justification);
-    if (! finalTransform.isIdentity())
-        g.addTransform (finalTransform);
+        if (data.bounds.isEmpty())
+        {
+            YUP_DRAWABLE_LOG ("Fitted paint skipped - drawable bounds are empty");
+            return;
+        }
 
-    g.setStrokeWidth (1.0f);
+        const auto savedState = g.saveState();
 
-    // Set default fill color based on root SVG element or SVG default (black)
-    if (rootFillColor)
-        g.setFillColor (*rootFillColor);
-    else
-        g.setFillColor (Colors::black);
+        auto finalBounds = data.viewBox.isEmpty() ? data.bounds : data.viewBox;
+        auto finalTransform = calculateTransformForTarget (finalBounds,
+                                                           targetArea,
+                                                           data.rootHasPreserveAspectRatio ? data.rootPreserveAspectRatioFitting : fitting,
+                                                           data.rootHasPreserveAspectRatio ? data.rootPreserveAspectRatioJustification : justification);
 
-    // Set default stroke color if root SVG element specified one
-    if (rootStrokeColor)
-        g.setStrokeColor (*rootStrokeColor);
+        if (! finalTransform.isIdentity())
+            g.addTransform (finalTransform);
 
-    // Pass root element's fill/stroke state to top-level elements
-    for (const auto& element : elements)
-        paintElement (g, *element, rootHasFill, rootHasStroke);
+        g.setStrokeWidth (1.0f);
+
+        if (data.rootFillColor)
+            g.setFillColor (*data.rootFillColor);
+        else
+            g.setFillColor (Colors::black);
+
+        if (data.rootStrokeColor)
+            g.setStrokeColor (*data.rootStrokeColor);
+
+        std::unordered_set<const SVGElement*> visiting;
+        for (const auto& element : data.elements)
+            paintElement (g, data, *element, data.rootHasFill, data.rootHasStroke, data.rootFillColor.value_or (Colors::black), visiting);
+    });
 }
 
 //==============================================================================
 
-void Drawable::paintElement (Graphics& g, const Element& element, bool hasParentFillEnabled, bool hasParentStrokeEnabled)
+void Drawable::paintElement (Graphics& g,
+                             const SVGData& data,
+                             const SVGElement& element,
+                             bool hasParentFillEnabled,
+                             bool hasParentStrokeEnabled,
+                             Color currentColor,
+                             std::unordered_set<const SVGElement*>& visitingElements,
+                             std::optional<Array<float>> inheritedStrokeDashArray,
+                             float inheritedStrokeDashOffset,
+                             int recursionDepth)
 {
+    if (element.hidden)
+    {
+        YUP_DRAWABLE_LOG ("paintElement skipped - hidden tag: " << element.tagName
+                                                                << " id: " << (element.id ? *element.id : "none")
+                                                                << " depth: " << recursionDepth);
+        return;
+    }
+
+    if (recursionDepth > 64)
+    {
+        YUP_DRAWABLE_LOG ("paintElement skipped - recursion limit tag: " << element.tagName
+                                                                         << " id: " << (element.id ? *element.id : "none")
+                                                                         << " depth: " << recursionDepth);
+        return;
+    }
+
     const auto savedState = g.saveState();
 
     bool isFillDefined = hasParentFillEnabled;
     bool isStrokeDefined = hasParentStrokeEnabled;
+    std::optional<Path> localGradientFillPath;
+    std::optional<AffineTransform> localGradientFillTransform;
 
-    YUP_DRAWABLE_LOG ("paintElement called - hasPath: " << (element.path ? "true" : "false") << " hasTransform: " << (element.transform ? "true" : "false"));
+    if (element.color)
+        currentColor = *element.color;
 
-    // Apply element transform if present - use proper composition for coordinate systems
     if (element.transform)
-    {
-        YUP_DRAWABLE_LOG ("Applying element transform - before: " << g.getTransform().toString() << " adding: " << element.transform->toString());
-        // For proper coordinate system handling, we need to apply element transform
-        // in the element's local space, then transform to viewport space
         g.setTransform (element.transform->followedBy (g.getTransform()));
-        YUP_DRAWABLE_LOG ("After transform: " << g.getTransform().toString());
-    }
 
     if (element.opacity)
         g.setOpacity (g.getOpacity() * (*element.opacity));
 
-    // Apply clipping path if specified
+    if (element.blendMode)
+        g.setBlendMode (*element.blendMode);
+
+    auto currentStrokeDashArray = inheritedStrokeDashArray;
+    if (element.strokeDashArrayNone)
+        currentStrokeDashArray.reset();
+    else if (element.strokeDashArray)
+        currentStrokeDashArray = element.strokeDashArray;
+
+    const auto currentStrokeDashOffset = element.strokeDashOffset.value_or (inheritedStrokeDashOffset);
+
+    if (element.filterUrl)
+    {
+        if (auto filter = resolveFilter (data, getFilterById (data, *element.filterUrl)))
+        {
+            for (const auto& primitive : filter->primitives)
+            {
+                if (auto blur = dynamic_cast<const SVGFEGaussianBlur*> (primitive.get()))
+                {
+                    const auto svgStdDeviationToFeather = 2.0f;
+                    const auto feather = jmax (g.getFeather(), blur->stdDeviation * svgStdDeviationToFeather);
+                    g.setFeather (feather);
+                }
+                else if (auto blend = dynamic_cast<const SVGFEBlend*> (primitive.get()))
+                {
+                    g.setBlendMode (blend->mode);
+                }
+            }
+        }
+    }
+
+    const auto setViewportClip = [&g] (const Rectangle<float>& viewportBounds)
+    {
+        Path viewportClip;
+        viewportClip.addRectangle (viewportBounds);
+        auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
+        auto transformedViewportClip = viewportClip.transformed (clipTransform);
+
+        const auto savedClipTransform = g.getTransform();
+        g.setTransform (AffineTransform::identity());
+        g.setClipPath (transformedViewportClip);
+        g.setTransform (savedClipTransform);
+    };
+
+    if (element.viewBox && (element.viewportBounds || element.viewportSize))
+    {
+        auto viewport = element.viewportBounds != std::nullopt
+                          ? Rectangle<float> (0.0f, 0.0f, element.viewportBounds->getWidth(), element.viewportBounds->getHeight())
+                          : Rectangle<float> (0.0f, 0.0f, element.viewportSize->getWidth(), element.viewportSize->getHeight());
+
+        auto viewportTransform = calculateTransformForTarget (*element.viewBox, viewport, element.preserveAspectRatioFitting, element.preserveAspectRatioJustification);
+        if (element.tagName == "svg" && element.viewportBounds)
+        {
+            setViewportClip (*element.viewportBounds);
+            viewportTransform = viewportTransform.followedBy (AffineTransform::translation (element.viewportBounds->getX(), element.viewportBounds->getY()));
+        }
+
+        if (! viewportTransform.isIdentity())
+            g.setTransform (viewportTransform.followedBy (g.getTransform()));
+    }
+    else if (element.tagName == "svg" && element.viewportBounds)
+    {
+        setViewportClip (*element.viewportBounds);
+        auto viewportTransform = AffineTransform::translation (element.viewportBounds->getX(), element.viewportBounds->getY());
+        g.setTransform (viewportTransform.followedBy (g.getTransform()));
+    }
+
     bool hasClipping = false;
     if (element.clipPathUrl)
     {
-        if (auto clipPath = getClipPathById (*element.clipPathUrl))
+        if (auto clipPath = getClipPathById (data, *element.clipPathUrl))
         {
-            // Create a combined path from all clip path elements
-            Path combinedClipPath;
-            for (const auto& clipElement : clipPath->elements)
+            const auto buildClipShape = [&] (const SVGClipPath& clip, const Rectangle<float>& objectBounds) -> Path
             {
-                if (clipElement->path)
-                    combinedClipPath.appendPath (*clipElement->path);
+                std::optional<Rectangle<float>> clipObjectBounds;
+
+                if (clip.units == SVGClipPath::ObjectBoundingBox)
+                {
+                    if (! objectBounds.isEmpty())
+                        clipObjectBounds = objectBounds;
+                }
+
+                Path result;
+
+                for (const auto& clipElement : clip.elements)
+                {
+                    const auto* elementPath = clipElement->path ? std::addressof (*clipElement->path) : nullptr;
+
+                    if (elementPath == nullptr && clipElement->reference)
+                    {
+                        if (auto refElement = data.elementsById[*clipElement->reference]; refElement != nullptr && refElement->path)
+                            elementPath = std::addressof (*refElement->path);
+                    }
+
+                    if (elementPath == nullptr)
+                        continue;
+
+                    AffineTransform clipTransform = clipElement->transform.value_or (AffineTransform::identity());
+
+                    if (clip.units == SVGClipPath::ObjectBoundingBox)
+                    {
+                        if (! clipObjectBounds || clipObjectBounds->isEmpty())
+                            continue;
+
+                        auto unitsTransform = AffineTransform::translation (clipObjectBounds->getX(), clipObjectBounds->getY())
+                                                  .scaled (clipObjectBounds->getWidth(), clipObjectBounds->getHeight());
+                        clipTransform = clipTransform.followedBy (unitsTransform);
+                    }
+
+                    if (! clipTransform.isIdentity())
+                        result.appendPath (*elementPath, clipTransform);
+                    else
+                        result.appendPath (*elementPath);
+                }
+
+                return result;
+            };
+
+            std::optional<Rectangle<float>> clipObjectBounds;
+
+            if (clipPath->units == SVGClipPath::ObjectBoundingBox)
+            {
+                if (element.path)
+                    clipObjectBounds = element.path->getBounds();
+                else if (element.reference)
+                {
+                    if (auto refElement = data.elementsById[*element.reference]; refElement != nullptr && refElement->path)
+                        clipObjectBounds = refElement->path->getBounds();
+                }
+                else if (element.imageBounds)
+                {
+                    clipObjectBounds = *element.imageBounds;
+                }
             }
 
-            if (! combinedClipPath.isEmpty())
+            const auto clipBounds = clipObjectBounds.value_or (Rectangle<float>());
+
+            const auto setClipPath = [&] (const Path& shape)
             {
-                g.setClipPath (combinedClipPath);
+                auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
+                auto transformedClipPath = shape.transformed (clipTransform);
+
+                const auto savedClipTransform = g.getTransform();
+                g.setTransform (AffineTransform::identity());
+                g.setClipPath (transformedClipPath);
+                g.setTransform (savedClipTransform);
+            };
+
+            // If the clipPath itself has a nested clip-path, apply it first (intersection)
+            if (clipPath->clipPathUrl)
+            {
+                if (auto nestedClipPath = getClipPathById (data, *clipPath->clipPathUrl))
+                {
+                    auto nestedClipShape = buildClipShape (*nestedClipPath, clipBounds);
+                    if (! nestedClipShape.isEmpty())
+                    {
+                        setClipPath (nestedClipShape);
+                        hasClipping = true;
+                    }
+                }
+            }
+
+            // Apply the clipPath's own elements (intersects with nested clip if present)
+            auto clipShape = buildClipShape (*clipPath, clipBounds);
+            if (! clipShape.isEmpty())
+            {
+                setClipPath (clipShape);
                 hasClipping = true;
             }
         }
     }
 
-    // Setup fill
+    if (element.maskUrl)
+    {
+        if (auto mask = getMaskById (data, *element.maskUrl))
+        {
+            std::optional<Rectangle<float>> maskObjectBounds;
+
+            if (mask->maskUnits == SVGMask::ObjectBoundingBox)
+            {
+                if (element.path)
+                    maskObjectBounds = element.path->getBounds();
+                else if (element.reference)
+                {
+                    if (auto refElement = data.elementsById[*element.reference]; refElement != nullptr && refElement->path)
+                        maskObjectBounds = refElement->path->getBounds();
+                }
+                else if (element.imageBounds)
+                {
+                    maskObjectBounds = *element.imageBounds;
+                }
+            }
+
+            Path combinedMaskPath;
+
+            for (const auto& maskElement : mask->elements)
+            {
+                if (maskElement->path)
+                {
+                    AffineTransform maskTransform = maskElement->transform.value_or (AffineTransform::identity());
+
+                    if (mask->maskUnits == SVGMask::ObjectBoundingBox)
+                    {
+                        if (! maskObjectBounds || maskObjectBounds->isEmpty())
+                            continue;
+
+                        auto unitsTransform = AffineTransform::translation (maskObjectBounds->getX(), maskObjectBounds->getY())
+                                                  .scaled (maskObjectBounds->getWidth(), maskObjectBounds->getHeight());
+                        maskTransform = maskTransform.followedBy (unitsTransform);
+                    }
+
+                    if (! maskTransform.isIdentity())
+                        combinedMaskPath.appendPath (*maskElement->path, maskTransform);
+                    else
+                        combinedMaskPath.appendPath (*maskElement->path);
+                }
+            }
+
+            if (! combinedMaskPath.isEmpty())
+            {
+                auto maskClipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
+                auto transformedMaskPath = combinedMaskPath.transformed (maskClipTransform);
+
+                const auto savedMaskTransform = g.getTransform();
+                g.setTransform (AffineTransform::identity());
+                g.setClipPath (transformedMaskPath);
+                g.setTransform (savedMaskTransform);
+            }
+        }
+    }
+
+    // Fill setup
     if (element.fillColor)
     {
         Color fillColor = *element.fillColor;
@@ -224,117 +614,152 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
         g.setFillColor (fillColor);
         isFillDefined = true;
     }
+    else if (element.fillCurrentColor)
+    {
+        Color fillColor = currentColor;
+        if (element.fillOpacity)
+            fillColor = fillColor.withMultipliedAlpha (*element.fillOpacity);
+        g.setFillColor (fillColor);
+        isFillDefined = true;
+    }
     else if (element.fillUrl)
     {
-        YUP_DRAWABLE_LOG ("Looking for gradient with ID: " << *element.fillUrl);
-        if (auto gradient = getGradientById (*element.fillUrl))
+        if (auto gradient = getGradientById (data, *element.fillUrl))
         {
-            YUP_DRAWABLE_LOG ("Found gradient, resolving references...");
-            auto resolvedGradient = resolveGradient (gradient);
+            auto resolvedGradient = resolveGradient (data, gradient);
             std::optional<Rectangle<float>> gradientBounds;
 
             if (element.path)
                 gradientBounds = element.path->getBounds();
             else if (element.reference)
             {
-                if (auto refElement = elementsById[*element.reference]; refElement != nullptr && refElement->path)
+                if (auto refElement = data.elementsById[*element.reference]; refElement != nullptr && refElement->path)
                     gradientBounds = refElement->path->getBounds();
             }
 
             ColorGradient colorGradient = createColorGradientFromSVG (*resolvedGradient,
                                                                       gradientBounds ? std::addressof (*gradientBounds) : nullptr);
+
+            if (resolvedGradient->type == SVGGradient::Radial && element.path && gradientBounds && ! resolvedGradient->transform.isIdentity())
+            {
+                const auto gradientSpaceTransform = createGradientSpaceTransform (*resolvedGradient, std::addressof (*gradientBounds));
+
+                if (! gradientSpaceTransform.isIdentity() && std::abs (gradientSpaceTransform.getDeterminant()) > 1.0e-6f)
+                {
+                    localGradientFillPath = element.path->transformed (gradientSpaceTransform.inverted());
+                    localGradientFillTransform = gradientSpaceTransform;
+
+                    const auto localGradient = createLocalGradientSpaceGradient (*resolvedGradient);
+                    const auto localGradientBounds = localGradientFillPath->getBounds();
+                    colorGradient = createColorGradientFromSVG (localGradient, std::addressof (localGradientBounds));
+                }
+            }
+
             g.setFillColorGradient (colorGradient);
             isFillDefined = true;
-            YUP_DRAWABLE_LOG ("Applied gradient to fill");
         }
-        else
+        else if (getPatternById (data, *element.fillUrl))
         {
-            YUP_DRAWABLE_LOG ("Gradient not found for ID: " << *element.fillUrl);
+            isFillDefined = true;
         }
     }
     else if (hasParentFillEnabled)
     {
-        // Inherit parent fill - don't change graphics state, just mark as defined
         isFillDefined = true;
     }
 
     if (isFillDefined && ! element.noFill)
     {
+        const auto fillElementPath = [&]
+        {
+            if (localGradientFillPath && localGradientFillTransform)
+            {
+                const auto savedFillTransform = g.getTransform();
+                g.setTransform (localGradientFillTransform->followedBy (savedFillTransform));
+                g.fillPath (*localGradientFillPath);
+                g.setTransform (savedFillTransform);
+            }
+            else
+            {
+                g.fillPath (*element.path);
+            }
+        };
+
         if (element.path)
         {
-            // SVG spec: fill is applied to both closed and unclosed paths
-            // For unclosed paths, an implicit line connects the last point to the first point
-            // TODO: Apply fill-rule when Graphics class supports it
-            // if (element.fillRule)
-            //     g.setFillRule (*element.fillRule == "evenodd" ? FillRule::EvenOdd : FillRule::NonZero);
-            g.fillPath (*element.path);
+            if (element.fillUrl)
+            {
+                if (auto pattern = getPatternById (data, *element.fillUrl))
+                {
+                    paintPatternFill (g, data, *element.path, element, *pattern, currentColor, visitingElements, recursionDepth);
+                }
+                else
+                {
+                    YUP_DRAWABLE_LOG ("Filling path - tag: " << element.tagName
+                                                             << " id: " << (element.id ? *element.id : "none")
+                                                             << " bounds: " << element.path->getBounds().toString()
+                                                             << " clip: " << (hasClipping ? "true" : "false"));
+                    fillElementPath();
+                }
+            }
+            else
+            {
+                YUP_DRAWABLE_LOG ("Filling path - tag: " << element.tagName
+                                                         << " id: " << (element.id ? *element.id : "none")
+                                                         << " bounds: " << element.path->getBounds().toString()
+                                                         << " clip: " << (hasClipping ? "true" : "false"));
+                fillElementPath();
+            }
         }
         else if (element.reference)
         {
-            if (auto refElement = elementsById[*element.reference]; refElement != nullptr && refElement->path)
+            if (auto refElement = data.elementsById[*element.reference]; refElement != nullptr && refElement->path)
             {
-                YUP_DRAWABLE_LOG ("Rendering use element - reference: " << *element.reference);
-                YUP_DRAWABLE_LOG ("Use element transform: " << (element.transform ? element.transform->toString() : "none"));
-                YUP_DRAWABLE_LOG ("Referenced element local transform: " << (refElement->localTransform ? refElement->localTransform->toString() : "none"));
-                YUP_DRAWABLE_LOG ("Graphics transform during use fill: " << g.getTransform().toString());
+                const bool useDefinesFill = element.fillColor || element.fillCurrentColor || element.fillUrl || element.noFill;
+                if (useDefinesFill || ! refElement->noFill)
+                {
+                    const auto savedReferenceState = g.saveState();
 
-                // For <use> elements, apply only the referenced element's own transform (not inherited parents)
-                const auto savedTransform = g.getTransform();
-                if (refElement->localTransform)
-                    g.setTransform (refElement->localTransform->followedBy (savedTransform));
+                    if (! useDefinesFill)
+                    {
+                        if (refElement->fillColor)
+                        {
+                            Color fillColor = *refElement->fillColor;
+                            if (refElement->fillOpacity)
+                                fillColor = fillColor.withMultipliedAlpha (*refElement->fillOpacity);
+                            g.setFillColor (fillColor);
+                        }
+                        else if (refElement->fillCurrentColor)
+                        {
+                            Color fillColor = currentColor;
+                            if (refElement->fillOpacity)
+                                fillColor = fillColor.withMultipliedAlpha (*refElement->fillOpacity);
+                            g.setFillColor (fillColor);
+                        }
+                    }
 
-                // SVG spec: fill is applied to both closed and unclosed paths
-                g.fillPath (*refElement->path);
+                    const auto savedTransform = g.getTransform();
+                    if (refElement->localTransform)
+                        g.setTransform (refElement->localTransform->followedBy (savedTransform));
 
-                if (refElement->localTransform)
-                    g.setTransform (savedTransform);
+                    g.fillPath (*refElement->path);
+
+                    if (refElement->localTransform)
+                        g.setTransform (savedTransform);
+                }
             }
         }
         else if (element.text && element.textPosition)
         {
-            /*
-            // Create StyledText for text rendering
-            StyledText styledText;
-            styledText.setText (*element.text);
-
-            // Set font properties
-            if (element.fontSize)
-                styledText.setFontSize (*element.fontSize);
-            else
-                styledText.setFontSize (12.0f);
-
-            if (element.fontFamily)
-                styledText.setFontFamily (*element.fontFamily);
-
-            // Set text alignment based on text-anchor
-            if (element.textAnchor)
-            {
-                if (*element.textAnchor == "middle")
-                    styledText.setHorizontalAlignment (StyledText::HorizontalAlignment::Center);
-                else if (*element.textAnchor == "end")
-                    styledText.setHorizontalAlignment (StyledText::HorizontalAlignment::Right);
-                else
-                    styledText.setHorizontalAlignment (StyledText::HorizontalAlignment::Left);
-            }
-
-            // Render text at specified position
-            auto textBounds = styledText.getBounds();
-            g.drawStyledText (styledText, element.textPosition->getX(), element.textPosition->getY() - textBounds.getHeight());
-            */
+            renderTextElement (g, element);
         }
-        else if (element.imageHref && element.imageBounds)
+        else if ((element.imageHref || element.image) && element.imageBounds)
         {
-            // TODO: Load and render image
-            // For now, draw a placeholder rectangle
-            g.setFillColor (Colors::lightgray);
-            g.fillRect (*element.imageBounds);
-            g.setStrokeColor (Colors::darkgray);
-            g.setStrokeWidth (1.0f);
-            g.strokeRect (*element.imageBounds);
+            renderImageElement (g, element);
         }
     }
 
-    // Setup stroke
+    // Stroke setup
     if (element.strokeColor)
     {
         Color strokeColor = *element.strokeColor;
@@ -343,18 +768,26 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
         g.setStrokeColor (strokeColor);
         isStrokeDefined = true;
     }
+    else if (element.strokeCurrentColor)
+    {
+        Color strokeColor = currentColor;
+        if (element.strokeOpacity)
+            strokeColor = strokeColor.withMultipliedAlpha (*element.strokeOpacity);
+        g.setStrokeColor (strokeColor);
+        isStrokeDefined = true;
+    }
     else if (element.strokeUrl)
     {
-        if (auto gradient = getGradientById (*element.strokeUrl))
+        if (auto gradient = getGradientById (data, *element.strokeUrl))
         {
-            auto resolvedGradient = resolveGradient (gradient);
+            auto resolvedGradient = resolveGradient (data, gradient);
             std::optional<Rectangle<float>> gradientBounds;
 
             if (element.path)
                 gradientBounds = element.path->getBounds();
             else if (element.reference)
             {
-                if (auto refElement = elementsById[*element.reference]; refElement != nullptr && refElement->path)
+                if (auto refElement = data.elementsById[*element.reference]; refElement != nullptr && refElement->path)
                     gradientBounds = refElement->path->getBounds();
             }
 
@@ -366,53 +799,95 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
     }
     else if (hasParentStrokeEnabled)
     {
-        // Inherit parent stroke - don't change graphics state, just mark as defined
         isStrokeDefined = true;
     }
 
     if (element.strokeJoin)
         g.setStrokeJoin (*element.strokeJoin);
-
     if (element.strokeCap)
         g.setStrokeCap (*element.strokeCap);
-
     if (element.strokeWidth)
         g.setStrokeWidth (*element.strokeWidth);
+    g.setStrokeMiterLimit (element.strokeMiterLimit.value_or (4.0f));
 
-    // Apply stroke dash patterns
-    if (element.strokeDashArray)
+    bool referenceDefinesStroke = false;
+    if (! isStrokeDefined && element.reference)
     {
-        // Convert Array<float> to what Graphics expects
-        const auto& dashArray = *element.strokeDashArray;
-        if (! dashArray.isEmpty())
-        {
-            // TODO: Graphics class needs stroke dash pattern support
-            // For now, this is prepared for when Graphics supports it
-            // g.setStrokeDashPattern (dashArray.getRawDataPointer(), dashArray.size());
-            // if (element.strokeDashOffset)
-            //     g.setStrokeDashOffset (*element.strokeDashOffset);
-        }
+        if (auto refElement = data.elementsById[*element.reference]; refElement != nullptr)
+            referenceDefinesStroke = (refElement->strokeColor || refElement->strokeCurrentColor || refElement->strokeUrl) && ! refElement->noStroke;
     }
 
-    if (isStrokeDefined && ! element.noStroke)
+    if ((isStrokeDefined || referenceDefinesStroke) && ! element.noStroke)
     {
-        if (element.path)
+        const Path* pathToStroke = element.path ? std::addressof (*element.path) : nullptr;
+        std::optional<Path> dashedPath;
+
+        if (pathToStroke != nullptr && currentStrokeDashArray && ! currentStrokeDashArray->isEmpty())
         {
-            g.strokePath (*element.path);
+            dashedPath = createDashedPath (*pathToStroke, *currentStrokeDashArray, currentStrokeDashOffset);
+            pathToStroke = std::addressof (*dashedPath);
+        }
+
+        if (pathToStroke != nullptr)
+        {
+            YUP_DRAWABLE_LOG ("Stroking path - tag: " << element.tagName
+                                                      << " id: " << (element.id ? *element.id : "none")
+                                                      << " bounds: " << pathToStroke->getBounds().toString());
+            g.strokePath (*pathToStroke);
         }
         else if (element.reference)
         {
-            if (auto refElement = elementsById[*element.reference]; refElement != nullptr && refElement->path)
+            if (auto refElement = data.elementsById[*element.reference]; refElement != nullptr && refElement->path)
             {
-                YUP_DRAWABLE_LOG ("Stroking use element - reference: " << *element.reference);
-                YUP_DRAWABLE_LOG ("Graphics transform during stroke: " << g.getTransform().toString());
+                const bool useDefinesStroke = element.strokeColor || element.strokeCurrentColor || element.strokeUrl || element.noStroke;
+                const auto savedReferenceState = g.saveState();
 
-                // For <use> elements, apply only the referenced element's own transform (not inherited parents)
+                if (! useDefinesStroke)
+                {
+                    if (refElement->strokeColor)
+                    {
+                        Color strokeColor = *refElement->strokeColor;
+                        if (refElement->strokeOpacity)
+                            strokeColor = strokeColor.withMultipliedAlpha (*refElement->strokeOpacity);
+                        g.setStrokeColor (strokeColor);
+                    }
+                    else if (refElement->strokeCurrentColor)
+                    {
+                        Color strokeColor = currentColor;
+                        if (refElement->strokeOpacity)
+                            strokeColor = strokeColor.withMultipliedAlpha (*refElement->strokeOpacity);
+                        g.setStrokeColor (strokeColor);
+                    }
+
+                    if (refElement->strokeWidth)
+                        g.setStrokeWidth (*refElement->strokeWidth);
+                    if (refElement->strokeJoin)
+                        g.setStrokeJoin (*refElement->strokeJoin);
+                    if (refElement->strokeCap)
+                        g.setStrokeCap (*refElement->strokeCap);
+                }
+
                 const auto savedTransform = g.getTransform();
                 if (refElement->localTransform)
                     g.setTransform (refElement->localTransform->followedBy (savedTransform));
 
-                g.strokePath (*refElement->path);
+                const Path* referencePathToStroke = std::addressof (*refElement->path);
+                std::optional<Path> dashedReferencePath;
+                auto referenceStrokeDashArray = currentStrokeDashArray;
+                if (refElement->strokeDashArrayNone)
+                    referenceStrokeDashArray.reset();
+                else if (refElement->strokeDashArray)
+                    referenceStrokeDashArray = refElement->strokeDashArray;
+
+                const auto referenceStrokeDashOffset = refElement->strokeDashOffset.value_or (currentStrokeDashOffset);
+
+                if (referenceStrokeDashArray && ! referenceStrokeDashArray->isEmpty())
+                {
+                    dashedReferencePath = createDashedPath (*referencePathToStroke, *referenceStrokeDashArray, referenceStrokeDashOffset);
+                    referencePathToStroke = std::addressof (*dashedReferencePath);
+                }
+
+                g.strokePath (*referencePathToStroke);
 
                 if (refElement->localTransform)
                     g.setTransform (savedTransform);
@@ -420,536 +895,338 @@ void Drawable::paintElement (Graphics& g, const Element& element, bool hasParent
         }
     }
 
-    for (const auto& childElement : element.children)
+    if (element.path && (element.markerStart || element.markerMid || element.markerEnd))
     {
-        YUP_DRAWABLE_LOG ("Rendering child element - current graphics transform: " << g.getTransform().toString());
-        // Pass fill/stroke state to children, but respect explicit "none" values
-        // If this element has fill="none", children should not inherit fill
-        paintElement (g, *childElement, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke);
+        struct MarkerPlacement
+        {
+            Point<float> position;
+            float tangentAngle = 0.0f;
+        };
+
+        std::vector<MarkerPlacement> startPlacements, midPlacements, endPlacements;
+        Point<float> firstPoint, prevPoint, subpathStart;
+        bool hasFirstPoint = false;
+        float firstTangent = 0.0f, prevTangent = 0.0f;
+        bool firstSegmentAfterMove = false;
+
+        for (const auto& seg : *element.path)
+        {
+            switch (seg.verb)
+            {
+                case Path::Verb::MoveTo:
+                {
+                    if (hasFirstPoint && ! endPlacements.empty())
+                    {
+                        // Flush pending end for the previous sub-path
+                    }
+
+                    firstPoint = seg.point;
+                    prevPoint = seg.point;
+                    subpathStart = seg.point;
+                    hasFirstPoint = true;
+                    firstSegmentAfterMove = true;
+                    firstTangent = 0.0f;
+                    prevTangent = 0.0f;
+                    endPlacements.clear();
+                    break;
+                }
+
+                case Path::Verb::LineTo:
+                {
+                    if (! hasFirstPoint)
+                        break;
+
+                    const float dx = seg.point.getX() - prevPoint.getX();
+                    const float dy = seg.point.getY() - prevPoint.getY();
+                    const float angle = std::atan2 (dy, dx);
+
+                    if (firstSegmentAfterMove)
+                    {
+                        startPlacements.push_back ({ firstPoint, angle });
+                        firstTangent = angle;
+                        firstSegmentAfterMove = false;
+                    }
+                    else
+                    {
+                        midPlacements.push_back ({ prevPoint, prevTangent });
+                    }
+
+                    prevPoint = seg.point;
+                    prevTangent = angle;
+                    endPlacements = { { seg.point, angle } };
+                    break;
+                }
+
+                case Path::Verb::QuadTo:
+                {
+                    if (! hasFirstPoint)
+                        break;
+
+                    const float dx = seg.point.getX() - seg.controlPoint1.getX();
+                    const float dy = seg.point.getY() - seg.controlPoint1.getY();
+                    const float angle = std::atan2 (dy, dx);
+                    const float startDx = seg.controlPoint1.getX() - prevPoint.getX();
+                    const float startDy = seg.controlPoint1.getY() - prevPoint.getY();
+                    const float startAngle = std::atan2 (startDy, startDx);
+
+                    if (firstSegmentAfterMove)
+                    {
+                        startPlacements.push_back ({ firstPoint, startAngle });
+                        firstTangent = startAngle;
+                        firstSegmentAfterMove = false;
+                    }
+                    else
+                    {
+                        midPlacements.push_back ({ prevPoint, prevTangent });
+                    }
+
+                    prevPoint = seg.point;
+                    prevTangent = angle;
+                    endPlacements = { { seg.point, angle } };
+                    break;
+                }
+
+                case Path::Verb::CubicTo:
+                {
+                    if (! hasFirstPoint)
+                        break;
+
+                    const float dx = seg.point.getX() - seg.controlPoint2.getX();
+                    const float dy = seg.point.getY() - seg.controlPoint2.getY();
+                    const float angle = std::atan2 (dy, dx);
+                    const float startDx = seg.controlPoint1.getX() - prevPoint.getX();
+                    const float startDy = seg.controlPoint1.getY() - prevPoint.getY();
+                    const float startAngle = std::atan2 (startDy, startDx);
+
+                    if (firstSegmentAfterMove)
+                    {
+                        startPlacements.push_back ({ firstPoint, startAngle });
+                        firstTangent = startAngle;
+                        firstSegmentAfterMove = false;
+                    }
+                    else
+                    {
+                        midPlacements.push_back ({ prevPoint, prevTangent });
+                    }
+
+                    prevPoint = seg.point;
+                    prevTangent = angle;
+                    endPlacements = { { seg.point, angle } };
+                    break;
+                }
+
+                case Path::Verb::Close:
+                {
+                    if (! hasFirstPoint)
+                        break;
+
+                    if (! firstSegmentAfterMove)
+                        midPlacements.push_back ({ prevPoint, prevTangent });
+
+                    prevPoint = subpathStart;
+                    firstSegmentAfterMove = true;
+                    endPlacements.clear();
+                    break;
+                }
+            }
+        }
+
+        const float sw = element.strokeWidth.value_or (1.0f);
+
+        if (element.markerStart)
+        {
+            if (auto marker = getMarkerById (data, *element.markerStart))
+            {
+                for (const auto& p : startPlacements)
+                {
+                    float angle = p.tangentAngle;
+                    if (marker->orientAutoStartReverse)
+                        angle += MathConstants<float>::pi;
+
+                    paintMarker (g, data, *marker, sw, p.position, angle, visitingElements, recursionDepth);
+                }
+            }
+        }
+
+        if (element.markerMid)
+        {
+            if (auto marker = getMarkerById (data, *element.markerMid))
+            {
+                for (const auto& p : midPlacements)
+                    paintMarker (g, data, *marker, sw, p.position, p.tangentAngle, visitingElements, recursionDepth);
+            }
+        }
+
+        if (element.markerEnd)
+        {
+            if (auto marker = getMarkerById (data, *element.markerEnd))
+            {
+                for (const auto& p : endPlacements)
+                    paintMarker (g, data, *marker, sw, p.position, p.tangentAngle, visitingElements, recursionDepth);
+            }
+        }
     }
+
+    if (element.reference)
+    {
+        if (auto refElement = data.elementsById[*element.reference]; refElement != nullptr && ! refElement->children.empty())
+        {
+            if (visitingElements.count (refElement.get()) != 0)
+            {
+                YUP_DRAWABLE_LOG ("paintElement skipped - cycle detected in use reference id: " << *element.reference);
+            }
+            else
+            {
+                struct ScopeErase
+                {
+                    std::unordered_set<const SVGElement*>& set;
+                    const SVGElement* elem;
+
+                    ~ScopeErase() { set.erase (elem); }
+                } eraseGuard { visitingElements, refElement.get() };
+
+                visitingElements.insert (refElement.get());
+
+                const auto savedTransform = g.getTransform();
+                if (refElement->localTransform)
+                    g.setTransform (refElement->localTransform->followedBy (savedTransform));
+
+                if (refElement->viewBox)
+                {
+                    auto viewportSizeToUse = element.viewportSize.value_or (refElement->viewportSize.value_or (Size<float> (refElement->viewBox->getWidth(), refElement->viewBox->getHeight())));
+                    Rectangle<float> viewport (0.0f, 0.0f, viewportSizeToUse.getWidth(), viewportSizeToUse.getHeight());
+                    auto viewBoxTransform = calculateTransformForTarget (*refElement->viewBox, viewport, refElement->preserveAspectRatioFitting, refElement->preserveAspectRatioJustification);
+                    if (! viewBoxTransform.isIdentity())
+                        g.addTransform (viewBoxTransform);
+                }
+
+                for (const auto& childElement : refElement->children)
+                    paintElement (g, data, *childElement, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke, currentColor, visitingElements, currentStrokeDashArray, currentStrokeDashOffset, recursionDepth + 1);
+
+                g.setTransform (savedTransform);
+            }
+        }
+    }
+
+    for (const auto& childElement : element.children)
+        paintElement (g, data, *childElement, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke, currentColor, visitingElements, currentStrokeDashArray, currentStrokeDashOffset, recursionDepth + 1);
 
     // paintDebugElement (g, element);
 }
 
 //==============================================================================
 
-bool Drawable::parseElement (const XmlElement& element, bool parentIsRoot, AffineTransform currentTransform, Element* parent)
+void Drawable::paintMarker (Graphics& g,
+                            const SVGData& data,
+                            const SVGMarker& marker,
+                            float strokeWidth,
+                            Point<float> position,
+                            float tangentAngle,
+                            std::unordered_set<const SVGElement*>& visitingElements,
+                            int recursionDepth)
 {
-    Element::Ptr e = new Element;
-    bool isRootElement = element.hasTagName ("svg");
+    const auto savedState = g.saveState();
 
-    if (auto id = element.getStringAttribute ("id"); id.isNotEmpty())
+    float scale = (marker.markerUnits == SVGMarker::StrokeWidth) ? strokeWidth : 1.0f;
+
+    if (marker.viewBox
+        && marker.viewBox->getWidth() > 0.0f
+        && marker.viewBox->getHeight() > 0.0f)
     {
-        e->id = id;
-        elementsById.set (id, e);
+        const float scaleX = marker.markerWidth / marker.viewBox->getWidth();
+        const float scaleY = marker.markerHeight / marker.viewBox->getHeight();
+        scale *= std::min (scaleX, scaleY);
     }
 
-    if (element.hasTagName ("path"))
-    {
-        auto path = Path();
+    // Build the marker transform: T(position) * R(angle) * S(scale) * T(-refX, -refY)
+    // Each followedBy call appends a transform that is applied AFTER the current one.
+    const float angle = marker.orient ? degreesToRadians (*marker.orient) : tangentAngle;
 
-        String pathData = element.getStringAttribute ("d");
-        if (pathData.isEmpty() || ! path.fromString (pathData))
-            return false;
+    const AffineTransform markerTransform = AffineTransform::translation (-marker.refX, -marker.refY)
+                                                .followedBy (AffineTransform::scaling (scale))
+                                                .followedBy (AffineTransform::rotation (angle))
+                                                .followedBy (AffineTransform::translation (position.getX(), position.getY()));
 
-        e->path = std::move (path);
+    g.addTransform (markerTransform);
 
-        currentTransform = parseTransform (element, currentTransform, *e);
-        parseStyle (element, currentTransform, *e);
-
-        // Apply fill-rule after parsing style
-        if (e->fillRule && *e->fillRule == "evenodd")
-            e->path->setUsingNonZeroWinding (false);
-    }
-    else if (element.hasTagName ("g"))
-    {
-        currentTransform = parseTransform (element, currentTransform, *e);
-        parseStyle (element, currentTransform, *e);
-    }
-    else if (element.hasTagName ("use"))
-    {
-        String href = element.getStringAttribute ("href");
-        if (href.isNotEmpty() && href.startsWith ("#"))
-            e->reference = href.substring (1);
-
-        // Handle x,y positioning for use elements (SVG spec requirement)
-        auto x = element.getFloatAttribute ("x");
-        auto y = element.getFloatAttribute ("y");
-        AffineTransform useTransform;
-        if (x != 0.0f || y != 0.0f)
-            useTransform = AffineTransform::translation (x, y);
-
-        currentTransform = parseTransform (element, currentTransform, *e);
-
-        // Combine use element positioning with any explicit transform
-        if (! useTransform.isIdentity())
-        {
-            if (e->transform.has_value())
-                e->transform = useTransform.followedBy (*e->transform);
-            else
-                e->transform = useTransform;
-        }
-
-        parseStyle (element, currentTransform, *e);
-    }
-    else if (element.hasTagName ("ellipse"))
-    {
-        auto cx = element.getFloatAttribute ("cx");
-        auto cy = element.getFloatAttribute ("cy");
-        auto rx = element.getFloatAttribute ("rx");
-        auto ry = element.getFloatAttribute ("ry");
-
-        auto path = Path();
-        path.addCenteredEllipse (cx, cy, rx, ry);
-        e->path = std::move (path);
-
-        currentTransform = parseTransform (element, currentTransform, *e);
-        parseStyle (element, currentTransform, *e);
-    }
-    else if (element.hasTagName ("circle"))
-    {
-        auto cx = element.getFloatAttribute ("cx");
-        auto cy = element.getFloatAttribute ("cy");
-        auto r = element.getFloatAttribute ("r");
-
-        auto path = Path();
-        path.addCenteredEllipse (cx, cy, r, r);
-        e->path = std::move (path);
-
-        currentTransform = parseTransform (element, currentTransform, *e);
-        parseStyle (element, currentTransform, *e);
-    }
-    else if (element.hasTagName ("rect"))
-    {
-        auto x = element.getFloatAttribute ("x");
-        auto y = element.getFloatAttribute ("y");
-        auto width = element.getFloatAttribute ("width");
-        auto height = element.getFloatAttribute ("height");
-        auto rx = element.getFloatAttribute ("rx");
-        auto ry = element.getFloatAttribute ("ry");
-
-        auto path = Path();
-        if (rx > 0.0f || ry > 0.0f)
-        {
-            if (rx == 0.0f)
-                rx = ry;
-            if (ry == 0.0f)
-                ry = rx;
-
-            path.addRoundedRectangle (x, y, width, height, rx, ry, rx, ry);
-        }
-        else
-        {
-            path.addRectangle (x, y, width, height);
-        }
-
-        e->path = std::move (path);
-
-        currentTransform = parseTransform (element, currentTransform, *e);
-        parseStyle (element, currentTransform, *e);
-    }
-    else if (element.hasTagName ("line"))
-    {
-        auto x1 = element.getFloatAttribute ("x1");
-        auto y1 = element.getFloatAttribute ("y1");
-        auto x2 = element.getFloatAttribute ("x2");
-        auto y2 = element.getFloatAttribute ("y2");
-
-        auto path = Path();
-        path.startNewSubPath (x1, y1);
-        path.lineTo (x2, y2);
-        e->path = std::move (path);
-
-        currentTransform = parseTransform (element, currentTransform, *e);
-        parseStyle (element, currentTransform, *e);
-    }
-    else if (element.hasTagName ("polygon"))
-    {
-        String points = element.getStringAttribute ("points");
-        if (points.isNotEmpty())
-        {
-            auto path = Path();
-            auto coords = StringArray::fromTokens (points, " ,", "");
-
-            if (coords.size() >= 4 && coords.size() % 2 == 0)
-            {
-                path.startNewSubPath (coords[0].getFloatValue(), coords[1].getFloatValue());
-
-                for (int i = 2; i < coords.size(); i += 2)
-                    path.lineTo (coords[i].getFloatValue(), coords[i + 1].getFloatValue());
-
-                path.closeSubPath();
-            }
-
-            e->path = std::move (path);
-        }
-
-        currentTransform = parseTransform (element, currentTransform, *e);
-        parseStyle (element, currentTransform, *e);
-    }
-    else if (element.hasTagName ("polyline"))
-    {
-        String points = element.getStringAttribute ("points");
-        if (points.isNotEmpty())
-        {
-            auto path = Path();
-            auto coords = StringArray::fromTokens (points, " ,", "");
-
-            if (coords.size() >= 4 && coords.size() % 2 == 0)
-            {
-                path.startNewSubPath (coords[0].getFloatValue(), coords[1].getFloatValue());
-
-                for (int i = 2; i < coords.size(); i += 2)
-                    path.lineTo (coords[i].getFloatValue(), coords[i + 1].getFloatValue());
-            }
-
-            e->path = std::move (path);
-        }
-
-        currentTransform = parseTransform (element, currentTransform, *e);
-        parseStyle (element, currentTransform, *e);
-    }
-    else if (element.hasTagName ("text"))
-    {
-        float x = element.getFloatAttribute ("x");
-        float y = element.getFloatAttribute ("y");
-        e->textPosition = Point<float> (x, y);
-
-        e->text = element.getAllSubText();
-
-        String fontFamily = element.getStringAttribute ("font-family");
-        if (fontFamily.isNotEmpty())
-            e->fontFamily = fontFamily;
-
-        float fontSize = element.getFloatAttribute ("font-size");
-        if (fontSize > 0.0f)
-            e->fontSize = fontSize;
-
-        String textAnchor = element.getStringAttribute ("text-anchor");
-        if (textAnchor.isNotEmpty())
-            e->textAnchor = textAnchor;
-
-        currentTransform = parseTransform (element, currentTransform, *e);
-        parseStyle (element, currentTransform, *e);
-    }
-    else if (element.hasTagName ("image"))
-    {
-        auto x = element.getFloatAttribute ("x");
-        auto y = element.getFloatAttribute ("y");
-        auto width = element.getFloatAttribute ("width");
-        auto height = element.getFloatAttribute ("height");
-
-        e->imageBounds = Rectangle<float> (x, y, width, height);
-
-        String href = element.getStringAttribute ("href");
-        if (href.isEmpty())
-            href = element.getStringAttribute ("xlink:href");
-
-        if (href.isNotEmpty())
-            e->imageHref = href;
-
-        currentTransform = parseTransform (element, currentTransform, *e);
-        parseStyle (element, currentTransform, *e);
-    }
-    else if (element.hasTagName ("defs"))
-    {
-        // Parse definitions like gradients and clip paths
-        for (auto* child = element.getFirstChildElement(); child != nullptr; child = child->getNextElement())
-        {
-            if (child->hasTagName ("linearGradient") || child->hasTagName ("radialGradient"))
-                parseGradient (*child);
-            else if (child->hasTagName ("clipPath"))
-                parseClipPath (*child);
-        }
-    }
-
-    for (auto* child = element.getFirstChildElement(); child != nullptr; child = child->getNextElement())
-    {
-        // Parse gradients and clip paths regardless of whether they're in <defs> or not
-        if (child->hasTagName ("linearGradient") || child->hasTagName ("radialGradient"))
-            parseGradient (*child);
-        else if (child->hasTagName ("clipPath"))
-            parseClipPath (*child);
-        else
-            parseElement (*child, isRootElement, currentTransform, e.get());
-    }
-
-    if (isRootElement)
-    {
-        // Store root SVG element's default fill/stroke for inheritance by top-level elements
-        if (e->fillColor)
-        {
-            rootFillColor = e->fillColor;
-            rootHasFill = true;
-        }
-        else if (e->noFill)
-        {
-            rootHasFill = false;
-        }
-
-        if (e->strokeColor)
-        {
-            rootStrokeColor = e->strokeColor;
-            rootHasStroke = true;
-        }
-        else if (e->noStroke)
-        {
-            rootHasStroke = false;
-        }
-
-        return true;
-    }
-
-    if (parent != nullptr && ! parentIsRoot)
-        parent->children.push_back (std::move (e));
-    else
-        elements.push_back (std::move (e));
-
-    return true;
+    for (const auto& element : marker.elements)
+        paintElement (g, data, *element, true, false, Colors::black, visitingElements, std::nullopt, 0.0f, recursionDepth + 1);
 }
 
 //==============================================================================
 
-void Drawable::parseStyle (const XmlElement& element, const AffineTransform& currentTransform, Element& e)
+void Drawable::paintPatternFill (Graphics& g,
+                                 const SVGData& data,
+                                 const Path& shape,
+                                 const SVGElement& element,
+                                 const SVGPattern& pattern,
+                                 Color currentColor,
+                                 std::unordered_set<const SVGElement*>& visitingElements,
+                                 int recursionDepth)
 {
-    // Parse CSS style attribute first
-    String styleAttr = element.getStringAttribute ("style");
-    if (styleAttr.isNotEmpty())
-        parseCSSStyle (styleAttr, e);
+    float tileW = pattern.width;
+    float tileH = pattern.height;
+    float originX = pattern.x;
+    float originY = pattern.y;
 
-    // Parse individual attributes (these override style attribute values)
-    String fill = element.getStringAttribute ("fill");
-    if (fill.isNotEmpty())
+    if (pattern.patternUnits == SVGPattern::ObjectBoundingBox)
     {
-        if (fill != "none")
+        const auto bounds = shape.getBounds();
+        tileW *= bounds.getWidth();
+        tileH *= bounds.getHeight();
+        originX = bounds.getX() + pattern.x * bounds.getWidth();
+        originY = bounds.getY() + pattern.y * bounds.getHeight();
+    }
+
+    if (tileW <= 0.0f || tileH <= 0.0f)
+        return;
+
+    const auto savedState = g.saveState();
+
+    // Clip rendering to the filled shape
+    {
+        auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
+        auto transformedShape = shape.transformed (clipTransform);
+        const auto savedClipTransform = g.getTransform();
+        g.setTransform (AffineTransform::identity());
+        g.setClipPath (transformedShape);
+        g.setTransform (savedClipTransform);
+    }
+
+    if (! pattern.patternTransform.isIdentity())
+        g.addTransform (pattern.patternTransform);
+
+    const auto shapeBounds = shape.getBounds();
+    const float startX = std::floor ((shapeBounds.getX() - originX) / tileW) * tileW + originX;
+    const float startY = std::floor ((shapeBounds.getY() - originY) / tileH) * tileH + originY;
+
+    for (float tileY = startY; tileY < shapeBounds.getBottom(); tileY += tileH)
+    {
+        for (float tileX = startX; tileX < shapeBounds.getRight(); tileX += tileW)
         {
-            String gradientUrl = extractGradientUrl (fill);
-            if (gradientUrl.isNotEmpty())
-                e.fillUrl = gradientUrl;
-            else
+            const auto savedTileState = g.saveState();
+
+            g.addTransform (AffineTransform::translation (tileX, tileY));
+
+            if (pattern.viewBox
+                && pattern.viewBox->getWidth() > 0.0f
+                && pattern.viewBox->getHeight() > 0.0f)
             {
-                e.fillColor = Color::fromString (fill);
-                YUP_DRAWABLE_LOG ("Parsed fill color: " << fill << " -> " << e.fillColor->toString());
-            }
-        }
-        else
-        {
-            e.noFill = true;
-        }
-    }
-
-    String stroke = element.getStringAttribute ("stroke");
-    if (stroke.isNotEmpty())
-    {
-        if (stroke != "none")
-        {
-            String gradientUrl = extractGradientUrl (stroke);
-            if (gradientUrl.isNotEmpty())
-                e.strokeUrl = gradientUrl;
-            else
-                e.strokeColor = Color::fromString (stroke);
-        }
-        else
-        {
-            e.noStroke = true;
-        }
-    }
-
-    String strokeJoin = element.getStringAttribute ("stroke-linejoin");
-    if (strokeJoin == "round")
-        e.strokeJoin = StrokeJoin::Round;
-    else if (strokeJoin == "miter")
-        e.strokeJoin = StrokeJoin::Miter;
-    else if (strokeJoin == "bevel")
-        e.strokeJoin = StrokeJoin::Bevel;
-
-    String strokeCap = element.getStringAttribute ("stroke-linecap");
-    if (strokeCap == "round")
-        e.strokeCap = StrokeCap::Round;
-    else if (strokeCap == "square")
-        e.strokeCap = StrokeCap::Square;
-    else if (strokeCap == "butt")
-        e.strokeCap = StrokeCap::Butt;
-
-    float strokeWidth = element.getFloatAttribute ("stroke-width", -1.0f);
-    if (strokeWidth > 0.0f)
-        e.strokeWidth = strokeWidth;
-
-    float opacity = element.getFloatAttribute ("opacity", -1.0f);
-    if (opacity >= 0.0f && opacity <= 1.0f)
-        e.opacity = opacity;
-
-    String clipPath = element.getStringAttribute ("clip-path");
-    if (clipPath.isNotEmpty())
-    {
-        String clipPathUrl = extractGradientUrl (clipPath);
-        if (clipPathUrl.isNotEmpty())
-            e.clipPathUrl = clipPathUrl;
-    }
-
-    // Parse stroke-dasharray
-    String dashArray = element.getStringAttribute ("stroke-dasharray");
-    if (dashArray.isNotEmpty() && dashArray != "none")
-    {
-        auto dashValues = StringArray::fromTokens (dashArray, " ,", "");
-        if (! dashValues.isEmpty())
-        {
-            Array<float> dashes;
-            for (const auto& dash : dashValues)
-            {
-                float value = parseUnit (dash);
-                if (value >= 0.0f)
-                    dashes.add (value);
+                const float scaleX = tileW / pattern.viewBox->getWidth();
+                const float scaleY = tileH / pattern.viewBox->getHeight();
+                g.addTransform (AffineTransform::scaling (scaleX, scaleY)
+                                    .translated (-pattern.viewBox->getX(), -pattern.viewBox->getY()));
             }
 
-            if (! dashes.isEmpty())
-                e.strokeDashArray = dashes;
+            for (const auto& patternElement : pattern.elements)
+                paintElement (g, data, *patternElement, true, false, currentColor, visitingElements, std::nullopt, 0.0f, recursionDepth + 1);
         }
     }
-
-    // Parse stroke-dashoffset
-    String dashOffset = element.getStringAttribute ("stroke-dashoffset");
-    if (dashOffset.isNotEmpty())
-        e.strokeDashOffset = parseUnit (dashOffset);
-
-    // Parse fill-opacity
-    float fillOpacity = element.getFloatAttribute ("fill-opacity", -1.0f);
-    if (fillOpacity >= 0.0f && fillOpacity <= 1.0f)
-        e.fillOpacity = fillOpacity;
-
-    // Parse stroke-opacity
-    float strokeOpacity = element.getFloatAttribute ("stroke-opacity", -1.0f);
-    if (strokeOpacity >= 0.0f && strokeOpacity <= 1.0f)
-        e.strokeOpacity = strokeOpacity;
-
-    // Parse fill-rule
-    String fillRule = element.getStringAttribute ("fill-rule");
-    if (fillRule == "evenodd" || fillRule == "nonzero")
-        e.fillRule = fillRule;
 }
 
 //==============================================================================
 
-AffineTransform Drawable::parseTransform (const XmlElement& element, const AffineTransform& currentTransform, Element& e)
-{
-    AffineTransform result;
-
-    if (auto transformString = element.getStringAttribute ("transform"); transformString.isNotEmpty())
-    {
-        result = parseTransform (transformString);
-
-        e.transform = result;
-        e.localTransform = result; // Store the local transform separately for use by <use> elements
-
-        YUP_DRAWABLE_LOG ("Parsed element transform: " << result.toString());
-    }
-
-    return currentTransform.followedBy (result);
-}
-
-//==============================================================================
-
-AffineTransform Drawable::parseTransform (const String& transformString)
-{
-    if (transformString.isEmpty())
-        return AffineTransform::identity();
-
-    AffineTransform result;
-    auto data = transformString.getCharPointer();
-
-    while (! data.isEmpty())
-    {
-        // Skip whitespace
-        while (data.isWhitespace())
-            ++data;
-
-        if (data.isEmpty())
-            break;
-
-        // Parse transform type
-        String type;
-        while (! data.isEmpty() && CharacterFunctions::isLetter (*data))
-        {
-            type += *data;
-            ++data;
-        }
-
-        // Skip whitespace and the opening parenthesis
-        while (data.isWhitespace() || *data == '(')
-            ++data;
-
-        // Parse parameters
-        Array<float> params;
-        while (! data.isEmpty() && *data != ')')
-        {
-            if (*data == ',' || *data == ' ')
-            {
-                ++data;
-                continue;
-            }
-
-            String number;
-            while (! data.isEmpty() && (*data == '-' || *data == '.' || *data == 'e' || (*data >= '0' && *data <= '9')))
-            {
-                number += *data;
-                ++data;
-            }
-
-            if (! number.isEmpty())
-                params.add (number.getFloatValue());
-
-            // Skip whitespace or commas
-            while (data.isWhitespace() || *data == ',')
-                ++data;
-        }
-
-        // Skip the closing parenthesis
-        if (*data == ')')
-            ++data;
-
-        // Apply the parsed transform
-        // SVG transforms are post-multiplied (applied left-to-right), so we use prependedBy
-        // to append each new transform on the right: result = result * newTransform
-        if (type == "translate" && (params.size() == 1 || params.size() == 2))
-        {
-            const auto tx = params[0];
-            const auto ty = (params.size() == 2) ? params[1] : 0.0f;
-            result = result.prependedBy (AffineTransform::translation (tx, ty));
-        }
-        else if (type == "scale" && (params.size() == 1 || params.size() == 2))
-        {
-            const auto sx = params[0];
-            const auto sy = (params.size() == 2) ? params[1] : params[0];
-            result = result.prependedBy (AffineTransform::scaling (sx, sy));
-        }
-        else if (type == "rotate" && (params.size() == 1 || params.size() == 3))
-        {
-            if (params.size() == 1)
-                result = result.prependedBy (AffineTransform::rotation (degreesToRadians (params[0])));
-            else
-                result = result.prependedBy (AffineTransform::rotation (degreesToRadians (params[0]), params[1], params[2]));
-        }
-        else if (type == "skewX" && params.size() == 1)
-        {
-            result = result.prependedBy (AffineTransform::shearing (tanf (degreesToRadians (params[0])), 0.0f));
-        }
-        else if (type == "skewY" && params.size() == 1)
-        {
-            result = result.prependedBy (AffineTransform::shearing (0.0f, tanf (degreesToRadians (params[0]))));
-        }
-        else if (type == "matrix" && params.size() == 6)
-        {
-            result = result.prependedBy (AffineTransform (
-                params[0], params[2], params[4], params[1], params[3], params[5]));
-        }
-    }
-
-    return result;
-}
-
-//==============================================================================
-
-void Drawable::paintDebugElement (Graphics& g, const Element& element)
+void Drawable::paintDebugElement (Graphics& g, const SVGElement& element)
 {
     if (! element.path)
         return;
@@ -978,255 +1255,324 @@ void Drawable::paintDebugElement (Graphics& g, const Element& element)
 
 //==============================================================================
 
-void Drawable::parseGradient (const XmlElement& element)
+Font Drawable::resolveFont (const SVGElement& element) const
 {
-    String id = element.getStringAttribute ("id");
-    if (id.isEmpty())
+    if (document == nullptr)
+        return Font().withHeight (element.fontSize.value_or (16.0f));
+
+    const auto& options = document->getParseOptions();
+    const auto fontSize = element.fontSize.value_or (16.0f);
+    const auto fontWeight = element.fontWeight.value_or (400);
+    const auto fontItalic = element.fontItalic.value_or (false);
+
+    if (options.fontResolver)
+    {
+        if (auto resolved = options.fontResolver (element.fontFamily.value_or (String()), fontSize, fontWeight, fontItalic))
+            return resolved->withHeight (fontSize);
+    }
+
+    return Font().withHeight (fontSize);
+}
+
+//==============================================================================
+
+void Drawable::renderTextElement (Graphics& g, const SVGElement& element)
+{
+    if (! element.text || ! element.textPosition || element.text->isEmpty())
         return;
 
-    YUP_DRAWABLE_LOG ("Parsing gradient with ID: " << id);
+    auto position = *element.textPosition;
 
-    Gradient::Ptr gradient = new Gradient;
-    gradient->id = id;
-    gradient->start = { 0.0f, 0.0f };
-    gradient->end = { 1.0f, 0.0f };
-    gradient->center = { 0.5f, 0.5f };
-    gradient->radius = 0.5f;
-    gradient->focal = gradient->center;
+    if (element.textX && ! element.textX->isEmpty())
+        position.setX (element.textX->getFirst());
+    if (element.textY && ! element.textY->isEmpty())
+        position.setY (element.textY->getFirst());
+    if (element.textDx && ! element.textDx->isEmpty())
+        position.setX (position.getX() + element.textDx->getFirst());
+    if (element.textDy && ! element.textDy->isEmpty())
+        position.setY (position.getY() + element.textDy->getFirst());
 
-    auto parseCoordinate = [&element] (const String& name, float defaultValue, bool& hasValue) -> float
+    const auto font = resolveFont (element);
+    const auto fontSize = element.fontSize.value_or (16.0f);
+
+    StyledText styledText;
     {
-        const auto value = element.getStringAttribute (name);
-        if (value.isEmpty())
-            return defaultValue;
+        auto modifier = styledText.startUpdate();
+        modifier.setMaxSize (Size<float> (jmax (fontSize, static_cast<float> (element.text->length()) * fontSize * 2.0f),
+                                          fontSize * 4.0f));
+        modifier.setWrap (StyledText::noWrap);
+        modifier.setHorizontalAlign (StyledText::left);
+        modifier.setVerticalAlign (StyledText::top);
+        modifier.appendText (*element.text, font, -1.0f, element.letterSpacing.value_or (0.0f));
+    }
 
-        hasValue = true;
+    const auto computedTextBounds = styledText.getComputedTextBounds();
+    const auto fontAscent = font.getAscent();
+    const auto fontDescent = font.getDescent();
+    const auto hasUsableFontMetrics = fontAscent < 0.0f && fontDescent > fontAscent;
+    const auto ascent = hasUsableFontMetrics ? fontAscent : -0.8f;
+    const auto descent = hasUsableFontMetrics ? fontDescent : 0.2f;
+    const auto metricsHeight = (descent - ascent) * fontSize;
+    const auto textWidth = jmax (fontSize, computedTextBounds.getWidth());
+    const auto textHeight = jmax (computedTextBounds.getHeight(), metricsHeight);
+    const auto bottomPadding = fontSize * 0.25f;
 
-        if (value.containsChar ('%'))
-            return value.upToFirstOccurrenceOf ("%", false, false).getFloatValue() / 100.0f;
+    auto textX = position.getX();
+    if (element.textAnchor == "middle")
+        textX -= textWidth * 0.5f;
+    else if (element.textAnchor == "end")
+        textX -= textWidth;
 
-        return value.getFloatValue();
+    Rectangle<float> textBounds (textX,
+                                 position.getY() + (ascent * fontSize),
+                                 textWidth,
+                                 textHeight + bottomPadding);
+
+    g.fillFittedText (styledText, textBounds);
+}
+
+//==============================================================================
+
+void Drawable::renderImageElement (Graphics& g, const SVGElement& element)
+{
+    if (! element.imageBounds)
+        return;
+
+    auto drawImage = [this, &g, &element] (const Image& image)
+    {
+        if (! image.isValid())
+            return;
+
+        const Rectangle<float> imageSourceBounds (0.0f, 0.0f, static_cast<float> (image.getWidth()), static_cast<float> (image.getHeight()));
+        const auto imageTransform = calculateTransformForTarget (imageSourceBounds,
+                                                                 *element.imageBounds,
+                                                                 element.preserveAspectRatioFitting,
+                                                                 element.preserveAspectRatioJustification);
+        const auto fittedImageBounds = imageSourceBounds.transformed (imageTransform);
+
+        const auto savedState = g.saveState();
+        g.setClipPath (*element.imageBounds);
+        g.drawImage (image, fittedImageBounds);
     };
 
-    // Parse xlink:href reference
-    String href = element.getStringAttribute ("xlink:href");
-    if (href.isNotEmpty() && href.startsWith ("#"))
+    if (element.image)
     {
-        gradient->href = href.substring (1); // Remove the # prefix
-        YUP_DRAWABLE_LOG ("Gradient references: " << gradient->href);
+        drawImage (*element.image);
+        return;
     }
 
-    if (element.hasTagName ("linearGradient"))
+    if (element.imageHref)
     {
-        gradient->type = Gradient::Linear;
-        bool hasX1 = false, hasY1 = false, hasX2 = false, hasY2 = false;
-        gradient->start = { parseCoordinate ("x1", gradient->start.getX(), hasX1), parseCoordinate ("y1", gradient->start.getY(), hasY1) };
-        gradient->end = { parseCoordinate ("x2", gradient->end.getX(), hasX2), parseCoordinate ("y2", gradient->end.getY(), hasY2) };
-        gradient->hasStart = hasX1 || hasY1;
-        gradient->hasEnd = hasX2 || hasY2;
-
-        YUP_DRAWABLE_LOG ("Linear gradient - start: (" << gradient->start.getX() << ", " << gradient->start.getY() << ") end: (" << gradient->end.getX() << ", " << gradient->end.getY() << ")");
-    }
-    else if (element.hasTagName ("radialGradient"))
-    {
-        gradient->type = Gradient::Radial;
-        bool hasCx = false, hasCy = false, hasR = false;
-        bool hasFx = false, hasFy = false;
-        gradient->center = { parseCoordinate ("cx", gradient->center.getX(), hasCx), parseCoordinate ("cy", gradient->center.getY(), hasCy) };
-        gradient->radius = parseCoordinate ("r", gradient->radius, hasR);
-
-        auto fx = parseCoordinate ("fx", gradient->center.getX(), hasFx);
-        auto fy = parseCoordinate ("fy", gradient->center.getY(), hasFy);
-        gradient->focal = { fx, fy };
-        gradient->hasCenter = hasCx || hasCy;
-        gradient->hasRadius = hasR;
-        gradient->hasFocal = hasFx || hasFy;
-
-        YUP_DRAWABLE_LOG ("Radial gradient - center: (" << gradient->center.getX() << ", " << gradient->center.getY() << ") radius: " << gradient->radius);
-    }
-
-    // Parse gradientUnits attribute
-    String gradientUnits = element.getStringAttribute ("gradientUnits");
-    if (gradientUnits == "userSpaceOnUse")
-    {
-        gradient->units = Gradient::UserSpaceOnUse;
-        YUP_DRAWABLE_LOG ("Gradient units: userSpaceOnUse");
-    }
-    else
-    {
-        gradient->units = Gradient::ObjectBoundingBox;
-        YUP_DRAWABLE_LOG ("Gradient units: objectBoundingBox (default)");
-    }
-
-    // Parse gradientTransform attribute
-    String gradientTransform = element.getStringAttribute ("gradientTransform");
-    if (gradientTransform.isNotEmpty())
-    {
-        YUP_DRAWABLE_LOG ("Parsing gradientTransform: " << gradientTransform);
-        gradient->transform = parseTransform (gradientTransform);
-        YUP_DRAWABLE_LOG ("Gradient transform: " << gradient->transform.toString());
-    }
-
-    // Parse gradient stops
-    for (auto* child = element.getFirstChildElement(); child != nullptr; child = child->getNextElement())
-    {
-        if (child->hasTagName ("stop"))
+        if (document != nullptr)
         {
-            GradientStop stop;
-            const auto offsetString = child->getStringAttribute ("offset");
-            if (offsetString.containsChar ('%'))
-                stop.offset = offsetString.upToFirstOccurrenceOf ("%", false, false).getFloatValue() * 0.01f;
-            else
-                stop.offset = child->getFloatAttribute ("offset");
+            if (auto image = SVGParser::loadImageFromHref (document->getParseOptions(), *element.imageHref))
+                drawImage (*image);
+        }
+    }
+}
 
-            stop.offset = jlimit (0.0f, 1.0f, stop.offset);
+//==============================================================================
 
-            // First try to get stop-color from attributes
-            String stopColor = child->getStringAttribute ("stop-color");
-            float stopOpacity = child->getFloatAttribute ("stop-opacity", 1.0f);
+Path Drawable::createDashedPath (const Path& source, const Array<float>& dashArray, float dashOffset) const
+{
+    if (dashArray.isEmpty())
+        return source;
 
-            // If not found in attributes, parse from CSS style
-            if (stopColor.isEmpty())
+    Array<float> positiveDashes;
+    for (auto dash : dashArray)
+    {
+        if (dash > 0.0f)
+            positiveDashes.add (dash);
+    }
+
+    if (positiveDashes.isEmpty())
+        return source;
+
+    if ((positiveDashes.size() % 2) != 0)
+    {
+        const auto originalSize = positiveDashes.size();
+        for (int i = 0; i < originalSize; ++i)
+            positiveDashes.add (positiveDashes[i]);
+    }
+
+    Path result;
+    float totalPatternLength = 0.0f;
+    for (auto dash : positiveDashes)
+        totalPatternLength += dash;
+
+    if (totalPatternLength <= 0.0f)
+        return source;
+
+    auto dashIndex = 0;
+    auto patternPosition = 0.0f;
+
+    const auto resetDashPosition = [&]
+    {
+        dashIndex = 0;
+        patternPosition = std::fmod (dashOffset, totalPatternLength);
+        if (patternPosition < 0.0f)
+            patternPosition += totalPatternLength;
+
+        while (patternPosition > positiveDashes[dashIndex])
+        {
+            patternPosition -= positiveDashes[dashIndex];
+            dashIndex = (dashIndex + 1) % positiveDashes.size();
+        }
+    };
+
+    resetDashPosition();
+
+    auto drawLineDash = [&] (Point<float> start, Point<float> end)
+    {
+        const auto length = start.distanceTo (end);
+        if (length <= 0.0f)
+            return;
+
+        auto direction = (end - start) / length;
+        float distance = 0.0f;
+
+        while (distance < length)
+        {
+            const auto remainingInDash = positiveDashes[dashIndex] - patternPosition;
+            const auto step = jmin (remainingInDash, length - distance);
+
+            if ((dashIndex % 2) == 0 && step > 0.0f)
             {
-                String styleAttr = child->getStringAttribute ("style");
-                if (styleAttr.isNotEmpty())
-                {
-                    YUP_DRAWABLE_LOG ("Parsing CSS style for gradient stop: " << styleAttr);
-
-                    // Parse CSS-style stop-color
-                    auto declarations = StringArray::fromTokens (styleAttr, ";", "");
-                    for (const auto& declaration : declarations)
-                    {
-                        auto colonPos = declaration.indexOf (":");
-                        if (colonPos > 0)
-                        {
-                            String property = declaration.substring (0, colonPos).trim();
-                            String value = declaration.substring (colonPos + 1).trim();
-
-                            if (property == "stop-color")
-                            {
-                                stopColor = value;
-                                YUP_DRAWABLE_LOG ("Found stop-color in CSS: " << stopColor);
-                            }
-                            else if (property == "stop-opacity")
-                            {
-                                stopOpacity = value.getFloatValue();
-                                YUP_DRAWABLE_LOG ("Found stop-opacity in CSS: " << stopOpacity);
-                            }
-                        }
-                    }
-                }
+                auto dashStart = start + direction * distance;
+                auto dashEnd = start + direction * (distance + step);
+                result.startNewSubPath (dashStart);
+                result.lineTo (dashEnd);
             }
 
-            if (stopColor.isNotEmpty())
-            {
-                YUP_DRAWABLE_LOG ("Parsing color string: '" << stopColor << "' (length: " << stopColor.length() << ")");
-                stop.color = Color::fromString (stopColor);
-                YUP_DRAWABLE_LOG ("Gradient stop - offset: " << stop.offset << " color: " << stopColor << " parsed: " << stop.color.toString());
-            }
-
-            stop.opacity = stopOpacity;
-
-            gradient->stops.push_back (stop);
+            distance += step;
+            patternPosition = 0.0f;
+            dashIndex = (dashIndex + 1) % positiveDashes.size();
         }
-    }
+    };
 
-    if (! gradient->stops.empty())
+    Point<float> current;
+    Point<float> subPathStart;
+    bool hasCurrent = false;
+
+    for (const auto& segment : source)
     {
-        std::sort (gradient->stops.begin(), gradient->stops.end(), [] (const GradientStop& a, const GradientStop& b)
+        switch (segment.verb)
         {
-            return a.offset < b.offset;
-        });
+            case Path::Verb::MoveTo:
+                current = segment.point;
+                subPathStart = current;
+                hasCurrent = true;
+                resetDashPosition();
+                break;
 
-        // Ensure implicit first/last stops per SVG spec
-        if (gradient->stops.front().offset > 0.0f)
-        {
-            auto first = gradient->stops.front();
-            first.offset = 0.0f;
-            gradient->stops.insert (gradient->stops.begin(), first);
-        }
+            case Path::Verb::LineTo:
+                if (hasCurrent)
+                    drawLineDash (current, segment.point);
+                current = segment.point;
+                break;
 
-        if (gradient->stops.back().offset < 1.0f)
-        {
-            auto last = gradient->stops.back();
-            last.offset = 1.0f;
-            gradient->stops.push_back (last);
+            case Path::Verb::Close:
+                if (hasCurrent)
+                    drawLineDash (current, subPathStart);
+                current = subPathStart;
+                break;
+
+            case Path::Verb::QuadTo:
+            case Path::Verb::CubicTo:
+                if (hasCurrent)
+                    drawLineDash (current, segment.point);
+                current = segment.point;
+                break;
         }
     }
 
-    YUP_DRAWABLE_LOG ("Gradient parsed with " << gradient->stops.size() << " stops");
-
-    gradients.push_back (gradient);
-    gradientsById.set (id, gradient);
+    return result;
 }
 
 //==============================================================================
 
-Drawable::Gradient::Ptr Drawable::getGradientById (const String& id)
+AffineTransform Drawable::calculateTransformForTarget (const Rectangle<float>& sourceBounds,
+                                                       const Rectangle<float>& targetArea,
+                                                       Fitting fitting,
+                                                       Justification justification) const
 {
-    return gradientsById[id];
-}
+    if (sourceBounds.isEmpty() || targetArea.isEmpty())
+        return AffineTransform::identity();
 
-//==============================================================================
+    float scaleX = targetArea.getWidth() / sourceBounds.getWidth();
+    float scaleY = targetArea.getHeight() / sourceBounds.getHeight();
 
-Drawable::Gradient::Ptr Drawable::resolveGradient (Gradient::Ptr gradient)
-{
-    if (gradient == nullptr || gradient->href.isEmpty())
-        return gradient;
-
-    auto referencedGradient = getGradientById (gradient->href);
-    if (referencedGradient == nullptr)
+    switch (fitting)
     {
-        YUP_DRAWABLE_LOG ("Referenced gradient not found: " << gradient->href);
-        return gradient;
+        case Fitting::none:
+            scaleX = scaleY = 1.0f;
+            break;
+
+        case Fitting::scaleToFit:
+            scaleX = scaleY = jmin (scaleX, scaleY);
+            break;
+
+        case Fitting::fitWidth:
+            scaleY = scaleX;
+            break;
+
+        case Fitting::fitHeight:
+            scaleX = scaleY;
+            break;
+
+        case Fitting::scaleToFill:
+        case Fitting::centerCrop:
+            scaleX = scaleY = jmax (scaleX, scaleY);
+            break;
+
+        case Fitting::fill:
+            break;
+
+        case Fitting::centerInside:
+            scaleX = scaleY = jmin (1.0f, jmin (scaleX, scaleY));
+            break;
+
+        case Fitting::stretchWidth:
+            scaleY = 1.0f;
+            break;
+
+        case Fitting::stretchHeight:
+            scaleX = 1.0f;
+            break;
+
+        case Fitting::tile:
+            scaleX = scaleY = 1.0f;
+            break;
     }
 
-    // Recursively resolve the referenced gradient first
-    referencedGradient = resolveGradient (referencedGradient);
+    float scaledWidth = sourceBounds.getWidth() * scaleX;
+    float scaledHeight = sourceBounds.getHeight() * scaleY;
 
-    // Create a new gradient that inherits from the referenced gradient
-    Gradient::Ptr resolvedGradient = new Gradient;
+    float offsetX = targetArea.getX();
+    float offsetY = targetArea.getY();
 
-    // Copy properties from referenced gradient
-    resolvedGradient->type = referencedGradient->type;
-    resolvedGradient->id = gradient->id; // Keep the original ID
-    resolvedGradient->units = referencedGradient->units;
-    resolvedGradient->start = referencedGradient->start;
-    resolvedGradient->end = referencedGradient->end;
-    resolvedGradient->center = referencedGradient->center;
-    resolvedGradient->radius = referencedGradient->radius;
-    resolvedGradient->focal = referencedGradient->focal;
-    resolvedGradient->transform = referencedGradient->transform;
-    resolvedGradient->stops = referencedGradient->stops;
+    if (justification.testFlags (Justification::horizontalCenter))
+        offsetX += (targetArea.getWidth() - scaledWidth) * 0.5f;
+    else if (justification.testFlags (Justification::right))
+        offsetX += targetArea.getWidth() - scaledWidth;
 
-    // Override with properties from the current gradient (if specified)
-    if (gradient->hasStart)
-        resolvedGradient->start = gradient->start;
-    if (gradient->hasEnd)
-        resolvedGradient->end = gradient->end;
-    if (gradient->hasCenter)
-        resolvedGradient->center = gradient->center;
-    if (gradient->hasRadius)
-        resolvedGradient->radius = gradient->radius;
-    if (gradient->hasFocal)
-        resolvedGradient->focal = gradient->focal;
+    if (justification.testFlags (Justification::verticalCenter))
+        offsetY += (targetArea.getHeight() - scaledHeight) * 0.5f;
+    else if (justification.testFlags (Justification::bottom))
+        offsetY += targetArea.getHeight() - scaledHeight;
 
-    if (! gradient->transform.isIdentity())
-        resolvedGradient->transform = gradient->transform;
-    if (gradient->units != Gradient::ObjectBoundingBox) // Only override if explicitly set
-        resolvedGradient->units = gradient->units;
-    if (! gradient->stops.empty()) // Use local stops if defined
-        resolvedGradient->stops = gradient->stops;
-
-    YUP_DRAWABLE_LOG ("Resolved gradient " << gradient->id << " from reference " << gradient->href);
-    return resolvedGradient;
+    return AffineTransform::translation (-sourceBounds.getX(), -sourceBounds.getY())
+        .followedBy (AffineTransform::scaling (scaleX, scaleY))
+        .followedBy (AffineTransform::translation (offsetX, offsetY));
 }
 
 //==============================================================================
 
-ColorGradient Drawable::createColorGradientFromSVG (const Gradient& gradient, const Rectangle<float>* objectBounds)
+ColorGradient Drawable::createColorGradientFromSVG (const SVGGradient& gradient, const Rectangle<float>* objectBounds) const
 {
-    YUP_DRAWABLE_LOG ("Creating ColorGradient from SVG gradient ID: " << gradient.id << " type: " << (gradient.type == Gradient::Linear ? "Linear" : "Radial") << " units: " << (gradient.units == Gradient::UserSpaceOnUse ? "userSpaceOnUse" : "objectBoundingBox"));
+    YUP_DRAWABLE_LOG ("Creating ColorGradient from SVG gradient ID: " << gradient.id
+                                                                      << " type: " << (gradient.type == SVGGradient::Linear ? "Linear" : "Radial")
+                                                                      << " units: " << (gradient.units == SVGGradient::UserSpaceOnUse ? "userSpaceOnUse" : "objectBoundingBox"));
 
     if (gradient.stops.empty())
     {
@@ -1234,21 +1580,8 @@ ColorGradient Drawable::createColorGradientFromSVG (const Gradient& gradient, co
         return ColorGradient();
     }
 
-    // Ensure we always have a valid bounds transform for objectBoundingBox gradients
-    const bool hasBounds = objectBounds != nullptr && objectBounds->getWidth() > 0.0f && objectBounds->getHeight() > 0.0f;
-    AffineTransform unitsTransform = AffineTransform::identity();
+    const AffineTransform gradientSpaceTransform = createGradientSpaceTransform (gradient, objectBounds);
 
-    if (gradient.units == Gradient::ObjectBoundingBox && hasBounds)
-    {
-        // Normalize gradient space to the element bounds (0..1 -> bounds)
-        unitsTransform = AffineTransform::translation (objectBounds->getX(), objectBounds->getY())
-                             .scaled (objectBounds->getWidth(), objectBounds->getHeight());
-    }
-
-    // Per SVG spec, gradientUnits are applied first, then gradientTransform
-    const AffineTransform gradientSpaceTransform = unitsTransform.followedBy (gradient.transform);
-
-    // Helper to apply transforms to a point
     auto transformPoint = [&gradientSpaceTransform] (Point<float> p)
     {
         float x = p.getX();
@@ -1258,490 +1591,191 @@ ColorGradient Drawable::createColorGradientFromSVG (const Gradient& gradient, co
         return Point<float> (x, y);
     };
 
-    // Prepare start/end/center after transforms (in local space; Graphics will apply viewport transforms)
     const Point<float> start = transformPoint (gradient.start);
     const Point<float> end = transformPoint (gradient.end);
     const Point<float> center = transformPoint (gradient.center);
+    const Point<float> focal = gradient.hasFocal ? transformPoint (gradient.focal) : center;
 
-    // Compute radial radius in transformed space
-    auto computeRadius = [&]() -> float
+    auto computeRadiusFrom = [&] (Point<float> origin) -> float
     {
         if (gradient.radius <= 0.0f)
             return 0.0f;
 
-        const auto edgePoint = transformPoint (Point<float> (gradient.center.getX() + gradient.radius, gradient.center.getY()));
-        return Line<float> (center, edgePoint).length();
+        const Point<float> edgePoints[] = {
+            transformPoint (Point<float> (gradient.center.getX() + gradient.radius, gradient.center.getY())),
+            transformPoint (Point<float> (gradient.center.getX() - gradient.radius, gradient.center.getY())),
+            transformPoint (Point<float> (gradient.center.getX(), gradient.center.getY() + gradient.radius)),
+            transformPoint (Point<float> (gradient.center.getX(), gradient.center.getY() - gradient.radius))
+        };
+
+        float maxRadius = 0.0f;
+        for (const auto& edgePoint : edgePoints)
+            maxRadius = jmax (maxRadius, Line<float> (origin, edgePoint).length());
+
+        return maxRadius;
     };
 
-    const auto radius = gradient.type == Gradient::Radial ? computeRadius() : 0.0f;
+    const auto radius = gradient.type == SVGGradient::Radial ? computeRadiusFrom (center) : 0.0f;
 
-    // Build color stops in gradient space
     std::vector<ColorGradient::ColorStop> colorStops;
     colorStops.reserve (gradient.stops.size());
 
-    for (const auto& stop : gradient.stops)
+    if (gradient.type == SVGGradient::Linear
+        && objectBounds != nullptr
+        && (gradient.spreadMethod == "reflect" || gradient.spreadMethod == "repeat"))
     {
-        Color color = stop.color.withMultipliedAlpha (stop.opacity);
+        const auto dx = end.getX() - start.getX();
+        const auto dy = end.getY() - start.getY();
+        const auto lengthSquared = dx * dx + dy * dy;
 
-        if (gradient.type == Gradient::Linear)
+        if (lengthSquared > 0.0f)
         {
-            const auto interpolated = Point<float> (start.getX() + stop.offset * (end.getX() - start.getX()),
-                                                    start.getY() + stop.offset * (end.getY() - start.getY()));
+            const Point<float> corners[] = {
+                objectBounds->getTopLeft(),
+                objectBounds->getTopRight(),
+                objectBounds->getBottomLeft(),
+                objectBounds->getBottomRight()
+            };
 
-            colorStops.emplace_back (color, interpolated, stop.offset);
+            float minT = 0.0f;
+            float maxT = 1.0f;
+
+            for (const auto& corner : corners)
+            {
+                const auto t = ((corner.getX() - start.getX()) * dx + (corner.getY() - start.getY()) * dy) / lengthSquared;
+                minT = jmin (minT, t);
+                maxT = jmax (maxT, t);
+            }
+
+            int firstRepeat = static_cast<int> (std::floor (minT));
+            int lastRepeat = static_cast<int> (std::ceil (maxT));
+
+            constexpr int maxGradientRepeats = 32;
+            if (lastRepeat - firstRepeat > maxGradientRepeats)
+            {
+                const auto centerRepeat = (firstRepeat + lastRepeat) / 2;
+                firstRepeat = centerRepeat - (maxGradientRepeats / 2);
+                lastRepeat = firstRepeat + maxGradientRepeats;
+            }
+
+            const auto repeatStart = static_cast<float> (firstRepeat);
+            const auto repeatEnd = static_cast<float> (jmax (lastRepeat, firstRepeat + 1));
+            const auto repeatRange = repeatEnd - repeatStart;
+            const auto expandedStart = Point<float> (start.getX() + dx * repeatStart, start.getY() + dy * repeatStart);
+            const auto expandedEnd = Point<float> (start.getX() + dx * repeatEnd, start.getY() + dy * repeatEnd);
+
+            colorStops.reserve (gradient.stops.size() * static_cast<size_t> (repeatEnd - repeatStart));
+
+            for (int repeat = firstRepeat; repeat < lastRepeat; ++repeat)
+            {
+                const bool reflected = gradient.spreadMethod == "reflect" && (std::abs (repeat) % 2) == 1;
+
+                for (const auto& stop : gradient.stops)
+                {
+                    const auto repeatedOffset = static_cast<float> (repeat) + (reflected ? (1.0f - stop.offset) : stop.offset);
+                    const auto normalizedOffset = (repeatedOffset - repeatStart) / repeatRange;
+                    const auto position = Point<float> (expandedStart.getX() + (expandedEnd.getX() - expandedStart.getX()) * normalizedOffset,
+                                                        expandedStart.getY() + (expandedEnd.getY() - expandedStart.getY()) * normalizedOffset);
+
+                    colorStops.emplace_back (stop.color.withMultipliedAlpha (stop.opacity), position, jlimit (0.0f, 1.0f, normalizedOffset));
+                }
+            }
+
+            std::sort (colorStops.begin(), colorStops.end(), [] (const auto& a, const auto& b)
+            {
+                return a.delta < b.delta;
+            });
+        }
+    }
+
+    if (gradient.type == SVGGradient::Radial
+        && objectBounds != nullptr
+        && (gradient.spreadMethod == "reflect" || gradient.spreadMethod == "repeat"))
+    {
+        const auto radialCenter = gradient.hasFocal ? focal : center;
+        const auto radialRadius = gradient.hasFocal ? computeRadiusFrom (focal) : radius;
+
+        if (radialRadius > 0.0f)
+        {
+            const Point<float> corners[] = {
+                objectBounds->getTopLeft(),
+                objectBounds->getTopRight(),
+                objectBounds->getBottomLeft(),
+                objectBounds->getBottomRight()
+            };
+
+            float maxT = 1.0f;
+
+            for (const auto& corner : corners)
+                maxT = jmax (maxT, Line<float> (radialCenter, corner).length() / radialRadius);
+
+            int repeatEnd = static_cast<int> (std::ceil (maxT));
+
+            constexpr int maxGradientRepeats = 64;
+            repeatEnd = jlimit (1, maxGradientRepeats, repeatEnd);
+
+            const auto repeatRange = static_cast<float> (repeatEnd);
+            const auto expandedRadius = radialRadius * repeatRange;
+
+            colorStops.reserve (gradient.stops.size() * static_cast<size_t> (repeatEnd));
+
+            const auto appendStop = [&] (const SVGGradientStop& stop, float repeatedOffset)
+            {
+                const auto normalizedOffset = repeatedOffset / repeatRange;
+                const auto radialPoint = Point<float> (radialCenter.getX() + expandedRadius * normalizedOffset,
+                                                       radialCenter.getY());
+
+                colorStops.emplace_back (stop.color.withMultipliedAlpha (stop.opacity), radialPoint, jlimit (0.0f, 1.0f, normalizedOffset));
+            };
+
+            for (int repeat = 0; repeat < repeatEnd; ++repeat)
+            {
+                const bool reflected = gradient.spreadMethod == "reflect" && (repeat % 2) == 1;
+
+                if (reflected)
+                {
+                    for (auto stop = gradient.stops.rbegin(); stop != gradient.stops.rend(); ++stop)
+                        appendStop (*stop, static_cast<float> (repeat) + (1.0f - stop->offset));
+                }
+                else
+                {
+                    for (const auto& stop : gradient.stops)
+                        appendStop (stop, static_cast<float> (repeat) + stop.offset);
+                }
+            }
+        }
+    }
+
+    if (colorStops.empty())
+    {
+        if (gradient.type == SVGGradient::Radial)
+        {
+            const auto radialCenter = gradient.hasFocal ? focal : center;
+            const auto radialRadius = gradient.hasFocal ? computeRadiusFrom (focal) : radius;
+            const auto effectiveRadius = (radialRadius > 0.0f) ? radialRadius : 1.0f;
+
+            for (const auto& stop : gradient.stops)
+            {
+                const auto offset = jlimit (0.0f, 1.0f, stop.offset);
+                const auto radialPoint = Point<float> (radialCenter.getX() + effectiveRadius * offset,
+                                                       radialCenter.getY());
+                colorStops.emplace_back (stop.color.withMultipliedAlpha (stop.opacity), radialPoint, offset);
+            }
         }
         else
         {
-            // Radial gradient: position lies along the radius vector to preserve radius computation
-            const auto radialPoint = Point<float> (center.getX() + radius * stop.offset, center.getY());
-            colorStops.emplace_back (color, radialPoint, stop.offset);
-        }
-    }
-
-    ColorGradient::Type type = (gradient.type == Gradient::Linear) ? ColorGradient::Linear : ColorGradient::Radial;
-    ColorGradient result (type, colorStops);
-
-    YUP_DRAWABLE_LOG ("Created ColorGradient with " << colorStops.size() << " stops");
-    return result;
-}
-
-//==============================================================================
-
-void Drawable::parseClipPath (const XmlElement& element)
-{
-    String id = element.getStringAttribute ("id");
-    if (id.isEmpty())
-        return;
-
-    ClipPath::Ptr clipPath = new ClipPath;
-    clipPath->id = id;
-
-    // Parse child elements that make up the clipping path
-    for (auto* child = element.getFirstChildElement(); child != nullptr; child = child->getNextElement())
-    {
-        Element::Ptr clipElement = new Element;
-
-        if (child->hasTagName ("path"))
-        {
-            auto path = Path();
-            String pathData = child->getStringAttribute ("d");
-            if (pathData.isNotEmpty() && path.fromString (pathData))
-                clipElement->path = std::move (path);
-        }
-        else if (child->hasTagName ("rect"))
-        {
-            auto x = child->getFloatAttribute ("x");
-            auto y = child->getFloatAttribute ("y");
-            auto width = child->getFloatAttribute ("width");
-            auto height = child->getFloatAttribute ("height");
-
-            auto path = Path();
-            path.addRectangle (x, y, width, height);
-            clipElement->path = std::move (path);
-        }
-        else if (child->hasTagName ("circle"))
-        {
-            auto cx = child->getFloatAttribute ("cx");
-            auto cy = child->getFloatAttribute ("cy");
-            auto r = child->getFloatAttribute ("r");
-
-            auto path = Path();
-            path.addCenteredEllipse (cx, cy, r, r);
-            clipElement->path = std::move (path);
-        }
-
-        if (clipElement->path)
-            clipPath->elements.push_back (clipElement);
-    }
-
-    clipPaths.push_back (clipPath);
-    clipPathsById.set (id, clipPath);
-}
-
-//==============================================================================
-
-Drawable::ClipPath::Ptr Drawable::getClipPathById (const String& id)
-{
-    return clipPathsById[id];
-}
-
-//==============================================================================
-
-void Drawable::parseCSSStyle (const String& styleString, Element& e)
-{
-    // Parse CSS style declarations separated by semicolons
-    auto declarations = StringArray::fromTokens (styleString, ";", "");
-
-    for (const auto& declaration : declarations)
-    {
-        auto colonPos = declaration.indexOf (":");
-        if (colonPos > 0)
-        {
-            String property = declaration.substring (0, colonPos).trim();
-            String value = declaration.substring (colonPos + 1).trim();
-
-            if (property == "fill")
+            for (const auto& stop : gradient.stops)
             {
-                if (value != "none")
-                {
-                    String gradientUrl = extractGradientUrl (value);
-                    if (gradientUrl.isNotEmpty())
-                        e.fillUrl = gradientUrl;
-                    else
-                        e.fillColor = Color::fromString (value);
-                }
-                else
-                {
-                    e.noFill = true;
-                }
-            }
-            else if (property == "stroke")
-            {
-                if (value != "none")
-                {
-                    String gradientUrl = extractGradientUrl (value);
-                    if (gradientUrl.isNotEmpty())
-                        e.strokeUrl = gradientUrl;
-                    else
-                        e.strokeColor = Color::fromString (value);
-                }
-                else
-                {
-                    e.noStroke = true;
-                }
-            }
-            else if (property == "stroke-width")
-            {
-                float strokeWidth = value.getFloatValue();
-                if (strokeWidth > 0.0f)
-                    e.strokeWidth = strokeWidth;
-            }
-            else if (property == "stroke-linejoin")
-            {
-                if (value == "round")
-                    e.strokeJoin = StrokeJoin::Round;
-                else if (value == "miter")
-                    e.strokeJoin = StrokeJoin::Miter;
-                else if (value == "bevel")
-                    e.strokeJoin = StrokeJoin::Bevel;
-            }
-            else if (property == "stroke-linecap")
-            {
-                if (value == "round")
-                    e.strokeCap = StrokeCap::Round;
-                else if (value == "square")
-                    e.strokeCap = StrokeCap::Square;
-                else if (value == "butt")
-                    e.strokeCap = StrokeCap::Butt;
-            }
-            else if (property == "opacity")
-            {
-                float opacity = value.getFloatValue();
-                if (opacity >= 0.0f && opacity <= 1.0f)
-                    e.opacity = opacity;
-            }
-            else if (property == "font-family")
-            {
-                e.fontFamily = value;
-            }
-            else if (property == "font-size")
-            {
-                float fontSize = value.getFloatValue();
-                if (fontSize > 0.0f)
-                    e.fontSize = fontSize;
-            }
-            else if (property == "text-anchor")
-            {
-                e.textAnchor = value;
-            }
-            else if (property == "clip-path")
-            {
-                String clipPathUrl = extractGradientUrl (value);
-                if (clipPathUrl.isNotEmpty())
-                    e.clipPathUrl = clipPathUrl;
-            }
-            else if (property == "stroke-dasharray")
-            {
-                if (value != "none")
-                {
-                    auto dashValues = StringArray::fromTokens (value, " ,", "");
-                    if (! dashValues.isEmpty())
-                    {
-                        Array<float> dashes;
-                        for (const auto& dash : dashValues)
-                        {
-                            float dashValue = parseUnit (dash);
-                            if (dashValue >= 0.0f)
-                                dashes.add (dashValue);
-                        }
-
-                        if (! dashes.isEmpty())
-                            e.strokeDashArray = dashes;
-                    }
-                }
-            }
-            else if (property == "stroke-dashoffset")
-            {
-                e.strokeDashOffset = parseUnit (value);
-            }
-            else if (property == "fill-opacity")
-            {
-                float opacity = value.getFloatValue();
-                if (opacity >= 0.0f && opacity <= 1.0f)
-                    e.fillOpacity = opacity;
-            }
-            else if (property == "stroke-opacity")
-            {
-                float opacity = value.getFloatValue();
-                if (opacity >= 0.0f && opacity <= 1.0f)
-                    e.strokeOpacity = opacity;
-            }
-            else if (property == "fill-rule")
-            {
-                if (value == "evenodd" || value == "nonzero")
-                    e.fillRule = value;
-            }
-        }
-    }
-}
-
-//==============================================================================
-
-float Drawable::parseUnit (const String& value, float defaultValue, float fontSize, float viewportSize)
-{
-    if (value.isEmpty())
-        return defaultValue;
-
-    String trimmed = value.trim();
-    if (trimmed.isEmpty())
-        return defaultValue;
-
-    // Extract numeric part and unit
-    int unitStart = 0;
-    while (unitStart < trimmed.length() && (CharacterFunctions::isDigit (trimmed[unitStart]) || trimmed[unitStart] == '.' || trimmed[unitStart] == '-' || trimmed[unitStart] == '+'))
-    {
-        unitStart++;
-    }
-
-    float numericValue = trimmed.substring (0, unitStart).getFloatValue();
-    String unit = trimmed.substring (unitStart).trim().toLowerCase();
-
-    // Handle different SVG units
-    if (unit.isEmpty() || unit == "px")
-        return numericValue; // Default user units or pixels
-
-    else if (unit == "pt")
-        return numericValue * 1.333333f; // 1pt = 1.333px
-
-    else if (unit == "pc")
-        return numericValue * 16.0f; // 1pc = 16px
-
-    else if (unit == "mm")
-        return numericValue * 3.779528f; // 1mm = 3.779528px (96 DPI)
-
-    else if (unit == "cm")
-        return numericValue * 37.79528f; // 1cm = 37.79528px (96 DPI)
-
-    else if (unit == "in")
-        return numericValue * 96.0f; // 1in = 96px (96 DPI)
-
-    else if (unit == "em")
-        return numericValue * fontSize; // Relative to font size
-
-    else if (unit == "ex")
-        return numericValue * fontSize * 0.5f; // Approximately 0.5em
-
-    else if (unit == "%")
-        return numericValue * viewportSize * 0.01f; // Percentage of viewport
-
-    else
-        return numericValue; // Unknown unit, treat as user units
-}
-
-//==============================================================================
-
-Rectangle<float> Drawable::calculateBounds() const
-{
-    // Use viewBox if available, otherwise use size
-    if (! viewBox.isEmpty())
-        return viewBox;
-
-    if (size.getWidth() > 0 && size.getHeight() > 0)
-        return Rectangle<float> (0, 0, size.getWidth(), size.getHeight());
-
-    // Fallback: calculate bounds from all elements with their transforms applied
-    // This gives us the actual visual bounds of the rendered content
-    Rectangle<float> bounds;
-    bool hasValidBounds = false;
-
-    for (const auto& element : elements)
-    {
-        if (element->path)
-        {
-            auto pathBounds = element->path->getBounds();
-            if (element->transform)
-                pathBounds = element->path->getBoundsTransformed (*element->transform);
-
-            if (hasValidBounds)
-                bounds = bounds.unionWith (pathBounds);
-            else
-            {
-                bounds = pathBounds;
-                hasValidBounds = true;
+                Color color = stop.color.withMultipliedAlpha (stop.opacity);
+                const auto interpolated = Point<float> (start.getX() + stop.offset * (end.getX() - start.getX()),
+                                                        start.getY() + stop.offset * (end.getY() - start.getY()));
+                colorStops.emplace_back (color, interpolated, stop.offset);
             }
         }
     }
 
-    return hasValidBounds ? bounds : Rectangle<float> (0, 0, 100, 100);
-}
-
-//==============================================================================
-
-AffineTransform Drawable::calculateTransformForTarget (const Rectangle<float>& sourceBounds, const Rectangle<float>& targetArea, Fitting fitting, Justification justification) const
-{
-    if (sourceBounds.isEmpty() || targetArea.isEmpty())
-        return AffineTransform::identity();
-
-    float scaleX = targetArea.getWidth() / sourceBounds.getWidth();
-    float scaleY = targetArea.getHeight() / sourceBounds.getHeight();
-
-    // Apply scaling based on fitting mode
-    switch (fitting)
-    {
-        case Fitting::none:
-            scaleX = scaleY = 1.0f;
-            break;
-
-        case Fitting::scaleToFit:
-            scaleX = scaleY = jmin (scaleX, scaleY); // Scale to fit both dimensions
-            break;
-
-        case Fitting::fitWidth:
-            scaleY = scaleX; // Scale to fit width, preserve aspect ratio
-            break;
-
-        case Fitting::fitHeight:
-            scaleX = scaleY; // Scale to fit height, preserve aspect ratio
-            break;
-
-        case Fitting::scaleToFill:
-        case Fitting::centerCrop:
-            scaleX = scaleY = jmax (scaleX, scaleY); // Scale to fill, may crop
-            break;
-
-        case Fitting::fill:
-            // Use calculated scales as-is (non-uniform scaling)
-            break;
-
-        case Fitting::centerInside:
-            // Like scaleToFit but don't upscale beyond original size
-            scaleX = scaleY = jmin (1.0f, jmin (scaleX, scaleY));
-            break;
-
-        case Fitting::stretchWidth:
-            scaleY = 1.0f; // Stretch horizontally only
-            break;
-
-        case Fitting::stretchHeight:
-            scaleX = 1.0f; // Stretch vertically only
-            break;
-
-        case Fitting::tile:
-            // For tile mode, use no scaling (tiling would be handled elsewhere)
-            scaleX = scaleY = 1.0f;
-            break;
-    }
-
-    // Calculate scaled size
-    float scaledWidth = sourceBounds.getWidth() * scaleX;
-    float scaledHeight = sourceBounds.getHeight() * scaleY;
-
-    // Calculate offset based on justification
-    float offsetX = targetArea.getX();
-    float offsetY = targetArea.getY();
-
-    // Horizontal justification
-    if (justification.testFlags (Justification::horizontalCenter))
-        offsetX += (targetArea.getWidth() - scaledWidth) * 0.5f;
-    else if (justification.testFlags (Justification::right))
-        offsetX += targetArea.getWidth() - scaledWidth;
-
-    // Vertical justification
-    if (justification.testFlags (Justification::verticalCenter))
-        offsetY += (targetArea.getHeight() - scaledHeight) * 0.5f;
-    else if (justification.testFlags (Justification::bottom))
-        offsetY += targetArea.getHeight() - scaledHeight;
-
-    // Create transform: translate to origin, scale, then translate to target position
-    return AffineTransform::translation (-sourceBounds.getX(), -sourceBounds.getY())
-        .scaled (scaleX, scaleY)
-        .translated (offsetX, offsetY);
-}
-
-//==============================================================================
-
-Fitting Drawable::parsePreserveAspectRatio (const String& preserveAspectRatio)
-{
-    if (preserveAspectRatio.isEmpty() || preserveAspectRatio == "xMidYMid meet")
-        return Fitting::scaleToFit; // Default SVG behavior
-
-    if (preserveAspectRatio.contains ("none"))
-        return Fitting::fill; // Non-uniform scaling allowed
-
-    if (preserveAspectRatio.contains ("slice"))
-        return Fitting::scaleToFill; // Scale to fill, may crop
-
-    // Default to uniform scaling (meet)
-    return Fitting::scaleToFit;
-}
-
-Justification Drawable::parseAspectRatioAlignment (const String& preserveAspectRatio)
-{
-    if (preserveAspectRatio.isEmpty())
-        return Justification::center; // Default SVG alignment
-
-    Justification result = Justification::left;
-
-    // Parse horizontal alignment
-    if (preserveAspectRatio.contains ("xMin"))
-        result = result | Justification::left;
-    else if (preserveAspectRatio.contains ("xMax"))
-        result = result | Justification::right;
-    else // xMid (default)
-        result = result | Justification::horizontalCenter;
-
-    // Parse vertical alignment
-    if (preserveAspectRatio.contains ("YMin"))
-        result = result | Justification::top;
-    else if (preserveAspectRatio.contains ("YMax"))
-        result = result | Justification::bottom;
-    else // YMid (default)
-        result = result | Justification::verticalCenter;
-
-    return result;
-}
-
-//==============================================================================
-
-String Drawable::extractGradientUrl (const String& value)
-{
-    if (! value.contains ("url(#"))
-        return String();
-
-    // Find the start of the URL
-    int urlStart = value.indexOf ("url(#");
-    if (urlStart == -1)
-        return String();
-
-    // Find the end of the URL (first closing parenthesis after the URL start)
-    int urlEnd = value.indexOf (urlStart, ")");
-    if (urlEnd == -1)
-        return String();
-
-    // Extract the ID part (between "url(#" and ")")
-    String url = value.substring (urlStart + 5, urlEnd); // +5 to skip "url(#"
-    YUP_DRAWABLE_LOG ("Extracted gradient URL: '" << url << "' from: '" << value << "'");
-    return url;
+    ColorGradient::Type type = (gradient.type == SVGGradient::Linear) ? ColorGradient::Linear : ColorGradient::Radial;
+    return ColorGradient (type, colorStops);
 }
 
 } // namespace yup

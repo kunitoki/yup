@@ -323,11 +323,11 @@ extern char** environ;
 #include "threads/yup_HighResolutionTimer.cpp"
 #include "threads/yup_WaitableEvent.cpp"
 #include "network/yup_URL.cpp"
+#include "network/yup_WebInputStream.cpp"
+#include "streams/yup_URLInputSource.cpp"
 
 #if ! YUP_WASM
 #include "threads/yup_ChildProcess.cpp"
-#include "network/yup_WebInputStream.cpp"
-#include "streams/yup_URLInputSource.cpp"
 #endif
 
 //==============================================================================
@@ -339,6 +339,11 @@ extern char** environ;
 
 //==============================================================================
 #include "files/yup_Watchdog.cpp"
+
+//==============================================================================
+#if YUP_MODULE_AVAILABLE_sqlite3_library
+#include "database/yup_SqliteDatabase.cpp"
+#endif
 
 //==============================================================================
 namespace yup

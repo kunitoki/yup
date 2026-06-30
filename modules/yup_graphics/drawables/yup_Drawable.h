@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2024 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -31,6 +31,9 @@ namespace yup
 class YUP_API Drawable
 {
 public:
+    /** Options used when parsing SVG data. Alias for SVGDocument::ParseOptions. */
+    using ParseOptions = SVGDocument::ParseOptions;
+
     //==============================================================================
     /** Constructor. */
     Drawable();
@@ -43,6 +46,21 @@ public:
         @return True if the SVG file was parsed successfully, false otherwise.
     */
     bool parseSVG (const File& svgFile);
+
+    /** Parses an SVG file with custom parse options. */
+    bool parseSVG (const File& svgFile, const ParseOptions& options);
+
+    //==============================================================================
+    /** Parses SVG text.
+
+        @param svgText The SVG XML text to parse.
+
+        @return True if the SVG text was parsed successfully, false otherwise.
+    */
+    bool parseSVG (StringRef svgText);
+
+    /** Parses SVG text with custom parse options. */
+    bool parseSVG (StringRef svgText, const ParseOptions& options);
 
     //==============================================================================
     /** Clears the drawable. */
@@ -76,148 +94,31 @@ public:
                 Justification justification = Justification::center);
 
 private:
-    struct Element : public ReferenceCountedObject
-    {
-        using Ptr = ReferenceCountedObjectPtr<Element>;
+    void paintElement (Graphics& g,
+                       const SVGData& data,
+                       const SVGElement& element,
+                       bool hasParentFillEnabled,
+                       bool hasParentStrokeEnabled,
+                       Color currentColor,
+                       std::unordered_set<const SVGElement*>& visitingElements,
+                       std::optional<Array<float>> inheritedStrokeDashArray = std::nullopt,
+                       float inheritedStrokeDashOffset = 0.0f,
+                       int recursionDepth = 0);
+    void paintMarker (Graphics& g, const SVGData& data, const SVGMarker& marker, float strokeWidth, Point<float> position, float tangentAngle, std::unordered_set<const SVGElement*>& visitingElements, int recursionDepth);
+    void paintPatternFill (Graphics& g, const SVGData& data, const Path& shape, const SVGElement& element, const SVGPattern& pattern, Color currentColor, std::unordered_set<const SVGElement*>& visitingElements, int recursionDepth);
+    void paintDebugElement (Graphics& g, const SVGElement& element);
+    void renderTextElement (Graphics& g, const SVGElement& element);
+    void renderImageElement (Graphics& g, const SVGElement& element);
+    Path createDashedPath (const Path& source, const Array<float>& dashArray, float dashOffset) const;
+    AffineTransform calculateTransformForTarget (const Rectangle<float>& sourceBounds,
+                                                 const Rectangle<float>& targetArea,
+                                                 Fitting fitting,
+                                                 Justification justification) const;
+    Font resolveFont (const SVGElement& element) const;
+    ColorGradient createColorGradientFromSVG (const SVGGradient& gradient,
+                                              const Rectangle<float>* objectBounds = nullptr) const;
 
-        std::optional<String> id;
-
-        std::optional<AffineTransform> transform;
-        std::optional<AffineTransform> localTransform; // Transform from the element itself (not accumulated)
-        std::optional<Path> path;
-        std::optional<String> reference;
-
-        std::optional<Color> fillColor;
-        std::optional<Color> strokeColor;
-        std::optional<float> fillOpacity;
-        std::optional<float> strokeOpacity;
-        std::optional<float> strokeWidth;
-        std::optional<StrokeJoin> strokeJoin;
-        std::optional<StrokeCap> strokeCap;
-        std::optional<Array<float>> strokeDashArray;
-        std::optional<float> strokeDashOffset;
-        std::optional<String> fillRule; // "evenodd" or "nonzero"
-        bool noFill = false;
-        bool noStroke = false;
-
-        std::optional<float> opacity;
-
-        // Text properties
-        std::optional<String> text;
-        std::optional<Point<float>> textPosition;
-        std::optional<String> fontFamily;
-        std::optional<float> fontSize;
-        std::optional<String> textAnchor;
-
-        // Gradient properties
-        std::optional<String> fillUrl;
-        std::optional<String> strokeUrl;
-
-        // Image properties
-        std::optional<String> imageHref;
-        std::optional<Rectangle<float>> imageBounds;
-
-        // Clipping properties
-        std::optional<String> clipPathUrl;
-
-        std::vector<Element::Ptr> children;
-    };
-
-    struct GradientStop
-    {
-        float offset;
-        Color color;
-        float opacity = 1.0f;
-    };
-
-    struct Gradient : public ReferenceCountedObject
-    {
-        using Ptr = ReferenceCountedObjectPtr<Gradient>;
-
-        enum Type
-        {
-            Linear,
-            Radial
-        };
-
-        enum Units
-        {
-            UserSpaceOnUse,
-            ObjectBoundingBox
-        };
-
-        Type type;
-        String id;
-        Units units = ObjectBoundingBox; // Default per SVG spec
-        String href;                     // xlink:href reference to another gradient
-
-        // Linear gradient properties
-        Point<float> start;
-        Point<float> end;
-
-        // Radial gradient properties
-        Point<float> center;
-        float radius = 0.0f;
-        Point<float> focal;
-
-        std::vector<GradientStop> stops;
-        AffineTransform transform;
-
-        bool hasStart = false;
-        bool hasEnd = false;
-        bool hasCenter = false;
-        bool hasRadius = false;
-        bool hasFocal = false;
-    };
-
-    struct ClipPath : public ReferenceCountedObject
-    {
-        using Ptr = ReferenceCountedObjectPtr<ClipPath>;
-
-        String id;
-        std::vector<Element::Ptr> elements;
-    };
-
-    void paintElement (Graphics& g, const Element& element, bool hasParentFillEnabled, bool hasParentStrokeEnabled);
-    void paintDebugElement (Graphics& g, const Element& element);
-    bool parseElement (const XmlElement& element, bool parentIsRoot, AffineTransform currentTransform, Element* parent = nullptr);
-    void parseStyle (const XmlElement& element, const AffineTransform& currentTransform, Element& e);
-    AffineTransform parseTransform (const XmlElement& element, const AffineTransform& currentTransform, Element& e);
-    void parseGradient (const XmlElement& element);
-    Gradient::Ptr getGradientById (const String& id);
-    Gradient::Ptr resolveGradient (Gradient::Ptr gradient);
-    ColorGradient createColorGradientFromSVG (const Gradient& gradient, const Rectangle<float>* objectBounds = nullptr);
-    void parseClipPath (const XmlElement& element);
-    ClipPath::Ptr getClipPathById (const String& id);
-    void parseCSSStyle (const String& styleString, Element& e);
-    float parseUnit (const String& value, float defaultValue = 0.0f, float fontSize = 12.0f, float viewportSize = 100.0f);
-    AffineTransform parseTransform (const String& transformString);
-    String extractGradientUrl (const String& value);
-
-    // SVG preserveAspectRatio parsing
-    Fitting parsePreserveAspectRatio (const String& preserveAspectRatio);
-    Justification parseAspectRatioAlignment (const String& preserveAspectRatio);
-
-    // Helper methods for layout and painting
-    Rectangle<float> calculateBounds() const;
-    AffineTransform calculateTransformForTarget (const Rectangle<float>& sourceBounds, const Rectangle<float>& targetArea, Fitting fitting, Justification justification) const;
-
-    Rectangle<float> viewBox;
-    Size<float> size;
-    Rectangle<float> bounds;
-    AffineTransform transform;
-    std::vector<Element::Ptr> elements;
-    HashMap<String, Element::Ptr> elementsById;
-    std::vector<Gradient::Ptr> gradients;
-    HashMap<String, Gradient::Ptr> gradientsById;
-    std::vector<ClipPath::Ptr> clipPaths;
-    HashMap<String, ClipPath::Ptr> clipPathsById;
-
-    // Root SVG element's default presentation attributes
-    bool rootHasFill = true;    // SVG default fill is black
-    bool rootHasStroke = false; // SVG default stroke is none
-    std::optional<Color> rootFillColor;
-    std::optional<Color> rootStrokeColor;
+    SVGDocument::Ptr document;
 };
 
 } // namespace yup

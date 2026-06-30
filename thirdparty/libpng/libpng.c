@@ -21,21 +21,59 @@
 
 #include "libpng.h"
 
+#if defined (__clang__)
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wincompatible-pointer-types-discards-qualifiers"
+#endif
+
 #include "upstream/png.c"
 #include "upstream/pngerror.c"
 #include "upstream/pngget.c"
 #include "upstream/pngmem.c"
 #include "upstream/pngread.c"
+
+#define png_pass_start yup_pngpread_pass_start
+#define png_pass_inc yup_pngpread_pass_inc
+#define png_pass_ystart yup_pngpread_pass_ystart
+#define png_pass_yinc yup_pngpread_pass_yinc
 #include "upstream/pngpread.c"
+#undef png_pass_start
+#undef png_pass_inc
+#undef png_pass_ystart
+#undef png_pass_yinc
+
 #include "upstream/pngrio.c"
 #include "upstream/pngrtran.c"
+
+#define png_pass_start yup_pngrutil_pass_start
+#define png_pass_inc yup_pngrutil_pass_inc
+#define png_pass_ystart yup_pngrutil_pass_ystart
+#define png_pass_yinc yup_pngrutil_pass_yinc
 #include "upstream/pngrutil.c"
+#undef png_pass_start
+#undef png_pass_inc
+#undef png_pass_ystart
+#undef png_pass_yinc
+
 #include "upstream/pngset.c"
 #include "upstream/pngtrans.c"
 #include "upstream/pngwio.c"
 #include "upstream/pngwrite.c"
 #include "upstream/pngwtran.c"
+
+#define png_pass_start yup_pngwutil_pass_start
+#define png_pass_inc yup_pngwutil_pass_inc
+#define png_pass_ystart yup_pngwutil_pass_ystart
+#define png_pass_yinc yup_pngwutil_pass_yinc
 #include "upstream/pngwutil.c"
+#undef png_pass_start
+#undef png_pass_inc
+#undef png_pass_ystart
+#undef png_pass_yinc
+
+#if defined (__clang__)
+ #pragma clang diagnostic pop
+#endif
 
 #if defined(__arm__) || defined(__aarch64__) || defined(_M_ARM) || defined(_M_ARM64)
 #include "upstream/arm/arm_init.c"
