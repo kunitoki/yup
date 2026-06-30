@@ -521,7 +521,7 @@ TEST (CachedValueAtomicTests, AtomicWithBool)
     EXPECT_FALSE (atomicBool.get());
 }
 
-#if ! YUP_EMSCRIPTEN || defined(__EMSCRIPTEN_PTHREADS__)
+#if ! YUP_WASM
 TEST (CachedValueAtomicTests, AtomicThreadSafeAccess)
 {
     auto undoManager = UndoManager::Ptr (new UndoManager);
@@ -789,7 +789,7 @@ TEST (CachedValueAtomicVariantConverterTests, AtomicPointType)
     }
 }
 
-#if ! YUP_EMSCRIPTEN || defined(__EMSCRIPTEN_PTHREADS__)
+#if ! YUP_WASM
 TEST (CachedValueAtomicVariantConverterTests, AtomicColorTypeThreadSafety)
 {
     auto undoManager = UndoManager::Ptr (new UndoManager);
