@@ -50,7 +50,7 @@ struct AudioPluginHostContext
     String hostVendor = "YUP";
 
     /** Host version string reported to the plugin. */
-    String hostVersion = "1.0.0";
+    String hostVersion = YUP_VERSION_STRING;
 };
 
 } // namespace yup
