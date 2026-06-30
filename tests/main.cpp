@@ -34,6 +34,8 @@
 #include <string_view>
 #include <vector>
 
+#include <yup_events/yup_events.h>
+
 int main (int argc, char** argv)
 {
     int totalShards = 1;
@@ -56,21 +58,27 @@ int main (int argc, char** argv)
     int filteredArgc = static_cast<int> (filteredArgv.size());
     testing::InitGoogleMock (&filteredArgc, filteredArgv.data());
 
-    if (totalShards == 1)
-        return RUN_ALL_TESTS();
-
-    std::cout << "Running shard " << shardIndex << " of " << totalShards << "\n";
-
-    auto* unitTest = ::testing::UnitTest::GetInstance();
     int failed = 0;
+    yup::ScopedYupInitialiser_GUI yupInitialiser;
 
-    for (int i = 0; i < unitTest->total_test_suite_count(); ++i)
+    if (totalShards == 1)
     {
-        if (i % totalShards != shardIndex)
-            continue;
+        failed = RUN_ALL_TESTS();
+    }
+    else
+    {
+        std::cout << "Running shard " << shardIndex << " of " << totalShards << "\n";
 
-        ::testing::GTEST_FLAG (filter) = std::string (unitTest->GetTestSuite (i)->name()) + ".*";
-        failed += RUN_ALL_TESTS();
+        auto* unitTest = ::testing::UnitTest::GetInstance();
+
+        for (int i = 0; i < unitTest->total_test_suite_count(); ++i)
+        {
+            if (i % totalShards != shardIndex)
+                continue;
+
+            ::testing::GTEST_FLAG (filter) = std::string (unitTest->GetTestSuite (i)->name()) + ".*";
+            failed += RUN_ALL_TESTS();
+        }
     }
 
     return failed > 0 ? 1 : 0;
