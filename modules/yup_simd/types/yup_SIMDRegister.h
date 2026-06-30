@@ -341,7 +341,7 @@ private:
                 alignas (64) T lanes[nativeSize] = {};
                 const auto remaining = static_cast<std::size_t> (N) - offset;
 
-                for (std::size_t i = 0; i < remaining; ++i)
+                for (std::size_t i = 0; i < remaining && i < nativeSize; ++i)
                     lanes[i] = ptr[offset + i];
 
                 data[batchIndex] = Batch::load_unaligned (lanes);
@@ -371,7 +371,7 @@ private:
 
                 const auto remaining = static_cast<std::size_t> (N) - offset;
 
-                for (std::size_t i = 0; i < remaining; ++i)
+                for (std::size_t i = 0; i < remaining && i < nativeSize; ++i)
                     ptr[offset + i] = lanes[i];
             }
 
