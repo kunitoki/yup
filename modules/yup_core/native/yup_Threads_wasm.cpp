@@ -68,6 +68,20 @@ bool Thread::setPriority (Priority newPriority)
 }
 
 //==============================================================================
+void CriticalSection::enter() const noexcept
+{
+    if (! tryEnter())
+    {
+        for (int i = 20; --i >= 0;)
+            if (tryEnter())
+                return;
+
+        while (! tryEnter())
+            Thread::yield();
+    }
+}
+
+//==============================================================================
 YUP_API void YUP_CALLTYPE Process::setPriority (ProcessPriority) {}
 
 static bool swapUserAndEffectiveUser()

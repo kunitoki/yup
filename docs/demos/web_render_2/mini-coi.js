@@ -1,12 +1,15 @@
 /*! coi-serviceworker v0.1.7 - Guido Zuidhof and contributors, licensed under MIT */
 /*! mini-coi - Andrea Giammarchi and contributors, licensed under MIT */
-(({ document: d, navigator: { serviceWorker: s } }) => {
+(({ document: d, navigator: n }) => {
     if (d) {
       const { currentScript: c } = d;
-      s.register(c.src, { scope: c.getAttribute('scope') || '.' }).then(r => {
-        r.addEventListener('updatefound', () => location.reload());
-        if (r.active && !s.controller) location.reload();
-      });
+      const s = n && n.serviceWorker;
+      if (s) {
+        s.register(c.src, { scope: c.getAttribute('scope') || '.' }).then(r => {
+          r.addEventListener('updatefound', () => location.reload());
+          if (r.active && !s.controller) location.reload();
+        });
+      }
     }
     else {
       addEventListener('install', () => skipWaiting());
