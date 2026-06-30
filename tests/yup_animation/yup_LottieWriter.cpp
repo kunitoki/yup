@@ -961,6 +961,8 @@ TEST_F (LottieWriterTests, ToJson_LayerContainsTransformField)
 // Roundtrip with test data files — tests/data/lottie/*
 // =============================================================================
 
+#if ! YUP_WASM
+
 TEST_F (LottieWriterTests, Roundtrip_GoalLottiePreservesName)
 {
     const File file = getLottieTestDataDir().getChildFile ("goal.lottie");
@@ -1159,3 +1161,5 @@ TEST_F (LottieWriterTests, ToFile_JollyWalkerWriteAndReadBack)
 
     tempFile.deleteFile();
 }
+
+#endif

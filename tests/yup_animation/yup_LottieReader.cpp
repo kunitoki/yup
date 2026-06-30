@@ -444,6 +444,7 @@ TEST_F (LottieReaderTests, ParseDataImageAssetHasCorrectPath)
 // Test data files — tests/data/lottie/*
 // =============================================================================
 
+#if ! YUP_WASM
 TEST_F (LottieReaderTests, ParseFileWithGoalLottieReturnsValidComposition)
 {
     const File file = getLottieTestDataDir().getChildFile ("goal.lottie");
@@ -536,6 +537,7 @@ TEST_F (LottieReaderTests, ParseFromZipWithDefaultIdParsesGoalLottie)
     ASSERT_NE (comp, nullptr);
     EXPECT_EQ (comp->name, String ("Goal"));
 }
+#endif
 
 // =============================================================================
 // parseStream
@@ -621,6 +623,7 @@ TEST_F (LottieReaderTests, ParseStreamWithFileInputStreamParsesJson)
     tempFile.deleteFile();
 }
 
+#if ! YUP_WASM
 TEST_F (LottieReaderTests, ParseStreamWithGoalLottieAsZipStream)
 {
     const File file = getLottieTestDataDir().getChildFile ("goal.lottie");
@@ -634,3 +637,4 @@ TEST_F (LottieReaderTests, ParseStreamWithGoalLottieAsZipStream)
     EXPECT_EQ (comp->name, String ("Goal"));
     EXPECT_EQ (comp->layers.size(), 3u);
 }
+#endif
