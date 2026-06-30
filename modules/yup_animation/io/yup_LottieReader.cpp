@@ -132,23 +132,19 @@ AnimationComposition::Ptr LottieReader::parseFile (const File& file,
         return {};
     }
 
-    // .lottie files are ZIP archives
-    if (file.getFileExtension().equalsIgnoreCase (".lottie"))
-        return parseFromZip (file, {}, options, outError);
-
-    const String text = file.loadFileAsString();
-    if (text.isEmpty())
-    {
-        if (outError != nullptr)
-            *outError = "Empty file: " + file.getFullPathName();
-        return {};
-    }
-
     LottieLoadOptions opts = options;
     if (opts.resourceDirectory == File())
         opts.resourceDirectory = file.getParentDirectory();
 
-    return parseData (text, opts, outError);
+    auto stream = file.createInputStream();
+    if (stream == nullptr)
+    {
+        if (outError != nullptr)
+            *outError = "Failed to open file: " + file.getFullPathName();
+        return {};
+    }
+
+    return parseStream (*stream, opts, outError);
 }
 
 //==============================================================================
@@ -167,6 +163,78 @@ AnimationComposition::Ptr LottieReader::parseData (const String& jsonText,
 
     LottieReader reader (options, outError);
     return reader.parseRoot (root);
+}
+
+//==============================================================================
+AnimationComposition::Ptr LottieReader::parseStream (InputStream& stream,
+                                                     const LottieLoadOptions& options,
+                                                     String* outError)
+{
+    MemoryBlock data;
+    const auto bytesRead = stream.readIntoMemoryBlock (data);
+    if (bytesRead == 0 || data.isEmpty())
+    {
+        if (outError != nullptr)
+            *outError = "Empty or unreadable stream";
+        return {};
+    }
+
+    // .lottie ZIP archives start with "PK" magic bytes
+    if (data.getSize() >= 2 && memcmp (data.getData(), "PK", 2) == 0)
+    {
+        MemoryInputStream memStream (data, false);
+        ZipFile zip (memStream);
+
+        const auto* manifestEntry = zip.getEntry ("manifest.json", true);
+        if (manifestEntry == nullptr)
+        {
+            if (outError != nullptr)
+                *outError = "manifest.json not found in .lottie stream";
+            return {};
+        }
+
+        std::unique_ptr<InputStream> manifestStream (zip.createStreamForEntry (*manifestEntry));
+        if (manifestStream == nullptr)
+            return {};
+
+        var manifest;
+        if (JSON::parse (manifestStream->readEntireStreamAsString(), manifest).failed())
+        {
+            if (outError != nullptr)
+                *outError = "Failed to parse manifest.json";
+            return {};
+        }
+
+        const auto* anims = safeArray (manifest["animations"]);
+        if (anims == nullptr || anims->isEmpty())
+        {
+            if (outError != nullptr)
+                *outError = "No animations found in manifest";
+            return {};
+        }
+
+        const auto& anim = (*anims)[0];
+        const String animId = varString (anim["id"]);
+        String jsonPath = varString (anim["path"]);
+        if (jsonPath.isEmpty())
+            jsonPath = "animations/" + animId + ".json";
+
+        const auto* jsonEntry = zip.getEntry (jsonPath, true);
+        if (jsonEntry == nullptr)
+        {
+            if (outError != nullptr)
+                *outError = "Animation JSON not found inside archive: " + jsonPath;
+            return {};
+        }
+
+        std::unique_ptr<InputStream> jsonStream (zip.createStreamForEntry (*jsonEntry));
+        if (jsonStream == nullptr)
+            return {};
+
+        return parseData (jsonStream->readEntireStreamAsString(), options, outError);
+    }
+
+    return parseData (data.toString(), options, outError);
 }
 
 //==============================================================================
@@ -240,8 +308,8 @@ AnimationComposition::Ptr LottieReader::parseFromZip (const File& lottieZipFile,
         if (animationId.isEmpty() || id == animationId)
         {
             jsonPath = varString (anim["path"]);
-            if (! jsonPath.endsWithIgnoreCase (".json"))
-                jsonPath += ".json";
+            if (jsonPath.isEmpty())
+                jsonPath = "animations/" + id + ".json";
             break;
         }
     }
@@ -644,7 +712,7 @@ AnimationLayer::Ptr LottieReader::parseLayer (const var& layerObj)
         il->assetRefId = varString (layerObj["refId"]);
         layer = il;
     }
-    else if (ty == 5) // Text — parsed as NullLayer (text rendering not yet supported)
+    else if (ty == 5) // Text — TODO: parsed as NullLayer (text rendering not yet supported)
     {
         layer = new NullLayer();
     }
@@ -656,7 +724,7 @@ AnimationLayer::Ptr LottieReader::parseLayer (const var& layerObj)
     if (layer == nullptr)
         return {};
 
-    // Self-parenting check (gap 22)
+    // Self-parenting check
     if (layer->parentId >= 0 && layer->id == layer->parentId)
     {
         if (errorOut_ != nullptr)

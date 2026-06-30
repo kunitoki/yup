@@ -66,6 +66,18 @@ Animation Animation::loadFromData (const String& jsonText, const LoadOptions& op
     return Animation (std::move (comp));
 }
 
+Animation Animation::loadFromStream (InputStream& stream, const LoadOptions& opts)
+{
+    LottieLoadOptions loaderOpts;
+    loaderOpts.resourceDirectory = opts.resourceDirectory;
+
+    auto comp = LottieReader::parseStream (stream, loaderOpts);
+    if (comp == nullptr)
+        return {};
+
+    return Animation (std::move (comp));
+}
+
 Animation Animation::fromComposition (AnimationComposition::Ptr comp)
 {
     return Animation (std::move (comp));

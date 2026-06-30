@@ -37,6 +37,28 @@
 #include <BinaryData.h>
 #endif
 
+//==============================================================================
+
+inline yup::File getAssetPath (yup::StringRef subPath = {})
+{
+    yup::File basePath;
+
+#if YUP_WASM
+    basePath = yup::File ("/");
+#else
+    basePath = yup::File (__FILE__)
+                   .getParentDirectory()
+                   .getParentDirectory();
+#endif
+
+    if (! subPath.isEmpty())
+        basePath = basePath.getChildFile (subPath);
+
+    return basePath;
+}
+
+//==============================================================================
+
 #include "examples/Artboard.h"
 #include "examples/Audio.h"
 #include "examples/AudioFileDemo.h"

@@ -153,3 +153,94 @@ TEST_F (AnimationEasingTests, EaseInIsNotEaseOut)
     const float vOut = eOut.evaluate (0.3f);
     EXPECT_LT (vIn, vOut);
 }
+
+// ── operator== / operator!= ───────────────────────────────────────────────────
+
+TEST_F (AnimationEasingTests, DefaultConstructedEqualsLinear)
+{
+    AnimationEasing def;
+    EXPECT_EQ (def, AnimationEasing::linear());
+}
+
+TEST_F (AnimationEasingTests, LinearEqualsSelf)
+{
+    EXPECT_EQ (AnimationEasing::linear(), AnimationEasing::linear());
+}
+
+TEST_F (AnimationEasingTests, LinearNotEqualsEaseIn)
+{
+    EXPECT_NE (AnimationEasing::linear(), AnimationEasing::easeIn());
+}
+
+TEST_F (AnimationEasingTests, LinearNotEqualsEaseOut)
+{
+    EXPECT_NE (AnimationEasing::linear(), AnimationEasing::easeOut());
+}
+
+TEST_F (AnimationEasingTests, LinearNotEqualsEaseInOut)
+{
+    EXPECT_NE (AnimationEasing::linear(), AnimationEasing::easeInOut());
+}
+
+TEST_F (AnimationEasingTests, LinearNotEqualsHold)
+{
+    EXPECT_NE (AnimationEasing::linear(), AnimationEasing::hold());
+}
+
+TEST_F (AnimationEasingTests, EaseInEqualsSelf)
+{
+    EXPECT_EQ (AnimationEasing::easeIn(), AnimationEasing::easeIn());
+}
+
+TEST_F (AnimationEasingTests, EaseInNotEqualsEaseOut)
+{
+    EXPECT_NE (AnimationEasing::easeIn(), AnimationEasing::easeOut());
+}
+
+TEST_F (AnimationEasingTests, EaseInNotEqualsEaseInOut)
+{
+    EXPECT_NE (AnimationEasing::easeIn(), AnimationEasing::easeInOut());
+}
+
+TEST_F (AnimationEasingTests, EaseOutEqualsSelf)
+{
+    EXPECT_EQ (AnimationEasing::easeOut(), AnimationEasing::easeOut());
+}
+
+TEST_F (AnimationEasingTests, HoldEqualsSelf)
+{
+    EXPECT_EQ (AnimationEasing::hold(), AnimationEasing::hold());
+}
+
+TEST_F (AnimationEasingTests, CopyConstructedEqualsOriginal)
+{
+    auto original = AnimationEasing::easeInOut();
+    auto copy = original;
+    EXPECT_EQ (copy, original);
+}
+
+TEST_F (AnimationEasingTests, SameTangentsProduceEqualEasing)
+{
+    const Point<float> outT { 0.25f, 0.1f };
+    const Point<float> inT { 0.75f, 0.9f };
+    auto a = AnimationEasing::fromLottieTangents (outT, inT);
+    auto b = AnimationEasing::fromLottieTangents (outT, inT);
+    EXPECT_EQ (a, b);
+}
+
+TEST_F (AnimationEasingTests, DifferentTangentsProduceNotEqualEasing)
+{
+    auto a = AnimationEasing::fromLottieTangents ({ 0.25f, 0.1f }, { 0.75f, 0.9f });
+    auto b = AnimationEasing::fromLottieTangents ({ 0.5f, 0.0f }, { 0.5f, 1.0f });
+    EXPECT_NE (a, b);
+}
+
+TEST_F (AnimationEasingTests, HoldNotEqualsEaseIn)
+{
+    EXPECT_NE (AnimationEasing::hold(), AnimationEasing::easeIn());
+}
+
+TEST_F (AnimationEasingTests, HoldNotEqualsEaseOut)
+{
+    EXPECT_NE (AnimationEasing::hold(), AnimationEasing::easeOut());
+}

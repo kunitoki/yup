@@ -77,6 +77,11 @@ public:
     /** Loads a Lottie animation from a JSON string. */
     [[nodiscard]] static Animation loadFromData (const String& jsonText, const LoadOptions& opts = {});
 
+    /** Loads a Lottie animation from an InputStream.
+        The stream is fully consumed. Both plain JSON and .lottie ZIP streams are supported.
+        Returns an invalid Animation on failure. */
+    [[nodiscard]] static Animation loadFromStream (InputStream& stream, const LoadOptions& opts = {});
+
     /** Wraps an already-constructed AnimationComposition. */
     [[nodiscard]] static Animation fromComposition (AnimationComposition::Ptr comp);
 

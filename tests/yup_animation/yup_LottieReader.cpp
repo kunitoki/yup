@@ -96,23 +96,36 @@ constexpr const char* kLottieReaderReversedFrameJson = R"json({
 
 } // namespace
 
+class LottieReaderTests : public ::testing::Test
+{
+protected:
+    static File getLottieTestDataDir()
+    {
+        return File (__FILE__)
+            .getParentDirectory()
+            .getParentDirectory()
+            .getChildFile ("data")
+            .getChildFile ("lottie");
+    }
+};
+
 // =============================================================================
 // parseData — basic functionality
 // =============================================================================
 
-TEST (LottieReaderTests, ParseDataReturnsValidCompositionForValidJson)
+TEST_F (LottieReaderTests, ParseDataReturnsValidCompositionForValidJson)
 {
     auto comp = LottieReader::parseData (kLottieReaderBaseJson);
     EXPECT_NE (comp, nullptr);
 }
 
-TEST (LottieReaderTests, ParseDataReturnsNullForGarbageJson)
+TEST_F (LottieReaderTests, ParseDataReturnsNullForGarbageJson)
 {
     auto comp = LottieReader::parseData ("{{ not json }}");
     EXPECT_EQ (comp, nullptr);
 }
 
-TEST (LottieReaderTests, ParseDataPopulatesErrorOutputForBadJson)
+TEST_F (LottieReaderTests, ParseDataPopulatesErrorOutputForBadJson)
 {
     String errorMsg;
     auto comp = LottieReader::parseData ("{{ bad }", {}, &errorMsg);
@@ -122,7 +135,7 @@ TEST (LottieReaderTests, ParseDataPopulatesErrorOutputForBadJson)
     EXPECT_TRUE (errorMsg.contains ("JSON parse error"));
 }
 
-TEST (LottieReaderTests, ParseDataSetsNoErrorForValidJson)
+TEST_F (LottieReaderTests, ParseDataSetsNoErrorForValidJson)
 {
     String errorMsg;
     auto comp = LottieReader::parseData (kLottieReaderBaseJson, {}, &errorMsg);
@@ -131,7 +144,7 @@ TEST (LottieReaderTests, ParseDataSetsNoErrorForValidJson)
     EXPECT_TRUE (errorMsg.isEmpty());
 }
 
-TEST (LottieReaderTests, ParseDataParsesCompositionProperties)
+TEST_F (LottieReaderTests, ParseDataParsesCompositionProperties)
 {
     auto comp = LottieReader::parseData (kLottieReaderBaseJson);
     ASSERT_NE (comp, nullptr);
@@ -145,14 +158,14 @@ TEST (LottieReaderTests, ParseDataParsesCompositionProperties)
     EXPECT_EQ (comp->version, String ("5.5.2"));
 }
 
-TEST (LottieReaderTests, ParseDataReturnsNullForReversedFrameRange)
+TEST_F (LottieReaderTests, ParseDataReturnsNullForReversedFrameRange)
 {
     // ip=50 > op=10 — startFrame > endFrame → validation fails
     auto comp = LottieReader::parseData (kLottieReaderReversedFrameJson);
     EXPECT_EQ (comp, nullptr);
 }
 
-TEST (LottieReaderTests, ParseDataSetsErrorForReversedFrameRange)
+TEST_F (LottieReaderTests, ParseDataSetsErrorForReversedFrameRange)
 {
     String errorMsg;
     auto comp = LottieReader::parseData (kLottieReaderReversedFrameJson, {}, &errorMsg);
@@ -165,14 +178,14 @@ TEST (LottieReaderTests, ParseDataSetsErrorForReversedFrameRange)
 // parseData — markers
 // =============================================================================
 
-TEST (LottieReaderTests, ParseDataParsesMarkersField)
+TEST_F (LottieReaderTests, ParseDataParsesMarkersField)
 {
     auto comp = LottieReader::parseData (kLottieReaderWithMarkersJson);
     ASSERT_NE (comp, nullptr);
     EXPECT_EQ (comp->markers.size(), 3u);
 }
 
-TEST (LottieReaderTests, ParseDataMarkersHaveCorrectFields)
+TEST_F (LottieReaderTests, ParseDataMarkersHaveCorrectFields)
 {
     auto comp = LottieReader::parseData (kLottieReaderWithMarkersJson);
     ASSERT_NE (comp, nullptr);
@@ -189,7 +202,7 @@ TEST (LottieReaderTests, ParseDataMarkersHaveCorrectFields)
     EXPECT_FLOAT_EQ (comp->markers[2].startFrame, 45.0f);
 }
 
-TEST (LottieReaderTests, ParseDataWithNoMarkersFieldHasEmptyMarkersVector)
+TEST_F (LottieReaderTests, ParseDataWithNoMarkersFieldHasEmptyMarkersVector)
 {
     auto comp = LottieReader::parseData (kLottieReaderBaseJson);
     ASSERT_NE (comp, nullptr);
@@ -200,7 +213,7 @@ TEST (LottieReaderTests, ParseDataWithNoMarkersFieldHasEmptyMarkersVector)
 // findMarker on composition
 // =============================================================================
 
-TEST (LottieReaderTests, FindMarkerReturnsCorrectMarkerByName)
+TEST_F (LottieReaderTests, FindMarkerReturnsCorrectMarkerByName)
 {
     auto comp = LottieReader::parseData (kLottieReaderWithMarkersJson);
     ASSERT_NE (comp, nullptr);
@@ -212,7 +225,7 @@ TEST (LottieReaderTests, FindMarkerReturnsCorrectMarkerByName)
     EXPECT_FLOAT_EQ (m->duration, 30.0f);
 }
 
-TEST (LottieReaderTests, FindMarkerReturnsNullForMissingName)
+TEST_F (LottieReaderTests, FindMarkerReturnsNullForMissingName)
 {
     auto comp = LottieReader::parseData (kLottieReaderWithMarkersJson);
     ASSERT_NE (comp, nullptr);
@@ -220,7 +233,7 @@ TEST (LottieReaderTests, FindMarkerReturnsNullForMissingName)
     EXPECT_EQ (comp->findMarker ("nonexistent"), nullptr);
 }
 
-TEST (LottieReaderTests, FindMarkerReturnsNullOnEmptyMarkersList)
+TEST_F (LottieReaderTests, FindMarkerReturnsNullOnEmptyMarkersList)
 {
     auto comp = LottieReader::parseData (kLottieReaderBaseJson);
     ASSERT_NE (comp, nullptr);
@@ -232,13 +245,13 @@ TEST (LottieReaderTests, FindMarkerReturnsNullOnEmptyMarkersList)
 // parseFile
 // =============================================================================
 
-TEST (LottieReaderTests, ParseFileReturnsNullForMissingFile)
+TEST_F (LottieReaderTests, ParseFileReturnsNullForMissingFile)
 {
     auto comp = LottieReader::parseFile (File ("/nonexistent/path/file.json"));
     EXPECT_EQ (comp, nullptr);
 }
 
-TEST (LottieReaderTests, ParseFileSetsErrorForMissingFile)
+TEST_F (LottieReaderTests, ParseFileSetsErrorForMissingFile)
 {
     String errorMsg;
     auto comp = LottieReader::parseFile (File ("/nonexistent/path/file.json"), {}, &errorMsg);
@@ -248,7 +261,7 @@ TEST (LottieReaderTests, ParseFileSetsErrorForMissingFile)
     EXPECT_TRUE (errorMsg.contains ("File not found"));
 }
 
-TEST (LottieReaderTests, ParseFileReturnsNullForEmptyFile)
+TEST_F (LottieReaderTests, ParseFileReturnsNullForEmptyFile)
 {
     const File tempFile = File::createTempFile (".json");
     tempFile.replaceWithText ({});
@@ -262,7 +275,7 @@ TEST (LottieReaderTests, ParseFileReturnsNullForEmptyFile)
     tempFile.deleteFile();
 }
 
-TEST (LottieReaderTests, ParseFileReturnsValidCompositionForValidFile)
+TEST_F (LottieReaderTests, ParseFileReturnsValidCompositionForValidFile)
 {
     const File tempFile = File::createTempFile (".json");
     tempFile.replaceWithText (kLottieReaderBaseJson);
@@ -273,7 +286,7 @@ TEST (LottieReaderTests, ParseFileReturnsValidCompositionForValidFile)
     tempFile.deleteFile();
 }
 
-TEST (LottieReaderTests, ParseFileSetsResourceDirectoryFromFileParent)
+TEST_F (LottieReaderTests, ParseFileSetsResourceDirectoryFromFileParent)
 {
     const File tempFile = File::createTempFile (".json");
     tempFile.replaceWithText (kLottieReaderBaseJson);
@@ -289,13 +302,13 @@ TEST (LottieReaderTests, ParseFileSetsResourceDirectoryFromFileParent)
 // listAnimationIds
 // =============================================================================
 
-TEST (LottieReaderTests, ListAnimationIdsReturnsEmptyForMissingFile)
+TEST_F (LottieReaderTests, ListAnimationIdsReturnsEmptyForMissingFile)
 {
     const auto ids = LottieReader::listAnimationIds (File ("/nonexistent/file.lottie"));
     EXPECT_TRUE (ids.empty());
 }
 
-TEST (LottieReaderTests, ListAnimationIdsReturnsEmptyForRegularJsonFile)
+TEST_F (LottieReaderTests, ListAnimationIdsReturnsEmptyForRegularJsonFile)
 {
     const File tempFile = File::createTempFile (".lottie");
     tempFile.replaceWithText (kLottieReaderBaseJson);
@@ -310,7 +323,7 @@ TEST (LottieReaderTests, ListAnimationIdsReturnsEmptyForRegularJsonFile)
 // parseFromZip
 // =============================================================================
 
-TEST (LottieReaderTests, ParseFromZipReturnsNullForMissingFile)
+TEST_F (LottieReaderTests, ParseFromZipReturnsNullForMissingFile)
 {
     String errorMsg;
     auto comp = LottieReader::parseFromZip (File ("/nonexistent/file.lottie"), {}, {}, &errorMsg);
@@ -319,7 +332,7 @@ TEST (LottieReaderTests, ParseFromZipReturnsNullForMissingFile)
     EXPECT_FALSE (errorMsg.isEmpty());
 }
 
-TEST (LottieReaderTests, ParseFromZipReturnsNullForNonZipFile)
+TEST_F (LottieReaderTests, ParseFromZipReturnsNullForNonZipFile)
 {
     const File tempFile = File::createTempFile (".lottie");
     tempFile.replaceWithText ("not a zip file");
@@ -336,7 +349,7 @@ TEST (LottieReaderTests, ParseFromZipReturnsNullForNonZipFile)
 // imageResolver callback
 // =============================================================================
 
-TEST (LottieReaderTests, ImageResolverIsCalledForExternalImageAssets)
+TEST_F (LottieReaderTests, ImageResolverIsCalledForExternalImageAssets)
 {
     bool resolverCalled = false;
     String capturedRef;
@@ -356,7 +369,7 @@ TEST (LottieReaderTests, ImageResolverIsCalledForExternalImageAssets)
     EXPECT_TRUE (capturedRef.contains ("logo.png"));
 }
 
-TEST (LottieReaderTests, ImageResolverCanProvideImageForAsset)
+TEST_F (LottieReaderTests, ImageResolverCanProvideImageForAsset)
 {
     Image providedImage (32, 32, PixelFormat::RGBA);
     providedImage.fill (0xFF0000FFu);
@@ -374,7 +387,7 @@ TEST (LottieReaderTests, ImageResolverCanProvideImageForAsset)
     EXPECT_EQ (comp->assets.size(), 1);
 }
 
-TEST (LottieReaderTests, ImageResolverNotCalledWhenNoImageAssets)
+TEST_F (LottieReaderTests, ImageResolverNotCalledWhenNoImageAssets)
 {
     bool resolverCalled = false;
 
@@ -395,7 +408,7 @@ TEST (LottieReaderTests, ImageResolverNotCalledWhenNoImageAssets)
 // Assets parsing
 // =============================================================================
 
-TEST (LottieReaderTests, ParseDataWithImageAssetCreatesAssetEntry)
+TEST_F (LottieReaderTests, ParseDataWithImageAssetCreatesAssetEntry)
 {
     auto comp = LottieReader::parseData (kLottieReaderImageAssetJson);
     ASSERT_NE (comp, nullptr);
@@ -404,7 +417,7 @@ TEST (LottieReaderTests, ParseDataWithImageAssetCreatesAssetEntry)
     EXPECT_NE (comp->assets["img0"], nullptr);
 }
 
-TEST (LottieReaderTests, ParseDataImageAssetHasCorrectDimensions)
+TEST_F (LottieReaderTests, ParseDataImageAssetHasCorrectDimensions)
 {
     auto comp = LottieReader::parseData (kLottieReaderImageAssetJson);
     ASSERT_NE (comp, nullptr);
@@ -416,7 +429,7 @@ TEST (LottieReaderTests, ParseDataImageAssetHasCorrectDimensions)
     EXPECT_EQ (asset->height, 32);
 }
 
-TEST (LottieReaderTests, ParseDataImageAssetHasCorrectPath)
+TEST_F (LottieReaderTests, ParseDataImageAssetHasCorrectPath)
 {
     auto comp = LottieReader::parseData (kLottieReaderImageAssetJson);
     ASSERT_NE (comp, nullptr);
@@ -425,4 +438,199 @@ TEST (LottieReaderTests, ParseDataImageAssetHasCorrectPath)
     ASSERT_NE (asset, nullptr);
 
     EXPECT_TRUE (asset->path.contains ("logo.png"));
+}
+
+// =============================================================================
+// Test data files — tests/data/lottie/*
+// =============================================================================
+
+TEST_F (LottieReaderTests, ParseFileWithGoalLottieReturnsValidComposition)
+{
+    const File file = getLottieTestDataDir().getChildFile ("goal.lottie");
+    ASSERT_TRUE (file.existsAsFile()) << "Test data file missing: " << file.getFullPathName();
+
+    auto comp = LottieReader::parseFile (file);
+    ASSERT_NE (comp, nullptr);
+    EXPECT_EQ (comp->name, String ("Goal"));
+    EXPECT_FLOAT_EQ (comp->frameRate, 30.0f);
+    EXPECT_FLOAT_EQ (comp->size.getWidth(), 1080.0f);
+    EXPECT_FLOAT_EQ (comp->size.getHeight(), 844.0f);
+    EXPECT_FLOAT_EQ (comp->startFrame, 0.0f);
+    EXPECT_FLOAT_EQ (comp->endFrame, 180.0f);
+}
+
+TEST_F (LottieReaderTests, ParseFileWithGoalLottieParsesLayers)
+{
+    const File file = getLottieTestDataDir().getChildFile ("goal.lottie");
+    ASSERT_TRUE (file.existsAsFile());
+
+    auto comp = LottieReader::parseFile (file);
+    ASSERT_NE (comp, nullptr);
+    EXPECT_EQ (comp->layers.size(), 3u);
+    EXPECT_GT (comp->assets.size(), 0u);
+}
+
+TEST_F (LottieReaderTests, ParseFileWithJollyWalkerJsonReturnsValidComposition)
+{
+    const File file = getLottieTestDataDir().getChildFile ("jolly_walker.json");
+    ASSERT_TRUE (file.existsAsFile()) << "Test data file missing: " << file.getFullPathName();
+
+    auto comp = LottieReader::parseFile (file);
+    ASSERT_NE (comp, nullptr);
+    EXPECT_EQ (comp->name, String ("Comp 1"));
+    EXPECT_FLOAT_EQ (comp->frameRate, 60.0f);
+    EXPECT_FLOAT_EQ (comp->size.getWidth(), 1000.0f);
+    EXPECT_FLOAT_EQ (comp->size.getHeight(), 1000.0f);
+    EXPECT_EQ (comp->layers.size(), 21u);
+}
+
+TEST_F (LottieReaderTests, ParseFileWithImageTestJsonReturnsValidComposition)
+{
+    const File file = getLottieTestDataDir().getChildFile ("image_test.json");
+    ASSERT_TRUE (file.existsAsFile()) << "Test data file missing: " << file.getFullPathName();
+
+    auto comp = LottieReader::parseFile (file);
+    ASSERT_NE (comp, nullptr);
+    EXPECT_EQ (comp->name, String ("test"));
+    EXPECT_EQ (comp->assets.size(), 1u);
+}
+
+TEST_F (LottieReaderTests, ParseFileWithImageEmbeddedJsonReturnsValidComposition)
+{
+    const File file = getLottieTestDataDir().getChildFile ("image_embedded.json");
+    ASSERT_TRUE (file.existsAsFile()) << "Test data file missing: " << file.getFullPathName();
+
+    auto comp = LottieReader::parseFile (file);
+    ASSERT_NE (comp, nullptr);
+    EXPECT_EQ (comp->name, String ("Comp 1"));
+    EXPECT_EQ (comp->assets.size(), 1u);
+}
+
+TEST_F (LottieReaderTests, ListAnimationIdsForGoalLottieReturnsExpectedId)
+{
+    const File file = getLottieTestDataDir().getChildFile ("goal.lottie");
+    ASSERT_TRUE (file.existsAsFile());
+
+    const auto ids = LottieReader::listAnimationIds (file);
+    ASSERT_FALSE (ids.empty());
+    EXPECT_EQ (ids[0], String ("goal-celebrate-every-win"));
+}
+
+TEST_F (LottieReaderTests, ParseFromZipWithAnimationIdParsesGoalLottie)
+{
+    const File file = getLottieTestDataDir().getChildFile ("goal.lottie");
+    ASSERT_TRUE (file.existsAsFile());
+
+    auto comp = LottieReader::parseFromZip (file, "goal-celebrate-every-win");
+    ASSERT_NE (comp, nullptr);
+    EXPECT_EQ (comp->name, String ("Goal"));
+    EXPECT_EQ (comp->layers.size(), 3u);
+}
+
+TEST_F (LottieReaderTests, ParseFromZipWithDefaultIdParsesGoalLottie)
+{
+    const File file = getLottieTestDataDir().getChildFile ("goal.lottie");
+    ASSERT_TRUE (file.existsAsFile());
+
+    auto comp = LottieReader::parseFromZip (file);
+    ASSERT_NE (comp, nullptr);
+    EXPECT_EQ (comp->name, String ("Goal"));
+}
+
+// =============================================================================
+// parseStream
+// =============================================================================
+
+TEST_F (LottieReaderTests, ParseStreamReturnsValidCompositionForValidJson)
+{
+    MemoryInputStream stream (kLottieReaderBaseJson, strlen (kLottieReaderBaseJson), false);
+
+    auto comp = LottieReader::parseStream (stream);
+    ASSERT_NE (comp, nullptr);
+    EXPECT_EQ (comp->name, String ("ReaderTest"));
+    EXPECT_FLOAT_EQ (comp->frameRate, 24.0f);
+    EXPECT_FLOAT_EQ (comp->size.getWidth(), 120.0f);
+    EXPECT_FLOAT_EQ (comp->size.getHeight(), 80.0f);
+}
+
+TEST_F (LottieReaderTests, ParseStreamReturnsNullForGarbageInput)
+{
+    const char garbage[] = "not json {{{";
+    MemoryInputStream stream (garbage, strlen (garbage), false);
+
+    auto comp = LottieReader::parseStream (stream);
+    EXPECT_EQ (comp, nullptr);
+}
+
+TEST_F (LottieReaderTests, ParseStreamSetsErrorForGarbageInput)
+{
+    const char garbage[] = "not json {{{";
+    MemoryInputStream stream (garbage, strlen (garbage), false);
+
+    String errorMsg;
+    auto comp = LottieReader::parseStream (stream, {}, &errorMsg);
+
+    EXPECT_EQ (comp, nullptr);
+    EXPECT_FALSE (errorMsg.isEmpty());
+}
+
+TEST_F (LottieReaderTests, ParseStreamSetsNoErrorForValidJson)
+{
+    MemoryInputStream stream (kLottieReaderBaseJson, strlen (kLottieReaderBaseJson), false);
+
+    String errorMsg;
+    auto comp = LottieReader::parseStream (stream, {}, &errorMsg);
+
+    EXPECT_NE (comp, nullptr);
+    EXPECT_TRUE (errorMsg.isEmpty());
+}
+
+TEST_F (LottieReaderTests, ParseStreamWithEmptyStreamReturnsNull)
+{
+    MemoryInputStream stream (nullptr, 0, false);
+
+    String errorMsg;
+    auto comp = LottieReader::parseStream (stream, {}, &errorMsg);
+
+    EXPECT_EQ (comp, nullptr);
+    EXPECT_FALSE (errorMsg.isEmpty());
+    EXPECT_TRUE (errorMsg.contains ("Empty"));
+}
+
+TEST_F (LottieReaderTests, ParseStreamParsesMarkers)
+{
+    MemoryInputStream stream (kLottieReaderWithMarkersJson, strlen (kLottieReaderWithMarkersJson), false);
+
+    auto comp = LottieReader::parseStream (stream);
+    ASSERT_NE (comp, nullptr);
+    EXPECT_EQ (comp->markers.size(), 3u);
+}
+
+TEST_F (LottieReaderTests, ParseStreamWithFileInputStreamParsesJson)
+{
+    const File tempFile = File::createTempFile (".json");
+    tempFile.replaceWithText (kLottieReaderBaseJson);
+
+    auto fis = tempFile.createInputStream();
+    ASSERT_NE (fis, nullptr);
+
+    auto comp = LottieReader::parseStream (*fis);
+    ASSERT_NE (comp, nullptr);
+    EXPECT_EQ (comp->name, String ("ReaderTest"));
+
+    tempFile.deleteFile();
+}
+
+TEST_F (LottieReaderTests, ParseStreamWithGoalLottieAsZipStream)
+{
+    const File file = getLottieTestDataDir().getChildFile ("goal.lottie");
+    ASSERT_TRUE (file.existsAsFile());
+
+    auto fis = file.createInputStream();
+    ASSERT_NE (fis, nullptr);
+
+    auto comp = LottieReader::parseStream (*fis);
+    ASSERT_NE (comp, nullptr);
+    EXPECT_EQ (comp->name, String ("Goal"));
+    EXPECT_EQ (comp->layers.size(), 3u);
 }

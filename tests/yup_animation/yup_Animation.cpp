@@ -162,6 +162,56 @@ TEST (AnimationTests, LoadFromDataWithMinimalJsonDoesNotCrash)
 }
 
 // =============================================================================
+// loadFromStream
+// =============================================================================
+
+TEST (AnimationTests, LoadFromStreamWithMemoryStreamReturnsValidAnimation)
+{
+    MemoryInputStream stream (kAnimTestJson, strlen (kAnimTestJson), false);
+    const auto anim = Animation::loadFromStream (stream);
+    EXPECT_TRUE (anim.isValid());
+}
+
+TEST (AnimationTests, LoadFromStreamWithFileInputStreamReturnsValidAnimation)
+{
+    const File tempFile = File::createTempFile (".json");
+    tempFile.replaceWithText (kAnimTestJson);
+
+    auto fis = tempFile.createInputStream();
+    ASSERT_NE (fis, nullptr);
+
+    const auto anim = Animation::loadFromStream (*fis);
+    EXPECT_TRUE (anim.isValid());
+    EXPECT_EQ (anim.frameRate(), 25.0f);
+
+    tempFile.deleteFile();
+}
+
+TEST (AnimationTests, LoadFromStreamWithGarbageInputReturnsInvalidAnimation)
+{
+    const char garbage[] = "not valid json {{{";
+    MemoryInputStream stream (garbage, strlen (garbage), false);
+    const auto anim = Animation::loadFromStream (stream);
+    EXPECT_FALSE (anim.isValid());
+}
+
+TEST (AnimationTests, LoadFromStreamWithEmptyStreamReturnsInvalidAnimation)
+{
+    MemoryInputStream stream (nullptr, 0, false);
+    const auto anim = Animation::loadFromStream (stream);
+    EXPECT_FALSE (anim.isValid());
+}
+
+TEST (AnimationTests, LoadFromStreamPreservesProperties)
+{
+    MemoryInputStream stream (kAnimTestJson, strlen (kAnimTestJson), false);
+    const auto anim = Animation::loadFromStream (stream);
+    ASSERT_TRUE (anim.isValid());
+    EXPECT_EQ (anim.frameRate(), 25.0f);
+    EXPECT_EQ (anim.totalFrames(), 10.0f);
+}
+
+// =============================================================================
 // loadFromFile
 // =============================================================================
 

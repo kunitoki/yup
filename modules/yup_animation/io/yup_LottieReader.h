@@ -57,6 +57,15 @@ public:
                                                               const LottieLoadOptions& options = {},
                                                               String* outError = nullptr);
 
+    /** Parses a Lottie animation from an InputStream.
+        The stream is fully consumed. Both plain Lottie JSON and .lottie ZIP (binary)
+        streams are supported; the format is auto-detected.
+        Returns nullptr on failure.
+    */
+    [[nodiscard]] static AnimationComposition::Ptr parseStream (InputStream& stream,
+                                                                const LottieLoadOptions& options = {},
+                                                                String* outError = nullptr);
+
     /** Lists animation IDs contained inside a `.lottie` ZIP archive.
         Returns an empty vector if the file is not a valid .lottie file.
     */

@@ -161,11 +161,17 @@ public:
         {
             playPauseButton->setButtonText ("Play");
         };
+
+#if YUP_ANDROID
+        yup::MemoryInputStream is (yup::LottieFile_data, yup::LottieFile_size, false);
+        loadStream (is);
+
+#else
+        loadFile (getAssetPath (YUP_EXAMPLE_GRAPHICS_LOTTIE_FILE));
+#endif
     }
 
-    ~LottieDemo() override
-    {
-    }
+    ~LottieDemo() override = default;
 
     void refreshDisplay (double lastFrameTimeSeconds) override
     {
@@ -269,6 +275,18 @@ private:
         });
     }
 
+    void loadStream (yup::MemoryInputStream& stream)
+    {
+        auto anim = yup::Animation::loadFromStream (stream);
+        if (! anim.isValid())
+        {
+            statusLabel->setText ("Failed to load animation from stream", yup::dontSendNotification);
+            return;
+        }
+
+        initializePlayer (std::move (anim));
+    }
+
     void loadFile (const yup::File& file)
     {
         auto anim = yup::Animation::loadFromFile (file);
@@ -278,6 +296,11 @@ private:
             return;
         }
 
+        initializePlayer (std::move (anim), file);
+    }
+
+    void initializePlayer (yup::Animation anim, const yup::File& file = {})
+    {
         player.stop();
         player.setAnimation (std::move (anim));
         player.setLooping (looping);

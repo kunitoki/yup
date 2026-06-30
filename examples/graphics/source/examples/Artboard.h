@@ -41,19 +41,8 @@ public:
 #if YUP_ANDROID
         yup::MemoryInputStream is (yup::RiveFile_data, yup::RiveFile_size, false);
         auto artboardFile = yup::ArtboardFile::load (is, *factory);
-
 #else
-        yup::File riveBasePath;
-#if YUP_WASM
-        riveBasePath = yup::File ("/");
-#else
-        riveBasePath = yup::File (__FILE__)
-                           .getParentDirectory()
-                           .getParentDirectory()
-                           .getParentDirectory();
-#endif
-
-        auto artboardFile = yup::ArtboardFile::load (riveBasePath.getChildFile (YUP_EXAMPLE_GRAPHICS_RIVE_FILE), *factory);
+        auto artboardFile = yup::ArtboardFile::load (getAssetPath (YUP_EXAMPLE_GRAPHICS_RIVE_FILE), *factory);
 #endif
         if (! artboardFile)
             return false;

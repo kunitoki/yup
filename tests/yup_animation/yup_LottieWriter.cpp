@@ -380,6 +380,15 @@ constexpr const char* kLayerWithInOutJson = R"json({
 
 class LottieWriterTests : public ::testing::Test
 {
+protected:
+    static File getLottieTestDataDir()
+    {
+        return File (__FILE__)
+            .getParentDirectory()
+            .getParentDirectory()
+            .getChildFile ("data")
+            .getChildFile ("lottie");
+    }
 };
 
 // =============================================================================
@@ -946,4 +955,207 @@ TEST_F (LottieWriterTests, ToJson_LayerContainsTransformField)
 
     const std::string json = LottieWriter::toJson (*comp).toStdString();
     EXPECT_NE (json.find ("\"ks\""), std::string::npos);
+}
+
+// =============================================================================
+// Roundtrip with test data files — tests/data/lottie/*
+// =============================================================================
+
+TEST_F (LottieWriterTests, Roundtrip_GoalLottiePreservesName)
+{
+    const File file = getLottieTestDataDir().getChildFile ("goal.lottie");
+    ASSERT_TRUE (file.existsAsFile());
+
+    auto comp = LottieReader::parseFile (file);
+    ASSERT_NE (comp, nullptr);
+
+    const String json = LottieWriter::toJson (*comp);
+    auto readback = LottieReader::parseData (json);
+
+    ASSERT_NE (readback, nullptr);
+    EXPECT_EQ (readback->name, String ("Goal"));
+}
+
+TEST_F (LottieWriterTests, Roundtrip_GoalLottiePreservesFrameRate)
+{
+    const File file = getLottieTestDataDir().getChildFile ("goal.lottie");
+    ASSERT_TRUE (file.existsAsFile());
+
+    auto comp = LottieReader::parseFile (file);
+    ASSERT_NE (comp, nullptr);
+
+    const String json = LottieWriter::toJson (*comp);
+    auto readback = LottieReader::parseData (json);
+
+    ASSERT_NE (readback, nullptr);
+    EXPECT_FLOAT_EQ (readback->frameRate, 30.0f);
+}
+
+TEST_F (LottieWriterTests, Roundtrip_GoalLottiePreservesSize)
+{
+    const File file = getLottieTestDataDir().getChildFile ("goal.lottie");
+    ASSERT_TRUE (file.existsAsFile());
+
+    auto comp = LottieReader::parseFile (file);
+    ASSERT_NE (comp, nullptr);
+
+    const String json = LottieWriter::toJson (*comp);
+    auto readback = LottieReader::parseData (json);
+
+    ASSERT_NE (readback, nullptr);
+    EXPECT_FLOAT_EQ (readback->size.getWidth(), 1080.0f);
+    EXPECT_FLOAT_EQ (readback->size.getHeight(), 844.0f);
+}
+
+TEST_F (LottieWriterTests, Roundtrip_GoalLottiePreservesLayerCount)
+{
+    const File file = getLottieTestDataDir().getChildFile ("goal.lottie");
+    ASSERT_TRUE (file.existsAsFile());
+
+    auto comp = LottieReader::parseFile (file);
+    ASSERT_NE (comp, nullptr);
+
+    const String json = LottieWriter::toJson (*comp);
+    auto readback = LottieReader::parseData (json);
+
+    ASSERT_NE (readback, nullptr);
+    EXPECT_EQ (readback->layers.size(), 3u);
+}
+
+TEST_F (LottieWriterTests, Roundtrip_GoalLottiePreservesMarkers)
+{
+    const File file = getLottieTestDataDir().getChildFile ("goal.lottie");
+    ASSERT_TRUE (file.existsAsFile());
+
+    auto comp = LottieReader::parseFile (file);
+    ASSERT_NE (comp, nullptr);
+
+    const auto originalMarkerCount = comp->markers.size();
+
+    const String json = LottieWriter::toJson (*comp);
+    auto readback = LottieReader::parseData (json);
+
+    ASSERT_NE (readback, nullptr);
+    EXPECT_EQ (readback->markers.size(), originalMarkerCount);
+}
+
+TEST_F (LottieWriterTests, Roundtrip_JollyWalkerPreservesLayerCount)
+{
+    const File file = getLottieTestDataDir().getChildFile ("jolly_walker.json");
+    ASSERT_TRUE (file.existsAsFile());
+
+    auto comp = LottieReader::parseFile (file);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 21u);
+
+    const String json = LottieWriter::toJson (*comp);
+    auto readback = LottieReader::parseData (json);
+
+    ASSERT_NE (readback, nullptr);
+    EXPECT_EQ (readback->layers.size(), 21u);
+}
+
+TEST_F (LottieWriterTests, Roundtrip_JollyWalkerPreservesName)
+{
+    const File file = getLottieTestDataDir().getChildFile ("jolly_walker.json");
+    ASSERT_TRUE (file.existsAsFile());
+
+    auto comp = LottieReader::parseFile (file);
+    ASSERT_NE (comp, nullptr);
+
+    const String json = LottieWriter::toJson (*comp);
+    auto readback = LottieReader::parseData (json);
+
+    ASSERT_NE (readback, nullptr);
+    EXPECT_EQ (readback->name, String ("Comp 1"));
+}
+
+TEST_F (LottieWriterTests, Roundtrip_JollyWalkerPreservesFrameRate)
+{
+    const File file = getLottieTestDataDir().getChildFile ("jolly_walker.json");
+    ASSERT_TRUE (file.existsAsFile());
+
+    auto comp = LottieReader::parseFile (file);
+    ASSERT_NE (comp, nullptr);
+
+    const String json = LottieWriter::toJson (*comp);
+    auto readback = LottieReader::parseData (json);
+
+    ASSERT_NE (readback, nullptr);
+    EXPECT_FLOAT_EQ (readback->frameRate, 60.0f);
+}
+
+TEST_F (LottieWriterTests, Roundtrip_ImageTestPreservesAssetCount)
+{
+    const File file = getLottieTestDataDir().getChildFile ("image_test.json");
+    ASSERT_TRUE (file.existsAsFile());
+
+    auto comp = LottieReader::parseFile (file);
+    ASSERT_NE (comp, nullptr);
+
+    const String json = LottieWriter::toJson (*comp);
+    auto readback = LottieReader::parseData (json);
+
+    ASSERT_NE (readback, nullptr);
+    EXPECT_EQ (readback->assets.size(), 1u);
+}
+
+TEST_F (LottieWriterTests, Roundtrip_ImageEmbeddedPreservesAssetCount)
+{
+    const File file = getLottieTestDataDir().getChildFile ("image_embedded.json");
+    ASSERT_TRUE (file.existsAsFile());
+
+    auto comp = LottieReader::parseFile (file);
+    ASSERT_NE (comp, nullptr);
+
+    const String json = LottieWriter::toJson (*comp);
+    auto readback = LottieReader::parseData (json);
+
+    ASSERT_NE (readback, nullptr);
+    EXPECT_EQ (readback->assets.size(), 1u);
+}
+
+TEST_F (LottieWriterTests, ToFile_GoalLottieWriteAndReadBack)
+{
+    const File inputFile = getLottieTestDataDir().getChildFile ("goal.lottie");
+    ASSERT_TRUE (inputFile.existsAsFile());
+
+    auto comp = LottieReader::parseFile (inputFile);
+    ASSERT_NE (comp, nullptr);
+
+    const File tempFile = File::createTempFile ("lottie_writer_goal.json");
+    const Result writeResult = LottieWriter::toFile (*comp, tempFile);
+    EXPECT_TRUE (writeResult.wasOk());
+    EXPECT_TRUE (tempFile.exists());
+
+    String outError;
+    auto readback = LottieReader::parseFile (tempFile, {}, &outError);
+
+    ASSERT_NE (readback, nullptr) << outError;
+    EXPECT_EQ (readback->name, String ("Goal"));
+    EXPECT_FLOAT_EQ (readback->frameRate, 30.0f);
+    EXPECT_FLOAT_EQ (readback->size.getWidth(), 1080.0f);
+    EXPECT_FLOAT_EQ (readback->size.getHeight(), 844.0f);
+    EXPECT_EQ (readback->layers.size(), 3u);
+
+    tempFile.deleteFile();
+}
+
+TEST_F (LottieWriterTests, ToFile_JollyWalkerWriteAndReadBack)
+{
+    const File inputFile = getLottieTestDataDir().getChildFile ("jolly_walker.json");
+    ASSERT_TRUE (inputFile.existsAsFile());
+
+    auto comp = LottieReader::parseFile (inputFile);
+    ASSERT_NE (comp, nullptr);
+
+    const File tempFile = File::createTempFile ("lottie_writer_jolly.json");
+    const Result writeResult = LottieWriter::toFile (*comp, tempFile);
+    EXPECT_TRUE (writeResult.wasOk());
+
+    auto readback = LottieReader::parseFile (tempFile);
+    ASSERT_NE (readback, nullptr);
+    EXPECT_EQ (readback->layers.size(), 21u);
+
+    tempFile.deleteFile();
 }
