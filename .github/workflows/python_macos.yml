@@ -14,7 +14,7 @@ on:
       - "!**/native/*_android.*"
       - "!**/native/*_emscripten.*"
       - "!**/native/*_linux.*"
-      - "!**/native/*_ios.*"
+      - "!**/native/*_ios*.*"
       - "!**/native/*_wasm.*"
       - "!**/native/*_windows.*"
     branches:
