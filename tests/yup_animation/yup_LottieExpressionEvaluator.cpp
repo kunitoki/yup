@@ -175,11 +175,223 @@ TEST_F (LottieExpressionEvaluatorTests, SubHelperProducesStaticValue)
     EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> (r.value)), 60.0f);
 }
 
+TEST_F (LottieExpressionEvaluatorTests, AddHelperWithScalarsProducesStaticValue)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("add(2, 3)");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::StaticValue);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> (r.value)), 5.0f);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, AddHelperWithArraysProducesStaticValue)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("add([1,2,3], [4,5,6])");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::StaticValue);
+    const auto* arr = r.value.getArray();
+    ASSERT_NE (arr, nullptr);
+    ASSERT_EQ (arr->size(), 3);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> ((*arr)[0])), 5.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> ((*arr)[1])), 7.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> ((*arr)[2])), 9.0f);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, MulHelperProducesStaticValue)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("mul(5, 2)");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::StaticValue);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> (r.value)), 10.0f);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, MulHelperWithArrayProducesStaticValue)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("mul([1,2,3], 2)");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::StaticValue);
+    const auto* arr = r.value.getArray();
+    ASSERT_NE (arr, nullptr);
+    ASSERT_EQ (arr->size(), 3);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> ((*arr)[0])), 2.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> ((*arr)[1])), 4.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> ((*arr)[2])), 6.0f);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, ClampHelperProducesStaticValue)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("clamp(50, 0, 100)");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::StaticValue);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> (r.value)), 50.0f);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, ClampHelperBelowMinClampsToMin)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("clamp(-10, 0, 100)");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::StaticValue);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> (r.value)), 0.0f);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, ClampHelperAboveMaxClampsToMax)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("clamp(200, 0, 100)");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::StaticValue);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> (r.value)), 100.0f);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, LinearHelperProducesStaticValue)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("linear(0.5, 0, 100)");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::StaticValue);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> (r.value)), 50.0f);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, LengthHelperWithScalarProducesStaticValue)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("length(-5)");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::StaticValue);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> (r.value)), 5.0f);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, LengthHelperWithArrayProducesStaticValue)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("length([3, 4])");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::StaticValue);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> (r.value)), 5.0f);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, LengthHelperWithTwoArraysProducesDistance)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("length([1, 2], [4, 6])");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::StaticValue);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> (r.value)), 5.0f);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, NormalizeHelperProducesUnitVector)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("normalize([3, 4])");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::StaticValue);
+    const auto* arr = r.value.getArray();
+    ASSERT_NE (arr, nullptr);
+    ASSERT_EQ (arr->size(), 2);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> ((*arr)[0])), 0.6f);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> ((*arr)[1])), 0.8f);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, NormalizeHelperWithZeroLengthReturnsSame)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("normalize([0, 0])");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::StaticValue);
+    const auto* arr = r.value.getArray();
+    ASSERT_NE (arr, nullptr);
+    ASSERT_EQ (arr->size(), 2);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> ((*arr)[0])), 0.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> ((*arr)[1])), 0.0f);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, DotHelperWithArraysProducesStaticValue)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("dot([1, 2], [3, 4])");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::StaticValue);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> (r.value)), 11.0f);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, DotHelperWithScalarsProducesStaticValue)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("dot(2, 3)");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::StaticValue);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> (r.value)), 6.0f);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, DegreesToRadiansHelperProducesStaticValue)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("degreesToRadians(180)");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::StaticValue);
+    EXPECT_NEAR (static_cast<double> (r.value), MathConstants<double>::pi, 1e-6);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, RadiansToDegreesHelperProducesStaticValue)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("radiansToDegrees(Math.PI)");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::StaticValue);
+    EXPECT_NEAR (static_cast<double> (r.value), 180.0, 1e-6);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, RandomHelperReturnsZero)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("random(0, 100)");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::StaticValue);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> (r.value)), 0.0f);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, WiggleHelperReturnsUnknown)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("wiggle(5, 20)");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::Unknown);
+}
+
 TEST_F (LottieExpressionEvaluatorTests, LoopOutReturnsUnknown)
 {
     LottieExpressionEvaluator eval;
     eval.setupCompositionContext (makeTestCtx());
     auto r = eval.evaluate ("loopOut('cycle')");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::Unknown);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, LoopInReturnsUnknown)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("loopIn('cycle')");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::Unknown);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, LoopOutDurationReturnsUnknown)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("loopOutDuration('cycle')");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::Unknown);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, LoopInDurationReturnsUnknown)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("loopInDuration('cycle')");
     EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::Unknown);
 }
 
@@ -199,6 +411,79 @@ TEST_F (LottieExpressionEvaluatorTests, ThisLayerEffectChainDoesNotThrow)
     eval.setupCompositionContext (makeTestCtx());
     auto r = eval.evaluate ("thisLayer.effect('Trace Path')('Progress')");
     EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::Unknown);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, ThisLayerToCompPassesThrough)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("thisLayer.toComp([100, 200])");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::StaticValue);
+    const auto* arr = r.value.getArray();
+    ASSERT_NE (arr, nullptr);
+    ASSERT_EQ (arr->size(), 2);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> ((*arr)[0])), 100.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> ((*arr)[1])), 200.0f);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, ThisLayerToCompNoArgsReturnsEmpty)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("thisLayer.toComp()");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::Unknown);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, ThisPropertyLoopOutDirectCallReturnsUnknown)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("thisProperty.loopOut('cycle')");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::Unknown);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, ThisPropertyLoopInDirectCallReturnsUnknown)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("thisProperty.loopIn('cycle')");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::Unknown);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, ThisCompFrameRate)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("thisComp.frameRate");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::StaticValue);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> (r.value)), 30.0f);
+}
+
+// ── Evaluate failure scenarios ────────────────────────────────────────────────
+
+TEST_F (LottieExpressionEvaluatorTests, InvalidSyntaxReturnsUnknown)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("2 +");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::Unknown);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, ReferenceToUndefinedVariableReturnsUnknown)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("undefinedVar");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::Unknown);
+}
+
+TEST_F (LottieExpressionEvaluatorTests, DivHelperZeroDivisorReturnsZero)
+{
+    LottieExpressionEvaluator eval;
+    eval.setupCompositionContext (makeTestCtx());
+    auto r = eval.evaluate ("div(100, 0)");
+    EXPECT_EQ (r.kind, LottieExpressionEvaluator::EvalResult::Kind::StaticValue);
+    EXPECT_FLOAT_EQ (static_cast<float> (static_cast<double> (r.value)), 0.0f);
 }
 
 // ── Shape content context ────────────────────────────────────────────────────
