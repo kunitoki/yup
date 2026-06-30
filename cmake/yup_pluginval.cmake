@@ -88,6 +88,10 @@ function (yup_setup_pluginval)
         return()
     endif()
 
+    if (NOT YUP_PLATFORM_DESKTOP)
+        return()
+    endif()
+
     # Determine platform-specific download URL and executable name
     if (YUP_PLATFORM_WINDOWS)
         if (CMAKE_SIZEOF_VOID_P EQUAL 8)
@@ -128,6 +132,10 @@ endfunction()
 
 function (yup_setup_clap_validator)
     if (NOT YUP_ENABLE_CLAP_VALIDATOR)
+        return()
+    endif()
+
+    if (NOT YUP_PLATFORM_DESKTOP)
         return()
     endif()
 

@@ -97,3 +97,32 @@ TEST (UMPStreamMessagesTests, EndpointNamePayload)
     auto view = EndpointNameView { msg };
     EXPECT_EQ (view.getPayload(), "Endpoint");
 }
+
+TEST (UMPStreamMessagesTests, IsStreamMessageReturnsTrueForAllStreamTypes)
+{
+    EXPECT_TRUE (isStreamMessage (StreamMessage {}));
+    EXPECT_TRUE (isStreamMessage (StreamMessage { Status (StreamStatus::endpointInfo) }));
+    EXPECT_TRUE (isStreamMessage (StreamMessage { Status (StreamStatus::endpointName), PacketFormat::start }));
+}
+
+TEST (UMPStreamMessagesTests, EndpointInfoExtensionsField)
+{
+    auto msg = makeEndpointInfoMessage (2,
+                                        false,
+                                        uint8_t (StreamProtocol::midi1),
+                                        uint8_t (StreamExtensions::jitterReductionReceive));
+    auto view = EndpointInfoView { msg };
+    EXPECT_EQ (view.getNumFunctionBlocks(), 2u);
+    EXPECT_FALSE (view.hasStaticFunctionBlocks());
+}
+
+TEST (UMPStreamMessagesTests, DeviceIdentityRoundTripWithDifferentManufacturer)
+{
+    const DeviceIdentity identity { Manufacturer::moog, 0xABCD, 0x1234, 0x00FF0000 };
+    auto msg = makeDeviceIdentityMessage (identity);
+    auto view = DeviceIdentityView { msg };
+
+    const auto parsed = view.getIdentity();
+    EXPECT_EQ (parsed.manufacturer, identity.manufacturer);
+    EXPECT_EQ (parsed.revision, identity.revision);
+}

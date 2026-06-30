@@ -27,6 +27,7 @@ namespace
 constexpr float kPeakToAverageCorrectionDb = 3.0103f;
 constexpr float kMeterMinimumDecibel = -(90.01f + 20.0f + kPeakToAverageCorrectionDb);
 constexpr float kPeakHoldFallRateDbPerSecond = 26.0f / 3.0f;
+constexpr int kMaxBlockSize = 512;
 
 void applyLogBallistics (float meterInertiaSeconds, float timePassedSeconds, float levelDb, float& readoutDb)
 {
@@ -79,14 +80,18 @@ void KMeterState::prepare (double newSampleRate, int maxChannels)
         processor.setFallTime (peakFallTime);
     }
 
+    // Preallocate per-channel de-interleaving buffers
+    channelBuffers.resize (numChannels);
+    for (auto& buf : channelBuffers)
+        buf.assign (kMaxBlockSize, 0.0f);
+
     // Initialize loudness filters (one per channel for ITU/EBU K-weighting)
     loudnessFilters.resize (numChannels);
-    const int maxBlockSize = 512; // Match processPendingAudio chunk size
     for (auto& filter : loudnessFilters)
-        filter.prepare (sampleRate, maxBlockSize);
+        filter.prepare (sampleRate, kMaxBlockSize);
 
     // Allocate temporary buffer for K-weighted samples
-    filteredBuffer.resize (maxBlockSize);
+    filteredBuffer.resize (kMaxBlockSize);
 
     reset();
 }
@@ -190,15 +195,9 @@ void KMeterState::processPendingAudio() noexcept
         return;
 
     // Process in chunks for efficiency
-    constexpr int maxChunkSize = 512;
-    const int numToProcess = jmin (numAvailable, maxChunkSize);
+    const int numToProcess = jmin (numAvailable, kMaxBlockSize);
 
     const auto scope = audioFifo->read (numToProcess);
-
-    // Temporary buffers for de-interleaving
-    std::vector<float> channelBuffers[32]; // Max 32 channels
-    for (int ch = 0; ch < numChannels; ++ch)
-        channelBuffers[ch].resize (numToProcess);
 
     // De-interleave samples from FIFO
     for (int block = 0; block < 2; ++block)

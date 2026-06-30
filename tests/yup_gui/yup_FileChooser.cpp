@@ -113,3 +113,48 @@ TEST (FileChooserTests, CompletionCallbackReceivesResults)
     ASSERT_EQ (1, tracker.results.size());
     EXPECT_EQ (results[0], tracker.results[0]);
 }
+
+TEST (FileChooserTests, CompletionCallbackReceivesFailureState)
+{
+    CallbackTracker tracker;
+    Array<File> empty;
+
+    auto callback = tracker.makeCallback();
+    callback (false, empty);
+
+    EXPECT_TRUE (tracker.called);
+    EXPECT_FALSE (tracker.success);
+    EXPECT_EQ (0, tracker.results.size());
+}
+
+TEST (FileChooserTests, CallbackTrackerResetClearsState)
+{
+    CallbackTracker tracker;
+    Array<File> results;
+    results.add (File::getSpecialLocation (File::userHomeDirectory));
+
+    auto callback = tracker.makeCallback();
+    callback (true, results);
+    EXPECT_TRUE (tracker.called);
+
+    tracker.reset();
+    EXPECT_FALSE (tracker.called);
+    EXPECT_FALSE (tracker.success);
+    EXPECT_EQ (0, tracker.results.size());
+}
+
+TEST (FileChooserTests, CompletionCallbackReceivesMultipleFiles)
+{
+    CallbackTracker tracker;
+    Array<File> results;
+    results.add (File::getSpecialLocation (File::userHomeDirectory));
+    results.add (File::getSpecialLocation (File::tempDirectory));
+
+    auto callback = tracker.makeCallback();
+    callback (true, results);
+
+    EXPECT_TRUE (tracker.called);
+    ASSERT_EQ (2, tracker.results.size());
+    EXPECT_EQ (results[0], tracker.results[0]);
+    EXPECT_EQ (results[1], tracker.results[1]);
+}

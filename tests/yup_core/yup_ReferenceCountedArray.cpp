@@ -87,6 +87,39 @@ struct DestructorObj final : public ReferenceCountedObject
 };
 } // namespace
 
+TEST (ReferenceCountedArrayTests, DefaultIsEmpty)
+{
+    ReferenceCountedArray<TestBaseObj> arr;
+    EXPECT_TRUE (arr.isEmpty());
+    EXPECT_EQ (0, arr.size());
+    EXPECT_EQ (nullptr, arr.getFirst());
+    EXPECT_EQ (nullptr, arr.getLast());
+}
+
+TEST (ReferenceCountedArrayTests, AddIncreasesSize)
+{
+    ReferenceCountedArray<TestBaseObj> arr;
+    arr.add (new TestBaseObj());
+    EXPECT_EQ (1, arr.size());
+    EXPECT_FALSE (arr.isEmpty());
+    arr.add (new TestBaseObj());
+    EXPECT_EQ (2, arr.size());
+}
+
+TEST (ReferenceCountedArrayTests, ClearDecrementsRefCount)
+{
+    TestBaseObj::Ptr obj = new TestBaseObj();
+    EXPECT_EQ (1, obj->getReferenceCount());
+
+    ReferenceCountedArray<TestBaseObj> arr;
+    arr.add (obj);
+    EXPECT_EQ (2, obj->getReferenceCount());
+
+    arr.clear();
+    EXPECT_TRUE (arr.isEmpty());
+    EXPECT_EQ (1, obj->getReferenceCount());
+}
+
 TEST (ReferenceCountedArrayTests, AddDerivedObjects)
 {
     ReferenceCountedArray<TestDerivedObj> derivedArray;
@@ -145,6 +178,47 @@ TEST (ReferenceCountedArrayTests, AddDerivedObjects)
 
     for (auto o : derivedArray)
         EXPECT_EQ (o->getReferenceCount(), 3);
+}
+
+TEST (ReferenceCountedArrayTests, GetFirstAndLastReturnCorrectElements)
+{
+    ReferenceCountedArray<TestBaseObj> arr;
+
+    TestBaseObj::Ptr first = new TestBaseObj();
+    TestBaseObj::Ptr last = new TestBaseObj();
+    arr.add (first);
+    arr.add (last);
+
+    EXPECT_EQ (arr.getFirst().get(), first.get());
+    EXPECT_EQ (arr.getLast().get(), last.get());
+}
+
+TEST (ReferenceCountedArrayTests, ContainsAndIndexOf)
+{
+    ReferenceCountedArray<TestBaseObj> arr;
+    TestBaseObj::Ptr a = new TestBaseObj();
+    TestBaseObj::Ptr b = new TestBaseObj();
+    arr.add (a);
+
+    EXPECT_TRUE (arr.contains (a.get()));
+    EXPECT_FALSE (arr.contains (b.get()));
+    EXPECT_EQ (arr.indexOf (a.get()), 0);
+    EXPECT_EQ (arr.indexOf (b.get()), -1);
+}
+
+TEST (ReferenceCountedArrayTests, RemoveDecreasesSize)
+{
+    ReferenceCountedArray<TestBaseObj> arr;
+    arr.add (new TestBaseObj());
+    arr.add (new TestBaseObj());
+    arr.add (new TestBaseObj());
+    EXPECT_EQ (arr.size(), 3);
+
+    arr.remove (1);
+    EXPECT_EQ (arr.size(), 2);
+
+    arr.remove (0);
+    EXPECT_EQ (arr.size(), 1);
 }
 
 TEST (ReferenceCountedArrayTests, IterateInDestructor)

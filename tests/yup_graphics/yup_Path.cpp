@@ -284,6 +284,84 @@ TEST (PathTests, GetPointAlongPath)
     EXPECT_TRUE (mid.getY() >= 0 && mid.getY() <= 10);
 }
 
+TEST (PathTests, GetLengthReturnsTotalDrawableLength)
+{
+    Path p;
+    p.moveTo (0, 0).lineTo (10, 0).lineTo (10, 10);
+
+    EXPECT_NEAR (p.getLength(), 20.0f, 1.0e-4f);
+}
+
+TEST (PathTests, GetTrimmedPathReturnsRequestedLineRange)
+{
+    Path p;
+    p.moveTo (0, 0).lineTo (10, 0);
+
+    const Path trimmed = p.getTrimmedPath (0.2f, 0.7f);
+
+    EXPECT_NEAR (trimmed.getLength(), 5.0f, 1.0e-4f);
+    expectPointNear (trimmed.getPointAlongPath (0.0f), Point<float> (2.0f, 0.0f));
+    expectPointNear (trimmed.getPointAlongPath (1.0f), Point<float> (7.0f, 0.0f));
+}
+
+TEST (PathTests, GetTrimmedPathWrapsAroundEnd)
+{
+    Path p;
+    p.moveTo (0, 0).lineTo (10, 0);
+
+    const Path trimmed = p.getTrimmedPath (0.75f, 0.25f);
+
+    EXPECT_NEAR (trimmed.getLength(), 5.0f, 1.0e-4f);
+    expectPointNear (trimmed.getPointAlongPath (0.0f), Point<float> (7.5f, 0.0f));
+    expectPointNear (trimmed.getPointAlongPath (1.0f), Point<float> (2.5f, 0.0f));
+}
+
+TEST (PathTests, GetTrimmedPathAppliesOffset)
+{
+    Path p;
+    p.moveTo (0, 0).lineTo (10, 0);
+
+    const Path trimmed = p.getTrimmedPath (0.0f, 0.5f, 0.25f);
+
+    EXPECT_NEAR (trimmed.getLength(), 5.0f, 1.0e-4f);
+    expectPointNear (trimmed.getPointAlongPath (0.0f), Point<float> (2.5f, 0.0f));
+    expectPointNear (trimmed.getPointAlongPath (1.0f), Point<float> (7.5f, 0.0f));
+}
+
+TEST (PathTests, TrimReplacesPathInPlace)
+{
+    Path p;
+    p.moveTo (0, 0).lineTo (10, 0);
+
+    p.trim (0.1f, 0.4f);
+
+    EXPECT_NEAR (p.getLength(), 3.0f, 1.0e-4f);
+    expectPointNear (p.getPointAlongPath (0.0f), Point<float> (1.0f, 0.0f));
+    expectPointNear (p.getPointAlongPath (1.0f), Point<float> (4.0f, 0.0f));
+}
+
+TEST (PathTests, GetTrimmedPathPreservesCubicSegments)
+{
+    Path p;
+    p.moveTo (0, 0).cubicTo (0, 10, 10, 10, 10, 0);
+
+    const Path trimmed = p.getTrimmedPath (0.25f, 0.75f, 0.0f, 0.01f);
+
+    int cubicCount = 0;
+    int lineCount = 0;
+    for (const auto segment : trimmed)
+    {
+        if (segment.verb == Path::Verb::CubicTo)
+            ++cubicCount;
+        else if (segment.verb == Path::Verb::LineTo)
+            ++lineCount;
+    }
+
+    EXPECT_EQ (cubicCount, 1);
+    EXPECT_EQ (lineCount, 0);
+    EXPECT_GT (trimmed.getLength (0.01f), 0.0f);
+}
+
 TEST (PathTests, CreateStrokePolygon)
 {
     Path p;
@@ -1202,4 +1280,617 @@ TEST (PathTests, FillRule_IndependentBetweenPaths)
     p2.setUsingNonZeroWinding (true);
     EXPECT_FALSE (p1.isUsingNonZeroWinding()); // p1 should remain even-odd
     EXPECT_TRUE (p2.isUsingNonZeroWinding());
+}
+
+TEST (PathTests, BooleanOperation_UnionCombinesOverlappingPaths)
+{
+    Path left;
+    left.addRectangle (0.0f, 0.0f, 10.0f, 10.0f);
+
+    Path right;
+    right.addRectangle (5.0f, 0.0f, 10.0f, 10.0f);
+
+    const auto result = left.combinedWith (right, Path::BooleanOperation::Union);
+    const auto bounds = result.getBounds();
+
+    EXPECT_FALSE (result.isEmpty());
+    EXPECT_NEAR (0.0f, bounds.getX(), 1.0e-3f);
+    EXPECT_NEAR (0.0f, bounds.getY(), 1.0e-3f);
+    EXPECT_NEAR (15.0f, bounds.getWidth(), 1.0e-3f);
+    EXPECT_NEAR (10.0f, bounds.getHeight(), 1.0e-3f);
+}
+
+TEST (PathTests, BooleanOperation_IntersectReturnsOverlap)
+{
+    Path left;
+    left.addRectangle (0.0f, 0.0f, 10.0f, 10.0f);
+
+    Path right;
+    right.addRectangle (5.0f, 0.0f, 10.0f, 10.0f);
+
+    const auto result = left.combinedWith (right, Path::BooleanOperation::Intersect);
+    const auto bounds = result.getBounds();
+
+    EXPECT_FALSE (result.isEmpty());
+    EXPECT_NEAR (5.0f, bounds.getX(), 1.0e-3f);
+    EXPECT_NEAR (0.0f, bounds.getY(), 1.0e-3f);
+    EXPECT_NEAR (5.0f, bounds.getWidth(), 1.0e-3f);
+    EXPECT_NEAR (10.0f, bounds.getHeight(), 1.0e-3f);
+}
+
+TEST (PathTests, BooleanOperation_SubtractRemovesOverlap)
+{
+    Path left;
+    left.addRectangle (0.0f, 0.0f, 10.0f, 10.0f);
+
+    Path right;
+    right.addRectangle (5.0f, 0.0f, 10.0f, 10.0f);
+
+    const auto result = left.combinedWith (right, Path::BooleanOperation::Subtract);
+    const auto bounds = result.getBounds();
+
+    EXPECT_FALSE (result.isEmpty());
+    EXPECT_NEAR (0.0f, bounds.getX(), 1.0e-3f);
+    EXPECT_NEAR (0.0f, bounds.getY(), 1.0e-3f);
+    EXPECT_NEAR (5.0f, bounds.getWidth(), 1.0e-3f);
+    EXPECT_NEAR (10.0f, bounds.getHeight(), 1.0e-3f);
+}
+
+TEST (PathTests, BooleanOperation_XorKeepsNonOverlappingRegions)
+{
+    Path left;
+    left.addRectangle (0.0f, 0.0f, 10.0f, 10.0f);
+
+    Path right;
+    right.addRectangle (5.0f, 0.0f, 10.0f, 10.0f);
+
+    const auto result = left.combinedWith (right, Path::BooleanOperation::Xor);
+    const auto bounds = result.getBounds();
+
+    EXPECT_FALSE (result.isEmpty());
+    EXPECT_NEAR (0.0f, bounds.getX(), 1.0e-3f);
+    EXPECT_NEAR (0.0f, bounds.getY(), 1.0e-3f);
+    EXPECT_NEAR (15.0f, bounds.getWidth(), 1.0e-3f);
+    EXPECT_NEAR (10.0f, bounds.getHeight(), 1.0e-3f);
+}
+
+// ==============================================================================
+// Tests for boolean operations with Quadratic paths
+// (covers evaluateClipperQuadratic, appendQuadraticAsLines,
+//  toClipperPaths QuadTo case lines 776-782, appendClipperPoint lines 661-667)
+// ==============================================================================
+
+TEST (PathTests, BooleanOperation_QuadraticUnion)
+{
+    Path left;
+    left.moveTo (0, 0).quadTo (50, -20, 100, 0).lineTo (100, 100).lineTo (0, 100).close();
+
+    Path right;
+    right.moveTo (25, 25).quadTo (75, 5, 125, 25).lineTo (125, 75).lineTo (25, 75).close();
+
+    const auto result = left.combinedWith (right, Path::BooleanOperation::Union);
+    EXPECT_FALSE (result.isEmpty());
+    EXPECT_GT (result.size(), 0);
+}
+
+TEST (PathTests, BooleanOperation_QuadraticIntersect)
+{
+    Path left;
+    left.moveTo (0, 0).quadTo (50, -20, 100, 0).lineTo (100, 100).lineTo (0, 100).close();
+
+    Path right;
+    right.moveTo (50, -10).quadTo (75, -30, 100, -10).lineTo (100, 50).lineTo (50, 50).close();
+
+    const auto result = left.combinedWith (right, Path::BooleanOperation::Intersect);
+    EXPECT_FALSE (result.isEmpty());
+    EXPECT_GT (result.size(), 0);
+}
+
+TEST (PathTests, BooleanOperation_QuadraticSubtract)
+{
+    Path left;
+    left.addRectangle (0, 0, 100, 100);
+
+    Path right;
+    right.moveTo (25, 25).quadTo (75, 5, 125, 25).lineTo (125, 75).lineTo (25, 75).close();
+
+    const auto result = left.combinedWith (right, Path::BooleanOperation::Subtract);
+    EXPECT_FALSE (result.isEmpty());
+    EXPECT_GT (result.size(), 0);
+}
+
+TEST (PathTests, BooleanOperation_QuadraticXor)
+{
+    Path left;
+    left.moveTo (0, 0).quadTo (50, -20, 100, 0).lineTo (100, 100).lineTo (0, 100).close();
+
+    Path right;
+    right.moveTo (25, 25).quadTo (75, 5, 125, 25).lineTo (125, 75).lineTo (25, 75).close();
+
+    const auto result = left.combinedWith (right, Path::BooleanOperation::Xor);
+    EXPECT_FALSE (result.isEmpty());
+    EXPECT_GT (result.size(), 0);
+}
+
+TEST (PathTests, BooleanOperation_QuadraticDegenerateCurve)
+{
+    Path left;
+    left.moveTo (0, 0).quadTo (0, 0, 100, 0).lineTo (100, 100).lineTo (0, 100).close();
+
+    Path right;
+    right.addRectangle (25, 25, 50, 50);
+
+    const auto result = left.combinedWith (right, Path::BooleanOperation::Union);
+    EXPECT_FALSE (result.isEmpty());
+    EXPECT_GT (result.size(), 0);
+}
+
+// ==============================================================================
+// Tests for combinedWith / combineWith edge cases
+// (covers lines 1778, 1782, 1793, 1795-1796)
+// ==============================================================================
+
+TEST (PathTests, CombinedWith_EmptySubjectUnionReturnsOther)
+{
+    Path empty;
+    Path other;
+    other.addRectangle (0, 0, 10, 10);
+
+    const auto result = empty.combinedWith (other, Path::BooleanOperation::Union);
+    expectRectNear (result.getBounds(), other.getBounds(), 1.0e-3f);
+}
+
+TEST (PathTests, CombinedWith_EmptySubjectXorReturnsOther)
+{
+    Path empty;
+    Path other;
+    other.addRectangle (0, 0, 10, 10);
+
+    const auto result = empty.combinedWith (other, Path::BooleanOperation::Xor);
+    expectRectNear (result.getBounds(), other.getBounds(), 1.0e-3f);
+}
+
+TEST (PathTests, CombinedWith_EmptySubjectIntersectReturnsEmpty)
+{
+    Path empty;
+    Path other;
+    other.addRectangle (0, 0, 10, 10);
+
+    const auto result = empty.combinedWith (other, Path::BooleanOperation::Intersect);
+    EXPECT_TRUE (result.isEmpty());
+}
+
+TEST (PathTests, CombinedWith_EmptySubjectSubtractReturnsEmpty)
+{
+    Path empty;
+    Path other;
+    other.addRectangle (0, 0, 10, 10);
+
+    const auto result = empty.combinedWith (other, Path::BooleanOperation::Subtract);
+    EXPECT_TRUE (result.isEmpty());
+}
+
+TEST (PathTests, CombinedWith_EmptyClipUnionReturnsThis)
+{
+    Path self;
+    self.addRectangle (0, 0, 10, 10);
+    Path empty;
+
+    const auto result = self.combinedWith (empty, Path::BooleanOperation::Union);
+    expectRectNear (result.getBounds(), self.getBounds(), 1.0e-3f);
+}
+
+TEST (PathTests, CombinedWith_EmptyClipIntersectReturnsEmpty)
+{
+    Path self;
+    self.addRectangle (0, 0, 10, 10);
+    Path empty;
+
+    const auto result = self.combinedWith (empty, Path::BooleanOperation::Intersect);
+    EXPECT_TRUE (result.isEmpty());
+}
+
+TEST (PathTests, CombinedWith_BothEmptyUnionReturnsEmpty)
+{
+    Path a;
+    Path b;
+    const auto result = a.combinedWith (b, Path::BooleanOperation::Union);
+    EXPECT_TRUE (result.isEmpty());
+}
+
+TEST (PathTests, CombineWith_ReplacesPathInPlace)
+{
+    Path self;
+    self.addRectangle (0, 0, 10, 10);
+
+    Path other;
+    other.addRectangle (5, 0, 10, 10);
+
+    self.combineWith (other, Path::BooleanOperation::Union);
+    EXPECT_FALSE (self.isEmpty());
+    EXPECT_NEAR (self.getBounds().getWidth(), 15.0f, 1.0e-3f);
+}
+
+TEST (PathTests, CombineWith_EmptySubjectIntersect)
+{
+    Path self;
+    Path other;
+    other.addRectangle (0, 0, 10, 10);
+
+    self.combineWith (other, Path::BooleanOperation::Intersect);
+    EXPECT_TRUE (self.isEmpty());
+}
+
+// ==============================================================================
+// Tests for getTrimmedPath edge cases
+// (covers lines 2618, 2624, 2630, 2504)
+// ==============================================================================
+
+TEST (PathTests, GetTrimmedPath_FullSpanReturnsCopy)
+{
+    Path p;
+    p.moveTo (0, 0).lineTo (10, 0).lineTo (10, 10).close();
+
+    const auto trimmed = p.getTrimmedPath (0.0f, 1.0f);
+    EXPECT_EQ (p.size(), trimmed.size());
+    expectRectNear (p.getBounds(), trimmed.getBounds(), 1.0e-3f);
+}
+
+TEST (PathTests, GetTrimmedPath_SpanExceedsFullReturnsCopy)
+{
+    Path p;
+    p.moveTo (0, 0).lineTo (10, 0).lineTo (10, 10).close();
+
+    const auto trimmed = p.getTrimmedPath (-0.5f, 1.5f);
+    EXPECT_EQ (p.size(), trimmed.size());
+}
+
+TEST (PathTests, GetTrimmedPath_ZeroRangeReturnsEmpty)
+{
+    Path p;
+    p.moveTo (0, 0).lineTo (10, 0);
+
+    const auto trimmed = p.getTrimmedPath (0.3f, 0.3f);
+    EXPECT_TRUE (trimmed.isEmpty());
+}
+
+TEST (PathTests, GetTrimmedPath_EmptyPathReturnsEmpty)
+{
+    Path p;
+    const auto trimmed = p.getTrimmedPath (0.0f, 0.5f);
+    EXPECT_TRUE (trimmed.isEmpty());
+}
+
+TEST (PathTests, GetTrimmedPath_NegativeSpanWrapsAround)
+{
+    Path p;
+    p.moveTo (0, 0).lineTo (10, 0);
+
+    const auto trimmed = p.getTrimmedPath (0.8f, 0.2f);
+    EXPECT_FALSE (trimmed.isEmpty());
+    EXPECT_NEAR (trimmed.getLength(), 4.0f, 1.0e-4f);
+}
+
+// ==============================================================================
+// Tests for getTrimmedPath with quadratic segments
+// (covers evaluateQuadratic, splitQuadratic, appendTrimmedQuadratic)
+// ==============================================================================
+
+TEST (PathTests, GetTrimmedPath_PreservesCurvesWhenTrimmingCubic)
+{
+    Path p;
+    p.moveTo (0, 0).cubicTo (0, 10, 10, 10, 10, 0);
+
+    const Path trimmed = p.getTrimmedPath (0.25f, 0.75f, 0.0f, 0.01f);
+
+    int cubicCount = 0;
+    for (const auto segment : trimmed)
+    {
+        if (segment.verb == Path::Verb::CubicTo)
+            ++cubicCount;
+    }
+
+    EXPECT_GE (cubicCount, 1);
+    EXPECT_GT (trimmed.getLength (0.01f), 0.0f);
+}
+
+TEST (PathTests, GetTrimmedPath_QuadraticWithOffset)
+{
+    Path p;
+    p.moveTo (0, 0).quadTo (10, 20, 20, 0);
+    const float length = p.getLength (0.01f);
+
+    const Path trimmed = p.getTrimmedPath (0.0f, 0.5f, 0.2f, 0.01f);
+    EXPECT_FALSE (trimmed.isEmpty());
+    EXPECT_GT (trimmed.getLength (0.01f), 0.0f);
+}
+
+TEST (PathTests, GetTrimmedPath_QuadraticWrapsAroundEnd)
+{
+    Path p;
+    p.moveTo (0, 0).quadTo (10, 10, 20, 0);
+    const float fullLength = p.getLength (0.01f);
+
+    const Path trimmed = p.getTrimmedPath (0.8f, 0.3f, 0.0f, 0.01f);
+    EXPECT_FALSE (trimmed.isEmpty());
+    EXPECT_GT (trimmed.getLength (0.01f), 0.0f);
+}
+
+TEST (PathTests, GetTrimmedPath_QuadraticPartialStart)
+{
+    Path p;
+    p.moveTo (0, 0).quadTo (10, 20, 20, 0);
+
+    const Path trimmed = p.getTrimmedPath (0.4f, 0.9f, 0.0f, 0.01f);
+    EXPECT_FALSE (trimmed.isEmpty());
+
+    const float trimmedLen = trimmed.getLength (0.01f);
+    const float originalLen = p.getLength (0.01f);
+    EXPECT_LT (trimmedLen, originalLen);
+}
+
+TEST (PathTests, GetTrimmedPath_TrimWithQuadraticAndLineSegments)
+{
+    Path p;
+    p.moveTo (0, 0).lineTo (10, 0).quadTo (20, 10, 20, 20).lineTo (0, 20).close();
+
+    const Path trimmed = p.getTrimmedPath (0.1f, 0.6f, 0.0f, 0.01f);
+    EXPECT_FALSE (trimmed.isEmpty());
+    EXPECT_GT (trimmed.getLength (0.01f), 0.0f);
+}
+
+TEST (PathTests, UnionWithBothPathsEmpty)
+{
+    Path left;
+    Path right;
+
+    const auto result = left.combinedWith (right, Path::BooleanOperation::Union);
+    EXPECT_TRUE (result.isEmpty());
+}
+
+TEST (PathTests, CombineWithUnion)
+{
+    Path left;
+    left.addRectangle (0, 0, 10, 10);
+    Path right;
+    right.addRectangle (5, 5, 10, 10);
+
+    left.combineWith (right, Path::BooleanOperation::Union);
+    const auto b = left.getBounds();
+    EXPECT_NEAR (0, b.getX(), 0.01f);
+    EXPECT_NEAR (0, b.getY(), 0.01f);
+    EXPECT_NEAR (15, b.getWidth(), 0.01f);
+    EXPECT_NEAR (15, b.getHeight(), 0.01f);
+}
+
+TEST (PathTests, SubtractNonOverlapping)
+{
+    Path left;
+    left.addRectangle (0, 0, 10, 10);
+    Path right;
+    right.addRectangle (20, 20, 10, 10);
+
+    const auto result = left.combinedWith (right, Path::BooleanOperation::Subtract);
+    EXPECT_NEAR (10, result.getBounds().getWidth(), 0.01f);
+    EXPECT_NEAR (10, result.getBounds().getHeight(), 0.01f);
+}
+
+// ==============================================================================
+// Tests for getLength with quadratic and cubic
+// (covers integrateSpeedRange line 2201, integrateSpeedAdaptive lines 2223-2224,
+//  quadraticSpeed)
+// ==============================================================================
+
+TEST (PathTests, GetLength_StraightLine)
+{
+    Path p;
+    p.moveTo (0, 0).lineTo (10, 0);
+    const float length = p.getLength (0.01f);
+    EXPECT_NEAR (length, 10.0f, 0.1f);
+}
+
+TEST (PathTests, GetLength_QuadraticCurve)
+{
+    Path p;
+    p.moveTo (0, 0).quadTo (5, 10, 10, 0);
+    const float length = p.getLength (0.01f);
+    EXPECT_GT (length, 10.0f);
+    EXPECT_LT (length, 30.0f);
+}
+
+TEST (PathTests, GetLength_QuadraticWithHigherTolerance)
+{
+    Path p;
+    p.moveTo (0, 0).quadTo (5, 10, 10, 0);
+
+    const float lengthTight = p.getLength (0.001f);
+    const float lengthLoose = p.getLength (1.0f);
+    EXPECT_GT (lengthTight, 0.0f);
+    EXPECT_GT (lengthLoose, 0.0f);
+}
+
+TEST (PathTests, GetLength_CubicCurve)
+{
+    Path p;
+    p.moveTo (0, 0).cubicTo (5, 10, 5, -10, 10, 0);
+    const float length = p.getLength (0.01f);
+    EXPECT_GT (length, 10.0f);
+}
+
+TEST (PathTests, GetLength_QuadraticDegenerateToPoint)
+{
+    Path p;
+    p.moveTo (0, 0).quadTo (0, 0, 0, 0);
+    const float length = p.getLength (0.01f);
+    EXPECT_NEAR (length, 0.0f, 1.0e-4f);
+}
+
+TEST (PathTests, GetLength_ZeroLengthPath)
+{
+    Path p;
+    EXPECT_NEAR (p.getLength(), 0.0f, 1.0e-4f);
+}
+
+TEST (PathTests, GetLength_MultipleQuadraticSegments)
+{
+    Path p;
+    p.moveTo (0, 0).quadTo (5, 5, 10, 0).quadTo (15, 5, 20, 0);
+    const float length = p.getLength (0.01f);
+    EXPECT_GT (length, 20.0f);
+}
+
+// ==============================================================================
+// Tests for getPointAlongPath on quadratic paths
+// (covers evaluateQuadratic)
+// ==============================================================================
+
+TEST (PathTests, GetPointAlongPath_QuadraticStart)
+{
+    Path p;
+    p.moveTo (0, 0).quadTo (5, 10, 10, 0);
+
+    const auto pt = p.getPointAlongPath (0.0f);
+    expectPointNear (pt, Point<float> (0, 0), 1.0e-3f);
+}
+
+TEST (PathTests, GetPointAlongPath_QuadraticEnd)
+{
+    Path p;
+    p.moveTo (0, 0).quadTo (10, 0, 5, 10);
+
+    const auto pt = p.getPointAlongPath (1.0f);
+    expectPointNear (pt, Point<float> (10, 0), 1.0e-3f);
+}
+
+TEST (PathTests, GetPointAlongPath_QuadraticMidpoint)
+{
+    Path p;
+    p.moveTo (0, 0).quadTo (5, 10, 10, 0);
+
+    const auto pt = p.getPointAlongPath (0.5f);
+    EXPECT_TRUE (pt.getX() > 0.0f && pt.getX() < 10.0f);
+    EXPECT_TRUE (pt.getY() > 0.0f && pt.getY() < 10.0f);
+}
+
+TEST (PathTests, GetPointAlongPath_LineMidpoint)
+{
+    Path p;
+    p.moveTo (0, 0).lineTo (10, 0);
+
+    const auto pt = p.getPointAlongPath (0.5f);
+    expectPointNear (pt, Point<float> (5, 0), 1.0e-3f);
+}
+
+TEST (PathTests, GetPointAlongPath_CubicStart)
+{
+    Path p;
+    p.moveTo (0, 0).cubicTo (3, 10, 7, -5, 10, 0);
+
+    const auto pt = p.getPointAlongPath (0.0f);
+    expectPointNear (pt, Point<float> (0, 0), 1.0e-3f);
+}
+
+TEST (PathTests, GetPointAlongPath_CubicEnd)
+{
+    Path p;
+    p.moveTo (0, 0).cubicTo (3, 10, 7, -5, 10, 0);
+
+    const auto pt = p.getPointAlongPath (1.0f);
+    expectPointNear (pt, Point<float> (10, 0), 1.0e-3f);
+}
+
+// ==============================================================================
+// Tests for fromClipperPaths skip small contours (line 840)
+// and toClipperClipType default (line 830, dead code)
+// ==============================================================================
+
+TEST (PathTests, BooleanOperation_PathWithTwoPointContourDropped)
+{
+    Path subject;
+    subject.addRectangle (0, 0, 10, 10);
+
+    Path clip;
+    clip.moveTo (5, 5).lineTo (6, 6).close();
+
+    const auto result = subject.combinedWith (clip, Path::BooleanOperation::Union);
+    EXPECT_FALSE (result.isEmpty());
+}
+
+TEST (PathTests, BooleanOperation_ClipWithOnlyMoveTo)
+{
+    Path subject;
+    subject.addRectangle (0, 0, 10, 10);
+
+    Path clip;
+    clip.moveTo (5, 5);
+
+    const auto result = subject.combinedWith (clip, Path::BooleanOperation::Union);
+    EXPECT_FALSE (result.isEmpty());
+}
+
+TEST (PathTests, CombinedWith_EmptyPathAllOperations)
+{
+    Path empty;
+    Path other;
+    other.addRectangle (0, 0, 10, 10);
+
+    const auto unionResult = empty.combinedWith (other, Path::BooleanOperation::Union);
+    EXPECT_FALSE (unionResult.isEmpty());
+
+    const auto intersectResult = empty.combinedWith (other, Path::BooleanOperation::Intersect);
+    EXPECT_TRUE (intersectResult.isEmpty());
+
+    const auto subtractResult = empty.combinedWith (other, Path::BooleanOperation::Subtract);
+    EXPECT_TRUE (subtractResult.isEmpty());
+
+    const auto xorResult = empty.combinedWith (other, Path::BooleanOperation::Xor);
+    EXPECT_FALSE (xorResult.isEmpty());
+}
+
+TEST (PathTests, CombinedWith_AllOperationsWithEmptyClip)
+{
+    Path self;
+    self.addRectangle (0, 0, 10, 10);
+    Path empty;
+
+    const auto unionResult = self.combinedWith (empty, Path::BooleanOperation::Union);
+    EXPECT_FALSE (unionResult.isEmpty());
+    expectRectNear (unionResult.getBounds(), self.getBounds(), 1.0e-3f);
+
+    const auto intersectResult = self.combinedWith (empty, Path::BooleanOperation::Intersect);
+    EXPECT_TRUE (intersectResult.isEmpty());
+
+    const auto subtractResult = self.combinedWith (empty, Path::BooleanOperation::Subtract);
+    EXPECT_FALSE (subtractResult.isEmpty());
+    expectRectNear (subtractResult.getBounds(), self.getBounds(), 1.0e-3f);
+
+    const auto xorResult = self.combinedWith (empty, Path::BooleanOperation::Xor);
+    EXPECT_FALSE (xorResult.isEmpty());
+    expectRectNear (xorResult.getBounds(), self.getBounds(), 1.0e-3f);
+}
+
+TEST (PathTests, FillRulePreservedInCombinedPath_EvenOdd)
+{
+    Path left;
+    left.setUsingNonZeroWinding (false);
+    left.addRectangle (0, 0, 10, 10);
+
+    Path right;
+    right.addRectangle (5, 5, 10, 10);
+
+    const auto result = left.combinedWith (right, Path::BooleanOperation::Union);
+    EXPECT_FALSE (result.isEmpty());
+}
+
+TEST (PathTests, FillRulePreservedInCombinedPath_NonZero)
+{
+    Path left;
+    left.setUsingNonZeroWinding (true);
+    left.addRectangle (0, 0, 10, 10);
+
+    Path right;
+    right.addRectangle (5, 5, 10, 10);
+
+    const auto result = left.combinedWith (right, Path::BooleanOperation::Union);
+    EXPECT_FALSE (result.isEmpty());
 }

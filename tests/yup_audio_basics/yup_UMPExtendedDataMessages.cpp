@@ -83,3 +83,34 @@ TEST (UMPExtendedDataMessagesTests, SysEx8PacketFormats)
     EXPECT_EQ (makeSysEx8ContinuePacket (0).getFormat(), PacketFormat::cont);
     EXPECT_EQ (makeSysEx8EndPacket (0).getFormat(), PacketFormat::end);
 }
+
+TEST (UMPExtendedDataMessagesTests, SysEx8MultiplePayloadBytesAreStoredCorrectly)
+{
+    auto m = makeSysEx8CompletePacket (0);
+    const uint8_t bytes[] = { 0x01, 0x23, 0x45, 0x67, 0x89 };
+    for (auto b : bytes)
+        m.addPayloadByte (b);
+
+    EXPECT_EQ (m.getPayloadSize(), 5u);
+    for (size_t i = 0; i < 5; ++i)
+        EXPECT_EQ (m.getPayloadByte (i), bytes[i]);
+}
+
+TEST (UMPExtendedDataMessagesTests, SysEx8MaxPayloadIs13Bytes)
+{
+    auto m = makeSysEx8CompletePacket (0);
+    for (int i = 0; i < 13; ++i)
+        m.addPayloadByte (static_cast<uint8_t> (i + 1));
+
+    EXPECT_EQ (m.getPayloadSize(), 13u);
+    for (int i = 0; i < 13; ++i)
+        EXPECT_EQ (m.getPayloadByte (static_cast<size_t> (i)), static_cast<uint8_t> (i + 1));
+}
+
+TEST (UMPExtendedDataMessagesTests, SysEx8GroupIsPreservedAcrossPacketTypes)
+{
+    const uint8_t streamId = 42;
+    EXPECT_EQ (makeSysEx8StartPacket (streamId, 3).getGroup(), 3u);
+    EXPECT_EQ (makeSysEx8ContinuePacket (streamId, 3).getGroup(), 3u);
+    EXPECT_EQ (makeSysEx8EndPacket (streamId, 3).getGroup(), 3u);
+}

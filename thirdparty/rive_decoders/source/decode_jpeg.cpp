@@ -10,6 +10,8 @@
 #include <cassert>
 #include <string.h>
 
+namespace rive {
+
 struct my_error_mgr
 {
     struct jpeg_error_mgr pub;
@@ -140,3 +142,5 @@ std::unique_ptr<Bitmap> DecodeJpeg(const uint8_t bytes[], size_t byteCount)
                                     Bitmap::PixelFormat::RGB,
                                     std::move(pixelBuffer));
 }
+
+} // namespace rive

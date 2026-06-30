@@ -205,3 +205,33 @@ TEST (SparseSetTests, RangeContainsAndOverlapsChecks)
     EXPECT_TRUE (! set.overlapsRange (Range<int> (10, 12)));
     EXPECT_TRUE (set.overlapsRange (Range<int> (0, 12)));
 }
+
+TEST (SparseSetTests, ClearMakesSetEmpty)
+{
+    SparseSet<int> set;
+    set.addRange ({ 0, 10 });
+    set.addRange ({ 20, 30 });
+    EXPECT_EQ (set.getNumRanges(), 2);
+    EXPECT_FALSE (set.isEmpty());
+
+    set.clear();
+    EXPECT_TRUE (set.isEmpty());
+    EXPECT_EQ (set.getNumRanges(), 0);
+    EXPECT_EQ (set.size(), 0);
+}
+
+TEST (SparseSetTests, ContainsChecksGapBetweenRanges)
+{
+    SparseSet<int> set;
+    set.addRange ({ 0, 5 });
+    set.addRange ({ 10, 15 });
+
+    EXPECT_TRUE (set.contains (0));
+    EXPECT_TRUE (set.contains (4));
+    EXPECT_FALSE (set.contains (5));
+    EXPECT_FALSE (set.contains (7));
+    EXPECT_FALSE (set.contains (9));
+    EXPECT_TRUE (set.contains (10));
+    EXPECT_TRUE (set.contains (14));
+    EXPECT_FALSE (set.contains (15));
+}

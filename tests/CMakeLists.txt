@@ -65,13 +65,22 @@ set (target_modules
     yup_events
     yup_data_model
     yup_graphics
+    yup_animation
     dr_libs
     pffft_library
     opus_library
     flac_library
     hmp3_library
     bungee_library
-    sqlite3_library)
+    sqlite3_library
+    libpng
+    libwebp
+    libjpeg
+    libgif)
+
+set (target_gtest_modules
+    GTest::gtest
+    GTest::gmock)
 
 if (YUP_PLATFORM_DESKTOP)
     list (APPEND target_modules yup_audio_plugin_host)
@@ -82,14 +91,8 @@ if (NOT YUP_PLATFORM_EMSCRIPTEN)
     if (YUP_PLATFORM_DESKTOP AND NOT YUP_PLATFORM_WINDOWS)
         list (APPEND target_modules yup_python)
     endif()
-    list (APPEND target_gtest_modules
-        GTest::gtest
-        GTest::gmock)
 else()
     set (target_console ON)
-    list (APPEND target_gtest_modules
-        GTest::gtest_main
-        GTest::gmock_main)
 
     file (GLOB_RECURSE data_files "${CMAKE_CURRENT_LIST_DIR}/data/*")
     foreach (data_file ${data_files})
@@ -153,9 +156,7 @@ foreach (module ${target_modules})
     endif()
 endforeach()
 
-if (NOT YUP_PLATFORM_EMSCRIPTEN)
-    list (APPEND sources "${CMAKE_CURRENT_LIST_DIR}/main.cpp")
-endif()
+list (APPEND sources "${CMAKE_CURRENT_LIST_DIR}/main.cpp")
 
 target_sources (${target_name} PRIVATE ${sources} ${imported_sources})
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})

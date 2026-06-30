@@ -77,3 +77,29 @@ TEST (UMPUniversalSysExTests, IdentityRequestAndReply)
     EXPECT_EQ (identity.model, 0x0678);
     EXPECT_EQ (identity.revision, 0x00abcdef);
 }
+
+TEST (UMPUniversalSysExTests, IdentityRequestDefaultDeviceIdIsAllOnes)
+{
+    auto req = UniversalSysEx::IdentityRequest {};
+    EXPECT_EQ (req.getDeviceId(), 0x7fu);
+}
+
+TEST (UMPUniversalSysExTests, IdentityRequestCustomDeviceId)
+{
+    auto req = UniversalSysEx::IdentityRequest { 0x10 };
+    EXPECT_EQ (req.getDeviceId(), 0x10u);
+}
+
+TEST (UMPUniversalSysExTests, IdentityReplyRoundTripViaDeviceIdentity)
+{
+    const DeviceIdentity original { Manufacturer::nativeInstruments, 0x0100, 0x0200, 0x00000300 };
+    auto reply = UniversalSysEx::IdentityReply { original };
+    EXPECT_TRUE (UniversalSysEx::isIdentityReply (reply));
+
+    const auto view = UniversalSysEx::IdentityReplyView { reply };
+    const auto parsed = view.getIdentity();
+    EXPECT_EQ (parsed.manufacturer, original.manufacturer);
+    EXPECT_EQ (parsed.family, original.family);
+    EXPECT_EQ (parsed.model, original.model);
+    EXPECT_EQ (parsed.revision, original.revision);
+}

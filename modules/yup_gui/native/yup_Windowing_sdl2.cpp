@@ -622,6 +622,13 @@ rive::Factory* SDL2ComponentNative::getFactory()
 
 //==============================================================================
 
+GraphicsContext* SDL2ComponentNative::getGraphicsContext()
+{
+    return context.get();
+}
+
+//==============================================================================
+
 void* SDL2ComponentNative::getNativeHandle() const
 {
     return getNativeWindowHandle (window);

@@ -14,7 +14,7 @@ on:
       - "**/thirdparty/**"
       - "!**/native/*_apple.*"
       - "!**/native/*_emscripten.*"
-      - "!**/native/*_ios.*"
+      - "!**/native/*_ios*.*"
       - "!**/native/*_linux.*"
       - "!**/native/*_mac.*"
       - "!**/native/*_wasm.*"

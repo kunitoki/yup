@@ -52,6 +52,7 @@ public:
     BitmapData() = default;
 
     /** Constructs bitmap data with specified dimensions and pixel format.
+ 
         @param w        The width of the bitmap in pixels.
         @param h        The height of the bitmap in pixels.
         @param fmt      The pixel format of the bitmap.
@@ -70,6 +71,36 @@ public:
         pixelBuffer = std::make_unique<uint8[]> (totalSizeBytes);
     }
 
+    /** Constructs bitmap data with specified dimensions and pixel format.
+ 
+        @param w            The width of the bitmap in pixels.
+        @param h            The height of the bitmap in pixels.
+        @param fmt          The pixel format of the bitmap.
+        @param pixelData    The pixel data bytes.
+    */
+    BitmapData (int w, int h, PixelFormat fmt, Span<const uint8> pixelData)
+        : width (w)
+        , height (h)
+        , format (fmt)
+    {
+        if (w <= 0 || h <= 0)
+            throw std::invalid_argument ("Width and Height must be positive integers.");
+
+        pixelStride = getBytesPerPixel (fmt);
+        lineStride = static_cast<size_t> (w) * static_cast<size_t> (pixelStride);
+        totalSizeBytes = static_cast<size_t> (h) * lineStride;
+        pixelBuffer = std::make_unique<uint8[]> (totalSizeBytes);
+
+        std::memcpy (pixelBuffer.get(), pixelData.data(), totalSizeBytes);
+    }
+
+    /** Constructs bitmap data with specified dimensions and pixel format.
+ 
+        @param w            The width of the bitmap in pixels.
+        @param h            The height of the bitmap in pixels.
+        @param fmt          The pixel format of the bitmap.
+        @param pixelData    The pixel data bytes.
+    */
     BitmapData (int w, int h, PixelFormat fmt, std::unique_ptr<const uint8[]> pixelData)
         : width (w)
         , height (h)
@@ -527,9 +558,23 @@ public:
     Span<uint8> getRawData() noexcept;
 
     //==============================================================================
-    /*
-    Image duplicate() const;
+    /** Duplicate the image.
+     
+        This will just duplicate the image on the CPU and won't duplicate the GPU texture if it exists.
+        
+        Use this method to create a new image with the same pixel data.
+
+        @return A new Image object that is a duplicate of the current image.
     */
+    Image duplicate() const;
+
+    //==============================================================================
+    /** Loads an image from raw data.
+
+        @param imageData    The raw image data.
+        @return             A ResultValue containing the loaded image or an error message.
+    */
+    static ResultValue<Image> loadFromData (Span<const uint8> imageData);
 
     //==============================================================================
     /** Creates a texture on the GPU for the image if it doesn't already exist.
@@ -542,21 +587,27 @@ public:
     /** Invalidates the existing texture, forcing a new texture to be created on the next request. */
     void invalidateTexture();
 
-    /** Returns the GPU texture associated with this image, or nullptr if no texture exists. */
+    //==============================================================================
+    /** @internal Sets the GPU texture directly, bypassing the BitmapData upload path. */
+    void adoptTexture (rive::rcp<rive::gpu::Texture> t);
+
+    /** @internal Sets the GPU render canvas directly, preserving render-to-texture resources. */
+    void adoptRenderCanvas (rive::rcp<rive::gpu::RenderCanvas> canvas);
+
+    /** @internal Returns the GPU texture associated with this image, or nullptr if no texture exists. */
     rive::rcp<rive::gpu::Texture> getTexture() const;
 
-    //==============================================================================
-    /** Loads an image from raw data.
+    /** @internal Returns the GPU render canvas associated with this image, or nullptr if none exists. */
+    rive::rcp<rive::gpu::RenderCanvas> getRenderCanvas() const;
 
-        @param imageData    The raw image data.
-        @return             A ResultValue containing the loaded image or an error message.
-    */
-    static ResultValue<Image> loadFromData (Span<const uint8> imageData);
+    /** @internal Returns the render image associated with this image, or nullptr if none exists. */
+    rive::RenderImage* getRenderImage() const;
 
 private:
     //==============================================================================
     BitmapData::Ptr bitmapData;
     mutable rive::rcp<rive::gpu::Texture> texture;
+    mutable rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
 };
 
 } // namespace yup

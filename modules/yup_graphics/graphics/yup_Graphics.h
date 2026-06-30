@@ -70,12 +70,78 @@ public:
     };
 
     //==============================================================================
+    /** Represents an isolated transparency layer.
+
+        A transparency layer renders into an offscreen GPU target first, then
+        composites the completed result back to the parent Graphics with the layer opacity.
+        This is required for correct group opacity when the layer contents overlap.
+
+        The Graphics returned by getGraphics() uses layer-local coordinates: the
+        target area's top-left corner is (0, 0), and the target area's size is the
+        drawing area.
+    */
+    class YUP_API TransparencyLayer
+    {
+    public:
+        /** Creates an invalid transparency layer. */
+        TransparencyLayer() noexcept = default;
+
+        /** Move constructor and assignment operator. */
+        TransparencyLayer (TransparencyLayer&&) noexcept;
+        TransparencyLayer& operator= (TransparencyLayer&&) noexcept;
+
+        /** Deleted copy constructor/assignment operators to avoid unintentional copying. */
+        TransparencyLayer (const TransparencyLayer&) = delete;
+        TransparencyLayer& operator= (const TransparencyLayer&) = delete;
+
+        /** Destroys the layer without committing it. */
+        ~TransparencyLayer();
+
+        /** Returns true when this layer has a valid offscreen Graphics target. */
+        bool isValid() const noexcept;
+
+        /** Returns the offscreen Graphics target used to draw this layer's contents. */
+        Graphics& getGraphics() const noexcept;
+
+        /** Commits the offscreen contents and composites them back to the parent Graphics.
+
+            Returns false if the layer is invalid, has already been committed, or the
+            offscreen target could not be finalized.
+        */
+        bool commit();
+
+    private:
+        friend class Graphics;
+
+        TransparencyLayer (Graphics& parent, Rectangle<float> targetArea, float opacity);
+
+        Graphics* parent = nullptr;
+        Rectangle<float> targetArea;
+        float opacity = 1.0f;
+        std::unique_ptr<Graphics> graphics;
+        bool committed = false;
+    };
+
+    //==============================================================================
     /** Constructs a Graphics object with a specific GraphicsContext and Renderer.
 
         @param context Reference to the GraphicsContext that defines the drawing surface and capabilities.
         @param renderer Reference to the Renderer that executes the drawing commands.
     */
     Graphics (GraphicsContext& context, rive::Renderer& renderer, float scale = 1.0f) noexcept;
+
+    /** Constructs a Graphics object for rendering into an Image on the GPU to be able to fetch it back on the CPU.
+
+        The image must have valid dimensions. Begins the offscreen GPU frame immediately.
+
+        @param context      Reference to the GraphicsContext to use for offscreen rendering.
+        @param targetImage  Reference to the Image that will receive the rendered result.
+        @param clearColor   ARGB clear color applied at the start of the offscreen frame.
+    */
+    Graphics (GraphicsContext& context, Image& targetImage, uint32_t clearColor = 0) noexcept;
+
+    /** Constructs a Graphics object for rendering into an Image on the GPU. */
+    Graphics (GraphicsContext& context, std::unique_ptr<GraphicsContext::OffscreenTarget> target, uint32_t clearColor = 0) noexcept;
 
     //==============================================================================
     /** Saves the current state of the Graphics object.
@@ -109,6 +175,19 @@ public:
        @return The current opacity level.
     */
     float getOpacity() const;
+
+    /** Begins an isolated transparency layer.
+
+        Drawing into the returned layer's Graphics happens offscreen in layer-local
+        coordinates. Calling TransparencyLayer::commit() composites the completed
+        layer back into this Graphics using the current transform and clip state.
+
+        @param targetArea The area, in this Graphics' current coordinate space, where
+                          the completed layer will be composited.
+        @param opacity    The opacity used when compositing the completed layer.
+        @return A TransparencyLayer. Check isValid() before drawing into it.
+    */
+    [[nodiscard]] TransparencyLayer beginTransparencyLayer (Rectangle<float> targetArea, float opacity = 1.0f);
 
     //==============================================================================
     /** Sets the current drawing fill color.
@@ -503,10 +582,34 @@ public:
     void strokeFittedText (const String& text, const Font& font, const Rectangle<float>& rect, Justification justification = Justification::center);
 
     //==============================================================================
+    /** Returns true if this Graphics renders to an offscreen Image target. */
+    bool isOffscreen() const noexcept;
+
+    /** Flushes the offscreen GPU frame and sets the rendered GPU texture on the target Image.
+
+        After this call, the Image can be passed to drawImage() without any CPU round-trip.
+
+        Returns false if not an offscreen context or already committed.
+    */
+    bool commitToImage();
+
+    /** Reads the rendered pixels back to the Image's CPU pixel buffer.
+
+        Implicitly calls commitToImage() first if not yet done.
+        After this call, Image::getRawData() contains the rendered content.
+        
+        Returns false if not an offscreen context.
+    */
+    bool readPixelsToImage();
+
+    //==============================================================================
     /** Retrieves the global context scale, the one used to construct the graphics instance. */
     float getContextScale() const;
 
     //==============================================================================
+    /** Retrieves the graphics context this object was created with. */
+    GraphicsContext& getGraphicsContext();
+
     /** Retrieves the factory used for creating graphical objects.
 
         @return Pointer to a rive::Factory object.
@@ -536,12 +639,12 @@ private:
 
         Color getFillColor() const noexcept
         {
-            return fillColor.withMultipliedAlpha (opacity);
+            return fillColor;
         }
 
         Color getStrokeColor() const noexcept
         {
-            return strokeColor.withMultipliedAlpha (opacity);
+            return strokeColor;
         }
 
         bool isFillColorGradient() const noexcept
@@ -556,12 +659,12 @@ private:
 
         ColorGradient getFillColorGradient() const noexcept
         {
-            return fillGradient.withMultipliedAlpha (opacity);
+            return fillGradient;
         }
 
         ColorGradient getStrokeColorGradient() const noexcept
         {
-            return strokeGradient.withMultipliedAlpha (opacity);
+            return strokeGradient;
         }
 
         float getStrokeWidth() const noexcept
@@ -629,19 +732,27 @@ private:
     const RenderOptions& currentRenderOptions() const;
 
     void restoreState();
+    bool commitOffscreenTarget();
 
     void clipPath (rive::RawPath& path);
 
     void renderStrokePath (const Path& path, const RenderOptions& options, const AffineTransform& transform);
     void renderFillPath (const Path& path, const RenderOptions& options, const AffineTransform& transform);
+    bool renderTexture (rive::rcp<rive::gpu::Texture> texture, const Rectangle<float>& targetArea);
 
     void renderFittedText (const StyledText& text, const Rectangle<float>& rect, rive::RiveRenderPaint* paint);
 
     GraphicsContext& context;
 
+    std::unique_ptr<GraphicsContext::OffscreenTarget> offscreenTarget;
+
     rive::Factory& factory;
+    std::unique_ptr<rive::Renderer> ownedRenderer;
     rive::Renderer& renderer;
     float contextScale = 1.0f;
+
+    Image* offscreenTargetImage = nullptr;
+    bool committed = false;
 
     std::vector<RenderOptions> renderOptions;
 };

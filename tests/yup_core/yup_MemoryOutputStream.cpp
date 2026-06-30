@@ -47,3 +47,85 @@ TEST (MemoryOutputStreamTests, WriteTextUtf16SupportsFullUnicodeCodepoints)
             EXPECT_EQ (*currentOriginal, *writtenPtr);
     }
 }
+
+TEST (MemoryOutputStreamTests, DefaultConstructedIsEmpty)
+{
+    MemoryOutputStream stream;
+    EXPECT_EQ (stream.getDataSize(), (size_t) 0);
+    EXPECT_NE (stream.getData(), nullptr);
+}
+
+TEST (MemoryOutputStreamTests, WriteBytesIncreasesSize)
+{
+    MemoryOutputStream stream;
+    const uint8 data[] = { 0x01, 0x02, 0x03 };
+    EXPECT_TRUE (stream.write (data, sizeof (data)));
+    EXPECT_EQ (stream.getDataSize(), sizeof (data));
+}
+
+TEST (MemoryOutputStreamTests, WriteRepeatedByteProducesCorrectSize)
+{
+    MemoryOutputStream stream;
+    EXPECT_TRUE (stream.writeRepeatedByte (0xFF, 10));
+    EXPECT_EQ (stream.getDataSize(), (size_t) 10);
+
+    const auto* bytes = static_cast<const uint8*> (stream.getData());
+    for (size_t i = 0; i < 10; ++i)
+        EXPECT_EQ (bytes[i], 0xFF);
+}
+
+TEST (MemoryOutputStreamTests, ResetClearsDataSize)
+{
+    MemoryOutputStream stream;
+    const uint8 data[] = { 1, 2, 3, 4, 5 };
+    stream.write (data, sizeof (data));
+    EXPECT_EQ (stream.getDataSize(), sizeof (data));
+
+    stream.reset();
+    EXPECT_EQ (stream.getDataSize(), (size_t) 0);
+}
+
+TEST (MemoryOutputStreamTests, GetPositionTracksWrittenBytes)
+{
+    MemoryOutputStream stream;
+    EXPECT_EQ (stream.getPosition(), (int64) 0);
+
+    const uint8 data[] = { 0xAA, 0xBB, 0xCC };
+    stream.write (data, sizeof (data));
+    EXPECT_EQ (stream.getPosition(), (int64) 3);
+
+    stream.write (data, sizeof (data));
+    EXPECT_EQ (stream.getPosition(), (int64) 6);
+}
+
+TEST (MemoryOutputStreamTests, GetMemoryBlockMatchesWrittenData)
+{
+    MemoryOutputStream stream;
+    const uint8 data[] = { 0x11, 0x22, 0x33, 0x44 };
+    stream.write (data, sizeof (data));
+
+    MemoryBlock block = stream.getMemoryBlock();
+    EXPECT_EQ (block.getSize(), sizeof (data));
+    EXPECT_EQ (memcmp (block.getData(), data, sizeof (data)), 0);
+}
+
+TEST (MemoryOutputStreamTests, WriteByteProducesOneByte)
+{
+    MemoryOutputStream stream;
+    EXPECT_TRUE (stream.writeByte ('Z'));
+    EXPECT_EQ (stream.getDataSize(), (size_t) 1);
+
+    const auto* bytes = static_cast<const uint8*> (stream.getData());
+    EXPECT_EQ (bytes[0], static_cast<uint8> ('Z'));
+}
+
+TEST (MemoryOutputStreamTests, PreallocateDoesNotAffectDataSize)
+{
+    MemoryOutputStream stream;
+    stream.preallocate (1024);
+    EXPECT_EQ (stream.getDataSize(), (size_t) 0);
+
+    const uint8 data[] = { 1, 2, 3 };
+    stream.write (data, sizeof (data));
+    EXPECT_EQ (stream.getDataSize(), sizeof (data));
+}

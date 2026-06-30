@@ -77,8 +77,8 @@ emscripten_test CONFIG="Debug":
 
 [doc("serve project for WASM")]
 emscripten_serve:
-  python3 -m http.server -d .
-  #python3 tools/serve.py -p 8000 -d .
+  #python3 -m http.server -d .
+  python3 tools/serve.py -p 8000 -d .
 
 [working-directory: 'python']
 python_wheel:

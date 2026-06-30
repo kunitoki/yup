@@ -126,3 +126,54 @@ TEST (FileInputStreamTests, Skip)
 
     f.deleteFile();
 }
+
+TEST (FileInputStreamTests, GetFileReturnsConstructedFile)
+{
+    auto tempFile = File::createTempFile (".txt");
+    tempFile.create();
+
+    FileInputStream stream (tempFile);
+    EXPECT_EQ (stream.getFile(), tempFile);
+
+    tempFile.deleteFile();
+}
+
+TEST (FileInputStreamTests, ReadSingleByte)
+{
+    const MemoryBlock data ("XYZ", 3);
+    File f (File::createTempFile (".txt"));
+    f.appendData (data.getData(), data.getSize());
+
+    FileInputStream stream (f);
+    EXPECT_TRUE (stream.openedOk());
+
+    EXPECT_EQ ((char) stream.readByte(), 'X');
+    EXPECT_EQ ((char) stream.readByte(), 'Y');
+    EXPECT_EQ ((char) stream.readByte(), 'Z');
+    EXPECT_TRUE (stream.isExhausted());
+
+    f.deleteFile();
+}
+
+TEST (FileInputStreamTests, SetPositionSeeksToSpecificOffset)
+{
+    const MemoryBlock data ("abcdefghij", 10);
+    File f (File::createTempFile (".txt"));
+    f.appendData (data.getData(), data.getSize());
+
+    FileInputStream stream (f);
+    EXPECT_TRUE (stream.openedOk());
+
+    char buf[3];
+    stream.read (buf, 3); // reads "abc", position now 3
+    EXPECT_EQ (stream.getPosition(), (int64) 3);
+
+    stream.setPosition (7); // seek to 'h'
+    EXPECT_EQ (stream.getPosition(), (int64) 7);
+
+    char single;
+    stream.read (&single, 1);
+    EXPECT_EQ (single, 'h');
+
+    f.deleteFile();
+}

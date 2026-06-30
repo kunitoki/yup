@@ -183,3 +183,35 @@ TEST_F (JSONTests, FloatFormatting)
         EXPECT_EQ (JSON::toString (value), expected);
     }
 }
+
+TEST_F (JSONTests, ParseNullKeyword)
+{
+    auto v = JSON::parse ("[null]")[0];
+    EXPECT_TRUE (v.isVoid());
+}
+
+TEST_F (JSONTests, ParseBoolValues)
+{
+    auto trueVal = JSON::parse ("[true]")[0];
+    auto falseVal = JSON::parse ("[false]")[0];
+
+    EXPECT_TRUE (trueVal.isBool());
+    EXPECT_TRUE (falseVal.isBool());
+    EXPECT_TRUE (static_cast<bool> (trueVal));
+    EXPECT_FALSE (static_cast<bool> (falseVal));
+}
+
+TEST_F (JSONTests, ParseSimpleStringValue)
+{
+    auto v = JSON::parse ("[\"hello world\"]")[0];
+    EXPECT_TRUE (v.isString());
+    EXPECT_EQ ("hello world", v.toString());
+}
+
+TEST_F (JSONTests, ParseNestedObject)
+{
+    auto v = JSON::parse (R"({"outer": {"inner": 42}})");
+    EXPECT_TRUE (v.isObject());
+    EXPECT_TRUE (v["outer"].isObject());
+    EXPECT_EQ (42, (int) v["outer"]["inner"]);
+}

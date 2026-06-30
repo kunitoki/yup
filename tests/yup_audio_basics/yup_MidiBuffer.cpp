@@ -43,6 +43,49 @@
 
 using namespace yup;
 
+TEST (MidiBufferTests, DefaultIsEmpty)
+{
+    MidiBuffer buffer;
+    EXPECT_TRUE (buffer.isEmpty());
+    EXPECT_EQ (0, buffer.getNumEvents());
+}
+
+TEST (MidiBufferTests, AddEventMakesNonEmpty)
+{
+    MidiBuffer buffer;
+    buffer.addEvent (MidiMessage::noteOn (1, 60, 0.5f), 0);
+    EXPECT_FALSE (buffer.isEmpty());
+    EXPECT_EQ (1, buffer.getNumEvents());
+}
+
+TEST (MidiBufferTests, ClearAllRemovesAllEvents)
+{
+    MidiBuffer buffer;
+    buffer.addEvent (MidiMessage::noteOn (1, 60, 0.5f), 0);
+    buffer.addEvent (MidiMessage::noteOff (1, 60), 10);
+    buffer.clear();
+    EXPECT_TRUE (buffer.isEmpty());
+    EXPECT_EQ (0, buffer.getNumEvents());
+}
+
+TEST (MidiBufferTests, IterationYieldsEventsInOrder)
+{
+    MidiBuffer buffer;
+    buffer.addEvent (MidiMessage::noteOn (1, 60, 0.5f), 0);
+    buffer.addEvent (MidiMessage::noteOn (1, 64, 0.5f), 10);
+    buffer.addEvent (MidiMessage::noteOff (1, 60), 20);
+
+    int prevPos = -1;
+    int count = 0;
+    for (const auto& meta : buffer)
+    {
+        EXPECT_GE (meta.samplePosition, prevPos);
+        prevPos = meta.samplePosition;
+        ++count;
+    }
+    EXPECT_EQ (3, count);
+}
+
 TEST (MidiBufferTests, Clear)
 {
     const auto message = MidiMessage::noteOn (1, 64, 0.5f);
@@ -91,5 +134,43 @@ TEST (MidiBufferTests, Clear)
         auto buffer = testBuffer;
         buffer.clear (10, 300);
         EXPECT_EQ (buffer.getNumEvents(), 1);
+    }
+}
+
+TEST (MidiBufferTests, CopyConstructorPreservesEvents)
+{
+    MidiBuffer original;
+    original.addEvent (MidiMessage::noteOn (1, 60, 0.5f), 0);
+    original.addEvent (MidiMessage::noteOff (1, 60), 10);
+
+    MidiBuffer copy (original);
+    EXPECT_EQ (copy.getNumEvents(), original.getNumEvents());
+    EXPECT_FALSE (copy.isEmpty());
+}
+
+TEST (MidiBufferTests, AddEventsFromAnotherBuffer)
+{
+    MidiBuffer source;
+    source.addEvent (MidiMessage::noteOn (1, 72, 0.8f), 5);
+    source.addEvent (MidiMessage::noteOff (1, 72), 15);
+
+    MidiBuffer destination;
+    destination.addEvent (MidiMessage::noteOn (1, 60, 0.5f), 0);
+    destination.addEvents (source, 0, -1, 20); // offset by 20 samples
+
+    EXPECT_EQ (destination.getNumEvents(), 3);
+}
+
+TEST (MidiBufferTests, EventDataMatchesAddedMessage)
+{
+    MidiBuffer buffer;
+    auto noteOn = MidiMessage::noteOn (2, 64, 0.75f);
+    buffer.addEvent (noteOn, 100);
+
+    for (const auto& meta : buffer)
+    {
+        EXPECT_EQ (meta.samplePosition, 100);
+        EXPECT_EQ (meta.getMessage().getChannel(), 2);
+        EXPECT_EQ (meta.getMessage().getNoteNumber(), 64);
     }
 }

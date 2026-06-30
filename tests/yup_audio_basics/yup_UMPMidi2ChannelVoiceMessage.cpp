@@ -71,3 +71,26 @@ TEST (UMPMidi2ChannelVoiceMessageTests, PerNoteMessages)
     EXPECT_TRUE (isMidi2ChannelVoiceMessage (assign));
     EXPECT_TRUE (isMidi2ChannelVoiceMessage (perNote));
 }
+
+TEST (UMPMidi2ChannelVoiceMessageTests, ConstructorDataFieldIsStoredCorrectly)
+{
+    Midi2ChannelVoiceMessage m (4, Status (ChannelVoiceStatus::noteOn), 6, 44, 101, 0x12345678u);
+    auto view = Midi2ChannelVoiceMessageView { m };
+    EXPECT_EQ (view.getData(), 0x12345678u);
+}
+
+TEST (UMPMidi2ChannelVoiceMessageTests, NoteOnByte3IsNoteNumber)
+{
+    auto msg = makeMidi2NoteOnMessage (1, 2, 60, Velocity { uint16_t { 0x8000 } });
+    auto view = Midi2ChannelVoiceMessageView { msg };
+    EXPECT_EQ (view.getByte3(), 60u);
+    EXPECT_EQ (view.getStatus(), Status (ChannelVoiceStatus::noteOn));
+    EXPECT_EQ (view.getChannel(), 2u);
+}
+
+TEST (UMPMidi2ChannelVoiceMessageTests, PitchBendDataIsFullRange)
+{
+    auto msg = makeMidi2PitchBendMessage (0, 1, PitchBend { uint32_t { 0x80000000u } });
+    auto view = Midi2ChannelVoiceMessageView { msg };
+    EXPECT_EQ (view.getData(), 0x80000000u);
+}

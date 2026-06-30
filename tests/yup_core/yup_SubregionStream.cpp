@@ -112,3 +112,52 @@ TEST (SubregionInputStreamTests, Skip)
     EXPECT_EQ (stream.getNumBytesRemaining(), (int64) 0);
     EXPECT_TRUE (stream.isExhausted());
 }
+
+TEST (SubregionInputStreamTests, FixedOffsetReadsCorrectBytes)
+{
+    const MemoryBlock data ("abcdefghijklmnopqrstuvwxyz", 26);
+    MemoryInputStream mi (data, true);
+
+    // offset=10 means we start at 'k', subregion covers "klmnopqrstuvwxyz" (16 bytes)
+    SubregionStream stream (&mi, 10, 16, false);
+
+    EXPECT_EQ (stream.getTotalLength(), (int64) 16);
+    EXPECT_EQ (stream.getPosition(), (int64) 0);
+    EXPECT_FALSE (stream.isExhausted());
+
+    char buf[16];
+    stream.read (buf, 16);
+
+    EXPECT_EQ (0, memcmp (buf, "klmnopqrstuvwxyz", 16));
+    EXPECT_TRUE (stream.isExhausted());
+}
+
+TEST (SubregionInputStreamTests, ZeroOffsetCoversFullData)
+{
+    const MemoryBlock data ("abcde", 5);
+    MemoryInputStream mi (data, true);
+
+    SubregionStream stream (&mi, 0, 5, false);
+
+    EXPECT_EQ (stream.getTotalLength(), (int64) 5);
+    EXPECT_EQ (stream.getNumBytesRemaining(), (int64) 5);
+
+    char buf[5];
+    stream.read (buf, 5);
+
+    EXPECT_EQ (0, memcmp (buf, "abcde", 5));
+    EXPECT_TRUE (stream.isExhausted());
+    EXPECT_EQ (stream.getNumBytesRemaining(), (int64) 0);
+}
+
+TEST (SubregionInputStreamTests, ZeroLengthSubregionIsImmediatelyExhausted)
+{
+    const MemoryBlock data ("abcdefghij", 10);
+    MemoryInputStream mi (data, true);
+
+    SubregionStream stream (&mi, 5, 0, false);
+
+    EXPECT_EQ (stream.getTotalLength(), (int64) 0);
+    EXPECT_EQ (stream.getNumBytesRemaining(), (int64) 0);
+    EXPECT_TRUE (stream.isExhausted());
+}

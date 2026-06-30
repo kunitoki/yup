@@ -40,6 +40,58 @@ TEST (JavascriptEngineTests, ExecuteInvalidCode)
     EXPECT_FALSE (result.wasOk());
 }
 
+TEST (JavascriptEngineTests, ExecuteWithResultReturnsLastExpressionStatement)
+{
+    JavascriptEngine engine;
+
+    auto result = engine.executeWithResult ("var x = 10; var y = 20; x + y;");
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_EQ (static_cast<int> (result.getReference()), 30);
+}
+
+TEST (JavascriptEngineTests, ExecuteWithResultReturnsAssignmentValue)
+{
+    JavascriptEngine engine;
+
+    {
+        auto result = engine.executeWithResult ("var $bm_rt; $bm_rt = 42;");
+        ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+        EXPECT_EQ (static_cast<int> (result.getReference()), 42);
+    }
+
+    {
+        auto result = engine.executeWithResult ("var $bm_rt; $bm_rt = 13");
+        ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+        EXPECT_EQ (static_cast<int> (result.getReference()), 13);
+    }
+}
+
+TEST (JavascriptEngineTests, ExecuteWithResultReturnsNothingOnNoExpression)
+{
+    JavascriptEngine engine;
+
+    auto result = engine.executeWithResult ("var $bm_rt;");
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (result.getReference().isUndefined());
+}
+
+TEST (JavascriptEngineTests, ExecuteWithResultReturnsReturnStatementValue)
+{
+    JavascriptEngine engine;
+
+    auto result = engine.executeWithResult ("return 42;");
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_EQ (static_cast<int> (result.getReference()), 42);
+}
+
+TEST (JavascriptEngineTests, ExecuteWithResultInvalidCode)
+{
+    JavascriptEngine engine;
+
+    auto result = engine.executeWithResult ("var x = 10; var y = ;");
+    EXPECT_FALSE (result.wasOk());
+}
+
 TEST (JavascriptEngineTests, EvaluateValidExpression)
 {
     JavascriptEngine engine;
@@ -123,6 +175,40 @@ TEST (JavascriptEngineTests, RegisterNativeObject)
     var result = engine.evaluate ("testObject.add (10, 20)", &error);
     EXPECT_TRUE (error.wasOk());
     EXPECT_EQ (static_cast<int> (result), 30);
+}
+
+TEST (JavascriptEngineTests, NativeObjectPropertyAccessUsesVirtualGetter)
+{
+    JavascriptEngine engine;
+
+    struct TestObject : public DynamicObject
+    {
+        explicit TestObject (int& counterIn)
+            : counter (counterIn)
+        {
+            setProperty ("value", 42);
+        }
+
+        const var& getProperty (const Identifier& propertyName) const override
+        {
+            if (propertyName == Identifier ("value"))
+                ++counter;
+
+            return DynamicObject::getProperty (propertyName);
+        }
+
+        int& counter;
+    };
+
+    int getterCalls = 0;
+    DynamicObject::Ptr testObject = new TestObject (getterCalls);
+    engine.registerNativeObject ("testObject", testObject.get());
+
+    auto error = Result::fail ("fail");
+    var result = engine.evaluate ("testObject.value", &error);
+    EXPECT_TRUE (error.wasOk());
+    EXPECT_EQ (static_cast<int> (result), 42);
+    EXPECT_EQ (getterCalls, 1);
 }
 
 TEST (JavascriptEngineTests, MaximumExecutionTime)

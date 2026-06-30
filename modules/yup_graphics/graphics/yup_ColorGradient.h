@@ -41,6 +41,15 @@ public:
     };
 
     //==============================================================================
+    /** How the gradient is repeated or reflected beyond its endpoints. */
+    enum class Spread : uint8_t
+    {
+        Pad,    ///< Colors beyond the endpoints are clamped to the nearest endpoint color.
+        Repeat, ///< The gradient pattern is repeated (tiled).
+        Reflect ///< The gradient pattern is repeated with alternating mirroring.
+    };
+
+    //==============================================================================
     /** Represents a single color stop in a gradient. */
     struct ColorStop
     {
@@ -165,6 +174,20 @@ public:
     Type getType() const noexcept
     {
         return type;
+    }
+
+    /** Gets the spread mode of the gradient. */
+    Spread getSpread() const noexcept
+    {
+        return spread;
+    }
+
+    /** Returns a copy of this gradient with the given spread mode. */
+    ColorGradient withSpread (Spread newSpread) const noexcept
+    {
+        auto copy = *this;
+        copy.spread = newSpread;
+        return copy;
     }
 
     //==============================================================================
@@ -322,8 +345,9 @@ public:
             if (radiusValue <= 0.0f)
                 return stops.front().color;
 
-            const float t = start.distanceTo ({ x, y }) / radiusValue;
-            return getColorAt (jlimit (0.0f, 1.0f, t));
+            float t = start.distanceTo ({ x, y }) / radiusValue;
+            t = applySpread (t);
+            return getColorAt (t);
         }
 
         const float dx = end.getX() - start.getX();
@@ -332,8 +356,9 @@ public:
         if (lenSquared <= 0.0f)
             return stops.front().color;
 
-        const float t = ((x - start.getX()) * dx + (y - start.getY()) * dy) / lenSquared;
-        return getColorAt (jlimit (0.0f, 1.0f, t));
+        float t = ((x - start.getX()) * dx + (y - start.getY()) * dy) / lenSquared;
+        t = applySpread (t);
+        return getColorAt (t);
     }
 
     /** Returns the interpolated color at a given point in gradient space. */
@@ -626,8 +651,31 @@ public:
 
 private:
     Type type = Type::Linear;
+    Spread spread = Spread::Pad;
     std::vector<ColorStop> stops;
     float radius = 0.0f;
+
+    float applySpread (float t) const noexcept
+    {
+        switch (spread)
+        {
+            case Spread::Pad:
+                return jlimit (0.0f, 1.0f, t);
+            case Spread::Repeat:
+            {
+                const float f = t - std::floor (t);
+                return f < 0.0f ? f + 1.0f : f;
+            }
+            case Spread::Reflect:
+            {
+                const float twoT = t * 0.5f;
+                const float rounded = std::round (twoT);
+                const float result = std::abs (t - 2.0f * rounded);
+                return jlimit (0.0f, 1.0f, result);
+            }
+        }
+        return jlimit (0.0f, 1.0f, t);
+    }
 };
 
 } // namespace yup

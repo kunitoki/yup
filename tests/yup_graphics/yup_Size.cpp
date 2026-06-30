@@ -226,3 +226,57 @@ TEST (SizeTests, StructuredBinding)
     EXPECT_EQ (w, 1);
     EXPECT_EQ (h, 2);
 }
+
+TEST (SizeTests, EnlargedWithTwoArgs)
+{
+    Size<float> s (3.0f, 5.0f);
+    auto e = s.enlarged (1.0f, 2.0f);
+    EXPECT_FLOAT_EQ (e.getWidth(), 4.0f);
+    EXPECT_FLOAT_EQ (e.getHeight(), 7.0f);
+    // Original unchanged
+    EXPECT_FLOAT_EQ (s.getWidth(), 3.0f);
+    EXPECT_FLOAT_EQ (s.getHeight(), 5.0f);
+}
+
+TEST (SizeTests, ReducedWithTwoArgs)
+{
+    Size<float> s (10.0f, 8.0f);
+    auto r = s.reduced (2.0f, 3.0f);
+    EXPECT_FLOAT_EQ (r.getWidth(), 8.0f);
+    EXPECT_FLOAT_EQ (r.getHeight(), 5.0f);
+}
+
+TEST (SizeTests, ScaledWithTwoFactors)
+{
+    Size<float> s (4.0f, 6.0f);
+    auto scaled = s.scaled (2.0f, 0.5f);
+    EXPECT_FLOAT_EQ (scaled.getWidth(), 8.0f);
+    EXPECT_FLOAT_EQ (scaled.getHeight(), 3.0f);
+    // Original unchanged
+    EXPECT_FLOAT_EQ (s.getWidth(), 4.0f);
+    EXPECT_FLOAT_EQ (s.getHeight(), 6.0f);
+}
+
+TEST (SizeTests, ToNearestIntRoundsBothDimensions)
+{
+    // Values < 0.5 fractional part round down
+    Size<float> s1 (3.4f, 4.3f);
+    auto rounded1 = s1.toNearestInt();
+    EXPECT_FLOAT_EQ (rounded1.getWidth(), 3.0f);
+    EXPECT_FLOAT_EQ (rounded1.getHeight(), 4.0f);
+
+    // Values >= 0.5 fractional part round up
+    Size<float> s2 (3.7f, 4.9f);
+    auto rounded2 = s2.toNearestInt();
+    EXPECT_FLOAT_EQ (rounded2.getWidth(), 4.0f);
+    EXPECT_FLOAT_EQ (rounded2.getHeight(), 5.0f);
+}
+
+TEST (SizeTests, ToStringIsNonEmpty)
+{
+    Size<int> s (5, 10);
+    const String str = s.toString();
+    EXPECT_FALSE (str.isEmpty());
+    // Should contain the width and height values
+    EXPECT_TRUE (str.contains ("5") || str.contains ("10"));
+}
