@@ -142,7 +142,9 @@ TEST (AnimationTests, LoadFromDataReturnsValidAnimationForValidJson)
 TEST (AnimationTests, LoadFromDataWithEmptyStringDoesNotCrash)
 {
     // LottieReader is lenient: empty string produces a valid but empty composition.
-    EXPECT_NO_THROW (Animation::loadFromData ({}));
+    EXPECT_NO_THROW ({
+        [[maybe_unused]] const auto anim = Animation::loadFromData ({});
+    });
 }
 
 TEST (AnimationTests, LoadFromDataReturnsInvalidAnimationForGarbageInput)
@@ -154,7 +156,9 @@ TEST (AnimationTests, LoadFromDataReturnsInvalidAnimationForGarbageInput)
 TEST (AnimationTests, LoadFromDataWithMinimalJsonDoesNotCrash)
 {
     // LottieReader creates a default composition even for non-Lottie JSON.
-    EXPECT_NO_THROW (Animation::loadFromData (R"json({"key": "value"})json"));
+    EXPECT_NO_THROW ({
+        [[maybe_unused]] const auto anim = Animation::loadFromData (R"json({"key": "value"})json");
+    });
 }
 
 // =============================================================================
