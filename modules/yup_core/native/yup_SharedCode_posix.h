@@ -54,9 +54,7 @@ CriticalSection::CriticalSection() noexcept
 
 CriticalSection::~CriticalSection() noexcept { pthread_mutex_destroy (&lock); }
 
-#if ! YUP_WASM
 void CriticalSection::enter() const noexcept { pthread_mutex_lock (&lock); }
-#endif
 
 bool CriticalSection::tryEnter() const noexcept { return pthread_mutex_trylock (&lock) == 0; }
 
