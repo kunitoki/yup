@@ -48,12 +48,7 @@ jobs:
       run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/Debug
-      run: |
-        node yup_tests.js --gtest_total_shards=5 --gtest_shard_index=0
-        node yup_tests.js --gtest_total_shards=5 --gtest_shard_index=1
-        node yup_tests.js --gtest_total_shards=5 --gtest_shard_index=2
-        node yup_tests.js --gtest_total_shards=5 --gtest_shard_index=3
-        node yup_tests.js --gtest_total_shards=5 --gtest_shard_index=4
+      run: node yup_tests.js
 
   build_tests_release:
     runs-on: ubuntu-latest
@@ -70,12 +65,7 @@ jobs:
       run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Release --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/Release
-      run: |
-        node yup_tests.js --gtest_total_shards=5 --gtest_shard_index=0
-        node yup_tests.js --gtest_total_shards=5 --gtest_shard_index=1
-        node yup_tests.js --gtest_total_shards=5 --gtest_shard_index=2
-        node yup_tests.js --gtest_total_shards=5 --gtest_shard_index=3
-        node yup_tests.js --gtest_total_shards=5 --gtest_shard_index=4
+      run: node yup_tests.js
 
   build_console:
     runs-on: ubuntu-latest
