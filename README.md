@@ -26,11 +26,10 @@ YUP is a C++20 framework for building native applications, audio tools, and audi
 
 ## Try It
 
-- Run the browser demos: [demo 1](https://kunitoki.github.io/yup/demos/web_render_0/), [demo 2](https://kunitoki.github.io/yup/demos/web_render_1/), [demo 3](https://kunitoki.github.io/yup/demos/web_render_2/), [demo 4](https://kunitoki.github.io/yup/demos/web_render_3/), [demo 5](https://kunitoki.github.io/yup/demos/web_render_4/).
 - Explore the example apps: [graphics](./examples/graphics), [audio graph](./examples/audiograph), [plugin](./examples/plugin), [console](./examples/console).
 - Read the build guides: [standalone applications](./docs/Building%20Standalone.md), [audio plugins](./docs/Building%20Plugins.md), [module format](./docs/YUP%20Module%20Format.md).
 
-## Screenshots and Demos
+## Screenshots
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
   <a href="https://kunitoki.github.io/yup/demos/web_render_0/" title="UI courtesy from https://www.drywestdesign.com/">
@@ -38,26 +37,31 @@ YUP is a C++20 framework for building native applications, audio tools, and audi
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
-  <a href="https://kunitoki.github.io/yup/demos/web_render_1/"><img src="./docs/demos/web_render_1.png" style="width:23.5%;" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_1/"><img src="./docs/images/yup_rive_artboard.jpg" style="width:23.5%;" /></a>
   <a href="https://kunitoki.github.io/yup/demos/web_render_2/"><img src="./docs/demos/web_render_2.png" style="width:23.5%;" /></a>
   <a href="https://kunitoki.github.io/yup/demos/web_render_3/"><img src="./docs/demos/web_render_3.png" style="width:23.5%;" /></a>
   <a href="https://kunitoki.github.io/yup/demos/web_render_4/"><img src="./docs/demos/web_render_4.png" style="width:23.5%;" /></a>
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
-  <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/images/yup_svg_tiger.png" style="width:32.3%;" /></a>
-  <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/images/yup_svg_lambo.png" style="width:32.3%;" /></a>
-  <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/images/yup_svg_yellow_car.png" style="width:32.3%;" /></a>
+  <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/images/yup_svg_tiger.jpg" style="width:23.5%;" /></a>
+  <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/images/yup_svg_lambo.jpg" style="width:23.5%;" /></a>
+  <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/images/yup_svg_yellow_car.jpg" style="width:23.5%;" /></a>
+  <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/images/yup_svg_scimitar.jpg" style="width:23.5%;" /></a>
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
-  <a href="./examples/graphics/source/examples/ColorLab.h"><img src="./docs/images/yup_gradient_editor.png" style="width:46.8%;" /></a>
-  <a href="./examples/graphics/source/examples/ColorLab.h"><img src="./docs/images/yup_color_picker.png" style="width:51.8%;" /></a>
+  <a href="./examples/graphics/source/examples/LottieDemo.h"><img src="./docs/images/yup_lottie.gif" style="width:99.5%;" /></a>
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
-  <a href="./examples/audiograph/"><img src="./docs/images/yup_audio_graph.png" style="width:56.5%;" /></a>
-  <a href="./examples/graphics/source/examples/AudioFileDemo.h"><img src="./docs/images/yup_audio_waveform.png" style="width:41.5%;" /></a>
+  <a href="./examples/graphics/source/examples/ColorLab.h"><img src="./docs/images/yup_gradient_editor.png" style="width:32.8%;" /></a>
+  <a href="./examples/graphics/source/examples/ColorLab.h"><img src="./docs/images/yup_color_picker.png" style="width:32.8%;" /></a>
+  <a href="./examples/graphics/source/examples/VariableFonts.h"><img src="./docs/images/yup_variable_fonts.jpg" style="width:28.8%;" /></a>
+</div>
+
+<div style="display: flex; width: 100%; flex-wrap: nowrap;">
+  <a href="./examples/audiograph/"><img src="./docs/images/yup_audio_graph.png" style="width:99.5%;" /></a>
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
@@ -71,12 +75,16 @@ YUP is a C++20 framework for building native applications, audio tools, and audi
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
-  <a href="./examples/graphics/source/examples/AudioFileDemo.h"><img src="./docs/images/yup_audio_scope.png" style="width:99%;" /></a>
+  <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_fill.png" style="width:99%;" /></a>
+  <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_line.png" style="width:99%;" /></a>
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
-  <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_fill.png" style="width:99%;" /></a>
-  <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/images/yup_dsp_spectrum_line.png" style="width:99%;" /></a>
+  <a href="./examples/graphics/source/examples/AudioFileDemo.h"><img src="./docs/images/yup_waveform_onsets.jpg" style="width:99.5%;" /></a>
+</div>
+
+<div style="display: flex; width: 100%; flex-wrap: nowrap;">
+  <a href="./examples/graphics/source/examples/AudioFileDemo.h"><img src="./docs/images/yup_audio_scope.png" style="width:99%;" /></a>
 </div>
 
 Example Rive animation display: [source code](./examples/graphics/source/main.cpp), [renderer video](https://youtube.com/shorts/3XC4hyDlrVs).
