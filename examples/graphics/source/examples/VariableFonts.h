@@ -97,7 +97,7 @@ public:
 
         bounds = bounds.reduced (10);
 
-        int slidersPerRow = 6;
+        int slidersPerRow = 8;
         int sliderWidth = bounds.getWidth() / slidersPerRow;
         int labelHeight = 16;
         int sliderIndex = 0;

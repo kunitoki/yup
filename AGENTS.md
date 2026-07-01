@@ -89,7 +89,7 @@ For main module headers (e.g., `yup_graphics.h`), include this declaration block
 
     ID:                 module_name
     vendor:             yup
-    version:            1.0.0
+    version:            1.2.3
     name:               Module Display Name
     description:        Brief module description
     website:            https://github.com/kunitoki/yup
@@ -104,7 +104,7 @@ For main module headers (e.g., `yup_graphics.h`), include this declaration block
 */
 ```
 
-Refer to `./docs/YUP Module Format.md` for more info if needed.
+Refer to `./docs/YUP Module Format.md` for more info if needed. For yup_* modules, the version number should be the same as all the others.
 
 ### 3. Formatting Rules (Allman Style)
 

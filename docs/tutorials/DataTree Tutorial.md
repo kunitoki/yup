@@ -27,7 +27,7 @@ DataTree appSettings("AppSettings");
 // Use transactions to modify the tree
 {
     auto transaction = appSettings.beginTransaction();
-    transaction.setProperty("version", "1.0.0");
+    transaction.setProperty("version", "1.2.3");
     transaction.setProperty("debug", true);
     transaction.setProperty("maxConnections", 100);
     // Transaction commits automatically when it goes out of scope
@@ -763,7 +763,7 @@ String schemaJson = R"({
                 "version": {
                     "type": "string",
                     "required": true,
-                    "default": "1.0.0",
+                    "default": "1.2.3",
                     "pattern": "^\\d+\\.\\d+\\.\\d+$"
                 },
                 "theme": {
@@ -821,7 +821,7 @@ if (!schema)
 ```cpp
 // Create nodes with defaults applied automatically
 auto appSettings = schema->createNode("AppSettings");
-// appSettings now has version="1.0.0", theme="light", fontSize=12
+// appSettings now has version="1.2.3", theme="light", fontSize=12
 
 // Create valid child nodes
 auto serverConfig = schema->createChildNode("AppSettings", "ServerConfig");
