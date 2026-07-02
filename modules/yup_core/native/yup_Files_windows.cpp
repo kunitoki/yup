@@ -91,6 +91,12 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 //==============================================================================
 yup::String toLongPath (const yup::String& path)
 {
+    if (path.startsWith (String (L"\\\\?\\")))
+        return path;
+
+    if (path.startsWith (String (L"\\\\")))
+        return L"\\\\?\\UNC" + path.substring (1);
+
     return L"\\\\?\\" + path;
 }
 

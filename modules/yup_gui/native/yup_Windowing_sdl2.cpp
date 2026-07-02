@@ -97,16 +97,32 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
 #if YUP_WINDOWS
     if (parent != nullptr)
     {
+        // Register a plain window class to avoid triggering SDL's WndProc during creation
+        // (SDL_CreateWindowFrom will subclass it afterwards).
+        static const wchar_t childWindowClass[] = L"YUPChildWindow";
+        static bool childWindowClassRegistered = false;
+
+        if (! childWindowClassRegistered)
+        {
+            WNDCLASSEXW wc = {};
+            wc.cbSize        = sizeof (WNDCLASSEXW);
+            wc.lpfnWndProc   = DefWindowProcW;
+            wc.hInstance     = GetModuleHandleW (nullptr);
+            wc.hCursor       = LoadCursorW (nullptr, IDC_ARROW);
+            wc.lpszClassName = childWindowClass;
+            childWindowClassRegistered = RegisterClassExW (&wc) != 0;
+        }
+
         DWORD style = WS_CHILDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
 
-        if (options.flags.test (resizableWindow))
-            style |= WS_THICKFRAME | WS_MAXIMIZEBOX;
+        if (options.flags.test (decoratedWindow))
+            style |= WS_CAPTION;
 
         if (component.isVisible())
             style |= WS_VISIBLE;
 
         HWND childHwnd = CreateWindowExW (0,
-                                          L"SDL_app",
+                                          childWindowClass,
                                           component.getTitle().toWideCharPointer(),
                                           style,
                                           0, 0,
@@ -790,7 +806,11 @@ void SDL2ComponentNative::timerCallback()
         if (GetCursorPos (&cursorPos))
         {
             ScreenToClient (reinterpret_cast<HWND> (getNativeHandle()), &cursorPos);
-            handleMouseMoveOrDrag (Point<float> { static_cast<float> (cursorPos.x), static_cast<float> (cursorPos.y) });
+
+            auto cursorPosition = Point<float> { static_cast<float> (cursorPos.x), static_cast<float> (cursorPos.y) };
+
+            if (lastMouseMovePosition != cursorPosition)
+                handleMouseMoveOrDrag (cursorPosition);
         }
     }
 #endif
