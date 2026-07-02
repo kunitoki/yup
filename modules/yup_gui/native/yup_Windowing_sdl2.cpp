@@ -239,6 +239,9 @@ SDL2ComponentNative::~SDL2ComponentNative()
     Desktop::getInstance()->unregisterNativeComponent (this);
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unregistered native component");
 
+    // Destroy graphics resources before the SDL window
+    renderer.reset();
+    context.reset();
 
     // Destroy the window
     if (window != nullptr)
