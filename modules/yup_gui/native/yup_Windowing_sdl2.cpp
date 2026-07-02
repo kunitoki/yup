@@ -225,6 +225,12 @@ SDL2ComponentNative::~SDL2ComponentNative()
 
     updateMouseCapture (false);
 
+    // Stop the rendering first, before touching any SDL resources
+    stopRendering();
+
+    // Cancel any pending async update that may have been scheduled by the render thread
+    cancelPendingUpdate();
+
     // Remove event watch
     SDL_DelEventWatch (eventDispatcher, this);
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unregistered window event watch");
@@ -233,12 +239,13 @@ SDL2ComponentNative::~SDL2ComponentNative()
     Desktop::getInstance()->unregisterNativeComponent (this);
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unregistered native component");
 
-    // Stop the rendering
-    stopRendering();
 
     // Destroy the window
     if (window != nullptr)
     {
+        // Clear the window data we set to avoid stale entries in SDL's linked list
+        SDL_SetWindowData (window, "self", nullptr);
+
         SDL_DestroyWindow (window);
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: destroyed window");
         window = nullptr;
