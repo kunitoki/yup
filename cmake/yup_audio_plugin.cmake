@@ -175,22 +175,8 @@ function (yup_audio_plugin)
             "${YUP_ARG_UNPARSED_ARGUMENTS}")
     endif()
 
-    # ==== Build AAX plugin target
-    if (YUP_ARG_PLUGIN_CREATE_AAX)
-        _yup_audio_plugin_create_aax (
-            "${target_name}"
-            "${target_version}"
-            "${target_ide_group}"
-            "${target_bundle_id}"
-            "${target_app_namespace}"
-            "${target_cxx_standard}"
-            "${additional_libraries}"
-            "${YUP_ARG_MODULES}"
-            "${YUP_ARG_UNPARSED_ARGUMENTS}")
-    endif()
-
-    # ==== Build AUv3 plugin target (macOS only)
-    if (YUP_ARG_PLUGIN_CREATE_AUv3)
+    # ==== Build AUv3 plugin target (macOS only for now, iOS support is planned)
+    if (YUP_ARG_PLUGIN_CREATE_AUv3 AND YUP_PLATFORM_MAC)
         cmake_parse_arguments (AUv3_ARGS ""
             "PLUGIN_IS_SYNTH;PLUGIN_AU_SUBTYPE;PLUGIN_AU_MANUFACTURER;PLUGIN_NAME;PLUGIN_VERSION;PLUGIN_ID;PLUGIN_VENDOR;PLUGIN_DESCRIPTION;PLUGIN_URL;PLUGIN_EMAIL;PLUGIN_IS_MONO"
             "" ${YUP_ARG_UNPARSED_ARGUMENTS})
@@ -223,6 +209,20 @@ function (yup_audio_plugin)
             PLUGIN_URL ${AUv3_ARGS_PLUGIN_URL}
             PLUGIN_EMAIL ${AUv3_ARGS_PLUGIN_EMAIL}
             PLUGIN_IS_MONO ${AUv3_ARGS_PLUGIN_IS_MONO})
+    endif()
+
+    # ==== Build AAX plugin target
+    if (YUP_ARG_PLUGIN_CREATE_AAX)
+        _yup_audio_plugin_create_aax (
+            "${target_name}"
+            "${target_version}"
+            "${target_ide_group}"
+            "${target_bundle_id}"
+            "${target_app_namespace}"
+            "${target_cxx_standard}"
+            "${additional_libraries}"
+            "${YUP_ARG_MODULES}"
+            "${YUP_ARG_UNPARSED_ARGUMENTS}")
     endif()
 
     # ==== Create composite target for all enabled plugin formats
