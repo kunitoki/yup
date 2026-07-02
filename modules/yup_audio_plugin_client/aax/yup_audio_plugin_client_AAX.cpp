@@ -96,9 +96,7 @@ namespace yup
 class YupAAX_Processor;
 class YupAAX_GUI;
 
-void AAX_CALLBACK yupAAXAlgorithmCallback (
-    void* const instancesBegin[],
-    const void* instancesEnd);
+void AAX_CALLBACK yupAAXAlgorithmCallback (void* const instancesBegin[], const void* instancesEnd);
 
 //==============================================================================
 // Algorithm context
@@ -153,8 +151,10 @@ static int32_t getAaxParamHash (const char* paramID) noexcept
 {
     int32_t h = 0;
     if (paramID != nullptr)
+    {
         for (auto p = paramID; *p != '\0'; ++p)
             h = 31 * h + static_cast<int32_t> (*p);
+    }
     return h;
 }
 
@@ -243,12 +243,16 @@ static AAX_EStemFormat stemFormatForChannelCount (int numChannels)
 static AAX_EMeterType getMeterTypeFromParam (const AudioParameter& param)
 {
     const auto name = param.getName();
+
     if (name.containsIgnoreCase ("input"))
         return AAX_eMeterType_Input;
+
     if (name.containsIgnoreCase ("output"))
         return AAX_eMeterType_Output;
+
     if (name.containsIgnoreCase ("gr") || name.containsIgnoreCase ("gain reduction"))
         return AAX_eMeterType_CLGain;
+
     return AAX_eMeterType_Other;
 }
 
@@ -262,7 +266,8 @@ static bool isMeterParameter (const AudioParameter& param)
 // YupAAX_Processor
 //==============================================================================
 
-class YupAAX_Processor : public AAX_CEffectParameters
+class YupAAX_Processor
+    : public AAX_CEffectParameters
     , private AudioProcessorBase::Listener
 {
 public:
@@ -317,9 +322,7 @@ public:
         ctrl->GetInputStemFormat (&inputFormat);
         ctrl->GetOutputStemFormat (&outputFormat);
 
-        auto err = preparePlugin (static_cast<float> (sampleRate),
-                                  inputFormat,
-                                  outputFormat);
+        auto err = preparePlugin (static_cast<float> (sampleRate), inputFormat, outputFormat);
         if (err != AAX_SUCCESS)
             return err;
 
@@ -331,13 +334,9 @@ public:
     // AAX_CEffectParameters — Parameters
     //==========================================================================
 
-    AAX_Result UpdateParameterNormalizedValue (
-        AAX_CParamID paramID,
-        double value,
-        AAX_EUpdateSource source) override
+    AAX_Result UpdateParameterNormalizedValue (AAX_CParamID paramID, double value, AAX_EUpdateSource source) override
     {
-        const auto result = AAX_CEffectParameters::UpdateParameterNormalizedValue (
-            paramID, value, source);
+        const auto result = AAX_CEffectParameters::UpdateParameterNormalizedValue (paramID, value, source);
 
         if (result == AAX_SUCCESS && ! inParameterChangedCallback.get())
             setAudioProcessorParameter (paramID, static_cast<float> (value));
@@ -345,38 +344,29 @@ public:
         return result;
     }
 
-    AAX_Result GetParameterValueFromString (
-        AAX_CParamID paramID,
-        double* result,
-        const AAX_IString& text) const override
+    AAX_Result GetParameterValueFromString (AAX_CParamID paramID, double* result, const AAX_IString& text) const override
     {
         if (auto* param = getParamForID (paramID))
         {
-            *result = static_cast<double> (
-                param->convertFromString (String (text.Get())));
+            *result = static_cast<double> (param->convertFromString (String (text.Get())));
             return AAX_SUCCESS;
         }
-        return AAX_CEffectParameters::GetParameterValueFromString (
-            paramID, result, text);
+
+        return AAX_CEffectParameters::GetParameterValueFromString (paramID, result, text);
     }
 
-    AAX_Result GetParameterStringFromValue (
-        AAX_CParamID paramID,
-        double value,
-        AAX_IString* result,
-        int32_t maxLen) const override
+    AAX_Result GetParameterStringFromValue (AAX_CParamID paramID, double value, AAX_IString* result, int32_t maxLen) const override
     {
         if (auto* param = getParamForID (paramID))
         {
             const auto str = param->convertToString (static_cast<float> (value));
             result->Set (str.substring (0, maxLen).toRawUTF8());
         }
+
         return AAX_SUCCESS;
     }
 
-    AAX_Result GetParameterNumberOfSteps (
-        AAX_CParamID paramID,
-        int32_t* result) const override
+    AAX_Result GetParameterNumberOfSteps (AAX_CParamID paramID, int32_t* result) const override
     {
         if (auto* param = getParamForID (paramID))
         {
@@ -387,34 +377,31 @@ public:
         {
             *result = 0;
         }
+
         return AAX_SUCCESS;
     }
 
-    AAX_Result GetParameterNormalizedValue (
-        AAX_CParamID paramID,
-        double* result) const override
+    AAX_Result GetParameterNormalizedValue (AAX_CParamID paramID, double* result) const override
     {
         if (auto* param = getParamForID (paramID))
             *result = static_cast<double> (param->getNormalizedValue());
         else
             *result = 0.0;
+
         return AAX_SUCCESS;
     }
 
-    AAX_Result SetParameterNormalizedValue (
-        AAX_CParamID paramID,
-        double newValue) override
+    AAX_Result SetParameterNormalizedValue (AAX_CParamID paramID, double newValue) override
     {
         if (auto* p = mParameterManager.GetParameterByID (paramID))
             p->SetValueWithFloat (static_cast<float> (newValue));
 
         setAudioProcessorParameter (paramID, static_cast<float> (newValue));
+
         return AAX_SUCCESS;
     }
 
-    AAX_Result SetParameterNormalizedRelative (
-        AAX_CParamID paramID,
-        double newDeltaValue) override
+    AAX_Result SetParameterNormalizedRelative (AAX_CParamID paramID, double newDeltaValue) override
     {
         if (auto* param = getParamForID (paramID))
         {
@@ -425,37 +412,34 @@ public:
             if (auto* p = mParameterManager.GetParameterByID (paramID))
                 p->SetValueWithFloat (newValue);
         }
+
         return AAX_SUCCESS;
     }
 
-    AAX_Result GetParameterNameOfLength (
-        AAX_CParamID paramID,
-        AAX_IString* result,
-        int32_t maxLen) const override
+    AAX_Result GetParameterNameOfLength (AAX_CParamID paramID, AAX_IString* result, int32_t maxLen) const override
     {
         if (auto* param = getParamForID (paramID))
             result->Set (param->getName().substring (0, maxLen).toRawUTF8());
+
         return AAX_SUCCESS;
     }
 
-    AAX_Result GetParameterName (
-        AAX_CParamID paramID,
-        AAX_IString* result) const override
+    AAX_Result GetParameterName (AAX_CParamID paramID, AAX_IString* result) const override
     {
         if (auto* param = getParamForID (paramID))
             result->Set (param->getName().substring (0, 31).toRawUTF8());
+
         return AAX_SUCCESS;
     }
 
-    AAX_Result GetParameterDefaultNormalizedValue (
-        AAX_CParamID paramID,
-        double* result) const override
+    AAX_Result GetParameterDefaultNormalizedValue (AAX_CParamID paramID, double* result) const override
     {
         if (auto* param = getParamForID (paramID))
             *result = static_cast<double> (
                 param->convertToNormalizedValue (param->getDefaultValue()));
         else
             *result = 0.0;
+
         return AAX_SUCCESS;
     }
 
@@ -463,39 +447,41 @@ public:
     // AAX_CEffectParameters — State reset
     //==========================================================================
 
-    AAX_Result ResetFieldData (
-        AAX_CFieldIndex fieldIndex,
-        void* data,
-        uint32_t dataSize) const override
+    AAX_Result ResetFieldData (AAX_CFieldIndex fieldIndex, void* data, uint32_t dataSize) const override
     {
         switch (fieldIndex)
         {
             case fieldPluginInfo:
             {
                 const auto numObjects = dataSize / sizeof (YupPluginInstanceInfo);
+
                 auto* objects = static_cast<YupPluginInstanceInfo*> (data);
                 for (size_t i = 0; i < numObjects; ++i)
-                    new (objects + i) YupPluginInstanceInfo (
-                        const_cast<YupAAX_Processor&> (*this));
+                    new (objects + i) YupPluginInstanceInfo (const_cast<YupAAX_Processor&> (*this));
+
                 break;
             }
 
             case fieldPreparedFlag:
             {
-                const_cast<YupAAX_Processor*> (this)->preparePlugin (
-                    lastSampleRate, lastInputFormat, lastOutputFormat);
+                const_cast<YupAAX_Processor*> (this)->preparePlugin (lastSampleRate, lastInputFormat, lastOutputFormat);
 
                 const auto numObjects = dataSize / sizeof (uint32_t);
+
                 auto* objects = static_cast<uint32_t*> (data);
                 for (size_t i = 0; i < numObjects; ++i)
                     objects[i] = 1;
+
                 break;
             }
 
             default:
+            {
                 if (data != nullptr && dataSize > 0)
                     std::memset (data, 0, dataSize);
+
                 break;
+            }
         }
 
         return AAX_SUCCESS;
@@ -508,6 +494,7 @@ public:
     AAX_Result GetNumberOfChunks (int32_t* numChunks) const override
     {
         *numChunks = yupChunkIndex + 1;
+
         return AAX_SUCCESS;
     }
 
@@ -518,6 +505,7 @@ public:
             *chunkID = YupPlugin_AAX_ChunkID;
             return AAX_SUCCESS;
         }
+
         return AAX_CEffectParameters::GetChunkIDFromIndex (index, chunkID);
     }
 
@@ -540,6 +528,7 @@ public:
             *size = static_cast<uint32_t> (tls.data.getSize());
             return AAX_SUCCESS;
         }
+
         return AAX_CEffectParameters::GetChunkSize (chunkID, size);
     }
 
@@ -555,11 +544,14 @@ public:
             // GetChunkSize, fData is a variable length trailing array
             const auto size = static_cast<int32_t> (tls.data.getSize());
             chunk->fSize = size;
+
             if (size > 0 && tls.data.getData() != nullptr)
                 tls.data.copyTo (chunk->fData, 0, static_cast<size_t> (size));
+
             tls.isValid = false;
             return AAX_SUCCESS;
         }
+
         return AAX_CEffectParameters::GetChunk (chunkID, chunk);
     }
 
@@ -568,14 +560,12 @@ public:
         if (chunkID == YupPlugin_AAX_ChunkID)
         {
             MemoryBlock rawData (chunk->fData, static_cast<size_t> (chunk->fSize));
-            auto state = readWrapperBypassState (
-                rawData, YupPlugin_AAX_ChunkMagic, YupPlugin_AAX_ChunkVersion);
+            auto state = readWrapperBypassState (rawData, YupPlugin_AAX_ChunkMagic, YupPlugin_AAX_ChunkVersion);
 
             if (state.hasWrapperState)
             {
                 setBypassed (state.isBypassed);
-                SetParameterNormalizedValue (cDefaultMasterBypassID,
-                                             state.isBypassed ? 1.0 : 0.0);
+                SetParameterNormalizedValue (cDefaultMasterBypassID, state.isBypassed ? 1.0 : 0.0);
 
                 if (state.hasProcessorState && ! state.processorState.isEmpty())
                     processor->loadStateFromMemory (state.processorState);
@@ -588,13 +578,16 @@ public:
             resyncParameterValues();
             return AAX_SUCCESS;
         }
+
         return AAX_CEffectParameters::SetChunk (chunkID, chunk);
     }
 
     AAX_Result GetNumberOfChanges (int32_t* numChanges) const override
     {
         const auto result = AAX_CEffectParameters::GetNumberOfChanges (numChanges);
+
         *numChanges += numSetDirtyCalls;
+
         return result;
     }
 
@@ -602,10 +595,7 @@ public:
     // AAX_CEffectParameters — Notifications
     //==========================================================================
 
-    AAX_Result NotificationReceived (
-        AAX_CTypeID notificationType,
-        const void* notificationData,
-        uint32_t notificationDataSize) override
+    AAX_Result NotificationReceived (AAX_CTypeID notificationType, const void* notificationData, uint32_t notificationDataSize) override
     {
         if (notificationType == AAX_eNotificationEvent_EnteringOfflineMode)
         {
@@ -616,8 +606,7 @@ public:
             processor->suspendProcessing (false);
         }
 
-        return AAX_CEffectParameters::NotificationReceived (
-            notificationType, notificationData, notificationDataSize);
+        return AAX_CEffectParameters::NotificationReceived (notificationType, notificationData, notificationDataSize);
     }
 
     //==========================================================================
@@ -687,8 +676,7 @@ private:
     // AudioProcessorBase::Listener
     //==========================================================================
 
-    void audioProcessorChanged (AudioProcessorBase* p,
-                                const AudioProcessorBase::ChangeDetails& details) override
+    void audioProcessorChanged (AudioProcessorBase* p, const AudioProcessorBase::ChangeDetails& details) override
     {
         if (p != processor.get())
             return;
@@ -713,9 +701,7 @@ private:
     // Helpers
     //==========================================================================
 
-    AAX_Result preparePlugin (float sampleRate,
-                              AAX_EStemFormat inputFormat,
-                              AAX_EStemFormat outputFormat)
+    AAX_Result preparePlugin (float sampleRate, AAX_EStemFormat inputFormat, AAX_EStemFormat outputFormat)
     {
         lastSampleRate = sampleRate;
         lastInputFormat = inputFormat;
@@ -792,8 +778,7 @@ private:
             AAX_CNumberDisplayDelegate<float>(),
             param.isAutomatable());
 
-        aaxParam->SetNumberOfSteps (static_cast<uint32_t> (
-            numSteps > 0 ? jmin (numSteps, 2048) : 1000));
+        aaxParam->SetNumberOfSteps (static_cast<uint32_t> (numSteps > 0 ? jmin (numSteps, 2048) : 1000));
 
         aaxParam->SetType (isDiscrete
                                ? AAX_eParameterType_Discrete
@@ -817,8 +802,7 @@ private:
 
             SetParameterDefaultNormalizedValue (
                 aaxParamID.toRawUTF8(),
-                static_cast<double> (
-                    param->convertToNormalizedValue (param->getDefaultValue())));
+                static_cast<double> (param->convertToNormalizedValue (param->getDefaultValue())));
         }
     }
 
@@ -910,8 +894,7 @@ private:
                 return MidiMessage::channelPressureChange (channel, data[1]);
             case 0xE0:
             {
-                const auto value = static_cast<int> (data[1])
-                                 | (static_cast<int> (data[2]) << 7);
+                const auto value = static_cast<int> (data[1]) | (static_cast<int> (data[2]) << 7);
                 return MidiMessage::pitchWheel (channel, value);
             }
             default:
@@ -932,13 +915,11 @@ private:
         }
     }
 
-    static void yupMidiMessageToAaxPacket (const MidiMessage& msg,
-                                           AAX_CMidiPacket& pkt)
+    static void yupMidiMessageToAaxPacket (const MidiMessage& msg, AAX_CMidiPacket& pkt)
     {
         const auto data = msg.getRawData();
         const auto dataSize = msg.getRawDataSize();
-        const auto copySize = jmin (dataSize,
-                                    static_cast<int> (sizeof (pkt.mData)));
+        const auto copySize = jmin (dataSize, static_cast<int> (sizeof (pkt.mData)));
         std::memcpy (pkt.mData, data, static_cast<size_t> (copySize));
         pkt.mLength = static_cast<uint32_t> (copySize);
     }
@@ -975,6 +956,8 @@ private:
         bool isValid = false;
         MemoryBlock data;
     };
+
+    ScopedYupInitialiser_GUI scopeInitialiser;
 
     std::unique_ptr<AudioProcessor> processor;
     int32_t yupChunkIndex = 0;
@@ -1125,6 +1108,7 @@ public:
     }
 
 private:
+    ScopedYupInitialiser_Windowing scopeInitialiser;
     std::unique_ptr<AudioProcessorEditor> editorComponent;
 };
 
@@ -1132,14 +1116,10 @@ private:
 // Algorithm callback
 //==============================================================================
 
-void AAX_CALLBACK yupAAXAlgorithmCallback (
-    void* const instancesBegin[],
-    const void* instancesEnd)
+void AAX_CALLBACK yupAAXAlgorithmCallback (void* const instancesBegin[], const void* instancesEnd)
 {
-    auto** typedBegin = static_cast<YupAlgorithmContext**> (
-        (void*) instancesBegin);
-    auto** typedEnd = static_cast<YupAlgorithmContext**> (
-        (void*) instancesEnd);
+    auto** typedBegin = static_cast<YupAlgorithmContext**> ((void*) instancesBegin);
+    auto** typedEnd = static_cast<YupAlgorithmContext**> ((void*) instancesEnd);
 
     for (auto** walk = typedBegin; walk < typedEnd; ++walk)
     {
@@ -1180,17 +1160,12 @@ static void getPlugInDescription (AAX_IEffectDescriptor& descriptor)
     descriptor.AddCategory (YupPlugin_AAXCategory);
 
     if (plugin->hasEditor())
-        aaxCheck (descriptor.AddProcPtr (
-            reinterpret_cast<void*> (YupAAX_GUI::Create),
-            kAAX_ProcPtrID_Create_EffectGUI));
+        aaxCheck (descriptor.AddProcPtr (reinterpret_cast<void*> (YupAAX_GUI::Create), kAAX_ProcPtrID_Create_EffectGUI));
 
-    aaxCheck (descriptor.AddProcPtr (
-        reinterpret_cast<void*> (YupAAX_Processor::Create),
-        kAAX_ProcPtrID_Create_EffectParameters));
+    aaxCheck (descriptor.AddProcPtr (reinterpret_cast<void*> (YupAAX_Processor::Create), kAAX_ProcPtrID_Create_EffectParameters));
 
 #ifdef YupPlugin_AAXPageTableFile
-    descriptor.AddResourceInfo (
-        AAX_eResourceType_PageTable, YupPlugin_AAXPageTableFile);
+    descriptor.AddResourceInfo (AAX_eResourceType_PageTable, YupPlugin_AAXPageTableFile);
 #endif
 
     // Register meters on the descriptor, the same IDs are then bound to the
@@ -1207,21 +1182,12 @@ static void getPlugInDescription (AAX_IEffectDescriptor& descriptor)
         if (meterProps == nullptr)
             continue;
 
-        meterProps->AddProperty (
-            AAX_eProperty_Meter_Type,
-            getMeterTypeFromParam (*param));
+        meterProps->AddProperty (AAX_eProperty_Meter_Type, getMeterTypeFromParam (*param));
+        meterProps->AddProperty (AAX_eProperty_Meter_Orientation, AAX_eMeterOrientation_TopRight);
 
-        meterProps->AddProperty (
-            AAX_eProperty_Meter_Orientation,
-            AAX_eMeterOrientation_TopRight);
+        const auto meterID = static_cast<AAX_CTypeID> ('Mtr0' + static_cast<AAX_CTypeID> (meterIDs.size()));
 
-        const auto meterID = static_cast<AAX_CTypeID> (
-            'Mtr0' + static_cast<AAX_CTypeID> (meterIDs.size()));
-
-        descriptor.AddMeterDescription (
-            meterID,
-            param->getName().toRawUTF8(),
-            meterProps);
+        descriptor.AddMeterDescription (meterID, param->getName().toRawUTF8(), meterProps);
 
         meterIDs.push_back (meterID);
     }
@@ -1250,60 +1216,34 @@ static void getPlugInDescription (AAX_IEffectDescriptor& descriptor)
     aaxCheck (compDesc->AddDataInPort (fieldBypass, sizeof (int32_t)));
 
     if (plugin->acceptsMidi())
-        aaxCheck (compDesc->AddMIDINode (
-            fieldMidiIn, AAX_eMIDINodeType_LocalInput, "MIDI In", 0xFFFF));
+        aaxCheck (compDesc->AddMIDINode (fieldMidiIn, AAX_eMIDINodeType_LocalInput, "MIDI In", 0xFFFF));
 
     if (plugin->producesMidi())
-        aaxCheck (compDesc->AddMIDINode (
-            fieldMidiOut, AAX_eMIDINodeType_LocalOutput, "MIDI Out", 0xFFFF));
+        aaxCheck (compDesc->AddMIDINode (fieldMidiOut, AAX_eMIDINodeType_LocalOutput, "MIDI Out", 0xFFFF));
 
-    aaxCheck (compDesc->AddPrivateData (
-        fieldPluginInfo, sizeof (YupPluginInstanceInfo), AAX_ePrivateDataOptions_DefaultOptions));
-
-    aaxCheck (compDesc->AddPrivateData (
-        fieldPreparedFlag, sizeof (int32_t)));
+    aaxCheck (compDesc->AddPrivateData (fieldPluginInfo, sizeof (YupPluginInstanceInfo), AAX_ePrivateDataOptions_DefaultOptions));
+    aaxCheck (compDesc->AddPrivateData (fieldPreparedFlag, sizeof (int32_t)));
 
     if (! meterIDs.empty())
-        aaxCheck (compDesc->AddMeters (
-            fieldMeterTaps, meterIDs.data(), static_cast<uint32_t> (meterIDs.size())));
+        aaxCheck (compDesc->AddMeters (fieldMeterTaps, meterIDs.data(), static_cast<uint32_t> (meterIDs.size())));
 
     auto* properties = compDesc->NewPropertyMap();
     if (properties == nullptr)
         return;
 
-    aaxCheck (properties->AddProperty (
-        AAX_eProperty_ManufacturerID,
-        static_cast<AAX_CPropertyValue> (YupPlugin_AAX_ManufacturerID)));
-
-    aaxCheck (properties->AddProperty (
-        AAX_eProperty_ProductID,
-        static_cast<AAX_CPropertyValue> (YupPlugin_AAX_ProductID)));
-
-    aaxCheck (properties->AddProperty (
-        AAX_eProperty_PlugInID_Native,
-        static_cast<AAX_CPropertyValue> (YupPlugin_AAX_PlugInID_Native)));
-
-    aaxCheck (properties->AddProperty (
-        AAX_eProperty_PlugInID_AudioSuite,
-        static_cast<AAX_CPropertyValue> (YupPlugin_AAX_PlugInID_AudioSuite)));
-
-    aaxCheck (properties->AddProperty (
-        AAX_eProperty_InputStemFormat, inputFormat));
-
-    aaxCheck (properties->AddProperty (
-        AAX_eProperty_OutputStemFormat, outputFormat));
-
-    aaxCheck (properties->AddProperty (
-        AAX_eProperty_CanBypass, true));
+    aaxCheck (properties->AddProperty (AAX_eProperty_ManufacturerID, static_cast<AAX_CPropertyValue> (YupPlugin_AAX_ManufacturerID)));
+    aaxCheck (properties->AddProperty (AAX_eProperty_ProductID, static_cast<AAX_CPropertyValue> (YupPlugin_AAX_ProductID)));
+    aaxCheck (properties->AddProperty (AAX_eProperty_PlugInID_Native, static_cast<AAX_CPropertyValue> (YupPlugin_AAX_PlugInID_Native)));
+    aaxCheck (properties->AddProperty (AAX_eProperty_PlugInID_AudioSuite, static_cast<AAX_CPropertyValue> (YupPlugin_AAX_PlugInID_AudioSuite)));
+    aaxCheck (properties->AddProperty (AAX_eProperty_InputStemFormat, inputFormat));
+    aaxCheck (properties->AddProperty (AAX_eProperty_OutputStemFormat, outputFormat));
+    aaxCheck (properties->AddProperty (AAX_eProperty_CanBypass, true));
 
     // Request the host-generated parameter GUI only when no editor is provided
     if (! plugin->hasEditor())
-        aaxCheck (properties->AddProperty (
-            AAX_eProperty_UsesClientGUI, true));
+        aaxCheck (properties->AddProperty (AAX_eProperty_UsesClientGUI, true));
 
-    aaxCheck (compDesc->AddProcessProc_Native (
-        reinterpret_cast<AAX_CProcessProc> (yupAAXAlgorithmCallback),
-        properties));
+    aaxCheck (compDesc->AddProcessProc_Native (reinterpret_cast<AAX_CProcessProc> (yupAAXAlgorithmCallback), properties));
 
     aaxCheck (descriptor.AddComponent (compDesc));
 }
