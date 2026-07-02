@@ -63,7 +63,7 @@ function (yup_audio_plugin)
 
     # ==== Validation stage
     if (NOT YUP_PLATFORM_DESKTOP)
-        _yup_message (FATAL_ERROR "Audio plugins are not supported on emscripten or android.")
+        _yup_message (FATAL_ERROR "Audio plugins are not supported on emscripten or mobile (yet).")
         return()
     endif()
 
@@ -264,12 +264,12 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
     elseif ("${plugin_type}" STREQUAL "auv3")
         set (target_file_name "${target_name}_${plugin_type}_plugin.appex")
         set (plugin_target_path "$ENV{HOME}/Library/Audio/Plug-Ins/AppExtensions")
-        # AppExtension destination may not exist, create it
-        file (MAKE_DIRECTORY "${plugin_target_path}")
     else()
         set (target_file_name "${target_name}_${plugin_type}_plugin.${plugin_type}")
         set (plugin_target_path "$ENV{HOME}/Library/Audio/Plug-Ins/${plugin_type_upper}")
     endif()
+
+    file (MAKE_DIRECTORY "${plugin_target_path}")
 
     set (plugin_path "${plugin_target_path}/${target_file_name}")
 
@@ -307,6 +307,12 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
             COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
             COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
             COMMENT "Copying AU plugin ${plugin_type_upper} to ${plugin_path}"
+            VERBATIM)
+    elseif ("${plugin_type}" STREQUAL "auv3")
+        add_custom_command(TARGET ${dependency_target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
+            COMMENT "Copying AUv3 plugin ${plugin_type_upper} to ${plugin_path}"
             VERBATIM)
     elseif ("${plugin_type}" STREQUAL "aax")
         _yup_message (STATUS "AAX plugin bundle copy not yet implemented for development")

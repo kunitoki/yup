@@ -33,11 +33,6 @@ function (yup_plugin_auv3)
 
     cmake_parse_arguments (YUP_ARG "" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
-    if (NOT YUP_PLATFORM_MAC)
-        _yup_message (WARNING "AUv3 plugins are only supported on macOS. Skipping AUv3 target.")
-        return()
-    endif()
-
     set (target_name "${YUP_ARG_TARGET_NAME}")
     set (target_cxx_standard "${YUP_ARG_TARGET_CXX_STANDARD}")
     set (target_ide_group "${YUP_ARG_TARGET_IDE_GROUP}")
@@ -148,9 +143,8 @@ function (yup_plugin_auv3)
         add_dependencies (${YUP_ARG_STANDALONE_TARGET} ${target_name}_auv3_plugin)
 
         if (XCODE)
-            set_target_properties (${target_name}_auv3_plugin PROPERTIES
-                XCODE_ATTRIBUTE_PRODUCT_BUNDLE_PACKAGE_TYPE XPC!
-                XCODE_EMBED_APP_EXTENSIONS "${target_name}_auv3_plugin.appex")
+            set_target_properties (${YUP_ARG_STANDALONE_TARGET} PROPERTIES
+                XCODE_EMBED_APP_EXTENSIONS ${target_name}_auv3_plugin)
         endif()
     endif()
 
