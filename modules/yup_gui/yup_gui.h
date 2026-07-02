@@ -70,6 +70,16 @@
 #endif
 
 //==============================================================================
+/** Config: YUP_ENABLE_GUI_POPUPMENU_LOGGING
+
+    Enable logging of PopupMenu events like hover, submenu show/hide, mouse enter/exit.
+    Set to 1 to enable, 0 to disable. Off by default.
+*/
+#ifndef YUP_ENABLE_GUI_POPUPMENU_LOGGING
+#define YUP_ENABLE_GUI_POPUPMENU_LOGGING 0
+#endif
+
+//==============================================================================
 
 #include <optional>
 #include <tuple>

@@ -239,7 +239,6 @@ SDL2ComponentNative::~SDL2ComponentNative()
     // Destroy the window
     if (window != nullptr)
     {
-        SDL_SetWindowData (window, "self", nullptr);
         SDL_DestroyWindow (window);
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: destroyed window");
         window = nullptr;
