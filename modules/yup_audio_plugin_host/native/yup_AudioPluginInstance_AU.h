@@ -25,27 +25,29 @@ namespace yup
 {
 
 /**
-    AudioPluginFormat implementation for AUv2 (macOS only).
+    AudioPluginFormat implementation for Audio Units (macOS only).
 
-    Enumerates AudioComponents via AudioComponentFindNext() and wraps each
-    component via AudioComponentInstanceNew().
+    Enumerates all AudioComponents via a single AudioComponentFindNext() pass,
+    covering both AUv2 (.component) and AUv3 (App Extension) plugins.
+    AUv3 components are detected via kAudioUnitComponentFlag_IsV3AudioUnit and
+    instantiated asynchronously using AudioComponentInstantiate().
 */
-class AUv2Format : public AudioPluginFormat
+class AUFormat : public AudioPluginFormat
 {
 public:
-    AUv2Format();
-    ~AUv2Format() override;
+    AUFormat();
+    ~AUFormat() override;
 
     AudioPluginFormatType getFormatType() const override;
     String getFormatName() const override;
     StringArray getFileExtensions() const override;
 
-    /** Returns an empty FileSearchPath — AUv2 uses AudioComponent registry. */
+    /** Returns an empty FileSearchPath — AU uses AudioComponent registry. */
     FileSearchPath getDefaultSearchPaths() const override;
 
     /**
         Passing an invalid File triggers full AudioComponent registry scan.
-        Otherwise scans only the component matching the file's bundle identifier.
+        The file argument is ignored; all registered components are enumerated.
     */
     ResultValue<std::vector<AudioPluginDescription>> scanFile (const File& file) override;
 

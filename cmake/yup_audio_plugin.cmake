@@ -269,16 +269,17 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
     elseif ("${plugin_type}" STREQUAL "auv3")
         set (target_file_name "${target_name}_${plugin_type}_plugin.appex")
         set (plugin_target_path "$ENV{HOME}/Library/Audio/Plug-Ins/AppExtensions")
+    elseif ("${plugin_type}" STREQUAL "aax")
+        set (target_file_name "${target_name}_${plugin_type}_plugin.aaxplugin")
+        set (plugin_target_path "$ENV{HOME}/Library/Application Support/Avid/Audio/Plug-Ins")
     else()
         set (target_file_name "${target_name}_${plugin_type}_plugin.${plugin_type}")
         set (plugin_target_path "$ENV{HOME}/Library/Audio/Plug-Ins/${plugin_type_upper}")
     endif()
 
-    file (MAKE_DIRECTORY "${plugin_target_path}")
-
     set (plugin_path "${plugin_target_path}/${target_file_name}")
 
-    if (NOT EXISTS ${plugin_target_path} AND NOT "${plugin_type}" STREQUAL "clap")
+    if (NOT EXISTS ${plugin_target_path} AND NOT "${plugin_type}" STREQUAL "clap" AND NOT "${plugin_type}" STREQUAL "aax")
         _yup_message (STATUS "Plugin path ${plugin_target_path} does not exist, skipping copy")
         return()
     endif()
@@ -303,25 +304,33 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
         endif()
 
         add_custom_command(TARGET ${dependency_target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_target_path}"
             COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
             COMMAND ${CMAKE_COMMAND} -E create_symlink "${source_plugin_path}" "${plugin_path}"
             COMMENT "Symlinking VST3 plugin ${plugin_type_upper} plugin to ${plugin_path}"
             VERBATIM)
     elseif ("${plugin_type}" STREQUAL "au")
         add_custom_command(TARGET ${dependency_target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_target_path}"
             COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
             COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
             COMMENT "Copying AU plugin ${plugin_type_upper} to ${plugin_path}"
             VERBATIM)
     elseif ("${plugin_type}" STREQUAL "auv3")
         add_custom_command(TARGET ${dependency_target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_target_path}"
             COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
             COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
             COMMAND /bin/sh -c "killall -9 AudioComponentRegistrar 2>/dev/null; sleep 2; true"
             COMMENT "Copying AUv3 plugin ${plugin_type_upper} to ${plugin_path}"
             VERBATIM)
     elseif ("${plugin_type}" STREQUAL "aax")
-        _yup_message (STATUS "AAX plugin bundle copy not yet implemented for development")
+        add_custom_command(TARGET ${dependency_target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_target_path}"
+            COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
+            COMMENT "Copying AAX plugin ${plugin_type_upper} to ${plugin_path}"
+            VERBATIM)
     else()
         _yup_message (FATAL_ERROR "Unsupported plugin type ${plugin_type} for copying bundle")
     endif()

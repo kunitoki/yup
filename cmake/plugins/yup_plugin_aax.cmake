@@ -206,4 +206,7 @@ function (_yup_audio_plugin_create_aax
     endif()
 
     yup_codesign_target (${target_name}_aax_plugin "${aax_plugin_path}")
+
+    yup_audio_plugin_copy_bundle (${target_name} aax)
+
 endfunction()

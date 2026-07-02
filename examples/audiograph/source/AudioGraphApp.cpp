@@ -71,7 +71,7 @@ AudioGraphApp::AudioGraphApp()
     scanner->addFormat (std::make_unique<yup::CLAPFormat>());
 #endif
 #if YUP_AUDIO_PLUGIN_HOST_ENABLE_AU && YUP_MAC
-    scanner->addFormat (std::make_unique<yup::AUv2Format>());
+    scanner->addFormat (std::make_unique<yup::AUFormat>());
 #endif
     nodeRegistry.registerPluginFormats (scanner.get(), makeHostContext());
 #endif

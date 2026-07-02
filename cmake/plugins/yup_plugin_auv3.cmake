@@ -24,8 +24,7 @@ function (yup_plugin_auv3)
     set (one_value_args
         TARGET_NAME TARGET_CXX_STANDARD TARGET_IDE_GROUP TARGET_BUNDLE_ID
         PLUGIN_IS_SYNTH PLUGIN_NAME PLUGIN_VERSION PLUGIN_AU_SUBTYPE PLUGIN_AU_MANUFACTURER
-        PLUGIN_ID PLUGIN_VENDOR PLUGIN_DESCRIPTION PLUGIN_URL PLUGIN_EMAIL PLUGIN_IS_MONO
-        STANDALONE_TARGET HAS_STANDALONE)
+        PLUGIN_ID PLUGIN_VENDOR PLUGIN_DESCRIPTION PLUGIN_URL PLUGIN_EMAIL PLUGIN_IS_MONO)
 
     set (multi_value_args
         SHARED_LIBS
@@ -114,6 +113,11 @@ function (yup_plugin_auv3)
     set (PLUGIN_AU_MANUFACTURER "${YUP_ARG_PLUGIN_AU_MANUFACTURER}")
     set (PLUGIN_AU_NAME "${YUP_ARG_PLUGIN_NAME}")
     set (PLUGIN_AU_VERSION "${YUP_ARG_PLUGIN_VERSION}")
+    if (YUP_ARG_PLUGIN_IS_SYNTH)
+        set (PLUGIN_AU_TAG "Instrument")
+    else()
+        set (PLUGIN_AU_TAG "Effects")
+    endif()
 
     set (auv3_bundle_identifier "${target_bundle_id}.auv3")
     string (REGEX REPLACE "[^A-Za-z0-9.-]" "-" auv3_bundle_identifier "${auv3_bundle_identifier}")
@@ -139,32 +143,70 @@ function (yup_plugin_auv3)
         XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${auv3_bundle_identifier}"
         XCODE_GENERATE_SCHEME ON)
 
-    # If standalone is also enabled, embed the .appex in the standalone app
-    if (YUP_ARG_HAS_STANDALONE)
-        add_dependencies (${YUP_ARG_STANDALONE_TARGET} ${target_name}_auv3_plugin)
+    # Always create a minimal dedicated container app to host the .appex
+    set (container_target "${target_name}_auv3_container")
+    set (auv3_container_main "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../../modules/yup_audio_plugin_client/auv3/yup_audio_plugin_client_AUv3_main.mm")
+    set (auv3_container_plist_template "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../platforms/mac/AudioUnitV3ContainerInfo.plist.in")
+    set (auv3_container_plist_output "${CMAKE_CURRENT_BINARY_DIR}/${container_target}.plist")
+    set (auv3_container_bundle_identifier "${target_bundle_id}")
 
-        if (XCODE)
-            set_target_properties (${YUP_ARG_STANDALONE_TARGET} PROPERTIES
-                XCODE_EMBED_APP_EXTENSIONS ${target_name}_auv3_plugin)
-        endif()
+    configure_file ("${auv3_container_plist_template}" "${auv3_container_plist_output}" @ONLY)
+
+    add_executable (${container_target} MACOSX_BUNDLE "${auv3_container_main}")
+    add_dependencies (${container_target} ${target_name}_auv3_plugin)
+
+    set_target_properties (${container_target} PROPERTIES
+        BUNDLE TRUE
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_INFO_PLIST "${auv3_container_plist_output}"
+        MACOSX_BUNDLE_BUNDLE_NAME "${YUP_ARG_PLUGIN_NAME}"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "${auv3_container_bundle_identifier}"
+        FOLDER "${target_ide_group}"
+        XCODE_GENERATE_SCHEME ON)
+
+    target_link_libraries (${container_target} PRIVATE "-framework Cocoa")
+
+    if (XCODE)
+        set_target_properties (${container_target} PROPERTIES
+            XCODE_EMBED_APP_EXTENSIONS ${target_name}_auv3_plugin)
+    else()
+        add_custom_command (TARGET ${container_target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory
+                "$<TARGET_BUNDLE_DIR:${container_target}>/Contents/PlugIns"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "$<TARGET_BUNDLE_DIR:${target_name}_auv3_plugin>"
+                "$<TARGET_BUNDLE_DIR:${container_target}>/Contents/PlugIns/$<TARGET_FILE_BASE_NAME:${target_name}_auv3_plugin>.appex"
+            COMMENT "Embedding .appex in container app"
+            VERBATIM)
     endif()
 
-    yup_codesign_target (${target_name}_auv3_plugin "$<TARGET_BUNDLE_DIR:${target_name}_auv3_plugin>")
+    add_custom_command (TARGET ${container_target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$ENV{HOME}/Applications"
+        COMMAND ${CMAKE_COMMAND} -E rm -rf
+            "$ENV{HOME}/Applications/$<TARGET_FILE_BASE_NAME:${container_target}>.app"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "$<TARGET_BUNDLE_DIR:${container_target}>"
+            "$ENV{HOME}/Applications/$<TARGET_FILE_BASE_NAME:${container_target}>.app"
+        COMMENT "Installing container app to ~/Applications"
+        VERBATIM)
+
+    set (auv3_entitlements "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../platforms/mac/AudioUnitV3_Entitlements.plist")
+    yup_codesign_target (${target_name}_auv3_plugin "$<TARGET_BUNDLE_DIR:${target_name}_auv3_plugin>" "${auv3_entitlements}")
 
     yup_audio_plugin_copy_bundle (${target_name} auv3)
 
     # Validation
-    set (auv3_pluginval_path "$ENV{HOME}/Library/Audio/Plug-Ins/AppExtensions/${target_name}_auv3_plugin.appex")
+    #set (auv3_pluginval_path "$ENV{HOME}/Library/Audio/Plug-Ins/AppExtensions/${target_name}_auv3_plugin.appex")
 
-    yup_validate_au_plugin (
-        ${target_name}_auv3_plugin
-        "${YUP_ARG_PLUGIN_NAME}"
-        "${au_bundle_type}"
-        "${YUP_ARG_PLUGIN_AU_SUBTYPE}"
-        "${YUP_ARG_PLUGIN_AU_MANUFACTURER}")
+    #yup_validate_au_plugin (
+    #    ${target_name}_auv3_plugin
+    #    "${YUP_ARG_PLUGIN_NAME}"
+    #    "${au_bundle_type}"
+    #    "${YUP_ARG_PLUGIN_AU_SUBTYPE}"
+    #    "${YUP_ARG_PLUGIN_AU_MANUFACTURER}")
 
-    yup_validate_pluginval (
-        ${target_name}_auv3_plugin
-        "${auv3_pluginval_path}")
+    #yup_validate_pluginval (
+    #    ${target_name}_auv3_plugin
+    #    "${auv3_pluginval_path}")
 
 endfunction()

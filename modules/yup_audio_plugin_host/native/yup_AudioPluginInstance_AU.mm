@@ -56,6 +56,7 @@ AudioPluginDescription descriptionFromComponent(AudioComponent comp,
     AudioPluginDescription desc;
     desc.formatType = AudioPluginFormatType::audioUnit;
     desc.identifier = makeIdentifier(acd);
+    desc.isV3 = (acd.componentFlags & kAudioUnitComponentFlag_IsV3AudioUnit) != 0;
 
     CFStringRef nameRef = nullptr;
     AudioComponentCopyName(comp, &nameRef);
@@ -159,10 +160,10 @@ AudioUnitEvent makeAUParameterEvent(AudioUnit audioUnit,
 
 //==============================================================================
 
-class AUv2Editor : public AudioProcessorEditor
+class AUEditor : public AudioProcessorEditor
 {
    public:
-    static std::unique_ptr<AUv2Editor> create(AudioUnit audioUnit)
+    static std::unique_ptr<AUEditor> create(AudioUnit audioUnit)
     {
         UInt32 size = 0;
         Boolean writable = false;
@@ -220,10 +221,10 @@ class AUv2Editor : public AudioProcessorEditor
         if (view == nil)
             return nullptr;
 
-        return std::unique_ptr<AUv2Editor>(new AUv2Editor(view, viewBundle, viewFactory));
+        return std::unique_ptr<AUEditor>(new AUEditor(view, viewBundle, viewFactory));
     }
 
-    ~AUv2Editor() override
+    ~AUEditor() override
     {
         detachCocoaView();
     }
@@ -254,7 +255,7 @@ class AUv2Editor : public AudioProcessorEditor
     }
 
    private:
-    AUv2Editor(NSView* view, NSBundle* viewBundle, id<AUCocoaUIBase> viewFactory)
+    AUEditor(NSView* view, NSBundle* viewBundle, id<AUCocoaUIBase> viewFactory)
         : cocoaView(view), cocoaViewBundle(viewBundle), cocoaViewFactory(viewFactory)
     {
         auto size = [cocoaView frame].size;
@@ -328,15 +329,15 @@ class AUv2Editor : public AudioProcessorEditor
     NSBundle* __strong cocoaViewBundle = nil;
     id<AUCocoaUIBase> __strong cocoaViewFactory = nil;
 
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AUv2Editor)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AUEditor)
 };
 
 //==============================================================================
 
-class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listener
+class AUInstance : public AudioPluginInstance, private AudioParameter::Listener
 {
    public:
-    AUv2Instance(const AudioPluginDescription& desc,
+    AUInstance(const AudioPluginDescription& desc,
                  AudioUnit unit,
                  AudioBusLayout busLayout)
         : AudioPluginInstance(desc, std::move(busLayout)), audioUnit(unit)
@@ -345,7 +346,7 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
         installLatencyListener();
     }
 
-    ~AUv2Instance() override
+    ~AUInstance() override
     {
         removeLatencyListener();
         removeParameterListeners();
@@ -700,7 +701,7 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
 
     AudioProcessorEditor* createEditor() override
     {
-        if (auto editor = AUv2Editor::create(audioUnit))
+        if (auto editor = AUEditor::create(audioUnit))
             return editor.release();
 
         return nullptr;
@@ -729,7 +730,7 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
 
     //==============================================================================
 
-    static std::unique_ptr<AUv2Instance> create(const AudioPluginDescription& desc,
+    static std::unique_ptr<AUInstance> create(const AudioPluginDescription& desc,
                                                 const AudioPluginHostContext& context)
     {
         // Parse "type/subt/mfgr" identifier
@@ -755,12 +756,36 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
             return nullptr;
 
         AudioUnit unit = nullptr;
-        if (AudioComponentInstanceNew(comp, &unit) != noErr || unit == nullptr)
+
+        if (desc.isV3)
+        {
+            // AUv3 components must be instantiated asynchronously; use a semaphore to wait
+            dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+            __block AudioUnit blockUnit = nullptr;
+
+            AudioComponentInstantiate(comp,
+                                      kAudioComponentInstantiation_LoadOutOfProcess,
+                                      ^(AudioComponentInstance au, OSStatus err) {
+                                          if (err == noErr)
+                                              blockUnit = au;
+                                          dispatch_semaphore_signal(semaphore);
+                                      });
+
+            dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+            unit = blockUnit;
+        }
+        else
+        {
+            if (AudioComponentInstanceNew(comp, &unit) != noErr)
+                return nullptr;
+        }
+
+        if (unit == nullptr)
             return nullptr;
 
         AudioBusLayout busLayout = makeBusLayout(desc, acd.componentType);
 
-        auto instance = std::make_unique<AUv2Instance>(desc, unit, std::move(busLayout));
+        auto instance = std::make_unique<AUInstance>(desc, unit, std::move(busLayout));
         instance->setNonRealtime(context.isNonRealtime);
         return instance;
     }
@@ -842,7 +867,7 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
                                        UInt64,
                                        AudioUnitParameterValue parameterValue)
     {
-        auto* instance = static_cast<AUv2Instance*>(userData);
+        auto* instance = static_cast<AUInstance*>(userData);
         if (instance == nullptr || event == nullptr || event->mEventType != kAudioUnitEvent_ParameterValueChange)
             return;
 
@@ -877,7 +902,7 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
                                         UInt32 numFrames,
                                         AudioBufferList* ioData)
     {
-        auto* instance = static_cast<AUv2Instance*>(refCon);
+        auto* instance = static_cast<AUInstance*>(refCon);
         if (ioData == nullptr)
             return noErr;
 
@@ -1009,7 +1034,7 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
                                              Float64* outCurrentBeat,
                                              Float64* outCurrentTempo)
     {
-        auto* instance = static_cast<AUv2Instance*>(userData);
+        auto* instance = static_cast<AUInstance*>(userData);
         if (instance == nullptr)
             return kAudioUnitErr_CannotDoInCurrentContext;
 
@@ -1044,7 +1069,7 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
                                                     UInt32* outTimeSigDenominator,
                                                     Float64* outCurrentMeasureDownBeat)
     {
-        auto* instance = static_cast<AUv2Instance*>(userData);
+        auto* instance = static_cast<AUInstance*>(userData);
         if (instance == nullptr)
             return kAudioUnitErr_CannotDoInCurrentContext;
 
@@ -1137,7 +1162,7 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
                                            Float64* outCycleStartBeat,
                                            Float64* outCycleEndBeat)
     {
-        auto* instance = static_cast<AUv2Instance*>(userData);
+        auto* instance = static_cast<AUInstance*>(userData);
         if (instance == nullptr)
             return kAudioUnitErr_CannotDoInCurrentContext;
 
@@ -1215,7 +1240,7 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
                                        UInt32,
                                        const MIDIPacketList* packetList)
     {
-        auto* instance = static_cast<AUv2Instance*>(userData);
+        auto* instance = static_cast<AUInstance*>(userData);
         if (instance == nullptr || instance->currentMidiOutputBuffer == nullptr || packetList == nullptr)
             return noErr;
 
@@ -1425,7 +1450,7 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
         if (propertyID != kAudioUnitProperty_Latency)
             return;
 
-        auto* instance = static_cast<AUv2Instance*> (userData);
+        auto* instance = static_cast<AUInstance*> (userData);
         if (instance != nullptr)
             instance->setLatencySamples(instance->getLatencySamples());
     }
@@ -1465,55 +1490,59 @@ class AUv2Instance : public AudioPluginInstance, private AudioParameter::Listene
 
 //==============================================================================
 
-AUv2Format::AUv2Format() = default;
-AUv2Format::~AUv2Format() = default;
+AUFormat::AUFormat() = default;
+AUFormat::~AUFormat() = default;
 
-AudioPluginFormatType AUv2Format::getFormatType() const
+AudioPluginFormatType AUFormat::getFormatType() const
 {
     return AudioPluginFormatType::audioUnit;
 }
 
-String AUv2Format::getFormatName() const
+String AUFormat::getFormatName() const
 {
-    return "AUv2";
+    return "AU";
 }
 
-StringArray AUv2Format::getFileExtensions() const
+StringArray AUFormat::getFileExtensions() const
 {
     return {};
 }
 
-FileSearchPath AUv2Format::getDefaultSearchPaths() const
+FileSearchPath AUFormat::getDefaultSearchPaths() const
 {
     return {};
 }
 
-ResultValue<std::vector<AudioPluginDescription>> AUv2Format::scanFile(const File&)
+ResultValue<std::vector<AudioPluginDescription>> AUFormat::scanFile(const File&)
 {
-    // Scan by enumerating the AudioComponent registry (ignores file argument)
+    // Scan all AudioComponents in one pass using a zeroed descriptor, then filter to hostable types
     std::vector<AudioPluginDescription> results;
 
-    const OSType types[] = {
-        kAudioUnitType_MusicDevice,
-        kAudioUnitType_Effect,
-        kAudioUnitType_MusicEffect,
-        kAudioUnitType_Generator,
-        kAudioUnitType_MIDIProcessor};
-
-    for (OSType type : types)
+    auto isHostableType = [](OSType type) -> bool
     {
-        AudioComponentDescription search{};
-        search.componentType = type;
+        return type == kAudioUnitType_MusicDevice
+            || type == kAudioUnitType_Effect
+            || type == kAudioUnitType_MusicEffect
+            || type == kAudioUnitType_Generator
+            || type == kAudioUnitType_MIDIProcessor
+            || type == kAudioUnitType_Panner
+            || type == kAudioUnitType_Mixer;
+    };
 
-        AudioComponent comp = nullptr;
-        while ((comp = AudioComponentFindNext(comp, &search)) != nullptr)
-        {
-            AudioComponentDescription acd{};
-            AudioComponentGetDescription(comp, &acd);
-            auto desc = descriptionFromComponent(comp, acd);
-            YUP_MODULE_DBG (PLUGIN_HOST_AU, "scan found: " << desc.name << " [" << desc.identifier << "]");
-            results.push_back(std::move(desc));
-        }
+    AudioComponentDescription search{};
+    AudioComponent comp = nullptr;
+
+    while ((comp = AudioComponentFindNext(comp, &search)) != nullptr)
+    {
+        AudioComponentDescription acd{};
+        AudioComponentGetDescription(comp, &acd);
+
+        if (! isHostableType(acd.componentType))
+            continue;
+
+        auto desc = descriptionFromComponent(comp, acd);
+        YUP_MODULE_DBG (PLUGIN_HOST_AU, "scan found: " << desc.name << " [" << desc.identifier << "] v3=" << (int) desc.isV3);
+        results.push_back(std::move(desc));
     }
 
     YUP_MODULE_DBG (PLUGIN_HOST_AU, "scan complete: " << results.size() << " AudioComponents found");
@@ -1524,18 +1553,18 @@ ResultValue<std::vector<AudioPluginDescription>> AUv2Format::scanFile(const File
     return makeResultValueOk(std::move(results));
 }
 
-ResultValue<std::unique_ptr<AudioPluginInstance>> AUv2Format::loadPlugin(
+ResultValue<std::unique_ptr<AudioPluginInstance>> AUFormat::loadPlugin(
     const AudioPluginDescription& description,
     const AudioPluginHostContext& context)
 {
     YUP_MODULE_DBG (PLUGIN_HOST_AU, "loading: " << description.name << " [" << description.identifier << "]");
 
-    auto instance = AUv2Instance::create(description, context);
+    auto instance = AUInstance::create(description, context);
 
     if (instance == nullptr)
     {
         YUP_MODULE_DBG (PLUGIN_HOST_AU, "load failed: " << description.name);
-        return makeResultValueFail("Failed to instantiate AUv2 plugin: " + description.name);
+        return makeResultValueFail("Failed to instantiate AU plugin: " + description.name);
     }
 
     YUP_MODULE_DBG (PLUGIN_HOST_AU, "loaded: " << description.name);

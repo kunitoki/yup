@@ -32,6 +32,8 @@
 		<string>com.apple.AudioUnit-UI</string>
 		<key>NSExtensionAttributes</key>
 		<dict>
+			<key>NSExtensionServiceRoleType</key>
+			<string>NSExtensionServiceRoleTypeEditor</string>
 			<key>AudioComponents</key>
 			<array>
 				<dict>
@@ -47,6 +49,10 @@
 					<integer>1</integer>
 					<key>sandboxSafe</key>
 					<true/>
+					<key>tags</key>
+					<array>
+						<string>@PLUGIN_AU_TAG@</string>
+					</array>
 				</dict>
 			</array>
 		</dict>
