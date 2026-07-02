@@ -30,7 +30,7 @@
 #include <AAX_Version.h>
 
 static_assert (AAX_SDK_CURRENT_REVISION >= AAX_SDK_2p6p1_REVISION,
-    "YUP requires AAX SDK version 2.6.1 or higher");
+               "YUP requires AAX SDK version 2.6.1 or higher");
 
 #include <AAX.h>
 #include <AAX_CEffectParameters.h>
@@ -58,9 +58,24 @@ static_assert (AAX_SDK_CURRENT_REVISION >= AAX_SDK_2p6p1_REVISION,
 #include <atomic>
 #include <cmath>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#if ! defined(YupPlugin_AAX_ManufacturerID) || ! defined(YupPlugin_AAX_ProductID) \
+    || ! defined(YupPlugin_AAX_PlugInID_Native) || ! defined(YupPlugin_AAX_PlugInID_AudioSuite)
+#error "AAX plugin clients require YupPlugin_AAX_ManufacturerID, YupPlugin_AAX_ProductID, \
+YupPlugin_AAX_PlugInID_Native and YupPlugin_AAX_PlugInID_AudioSuite to be defined"
+#endif
+
+#if ! defined(YupPlugin_AAXCategory)
+#if YupPlugin_IsSynth
+#define YupPlugin_AAXCategory AAX_ePlugInCategory_SWGenerators
+#else
+#define YupPlugin_AAXCategory AAX_ePlugInCategory_Effect
+#endif
+#endif
 
 extern "C" yup::AudioProcessor* createPluginProcessor();
 
@@ -69,7 +84,7 @@ namespace yup
 
 //==============================================================================
 #if YUP_ENABLE_PLUGIN_CLIENT_AAX_LOGGING
-#define YUP_AAX_LOG(x) Logger::writeToLog(x)
+#define YUP_AAX_LOG(x) Logger::writeToLog (x)
 #else
 #define YUP_AAX_LOG(x)
 #endif
@@ -100,21 +115,19 @@ struct YupAlgorithmContext
     void* pluginInfo = nullptr;
     int32_t* isPrepared = nullptr;
     float* const* meterTapBuffers = nullptr;
-    int32_t* sideChainBuffers = nullptr;
 };
 
 enum YupAlgorithmField
 {
-    fieldAudioIn      = AAX_FIELD_INDEX (YupAlgorithmContext, inputChannels),
-    fieldAudioOut     = AAX_FIELD_INDEX (YupAlgorithmContext, outputChannels),
-    fieldBufferSize   = AAX_FIELD_INDEX (YupAlgorithmContext, bufferSize),
-    fieldBypass       = AAX_FIELD_INDEX (YupAlgorithmContext, bypass),
-    fieldMidiIn       = AAX_FIELD_INDEX (YupAlgorithmContext, midiNodeIn),
-    fieldMidiOut      = AAX_FIELD_INDEX (YupAlgorithmContext, midiNodeOut),
-    fieldPluginInfo   = AAX_FIELD_INDEX (YupAlgorithmContext, pluginInfo),
+    fieldAudioIn = AAX_FIELD_INDEX (YupAlgorithmContext, inputChannels),
+    fieldAudioOut = AAX_FIELD_INDEX (YupAlgorithmContext, outputChannels),
+    fieldBufferSize = AAX_FIELD_INDEX (YupAlgorithmContext, bufferSize),
+    fieldBypass = AAX_FIELD_INDEX (YupAlgorithmContext, bypass),
+    fieldMidiIn = AAX_FIELD_INDEX (YupAlgorithmContext, midiNodeIn),
+    fieldMidiOut = AAX_FIELD_INDEX (YupAlgorithmContext, midiNodeOut),
+    fieldPluginInfo = AAX_FIELD_INDEX (YupAlgorithmContext, pluginInfo),
     fieldPreparedFlag = AAX_FIELD_INDEX (YupAlgorithmContext, isPrepared),
-    fieldMeterTaps    = AAX_FIELD_INDEX (YupAlgorithmContext, meterTapBuffers),
-    fieldSideChain    = AAX_FIELD_INDEX (YupAlgorithmContext, sideChainBuffers),
+    fieldMeterTaps = AAX_FIELD_INDEX (YupAlgorithmContext, meterTapBuffers),
 };
 
 //==============================================================================
@@ -123,7 +136,11 @@ enum YupAlgorithmField
 
 struct YupPluginInstanceInfo
 {
-    explicit YupPluginInstanceInfo (YupAAX_Processor& p) : processor (p) {}
+    explicit YupPluginInstanceInfo (YupAAX_Processor& p)
+        : processor (p)
+    {
+    }
+
     YupAAX_Processor& processor;
 };
 
@@ -142,423 +159,81 @@ static int32_t getAaxParamHash (const char* paramID) noexcept
 }
 
 //==============================================================================
-// Channel ordering
+// Channel count to AAX stem format conversion
 //==============================================================================
-
-struct AAXChannelStreamOrder
-{
-    AAX_EStemFormat aaxStemFormat;
-    std::vector<AudioChannelSet::ChannelType> speakerOrder;
-};
 
 static AAX_EStemFormat stemFormatForAmbisonicOrder (int order)
 {
     switch (order)
     {
-        case 1:  return AAX_eStemFormat_Ambi_1_ACN;
-        case 2:  return AAX_eStemFormat_Ambi_2_ACN;
-        case 3:  return AAX_eStemFormat_Ambi_3_ACN;
-        case 4:  return AAX_eStemFormat_Ambi_4_ACN;
-        case 5:  return AAX_eStemFormat_Ambi_5_ACN;
-        case 6:  return AAX_eStemFormat_Ambi_6_ACN;
-        case 7:  return AAX_eStemFormat_Ambi_7_ACN;
-        default: return AAX_eStemFormat_INT32_MAX;
+        case 1:
+            return AAX_eStemFormat_Ambi_1_ACN;
+        case 2:
+            return AAX_eStemFormat_Ambi_2_ACN;
+        case 3:
+            return AAX_eStemFormat_Ambi_3_ACN;
+        case 4:
+            return AAX_eStemFormat_Ambi_4_ACN;
+        case 5:
+            return AAX_eStemFormat_Ambi_5_ACN;
+        case 6:
+            return AAX_eStemFormat_Ambi_6_ACN;
+        case 7:
+            return AAX_eStemFormat_Ambi_7_ACN;
+        default:
+            return AAX_eStemFormat_INT32_MAX;
     }
 }
 
-// Note: YUP uses British spelling for AudioChannelSet names
-static AAXChannelStreamOrder aaxChannelOrder[] =
+// YUP buses carry a plain channel count, so the stem format is chosen by count
+// and channels are passed through to the processor in AAX stream order.
+static AAX_EStemFormat stemFormatForChannelCount (int numChannels)
 {
-    { AAX_eStemFormat_Mono,     { AudioChannelSet::centre } },
-    { AAX_eStemFormat_Stereo,   { AudioChannelSet::left, AudioChannelSet::right } },
-    { AAX_eStemFormat_LCR,      { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right } },
-    { AAX_eStemFormat_LCRS,     { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right,
-                                  AudioChannelSet::centreSurround } },
-    { AAX_eStemFormat_Quad,     { AudioChannelSet::left, AudioChannelSet::right,
-                                  AudioChannelSet::leftSurround,
-                                  AudioChannelSet::rightSurround } },
-    { AAX_eStemFormat_5_0,      { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right, AudioChannelSet::leftSurround,
-                                  AudioChannelSet::rightSurround } },
-    { AAX_eStemFormat_5_1,      { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right, AudioChannelSet::leftSurround,
-                                  AudioChannelSet::rightSurround,
-                                  AudioChannelSet::LFE } },
-    { AAX_eStemFormat_6_0,      { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right, AudioChannelSet::leftSurround,
-                                  AudioChannelSet::centreSurround,
-                                  AudioChannelSet::rightSurround } },
-    { AAX_eStemFormat_6_1,      { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right, AudioChannelSet::leftSurround,
-                                  AudioChannelSet::centreSurround,
-                                  AudioChannelSet::rightSurround,
-                                  AudioChannelSet::LFE } },
-    { AAX_eStemFormat_7_0_DTS,  { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right,
-                                  AudioChannelSet::leftSurroundSide,
-                                  AudioChannelSet::rightSurroundSide,
-                                  AudioChannelSet::leftSurroundRear,
-                                  AudioChannelSet::rightSurroundRear } },
-    { AAX_eStemFormat_7_0_SDDS, { AudioChannelSet::left, AudioChannelSet::leftCentre,
-                                  AudioChannelSet::centre,
-                                  AudioChannelSet::rightCentre,
-                                  AudioChannelSet::right,
-                                  AudioChannelSet::leftSurround,
-                                  AudioChannelSet::rightSurround } },
-    { AAX_eStemFormat_7_1_DTS,  { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right,
-                                  AudioChannelSet::leftSurroundSide,
-                                  AudioChannelSet::rightSurroundSide,
-                                  AudioChannelSet::leftSurroundRear,
-                                  AudioChannelSet::rightSurroundRear,
-                                  AudioChannelSet::LFE } },
-    { AAX_eStemFormat_7_1_SDDS, { AudioChannelSet::left, AudioChannelSet::leftCentre,
-                                  AudioChannelSet::centre,
-                                  AudioChannelSet::rightCentre,
-                                  AudioChannelSet::right,
-                                  AudioChannelSet::leftSurround,
-                                  AudioChannelSet::rightSurround,
-                                  AudioChannelSet::LFE } },
-    { AAX_eStemFormat_7_0_2,    { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right,
-                                  AudioChannelSet::leftSurroundSide,
-                                  AudioChannelSet::rightSurroundSide,
-                                  AudioChannelSet::leftSurroundRear,
-                                  AudioChannelSet::rightSurroundRear,
-                                  AudioChannelSet::topSideLeft,
-                                  AudioChannelSet::topSideRight } },
-    { AAX_eStemFormat_7_1_2,    { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right,
-                                  AudioChannelSet::leftSurroundSide,
-                                  AudioChannelSet::rightSurroundSide,
-                                  AudioChannelSet::leftSurroundRear,
-                                  AudioChannelSet::rightSurroundRear,
-                                  AudioChannelSet::LFE,
-                                  AudioChannelSet::topSideLeft,
-                                  AudioChannelSet::topSideRight } },
-    { AAX_eStemFormat_5_0_2,    { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right,
-                                  AudioChannelSet::leftSurround,
-                                  AudioChannelSet::rightSurround,
-                                  AudioChannelSet::topSideLeft,
-                                  AudioChannelSet::topSideRight } },
-    { AAX_eStemFormat_5_1_2,    { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right,
-                                  AudioChannelSet::leftSurround,
-                                  AudioChannelSet::rightSurround,
-                                  AudioChannelSet::LFE,
-                                  AudioChannelSet::topSideLeft,
-                                  AudioChannelSet::topSideRight } },
-    { AAX_eStemFormat_5_0_4,    { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right,
-                                  AudioChannelSet::leftSurround,
-                                  AudioChannelSet::rightSurround,
-                                  AudioChannelSet::topFrontLeft,
-                                  AudioChannelSet::topFrontRight,
-                                  AudioChannelSet::topRearLeft,
-                                  AudioChannelSet::topRearRight } },
-    { AAX_eStemFormat_5_1_4,    { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right,
-                                  AudioChannelSet::leftSurround,
-                                  AudioChannelSet::rightSurround,
-                                  AudioChannelSet::LFE,
-                                  AudioChannelSet::topFrontLeft,
-                                  AudioChannelSet::topFrontRight,
-                                  AudioChannelSet::topRearLeft,
-                                  AudioChannelSet::topRearRight } },
-    { AAX_eStemFormat_7_0_4,    { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right,
-                                  AudioChannelSet::leftSurroundSide,
-                                  AudioChannelSet::rightSurroundSide,
-                                  AudioChannelSet::leftSurroundRear,
-                                  AudioChannelSet::rightSurroundRear,
-                                  AudioChannelSet::topFrontLeft,
-                                  AudioChannelSet::topFrontRight,
-                                  AudioChannelSet::topRearLeft,
-                                  AudioChannelSet::topRearRight } },
-    { AAX_eStemFormat_7_1_4,    { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right,
-                                  AudioChannelSet::leftSurroundSide,
-                                  AudioChannelSet::rightSurroundSide,
-                                  AudioChannelSet::leftSurroundRear,
-                                  AudioChannelSet::rightSurroundRear,
-                                  AudioChannelSet::LFE,
-                                  AudioChannelSet::topFrontLeft,
-                                  AudioChannelSet::topFrontRight,
-                                  AudioChannelSet::topRearLeft,
-                                  AudioChannelSet::topRearRight } },
-    { AAX_eStemFormat_7_0_6,    { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right,
-                                  AudioChannelSet::leftSurroundSide,
-                                  AudioChannelSet::rightSurroundSide,
-                                  AudioChannelSet::leftSurroundRear,
-                                  AudioChannelSet::rightSurroundRear,
-                                  AudioChannelSet::topFrontLeft,
-                                  AudioChannelSet::topFrontRight,
-                                  AudioChannelSet::topSideLeft,
-                                  AudioChannelSet::topSideRight,
-                                  AudioChannelSet::topRearLeft,
-                                  AudioChannelSet::topRearRight } },
-    { AAX_eStemFormat_7_1_6,    { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right,
-                                  AudioChannelSet::leftSurroundSide,
-                                  AudioChannelSet::rightSurroundSide,
-                                  AudioChannelSet::leftSurroundRear,
-                                  AudioChannelSet::rightSurroundRear,
-                                  AudioChannelSet::LFE,
-                                  AudioChannelSet::topFrontLeft,
-                                  AudioChannelSet::topFrontRight,
-                                  AudioChannelSet::topSideLeft,
-                                  AudioChannelSet::topSideRight,
-                                  AudioChannelSet::topRearLeft,
-                                  AudioChannelSet::topRearRight } },
-    { AAX_eStemFormat_9_0_4,    { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right,
-                                  AudioChannelSet::wideLeft,
-                                  AudioChannelSet::wideRight,
-                                  AudioChannelSet::leftSurroundSide,
-                                  AudioChannelSet::rightSurroundSide,
-                                  AudioChannelSet::leftSurroundRear,
-                                  AudioChannelSet::rightSurroundRear,
-                                  AudioChannelSet::topFrontLeft,
-                                  AudioChannelSet::topFrontRight,
-                                  AudioChannelSet::topRearLeft,
-                                  AudioChannelSet::topRearRight } },
-    { AAX_eStemFormat_9_1_4,    { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right,
-                                  AudioChannelSet::wideLeft,
-                                  AudioChannelSet::wideRight,
-                                  AudioChannelSet::leftSurroundSide,
-                                  AudioChannelSet::rightSurroundSide,
-                                  AudioChannelSet::leftSurroundRear,
-                                  AudioChannelSet::rightSurroundRear,
-                                  AudioChannelSet::LFE,
-                                  AudioChannelSet::topFrontLeft,
-                                  AudioChannelSet::topFrontRight,
-                                  AudioChannelSet::topRearLeft,
-                                  AudioChannelSet::topRearRight } },
-    { AAX_eStemFormat_9_0_6,    { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right,
-                                  AudioChannelSet::wideLeft,
-                                  AudioChannelSet::wideRight,
-                                  AudioChannelSet::leftSurroundSide,
-                                  AudioChannelSet::rightSurroundSide,
-                                  AudioChannelSet::leftSurroundRear,
-                                  AudioChannelSet::rightSurroundRear,
-                                  AudioChannelSet::topFrontLeft,
-                                  AudioChannelSet::topFrontRight,
-                                  AudioChannelSet::topSideLeft,
-                                  AudioChannelSet::topSideRight,
-                                  AudioChannelSet::topRearLeft,
-                                  AudioChannelSet::topRearRight } },
-    { AAX_eStemFormat_9_1_6,    { AudioChannelSet::left, AudioChannelSet::centre,
-                                  AudioChannelSet::right,
-                                  AudioChannelSet::wideLeft,
-                                  AudioChannelSet::wideRight,
-                                  AudioChannelSet::leftSurroundSide,
-                                  AudioChannelSet::rightSurroundSide,
-                                  AudioChannelSet::leftSurroundRear,
-                                  AudioChannelSet::rightSurroundRear,
-                                  AudioChannelSet::LFE,
-                                  AudioChannelSet::topFrontLeft,
-                                  AudioChannelSet::topFrontRight,
-                                  AudioChannelSet::topSideLeft,
-                                  AudioChannelSet::topSideRight,
-                                  AudioChannelSet::topRearLeft,
-                                  AudioChannelSet::topRearRight } },
-    { AAX_eStemFormat_None,     {} },
-};
-
-static AAX_EStemFormat aaxFormats[] =
-{
-    AAX_eStemFormat_Mono,
-    AAX_eStemFormat_Stereo,
-    AAX_eStemFormat_LCR,
-    AAX_eStemFormat_LCRS,
-    AAX_eStemFormat_Quad,
-    AAX_eStemFormat_5_0,
-    AAX_eStemFormat_5_1,
-    AAX_eStemFormat_6_0,
-    AAX_eStemFormat_6_1,
-    AAX_eStemFormat_7_0_SDDS,
-    AAX_eStemFormat_7_1_SDDS,
-    AAX_eStemFormat_7_0_DTS,
-    AAX_eStemFormat_7_1_DTS,
-    AAX_eStemFormat_7_0_2,
-    AAX_eStemFormat_7_1_2,
-    AAX_eStemFormat_Ambi_1_ACN,
-    AAX_eStemFormat_Ambi_2_ACN,
-    AAX_eStemFormat_Ambi_3_ACN,
-    AAX_eStemFormat_5_0_2,
-    AAX_eStemFormat_5_1_2,
-    AAX_eStemFormat_5_0_4,
-    AAX_eStemFormat_5_1_4,
-    AAX_eStemFormat_7_0_4,
-    AAX_eStemFormat_7_1_4,
-    AAX_eStemFormat_7_0_6,
-    AAX_eStemFormat_7_1_6,
-    AAX_eStemFormat_9_0_4,
-    AAX_eStemFormat_9_1_4,
-    AAX_eStemFormat_9_0_6,
-    AAX_eStemFormat_9_1_6,
-    AAX_eStemFormat_Ambi_4_ACN,
-    AAX_eStemFormat_Ambi_5_ACN,
-    AAX_eStemFormat_Ambi_6_ACN,
-    AAX_eStemFormat_Ambi_7_ACN,
-};
-
-//==============================================================================
-// Channel set ↔ AAX stem format conversion
-//==============================================================================
-
-static AAX_EStemFormat getFormatForAudioChannelSet (
-    const AudioChannelSet& set, bool ignoreLayout) noexcept
-{
-    if (ignoreLayout)
+    switch (numChannels)
     {
-        const auto numChannels = set.size();
-        switch (numChannels)
-        {
-            case 0:  return AAX_eStemFormat_None;
-            case 1:  return AAX_eStemFormat_Mono;
-            case 2:  return AAX_eStemFormat_Stereo;
-            case 3:  return AAX_eStemFormat_LCR;
-            case 4:  return AAX_eStemFormat_Quad;
-            case 5:  return AAX_eStemFormat_5_0;
-            case 6:  return AAX_eStemFormat_5_1;
-            case 7:  return AAX_eStemFormat_7_0_DTS;
-            case 8:  return AAX_eStemFormat_7_1_DTS;
-            case 9:  return AAX_eStemFormat_7_0_2;
-            case 10: return AAX_eStemFormat_7_1_2;
-            case 11: return AAX_eStemFormat_7_0_4;
-            case 12: return AAX_eStemFormat_7_1_4;
-            case 13: return AAX_eStemFormat_9_0_4;
-            case 14: return AAX_eStemFormat_9_1_4;
-            case 15: return AAX_eStemFormat_9_0_6;
-            case 16: return AAX_eStemFormat_9_1_6;
-            default: break;
-        }
-
-        const auto maybeOrder =
-            AudioChannelSet::getAmbisonicOrderForNumChannels (numChannels);
-
-        if (maybeOrder != -1)
-            return stemFormatForAmbisonicOrder (maybeOrder);
-
-        return AAX_eStemFormat_INT32_MAX;
-    }
-
-    if (set == AudioChannelSet::disabled())            return AAX_eStemFormat_None;
-    if (set == AudioChannelSet::mono())                return AAX_eStemFormat_Mono;
-    if (set == AudioChannelSet::stereo())              return AAX_eStemFormat_Stereo;
-    if (set == AudioChannelSet::createLCR())           return AAX_eStemFormat_LCR;
-    if (set == AudioChannelSet::createLCRS())          return AAX_eStemFormat_LCRS;
-    if (set == AudioChannelSet::quadraphonic())        return AAX_eStemFormat_Quad;
-    if (set == AudioChannelSet::create5point0())       return AAX_eStemFormat_5_0;
-    if (set == AudioChannelSet::create5point1())       return AAX_eStemFormat_5_1;
-    if (set == AudioChannelSet::create6point0())       return AAX_eStemFormat_6_0;
-    if (set == AudioChannelSet::create6point1())       return AAX_eStemFormat_6_1;
-    if (set == AudioChannelSet::create7point0())       return AAX_eStemFormat_7_0_DTS;
-    if (set == AudioChannelSet::create7point1())       return AAX_eStemFormat_7_1_DTS;
-    if (set == AudioChannelSet::create7point0SDDS())   return AAX_eStemFormat_7_0_SDDS;
-    if (set == AudioChannelSet::create7point1SDDS())   return AAX_eStemFormat_7_1_SDDS;
-    if (set == AudioChannelSet::create7point0point2()) return AAX_eStemFormat_7_0_2;
-    if (set == AudioChannelSet::create7point1point2()) return AAX_eStemFormat_7_1_2;
-    if (set == AudioChannelSet::create5point0point2()) return AAX_eStemFormat_5_0_2;
-    if (set == AudioChannelSet::create5point1point2()) return AAX_eStemFormat_5_1_2;
-    if (set == AudioChannelSet::create5point0point4()) return AAX_eStemFormat_5_0_4;
-    if (set == AudioChannelSet::create5point1point4()) return AAX_eStemFormat_5_1_4;
-    if (set == AudioChannelSet::create7point0point4()) return AAX_eStemFormat_7_0_4;
-    if (set == AudioChannelSet::create7point1point4()) return AAX_eStemFormat_7_1_4;
-
-    const auto order = set.getAmbisonicOrder();
-    if (order >= 0)
-        return stemFormatForAmbisonicOrder (order);
-
-    return AAX_eStemFormat_INT32_MAX;
-}
-
-static AudioChannelSet channelSetFromStemFormat (
-    AAX_EStemFormat format, bool ignoreLayout) noexcept
-{
-    if (! ignoreLayout)
-    {
-        switch (format)
-        {
-            case AAX_eStemFormat_None:       return AudioChannelSet::disabled();
-            case AAX_eStemFormat_Mono:       return AudioChannelSet::mono();
-            case AAX_eStemFormat_Stereo:     return AudioChannelSet::stereo();
-            case AAX_eStemFormat_LCR:        return AudioChannelSet::createLCR();
-            case AAX_eStemFormat_LCRS:       return AudioChannelSet::createLCRS();
-            case AAX_eStemFormat_Quad:       return AudioChannelSet::quadraphonic();
-            case AAX_eStemFormat_5_0:        return AudioChannelSet::create5point0();
-            case AAX_eStemFormat_5_1:        return AudioChannelSet::create5point1();
-            case AAX_eStemFormat_6_0:        return AudioChannelSet::create6point0();
-            case AAX_eStemFormat_6_1:        return AudioChannelSet::create6point1();
-            case AAX_eStemFormat_7_0_SDDS:   return AudioChannelSet::create7point0SDDS();
-            case AAX_eStemFormat_7_0_DTS:    return AudioChannelSet::create7point0();
-            case AAX_eStemFormat_7_1_SDDS:   return AudioChannelSet::create7point1SDDS();
-            case AAX_eStemFormat_7_1_DTS:    return AudioChannelSet::create7point1();
-            case AAX_eStemFormat_7_0_2:      return AudioChannelSet::create7point0point2();
-            case AAX_eStemFormat_7_1_2:      return AudioChannelSet::create7point1point2();
-            case AAX_eStemFormat_Ambi_1_ACN: return AudioChannelSet::ambisonic (1);
-            case AAX_eStemFormat_Ambi_2_ACN: return AudioChannelSet::ambisonic (2);
-            case AAX_eStemFormat_Ambi_3_ACN: return AudioChannelSet::ambisonic (3);
-            case AAX_eStemFormat_5_0_2:      return AudioChannelSet::create5point0point2();
-            case AAX_eStemFormat_5_1_2:      return AudioChannelSet::create5point1point2();
-            case AAX_eStemFormat_5_0_4:      return AudioChannelSet::create5point0point4();
-            case AAX_eStemFormat_5_1_4:      return AudioChannelSet::create5point1point4();
-            case AAX_eStemFormat_7_0_4:      return AudioChannelSet::create7point0point4();
-            case AAX_eStemFormat_7_1_4:      return AudioChannelSet::create7point1point4();
-            case AAX_eStemFormat_7_0_6:      return AudioChannelSet::create7point0point6();
-            case AAX_eStemFormat_7_1_6:      return AudioChannelSet::create7point1point6();
-            case AAX_eStemFormat_9_0_4:      return AudioChannelSet::create9point0point4();
-            case AAX_eStemFormat_9_1_4:      return AudioChannelSet::create9point1point4();
-            case AAX_eStemFormat_9_0_6:      return AudioChannelSet::create9point0point6();
-            case AAX_eStemFormat_9_1_6:      return AudioChannelSet::create9point1point6();
-            case AAX_eStemFormat_Ambi_4_ACN: return AudioChannelSet::ambisonic (4);
-            case AAX_eStemFormat_Ambi_5_ACN: return AudioChannelSet::ambisonic (5);
-            case AAX_eStemFormat_Ambi_6_ACN: return AudioChannelSet::ambisonic (6);
-            case AAX_eStemFormat_Ambi_7_ACN: return AudioChannelSet::ambisonic (7);
-            default:                          return AudioChannelSet::disabled();
-        }
-    }
-
-    return AudioChannelSet::discreteChannels (
-        jmax (0, static_cast<int> (AAX_STEM_FORMAT_CHANNEL_COUNT (format))));
-}
-
-static int processorChannelIndexToAax (int chIndex, const AudioChannelSet& channelSet)
-{
-    const auto order = channelSet.getAmbisonicOrder();
-    const auto currentLayout = getFormatForAudioChannelSet (channelSet, false);
-
-    if (order >= 0 && currentLayout != AAX_eStemFormat_INT32_MAX)
-        return chIndex;
-
-    int layoutIndex;
-    for (layoutIndex = 0;
-         aaxChannelOrder[layoutIndex].aaxStemFormat != AAX_eStemFormat_None;
-         ++layoutIndex)
-    {
-        if (aaxChannelOrder[layoutIndex].aaxStemFormat == currentLayout)
+        case 0:
+            return AAX_eStemFormat_None;
+        case 1:
+            return AAX_eStemFormat_Mono;
+        case 2:
+            return AAX_eStemFormat_Stereo;
+        case 3:
+            return AAX_eStemFormat_LCR;
+        case 4:
+            return AAX_eStemFormat_Quad;
+        case 5:
+            return AAX_eStemFormat_5_0;
+        case 6:
+            return AAX_eStemFormat_5_1;
+        case 7:
+            return AAX_eStemFormat_7_0_DTS;
+        case 8:
+            return AAX_eStemFormat_7_1_DTS;
+        case 9:
+            return AAX_eStemFormat_7_0_2;
+        case 10:
+            return AAX_eStemFormat_7_1_2;
+        case 11:
+            return AAX_eStemFormat_7_0_4;
+        case 12:
+            return AAX_eStemFormat_7_1_4;
+        case 13:
+            return AAX_eStemFormat_9_0_4;
+        case 14:
+            return AAX_eStemFormat_9_1_4;
+        case 15:
+            return AAX_eStemFormat_9_0_6;
+        case 16:
+            return AAX_eStemFormat_9_1_6;
+        default:
             break;
     }
 
-    if (aaxChannelOrder[layoutIndex].aaxStemFormat == AAX_eStemFormat_None)
-        return chIndex;
+    const auto maybeOrder = AudioChannelSet::getAmbisonicOrderForNumChannels (numChannels);
+    if (maybeOrder != -1)
+        return stemFormatForAmbisonicOrder (maybeOrder);
 
-    const auto& channelOrder = aaxChannelOrder[layoutIndex];
-    const auto channelType = channelSet.getTypeOfChannel (chIndex);
-    const auto& speakers = channelOrder.speakerOrder;
-
-    const auto it = std::find (speakers.begin(), speakers.end(), channelType);
-    if (it != speakers.end())
-        return static_cast<int> (std::distance (speakers.begin(), it));
-
-    return chIndex;
+    return AAX_eStemFormat_INT32_MAX;
 }
 
 //==============================================================================
@@ -568,8 +243,10 @@ static int processorChannelIndexToAax (int chIndex, const AudioChannelSet& chann
 static AAX_EMeterType getMeterTypeFromParam (const AudioParameter& param)
 {
     const auto name = param.getName();
-    if (name.containsIgnoreCase ("input"))  return AAX_eMeterType_Input;
-    if (name.containsIgnoreCase ("output")) return AAX_eMeterType_Output;
+    if (name.containsIgnoreCase ("input"))
+        return AAX_eMeterType_Input;
+    if (name.containsIgnoreCase ("output"))
+        return AAX_eMeterType_Output;
     if (name.containsIgnoreCase ("gr") || name.containsIgnoreCase ("gain reduction"))
         return AAX_eMeterType_CLGain;
     return AAX_eMeterType_Other;
@@ -585,9 +262,8 @@ static bool isMeterParameter (const AudioParameter& param)
 // YupAAX_Processor
 //==============================================================================
 
-class YupAAX_Processor : public AAX_CEffectParameters,
-                         private AudioProcessorBase::Listener,
-                         private AsyncUpdater
+class YupAAX_Processor : public AAX_CEffectParameters
+    , private AudioProcessorBase::Listener
 {
 public:
     static AAX_CEffectParameters* AAX_CALLBACK Create()
@@ -599,7 +275,6 @@ public:
     {
         processor.reset (createPluginProcessor());
         processor->addListener (this);
-        rebuildChannelMapArrays();
 
         AAX_CEffectParameters::GetNumberOfChunks (&yupChunkIndex);
         YUP_AAX_LOG ("YupAAX_Processor: created");
@@ -617,8 +292,6 @@ public:
 
     AAX_Result Uninitialize() override
     {
-        cancelPendingUpdate();
-
         if (isPrepared && processor != nullptr)
         {
             isPrepared = false;
@@ -631,7 +304,6 @@ public:
     AAX_Result EffectInit() override
     {
         YUP_AAX_LOG ("YupAAX_Processor::EffectInit");
-        cancelPendingUpdate();
 
         auto* ctrl = Controller();
         if (ctrl == nullptr)
@@ -646,7 +318,8 @@ public:
         ctrl->GetOutputStemFormat (&outputFormat);
 
         auto err = preparePlugin (static_cast<float> (sampleRate),
-                                  inputFormat, outputFormat);
+                                  inputFormat,
+                                  outputFormat);
         if (err != AAX_SUCCESS)
             return err;
 
@@ -659,7 +332,9 @@ public:
     //==========================================================================
 
     AAX_Result UpdateParameterNormalizedValue (
-        AAX_CParamID paramID, double value, AAX_EUpdateSource source) override
+        AAX_CParamID paramID,
+        double value,
+        AAX_EUpdateSource source) override
     {
         const auto result = AAX_CEffectParameters::UpdateParameterNormalizedValue (
             paramID, value, source);
@@ -671,7 +346,9 @@ public:
     }
 
     AAX_Result GetParameterValueFromString (
-        AAX_CParamID paramID, double* result, const AAX_IString& text) const override
+        AAX_CParamID paramID,
+        double* result,
+        const AAX_IString& text) const override
     {
         if (auto* param = getParamForID (paramID))
         {
@@ -684,7 +361,9 @@ public:
     }
 
     AAX_Result GetParameterStringFromValue (
-        AAX_CParamID paramID, double value, AAX_IString* result,
+        AAX_CParamID paramID,
+        double value,
+        AAX_IString* result,
         int32_t maxLen) const override
     {
         if (auto* param = getParamForID (paramID))
@@ -696,7 +375,8 @@ public:
     }
 
     AAX_Result GetParameterNumberOfSteps (
-        AAX_CParamID paramID, int32_t* result) const override
+        AAX_CParamID paramID,
+        int32_t* result) const override
     {
         if (auto* param = getParamForID (paramID))
         {
@@ -711,7 +391,8 @@ public:
     }
 
     AAX_Result GetParameterNormalizedValue (
-        AAX_CParamID paramID, double* result) const override
+        AAX_CParamID paramID,
+        double* result) const override
     {
         if (auto* param = getParamForID (paramID))
             *result = static_cast<double> (param->getNormalizedValue());
@@ -721,7 +402,8 @@ public:
     }
 
     AAX_Result SetParameterNormalizedValue (
-        AAX_CParamID paramID, double newValue) override
+        AAX_CParamID paramID,
+        double newValue) override
     {
         if (auto* p = mParameterManager.GetParameterByID (paramID))
             p->SetValueWithFloat (static_cast<float> (newValue));
@@ -731,7 +413,8 @@ public:
     }
 
     AAX_Result SetParameterNormalizedRelative (
-        AAX_CParamID paramID, double newDeltaValue) override
+        AAX_CParamID paramID,
+        double newDeltaValue) override
     {
         if (auto* param = getParamForID (paramID))
         {
@@ -746,7 +429,9 @@ public:
     }
 
     AAX_Result GetParameterNameOfLength (
-        AAX_CParamID paramID, AAX_IString* result, int32_t maxLen) const override
+        AAX_CParamID paramID,
+        AAX_IString* result,
+        int32_t maxLen) const override
     {
         if (auto* param = getParamForID (paramID))
             result->Set (param->getName().substring (0, maxLen).toRawUTF8());
@@ -754,7 +439,8 @@ public:
     }
 
     AAX_Result GetParameterName (
-        AAX_CParamID paramID, AAX_IString* result) const override
+        AAX_CParamID paramID,
+        AAX_IString* result) const override
     {
         if (auto* param = getParamForID (paramID))
             result->Set (param->getName().substring (0, 31).toRawUTF8());
@@ -762,18 +448,15 @@ public:
     }
 
     AAX_Result GetParameterDefaultNormalizedValue (
-        AAX_CParamID paramID, double* result) const override
+        AAX_CParamID paramID,
+        double* result) const override
     {
         if (auto* param = getParamForID (paramID))
-            *result = static_cast<double> (param->getDefaultValue());
+            *result = static_cast<double> (
+                param->convertToNormalizedValue (param->getDefaultValue()));
         else
             *result = 0.0;
         return AAX_SUCCESS;
-    }
-
-    AAX_Result GenerateCoefficients() override
-    {
-        return AAX_CEffectParameters::GenerateCoefficients();
     }
 
     //==========================================================================
@@ -781,7 +464,9 @@ public:
     //==========================================================================
 
     AAX_Result ResetFieldData (
-        AAX_CFieldIndex fieldIndex, void* data, uint32_t dataSize) const override
+        AAX_CFieldIndex fieldIndex,
+        void* data,
+        uint32_t dataSize) const override
     {
         switch (fieldIndex)
         {
@@ -866,11 +551,12 @@ public:
             if (! tls.isValid)
                 return 20700; // AAX_ERROR_PLUGIN_API_INVALID_THREAD
 
+            // The host allocates the chunk using the size returned by
+            // GetChunkSize, fData is a variable length trailing array
             const auto size = static_cast<int32_t> (tls.data.getSize());
             chunk->fSize = size;
-            const auto copySize = jmin (static_cast<size_t> (size), sizeof (chunk->fData));
-            if (copySize > 0 && tls.data.getData() != nullptr)
-                tls.data.copyTo (chunk->fData, 0, copySize);
+            if (size > 0 && tls.data.getData() != nullptr)
+                tls.data.copyTo (chunk->fData, 0, static_cast<size_t> (size));
             tls.isValid = false;
             return AAX_SUCCESS;
         }
@@ -888,6 +574,9 @@ public:
             if (state.hasWrapperState)
             {
                 setBypassed (state.isBypassed);
+                SetParameterNormalizedValue (cDefaultMasterBypassID,
+                                             state.isBypassed ? 1.0 : 0.0);
+
                 if (state.hasProcessorState && ! state.processorState.isEmpty())
                     processor->loadStateFromMemory (state.processorState);
             }
@@ -936,80 +625,59 @@ public:
     //==========================================================================
 
     void process (float* const* inputChannelData,
-                  int numInputChannels,
                   float* const* outputChannelData,
-                  int numOutputChannels,
                   int bufferSize,
                   int32_t bypassFlag,
                   AAX_IMIDINode* midiNodeIn,
                   AAX_IMIDINode* midiNodeOut,
-                  float* meterTaps,
-                  int numMeterTaps,
-                  int sideChainBufIdx)
+                  float* const* meterTapBuffers)
     {
-        if (sideChainDesired.load() != (sideChainBufIdx != -1))
-        {
-            sideChainDesired.store (sideChainBufIdx != -1);
-            triggerAsyncUpdate();
-        }
-
         const bool currentlyBypassed = (bypassFlag != 0);
         setBypassed (currentlyBypassed);
 
+        // The MIDI node fields are only registered when the plugin handles
+        // MIDI, otherwise their context values are meaningless
         midiBuffer.clear();
-        if (midiNodeIn != nullptr && processor->acceptsMidi())
+        if (processor->acceptsMidi() && midiNodeIn != nullptr)
             fillMidiBufferFromAaxNode (*midiNodeIn, midiBuffer);
 
-        const auto actualNumIn = jmin (numInputChannels,
-            processor->getBusLayout().getNumAudioInputChannels());
-        const auto actualNumOut = jmin (numOutputChannels,
-            processor->getBusLayout().getNumAudioOutputChannels());
+        // The component is described with stem formats matching the processor
+        // layout, so the host provides exactly these channel counts
+        const auto& layout = processor->getBusLayout();
+        const auto numIn = layout.getNumAudioInputChannels();
+        const auto numOut = layout.getNumAudioOutputChannels();
 
-        AudioBuffer<float> audioBuffer (actualNumOut, bufferSize);
-        audioBuffer.clear();
-
-        for (int ch = 0; ch < actualNumIn; ++ch)
-        {
-            const auto mappedCh = isPositiveAndBelow (ch, static_cast<int> (inputLayoutMap.size()))
-                                  ? inputLayoutMap[static_cast<size_t> (ch)] : ch;
-            const auto srcIdx = ch;
-
-            if (isPositiveAndBelow (mappedCh, actualNumOut)
-                && srcIdx < numInputChannels
-                && inputChannelData[srcIdx] != nullptr)
-            {
-                audioBuffer.copyFrom (mappedCh, 0,
-                                      inputChannelData[srcIdx], bufferSize);
-            }
-        }
-
-        paramChangeBuffer.clear();
-
-        AudioProcessContext<float> context (
-            audioBuffer, midiBuffer, paramChangeBuffer, nullptr);
-
-        processAudioBlock (*processor, context, currentlyBypassed);
-
-        for (int ch = 0; ch < actualNumOut; ++ch)
+        for (int ch = 0; ch < numOut; ++ch)
         {
             if (outputChannelData[ch] == nullptr)
                 continue;
 
-            const auto mappedCh = isPositiveAndBelow (ch, static_cast<int> (outputLayoutMap.size()))
-                                  ? outputLayoutMap[static_cast<size_t> (ch)] : ch;
-
-            if (isPositiveAndBelow (mappedCh, actualNumOut))
+            if (ch < numIn && inputChannelData[ch] != nullptr)
             {
-                const auto* src = audioBuffer.getReadPointer (mappedCh);
-                std::memcpy (outputChannelData[ch], src,
-                             static_cast<size_t> (bufferSize) * sizeof (float));
+                if (outputChannelData[ch] != inputChannelData[ch])
+                    std::memcpy (outputChannelData[ch], inputChannelData[ch], static_cast<size_t> (bufferSize) * sizeof (float));
+            }
+            else
+            {
+                std::memset (outputChannelData[ch], 0, static_cast<size_t> (bufferSize) * sizeof (float));
             }
         }
 
-        if (midiNodeOut != nullptr && processor->producesMidi())
+        AudioBuffer<float> audioBuffer (outputChannelData, numOut, bufferSize);
+
+        paramChangeBuffer.clear();
+
+        AudioProcessContext<float> context {
+            audioBuffer, midiBuffer, paramChangeBuffer, nullptr
+        };
+
+        processAudioBlock (*processor, context, currentlyBypassed);
+
+        if (processor->producesMidi() && midiNodeOut != nullptr)
             fillAaxMidiNodeFromBuffer (*midiNodeOut, midiBuffer);
 
-        extractMeterValues (meterTaps, numMeterTaps);
+        if (! aaxMeters.empty() && meterTapBuffers != nullptr)
+            extractMeterValues (*meterTapBuffers);
     }
 
     AudioProcessor& getAudioProcessor() noexcept { return *processor; }
@@ -1026,7 +694,7 @@ private:
             return;
 
         if (details.parameterValuesChanged)
-            resyncAllAaxParameterValues();
+            resyncParameterValues();
 
         if (details.parameterInfoChanged)
             syncParameterAttributes();
@@ -1042,18 +710,6 @@ private:
     }
 
     //==========================================================================
-    // AsyncUpdater
-    //==========================================================================
-
-    void handleAsyncUpdate() override
-    {
-        if (auto* ctrl = Controller())
-            ctrl->PostPacket (fieldSideChain,
-                              &sideChainDesired,
-                              sizeof (sideChainDesired));
-    }
-
-    //==========================================================================
     // Helpers
     //==========================================================================
 
@@ -1064,15 +720,11 @@ private:
         lastSampleRate = sampleRate;
         lastInputFormat = inputFormat;
         lastOutputFormat = outputFormat;
-        lastBufferSize = 1024;
-        maxBufferSize = 1024;
 
-        AudioSpec spec { sampleRate,
-                         maxBufferSize };
-        processor->prepareToPlay (spec);
+        processor->setPlaybackConfiguration (sampleRate, maxAaxBufferSize);
         isPrepared = true;
 
-        rebuildChannelMapArrays();
+        paramChangeBuffer.reserve (getDefaultParameterChangeCapacity (*processor));
 
         if (auto* ctrl = Controller())
             ctrl->SetSignalLatency (processor->getLatencySamples());
@@ -1080,45 +732,12 @@ private:
         return AAX_SUCCESS;
     }
 
-    void rebuildChannelMapArrays()
-    {
-        const auto& layout = processor->getBusLayout();
-
-        for (int dir = 0; dir < 2; ++dir)
-        {
-            const bool isInput = (dir == 0);
-            auto& layoutMap = isInput ? inputLayoutMap : outputLayoutMap;
-            layoutMap.clear();
-
-            const auto buses = isInput
-                               ? layout.getInputBuses()
-                               : layout.getOutputBuses();
-
-            int chOffset = 0;
-
-            for (const auto& bus : buses)
-            {
-                if (bus.getType() != AudioBus::Type::Audio)
-                    continue;
-
-                const auto numChannels = bus.getNumChannels();
-                const AudioChannelSet channelSet =
-                    AudioChannelSet::discreteChannels (numChannels);
-
-                for (int ch = 0; ch < numChannels; ++ch)
-                    layoutMap.push_back (
-                        processorChannelIndexToAax (ch, channelSet) + chOffset);
-
-                chOffset += numChannels;
-            }
-        }
-    }
-
     void addAudioProcessorParameters()
     {
         paramMap.clear();
-        aaxParamIDs.clear();
         aaxMeters.clear();
+
+        addMasterBypassParameter();
 
         const auto parameters = processor->getParameters();
 
@@ -1141,9 +760,23 @@ private:
             const auto hash = getAaxParamHash (aaxParamID.toRawUTF8());
             paramMap[hash] = param;
         }
+    }
 
-        mPacketDispatcher.RegisterPacket (
-            YupPlugin_AAX_BypassID, fieldBypass);
+    void addMasterBypassParameter()
+    {
+        auto* bypassParam = new AAX_CParameter<bool> (
+            cDefaultMasterBypassID,
+            AAX_CString ("Master Bypass"),
+            false,
+            AAX_CBinaryTaperDelegate<bool>(),
+            AAX_CBinaryDisplayDelegate<bool> ("bypass", "on"),
+            true);
+
+        bypassParam->SetNumberOfSteps (2);
+        bypassParam->SetType (AAX_eParameterType_Discrete);
+        mParameterManager.AddParameter (bypassParam);
+
+        mPacketDispatcher.RegisterPacket (cDefaultMasterBypassID, fieldBypass);
     }
 
     void addAaxParameter (AudioParameter& param, const String& aaxParamID)
@@ -1154,23 +787,19 @@ private:
         auto* aaxParam = new AAX_CParameter<float> (
             aaxParamID.toRawUTF8(),
             AAX_CString (param.getName().substring (0, 31).toRawUTF8()),
-            param.getDefaultValue(),
+            param.convertToNormalizedValue (param.getDefaultValue()),
             AAX_CLinearTaperDelegate<float> (0.0f, 1.0f),
             AAX_CNumberDisplayDelegate<float>(),
             param.isAutomatable());
 
-        if (aaxParam != nullptr)
-        {
-            aaxParam->SetNumberOfSteps (static_cast<int32_t> (
-                numSteps > 0 ? jmin (numSteps, 2048) : 1000));
+        aaxParam->SetNumberOfSteps (static_cast<uint32_t> (
+            numSteps > 0 ? jmin (numSteps, 2048) : 1000));
 
-            aaxParam->SetType (isDiscrete
+        aaxParam->SetType (isDiscrete
                                ? AAX_eParameterType_Discrete
                                : AAX_eParameterType_Continuous);
 
-            mParameterManager.AddParameter (aaxParam);
-            aaxParamIDs.add (aaxParamID);
-        }
+        mParameterManager.AddParameter (aaxParam);
     }
 
     void syncParameterAttributes()
@@ -1185,11 +814,11 @@ private:
                 continue;
 
             const auto aaxParamID = getAaxParamIDFromIndex (static_cast<int> (i));
-            const auto numSteps = param->getNumSteps();
 
             SetParameterDefaultNormalizedValue (
                 aaxParamID.toRawUTF8(),
-                static_cast<double> (param->getDefaultValue()));
+                static_cast<double> (
+                    param->convertToNormalizedValue (param->getDefaultValue())));
         }
     }
 
@@ -1206,7 +835,7 @@ private:
         }
     }
 
-    void resyncAllAaxParameterValues()
+    void resyncParameterValues()
     {
         const auto parameters = processor->getParameters();
 
@@ -1217,22 +846,8 @@ private:
             inParameterChangedCallback = true;
             SetParameterNormalizedValue (
                 aaxParamID.toRawUTF8(),
-                static_cast<double> (
-                    parameters[i]->getNormalizedValue()));
-            inParameterChangedCallback = false;
-        }
-    }
-
-    void resyncParameterValues()
-    {
-        const auto parameters = processor->getParameters();
-
-        for (size_t i = 0; i < parameters.size(); ++i)
-        {
-            const auto aaxParamID = getAaxParamIDFromIndex (static_cast<int> (i));
-            SetParameterNormalizedValue (
-                aaxParamID.toRawUTF8(),
                 static_cast<double> (parameters[i]->getNormalizedValue()));
+            inParameterChangedCallback = false;
         }
     }
 
@@ -1272,7 +887,7 @@ private:
 
     static std::optional<MidiMessage> aaxMidiPacketToYup (const AAX_CMidiPacket& pkt)
     {
-        if (pkt.mLength <= 0 || pkt.mLength > 4)
+        if (pkt.mLength == 0 || pkt.mLength > 4)
             return std::nullopt;
 
         const auto* data = pkt.mData;
@@ -1281,19 +896,26 @@ private:
 
         switch (status)
         {
-            case 0x80: return MidiMessage::noteOff (channel, data[1], static_cast<uint8> (data[2]));
-            case 0x90: return MidiMessage::noteOn  (channel, data[1], static_cast<uint8> (data[2]));
-            case 0xA0: return MidiMessage::aftertouchChange (channel, data[1], data[2]);
-            case 0xB0: return MidiMessage::controllerEvent (channel, data[1], data[2]);
-            case 0xC0: return MidiMessage::programChange (channel, data[1]);
-            case 0xD0: return MidiMessage::channelPressureChange (channel, data[1]);
+            case 0x80:
+                return MidiMessage::noteOff (channel, data[1], static_cast<uint8> (data[2]));
+            case 0x90:
+                return MidiMessage::noteOn (channel, data[1], static_cast<uint8> (data[2]));
+            case 0xA0:
+                return MidiMessage::aftertouchChange (channel, data[1], data[2]);
+            case 0xB0:
+                return MidiMessage::controllerEvent (channel, data[1], data[2]);
+            case 0xC0:
+                return MidiMessage::programChange (channel, data[1]);
+            case 0xD0:
+                return MidiMessage::channelPressureChange (channel, data[1]);
             case 0xE0:
             {
                 const auto value = static_cast<int> (data[1])
                                  | (static_cast<int> (data[2]) << 7);
                 return MidiMessage::pitchWheel (channel, value);
             }
-            default: break;
+            default:
+                break;
         }
         return std::nullopt;
     }
@@ -1318,23 +940,21 @@ private:
         const auto copySize = jmin (dataSize,
                                     static_cast<int> (sizeof (pkt.mData)));
         std::memcpy (pkt.mData, data, static_cast<size_t> (copySize));
-        pkt.mLength = static_cast<int32_t> (copySize);
+        pkt.mLength = static_cast<uint32_t> (copySize);
     }
 
     //==========================================================================
     // Meters
     //==========================================================================
 
-    void extractMeterValues (float* meterTaps, int numMeterTaps)
+    void extractMeterValues (float* meterTaps)
     {
-        if (meterTaps == nullptr || numMeterTaps <= 0)
+        if (meterTaps == nullptr)
             return;
 
-        const auto numMeters = jmin (static_cast<int> (aaxMeters.size()),
-                                     numMeterTaps);
-        for (int i = 0; i < numMeters; ++i)
+        for (size_t i = 0; i < aaxMeters.size(); ++i)
         {
-            const auto value = aaxMeters[static_cast<size_t> (i)]->getNormalizedValue();
+            const auto value = aaxMeters[i]->getNormalizedValue();
             meterTaps[i] = std::max (meterTaps[i], std::abs (value));
         }
     }
@@ -1358,8 +978,6 @@ private:
 
     std::unique_ptr<AudioProcessor> processor;
     int32_t yupChunkIndex = 0;
-    int lastBufferSize = 1024;
-    int maxBufferSize = 1024;
     float lastSampleRate = 44100.0f;
     AAX_EStemFormat lastInputFormat = AAX_eStemFormat_None;
     AAX_EStemFormat lastOutputFormat = AAX_eStemFormat_None;
@@ -1370,22 +988,18 @@ private:
     MidiBuffer midiBuffer;
     ParameterChangeBuffer paramChangeBuffer;
 
-    std::vector<int> inputLayoutMap;
-    std::vector<int> outputLayoutMap;
-
-    StringArray aaxParamIDs;
     std::unordered_map<int32_t, AudioParameter*> paramMap;
     std::vector<AudioParameter*> aaxMeters;
 
     mutable ThreadLocalValue<ChunkMemoryBlock> chunkData;
     ThreadLocalValue<bool> inParameterChangedCallback;
 
-    mutable std::atomic<int> sideChainDesired { 0 };
+    // AAX native algorithm buffers are at most 1024 samples
+    static constexpr int maxAaxBufferSize = 1024;
 
-    static constexpr int YupPlugin_AAX_ChunkMagic = 0x59415858;   // 'YAAX'
+    static constexpr int YupPlugin_AAX_ChunkMagic = 0x59415858; // 'YAAX'
     static constexpr int YupPlugin_AAX_ChunkVersion = 1;
-    static constexpr AAX_CTypeID YupPlugin_AAX_ChunkID = 'YUpS';  // YUP State
-    static constexpr const char* YupPlugin_AAX_BypassID = "MasterBypassID";
+    static constexpr AAX_CTypeID YupPlugin_AAX_ChunkID = 'YUpS'; // YUP State
 };
 
 //==============================================================================
@@ -1401,6 +1015,7 @@ public:
     }
 
     YupAAX_GUI() = default;
+
     ~YupAAX_GUI() override { DeleteViewContainer(); }
 
     //==========================================================================
@@ -1442,13 +1057,28 @@ public:
             return;
 
         auto* nativeView = viewContainer->GetPtr();
+        if (nativeView == nullptr)
+            return;
 
-        if (nativeView != nullptr)
-        {
-            auto options = ComponentNative::Options();
-            editorComponent->addToDesktop (options, nativeView);
-            YUP_AAX_LOG ("YupAAX_GUI: attached to native view");
-        }
+        ComponentNative::Flags flags =
+            ComponentNative::defaultFlags & ~ComponentNative::decoratedWindow;
+
+        if (editorComponent->shouldRenderContinuous())
+            flags.set (ComponentNative::renderContinuous);
+
+        auto options = ComponentNative::Options()
+                           .withFlags (flags)
+                           .withResizableWindow (editorComponent->isResizable());
+
+        const auto preferredSize = editorComponent->getPreferredSize();
+        editorComponent->setSize ({ static_cast<float> (preferredSize.getWidth()),
+                                    static_cast<float> (preferredSize.getHeight()) });
+
+        editorComponent->addToDesktop (options, nativeView);
+        editorComponent->setVisible (true);
+        editorComponent->attachedToNative();
+
+        YUP_AAX_LOG ("YupAAX_GUI: attached to native view");
     }
 
     void DeleteViewContainer() override
@@ -1465,29 +1095,37 @@ public:
         if (size == nullptr)
             return AAX_ERROR_NULL_OBJECT;
 
+        size->horz = 0.0f;
+        size->vert = 0.0f;
+
         if (editorComponent != nullptr)
         {
-            const auto bounds = editorComponent->getLocalBounds();
-            size->vert = static_cast<float> (bounds.getHeight());
-            size->horz = static_cast<float> (bounds.getWidth());
-        }
-        else
-        {
-            size->vert = 0.0f;
-            size->horz = 0.0f;
+            if (editorComponent->isResizable() && editorComponent->getWidth() != 0)
+            {
+                size->horz = static_cast<float> (editorComponent->getWidth());
+                size->vert = static_cast<float> (editorComponent->getHeight());
+            }
+            else
+            {
+                const auto preferredSize = editorComponent->getPreferredSize();
+                size->horz = static_cast<float> (preferredSize.getWidth());
+                size->vert = static_cast<float> (preferredSize.getHeight());
+            }
         }
 
         return AAX_SUCCESS;
     }
 
     AAX_Result SetControlHighlightInfo (
-        AAX_CParamID, AAX_CBoolean, AAX_EHighlightColor) override
+        AAX_CParamID,
+        AAX_CBoolean,
+        AAX_EHighlightColor) override
     {
         return AAX_SUCCESS;
     }
 
 private:
-    std::unique_ptr<Component> editorComponent;
+    std::unique_ptr<AudioProcessorEditor> editorComponent;
 };
 
 //==============================================================================
@@ -1512,26 +1150,20 @@ void AAX_CALLBACK yupAAXAlgorithmCallback (
         auto* info = static_cast<YupPluginInstanceInfo*> (ctx->pluginInfo);
 
         const auto bufSize = (ctx->bufferSize != nullptr)
-                             ? static_cast<int> (*ctx->bufferSize) : 0;
+                               ? static_cast<int> (*ctx->bufferSize)
+                               : 0;
 
         if (bufSize <= 0)
             continue;
 
-        auto* meterTaps = ctx->meterTapBuffers != nullptr
-                          ? const_cast<float*> (*ctx->meterTapBuffers) : nullptr;
-
         info->processor.process (
             ctx->inputChannels,
-            8,
             ctx->outputChannels,
-            8,
             bufSize,
             ctx->bypass != nullptr ? *ctx->bypass : 0,
             ctx->midiNodeIn,
             ctx->midiNodeOut,
-            meterTaps,
-            16,
-            ctx->sideChainBuffers != nullptr ? *ctx->sideChainBuffers : -1);
+            ctx->meterTapBuffers);
     }
 }
 
@@ -1547,9 +1179,10 @@ static void getPlugInDescription (AAX_IEffectDescriptor& descriptor)
     descriptor.AddName (YupPlugin_Description);
     descriptor.AddCategory (YupPlugin_AAXCategory);
 
-    aaxCheck (descriptor.AddProcPtr (
-        reinterpret_cast<void*> (YupAAX_GUI::Create),
-        kAAX_ProcPtrID_Create_EffectGUI));
+    if (plugin->hasEditor())
+        aaxCheck (descriptor.AddProcPtr (
+            reinterpret_cast<void*> (YupAAX_GUI::Create),
+            kAAX_ProcPtrID_Create_EffectGUI));
 
     aaxCheck (descriptor.AddProcPtr (
         reinterpret_cast<void*> (YupAAX_Processor::Create),
@@ -1560,126 +1193,119 @@ static void getPlugInDescription (AAX_IEffectDescriptor& descriptor)
         AAX_eResourceType_PageTable, YupPlugin_AAXPageTableFile);
 #endif
 
-    // Register meters on the descriptor
-    const auto parameters = plugin->getParameters();
-    int meterIdx = 0;
+    // Register meters on the descriptor, the same IDs are then bound to the
+    // component's meter tap field below
+    std::vector<AAX_CTypeID> meterIDs;
 
-    for (size_t i = 0; i < parameters.size(); ++i)
+    for (const auto& parameter : plugin->getParameters())
     {
-        auto* param = parameters[i].get();
+        auto* param = parameter.get();
         if (param == nullptr || ! isMeterParameter (*param))
             continue;
 
         auto* meterProps = descriptor.NewPropertyMap();
-        if (meterProps != nullptr)
-        {
-            meterProps->AddProperty (
-                AAX_eProperty_Meter_Type,
-                getMeterTypeFromParam (*param));
+        if (meterProps == nullptr)
+            continue;
 
-            meterProps->AddProperty (
-                AAX_eProperty_Meter_Orientation,
-                AAX_eMeterOrientation_TopRight);
+        meterProps->AddProperty (
+            AAX_eProperty_Meter_Type,
+            getMeterTypeFromParam (*param));
 
-            descriptor.AddMeterDescription (
-                static_cast<AAX_CTypeID> ('Mtr0' + meterIdx),
-                param->getName().substring (0, 1024).toRawUTF8(),
-                meterProps);
-            ++meterIdx;
-        }
+        meterProps->AddProperty (
+            AAX_eProperty_Meter_Orientation,
+            AAX_eMeterOrientation_TopRight);
+
+        const auto meterID = static_cast<AAX_CTypeID> (
+            'Mtr0' + static_cast<AAX_CTypeID> (meterIDs.size()));
+
+        descriptor.AddMeterDescription (
+            meterID,
+            param->getName().toRawUTF8(),
+            meterProps);
+
+        meterIDs.push_back (meterID);
     }
 
+    // YUP processors have a fixed bus layout, so a single component matching
+    // the processor's channel configuration is registered. Instruments with no
+    // audio input still process in place on the track stem.
     const auto numInCh = plugin->getBusLayout().getNumAudioInputChannels();
     const auto numOutCh = plugin->getBusLayout().getNumAudioOutputChannels();
 
-    const auto numInFormats = numInCh > 0
-        ? static_cast<int> (std::size (aaxFormats)) : 0;
-    const auto numOutFormats = numOutCh > 0
-        ? static_cast<int> (std::size (aaxFormats)) : 0;
+    const auto outputFormat = stemFormatForChannelCount (numOutCh);
+    const auto inputFormat = numInCh > 0
+                               ? stemFormatForChannelCount (numInCh)
+                               : outputFormat;
 
-    for (int inIdx = 0; inIdx < jmax (numInFormats, 1); ++inIdx)
-    {
-        const auto aaxInFormat = numInFormats > 0
-            ? aaxFormats[inIdx] : AAX_eStemFormat_None;
+    jassert (inputFormat != AAX_eStemFormat_INT32_MAX);
+    jassert (outputFormat != AAX_eStemFormat_INT32_MAX);
 
-        for (int outIdx = 0; outIdx < jmax (numOutFormats, 1); ++outIdx)
-        {
-            const auto aaxOutFormat = numOutFormats > 0
-                ? aaxFormats[outIdx] : AAX_eStemFormat_None;
+    auto* compDesc = descriptor.NewComponentDescriptor();
+    if (compDesc == nullptr)
+        return;
 
-            auto* compDesc = descriptor.NewComponentDescriptor();
-            if (compDesc == nullptr)
-                continue;
+    aaxCheck (compDesc->AddAudioIn (fieldAudioIn));
+    aaxCheck (compDesc->AddAudioOut (fieldAudioOut));
+    aaxCheck (compDesc->AddAudioBufferLength (fieldBufferSize));
+    aaxCheck (compDesc->AddDataInPort (fieldBypass, sizeof (int32_t)));
 
-            aaxCheck (compDesc->AddAudioIn (fieldAudioIn));
-            aaxCheck (compDesc->AddAudioOut (fieldAudioOut));
-            aaxCheck (compDesc->AddAudioBufferLength (fieldBufferSize));
-            aaxCheck (compDesc->AddDataInPort (fieldBypass, sizeof (int32_t)));
+    if (plugin->acceptsMidi())
+        aaxCheck (compDesc->AddMIDINode (
+            fieldMidiIn, AAX_eMIDINodeType_LocalInput, "MIDI In", 0xFFFF));
 
-            if (plugin->acceptsMidi())
-                aaxCheck (compDesc->AddMIDINode (
-                    fieldMidiIn, AAX_eMIDINodeType_LocalInput,
-                    "MIDI In", 0xFFFF));
+    if (plugin->producesMidi())
+        aaxCheck (compDesc->AddMIDINode (
+            fieldMidiOut, AAX_eMIDINodeType_LocalOutput, "MIDI Out", 0xFFFF));
 
-            if (plugin->producesMidi())
-                aaxCheck (compDesc->AddMIDINode (
-                    fieldMidiOut, AAX_eMIDINodeType_LocalOutput,
-                    "MIDI Out", 0xFFFF));
+    aaxCheck (compDesc->AddPrivateData (
+        fieldPluginInfo, sizeof (YupPluginInstanceInfo), AAX_ePrivateDataOptions_DefaultOptions));
 
-            aaxCheck (compDesc->AddPrivateData (
-                fieldPluginInfo, sizeof (YupPluginInstanceInfo),
-                AAX_ePrivateDataOptions_DefaultOptions));
+    aaxCheck (compDesc->AddPrivateData (
+        fieldPreparedFlag, sizeof (int32_t)));
 
-            aaxCheck (compDesc->AddPrivateData (
-                fieldPreparedFlag, sizeof (int32_t)));
+    if (! meterIDs.empty())
+        aaxCheck (compDesc->AddMeters (
+            fieldMeterTaps, meterIDs.data(), static_cast<uint32_t> (meterIDs.size())));
 
-            aaxCheck (compDesc->AddPrivateData (
-                fieldMeterTaps, sizeof (float) * 16,
-                AAX_ePrivateDataOptions_DefaultOptions));
+    auto* properties = compDesc->NewPropertyMap();
+    if (properties == nullptr)
+        return;
 
-            aaxCheck (compDesc->AddPrivateData (
-                fieldSideChain, sizeof (int32_t),
-                AAX_ePrivateDataOptions_DefaultOptions));
+    aaxCheck (properties->AddProperty (
+        AAX_eProperty_ManufacturerID,
+        static_cast<AAX_CPropertyValue> (YupPlugin_AAX_ManufacturerID)));
 
-            auto* properties = compDesc->NewPropertyMap();
-            if (properties == nullptr)
-                continue;
+    aaxCheck (properties->AddProperty (
+        AAX_eProperty_ProductID,
+        static_cast<AAX_CPropertyValue> (YupPlugin_AAX_ProductID)));
 
-            aaxCheck (properties->AddProperty (
-                AAX_eProperty_ManufacturerID,
-                static_cast<AAX_CPropertyValue> (YupPlugin_AAX_ManufacturerID)));
+    aaxCheck (properties->AddProperty (
+        AAX_eProperty_PlugInID_Native,
+        static_cast<AAX_CPropertyValue> (YupPlugin_AAX_PlugInID_Native)));
 
-            aaxCheck (properties->AddProperty (
-                AAX_eProperty_ProductID,
-                static_cast<AAX_CPropertyValue> (YupPlugin_AAX_ProductID)));
+    aaxCheck (properties->AddProperty (
+        AAX_eProperty_PlugInID_AudioSuite,
+        static_cast<AAX_CPropertyValue> (YupPlugin_AAX_PlugInID_AudioSuite)));
 
-            aaxCheck (properties->AddProperty (
-                AAX_eProperty_PlugInID_Native,
-                static_cast<AAX_CPropertyValue> (YupPlugin_AAX_PlugInID_Native)));
+    aaxCheck (properties->AddProperty (
+        AAX_eProperty_InputStemFormat, inputFormat));
 
-            aaxCheck (properties->AddProperty (
-                AAX_eProperty_PlugInID_AudioSuite,
-                static_cast<AAX_CPropertyValue> (YupPlugin_AAX_PlugInID_AudioSuite)));
+    aaxCheck (properties->AddProperty (
+        AAX_eProperty_OutputStemFormat, outputFormat));
 
-            aaxCheck (properties->AddProperty (
-                AAX_eProperty_InputStemFormat, aaxInFormat));
+    aaxCheck (properties->AddProperty (
+        AAX_eProperty_CanBypass, true));
 
-            aaxCheck (properties->AddProperty (
-                AAX_eProperty_OutputStemFormat, aaxOutFormat));
+    // Request the host-generated parameter GUI only when no editor is provided
+    if (! plugin->hasEditor())
+        aaxCheck (properties->AddProperty (
+            AAX_eProperty_UsesClientGUI, true));
 
-            aaxCheck (properties->AddProperty (
-                AAX_eProperty_CanBypass, true));
+    aaxCheck (compDesc->AddProcessProc_Native (
+        reinterpret_cast<AAX_CProcessProc> (yupAAXAlgorithmCallback),
+        properties));
 
-            aaxCheck (properties->AddProperty (
-                AAX_eProperty_UsesClientGUI, true));
-
-            aaxCheck (compDesc->AddProcessProc_Native (
-                reinterpret_cast<AAX_CProcessProc> (yupAAXAlgorithmCallback),
-                properties));
-
-            aaxCheck (descriptor.AddComponent (compDesc));
-        }
-    }
+    aaxCheck (descriptor.AddComponent (compDesc));
 }
 
 } // namespace yup
@@ -1701,8 +1327,13 @@ AAX_Result GetEffectDescriptions (AAX_ICollection* collection)
     collection->AddEffect (YupPlugin_Id, descriptor);
 
     collection->SetManufacturerName (YupPlugin_Vendor);
-    collection->AddPackageName (YupPlugin_Name);
-    collection->AddPackageName (YupPlugin_Description);
+
+    // At least one package name of 16 characters or less is required
+    const yup::String pluginName (YupPlugin_Name);
+    collection->AddPackageName (pluginName.toRawUTF8());
+    if (pluginName.length() > 16)
+        collection->AddPackageName (pluginName.substring (0, 16).toRawUTF8());
+
     collection->SetPackageVersion (1);
 
     return AAX_SUCCESS;
