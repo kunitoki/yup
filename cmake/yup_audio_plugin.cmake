@@ -217,7 +217,12 @@ function (yup_audio_plugin)
             SHARED_LIBS ${target_name}_shared
             ADDITIONAL_LIBRARIES ${additional_libraries}
             MODULES ${YUP_ARG_MODULES}
-            ${YUP_ARG_UNPARSED_ARGUMENTS})
+            PLUGIN_ID ${AUv3_ARGS_PLUGIN_ID}
+            PLUGIN_VENDOR ${AUv3_ARGS_PLUGIN_VENDOR}
+            PLUGIN_DESCRIPTION ${AUv3_ARGS_PLUGIN_DESCRIPTION}
+            PLUGIN_URL ${AUv3_ARGS_PLUGIN_URL}
+            PLUGIN_EMAIL ${AUv3_ARGS_PLUGIN_EMAIL}
+            PLUGIN_IS_MONO ${AUv3_ARGS_PLUGIN_IS_MONO})
     endif()
 
     # ==== Create composite target for all enabled plugin formats
@@ -312,6 +317,7 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
         add_custom_command(TARGET ${dependency_target} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
             COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
+            COMMAND /bin/sh -c "killall -9 AudioComponentRegistrar 2>/dev/null; sleep 2; true"
             COMMENT "Copying AUv3 plugin ${plugin_type_upper} to ${plugin_path}"
             VERBATIM)
     elseif ("${plugin_type}" STREQUAL "aax")

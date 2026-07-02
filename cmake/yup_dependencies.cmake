@@ -155,16 +155,6 @@ function (_yup_collect_audio_plugin_host_dependencies definitions output_variabl
             "-framework CoreFoundation")
     endif()
 
-    _yup_definitions_enable ("${definitions}" YUP_AUDIO_PLUGIN_HOST_ENABLE_AUV3 enable_auv3)
-    if (enable_auv3 AND YUP_PLATFORM_MAC)
-        list (APPEND dependencies
-            "-framework AVFoundation"
-            "-framework AudioToolbox"
-            "-framework CoreAudioKit"
-            "-framework CoreAudio"
-            "-framework CoreFoundation")
-    endif()
-
     set (${output_variable} "${dependencies}" PARENT_SCOPE)
 endfunction()
 

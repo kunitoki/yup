@@ -35,6 +35,11 @@
 
 #import <AppKit/AppKit.h>
 
+#import <objc/message.h>
+#import <objc/runtime.h>
+
+#include <yup_core/native/yup_ObjCHelpers_apple.h>
+
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
@@ -156,8 +161,6 @@ public:
         inParameterChangedCallback = false;
 
         const AUAudioFrameCount maxFrames = [au maximumFramesToRender];
-
-        processor->setPlayHead (this);
 
         const auto& busLayout = processor->getBusLayout();
 
@@ -285,8 +288,8 @@ public:
         {
             auto* param = parameters[i].get();
             const auto address = param->getHostParameterID();
-            const auto name = param->getName().toNSString();
-            const auto identifier = param->getID().toNSString();
+            const auto name = yupStringToNS (param->getName());
+            const auto identifier = yupStringToNS (param->getID());
 
             AUValue minVal = static_cast<AUValue> (param->getMinimumValue());
             AUValue maxVal = static_cast<AUValue> (param->getMaximumValue());
@@ -310,7 +313,7 @@ public:
             }
         }
 
-        return [nodes autorelease];
+        return nodes;
     }
 
     void valueChangedFromHost (AUParameter* param, AUValue value)
@@ -356,7 +359,7 @@ public:
             return @"";
 
         const auto normalised = static_cast<float> (*value) / getMaximumParameterValue (*yupParam);
-        return yupParam->convertToString (normalised).toNSString();
+        return yupStringToNS (yupParam->convertToString (normalised));
     }
 
     AUValue valueFromString (AUParameter* param, NSString* str) const
@@ -406,12 +409,12 @@ public:
 
         auto* newPresets = [[NSMutableArray<AUAudioUnitPreset*> alloc] init];
 
-        const int n = static_cast<int> (processor->getNumPrograms());
+        const int n = static_cast<int> (processor->getNumPresets());
 
         for (int i = 0; i < n; ++i)
         {
             auto* preset = [[AUAudioUnitPreset alloc] init];
-            [preset setName:processor->getProgramName (i).toNSString()];
+            [preset setName:yupStringToNS (processor->getPresetName (i))];
             [preset setNumber:static_cast<NSInteger> (i)];
             [newPresets addObject:preset];
         }
@@ -432,7 +435,7 @@ public:
             return nil;
 
         std::lock_guard<std::mutex> lock (factoryPresetsMutex);
-        const auto current = processor->getCurrentProgram();
+        const auto current = processor->getCurrentPreset();
 
         if (isPositiveAndBelow (current, static_cast<int> ([factoryPresets.get() count])))
             return [factoryPresets.get() objectAtIndex:static_cast<NSUInteger> (current)];
@@ -443,7 +446,7 @@ public:
     void setCurrentPreset (AUAudioUnitPreset* preset)
     {
         if (processor != nullptr && preset != nullptr)
-            processor->setCurrentProgram (static_cast<int> ([preset number]));
+            processor->setCurrentPreset (static_cast<int> ([preset number]));
     }
 
     //==============================================================================
@@ -461,7 +464,7 @@ public:
 
         MemoryBlock state;
         if (processor != nullptr)
-            processor->getStateInformation (state);
+            processor->saveStateIntoMemory (state);
 
         if (state.getSize() > 0)
         {
@@ -469,7 +472,7 @@ public:
                        forKey:@"YUPProcessorState"];
         }
 
-        return [retval autorelease];
+        return retval;
     }
 
     void setFullState (NSDictionary<NSString*, id>* state)
@@ -477,7 +480,7 @@ public:
         if (state == nil || processor == nullptr)
             return;
 
-        auto* obj = [state objectForKey:@"YUPProcessorState"];
+        id obj = [state objectForKey:@"YUPProcessorState"];
         if (obj == nil || ! [obj isKindOfClass:[NSData class]])
             return;
 
@@ -490,7 +493,8 @@ public:
             ObjCMsgSendSuper<AUAudioUnit, void> (au, @selector (willChangeValueForKey:), @"allParameterValues");
         }
 
-        processor->setStateInformation (static_cast<const char*> ([data bytes]), numBytes);
+        MemoryBlock stateBlock ([data bytes], static_cast<size_t> (numBytes));
+        processor->loadStateFromMemory (stateBlock);
 
         {
             ObjCMsgSendSuper<AUAudioUnit, void> (au, @selector (didChangeValueForKey:), @"allParameterValues");
@@ -572,7 +576,7 @@ public:
         if (bus.getType() != AudioBus::Type::Audio)
             return false;
 
-        return newNumChannels > 0 && newNumChannels <= bus.getMaxSupportedChannels();
+        return newNumChannels > 0 && newNumChannels <= bus.getNumChannels();
     }
 
     //==============================================================================
@@ -583,9 +587,6 @@ public:
         allocated = false;
 
         if (processor == nullptr)
-            return false;
-
-        if (ObjCMsgSendSuper<AUAudioUnit, BOOL, NSError**> (au, @selector (allocateRenderResourcesAndReturnError:), outError) == NO)
             return false;
 
         if (outError != nullptr)
@@ -869,13 +870,13 @@ public:
 
     bool getRenderingOffline() const
     {
-        return processor != nullptr && processor->isNonRealtime();
+        return processor != nullptr && processor->isOfflineProcessing();
     }
 
     void setRenderingOffline (bool offline)
     {
         if (processor != nullptr)
-            processor->setNonRealtime (offline);
+            processor->setOfflineProcessing (offline);
     }
 
     //==============================================================================
@@ -888,7 +889,7 @@ public:
 
     bool getSupportsMPE() const
     {
-        return processor != nullptr && processor->supportsMPE();
+        return false;
     }
 
     NSArray<NSString*>* getMIDIOutputNames() const
@@ -911,7 +912,8 @@ public:
         if (processor != nullptr && processor->getSampleRate() > 0.0)
             info.setTimeInSeconds (static_cast<double> (*info.getTimeInSamples()) / processor->getSampleRate());
 
-        double num = 0, den = 0, ppqPosition = 0;
+        double num = 0, ppqPosition = 0;
+        NSInteger den = 0;
         NSInteger deltaSampleOffsetToNextBeat = 0;
         double currentMeasureDownBeat = 0, bpm = 0;
 
@@ -963,21 +965,20 @@ public:
         auto* indices = [[NSMutableIndexSet alloc] init];
 
         if (! processor->hasEditor())
-            return [indices autorelease];
+            return indices;
 
-        auto* editor = processor->createEditorAndMakeActive();
+        auto* editor = processor->createEditor();
         if (editor == nullptr)
-            return [indices autorelease];
+            return indices;
 
         for (NSUInteger i = 0; i < [configs count]; ++i)
         {
-            auto* config = [configs objectAtIndex:i];
-            (void) config;
+            [[maybe_unused]] auto* config = [configs objectAtIndex:i];
             [indices addIndex:i];
         }
 
         delete editor;
-        return [indices autorelease];
+        return indices;
     }
 
     void selectViewConfiguration (AUAudioUnitViewConfiguration* config)
@@ -989,7 +990,7 @@ public:
     //==============================================================================
     // Listener callbacks
 
-    void audioProcessorChanged (AudioProcessorBase*, const ChangeDetails& details) override
+    void audioProcessorChanged (AudioProcessorBase*, const AudioProcessorBase::ChangeDetails& details) override
     {
         if (details.programChanged)
         {
@@ -1204,7 +1205,7 @@ struct AUAudioUnitSubclass final : public ObjCClass<AUAudioUnit>
                                                                                          NSError** error,
                                                                                          AudioPluginProcessorAUv3* cpp) {
             self = ObjCMsgSendSuper<AUAudioUnit, AUAudioUnit*, AudioComponentDescription,
-                                    AudioComponentInstantiationOptions, NSError**> (self, @selector (initWithComponentDescription:options:error:), descr, options, error);
+                                    AudioComponentInstantiationOptions, NSError * __autoreleasing *> (self, @selector (initWithComponentDescription:options:error:), descr, options, error);
             setThis (self, cpp);
             return self;
         });
@@ -1212,18 +1213,20 @@ struct AUAudioUnitSubclass final : public ObjCClass<AUAudioUnit>
 
         addMethod (@selector (initWithComponentDescription:options:error:), [] (id self, SEL, AudioComponentDescription descr, AudioComponentInstantiationOptions options, NSError** error) {
             self = ObjCMsgSendSuper<AUAudioUnit, AUAudioUnit*, AudioComponentDescription,
-                                    AudioComponentInstantiationOptions, NSError**> (self, @selector (initWithComponentDescription:options:error:), descr, options, error);
+                                    AudioComponentInstantiationOptions, NSError * __autoreleasing *> (self, @selector (initWithComponentDescription:options:error:), descr, options, error);
 
             auto* cpp = new AudioPluginProcessorAUv3 (self, descr, options, error);
             setThis (self, cpp);
             return self;
         });
 
-        addMethod (@selector (dealloc), [] (id self, SEL) {
+        YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wundeclared-selector")
+        addMethod (sel_registerName ("dealloc"), [] (id self, SEL) {
             auto* cpp = _this (self);
             delete cpp;
             setThis (self, nullptr);
         });
+        YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
         // Internal render block
         addMethod (@selector (internalRenderBlock), [] (id self, SEL) {
@@ -1368,7 +1371,7 @@ struct AUAudioUnitSubclass final : public ObjCClass<AUAudioUnit>
 
     static void setThis (id self, AudioPluginProcessorAUv3* cpp)
     {
-        object_setInstanceVariable (self, "cppObject", cpp);
+        setIvar (self, "cppObject", cpp);
     }
 };
 
@@ -1376,43 +1379,45 @@ struct AUAudioUnitSubclass final : public ObjCClass<AUAudioUnit>
 // View controller C++ companion
 
 class AudioPluginViewControllerv3
+    : public AudioProcessorBase::Listener
 {
 public:
     explicit AudioPluginViewControllerv3 (AUViewController<AUAudioUnitFactory>* vc)
         : myself (vc)
     {
         initialiseYup_GUI();
+        processor.reset (::createPluginProcessor());
     }
 
-    ~AudioPluginViewControllerv3()
+    ~AudioPluginViewControllerv3() override
     {
         if (processor != nullptr)
         {
             yup::endActiveParameterGestures (processor.get());
             processor->removeListener (this);
 
-            if (auto* editor = processor->getActiveEditor())
+            if (editor != nullptr)
             {
-                processor->editorBeingDeleted (editor);
                 delete editor;
+                editor = nullptr;
             }
         }
     }
 
     void loadView()
     {
-        processor.reset (::createPluginProcessor());
-
         if (processor == nullptr)
             return;
 
         if (processor->hasEditor())
         {
-            if (auto* editor = processor->createEditorAndMakeActive())
+            editor = processor->createEditor();
+
+            if (editor != nullptr)
             {
                 preferredSize = { editor->getWidth(), editor->getHeight() };
 
-                NSView* view = [[NSView alloc] initWithFrame:NSMakeRect (0, 0, preferredSize.width, preferredSize.height)];
+                NSView* view = [[NSView alloc] initWithFrame:NSMakeRect (0, 0, preferredSize.getWidth(), preferredSize.getHeight())];
                 [myself setView:view];
 
                 editor->setVisible (true);
@@ -1432,7 +1437,7 @@ public:
 
         if ([myself view] != nil)
         {
-            if (auto* editor = processor->getActiveEditor())
+            if (editor != nullptr)
             {
                 const auto bounds = [[myself view] bounds];
                 editor->setBounds ({ 0.0f,
@@ -1445,9 +1450,16 @@ public:
 
     CGSize getPreferredContentSize() const
     {
-        return CGSizeMake (static_cast<CGFloat> (preferredSize.width),
-                           static_cast<CGFloat> (preferredSize.height));
+        return CGSizeMake (static_cast<CGFloat> (preferredSize.getWidth()),
+                           static_cast<CGFloat> (preferredSize.getHeight()));
     }
+
+    //==============================================================================
+    // Listener
+
+    void audioProcessorChanged (AudioProcessorBase*, const AudioProcessorBase::ChangeDetails&) override {}
+
+    //==============================================================================
 
     AUAudioUnit* createAudioUnit (const AudioComponentDescription& desc, NSError** error)
     {
@@ -1459,7 +1471,7 @@ public:
         static AUAudioUnitSubclass auClass;
         auto* au = auClass.createInstance();
         au = ObjCMsgSendSuper<AUAudioUnit, AUAudioUnit*, AudioComponentDescription,
-                              AudioComponentInstantiationOptions, NSError**> (au, @selector (initWithComponentDescription:options:error:), desc, 0, error);
+                              AudioComponentInstantiationOptions, NSError * __autoreleasing *> (au, @selector (initWithComponentDescription:options:error:), desc, 0, error);
 
         if (au == nil)
         {
@@ -1478,6 +1490,7 @@ public:
 private:
     AUViewController<AUAudioUnitFactory>* myself = nil;
     std::unique_ptr<AudioProcessor> processor;
+    AudioProcessorEditor* editor = nullptr;
     Rectangle<float> preferredSize { 1.0f, 1.0f };
 };
 

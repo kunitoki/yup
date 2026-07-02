@@ -37,9 +37,6 @@ yup::String formatTypeToString (yup::AudioPluginFormatType type)
         case yup::AudioPluginFormatType::audioUnit:
             return "AU";
 
-        case yup::AudioPluginFormatType::audioUnitV3:
-            return "AUv3";
-
         default:
             return "?";
     }
@@ -76,10 +73,6 @@ AudioGraphApp::AudioGraphApp()
 #if YUP_AUDIO_PLUGIN_HOST_ENABLE_AU && YUP_MAC
     scanner->addFormat (std::make_unique<yup::AUv2Format>());
 #endif
-#if YUP_AUDIO_PLUGIN_HOST_ENABLE_AUV3 && YUP_MAC
-    scanner->addFormat (std::make_unique<yup::AUv3Format>());
-#endif
-
     nodeRegistry.registerPluginFormats (scanner.get(), makeHostContext());
 #endif
 

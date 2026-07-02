@@ -32,26 +32,24 @@
 		<string>com.apple.AudioUnit-UI</string>
 		<key>NSExtensionAttributes</key>
 		<dict>
-			<key>AudioComponentBundle</key>
-			<string></string>
+			<key>AudioComponents</key>
+			<array>
+				<dict>
+					<key>type</key>
+					<string>@PLUGIN_AU_TYPE@</string>
+					<key>subtype</key>
+					<string>@PLUGIN_AU_SUBTYPE@</string>
+					<key>manufacturer</key>
+					<string>@PLUGIN_AU_MANUFACTURER@</string>
+					<key>name</key>
+					<string>@PLUGIN_AU_NAME@</string>
+					<key>version</key>
+					<integer>1</integer>
+					<key>sandboxSafe</key>
+					<true/>
+				</dict>
+			</array>
 		</dict>
 	</dict>
-	<key>AudioComponents</key>
-	<array>
-		<dict>
-			<key>type</key>
-			<string>@PLUGIN_AU_TYPE@</string>
-			<key>subtype</key>
-			<string>@PLUGIN_AU_SUBTYPE@</string>
-			<key>manufacturer</key>
-			<string>@PLUGIN_AU_MANUFACTURER@</string>
-			<key>name</key>
-			<string>@PLUGIN_AU_NAME@</string>
-			<key>version</key>
-			<integer>1</integer>
-			<key>sandboxSafe</key>
-			<true/>
-		</dict>
-	</array>
 </dict>
 </plist>

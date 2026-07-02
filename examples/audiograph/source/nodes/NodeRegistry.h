@@ -420,9 +420,6 @@ public:
             case yup::AudioPluginFormatType::audioUnit:
                 return pluginAuIdentifier;
 
-            case yup::AudioPluginFormatType::audioUnitV3:
-                return pluginAuIdentifier; // reuse AU identifier for now
-
             default:
                 return pluginUnknownIdentifier;
         }
@@ -462,9 +459,6 @@ public:
                 break;
             case yup::AudioPluginFormatType::audioUnit:
                 formatTypeStr = "au";
-                break;
-            case yup::AudioPluginFormatType::audioUnitV3:
-                formatTypeStr = "auv3";
                 break;
             default:
                 formatTypeStr = "unknown";

@@ -99,11 +99,3 @@ using CLAPModuleHandle = void*;
 
 #include "native/yup_AudioPluginInstance_AUv2.mm"
 #endif
-
-#if YUP_AUDIO_PLUGIN_HOST_ENABLE_AUV3 && YUP_MAC
-#import <AVFoundation/AVFoundation.h>
-#import <AudioToolbox/AudioToolbox.h>
-#import <CoreAudioKit/CoreAudioKit.h>
-
-#include "native/yup_AudioPluginInstance_AUv3.mm"
-#endif
