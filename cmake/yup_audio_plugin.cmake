@@ -34,7 +34,7 @@ function (yup_audio_plugin)
         # Globals
         TARGET_NAME TARGET_VERSION TARGET_IDE_GROUP TARGET_APP_ID TARGET_APP_NAMESPACE TARGET_CXX_STANDARD
         # Plugin types
-        PLUGIN_CREATE_CLAP PLUGIN_CREATE_VST3 PLUGIN_CREATE_STANDALONE PLUGIN_CREATE_AU PLUGIN_CREATE_AAX)
+        PLUGIN_CREATE_CLAP PLUGIN_CREATE_VST3 PLUGIN_CREATE_STANDALONE PLUGIN_CREATE_AU PLUGIN_CREATE_AUv3 PLUGIN_CREATE_AAX)
 
     set (multi_value_args
         DEFINITIONS
@@ -67,8 +67,8 @@ function (yup_audio_plugin)
         return()
     endif()
 
-    if (NOT YUP_ARG_PLUGIN_CREATE_CLAP AND NOT YUP_ARG_PLUGIN_CREATE_VST3 AND NOT YUP_ARG_PLUGIN_CREATE_STANDALONE AND NOT YUP_ARG_PLUGIN_CREATE_AU AND NOT YUP_ARG_PLUGIN_CREATE_AAX)
-        _yup_message (FATAL_ERROR "At least one plugin type must be enabled (CLAP, VST3, AU, AAX, or Standalone).")
+    if (NOT YUP_ARG_PLUGIN_CREATE_CLAP AND NOT YUP_ARG_PLUGIN_CREATE_VST3 AND NOT YUP_ARG_PLUGIN_CREATE_STANDALONE AND NOT YUP_ARG_PLUGIN_CREATE_AU AND NOT YUP_ARG_PLUGIN_CREATE_AUv3 AND NOT YUP_ARG_PLUGIN_CREATE_AAX)
+        _yup_message (FATAL_ERROR "At least one plugin type must be enabled (CLAP, VST3, AU, AUv3, AAX, or Standalone).")
         return()
     endif()
 
@@ -189,6 +189,37 @@ function (yup_audio_plugin)
             "${YUP_ARG_UNPARSED_ARGUMENTS}")
     endif()
 
+    # ==== Build AUv3 plugin target (macOS only)
+    if (YUP_ARG_PLUGIN_CREATE_AUv3)
+        cmake_parse_arguments (AUv3_ARGS ""
+            "PLUGIN_IS_SYNTH;PLUGIN_AU_SUBTYPE;PLUGIN_AU_MANUFACTURER;PLUGIN_NAME;PLUGIN_VERSION;PLUGIN_ID;PLUGIN_VENDOR;PLUGIN_DESCRIPTION;PLUGIN_URL;PLUGIN_EMAIL;PLUGIN_IS_MONO"
+            "" ${YUP_ARG_UNPARSED_ARGUMENTS})
+
+        set (auv3_has_standalone OFF)
+        set (auv3_standalone_target "")
+        if (YUP_ARG_PLUGIN_CREATE_STANDALONE)
+            set (auv3_has_standalone ON)
+            set (auv3_standalone_target "${target_name}_standalone_plugin")
+        endif()
+
+        yup_plugin_auv3 (
+            TARGET_NAME ${target_name}
+            TARGET_CXX_STANDARD ${target_cxx_standard}
+            TARGET_IDE_GROUP ${target_ide_group}
+            TARGET_BUNDLE_ID ${target_bundle_id}
+            PLUGIN_IS_SYNTH ${AUv3_ARGS_PLUGIN_IS_SYNTH}
+            PLUGIN_NAME ${AUv3_ARGS_PLUGIN_NAME}
+            PLUGIN_VERSION ${AUv3_ARGS_PLUGIN_VERSION}
+            PLUGIN_AU_SUBTYPE ${AUv3_ARGS_PLUGIN_AU_SUBTYPE}
+            PLUGIN_AU_MANUFACTURER ${AUv3_ARGS_PLUGIN_AU_MANUFACTURER}
+            HAS_STANDALONE ${auv3_has_standalone}
+            STANDALONE_TARGET ${auv3_standalone_target}
+            SHARED_LIBS ${target_name}_shared
+            ADDITIONAL_LIBRARIES ${additional_libraries}
+            MODULES ${YUP_ARG_MODULES}
+            ${YUP_ARG_UNPARSED_ARGUMENTS})
+    endif()
+
     # ==== Create composite target for all enabled plugin formats
     set (_all_plugin_targets "")
     if (YUP_ARG_PLUGIN_CREATE_CLAP)
@@ -205,6 +236,9 @@ function (yup_audio_plugin)
     endif()
     if (YUP_ARG_PLUGIN_CREATE_AAX)
         list (APPEND _all_plugin_targets ${target_name}_aax_plugin)
+    endif()
+    if (YUP_ARG_PLUGIN_CREATE_AUv3 AND YUP_PLATFORM_MAC)
+        list (APPEND _all_plugin_targets ${target_name}_auv3_plugin)
     endif()
 
     add_custom_target (${target_name} DEPENDS ${_all_plugin_targets})
@@ -227,6 +261,11 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
     if ("${plugin_type}" STREQUAL "au")
         set (target_file_name "${target_name}_${plugin_type}_plugin.component")
         set (plugin_target_path "$ENV{HOME}/Library/Audio/Plug-Ins/Components")
+    elseif ("${plugin_type}" STREQUAL "auv3")
+        set (target_file_name "${target_name}_${plugin_type}_plugin.appex")
+        set (plugin_target_path "$ENV{HOME}/Library/Audio/Plug-Ins/AppExtensions")
+        # AppExtension destination may not exist, create it
+        file (MAKE_DIRECTORY "${plugin_target_path}")
     else()
         set (target_file_name "${target_name}_${plugin_type}_plugin.${plugin_type}")
         set (plugin_target_path "$ENV{HOME}/Library/Audio/Plug-Ins/${plugin_type_upper}")

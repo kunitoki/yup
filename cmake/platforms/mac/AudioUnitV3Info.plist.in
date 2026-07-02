@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>English</string>
+	<key>CFBundleExecutable</key>
+	<string>${MACOSX_BUNDLE_EXECUTABLE_NAME}</string>
+	<key>CFBundleIdentifier</key>
+	<string>${MACOSX_BUNDLE_GUI_IDENTIFIER}</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>@PLUGIN_AU_NAME@</string>
+	<key>CFBundlePackageType</key>
+	<string>XPC!</string>
+	<key>CFBundleShortVersionString</key>
+	<string>@PLUGIN_AU_VERSION@</string>
+	<key>CFBundleVersion</key>
+	<string>@PLUGIN_AU_VERSION@</string>
+	<key>CFBundleSignature</key>
+	<string>@PLUGIN_AU_MANUFACTURER@</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright (c) 2026 - kunitoki@gmail.com</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionPrincipalClass</key>
+		<string>YUPAUv3ViewController</string>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.AudioUnit-UI</string>
+		<key>NSExtensionAttributes</key>
+		<dict>
+			<key>AudioComponentBundle</key>
+			<string></string>
+		</dict>
+	</dict>
+	<key>AudioComponents</key>
+	<array>
+		<dict>
+			<key>type</key>
+			<string>@PLUGIN_AU_TYPE@</string>
+			<key>subtype</key>
+			<string>@PLUGIN_AU_SUBTYPE@</string>
+			<key>manufacturer</key>
+			<string>@PLUGIN_AU_MANUFACTURER@</string>
+			<key>name</key>
+			<string>@PLUGIN_AU_NAME@</string>
+			<key>version</key>
+			<integer>1</integer>
+			<key>sandboxSafe</key>
+			<true/>
+		</dict>
+	</array>
+</dict>
+</plist>
