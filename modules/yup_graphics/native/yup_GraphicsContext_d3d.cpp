@@ -68,6 +68,9 @@ public:
             scd.BufferCount = 2;
             scd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
 
+            fprintf (stderr, "D3D: CreateSwapChainForHwnd hwnd=%p size=%dx%d\n", window, width, height);
+            fflush (stderr);
+
             VERIFY_OK (m_d3dFactory->CreateSwapChainForHwnd (m_gpu.Get(),
                                                              (HWND) window,
                                                              &scd,
@@ -117,9 +120,18 @@ public:
             else
             {
                 ComPtr<ID3D11Texture2D> backbuffer;
-                VERIFY_OK (m_swapchain->GetBuffer (0,
-                                                   __uuidof (ID3D11Texture2D),
-                                                   reinterpret_cast<void**> (backbuffer.ReleaseAndGetAddressOf())));
+                HRESULT hr = m_swapchain->GetBuffer (0,
+                                                     __uuidof (ID3D11Texture2D),
+                                                     reinterpret_cast<void**> (backbuffer.ReleaseAndGetAddressOf()));
+
+                if (FAILED (hr))
+                {
+                    auto reason = m_gpu->GetDeviceRemovedReason();
+                    fprintf (stderr, "D3D: GetBuffer failed: hr=0x%08X, deviceRemovedReason=0x%08X\n", static_cast<unsigned> (hr), static_cast<unsigned> (reason));
+                    fflush (stderr);
+                    m_renderTarget->setTargetTexture (nullptr);
+                    return;
+                }
 
                 m_renderTarget->setTargetTexture (backbuffer);
             }
@@ -130,7 +142,21 @@ public:
         m_renderContext->flush (flushDesc);
 
         if (! m_isHeadless)
-            m_swapchain->Present (0, 0);
+        {
+            HRESULT hr = m_swapchain->Present (0, 0);
+
+            if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
+            {
+                auto reason = m_gpu->GetDeviceRemovedReason();
+                fprintf (stderr, "D3D: Present returned device removed/reset: hr=0x%08X, deviceRemovedReason=0x%08X\n", static_cast<unsigned> (hr), static_cast<unsigned> (reason));
+                fflush (stderr);
+            }
+            else if (FAILED (hr))
+            {
+                fprintf (stderr, "D3D: Present failed: hr=0x%08X\n", static_cast<unsigned> (hr));
+                fflush (stderr);
+            }
+        }
 
         m_renderTarget->setTargetTexture (nullptr);
     }
