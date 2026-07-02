@@ -269,6 +269,101 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_find_aax_sdk)
+    if (TARGET yup_audio_plugin_client_aaxsdk)
+        return()
+    endif()
+
+    if (DEFINED YUP_AAX_SDK_ROOT)
+        set (AAX_SDK_ROOT "${YUP_AAX_SDK_ROOT}")
+    elseif (DEFINED ENV{YUP_AAX_SDK_ROOT})
+        set (AAX_SDK_ROOT "$ENV{YUP_AAX_SDK_ROOT}")
+    else()
+        _yup_message (STATUS "YUP_AAX_SDK_ROOT not set — AAX plugin support disabled")
+        return()
+    endif()
+
+    if (NOT EXISTS "${AAX_SDK_ROOT}/Interfaces/AAX.h")
+        _yup_message (FATAL_ERROR "AAX SDK not found at ${AAX_SDK_ROOT} "
+            "(expected ${AAX_SDK_ROOT}/Interfaces/AAX.h)")
+    endif()
+
+    # --- Build AAX SDK headers interface ---
+    add_library (yup_audio_plugin_client_aaxsdk_headers INTERFACE)
+    target_include_directories (yup_audio_plugin_client_aaxsdk_headers INTERFACE
+        "${AAX_SDK_ROOT}/Interfaces"
+        "${AAX_SDK_ROOT}/Interfaces/ACF")
+
+    # --- Build AAXLibrary (static library from SDK sources) ---
+    set (AAX_LIBRARY_SOURCE_DIR "${AAX_SDK_ROOT}/Libs/AAXLibrary/source")
+
+    if (EXISTS "${AAX_LIBRARY_SOURCE_DIR}")
+        # Collect source files, excluding platform-specific files for the wrong platform
+        file (GLOB_RECURSE AAX_LIBRARY_SOURCES
+            "${AAX_LIBRARY_SOURCE_DIR}/*.cpp")
+
+        if (YUP_PLATFORM_MAC)
+            file (GLOB_RECURSE AAX_LIBRARY_OBJC_SOURCES
+                "${AAX_LIBRARY_SOURCE_DIR}/*.mm"
+                "${AAX_LIBRARY_SOURCE_DIR}/*.OSX.*")
+            list (APPEND AAX_LIBRARY_SOURCES ${AAX_LIBRARY_OBJC_SOURCES})
+        else()
+            # Exclude macOS-specific files on Windows/Linux
+            file (GLOB_RECURSE AAX_LIBRARY_OSX_SOURCES
+                "${AAX_LIBRARY_SOURCE_DIR}/*_OSX.*"
+                "${AAX_LIBRARY_SOURCE_DIR}/*.mm")
+            if (AAX_LIBRARY_OSX_SOURCES)
+                list (REMOVE_ITEM AAX_LIBRARY_SOURCES ${AAX_LIBRARY_OSX_SOURCES})
+            endif()
+        endif()
+
+        if (AAX_LIBRARY_SOURCES)
+            add_library (yup_audio_plugin_client_aaxlib STATIC ${AAX_LIBRARY_SOURCES})
+            target_compile_features (yup_audio_plugin_client_aaxlib PRIVATE cxx_std_17)
+            target_include_directories (yup_audio_plugin_client_aaxlib PRIVATE
+                "${AAX_SDK_ROOT}/Interfaces"
+                "${AAX_SDK_ROOT}/Interfaces/ACF")
+            target_compile_definitions (yup_audio_plugin_client_aaxlib PRIVATE
+                AAX_LIBRARY_BINARY=1)
+
+            if (WIN32)
+                target_compile_definitions (yup_audio_plugin_client_aaxlib PRIVATE
+                    NOMINMAX=1 WIN32_LEAN_AND_MEAN=1)
+            endif()
+
+            set_target_properties (yup_audio_plugin_client_aaxlib PROPERTIES
+                POSITION_INDEPENDENT_CODE ON
+                FOLDER "Thirdparty")
+
+            # Interface target that combines headers + library
+            add_library (yup_audio_plugin_client_aaxsdk INTERFACE)
+            target_link_libraries (yup_audio_plugin_client_aaxsdk INTERFACE
+                yup_audio_plugin_client_aaxsdk_headers
+                yup_audio_plugin_client_aaxlib)
+            target_compile_definitions (yup_audio_plugin_client_aaxsdk INTERFACE
+                AAX_LIBRARY_BINARY=1)
+
+            set_target_properties (yup_audio_plugin_client_aaxsdk PROPERTIES
+                YUP_AAX_SDK_ROOT "${AAX_SDK_ROOT}")
+
+            _yup_message (STATUS "AAX SDK found and library built from ${AAX_SDK_ROOT}")
+            return()
+        endif()
+    endif()
+
+    # Fallback: headers-only if no source files found
+    add_library (yup_audio_plugin_client_aaxsdk INTERFACE)
+    target_link_libraries (yup_audio_plugin_client_aaxsdk INTERFACE
+        yup_audio_plugin_client_aaxsdk_headers)
+
+    set_target_properties (yup_audio_plugin_client_aaxsdk PROPERTIES
+        YUP_AAX_SDK_ROOT "${AAX_SDK_ROOT}")
+
+    _yup_message (WARNING "AAX SDK headers found but no library sources — plugin may not link properly")
+endfunction()
+
+#==============================================================================
+
 function (_yup_fetch_perfetto)
     if (TARGET perfetto::perfetto)
         return()

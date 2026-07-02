@@ -34,7 +34,7 @@ function (yup_audio_plugin)
         # Globals
         TARGET_NAME TARGET_VERSION TARGET_IDE_GROUP TARGET_APP_ID TARGET_APP_NAMESPACE TARGET_CXX_STANDARD
         # Plugin types
-        PLUGIN_CREATE_CLAP PLUGIN_CREATE_VST3 PLUGIN_CREATE_STANDALONE PLUGIN_CREATE_AU)
+        PLUGIN_CREATE_CLAP PLUGIN_CREATE_VST3 PLUGIN_CREATE_STANDALONE PLUGIN_CREATE_AU PLUGIN_CREATE_AAX)
 
     set (multi_value_args
         DEFINITIONS
@@ -67,8 +67,8 @@ function (yup_audio_plugin)
         return()
     endif()
 
-    if (NOT YUP_ARG_PLUGIN_CREATE_CLAP AND NOT YUP_ARG_PLUGIN_CREATE_VST3 AND NOT YUP_ARG_PLUGIN_CREATE_STANDALONE AND NOT YUP_ARG_PLUGIN_CREATE_AU)
-        _yup_message (FATAL_ERROR "At least one plugin type must be enabled (CLAP, VST3, AU, or Standalone).")
+    if (NOT YUP_ARG_PLUGIN_CREATE_CLAP AND NOT YUP_ARG_PLUGIN_CREATE_VST3 AND NOT YUP_ARG_PLUGIN_CREATE_STANDALONE AND NOT YUP_ARG_PLUGIN_CREATE_AU AND NOT YUP_ARG_PLUGIN_CREATE_AAX)
+        _yup_message (FATAL_ERROR "At least one plugin type must be enabled (CLAP, VST3, AU, AAX, or Standalone).")
         return()
     endif()
 
@@ -342,140 +342,219 @@ function (yup_audio_plugin)
     endif()
 
     # ==== Build AUv2 plugin target (macOS only)
-    if (YUP_ARG_PLUGIN_CREATE_AU)
-        if (NOT YUP_PLATFORM_MAC)
-            _yup_message (WARNING "AUv2 plugins are only supported on macOS. Skipping AU target.")
+    if (YUP_ARG_PLUGIN_CREATE_AU AND YUP_PLATFORM_MAC)
+        _yup_fetch_apple_ausdk()
+
+        _yup_message (STATUS "Setting up AUv2 plugin client")
+        _yup_module_setup_plugin_client (
+            ${target_name}
+            yup_audio_plugin_client
+            ${YUP_ARG_TARGET_IDE_GROUP}
+            au
+            ${YUP_ARG_UNPARSED_ARGUMENTS})
+
+        # Determine AU type (aumu for instruments, aufx for effects)
+        cmake_parse_arguments (AU_ARGS ""
+            "PLUGIN_IS_SYNTH;PLUGIN_AU_SUBTYPE;PLUGIN_AU_MANUFACTURER;PLUGIN_NAME;PLUGIN_VERSION;PLUGIN_ID;PLUGIN_VENDOR;PLUGIN_DESCRIPTION;PLUGIN_URL;PLUGIN_EMAIL;PLUGIN_IS_MONO"
+            "" ${YUP_ARG_UNPARSED_ARGUMENTS})
+        if (AU_ARGS_PLUGIN_IS_SYNTH)
+            set (au_bundle_type "aumu")
         else()
-            _yup_fetch_apple_ausdk()
-
-            _yup_message (STATUS "Setting up AUv2 plugin client")
-            _yup_module_setup_plugin_client (
-                ${target_name}
-                yup_audio_plugin_client
-                ${YUP_ARG_TARGET_IDE_GROUP}
-                au
-                ${YUP_ARG_UNPARSED_ARGUMENTS})
-
-            # Determine AU type (aumu for instruments, aufx for effects)
-            cmake_parse_arguments (AU_ARGS ""
-                "PLUGIN_IS_SYNTH;PLUGIN_AU_SUBTYPE;PLUGIN_AU_MANUFACTURER;PLUGIN_NAME;PLUGIN_VERSION;PLUGIN_ID;PLUGIN_VENDOR;PLUGIN_DESCRIPTION;PLUGIN_URL;PLUGIN_EMAIL;PLUGIN_IS_MONO"
-                "" ${YUP_ARG_UNPARSED_ARGUMENTS})
-            if (AU_ARGS_PLUGIN_IS_SYNTH)
-                set (au_bundle_type "aumu")
-            else()
-                set (au_bundle_type "aufx")
-            endif()
-
-            if (NOT AU_ARGS_PLUGIN_AU_SUBTYPE)
-                set (AU_ARGS_PLUGIN_AU_SUBTYPE "Dflt")
-            endif()
-            if (NOT AU_ARGS_PLUGIN_AU_MANUFACTURER)
-                set (AU_ARGS_PLUGIN_AU_MANUFACTURER "Yup!")
-            endif()
-            if (NOT AU_ARGS_PLUGIN_NAME)
-                set (AU_ARGS_PLUGIN_NAME "${target_name}")
-            endif()
-            if (NOT AU_ARGS_PLUGIN_VERSION)
-                set (AU_ARGS_PLUGIN_VERSION "1")
-            endif()
-
-            _yup_message (STATUS "Creating AUv2 plugin target")
-            add_library (${target_name}_au_plugin MODULE)
-
-            target_compile_features (${target_name}_au_plugin PRIVATE cxx_std_${target_cxx_standard})
-
-            target_compile_definitions (${target_name}_au_plugin PRIVATE
-                YUP_AUDIO_PLUGIN_ENABLE_AU=1
-                YUP_STANDALONE_APPLICATION=0)
-
-            _yup_sdl_configure_symbols_patch ("${target_name}_au_plugin" au_sdl_symbols_patch_target au_sdl_symbols_sdl_target)
-            set (au_plugin_bundle_libraries
-                ${au_sdl_symbols_sdl_target}
-                ${au_sdl_symbols_patch_target})
-
-            target_link_libraries (${target_name}_au_plugin PRIVATE
-                ${target_name}_shared
-                yup_audio_plugin_client
-                base-sdk-auv2
-                ${target_name}_au
-                ${additional_libraries}
-                ${au_plugin_bundle_libraries}
-                ${YUP_ARG_MODULES}
-                "-framework AudioUnit"
-                "-framework AudioToolbox"
-                "-framework CoreAudio"
-                "-framework CoreFoundation"
-                "-framework AppKit")
-
-            _yup_module_apply_arc_to_target_sources (${target_name}_au_plugin
-                ${target_name}_shared
-                yup_audio_plugin_client
-                base-sdk-auv2
-                ${target_name}_au
-                ${additional_libraries}
-                ${au_plugin_bundle_libraries}
-                ${YUP_ARG_MODULES})
-
-            # Generate the AU Info.plist from our template
-            set (au_plist_template "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/mac/AudioUnitInfo.plist.in")
-            set (au_plist_output "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_au_plugin.plist")
-
-            set (PLUGIN_AU_TYPE "${au_bundle_type}")
-            set (PLUGIN_AU_SUBTYPE "${AU_ARGS_PLUGIN_AU_SUBTYPE}")
-            set (PLUGIN_AU_MANUFACTURER "${AU_ARGS_PLUGIN_AU_MANUFACTURER}")
-            set (PLUGIN_AU_NAME "${AU_ARGS_PLUGIN_NAME}")
-            set (PLUGIN_AU_VERSION "${AU_ARGS_PLUGIN_VERSION}")
-
-            set (au_bundle_identifier "${target_bundle_id}.au")
-            string (REGEX REPLACE "[^A-Za-z0-9.-]" "-" au_bundle_identifier "${au_bundle_identifier}")
-
-            set (au_pkginfo_file "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_au_plugin.PkgInfo")
-            file (WRITE "${au_pkginfo_file}" "BNDL${AU_ARGS_PLUGIN_AU_MANUFACTURER}")
-
-            configure_file ("${au_plist_template}" "${au_plist_output}" @ONLY)
-
-            set_target_properties (${target_name}_au_plugin PROPERTIES
-                C_VISIBILITY_PRESET hidden
-                CXX_VISIBILITY_PRESET hidden
-                OBJC_VISIBILITY_PRESET hidden
-                OBJCXX_VISIBILITY_PRESET hidden
-                VISIBILITY_INLINES_HIDDEN ON
-                BUNDLE TRUE
-                BUNDLE_EXTENSION "component"
-                MACOSX_BUNDLE TRUE
-                MACOSX_BUNDLE_INFO_PLIST "${au_plist_output}"
-                MACOSX_BUNDLE_BUNDLE_NAME "${AU_ARGS_PLUGIN_NAME}"
-                MACOSX_BUNDLE_BUNDLE_VERSION "${AU_ARGS_PLUGIN_VERSION}"
-                MACOSX_BUNDLE_SHORT_VERSION_STRING "${AU_ARGS_PLUGIN_VERSION}"
-                MACOSX_BUNDLE_GUI_IDENTIFIER "${au_bundle_identifier}"
-                FOLDER "${YUP_ARG_TARGET_IDE_GROUP}"
-                XCODE_ATTRIBUTE_GENERATE_PKGINFO_FILE YES
-                XCODE_ATTRIBUTE_PRODUCT_BUNDLE_PACKAGE_TYPE BNDL
-                XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${au_bundle_identifier}"
-                XCODE_GENERATE_SCHEME ON)
-
-            add_custom_command (TARGET ${target_name}_au_plugin POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${au_pkginfo_file}" "$<TARGET_BUNDLE_CONTENT_DIR:${target_name}_au_plugin>/PkgInfo"
-                COMMENT "Generating AU PkgInfo"
-                VERBATIM)
-
-            yup_codesign_target (${target_name}_au_plugin "$<TARGET_BUNDLE_DIR:${target_name}_au_plugin>")
-
-            yup_audio_plugin_copy_bundle (${target_name} au)
-
-            set (au_pluginval_path "$ENV{HOME}/Library/Audio/Plug-Ins/Components/${target_name}_au_plugin.component")
-
-            yup_validate_au_plugin (
-                ${target_name}_au_plugin
-                "${AU_ARGS_PLUGIN_NAME}"
-                "${au_bundle_type}"
-                "${AU_ARGS_PLUGIN_AU_SUBTYPE}"
-                "${AU_ARGS_PLUGIN_AU_MANUFACTURER}")
-
-            yup_validate_pluginval (
-                ${target_name}_au_plugin
-                "${au_pluginval_path}")
+            set (au_bundle_type "aufx")
         endif()
+
+        if (NOT AU_ARGS_PLUGIN_AU_SUBTYPE)
+            set (AU_ARGS_PLUGIN_AU_SUBTYPE "Dflt")
+        endif()
+        if (NOT AU_ARGS_PLUGIN_AU_MANUFACTURER)
+            set (AU_ARGS_PLUGIN_AU_MANUFACTURER "Yup!")
+        endif()
+        if (NOT AU_ARGS_PLUGIN_NAME)
+            set (AU_ARGS_PLUGIN_NAME "${target_name}")
+        endif()
+        if (NOT AU_ARGS_PLUGIN_VERSION)
+            set (AU_ARGS_PLUGIN_VERSION "1")
+        endif()
+
+        _yup_message (STATUS "Creating AUv2 plugin target")
+        add_library (${target_name}_au_plugin MODULE)
+
+        target_compile_features (${target_name}_au_plugin PRIVATE cxx_std_${target_cxx_standard})
+
+        target_compile_definitions (${target_name}_au_plugin PRIVATE
+            YUP_AUDIO_PLUGIN_ENABLE_AU=1
+            YUP_STANDALONE_APPLICATION=0)
+
+        _yup_sdl_configure_symbols_patch ("${target_name}_au_plugin" au_sdl_symbols_patch_target au_sdl_symbols_sdl_target)
+        set (au_plugin_bundle_libraries
+            ${au_sdl_symbols_sdl_target}
+            ${au_sdl_symbols_patch_target})
+
+        target_link_libraries (${target_name}_au_plugin PRIVATE
+            ${target_name}_shared
+            yup_audio_plugin_client
+            base-sdk-auv2
+            ${target_name}_au
+            ${additional_libraries}
+            ${au_plugin_bundle_libraries}
+            ${YUP_ARG_MODULES}
+            "-framework AudioUnit"
+            "-framework AudioToolbox"
+            "-framework CoreAudio"
+            "-framework CoreFoundation"
+            "-framework AppKit")
+
+        _yup_module_apply_arc_to_target_sources (${target_name}_au_plugin
+            ${target_name}_shared
+            yup_audio_plugin_client
+            base-sdk-auv2
+            ${target_name}_au
+            ${additional_libraries}
+            ${au_plugin_bundle_libraries}
+            ${YUP_ARG_MODULES})
+
+        # Generate the AU Info.plist from our template
+        set (au_plist_template "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/mac/AudioUnitInfo.plist.in")
+        set (au_plist_output "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_au_plugin.plist")
+
+        set (PLUGIN_AU_TYPE "${au_bundle_type}")
+        set (PLUGIN_AU_SUBTYPE "${AU_ARGS_PLUGIN_AU_SUBTYPE}")
+        set (PLUGIN_AU_MANUFACTURER "${AU_ARGS_PLUGIN_AU_MANUFACTURER}")
+        set (PLUGIN_AU_NAME "${AU_ARGS_PLUGIN_NAME}")
+        set (PLUGIN_AU_VERSION "${AU_ARGS_PLUGIN_VERSION}")
+
+        set (au_bundle_identifier "${target_bundle_id}.au")
+        string (REGEX REPLACE "[^A-Za-z0-9.-]" "-" au_bundle_identifier "${au_bundle_identifier}")
+
+        set (au_pkginfo_file "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_au_plugin.PkgInfo")
+        file (WRITE "${au_pkginfo_file}" "BNDL${AU_ARGS_PLUGIN_AU_MANUFACTURER}")
+
+        configure_file ("${au_plist_template}" "${au_plist_output}" @ONLY)
+
+        set_target_properties (${target_name}_au_plugin PROPERTIES
+            C_VISIBILITY_PRESET hidden
+            CXX_VISIBILITY_PRESET hidden
+            OBJC_VISIBILITY_PRESET hidden
+            OBJCXX_VISIBILITY_PRESET hidden
+            VISIBILITY_INLINES_HIDDEN ON
+            BUNDLE TRUE
+            BUNDLE_EXTENSION "component"
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_INFO_PLIST "${au_plist_output}"
+            MACOSX_BUNDLE_BUNDLE_NAME "${AU_ARGS_PLUGIN_NAME}"
+            MACOSX_BUNDLE_BUNDLE_VERSION "${AU_ARGS_PLUGIN_VERSION}"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "${AU_ARGS_PLUGIN_VERSION}"
+            MACOSX_BUNDLE_GUI_IDENTIFIER "${au_bundle_identifier}"
+            FOLDER "${YUP_ARG_TARGET_IDE_GROUP}"
+            XCODE_ATTRIBUTE_GENERATE_PKGINFO_FILE YES
+            XCODE_ATTRIBUTE_PRODUCT_BUNDLE_PACKAGE_TYPE BNDL
+            XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${au_bundle_identifier}"
+            XCODE_GENERATE_SCHEME ON)
+
+        add_custom_command (TARGET ${target_name}_au_plugin POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${au_pkginfo_file}" "$<TARGET_BUNDLE_CONTENT_DIR:${target_name}_au_plugin>/PkgInfo"
+            COMMENT "Generating AU PkgInfo"
+            VERBATIM)
+
+        yup_codesign_target (${target_name}_au_plugin "$<TARGET_BUNDLE_DIR:${target_name}_au_plugin>")
+
+        yup_audio_plugin_copy_bundle (${target_name} au)
+
+        set (au_pluginval_path "$ENV{HOME}/Library/Audio/Plug-Ins/Components/${target_name}_au_plugin.component")
+
+        yup_validate_au_plugin (
+            ${target_name}_au_plugin
+            "${AU_ARGS_PLUGIN_NAME}"
+            "${au_bundle_type}"
+            "${AU_ARGS_PLUGIN_AU_SUBTYPE}"
+            "${AU_ARGS_PLUGIN_AU_MANUFACTURER}")
+
+        yup_validate_pluginval (
+            ${target_name}_au_plugin
+            "${au_pluginval_path}")
+    endif()
+
+    # ==== Build AAX plugin target
+    if (YUP_ARG_PLUGIN_CREATE_AAX)
+        _yup_find_aax_sdk()
+
+        _yup_message (STATUS "Setting up AAX plugin client")
+        _yup_module_setup_plugin_client (
+            ${target_name}
+            yup_audio_plugin_client
+            ${YUP_ARG_TARGET_IDE_GROUP}
+            aax
+            ${YUP_ARG_UNPARSED_ARGUMENTS})
+
+        # Create AAX plugin target
+        _yup_message (STATUS "Creating AAX plugin target")
+        if (YUP_PLATFORM_MAC)
+            add_library (${target_name}_aax_plugin MODULE)
+        else()
+            add_library (${target_name}_aax_plugin SHARED)
+        endif()
+
+        target_compile_features (${target_name}_aax_plugin PRIVATE cxx_std_20)
+
+        target_compile_definitions (${target_name}_aax_plugin PRIVATE
+            YUP_AUDIO_PLUGIN_ENABLE_AAX=1
+            YUP_STANDALONE_APPLICATION=0)
+
+        target_link_libraries (${target_name}_aax_plugin PRIVATE
+            ${target_name}_shared
+            yup_audio_plugin_client
+            yup_audio_plugin_client_aaxsdk
+            ${target_name}_aax
+            sdl2::sdl2
+            ${additional_libraries}
+            ${YUP_ARG_MODULES})
+
+        _yup_module_apply_arc_to_target_sources (${target_name}_aax_plugin
+            ${target_name}_shared
+            yup_audio_plugin_client
+            yup_audio_plugin_client_aaxsdk
+            ${target_name}_aax
+            ${additional_libraries}
+            ${YUP_ARG_MODULES})
+
+        set_target_properties (${target_name}_aax_plugin PROPERTIES
+            C_VISIBILITY_PRESET hidden
+            CXX_VISIBILITY_PRESET hidden
+            OBJC_VISIBILITY_PRESET hidden
+            OBJCXX_VISIBILITY_PRESET hidden
+            VISIBILITY_INLINES_HIDDEN ON
+            FOLDER "${YUP_ARG_TARGET_IDE_GROUP}"
+            XCODE_GENERATE_SCHEME ON)
+
+        if (YUP_PLATFORM_MAC)
+            set (aax_plist_output "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_aax_plugin.plist")
+            _yup_configure_audio_plugin_bundle_info_plist ("${aax_plist_output}" "TDMw")
+
+            set_target_properties (${target_name}_aax_plugin PROPERTIES
+                BUNDLE TRUE
+                BUNDLE_EXTENSION "aaxplugin"
+                MACOSX_BUNDLE TRUE
+                MACOSX_BUNDLE_INFO_PLIST "${aax_plist_output}"
+                MACOSX_BUNDLE_BUNDLE_NAME "${target_name}_aax_plugin"
+                MACOSX_BUNDLE_BUNDLE_VERSION "${target_version}"
+                MACOSX_BUNDLE_SHORT_VERSION_STRING "${target_version}"
+                MACOSX_BUNDLE_GUI_IDENTIFIER "${target_bundle_id}.aax"
+                XCODE_ATTRIBUTE_GENERATE_PKGINFO_FILE YES
+                XCODE_ATTRIBUTE_PRODUCT_BUNDLE_PACKAGE_TYPE TDMw
+                XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${target_bundle_id}.aax"
+                PREFIX "")
+
+            set (aax_plugin_path "$<TARGET_BUNDLE_DIR:${target_name}_aax_plugin>")
+        else()
+            # Windows AAX: directory bundle with .aaxplugin extension
+            set_target_properties (${target_name}_aax_plugin PROPERTIES
+                PREFIX ""
+                SUFFIX ".aaxplugin")
+
+            set (aax_plugin_path "$<TARGET_FILE_DIR:${target_name}_aax_plugin>")
+        endif()
+
+        yup_codesign_target (${target_name}_aax_plugin "${aax_plugin_path}")
     endif()
 
     # ==== Create composite target for all enabled plugin formats
@@ -491,6 +570,9 @@ function (yup_audio_plugin)
     endif()
     if (YUP_ARG_PLUGIN_CREATE_AU AND YUP_PLATFORM_MAC)
         list (APPEND _all_plugin_targets ${target_name}_au_plugin)
+    endif()
+    if (YUP_ARG_PLUGIN_CREATE_AAX)
+        list (APPEND _all_plugin_targets ${target_name}_aax_plugin)
     endif()
 
     add_custom_target (${target_name} DEPENDS ${_all_plugin_targets})
@@ -555,6 +637,8 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
             COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
             COMMENT "Copying AU plugin ${plugin_type_upper} to ${plugin_path}"
             VERBATIM)
+    elseif ("${plugin_type}" STREQUAL "aax")
+        _yup_message (STATUS "AAX plugin bundle copy not yet implemented for development")
     else()
         _yup_message (FATAL_ERROR "Unsupported plugin type ${plugin_type} for copying bundle")
     endif()

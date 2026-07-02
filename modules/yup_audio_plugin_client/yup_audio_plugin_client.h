@@ -67,6 +67,14 @@
 #define YUP_ENABLE_PLUGIN_CLIENT_VST3_LOGGING 0
 #endif
 
+/** Config: YUP_ENABLE_PLUGIN_CLIENT_AAX_LOGGING
+
+    Enable debug logging for AAX plugin client.
+*/
+#ifndef YUP_ENABLE_PLUGIN_CLIENT_AAX_LOGGING
+#define YUP_ENABLE_PLUGIN_CLIENT_AAX_LOGGING 0
+#endif
+
 //==============================================================================
 
 #include <yup_audio_processors/yup_audio_processors.h>

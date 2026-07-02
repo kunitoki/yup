@@ -135,8 +135,8 @@ YUP is usable for experimentation, examples, prototypes, and contributors who ar
 ## Supported Plugin Formats
 |                          | **CLAP**           | **VST3**           | **VST2**           | **AUv3**           | **AUv2**                  | **AAX**               | **LV2**               |
 |--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|:---------------------:|
-| **Windows**              | :white_check_mark: | :construction:     |                    |                    |                           |                       |                       |
-| **macOS**                | :white_check_mark: | :white_check_mark: |                    |                    | :white_check_mark:        |                       |                       |
+| **Windows**              | :white_check_mark: | :white_check_mark: |                    |                    |                           | :construction:        |                       |
+| **macOS**                | :white_check_mark: | :white_check_mark: |                    | :construction:     | :white_check_mark:        | :construction:        |                       |
 | **Linux**                | :construction:     | :construction:     |                    |                    |                           |                       |                       |
 
 
