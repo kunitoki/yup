@@ -21,6 +21,7 @@
 
 #include "../yup_audio_plugin_client.h"
 
+#include "../common/yup_AudioPluginEntryPoint.h"
 #include "../common/yup_AudioPluginUtilities.h"
 
 #if ! defined(YUP_AUDIO_PLUGIN_ENABLE_CLAP)
@@ -1936,7 +1937,7 @@ static const void* clapGetFactory (const char* factoryId) noexcept
     return nullptr;
 }
 
-extern "C" const CLAP_EXPORT clap_plugin_entry_t clap_entry = {
+extern "C" YUP_PLUGIN_ENTRY_POINT const clap_plugin_entry_t clap_entry = {
     CLAP_VERSION_INIT,
     clapInit,
     clapDeinit,

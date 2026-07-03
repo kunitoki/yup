@@ -159,6 +159,8 @@ function (_yup_audio_plugin_create_vst3)
         FOLDER "${target_ide_group}"
         XCODE_GENERATE_SCHEME ON)
 
+    _yup_audio_plugin_apply_binary_optimizations (${target_name}_vst3_plugin)
+
     set (vst3_plugin_binary_path "$<TARGET_FILE:${target_name}_vst3_plugin>")
     set (vst3_pluginval_path "${vst3_plugin_binary_path}")
     get_target_property (vst3_plugin_package_path ${target_name}_vst3_plugin SMTG_PLUGIN_PACKAGE_PATH)

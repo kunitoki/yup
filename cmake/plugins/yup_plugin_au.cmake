@@ -203,6 +203,8 @@ function (_yup_audio_plugin_create_au)
         XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${au_bundle_identifier}"
         XCODE_GENERATE_SCHEME ON)
 
+    _yup_audio_plugin_apply_binary_optimizations (${target_name}_au_plugin)
+
     add_custom_command (TARGET ${target_name}_au_plugin POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${au_pkginfo_file}" "$<TARGET_BUNDLE_CONTENT_DIR:${target_name}_au_plugin>/PkgInfo"
         COMMENT "Generating AU PkgInfo"

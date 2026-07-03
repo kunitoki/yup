@@ -21,6 +21,7 @@
 
 #include "../yup_audio_plugin_client.h"
 
+#include "../common/yup_AudioPluginEntryPoint.h"
 #include "../common/yup_AudioPluginUtilities.h"
 
 #if ! defined(YUP_AUDIO_PLUGIN_ENABLE_LV2)
@@ -837,7 +838,7 @@ static const LV2_Descriptor lv2Descriptor = {
 // Exported entry points
 //==============================================================================
 
-extern "C" YUP_API const LV2_Descriptor* lv2_descriptor (uint32_t index)
+extern "C" YUP_PLUGIN_ENTRY_POINT const LV2_Descriptor* lv2_descriptor (uint32_t index)
 {
     return (index == 0) ? &yup::lv2Descriptor : nullptr;
 }

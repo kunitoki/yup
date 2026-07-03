@@ -50,3 +50,52 @@ function (_yup_plugin_shared_args one_value_output multi_value_output)
         PLUGIN_CLAP_FEATURES PLUGIN_VST3_CATEGORIES PLUGIN_HARDENED_RUNTIME_OPTIONS PLUGIN_CUSTOM_PLIST
         PARENT_SCOPE)
 endfunction()
+
+#==============================================================================
+
+function (_yup_audio_plugin_apply_binary_optimizations target_name)
+    cmake_parse_arguments (YUP_ARG "" "" "EXPORTED_SYMBOLS" ${ARGN})
+
+    set (release_config "$<CONFIG:Release,MinSizeRel>")
+
+    if (MSVC)
+        target_compile_options (${target_name} PRIVATE
+            $<${release_config}:/Gy>
+            $<${release_config}:/Gw>)
+
+        target_link_options (${target_name} PRIVATE
+            $<${release_config}:/OPT:REF>
+            $<${release_config}:/OPT:ICF>)
+    else()
+        target_compile_options (${target_name} PRIVATE
+            $<${release_config}:-ffunction-sections>
+            $<${release_config}:-fdata-sections>)
+
+        if (YUP_PLATFORM_APPLE)
+            target_link_options (${target_name} PRIVATE
+                $<${release_config}:LINKER:-dead_strip>)
+
+            foreach (exported_symbol ${YUP_ARG_EXPORTED_SYMBOLS})
+                target_link_options (${target_name} PRIVATE
+                    $<${release_config}:LINKER:-exported_symbol,_${exported_symbol}>)
+            endforeach()
+        elseif (YUP_PLATFORM_LINUX)
+            target_link_options (${target_name} PRIVATE
+                $<${release_config}:LINKER:--gc-sections>)
+
+            if (YUP_ARG_EXPORTED_SYMBOLS)
+                set (export_script "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_exports.map")
+                file (WRITE "${export_script}" "{\n  global:\n")
+
+                foreach (exported_symbol ${YUP_ARG_EXPORTED_SYMBOLS})
+                    file (APPEND "${export_script}" "    ${exported_symbol};\n")
+                endforeach()
+
+                file (APPEND "${export_script}" "  local:\n    *;\n};\n")
+
+                target_link_options (${target_name} PRIVATE
+                    $<${release_config}:LINKER:--version-script=${export_script}>)
+            endif()
+        endif()
+    endif()
+endfunction()

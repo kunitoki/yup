@@ -235,6 +235,8 @@ function (_yup_audio_plugin_create_aax)
         FOLDER "${target_ide_group}"
         XCODE_GENERATE_SCHEME ON)
 
+    _yup_audio_plugin_apply_binary_optimizations (${target_name}_aax_plugin)
+
     if (YUP_PLATFORM_MAC)
         set (aax_plist_output "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_aax_plugin.plist")
         _yup_configure_audio_plugin_bundle_info_plist ("${aax_plist_output}" "TDMw")

@@ -158,6 +158,8 @@ function (yup_plugin_auv3)
         XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${auv3_bundle_identifier}"
         XCODE_GENERATE_SCHEME ON)
 
+    _yup_audio_plugin_apply_binary_optimizations (${target_name}_auv3_plugin)
+
     # Always create a minimal dedicated container app to host the .appex
     set (container_target "${target_name}_auv3_container")
     set (auv3_container_main "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../../modules/yup_audio_plugin_client/auv3/yup_audio_plugin_client_AUv3_main.mm")

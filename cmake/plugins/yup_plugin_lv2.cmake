@@ -252,11 +252,10 @@ function (_yup_audio_plugin_create_lv2)
     set (lv2_binary_suffix "${CMAKE_SHARED_LIBRARY_SUFFIX}")
     set (lv2_binary_name "${target_name}_lv2_plugin${lv2_binary_suffix}")
 
-    # TTL output paths — files are written at build time by the generator
-    set (lv2_manifest_dir "${CMAKE_CURRENT_BINARY_DIR}/lv2_manifests")
-    set (lv2_manifest_file "${lv2_manifest_dir}/manifest.ttl")
+    # Bundle lives in the build output dir alongside the other plugin formats
+    set (lv2_bundle_name "${target_name}_lv2_plugin.lv2")
+    set (lv2_bundle_dir "$<TARGET_FILE_DIR:${target_name}_lv2_plugin>/${lv2_bundle_name}")
     set (lv2_plugin_ttl_name "${target_name}_plugin.ttl")
-    set (lv2_plugin_ttl_file "${lv2_manifest_dir}/${lv2_plugin_ttl_name}")
 
     # is-synth flag for the generator command
     if (YUP_ARG_PLUGIN_IS_SYNTH)
@@ -354,46 +353,49 @@ function (_yup_audio_plugin_create_lv2)
         ${target_modules})
 
     set_target_properties (${target_name}_lv2_plugin PROPERTIES
-        C_VISIBILITY_PRESET default
-        CXX_VISIBILITY_PRESET default
-        OBJC_VISIBILITY_PRESET default
-        OBJCXX_VISIBILITY_PRESET default
+        C_VISIBILITY_PRESET hidden
+        CXX_VISIBILITY_PRESET hidden
+        OBJC_VISIBILITY_PRESET hidden
+        OBJCXX_VISIBILITY_PRESET hidden
         VISIBILITY_INLINES_HIDDEN ON
         PREFIX ""
         SUFFIX "${lv2_binary_suffix}"
         FOLDER "${target_ide_group}"
         XCODE_GENERATE_SCHEME ON)
 
+    _yup_audio_plugin_apply_binary_optimizations (${target_name}_lv2_plugin
+        EXPORTED_SYMBOLS lv2_descriptor)
+
     yup_codesign_target (${target_name}_lv2_plugin "$<TARGET_FILE:${target_name}_lv2_plugin>")
 
-    #yup_validate_pluginval (
-    #    ${target_name}_lv2_plugin
-    #    "$<TARGET_BUNDLE_DIR:${target_name}_au_plugin>")
-
-    # Ensure the generator is built before the plugin so the POST_BUILD step can run it
+    # Ensure the generator is built before the plugin so POST_BUILD can run it
     add_dependencies (${target_name}_lv2_plugin ${target_name}_lv2_ttl_generator)
 
-    # Run the TTL generator after every plugin build to keep the bundle description current
+    # Assemble the .lv2 bundle in the build output directory
     add_custom_command (TARGET ${target_name}_lv2_plugin POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${lv2_manifest_dir}"
+        COMMAND ${CMAKE_COMMAND} -E rm -rf "${lv2_bundle_dir}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${lv2_bundle_dir}"
+        COMMAND ${CMAKE_COMMAND} -E copy
+            "$<TARGET_FILE:${target_name}_lv2_plugin>"
+            "${lv2_bundle_dir}/${lv2_binary_name}"
         COMMAND "$<TARGET_FILE:${target_name}_lv2_ttl_generator>"
             "--uri"          "${lv2_uri}"
             "--name"         "${YUP_ARG_PLUGIN_NAME}"
             "--vendor"       "${YUP_ARG_PLUGIN_VENDOR}"
             "--version"      "${YUP_ARG_PLUGIN_VERSION}"
             "--description"  "${YUP_ARG_PLUGIN_DESCRIPTION}"
-            "--output-dir"   "${lv2_manifest_dir}"
+            "--output-dir"   "${lv2_bundle_dir}"
             "--binary-name"  "${lv2_binary_name}"
             "--ttl-name"     "${lv2_plugin_ttl_name}"
             "--is-synth"     "${lv2_is_synth_arg}"
-        COMMENT "Generating LV2 TTL files for ${target_name}"
+        COMMENT "Assembling LV2 bundle for ${target_name}"
         VERBATIM)
+
+    yup_validate_pluginval (${target_name}_lv2_plugin "${lv2_bundle_dir}")
 
     if (YUP_ARG_PLUGIN_COPY_AFTER_BUILD)
         yup_audio_plugin_copy_bundle (${target_name} lv2
-            LV2_BINARY_NAME    "${lv2_binary_name}"
-            LV2_MANIFEST_FILE  "${lv2_manifest_file}"
-            LV2_PLUGIN_TTL_FILE "${lv2_plugin_ttl_file}"
-            LV2_PLUGIN_TTL_NAME "${lv2_plugin_ttl_name}")
+            LV2_BUNDLE_DIR  "${lv2_bundle_dir}"
+            LV2_BUNDLE_NAME "${lv2_bundle_name}")
     endif()
 endfunction()

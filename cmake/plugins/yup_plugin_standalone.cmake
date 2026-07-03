@@ -68,4 +68,6 @@ function (_yup_audio_plugin_create_standalone)
             yup_audio_devices
             ${additional_libraries}
             ${target_modules})
+
+    _yup_audio_plugin_apply_binary_optimizations (${target_name}_standalone_plugin)
 endfunction()
