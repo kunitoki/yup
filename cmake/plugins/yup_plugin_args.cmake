@@ -45,9 +45,8 @@ function (_yup_plugin_shared_args one_value_output multi_value_output)
         PARENT_SCOPE)
 
     set (${multi_value_output}
-        DEFINITIONS MODULES LINK_OPTIONS
-        SHARED_LIBS
-        ADDITIONAL_LIBRARIES
+        DEFINITIONS OPTIONS
+        MODULES LINK_OPTIONS SHARED_LIBS ADDITIONAL_LIBRARIES
         PLUGIN_CLAP_FEATURES PLUGIN_VST3_CATEGORIES PLUGIN_HARDENED_RUNTIME_OPTIONS PLUGIN_CUSTOM_PLIST
         PARENT_SCOPE)
 endfunction()

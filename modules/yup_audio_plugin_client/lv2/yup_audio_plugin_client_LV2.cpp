@@ -113,35 +113,35 @@ struct UridMap
 
     LV2_URID operator() (const char* uri) { return mapUri (uri); }
 
-    #define URID(name, uri) const LV2_URID name = mapUri (uri)
+#define URID(name, uri) const LV2_URID name = mapUri (uri)
 
-    URID (atom_Float,              LV2_ATOM__Float);
-    URID (atom_Int,                LV2_ATOM__Int);
-    URID (atom_Object,             LV2_ATOM__Object);
-    URID (atom_Blank,              LV2_ATOM__Blank);
-    URID (atom_Sequence,           LV2_ATOM__Sequence);
-    URID (atom_String,             LV2_ATOM__String);
-    URID (atom_eventTransfer,      LV2_ATOM__eventTransfer);
-    URID (midi_MidiEvent,          LV2_MIDI__MidiEvent);
-    URID (patch_Set,               LV2_PATCH__Set);
-    URID (patch_Get,               LV2_PATCH__Get);
-    URID (patch_property,          LV2_PATCH__property);
-    URID (patch_value,             LV2_PATCH__value);
-    URID (time_Position,           LV2_TIME__Position);
-    URID (time_frame,              LV2_TIME__frame);
-    URID (time_speed,              LV2_TIME__speed);
-    URID (time_bar,                LV2_TIME__bar);
-    URID (time_beat,               LV2_TIME__beat);
-    URID (time_beatUnit,           LV2_TIME__beatUnit);
-    URID (time_beatsPerBar,        LV2_TIME__beatsPerBar);
-    URID (time_beatsPerMinute,     LV2_TIME__beatsPerMinute);
-    URID (bufs_maxBlockLength,     LV2_BUF_SIZE__maxBlockLength);
-    URID (bufs_minBlockLength,     LV2_BUF_SIZE__minBlockLength);
-    URID (bufs_sequenceSize,       LV2_BUF_SIZE__sequenceSize);
-    URID (state_StateChanged,      LV2_STATE__StateChanged);
+    URID (atom_Float, LV2_ATOM__Float);
+    URID (atom_Int, LV2_ATOM__Int);
+    URID (atom_Object, LV2_ATOM__Object);
+    URID (atom_Blank, LV2_ATOM__Blank);
+    URID (atom_Sequence, LV2_ATOM__Sequence);
+    URID (atom_String, LV2_ATOM__String);
+    URID (atom_eventTransfer, LV2_ATOM__eventTransfer);
+    URID (midi_MidiEvent, LV2_MIDI__MidiEvent);
+    URID (patch_Set, LV2_PATCH__Set);
+    URID (patch_Get, LV2_PATCH__Get);
+    URID (patch_property, LV2_PATCH__property);
+    URID (patch_value, LV2_PATCH__value);
+    URID (time_Position, LV2_TIME__Position);
+    URID (time_frame, LV2_TIME__frame);
+    URID (time_speed, LV2_TIME__speed);
+    URID (time_bar, LV2_TIME__bar);
+    URID (time_beat, LV2_TIME__beat);
+    URID (time_beatUnit, LV2_TIME__beatUnit);
+    URID (time_beatsPerBar, LV2_TIME__beatsPerBar);
+    URID (time_beatsPerMinute, LV2_TIME__beatsPerMinute);
+    URID (bufs_maxBlockLength, LV2_BUF_SIZE__maxBlockLength);
+    URID (bufs_minBlockLength, LV2_BUF_SIZE__minBlockLength);
+    URID (bufs_sequenceSize, LV2_BUF_SIZE__sequenceSize);
+    URID (state_StateChanged, LV2_STATE__StateChanged);
     URID (state_threadSafeRestore, LV2_STATE__threadSafeRestore);
 
-    #undef URID
+#undef URID
 };
 
 //==============================================================================
@@ -166,8 +166,11 @@ struct PortIndices
     int numOutputChannels = 0;
 
     int getAudioInputPort (int index) const noexcept { return index; }
+
     int getAudioOutputPort (int index) const noexcept { return index + numInputChannels; }
+
     int getMaxAudioPortIndex() const noexcept { return numInputChannels + numOutputChannels; }
+
     int getPortIndexFor (NonAudioPort p) const noexcept { return getMaxAudioPortIndex() + static_cast<int> (p); }
 };
 
@@ -189,7 +192,7 @@ static void midiBufferToAtomSequence (const MidiBuffer& midi, LV2_Atom_Forge* fo
 
 //==============================================================================
 
-class AudioPluginProcessorLV2 : private AudioProcessorListener
+class AudioPluginProcessorLV2 : private AudioProcessorBase::Listener
 {
 public:
     AudioPluginProcessorLV2 (double sampleRate,
@@ -207,13 +210,11 @@ public:
         if (processor == nullptr)
             return;
 
-        numInputChannels = processor->getTotalNumInputChannels();
-        numOutputChannels = processor->getTotalNumOutputChannels();
+        numInputChannels = processor->getBusLayout().getNumAudioInputChannels();
+        numOutputChannels = processor->getBusLayout().getNumAudioOutputChannels();
 
         // Build parameter Urid maps
-        const auto& params = processor->getParameters();
-        paramUridToIndex.reserve (params.size());
-        indexToParamUrid.reserve (params.size());
+        const auto params = processor->getParameters();
         lastSentValues.resize (params.size(), -1.0f);
 
         for (std::size_t i = 0; i < params.size(); ++i)
@@ -222,7 +223,7 @@ public:
             const auto uri = String (YupPlugin_LV2URI) + ":param_" + String (static_cast<int> (hostId));
             const auto urid = urids.mapUri (uri.toRawUTF8());
             paramUridToIndex[urid] = i;
-            indexToParamUrid[i] = urid;
+            indexToParamUrid[static_cast<int> (i)] = urid;
         }
 
         // Setup state URIs
@@ -233,14 +234,12 @@ public:
         programUrid = urids (programUri.toRawUTF8());
 
         // Setup state interface
-        stateInterface.handle = nullptr;
         stateInterface.save = stateSave;
         stateInterface.restore = stateRestore;
 
         prepare();
 
         processor->addListener (this);
-        processor->setPlayHead (&playHead);
     }
 
     ~AudioPluginProcessorLV2() override
@@ -286,7 +285,7 @@ public:
     void activate()
     {
         if (processor != nullptr)
-            processor->prepareToPlay (sampleRate, maxBlockSize);
+            processor->setPlaybackConfiguration (static_cast<float> (sampleRate), maxBlockSize);
     }
 
     void run (uint32_t numSamples)
@@ -297,7 +296,7 @@ public:
         midiEvents.clear();
         playHead.invalidate();
         parameterChanges.clear();
-        parameterChanges.setCapacity (getDefaultParameterChangeCapacity (*processor));
+        parameterChanges.reserve (getDefaultParameterChangeCapacity (*processor));
 
         const int numSamplesInt = static_cast<int> (numSamples);
         audioBuffer.setSize (jmax (numInputChannels, numOutputChannels), numSamplesInt, false, true, true);
@@ -315,18 +314,18 @@ public:
                 audioBuffer.copyFrom (ch, 0, src, numSamplesInt);
         }
 
-        // Apply bypass / freeWheeling state
+        // Apply offline processing state
         if (freeWheelingPort != nullptr)
-            processor->setNonRealtime (*freeWheelingPort > 0.5f);
+            processor->setOfflineProcessing (*freeWheelingPort > 0.5f);
 
         const bool isEnabled = (enabledPort == nullptr) || (*enabledPort > 0.5f);
+        isBypassed = ! isEnabled;
 
-        if (auto* bypassParam = processor->getBypassParameter())
-            bypassParam->setValueNotifyingHost (isEnabled ? 0.0f : 1.0f);
+        // Build process context and process
+        AudioProcessContext<float> context { audioBuffer, midiEvents, parameterChanges, &playHead };
 
-        // Process
         {
-            const ScopedLock lock (processor->getCallbackLock());
+            const ScopedLock lock (processor->getProcessLock());
 
             if (processor->isSuspended())
             {
@@ -339,23 +338,7 @@ public:
             }
             else
             {
-                if (isEnabled)
-                {
-                    if (auto* bp = processor->getBypassParameter())
-                    {
-                        bp->setValueNotifyingHost (0.0f);
-                        processor->processBlock (audioBuffer, midiEvents);
-                    }
-                    else
-                    {
-                        processor->processBlock (audioBuffer, midiEvents);
-                    }
-                }
-                else
-                {
-                    MidiBuffer emptyMidi;
-                    processor->processBlockBypassed (audioBuffer, emptyMidi);
-                }
+                processAudioBlock (*processor, context, isBypassed);
             }
         }
 
@@ -434,8 +417,7 @@ private:
             return;
 
         const auto blockSize = jmax (maxBlockSize, 256);
-        processor->setRateAndBufferSizeDetails (sampleRate, blockSize);
-        processor->prepareToPlay (sampleRate, blockSize);
+        processor->setPlaybackConfiguration (static_cast<float> (sampleRate), blockSize);
     }
 
     void parseInputSequence (int numSamplesInt)
@@ -470,7 +452,7 @@ private:
                     const LV2_Atom *propertyAtom = nullptr, *valueAtom = nullptr;
                     LV2_Atom_Object_Query query[] = {
                         { urids.patch_property, &propertyAtom },
-                        { urids.patch_value,    &valueAtom },
+                        { urids.patch_value, &valueAtom },
                         LV2_ATOM_OBJECT_QUERY_END
                     };
                     lv2_atom_object_query (obj, query);
@@ -529,13 +511,13 @@ private:
         const LV2_Atom *beatUnit = nullptr, *beatsPerBar = nullptr, *beatsPerMinute = nullptr;
 
         LV2_Atom_Object_Query query[] = {
-            { urids.time_frame,            &frame },
-            { urids.time_speed,            &speed },
-            { urids.time_bar,              &bar },
-            { urids.time_beat,             &beat },
-            { urids.time_beatUnit,         &beatUnit },
-            { urids.time_beatsPerBar,      &beatsPerBar },
-            { urids.time_beatsPerMinute,   &beatsPerMinute },
+            { urids.time_frame, &frame },
+            { urids.time_speed, &speed },
+            { urids.time_bar, &bar },
+            { urids.time_beat, &beat },
+            { urids.time_beatUnit, &beatUnit },
+            { urids.time_beatsPerBar, &beatsPerBar },
+            { urids.time_beatsPerMinute, &beatsPerMinute },
             LV2_ATOM_OBJECT_QUERY_END
         };
         lv2_atom_object_query (obj, query);
@@ -582,8 +564,8 @@ private:
         LV2_Atom_Forge forge;
         lv2_atom_forge_init (&forge, &urids.map);
         lv2_atom_forge_set_buffer (&forge,
-                                    reinterpret_cast<uint8_t*> (outputSequence),
-                                    outputSequence->atom.size);
+                                   reinterpret_cast<uint8_t*> (outputSequence),
+                                   outputSequence->atom.size);
 
         LV2_Atom_Forge_Frame seqFrame;
         lv2_atom_forge_sequence_head (&forge, &seqFrame, 0);
@@ -605,7 +587,7 @@ private:
                 lv2_atom_forge_object (&forge, &objFrame, 0, urids.patch_Set);
 
                 lv2_atom_forge_key (&forge, urids.patch_property);
-                lv2_atom_forge_int (&forge, indexToParamUrid[i]);
+                lv2_atom_forge_int (&forge, indexToParamUrid[static_cast<int> (i)]);
 
                 lv2_atom_forge_key (&forge, urids.patch_value);
                 lv2_atom_forge_float (&forge, currentValue);
@@ -630,11 +612,7 @@ private:
         lv2_atom_forge_pop (&forge, &seqFrame);
     }
 
-    void audioProcessorParameterChanged (AudioProcessor*, int, float) override
-    {
-    }
-
-    void audioProcessorChanged (AudioProcessor*, const ChangeDetails& details) override
+    void audioProcessorChanged (AudioProcessorBase* processor, const AudioProcessor::ChangeDetails& details) override
     {
         if (details.nonParameterStateChanged)
             shouldSendStateChange.store (true);
@@ -651,7 +629,7 @@ public:
     MidiBuffer midiEvents;
     MidiBuffer midiOutputEvents;
     AudioBuffer<float> audioBuffer { 0, 0 };
-    ParameterChangeBuffer parameterChanges { 1 };
+    ParameterChangeBuffer parameterChanges;
 
     std::vector<float*> audioPorts;
     const LV2_Atom_Sequence* inputSequence = nullptr;
@@ -671,6 +649,7 @@ public:
     String programUri;
     LV2_URID programUrid = 0;
 
+    bool isBypassed = false;
     std::atomic<bool> shouldSendStateChange { false };
     AudioPlayHead::PositionInfo lastPosition;
 
@@ -680,6 +659,7 @@ public:
         AudioPluginPlayHeadLV2() = default;
 
         void invalidate() { currentPosition.reset(); }
+
         void setPosition (const PositionInfo& info) { currentPosition = info; }
 
         std::optional<PositionInfo> getPosition() const override
@@ -705,18 +685,16 @@ public:
             return LV2_STATE_ERR_UNKNOWN;
 
         MemoryBlock processorState;
-        self->processor->getStateInformation (processorState);
+        const auto stateResult = self->processor->saveStateIntoMemory (processorState);
+        const bool hasProcessorState = stateResult.wasOk() && ! processorState.isEmpty();
 
-        const bool isBypassed = self->processor->getBypassParameter() != nullptr
-                                && self->processor->getBypassParameter()->getValue() > 0.5f;
+        const auto data = writeWrapperBypassState (lv2WrapperStateMagic,
+                                                   lv2WrapperStateVersion,
+                                                   self->isBypassed,
+                                                   processorState,
+                                                   hasProcessorState);
 
-        const auto wrapperState = writeWrapperBypassState (lv2WrapperStateMagic,
-                                                           lv2WrapperStateVersion,
-                                                           isBypassed,
-                                                           processorState,
-                                                           processorState.getSize() > 0);
-
-        const auto base64 = wrapperState.toBase64Encoding();
+        const auto base64 = data.toBase64Encoding();
 
         store (handle,
                self->stateUrid,
@@ -748,7 +726,7 @@ public:
         if (programData != nullptr && type == self->urids.atom_Int && size == sizeof (int32_t))
         {
             const auto programIndex = *static_cast<const int32_t*> (programData);
-            self->processor->setCurrentProgram (programIndex);
+            self->processor->setCurrentPreset (programIndex);
             return LV2_STATE_SUCCESS;
         }
 
@@ -770,22 +748,20 @@ public:
 
         if (wrapperState.hasWrapperState)
         {
-            if (auto* bypassParam = self->processor->getBypassParameter())
-                bypassParam->setValueNotifyingHost (wrapperState.isBypassed ? 1.0f : 0.0f);
+            self->isBypassed = wrapperState.isBypassed;
 
             if (wrapperState.hasProcessorState && ! wrapperState.processorState.isEmpty())
-                self->processor->setStateInformation (wrapperState.processorState.getData(),
-                                                      static_cast<int> (wrapperState.processorState.getSize()));
+                self->processor->loadStateFromMemory (wrapperState.processorState);
         }
         else
         {
-            self->processor->setStateInformation (block.getData(), static_cast<int> (block.getSize()));
+            self->processor->loadStateFromMemory (block);
         }
 
         return LV2_STATE_SUCCESS;
     }
 
-    LV2_State_Interface stateInterface = { nullptr, nullptr, nullptr };
+    LV2_State_Interface stateInterface = { stateSave, stateRestore };
 };
 
 //==============================================================================
@@ -835,7 +811,6 @@ static const void* lv2ExtensionData (const char* uri)
     if (std::strcmp (uri, LV2_STATE__interface) == 0)
     {
         static const LV2_State_Interface stateInterface = {
-            nullptr,
             AudioPluginProcessorLV2::stateSave,
             AudioPluginProcessorLV2::stateRestore
         };
@@ -862,7 +837,7 @@ static const LV2_Descriptor lv2Descriptor = {
 // Exported entry points
 //==============================================================================
 
-extern "C" YUP_EXPORT const LV2_Descriptor* lv2_descriptor (uint32_t index)
+extern "C" YUP_API const LV2_Descriptor* lv2_descriptor (uint32_t index)
 {
     return (index == 0) ? &yup::lv2Descriptor : nullptr;
 }

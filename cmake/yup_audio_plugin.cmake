@@ -32,12 +32,8 @@ endfunction()
 
 function (yup_audio_plugin)
     # ==== Parse all known keywords so nothing leaks into unparsed.
-    # We forward ${ARGN} (raw original args) to sub-functions so they can
-    # parse their own format-specific args independently.
-    set (options CONSOLE)
-
     _yup_plugin_shared_args (one_value_args multi_value_args)
-    cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
+    cmake_parse_arguments (YUP_ARG "" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
     _yup_set_default (YUP_ARG_TARGET_CXX_STANDARD 20)
 
@@ -46,6 +42,10 @@ function (yup_audio_plugin)
     set (target_cxx_standard "${YUP_ARG_TARGET_CXX_STANDARD}")
     set (target_app_id "${YUP_ARG_TARGET_APP_ID}")
     set (target_bundle_id "${target_app_id}")
+
+    set (additional_definitions "${YUP_ARG_DEFINITIONS}")
+    set (additional_options "${YUP_ARG_OPTIONS}")
+    set (additional_libraries "${YUP_ARG_ADDITIONAL_LIBRARIES}")
 
     string (REGEX REPLACE "[^A-Za-z0-9.-]" "-" target_bundle_id "${target_bundle_id}")
 
@@ -229,9 +229,6 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
     elseif ("${plugin_type}" STREQUAL "aax")
         set (target_file_name "${target_name}_${plugin_type}_plugin.aaxplugin")
         set (plugin_target_path "$ENV{HOME}/Library/Application Support/Avid/Audio/Plug-Ins")
-    elseif ("${plugin_type}" STREQUAL "lv2")
-        set (target_file_name "${target_name}_${plugin_type}_plugin.lv2")
-        set (plugin_target_path "$ENV{HOME}/Library/Audio/Plug-Ins/LV2")
     else()
         set (target_file_name "${target_name}_${plugin_type}_plugin.${plugin_type}")
         set (plugin_target_path "$ENV{HOME}/Library/Audio/Plug-Ins/${plugin_type_upper}")
@@ -290,6 +287,13 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
             COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
             COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
             COMMENT "Copying AAX plugin ${plugin_type_upper} to ${plugin_path}"
+            VERBATIM)
+    elseif ("${plugin_type}" STREQUAL "lv2")
+        add_custom_command(TARGET ${dependency_target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_target_path}"
+            COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
+            COMMENT "Copying LV2 plugin ${plugin_type_upper} to ${plugin_path}"
             VERBATIM)
     else()
         _yup_message (FATAL_ERROR "Unsupported plugin type ${plugin_type} for copying bundle")

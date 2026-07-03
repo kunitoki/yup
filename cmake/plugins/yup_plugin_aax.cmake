@@ -31,13 +31,12 @@ function (_yup_find_aax_sdk)
     elseif (DEFINED ENV{YUP_AAX_SDK_ROOT})
         set (AAX_SDK_ROOT "$ENV{YUP_AAX_SDK_ROOT}")
     else()
-        _yup_message (STATUS "YUP_AAX_SDK_ROOT not set — AAX plugin support disabled")
+        _yup_message (FATAL_ERROR "YUP_AAX_SDK_ROOT not set — AAX plugin support disabled")
         return()
     endif()
 
     if (NOT EXISTS "${AAX_SDK_ROOT}/Interfaces/AAX.h")
-        _yup_message (FATAL_ERROR "AAX SDK not found at ${AAX_SDK_ROOT} "
-            "(expected ${AAX_SDK_ROOT}/Interfaces/AAX.h)")
+        _yup_message (FATAL_ERROR "AAX SDK not found at ${AAX_SDK_ROOT} (expected ${AAX_SDK_ROOT}/Interfaces/AAX.h)")
     endif()
 
     # --- Build AAX SDK headers interface ---
@@ -199,8 +198,12 @@ function (_yup_audio_plugin_create_aax)
         YUP_AUDIO_PLUGIN_ENABLE_AAX=1
         YUP_STANDALONE_APPLICATION=0)
 
-    # The ACF entry points (ACFRegisterPlugin, ACFStartup, ...) exported by the
-    # plugin binary are defined in the SDK's AAX_Exports.cpp
+    _yup_sdl_configure_symbols_patch ("${target_name}_aax_plugin" aax_sdl_symbols_patch_target aax_sdl_symbols_sdl_target)
+    set (aax_plugin_bundle_libraries
+        ${aax_sdl_symbols_sdl_target}
+        ${aax_sdl_symbols_patch_target})
+
+    # The ACF entry points (ACFRegisterPlugin, ACFStartup, ...) are defined in the SDK's AAX_Exports.cpp
     get_target_property (aax_sdk_root yup_audio_plugin_client_aaxsdk YUP_AAX_SDK_ROOT)
     target_sources (${target_name}_aax_plugin PRIVATE
         "${aax_sdk_root}/Interfaces/AAX_Exports.cpp")
@@ -210,8 +213,8 @@ function (_yup_audio_plugin_create_aax)
         yup_audio_plugin_client
         yup_audio_plugin_client_aaxsdk
         ${target_name}_aax
-        sdl2::sdl2
         ${additional_libraries}
+        ${aax_plugin_bundle_libraries}
         ${target_modules})
 
     _yup_module_apply_arc_to_target_sources (${target_name}_aax_plugin
@@ -220,6 +223,7 @@ function (_yup_audio_plugin_create_aax)
         yup_audio_plugin_client_aaxsdk
         ${target_name}_aax
         ${additional_libraries}
+        ${aax_plugin_bundle_libraries}
         ${target_modules})
 
     set_target_properties (${target_name}_aax_plugin PROPERTIES

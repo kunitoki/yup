@@ -227,16 +227,10 @@ endfunction()
 #==============================================================================
 # Create an LV2 plugin target from a YUP audio processor
 
-function (_yup_audio_plugin_create_lv2
-    target_name
-    target_version
-    target_ide_group
-    target_bundle_id
-    target_app_namespace
-    target_cxx_standard
-    additional_libraries
-    target_modules
-    unparsed_args)
+function (_yup_audio_plugin_create_lv2)
+    # ==== Parse arguments — recognise all possible keywords from parent call
+    _yup_plugin_shared_args (one_value_args multi_value_args)
+    cmake_parse_arguments (YUP_ARG "" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
     _yup_fetch_lv2_sdk()
 
@@ -249,9 +243,8 @@ function (_yup_audio_plugin_create_lv2
         ${unparsed_args})
 
     # Extract PLUGIN_ID for LV2 URI
-    cmake_parse_arguments (LV2_ARG "" "PLUGIN_ID;PLUGIN_NAME" "" ${unparsed_args})
-    if (LV2_ARG_PLUGIN_ID)
-        set (lv2_uri "${LV2_ARG_PLUGIN_ID}")
+    if (YUP_ARG_PLUGIN_ID)
+        set (lv2_uri "${YUP_ARG_PLUGIN_ID}")
     else()
         set (lv2_uri "${target_app_namespace}/${target_name}")
     endif()
@@ -272,12 +265,18 @@ function (_yup_audio_plugin_create_lv2
         YUP_STANDALONE_APPLICATION=0
         YupPlugin_LV2URI="${lv2_uri}")
 
+    _yup_sdl_configure_symbols_patch ("${target_name}_lv2_plugin" lv2_sdl_symbols_patch_target lv2_sdl_symbols_sdl_target)
+    set (lv2_plugin_bundle_libraries
+        ${lv2_sdl_symbols_sdl_target}
+        ${lv2_sdl_symbols_patch_target})
+
     target_link_libraries (${target_name}_lv2_plugin PRIVATE
         ${target_name}_shared
         yup_audio_plugin_client
         lv2-headers
         ${target_name}_lv2
         ${additional_libraries}
+        ${lv2_plugin_bundle_libraries}
         ${target_modules})
 
     _yup_module_apply_arc_to_target_sources (${target_name}_lv2_plugin
@@ -286,6 +285,7 @@ function (_yup_audio_plugin_create_lv2
         lv2-headers
         ${target_name}_lv2
         ${additional_libraries}
+        ${lv2_plugin_bundle_libraries}
         ${target_modules})
 
     set_target_properties (${target_name}_lv2_plugin PROPERTIES
