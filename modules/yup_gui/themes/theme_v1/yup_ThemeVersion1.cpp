@@ -1808,7 +1808,7 @@ ApplicationTheme::Ptr createThemeVersion1()
 #if YUP_EMBED_DEFAULT_THEME_TEXT_FONT
     {
         Font font;
-        if (auto result = font.loadFromData (MemoryBlock (&RobotoFlexFont_data[0], RobotoFlexFont_size)); result.failed())
+        if (auto result = font.loadFromData (Span (&RobotoFlexFont_data[0], RobotoFlexFont_size)); result.failed())
             yup::Logger::outputDebugString (result.getErrorMessage());
 
         theme->setDefaultFont (std::move (font));
@@ -1823,7 +1823,7 @@ ApplicationTheme::Ptr createThemeVersion1()
 #if YUP_EMBED_DEFAULT_THEME_ICON_FONT
     {
         Font font;
-        if (auto result = font.loadFromData (MemoryBlock (&FontAwesome7Font_data[0], FontAwesome7Font_size)); result.failed())
+        if (auto result = font.loadFromData (Span (&FontAwesome7Font_data[0], FontAwesome7Font_size)); result.failed())
             yup::Logger::outputDebugString (result.getErrorMessage());
 
         theme->setDefaultIconFont (std::move (font));

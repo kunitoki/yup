@@ -76,6 +76,15 @@ Result Font::loadFromData (const MemoryBlock& fontBytes)
     return font ? Result::ok() : Result::fail ("Unable to load font");
 }
 
+Result Font::loadFromData (const Span<const uint8>& fontBytes)
+{
+    if (fontBytes.empty())
+        return Result::fail ("Unable to instantiate font from empty data");
+
+    font = HBFont::Decode (rive::make_span (fontBytes.data(), fontBytes.size()));
+    return font ? Result::ok() : Result::fail ("Unable to load font");
+}
+
 Result Font::loadFromFile (const File& fontFile)
 {
     if (! fontFile.existsAsFile())
