@@ -67,13 +67,11 @@ yup_audio_plugin (
     PLUGIN_CREATE_AUv3 ON
     PLUGIN_CREATE_STANDALONE ON
     PLUGIN_CREATE_AAX ${plugin_create_aax}
-    PLUGIN_CREATE_LV2 ON
-    DEFINITIONS
-        YupPlugin_AAX_ManufacturerID='YUPP'
-        YupPlugin_AAX_ProductID='YpSy'
-        YupPlugin_AAX_PlugInID_Native='YpSN'
-        YupPlugin_AAX_PlugInID_AudioSuite='YpSA'
-        YupPlugin_AAXCategory=AAX_ePlugInCategory_Example
+    PLUGIN_AAX_MANUFACTURER_ID YUPP
+    PLUGIN_AAX_PRODUCT_ID YpSy
+    PLUGIN_AAX_PLUGIN_ID_NATIVE YpSN
+    PLUGIN_AAX_PLUGIN_ID_AUDIOSUITE YpSA
+    PLUGIN_AAX_CATEGORY AAX_ePlugInCategory_Example
     MODULES
         yup::yup_gui
         yup::yup_audio_processors)

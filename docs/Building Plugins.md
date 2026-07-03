@@ -136,6 +136,7 @@ yup_audio_plugin (
     PLUGIN_IS_MONO OFF
     PLUGIN_CREATE_CLAP ON
     PLUGIN_CREATE_VST3 ON
+    PLUGIN_CREATE_AU ON
     PLUGIN_CREATE_STANDALONE ON
     MODULES
         yup::yup_gui
@@ -226,6 +227,6 @@ cmake --build build --config Release
 
 ## Additional Resources
 
-- [YUP Documentation](https://yup.github.io/docs)
+- [CMake API Reference](CMake%20API.md) — Full reference of all CMake options and functions
 - [CLAP Documentation](https://cleveraudio.org/)
 - [VST3 Documentation](https://developer.steinberg.help/hub/display/VST)

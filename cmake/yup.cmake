@@ -93,6 +93,7 @@ _yup_setup_platform()
 # Common includes
 include (${CMAKE_CURRENT_LIST_DIR}/yup_utilities.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_dependencies.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/plugins/yup_plugin_args.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/plugins/yup_plugin_clap.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/plugins/yup_plugin_vst3.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/plugins/yup_plugin_standalone.cmake)

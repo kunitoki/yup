@@ -24,16 +24,7 @@ namespace yup
 
 //==============================================================================
 
-std::atomic_flag SDL2ComponentNative::isInitialised = ATOMIC_FLAG_INIT;
-int SDL2ComponentNative::mouseCaptureRequestCount = 0;
-uint32_t SDL2ComponentNative::lastCapturedMouseButtonState = 0;
-bool SDL2ComponentNative::popupDismissalCheckPending = false;
-
-//==============================================================================
-
 static constexpr uint32 sdlDefaultSubsystems = SDL_INIT_VIDEO | SDL_INIT_EVENTS;
-
-//==============================================================================
 
 static String getSDLVersionString (const SDL_version& version)
 {
@@ -41,6 +32,15 @@ static String getSDLVersionString (const SDL_version& version)
          + String (static_cast<int> (version.minor)) + "."
          + String (static_cast<int> (version.patch));
 }
+
+//==============================================================================
+
+std::atomic_flag SDL2ComponentNative::isInitialised = ATOMIC_FLAG_INIT;
+int SDL2ComponentNative::mouseCaptureRequestCount = 0;
+uint32_t SDL2ComponentNative::lastCapturedMouseButtonState = 0;
+bool SDL2ComponentNative::popupDismissalCheckPending = false;
+
+//==============================================================================
 
 SDL2ComponentNative::SDL2ComponentNative (Component& component,
                                           const Options& options,

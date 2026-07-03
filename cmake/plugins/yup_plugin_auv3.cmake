@@ -7,7 +7,7 @@
 #
 #   The code included in this file is provided under the terms of the ISC license
 #   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-#   To use, copy, modify, and/or distribute this software for any purpose with or
+#   to use, copy, modify, and/or distribute this software for any purpose with or
 #   without fee is hereby granted provided that the above copyright notice and
 #   this permission notice appear in all copies.
 #
@@ -20,18 +20,15 @@
 #==============================================================================
 
 function (yup_plugin_auv3)
-    # ==== Parse arguments
-    set (one_value_args
-        TARGET_NAME TARGET_CXX_STANDARD TARGET_IDE_GROUP TARGET_BUNDLE_ID
-        PLUGIN_IS_SYNTH PLUGIN_NAME PLUGIN_VERSION PLUGIN_AU_SUBTYPE PLUGIN_AU_MANUFACTURER
-        PLUGIN_ID PLUGIN_VENDOR PLUGIN_DESCRIPTION PLUGIN_URL PLUGIN_EMAIL PLUGIN_IS_MONO)
-
-    set (multi_value_args
-        SHARED_LIBS
-        ADDITIONAL_LIBRARIES
-        MODULES)
-
+    # ==== Parse arguments — recognise all possible keywords from parent call
+    _yup_plugin_shared_args (one_value_args multi_value_args)
     cmake_parse_arguments (YUP_ARG "" "${one_value_args}" "${multi_value_args}" ${ARGN})
+
+    # Set defaults for optional args
+    _yup_set_default (YUP_ARG_PLUGIN_AU_SANDBOX_SAFE ON)
+    _yup_set_default (YUP_ARG_PLUGIN_COPY_AFTER_BUILD ON)
+    _yup_set_default (YUP_ARG_PLUGIN_CODESIGN_IDENTITY "-")
+    _yup_set_default (YUP_ARG_PLUGIN_HARDENED_RUNTIME OFF)
 
     set (target_name "${YUP_ARG_TARGET_NAME}")
     set (target_cxx_standard "${YUP_ARG_TARGET_CXX_STANDARD}")
@@ -44,7 +41,18 @@ function (yup_plugin_auv3)
         yup_audio_plugin_client
         ${target_ide_group}
         auv3
-        ${YUP_ARG_UNPARSED_ARGUMENTS})
+        PLUGIN_ID ${YUP_ARG_PLUGIN_ID}
+        PLUGIN_NAME ${YUP_ARG_PLUGIN_NAME}
+        PLUGIN_VENDOR ${YUP_ARG_PLUGIN_VENDOR}
+        PLUGIN_EMAIL ${YUP_ARG_PLUGIN_EMAIL}
+        PLUGIN_VERSION ${YUP_ARG_PLUGIN_VERSION}
+        PLUGIN_DESCRIPTION ${YUP_ARG_PLUGIN_DESCRIPTION}
+        PLUGIN_URL ${YUP_ARG_PLUGIN_URL}
+        PLUGIN_IS_SYNTH ${YUP_ARG_PLUGIN_IS_SYNTH}
+        PLUGIN_IS_MONO ${YUP_ARG_PLUGIN_IS_MONO}
+        PLUGIN_AU_SUBTYPE ${YUP_ARG_PLUGIN_AU_SUBTYPE}
+        PLUGIN_AU_MANUFACTURER ${YUP_ARG_PLUGIN_AU_MANUFACTURER}
+        PLUGIN_AU_SANDBOX_SAFE ${YUP_ARG_PLUGIN_AU_SANDBOX_SAFE})
 
     # Determine AU type (aumu for instruments, aufx for effects)
     if (YUP_ARG_PLUGIN_IS_SYNTH)
@@ -64,6 +72,13 @@ function (yup_plugin_auv3)
     endif()
     if (NOT YUP_ARG_PLUGIN_VERSION)
         set (YUP_ARG_PLUGIN_VERSION "1")
+    endif()
+
+    # Determine sandboxSafe plist value
+    if (YUP_ARG_PLUGIN_AU_SANDBOX_SAFE)
+        set (PLUGIN_AU_SANDBOX_SAFE "<true/>")
+    else()
+        set (PLUGIN_AU_SANDBOX_SAFE "<false/>")
     endif()
 
     _yup_message (STATUS "Creating AUv3 plugin target")
@@ -190,23 +205,19 @@ function (yup_plugin_auv3)
         COMMENT "Installing container app to ~/Applications"
         VERBATIM)
 
-    set (auv3_entitlements "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../platforms/mac/AudioUnitV3_Entitlements.plist")
-    yup_codesign_target (${target_name}_auv3_plugin "$<TARGET_BUNDLE_DIR:${target_name}_auv3_plugin>" "${auv3_entitlements}")
+    # Determine entitlements file to use
+    if (YUP_ARG_PLUGIN_APPLE_ENTITLEMENTS)
+        set (auv3_entitlements "${YUP_ARG_PLUGIN_APPLE_ENTITLEMENTS}")
+    else()
+        set (auv3_entitlements "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../platforms/mac/AudioUnitV3_Entitlements.plist")
+    endif()
 
-    yup_audio_plugin_copy_bundle (${target_name} auv3)
+    yup_codesign_target (${target_name}_auv3_plugin "$<TARGET_BUNDLE_DIR:${target_name}_auv3_plugin>"
+        "${YUP_ARG_PLUGIN_CODESIGN_IDENTITY}"
+        "${YUP_ARG_PLUGIN_HARDENED_RUNTIME}"
+        "${auv3_entitlements}")
 
-    # Validation
-    #set (auv3_pluginval_path "$ENV{HOME}/Library/Audio/Plug-Ins/AppExtensions/${target_name}_auv3_plugin.appex")
-
-    #yup_validate_au_plugin (
-    #    ${target_name}_auv3_plugin
-    #    "${YUP_ARG_PLUGIN_NAME}"
-    #    "${au_bundle_type}"
-    #    "${YUP_ARG_PLUGIN_AU_SUBTYPE}"
-    #    "${YUP_ARG_PLUGIN_AU_MANUFACTURER}")
-
-    #yup_validate_pluginval (
-    #    ${target_name}_auv3_plugin
-    #    "${auv3_pluginval_path}")
-
+    if (YUP_ARG_PLUGIN_COPY_AFTER_BUILD)
+        yup_audio_plugin_copy_bundle (${target_name} auv3)
+    endif()
 endfunction()

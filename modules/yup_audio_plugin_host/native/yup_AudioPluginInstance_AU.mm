@@ -56,7 +56,7 @@ AudioPluginDescription descriptionFromComponent(AudioComponent comp,
     AudioPluginDescription desc;
     desc.formatType = AudioPluginFormatType::audioUnit;
     desc.identifier = makeIdentifier(acd);
-    desc.isV3 = (acd.componentFlags & kAudioUnitComponentFlag_IsV3AudioUnit) != 0;
+    desc.isV3 = (acd.componentFlags & kAudioComponentFlag_IsV3AudioUnit) != 0;
 
     CFStringRef nameRef = nullptr;
     AudioComponentCopyName(comp, &nameRef);

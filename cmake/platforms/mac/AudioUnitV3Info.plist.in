@@ -48,7 +48,7 @@
 					<key>version</key>
 					<integer>1</integer>
 					<key>sandboxSafe</key>
-					<true/>
+					@PLUGIN_AU_SANDBOX_SAFE@
 					<key>tags</key>
 					<array>
 						<string>@PLUGIN_AU_TAG@</string>
