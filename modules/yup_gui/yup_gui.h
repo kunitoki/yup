@@ -52,6 +52,17 @@
 #include <rive/rive.h>
 
 //==============================================================================
+/** Config: YUP_EMBED_DEFAULT_THEME_FONTS
+
+    Select if the default theme fonts should be embedded in the binary. If set to 0, the
+    default theme fonts will be loaded from the system fonts. If set to 1, the default
+    theme fonts will be embedded in the binary. The default is 1.
+*/
+#ifndef YUP_EMBED_DEFAULT_THEME_FONTS
+#define YUP_EMBED_DEFAULT_THEME_FONTS 1
+#endif
+
+//==============================================================================
 /** Config: YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
 
     Enable repaint debugging for components.

@@ -1733,6 +1733,7 @@ ApplicationTheme::Ptr createThemeVersion1()
 {
     ApplicationTheme::Ptr theme (new ApplicationTheme);
 
+#if YUP_EMBED_DEFAULT_THEME_FONTS
     {
         Font font;
         if (auto result = font.loadFromData (MemoryBlock (&RobotoFlexFont_data[0], RobotoFlexFont_size)); result.failed())
@@ -1748,6 +1749,7 @@ ApplicationTheme::Ptr createThemeVersion1()
 
         theme->setDefaultIconFont (std::move (font));
     }
+#endif
 
     theme->setComponentStyle<Slider> (ComponentStyle::createStyle<Slider> (paintSlider));
     theme->setColor (Slider::Style::backgroundColorId, Color (0xff3d3d3d));
