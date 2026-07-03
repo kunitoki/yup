@@ -21,7 +21,11 @@
 
 function (_yup_configure_audio_plugin_bundle_info_plist output_file package_type)
     set (YUP_AUDIO_PLUGIN_BUNDLE_PACKAGE_TYPE "${package_type}")
-    configure_file ("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/mac/AudioPluginInfo.plist.in" "${output_file}" @ONLY)
+    if ("${package_type}" STREQUAL "TDMw")
+        configure_file ("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/mac/AudioPluginInfo_AAX.plist.in" "${output_file}" @ONLY)
+    else()
+        configure_file ("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/mac/AudioPluginInfo.plist.in" "${output_file}" @ONLY)
+    endif()
 endfunction()
 
 #==============================================================================
@@ -34,7 +38,7 @@ function (yup_audio_plugin)
         # Globals
         TARGET_NAME TARGET_VERSION TARGET_IDE_GROUP TARGET_APP_ID TARGET_APP_NAMESPACE TARGET_CXX_STANDARD
         # Plugin types
-        PLUGIN_CREATE_CLAP PLUGIN_CREATE_VST3 PLUGIN_CREATE_STANDALONE PLUGIN_CREATE_AU PLUGIN_CREATE_AAX)
+        PLUGIN_CREATE_CLAP PLUGIN_CREATE_VST3 PLUGIN_CREATE_STANDALONE PLUGIN_CREATE_AU PLUGIN_CREATE_AUv3 PLUGIN_CREATE_AAX)
 
     set (multi_value_args
         DEFINITIONS
@@ -63,12 +67,12 @@ function (yup_audio_plugin)
 
     # ==== Validation stage
     if (NOT YUP_PLATFORM_DESKTOP)
-        _yup_message (FATAL_ERROR "Audio plugins are not supported on emscripten or android.")
+        _yup_message (FATAL_ERROR "Audio plugins are not supported on emscripten or mobile (yet).")
         return()
     endif()
 
-    if (NOT YUP_ARG_PLUGIN_CREATE_CLAP AND NOT YUP_ARG_PLUGIN_CREATE_VST3 AND NOT YUP_ARG_PLUGIN_CREATE_STANDALONE AND NOT YUP_ARG_PLUGIN_CREATE_AU AND NOT YUP_ARG_PLUGIN_CREATE_AAX)
-        _yup_message (FATAL_ERROR "At least one plugin type must be enabled (CLAP, VST3, AU, AAX, or Standalone).")
+    if (NOT YUP_ARG_PLUGIN_CREATE_CLAP AND NOT YUP_ARG_PLUGIN_CREATE_VST3 AND NOT YUP_ARG_PLUGIN_CREATE_STANDALONE AND NOT YUP_ARG_PLUGIN_CREATE_AU AND NOT YUP_ARG_PLUGIN_CREATE_AUv3 AND NOT YUP_ARG_PLUGIN_CREATE_AAX)
+        _yup_message (FATAL_ERROR "At least one plugin type must be enabled (CLAP, VST3, AU, AUv3, AAX, or Standalone).")
         return()
     endif()
 
@@ -175,6 +179,42 @@ function (yup_audio_plugin)
             "${YUP_ARG_UNPARSED_ARGUMENTS}")
     endif()
 
+    # ==== Build AUv3 plugin target (macOS only for now, iOS support is planned)
+    if (YUP_ARG_PLUGIN_CREATE_AUv3 AND YUP_PLATFORM_MAC)
+        cmake_parse_arguments (AUv3_ARGS ""
+            "PLUGIN_IS_SYNTH;PLUGIN_AU_SUBTYPE;PLUGIN_AU_MANUFACTURER;PLUGIN_NAME;PLUGIN_VERSION;PLUGIN_ID;PLUGIN_VENDOR;PLUGIN_DESCRIPTION;PLUGIN_URL;PLUGIN_EMAIL;PLUGIN_IS_MONO"
+            "" ${YUP_ARG_UNPARSED_ARGUMENTS})
+
+        set (auv3_has_standalone OFF)
+        set (auv3_standalone_target "")
+        if (YUP_ARG_PLUGIN_CREATE_STANDALONE)
+            set (auv3_has_standalone ON)
+            set (auv3_standalone_target "${target_name}_standalone_plugin")
+        endif()
+
+        yup_plugin_auv3 (
+            TARGET_NAME ${target_name}
+            TARGET_CXX_STANDARD ${target_cxx_standard}
+            TARGET_IDE_GROUP ${target_ide_group}
+            TARGET_BUNDLE_ID ${target_bundle_id}
+            PLUGIN_IS_SYNTH ${AUv3_ARGS_PLUGIN_IS_SYNTH}
+            PLUGIN_NAME ${AUv3_ARGS_PLUGIN_NAME}
+            PLUGIN_VERSION ${AUv3_ARGS_PLUGIN_VERSION}
+            PLUGIN_AU_SUBTYPE ${AUv3_ARGS_PLUGIN_AU_SUBTYPE}
+            PLUGIN_AU_MANUFACTURER ${AUv3_ARGS_PLUGIN_AU_MANUFACTURER}
+            HAS_STANDALONE ${auv3_has_standalone}
+            STANDALONE_TARGET ${auv3_standalone_target}
+            SHARED_LIBS ${target_name}_shared
+            ADDITIONAL_LIBRARIES ${additional_libraries}
+            MODULES ${YUP_ARG_MODULES}
+            PLUGIN_ID ${AUv3_ARGS_PLUGIN_ID}
+            PLUGIN_VENDOR ${AUv3_ARGS_PLUGIN_VENDOR}
+            PLUGIN_DESCRIPTION ${AUv3_ARGS_PLUGIN_DESCRIPTION}
+            PLUGIN_URL ${AUv3_ARGS_PLUGIN_URL}
+            PLUGIN_EMAIL ${AUv3_ARGS_PLUGIN_EMAIL}
+            PLUGIN_IS_MONO ${AUv3_ARGS_PLUGIN_IS_MONO})
+    endif()
+
     # ==== Build AAX plugin target
     if (YUP_ARG_PLUGIN_CREATE_AAX)
         _yup_audio_plugin_create_aax (
@@ -203,8 +243,11 @@ function (yup_audio_plugin)
     if (YUP_ARG_PLUGIN_CREATE_AU AND YUP_PLATFORM_MAC)
         list (APPEND _all_plugin_targets ${target_name}_au_plugin)
     endif()
-    if (YUP_ARG_PLUGIN_CREATE_AAX)
+    if (YUP_ARG_PLUGIN_CREATE_AAX AND TARGET ${target_name}_aax_plugin)
         list (APPEND _all_plugin_targets ${target_name}_aax_plugin)
+    endif()
+    if (YUP_ARG_PLUGIN_CREATE_AUv3 AND YUP_PLATFORM_MAC)
+        list (APPEND _all_plugin_targets ${target_name}_auv3_plugin)
     endif()
 
     add_custom_target (${target_name} DEPENDS ${_all_plugin_targets})
@@ -227,6 +270,12 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
     if ("${plugin_type}" STREQUAL "au")
         set (target_file_name "${target_name}_${plugin_type}_plugin.component")
         set (plugin_target_path "$ENV{HOME}/Library/Audio/Plug-Ins/Components")
+    elseif ("${plugin_type}" STREQUAL "auv3")
+        set (target_file_name "${target_name}_${plugin_type}_plugin.appex")
+        set (plugin_target_path "$ENV{HOME}/Library/Audio/Plug-Ins/AppExtensions")
+    elseif ("${plugin_type}" STREQUAL "aax")
+        set (target_file_name "${target_name}_${plugin_type}_plugin.aaxplugin")
+        set (plugin_target_path "$ENV{HOME}/Library/Application Support/Avid/Audio/Plug-Ins")
     else()
         set (target_file_name "${target_name}_${plugin_type}_plugin.${plugin_type}")
         set (plugin_target_path "$ENV{HOME}/Library/Audio/Plug-Ins/${plugin_type_upper}")
@@ -234,7 +283,7 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
 
     set (plugin_path "${plugin_target_path}/${target_file_name}")
 
-    if (NOT EXISTS ${plugin_target_path} AND NOT "${plugin_type}" STREQUAL "clap")
+    if (NOT EXISTS ${plugin_target_path} AND NOT "${plugin_type}" STREQUAL "clap" AND NOT "${plugin_type}" STREQUAL "aax")
         _yup_message (STATUS "Plugin path ${plugin_target_path} does not exist, skipping copy")
         return()
     endif()
@@ -259,18 +308,33 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
         endif()
 
         add_custom_command(TARGET ${dependency_target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_target_path}"
             COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
             COMMAND ${CMAKE_COMMAND} -E create_symlink "${source_plugin_path}" "${plugin_path}"
             COMMENT "Symlinking VST3 plugin ${plugin_type_upper} plugin to ${plugin_path}"
             VERBATIM)
     elseif ("${plugin_type}" STREQUAL "au")
         add_custom_command(TARGET ${dependency_target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_target_path}"
             COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
             COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
             COMMENT "Copying AU plugin ${plugin_type_upper} to ${plugin_path}"
             VERBATIM)
+    elseif ("${plugin_type}" STREQUAL "auv3")
+        add_custom_command(TARGET ${dependency_target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_target_path}"
+            COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
+            COMMAND /bin/sh -c "killall -9 AudioComponentRegistrar 2>/dev/null; sleep 2; true"
+            COMMENT "Copying AUv3 plugin ${plugin_type_upper} to ${plugin_path}"
+            VERBATIM)
     elseif ("${plugin_type}" STREQUAL "aax")
-        _yup_message (STATUS "AAX plugin bundle copy not yet implemented for development")
+        add_custom_command(TARGET ${dependency_target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_target_path}"
+            COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
+            COMMENT "Copying AAX plugin ${plugin_type_upper} to ${plugin_path}"
+            VERBATIM)
     else()
         _yup_message (FATAL_ERROR "Unsupported plugin type ${plugin_type} for copying bundle")
     endif()

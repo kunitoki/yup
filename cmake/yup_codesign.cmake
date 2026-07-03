@@ -24,8 +24,15 @@ function (yup_codesign_target target_name bundle_path)
         return()
     endif()
 
-    add_custom_command (TARGET ${target_name} POST_BUILD
-        COMMAND codesign --force --sign - "${bundle_path}"
-        COMMENT "Codesigning ${target_name}"
-        VERBATIM)
+    if (ARGC GREATER 2 AND ARGV2)
+        add_custom_command (TARGET ${target_name} POST_BUILD
+            COMMAND codesign --force --sign - --entitlements "${ARGV2}" "${bundle_path}"
+            COMMENT "Codesigning ${target_name}"
+            VERBATIM)
+    else()
+        add_custom_command (TARGET ${target_name} POST_BUILD
+            COMMAND codesign --force --sign - "${bundle_path}"
+            COMMENT "Codesigning ${target_name}"
+            VERBATIM)
+    endif()
 endfunction()

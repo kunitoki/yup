@@ -28,7 +28,7 @@
     vendor:             yup
     version:            1.0.0
     name:               YUP Audio Plugin Host
-    description:        In-process hosting of VST3, CLAP, and AUv2 audio plugins.
+    description:        In-process hosting of VST3, CLAP, and AU (v2 and v3) audio plugins.
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
@@ -46,7 +46,7 @@
 //==============================================================================
 /** Config: YUP_ENABLE_PLUGIN_HOST_AU_LOGGING
 
-    Enable debug logging for AUv2 plugin scanning and loading.
+    Enable debug logging for AU plugin scanning and loading.
 */
 #ifndef YUP_ENABLE_PLUGIN_HOST_AU_LOGGING
 #define YUP_ENABLE_PLUGIN_HOST_AU_LOGGING 0
@@ -82,4 +82,4 @@
 //==============================================================================
 #include "native/yup_AudioPluginInstance_VST3.h"
 #include "native/yup_AudioPluginInstance_CLAP.h"
-#include "native/yup_AudioPluginInstance_AUv2.h"
+#include "native/yup_AudioPluginInstance_AU.h"
