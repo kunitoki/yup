@@ -32,6 +32,7 @@ function (_yup_find_aax_sdk)
         set (AAX_SDK_ROOT "$ENV{YUP_AAX_SDK_ROOT}")
     else()
         _yup_message (STATUS "YUP_AAX_SDK_ROOT not set — AAX plugin support disabled")
+        # _yup_message (FATAL_ERROR "YUP_AAX_SDK_ROOT must be set when PLUGIN_CREATE_AAX is enabled")
         return()
     endif()
 
@@ -45,6 +46,9 @@ function (_yup_find_aax_sdk)
     target_include_directories (yup_audio_plugin_client_aaxsdk_headers INTERFACE
         "${AAX_SDK_ROOT}/Interfaces"
         "${AAX_SDK_ROOT}/Interfaces/ACF")
+    target_compile_options (yup_audio_plugin_client_aaxsdk_headers INTERFACE
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-multichar>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-undef-prefix>)
 
     # --- Build AAXLibrary (static library from SDK sources) ---
     set (AAX_LIBRARY_SOURCE_DIR "${AAX_SDK_ROOT}/Libs/AAXLibrary/source")
@@ -54,27 +58,31 @@ function (_yup_find_aax_sdk)
         file (GLOB_RECURSE AAX_LIBRARY_SOURCES
             "${AAX_LIBRARY_SOURCE_DIR}/*.cpp")
 
+        # AAX_CAutoreleasePool.Win.cpp and .OSX.mm define the same symbols unguarded
         if (YUP_PLATFORM_MAC)
-            file (GLOB_RECURSE AAX_LIBRARY_OBJC_SOURCES
-                "${AAX_LIBRARY_SOURCE_DIR}/*.mm"
-                "${AAX_LIBRARY_SOURCE_DIR}/*.OSX.*")
-            list (APPEND AAX_LIBRARY_SOURCES ${AAX_LIBRARY_OBJC_SOURCES})
-        else()
-            # Exclude macOS-specific files on Windows/Linux
-            file (GLOB_RECURSE AAX_LIBRARY_OSX_SOURCES
-                "${AAX_LIBRARY_SOURCE_DIR}/*_OSX.*"
-                "${AAX_LIBRARY_SOURCE_DIR}/*.mm")
-            if (AAX_LIBRARY_OSX_SOURCES)
-                list (REMOVE_ITEM AAX_LIBRARY_SOURCES ${AAX_LIBRARY_OSX_SOURCES})
+            file (GLOB_RECURSE AAX_LIBRARY_WIN_SOURCES
+                "${AAX_LIBRARY_SOURCE_DIR}/*.Win.cpp")
+            if (AAX_LIBRARY_WIN_SOURCES)
+                list (REMOVE_ITEM AAX_LIBRARY_SOURCES ${AAX_LIBRARY_WIN_SOURCES})
             endif()
+            file (GLOB_RECURSE AAX_LIBRARY_OBJC_SOURCES
+                "${AAX_LIBRARY_SOURCE_DIR}/*.mm")
+            list (APPEND AAX_LIBRARY_SOURCES ${AAX_LIBRARY_OBJC_SOURCES})
         endif()
+
+        # Class factory implementation required by AAX_Init.cpp
+        list (APPEND AAX_LIBRARY_SOURCES "${AAX_SDK_ROOT}/Interfaces/ACF/CACFClassFactory.cpp")
 
         if (AAX_LIBRARY_SOURCES)
             add_library (yup_audio_plugin_client_aaxlib STATIC ${AAX_LIBRARY_SOURCES})
             target_compile_features (yup_audio_plugin_client_aaxlib PRIVATE cxx_std_17)
             target_include_directories (yup_audio_plugin_client_aaxlib PRIVATE
                 "${AAX_SDK_ROOT}/Interfaces"
-                "${AAX_SDK_ROOT}/Interfaces/ACF")
+                "${AAX_SDK_ROOT}/Interfaces/ACF"
+                "${AAX_SDK_ROOT}/Libs/AAXLibrary/include")
+            target_compile_options (yup_audio_plugin_client_aaxlib PRIVATE
+                $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-multichar>
+                $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-undef-prefix>)
             target_compile_definitions (yup_audio_plugin_client_aaxlib PRIVATE
                 AAX_LIBRARY_BINARY=1)
 
@@ -129,6 +137,11 @@ function (_yup_audio_plugin_create_aax
 
     _yup_find_aax_sdk()
 
+    if (NOT TARGET yup_audio_plugin_client_aaxsdk)
+        _yup_message (STATUS "Skipping AAX plugin target for ${target_name} (AAX SDK not available)")
+        return()
+    endif()
+
     _yup_message (STATUS "Setting up AAX plugin client")
     _yup_module_setup_plugin_client (
         ${target_name}
@@ -150,6 +163,12 @@ function (_yup_audio_plugin_create_aax
     target_compile_definitions (${target_name}_aax_plugin PRIVATE
         YUP_AUDIO_PLUGIN_ENABLE_AAX=1
         YUP_STANDALONE_APPLICATION=0)
+
+    # The ACF entry points (ACFRegisterPlugin, ACFStartup, ...) exported by the
+    # plugin binary are defined in the SDK's AAX_Exports.cpp
+    get_target_property (aax_sdk_root yup_audio_plugin_client_aaxsdk YUP_AAX_SDK_ROOT)
+    target_sources (${target_name}_aax_plugin PRIVATE
+        "${aax_sdk_root}/Interfaces/AAX_Exports.cpp")
 
     target_link_libraries (${target_name}_aax_plugin PRIVATE
         ${target_name}_shared
@@ -197,12 +216,18 @@ function (_yup_audio_plugin_create_aax
 
         set (aax_plugin_path "$<TARGET_BUNDLE_DIR:${target_name}_aax_plugin>")
     else()
-        # Windows AAX: directory bundle with .aaxplugin extension
+        # Windows AAX plugins are directory bundles laid out as
+        # Name.aaxplugin/Contents/x64/Name.aaxplugin
+        set (aax_bundle_dir "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_aax_plugin.aaxplugin")
+
         set_target_properties (${target_name}_aax_plugin PROPERTIES
             PREFIX ""
-            SUFFIX ".aaxplugin")
+            SUFFIX ".aaxplugin"
+            OUTPUT_NAME "${target_name}_aax_plugin"
+            RUNTIME_OUTPUT_DIRECTORY "$<1:${aax_bundle_dir}/Contents/x64>"
+            LIBRARY_OUTPUT_DIRECTORY "$<1:${aax_bundle_dir}/Contents/x64>")
 
-        set (aax_plugin_path "$<TARGET_FILE_DIR:${target_name}_aax_plugin>")
+        set (aax_plugin_path "${aax_bundle_dir}")
     endif()
 
     yup_codesign_target (${target_name}_aax_plugin "${aax_plugin_path}")

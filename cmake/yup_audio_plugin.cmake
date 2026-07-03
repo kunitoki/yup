@@ -21,7 +21,11 @@
 
 function (_yup_configure_audio_plugin_bundle_info_plist output_file package_type)
     set (YUP_AUDIO_PLUGIN_BUNDLE_PACKAGE_TYPE "${package_type}")
-    configure_file ("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/mac/AudioPluginInfo.plist.in" "${output_file}" @ONLY)
+    if ("${package_type}" STREQUAL "TDMw")
+        configure_file ("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/mac/AudioPluginInfo_AAX.plist.in" "${output_file}" @ONLY)
+    else()
+        configure_file ("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/mac/AudioPluginInfo.plist.in" "${output_file}" @ONLY)
+    endif()
 endfunction()
 
 #==============================================================================
@@ -253,7 +257,7 @@ function (yup_audio_plugin)
     if (YUP_ARG_PLUGIN_CREATE_AU AND YUP_PLATFORM_MAC)
         list (APPEND _all_plugin_targets ${target_name}_au_plugin)
     endif()
-    if (YUP_ARG_PLUGIN_CREATE_AAX)
+    if (YUP_ARG_PLUGIN_CREATE_AAX AND TARGET ${target_name}_aax_plugin)
         list (APPEND _all_plugin_targets ${target_name}_aax_plugin)
     endif()
     if (YUP_ARG_PLUGIN_CREATE_AUv3 AND YUP_PLATFORM_MAC)
