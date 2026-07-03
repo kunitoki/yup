@@ -60,16 +60,25 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_audio_plugin_create_au
-    target_name
-    target_version
-    target_ide_group
-    target_bundle_id
-    target_app_namespace
-    target_cxx_standard
-    additional_libraries
-    target_modules
-    unparsed_args)
+function (_yup_audio_plugin_create_au)
+    # ==== Parse arguments — recognise all possible keywords from parent call
+    _yup_plugin_shared_args (one_value_args multi_value_args)
+    cmake_parse_arguments (YUP_ARG "" "${one_value_args}" "${multi_value_args}" ${ARGN})
+
+    # ==== Set defaults for optional args
+    _yup_set_default (YUP_ARG_PLUGIN_AU_SANDBOX_SAFE ON)
+    _yup_set_default (YUP_ARG_PLUGIN_COPY_AFTER_BUILD ON)
+    _yup_set_default (YUP_ARG_PLUGIN_CODESIGN_IDENTITY "-")
+    _yup_set_default (YUP_ARG_PLUGIN_HARDENED_RUNTIME OFF)
+
+    set (target_name "${YUP_ARG_TARGET_NAME}")
+    set (target_version "${YUP_ARG_TARGET_VERSION}")
+    set (target_ide_group "${YUP_ARG_TARGET_IDE_GROUP}")
+    set (target_bundle_id "${YUP_ARG_TARGET_BUNDLE_ID}")
+    set (target_app_namespace "${YUP_ARG_TARGET_APP_NAMESPACE}")
+    set (target_cxx_standard "${YUP_ARG_TARGET_CXX_STANDARD}")
+    set (additional_libraries "${YUP_ARG_ADDITIONAL_LIBRARIES}")
+    set (target_modules "${YUP_ARG_MODULES}")
 
     _yup_fetch_apple_ausdk()
 
@@ -79,29 +88,44 @@ function (_yup_audio_plugin_create_au
         yup_audio_plugin_client
         ${target_ide_group}
         au
-        ${unparsed_args})
+        PLUGIN_ID ${YUP_ARG_PLUGIN_ID}
+        PLUGIN_NAME ${YUP_ARG_PLUGIN_NAME}
+        PLUGIN_VENDOR ${YUP_ARG_PLUGIN_VENDOR}
+        PLUGIN_EMAIL ${YUP_ARG_PLUGIN_EMAIL}
+        PLUGIN_VERSION ${YUP_ARG_PLUGIN_VERSION}
+        PLUGIN_DESCRIPTION ${YUP_ARG_PLUGIN_DESCRIPTION}
+        PLUGIN_URL ${YUP_ARG_PLUGIN_URL}
+        PLUGIN_IS_SYNTH ${YUP_ARG_PLUGIN_IS_SYNTH}
+        PLUGIN_IS_MONO ${YUP_ARG_PLUGIN_IS_MONO}
+        PLUGIN_AU_SUBTYPE ${YUP_ARG_PLUGIN_AU_SUBTYPE}
+        PLUGIN_AU_MANUFACTURER ${YUP_ARG_PLUGIN_AU_MANUFACTURER}
+        PLUGIN_AU_SANDBOX_SAFE ${YUP_ARG_PLUGIN_AU_SANDBOX_SAFE})
 
     # Determine AU type (aumu for instruments, aufx for effects)
-    cmake_parse_arguments (AU_ARGS ""
-        "PLUGIN_IS_SYNTH;PLUGIN_AU_SUBTYPE;PLUGIN_AU_MANUFACTURER;PLUGIN_NAME;PLUGIN_VERSION;PLUGIN_ID;PLUGIN_VENDOR;PLUGIN_DESCRIPTION;PLUGIN_URL;PLUGIN_EMAIL;PLUGIN_IS_MONO"
-        "" ${unparsed_args})
-    if (AU_ARGS_PLUGIN_IS_SYNTH)
+    if (YUP_ARG_PLUGIN_IS_SYNTH)
         set (au_bundle_type "aumu")
     else()
         set (au_bundle_type "aufx")
     endif()
 
-    if (NOT AU_ARGS_PLUGIN_AU_SUBTYPE)
-        set (AU_ARGS_PLUGIN_AU_SUBTYPE "Dflt")
+    if (NOT YUP_ARG_PLUGIN_AU_SUBTYPE)
+        set (YUP_ARG_PLUGIN_AU_SUBTYPE "Dflt")
     endif()
-    if (NOT AU_ARGS_PLUGIN_AU_MANUFACTURER)
-        set (AU_ARGS_PLUGIN_AU_MANUFACTURER "Yup!")
+    if (NOT YUP_ARG_PLUGIN_AU_MANUFACTURER)
+        set (YUP_ARG_PLUGIN_AU_MANUFACTURER "Yup!")
     endif()
-    if (NOT AU_ARGS_PLUGIN_NAME)
-        set (AU_ARGS_PLUGIN_NAME "${target_name}")
+    if (NOT YUP_ARG_PLUGIN_NAME)
+        set (YUP_ARG_PLUGIN_NAME "${target_name}")
     endif()
-    if (NOT AU_ARGS_PLUGIN_VERSION)
-        set (AU_ARGS_PLUGIN_VERSION "1")
+    if (NOT YUP_ARG_PLUGIN_VERSION)
+        set (YUP_ARG_PLUGIN_VERSION "1")
+    endif()
+
+    # Determine sandboxSafe plist value
+    if (YUP_ARG_PLUGIN_AU_SANDBOX_SAFE)
+        set (PLUGIN_AU_SANDBOX_SAFE "<true/>")
+    else()
+        set (PLUGIN_AU_SANDBOX_SAFE "<false/>")
     endif()
 
     _yup_message (STATUS "Creating AUv2 plugin target")
@@ -146,16 +170,16 @@ function (_yup_audio_plugin_create_au
     set (au_plist_output "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_au_plugin.plist")
 
     set (PLUGIN_AU_TYPE "${au_bundle_type}")
-    set (PLUGIN_AU_SUBTYPE "${AU_ARGS_PLUGIN_AU_SUBTYPE}")
-    set (PLUGIN_AU_MANUFACTURER "${AU_ARGS_PLUGIN_AU_MANUFACTURER}")
-    set (PLUGIN_AU_NAME "${AU_ARGS_PLUGIN_NAME}")
-    set (PLUGIN_AU_VERSION "${AU_ARGS_PLUGIN_VERSION}")
+    set (PLUGIN_AU_SUBTYPE "${YUP_ARG_PLUGIN_AU_SUBTYPE}")
+    set (PLUGIN_AU_MANUFACTURER "${YUP_ARG_PLUGIN_AU_MANUFACTURER}")
+    set (PLUGIN_AU_NAME "${YUP_ARG_PLUGIN_NAME}")
+    set (PLUGIN_AU_VERSION "${YUP_ARG_PLUGIN_VERSION}")
 
     set (au_bundle_identifier "${target_bundle_id}.au")
     string (REGEX REPLACE "[^A-Za-z0-9.-]" "-" au_bundle_identifier "${au_bundle_identifier}")
 
     set (au_pkginfo_file "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_au_plugin.PkgInfo")
-    file (WRITE "${au_pkginfo_file}" "BNDL${AU_ARGS_PLUGIN_AU_MANUFACTURER}")
+    file (WRITE "${au_pkginfo_file}" "BNDL${YUP_ARG_PLUGIN_AU_MANUFACTURER}")
 
     configure_file ("${au_plist_template}" "${au_plist_output}" @ONLY)
 
@@ -169,9 +193,9 @@ function (_yup_audio_plugin_create_au
         BUNDLE_EXTENSION "component"
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_INFO_PLIST "${au_plist_output}"
-        MACOSX_BUNDLE_BUNDLE_NAME "${AU_ARGS_PLUGIN_NAME}"
-        MACOSX_BUNDLE_BUNDLE_VERSION "${AU_ARGS_PLUGIN_VERSION}"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "${AU_ARGS_PLUGIN_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_NAME "${YUP_ARG_PLUGIN_NAME}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${YUP_ARG_PLUGIN_VERSION}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${YUP_ARG_PLUGIN_VERSION}"
         MACOSX_BUNDLE_GUI_IDENTIFIER "${au_bundle_identifier}"
         FOLDER "${target_ide_group}"
         XCODE_ATTRIBUTE_GENERATE_PKGINFO_FILE YES
@@ -184,18 +208,22 @@ function (_yup_audio_plugin_create_au
         COMMENT "Generating AU PkgInfo"
         VERBATIM)
 
-    yup_codesign_target (${target_name}_au_plugin "$<TARGET_BUNDLE_DIR:${target_name}_au_plugin>")
+    yup_codesign_target (${target_name}_au_plugin "$<TARGET_BUNDLE_DIR:${target_name}_au_plugin>"
+        "${YUP_ARG_PLUGIN_CODESIGN_IDENTITY}"
+        "${YUP_ARG_PLUGIN_HARDENED_RUNTIME}")
 
-    yup_audio_plugin_copy_bundle (${target_name} au)
+    if (YUP_ARG_PLUGIN_COPY_AFTER_BUILD)
+        yup_audio_plugin_copy_bundle (${target_name} au)
+    endif()
 
     set (au_pluginval_path "$ENV{HOME}/Library/Audio/Plug-Ins/Components/${target_name}_au_plugin.component")
 
     yup_validate_au_plugin (
         ${target_name}_au_plugin
-        "${AU_ARGS_PLUGIN_NAME}"
+        "${YUP_ARG_PLUGIN_NAME}"
         "${au_bundle_type}"
-        "${AU_ARGS_PLUGIN_AU_SUBTYPE}"
-        "${AU_ARGS_PLUGIN_AU_MANUFACTURER}")
+        "${YUP_ARG_PLUGIN_AU_SUBTYPE}"
+        "${YUP_ARG_PLUGIN_AU_MANUFACTURER}")
 
     yup_validate_pluginval (
         ${target_name}_au_plugin

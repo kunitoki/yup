@@ -1621,10 +1621,12 @@ private:
     bool isBypassed = false;
 };
 
-#if YupPlugin_IsSynth
-const auto YupPlugin_Category = Vst::PlugType::kInstrumentSynth;
+#ifdef YupPlugin_VST3_Categories
+constexpr auto YupPlugin_Category = YupPlugin_VST3_Categories;
+#elif YupPlugin_IsSynth
+constexpr auto YupPlugin_Category = Vst::PlugType::kInstrumentSynth;
 #else
-const auto YupPlugin_Category = Vst::PlugType::kFx;
+constexpr auto YupPlugin_Category = Vst::PlugType::kFx;
 #endif
 
 } // namespace yup

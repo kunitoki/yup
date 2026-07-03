@@ -32,7 +32,6 @@ function (_yup_find_aax_sdk)
         set (AAX_SDK_ROOT "$ENV{YUP_AAX_SDK_ROOT}")
     else()
         _yup_message (STATUS "YUP_AAX_SDK_ROOT not set — AAX plugin support disabled")
-        # _yup_message (FATAL_ERROR "YUP_AAX_SDK_ROOT must be set when PLUGIN_CREATE_AAX is enabled")
         return()
     endif()
 
@@ -124,16 +123,38 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_audio_plugin_create_aax
-    target_name
-    target_version
-    target_ide_group
-    target_bundle_id
-    target_app_namespace
-    target_cxx_standard
-    additional_libraries
-    target_modules
-    unparsed_args)
+function (_yup_audio_plugin_create_aax)
+    # ==== Parse arguments — recognise all possible keywords from parent call
+    _yup_plugin_shared_args (one_value_args multi_value_args)
+    cmake_parse_arguments (YUP_ARG "" "${one_value_args}" "${multi_value_args}" ${ARGN})
+
+    # ==== Validate required AAX IDs at cmake time
+    if (NOT YUP_ARG_PLUGIN_AAX_MANUFACTURER_ID)
+        _yup_message (FATAL_ERROR "PLUGIN_AAX_MANUFACTURER_ID is required when PLUGIN_CREATE_AAX is ON.")
+    endif()
+    if (NOT YUP_ARG_PLUGIN_AAX_PRODUCT_ID)
+        _yup_message (FATAL_ERROR "PLUGIN_AAX_PRODUCT_ID is required when PLUGIN_CREATE_AAX is ON.")
+    endif()
+    if (NOT YUP_ARG_PLUGIN_AAX_PLUGIN_ID_NATIVE)
+        _yup_message (FATAL_ERROR "PLUGIN_AAX_PLUGIN_ID_NATIVE is required when PLUGIN_CREATE_AAX is ON.")
+    endif()
+    if (NOT YUP_ARG_PLUGIN_AAX_PLUGIN_ID_AUDIOSUITE)
+        _yup_message (FATAL_ERROR "PLUGIN_AAX_PLUGIN_ID_AUDIOSUITE is required when PLUGIN_CREATE_AAX is ON.")
+    endif()
+
+    # ==== Set defaults for optional args
+    _yup_set_default (YUP_ARG_PLUGIN_COPY_AFTER_BUILD ON)
+    _yup_set_default (YUP_ARG_PLUGIN_CODESIGN_IDENTITY "-")
+    _yup_set_default (YUP_ARG_PLUGIN_HARDENED_RUNTIME OFF)
+
+    set (target_name "${YUP_ARG_TARGET_NAME}")
+    set (target_version "${YUP_ARG_TARGET_VERSION}")
+    set (target_ide_group "${YUP_ARG_TARGET_IDE_GROUP}")
+    set (target_bundle_id "${YUP_ARG_TARGET_BUNDLE_ID}")
+    set (target_app_namespace "${YUP_ARG_TARGET_APP_NAMESPACE}")
+    set (target_cxx_standard "${YUP_ARG_TARGET_CXX_STANDARD}")
+    set (additional_libraries "${YUP_ARG_ADDITIONAL_LIBRARIES}")
+    set (target_modules "${YUP_ARG_MODULES}")
 
     _yup_find_aax_sdk()
 
@@ -148,7 +169,21 @@ function (_yup_audio_plugin_create_aax
         yup_audio_plugin_client
         ${target_ide_group}
         aax
-        ${unparsed_args})
+        PLUGIN_ID ${YUP_ARG_PLUGIN_ID}
+        PLUGIN_NAME ${YUP_ARG_PLUGIN_NAME}
+        PLUGIN_VENDOR ${YUP_ARG_PLUGIN_VENDOR}
+        PLUGIN_EMAIL ${YUP_ARG_PLUGIN_EMAIL}
+        PLUGIN_VERSION ${YUP_ARG_PLUGIN_VERSION}
+        PLUGIN_DESCRIPTION ${YUP_ARG_PLUGIN_DESCRIPTION}
+        PLUGIN_URL ${YUP_ARG_PLUGIN_URL}
+        PLUGIN_IS_SYNTH ${YUP_ARG_PLUGIN_IS_SYNTH}
+        PLUGIN_IS_MONO ${YUP_ARG_PLUGIN_IS_MONO}
+        PLUGIN_AAX_MANUFACTURER_ID ${YUP_ARG_PLUGIN_AAX_MANUFACTURER_ID}
+        PLUGIN_AAX_PRODUCT_ID ${YUP_ARG_PLUGIN_AAX_PRODUCT_ID}
+        PLUGIN_AAX_PLUGIN_ID_NATIVE ${YUP_ARG_PLUGIN_AAX_PLUGIN_ID_NATIVE}
+        PLUGIN_AAX_PLUGIN_ID_AUDIOSUITE ${YUP_ARG_PLUGIN_AAX_PLUGIN_ID_AUDIOSUITE}
+        PLUGIN_AAX_CATEGORY ${YUP_ARG_PLUGIN_AAX_CATEGORY}
+        PLUGIN_AAX_PAGE_TABLE_FILE ${YUP_ARG_PLUGIN_AAX_PAGE_TABLE_FILE})
 
     # Create AAX plugin target
     _yup_message (STATUS "Creating AAX plugin target")
@@ -230,8 +265,14 @@ function (_yup_audio_plugin_create_aax
         set (aax_plugin_path "${aax_bundle_dir}")
     endif()
 
-    yup_codesign_target (${target_name}_aax_plugin "${aax_plugin_path}")
+    if (YUP_PLATFORM_MAC)
+        yup_codesign_target (${target_name}_aax_plugin "${aax_plugin_path}"
+            "${YUP_ARG_PLUGIN_CODESIGN_IDENTITY}"
+            "${YUP_ARG_PLUGIN_HARDENED_RUNTIME}")
+    endif()
 
-    yup_audio_plugin_copy_bundle (${target_name} aax)
+    if (YUP_ARG_PLUGIN_COPY_AFTER_BUILD)
+        yup_audio_plugin_copy_bundle (${target_name} aax)
+    endif()
 
 endfunction()

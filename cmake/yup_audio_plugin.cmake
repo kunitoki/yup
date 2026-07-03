@@ -31,39 +31,23 @@ endfunction()
 #==============================================================================
 
 function (yup_audio_plugin)
-    # ==== Fetch options
+    # ==== Parse all known keywords so nothing leaks into unparsed.
+    # We forward ${ARGN} (raw original args) to sub-functions so they can
+    # parse their own format-specific args independently.
     set (options CONSOLE)
 
-    set (one_value_args
-        # Globals
-        TARGET_NAME TARGET_VERSION TARGET_IDE_GROUP TARGET_APP_ID TARGET_APP_NAMESPACE TARGET_CXX_STANDARD
-        # Plugin types
-        PLUGIN_CREATE_CLAP PLUGIN_CREATE_VST3 PLUGIN_CREATE_STANDALONE PLUGIN_CREATE_AU PLUGIN_CREATE_AUv3 PLUGIN_CREATE_AAX)
-
-    set (multi_value_args
-        DEFINITIONS
-        MODULES
-        LINK_OPTIONS)
-
+    _yup_plugin_shared_args (one_value_args multi_value_args)
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
     _yup_set_default (YUP_ARG_TARGET_CXX_STANDARD 20)
 
     set (target_name "${YUP_ARG_TARGET_NAME}")
-    set (target_version "${YUP_ARG_TARGET_VERSION}")
     set (target_ide_group "${YUP_ARG_TARGET_IDE_GROUP}")
-    set (target_app_id "${YUP_ARG_TARGET_APP_ID}")
-    set (target_app_namespace "${YUP_ARG_TARGET_APP_NAMESPACE}")
     set (target_cxx_standard "${YUP_ARG_TARGET_CXX_STANDARD}")
+    set (target_app_id "${YUP_ARG_TARGET_APP_ID}")
     set (target_bundle_id "${target_app_id}")
-    if (NOT target_bundle_id)
-        set (target_bundle_id "org.kunitoki.yup.${target_name}")
-    endif()
+
     string (REGEX REPLACE "[^A-Za-z0-9.-]" "-" target_bundle_id "${target_bundle_id}")
-    set (additional_definitions "")
-    set (additional_options "")
-    set (additional_libraries "")
-    set (additional_link_options "")
 
     # ==== Validation stage
     if (NOT YUP_PLATFORM_DESKTOP)
@@ -125,66 +109,38 @@ function (yup_audio_plugin)
 
     # ==== Build CLAP plugin target
     if (YUP_ARG_PLUGIN_CREATE_CLAP)
-        _yup_audio_plugin_create_clap (
-            "${target_name}"
-            "${target_version}"
-            "${target_ide_group}"
-            "${target_bundle_id}"
-            "${target_app_namespace}"
-            "${target_cxx_standard}"
-            "${additional_libraries}"
-            "${YUP_ARG_MODULES}"
-            "${YUP_ARG_UNPARSED_ARGUMENTS}")
+        _yup_audio_plugin_create_clap(
+            TARGET_BUNDLE_ID ${target_bundle_id}
+            ADDITIONAL_LIBRARIES ${additional_libraries}
+            ${ARGN})
     endif()
 
     # ==== Build VST3 plugin target
     if (YUP_ARG_PLUGIN_CREATE_VST3)
-        _yup_audio_plugin_create_vst3 (
-            "${target_name}"
-            "${target_version}"
-            "${target_ide_group}"
-            "${target_bundle_id}"
-            "${target_app_namespace}"
-            "${target_cxx_standard}"
-            "${additional_libraries}"
-            "${YUP_ARG_MODULES}"
-            "${YUP_ARG_UNPARSED_ARGUMENTS}")
+        _yup_audio_plugin_create_vst3(
+            TARGET_BUNDLE_ID ${target_bundle_id}
+            ADDITIONAL_LIBRARIES ${additional_libraries}
+            ${ARGN})
     endif()
 
     # ==== Build standalone plugin target
     if (YUP_ARG_PLUGIN_CREATE_STANDALONE)
-        _yup_audio_plugin_create_standalone (
-            "${target_name}"
-            "${target_version}"
-            "${target_ide_group}"
-            "${target_bundle_id}"
-            "${target_app_namespace}"
-            "${target_cxx_standard}"
-            "${additional_libraries}"
-            "${YUP_ARG_MODULES}"
-            "${YUP_ARG_UNPARSED_ARGUMENTS}")
+        _yup_audio_plugin_create_standalone(
+            TARGET_BUNDLE_ID ${target_bundle_id}
+            ADDITIONAL_LIBRARIES ${additional_libraries}
+            ${ARGN})
     endif()
 
     # ==== Build AUv2 plugin target (macOS only)
     if (YUP_ARG_PLUGIN_CREATE_AU AND YUP_PLATFORM_MAC)
-        _yup_audio_plugin_create_au (
-            "${target_name}"
-            "${target_version}"
-            "${target_ide_group}"
-            "${target_bundle_id}"
-            "${target_app_namespace}"
-            "${target_cxx_standard}"
-            "${additional_libraries}"
-            "${YUP_ARG_MODULES}"
-            "${YUP_ARG_UNPARSED_ARGUMENTS}")
+        _yup_audio_plugin_create_au(
+            TARGET_BUNDLE_ID ${target_bundle_id}
+            ADDITIONAL_LIBRARIES ${additional_libraries}
+            ${ARGN})
     endif()
 
     # ==== Build AUv3 plugin target (macOS only for now, iOS support is planned)
     if (YUP_ARG_PLUGIN_CREATE_AUv3 AND YUP_PLATFORM_MAC)
-        cmake_parse_arguments (AUv3_ARGS ""
-            "PLUGIN_IS_SYNTH;PLUGIN_AU_SUBTYPE;PLUGIN_AU_MANUFACTURER;PLUGIN_NAME;PLUGIN_VERSION;PLUGIN_ID;PLUGIN_VENDOR;PLUGIN_DESCRIPTION;PLUGIN_URL;PLUGIN_EMAIL;PLUGIN_IS_MONO"
-            "" ${YUP_ARG_UNPARSED_ARGUMENTS})
-
         set (auv3_has_standalone OFF)
         set (auv3_standalone_target "")
         if (YUP_ARG_PLUGIN_CREATE_STANDALONE)
@@ -192,41 +148,21 @@ function (yup_audio_plugin)
             set (auv3_standalone_target "${target_name}_standalone_plugin")
         endif()
 
-        yup_plugin_auv3 (
-            TARGET_NAME ${target_name}
-            TARGET_CXX_STANDARD ${target_cxx_standard}
-            TARGET_IDE_GROUP ${target_ide_group}
+        yup_plugin_auv3(
             TARGET_BUNDLE_ID ${target_bundle_id}
-            PLUGIN_IS_SYNTH ${AUv3_ARGS_PLUGIN_IS_SYNTH}
-            PLUGIN_NAME ${AUv3_ARGS_PLUGIN_NAME}
-            PLUGIN_VERSION ${AUv3_ARGS_PLUGIN_VERSION}
-            PLUGIN_AU_SUBTYPE ${AUv3_ARGS_PLUGIN_AU_SUBTYPE}
-            PLUGIN_AU_MANUFACTURER ${AUv3_ARGS_PLUGIN_AU_MANUFACTURER}
             HAS_STANDALONE ${auv3_has_standalone}
             STANDALONE_TARGET ${auv3_standalone_target}
             SHARED_LIBS ${target_name}_shared
             ADDITIONAL_LIBRARIES ${additional_libraries}
-            MODULES ${YUP_ARG_MODULES}
-            PLUGIN_ID ${AUv3_ARGS_PLUGIN_ID}
-            PLUGIN_VENDOR ${AUv3_ARGS_PLUGIN_VENDOR}
-            PLUGIN_DESCRIPTION ${AUv3_ARGS_PLUGIN_DESCRIPTION}
-            PLUGIN_URL ${AUv3_ARGS_PLUGIN_URL}
-            PLUGIN_EMAIL ${AUv3_ARGS_PLUGIN_EMAIL}
-            PLUGIN_IS_MONO ${AUv3_ARGS_PLUGIN_IS_MONO})
+            ${ARGN})
     endif()
 
     # ==== Build AAX plugin target
     if (YUP_ARG_PLUGIN_CREATE_AAX)
-        _yup_audio_plugin_create_aax (
-            "${target_name}"
-            "${target_version}"
-            "${target_ide_group}"
-            "${target_bundle_id}"
-            "${target_app_namespace}"
-            "${target_cxx_standard}"
-            "${additional_libraries}"
-            "${YUP_ARG_MODULES}"
-            "${YUP_ARG_UNPARSED_ARGUMENTS}")
+        _yup_audio_plugin_create_aax(
+            TARGET_BUNDLE_ID ${target_bundle_id}
+            ADDITIONAL_LIBRARIES ${additional_libraries}
+            ${ARGN})
     endif()
 
     # ==== Create composite target for all enabled plugin formats

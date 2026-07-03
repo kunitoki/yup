@@ -74,16 +74,23 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_audio_plugin_create_vst3
-    target_name
-    target_version
-    target_ide_group
-    target_bundle_id
-    target_app_namespace
-    target_cxx_standard
-    additional_libraries
-    target_modules
-    unparsed_args)
+function (_yup_audio_plugin_create_vst3)
+    # ==== Parse arguments — recognise all possible keywords from parent call
+    _yup_plugin_shared_args (one_value_args multi_value_args)
+    cmake_parse_arguments (YUP_ARG "" "${one_value_args}" "${multi_value_args}" ${ARGN})
+
+    # ==== Set defaults for optional args
+    _yup_set_default (YUP_ARG_PLUGIN_VST3_AUTO_MANIFEST ON)
+    _yup_set_default (YUP_ARG_PLUGIN_COPY_AFTER_BUILD ON)
+
+    set (target_name "${YUP_ARG_TARGET_NAME}")
+    set (target_version "${YUP_ARG_TARGET_VERSION}")
+    set (target_ide_group "${YUP_ARG_TARGET_IDE_GROUP}")
+    set (target_bundle_id "${YUP_ARG_TARGET_BUNDLE_ID}")
+    set (target_app_namespace "${YUP_ARG_TARGET_APP_NAMESPACE}")
+    set (target_cxx_standard "${YUP_ARG_TARGET_CXX_STANDARD}")
+    set (additional_libraries "${YUP_ARG_ADDITIONAL_LIBRARIES}")
+    set (target_modules "${YUP_ARG_MODULES}")
 
     _yup_fetch_vst3sdk()
 
@@ -97,7 +104,16 @@ function (_yup_audio_plugin_create_vst3
         yup_audio_plugin_client
         ${target_ide_group}
         vst3
-        ${unparsed_args})
+        PLUGIN_ID ${YUP_ARG_PLUGIN_ID}
+        PLUGIN_NAME ${YUP_ARG_PLUGIN_NAME}
+        PLUGIN_VENDOR ${YUP_ARG_PLUGIN_VENDOR}
+        PLUGIN_EMAIL ${YUP_ARG_PLUGIN_EMAIL}
+        PLUGIN_VERSION ${YUP_ARG_PLUGIN_VERSION}
+        PLUGIN_DESCRIPTION ${YUP_ARG_PLUGIN_DESCRIPTION}
+        PLUGIN_URL ${YUP_ARG_PLUGIN_URL}
+        PLUGIN_IS_SYNTH ${YUP_ARG_PLUGIN_IS_SYNTH}
+        PLUGIN_IS_MONO ${YUP_ARG_PLUGIN_IS_MONO}
+        PLUGIN_VST3_CATEGORIES ${YUP_ARG_PLUGIN_VST3_CATEGORIES})
 
     # Create VST3 plugin target
     _yup_message (STATUS "Creating VST3 plugin target")
@@ -180,5 +196,7 @@ function (_yup_audio_plugin_create_vst3
 
     yup_validate_pluginval (${target_name}_vst3_plugin "${vst3_pluginval_path}")
 
-    yup_audio_plugin_copy_bundle (${target_name} vst3)
+    if (YUP_ARG_PLUGIN_COPY_AFTER_BUILD)
+        yup_audio_plugin_copy_bundle (${target_name} vst3)
+    endif()
 endfunction()

@@ -330,6 +330,9 @@ bool pluginSyncAudioToMain (AudioProcessor& audioProcessor)
 
 //==============================================================================
 
+#ifdef YupPlugin_CLAP_Features
+static const char* pluginFeatures[] = { YupPlugin_CLAP_Features nullptr };
+#else
 static const char* pluginFeatures[] = {
 #if YupPlugin_IsSynth
     CLAP_PLUGIN_FEATURE_INSTRUMENT,
@@ -344,6 +347,7 @@ static const char* pluginFeatures[] = {
 #endif
     nullptr
 };
+#endif
 
 static const clap_plugin_descriptor_t pluginDescriptor = {
     .clap_version = CLAP_VERSION_INIT,
