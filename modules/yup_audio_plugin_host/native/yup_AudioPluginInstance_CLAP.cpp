@@ -767,14 +767,14 @@ public:
 
     //==============================================================================
 
-    void prepareToPlay (float sampleRate, int maxBlockSize) override
+    void prepareToPlay (const AudioSpec& spec) override
     {
         const int numChannels = jmax (2, pluginDescription.numInputChannels, pluginDescription.numOutputChannels);
         preparedInPtrs.resize (static_cast<std::size_t> (numChannels));
         preparedOutPtrs.resize (static_cast<std::size_t> (numChannels));
 
         updateRenderMode();
-        clapPlugin->activate (clapPlugin, sampleRate, 1, static_cast<uint32_t> (jmax (1, maxBlockSize)));
+        clapPlugin->activate (clapPlugin, spec.sampleRate, 1, static_cast<uint32_t> (jmax (1, spec.maxBlockSize)));
         updateRenderMode();
 
         clapPlugin->start_processing (clapPlugin);
@@ -1236,10 +1236,10 @@ ResultValue<std::vector<AudioPluginDescription>> CLAPFormat::scanFile (const Fil
             clap_host_t host {};
             host.clap_version = CLAP_VERSION;
             host.host_data = nullptr;
-            host.name = "YUP Scanner";
-            host.vendor = "yup";
+            host.name = "YUP Audio Plugin Host Scanner";
+            host.vendor = "YUP";
             host.url = "";
-            host.version = "1.0.0";
+            host.version = YUP_VERSION_STRING;
             host.get_extension = [] (const clap_host_t*, const char*) -> const void*
             {
                 return nullptr;

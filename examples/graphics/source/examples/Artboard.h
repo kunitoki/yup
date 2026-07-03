@@ -41,19 +41,8 @@ public:
 #if YUP_ANDROID
         yup::MemoryInputStream is (yup::RiveFile_data, yup::RiveFile_size, false);
         auto artboardFile = yup::ArtboardFile::load (is, *factory);
-
 #else
-        yup::File riveBasePath;
-#if YUP_WASM
-        riveBasePath = yup::File ("/");
-#else
-        riveBasePath = yup::File (__FILE__)
-                           .getParentDirectory()
-                           .getParentDirectory()
-                           .getParentDirectory();
-#endif
-
-        auto artboardFile = yup::ArtboardFile::load (riveBasePath.getChildFile (YUP_EXAMPLE_GRAPHICS_RIVE_FILE), *factory);
+        auto artboardFile = yup::ArtboardFile::load (getAssetPath (YUP_EXAMPLE_GRAPHICS_RIVE_FILE), *factory);
 #endif
         if (! artboardFile)
             return false;
@@ -71,6 +60,8 @@ public:
             art->advanceAndApply (i * art->durationSeconds());
         }
 
+        resized();
+
         return true;
     }
 
@@ -81,12 +72,6 @@ public:
 
     void resized() override
     {
-        //for (int i = 0; i < totalRows * totalColumns; ++i)
-        //    artboards.getUnchecked (i)->setBounds (getLocalBounds().reduced (100.0f));
-
-        if (artboards.size() != totalRows * totalColumns)
-            return;
-
         auto bounds = getLocalBounds().reduced (10, 20);
         auto controls = bounds.removeFromTop (30);
 
@@ -101,6 +86,12 @@ public:
         controls.removeFromLeft (spacing);
         alignmentLabel.setBounds (controls.removeFromLeft (labelWidth).withHeight (labelHeight));
         alignmentCombo.setBounds (controls.removeFromLeft (comboWidth).withHeight (comboHeight));
+
+        if (artboards.size() != totalRows * totalColumns)
+            return;
+
+        //for (int i = 0; i < totalRows * totalColumns; ++i)
+        //    artboards.getUnchecked (i)->setBounds (getLocalBounds().reduced (100.0f));
 
         bounds.removeFromTop (10);
         auto width = bounds.getWidth() / totalColumns;
@@ -124,6 +115,15 @@ public:
     }
 
 private:
+    void visibilityChanged() override
+    {
+        if (isVisible())
+        {
+            if (auto topLevelComponent = getTopLevelComponent(); topLevelComponent != nullptr && topLevelComponent->isOnDesktop())
+                loadArtboard();
+        }
+    }
+
     void setupControls()
     {
         auto labelFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);

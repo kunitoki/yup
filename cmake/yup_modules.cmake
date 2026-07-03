@@ -427,6 +427,64 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_module_normalize_dependency_target dependency output_variable)
+    set (normalized_dependency "${dependency}")
+
+    if (TARGET "${normalized_dependency}")
+        get_target_property (aliased_target "${normalized_dependency}" ALIASED_TARGET)
+        if (aliased_target)
+            set (normalized_dependency "${aliased_target}")
+        endif()
+    elseif ("${normalized_dependency}" MATCHES "^yup::(.+)$")
+        string (REGEX REPLACE "^yup::" "" normalized_dependency "${normalized_dependency}")
+    endif()
+
+    set (${output_variable} "${normalized_dependency}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_check_dependency_cycle module_name context_name active_stack)
+    _yup_module_normalize_dependency_target ("${module_name}" module_target)
+
+    if (NOT TARGET "${module_target}")
+        return()
+    endif()
+
+    get_target_property (module_path "${module_target}" YUP_MODULE_PATH)
+    if (NOT module_path)
+        return()
+    endif()
+
+    list (FIND active_stack "${module_target}" cycle_start)
+    if (NOT cycle_start EQUAL -1)
+        list (LENGTH active_stack active_stack_length)
+        math (EXPR cycle_length "${active_stack_length} - ${cycle_start}")
+        list (SUBLIST active_stack ${cycle_start} ${cycle_length} cycle_path)
+        list (APPEND cycle_path "${module_target}")
+        list (JOIN cycle_path " -> " cycle_message)
+
+        _yup_message (FATAL_ERROR "${context_name} introduces a circular YUP module dependency: ${cycle_message}")
+    endif()
+
+    list (APPEND active_stack "${module_target}")
+
+    get_target_property (module_dependencies "${module_target}" YUP_MODULE_DEPENDENCIES)
+    foreach (module_dependency IN LISTS module_dependencies)
+        _yup_module_check_dependency_cycle ("${module_dependency}" "${context_name}" "${active_stack}")
+    endforeach()
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_check_circular_dependencies context_name module_targets)
+    foreach (module_target IN LISTS module_targets)
+        _yup_module_check_dependency_cycle ("${module_target}" "${context_name}" "")
+    endforeach()
+endfunction()
+
+#==============================================================================
+
 function (_yup_module_setup_target module_name
                                    module_path
                                    module_cpp_standard
@@ -509,8 +567,16 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
     endif()
 
     set (options "")
-    set (one_value_args PLUGIN_ID PLUGIN_NAME PLUGIN_VENDOR PLUGIN_VERSION PLUGIN_DESCRIPTION PLUGIN_URL PLUGIN_EMAIL PLUGIN_IS_SYNTH PLUGIN_IS_MONO PLUGIN_AU_SUBTYPE PLUGIN_AU_MANUFACTURER)
-    set (multi_value_args "")
+    set (one_value_args
+        PLUGIN_ID PLUGIN_NAME PLUGIN_VENDOR PLUGIN_VERSION PLUGIN_DESCRIPTION PLUGIN_URL PLUGIN_EMAIL
+        PLUGIN_IS_SYNTH PLUGIN_IS_MONO
+        PLUGIN_AU_SUBTYPE PLUGIN_AU_MANUFACTURER PLUGIN_AU_SANDBOX_SAFE
+        PLUGIN_AAX_MANUFACTURER_ID PLUGIN_AAX_PRODUCT_ID
+        PLUGIN_AAX_PLUGIN_ID_NATIVE PLUGIN_AAX_PLUGIN_ID_AUDIOSUITE
+        PLUGIN_AAX_CATEGORY PLUGIN_AAX_PAGE_TABLE_FILE)
+    set (multi_value_args
+        PLUGIN_CLAP_FEATURES
+        PLUGIN_VST3_CATEGORIES)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
@@ -526,8 +592,17 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
     elseif (plugin_type STREQUAL "au")
         set (custom_target_name "${target_name}_au")
         set (plugin_define "YUP_AUDIO_PLUGIN_ENABLE_AU=1")
+    elseif (plugin_type STREQUAL "auv3")
+        set (custom_target_name "${target_name}_auv3")
+        set (plugin_define "YUP_AUDIO_PLUGIN_ENABLE_AUv3=1")
+    elseif (plugin_type STREQUAL "aax")
+        set (custom_target_name "${target_name}_aax")
+        set (plugin_define "YUP_AUDIO_PLUGIN_ENABLE_AAX=1")
+    elseif (plugin_type STREQUAL "lv2")
+        set (custom_target_name "${target_name}_lv2")
+        set (plugin_define "YUP_AUDIO_PLUGIN_ENABLE_LV2=1")
     else()
-        _yup_message (FATAL_ERROR "Invalid plugin type: ${plugin_type}. Must be either 'vst3', 'clap', 'au' or 'standalone'")
+        _yup_message (FATAL_ERROR "Invalid plugin type: ${plugin_type}. Must be either 'vst3', 'clap', 'au', 'auv3', 'aax', 'lv2' or 'standalone'")
     endif()
 
     add_library (${custom_target_name} INTERFACE)
@@ -571,6 +646,65 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
 
     if (YUP_ARG_PLUGIN_AU_MANUFACTURER)
         list (APPEND module_defines "YupPlugin_AUManufacturer=\"${YUP_ARG_PLUGIN_AU_MANUFACTURER}\"")
+    endif()
+
+    # -- AAX-specific defines
+    if (plugin_type STREQUAL "aax")
+        if (YUP_ARG_PLUGIN_AAX_MANUFACTURER_ID)
+            list (APPEND module_defines "YupPlugin_AAX_ManufacturerID='${YUP_ARG_PLUGIN_AAX_MANUFACTURER_ID}'")
+        endif()
+        if (YUP_ARG_PLUGIN_AAX_PRODUCT_ID)
+            list (APPEND module_defines "YupPlugin_AAX_ProductID='${YUP_ARG_PLUGIN_AAX_PRODUCT_ID}'")
+        endif()
+        if (YUP_ARG_PLUGIN_AAX_PLUGIN_ID_NATIVE)
+            list (APPEND module_defines "YupPlugin_AAX_PlugInID_Native='${YUP_ARG_PLUGIN_AAX_PLUGIN_ID_NATIVE}'")
+        endif()
+        if (YUP_ARG_PLUGIN_AAX_PLUGIN_ID_AUDIOSUITE)
+            list (APPEND module_defines "YupPlugin_AAX_PlugInID_AudioSuite='${YUP_ARG_PLUGIN_AAX_PLUGIN_ID_AUDIOSUITE}'")
+        endif()
+        if (YUP_ARG_PLUGIN_AAX_CATEGORY)
+            list (APPEND module_defines "YupPlugin_AAXCategory=${YUP_ARG_PLUGIN_AAX_CATEGORY}")
+        endif()
+        if (YUP_ARG_PLUGIN_AAX_PAGE_TABLE_FILE)
+            list (APPEND module_defines "YupPlugin_AAXPageTableFile=\"${YUP_ARG_PLUGIN_AAX_PAGE_TABLE_FILE}\"")
+        endif()
+    endif()
+
+    # -- CLAP-specific defines
+    if (plugin_type STREQUAL "clap" AND YUP_ARG_PLUGIN_CLAP_FEATURES)
+        set (_clap_features_str "")
+        foreach (_feature IN LISTS YUP_ARG_PLUGIN_CLAP_FEATURES)
+            if (_feature STREQUAL "instrument")
+                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_INSTRUMENT,")
+            elseif (_feature STREQUAL "audio-effect")
+                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_AUDIO_EFFECT,")
+            elseif (_feature STREQUAL "note-effect")
+                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_NOTE_EFFECT,")
+            elseif (_feature STREQUAL "note-detector")
+                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_NOTE_DETECTOR,")
+            elseif (_feature STREQUAL "analyzer")
+                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_ANALYZER,")
+            elseif (_feature STREQUAL "synthesizer")
+                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_SYNTHESIZER,")
+            elseif (_feature STREQUAL "mono")
+                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_MONO,")
+            elseif (_feature STREQUAL "stereo")
+                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_STEREO,")
+            elseif (_feature STREQUAL "surround")
+                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_SURROUND,")
+            elseif (_feature STREQUAL "utility")
+                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_UTILITY,")
+            else()
+                _yup_message (WARNING "Unknown CLAP feature: ${_feature}")
+            endif()
+        endforeach()
+        list (APPEND module_defines "YupPlugin_CLAP_Features=${_clap_features_str}")
+    endif()
+
+    # -- VST3-specific defines
+    if (plugin_type STREQUAL "vst3" AND YUP_ARG_PLUGIN_VST3_CATEGORIES)
+        list (JOIN YUP_ARG_PLUGIN_VST3_CATEGORIES "|" _vst3_categories_joined)
+        list (APPEND module_defines "YupPlugin_VST3_Categories=\"${_vst3_categories_joined}\"")
     endif()
 
     if (YUP_PLATFORM_APPLE)

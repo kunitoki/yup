@@ -54,7 +54,17 @@ public:
         AudioViewComponent::clear();
         playheadSeconds = 0.0;
         lengthSeconds = 0.0;
+        onsetTimes.clear();
+        hasOnsets = false;
         updatePlayheadPosition();
+    }
+
+    /** Sets onset markers to overlay on the waveform. */
+    void setOnsetData (const std::vector<double>& times)
+    {
+        onsetTimes = times;
+        hasOnsets = ! times.empty();
+        repaint();
     }
 
     /** Updates the playhead without repainting the full waveform. */
@@ -70,6 +80,32 @@ protected:
     {
         AudioViewComponent::resized();
         updatePlayheadPosition();
+    }
+
+    void paint (yup::Graphics& g) override
+    {
+        AudioViewComponent::paint (g);
+
+        if (! hasOnsets || getSampleRate() <= 0.0)
+            return;
+
+        const auto waveformBounds = getWaveformBounds();
+        const auto viewRange = getViewRangeSamples();
+
+        g.setStrokeColor (yup::Color (0xFF00FF00).withAlpha (0.4f));
+
+        for (auto t : onsetTimes)
+        {
+            const double sample = timeToSample (t);
+
+            if (sample < viewRange.getStart())
+                continue;
+            else if (sample > viewRange.getEnd())
+                break;
+
+            const float x = sampleToX (sample, waveformBounds);
+            g.strokeLine (x, waveformBounds.getY(), x, waveformBounds.getBottom());
+        }
     }
 
 private:
@@ -124,6 +160,8 @@ private:
     PlayheadMarker playhead;
     double playheadSeconds = 0.0;
     double lengthSeconds = 0.0;
+    std::vector<double> onsetTimes;
+    bool hasOnsets = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioFileWaveform)
 };
@@ -1014,6 +1052,26 @@ private:
 
         waveformDisplay.setSource (&audioBuffer, loadedSampleRate);
         waveformDisplay.setPlayhead (0.0, audioLengthSeconds);
+
+        // Compute onsets in background
+        waveformThreadPool.addJob ([this]
+        {
+            superFlux.prepare ({ .spectrogram = { .fftSize = 2048, .fps = 200 },
+                                 .peakPicker = { .threshold = 0.8f },
+                                 .useFilterBank = true,
+                                 .refineOnsets = true },
+                               loadedSampleRate);
+
+            superFlux.processOffline (audioBuffer);
+            onsetTimes = superFlux.getOnsetTimes();
+            hasOnsets = true;
+
+            yup::MessageManager::callAsync ([this]
+            {
+                waveformDisplay.setOnsetData (onsetTimes);
+            });
+        });
+
         updateStatus ("Loaded " + file.getFileName() + " | " + yup::String (numChannels)
                       + " ch | " + yup::String (loadedSampleRate, 1) + " Hz | "
                       + formatTime (audioLengthSeconds));
@@ -1192,6 +1250,10 @@ private:
     bool hasLoadedAudio = false;
     bool loopEnabled = false;
     bool timeStretchSupported = false;
+
+    yup::OnsetDetector superFlux;
+    std::vector<double> onsetTimes;
+    bool hasOnsets = false;
 
     static constexpr int backendAutomaticId = 1;
     static constexpr int backendTimeDomainId = 2;

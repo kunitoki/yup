@@ -23,15 +23,87 @@
 #include <yup_audio_gui/yup_audio_gui.h>
 #endif
 
+#if ! YUP_EMBED_DEFAULT_THEME_TEXT_FONT
+#if YUP_MAC || YUP_IOS
+#include <CoreText/CoreText.h>
+#include <rive/text/font_hb.hpp>
+#endif
+#endif
+
 namespace yup
 {
 
 //==============================================================================
 
+#if YUP_EMBED_DEFAULT_THEME_TEXT_FONT
 extern const uint8_t RobotoFlexFont_data[];
 extern const std::size_t RobotoFlexFont_size;
+#endif
+
+#if YUP_EMBED_DEFAULT_THEME_ICON_FONT
 extern const uint8_t FontAwesome7Font_data[];
 extern const std::size_t FontAwesome7Font_size;
+#endif
+
+//==============================================================================
+
+#if ! YUP_EMBED_DEFAULT_THEME_TEXT_FONT
+std::optional<Font> loadThemeVersion1FontFromFirstAvailableFile (std::initializer_list<const char*> fontPaths)
+{
+    for (auto* fontPath : fontPaths)
+    {
+        auto fontFile = File (fontPath);
+        if (! fontFile.existsAsFile())
+            continue;
+
+        Font font;
+        if (font.loadFromFile (fontFile).wasOk())
+            return font;
+    }
+
+    return std::nullopt;
+}
+
+std::optional<Font> loadThemeVersion1SystemTextFont()
+{
+#if YUP_MAC || YUP_IOS
+    if (auto systemFont = CTFontCreateUIFontForLanguage (kCTFontUIFontSystem, 0.0, nullptr))
+    {
+        auto releaseSystemFont = ErasedScopeGuard ([systemFont]
+        {
+            CFRelease (systemFont);
+        });
+
+        if (auto font = HBFont::FromSystem (const_cast<void*> (static_cast<const void*> (systemFont)), true, 400, 100))
+            return Font (std::move (font));
+    }
+
+    return std::nullopt;
+
+#elif YUP_WINDOWS
+    return loadThemeVersion1FontFromFirstAvailableFile ({ R"(C:\Windows\Fonts\segoeui.ttf)",
+                                                          R"(C:\Windows\Fonts\arial.ttf)" });
+
+#elif YUP_ANDROID
+    return loadThemeVersion1FontFromFirstAvailableFile ({ "/system/fonts/Roboto-Regular.ttf",
+                                                          "/system/fonts/NotoSans-Regular.ttf",
+                                                          "/system/fonts/DroidSans.ttf" });
+
+#elif YUP_LINUX
+    return loadThemeVersion1FontFromFirstAvailableFile ({ "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+                                                          "/usr/share/fonts/noto/NotoSans-Regular.ttf",
+                                                          "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                                                          "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+                                                          "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+                                                          "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+                                                          "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf" });
+
+#else
+    return std::nullopt;
+
+#endif
+}
+#endif
 
 //==============================================================================
 
@@ -1733,21 +1805,30 @@ ApplicationTheme::Ptr createThemeVersion1()
 {
     ApplicationTheme::Ptr theme (new ApplicationTheme);
 
+#if YUP_EMBED_DEFAULT_THEME_TEXT_FONT
     {
         Font font;
-        if (auto result = font.loadFromData (MemoryBlock (&RobotoFlexFont_data[0], RobotoFlexFont_size)); result.failed())
+        if (auto result = font.loadFromData (Span (&RobotoFlexFont_data[0], RobotoFlexFont_size)); result.failed())
             yup::Logger::outputDebugString (result.getErrorMessage());
 
         theme->setDefaultFont (std::move (font));
     }
+#else
+    if (auto font = loadThemeVersion1SystemTextFont())
+        theme->setDefaultFont (std::move (*font));
+    else
+        yup::Logger::outputDebugString ("Unable to load a system text font for the default theme");
+#endif
 
+#if YUP_EMBED_DEFAULT_THEME_ICON_FONT
     {
         Font font;
-        if (auto result = font.loadFromData (MemoryBlock (&FontAwesome7Font_data[0], FontAwesome7Font_size)); result.failed())
+        if (auto result = font.loadFromData (Span (&FontAwesome7Font_data[0], FontAwesome7Font_size)); result.failed())
             yup::Logger::outputDebugString (result.getErrorMessage());
 
         theme->setDefaultIconFont (std::move (font));
     }
+#endif
 
     theme->setComponentStyle<Slider> (ComponentStyle::createStyle<Slider> (paintSlider));
     theme->setColor (Slider::Style::backgroundColorId, Color (0xff3d3d3d));

@@ -521,6 +521,7 @@ TEST (CachedValueAtomicTests, AtomicWithBool)
     EXPECT_FALSE (atomicBool.get());
 }
 
+#if ! YUP_WASM
 TEST (CachedValueAtomicTests, AtomicThreadSafeAccess)
 {
     auto undoManager = UndoManager::Ptr (new UndoManager);
@@ -542,7 +543,7 @@ TEST (CachedValueAtomicTests, AtomicThreadSafeAccess)
         while (! stopFlag.load())
         {
             int value = atomicValue.get(); // Atomic read
-            (void) value;
+            yup::ignoreUnused (value);
             readCount.fetch_add (1);
             std::this_thread::yield();
         }
@@ -569,6 +570,7 @@ TEST (CachedValueAtomicTests, AtomicThreadSafeAccess)
     EXPECT_GT (readCount.load(), 0);
     EXPECT_EQ (100, atomicValue.get()); // Should be the final value
 }
+#endif
 
 TEST_F (CachedValueTests, SetMethodUpdatesDataTree)
 {
@@ -787,6 +789,7 @@ TEST (CachedValueAtomicVariantConverterTests, AtomicPointType)
     }
 }
 
+#if ! YUP_WASM
 TEST (CachedValueAtomicVariantConverterTests, AtomicColorTypeThreadSafety)
 {
     auto undoManager = UndoManager::Ptr (new UndoManager);
@@ -811,7 +814,7 @@ TEST (CachedValueAtomicVariantConverterTests, AtomicColorTypeThreadSafety)
         while (! stopFlag.load())
         {
             Color color = atomicColor.get(); // Atomic read
-            (void) color;                    // Use the value to prevent optimization
+            yup::ignoreUnused (color);
             readCount.fetch_add (1);
             std::this_thread::yield();
         }
@@ -838,6 +841,7 @@ TEST (CachedValueAtomicVariantConverterTests, AtomicColorTypeThreadSafety)
     EXPECT_GT (readCount.load(), 0);
     EXPECT_EQ (finalColor, atomicColor.get());
 }
+#endif
 
 TEST (CachedValueVariantConverterTests, ConversionFailureHandling)
 {

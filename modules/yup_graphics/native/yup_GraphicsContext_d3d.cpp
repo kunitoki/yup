@@ -41,6 +41,7 @@ public:
         , m_gpu (std::move (gpu))
         , m_gpuContext (std::move (gpuContext))
         , m_renderContext (rive::gpu::RenderContextD3DImpl::MakeContext (m_gpu, m_gpuContext, contextOptions))
+        , m_offscreenRenderContext (rive::gpu::RenderContextD3DImpl::MakeContext (m_gpu, m_gpuContext, contextOptions))
     {
     }
 
@@ -66,6 +67,9 @@ public:
             scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT | DXGI_USAGE_UNORDERED_ACCESS;
             scd.BufferCount = 2;
             scd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+
+            fprintf (stderr, "D3D: CreateSwapChainForHwnd hwnd=%p size=%dx%d\n", window, width, height);
+            fflush (stderr);
 
             VERIFY_OK (m_d3dFactory->CreateSwapChainForHwnd (m_gpu.Get(),
                                                              (HWND) window,
@@ -116,9 +120,18 @@ public:
             else
             {
                 ComPtr<ID3D11Texture2D> backbuffer;
-                VERIFY_OK (m_swapchain->GetBuffer (0,
-                                                   __uuidof (ID3D11Texture2D),
-                                                   reinterpret_cast<void**> (backbuffer.ReleaseAndGetAddressOf())));
+                HRESULT hr = m_swapchain->GetBuffer (0,
+                                                     __uuidof (ID3D11Texture2D),
+                                                     reinterpret_cast<void**> (backbuffer.ReleaseAndGetAddressOf()));
+
+                if (FAILED (hr))
+                {
+                    auto reason = m_gpu->GetDeviceRemovedReason();
+                    fprintf (stderr, "D3D: GetBuffer failed: hr=0x%08X, deviceRemovedReason=0x%08X\n", static_cast<unsigned> (hr), static_cast<unsigned> (reason));
+                    fflush (stderr);
+                    m_renderTarget->setTargetTexture (nullptr);
+                    return;
+                }
 
                 m_renderTarget->setTargetTexture (backbuffer);
             }
@@ -129,9 +142,147 @@ public:
         m_renderContext->flush (flushDesc);
 
         if (! m_isHeadless)
-            m_swapchain->Present (0, 0);
+        {
+            HRESULT hr = m_swapchain->Present (0, 0);
+
+            if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
+            {
+                auto reason = m_gpu->GetDeviceRemovedReason();
+                fprintf (stderr, "D3D: Present returned device removed/reset: hr=0x%08X, deviceRemovedReason=0x%08X\n", static_cast<unsigned> (hr), static_cast<unsigned> (reason));
+                fflush (stderr);
+            }
+            else if (FAILED (hr))
+            {
+                fprintf (stderr, "D3D: Present failed: hr=0x%08X\n", static_cast<unsigned> (hr));
+                fflush (stderr);
+            }
+        }
 
         m_renderTarget->setTargetTexture (nullptr);
+    }
+
+    //==============================================================================
+
+    struct OffscreenTargetD3D : public OffscreenTarget
+    {
+        int width = 0;
+        int height = 0;
+        ComPtr<ID3D11Texture2D> stagingTexture;
+        rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
+        rive::gpu::RenderContext* renderContext = nullptr;
+
+        int getWidth() const noexcept override { return width; }
+
+        int getHeight() const noexcept override { return height; }
+
+        rive::gpu::RenderTarget* getRenderTarget() noexcept override
+        {
+            return renderCanvas != nullptr ? renderCanvas->renderTarget() : nullptr;
+        }
+
+        rive::gpu::RenderContext* getRenderContext() noexcept override
+        {
+            return renderContext;
+        }
+
+        rive::rcp<rive::gpu::RenderCanvas> refRenderCanvas() noexcept override
+        {
+            return renderCanvas;
+        }
+
+        rive::rcp<rive::gpu::Texture> adoptAsTexture() override
+        {
+            if (renderCanvas == nullptr)
+                return nullptr;
+
+            return renderCanvas->renderImage()->refTexture();
+        }
+    };
+
+    std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
+    {
+        if (width <= 0 || height <= 0 || m_offscreenRenderContext == nullptr)
+            return nullptr;
+
+        auto target = std::make_unique<OffscreenTargetD3D>();
+        target->width = width;
+        target->height = height;
+        target->renderContext = m_offscreenRenderContext.get();
+
+        target->renderCanvas = m_offscreenRenderContext->makeRenderCanvas (static_cast<uint32_t> (width),
+                                                                           static_cast<uint32_t> (height));
+        if (target->renderCanvas == nullptr)
+            return nullptr;
+
+        D3D11_TEXTURE2D_DESC stagingDesc {};
+        stagingDesc.Width = static_cast<UINT> (width);
+        stagingDesc.Height = static_cast<UINT> (height);
+        stagingDesc.MipLevels = 1;
+        stagingDesc.ArraySize = 1;
+        stagingDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        stagingDesc.SampleDesc.Count = 1;
+        stagingDesc.Usage = D3D11_USAGE_STAGING;
+        stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        auto hr = m_gpu->CreateTexture2D (&stagingDesc, nullptr, target->stagingTexture.ReleaseAndGetAddressOf());
+        if (FAILED (hr))
+            return nullptr;
+
+        return target;
+    }
+
+    void beginOffscreen (OffscreenTarget& baseTarget, const rive::gpu::RenderContext::FrameDescriptor& frameDesc) override
+    {
+        auto& target = static_cast<OffscreenTargetD3D&> (baseTarget);
+
+        if (auto* renderContext = target.getRenderContext())
+            renderContext->beginFrame (frameDesc);
+    }
+
+    void endOffscreen (OffscreenTarget& baseTarget) override
+    {
+        auto& target = static_cast<OffscreenTargetD3D&> (baseTarget);
+        auto* renderContext = target.getRenderContext();
+
+        if (renderContext == nullptr)
+            return;
+
+        rive::gpu::RenderContext::FlushResources flushDesc;
+        flushDesc.renderTarget = target.getRenderTarget();
+        renderContext->flush (flushDesc);
+
+        if (auto* renderTarget = static_cast<rive::gpu::RenderTargetD3D*> (target.getRenderTarget()))
+            m_gpuContext->CopyResource (target.stagingTexture.Get(), renderTarget->targetTexture());
+    }
+
+    bool readOffscreenPixels (OffscreenTarget& baseTarget, void* dst, size_t dstSize) override
+    {
+        auto& target = static_cast<OffscreenTargetD3D&> (baseTarget);
+
+        if (target.stagingTexture == nullptr || dst == nullptr)
+            return false;
+
+        const size_t bytesPerRow = static_cast<size_t> (target.width) * 4u;
+        if (dstSize < bytesPerRow * static_cast<size_t> (target.height))
+            return false;
+
+        D3D11_MAPPED_SUBRESOURCE mapped {};
+        HRESULT hr = m_gpuContext->Map (target.stagingTexture.Get(), 0, D3D11_MAP_READ, 0, &mapped);
+        if (FAILED (hr))
+            return false;
+
+        auto* dstBytes = static_cast<uint8_t*> (dst);
+        const auto* srcBytes = static_cast<const uint8_t*> (mapped.pData);
+
+        for (int row = 0; row < target.height; ++row)
+        {
+            std::memcpy (dstBytes + static_cast<size_t> (row) * bytesPerRow,
+                         srcBytes + static_cast<size_t> (row) * mapped.RowPitch,
+                         bytesPerRow);
+        }
+
+        m_gpuContext->Unmap (target.stagingTexture.Get(), 0);
+
+        return true;
     }
 
 private:
@@ -143,6 +294,7 @@ private:
     ComPtr<ID3D11Texture2D> m_readbackTexture;
     ComPtr<ID3D11Texture2D> m_headlessDrawTexture;
     std::unique_ptr<rive::gpu::RenderContext> m_renderContext;
+    std::unique_ptr<rive::gpu::RenderContext> m_offscreenRenderContext;
     rive::rcp<rive::gpu::RenderTargetD3D> m_renderTarget;
 };
 

@@ -18,7 +18,7 @@ public:
     {
     }
 
-    void prepareToPlay (float, int) override { prepared = true; }
+    void prepareToPlay (const AudioSpec&) override { prepared = true; }
 
     void releaseResources() override { prepared = false; }
 
@@ -88,7 +88,7 @@ public:
     {
     }
 
-    void prepareToPlay (float, int) override {}
+    void prepareToPlay (const AudioSpec&) override {}
 
     void releaseResources() override {}
 
@@ -130,7 +130,7 @@ public:
     {
     }
 
-    void prepareToPlay (float, int) override {}
+    void prepareToPlay (const AudioSpec&) override {}
 
     void releaseResources() override {}
 
@@ -212,7 +212,7 @@ TEST_F (AudioPluginInstanceTests, PrepareToPlaySetsPreparedFlag)
 
 TEST_F (AudioPluginInstanceTests, ReleaseResourcesClearsPreparedFlag)
 {
-    instance.prepareToPlay (44100.0f, 512);
+    instance.prepareToPlay (AudioSpec (44100.0f, 512));
     instance.releaseResources();
     EXPECT_FALSE (instance.prepared);
 }
@@ -223,7 +223,7 @@ TEST_F (AudioPluginInstanceTests, ProcessBlockIncrementsCounter)
     MidiBuffer midi;
     ParameterChangeBuffer params;
 
-    instance.prepareToPlay (44100.0f, 512);
+    instance.prepareToPlay (AudioSpec (44100.0f, 512));
     AudioProcessContext<float> ctx { audio, midi, params };
     instance.processBlock (ctx);
 
@@ -269,7 +269,7 @@ TEST_F (AudioPluginInstanceTests, DoublePrecisionProcessBlockUsesDoublePath)
     audio.setSample (0, 0, 1.0);
 
     doublePrecisionInstance.setProcessingPrecision (AudioProcessor::ProcessingPrecision::doublePrecision);
-    doublePrecisionInstance.prepareToPlay (44100.0f, 512);
+    doublePrecisionInstance.prepareToPlay (AudioSpec (44100.0f, 512));
     AudioProcessContext<double> ctx { audio, midi, params };
     doublePrecisionInstance.processBlock (ctx);
 

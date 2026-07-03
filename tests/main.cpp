@@ -19,12 +19,76 @@
   ==============================================================================
 */
 
-#include <yup_gui/yup_gui.h>
-
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
+#include <yup_core/yup_core.h>
+
 //==============================================================================
+
+#if YUP_EMSCRIPTEN
+
+#include <algorithm>
+#include <iostream>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include <yup_events/yup_events.h>
+
+int main (int argc, char** argv)
+{
+    int totalShards = 1;
+    int shardIndex = 0;
+
+    std::vector<char*> filteredArgv;
+    filteredArgv.reserve (argc);
+    for (int i = 0; i < argc; ++i)
+    {
+        const std::string_view arg = argv[i];
+
+        if (arg.starts_with ("--gtest_total_shards="))
+            totalShards = std::max (1, std::stoi (std::string (arg.substr (21))));
+        else if (arg.starts_with ("--gtest_shard_index="))
+            shardIndex = std::stoi (std::string (arg.substr (20)));
+        else
+            filteredArgv.push_back (argv[i]);
+    }
+
+    int filteredArgc = static_cast<int> (filteredArgv.size());
+    testing::InitGoogleMock (&filteredArgc, filteredArgv.data());
+
+    int failed = 0;
+    yup::ScopedYupInitialiser_GUI yupInitialiser;
+
+    if (totalShards == 1)
+    {
+        failed = RUN_ALL_TESTS();
+    }
+    else
+    {
+        std::cout << "Running shard " << shardIndex << " of " << totalShards << "\n";
+
+        auto* unitTest = ::testing::UnitTest::GetInstance();
+
+        for (int i = 0; i < unitTest->total_test_suite_count(); ++i)
+        {
+            if (i % totalShards != shardIndex)
+                continue;
+
+            ::testing::GTEST_FLAG (filter) = std::string (unitTest->GetTestSuite (i)->name()) + ".*";
+            failed += RUN_ALL_TESTS();
+        }
+    }
+
+    return failed > 0 ? 1 : 0;
+}
+
+#else
+
+//==============================================================================
+
+#include <yup_gui/yup_gui.h>
 
 struct TestApplication : yup::YUPApplication
 {
@@ -102,6 +166,8 @@ private:
     int passedTests = 0;
     yup::File originalXmlOutputPath;
     bool shouldUseSingleCall = false;
+    int totalShards = 1;
+    int shardIndex = 0;
 
     void parseCommandLineSettings (const yup::String& commandLineParameters)
     {
@@ -152,6 +218,16 @@ private:
             {
                 std::cout << "Color output specified: " << arg << std::endl;
             }
+            else if (arg.startsWith ("--gtest_total_shards="))
+            {
+                totalShards = std::max (1, arg.fromFirstOccurrenceOf ("=", false, false).getIntValue());
+                std::cout << "Total shards: " << totalShards << std::endl;
+            }
+            else if (arg.startsWith ("--gtest_shard_index="))
+            {
+                shardIndex = arg.fromFirstOccurrenceOf ("=", false, false).getIntValue();
+                std::cout << "Shard index: " << shardIndex << std::endl;
+            }
             else if (arg == "--gtest_list_tests")
             {
                 shouldUseSingleCall = true;
@@ -163,6 +239,9 @@ private:
     void runNextSuite (int suiteIndex)
     {
         auto* unitTest = ::testing::UnitTest::GetInstance();
+
+        while (suiteIndex < unitTest->total_test_suite_count() && suiteIndex % totalShards != shardIndex)
+            ++suiteIndex;
 
         if (suiteIndex >= unitTest->total_test_suite_count())
         {
@@ -401,3 +480,5 @@ private:
 };
 
 START_YUP_APPLICATION (TestApplication)
+
+#endif

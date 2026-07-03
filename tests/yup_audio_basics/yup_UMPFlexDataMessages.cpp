@@ -84,3 +84,22 @@ TEST (UMPFlexDataMessagesTests, SetChord)
     EXPECT_EQ (chord.data[2], 0x55667788u);
     EXPECT_EQ (chord.data[3], 0x99aabbccu);
 }
+
+TEST (UMPFlexDataMessagesTests, IsFlexDataMessage)
+{
+    FlexDataMessage m (2);
+    EXPECT_TRUE (isFlexDataMessage (m));
+}
+
+TEST (UMPFlexDataMessagesTests, TextMessageWithEmptyStringProducesEmptyPayload)
+{
+    auto msg = makeFlexDataTextMessage (0, PacketFormat::complete, PacketAddress::group, 0, 0x01, 0x02, "");
+    EXPECT_EQ (FlexDataMessage::getPayloadAsString (msg), "");
+}
+
+TEST (UMPFlexDataMessagesTests, SetTempoGroupIsPreserved)
+{
+    auto tempo = makeSetTempoMessage (5, 500000u);
+    EXPECT_EQ (tempo.getGroup(), 5u);
+    EXPECT_EQ (tempo.data[1], 500000u);
+}

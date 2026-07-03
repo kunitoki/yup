@@ -40,6 +40,10 @@ const char* getPluginFormatName()
     return "clap";
 #elif YUP_AUDIO_PLUGIN_ENABLE_VST3
     return "vst3";
+#elif YUP_AUDIO_PLUGIN_ENABLE_LV2
+    return "lv2";
+#elif YUP_AUDIO_PLUGIN_ENABLE_AAX
+    return "aax";
 #elif YUP_AUDIO_PLUGIN_ENABLE_STANDALONE
     return "standalone";
 #else
@@ -108,11 +112,11 @@ ExamplePlugin::~ExamplePlugin()
 
 //==============================================================================
 
-void ExamplePlugin::prepareToPlay (float sampleRate, int maxBlockSize)
+void ExamplePlugin::prepareToPlay (const yup::AudioSpec& spec)
 {
-    this->sampleRate = sampleRate;
+    this->sampleRate = spec.sampleRate;
 
-    gainHandle = yup::AudioParameterHandle (*gainParameter, sampleRate);
+    gainHandle = yup::AudioParameterHandle (*gainParameter, spec.sampleRate);
 }
 
 void ExamplePlugin::releaseResources()

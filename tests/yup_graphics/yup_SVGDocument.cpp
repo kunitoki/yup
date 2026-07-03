@@ -136,6 +136,26 @@ TEST (SVGDocumentTests, BoundsMatchWidthHeightWhenNoViewBox)
     EXPECT_FLOAT_EQ (250.0f, doc->getBounds().getHeight());
 }
 
+TEST (SVGDocumentTests, BoundsIncludeNestedGroupContentWhenNoViewBoxOrSize)
+{
+    auto doc = parse ("<svg><g transform=\"translate(10,20)\"><circle cx=\"100\" cy=\"50\" r=\"25\" /></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    auto bounds = doc->getBounds();
+    EXPECT_FLOAT_EQ (85.0f, bounds.getX());
+    EXPECT_FLOAT_EQ (45.0f, bounds.getY());
+    EXPECT_FLOAT_EQ (50.0f, bounds.getWidth());
+    EXPECT_FLOAT_EQ (50.0f, bounds.getHeight());
+
+    doc->visit ([] (const SVGData& data)
+    {
+        EXPECT_FLOAT_EQ (85.0f, data.viewBox.getX());
+        EXPECT_FLOAT_EQ (45.0f, data.viewBox.getY());
+        EXPECT_FLOAT_EQ (50.0f, data.viewBox.getWidth());
+        EXPECT_FLOAT_EQ (50.0f, data.viewBox.getHeight());
+    });
+}
+
 // ==============================================================================
 // SVGData root fill / stroke flags
 // ==============================================================================
@@ -652,7 +672,8 @@ TEST (SVGDocumentTests, StrokeMiterLimitAttribute)
     doc->visit ([] (const SVGData& data)
     {
         ASSERT_EQ (1u, data.elements.size());
-        EXPECT_FLOAT_EQ (2.5f, data.elements[0]->strokeMiterLimit);
+        ASSERT_TRUE (data.elements[0]->strokeMiterLimit);
+        EXPECT_FLOAT_EQ (2.5f, *data.elements[0]->strokeMiterLimit);
     });
 }
 
@@ -664,7 +685,8 @@ TEST (SVGDocumentTests, StrokeMiterLimitBelowOneIsClampedToOne)
     doc->visit ([] (const SVGData& data)
     {
         ASSERT_EQ (1u, data.elements.size());
-        EXPECT_FLOAT_EQ (1.0f, data.elements[0]->strokeMiterLimit);
+        ASSERT_TRUE (data.elements[0]->strokeMiterLimit);
+        EXPECT_FLOAT_EQ (1.0f, *data.elements[0]->strokeMiterLimit);
     });
 }
 
@@ -676,7 +698,8 @@ TEST (SVGDocumentTests, DefaultStrokeMiterLimitIsFour)
     doc->visit ([] (const SVGData& data)
     {
         ASSERT_EQ (1u, data.elements.size());
-        EXPECT_FLOAT_EQ (4.0f, data.elements[0]->strokeMiterLimit);
+        ASSERT_TRUE (data.elements[0]->strokeMiterLimit);
+        EXPECT_FLOAT_EQ (4.0f, *data.elements[0]->strokeMiterLimit);
     });
 }
 
@@ -696,6 +719,25 @@ TEST (SVGDocumentTests, StrokeDashArrayAttribute)
     });
 }
 
+TEST (SVGDocumentTests, StrokeDashArrayNoneAttributeOverridesInheritedDashArray)
+{
+    auto doc = parse ("<svg><g stroke-dasharray=\"5 3\"><path d=\"M 0 0 L 100 0\" stroke=\"black\" stroke-dasharray=\"none\" fill=\"none\" /></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+        const auto& group = *data.elements[0];
+        ASSERT_TRUE (group.strokeDashArray.has_value());
+        EXPECT_FALSE (group.strokeDashArrayNone);
+        ASSERT_EQ (1u, group.children.size());
+
+        const auto& path = *group.children[0];
+        EXPECT_FALSE (path.strokeDashArray.has_value());
+        EXPECT_TRUE (path.strokeDashArrayNone);
+    });
+}
+
 TEST (SVGDocumentTests, StrokeDashOffsetAttribute)
 {
     auto doc = parse ("<svg><path d=\"M 0 0 L 100 0\" stroke=\"black\" stroke-dasharray=\"5 3\" stroke-dashoffset=\"2\" fill=\"none\" /></svg>");
@@ -707,6 +749,28 @@ TEST (SVGDocumentTests, StrokeDashOffsetAttribute)
         const auto& elem = *data.elements[0];
         ASSERT_TRUE (elem.strokeDashOffset.has_value());
         EXPECT_FLOAT_EQ (2.0f, *elem.strokeDashOffset);
+    });
+}
+
+TEST (SVGDocumentTests, StrokeDashAttributesOnGroupAndChild)
+{
+    auto doc = parse ("<svg><g stroke=\"black\" stroke-dasharray=\"4,2\"><path d=\"M 0 0 L 100 0\" /><path d=\"M 0 10 L 100 10\" stroke-dashoffset=\"3\" /></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+        const auto& group = *data.elements[0];
+        ASSERT_TRUE (group.strokeDashArray.has_value());
+        ASSERT_EQ (2, group.strokeDashArray->size());
+        EXPECT_FLOAT_EQ (4.0f, (*group.strokeDashArray)[0]);
+        EXPECT_FLOAT_EQ (2.0f, (*group.strokeDashArray)[1]);
+        ASSERT_EQ (2u, group.children.size());
+
+        EXPECT_FALSE (group.children[0]->strokeDashArray.has_value());
+        EXPECT_FALSE (group.children[0]->strokeDashOffset.has_value());
+        ASSERT_TRUE (group.children[1]->strokeDashOffset.has_value());
+        EXPECT_FLOAT_EQ (3.0f, *group.children[1]->strokeDashOffset);
     });
 }
 
@@ -1036,9 +1100,12 @@ TEST (SVGDocumentTests, NestedSVGHasViewBoxSet)
         ASSERT_TRUE (svgElem.viewBox.has_value());
         EXPECT_FLOAT_EQ (50.0f, svgElem.viewBox->getWidth());
         EXPECT_FLOAT_EQ (50.0f, svgElem.viewBox->getHeight());
-        ASSERT_TRUE (svgElem.viewportSize.has_value());
-        EXPECT_FLOAT_EQ (40.0f, svgElem.viewportSize->getWidth());
-        EXPECT_FLOAT_EQ (40.0f, svgElem.viewportSize->getHeight());
+        ASSERT_TRUE (svgElem.viewportBounds.has_value());
+        EXPECT_FLOAT_EQ (10.0f, svgElem.viewportBounds->getX());
+        EXPECT_FLOAT_EQ (10.0f, svgElem.viewportBounds->getY());
+        EXPECT_FLOAT_EQ (40.0f, svgElem.viewportBounds->getWidth());
+        EXPECT_FLOAT_EQ (40.0f, svgElem.viewportBounds->getHeight());
+        EXPECT_FALSE (svgElem.viewportSize.has_value());
     });
 }
 
@@ -1484,8 +1551,124 @@ TEST (SVGDocumentTests, FilterParsedAndStored)
         ASSERT_EQ (1u, data.filters.size());
         const auto& f = *data.filters[0];
         EXPECT_EQ (String ("blur"), f.id);
-        ASSERT_TRUE (f.gaussianBlurStdDeviation.has_value());
-        EXPECT_FLOAT_EQ (4.0f, *f.gaussianBlurStdDeviation);
+        ASSERT_EQ (1u, f.primitives.size());
+        auto blur = dynamic_cast<const SVGFEGaussianBlur*> (f.primitives[0].get());
+        ASSERT_NE (nullptr, blur);
+        EXPECT_FLOAT_EQ (4.0f, blur->stdDeviation);
+    });
+}
+
+TEST (SVGDocumentTests, FEBlendParsedAndStored)
+{
+    auto doc = parse ("<svg>"
+                      "<defs><filter id=\"f\"><feBlend mode=\"multiply\" in=\"SourceGraphic\" in2=\"SourceGraphic\" /></filter></defs>"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.filters.size());
+        const auto& f = *data.filters[0];
+        EXPECT_EQ (String ("f"), f.id);
+        ASSERT_EQ (1u, f.primitives.size());
+        auto blend = dynamic_cast<const SVGFEBlend*> (f.primitives[0].get());
+        ASSERT_NE (nullptr, blend);
+        EXPECT_EQ (BlendMode::Multiply, blend->mode);
+        EXPECT_EQ (String ("SourceGraphic"), blend->in);
+        EXPECT_EQ (String ("SourceGraphic"), blend->in2);
+    });
+}
+
+TEST (SVGDocumentTests, FEBlendAllModes)
+{
+    struct ModeTest
+    {
+        const char* modeStr;
+        BlendMode expectedMode;
+    };
+
+    static const ModeTest tests[] = {
+        { "normal", BlendMode::SrcOver },
+        { "multiply", BlendMode::Multiply },
+        { "screen", BlendMode::Screen },
+        { "overlay", BlendMode::Overlay },
+        { "darken", BlendMode::Darken },
+        { "lighten", BlendMode::Lighten },
+        { "color-dodge", BlendMode::ColorDodge },
+        { "color-burn", BlendMode::ColorBurn },
+        { "hard-light", BlendMode::HardLight },
+        { "soft-light", BlendMode::SoftLight },
+        { "difference", BlendMode::Difference },
+        { "exclusion", BlendMode::Exclusion },
+        { "hue", BlendMode::Hue },
+        { "saturation", BlendMode::Saturation },
+        { "color", BlendMode::Color },
+        { "luminosity", BlendMode::Luminosity },
+    };
+
+    for (const auto& t : tests)
+    {
+        String svg = "<svg><defs><filter id=\"f\"><feBlend mode=\"";
+        svg += t.modeStr;
+        svg += "\" /></filter></defs></svg>";
+
+        auto doc = parse (svg.toRawUTF8());
+        ASSERT_NE (nullptr, doc) << t.modeStr;
+
+        doc->visit ([&] (const SVGData& data)
+        {
+            ASSERT_EQ (1u, data.filters.size());
+            ASSERT_EQ (1u, data.filters[0]->primitives.size());
+            auto blend = dynamic_cast<const SVGFEBlend*> (data.filters[0]->primitives[0].get());
+            ASSERT_NE (nullptr, blend) << t.modeStr;
+            EXPECT_EQ (t.expectedMode, blend->mode) << t.modeStr;
+        });
+    }
+}
+
+TEST (SVGDocumentTests, FEBlendDefaultsInWhenEmpty)
+{
+    auto doc = parse ("<svg>"
+                      "<defs><filter id=\"f\"><feBlend mode=\"screen\" /></filter></defs>"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.filters.size());
+        ASSERT_EQ (1u, data.filters[0]->primitives.size());
+        auto blend = dynamic_cast<const SVGFEBlend*> (data.filters[0]->primitives[0].get());
+        ASSERT_NE (nullptr, blend);
+        EXPECT_EQ (String ("SourceGraphic"), blend->in);
+    });
+}
+
+TEST (SVGDocumentTests, FilterChainMultiplePrimitives)
+{
+    auto doc = parse ("<svg>"
+                      "<defs><filter id=\"f\">"
+                      "<feGaussianBlur stdDeviation=\"3\" result=\"blur\" />"
+                      "<feBlend mode=\"multiply\" in=\"SourceGraphic\" in2=\"blur\" />"
+                      "</filter></defs>"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.filters.size());
+        const auto& f = *data.filters[0];
+        ASSERT_EQ (2u, f.primitives.size());
+
+        auto blur = dynamic_cast<const SVGFEGaussianBlur*> (f.primitives[0].get());
+        ASSERT_NE (nullptr, blur);
+        EXPECT_FLOAT_EQ (3.0f, blur->stdDeviation);
+        EXPECT_EQ (String ("blur"), blur->result);
+
+        auto blend = dynamic_cast<const SVGFEBlend*> (f.primitives[1].get());
+        ASSERT_NE (nullptr, blend);
+        EXPECT_EQ (BlendMode::Multiply, blend->mode);
+        EXPECT_EQ (String ("SourceGraphic"), blend->in);
+        EXPECT_EQ (String ("blur"), blend->in2);
     });
 }
 
@@ -1522,6 +1705,51 @@ TEST (SVGDocumentTests, FilterOnElementStoredAsUrl)
             }
         }
         ADD_FAILURE() << "rect not found";
+    });
+}
+
+// ==============================================================================
+// Gradient parsing edge cases
+// ==============================================================================
+
+TEST (SVGDocumentTests, GradientUnitsHandlesInkscapeNamespacePrefix)
+{
+    auto doc = parse ("<svg>"
+                      "<defs>"
+                      "<linearGradient id=\"g1\" gradientUnits=\"xuserSpaceOnUse\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">"
+                      "<stop offset=\"0\" stop-color=\"red\" />"
+                      "<stop offset=\"1\" stop-color=\"blue\" />"
+                      "</linearGradient>"
+                      "</defs>"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.gradients.size());
+        EXPECT_EQ (SVGGradient::UserSpaceOnUse, data.gradients[0]->units);
+    });
+}
+
+TEST (SVGDocumentTests, RadialGradientWithFocalPoint)
+{
+    auto doc = parse ("<svg>"
+                      "<defs>"
+                      "<radialGradient id=\"rg\" cx=\"0.5\" cy=\"0.5\" r=\"0.5\" fx=\"0.3\" fy=\"0.3\">"
+                      "<stop offset=\"0\" stop-color=\"yellow\" />"
+                      "<stop offset=\"1\" stop-color=\"red\" />"
+                      "</radialGradient>"
+                      "</defs>"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.gradients.size());
+        const auto& g = *data.gradients[0];
+        EXPECT_TRUE (g.hasFocal);
+        EXPECT_FLOAT_EQ (0.3f, g.focal.getX());
+        EXPECT_FLOAT_EQ (0.3f, g.focal.getY());
     });
 }
 
@@ -1614,6 +1842,65 @@ TEST (SVGDocumentTests, ClipRuleOnClipPathChildElement)
         ASSERT_EQ (1u, cp.elements.size());
         ASSERT_TRUE (cp.elements[0]->clipRule.has_value());
         EXPECT_EQ (String ("evenodd"), *cp.elements[0]->clipRule);
+    });
+}
+
+TEST (SVGDocumentTests, ClipPathRegistersChildIds)
+{
+    auto doc = parse ("<svg>"
+                      "<defs><clipPath id=\"cp\"><circle id=\"c1\" cx=\"10\" cy=\"10\" r=\"5\" /></clipPath></defs>"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        EXPECT_TRUE (data.elementsById.contains ("c1"));
+        auto elem = data.elementsById["c1"];
+        ASSERT_NE (nullptr, elem);
+        ASSERT_TRUE (elem->path.has_value());
+    });
+}
+
+TEST (SVGDocumentTests, ClipPathWithUseElement)
+{
+    auto doc = parse ("<svg>"
+                      "<defs>"
+                      "<clipPath id=\"star\"><polygon id=\"starShape\" points=\"100,10 190,180 10,60 190,60 10,180\" /></clipPath>"
+                      "<clipPath id=\"union\">"
+                      "<use xlink:href=\"#starShape\" />"
+                      "<circle id=\"circ\" cx=\"100\" cy=\"100\" r=\"50\" />"
+                      "</clipPath>"
+                      "</defs>"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        auto unionCp = data.clipPathsById["union"];
+        ASSERT_NE (nullptr, unionCp);
+        ASSERT_EQ (2u, unionCp->elements.size());
+        EXPECT_TRUE (unionCp->elements[0]->path.has_value());
+        EXPECT_TRUE (unionCp->elements[1]->path.has_value());
+    });
+}
+
+TEST (SVGDocumentTests, ClipPathWithNestedClipPath)
+{
+    auto doc = parse ("<svg>"
+                      "<defs>"
+                      "<clipPath id=\"outer\"><circle cx=\"50\" cy=\"50\" r=\"30\" /></clipPath>"
+                      "<clipPath id=\"inner\" clip-path=\"url(#outer)\"><circle cx=\"50\" cy=\"50\" r=\"20\" /></clipPath>"
+                      "</defs>"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        auto innerCp = data.clipPathsById["inner"];
+        ASSERT_NE (nullptr, innerCp);
+        ASSERT_TRUE (innerCp->clipPathUrl.has_value());
+        EXPECT_EQ (String ("outer"), *innerCp->clipPathUrl);
+        ASSERT_EQ (1u, innerCp->elements.size());
     });
 }
 
@@ -2127,7 +2414,8 @@ TEST (SVGDocumentTests, SVGCssParserInlineStyleAppliesPresentationProperties)
     EXPECT_EQ (String ("mid"), *element.markerMid);
     ASSERT_TRUE (element.markerEnd.has_value());
     EXPECT_EQ (String ("end"), *element.markerEnd);
-    EXPECT_FLOAT_EQ (1.0f, element.strokeMiterLimit);
+    ASSERT_TRUE (element.strokeMiterLimit);
+    EXPECT_FLOAT_EQ (1.0f, *element.strokeMiterLimit);
     ASSERT_TRUE (element.filterUrl.has_value());
     EXPECT_EQ (String ("blur"), *element.filterUrl);
     ASSERT_TRUE (element.strokeDashArray.has_value());
@@ -2199,6 +2487,7 @@ TEST (SVGDocumentTests, SVGCssParserApplyStylePropertyCoversAlternateBranches)
     element.strokeDashArray = Array<float> ({ 1.0f, 2.0f });
     parser.applyStyleProperty ("stroke-dasharray", "none", element);
     EXPECT_FALSE (element.strokeDashArray.has_value());
+    EXPECT_TRUE (element.strokeDashArrayNone);
 
     parser.applyStyleProperty ("fill-rule", "nonzero", element);
     ASSERT_TRUE (element.fillRule.has_value());
@@ -2388,5 +2677,152 @@ TEST (SVGDocumentTests, ClearResetsViewBoxToEmpty)
         EXPECT_EQ (0u, data.markers.size());
         EXPECT_EQ (0u, data.patterns.size());
         EXPECT_EQ (0u, data.cssRules.size());
+    });
+}
+
+// ==============================================================================
+// CSS presentation attribute inheritance
+// ==============================================================================
+
+TEST (SVGInheritanceTests, InheritsFillColorFromGroup)
+{
+    auto doc = parse ("<svg><g fill=\"red\"><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" /></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+        ASSERT_EQ (1u, data.elements[0]->children.size());
+        const auto& rect = *data.elements[0]->children[0];
+        EXPECT_TRUE (rect.fillColor.has_value());
+        EXPECT_FALSE (rect.noFill);
+    });
+}
+
+TEST (SVGInheritanceTests, InheritsStrokeFromGroup)
+{
+    auto doc = parse ("<svg><g stroke=\"blue\" stroke-width=\"3\"><circle cx=\"5\" cy=\"5\" r=\"5\" /></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+        ASSERT_EQ (1u, data.elements[0]->children.size());
+        const auto& circle = *data.elements[0]->children[0];
+        EXPECT_TRUE (circle.strokeColor.has_value());
+        ASSERT_TRUE (circle.strokeWidth.has_value());
+        EXPECT_FLOAT_EQ (3.0f, *circle.strokeWidth);
+    });
+}
+
+TEST (SVGInheritanceTests, InheritsFillRuleFromGroup)
+{
+    auto doc = parse ("<svg><g fill-rule=\"evenodd\"><path d=\"M 0 0 L 10 0 L 10 10 Z\" /></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+        ASSERT_EQ (1u, data.elements[0]->children.size());
+        const auto& path = *data.elements[0]->children[0];
+        ASSERT_TRUE (path.fillRule.has_value());
+        EXPECT_EQ (String ("evenodd"), *path.fillRule);
+    });
+}
+
+TEST (SVGInheritanceTests, ChildExplicitFillOverridesParent)
+{
+    auto doc = parse ("<svg><g fill=\"red\"><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" fill=\"green\" /></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+        ASSERT_EQ (1u, data.elements[0]->children.size());
+        const auto& rect = *data.elements[0]->children[0];
+        ASSERT_TRUE (rect.fillColor.has_value());
+        EXPECT_EQ (Colors::green, *rect.fillColor);
+    });
+}
+
+TEST (SVGInheritanceTests, ChildNoneFillOverridesParent)
+{
+    auto doc = parse ("<svg><g fill=\"red\"><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" fill=\"none\" /></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+        ASSERT_EQ (1u, data.elements[0]->children.size());
+        const auto& rect = *data.elements[0]->children[0];
+        EXPECT_TRUE (rect.noFill);
+        EXPECT_FALSE (rect.fillColor.has_value());
+    });
+}
+
+TEST (SVGInheritanceTests, InheritsMarkersFromGroup)
+{
+    auto doc = parse ("<svg>"
+                      "<defs><marker id=\"a\"><path d=\"M 0 0 L 5 5\" /></marker></defs>"
+                      "<g marker-start=\"url(#a)\"><path d=\"M 0 0 L 10 0\" /></g>"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        // defs is element[0], g is element[1]
+        ASSERT_GE (data.elements.size(), 2u);
+        const auto& g = *data.elements[1];
+        ASSERT_EQ (1u, g.children.size());
+        const auto& path = *g.children[0];
+        ASSERT_TRUE (path.markerStart.has_value());
+        EXPECT_EQ (String ("a"), *path.markerStart);
+    });
+}
+
+TEST (SVGInheritanceTests, InheritsVisibilityFromGroup)
+{
+    auto doc = parse ("<svg><g visibility=\"hidden\"><circle cx=\"5\" cy=\"5\" r=\"5\" /></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+        ASSERT_EQ (1u, data.elements[0]->children.size());
+        const auto& circle = *data.elements[0]->children[0];
+        EXPECT_TRUE (circle.hidden);
+    });
+}
+
+TEST (SVGInheritanceTests, DeepNestingInheritance)
+{
+    auto doc = parse ("<svg><g fill=\"purple\"><g><g><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" /></g></g></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+        ASSERT_EQ (1u, data.elements[0]->children.size());
+        const auto& g2 = *data.elements[0]->children[0];
+        ASSERT_EQ (1u, g2.children.size());
+        const auto& g3 = *g2.children[0];
+        ASSERT_EQ (1u, g3.children.size());
+        const auto& rect = *g3.children[0];
+        EXPECT_TRUE (rect.fillColor.has_value());
+    });
+}
+
+TEST (SVGInheritanceTests, InheritsStrokeMiterLimit)
+{
+    auto doc = parse ("<svg><g stroke-miterlimit=\"2\"><path d=\"M 0 0 L 10 0\" /></g></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+        ASSERT_EQ (1u, data.elements[0]->children.size());
+        const auto& path = *data.elements[0]->children[0];
+        ASSERT_TRUE (path.strokeMiterLimit.has_value());
+        EXPECT_FLOAT_EQ (2.0f, *path.strokeMiterLimit);
     });
 }

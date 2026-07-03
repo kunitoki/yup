@@ -16,7 +16,7 @@ public:
     {
     }
 
-    void prepareToPlay (float, int) override {}
+    void prepareToPlay (const AudioSpec&) override {}
 
     void releaseResources() override {}
 
@@ -79,4 +79,66 @@ TEST (AudioPluginStateTests, SetAndGetCurrentPreset)
     StatefulFakeInstance instance;
     instance.setCurrentPreset (2);
     EXPECT_EQ (2, instance.getCurrentPreset());
+}
+
+TEST (AudioPluginStateTests, EmptyStateRoundTrip)
+{
+    StatefulFakeInstance instance;
+    MemoryBlock empty;
+
+    EXPECT_TRUE (instance.loadStateFromMemory (empty).wasOk());
+
+    MemoryBlock readBack;
+    EXPECT_TRUE (instance.saveStateIntoMemory (readBack).wasOk());
+
+    EXPECT_EQ (readBack.getSize(), 0u);
+}
+
+TEST (AudioPluginStateTests, LargeStateRoundTrip)
+{
+    StatefulFakeInstance instance;
+    MemoryBlock large (4096, true);
+    for (int i = 0; i < 4096; ++i)
+        static_cast<char*> (large.getData())[i] = (char) (i & 0xFF);
+
+    EXPECT_TRUE (instance.loadStateFromMemory (large).wasOk());
+
+    MemoryBlock readBack;
+    EXPECT_TRUE (instance.saveStateIntoMemory (readBack).wasOk());
+    EXPECT_EQ (large, readBack);
+}
+
+TEST (AudioPluginStateTests, GetNumPresetsReturnsCorrectCount)
+{
+    StatefulFakeInstance instance;
+    EXPECT_EQ (3, instance.getNumPresets());
+}
+
+TEST (AudioPluginStateTests, HasEditorReturnsFalse)
+{
+    StatefulFakeInstance instance;
+    EXPECT_FALSE (instance.hasEditor());
+}
+
+TEST (AudioPluginStateTests, DefaultCurrentPresetIsZero)
+{
+    StatefulFakeInstance instance;
+    EXPECT_EQ (0, instance.getCurrentPreset());
+}
+
+TEST (AudioPluginStateTests, MultipleSavesPreserveLastLoad)
+{
+    StatefulFakeInstance instance;
+
+    const unsigned char firstData[] = { 0x01, 0x02 };
+    EXPECT_TRUE (instance.loadStateFromMemory ({ firstData, sizeof (firstData) }).wasOk());
+
+    const unsigned char secondData[] = { 0xAA, 0xBB, 0xCC };
+    EXPECT_TRUE (instance.loadStateFromMemory ({ secondData, sizeof (secondData) }).wasOk());
+
+    MemoryBlock readBack;
+    EXPECT_TRUE (instance.saveStateIntoMemory (readBack).wasOk());
+
+    EXPECT_EQ (readBack.getSize(), sizeof (secondData));
+    EXPECT_EQ (memcmp (readBack.getData(), secondData, sizeof (secondData)), 0);
 }

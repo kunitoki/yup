@@ -22,42 +22,6 @@
 namespace yup
 {
 
-namespace
-{
-uint8 unpremultiplyComponent (uint8 component, uint8 alpha) noexcept
-{
-    if (alpha == 0)
-        return 0;
-
-    const auto value = (static_cast<uint32> (component) * 255u + static_cast<uint32> (alpha) / 2u) / static_cast<uint32> (alpha);
-    return static_cast<uint8> (value > 255u ? 255u : value);
-}
-
-std::unique_ptr<const uint8[]> copyRGBAPremultipliedAsRGBA (const rive::Bitmap& bitmap)
-{
-    const auto numPixels = static_cast<size_t> (bitmap.width()) * static_cast<size_t> (bitmap.height());
-    auto destination = std::make_unique<uint8[]> (numPixels * 4u);
-
-    const auto* source = bitmap.bytes();
-    auto* target = destination.get();
-
-    for (size_t i = 0; i < numPixels; ++i)
-    {
-        const auto alpha = source[3];
-
-        target[0] = unpremultiplyComponent (source[0], alpha);
-        target[1] = unpremultiplyComponent (source[1], alpha);
-        target[2] = unpremultiplyComponent (source[2], alpha);
-        target[3] = alpha;
-
-        source += 4;
-        target += 4;
-    }
-
-    return std::unique_ptr<const uint8[]> (destination.release());
-}
-} // namespace
-
 //==============================================================================
 void BitmapData::setPixelColor (int x, int y, Color color)
 {
@@ -87,13 +51,19 @@ Image::Image (const Image& other)
 
 Image::Image (Image&& other) noexcept
     : bitmapData (std::exchange (other.bitmapData, {}))
+    , texture (std::exchange (other.texture, {}))
+    , renderCanvas (std::exchange (other.renderCanvas, {}))
 {
 }
 
 Image& Image::operator= (const Image& other)
 {
     if (this != &other)
+    {
         bitmapData = other.bitmapData;
+        texture = nullptr;
+        renderCanvas = nullptr;
+    }
 
     return *this;
 }
@@ -101,7 +71,11 @@ Image& Image::operator= (const Image& other)
 Image& Image::operator= (Image&& other) noexcept
 {
     if (this != &other)
+    {
         bitmapData = std::exchange (other.bitmapData, {});
+        texture = std::exchange (other.texture, {});
+        renderCanvas = std::exchange (other.renderCanvas, {});
+    }
 
     return *this;
 }
@@ -214,21 +188,46 @@ Span<uint8> Image::getRawData() noexcept
 }
 
 //==============================================================================
-/*
 Image Image::duplicate() const
 {
     Image result;
 
     if (bitmapData != nullptr)
-        result.bitmapData = new BitmapData (*bitmapData);
+    {
+        result.bitmapData = new BitmapData (
+            bitmapData->getWidth(),
+            bitmapData->getHeight(),
+            bitmapData->getPixelFormat(),
+            bitmapData->getRawData());
+    }
 
     return result;
 }
-*/
 
+//==============================================================================
+
+ResultValue<Image> Image::loadFromData (Span<const uint8> imageData)
+{
+    auto stream = std::make_unique<MemoryInputStream> (imageData.data(), imageData.size(), false);
+
+    ImageFormatManager manager;
+    manager.registerDefaultFormats();
+
+    auto reader = manager.createReaderFor (stream.release());
+    if (reader == nullptr || reader->width <= 0 || reader->height <= 0)
+        return makeResultValueFail ("Unable to decode image");
+
+    auto image = reader->readImage();
+    if (! image.isValid())
+        return makeResultValueFail ("Unable to decode image");
+
+    return makeResultValueOk (image);
+}
+
+//==============================================================================
 bool Image::createTextureIfNotPresent (GraphicsContext& context) const
 {
-    if (texture != nullptr)
+    if (getTexture() != nullptr)
         return true;
 
     if (bitmapData == nullptr)
@@ -270,40 +269,49 @@ bool Image::createTextureIfNotPresent (GraphicsContext& context) const
         rive::GPUTextureFormat::rgba32,
         texturePixels.data());
 
+    renderCanvas = nullptr;
+
     return true;
 }
 
 void Image::invalidateTexture()
 {
     texture = nullptr;
+    renderCanvas = nullptr;
+}
+
+//==============================================================================
+void Image::adoptTexture (rive::rcp<rive::gpu::Texture> t)
+{
+    texture = std::move (t);
+    renderCanvas = nullptr;
+}
+
+void Image::adoptRenderCanvas (rive::rcp<rive::gpu::RenderCanvas> canvas)
+{
+    renderCanvas = std::move (canvas);
+    texture = nullptr;
 }
 
 rive::rcp<rive::gpu::Texture> Image::getTexture() const
 {
+    if (renderCanvas != nullptr)
+        return renderCanvas->renderImage()->refTexture();
+
     return texture;
 }
 
-//==============================================================================
-
-ResultValue<Image> Image::loadFromData (Span<const uint8> imageData)
+rive::rcp<rive::gpu::RenderCanvas> Image::getRenderCanvas() const
 {
-    auto bitmap = rive::Bitmap::decode (imageData.data(), imageData.size());
-    if (bitmap == nullptr)
-        return makeResultValueFail ("Unable to decode image");
+    return renderCanvas;
+}
 
-    Image result;
+rive::RenderImage* Image::getRenderImage() const
+{
+    if (renderCanvas != nullptr)
+        return renderCanvas->renderImage();
 
-    const auto pixelFormat = bitmap->pixelFormat();
-    const auto imagePixelFormat = pixelFormat == rive::Bitmap::PixelFormat::RGB
-                                    ? PixelFormat::RGB
-                                    : PixelFormat::RGBA;
-    auto pixelData = pixelFormat == rive::Bitmap::PixelFormat::RGBAPremul
-                       ? copyRGBAPremultipliedAsRGBA (*bitmap)
-                       : bitmap->detachBytes();
-
-    result.bitmapData = new BitmapData (bitmap->width(), bitmap->height(), imagePixelFormat, std::move (pixelData));
-
-    return makeResultValueOk (result);
+    return nullptr;
 }
 
 } // namespace yup

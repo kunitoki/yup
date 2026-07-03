@@ -47,6 +47,7 @@ __pycache__/
 .idea/
 .vs/
 .claude/
+.opencode/
 .pytest_cache/
 .cache/
 docs/superpowers/

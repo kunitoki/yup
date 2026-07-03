@@ -77,3 +77,59 @@ TEST (KMeterComponentTests, PaintWithThemeDoesNotCrash)
 
     EXPECT_TRUE (true);
 }
+
+TEST (KMeterComponentTests, GetChannelReturnsConstructorArg)
+{
+    KMeterState meterState (48000.0, 2);
+    KMeterComponent meter0 (meterState, 0);
+    KMeterComponent meter1 (meterState, 1);
+    KMeterComponent meterAll (meterState, -1);
+
+    EXPECT_EQ (0, meter0.getChannel());
+    EXPECT_EQ (1, meter1.getChannel());
+    EXPECT_EQ (-1, meterAll.getChannel());
+}
+
+TEST (KMeterComponentTests, RefreshRateDefaultIs30)
+{
+    KMeterState meterState (48000.0, 2);
+    KMeterComponent meter (meterState, 0);
+    EXPECT_EQ (30, meter.getRefreshRate());
+}
+
+TEST (KMeterComponentTests, SetRefreshRateUpdatesValue)
+{
+    KMeterState meterState (48000.0, 2);
+    KMeterComponent meter (meterState, 0);
+    meter.setRefreshRate (60);
+    EXPECT_EQ (60, meter.getRefreshRate());
+}
+
+TEST (KMeterComponentTests, PaintLinearScaleDoesNotCrash)
+{
+    KMeterState meterState (48000.0, 2);
+    KMeterComponent meter (meterState, 0);
+    meter.setScaleMapping (KMeterComponent::ScaleMapping::linear);
+    meter.setBounds (0.0f, 0.0f, 30.0f, 120.0f);
+
+    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto renderer = context->makeRenderer (30, 120);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({ meter.paint (g); });
+}
+
+TEST (KMeterComponentTests, PaintWithShowPeakFalseDoesNotCrash)
+{
+    KMeterState meterState (48000.0, 2);
+    KMeterComponent meter (meterState, 0);
+    meter.setShowPeak (false);
+    meter.setShowPeakHold (false);
+    meter.setBounds (0.0f, 0.0f, 30.0f, 120.0f);
+
+    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto renderer = context->makeRenderer (30, 120);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({ meter.paint (g); });
+}

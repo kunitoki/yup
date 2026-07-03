@@ -41,9 +41,9 @@ public:
         addParameter (sweepEnabled);
     }
 
-    void prepareToPlay (float newSampleRate, int) override
+    void prepareToPlay (const yup::AudioSpec& spec) override
     {
-        sampleRate = newSampleRate;
+        sampleRate = spec.sampleRate;
         phase = 0.0;
         sweepPositionSeconds = 0.0;
         wasSweepActive = false;

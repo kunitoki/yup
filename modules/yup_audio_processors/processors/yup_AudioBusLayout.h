@@ -64,6 +64,24 @@ public:
     /** Returns all output buses. */
     Span<const AudioBus> getOutputBuses() const noexcept { return outputBuses; }
 
+    /** Returns the total number of audio input channels across all input buses. */
+    int getNumAudioInputChannels() const { return getNumAudioChannels (inputBuses); }
+
+    /** Returns the total number of audio output channels across all output buses. */
+    int getNumAudioOutputChannels() const { return getNumAudioChannels (outputBuses); }
+
+    /** Returns the total number of audio channels across the given buses. */
+    int getNumAudioChannels (Span<const AudioBus> buses) const
+    {
+        int numChannels = 0;
+
+        for (const auto& bus : buses)
+            if (bus.getType() == AudioBus::Type::Audio)
+                numChannels += bus.getNumChannels();
+
+        return numChannels;
+    }
+
 private:
     std::vector<AudioBus> inputBuses;
     std::vector<AudioBus> outputBuses;

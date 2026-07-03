@@ -87,3 +87,42 @@ TEST (DefaultElementComparatorTest, ComparesCorrectly)
     EXPECT_EQ (comparator.compareElements (2, 1), 1);
     EXPECT_EQ (comparator.compareElements (1, 1), 0);
 }
+
+TEST (FindInsertIndexInSortedArrayTest, FindsIndexAtStart)
+{
+    int array[] = { 3, 5, 7, 9 };
+    IntComparator comparator;
+
+    int index = findInsertIndexInSortedArray (comparator, array, 1, 0, 4);
+    EXPECT_EQ (index, 0);
+}
+
+TEST (FindInsertIndexInSortedArrayTest, FindsIndexAtEnd)
+{
+    int array[] = { 3, 5, 7, 9 };
+    IntComparator comparator;
+
+    int index = findInsertIndexInSortedArray (comparator, array, 11, 0, 4);
+    EXPECT_EQ (index, 4);
+}
+
+TEST (SortArrayTest, SortsSingleElementArray)
+{
+    int array[] = { 42 };
+    IntComparator comparator;
+
+    sortArray (comparator, array, 0, 0, false);
+
+    EXPECT_EQ (array[0], 42);
+}
+
+TEST (SortArrayTest, SortsAlreadySortedArray)
+{
+    int array[] = { 1, 2, 3, 4, 5 };
+    IntComparator comparator;
+
+    sortArray (comparator, array, 0, 4, false);
+
+    int expected[] = { 1, 2, 3, 4, 5 };
+    EXPECT_TRUE (std::equal (std::begin (array), std::end (array), std::begin (expected)));
+}

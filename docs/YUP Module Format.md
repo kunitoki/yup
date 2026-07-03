@@ -173,7 +173,7 @@ Here's an example block:
 
      ID:               yup_audio_devices
      vendor:           yup
-     version:          1.0.0
+     version:          1.2.3
      name:             YUP audio and MIDI I/O device classes
      description:      Classes to play and record from audio and MIDI I/O devices
      website:          https://github.com/kunitoki/yup

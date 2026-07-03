@@ -68,7 +68,7 @@
 #endif
 
 #if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_OOURA
-#include "yup_OouraFFT8g.h"
+#include "frequency/yup_OouraFFT8g.h"
 #define YUP_FFT_USING_OOURA 1
 #define YUP_FFT_FOUND_BACKEND 1
 #endif
@@ -81,6 +81,12 @@
 
 #include "frequency/yup_FFTProcessor.cpp"
 #include "frequency/yup_SpectrumAnalyzerState.cpp"
+#include "onsets/yup_Spectrogram.cpp"
+#include "onsets/yup_FilterBank.cpp"
+#include "onsets/yup_SuperFluxODF.cpp"
+#include "onsets/yup_ComplexFluxODF.cpp"
+#include "onsets/yup_OnsetPeakPicker.cpp"
+#include "onsets/yup_OnsetDetector.cpp"
 #include "metering/yup_LevelProcessor.cpp"
 #include "metering/yup_LoudnessFilter.cpp"
 #include "metering/yup_KMeterState.cpp"

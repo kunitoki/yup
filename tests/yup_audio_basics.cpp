@@ -25,6 +25,7 @@
 #include "yup_audio_basics/yup_AudioPlayHead.cpp"
 #include "yup_audio_basics/yup_AudioProcessLoadMeasurer.cpp"
 #include "yup_audio_basics/yup_AudioSampleBuffer.cpp"
+#include "yup_audio_basics/yup_AudioSpectralBuffer.cpp"
 #include "yup_audio_basics/yup_BufferingAudioSource.cpp"
 #include "yup_audio_basics/yup_ChannelRemappingAudioSource.cpp"
 #include "yup_audio_basics/yup_Decibels.cpp"

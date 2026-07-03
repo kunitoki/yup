@@ -26,7 +26,7 @@
 
     ID:                   yup_dsp
     vendor:               yup
-    version:              1.0.0
+    version:              2.0.0
     name:                 YUP DSP
     description:          The essential set of basic YUP DSP.
     website:              https://github.com/kunitoki/yup
@@ -138,6 +138,15 @@
 // Frequency domain functions
 #include "frequency/yup_FFTProcessor.h"
 #include "frequency/yup_SpectrumAnalyzerState.h"
+
+// Onset detection
+#include "onsets/yup_FilterBank.h"
+#include "onsets/yup_Spectrogram.h"
+#include "onsets/yup_OnsetDetectionFunction.h"
+#include "onsets/yup_SuperFluxODF.h"
+#include "onsets/yup_ComplexFluxODF.h"
+#include "onsets/yup_OnsetPeakPicker.h"
+#include "onsets/yup_OnsetDetector.h"
 
 // Base filter interfaces and common structures
 #include "base/yup_FilterMode.h"

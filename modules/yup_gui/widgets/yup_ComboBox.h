@@ -199,6 +199,8 @@ private:
     StyledText styledText;
     PopupMenu::Ptr popupMenu;
     bool textIsEditable = false;
+    bool ignoreMouseDownAfterPopupDismissal = false;
+    bool dismissingPopupFromMouseDown = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComboBox)
 };

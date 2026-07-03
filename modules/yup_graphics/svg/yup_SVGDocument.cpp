@@ -68,23 +68,34 @@ Rectangle<float> SVGDocument::calculateBounds() const
     Rectangle<float> bounds;
     bool hasValidBounds = false;
 
-    for (const auto& element : data.elements)
+    const auto addBounds = [&] (const Rectangle<float>& elementBounds)
     {
-        if (element->path)
+        if (hasValidBounds)
+            bounds = bounds.unionWith (elementBounds);
+        else
         {
-            auto pathBounds = element->path->getBounds();
-            if (element->transform)
-                pathBounds = element->path->getBoundsTransformed (*element->transform);
-
-            if (hasValidBounds)
-                bounds = bounds.unionWith (pathBounds);
-            else
-            {
-                bounds = pathBounds;
-                hasValidBounds = true;
-            }
+            bounds = elementBounds;
+            hasValidBounds = true;
         }
-    }
+    };
+
+    const auto visitElement = [&] (const auto& self,
+                                   const SVGElement& element,
+                                   const AffineTransform& parentTransform) -> void
+    {
+        auto elementTransform = parentTransform;
+        if (element.transform)
+            elementTransform = element.transform->followedBy (parentTransform);
+
+        if (element.path)
+            addBounds (element.path->getBoundsTransformed (elementTransform));
+
+        for (const auto& child : element.children)
+            self (self, *child, elementTransform);
+    };
+
+    for (const auto& element : data.elements)
+        visitElement (visitElement, *element, AffineTransform::identity());
 
     return hasValidBounds ? bounds : Rectangle<float> (0.0f, 0.0f, 100.0f, 100.0f);
 }

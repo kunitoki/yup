@@ -25,7 +25,7 @@ namespace yup
 //==============================================================================
 
 AudioProcessor::AudioProcessor (StringRef name, AudioBusLayout busLayout)
-    : processorName (name)
+    : BaseDomainProcessor (name)
     , busLayout (std::move (busLayout))
 {
 }
@@ -33,123 +33,6 @@ AudioProcessor::AudioProcessor (StringRef name, AudioBusLayout busLayout)
 //==============================================================================
 
 AudioProcessor::~AudioProcessor() = default;
-
-//==============================================================================
-
-void AudioProcessor::addParameter (AudioParameter::Ptr parameter)
-{
-    jassert (parameter != nullptr);
-    if (parameter == nullptr)
-        return;
-
-    if (parameterMap.find (parameter->getID()) != parameterMap.end())
-        return;
-
-    const auto hostParameterID = parameter->hasExplicitHostParameterID()
-                                   ? parameter->getHostParameterID()
-                                   : static_cast<uint32> (parameters.size());
-    jassert (hostParameterID != AudioParameter::invalidHostParameterID);
-    jassert (hostParameterID <= AudioParameter::maximumHostParameterID);
-
-    if (parameterHostIDMap.find (hostParameterID) != parameterHostIDMap.end())
-    {
-        jassertfalse;
-        return;
-    }
-
-    parameter->setIndexInContainer (static_cast<int> (parameters.size()));
-
-    parameterMap.emplace (parameter->getID(), parameter);
-    parameterHostIDMap.emplace (hostParameterID, parameter);
-    parameters.emplace_back (std::move (parameter));
-}
-
-AudioParameter::Ptr AudioProcessor::getParameterByID (StringRef parameterID) const
-{
-    const auto iterator = parameterMap.find (String (parameterID));
-    return iterator != parameterMap.end() ? iterator->second : nullptr;
-}
-
-AudioParameter::Ptr AudioProcessor::getParameterByHostID (uint32 hostParameterID) const
-{
-    const auto iterator = parameterHostIDMap.find (hostParameterID);
-    return iterator != parameterHostIDMap.end() ? iterator->second : nullptr;
-}
-
-int AudioProcessor::getParameterIndexByHostID (uint32 hostParameterID) const
-{
-    if (auto parameter = getParameterByHostID (hostParameterID))
-        return parameter->getIndexInContainer();
-
-    return -1;
-}
-
-void AudioProcessor::addListener (Listener* listener)
-{
-    listeners.add (listener);
-}
-
-void AudioProcessor::removeListener (Listener* listener)
-{
-    listeners.remove (listener);
-}
-
-void AudioProcessor::updateHostDisplay (ChangeDetails details)
-{
-    listeners.call (&Listener::audioProcessorChanged, this, details);
-}
-
-//==============================================================================
-
-Result AudioProcessor::loadStateFromDataTree (const DataTree& state)
-{
-    ignoreUnused (state);
-    return Result::fail ("Processor does not support DataTree state");
-}
-
-Result AudioProcessor::saveStateIntoDataTree (DataTree& state)
-{
-    ignoreUnused (state);
-    return Result::fail ("Processor does not support DataTree state");
-}
-
-Result AudioProcessor::loadStateFromMemory (const MemoryBlock& memoryBlock)
-{
-    if (! supportsDataTreeState())
-        return Result::fail ("Processor does not support binary state");
-
-    MemoryInputStream stream (memoryBlock, false);
-    auto xml = parseXML (stream.readEntireStreamAsString());
-
-    if (xml == nullptr)
-        return Result::fail ("Processor state is not valid XML");
-
-    auto state = DataTree::fromXml (*xml);
-    if (! state.isValid())
-        return Result::fail ("Processor state is not a valid DataTree");
-
-    return loadStateFromDataTree (state);
-}
-
-Result AudioProcessor::saveStateIntoMemory (MemoryBlock& memoryBlock)
-{
-    if (! supportsDataTreeState())
-        return Result::fail ("Processor does not support binary state");
-
-    DataTree state;
-    if (const auto result = saveStateIntoDataTree (state); result.failed())
-        return result;
-
-    auto xml = state.createXml();
-    if (xml == nullptr)
-        return Result::fail ("Processor DataTree state is invalid");
-
-    MemoryOutputStream stream (memoryBlock, false);
-    xml->writeTo (stream);
-    stream.flush();
-
-    return Result::ok();
-}
 
 //==============================================================================
 
@@ -197,45 +80,6 @@ bool AudioProcessor::producesMidi() const noexcept
 
 //==============================================================================
 
-void AudioProcessor::suspendProcessing (bool shouldSuspend)
-{
-    auto lock = CriticalSection::ScopedLockType (processLock);
-
-    processIsSuspended.store (shouldSuspend);
-}
-
-bool AudioProcessor::isSuspended() const
-{
-    return processIsSuspended.load();
-}
-
-//==============================================================================
-
-void AudioProcessor::setLatencySamples (int newLatencySamples)
-{
-    const auto clampedLatencySamples = jmax (0, newLatencySamples);
-    const auto oldLatencySamples = latencySamples.exchange (clampedLatencySamples);
-
-    if (oldLatencySamples != clampedLatencySamples)
-        updateHostDisplay (ChangeDetails().withLatencyChanged (true));
-}
-
-//==============================================================================
-
-void AudioProcessor::setProcessingPrecision (ProcessingPrecision precision)
-{
-    if (precision == ProcessingPrecision::doublePrecision && ! supportsDoublePrecisionProcessing())
-    {
-        jassertfalse;
-        processingPrecision = ProcessingPrecision::singlePrecision;
-        return;
-    }
-
-    processingPrecision = precision;
-}
-
-//==============================================================================
-
 AudioProcessorEditor* AudioProcessor::createEditor()
 {
     jassert (hasEditor());
@@ -247,9 +91,10 @@ AudioProcessorEditor* AudioProcessor::createEditor()
 void AudioProcessor::setPlaybackConfiguration (float sampleRate, int samplesPerBlock)
 {
     releaseResources();
-    this->sampleRate = sampleRate;
-    this->samplesPerBlock = samplesPerBlock;
-    prepareToPlay (sampleRate, samplesPerBlock);
+
+    AudioProcessorBase::setPlaybackConfiguration (sampleRate, samplesPerBlock);
+
+    prepareToPlay (AudioSpec (sampleRate, samplesPerBlock));
 }
 
 } // namespace yup

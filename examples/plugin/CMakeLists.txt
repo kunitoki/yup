@@ -21,9 +21,29 @@ cmake_minimum_required(VERSION 3.31)
 
 # ==== Prepare target
 set (target_name example_plugin)
-set (target_version "1.0.0")
+set (target_version "2.0.0")
 
 project (${target_name} VERSION ${target_version})
+
+# ==== Auto-detect AAX SDK
+set (plugin_create_aax OFF)
+
+if (DEFINED YUP_AAX_SDK_ROOT OR DEFINED ENV{YUP_AAX_SDK_ROOT})
+    if (DEFINED ENV{YUP_AAX_SDK_ROOT} AND NOT DEFINED YUP_AAX_SDK_ROOT)
+        set (YUP_AAX_SDK_ROOT "$ENV{YUP_AAX_SDK_ROOT}" CACHE PATH "Path to the AAX SDK")
+    endif()
+    message (STATUS "AAX SDK using YUP_AAX_SDK_ROOT: ${YUP_AAX_SDK_ROOT}")
+    set (plugin_create_aax ON)
+else()
+    set (aax_sdk_candidate "${CMAKE_CURRENT_LIST_DIR}/../../../AAX/aax-sdk-2-9-0")
+    if (EXISTS "${aax_sdk_candidate}/Interfaces/AAX.h")
+        set (YUP_AAX_SDK_ROOT "${aax_sdk_candidate}" CACHE PATH "Path to the AAX SDK")
+        set (plugin_create_aax ON)
+        message (STATUS "AAX SDK auto-detected at ${aax_sdk_candidate}")
+    else()
+        message (STATUS "AAX SDK not found — AAX target disabled")
+    endif()
+endif()
 
 yup_audio_plugin (
     TARGET_NAME ${target_name}
@@ -44,7 +64,16 @@ yup_audio_plugin (
     PLUGIN_CREATE_CLAP ON
     PLUGIN_CREATE_VST3 ON
     PLUGIN_CREATE_AU ON
+    PLUGIN_CREATE_AUv3 ON
+    PLUGIN_CREATE_LV2 ON
     PLUGIN_CREATE_STANDALONE ON
+    PLUGIN_CREATE_AAX ${plugin_create_aax}
+    PLUGIN_AAX_MANUFACTURER_ID YUPP
+    PLUGIN_AAX_PRODUCT_ID YpSy
+    PLUGIN_AAX_PLUGIN_ID_NATIVE YpSN
+    PLUGIN_AAX_PLUGIN_ID_AUDIOSUITE YpSA
+    PLUGIN_AAX_CATEGORY AAX_ePlugInCategory_Example
+    PLUGIN_COPY_AFTER_BUILD ON
     MODULES
         yup::yup_gui
         yup::yup_audio_processors)

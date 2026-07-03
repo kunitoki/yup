@@ -104,6 +104,8 @@ public:
     //==============================================================================
     rive::Factory* getFactory() override;
 
+    GraphicsContext* getGraphicsContext() override;
+
     //==============================================================================
     void* getNativeHandle() const override;
 

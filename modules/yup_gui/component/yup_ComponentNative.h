@@ -437,6 +437,12 @@ public:
     */
     virtual rive::Factory* getFactory() = 0;
 
+    /** Gets the graphics context associated with this component.
+
+        @return Pointer to the GraphicsContext, or nullptr if unavailable.
+    */
+    virtual GraphicsContext* getGraphicsContext() = 0;
+
     //==============================================================================
     /** Creates a platform-specific ComponentNative instance.
 

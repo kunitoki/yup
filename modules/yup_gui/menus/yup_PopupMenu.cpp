@@ -121,7 +121,10 @@ void installGlobalMouseListener()
             {
                 const auto globalPos = event.getScreenPosition();
                 if (auto* popupMenu = findActivePopupAt (globalPos))
+                {
+                    YUP_MODULE_DBG (GUI_POPUPMENU, "GlobalMouseListener::mouseMove: dispatching to popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (popupMenu)) << " globalPos=" << globalPos.toString());
                     popupMenu->mouseMove (makePopupMouseEvent (event, *popupMenu, globalPos));
+                }
             }
         } globalMouseListener {};
 
@@ -457,6 +460,8 @@ PopupMenu::Ptr PopupMenu::create (const Options& options)
 
 void PopupMenu::dismissAllPopups()
 {
+    YUP_MODULE_DBG (GUI_POPUPMENU, "dismissAllPopups: count=" << activePopups.size());
+
     auto popupsToClose = std::exchange (activePopups, {});
 
     for (const auto& popup : popupsToClose)
@@ -721,6 +726,8 @@ void PopupMenu::show (std::function<void (int)> callback)
 
 void PopupMenu::showCustom (const Options& options, bool isSubmenu, std::function<void (int)> callback)
 {
+    YUP_MODULE_DBG (GUI_POPUPMENU, "showCustom: isSubmenu=" << (isSubmenu ? 1 : 0) << " isOnDesktop=" << (isOnDesktop() ? 1 : 0) << " numItems=" << getNumItems() << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
+
     if (! isSubmenu)
         dismissAllPopups();
 
@@ -755,7 +762,10 @@ void PopupMenu::showCustom (const Options& options, bool isSubmenu, std::functio
                                  .withMouseCapture (true);
 
         if (! isOnDesktop())
+        {
+            YUP_MODULE_DBG (GUI_POPUPMENU, "showCustom: adding to desktop [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
             addToDesktop (nativeOptions);
+        }
     }
 
     removeActivePopup (this);
@@ -766,6 +776,8 @@ void PopupMenu::showCustom (const Options& options, bool isSubmenu, std::functio
 
     setVisible (true);
     toFront (true);
+
+    YUP_MODULE_DBG (GUI_POPUPMENU, "showCustom EXIT: visible=" << (isVisible() ? 1 : 0) << " size=" << getWidth() << "x" << getHeight() << " screenBounds=" << getScreenBounds().toString() << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
 }
 
 //==============================================================================
@@ -779,6 +791,8 @@ void PopupMenu::dismiss (int itemID)
 {
     if (isBeingDismissed)
         return;
+
+    YUP_MODULE_DBG (GUI_POPUPMENU, "dismiss: itemID=" << itemID << " isOnDesktop=" << (isOnDesktop() ? 1 : 0) << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
 
     isBeingDismissed = true;
 
@@ -898,6 +912,8 @@ void PopupMenu::mouseMove (const MouseEvent& event)
 
     if (itemIndex >= 0 && isItemSelectable (itemIndex))
     {
+        YUP_MODULE_DBG (GUI_POPUPMENU, "mouseMove: itemIndex=" << itemIndex << " (" << items[itemIndex]->text << ") [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
+
         // Set selection on hover for selectable items
         setSelectedItemIndex (itemIndex, true);
 
@@ -917,6 +933,8 @@ void PopupMenu::mouseMove (const MouseEvent& event)
     }
     else if (itemIndex < 0)
     {
+        YUP_MODULE_DBG (GUI_POPUPMENU, "mouseMove: itemIndex=" << itemIndex << " (no item) [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
+
         // Mouse is not over any item, clear selection
         setSelectedItemIndex (-1, true);
     }
@@ -925,18 +943,24 @@ void PopupMenu::mouseMove (const MouseEvent& event)
 void PopupMenu::mouseEnter (const MouseEvent& event)
 {
     int itemIndex = getItemIndexAt (event.getPosition());
+    YUP_MODULE_DBG (GUI_POPUPMENU, "mouseEnter: itemIndex=" << itemIndex << " hasVisibleSubmenu=" << (hasVisibleSubmenu() ? 1 : 0) << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
+
     if (itemIndex >= 0 && isItemSelectable (itemIndex))
     {
         setSelectedItemIndex (itemIndex, true);
-
-        auto& item = *items[itemIndex];
-        if (item.isSubMenu() && item.isEnabled)
-            showSubmenu (itemIndex);
     }
 }
 
 void PopupMenu::mouseExit (const MouseEvent& event)
 {
+    YUP_MODULE_DBG (GUI_POPUPMENU, "mouseExit: hasVisibleSubmenu=" << (hasVisibleSubmenu() ? 1 : 0) << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
+
+    // Don't clear the hover if we're showing a submenu — the mouse likely
+    // "left" due to a submenu window appearing on top, not because the user
+    // intentionally moved away. updateSubmenuVisibility keeps submenus open.
+    if (hasVisibleSubmenu())
+        return;
+
     setSelectedItemIndex (-1, true);
 }
 
@@ -981,18 +1005,29 @@ void PopupMenu::keyDown (const KeyPress& key, const Point<float>& position)
 
 void PopupMenu::showSubmenu (int itemIndex)
 {
+    YUP_MODULE_DBG (GUI_POPUPMENU, "showSubmenu ENTER: itemIndex=" << itemIndex << " currentSubmenuItemIndex=" << submenuItemIndex << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
+
     if (! canShowSubmenu (itemIndex))
+    {
+        YUP_MODULE_DBG (GUI_POPUPMENU, "showSubmenu EXIT: canShowSubmenu=false [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
         return;
+    }
 
     auto& item = *items[itemIndex];
 
     // If we're already showing this submenu, no need to do anything
     if (isAlreadyShowingSubmenu (itemIndex, item))
+    {
+        YUP_MODULE_DBG (GUI_POPUPMENU, "showSubmenu EXIT: alreadyShowing [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
         return;
+    }
 
     // Hide current submenu if different item
     if (submenuItemIndex != itemIndex)
+    {
+        YUP_MODULE_DBG (GUI_POPUPMENU, "showSubmenu: hiding previous submenu (prev=" << submenuItemIndex << ") [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
         hideSubmenus();
+    }
 
     isShowingSubmenu = true;
     submenuItemIndex = itemIndex;
@@ -1005,7 +1040,6 @@ void PopupMenu::showSubmenu (int itemIndex)
 
     // Reset the submenu's state before showing to ensure clean positioning
     currentSubmenu->resetInternalState();
-    currentSubmenu->parentMenu = this;
 
     // Configure submenu options
     auto submenuOptions = prepareSubmenuOptions (currentSubmenu);
@@ -1016,11 +1050,14 @@ void PopupMenu::showSubmenu (int itemIndex)
     // Show the submenu with callback
     currentSubmenu->showCustom (submenuOptions, true, [this] (int selectedID)
     {
+        YUP_MODULE_DBG (GUI_POPUPMENU, "showSubmenu callback: selectedID=" << selectedID << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
         if (selectedID != 0)
             dismiss (selectedID);
 
         isShowingSubmenu = false;
     });
+
+    YUP_MODULE_DBG (GUI_POPUPMENU, "showSubmenu EXIT: submenu visible=" << (currentSubmenu->isVisible() ? 1 : 0) << " submenu popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (currentSubmenu.get())) << " screenBounds=" << currentSubmenu->getScreenBounds().toString() << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
 
     // Repaint to show active submenu highlight
     repaint();
@@ -1040,7 +1077,7 @@ bool PopupMenu::isAlreadyShowingSubmenu (int itemIndex, const Item& item) const
     return submenuItemIndex == itemIndex
         && currentSubmenu
         && currentSubmenu == item.subMenu
-        && currentSubmenu->isVisible();
+        && (currentSubmenu->isVisible() || isShowingSubmenu);
 }
 
 void PopupMenu::positionSubmenu (Options& submenuOptions)
@@ -1131,6 +1168,7 @@ void PopupMenu::hideSubmenus()
 {
     if (currentSubmenu)
     {
+        YUP_MODULE_DBG (GUI_POPUPMENU, "hideSubmenus: dismissing submenu popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (currentSubmenu.get())) << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
         cleanupSubmenu (currentSubmenu);
 
         currentSubmenu = nullptr;
@@ -1205,14 +1243,21 @@ void PopupMenu::updateSubmenuVisibility (int hoveredItemIndex)
         if (item.isSubMenu() && item.isEnabled)
         {
             if (submenuItemIndex == hoveredItemIndex && hasVisibleSubmenu())
+            {
+                YUP_MODULE_DBG (GUI_POPUPMENU, "updateSubmenuVisibility: already showing submenu for itemIndex=" << hoveredItemIndex << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
                 return;
+            }
 
+            YUP_MODULE_DBG (GUI_POPUPMENU, "updateSubmenuVisibility: showing submenu for itemIndex=" << hoveredItemIndex << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
             showSubmenu (hoveredItemIndex);
         }
         else
         {
             if (hasVisibleSubmenu())
+            {
+                YUP_MODULE_DBG (GUI_POPUPMENU, "updateSubmenuVisibility: hiding submenu (hovered non-submenu itemIndex=" << hoveredItemIndex << ") [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
                 hideSubmenus();
+            }
         }
 
         return;
@@ -1225,11 +1270,13 @@ void PopupMenu::updateSubmenuVisibility (int hoveredItemIndex)
             auto& newItem = *items[hoveredItemIndex];
             if (newItem.isSubMenu() && newItem.isEnabled)
             {
+                YUP_MODULE_DBG (GUI_POPUPMENU, "updateSubmenuVisibility: switching submenu to itemIndex=" << hoveredItemIndex << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
                 showSubmenu (hoveredItemIndex);
                 return;
             }
             else
             {
+                YUP_MODULE_DBG (GUI_POPUPMENU, "updateSubmenuVisibility: hiding submenu (hovered non-submenu itemIndex=" << hoveredItemIndex << ") [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
                 hideSubmenus();
                 return;
             }
@@ -1269,6 +1316,7 @@ void PopupMenu::setSelectedItemIndex (int index, bool fromMouse)
 {
     if (selectedItemIndex == index)
     {
+        YUP_MODULE_DBG (GUI_POPUPMENU, "setSelectedItemIndex: unchanged index=" << index << " fromMouse=" << (fromMouse ? 1 : 0) << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
         if (fromMouse)
             updateSubmenuVisibility (index);
 
@@ -1282,6 +1330,8 @@ void PopupMenu::setSelectedItemIndex (int index, bool fromMouse)
 
     if (selectedItemIndex >= 0 && selectedItemIndex < static_cast<int> (items.size()))
         items[selectedItemIndex]->isHovered = true;
+
+    YUP_MODULE_DBG (GUI_POPUPMENU, "setSelectedItemIndex: index=" << index << " fromMouse=" << (fromMouse ? 1 : 0) << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
 
     if (fromMouse)
         updateSubmenuVisibility (index);

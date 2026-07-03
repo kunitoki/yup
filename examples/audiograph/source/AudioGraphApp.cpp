@@ -71,9 +71,8 @@ AudioGraphApp::AudioGraphApp()
     scanner->addFormat (std::make_unique<yup::CLAPFormat>());
 #endif
 #if YUP_AUDIO_PLUGIN_HOST_ENABLE_AU && YUP_MAC
-    scanner->addFormat (std::make_unique<yup::AUv2Format>());
+    scanner->addFormat (std::make_unique<yup::AUFormat>());
 #endif
-
     nodeRegistry.registerPluginFormats (scanner.get(), makeHostContext());
 #endif
 
@@ -202,8 +201,10 @@ void AudioGraphApp::audioDeviceAboutToStart (yup::AudioIODevice* device)
     nodeRegistry.setPluginScanner (scanner.get(), ctx);
 #endif
 
-    graph->prepareToPlay (static_cast<float> (device->getCurrentSampleRate()),
-                          device->getCurrentBufferSizeSamples());
+    const auto spec = yup::AudioSpec (
+        static_cast<float> (device->getCurrentSampleRate()),
+        device->getCurrentBufferSizeSamples());
+    graph->prepareToPlay (spec);
 }
 
 void AudioGraphApp::audioDeviceStopped()

@@ -227,6 +227,24 @@ public:
     {
     }
 
+    std::unique_ptr<OffscreenTarget> createOffscreenTarget (int, int) override
+    {
+        return nullptr;
+    }
+
+    void beginOffscreen (OffscreenTarget&, const rive::gpu::RenderContext::FrameDescriptor&) override
+    {
+    }
+
+    void endOffscreen (OffscreenTarget&) override
+    {
+    }
+
+    bool readOffscreenPixels (OffscreenTarget&, void*, size_t) override
+    {
+        return false;
+    }
+
 private:
     NoOpFactory noOpFactory;
 };

@@ -65,6 +65,40 @@ protected:
     }
 };
 
+TEST_F (JSONUtilsTests, DeepEqualReturnsTrueForIdenticalPrimitives)
+{
+    EXPECT_TRUE (JSONUtils::deepEqual (var (42), var (42)));
+    EXPECT_TRUE (JSONUtils::deepEqual (var ("hello"), var ("hello")));
+    EXPECT_TRUE (JSONUtils::deepEqual (var (3.14), var (3.14)));
+    EXPECT_FALSE (JSONUtils::deepEqual (var (1), var (2)));
+    EXPECT_FALSE (JSONUtils::deepEqual (var ("a"), var ("b")));
+}
+
+TEST_F (JSONUtilsTests, DeepEqualForObjects)
+{
+    const auto a = JSON::parse (R"({"x":1,"y":2})");
+    const auto b = JSON::parse (R"({"x":1,"y":2})");
+    const auto c = JSON::parse (R"({"x":1,"y":3})");
+
+    EXPECT_TRUE (JSONUtils::deepEqual (a, b));
+    EXPECT_FALSE (JSONUtils::deepEqual (a, c));
+}
+
+TEST_F (JSONUtilsTests, MakeObjectFromMap)
+{
+    std::map<Identifier, var> source;
+    source[Identifier ("key1")] = var (10);
+    source[Identifier ("key2")] = var ("value");
+
+    auto result = JSONUtils::makeObject (source);
+    EXPECT_TRUE (result.isObject());
+
+    auto obj = result.getDynamicObject();
+    ASSERT_NE (nullptr, obj);
+    EXPECT_EQ (var (10), obj->getProperty ("key1"));
+    EXPECT_EQ (var ("value"), obj->getProperty ("key2"));
+}
+
 TEST_F (JSONUtilsTests, JSONPointers)
 {
     const auto obj = JSON::parse (R"({ "name":           "PIANO 4"

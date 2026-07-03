@@ -26,7 +26,7 @@
 
     ID:                   yup_gui
     vendor:               yup
-    version:              1.0.0
+    version:              2.0.0
     name:                 YUP Graphical User Interface
     description:          The essential set of basic YUP user interface.
     website:              https://github.com/kunitoki/yup
@@ -52,6 +52,27 @@
 #include <rive/rive.h>
 
 //==============================================================================
+/** Config: YUP_EMBED_DEFAULT_THEME_TEXT_FONT
+
+    Select if the default theme text fonts should be embedded in the binary. If set to 0, the
+    default theme text fonts will be loaded from the system fonts. If set to 1, the default
+    theme text fonts will be embedded in the binary. The default is 1.
+*/
+#ifndef YUP_EMBED_DEFAULT_THEME_TEXT_FONT
+#define YUP_EMBED_DEFAULT_THEME_TEXT_FONT 0
+#endif
+
+/** Config: YUP_EMBED_DEFAULT_THEME_ICON_FONT
+
+    Select if the default theme icon fonts should be embedded in the binary. If set to 0, the
+    default theme icon fonts will be loaded from the system fonts. If set to 1, the default
+    theme icon fonts will be embedded in the binary. The default is 1.
+*/
+#ifndef YUP_EMBED_DEFAULT_THEME_ICON_FONT
+#define YUP_EMBED_DEFAULT_THEME_ICON_FONT 1
+#endif
+
+//==============================================================================
 /** Config: YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
 
     Enable repaint debugging for components.
@@ -66,7 +87,24 @@
     Enable logging of windowing events like movement, resizes, mouse interactions.
 */
 #ifndef YUP_ENABLE_GUI_WINDOWING_LOGGING
-#define YUP_ENABLE_GUI_WINDOWING_LOGGING 1
+#define YUP_ENABLE_GUI_WINDOWING_LOGGING 0
+#endif
+
+//==============================================================================
+/** Config: YUP_ENABLE_GUI_POPUPMENU_LOGGING
+
+    Enable logging of PopupMenu events like hover, submenu show/hide, mouse enter/exit.
+    Set to 1 to enable, 0 to disable. Off by default.
+*/
+#ifndef YUP_ENABLE_GUI_POPUPMENU_LOGGING
+#define YUP_ENABLE_GUI_POPUPMENU_LOGGING 0
+#endif
+
+//==============================================================================
+
+#if ! YUP_EMBED_DEFAULT_THEME_TEXT_FONT && YUP_EMSCRIPTEN
+#undef YUP_EMBED_DEFAULT_THEME_TEXT_FONT
+#define YUP_EMBED_DEFAULT_THEME_TEXT_FONT 1
 #endif
 
 //==============================================================================

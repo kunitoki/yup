@@ -892,6 +892,13 @@ rcp<Texture> RenderContextMetalImpl::makeImageTexture(
         m_gpu, width, height, mipLevelCount, imageDataRGBAPremul);
 }
 
+rcp<Texture> RenderContextMetalImpl::adoptImageTexture(id<MTLTexture> mtlTexture,
+                                                        uint32_t width,
+                                                        uint32_t height)
+{
+    return make_rcp<TextureMetalImpl>(mtlTexture, width, height);
+}
+
 #ifdef RIVE_CANVAS
 rcp<RenderCanvas> RenderContextMetalImpl::makeRenderCanvas(uint32_t width,
                                                            uint32_t height)

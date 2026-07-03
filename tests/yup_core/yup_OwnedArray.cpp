@@ -95,6 +95,37 @@ struct OwnedArrayTests : public ::testing::Test
     }
 };
 
+TEST_F (OwnedArrayTests, DefaultIsEmpty)
+{
+    OwnedArray<Base> arr;
+    EXPECT_TRUE (arr.isEmpty());
+    EXPECT_EQ (arr.size(), 0);
+    EXPECT_EQ (nullptr, arr.getFirst());
+    EXPECT_EQ (nullptr, arr.getLast());
+}
+
+TEST_F (OwnedArrayTests, AddIncreasesSize)
+{
+    OwnedArray<Base> arr;
+    arr.add (new Derived());
+    EXPECT_EQ (1, arr.size());
+    EXPECT_FALSE (arr.isEmpty());
+    arr.add (new Derived());
+    EXPECT_EQ (2, arr.size());
+}
+
+TEST_F (OwnedArrayTests, ClearMakesEmpty)
+{
+    OwnedArray<Base> arr;
+    arr.add (new Derived());
+    arr.add (new Derived());
+    EXPECT_EQ (2, arr.size());
+
+    arr.clear();
+    EXPECT_TRUE (arr.isEmpty());
+    EXPECT_EQ (0, arr.size());
+}
+
 TEST_F (OwnedArrayTests, MoveConstructionTransfersOwnership)
 {
     OwnedArray<Derived> derived;

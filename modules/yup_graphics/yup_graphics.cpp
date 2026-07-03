@@ -32,7 +32,12 @@
 
 //==============================================================================
 
+#include <rive/renderer/rive_renderer.hpp>
 #include <rive/text/font_hb.hpp>
+
+//==============================================================================
+
+#include <libclipper2/libclipper2.h>
 
 //==============================================================================
 
@@ -46,7 +51,6 @@
 #endif
 
 #if YUP_RIVE_USE_OPENGL
-//#include "native/yup_GraphicsContext_gl.cpp"
 #include "native/yup_GraphicsContext_opengl.cpp"
 #endif
 
@@ -68,7 +72,6 @@
 #endif
 
 #if YUP_RIVE_USE_OPENGL
-//#include "native/yup_GraphicsContext_gl.cpp"
 #include "native/yup_GraphicsContext_opengl.cpp"
 #endif
 
@@ -81,7 +84,6 @@
 #include <emscripten/html5.h>
 #endif
 
-//#include "native/yup_GraphicsContext_gl.cpp"
 #include "native/yup_GraphicsContext_opengl.cpp"
 
 #endif
@@ -92,23 +94,6 @@
 #include "native/yup_GraphicsContext_dawn.cpp"
 #include "native/yup_GraphicsContext_dawn_helper.cpp"
 #endif
-
-//==============================================================================
-
-#include "native/yup_GraphicsContext_headless.cpp"
-
-//==============================================================================
-
-#include "native/yup_GraphicsContext_impl.cpp"
-
-//==============================================================================
-#include "primitives/yup_Path.cpp"
-#include "fonts/yup_Font.cpp"
-#include "fonts/yup_StyledText.cpp"
-#include "imaging/yup_Image.cpp"
-#include "graphics/yup_Color.cpp"
-#include "graphics/yup_Colors.cpp"
-#include "graphics/yup_Graphics.cpp"
 
 //==============================================================================
 
@@ -124,7 +109,51 @@
 
 //==============================================================================
 
+#include "native/yup_GraphicsContext_headless.cpp"
+#include "native/yup_GraphicsContext_impl.cpp"
+
+//==============================================================================
+#include "primitives/yup_Path.cpp"
+#include "primitives/yup_CubicBezier.cpp"
+#include "fonts/yup_Font.cpp"
+#include "fonts/yup_StyledText.cpp"
+#include "imaging/yup_Image.cpp"
+#include "imaging/yup_ImageFormat.cpp"
+#include "imaging/yup_ImageFormatReader.cpp"
+#include "imaging/yup_ImageFormatWriter.cpp"
+#include "imaging/yup_ImageFormatManager.cpp"
+#include "graphics/yup_Color.cpp"
+#include "graphics/yup_Colors.cpp"
+#include "graphics/yup_Graphics.cpp"
 #include "svg/yup_SVGDocument.cpp"
 #include "svg/yup_SVGCssParser.cpp"
 #include "svg/yup_SVGParser.cpp"
 #include "drawables/yup_Drawable.cpp"
+
+//==============================================================================
+#if YUP_IMAGE_FORMAT_BMP
+#include "formats/yup_BmpImageFormat.cpp"
+#endif
+
+#if YUP_IMAGE_FORMAT_PPM
+#include "formats/yup_PpmImageFormat.cpp"
+#endif
+
+#if YUP_IMAGE_FORMAT_PNG
+#include <libpng/libpng.h>
+#include "formats/yup_PngImageFormat.cpp"
+#endif
+
+#if YUP_IMAGE_FORMAT_JPEG
+#include <libjpeg/libjpeg.h>
+#include "formats/yup_JpegImageFormat.cpp"
+#endif
+
+#if YUP_IMAGE_FORMAT_WEBP
+#include <libwebp/libwebp.h>
+#include "formats/yup_WebPImageFormat.cpp"
+#endif
+
+#if YUP_IMAGE_FORMAT_GIF
+#include "formats/yup_GifImageFormat.cpp"
+#endif

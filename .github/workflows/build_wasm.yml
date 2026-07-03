@@ -15,7 +15,7 @@ on:
       - "!**/native/*_android.*"
       - "!**/native/*_apple.*"
       - "!**/native/*_linux.*"
-      - "!**/native/*_ios.*"
+      - "!**/native/*_ios*.*"
       - "!**/native/*_mac.*"
       - "!**/native/*_windows.*"
     branches:
@@ -41,7 +41,7 @@ jobs:
         fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - name: Setup emsdk
-      uses: mymindstorm/setup-emsdk@v14
+      uses: mymindstorm/setup-emsdk@v15
       with:
         version: ${{ env.EM_VERSION }}
     - name: Configure
@@ -58,7 +58,7 @@ jobs:
         fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - name: Setup emsdk
-      uses: mymindstorm/setup-emsdk@v14
+      uses: mymindstorm/setup-emsdk@v15
       with:
         version: ${{ env.EM_VERSION }}
     - name: Configure
@@ -75,7 +75,7 @@ jobs:
         fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - name: Setup emsdk
-      uses: mymindstorm/setup-emsdk@v14
+      uses: mymindstorm/setup-emsdk@v15
       with:
         version: ${{ env.EM_VERSION }}
     - name: Configure
@@ -91,7 +91,7 @@ jobs:
         fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - name: Setup emsdk
-      uses: mymindstorm/setup-emsdk@v14
+      uses: mymindstorm/setup-emsdk@v15
       with:
         version: ${{ env.EM_VERSION }}
     - name: Configure
@@ -107,7 +107,7 @@ jobs:
         fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - name: Setup emsdk
-      uses: mymindstorm/setup-emsdk@v14
+      uses: mymindstorm/setup-emsdk@v15
       with:
         version: ${{ env.EM_VERSION }}
     - name: Configure

@@ -352,9 +352,10 @@ private:
     std::vector<ChannelState> channels;
 
     // Level processors
-    std::vector<LevelProcessor> levelProcessors; // One per channel
-    std::vector<LoudnessFilter> loudnessFilters; // One per channel (for ITU/EBU K-weighting)
-    std::vector<float> filteredBuffer;           // Temporary buffer for K-weighted samples
+    std::vector<LevelProcessor> levelProcessors;    // One per channel
+    std::vector<LoudnessFilter> loudnessFilters;    // One per channel (for ITU/EBU K-weighting)
+    std::vector<std::vector<float>> channelBuffers; // Per-channel de-interleaving buffers
+    std::vector<float> filteredBuffer;              // Temporary buffer for K-weighted samples
 
     // Atomic state for UI thread (wait-free reads)
     Atomic<float> atomicPeakLevelDb { -100.0f };

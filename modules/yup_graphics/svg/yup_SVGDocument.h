@@ -57,6 +57,9 @@ struct SVGData
     bool rootHasStroke = false;
     std::optional<Color> rootFillColor;
     std::optional<Color> rootStrokeColor;
+    bool rootHasPreserveAspectRatio = false;
+    Fitting rootPreserveAspectRatioFitting = Fitting::scaleToFit;
+    Justification rootPreserveAspectRatioJustification = Justification::center;
 };
 
 //==============================================================================

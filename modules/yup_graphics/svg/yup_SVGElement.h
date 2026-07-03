@@ -52,6 +52,7 @@ struct SVGElement : public ReferenceCountedObject
     std::optional<StrokeJoin> strokeJoin;
     std::optional<StrokeCap> strokeCap;
     std::optional<Array<float>> strokeDashArray;
+    bool strokeDashArrayNone = false;
     std::optional<float> strokeDashOffset;
     std::optional<String> fillRule;
     std::optional<String> clipRule;
@@ -87,9 +88,10 @@ struct SVGElement : public ReferenceCountedObject
     std::optional<String> markerStart;
     std::optional<String> markerMid;
     std::optional<String> markerEnd;
-    float strokeMiterLimit = 4.0f;
+    std::optional<float> strokeMiterLimit;
     std::optional<BlendMode> blendMode;
     std::optional<Rectangle<float>> viewBox;
+    std::optional<Rectangle<float>> viewportBounds;
     std::optional<Size<float>> viewportSize;
     Fitting preserveAspectRatioFitting = Fitting::scaleToFit;
     Justification preserveAspectRatioJustification = Justification::center;

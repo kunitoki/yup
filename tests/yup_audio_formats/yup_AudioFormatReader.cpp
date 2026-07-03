@@ -151,3 +151,45 @@ TEST (AudioFormatReaderTests, GetChannelLayoutMatchesChannelCount)
     EXPECT_EQ (AudioChannelSet::stereo(), stereoReader.getChannelLayout());
     EXPECT_EQ (AudioChannelSet::discreteChannels (4), surroundReader.getChannelLayout());
 }
+
+TEST (AudioFormatReaderTests, MetadataAttributesAreAccessible)
+{
+    MockAudioFormatReader reader (2, 100);
+
+    EXPECT_DOUBLE_EQ (48000.0, reader.sampleRate);
+    EXPECT_EQ (32u, reader.bitsPerSample);
+    EXPECT_EQ (100, (int) reader.lengthInSamples);
+    EXPECT_EQ (2u, reader.numChannels);
+    EXPECT_TRUE (reader.usesFloatingPointData);
+}
+
+TEST (AudioFormatReaderTests, ReadWithStartOffsetInDestinationBuffer)
+{
+    MockAudioFormatReader reader (1, 3);
+    fillChannel (reader.buffer, 0, { 0.1f, 0.2f, 0.3f });
+
+    AudioBuffer<float> destination (1, 6);
+    destination.clear();
+
+    // Read 3 samples starting at dest offset 2
+    EXPECT_TRUE (reader.read (&destination, 2, 3, 0, true, false));
+
+    EXPECT_FLOAT_EQ (destination.getSample (0, 0), 0.0f); // before offset untouched
+    EXPECT_FLOAT_EQ (destination.getSample (0, 1), 0.0f);
+    EXPECT_FLOAT_EQ (destination.getSample (0, 2), 0.1f);
+    EXPECT_FLOAT_EQ (destination.getSample (0, 3), 0.2f);
+    EXPECT_FLOAT_EQ (destination.getSample (0, 4), 0.3f);
+    EXPECT_FLOAT_EQ (destination.getSample (0, 5), 0.0f);
+}
+
+TEST (AudioFormatReaderTests, ReadOutOfRangeReturnsFalse)
+{
+    MockAudioFormatReader reader (1, 4);
+    fillChannel (reader.buffer, 0, { 0.1f, 0.2f, 0.3f, 0.4f });
+
+    AudioBuffer<float> destination (1, 4);
+    destination.clear();
+
+    // Request samples beyond length
+    EXPECT_FALSE (reader.read (&destination, 0, 4, 2, true, false));
+}

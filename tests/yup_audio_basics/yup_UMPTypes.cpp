@@ -79,3 +79,37 @@ TEST (UMPTypesTests, UpsampleXToYBit)
     for (uint14_t v = 0u; v < 0x4000; ++v)
         EXPECT_EQ (upsample14To32Bit (v), upsampleXToYBit (v, 14, 32));
 }
+
+TEST (UMPTypesTests, DownsampleMonotonicallyIncreasing)
+{
+    auto prev = downsample16To7Bit (static_cast<uint16_t> (0));
+    for (uint16_t v = 1; v < 0xffffu; ++v)
+    {
+        const auto downsampled = downsample16To7Bit (v);
+        EXPECT_GE (downsampled, prev);
+        prev = downsampled;
+    }
+}
+
+TEST (UMPTypesTests, UpsampleMonotonicallyIncreasing)
+{
+    auto prev = upsample7To16Bit (static_cast<uint7_t> (0));
+    for (uint7_t v = 1u; v < 0x80; ++v)
+    {
+        const auto upsampled = upsample7To16Bit (v);
+        EXPECT_GE (upsampled, prev);
+        prev = upsampled;
+    }
+}
+
+TEST (UMPTypesTests, SpotCheckIntermediateDownsampleValues)
+{
+    // Quarter and three-quarter values should be monotonically between min and center
+    const auto quarter7bit = downsample16To7Bit (0x4000);
+    const auto threeQuarter7bit = downsample16To7Bit (0xC000);
+
+    EXPECT_GT (quarter7bit, 0u);
+    EXPECT_LT (quarter7bit, 0x40u);
+    EXPECT_GT (threeQuarter7bit, 0x40u);
+    EXPECT_LT (threeQuarter7bit, 0x7fu);
+}

@@ -50,4 +50,8 @@
 #define RIVE_WEBP 1
 #endif
 
+#if YUP_MODULE_AVAILABLE_libjpeg
+#define RIVE_JPEG 1
+#endif
+
 #include "include/rive/decoders/bitmap_decoder.hpp"

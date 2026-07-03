@@ -30,6 +30,54 @@ namespace yup
 extern std::unique_ptr<yup::GraphicsContext> yup_constructHeadlessGraphicsContext (yup::GraphicsContext::Options);
 } // namespace yup
 
+TEST (ThemeVersion1Tests, CreateReturnsNonNullTheme)
+{
+    auto theme = createThemeVersion1();
+    EXPECT_NE (nullptr, theme.get());
+}
+
+TEST (ThemeVersion1Tests, SliderColorsAreRegistered)
+{
+    auto theme = createThemeVersion1();
+    ASSERT_NE (nullptr, theme.get());
+
+    Slider slider (Slider::LinearHorizontal);
+    EXPECT_TRUE (theme->findColor (slider, Slider::Style::backgroundColorId).has_value());
+    EXPECT_TRUE (theme->findColor (slider, Slider::Style::trackColorId).has_value());
+    EXPECT_TRUE (theme->findColor (slider, Slider::Style::thumbColorId).has_value());
+    EXPECT_TRUE (theme->findColor (slider, Slider::Style::textColorId).has_value());
+}
+
+TEST (ThemeVersion1Tests, LabelColorsAreRegistered)
+{
+    auto theme = createThemeVersion1();
+    ASSERT_NE (nullptr, theme.get());
+
+    Label label;
+    EXPECT_TRUE (theme->findColor (label, Label::Style::textFillColorId).has_value());
+    EXPECT_TRUE (theme->findColor (label, Label::Style::backgroundColorId).has_value());
+}
+
+TEST (ThemeVersion1Tests, ProgressBarColorsAreRegistered)
+{
+    auto theme = createThemeVersion1();
+    ASSERT_NE (nullptr, theme.get());
+
+    ProgressBar progressBar;
+    EXPECT_TRUE (theme->findColor (progressBar, ProgressBar::Style::backgroundColorId).has_value());
+    EXPECT_TRUE (theme->findColor (progressBar, ProgressBar::Style::foregroundColorId).has_value());
+}
+
+TEST (ThemeVersion1Tests, ScrollBarColorsAreRegistered)
+{
+    auto theme = createThemeVersion1();
+    ASSERT_NE (nullptr, theme.get());
+
+    ScrollBar scrollBar (ScrollBar::Orientation::vertical);
+    EXPECT_TRUE (theme->findColor (scrollBar, ScrollBar::Style::trackColorId).has_value());
+    EXPECT_TRUE (theme->findColor (scrollBar, ScrollBar::Style::thumbColorId).has_value());
+}
+
 TEST (ThemeVersion1Tests, PaintsCoreComponents)
 {
     auto context = yup_constructHeadlessGraphicsContext ({});

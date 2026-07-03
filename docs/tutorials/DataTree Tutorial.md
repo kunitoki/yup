@@ -27,7 +27,7 @@ DataTree appSettings("AppSettings");
 // Use transactions to modify the tree
 {
     auto transaction = appSettings.beginTransaction();
-    transaction.setProperty("version", "1.0.0");
+    transaction.setProperty("version", "1.2.3");
     transaction.setProperty("debug", true);
     transaction.setProperty("maxConnections", 100);
     // Transaction commits automatically when it goes out of scope
@@ -38,8 +38,8 @@ String version = appSettings.getProperty("version", "unknown");
 bool debugMode = appSettings.getProperty("debug", false);
 int maxConn = appSettings.getProperty("maxConnections", 50);
 
-DBG("App version: " << version);
-DBG("Debug mode: " << (debugMode ? "enabled" : "disabled"));
+YUP_DBG("App version: " << version);
+YUP_DBG("Debug mode: " << (debugMode ? "enabled" : "disabled"));
 ```
 
 ### Working with Child Nodes
@@ -68,8 +68,8 @@ if (foundServer.isValid())
 // Iterate over children
 for (const auto& child : appSettings)
 {
-    DBG("Child type: " << child.getType().toString());
-    DBG("Properties: " << child.getNumProperties());
+    YUP_DBG("Child type: " << child.getType().toString());
+    YUP_DBG("Properties: " << child.getNumProperties());
 }
 ```
 
@@ -271,7 +271,7 @@ auto firstEnabledButton = DataTreeQuery::from(appRoot)
 
 if (firstEnabledButton.isValid())
 {
-    DBG("First enabled button: " << firstEnabledButton.getProperty("text").toString());
+    YUP_DBG("First enabled button: " << firstEnabledButton.getProperty("text").toString());
 }
 ```
 
@@ -316,7 +316,7 @@ if (firstButton.isValid())
     auto siblings = DataTreeQuery::from(firstButton)
         .siblings()
         .nodes();
-    DBG("Button has " << siblings.size() << " siblings");
+    YUP_DBG("Button has " << siblings.size() << " siblings");
 }
 ```
 
@@ -377,7 +377,7 @@ auto buttonTexts = DataTreeQuery::from(appRoot)
 
 for (const String& text : buttonTexts)
 {
-    DBG("Button text: " << text);
+    YUP_DBG("Button text: " << text);
 }
 
 // Extract multiple properties from windows
@@ -397,7 +397,7 @@ auto buttonInfo = DataTreeQuery::from(appRoot)
 
 for (const String& info : buttonInfo)
 {
-    DBG("Button info: " << info);
+    YUP_DBG("Button info: " << info);
 }
 ```
 
@@ -588,7 +588,7 @@ auto buttonsByState = DataTreeQuery::from(appRoot)
 
 for (const auto& [state, buttons] : buttonsByState)
 {
-    DBG(state.toString() << ": " << buttons.size() << " buttons");
+    YUP_DBG(state.toString() << ": " << buttons.size() << " buttons");
 }
 
 // Group panels by width ranges
@@ -695,18 +695,18 @@ However, there are still important validation patterns to follow:
 auto result = DataTreeQuery::xpath(appRoot, "//Invalid[Syntax");
 if (result.empty())
 {
-    DBG("Query returned no results (possibly due to syntax error)");
+    YUP_DBG("Query returned no results (possibly due to syntax error)");
 }
 
 // Check for valid results
 auto buttons = DataTreeQuery::from(appRoot).descendants("Button").nodes();
 if (buttons.empty())
 {
-    DBG("No buttons found");
+    YUP_DBG("No buttons found");
 }
 else
 {
-    DBG("Found " << buttons.size() << " buttons");
+    YUP_DBG("Found " << buttons.size() << " buttons");
 }
 
 // Safe property access
@@ -763,7 +763,7 @@ String schemaJson = R"({
                 "version": {
                     "type": "string",
                     "required": true,
-                    "default": "1.0.0",
+                    "default": "1.2.3",
                     "pattern": "^\\d+\\.\\d+\\.\\d+$"
                 },
                 "theme": {
@@ -811,7 +811,7 @@ String schemaJson = R"({
 auto schema = DataTreeSchema::fromJsonSchemaString(schemaJson);
 if (!schema)
 {
-    DBG("Failed to load schema");
+    YUP_DBG("Failed to load schema");
     return;
 }
 ```
@@ -821,7 +821,7 @@ if (!schema)
 ```cpp
 // Create nodes with defaults applied automatically
 auto appSettings = schema->createNode("AppSettings");
-// appSettings now has version="1.0.0", theme="light", fontSize=12
+// appSettings now has version="1.2.3", theme="light", fontSize=12
 
 // Create valid child nodes
 auto serverConfig = schema->createChildNode("AppSettings", "ServerConfig");
@@ -829,14 +829,14 @@ auto serverConfig = schema->createChildNode("AppSettings", "ServerConfig");
 
 // Query schema metadata
 auto themeInfo = schema->getPropertyInfo("AppSettings", "theme");
-DBG("Theme type: " << themeInfo.type);
-DBG("Default theme: " << themeInfo.defaultValue.toString());
-DBG("Allowed values: " << themeInfo.enumValues.size());
+YUP_DBG("Theme type: " << themeInfo.type);
+YUP_DBG("Default theme: " << themeInfo.defaultValue.toString());
+YUP_DBG("Allowed values: " << themeInfo.enumValues.size());
 
 // Check node type capabilities
 auto childConstraints = schema->getChildConstraints("AppSettings");
-DBG("Max children: " << childConstraints.maxCount);
-DBG("Allowed child types: " << childConstraints.allowedTypes.size());
+YUP_DBG("Max children: " << childConstraints.maxCount);
+YUP_DBG("Allowed child types: " << childConstraints.allowedTypes.size());
 ```
 
 ### Validated Transactions
@@ -879,12 +879,12 @@ if (childResult.wasOk())
 auto validationResult = schema->validate(appSettings);
 if (validationResult.failed())
 {
-    DBG("Validation failed: " << validationResult.getErrorMessage());
+    YUP_DBG("Validation failed: " << validationResult.getErrorMessage());
     // Handle validation errors
 }
 else
 {
-    DBG("Tree structure is valid");
+    YUP_DBG("Tree structure is valid");
     // Safe to proceed with application logic
 }
 ```
@@ -911,13 +911,13 @@ public:
     {
         // Reading from CachedValue is fast (cached)
         String currentTheme = theme.get();
-        DBG("Current theme: " << currentTheme);
+        YUP_DBG("Current theme: " << currentTheme);
 
         // Setting triggers cache invalidation and change notifications
         theme.set("dark");
 
         // Next read will be from cache again
-        DBG("New theme: " << theme.get());
+        YUP_DBG("New theme: " << theme.get());
     }
 
     void updateFontSize(int newSize)
@@ -999,12 +999,12 @@ public:
         , x(tree, "x", 0.0f)
         , y(tree, "y", 0.0f)
     {
-        DBG("Created component: " << getName());
+        YUP_DBG("Created component: " << getName());
     }
 
     ~UIComponent()
     {
-        DBG("Destroyed component: " << getName());
+        YUP_DBG("Destroyed component: " << getName());
     }
 
     // Getters using CachedValue
@@ -1068,19 +1068,19 @@ protected:
     // Optional: receive notifications
     void newObjectAdded(UIComponent* object) override
     {
-        DBG("UI Component added: " << object->getName());
+        YUP_DBG("UI Component added: " << object->getName());
         // Update UI, register callbacks, etc.
     }
 
     void objectRemoved(UIComponent* object) override
     {
-        DBG("UI Component removed: " << object->getName());
+        YUP_DBG("UI Component removed: " << object->getName());
         // Clean up UI, unregister callbacks, etc.
     }
 
     void objectOrderChanged() override
     {
-        DBG("UI Component order changed");
+        YUP_DBG("UI Component order changed");
         // Update rendering order, etc.
     }
 };

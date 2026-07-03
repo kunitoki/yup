@@ -77,6 +77,9 @@ function (yup_standalone_app)
         return()
     endif()
 
+    # ==== Check for modules circular dependencies
+    _yup_module_check_circular_dependencies ("${target_name} standalone application" "${YUP_ARG_MODULES}")
+
     # ==== Find modules includes
     set (module_include_dirs "")
     foreach (module IN ITEMS ${YUP_ARG_MODULES})
@@ -181,7 +184,7 @@ function (yup_standalone_app)
         endif()
 
         _yup_set_default (YUP_ARG_CUSTOM_SHELL "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/${YUP_PLATFORM}/shell.html")
-        _yup_set_default (YUP_ARG_INITIAL_MEMORY 33554432) # 32mb
+        _yup_set_default (YUP_ARG_INITIAL_MEMORY 65536000) # 64mb
         _yup_set_default (YUP_ARG_PTHREAD_POOL_SIZE 8)
         _yup_set_default (YUP_ARG_STACK_SIZE 2097152) # 2mb
 

@@ -436,8 +436,10 @@ public:
 
             const auto scoped = ScopedValueSetter<bool> (hostTriggeredResizing, true);
 
-            setSize ({ static_cast<float> (rect.getWidth()),
-                       static_cast<float> (rect.getHeight()) });
+            setBounds ({ static_cast<float> (rect.left),
+                         static_cast<float> (rect.top),
+                         static_cast<float> (rect.getWidth()),
+                         static_cast<float> (rect.getHeight()) });
         }
 
         return kResultTrue;
@@ -1086,7 +1088,7 @@ private:
         }
     }
 
-    void audioProcessorChanged (AudioProcessor* processor, const AudioProcessor::ChangeDetails& details) override
+    void audioProcessorChanged (AudioProcessorBase* processor, const AudioProcessor::ChangeDetails& details) override
     {
         ignoreUnused (processor);
 
@@ -1619,10 +1621,12 @@ private:
     bool isBypassed = false;
 };
 
-#if YupPlugin_IsSynth
-const auto YupPlugin_Category = Vst::PlugType::kInstrumentSynth;
+#ifdef YupPlugin_VST3_Categories
+constexpr auto YupPlugin_Category = YupPlugin_VST3_Categories;
+#elif YupPlugin_IsSynth
+constexpr auto YupPlugin_Category = Vst::PlugType::kInstrumentSynth;
 #else
-const auto YupPlugin_Category = Vst::PlugType::kFx;
+constexpr auto YupPlugin_Category = Vst::PlugType::kFx;
 #endif
 
 } // namespace yup
