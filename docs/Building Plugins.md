@@ -172,7 +172,10 @@ cmake --build build --config Release
 
 ### macOS
 - VST3: `~/Library/Audio/Plug-Ins/VST3/`
+- AU: `~/Library/Audio/Plug-Ins/Components/`
+- AUv3: `~/Library/Audio/Plug-Ins/AppExtensions/`
 - CLAP: `~/Library/Audio/Plug-Ins/CLAP/`
+- AAX: `~/Application Support/Avid/Audio/Plug-Ins/`
 
 ### Windows
 - VST3: `C:\Program Files\Common Files\VST3\`

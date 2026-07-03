@@ -252,18 +252,71 @@ function (_yup_audio_plugin_create_lv2)
     set (lv2_binary_suffix "${CMAKE_SHARED_LIBRARY_SUFFIX}")
     set (lv2_binary_name "${target_name}_lv2_plugin${lv2_binary_suffix}")
 
-    # Generate manifest.ttl for the LV2 bundle
+    # TTL output paths — files are written at build time by the generator
     set (lv2_manifest_dir "${CMAKE_CURRENT_BINARY_DIR}/lv2_manifests")
-    file (MAKE_DIRECTORY "${lv2_manifest_dir}")
-    set (lv2_manifest_file "${lv2_manifest_dir}/${target_name}_manifest.ttl")
+    set (lv2_manifest_file "${lv2_manifest_dir}/manifest.ttl")
+    set (lv2_plugin_ttl_name "${target_name}_plugin.ttl")
+    set (lv2_plugin_ttl_file "${lv2_manifest_dir}/${lv2_plugin_ttl_name}")
 
-    file (WRITE "${lv2_manifest_file}" "@prefix lv2: <http://lv2plug.in/ns/lv2core#> .
-@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    # is-synth flag for the generator command
+    if (YUP_ARG_PLUGIN_IS_SYNTH)
+        set (lv2_is_synth_arg "ON")
+    else()
+        set (lv2_is_synth_arg "OFF")
+    endif()
 
-<${lv2_uri}>
-    a lv2:Plugin ;
-    lv2:binary <${lv2_binary_name}> .
-")
+    # ==== Build the TTL generator executable
+    get_target_property (lv2_plugin_client_path yup_audio_plugin_client YUP_MODULE_PATH)
+    get_target_property (lv2_plugin_client_includes yup_audio_plugin_client YUP_MODULE_INCLUDE_PATHS)
+
+    add_executable (${target_name}_lv2_ttl_generator
+        "${lv2_plugin_client_path}/tools/yup_lv2_ttl_generator.cpp")
+
+    target_compile_features (${target_name}_lv2_ttl_generator PRIVATE cxx_std_20)
+
+    target_include_directories (${target_name}_lv2_ttl_generator PRIVATE
+        ${lv2_plugin_client_includes})
+
+    if (YUP_ARG_PLUGIN_IS_SYNTH)
+        set (lv2_ttl_gen_synth_define YupPlugin_IsSynth=1)
+    else()
+        set (lv2_ttl_gen_synth_define YupPlugin_IsSynth=0)
+    endif()
+
+    if (YUP_ARG_PLUGIN_IS_MONO)
+        set (lv2_ttl_gen_mono_define YupPlugin_IsMono=1)
+    else()
+        set (lv2_ttl_gen_mono_define YupPlugin_IsMono=0)
+    endif()
+
+    target_compile_definitions (${target_name}_lv2_ttl_generator PRIVATE
+        $<IF:$<CONFIG:Debug>,DEBUG=1,NDEBUG=1>
+        YUP_STANDALONE_APPLICATION=0
+        YUP_GLOBAL_MODULE_SETTINGS_INCLUDED=1
+        YupPlugin_Id="${YUP_ARG_PLUGIN_ID}"
+        YupPlugin_Name="${YUP_ARG_PLUGIN_NAME}"
+        YupPlugin_Version="${YUP_ARG_PLUGIN_VERSION}"
+        YupPlugin_Vendor="${YUP_ARG_PLUGIN_VENDOR}"
+        YupPlugin_Description="${YUP_ARG_PLUGIN_DESCRIPTION}"
+        YupPlugin_URL="${YUP_ARG_PLUGIN_URL}"
+        YupPlugin_Email="${YUP_ARG_PLUGIN_EMAIL}"
+        ${lv2_ttl_gen_synth_define}
+        ${lv2_ttl_gen_mono_define})
+
+    target_link_libraries (${target_name}_lv2_ttl_generator PRIVATE
+        ${target_name}_shared
+        sdl2::sdl2
+        ${additional_libraries}
+        ${target_modules})
+
+    _yup_module_apply_arc_to_target_sources (${target_name}_lv2_ttl_generator
+        ${target_name}_shared
+        ${additional_libraries}
+        ${target_modules})
+
+    set_target_properties (${target_name}_lv2_ttl_generator PROPERTIES
+        FOLDER "${target_ide_group}"
+        XCODE_GENERATE_SCHEME OFF)
 
     # Create LV2 plugin target
     _yup_message (STATUS "Creating LV2 plugin target")
@@ -317,9 +370,30 @@ function (_yup_audio_plugin_create_lv2)
     #    ${target_name}_lv2_plugin
     #    "$<TARGET_BUNDLE_DIR:${target_name}_au_plugin>")
 
+    # Ensure the generator is built before the plugin so the POST_BUILD step can run it
+    add_dependencies (${target_name}_lv2_plugin ${target_name}_lv2_ttl_generator)
+
+    # Run the TTL generator after every plugin build to keep the bundle description current
+    add_custom_command (TARGET ${target_name}_lv2_plugin POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${lv2_manifest_dir}"
+        COMMAND "$<TARGET_FILE:${target_name}_lv2_ttl_generator>"
+            "--uri"          "${lv2_uri}"
+            "--name"         "${YUP_ARG_PLUGIN_NAME}"
+            "--vendor"       "${YUP_ARG_PLUGIN_VENDOR}"
+            "--version"      "${YUP_ARG_PLUGIN_VERSION}"
+            "--description"  "${YUP_ARG_PLUGIN_DESCRIPTION}"
+            "--output-dir"   "${lv2_manifest_dir}"
+            "--binary-name"  "${lv2_binary_name}"
+            "--ttl-name"     "${lv2_plugin_ttl_name}"
+            "--is-synth"     "${lv2_is_synth_arg}"
+        COMMENT "Generating LV2 TTL files for ${target_name}"
+        VERBATIM)
+
     if (YUP_ARG_PLUGIN_COPY_AFTER_BUILD)
         yup_audio_plugin_copy_bundle (${target_name} lv2
-            LV2_BINARY_NAME "${lv2_binary_name}"
-            LV2_MANIFEST_FILE "${lv2_manifest_file}")
+            LV2_BINARY_NAME    "${lv2_binary_name}"
+            LV2_MANIFEST_FILE  "${lv2_manifest_file}"
+            LV2_PLUGIN_TTL_FILE "${lv2_plugin_ttl_file}"
+            LV2_PLUGIN_TTL_NAME "${lv2_plugin_ttl_name}")
     endif()
 endfunction()

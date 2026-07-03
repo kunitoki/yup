@@ -212,7 +212,7 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
     endif()
 
     # Parse optional LV2 arguments
-    cmake_parse_arguments (ARG "" "LV2_BINARY_NAME;LV2_MANIFEST_FILE" "" ${ARGN})
+    cmake_parse_arguments (ARG "" "LV2_BINARY_NAME;LV2_MANIFEST_FILE;LV2_PLUGIN_TTL_FILE;LV2_PLUGIN_TTL_NAME" "" ${ARGN})
 
     string (TOUPPER "${plugin_type}" plugin_type_upper)
     set (dependency_target ${target_name}_${plugin_type}_plugin)
@@ -278,7 +278,7 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
             COMMENT "Copying AAX plugin ${plugin_type_upper} to ${plugin_path}"
             VERBATIM)
     elseif ("${plugin_type}" STREQUAL "lv2")
-        # LV2 bundles are directories containing the plugin binary and manifest.ttl
+        # LV2 bundles are directories containing the plugin binary, manifest.ttl and plugin.ttl
         set (lv2_binary_in_bundle "${plugin_path}/${ARG_LV2_BINARY_NAME}")
 
         add_custom_command(TARGET ${dependency_target} POST_BUILD
@@ -286,6 +286,7 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
             COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_path}"
             COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:${dependency_target}>" "${lv2_binary_in_bundle}"
             COMMAND ${CMAKE_COMMAND} -E copy "${ARG_LV2_MANIFEST_FILE}" "${plugin_path}/manifest.ttl"
+            COMMAND ${CMAKE_COMMAND} -E copy "${ARG_LV2_PLUGIN_TTL_FILE}" "${plugin_path}/${ARG_LV2_PLUGIN_TTL_NAME}"
             COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_target_path}/.DS_Store"
             COMMENT "Creating LV2 bundle at ${plugin_path}"
             VERBATIM)
