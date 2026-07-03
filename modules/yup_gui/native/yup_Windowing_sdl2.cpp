@@ -1289,7 +1289,7 @@ void SDL2ComponentNative::handleMoved (int xpos, int ypos)
 #if YUP_MAC
         auto nativeWindowPos = getNativeWindowPosition (parentWindow);
 #else
-        auto nativeWindowPos = Point<int> (0, 0);
+        auto nativeWindowPos = Rectangle<int> (0, 0, 1, 1);
 #endif
 
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: parent window position sync after move: " << nativeWindowPos.toString());
@@ -1324,7 +1324,7 @@ void SDL2ComponentNative::handleResized (int width, int height)
 #if YUP_MAC
         auto nativeWindowPos = getNativeWindowPosition (parentWindow);
 #else
-        auto nativeWindowPos = Point<int> (0, 0);
+        auto nativeWindowPos = Rectangle<int> (0, 0, 1, 1);
 #endif
 
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: parent window position sync after resize: " << nativeWindowPos.toString());

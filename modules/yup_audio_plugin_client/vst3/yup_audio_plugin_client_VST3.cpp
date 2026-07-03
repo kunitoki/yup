@@ -436,8 +436,10 @@ public:
 
             const auto scoped = ScopedValueSetter<bool> (hostTriggeredResizing, true);
 
-            setSize ({ static_cast<float> (rect.getWidth()),
-                       static_cast<float> (rect.getHeight()) });
+            setBounds ({ static_cast<float> (rect.left),
+                         static_cast<float> (rect.top),
+                         static_cast<float> (rect.getWidth()),
+                         static_cast<float> (rect.getHeight()) });
         }
 
         return kResultTrue;
