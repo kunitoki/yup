@@ -7,41 +7,24 @@
 	<key>CFBundleExecutable</key>
 	<string>${MACOSX_BUNDLE_EXECUTABLE_NAME}</string>
 	<key>CFBundleIdentifier</key>
-	<string>${MACOSX_BUNDLE_GUI_IDENTIFIER}</string>
+	<string>@auv3_container_bundle_identifier@</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>@PLUGIN_AU_NAME@</string>
 	<key>CFBundlePackageType</key>
-	<string>BNDL</string>
+	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>@PLUGIN_AU_VERSION@</string>
 	<key>CFBundleVersion</key>
 	<string>@PLUGIN_AU_VERSION@</string>
-	<key>CFBundleSignature</key>
-	<string>@PLUGIN_AU_MANUFACTURER@</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright (c) 2026 - kunitoki@gmail.com</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
-	<key>AudioComponents</key>
-	<array>
-		<dict>
-			<key>type</key>
-			<string>@PLUGIN_AU_TYPE@</string>
-			<key>subtype</key>
-			<string>@PLUGIN_AU_SUBTYPE@</string>
-			<key>manufacturer</key>
-			<string>@PLUGIN_AU_MANUFACTURER@</string>
-			<key>name</key>
-			<string>@PLUGIN_AU_NAME@</string>
-			<key>version</key>
-			<integer>1</integer>
-			<key>factoryFunction</key>
-			<string>AudioPluginProcessorAUFactory</string>
-			<key>sandboxSafe</key>
-			@PLUGIN_AU_SANDBOX_SAFE@
-		</dict>
-	</array>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>LSUIElement</key>
+	<true/>
 </dict>
 </plist>

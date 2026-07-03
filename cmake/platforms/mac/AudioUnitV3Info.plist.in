@@ -13,7 +13,7 @@
 	<key>CFBundleName</key>
 	<string>@PLUGIN_AU_NAME@</string>
 	<key>CFBundlePackageType</key>
-	<string>BNDL</string>
+	<string>XPC!</string>
 	<key>CFBundleShortVersionString</key>
 	<string>@PLUGIN_AU_VERSION@</string>
 	<key>CFBundleVersion</key>
@@ -24,24 +24,38 @@
 	<string>Copyright (c) 2026 - kunitoki@gmail.com</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
-	<key>AudioComponents</key>
-	<array>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionPrincipalClass</key>
+		<string>YUPAUv3ViewController</string>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.AudioUnit-UI</string>
+		<key>NSExtensionAttributes</key>
 		<dict>
-			<key>type</key>
-			<string>@PLUGIN_AU_TYPE@</string>
-			<key>subtype</key>
-			<string>@PLUGIN_AU_SUBTYPE@</string>
-			<key>manufacturer</key>
-			<string>@PLUGIN_AU_MANUFACTURER@</string>
-			<key>name</key>
-			<string>@PLUGIN_AU_NAME@</string>
-			<key>version</key>
-			<integer>1</integer>
-			<key>factoryFunction</key>
-			<string>AudioPluginProcessorAUFactory</string>
-			<key>sandboxSafe</key>
-			@PLUGIN_AU_SANDBOX_SAFE@
+			<key>NSExtensionServiceRoleType</key>
+			<string>NSExtensionServiceRoleTypeEditor</string>
+			<key>AudioComponents</key>
+			<array>
+				<dict>
+					<key>type</key>
+					<string>@PLUGIN_AU_TYPE@</string>
+					<key>subtype</key>
+					<string>@PLUGIN_AU_SUBTYPE@</string>
+					<key>manufacturer</key>
+					<string>@PLUGIN_AU_MANUFACTURER@</string>
+					<key>name</key>
+					<string>@PLUGIN_AU_NAME@</string>
+					<key>version</key>
+					<integer>1</integer>
+					<key>sandboxSafe</key>
+					@PLUGIN_AU_SANDBOX_SAFE@
+					<key>tags</key>
+					<array>
+						<string>@PLUGIN_AU_TAG@</string>
+					</array>
+				</dict>
+			</array>
 		</dict>
-	</array>
+	</dict>
 </dict>
 </plist>

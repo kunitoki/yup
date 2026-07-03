@@ -51,6 +51,14 @@
 #define YUP_ENABLE_PLUGIN_CLIENT_AU_LOGGING 0
 #endif
 
+/** Config: YUP_ENABLE_PLUGIN_CLIENT_AUV3_LOGGING
+
+    Enable debug logging for AUv3 plugin client.
+*/
+#ifndef YUP_ENABLE_PLUGIN_CLIENT_AUV3_LOGGING
+#define YUP_ENABLE_PLUGIN_CLIENT_AUV3_LOGGING 0
+#endif
+
 /** Config: YUP_ENABLE_PLUGIN_CLIENT_CLAP_LOGGING
 
     Enable debug logging for CLAP plugin client.
@@ -65,6 +73,22 @@
 */
 #ifndef YUP_ENABLE_PLUGIN_CLIENT_VST3_LOGGING
 #define YUP_ENABLE_PLUGIN_CLIENT_VST3_LOGGING 0
+#endif
+
+/** Config: YUP_ENABLE_PLUGIN_CLIENT_AAX_LOGGING
+
+    Enable debug logging for AAX plugin client.
+*/
+#ifndef YUP_ENABLE_PLUGIN_CLIENT_AAX_LOGGING
+#define YUP_ENABLE_PLUGIN_CLIENT_AAX_LOGGING 0
+#endif
+
+/** Config: YUP_ENABLE_PLUGIN_CLIENT_LV2_LOGGING
+
+    Enable debug logging for LV2 plugin client.
+*/
+#ifndef YUP_ENABLE_PLUGIN_CLIENT_LV2_LOGGING
+#define YUP_ENABLE_PLUGIN_CLIENT_LV2_LOGGING 0
 #endif
 
 //==============================================================================

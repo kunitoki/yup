@@ -80,6 +80,14 @@ public:
             return copy;
         }
 
+        /** Returns a copy of these details with the program change flag set. */
+        ChangeDetails withProgramChanged (bool shouldBeProgramChanged) const noexcept
+        {
+            auto copy = *this;
+            copy.programChanged = shouldBeProgramChanged;
+            return copy;
+        }
+
         /** True when the processor latency may have changed. */
         bool latencyChanged = false;
 
@@ -94,6 +102,9 @@ public:
 
         /** True when non-parameter processor state may have changed. */
         bool nonParameterStateChanged = false;
+
+        /** True when the program/preset has changed. */
+        bool programChanged = false;
     };
 
     //==============================================================================

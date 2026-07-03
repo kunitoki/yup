@@ -19,17 +19,4 @@
   ==============================================================================
 */
 
-namespace yup
-{
-
-/** Identifies the native format of a plugin. */
-enum class AudioPluginFormatType
-{
-    vst3,
-    clap,
-    lv2,
-    audioUnit,
-    unknown
-};
-
-} // namespace yup
+#include "yup_audio_plugin_client_LV2.cpp"

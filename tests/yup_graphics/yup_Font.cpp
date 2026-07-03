@@ -41,6 +41,14 @@ File getValidFontFile()
             .getChildFile ("fonts")
             .getChildFile ("Linefont-VariableFont_wdth,wght.ttf");
 }
+
+MemoryBlock getValidFontData()
+{
+    MemoryBlock mb;
+    if (auto is = getValidFontFile().createInputStream(); is != nullptr && is->openedOk())
+        is->readIntoMemoryBlock (mb);
+    return mb;
+}
 } // namespace
 
 // ==============================================================================
@@ -164,6 +172,67 @@ TEST (FontTests, LoadFromFileWithValidFile)
 
     EXPECT_TRUE (result.wasOk());
     EXPECT_TRUE (result.getErrorMessage().isEmpty());
+}
+
+// ==============================================================================
+// Loading From Span Tests
+// ==============================================================================
+
+TEST (FontTests, LoadFromSpanWithEmptySpan)
+{
+    Font font;
+    Span<const uint8> emptySpan;
+
+    Result result = font.loadFromData (emptySpan);
+
+    EXPECT_FALSE (result.wasOk());
+    EXPECT_FALSE (result.getErrorMessage().isEmpty());
+}
+
+TEST (FontTests, LoadFromSpanWithValidData)
+{
+    Font font;
+    MemoryBlock mb = getValidFontData();
+    ASSERT_FALSE (mb.isEmpty());
+
+    Span<const uint8> span (static_cast<const uint8*> (mb.getData()), mb.getSize());
+    Result result = font.loadFromData (span);
+
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_TRUE (result.getErrorMessage().isEmpty());
+}
+
+TEST (FontTests, LoadFromSpanProducesValidFontMetrics)
+{
+    Font font;
+    MemoryBlock mb = getValidFontData();
+    ASSERT_FALSE (mb.isEmpty());
+
+    Span<const uint8> span (static_cast<const uint8*> (mb.getData()), mb.getSize());
+    font.loadFromData (span);
+
+    EXPECT_NE (0.0f, font.getAscent());
+    EXPECT_NE (0.0f, font.getDescent());
+    EXPECT_GT (font.getWeight(), 0);
+    EXPECT_EQ (2, font.getNumAxis());
+}
+
+TEST (FontTests, LoadFromSpanAndMemoryBlockProduceSameMetrics)
+{
+    MemoryBlock mb = getValidFontData();
+    ASSERT_FALSE (mb.isEmpty());
+
+    Font fontFromBlock;
+    fontFromBlock.loadFromData (mb);
+
+    Font fontFromSpan;
+    Span<const uint8> span (static_cast<const uint8*> (mb.getData()), mb.getSize());
+    fontFromSpan.loadFromData (span);
+
+    EXPECT_FLOAT_EQ (fontFromBlock.getAscent(), fontFromSpan.getAscent());
+    EXPECT_FLOAT_EQ (fontFromBlock.getDescent(), fontFromSpan.getDescent());
+    EXPECT_EQ (fontFromBlock.getWeight(), fontFromSpan.getWeight());
+    EXPECT_EQ (fontFromBlock.getNumAxis(), fontFromSpan.getNumAxis());
 }
 
 // ==============================================================================

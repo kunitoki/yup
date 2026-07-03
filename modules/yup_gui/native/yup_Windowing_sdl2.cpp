@@ -24,16 +24,7 @@ namespace yup
 
 //==============================================================================
 
-std::atomic_flag SDL2ComponentNative::isInitialised = ATOMIC_FLAG_INIT;
-int SDL2ComponentNative::mouseCaptureRequestCount = 0;
-uint32_t SDL2ComponentNative::lastCapturedMouseButtonState = 0;
-bool SDL2ComponentNative::popupDismissalCheckPending = false;
-
-//==============================================================================
-
 static constexpr uint32 sdlDefaultSubsystems = SDL_INIT_VIDEO | SDL_INIT_EVENTS;
-
-//==============================================================================
 
 static String getSDLVersionString (const SDL_version& version)
 {
@@ -41,6 +32,15 @@ static String getSDLVersionString (const SDL_version& version)
          + String (static_cast<int> (version.minor)) + "."
          + String (static_cast<int> (version.patch));
 }
+
+//==============================================================================
+
+std::atomic_flag SDL2ComponentNative::isInitialised = ATOMIC_FLAG_INIT;
+int SDL2ComponentNative::mouseCaptureRequestCount = 0;
+uint32_t SDL2ComponentNative::lastCapturedMouseButtonState = 0;
+bool SDL2ComponentNative::popupDismissalCheckPending = false;
+
+//==============================================================================
 
 SDL2ComponentNative::SDL2ComponentNative (Component& component,
                                           const Options& options,
@@ -105,10 +105,10 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
         if (! childWindowClassRegistered)
         {
             WNDCLASSEXW wc = {};
-            wc.cbSize        = sizeof (WNDCLASSEXW);
-            wc.lpfnWndProc   = DefWindowProcW;
-            wc.hInstance     = GetModuleHandleW (nullptr);
-            wc.hCursor       = LoadCursorW (nullptr, IDC_ARROW);
+            wc.cbSize = sizeof (WNDCLASSEXW);
+            wc.lpfnWndProc = DefWindowProcW;
+            wc.hInstance = GetModuleHandleW (nullptr);
+            wc.hCursor = LoadCursorW (nullptr, IDC_ARROW);
             wc.lpszClassName = childWindowClass;
             childWindowClassRegistered = RegisterClassExW (&wc) != 0;
         }
@@ -125,7 +125,8 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
                                           childWindowClass,
                                           component.getTitle().toWideCharPointer(),
                                           style,
-                                          0, 0,
+                                          0,
+                                          0,
                                           jmax (1, screenBounds.getWidth()),
                                           jmax (1, screenBounds.getHeight()),
                                           reinterpret_cast<HWND> (parent),
@@ -1285,16 +1286,22 @@ void SDL2ComponentNative::handleMoved (int xpos, int ypos)
     {
         auto preventBoundsChange = ScopedValueSetter<bool> (internalBoundsChange, true);
 
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: parent window position sync after move: resetting to parent-relative (0, 0)");
-        setPosition ({ 0, 0 });
-        component.internalMoved (0, 0);
-    }
-    else
-    {
-        component.internalMoved (xpos, ypos);
+#if YUP_MAC
+        auto nativeWindowPos = getNativeWindowPosition (parentWindow);
+#else
+        auto nativeWindowPos = Rectangle<int> (0, 0, 1, 1);
+#endif
 
-        screenBounds = screenBounds.withPosition (xpos, ypos);
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: parent window position sync after move: " << nativeWindowPos.toString());
+        setPosition (nativeWindowPos.getTopLeft());
+
+        xpos = nativeWindowPos.getX();
+        ypos = nativeWindowPos.getY();
     }
+
+    component.internalMoved (xpos, ypos);
+
+    screenBounds = screenBounds.withPosition (xpos, ypos);
 }
 
 void SDL2ComponentNative::handleResized (int width, int height)
@@ -1314,8 +1321,14 @@ void SDL2ComponentNative::handleResized (int width, int height)
     {
         auto preventBoundsChange = ScopedValueSetter<bool> (internalBoundsChange, true);
 
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: parent window position sync after resize: resetting to parent-relative (0, 0)");
-        setPosition ({ 0, 0 });
+#if YUP_MAC
+        auto nativeWindowPos = getNativeWindowPosition (parentWindow);
+#else
+        auto nativeWindowPos = Rectangle<int> (0, 0, 1, 1);
+#endif
+
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: parent window position sync after resize: " << nativeWindowPos.toString());
+        setPosition (nativeWindowPos.getTopLeft());
     }
 
     if (dynamic_cast<PopupMenu*> (&component) == nullptr)

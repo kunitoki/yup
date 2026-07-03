@@ -79,115 +79,6 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_fetch_apple_ausdk)
-    if (NOT TARGET base-sdk-auv2)
-        if (NOT AUDIOUNIT_SDK_ROOT)
-            _yup_message (STATUS "Fetching Apple AudioUnitSDK")
-            _yup_fetchcontent_declare (AudioUnitSDK
-                GIT_REPOSITORY https://github.com/apple/AudioUnitSDK.git
-                GIT_TAG        AudioUnitSDK-1.1.0)
-            FetchContent_MakeAvailable (AudioUnitSDK)
-            set (AUDIOUNIT_SDK_ROOT "${audiounitsdk_SOURCE_DIR}")
-        endif()
-
-        set (AUSDK_SRC "${AUDIOUNIT_SDK_ROOT}/src/AudioUnitSDK")
-
-        add_library (base-sdk-auv2 STATIC
-            "${AUSDK_SRC}/AUBase.cpp"
-            "${AUSDK_SRC}/AUBuffer.cpp"
-            "${AUSDK_SRC}/AUBufferAllocator.cpp"
-            "${AUSDK_SRC}/AUEffectBase.cpp"
-            "${AUSDK_SRC}/AUInputElement.cpp"
-            "${AUSDK_SRC}/AUMIDIBase.cpp"
-            "${AUSDK_SRC}/AUMIDIEffectBase.cpp"
-            "${AUSDK_SRC}/AUOutputElement.cpp"
-            "${AUSDK_SRC}/AUPlugInDispatch.cpp"
-            "${AUSDK_SRC}/AUScopeElement.cpp"
-            "${AUSDK_SRC}/ComponentBase.cpp"
-            "${AUSDK_SRC}/MusicDeviceBase.cpp")
-
-        target_include_directories (base-sdk-auv2 PUBLIC "${AUDIOUNIT_SDK_ROOT}/include")
-        target_compile_features (base-sdk-auv2 PUBLIC cxx_std_17)
-        target_compile_options (base-sdk-auv2 PRIVATE -Wno-deprecated-declarations)
-
-        set_target_properties (base-sdk-auv2 PROPERTIES
-            POSITION_INDEPENDENT_CODE ON
-            FOLDER "Thirdparty")
-    endif()
-endfunction()
-
-#==============================================================================
-
-function (_yup_fetch_clap)
-    if (NOT TARGET clap)
-        _yup_message (STATUS "Fetching CLAP SDK")
-        _yup_fetchcontent_declare (clap
-            GIT_REPOSITORY https://github.com/free-audio/clap.git
-            GIT_TAG main)
-
-        FetchContent_MakeAvailable (clap)
-    endif()
-
-    if (TARGET clap-tests)
-        set_target_properties (clap-tests PROPERTIES FOLDER "Tests")
-    endif()
-endfunction()
-
-#==============================================================================
-
-function (_yup_fetch_vst3sdk)
-    if (NOT TARGET sdk)
-        _yup_message (STATUS "Fetching VST3 SDK")
-
-        set (SMTG_CREATE_MODULE_INFO OFF)
-        set (SMTG_ADD_VST3_UTILITIES OFF)
-        set (SMTG_ENABLE_VST3_HOSTING_EXAMPLES OFF)
-        set (SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF)
-        set (SMTG_ENABLE_VSTGUI_SUPPORT OFF)
-        set (SMTG_CREATE_PLUGIN_LINK OFF)
-        if (NOT YUP_PLATFORM_MAC OR XCODE)
-            set (SMTG_RUN_VST_VALIDATOR ON)
-        else()
-            set (SMTG_RUN_VST_VALIDATOR OFF)
-        endif()
-
-        _yup_fetchcontent_declare (vst3sdk
-            GIT_REPOSITORY https://github.com/steinbergmedia/vst3sdk.git
-            GIT_TAG master)
-
-        FetchContent_MakeAvailable (vst3sdk)
-    endif()
-
-    if (NOT TARGET yup_audio_plugin_host_vst3sdk)
-        add_library (yup_audio_plugin_host_vst3sdk INTERFACE)
-        target_link_libraries (yup_audio_plugin_host_vst3sdk INTERFACE sdk)
-
-        set (vst3sdk_source_dir "")
-        if (DEFINED vst3sdk_SOURCE_DIR)
-            set (vst3sdk_source_dir "${vst3sdk_SOURCE_DIR}")
-        elseif (TARGET sdk)
-            get_target_property (vst3sdk_source_dir sdk SOURCE_DIR)
-        endif()
-
-        set (vst3sdk_memorystream_source "${vst3sdk_source_dir}/public.sdk/source/common/memorystream.cpp")
-        if (vst3sdk_source_dir AND EXISTS "${vst3sdk_memorystream_source}")
-            target_sources (yup_audio_plugin_host_vst3sdk INTERFACE "${vst3sdk_memorystream_source}")
-        endif()
-
-        set (vst3sdk_parameterchanges_source "${vst3sdk_source_dir}/public.sdk/source/vst/hosting/parameterchanges.cpp")
-        if (vst3sdk_source_dir AND EXISTS "${vst3sdk_parameterchanges_source}")
-            target_sources (yup_audio_plugin_host_vst3sdk INTERFACE "${vst3sdk_parameterchanges_source}")
-        endif()
-
-        set (vst3sdk_eventlist_source "${vst3sdk_source_dir}/public.sdk/source/vst/hosting/eventlist.cpp")
-        if (vst3sdk_source_dir AND EXISTS "${vst3sdk_eventlist_source}")
-            target_sources (yup_audio_plugin_host_vst3sdk INTERFACE "${vst3sdk_eventlist_source}")
-        endif()
-    endif()
-endfunction()
-
-#==============================================================================
-
 function (_yup_target_list_contains target_list target_name output_variable)
     foreach (target IN LISTS target_list)
         if ("${target}" STREQUAL "${target_name}" OR "${target}" STREQUAL "yup::${target_name}")
@@ -253,6 +144,12 @@ function (_yup_collect_audio_plugin_host_dependencies definitions output_variabl
     if (enable_vst3)
         _yup_fetch_vst3sdk()
         list (APPEND dependencies yup_audio_plugin_host_vst3sdk)
+    endif()
+
+    _yup_definitions_enable ("${definitions}" YUP_AUDIO_PLUGIN_HOST_ENABLE_LV2 enable_lv2)
+    if (enable_lv2)
+        _yup_fetch_lv2()
+        list (APPEND dependencies lv2-headers lilv-static)
     endif()
 
     _yup_definitions_enable ("${definitions}" YUP_AUDIO_PLUGIN_HOST_ENABLE_AU enable_au)

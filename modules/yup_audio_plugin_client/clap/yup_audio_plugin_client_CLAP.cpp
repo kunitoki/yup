@@ -21,6 +21,7 @@
 
 #include "../yup_audio_plugin_client.h"
 
+#include "../common/yup_AudioPluginEntryPoint.h"
 #include "../common/yup_AudioPluginUtilities.h"
 
 #if ! defined(YUP_AUDIO_PLUGIN_ENABLE_CLAP)
@@ -330,6 +331,9 @@ bool pluginSyncAudioToMain (AudioProcessor& audioProcessor)
 
 //==============================================================================
 
+#ifdef YupPlugin_CLAP_Features
+static const char* pluginFeatures[] = { YupPlugin_CLAP_Features nullptr };
+#else
 static const char* pluginFeatures[] = {
 #if YupPlugin_IsSynth
     CLAP_PLUGIN_FEATURE_INSTRUMENT,
@@ -344,6 +348,7 @@ static const char* pluginFeatures[] = {
 #endif
     nullptr
 };
+#endif
 
 static const clap_plugin_descriptor_t pluginDescriptor = {
     .clap_version = CLAP_VERSION_INIT,
@@ -1932,7 +1937,7 @@ static const void* clapGetFactory (const char* factoryId) noexcept
     return nullptr;
 }
 
-extern "C" const CLAP_EXPORT clap_plugin_entry_t clap_entry = {
+extern "C" YUP_PLUGIN_ENTRY_POINT const clap_plugin_entry_t clap_entry = {
     CLAP_VERSION_INIT,
     clapInit,
     clapDeinit,

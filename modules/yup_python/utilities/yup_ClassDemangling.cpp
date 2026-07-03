@@ -22,7 +22,7 @@
 #include "yup_ClassDemangling.h"
 
 #include <cstddef>
-#include <ciso646>
+#include <version>
 
 #if YUP_WINDOWS
 #include "yup_WindowsIncludes.h"

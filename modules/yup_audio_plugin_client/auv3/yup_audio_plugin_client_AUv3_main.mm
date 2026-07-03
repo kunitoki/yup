@@ -19,17 +19,9 @@
   ==============================================================================
 */
 
-namespace yup
-{
+#import <Cocoa/Cocoa.h>
 
-/** Identifies the native format of a plugin. */
-enum class AudioPluginFormatType
+int main (int argc, const char* argv[])
 {
-    vst3,
-    clap,
-    lv2,
-    audioUnit,
-    unknown
-};
-
-} // namespace yup
+    return NSApplicationMain (argc, argv);
+}

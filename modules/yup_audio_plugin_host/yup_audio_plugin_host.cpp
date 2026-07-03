@@ -97,5 +97,5 @@ using CLAPModuleHandle = void*;
 #import <CoreAudio/CoreAudio.h>
 #import <CoreMIDI/CoreMIDI.h>
 
-#include "native/yup_AudioPluginInstance_AUv2.mm"
+#include "native/yup_AudioPluginInstance_AU.mm"
 #endif

@@ -19,17 +19,14 @@
   ==============================================================================
 */
 
-namespace yup
-{
+#pragma once
 
-/** Identifies the native format of a plugin. */
-enum class AudioPluginFormatType
-{
-    vst3,
-    clap,
-    lv2,
-    audioUnit,
-    unknown
-};
+//==============================================================================
 
-} // namespace yup
+#if YUP_WINDOWS
+#define YUP_PLUGIN_ENTRY_POINT __declspec (dllexport)
+#elif YUP_CLANG || YUP_GCC
+#define YUP_PLUGIN_ENTRY_POINT __attribute__ ((visibility ("default")))
+#else
+#define YUP_PLUGIN_ENTRY_POINT
+#endif
