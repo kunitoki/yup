@@ -26,7 +26,7 @@
 
     ID:                 yup_audio_plugin_client
     vendor:             yup
-    version:            1.0.0
+    version:            2.0.0
     name:               YUP Audio Plugin Client
     description:        The essential set of basic YUP audio plugin clients.
     website:            https://github.com/kunitoki/yup

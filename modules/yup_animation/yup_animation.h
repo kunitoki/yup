@@ -26,7 +26,7 @@
 
     ID:                 yup_animation
     vendor:             yup
-    version:            1.0.0
+    version:            2.0.0
     name:               YUP Animation Classes
     description:        Lottie-compatible animation model with rendering and export.
     website:            https://github.com/kunitoki/yup

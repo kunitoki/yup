@@ -21,7 +21,7 @@ cmake_minimum_required(VERSION 3.31)
 
 # ==== Prepare target
 set (target_name example_plugin)
-set (target_version "1.0.0")
+set (target_version "2.0.0")
 
 project (${target_name} VERSION ${target_version})
 

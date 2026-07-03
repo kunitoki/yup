@@ -20,7 +20,7 @@
 cmake_minimum_required (VERSION 3.31)
 
 set (target_name example_audiograph)
-set (target_version "1.0.0")
+set (target_version "2.0.0")
 
 project (${target_name} VERSION ${target_version})
 

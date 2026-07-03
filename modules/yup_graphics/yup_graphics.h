@@ -26,7 +26,7 @@
 
     ID:                 yup_graphics
     vendor:             yup
-    version:            1.0.0
+    version:            2.0.0
     name:               YUP Graphics Classes
     description:        The essential set of basic YUP graphics classes.
     website:            https://github.com/kunitoki/yup

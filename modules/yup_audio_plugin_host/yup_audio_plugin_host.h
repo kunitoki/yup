@@ -26,7 +26,7 @@
 
     ID:                 yup_audio_plugin_host
     vendor:             yup
-    version:            1.0.0
+    version:            2.0.0
     name:               YUP Audio Plugin Host
     description:        In-process hosting of VST3, CLAP, LV2, and AU (v2 and v3) audio plugins.
     website:            https://github.com/kunitoki/yup

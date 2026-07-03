@@ -26,7 +26,7 @@
 
     ID:                   yup_audio_formats
     vendor:               yup
-    version:              1.0.0
+    version:              2.0.0
     name:                 YUP Audio Formats
     description:          Audio formats for the YUP library
     website:              https://github.com/kunitoki/yup

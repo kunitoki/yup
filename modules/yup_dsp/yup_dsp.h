@@ -26,7 +26,7 @@
 
     ID:                   yup_dsp
     vendor:               yup
-    version:              1.0.0
+    version:              2.0.0
     name:                 YUP DSP
     description:          The essential set of basic YUP DSP.
     website:              https://github.com/kunitoki/yup

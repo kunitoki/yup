@@ -314,7 +314,8 @@ Before suggesting code, verify:
 - [ ] Proper TDD and ensure tests cover new functionality
 - [ ] No memory leaks (prefer RAII/smart pointers)
 - [ ] Thread safety considerations if applicable
-- [ ] Documentation for public APIs
+- [ ] Documentation for public APIs or build system
+- [ ] Keep changes updated in @CHANGELOG.md
 
 ## Differences with JUCE
 
