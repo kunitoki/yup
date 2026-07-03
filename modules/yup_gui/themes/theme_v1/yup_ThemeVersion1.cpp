@@ -1805,7 +1805,7 @@ ApplicationTheme::Ptr createThemeVersion1()
 {
     ApplicationTheme::Ptr theme (new ApplicationTheme);
 
-#if ! YUP_EMBED_DEFAULT_THEME_TEXT_FONT
+#if YUP_EMBED_DEFAULT_THEME_TEXT_FONT
     {
         Font font;
         if (auto result = font.loadFromData (MemoryBlock (&RobotoFlexFont_data[0], RobotoFlexFont_size)); result.failed())
