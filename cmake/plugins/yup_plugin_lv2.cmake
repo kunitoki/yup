@@ -249,6 +249,15 @@ function (_yup_audio_plugin_create_lv2)
         set (lv2_uri "${target_app_namespace}/${target_name}")
     endif()
 
+    # LV2 URIs must be absolute IRIs. A bare reverse-domain ID (e.g. "org.yup.Foo")
+    # is a relative IRI in Turtle — lilv would resolve it against the bundle base URI,
+    # producing "file:///path/to/bundle/org.yup.Foo", which never matches the
+    # lv2_descriptor URI string in the binary. Prefix with "urn:" when no scheme is
+    # present to keep the manifest IRI and the C++ string identical.
+    if (NOT lv2_uri MATCHES "^[a-zA-Z][a-zA-Z0-9+.-]*:")
+        set (lv2_uri "urn:${lv2_uri}")
+    endif()
+
     set (lv2_binary_suffix "${CMAKE_SHARED_LIBRARY_SUFFIX}")
     set (lv2_binary_name "${target_name}_lv2_plugin${lv2_binary_suffix}")
 
