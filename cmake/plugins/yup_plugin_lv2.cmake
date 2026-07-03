@@ -249,7 +249,7 @@ function (_yup_audio_plugin_create_lv2)
         set (lv2_uri "${target_app_namespace}/${target_name}")
     endif()
 
-    set (lv2_binary_suffix "${CMAKE_SHARED_MODULE_SUFFIX}")
+    set (lv2_binary_suffix "${CMAKE_SHARED_LIBRARY_SUFFIX}")
     set (lv2_binary_name "${target_name}_lv2_plugin${lv2_binary_suffix}")
 
     # Generate manifest.ttl for the LV2 bundle
@@ -268,11 +268,7 @@ function (_yup_audio_plugin_create_lv2)
     # Create LV2 plugin target
     _yup_message (STATUS "Creating LV2 plugin target")
 
-    if (YUP_PLATFORM_MAC)
-        add_library (${target_name}_lv2_plugin MODULE)
-    else()
-        add_library (${target_name}_lv2_plugin SHARED)
-    endif()
+    add_library (${target_name}_lv2_plugin SHARED)
 
     target_compile_features (${target_name}_lv2_plugin PRIVATE cxx_std_20)
 
@@ -317,7 +313,13 @@ function (_yup_audio_plugin_create_lv2)
 
     yup_codesign_target (${target_name}_lv2_plugin "$<TARGET_FILE:${target_name}_lv2_plugin>")
 
-    yup_audio_plugin_copy_bundle (${target_name} lv2
-        LV2_BINARY_NAME "${lv2_binary_name}"
-        LV2_MANIFEST_FILE "${lv2_manifest_file}")
+    #yup_validate_pluginval (
+    #    ${target_name}_lv2_plugin
+    #    "$<TARGET_BUNDLE_DIR:${target_name}_au_plugin>")
+
+    if (YUP_ARG_PLUGIN_COPY_AFTER_BUILD)
+        yup_audio_plugin_copy_bundle (${target_name} lv2
+            LV2_BINARY_NAME "${lv2_binary_name}"
+            LV2_MANIFEST_FILE "${lv2_manifest_file}")
+    endif()
 endfunction()

@@ -212,12 +212,6 @@ function (_yup_audio_plugin_create_au)
         "${YUP_ARG_PLUGIN_CODESIGN_IDENTITY}"
         "${YUP_ARG_PLUGIN_HARDENED_RUNTIME}")
 
-    if (YUP_ARG_PLUGIN_COPY_AFTER_BUILD)
-        yup_audio_plugin_copy_bundle (${target_name} au)
-    endif()
-
-    set (au_pluginval_path "$ENV{HOME}/Library/Audio/Plug-Ins/Components/${target_name}_au_plugin.component")
-
     yup_validate_au_plugin (
         ${target_name}_au_plugin
         "${YUP_ARG_PLUGIN_NAME}"
@@ -227,5 +221,9 @@ function (_yup_audio_plugin_create_au)
 
     yup_validate_pluginval (
         ${target_name}_au_plugin
-        "${au_pluginval_path}")
+        "$<TARGET_BUNDLE_DIR:${target_name}_au_plugin>")
+
+    if (YUP_ARG_PLUGIN_COPY_AFTER_BUILD)
+        yup_audio_plugin_copy_bundle (${target_name} au)
+    endif()
 endfunction()

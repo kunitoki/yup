@@ -278,5 +278,4 @@ function (_yup_audio_plugin_create_aax)
     if (YUP_ARG_PLUGIN_COPY_AFTER_BUILD)
         yup_audio_plugin_copy_bundle (${target_name} aax)
     endif()
-
 endfunction()

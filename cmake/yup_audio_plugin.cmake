@@ -284,8 +284,9 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
         add_custom_command(TARGET ${dependency_target} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
             COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_path}"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:${dependency_target}>" "${lv2_binary_in_bundle}"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ARG_LV2_MANIFEST_FILE}" "${plugin_path}/manifest.ttl"
+            COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:${dependency_target}>" "${lv2_binary_in_bundle}"
+            COMMAND ${CMAKE_COMMAND} -E copy "${ARG_LV2_MANIFEST_FILE}" "${plugin_path}/manifest.ttl"
+            COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_target_path}/.DS_Store"
             COMMENT "Creating LV2 bundle at ${plugin_path}"
             VERBATIM)
     else()

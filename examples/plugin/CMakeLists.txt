@@ -73,6 +73,7 @@ yup_audio_plugin (
     PLUGIN_AAX_PLUGIN_ID_NATIVE YpSN
     PLUGIN_AAX_PLUGIN_ID_AUDIOSUITE YpSA
     PLUGIN_AAX_CATEGORY AAX_ePlugInCategory_Example
+    PLUGIN_COPY_AFTER_BUILD ON
     MODULES
         yup::yup_gui
         yup::yup_audio_processors)
