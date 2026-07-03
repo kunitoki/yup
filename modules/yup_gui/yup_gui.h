@@ -52,14 +52,24 @@
 #include <rive/rive.h>
 
 //==============================================================================
-/** Config: YUP_EMBED_DEFAULT_THEME_FONTS
+/** Config: YUP_EMBED_DEFAULT_THEME_TEXT_FONT
 
-    Select if the default theme fonts should be embedded in the binary. If set to 0, the
-    default theme fonts will be loaded from the system fonts. If set to 1, the default
-    theme fonts will be embedded in the binary. The default is 1.
+    Select if the default theme text fonts should be embedded in the binary. If set to 0, the
+    default theme text fonts will be loaded from the system fonts. If set to 1, the default
+    theme text fonts will be embedded in the binary. The default is 1.
 */
-#ifndef YUP_EMBED_DEFAULT_THEME_FONTS
-#define YUP_EMBED_DEFAULT_THEME_FONTS 1
+#ifndef YUP_EMBED_DEFAULT_THEME_TEXT_FONT
+#define YUP_EMBED_DEFAULT_THEME_TEXT_FONT 0
+#endif
+
+/** Config: YUP_EMBED_DEFAULT_THEME_ICON_FONT
+
+    Select if the default theme icon fonts should be embedded in the binary. If set to 0, the
+    default theme icon fonts will be loaded from the system fonts. If set to 1, the default
+    theme icon fonts will be embedded in the binary. The default is 1.
+*/
+#ifndef YUP_EMBED_DEFAULT_THEME_ICON_FONT
+#define YUP_EMBED_DEFAULT_THEME_ICON_FONT 1
 #endif
 
 //==============================================================================
@@ -88,6 +98,13 @@
 */
 #ifndef YUP_ENABLE_GUI_POPUPMENU_LOGGING
 #define YUP_ENABLE_GUI_POPUPMENU_LOGGING 0
+#endif
+
+//==============================================================================
+
+#if ! YUP_EMBED_DEFAULT_THEME_TEXT_FONT && YUP_EMSCRIPTEN
+#undef YUP_EMBED_DEFAULT_THEME_TEXT_FONT
+#define YUP_EMBED_DEFAULT_THEME_TEXT_FONT 1
 #endif
 
 //==============================================================================
