@@ -249,6 +249,22 @@ function (_yup_audio_plugin_create_lv2)
         set (lv2_uri "${target_app_namespace}/${target_name}")
     endif()
 
+    set (lv2_binary_suffix "${CMAKE_SHARED_MODULE_SUFFIX}")
+    set (lv2_binary_name "${target_name}_lv2_plugin${lv2_binary_suffix}")
+
+    # Generate manifest.ttl for the LV2 bundle
+    set (lv2_manifest_dir "${CMAKE_CURRENT_BINARY_DIR}/lv2_manifests")
+    file (MAKE_DIRECTORY "${lv2_manifest_dir}")
+    set (lv2_manifest_file "${lv2_manifest_dir}/${target_name}_manifest.ttl")
+
+    file (WRITE "${lv2_manifest_file}" "@prefix lv2: <http://lv2plug.in/ns/lv2core#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<${lv2_uri}>
+    a lv2:Plugin ;
+    lv2:binary <${lv2_binary_name}> .
+")
+
     # Create LV2 plugin target
     _yup_message (STATUS "Creating LV2 plugin target")
 
@@ -295,11 +311,13 @@ function (_yup_audio_plugin_create_lv2)
         OBJCXX_VISIBILITY_PRESET default
         VISIBILITY_INLINES_HIDDEN ON
         PREFIX ""
-        SUFFIX ".lv2"
+        SUFFIX "${lv2_binary_suffix}"
         FOLDER "${target_ide_group}"
         XCODE_GENERATE_SCHEME ON)
 
     yup_codesign_target (${target_name}_lv2_plugin "$<TARGET_FILE:${target_name}_lv2_plugin>")
 
-    yup_audio_plugin_copy_bundle (${target_name} lv2)
+    yup_audio_plugin_copy_bundle (${target_name} lv2
+        LV2_BINARY_NAME "${lv2_binary_name}"
+        LV2_MANIFEST_FILE "${lv2_manifest_file}")
 endfunction()

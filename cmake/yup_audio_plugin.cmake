@@ -168,15 +168,9 @@ function (yup_audio_plugin)
     # ==== Build LV2 plugin target
     if (YUP_ARG_PLUGIN_CREATE_LV2)
         _yup_audio_plugin_create_lv2 (
-            "${target_name}"
-            "${target_version}"
-            "${target_ide_group}"
-            "${target_bundle_id}"
-            "${target_app_namespace}"
-            "${target_cxx_standard}"
-            "${additional_libraries}"
-            "${YUP_ARG_MODULES}"
-            "${YUP_ARG_UNPARSED_ARGUMENTS}")
+            TARGET_BUNDLE_ID ${target_bundle_id}
+            ADDITIONAL_LIBRARIES ${additional_libraries}
+            ${ARGN})
     endif()
 
     # ==== Create composite target for all enabled plugin formats
@@ -193,11 +187,11 @@ function (yup_audio_plugin)
     if (YUP_ARG_PLUGIN_CREATE_AU AND YUP_PLATFORM_MAC)
         list (APPEND _all_plugin_targets ${target_name}_au_plugin)
     endif()
-    if (YUP_ARG_PLUGIN_CREATE_AAX AND TARGET ${target_name}_aax_plugin)
-        list (APPEND _all_plugin_targets ${target_name}_aax_plugin)
-    endif()
     if (YUP_ARG_PLUGIN_CREATE_AUv3 AND YUP_PLATFORM_MAC)
         list (APPEND _all_plugin_targets ${target_name}_auv3_plugin)
+    endif()
+    if (YUP_ARG_PLUGIN_CREATE_AAX AND TARGET ${target_name}_aax_plugin)
+        list (APPEND _all_plugin_targets ${target_name}_aax_plugin)
     endif()
     if (YUP_ARG_PLUGIN_CREATE_LV2)
         list (APPEND _all_plugin_targets ${target_name}_lv2_plugin)
@@ -217,6 +211,9 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
         return()
     endif()
 
+    # Parse optional LV2 arguments
+    cmake_parse_arguments (ARG "" "LV2_BINARY_NAME;LV2_MANIFEST_FILE" "" ${ARGN})
+
     string (TOUPPER "${plugin_type}" plugin_type_upper)
     set (dependency_target ${target_name}_${plugin_type}_plugin)
 
@@ -235,11 +232,6 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
     endif()
 
     set (plugin_path "${plugin_target_path}/${target_file_name}")
-
-    if (NOT EXISTS ${plugin_target_path} AND NOT "${plugin_type}" STREQUAL "clap" AND NOT "${plugin_type}" STREQUAL "aax")
-        _yup_message (STATUS "Plugin path ${plugin_target_path} does not exist, skipping copy")
-        return()
-    endif()
 
     _yup_message (STATUS "Generating rule to copy ${plugin_type} plugin ${target_name}")
 
@@ -269,31 +261,32 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
     elseif ("${plugin_type}" STREQUAL "au")
         add_custom_command(TARGET ${dependency_target} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_target_path}"
-            COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
-            COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
             COMMENT "Copying AU plugin ${plugin_type_upper} to ${plugin_path}"
             VERBATIM)
     elseif ("${plugin_type}" STREQUAL "auv3")
         add_custom_command(TARGET ${dependency_target} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_target_path}"
-            COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
-            COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
             COMMAND /bin/sh -c "killall -9 AudioComponentRegistrar 2>/dev/null; sleep 2; true"
             COMMENT "Copying AUv3 plugin ${plugin_type_upper} to ${plugin_path}"
             VERBATIM)
     elseif ("${plugin_type}" STREQUAL "aax")
         add_custom_command(TARGET ${dependency_target} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_target_path}"
-            COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
-            COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
             COMMENT "Copying AAX plugin ${plugin_type_upper} to ${plugin_path}"
             VERBATIM)
     elseif ("${plugin_type}" STREQUAL "lv2")
+        # LV2 bundles are directories containing the plugin binary and manifest.ttl
+        set (lv2_binary_in_bundle "${plugin_path}/${ARG_LV2_BINARY_NAME}")
+
         add_custom_command(TARGET ${dependency_target} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_target_path}"
             COMMAND ${CMAKE_COMMAND} -E rm -rf "${plugin_path}"
-            COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
-            COMMENT "Copying LV2 plugin ${plugin_type_upper} to ${plugin_path}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_path}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:${dependency_target}>" "${lv2_binary_in_bundle}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ARG_LV2_MANIFEST_FILE}" "${plugin_path}/manifest.ttl"
+            COMMENT "Creating LV2 bundle at ${plugin_path}"
             VERBATIM)
     else()
         _yup_message (FATAL_ERROR "Unsupported plugin type ${plugin_type} for copying bundle")

@@ -254,8 +254,9 @@ All codesigning options are macOS-only and have no effect on other platforms.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `DEFINITIONS` | list | — | Additional compile definitions applied to all format targets. |
 | `MODULES` | list | *(required)* | YUP module dependencies (e.g. `yup::yup_gui yup::yup_audio_processors`). |
+| `DEFINITIONS` | list | — | Additional compile definitions applied to all format targets. |
+| `OPTIONS` | list | — | Additional compile options applied to all format targets. |
 | `LINK_OPTIONS` | list | — | Additional linker options applied to all format targets. |
 
 ---
