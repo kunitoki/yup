@@ -34,7 +34,7 @@ function (yup_audio_plugin)
         # Globals
         TARGET_NAME TARGET_VERSION TARGET_IDE_GROUP TARGET_APP_ID TARGET_APP_NAMESPACE TARGET_CXX_STANDARD
         # Plugin types
-        PLUGIN_CREATE_CLAP PLUGIN_CREATE_VST3 PLUGIN_CREATE_STANDALONE PLUGIN_CREATE_AU PLUGIN_CREATE_AUv3 PLUGIN_CREATE_AAX)
+        PLUGIN_CREATE_CLAP PLUGIN_CREATE_VST3 PLUGIN_CREATE_STANDALONE PLUGIN_CREATE_AU PLUGIN_CREATE_AUv3 PLUGIN_CREATE_AAX PLUGIN_CREATE_LV2)
 
     set (multi_value_args
         DEFINITIONS
@@ -67,7 +67,7 @@ function (yup_audio_plugin)
         return()
     endif()
 
-    if (NOT YUP_ARG_PLUGIN_CREATE_CLAP AND NOT YUP_ARG_PLUGIN_CREATE_VST3 AND NOT YUP_ARG_PLUGIN_CREATE_STANDALONE AND NOT YUP_ARG_PLUGIN_CREATE_AU AND NOT YUP_ARG_PLUGIN_CREATE_AUv3 AND NOT YUP_ARG_PLUGIN_CREATE_AAX)
+    if (NOT YUP_ARG_PLUGIN_CREATE_CLAP AND NOT YUP_ARG_PLUGIN_CREATE_VST3 AND NOT YUP_ARG_PLUGIN_CREATE_STANDALONE AND NOT YUP_ARG_PLUGIN_CREATE_AU AND NOT YUP_ARG_PLUGIN_CREATE_AUv3 AND NOT YUP_ARG_PLUGIN_CREATE_AAX AND NOT YUP_ARG_PLUGIN_CREATE_LV2)
         _yup_message (FATAL_ERROR "At least one plugin type must be enabled (CLAP, VST3, AU, AUv3, AAX, or Standalone).")
         return()
     endif()
@@ -225,6 +225,20 @@ function (yup_audio_plugin)
             "${YUP_ARG_UNPARSED_ARGUMENTS}")
     endif()
 
+    # ==== Build LV2 plugin target
+    if (YUP_ARG_PLUGIN_CREATE_LV2)
+        _yup_audio_plugin_create_lv2 (
+            "${target_name}"
+            "${target_version}"
+            "${target_ide_group}"
+            "${target_bundle_id}"
+            "${target_app_namespace}"
+            "${target_cxx_standard}"
+            "${additional_libraries}"
+            "${YUP_ARG_MODULES}"
+            "${YUP_ARG_UNPARSED_ARGUMENTS}")
+    endif()
+
     # ==== Create composite target for all enabled plugin formats
     set (_all_plugin_targets "")
     if (YUP_ARG_PLUGIN_CREATE_CLAP)
@@ -244,6 +258,9 @@ function (yup_audio_plugin)
     endif()
     if (YUP_ARG_PLUGIN_CREATE_AUv3 AND YUP_PLATFORM_MAC)
         list (APPEND _all_plugin_targets ${target_name}_auv3_plugin)
+    endif()
+    if (YUP_ARG_PLUGIN_CREATE_LV2)
+        list (APPEND _all_plugin_targets ${target_name}_lv2_plugin)
     endif()
 
     add_custom_target (${target_name} DEPENDS ${_all_plugin_targets})
@@ -272,6 +289,9 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
     elseif ("${plugin_type}" STREQUAL "aax")
         set (target_file_name "${target_name}_${plugin_type}_plugin.aaxplugin")
         set (plugin_target_path "$ENV{HOME}/Library/Application Support/Avid/Audio/Plug-Ins")
+    elseif ("${plugin_type}" STREQUAL "lv2")
+        set (target_file_name "${target_name}_${plugin_type}_plugin.lv2")
+        set (plugin_target_path "$ENV{HOME}/Library/Audio/Plug-Ins/LV2")
     else()
         set (target_file_name "${target_name}_${plugin_type}_plugin.${plugin_type}")
         set (plugin_target_path "$ENV{HOME}/Library/Audio/Plug-Ins/${plugin_type_upper}")

@@ -83,6 +83,14 @@
 #define YUP_ENABLE_PLUGIN_CLIENT_AAX_LOGGING 0
 #endif
 
+/** Config: YUP_ENABLE_PLUGIN_CLIENT_LV2_LOGGING
+
+    Enable debug logging for LV2 plugin client.
+*/
+#ifndef YUP_ENABLE_PLUGIN_CLIENT_LV2_LOGGING
+#define YUP_ENABLE_PLUGIN_CLIENT_LV2_LOGGING 0
+#endif
+
 //==============================================================================
 
 #include <yup_audio_processors/yup_audio_processors.h>

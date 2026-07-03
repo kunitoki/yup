@@ -67,6 +67,7 @@ yup_audio_plugin (
     PLUGIN_CREATE_AUv3 ON
     PLUGIN_CREATE_STANDALONE ON
     PLUGIN_CREATE_AAX ${plugin_create_aax}
+    PLUGIN_CREATE_LV2 ON
     DEFINITIONS
         YupPlugin_AAX_ManufacturerID='YUPP'
         YupPlugin_AAX_ProductID='YpSy'

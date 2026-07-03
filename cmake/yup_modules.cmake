@@ -590,8 +590,11 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
     elseif (plugin_type STREQUAL "aax")
         set (custom_target_name "${target_name}_aax")
         set (plugin_define "YUP_AUDIO_PLUGIN_ENABLE_AAX=1")
+    elseif (plugin_type STREQUAL "lv2")
+        set (custom_target_name "${target_name}_lv2")
+        set (plugin_define "YUP_AUDIO_PLUGIN_ENABLE_LV2=1")
     else()
-        _yup_message (FATAL_ERROR "Invalid plugin type: ${plugin_type}. Must be either 'vst3', 'clap', 'au', 'auv3', 'aax' or 'standalone'")
+        _yup_message (FATAL_ERROR "Invalid plugin type: ${plugin_type}. Must be either 'vst3', 'clap', 'au', 'auv3', 'aax', 'lv2' or 'standalone'")
     endif()
 
     add_library (${custom_target_name} INTERFACE)

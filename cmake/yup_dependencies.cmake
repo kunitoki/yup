@@ -146,6 +146,12 @@ function (_yup_collect_audio_plugin_host_dependencies definitions output_variabl
         list (APPEND dependencies yup_audio_plugin_host_vst3sdk)
     endif()
 
+    _yup_definitions_enable ("${definitions}" YUP_AUDIO_PLUGIN_HOST_ENABLE_LV2 enable_lv2)
+    if (enable_lv2)
+        _yup_fetch_lv2()
+        list (APPEND dependencies lv2-headers lilv-static)
+    endif()
+
     _yup_definitions_enable ("${definitions}" YUP_AUDIO_PLUGIN_HOST_ENABLE_AU enable_au)
     if (enable_au AND YUP_PLATFORM_MAC)
         list (APPEND dependencies
