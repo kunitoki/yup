@@ -138,6 +138,8 @@ function (yup_standalone_app)
         OBJCXX_VISIBILITY_PRESET hidden
         VISIBILITY_INLINES_HIDDEN ON)
 
+    _yup_apply_binary_optimizations (${target_name})
+
     target_compile_features (${target_name} PRIVATE cxx_std_${target_cxx_standard})
     target_include_directories (${target_name} PRIVATE ${module_include_dirs})
 
