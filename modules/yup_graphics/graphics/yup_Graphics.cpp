@@ -301,7 +301,7 @@ bool Graphics::commitToImage()
     if (! offscreenTargetImage || ! commitOffscreenTarget())
         return false;
 
-    if (auto canvas = offscreenTarget->refRenderCanvas())
+    if (auto canvas = offscreenTarget->getRenderCanvas())
         offscreenTargetImage->adoptRenderCanvas (std::move (canvas));
     else if (auto tex = offscreenTarget->adoptAsTexture())
         offscreenTargetImage->adoptTexture (std::move (tex));
@@ -466,7 +466,7 @@ bool Graphics::TransparencyLayer::commit()
 
     auto texture = [&]() -> rive::rcp<rive::gpu::Texture>
     {
-        if (auto canvas = graphics->offscreenTarget->refRenderCanvas())
+        if (auto canvas = graphics->offscreenTarget->getRenderCanvas())
             return canvas->renderImage()->refTexture();
 
         return graphics->offscreenTarget->adoptAsTexture();

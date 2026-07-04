@@ -185,7 +185,7 @@ public:
             return renderContext;
         }
 
-        rive::rcp<rive::gpu::RenderCanvas> refRenderCanvas() noexcept override
+        rive::rcp<rive::gpu::RenderCanvas> getRenderCanvas() noexcept override
         {
             return renderCanvas;
         }
