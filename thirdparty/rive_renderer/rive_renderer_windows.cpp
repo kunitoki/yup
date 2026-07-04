@@ -31,6 +31,15 @@
 //#include "source/d3d12/d3d12_pipeline_manager.cpp"
 //#include "source/d3d12/d3d12_utils.cpp"
 //#include "source/d3d12/render_context_d3d12_impl.cpp"
+
+#include "source/ore/d3d11/ore_bind_group_d3d11.cpp"
+#include "source/ore/d3d11/ore_buffer_d3d11.cpp"
+#include "source/ore/d3d11/ore_context_d3d11.cpp"
+#include "source/ore/d3d11/ore_pipeline_d3d11.cpp"
+#include "source/ore/d3d11/ore_render_pass_d3d11.cpp"
+#include "source/ore/d3d11/ore_sampler_d3d11.cpp"
+#include "source/ore/d3d11/ore_shader_module_d3d11.cpp"
+#include "source/ore/d3d11/ore_texture_d3d11.cpp"
 #endif
 
 #if YUP_RIVE_USE_OPENGL
@@ -44,4 +53,13 @@
 #include "source/gl/render_buffer_gl_impl.cpp"
 #include "source/gl/render_context_gl_impl.cpp"
 #include "source/gl/render_target_gl.cpp"
+
+#include "source/ore/gl/ore_bind_group_gl.cpp"
+#include "source/ore/gl/ore_buffer_gl.cpp"
+#include "source/ore/gl/ore_context_gl.cpp"
+#include "source/ore/gl/ore_pipeline_gl.cpp"
+#include "source/ore/gl/ore_render_pass_gl.cpp"
+#include "source/ore/gl/ore_sampler_gl.cpp"
+#include "source/ore/gl/ore_shader_module_gl.cpp"
+#include "source/ore/gl/ore_texture_gl.cpp"
 #endif

@@ -35,14 +35,15 @@
     dependencies:       rive rive_decoders glad
     searchpaths:        include source source/generated/shaders
     macFrameworks:      Metal QuartzCore
-    defines:            WITH_RIVE_TEXT=1 RIVE_DECODERS=1
+    appleDefines:       ORE_BACKEND_METAL=1
     iosDefines:         RIVE_IOS=1
     iosSimDefines:      RIVE_IOS_SIMULATOR=1
-    linuxDefines:       RIVE_DESKTOP_GL=1
-    wasmDefines:        RIVE_WEBGL=1
+    linuxDefines:       RIVE_DESKTOP_GL=1 ORE_BACKEND_GL=1
+    wasmDefines:        RIVE_WEBGL=1 ORE_BACKEND_GL=1
     wasmOptions:        -sUSE_SDL=2
     wasmLinkOptions:    -sUSE_SDL=2 -sMAX_WEBGL_VERSION=2
-    androidDefines:     RIVE_ANDROID=1
+    windowsDefines:     ORE_BACKEND_D3D11=1 ORE_BACKEND_GL=1
+    androidDefines:     RIVE_ANDROID=1 ORE_BACKEND_GL=1
     androidLibs:        EGL GLESv3
 
   END_YUP_MODULE_DECLARATION
@@ -69,10 +70,7 @@
 
 /** Config: YUP_RIVE_USE_OPENGL
     Enables the use of the OpenGL renderer on platform that support it but where it is not used by default (in
-    the specific case macOS and Windows).
-
-    You will need to link to the specific OpenGL framework on macOS when building your application with this
-    flag set: add "-framework OpenGL" to link flags.
+    the specific case Windows).
 */
 #ifndef YUP_RIVE_USE_OPENGL
 #define YUP_RIVE_USE_OPENGL 0
@@ -103,12 +101,6 @@
 //==============================================================================
 
 #if YUP_RIVE_USE_OPENGL
-#if __APPLE__ && !YUP_RIVE_USE_METAL && !YUP_RIVE_USE_DAWN
-#error Must select at least one between YUP_RIVE_USE_METAL, YUP_RIVE_USE_OPENGL or YUP_RIVE_USE_DAWN
-#elif _WIN32 && !YUP_RIVE_USE_D3D && !YUP_RIVE_USE_DAWN
-#error Must select at least one between YUP_RIVE_USE_D3D, YUP_RIVE_USE_OPENGL or YUP_RIVE_USE_DAWN
-#endif
-
 #if !defined(RIVE_DESKTOP_GL) && !defined(RIVE_WEBGL)
 #define RIVE_DESKTOP_GL 1
 #endif
@@ -121,6 +113,8 @@
 #endif
 
 //==============================================================================
+
+#if !defined (YUP_RIVE_RENDERER_NO_INCLUDES)
 
 #if __GNUC__
  #pragma GCC diagnostic push
@@ -150,3 +144,5 @@
 #elif _MSC_VER
  __pragma (warning (pop))
 #endif
+
+#endif // YUP_RIVE_RENDERER_NO_INCLUDES

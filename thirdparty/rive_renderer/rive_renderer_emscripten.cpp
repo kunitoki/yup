@@ -41,6 +41,15 @@
 #include "source/gl/render_context_gl_impl.cpp"
 #include "source/gl/render_target_gl.cpp"
 
+#include "source/ore/gl/ore_bind_group_gl.cpp"
+#include "source/ore/gl/ore_buffer_gl.cpp"
+#include "source/ore/gl/ore_context_gl.cpp"
+#include "source/ore/gl/ore_pipeline_gl.cpp"
+#include "source/ore/gl/ore_render_pass_gl.cpp"
+#include "source/ore/gl/ore_sampler_gl.cpp"
+#include "source/ore/gl/ore_shader_module_gl.cpp"
+#include "source/ore/gl/ore_texture_gl.cpp"
+
 #else
 #error "No renderer backend defined"
 

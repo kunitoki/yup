@@ -32,8 +32,8 @@
     website:            https://github.com/rive-app/rive-runtime
     license:            MIT
 
-    dependencies:       harfbuzz sheenbidi_library yoga_library luau libhydrogen
-    defines:            WITH_RIVE_TEXT=1 WITH_RIVE_YOGA=1 WITH_RIVE_LAYOUT=1 WITH_RIVE_SCRIPTING=1 RIVE_CANVAS=1
+    dependencies:       harfbuzz sheenbidi_library yoga_library libhydrogen
+    defines:            WITH_RIVE_TEXT=1 WITH_RIVE_YOGA=1 WITH_RIVE_LAYOUT=1 RIVE_DECODERS=1 RIVE_CANVAS=1 RIVE_ORE=1
     appleFrameworks:    CoreText
     searchpaths:        include
 

@@ -52,6 +52,8 @@
 #include "source/gpu_resource.cpp"
 // END YUP GENERATED RIVE RENDERER INCLUDES
 
+#include "source/ore/ore_bind_group_layout.cpp"
+#include "source/ore/ore_binding_map.cpp"
 
 #if __clang__
  #pragma clang diagnostic pop
