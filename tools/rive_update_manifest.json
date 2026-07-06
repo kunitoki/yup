@@ -555,6 +555,37 @@
             "pnglibconf.h"
           ]
         }
+      ],
+      "patches": [
+        {
+          "path": "upstream/pngpriv.h",
+          "note": "convert anti-double-include guard to a standard include guard for unity builds",
+          "already_contains": "#endif /* PNGPRIV_H */",
+          "replace": {
+            "from": [
+              "#  define PNGPRIV_H",
+              "#else",
+              "#  error Duplicate inclusion of pngpriv.h; please check the libpng source files",
+              "#endif",
+              "",
+              "#if defined(PNG_H) || defined(PNGCONF_H) || defined(PNGLCONF_H)",
+              "#  error This file must not be included by applications; please include <png.h>",
+              "#endif"
+            ],
+            "to": [
+              "#  define PNGPRIV_H"
+            ]
+          }
+        },
+        {
+          "path": "upstream/pngpriv.h",
+          "note": "add closing endif for PNGPRIV_H include guard",
+          "already_contains": "#endif /* PNGPRIV_H */",
+          "replace": {
+            "from": "#endif /* PNG_VERSION_INFO_ONLY */",
+            "to": "#endif /* PNG_VERSION_INFO_ONLY */\n\n#endif /* PNGPRIV_H */"
+          }
+        }
       ]
     },
     {
