@@ -781,9 +781,14 @@
         "*.cpp"
       ],
       "exclude_globs": [
+        "decode_astc_texture.cpp",
+        "decode_bc_texture.cpp",
+        "decode_etc_texture.cpp",
         "decode_jpeg.cpp",
+        "decode_ktx2.cpp",
         "decode_png.cpp",
-        "decode_webp.cpp"
+        "decode_webp.cpp",
+        "texture_decoder.cpp"
       ]
     },
     {
