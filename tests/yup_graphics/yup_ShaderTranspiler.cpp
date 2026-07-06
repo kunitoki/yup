@@ -61,7 +61,7 @@ void main()
 constexpr const char* kFragmentWithUniforms = R"glsl(
 #version 450
 layout(location = 0) out vec4 outColor;
-layout(binding = 0) uniform UBO {
+layout(std140, binding = 0) uniform UBO {
     vec4 tint;
     float scale;
 } ubo;
@@ -123,6 +123,93 @@ void main()
     gl_Position = gl_in[2].gl_Position;
     EmitVertex();
     EndPrimitive();
+}
+)glsl";
+
+constexpr const char* kTessControlGLSL = R"glsl(
+#version 450
+layout(vertices = 3) out;
+void main()
+{
+    gl_TessLevelOuter[0] = 1.0;
+    gl_TessLevelOuter[1] = 1.0;
+    gl_TessLevelOuter[2] = 1.0;
+    gl_TessLevelInner[0] = 1.0;
+    gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
+}
+)glsl";
+
+constexpr const char* kTessEvalGLSL = R"glsl(
+#version 450
+layout(triangles, equal_spacing, cw) in;
+void main()
+{
+    gl_Position = gl_TessCoord.x * gl_in[0].gl_Position
+                + gl_TessCoord.y * gl_in[1].gl_Position
+                + gl_TessCoord.z * gl_in[2].gl_Position;
+}
+)glsl";
+
+constexpr const char* kFragmentWithIntUintInputs = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+layout(location = 0) flat in int intVal;
+layout(location = 1) flat in uint uintVal;
+void main()
+{
+    outColor = vec4(float(intVal), float(uintVal), 0.0, 1.0);
+}
+)glsl";
+
+constexpr const char* kFragmentWithStorageBuffer = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+layout(std430, binding = 0) buffer StorageBuf {
+    float values[];
+} sb;
+void main()
+{
+    outColor = vec4(sb.values[0], 0.0, 0.0, 1.0);
+}
+)glsl";
+
+constexpr const char* kFragmentWithArrayUBO = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+layout(std140, binding = 0) uniform ArrayUBO {
+    vec4 colors[4];
+} ubo;
+void main()
+{
+    outColor = ubo.colors[0] + ubo.colors[1] + ubo.colors[2] + ubo.colors[3];
+}
+)glsl";
+
+constexpr const char* kFragmentWithMultiTextures = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+layout(binding = 0) uniform sampler2D tex2D;
+layout(binding = 1) uniform sampler3D tex3D;
+layout(binding = 2) uniform samplerCube texCube;
+layout(binding = 3) uniform sampler2DShadow texShadow;
+void main()
+{
+    float s = texture(tex2D, vec2(0.5)).r;
+    s += texture(tex3D, vec3(0.5)).r;
+    s += texture(texCube, vec3(0.5)).r;
+    s += texture(texShadow, vec3(0.5, 0.5, 0.5));
+    outColor = vec4(vec3(s), 1.0);
+}
+)glsl";
+
+constexpr const char* kFragmentWithTextureArray = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+layout(binding = 0) uniform sampler2D textures[3];
+layout(location = 0) in vec2 vUV;
+void main()
+{
+    outColor = texture(textures[0], vUV) + texture(textures[1], vUV);
 }
 )glsl";
 
@@ -273,6 +360,24 @@ TEST_F (ShaderTranspilerTests, CompileToSPIRV_UnsupportedLanguageFails)
     EXPECT_TRUE (result.failed());
 }
 
+TEST_F (ShaderTranspilerTests, CompileToSPIRV_TessControlShader)
+{
+    auto result = transpiler->compileToSPIRV (
+        kTessControlGLSL, ShaderStage::tessControl, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+    EXPECT_GT (result.getValue().getSize(), sizeof (uint32_t) * 5u);
+}
+
+TEST_F (ShaderTranspilerTests, CompileToSPIRV_TessEvalShader)
+{
+    auto result = transpiler->compileToSPIRV (
+        kTessEvalGLSL, ShaderStage::tessEval, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+    EXPECT_GT (result.getValue().getSize(), sizeof (uint32_t) * 5u);
+}
+
 //==============================================================================
 // decompileFromSPIRV
 //==============================================================================
@@ -390,6 +495,58 @@ TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_GLSLVersion)
 
     ASSERT_TRUE (result.wasOk());
     EXPECT_TRUE (result.getValue().contains ("330"));
+}
+
+TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_UnsupportedTargetFails)
+{
+    auto spirv = transpiler->compileToSPIRV (
+        kMinimalFragmentGLSL, ShaderStage::fragment, ShaderLanguage::glsl);
+    ASSERT_TRUE (spirv.wasOk());
+
+    auto result = transpiler->decompileFromSPIRV (
+        spirv.getValue(), ShaderLanguage::spirv);
+
+    EXPECT_TRUE (result.failed());
+    EXPECT_TRUE (result.getErrorMessage().isNotEmpty());
+}
+
+TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToGLSL_TessControl)
+{
+    auto spirv = transpiler->compileToSPIRV (
+        kTessControlGLSL, ShaderStage::tessControl, ShaderLanguage::glsl);
+    ASSERT_TRUE (spirv.wasOk());
+
+    auto result = transpiler->decompileFromSPIRV (
+        spirv.getValue(), ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+    EXPECT_TRUE (result.getValue().contains ("main"));
+}
+
+TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToMSL_TessControl)
+{
+    auto spirv = transpiler->compileToSPIRV (
+        kTessControlGLSL, ShaderStage::tessControl, ShaderLanguage::glsl);
+    ASSERT_TRUE (spirv.wasOk());
+
+    auto result = transpiler->decompileFromSPIRV (
+        spirv.getValue(), ShaderLanguage::msl);
+
+    ASSERT_TRUE (result.wasOk());
+    EXPECT_FALSE (result.getValue().isEmpty());
+}
+
+TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToGLSL_TessEval)
+{
+    auto spirv = transpiler->compileToSPIRV (
+        kTessEvalGLSL, ShaderStage::tessEval, ShaderLanguage::glsl);
+    ASSERT_TRUE (spirv.wasOk());
+
+    auto result = transpiler->decompileFromSPIRV (
+        spirv.getValue(), ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+    EXPECT_TRUE (result.getValue().contains ("main"));
 }
 
 //==============================================================================
@@ -547,6 +704,42 @@ TEST_F (ShaderTranspilerTests, Transpile_WithOptions)
     EXPECT_TRUE (result.getValue().contains ("330"));
 }
 
+TEST_F (ShaderTranspilerTests, Transpile_TessControlToGLSL)
+{
+    auto result = transpiler->transpile (
+        kTessControlGLSL, ShaderStage::tessControl, ShaderLanguage::glsl, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+    EXPECT_TRUE (result.getValue().contains ("main"));
+}
+
+TEST_F (ShaderTranspilerTests, Transpile_TessControlToMSL)
+{
+    auto result = transpiler->transpile (
+        kTessControlGLSL, ShaderStage::tessControl, ShaderLanguage::glsl, ShaderLanguage::msl);
+
+    ASSERT_TRUE (result.wasOk());
+    EXPECT_FALSE (result.getValue().isEmpty());
+}
+
+TEST_F (ShaderTranspilerTests, Transpile_TessEvalToGLSL)
+{
+    auto result = transpiler->transpile (
+        kTessEvalGLSL, ShaderStage::tessEval, ShaderLanguage::glsl, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+    EXPECT_TRUE (result.getValue().contains ("main"));
+}
+
+TEST_F (ShaderTranspilerTests, Transpile_TessEvalToMSL)
+{
+    auto result = transpiler->transpile (
+        kTessEvalGLSL, ShaderStage::tessEval, ShaderLanguage::glsl, ShaderLanguage::msl);
+
+    ASSERT_TRUE (result.wasOk());
+    EXPECT_FALSE (result.getValue().isEmpty());
+}
+
 //==============================================================================
 // MSL-specific transpilation
 //==============================================================================
@@ -700,6 +893,194 @@ TEST_F (ShaderTranspilerTests, Reflect_InvalidSourceFails)
     EXPECT_TRUE (result.failed());
 }
 
+TEST_F (ShaderTranspilerTests, Reflect_TessControlShader)
+{
+    auto result = transpiler->reflect (
+        kTessControlGLSL, ShaderStage::tessControl, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    EXPECT_FALSE (ref.entryPoints.empty());
+    EXPECT_EQ (ref.entryPoints[0].stage, ShaderStage::tessControl);
+
+    // Tessellation control should have tessLevelOuter and tessLevelInner builtins
+    bool hasTessLevelOuter = false;
+    bool hasTessLevelInner = false;
+    for (const auto& bo : ref.builtinOutputs)
+    {
+        if (bo.builtin == ShaderReflection::BuiltInType::tessLevelOuter)
+            hasTessLevelOuter = true;
+        if (bo.builtin == ShaderReflection::BuiltInType::tessLevelInner)
+            hasTessLevelInner = true;
+    }
+    EXPECT_TRUE (hasTessLevelOuter);
+    EXPECT_TRUE (hasTessLevelInner);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_TessEvalShader)
+{
+    auto result = transpiler->reflect (
+        kTessEvalGLSL, ShaderStage::tessEval, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    EXPECT_FALSE (ref.entryPoints.empty());
+    EXPECT_EQ (ref.entryPoints[0].stage, ShaderStage::tessEval);
+
+    // Tessellation evaluation should have tessCoord builtin input
+    bool hasTessCoord = false;
+    for (const auto& bi : ref.builtinInputs)
+    {
+        if (bi.builtin == ShaderReflection::BuiltInType::tessCoord)
+        {
+            hasTessCoord = true;
+            break;
+        }
+    }
+    EXPECT_TRUE (hasTessCoord);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_IntUintTypes)
+{
+    auto result = transpiler->reflect (
+        kFragmentWithIntUintInputs, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    EXPECT_FALSE (ref.stageInputs.empty());
+
+    bool foundInt = false;
+    bool foundUint = false;
+    for (const auto& si : ref.stageInputs)
+    {
+        if (si.baseType == ShaderReflection::BaseType::int32)
+            foundInt = true;
+        if (si.baseType == ShaderReflection::BaseType::uint32)
+            foundUint = true;
+    }
+    EXPECT_TRUE (foundInt);
+    EXPECT_TRUE (foundUint);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_StorageBuffer)
+{
+    auto result = transpiler->reflect (
+        kFragmentWithStorageBuffer, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    EXPECT_FALSE (ref.storageBuffers.empty());
+
+    bool foundStorageBuf = false;
+    for (const auto& sb : ref.storageBuffers)
+    {
+        if (sb.type == ShaderReflection::ResourceType::storageBuffer)
+        {
+            foundStorageBuf = true;
+            break;
+        }
+    }
+    EXPECT_TRUE (foundStorageBuf);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_ArrayUBO)
+{
+    auto result = transpiler->reflect (
+        kFragmentWithArrayUBO, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    EXPECT_FALSE (ref.uniformBuffers.empty());
+    EXPECT_FALSE (ref.entryPoints.empty());
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_StructMemberDetails)
+{
+    auto result = transpiler->reflect (
+        kFragmentWithUniforms, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    EXPECT_FALSE (ref.uniformBuffers.empty());
+    EXPECT_FALSE (ref.sampledImages.empty());
+    EXPECT_FALSE (ref.stageInputs.empty());
+
+    // Verify that uniform buffer and sampled image metadata is populated
+    for (const auto& ub : ref.uniformBuffers)
+    {
+        EXPECT_EQ (ub.type, ShaderReflection::ResourceType::uniformBuffer);
+        EXPECT_EQ (ub.baseType, ShaderReflection::BaseType::structType);
+    }
+
+    for (const auto& si : ref.sampledImages)
+    {
+        EXPECT_EQ (si.type, ShaderReflection::ResourceType::sampledImage);
+        EXPECT_EQ (si.imageDim, ShaderReflection::ImageDimension::dim2D);
+    }
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_MultiTextureDimensions)
+{
+    auto result = transpiler->reflect (
+        kFragmentWithMultiTextures, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    EXPECT_FALSE (ref.sampledImages.empty());
+
+    bool foundDim2D = false;
+    bool foundDim3D = false;
+    bool foundCube = false;
+    for (const auto& si : ref.sampledImages)
+    {
+        if (si.imageDim == ShaderReflection::ImageDimension::dim2D)
+            foundDim2D = true;
+        if (si.imageDim == ShaderReflection::ImageDimension::dim3D)
+            foundDim3D = true;
+        if (si.imageDim == ShaderReflection::ImageDimension::cube)
+            foundCube = true;
+    }
+    EXPECT_TRUE (foundDim2D);
+    EXPECT_TRUE (foundDim3D);
+    EXPECT_TRUE (foundCube);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_TextureArray)
+{
+    auto result = transpiler->reflect (
+        kFragmentWithTextureArray, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    EXPECT_FALSE (ref.sampledImages.empty());
+    EXPECT_FALSE (ref.entryPoints.empty());
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_TextureArrayLayout)
+{
+    auto result = transpiler->reflect (
+        kFragmentWithTextureArray, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+
+    // Texture arrays should be reflected with correct resource type and image dim
+    for (const auto& si : ref.sampledImages)
+    {
+        EXPECT_EQ (si.type, ShaderReflection::ResourceType::sampledImage);
+        EXPECT_EQ (si.imageDim, ShaderReflection::ImageDimension::dim2D);
+    }
+}
+
 //==============================================================================
 // reflectFromSPIRV
 //==============================================================================
@@ -748,6 +1129,29 @@ TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_ComputeWorkgroupReflected)
 
     ASSERT_TRUE (result.wasOk());
     EXPECT_EQ (result.getValue().workgroupSize.x, 16u);
+}
+
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_TooSmallFails)
+{
+    const uint32_t tooSmall[] = { 0x07230203, 0x00010000 };
+    MemoryBlock smallSpirv (tooSmall, sizeof (tooSmall));
+
+    auto result = transpiler->reflectFromSPIRV (smallSpirv);
+
+    EXPECT_TRUE (result.failed());
+}
+
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_CorruptHeaderDataFails)
+{
+    // Valid magic and version, but garbage thereafter — should throw in spirv_cross
+    const uint32_t corruptSpirv[] = {
+        0x07230203, 0x00010000, 0x00000000, 0x00000000, 0x00000000, 0xDEADBEEF, 0xDEADBEEF, 0xDEADBEEF
+    };
+    MemoryBlock corrupt (corruptSpirv, sizeof (corruptSpirv));
+
+    auto result = transpiler->reflectFromSPIRV (corrupt);
+
+    EXPECT_TRUE (result.failed());
 }
 
 //==============================================================================
