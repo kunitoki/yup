@@ -790,6 +790,106 @@ static void fillGLSLBackendSlots (ShaderReflection& ref)
     fillVec (ref.shaderRecordBuffers);
 }
 
+//==============================================================================
+// Fills HLSL backend slot numbers by parsing compiled HLSL source for register() annotations
+//==============================================================================
+
+static void fillHLSLBackendSlots (const std::string& hlslSource, ShaderReflection& ref)
+{
+    // Parse "identifier : register(XN)" patterns where X is b/t/u/s.
+    // Uses a linear-scan vector since shader resource counts are small.
+
+    struct NameSlot
+    {
+        std::string name;
+        uint32_t slot;
+    };
+
+    std::vector<NameSlot> parsedSlots;
+
+    const char* p = hlslSource.c_str();
+    const char* const srcStart = p;
+    const char* const srcEnd = p + hlslSource.size();
+
+    while (p < srcEnd)
+    {
+        const char* regStart = strstr (p, "register(");
+        if (regStart == nullptr)
+            break;
+
+        const char* reg = regStart + 9; // skip past "register("
+
+        if (reg >= srcEnd)
+            break;
+        ++reg; // skip prefix (b/t/u/s), we only need the slot number
+
+        uint32_t slot = 0;
+        while (reg < srcEnd && *reg >= '0' && *reg <= '9')
+        {
+            slot = slot * 10 + static_cast<uint32_t> (*reg - '0');
+            ++reg;
+        }
+
+        // Backtrack from "register(" to find the preceding ':'
+        const char* colon = regStart;
+        while (colon > srcStart && *colon != ':' && *colon != '\n')
+            --colon;
+
+        if (colon > srcStart && *colon == ':')
+        {
+            const char* nameEnd2 = colon - 1;
+
+            while (nameEnd2 > srcStart && (*nameEnd2 == ' ' || *nameEnd2 == '\t'))
+                --nameEnd2;
+
+            const char* nameStart = nameEnd2;
+            while (nameStart >= srcStart
+                   && (isalnum (static_cast<unsigned char> (*nameStart)) || *nameStart == '_'))
+                --nameStart;
+            ++nameStart;
+
+            if (nameStart <= nameEnd2)
+            {
+                std::string name (nameStart, nameEnd2 - nameStart + 1);
+                if (! name.empty())
+                    parsedSlots.push_back ({ std::move (name), slot });
+            }
+        }
+
+        p = reg;
+    }
+
+    auto findSlot = [&] (const std::string& name) -> uint32_t
+    {
+        for (const auto& ns : parsedSlots)
+        {
+            if (ns.name == name)
+                return ns.slot;
+        }
+        return ~0u;
+    };
+
+    auto fillVec = [&] (std::vector<ShaderReflection::ResourceBinding>& bindings)
+    {
+        for (auto& b : bindings)
+            b.backendSlot = findSlot (b.name.toStdString());
+    };
+
+    fillVec (ref.uniformBuffers);
+    fillVec (ref.storageBuffers);
+    fillVec (ref.sampledImages);
+    fillVec (ref.separateImages);
+    fillVec (ref.separateSamplers);
+    fillVec (ref.storageImages);
+    fillVec (ref.subpassInputs);
+    fillVec (ref.atomicCounters);
+    fillVec (ref.accelerationStructures);
+    fillVec (ref.glPlainUniforms);
+    fillVec (ref.tensors);
+    fillVec (ref.pushConstantBuffers);
+    fillVec (ref.shaderRecordBuffers);
+}
+
 } // namespace
 
 //==============================================================================
@@ -1115,7 +1215,35 @@ ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBl
             }
 
             case ShaderLanguage::hlsl:
-                return makeResultValueFail ("HLSL backend slot reflection is not supported");
+            {
+                spirv_cross::CompilerHLSL compiler (words, wordCount);
+
+                spirv_cross::CompilerGLSL::Options commonOpts;
+                commonOpts.vertex.flip_vert_y = options.flipVertY;
+                compiler.set_common_options (commonOpts);
+
+                spirv_cross::CompilerHLSL::Options hlslOpts;
+
+                if (options.hlslShaderModel >= 10)
+                    hlslOpts.shader_model = static_cast<uint32_t> (options.hlslShaderModel);
+
+                compiler.set_hlsl_options (hlslOpts);
+
+                if (! entryName.empty())
+                {
+                    auto entries = compiler.get_entry_points_and_stages();
+
+                    if (! entries.empty())
+                        compiler.set_entry_point (entryName, entries[0].execution_model);
+                }
+
+                auto hlslSource = compiler.compile(); // triggers register allocation
+
+                auto ref = extractReflection (compiler);
+                fillHLSLBackendSlots (hlslSource, ref);
+
+                return makeResultValueOk (std::move (ref));
+            }
 
             default:
                 return makeResultValueFail ("Unsupported target language for backend-aware reflection");

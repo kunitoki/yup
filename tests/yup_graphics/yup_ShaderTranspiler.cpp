@@ -2219,17 +2219,45 @@ TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_ESSL_SlotsMatchSPIRVBinding)
     }
 }
 
-TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_HLSL_NotSupported)
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_HLSL_BackendSlotsParsed)
 {
     auto spirvResult = transpiler->compileToSPIRV (
-        kMinimalFragmentGLSL, ShaderStage::fragment, ShaderLanguage::glsl);
+        kFragmentWithUniforms, ShaderStage::fragment, ShaderLanguage::glsl);
 
     ASSERT_TRUE (spirvResult.wasOk());
 
     auto reflectResult = transpiler->reflectFromSPIRV (
         spirvResult.getValue(), ShaderLanguage::hlsl);
 
-    EXPECT_TRUE (reflectResult.failed());
+    ASSERT_TRUE (reflectResult.wasOk());
+
+    const auto& ref = reflectResult.getValue();
+
+    ASSERT_FALSE (ref.uniformBuffers.empty());
+    ASSERT_FALSE (ref.sampledImages.empty());
+
+    // UBO should have a valid register slot parsed from register(bN)
+    for (const auto& ub : ref.uniformBuffers)
+    {
+        EXPECT_NE (ub.backendSlot, ~0u);
+    }
+
+    // Sampled image should have a valid register slot parsed from register(tN)
+    for (const auto& si : ref.sampledImages)
+    {
+        EXPECT_NE (si.backendSlot, ~0u);
+    }
+
+    // HLSL register slots per type are independent (b0, t0, s0 are all valid)
+    std::set<uint32_t> bufferSlots;
+    for (const auto& ub : ref.uniformBuffers)
+    {
+        if (ub.backendSlot != ~0u)
+        {
+            EXPECT_FALSE (bufferSlots.contains (ub.backendSlot));
+            bufferSlots.insert (ub.backendSlot);
+        }
+    }
 }
 
 TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_NoTargetLang_BackendSlotsAreAbsent)

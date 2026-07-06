@@ -588,12 +588,17 @@ public:
     /**
         Extract reflection data with backend-assigned native slot numbers.
 
-        Creates a backend-specific compiler (MSL, GLSL, etc.), compiles the SPIR-V
+        Creates a backend-specific compiler (MSL, GLSL, HLSL), compiles the SPIR-V
         to trigger slot allocation, and extracts reflection data that includes
         the backend-assigned slot indices in each ResourceBinding::backendSlot.
 
+        For MSL: queries CompilerMSL::get_automatic_msl_resource_binding() after compile().
+        For GLSL/ESSL: copies the SPIR-V binding (no remapping occurs).
+        For HLSL: parses register(bN)/register(tN)/register(sN)/register(uN) from
+        the compiled source. This relies on spirv-cross's stable output format.
+
         @param spirv       SPIR-V binary data.
-        @param targetLang  Target backend language (e.g., msl, glsl, essl).
+        @param targetLang  Target backend language (e.g., msl, glsl, essl, hlsl).
         @param options     Options that affect slot assignment (e.g., entry point).
 
         @returns A ResultValue containing ShaderReflection on success,
