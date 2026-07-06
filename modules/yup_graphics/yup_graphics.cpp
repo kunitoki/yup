@@ -41,6 +41,13 @@
 
 //==============================================================================
 
+#if YUP_ENABLE_SHADER_COMPILER
+#include <glslang/glslang.h>
+#include <spirv_cross/spirv_cross.h>
+#endif
+
+//==============================================================================
+
 #if YUP_WINDOWS
 
 #if YUP_RIVE_USE_D3D
@@ -156,4 +163,10 @@
 
 #if YUP_IMAGE_FORMAT_GIF
 #include "formats/yup_GifImageFormat.cpp"
+#endif
+
+//==============================================================================
+#if YUP_ENABLE_SHADER_COMPILER
+#include "shading/yup_ShaderTranspiler.cpp"
+#include "shading/yup_ShaderCache.cpp"
 #endif

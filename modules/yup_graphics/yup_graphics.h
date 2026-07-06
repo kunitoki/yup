@@ -121,6 +121,16 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #endif
 #endif
 
+/** Config: YUP_ENABLE_SHADER_COMPILER
+
+    Enable shader compiler support.
+*/
+#ifndef YUP_ENABLE_SHADER_COMPILER
+#if YUP_MODULE_AVAILABLE_glslang && YUP_MODULE_AVAILABLE_spirv_cross
+#define YUP_ENABLE_SHADER_COMPILER 1
+#endif
+#endif
+
 //==============================================================================
 
 #if YUP_IMAGE_FORMAT_PNG && ! YUP_MODULE_AVAILABLE_libpng
@@ -209,4 +219,10 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #if YUP_IMAGE_FORMAT_GIF
 #include <libgif/libgif.h>
 #include "formats/yup_GifImageFormat.h"
+#endif
+
+//==============================================================================
+#if YUP_ENABLE_SHADER_COMPILER
+#include "shading/yup_ShaderTranspiler.h"
+#include "shading/yup_ShaderCache.h"
 #endif

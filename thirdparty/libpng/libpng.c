@@ -21,9 +21,12 @@
 
 #include "libpng.h"
 
-#if defined (__clang__)
- #pragma clang diagnostic push
- #pragma clang diagnostic ignored "-Wincompatible-pointer-types-discards-qualifiers"
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wincompatible-pointer-types-discards-qualifiers"
+#elif defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
 #endif
 
 #include "upstream/png.c"
@@ -71,10 +74,6 @@
 #undef png_pass_ystart
 #undef png_pass_yinc
 
-#if defined (__clang__)
- #pragma clang diagnostic pop
-#endif
-
 #if defined(__arm__) || defined(__aarch64__) || defined(_M_ARM) || defined(_M_ARM64)
 #include "upstream/arm/arm_init.c"
 #include "upstream/arm/filter_neon_intrinsics.c"
@@ -84,4 +83,10 @@
 #if defined(__SSE2__) || defined(_M_X64) || defined(_M_IX86)
 #include "upstream/intel/intel_init.c"
 #include "upstream/intel/filter_sse2_intrinsics.c"
+#endif
+
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#elif defined(__GNUC__)
+#pragma GCC diagnostic pop
 #endif
