@@ -220,3 +220,9 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include <libgif/libgif.h>
 #include "formats/yup_GifImageFormat.h"
 #endif
+
+//==============================================================================
+#if YUP_ENABLE_SHADER_COMPILER
+#include "shading/yup_ShaderTranspiler.h"
+#include "shading/yup_ShaderCache.h"
+#endif
