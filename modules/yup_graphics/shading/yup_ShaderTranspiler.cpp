@@ -759,6 +759,7 @@ ResultValue<MemoryBlock> ShaderTranspiler::compileToSPIRV (const String& source,
     const auto glslStage = toGlslangStage (stage);
 
     glslang::TShader shader (glslStage);
+    shader.setEnvInput (toGlslangSource (sourceLang), glslStage, glslang::EShClientVulkan, 100);
 
     auto sourceUtf8 = source.toStdString();
     const char* srcPtr = sourceUtf8.c_str();

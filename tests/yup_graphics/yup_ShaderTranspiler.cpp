@@ -62,8 +62,8 @@ constexpr const char* kFragmentWithUniforms = R"glsl(
 #version 450
 layout(location = 0) out vec4 outColor;
 layout(std140, binding = 0) uniform UBO {
-    vec4 tint;
-    float scale;
+    layout(offset = 0) vec4 tint;
+    layout(offset = 16) float scale;
 } ubo;
 layout(binding = 1) uniform sampler2D tex;
 layout(location = 0) in vec2 vUV;
@@ -210,6 +210,303 @@ layout(location = 0) in vec2 vUV;
 void main()
 {
     outColor = texture(textures[0], vUV) + texture(textures[1], vUV);
+}
+)glsl";
+
+constexpr const char* kFragmentWithSpecConst = R"glsl(
+#version 450
+layout(constant_id = 0) const float specConst = 1.0;
+layout(location = 0) out vec4 outColor;
+void main()
+{
+    outColor = vec4(specConst);
+}
+)glsl";
+
+constexpr const char* kFragmentWithUBOArray = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+layout(std140, binding = 0) uniform MyUBO {
+    vec4 color;
+} ubos[3];
+void main()
+{
+    outColor = ubos[0].color + ubos[1].color + ubos[2].color;
+}
+)glsl";
+
+constexpr const char* kVertexWithIndices = R"glsl(
+#version 450
+void main()
+{
+    gl_Position = vec4(float(gl_VertexIndex), float(gl_InstanceIndex), 0.0, 1.0);
+}
+)glsl";
+
+constexpr const char* kFragmentWithFragCoord = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+void main()
+{
+    outColor = vec4(gl_FragCoord.xy / 100.0, float(gl_FrontFacing), 1.0);
+}
+)glsl";
+
+constexpr const char* kComputeWithBuiltins = R"glsl(
+#version 450
+layout(local_size_x = 8, local_size_y = 1, local_size_z = 1) in;
+layout(binding = 0, rgba8) uniform writeonly image2D img;
+void main()
+{
+    vec4 val = vec4(float(gl_NumWorkGroups.x), float(gl_WorkGroupID.x),
+                    float(gl_LocalInvocationID.x), float(gl_LocalInvocationIndex));
+    imageStore(img, ivec2(gl_GlobalInvocationID.xy), val);
+}
+)glsl";
+
+constexpr const char* kFragmentWithSeparateSampler = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+layout(binding = 0) uniform texture2D tex;
+layout(binding = 1) uniform sampler samp;
+void main()
+{
+    outColor = texture(sampler2D(tex, samp), vec2(0.5));
+}
+)glsl";
+
+constexpr const char* kVertexWithClipCullDistance = R"glsl(
+#version 450
+out float gl_ClipDistance[2];
+out float gl_CullDistance[2];
+void main()
+{
+    gl_Position = vec4(0.0);
+    gl_ClipDistance[0] = 1.0;
+    gl_CullDistance[0] = 1.0;
+}
+)glsl";
+
+constexpr const char* kGeometryWithPrimitiveId = R"glsl(
+#version 450
+layout(triangles) in;
+layout(triangle_strip, max_vertices = 3) out;
+void main()
+{
+    gl_Position = gl_in[gl_PrimitiveIDIn].gl_Position;
+    EmitVertex();
+    gl_Position = gl_in[1].gl_Position;
+    EmitVertex();
+    gl_Position = gl_in[2].gl_Position;
+    EmitVertex();
+    EndPrimitive();
+}
+)glsl";
+
+constexpr const char* kVertexWithPointSize = R"glsl(
+#version 450
+void main()
+{
+    gl_Position = vec4(0.0);
+    gl_PointSize = 1.0;
+}
+)glsl";
+
+constexpr const char* kFragmentWithFragDepth = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+void main()
+{
+    outColor = vec4(1.0);
+    gl_FragDepth = 0.5;
+}
+)glsl";
+
+constexpr const char* kGeometryWithLayer = R"glsl(
+#version 450
+layout(triangles) in;
+layout(triangle_strip, max_vertices = 3) out;
+void main()
+{
+    gl_Layer = 0;
+    gl_Position = gl_in[0].gl_Position;
+    EmitVertex();
+    gl_Position = gl_in[1].gl_Position;
+    EmitVertex();
+    gl_Position = gl_in[2].gl_Position;
+    EmitVertex();
+    EndPrimitive();
+}
+)glsl";
+
+constexpr const char* kFragmentWithPointCoord = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+void main()
+{
+    outColor = vec4(gl_PointCoord, 0.0, 1.0);
+}
+)glsl";
+
+constexpr const char* kTessControlWithPatchVertices = R"glsl(
+#version 450
+layout(vertices = 3) out;
+void main()
+{
+    gl_TessLevelOuter[0] = float(gl_PatchVerticesIn);
+    gl_TessLevelOuter[1] = 1.0;
+    gl_TessLevelOuter[2] = 1.0;
+    gl_TessLevelInner[0] = 1.0;
+    gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
+}
+)glsl";
+
+constexpr const char* kFragmentWithHelperInvocation = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+void main()
+{
+    if (gl_HelperInvocation)
+        outColor = vec4(0.0);
+    else
+        outColor = vec4(1.0);
+}
+)glsl";
+
+constexpr const char* kFragmentWithSampleMask = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+void main()
+{
+    outColor = vec4(1.0);
+    gl_SampleMask[0] = 1;
+}
+)glsl";
+
+constexpr const char* kFragmentWithBoolUBO = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+layout(std140, binding = 0) uniform BoolUBO {
+    layout(offset = 0) bool flag;
+    layout(offset = 4) float value;
+} ubo;
+void main()
+{
+    outColor = ubo.flag ? vec4(ubo.value) : vec4(0.0);
+}
+)glsl";
+
+constexpr const char* kFragmentWithSampler1D = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+layout(binding = 0) uniform sampler1D tex1D;
+void main()
+{
+    outColor = vec4(texture(tex1D, 0.5).r);
+}
+)glsl";
+
+constexpr const char* kFragmentWithExtensions = R"glsl(
+#version 450
+#extension GL_EXT_shader_16bit_storage : enable
+layout(location = 0) out vec4 outColor;
+void main()
+{
+    outColor = vec4(1.0);
+}
+)glsl";
+
+constexpr const char* kFragmentWithSampleIdAndPos = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+void main()
+{
+    outColor = vec4(float(gl_SampleID), gl_SamplePosition.x, 0.0, 1.0);
+}
+)glsl";
+
+constexpr const char* kVertexWithDrawParams = R"glsl(
+#version 450
+void main()
+{
+    gl_Position = vec4(float(gl_BaseVertex), float(gl_BaseInstance), float(gl_DrawID), 1.0);
+}
+)glsl";
+
+constexpr const char* kFragmentWithImageBuffer = R"glsl(
+#version 450
+#extension GL_EXT_texture_buffer : enable
+layout(location = 0) out vec4 outColor;
+layout(binding = 0) uniform samplerBuffer buf;
+void main()
+{
+    outColor = vec4(texelFetch(buf, 0).r);
+}
+)glsl";
+
+constexpr const char* kFragmentWithSubpassInput = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+layout(input_attachment_index = 0, binding = 0) uniform subpassInput subpass;
+void main()
+{
+    outColor = subpassLoad(subpass);
+}
+)glsl";
+
+constexpr const char* kFragmentWith8BitStorage = R"glsl(
+#version 450
+#extension GL_EXT_shader_8bit_storage : enable
+layout(location = 0) out vec4 outColor;
+layout(std430, binding = 0) buffer StorageBuf8 {
+    layout(offset = 0) int8_t i8;
+    layout(offset = 1) uint8_t u8;
+} sb;
+void main()
+{
+    outColor = vec4(float(sb.i8), float(sb.u8), 0.0, 1.0);
+}
+)glsl";
+
+constexpr const char* kFragmentWith16BitStorage = R"glsl(
+#version 450
+#extension GL_EXT_shader_16bit_storage : enable
+layout(location = 0) out vec4 outColor;
+layout(std430, binding = 0) buffer StorageBuf16 {
+    layout(offset = 0) int16_t i16;
+    layout(offset = 2) uint16_t u16;
+    layout(offset = 4) float16_t f16;
+} sb;
+void main()
+{
+    outColor = vec4(float(sb.i16), float(sb.u16), float(sb.f16), 1.0);
+}
+)glsl";
+
+constexpr const char* kFragmentWithInt64 = R"glsl(
+#version 450
+#extension GL_ARB_gpu_shader_int64 : enable
+layout(location = 0) out vec4 outColor;
+layout(std140, binding = 0) uniform Int64UBO {
+    layout(offset = 0) int64_t i64;
+    layout(offset = 8) uint64_t u64;
+} ubo;
+void main()
+{
+    outColor = vec4(float(ubo.i64) * 1e-9, float(ubo.u64) * 1e-9, 0.0, 1.0);
+}
+)glsl";
+
+constexpr const char* kFragmentWithDouble = R"glsl(
+#version 450
+#extension GL_ARB_gpu_shader_fp64 : enable
+layout(location = 0) out vec4 outColor;
+layout(std140, binding = 0) uniform DoubleUBO {
+    layout(offset = 0) double dVal;
+} ubo;
+void main()
+{
+    outColor = vec4(float(ubo.dVal), 0.0, 0.0, 1.0);
 }
 )glsl";
 
@@ -1025,6 +1322,238 @@ TEST_F (ShaderTranspilerTests, Reflect_StructMemberDetails)
     }
 }
 
+TEST_F (ShaderTranspilerTests, Reflect_PointSize)
+{
+    auto result = transpiler->reflect (
+        kVertexWithPointSize, ShaderStage::vertex, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    bool hasPointSize = false;
+    for (const auto& bo : ref.builtinOutputs)
+    {
+        if (bo.builtin == ShaderReflection::BuiltInType::pointSize)
+        {
+            hasPointSize = true;
+            break;
+        }
+    }
+    EXPECT_TRUE (hasPointSize);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_FragDepth)
+{
+    auto result = transpiler->reflect (
+        kFragmentWithFragDepth, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    bool hasFragDepth = false;
+    for (const auto& bo : ref.builtinOutputs)
+    {
+        if (bo.builtin == ShaderReflection::BuiltInType::fragDepth)
+        {
+            hasFragDepth = true;
+            break;
+        }
+    }
+    EXPECT_TRUE (hasFragDepth);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_Layer)
+{
+    auto result = transpiler->reflect (
+        kGeometryWithLayer, ShaderStage::geometry, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    bool hasLayer = false;
+    for (const auto& bo : ref.builtinOutputs)
+    {
+        if (bo.builtin == ShaderReflection::BuiltInType::layer)
+        {
+            hasLayer = true;
+            break;
+        }
+    }
+    EXPECT_TRUE (hasLayer);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_PointCoord)
+{
+    auto result = transpiler->reflect (
+        kFragmentWithPointCoord, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    bool hasPointCoord = false;
+    for (const auto& bi : ref.builtinInputs)
+    {
+        if (bi.builtin == ShaderReflection::BuiltInType::pointCoord)
+        {
+            hasPointCoord = true;
+            break;
+        }
+    }
+    EXPECT_TRUE (hasPointCoord);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_PatchVertices)
+{
+    auto result = transpiler->reflect (
+        kTessControlWithPatchVertices, ShaderStage::tessControl, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    bool hasPatchVertices = false;
+    for (const auto& bi : ref.builtinInputs)
+    {
+        if (bi.builtin == ShaderReflection::BuiltInType::patchVertices)
+        {
+            hasPatchVertices = true;
+            break;
+        }
+    }
+    EXPECT_TRUE (hasPatchVertices);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_HelperInvocation)
+{
+    auto result = transpiler->reflect (
+        kFragmentWithHelperInvocation, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    bool hasHelper = false;
+    for (const auto& bi : ref.builtinInputs)
+    {
+        if (bi.builtin == ShaderReflection::BuiltInType::helperInvocation)
+        {
+            hasHelper = true;
+            break;
+        }
+    }
+    EXPECT_TRUE (hasHelper);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_SampleMask)
+{
+    auto result = transpiler->reflect (
+        kFragmentWithSampleMask, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    bool hasSampleMask = false;
+    for (const auto& bo : ref.builtinOutputs)
+    {
+        if (bo.builtin == ShaderReflection::BuiltInType::sampleMask)
+        {
+            hasSampleMask = true;
+            break;
+        }
+    }
+    EXPECT_TRUE (hasSampleMask);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_Sampler1D)
+{
+    auto result = transpiler->reflect (
+        kFragmentWithSampler1D, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    EXPECT_FALSE (ref.sampledImages.empty());
+
+    bool foundDim1D = false;
+    for (const auto& si : ref.sampledImages)
+    {
+        if (si.imageDim == ShaderReflection::ImageDimension::dim1D)
+        {
+            foundDim1D = true;
+            break;
+        }
+    }
+    EXPECT_TRUE (foundDim1D);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_SampleIdAndPosition)
+{
+    auto result = transpiler->reflect (
+        kFragmentWithSampleIdAndPos, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    bool hasSampleId = false;
+    bool hasSamplePosition = false;
+    for (const auto& bi : ref.builtinInputs)
+    {
+        if (bi.builtin == ShaderReflection::BuiltInType::sampleId)
+            hasSampleId = true;
+        if (bi.builtin == ShaderReflection::BuiltInType::samplePosition)
+            hasSamplePosition = true;
+    }
+    EXPECT_TRUE (hasSampleId);
+    EXPECT_TRUE (hasSamplePosition);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_ImageBuffer)
+{
+    auto result = transpiler->reflect (
+        kFragmentWithImageBuffer, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    EXPECT_FALSE (ref.sampledImages.empty());
+
+    bool foundDimBuffer = false;
+    for (const auto& si : ref.sampledImages)
+    {
+        if (si.imageDim == ShaderReflection::ImageDimension::dimBuffer)
+        {
+            foundDimBuffer = true;
+            break;
+        }
+    }
+    EXPECT_TRUE (foundDimBuffer);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_SubpassInput)
+{
+    auto result = transpiler->reflect (
+        kFragmentWithSubpassInput, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    EXPECT_FALSE (ref.subpassInputs.empty());
+
+    bool foundSubpass = false;
+    for (const auto& sp : ref.subpassInputs)
+    {
+        if (sp.type == ShaderReflection::ResourceType::subpassInput)
+        {
+            foundSubpass = true;
+            EXPECT_EQ (sp.imageDim, ShaderReflection::ImageDimension::dimSubpass);
+            break;
+        }
+    }
+    EXPECT_TRUE (foundSubpass);
+}
+
+//==============================================================================
+// Multi-texture dimensions
+//==============================================================================
+
 TEST_F (ShaderTranspilerTests, Reflect_MultiTextureDimensions)
 {
     auto result = transpiler->reflect (
@@ -1079,6 +1608,237 @@ TEST_F (ShaderTranspilerTests, Reflect_TextureArrayLayout)
         EXPECT_EQ (si.type, ShaderReflection::ResourceType::sampledImage);
         EXPECT_EQ (si.imageDim, ShaderReflection::ImageDimension::dim2D);
     }
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_SpecializationConstant)
+{
+    auto result = transpiler->reflect (
+        kFragmentWithSpecConst, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    EXPECT_FALSE (ref.specConstants.empty());
+
+    bool foundSpecConst = false;
+    for (const auto& sc : ref.specConstants)
+    {
+        if (sc.constantId == 0)
+        {
+            foundSpecConst = true;
+            EXPECT_EQ (sc.baseType, ShaderReflection::BaseType::float32);
+            break;
+        }
+    }
+    EXPECT_TRUE (foundSpecConst);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_UBOArray)
+{
+    auto result = transpiler->reflect (
+        kFragmentWithUBOArray, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    EXPECT_FALSE (ref.uniformBuffers.empty());
+    EXPECT_FALSE (ref.entryPoints.empty());
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_VertexIndices)
+{
+    auto result = transpiler->reflect (
+        kVertexWithIndices, ShaderStage::vertex, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    EXPECT_FALSE (ref.entryPoints.empty());
+    EXPECT_EQ (ref.entryPoints[0].stage, ShaderStage::vertex);
+
+    bool hasVertexIndex = false;
+    bool hasInstanceIndex = false;
+    for (const auto& bi : ref.builtinInputs)
+    {
+        if (bi.builtin == ShaderReflection::BuiltInType::vertexIndex)
+            hasVertexIndex = true;
+        if (bi.builtin == ShaderReflection::BuiltInType::instanceIndex)
+            hasInstanceIndex = true;
+    }
+    EXPECT_TRUE (hasVertexIndex);
+    EXPECT_TRUE (hasInstanceIndex);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_FragCoordAndFrontFacing)
+{
+    auto result = transpiler->reflect (
+        kFragmentWithFragCoord, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+
+    bool hasFragCoord = false;
+    bool hasFrontFacing = false;
+    for (const auto& bi : ref.builtinInputs)
+    {
+        if (bi.builtin == ShaderReflection::BuiltInType::fragCoord)
+            hasFragCoord = true;
+        if (bi.builtin == ShaderReflection::BuiltInType::frontFacing)
+            hasFrontFacing = true;
+    }
+    EXPECT_TRUE (hasFragCoord);
+    EXPECT_TRUE (hasFrontFacing);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_ComputeBuiltins)
+{
+    auto result = transpiler->reflect (
+        kComputeWithBuiltins, ShaderStage::compute, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    EXPECT_EQ (ref.entryPoints[0].stage, ShaderStage::compute);
+
+    bool hasNumWorkgroups = false;
+    bool hasWorkgroupId = false;
+    bool hasLocalInvocationId = false;
+    bool hasGlobalInvocationId = false;
+    bool hasLocalInvocationIndex = false;
+    for (const auto& bi : ref.builtinInputs)
+    {
+        switch (bi.builtin)
+        {
+            case ShaderReflection::BuiltInType::numWorkgroups:
+                hasNumWorkgroups = true;
+                break;
+            case ShaderReflection::BuiltInType::workgroupId:
+                hasWorkgroupId = true;
+                break;
+            case ShaderReflection::BuiltInType::localInvocationId:
+                hasLocalInvocationId = true;
+                break;
+            case ShaderReflection::BuiltInType::globalInvocationId:
+                hasGlobalInvocationId = true;
+                break;
+            case ShaderReflection::BuiltInType::localInvocationIndex:
+                hasLocalInvocationIndex = true;
+                break;
+            default:
+                break;
+        }
+    }
+    EXPECT_TRUE (hasNumWorkgroups);
+    EXPECT_TRUE (hasWorkgroupId);
+    EXPECT_TRUE (hasLocalInvocationId);
+    EXPECT_TRUE (hasGlobalInvocationId);
+    EXPECT_TRUE (hasLocalInvocationIndex);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_WorkgroupSizeDetails)
+{
+    auto result = transpiler->reflect (
+        kComputeWithBuiltins, ShaderStage::compute, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    EXPECT_EQ (ref.workgroupSize.x, 8u);
+    EXPECT_EQ (ref.workgroupSize.y, 1u);
+    EXPECT_EQ (ref.workgroupSize.z, 1u);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_SeparateSampler)
+{
+    auto result = transpiler->reflect (
+        kFragmentWithSeparateSampler, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+
+    bool foundImage = false;
+    bool foundSampler = false;
+    for (const auto& si : ref.separateImages)
+    {
+        if (si.baseType == ShaderReflection::BaseType::image)
+            foundImage = true;
+    }
+    for (const auto& ss : ref.separateSamplers)
+    {
+        if (ss.baseType == ShaderReflection::BaseType::sampler)
+            foundSampler = true;
+    }
+    EXPECT_TRUE (foundImage);
+    EXPECT_TRUE (foundSampler);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_StorageImage)
+{
+    auto result = transpiler->reflect (
+        kComputeWithBuiltins, ShaderStage::compute, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    EXPECT_FALSE (ref.storageImages.empty());
+
+    bool foundStorageImage = false;
+    for (const auto& si : ref.storageImages)
+    {
+        if (si.type == ShaderReflection::ResourceType::storageImage)
+        {
+            foundStorageImage = true;
+            EXPECT_EQ (si.imageDim, ShaderReflection::ImageDimension::dim2D);
+            break;
+        }
+    }
+    EXPECT_TRUE (foundStorageImage);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_ClipAndCullDistance)
+{
+    auto result = transpiler->reflect (
+        kVertexWithClipCullDistance, ShaderStage::vertex, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+
+    bool hasClipDistance = false;
+    bool hasCullDistance = false;
+    for (const auto& bo : ref.builtinOutputs)
+    {
+        if (bo.builtin == ShaderReflection::BuiltInType::clipDistance)
+            hasClipDistance = true;
+        if (bo.builtin == ShaderReflection::BuiltInType::cullDistance)
+            hasCullDistance = true;
+    }
+    EXPECT_TRUE (hasClipDistance);
+    EXPECT_TRUE (hasCullDistance);
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_GeometryPrimitiveId)
+{
+    auto result = transpiler->reflect (
+        kGeometryWithPrimitiveId, ShaderStage::geometry, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& ref = result.getValue();
+    EXPECT_EQ (ref.entryPoints[0].stage, ShaderStage::geometry);
+
+    bool hasPrimitiveId = false;
+    for (const auto& bi : ref.builtinInputs)
+    {
+        if (bi.builtin == ShaderReflection::BuiltInType::primitiveId)
+        {
+            hasPrimitiveId = true;
+            break;
+        }
+    }
+    EXPECT_TRUE (hasPrimitiveId);
 }
 
 //==============================================================================
