@@ -549,6 +549,7 @@ static ShaderReflection::ResourceBinding extractResourceBinding (
     binding.set = getVariableDecoration (compiler, resource.id, spv::DecorationDescriptorSet);
     binding.binding = getVariableDecoration (compiler, resource.id, spv::DecorationBinding);
     binding.location = getVariableDecoration (compiler, resource.id, spv::DecorationLocation);
+    binding.resourceId = resource.id;
     binding.descriptorCount = 1; // default, may be overridden by array type in fillTypeInfo
 
     fillTypeInfo (compiler, resource.base_type_id, binding);
@@ -730,6 +731,63 @@ static const uint32_t* memoryBlockToSpirvWords (const MemoryBlock& block, size_t
 {
     wordCount = block.getSize() / sizeof (uint32_t);
     return static_cast<const uint32_t*> (block.getData());
+}
+
+//==============================================================================
+// Fills MSL backend slot numbers into a ShaderReflection after CompilerMSL::compile() has run
+//==============================================================================
+
+static void fillMSLBackendSlots (spirv_cross::CompilerMSL& mslCompiler, ShaderReflection& ref)
+{
+    auto fillVec = [&] (std::vector<ShaderReflection::ResourceBinding>& bindings)
+    {
+        for (auto& b : bindings)
+        {
+            b.backendSlot = mslCompiler.get_automatic_msl_resource_binding (b.resourceId);
+            b.backendSlotSecondary = mslCompiler.get_automatic_msl_resource_binding_secondary (b.resourceId);
+        }
+    };
+
+    fillVec (ref.uniformBuffers);
+    fillVec (ref.storageBuffers);
+    fillVec (ref.sampledImages);
+    fillVec (ref.separateImages);
+    fillVec (ref.separateSamplers);
+    fillVec (ref.storageImages);
+    fillVec (ref.subpassInputs);
+    fillVec (ref.atomicCounters);
+    fillVec (ref.accelerationStructures);
+    fillVec (ref.glPlainUniforms);
+    fillVec (ref.tensors);
+    fillVec (ref.pushConstantBuffers);
+    fillVec (ref.shaderRecordBuffers);
+}
+
+//==============================================================================
+// Fills GLSL backend slot numbers into a ShaderReflection
+//==============================================================================
+
+static void fillGLSLBackendSlots (ShaderReflection& ref)
+{
+    auto fillVec = [] (std::vector<ShaderReflection::ResourceBinding>& bindings)
+    {
+        for (auto& b : bindings)
+            b.backendSlot = b.binding;
+    };
+
+    fillVec (ref.uniformBuffers);
+    fillVec (ref.storageBuffers);
+    fillVec (ref.sampledImages);
+    fillVec (ref.separateImages);
+    fillVec (ref.separateSamplers);
+    fillVec (ref.storageImages);
+    fillVec (ref.subpassInputs);
+    fillVec (ref.atomicCounters);
+    fillVec (ref.accelerationStructures);
+    fillVec (ref.glPlainUniforms);
+    fillVec (ref.tensors);
+    fillVec (ref.pushConstantBuffers);
+    fillVec (ref.shaderRecordBuffers);
 }
 
 } // namespace
@@ -974,6 +1032,94 @@ ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBl
     {
         auto compiler = createSpirvCompiler (words, wordCount);
         return makeResultValueOk (extractReflection (*compiler));
+    }
+    catch (const std::exception& e)
+    {
+        return makeResultValueFail (String ("SPIR-V reflection error: ") + e.what());
+    }
+}
+
+ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBlock& spirv,
+                                                                  ShaderLanguage targetLang,
+                                                                  const TranspileOptions& options)
+{
+    if (spirv.getSize() < sizeof (uint32_t) * 5)
+        return makeResultValueFail ("SPIR-V data is too small to be valid");
+
+    size_t wordCount = 0;
+    const uint32_t* words = memoryBlockToSpirvWords (spirv, wordCount);
+
+    if (wordCount == 0)
+        return makeResultValueFail ("SPIR-V data is empty");
+
+    try
+    {
+        const auto entryName = options.entryPoint.toStdString();
+
+        switch (targetLang)
+        {
+            case ShaderLanguage::msl:
+            {
+                spirv_cross::CompilerMSL compiler (words, wordCount);
+
+                spirv_cross::CompilerGLSL::Options commonOpts;
+                commonOpts.vertex.flip_vert_y = options.flipVertY;
+                compiler.set_common_options (commonOpts);
+
+                spirv_cross::CompilerMSL::Options mslOpts;
+                mslOpts.use_framebuffer_fetch_subpasses = options.mslUsesFramebufferFetch;
+                compiler.set_msl_options (mslOpts);
+
+                if (! entryName.empty())
+                {
+                    auto entries = compiler.get_entry_points_and_stages();
+
+                    if (! entries.empty())
+                        compiler.set_entry_point (entryName, entries[0].execution_model);
+                }
+
+                compiler.compile(); // triggers slot allocation + combined sampler splitting
+
+                auto ref = extractReflection (compiler);
+                fillMSLBackendSlots (compiler, ref);
+
+                return makeResultValueOk (std::move (ref));
+            }
+
+            case ShaderLanguage::glsl:
+            case ShaderLanguage::essl:
+            {
+                spirv_cross::CompilerGLSL compiler (words, wordCount);
+
+                spirv_cross::CompilerGLSL::Options glslOpts;
+                glslOpts.version = options.glslVersion;
+                glslOpts.es = options.es || (targetLang == ShaderLanguage::essl);
+                glslOpts.vulkan_semantics = true;
+                glslOpts.vertex.flip_vert_y = options.flipVertY;
+                compiler.set_common_options (glslOpts);
+
+                if (! entryName.empty())
+                {
+                    auto entries = compiler.get_entry_points_and_stages();
+
+                    if (! entries.empty())
+                        compiler.set_entry_point (entryName, entries[0].execution_model);
+                }
+
+                compiler.compile();
+
+                auto ref = extractReflection (compiler);
+                fillGLSLBackendSlots (ref);
+
+                return makeResultValueOk (std::move (ref));
+            }
+
+            case ShaderLanguage::hlsl:
+                return makeResultValueFail ("HLSL backend slot reflection is not supported");
+
+            default:
+                return makeResultValueFail ("Unsupported target language for backend-aware reflection");
+        }
     }
     catch (const std::exception& e)
     {

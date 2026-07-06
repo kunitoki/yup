@@ -346,6 +346,22 @@ struct ShaderReflection
 
         /** Total block size in bytes (for uniform/storage buffer blocks). */
         uint32_t blockSize = 0;
+
+        /** Internal resource variable ID (for backend slot queries). */
+        uint32_t resourceId = 0;
+
+        /** Backend-assigned native slot index.
+            Populated by reflectFromSPIRV() when a target language is provided.
+            For MSL: the [[buffer(N)]], [[texture(N)]], [[sampler(N)]], or [[id(N)]] index.
+            For GLSL/ESSL: same as the SPIR-V binding point.
+            Set to ~0u (~0u) when not populated. */
+        uint32_t backendSlot = ~0u;
+
+        /** Secondary backend-assigned slot.
+            Populated by reflectFromSPIRV() when a target language is provided.
+            For MSL: the sampler half of a combined-image-sampler resource.
+            Set to ~0u (~0u) when not applicable. */
+        uint32_t backendSlotSecondary = ~0u;
     };
 
     //==========================================================================
@@ -567,6 +583,25 @@ public:
                  or an error message on failure.
     */
     ResultValue<ShaderReflection> reflectFromSPIRV (const MemoryBlock& spirv);
+
+    //==========================================================================
+    /**
+        Extract reflection data with backend-assigned native slot numbers.
+
+        Creates a backend-specific compiler (MSL, GLSL, etc.), compiles the SPIR-V
+        to trigger slot allocation, and extracts reflection data that includes
+        the backend-assigned slot indices in each ResourceBinding::backendSlot.
+
+        @param spirv       SPIR-V binary data.
+        @param targetLang  Target backend language (e.g., msl, glsl, essl).
+        @param options     Options that affect slot assignment (e.g., entry point).
+
+        @returns A ResultValue containing ShaderReflection on success,
+                 or an error message on failure.
+    */
+    ResultValue<ShaderReflection> reflectFromSPIRV (const MemoryBlock& spirv,
+                                                    ShaderLanguage targetLang,
+                                                    const TranspileOptions& options = {});
 };
 
 } // namespace yup

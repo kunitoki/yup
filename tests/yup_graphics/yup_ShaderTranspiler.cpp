@@ -21,6 +21,8 @@
 
 #include <gtest/gtest.h>
 
+#include <set>
+
 #include <yup_graphics/yup_graphics.h>
 
 #if YUP_ENABLE_SHADER_COMPILER
@@ -2077,6 +2079,210 @@ TEST_F (ShaderTranspilerTests, MultipleInstancesCanCoexist)
 
     EXPECT_TRUE (r1.wasOk());
     EXPECT_TRUE (r2.wasOk());
+}
+
+//==============================================================================
+// reflectFromSPIRV with backend-aware slot reflection
+//==============================================================================
+
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_MSL_FragmentShaderWithUniforms)
+{
+    auto spirvResult = transpiler->compileToSPIRV (
+        kFragmentWithUniforms, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (spirvResult.wasOk());
+
+    auto reflectResult = transpiler->reflectFromSPIRV (
+        spirvResult.getValue(), ShaderLanguage::msl);
+
+    ASSERT_TRUE (reflectResult.wasOk());
+
+    const auto& ref = reflectResult.getValue();
+
+    ASSERT_FALSE (ref.uniformBuffers.empty());
+    ASSERT_FALSE (ref.sampledImages.empty());
+
+    // UBO should have a valid backend slot assigned
+    for (const auto& ub : ref.uniformBuffers)
+    {
+        EXPECT_NE (ub.backendSlot, ~0u);
+    }
+
+    // Sampled image (combined sampler) should have both primary and secondary slots
+    for (const auto& si : ref.sampledImages)
+    {
+        EXPECT_NE (si.backendSlot, ~0u);
+        EXPECT_NE (si.backendSlotSecondary, ~0u);
+    }
+}
+
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_MSL_BackendSlotsDoNotCollide)
+{
+    auto spirvResult = transpiler->compileToSPIRV (
+        kFragmentWithUniforms, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (spirvResult.wasOk());
+
+    auto reflectResult = transpiler->reflectFromSPIRV (
+        spirvResult.getValue(), ShaderLanguage::msl);
+
+    ASSERT_TRUE (reflectResult.wasOk());
+
+    const auto& ref = reflectResult.getValue();
+
+    // MSL has independent slot namespaces per resource type:
+    // [[buffer(N)]], [[texture(N)]], [[sampler(N)]] don't collide.
+    // Uniqueness is checked per-category.
+
+    auto checkUniq = [] (const std::vector<ShaderReflection::ResourceBinding>& bindings)
+    {
+        std::set<uint32_t> seen;
+
+        for (const auto& b : bindings)
+        {
+            if (b.backendSlot != ~0u)
+            {
+                EXPECT_FALSE (seen.contains (b.backendSlot))
+                    << "Duplicate backend slot " << b.backendSlot << " for " << b.name.toRawUTF8();
+                seen.insert (b.backendSlot);
+            }
+        }
+    };
+
+    checkUniq (ref.uniformBuffers);
+    checkUniq (ref.sampledImages);
+    checkUniq (ref.separateImages);
+    checkUniq (ref.separateSamplers);
+}
+
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_MSL_ComputeShader)
+{
+    auto spirvResult = transpiler->compileToSPIRV (
+        kMinimalComputeGLSL, ShaderStage::compute, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (spirvResult.wasOk());
+
+    auto reflectResult = transpiler->reflectFromSPIRV (
+        spirvResult.getValue(), ShaderLanguage::msl);
+
+    ASSERT_TRUE (reflectResult.wasOk());
+
+    const auto& ref = reflectResult.getValue();
+    EXPECT_EQ (ref.workgroupSize.x, 16u);
+    EXPECT_EQ (ref.workgroupSize.y, 1u);
+    EXPECT_EQ (ref.workgroupSize.z, 1u);
+}
+
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_GLSL_SlotsMatchSPIRVBinding)
+{
+    auto spirvResult = transpiler->compileToSPIRV (
+        kFragmentWithUniforms, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (spirvResult.wasOk());
+
+    auto reflectResult = transpiler->reflectFromSPIRV (
+        spirvResult.getValue(), ShaderLanguage::glsl);
+
+    ASSERT_TRUE (reflectResult.wasOk());
+
+    const auto& ref = reflectResult.getValue();
+
+    // GLSL backend slots should match the original SPIR-V binding numbers
+    for (const auto& ub : ref.uniformBuffers)
+    {
+        EXPECT_EQ (ub.backendSlot, ub.binding);
+    }
+
+    for (const auto& si : ref.sampledImages)
+    {
+        EXPECT_EQ (si.backendSlot, si.binding);
+    }
+}
+
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_ESSL_SlotsMatchSPIRVBinding)
+{
+    auto spirvResult = transpiler->compileToSPIRV (
+        kFragmentWithUniforms, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (spirvResult.wasOk());
+
+    auto reflectResult = transpiler->reflectFromSPIRV (
+        spirvResult.getValue(), ShaderLanguage::essl);
+
+    ASSERT_TRUE (reflectResult.wasOk());
+
+    const auto& ref = reflectResult.getValue();
+
+    for (const auto& ub : ref.uniformBuffers)
+    {
+        EXPECT_EQ (ub.backendSlot, ub.binding);
+    }
+}
+
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_HLSL_NotSupported)
+{
+    auto spirvResult = transpiler->compileToSPIRV (
+        kMinimalFragmentGLSL, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (spirvResult.wasOk());
+
+    auto reflectResult = transpiler->reflectFromSPIRV (
+        spirvResult.getValue(), ShaderLanguage::hlsl);
+
+    EXPECT_TRUE (reflectResult.failed());
+}
+
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_NoTargetLang_BackendSlotsAreAbsent)
+{
+    auto spirvResult = transpiler->compileToSPIRV (
+        kFragmentWithUniforms, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (spirvResult.wasOk());
+
+    // Original overload (no target language) — backend slots should remain ~0u
+    auto reflectResult = transpiler->reflectFromSPIRV (spirvResult.getValue());
+
+    ASSERT_TRUE (reflectResult.wasOk());
+
+    const auto& ref = reflectResult.getValue();
+
+    for (const auto& ub : ref.uniformBuffers)
+    {
+        EXPECT_EQ (ub.backendSlot, ~0u);
+        EXPECT_EQ (ub.backendSlotSecondary, ~0u);
+    }
+
+    for (const auto& si : ref.sampledImages)
+    {
+        EXPECT_EQ (si.backendSlot, ~0u);
+        EXPECT_EQ (si.backendSlotSecondary, ~0u);
+    }
+}
+
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_MSL_StageInputAndOutputSlots)
+{
+    auto spirvResult = transpiler->compileToSPIRV (
+        kFragmentWithUniforms, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (spirvResult.wasOk());
+
+    auto reflectResult = transpiler->reflectFromSPIRV (
+        spirvResult.getValue(), ShaderLanguage::msl);
+
+    ASSERT_TRUE (reflectResult.wasOk());
+
+    const auto& ref = reflectResult.getValue();
+
+    // Stage inputs/outputs don't get backend buffer/texture/sampler slots
+    for (const auto& si : ref.stageInputs)
+    {
+        EXPECT_EQ (si.backendSlot, ~0u);
+    }
+
+    for (const auto& so : ref.stageOutputs)
+    {
+        EXPECT_EQ (so.backendSlot, ~0u);
+    }
 }
 
 #endif // YUP_ENABLE_SHADER_COMPILER
