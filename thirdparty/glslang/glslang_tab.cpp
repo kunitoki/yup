@@ -104,12 +104,22 @@ void OS_DumpMemoryCounters() {}
 #if defined (_WIN32)
  #pragma push_macro ("CONST")
  #undef CONST
+ #define BOOL glslang_BOOL
+ #define INT glslang_INT
+ #define UINT glslang_UINT
+ #define FLOAT glslang_FLOAT
+ #define MAT2 glslang_MAT2
 #endif
 
 #include "upstream/glslang/MachineIndependent/glslang_tab.cpp"
 
 #if defined (_WIN32)
  #pragma pop_macro ("CONST")
+ #undef BOOL
+ #undef INT
+ #undef UINT
+ #undef FLOAT
+ #undef MAT2
 #endif
 
 #if defined (__clang__)
