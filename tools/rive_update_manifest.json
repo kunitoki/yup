@@ -280,6 +280,21 @@
             "**/*.mm"
           ]
         }
+      ],
+      "namespace_wraps": [
+        { "path": "source/bitmap_decoder.cpp", "namespace": "rive" },
+        { "path": "source/bitmap_decoder_thirdparty.cpp", "namespace": "rive" },
+        { "path": "source/decode_astc_texture.cpp", "namespace": "rive" },
+        { "path": "source/decode_bc_texture.cpp", "namespace": "rive" },
+        {
+          "path": "source/decode_etc_texture.cpp",
+          "namespace": "rive",
+          "start_after": "                                  int channels);\n"
+        },
+        { "path": "source/decode_jpeg.cpp", "namespace": "rive" },
+        { "path": "source/decode_png.cpp", "namespace": "rive" },
+        { "path": "source/decode_webp.cpp", "namespace": "rive" },
+        { "path": "source/texture_decoder.cpp", "namespace": "rive" }
       ]
     },
     {
@@ -465,6 +480,43 @@
               "#ifdef _WINDLL"
             ]
           }
+        },
+        {
+          "path": "upstream/yoga/Yoga.cpp",
+          "note": "patched YGConfigGetDefault to use a proper RAII wrapper with cleanup",
+          "already_contains": "struct YogaWrapperWithCleanup",
+          "replace": {
+            "from": [
+              "YOGA_EXPORT YGConfigRef YGConfigGetDefault() {",
+              "  static YogaWrapperWithCleanup defaultWrapper = YogaWrapperWithCleanup();",
+              "  return defaultWrapper.defaultConfig;",
+              "}"
+            ],
+            "to": [
+              "namespace {",
+              "struct YogaWrapperWithCleanup {",
+              "  YogaWrapperWithCleanup()",
+              "    : defaultConfig (YGConfigNew())",
+              "  {",
+              "  }",
+              "",
+              "  ~YogaWrapperWithCleanup() {",
+              "    if (defaultConfig != nullptr) {",
+              "      YGConfigFree (defaultConfig);",
+              "      defaultConfig = nullptr;",
+              "    }",
+              "  }",
+              "",
+              "  YGConfigRef defaultConfig = nullptr;",
+              "};",
+              "} // namespace",
+              "",
+              "YOGA_EXPORT YGConfigRef YGConfigGetDefault() {",
+              "  static YGConfigRef defaultConfig = YGConfigNew();",
+              "  return defaultConfig;",
+              "}"
+            ]
+          }
         }
       ]
     },
@@ -513,6 +565,14 @@
         {
           "from": "src",
           "to": "upstream/src",
+          "include_globs": [
+            "**/*.c",
+            "**/*.h"
+          ]
+        },
+        {
+          "from": "sharpyuv",
+          "to": "upstream/src/sharpyuv",
           "include_globs": [
             "**/*.c",
             "**/*.h"
@@ -764,7 +824,15 @@
       "validate_existing_includes": true
     },
     {
-      "path": "thirdparty/libwebp/libwebp.c",
+      "path": "thirdparty/libwebp/libwebp_decode.c",
+      "validate_existing_includes": true,
+      "search_roots": [
+        "thirdparty/libwebp",
+        "thirdparty/libwebp/upstream"
+      ]
+    },
+    {
+      "path": "thirdparty/libwebp/libwebp_encode.c",
       "validate_existing_includes": true,
       "search_roots": [
         "thirdparty/libwebp",
