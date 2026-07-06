@@ -454,12 +454,25 @@ def apply_namespace_wraps(destination_root: Path, dep: dict[str, Any]) -> list[s
             last_match = matches[-1]
             insert_at = text.index("\n", last_match.end()) + 1
 
-        new_text = (
-            text[:insert_at]
-            + f"\n{open_marker}\n"
-            + text[insert_at:].rstrip("\n")
-            + f"\n\n{close_marker}\n"
-        )
+        close_before = wrap.get("close_before")
+        if close_before:
+            close_at = text.rfind(close_before)
+            if close_at == -1:
+                raise SystemExit(f"Could not find close_before in {path}: {close_before!r}")
+            new_text = (
+                text[:insert_at]
+                + f"\n{open_marker}\n"
+                + text[insert_at:close_at].rstrip("\n")
+                + f"\n\n{close_marker}\n\n"
+                + text[close_at:].lstrip("\n")
+            )
+        else:
+            new_text = (
+                text[:insert_at]
+                + f"\n{open_marker}\n"
+                + text[insert_at:].rstrip("\n")
+                + f"\n\n{close_marker}\n"
+            )
         if write_text_if_changed(path, new_text):
             notes.append(f"wrapped {wrap['path']} in namespace {namespace}")
 

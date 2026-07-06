@@ -282,6 +282,11 @@
         }
       ],
       "namespace_wraps": [
+        {
+          "path": "include/rive/decoders/bitmap_decoder.hpp",
+          "namespace": "rive",
+          "close_before": "\n#endif\n"
+        },
         { "path": "source/bitmap_decoder.cpp", "namespace": "rive" },
         { "path": "source/bitmap_decoder_thirdparty.cpp", "namespace": "rive" },
         { "path": "source/decode_astc_texture.cpp", "namespace": "rive" },
