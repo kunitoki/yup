@@ -101,7 +101,16 @@ void OS_DumpMemoryCounters() {}
 
 #endif
 
+#if defined (_WIN32)
+ #pragma push_macro ("CONST")
+ #undef CONST
+#endif
+
 #include "upstream/glslang/MachineIndependent/glslang_tab.cpp"
+
+#if defined (_WIN32)
+ #pragma pop_macro ("CONST")
+#endif
 
 #if defined (__clang__)
  #pragma clang diagnostic pop
