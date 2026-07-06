@@ -22,7 +22,7 @@
  */
 
 #include "spirv_parser.hpp"
-#include "NonSemanticShaderDebugInfo100.h"
+#include "NonSemanticShaderDebugInfo.h"
 #include <assert.h>
 
 using namespace std;
@@ -371,7 +371,7 @@ void Parser::parse(const Instruction &instruction)
 			if (ext.ext == SPIRExtension::NonSemanticShaderDebugInfo)
 			{
 				const auto instr = ops[3];
-				if (instr == NonSemanticShaderDebugInfo100DebugSource)
+				if (instr == NonSemanticShaderDebugInfoDebugSource)
 				{
 					set<SPIRString>(ops[1], get<SPIRString>(ops[4]).str);
 
@@ -382,14 +382,14 @@ void Parser::parse(const Instruction &instruction)
 					if (length >= 6)
 						source.source = ir.get<SPIRString>(ops[5]).str;
 				}
-				else if (instr == NonSemanticShaderDebugInfo100DebugSourceContinued)
+				else if (instr == NonSemanticShaderDebugInfoDebugSourceContinued)
 				{
 					if (length < 5)
 						SPIRV_CROSS_THROW("Invalid arguments for ShaderDebugInfo100DebugSourceContinued");
 					if (!ir.sources.empty())
 						ir.sources.back().source += ir.get<SPIRString>(ops[4]).str;
 				}
-				else if (instr == NonSemanticShaderDebugInfo100DebugLine)
+				else if (instr == NonSemanticShaderDebugInfoDebugLine)
 				{
 					if (length < 9)
 						SPIRV_CROSS_THROW("Invalid arguments for ShaderDebugInfo100DebugLine");
@@ -412,14 +412,14 @@ void Parser::parse(const Instruction &instruction)
 						break;
 					}
 				}
-				else if (instr == NonSemanticShaderDebugInfo100DebugLocalVariable)
+				else if (instr == NonSemanticShaderDebugInfoDebugLocalVariable)
 				{
 					if (length < 11)
 						SPIRV_CROSS_THROW("Invalid arguments for ShaderDebugInfo100DebugLocalVariable");
 					auto &lvar = set<SPIRDebugLocalVariable>(ops[1]);
 					lvar.name_id = ops[4];
 				}
-				else if (instr == NonSemanticShaderDebugInfo100DebugDeclare)
+				else if (instr == NonSemanticShaderDebugInfoDebugDeclare)
 				{
 					if (length < 7)
 						SPIRV_CROSS_THROW("Invalid arguments for ShaderDebugInfo100DebugDeclare");

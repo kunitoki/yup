@@ -33,7 +33,7 @@
     license:            BSD-3-Clause
 
     defines:            ENABLE_HLSL=1
-    searchpaths:        upstream
+    searchpaths:        upstream upstream/SPIRV
 
   END_YUP_MODULE_DECLARATION
 
