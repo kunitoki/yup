@@ -200,6 +200,84 @@ void Text::clearRenderStyles()
     }
 }
 
+// Vertical trim: the ascent above the first line's cap- or x-height and the
+// descent below the last line's baseline (or natural descent) that should be
+// removed from the box. Glyph layout is unchanged. Shared by computeBoundsInfo
+// (rendering) and measure (layout), so it operates on supplied lines/shape.
+static void computeVerticalTrim(
+    const SimpleArray<SimpleArray<GlyphLine>>& lines,
+    const SimpleArray<Paragraph>& shape,
+    TextTrimTop trimTop,
+    TextTrimBottom trimBottom,
+    float& topTrim,
+    float& bottomTrim)
+{
+    topTrim = 0.0f;
+    bottomTrim = 0.0f;
+    if (lines.empty() ||
+        (trimTop == TextTrimTop::none && trimBottom == TextTrimBottom::none))
+    {
+        return;
+    }
+
+    if (trimTop != TextTrimTop::none && !lines.front().empty())
+    {
+        const GlyphLine& firstLine = lines.front().front();
+        const Paragraph& firstParagraph = shape[0];
+        // Largest top edge across the runs on the first line so that no glyph
+        // is clipped. capHeight/xHeight are stored negative (up is -Y).
+        float edgePx = 0.0f;
+        for (uint32_t i = firstLine.startRunIndex; i <= firstLine.endRunIndex;
+             ++i)
+        {
+            const Font::LineMetrics& metrics =
+                firstParagraph.runs[i].font->lineMetrics();
+            float edge = trimTop == TextTrimTop::cap ? metrics.capHeight
+                                                     : metrics.xHeight;
+            edgePx = std::max(edgePx, -edge * firstParagraph.runs[i].size);
+        }
+        topTrim = std::max(0.0f, (firstLine.baseline - edgePx) - firstLine.top);
+    }
+
+    // Bottom trim uses the last non-empty paragraph's last line.
+    if (trimBottom != TextTrimBottom::none)
+    {
+        for (size_t p = lines.size(); p-- > 0;)
+        {
+            const SimpleArray<GlyphLine>& paragraphLines = lines[p];
+            if (paragraphLines.empty())
+            {
+                continue;
+            }
+            const GlyphLine& lastLine = paragraphLines.back();
+            float descentBand = lastLine.bottom - lastLine.baseline;
+            if (trimBottom == TextTrimBottom::alphabetic)
+            {
+                // Box bottom at the baseline: remove the whole descent.
+                bottomTrim = std::max(0.0f, descentBand);
+            }
+            else
+            {
+                // Box bottom at the natural descent: keep the descenders,
+                // remove only any extra leading below them.
+                const Paragraph& lastParagraph = shape[p];
+                float descentPx = 0.0f;
+                for (uint32_t i = lastLine.startRunIndex;
+                     i <= lastLine.endRunIndex;
+                     ++i)
+                {
+                    const GlyphRun& run = lastParagraph.runs[i];
+                    descentPx =
+                        std::max(descentPx,
+                                 run.font->lineMetrics().descent * run.size);
+                }
+                bottomTrim = std::max(0.0f, descentBand - descentPx);
+            }
+            break;
+        }
+    }
+}
+
 TextBoundsInfo Text::computeBoundsInfo()
 {
     const float paragraphSpace = paragraphSpacing();
@@ -259,13 +337,121 @@ TextBoundsInfo Text::computeBoundsInfo()
     }
     auto totalHeight = ellipsisLine > 0 ? ellipsedHeight : y;
     isEllipsisLineLast = lastLineIndex == ellipsisLine;
+
+    // Vertical trim: shrink the box to the chosen cap/x-height + baseline band.
+    // Glyph layout is unchanged; fixed sizing keeps its authored box.
+    float topTrim = 0.0f;
+    float bottomTrim = 0.0f;
+    if (effectiveSizing() != TextSizing::fixed)
+    {
+        computeVerticalTrim(m_lines,
+                            m_shape,
+                            verticalTrimTop(),
+                            verticalTrimBottom(),
+                            topTrim,
+                            bottomTrim);
+    }
+
     return {
         minY,
         maxWidth,
         totalHeight,
         ellipsisLine,
         isEllipsisLineLast,
+        topTrim,
+        bottomTrim,
     };
+}
+
+float Text::fitFontScale()
+{
+    // Largest authored font size across runs is our maximum; we search integer
+    // sizes in [1, maxSize]. Scaling all runs by a single multiplier preserves
+    // their relative proportions while stepping the largest run by integers.
+    float maxSize = 0.0f;
+    for (TextValueRun* valueRun : m_allRuns)
+    {
+        TextStylePaint* style = valueRun->style();
+        if (style != nullptr && style->font() != nullptr &&
+            !valueRun->text().empty())
+        {
+            maxSize = std::max(maxSize, style->fontSize());
+        }
+    }
+
+    const TextSizing sizing = effectiveSizing();
+    // Without a fixed dimension to fit into there is nothing to search:
+    // autoWidth grows in both directions, so we keep the authored size.
+    if (maxSize <= 1.0f || sizing == TextSizing::autoWidth)
+    {
+        return 1.0f;
+    }
+
+    const float boxWidth = effectiveWidth();
+    const float boxHeight = effectiveHeight();
+    const float paragraphSpace = paragraphSpacing();
+
+    StyledText styledText;
+
+    // Shapes and lays out the text at the given integer top size and reports
+    // whether it fits the bounds. Text dimensions grow monotonically with size,
+    // so this predicate is monotonic and binary-searchable.
+    auto fits = [&](int topSize) -> bool {
+        float scale = (float)topSize / maxSize;
+        if (!makeStyled(styledText, true, scale))
+        {
+            // Nothing to lay out: trivially fits.
+            return true;
+        }
+        auto runs = styledText.runs();
+        auto shape = runs[0].font->shapeText(styledText.unichars(), runs);
+        auto lines = BreakLines(shape, boxWidth, align(), wrap());
+
+        float maxWidth = 0.0f;
+        float y = 0.0f;
+        size_t paragraphIndex = 0;
+        for (const SimpleArray<GlyphLine>& paragraphLines : lines)
+        {
+            const Paragraph& paragraph = shape[paragraphIndex++];
+            for (const GlyphLine& line : paragraphLines)
+            {
+                const GlyphRun& endRun = paragraph.runs[line.endRunIndex];
+                const GlyphRun& startRun = paragraph.runs[line.startRunIndex];
+                float width = endRun.xpos[line.endGlyphIndex] -
+                              startRun.xpos[line.startGlyphIndex];
+                maxWidth = std::max(maxWidth, width);
+            }
+            if (!paragraphLines.empty())
+            {
+                y += paragraphLines.back().bottom;
+            }
+            y += paragraphSpace;
+        }
+
+        bool widthFits = maxWidth <= boxWidth;
+        bool heightFits = sizing == TextSizing::fixed ? (y <= boxHeight) : true;
+        return widthFits && heightFits;
+    };
+
+    // Binary search for the largest integer top size in [1, floor(maxSize)]
+    // that fits. If nothing fits we fall back to the minimum size (1).
+    int lo = 1;
+    int hi = std::max(1, (int)maxSize);
+    int best = 1;
+    while (lo <= hi)
+    {
+        int mid = lo + (hi - lo) / 2;
+        if (fits(mid))
+        {
+            best = mid;
+            lo = mid + 1;
+        }
+        else
+        {
+            hi = mid - 1;
+        }
+    }
+    return (float)best / maxSize;
 }
 
 LineIter Text::shouldDrawLine(float curY,
@@ -363,6 +549,8 @@ void Text::buildRenderStyles()
     float totalHeight = info.totalHeight;
     int ellipsisLine = info.ellipsisLine;
     bool isEllipsisLineLast = info.isEllipsisLineLast;
+    float topTrim = info.topTrim;
+    float bottomTrim = info.bottomTrim;
 
     // Step 3: update modifiers
     bool hasModifiers = haveModifiers();
@@ -381,16 +569,20 @@ void Text::buildRenderStyles()
     switch (effectiveSizing())
     {
         case TextSizing::autoWidth:
-            m_bounds = AABB(0.0f,
-                            minY,
-                            maxWidth,
-                            std::max(minY, totalHeight - paragraphSpace));
+            m_bounds = AABB(
+                0.0f,
+                minY,
+                maxWidth,
+                std::max(minY,
+                         totalHeight - paragraphSpace - topTrim - bottomTrim));
             break;
         case TextSizing::autoHeight:
-            m_bounds = AABB(0.0f,
-                            minY,
-                            effectiveWidth(),
-                            std::max(minY, totalHeight - paragraphSpace));
+            m_bounds = AABB(
+                0.0f,
+                minY,
+                effectiveWidth(),
+                std::max(minY,
+                         totalHeight - paragraphSpace - topTrim - bottomTrim));
             break;
         case TextSizing::fixed:
             m_bounds =
@@ -425,8 +617,9 @@ void Text::buildRenderStyles()
             AABB(minX, minY, minX + bounds.width(), minY + bounds.height()));
     }
 
-    // Step 6: add the glyphs to render paths
-    float curY = minY;
+    // Step 6: add the glyphs to render paths. Shift content up by topTrim so
+    // the first line's cap-height line aligns with the (trimmed) box top.
+    float curY = minY - topTrim;
     int lineIndex = 0;
     int paragraphIndex = 0;
     float minX = std::numeric_limits<float>::max();
@@ -833,7 +1026,9 @@ void StyledText::append(rcp<Font> font,
         {std::move(font), size, lineHeight, letterSpacing, n, 0, styleId});
 }
 
-bool Text::makeStyled(StyledText& styledText, bool withModifiers) const
+bool Text::makeStyled(StyledText& styledText,
+                      bool withModifiers,
+                      float fontScale) const
 {
     styledText.clear();
     uint16_t runIndex = 0;
@@ -847,7 +1042,7 @@ bool Text::makeStyled(StyledText& styledText, bool withModifiers) const
             continue;
         }
         styledText.append(style->font(),
-                          style->fontSize(),
+                          style->fontSize() * fontScale,
                           style->lineHeight(),
                           style->letterSpacing(),
                           text,
@@ -943,8 +1138,12 @@ void Text::update(ComponentDirt value)
         bool precomputeModifierCoverage = modifierRangesNeedShape();
         bool parentIsLayoutNotArtboard =
             parent()->is<LayoutComponent>() && !parent()->is<Artboard>();
+        // For fitFontSize, find the largest integer font size that fits the
+        // bounds, then shape/lay out the text at that size below.
+        float fontScale =
+            overflow() == TextOverflow::fitFontSize ? fitFontScale() : 1.0f;
         if (precomputeModifierCoverage &&
-            makeStyled(m_modifierStyledText, false))
+            makeStyled(m_modifierStyledText, false, fontScale))
         {
             auto runs = m_modifierStyledText.runs();
             m_modifierShape =
@@ -970,7 +1169,7 @@ void Text::update(ComponentDirt value)
                 group->computeCoverage(textSize);
             }
         }
-        if (makeStyled(m_styledText))
+        if (makeStyled(m_styledText, true, fontScale))
         {
             auto runs = m_styledText.runs();
             m_shape = runs[0].font->shapeText(m_styledText.unichars(), runs);
@@ -1108,14 +1307,27 @@ Vec2D Text::measure(Vec2D maxSize)
             y += paragraphSpace;
         }
     doneMeasuring:
+        // Match the rendered box: trim the ascent/descent band for auto sizing.
+        float topTrim = 0.0f;
+        float bottomTrim = 0.0f;
+        computeVerticalTrim(lines,
+                            shape,
+                            verticalTrimTop(),
+                            verticalTrimBottom(),
+                            topTrim,
+                            bottomTrim);
         Vec2D bounds;
         switch (sizing())
         {
             case TextSizing::autoWidth:
-                bounds = Vec2D(maxWidth, std::max(minY, computedHeight));
+                bounds = Vec2D(
+                    maxWidth,
+                    std::max(minY, computedHeight - topTrim - bottomTrim));
                 break;
             case TextSizing::autoHeight:
-                bounds = Vec2D(width(), std::max(minY, computedHeight));
+                bounds = Vec2D(
+                    width(),
+                    std::max(minY, computedHeight - topTrim - bottomTrim));
                 break;
             case TextSizing::fixed:
                 bounds = Vec2D(width(), minY + height());
@@ -1164,6 +1376,13 @@ void Text::originYChanged()
     markWorldTransformDirty();
 }
 
+void Text::verticalTrimValueChanged()
+{
+    // Trim affects both the rendered box and the layout-measured size, so go
+    // through the shape/layout path like sizing does.
+    markShapeDirty();
+}
+
 #else
 // Text disabled.
 Text::~Text() {}
@@ -1192,6 +1411,7 @@ AABB Text::localBounds() const { return AABB(); }
 void Text::originValueChanged() {}
 void Text::originXChanged() {}
 void Text::originYChanged() {}
+void Text::verticalTrimValueChanged() {}
 Vec2D Text::measureLayout(float width,
                           LayoutMeasureMode widthMode,
                           float height,

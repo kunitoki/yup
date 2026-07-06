@@ -19,17 +19,25 @@ class ScrollConstraint : public ScrollConstraintBase,
                          public LayoutConstraint
 {
 private:
-    TransformComponents m_componentsA;
-    TransformComponents m_componentsB;
-    float m_offsetX = 0;
-    float m_offsetY = 0;
     ScrollPhysics* m_physics;
-    Mat2D m_scrollTransform;
-    bool m_isDragging = false;
     ScrollVirtualizer* m_virtualizer = nullptr;
     std::vector<LayoutNodeProvider*> m_layoutChildren;
+
+    TransformComponents m_componentsA;
+    TransformComponents m_componentsB;
+    Mat2D m_scrollTransform;
+
+    float m_offsetX = 0;
+    float m_offsetY = 0;
+    float m_lastFrameOffsetX = 0;
+    float m_lastFrameOffsetY = 0;
     int m_childConstraintAppliedCount = 0;
 
+    bool m_isDragging = false;
+    bool m_isScrollBarDragging = false;
+    bool m_hasListChildren = false;
+
+    AABB boundsForFlatIndex(size_t index);
     Vec2D positionAtIndex(float index);
     float indexAtPosition(Vec2D pos);
     float maxOffsetXForPercent();
@@ -59,6 +67,8 @@ public:
     void physics(ScrollPhysics* physics) { m_physics = physics; }
     void initPhysics();
     void stopPhysics();
+
+    void clearVelocity();
 
     ScrollPhysicsType physicsType() const
     {
@@ -97,6 +107,27 @@ public:
     void setScrollPercentX(float value) override;
     void setScrollPercentY(float value) override;
     void setScrollIndex(float value) override;
+
+    float velocityX() override;
+    float velocityY() override;
+    void setVelocityX(float value) override {}
+    void setVelocityY(float value) override {}
+
+    bool scrollActive() override;
+    void setScrollActive(bool value) override {}
+
+    bool isScrollBarDragging() const { return m_isScrollBarDragging; }
+    void isScrollBarDragging(bool value)
+    {
+        if (!m_isScrollBarDragging && value)
+        {
+            // Prime the snapshot so the first advance comparison is
+            // meaningful (otherwise a stale value falsely flags motion).
+            m_lastFrameOffsetX = scrollOffsetX();
+            m_lastFrameOffsetY = scrollOffsetY();
+        }
+        m_isScrollBarDragging = value;
+    }
 
     size_t scrollItemCount();
     std::vector<LayoutNodeProvider*>& scrollChildren()

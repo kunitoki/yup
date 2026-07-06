@@ -493,11 +493,18 @@ def generate_include_lines(block: dict[str, Any]) -> list[str]:
     if not root.exists():
         raise SystemExit(f"Include generation root does not exist: {root}")
 
+    scanned: set[str] = set()
     for source in iter_source_files(root):
         rel = posix(source.relative_to(root))
         if should_copy(rel, include_globs, exclude_globs):
             include_path = f"{prefix}/{rel}" if prefix else rel
             paths.append(include_path)
+            scanned.add(include_path)
+
+    # Emit overrides even if upstream removed the file from the source tree
+    for key in include_overrides:
+        if key not in scanned:
+            paths.append(key)
 
     lines: list[str] = []
     for path in sorted(paths):

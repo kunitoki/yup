@@ -16,6 +16,7 @@ namespace rive
 {
 
 class FocusManager; // Forward declaration
+class ListenerInvocation;
 
 enum class EdgeBehavior : uint8_t
 {
@@ -104,6 +105,7 @@ public:
     bool isScope() const { return !m_children.empty(); }
 
     void addChild(rcp<FocusNode> child);
+    void insertChild(size_t index, rcp<FocusNode> child);
     void removeChild(rcp<FocusNode> child);
 
     // Remove this node from its current parent (used internally)
@@ -124,6 +126,16 @@ public:
     bool textInput(const std::string& text)
     {
         return m_focusable ? m_focusable->textInput(text) : false;
+    }
+
+    bool gamepadDispatch(
+        const ListenerInvocation& invocation,
+        ScriptedDrawable** outDispatchedScriptedDrawable = nullptr)
+    {
+        return m_focusable
+                   ? m_focusable->gamepadDispatch(invocation,
+                                                  outDispatchedScriptedDrawable)
+                   : false;
     }
 
     void focused()

@@ -33,10 +33,12 @@ public:
 
     static const uint16_t generatorFunctionRefPropertyKey = 893;
     static const uint16_t isModulePropertyKey = 914;
+    static const uint16_t serializedImplementedMethodsPropertyKey = 1022;
 
 protected:
     uint32_t m_GeneratorFunctionRef = 0;
     bool m_IsModule = false;
+    uint32_t m_SerializedImplementedMethods = 2097151;
 
 public:
     inline uint32_t generatorFunctionRef() const
@@ -51,6 +53,7 @@ public:
         }
         m_GeneratorFunctionRef = value;
         generatorFunctionRefChanged();
+        notifyPropertyChanged(generatorFunctionRefPropertyKey);
     }
 
     inline bool isModule() const { return m_IsModule; }
@@ -62,6 +65,22 @@ public:
         }
         m_IsModule = value;
         isModuleChanged();
+        notifyPropertyChanged(isModulePropertyKey);
+    }
+
+    inline uint32_t serializedImplementedMethods() const
+    {
+        return m_SerializedImplementedMethods;
+    }
+    void serializedImplementedMethods(uint32_t value)
+    {
+        if (m_SerializedImplementedMethods == value)
+        {
+            return;
+        }
+        m_SerializedImplementedMethods = value;
+        serializedImplementedMethodsChanged();
+        notifyPropertyChanged(serializedImplementedMethodsPropertyKey);
     }
 
     Core* clone() const override;
@@ -69,6 +88,7 @@ public:
     {
         m_GeneratorFunctionRef = object.m_GeneratorFunctionRef;
         m_IsModule = object.m_IsModule;
+        m_SerializedImplementedMethods = object.m_SerializedImplementedMethods;
         TextAsset::copy(object);
     }
 
@@ -82,6 +102,10 @@ public:
             case isModulePropertyKey:
                 m_IsModule = CoreBoolType::deserialize(reader);
                 return true;
+            case serializedImplementedMethodsPropertyKey:
+                m_SerializedImplementedMethods =
+                    CoreUintType::deserialize(reader);
+                return true;
         }
         return TextAsset::deserialize(propertyKey, reader);
     }
@@ -89,6 +113,7 @@ public:
 protected:
     virtual void generatorFunctionRefChanged() {}
     virtual void isModuleChanged() {}
+    virtual void serializedImplementedMethodsChanged() {}
 };
 } // namespace rive
 

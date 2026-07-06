@@ -228,12 +228,24 @@ public:
 
             if (i == maxIterations)
             {
+                auto stateMachineName =
+                    m_stateMachineInstance->stateMachine() == nullptr
+                        ? "[SM Not found]"
+                        : m_stateMachineInstance->stateMachine()
+                              ->name()
+                              .c_str();
+                auto layerName = m_layer == nullptr ? "[LY Not found]"
+                                                    : m_layer->name().c_str();
+                auto artboardName =
+                    m_stateMachineInstance->artboard() == nullptr
+                        ? "[AB Not found]"
+                        : m_stateMachineInstance->artboard()->name().c_str();
                 fprintf(stderr,
                         "%s StateMachine exceeded max iterations in layer %s "
                         "on artboard %s\n",
-                        m_stateMachineInstance->stateMachine()->name().c_str(),
-                        m_layer->name().c_str(),
-                        m_stateMachineInstance->artboard()->name().c_str());
+                        stateMachineName,
+                        layerName,
+                        artboardName);
                 return false;
             }
         }
@@ -731,6 +743,13 @@ public:
         }
     }
 
+    HitResult processGamepadInvocation(
+        const ListenerInvocation& invocation,
+        ScriptedDrawable* alreadyDispatched) override
+    {
+        return HitResult::none;
+    }
+
     HitResult processEvent(Vec2D position,
                            ListenerType hitType,
                            bool canHit,
@@ -897,6 +916,25 @@ public:
         }
         return false;
     }
+    HitResult processGamepadInvocation(
+        const ListenerInvocation& invocation,
+        ScriptedDrawable* alreadyDispatched) override
+    {
+        auto hitResult = HitResult::none;
+        auto nestedArtboard = m_component->as<NestedArtboard>();
+        for (auto nestedAnimation : nestedArtboard->nestedAnimations())
+        {
+            if (nestedAnimation->is<NestedStateMachine>())
+            {
+                auto nestedStateMachine =
+                    nestedAnimation->as<NestedStateMachine>();
+                nestedStateMachine->stateMachineInstance()
+                    ->broadcastGamepadToScriptedDrawables(invocation,
+                                                          alreadyDispatched);
+            }
+        }
+        return hitResult;
+    }
     HitResult processEvent(Vec2D position,
                            ListenerType hitType,
                            bool canHit,
@@ -968,6 +1006,7 @@ public:
                         case ListenerType::blur:
                         case ListenerType::keyboard:
                         case ListenerType::semanticAction:
+                        case ListenerType::gamepad:
                             break;
                     }
                 }
@@ -995,6 +1034,7 @@ public:
                         case ListenerType::blur:
                         case ListenerType::keyboard:
                         case ListenerType::semanticAction:
+                        case ListenerType::gamepad:
                             break;
                     }
                 }
@@ -1114,6 +1154,7 @@ public:
                         case ListenerType::blur:
                         case ListenerType::keyboard:
                         case ListenerType::semanticAction:
+                        case ListenerType::gamepad:
                             break;
                     }
                 }
@@ -1140,9 +1181,53 @@ public:
                         case ListenerType::blur:
                         case ListenerType::keyboard:
                         case ListenerType::semanticAction:
+                        case ListenerType::gamepad:
                             break;
                     }
                 }
+                if ((hitResult == HitResult::none &&
+                     (itemHitResult == HitResult::hit ||
+                      itemHitResult == HitResult::hitOpaque)) ||
+                    (hitResult == HitResult::hit &&
+                     itemHitResult == HitResult::hitOpaque))
+                {
+                    hitResult = itemHitResult;
+                }
+                if (hitResult == HitResult::hitOpaque)
+                {
+                    runningCanHit = false;
+                }
+            }
+        }
+        return hitResult;
+    }
+    HitResult processGamepadInvocation(
+        const ListenerInvocation& invocation,
+        ScriptedDrawable* alreadyDispatched) override
+    {
+        auto componentList = m_component->as<ArtboardComponentList>();
+        HitResult hitResult = HitResult::none;
+        bool runningCanHit = true;
+        if (componentList->isCollapsed())
+        {
+            return hitResult;
+        }
+        const auto& order = componentList->orderedListIndices();
+        for (auto it = order.rbegin(); it != order.rend(); ++it)
+        {
+            const int i = *it;
+            auto stateMachine = componentList->stateMachineInstance(i);
+            if (stateMachine != nullptr)
+            {
+                HitResult itemHitResult = HitResult::none;
+                if (runningCanHit)
+                {
+                    itemHitResult =
+                        stateMachine->broadcastGamepadToScriptedDrawables(
+                            invocation,
+                            alreadyDispatched);
+                }
+
                 if ((hitResult == HitResult::none &&
                      (itemHitResult == HitResult::hit ||
                       itemHitResult == HitResult::hitOpaque)) ||
@@ -1484,7 +1569,7 @@ HitResult StateMachineInstance::dragStart(Vec2D position,
     {
         disablePointerEvents(pointerId);
     }
-    auto hit = updateListeners(position, ListenerType::dragStart);
+    auto hit = updateListeners(position, ListenerType::dragStart, pointerId);
     return hit;
 }
 HitResult StateMachineInstance::dragEnd(Vec2D position,
@@ -1492,7 +1577,7 @@ HitResult StateMachineInstance::dragEnd(Vec2D position,
                                         int pointerId)
 {
     enablePointerEvents(pointerId);
-    auto hit = updateListeners(position, ListenerType::dragEnd);
+    auto hit = updateListeners(position, ListenerType::dragEnd, pointerId);
     pointerMove(position, timeStamp, pointerId);
     return hit;
 }
@@ -1650,6 +1735,10 @@ StateMachineInstance::StateMachineInstance(const StateMachine* machine,
     for (size_t i = 0; i < dataBindCount; i++)
     {
         auto dataBind = machine->dataBind(i);
+        if (!dataBind->target())
+        {
+            continue;
+        }
         auto dataBindClone = static_cast<DataBind*>(dataBind->clone());
         dataBindClone->file(dataBind->file());
         if (dataBind->converter() != nullptr)
@@ -1830,6 +1919,28 @@ StateMachineInstance::StateMachineInstance(const StateMachine* machine,
             }
             m_listenerGroups.push_back(std::move(listenerGroup));
         }
+        if (listener->hasListener(ListenerType::gamepad))
+        {
+            auto target = m_artboardInstance->resolve(listener->targetId());
+            auto node = target->as<Node>();
+            FocusData* focusData = nullptr;
+            for (auto child : node->children())
+            {
+                if (child->is<FocusData>())
+                {
+                    focusData = child->as<FocusData>();
+                    break;
+                }
+            }
+            if (focusData != nullptr)
+            {
+                auto gamepadGroup =
+                    std::make_unique<GamepadListenerGroup>(focusData,
+                                                           listener,
+                                                           this);
+                m_gamepadListenerGroups.push_back(std::move(gamepadGroup));
+            }
+        }
     }
 
     std::vector<ListenerGroupProvider*> componentProvidedListenerGroups;
@@ -1946,12 +2057,18 @@ StateMachineInstance::StateMachineInstance(const StateMachine* machine,
         scriptedPair.second->dataContext(m_artboardInstance->dataContext());
     }
     initScriptedObjects();
-    // Register Scripted objects as keyboard and text targets when expected
+    // Register Scripted objects as keyboard and text targets when expected,
+    // and collect every scripted drawable that wants gamepad events so we can
+    // broadcast to it later regardless of focus.
     for (auto object : instance->objects<ContainerComponent>())
     {
         auto scriptedObject = ScriptedObject::from(object);
-        if (scriptedObject && (scriptedObject->wantsKeyboardInput() ||
-                               scriptedObject->wantsTextInput()))
+        if (!scriptedObject)
+        {
+            continue;
+        }
+        if (scriptedObject->wantsKeyboardInput() ||
+            scriptedObject->wantsTextInput())
         {
             for (auto& child : object->as<ContainerComponent>()->children())
             {
@@ -1968,6 +2085,14 @@ StateMachineInstance::StateMachineInstance(const StateMachine* machine,
                     break;
                 }
             }
+        }
+        if ((scriptedObject->wantsGamePadConnect() ||
+             scriptedObject->wantsGamePadDisconnect() ||
+             scriptedObject->wantsGamePadEvent()) &&
+            object->is<ScriptedDrawable>())
+        {
+            m_gamepadScriptedDrawables.push_back(
+                object->as<ScriptedDrawable>());
         }
     }
     sortHitComponents();
@@ -2007,6 +2132,7 @@ StateMachineInstance::~StateMachineInstance()
     {
         m_artboardInstance->cleanupSemanticTree();
     }
+    m_embedderGamepads.clear();
 
     unbind();
     for (auto inst : m_inputInstances)
@@ -2274,6 +2400,25 @@ void StateMachineInstance::setFocus(FocusData* focusData)
     }
 }
 
+StateMachineInstance::FocusState StateMachineInstance::focusState() const
+{
+    FocusState state;
+    const FocusManager* fm =
+        m_externalFocusManager ? m_externalFocusManager : &m_focusManager;
+    // primaryFocusPtr() avoids a refcount bump on this poll-friendly path.
+    FocusNode* focus = fm->primaryFocusPtr();
+    if (focus == nullptr)
+    {
+        return state;
+    }
+    state.hasFocus = true;
+    if (Focusable* focusable = focus->focusable())
+    {
+        state.expectsKeyboardInput = focusable->acceptsKeyboardInput();
+    }
+    return state;
+}
+
 void StateMachineInstance::processFocusEvents()
 {
     if (m_queuedFocusEvents.empty())
@@ -2428,6 +2573,12 @@ void StateMachineInstance::reset()
 
 bool StateMachineInstance::advanceAndApply(float seconds)
 {
+    return advanceAndApply(seconds, true);
+}
+
+bool StateMachineInstance::advanceAndApply(float seconds,
+                                           bool advanceViewModels)
+{
     RIVE_PROF_SCOPE_L(1)
     // Advancing by 0 could return false, when it shouldn't. Force keepGoing
     // to true.
@@ -2462,12 +2613,25 @@ bool StateMachineInstance::advanceAndApply(float seconds)
         {
             keepGoing = true;
         }
-        reset();
+        if (advanceViewModels)
+        {
+            reset(); // advancedDataContext() (VM consume) + artboard reset
+        }
+        else
+        {
+            m_artboardInstance->reset(); // artboard component reset only
+        }
 
         if (!m_artboardInstance->hasDirt(ComponentDirt::Components))
         {
             break;
         }
+    }
+    if (advanceViewModels)
+    {
+        // Advance detached scripted view models (created via scripts, not part
+        // of the bound view model tree) at the end of the frame.
+        m_artboardInstance->advanceScriptedViewModels();
     }
     return keepGoing || !m_reportedEvents.empty() ||
            !m_reportedListenerViewModels.empty();
@@ -2905,4 +3069,32 @@ BindablePropertyNumber* StateMachineInstance::findTransitionPropertyInstance(
         }
     }
     return nullptr;
+}
+
+bool StateMachineInstance::hasFocusNodes()
+{
+    auto* fm = focusManager();
+    assert(fm != nullptr);
+    return !fm->rootNodes().empty();
+}
+
+bool StateMachineInstance::focusNext()
+{
+    auto* fm = focusManager();
+    assert(fm != nullptr);
+    return fm->focusNext();
+}
+
+bool StateMachineInstance::focusPrevious()
+{
+    auto* fm = focusManager();
+    assert(fm != nullptr);
+    return fm->focusPrevious();
+}
+
+void StateMachineInstance::clearFocus()
+{
+    auto* fm = focusManager();
+    assert(fm != nullptr);
+    fm->clearFocus();
 }
