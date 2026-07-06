@@ -45,10 +45,14 @@
 #include "source/ore/gl/ore_buffer_gl.cpp"
 #include "source/ore/gl/ore_context_gl.cpp"
 #include "source/ore/gl/ore_pipeline_gl.cpp"
+#define oreCompareFunctionToGL oreCompareFunctionToGL_rp
 #include "source/ore/gl/ore_render_pass_gl.cpp"
+#undef oreCompareFunctionToGL
 #include "source/ore/gl/ore_sampler_gl.cpp"
 #include "source/ore/gl/ore_shader_module_gl.cpp"
+#define oreFormatToGLInternal oreFormatToGLInternal_tex
 #include "source/ore/gl/ore_texture_gl.cpp"
+#undef oreFormatToGLInternal
 
 #else
 #error "No renderer backend defined"
