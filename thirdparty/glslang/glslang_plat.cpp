@@ -83,54 +83,18 @@
 #pragma warning(disable : 4996)
 #endif
 
-#include "glslang.h"
+// --- Platform Specific ----------------------------------------------------
 
-// --- GenericCodeGen -------------------------------------------------------
-
-#include "upstream/glslang/GenericCodeGen/CodeGen.cpp"
-#include "upstream/glslang/GenericCodeGen/Link.cpp"
-
-// --- MachineIndependent ---------------------------------------------------
-
-#include "upstream/glslang/MachineIndependent/PoolAlloc.cpp"
-#include "upstream/glslang/MachineIndependent/InfoSink.cpp"
-#include "upstream/glslang/MachineIndependent/Constant.cpp"
-#include "upstream/glslang/MachineIndependent/Intermediate.cpp"
-#include "upstream/glslang/MachineIndependent/IntermTraverse.cpp"
-#include "upstream/glslang/MachineIndependent/intermOut.cpp"
-#include "upstream/glslang/MachineIndependent/SymbolTable.cpp"
-#include "upstream/glslang/MachineIndependent/Versions.cpp"
-#include "upstream/glslang/MachineIndependent/Initialize.cpp"
-#include "upstream/glslang/MachineIndependent/Scan.cpp"
-#include "upstream/glslang/MachineIndependent/ParseContextBase.cpp"
-#include "upstream/glslang/MachineIndependent/ParseHelper.cpp"
-#include "upstream/glslang/MachineIndependent/parseConst.cpp"
-#include "upstream/glslang/MachineIndependent/ShaderLang.cpp"
-#include "upstream/glslang/MachineIndependent/linkValidate.cpp"
-#include "upstream/glslang/MachineIndependent/reflection.cpp"
-#include "upstream/glslang/MachineIndependent/iomapper.cpp"
-#include "upstream/glslang/MachineIndependent/limits.cpp"
-#include "upstream/glslang/MachineIndependent/RemoveTree.cpp"
-#include "upstream/glslang/MachineIndependent/SpirvIntrinsics.cpp"
-#include "upstream/glslang/MachineIndependent/attribute.cpp"
-#include "upstream/glslang/MachineIndependent/propagateNoContraction.cpp"
-
-// --- Preprocessor ---------------------------------------------------------
-
-#include "upstream/glslang/MachineIndependent/preprocessor/Pp.cpp"
-#include "upstream/glslang/MachineIndependent/preprocessor/PpAtom.cpp"
-#include "upstream/glslang/MachineIndependent/preprocessor/PpContext.cpp"
-#include "upstream/glslang/MachineIndependent/preprocessor/PpScanner.cpp"
-#include "upstream/glslang/MachineIndependent/preprocessor/PpTokens.cpp"
-
-// --- C Interface ----------------------------------------------------------
-
-#include "upstream/glslang/CInterface/glslang_c_interface.cpp"
-
-// --- ResourceLimits -------------------------------------------------------
-
-#include "upstream/glslang/ResourceLimits/ResourceLimits.cpp"
-#include "upstream/glslang/ResourceLimits/resource_limits_c.cpp"
+#if defined(__EMSCRIPTEN__)
+namespace glslang
+{
+void OS_DumpMemoryCounters() {}
+} // namespace glslang
+#elif defined(_WIN32)
+#include "upstream/glslang/OSDependent/Windows/ossource.cpp"
+#else
+#include "upstream/glslang/OSDependent/Unix/ossource.cpp"
+#endif
 
 // --- End diagnostic suppression -------------------------------------------
 
