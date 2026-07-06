@@ -512,8 +512,8 @@
               "} // namespace",
               "",
               "YOGA_EXPORT YGConfigRef YGConfigGetDefault() {",
-              "  static YGConfigRef defaultConfig = YGConfigNew();",
-              "  return defaultConfig;",
+              "  static auto defaultWrapper = YogaWrapperWithCleanup();",
+              "  return defaultWrapper.defaultConfig;",
               "}"
             ]
           }
