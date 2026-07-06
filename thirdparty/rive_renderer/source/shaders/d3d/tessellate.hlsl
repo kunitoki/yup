@@ -1,7 +1,7 @@
-#include "../../generated/shaders/hlsl.minified.glsl"
-#include "../../generated/shaders/constants.minified.glsl"
+#include "hlsl.minified.glsl"
+#include "constants.minified.glsl"
 
-#include "../../generated/shaders/flush_uniforms.minified.glsl"
-#include "../../generated/shaders/common.minified.glsl"
-#include "../../generated/shaders/bezier_utils.minified.glsl"
-#include "../../generated/shaders/tessellate.minified.glsl"
+#include "flush_uniforms.minified.glsl"
+#include "common.minified.glsl"
+#include "bezier_utils.minified.glsl"
+#include "tessellate.minified.glsl"

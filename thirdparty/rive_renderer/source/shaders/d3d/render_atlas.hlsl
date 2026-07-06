@@ -1,10 +1,10 @@
 #define DRAW_PATH
 #define ENABLE_FEATHER
 
-#include "../../generated/shaders/hlsl.minified.glsl"
-#include "../../generated/shaders/constants.minified.glsl"
+#include "hlsl.minified.glsl"
+#include "constants.minified.glsl"
 
-#include "../../generated/shaders/flush_uniforms.minified.glsl"
-#include "../../generated/shaders/common.minified.glsl"
-#include "../../generated/shaders/draw_path_common.minified.glsl"
-#include "../../generated/shaders/render_atlas.minified.glsl"
+#include "flush_uniforms.minified.glsl"
+#include "common.minified.glsl"
+#include "draw_path_common.minified.glsl"
+#include "render_atlas.minified.glsl"
