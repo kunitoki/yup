@@ -27,6 +27,9 @@
 #elif defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
+#elif _MSC_VER
+#pragma warning (push)
+#pragma warning (disable : 4090)
 #endif
 
 #include "upstream/png.c"
@@ -89,4 +92,6 @@
 #pragma clang diagnostic pop
 #elif defined(__GNUC__)
 #pragma GCC diagnostic pop
+#elif _MSC_VER
+#pragma warning (pop)
 #endif
