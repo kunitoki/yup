@@ -689,7 +689,11 @@ TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToGLSL)
         spirv.getValue(), ShaderLanguage::glsl);
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_TRUE (result.getValue().contains ("main"));
+    const auto& output = result.getValue();
+    EXPECT_TRUE (output.contains ("main"));
+    EXPECT_TRUE (output.contains ("#version"));
+    EXPECT_FALSE (output.contains ("metal"));
+    EXPECT_FALSE (output.contains ("float4"));
 }
 
 TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToESSL)
@@ -702,7 +706,10 @@ TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToESSL)
         spirv.getValue(), ShaderLanguage::essl);
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_TRUE (result.getValue().contains ("main"));
+    const auto& output = result.getValue();
+    EXPECT_TRUE (output.contains ("main"));
+    EXPECT_TRUE (output.contains ("#version"));
+    EXPECT_TRUE (output.contains ("es"));
 }
 
 TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToHLSL)
@@ -715,7 +722,10 @@ TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToHLSL)
         spirv.getValue(), ShaderLanguage::hlsl);
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_TRUE (result.getValue().contains ("main"));
+    const auto& output = result.getValue();
+    EXPECT_TRUE (output.contains ("main"));
+    EXPECT_FALSE (output.contains ("#version"));
+    EXPECT_FALSE (output.contains ("gl_Position"));
 }
 
 TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToMSL)
@@ -728,7 +738,10 @@ TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToMSL)
         spirv.getValue(), ShaderLanguage::msl);
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_TRUE (result.getValue().contains ("main0"));
+    const auto& output = result.getValue();
+    EXPECT_TRUE (output.contains ("main0"));
+    EXPECT_FALSE (output.contains ("#version"));
+    EXPECT_TRUE (output.contains ("metal"));
 }
 
 TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_InvalidBinaryFails)
@@ -817,7 +830,9 @@ TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToGLSL_TessControl)
         spirv.getValue(), ShaderLanguage::glsl);
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_TRUE (result.getValue().contains ("main"));
+    const auto& output = result.getValue();
+    EXPECT_TRUE (output.contains ("main"));
+    EXPECT_TRUE (output.contains ("#version"));
 }
 
 TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToMSL_TessControl)
@@ -830,7 +845,10 @@ TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToMSL_TessControl)
         spirv.getValue(), ShaderLanguage::msl);
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_FALSE (result.getValue().isEmpty());
+    const auto& output = result.getValue();
+    EXPECT_FALSE (output.isEmpty());
+    EXPECT_TRUE (output.contains ("metal"));
+    EXPECT_TRUE (output.contains ("kernel"));
 }
 
 TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToGLSL_TessEval)
@@ -843,7 +861,9 @@ TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToGLSL_TessEval)
         spirv.getValue(), ShaderLanguage::glsl);
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_TRUE (result.getValue().contains ("main"));
+    const auto& output = result.getValue();
+    EXPECT_TRUE (output.contains ("main"));
+    EXPECT_TRUE (output.contains ("#version"));
 }
 
 //==============================================================================
@@ -864,6 +884,7 @@ TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToMSL_FlipVertY)
 
     ASSERT_TRUE (result.wasOk());
     EXPECT_FALSE (result.getValue().isEmpty());
+    EXPECT_TRUE (result.getValue().contains ("metal"));
 }
 
 TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToMSL_VertexShader)
@@ -876,8 +897,12 @@ TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToMSL_VertexShader)
         spirv.getValue(), ShaderLanguage::msl);
 
     ASSERT_TRUE (result.wasOk());
-    // vertex shader in MSL uses 'vertex' qualifier on return type
-    EXPECT_TRUE (result.getValue().contains ("vertex"));
+    const auto& output = result.getValue();
+    EXPECT_TRUE (output.contains ("#include <metal_stdlib>"));
+    EXPECT_TRUE (output.contains ("using namespace metal;"));
+    EXPECT_TRUE (output.contains ("[[position]]"));
+    EXPECT_TRUE (output.contains ("vertex"));
+    EXPECT_TRUE (output.contains ("metal"));
 }
 
 TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToMSL_FragmentShader)
@@ -890,8 +915,12 @@ TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToMSL_FragmentShader)
         spirv.getValue(), ShaderLanguage::msl);
 
     ASSERT_TRUE (result.wasOk());
-    // fragment shader in MSL uses 'fragment' qualifier on return type
-    EXPECT_TRUE (result.getValue().contains ("fragment"));
+    const auto& output = result.getValue();
+    EXPECT_TRUE (output.contains ("#include <metal_stdlib>"));
+    EXPECT_TRUE (output.contains ("using namespace metal;"));
+    EXPECT_TRUE (output.contains ("[[color(0)]]"));
+    EXPECT_TRUE (output.contains ("fragment"));
+    EXPECT_TRUE (output.contains ("metal"));
 }
 
 TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToMSL_FramebufferFetch)
@@ -920,8 +949,9 @@ TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToMSL_ComputeShader)
         spirv.getValue(), ShaderLanguage::msl);
 
     ASSERT_TRUE (result.wasOk());
-    // compute shader in MSL uses 'kernel' qualifier
-    EXPECT_TRUE (result.getValue().contains ("kernel"));
+    const auto& output = result.getValue();
+    EXPECT_TRUE (output.contains ("kernel"));
+    EXPECT_TRUE (output.contains ("metal"));
 }
 
 TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToMSL_WithEntryPoint)
@@ -950,7 +980,10 @@ TEST_F (ShaderTranspilerTests, Transpile_GLSLToGLSL)
         kMinimalFragmentGLSL, ShaderStage::fragment, ShaderLanguage::glsl, ShaderLanguage::glsl);
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_TRUE (result.getValue().contains ("main"));
+    const auto& output = result.getValue();
+    EXPECT_TRUE (output.contains ("main"));
+    EXPECT_TRUE (output.contains ("#version"));
+    EXPECT_FALSE (output.contains ("metal"));
 }
 
 TEST_F (ShaderTranspilerTests, Transpile_GLSLToMSL)
@@ -959,7 +992,10 @@ TEST_F (ShaderTranspilerTests, Transpile_GLSLToMSL)
         kMinimalFragmentGLSL, ShaderStage::fragment, ShaderLanguage::glsl, ShaderLanguage::msl);
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_FALSE (result.getValue().isEmpty());
+    const auto& output = result.getValue();
+    EXPECT_FALSE (output.isEmpty());
+    EXPECT_TRUE (output.contains ("metal"));
+    EXPECT_FALSE (output.contains ("#version"));
 }
 
 TEST_F (ShaderTranspilerTests, Transpile_GLSLToHLSL)
@@ -968,7 +1004,10 @@ TEST_F (ShaderTranspilerTests, Transpile_GLSLToHLSL)
         kMinimalFragmentGLSL, ShaderStage::fragment, ShaderLanguage::glsl, ShaderLanguage::hlsl);
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_FALSE (result.getValue().isEmpty());
+    const auto& output = result.getValue();
+    EXPECT_FALSE (output.isEmpty());
+    EXPECT_FALSE (output.contains ("#version"));
+    EXPECT_FALSE (output.contains ("metal"));
 }
 
 TEST_F (ShaderTranspilerTests, Transpile_GLSLToESSL)
@@ -977,7 +1016,10 @@ TEST_F (ShaderTranspilerTests, Transpile_GLSLToESSL)
         kMinimalFragmentGLSL, ShaderStage::fragment, ShaderLanguage::glsl, ShaderLanguage::essl);
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_FALSE (result.getValue().isEmpty());
+    const auto& output = result.getValue();
+    EXPECT_FALSE (output.isEmpty());
+    EXPECT_TRUE (output.contains ("#version"));
+    EXPECT_TRUE (output.contains ("es"));
 }
 
 TEST_F (ShaderTranspilerTests, Transpile_InvalidSourceFails)
@@ -998,7 +1040,9 @@ TEST_F (ShaderTranspilerTests, Transpile_WithOptions)
         kMinimalVertexGLSL, ShaderStage::vertex, ShaderLanguage::glsl, ShaderLanguage::glsl, opts);
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_TRUE (result.getValue().contains ("330"));
+    const auto& output = result.getValue();
+    EXPECT_TRUE (output.contains ("330"));
+    EXPECT_TRUE (output.contains ("#version"));
 }
 
 TEST_F (ShaderTranspilerTests, Transpile_TessControlToGLSL)
@@ -1007,7 +1051,9 @@ TEST_F (ShaderTranspilerTests, Transpile_TessControlToGLSL)
         kTessControlGLSL, ShaderStage::tessControl, ShaderLanguage::glsl, ShaderLanguage::glsl);
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_TRUE (result.getValue().contains ("main"));
+    const auto& output = result.getValue();
+    EXPECT_TRUE (output.contains ("main"));
+    EXPECT_TRUE (output.contains ("#version"));
 }
 
 TEST_F (ShaderTranspilerTests, Transpile_TessControlToMSL)
@@ -1016,7 +1062,10 @@ TEST_F (ShaderTranspilerTests, Transpile_TessControlToMSL)
         kTessControlGLSL, ShaderStage::tessControl, ShaderLanguage::glsl, ShaderLanguage::msl);
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_FALSE (result.getValue().isEmpty());
+    const auto& output = result.getValue();
+    EXPECT_FALSE (output.isEmpty());
+    EXPECT_TRUE (output.contains ("metal"));
+    EXPECT_TRUE (output.contains ("kernel"));
 }
 
 TEST_F (ShaderTranspilerTests, Transpile_TessEvalToGLSL)
@@ -1025,7 +1074,9 @@ TEST_F (ShaderTranspilerTests, Transpile_TessEvalToGLSL)
         kTessEvalGLSL, ShaderStage::tessEval, ShaderLanguage::glsl, ShaderLanguage::glsl);
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_TRUE (result.getValue().contains ("main"));
+    const auto& output = result.getValue();
+    EXPECT_TRUE (output.contains ("main"));
+    EXPECT_TRUE (output.contains ("#version"));
 }
 
 TEST_F (ShaderTranspilerTests, Transpile_TessEvalToMSL)
@@ -1034,7 +1085,16 @@ TEST_F (ShaderTranspilerTests, Transpile_TessEvalToMSL)
         kTessEvalGLSL, ShaderStage::tessEval, ShaderLanguage::glsl, ShaderLanguage::msl);
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_FALSE (result.getValue().isEmpty());
+    const auto& output = result.getValue();
+    EXPECT_FALSE (output.isEmpty());
+    EXPECT_TRUE (output.contains ("#include <metal_stdlib>"));
+    EXPECT_TRUE (output.contains ("using namespace metal;"));
+    EXPECT_TRUE (output.contains ("[[position]]"));
+    EXPECT_TRUE (output.contains ("[[attribute(0)]]"));
+    EXPECT_TRUE (output.contains ("[[ patch(triangle, 0) ]]"));
+    EXPECT_TRUE (output.contains ("[[stage_in]]"));
+    EXPECT_TRUE (output.contains ("[[position_in_patch]]"));
+    EXPECT_TRUE (output.contains ("vertex"));
 }
 
 //==============================================================================
@@ -1047,7 +1107,12 @@ TEST_F (ShaderTranspilerTests, Transpile_HLSLToMSL)
         kMinimalHLSL, ShaderStage::vertex, ShaderLanguage::hlsl, ShaderLanguage::msl);
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_FALSE (result.getValue().isEmpty());
+    const auto& output = result.getValue();
+    EXPECT_FALSE (output.isEmpty());
+    EXPECT_TRUE (output.contains ("#include <metal_stdlib>"));
+    EXPECT_TRUE (output.contains ("using namespace metal;"));
+    EXPECT_TRUE (output.contains ("[[position]]"));
+    EXPECT_TRUE (output.contains ("vertex"));
 }
 
 TEST_F (ShaderTranspilerTests, Transpile_VertexToMSL)
@@ -1056,7 +1121,11 @@ TEST_F (ShaderTranspilerTests, Transpile_VertexToMSL)
         kMinimalVertexGLSL, ShaderStage::vertex, ShaderLanguage::glsl, ShaderLanguage::msl);
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_TRUE (result.getValue().contains ("vertex"));
+    const auto& output = result.getValue();
+    EXPECT_TRUE (output.contains ("#include <metal_stdlib>"));
+    EXPECT_TRUE (output.contains ("using namespace metal;"));
+    EXPECT_TRUE (output.contains ("[[position]]"));
+    EXPECT_TRUE (output.contains ("vertex"));
 }
 
 TEST_F (ShaderTranspilerTests, Transpile_FragmentToMSL)
@@ -1065,7 +1134,10 @@ TEST_F (ShaderTranspilerTests, Transpile_FragmentToMSL)
         kMinimalFragmentGLSL, ShaderStage::fragment, ShaderLanguage::glsl, ShaderLanguage::msl);
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_TRUE (result.getValue().contains ("fragment"));
+    const auto& output = result.getValue();
+    EXPECT_TRUE (output.contains ("fragment"));
+    EXPECT_TRUE (output.contains ("metal"));
+    EXPECT_FALSE (output.contains ("gl_FragCoord"));
 }
 
 TEST_F (ShaderTranspilerTests, Transpile_ComputeToMSL)
@@ -1074,7 +1146,9 @@ TEST_F (ShaderTranspilerTests, Transpile_ComputeToMSL)
         kMinimalComputeGLSL, ShaderStage::compute, ShaderLanguage::glsl, ShaderLanguage::msl);
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_TRUE (result.getValue().contains ("kernel"));
+    const auto& output = result.getValue();
+    EXPECT_TRUE (output.contains ("kernel"));
+    EXPECT_TRUE (output.contains ("metal"));
 }
 
 TEST_F (ShaderTranspilerTests, Transpile_MSLWithFlipVertY)
@@ -1086,7 +1160,10 @@ TEST_F (ShaderTranspilerTests, Transpile_MSLWithFlipVertY)
         kMinimalVertexGLSL, ShaderStage::vertex, ShaderLanguage::glsl, ShaderLanguage::msl, opts);
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_FALSE (result.getValue().isEmpty());
+    const auto& output = result.getValue();
+    EXPECT_FALSE (output.isEmpty());
+    EXPECT_TRUE (output.contains ("metal"));
+    EXPECT_TRUE (output.contains ("vertex"));
 }
 
 TEST_F (ShaderTranspilerTests, Transpile_MSLWithFramebufferFetch)
