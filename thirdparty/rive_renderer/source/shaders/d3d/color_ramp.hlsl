@@ -1,6 +1,6 @@
-#include "hlsl.minified.glsl"
-#include "constants.minified.glsl"
+#include "../../generated/shaders/hlsl.minified.glsl"
+#include "../../generated/shaders/constants.minified.glsl"
 
-#include "flush_uniforms.minified.glsl"
-#include "common.minified.glsl"
-#include "color_ramp.minified.glsl"
+#include "../../generated/shaders/flush_uniforms.minified.glsl"
+#include "../../generated/shaders/common.minified.glsl"
+#include "../../generated/shaders/color_ramp.minified.glsl"
