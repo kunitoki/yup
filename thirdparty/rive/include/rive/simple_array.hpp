@@ -240,8 +240,9 @@ private:
         SimpleArrayTesting::reallocCount++;
 #endif
         // Call destructor for elements when sizing down.
-        SimpleArrayHelper<T>::DestructArray(this->m_ptr + size,
-                                            this->m_ptr + this->m_size);
+        if (this->m_ptr)
+            SimpleArrayHelper<T>::DestructArray(this->m_ptr + size,
+                                                this->m_ptr + this->m_size);
         this->m_ptr = static_cast<T*>(realloc(this->m_ptr, size * sizeof(T)));
         // Call constructor for elements when sizing up.
         SimpleArrayHelper<T>::DefaultConstructArray(this->m_ptr + this->m_size,
