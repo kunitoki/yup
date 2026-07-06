@@ -488,8 +488,8 @@
           "replace": {
             "from": [
               "YOGA_EXPORT YGConfigRef YGConfigGetDefault() {",
-              "  static YogaWrapperWithCleanup defaultWrapper = YogaWrapperWithCleanup();",
-              "  return defaultWrapper.defaultConfig;",
+              "  static YGConfigRef defaultConfig = YGConfigNew();",
+              "  return defaultConfig;",
               "}"
             ],
             "to": [
