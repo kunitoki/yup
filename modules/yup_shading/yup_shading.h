@@ -28,11 +28,11 @@
     vendor:             yup
     version:            2.0.0
     name:               YUP Shading Classes
-    description:        The essential set of basic YUP shading classes.
+    description:        The essential set of basic YUP shader classes.
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_core glslang spirv_cross
+    dependencies:       yup_core
 
   END_YUP_MODULE_DECLARATION
 
@@ -45,5 +45,22 @@
 #include <yup_core/yup_core.h>
 
 //==============================================================================
+#if ! YUP_ENABLE_SHADER_TRANSPILER
+#if YUP_MODULE_AVAILABLE_glslang && YUP_MODULE_AVAILABLE_spirv_cross
+#define YUP_ENABLE_SHADER_TRANSPILER 1
+#endif
+#else
+#if ! YUP_MODULE_AVAILABLE_glslang || ! YUP_MODULE_AVAILABLE_spirv_cross
+#define YUP_ENABLE_SHADER_TRANSPILER 0
+#endif
+#endif
+
+//==============================================================================
+#include "shading/yup_ShaderTypes.h"
+#include "shading/yup_ShaderBundle.h"
+
+#if YUP_ENABLE_SHADER_TRANSPILER
 #include "shading/yup_ShaderTranspiler.h"
 #include "shading/yup_ShaderCache.h"
+#include "shading/yup_ShaderBundleCompiler.h"
+#endif

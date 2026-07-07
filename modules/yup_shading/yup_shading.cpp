@@ -31,9 +31,13 @@
 #include "yup_shading.h"
 
 //==============================================================================
+#include "shading/yup_ShaderBundle.cpp"
+
+#if YUP_ENABLE_SHADER_TRANSPILER
 #include <glslang/glslang.h>
 #include <spirv_cross/spirv_cross.h>
 
-//==============================================================================
 #include "shading/yup_ShaderTranspiler.cpp"
 #include "shading/yup_ShaderCache.cpp"
+#include "shading/yup_ShaderBundleCompiler.cpp"
+#endif

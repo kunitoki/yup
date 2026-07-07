@@ -345,6 +345,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "logging/yup_FileLogger.h"
 #include "javascript/yup_JSONUtils.h"
 #include "serialisation/yup_Serialisation.h"
+#include "serialisation/yup_BinaryArchive.h"
 #include "javascript/yup_JSONSerialisation.h"
 #include "javascript/yup_Javascript.h"
 #include "maths/yup_BigInteger.h"

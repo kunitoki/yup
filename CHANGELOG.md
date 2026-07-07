@@ -17,6 +17,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 #### Shader Compiler (#126)
 
 - New glslang (`thirdparty/glslang`) and SPIRV-Cross integration (`thirdparty/spirv_cross`) for shader reflection and cross-compilation (GLSL, HLSL, MSL, WGSL)
+- New `ShaderBundle` class (`shading/yup_ShaderBundle.h`): RIFF binary format (`.ysl`) that stores original source, per-stage SPIR-V, all transpiled variants (GLSL/ESSL/HLSL/MSL), and full `ShaderReflection` data. Persists to / loads from `OutputStream`, `File`, and `MemoryBlock` via `saveToStream` / `loadFromStream` and friends. Lookup by stage + language via `findShader()`.
+- New `ShaderBundleCompiler` class (`shading/yup_ShaderBundleCompiler.h`): drives `ShaderTranspiler` to compile + transpile multiple stage/language combinations in one call and returns a fully-populated `ShaderBundle`. Accepts a `ShaderBundleCompileRequest` with per-stage `ShaderBundleEntry` items (stage, target languages, `TranspileOptions`).
+- New `BinaryOutputArchive` / `BinaryInputArchive` pair (`yup_core/serialisation/yup_BinaryArchive.h`): binary stream archives that plug into the `SerialisationTraits` system; used internally by `ShaderBundle` to serialise `ShaderReflection` data into `REFL` RIFF chunks.
+- `SerialisationTraits` specialisations for all `ShaderReflection` nested types (`EntryPoint`, `WorkgroupSize`, `ResourceMember`, `ResourceBinding`, `BuiltInBinding`, `SpecializationConstant`, `ShaderReflection`) enabling binary and JSON serialisation of full reflection data. Both `ShaderBundle` and `ShaderBundleCompiler` are compiled only when `YUP_ENABLE_SHADER_TRANSPILER` is `1`.
 
 #### macOS
 
