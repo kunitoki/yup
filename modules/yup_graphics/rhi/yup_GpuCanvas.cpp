@@ -38,7 +38,7 @@ GpuCanvas::Ptr GpuCanvas::create (GraphicsContext& ctx, int width, int height)
     if (! g->isOffscreen())
         return nullptr;
 
-    auto* canvas = new GpuCanvas();
+    GpuCanvas::Ptr canvas = new GpuCanvas();
     canvas->ctx = &ctx;
     canvas->graphics = std::move (g);
     return canvas;
