@@ -206,6 +206,25 @@ Image Image::duplicate() const
 
 //==============================================================================
 
+Image Image::fromTexture (Texture::Ptr tex)
+{
+    if (tex == nullptr || ! tex->isValid())
+        return {};
+
+    // Create BitmapData at the correct dimensions so isValid() and getWidth()/getHeight() work.
+    // No GPU round-trip; the pixel buffer is left uninitialized.
+    Image image (tex->getWidth(), tex->getHeight());
+
+    if (auto canvas = tex->getInternalRenderCanvas())
+        image.adoptRenderCanvas (std::move (canvas));
+    else if (auto rawTex = tex->getOrAdoptGpuTexture())
+        image.adoptTexture (std::move (rawTex));
+
+    return image;
+}
+
+//==============================================================================
+
 ResultValue<Image> Image::loadFromData (Span<const uint8> imageData)
 {
     auto stream = std::make_unique<MemoryInputStream> (imageData.data(), imageData.size(), false);

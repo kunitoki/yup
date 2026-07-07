@@ -128,6 +128,7 @@
 #include "native/yup_GraphicsContext_impl.cpp"
 
 //==============================================================================
+#include "rhi/yup_Texture.cpp"
 #include "primitives/yup_Path.cpp"
 #include "primitives/yup_CubicBezier.cpp"
 #include "fonts/yup_Font.cpp"
@@ -144,6 +145,8 @@
 #include "svg/yup_SVGCssParser.cpp"
 #include "svg/yup_SVGParser.cpp"
 #include "drawables/yup_Drawable.cpp"
+#include "rhi/yup_GpuCanvas.cpp"
+#include "rhi/yup_GpuProgram.cpp"
 
 //==============================================================================
 #if YUP_IMAGE_FORMAT_BMP

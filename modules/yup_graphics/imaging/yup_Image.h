@@ -24,6 +24,7 @@ namespace yup
 
 class Color;
 class GraphicsContext;
+class Texture;
 
 //==============================================================================
 /** Supported raw pixel byte formats. */
@@ -575,6 +576,17 @@ public:
         @return             A ResultValue containing the loaded image or an error message.
     */
     static ResultValue<Image> loadFromData (Span<const uint8> imageData);
+
+    /** Creates an Image that wraps an existing GPU Texture without allocating new BitmapData.
+
+        The returned Image has no CPU-side pixel data. It is suitable for passing to
+        Graphics::drawImage(); CPU pixel access (getPixel, getRawData) will jassert.
+
+        Returns an empty (invalid) Image if tex is null or invalid.
+
+        @param tex  A GPU texture obtained from GpuCanvas::asTexture().
+    */
+    static Image fromTexture (Texture::Ptr tex);
 
     //==============================================================================
     /** Creates a texture on the GPU for the image if it doesn't already exist.

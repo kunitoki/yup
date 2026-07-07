@@ -298,7 +298,7 @@ bool Graphics::isOffscreen() const noexcept
 
 bool Graphics::commitToImage()
 {
-    if (! offscreenTargetImage || ! commitOffscreenTarget())
+    if (offscreenTargetImage == nullptr || ! commitOffscreenTarget())
         return false;
 
     if (auto canvas = offscreenTarget->getRenderCanvas())
@@ -311,7 +311,7 @@ bool Graphics::commitToImage()
 
 bool Graphics::commitOffscreenTarget()
 {
-    if (! offscreenTarget || committed)
+    if (offscreenTarget == nullptr || committed)
         return false;
 
     context.endOffscreen (*offscreenTarget);
@@ -322,7 +322,7 @@ bool Graphics::commitOffscreenTarget()
 
 bool Graphics::readPixelsToImage()
 {
-    if (! offscreenTarget || ! offscreenTargetImage)
+    if (offscreenTarget == nullptr || offscreenTargetImage == nullptr)
         return false;
 
     if (! committed)
@@ -902,6 +902,15 @@ void Graphics::drawImage (const Image& image, const Rectangle<float>& targetArea
         return;
 
     renderTexture (image.getTexture(), targetArea);
+}
+
+void Graphics::drawTexture (const Texture::Ptr& texture, const Rectangle<float>& targetArea)
+{
+    if (texture == nullptr)
+        return;
+
+    // Graphics is a friend of Texture — may access private getOrAdoptGpuTexture()
+    renderTexture (texture->getOrAdoptGpuTexture(), targetArea);
 }
 
 bool Graphics::renderTexture (rive::rcp<rive::gpu::Texture> texture, const Rectangle<float>& targetArea)

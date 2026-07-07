@@ -62,6 +62,15 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 //==============================================================================
 
+namespace rive::ore
+{
+class Context;
+class Pipeline;
+class TextureView;
+} // namespace rive::ore
+
+//==============================================================================
+
 #include <compare>
 #include <tuple>
 
@@ -159,6 +168,7 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "primitives/yup_CubicBezier.h"
 #include "fonts/yup_Font.h"
 #include "fonts/yup_StyledText.h"
+#include "rhi/yup_Texture.h"
 #include "imaging/yup_Image.h"
 #include "imaging/yup_ImageFormat.h"
 #include "imaging/yup_ImageFormatReader.h"
@@ -174,6 +184,8 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "graphics/yup_FillType.h"
 #include "context/yup_GraphicsContext.h"
 #include "graphics/yup_Graphics.h"
+#include "rhi/yup_GpuCanvas.h"
+#include "rhi/yup_GpuProgram.h"
 #include "svg/yup_SVGElement.h"
 #include "svg/yup_SVGGradient.h"
 #include "svg/yup_SVGClipPath.h"

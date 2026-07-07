@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - New `ShaderBundleCompiler` class (`shading/yup_ShaderBundleCompiler.h`): drives `ShaderTranspiler` to compile + transpile multiple stage/language combinations in one call and returns a fully-populated `ShaderBundle`. Accepts a `ShaderBundleCompileRequest` with per-stage `ShaderBundleEntry` items (stage, target languages, `TranspileOptions`).
 - New `BinaryOutputArchive` / `BinaryInputArchive` pair (`yup_core/serialisation/yup_BinaryArchive.h`): binary stream archives that plug into the `SerialisationTraits` system; used internally by `ShaderBundle` to serialise `ShaderReflection` data into `REFL` RIFF chunks.
 - `SerialisationTraits` specialisations for all `ShaderReflection` nested types (`EntryPoint`, `WorkgroupSize`, `ResourceMember`, `ResourceBinding`, `BuiltInBinding`, `SpecializationConstant`, `ShaderReflection`) enabling binary and JSON serialisation of full reflection data. Both `ShaderBundle` and `ShaderBundleCompiler` are compiled only when `YUP_ENABLE_SHADER_TRANSPILER` is `1`.
+- `TranspileOptions` now exposes `spirvOptimize` flag; wired through to `glslang::SpvOptions` (disabled by default; requires SPIRV-Tools linked into glslang to take effect).
 
 #### macOS
 
@@ -29,6 +30,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Bug Fixes
 
 - UBSAN and ASAN fixes throughout the codebase
+### Graphics RHI
+
+- New `Texture` class (`rhi/yup_Texture.h`): opaque reference-counted GPU texture wrapping `rive::gpu::Texture` or `rive::gpu::RenderCanvas`. Obtained from `GpuCanvas::asTexture()` or constructed internally by `Image::fromTexture()`.
+- New `GpuCanvas` class (`rhi/yup_GpuCanvas.h`): consolidated backend-agnostic offscreen GPU surface. Replaces `GraphicsContext::createOffscreenTarget / beginOffscreen / endOffscreen` for all new code. API: `GpuCanvas::create()`, `getGraphics()`, `commit()`, `asTexture()`, `asImage()`, `readPixels()`.
+- `Image::fromTexture(Texture::Ptr)`: creates an `Image` wrapping an existing GPU texture (no CPU round-trip). Suitable for `Graphics::drawImage()`.
+- `Graphics::drawTexture(Texture::Ptr, Rectangle<float>)`: draws a GPU texture directly without materialising an `Image`, avoiding CPU-side BitmapData allocation.
+- New `GpuProgram` class (`rhi/yup_GpuProgram.h`): compiled ore render pipeline for custom GPU dispatch. `compile(ctx, vertSource, fragSource)` compiles WGSL/GLSL shader sources — each must supply a mandatory pre-compiled RSTB binding-map sidecar. `setTexture(group, binding, Texture::Ptr)` / `setUniformBuffer(group, binding, data, size)` bind resources. Frame lifecycle: `beginFrame()` → one or more `dispatch(GpuCanvas&)` calls (fullscreen triangle pass per call) → `endFrame()` → optionally `waitForGPU()`. `oreContext()` / `orePipeline()` expose the underlying ore handles for advanced custom vertex/draw calls.
+- GraphicsContext ore integration (`Options::enableOreContext = true`): activates the backend-native ore context. `gpuContext()` returns the ore `Context*` (Metal via `ContextMetal::Make`, GL via `ContextGL::Make`, D3D11 via `ContextD3D11::Make`). Required for `GpuProgram::compile()`.
+- New `SpinningCubeDemo` example (`examples/graphics`): 3D spinning cube rendered per-frame into a `GpuCanvas` via the 2D painter's algorithm; separable two-pass Gaussian blur (O(radius) H+V instead of O(radius^2) 2-D) wired to a slider via `GpuProgram`. Includes documented TODO block showing the ore-direct rendering path (vertex/index buffers via `oreContext()`, custom render pass via `orePipeline()`) for when RSTB-compiled cube shaders are provided.
 
 ---
 
