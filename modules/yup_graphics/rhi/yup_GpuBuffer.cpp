@@ -107,7 +107,7 @@ GpuBuffer::Ptr GpuBuffer::create (GraphicsContext& ctx,
         return nullptr;
 
     auto* result = new GpuBuffer();
-    result->impl = TypeErasedObject<GpuBuffer::kImplSize> (GpuBuffer::Impl { type, byteSize, std::move (buffer) });
+    result->impl = TypeErasedObject (GpuBuffer::Impl { type, byteSize, std::move (buffer) });
     return result;
 }
 

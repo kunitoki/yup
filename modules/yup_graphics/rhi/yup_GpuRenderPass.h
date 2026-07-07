@@ -148,7 +148,11 @@ private:
     GpuRenderPass() = default;
 
     struct Impl;
-    std::unique_ptr<Impl> impl;
+    Impl* getImpl() noexcept;
+    const Impl* getImpl() const noexcept;
+
+    static constexpr size_t ImplSizeBytes = 256;
+    TypeErasedObject<ImplSizeBytes> impl;
 
     YUP_DECLARE_NON_COPYABLE (GpuRenderPass)
 };

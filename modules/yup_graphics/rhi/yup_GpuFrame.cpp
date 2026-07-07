@@ -38,6 +38,18 @@ struct GpuFrame::Impl
 
 //==============================================================================
 
+GpuFrame::Impl* GpuFrame::getImpl() noexcept
+{
+    return impl.getPayload<Impl>();
+}
+
+const GpuFrame::Impl* GpuFrame::getImpl() const noexcept
+{
+    return impl.getPayload<Impl>();
+}
+
+//==============================================================================
+
 GpuFrame GpuFrame::begin (GraphicsContext& ctx)
 {
     GpuFrame frame;
@@ -46,8 +58,10 @@ GpuFrame GpuFrame::begin (GraphicsContext& ctx)
     if (oreCtx == nullptr)
         return frame;
 
-    frame.impl = std::make_unique<Impl>();
-    frame.impl->oreCtx = oreCtx;
+    frame.impl = TypeErasedObject<GpuFrame::ImplSizeBytes> (GpuFrame::Impl {});
+
+    auto* i = frame.getImpl();
+    i->oreCtx = oreCtx;
 
     oreCtx->beginFrame ({});
     return frame;
@@ -62,8 +76,8 @@ GpuFrame& GpuFrame::operator= (GpuFrame&& other) noexcept
     if (this != &other)
     {
         // Submit any pending frame we currently own before taking over.
-        if (impl != nullptr && ! impl->submitted && impl->oreCtx != nullptr)
-            impl->oreCtx->endFrame();
+        if (auto* i = getImpl(); i != nullptr && ! i->submitted && i->oreCtx != nullptr)
+            i->oreCtx->endFrame();
 
         impl = std::move (other.impl);
     }
@@ -80,30 +94,33 @@ GpuFrame::~GpuFrame()
 
 bool GpuFrame::isValid() const noexcept
 {
-    return impl != nullptr && impl->oreCtx != nullptr;
+    auto* i = getImpl();
+    return i != nullptr && i->oreCtx != nullptr;
 }
 
 bool GpuFrame::submit()
 {
-    if (impl == nullptr || impl->oreCtx == nullptr || impl->submitted)
+    auto* i = getImpl();
+    if (i == nullptr || i->oreCtx == nullptr || i->submitted)
         return false;
 
-    impl->oreCtx->endFrame();
-    impl->submitted = true;
+    i->oreCtx->endFrame();
+    i->submitted = true;
     return true;
 }
 
 void GpuFrame::waitForGPU()
 {
-    if (impl == nullptr || impl->oreCtx == nullptr)
+    auto* i = getImpl();
+    if (i == nullptr || i->oreCtx == nullptr)
         return;
 
-    impl->oreCtx->waitForGPU();
+    i->oreCtx->waitForGPU();
 
     // GPU has finished; safe to release all transient resources.
-    impl->liveBuffers.clear();
-    impl->liveViews.clear();
-    impl->liveSamplers.clear();
+    i->liveBuffers.clear();
+    i->liveViews.clear();
+    i->liveSamplers.clear();
 }
 
 } // namespace yup

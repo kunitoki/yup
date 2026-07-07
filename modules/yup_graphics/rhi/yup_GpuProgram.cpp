@@ -24,7 +24,7 @@ namespace yup
 
 //==============================================================================
 
-namespace GpuPipelineHelpers
+namespace
 {
 
 rive::ore::VertexFormat toOreVertexFormat (GpuVertexFormat f)
@@ -225,12 +225,33 @@ rive::ore::TextureFormat toOreTextureFormat (GpuTextureFormat f)
     }
 }
 
-} // namespace GpuPipelineHelpers
+} // namespace
 
 //==============================================================================
 
-struct GpuPipeline::Impl
+struct GpuProgram::Impl
 {
+    struct TextureBinding
+    {
+        int group;
+        int binding;
+        GpuTexture::Ptr texture;
+    };
+
+    struct UboBinding
+    {
+        int group;
+        int binding;
+        std::vector<uint8_t> data;
+    };
+
+    struct VertexBinding
+    {
+        int slot;
+        GpuBuffer::Ptr buffer;
+        rive::ore::Buffer* oreBuffer;
+    };
+
     rive::ore::Context* oreCtx = nullptr;
     rive::rcp<rive::ore::ShaderModule> vertModule;
     rive::rcp<rive::ore::ShaderModule> fragModule;
@@ -243,31 +264,388 @@ struct GpuPipeline::Impl
     // outlive the pipeline.
     std::vector<std::vector<rive::ore::VertexAttribute>> vertexAttrStorage;
     std::vector<rive::ore::VertexBufferLayout> vertexLayoutStorage;
+
+    std::vector<TextureBinding> textureBindings;
+    std::vector<UboBinding> uboBindings;
+
+    std::vector<VertexBinding> vertexBindings;
+    GpuBuffer::Ptr indexBuffer;
+    rive::ore::Buffer* indexOreBuffer = nullptr;
+    rive::ore::IndexFormat indexFormat = rive::ore::IndexFormat::none;
+
+    // Resources that must remain alive from a draw call until waitForGPU()
+    // completes. Cleared by beginFrame() and waitForGPU().
+    std::vector<rive::rcp<rive::ore::Buffer>> liveBuffers;
+    std::vector<rive::rcp<rive::ore::TextureView>> liveViews;
+    std::vector<rive::rcp<rive::ore::Sampler>> liveSamplers;
+
+    // Shared render-pass encoder used by draw() and drawIndexed().
+    bool encode (GpuCanvas& output,
+                 uint32_t count,
+                 bool indexed,
+                 const GpuRenderOptions& options);
 };
 
 //==============================================================================
 
-GpuPipeline::~GpuPipeline() = default;
+GpuProgram::~GpuProgram() = default;
 
-GpuPipeline::Impl* GpuPipeline::getImpl() noexcept
+//==============================================================================
+
+GpuProgram::Impl* GpuProgram::getImpl() noexcept
 {
     return impl.getPayload<Impl>();
 }
 
-const GpuPipeline::Impl* GpuPipeline::getImpl() const noexcept
+const GpuProgram::Impl* GpuProgram::getImpl() const noexcept
 {
     return impl.getPayload<Impl>();
 }
 
 //==============================================================================
 
-ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GraphicsContext& ctx,
-                                                    const GpuShaderSource& vs,
-                                                    const GpuShaderSource& fs,
-                                                    const GpuPipelineOptions& pipelineOptions)
+void GpuProgram::setTexture (int group, int binding, GpuTexture::Ptr texture)
 {
-    using namespace GpuPipelineHelpers;
+    auto* i = getImpl();
+    jassert (i != nullptr);
+    if (i == nullptr)
+        return;
 
+    for (auto& tb : i->textureBindings)
+    {
+        if (tb.group == group && tb.binding == binding)
+        {
+            tb.texture = std::move (texture);
+            return;
+        }
+    }
+
+    i->textureBindings.push_back ({ group, binding, std::move (texture) });
+}
+
+void GpuProgram::setUniformBuffer (int group, int binding, const void* data, size_t byteSize)
+{
+    auto* i = getImpl();
+    jassert (i != nullptr);
+    jassert (data != nullptr && byteSize > 0);
+    if (i == nullptr || data == nullptr || byteSize == 0)
+        return;
+
+    for (auto& ub : i->uboBindings)
+    {
+        if (ub.group == group && ub.binding == binding)
+        {
+            ub.data.assign (static_cast<const uint8_t*> (data), static_cast<const uint8_t*> (data) + byteSize);
+            return;
+        }
+    }
+
+    Impl::UboBinding ub;
+    ub.group = group;
+    ub.binding = binding;
+    ub.data.assign (static_cast<const uint8_t*> (data), static_cast<const uint8_t*> (data) + byteSize);
+    i->uboBindings.push_back (std::move (ub));
+}
+
+void GpuProgram::setVertexBuffer (int slot, GpuBuffer::Ptr buffer)
+{
+    auto* i = getImpl();
+    jassert (i != nullptr);
+    if (i == nullptr)
+        return;
+
+    auto* ore = (buffer != nullptr) ? buffer->oreBufferHandle() : nullptr;
+
+    for (auto& vb : i->vertexBindings)
+    {
+        if (vb.slot == slot)
+        {
+            vb.buffer = std::move (buffer);
+            vb.oreBuffer = ore;
+            return;
+        }
+    }
+
+    i->vertexBindings.push_back ({ slot, std::move (buffer), ore });
+}
+
+void GpuProgram::setIndexBuffer (GpuIndexFormat format, GpuBuffer::Ptr buffer)
+{
+    auto* i = getImpl();
+    jassert (i != nullptr);
+    if (i == nullptr)
+        return;
+
+    i->indexOreBuffer = (buffer != nullptr) ? buffer->oreBufferHandle() : nullptr;
+    i->indexBuffer = std::move (buffer);
+    i->indexFormat = toOreIndexFormat (format);
+}
+
+//==============================================================================
+
+bool GpuProgram::beginFrame()
+{
+    auto* i = getImpl();
+    if (i == nullptr || i->oreCtx == nullptr)
+        return false;
+
+    // Drop resources from any prior frame before beginning a new one.
+    i->liveBuffers.clear();
+    i->liveViews.clear();
+    i->liveSamplers.clear();
+
+    i->oreCtx->beginFrame ({});
+    return true;
+}
+
+bool GpuProgram::endFrame()
+{
+    auto* i = getImpl();
+    if (i == nullptr || i->oreCtx == nullptr)
+        return false;
+
+    i->oreCtx->endFrame();
+    return true;
+}
+
+void GpuProgram::waitForGPU()
+{
+    auto* i = getImpl();
+    if (i == nullptr || i->oreCtx == nullptr)
+        return;
+
+    i->oreCtx->waitForGPU();
+
+    // GPU has finished; safe to release all transient resources.
+    i->liveBuffers.clear();
+    i->liveViews.clear();
+    i->liveSamplers.clear();
+}
+
+//==============================================================================
+
+bool GpuProgram::Impl::encode (GpuCanvas& output,
+                               uint32_t count,
+                               bool indexed,
+                               const GpuRenderOptions& options)
+{
+    if (oreCtx == nullptr || pipeline == nullptr)
+        return false;
+
+    if (indexed && indexOreBuffer == nullptr)
+        return false;
+
+    auto outputTex = output.asTexture();
+    if (outputTex == nullptr)
+        return false;
+
+    rive::rcp<rive::ore::TextureView> outputView;
+
+    if (auto gpuTex = outputTex->getOrAdoptGpuTexture())
+        outputView = oreCtx->wrapRiveTexture (gpuTex.get(), (uint32_t) outputTex->getWidth(), (uint32_t) outputTex->getHeight());
+    else if (auto rc = outputTex->getInternalRenderCanvas())
+        outputView = oreCtx->wrapCanvasTexture (rc.get());
+
+    if (outputView == nullptr)
+        return false;
+
+    liveViews.push_back (outputView);
+
+    std::vector<std::pair<uint32_t, rive::rcp<rive::ore::BindGroup>>> bindGroups;
+
+    for (uint32_t groupIdx = 0; groupIdx < layouts.size(); ++groupIdx)
+    {
+        auto* layout = layouts[groupIdx].get();
+        if (layout == nullptr)
+            continue;
+
+        // UBO entries for this group.
+        std::vector<rive::ore::BindGroupDesc::UBOEntry> uboEntries;
+
+        for (const auto& ub : uboBindings)
+        {
+            if (ub.group != (int) groupIdx)
+                continue;
+
+            rive::ore::BufferDesc bufDesc;
+            bufDesc.usage = rive::ore::BufferUsage::uniform;
+            bufDesc.size = (uint32_t) ub.data.size();
+            bufDesc.data = ub.data.data();
+            bufDesc.immutable = true;
+
+            auto buf = oreCtx->makeBuffer (bufDesc);
+            if (buf == nullptr)
+                continue;
+
+            rive::ore::BindGroupDesc::UBOEntry entry;
+            entry.slot = (uint32_t) ub.binding;
+            entry.buffer = buf.get();
+            entry.offset = 0;
+            entry.size = (uint32_t) ub.data.size();
+            uboEntries.push_back (entry);
+            liveBuffers.push_back (std::move (buf));
+        }
+
+        // Texture entries for this group.
+        std::vector<rive::ore::BindGroupDesc::TexEntry> texEntries;
+
+        for (const auto& tb : textureBindings)
+        {
+            if (tb.group != (int) groupIdx || tb.texture == nullptr)
+                continue;
+
+            // Sampled inputs must be bound through an SRV-backed view. The canvas wrapper (wrapCanvasTexture)
+            // only exposes a render-target view, which has no shader-resource view on D3D - sampling it
+            // reads nothing. Prefer the underlying GPU texture, which wrapRiveTexture() wraps with a proper SRV for sampling.
+            rive::rcp<rive::ore::TextureView> view;
+
+            if (auto gpuTex = tb.texture->getOrAdoptGpuTexture())
+                view = oreCtx->wrapRiveTexture (gpuTex.get(), (uint32_t) tb.texture->getWidth(), (uint32_t) tb.texture->getHeight());
+            else if (auto rc = tb.texture->getInternalRenderCanvas())
+                view = oreCtx->wrapCanvasTexture (rc.get());
+
+            if (view == nullptr)
+                continue;
+
+            rive::ore::BindGroupDesc::TexEntry entry;
+            entry.slot = (uint32_t) tb.binding;
+            entry.view = view.get();
+            texEntries.push_back (entry);
+            liveViews.push_back (std::move (view));
+        }
+
+        // Sampler entries - auto-create one linear+clamp sampler for each
+        // sampler binding declared in the layout.
+        std::vector<rive::ore::BindGroupDesc::SampEntry> sampEntries;
+
+        for (const auto& layoutEntry : layout->entries())
+        {
+            if (layoutEntry.kind != rive::ore::BindingKind::sampler
+                && layoutEntry.kind != rive::ore::BindingKind::comparisonSampler)
+                continue;
+
+            rive::ore::SamplerDesc sd;
+            sd.minFilter = rive::ore::Filter::linear;
+            sd.magFilter = rive::ore::Filter::linear;
+            sd.wrapU = rive::ore::WrapMode::clampToEdge;
+            sd.wrapV = rive::ore::WrapMode::clampToEdge;
+
+            auto samp = oreCtx->makeSampler (sd);
+            if (samp == nullptr)
+                continue;
+
+            rive::ore::BindGroupDesc::SampEntry se;
+            se.slot = layoutEntry.binding;
+            se.sampler = samp.get();
+            sampEntries.push_back (se);
+            liveSamplers.push_back (std::move (samp));
+        }
+
+        rive::ore::BindGroupDesc bgDesc;
+        bgDesc.layout = layout;
+        bgDesc.ubos = uboEntries.empty() ? nullptr : uboEntries.data();
+        bgDesc.uboCount = (uint32_t) uboEntries.size();
+        bgDesc.textures = texEntries.empty() ? nullptr : texEntries.data();
+        bgDesc.textureCount = (uint32_t) texEntries.size();
+        bgDesc.samplers = sampEntries.empty() ? nullptr : sampEntries.data();
+        bgDesc.samplerCount = (uint32_t) sampEntries.size();
+
+        auto bg = oreCtx->makeBindGroup (bgDesc);
+        if (bg != nullptr)
+            bindGroups.push_back ({ groupIdx, std::move (bg) });
+    }
+
+    // Encode the render pass into the current frame (beginFrame/endFrame are the caller's responsibility).
+    rive::ore::RenderPassDesc rpDesc;
+    rpDesc.colorCount = 1;
+    rpDesc.colorAttachments[0].view = outputView.get();
+    rpDesc.colorAttachments[0].loadOp = options.clear ? rive::ore::LoadOp::clear : rive::ore::LoadOp::load;
+    rpDesc.colorAttachments[0].storeOp = rive::ore::StoreOp::store;
+    rpDesc.colorAttachments[0].clearColor = { options.clearColor.getRedFloat(),
+                                              options.clearColor.getGreenFloat(),
+                                              options.clearColor.getBlueFloat(),
+                                              options.clearColor.getAlphaFloat() };
+
+    auto renderPass = oreCtx->beginRenderPass (rpDesc);
+    renderPass->setPipeline (pipeline.get());
+    renderPass->setViewport (0.0f, 0.0f, (float) output.getWidth(), (float) output.getHeight());
+
+    for (auto& [groupIdx, bg] : bindGroups)
+        renderPass->setBindGroup (groupIdx, bg.get());
+
+    for (const auto& vb : vertexBindings)
+    {
+        if (vb.oreBuffer != nullptr)
+            renderPass->setVertexBuffer ((uint32_t) vb.slot, vb.oreBuffer, 0);
+    }
+
+    if (indexed)
+    {
+        renderPass->setIndexBuffer (indexOreBuffer, indexFormat, 0);
+        renderPass->drawIndexed (count);
+    }
+    else
+    {
+        renderPass->draw (count);
+    }
+
+    renderPass->finish();
+    return true;
+}
+
+//==============================================================================
+
+bool GpuProgram::dispatch (GpuCanvas& output)
+{
+    return draw (output, 3, { true, Colors::transparentBlack });
+}
+
+bool GpuProgram::draw (GpuCanvas& output, uint32_t vertexCount, const GpuRenderOptions& options)
+{
+    auto* i = getImpl();
+    if (i == nullptr)
+        return false;
+
+    return i->encode (output, vertexCount, false, options);
+}
+
+bool GpuProgram::drawIndexed (GpuCanvas& output, uint32_t indexCount, const GpuRenderOptions& options)
+{
+    auto* i = getImpl();
+    if (i == nullptr)
+        return false;
+
+    return i->encode (output, indexCount, true, options);
+}
+
+//==============================================================================
+
+rive::ore::Context* GpuProgram::oreContext() const noexcept
+{
+    auto* i = getImpl();
+    return i != nullptr ? i->oreCtx : nullptr;
+}
+
+rive::ore::Pipeline* GpuProgram::orePipeline() const noexcept
+{
+    auto* i = getImpl();
+    return (i != nullptr && i->pipeline != nullptr) ? i->pipeline.get() : nullptr;
+}
+
+//==============================================================================
+
+ResultValue<GpuProgram::Ptr> GpuProgram::compile (GraphicsContext& ctx,
+                                                  const GpuShaderSource& vs,
+                                                  const GpuShaderSource& fs)
+{
+    return compile (ctx, vs, fs, GpuPipelineOptions {});
+}
+
+ResultValue<GpuProgram::Ptr> GpuProgram::compile (GraphicsContext& ctx,
+                                                  const GpuShaderSource& vs,
+                                                  const GpuShaderSource& fs,
+                                                  const GpuPipelineOptions& pipelineOptions)
+{
     auto oreCtx = ctx.gpuContext();
     if (oreCtx == nullptr)
         return makeResultValueFail ("GraphicsContext was not created with Options::enableOreContext = true");
@@ -320,7 +698,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GraphicsContext& ctx,
 
     // Compile vertex shader module.
     rive::ore::ShaderModuleDesc vsd;
-    fillModuleDesc (vsd, vs, rive::ore::ShaderStage::vertex, "GpuPipeline VS");
+    fillModuleDesc (vsd, vs, rive::ore::ShaderStage::vertex, "GpuProgram VS");
 
     auto vertModule = oreCtx->makeShaderModule (vsd);
     if (vertModule == nullptr)
@@ -328,7 +706,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GraphicsContext& ctx,
 
     // Compile fragment shader module.
     rive::ore::ShaderModuleDesc fsd;
-    fillModuleDesc (fsd, fs, rive::ore::ShaderStage::fragment, "GpuPipeline FS");
+    fillModuleDesc (fsd, fs, rive::ore::ShaderStage::fragment, "GpuProgram FS");
 
     auto fragModule = oreCtx->makeShaderModule (fsd);
     if (fragModule == nullptr)
@@ -496,7 +874,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GraphicsContext& ctx,
             desc.groupIndex = g;
             desc.entries = entries.data();
             desc.entryCount = (uint32_t) entries.size();
-            desc.label = "GpuPipeline BGL";
+            desc.label = "GpuProgram BGL";
             layouts[g] = oreCtx->makeBindGroupLayout (desc);
         }
     }
@@ -506,14 +884,14 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GraphicsContext& ctx,
     for (uint32_t g = 0; g < numGroups; ++g)
         layoutPtrs[g] = layouts[g].get();
 
-    // Create the pipeline up-front so the vertex-layout storage that backs
+    // Create the program up-front so the vertex-layout storage that backs
     // PipelineDesc's raw pointers lives inside the object that owns the
     // pipeline. The ore Pipeline copies PipelineDesc by value but keeps the
     // vertexBuffers / attributes pointers, reading them at draw time.
-    auto pipe = GpuPipeline::Ptr { new GpuPipeline() };
-    pipe->impl = TypeErasedObject (GpuPipeline::Impl {});
+    auto prog = GpuProgram::Ptr { new GpuProgram() };
+    prog->impl = TypeErasedObject (GpuProgram::Impl {});
 
-    auto* implRef = pipe->getImpl();
+    auto* implRef = prog->getImpl();
     implRef->vertexAttrStorage.resize (pipelineOptions.vertexBufferCount);
     implRef->vertexLayoutStorage.resize (pipelineOptions.vertexBufferCount);
 
@@ -605,7 +983,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GraphicsContext& ctx,
     pipeDesc.sampleCount = pipelineOptions.sampleCount;
     pipeDesc.bindGroupLayouts = layoutPtrs.empty() ? nullptr : layoutPtrs.data();
     pipeDesc.bindGroupLayoutCount = (uint32_t) layoutPtrs.size();
-    pipeDesc.label = "GpuPipeline Pipeline";
+    pipeDesc.label = "GpuProgram Pipeline";
 
     std::string pipeError;
     auto pipeline = oreCtx->makePipeline (pipeDesc, &pipeError);
@@ -617,7 +995,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GraphicsContext& ctx,
     implRef->fragModule = std::move (fragModule);
     implRef->pipeline = std::move (pipeline);
     implRef->layouts = std::move (layouts);
-    return makeResultValueOk (pipe);
+    return makeResultValueOk (prog);
 }
 
 //==============================================================================
@@ -659,9 +1037,9 @@ GpuShaderLanguage gpuShaderLanguageForApi (GraphicsContext::Api api)
 
 } // namespace
 
-ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (GraphicsContext& ctx,
-                                                              const ShaderBundle& bundle,
-                                                              const GpuPipelineOptions& pipelineOptions)
+ResultValue<GpuProgram::Ptr> GpuProgram::compileFromBundle (GraphicsContext& ctx,
+                                                            const ShaderBundle& bundle,
+                                                            const GpuPipelineOptions& pipelineOptions)
 {
     const auto api = ctx.getApi();
     const auto targetLang = shaderLanguageForApi (api);
@@ -721,10 +1099,10 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (GraphicsContext& c
 
 #if YUP_ENABLE_SHADER_TRANSPILER
 
-ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromGlsl (GraphicsContext& ctx,
-                                                            const String& vertexGlsl,
-                                                            const String& fragmentGlsl,
-                                                            const GpuPipelineOptions& pipelineOptions)
+ResultValue<GpuProgram::Ptr> GpuProgram::compileFromGlsl (GraphicsContext& ctx,
+                                                          const String& vertexGlsl,
+                                                          const String& fragmentGlsl,
+                                                          const GpuPipelineOptions& pipelineOptions)
 {
     const auto targetLang = shaderLanguageForApi (ctx.getApi());
 

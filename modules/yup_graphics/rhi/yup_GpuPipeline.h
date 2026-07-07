@@ -396,13 +396,12 @@ private:
 
     GpuPipeline() = default;
 
-    static constexpr size_t kImplSize = 384;
-
     struct Impl;
-    TypeErasedObject<kImplSize> impl;
-
     Impl* getImpl() noexcept;
     const Impl* getImpl() const noexcept;
+
+    static constexpr size_t ImplSizeBytes = 384;
+    TypeErasedObject<ImplSizeBytes> impl;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuPipeline)
 };

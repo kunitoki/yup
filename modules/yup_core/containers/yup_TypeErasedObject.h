@@ -86,6 +86,25 @@ struct TypeErasedObject
     }
 
     /**
+	    Move constructor that transfers ownership of the payload from a smaller instance.
+	 
+	    Moves the contents of the payload from `other`, whose storage size must be less than or equal
+	    to this instance's storage size, ensuring that `other` is left in a valid but empty state.
+	 
+	    @tparam OtherBytes The storage size of the source payload. Must be less than or equal to `NumBytes`.
+	 
+	    @param other The payload to move from.
+	*/
+    template <std::size_t OtherBytes>
+    TypeErasedObject (TypeErasedObject<OtherBytes>&& other) noexcept
+        requires (OtherBytes <= NumBytes)
+        : deleterCallback (std::exchange (other.deleterCallback, nullptr))
+        , type (std::exchange (other.type, typeid (void)))
+    {
+        std::memcpy (objectBuffer, other.objectBuffer, jmin (sizeof (objectBuffer), sizeof (other.objectBuffer)));
+    }
+
+    /**
 	    Move assignment operator that transfers ownership of the payload from another instance.
 	 
 	    Moves the contents of the payload from `other` into this instance, properly destroying the
@@ -96,6 +115,33 @@ struct TypeErasedObject
 	    @return A reference to this `TypeErasedObject` after the move.
 	*/
     TypeErasedObject& operator= (TypeErasedObject&& other)
+    {
+        if (auto deleter = std::exchange (deleterCallback, nullptr))
+            deleter (reinterpret_cast<void*> (&objectBuffer[0]));
+
+        deleterCallback = std::exchange (other.deleterCallback, nullptr);
+        type = std::exchange (other.type, typeid (void));
+        std::memcpy (objectBuffer, other.objectBuffer, jmin (sizeof (objectBuffer), sizeof (other.objectBuffer)));
+
+        return *this;
+    }
+
+    /**
+	    Move assignment operator that transfers ownership of the payload from a smaller instance.
+	 
+	    Moves the contents of the payload from `other`, whose storage size must be less than or equal
+	    to this instance's storage size, properly destroying the current payload object if one exists,
+	    and leaving `other` in a valid but empty state.
+	 
+	    @tparam OtherBytes The storage size of the source payload. Must be less than or equal to `NumBytes`.
+	 
+	    @param other The payload to move from.
+	 
+	    @return A reference to this `TypeErasedObject` after the move.
+	*/
+    template <std::size_t OtherBytes>
+    TypeErasedObject& operator= (TypeErasedObject<OtherBytes>&& other)
+        requires (OtherBytes <= NumBytes)
     {
         if (auto deleter = std::exchange (deleterCallback, nullptr))
             deleter (reinterpret_cast<void*> (&objectBuffer[0]));
@@ -152,9 +198,16 @@ struct TypeErasedObject
     }
 
 private:
+    template <std::size_t>
+    friend struct TypeErasedObject;
+
     alignas (alignof (std::max_align_t)) uint8 objectBuffer[NumBytes] = {};
     void (*deleterCallback) (void*) = nullptr;
     std::type_index type = typeid (void);
 };
+
+/** Deduction guide that sizes the storage to fit the provided value. */
+template <class T>
+TypeErasedObject (T&&) -> TypeErasedObject<sizeof (T)>;
 
 } // namespace yup

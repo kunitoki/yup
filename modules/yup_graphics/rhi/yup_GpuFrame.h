@@ -98,9 +98,11 @@ private:
     GpuFrame() = default;
 
     struct Impl;
-    std::unique_ptr<Impl> impl;
+    Impl* getImpl() noexcept;
+    const Impl* getImpl() const noexcept;
 
-    Impl* getImpl() noexcept { return impl.get(); }
+    static constexpr size_t ImplSizeBytes = 128;
+    TypeErasedObject<ImplSizeBytes> impl;
 
     YUP_DECLARE_NON_COPYABLE (GpuFrame)
 };

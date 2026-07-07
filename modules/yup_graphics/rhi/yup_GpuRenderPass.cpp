@@ -249,6 +249,18 @@ bool GpuRenderPass::Impl::encode (uint32_t count, bool indexed)
 
 //==============================================================================
 
+GpuRenderPass::Impl* GpuRenderPass::getImpl() noexcept
+{
+    return impl.getPayload<Impl>();
+}
+
+const GpuRenderPass::Impl* GpuRenderPass::getImpl() const noexcept
+{
+    return impl.getPayload<Impl>();
+}
+
+//==============================================================================
+
 GpuRenderPass::GpuRenderPass (GpuRenderPass&&) noexcept = default;
 
 GpuRenderPass& GpuRenderPass::operator= (GpuRenderPass&& other) noexcept
@@ -271,36 +283,39 @@ GpuRenderPass::~GpuRenderPass()
 
 bool GpuRenderPass::isValid() const noexcept
 {
-    return impl != nullptr && impl->oreCtx != nullptr && ! impl->finished;
+    auto* i = getImpl();
+    return i != nullptr && i->oreCtx != nullptr && ! i->finished;
 }
 
 //==============================================================================
 
 void GpuRenderPass::setPipeline (GpuPipeline& pipeline)
 {
-    if (impl == nullptr)
+    auto* i = getImpl();
+    if (i == nullptr)
         return;
 
-    impl->pipelineRef = &pipeline;
+    i->pipelineRef = &pipeline;
 
     if (auto* pipeImpl = pipeline.getImpl())
     {
-        impl->orePipeline = pipeImpl->pipeline.get();
-        impl->oreLayouts = &pipeImpl->layouts;
+        i->orePipeline = pipeImpl->pipeline.get();
+        i->oreLayouts = &pipeImpl->layouts;
     }
     else
     {
-        impl->orePipeline = nullptr;
-        impl->oreLayouts = nullptr;
+        i->orePipeline = nullptr;
+        i->oreLayouts = nullptr;
     }
 }
 
 void GpuRenderPass::setTexture (int group, int binding, GpuTexture::Ptr texture)
 {
-    if (impl == nullptr)
+    auto* i = getImpl();
+    if (i == nullptr)
         return;
 
-    for (auto& tb : impl->textureBindings)
+    for (auto& tb : i->textureBindings)
     {
         if (tb.group == group && tb.binding == binding)
         {
@@ -309,19 +324,20 @@ void GpuRenderPass::setTexture (int group, int binding, GpuTexture::Ptr texture)
         }
     }
 
-    impl->textureBindings.push_back ({ group, binding, std::move (texture) });
+    i->textureBindings.push_back ({ group, binding, std::move (texture) });
 }
 
 void GpuRenderPass::setUniformBuffer (int group, int binding, const void* data, size_t byteSize)
 {
-    if (impl == nullptr)
+    auto* i = getImpl();
+    if (i == nullptr)
         return;
 
     jassert (data != nullptr && byteSize > 0);
     if (data == nullptr || byteSize == 0)
         return;
 
-    for (auto& ub : impl->uboBindings)
+    for (auto& ub : i->uboBindings)
     {
         if (ub.group == group && ub.binding == binding)
         {
@@ -334,17 +350,18 @@ void GpuRenderPass::setUniformBuffer (int group, int binding, const void* data, 
     ub.group = group;
     ub.binding = binding;
     ub.data.assign (static_cast<const uint8_t*> (data), static_cast<const uint8_t*> (data) + byteSize);
-    impl->uboBindings.push_back (std::move (ub));
+    i->uboBindings.push_back (std::move (ub));
 }
 
 void GpuRenderPass::setVertexBuffer (int slot, GpuBuffer::Ptr buffer)
 {
-    if (impl == nullptr)
+    auto* i = getImpl();
+    if (i == nullptr)
         return;
 
     auto* ore = (buffer != nullptr && buffer->getImpl() != nullptr) ? buffer->getImpl()->buffer.get() : nullptr;
 
-    for (auto& vb : impl->vertexBindings)
+    for (auto& vb : i->vertexBindings)
     {
         if (vb.slot == slot)
         {
@@ -354,17 +371,18 @@ void GpuRenderPass::setVertexBuffer (int slot, GpuBuffer::Ptr buffer)
         }
     }
 
-    impl->vertexBindings.push_back ({ slot, std::move (buffer), ore });
+    i->vertexBindings.push_back ({ slot, std::move (buffer), ore });
 }
 
 void GpuRenderPass::setIndexBuffer (GpuIndexFormat format, GpuBuffer::Ptr buffer)
 {
-    if (impl == nullptr)
+    auto* i = getImpl();
+    if (i == nullptr)
         return;
 
-    impl->indexOreBuffer = (buffer != nullptr && buffer->getImpl() != nullptr) ? buffer->getImpl()->buffer.get() : nullptr;
-    impl->indexBuffer = std::move (buffer);
-    impl->indexFormat = GpuPipelineHelpers::toOreIndexFormat (format);
+    i->indexOreBuffer = (buffer != nullptr && buffer->getImpl() != nullptr) ? buffer->getImpl()->buffer.get() : nullptr;
+    i->indexBuffer = std::move (buffer);
+    i->indexFormat = GpuPipelineHelpers::toOreIndexFormat (format);
 }
 
 //==============================================================================
@@ -374,7 +392,7 @@ bool GpuRenderPass::draw (uint32_t vertexCount)
     if (! isValid())
         return false;
 
-    return impl->encode (vertexCount, false);
+    return getImpl()->encode (vertexCount, false);
 }
 
 bool GpuRenderPass::drawIndexed (uint32_t indexCount)
@@ -382,17 +400,18 @@ bool GpuRenderPass::drawIndexed (uint32_t indexCount)
     if (! isValid())
         return false;
 
-    return impl->encode (indexCount, true);
+    return getImpl()->encode (indexCount, true);
 }
 
 //==============================================================================
 
 bool GpuRenderPass::finish()
 {
-    if (impl == nullptr || impl->finished)
+    auto* i = getImpl();
+    if (i == nullptr || i->finished)
         return false;
 
-    impl->finished = true;
+    i->finished = true;
     return true;
 }
 

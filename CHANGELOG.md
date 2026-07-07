@@ -226,6 +226,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 #### `yup_core` Additions
 - `constructAt()` / `destroyAt()` / `voidify()` in `memory/yup_Memory.h`: portable replacements for `std::construct_at` / `std::destroy_at`, used by `TypeErasedObject`
+- `TypeErasedObject` now supports class template argument deduction (deduction guide sizes storage to the stored value) and move construction / assignment from a smaller-sized `TypeErasedObject`
 - `SqliteDatabase` with `Statement` and `Transaction` ([#94](https://github.com/kunitoki/yup/pull/94))
 - Perfetto profiling: `YUP_ENABLE_PROFILING`, `Profiler` singleton, `YUP_PROFILE_START` / `YUP_PROFILE_STOP` macros ([#20](https://github.com/kunitoki/yup/pull/20))
 - `Watchdog` file watching utility ([#50](https://github.com/kunitoki/yup/pull/50))

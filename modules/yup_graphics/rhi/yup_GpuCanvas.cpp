@@ -147,13 +147,15 @@ GpuRenderPass GpuCanvas::beginRenderPass (GpuFrame& frame, const GpuRenderOption
     if (tex == nullptr)
         return pass;
 
-    pass.impl = std::make_unique<GpuRenderPass::Impl>();
-    pass.impl->oreCtx = frame.getImpl()->oreCtx;
-    pass.impl->framePools = frame.getImpl();
-    pass.impl->outputTexture = tex;
-    pass.impl->width = getWidth();
-    pass.impl->height = getHeight();
-    pass.impl->options = options;
+    pass.impl = TypeErasedObject (GpuRenderPass::Impl {});
+
+    auto* i = pass.getImpl();
+    i->oreCtx = frame.getImpl()->oreCtx;
+    i->framePools = frame.getImpl();
+    i->outputTexture = tex;
+    i->width = getWidth();
+    i->height = getHeight();
+    i->options = options;
 
     return pass;
 }

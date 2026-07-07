@@ -91,8 +91,8 @@ private:
     Impl* getImpl() noexcept;
     const Impl* getImpl() const noexcept;
 
-    static constexpr size_t kImplSize = 32;
-    TypeErasedObject<kImplSize> impl;
+    static constexpr size_t ImplSizeBytes = 32;
+    TypeErasedObject<ImplSizeBytes> impl;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuBuffer)
 };

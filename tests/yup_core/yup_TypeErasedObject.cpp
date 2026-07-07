@@ -232,3 +232,57 @@ TEST_F (TypeErasedObjectTests, StoresTypeFillingTheBuffer)
 
     EXPECT_NE (object.getPayload<FullBuffer>(), nullptr);
 }
+
+TEST_F (TypeErasedObjectTests, MoveConstructionFromSmallerSize)
+{
+    TypeErasedObject<16> source (Payload { 77, 5.5 });
+    TypeErasedObject<64> destination (std::move (source));
+
+    auto* payload = destination.getPayload<Payload>();
+    ASSERT_NE (payload, nullptr);
+    EXPECT_EQ (payload->value, 77);
+    EXPECT_EQ (payload->factor, 5.5);
+
+    EXPECT_EQ (source.getPayload<Payload>(), nullptr);
+}
+
+TEST_F (TypeErasedObjectTests, MoveAssignmentFromSmallerSize)
+{
+    TypeErasedObject<16> source (Payload { 88, 6.5 });
+    TypeErasedObject<64> destination;
+
+    destination = std::move (source);
+
+    auto* payload = destination.getPayload<Payload>();
+    ASSERT_NE (payload, nullptr);
+    EXPECT_EQ (payload->value, 88);
+    EXPECT_EQ (payload->factor, 6.5);
+
+    EXPECT_EQ (source.getPayload<Payload>(), nullptr);
+}
+
+TEST_F (TypeErasedObjectTests, MoveFromSmallerSizeDoesNotDoubleDestroy)
+{
+    int destructions = 0;
+
+    {
+        TypeErasedObject<16> source (LifetimeTracker { &destructions });
+        TypeErasedObject<64> destination (std::move (source));
+
+        EXPECT_EQ (destructions, 0);
+    }
+
+    EXPECT_EQ (destructions, 1);
+}
+
+TEST_F (TypeErasedObjectTests, DeductionGuideSizesStorageToValue)
+{
+    TypeErasedObject object (Payload { 33, 7.5 });
+
+    static_assert (std::is_same_v<decltype (object), TypeErasedObject<sizeof (Payload)>>);
+
+    auto* payload = object.getPayload<Payload>();
+    ASSERT_NE (payload, nullptr);
+    EXPECT_EQ (payload->value, 33);
+    EXPECT_EQ (payload->factor, 7.5);
+}
