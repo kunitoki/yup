@@ -15,6 +15,7 @@ This document provides directive guidelines for AI assistants working on the YUP
 ## Code Generation Rules
 
 **NEVER EVER run bash commands to configure, compile or test the implementation, acknowledge that we should test and we'll run and report any issue.**
+**If you see changes in code you didn't notice before, it's not the linter, it's me changing it for a reason and you should acknowledge the changes, not revert them.**
 
 ## AI Decision Making Rules
 

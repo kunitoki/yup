@@ -625,23 +625,6 @@ TEST_F (PaintProfilerFixture, MultipleFramesAccumulateGlobalStats)
 // Paint profiling integration tests — exercises Component::internalPaint
 // =============================================================================
 
-namespace yup
-{
-
-class ComponentTestHelper
-{
-public:
-    static void triggerPaint (Component& comp,
-                              Graphics& g,
-                              const Rectangle<float>& repaintArea,
-                              bool renderContinuous = false)
-    {
-        comp.internalPaint (g, repaintArea, renderContinuous);
-    }
-};
-
-} // namespace yup
-
 namespace
 {
 

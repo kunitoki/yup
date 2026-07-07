@@ -137,6 +137,10 @@ yup_standalone_app (
         ${target_modules}
         ${target_gtest_modules})
 
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options (${target_name} PRIVATE -Wno-subobject-linkage)
+endif()
+
 # ==== (Only For Manual Testing) Setup FFTW3
 # _yup_find_fftw3 (${target_name})
 

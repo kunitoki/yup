@@ -19,24 +19,21 @@
 
 #==============================================================================
 
-macro (_yup_fetchcontent_declare name GIT_REPOSITORY git_repository GIT_TAG git_tag)
-    FetchContent_Declare(
-		"${name}"
-		GIT_REPOSITORY "${git_repository}"
-        GIT_TAG "${git_tag}"
-        GIT_SUBMODULES_RECURSE ON
-        SOURCE_DIR "${CMAKE_BINARY_DIR}/externals/${name}")
+macro (_yup_fetchcontent_declare name)
+    cmake_parse_arguments (_yup_fcd "" "GIT_REPOSITORY;GIT_TAG" "GIT_SUBMODULES" ${ARGN})
 
-    #if (NOT DEFINED FETCHCONTENT_BASE_DIR)
-    #    set (FETCHCONTENT_BASE_DIR "${CMAKE_BINARY_DIR}/externals")
-    #endif()
-    #FetchContent_Declare(
-	#	"${name}"
-	#	DOWNLOAD_COMMAND
-	#		cd "${FETCHCONTENT_BASE_DIR}/${name}-src" &&
-	#		git init &&
-	#		git fetch --depth=1 --progress "${git_repository}" "${git_tag}" &&
-	#		git reset --hard FETCH_HEAD)
+    set (_yup_fcd_submodules_args "")
+    if (DEFINED _yup_fcd_GIT_SUBMODULES)
+        set (_yup_fcd_submodules_args GIT_SUBMODULES ${_yup_fcd_GIT_SUBMODULES})
+    endif()
+
+    FetchContent_Declare(
+        "${name}"
+        GIT_REPOSITORY "${_yup_fcd_GIT_REPOSITORY}"
+        GIT_TAG        "${_yup_fcd_GIT_TAG}"
+        GIT_SUBMODULES_RECURSE ON
+        ${_yup_fcd_submodules_args}
+        SOURCE_DIR "${CMAKE_BINARY_DIR}/externals/${name}")
 endmacro()
 
 #==============================================================================

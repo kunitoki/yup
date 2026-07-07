@@ -771,6 +771,14 @@ void Component::addChildComponent (Component* component, int index)
 
         auto bailOutChecker = BailOutChecker (this);
 
+        if (getNativeComponent() != nullptr)
+        {
+            component->internalAttachedToNative();
+
+            if (bailOutChecker.shouldBailOut())
+                return;
+        }
+
         component->internalHierarchyChanged();
 
         if (bailOutChecker.shouldBailOut())
@@ -818,6 +826,14 @@ void Component::removeChildComponent (int index)
     component->parentComponent = nullptr;
 
     auto bailOutChecker = BailOutChecker (this);
+
+    if (getNativeComponent() != nullptr)
+    {
+        component->internalDetachedFromNative();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
 
     component->internalHierarchyChanged();
 

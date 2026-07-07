@@ -39,7 +39,8 @@ function (_yup_fetch_vst3sdk)
 
         _yup_fetchcontent_declare (vst3sdk
             GIT_REPOSITORY https://github.com/steinbergmedia/vst3sdk.git
-            GIT_TAG master)
+            GIT_TAG        master
+            GIT_SUBMODULES "base" "cmake" "pluginterfaces" "public.sdk")
 
         FetchContent_MakeAvailable (vst3sdk)
     endif()

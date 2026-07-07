@@ -25,11 +25,10 @@
 
 using namespace yup;
 
-// =============================================================================
-
 namespace
 {
 
+// =============================================================================
 class ComponentMock : public Component
 {
 public:
@@ -167,6 +166,94 @@ public:
     void transformChanged() override { transformChangedCalled = true; }
 };
 
+// =============================================================================
+class TestComponentNative final : public ComponentNative
+{
+public:
+    TestComponentNative (Component& component)
+        : ComponentNative (component, defaultFlags)
+    {
+    }
+
+    void setTitle (const String&) override {}
+
+    String getTitle() const override { return {}; }
+
+    void setVisible (bool) override {}
+
+    bool isVisible() const override { return false; }
+
+    void toFront() override {}
+
+    void setSize (const Size<int>&) override {}
+
+    Size<int> getSize() const override { return {}; }
+
+    Size<int> getContentSize() const override { return {}; }
+
+    Point<int> getPosition() const override { return {}; }
+
+    void setPosition (const Point<int>&) override {}
+
+    Rectangle<int> getBounds() const override { return {}; }
+
+    void setBounds (const Rectangle<int>&) override {}
+
+    void setFullScreen (bool) override {}
+
+    bool isFullScreen() const override { return false; }
+
+    bool isDecorated() const override { return false; }
+
+    void setOpacity (float) override {}
+
+    float getOpacity() const override { return 1.0f; }
+
+    void setFocusedComponent (Component*) override {}
+
+    Component* getFocusedComponent() const override { return nullptr; }
+
+    bool isContinuousRepaintingEnabled() const override { return false; }
+
+    void enableContinuousRepainting (bool) override {}
+
+    bool isAtomicModeEnabled() const override { return false; }
+
+    void enableAtomicMode (bool) override {}
+
+    bool isWireframeEnabled() const override { return false; }
+
+    void enableWireframe (bool) override {}
+
+    void repaint() override {}
+
+    void repaint (const Rectangle<float>&) override {}
+
+    const RectangleList<float>& getRepaintAreas() const override
+    {
+        static RectangleList<float> r;
+        return r;
+    }
+
+    void startTextInput (Component&) override {}
+
+    void stopTextInput (Component&) override {}
+
+    void updateTextInputRect (Component&) override {}
+
+    float getScaleDpi() const override { return 1.0f; }
+
+    float getCurrentFrameRate() const override { return 60.0f; }
+
+    float getDesiredFrameRate() const override { return 60.0f; }
+
+    void* getNativeHandle() const override { return nullptr; }
+
+    rive::Factory* getFactory() override { return nullptr; }
+
+    GraphicsContext* getGraphicsContext() override { return nullptr; }
+};
+
 class RecordingComponentListener : public ComponentListener
 {
 public:
@@ -197,6 +284,37 @@ public:
 };
 
 } // namespace
+
+// =============================================================================
+
+namespace yup
+{
+
+// Friend of Component, defined here for test access.
+class ComponentTestHelper
+{
+public:
+    static void attachMockNative (Component& component)
+    {
+        jassert (component.native == nullptr);
+        component.native = new TestComponentNative (component);
+    }
+
+    static void detachMockNative (Component& component)
+    {
+        component.native = nullptr;
+    }
+
+    static void triggerPaint (Component& comp,
+                              Graphics& g,
+                              const Rectangle<float>& repaintArea,
+                              bool renderContinuous = false)
+    {
+        comp.internalPaint (g, repaintArea, renderContinuous);
+    }
+};
+
+} // namespace yup
 
 // =============================================================================
 
@@ -1758,6 +1876,79 @@ TEST_F (ComponentMockTest, AdditionalVirtualMethodTests)
     mockComponent->resetCallTracking();
     mockComponent->displayChanged();
     EXPECT_TRUE (mockComponent->displayChangedCalled);
+}
+
+//==============================================================================
+// Tests for native attachment propagation through addChild/removeChild
+
+TEST_F (ComponentMockTest, AddChildToNativeParentTriggersAttachedToNative)
+{
+    auto parent = std::make_unique<ComponentMock> ("parent");
+    ComponentTestHelper::attachMockNative (*parent);
+
+    mockComponent->resetCallTracking();
+    parent->addChildComponent (*mockComponent);
+
+    EXPECT_TRUE (mockComponent->attachedToNativeCalled);
+    EXPECT_FALSE (mockComponent->detachedFromNativeCalled);
+
+    ComponentTestHelper::detachMockNative (*parent);
+}
+
+TEST_F (ComponentMockTest, AddChildToNonNativeParentDoesNotTriggerAttachedToNative)
+{
+    auto parent = std::make_unique<ComponentMock> ("parent");
+
+    mockComponent->resetCallTracking();
+    parent->addChildComponent (*mockComponent);
+
+    EXPECT_FALSE (mockComponent->attachedToNativeCalled);
+    EXPECT_FALSE (mockComponent->detachedFromNativeCalled);
+}
+
+TEST_F (ComponentMockTest, RemoveChildFromNativeParentTriggersDetachedFromNative)
+{
+    auto parent = std::make_unique<ComponentMock> ("parent");
+    ComponentTestHelper::attachMockNative (*parent);
+    parent->addChildComponent (*mockComponent);
+    mockComponent->resetCallTracking();
+
+    parent->removeChildComponent (mockComponent.get());
+
+    EXPECT_TRUE (mockComponent->detachedFromNativeCalled);
+    EXPECT_FALSE (mockComponent->attachedToNativeCalled);
+
+    ComponentTestHelper::detachMockNative (*parent);
+}
+
+TEST_F (ComponentMockTest, RemoveChildFromNonNativeParentDoesNotTriggerDetachedFromNative)
+{
+    auto parent = std::make_unique<ComponentMock> ("parent");
+    parent->addChildComponent (*mockComponent);
+    mockComponent->resetCallTracking();
+
+    parent->removeChildComponent (mockComponent.get());
+
+    EXPECT_FALSE (mockComponent->detachedFromNativeCalled);
+    EXPECT_FALSE (mockComponent->attachedToNativeCalled);
+}
+
+TEST_F (ComponentMockTest, DeepChildGetsAttachedToNativeThroughAncestorChain)
+{
+    // root (with native) -> child -> grandchild
+    auto root = std::make_unique<ComponentMock> ("root");
+    auto child = std::make_unique<ComponentMock> ("child");
+    auto grandchild = std::make_unique<ComponentMock> ("grandchild");
+
+    ComponentTestHelper::attachMockNative (*root);
+    root->addChildComponent (*child);
+
+    child->addChildComponent (*grandchild);
+
+    // grandchild should receive attachedToNative because its ancestor (root) has a native
+    EXPECT_TRUE (grandchild->attachedToNativeCalled);
+
+    ComponentTestHelper::detachMockNative (*root);
 }
 
 /*
