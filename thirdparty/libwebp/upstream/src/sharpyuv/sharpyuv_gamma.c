@@ -9,14 +9,13 @@
 //
 // Gamma correction utilities.
 
-#include "./sharpyuv_gamma.h"
+#include "sharpyuv/sharpyuv_gamma.h"
 
 #include <assert.h>
 #include <float.h>
 #include <math.h>
 
-#include "./sharpyuv.h"
-#include "webp/types.h"
+#include "src/webp/types.h"
 
 // Gamma correction compensates loss of resolution during chroma subsampling.
 // Size of pre-computed table for converting from gamma to linear.
@@ -67,7 +66,8 @@ void SharpYuvInitGammaTables(void) {
         } else {
           value = (1. + a) * pow(g, 1. / kGammaF) - a;
         }
-        kLinearToGammaTabS[v] = (uint32_t)(final_scale * value + 0.5);
+        kLinearToGammaTabS[v] =
+            (uint32_t)(final_scale * value + 0.5);
       }
       // to prevent small rounding errors to cause read-overflow:
       kLinearToGammaTabS[LINEAR_TO_GAMMA_TAB_SIZE + 1] =
@@ -100,7 +100,6 @@ static WEBP_INLINE uint32_t FixedPointInterpolation(int v, uint32_t* tab,
 
 static uint32_t ToLinearSrgb(uint16_t v, int bit_depth) {
   const int shift = GAMMA_TO_LINEAR_TAB_BITS - bit_depth;
-  assert(v <= ((1 << bit_depth) - 1));
   if (shift > 0) {
     return kGammaToLinearTabS[v << shift];
   }
@@ -108,7 +107,6 @@ static uint32_t ToLinearSrgb(uint16_t v, int bit_depth) {
 }
 
 static uint16_t FromLinearSrgb(uint32_t value, int bit_depth) {
-  assert(value <= (1 << GAMMA_TO_LINEAR_BITS));
   return FixedPointInterpolation(
       value, kLinearToGammaTabS,
       (GAMMA_TO_LINEAR_BITS - LINEAR_TO_GAMMA_TAB_BITS),
@@ -123,11 +121,10 @@ static uint16_t FromLinearSrgb(uint32_t value, int bit_depth) {
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
 static WEBP_INLINE float Roundf(float x) {
-  if (x < 0) {
+  if (x < 0)
     return (float)ceil((double)(x - 0.5f));
-  } else {
+  else
     return (float)floor((double)(x + 0.5f));
-  }
 }
 
 static WEBP_INLINE float Powf(float base, float exp) {
@@ -200,7 +197,7 @@ static float ToLinearLog100(float gamma) {
   // The function is non-bijective so choose the middle of [0, 0.01].
   const float mid_interval = 0.01f / 2.f;
   return (gamma <= 0.0f) ? mid_interval
-                         : Powf(10.0f, 2.f * (MIN(gamma, 1.f) - 1.0f));
+                          : Powf(10.0f, 2.f * (MIN(gamma, 1.f) - 1.0f));
 }
 
 static float FromLinearLog100(float linear) {
@@ -211,12 +208,12 @@ static float ToLinearLog100Sqrt10(float gamma) {
   // The function is non-bijective so choose the middle of [0, 0.00316227766f[.
   const float mid_interval = 0.00316227766f / 2.f;
   return (gamma <= 0.0f) ? mid_interval
-                         : Powf(10.0f, 2.5f * (MIN(gamma, 1.f) - 1.0f));
+                          : Powf(10.0f, 2.5f * (MIN(gamma, 1.f) - 1.0f));
 }
 
 static float FromLinearLog100Sqrt10(float linear) {
   return (linear < 0.00316227766f) ? 0.0f
-                                   : 1.0f + Log10f(MIN(linear, 1.f)) / 2.5f;
+                                  : 1.0f + Log10f(MIN(linear, 1.f)) / 2.5f;
 }
 
 static float ToLinearIec61966(float gamma) {

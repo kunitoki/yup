@@ -5,34 +5,21 @@
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char specialization[] = R"===(#ifndef ME
-layout(constant_id=xf)const bool Gg=true;layout(constant_id=yf)const bool Hg=true;layout(constant_id=zf)const bool Ig=true;layout(constant_id=Af)const bool Jg=true;layout(constant_id=Bf)const bool Kg=true;layout(constant_id=Cf)const bool Lg=true;layout(constant_id=Df)const bool Mg=true;layout(constant_id=Ef)const bool Ng=true;layout(constant_id=Ff)const bool Og=true;layout(constant_id=Gf)const bool Pg=true;layout(constant_id=Hf)const bool Qg=true;layout(constant_id=If)const uint Rg=0;
-#define M Gg
-#define Z Hg
-#define FB Ig
-#define GB Jg
-#define IC Kg
-#define NC Lg
-#define SB Mg
-#define IB Ng
-#define YC Og
-#define QB Pg
-#define SC Qg
+const char specialization[] = R"===(layout(constant_id=Cf)const bool Mg=true;layout(constant_id=Df)const bool Ng=true;layout(constant_id=Ef)const bool Og=true;layout(constant_id=Ff)const bool Pg=true;layout(constant_id=Gf)const bool Qg=true;layout(constant_id=Hf)const bool Rg=true;layout(constant_id=If)const bool Sg=true;layout(constant_id=Jf)const bool Tg=true;layout(constant_id=Kf)const bool Ug=true;layout(constant_id=Mf)const bool Vg=false;layout(constant_id=Lf)const bool Wg=false;layout(constant_id=Pf)const bool Xg=false;layout(constant_id=Nf)const bool Yg=false;layout(constant_id=Of)const bool Zg=false;
+#define O Mg
+#define AB Ng
+#define GB Og
+#define HB Pg
+#define PC Qg
 #define RC Rg
-#else
-#define M true
-#define Z true
-#define FB true
-#define GB true
-#define IC true
-#define NC true
-#define SB true
-#define IB true
-#define YC true
-#define QB false
-#define SC false
-#define RC 0
-#endif
+#define XB Sg
+#define JB Tg
+#define UD Ug
+#define WB Vg
+#define YC Wg
+#define WC Xg
+#define ED Yg
+#define FD Zg
 )===";
 } // namespace glsl
 } // namespace gpu

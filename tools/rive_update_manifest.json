@@ -280,6 +280,26 @@
             "**/*.mm"
           ]
         }
+      ],
+      "namespace_wraps": [
+        {
+          "path": "include/rive/decoders/bitmap_decoder.hpp",
+          "namespace": "rive",
+          "close_before": "\n#endif\n"
+        },
+        { "path": "source/bitmap_decoder.cpp", "namespace": "rive" },
+        { "path": "source/bitmap_decoder_thirdparty.cpp", "namespace": "rive" },
+        { "path": "source/decode_astc_texture.cpp", "namespace": "rive" },
+        { "path": "source/decode_bc_texture.cpp", "namespace": "rive" },
+        {
+          "path": "source/decode_etc_texture.cpp",
+          "namespace": "rive",
+          "start_after": "                                  int channels);\n"
+        },
+        { "path": "source/decode_jpeg.cpp", "namespace": "rive" },
+        { "path": "source/decode_png.cpp", "namespace": "rive" },
+        { "path": "source/decode_webp.cpp", "namespace": "rive" },
+        { "path": "source/texture_decoder.cpp", "namespace": "rive" }
       ]
     },
     {
@@ -465,6 +485,43 @@
               "#ifdef _WINDLL"
             ]
           }
+        },
+        {
+          "path": "upstream/yoga/Yoga.cpp",
+          "note": "patched YGConfigGetDefault to use a proper RAII wrapper with cleanup",
+          "already_contains": "struct YogaWrapperWithCleanup",
+          "replace": {
+            "from": [
+              "YOGA_EXPORT YGConfigRef YGConfigGetDefault() {",
+              "  static YGConfigRef defaultConfig = YGConfigNew();",
+              "  return defaultConfig;",
+              "}"
+            ],
+            "to": [
+              "namespace {",
+              "struct YogaWrapperWithCleanup {",
+              "  YogaWrapperWithCleanup()",
+              "    : defaultConfig (YGConfigNew())",
+              "  {",
+              "  }",
+              "",
+              "  ~YogaWrapperWithCleanup() {",
+              "    if (defaultConfig != nullptr) {",
+              "      YGConfigFree (defaultConfig);",
+              "      defaultConfig = nullptr;",
+              "    }",
+              "  }",
+              "",
+              "  YGConfigRef defaultConfig = nullptr;",
+              "};",
+              "} // namespace",
+              "",
+              "YOGA_EXPORT YGConfigRef YGConfigGetDefault() {",
+              "  static auto defaultWrapper = YogaWrapperWithCleanup();",
+              "  return defaultWrapper.defaultConfig;",
+              "}"
+            ]
+          }
         }
       ]
     },
@@ -498,6 +555,37 @@
             "pnglibconf.h"
           ]
         }
+      ],
+      "patches": [
+        {
+          "path": "upstream/pngpriv.h",
+          "note": "convert anti-double-include guard to a standard include guard for unity builds",
+          "already_contains": "#endif /* PNGPRIV_H */",
+          "replace": {
+            "from": [
+              "#  define PNGPRIV_H",
+              "#else",
+              "#  error Duplicate inclusion of pngpriv.h; please check the libpng source files",
+              "#endif",
+              "",
+              "#if defined(PNG_H) || defined(PNGCONF_H) || defined(PNGLCONF_H)",
+              "#  error This file must not be included by applications; please include <png.h>",
+              "#endif"
+            ],
+            "to": [
+              "#  define PNGPRIV_H"
+            ]
+          }
+        },
+        {
+          "path": "upstream/pngpriv.h",
+          "note": "add closing endif for PNGPRIV_H include guard",
+          "already_contains": "#endif /* PNGPRIV_H */",
+          "replace": {
+            "from": "#endif /* PNG_VERSION_INFO_ONLY */",
+            "to": "#endif /* PNG_VERSION_INFO_ONLY */\n\n#endif /* PNGPRIV_H */"
+          }
+        }
       ]
     },
     {
@@ -513,6 +601,14 @@
         {
           "from": "src",
           "to": "upstream/src",
+          "include_globs": [
+            "**/*.c",
+            "**/*.h"
+          ]
+        },
+        {
+          "from": "sharpyuv",
+          "to": "upstream/src/sharpyuv",
           "include_globs": [
             "**/*.c",
             "**/*.h"
@@ -721,9 +817,14 @@
         "*.cpp"
       ],
       "exclude_globs": [
+        "decode_astc_texture.cpp",
+        "decode_bc_texture.cpp",
+        "decode_etc_texture.cpp",
         "decode_jpeg.cpp",
+        "decode_ktx2.cpp",
         "decode_png.cpp",
-        "decode_webp.cpp"
+        "decode_webp.cpp",
+        "texture_decoder.cpp"
       ]
     },
     {
@@ -764,7 +865,15 @@
       "validate_existing_includes": true
     },
     {
-      "path": "thirdparty/libwebp/libwebp.c",
+      "path": "thirdparty/libwebp/libwebp_decode.c",
+      "validate_existing_includes": true,
+      "search_roots": [
+        "thirdparty/libwebp",
+        "thirdparty/libwebp/upstream"
+      ]
+    },
+    {
+      "path": "thirdparty/libwebp/libwebp_encode.c",
       "validate_existing_includes": true,
       "search_roots": [
         "thirdparty/libwebp",

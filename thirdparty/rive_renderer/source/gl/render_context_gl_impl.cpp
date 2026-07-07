@@ -4,11 +4,14 @@
 
 #include "rive/renderer/gl/render_context_gl_impl.hpp"
 
+#include "rive/decoders/astc_footprints.hpp"
+
 #include "rive/renderer/gl/render_buffer_gl_impl.hpp"
 #include "rive/renderer/gl/render_target_gl.hpp"
 #include "rive/renderer/draw.hpp"
 #ifdef RIVE_CANVAS
 #include "rive/renderer/render_canvas.hpp"
+#include "rive/renderer/ore/ore_context_gl.hpp"
 #endif
 #include "rive/renderer/render_context_impl.hpp"
 #include "rive/renderer/rive_renderer.hpp"
@@ -189,12 +192,13 @@ RenderContextGLImpl::RenderContextGLImpl(
         // (5-10%) improvement from not using flat varyings.
         m_platformFeatures.avoidFlatVaryings = true;
     }
-    if (m_capabilities.isPowerVR)
+    if (m_capabilities.isPowerVR || strstr(rendererString, "Mali-G52"))
     {
-        // Vivo Y21 (PowerVR Rogue GE8320; OpenGL ES 3.2 build 1.13@5776728a)
-        // seems to hit some sort of reset condition that corrupts pixel local
-        // storage when rendering a complex feather. For now, feather directly
-        // to the screen on PowerVR; always go offscreen.
+        // PowerVR (Vivo Y21, Rogue GE8320; OpenGL ES 3.2 build 1.13@5776728a)
+        // and Mali-G52 (Panfrost, e.g. MediaTek MT8169) hit a reset condition
+        // that corrupts pixel local storage when rendering a complex feather
+        // directly into PLS. Route feathers through the offscreen atlas on
+        // these GPUs.
         m_platformFeatures.alwaysFeatherToAtlas = true;
     }
     m_platformFeatures.clipSpaceBottomUp = true;
@@ -203,6 +207,16 @@ RenderContextGLImpl::RenderContextGLImpl(
     GLint maxTextureSize;
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
     m_platformFeatures.maxTextureSize = maxTextureSize;
+
+    if (!capabilities.isAdreno || capabilities.adrenoSeries < 600 ||
+        capabilities.adrenoSeries >= 700)
+    {
+        // Currently there's what appears to be a driver bug where setting a
+        // scissor rect on the atlasBlit step (even if the rect is the full
+        // render target) causes some display corruption. Until we can find a
+        // workaround, just disable clip scissor on Adreno 6xx models.
+        m_platformFeatures.supportsClipScissor = true;
+    }
 
     m_platformFeatures.supportsTextureCompressionBC =
         m_capabilities.EXT_texture_compression_s3tc &&
@@ -465,7 +479,9 @@ void RenderContextGLImpl::buildAtlasRenderPipelines()
 #ifndef RIVE_ANDROID
             defines.push_back(GLSL_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE);
             m_atlasFillPipelineState.blendEquation = gpu::BlendEquation::none;
+            m_atlasFillPipelineState.colorWriteEnabled = false;
             m_atlasStrokePipelineState.blendEquation = gpu::BlendEquation::none;
+            m_atlasStrokePipelineState.colorWriteEnabled = false;
 #else
             RIVE_UNREACHABLE();
 #endif
@@ -701,36 +717,116 @@ private:
 };
 #endif // RIVE_CANVAS
 
-rcp<Texture> RenderContextGLImpl::makeImageTexture(
-    uint32_t width,
-    uint32_t height,
-    uint32_t mipLevelCount,
-    GPUTextureFormat format,
-    const uint8_t imageDataRGBAPremul[])
+rcp<Texture> RenderContextGLImpl::makeImageTexture(uint32_t width,
+                                                   uint32_t height,
+                                                   uint32_t mipLevelCount,
+                                                   GPUTextureFormat format,
+                                                   const uint8_t imageData[],
+                                                   uint8_t blockWidth,
+                                                   uint8_t blockHeight,
+                                                   [[maybe_unused]] bool srgb,
+                                                   bool generateRemainingMips)
 {
-    if (format != GPUTextureFormat::rgba32)
+    // Pick UNORM internal format. Sampler path treats texels as sRGB-
+    // encoded bytes (matching the GL_RGBA8 PNG upload).
+    GLenum sizedInternal;
+    bool isCompressed = false;
+
+    uint32_t bytesPerBlock = 16;
+    switch (format)
     {
-        assert(!"unsupported format");
-        return nullptr;
+        case GPUTextureFormat::rgba32:
+            sizedInternal = GL_RGBA8;
+            assert(blockWidth == 1 && blockHeight == 1);
+            bytesPerBlock = 4;
+            break;
+        case GPUTextureFormat::bc7:
+            sizedInternal = 0x8E8C; // GL_COMPRESSED_RGBA_BPTC_UNORM
+            isCompressed = true;
+            break;
+        case GPUTextureFormat::etc2:
+            sizedInternal = 0x9278; // GL_COMPRESSED_RGBA8_ETC2_EAC
+            isCompressed = true;
+            break;
+        case GPUTextureFormat::astc:
+        {
+
+            const int idx = rive::astcFootprintIndex(blockWidth, blockHeight);
+            if (idx < 0)
+            {
+                assert(!"unsupported ASTC block footprint");
+                return nullptr;
+            }
+
+            // KHR_texture_compression_astc_ldr lays the per-footprint enums
+            // out contiguously starting at GL_COMPRESSED_RGBA_ASTC_4x4_KHR, in
+            // the same canonical order as astcFootprintIndex().
+            sizedInternal =
+                static_cast<GLenum>(GL_COMPRESSED_RGBA_ASTC_4x4_KHR + idx);
+            isCompressed = true;
+            break;
+        }
+        default:
+            assert(!"unsupported format");
+            return nullptr;
     }
+    assert(!(generateRemainingMips && isCompressed) &&
+           "glGenerateMipmap is undefined on compressed textures");
 
     GLuint textureID;
     glGenTextures(1, &textureID);
     glActiveTexture(GL_TEXTURE0 + IMAGE_TEXTURE_IDX);
     glBindTexture(GL_TEXTURE_2D, textureID);
-    glTexStorage2D(GL_TEXTURE_2D, mipLevelCount, GL_RGBA8, width, height);
-    if (imageDataRGBAPremul != nullptr)
+    glTexStorage2D(GL_TEXTURE_2D,
+                   static_cast<GLsizei>(mipLevelCount),
+                   sizedInternal,
+                   width,
+                   height);
+    if (imageData != nullptr)
     {
-        glTexSubImage2D(GL_TEXTURE_2D,
-                        0,
-                        0,
-                        0,
-                        width,
-                        height,
-                        GL_RGBA,
-                        GL_UNSIGNED_BYTE,
-                        imageDataRGBAPremul);
-        glGenerateMipmap(GL_TEXTURE_2D);
+        // When the caller wants the GPU to auto-fill mips 1..N from mip 0
+        // (PNG path), only upload level 0 and finish via glGenerateMipmap.
+        const uint32_t levelsToUpload =
+            generateRemainingMips ? 1u : mipLevelCount;
+        size_t srcOffset = 0;
+        for (uint32_t i = 0; i < levelsToUpload; ++i)
+        {
+            const uint32_t logW = std::max<uint32_t>(1u, width >> i);
+            const uint32_t logH = std::max<uint32_t>(1u, height >> i);
+            const uint32_t blocksX = (logW + blockWidth - 1) / blockWidth;
+            const uint32_t blocksY = (logH + blockHeight - 1) / blockHeight;
+            const size_t levelBytes =
+                static_cast<size_t>(blocksX) * blocksY * bytesPerBlock;
+            if (isCompressed)
+            {
+                glCompressedTexSubImage2D(GL_TEXTURE_2D,
+                                          static_cast<GLint>(i),
+                                          0,
+                                          0,
+                                          logW,
+                                          logH,
+                                          sizedInternal,
+                                          static_cast<GLsizei>(levelBytes),
+                                          imageData + srcOffset);
+            }
+            else
+            {
+                glTexSubImage2D(GL_TEXTURE_2D,
+                                static_cast<GLint>(i),
+                                0,
+                                0,
+                                logW,
+                                logH,
+                                GL_RGBA,
+                                GL_UNSIGNED_BYTE,
+                                imageData + srcOffset);
+            }
+            srcOffset += levelBytes;
+        }
+        if (generateRemainingMips && mipLevelCount > 1)
+        {
+            glGenerateMipmap(GL_TEXTURE_2D);
+        }
     }
     return adoptImageTexture(width, height, textureID);
 }
@@ -779,6 +875,11 @@ rcp<RenderCanvas> RenderContextGLImpl::makeRenderCanvas(uint32_t width,
 
     return make_rcp<RenderCanvas>(std::move(renderImage),
                                   std::move(renderTarget));
+}
+
+std::unique_ptr<rive::ore::Context> RenderContextGLImpl::makeOreContext()
+{
+    return rive::ore::ContextGL::Make();
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -2294,7 +2395,8 @@ void RenderContextGLImpl::flush(const FlushDescriptor& desc)
     if ((desc.atlasFillBatchCount | desc.atlasStrokeBatchCount) != 0)
     {
         // Finish setting up the atlas render pass and clear the atlas.
-        m_state->setPipelineState(gpu::COLOR_ONLY_PIPELINE_STATE);
+        m_state->setPipelineState(gpu::COLOR_ONLY_PIPELINE_STATE,
+                                  ScissorAction::ignore);
 
         glBindFramebuffer(GL_FRAMEBUFFER, m_atlasRenderFBO);
         glViewport(0, 0, desc.atlasContentWidth, desc.atlasContentHeight);
@@ -2359,7 +2461,6 @@ void RenderContextGLImpl::flush(const FlushDescriptor& desc)
                 glClearBufferiv(GL_COLOR, 0, clearZero4i);
                 glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT |
                                 GL_FRAMEBUFFER_BARRIER_BIT);
-                m_state->setWriteMasks(false, false, 0);
                 glBindImageTexture(0,
                                    m_atlasRenderTexture,
                                    0,
@@ -2378,7 +2479,8 @@ void RenderContextGLImpl::flush(const FlushDescriptor& desc)
         // Draw the atlas fills.
         if (desc.atlasFillBatchCount != 0)
         {
-            m_state->setPipelineState(m_atlasFillPipelineState);
+            m_state->setPipelineState(m_atlasFillPipelineState,
+                                      ScissorAction::ignore);
             m_state->bindProgram(m_atlasFillProgram);
             for (size_t i = 0; i < desc.atlasFillBatchCount; ++i)
             {
@@ -2401,7 +2503,8 @@ void RenderContextGLImpl::flush(const FlushDescriptor& desc)
         // Draw the atlas strokes.
         if (desc.atlasStrokeBatchCount != 0)
         {
-            m_state->setPipelineState(m_atlasStrokePipelineState);
+            m_state->setPipelineState(m_atlasStrokePipelineState,
+                                      ScissorAction::ignore);
             m_state->bindProgram(m_atlasStrokeProgram);
             for (size_t i = 0; i < desc.atlasStrokeBatchCount; ++i)
             {
@@ -2631,6 +2734,9 @@ void RenderContextGLImpl::flush(const FlushDescriptor& desc)
 
     bool clipPlanesEnabled = false;
 
+    const auto fullUpdateScissorRect =
+        desc.renderTargetUpdateBounds.lossless_numeric_cast<uint16_t>();
+
     // Execute the DrawList.
     for (const DrawBatch& batch : *desc.drawList)
     {
@@ -2703,7 +2809,18 @@ void RenderContextGLImpl::flush(const FlushDescriptor& desc)
                 clipPlanesEnabled = needsClipPlanes;
             }
         }
-        m_state->setPipelineState(pipelineState);
+
+        if (batch.scissorRect.has_value())
+        {
+            auto scissorRect = fullUpdateScissorRect.intersectOrEmpty(
+                batch.scissorRect.value());
+            m_state->setPipelineState(pipelineState, ScissorAction::ignore);
+            m_state->setScissor(scissorRect, renderTarget->height());
+        }
+        else
+        {
+            m_state->setPipelineState(pipelineState);
+        }
 
         if (enums::any_flag_set(batch.barriers,
                                 BarrierFlags::plsAtomic |
@@ -3024,7 +3141,8 @@ void RenderContextGLImpl::blitTextureToFramebufferAsDraw(
         glutils::Uniform1iByName(m_blitAsDrawProgram, GLSL_sourceTexture, 0);
     }
 
-    m_state->setPipelineState(gpu::COLOR_ONLY_PIPELINE_STATE);
+    m_state->setPipelineState(gpu::COLOR_ONLY_PIPELINE_STATE,
+                              ScissorAction::ignore);
     m_state->setScissor(bounds, renderTargetHeight);
     m_state->bindProgram(m_blitAsDrawProgram);
     m_state->bindVAO(m_emptyVAO);

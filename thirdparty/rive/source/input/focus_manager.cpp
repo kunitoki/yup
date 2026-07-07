@@ -5,9 +5,11 @@
 #include "rive/input/focus_manager.hpp"
 #include "rive/artboard.hpp"
 #include "rive/artboard_host.hpp"
+#include "rive/animation/listener_invocation.hpp"
 #include "rive/focus_data.hpp"
 #include "rive/math/aabb.hpp"
 #include <algorithm>
+#include <cstddef>
 #include <cmath>
 #include <limits>
 #include <unordered_set>
@@ -43,6 +45,10 @@ static bool focusNodeEligibleForTraversal(FocusNode* node)
     }
     return focusNodeEligibleForFocus(node);
 }
+
+// Defined later in this file; used by setFocus to descend a scope to its first
+// eligible leaf.
+static FocusNode* getFirstLeaf(FocusNode* node, const FocusManager* manager);
 
 void FocusManager::dropFocusIfFocusTargetHidden()
 {
@@ -104,6 +110,24 @@ void FocusManager::removeManager(rcp<FocusNode> node)
 
 void FocusManager::setFocus(rcp<FocusNode> node)
 {
+    // Focus always rests on a leaf: if handed a scope (a node with eligible
+    // traversable descendants), descend to its first eligible leaf — matching
+    // Tab/arrow traversal, which never lands focus on a scope. Falls back to
+    // the node itself when it has no eligible leaf.
+    //
+    // Gate the descent on the requested target being eligible for focus, so a
+    // programmatic focus on an ineligible target (canFocus==false, collapsed,
+    // hidden, opacity 0, ...) stays a no-op as before, rather than reaching an
+    // eligible descendant and bypassing the early-return guards below.
+    if (node != nullptr && focusNodeEligibleForFocus(node.get()))
+    {
+        FocusNode* leaf = getFirstLeaf(node.get(), this);
+        if (leaf != nullptr)
+        {
+            node = ref_rcp(leaf);
+        }
+    }
+
     if (node == m_primaryFocus)
     {
         return;
@@ -181,6 +205,42 @@ void FocusManager::addChild(rcp<FocusNode> parent, rcp<FocusNode> child)
     {
         // Add to root nodes
         m_rootNodes.push_back(std::move(child));
+    }
+}
+
+void FocusManager::addChild(rcp<FocusNode> parent,
+                            rcp<FocusNode> child,
+                            size_t index)
+{
+    if (!child)
+    {
+        return;
+    }
+    if (child->parent())
+    {
+        child->removeFromParent();
+    }
+    else
+    {
+        auto it = std::find(m_rootNodes.begin(), m_rootNodes.end(), child);
+        if (it != m_rootNodes.end())
+        {
+            m_rootNodes.erase(it);
+        }
+    }
+    child->m_manager = this;
+    if (parent)
+    {
+        parent->insertChild(index, std::move(child));
+    }
+    else
+    {
+        if (index > m_rootNodes.size())
+        {
+            index = m_rootNodes.size();
+        }
+        m_rootNodes.insert(m_rootNodes.begin() + static_cast<ptrdiff_t>(index),
+                           std::move(child));
     }
 }
 
@@ -634,6 +694,23 @@ bool FocusManager::textInput(const std::string& text)
     return false;
 }
 
+bool FocusManager::gamepadDispatch(
+    const ListenerInvocation& invocation,
+    ScriptedDrawable** outDispatchedScriptedDrawable)
+{
+    dropFocusIfFocusTargetHidden();
+    FocusNode* node = m_primaryFocus.get();
+    while (node != nullptr)
+    {
+        if (node->gamepadDispatch(invocation, outDispatchedScriptedDrawable))
+        {
+            return true;
+        }
+        node = node->parent();
+    }
+    return false;
+}
+
 void FocusManager::notifyFocusChange(FocusNode* oldFocus, FocusNode* newFocus)
 {
     // Find the common ancestor to avoid unnecessary blur/focus notifications
@@ -902,7 +979,7 @@ FocusNode* FocusManager::findNextFocusable(FocusNode* current,
                         {
                             return findNextFocusable(scope, forward);
                         }
-                        next = firstEligibleLeafFrom(traversable, true, this);
+                        next = nullptr;
                         break;
                 }
             }
@@ -950,14 +1027,14 @@ FocusNode* FocusManager::findNextFocusable(FocusNode* current,
                         {
                             return findNextFocusable(scope, forward);
                         }
-                        next = firstEligibleLeafFrom(traversable, false, this);
+                        next = nullptr;
                         break;
                 }
             }
         }
     }
 
-    if (next != nullptr && next != current)
+    if (next != current)
     {
         const_cast<FocusManager*>(this)->setFocus(ref_rcp(next));
         return next;

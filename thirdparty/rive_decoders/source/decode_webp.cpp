@@ -6,7 +6,8 @@
 #include <memory>
 #include <cassert>
 
-namespace rive {
+namespace rive
+{
 
 std::unique_ptr<Bitmap> DecodeWebP(const uint8_t bytes[], size_t byteCount)
 {

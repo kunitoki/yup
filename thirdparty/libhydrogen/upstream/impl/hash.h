@@ -57,6 +57,7 @@ hydro_hash_init(hydro_hash_state *state, const char ctx[hydro_hash_CONTEXTBYTES]
 /* pad(str_enc("tmac") || str_enc(context)) || pad(str_enc(k)) ||
    pad(right_enc(tweak)) || msg || right_enc(msg_len) || 0x00 */
 
+#if !HYDRO_DISABLE_KDF
 static int
 hydro_hash_init_with_tweak(hydro_hash_state *state, const char ctx[hydro_hash_CONTEXTBYTES],
                            uint64_t tweak, const uint8_t key[hydro_hash_KEYBYTES])
@@ -84,6 +85,7 @@ hydro_hash_init_with_tweak(hydro_hash_state *state, const char ctx[hydro_hash_CO
 
     return 0;
 }
+#endif
 
 int
 hydro_hash_final(hydro_hash_state *state, uint8_t *out, size_t out_len)

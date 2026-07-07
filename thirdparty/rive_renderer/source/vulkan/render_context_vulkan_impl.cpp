@@ -4,9 +4,12 @@
 
 #include "rive/renderer/vulkan/render_context_vulkan_impl.hpp"
 
+#include "rive/decoders/astc_footprints.hpp"
+
 #include "vulkan_shaders.hpp"
 #ifdef RIVE_CANVAS
 #include "rive/renderer/render_canvas.hpp"
+#include "rive/renderer/ore/ore_context_vulkan.hpp"
 #endif
 #include "rive/renderer/stack_vector.hpp"
 #include "rive/renderer/texture.hpp"
@@ -21,6 +24,12 @@
 #include "render_pass_vulkan.hpp"
 #include "instance_chunker.hpp"
 #include <sstream>
+
+#ifdef RIVE_ANDROID
+#include <android/log.h>
+#include <android/api-level.h>
+#include <sys/system_properties.h>
+#endif
 
 namespace rive::gpu
 {
@@ -91,22 +100,151 @@ rcp<Texture> RenderContextVulkanImpl::makeImageTexture(
     uint32_t height,
     uint32_t mipLevelCount,
     GPUTextureFormat format,
-    const uint8_t imageDataRGBAPremul[])
+    const uint8_t imageData[],
+    uint8_t blockWidth,
+    uint8_t blockHeight,
+    [[maybe_unused]] bool srgb,
+    bool generateRemainingMips)
 {
-    if (format != GPUTextureFormat::rgba32)
+    // Sampler path treats texels as sRGB-encoded bytes (matches PNG path's
+    // GL_RGBA8 / VK_FORMAT_R8G8B8A8_UNORM upload). Don't pick the GPU sRGB
+    // view here — would auto-linearise on sample and double-darken.
+    VkFormat vkFormat;
+    uint32_t bytesPerBlock = 16;
+    [[maybe_unused]] bool isCompressed = false;
+
+    switch (format)
     {
-        assert(!"unsupported format");
+        case GPUTextureFormat::rgba32:
+            vkFormat = VK_FORMAT_R8G8B8A8_UNORM;
+            assert(blockWidth == 1 && blockHeight == 1);
+            bytesPerBlock = 4;
+            break;
+        case GPUTextureFormat::bc7:
+            vkFormat = VK_FORMAT_BC7_UNORM_BLOCK;
+            isCompressed = true;
+            break;
+        case GPUTextureFormat::etc2:
+            // ETC2 RGBA8: 8 bytes EAC alpha + 8 bytes ETC2 RGB = 16/block.
+            vkFormat = VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK;
+            isCompressed = true;
+            break;
+        case GPUTextureFormat::astc:
+        {
+            const int idx = rive::astcFootprintIndex(blockWidth, blockHeight);
+            if (idx < 0)
+            {
+                assert(!"unsupported ASTC block footprint");
+                return nullptr;
+            }
+
+            vkFormat =
+                static_cast<VkFormat>(VK_FORMAT_ASTC_4x4_UNORM_BLOCK + 2 * idx);
+            isCompressed = true;
+            break;
+        }
+        default:
+            assert(!"unsupported format");
+            return nullptr;
+    }
+    assert(!(generateRemainingMips && isCompressed) &&
+           "vkCmdBlitImage mipgen is undefined on compressed formats");
+
+    auto texture = m_vk->makeTexture2D({.format = vkFormat,
+                                        .extent = {width, height},
+                                        .mipLevels = mipLevelCount},
+                                       "RenderContext imageTexture");
+
+    if (imageData == nullptr)
+    {
+        return texture;
+    }
+    assert(!(generateRemainingMips && isCompressed) &&
+           "vkCmdBlitImage mipgen is undefined on compressed formats");
+
+    if (generateRemainingMips)
+    {
+        // Upload mip 0 only; vkutil's single-region scheduleUpload calls
+        // generateMipmaps to fill the rest.
+        const size_t mip0Bytes =
+            static_cast<size_t>(width) * height * bytesPerBlock;
+        texture->scheduleUpload(imageData, mip0Bytes);
+        return texture;
+    }
+    assert(!(generateRemainingMips && isCompressed) &&
+           "vkCmdBlitImage mipgen is undefined on compressed formats");
+
+    // Multi-mip: pre-compute per-level regions in the source blob.
+    std::vector<VkBufferImageCopy> regions;
+    regions.reserve(mipLevelCount);
+    size_t srcOffset = 0;
+    for (uint32_t i = 0; i < mipLevelCount; ++i)
+    {
+        const uint32_t logW = std::max<uint32_t>(1u, width >> i);
+        const uint32_t logH = std::max<uint32_t>(1u, height >> i);
+        const uint32_t blocksX = (logW + blockWidth - 1) / blockWidth;
+        const uint32_t blocksY = (logH + blockHeight - 1) / blockHeight;
+        const size_t levelBytes =
+            static_cast<size_t>(blocksX) * blocksY * bytesPerBlock;
+        regions.push_back({.bufferOffset = static_cast<VkDeviceSize>(srcOffset),
+                           .imageSubresource =
+                               {
+                                   .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                   .mipLevel = i,
+                                   .layerCount = 1,
+                               },
+                           .imageExtent = {logW, logH, 1}});
+        srcOffset += levelBytes;
+    }
+    assert(!(generateRemainingMips && isCompressed) &&
+           "vkCmdBlitImage mipgen is undefined on compressed formats");
+
+    // Stage all levels into one buffer, then hand the region list over.
+    rcp<vkutil::Buffer> staging = m_vk->makeBuffer(
+        {.size = srcOffset, .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT},
+        vkutil::Mappability::writeOnly);
+    std::memcpy(staging->contents(), imageData, srcOffset);
+    staging->flushContents();
+    texture->scheduleUpload(std::move(staging), std::move(regions));
+    return texture;
+}
+
+rcp<Texture> RenderContextVulkanImpl::adoptImageTexture(VkImage image,
+                                                        uint32_t width,
+                                                        uint32_t height,
+                                                        VkFormat format)
+{
+    if (image == VK_NULL_HANDLE || width == 0 || height == 0)
+    {
         return nullptr;
     }
 
-    auto texture = m_vk->makeTexture2D(
-        {
-            .format = VK_FORMAT_R8G8B8A8_UNORM,
-            .extent = {width, height},
-            .mipLevels = mipLevelCount,
-        },
-        "RenderContext imageTexture");
-    texture->scheduleUpload(imageDataRGBAPremul, height * width * 4);
+    VkImageCreateInfo info = {
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = format,
+        .extent = {width, height, 1},
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .usage = VK_IMAGE_USAGE_SAMPLED_BIT,
+    };
+
+    auto externalImage =
+        m_vk->makeExternalImage(image, info, "adopted external image");
+    auto texture =
+        m_vk->makeTexture2D(std::move(externalImage), "adopted external image");
+
+    // Caller is required to transition the image to SHADER_READ_ONLY_OPTIMAL
+    // before this call (Unity does this via AccessTexture with
+    // kUnityVulkanResourceAccess_PipelineBarrier). Pre-seed lastAccess so
+    // Rive doesn't redundantly barrier from UNDEFINED, which would discard
+    // the source contents.
+    texture->overrideLastAccess({
+        .pipelineStages = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        .accessMask = VK_ACCESS_SHADER_READ_BIT,
+        .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    });
+
     return texture;
 }
 
@@ -186,6 +324,10 @@ rcp<RenderCanvas> RenderContextVulkanImpl::makeRenderCanvas(uint32_t width,
 
     return make_rcp<RenderCanvas>(std::move(renderImage),
                                   std::move(renderTarget));
+}
+std::unique_ptr<rive::ore::Context> RenderContextVulkanImpl::makeOreContext()
+{
+    return rive::ore::ContextVulkan::Make(m_vk);
 }
 #endif
 
@@ -824,23 +966,25 @@ RenderContextVulkanImpl::RenderContextVulkanImpl(
     m_workarounds({
         .maxInstancesPerRenderPass =
             (m_vk->physicalDeviceProperties().apiVersion < VK_API_VERSION_1_3 &&
-             (m_vk->physicalDeviceProperties().vendorID == VULKAN_VENDOR_ARM ||
+             (m_vk->physicalDeviceProperties().vendorID ==
+                  vkutil::vendors::ARM ||
               m_vk->physicalDeviceProperties().vendorID ==
-                  VULKAN_VENDOR_IMG_TEC))
+                  vkutil::vendors::Imagination))
                 // Early Mali and PowerVR devices are known to crash when a
                 // single render pass is too complex.
                 ? (1u << 13) - 1u
                 : UINT32_MAX,
         // Early Xclipse drivers struggle with our manual msaa resolve, so we
         // always do automatic fullscreen resolves on that GPU family.
-        .avoidManualMSAAResolves =
-            m_vk->physicalDeviceProperties().vendorID == VULKAN_VENDOR_SAMSUNG,
+        .avoidManualMSAAResolves = m_vk->physicalDeviceProperties().vendorID ==
+                                   vkutil::vendors::Samsung,
         // Some Android drivers (some Android 12 and earlier Adreno drivers)
         // have issues with having both a self-dependency for dst reads and
         // resolve attachments. For now we just always manually resolve these
         // render passes that use advanced blend on Qualcomm.
         .needsManualMSAAResolveAfterDstRead =
-            m_vk->physicalDeviceProperties().vendorID == VULKAN_VENDOR_QUALCOMM,
+            m_vk->physicalDeviceProperties().vendorID ==
+            vkutil::vendors::Qualcomm,
     }),
     m_flushUniformBufferPool(m_vk, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT),
     m_imageDrawUniformBufferPool(m_vk, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT),
@@ -898,6 +1042,9 @@ RenderContextVulkanImpl::RenderContextVulkanImpl(
     m_platformFeatures.msaaColorPreserveNeedsDraw = true;
     m_platformFeatures.maxTextureSize =
         physicalDeviceProps.limits.maxImageDimension2D;
+
+    m_platformFeatures.supportsClipScissor = true;
+
     m_platformFeatures.supportsTextureCompressionBC =
         m_vk->features.textureCompressionBC;
     m_platformFeatures.supportsTextureCompressionASTC =
@@ -910,7 +1057,7 @@ RenderContextVulkanImpl::RenderContextVulkanImpl(
 
     switch (physicalDeviceProps.vendorID)
     {
-        case VULKAN_VENDOR_QUALCOMM:
+        case vkutil::vendors::Qualcomm:
             // Qualcomm advertises EXT_rasterization_order_attachment_access,
             // but it's slow. Use atomics instead on this platform.
             m_platformFeatures.supportsRasterOrderingMode = false;
@@ -924,7 +1071,7 @@ RenderContextVulkanImpl::RenderContextVulkanImpl(
             m_platformFeatures.pathIDGranularity = 2;
             break;
 
-        case VULKAN_VENDOR_ARM:
+        case vkutil::vendors::ARM:
             // Raster ordering is known to work on ARM hardware, even on old
             // drivers without EXT_rasterization_order_attachment_access, as
             // long as you define a subpass self-dependency.
@@ -932,7 +1079,7 @@ RenderContextVulkanImpl::RenderContextVulkanImpl(
                 !contextOptions.forceAtomicMode;
             break;
 
-        case VULKAN_VENDOR_IMG_TEC:
+        case vkutil::vendors::Imagination:
             // Raster ordering is known to work on IMG hardware, even without
             // EXT_rasterization_order_attachment_access, as long as you define
             // a subpass self-dependency.
@@ -1952,9 +2099,6 @@ const DrawPipelineLayoutVulkan& RenderContextVulkanImpl::DrawRenderPass::begin(
         1,
         vkutil::ViewportFromRect2D(
             {.extent = {renderTarget->width(), renderTarget->height()}}));
-
-    VkRect2D scissorRect = vkutil::rect2d(scissor);
-    vk->CmdSetScissor(commandBuffer, 0, 1, &scissorRect);
 
     m_renderPassOptions = renderPassOptions;
     m_scissor = scissor;
@@ -3014,9 +3158,10 @@ void RenderContextVulkanImpl::flush(const FlushDescriptor& desc)
         virtualTileHeight = desc.virtualTileHeight;
     }
 
-    auto scissorBox = IAABB::MakeWH(virtualTileWidth, virtualTileHeight)
-                          .offset(drawBounds.left, drawBounds.top)
-                          .intersect(drawBounds);
+    const auto renderPassScissorBox =
+        IAABB::MakeWH(virtualTileWidth, virtualTileHeight)
+            .offset(drawBounds.left, drawBounds.top)
+            .intersect(drawBounds);
 
     // Begin the render pass before binding buffers or updating descriptor sets.
     // It's valid Vulkan to do these tasks in any order, but Adreno 730, 740,
@@ -3029,7 +3174,7 @@ void RenderContextVulkanImpl::flush(const FlushDescriptor& desc)
                                   msaaColorSeedImageView,
                                   msaaResolveImageView,
                                   renderPassOptions,
-                                  scissorBox);
+                                  renderPassScissorBox);
 
     // Update the PLS input attachment descriptor sets.
     VkDescriptorSet inputAttachmentDescriptorSet = VK_NULL_HANDLE;
@@ -3270,6 +3415,10 @@ void RenderContextVulkanImpl::submitDrawList(
     auto* const renderTarget =
         static_cast<RenderTargetVulkan*>(desc.renderTarget);
 
+    const auto renderPassScissorRect = drawRenderPass->scissor();
+
+    auto currentScissorRect = IAABB{};
+
     // Submit the DrawList.
     for (const DrawBatch& batch : *desc.drawList)
     {
@@ -3420,6 +3569,47 @@ void RenderContextVulkanImpl::submitDrawList(
             m_vk->CmdBindPipeline(commandBuffer,
                                   VK_PIPELINE_BIND_POINT_GRAPHICS,
                                   *drawPipeline);
+
+            IAABB desiredScissorRect;
+            switch (drawType)
+            {
+                case DrawType::renderPassInitialize:
+                case DrawType::renderPassResolve:
+                    if (desc.interlockMode ==
+                        gpu::InterlockMode::clockwiseAtomic)
+                    {
+                        // clockwiseAtomic's renderPassInitialize is just a
+                        // workaround for Qualcomm, and only needs to touch one
+                        // pixel.
+                        desiredScissorRect = {
+                            renderPassScissorRect.left,
+                            renderPassScissorRect.top,
+                            1,
+                            1,
+                        };
+
+                        break;
+                    }
+
+                    [[fallthrough]];
+
+                default:
+                    // Default behavior is to use the batch's scissor rect,
+                    // intersected with the render pass' rect.
+                    desiredScissorRect =
+                        batch.scissorRect.has_value()
+                            ? renderPassScissorRect.intersectOrEmpty(
+                                  batch.scissorRect.value())
+                            : renderPassScissorRect;
+            }
+
+            if (desiredScissorRect != currentScissorRect)
+            {
+                currentScissorRect = desiredScissorRect;
+
+                VkRect2D vkScissorRect = vkutil::rect2d(currentScissorRect);
+                m_vk->CmdSetScissor(commandBuffer, 0, 1, &vkScissorRect);
+            }
         }
 
         switch (drawType)
@@ -3557,29 +3747,7 @@ void RenderContextVulkanImpl::submitDrawList(
             {
                 if (drawPipeline != nullptr)
                 {
-                    if (desc.interlockMode ==
-                        gpu::InterlockMode::clockwiseAtomic)
-                    {
-                        // clockwiseAtomic's renderPassInitialize is just a
-                        // workaround for Qualcomm, and only needs to touch one
-                        // pixel.
-                        // TODO: add scissor to DrawBatch.
-                        VkRect2D scissorRect =
-                            vkutil::rect2d(IAABB{0, 0, 1, 1});
-                        m_vk->CmdSetScissor(commandBuffer, 0, 1, &scissorRect);
-                    }
-
                     m_vk->CmdDraw(commandBuffer, 4, 1, 0, 0);
-
-                    if (desc.interlockMode ==
-                        gpu::InterlockMode::clockwiseAtomic)
-                    {
-                        // Restore the scissor.
-                        // TODO: add scissor to DrawBatch.
-                        VkRect2D scissorRect =
-                            vkutil::rect2d(drawRenderPass->scissor());
-                        m_vk->CmdSetScissor(commandBuffer, 0, 1, &scissorRect);
-                    }
                 }
                 break;
             }
@@ -3668,6 +3836,34 @@ std::unique_ptr<RenderContext> RenderContextVulkanImpl::MakeContext(
     PFN_vkGetInstanceProcAddr pfnvkGetInstanceProcAddr,
     const ContextOptions& contextOptions)
 {
+#ifdef RIVE_ANDROID
+#define PRINT_ERROR_LINE(str)                                                  \
+    __android_log_print(ANDROID_LOG_ERROR, "rive_runtime", str);               \
+    fprintf(stderr, str "\n")
+
+#if __ANDROID_API__ >= 29
+    // Android API 29 introduced this function which is simpler
+    int deviceAPILevel = android_get_device_api_level();
+#else
+    // Otherwise fall back on __system_property_get (getting
+    // "ro.build.version.sdk" has been deprecated, or else this would be the
+    // only code path here)
+    char propertyValue[PROP_VALUE_MAX]{};
+    __system_property_get("ro.build.version.sdk", propertyValue);
+    int deviceAPILevel = atoi(propertyValue);
+#endif
+
+    // Ensure we are running on a device that is at least Android 10 (which is
+    // what __ANDROID_API_Q__'s value corresponds to)
+    if (deviceAPILevel < __ANDROID_API_Q__)
+    {
+        PRINT_ERROR_LINE(
+            "ERROR: Rive Vulkan renderer requires Android 10 or newer.");
+        return nullptr;
+    }
+#else
+#define PRINT_ERROR_LINE(str) fprintf(stderr, str "\n")
+#endif
     rcp<VulkanContext> vk = make_rcp<VulkanContext>(instance,
                                                     physicalDevice,
                                                     device,
@@ -3676,18 +3872,17 @@ std::unique_ptr<RenderContext> RenderContextVulkanImpl::MakeContext(
 
     if (vk->physicalDeviceProperties().apiVersion < VK_API_VERSION_1_1)
     {
-        fprintf(
-            stderr,
-            "ERROR: Rive Vulkan renderer requires a driver that supports at least Vulkan 1.1.\n");
+        PRINT_ERROR_LINE(
+            "ERROR: Rive Vulkan renderer requires a driver that supports at least Vulkan 1.1.");
         return nullptr;
     }
 
-    if (vk->physicalDeviceProperties().vendorID == VULKAN_VENDOR_IMG_TEC &&
+    if (vk->physicalDeviceProperties().vendorID ==
+            vkutil::vendors::Imagination &&
         vk->physicalDeviceProperties().apiVersion < VK_API_VERSION_1_3)
     {
-        fprintf(
-            stderr,
-            "ERROR: Rive Vulkan renderer requires a driver that supports at least Vulkan 1.3 on PowerVR chipsets.\n");
+        PRINT_ERROR_LINE(
+            "ERROR: Rive Vulkan renderer requires a driver that supports at least Vulkan 1.3 on PowerVR chipsets.");
         return nullptr;
     }
 
@@ -3697,9 +3892,8 @@ std::unique_ptr<RenderContext> RenderContextVulkanImpl::MakeContext(
     if (contextOptions.forceAtomicMode &&
         !impl->platformFeatures().supportsAtomicMode)
     {
-        fprintf(
-            stderr,
-            "ERROR: Requested \"atomic\" mode but Vulkan does not support fragmentStoresAndAtomics on this platform.\n");
+        PRINT_ERROR_LINE(
+            "ERROR: Requested \"atomic\" mode but Vulkan does not support fragmentStoresAndAtomics on this platform.");
         return nullptr;
     }
 

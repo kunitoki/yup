@@ -8,6 +8,18 @@
 
 using namespace rive;
 
+static void blob_direct_size(void* udata, void* result)
+{
+    auto* self = (ScriptedBlob*)udata;
+    BlobAsset* asset = self->asset ? self->asset->as<BlobAsset>() : nullptr;
+    if (!asset)
+    {
+        lua_userdatadirectfield_setnil(result);
+        return;
+    }
+    lua_userdatadirectfield_setnumber(result, (double)asset->bytes().size());
+}
+
 static int blob_index(lua_State* L)
 {
     auto blob = lua_torive<ScriptedBlob>(L, 1);
@@ -55,6 +67,28 @@ static int blob_index(lua_State* L)
     return 0;
 }
 
+#ifdef WITH_RIVE_TOOLS
+int lua_push_blob(lua_State* L,
+                  const char* name,
+                  const uint8_t* data,
+                  size_t size)
+{
+    auto scriptedBlob = lua_newrive<ScriptedBlob>(L);
+    if (data != nullptr && size > 0)
+    {
+        auto blobAsset = make_rcp<BlobAsset>();
+        if (name != nullptr)
+        {
+            blobAsset->name(name);
+        }
+        SimpleArray<uint8_t> bytes(data, size);
+        blobAsset->decode(bytes, nullptr);
+        scriptedBlob->asset = blobAsset;
+    }
+    return 1;
+}
+#endif
+
 int luaopen_rive_blob(lua_State* L)
 {
     lua_register_rive<ScriptedBlob>(L);
@@ -63,6 +97,11 @@ int luaopen_rive_blob(lua_State* L)
     lua_setfield(L, -2, "__index");
     lua_setreadonly(L, -1, true);
     lua_pop(L, 1);
+
+    lua_registeruserdatadirectfieldget(L,
+                                       ScriptedBlob::luaTag,
+                                       "size",
+                                       blob_direct_size);
 
     return 0;
 }

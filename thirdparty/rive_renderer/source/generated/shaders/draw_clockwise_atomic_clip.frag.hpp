@@ -5,32 +5,32 @@
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char draw_clockwise_atomic_clip_frag[] = R"===(#ifdef EB
-K1
+const char draw_clockwise_atomic_clip_frag[] = R"===(#ifdef FB
+J1
 #ifndef K
-p0(P2,j0);
+r0(Q2,g0);
 #endif
-ld(Q2,e0);L1
-#ifdef SC
-K3 Ea(ga,Td,S0);L3
+rd(R2,d0);K1
+#ifdef YC
+N3 Ea(ga,Yd,S0);O3
 #endif
 #ifdef K
-#define c5 o2
-#define T3(o5) m1=o5;i3
+#define d5 o2
+#define V3(p5) l1=p5;l3
 #else
-#define c5 v1
-#define T3(o5) C0(j0,o5);c2;
+#define d5 m1
+#define V3(p5) v0(g0,p5);U1;
 #endif
-c5(HB){
-#ifdef CB
-B(l1,d);d q0=l1;
+d5(IB){
+#ifdef DB
+B(j1,d);d o0=j1;
 #else
-B(I,z2);d q0=I.x;
+B(I,z2);d o0=I.x;
 #endif
-#ifdef SC
-if(SC){B(a3,W0);B(i4,c);uint N7=a3.y;uint T1=a3.x+ya(W0(floor(i4)),N7);uint p1=kd(S0,T1);d Ya;if(q0>=1.&&(p1<k.W1||p1>=(k.W1|i5))){Ya=.0;}else{d Vd=q0;d g9=q0;if(p1<k.W1){uint O7=k.W1|(i5+q7(abs(q0)));uint c3=A7(S0,T1,O7);if(c3<=k.W1){g9=.0;}else if(c3<O7){g9=Aa(c3);}}if(g9>.0){uint Za=Fa(S0,T1,q7(abs(g9)));Vd=Aa(Za)+q0;}Ya=1.-Vd;}C0(e0,B0(Ya));T3(B0(1.))}else
+#ifdef YC
+if(YC){B(e3,W0);B(j4,c);uint N7=e3.y;uint T1=e3.x+L8(W0(floor(j4)),N7);uint p1=pd(S0,T1);d db;if(o0>=1.&&(p1<k.W1||p1>=(k.W1|j5))){db=.0;}else{d ae=o0;d g9=o0;if(p1<k.W1){uint O7=k.W1|(j5+q7(abs(o0)));uint f3=A7(S0,T1,O7);if(f3<=k.W1){g9=.0;}else if(f3<O7){g9=Aa(f3);}}if(g9>.0){uint eb=Fa(S0,T1,q7(abs(g9)));ae=Aa(eb)+o0;}db=1.-ae;}v0(d0,B0(db));V3(B0(1.))}else
 #endif
-{C0(e0,B0(q0));T3(B0(.0))}}
+{v0(d0,B0(o0));V3(B0(.0))}}
 #endif
 )===";
 } // namespace glsl

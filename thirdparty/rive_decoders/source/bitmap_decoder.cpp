@@ -8,7 +8,8 @@
 #include <stdio.h>
 #include <string.h>
 
-namespace rive {
+namespace rive
+{
 
 Bitmap::Bitmap(uint32_t width,
                uint32_t height,
