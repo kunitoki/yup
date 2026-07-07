@@ -26,21 +26,23 @@
 //==============================================================================
 
 /**
-    Demonstrates per-frame GpuCanvas rendering with ore-direct 3D vertex rendering
-    and GpuProgram-based Gaussian blur post-processing.
+    Demonstrates per-frame GpuCanvas rendering with GpuProgram-based 3D vertex
+    rendering and a GpuProgram-based Gaussian blur post-process.
 
-    The spinning cube is rendered each frame using rive::ore directly:
-    - GLSL 450 vertex + fragment shaders compiled at runtime via ore::Context::makeShaderModule()
-    - Per-vertex position/color/normal in a GPU vertex buffer (ore::Buffer)
+    The spinning cube is rendered each frame entirely through GpuProgram:
+    - GLSL 450 vertex + fragment shaders compiled at runtime via
+      GpuProgram::compileFromGlsl() (which transpiles to the backend-native
+      language and derives the binding-map sidecar via reflection)
+    - Per-vertex position/color/normal in a GpuBuffer vertex buffer
     - MVP-style transform computed per-frame in the vertex shader
-    - Backface culling via ore::CullMode::back
+    - Backface culling via GpuCullMode::back and an indexed draw
 
-    A Gaussian blur post-process is applied via GpuProgram when ore is available.
+    A separable Gaussian blur post-process is applied via a second GpuProgram.
     The blur intensity is controlled by a slider.
 
-    ShaderTranspiler is used for reflection only: GLSL → SPIR-V → reflect with the
-    target backend language → native slot numbers → BindingMap blob. The GLSL source
-    itself is passed to ore unchanged (ore cross-compiles internally for Metal/D3D/GL).
+    All ore-specific plumbing (shader modules, pipelines, bind groups, buffers)
+    is hidden behind GpuProgram / GpuBuffer, so the backend-native shader source
+    and binding maps are always fully populated (fixing the HLSL D3D path).
 */
 class SpinningCubeDemo : public yup::Component
 {
@@ -184,7 +186,7 @@ public:
         const int w = (int) cubeBounds.getWidth();
         const int h = (int) cubeBounds.getHeight();
 
-        if (w < 2 || h < 2 || oreCtx == nullptr || ! gpuInitialized)
+        if (w < 2 || h < 2 || ! gpuInitialized)
             return;
 
         // 1. Create an empty GpuCanvas for the scene, commit the empty Rive 2D frame.
@@ -194,14 +196,9 @@ public:
 
         sceneCanvas->commit();
 
-        // 2. Render the 3D cube into sceneCanvas via ore directly.
-        if (cubePipeline != nullptr)
-        {
-            oreCtx->beginFrame ({});
+        // 2. Render the 3D cube into sceneCanvas via GpuProgram.
+        if (cubeProgram != nullptr)
             renderCube (*sceneCanvas, w, h);
-            oreCtx->endFrame();
-            oreCtx->waitForGPU();
-        }
 
         // 3. Apply separable Gaussian blur via GpuProgram: two O(radius) passes (H then V).
         yup::Texture::Ptr outputTex = sceneCanvas->asTexture();
@@ -434,167 +431,31 @@ void main() {
     };
     // clang-format on
 
-    // ---- Shader reflection helpers -------------------------------------------
-
-    static yup::ShaderLanguage shaderLanguageForApi (yup::GraphicsContext::Api api)
+    //==============================================================================
+    /** Builds the pipeline options describing the cube's vertex layout and state. */
+    static yup::GpuPipelineOptions cubePipelineOptions()
     {
-        switch (api)
-        {
-            case yup::GraphicsContext::Api::Metal:
-                return yup::ShaderLanguage::msl;
-            case yup::GraphicsContext::Api::Direct3D:
-                return yup::ShaderLanguage::hlsl;
-            case yup::GraphicsContext::Api::OpenGLES:
-                return yup::ShaderLanguage::essl;
-            default:
-                return yup::ShaderLanguage::glsl;
-        }
-    }
+        static constexpr yup::GpuVertexAttribute attrs[3] = {
+            { yup::GpuVertexFormat::float3, 0, 0 },
+            { yup::GpuVertexFormat::float3, 12, 1 },
+            { yup::GpuVertexFormat::float3, 24, 2 },
+        };
 
-    static std::vector<uint8_t> buildBindingMapFromReflection (const yup::ShaderReflection& refl,
-                                                               yup::ShaderStage stage)
-    {
-        using namespace rive::ore;
+        static constexpr yup::GpuVertexBufferLayout vbLayout {
+            (uint32_t) sizeof (CubeVertex),
+            yup::GpuVertexStepMode::vertex,
+            attrs,
+            3
+        };
 
-        const uint8_t stageMask = (stage == yup::ShaderStage::vertex)
-                                    ? BindingMap::kStageVertex
-                                    : BindingMap::kStageFragment;
-        const int slotIndex = (stage == yup::ShaderStage::vertex) ? 0 : 1;
-
-        BindingMap bm;
-
-        for (const auto& ub : refl.uniformBuffers)
-        {
-            BindingMap::Entry e {};
-            e.group = (uint8_t) ub.set;
-            e.binding = (uint8_t) ub.binding;
-            e.kind = ResourceKind::UniformBuffer;
-            e.stageMask = stageMask;
-            e.backendSlot[slotIndex] = (uint16_t) ub.backendSlot;
-            bm.push (e);
-        }
-
-        for (const auto& img : refl.separateImages)
-        {
-            BindingMap::Entry e {};
-            e.group = (uint8_t) img.set;
-            e.binding = (uint8_t) img.binding;
-            e.kind = ResourceKind::SampledTexture;
-            e.stageMask = stageMask;
-            e.backendSlot[slotIndex] = (uint16_t) img.backendSlot;
-            e.textureViewDim = TextureViewDim::D2;
-            e.textureSampleType = TextureSampleType::Float;
-            e.textureMultisampled = false;
-            bm.push (e);
-        }
-
-        for (const auto& samp : refl.separateSamplers)
-        {
-            BindingMap::Entry e {};
-            e.group = (uint8_t) samp.set;
-            e.binding = (uint8_t) samp.binding;
-            e.kind = ResourceKind::Sampler;
-            e.stageMask = stageMask;
-            e.backendSlot[slotIndex] = (uint16_t) samp.backendSlot;
-            bm.push (e);
-        }
-
-        bm.finalize();
-        return bm.toBlob();
-    }
-
-    struct ShaderData
-    {
-        yup::String source;     // Native source: MSL for Metal, HLSL for D3D, GLSL otherwise
-        yup::String entryPoint; // Entry point name in the native source
-        yup::GpuShaderLanguage gpuLanguage = yup::GpuShaderLanguage::glsl;
-        std::vector<uint8_t> bindingMap;
-    };
-
-    static yup::ResultValue<ShaderData> compileGlslShader (const yup::String& glslSource,
-                                                           yup::ShaderStage stage,
-                                                           yup::ShaderLanguage targetLang,
-                                                           yup::ShaderTranspiler& transpiler)
-    {
-        // Step 1: GLSL → SPIR-V (always needed for reflection).
-        yup::TranspileOptions options;
-        options.spirvOptimize = true;
-
-        auto spirvResult = transpiler.compileToSPIRV (glslSource, stage, yup::ShaderLanguage::glsl, options);
-        if (spirvResult.failed())
-        {
-            auto err = "SPIR-V compile error: " + spirvResult.getErrorMessage();
-            yup::Logger::outputDebugString ("SpinningCubeDemo: " + err);
-            return yup::makeResultValueFail (err);
-        }
-
-        // Step 2: reflect from SPIR-V with target backend language → native slot numbers.
-        auto reflResult = transpiler.reflectFromSPIRV (spirvResult.getValue(), targetLang);
-        if (reflResult.failed())
-        {
-            auto err = "Reflection error: " + reflResult.getErrorMessage();
-            yup::Logger::outputDebugString ("SpinningCubeDemo: " + err);
-            return yup::makeResultValueFail (err);
-        }
-
-        // Step 3: derive the native source that ore will actually compile.
-        // Ore's Metal and D3D backends pass the source directly to the platform
-        // compiler — they do NOT cross-compile from GLSL internally.
-        yup::String nativeSource;
-        yup::String entryPoint;
-        yup::GpuShaderLanguage gpuLang;
-
-        if (targetLang == yup::ShaderLanguage::msl)
-        {
-            auto mslResult = transpiler.decompileFromSPIRV (spirvResult.getValue(), yup::ShaderLanguage::msl);
-            if (mslResult.failed())
-            {
-                auto err = "MSL decompile error: " + mslResult.getErrorMessage();
-                yup::Logger::outputDebugString ("SpinningCubeDemo: " + err);
-                return yup::makeResultValueFail (err);
-            }
-            nativeSource = mslResult.getValue();
-            entryPoint = "main0"; // SPIRV-Cross always renames GLSL "main" → "main0" in MSL
-            gpuLang = yup::GpuShaderLanguage::msl;
-        }
-        else if (targetLang == yup::ShaderLanguage::hlsl)
-        {
-            auto hlslResult = transpiler.decompileFromSPIRV (spirvResult.getValue(), yup::ShaderLanguage::hlsl);
-            if (hlslResult.failed())
-            {
-                auto err = "HLSL decompile error: " + hlslResult.getErrorMessage();
-                yup::Logger::outputDebugString ("SpinningCubeDemo: " + err);
-                return yup::makeResultValueFail (err);
-            }
-            nativeSource = hlslResult.getValue();
-            entryPoint = "main";
-            gpuLang = yup::GpuShaderLanguage::hlsl;
-        }
-        else if (targetLang == yup::ShaderLanguage::essl)
-        {
-            auto esslResult = transpiler.decompileFromSPIRV (spirvResult.getValue(), yup::ShaderLanguage::essl);
-            if (esslResult.failed())
-            {
-                auto err = "ESSL decompile error: " + esslResult.getErrorMessage();
-                yup::Logger::outputDebugString ("SpinningCubeDemo: " + err);
-                return yup::makeResultValueFail (err);
-            }
-            nativeSource = esslResult.getValue();
-            entryPoint = "main";
-            gpuLang = yup::GpuShaderLanguage::glsl;
-        }
-        else
-        {
-            nativeSource = glslSource;
-            entryPoint = "main";
-            gpuLang = yup::GpuShaderLanguage::glsl;
-        }
-
-        ShaderData data { std::move (nativeSource),
-                          std::move (entryPoint),
-                          gpuLang,
-                          buildBindingMapFromReflection (reflResult.getValue(), stage) };
-        return yup::makeResultValueOk (std::move (data));
+        yup::GpuPipelineOptions options;
+        options.vertexBuffers = &vbLayout;
+        options.vertexBufferCount = 1;
+        options.topology = yup::GpuPrimitiveTopology::triangleList;
+        options.indexFormat = yup::GpuIndexFormat::uint16;
+        options.cullMode = yup::GpuCullMode::back;
+        options.winding = yup::GpuFaceWinding::counterClockwise;
+        return options;
     }
 
     // ---- GPU initialisation --------------------------------------------------
@@ -605,24 +466,20 @@ void main() {
             return;
 
         gpuInitialized = true;
-        oreCtx = capturedContext->gpuContext();
 
-        if (oreCtx == nullptr)
+        if (capturedContext->gpuContext() == nullptr)
         {
             statusLabel->setText ("ore context unavailable - rebuild with enableOreContext=true.",
                                   yup::dontSendNotification);
             return;
         }
 
-        transpiler = new yup::ShaderTranspiler();
-        targetShaderLang = shaderLanguageForApi (capturedContext->getApi());
-
         initBlur();
         initCube();
 
-        if (cubePipeline != nullptr && blurProgram != nullptr)
+        if (cubeProgram != nullptr && blurProgram != nullptr)
             statusLabel->setText ("GPU cube + separable blur ready. Drag slider for blur intensity.", yup::dontSendNotification);
-        else if (cubePipeline != nullptr)
+        else if (cubeProgram != nullptr)
             statusLabel->setText ("GPU cube ready. Blur compile failed - see debug log.", yup::dontSendNotification);
         else
             statusLabel->setText ("GPU init failed - see debug log.", yup::dontSendNotification);
@@ -672,39 +529,12 @@ void main() {
 }
 )glsl";
 
-        auto vsData = compileGlslShader (kBlurVS, yup::ShaderStage::vertex, targetShaderLang, *transpiler);
-        auto fsData = compileGlslShader (kBlurFS, yup::ShaderStage::fragment, targetShaderLang, *transpiler);
-
-        if (vsData.failed() || fsData.failed())
-        {
-            yup::Logger::outputDebugString ("SpinningCubeDemo: blur shader compile failed.");
-            return;
-        }
-
-        const auto& vsRef = vsData.getReference();
-        const auto& fsRef = fsData.getReference();
-
-        auto vsCode = vsRef.source.toRawUTF8();
-        auto fsCode = fsRef.source.toRawUTF8();
-
-        yup::GpuShaderSource blurVS;
-        blurVS.language = vsRef.gpuLanguage;
-        blurVS.code = vsCode;
-        blurVS.codeSize = (uint32_t) strlen (vsCode);
-        blurVS.entryPoint = vsRef.entryPoint.toRawUTF8();
-        blurVS.bindingMap = vsRef.bindingMap.data();
-        blurVS.bindingMapSize = (uint32_t) vsRef.bindingMap.size();
-
-        yup::GpuShaderSource blurFS;
-        blurFS.language = fsRef.gpuLanguage;
-        blurFS.code = fsCode;
-        blurFS.codeSize = (uint32_t) strlen (fsCode);
-        blurFS.entryPoint = fsRef.entryPoint.toRawUTF8();
-        blurFS.bindingMap = fsRef.bindingMap.data();
-        blurFS.bindingMapSize = (uint32_t) fsRef.bindingMap.size();
-
         std::string err;
-        blurProgram = yup::GpuProgram::compile (*capturedContext, blurVS, blurFS, &err);
+        blurProgram = yup::GpuProgram::compileFromGlsl (*capturedContext,
+                                                        yup::String (kBlurVS),
+                                                        yup::String (kBlurFS),
+                                                        {},
+                                                        &err);
 
         if (blurProgram == nullptr)
             yup::Logger::outputDebugString ("SpinningCubeDemo: blur compile failed: " + yup::String (err.c_str()));
@@ -712,128 +542,22 @@ void main() {
 
     void initCube()
     {
-        auto vsData = compileGlslShader (currentVertSource, yup::ShaderStage::vertex, targetShaderLang, *transpiler);
-        auto fsData = compileGlslShader (currentFragSource, yup::ShaderStage::fragment, targetShaderLang, *transpiler);
+        std::string err;
+        cubeProgram = yup::GpuProgram::compileFromGlsl (*capturedContext,
+                                                        currentVertSource,
+                                                        currentFragSource,
+                                                        cubePipelineOptions(),
+                                                        &err);
 
-        if (vsData.failed() || fsData.failed())
+        if (cubeProgram == nullptr)
         {
-            yup::Logger::outputDebugString ("SpinningCubeDemo: cube shader compile failed.");
-            return;
-        }
-
-        const auto& vsRef = vsData.getReference();
-        const auto& fsRef = fsData.getReference();
-
-        auto vsCode = vsRef.source.toRawUTF8();
-        auto fsCode = fsRef.source.toRawUTF8();
-
-        // Compile vertex shader module.
-        rive::ore::ShaderModuleDesc vsd;
-        vsd.language = rive::ore::ShaderLanguage::glsl;
-        vsd.code = vsCode;
-        vsd.codeSize = (uint32_t) strlen (vsCode);
-        vsd.stage = rive::ore::ShaderStage::vertex;
-        vsd.label = "Cube VS";
-        vsd.bindingMapBytes = vsRef.bindingMap.data();
-        vsd.bindingMapSize = (uint32_t) vsRef.bindingMap.size();
-        cubeVertModule = oreCtx->makeShaderModule (vsd);
-
-        // Compile fragment shader module.
-        rive::ore::ShaderModuleDesc fsd;
-        fsd.language = rive::ore::ShaderLanguage::glsl;
-        fsd.code = fsCode;
-        fsd.codeSize = (uint32_t) strlen (fsCode);
-        fsd.stage = rive::ore::ShaderStage::fragment;
-        fsd.label = "Cube FS";
-        fsd.bindingMapBytes = fsRef.bindingMap.data();
-        fsd.bindingMapSize = (uint32_t) fsRef.bindingMap.size();
-        cubeFragModule = oreCtx->makeShaderModule (fsd);
-
-        if (cubeVertModule == nullptr || cubeFragModule == nullptr)
-        {
-            yup::Logger::outputDebugString ("SpinningCubeDemo: cube shader compile failed: " + yup::String (oreCtx->lastError().c_str()));
-            return;
-        }
-
-        // Bind-group layout: @group(0) @binding(0) = UBO, VS-only, Metal buffer(0).
-        rive::ore::BindGroupLayoutEntry bglEntry;
-        bglEntry.binding = 0;
-        bglEntry.kind = rive::ore::BindingKind::uniformBuffer;
-        bglEntry.visibility.mask = rive::ore::StageVisibility::kVertex;
-        bglEntry.nativeSlotVS = 0;
-        bglEntry.nativeSlotFS = rive::ore::BindGroupLayoutEntry::kNativeSlotAbsent;
-        bglEntry.nativeSlotCS = rive::ore::BindGroupLayoutEntry::kNativeSlotAbsent;
-
-        rive::ore::BindGroupLayoutDesc bglDesc;
-        bglDesc.groupIndex = 0;
-        bglDesc.entries = &bglEntry;
-        bglDesc.entryCount = 1;
-        bglDesc.label = "Cube BGL";
-        cubeLayout = oreCtx->makeBindGroupLayout (bglDesc);
-
-        if (cubeLayout == nullptr)
-        {
-            yup::Logger::outputDebugString ("SpinningCubeDemo: cube BGL creation failed.");
-            return;
-        }
-
-        // Vertex attribute layout: pos(float3,0), color(float3,12), normal(float3,24).
-        rive::ore::VertexAttribute attrs[3] = {
-            { rive::ore::VertexFormat::float3, 0, 0 },
-            { rive::ore::VertexFormat::float3, 12, 1 },
-            { rive::ore::VertexFormat::float3, 24, 2 },
-        };
-        rive::ore::VertexBufferLayout vbLayout;
-        vbLayout.stride = sizeof (CubeVertex); // 36 bytes
-        vbLayout.stepMode = rive::ore::VertexStepMode::vertex;
-        vbLayout.attributes = attrs;
-        vbLayout.attributeCount = 3;
-
-        // Pipeline.
-        rive::ore::BindGroupLayout* layoutPtr = cubeLayout.get();
-
-        rive::ore::PipelineDesc pipeDesc;
-        pipeDesc.vertexModule = cubeVertModule.get();
-        pipeDesc.vertexEntryPoint = vsRef.entryPoint.toRawUTF8();
-        pipeDesc.fragmentModule = cubeFragModule.get();
-        pipeDesc.fragmentEntryPoint = fsRef.entryPoint.toRawUTF8();
-        pipeDesc.vertexBuffers = &vbLayout;
-        pipeDesc.vertexBufferCount = 1;
-        pipeDesc.topology = rive::ore::PrimitiveTopology::triangleList;
-        pipeDesc.indexFormat = rive::ore::IndexFormat::uint16;
-        pipeDesc.cullMode = rive::ore::CullMode::back;
-        pipeDesc.winding = rive::ore::FaceWinding::counterClockwise;
-        pipeDesc.colorCount = 1;
-        pipeDesc.colorTargets[0].format = rive::ore::TextureFormat::rgba8unorm;
-        pipeDesc.colorTargets[0].blendEnabled = false;
-        pipeDesc.bindGroupLayouts = &layoutPtr;
-        pipeDesc.bindGroupLayoutCount = 1;
-        pipeDesc.label = "Cube Pipeline";
-
-        std::string pipeError;
-        cubePipeline = oreCtx->makePipeline (pipeDesc, &pipeError);
-
-        if (cubePipeline == nullptr)
-        {
-            yup::Logger::outputDebugString ("SpinningCubeDemo: cube pipeline failed: "
-                                            + yup::String (pipeError.c_str()));
+            yup::Logger::outputDebugString ("SpinningCubeDemo: cube shader compile failed: " + yup::String (err.c_str()));
             return;
         }
 
         // Upload immutable vertex and index buffers.
-        rive::ore::BufferDesc vboDesc;
-        vboDesc.usage = rive::ore::BufferUsage::vertex;
-        vboDesc.size = sizeof (kCubeVerts);
-        vboDesc.data = kCubeVerts;
-        vboDesc.immutable = true;
-        cubeVBO = oreCtx->makeBuffer (vboDesc);
-
-        rive::ore::BufferDesc iboDesc;
-        iboDesc.usage = rive::ore::BufferUsage::index;
-        iboDesc.size = sizeof (kCubeIdx);
-        iboDesc.data = kCubeIdx;
-        iboDesc.immutable = true;
-        cubeIBO = oreCtx->makeBuffer (iboDesc);
+        cubeVBO = yup::GpuBuffer::create (*capturedContext, yup::GpuBufferType::vertex, kCubeVerts, sizeof (kCubeVerts));
+        cubeIBO = yup::GpuBuffer::create (*capturedContext, yup::GpuBufferType::index, kCubeIdx, sizeof (kCubeIdx));
 
         if (cubeVBO == nullptr || cubeIBO == nullptr)
             yup::Logger::outputDebugString ("SpinningCubeDemo: cube buffer creation failed.");
@@ -865,130 +589,26 @@ void main() {
 
     void recompileCubeShader()
     {
-        if (oreCtx == nullptr || transpiler == nullptr)
+        if (capturedContext == nullptr || ! gpuInitialized)
             return;
 
         syncEditorSource();
 
-        auto vsData = compileGlslShader (currentVertSource, yup::ShaderStage::vertex, targetShaderLang, *transpiler);
-        auto fsData = compileGlslShader (currentFragSource, yup::ShaderStage::fragment, targetShaderLang, *transpiler);
+        std::string err;
+        auto newProgram = yup::GpuProgram::compileFromGlsl (*capturedContext,
+                                                            currentVertSource,
+                                                            currentFragSource,
+                                                            cubePipelineOptions(),
+                                                            &err);
 
-        if (vsData.failed() || fsData.failed())
+        if (newProgram == nullptr)
         {
-            yup::String errors;
-            if (vsData.failed())
-                errors << "Vertex: " << vsData.getErrorMessage() << "\n";
-            if (fsData.failed())
-                errors << "Fragment: " << fsData.getErrorMessage() << "\n";
-            showError (errors);
+            showError (yup::String (err.c_str()));
             return;
         }
 
-        const auto& vsRef = vsData.getReference();
-        const auto& fsRef = fsData.getReference();
-
-        auto vsCode = vsRef.source.toRawUTF8();
-        auto fsCode = fsRef.source.toRawUTF8();
-
-        // Create new shader modules.
-        rive::ore::ShaderModuleDesc vsd;
-        vsd.language = rive::ore::ShaderLanguage::glsl;
-        vsd.code = vsCode;
-        vsd.codeSize = (uint32_t) strlen (vsCode);
-        vsd.stage = rive::ore::ShaderStage::vertex;
-        vsd.label = "Cube VS";
-        vsd.bindingMapBytes = vsRef.bindingMap.data();
-        vsd.bindingMapSize = (uint32_t) vsRef.bindingMap.size();
-        auto newVertModule = oreCtx->makeShaderModule (vsd);
-
-        rive::ore::ShaderModuleDesc fsd;
-        fsd.language = rive::ore::ShaderLanguage::glsl;
-        fsd.code = fsCode;
-        fsd.codeSize = (uint32_t) strlen (fsCode);
-        fsd.stage = rive::ore::ShaderStage::fragment;
-        fsd.label = "Cube FS";
-        fsd.bindingMapBytes = fsRef.bindingMap.data();
-        fsd.bindingMapSize = (uint32_t) fsRef.bindingMap.size();
-        auto newFragModule = oreCtx->makeShaderModule (fsd);
-
-        if (newVertModule == nullptr || newFragModule == nullptr)
-        {
-            showError ("Shader module creation failed: " + yup::String (oreCtx->lastError().c_str()));
-            return;
-        }
-
-        // Ensure BGL exists (first compile creates it; subsequent recompiles reuse it).
-        if (cubeLayout == nullptr)
-        {
-            rive::ore::BindGroupLayoutEntry bglEntry;
-            bglEntry.binding = 0;
-            bglEntry.kind = rive::ore::BindingKind::uniformBuffer;
-            bglEntry.visibility.mask = rive::ore::StageVisibility::kVertex;
-            bglEntry.nativeSlotVS = 0;
-            bglEntry.nativeSlotFS = rive::ore::BindGroupLayoutEntry::kNativeSlotAbsent;
-            bglEntry.nativeSlotCS = rive::ore::BindGroupLayoutEntry::kNativeSlotAbsent;
-
-            rive::ore::BindGroupLayoutDesc bglDesc;
-            bglDesc.groupIndex = 0;
-            bglDesc.entries = &bglEntry;
-            bglDesc.entryCount = 1;
-            bglDesc.label = "Cube BGL";
-            cubeLayout = oreCtx->makeBindGroupLayout (bglDesc);
-
-            if (cubeLayout == nullptr)
-            {
-                showError ("BGL creation failed.");
-                return;
-            }
-        }
-
-        // Vertex attribute layout (unchanged across recompiles).
-        rive::ore::VertexAttribute attrs[3] = {
-            { rive::ore::VertexFormat::float3, 0, 0 },
-            { rive::ore::VertexFormat::float3, 12, 1 },
-            { rive::ore::VertexFormat::float3, 24, 2 },
-        };
-        rive::ore::VertexBufferLayout vbLayout;
-        vbLayout.stride = sizeof (CubeVertex);
-        vbLayout.stepMode = rive::ore::VertexStepMode::vertex;
-        vbLayout.attributes = attrs;
-        vbLayout.attributeCount = 3;
-
-        // Build pipeline with the new shader modules.
-        rive::ore::BindGroupLayout* layoutPtr = cubeLayout.get();
-
-        rive::ore::PipelineDesc pipeDesc;
-        pipeDesc.vertexModule = newVertModule.get();
-        pipeDesc.vertexEntryPoint = vsRef.entryPoint.toRawUTF8();
-        pipeDesc.fragmentModule = newFragModule.get();
-        pipeDesc.fragmentEntryPoint = fsRef.entryPoint.toRawUTF8();
-        pipeDesc.vertexBuffers = &vbLayout;
-        pipeDesc.vertexBufferCount = 1;
-        pipeDesc.topology = rive::ore::PrimitiveTopology::triangleList;
-        pipeDesc.indexFormat = rive::ore::IndexFormat::uint16;
-        pipeDesc.cullMode = rive::ore::CullMode::back;
-        pipeDesc.winding = rive::ore::FaceWinding::counterClockwise;
-        pipeDesc.colorCount = 1;
-        pipeDesc.colorTargets[0].format = rive::ore::TextureFormat::rgba8unorm;
-        pipeDesc.colorTargets[0].blendEnabled = false;
-        pipeDesc.bindGroupLayouts = &layoutPtr;
-        pipeDesc.bindGroupLayoutCount = 1;
-        pipeDesc.label = "Cube Pipeline";
-
-        std::string pipeError;
-        auto newPipeline = oreCtx->makePipeline (pipeDesc, &pipeError);
-
-        if (newPipeline == nullptr)
-        {
-            showError ("Pipeline creation failed: " + yup::String (pipeError.c_str()));
-            return;
-        }
-
-        // Success — swap in the new pipeline and shader modules.
-        cubeVertModule = std::move (newVertModule);
-        cubeFragModule = std::move (newFragModule);
-        cubePipeline = std::move (newPipeline);
-
+        // Success — swap in the new program.
+        cubeProgram = std::move (newProgram);
         hideError();
     }
 
@@ -1071,10 +691,10 @@ void main() {
 
     void renderCube (yup::GpuCanvas& canvas, int w, int h)
     {
-        if (cubePipeline == nullptr || cubeVBO == nullptr || cubeIBO == nullptr || cubeLayout == nullptr)
+        if (cubeProgram == nullptr || cubeVBO == nullptr || cubeIBO == nullptr)
             return;
 
-        // Upload per-frame uniform buffer (rotation angles + aspect ratio).
+        // Per-frame uniform buffer (rotation angles + aspect ratio).
         struct CubeUniforms
         {
             float angleY, angleX, aspect, pad;
@@ -1082,72 +702,26 @@ void main() {
 
         CubeUniforms uniforms { angleY, angleX, (float) w / (float) h, 0.0f };
 
-        rive::ore::BufferDesc ubDesc;
-        ubDesc.usage = rive::ore::BufferUsage::uniform;
-        ubDesc.size = sizeof (uniforms);
-        ubDesc.data = &uniforms;
-        ubDesc.immutable = true;
-        auto ubo = oreCtx->makeBuffer (ubDesc);
-        if (ubo == nullptr)
-            return;
+        cubeProgram->setUniformBuffer (0, 0, &uniforms, sizeof (uniforms));
+        cubeProgram->setVertexBuffer (0, cubeVBO);
+        cubeProgram->setIndexBuffer (cubeIBO, yup::GpuIndexFormat::uint16);
 
-        // Bind group.
-        rive::ore::BindGroupDesc::UBOEntry uboEntry;
-        uboEntry.slot = 0; // WGSL @binding(0)
-        uboEntry.buffer = ubo.get();
-        uboEntry.offset = 0;
-        uboEntry.size = sizeof (uniforms);
-
-        rive::ore::BindGroupDesc bgDesc;
-        bgDesc.layout = cubeLayout.get();
-        bgDesc.ubos = &uboEntry;
-        bgDesc.uboCount = 1;
-        bgDesc.textures = nullptr;
-        bgDesc.textureCount = 0;
-        bgDesc.samplers = nullptr;
-        bgDesc.samplerCount = 0;
-        auto bg = oreCtx->makeBindGroup (bgDesc);
-        if (bg == nullptr)
-            return;
-
-        // Encode the render pass targeting sceneCanvas's backing texture.
-        canvas.withOreAttachment (oreCtx, [&] (rive::ore::TextureView* view)
-        {
-            rive::ore::RenderPassDesc rpDesc;
-            rpDesc.colorCount = 1;
-            rpDesc.colorAttachments[0].view = view;
-            rpDesc.colorAttachments[0].loadOp = rive::ore::LoadOp::clear;
-            rpDesc.colorAttachments[0].storeOp = rive::ore::StoreOp::store;
-            rpDesc.colorAttachments[0].clearColor = { 0.1f, 0.1f, 0.18f, 1.0f };
-
-            auto rp = oreCtx->beginRenderPass (rpDesc);
-            rp->setPipeline (cubePipeline.get());
-            rp->setVertexBuffer (0, cubeVBO.get(), 0);
-            rp->setIndexBuffer (cubeIBO.get(), rive::ore::IndexFormat::uint16, 0);
-            rp->setBindGroup (0, bg.get());
-            rp->setViewport (0.0f, 0.0f, (float) w, (float) h);
-            rp->drawIndexed (36);
-            rp->finish();
-        });
+        cubeProgram->beginFrame();
+        cubeProgram->drawIndexed (canvas, 36, { true, yup::Color (0xff1a1a2e) });
+        cubeProgram->endFrame();
+        cubeProgram->waitForGPU();
     }
 
     //==============================================================================
     yup::GraphicsContext* capturedContext = nullptr;
-    rive::ore::Context* oreCtx = nullptr;
 
-    yup::ShaderTranspiler::Ptr transpiler;
-    yup::ShaderLanguage targetShaderLang = yup::ShaderLanguage::glsl;
+    // Cube pass (GpuProgram indexed geometry).
+    yup::GpuProgram::Ptr cubeProgram;
+    yup::GpuBuffer::Ptr cubeVBO;
+    yup::GpuBuffer::Ptr cubeIBO;
 
     // Blur pass (GpuProgram fullscreen triangle).
     yup::GpuProgram::Ptr blurProgram;
-
-    // Cube pass (ore direct).
-    rive::rcp<rive::ore::ShaderModule> cubeVertModule;
-    rive::rcp<rive::ore::ShaderModule> cubeFragModule;
-    rive::rcp<rive::ore::Pipeline> cubePipeline;
-    rive::rcp<rive::ore::BindGroupLayout> cubeLayout;
-    rive::rcp<rive::ore::Buffer> cubeVBO;
-    rive::rcp<rive::ore::Buffer> cubeIBO;
 
     bool gpuInitialized = false;
     float angleY = 0.0f;

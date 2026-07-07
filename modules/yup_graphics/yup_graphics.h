@@ -46,6 +46,7 @@
 
 #include <yup_core/yup_core.h>
 #include <yup_simd/yup_simd.h>
+#include <yup_shading/yup_shading.h>
 
 #include <rive_renderer/rive_renderer.h>
 #include <rive/renderer/ore/ore_context.hpp>
@@ -185,6 +186,8 @@ class TextureView;
 #include "context/yup_GraphicsContext.h"
 #include "graphics/yup_Graphics.h"
 #include "rhi/yup_GpuCanvas.h"
+#include "rhi/yup_ShaderBindingMap.h"
+#include "rhi/yup_GpuBuffer.h"
 #include "rhi/yup_GpuProgram.h"
 #include "svg/yup_SVGElement.h"
 #include "svg/yup_SVGGradient.h"

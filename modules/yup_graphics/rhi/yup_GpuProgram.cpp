@@ -24,6 +24,151 @@ namespace yup
 
 //==============================================================================
 
+namespace
+{
+
+rive::ore::VertexFormat toOreVertexFormat (GpuVertexFormat f)
+{
+    switch (f)
+    {
+        case GpuVertexFormat::float1:   return rive::ore::VertexFormat::float1;
+        case GpuVertexFormat::float2:   return rive::ore::VertexFormat::float2;
+        case GpuVertexFormat::float3:   return rive::ore::VertexFormat::float3;
+        case GpuVertexFormat::float4:   return rive::ore::VertexFormat::float4;
+        case GpuVertexFormat::uint8x4:  return rive::ore::VertexFormat::uint8x4;
+        case GpuVertexFormat::snorm8x4: return rive::ore::VertexFormat::snorm8x4;
+        case GpuVertexFormat::unorm8x4: return rive::ore::VertexFormat::unorm8x4;
+        default:                        return rive::ore::VertexFormat::float4;
+    }
+}
+
+rive::ore::VertexStepMode toOreStepMode (GpuVertexStepMode m)
+{
+    return m == GpuVertexStepMode::instance ? rive::ore::VertexStepMode::instance
+                                            : rive::ore::VertexStepMode::vertex;
+}
+
+rive::ore::PrimitiveTopology toOreTopology (GpuPrimitiveTopology t)
+{
+    switch (t)
+    {
+        case GpuPrimitiveTopology::pointList:     return rive::ore::PrimitiveTopology::pointList;
+        case GpuPrimitiveTopology::lineList:      return rive::ore::PrimitiveTopology::lineList;
+        case GpuPrimitiveTopology::lineStrip:     return rive::ore::PrimitiveTopology::lineStrip;
+        case GpuPrimitiveTopology::triangleList:  return rive::ore::PrimitiveTopology::triangleList;
+        case GpuPrimitiveTopology::triangleStrip: return rive::ore::PrimitiveTopology::triangleStrip;
+        default:                                  return rive::ore::PrimitiveTopology::triangleList;
+    }
+}
+
+rive::ore::IndexFormat toOreIndexFormat (GpuIndexFormat f)
+{
+    switch (f)
+    {
+        case GpuIndexFormat::uint16: return rive::ore::IndexFormat::uint16;
+        case GpuIndexFormat::uint32: return rive::ore::IndexFormat::uint32;
+        case GpuIndexFormat::none:
+        default:                     return rive::ore::IndexFormat::none;
+    }
+}
+
+rive::ore::CullMode toOreCullMode (GpuCullMode m)
+{
+    switch (m)
+    {
+        case GpuCullMode::front: return rive::ore::CullMode::front;
+        case GpuCullMode::back:  return rive::ore::CullMode::back;
+        case GpuCullMode::none:
+        default:                 return rive::ore::CullMode::none;
+    }
+}
+
+rive::ore::FaceWinding toOreWinding (GpuFaceWinding w)
+{
+    return w == GpuFaceWinding::clockwise ? rive::ore::FaceWinding::clockwise
+                                          : rive::ore::FaceWinding::counterClockwise;
+}
+
+rive::ore::CompareFunction toOreCompare (GpuCompareFunction c)
+{
+    switch (c)
+    {
+        case GpuCompareFunction::never:        return rive::ore::CompareFunction::never;
+        case GpuCompareFunction::less:         return rive::ore::CompareFunction::less;
+        case GpuCompareFunction::equal:        return rive::ore::CompareFunction::equal;
+        case GpuCompareFunction::lessEqual:    return rive::ore::CompareFunction::lessEqual;
+        case GpuCompareFunction::greater:      return rive::ore::CompareFunction::greater;
+        case GpuCompareFunction::notEqual:     return rive::ore::CompareFunction::notEqual;
+        case GpuCompareFunction::greaterEqual: return rive::ore::CompareFunction::greaterEqual;
+        case GpuCompareFunction::always:
+        default:                               return rive::ore::CompareFunction::always;
+    }
+}
+
+rive::ore::StencilOp toOreStencilOp (GpuStencilOp o)
+{
+    switch (o)
+    {
+        case GpuStencilOp::keep:           return rive::ore::StencilOp::keep;
+        case GpuStencilOp::zero:           return rive::ore::StencilOp::zero;
+        case GpuStencilOp::replace:        return rive::ore::StencilOp::replace;
+        case GpuStencilOp::incrementClamp: return rive::ore::StencilOp::incrementClamp;
+        case GpuStencilOp::decrementClamp: return rive::ore::StencilOp::decrementClamp;
+        case GpuStencilOp::invert:         return rive::ore::StencilOp::invert;
+        case GpuStencilOp::incrementWrap:  return rive::ore::StencilOp::incrementWrap;
+        case GpuStencilOp::decrementWrap:  return rive::ore::StencilOp::decrementWrap;
+        default:                           return rive::ore::StencilOp::keep;
+    }
+}
+
+rive::ore::BlendFactor toOreBlendFactor (GpuBlendFactor f)
+{
+    switch (f)
+    {
+        case GpuBlendFactor::zero:             return rive::ore::BlendFactor::zero;
+        case GpuBlendFactor::one:              return rive::ore::BlendFactor::one;
+        case GpuBlendFactor::srcColor:         return rive::ore::BlendFactor::srcColor;
+        case GpuBlendFactor::oneMinusSrcColor: return rive::ore::BlendFactor::oneMinusSrcColor;
+        case GpuBlendFactor::srcAlpha:         return rive::ore::BlendFactor::srcAlpha;
+        case GpuBlendFactor::oneMinusSrcAlpha: return rive::ore::BlendFactor::oneMinusSrcAlpha;
+        case GpuBlendFactor::dstColor:         return rive::ore::BlendFactor::dstColor;
+        case GpuBlendFactor::oneMinusDstColor: return rive::ore::BlendFactor::oneMinusDstColor;
+        case GpuBlendFactor::dstAlpha:         return rive::ore::BlendFactor::dstAlpha;
+        case GpuBlendFactor::oneMinusDstAlpha: return rive::ore::BlendFactor::oneMinusDstAlpha;
+        default:                               return rive::ore::BlendFactor::one;
+    }
+}
+
+rive::ore::BlendOp toOreBlendOp (GpuBlendOp o)
+{
+    switch (o)
+    {
+        case GpuBlendOp::add:             return rive::ore::BlendOp::add;
+        case GpuBlendOp::subtract:        return rive::ore::BlendOp::subtract;
+        case GpuBlendOp::reverseSubtract: return rive::ore::BlendOp::reverseSubtract;
+        case GpuBlendOp::min:             return rive::ore::BlendOp::min;
+        case GpuBlendOp::max:             return rive::ore::BlendOp::max;
+        default:                          return rive::ore::BlendOp::add;
+    }
+}
+
+rive::ore::TextureFormat toOreTextureFormat (GpuTextureFormat f)
+{
+    switch (f)
+    {
+        case GpuTextureFormat::rgba8unorm:          return rive::ore::TextureFormat::rgba8unorm;
+        case GpuTextureFormat::bgra8unorm:          return rive::ore::TextureFormat::bgra8unorm;
+        case GpuTextureFormat::rgba16float:         return rive::ore::TextureFormat::rgba16float;
+        case GpuTextureFormat::depth24plusStencil8: return rive::ore::TextureFormat::depth24plusStencil8;
+        case GpuTextureFormat::depth32float:        return rive::ore::TextureFormat::depth32float;
+        default:                                    return rive::ore::TextureFormat::rgba8unorm;
+    }
+}
+
+} // namespace
+
+//==============================================================================
+
 struct GpuProgram::Impl
 {
     struct TextureBinding
@@ -40,21 +185,45 @@ struct GpuProgram::Impl
         std::vector<uint8_t> data;
     };
 
+    struct VertexBinding
+    {
+        int slot;
+        GpuBuffer::Ptr buffer;
+        rive::ore::Buffer* oreBuffer;
+    };
+
     rive::ore::Context* oreCtx = nullptr;
     rive::rcp<rive::ore::ShaderModule> vertModule;
     rive::rcp<rive::ore::ShaderModule> fragModule;
     rive::rcp<rive::ore::Pipeline> pipeline;
     std::vector<rive::rcp<rive::ore::BindGroupLayout>> layouts; // indexed by group; may contain null entries
 
+    // Vertex-layout storage backing PipelineDesc's raw pointers. The ore
+    // Pipeline copies PipelineDesc by value but keeps the vertexBuffers /
+    // attributes pointers, reading them at draw time — so this storage must
+    // outlive the pipeline.
+    std::vector<std::vector<rive::ore::VertexAttribute>> vertexAttrStorage;
+    std::vector<rive::ore::VertexBufferLayout> vertexLayoutStorage;
+
     std::vector<TextureBinding> textureBindings;
     std::vector<UboBinding> uboBindings;
 
-    // Resources that must remain alive from dispatch() until waitForGPU() completes.
-    // Cleared by beginFrame() (safe: GPU finished before a new frame starts) and
-    // by waitForGPU() (safe: GPU has synchronised).
+    std::vector<VertexBinding> vertexBindings;
+    GpuBuffer::Ptr indexBuffer;
+    rive::ore::Buffer* indexOreBuffer = nullptr;
+    rive::ore::IndexFormat indexFormat = rive::ore::IndexFormat::none;
+
+    // Resources that must remain alive from a draw call until waitForGPU()
+    // completes. Cleared by beginFrame() and waitForGPU().
     std::vector<rive::rcp<rive::ore::Buffer>> liveBuffers;
     std::vector<rive::rcp<rive::ore::TextureView>> liveViews;
     std::vector<rive::rcp<rive::ore::Sampler>> liveSamplers;
+
+    // Shared render-pass encoder used by draw() and drawIndexed().
+    bool encode (GpuCanvas& output,
+                 uint32_t count,
+                 bool indexed,
+                 const GpuRenderOptions& options);
 };
 
 //==============================================================================
@@ -106,6 +275,38 @@ void GpuProgram::setUniformBuffer (int group, int binding, const void* data, siz
     impl->uboBindings.push_back (std::move (ub));
 }
 
+void GpuProgram::setVertexBuffer (int slot, GpuBuffer::Ptr buffer)
+{
+    jassert (impl != nullptr);
+    if (impl == nullptr)
+        return;
+
+    auto* ore = (buffer != nullptr) ? buffer->oreBufferHandle() : nullptr;
+
+    for (auto& vb : impl->vertexBindings)
+    {
+        if (vb.slot == slot)
+        {
+            vb.buffer = std::move (buffer);
+            vb.oreBuffer = ore;
+            return;
+        }
+    }
+
+    impl->vertexBindings.push_back ({ slot, std::move (buffer), ore });
+}
+
+void GpuProgram::setIndexBuffer (GpuBuffer::Ptr buffer, GpuIndexFormat format)
+{
+    jassert (impl != nullptr);
+    if (impl == nullptr)
+        return;
+
+    impl->indexOreBuffer = (buffer != nullptr) ? buffer->oreBufferHandle() : nullptr;
+    impl->indexBuffer = std::move (buffer);
+    impl->indexFormat = toOreIndexFormat (format);
+}
+
 //==============================================================================
 
 bool GpuProgram::beginFrame()
@@ -114,7 +315,6 @@ bool GpuProgram::beginFrame()
         return false;
 
     // Drop resources from any prior frame before beginning a new one.
-    // By convention the caller must not beginFrame() again before waitForGPU().
     impl->liveBuffers.clear();
     impl->liveViews.clear();
     impl->liveSamplers.clear();
@@ -147,12 +347,16 @@ void GpuProgram::waitForGPU()
 
 //==============================================================================
 
-bool GpuProgram::dispatch (GpuCanvas& output)
+bool GpuProgram::Impl::encode (GpuCanvas& output,
+                               uint32_t count,
+                               bool indexed,
+                               const GpuRenderOptions& options)
 {
-    if (impl == nullptr || impl->oreCtx == nullptr || impl->pipeline == nullptr)
+    if (oreCtx == nullptr || pipeline == nullptr)
         return false;
 
-    auto* oreCtx = impl->oreCtx;
+    if (indexed && indexOreBuffer == nullptr)
+        return false;
 
     auto outputTex = output.asTexture();
     if (outputTex == nullptr)
@@ -167,12 +371,9 @@ bool GpuProgram::dispatch (GpuCanvas& output)
     if (outputView == nullptr)
         return false;
 
-    impl->liveViews.push_back (outputView);
+    liveViews.push_back (outputView);
 
     std::vector<std::pair<uint32_t, rive::rcp<rive::ore::BindGroup>>> bindGroups;
-
-    // Determine which groups have at least one binding.
-    const auto& layouts = impl->layouts;
 
     for (uint32_t groupIdx = 0; groupIdx < layouts.size(); ++groupIdx)
     {
@@ -183,7 +384,7 @@ bool GpuProgram::dispatch (GpuCanvas& output)
         // UBO entries for this group.
         std::vector<rive::ore::BindGroupDesc::UBOEntry> uboEntries;
 
-        for (const auto& ub : impl->uboBindings)
+        for (const auto& ub : uboBindings)
         {
             if (ub.group != (int) groupIdx)
                 continue;
@@ -204,13 +405,13 @@ bool GpuProgram::dispatch (GpuCanvas& output)
             entry.offset = 0;
             entry.size = (uint32_t) ub.data.size();
             uboEntries.push_back (entry);
-            impl->liveBuffers.push_back (std::move (buf));
+            liveBuffers.push_back (std::move (buf));
         }
 
         // Texture entries for this group.
         std::vector<rive::ore::BindGroupDesc::TexEntry> texEntries;
 
-        for (const auto& tb : impl->textureBindings)
+        for (const auto& tb : textureBindings)
         {
             if (tb.group != (int) groupIdx || tb.texture == nullptr)
                 continue;
@@ -228,7 +429,7 @@ bool GpuProgram::dispatch (GpuCanvas& output)
             entry.slot = (uint32_t) tb.binding;
             entry.view = view.get();
             texEntries.push_back (entry);
-            impl->liveViews.push_back (std::move (view));
+            liveViews.push_back (std::move (view));
         }
 
         // Sampler entries — auto-create one linear+clamp sampler for each
@@ -255,7 +456,7 @@ bool GpuProgram::dispatch (GpuCanvas& output)
             se.slot = layoutEntry.binding;
             se.sampler = samp.get();
             sampEntries.push_back (se);
-            impl->liveSamplers.push_back (std::move (samp));
+            liveSamplers.push_back (std::move (samp));
         }
 
         rive::ore::BindGroupDesc bgDesc;
@@ -272,26 +473,66 @@ bool GpuProgram::dispatch (GpuCanvas& output)
             bindGroups.push_back ({ groupIdx, std::move (bg) });
     }
 
-    // Encode the render pass into the current frame (beginFrame/endFrame
-    // are the caller's responsibility — see beginFrame() / endFrame()).
+    // Encode the render pass into the current frame (beginFrame/endFrame are
+    // the caller's responsibility).
     rive::ore::RenderPassDesc rpDesc;
     rpDesc.colorCount = 1;
     rpDesc.colorAttachments[0].view = outputView.get();
-    rpDesc.colorAttachments[0].loadOp = rive::ore::LoadOp::clear;
+    rpDesc.colorAttachments[0].loadOp = options.clear ? rive::ore::LoadOp::clear : rive::ore::LoadOp::load;
     rpDesc.colorAttachments[0].storeOp = rive::ore::StoreOp::store;
-    rpDesc.colorAttachments[0].clearColor = { 0.0f, 0.0f, 0.0f, 0.0f };
+    rpDesc.colorAttachments[0].clearColor = { options.clearColor.getRedFloat(),
+                                              options.clearColor.getGreenFloat(),
+                                              options.clearColor.getBlueFloat(),
+                                              options.clearColor.getAlphaFloat() };
 
     auto renderPass = oreCtx->beginRenderPass (rpDesc);
-    renderPass->setPipeline (impl->pipeline.get());
+    renderPass->setPipeline (pipeline.get());
     renderPass->setViewport (0.0f, 0.0f, (float) output.getWidth(), (float) output.getHeight());
 
     for (auto& [groupIdx, bg] : bindGroups)
         renderPass->setBindGroup (groupIdx, bg.get());
 
-    renderPass->draw (3); // fullscreen triangle — no vertex buffer needed
-    renderPass->finish();
+    for (const auto& vb : vertexBindings)
+    {
+        if (vb.oreBuffer != nullptr)
+            renderPass->setVertexBuffer ((uint32_t) vb.slot, vb.oreBuffer, 0);
+    }
 
+    if (indexed)
+    {
+        renderPass->setIndexBuffer (indexOreBuffer, indexFormat, 0);
+        renderPass->drawIndexed (count);
+    }
+    else
+    {
+        renderPass->draw (count);
+    }
+
+    renderPass->finish();
     return true;
+}
+
+//==============================================================================
+
+bool GpuProgram::dispatch (GpuCanvas& output)
+{
+    return draw (output, 3, { true, Colors::transparentBlack });
+}
+
+bool GpuProgram::draw (GpuCanvas& output, uint32_t vertexCount, const GpuRenderOptions& options)
+{
+    if (impl == nullptr)
+        return false;
+
+    return impl->encode (output, vertexCount, false, options);
+}
+
+bool GpuProgram::drawIndexed (GpuCanvas& output, uint32_t indexCount, const GpuRenderOptions& options)
+{
+    if (impl == nullptr)
+        return false;
+
+    return impl->encode (output, indexCount, true, options);
 }
 
 //==============================================================================
@@ -313,6 +554,15 @@ GpuProgram::Ptr GpuProgram::compile (GraphicsContext& ctx,
                                      const GpuShaderSource& fs,
                                      std::string* outError)
 {
+    return compile (ctx, vs, fs, GpuPipelineOptions {}, outError);
+}
+
+GpuProgram::Ptr GpuProgram::compile (GraphicsContext& ctx,
+                                     const GpuShaderSource& vs,
+                                     const GpuShaderSource& fs,
+                                     const GpuPipelineOptions& pipelineOptions,
+                                     std::string* outError)
+{
     auto setError = [&] (const char* msg)
     {
         if (outError)
@@ -320,7 +570,7 @@ GpuProgram::Ptr GpuProgram::compile (GraphicsContext& ctx,
         return GpuProgram::Ptr {};
     };
 
-    auto* oreCtx = ctx.gpuContext();
+    auto oreCtx = ctx.gpuContext();
     if (oreCtx == nullptr)
         return setError ("GraphicsContext was not created with Options::enableOreContext = true");
 
@@ -336,17 +586,46 @@ GpuProgram::Ptr GpuProgram::compile (GraphicsContext& ctx,
     if (fs.bindingMap == nullptr || fs.bindingMapSize == 0)
         return setError ("Fragment shader binding-map sidecar is required but not provided");
 
+    // Populates an ore ShaderModuleDesc from a GpuShaderSource. The D3D11/D3D12
+    // backends compile HLSL from source at first use (AMD drivers crash on
+    // cross-process DXBC), so HLSL sources must be routed through the dedicated
+    // hlslSource fields rather than the generic code pointer.
+    auto fillModuleDesc = [] (rive::ore::ShaderModuleDesc& desc,
+                              const GpuShaderSource& src,
+                              rive::ore::ShaderStage stage,
+                              const char* label)
+    {
+        desc.code = src.code;
+        desc.codeSize = src.codeSize;
+        desc.stage = stage;
+        desc.label = label;
+        desc.bindingMapBytes = src.bindingMap;
+        desc.bindingMapSize = src.bindingMapSize;
+
+        switch (src.language)
+        {
+            case GpuShaderLanguage::wgsl:
+                desc.language = rive::ore::ShaderLanguage::wgsl;
+                break;
+
+            case GpuShaderLanguage::hlsl:
+                desc.language = rive::ore::ShaderLanguage::glsl;
+                desc.hlslSource = static_cast<const char*> (src.code);
+                desc.hlslSourceSize = src.codeSize;
+                desc.hlslEntryPoint = src.entryPoint;
+                break;
+
+            case GpuShaderLanguage::msl:
+            case GpuShaderLanguage::glsl:
+            default:
+                desc.language = rive::ore::ShaderLanguage::glsl;
+                break;
+        }
+    };
+
     // Compile vertex shader module.
     rive::ore::ShaderModuleDesc vsd;
-    vsd.code = vs.code;
-    vsd.codeSize = vs.codeSize;
-    vsd.language = (vs.language == GpuShaderLanguage::wgsl)
-                     ? rive::ore::ShaderLanguage::wgsl
-                     : rive::ore::ShaderLanguage::glsl;
-    vsd.stage = rive::ore::ShaderStage::vertex;
-    vsd.label = "GpuProgram VS";
-    vsd.bindingMapBytes = vs.bindingMap;
-    vsd.bindingMapSize = vs.bindingMapSize;
+    fillModuleDesc (vsd, vs, rive::ore::ShaderStage::vertex, "GpuProgram VS");
 
     auto vertModule = oreCtx->makeShaderModule (vsd);
     if (vertModule == nullptr)
@@ -358,15 +637,7 @@ GpuProgram::Ptr GpuProgram::compile (GraphicsContext& ctx,
 
     // Compile fragment shader module.
     rive::ore::ShaderModuleDesc fsd;
-    fsd.code = fs.code;
-    fsd.codeSize = fs.codeSize;
-    fsd.language = (fs.language == GpuShaderLanguage::wgsl)
-                     ? rive::ore::ShaderLanguage::wgsl
-                     : rive::ore::ShaderLanguage::glsl;
-    fsd.stage = rive::ore::ShaderStage::fragment;
-    fsd.label = "GpuProgram FS";
-    fsd.bindingMapBytes = fs.bindingMap;
-    fsd.bindingMapSize = fs.bindingMapSize;
+    fillModuleDesc (fsd, fs, rive::ore::ShaderStage::fragment, "GpuProgram FS");
 
     auto fragModule = oreCtx->makeShaderModule (fsd);
     if (fragModule == nullptr)
@@ -377,7 +648,6 @@ GpuProgram::Ptr GpuProgram::compile (GraphicsContext& ctx,
     }
 
     // Derive BindGroupLayouts by merging the VS and FS binding maps.
-    // Each entry is identified by (group, binding); stage masks are OR'd.
     struct MergedEntry
     {
         uint32_t group;
@@ -425,10 +695,10 @@ GpuProgram::Ptr GpuProgram::compile (GraphicsContext& ctx,
     };
 
     const auto& vsMap = vertModule->m_bindingMap;
-    const auto& fsMap = fragModule->m_bindingMap;
-
     for (size_t i = 0; i < vsMap.size(); ++i)
         addEntry (vsMap.at (i));
+
+    const auto& fsMap = fragModule->m_bindingMap;
     for (size_t i = 0; i < fsMap.size(); ++i)
         addEntry (fsMap.at (i));
 
@@ -549,22 +819,103 @@ GpuProgram::Ptr GpuProgram::compile (GraphicsContext& ctx,
     for (uint32_t g = 0; g < numGroups; ++g)
         layoutPtrs[g] = layouts[g].get();
 
-    // Fullscreen triangle pipeline — no vertex buffers, rgba8unorm output.
+    // Create the program up-front so the vertex-layout storage that backs
+    // PipelineDesc's raw pointers lives inside the object that owns the
+    // pipeline. The ore Pipeline copies PipelineDesc by value but keeps the
+    // vertexBuffers / attributes pointers, reading them at draw time.
+    auto prog = GpuProgram::Ptr{ new GpuProgram() };
+    prog->impl = std::make_unique<Impl>();
+
+    auto& implRef = *prog->impl;
+    implRef.vertexAttrStorage.resize (pipelineOptions.vertexBufferCount);
+    implRef.vertexLayoutStorage.resize (pipelineOptions.vertexBufferCount);
+
+    for (uint32_t i = 0; i < pipelineOptions.vertexBufferCount; ++i)
+    {
+        const auto& src = pipelineOptions.vertexBuffers[i];
+        auto& attrs = implRef.vertexAttrStorage[i];
+        attrs.resize (src.attributeCount);
+
+        for (uint32_t a = 0; a < src.attributeCount; ++a)
+        {
+            attrs[a].format = toOreVertexFormat (src.attributes[a].format);
+            attrs[a].offset = src.attributes[a].offset;
+            attrs[a].shaderSlot = src.attributes[a].shaderLocation;
+        }
+
+        implRef.vertexLayoutStorage[i].stride = src.stride;
+        implRef.vertexLayoutStorage[i].stepMode = toOreStepMode (src.stepMode);
+        implRef.vertexLayoutStorage[i].attributes = attrs.empty() ? nullptr : attrs.data();
+        implRef.vertexLayoutStorage[i].attributeCount = src.attributeCount;
+    }
+
     rive::ore::PipelineDesc pipeDesc;
     pipeDesc.vertexModule = vertModule.get();
     pipeDesc.vertexEntryPoint = (vs.entryPoint != nullptr) ? vs.entryPoint : "vs_main";
     pipeDesc.fragmentModule = fragModule.get();
     pipeDesc.fragmentEntryPoint = (fs.entryPoint != nullptr) ? fs.entryPoint : "fs_main";
-    pipeDesc.topology = rive::ore::PrimitiveTopology::triangleList;
-    pipeDesc.colorCount = 1;
-    pipeDesc.colorTargets[0].format = rive::ore::TextureFormat::rgba8unorm;
-    pipeDesc.colorTargets[0].blendEnabled = true;
-    pipeDesc.colorTargets[0].blend.srcColor = rive::ore::BlendFactor::srcAlpha;
-    pipeDesc.colorTargets[0].blend.dstColor = rive::ore::BlendFactor::oneMinusSrcAlpha;
-    pipeDesc.colorTargets[0].blend.colorOp = rive::ore::BlendOp::add;
-    pipeDesc.colorTargets[0].blend.srcAlpha = rive::ore::BlendFactor::one;
-    pipeDesc.colorTargets[0].blend.dstAlpha = rive::ore::BlendFactor::oneMinusSrcAlpha;
-    pipeDesc.colorTargets[0].blend.alphaOp = rive::ore::BlendOp::add;
+    pipeDesc.vertexBuffers = implRef.vertexLayoutStorage.empty() ? nullptr : implRef.vertexLayoutStorage.data();
+    pipeDesc.vertexBufferCount = (uint32_t) implRef.vertexLayoutStorage.size();
+    pipeDesc.topology = toOreTopology (pipelineOptions.topology);
+    pipeDesc.indexFormat = toOreIndexFormat (pipelineOptions.indexFormat);
+    pipeDesc.cullMode = toOreCullMode (pipelineOptions.cullMode);
+    pipeDesc.winding = toOreWinding (pipelineOptions.winding);
+
+    // Color targets. Default to a single alpha-blended rgba8unorm target when
+    // none are specified, matching the classic fullscreen post-process pipeline.
+    if (pipelineOptions.colorTargetCount == 0)
+    {
+        pipeDesc.colorCount = 1;
+        pipeDesc.colorTargets[0].format = rive::ore::TextureFormat::rgba8unorm;
+        pipeDesc.colorTargets[0].blendEnabled = true;
+        pipeDesc.colorTargets[0].blend.srcColor = rive::ore::BlendFactor::srcAlpha;
+        pipeDesc.colorTargets[0].blend.dstColor = rive::ore::BlendFactor::oneMinusSrcAlpha;
+        pipeDesc.colorTargets[0].blend.colorOp = rive::ore::BlendOp::add;
+        pipeDesc.colorTargets[0].blend.srcAlpha = rive::ore::BlendFactor::one;
+        pipeDesc.colorTargets[0].blend.dstAlpha = rive::ore::BlendFactor::oneMinusSrcAlpha;
+        pipeDesc.colorTargets[0].blend.alphaOp = rive::ore::BlendOp::add;
+    }
+    else
+    {
+        const uint32_t count = std::min<uint32_t> (pipelineOptions.colorTargetCount, 4);
+        pipeDesc.colorCount = count;
+
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            const auto& src = pipelineOptions.colorTargets[i];
+            pipeDesc.colorTargets[i].format = toOreTextureFormat (src.format);
+            pipeDesc.colorTargets[i].blendEnabled = src.blendEnabled;
+            pipeDesc.colorTargets[i].blend.srcColor = toOreBlendFactor (src.blend.srcColor);
+            pipeDesc.colorTargets[i].blend.dstColor = toOreBlendFactor (src.blend.dstColor);
+            pipeDesc.colorTargets[i].blend.colorOp = toOreBlendOp (src.blend.colorOp);
+            pipeDesc.colorTargets[i].blend.srcAlpha = toOreBlendFactor (src.blend.srcAlpha);
+            pipeDesc.colorTargets[i].blend.dstAlpha = toOreBlendFactor (src.blend.dstAlpha);
+            pipeDesc.colorTargets[i].blend.alphaOp = toOreBlendOp (src.blend.alphaOp);
+        }
+    }
+
+    // Depth/stencil. rgba8unorm is the ore sentinel for "no depth/stencil".
+    if (pipelineOptions.depthStencil.enabled)
+    {
+        pipeDesc.depthStencil.format = toOreTextureFormat (pipelineOptions.depthStencil.format);
+        pipeDesc.depthStencil.depthCompare = toOreCompare (pipelineOptions.depthStencil.depthCompare);
+        pipeDesc.depthStencil.depthWriteEnabled = pipelineOptions.depthStencil.depthWriteEnabled;
+
+        auto fillStencilFace = [] (rive::ore::StencilFaceState& dst, const GpuStencilFaceState& src)
+        {
+            dst.compare = toOreCompare (src.compare);
+            dst.failOp = toOreStencilOp (src.failOp);
+            dst.depthFailOp = toOreStencilOp (src.depthFailOp);
+            dst.passOp = toOreStencilOp (src.passOp);
+        };
+
+        fillStencilFace (pipeDesc.stencilFront, pipelineOptions.stencilFront);
+        fillStencilFace (pipeDesc.stencilBack, pipelineOptions.stencilBack);
+        pipeDesc.stencilReadMask = pipelineOptions.stencilReadMask;
+        pipeDesc.stencilWriteMask = pipelineOptions.stencilWriteMask;
+    }
+
+    pipeDesc.sampleCount = pipelineOptions.sampleCount;
     pipeDesc.bindGroupLayouts = layoutPtrs.empty() ? nullptr : layoutPtrs.data();
     pipeDesc.bindGroupLayoutCount = (uint32_t) layoutPtrs.size();
     pipeDesc.label = "GpuProgram Pipeline";
@@ -578,14 +929,174 @@ GpuProgram::Ptr GpuProgram::compile (GraphicsContext& ctx,
         return nullptr;
     }
 
-    auto* prog = new GpuProgram();
-    prog->impl = std::make_unique<Impl>();
-    prog->impl->oreCtx = oreCtx;
-    prog->impl->vertModule = std::move (vertModule);
-    prog->impl->fragModule = std::move (fragModule);
-    prog->impl->pipeline = std::move (pipeline);
-    prog->impl->layouts = std::move (layouts);
+    implRef.oreCtx = oreCtx;
+    implRef.vertModule = std::move (vertModule);
+    implRef.fragModule = std::move (fragModule);
+    implRef.pipeline = std::move (pipeline);
+    implRef.layouts = std::move (layouts);
     return prog;
 }
+
+//==============================================================================
+
+namespace
+{
+
+ShaderLanguage shaderLanguageForApi (GraphicsContext::Api api)
+{
+    switch (api)
+    {
+        case GraphicsContext::Metal:    return ShaderLanguage::msl;
+        case GraphicsContext::Direct3D: return ShaderLanguage::hlsl;
+        case GraphicsContext::OpenGLES: return ShaderLanguage::essl;
+        case GraphicsContext::WebGPU:   return ShaderLanguage::wgsl;
+        default:                        return ShaderLanguage::glsl;
+    }
+}
+
+GpuShaderLanguage gpuShaderLanguageForApi (GraphicsContext::Api api)
+{
+    switch (api)
+    {
+        case GraphicsContext::Metal:    return GpuShaderLanguage::msl;
+        case GraphicsContext::Direct3D: return GpuShaderLanguage::hlsl;
+        case GraphicsContext::WebGPU:   return GpuShaderLanguage::wgsl;
+        default:                        return GpuShaderLanguage::glsl;
+    }
+}
+
+} // namespace
+
+GpuProgram::Ptr GpuProgram::compileFromBundle (GraphicsContext& ctx,
+                                               const ShaderBundle& bundle,
+                                               const GpuPipelineOptions& pipelineOptions,
+                                               std::string* outError)
+{
+    auto setError = [&] (const char* msg)
+    {
+        if (outError)
+            *outError = msg;
+        return GpuProgram::Ptr {};
+    };
+
+    const auto api = ctx.getApi();
+    const auto targetLang = shaderLanguageForApi (api);
+    const auto gpuLang = gpuShaderLanguageForApi (api);
+
+    const ShaderInfo* vsInfo = bundle.findShader (ShaderStage::vertex, targetLang);
+    if (vsInfo == nullptr && targetLang == ShaderLanguage::essl)
+        vsInfo = bundle.findShader (ShaderStage::vertex, ShaderLanguage::glsl);
+
+    if (vsInfo == nullptr)
+        return setError ("Shader bundle has no vertex variant for the current graphics API");
+
+    const ShaderInfo* fsInfo = bundle.findShader (ShaderStage::fragment, targetLang);
+    if (fsInfo == nullptr && targetLang == ShaderLanguage::essl)
+        fsInfo = bundle.findShader (ShaderStage::fragment, ShaderLanguage::glsl);
+
+    if (fsInfo == nullptr)
+        return setError ("Shader bundle has no fragment variant for the current graphics API");
+
+    auto vsMap = makeShaderBindingMapBlob (vsInfo->reflection, ShaderStage::vertex);
+    auto fsMap = makeShaderBindingMapBlob (fsInfo->reflection, ShaderStage::fragment);
+
+    auto vsSource = vsInfo->source.toRawUTF8();
+    auto fsSource = fsInfo->source.toRawUTF8();
+
+    // SPIRV-Cross renames the GLSL "main" entry point to "main0" in MSL.
+    auto resolveEntry = [gpuLang] (const ShaderInfo& info) -> String
+    {
+        if (gpuLang == GpuShaderLanguage::msl && info.entryPoint == "main")
+            return "main0";
+        return info.entryPoint;
+    };
+
+    const auto vsEntryStr = resolveEntry (*vsInfo);
+    const auto fsEntryStr = resolveEntry (*fsInfo);
+    auto vsEntry = vsEntryStr.toRawUTF8();
+    auto fsEntry = fsEntryStr.toRawUTF8();
+
+    GpuShaderSource vs;
+    vs.language = gpuLang;
+    vs.code = vsSource;
+    vs.codeSize = (uint32_t) strlen (vsSource);
+    vs.bindingMap = vsMap.data();
+    vs.bindingMapSize = (uint32_t) vsMap.size();
+    vs.entryPoint = vsEntry;
+
+    GpuShaderSource fs;
+    fs.language = gpuLang;
+    fs.code = fsSource;
+    fs.codeSize = (uint32_t) strlen (fsSource);
+    fs.bindingMap = fsMap.data();
+    fs.bindingMapSize = (uint32_t) fsMap.size();
+    fs.entryPoint = fsEntry;
+
+    return compile (ctx, vs, fs, pipelineOptions, outError);
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+
+GpuProgram::Ptr GpuProgram::compileFromGlsl (GraphicsContext& ctx,
+                                             const String& vertexGlsl,
+                                             const String& fragmentGlsl,
+                                             const GpuPipelineOptions& pipelineOptions,
+                                             std::string* outError)
+{
+    auto setError = [&] (const String& msg)
+    {
+        if (outError)
+            *outError = msg.toStdString();
+        return GpuProgram::Ptr {};
+    };
+
+    const auto targetLang = shaderLanguageForApi (ctx.getApi());
+
+    ShaderBundleCompiler compiler;
+
+    auto makeEntry = [&] (ShaderStage stage)
+    {
+        ShaderBundleEntry entry;
+        entry.stage = stage;
+        entry.targetLanguages = { targetLang };
+        entry.options.spirvOptimize = false;
+        return entry;
+    };
+
+    auto vsBundle = [&]
+    {
+        ShaderBundleCompileRequest request;
+        request.source = vertexGlsl;
+        request.sourceLanguage = ShaderLanguage::glsl;
+        request.entries.push_back (makeEntry (ShaderStage::vertex));
+        return compiler.compile (request);
+    }();
+
+    if (vsBundle.failed())
+        return setError ("Vertex shader compile failed: " + vsBundle.getErrorMessage());
+
+    auto fsBundle = [&]
+    {
+        ShaderBundleCompileRequest request;
+        request.source = fragmentGlsl;
+        request.sourceLanguage = ShaderLanguage::glsl;
+        request.entries.push_back (makeEntry (ShaderStage::fragment));
+        return compiler.compile (request);
+    }();
+
+    if (fsBundle.failed())
+        return setError ("Fragment shader compile failed: " + fsBundle.getErrorMessage());
+
+    // Merge both stages into a single bundle for compileFromBundle().
+    ShaderBundle bundle;
+    for (const auto& info : vsBundle.getReference().getShaders())
+        bundle.addShader (info);
+    for (const auto& info : fsBundle.getReference().getShaders())
+        bundle.addShader (info);
+
+    return compileFromBundle (ctx, bundle, pipelineOptions, outError);
+}
+
+#endif
 
 } // namespace yup

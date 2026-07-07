@@ -286,6 +286,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "maths/yup_NormalisableRange.h"
 #include "maths/yup_StatisticsAccumulator.h"
 #include "containers/yup_ElementComparator.h"
+#include "containers/yup_TypeErasedObject.h"
 #include "containers/yup_ArrayAllocationBase.h"
 #include "containers/yup_ArrayBase.h"
 #include "containers/yup_Array.h"

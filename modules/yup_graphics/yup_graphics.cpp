@@ -146,6 +146,8 @@
 #include "svg/yup_SVGParser.cpp"
 #include "drawables/yup_Drawable.cpp"
 #include "rhi/yup_GpuCanvas.cpp"
+#include "rhi/yup_ShaderBindingMap.cpp"
+#include "rhi/yup_GpuBuffer.cpp"
 #include "rhi/yup_GpuProgram.cpp"
 
 //==============================================================================
