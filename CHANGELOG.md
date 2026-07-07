@@ -31,6 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - UBSAN and ASAN fixes throughout the codebase
 - `GpuProgram::compile()` now correctly routes HLSL and MSL shader sources: HLSL sources are passed through the ore `ShaderModuleDesc::hlslSource` fields required by the D3D11/D3D12 backends (previously they were collapsed to GLSL, tripping the backend assertion), and the source language is mapped explicitly instead of defaulting all non-WGSL sources to GLSL.
+- `GpuProgram` now binds sampled input textures through a shader-resource view (`wrapRiveTexture`) instead of the render-target-only canvas view (`wrapCanvasTexture`). On D3D the canvas view exposes no SRV, so sampling a `GpuCanvas`-backed texture (e.g. feeding a scene render into a blur post-process) previously read nothing and produced a blank result.
 ### Graphics RHI
 
 - New `Texture` class (`rhi/yup_Texture.h`): opaque reference-counted GPU texture wrapping `rive::gpu::Texture` or `rive::gpu::RenderCanvas`. Obtained from `GpuCanvas::asTexture()` or constructed internally by `Image::fromTexture()`.
