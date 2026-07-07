@@ -49,7 +49,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - New `makeShaderBindingMapBlob(ShaderReflection, ShaderStage)` helper (`rhi/yup_ShaderBindingMap.h`): converts shader reflection data into the ore RSTB binding-map blob required by `GpuShaderSource::bindingMap`.
 - GraphicsContext ore integration (`Options::enableOreContext = true`): activates the backend-native ore context. New ore-free `GraphicsContext::isGpuAvailable()` capability probe; `gpuContext()` is retained but documented `@internal` as the single backend bridge.
 - **Breaking:** removed `GpuCanvas::withAttachment()`, `GpuProgram::oreContext()`, and `GpuProgram::orePipeline()`. The public `rive::ore` surface is now a single forward declaration plus one `@internal` accessor on `GraphicsContext`; every RHI header is ore-free.
-- `SpinningCubeDemo` example (`examples/graphics`): rewritten to the new RHI shape — `GpuFrame` + `GpuCanvas::beginRenderPass` + `GpuRenderPass` for both the indexed cube draw and the separable two-pass blur (H+V sharing one `GpuFrame`), `isGpuAvailable()` capability probe, and live GLSL editing via `GpuPipeline::compileFromGlsl`.
+- `SpinningCubeDemo` example (`examples/graphics`): rewritten to the new RHI shape — `GpuFrame` + `GpuCanvas::beginRenderPass` + `GpuRenderPass` for both the indexed cube draw and the separable two-pass blur (H+V sharing one `GpuFrame`), `isGpuAvailable()` capability probe, and live GLSL editing via `GpuPipeline::compileFromGlsl`. The default Lottie animation is now played back per-frame into an offscreen `GpuCanvas` (2D path) and sampled by the cube's fragment shader so the animation is texture-mapped onto every cube face.
 
 ---
 

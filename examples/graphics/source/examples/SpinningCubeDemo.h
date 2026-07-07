@@ -22,6 +22,7 @@
 #pragma once
 
 #include <yup_shading/yup_shading.h>
+#include <yup_animation/yup_animation.h>
 
 //==============================================================================
 
@@ -47,6 +48,10 @@
     buttons to pick which pipeline to edit, the Vertex/Fragment buttons to pick
     the stage, and Load/Save to persist the active pipeline's vertex + fragment
     GLSL to a .ysl shader bundle.
+
+    The default Lottie animation is played back each frame into an offscreen
+    GpuCanvas (2D path) and sampled by the cube's fragment shader, so the moving
+    animation is mapped onto every cube face and blended over the per-face tint.
 */
 class SpinningCubeDemo : public yup::Component
 {
@@ -161,13 +166,15 @@ public:
     ~SpinningCubeDemo() override = default;
 
     //==============================================================================
-    void refreshDisplay (double) override
+    void refreshDisplay (double lastFrameTimeSeconds) override
     {
         if (! isDragging)
         {
             angleY += 0.038f;
             angleX += 0.012f;
         }
+
+        lottiePlayer.advanceTime (lastFrameTimeSeconds);
         repaint();
     }
 
@@ -204,11 +211,15 @@ public:
                 return;
         }
 
-        // 2. Render the 3D cube into sceneCanvas via GpuPipeline + GpuRenderPass.
-        if (cubePipeline != nullptr)
-            renderCube (*sceneCanvas, w, h);
+        // 2. Render the current Lottie frame into an offscreen GpuCanvas (2D path)
+        //    so it can be sampled as a texture by the cube's fragment shader.
+        yup::GpuTexture::Ptr lottieTexture = renderLottieTexture();
 
-        // 3. Apply separable Gaussian blur: two O(radius) passes (H then V).
+        // 3. Render the 3D cube into sceneCanvas via GpuPipeline + GpuRenderPass.
+        if (cubePipeline != nullptr)
+            renderCube (*sceneCanvas, w, h, lottieTexture);
+
+        // 4. Apply separable Gaussian blur: two O(radius) passes (H then V).
         yup::GpuTexture::Ptr outputTex = sceneCanvas->asTexture();
 
         if (blurPipeline != nullptr && blurSigma > 0.01f)
@@ -255,7 +266,7 @@ public:
             frame.waitForGPU();
         }
 
-        // 4. Composite to main view.
+        // 5. Composite to main view.
         if (outputTex != nullptr)
             g.drawTexture (outputTex, cubeBounds);
     }
@@ -365,11 +376,13 @@ private:
 layout(location = 0) in vec3 a_pos;
 layout(location = 1) in vec3 a_color;
 layout(location = 2) in vec3 a_normal;
+layout(location = 3) in vec2 a_uv;
 layout(set = 0, binding = 0) uniform CubeUniforms {
     float angleY; float angleX; float aspect; float pad;
 } u;
 layout(location = 0) out vec3 v_color;
 layout(location = 1) out vec3 v_normal;
+layout(location = 2) out vec2 v_uv;
 void main() {
     float cy = cos(u.angleY), sy = sin(u.angleY);
     float cx = cos(u.angleX), sx = sin(u.angleX);
@@ -384,17 +397,23 @@ void main() {
     gl_Position = vec4(rx.x * fov / u.aspect, rx.y * fov, (d - 0.1) / 99.9 * d, d);
     v_color  = a_color;
     v_normal = rxn;
+    v_uv     = a_uv;
 }
 )glsl";
 
     static constexpr char kDefaultFragSource[] = R"glsl(#version 450
 layout(location = 0) in vec3 v_color;
 layout(location = 1) in vec3 v_normal;
+layout(location = 2) in vec2 v_uv;
+layout(set = 0, binding = 1) uniform texture2D u_tex;
+layout(set = 0, binding = 2) uniform sampler   u_samp;
 layout(location = 0) out vec4 fragColor;
 void main() {
     vec3  light = normalize(vec3(0.503, 0.671, -0.419));
     float ndotl = clamp(dot(normalize(v_normal), light), 0.0, 1.0);
-    fragColor   = vec4(v_color * (0.35 + 0.65 * ndotl), 1.0);
+    vec4  tex   = texture(sampler2D(u_tex, u_samp), vec2(1.0 - v_uv.x, v_uv.y));
+    vec3  base  = mix(v_color, tex.rgb, tex.a);
+    fragColor   = vec4(base * (0.35 + 0.65 * ndotl), 1.0);
 }
 )glsl";
 
@@ -449,39 +468,40 @@ void main() {
         float pos[3];
         float color[3];
         float normal[3];
+        float uv[2];
     };
 
     static constexpr CubeVertex kCubeVerts[24] = {
         // Front (-Z), red
-        { { -1, -1, -1 }, { 0.91f, 0.30f, 0.24f }, { 0, 0, -1 } },
-        { { 1, -1, -1 }, { 0.91f, 0.30f, 0.24f }, { 0, 0, -1 } },
-        { { 1, 1, -1 }, { 0.91f, 0.30f, 0.24f }, { 0, 0, -1 } },
-        { { -1, 1, -1 }, { 0.91f, 0.30f, 0.24f }, { 0, 0, -1 } },
+        { { -1, -1, -1 }, { 0.91f, 0.30f, 0.24f }, { 0, 0, -1 }, { 0, 0 } },
+        { { 1, -1, -1 }, { 0.91f, 0.30f, 0.24f }, { 0, 0, -1 }, { 1, 0 } },
+        { { 1, 1, -1 }, { 0.91f, 0.30f, 0.24f }, { 0, 0, -1 }, { 1, 1 } },
+        { { -1, 1, -1 }, { 0.91f, 0.30f, 0.24f }, { 0, 0, -1 }, { 0, 1 } },
         // Back (+Z), blue
-        { { 1, -1, 1 }, { 0.20f, 0.60f, 0.86f }, { 0, 0, 1 } },
-        { { -1, -1, 1 }, { 0.20f, 0.60f, 0.86f }, { 0, 0, 1 } },
-        { { -1, 1, 1 }, { 0.20f, 0.60f, 0.86f }, { 0, 0, 1 } },
-        { { 1, 1, 1 }, { 0.20f, 0.60f, 0.86f }, { 0, 0, 1 } },
+        { { 1, -1, 1 }, { 0.20f, 0.60f, 0.86f }, { 0, 0, 1 }, { 0, 0 } },
+        { { -1, -1, 1 }, { 0.20f, 0.60f, 0.86f }, { 0, 0, 1 }, { 1, 0 } },
+        { { -1, 1, 1 }, { 0.20f, 0.60f, 0.86f }, { 0, 0, 1 }, { 1, 1 } },
+        { { 1, 1, 1 }, { 0.20f, 0.60f, 0.86f }, { 0, 0, 1 }, { 0, 1 } },
         // Left (-X), green
-        { { -1, -1, 1 }, { 0.18f, 0.80f, 0.44f }, { -1, 0, 0 } },
-        { { -1, -1, -1 }, { 0.18f, 0.80f, 0.44f }, { -1, 0, 0 } },
-        { { -1, 1, -1 }, { 0.18f, 0.80f, 0.44f }, { -1, 0, 0 } },
-        { { -1, 1, 1 }, { 0.18f, 0.80f, 0.44f }, { -1, 0, 0 } },
+        { { -1, -1, 1 }, { 0.18f, 0.80f, 0.44f }, { -1, 0, 0 }, { 0, 0 } },
+        { { -1, -1, -1 }, { 0.18f, 0.80f, 0.44f }, { -1, 0, 0 }, { 1, 0 } },
+        { { -1, 1, -1 }, { 0.18f, 0.80f, 0.44f }, { -1, 0, 0 }, { 1, 1 } },
+        { { -1, 1, 1 }, { 0.18f, 0.80f, 0.44f }, { -1, 0, 0 }, { 0, 1 } },
         // Right (+X), orange
-        { { 1, -1, -1 }, { 0.95f, 0.61f, 0.07f }, { 1, 0, 0 } },
-        { { 1, -1, 1 }, { 0.95f, 0.61f, 0.07f }, { 1, 0, 0 } },
-        { { 1, 1, 1 }, { 0.95f, 0.61f, 0.07f }, { 1, 0, 0 } },
-        { { 1, 1, -1 }, { 0.95f, 0.61f, 0.07f }, { 1, 0, 0 } },
+        { { 1, -1, -1 }, { 0.95f, 0.61f, 0.07f }, { 1, 0, 0 }, { 0, 0 } },
+        { { 1, -1, 1 }, { 0.95f, 0.61f, 0.07f }, { 1, 0, 0 }, { 1, 0 } },
+        { { 1, 1, 1 }, { 0.95f, 0.61f, 0.07f }, { 1, 0, 0 }, { 1, 1 } },
+        { { 1, 1, -1 }, { 0.95f, 0.61f, 0.07f }, { 1, 0, 0 }, { 0, 1 } },
         // Top (+Y), purple
-        { { -1, 1, -1 }, { 0.61f, 0.35f, 0.71f }, { 0, 1, 0 } },
-        { { 1, 1, -1 }, { 0.61f, 0.35f, 0.71f }, { 0, 1, 0 } },
-        { { 1, 1, 1 }, { 0.61f, 0.35f, 0.71f }, { 0, 1, 0 } },
-        { { -1, 1, 1 }, { 0.61f, 0.35f, 0.71f }, { 0, 1, 0 } },
+        { { -1, 1, -1 }, { 0.61f, 0.35f, 0.71f }, { 0, 1, 0 }, { 0, 0 } },
+        { { 1, 1, -1 }, { 0.61f, 0.35f, 0.71f }, { 0, 1, 0 }, { 1, 0 } },
+        { { 1, 1, 1 }, { 0.61f, 0.35f, 0.71f }, { 0, 1, 0 }, { 1, 1 } },
+        { { -1, 1, 1 }, { 0.61f, 0.35f, 0.71f }, { 0, 1, 0 }, { 0, 1 } },
         // Bottom (-Y), teal
-        { { -1, -1, 1 }, { 0.10f, 0.74f, 0.61f }, { 0, -1, 0 } },
-        { { 1, -1, 1 }, { 0.10f, 0.74f, 0.61f }, { 0, -1, 0 } },
-        { { 1, -1, -1 }, { 0.10f, 0.74f, 0.61f }, { 0, -1, 0 } },
-        { { -1, -1, -1 }, { 0.10f, 0.74f, 0.61f }, { 0, -1, 0 } },
+        { { -1, -1, 1 }, { 0.10f, 0.74f, 0.61f }, { 0, -1, 0 }, { 0, 0 } },
+        { { 1, -1, 1 }, { 0.10f, 0.74f, 0.61f }, { 0, -1, 0 }, { 1, 0 } },
+        { { 1, -1, -1 }, { 0.10f, 0.74f, 0.61f }, { 0, -1, 0 }, { 1, 1 } },
+        { { -1, -1, -1 }, { 0.10f, 0.74f, 0.61f }, { 0, -1, 0 }, { 0, 1 } },
     };
 
     // clang-format off
@@ -499,17 +519,18 @@ void main() {
     /** Builds the pipeline options describing the cube's vertex layout and state. */
     static yup::GpuPipelineOptions cubePipelineOptions()
     {
-        static constexpr yup::GpuVertexAttribute attrs[3] = {
+        static constexpr yup::GpuVertexAttribute attrs[4] = {
             { yup::GpuVertexFormat::float3, 0, 0 },
             { yup::GpuVertexFormat::float3, 12, 1 },
             { yup::GpuVertexFormat::float3, 24, 2 },
+            { yup::GpuVertexFormat::float2, 36, 3 },
         };
 
         static constexpr yup::GpuVertexBufferLayout vbLayout {
             (uint32_t) sizeof (CubeVertex),
             yup::GpuVertexStepMode::vertex,
             attrs,
-            3
+            4
         };
 
         yup::GpuPipelineOptions options;
@@ -540,6 +561,7 @@ void main() {
 
         initBlur();
         initCube();
+        initLottie();
 
         if (cubePipeline != nullptr && blurPipeline != nullptr)
             statusLabel->setText ("GPU cube + separable blur ready. Drag slider for blur intensity.", yup::dontSendNotification);
@@ -547,6 +569,26 @@ void main() {
             statusLabel->setText ("GPU cube ready. Blur compile failed - see debug log.", yup::dontSendNotification);
         else
             statusLabel->setText ("GPU init failed - see debug log.", yup::dontSendNotification);
+    }
+
+    void initLottie()
+    {
+#if YUP_ANDROID
+        yup::MemoryInputStream is (yup::LottieFile_data, yup::LottieFile_size, false);
+        auto anim = yup::Animation::loadFromStream (is);
+#else
+        auto anim = yup::Animation::loadFromFile (getAssetPath (YUP_EXAMPLE_GRAPHICS_LOTTIE_FILE));
+#endif
+
+        if (! anim.isValid())
+        {
+            yup::Logger::outputDebugString ("SpinningCubeDemo: failed to load Lottie texture animation.");
+            return;
+        }
+
+        lottiePlayer.setAnimation (std::move (anim));
+        lottiePlayer.setLooping (true);
+        lottiePlayer.play();
     }
 
     void initBlur()
@@ -788,9 +830,34 @@ void main() {
         activeStageSource() = shaderEditor->getText();
     }
 
+    // ---- Per-frame Lottie texture render -------------------------------------
+
+    /** Renders the current Lottie frame into an offscreen GpuCanvas (2D path) and
+        returns a sampleable texture for the cube's fragment shader. */
+    yup::GpuTexture::Ptr renderLottieTexture()
+    {
+        if (! lottiePlayer.getAnimation().isValid())
+            return nullptr;
+
+        // A fresh canvas per frame keeps the 2D commit path simple and avoids
+        // re-committing an already-finalised offscreen target.
+        lottieCanvas = yup::GpuCanvas::create (*capturedContext, kLottieTextureSize, kLottieTextureSize);
+        if (lottieCanvas == nullptr)
+            return nullptr;
+
+        auto& g = lottieCanvas->getGraphics();
+        g.setFillColor (yup::Colors::white);
+        g.fillAll();
+
+        lottiePlayer.render (g, yup::Rectangle<float> (0.0f, 0.0f, (float) kLottieTextureSize, (float) kLottieTextureSize), true);
+
+        lottieCanvas->commit();
+        return lottieCanvas->asTexture();
+    }
+
     // ---- Per-frame cube render pass -----------------------------------------
 
-    void renderCube (yup::GpuCanvas& canvas, int w, int h)
+    void renderCube (yup::GpuCanvas& canvas, int w, int h, const yup::GpuTexture::Ptr& lottieTexture)
     {
         if (cubePipeline == nullptr || cubeVBO == nullptr || cubeIBO == nullptr)
             return;
@@ -808,6 +875,8 @@ void main() {
         auto pass = canvas.beginRenderPass (frame, { true, yup::Color (0xff1a1a2e) });
         pass.setPipeline (*cubePipeline);
         pass.setUniformBuffer (0, 0, &uniforms, sizeof (uniforms));
+        if (lottieTexture != nullptr)
+            pass.setTexture (0, 1, lottieTexture);
         pass.setVertexBuffer (0, cubeVBO);
         pass.setIndexBuffer (yup::GpuIndexFormat::uint16, cubeIBO);
         pass.drawIndexed (yup::numElementsInArray (kCubeIdx));
@@ -828,6 +897,11 @@ void main() {
 
     // Blur pass (GpuPipeline fullscreen triangle).
     yup::GpuPipeline::Ptr blurPipeline;
+
+    // Lottie texture source sampled by the cube faces.
+    static constexpr int kLottieTextureSize = 512;
+    yup::AnimationPlayer lottiePlayer;
+    yup::GpuCanvas::Ptr lottieCanvas;
 
     bool gpuInitialized = false;
     float angleY = 0.0f;
