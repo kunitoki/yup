@@ -21,9 +21,7 @@
 
 #include <gtest/gtest.h>
 
-#include <yup_graphics/yup_graphics.h>
-
-#if YUP_ENABLE_SHADER_COMPILER
+#include <yup_shading/yup_shading.h>
 
 using namespace yup;
 
@@ -597,5 +595,3 @@ TEST_F (ShaderCacheTests, SetMaxEntries_UpdatesValue)
     cache->setMaxEntries (0);
     EXPECT_EQ (0u, cache->getMaxEntries());
 }
-
-#endif // YUP_ENABLE_SHADER_COMPILER

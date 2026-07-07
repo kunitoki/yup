@@ -23,9 +23,7 @@
 
 #include <set>
 
-#include <yup_graphics/yup_graphics.h>
-
-#if YUP_ENABLE_SHADER_COMPILER
+#include <yup_shading/yup_shading.h>
 
 using namespace yup;
 
@@ -2312,5 +2310,3 @@ TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_MSL_StageInputAndOutputSlots)
         EXPECT_EQ (so.backendSlot, ~0u);
     }
 }
-
-#endif // YUP_ENABLE_SHADER_COMPILER

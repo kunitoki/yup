@@ -164,9 +164,3 @@
 #if YUP_IMAGE_FORMAT_GIF
 #include "formats/yup_GifImageFormat.cpp"
 #endif
-
-//==============================================================================
-#if YUP_ENABLE_SHADER_COMPILER
-#include "shading/yup_ShaderTranspiler.cpp"
-#include "shading/yup_ShaderCache.cpp"
-#endif

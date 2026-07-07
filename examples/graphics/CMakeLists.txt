@@ -84,6 +84,7 @@ yup_standalone_app (
         yup::yup_audio_gui
         yup::yup_audio_processors
         yup::yup_audio_formats
+        yup::yup_shading
         bungee_library
         pffft_library
         opus_library
@@ -95,16 +96,14 @@ yup_standalone_app (
         libwebp
         libjpeg
         libgif
-        glslang
-        spirv_cross
         ${additional_modules}
         ${link_libraries})
 
 # ==== Prepare sources
 if (NOT YUP_TARGET_ANDROID)
     file (GLOB_RECURSE sources
-        "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp"
-        "${CMAKE_CURRENT_LIST_DIR}/source/*.h")
+        "${CMAKE_CURRENT_LIST_DIR}/source/examples/*.h"
+        "${CMAKE_CURRENT_LIST_DIR}/source/main.cpp")
     source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
     target_sources (${target_name} PRIVATE ${sources})
 endif()

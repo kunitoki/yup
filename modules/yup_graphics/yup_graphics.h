@@ -48,6 +48,8 @@
 #include <yup_simd/yup_simd.h>
 
 #include <rive_renderer/rive_renderer.h>
+#include <rive/renderer/ore/ore_context.hpp>
+#include <rive/renderer/ore/ore_binding_map.hpp>
 
 //==============================================================================
 
@@ -118,16 +120,6 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #ifndef YUP_IMAGE_FORMAT_GIF
 #if YUP_MODULE_AVAILABLE_libgif
 #define YUP_IMAGE_FORMAT_GIF 1
-#endif
-#endif
-
-/** Config: YUP_ENABLE_SHADER_COMPILER
-
-    Enable shader compiler support.
-*/
-#ifndef YUP_ENABLE_SHADER_COMPILER
-#if YUP_MODULE_AVAILABLE_glslang && YUP_MODULE_AVAILABLE_spirv_cross
-#define YUP_ENABLE_SHADER_COMPILER 1
 #endif
 #endif
 
@@ -219,10 +211,4 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #if YUP_IMAGE_FORMAT_GIF
 #include <libgif/libgif.h>
 #include "formats/yup_GifImageFormat.h"
-#endif
-
-//==============================================================================
-#if YUP_ENABLE_SHADER_COMPILER
-#include "shading/yup_ShaderTranspiler.h"
-#include "shading/yup_ShaderCache.h"
 #endif

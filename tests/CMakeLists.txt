@@ -66,6 +66,7 @@ set (target_modules
     yup_data_model
     yup_graphics
     yup_animation
+    yup_shading
     dr_libs
     pffft_library
     opus_library
@@ -76,9 +77,7 @@ set (target_modules
     libpng
     libwebp
     libjpeg
-    libgif
-    glslang
-    spirv_cross)
+    libgif)
 
 set (target_gtest_modules
     GTest::gtest
