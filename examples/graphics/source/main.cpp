@@ -81,7 +81,6 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #include "examples/Images.h"
 #include "examples/PaintProfilerDemo.h"
 #include "examples/OffscreenRenderDemo.h"
-#include "examples/SpinningCubeDemo.h"
 #include "examples/LottieDemo.h"
 #if YUP_MODULE_AVAILABLE_yup_python
 #include "examples/Python.h"
@@ -180,7 +179,6 @@ public:
         registerDemo<ImagesDemo> ("Images", counter++);
         registerDemo<PaintProfilerDemo> ("Paint Profiler", counter++);
         registerDemo<OffscreenRenderDemo> ("Offscreen Render", counter++);
-        registerDemo<SpinningCubeDemo> ("Spinning Cube", counter++);
         registerDemo<LottieDemo> ("Lottie", counter++);
 #if YUP_MODULE_AVAILABLE_yup_python
         registerDemo<PythonDemo> ("Python", counter++);
