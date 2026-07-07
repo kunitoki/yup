@@ -48,6 +48,23 @@ protected:
     MessageManager* mm = nullptr;
 };
 
+TEST_F (MessageManagerTests, InstanceIsNonNull)
+{
+    EXPECT_NE (mm, nullptr);
+    EXPECT_NE (MessageManager::getInstanceWithoutCreating(), nullptr);
+}
+
+TEST_F (MessageManagerTests, IsThisTheMessageThread)
+{
+    EXPECT_TRUE (mm->isThisTheMessageThread());
+    EXPECT_TRUE (MessageManager::existsAndIsCurrentThread());
+}
+
+TEST_F (MessageManagerTests, HasStopMessageNotBeenSentInitially)
+{
+    EXPECT_FALSE (mm->hasStopMessageBeenSent());
+}
+
 #if 0
 
 TEST_F (MessageManagerTests, Existence)

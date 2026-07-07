@@ -49,6 +49,13 @@ public:
     */
     Result loadFromData (const MemoryBlock& fontBytes);
 
+    /** Loads a font from as span of bytes
+
+        @param fontBytes The memory block containing the font data.
+        @return The result of the operation.
+    */
+    Result loadFromData (const Span<const uint8>& fontBytes);
+
     //==============================================================================
     /** Loads a font from a file.
 

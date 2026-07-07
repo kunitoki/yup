@@ -21,11 +21,12 @@ cmake_minimum_required (VERSION 3.31)
 
 # ==== Set target name and version
 set (target_name example_graphics)
-set (target_version "1.0.0")
+set (target_version "2.0.0")
 
 project (${target_name} VERSION ${target_version})
 
 set (rive_file "data/alien.riv")
+set (lottie_file "data/goal.lottie")
 
 # ==== Prepare Android build
 set (link_libraries "")
@@ -40,8 +41,10 @@ if (ANDROID)
         NAMESPACE yup
         RESOURCE_NAMES
             RiveFile
+            LottieFile
         RESOURCES
-            "${CMAKE_CURRENT_LIST_DIR}/${rive_file}")
+            "${CMAKE_CURRENT_LIST_DIR}/${rive_file}"
+            "${CMAKE_CURRENT_LIST_DIR}/${lottie_file}")
 
     set (link_libraries "${target_name}_binary_data")
 endif()
@@ -64,9 +67,11 @@ yup_standalone_app (
     STACK_SIZE 4194304
     DEFINITIONS
         YUP_EXAMPLE_GRAPHICS_RIVE_FILE="${rive_file}"
+        YUP_EXAMPLE_GRAPHICS_LOTTIE_FILE="${lottie_file}"
         ${additional_definitions}
     PRELOAD_FILES
         "${CMAKE_CURRENT_LIST_DIR}/${rive_file}@${rive_file}"
+        "${CMAKE_CURRENT_LIST_DIR}/${lottie_file}@${lottie_file}"
     MODULES
         yup::yup_core
         yup::yup_audio_basics
@@ -74,10 +79,12 @@ yup_standalone_app (
         yup::yup_dsp
         yup::yup_events
         yup::yup_graphics
+        yup::yup_animation
         yup::yup_gui
         yup::yup_audio_gui
         yup::yup_audio_processors
         yup::yup_audio_formats
+        bungee_library
         pffft_library
         opus_library
         flac_library
@@ -86,7 +93,10 @@ yup_standalone_app (
         libvorbis
         libpng
         libwebp
-        bungee_library
+        libjpeg
+        libgif
+        glslang
+        spirv_cross
         ${additional_modules}
         ${link_libraries})
 

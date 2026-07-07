@@ -24,16 +24,7 @@ namespace yup
 
 //==============================================================================
 
-std::atomic_flag SDL2ComponentNative::isInitialised = ATOMIC_FLAG_INIT;
-int SDL2ComponentNative::mouseCaptureRequestCount = 0;
-uint32_t SDL2ComponentNative::lastCapturedMouseButtonState = 0;
-bool SDL2ComponentNative::popupDismissalCheckPending = false;
-
-//==============================================================================
-
 static constexpr uint32 sdlDefaultSubsystems = SDL_INIT_VIDEO | SDL_INIT_EVENTS;
-
-//==============================================================================
 
 static String getSDLVersionString (const SDL_version& version)
 {
@@ -41,6 +32,15 @@ static String getSDLVersionString (const SDL_version& version)
          + String (static_cast<int> (version.minor)) + "."
          + String (static_cast<int> (version.patch));
 }
+
+//==============================================================================
+
+std::atomic_flag SDL2ComponentNative::isInitialised = ATOMIC_FLAG_INIT;
+int SDL2ComponentNative::mouseCaptureRequestCount = 0;
+uint32_t SDL2ComponentNative::lastCapturedMouseButtonState = 0;
+bool SDL2ComponentNative::popupDismissalCheckPending = false;
+
+//==============================================================================
 
 SDL2ComponentNative::SDL2ComponentNative (Component& component,
                                           const Options& options,
@@ -94,27 +94,88 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     // Create the window, renderer and parent it
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: creating window: title=" << component.getTitle() << ", flags=" << String::toHexString (static_cast<int> (windowFlags)) << ", parent=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (parent))));
 
-    window = SDL_CreateWindow (component.getTitle().toRawUTF8(),
-                               SDL_WINDOWPOS_UNDEFINED,
-                               SDL_WINDOWPOS_UNDEFINED,
-                               1,
-                               1,
-                               windowFlags);
-    if (window == nullptr)
+#if YUP_WINDOWS
+    if (parent != nullptr)
     {
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unable to create heavyweight window: " << SDL_GetError());
-        return; // TODO - raise something ?
+        // Register a plain window class to avoid triggering SDL's WndProc during creation
+        // (SDL_CreateWindowFrom will subclass it afterwards).
+        static const wchar_t childWindowClass[] = L"YUPChildWindow";
+        static bool childWindowClassRegistered = false;
+
+        if (! childWindowClassRegistered)
+        {
+            WNDCLASSEXW wc = {};
+            wc.cbSize = sizeof (WNDCLASSEXW);
+            wc.lpfnWndProc = DefWindowProcW;
+            wc.hInstance = GetModuleHandleW (nullptr);
+            wc.hCursor = LoadCursorW (nullptr, IDC_ARROW);
+            wc.lpszClassName = childWindowClass;
+            childWindowClassRegistered = RegisterClassExW (&wc) != 0;
+        }
+
+        DWORD style = WS_CHILDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
+
+        if (options.flags.test (decoratedWindow))
+            style |= WS_CAPTION;
+
+        if (component.isVisible())
+            style |= WS_VISIBLE;
+
+        HWND childHwnd = CreateWindowExW (0,
+                                          childWindowClass,
+                                          component.getTitle().toWideCharPointer(),
+                                          style,
+                                          0,
+                                          0,
+                                          jmax (1, screenBounds.getWidth()),
+                                          jmax (1, screenBounds.getHeight()),
+                                          reinterpret_cast<HWND> (parent),
+                                          nullptr,
+                                          GetModuleHandleW (nullptr),
+                                          nullptr);
+
+        if (childHwnd == nullptr)
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unable to create child window");
+            return;
+        }
+
+        window = SDL_CreateWindowFrom (reinterpret_cast<void*> (childHwnd));
+
+        if (window == nullptr)
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unable to wrap child window with SDL: " << SDL_GetError());
+            DestroyWindow (childHwnd);
+            return;
+        }
+    }
+    else
+#endif
+    {
+        window = SDL_CreateWindow (component.getTitle().toRawUTF8(),
+                                   SDL_WINDOWPOS_UNDEFINED,
+                                   SDL_WINDOWPOS_UNDEFINED,
+                                   1,
+                                   1,
+                                   windowFlags);
+        if (window == nullptr)
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unable to create heavyweight window: " << SDL_GetError());
+            return; // TODO - raise something ?
+        }
     }
 
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: created window: id=" << static_cast<int64> (SDL_GetWindowID (window)) << ", window=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (window))));
 
     SDL_SetWindowData (window, "self", this);
 
+#if ! YUP_WINDOWS
     if (parent != nullptr)
     {
         setNativeParent (parent, window);
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: set native parent");
     }
+#endif
 
     if (currentGraphicsApi == GraphicsContext::OpenGL)
     {
@@ -165,6 +226,12 @@ SDL2ComponentNative::~SDL2ComponentNative()
 
     updateMouseCapture (false);
 
+    // Stop the rendering first, before touching any SDL resources
+    stopRendering();
+
+    // Cancel any pending async update that may have been scheduled by the render thread
+    cancelPendingUpdate();
+
     // Remove event watch
     SDL_DelEventWatch (eventDispatcher, this);
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unregistered window event watch");
@@ -173,13 +240,16 @@ SDL2ComponentNative::~SDL2ComponentNative()
     Desktop::getInstance()->unregisterNativeComponent (this);
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unregistered native component");
 
-    // Stop the rendering
-    stopRendering();
+    // Destroy graphics resources before the SDL window
+    renderer.reset();
+    context.reset();
 
     // Destroy the window
     if (window != nullptr)
     {
+        // Clear the window data we set to avoid stale entries in SDL's linked list
         SDL_SetWindowData (window, "self", nullptr);
+
         SDL_DestroyWindow (window);
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: destroyed window");
         window = nullptr;
@@ -622,6 +692,13 @@ rive::Factory* SDL2ComponentNative::getFactory()
 
 //==============================================================================
 
+GraphicsContext* SDL2ComponentNative::getGraphicsContext()
+{
+    return context.get();
+}
+
+//==============================================================================
+
 void* SDL2ComponentNative::getNativeHandle() const
 {
     return getNativeWindowHandle (window);
@@ -732,6 +809,22 @@ void SDL2ComponentNative::handleAsyncUpdate()
 
 void SDL2ComponentNative::timerCallback()
 {
+#if YUP_WINDOWS
+    if (currentMouseButtons != MouseEvent::noButtons && window != nullptr)
+    {
+        POINT cursorPos;
+        if (GetCursorPos (&cursorPos))
+        {
+            ScreenToClient (reinterpret_cast<HWND> (getNativeHandle()), &cursorPos);
+
+            auto cursorPosition = Point<float> { static_cast<float> (cursorPos.x), static_cast<float> (cursorPos.y) };
+
+            if (lastMouseMovePosition != cursorPosition)
+                handleMouseMoveOrDrag (cursorPosition);
+        }
+    }
+#endif
+
     renderContext();
 }
 
@@ -998,6 +1091,10 @@ void SDL2ComponentNative::handleMouseDown (const Point<float>& position, MouseEv
 
         lastMouseDownPosition = position;
         lastMouseDownTime = currentMouseDownTime;
+
+#if YUP_WINDOWS
+        SetCapture (reinterpret_cast<HWND> (getNativeHandle()));
+#endif
     }
 
     lastMouseMovePosition = position;
@@ -1046,6 +1143,10 @@ void SDL2ComponentNative::handleMouseUp (const Point<float>& position, MouseEven
 
     if (currentMouseButtons == MouseEvent::noButtons)
     {
+#if YUP_WINDOWS
+        ReleaseCapture();
+#endif
+
         updateComponentUnderMouse (event);
 
         lastComponentClicked = nullptr;
@@ -1094,6 +1195,9 @@ void SDL2ComponentNative::handleMouseWheel (const Point<float>& position, const 
 
 void SDL2ComponentNative::handleMouseEnter (const Point<float>& position)
 {
+    if (currentMouseButtons != MouseEvent::noButtons)
+        return;
+
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
                      .withModifiers (currentKeyModifiers)
@@ -1111,6 +1215,9 @@ void SDL2ComponentNative::handleMouseEnter (const Point<float>& position)
 
 void SDL2ComponentNative::handleMouseLeave (const Point<float>& position)
 {
+    if (currentMouseButtons != MouseEvent::noButtons)
+        return;
+
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
                      .withModifiers (currentKeyModifiers)
@@ -1172,18 +1279,29 @@ void SDL2ComponentNative::handleMoved (int xpos, int ypos)
 
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: handleMoved " << screenBounds.getX() << " " << screenBounds.getY() << " -> " << xpos << " " << ypos << ", parent=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (parentWindow))));
 
-    component.internalMoved (xpos, ypos);
-
-    screenBounds = screenBounds.withPosition (xpos, ypos);
+    if (context == nullptr)
+        return;
 
     if (parentWindow != nullptr)
     {
         auto preventBoundsChange = ScopedValueSetter<bool> (internalBoundsChange, true);
 
+#if YUP_MAC
         auto nativeWindowPos = getNativeWindowPosition (parentWindow);
+#else
+        auto nativeWindowPos = Rectangle<int> (0, 0, 1, 1);
+#endif
+
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: parent window position sync after move: " << nativeWindowPos.toString());
         setPosition (nativeWindowPos.getTopLeft());
+
+        xpos = nativeWindowPos.getX();
+        ypos = nativeWindowPos.getY();
     }
+
+    component.internalMoved (xpos, ypos);
+
+    screenBounds = screenBounds.withPosition (xpos, ypos);
 }
 
 void SDL2ComponentNative::handleResized (int width, int height)
@@ -1191,6 +1309,9 @@ void SDL2ComponentNative::handleResized (int width, int height)
     YUP_PROFILE_INTERNAL_TRACE();
 
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: handleResized " << screenBounds.getWidth() << "x" << screenBounds.getHeight() << " -> " << width << "x" << height << ", parent=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (parentWindow))));
+
+    if (context == nullptr)
+        return;
 
     component.internalResized (width, height);
 
@@ -1200,7 +1321,12 @@ void SDL2ComponentNative::handleResized (int width, int height)
     {
         auto preventBoundsChange = ScopedValueSetter<bool> (internalBoundsChange, true);
 
+#if YUP_MAC
         auto nativeWindowPos = getNativeWindowPosition (parentWindow);
+#else
+        auto nativeWindowPos = Rectangle<int> (0, 0, 1, 1);
+#endif
+
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: parent window position sync after resize: " << nativeWindowPos.toString());
         setPosition (nativeWindowPos.getTopLeft());
     }

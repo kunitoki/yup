@@ -154,3 +154,45 @@ TEST (MemoryInputStreamTests, Skip)
     EXPECT_EQ (stream.getNumBytesRemaining(), (int64) 0);
     EXPECT_TRUE (stream.isExhausted());
 }
+
+TEST (MemoryInputStreamTests, SetPositionAndReread)
+{
+    const MemoryBlock data ("hello", 5);
+    MemoryInputStream stream (data, true);
+
+    char buf[3];
+    stream.read (buf, 3);
+    EXPECT_EQ (stream.getPosition(), (int64) 3);
+
+    stream.setPosition (0);
+    EXPECT_EQ (stream.getPosition(), (int64) 0);
+    EXPECT_FALSE (stream.isExhausted());
+
+    char buf2[5];
+    stream.read (buf2, 5);
+    EXPECT_EQ (0, memcmp (buf2, "hello", 5));
+}
+
+TEST (MemoryInputStreamTests, ReadSingleBytes)
+{
+    const MemoryBlock data ("XYZ", 3);
+    MemoryInputStream stream (data, true);
+
+    EXPECT_EQ ((char) stream.readByte(), 'X');
+    EXPECT_EQ ((char) stream.readByte(), 'Y');
+    EXPECT_EQ ((char) stream.readByte(), 'Z');
+    EXPECT_TRUE (stream.isExhausted());
+}
+
+TEST (MemoryInputStreamTests, ConstructFromRawPointerKeepsAccess)
+{
+    const char rawData[] = { 1, 2, 3, 4 };
+    MemoryInputStream stream (rawData, sizeof (rawData), false);
+
+    EXPECT_EQ (stream.getTotalLength(), (int64) 4);
+
+    char buf[4];
+    stream.read (buf, 4);
+    EXPECT_EQ (0, memcmp (buf, rawData, 4));
+    EXPECT_TRUE (stream.isExhausted());
+}

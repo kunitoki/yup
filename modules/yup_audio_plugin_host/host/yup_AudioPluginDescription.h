@@ -49,12 +49,15 @@ struct AudioPluginDescription
         Format-specific unique identifier.
         - VST3: base64-encoded 16-byte FUID
         - CLAP: clap_plugin_descriptor::id string
-        - AUv2: "type/subt/mfgr" four-char-code triplet
+        - AU:   "type/subt/mfgr" four-char-code triplet
     */
     String identifier;
 
     /** Absolute path to the plugin file or bundle on disk. */
     String fileOrBundlePath;
+
+    /** True when the component is an Audio Unit v3 (App Extension) rather than a v2 component. */
+    bool isV3 = false;
 
     /** True when the plugin is a synthesiser / instrument. */
     bool isInstrument = false;
@@ -83,6 +86,7 @@ struct AudioPluginDescription
             && category == other.category
             && identifier == other.identifier
             && fileOrBundlePath == other.fileOrBundlePath
+            && isV3 == other.isV3
             && isInstrument == other.isInstrument
             && isEffect == other.isEffect
             && numInputChannels == other.numInputChannels

@@ -249,9 +249,9 @@ public:
 
             for (int i = 0; i < interpolatedSize + SincRadius * OversampleFactor; ++i)
             {
-                auto* currentBuf = inBuf + static_cast<std::size_t> (i - SincRadius * OversampleFactor);
-
-                *xBuf++ = (i >= SincRadius * OversampleFactor) ? *currentBuf : dEndBuf[i];
+                *xBuf++ = (i >= SincRadius * OversampleFactor)
+                            ? inBuf[static_cast<std::size_t> (i - SincRadius * OversampleFactor)]
+                            : dEndBuf[i];
             }
         }
 

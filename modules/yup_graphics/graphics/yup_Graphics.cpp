@@ -193,6 +193,24 @@ StyledText::VerticalAlign toVerticalAlign (Justification justification)
         return StyledText::middle;
 }
 
+rive::Factory* getOffscreenFactory (GraphicsContext& context, const std::unique_ptr<GraphicsContext::OffscreenTarget>& target) noexcept
+{
+    if (target != nullptr)
+        if (auto* renderContext = target->getRenderContext())
+            return renderContext;
+
+    return context.factory();
+}
+
+std::unique_ptr<rive::Renderer> makeOffscreenRenderer (GraphicsContext& context, const std::unique_ptr<GraphicsContext::OffscreenTarget>& target, int width, int height)
+{
+    if (target != nullptr)
+        if (auto* renderContext = target->getRenderContext())
+            return std::make_unique<rive::RiveRenderer> (renderContext);
+
+    return context.makeRenderer (width, height);
+}
+
 } // namespace
 
 //==============================================================================
@@ -226,13 +244,92 @@ void Graphics::SavedState::restore()
 //==============================================================================
 Graphics::Graphics (GraphicsContext& context, rive::Renderer& renderer, float scale) noexcept
     : context (context)
+    , offscreenTarget (nullptr)
     , factory (*context.factory())
+    , ownedRenderer (nullptr)
     , renderer (renderer)
     , contextScale (scale)
 {
     renderOptions.emplace_back();
 
     currentRenderOptions().scale = scale;
+}
+
+Graphics::Graphics (GraphicsContext& context, Image& image, uint32_t clearColor) noexcept
+    : Graphics (context, context.createOffscreenTarget (image.getWidth(), image.getHeight()), clearColor)
+{
+    offscreenTargetImage = std::addressof (image);
+}
+
+Graphics::Graphics (GraphicsContext& context, std::unique_ptr<GraphicsContext::OffscreenTarget> target, uint32_t clearColor) noexcept
+    : context (context)
+    , offscreenTarget (std::move (target))
+    , factory (*getOffscreenFactory (context, offscreenTarget))
+    , ownedRenderer (makeOffscreenRenderer (context,
+                                            offscreenTarget,
+                                            offscreenTarget != nullptr ? offscreenTarget->getWidth() : 0,
+                                            offscreenTarget != nullptr ? offscreenTarget->getHeight() : 0))
+    , renderer (*ownedRenderer)
+    , contextScale (1.0f)
+{
+    renderOptions.emplace_back();
+    currentRenderOptions().scale = 1.0f;
+
+    if (! offscreenTarget)
+        return;
+
+    rive::gpu::RenderContext::FrameDescriptor frameDesc;
+    frameDesc.renderTargetWidth = static_cast<uint32_t> (offscreenTarget->getWidth());
+    frameDesc.renderTargetHeight = static_cast<uint32_t> (offscreenTarget->getHeight());
+    frameDesc.loadAction = rive::gpu::LoadAction::clear;
+    frameDesc.clearColor = clearColor;
+
+    context.beginOffscreen (*offscreenTarget, frameDesc);
+
+    currentRenderOptions().drawingArea = { 0.0f, 0.0f, static_cast<float> (offscreenTarget->getWidth()), static_cast<float> (offscreenTarget->getHeight()) };
+}
+
+//==============================================================================
+
+bool Graphics::isOffscreen() const noexcept
+{
+    return offscreenTarget != nullptr;
+}
+
+bool Graphics::commitToImage()
+{
+    if (! offscreenTargetImage || ! commitOffscreenTarget())
+        return false;
+
+    if (auto canvas = offscreenTarget->refRenderCanvas())
+        offscreenTargetImage->adoptRenderCanvas (std::move (canvas));
+    else if (auto tex = offscreenTarget->adoptAsTexture())
+        offscreenTargetImage->adoptTexture (std::move (tex));
+
+    return true;
+}
+
+bool Graphics::commitOffscreenTarget()
+{
+    if (! offscreenTarget || committed)
+        return false;
+
+    context.endOffscreen (*offscreenTarget);
+    committed = true;
+
+    return true;
+}
+
+bool Graphics::readPixelsToImage()
+{
+    if (! offscreenTarget || ! offscreenTargetImage)
+        return false;
+
+    if (! committed)
+        commitToImage();
+
+    auto span = offscreenTargetImage->getRawData();
+    return context.readOffscreenPixels (*offscreenTarget, span.data(), span.size());
 }
 
 //==============================================================================
@@ -243,6 +340,11 @@ float Graphics::getContextScale() const
 }
 
 //==============================================================================
+GraphicsContext& Graphics::getGraphicsContext()
+{
+    return context;
+}
+
 rive::Factory* Graphics::getFactory()
 {
     return std::addressof (factory);
@@ -285,6 +387,109 @@ void Graphics::restoreState()
     renderer.restore();
 
     renderOptions.pop_back();
+}
+
+//==============================================================================
+Graphics::TransparencyLayer::TransparencyLayer (TransparencyLayer&& other) noexcept
+    : parent (std::exchange (other.parent, nullptr))
+    , targetArea (other.targetArea)
+    , opacity (other.opacity)
+    , graphics (std::move (other.graphics))
+    , committed (std::exchange (other.committed, true))
+{
+}
+
+Graphics::TransparencyLayer& Graphics::TransparencyLayer::operator= (TransparencyLayer&& other) noexcept
+{
+    if (this != std::addressof (other))
+    {
+        parent = std::exchange (other.parent, nullptr);
+        targetArea = other.targetArea;
+        opacity = other.opacity;
+        graphics = std::move (other.graphics);
+        committed = std::exchange (other.committed, true);
+    }
+
+    return *this;
+}
+
+Graphics::TransparencyLayer::~TransparencyLayer() = default;
+
+Graphics::TransparencyLayer::TransparencyLayer (Graphics& parent, Rectangle<float> targetArea, float opacity)
+    : parent (std::addressof (parent))
+    , targetArea (targetArea)
+    , opacity (jlimit (0.0f, 1.0f, opacity))
+{
+    const int width = static_cast<int> (std::ceil (targetArea.getWidth()));
+    const int height = static_cast<int> (std::ceil (targetArea.getHeight()));
+
+    if (width <= 0 || height <= 0)
+        return;
+
+    auto target = parent.getGraphicsContext().createOffscreenTarget (width, height);
+    if (target == nullptr)
+        return;
+
+    graphics = std::make_unique<Graphics> (parent.getGraphicsContext(), std::move (target), 0x00000000);
+
+    if (! graphics->isOffscreen())
+        graphics.reset();
+    else
+        graphics->setDrawingArea ({ 0.0f, 0.0f, targetArea.getWidth(), targetArea.getHeight() });
+}
+
+bool Graphics::TransparencyLayer::isValid() const noexcept
+{
+    return parent != nullptr && graphics != nullptr && ! committed;
+}
+
+Graphics& Graphics::TransparencyLayer::getGraphics() const noexcept
+{
+    jassert (graphics != nullptr);
+    return *graphics;
+}
+
+bool Graphics::TransparencyLayer::commit()
+{
+    if (! isValid())
+        return false;
+
+    if (! graphics->commitOffscreenTarget())
+        return false;
+
+    auto releaseCommittedLayer = [this]
+    {
+        committed = true;
+        graphics.reset();
+        parent = nullptr;
+    };
+
+    auto texture = [&]() -> rive::rcp<rive::gpu::Texture>
+    {
+        if (auto canvas = graphics->offscreenTarget->refRenderCanvas())
+            return canvas->renderImage()->refTexture();
+
+        return graphics->offscreenTarget->adoptAsTexture();
+    }();
+
+    if (texture == nullptr)
+    {
+        releaseCommittedLayer();
+        return false;
+    }
+
+    auto parentState = parent->saveState();
+    parent->setOpacity (parent->getOpacity() * opacity);
+
+    if (! parent->renderTexture (std::move (texture), targetArea))
+    {
+        releaseCommittedLayer();
+        return false;
+    }
+
+    releaseCommittedLayer();
+
+    return true;
 }
 
 //==============================================================================
@@ -357,6 +562,11 @@ float Graphics::getOpacity() const
     return currentRenderOptions().opacity;
 }
 
+Graphics::TransparencyLayer Graphics::beginTransparencyLayer (Rectangle<float> targetArea, float opacity)
+{
+    return { *this, targetArea, opacity };
+}
+
 //==============================================================================
 void Graphics::setStrokeType (StrokeType strokeType)
 {
@@ -404,8 +614,9 @@ StrokeCap Graphics::getStrokeCap() const
     return currentRenderOptions().cap;
 }
 
-void Graphics::setStrokeMiterLimit (float /*limit*/)
+void Graphics::setStrokeMiterLimit ([[maybe_unused]] float limit)
 {
+    // Rive has a hardcoded miter limit of 4.0, so we don't need to set it here.
 }
 
 //==============================================================================
@@ -655,6 +866,7 @@ void Graphics::renderStrokePath (const Path& path, const RenderOptions& options,
 
     renderer.save();
     renderer.transform (transform.toMat2D());
+    renderer.modulateOpacity (options.opacity);
     renderer.drawPath (path.getRenderPath(), std::addressof (paint));
     renderer.restore();
 }
@@ -673,6 +885,7 @@ void Graphics::renderFillPath (const Path& path, const RenderOptions& options, c
 
     renderer.save();
     renderer.transform (transform.toMat2D());
+    renderer.modulateOpacity (options.opacity);
     renderer.drawPath (path.getRenderPath(), std::addressof (paint));
     renderer.restore();
 }
@@ -685,17 +898,23 @@ void Graphics::drawImageAt (const Image& image, const Point<float>& pos)
 
 void Graphics::drawImage (const Image& image, const Rectangle<float>& targetArea)
 {
-    auto renderContext = context.renderContext();
-    if (renderContext == nullptr)
-        return;
-
-    if (targetArea.isEmpty())
-        return;
-
     if (! image.createTextureIfNotPresent (context))
         return;
 
+    renderTexture (image.getTexture(), targetArea);
+}
+
+bool Graphics::renderTexture (rive::rcp<rive::gpu::Texture> texture, const Rectangle<float>& targetArea)
+{
+    auto renderContext = context.renderContext();
+    if (renderContext == nullptr || texture == nullptr)
+        return false;
+
+    if (targetArea.isEmpty())
+        return false;
+
     const auto& options = currentRenderOptions();
+    const auto blendMode = toBlendMode (options.blendMode);
 
     static const auto unitRectPath = []
     {
@@ -708,8 +927,8 @@ void Graphics::drawImage (const Image& image, const Rectangle<float>& targetArea
     }();
 
     rive::RiveRenderPaint paint;
-    paint.image (image.getTexture(), jlimit (0.0f, 1.0f, options.opacity));
-    paint.blendMode (toBlendMode (options.blendMode));
+    paint.image (std::move (texture), 1.0f);
+    paint.blendMode (blendMode);
 
     const auto imageTransform = AffineTransform::scaling (targetArea.getWidth(), targetArea.getHeight())
                                     .translated (targetArea.getX(), targetArea.getY())
@@ -717,8 +936,11 @@ void Graphics::drawImage (const Image& image, const Rectangle<float>& targetArea
 
     renderer.save();
     renderer.transform (imageTransform.toMat2D());
+    renderer.modulateOpacity (options.opacity);
     renderer.drawPath (unitRectPath.get(), std::addressof (paint));
     renderer.restore();
+
+    return true;
 }
 
 //==============================================================================
@@ -809,6 +1031,7 @@ void Graphics::renderFittedText (const StyledText& text, const Rectangle<float>&
     const auto& options = currentRenderOptions();
 
     renderer.save();
+    renderer.modulateOpacity (options.opacity);
 
     if (text.getOverflow() != StyledText::visible)
     {

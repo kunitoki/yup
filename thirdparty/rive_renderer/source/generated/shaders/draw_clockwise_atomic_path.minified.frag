@@ -1,57 +1,57 @@
 #ifdef FRAGMENT
-K1
+J1
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-p0(P2,j0);
+r0(Q2,g0);
 #endif
-p0(Q2,e0);
+r0(R2,d0);
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-md(d6,z6);
+Ja(d6,z6);
 #endif
-L1 K3 Ea(ga,Td,S0);L3 e void ph(U4(float)l3,d q0,uint T1,g1(uint)p1,g1(d)G3){
+K1 N3 Ea(ga,Yd,S0);O3 e void xh(T4(float)o3,d o0,uint T1,e1(uint)p1,e1(d)J3){
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT
-if(min(l3,q0)>=1.){return;}
+if(min(o3,o0)>=1.){return;}
 #endif
-d q;uint Wd=q7(abs(q0));p1=A7(S0,T1,k.W1|Wd);if(p1<k.W1){q=q0;
+d q;uint be=q7(abs(o0));p1=A7(S0,T1,k.W1|be);if(p1<k.W1){q=o0;
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-G3=q0;
+J3=o0;
 #endif
 }else{
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-if((p1&e7)!=0u){p1=A7(S0,T1,k.W1|e7|Wd);}
+if((p1&e7)!=0u){p1=A7(S0,T1,k.W1|e7|be);}
 #endif
-d V1=V5(p1&ja)*ha;d H1=max(V1,q0);q=K8(V1,H1,l3);
+d V1=V5(p1&ja)*ha;d G1=max(V1,o0);q=K8(V1,G1,o3);
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-G3=H1;
+J3=G1;
 #endif
-}l3*=q;}e void qh(U4(float)l3,d Q4,uint T1,g1(uint)p1,g1(d)G3){d q=.0;uint ab=q7(abs(Q4));p1=kd(S0,T1);
+}o3*=q;}e void yh(T4(float)o3,d P4,uint T1,e1(uint)p1,e1(d)J3){d q=.0;uint fb=q7(abs(P4));p1=pd(S0,T1);
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT
-if(min(l3,Q4)>=1.&&(p1<k.W1||p1>=(k.W1|i5))){return;}
+if(min(o3,P4)>=1.&&(p1<k.W1||p1>=(k.W1|j5))){return;}
 #endif
-if(p1<k.W1){uint Xd=k.W1|(i5+ab);uint c3=A7(S0,T1,Xd);
+if(p1<k.W1){uint ce=k.W1|(j5+fb);uint f3=A7(S0,T1,ce);
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-p1=c3;
+p1=f3;
 #endif
-if(c3<=k.W1){q=Q4;
+if(f3<=k.W1){q=P4;
 #ifdef DRAW_INTERIOR_TRIANGLES
 q=min(q,1.);
 #endif
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-G3=q;
+J3=q;
 #endif
-Q4=.0;}else if(c3<Xd){uint Yd=(c3&ja)-i5;d V1=V5(Yd)*ha;d H1=Q4;
+P4=.0;}else if(f3<ce){uint de=(f3&ja)-j5;d V1=V5(de)*ha;d G1=P4;
 #ifdef DRAW_INTERIOR_TRIANGLES
-H1=min(H1,1.);
+G1=min(G1,1.);
 #endif
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-G3=H1;
+J3=G1;
 #endif
-q=K8(V1,H1,l3);ab=Yd;Q4=V1;}}if(Q4>.0){uint Za=Fa(S0,T1,ab);d V1=Aa(Za);d H1=V1+Q4;V1=clamp(V1,.0,1.);H1=clamp(H1,.0,1.);
+q=K8(V1,G1,o3);fb=de;P4=V1;}}if(P4>.0){uint eb=Fa(S0,T1,fb);d V1=Aa(eb);d G1=V1+P4;V1=clamp(V1,.0,1.);G1=clamp(G1,.0,1.);
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-G3=H1;
+J3=G1;
 #endif
-q+=(1.-q*l3)*K8(V1,H1,l3);}l3*=q;}c5(HB){B(k1,g);
+q+=(1.-q*o3)*K8(V1,G1,o3);}o3*=q;}d5(IB){B(i1,g);
 #ifdef DRAW_INTERIOR_TRIANGLES
-Y(l1,d);
+Y(j1,d);
 #else
 Y(I,z2);
 #endif
@@ -63,47 +63,47 @@ B(S1,D);
 B(N0,g);
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-B(Y1,d);
+B(Z1,d);
 #endif
-B(a3,W0);B(i4,c);i F0=M7(k1,1. R2);
+B(e3,W0);B(j4,c);i F0=M7(i1,1. S2);
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-i bb=H0(j0);
+i gb=H0(g0);
 #endif
-d q0=
+d o0=
 #ifdef DRAW_INTERIOR_TRIANGLES
-l1;
+j1;
 #else
-Xa(I);
+cb(I);
 #endif
-c y6=i4;
+c y6=j4;
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-y6+=(bb.xy+bb.zw)*k.ng;
+y6+=(gb.xy+gb.zw)*k.vg;
 #endif
-y6=floor(y6);uint N7=a3.y;uint T1=a3.x+ya(W0(y6),N7);d I1=1.;
+y6=floor(y6);uint N7=e3.y;uint T1=e3.x+L8(W0(y6),N7);d H1=1.;
 #ifdef ENABLE_CLIP_RECT
-if(ENABLE_CLIP_RECT){d cb=d3(X4(N0));I1=min(cb,I1);}
+if(ENABLE_CLIP_RECT){d hb=g3(Y4(N0));H1=min(hb,H1);}
 #endif
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING&&S1.x!=.0){d db=H0(e0).x;I1=min(db,I1);}
+if(ENABLE_CLIPPING&&S1.x!=.0){d ib=H0(d0).x;H1=min(ib,H1);}
 #endif
-I1=max(I1,.0);q0=clamp(q0,.0,I1);uint p1;float G3;
+H1=max(H1,.0);o0=clamp(o0,.0,H1);uint p1;float J3;
 #ifndef DRAW_INTERIOR_TRIANGLES
-if(P5(I)){ph(F0.w,q0,T1,p1,G3);}else
+if(Q5(I)){xh(F0.w,o0,T1,p1,J3);}else
 #endif
-{qh(F0.w,q0,T1,p1,G3);}
+{yh(F0.w,o0,T1,p1,J3);}
 #ifdef ENABLE_DITHER
-d E5;if(ENABLE_DITHER){E5=Z9(T.xy,k.v3,k.w3);}
+d G5;if(ENABLE_DITHER){G5=Z9(S.xy,k.y3,k.z3);}
 #endif
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-if(F0.w>.0){bool rh=p1>=k.W1&&(p1&e7)!=0u;if(!rh){F0.xyz=R4(F0.xyz,bb,W5(Y1));if(G3<1.){r P7=F0.xyz;
+if(F0.w>.0){bool zh=p1>=k.W1&&(p1&e7)!=0u;if(!zh){F0.xyz=Q4(F0.xyz,gb,W5(Z1));if(J3<1.){r P7=F0.xyz;
 #ifdef ENABLE_DITHER
-if(ENABLE_DITHER){P7+=E5*k.bd;}
+if(ENABLE_DITHER){P7+=G5*k.gd;}
 #endif
-sg(z6,B0(P7,.0));memoryBarrier();pg(S0,T1,e7);}}else{F0.xyz=rg(z6).xyz;}}
+Ia(z6,B0(P7,.0));memoryBarrier();xg(S0,T1,e7);}}else{F0.xyz=Ha(z6).xyz;}}
 #endif
 F0.xyz*=F0.w;
 #ifdef ENABLE_DITHER
-if(ENABLE_DITHER){F0.xyz+=E5;}
+if(ENABLE_DITHER){F0.xyz+=G5;}
 #endif
-C0(e0,B0(.0));T3(F0);}
+v0(d0,B0(.0));V3(F0);}
 #endif

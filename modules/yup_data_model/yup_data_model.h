@@ -25,7 +25,7 @@
 
     ID:                 yup_data_model
     vendor:             yup
-    version:            1.0.0
+    version:            2.0.0
     name:               YUP Data Model
     description:        The essential set of basic YUP data model classes.
     website:            https://github.com/kunitoki/yup

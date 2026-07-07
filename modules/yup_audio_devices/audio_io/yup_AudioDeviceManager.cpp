@@ -1062,7 +1062,9 @@ void AudioDeviceManager::audioDeviceIOCallbackInt (const float* const* inputChan
 
     if (callbacks.size() > 0)
     {
+#if ! defined(__EMSCRIPTEN__)
         AudioProcessLoadMeasurer::ScopedTimer timer (loadMeasurer, numSamples);
+#endif
 
         tempBuffer.setSize (jmax (1, numOutputChannels), jmax (1, numSamples), false, false, true);
 

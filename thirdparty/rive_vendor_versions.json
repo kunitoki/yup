@@ -1,40 +1,40 @@
 {
   "dependencies": [
     {
-      "checkout": "972e52893bf03fd26920d4d191d1a09c7e0b0fa5",
+      "checkout": "244aa55bd623d03608576a0874b15f1c5bdc4a35",
       "name": "rive",
-      "ref": "runtime-v0.1.62",
-      "version": "0.1.62"
+      "ref": "runtime-v0.1.155",
+      "version": "0.1.155"
     },
     {
-      "checkout": "972e52893bf03fd26920d4d191d1a09c7e0b0fa5",
+      "checkout": "244aa55bd623d03608576a0874b15f1c5bdc4a35",
       "name": "rive_renderer",
-      "ref": "runtime-v0.1.62",
-      "version": "0.1.62"
+      "ref": "runtime-v0.1.155",
+      "version": "0.1.155"
     },
     {
-      "checkout": "972e52893bf03fd26920d4d191d1a09c7e0b0fa5",
+      "checkout": "244aa55bd623d03608576a0874b15f1c5bdc4a35",
       "name": "glad",
-      "ref": "runtime-v0.1.62",
-      "version": "0.1.62"
+      "ref": "runtime-v0.1.155",
+      "version": "0.1.155"
     },
     {
-      "checkout": "972e52893bf03fd26920d4d191d1a09c7e0b0fa5",
+      "checkout": "244aa55bd623d03608576a0874b15f1c5bdc4a35",
       "name": "rive_decoders",
-      "ref": "runtime-v0.1.62",
-      "version": "0.1.62"
+      "ref": "runtime-v0.1.155",
+      "version": "0.1.155"
     },
     {
-      "checkout": "58a7e5d9badc3241a136b6e3c6f71d58c0f7bb84",
+      "checkout": "c99c73a96b046723c188dc4f54b02b9d50791325",
       "name": "luau",
-      "ref": "rive_0_35",
-      "version": "0.35"
+      "ref": "rive_0_728_vec3",
+      "version": "0.728"
     },
     {
-      "checkout": "f11e8d2d4385c1df7dd21082be421d2d6101f03a",
+      "checkout": "4c298c5e3012d891b8b375c6dd215f580a36ed60",
       "name": "libhydrogen",
-      "ref": "rive_0_1",
-      "version": "0.1"
+      "ref": "rive_0_2",
+      "version": "0.2"
     },
     {
       "checkout": "08d34675f64b1ac4880f4f10c9fd474a56dd4399",
@@ -52,10 +52,10 @@
       "checkout": "b827168e5e66c56b3117660a12607fe4f54ea33c",
       "name": "yoga_library",
       "ref": "rive_changes_v2_0_1_2",
-      "version": "2.0.2.1"
+      "version": "2.0.1.2"
     },
     {
-      "checkout": "8c62c3b86a8832d47d6089ee4e5caf64177473c3",
+      "checkout": "cae474558968f015124d7369556a4b1016276e3a",
       "name": "libpng",
       "ref": "libpng16",
       "version": "1.6"
@@ -73,5 +73,5 @@
       "version": "1.3.1"
     }
   ],
-  "generatedAt": "2026-05-10T17:45:01.364694+00:00"
+  "generatedAt": "2026-07-06T15:27:46.306808+00:00"
 }

@@ -24,4 +24,5 @@
 // BEGIN YUP GENERATED LUAU COMMON INCLUDES
 #include "upstream/Common/src/StringUtils.cpp"
 #include "upstream/Common/src/TimeTrace.cpp"
+#include "upstream/Common/src/BytecodeWire.cpp"
 // END YUP GENERATED LUAU COMMON INCLUDES

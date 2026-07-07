@@ -103,3 +103,74 @@ TEST_F (AudioPluginScannerTests, AddingDuplicateFormatTypeReplacesExisting)
     scanner.addFormat (std::make_unique<FakeFormat> (AudioPluginFormatType::vst3));
     EXPECT_EQ (1, scanner.getNumFormats());
 }
+
+TEST_F (AudioPluginScannerTests, EmptyDirectoryReturnsNoResults)
+{
+    File tmpDir = File::getSpecialLocation (File::tempDirectory).getChildFile ("yup_scanner_empty");
+    tmpDir.createDirectory();
+
+    FileSearchPath path;
+    path.add (tmpDir);
+
+    auto result = scanner.scan (path);
+    EXPECT_TRUE (result.discovered.empty());
+    EXPECT_TRUE (result.failedPaths.empty());
+
+    tmpDir.deleteRecursively();
+}
+
+TEST_F (AudioPluginScannerTests, MultipleGoodPluginsAllDiscovered)
+{
+    File tmpDir = File::getSpecialLocation (File::tempDirectory).getChildFile ("yup_scanner_multi");
+    tmpDir.createDirectory();
+    tmpDir.getChildFile ("SynthA.vst3").create();
+    tmpDir.getChildFile ("SynthB.vst3").create();
+
+    FileSearchPath path;
+    path.add (tmpDir);
+
+    auto result = scanner.scan (path);
+    EXPECT_EQ (2, (int) result.discovered.size());
+    EXPECT_TRUE (result.failedPaths.empty());
+
+    tmpDir.deleteRecursively();
+}
+
+TEST_F (AudioPluginScannerTests, MixedGoodAndBadPluginsSeparateLists)
+{
+    File tmpDir = File::getSpecialLocation (File::tempDirectory).getChildFile ("yup_scanner_mixed");
+    tmpDir.createDirectory();
+    tmpDir.getChildFile ("GoodSynth.vst3").create();
+    tmpDir.getChildFile ("bad.vst3").create();
+
+    FileSearchPath path;
+    path.add (tmpDir);
+
+    auto result = scanner.scan (path);
+    EXPECT_EQ (1, (int) result.discovered.size());
+    EXPECT_EQ (1, (int) result.failedPaths.size());
+
+    tmpDir.deleteRecursively();
+}
+
+TEST_F (AudioPluginScannerTests, GetNumFormatsReturnsCorrectCount)
+{
+    EXPECT_EQ (1, scanner.getNumFormats());
+}
+
+TEST_F (AudioPluginScannerTests, NonVst3FilesAreIgnored)
+{
+    File tmpDir = File::getSpecialLocation (File::tempDirectory).getChildFile ("yup_scanner_nonvst3");
+    tmpDir.createDirectory();
+    tmpDir.getChildFile ("SomeLib.so").create();
+    tmpDir.getChildFile ("readme.txt").create();
+
+    FileSearchPath path;
+    path.add (tmpDir);
+
+    auto result = scanner.scan (path);
+    EXPECT_TRUE (result.discovered.empty());
+    EXPECT_TRUE (result.failedPaths.empty());
+
+    tmpDir.deleteRecursively();
+}

@@ -1,6 +1,5 @@
 #ifndef _RIVE_ARTBOARD_BASE_HPP_
 #define _RIVE_ARTBOARD_BASE_HPP_
-#include "rive/core/field_types/core_bool_type.hpp"
 #include "rive/core/field_types/core_double_type.hpp"
 #include "rive/core/field_types/core_uint_type.hpp"
 #include "rive/layout_component.hpp"
@@ -40,14 +39,12 @@ public:
     static const uint16_t originYPropertyKey = 12;
     static const uint16_t defaultStateMachineIdPropertyKey = 236;
     static const uint16_t viewModelIdPropertyKey = 583;
-    static const uint16_t isStatefulPropertyKey = 951;
 
 protected:
     float m_OriginX = 0.0f;
     float m_OriginY = 0.0f;
     uint32_t m_DefaultStateMachineId = -1;
     uint32_t m_ViewModelId = -1;
-    bool m_IsStateful = false;
 
 public:
     inline float originX() const { return m_OriginX; }
@@ -59,6 +56,7 @@ public:
         }
         m_OriginX = value;
         originXChanged();
+        notifyPropertyChanged(originXPropertyKey);
     }
 
     inline float originY() const { return m_OriginY; }
@@ -70,6 +68,7 @@ public:
         }
         m_OriginY = value;
         originYChanged();
+        notifyPropertyChanged(originYPropertyKey);
     }
 
     inline uint32_t defaultStateMachineId() const
@@ -84,6 +83,7 @@ public:
         }
         m_DefaultStateMachineId = value;
         defaultStateMachineIdChanged();
+        notifyPropertyChanged(defaultStateMachineIdPropertyKey);
     }
 
     inline uint32_t viewModelId() const { return m_ViewModelId; }
@@ -95,17 +95,7 @@ public:
         }
         m_ViewModelId = value;
         viewModelIdChanged();
-    }
-
-    inline bool isStateful() const { return m_IsStateful; }
-    void isStateful(bool value)
-    {
-        if (m_IsStateful == value)
-        {
-            return;
-        }
-        m_IsStateful = value;
-        isStatefulChanged();
+        notifyPropertyChanged(viewModelIdPropertyKey);
     }
 
     Core* clone() const override;
@@ -115,7 +105,6 @@ public:
         m_OriginY = object.m_OriginY;
         m_DefaultStateMachineId = object.m_DefaultStateMachineId;
         m_ViewModelId = object.m_ViewModelId;
-        m_IsStateful = object.m_IsStateful;
         LayoutComponent::copy(object);
     }
 
@@ -135,9 +124,6 @@ public:
             case viewModelIdPropertyKey:
                 m_ViewModelId = CoreUintType::deserialize(reader);
                 return true;
-            case isStatefulPropertyKey:
-                m_IsStateful = CoreBoolType::deserialize(reader);
-                return true;
         }
         return LayoutComponent::deserialize(propertyKey, reader);
     }
@@ -147,7 +133,6 @@ protected:
     virtual void originYChanged() {}
     virtual void defaultStateMachineIdChanged() {}
     virtual void viewModelIdChanged() {}
-    virtual void isStatefulChanged() {}
 };
 } // namespace rive
 

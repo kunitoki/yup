@@ -673,3 +673,336 @@ TEST_F (GraphicsTest, Ellipse_Edge_Cases)
         graphics->strokeEllipse (185.0f, 185.0f, 1.0f, 1.0f);
     });
 }
+
+// =============================================================================
+// StrokeType — set/get
+// =============================================================================
+
+TEST_F (GraphicsTest, StrokeType_DefaultIsDefaultConstructed)
+{
+    const StrokeType st = graphics->getStrokeType();
+    EXPECT_FLOAT_EQ (st.getWidth(), graphics->getStrokeWidth());
+}
+
+TEST_F (GraphicsTest, StrokeType_SetAndGetRoundtrips)
+{
+    const StrokeType st (5.0f, StrokeJoin::Round, StrokeCap::Square);
+    graphics->setStrokeType (st);
+
+    const StrokeType result = graphics->getStrokeType();
+    EXPECT_FLOAT_EQ (result.getWidth(), 5.0f);
+    EXPECT_EQ (result.getJoin(), StrokeJoin::Round);
+    EXPECT_EQ (result.getCap(), StrokeCap::Square);
+}
+
+TEST_F (GraphicsTest, StrokeType_SetWidthAlsoUpdatesGetStrokeWidth)
+{
+    graphics->setStrokeType (StrokeType (7.5f));
+    EXPECT_FLOAT_EQ (graphics->getStrokeWidth(), 7.5f);
+}
+
+TEST_F (GraphicsTest, StrokeType_SetCapAndJoinAlsoUpdatesGetters)
+{
+    graphics->setStrokeType (StrokeType (1.0f, StrokeJoin::Bevel, StrokeCap::Round));
+    EXPECT_EQ (graphics->getStrokeCap(), StrokeCap::Round);
+    EXPECT_EQ (graphics->getStrokeJoin(), StrokeJoin::Bevel);
+}
+
+// =============================================================================
+// beginTransparencyLayer
+// =============================================================================
+
+TEST_F (GraphicsTest, TransparencyLayer_BeginDoesNotCrash)
+{
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+
+    EXPECT_NO_THROW ({
+        auto layer = graphics->beginTransparencyLayer (Rectangle<float> (0.0f, 0.0f, 100.0f, 100.0f), 0.5f);
+        (void) layer;
+    });
+}
+
+TEST_F (GraphicsTest, TransparencyLayer_InvalidLayerCommitReturnsFalse)
+{
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+
+    // Default-constructed layer is invalid and commit must return false
+    Graphics::TransparencyLayer layer;
+    EXPECT_FALSE (layer.isValid());
+    EXPECT_FALSE (layer.commit());
+}
+
+TEST_F (GraphicsTest, TransparencyLayer_CanDrawIntoLayerWhenSupported)
+{
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+
+    auto layer = graphics->beginTransparencyLayer (Rectangle<float> (0.0f, 0.0f, 100.0f, 100.0f), 0.5f);
+    if (! layer.isValid())
+        GTEST_SKIP() << "Offscreen targets not supported on this context";
+
+    EXPECT_NO_THROW ({
+        layer.getGraphics().setFillColor (Color (0xFFFF0000));
+        layer.getGraphics().fillRect (Rectangle<float> (10.0f, 10.0f, 30.0f, 30.0f));
+    });
+}
+
+TEST_F (GraphicsTest, TransparencyLayer_CommitSucceedsWhenSupported)
+{
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+
+    auto layer = graphics->beginTransparencyLayer (Rectangle<float> (0.0f, 0.0f, 100.0f, 100.0f), 1.0f);
+    if (! layer.isValid())
+        GTEST_SKIP() << "Offscreen targets not supported on this context";
+
+    layer.getGraphics().setFillColor (Color (0xFF0000FF));
+    layer.getGraphics().fillRect (Rectangle<float> (5.0f, 5.0f, 50.0f, 50.0f));
+
+    EXPECT_TRUE (layer.commit());
+}
+
+TEST_F (GraphicsTest, TransparencyLayer_CommitTwiceAlwaysReturnsFalseOnSecondCall)
+{
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+
+    auto layer = graphics->beginTransparencyLayer (Rectangle<float> (0.0f, 0.0f, 50.0f, 50.0f), 0.75f);
+    // First commit: true if supported, false if not — either is acceptable
+    layer.commit();
+    // Second commit must always be false (already committed or was never valid)
+    EXPECT_FALSE (layer.commit());
+}
+
+TEST_F (GraphicsTest, TransparencyLayer_WithZeroOpacityDoesNotCrash)
+{
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+
+    EXPECT_NO_THROW ({
+        auto layer = graphics->beginTransparencyLayer (Rectangle<float> (0.0f, 0.0f, 50.0f, 50.0f), 0.0f);
+        if (layer.isValid())
+            layer.commit();
+    });
+}
+
+TEST_F (GraphicsTest, TransparencyLayer_WithFullOpacityDoesNotCrash)
+{
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+
+    EXPECT_NO_THROW ({
+        auto layer = graphics->beginTransparencyLayer (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f), 1.0f);
+        if (layer.isValid())
+        {
+            layer.getGraphics().setFillColor (Color (0xFFAAAAAA));
+            layer.getGraphics().fillRect (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+            layer.commit();
+        }
+    });
+}
+
+TEST_F (GraphicsTest, TransparencyLayer_NestedLayersDoNotCrash)
+{
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+
+    EXPECT_NO_THROW ({
+        auto outer = graphics->beginTransparencyLayer (Rectangle<float> (0.0f, 0.0f, 100.0f, 100.0f), 0.8f);
+        if (outer.isValid())
+        {
+            auto inner = outer.getGraphics().beginTransparencyLayer (Rectangle<float> (10.0f, 10.0f, 40.0f, 40.0f), 0.5f);
+            if (inner.isValid())
+            {
+                inner.getGraphics().setFillColor (Color (0xFF00FF00));
+                inner.getGraphics().fillRect (Rectangle<float> (0.0f, 0.0f, 40.0f, 40.0f));
+                inner.commit();
+            }
+            outer.commit();
+        }
+    });
+}
+
+// =============================================================================
+// drawImage with targetArea (the non-At variant)
+// =============================================================================
+
+TEST_F (GraphicsTest, DrawImage_WithTargetAreaDoesNotCrash)
+{
+    Image testImage (64, 64, PixelFormat::RGBA);
+    testImage.fill (0xFFFF0000u);
+    testImage.createTextureIfNotPresent (*context);
+
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+
+    EXPECT_NO_THROW ({
+        graphics->drawImage (testImage, Rectangle<float> (10.0f, 10.0f, 80.0f, 80.0f));
+    });
+}
+
+TEST_F (GraphicsTest, DrawImage_StretchedToLargerAreaDoesNotCrash)
+{
+    Image testImage (16, 16, PixelFormat::RGBA);
+    testImage.fill (0xFF0000FFu);
+    testImage.createTextureIfNotPresent (*context);
+
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+
+    EXPECT_NO_THROW ({
+        graphics->drawImage (testImage, Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+    });
+}
+
+TEST_F (GraphicsTest, DrawImage_ShrunkToSmallerAreaDoesNotCrash)
+{
+    Image testImage (128, 128, PixelFormat::RGBA);
+    testImage.fill (0xFF00FF00u);
+    testImage.createTextureIfNotPresent (*context);
+
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+
+    EXPECT_NO_THROW ({
+        graphics->drawImage (testImage, Rectangle<float> (50.0f, 50.0f, 10.0f, 10.0f));
+    });
+}
+
+// =============================================================================
+// Offscreen rendering: Graphics(context, Image) — readPixelsToImage / commitToImage
+// =============================================================================
+
+TEST_F (GraphicsTest, OffscreenRendering_ConstructionFromImageDoesNotCrash)
+{
+    Image target (32, 32, PixelFormat::RGBA);
+
+    EXPECT_NO_THROW ({
+        Graphics offscreen (*context, target, 0xFF000000u);
+        (void) offscreen;
+    });
+}
+
+TEST_F (GraphicsTest, OffscreenRendering_CommitToImageWhenSupported)
+{
+    Image target (32, 32, PixelFormat::RGBA);
+
+    Graphics offscreen (*context, target, 0xFF000000u);
+    if (! offscreen.isOffscreen())
+        GTEST_SKIP() << "Offscreen rendering not supported on this context";
+
+    offscreen.setFillColor (Color (0xFFFF0000));
+    offscreen.fillRect (Rectangle<float> (0.0f, 0.0f, 32.0f, 32.0f));
+
+    EXPECT_TRUE (offscreen.commitToImage());
+}
+
+TEST_F (GraphicsTest, OffscreenRendering_CommitToImageTwiceReturnsFalse)
+{
+    Image target (16, 16, PixelFormat::RGBA);
+
+    Graphics offscreen (*context, target, 0xFF000000u);
+    if (! offscreen.isOffscreen())
+        GTEST_SKIP() << "Offscreen rendering not supported on this context";
+
+    EXPECT_TRUE (offscreen.commitToImage());
+    EXPECT_FALSE (offscreen.commitToImage());
+}
+
+TEST_F (GraphicsTest, OffscreenRendering_ReadPixelsToImageWhenSupported)
+{
+    Image target (32, 32, PixelFormat::RGBA);
+
+    Graphics offscreen (*context, target, 0xFF000000u);
+    if (! offscreen.isOffscreen())
+        GTEST_SKIP() << "Offscreen rendering not supported on this context";
+
+    offscreen.setFillColor (Color (0xFF0000FF));
+    offscreen.fillRect (Rectangle<float> (0.0f, 0.0f, 32.0f, 32.0f));
+
+    EXPECT_TRUE (offscreen.readPixelsToImage());
+}
+
+TEST_F (GraphicsTest, OffscreenRendering_NonOffscreenGraphicsReadPixelsFails)
+{
+    EXPECT_FALSE (graphics->readPixelsToImage());
+}
+
+TEST_F (GraphicsTest, OffscreenRendering_NonOffscreenGraphicsCommitToImageFails)
+{
+    EXPECT_FALSE (graphics->commitToImage());
+}
+
+TEST_F (GraphicsTest, OffscreenRendering_ImageBackedContextNotOffscreenOnHeadless)
+{
+    Image target (16, 16, PixelFormat::RGBA);
+    Graphics offscreen (*context, target, 0xFF000000u);
+
+    // On headless contexts, creating an image-backed Graphics results in a
+    // non-offscreen object because createOffscreenTarget returns null.
+    // Both commitToImage and readPixelsToImage must not crash.
+    EXPECT_NO_THROW ({
+        offscreen.commitToImage();
+        offscreen.readPixelsToImage();
+    });
+}
+
+// =============================================================================
+// getClipPath
+// =============================================================================
+
+TEST_F (GraphicsTest, GetClipPath_DefaultIsEmpty)
+{
+    const Path clip = graphics->getClipPath();
+    EXPECT_TRUE (clip.isEmpty());
+}
+
+TEST_F (GraphicsTest, GetClipPath_ReturnsSetRectangleClip)
+{
+    const Rectangle<float> clipRect (10.0f, 20.0f, 80.0f, 60.0f);
+    graphics->setClipPath (clipRect);
+
+    const Path clip = graphics->getClipPath();
+    EXPECT_FALSE (clip.isEmpty());
+}
+
+TEST_F (GraphicsTest, GetClipPath_ReturnsSetPathClip)
+{
+    Path clipPath;
+    clipPath.addEllipse (20.0f, 20.0f, 60.0f, 60.0f);
+    graphics->setClipPath (clipPath);
+
+    const Path clip = graphics->getClipPath();
+    EXPECT_FALSE (clip.isEmpty());
+}
+
+// =============================================================================
+// setStrokeMiterLimit
+// =============================================================================
+
+TEST_F (GraphicsTest, SetStrokeMiterLimit_DoesNotCrash)
+{
+    EXPECT_NO_THROW ({
+        graphics->setStrokeMiterLimit (4.0f);
+        graphics->setStrokeMiterLimit (1.0f);
+        graphics->setStrokeMiterLimit (10.0f);
+    });
+}
+
+// =============================================================================
+// fillFittedText / strokeFittedText with String + Justification
+// =============================================================================
+
+TEST_F (GraphicsTest, FillFittedText_StringWithJustificationDoesNotCrash)
+{
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+    graphics->setFillColor (Color (0xFF000000));
+
+    EXPECT_NO_THROW ({
+        graphics->fillFittedText ("Hello", Font().withHeight (14.0f), Rectangle<float> (10.0f, 10.0f, 100.0f, 30.0f), Justification::topLeft);
+        graphics->fillFittedText ("Hello", Font().withHeight (14.0f), Rectangle<float> (10.0f, 50.0f, 100.0f, 30.0f), Justification::center);
+        graphics->fillFittedText ("Hello", Font().withHeight (14.0f), Rectangle<float> (10.0f, 90.0f, 100.0f, 30.0f), Justification::bottomRight);
+    });
+}
+
+TEST_F (GraphicsTest, StrokeFittedText_StringWithJustificationDoesNotCrash)
+{
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+    graphics->setStrokeColor (Color (0xFF000000));
+    graphics->setStrokeWidth (1.0f);
+
+    EXPECT_NO_THROW ({
+        graphics->strokeFittedText ("World", Font().withHeight (16.0f), Rectangle<float> (10.0f, 10.0f, 120.0f, 40.0f), Justification::center);
+    });
+}

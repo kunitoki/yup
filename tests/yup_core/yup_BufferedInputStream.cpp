@@ -143,6 +143,65 @@ protected:
     }
 };
 
+TEST_F (BufferedInputStreamTests, InitialStateIsAtStart)
+{
+    const MemoryBlock data ("hello", 5);
+    MemoryInputStream mi (data, true);
+    BufferedInputStream stream (mi, 64);
+
+    EXPECT_EQ (stream.getPosition(), (int64) 0);
+    EXPECT_EQ (stream.getTotalLength(), (int64) 5);
+    EXPECT_FALSE (stream.isExhausted());
+}
+
+TEST_F (BufferedInputStreamTests, ExhaustedAfterReadAll)
+{
+    const MemoryBlock data ("hello", 5);
+    MemoryInputStream mi (data, true);
+    BufferedInputStream stream (mi, 64);
+
+    char buf[5];
+    stream.read (buf, 5);
+    EXPECT_TRUE (stream.isExhausted());
+    EXPECT_EQ (stream.getNumBytesRemaining(), (int64) 0);
+}
+
+TEST_F (BufferedInputStreamTests, PeekByteDoesNotAdvancePosition)
+{
+    const MemoryBlock data ("abcdef", 6);
+    MemoryInputStream mi (data, true);
+    BufferedInputStream stream (mi, 64);
+
+    EXPECT_EQ (stream.getPosition(), (int64) 0);
+    EXPECT_EQ (stream.peekByte(), 'a');
+    EXPECT_EQ (stream.getPosition(), (int64) 0); // position must not move
+
+    char buf[1];
+    stream.read (buf, 1);
+    EXPECT_EQ (buf[0], 'a');
+    EXPECT_EQ (stream.getPosition(), (int64) 1);
+    EXPECT_EQ (stream.peekByte(), 'b'); // peek still works after read
+    EXPECT_EQ (stream.getPosition(), (int64) 1);
+}
+
+TEST_F (BufferedInputStreamTests, SetPositionCanSeekToMiddle)
+{
+    const MemoryBlock data ("abcdefghij", 10);
+    MemoryInputStream mi (data, true);
+    BufferedInputStream stream (mi, 64);
+
+    char buf[4];
+    stream.read (buf, 4);
+    EXPECT_EQ (stream.getPosition(), (int64) 4);
+
+    EXPECT_TRUE (stream.setPosition (2));
+    EXPECT_EQ (stream.getPosition(), (int64) 2);
+    stream.read (buf, 3);
+    EXPECT_EQ (buf[0], 'c');
+    EXPECT_EQ (buf[1], 'd');
+    EXPECT_EQ (buf[2], 'e');
+}
+
 TEST_F (BufferedInputStreamTests, ReadAndSkipCombinations)
 {
     const MemoryBlock testBufferA ("abcdefghijklmnopqrstuvwxyz", 26);

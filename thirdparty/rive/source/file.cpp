@@ -34,6 +34,7 @@
 #include "rive/importers/state_transition_importer.hpp"
 #include "rive/importers/state_machine_layer_component_importer.hpp"
 #include "rive/importers/transition_viewmodel_condition_importer.hpp"
+#include "rive/importers/listener_input_type_gamepad_importer.hpp"
 #include "rive/importers/listener_input_type_keyboard_importer.hpp"
 #include "rive/importers/listener_input_type_semantic_importer.hpp"
 #include "rive/importers/viewmodel_importer.hpp"
@@ -76,6 +77,7 @@
 #include "rive/scripted/scripted_layout.hpp"
 #include "rive/scripted/scripted_object.hpp"
 #include "rive/scripted/scripted_path_effect.hpp"
+#include "rive/scripted/scripted_interpolator.hpp"
 #include "rive/viewmodel/viewmodel.hpp"
 #include "rive/viewmodel/data_enum.hpp"
 #include "rive/viewmodel/viewmodel_instance.hpp"
@@ -206,6 +208,9 @@ File::~File()
 #if defined(DEBUG)
     debugTotalFileCount--;
 #endif
+#ifdef WITH_RIVE_SCRIPTING
+    cleanupScriptingVM();
+#endif
     for (auto artboard : m_artboards)
     {
         delete artboard;
@@ -234,9 +239,6 @@ File::~File()
         delete physics;
     }
     delete m_backboard;
-#ifdef WITH_RIVE_SCRIPTING
-    cleanupScriptingVM();
-#endif
 }
 
 rcp<File> File::import(Span<const uint8_t> bytes,
@@ -293,6 +295,7 @@ rcp<File> File::import(Span<const uint8_t> bytes,
 ImportResult File::read(BinaryReader& reader, const RuntimeHeader& header)
 {
     ImportStack importStack;
+    importStack.version(header.majorVersion(), header.minorVersion());
 #ifdef WITH_RIVE_SCRIPTING
     std::vector<InBandContent> inBandContent;
 #endif
@@ -478,6 +481,12 @@ ImportResult File::read(BinaryReader& reader, const RuntimeHeader& header)
                         object->as<ListenerInputTypeKeyboard>());
                 stackType = ListenerInputTypeKeyboardBase::typeKey;
                 break;
+            case ListenerInputTypeGamepadBase::typeKey:
+                stackObject =
+                    std::make_unique<ListenerInputTypeGamepadImporter>(
+                        object->as<ListenerInputTypeGamepad>());
+                stackType = ListenerInputTypeGamepadBase::typeKey;
+                break;
             case ListenerInputTypeSemanticBase::typeKey:
                 stackObject =
                     std::make_unique<ListenerInputTypeSemanticImporter>(
@@ -521,7 +530,6 @@ ImportResult File::read(BinaryReader& reader, const RuntimeHeader& header)
             {
                 stackObject = std::make_unique<ViewModelImporter>(
                     object->as<ViewModel>());
-                static_cast<ViewModelImporter*>(stackObject.get())->file(this);
                 stackType = ViewModel::typeKey;
                 object->as<ViewModel>()->file(this);
                 break;
@@ -585,6 +593,7 @@ ImportResult File::read(BinaryReader& reader, const RuntimeHeader& header)
             case ScriptedPathEffect::typeKey:
             case ScriptedListenerAction::typeKey:
             case ScriptedTransitionCondition::typeKey:
+            case ScriptedInterpolator::typeKey:
             {
                 auto scriptedObject = ScriptedObject::from(object);
                 if (scriptedObject != nullptr)
@@ -633,6 +642,11 @@ ImportResult File::read(BinaryReader& reader, const RuntimeHeader& header)
             {
                 m_keyframeInterpolators.push_back(
                     object->as<KeyFrameInterpolator>());
+            }
+            if (object->is<ScriptedInterpolator>())
+            {
+                m_scriptedInterpolators.push_back(
+                    object->as<ScriptedInterpolator>());
             }
         }
         else if (object->is<ScrollPhysics>())
@@ -698,6 +712,15 @@ void File::registerScripts()
             // and retries
             vm->performRegistration();
         }
+
+        for (auto& interpolator : m_scriptedInterpolators)
+        {
+            auto scriptAsset = interpolator->scriptAsset();
+            if (scriptAsset != nullptr)
+            {
+                scriptAsset->initScriptedObject(interpolator);
+            }
+        }
     }
 }
 
@@ -741,6 +764,11 @@ void File::cleanupScriptingVM()
         }
     }
 #endif
+    // ScriptedObjects only hold a raw ScriptingVM* (see
+    // ScriptingVM::registerScriptedObject), so dropping our rcp here is the
+    // only thing keeping the VM alive from File's side. If Dart still holds
+    // its own rcp<ScriptingVM> (editor flow), the VM and lua_State stay
+    // alive until Dart releases too. ~ScriptingVM handles lua_close.
     m_scriptingVM = nullptr;
 }
 #endif
@@ -789,6 +817,7 @@ std::unique_ptr<ArtboardInstance> File::instanceArtboard(Artboard* ab) const
 #ifdef WITH_RIVE_SCRIPTING
         artboardInstance->scriptingVM(m_scriptingVM.get());
 #endif
+        artboardInstance->file(ref_rcp(this));
         return artboardInstance;
     }
     return nullptr;

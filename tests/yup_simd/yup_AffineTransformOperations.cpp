@@ -28,9 +28,7 @@ using namespace yup;
 class AffineTransformOpsTests : public ::testing::Test
 {
 protected:
-    static void transformScalar (const float* srcXs, const float* srcYs,
-                                  float* dstXs, float* dstYs, int numPoints,
-                                  float sx, float shx, float tx, float shy, float sy, float ty) noexcept
+    static void transformScalar (const float* srcXs, const float* srcYs, float* dstXs, float* dstYs, int numPoints, float sx, float shx, float tx, float shy, float sy, float ty) noexcept
     {
         for (int i = 0; i < numPoints; ++i)
         {

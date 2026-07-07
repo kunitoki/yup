@@ -84,3 +84,34 @@ TEST (UMPMidi1ChannelVoiceMessageTests, MakeMessageHelpers)
     EXPECT_TRUE (isMidi1ChannelVoiceMessage (channelPressure));
     EXPECT_TRUE (isMidi1ChannelVoiceMessage (pitchBend));
 }
+
+TEST (UMPMidi1ChannelVoiceMessageTests, NoteOnNoteAndVelocityStoredCorrectly)
+{
+    auto msg = makeMidi1NoteOnMessage (1, 2, 60, Velocity { uint7_t { 12 } });
+    auto view = Midi1ChannelVoiceMessageView { msg };
+
+    EXPECT_EQ (view.getDataByte1(), 60u); // note number
+    EXPECT_EQ (view.getDataByte2(), 12u); // velocity
+    EXPECT_EQ (view.getStatus(), Status (Midi1ChannelVoiceStatus::noteOn));
+    EXPECT_EQ (view.getChannel(), 2u);
+}
+
+TEST (UMPMidi1ChannelVoiceMessageTests, NoteOffNoteAndVelocityStoredCorrectly)
+{
+    auto msg = makeMidi1NoteOffMessage (0, 3, 64, Velocity { uint7_t { 80 } });
+    auto view = Midi1ChannelVoiceMessageView { msg };
+
+    EXPECT_EQ (view.getDataByte1(), 64u);
+    EXPECT_EQ (view.getDataByte2(), 80u);
+    EXPECT_EQ (view.getStatus(), Status (Midi1ChannelVoiceStatus::noteOff));
+    EXPECT_EQ (view.getChannel(), 3u);
+}
+
+TEST (UMPMidi1ChannelVoiceMessageTests, PitchBend14BitValueMatchesInput)
+{
+    auto msg = makeMidi1PitchBendMessage (2, 5, PitchBend { uint14_t { 0x2000 } });
+    auto view = Midi1ChannelVoiceMessageView { msg };
+
+    // LSB goes in byte1, MSB in byte2; get14BitValue reconstructs from both
+    EXPECT_EQ (view.get14BitValue(), 0x2000u);
+}

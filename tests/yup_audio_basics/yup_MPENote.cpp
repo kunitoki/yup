@@ -62,3 +62,50 @@ TEST (MPENoteTests, GetFrequencyInHertz)
     note.totalPitchbendInSemitones = -0.5;
     expectEqualsWithinOneCent (note.getFrequencyInHertz(), 254.178);
 }
+
+TEST (MPENoteTests, DefaultConstructedIsNotValid)
+{
+    MPENote note;
+    EXPECT_FALSE (note.isValid());
+}
+
+TEST (MPENoteTests, DefaultKeyStateIsOff)
+{
+    MPENote note;
+    EXPECT_EQ (MPENote::off, note.keyState);
+}
+
+TEST (MPENoteTests, NoteA4FrequencyWithNoPitchbend)
+{
+    MPENote note;
+    note.initialNote = 69; // A4
+    note.totalPitchbendInSemitones = 0.0;
+    expectEqualsWithinOneCent (note.getFrequencyInHertz(), 440.0);
+}
+
+TEST (MPENoteTests, OctaveUpDoublesFrequency)
+{
+    MPENote low, high;
+    low.initialNote = 60;
+    low.totalPitchbendInSemitones = 0.0;
+    high.initialNote = 72; // C5 = C4 + 12 semitones
+    high.totalPitchbendInSemitones = 0.0;
+
+    const double ratio = high.getFrequencyInHertz() / low.getFrequencyInHertz();
+    EXPECT_NEAR (ratio, 2.0, 0.001);
+}
+
+TEST (MPENoteTests, CustomA4FrequencyIsUsed)
+{
+    MPENote note;
+    note.initialNote = 69; // A4
+    note.totalPitchbendInSemitones = 0.0;
+    // With 432 Hz reference
+    expectEqualsWithinOneCent (note.getFrequencyInHertz (432.0), 432.0);
+}
+
+TEST (MPENoteTests, DefaultMidiChannelIsZero)
+{
+    MPENote note;
+    EXPECT_EQ (0, note.midiChannel);
+}

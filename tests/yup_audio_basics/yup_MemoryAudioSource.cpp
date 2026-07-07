@@ -174,3 +174,53 @@ TEST_F (MemoryAudioSourceTests, LongBufferWithLoopingPlayedMultipleTimes)
         EXPECT_EQ (bufferToFill.getSample (0, 0), buffer.getSample (0, (i * blockSize) % buffer.getNumSamples()));
     }
 }
+
+TEST_F (MemoryAudioSourceTests, TotalLengthMatchesBufferSize)
+{
+    auto buffer = getLongBuffer();
+    MemoryAudioSource source { buffer, true, false };
+    source.prepareToPlay (blockSize, 44100.0);
+
+    EXPECT_EQ (source.getTotalLength(), (int64) buffer.getNumSamples());
+}
+
+TEST_F (MemoryAudioSourceTests, GetNextReadPositionDefaultIsZero)
+{
+    auto buffer = getShortBuffer();
+    MemoryAudioSource source { buffer, true, false };
+    source.prepareToPlay (blockSize, 44100.0);
+
+    EXPECT_EQ (source.getNextReadPosition(), 0);
+}
+
+TEST_F (MemoryAudioSourceTests, SetNextReadPositionAffectsReadback)
+{
+    auto buffer = getLongBuffer();
+    MemoryAudioSource source { buffer, true, false };
+    source.setLooping (false);
+    source.prepareToPlay (blockSize, 44100.0);
+
+    const int64 seekPos = 100;
+    source.setNextReadPosition (seekPos);
+    EXPECT_EQ (source.getNextReadPosition(), seekPos);
+}
+
+TEST_F (MemoryAudioSourceTests, IsLoopingReflectsSetLooping)
+{
+    auto buffer = getShortBuffer();
+    MemoryAudioSource source { buffer, true, false };
+
+    EXPECT_FALSE (source.isLooping());
+    source.setLooping (true);
+    EXPECT_TRUE (source.isLooping());
+    source.setLooping (false);
+    EXPECT_FALSE (source.isLooping());
+}
+
+TEST_F (MemoryAudioSourceTests, ReleaseResourcesDoesNotCrash)
+{
+    auto buffer = getShortBuffer();
+    MemoryAudioSource source { buffer, true, false };
+    source.prepareToPlay (blockSize, 44100.0);
+    EXPECT_NO_THROW ({ source.releaseResources(); });
+}

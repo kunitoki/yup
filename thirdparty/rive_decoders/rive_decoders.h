@@ -26,7 +26,7 @@
 
     ID:                 rive_decoders
     vendor:             rive
-    version:            0.1.62
+    version:            0.1.155
     name:               Rive Decoders.
     description:        The Rive Decoders is a companion library for raster image decoding backends (libpng, libwebp, libjpeg).
     website:            https://github.com/rive-app/rive-runtime
@@ -48,6 +48,10 @@
 
 #if YUP_MODULE_AVAILABLE_libwebp
 #define RIVE_WEBP 1
+#endif
+
+#if YUP_MODULE_AVAILABLE_libjpeg
+#define RIVE_JPEG 1
 #endif
 
 #include "include/rive/decoders/bitmap_decoder.hpp"

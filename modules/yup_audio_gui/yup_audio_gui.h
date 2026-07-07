@@ -26,7 +26,7 @@
 
     ID:                   yup_audio_gui
     vendor:               yup
-    version:              1.0.0
+    version:              2.0.0
     name:                 YUP Audio GUI Components
     description:          Audio-related GUI components for the YUP library
     website:              https://github.com/kunitoki/yup

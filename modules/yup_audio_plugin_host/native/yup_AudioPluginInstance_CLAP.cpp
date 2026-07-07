@@ -1236,10 +1236,10 @@ ResultValue<std::vector<AudioPluginDescription>> CLAPFormat::scanFile (const Fil
             clap_host_t host {};
             host.clap_version = CLAP_VERSION;
             host.host_data = nullptr;
-            host.name = "YUP Scanner";
-            host.vendor = "yup";
+            host.name = "YUP Audio Plugin Host Scanner";
+            host.vendor = "YUP";
             host.url = "";
-            host.version = "1.0.0";
+            host.version = YUP_VERSION_STRING;
             host.get_extension = [] (const clap_host_t*, const char*) -> const void*
             {
                 return nullptr;

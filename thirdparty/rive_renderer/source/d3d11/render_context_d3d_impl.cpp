@@ -8,11 +8,13 @@
 
 #ifdef RIVE_CANVAS
 #include "rive/renderer/render_canvas.hpp"
+#include <rive/renderer/ore/ore_context_d3d11.hpp>
 #endif
 #include "rive/renderer/texture.hpp"
 #include "rive/profiler/profiler_macros.h"
 
 #include <D3DCompiler.h>
+#include <mutex>
 
 #include "generated/shaders/tessellate.glsl.exports.h"
 
@@ -413,7 +415,12 @@ std::unique_ptr<RenderContext> RenderContextD3DImpl::MakeContext(
     const D3DContextOptions& contextOptions)
 {
 #if defined(RIVE_MICROPROFILE)
-    MicroProfileGpuInitD3D11(gpu.Get());
+    // MicroProfile keeps process-global GPU state and asserts on re-init, so
+    // bind it to the first device we see (e.g. with desktop_multi_window,
+    // multiple plugin instances each create their own RenderContext).
+    static std::once_flag s_microProfileInit;
+    std::call_once(s_microProfileInit,
+                   [&] { MicroProfileGpuInitD3D11(gpu.Get()); });
 #endif
     D3DCapabilities d3dCapabilities;
     D3D11_FEATURE_DATA_D3D11_OPTIONS2 d3d11Options2;
@@ -511,6 +518,9 @@ RenderContextD3DImpl::RenderContextD3DImpl(
         d3dCapabilities.supportsRasterizerOrderedViews;
     m_platformFeatures.supportsAtomicMode = true;
     m_platformFeatures.maxTextureSize = D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION;
+
+    m_platformFeatures.supportsClipScissor = true;
+
     // BC1–BC7 are required at D3D feature level 11.0+.
     m_platformFeatures.supportsTextureCompressionBC = true;
 
@@ -530,7 +540,8 @@ RenderContextD3DImpl::RenderContextD3DImpl(
               // Details on default state here:
     // https://learn.microsoft.com/en-us/windows/win32/api/d3d11/ns-d3d11-d3d11_rasterizer_desc
 
-    rasterDesc.ScissorEnable = FALSE;
+    // Always enable scissor - we'll set it to the full display when it's unused
+    rasterDesc.ScissorEnable = TRUE;
     rasterDesc.MultisampleEnable = FALSE;
     rasterDesc.AntialiasedLineEnable = FALSE;
     VERIFY_OK(m_gpu->CreateRasterizerState(
@@ -539,7 +550,6 @@ RenderContextD3DImpl::RenderContextD3DImpl(
 
     // ...And with scissor and no culling for the atlas fill.
     rasterDesc.CullMode = D3D11_CULL_NONE;
-    rasterDesc.ScissorEnable = TRUE;
     VERIFY_OK(m_gpu->CreateRasterizerState(
         &rasterDesc,
         m_atlasFillRasterState.ReleaseAndGetAddressOf()));
@@ -551,7 +561,6 @@ RenderContextD3DImpl::RenderContextD3DImpl(
         m_atlasStrokeRasterState.ReleaseAndGetAddressOf()));
 
     // ...And with wireframe for debugging.
-    rasterDesc.ScissorEnable = FALSE;
     rasterDesc.FillMode = D3D11_FILL_WIREFRAME;
     VERIFY_OK(m_gpu->CreateRasterizerState(
         &rasterDesc,
@@ -890,16 +899,46 @@ rcp<RenderBuffer> RenderContextD3DImpl::makeRenderBuffer(
 class TextureD3DImpl : public Texture
 {
 public:
+    // viewFormat = DXGI_FORMAT_UNKNOWN → infer (TYPELESS storage gets
+    // mapped to its UNORM variant; other formats use desc.Format as-is).
+    // Pass an explicit format to override (e.g. Unity sRGB RTs).
     TextureD3DImpl(RenderContextD3DImpl* renderContextImpl,
                    ComPtr<ID3D11Texture2D> image,
                    UINT width,
-                   UINT height) :
+                   UINT height,
+                   DXGI_FORMAT viewFormat = DXGI_FORMAT_UNKNOWN) :
         Texture(width, height), m_texture(image)
     {
-        // Create a view.
+        D3D11_TEXTURE2D_DESC desc;
+        m_texture->GetDesc(&desc);
+        if (viewFormat == DXGI_FORMAT_UNKNOWN)
+        {
+            switch (desc.Format)
+            {
+                case DXGI_FORMAT_R8G8B8A8_TYPELESS:
+                    viewFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+                    break;
+                case DXGI_FORMAT_B8G8R8A8_TYPELESS:
+                    viewFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
+                    break;
+                case DXGI_FORMAT_R16G16B16A16_TYPELESS:
+                    viewFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
+                    break;
+                default:
+                    viewFormat = desc.Format;
+                    break;
+            }
+        }
+        const D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+            .Format = viewFormat,
+            .ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+            .Texture2D = {.MostDetailedMip = 0, .MipLevels = desc.MipLevels},
+        };
+        const D3D11_SHADER_RESOURCE_VIEW_DESC* srvDescPtr =
+            (viewFormat == desc.Format) ? nullptr : &srvDesc;
         VERIFY_OK(renderContextImpl->gpu()->CreateShaderResourceView(
             m_texture.Get(),
-            NULL,
+            srvDescPtr,
             m_srv.ReleaseAndGetAddressOf()));
     }
 
@@ -908,7 +947,8 @@ public:
                    UINT height,
                    UINT mipLevelCount,
                    GPUTextureFormat format,
-                   const uint8_t imageDataRGBAPremul[]) :
+                   const uint8_t imageDataRGBAPremul[],
+                   bool generateRemainingMips) :
         Texture(width, height)
     {
         if (format == GPUTextureFormat::bc7)
@@ -954,29 +994,48 @@ public:
         }
         else if (format == GPUTextureFormat::rgba32)
         {
+            // GENERATE_MIPS flag + RTV binding are only needed when the
+            // GPU is going to fill in the chain. For the KTX2-supplied
+            // chain (caller-provided mips) it's pure overhead.
+            const UINT miscFlags =
+                generateRemainingMips ? D3D11_RESOURCE_MISC_GENERATE_MIPS : 0u;
+            const UINT bindFlags =
+                generateRemainingMips
+                    ? (D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET)
+                    : D3D11_BIND_SHADER_RESOURCE;
             m_texture = renderContextImpl->makeSimple2DTexture(
                 DXGI_FORMAT_R8G8B8A8_UNORM,
                 width,
                 height,
                 mipLevelCount,
-                D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET,
-                D3D11_RESOURCE_MISC_GENERATE_MIPS);
+                bindFlags,
+                miscFlags);
 
-            // Specify the top-level image in the mipmap chain.
-            D3D11_BOX box;
-            box.left = 0;
-            box.right = width;
-            box.top = 0;
-            box.bottom = height;
-            box.front = 0;
-            box.back = 1;
-            renderContextImpl->gpuContext()->UpdateSubresource(
-                m_texture.Get(),
-                0,
-                &box,
-                imageDataRGBAPremul,
-                width * 4,
-                0);
+            const uint8_t* src = imageDataRGBAPremul;
+            const UINT levelsToUpload =
+                generateRemainingMips ? 1u : mipLevelCount;
+            UINT W = width;
+            UINT H = height;
+            for (UINT i = 0; i < levelsToUpload; ++i)
+            {
+                D3D11_BOX box;
+                box.left = 0;
+                box.right = W;
+                box.top = 0;
+                box.bottom = H;
+                box.front = 0;
+                box.back = 1;
+                renderContextImpl->gpuContext()->UpdateSubresource(
+                    m_texture.Get(),
+                    i,
+                    &box,
+                    src,
+                    W * 4,
+                    0);
+                src += static_cast<size_t>(W) * H * 4;
+                W = std::max<UINT>(1u, W >> 1);
+                H = std::max<UINT>(1u, H >> 1);
+            }
         }
         else
         {
@@ -989,8 +1048,11 @@ public:
             NULL,
             m_srv.ReleaseAndGetAddressOf()));
 
-        if (format == GPUTextureFormat::rgba32)
+        if (format == GPUTextureFormat::rgba32 && generateRemainingMips &&
+            mipLevelCount > 1)
+        {
             renderContextImpl->gpuContext()->GenerateMips(m_srv.Get());
+        }
     }
 
     ID3D11ShaderResourceView* srv() const { return m_srv.Get(); }
@@ -1013,22 +1075,28 @@ rcp<Texture> RenderContextD3DImpl::makeImageTexture(
     uint32_t height,
     uint32_t mipLevelCount,
     GPUTextureFormat format,
-    const uint8_t imageDataRGBAPremul[])
+    const uint8_t imageDataRGBAPremul[],
+    uint8_t /*blockWidth*/,
+    uint8_t /*blockHeight*/,
+    bool /*srgb*/,
+    bool generateRemainingMips)
 {
     return make_rcp<TextureD3DImpl>(this,
                                     width,
                                     height,
                                     mipLevelCount,
                                     format,
-                                    imageDataRGBAPremul);
+                                    imageDataRGBAPremul,
+                                    generateRemainingMips);
 }
 
 rcp<Texture> RenderContextD3DImpl::adoptImageTexture(
     ComPtr<ID3D11Texture2D> image,
     uint32_t width,
-    uint32_t height)
+    uint32_t height,
+    DXGI_FORMAT viewFormat)
 {
-    return make_rcp<TextureD3DImpl>(this, image, width, height);
+    return make_rcp<TextureD3DImpl>(this, image, width, height, viewFormat);
 }
 
 #ifdef RIVE_CANVAS
@@ -1052,6 +1120,12 @@ rcp<RenderCanvas> RenderContextD3DImpl::makeRenderCanvas(uint32_t width,
     return make_rcp<RenderCanvas>(std::move(renderImage),
                                   std::move(renderTarget));
 }
+
+std::unique_ptr<rive::ore::Context> RenderContextD3DImpl::makeOreContext()
+{
+    return rive::ore::ContextD3D11::Make(m_gpu.Get(), m_gpuContext.Get());
+}
+
 #endif
 
 class BufferRingD3D : public BufferRing
@@ -1510,7 +1584,7 @@ static void blit_sub_rect(ID3D11DeviceContext* gpuContext,
                                       &updateBox);
 }
 
-static D3D11_RECT make_scissor(const TAABB<uint16_t> scissor)
+static D3D11_RECT make_scissor(const AABBu16 scissor)
 {
     D3D11_RECT rect;
     rect.left = scissor.left;
@@ -1960,6 +2034,13 @@ void RenderContextD3DImpl::flush(const FlushDescriptor& desc)
         !desc.fixedFunctionColorOutput &&
         !renderTarget->targetTextureSupportsUAV();
 
+    const auto fullUpdateScissorRect =
+        desc.renderTargetUpdateBounds.lossless_numeric_cast<uint16_t>();
+
+    // Start the current scissor rect out inside-out to guarantee that the first
+    //  rectangle we get doesn't match it.
+    auto currentScissorRect = AABBu16{0xffff, 0xffff, 0, 0};
+
     for (const DrawBatch& batch : *desc.drawList)
     {
         DrawType drawType = batch.drawType;
@@ -1990,6 +2071,18 @@ void RenderContextD3DImpl::flush(const FlushDescriptor& desc)
             // There was an issue getting either the requested pipeline state or
             // its ubershader counterpart so we cannot draw anything.
             continue;
+        }
+
+        auto desiredScissorRect = batch.scissorRect.has_value()
+                                      ? fullUpdateScissorRect.intersectOrEmpty(
+                                            batch.scissorRect.value())
+                                      : fullUpdateScissorRect;
+
+        if (desiredScissorRect != currentScissorRect)
+        {
+            currentScissorRect = desiredScissorRect;
+            D3D11_RECT scissor = make_scissor(currentScissorRect);
+            m_gpuContext->RSSetScissorRects(1, &scissor);
         }
 
         if (auto imageTextureD3D =

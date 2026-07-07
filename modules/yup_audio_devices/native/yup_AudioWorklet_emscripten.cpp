@@ -439,7 +439,7 @@ private:
     HeapBlock<const float*> channelInBuffer;
     HeapBlock<float*> channelOutBuffer;
 
-    static constexpr size_t audioThreadStackSize = 64 * 1024;
+    static constexpr size_t audioThreadStackSize = 128 * 1024;
     alignas (16) uint8 audioThreadStack[audioThreadStackSize] = {};
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioWorkletAudioIODevice)

@@ -44,7 +44,7 @@
 
     ID:                 yup_simd
     vendor:             yup
-    version:            1.0.0
+    version:            2.0.0
     name:               YUP single instruction multiple data (SIMD) support
     description:        Classes and functions for SIMD operations using SSE, AVX, FMA, NEON, and Accelerate framework.
     website:            https://github.com/kunitoki/yup

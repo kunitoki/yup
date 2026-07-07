@@ -15,7 +15,7 @@ on:
       - "!**/native/*_apple.*"
       - "!**/native/*_emscripten.*"
       - "!**/native/*_linux.*"
-      - "!**/native/*_ios.*"
+      - "!**/native/*_ios*.*"
       - "!**/native/*_mac.*"
       - "!**/native/*_posix.*"
       - "!**/native/*_wasm.*"

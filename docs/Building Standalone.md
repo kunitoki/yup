@@ -61,7 +61,7 @@ public:
 
     const yup::String getApplicationVersion() override
     {
-        return "1.0.0";
+        return "1.2.3";
     }
 
     void initialise (const yup::String& commandLineParameters) override
@@ -89,7 +89,7 @@ Create a `CMakeLists.txt` file for your application:
 cmake_minimum_required (VERSION 3.31)
 
 set (target_name my_app)
-set (target_version "1.0.0")
+set (target_version "1.2.3")
 project (${target_name} VERSION ${target_version})
 
 include (FetchContent)

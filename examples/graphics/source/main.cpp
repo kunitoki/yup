@@ -23,6 +23,7 @@
 #include <yup_audio_devices/yup_audio_devices.h>
 #include <yup_events/yup_events.h>
 #include <yup_graphics/yup_graphics.h>
+#include <yup_animation/yup_animation.h>
 #include <yup_gui/yup_gui.h>
 #include <yup_audio_gui/yup_audio_gui.h>
 #if YUP_MODULE_AVAILABLE_yup_python
@@ -35,6 +36,28 @@
 #if YUP_ANDROID
 #include <BinaryData.h>
 #endif
+
+//==============================================================================
+
+inline yup::File getAssetPath (yup::StringRef subPath = {})
+{
+    yup::File basePath;
+
+#if YUP_WASM
+    basePath = yup::File ("/");
+#else
+    basePath = yup::File (__FILE__)
+                   .getParentDirectory()
+                   .getParentDirectory();
+#endif
+
+    if (! subPath.isEmpty())
+        basePath = basePath.getChildFile (subPath);
+
+    return basePath;
+}
+
+//==============================================================================
 
 #include "examples/Artboard.h"
 #include "examples/Audio.h"
@@ -55,7 +78,10 @@
 #include "examples/TextEditor.h"
 #include "examples/VariableFonts.h"
 #include "examples/Widgets.h"
+#include "examples/Images.h"
 #include "examples/PaintProfilerDemo.h"
+#include "examples/OffscreenRenderDemo.h"
+#include "examples/LottieDemo.h"
 #if YUP_MODULE_AVAILABLE_yup_python
 #include "examples/Python.h"
 #endif
@@ -108,14 +134,12 @@ public:
     {
         setTitle ("main");
 
+        // Load the logo image
 #if YUP_WASM
         auto baseFilePath = yup::File ("/data");
 #else
         auto baseFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
 #endif
-
-        /*
-        // Load an image
         {
             yup::MemoryBlock mb;
             auto imageFile = baseFilePath.getChildFile ("logo.png");
@@ -130,16 +154,9 @@ public:
                 yup::Logger::outputDebugString ("Unable to load requested image");
             }
         }
-        */
 
-#if YUP_WASM
-        yup::File dataPath = yup::File ("/data");
-#else
-        yup::File dataPath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
-#endif
-
+        // Setup examples
         int counter = 0;
-
         registerDemo<AudioExample> ("Audio", counter++);
         registerDemo<AudioFileDemo> ("Audio File", counter++);
         registerDemo<ColorLabDemo> ("Color Lab", counter++);
@@ -157,12 +174,12 @@ public:
         registerDemo<TextEditorDemo> ("Text Editor", counter++);
         registerDemo<VariableFontsExample> ("Variable Fonts", counter++);
         registerDemo<WidgetsDemo> ("Widgets", counter++);
-        registerDemo<ArtboardDemo> ("Artboard", counter++, [] (auto& artboard)
-        {
-            jassert (artboard.loadArtboard());
-        });
+        registerDemo<ArtboardDemo> ("Artboard", counter++);
         registerDemo<SvgDemo> ("SVG", counter++);
+        registerDemo<ImagesDemo> ("Images", counter++);
         registerDemo<PaintProfilerDemo> ("Paint Profiler", counter++);
+        registerDemo<OffscreenRenderDemo> ("Offscreen Render", counter++);
+        registerDemo<LottieDemo> ("Lottie", counter++);
 #if YUP_MODULE_AVAILABLE_yup_python
         registerDemo<PythonDemo> ("Python", counter++);
 #endif
@@ -238,21 +255,7 @@ public:
     void paint (yup::Graphics& g) override
     {
         yup::DocumentWindow::paint (g);
-
-        //g.drawImageAt (image, getLocalBounds().getCenter());
     }
-
-    /*
-    void paintOverChildren (yup::Graphics& g) override
-    {
-        if (! image.isValid())
-            return;
-
-        g.setBlendMode (yup::BlendMode::ColorDodge);
-        g.setOpacity (1.0f);
-        g.drawImageAt (image, getLocalBounds().getCenter());
-    }
-    */
 
     void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
     {
@@ -296,7 +299,7 @@ public:
 
 private:
     template <class Demo>
-    void registerDemo (const yup::String& name, int counter, std::function<void (Demo&)> setup = nullptr)
+    void registerDemo (const yup::String& name, int counter)
     {
         demoNames.add (name);
 
@@ -305,9 +308,6 @@ private:
 
         components.add (std::move (demo));
         addChildComponent (components.getLast());
-
-        if (setup)
-            setup (demoInstance);
     }
 
     void updateWindowTitle()
@@ -331,8 +331,6 @@ private:
     std::unique_ptr<DemoListModel> listModel;
     std::unique_ptr<yup::ListBox> listBox;
     yup::OwnedArray<yup::Component> components;
-
-    yup::Font font;
     yup::Image image;
 };
 

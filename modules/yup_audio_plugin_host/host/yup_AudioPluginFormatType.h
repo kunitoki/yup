@@ -27,6 +27,7 @@ enum class AudioPluginFormatType
 {
     vst3,
     clap,
+    lv2,
     audioUnit,
     unknown
 };

@@ -81,6 +81,17 @@ public:
     */
     Result execute (const String& javascriptCode);
 
+    /** Attempts to parse and run a block of javascript code, and returns the last
+        expression statement result.
+        If there's a parse or execution error, the returned ResultValue will contain
+        the error description.
+        Statements that do not produce a value, such as variable or function declarations,
+        leave the returned value as var::undefined().
+        You can specify a maximum time for which the program is allowed to run, and it'll return with an error
+        message if this time is exceeded.
+    */
+    ResultValue<var> executeWithResult (const String& javascriptCode);
+
     /** Attempts to parse and run a javascript expression, and returns the result.
         If there's a syntax error, or the expression can't be evaluated, the return value
         will be var::undefined(). The errorMessage parameter gives you a way to find out
@@ -114,6 +125,11 @@ public:
         without any dots.
     */
     void registerNativeObject (const Identifier& objectName, DynamicObject* object);
+
+    /** Adds a native function to the root namespace.
+        The name must be a simple JS identifier, without any dots.
+    */
+    void registerNativeFunction (const Identifier& functionName, var::NativeFunction function);
 
     /** This value indicates how long a call to one of the evaluate methods is permitted
         to run before timing-out and failing.

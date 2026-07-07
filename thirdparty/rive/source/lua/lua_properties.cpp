@@ -16,6 +16,13 @@
 #include "rive/viewmodel/viewmodel_instance_list_item.hpp"
 #include "rive/viewmodel/viewmodel_instance_symbol_list_index.hpp"
 #include "rive/scripted/scripted_object.hpp"
+#include "rive/assets/image_asset.hpp"
+#include "rive/assets/script_asset.hpp"
+#include "rive/file.hpp"
+#ifdef WITH_RIVE_TOOLS
+#include "rive/viewmodel/viewmodel.hpp"
+#include "rive/viewmodel/viewmodel_instance.hpp"
+#endif
 
 #include <math.h>
 
@@ -204,6 +211,14 @@ void ScriptedProperty::dispose()
 
 void ScriptedProperty::valueChanged()
 {
+    if (m_listeners.empty())
+    {
+        return;
+    }
+    if (!lua_checkstack(m_state, (int)(m_listeners.size() * 2 + LUA_MINSTACK)))
+    {
+        return;
+    }
     // This works because we don't actually call as we go (or we could
     // invalidate listeners if a callback registers a new or removes a
     // listener). Instead, we build up the call stack and then call for each
@@ -309,12 +324,12 @@ void ScriptedPropertyViewModel::setValue(ScriptedViewModel* scriptedViewModel)
         auto instanceValue = m_instanceValue->as<ViewModelInstanceViewModel>();
         auto parentViewModelInstance = instanceValue->parentViewModelInstance();
         auto viewModelInstance = scriptedViewModel->mutableViewModelInstance();
+        // replaceViewModelByProperty notifies this property's value-dependents
+        // (including this wrapper and any siblings sharing the property) so
+        // cached Lua-side values are invalidated.
         parentViewModelInstance->replaceViewModelByProperty(
             instanceValue,
             rcp<ViewModelInstance>(viewModelInstance));
-        // Invalidate cached Lua-side value so the next push reflects the new
-        // instance.
-        clearRef();
     }
 }
 
@@ -342,10 +357,25 @@ ScriptedViewModel::ScriptedViewModel(lua_State* L,
                                      rcp<ViewModel> viewModel,
                                      rcp<ViewModelInstance> viewModelInstance) :
     m_state(L), m_viewModel(viewModel), m_viewModelInstance(viewModelInstance)
-{}
+{
+    // Register the instance so detached ones (no parents) get advanced at the
+    // end of each frame. Tracking is keyed to owner lifetime, so the instance
+    // stays tracked while any owner (this wrapper, a scripted artboard) is
+    // alive. Store the context so unregistration in the destructor does not
+    // depend on lua_getthreaddata during Lua finalization.
+    m_scriptingContext = scriptingContext(L);
+    if (m_scriptingContext != nullptr)
+    {
+        m_scriptingContext->trackViewModelInstance(m_viewModelInstance);
+    }
+}
 
 ScriptedViewModel::~ScriptedViewModel()
 {
+    if (m_scriptingContext != nullptr)
+    {
+        m_scriptingContext->untrackViewModelInstance(m_viewModelInstance.get());
+    }
     for (auto itr : m_propertyRefs)
     {
         lua_unref(m_state, itr.second);
@@ -1215,8 +1245,52 @@ int ScriptedPropertyImage::pushValue()
     if (m_instanceValue)
     {
         auto vmi = m_instanceValue->as<ViewModelInstanceAssetImage>();
-        auto asset = vmi->asset();
-        if (asset != nullptr && asset->renderImage() != nullptr)
+        RenderImage* renderImage = nullptr;
+        if (auto asset = vmi->asset())
+        {
+            renderImage = asset->renderImage();
+        }
+        // Fall back to the file's asset registry when no image is embedded
+        // on the instance — mirrors DataBindContextValueAssetImage.
+        if (renderImage == nullptr && owner() != nullptr)
+        {
+            if (auto scriptAsset = owner()->scriptAsset())
+            {
+                if (auto file = scriptAsset->file())
+                {
+                    auto fileAsset = file->asset(vmi->propertyValue());
+                    if (fileAsset != nullptr && fileAsset->is<ImageAsset>())
+                    {
+                        renderImage =
+                            fileAsset->as<ImageAsset>()->renderImage();
+                    }
+                }
+            }
+        }
+#ifdef WITH_RIVE_TOOLS
+        // Editor/Dart path: when the property is constructed without a
+        // ScriptedObject owner (owner() is null), reach the File through
+        // the ViewModel instead.
+        if (renderImage == nullptr && owner() == nullptr)
+        {
+            if (auto vmInstance = vmi->viewModelInstance())
+            {
+                if (auto viewModel = vmInstance->viewModel())
+                {
+                    if (auto file = viewModel->file())
+                    {
+                        auto fileAsset = file->asset(vmi->propertyValue());
+                        if (fileAsset != nullptr && fileAsset->is<ImageAsset>())
+                        {
+                            renderImage =
+                                fileAsset->as<ImageAsset>()->renderImage();
+                        }
+                    }
+                }
+            }
+        }
+#endif
+        if (renderImage != nullptr)
         {
             // Use the out-of-line `ScriptedImage::luaNew` factory rather
             // than `lua_newrive<ScriptedImage>` directly: when ore is
@@ -1226,7 +1300,7 @@ int ScriptedPropertyImage::pushValue()
             // factory lives in `lua_gpu.cpp` / `lua_image.cpp` where the
             // ore headers are visible.
             auto scriptedImage = ScriptedImage::luaNew(m_state);
-            scriptedImage->image = ref_rcp(asset->renderImage());
+            scriptedImage->image = ref_rcp(renderImage);
             return 1;
         }
     }
@@ -1262,6 +1336,46 @@ int ScriptedEnumValues::pushLength()
         lua_pushinteger(m_state, 0);
     }
     return 1;
+}
+
+// Direct field getters: dispatched by LOP_GETTABLEKS on `prop.value` /
+// `list.length`. Slow paths (property_*_index) remain reachable for
+// computed-key access and lua_getfield from C.
+
+static void property_number_direct_value(void* udata, void* result)
+{
+    auto* p = (ScriptedPropertyNumber*)udata;
+    auto* iv = p->instanceValue();
+    lua_userdatadirectfield_setnumber(
+        result,
+        iv ? iv->as<ViewModelInstanceNumber>()->propertyValue() : 0);
+}
+
+static void property_color_direct_value(void* udata, void* result)
+{
+    auto* p = (ScriptedPropertyColor*)udata;
+    auto* iv = p->instanceValue();
+    lua_userdatadirectfield_setnumber(
+        result,
+        iv ? (unsigned)iv->as<ViewModelInstanceColor>()->propertyValue() : 0);
+}
+
+static void property_boolean_direct_value(void* udata, void* result)
+{
+    auto* p = (ScriptedPropertyBoolean*)udata;
+    auto* iv = p->instanceValue();
+    lua_userdatadirectfield_setboolean(
+        result,
+        iv ? (iv->as<ViewModelInstanceBoolean>()->propertyValue() ? 1 : 0) : 0);
+}
+
+static void property_list_direct_length(void* udata, void* result)
+{
+    auto* p = (ScriptedPropertyList*)udata;
+    auto* iv = p->instanceValue();
+    lua_userdatadirectfield_setnumber(
+        result,
+        iv ? (double)iv->as<ViewModelInstanceList>()->listItems().size() : 0);
 }
 
 static int property_list_index(lua_State* L)
@@ -1627,6 +1741,11 @@ int luaopen_rive_properties(lua_State* L)
 
         lua_setreadonly(L, -1, true);
         lua_pop(L, 1); // pop the metatable
+
+        lua_registeruserdatadirectfieldget(L,
+                                           ScriptedPropertyNumber::luaTag,
+                                           "value",
+                                           property_number_direct_value);
     }
 
     {
@@ -1643,6 +1762,11 @@ int luaopen_rive_properties(lua_State* L)
 
         lua_setreadonly(L, -1, true);
         lua_pop(L, 1); // pop the metatable
+
+        lua_registeruserdatadirectfieldget(L,
+                                           ScriptedPropertyColor::luaTag,
+                                           "value",
+                                           property_color_direct_value);
     }
 
     {
@@ -1675,6 +1799,11 @@ int luaopen_rive_properties(lua_State* L)
 
         lua_setreadonly(L, -1, true);
         lua_pop(L, 1); // pop the metatable
+
+        lua_registeruserdatadirectfieldget(L,
+                                           ScriptedPropertyBoolean::luaTag,
+                                           "value",
+                                           property_boolean_direct_value);
     }
 
     {
@@ -1714,6 +1843,11 @@ int luaopen_rive_properties(lua_State* L)
 
         lua_setreadonly(L, -1, true);
         lua_pop(L, 1); // pop the metatable
+
+        lua_registeruserdatadirectfieldget(L,
+                                           ScriptedPropertyList::luaTag,
+                                           "length",
+                                           property_list_direct_length);
     }
 
     {
