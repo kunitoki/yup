@@ -25,11 +25,10 @@
 
 using namespace yup;
 
-// =============================================================================
-
 namespace
 {
 
+// =============================================================================
 class ComponentMock : public Component
 {
 public:
@@ -168,8 +167,6 @@ public:
 };
 
 // =============================================================================
-// Minimal mock ComponentNative for testing native attachment propagation.
-// Implements all pure virtual methods as no-ops.
 class TestComponentNative final : public ComponentNative
 {
 public:
@@ -257,22 +254,6 @@ public:
     GraphicsContext* getGraphicsContext() override { return nullptr; }
 };
 
-// Friend of Component, defined here for test access.
-class ComponentTestHelper
-{
-public:
-    static void attachMockNative (Component& component)
-    {
-        jassert (component.native == nullptr);
-        component.native = new TestComponentNative (component);
-    }
-
-    static void detachMockNative (Component& component)
-    {
-        component.native = nullptr;
-    }
-};
-
 class RecordingComponentListener : public ComponentListener
 {
 public:
@@ -303,6 +284,37 @@ public:
 };
 
 } // namespace
+
+// =============================================================================
+
+namespace yup
+{
+
+// Friend of Component, defined here for test access.
+class ComponentTestHelper
+{
+public:
+    static void attachMockNative (Component& component)
+    {
+        jassert (component.native == nullptr);
+        component.native = new TestComponentNative (component);
+    }
+
+    static void detachMockNative (Component& component)
+    {
+        component.native = nullptr;
+    }
+
+    static void triggerPaint (Component& comp,
+                              Graphics& g,
+                              const Rectangle<float>& repaintArea,
+                              bool renderContinuous = false)
+    {
+        comp.internalPaint (g, repaintArea, renderContinuous);
+    }
+};
+
+} // namespace yup
 
 // =============================================================================
 
