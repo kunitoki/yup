@@ -235,7 +235,7 @@ struct GpuProgram::Impl
     {
         int group;
         int binding;
-        Texture::Ptr texture;
+        GpuTexture::Ptr texture;
     };
 
     struct UboBinding
@@ -292,13 +292,26 @@ GpuProgram::~GpuProgram() = default;
 
 //==============================================================================
 
-void GpuProgram::setTexture (int group, int binding, Texture::Ptr texture)
+GpuProgram::Impl* GpuProgram::getImpl() noexcept
 {
-    jassert (impl != nullptr);
-    if (impl == nullptr)
+    return impl.getPayload<Impl>();
+}
+
+const GpuProgram::Impl* GpuProgram::getImpl() const noexcept
+{
+    return impl.getPayload<Impl>();
+}
+
+//==============================================================================
+
+void GpuProgram::setTexture (int group, int binding, GpuTexture::Ptr texture)
+{
+    auto* i = getImpl();
+    jassert (i != nullptr);
+    if (i == nullptr)
         return;
 
-    for (auto& tb : impl->textureBindings)
+    for (auto& tb : i->textureBindings)
     {
         if (tb.group == group && tb.binding == binding)
         {
@@ -307,17 +320,18 @@ void GpuProgram::setTexture (int group, int binding, Texture::Ptr texture)
         }
     }
 
-    impl->textureBindings.push_back ({ group, binding, std::move (texture) });
+    i->textureBindings.push_back ({ group, binding, std::move (texture) });
 }
 
 void GpuProgram::setUniformBuffer (int group, int binding, const void* data, size_t byteSize)
 {
-    jassert (impl != nullptr);
+    auto* i = getImpl();
+    jassert (i != nullptr);
     jassert (data != nullptr && byteSize > 0);
-    if (impl == nullptr || data == nullptr || byteSize == 0)
+    if (i == nullptr || data == nullptr || byteSize == 0)
         return;
 
-    for (auto& ub : impl->uboBindings)
+    for (auto& ub : i->uboBindings)
     {
         if (ub.group == group && ub.binding == binding)
         {
@@ -332,18 +346,19 @@ void GpuProgram::setUniformBuffer (int group, int binding, const void* data, siz
     ub.binding = binding;
     ub.data.assign (static_cast<const uint8_t*> (data),
                     static_cast<const uint8_t*> (data) + byteSize);
-    impl->uboBindings.push_back (std::move (ub));
+    i->uboBindings.push_back (std::move (ub));
 }
 
 void GpuProgram::setVertexBuffer (int slot, GpuBuffer::Ptr buffer)
 {
-    jassert (impl != nullptr);
-    if (impl == nullptr)
+    auto* i = getImpl();
+    jassert (i != nullptr);
+    if (i == nullptr)
         return;
 
     auto* ore = (buffer != nullptr) ? buffer->oreBufferHandle() : nullptr;
 
-    for (auto& vb : impl->vertexBindings)
+    for (auto& vb : i->vertexBindings)
     {
         if (vb.slot == slot)
         {
@@ -353,56 +368,60 @@ void GpuProgram::setVertexBuffer (int slot, GpuBuffer::Ptr buffer)
         }
     }
 
-    impl->vertexBindings.push_back ({ slot, std::move (buffer), ore });
+    i->vertexBindings.push_back ({ slot, std::move (buffer), ore });
 }
 
 void GpuProgram::setIndexBuffer (GpuIndexFormat format, GpuBuffer::Ptr buffer)
 {
-    jassert (impl != nullptr);
-    if (impl == nullptr)
+    auto* i = getImpl();
+    jassert (i != nullptr);
+    if (i == nullptr)
         return;
 
-    impl->indexOreBuffer = (buffer != nullptr) ? buffer->oreBufferHandle() : nullptr;
-    impl->indexBuffer = std::move (buffer);
-    impl->indexFormat = toOreIndexFormat (format);
+    i->indexOreBuffer = (buffer != nullptr) ? buffer->oreBufferHandle() : nullptr;
+    i->indexBuffer = std::move (buffer);
+    i->indexFormat = toOreIndexFormat (format);
 }
 
 //==============================================================================
 
 bool GpuProgram::beginFrame()
 {
-    if (impl == nullptr || impl->oreCtx == nullptr)
+    auto* i = getImpl();
+    if (i == nullptr || i->oreCtx == nullptr)
         return false;
 
     // Drop resources from any prior frame before beginning a new one.
-    impl->liveBuffers.clear();
-    impl->liveViews.clear();
-    impl->liveSamplers.clear();
+    i->liveBuffers.clear();
+    i->liveViews.clear();
+    i->liveSamplers.clear();
 
-    impl->oreCtx->beginFrame ({});
+    i->oreCtx->beginFrame ({});
     return true;
 }
 
 bool GpuProgram::endFrame()
 {
-    if (impl == nullptr || impl->oreCtx == nullptr)
+    auto* i = getImpl();
+    if (i == nullptr || i->oreCtx == nullptr)
         return false;
 
-    impl->oreCtx->endFrame();
+    i->oreCtx->endFrame();
     return true;
 }
 
 void GpuProgram::waitForGPU()
 {
-    if (impl == nullptr || impl->oreCtx == nullptr)
+    auto* i = getImpl();
+    if (i == nullptr || i->oreCtx == nullptr)
         return;
 
-    impl->oreCtx->waitForGPU();
+    i->oreCtx->waitForGPU();
 
     // GPU has finished; safe to release all transient resources.
-    impl->liveBuffers.clear();
-    impl->liveViews.clear();
-    impl->liveSamplers.clear();
+    i->liveBuffers.clear();
+    i->liveViews.clear();
+    i->liveSamplers.clear();
 }
 
 //==============================================================================
@@ -586,30 +605,34 @@ bool GpuProgram::dispatch (GpuCanvas& output)
 
 bool GpuProgram::draw (GpuCanvas& output, uint32_t vertexCount, const GpuRenderOptions& options)
 {
-    if (impl == nullptr)
+    auto* i = getImpl();
+    if (i == nullptr)
         return false;
 
-    return impl->encode (output, vertexCount, false, options);
+    return i->encode (output, vertexCount, false, options);
 }
 
 bool GpuProgram::drawIndexed (GpuCanvas& output, uint32_t indexCount, const GpuRenderOptions& options)
 {
-    if (impl == nullptr)
+    auto* i = getImpl();
+    if (i == nullptr)
         return false;
 
-    return impl->encode (output, indexCount, true, options);
+    return i->encode (output, indexCount, true, options);
 }
 
 //==============================================================================
 
 rive::ore::Context* GpuProgram::oreContext() const noexcept
 {
-    return impl != nullptr ? impl->oreCtx : nullptr;
+    auto* i = getImpl();
+    return i != nullptr ? i->oreCtx : nullptr;
 }
 
 rive::ore::Pipeline* GpuProgram::orePipeline() const noexcept
 {
-    return (impl != nullptr && impl->pipeline != nullptr) ? impl->pipeline.get() : nullptr;
+    auto* i = getImpl();
+    return (i != nullptr && i->pipeline != nullptr) ? i->pipeline.get() : nullptr;
 }
 
 //==============================================================================
@@ -889,16 +912,16 @@ GpuProgram::Ptr GpuProgram::compile (GraphicsContext& ctx,
     // pipeline. The ore Pipeline copies PipelineDesc by value but keeps the
     // vertexBuffers / attributes pointers, reading them at draw time.
     auto prog = GpuProgram::Ptr { new GpuProgram() };
-    prog->impl = std::make_unique<Impl>();
+    prog->impl = TypeErasedObject<GpuProgram::kImplSize> (GpuProgram::Impl {});
 
-    auto& implRef = *prog->impl;
-    implRef.vertexAttrStorage.resize (pipelineOptions.vertexBufferCount);
-    implRef.vertexLayoutStorage.resize (pipelineOptions.vertexBufferCount);
+    auto* implRef = prog->getImpl();
+    implRef->vertexAttrStorage.resize (pipelineOptions.vertexBufferCount);
+    implRef->vertexLayoutStorage.resize (pipelineOptions.vertexBufferCount);
 
     for (uint32_t i = 0; i < pipelineOptions.vertexBufferCount; ++i)
     {
         const auto& src = pipelineOptions.vertexBuffers[i];
-        auto& attrs = implRef.vertexAttrStorage[i];
+        auto& attrs = implRef->vertexAttrStorage[i];
         attrs.resize (src.attributeCount);
 
         for (uint32_t a = 0; a < src.attributeCount; ++a)
@@ -908,10 +931,10 @@ GpuProgram::Ptr GpuProgram::compile (GraphicsContext& ctx,
             attrs[a].shaderSlot = src.attributes[a].shaderLocation;
         }
 
-        implRef.vertexLayoutStorage[i].stride = src.stride;
-        implRef.vertexLayoutStorage[i].stepMode = toOreStepMode (src.stepMode);
-        implRef.vertexLayoutStorage[i].attributes = attrs.empty() ? nullptr : attrs.data();
-        implRef.vertexLayoutStorage[i].attributeCount = src.attributeCount;
+        implRef->vertexLayoutStorage[i].stride = src.stride;
+        implRef->vertexLayoutStorage[i].stepMode = toOreStepMode (src.stepMode);
+        implRef->vertexLayoutStorage[i].attributes = attrs.empty() ? nullptr : attrs.data();
+        implRef->vertexLayoutStorage[i].attributeCount = src.attributeCount;
     }
 
     rive::ore::PipelineDesc pipeDesc;
@@ -919,8 +942,8 @@ GpuProgram::Ptr GpuProgram::compile (GraphicsContext& ctx,
     pipeDesc.vertexEntryPoint = (vs.entryPoint != nullptr) ? vs.entryPoint : "vs_main";
     pipeDesc.fragmentModule = fragModule.get();
     pipeDesc.fragmentEntryPoint = (fs.entryPoint != nullptr) ? fs.entryPoint : "fs_main";
-    pipeDesc.vertexBuffers = implRef.vertexLayoutStorage.empty() ? nullptr : implRef.vertexLayoutStorage.data();
-    pipeDesc.vertexBufferCount = (uint32_t) implRef.vertexLayoutStorage.size();
+    pipeDesc.vertexBuffers = implRef->vertexLayoutStorage.empty() ? nullptr : implRef->vertexLayoutStorage.data();
+    pipeDesc.vertexBufferCount = (uint32_t) implRef->vertexLayoutStorage.size();
     pipeDesc.topology = toOreTopology (pipelineOptions.topology);
     pipeDesc.indexFormat = toOreIndexFormat (pipelineOptions.indexFormat);
     pipeDesc.cullMode = toOreCullMode (pipelineOptions.cullMode);
@@ -994,11 +1017,11 @@ GpuProgram::Ptr GpuProgram::compile (GraphicsContext& ctx,
         return nullptr;
     }
 
-    implRef.oreCtx = oreCtx;
-    implRef.vertModule = std::move (vertModule);
-    implRef.fragModule = std::move (fragModule);
-    implRef.pipeline = std::move (pipeline);
-    implRef.layouts = std::move (layouts);
+    implRef->oreCtx = oreCtx;
+    implRef->vertModule = std::move (vertModule);
+    implRef->fragModule = std::move (fragModule);
+    implRef->pipeline = std::move (pipeline);
+    implRef->layouts = std::move (layouts);
     return prog;
 }
 

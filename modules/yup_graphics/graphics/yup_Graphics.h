@@ -25,7 +25,7 @@ namespace yup
 //==============================================================================
 class GraphicsContext;
 class GpuCanvas;
-class Texture;
+class GpuTexture;
 
 //==============================================================================
 /** A graphical interface for drawing operations within a defined rendering context.
@@ -550,14 +550,14 @@ public:
 
     /** Draws a GPU texture directly into a target rectangle, without materialising an Image.
 
-        This avoids the CPU-side BitmapData allocation that Image::fromTexture() requires.
-        Obtain a Texture::Ptr from GpuCanvas::asTexture() or keep one alive from a
+        This avoids the CPU-side ImagePixelData allocation that Image::fromTexture() requires.
+        Obtain a GpuTexture::Ptr from GpuCanvas::asTexture() or keep one alive from a
         previous GpuCanvas render.
 
         @param texture    The texture to draw. Must be valid (non-null).
         @param targetArea The destination rectangle in the current coordinate space.
     */
-    void drawTexture (const Texture::Ptr& texture, const Rectangle<float>& targetArea);
+    void drawTexture (const GpuTexture::Ptr& texture, const Rectangle<float>& targetArea);
 
     //==============================================================================
     /** Draws an attributed text.

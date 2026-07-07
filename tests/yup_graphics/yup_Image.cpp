@@ -30,7 +30,7 @@
 using namespace yup;
 
 // ======================================================================
-// Image / BitmapData pixel format tests
+// Image / ImagePixelData pixel format tests
 // ======================================================================
 
 TEST (ImageTests, RgbaBitmapStoresRGBABytesAndReturnsARGBColor)
@@ -144,12 +144,12 @@ TEST (ImageTests, ColorCanConvertToExplicitPackedByteOrders)
 }
 
 // ======================================================================
-// BitmapData tests
+// ImagePixelData tests
 // ======================================================================
 
-TEST (BitmapDataTests, RgbaSetPixelWritesAtCorrectRowOffset)
+TEST (ImagePixelDataTests, RgbaSetPixelWritesAtCorrectRowOffset)
 {
-    BitmapData bitmap (2, 2, PixelFormat::RGBA);
+    ImagePixelData bitmap (2, 2, PixelFormat::RGBA);
     bitmap.clear();
 
     bitmap.setPixel (1, 1, 0x80123456);
@@ -164,9 +164,9 @@ TEST (BitmapDataTests, RgbaSetPixelWritesAtCorrectRowOffset)
     EXPECT_EQ (bitmap.getPixel (1, 1), 0x80123456u);
 }
 
-TEST (BitmapDataTests, DefaultConstructorCreatesEmptyBitmap)
+TEST (ImagePixelDataTests, DefaultConstructorCreatesEmptyBitmap)
 {
-    BitmapData bitmap;
+    ImagePixelData bitmap;
 
     EXPECT_EQ (bitmap.getWidth(), 0);
     EXPECT_EQ (bitmap.getHeight(), 0);
@@ -179,11 +179,11 @@ TEST (BitmapDataTests, DefaultConstructorCreatesEmptyBitmap)
     EXPECT_THROW (bitmap.getPixel (0, 0), std::out_of_range);
 }
 
-TEST (BitmapDataTests, ConstructorAdoptsProvidedPixelData)
+TEST (ImagePixelDataTests, ConstructorAdoptsProvidedPixelData)
 {
     auto pixels = std::unique_ptr<uint8[]> (new uint8[4] { 0x12, 0x34, 0x56, 0x80 });
 
-    BitmapData bitmap (1, 1, PixelFormat::RGBA, std::unique_ptr<const uint8[]> (pixels.release()));
+    ImagePixelData bitmap (1, 1, PixelFormat::RGBA, std::unique_ptr<const uint8[]> (pixels.release()));
 
     EXPECT_EQ (bitmap.getRawData().size(), 4u);
     EXPECT_EQ (bitmap.getPixel (0, 0), 0x80123456u);
@@ -192,9 +192,9 @@ TEST (BitmapDataTests, ConstructorAdoptsProvidedPixelData)
     EXPECT_EQ (bitmap.getPixel (0, 0), 0xffabcdefu);
 }
 
-TEST (BitmapDataTests, FillWritesExpectedBytesForRGBA)
+TEST (ImagePixelDataTests, FillWritesExpectedBytesForRGBA)
 {
-    BitmapData bitmap (2, 2, PixelFormat::RGBA);
+    ImagePixelData bitmap (2, 2, PixelFormat::RGBA);
 
     bitmap.fill (0x80123456);
 
@@ -210,9 +210,9 @@ TEST (BitmapDataTests, FillWritesExpectedBytesForRGBA)
     }
 }
 
-TEST (BitmapDataTests, FillWritesExpectedBytesForRGB)
+TEST (ImagePixelDataTests, FillWritesExpectedBytesForRGB)
 {
-    BitmapData bitmap (2, 1, PixelFormat::RGB);
+    ImagePixelData bitmap (2, 1, PixelFormat::RGB);
 
     bitmap.fill (0x80123456);
 
@@ -227,9 +227,9 @@ TEST (BitmapDataTests, FillWritesExpectedBytesForRGB)
     EXPECT_EQ (raw[5], 0x56);
 }
 
-TEST (BitmapDataTests, FillWritesExpectedBytesForGrayscale)
+TEST (ImagePixelDataTests, FillWritesExpectedBytesForGrayscale)
 {
-    BitmapData bitmap (3, 1, PixelFormat::Grayscale);
+    ImagePixelData bitmap (3, 1, PixelFormat::Grayscale);
 
     bitmap.fillColor (Color (0xff00ff00));
 
@@ -242,18 +242,18 @@ TEST (BitmapDataTests, FillWritesExpectedBytesForGrayscale)
     EXPECT_EQ (bitmap.getPixel (2, 0), 0xffb6b6b6u);
 }
 
-TEST (BitmapDataTests, SetPixelColorAndGetPixelColorRoundTrip)
+TEST (ImagePixelDataTests, SetPixelColorAndGetPixelColorRoundTrip)
 {
-    BitmapData bitmap (1, 1, PixelFormat::RGBA);
+    ImagePixelData bitmap (1, 1, PixelFormat::RGBA);
 
     bitmap.setPixelColor (0, 0, Color (0x80123456));
 
     EXPECT_EQ (bitmap.getPixelColor (0, 0), Color (0x80123456));
 }
 
-TEST (BitmapDataTests, MutableRawDataUpdatesPixelValues)
+TEST (ImagePixelDataTests, MutableRawDataUpdatesPixelValues)
 {
-    BitmapData bitmap (1, 1, PixelFormat::RGB);
+    ImagePixelData bitmap (1, 1, PixelFormat::RGB);
 
     auto raw = bitmap.getRawData();
     ASSERT_EQ (raw.size(), 3u);
@@ -265,9 +265,9 @@ TEST (BitmapDataTests, MutableRawDataUpdatesPixelValues)
     EXPECT_EQ (bitmap.getPixel (0, 0), 0xff123456u);
 }
 
-TEST (BitmapDataTests, ClearZerosRawData)
+TEST (ImagePixelDataTests, ClearZerosRawData)
 {
-    BitmapData bitmap (2, 2, PixelFormat::RGBA);
+    ImagePixelData bitmap (2, 2, PixelFormat::RGBA);
 
     bitmap.fill (0xffffffff);
     bitmap.clear();
@@ -279,12 +279,12 @@ TEST (BitmapDataTests, ClearZerosRawData)
         EXPECT_EQ (byte, 0);
 }
 
-TEST (BitmapDataTests, MoveConstructorPreservesPixelDataAndStrides)
+TEST (ImagePixelDataTests, MoveConstructorPreservesPixelDataAndStrides)
 {
-    BitmapData original (2, 2, PixelFormat::RGBA);
+    ImagePixelData original (2, 2, PixelFormat::RGBA);
     original.setPixel (1, 1, 0x80123456);
 
-    BitmapData moved (std::move (original));
+    ImagePixelData moved (std::move (original));
 
     EXPECT_EQ (moved.getWidth(), 2);
     EXPECT_EQ (moved.getHeight(), 2);
@@ -297,12 +297,12 @@ TEST (BitmapDataTests, MoveConstructorPreservesPixelDataAndStrides)
     EXPECT_EQ (original.getRawData().size(), 0u);
 }
 
-TEST (BitmapDataTests, MoveAssignmentPreservesPixelDataAndStrides)
+TEST (ImagePixelDataTests, MoveAssignmentPreservesPixelDataAndStrides)
 {
-    BitmapData source (2, 1, PixelFormat::RGB);
+    ImagePixelData source (2, 1, PixelFormat::RGB);
     source.setPixel (1, 0, 0x80123456);
 
-    BitmapData target (1, 1, PixelFormat::Grayscale);
+    ImagePixelData target (1, 1, PixelFormat::Grayscale);
     target = std::move (source);
 
     EXPECT_EQ (target.getWidth(), 2);
@@ -313,18 +313,18 @@ TEST (BitmapDataTests, MoveAssignmentPreservesPixelDataAndStrides)
     EXPECT_EQ (target.getPixel (1, 0), 0xff123456u);
 }
 
-TEST (BitmapDataTests, ConstructorRejectsInvalidDimensions)
+TEST (ImagePixelDataTests, ConstructorRejectsInvalidDimensions)
 {
-    EXPECT_THROW (BitmapData (0, 1, PixelFormat::RGBA), std::invalid_argument);
-    EXPECT_THROW (BitmapData (1, 0, PixelFormat::RGBA), std::invalid_argument);
-    EXPECT_THROW (BitmapData (-1, 1, PixelFormat::RGBA), std::invalid_argument);
-    EXPECT_THROW (BitmapData (1, -1, PixelFormat::RGBA), std::invalid_argument);
-    EXPECT_THROW (BitmapData (1, 1, static_cast<PixelFormat> (255)), std::runtime_error);
+    EXPECT_THROW (ImagePixelData (0, 1, PixelFormat::RGBA), std::invalid_argument);
+    EXPECT_THROW (ImagePixelData (1, 0, PixelFormat::RGBA), std::invalid_argument);
+    EXPECT_THROW (ImagePixelData (-1, 1, PixelFormat::RGBA), std::invalid_argument);
+    EXPECT_THROW (ImagePixelData (1, -1, PixelFormat::RGBA), std::invalid_argument);
+    EXPECT_THROW (ImagePixelData (1, 1, static_cast<PixelFormat> (255)), std::runtime_error);
 }
 
-TEST (BitmapDataTests, PixelAccessRejectsOutOfRangeCoordinates)
+TEST (ImagePixelDataTests, PixelAccessRejectsOutOfRangeCoordinates)
 {
-    BitmapData bitmap (2, 2, PixelFormat::RGBA);
+    ImagePixelData bitmap (2, 2, PixelFormat::RGBA);
 
     EXPECT_THROW (bitmap.setPixel (-1, 0, 0xffffffff), std::out_of_range);
     EXPECT_THROW (bitmap.setPixel (0, -1, 0xffffffff), std::out_of_range);
@@ -345,7 +345,7 @@ TEST (ImageTests, DefaultConstructorCreatesInvalidImage)
     EXPECT_FALSE (image.isValid());
 }
 
-TEST (ImageTests, ConstructorExposesBitmapMetadata)
+TEST (ImageTests, ConstructorExposesPixelDataMetadata)
 {
     Image image (3, 2, PixelFormat::RGB);
 
@@ -357,8 +357,8 @@ TEST (ImageTests, ConstructorExposesBitmapMetadata)
     EXPECT_EQ (image.getRawData().size(), 18u);
 
     const auto& constImage = image;
-    EXPECT_EQ (constImage.getBitmapData().getWidth(), 3);
-    EXPECT_EQ (image.getBitmapData().getHeight(), 2);
+    EXPECT_EQ (constImage.getPixelData().getWidth(), 3);
+    EXPECT_EQ (image.getPixelData().getHeight(), 2);
 }
 
 TEST (ImageTests, FillColorAndClearRoundTrip)
@@ -389,7 +389,7 @@ TEST (ImageTests, MutableRawDataUpdatesPixelValues)
     EXPECT_EQ (image.getPixelColor (0, 0), Color (0x80123456));
 }
 
-TEST (ImageTests, CopyConstructorPreservesBitmapData)
+TEST (ImageTests, CopyConstructorPreservesPixelData)
 {
     Image original (1, 1, PixelFormat::RGBA);
     original.setPixel (0, 0, 0x80123456);
@@ -403,7 +403,7 @@ TEST (ImageTests, CopyConstructorPreservesBitmapData)
     EXPECT_EQ (copy.getPixel (0, 0), 0x80123456u);
 }
 
-TEST (ImageTests, CopyAssignmentPreservesBitmapData)
+TEST (ImageTests, CopyAssignmentPreservesPixelData)
 {
     Image original (1, 1, PixelFormat::RGB);
     original.setPixel (0, 0, 0x80123456);
@@ -417,7 +417,7 @@ TEST (ImageTests, CopyAssignmentPreservesBitmapData)
     EXPECT_EQ (copy.getPixel (0, 0), 0xff123456u);
 }
 
-TEST (ImageTests, MoveConstructorTransfersBitmapData)
+TEST (ImageTests, MoveConstructorTransfersPixelData)
 {
     Image source (1, 1, PixelFormat::RGBA);
     source.setPixel (0, 0, 0x80123456);
@@ -431,7 +431,7 @@ TEST (ImageTests, MoveConstructorTransfersBitmapData)
     EXPECT_EQ (moved.getPixel (0, 0), 0x80123456u);
 }
 
-TEST (ImageTests, MoveAssignmentTransfersBitmapData)
+TEST (ImageTests, MoveAssignmentTransfersPixelData)
 {
     Image source (1, 1, PixelFormat::RGBA);
     source.setPixel (0, 0, 0x80123456);

@@ -370,7 +370,7 @@ public:
     /** Fills a lookup table with colors sampled evenly along this gradient.
 
         The output values are packed as `0xAARRGGBB`, matching Color, Rive
-        ColorInt, and image pixel APIs such as BitmapData::setPixel().
+        ColorInt, and image pixel APIs such as ImagePixelData::setPixel().
 
         @param colors    the destination lookup table to fill
     */

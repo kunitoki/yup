@@ -110,7 +110,7 @@ TEST_F (GpuCanvasTests, DoubleCommitReturnsFalseOnSecondCall)
 
 TEST (ImageFromTextureTests, NullTextureReturnsInvalidImage)
 {
-    Texture::Ptr nullTex;
+    GpuTexture::Ptr nullTex;
     auto img = Image::fromTexture (nullTex);
     EXPECT_FALSE (img.isValid());
 }
@@ -126,15 +126,15 @@ TEST (ImageFromTextureTests, ExplicitNullptrReturnsInvalidImage)
 
 TEST (TextureTests, DefaultPtrIsInvalid)
 {
-    Texture::Ptr t;
+    GpuTexture::Ptr t;
     EXPECT_EQ (t, nullptr);
 }
 
 TEST (TextureTests, ValidTextureReportsCorrectlyViaGpuCanvas)
 {
     // We cannot exercise a real GPU Texture without a real backend.
-    // This test confirms the type system compiles and Texture::Ptr comparison works.
-    Texture::Ptr t;
+    // This test confirms the type system compiles and GpuTexture::Ptr comparison works.
+    GpuTexture::Ptr t;
     EXPECT_FALSE (t != nullptr);
     EXPECT_TRUE (t == nullptr);
 }
@@ -152,6 +152,6 @@ TEST (GraphicsDrawTextureTests, NullTextureIsNoOp)
 
     Graphics g (*ctx, *renderer);
 
-    Texture::Ptr nullTex;
+    GpuTexture::Ptr nullTex;
     EXPECT_NO_THROW (g.drawTexture (nullTex, { 0.0f, 0.0f, 64.0f, 64.0f }));
 }

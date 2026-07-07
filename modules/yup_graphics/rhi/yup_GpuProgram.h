@@ -287,7 +287,7 @@ struct GpuRenderOptions
 };
 
 class GraphicsContext;
-class Texture;
+class GpuTexture;
 class GpuCanvas;
 class GpuBuffer;
 
@@ -354,7 +354,7 @@ public:
         The texture may come from GpuCanvas::asTexture() (after commit) or from
         Image::getTexture(). If the same slot is set more than once the later call wins.
     */
-    void setTexture (int group, int binding, Texture::Ptr texture);
+    void setTexture (int group, int binding, GpuTexture::Ptr texture);
 
     /** Uploads raw uniform data to the given (group, binding) slot.
 
@@ -518,8 +518,13 @@ public:
 private:
     GpuProgram() = default;
 
+    static constexpr size_t kImplSize = 288;
+
     struct Impl;
-    std::unique_ptr<Impl> impl;
+    TypeErasedObject<kImplSize> impl;
+
+    Impl* getImpl() noexcept;
+    const Impl* getImpl() const noexcept;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuProgram)
 };

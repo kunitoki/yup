@@ -88,11 +88,14 @@ private:
 
     GpuBuffer() = default;
 
-    /** Returns the underlying ore buffer pointer, or nullptr. Internal use. */
     rive::ore::Buffer* oreBufferHandle() const noexcept;
 
     struct Impl;
-    std::unique_ptr<Impl> impl;
+    Impl* getImpl() noexcept;
+    const Impl* getImpl() const noexcept;
+
+    static constexpr size_t kImplSize = 32;
+    TypeErasedObject<kImplSize> impl;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuBuffer)
 };

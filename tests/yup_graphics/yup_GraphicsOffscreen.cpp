@@ -90,24 +90,22 @@ TEST_F (GraphicsOffscreenTests, ReadPixelsToImageReturnsFalseForHeadlessOffscree
     EXPECT_FALSE (g.readPixelsToImage());
 }
 
-TEST_F (GraphicsOffscreenTests, AdoptTextureStoresTexture)
+TEST_F (GraphicsOffscreenTests, SetGpuTextureStoresTexture)
 {
     Image image (32, 32);
     EXPECT_EQ (image.getTexture(), nullptr);
+    EXPECT_EQ (image.getGpuTexture(), nullptr);
 
-    image.adoptTexture (nullptr);
+    image.setGpuTexture (nullptr);
     EXPECT_EQ (image.getTexture(), nullptr);
+    EXPECT_EQ (image.getGpuTexture(), nullptr);
 }
 
-TEST_F (GraphicsOffscreenTests, AdoptRenderCanvasStoresCanvas)
+TEST_F (GraphicsOffscreenTests, GetGpuTextureReturnsNullByDefault)
 {
     Image image (32, 32);
-    EXPECT_EQ (image.getRenderCanvas(), nullptr);
-    EXPECT_EQ (image.getRenderImage(), nullptr);
-
-    image.adoptRenderCanvas (nullptr);
-    EXPECT_EQ (image.getRenderCanvas(), nullptr);
-    EXPECT_EQ (image.getRenderImage(), nullptr);
+    EXPECT_EQ (image.getGpuTexture(), nullptr);
+    EXPECT_EQ (image.getTexture(), nullptr);
 }
 
 TEST_F (GraphicsOffscreenTests, SmallImageOffscreenConstructorDoesNotCrash)

@@ -181,10 +181,7 @@ public:
         if (capturedContext == nullptr)
         {
             capturedContext = &g.getGraphicsContext();
-            yup::MessageManager::callAsync ([this]
-            {
-                initGpu();
-            });
+            initGpu();
         }
 
         auto bounds = getLocalBounds().to<float>().reduced (10.0f);
@@ -214,7 +211,7 @@ public:
             renderCube (*sceneCanvas, w, h);
 
         // 3. Apply separable Gaussian blur via GpuProgram: two O(radius) passes (H then V).
-        yup::Texture::Ptr outputTex = sceneCanvas->asTexture();
+        yup::GpuTexture::Ptr outputTex = sceneCanvas->asTexture();
 
         if (blurProgram != nullptr && blurSigma > 0.01f)
         {
@@ -232,7 +229,7 @@ public:
 
             const float radius = (float) ceil (blurSigma * 3.0);
 
-            auto runPass = [&] (const yup::Texture::Ptr& input, float dirX, float dirY) -> yup::Texture::Ptr
+            auto runPass = [&] (const yup::GpuTexture::Ptr& input, float dirX, float dirY) -> yup::GpuTexture::Ptr
             {
                 auto passCanvas = yup::GpuCanvas::create (*capturedContext, w, h);
                 if (passCanvas == nullptr)

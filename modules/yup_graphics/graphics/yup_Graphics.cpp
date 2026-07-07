@@ -302,9 +302,9 @@ bool Graphics::commitToImage()
         return false;
 
     if (auto canvas = offscreenTarget->getRenderCanvas())
-        offscreenTargetImage->adoptRenderCanvas (std::move (canvas));
+        offscreenTargetImage->setGpuTexture (GpuTexture::fromRenderCanvas (std::move (canvas), offscreenTargetImage->getWidth(), offscreenTargetImage->getHeight()));
     else if (auto tex = offscreenTarget->adoptAsTexture())
-        offscreenTargetImage->adoptTexture (std::move (tex));
+        offscreenTargetImage->setGpuTexture (GpuTexture::fromGpuTexture (std::move (tex), offscreenTargetImage->getWidth(), offscreenTargetImage->getHeight()));
 
     return true;
 }
@@ -904,12 +904,12 @@ void Graphics::drawImage (const Image& image, const Rectangle<float>& targetArea
     renderTexture (image.getTexture(), targetArea);
 }
 
-void Graphics::drawTexture (const Texture::Ptr& texture, const Rectangle<float>& targetArea)
+void Graphics::drawTexture (const GpuTexture::Ptr& texture, const Rectangle<float>& targetArea)
 {
     if (texture == nullptr)
         return;
 
-    // Graphics is a friend of Texture — may access private getOrAdoptGpuTexture()
+    // Graphics is a friend of GpuTexture — may access private getOrAdoptGpuTexture()
     renderTexture (texture->getOrAdoptGpuTexture(), targetArea);
 }
 

@@ -169,7 +169,7 @@ class TextureView;
 #include "primitives/yup_CubicBezier.h"
 #include "fonts/yup_Font.h"
 #include "fonts/yup_StyledText.h"
-#include "rhi/yup_Texture.h"
+#include "rhi/yup_GpuTexture.h"
 #include "imaging/yup_Image.h"
 #include "imaging/yup_ImageFormat.h"
 #include "imaging/yup_ImageFormatReader.h"

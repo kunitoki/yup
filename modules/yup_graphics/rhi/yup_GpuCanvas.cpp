@@ -88,7 +88,7 @@ bool GpuCanvas::commit()
 
 //==============================================================================
 
-Texture::Ptr GpuCanvas::asTexture()
+GpuTexture::Ptr GpuCanvas::asTexture()
 {
     if (! committed || graphics == nullptr || graphics->offscreenTarget == nullptr)
         return nullptr;
@@ -101,9 +101,9 @@ Texture::Ptr GpuCanvas::asTexture()
     const int h = target.getHeight();
 
     if (auto canvas = target.getRenderCanvas())
-        cachedTexture = Texture::fromRenderCanvas (std::move (canvas), w, h);
+        cachedTexture = GpuTexture::fromRenderCanvas (std::move (canvas), w, h);
     else if (auto tex = target.adoptAsTexture())
-        cachedTexture = Texture::fromGpuTexture (std::move (tex), w, h);
+        cachedTexture = GpuTexture::fromGpuTexture (std::move (tex), w, h);
 
     return cachedTexture;
 }

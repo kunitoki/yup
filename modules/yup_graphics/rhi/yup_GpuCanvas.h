@@ -24,7 +24,7 @@ namespace yup
 
 class GraphicsContext;
 class Graphics;
-class Texture;
+class GpuTexture;
 class Image;
 
 //==============================================================================
@@ -56,7 +56,7 @@ class Image;
     The canvas is reference-counted; keep at least one Ptr alive for as long as
     you need to sample from the rendered texture.
 
-    @see Texture, Graphics::drawTexture
+    @see GpuTexture, Graphics::drawTexture
 */
 class YUP_API GpuCanvas : public ReferenceCountedObject
 {
@@ -100,15 +100,15 @@ public:
     //==============================================================================
     /** Returns a GPU-texture view of the rendered result.
 
-        Valid after commit(). The Texture holds a reference to the underlying GPU
+        Valid after commit(). The GpuTexture holds a reference to the underlying GPU
         resource; the canvas can be destroyed after this call.
     */
-    Texture::Ptr asTexture();
+    GpuTexture::Ptr asTexture();
 
     /** Returns an Image with both GPU texture and CPU pixel data populated.
 
         Calls asTexture() to obtain the GPU resource, creates an Image wrapping it,
-        and then calls readPixels() to fill the CPU-side BitmapData so that
+        and then calls readPixels() to fill the CPU-side ImagePixelData so that
         Image::getRawData() returns the rendered pixels.
 
         Valid after commit(). Returns an empty Image on failure.
@@ -158,7 +158,7 @@ private:
 
     GraphicsContext* ctx = nullptr;
     std::unique_ptr<Graphics> graphics;
-    Texture::Ptr cachedTexture;
+    GpuTexture::Ptr cachedTexture;
     bool committed = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuCanvas)

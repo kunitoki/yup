@@ -37,24 +37,40 @@ GpuBuffer::~GpuBuffer() = default;
 
 //==============================================================================
 
+GpuBuffer::Impl* GpuBuffer::getImpl() noexcept
+{
+    return impl.getPayload<Impl>();
+}
+
+const GpuBuffer::Impl* GpuBuffer::getImpl() const noexcept
+{
+    return impl.getPayload<Impl>();
+}
+
+//==============================================================================
+
 GpuBufferType GpuBuffer::getType() const noexcept
 {
-    return impl != nullptr ? impl->type : GpuBufferType::vertex;
+    auto* i = getImpl();
+    return i != nullptr ? i->type : GpuBufferType::vertex;
 }
 
 size_t GpuBuffer::getSizeInBytes() const noexcept
 {
-    return impl != nullptr ? impl->byteSize : 0;
+    auto* i = getImpl();
+    return i != nullptr ? i->byteSize : 0;
 }
 
 bool GpuBuffer::isValid() const noexcept
 {
-    return impl != nullptr && impl->buffer != nullptr;
+    auto* i = getImpl();
+    return i != nullptr && i->buffer != nullptr;
 }
 
 rive::ore::Buffer* GpuBuffer::oreBufferHandle() const noexcept
 {
-    return (impl != nullptr) ? impl->buffer.get() : nullptr;
+    auto* i = getImpl();
+    return (i != nullptr) ? i->buffer.get() : nullptr;
 }
 
 //==============================================================================
@@ -97,10 +113,7 @@ GpuBuffer::Ptr GpuBuffer::create (GraphicsContext& ctx,
         return nullptr;
 
     auto* result = new GpuBuffer();
-    result->impl = std::make_unique<Impl>();
-    result->impl->type = type;
-    result->impl->byteSize = byteSize;
-    result->impl->buffer = std::move (buffer);
+    result->impl = TypeErasedObject<GpuBuffer::kImplSize> (GpuBuffer::Impl { type, byteSize, std::move (buffer) });
     return result;
 }
 

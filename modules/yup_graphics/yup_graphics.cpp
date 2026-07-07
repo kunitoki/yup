@@ -128,7 +128,7 @@
 #include "native/yup_GraphicsContext_impl.cpp"
 
 //==============================================================================
-#include "rhi/yup_Texture.cpp"
+#include "rhi/yup_GpuTexture.cpp"
 #include "primitives/yup_Path.cpp"
 #include "primitives/yup_CubicBezier.cpp"
 #include "fonts/yup_Font.cpp"

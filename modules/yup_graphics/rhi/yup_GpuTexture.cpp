@@ -24,24 +24,24 @@ namespace yup
 
 //==============================================================================
 
-Texture::Ptr Texture::fromGpuTexture (rive::rcp<rive::gpu::Texture> texture, int width, int height)
+GpuTexture::Ptr GpuTexture::fromGpuTexture (rive::rcp<rive::gpu::Texture> texture, int width, int height)
 {
     if (texture == nullptr || width <= 0 || height <= 0)
         return nullptr;
 
-    auto* t = new Texture();
+    GpuTexture::Ptr t = new GpuTexture();
     t->gpuTexture = std::move (texture);
     t->width = width;
     t->height = height;
     return t;
 }
 
-Texture::Ptr Texture::fromRenderCanvas (rive::rcp<rive::gpu::RenderCanvas> canvas, int width, int height)
+GpuTexture::Ptr GpuTexture::fromRenderCanvas (rive::rcp<rive::gpu::RenderCanvas> canvas, int width, int height)
 {
     if (canvas == nullptr || width <= 0 || height <= 0)
         return nullptr;
 
-    auto* t = new Texture();
+    GpuTexture::Ptr t = new GpuTexture();
     t->renderCanvas = std::move (canvas);
     t->renderTarget = true;
     t->width = width;
@@ -51,7 +51,7 @@ Texture::Ptr Texture::fromRenderCanvas (rive::rcp<rive::gpu::RenderCanvas> canva
 
 //==============================================================================
 
-rive::rcp<rive::gpu::Texture> Texture::getOrAdoptGpuTexture() const
+rive::rcp<rive::gpu::Texture> GpuTexture::getOrAdoptGpuTexture() const
 {
     if (gpuTexture != nullptr)
         return gpuTexture;
@@ -65,12 +65,12 @@ rive::rcp<rive::gpu::Texture> Texture::getOrAdoptGpuTexture() const
     return gpuTexture;
 }
 
-rive::rcp<rive::gpu::RenderCanvas> Texture::getInternalRenderCanvas() const
+rive::rcp<rive::gpu::RenderCanvas> GpuTexture::getInternalRenderCanvas() const
 {
     return renderCanvas;
 }
 
-rive::RenderImage* Texture::getRenderImage() const
+rive::RenderImage* GpuTexture::getRenderImage() const
 {
     if (renderCanvas != nullptr)
         return renderCanvas->renderImage();
@@ -80,22 +80,22 @@ rive::RenderImage* Texture::getRenderImage() const
 
 //==============================================================================
 
-int Texture::getWidth() const noexcept
+int GpuTexture::getWidth() const noexcept
 {
     return width;
 }
 
-int Texture::getHeight() const noexcept
+int GpuTexture::getHeight() const noexcept
 {
     return height;
 }
 
-bool Texture::isValid() const noexcept
+bool GpuTexture::isValid() const noexcept
 {
     return gpuTexture != nullptr || renderCanvas != nullptr;
 }
 
-bool Texture::isRenderTarget() const noexcept
+bool GpuTexture::isRenderTarget() const noexcept
 {
     return renderTarget;
 }

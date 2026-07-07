@@ -38,10 +38,10 @@ class Graphics;
 
     @see GpuCanvas, Image::fromTexture, Graphics::drawTexture
 */
-class YUP_API Texture : public ReferenceCountedObject
+class YUP_API GpuTexture : public ReferenceCountedObject
 {
 public:
-    using Ptr = ReferenceCountedObjectPtr<Texture>;
+    using Ptr = ReferenceCountedObjectPtr<GpuTexture>;
 
     //==============================================================================
     /** Returns the width of the texture in pixels. */
@@ -63,13 +63,13 @@ private:
     friend class GpuProgram;
     friend class Graphics;
 
-    Texture() = default;
+    GpuTexture() = default;
 
-    /** Creates a Texture from a raw GPU texture of known dimensions. */
-    static Texture::Ptr fromGpuTexture (rive::rcp<rive::gpu::Texture> texture, int width, int height);
+    /** Creates a GpuTexture from a raw GPU texture of known dimensions. */
+    static GpuTexture::Ptr fromGpuTexture (rive::rcp<rive::gpu::Texture> texture, int width, int height);
 
-    /** Creates a Texture from a render canvas of known dimensions. */
-    static Texture::Ptr fromRenderCanvas (rive::rcp<rive::gpu::RenderCanvas> canvas, int width, int height);
+    /** Creates a GpuTexture from a render canvas of known dimensions. */
+    static GpuTexture::Ptr fromRenderCanvas (rive::rcp<rive::gpu::RenderCanvas> canvas, int width, int height);
 
     /** Returns the raw GPU texture, extracting it from the render canvas if needed. */
     rive::rcp<rive::gpu::Texture> getOrAdoptGpuTexture() const;
@@ -88,7 +88,7 @@ private:
     mutable rive::rcp<rive::gpu::Texture> gpuTexture;
     rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
 
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Texture)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuTexture)
 };
 
 } // namespace yup
