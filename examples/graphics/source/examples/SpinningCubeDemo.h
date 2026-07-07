@@ -40,6 +40,11 @@
     A separable Gaussian blur post-process is applied via a second GpuProgram.
     The blur intensity is controlled by a slider.
 
+    Both the cube and the blur programs can be live-edited: use the Cube/Blur
+    buttons to pick which program to edit, the Vertex/Fragment buttons to pick
+    the stage, and Load/Save to persist the active program's vertex + fragment
+    GLSL to a .ysl shader bundle.
+
     All ore-specific plumbing (shader modules, pipelines, bind groups, buffers)
     is hidden behind GpuProgram / GpuBuffer, so the backend-native shader source
     and binding maps are always fully populated (fixing the HLSL D3D path).
@@ -53,6 +58,8 @@ public:
     {
         currentVertSource = yup::String::fromUTF8 (kDefaultVertSource, sizeof (kDefaultVertSource) - 1);
         currentFragSource = yup::String::fromUTF8 (kDefaultFragSource, sizeof (kDefaultFragSource) - 1);
+        currentBlurVertSource = yup::String::fromUTF8 (kDefaultBlurVertSource, sizeof (kDefaultBlurVertSource) - 1);
+        currentBlurFragSource = yup::String::fromUTF8 (kDefaultBlurFragSource, sizeof (kDefaultBlurFragSource) - 1);
 
         blurSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal);
         blurSlider->setRange (0.0, 128.0);
@@ -74,48 +81,51 @@ public:
         shaderEditor->setText (currentVertSource, yup::dontSendNotification);
         shaderEditor->onTextChange = [this]
         {
-            if (showingVertexShader)
-                currentVertSource = shaderEditor->getText();
-            else
-                currentFragSource = shaderEditor->getText();
+            activeStageSource() = shaderEditor->getText();
         };
         addAndMakeVisible (shaderEditor.get());
 
         compileButton = std::make_unique<yup::TextButton> ("Compile");
         compileButton->onClick = [this]
         {
-            recompileCubeShader();
+            recompileActiveShader();
         };
         addAndMakeVisible (compileButton.get());
 
         resetButton = std::make_unique<yup::TextButton> ("Reset");
         resetButton->onClick = [this]
         {
-            if (showingVertexShader)
-            {
-                currentVertSource = yup::String::fromUTF8 (kDefaultVertSource, sizeof (kDefaultVertSource) - 1);
-                shaderEditor->setText (currentVertSource, yup::dontSendNotification);
-            }
-            else
-            {
-                currentFragSource = yup::String::fromUTF8 (kDefaultFragSource, sizeof (kDefaultFragSource) - 1);
-                shaderEditor->setText (currentFragSource, yup::dontSendNotification);
-            }
-            recompileCubeShader();
+            activeStageSource() = defaultStageSource();
+            shaderEditor->setText (activeStageSource(), yup::dontSendNotification);
+            recompileActiveShader();
         };
         addAndMakeVisible (resetButton.get());
+
+        cubeTargetButton = std::make_unique<yup::TextButton> ("Cube");
+        cubeTargetButton->onClick = [this]
+        {
+            switchToTarget (false);
+        };
+        addAndMakeVisible (cubeTargetButton.get());
+
+        blurTargetButton = std::make_unique<yup::TextButton> ("Blur");
+        blurTargetButton->onClick = [this]
+        {
+            switchToTarget (true);
+        };
+        addAndMakeVisible (blurTargetButton.get());
 
         vertToggleButton = std::make_unique<yup::TextButton> ("Vertex");
         vertToggleButton->onClick = [this]
         {
-            switchToVertexShader();
+            switchToStage (true);
         };
         addAndMakeVisible (vertToggleButton.get());
 
         fragToggleButton = std::make_unique<yup::TextButton> ("Fragment");
         fragToggleButton->onClick = [this]
         {
-            switchToFragmentShader();
+            switchToStage (false);
         };
         addAndMakeVisible (fragToggleButton.get());
 
@@ -134,7 +144,7 @@ public:
         addAndMakeVisible (saveButton.get());
 
         shaderModeLabel = std::make_unique<yup::Label> ("shaderMode");
-        shaderModeLabel->setText ("Vertex Shader", yup::dontSendNotification);
+        shaderModeLabel->setText ("Cube - Vertex Shader", yup::dontSendNotification);
         addAndMakeVisible (shaderModeLabel.get());
 
         compileStatusLabel = std::make_unique<yup::Label> ("compileStatus");
@@ -190,11 +200,14 @@ public:
             return;
 
         // 1. Create an empty GpuCanvas for the scene, commit the empty Rive 2D frame.
-        auto sceneCanvas = yup::GpuCanvas::create (*capturedContext, w, h);
-        if (sceneCanvas == nullptr)
-            return;
+        if (sceneCanvas == nullptr || sceneCanvas->getWidth() != w || sceneCanvas->getHeight() != h)
+        {
+            sceneCanvas = yup::GpuCanvas::create (*capturedContext, w, h);
+            if (sceneCanvas == nullptr)
+                return;
 
-        sceneCanvas->commit();
+            sceneCanvas->commit();
+        }
 
         // 2. Render the 3D cube into sceneCanvas via GpuProgram.
         if (cubeProgram != nullptr)
@@ -266,9 +279,9 @@ public:
 
         auto buttonRow1 = editorBounds.removeFromTop (26.0f);
         auto bw1 = buttonRow1.getWidth();
-        compileButton->setBounds (buttonRow1.removeFromLeft (bw1 * 0.47f));
+        cubeTargetButton->setBounds (buttonRow1.removeFromLeft (bw1 * 0.47f));
         buttonRow1.removeFromLeft (bw1 * 0.06f);
-        resetButton->setBounds (buttonRow1);
+        blurTargetButton->setBounds (buttonRow1);
 
         editorBounds.removeFromTop (4.0f);
 
@@ -282,9 +295,17 @@ public:
 
         auto buttonRow3 = editorBounds.removeFromTop (26.0f);
         auto bw3 = buttonRow3.getWidth();
-        loadButton->setBounds (buttonRow3.removeFromLeft (bw3 * 0.47f));
+        compileButton->setBounds (buttonRow3.removeFromLeft (bw3 * 0.47f));
         buttonRow3.removeFromLeft (bw3 * 0.06f);
-        saveButton->setBounds (buttonRow3);
+        resetButton->setBounds (buttonRow3);
+
+        editorBounds.removeFromTop (4.0f);
+
+        auto buttonRow4 = editorBounds.removeFromTop (26.0f);
+        auto bw4 = buttonRow4.getWidth();
+        loadButton->setBounds (buttonRow4.removeFromLeft (bw4 * 0.47f));
+        buttonRow4.removeFromLeft (bw4 * 0.06f);
+        saveButton->setBounds (buttonRow4);
 
         editorBounds.removeFromTop (4.0f);
 
@@ -375,6 +396,50 @@ void main() {
     vec3  light = normalize(vec3(0.503, 0.671, -0.419));
     float ndotl = clamp(dot(normalize(v_normal), light), 0.0, 1.0);
     fragColor   = vec4(v_color * (0.35 + 0.65 * ndotl), 1.0);
+}
+)glsl";
+
+    // ---- Default blur shader sources -----------------------------------------
+
+    // GLSL 450 blur vertex shader: fullscreen triangle from vertex index, no vertex buffer.
+    static constexpr char kDefaultBlurVertSource[] = R"glsl(#version 450
+void main() {
+    float x = float((gl_VertexIndex & 1u) << 2u) - 1.0;
+    float y = float((gl_VertexIndex & 2u) << 1u) - 1.0;
+    gl_Position = vec4(x, y, 0.0, 1.0);
+}
+)glsl";
+
+    // GLSL 450 blur fragment shader: separable 1-D Gaussian using separate texture + sampler.
+    // Runs twice per frame (horizontal then vertical) driven by BlurParams.dir, turning the
+    // naive O(radius^2) 2-D blur into two O(radius) passes.
+    // Bindings: set=0 binding=0 = scene texture (separate image)
+    //           set=0 binding=1 = sampler
+    //           set=0 binding=2 = BlurParams UBO
+    static constexpr char kDefaultBlurFragSource[] = R"glsl(#version 450
+layout(set = 0, binding = 0) uniform texture2D u_tex;
+layout(set = 0, binding = 1) uniform sampler   u_samp;
+layout(set = 0, binding = 2) uniform BlurParams {
+    float sigma; float radius; float resX; float resY;
+    float dirX;  float dirY;   float pad0; float pad1;
+} p;
+layout(location = 0) out vec4 fragColor;
+void main() {
+    vec2 uv = gl_FragCoord.xy / vec2(p.resX, p.resY);
+    if (p.sigma <= 0.0001) { fragColor = texture(sampler2D(u_tex, u_samp), uv); return; }
+    int   radius = int(clamp(p.radius, 1.0, 128.0));  // slider max 40 > ceil(120)
+    vec2  step   = vec2(p.dirX, p.dirY) / vec2(p.resX, p.resY);
+    float inv2s2 = 0.5 / (p.sigma * p.sigma);
+    vec4  sum  = texture(sampler2D(u_tex, u_samp), uv);
+    float wsum = 1.0;
+    for (int i = 1; i <= radius; ++i) {
+        float w   = exp(-float(i * i) * inv2s2);
+        vec2  off = step * float(i);
+        sum  += texture(sampler2D(u_tex, u_samp), uv + off) * w;
+        sum  += texture(sampler2D(u_tex, u_samp), uv - off) * w;
+        wsum += 2.0 * w;
+    }
+    fragColor = sum / wsum;
 }
 )glsl";
 
@@ -487,52 +552,10 @@ void main() {
 
     void initBlur()
     {
-        // GLSL 450 blur vertex shader: fullscreen triangle from vertex index, no vertex buffer.
-        static constexpr char kBlurVS[] = R"glsl(#version 450
-void main() {
-    float x = float((gl_VertexIndex & 1u) << 2u) - 1.0;
-    float y = float((gl_VertexIndex & 2u) << 1u) - 1.0;
-    gl_Position = vec4(x, y, 0.0, 1.0);
-}
-)glsl";
-
-        // GLSL 450 blur fragment shader: separable 1-D Gaussian using separate texture + sampler.
-        // Runs twice per frame (horizontal then vertical) driven by BlurParams.dir, turning the
-        // naive O(radius^2) 2-D blur into two O(radius) passes.
-        // Bindings: set=0 binding=0 = scene texture (separate image)
-        //           set=0 binding=1 = sampler
-        //           set=0 binding=2 = BlurParams UBO
-        static constexpr char kBlurFS[] = R"glsl(#version 450
-layout(set = 0, binding = 0) uniform texture2D u_tex;
-layout(set = 0, binding = 1) uniform sampler   u_samp;
-layout(set = 0, binding = 2) uniform BlurParams {
-    float sigma; float radius; float resX; float resY;
-    float dirX;  float dirY;   float pad0; float pad1;
-} p;
-layout(location = 0) out vec4 fragColor;
-void main() {
-    vec2 uv = gl_FragCoord.xy / vec2(p.resX, p.resY);
-    if (p.sigma <= 0.0001) { fragColor = texture(sampler2D(u_tex, u_samp), uv); return; }
-    int   radius = int(clamp(p.radius, 1.0, 128.0));  // slider max 40 > ceil(120)
-    vec2  step   = vec2(p.dirX, p.dirY) / vec2(p.resX, p.resY);
-    float inv2s2 = 0.5 / (p.sigma * p.sigma);
-    vec4  sum  = texture(sampler2D(u_tex, u_samp), uv);
-    float wsum = 1.0;
-    for (int i = 1; i <= radius; ++i) {
-        float w   = exp(-float(i * i) * inv2s2);
-        vec2  off = step * float(i);
-        sum  += texture(sampler2D(u_tex, u_samp), uv + off) * w;
-        sum  += texture(sampler2D(u_tex, u_samp), uv - off) * w;
-        wsum += 2.0 * w;
-    }
-    fragColor = sum / wsum;
-}
-)glsl";
-
         std::string err;
         blurProgram = yup::GpuProgram::compileFromGlsl (*capturedContext,
-                                                        yup::String (kBlurVS),
-                                                        yup::String (kBlurFS),
+                                                        currentBlurVertSource,
+                                                        currentBlurFragSource,
                                                         {},
                                                         &err);
 
@@ -565,29 +588,60 @@ void main() {
 
     // ---- Shader live-editing helpers -----------------------------------------
 
-    void switchToVertexShader()
+    /** Returns a reference to the source string for the active target + stage. */
+    yup::String& activeStageSource()
     {
-        if (showingVertexShader)
-            return;
+        if (editingBlur)
+            return showingVertexShader ? currentBlurVertSource : currentBlurFragSource;
 
-        currentFragSource = shaderEditor->getText();
-        showingVertexShader = true;
-        shaderEditor->setText (currentVertSource, yup::dontSendNotification);
-        shaderModeLabel->setText ("Vertex Shader", yup::dontSendNotification);
+        return showingVertexShader ? currentVertSource : currentFragSource;
     }
 
-    void switchToFragmentShader()
+    /** Returns the default source for the active target + stage. */
+    yup::String defaultStageSource() const
     {
-        if (! showingVertexShader)
-            return;
+        if (editingBlur)
+            return showingVertexShader
+                     ? yup::String::fromUTF8 (kDefaultBlurVertSource, sizeof (kDefaultBlurVertSource) - 1)
+                     : yup::String::fromUTF8 (kDefaultBlurFragSource, sizeof (kDefaultBlurFragSource) - 1);
 
-        currentVertSource = shaderEditor->getText();
-        showingVertexShader = false;
-        shaderEditor->setText (currentFragSource, yup::dontSendNotification);
-        shaderModeLabel->setText ("Fragment Shader", yup::dontSendNotification);
+        return showingVertexShader
+                 ? yup::String::fromUTF8 (kDefaultVertSource, sizeof (kDefaultVertSource) - 1)
+                 : yup::String::fromUTF8 (kDefaultFragSource, sizeof (kDefaultFragSource) - 1);
     }
 
-    void recompileCubeShader()
+    void updateShaderModeLabel()
+    {
+        shaderModeLabel->setText (yup::String (editingBlur ? "Blur" : "Cube")
+                                      + " — "
+                                      + (showingVertexShader ? "Vertex Shader" : "Fragment Shader"),
+                                  yup::dontSendNotification);
+    }
+
+    void switchToTarget (bool blur)
+    {
+        if (editingBlur == blur)
+            return;
+
+        syncEditorSource();
+        editingBlur = blur;
+        shaderEditor->setText (activeStageSource(), yup::dontSendNotification);
+        updateShaderModeLabel();
+    }
+
+    void switchToStage (bool vertex)
+    {
+        if (showingVertexShader == vertex)
+            return;
+
+        syncEditorSource();
+        showingVertexShader = vertex;
+        shaderEditor->setText (activeStageSource(), yup::dontSendNotification);
+        updateShaderModeLabel();
+    }
+
+    /** Recompiles the active program (cube or blur) from the current sources. */
+    void recompileActiveShader()
     {
         if (capturedContext == nullptr || ! gpuInitialized)
             return;
@@ -595,20 +649,40 @@ void main() {
         syncEditorSource();
 
         std::string err;
-        auto newProgram = yup::GpuProgram::compileFromGlsl (*capturedContext,
-                                                            currentVertSource,
-                                                            currentFragSource,
-                                                            cubePipelineOptions(),
-                                                            &err);
 
-        if (newProgram == nullptr)
+        if (editingBlur)
         {
-            showError (yup::String (err.c_str()));
-            return;
+            auto newProgram = yup::GpuProgram::compileFromGlsl (*capturedContext,
+                                                                currentBlurVertSource,
+                                                                currentBlurFragSource,
+                                                                {},
+                                                                &err);
+
+            if (newProgram == nullptr)
+            {
+                showError (yup::String (err.c_str()));
+                return;
+            }
+
+            blurProgram = std::move (newProgram);
+        }
+        else
+        {
+            auto newProgram = yup::GpuProgram::compileFromGlsl (*capturedContext,
+                                                                currentVertSource,
+                                                                currentFragSource,
+                                                                cubePipelineOptions(),
+                                                                &err);
+
+            if (newProgram == nullptr)
+            {
+                showError (yup::String (err.c_str()));
+                return;
+            }
+
+            cubeProgram = std::move (newProgram);
         }
 
-        // Success — swap in the new program.
-        cubeProgram = std::move (newProgram);
         hideError();
     }
 
@@ -645,14 +719,30 @@ void main() {
                 return;
             }
 
-            yup::String src = loaded.getReference().getOriginalSource();
-            if (showingVertexShader)
-                currentVertSource = src;
-            else
-                currentFragSource = src;
+            const auto& bundle = loaded.getReference();
 
-            shaderEditor->setText (src, yup::dontSendNotification);
-            recompileCubeShader();
+            bool loadedAny = false;
+
+            if (auto* vs = bundle.findShader (yup::ShaderStage::vertex, yup::ShaderLanguage::glsl))
+            {
+                (editingBlur ? currentBlurVertSource : currentVertSource) = vs->source;
+                loadedAny = true;
+            }
+
+            if (auto* fs = bundle.findShader (yup::ShaderStage::fragment, yup::ShaderLanguage::glsl))
+            {
+                (editingBlur ? currentBlurFragSource : currentFragSource) = fs->source;
+                loadedAny = true;
+            }
+
+            if (! loadedAny)
+            {
+                // Legacy bundles only stored a single source blob.
+                activeStageSource() = bundle.getOriginalSource();
+            }
+
+            shaderEditor->setText (activeStageSource(), yup::dontSendNotification);
+            recompileActiveShader();
         });
     }
 
@@ -660,18 +750,34 @@ void main() {
     {
         syncEditorSource();
 
-        yup::String source = showingVertexShader ? currentVertSource : currentFragSource;
+        yup::String vertSource = editingBlur ? currentBlurVertSource : currentVertSource;
+        yup::String fragSource = editingBlur ? currentBlurFragSource : currentFragSource;
 
         auto chooser = yup::FileChooser::create ("Save Shader Bundle",
                                                  yup::File(),
                                                  "*.ysl");
-        chooser->browseForFileToSave ([source] (bool success, const yup::Array<yup::File>& results)
+        chooser->browseForFileToSave ([vertSource, fragSource] (bool success, const yup::Array<yup::File>& results)
         {
             if (! success || results.isEmpty())
                 return;
 
             yup::ShaderBundle bundle;
-            bundle.setOriginalSource (source);
+            bundle.setOriginalSource (vertSource);
+
+            yup::ShaderInfo vertInfo;
+            vertInfo.stage = yup::ShaderStage::vertex;
+            vertInfo.language = yup::ShaderLanguage::glsl;
+            vertInfo.entryPoint = "main";
+            vertInfo.source = vertSource;
+            bundle.addShader (std::move (vertInfo));
+
+            yup::ShaderInfo fragInfo;
+            fragInfo.stage = yup::ShaderStage::fragment;
+            fragInfo.language = yup::ShaderLanguage::glsl;
+            fragInfo.entryPoint = "main";
+            fragInfo.source = fragSource;
+            bundle.addShader (std::move (fragInfo));
+
             auto result = bundle.saveToFile (results[0]);
             if (result.failed())
                 yup::Logger::outputDebugString ("SpinningCubeDemo: save YSLB failed: " + result.getErrorMessage());
@@ -681,10 +787,7 @@ void main() {
 
     void syncEditorSource()
     {
-        if (showingVertexShader)
-            currentVertSource = shaderEditor->getText();
-        else
-            currentFragSource = shaderEditor->getText();
+        activeStageSource() = shaderEditor->getText();
     }
 
     // ---- Per-frame cube render pass -----------------------------------------
@@ -719,6 +822,7 @@ void main() {
     yup::GpuProgram::Ptr cubeProgram;
     yup::GpuBuffer::Ptr cubeVBO;
     yup::GpuBuffer::Ptr cubeIBO;
+    yup::GpuCanvas::Ptr sceneCanvas;
 
     // Blur pass (GpuProgram fullscreen triangle).
     yup::GpuProgram::Ptr blurProgram;
@@ -737,11 +841,16 @@ void main() {
     // Shader live editing.
     yup::String currentVertSource;
     yup::String currentFragSource;
+    yup::String currentBlurVertSource;
+    yup::String currentBlurFragSource;
     bool showingVertexShader = true;
+    bool editingBlur = false;
 
     std::unique_ptr<yup::TextEditor> shaderEditor;
     std::unique_ptr<yup::TextButton> compileButton;
     std::unique_ptr<yup::TextButton> resetButton;
+    std::unique_ptr<yup::TextButton> cubeTargetButton;
+    std::unique_ptr<yup::TextButton> blurTargetButton;
     std::unique_ptr<yup::TextButton> vertToggleButton;
     std::unique_ptr<yup::TextButton> fragToggleButton;
     std::unique_ptr<yup::TextButton> loadButton;
