@@ -46,6 +46,9 @@ struct TranspileOptions
     /** When true, flip the Y coordinate in vertex output (MSL). */
     bool flipVertY = false;
 
+    /** Enable SPIR-V optimization (requires SPIRV-Tools linked into glslang). */
+    bool spirvOptimize = false;
+
     /** Preprocessor defines (name → value, empty string for no-value defines). */
     HashMap<String, String> defines;
 
@@ -64,7 +67,8 @@ struct TranspileOptions
                 << "|es:" << (es ? '1' : '0')
                 << "|hlslSM:" << hlslShaderModel
                 << "|mslFBF:" << (mslUsesFramebufferFetch ? '1' : '0')
-                << "|flipY:" << (flipVertY ? '1' : '0');
+                << "|flipY:" << (flipVertY ? '1' : '0')
+                << "|spvOpt:" << (spirvOptimize ? '1' : '0');
 
         // Defines sorted for determinism
         std::vector<std::pair<String, String>> sortedDefines;

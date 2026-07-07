@@ -26,7 +26,7 @@ namespace yup
 /** Encapsulates a graphics context that abstracts rendering operations across various APIs.
 
     This class serves as a base for implementing specific graphics context functionalities, such as rendering and resource management,
-    across different graphics APIs like OpenGL, Direct3D, Metal, and WebGL. It offers a standardized interface for operations
+    across different graphics APIs like OpenGL, OpenGLES, Direct3D, Metal, and WebGPU. It offers a standardized interface for operations
     common to all graphics APIs.
 */
 class YUP_API GraphicsContext
@@ -45,7 +45,7 @@ public:
         OpenGLES, ///< Specifies the use of OpenGL ES (GLES 3.0+) for rendering (Android, WASM).
         Direct3D, ///< Specifies the use of Direct3D for rendering.
         Metal,    ///< Specifies the use of Metal for rendering.
-        WebGL     ///< Specifies the use of WebGL, relying on dawn.
+        WebGPU    ///< Specifies the use of WebGPU, relying on dawn where not supported natively.
     };
 
     /** Configuration options for creating a graphics context. */

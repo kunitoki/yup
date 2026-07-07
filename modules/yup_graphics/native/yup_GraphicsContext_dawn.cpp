@@ -191,7 +191,7 @@ public:
                                                      PLSRenderContextWebGPUImpl::ContextOptions());
     }
 
-    Api getApi() const noexcept override { return Api::WebGL; }
+    Api getApi() const noexcept override { return Api::WebGPU; }
 
     float dpiScale (void* window) const override
     {

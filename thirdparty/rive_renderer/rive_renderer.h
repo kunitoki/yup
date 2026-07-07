@@ -35,7 +35,7 @@
     dependencies:       rive rive_decoders glad
     searchpaths:        include source source/generated/shaders
     macFrameworks:      Metal QuartzCore
-    appleDefines:       ORE_BACKEND_METAL=1
+    appleDefines:       ORE_BACKEND_METAL=1 RIVE_OBJC_EXCEPTIONS=1
     iosDefines:         RIVE_IOS=1
     iosSimDefines:      RIVE_IOS_SIMULATOR=1
     linuxDefines:       RIVE_DESKTOP_GL=1 ORE_BACKEND_GL=1

@@ -980,7 +980,10 @@ ResultValue<MemoryBlock> ShaderTranspiler::compileToSPIRV (const String& source,
     }
 
     std::vector<uint32_t> spirv;
-    glslang::GlslangToSpv (*program.getIntermediate (glslStage), spirv);
+    glslang::SpvOptions spvOptions;
+    spvOptions.disableOptimizer = ! options.spirvOptimize;
+    spvOptions.optimizeSize = options.spirvOptimize;
+    glslang::GlslangToSpv (*program.getIntermediate (glslStage), spirv, &spvOptions);
 
     if (spirv.empty())
         return makeResultValueFail ("No SPIR-V output produced");
