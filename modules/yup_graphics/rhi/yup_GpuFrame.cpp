@@ -58,7 +58,7 @@ GpuFrame GpuFrame::begin (GraphicsContext& ctx)
     if (oreCtx == nullptr)
         return frame;
 
-    frame.impl = TypeErasedObject<GpuFrame::ImplSizeBytes> (GpuFrame::Impl {});
+    frame.impl = TypeErasedObject (GpuFrame::Impl {});
 
     auto* i = frame.getImpl();
     i->oreCtx = oreCtx;
