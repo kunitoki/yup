@@ -440,10 +440,11 @@ bool GpuProgram::Impl::encode (GpuCanvas& output,
         return false;
 
     rive::rcp<rive::ore::TextureView> outputView;
-    if (auto rc = outputTex->getInternalRenderCanvas())
-        outputView = oreCtx->wrapCanvasTexture (rc.get());
-    else if (auto gpuTex = outputTex->getOrAdoptGpuTexture())
+
+    if (auto gpuTex = outputTex->getOrAdoptGpuTexture())
         outputView = oreCtx->wrapRiveTexture (gpuTex.get(), (uint32_t) outputTex->getWidth(), (uint32_t) outputTex->getHeight());
+    else if (auto rc = outputTex->getInternalRenderCanvas())
+        outputView = oreCtx->wrapCanvasTexture (rc.get());
 
     if (outputView == nullptr)
         return false;
@@ -493,12 +494,11 @@ bool GpuProgram::Impl::encode (GpuCanvas& output,
             if (tb.group != (int) groupIdx || tb.texture == nullptr)
                 continue;
 
-            // Sampled inputs must be bound through an SRV-backed view. The
-            // canvas wrapper (wrapCanvasTexture) only exposes a render-target
-            // view, which has no shader-resource view on D3D - sampling it
-            // reads nothing. Prefer the underlying GPU texture, which
-            // wrapRiveTexture() wraps with a proper SRV for sampling.
+            // Sampled inputs must be bound through an SRV-backed view. The canvas wrapper (wrapCanvasTexture)
+            // only exposes a render-target view, which has no shader-resource view on D3D - sampling it
+            // reads nothing. Prefer the underlying GPU texture, which wrapRiveTexture() wraps with a proper SRV for sampling.
             rive::rcp<rive::ore::TextureView> view;
+
             if (auto gpuTex = tb.texture->getOrAdoptGpuTexture())
                 view = oreCtx->wrapRiveTexture (gpuTex.get(), (uint32_t) tb.texture->getWidth(), (uint32_t) tb.texture->getHeight());
             else if (auto rc = tb.texture->getInternalRenderCanvas())
@@ -555,8 +555,7 @@ bool GpuProgram::Impl::encode (GpuCanvas& output,
             bindGroups.push_back ({ groupIdx, std::move (bg) });
     }
 
-    // Encode the render pass into the current frame (beginFrame/endFrame are
-    // the caller's responsibility).
+    // Encode the render pass into the current frame (beginFrame/endFrame are the caller's responsibility).
     rive::ore::RenderPassDesc rpDesc;
     rpDesc.colorCount = 1;
     rpDesc.colorAttachments[0].view = outputView.get();
@@ -672,6 +671,7 @@ ResultValue<GpuProgram::Ptr> GpuProgram::compile (GraphicsContext& ctx,
                               rive::ore::ShaderStage stage,
                               const char* label)
     {
+        desc.language = rive::ore::ShaderLanguage::glsl;
         desc.code = src.code;
         desc.codeSize = src.codeSize;
         desc.stage = stage;
@@ -686,16 +686,12 @@ ResultValue<GpuProgram::Ptr> GpuProgram::compile (GraphicsContext& ctx,
                 break;
 
             case GpuShaderLanguage::hlsl:
-                desc.language = rive::ore::ShaderLanguage::glsl;
                 desc.hlslSource = static_cast<const char*> (src.code);
                 desc.hlslSourceSize = src.codeSize;
                 desc.hlslEntryPoint = src.entryPoint;
                 break;
 
-            case GpuShaderLanguage::msl:
-            case GpuShaderLanguage::glsl:
             default:
-                desc.language = rive::ore::ShaderLanguage::glsl;
                 break;
         }
     };

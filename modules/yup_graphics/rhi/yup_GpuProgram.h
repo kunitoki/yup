@@ -183,7 +183,14 @@ enum class GpuTextureFormat : uint8_t
 /** Describes a single vertex attribute within a vertex buffer layout. */
 struct GpuVertexAttribute
 {
-    GpuVertexAttribute() = default;
+    constexpr GpuVertexAttribute() = default;
+
+    constexpr GpuVertexAttribute (GpuVertexFormat format, uint32_t offset, uint32_t shaderLocation)
+        : format (format)
+        , offset (offset)
+        , shaderLocation (shaderLocation)
+    {
+    }
 
     GpuVertexFormat format = GpuVertexFormat::float4; ///< The attribute data format.
     uint32_t offset = 0;                              ///< Byte offset within the vertex.
@@ -193,7 +200,15 @@ struct GpuVertexAttribute
 /** Describes the layout of one vertex buffer bound to a pipeline. */
 struct GpuVertexBufferLayout
 {
-    GpuVertexBufferLayout() = default;
+    constexpr GpuVertexBufferLayout() = default;
+
+    constexpr GpuVertexBufferLayout (uint32_t stride, GpuVertexStepMode stepMode, const GpuVertexAttribute* attributes, uint32_t attributeCount)
+        : stride (stride)
+        , stepMode (stepMode)
+        , attributes (attributes)
+        , attributeCount (attributeCount)
+    {
+    }
 
     uint32_t stride = 0;                                    ///< Byte stride between vertices.
     GpuVertexStepMode stepMode = GpuVertexStepMode::vertex; ///< Per-vertex or per-instance.
@@ -204,7 +219,7 @@ struct GpuVertexBufferLayout
 /** Blend state for a single color target. */
 struct GpuBlendState
 {
-    GpuBlendState() = default;
+    constexpr GpuBlendState() = default;
 
     GpuBlendFactor srcColor = GpuBlendFactor::srcAlpha;
     GpuBlendFactor dstColor = GpuBlendFactor::oneMinusSrcAlpha;
@@ -217,7 +232,7 @@ struct GpuBlendState
 /** State for a single color render target. */
 struct GpuColorTarget
 {
-    GpuColorTarget() = default;
+    constexpr GpuColorTarget() = default;
 
     GpuTextureFormat format = GpuTextureFormat::rgba8unorm; ///< Target pixel format.
     bool blendEnabled = true;                               ///< Enable alpha blending.
@@ -227,7 +242,7 @@ struct GpuColorTarget
 /** Per-face stencil test state. */
 struct GpuStencilFaceState
 {
-    GpuStencilFaceState() = default;
+    constexpr GpuStencilFaceState() = default;
 
     GpuCompareFunction compare = GpuCompareFunction::always;
     GpuStencilOp failOp = GpuStencilOp::keep;
@@ -243,7 +258,7 @@ struct GpuStencilFaceState
 */
 struct GpuDepthStencilState
 {
-    GpuDepthStencilState() = default;
+    constexpr GpuDepthStencilState() = default;
 
     bool enabled = false;                                            ///< Enable depth/stencil testing.
     GpuTextureFormat format = GpuTextureFormat::depth24plusStencil8; ///< Depth/stencil format.
@@ -295,7 +310,13 @@ struct GpuPipelineOptions
 /** Per-draw options controlling the render pass a draw call encodes. */
 struct GpuRenderOptions
 {
-    GpuRenderOptions() = default;
+    constexpr GpuRenderOptions() = default;
+
+    constexpr GpuRenderOptions (bool clear, Color clearColor)
+        : clear (clear)
+        , clearColor (clearColor)
+    {
+    }
 
     /** Whether to clear the target before drawing (LoadOp::clear). When false
         the existing contents are loaded (LoadOp::load). */

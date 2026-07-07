@@ -75,8 +75,7 @@ public:
         @param data       Pointer to the source data to upload (must be non-null).
         @param byteSize   Number of bytes to upload (must be greater than zero).
 
-        @returns A valid GpuBuffer, or nullptr on failure (ore unavailable or
-                 allocation failed).
+        @returns A valid GpuBuffer, or nullptr on failure (ore unavailable or allocation failed).
     */
     static GpuBuffer::Ptr create (GraphicsContext& ctx,
                                   GpuBufferType type,
