@@ -190,6 +190,8 @@ class NoOpGraphicsContext : public GraphicsContext
 public:
     NoOpGraphicsContext() = default;
 
+    Api getApi() const noexcept override { return Api::Headless; }
+
     float dpiScale (void*) const override
     {
         return 1.0f;

@@ -45,6 +45,8 @@ public:
     {
     }
 
+    Api getApi() const noexcept override { return Api::Direct3D; }
+
     float dpiScale (void*) const override { return 1.0f; }
 
     rive::Factory* factory() override { return m_renderContext.get(); }

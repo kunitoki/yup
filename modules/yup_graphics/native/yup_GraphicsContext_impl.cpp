@@ -45,7 +45,7 @@ std::unique_ptr<GraphicsContext> GraphicsContext::createContext (Api graphicsApi
 #endif
 
 #if YUP_RIVE_USE_DAWN
-        case Api::Dawn:
+        case Api::WebGL:
             return yup_constructDawnGraphicsContext (options);
 #endif
 

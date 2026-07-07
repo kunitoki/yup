@@ -129,6 +129,8 @@ public:
         cleanupOffscreenResources();
     }
 
+    Api getApi() const noexcept override { return Api::OpenGL; }
+
     float dpiScale (void*) const override
     {
 #if RIVE_DESKTOP_GL && __APPLE__

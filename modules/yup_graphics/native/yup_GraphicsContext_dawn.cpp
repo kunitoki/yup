@@ -191,6 +191,8 @@ public:
                                                      PLSRenderContextWebGPUImpl::ContextOptions());
     }
 
+    Api getApi() const noexcept override { return Api::WebGL; }
+
     float dpiScale (void* window) const override
     {
         return GetDawnWindowBackingScaleFactor (window, m_options.retinaDisplay);

@@ -138,6 +138,8 @@ public:
 
     //==============================================================================
 
+    Api getApi() const noexcept override { return Api::Metal; }
+
     float dpiScale (void* window) const override
     {
 #if YUP_IOS

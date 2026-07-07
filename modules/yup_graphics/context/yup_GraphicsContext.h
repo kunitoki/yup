@@ -26,7 +26,7 @@ namespace yup
 /** Encapsulates a graphics context that abstracts rendering operations across various APIs.
 
     This class serves as a base for implementing specific graphics context functionalities, such as rendering and resource management,
-    across different graphics APIs like OpenGL, Direct3D, Metal, and Dawn. It offers a standardized interface for operations
+    across different graphics APIs like OpenGL, Direct3D, Metal, and WebGL. It offers a standardized interface for operations
     common to all graphics APIs.
 */
 class YUP_API GraphicsContext
@@ -44,7 +44,7 @@ public:
         OpenGL,   ///< Specifies the use of OpenGL for rendering.
         Direct3D, ///< Specifies the use of Direct3D for rendering.
         Metal,    ///< Specifies the use of Metal for rendering.
-        Dawn      ///< Specifies the use of Dawn, a Vulkan-like API.
+        WebGL     ///< Specifies the use of WebGL, relying on dawn.
     };
 
     /** Configuration options for creating a graphics context. */
@@ -75,6 +75,13 @@ public:
     GraphicsContext (GraphicsContext&& other) noexcept = default;
     GraphicsContext& operator= (const GraphicsContext& other) noexcept = delete;
     GraphicsContext& operator= (GraphicsContext&& other) noexcept = default;
+
+    //==============================================================================
+    /** Returns the graphics API used by this context.
+
+        @return The Api enum value identifying the active rendering backend.
+    */
+    virtual Api getApi() const noexcept = 0;
 
     //==============================================================================
     /** Returns the DPI scale associated with a native handle.
