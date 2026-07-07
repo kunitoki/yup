@@ -162,7 +162,7 @@ private:
     struct Entry
     {
         MemoryBlock spirv;
-        int64 lastAccessTime = 0;
+        uint64 lastAccessOrder = 0;
     };
 
     void evictIfNeeded();
@@ -170,6 +170,7 @@ private:
     ShaderTranspiler::Ptr transpiler;
     std::map<String, Entry> cache;
     size_t maxEntries = 256;
+    uint64 accessCounter = 0;
     mutable CriticalSection lock;
 };
 
