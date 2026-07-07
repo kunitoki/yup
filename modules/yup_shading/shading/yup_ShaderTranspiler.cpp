@@ -19,8 +19,6 @@
   ==============================================================================
 */
 
-#if YUP_ENABLE_SHADER_COMPILER
-
 //==============================================================================
 namespace yup
 {
@@ -1256,5 +1254,3 @@ ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBl
 }
 
 } // namespace yup
-
-#endif // YUP_ENABLE_SHADER_COMPILER

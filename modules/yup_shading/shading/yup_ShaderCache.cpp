@@ -19,8 +19,6 @@
   ==============================================================================
 */
 
-#if YUP_ENABLE_SHADER_COMPILER
-
 //==============================================================================
 namespace yup
 {
@@ -195,5 +193,3 @@ void ShaderCache::evictIfNeeded()
 }
 
 } // namespace yup
-
-#endif // YUP_ENABLE_SHADER_COMPILER
