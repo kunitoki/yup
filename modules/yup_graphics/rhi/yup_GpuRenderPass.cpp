@@ -73,16 +73,37 @@ struct GpuRenderPass::Impl
 
     bool encode (uint32_t count, bool indexed);
 
-    // Creates an ore TextureView for a GpuTexture. Sampled inputs and color
-    // attachments must be bound through an SRV-backed view. wrapCanvasTexture
-    // only exposes a render-target view, which has no shader-resource view on
-    // D3D - sampling it reads nothing. Prefer the underlying GPU texture, which
-    // wrapRiveTexture() wraps with a proper SRV, and fall back to the canvas
-    // view. This is a member of the nested Impl so it can read GpuTexture
-    // internals: GpuRenderPass is a friend of GpuTexture, and a nested class
-    // shares the enclosing class's access rights (C++11).
-    static rive::rcp<rive::ore::TextureView> createView (rive::ore::Context& oreCtx, const GpuTexture& tex)
+    // Creates an ore TextureView for a GpuTexture. The correct view kind depends
+    // on how the texture is used, and the preference order differs between color
+    // attachments and sampled inputs:
+    //
+    // - Color attachments must be bound through a render-target view. On D3D the
+    //   canvas wrapper (wrapCanvasTexture) exposes the RTV; binding an SRV-backed
+    //   rive-texture view instead leaves no RTV bound and the draw is discarded
+    //   (DEVICE_DRAW_RENDERTARGETVIEW_NOT_SET). Prefer wrapCanvasTexture, and
+    //   fall back to the underlying GPU texture.
+    // - Sampled inputs must be bound through an SRV-backed view. wrapCanvasTexture
+    //   only exposes a render-target view, which has no shader-resource view on
+    //   D3D - sampling it reads nothing. Prefer the underlying GPU texture, which
+    //   wrapRiveTexture() wraps with a proper SRV, and fall back to the canvas
+    //   view.
+    //
+    // This is a member of the nested Impl so it can read GpuTexture internals:
+    // GpuRenderPass is a friend of GpuTexture, and a nested class shares the
+    // enclosing class's access rights (C++11).
+    static rive::rcp<rive::ore::TextureView> createView (rive::ore::Context& oreCtx, const GpuTexture& tex, bool forRenderTarget)
     {
+        if (forRenderTarget)
+        {
+            if (auto rc = tex.getInternalRenderCanvas())
+                return oreCtx.wrapCanvasTexture (rc.get());
+
+            if (auto gpuTex = tex.getOrAdoptGpuTexture())
+                return oreCtx.wrapRiveTexture (gpuTex.get(), (uint32_t) tex.getWidth(), (uint32_t) tex.getHeight());
+
+            return nullptr;
+        }
+
         if (auto gpuTex = tex.getOrAdoptGpuTexture())
             return oreCtx.wrapRiveTexture (gpuTex.get(), (uint32_t) tex.getWidth(), (uint32_t) tex.getHeight());
 
@@ -106,7 +127,7 @@ bool GpuRenderPass::Impl::encode (uint32_t count, bool indexed)
     if (outputTexture == nullptr)
         return false;
 
-    auto outputView = createView (*oreCtx, *outputTexture);
+    auto outputView = createView (*oreCtx, *outputTexture, true);
     if (outputView == nullptr)
         return false;
 
@@ -157,7 +178,7 @@ bool GpuRenderPass::Impl::encode (uint32_t count, bool indexed)
             if (tb.group != (int) groupIdx || tb.texture == nullptr)
                 continue;
 
-            auto view = createView (*oreCtx, *tb.texture);
+            auto view = createView (*oreCtx, *tb.texture, false);
             if (view == nullptr)
                 continue;
 
