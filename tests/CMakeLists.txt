@@ -161,6 +161,10 @@ endforeach()
 
 list (APPEND sources "${CMAKE_CURRENT_LIST_DIR}/main.cpp")
 
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options (${target_name} PRIVATE -Wno-subobject-linkage)
+endif()
+
 target_sources (${target_name} PRIVATE ${sources} ${imported_sources})
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${imported_sources})
