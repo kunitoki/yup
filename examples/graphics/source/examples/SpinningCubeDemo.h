@@ -704,10 +704,10 @@ void main() {
 
         cubeProgram->setUniformBuffer (0, 0, &uniforms, sizeof (uniforms));
         cubeProgram->setVertexBuffer (0, cubeVBO);
-        cubeProgram->setIndexBuffer (cubeIBO, yup::GpuIndexFormat::uint16);
+        cubeProgram->setIndexBuffer (yup::GpuIndexFormat::uint16, cubeIBO);
 
         cubeProgram->beginFrame();
-        cubeProgram->drawIndexed (canvas, 36, { true, yup::Color (0xff1a1a2e) });
+        cubeProgram->drawIndexed (canvas, yup::numElementsInArray (kCubeIdx), { true, yup::Color (0xff1a1a2e) });
         cubeProgram->endFrame();
         cubeProgram->waitForGPU();
     }

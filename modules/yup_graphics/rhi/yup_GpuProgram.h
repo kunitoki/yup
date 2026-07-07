@@ -190,8 +190,8 @@ struct GpuVertexBufferLayout
 {
     uint32_t stride = 0;                                    ///< Byte stride between vertices.
     GpuVertexStepMode stepMode = GpuVertexStepMode::vertex; ///< Per-vertex or per-instance.
-    const GpuVertexAttribute* attributes = nullptr;        ///< Attribute array.
-    uint32_t attributeCount = 0;                           ///< Number of attributes.
+    const GpuVertexAttribute* attributes = nullptr;         ///< Attribute array.
+    uint32_t attributeCount = 0;                            ///< Number of attributes.
 };
 
 /** Blend state for a single color target. */
@@ -230,10 +230,10 @@ struct GpuStencilFaceState
 */
 struct GpuDepthStencilState
 {
-    bool enabled = false;                                      ///< Enable depth/stencil testing.
+    bool enabled = false;                                            ///< Enable depth/stencil testing.
     GpuTextureFormat format = GpuTextureFormat::depth24plusStencil8; ///< Depth/stencil format.
-    GpuCompareFunction depthCompare = GpuCompareFunction::less;///< Depth comparison function.
-    bool depthWriteEnabled = true;                            ///< Enable depth writes.
+    GpuCompareFunction depthCompare = GpuCompareFunction::less;      ///< Depth comparison function.
+    bool depthWriteEnabled = true;                                   ///< Enable depth writes.
 };
 
 //==============================================================================
@@ -376,7 +376,7 @@ public:
         Used by drawIndexed(). The format must match the pipeline's index format.
         The buffer is retained until replaced or the program is destroyed.
     */
-    void setIndexBuffer (GpuBuffer::Ptr buffer, GpuIndexFormat format);
+    void setIndexBuffer (GpuIndexFormat format, GpuBuffer::Ptr buffer);
 
     //==============================================================================
     /** Begins an ore GPU frame.

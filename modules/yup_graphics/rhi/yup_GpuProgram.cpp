@@ -31,14 +31,22 @@ rive::ore::VertexFormat toOreVertexFormat (GpuVertexFormat f)
 {
     switch (f)
     {
-        case GpuVertexFormat::float1:   return rive::ore::VertexFormat::float1;
-        case GpuVertexFormat::float2:   return rive::ore::VertexFormat::float2;
-        case GpuVertexFormat::float3:   return rive::ore::VertexFormat::float3;
-        case GpuVertexFormat::float4:   return rive::ore::VertexFormat::float4;
-        case GpuVertexFormat::uint8x4:  return rive::ore::VertexFormat::uint8x4;
-        case GpuVertexFormat::snorm8x4: return rive::ore::VertexFormat::snorm8x4;
-        case GpuVertexFormat::unorm8x4: return rive::ore::VertexFormat::unorm8x4;
-        default:                        return rive::ore::VertexFormat::float4;
+        case GpuVertexFormat::float1:
+            return rive::ore::VertexFormat::float1;
+        case GpuVertexFormat::float2:
+            return rive::ore::VertexFormat::float2;
+        case GpuVertexFormat::float3:
+            return rive::ore::VertexFormat::float3;
+        case GpuVertexFormat::float4:
+            return rive::ore::VertexFormat::float4;
+        case GpuVertexFormat::uint8x4:
+            return rive::ore::VertexFormat::uint8x4;
+        case GpuVertexFormat::snorm8x4:
+            return rive::ore::VertexFormat::snorm8x4;
+        case GpuVertexFormat::unorm8x4:
+            return rive::ore::VertexFormat::unorm8x4;
+        default:
+            return rive::ore::VertexFormat::float4;
     }
 }
 
@@ -52,12 +60,18 @@ rive::ore::PrimitiveTopology toOreTopology (GpuPrimitiveTopology t)
 {
     switch (t)
     {
-        case GpuPrimitiveTopology::pointList:     return rive::ore::PrimitiveTopology::pointList;
-        case GpuPrimitiveTopology::lineList:      return rive::ore::PrimitiveTopology::lineList;
-        case GpuPrimitiveTopology::lineStrip:     return rive::ore::PrimitiveTopology::lineStrip;
-        case GpuPrimitiveTopology::triangleList:  return rive::ore::PrimitiveTopology::triangleList;
-        case GpuPrimitiveTopology::triangleStrip: return rive::ore::PrimitiveTopology::triangleStrip;
-        default:                                  return rive::ore::PrimitiveTopology::triangleList;
+        case GpuPrimitiveTopology::pointList:
+            return rive::ore::PrimitiveTopology::pointList;
+        case GpuPrimitiveTopology::lineList:
+            return rive::ore::PrimitiveTopology::lineList;
+        case GpuPrimitiveTopology::lineStrip:
+            return rive::ore::PrimitiveTopology::lineStrip;
+        case GpuPrimitiveTopology::triangleList:
+            return rive::ore::PrimitiveTopology::triangleList;
+        case GpuPrimitiveTopology::triangleStrip:
+            return rive::ore::PrimitiveTopology::triangleStrip;
+        default:
+            return rive::ore::PrimitiveTopology::triangleList;
     }
 }
 
@@ -65,10 +79,13 @@ rive::ore::IndexFormat toOreIndexFormat (GpuIndexFormat f)
 {
     switch (f)
     {
-        case GpuIndexFormat::uint16: return rive::ore::IndexFormat::uint16;
-        case GpuIndexFormat::uint32: return rive::ore::IndexFormat::uint32;
+        case GpuIndexFormat::uint16:
+            return rive::ore::IndexFormat::uint16;
+        case GpuIndexFormat::uint32:
+            return rive::ore::IndexFormat::uint32;
         case GpuIndexFormat::none:
-        default:                     return rive::ore::IndexFormat::none;
+        default:
+            return rive::ore::IndexFormat::none;
     }
 }
 
@@ -76,10 +93,13 @@ rive::ore::CullMode toOreCullMode (GpuCullMode m)
 {
     switch (m)
     {
-        case GpuCullMode::front: return rive::ore::CullMode::front;
-        case GpuCullMode::back:  return rive::ore::CullMode::back;
+        case GpuCullMode::front:
+            return rive::ore::CullMode::front;
+        case GpuCullMode::back:
+            return rive::ore::CullMode::back;
         case GpuCullMode::none:
-        default:                 return rive::ore::CullMode::none;
+        default:
+            return rive::ore::CullMode::none;
     }
 }
 
@@ -93,15 +113,23 @@ rive::ore::CompareFunction toOreCompare (GpuCompareFunction c)
 {
     switch (c)
     {
-        case GpuCompareFunction::never:        return rive::ore::CompareFunction::never;
-        case GpuCompareFunction::less:         return rive::ore::CompareFunction::less;
-        case GpuCompareFunction::equal:        return rive::ore::CompareFunction::equal;
-        case GpuCompareFunction::lessEqual:    return rive::ore::CompareFunction::lessEqual;
-        case GpuCompareFunction::greater:      return rive::ore::CompareFunction::greater;
-        case GpuCompareFunction::notEqual:     return rive::ore::CompareFunction::notEqual;
-        case GpuCompareFunction::greaterEqual: return rive::ore::CompareFunction::greaterEqual;
+        case GpuCompareFunction::never:
+            return rive::ore::CompareFunction::never;
+        case GpuCompareFunction::less:
+            return rive::ore::CompareFunction::less;
+        case GpuCompareFunction::equal:
+            return rive::ore::CompareFunction::equal;
+        case GpuCompareFunction::lessEqual:
+            return rive::ore::CompareFunction::lessEqual;
+        case GpuCompareFunction::greater:
+            return rive::ore::CompareFunction::greater;
+        case GpuCompareFunction::notEqual:
+            return rive::ore::CompareFunction::notEqual;
+        case GpuCompareFunction::greaterEqual:
+            return rive::ore::CompareFunction::greaterEqual;
         case GpuCompareFunction::always:
-        default:                               return rive::ore::CompareFunction::always;
+        default:
+            return rive::ore::CompareFunction::always;
     }
 }
 
@@ -109,15 +137,24 @@ rive::ore::StencilOp toOreStencilOp (GpuStencilOp o)
 {
     switch (o)
     {
-        case GpuStencilOp::keep:           return rive::ore::StencilOp::keep;
-        case GpuStencilOp::zero:           return rive::ore::StencilOp::zero;
-        case GpuStencilOp::replace:        return rive::ore::StencilOp::replace;
-        case GpuStencilOp::incrementClamp: return rive::ore::StencilOp::incrementClamp;
-        case GpuStencilOp::decrementClamp: return rive::ore::StencilOp::decrementClamp;
-        case GpuStencilOp::invert:         return rive::ore::StencilOp::invert;
-        case GpuStencilOp::incrementWrap:  return rive::ore::StencilOp::incrementWrap;
-        case GpuStencilOp::decrementWrap:  return rive::ore::StencilOp::decrementWrap;
-        default:                           return rive::ore::StencilOp::keep;
+        case GpuStencilOp::keep:
+            return rive::ore::StencilOp::keep;
+        case GpuStencilOp::zero:
+            return rive::ore::StencilOp::zero;
+        case GpuStencilOp::replace:
+            return rive::ore::StencilOp::replace;
+        case GpuStencilOp::incrementClamp:
+            return rive::ore::StencilOp::incrementClamp;
+        case GpuStencilOp::decrementClamp:
+            return rive::ore::StencilOp::decrementClamp;
+        case GpuStencilOp::invert:
+            return rive::ore::StencilOp::invert;
+        case GpuStencilOp::incrementWrap:
+            return rive::ore::StencilOp::incrementWrap;
+        case GpuStencilOp::decrementWrap:
+            return rive::ore::StencilOp::decrementWrap;
+        default:
+            return rive::ore::StencilOp::keep;
     }
 }
 
@@ -125,17 +162,28 @@ rive::ore::BlendFactor toOreBlendFactor (GpuBlendFactor f)
 {
     switch (f)
     {
-        case GpuBlendFactor::zero:             return rive::ore::BlendFactor::zero;
-        case GpuBlendFactor::one:              return rive::ore::BlendFactor::one;
-        case GpuBlendFactor::srcColor:         return rive::ore::BlendFactor::srcColor;
-        case GpuBlendFactor::oneMinusSrcColor: return rive::ore::BlendFactor::oneMinusSrcColor;
-        case GpuBlendFactor::srcAlpha:         return rive::ore::BlendFactor::srcAlpha;
-        case GpuBlendFactor::oneMinusSrcAlpha: return rive::ore::BlendFactor::oneMinusSrcAlpha;
-        case GpuBlendFactor::dstColor:         return rive::ore::BlendFactor::dstColor;
-        case GpuBlendFactor::oneMinusDstColor: return rive::ore::BlendFactor::oneMinusDstColor;
-        case GpuBlendFactor::dstAlpha:         return rive::ore::BlendFactor::dstAlpha;
-        case GpuBlendFactor::oneMinusDstAlpha: return rive::ore::BlendFactor::oneMinusDstAlpha;
-        default:                               return rive::ore::BlendFactor::one;
+        case GpuBlendFactor::zero:
+            return rive::ore::BlendFactor::zero;
+        case GpuBlendFactor::one:
+            return rive::ore::BlendFactor::one;
+        case GpuBlendFactor::srcColor:
+            return rive::ore::BlendFactor::srcColor;
+        case GpuBlendFactor::oneMinusSrcColor:
+            return rive::ore::BlendFactor::oneMinusSrcColor;
+        case GpuBlendFactor::srcAlpha:
+            return rive::ore::BlendFactor::srcAlpha;
+        case GpuBlendFactor::oneMinusSrcAlpha:
+            return rive::ore::BlendFactor::oneMinusSrcAlpha;
+        case GpuBlendFactor::dstColor:
+            return rive::ore::BlendFactor::dstColor;
+        case GpuBlendFactor::oneMinusDstColor:
+            return rive::ore::BlendFactor::oneMinusDstColor;
+        case GpuBlendFactor::dstAlpha:
+            return rive::ore::BlendFactor::dstAlpha;
+        case GpuBlendFactor::oneMinusDstAlpha:
+            return rive::ore::BlendFactor::oneMinusDstAlpha;
+        default:
+            return rive::ore::BlendFactor::one;
     }
 }
 
@@ -143,12 +191,18 @@ rive::ore::BlendOp toOreBlendOp (GpuBlendOp o)
 {
     switch (o)
     {
-        case GpuBlendOp::add:             return rive::ore::BlendOp::add;
-        case GpuBlendOp::subtract:        return rive::ore::BlendOp::subtract;
-        case GpuBlendOp::reverseSubtract: return rive::ore::BlendOp::reverseSubtract;
-        case GpuBlendOp::min:             return rive::ore::BlendOp::min;
-        case GpuBlendOp::max:             return rive::ore::BlendOp::max;
-        default:                          return rive::ore::BlendOp::add;
+        case GpuBlendOp::add:
+            return rive::ore::BlendOp::add;
+        case GpuBlendOp::subtract:
+            return rive::ore::BlendOp::subtract;
+        case GpuBlendOp::reverseSubtract:
+            return rive::ore::BlendOp::reverseSubtract;
+        case GpuBlendOp::min:
+            return rive::ore::BlendOp::min;
+        case GpuBlendOp::max:
+            return rive::ore::BlendOp::max;
+        default:
+            return rive::ore::BlendOp::add;
     }
 }
 
@@ -156,12 +210,18 @@ rive::ore::TextureFormat toOreTextureFormat (GpuTextureFormat f)
 {
     switch (f)
     {
-        case GpuTextureFormat::rgba8unorm:          return rive::ore::TextureFormat::rgba8unorm;
-        case GpuTextureFormat::bgra8unorm:          return rive::ore::TextureFormat::bgra8unorm;
-        case GpuTextureFormat::rgba16float:         return rive::ore::TextureFormat::rgba16float;
-        case GpuTextureFormat::depth24plusStencil8: return rive::ore::TextureFormat::depth24plusStencil8;
-        case GpuTextureFormat::depth32float:        return rive::ore::TextureFormat::depth32float;
-        default:                                    return rive::ore::TextureFormat::rgba8unorm;
+        case GpuTextureFormat::rgba8unorm:
+            return rive::ore::TextureFormat::rgba8unorm;
+        case GpuTextureFormat::bgra8unorm:
+            return rive::ore::TextureFormat::bgra8unorm;
+        case GpuTextureFormat::rgba16float:
+            return rive::ore::TextureFormat::rgba16float;
+        case GpuTextureFormat::depth24plusStencil8:
+            return rive::ore::TextureFormat::depth24plusStencil8;
+        case GpuTextureFormat::depth32float:
+            return rive::ore::TextureFormat::depth32float;
+        default:
+            return rive::ore::TextureFormat::rgba8unorm;
     }
 }
 
@@ -296,7 +356,7 @@ void GpuProgram::setVertexBuffer (int slot, GpuBuffer::Ptr buffer)
     impl->vertexBindings.push_back ({ slot, std::move (buffer), ore });
 }
 
-void GpuProgram::setIndexBuffer (GpuBuffer::Ptr buffer, GpuIndexFormat format)
+void GpuProgram::setIndexBuffer (GpuIndexFormat format, GpuBuffer::Ptr buffer)
 {
     jassert (impl != nullptr);
     if (impl == nullptr)
@@ -823,7 +883,7 @@ GpuProgram::Ptr GpuProgram::compile (GraphicsContext& ctx,
     // PipelineDesc's raw pointers lives inside the object that owns the
     // pipeline. The ore Pipeline copies PipelineDesc by value but keeps the
     // vertexBuffers / attributes pointers, reading them at draw time.
-    auto prog = GpuProgram::Ptr{ new GpuProgram() };
+    auto prog = GpuProgram::Ptr { new GpuProgram() };
     prog->impl = std::make_unique<Impl>();
 
     auto& implRef = *prog->impl;
@@ -946,11 +1006,16 @@ ShaderLanguage shaderLanguageForApi (GraphicsContext::Api api)
 {
     switch (api)
     {
-        case GraphicsContext::Metal:    return ShaderLanguage::msl;
-        case GraphicsContext::Direct3D: return ShaderLanguage::hlsl;
-        case GraphicsContext::OpenGLES: return ShaderLanguage::essl;
-        case GraphicsContext::WebGPU:   return ShaderLanguage::wgsl;
-        default:                        return ShaderLanguage::glsl;
+        case GraphicsContext::Metal:
+            return ShaderLanguage::msl;
+        case GraphicsContext::Direct3D:
+            return ShaderLanguage::hlsl;
+        case GraphicsContext::OpenGLES:
+            return ShaderLanguage::essl;
+        case GraphicsContext::WebGPU:
+            return ShaderLanguage::wgsl;
+        default:
+            return ShaderLanguage::glsl;
     }
 }
 
@@ -958,10 +1023,14 @@ GpuShaderLanguage gpuShaderLanguageForApi (GraphicsContext::Api api)
 {
     switch (api)
     {
-        case GraphicsContext::Metal:    return GpuShaderLanguage::msl;
-        case GraphicsContext::Direct3D: return GpuShaderLanguage::hlsl;
-        case GraphicsContext::WebGPU:   return GpuShaderLanguage::wgsl;
-        default:                        return GpuShaderLanguage::glsl;
+        case GraphicsContext::Metal:
+            return GpuShaderLanguage::msl;
+        case GraphicsContext::Direct3D:
+            return GpuShaderLanguage::hlsl;
+        case GraphicsContext::WebGPU:
+            return GpuShaderLanguage::wgsl;
+        default:
+            return GpuShaderLanguage::glsl;
     }
 }
 
