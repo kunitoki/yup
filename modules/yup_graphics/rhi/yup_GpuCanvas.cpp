@@ -129,8 +129,8 @@ bool GpuCanvas::readPixels (void* dst, size_t byteSize)
     return ctx->readOffscreenPixels (*graphics->offscreenTarget, dst, byteSize);
 }
 
-bool GpuCanvas::withOreAttachment (rive::ore::Context* oreCtx,
-                                   std::function<void (rive::ore::TextureView*)> renderFunc) noexcept
+bool GpuCanvas::withAttachment (rive::ore::Context* oreCtx,
+                                std::function<void (rive::ore::TextureView*)> renderFunc) noexcept
 {
     if (oreCtx == nullptr || ! renderFunc)
         return false;

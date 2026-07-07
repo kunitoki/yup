@@ -122,6 +122,11 @@ public:
         Valid after commit(). The destination buffer must hold at least
         getWidth() * getHeight() * 4 bytes (RGBA, top-to-bottom row order).
         Returns false if readback is not available for this backend or fails.
+
+        @param dst       Pointer to the destination buffer (must be non-null).
+        @param byteSize  Size of the destination buffer in bytes (must be >= width*height*4).
+
+        @returns         True on success, false on failure.
     */
     bool readPixels (void* dst, size_t byteSize);
 
@@ -134,7 +139,7 @@ public:
 
         Typical usage - encode a custom ore render pass targeting this canvas:
         @code
-        canvas->withOreAttachment(oreCtx, [&](rive::ore::TextureView* view) {
+        canvas->withAttachment(oreCtx, [&](rive::ore::TextureView* view) {
             rive::ore::RenderPassDesc rpDesc;
             rpDesc.colorAttachments[0].view = view;
             rpDesc.colorCount = 1;
@@ -145,12 +150,12 @@ public:
         });
         @endcode
 
-        @returns false if ore is unavailable, @c oreCtx is null, or the canvas is
-                 not committed.
-        Requires enableOreContext = true on the associated GraphicsContext.
+        @returns false if ore is unavailable, @c oreCtx is null, or the canvas is not committed.
+
+        @note Requires enableOreContext = true on the associated GraphicsContext.
     */
-    bool withOreAttachment (rive::ore::Context* oreCtx,
-                            std::function<void (rive::ore::TextureView*)> renderFunc) noexcept;
+    bool withAttachment (rive::ore::Context* oreCtx,
+                         std::function<void (rive::ore::TextureView*)> renderFunc) noexcept;
 
 private:
     //==============================================================================
