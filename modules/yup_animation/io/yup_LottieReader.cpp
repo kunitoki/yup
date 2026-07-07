@@ -712,7 +712,7 @@ AnimationLayer::Ptr LottieReader::parseLayer (const var& layerObj)
         il->assetRefId = varString (layerObj["refId"]);
         layer = il;
     }
-    else if (ty == 5) // Text — TODO: parsed as NullLayer (text rendering not yet supported)
+    else if (ty == 5) // Text - TODO: parsed as NullLayer (text rendering not yet supported)
     {
         layer = new NullLayer();
     }
@@ -732,7 +732,7 @@ AnimationLayer::Ptr LottieReader::parseLayer (const var& layerObj)
         return {};
     }
 
-    // Hidden layers — downgrade to Null to save resources (gap 23)
+    // Hidden layers - downgrade to Null to save resources (gap 23)
     if (layer->hidden)
     {
         layer = new NullLayer();
@@ -1157,7 +1157,7 @@ void LottieReader::parseSingleItem (const var& itemObj, AnimationGroup& group)
         rd->hidden = (bool) itemObj["hd"];
         rd->radius = parseProperty<float> (itemObj["r"], extractFloat);
     }
-    else if (ty == "mm") // Merge Paths — not yet supported (gap 26)
+    else if (ty == "mm") // Merge Paths - not yet supported (gap 26)
     {
         if (errorOut_ != nullptr)
             *errorOut_ = "Merge Path (mm) is not supported yet";
@@ -1191,7 +1191,7 @@ void LottieReader::parseGradient (const var& gradObj, AnimationGradient& gradien
 
         if (! isAnimated)
         {
-            // Static gradient — parse the flat array once
+            // Static gradient - parse the flat array once
             if (const auto* arr = safeArray (gk["k"]))
             {
                 std::vector<float> flat;
@@ -1203,7 +1203,7 @@ void LottieReader::parseGradient (const var& gradObj, AnimationGradient& gradien
         }
         else
         {
-            // Animated gradient — store all keyframes for runtime interpolation
+            // Animated gradient - store all keyframes for runtime interpolation
             if (const auto* kfs = safeArray (gk["k"]))
             {
                 for (const var& kf : *kfs)
@@ -1378,7 +1378,7 @@ void LottieReader::parseTransform (const var& ksObj, AnimationTransform& t, bool
 
                 if (hasSpatial)
                 {
-                    // Parse position with spatial tangents — store keyframes and tangents
+                    // Parse position with spatial tangents - store keyframes and tangents
                     typename AnimationProperty<Point<float>>::Builder builder;
                     bool hasPreviousValue = false;
                     Point<float> previousValue {};

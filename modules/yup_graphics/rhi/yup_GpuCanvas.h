@@ -132,7 +132,7 @@ public:
         an ore RenderPassDesc. The TextureView pointer is only valid within the scope of
         @c renderFunc; it must not be stored beyond the call.
 
-        Typical usage — encode a custom ore render pass targeting this canvas:
+        Typical usage - encode a custom ore render pass targeting this canvas:
         @code
         canvas->withOreAttachment(oreCtx, [&](rive::ore::TextureView* view) {
             rive::ore::RenderPassDesc rpDesc;

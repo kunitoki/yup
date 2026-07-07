@@ -99,7 +99,7 @@ bool AnimationEasing::operator!= (const AnimationEasing& o) const noexcept
 }
 
 //==============================================================================
-// Private helpers — cubic bezier evaluation matching CSS/rlottie VInterpolator
+// Private helpers - cubic bezier evaluation matching CSS/rlottie VInterpolator
 
 float AnimationEasing::calcBezier (float t, float a1, float a2) noexcept
 {

@@ -26,7 +26,7 @@ namespace
 {
 
 //==============================================================================
-// glslang global init/finalize — reference-counted across all ShaderTranspiler instances
+// glslang global init/finalize - reference-counted across all ShaderTranspiler instances
 //==============================================================================
 
 static std::atomic<int>& getGlslangInitCount()
@@ -497,7 +497,7 @@ static void fillTypeInfo (const spirv_cross::Compiler& compiler,
 
         // Built-in blocks (e.g. gl_PerVertex) have no Offset decorations on
         // their members. spirv-cross throws when queried for offsets/sizes on
-        // such members, so detect this case up front and skip reflection —
+        // such members, so detect this case up front and skip reflection -
         // these blocks are not user-facing resources anyway.
         bool hasLaidOutMembers = false;
         for (uint32_t i = 0; i < memberCount; ++i)
@@ -557,7 +557,7 @@ static void fillTypeInfo (const spirv_cross::Compiler& compiler,
         catch (const std::exception&)
         {
             // Built-in blocks (e.g., gl_PerVertex) may not have explicit
-            // offset/size decorations — clear partial member data gracefully.
+            // offset/size decorations - clear partial member data gracefully.
             binding.members.clear();
             binding.blockSize = 0;
         }

@@ -413,7 +413,7 @@ public:
     /** Submits all render passes recorded since beginFrame().
 
         Must be called after all draw calls for this frame. Does not block the
-        CPU — call waitForGPU() afterwards if you need results immediately.
+        CPU - call waitForGPU() afterwards if you need results immediately.
 
         @return true on success; false if ore is unavailable.
     */

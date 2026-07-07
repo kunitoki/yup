@@ -60,7 +60,7 @@ static void skipWhitespaceAndComments (InputStream& stream)
         }
         else
         {
-            // Not whitespace / comment — push back by seeking one byte back.
+            // Not whitespace / comment - push back by seeking one byte back.
             stream.setPosition (stream.getPosition() - 1);
             return;
         }
@@ -92,7 +92,7 @@ static int readAsciiInt (InputStream& stream)
         }
         else
         {
-            // End of number — put the non-digit character back.
+            // End of number - put the non-digit character back.
             stream.setPosition (stream.getPosition() - 1);
             break;
         }
@@ -191,7 +191,7 @@ Image PpmImageFormatReader::readImage()
     switch (magic)
     {
         //----------------------------------------------------------------------
-        case 1: // ASCII bitmap — '0' = white (255), '1' = black (0)
+        case 1: // ASCII bitmap - '0' = white (255), '1' = black (0)
         {
             for (int y = 0; y < height; ++y)
             {
@@ -253,7 +253,7 @@ Image PpmImageFormatReader::readImage()
         }
 
         //----------------------------------------------------------------------
-        case 4: // Binary bitmap — each row is packed into ceil(width/8) bytes
+        case 4: // Binary bitmap - each row is packed into ceil(width/8) bytes
         {
             const int rowBytes = (width + 7) / 8;
 

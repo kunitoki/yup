@@ -151,7 +151,7 @@ Result ShaderBundle::saveToStream (OutputStream& stream) const
 {
     MemoryOutputStream buf;
 
-    // Writes [fourcc][size][body()][pad] — size is back-patched after body() returns.
+    // Writes [fourcc][size][body()][pad] - size is back-patched after body() returns.
     auto writeChunk = [&] (uint32_t fourcc, const auto& body)
     {
         buf.writeInt (static_cast<int> (fourcc));

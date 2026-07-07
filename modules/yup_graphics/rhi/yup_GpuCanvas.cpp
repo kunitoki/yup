@@ -78,7 +78,7 @@ bool GpuCanvas::commit()
     if (graphics == nullptr || committed)
         return false;
 
-    // commitOffscreenTarget is private — accessible via friend class Graphics
+    // commitOffscreenTarget is private - accessible via friend class Graphics
     if (! graphics->commitOffscreenTarget())
         return false;
 

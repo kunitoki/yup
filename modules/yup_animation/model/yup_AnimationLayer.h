@@ -123,10 +123,10 @@ public:
     // Identity and timing
     String name;
     int id = -1;              ///< "ind"
-    int parentId = -1;        ///< "parent" — -1 means no parent
+    int parentId = -1;        ///< "parent" - -1 means no parent
     float inFrame = 0.0f;     ///< "ip"
     float outFrame = 0.0f;    ///< "op"
-    float startFrame = 0.0f;  ///< "st" — local time offset
+    float startFrame = 0.0f;  ///< "st" - local time offset
     float timeStretch = 1.0f; ///< "sr"
 
     // Optional time remapping (overrides startFrame when set)
@@ -136,8 +136,8 @@ public:
     // Visual state
     AnimationTransform transform;
     BlendMode blendMode = BlendMode::SrcOver;
-    MatteType matteType = MatteType::None; ///< "tt" — this layer is the matte target
-    bool isMatteSource = false;            ///< "td" — this layer is the matte source (not rendered directly)
+    MatteType matteType = MatteType::None; ///< "tt" - this layer is the matte target
+    bool isMatteSource = false;            ///< "td" - this layer is the matte source (not rendered directly)
     bool is3D = false;
     bool hidden = false;
     bool autoOrient = false;

@@ -33,8 +33,8 @@ struct SpatialPositionKeyframe
     float frame = 0.0f;
     Point<float> value {};
     std::optional<Point<float>> endValue;
-    Point<float> tangentIn {};  ///< "ti" — in tangent (relative to this keyframe)
-    Point<float> tangentOut {}; ///< "to" — out tangent (relative to this keyframe)
+    Point<float> tangentIn {};  ///< "ti" - in tangent (relative to this keyframe)
+    Point<float> tangentOut {}; ///< "to" - out tangent (relative to this keyframe)
     AnimationEasing easing;
 };
 
@@ -60,9 +60,9 @@ public:
     /** 3D rotation channels (Lottie "rx", "ry", "rz").
         When is3DData is true, these replace the 2D rotation for 3D layers. */
     bool is3DData = false;
-    FloatProperty rotationX { AnimationProperty<float>::staticValue (0.0f) }; ///< "rx" — rotation around X axis
-    FloatProperty rotationY { AnimationProperty<float>::staticValue (0.0f) }; ///< "ry" — rotation around Y axis
-    FloatProperty rotationZ { AnimationProperty<float>::staticValue (0.0f) }; ///< "rz" — rotation around Z axis
+    FloatProperty rotationX { AnimationProperty<float>::staticValue (0.0f) }; ///< "rx" - rotation around X axis
+    FloatProperty rotationY { AnimationProperty<float>::staticValue (0.0f) }; ///< "ry" - rotation around Y axis
+    FloatProperty rotationZ { AnimationProperty<float>::staticValue (0.0f) }; ///< "rz" - rotation around Z axis
 
     /** When true, the layer has separate X/Y position channels. */
     bool separatePosition = false;

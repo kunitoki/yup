@@ -45,7 +45,7 @@ public:
         ColorProperty color { ColorProperty::staticValue (Color()) };
     };
 
-    /** A keyframe for animated gradient stops — stores a flat float array for interpolation. */
+    /** A keyframe for animated gradient stops - stores a flat float array for interpolation. */
     struct GradientKeyframe
     {
         float frame = 0.0f;
@@ -62,7 +62,7 @@ public:
     FloatProperty highlightLen { FloatProperty::staticValue (0.0f) };
     FloatProperty highlightAngle { FloatProperty::staticValue (0.0f) };
 
-    /** Gradient spread mode — defaults to Pad (clamped). */
+    /** Gradient spread mode - defaults to Pad (clamped). */
     ColorGradient::Spread spread = ColorGradient::Spread::Pad;
 
     std::vector<ColorStop> colorStops;
@@ -106,12 +106,12 @@ public:
     //==============================================================================
     String name;
     bool hidden = false;
-    bool enabled = true; ///< "fillEnabled" — defaults to true (Lottie spec)
+    bool enabled = true; ///< "fillEnabled" - defaults to true (Lottie spec)
     FillRule fillRule = FillRule::NonZero;
     ColorProperty color { ColorProperty::staticValue (Color (0xFF000000)) };
     FloatProperty opacity { FloatProperty::staticValue (100.0f) };
 
-    /** Optional gradient — overrides solid color when set. */
+    /** Optional gradient - overrides solid color when set. */
     AnimationGradient::Ptr gradient;
 
     //==============================================================================
@@ -148,7 +148,7 @@ public:
     //==============================================================================
     String name;
     bool hidden = false;
-    bool enabled = true; ///< "fillEnabled" — defaults to true (Lottie spec)
+    bool enabled = true; ///< "fillEnabled" - defaults to true (Lottie spec)
     ColorProperty color { ColorProperty::staticValue (Color (0xFF000000)) };
     FloatProperty opacity { FloatProperty::staticValue (100.0f) };
     FloatProperty width { FloatProperty::staticValue (2.0f) };
@@ -156,7 +156,7 @@ public:
     StrokeJoin join = StrokeJoin::Miter;
     float miterLimit = 4.0f;
 
-    /** Optional gradient — overrides solid color when set. */
+    /** Optional gradient - overrides solid color when set. */
     AnimationGradient::Ptr gradient;
 
     std::vector<StrokeDash> dashArray;

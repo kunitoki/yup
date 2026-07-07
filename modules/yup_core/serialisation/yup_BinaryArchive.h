@@ -83,7 +83,7 @@ public:
     {
     }
 
-    /** Returns nullopt — versioning is handled at the file-format level, not per-item. */
+    /** Returns nullopt - versioning is handled at the file-format level, not per-item. */
     std::optional<int> getVersion() const { return std::nullopt; }
 
     /** Serialise one or more values. */
@@ -171,7 +171,7 @@ private:
 /**
     An archive that deserialises objects from a binary InputStream.
 
-    Mirror of BinaryOutputArchive — reads data in the same order and format.
+    Mirror of BinaryOutputArchive - reads data in the same order and format.
     SerialisationSize<T> values are read as int64 and assigned back to the
     size reference so that dynamically-sized containers can be resized before
     reading their elements.
@@ -193,7 +193,7 @@ public:
     {
     }
 
-    /** Returns nullopt — versioning is handled at the file-format level, not per-item. */
+    /** Returns nullopt - versioning is handled at the file-format level, not per-item. */
     std::optional<int> getVersion() const { return std::nullopt; }
 
     /** Deserialise one or more values. */

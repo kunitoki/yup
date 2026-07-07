@@ -909,7 +909,7 @@ void Graphics::drawTexture (const GpuTexture::Ptr& texture, const Rectangle<floa
     if (texture == nullptr)
         return;
 
-    // Graphics is a friend of GpuTexture — may access private getOrAdoptGpuTexture()
+    // Graphics is a friend of GpuTexture - may access private getOrAdoptGpuTexture()
     renderTexture (texture->getOrAdoptGpuTexture(), targetArea);
 }
 

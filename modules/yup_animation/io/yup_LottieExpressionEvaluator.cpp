@@ -66,7 +66,7 @@ struct TransformProxy final : public DynamicObject
 };
 
 //==============================================================================
-// Proxy for a single layer — exposes .name, .index, and .transform.
+// Proxy for a single layer - exposes .name, .index, and .transform.
 struct LayerProxy final : public DynamicObject
 {
     LayerProxy (const LottieExpressionEvaluator::LayerContext& lc, String& lastProperty)
@@ -81,7 +81,7 @@ struct LayerProxy final : public DynamicObject
 };
 
 //==============================================================================
-// Proxy for a content item — exposes .path and .transform.rotation side effects.
+// Proxy for a content item - exposes .path and .transform.rotation side effects.
 struct ContentItemProxy final : public DynamicObject
 {
     // Records which property was accessed on a content item's transform.
@@ -133,7 +133,7 @@ struct ContentItemProxy final : public DynamicObject
 };
 
 //==============================================================================
-// Root object for thisComp — exposes .width, .height, .frameRate, and .layer().
+// Root object for thisComp - exposes .width, .height, .frameRate, and .layer().
 struct ThisCompObject final : public DynamicObject
 {
     ThisCompObject (LottieExpressionEvaluator* owner,
@@ -188,7 +188,7 @@ struct ThisCompObject final : public DynamicObject
 };
 
 //==============================================================================
-// Root object for content() global function — records the group name.
+// Root object for content() global function - records the group name.
 struct ContentRootObject final : public DynamicObject
 {
     explicit ContentRootObject (LottieExpressionEvaluator* owner)
@@ -253,7 +253,7 @@ static double magnitude (const Array<var>& arr)
 } // namespace AEMath
 
 //==============================================================================
-// Stub for `thisProperty` — allows numKeys guards and loop-modifier calls without throwing.
+// Stub for `thisProperty` - allows numKeys guards and loop-modifier calls without throwing.
 struct ThisPropertyObject final : public DynamicObject
 {
     ThisPropertyObject()
@@ -271,7 +271,7 @@ struct ThisPropertyObject final : public DynamicObject
 };
 
 //==============================================================================
-// Stub for `thisLayer` — allows .effect('name')('param') chains without throwing.
+// Stub for `thisLayer` - allows .effect('name')('param') chains without throwing.
 struct ThisLayerObject final : public DynamicObject
 {
     ThisLayerObject()
@@ -452,7 +452,7 @@ LottieExpressionEvaluator::LottieExpressionEvaluator()
         return radiansToDegrees (static_cast<double> (a.arguments[0]));
     });
 
-    // random/wiggle are non-deterministic by design — always return 0 / undefined
+    // random/wiggle are non-deterministic by design - always return 0 / undefined
     // at parse time so expressions degrade gracefully to Unknown.
     engine.registerNativeFunction ("random", [] (const var::NativeFunctionArgs&) -> var
     {
@@ -463,7 +463,7 @@ LottieExpressionEvaluator::LottieExpressionEvaluator()
         return var::undefined();
     });
 
-    // Loop modifiers — returning undefined causes evaluate() to yield Kind::Unknown,
+    // Loop modifiers - returning undefined causes evaluate() to yield Kind::Unknown,
     // so the parsed keyframe data is preserved unchanged.
     auto noopUndefined = [] (const var::NativeFunctionArgs&) -> var
     {

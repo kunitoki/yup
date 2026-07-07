@@ -218,7 +218,7 @@ Image BmpImageFormatReader::readImage()
                         const uint8 hi = rowBuffer[static_cast<size_t> (x) * 2 + 1];
                         const uint16 v = static_cast<uint16> (lo | (static_cast<uint16> (hi) << 8));
 
-                        // RGB555: bits [14:10]=R, [9:5]=G, [4:0]=B — scale 5-bit to 8-bit.
+                        // RGB555: bits [14:10]=R, [9:5]=G, [4:0]=B - scale 5-bit to 8-bit.
                         const uint8 r = static_cast<uint8> (((v >> 10) & 0x1fu) * 255u / 31u);
                         const uint8 g = static_cast<uint8> (((v >> 5) & 0x1fu) * 255u / 31u);
                         const uint8 b = static_cast<uint8> ((v & 0x1fu) * 255u / 31u);

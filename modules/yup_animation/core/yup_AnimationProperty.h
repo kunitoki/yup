@@ -23,7 +23,7 @@ namespace yup
 {
 
 //==============================================================================
-/** Lerp helper — specialize for types that need custom interpolation. */
+/** Lerp helper - specialize for types that need custom interpolation. */
 template <typename T>
 struct AnimationLerp
 {
@@ -203,7 +203,7 @@ public:
     }
 
     //==============================================================================
-    /** Fluent setter — sets a static value, clearing any keyframes. */
+    /** Fluent setter - sets a static value, clearing any keyframes. */
     AnimationProperty& withStaticValue (T value)
     {
         staticVal = std::move (value);
@@ -268,7 +268,7 @@ public:
 
     //==============================================================================
     /** Returns true when any keyframe is active in the frame range [prevFrame, curFrame).
-        Useful for dirty-tracking — skip re-evaluation when nothing changed.
+        Useful for dirty-tracking - skip re-evaluation when nothing changed.
     */
     [[nodiscard]] bool changed (float prevFrame, float curFrame) const noexcept
     {

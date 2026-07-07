@@ -260,7 +260,7 @@ struct GpuProgram::Impl
 
     // Vertex-layout storage backing PipelineDesc's raw pointers. The ore
     // Pipeline copies PipelineDesc by value but keeps the vertexBuffers /
-    // attributes pointers, reading them at draw time  so this storage must
+    // attributes pointers, reading them at draw time - so this storage must
     // outlive the pipeline.
     std::vector<std::vector<rive::ore::VertexAttribute>> vertexAttrStorage;
     std::vector<rive::ore::VertexBufferLayout> vertexLayoutStorage;
@@ -495,7 +495,7 @@ bool GpuProgram::Impl::encode (GpuCanvas& output,
 
             // Sampled inputs must be bound through an SRV-backed view. The
             // canvas wrapper (wrapCanvasTexture) only exposes a render-target
-            // view, which has no shader-resource view on D3D  sampling it
+            // view, which has no shader-resource view on D3D - sampling it
             // reads nothing. Prefer the underlying GPU texture, which
             // wrapRiveTexture() wraps with a proper SRV for sampling.
             rive::rcp<rive::ore::TextureView> view;
@@ -514,7 +514,7 @@ bool GpuProgram::Impl::encode (GpuCanvas& output,
             liveViews.push_back (std::move (view));
         }
 
-        // Sampler entries  auto-create one linear+clamp sampler for each
+        // Sampler entries - auto-create one linear+clamp sampler for each
         // sampler binding declared in the layout.
         std::vector<rive::ore::BindGroupDesc::SampEntry> sampEntries;
 

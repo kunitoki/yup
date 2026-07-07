@@ -463,7 +463,7 @@ private:
             const T fA = NonlinearTraits::f (xiA);
             const T fB = NonlinearTraits::f (xiB);
 
-            // Slope in u-space: slopeU = (fB-fA)/(ub-ua) — independent of delta.
+            // Slope in u-space: slopeU = (fB-fA)/(ub-ua) - independent of delta.
             // ub > ua always, so no division by zero here.
             const T slopeU = (fB - fA) / (ub - ua);
 
