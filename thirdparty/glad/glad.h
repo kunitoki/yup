@@ -26,7 +26,7 @@
 
     ID:               glad
     vendor:           glad
-    version:          0.1.62
+    version:          0.1.155
     name:             Vulkan/GL/GLES/EGL/GLX/WGL Loader-Generator
     description:      Vulkan/GL/GLES/EGL/GLX/WGL Loader-Generator based on the official specifications for multiple languages..
     website:          https://glad.dav1d.de/

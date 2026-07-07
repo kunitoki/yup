@@ -219,8 +219,9 @@ def ref_to_version(ref: str) -> str:
     if libpng_match:
         return f"{libpng_match.group(1)}.{int(libpng_match.group(2))}"
 
-    if value == "rive_changes_v2_0_1_2":
-        return "2.0.2.1"
+    if value.startswith("rive_changes_v"):
+        value = value.removeprefix("rive_changes_v").replace("_", ".")
+        return value
 
     value = re.sub(r"^(rive_changes_|rive_|release[-_/])", "", value)
     if value.startswith("v") and len(value) > 1 and value[1].isdigit():
@@ -422,6 +423,62 @@ def apply_dependency_patches(destination_root: Path, dep: dict[str, Any]) -> lis
     return notes
 
 
+def apply_namespace_wraps(destination_root: Path, dep: dict[str, Any]) -> list[str]:
+    notes: list[str] = []
+    for wrap in dep.get("namespace_wraps", []):
+        path = (destination_root / wrap["path"]).resolve()
+        if not is_relative_to(path, destination_root):
+            raise SystemExit(f"Namespace wrap path escapes dependency root: {path}")
+        if not path.exists():
+            raise SystemExit(f"Missing namespace wrap target: {path}")
+
+        namespace = wrap["namespace"]
+        open_marker = f"namespace {namespace}\n{{"
+        close_marker = f"}} // namespace {namespace}"
+
+        text = read_text(path)
+        if open_marker in text:
+            continue
+
+        start_after = wrap.get("start_after")
+        if start_after:
+            idx = text.find(start_after)
+            if idx == -1:
+                raise SystemExit(f"Could not find start_after in {path}: {start_after!r}")
+            insert_at = idx + len(start_after)
+        else:
+            include_re = re.compile(r"^#include\s+[<\"][^>\"]+[>\"]", re.MULTILINE)
+            matches = list(include_re.finditer(text))
+            if not matches:
+                raise SystemExit(f"No #include found in {path}")
+            last_match = matches[-1]
+            insert_at = text.index("\n", last_match.end()) + 1
+
+        close_before = wrap.get("close_before")
+        if close_before:
+            close_at = text.rfind(close_before)
+            if close_at == -1:
+                raise SystemExit(f"Could not find close_before in {path}: {close_before!r}")
+            new_text = (
+                text[:insert_at]
+                + f"\n{open_marker}\n"
+                + text[insert_at:close_at].rstrip("\n")
+                + f"\n\n{close_marker}\n\n"
+                + text[close_at:].lstrip("\n")
+            )
+        else:
+            new_text = (
+                text[:insert_at]
+                + f"\n{open_marker}\n"
+                + text[insert_at:].rstrip("\n")
+                + f"\n\n{close_marker}\n"
+            )
+        if write_text_if_changed(path, new_text):
+            notes.append(f"wrapped {wrap['path']} in namespace {namespace}")
+
+    return notes
+
+
 def generate_include_lines(block: dict[str, Any]) -> list[str]:
     if "entries" in block:
         return list(block["entries"])
@@ -436,11 +493,18 @@ def generate_include_lines(block: dict[str, Any]) -> list[str]:
     if not root.exists():
         raise SystemExit(f"Include generation root does not exist: {root}")
 
+    scanned: set[str] = set()
     for source in iter_source_files(root):
         rel = posix(source.relative_to(root))
         if should_copy(rel, include_globs, exclude_globs):
             include_path = f"{prefix}/{rel}" if prefix else rel
             paths.append(include_path)
+            scanned.add(include_path)
+
+    # Emit overrides even if upstream removed the file from the source tree
+    for key in include_overrides:
+        if key not in scanned:
+            paths.append(key)
 
     lines: list[str] = []
     for path in sorted(paths):
@@ -794,6 +858,7 @@ def update_dependencies(
             result.copy_stats.append(copy_tree(checkout_dir, destination_root, copy_rule, global_excludes))
 
         result.notes.extend(apply_dependency_patches(destination_root, dep))
+        result.notes.extend(apply_namespace_wraps(destination_root, dep))
 
         if dep.get("module_header") and dep.get("module_version_from_ref"):
             changed = replace_module_version(REPO_ROOT / dep["module_header"], version)

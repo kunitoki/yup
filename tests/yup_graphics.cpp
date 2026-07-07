@@ -38,6 +38,8 @@
 #include "yup_graphics/yup_Point.cpp"
 #include "yup_graphics/yup_Rectangle.cpp"
 #include "yup_graphics/yup_RectangleList.cpp"
+#include "yup_graphics/yup_ShaderCache.cpp"
+#include "yup_graphics/yup_ShaderTranspiler.cpp"
 #include "yup_graphics/yup_Size.cpp"
 #include "yup_graphics/yup_StrokeType.cpp"
 #include "yup_graphics/yup_StyledText.cpp"

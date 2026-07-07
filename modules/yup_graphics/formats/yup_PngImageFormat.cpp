@@ -89,6 +89,8 @@ PngImageFormatReader::PngImageFormatReader (InputStream* stream)
         png_set_expand_gray_1_2_4_to_8 (pngPtr);
     if (png_get_valid (pngPtr, infoPtr, PNG_INFO_tRNS))
         png_set_tRNS_to_alpha (pngPtr);
+    if (colorType == PNG_COLOR_TYPE_GRAY_ALPHA)
+        png_set_gray_to_rgb (pngPtr);
 
     // Determine output format after transforms
     png_read_update_info (pngPtr, infoPtr);
@@ -168,6 +170,8 @@ Image PngImageFormatReader::readImage()
         png_set_expand_gray_1_2_4_to_8 (pngPtr);
     if (png_get_valid (pngPtr, infoPtr, PNG_INFO_tRNS))
         png_set_tRNS_to_alpha (pngPtr);
+    if (colorType == PNG_COLOR_TYPE_GRAY_ALPHA)
+        png_set_gray_to_rgb (pngPtr);
 
     png_read_update_info (pngPtr, infoPtr);
 

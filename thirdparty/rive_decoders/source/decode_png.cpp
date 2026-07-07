@@ -9,7 +9,8 @@
 #include <string.h>
 #include <setjmp.h>
 
-namespace rive {
+namespace rive
+{
 
 struct EncodedImageBuffer
 {

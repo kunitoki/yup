@@ -10,7 +10,8 @@
 #include <cassert>
 #include <string.h>
 
-namespace rive {
+namespace rive
+{
 
 struct my_error_mgr
 {

@@ -26,7 +26,7 @@
 
     ID:               libhydrogen
     vendor:           libhydrogen
-    version:          0.1
+    version:          0.2
     name:             libhydrogen
     description:      Small cryptographic library used by Rive scripting for signed content verification.
     website:          https://github.com/jedisct1/libhydrogen

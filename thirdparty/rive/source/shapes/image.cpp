@@ -96,6 +96,13 @@ StatusCode Image::import(ImportStack& importStack)
     {
         return result;
     }
+    // Files exported before 7.2 overwrite scaleX/scaleY with the layout fit, so
+    // any stored scale on a layout image was ignored. Keep that legacy behavior
+    // for those files; newer files compose the fit as a separate scale so the
+    // user scale stays editable/animatable.
+    int major = importStack.majorVersion();
+    int minor = importStack.minorVersion();
+    m_layoutScaleSeparate = major > 7 || (major == 7 && minor >= 2);
     return Super::import(importStack);
 }
 
@@ -129,6 +136,7 @@ void Image::assetUpdated()
 Core* Image::clone() const
 {
     Image* twin = ImageBase::clone()->as<Image>();
+    twin->m_layoutScaleSeparate = m_layoutScaleSeparate;
     if (m_fileAsset != nullptr)
     {
         twin->setAsset(m_fileAsset);
@@ -230,6 +238,10 @@ void Image::controlSize(Vec2D size,
 void Image::updateTransform()
 {
     Super::updateTransform();
+    // Compose the layout fit scale on top of the user transform (innermost), so
+    // the user's scaleX/scaleY (built by Super) remain free to be animated:
+    //   M = T(offset) * UserLocal * S(fitScale)
+    m_Transform.scaleByValues(m_layoutScaleX, m_layoutScaleY);
     m_Transform[4] += m_layoutOffsetX;
     m_Transform[5] += m_layoutOffsetY;
 }
@@ -256,37 +268,33 @@ void Image::updateImageScale()
         float imgW = (float)renderImage->width();
         float imgH = (float)renderImage->height();
         float newScaleX, newScaleY;
-        auto imageFit = static_cast<Fit>(fit());
+        auto imageFit = static_cast<ImageFit>(fit());
         switch (imageFit)
         {
-            case Fit::fill:
-                newScaleX = m_layoutWidth / imgW;
-                newScaleY = m_layoutHeight / imgH;
-                break;
-            case Fit::contain:
+            case ImageFit::contain:
             {
                 float s =
                     std::fmin(m_layoutWidth / imgW, m_layoutHeight / imgH);
                 newScaleX = newScaleY = s;
                 break;
             }
-            case Fit::cover:
+            case ImageFit::cover:
             {
                 float s =
                     std::fmax(m_layoutWidth / imgW, m_layoutHeight / imgH);
                 newScaleX = newScaleY = s;
                 break;
             }
-            case Fit::fitWidth:
+            case ImageFit::fitWidth:
                 newScaleX = newScaleY = m_layoutWidth / imgW;
                 break;
-            case Fit::fitHeight:
+            case ImageFit::fitHeight:
                 newScaleX = newScaleY = m_layoutHeight / imgH;
                 break;
-            case Fit::none:
+            case ImageFit::none:
                 newScaleX = newScaleY = 1.0f;
                 break;
-            case Fit::scaleDown:
+            case ImageFit::scaleDown:
             {
                 float s =
                     std::fmin(m_layoutWidth / imgW, m_layoutHeight / imgH);
@@ -294,16 +302,17 @@ void Image::updateImageScale()
                 newScaleX = newScaleY = s;
                 break;
             }
-            case Fit::layout:
+            case ImageFit::fill:
+            case ImageFit::resize:
             default:
                 newScaleX = m_layoutWidth / imgW;
                 newScaleY = m_layoutHeight / imgH;
                 break;
         }
 
-        // Compatibility: legacy files assume fill does not apply fit/alignment
-        // translation offsets, only scale.
-        if (imageFit != Fit::fill)
+        // Compatibility: legacy files assume resize does not apply
+        // fit/alignment translation offsets, only scale.
+        if (imageFit != ImageFit::resize)
         {
             float boundsW = imgW;
             float boundsH = imgH;
@@ -326,10 +335,26 @@ void Image::updateImageScale()
             newOffsetY = -scaledTop + heightRemainder * yAlign;
         }
 
-        if (newScaleX != scaleX() || newScaleY != scaleY())
+        if (m_layoutScaleSeparate)
         {
-            scaleX(newScaleX);
-            scaleY(newScaleY);
+            if (newScaleX != m_layoutScaleX || newScaleY != m_layoutScaleY)
+            {
+                m_layoutScaleX = newScaleX;
+                m_layoutScaleY = newScaleY;
+                // Fit scale is composed in updateTransform(), so changing it
+                // must mark the local transform dirty (not just the world
+                // transform).
+                markTransformDirty();
+            }
+        }
+        else
+        {
+            // Legacy (pre-7.2): the fit overwrites the user scale.
+            if (newScaleX != scaleX() || newScaleY != scaleY())
+            {
+                scaleX(newScaleX);
+                scaleY(newScaleY);
+            }
         }
     }
     if (newOffsetX != m_layoutOffsetX || newOffsetY != m_layoutOffsetY)
