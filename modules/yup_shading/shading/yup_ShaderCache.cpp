@@ -43,7 +43,7 @@ ResultValue<MemoryBlock> ShaderCache::getOrCompile (const String& cacheKey,
 
         if (auto it = cache.find (cacheKey); it != cache.end())
         {
-            it->second.lastAccessTime = Time::getCurrentTime().toMilliseconds();
+            it->second.lastAccessOrder = ++accessCounter;
             return makeResultValueOk (MemoryBlock (it->second.spirv.getData(), it->second.spirv.getSize()));
         }
     }
@@ -86,7 +86,7 @@ void ShaderCache::store (const String& key, MemoryBlock spirv)
 
     Entry entry;
     entry.spirv = std::move (spirv);
-    entry.lastAccessTime = Time::getCurrentTime().toMilliseconds();
+    entry.lastAccessOrder = ++accessCounter;
 
     cache.insert_or_assign (key, std::move (entry));
 
@@ -177,13 +177,13 @@ void ShaderCache::evictIfNeeded()
     {
         // Evict least recently accessed
         auto oldest = cache.begin();
-        int64 oldestTime = std::numeric_limits<int64>::max();
+        uint64 oldestOrder = std::numeric_limits<uint64>::max();
 
         for (auto it = cache.begin(); it != cache.end(); ++it)
         {
-            if (it->second.lastAccessTime < oldestTime)
+            if (it->second.lastAccessOrder < oldestOrder)
             {
-                oldestTime = it->second.lastAccessTime;
+                oldestOrder = it->second.lastAccessOrder;
                 oldest = it;
             }
         }
