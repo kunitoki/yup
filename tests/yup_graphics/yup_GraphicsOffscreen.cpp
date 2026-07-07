@@ -93,11 +93,9 @@ TEST_F (GraphicsOffscreenTests, ReadPixelsToImageReturnsFalseForHeadlessOffscree
 TEST_F (GraphicsOffscreenTests, SetGpuTextureStoresTexture)
 {
     Image image (32, 32);
-    EXPECT_EQ (image.getTexture(), nullptr);
     EXPECT_EQ (image.getGpuTexture(), nullptr);
 
     image.setGpuTexture (nullptr);
-    EXPECT_EQ (image.getTexture(), nullptr);
     EXPECT_EQ (image.getGpuTexture(), nullptr);
 }
 
@@ -105,7 +103,6 @@ TEST_F (GraphicsOffscreenTests, GetGpuTextureReturnsNullByDefault)
 {
     Image image (32, 32);
     EXPECT_EQ (image.getGpuTexture(), nullptr);
-    EXPECT_EQ (image.getTexture(), nullptr);
 }
 
 TEST_F (GraphicsOffscreenTests, SmallImageOffscreenConstructorDoesNotCrash)
