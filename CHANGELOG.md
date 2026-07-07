@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] - Unreleased
 
+### Graphics
+
+#### Rive Runtime Bump
+
+- Rive runtime bumped from v0.1.62 to v0.1.155
+
+#### Shader Compiler (#126)
+
+- New glslang (`thirdparty/glslang`) and SPIRV-Cross integration (`thirdparty/spirv_cross`) for shader reflection and cross-compilation (GLSL, HLSL, MSL, WGSL)
+
+#### macOS
+
+- OpenGL rendering backend disabled on macOS in favor of Metal
+
+### Bug Fixes
+
+- UBSAN and ASAN fixes throughout the codebase
+
 ---
 
 ## [1.0.0] - 2026-07-03
