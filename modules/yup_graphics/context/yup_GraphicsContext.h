@@ -59,6 +59,7 @@ public:
         bool enableReadPixels = false;              ///< Enables reading pixels directly from the framebuffer.
         bool disableRasterOrdering = false;         ///< Disables specific raster ordering features for performance.
         bool allowHeadlessRendering = false;        ///< Allows rendering without a visible window (headless mode).
+        bool enableOreContext = true;               ///< Enables the ore GPU context for GpuProgram shader operations.
         LoaderFunction loaderFunction = nullptr;    ///< Loader function (used by GL/Vulkan).
     };
 
@@ -110,6 +111,12 @@ public:
         @return Pointer to a rive::pls::PLSRenderTarget, or nullptr if not available.
     */
     virtual rive::gpu::RenderTarget* renderTarget() = 0;
+
+    /** Returns the ore GPU context, or nullptr when enableOreContext was false or ore is unavailable on this backend.
+
+        Use this to compile GpuProgram pipelines and build ore BindGroups for shader dispatch.
+    */
+    virtual rive::ore::Context* gpuContext() const noexcept { return nullptr; }
 
     /** Creates a renderer suitable for the specified dimensions.
 

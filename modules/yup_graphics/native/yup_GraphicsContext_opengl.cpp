@@ -25,6 +25,7 @@
 #include "rive/renderer/gl/render_buffer_gl_impl.hpp"
 #include "rive/renderer/gl/render_context_gl_impl.hpp"
 #include "rive/renderer/gl/render_target_gl.hpp"
+#include "rive/renderer/ore/ore_context_gl.hpp"
 #include <vector>
 #include <cstring>
 
@@ -99,6 +100,9 @@ public:
             return;
         }
 
+        if (options.enableOreContext)
+            m_oreContext = rive::ore::ContextGL::Make();
+
         printf ("GL_VENDOR:   %s\n", glGetString (GL_VENDOR));
         printf ("GL_RENDERER: %s\n", glGetString (GL_RENDERER));
         printf ("GL_VERSION:  %s\n", glGetString (GL_VERSION));
@@ -155,6 +159,11 @@ public:
     rive::gpu::RenderTarget* renderTarget() override
     {
         return m_offscreenRenderTarget.get();
+    }
+
+    rive::ore::Context* gpuContext() const noexcept override
+    {
+        return m_oreContext.get();
     }
 
     void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
@@ -375,6 +384,7 @@ private:
     Options m_options;
     std::unique_ptr<rive::gpu::RenderContext> m_renderContext;
     std::unique_ptr<rive::gpu::RenderContext> m_offscreenRenderContext;
+    std::unique_ptr<rive::ore::ContextGL> m_oreContext;
     rive::rcp<rive::gpu::RenderTargetGL> m_offscreenRenderTarget;
 
     // Offscreen rendering resources

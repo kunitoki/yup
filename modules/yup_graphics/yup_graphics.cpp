@@ -37,6 +37,14 @@
 
 //==============================================================================
 
+#include <rive/renderer/ore/ore_context.hpp>
+#include <rive/renderer/ore/ore_binding_map.hpp>
+#include <rive/renderer/ore/ore_bind_group_layout.hpp>
+#include <rive/renderer/ore/ore_pipeline.hpp>
+#include <rive/renderer/ore/ore_bind_group.hpp>
+
+//==============================================================================
+
 #include <libclipper2/libclipper2.h>
 
 //==============================================================================
