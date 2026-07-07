@@ -824,11 +824,20 @@
 #include "source/shapes/paint/stroke_effect.cpp"
 #include "source/shapes/paint/target_effect.cpp"
 #include "source/shapes/points_common_path.cpp"
-#include "source/texture_archive.cpp"
 #include "source/viewmodel/property_symbol_dependent.cpp"
 #include "source/viewmodel/runtime/viewmodel_instance_artboard_runtime.cpp"
 #include "source/viewmodel/viewmodel_instance_artboard.cpp"
 #include "source/virtualizing_component.cpp"
+#include "source/animation/gamepad_listener_group.cpp"
+#include "source/animation/listener_types/listener_input_type_gamepad.cpp"
+#include "source/core.cpp"
+#include "source/generated/animation/listener_types/listener_input_type_gamepad_base.cpp"
+#include "source/generated/inputs/gamepad_input_base.cpp"
+#include "source/generated/scripted/scripted_interpolator_base.cpp"
+#include "source/importers/listener_input_type_gamepad_importer.cpp"
+#include "source/input/gamepad_batch.cpp"
+#include "source/inputs/gamepad_input.cpp"
+#include "source/scripted/scripted_interpolator.cpp"
 // END YUP GENERATED RIVE INCLUDES
 
 #if defined(YUP_RIVE_DEFINED_YG_DEPRECATED)

@@ -95,6 +95,8 @@ yup_standalone_app (
         libwebp
         libjpeg
         libgif
+        glslang
+        spirv_cross
         ${additional_modules}
         ${link_libraries})
 

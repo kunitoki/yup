@@ -26,7 +26,7 @@
 
     ID:                 rive
     vendor:             rive
-    version:            0.1.62
+    version:            0.1.155
     name:               Rive C++ is a runtime library for Rive.
     description:        Rive C++ is a runtime library for Rive, a real-time interactive design and animation tool.
     website:            https://github.com/rive-app/rive-runtime

@@ -19,8 +19,7 @@
 
 #define PCG32_INC 105
 
-LUAU_FASTFLAGVARIABLE(LuauMathSeedEncode)
-LUAU_FASTFLAGVARIABLE(LuauNewMathConstantsRuntime)
+LUAU_FASTFLAGVARIABLE(FixMathNoisePrecision)
 
 static uint32_t pcg32_random(uint64_t* state)
 {
@@ -202,6 +201,13 @@ static int math_ldexp(lua_State* L)
     return 1;
 }
 
+// Rive: round to nearest float32. Fallback for the LBF_RIVE_FROUND fastcall.
+static int math_fround(lua_State* L)
+{
+    lua_pushnumber(L, double(float(luaL_checknumber(L, 1))));
+    return 1;
+}
+
 static int math_min(lua_State* L)
 {
     int n = lua_gettop(L); // number of arguments
@@ -378,6 +384,17 @@ static int math_noise(lua_State* L)
     luaL_argexpected(L, ny || lua_isnoneornil(L, 2), 2, "number");
     luaL_argexpected(L, nz || lua_isnoneornil(L, 3), 3, "number");
 
+    if (FFlag::FixMathNoisePrecision)
+    {
+        // NOTES: input numbers from Luau are double with higher precision and range than float used by perlin().
+        // If we don't do this, for large numbers, perlin() will return almost always 0, since with larger inputs,
+        // most of the mantissa is used to store the integer part and perlin() is always 0 at integer cell values.
+        // Noise repeat exactly every 256 units in all dimensions, so we can wrap to prevent loss of precision for large numbers.
+        x = fmod(x, 256.0);
+        y = fmod(y, 256.0);
+        z = fmod(z, 256.0);
+    }
+
     double r = perlin((float)x, (float)y, (float)z);
 
     lua_pushnumber(L, r);
@@ -474,6 +491,7 @@ static const luaL_Reg mathlib[] = {
     {"floor", math_floor},
     {"fmod", math_fmod},
     {"frexp", math_frexp},
+    {"fround", math_fround},
     {"ldexp", math_ldexp},
     {"log10", math_log10},
     {"log", math_log},
@@ -506,7 +524,7 @@ static const luaL_Reg mathlib[] = {
 */
 int luaopen_math(lua_State* L)
 {
-    uint64_t seed = FFlag::LuauMathSeedEncode ? lua_encodepointer(L, uintptr_t(L)) : uintptr_t(L);
+    uint64_t seed = lua_encodepointer(L, uintptr_t(L));
     seed ^= time(NULL);
     seed ^= clock();
 
@@ -518,20 +536,16 @@ int luaopen_math(lua_State* L)
     lua_setfield(L, -2, "pi");
     lua_pushnumber(L, HUGE_VAL);
     lua_setfield(L, -2, "huge");
-
-    if (FFlag::LuauNewMathConstantsRuntime)
-    {
-        lua_pushnumber(L, LUAU_NAN);
-        lua_setfield(L, -2, "nan");
-        lua_pushnumber(L, LUAU_E);
-        lua_setfield(L, -2, "e");
-        lua_pushnumber(L, LUAU_PHI);
-        lua_setfield(L, -2, "phi");
-        lua_pushnumber(L, LUAU_SQRT2);
-        lua_setfield(L, -2, "sqrt2");
-        lua_pushnumber(L, LUAU_TAU);
-        lua_setfield(L, -2, "tau");
-    }
+    lua_pushnumber(L, LUAU_NAN);
+    lua_setfield(L, -2, "nan");
+    lua_pushnumber(L, LUAU_E);
+    lua_setfield(L, -2, "e");
+    lua_pushnumber(L, LUAU_PHI);
+    lua_setfield(L, -2, "phi");
+    lua_pushnumber(L, LUAU_SQRT2);
+    lua_setfield(L, -2, "sqrt2");
+    lua_pushnumber(L, LUAU_TAU);
+    lua_setfield(L, -2, "tau");
 
     return 1;
 }

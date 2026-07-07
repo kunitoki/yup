@@ -76,7 +76,9 @@ set (target_modules
     libpng
     libwebp
     libjpeg
-    libgif)
+    libgif
+    glslang
+    spirv_cross)
 
 set (target_gtest_modules
     GTest::gtest

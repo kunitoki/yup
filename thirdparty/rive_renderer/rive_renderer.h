@@ -26,7 +26,7 @@
 
     ID:                 rive_renderer
     vendor:             rive
-    version:            0.1.62
+    version:            0.1.155
     name:               Rive Renderer.
     description:        The Rive Renderer is a vector and raster graphics renderer custom-built for Rive content, for animation, and for runtime.
     website:            https://github.com/rive-app/rive-runtime

@@ -5,53 +5,53 @@
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char draw_image_mesh_vert[] = R"===(#ifdef BB
-A1(e3)r0(0,c,FC);B1 A1(q3)r0(1,c,GC);B1
+const char draw_image_mesh_vert[] = R"===(#ifdef CB
+A1(h3)p0(0,c,GC);B1 A1(w3)p0(1,c,HC);B1
 #endif
-h2 J0 d0(0,c,U0);
-#ifdef M
-NB d0(1,d,F3);
+h2 J0 c0(0,c,U0);
+#ifdef O
+OB c0(1,d,I3);
 #endif
-#if defined(Z)&&!defined(AB)
-J0 d0(2,g,N0);
+#if defined(AB)&&!defined(BB)
+J0 c0(2,g,N0);
 #endif
-Z1
-#ifdef BB
-P3 Q3 E6(XB,e3,f3,q3,r3,v){v0(v,f3,FC,c);v0(v,r3,GC,c);Y(U0,c);
-#ifdef M
-Y(F3,d);
+a2
+#ifdef CB
+R3 S3 E6(YB,h3,i3,w3,x3,v){q0(v,i3,GC,c);q0(v,x3,HC,c);Y(U0,c);
+#ifdef O
+Y(I3,d);
 #endif
-#if defined(Z)&&!defined(AB)
+#if defined(AB)&&!defined(BB)
 Y(N0,g);
 #endif
-c i0=Z0(j2(A0.r9),FC)+A0.a2;U0=GC;
-#ifdef M
-if(M){F3=r8(A0.V0,k.Y5);}
+c i0=Z0(j2(A0.r9),GC)+A0.c2;U0=HC;
+#ifdef O
+if(O){I3=r8(A0.V0,k.Y5);}
 #endif
-#ifdef Z
-if(Z){
-#ifndef AB
-N0=T7(j2(A0.k2),A0.D2,i0 r5);
+#ifdef AB
+if(AB){
+#ifndef BB
+N0=T7(j2(A0.k2),A0.D2,i0 w5);
 #else
-ic(j2(A0.k2),A0.D2,i0 r5);
+nc(j2(A0.k2),A0.D2,i0 w5);
 #endif
 }
 #endif
-g O=H3(i0);
+g N=K3(i0);
 #ifdef JC
-O.y=-O.y;
+N.y=-N.y;
 #endif
-#ifdef AB
-O.z=ca(A0.Z6);
+#ifdef BB
+N.z=ca(A0.Z6);
 #endif
-l0(U0);
-#ifdef M
-l0(F3);
+k0(U0);
+#ifdef O
+k0(I3);
 #endif
-#if defined(Z)&&!defined(AB)
-l0(N0);
+#if defined(AB)&&!defined(BB)
+k0(N0);
 #endif
-D1(O);}
+D1(N);}
 #endif
 )===";
 } // namespace glsl

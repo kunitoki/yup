@@ -25,8 +25,10 @@
 #pragma comment (lib, "d3d11.lib")
 #pragma comment (lib, "d3dcompiler.lib")
 #pragma comment (lib, "dxgi.lib")
+#pragma comment (lib, "dxguid.lib")
 
 #include "source/d3d/pipeline_manager.cpp"
+#include "source/d3d/d3d_utils.cpp"
 #include "source/d3d11/render_context_d3d_impl.cpp"
 //#include "source/d3d12/d3d12_pipeline_manager.cpp"
 //#include "source/d3d12/d3d12_utils.cpp"
@@ -58,8 +60,12 @@
 #include "source/ore/gl/ore_buffer_gl.cpp"
 #include "source/ore/gl/ore_context_gl.cpp"
 #include "source/ore/gl/ore_pipeline_gl.cpp"
+#define oreCompareFunctionToGL oreCompareFunctionToGL_rp
 #include "source/ore/gl/ore_render_pass_gl.cpp"
+#undef oreCompareFunctionToGL
 #include "source/ore/gl/ore_sampler_gl.cpp"
 #include "source/ore/gl/ore_shader_module_gl.cpp"
+#define oreFormatToGLInternal oreFormatToGLInternal_tex
 #include "source/ore/gl/ore_texture_gl.cpp"
+#undef oreFormatToGLInternal
 #endif

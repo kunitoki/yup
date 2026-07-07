@@ -52,6 +52,11 @@
 #include "source/gpu_resource.cpp"
 // END YUP GENERATED RIVE RENDERER INCLUDES
 
+#define readU16LE readU16LE_vec
+#define readU32LE readU32LE_vec
+#include "source/ore/hlsl_struct_layout.cpp"
+#undef readU16LE
+#undef readU32LE
 #include "source/ore/ore_bind_group_layout.cpp"
 #include "source/ore/ore_binding_map.cpp"
 

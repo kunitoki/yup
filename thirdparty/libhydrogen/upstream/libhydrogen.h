@@ -51,6 +51,29 @@ extern "C" {
 #    define HYDRO_SIGN_VERIFY_ONLY 0
 #endif
 
+/* When verify-only is requested, force-disable unused modules FIRST so the
+ * inner `#ifndef` checks actually fire. Doing this AFTER the default
+ * `#ifndef X #define X 0` blocks (as the original code did) meant the
+ * defaults always won and the verify-only overrides were dead code.
+ */
+#if HYDRO_SIGN_VERIFY_ONLY
+#    ifndef HYDRO_DISABLE_RANDOM
+#        define HYDRO_DISABLE_RANDOM 1
+#    endif
+#    ifndef HYDRO_DISABLE_KDF
+#        define HYDRO_DISABLE_KDF 1
+#    endif
+#    ifndef HYDRO_DISABLE_SECRETBOX
+#        define HYDRO_DISABLE_SECRETBOX 1
+#    endif
+#    ifndef HYDRO_DISABLE_KX
+#        define HYDRO_DISABLE_KX 1
+#    endif
+#    ifndef HYDRO_DISABLE_PWHASH
+#        define HYDRO_DISABLE_PWHASH 1
+#    endif
+#endif
+
 #ifndef HYDRO_DISABLE_KX
 #    define HYDRO_DISABLE_KX 0
 #endif
@@ -69,28 +92,6 @@ extern "C" {
 
 #ifndef HYDRO_DISABLE_RANDOM
 #    define HYDRO_DISABLE_RANDOM 0
-#endif
-
-/* Automatically disable unused modules when verify-only mode is enabled.
- * Verification only needs hash and X25519 operations, not random, KDF,
- * secretbox, KX, or pwhash.
- */
-#if HYDRO_SIGN_VERIFY_ONLY
-#    ifndef HYDRO_DISABLE_RANDOM
-#        define HYDRO_DISABLE_RANDOM 1
-#    endif
-#    ifndef HYDRO_DISABLE_KDF
-#        define HYDRO_DISABLE_KDF 1
-#    endif
-#    ifndef HYDRO_DISABLE_SECRETBOX
-#        define HYDRO_DISABLE_SECRETBOX 1
-#    endif
-#    ifndef HYDRO_DISABLE_KX
-#        define HYDRO_DISABLE_KX 1
-#    endif
-#    ifndef HYDRO_DISABLE_PWHASH
-#        define HYDRO_DISABLE_PWHASH 1
-#    endif
 #endif
 
 int hydro_init(void);

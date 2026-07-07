@@ -37,29 +37,15 @@
 #include "source/generated/shaders/rive_pls_macosx.metallib.c"
 #endif
 
-#include "source/ore/metal/ore_bind_group_metal_gl.mm"
 #include "source/ore/metal/ore_bind_group_metal.mm"
-#include "source/ore/metal/ore_buffer_metal_gl.mm"
-#include "source/ore/metal/ore_buffer_metal.mm"
 #include "source/ore/metal/ore_context_metal.mm"
-#include "source/ore/metal/ore_pipeline_metal_gl.mm"
-#include "source/ore/metal/ore_pipeline_metal.mm"
-#include "source/ore/metal/ore_render_pass_metal_gl.mm"
-#define orePrimitiveTopologyToMTL orePrimitiveTopologyToMTL_render_pass
-#define oreIndexFormatToMTL oreIndexFormatToMTL_render_pass
-#define oreCullModeToMTL oreCullModeToMTL_render_pass
-#define oreWindingToMTL oreWindingToMTL_render_pass
+#include "source/ore/metal/ore_texture_metal.mm"
+#include "source/ore/metal/ore_shader_module_metal.mm"
+#include "source/ore/metal/ore_sampler_metal.mm"
 #define kMetalVertexBufferBase kMetalVertexBufferBase_render_pass
 #include "source/ore/metal/ore_render_pass_metal.mm"
-#undef orePrimitiveTopologyToMTL
-#undef oreIndexFormatToMTL
-#undef oreCullModeToMTL
-#undef oreWindingToMTL
 #undef kMetalVertexBufferBase
-#include "source/ore/metal/ore_sampler_metal_gl.mm"
-#include "source/ore/metal/ore_sampler_metal.mm"
-#include "source/ore/metal/ore_shader_module_metal_gl.mm"
-#include "source/ore/metal/ore_shader_module_metal.mm"
-#include "source/ore/metal/ore_texture_metal_gl.mm"
-#include "source/ore/metal/ore_texture_metal.mm"
+#include "source/ore/metal/ore_pipeline_metal.mm"
+#include "source/ore/metal/ore_buffer_metal.mm"
+#include "source/ore/metal/ore_bind_group_metal.mm"
 #endif

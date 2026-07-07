@@ -24,7 +24,8 @@
 #include <string.h>
 #include <vector>
 
-namespace rive {
+namespace rive
+{
 
 #ifdef RIVE_PNG
 std::unique_ptr<Bitmap> DecodePng(const uint8_t bytes[], size_t byteCount);

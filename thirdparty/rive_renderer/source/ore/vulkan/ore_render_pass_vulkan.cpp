@@ -2,13 +2,13 @@
  * Copyright 2025 Rive
  */
 
-#include "rive/renderer/ore/ore_render_pass.hpp"
-#include "rive/renderer/ore/ore_bind_group.hpp"
 #include "rive/renderer/ore/ore_context_vulkan.hpp"
-#include "rive/renderer/ore/ore_buffer.hpp"
-#include "rive/renderer/ore/ore_texture.hpp"
-#include "rive/renderer/ore/ore_sampler.hpp"
-#include "rive/renderer/ore/ore_pipeline.hpp"
+#include "ore_render_pass_vulkan.hpp"
+#include "ore_bind_group_vulkan.hpp"
+#include "ore_buffer_vulkan.hpp"
+#include "ore_texture_vulkan.hpp"
+#include "ore_sampler_vulkan.hpp"
+#include "ore_pipeline_vulkan.hpp"
 #include "rive/renderer/vulkan/render_target_vulkan.hpp"
 #include "rive/rive_types.hpp"
 
@@ -16,6 +16,8 @@
 #include <cassert>
 #include <cmath>
 #include <cstring>
+#include <iterator>
+#include <utility>
 
 namespace rive::ore
 {
@@ -24,58 +26,93 @@ namespace rive::ore
 // RenderPass methods
 // ============================================================================
 
-#if !defined(ORE_BACKEND_GL)
-
-void RenderPass::setPipeline(Pipeline* pipeline)
+void RenderPassVulkan::setPipeline(Pipeline* inPipeline)
 {
-    if (!checkPipelineCompat(pipeline))
+    if (!checkPipelineCompat(inPipeline))
         return;
+    auto pipeline = lite_rtti_cast<PipelineVulkan*>(inPipeline);
+    assert(pipeline != nullptr);
     m_currentPipeline = ref_rcp(pipeline);
-    m_vkContext->m_vk.CmdBindPipeline(m_vkCmdBuf,
-                                      VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                      pipeline->m_vkPipeline);
+    m_vkContext->m_vk->CmdBindPipeline(m_vkCmdBuf,
+                                       VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                       pipeline->m_vkPipeline);
+    // Re-emit pass-state stencil ref (default 0) so the dynamic state is
+    // set before any draw. WebGPU semantics: persists across pipeline binds.
+    if (pipeline->m_vkStencilTestEnabled)
+    {
+        m_vkContext->m_vk->CmdSetStencilReference(
+            m_vkCmdBuf,
+            VK_STENCIL_FACE_FRONT_AND_BACK,
+            m_vkStencilRef);
+    }
 }
 
-void RenderPass::setVertexBuffer(uint32_t slot, Buffer* buffer, uint32_t offset)
+void RenderPassVulkan::setVertexBuffer(uint32_t slot,
+                                       Buffer* inBuffer,
+                                       uint32_t offset)
 {
     VkDeviceSize vkOffset = offset;
-    m_vkContext->m_vk.CmdBindVertexBuffers(m_vkCmdBuf,
-                                           slot,
-                                           1,
-                                           &buffer->m_vkBuffer,
-                                           &vkOffset);
+    auto buffer = lite_rtti_cast<BufferVulkan*>(inBuffer);
+    assert(buffer != nullptr);
+    buffer->markBound();
+    VkBuffer vkBuffer = buffer->current();
+    m_vkContext->m_vk->CmdBindVertexBuffers(m_vkCmdBuf,
+                                            slot,
+                                            1,
+                                            &vkBuffer,
+                                            &vkOffset);
 }
 
-void RenderPass::setIndexBuffer(Buffer* buffer,
-                                IndexFormat format,
-                                uint32_t offset)
+void RenderPassVulkan::setIndexBuffer(Buffer* inBuffer,
+                                      IndexFormat format,
+                                      uint32_t offset)
 {
-    m_vkIndexBuffer = buffer->m_vkBuffer;
+    auto buffer = lite_rtti_cast<BufferVulkan*>(inBuffer);
+    assert(buffer != nullptr);
+    buffer->markBound();
+    m_vkIndexBuffer = buffer->current();
     m_vkIndexType = (format == IndexFormat::uint32) ? VK_INDEX_TYPE_UINT32
                                                     : VK_INDEX_TYPE_UINT16;
     m_vkIndexOffset = offset;
-    m_vkContext->m_vk.CmdBindIndexBuffer(m_vkCmdBuf,
-                                         buffer->m_vkBuffer,
-                                         offset,
-                                         m_vkIndexType);
+    m_vkContext->m_vk->CmdBindIndexBuffer(m_vkCmdBuf,
+                                          m_vkIndexBuffer,
+                                          offset,
+                                          m_vkIndexType);
 }
 
-void RenderPass::setBindGroup(uint32_t groupIndex,
-                              BindGroup* bg,
-                              const uint32_t* dynamicOffsets,
-                              uint32_t dynamicOffsetCount)
+void RenderPassVulkan::setBindGroup(uint32_t groupIndex,
+                                    BindGroup* inBg,
+                                    const uint32_t* dynamicOffsets,
+                                    uint32_t dynamicOffsetCount)
 {
-    assert(bg != nullptr);
+    assert(inBg != nullptr);
     assert(m_currentPipeline != nullptr &&
            "setPipeline must be called before setBindGroup");
 
-    m_vkContext->m_vk.CmdBindDescriptorSets(
+    auto bg = lite_rtti_cast<BindGroupVulkan*>(inBg);
+    assert(bg != nullptr);
+    // Resolve the live backing of each UBO. Only stamp the UBOs bound after a
+    // successful resolve, so a failed (OOM) resolve doesn't force later
+    // update()s to orphan needlessly.
+    VkDescriptorSet set = bg->resolveDescriptorSet();
+    if (set == VK_NULL_HANDLE)
+    {
+        // Descriptor set allocation failed (device OOM). Report it instead of
+        // binding null; the Lua layer reads lastError after the call. Pre-fix
+        // this surfaced at makeBindGroup time.
+        m_vkContext->setLastError(
+            "ore: Vulkan descriptor set allocation failed for group %u",
+            groupIndex);
+        return;
+    }
+    bg->markUBOsBound();
+    m_vkContext->m_vk->CmdBindDescriptorSets(
         m_vkCmdBuf,
         VK_PIPELINE_BIND_POINT_GRAPHICS,
         m_currentPipeline->m_vkPipelineLayout,
         groupIndex,
         1,
-        &bg->m_vkDescriptorSet,
+        &set,
         dynamicOffsetCount,
         dynamicOffsets);
 
@@ -84,36 +121,26 @@ void RenderPass::setBindGroup(uint32_t groupIndex,
     m_boundGroups[groupIndex] = ref_rcp(bg);
 }
 
-void RenderPass::setViewport(float x,
-                             float y,
-                             float width,
-                             float height,
-                             float minDepth,
-                             float maxDepth)
+void RenderPassVulkan::setViewport(float x,
+                                   float y,
+                                   float width,
+                                   float height,
+                                   float minDepth,
+                                   float maxDepth)
 {
-    // Ore NDC convention: Y-up clip space, depth in [0, 1].
-    // Vulkan's clip space is Y-down, so we flip the viewport with a negative
-    // height (VK_KHR_maintenance1). This is handled here rather than in the
-    // shader so that WGSL authors see a consistent Y-up coordinate system
-    // across all backends without any shader-level fixup.
+    // Positive-height viewport. WGSL Y-up clip space is achieved via
+    // shader-baked Y-flip (naga ADJUST_COORDINATE_SPACE); see oreWindingToVk.
     VkViewport vp{};
     vp.x = x;
-    vp.y = y + height; // Start at the bottom.
+    vp.y = y;
     vp.width = width;
-    vp.height = -height; // Negative height flips Y.
+    vp.height = height;
     vp.minDepth = minDepth;
     vp.maxDepth = maxDepth;
-    m_vkContext->m_vk.CmdSetViewport(m_vkCmdBuf, 0, 1, &vp);
+    m_vkContext->m_vk->CmdSetViewport(m_vkCmdBuf, 0, 1, &vp);
 
-    // Match the other backends' implicit behaviour: scissor defaults to the
-    // full viewport rectangle. Callers can override with setScissorRect().
-    // Vulkan's `VkRect2D` is integer-typed so we have to discretize the
-    // float-valued viewport. Use floor on the corner and ceil on the
-    // far edge so the scissor never clips the requested area, and clamp
-    // negative origins to 0 — `static_cast<uint32_t>` on a negative
-    // float is UB, and the previous `int32_t` cast truncated fractional
-    // pixels (e.g. y=0.5 → 0 vs height=255.5 → 255 dropped a pixel row
-    // on every fractional sub-rect).
+    // Scissor defaults to the viewport rect. Floor the origin and ceil the
+    // far edge so fractional viewports aren't clipped; clamp negatives to 0.
     const float x0 = std::floor(x);
     const float y0 = std::floor(y);
     const float x1 = std::ceil(x + width);
@@ -123,66 +150,67 @@ void RenderPass::setViewport(float x,
                       static_cast<int32_t>(std::max(0.0f, y0))};
     scissor.extent = {static_cast<uint32_t>(std::max(0.0f, x1 - x0)),
                       static_cast<uint32_t>(std::max(0.0f, y1 - y0))};
-    m_vkContext->m_vk.CmdSetScissor(m_vkCmdBuf, 0, 1, &scissor);
+    m_vkContext->m_vk->CmdSetScissor(m_vkCmdBuf, 0, 1, &scissor);
 }
 
-void RenderPass::setScissorRect(uint32_t x,
-                                uint32_t y,
-                                uint32_t width,
-                                uint32_t height)
+void RenderPassVulkan::setScissorRect(uint32_t x,
+                                      uint32_t y,
+                                      uint32_t width,
+                                      uint32_t height)
 {
     VkRect2D scissor{};
     scissor.offset = {static_cast<int32_t>(x), static_cast<int32_t>(y)};
     scissor.extent = {width, height};
-    m_vkContext->m_vk.CmdSetScissor(m_vkCmdBuf, 0, 1, &scissor);
+    m_vkContext->m_vk->CmdSetScissor(m_vkCmdBuf, 0, 1, &scissor);
 }
 
-void RenderPass::setStencilReference(uint32_t ref)
+void RenderPassVulkan::setStencilReference(uint32_t ref)
 {
-    m_vkContext->m_vk.CmdSetStencilReference(m_vkCmdBuf,
-                                             VK_STENCIL_FACE_FRONT_AND_BACK,
-                                             ref);
+    m_vkStencilRef = ref;
+    m_vkContext->m_vk->CmdSetStencilReference(m_vkCmdBuf,
+                                              VK_STENCIL_FACE_FRONT_AND_BACK,
+                                              ref);
 }
 
-void RenderPass::setBlendColor(float r, float g, float b, float a)
+void RenderPassVulkan::setBlendColor(float r, float g, float b, float a)
 {
     float constants[4] = {r, g, b, a};
-    m_vkContext->m_vk.CmdSetBlendConstants(m_vkCmdBuf, constants);
+    m_vkContext->m_vk->CmdSetBlendConstants(m_vkCmdBuf, constants);
 }
 
-void RenderPass::draw(uint32_t vertexCount,
-                      uint32_t instanceCount,
-                      uint32_t firstVertex,
-                      uint32_t firstInstance)
+void RenderPassVulkan::draw(uint32_t vertexCount,
+                            uint32_t instanceCount,
+                            uint32_t firstVertex,
+                            uint32_t firstInstance)
 {
-    m_vkContext->m_vk.CmdDraw(m_vkCmdBuf,
-                              vertexCount,
-                              instanceCount,
-                              firstVertex,
-                              firstInstance);
+    m_vkContext->m_vk->CmdDraw(m_vkCmdBuf,
+                               vertexCount,
+                               instanceCount,
+                               firstVertex,
+                               firstInstance);
 }
 
-void RenderPass::drawIndexed(uint32_t indexCount,
-                             uint32_t instanceCount,
-                             uint32_t firstIndex,
-                             int32_t baseVertex,
-                             uint32_t firstInstance)
+void RenderPassVulkan::drawIndexed(uint32_t indexCount,
+                                   uint32_t instanceCount,
+                                   uint32_t firstIndex,
+                                   int32_t baseVertex,
+                                   uint32_t firstInstance)
 {
-    m_vkContext->m_vk.CmdDrawIndexed(m_vkCmdBuf,
-                                     indexCount,
-                                     instanceCount,
-                                     firstIndex,
-                                     baseVertex,
-                                     firstInstance);
+    m_vkContext->m_vk->CmdDrawIndexed(m_vkCmdBuf,
+                                      indexCount,
+                                      instanceCount,
+                                      firstIndex,
+                                      baseVertex,
+                                      firstInstance);
 }
 
-void RenderPass::finish()
+void RenderPassVulkan::finish()
 {
     if (m_finished)
         return;
     m_finished = true;
 
-    m_vkContext->m_vk.CmdEndRenderPass(m_vkCmdBuf);
+    m_vkContext->m_vk->CmdEndRenderPass(m_vkCmdBuf);
 
     // Transition color attachments COLOR_ATTACHMENT_OPTIMAL →
     // SHADER_READ_ONLY_OPTIMAL so callers (e.g. Rive drawImage) can sample.
@@ -218,7 +246,7 @@ void RenderPass::finish()
                                     m_vkColorLayerCount[i]};
         barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         barrier.dstAccessMask = 0; // visibility established in Rive's CB
-        m_vkContext->m_vk.CmdPipelineBarrier(
+        m_vkContext->m_vk->CmdPipelineBarrier(
             m_vkCmdBuf,
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, // just the layout transition
@@ -235,6 +263,62 @@ void RenderPass::finish()
         if (m_vkColorRenderTargets[i] != nullptr)
             m_vkColorRenderTargets[i]->updateLastAccess(
                 kColorAttachmentWriteAccess);
+        // Mirror the layout transition in our per-Texture tracker so future
+        // makeBindGroup calls treat this texture as already in SRO.
+        if (auto* tex =
+                lite_rtti_cast<TextureVulkan*>(m_vkColorTextures[i].get()))
+        {
+            tex->m_vkLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        }
+    }
+
+    // MSAA resolve targets get the same treatment as the color attachments.
+    // Resolve writes count as COLOR_ATTACHMENT_WRITE in the
+    // COLOR_ATTACHMENT_OUTPUT stage, and the render pass leaves the resolve
+    // attachment in COLOR_ATTACHMENT_OPTIMAL.
+    for (auto& resolve : m_vkResolveTargets)
+    {
+        if (resolve.image == VK_NULL_HANDLE)
+        {
+            continue;
+        }
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = resolve.image;
+        barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT,
+                                    resolve.baseMip,
+                                    1,
+                                    resolve.baseLayer,
+                                    resolve.layerCount};
+        barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        barrier.dstAccessMask = 0; // visibility established in Rive's CB
+        m_vkContext->m_vk->CmdPipelineBarrier(
+            m_vkCmdBuf,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, // just the layout transition
+            0,
+            0,
+            nullptr,
+            0,
+            nullptr,
+            1,
+            &barrier);
+        // Without this hand-off Rive's tracker keeps the pre-pass layout and
+        // its next barrier uses a wrong oldLayout, which corrupts the
+        // resolved contents on GPUs with layout-dependent compression
+        // (tile-grid artifacts on Xclipse 920).
+        if (resolve.renderTarget != nullptr)
+        {
+            resolve.renderTarget->updateLastAccess(kColorAttachmentWriteAccess);
+        }
+        if (auto* tex = lite_rtti_cast<TextureVulkan*>(resolve.texture.get()))
+        {
+            tex->m_vkLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        }
     }
 
     // Transition depth attachment DEPTH_STENCIL_ATTACHMENT_OPTIMAL →
@@ -269,7 +353,7 @@ void RenderPass::finish()
         depthBarrier.srcAccessMask =
             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         depthBarrier.dstAccessMask = 0;
-        m_vkContext->m_vk.CmdPipelineBarrier(
+        m_vkContext->m_vk->CmdPipelineBarrier(
             m_vkCmdBuf,
             VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
                 VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
@@ -281,27 +365,22 @@ void RenderPass::finish()
             nullptr,
             1,
             &depthBarrier);
-    }
-
-    if (m_vkFramebuffer != VK_NULL_HANDLE)
-    {
-        // Defer destruction — the command buffer still references this
-        // framebuffer until endFrame() submits and waits.
-        m_vkContext->m_vkDeferredFramebuffers.push_back(m_vkFramebuffer);
-        m_vkFramebuffer = VK_NULL_HANDLE;
+        if (auto* tex = lite_rtti_cast<TextureVulkan*>(m_vkDepthTexture.get()))
+        {
+            tex->m_vkLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        }
     }
 }
 
-RenderPass::~RenderPass() { finish(); }
+RenderPassVulkan::~RenderPassVulkan() { finish(); }
 
-RenderPass::RenderPass(RenderPass&& other) noexcept
+RenderPassVulkan::RenderPassVulkan(RenderPassVulkan&& other) noexcept
 {
 #if defined(ORE_BACKEND_VK)
-    moveCrossBackendFieldsFrom(other);
     m_vkContext = other.m_vkContext;
     m_currentPipeline = std::move(other.m_currentPipeline);
     m_vkCmdBuf = other.m_vkCmdBuf;
-    m_vkFramebuffer = other.m_vkFramebuffer;
+    m_framebuffer = std::move(other.m_framebuffer);
     m_vkIndexBuffer = other.m_vkIndexBuffer;
     m_vkIndexType = other.m_vkIndexType;
     m_vkIndexOffset = other.m_vkIndexOffset;
@@ -316,25 +395,38 @@ RenderPass::RenderPass(RenderPass&& other) noexcept
     memcpy(m_vkColorRenderTargets,
            other.m_vkColorRenderTargets,
            sizeof(m_vkColorRenderTargets));
-    other.m_vkFramebuffer = VK_NULL_HANDLE;
+    for (uint32_t i = 0; i < std::size(m_vkColorTextures); ++i)
+    {
+        m_vkColorTextures[i] = std::move(other.m_vkColorTextures[i]);
+    }
+    for (uint32_t i = 0; i < std::size(m_vkResolveTargets); ++i)
+    {
+        m_vkResolveTargets[i] =
+            std::exchange(other.m_vkResolveTargets[i], ResolveTarget{});
+    }
+    m_vkDepthImage = other.m_vkDepthImage;
+    m_vkDepthBaseLayer = other.m_vkDepthBaseLayer;
+    m_vkDepthLayerCount = other.m_vkDepthLayerCount;
+    m_vkDepthTexture = std::move(other.m_vkDepthTexture);
+    m_vkStencilRef = other.m_vkStencilRef;
+    other.m_vkDepthImage = VK_NULL_HANDLE;
+    other.m_vkStencilRef = 0;
 #endif
 }
 
-RenderPass& RenderPass::operator=(RenderPass&& other) noexcept
+RenderPassVulkan& RenderPassVulkan::operator=(RenderPassVulkan&& other) noexcept
 {
     if (this != &other)
     {
         finish();
-        new (this) RenderPass(std::move(other));
+        new (this) RenderPassVulkan(std::move(other));
     }
     return *this;
 }
 
-void RenderPass::validate() const
+void RenderPassVulkan::validate() const
 {
     assert(!m_finished && "RenderPass has already been finished");
 }
-
-#endif // !ORE_BACKEND_GL
 
 } // namespace rive::ore

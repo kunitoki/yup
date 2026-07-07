@@ -1,7 +1,9 @@
 int
 hydro_init(void)
 {
+#if !HYDRO_DISABLE_RANDOM
     hydro_random_ensure_initialized();
+#endif
     return 0;
 }
 
