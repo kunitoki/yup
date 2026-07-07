@@ -37,9 +37,9 @@ constexpr uint32_t makeFourCC (char a, char b, char c, char d) noexcept
          | (static_cast<uint32_t> (static_cast<unsigned char> (d)) << 24);
 }
 
+constexpr uint32_t kFourCC_YSLB = makeFourCC ('Y', 'S', 'L', 'B');
 constexpr uint32_t kFourCC_RIFF = makeFourCC ('R', 'I', 'F', 'F');
 constexpr uint32_t kFourCC_LIST = makeFourCC ('L', 'I', 'S', 'T');
-constexpr uint32_t kFourCC_SHBD = makeFourCC ('Y', 'S', 'L', 'B');
 constexpr uint32_t kFourCC_VERS = makeFourCC ('V', 'E', 'R', 'S');
 constexpr uint32_t kFourCC_SRCE = makeFourCC ('S', 'R', 'C', 'E');
 constexpr uint32_t kFourCC_SHAD = makeFourCC ('S', 'H', 'A', 'D');
@@ -189,7 +189,7 @@ Result ShaderBundle::saveToStream (OutputStream& stream) const
 
     writeChunk (kFourCC_RIFF, [&]
     {
-        buf.writeInt (static_cast<int> (kFourCC_SHBD));
+        buf.writeInt (static_cast<int> (kFourCC_YSLB));
 
         writeChunk (kFourCC_VERS, [&]
         {
@@ -277,8 +277,8 @@ ResultValue<ShaderBundle> ShaderBundle::loadFromStream (InputStream& stream)
 
     const auto riffSize = static_cast<uint32_t> (stream.readInt());
 
-    if (static_cast<uint32_t> (stream.readInt()) != kFourCC_SHBD)
-        return makeResultValueFail ("ShaderBundle: not an SHBD bundle (wrong form type)");
+    if (static_cast<uint32_t> (stream.readInt()) != kFourCC_YSLB)
+        return makeResultValueFail ("ShaderBundle: not an YSLB bundle (wrong form type)");
 
     const auto dataLen = static_cast<size_t> (riffSize - 4);
     MemoryBlock riffData (dataLen, false);
