@@ -41,7 +41,8 @@ public:
     enum Api
     {
         Headless, ///< Specifies the use of a headless context for rendering.
-        OpenGL,   ///< Specifies the use of OpenGL for rendering.
+        OpenGL,   ///< Specifies the use of desktop OpenGL for rendering.
+        OpenGLES, ///< Specifies the use of OpenGL ES (GLES 3.0+) for rendering (Android, WASM).
         Direct3D, ///< Specifies the use of Direct3D for rendering.
         Metal,    ///< Specifies the use of Metal for rendering.
         WebGL     ///< Specifies the use of WebGL, relying on dawn.

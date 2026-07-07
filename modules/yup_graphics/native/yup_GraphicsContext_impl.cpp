@@ -41,6 +41,7 @@ std::unique_ptr<GraphicsContext> GraphicsContext::createContext (Api graphicsApi
 
 #if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_WASM || YUP_ANDROID
         case Api::OpenGL:
+        case Api::OpenGLES:
             return yup_constructOpenGLGraphicsContext (options);
 #endif
 

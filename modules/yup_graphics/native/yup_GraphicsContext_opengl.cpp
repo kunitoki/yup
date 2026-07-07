@@ -133,7 +133,14 @@ public:
         cleanupOffscreenResources();
     }
 
-    Api getApi() const noexcept override { return Api::OpenGL; }
+    Api getApi() const noexcept override
+    {
+#if RIVE_ANDROID || RIVE_WEBGL
+        return Api::OpenGLES;
+#else
+        return Api::OpenGL;
+#endif
+    }
 
     float dpiScale (void*) const override
     {
