@@ -265,9 +265,9 @@ struct GpuPipelineOptions
     GpuColorTarget colorTargets[4] = {};
     uint32_t colorTargetCount = 0;
 
-    GpuDepthStencilState depthStencil;
-    GpuStencilFaceState stencilFront;
-    GpuStencilFaceState stencilBack;
+    GpuDepthStencilState depthStencil {};
+    GpuStencilFaceState stencilFront {};
+    GpuStencilFaceState stencilBack {};
     uint8_t stencilReadMask = 0xFF;
     uint8_t stencilWriteMask = 0xFF;
 
@@ -489,7 +489,7 @@ public:
     */
     static GpuProgram::Ptr compileFromBundle (GraphicsContext& ctx,
                                               const ShaderBundle& bundle,
-                                              const GpuPipelineOptions& pipelineOptions = GpuPipelineOptions {},
+                                              const GpuPipelineOptions& pipelineOptions = {},
                                               std::string* outError = nullptr);
 
 #if YUP_ENABLE_SHADER_TRANSPILER
