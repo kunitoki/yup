@@ -494,20 +494,51 @@ static void fillTypeInfo (const spirv_cross::Compiler& compiler,
     if (type.basetype == spirv_cross::SPIRType::Struct)
     {
         const uint32_t memberCount = static_cast<uint32_t> (type.member_types.size());
+
+        // Built-in blocks (e.g. gl_PerVertex) have no Offset decorations on
+        // their members. spirv-cross throws when queried for offsets/sizes on
+        // such members, so detect this case up front and skip reflection —
+        // these blocks are not user-facing resources anyway.
+        bool hasLaidOutMembers = false;
+        for (uint32_t i = 0; i < memberCount; ++i)
+        {
+            if (compiler.has_member_decoration (type.self, i, spv::DecorationOffset))
+            {
+                hasLaidOutMembers = true;
+                break;
+            }
+        }
+
+        if (! hasLaidOutMembers)
+            return;
+
         binding.members.reserve (memberCount);
 
         try
         {
+            uint32_t computedBlockSize = 0;
+
             for (uint32_t i = 0; i < memberCount; ++i)
             {
+                if (! compiler.has_member_decoration (type.self, i, spv::DecorationOffset))
+                    continue;
+
                 ShaderReflection::ResourceMember member;
                 member.name = compiler.get_member_name (typeId, i).c_str();
                 member.offset = compiler.type_struct_member_offset (type, i);
                 member.size = static_cast<uint32_t> (compiler.get_declared_struct_member_size (type, i));
-                member.arrayStride = compiler.type_struct_member_array_stride (type, i);
-                member.matrixStride = compiler.type_struct_member_matrix_stride (type, i);
 
                 const auto& memberType = compiler.get_type (type.member_types[i]);
+
+                // Array/matrix strides live in separate decorations that are
+                // only present for array/matrix members. Query them guarded so
+                // spirv-cross doesn't throw on plain scalar/vector members.
+                if (! memberType.array.empty())
+                    member.arrayStride = compiler.type_struct_member_array_stride (type, i);
+
+                if (memberType.columns > 1)
+                    member.matrixStride = compiler.type_struct_member_matrix_stride (type, i);
+
                 member.baseType = toBaseType (memberType.basetype);
                 member.vecSize = memberType.vecsize;
                 member.columns = memberType.columns;
@@ -516,10 +547,12 @@ static void fillTypeInfo (const spirv_cross::Compiler& compiler,
                 if (! memberType.array.empty())
                     member.arraySizes.assign (memberType.array.begin(), memberType.array.end());
 
+                computedBlockSize = jmax (computedBlockSize, member.offset + member.size);
+
                 binding.members.push_back (std::move (member));
             }
 
-            binding.blockSize = static_cast<uint32_t> (compiler.get_declared_struct_size (type));
+            binding.blockSize = computedBlockSize;
         }
         catch (const std::exception&)
         {
