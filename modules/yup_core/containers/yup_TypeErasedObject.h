@@ -37,10 +37,10 @@ namespace yup
 template <std::size_t NumBytes>
 struct TypeErasedObject
 {
-	/** Default constructor that creates an empty `TypeErasedObject`. */
-	TypeErasedObject() = default;
+    /** Default constructor that creates an empty `TypeErasedObject`. */
+    TypeErasedObject() = default;
 
-	/**
+    /**
 	    Constructs the payload by moving the provided value into the internal buffer.
 	 
 	    This constructor accepts a value of type `T`, moves it into the internal buffer, and sets up a deleter
@@ -50,23 +50,27 @@ struct TypeErasedObject
 	 
 	    @param value The object to store in the payload.
 	*/
-	template <class T>
-	explicit TypeErasedObject (T&& value) requires (sizeof (T) > 0 && sizeof (T) <= NumBytes)
-		: type (typeid (T))
+    template <class T>
+    explicit TypeErasedObject (T&& value)
+        requires (sizeof (T) > 0 && sizeof (T) <= NumBytes)
+        : type (typeid (T))
     {
-		std::construct_at (reinterpret_cast<T*> (&objectBuffer[0]), std::forward<T> (value));
+        constructAt (reinterpret_cast<T*> (&objectBuffer[0]), std::forward<T> (value));
 
-        deleterCallback = +[](void* buffer) { std::destroy_at (std::launder (reinterpret_cast<T*> (buffer))); };
-	}
+        deleterCallback = +[] (void* buffer)
+        {
+            destroyAt (std::launder (reinterpret_cast<T*> (buffer)));
+        };
+    }
 
-	/** Destroys the payload and calls the stored deleter to clean up the contained object. */
-	~TypeErasedObject()
+    /** Destroys the payload and calls the stored deleter to clean up the contained object. */
+    ~TypeErasedObject()
     {
-		if (deleterCallback != nullptr)
-			deleterCallback (static_cast<void*> (&objectBuffer[0]));
-	}
+        if (deleterCallback != nullptr)
+            deleterCallback (static_cast<void*> (&objectBuffer[0]));
+    }
 
-	/**
+    /**
 	    Move constructor that transfers ownership of the payload from another instance.
 	 
 	    Moves the contents of the payload from `other` into this instance, ensuring that the
@@ -74,14 +78,14 @@ struct TypeErasedObject
 	 
 	    @param other The payload to move from.
 	*/
-	TypeErasedObject (TypeErasedObject&& other) noexcept
-		: deleterCallback (std::exchange (other.deleterCallback, nullptr))
-		, type (std::exchange (other.type, typeid (void)))
+    TypeErasedObject (TypeErasedObject&& other) noexcept
+        : deleterCallback (std::exchange (other.deleterCallback, nullptr))
+        , type (std::exchange (other.type, typeid (void)))
     {
-		std::memcpy (objectBuffer, other.objectBuffer, jmin (sizeof (objectBuffer), sizeof (other.objectBuffer)));
-	}
+        std::memcpy (objectBuffer, other.objectBuffer, jmin (sizeof (objectBuffer), sizeof (other.objectBuffer)));
+    }
 
-	/**
+    /**
 	    Move assignment operator that transfers ownership of the payload from another instance.
 	 
 	    Moves the contents of the payload from `other` into this instance, properly destroying the
@@ -91,25 +95,25 @@ struct TypeErasedObject
 	 
 	    @return A reference to this `TypeErasedObject` after the move.
 	*/
-	TypeErasedObject& operator=(TypeErasedObject&& other)
+    TypeErasedObject& operator= (TypeErasedObject&& other)
     {
-		if (auto deleter = std::exchange (deleterCallback, nullptr))
-			deleter (reinterpret_cast<void*> (&objectBuffer[0]));
+        if (auto deleter = std::exchange (deleterCallback, nullptr))
+            deleter (reinterpret_cast<void*> (&objectBuffer[0]));
 
-		deleterCallback = std::exchange (other.deleterCallback, nullptr);
-		type = std::exchange (other.type, typeid (void));
-		std::memcpy (objectBuffer, other.objectBuffer, jmin (sizeof (objectBuffer), sizeof (other.objectBuffer)));
+        deleterCallback = std::exchange (other.deleterCallback, nullptr);
+        type = std::exchange (other.type, typeid (void));
+        std::memcpy (objectBuffer, other.objectBuffer, jmin (sizeof (objectBuffer), sizeof (other.objectBuffer)));
 
-		return *this;
-	}
+        return *this;
+    }
 
-	/** Deleted copy constructor to ensure the payload is move-only. */
-	TypeErasedObject(const TypeErasedObject&) = delete;
+    /** Deleted copy constructor to ensure the payload is move-only. */
+    TypeErasedObject (const TypeErasedObject&) = delete;
 
-	/** Deleted copy assignment operator to ensure the payload is move-only. */
-	TypeErasedObject& operator=(const TypeErasedObject&) = delete;
+    /** Deleted copy assignment operator to ensure the payload is move-only. */
+    TypeErasedObject& operator= (const TypeErasedObject&) = delete;
 
-	/**
+    /**
 	    Retrieves a pointer to the stored payload object of type `T` (const version).
 	 
 	    Returns a pointer to the stored object if the stored type matches `T`; otherwise, returns `nullptr`.
@@ -118,17 +122,17 @@ struct TypeErasedObject
 	 
 	    @return A pointer to the stored object of type `T`, or `nullptr` if the types don't match.
 	*/
-	template <class T>
-	const T* getPayload() const noexcept
-        requires (sizeof(T) > 0 && sizeof(T) <= NumBytes)
+    template <class T>
+    const T* getPayload() const noexcept
+        requires (sizeof (T) > 0 && sizeof (T) <= NumBytes)
     {
-		if (deleterCallback != nullptr && typeid (T) == type)
-			return std::launder (reinterpret_cast<const T*> (&objectBuffer[0]));
+        if (deleterCallback != nullptr && typeid (T) == type)
+            return std::launder (reinterpret_cast<const T*> (&objectBuffer[0]));
 
-		return nullptr;
-	}
+        return nullptr;
+    }
 
-	/**
+    /**
 	    Retrieves a pointer to the stored payload object of type `T` (non-const version).
 	 
 	    Returns a pointer to the stored object if the stored type matches `T`; otherwise, returns `nullptr`.
@@ -137,20 +141,20 @@ struct TypeErasedObject
 	 
 	    @return A pointer to the stored object of type `T`, or `nullptr` if the types don't match.
 	*/
-	template <class T>
-	T* getPayload() noexcept
-        requires (sizeof(T) > 0 && sizeof(T) <= NumBytes)
+    template <class T>
+    T* getPayload() noexcept
+        requires (sizeof (T) > 0 && sizeof (T) <= NumBytes)
     {
-		if (deleterCallback != nullptr && typeid (T) == type)
-			return std::launder (reinterpret_cast<T*> (&objectBuffer[0]));
+        if (deleterCallback != nullptr && typeid (T) == type)
+            return std::launder (reinterpret_cast<T*> (&objectBuffer[0]));
 
-		return nullptr;
-	}
+        return nullptr;
+    }
 
 private:
-	alignas (alignof (std::max_align_t)) uint8 objectBuffer[NumBytes] = {};
-	void (*deleterCallback) (void*) = nullptr;
-	std::type_index type = typeid (void);
+    alignas (alignof (std::max_align_t)) uint8 objectBuffer[NumBytes] = {};
+    void (*deleterCallback) (void*) = nullptr;
+    std::type_index type = typeid (void);
 };
 
 } // namespace yup

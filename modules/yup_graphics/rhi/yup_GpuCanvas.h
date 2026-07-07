@@ -25,6 +25,9 @@ namespace yup
 class GraphicsContext;
 class Graphics;
 class GpuTexture;
+class GpuFrame;
+class GpuRenderPass;
+struct GpuRenderOptions;
 class Image;
 
 //==============================================================================
@@ -85,15 +88,18 @@ public:
     //==============================================================================
     /** Returns the Graphics object to draw 2D YUP content into this canvas.
 
-        Valid until commit() is called. Drawing after commit() has undefined behaviour.
+        Lazily begins the offscreen 2D GPU frame on first call. Valid until
+        commit() is called. Drawing after commit() has undefined behaviour.
     */
     Graphics& getGraphics() noexcept;
 
     //==============================================================================
-    /** Finalises the GPU render pass.
+    /** Finalises any open 2D GPU render pass.
 
-        Must be called before asTexture(), asImage(), or readPixels().
-        Returns false if already committed or if no GPU resources were available.
+        Only needs to be called when 2D content was drawn via getGraphics(). For
+        canvases used purely as a render target for GpuRenderPass, committing is
+        not required. Returns false if already committed or if no 2D frame was
+        open.
     */
     bool commit();
 
@@ -131,39 +137,31 @@ public:
     bool readPixels (void* dst, size_t byteSize);
 
     //==============================================================================
-    /** Invokes @c renderFunc with the ore TextureView for this canvas's backing texture.
+    /** Begins a render pass targeting this canvas's backing texture.
 
-        Provides a temporary ore TextureView suitable for use as a color attachment in
-        an ore RenderPassDesc. The TextureView pointer is only valid within the scope of
-        @c renderFunc; it must not be stored beyond the call.
+        The returned GpuRenderPass encodes draws into this canvas within the
+        given frame. The canvas is the render target, so this is where the pass
+        originates. The pass must be finished (explicitly or by destruction)
+        before the frame is submitted.
 
-        Typical usage - encode a custom ore render pass targeting this canvas:
-        @code
-        canvas->withAttachment(oreCtx, [&](rive::ore::TextureView* view) {
-            rive::ore::RenderPassDesc rpDesc;
-            rpDesc.colorAttachments[0].view = view;
-            rpDesc.colorCount = 1;
-            auto rp = oreCtx->beginRenderPass(rpDesc);
-            rp->setPipeline(myPipeline);
-            rp->drawIndexed(36);
-            rp->finish();
-        });
-        @endcode
+        @param frame    The active GpuFrame the pass records into.
+        @param options  Attachment load behaviour (clear flag + clear color).
 
-        @returns false if ore is unavailable, @c oreCtx is null, or the canvas is not committed.
-
-        @note Requires enableOreContext = true on the associated GraphicsContext.
+        @returns A GpuRenderPass. Check isValid() before drawing into it.
     */
-    bool withAttachment (rive::ore::Context* oreCtx,
-                         std::function<void (rive::ore::TextureView*)> renderFunc) noexcept;
+    GpuRenderPass beginRenderPass (GpuFrame& frame, const GpuRenderOptions& options = {});
 
 private:
     //==============================================================================
     GpuCanvas() = default;
 
+    Graphics& ensureGraphics();
+
     GraphicsContext* ctx = nullptr;
+    std::unique_ptr<GraphicsContext::OffscreenTarget> offscreenTarget;
     std::unique_ptr<Graphics> graphics;
     GpuTexture::Ptr cachedTexture;
+    bool frameOpen = false;
     bool committed = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuCanvas)

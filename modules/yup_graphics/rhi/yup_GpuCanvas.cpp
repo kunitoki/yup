@@ -33,14 +33,9 @@ GpuCanvas::Ptr GpuCanvas::create (GraphicsContext& ctx, int width, int height)
     if (target == nullptr)
         return nullptr;
 
-    // Graphics takes ownership of the offscreen target and begins the GPU frame.
-    auto g = std::make_unique<Graphics> (ctx, std::move (target), 0u);
-    if (! g->isOffscreen())
-        return nullptr;
-
     GpuCanvas::Ptr canvas = new GpuCanvas();
     canvas->ctx = &ctx;
-    canvas->graphics = std::move (g);
+    canvas->offscreenTarget = std::move (target);
     return canvas;
 }
 
@@ -48,40 +43,42 @@ GpuCanvas::Ptr GpuCanvas::create (GraphicsContext& ctx, int width, int height)
 
 int GpuCanvas::getWidth() const noexcept
 {
-    // Access private member via friend class Graphics
-    if (graphics != nullptr && graphics->offscreenTarget != nullptr)
-        return graphics->offscreenTarget->getWidth();
-
-    return 0;
+    return offscreenTarget != nullptr ? offscreenTarget->getWidth() : 0;
 }
 
 int GpuCanvas::getHeight() const noexcept
 {
-    if (graphics != nullptr && graphics->offscreenTarget != nullptr)
-        return graphics->offscreenTarget->getHeight();
-
-    return 0;
+    return offscreenTarget != nullptr ? offscreenTarget->getHeight() : 0;
 }
 
 //==============================================================================
 
+Graphics& GpuCanvas::ensureGraphics()
+{
+    jassert (ctx != nullptr && offscreenTarget != nullptr);
+
+    if (graphics == nullptr)
+    {
+        graphics = std::make_unique<Graphics> (*ctx, *offscreenTarget, 0u);
+        frameOpen = true;
+    }
+
+    return *graphics;
+}
+
 Graphics& GpuCanvas::getGraphics() noexcept
 {
-    jassert (graphics != nullptr);
-    return *graphics;
+    return ensureGraphics();
 }
 
 //==============================================================================
 
 bool GpuCanvas::commit()
 {
-    if (graphics == nullptr || committed)
+    if (! frameOpen || committed || ctx == nullptr || offscreenTarget == nullptr)
         return false;
 
-    // commitOffscreenTarget is private - accessible via friend class Graphics
-    if (! graphics->commitOffscreenTarget())
-        return false;
-
+    ctx->endOffscreen (*offscreenTarget);
     committed = true;
     return true;
 }
@@ -90,13 +87,18 @@ bool GpuCanvas::commit()
 
 GpuTexture::Ptr GpuCanvas::asTexture()
 {
-    if (! committed || graphics == nullptr || graphics->offscreenTarget == nullptr)
+    if (offscreenTarget == nullptr)
+        return nullptr;
+
+    // A canvas used purely as a GpuRenderPass target has no 2D frame to commit,
+    // but one opened via getGraphics() must be committed first.
+    if (frameOpen && ! committed)
         return nullptr;
 
     if (cachedTexture != nullptr)
         return cachedTexture;
 
-    auto& target = *graphics->offscreenTarget;
+    auto& target = *offscreenTarget;
     const int w = target.getWidth();
     const int h = target.getHeight();
 
@@ -123,34 +125,37 @@ Image GpuCanvas::asImage()
 
 bool GpuCanvas::readPixels (void* dst, size_t byteSize)
 {
-    if (! committed || graphics == nullptr || graphics->offscreenTarget == nullptr || ctx == nullptr)
+    if (offscreenTarget == nullptr || ctx == nullptr)
         return false;
 
-    return ctx->readOffscreenPixels (*graphics->offscreenTarget, dst, byteSize);
+    if (frameOpen && ! committed)
+        return false;
+
+    return ctx->readOffscreenPixels (*offscreenTarget, dst, byteSize);
 }
 
-bool GpuCanvas::withAttachment (rive::ore::Context* oreCtx,
-                                std::function<void (rive::ore::TextureView*)> renderFunc) noexcept
+//==============================================================================
+
+GpuRenderPass GpuCanvas::beginRenderPass (GpuFrame& frame, const GpuRenderOptions& options)
 {
-    if (oreCtx == nullptr || ! renderFunc)
-        return false;
+    GpuRenderPass pass;
+
+    if (offscreenTarget == nullptr || ! frame.isValid())
+        return pass;
 
     auto tex = asTexture();
     if (tex == nullptr)
-        return false;
+        return pass;
 
-    rive::rcp<rive::ore::TextureView> view;
+    pass.impl = std::make_unique<GpuRenderPass::Impl>();
+    pass.impl->oreCtx = frame.getImpl()->oreCtx;
+    pass.impl->framePools = frame.getImpl();
+    pass.impl->outputTexture = tex;
+    pass.impl->width = getWidth();
+    pass.impl->height = getHeight();
+    pass.impl->options = options;
 
-    if (auto rc = tex->getInternalRenderCanvas())
-        view = oreCtx->wrapCanvasTexture (rc.get());
-    else if (auto gpuTex = tex->getOrAdoptGpuTexture())
-        view = oreCtx->wrapRiveTexture (gpuTex.get(), (uint32_t) tex->getWidth(), (uint32_t) tex->getHeight());
-
-    if (view == nullptr)
-        return false;
-
-    renderFunc (view.get()); // rcp keeps view alive for the call's duration
-    return true;
+    return pass;
 }
 
 } // namespace yup

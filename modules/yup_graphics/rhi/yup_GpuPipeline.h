@@ -37,10 +37,10 @@ enum class GpuShaderLanguage : uint8_t
 
     The binding-map sidecar (@c bindingMap / @c bindingMapSize) is mandatory.
     It is produced offline by the Rive scripting-workspace RSTB toolchain and
-    must accompany the shader code. GpuProgram::compile() will assert and fail
+    must accompany the shader code. GpuPipeline::compile() will assert and fail
     if the sidecar is missing.
 
-    @see GpuProgram
+    @see GpuPipeline
 */
 struct GpuShaderSource
 {
@@ -267,16 +267,16 @@ struct GpuDepthStencilState
 };
 
 //==============================================================================
-/** Full pipeline configuration for a GpuProgram.
+/** Full pipeline configuration for a GpuPipeline.
 
     Defaults reproduce the classic fullscreen-triangle post-process pipeline
     (no vertex buffers, no culling, single alpha-blended rgba8unorm target), so
-    the two-argument GpuProgram::compile() overload behaves exactly as before.
+    the two-shader GpuPipeline::compile() overload behaves as a fullscreen pass.
 
     For custom geometry rendering supply vertex buffer layouts, an index format,
     culling / winding, and optionally depth-stencil state or extra color targets.
 
-    @see GpuProgram::compile
+    @see GpuPipeline::compile
 */
 struct GpuPipelineOptions
 {
@@ -307,202 +307,49 @@ struct GpuPipelineOptions
 };
 
 //==============================================================================
-/** Per-draw options controlling the render pass a draw call encodes. */
-struct GpuRenderOptions
-{
-    constexpr GpuRenderOptions() = default;
-
-    constexpr GpuRenderOptions (bool clear, Color clearColor)
-        : clear (clear)
-        , clearColor (clearColor)
-    {
-    }
-
-    /** Whether to clear the target before drawing (LoadOp::clear). When false
-        the existing contents are loaded (LoadOp::load). */
-    bool clear = true;
-
-    /** Clear color used when @c clear is true. */
-    Color clearColor = Colors::transparentBlack;
-};
-
 class GraphicsContext;
-class GpuTexture;
-class GpuCanvas;
-class GpuBuffer;
 
 //==============================================================================
-/** A compiled GPU render pipeline for custom shader dispatch.
+/** An immutable, compiled GPU render pipeline.
 
-    GpuProgram wraps an ore (Rive's backend-agnostic GPU layer) render pipeline
-    consisting of a vertex shader and a fragment shader. It supports both
-    fullscreen post-process effects and custom geometry rendering (indexed or
-    non-indexed) with vertex buffers, culling, and depth-stencil state.
+    GpuPipeline wraps an ore (Rive's backend-agnostic GPU layer) render pipeline
+    consisting of a vertex shader and a fragment shader plus fixed pipeline
+    state. It supports both fullscreen post-process effects and custom geometry
+    rendering (indexed or non-indexed) with vertex buffers, culling, and
+    depth-stencil state.
 
-    Typical fullscreen post-process usage:
-    @code
-        auto prog = yup::GpuProgram::compile (ctx, vertSource, fragSource).getValue();
+    A pipeline is immutable once compiled: mutable binding state and per-draw
+    encoding live on GpuRenderPass. Compile a pipeline once (or fetch it from a
+    GpuPipelineCache) and reuse it across frames and render passes.
 
-        auto canvas = yup::GpuCanvas::create (ctx, w, h);
-        canvas->commit();                                 // commit Rive frame first
-        prog->setTexture (0, 0, inputTexture);
-        prog->setUniformBuffer (0, 1, &params, sizeof (params));
-        prog->beginFrame();
-        prog->dispatch (*canvas);                         // ore renders into canvas texture
-        prog->endFrame();
-        prog->waitForGPU();
-        g.drawTexture (canvas->asTexture(), bounds);      // composite
-    @endcode
+    Requires the GraphicsContext to have been created with
+    Options::enableOreContext = true.
 
-    Typical custom geometry usage:
-    @code
-        yup::GpuPipelineOptions options;
-        options.vertexBuffers = &layout;
-        options.vertexBufferCount = 1;
-        options.indexFormat = yup::GpuIndexFormat::uint16;
-        options.cullMode = yup::GpuCullMode::back;
-        auto prog = yup::GpuProgram::compile (ctx, vs, fs, options).getValue();
-
-        auto vbo = yup::GpuBuffer::create (ctx, yup::GpuBufferType::vertex, verts, sizeof (verts));
-        auto ibo = yup::GpuBuffer::create (ctx, yup::GpuBufferType::index, idx, sizeof (idx));
-
-        prog->setVertexBuffer (0, vbo);
-        prog->setIndexBuffer (ibo, yup::GpuIndexFormat::uint16);
-        prog->setUniformBuffer (0, 0, &uniforms, sizeof (uniforms));
-        prog->beginFrame();
-        prog->drawIndexed (*canvas, indexCount, { true, yup::Colors::black });
-        prog->endFrame();
-        prog->waitForGPU();
-    @endcode
-
-    Requires the GraphicsContext to have been created with Options::enableOreContext = true.
-
-    @see GpuCanvas, GpuBuffer, GpuShaderSource, GpuPipelineOptions, GraphicsContext::Options
+    @see GpuRenderPass, GpuFrame, GpuCanvas, GpuPipelineCache, GpuPipelineOptions
 */
-class YUP_API GpuProgram : public ReferenceCountedObject
+class YUP_API GpuPipeline : public ReferenceCountedObject
 {
 public:
-    using Ptr = ReferenceCountedObjectPtr<GpuProgram>;
+    using Ptr = ReferenceCountedObjectPtr<GpuPipeline>;
 
     //==============================================================================
-    ~GpuProgram();
+    ~GpuPipeline();
 
     //==============================================================================
-    /** Binds a texture to the given (group, binding) slot.
-
-        The texture may come from:
-        - GpuCanvas::asTexture() (after commit) or from
-        - Image::getTexture() (after Image::createTextureIfNotPresent()).
-        
-        If the same slot is set more than once the later call wins.
-    */
-    void setTexture (int group, int binding, GpuTexture::Ptr texture);
-
-    /** Uploads raw uniform data to the given (group, binding) slot.
-
-        The data is copied immediately; the caller need not keep it alive.
-        If the same slot is set more than once the later call wins.
-    */
-    void setUniformBuffer (int group, int binding, const void* data, size_t byteSize);
-
-    /** Binds a vertex buffer to the given slot for custom geometry rendering.
-
-        The program must have been compiled with a matching vertex buffer layout
-        in GpuPipelineOptions. The buffer is retained until replaced or the
-        program is destroyed.
-    */
-    void setVertexBuffer (int slot, GpuBuffer::Ptr buffer);
-
-    /** Binds an index buffer for indexed geometry rendering.
-
-        Used by drawIndexed(). The format must match the pipeline's index format.
-        The buffer is retained until replaced or the program is destroyed.
-    */
-    void setIndexBuffer (GpuIndexFormat format, GpuBuffer::Ptr buffer);
-
-    //==============================================================================
-    /** Begins an ore GPU frame.
-
-        Must be called once before one or more dispatch()/draw()/drawIndexed()
-        calls. Clears any GPU resources retained from the previous frame. Pair
-        with endFrame().
-
-        @return true on success; false if ore is unavailable.
-    */
-    bool beginFrame();
-
-    /** Submits all render passes recorded since beginFrame().
-
-        Must be called after all draw calls for this frame. Does not block the
-        CPU - call waitForGPU() afterwards if you need results immediately.
-
-        @return true on success; false if ore is unavailable.
-    */
-    bool endFrame();
-
-    /** Blocks the calling thread until all submitted GPU work has completed. */
-    void waitForGPU();
-
-    //==============================================================================
-    /** Encodes a fullscreen render pass into the committed GpuCanvas.
-
-        Convenience for the classic fullscreen-triangle post-process pass:
-        equivalent to draw (output, 3, { true, Colors::transparentBlack }).
-
-        The canvas must already be committed. Must be called between beginFrame()
-        and endFrame().
-
-        @return true on success; false if invalid or the canvas isn't committed.
-    */
-    bool dispatch (GpuCanvas& output);
-
-    /** Encodes a non-indexed draw of @c vertexCount vertices into the canvas.
-
-        Binds any vertex buffers set via setVertexBuffer(). For fullscreen passes
-        that generate vertices from the vertex index, pass vertexCount = 3 with no
-        vertex buffers bound.
-
-        @return true on success; false if invalid or the canvas isn't committed.
-    */
-    bool draw (GpuCanvas& output, uint32_t vertexCount, const GpuRenderOptions& options = {});
-
-    /** Encodes an indexed draw of @c indexCount indices into the canvas.
-
-        Binds the vertex buffers and index buffer set via setVertexBuffer() /
-        setIndexBuffer().
-
-        @return true on success; false if invalid, no index buffer is bound, or
-                the canvas isn't committed.
-    */
-    bool drawIndexed (GpuCanvas& output, uint32_t indexCount, const GpuRenderOptions& options = {});
-
-    //==============================================================================
-    /** Compiles a fullscreen GpuProgram from vertex and fragment shader sources.
+    /** Compiles a GpuPipeline from vertex and fragment shader sources.
 
         Both shaders must supply pre-compiled RSTB binding-map blobs via
         GpuShaderSource::bindingMap. On failure the returned ResultValue holds a
         human-readable description of the failure.
 
-        Requires ctx.gpuContext() != nullptr (enableOreContext = true).
+        Requires ctx.isGpuAvailable() (enableOreContext = true).
     */
-    static ResultValue<GpuProgram::Ptr> compile (GraphicsContext& ctx,
-                                                 const GpuShaderSource& vertexShader,
-                                                 const GpuShaderSource& fragmentShader);
+    static ResultValue<GpuPipeline::Ptr> compile (GraphicsContext& ctx,
+                                                  const GpuShaderSource& vertexShader,
+                                                  const GpuShaderSource& fragmentShader,
+                                                  const GpuPipelineOptions& pipelineOptions = {});
 
-    /** Compiles a GpuProgram with a full pipeline configuration.
-
-        Use this overload to render custom geometry with vertex buffers, culling,
-        depth-stencil state, or multiple color targets.
-
-        @see GpuPipelineOptions
-    */
-    static ResultValue<GpuProgram::Ptr> compile (GraphicsContext& ctx,
-                                                 const GpuShaderSource& vertexShader,
-                                                 const GpuShaderSource& fragmentShader,
-                                                 const GpuPipelineOptions& pipelineOptions);
-
-    //==============================================================================
-    /** Compiles a GpuProgram from a pre-built shader bundle.
+    /** Compiles a GpuPipeline from a pre-built shader bundle.
 
         The bundle must contain both a vertex and a fragment shader stage. Picks
         the native shader variant matching the context's graphics API for each
@@ -515,16 +362,16 @@ public:
         @param bundle           Bundle containing the vertex and fragment stages.
         @param pipelineOptions  Pipeline configuration.
 
-        @returns A compiled program, or a failure with a human-readable description.
+        @returns A compiled pipeline, or a failure with a human-readable description.
 
         @see ShaderBundle
     */
-    static ResultValue<GpuProgram::Ptr> compileFromBundle (GraphicsContext& ctx,
-                                                           const ShaderBundle& bundle,
-                                                           const GpuPipelineOptions& pipelineOptions = {});
+    static ResultValue<GpuPipeline::Ptr> compileFromBundle (GraphicsContext& ctx,
+                                                            const ShaderBundle& bundle,
+                                                            const GpuPipelineOptions& pipelineOptions = {});
 
 #if YUP_ENABLE_SHADER_TRANSPILER
-    /** Compiles a GpuProgram directly from GLSL 450 vertex and fragment sources.
+    /** Compiles a GpuPipeline directly from GLSL 450 vertex and fragment sources.
 
         Convenience that transpiles the GLSL to the native language of the
         context's graphics API, derives the binding-map sidecar via reflection,
@@ -536,23 +383,18 @@ public:
         @param fragmentGlsl     GLSL 450 fragment shader source.
         @param pipelineOptions  Pipeline configuration.
 
-        @returns A compiled program, or a failure with a human-readable description.
+        @returns A compiled pipeline, or a failure with a human-readable description.
     */
-    static ResultValue<GpuProgram::Ptr> compileFromGlsl (GraphicsContext& ctx,
-                                                         const String& vertexGlsl,
-                                                         const String& fragmentGlsl,
-                                                         const GpuPipelineOptions& pipelineOptions = {});
+    static ResultValue<GpuPipeline::Ptr> compileFromGlsl (GraphicsContext& ctx,
+                                                          const String& vertexGlsl,
+                                                          const String& fragmentGlsl,
+                                                          const GpuPipelineOptions& pipelineOptions = {});
 #endif
 
-    //==============================================================================
-    /** @internal Returns the ore Context used to compile this program, or nullptr. */
-    rive::ore::Context* oreContext() const noexcept;
-
-    /** @internal Returns the compiled ore Pipeline for advanced vertex / 3D draw calls. */
-    rive::ore::Pipeline* orePipeline() const noexcept;
-
 private:
-    GpuProgram() = default;
+    friend class GpuRenderPass;
+
+    GpuPipeline() = default;
 
     static constexpr size_t kImplSize = 384;
 
@@ -562,7 +404,7 @@ private:
     Impl* getImpl() noexcept;
     const Impl* getImpl() const noexcept;
 
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuProgram)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuPipeline)
 };
 
 } // namespace yup

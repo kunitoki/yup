@@ -93,16 +93,15 @@ TEST_F (GpuCanvasTests, ReadPixelsBeforeCommitReturnsFalse)
     EXPECT_FALSE (canvas->readPixels (buf.data(), buf.size()));
 }
 
-TEST_F (GpuCanvasTests, DoubleCommitReturnsFalseOnSecondCall)
+TEST_F (GpuCanvasTests, CommitBeforeDrawingReturnsFalse)
 {
     auto canvas = GpuCanvas::create (*context, 64, 64);
     if (canvas == nullptr)
         return;
 
-    const bool first = canvas->commit();
-    const bool second = canvas->commit();
-    EXPECT_FALSE (second);
-    (void) first;
+    // No 2D frame was opened (getGraphics never called), so there is nothing
+    // to commit.
+    EXPECT_FALSE (canvas->commit());
 }
 
 // ---------------------------------------------------------------------------

@@ -60,7 +60,7 @@ public:
         bool enableReadPixels = false;              ///< Enables reading pixels directly from the framebuffer.
         bool disableRasterOrdering = false;         ///< Disables specific raster ordering features for performance.
         bool allowHeadlessRendering = false;        ///< Allows rendering without a visible window (headless mode).
-        bool enableOreContext = true;               ///< Enables the ore GPU context for GpuProgram shader operations.
+        bool enableOreContext = true;               ///< Enables the ore GPU context for GpuPipeline shader operations.
         LoaderFunction loaderFunction = nullptr;    ///< Loader function (used by GL/Vulkan).
     };
 
@@ -113,11 +113,22 @@ public:
     */
     virtual rive::gpu::RenderTarget* renderTarget() = 0;
 
-    /** Returns the ore GPU context, or nullptr when enableOreContext was false or ore is unavailable on this backend.
+    /** @internal
 
-        Use this to compile GpuProgram pipelines and build ore BindGroups for shader dispatch.
+        Returns the ore GPU context, or nullptr when enableOreContext was false or ore is unavailable on this backend.
+
+        This is the single backend bridge used by the RHI layer (GpuPipeline,
+        GpuFrame, GpuRenderPass, GpuBuffer). User code should prefer the ore-free
+        isGpuAvailable() capability probe instead.
     */
     virtual rive::ore::Context* gpuContext() const noexcept { return nullptr; }
+
+    /** Returns true if a GPU (ore) context is available for RHI operations.
+
+        Equivalent to gpuContext() != nullptr but without referencing any ore
+        type, so user code and examples can probe GPU capability ore-free.
+    */
+    bool isGpuAvailable() const noexcept { return gpuContext() != nullptr; }
 
     /** Creates a renderer suitable for the specified dimensions.
 

@@ -24,7 +24,7 @@ namespace yup
 
 class Image;
 class GpuCanvas;
-class GpuProgram;
+class GpuRenderPass;
 class Graphics;
 
 //==============================================================================
@@ -60,7 +60,7 @@ private:
     //==============================================================================
     friend class Image;
     friend class GpuCanvas;
-    friend class GpuProgram;
+    friend class GpuRenderPass;
     friend class Graphics;
 
     GpuTexture() = default;

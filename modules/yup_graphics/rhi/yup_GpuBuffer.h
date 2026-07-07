@@ -28,8 +28,8 @@ class GraphicsContext;
 /** Identifies the intended usage of a GpuBuffer. */
 enum class GpuBufferType : uint8_t
 {
-    vertex,  ///< Per-vertex attribute data, bound via GpuProgram::setVertexBuffer().
-    index,   ///< Index data, bound via GpuProgram::setIndexBuffer().
+    vertex,  ///< Per-vertex attribute data, bound via GpuRenderPass::setVertexBuffer().
+    index,   ///< Index data, bound via GpuRenderPass::setIndexBuffer().
     uniform, ///< Uniform (constant) data.
 };
 
@@ -37,7 +37,7 @@ enum class GpuBufferType : uint8_t
 /** A reference-counted GPU buffer handle.
 
     Wraps a backend-native ore buffer holding vertex, index, or uniform data.
-    Create one via GpuBuffer::create() and bind it to a GpuProgram for indexed
+    Create one via GpuBuffer::create() and bind it to a GpuRenderPass for indexed
     or non-indexed geometry rendering. The underlying GPU resource lives for as
     long as at least one GpuBuffer::Ptr exists.
 
@@ -47,7 +47,7 @@ enum class GpuBufferType : uint8_t
     Requires the GraphicsContext to have been created with
     Options::enableOreContext = true.
 
-    @see GpuProgram, GraphicsContext::Options
+    @see GpuRenderPass, GraphicsContext::Options
 */
 class YUP_API GpuBuffer : public ReferenceCountedObject
 {
@@ -83,11 +83,9 @@ public:
                                   size_t byteSize);
 
 private:
-    friend class GpuProgram;
+    friend class GpuRenderPass;
 
     GpuBuffer() = default;
-
-    rive::ore::Buffer* oreBufferHandle() const noexcept;
 
     struct Impl;
     Impl* getImpl() noexcept;

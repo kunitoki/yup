@@ -67,12 +67,6 @@ bool GpuBuffer::isValid() const noexcept
     return i != nullptr && i->buffer != nullptr;
 }
 
-rive::ore::Buffer* GpuBuffer::oreBufferHandle() const noexcept
-{
-    auto* i = getImpl();
-    return (i != nullptr) ? i->buffer.get() : nullptr;
-}
-
 //==============================================================================
 
 GpuBuffer::Ptr GpuBuffer::create (GraphicsContext& ctx,

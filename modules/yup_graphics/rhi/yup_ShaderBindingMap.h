@@ -25,7 +25,7 @@ namespace yup
 //==============================================================================
 /** Builds an ore RSTB binding-map blob from shader reflection data.
 
-    GpuProgram (and the underlying ore layer) require a pre-compiled RSTB
+    GpuPipeline (and the underlying ore layer) require a pre-compiled RSTB
     binding-map sidecar for every shader stage. This helper converts a
     ShaderReflection (produced by ShaderTranspiler / ShaderBundle) into the
     binary blob format expected by GpuShaderSource::bindingMap.
@@ -41,7 +41,7 @@ namespace yup
     @returns A binary blob suitable for GpuShaderSource::bindingMap. The blob is
              empty only if the reflection declares no bindable resources.
 
-    @see GpuShaderSource, GpuProgram, ShaderReflection
+    @see GpuShaderSource, GpuPipeline, ShaderReflection
 */
 std::vector<uint8_t> makeShaderBindingMapBlob (const ShaderReflection& reflection,
                                                ShaderStage stage);

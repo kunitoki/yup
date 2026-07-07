@@ -26,28 +26,27 @@
 //==============================================================================
 
 /**
-    Demonstrates per-frame GpuCanvas rendering with GpuProgram-based 3D vertex
-    rendering and a GpuProgram-based Gaussian blur post-process.
+    Demonstrates per-frame GpuCanvas rendering with GpuPipeline-based 3D vertex
+    rendering and a GpuPipeline-based Gaussian blur post-process.
 
-    The spinning cube is rendered each frame entirely through GpuProgram:
+    The spinning cube is rendered each frame through the RHI layer:
     - GLSL 450 vertex + fragment shaders compiled at runtime via
-      GpuProgram::compileFromGlsl() (which transpiles to the backend-native
+      GpuPipeline::compileFromGlsl() (which transpiles to the backend-native
       language and derives the binding-map sidecar via reflection)
     - Per-vertex position/color/normal in a GpuBuffer vertex buffer
     - MVP-style transform computed per-frame in the vertex shader
     - Backface culling via GpuCullMode::back and an indexed draw
+    - A GpuFrame scopes the GPU work; GpuCanvas::beginRenderPass() encodes into
+      the scene canvas via a GpuRenderPass
 
-    A separable Gaussian blur post-process is applied via a second GpuProgram.
-    The blur intensity is controlled by a slider.
+    A separable Gaussian blur post-process is applied via a second GpuPipeline.
+    The blur intensity is controlled by a slider; the horizontal and vertical
+    passes share a single GpuFrame.
 
-    Both the cube and the blur programs can be live-edited: use the Cube/Blur
-    buttons to pick which program to edit, the Vertex/Fragment buttons to pick
-    the stage, and Load/Save to persist the active program's vertex + fragment
+    Both the cube and the blur pipelines can be live-edited: use the Cube/Blur
+    buttons to pick which pipeline to edit, the Vertex/Fragment buttons to pick
+    the stage, and Load/Save to persist the active pipeline's vertex + fragment
     GLSL to a .ysl shader bundle.
-
-    All ore-specific plumbing (shader modules, pipelines, bind groups, buffers)
-    is hidden behind GpuProgram / GpuBuffer, so the backend-native shader source
-    and binding maps are always fully populated (fixing the HLSL D3D path).
 */
 class SpinningCubeDemo : public yup::Component
 {
@@ -196,24 +195,23 @@ public:
         if (w < 2 || h < 2 || ! gpuInitialized)
             return;
 
-        // 1. Create an empty GpuCanvas for the scene, commit the empty Rive 2D frame.
+        // 1. Create an empty GpuCanvas for the scene (used purely as a render
+        //    target - no 2D commit required).
         if (sceneCanvas == nullptr || sceneCanvas->getWidth() != w || sceneCanvas->getHeight() != h)
         {
             sceneCanvas = yup::GpuCanvas::create (*capturedContext, w, h);
             if (sceneCanvas == nullptr)
                 return;
-
-            sceneCanvas->commit();
         }
 
-        // 2. Render the 3D cube into sceneCanvas via GpuProgram.
-        if (cubeProgram != nullptr)
+        // 2. Render the 3D cube into sceneCanvas via GpuPipeline + GpuRenderPass.
+        if (cubePipeline != nullptr)
             renderCube (*sceneCanvas, w, h);
 
-        // 3. Apply separable Gaussian blur via GpuProgram: two O(radius) passes (H then V).
+        // 3. Apply separable Gaussian blur: two O(radius) passes (H then V).
         yup::GpuTexture::Ptr outputTex = sceneCanvas->asTexture();
 
-        if (blurProgram != nullptr && blurSigma > 0.01f)
+        if (blurPipeline != nullptr && blurSigma > 0.01f)
         {
             struct alignas (16) BlurParams
             {
@@ -229,28 +227,32 @@ public:
 
             const float radius = (float) ceil (blurSigma * 3.0);
 
+            // Both blur passes share a single GpuFrame.
+            auto frame = yup::GpuFrame::begin (*capturedContext);
+
             auto runPass = [&] (const yup::GpuTexture::Ptr& input, float dirX, float dirY) -> yup::GpuTexture::Ptr
             {
                 auto passCanvas = yup::GpuCanvas::create (*capturedContext, w, h);
                 if (passCanvas == nullptr)
                     return input;
 
-                passCanvas->commit();
-
                 BlurParams params { blurSigma, radius, (float) w, (float) h, dirX, dirY, 0.0f, 0.0f };
 
-                blurProgram->setTexture (0, 0, input);
-                blurProgram->setUniformBuffer (0, 2, &params, sizeof (params));
-                blurProgram->beginFrame();
-                blurProgram->dispatch (*passCanvas);
-                blurProgram->endFrame();
-                blurProgram->waitForGPU();
+                auto pass = passCanvas->beginRenderPass (frame, { true, yup::Colors::transparentBlack });
+                pass.setPipeline (*blurPipeline);
+                pass.setTexture (0, 0, input);
+                pass.setUniformBuffer (0, 2, &params, sizeof (params));
+                pass.draw (3);
+                pass.finish();
 
                 return passCanvas->asTexture();
             };
 
             outputTex = runPass (outputTex, 1.0f, 0.0f); // horizontal
             outputTex = runPass (outputTex, 0.0f, 1.0f); // vertical
+
+            frame.submit();
+            frame.waitForGPU();
         }
 
         // 4. Composite to main view.
@@ -529,7 +531,7 @@ void main() {
 
         gpuInitialized = true;
 
-        if (capturedContext->gpuContext() == nullptr)
+        if (! capturedContext->isGpuAvailable())
         {
             statusLabel->setText ("ore context unavailable - rebuild with enableOreContext=true.",
                                   yup::dontSendNotification);
@@ -539,9 +541,9 @@ void main() {
         initBlur();
         initCube();
 
-        if (cubeProgram != nullptr && blurProgram != nullptr)
+        if (cubePipeline != nullptr && blurPipeline != nullptr)
             statusLabel->setText ("GPU cube + separable blur ready. Drag slider for blur intensity.", yup::dontSendNotification);
-        else if (cubeProgram != nullptr)
+        else if (cubePipeline != nullptr)
             statusLabel->setText ("GPU cube ready. Blur compile failed - see debug log.", yup::dontSendNotification);
         else
             statusLabel->setText ("GPU init failed - see debug log.", yup::dontSendNotification);
@@ -549,10 +551,10 @@ void main() {
 
     void initBlur()
     {
-        auto result = yup::GpuProgram::compileFromGlsl (*capturedContext,
-                                                        currentBlurVertSource,
-                                                        currentBlurFragSource,
-                                                        {});
+        auto result = yup::GpuPipeline::compileFromGlsl (*capturedContext,
+                                                         currentBlurVertSource,
+                                                         currentBlurFragSource,
+                                                         {});
 
         if (result.failed())
         {
@@ -560,15 +562,15 @@ void main() {
             return;
         }
 
-        blurProgram = result.getValue();
+        blurPipeline = result.getValue();
     }
 
     void initCube()
     {
-        auto result = yup::GpuProgram::compileFromGlsl (*capturedContext,
-                                                        currentVertSource,
-                                                        currentFragSource,
-                                                        cubePipelineOptions());
+        auto result = yup::GpuPipeline::compileFromGlsl (*capturedContext,
+                                                         currentVertSource,
+                                                         currentFragSource,
+                                                         cubePipelineOptions());
 
         if (result.failed())
         {
@@ -576,7 +578,7 @@ void main() {
             return;
         }
 
-        cubeProgram = result.getValue();
+        cubePipeline = result.getValue();
 
         // Upload immutable vertex and index buffers.
         cubeVBO = yup::GpuBuffer::create (*capturedContext, yup::GpuBufferType::vertex, kCubeVerts, sizeof (kCubeVerts));
@@ -640,7 +642,7 @@ void main() {
         updateShaderModeLabel();
     }
 
-    /** Recompiles the active program (cube or blur) from the current sources. */
+    /** Recompiles the active pipeline (cube or blur) from the current sources. */
     void recompileActiveShader()
     {
         if (capturedContext == nullptr || ! gpuInitialized)
@@ -650,10 +652,10 @@ void main() {
 
         if (editingBlur)
         {
-            auto result = yup::GpuProgram::compileFromGlsl (*capturedContext,
-                                                            currentBlurVertSource,
-                                                            currentBlurFragSource,
-                                                            {});
+            auto result = yup::GpuPipeline::compileFromGlsl (*capturedContext,
+                                                             currentBlurVertSource,
+                                                             currentBlurFragSource,
+                                                             {});
 
             if (result.failed())
             {
@@ -661,14 +663,14 @@ void main() {
                 return;
             }
 
-            blurProgram = result.getValue();
+            blurPipeline = result.getValue();
         }
         else
         {
-            auto result = yup::GpuProgram::compileFromGlsl (*capturedContext,
-                                                            currentVertSource,
-                                                            currentFragSource,
-                                                            cubePipelineOptions());
+            auto result = yup::GpuPipeline::compileFromGlsl (*capturedContext,
+                                                             currentVertSource,
+                                                             currentFragSource,
+                                                             cubePipelineOptions());
 
             if (result.failed())
             {
@@ -676,7 +678,7 @@ void main() {
                 return;
             }
 
-            cubeProgram = result.getValue();
+            cubePipeline = result.getValue();
         }
 
         hideError();
@@ -790,7 +792,7 @@ void main() {
 
     void renderCube (yup::GpuCanvas& canvas, int w, int h)
     {
-        if (cubeProgram == nullptr || cubeVBO == nullptr || cubeIBO == nullptr)
+        if (cubePipeline == nullptr || cubeVBO == nullptr || cubeIBO == nullptr)
             return;
 
         // Per-frame uniform buffer (rotation angles + aspect ratio).
@@ -801,27 +803,31 @@ void main() {
 
         CubeUniforms uniforms { angleY, angleX, (float) w / (float) h, 0.0f };
 
-        cubeProgram->setUniformBuffer (0, 0, &uniforms, sizeof (uniforms));
-        cubeProgram->setVertexBuffer (0, cubeVBO);
-        cubeProgram->setIndexBuffer (yup::GpuIndexFormat::uint16, cubeIBO);
+        auto frame = yup::GpuFrame::begin (*capturedContext);
 
-        cubeProgram->beginFrame();
-        cubeProgram->drawIndexed (canvas, yup::numElementsInArray (kCubeIdx), { true, yup::Color (0xff1a1a2e) });
-        cubeProgram->endFrame();
-        cubeProgram->waitForGPU();
+        auto pass = canvas.beginRenderPass (frame, { true, yup::Color (0xff1a1a2e) });
+        pass.setPipeline (*cubePipeline);
+        pass.setUniformBuffer (0, 0, &uniforms, sizeof (uniforms));
+        pass.setVertexBuffer (0, cubeVBO);
+        pass.setIndexBuffer (yup::GpuIndexFormat::uint16, cubeIBO);
+        pass.drawIndexed (yup::numElementsInArray (kCubeIdx));
+        pass.finish();
+
+        frame.submit();
+        frame.waitForGPU();
     }
 
     //==============================================================================
     yup::GraphicsContext* capturedContext = nullptr;
 
-    // Cube pass (GpuProgram indexed geometry).
-    yup::GpuProgram::Ptr cubeProgram;
+    // Cube pass (GpuPipeline indexed geometry).
+    yup::GpuPipeline::Ptr cubePipeline;
     yup::GpuBuffer::Ptr cubeVBO;
     yup::GpuBuffer::Ptr cubeIBO;
     yup::GpuCanvas::Ptr sceneCanvas;
 
-    // Blur pass (GpuProgram fullscreen triangle).
-    yup::GpuProgram::Ptr blurProgram;
+    // Blur pass (GpuPipeline fullscreen triangle).
+    yup::GpuPipeline::Ptr blurPipeline;
 
     bool gpuInitialized = false;
     float angleY = 0.0f;

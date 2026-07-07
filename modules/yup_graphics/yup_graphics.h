@@ -66,8 +66,6 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 namespace rive::ore
 {
 class Context;
-class Pipeline;
-class TextureView;
 } // namespace rive::ore
 
 //==============================================================================
@@ -185,10 +183,13 @@ class TextureView;
 #include "graphics/yup_FillType.h"
 #include "context/yup_GraphicsContext.h"
 #include "graphics/yup_Graphics.h"
-#include "rhi/yup_GpuCanvas.h"
 #include "rhi/yup_ShaderBindingMap.h"
 #include "rhi/yup_GpuBuffer.h"
-#include "rhi/yup_GpuProgram.h"
+#include "rhi/yup_GpuPipeline.h"
+#include "rhi/yup_GpuFrame.h"
+#include "rhi/yup_GpuRenderPass.h"
+#include "rhi/yup_GpuCanvas.h"
+#include "rhi/yup_GpuPipelineCache.h"
 #include "svg/yup_SVGElement.h"
 #include "svg/yup_SVGGradient.h"
 #include "svg/yup_SVGClipPath.h"
