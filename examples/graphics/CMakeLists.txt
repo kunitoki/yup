@@ -98,6 +98,7 @@ yup_standalone_app (
         libgif
         glslang
         spirv_cross
+        spirv_tools
         ${additional_modules}
         ${link_libraries})
 

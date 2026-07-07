@@ -24,16 +24,16 @@
 
   BEGIN_YUP_MODULE_DECLARATION
 
-    ID:                 glslang
+    ID:                 spirv_tools
     vendor:             khronos
-    version:            16.3.0
-    name:               glslang GLSL/HLSL Reference Shader Compiler
-    description:        glslang is the official Khronos reference front-end for GLSL, ESSL, and HLSL shader languages, with SPIR-V backend code generation.
-    website:            https://github.com/KhronosGroup/glslang
-    license:            BSD-3-Clause
+    version:            0.68.0
+    name:               SPIRV-Tools
+    description:        SPIRV-Tools is a collection of tools for processing SPIR-V, including validation, optimization, and reflection.
+    website:            https://github.com/KhronosGroup/SPIRV-Tools
+    license:            Apache-2.0 OR MIT
 
-    defines:            ENABLE_HLSL=1
-    searchpaths:        upstream upstream/SPIRV
+    searchpaths:        upstream upstream/include upstream/include/spirv/unified1 upstream/generated
+    defines:            ENABLE_OPT=1
 
   END_YUP_MODULE_DECLARATION
 
@@ -42,10 +42,23 @@
 
 #pragma once
 
-#include "upstream/glslang/Public/ShaderLang.h"
-#include "upstream/glslang/Public/ResourceLimits.h"
-#include "upstream/SPIRV/GlslangToSpv.h"
+//==============================================================================
+/** Config: YUP_SPIRV_TOOLS_ENABLE_LINTER
 
-#if YUP_MODULE_AVAILABLE_spirv_tools
-#include "spirv_tools/spirv_tools.h"
+    Enable SPIRV-Tools linter support.
+*/
+
+#if ! YUP_SPIRV_TOOLS_ENABLE_LINTER
+#define YUP_SPIRV_TOOLS_ENABLE_LINTER 1
 #endif
+
+//==============================================================================
+#include "upstream/include/spirv-tools/optimizer.hpp"
+
+#if YUP_SPIRV_TOOLS_ENABLE_LINTER
+#include "upstream/include/spirv-tools/linter.hpp"
+#endif
+
+//==============================================================================
+#include "upstream/include/spirv-tools/libspirv.h"
+#include "upstream/include/spirv-tools/libspirv.hpp"
