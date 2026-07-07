@@ -489,7 +489,7 @@ public:
     */
     static GpuProgram::Ptr compileFromBundle (GraphicsContext& ctx,
                                               const ShaderBundle& bundle,
-                                              const GpuPipelineOptions& pipelineOptions = {},
+                                              const GpuPipelineOptions& pipelineOptions = GpuPipelineOptions {},
                                               std::string* outError = nullptr);
 
 #if YUP_ENABLE_SHADER_TRANSPILER
@@ -518,7 +518,7 @@ public:
 private:
     GpuProgram() = default;
 
-    static constexpr size_t kImplSize = 288;
+    static constexpr size_t kImplSize = 384;
 
     struct Impl;
     TypeErasedObject<kImplSize> impl;
