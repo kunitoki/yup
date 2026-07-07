@@ -476,11 +476,16 @@ bool GpuProgram::Impl::encode (GpuCanvas& output,
             if (tb.group != (int) groupIdx || tb.texture == nullptr)
                 continue;
 
+            // Sampled inputs must be bound through an SRV-backed view. The
+            // canvas wrapper (wrapCanvasTexture) only exposes a render-target
+            // view, which has no shader-resource view on D3D — sampling it
+            // reads nothing. Prefer the underlying GPU texture, which
+            // wrapRiveTexture() wraps with a proper SRV for sampling.
             rive::rcp<rive::ore::TextureView> view;
-            if (auto rc = tb.texture->getInternalRenderCanvas())
-                view = oreCtx->wrapCanvasTexture (rc.get());
-            else if (auto gpuTex = tb.texture->getOrAdoptGpuTexture())
+            if (auto gpuTex = tb.texture->getOrAdoptGpuTexture())
                 view = oreCtx->wrapRiveTexture (gpuTex.get(), (uint32_t) tb.texture->getWidth(), (uint32_t) tb.texture->getHeight());
+            else if (auto rc = tb.texture->getInternalRenderCanvas())
+                view = oreCtx->wrapCanvasTexture (rc.get());
 
             if (view == nullptr)
                 continue;
