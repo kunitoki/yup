@@ -44,6 +44,9 @@ enum class GpuShaderLanguage : uint8_t
 */
 struct GpuShaderSource
 {
+    GpuShaderSource() = default;
+
+    /** Shading language of the source code. */
     GpuShaderLanguage language = GpuShaderLanguage::wgsl;
 
     /** Shader source code bytes. */
@@ -180,6 +183,8 @@ enum class GpuTextureFormat : uint8_t
 /** Describes a single vertex attribute within a vertex buffer layout. */
 struct GpuVertexAttribute
 {
+    GpuVertexAttribute() = default;
+
     GpuVertexFormat format = GpuVertexFormat::float4; ///< The attribute data format.
     uint32_t offset = 0;                              ///< Byte offset within the vertex.
     uint32_t shaderLocation = 0;                      ///< Shader @location index.
@@ -188,6 +193,8 @@ struct GpuVertexAttribute
 /** Describes the layout of one vertex buffer bound to a pipeline. */
 struct GpuVertexBufferLayout
 {
+    GpuVertexBufferLayout() = default;
+
     uint32_t stride = 0;                                    ///< Byte stride between vertices.
     GpuVertexStepMode stepMode = GpuVertexStepMode::vertex; ///< Per-vertex or per-instance.
     const GpuVertexAttribute* attributes = nullptr;         ///< Attribute array.
@@ -197,6 +204,8 @@ struct GpuVertexBufferLayout
 /** Blend state for a single color target. */
 struct GpuBlendState
 {
+    GpuBlendState() = default;
+
     GpuBlendFactor srcColor = GpuBlendFactor::srcAlpha;
     GpuBlendFactor dstColor = GpuBlendFactor::oneMinusSrcAlpha;
     GpuBlendOp colorOp = GpuBlendOp::add;
@@ -208,6 +217,8 @@ struct GpuBlendState
 /** State for a single color render target. */
 struct GpuColorTarget
 {
+    GpuColorTarget() = default;
+
     GpuTextureFormat format = GpuTextureFormat::rgba8unorm; ///< Target pixel format.
     bool blendEnabled = true;                               ///< Enable alpha blending.
     GpuBlendState blend;                                    ///< Blend equation and factors.
@@ -216,6 +227,8 @@ struct GpuColorTarget
 /** Per-face stencil test state. */
 struct GpuStencilFaceState
 {
+    GpuStencilFaceState() = default;
+
     GpuCompareFunction compare = GpuCompareFunction::always;
     GpuStencilOp failOp = GpuStencilOp::keep;
     GpuStencilOp depthFailOp = GpuStencilOp::keep;
@@ -230,6 +243,8 @@ struct GpuStencilFaceState
 */
 struct GpuDepthStencilState
 {
+    GpuDepthStencilState() = default;
+
     bool enabled = false;                                            ///< Enable depth/stencil testing.
     GpuTextureFormat format = GpuTextureFormat::depth24plusStencil8; ///< Depth/stencil format.
     GpuCompareFunction depthCompare = GpuCompareFunction::less;      ///< Depth comparison function.
@@ -250,6 +265,8 @@ struct GpuDepthStencilState
 */
 struct GpuPipelineOptions
 {
+    GpuPipelineOptions() = default;
+
     /** Vertex buffer layouts. Leave null/zero for fullscreen passes that
         generate vertices from the vertex index. */
     const GpuVertexBufferLayout* vertexBuffers = nullptr;
@@ -265,9 +282,9 @@ struct GpuPipelineOptions
     GpuColorTarget colorTargets[4] = {};
     uint32_t colorTargetCount = 0;
 
-    GpuDepthStencilState depthStencil {};
-    GpuStencilFaceState stencilFront {};
-    GpuStencilFaceState stencilBack {};
+    GpuDepthStencilState depthStencil;
+    GpuStencilFaceState stencilFront;
+    GpuStencilFaceState stencilBack;
     uint8_t stencilReadMask = 0xFF;
     uint8_t stencilWriteMask = 0xFF;
 
@@ -278,6 +295,8 @@ struct GpuPipelineOptions
 /** Per-draw options controlling the render pass a draw call encodes. */
 struct GpuRenderOptions
 {
+    GpuRenderOptions() = default;
+
     /** Whether to clear the target before drawing (LoadOp::clear). When false
         the existing contents are loaded (LoadOp::load). */
     bool clear = true;
@@ -301,42 +320,41 @@ class GpuBuffer;
 
     Typical fullscreen post-process usage:
     @code
-    auto prog = yup::GpuProgram::compile (ctx, vertSource, fragSource);
+        auto prog = yup::GpuProgram::compile (ctx, vertSource, fragSource).getValue();
 
-    auto canvas = yup::GpuCanvas::create (ctx, w, h);
-    canvas->commit();                                 // commit Rive frame first
-    prog->setTexture (0, 0, inputTexture);
-    prog->setUniformBuffer (0, 1, &params, sizeof (params));
-    prog->beginFrame();
-    prog->dispatch (*canvas);                         // ore renders into canvas texture
-    prog->endFrame();
-    prog->waitForGPU();
-    g.drawTexture (canvas->asTexture(), bounds);      // composite
+        auto canvas = yup::GpuCanvas::create (ctx, w, h);
+        canvas->commit();                                 // commit Rive frame first
+        prog->setTexture (0, 0, inputTexture);
+        prog->setUniformBuffer (0, 1, &params, sizeof (params));
+        prog->beginFrame();
+        prog->dispatch (*canvas);                         // ore renders into canvas texture
+        prog->endFrame();
+        prog->waitForGPU();
+        g.drawTexture (canvas->asTexture(), bounds);      // composite
     @endcode
 
     Typical custom geometry usage:
     @code
-    yup::GpuPipelineOptions options;
-    options.vertexBuffers = &layout;
-    options.vertexBufferCount = 1;
-    options.indexFormat = yup::GpuIndexFormat::uint16;
-    options.cullMode = yup::GpuCullMode::back;
-    auto prog = yup::GpuProgram::compile (ctx, vs, fs, options);
+        yup::GpuPipelineOptions options;
+        options.vertexBuffers = &layout;
+        options.vertexBufferCount = 1;
+        options.indexFormat = yup::GpuIndexFormat::uint16;
+        options.cullMode = yup::GpuCullMode::back;
+        auto prog = yup::GpuProgram::compile (ctx, vs, fs, options).getValue();
 
-    auto vbo = yup::GpuBuffer::create (ctx, yup::GpuBufferType::vertex, verts, sizeof (verts));
-    auto ibo = yup::GpuBuffer::create (ctx, yup::GpuBufferType::index, idx, sizeof (idx));
+        auto vbo = yup::GpuBuffer::create (ctx, yup::GpuBufferType::vertex, verts, sizeof (verts));
+        auto ibo = yup::GpuBuffer::create (ctx, yup::GpuBufferType::index, idx, sizeof (idx));
 
-    prog->setVertexBuffer (0, vbo);
-    prog->setIndexBuffer (ibo, yup::GpuIndexFormat::uint16);
-    prog->setUniformBuffer (0, 0, &uniforms, sizeof (uniforms));
-    prog->beginFrame();
-    prog->drawIndexed (*canvas, indexCount, { true, yup::Colors::black });
-    prog->endFrame();
-    prog->waitForGPU();
+        prog->setVertexBuffer (0, vbo);
+        prog->setIndexBuffer (ibo, yup::GpuIndexFormat::uint16);
+        prog->setUniformBuffer (0, 0, &uniforms, sizeof (uniforms));
+        prog->beginFrame();
+        prog->drawIndexed (*canvas, indexCount, { true, yup::Colors::black });
+        prog->endFrame();
+        prog->waitForGPU();
     @endcode
 
-    Requires the GraphicsContext to have been created with
-    Options::enableOreContext = true.
+    Requires the GraphicsContext to have been created with Options::enableOreContext = true.
 
     @see GpuCanvas, GpuBuffer, GpuShaderSource, GpuPipelineOptions, GraphicsContext::Options
 */
@@ -351,8 +369,11 @@ public:
     //==============================================================================
     /** Binds a texture to the given (group, binding) slot.
 
-        The texture may come from GpuCanvas::asTexture() (after commit) or from
-        Image::getTexture(). If the same slot is set more than once the later call wins.
+        The texture may come from:
+        - GpuCanvas::asTexture() (after commit) or from
+        - Image::getTexture() (after Image::createTextureIfNotPresent()).
+        
+        If the same slot is set more than once the later call wins.
     */
     void setTexture (int group, int binding, GpuTexture::Ptr texture);
 
@@ -435,25 +456,17 @@ public:
     bool drawIndexed (GpuCanvas& output, uint32_t indexCount, const GpuRenderOptions& options = {});
 
     //==============================================================================
-    /** Returns the ore Context used to compile this program, or nullptr. */
-    rive::ore::Context* oreContext() const noexcept;
-
-    /** Returns the compiled ore Pipeline for advanced vertex / 3D draw calls. */
-    rive::ore::Pipeline* orePipeline() const noexcept;
-
-    //==============================================================================
     /** Compiles a fullscreen GpuProgram from vertex and fragment shader sources.
 
         Both shaders must supply pre-compiled RSTB binding-map blobs via
-        GpuShaderSource::bindingMap. Returns nullptr on failure; if @c outError is
-        non-null it receives a human-readable description of the failure.
+        GpuShaderSource::bindingMap. On failure the returned ResultValue holds a
+        human-readable description of the failure.
 
         Requires ctx.gpuContext() != nullptr (enableOreContext = true).
     */
-    static GpuProgram::Ptr compile (GraphicsContext& ctx,
-                                    const GpuShaderSource& vertexShader,
-                                    const GpuShaderSource& fragmentShader,
-                                    std::string* outError = nullptr);
+    static ResultValue<GpuProgram::Ptr> compile (GraphicsContext& ctx,
+                                                 const GpuShaderSource& vertexShader,
+                                                 const GpuShaderSource& fragmentShader);
 
     /** Compiles a GpuProgram with a full pipeline configuration.
 
@@ -462,11 +475,10 @@ public:
 
         @see GpuPipelineOptions
     */
-    static GpuProgram::Ptr compile (GraphicsContext& ctx,
-                                    const GpuShaderSource& vertexShader,
-                                    const GpuShaderSource& fragmentShader,
-                                    const GpuPipelineOptions& pipelineOptions,
-                                    std::string* outError = nullptr);
+    static ResultValue<GpuProgram::Ptr> compile (GraphicsContext& ctx,
+                                                 const GpuShaderSource& vertexShader,
+                                                 const GpuShaderSource& fragmentShader,
+                                                 const GpuPipelineOptions& pipelineOptions);
 
     //==============================================================================
     /** Compiles a GpuProgram from a pre-built shader bundle.
@@ -481,16 +493,14 @@ public:
         @param ctx              A GraphicsContext with enableOreContext = true.
         @param bundle           Bundle containing the vertex and fragment stages.
         @param pipelineOptions  Pipeline configuration.
-        @param outError         Optional human-readable failure description.
 
-        @returns A compiled program, or nullptr on failure.
+        @returns A compiled program, or a failure with a human-readable description.
 
         @see ShaderBundle
     */
-    static GpuProgram::Ptr compileFromBundle (GraphicsContext& ctx,
-                                              const ShaderBundle& bundle,
-                                              const GpuPipelineOptions& pipelineOptions = {},
-                                              std::string* outError = nullptr);
+    static ResultValue<GpuProgram::Ptr> compileFromBundle (GraphicsContext& ctx,
+                                                           const ShaderBundle& bundle,
+                                                           const GpuPipelineOptions& pipelineOptions = {});
 
 #if YUP_ENABLE_SHADER_TRANSPILER
     /** Compiles a GpuProgram directly from GLSL 450 vertex and fragment sources.
@@ -504,16 +514,21 @@ public:
         @param vertexGlsl       GLSL 450 vertex shader source.
         @param fragmentGlsl     GLSL 450 fragment shader source.
         @param pipelineOptions  Pipeline configuration.
-        @param outError         Optional human-readable failure description.
 
-        @returns A compiled program, or nullptr on failure.
+        @returns A compiled program, or a failure with a human-readable description.
     */
-    static GpuProgram::Ptr compileFromGlsl (GraphicsContext& ctx,
-                                            const String& vertexGlsl,
-                                            const String& fragmentGlsl,
-                                            const GpuPipelineOptions& pipelineOptions = {},
-                                            std::string* outError = nullptr);
+    static ResultValue<GpuProgram::Ptr> compileFromGlsl (GraphicsContext& ctx,
+                                                         const String& vertexGlsl,
+                                                         const String& fragmentGlsl,
+                                                         const GpuPipelineOptions& pipelineOptions = {});
 #endif
+
+    //==============================================================================
+    /** @internal Returns the ore Context used to compile this program, or nullptr. */
+    rive::ore::Context* oreContext() const noexcept;
+
+    /** @internal Returns the compiled ore Pipeline for advanced vertex / 3D draw calls. */
+    rive::ore::Pipeline* orePipeline() const noexcept;
 
 private:
     GpuProgram() = default;

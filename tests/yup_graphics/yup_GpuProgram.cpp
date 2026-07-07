@@ -139,10 +139,9 @@ TEST_F (GpuProgramTests, CompileHeadlessReturnsNullWithError)
     auto vs = makeStubShader ("void main() {}", map, sizeof (map));
     auto fs = makeStubShader ("void main() {}", map, sizeof (map));
 
-    std::string err;
-    auto prog = GpuProgram::compile (*context, vs, fs, &err);
-    EXPECT_EQ (prog, nullptr);
-    EXPECT_FALSE (err.empty());
+    auto result = GpuProgram::compile (*context, vs, fs);
+    EXPECT_TRUE (result.failed());
+    EXPECT_FALSE (result.getErrorMessage().isEmpty());
 }
 
 TEST_F (GpuProgramTests, CompileWithEmptyVertexCodeFailsFastWhenOreAvailable)
@@ -157,9 +156,9 @@ TEST_F (GpuProgramTests, CompileWithEmptyVertexCodeFailsFastWhenOreAvailable)
 
     auto fs = makeStubShader ("void main() {}", map, sizeof (map));
 
-    std::string err;
-    EXPECT_EQ (GpuProgram::compile (*context, vs, fs, &err), nullptr);
-    EXPECT_FALSE (err.empty());
+    auto result = GpuProgram::compile (*context, vs, fs);
+    EXPECT_TRUE (result.failed());
+    EXPECT_FALSE (result.getErrorMessage().isEmpty());
 }
 
 TEST_F (GpuProgramTests, CompileWithPipelineOptionsHeadlessReturnsNull)
@@ -177,9 +176,9 @@ TEST_F (GpuProgramTests, CompileWithPipelineOptionsHeadlessReturnsNull)
     options.indexFormat = GpuIndexFormat::uint16;
     options.cullMode = GpuCullMode::back;
 
-    std::string err;
-    EXPECT_EQ (GpuProgram::compile (*context, vs, fs, options, &err), nullptr);
-    EXPECT_FALSE (err.empty());
+    auto result = GpuProgram::compile (*context, vs, fs, options);
+    EXPECT_TRUE (result.failed());
+    EXPECT_FALSE (result.getErrorMessage().isEmpty());
 }
 
 TEST (GpuProgramDefaults, DefaultPtrIsNull)

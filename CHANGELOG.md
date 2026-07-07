@@ -46,6 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - New `makeShaderBindingMapBlob(ShaderReflection, ShaderStage)` helper (`rhi/yup_ShaderBindingMap.h`): converts shader reflection data into the ore RSTB binding-map blob required by `GpuShaderSource::bindingMap`, replacing the ad-hoc conversion previously duplicated in examples.
 - GraphicsContext ore integration (`Options::enableOreContext = true`): activates the backend-native ore context. `gpuContext()` returns the ore `Context*` (Metal via `ContextMetal::Make`, GL via `ContextGL::Make`, D3D11 via `ContextD3D11::Make`). Required for `GpuProgram::compile()`.
 - New `SpinningCubeDemo` example (`examples/graphics`): 3D spinning cube rendered per-frame into a `GpuCanvas` entirely through `GpuProgram` (indexed geometry via `GpuBuffer`, live GLSL editing via `compileFromGlsl`); separable two-pass Gaussian blur (O(radius) H+V instead of O(radius^2) 2-D) wired to a slider via `GpuProgram`. No longer uses the `rive::ore` API directly. Both the cube and blur programs are live-editable (Cube/Blur target toggle) and each program's vertex + fragment GLSL can be saved to / loaded from a `.ysl` `ShaderBundle`.
+- `GpuProgram::compile()`, `compileFromBundle()`, and `compileFromGlsl()` now return a `ResultValue<GpuProgram::Ptr>` instead of returning a `GpuProgram::Ptr` and taking a `std::string* outError` out-parameter. On failure the returned value carries a human-readable error message accessible via `getErrorMessage()`.
 
 ---
 

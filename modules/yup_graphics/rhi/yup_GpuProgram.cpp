@@ -260,7 +260,7 @@ struct GpuProgram::Impl
 
     // Vertex-layout storage backing PipelineDesc's raw pointers. The ore
     // Pipeline copies PipelineDesc by value but keeps the vertexBuffers /
-    // attributes pointers, reading them at draw time — so this storage must
+    // attributes pointers, reading them at draw time  so this storage must
     // outlive the pipeline.
     std::vector<std::vector<rive::ore::VertexAttribute>> vertexAttrStorage;
     std::vector<rive::ore::VertexBufferLayout> vertexLayoutStorage;
@@ -335,8 +335,7 @@ void GpuProgram::setUniformBuffer (int group, int binding, const void* data, siz
     {
         if (ub.group == group && ub.binding == binding)
         {
-            ub.data.assign (static_cast<const uint8_t*> (data),
-                            static_cast<const uint8_t*> (data) + byteSize);
+            ub.data.assign (static_cast<const uint8_t*> (data), static_cast<const uint8_t*> (data) + byteSize);
             return;
         }
     }
@@ -344,8 +343,7 @@ void GpuProgram::setUniformBuffer (int group, int binding, const void* data, siz
     Impl::UboBinding ub;
     ub.group = group;
     ub.binding = binding;
-    ub.data.assign (static_cast<const uint8_t*> (data),
-                    static_cast<const uint8_t*> (data) + byteSize);
+    ub.data.assign (static_cast<const uint8_t*> (data), static_cast<const uint8_t*> (data) + byteSize);
     i->uboBindings.push_back (std::move (ub));
 }
 
@@ -497,7 +495,7 @@ bool GpuProgram::Impl::encode (GpuCanvas& output,
 
             // Sampled inputs must be bound through an SRV-backed view. The
             // canvas wrapper (wrapCanvasTexture) only exposes a render-target
-            // view, which has no shader-resource view on D3D — sampling it
+            // view, which has no shader-resource view on D3D  sampling it
             // reads nothing. Prefer the underlying GPU texture, which
             // wrapRiveTexture() wraps with a proper SRV for sampling.
             rive::rcp<rive::ore::TextureView> view;
@@ -516,7 +514,7 @@ bool GpuProgram::Impl::encode (GpuCanvas& output,
             liveViews.push_back (std::move (view));
         }
 
-        // Sampler entries — auto-create one linear+clamp sampler for each
+        // Sampler entries  auto-create one linear+clamp sampler for each
         // sampler binding declared in the layout.
         std::vector<rive::ore::BindGroupDesc::SampEntry> sampEntries;
 
@@ -637,42 +635,33 @@ rive::ore::Pipeline* GpuProgram::orePipeline() const noexcept
 
 //==============================================================================
 
-GpuProgram::Ptr GpuProgram::compile (GraphicsContext& ctx,
-                                     const GpuShaderSource& vs,
-                                     const GpuShaderSource& fs,
-                                     std::string* outError)
+ResultValue<GpuProgram::Ptr> GpuProgram::compile (GraphicsContext& ctx,
+                                                  const GpuShaderSource& vs,
+                                                  const GpuShaderSource& fs)
 {
-    return compile (ctx, vs, fs, GpuPipelineOptions {}, outError);
+    return compile (ctx, vs, fs, GpuPipelineOptions {});
 }
 
-GpuProgram::Ptr GpuProgram::compile (GraphicsContext& ctx,
-                                     const GpuShaderSource& vs,
-                                     const GpuShaderSource& fs,
-                                     const GpuPipelineOptions& pipelineOptions,
-                                     std::string* outError)
+ResultValue<GpuProgram::Ptr> GpuProgram::compile (GraphicsContext& ctx,
+                                                  const GpuShaderSource& vs,
+                                                  const GpuShaderSource& fs,
+                                                  const GpuPipelineOptions& pipelineOptions)
 {
-    auto setError = [&] (const char* msg)
-    {
-        if (outError)
-            *outError = msg;
-        return GpuProgram::Ptr {};
-    };
-
     auto oreCtx = ctx.gpuContext();
     if (oreCtx == nullptr)
-        return setError ("GraphicsContext was not created with Options::enableOreContext = true");
+        return makeResultValueFail ("GraphicsContext was not created with Options::enableOreContext = true");
 
     if (vs.code == nullptr || vs.codeSize == 0)
-        return setError ("Vertex shader code is empty");
+        return makeResultValueFail ("Vertex shader code is empty");
 
     if (vs.bindingMap == nullptr || vs.bindingMapSize == 0)
-        return setError ("Vertex shader binding-map sidecar is required but not provided");
+        return makeResultValueFail ("Vertex shader binding-map sidecar is required but not provided");
 
     if (fs.code == nullptr || fs.codeSize == 0)
-        return setError ("Fragment shader code is empty");
+        return makeResultValueFail ("Fragment shader code is empty");
 
     if (fs.bindingMap == nullptr || fs.bindingMapSize == 0)
-        return setError ("Fragment shader binding-map sidecar is required but not provided");
+        return makeResultValueFail ("Fragment shader binding-map sidecar is required but not provided");
 
     // Populates an ore ShaderModuleDesc from a GpuShaderSource. The D3D11/D3D12
     // backends compile HLSL from source at first use (AMD drivers crash on
@@ -717,11 +706,7 @@ GpuProgram::Ptr GpuProgram::compile (GraphicsContext& ctx,
 
     auto vertModule = oreCtx->makeShaderModule (vsd);
     if (vertModule == nullptr)
-    {
-        if (outError)
-            *outError = "Failed to compile vertex shader: " + oreCtx->lastError();
-        return nullptr;
-    }
+        return makeResultValueFail ("Failed to compile vertex shader: " + oreCtx->lastError());
 
     // Compile fragment shader module.
     rive::ore::ShaderModuleDesc fsd;
@@ -729,11 +714,7 @@ GpuProgram::Ptr GpuProgram::compile (GraphicsContext& ctx,
 
     auto fragModule = oreCtx->makeShaderModule (fsd);
     if (fragModule == nullptr)
-    {
-        if (outError)
-            *outError = "Failed to compile fragment shader: " + oreCtx->lastError();
-        return nullptr;
-    }
+        return makeResultValueFail ("Failed to compile fragment shader: " + oreCtx->lastError());
 
     // Derive BindGroupLayouts by merging the VS and FS binding maps.
     struct MergedEntry
@@ -754,7 +735,7 @@ GpuProgram::Ptr GpuProgram::compile (GraphicsContext& ctx,
 
     auto addEntry = [&] (const rive::ore::BindingMap::Entry& e)
     {
-        maxGroup = std::max (maxGroup, (uint32_t) e.group);
+        maxGroup = jmax (maxGroup, (uint32_t) e.group);
 
         for (auto& m : merged)
         {
@@ -965,7 +946,7 @@ GpuProgram::Ptr GpuProgram::compile (GraphicsContext& ctx,
     }
     else
     {
-        const uint32_t count = std::min<uint32_t> (pipelineOptions.colorTargetCount, 4);
+        const uint32_t count = jmin<uint32_t> (pipelineOptions.colorTargetCount, 4);
         pipeDesc.colorCount = count;
 
         for (uint32_t i = 0; i < count; ++i)
@@ -1011,18 +992,14 @@ GpuProgram::Ptr GpuProgram::compile (GraphicsContext& ctx,
     std::string pipeError;
     auto pipeline = oreCtx->makePipeline (pipeDesc, &pipeError);
     if (pipeline == nullptr)
-    {
-        if (outError)
-            *outError = "Failed to create pipeline: " + pipeError;
-        return nullptr;
-    }
+        return makeResultValueFail ("Failed to create pipeline: " + pipeError);
 
     implRef->oreCtx = oreCtx;
     implRef->vertModule = std::move (vertModule);
     implRef->fragModule = std::move (fragModule);
     implRef->pipeline = std::move (pipeline);
     implRef->layouts = std::move (layouts);
-    return prog;
+    return makeResultValueOk (prog);
 }
 
 //==============================================================================
@@ -1064,18 +1041,10 @@ GpuShaderLanguage gpuShaderLanguageForApi (GraphicsContext::Api api)
 
 } // namespace
 
-GpuProgram::Ptr GpuProgram::compileFromBundle (GraphicsContext& ctx,
-                                               const ShaderBundle& bundle,
-                                               const GpuPipelineOptions& pipelineOptions,
-                                               std::string* outError)
+ResultValue<GpuProgram::Ptr> GpuProgram::compileFromBundle (GraphicsContext& ctx,
+                                                            const ShaderBundle& bundle,
+                                                            const GpuPipelineOptions& pipelineOptions)
 {
-    auto setError = [&] (const char* msg)
-    {
-        if (outError)
-            *outError = msg;
-        return GpuProgram::Ptr {};
-    };
-
     const auto api = ctx.getApi();
     const auto targetLang = shaderLanguageForApi (api);
     const auto gpuLang = gpuShaderLanguageForApi (api);
@@ -1085,14 +1054,14 @@ GpuProgram::Ptr GpuProgram::compileFromBundle (GraphicsContext& ctx,
         vsInfo = bundle.findShader (ShaderStage::vertex, ShaderLanguage::glsl);
 
     if (vsInfo == nullptr)
-        return setError ("Shader bundle has no vertex variant for the current graphics API");
+        return makeResultValueFail ("Shader bundle has no vertex variant for the current graphics API");
 
     const ShaderInfo* fsInfo = bundle.findShader (ShaderStage::fragment, targetLang);
     if (fsInfo == nullptr && targetLang == ShaderLanguage::essl)
         fsInfo = bundle.findShader (ShaderStage::fragment, ShaderLanguage::glsl);
 
     if (fsInfo == nullptr)
-        return setError ("Shader bundle has no fragment variant for the current graphics API");
+        return makeResultValueFail ("Shader bundle has no fragment variant for the current graphics API");
 
     auto vsMap = makeShaderBindingMapBlob (vsInfo->reflection, ShaderStage::vertex);
     auto fsMap = makeShaderBindingMapBlob (fsInfo->reflection, ShaderStage::fragment);
@@ -1129,24 +1098,16 @@ GpuProgram::Ptr GpuProgram::compileFromBundle (GraphicsContext& ctx,
     fs.bindingMapSize = (uint32_t) fsMap.size();
     fs.entryPoint = fsEntry;
 
-    return compile (ctx, vs, fs, pipelineOptions, outError);
+    return compile (ctx, vs, fs, pipelineOptions);
 }
 
 #if YUP_ENABLE_SHADER_TRANSPILER
 
-GpuProgram::Ptr GpuProgram::compileFromGlsl (GraphicsContext& ctx,
-                                             const String& vertexGlsl,
-                                             const String& fragmentGlsl,
-                                             const GpuPipelineOptions& pipelineOptions,
-                                             std::string* outError)
+ResultValue<GpuProgram::Ptr> GpuProgram::compileFromGlsl (GraphicsContext& ctx,
+                                                          const String& vertexGlsl,
+                                                          const String& fragmentGlsl,
+                                                          const GpuPipelineOptions& pipelineOptions)
 {
-    auto setError = [&] (const String& msg)
-    {
-        if (outError)
-            *outError = msg.toStdString();
-        return GpuProgram::Ptr {};
-    };
-
     const auto targetLang = shaderLanguageForApi (ctx.getApi());
 
     ShaderBundleCompiler compiler;
@@ -1170,7 +1131,7 @@ GpuProgram::Ptr GpuProgram::compileFromGlsl (GraphicsContext& ctx,
     }();
 
     if (vsBundle.failed())
-        return setError ("Vertex shader compile failed: " + vsBundle.getErrorMessage());
+        return makeResultValueFail ("Vertex shader compile failed: " + vsBundle.getErrorMessage());
 
     auto fsBundle = [&]
     {
@@ -1182,7 +1143,7 @@ GpuProgram::Ptr GpuProgram::compileFromGlsl (GraphicsContext& ctx,
     }();
 
     if (fsBundle.failed())
-        return setError ("Fragment shader compile failed: " + fsBundle.getErrorMessage());
+        return makeResultValueFail ("Fragment shader compile failed: " + fsBundle.getErrorMessage());
 
     // Merge both stages into a single bundle for compileFromBundle().
     ShaderBundle bundle;
@@ -1191,7 +1152,7 @@ GpuProgram::Ptr GpuProgram::compileFromGlsl (GraphicsContext& ctx,
     for (const auto& info : fsBundle.getReference().getShaders())
         bundle.addShader (info);
 
-    return compileFromBundle (ctx, bundle, pipelineOptions, outError);
+    return compileFromBundle (ctx, bundle, pipelineOptions);
 }
 
 #endif

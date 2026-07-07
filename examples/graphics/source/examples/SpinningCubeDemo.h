@@ -549,31 +549,34 @@ void main() {
 
     void initBlur()
     {
-        std::string err;
-        blurProgram = yup::GpuProgram::compileFromGlsl (*capturedContext,
+        auto result = yup::GpuProgram::compileFromGlsl (*capturedContext,
                                                         currentBlurVertSource,
                                                         currentBlurFragSource,
-                                                        {},
-                                                        &err);
+                                                        {});
 
-        if (blurProgram == nullptr)
-            yup::Logger::outputDebugString ("SpinningCubeDemo: blur compile failed: " + yup::String (err.c_str()));
+        if (result.failed())
+        {
+            yup::Logger::outputDebugString ("SpinningCubeDemo: blur compile failed: " + result.getErrorMessage());
+            return;
+        }
+
+        blurProgram = result.getValue();
     }
 
     void initCube()
     {
-        std::string err;
-        cubeProgram = yup::GpuProgram::compileFromGlsl (*capturedContext,
+        auto result = yup::GpuProgram::compileFromGlsl (*capturedContext,
                                                         currentVertSource,
                                                         currentFragSource,
-                                                        cubePipelineOptions(),
-                                                        &err);
+                                                        cubePipelineOptions());
 
-        if (cubeProgram == nullptr)
+        if (result.failed())
         {
-            yup::Logger::outputDebugString ("SpinningCubeDemo: cube shader compile failed: " + yup::String (err.c_str()));
+            yup::Logger::outputDebugString ("SpinningCubeDemo: cube shader compile failed: " + result.getErrorMessage());
             return;
         }
+
+        cubeProgram = result.getValue();
 
         // Upload immutable vertex and index buffers.
         cubeVBO = yup::GpuBuffer::create (*capturedContext, yup::GpuBufferType::vertex, kCubeVerts, sizeof (kCubeVerts));
@@ -610,7 +613,7 @@ void main() {
     void updateShaderModeLabel()
     {
         shaderModeLabel->setText (yup::String (editingBlur ? "Blur" : "Cube")
-                                      + " — "
+                                      + " - "
                                       + (showingVertexShader ? "Vertex Shader" : "Fragment Shader"),
                                   yup::dontSendNotification);
     }
@@ -645,39 +648,35 @@ void main() {
 
         syncEditorSource();
 
-        std::string err;
-
         if (editingBlur)
         {
-            auto newProgram = yup::GpuProgram::compileFromGlsl (*capturedContext,
-                                                                currentBlurVertSource,
-                                                                currentBlurFragSource,
-                                                                {},
-                                                                &err);
+            auto result = yup::GpuProgram::compileFromGlsl (*capturedContext,
+                                                            currentBlurVertSource,
+                                                            currentBlurFragSource,
+                                                            {});
 
-            if (newProgram == nullptr)
+            if (result.failed())
             {
-                showError (yup::String (err.c_str()));
+                showError (result.getErrorMessage());
                 return;
             }
 
-            blurProgram = std::move (newProgram);
+            blurProgram = result.getValue();
         }
         else
         {
-            auto newProgram = yup::GpuProgram::compileFromGlsl (*capturedContext,
-                                                                currentVertSource,
-                                                                currentFragSource,
-                                                                cubePipelineOptions(),
-                                                                &err);
+            auto result = yup::GpuProgram::compileFromGlsl (*capturedContext,
+                                                            currentVertSource,
+                                                            currentFragSource,
+                                                            cubePipelineOptions());
 
-            if (newProgram == nullptr)
+            if (result.failed())
             {
-                showError (yup::String (err.c_str()));
+                showError (result.getErrorMessage());
                 return;
             }
 
-            cubeProgram = std::move (newProgram);
+            cubeProgram = result.getValue();
         }
 
         hideError();
