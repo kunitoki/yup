@@ -885,3 +885,72 @@ TEST_F (GpuRenderPassMockTests, DrawEndToEndWithValidPipeline)
     pass.finish();
     valid.submit();
 }
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+
+// ==============================================================================
+// GpuPipeline::compileFromGlsl — only when shader transpiler is available
+// ==============================================================================
+
+TEST_F (GpuPipelineMockTests, CompileFromGlslSucceeds)
+{
+    auto vsModule = makeShaderModuleWithBindingMap();
+    auto fsModule = makeShaderModuleWithBindingMap();
+    auto pipeline = rive::make_rcp<TestOrePipeline>();
+    auto bgl = rive::make_rcp<TestOreBindGroupLayout>();
+
+    EXPECT_CALL (*mockOreCtx, makeShaderModule (_))
+        .WillOnce (Return (vsModule))
+        .WillOnce (Return (fsModule));
+    EXPECT_CALL (*mockOreCtx, makeBindGroupLayout (_))
+        .WillOnce (Return (bgl));
+    EXPECT_CALL (*mockOreCtx, makePipeline (_, _))
+        .WillOnce (Return (pipeline));
+
+    const String vertexGlsl = "\n"
+                              "#version 450\n"
+                              "layout(set = 0, binding = 0) uniform Uniforms { vec4 color; } ubo;\n"
+                              "void main() { gl_Position = ubo.color; }\n";
+
+    const String fragmentGlsl = "\n"
+                                "#version 450\n"
+                                "layout(location = 0) out vec4 fragColor;\n"
+                                "void main() { fragColor = vec4(1.0, 0.0, 0.0, 1.0); }\n";
+
+    auto result = GpuPipeline::compileFromGlsl (*ctx, vertexGlsl, fragmentGlsl);
+    EXPECT_TRUE (result.wasOk());
+    ASSERT_NE (result.getValue(), nullptr);
+}
+
+TEST_F (GpuPipelineMockTests, CompileFromGlslWithOptions)
+{
+    auto vsModule = makeShaderModuleWithBindingMap();
+    auto fsModule = makeShaderModuleWithBindingMap();
+    auto pipeline = rive::make_rcp<TestOrePipeline>();
+    auto bgl = rive::make_rcp<TestOreBindGroupLayout>();
+
+    EXPECT_CALL (*mockOreCtx, makeShaderModule (_))
+        .WillOnce (Return (vsModule))
+        .WillOnce (Return (fsModule));
+    EXPECT_CALL (*mockOreCtx, makeBindGroupLayout (_))
+        .WillOnce (Return (bgl));
+    EXPECT_CALL (*mockOreCtx, makePipeline (_, _))
+        .WillOnce (Return (pipeline));
+
+    GpuPipelineOptions options;
+    options.cullMode = GpuCullMode::back;
+
+    const String vs = "#version 450\n"
+                      "layout(set = 0, binding = 0) uniform UB { vec4 pos; } u;\n"
+                      "void main() { gl_Position = u.pos; }\n";
+
+    const String fs = "#version 450\n"
+                      "layout(location = 0) out vec4 c;\n"
+                      "void main() { c = vec4(1); }\n";
+
+    auto result = GpuPipeline::compileFromGlsl (*ctx, vs, fs, options);
+    EXPECT_TRUE (result.wasOk());
+    ASSERT_NE (result.getValue(), nullptr);
+}
+
+#endif // YUP_ENABLE_SHADER_TRANSPILER
