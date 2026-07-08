@@ -120,6 +120,9 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #endif
 
 #if YUP_USE_CURL
+#if ! __has_include(<curl/curl.h>)
+#error "YUP_USE_CURL is explicitly enabled but <curl/curl.h> is not available"
+#endif
 #include <curl/curl.h>
 #endif
 #endif
