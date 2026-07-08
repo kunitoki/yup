@@ -41,6 +41,7 @@ function (_yup_build_shader_bundler_tool output_variable)
     _yup_message (STATUS " * tool_build_dir: ${tool_build_dir}")
     _yup_execute_process_or_fail (
         "${CMAKE_COMMAND}"
+            -G Ninja
             -S "${tool_source_dir}"
             -B "${tool_build_dir}"
             -DCMAKE_BUILD_TYPE=Release
