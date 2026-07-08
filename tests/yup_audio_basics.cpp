@@ -19,6 +19,8 @@
   ==============================================================================
 */
 
+#include "mocks/yup_audio_basics.h"
+
 #include "yup_audio_basics/yup_ADSR.cpp"
 #include "yup_audio_basics/yup_AudioChannelSet.cpp"
 #include "yup_audio_basics/yup_AudioDataConverters.cpp"
