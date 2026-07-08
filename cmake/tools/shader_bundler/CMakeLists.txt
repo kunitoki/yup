@@ -28,7 +28,18 @@ project (${target_name} VERSION ${target_version})
 # ==== Bootstrap YUP modules (this is always built as a standalone host tool)
 get_filename_component (yup_root "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
 include (${yup_root}/cmake/yup.cmake)
-yup_add_default_modules ("${yup_root}")
+
+# Only add the modules actually needed by the shader bundler tool.
+# Adding all default modules would pull in audio modules that require host
+# system packages (e.g. alsa, pulseaudio) which may not be available.
+yup_add_module ("${yup_root}/thirdparty/zlib" "" "Thirdparty")
+yup_add_module ("${yup_root}/thirdparty/glslang" "" "Thirdparty")
+yup_add_module ("${yup_root}/thirdparty/spirv_cross" "" "Thirdparty")
+yup_add_module ("${yup_root}/thirdparty/spirv_tools" "" "Thirdparty")
+yup_add_module ("${yup_root}/modules/yup_core" "" "Modules")
+yup_add_module ("${yup_root}/modules/yup_shading" "" "Modules")
+add_library (yup::yup_core ALIAS yup_core)
+add_library (yup::yup_shading ALIAS yup_shading)
 
 # ==== Prepare target
 yup_standalone_app (

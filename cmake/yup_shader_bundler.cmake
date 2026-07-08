@@ -44,6 +44,7 @@ function (_yup_build_shader_bundler_tool output_variable)
             -S "${tool_source_dir}"
             -B "${tool_build_dir}"
             -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_TOOLCHAIN_FILE=
             -DYUP_BUILD_EXAMPLES=OFF
             -DYUP_BUILD_TESTS=OFF)
 
