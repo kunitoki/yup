@@ -609,6 +609,9 @@ public:
     /** Returns true if this Graphics renders to an offscreen Image target. */
     bool isOffscreen() const noexcept;
 
+    /** Flushes the offscreen GPU frame. */
+    bool commitOffscreenTarget();
+
     /** Flushes the offscreen GPU frame and sets the rendered GPU texture on the target Image.
 
         After this call, the Image can be passed to drawImage() without any CPU round-trip.
@@ -756,7 +759,6 @@ private:
     const RenderOptions& currentRenderOptions() const;
 
     void restoreState();
-    bool commitOffscreenTarget();
 
     void clipPath (rive::RawPath& path);
 

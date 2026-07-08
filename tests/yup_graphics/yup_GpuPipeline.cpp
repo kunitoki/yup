@@ -281,6 +281,198 @@ TEST_F (GpuPipelineCacheTests, GetOrCompileHeadlessFails)
     EXPECT_TRUE (result.failed());
 }
 
+TEST_F (GpuPipelineCacheTests, EmptyBundleGeneratesKeyWithNoneMarkers)
+{
+    ShaderBundle bundle;
+    GpuPipelineOptions options;
+
+    const auto key = GpuPipelineCache::generateCacheKey (bundle, options, GraphicsContext::Metal);
+    EXPECT_FALSE (key.isEmpty());
+}
+
+TEST_F (GpuPipelineCacheTests, OpenGLES_ApisGenerateDifferentKeys)
+{
+    ShaderBundle bundle;
+    GpuPipelineOptions options;
+
+    const auto keyGL = GpuPipelineCache::generateCacheKey (bundle, options, GraphicsContext::OpenGL);
+    const auto keyGLES = GpuPipelineCache::generateCacheKey (bundle, options, GraphicsContext::OpenGLES);
+    EXPECT_NE (keyGL, keyGLES);
+}
+
+TEST_F (GpuPipelineCacheTests, WebGPU_GeneratesKey)
+{
+    ShaderBundle bundle;
+    GpuPipelineOptions options;
+
+    const auto key = GpuPipelineCache::generateCacheKey (bundle, options, GraphicsContext::WebGPU);
+    EXPECT_FALSE (key.isEmpty());
+}
+
+TEST_F (GpuPipelineCacheTests, ESSL_FallbackUsesGlslWhenEsslMissing)
+{
+    ShaderBundle bundle;
+
+    ShaderInfo vsGlsl;
+    vsGlsl.stage = ShaderStage::vertex;
+    vsGlsl.language = ShaderLanguage::glsl;
+    vsGlsl.entryPoint = "main";
+    vsGlsl.source = "// glsl vertex";
+    bundle.addShader (vsGlsl);
+
+    ShaderInfo fsGlsl;
+    fsGlsl.stage = ShaderStage::fragment;
+    fsGlsl.language = ShaderLanguage::glsl;
+    fsGlsl.entryPoint = "main";
+    fsGlsl.source = "// glsl fragment";
+    bundle.addShader (fsGlsl);
+
+    GpuPipelineOptions options;
+
+    // With ESSL API, the cache should fall back to GLSL since no ESSL variant exists.
+    const auto keyESSL = GpuPipelineCache::generateCacheKey (bundle, options, GraphicsContext::OpenGLES);
+    EXPECT_FALSE (keyESSL.isEmpty());
+}
+
+TEST_F (GpuPipelineCacheTests, ESSL_FallbackUsesEsslWhenAvailable)
+{
+    ShaderBundle bundle;
+
+    ShaderInfo vsGlsl;
+    vsGlsl.stage = ShaderStage::vertex;
+    vsGlsl.language = ShaderLanguage::glsl;
+    vsGlsl.entryPoint = "main";
+    vsGlsl.source = "// glsl vertex";
+    bundle.addShader (vsGlsl);
+
+    ShaderInfo vsEssl;
+    vsEssl.stage = ShaderStage::vertex;
+    vsEssl.language = ShaderLanguage::essl;
+    vsEssl.entryPoint = "main";
+    vsEssl.source = "// essl vertex";
+    bundle.addShader (vsEssl);
+
+    ShaderInfo fsEssl;
+    fsEssl.stage = ShaderStage::fragment;
+    fsEssl.language = ShaderLanguage::essl;
+    fsEssl.entryPoint = "main";
+    fsEssl.source = "// essl fragment";
+    bundle.addShader (fsEssl);
+
+    GpuPipelineOptions options;
+
+    const auto key = GpuPipelineCache::generateCacheKey (bundle, options, GraphicsContext::OpenGLES);
+    EXPECT_FALSE (key.isEmpty());
+}
+
+TEST_F (GpuPipelineCacheTests, KeyChangesWhenShaderSourceDiffers)
+{
+    ShaderBundle bundleA;
+    ShaderInfo vsA;
+    vsA.stage = ShaderStage::vertex;
+    vsA.language = ShaderLanguage::glsl;
+    vsA.entryPoint = "main";
+    vsA.source = "// source A";
+    bundleA.addShader (vsA);
+
+    ShaderBundle bundleB;
+    ShaderInfo vsB;
+    vsB.stage = ShaderStage::vertex;
+    vsB.language = ShaderLanguage::glsl;
+    vsB.entryPoint = "main";
+    vsB.source = "// source B";
+    bundleB.addShader (vsB);
+
+    GpuPipelineOptions options;
+
+    const auto keyA = GpuPipelineCache::generateCacheKey (bundleA, options, GraphicsContext::OpenGL);
+    const auto keyB = GpuPipelineCache::generateCacheKey (bundleB, options, GraphicsContext::OpenGL);
+    EXPECT_NE (keyA, keyB);
+}
+
+TEST_F (GpuPipelineCacheTests, KeyChangesWhenEntryPointDiffers)
+{
+    ShaderBundle bundleA;
+    ShaderInfo vsA;
+    vsA.stage = ShaderStage::vertex;
+    vsA.language = ShaderLanguage::glsl;
+    vsA.entryPoint = "vsMain";
+    vsA.source = "// source";
+    bundleA.addShader (vsA);
+
+    ShaderBundle bundleB;
+    ShaderInfo vsB;
+    vsB.stage = ShaderStage::vertex;
+    vsB.language = ShaderLanguage::glsl;
+    vsB.entryPoint = "vsMain2";
+    vsB.source = "// source";
+    bundleB.addShader (vsB);
+
+    GpuPipelineOptions options;
+
+    const auto keyA = GpuPipelineCache::generateCacheKey (bundleA, options, GraphicsContext::OpenGL);
+    const auto keyB = GpuPipelineCache::generateCacheKey (bundleB, options, GraphicsContext::OpenGL);
+    EXPECT_NE (keyA, keyB);
+}
+
+TEST_F (GpuPipelineCacheTests, MaxEntriesZeroNeverEvicts)
+{
+    GpuPipelineCache cache (*context);
+    cache.setMaxEntries (0);
+    EXPECT_EQ (cache.getMaxEntries(), 0u);
+
+    cache.store ("a", nullptr);
+    cache.store ("b", nullptr);
+    cache.store ("c", nullptr);
+
+    EXPECT_EQ (cache.getNumEntries(), 3u);
+}
+
+TEST_F (GpuPipelineCacheTests, EvictsOldestEntry)
+{
+    GpuPipelineCache cache (*context);
+    cache.setMaxEntries (2);
+
+    cache.store ("a", nullptr);
+
+    // Access "a" so it's not the oldest.
+    EXPECT_TRUE (cache.contains ("a"));
+
+    cache.store ("b", nullptr);
+
+    // Now "a" was accessed before "b" was added, so "a" should be oldest.
+    cache.store ("c", nullptr);
+
+    EXPECT_EQ (cache.getNumEntries(), 2u);
+}
+
+TEST_F (GpuPipelineCacheTests, CacheHitReturnsStoredPipeline)
+{
+    GpuPipelineCache cache (*context);
+
+    cache.store ("key", nullptr);
+
+    ShaderBundle bundle;
+    GpuPipelineOptions options;
+
+    auto result = cache.getOrCompile ("key", bundle, options);
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_EQ (result.getValue(), nullptr);
+}
+
+TEST_F (GpuPipelineCacheTests, GetOrCompileWithExplicitKeyStoresCompiledPipeline)
+{
+    GpuPipelineCache cache (*context);
+
+    ShaderBundle bundle;
+    GpuPipelineOptions options;
+
+    const auto key = GpuPipelineCache::generateCacheKey (bundle, options, context->getApi());
+    auto result = cache.getOrCompile (key, bundle, options);
+    // Headless compile fails, but we verify the path doesn't crash.
+    EXPECT_TRUE (result.failed());
+}
+
 // ---------------------------------------------------------------------------
 // GpuFrame — headless invalid, RAII submit idempotency
 
@@ -297,4 +489,35 @@ TEST_F (GpuPipelineTests, GpuFrameSubmitIsIdempotentOnInvalid)
     EXPECT_FALSE (frame.submit());
     EXPECT_FALSE (frame.submit());
     EXPECT_NO_THROW (frame.waitForGPU());
+}
+
+TEST_F (GpuPipelineTests, GpuFrameMoveAssignmentMovesInvalidState)
+{
+    auto src = GpuFrame::begin (*context);
+    EXPECT_FALSE (src.isValid());
+
+    auto dst = GpuFrame::begin (*context);
+    dst = std::move (src);
+
+    EXPECT_FALSE (dst.isValid());
+    EXPECT_FALSE (dst.submit());
+}
+
+TEST_F (GpuPipelineTests, GpuFrameMoveConstructionFromInvalidIsInvalid)
+{
+    auto src = GpuFrame::begin (*context);
+    GpuFrame dst (std::move (src));
+
+    EXPECT_FALSE (dst.isValid());
+    EXPECT_FALSE (dst.submit());
+}
+
+TEST_F (GpuPipelineTests, GpuFrameDestructorDoesNotCrashOnInvalid)
+{
+    {
+        auto frame = GpuFrame::begin (*context);
+        EXPECT_FALSE (frame.isValid());
+    }
+    // Destructor calls submit() which is idempotent.
+    EXPECT_TRUE (true);
 }

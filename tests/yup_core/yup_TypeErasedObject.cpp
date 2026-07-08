@@ -286,3 +286,98 @@ TEST_F (TypeErasedObjectTests, DeductionGuideSizesStorageToValue)
     EXPECT_EQ (payload->value, 33);
     EXPECT_EQ (payload->factor, 7.5);
 }
+
+TEST_F (TypeErasedObjectTests, MoveAssignmentFromSameSizedEmptyDoesNotCrash)
+{
+    TypeErasedObject<64> destination (Payload { 1, 1.0 });
+    TypeErasedObject<64> source; // Empty - moved from elsewhere
+
+    // Move from empty source into a destination with a live payload.
+    destination = std::move (source);
+
+    // Destination is now empty.
+    EXPECT_EQ (destination.getPayload<Payload>(), nullptr);
+}
+
+TEST_F (TypeErasedObjectTests, MoveAssignmentFromSmallerSizedEmptyDoesNotCrash)
+{
+    TypeErasedObject<16> source; // Empty
+    TypeErasedObject<64> destination (Payload { 1, 1.0 });
+
+    // Move from smaller empty source.
+    destination = std::move (source);
+
+    EXPECT_EQ (destination.getPayload<Payload>(), nullptr);
+}
+
+TEST_F (TypeErasedObjectTests, MoveAssignmentFromEmptyDestroysExistingPayload)
+{
+    int destructions = 0;
+
+    {
+        TypeErasedObject<16> source; // Empty - moved from elsewhere
+        TypeErasedObject<64> destination (LifetimeTracker { &destructions });
+
+        // Before move: destination owns a LifetimeTracker.
+        EXPECT_EQ (destructions, 0);
+
+        destination = std::move (source);
+
+        // After moving empty source: destination's LifetimeTracker should be destroyed.
+        EXPECT_EQ (destructions, 1);
+    }
+
+    EXPECT_EQ (destructions, 1);
+}
+
+TEST_F (TypeErasedObjectTests, StoresDoublePrecisionValue)
+{
+    TypeErasedObject<64> object (3.14159265358979323846);
+
+    auto* payload = object.getPayload<double>();
+    ASSERT_NE (payload, nullptr);
+    EXPECT_DOUBLE_EQ (*payload, 3.14159265358979323846);
+}
+
+TEST_F (TypeErasedObjectTests, StoresMaxSizePayloadAtBufferLimit)
+{
+    struct MaxPayload
+    {
+        char data[64] = {};
+    };
+
+    TypeErasedObject<64> object (MaxPayload {});
+    ASSERT_NE (object.getPayload<MaxPayload>(), nullptr);
+}
+
+TEST_F (TypeErasedObjectTests, MoveAssignmentSelfDestroysExistingFromSmallerSize)
+{
+    int destructions = 0;
+
+    {
+        TypeErasedObject<16> source; // Empty
+        TypeErasedObject<64> destination (LifetimeTracker { &destructions });
+
+        destination = std::move (source);
+
+        EXPECT_EQ (destructions, 1);
+    }
+
+    EXPECT_EQ (destructions, 1);
+}
+
+TEST_F (TypeErasedObjectTests, ConstGetPayloadOnDefaultReturnsNull)
+{
+    const TypeErasedObject<64> object;
+    EXPECT_EQ (object.getPayload<int>(), nullptr);
+    EXPECT_EQ (object.getPayload<Payload>(), nullptr);
+    EXPECT_EQ (object.getPayload<double>(), nullptr);
+}
+
+TEST_F (TypeErasedObjectTests, NonConstGetPayloadOnDefaultReturnsNull)
+{
+    TypeErasedObject<64> object;
+    EXPECT_EQ (object.getPayload<int>(), nullptr);
+    EXPECT_EQ (object.getPayload<Payload>(), nullptr);
+    EXPECT_EQ (object.getPayload<double>(), nullptr);
+}

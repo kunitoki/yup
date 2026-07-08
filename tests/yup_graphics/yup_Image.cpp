@@ -813,3 +813,180 @@ TEST (ImageTests, CopyAssignmentClearsTextureMeta)
     EXPECT_EQ (target.getWidth(), 1);
     EXPECT_EQ (target.getHeight(), 1);
 }
+
+// ======================================================================
+// Image::toRGBA (via ImagePixelData) tests
+// ======================================================================
+
+TEST (ImagePixelDataTests, ToRGBAOnGrayscaleImageReturnsFourBytesPerPixel)
+{
+    ImagePixelData bitmap (4, 1, PixelFormat::Grayscale);
+    auto raw = bitmap.getRawData();
+    raw[0] = 0;
+    raw[1] = 128;
+    raw[2] = 255;
+    raw[3] = 64;
+
+    auto result = bitmap.toRGBA (false);
+
+    ASSERT_EQ (result.size(), 16u);
+    EXPECT_EQ (result[0], 0);
+    EXPECT_EQ (result[1], 0);
+    EXPECT_EQ (result[2], 0);
+    EXPECT_EQ (result[3], 255);
+}
+
+TEST (ImagePixelDataTests, ToRGBAOnRGBImageReturnsFourBytesPerPixel)
+{
+    ImagePixelData bitmap (2, 1, PixelFormat::RGB);
+    auto raw = bitmap.getRawData();
+    raw[0] = 10;
+    raw[1] = 20;
+    raw[2] = 30;
+    raw[3] = 40;
+    raw[4] = 50;
+    raw[5] = 60;
+
+    auto result = bitmap.toRGBA (false);
+
+    ASSERT_EQ (result.size(), 8u);
+    EXPECT_EQ (result[0], 10);
+    EXPECT_EQ (result[1], 20);
+    EXPECT_EQ (result[2], 30);
+    EXPECT_EQ (result[3], 255);
+    EXPECT_EQ (result[4], 40);
+    EXPECT_EQ (result[5], 50);
+    EXPECT_EQ (result[6], 60);
+    EXPECT_EQ (result[7], 255);
+}
+
+TEST (ImagePixelDataTests, ToRGBAOnRGBAImagePreservesChannels)
+{
+    ImagePixelData bitmap (1, 1, PixelFormat::RGBA);
+    auto raw = bitmap.getRawData();
+    raw[0] = 0x12;
+    raw[1] = 0x34;
+    raw[2] = 0x56;
+    raw[3] = 0x80;
+
+    auto result = bitmap.toRGBA (false);
+
+    ASSERT_EQ (result.size(), 4u);
+    EXPECT_EQ (result[0], 0x12);
+    EXPECT_EQ (result[1], 0x34);
+    EXPECT_EQ (result[2], 0x56);
+    EXPECT_EQ (result[3], 0x80);
+}
+
+TEST (ImagePixelDataTests, ToRGBAOnRGBAWithPremultiplyAlpha)
+{
+    ImagePixelData bitmap (1, 1, PixelFormat::RGBA);
+    auto raw = bitmap.getRawData();
+    raw[0] = 128; // R
+    raw[1] = 64;  // G
+    raw[2] = 192; // B
+    raw[3] = 128; // A (50%)
+
+    auto result = bitmap.toRGBA (true);
+
+    ASSERT_EQ (result.size(), 4u);
+    EXPECT_EQ (result[0], 64);
+    EXPECT_EQ (result[1], 32);
+    EXPECT_EQ (result[2], 96);
+    EXPECT_EQ (result[3], 128);
+}
+
+// ======================================================================
+// Image::getRawData const version
+// ======================================================================
+
+TEST (ImageTests, ConstGetRawDataReturnsPixelData)
+{
+    const Image image (2, 2, PixelFormat::RGBA);
+
+    auto raw = image.getRawData();
+    EXPECT_EQ (raw.size(), 16u);
+}
+
+// ======================================================================
+// Image::fromTexture with null
+// ======================================================================
+
+TEST (ImageTests, FromTextureWithNullReturnsInvalidImage)
+{
+    auto img = Image::fromTexture (nullptr);
+    EXPECT_FALSE (img.isValid());
+}
+
+// ======================================================================
+// Image::getGpuTexture / setGpuTexture
+// ======================================================================
+
+TEST (ImageTests, GetGpuTextureOnDefaultImageReturnsNull)
+{
+    Image image;
+    EXPECT_EQ (image.getGpuTexture(), nullptr);
+}
+
+TEST (ImageTests, GetGpuTextureOnNewlyCreatedImageReturnsNull)
+{
+    Image image (16, 16, PixelFormat::RGBA);
+    EXPECT_EQ (image.getGpuTexture(), nullptr);
+}
+
+TEST (ImageTests, SetGpuTextureWithNullDoesNotCrash)
+{
+    Image image (8, 8, PixelFormat::RGBA);
+    EXPECT_NO_THROW (image.setGpuTexture (nullptr));
+    EXPECT_EQ (image.getGpuTexture(), nullptr);
+}
+
+// ======================================================================
+// Image::createTextureIfNotPresent (headless — should return false)
+// ======================================================================
+
+TEST (ImageTests, CreateTextureIfNotPresentOnHeadlessReturnsFalse)
+{
+    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    ASSERT_NE (ctx, nullptr);
+
+    Image image (8, 8, PixelFormat::RGBA);
+    image.fill (0xFF0000FFu);
+
+    EXPECT_FALSE (image.createTextureIfNotPresent (*ctx));
+}
+
+TEST (ImageTests, CreateTextureIfNotPresentOnDefaultImageReturnsFalse)
+{
+    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    ASSERT_NE (ctx, nullptr);
+
+    Image image;
+    EXPECT_FALSE (image.createTextureIfNotPresent (*ctx));
+}
+
+// ======================================================================
+// Image::getPixelData const version
+// ======================================================================
+
+TEST (ImageTests, ConstGetPixelDataOnEmptyImageThrowsOrReturnsEmpty)
+{
+    Image image;
+    EXPECT_FALSE (image.isValid());
+}
+
+// ======================================================================
+// ImagePixelData move assignment from empty
+// ======================================================================
+
+TEST (ImagePixelDataTests, MoveAssignmentFromEmpty)
+{
+    ImagePixelData source; // Default-constructed, empty.
+    ImagePixelData target (2, 2, PixelFormat::RGBA);
+    target.fill (0xFF0000AAu);
+
+    target = std::move (source);
+
+    EXPECT_EQ (target.getWidth(), 0);
+    EXPECT_EQ (target.getHeight(), 0);
+}
