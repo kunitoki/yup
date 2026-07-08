@@ -94,6 +94,20 @@ public:
     Graphics& getGraphics() noexcept;
 
     //==============================================================================
+    /** Reopens a previously committed 2D canvas for a new frame of drawing.
+
+        Reuses the already-allocated GPU target textures instead of creating a
+        new canvas each frame. After this call getGraphics() begins a fresh
+        offscreen 2D frame on the same target, and commit() can be called again.
+
+        Only meaningful for canvases drawn via getGraphics()/commit(); it is a
+        no-op for canvases used purely as GpuRenderPass render targets. The
+        sampled texture returned by asTexture() remains stable across frames and
+        reflects the most recently committed content.
+    */
+    void beginNewFrame();
+
+    //==============================================================================
     /** Finalises any open 2D GPU render pass.
 
         Only needs to be called when 2D content was drawn via getGraphics(). For

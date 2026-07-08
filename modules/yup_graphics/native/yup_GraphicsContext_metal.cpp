@@ -386,13 +386,38 @@ public:
 
         id<MTLCommandBuffer> commandBuffer = [m_queue commandBuffer];
         renderContext->flush ({ .renderTarget = target.getRenderTarget(), .externalCommandBuffer = (__bridge void*) commandBuffer });
+        [commandBuffer commit];
+    }
+
+    bool readOffscreenPixels (OffscreenTarget& baseTarget, void* dst, size_t dstSize) override
+    {
+        auto& target = static_cast<OffscreenTargetMetal&> (baseTarget);
+
+        if (target.stagingTexture == nil || dst == nullptr)
+            return false;
+
+        id<MTLTexture> srcTexture = target.targetTexture();
+        if (srcTexture == nil)
+            return false;
+
+        const auto w = static_cast<NSUInteger> (target.width);
+        const auto h = static_cast<NSUInteger> (target.height);
+        const size_t bytesPerRow = w * 4u;
+
+        if (dstSize < bytesPerRow * h)
+            return false;
+
+        // Copy the rendered target into a CPU-readable staging texture and block
+        // until the GPU is done. This is the only path that requires a CPU/GPU
+        // sync, so the stall is paid only when pixels are actually read back.
+        id<MTLCommandBuffer> commandBuffer = [m_queue commandBuffer];
 
         id<MTLBlitCommandEncoder> blitEncoder = [commandBuffer blitCommandEncoder];
-        [blitEncoder copyFromTexture:target.targetTexture()
+        [blitEncoder copyFromTexture:srcTexture
                          sourceSlice:0
                          sourceLevel:0
                         sourceOrigin:MTLOriginMake (0, 0, 0)
-                          sourceSize:MTLSizeMake (static_cast<NSUInteger> (target.width), static_cast<NSUInteger> (target.height), 1)
+                          sourceSize:MTLSizeMake (w, h, 1)
                            toTexture:target.stagingTexture
                     destinationSlice:0
                     destinationLevel:0
@@ -404,21 +429,6 @@ public:
 
         [commandBuffer commit];
         [commandBuffer waitUntilCompleted];
-    }
-
-    bool readOffscreenPixels (OffscreenTarget& baseTarget, void* dst, size_t dstSize) override
-    {
-        auto& target = static_cast<OffscreenTargetMetal&> (baseTarget);
-
-        if (target.stagingTexture == nil || dst == nullptr)
-            return false;
-
-        const auto w = static_cast<NSUInteger> (target.width);
-        const auto h = static_cast<NSUInteger> (target.height);
-        const size_t bytesPerRow = w * 4u;
-
-        if (dstSize < bytesPerRow * h)
-            return false;
 
         [target.stagingTexture getBytes:dst
                             bytesPerRow:bytesPerRow
