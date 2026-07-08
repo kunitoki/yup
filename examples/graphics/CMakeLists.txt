@@ -49,13 +49,24 @@ if (ANDROID)
     set (link_libraries "${target_name}_binary_data")
 endif()
 
+# ==== Embed shaders
+yup_add_shader_bundle (
+    "${target_name}_binary_shaders"
+    VERT ${CMAKE_CURRENT_LIST_DIR}/data/shaders/cube.vert
+    FRAG ${CMAKE_CURRENT_LIST_DIR}/data/shaders/cube.frag
+    NAMESPACE yup
+    OUTPUT_NAME
+        ShaderBundle
+    RESOURCE_NAME
+        ShaderBundleFile)
+list (APPEND link_libraries "${target_name}_binary_shaders")
+
 # ==== Prepare target
 set (additional_modules "")
 set (additional_definitions "")
 if (YUP_PLATFORM_DESKTOP AND NOT YUP_PLATFORM_WINDOWS)
     set (additional_modules yup::yup_python)
 endif()
-
 
 yup_standalone_app (
     TARGET_NAME ${target_name}

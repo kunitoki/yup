@@ -22,6 +22,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - New `BinaryOutputArchive` / `BinaryInputArchive` pair (`yup_core/serialisation/yup_BinaryArchive.h`): binary stream archives that plug into the `SerialisationTraits` system; used internally by `ShaderBundle` to serialise `ShaderReflection` data into `REFL` RIFF chunks.
 - `SerialisationTraits` specialisations for all `ShaderReflection` nested types (`EntryPoint`, `WorkgroupSize`, `ResourceMember`, `ResourceBinding`, `BuiltInBinding`, `SpecializationConstant`, `ShaderReflection`) enabling binary and JSON serialisation of full reflection data. Both `ShaderBundle` and `ShaderBundleCompiler` are compiled only when `YUP_ENABLE_SHADER_TRANSPILER` is `1`.
 - `TranspileOptions` now exposes `spirvOptimize` flag; wired through to `glslang::SpvOptions` (disabled by default; requires SPIRV-Tools linked into glslang to take effect).
+- New standalone `yup_shader_bundler` console tool (`cmake/tools/shader_bundler`): takes a `.vert` and `.frag` GLSL pair on disk and produces a single `.ysl` bundle containing transpiled variants for all target languages (GLSL/ESSL/HLSL/MSL/WGSL).
+- New `yup_add_shader_bundle()` CMake helper (`cmake/yup_shader_bundler.cmake`): builds the `yup_shader_bundler` tool for the host once (cached in the global property `YUP_SHADER_BUNDLER_EXECUTABLE`), runs it at configure time to generate the `.ysl`, and embeds it into a linkable object library via `yup_add_embedded_binary_resources`. Works even when the outer build is cross-compiling, since the tool is built in its own host binary tree without forwarding the cross toolchain.
 
 #### macOS
 

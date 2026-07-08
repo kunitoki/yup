@@ -24,6 +24,8 @@
 #include <yup_shading/yup_shading.h>
 #include <yup_animation/yup_animation.h>
 
+#include <ShaderBundle.h>
+
 //==============================================================================
 
 /**
@@ -609,10 +611,24 @@ void main() {
 
     void initCube()
     {
-        auto result = yup::GpuPipeline::compileFromGlsl (*capturedContext,
-                                                         currentVertSource,
-                                                         currentFragSource,
-                                                         cubePipelineOptions());
+        auto loaded = yup::ShaderBundle::loadFromData (yup::ShaderBundleFile_data, yup::ShaderBundleFile_size);
+        if (loaded.failed())
+        {
+            yup::Logger::outputDebugString ("SpinningCubeDemo: failed to load shader bundle: " + loaded.getErrorMessage());
+            return;
+        }
+
+        auto result = yup::GpuPipeline::compileFromBundle (*capturedContext,
+                                                           loaded.getReference(),
+                                                           cubePipelineOptions());
+
+        const auto& bundle = loaded.getReference();
+
+        if (auto* vs = bundle.findShader (yup::ShaderStage::vertex, yup::ShaderLanguage::glsl))
+            currentVertSource = vs->source;
+
+        if (auto* fs = bundle.findShader (yup::ShaderStage::fragment, yup::ShaderLanguage::glsl))
+            currentFragSource = fs->source;
 
         if (result.failed())
         {
