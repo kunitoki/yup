@@ -44,16 +44,15 @@ function (_yup_build_shader_bundler_tool output_variable)
             -S "${tool_source_dir}"
             -B "${tool_build_dir}"
             -DCMAKE_BUILD_TYPE=Release
-            -DCMAKE_TOOLCHAIN_FILE=
-            -DYUP_BUILD_EXAMPLES=OFF
-            -DYUP_BUILD_TESTS=OFF)
+            -DCMAKE_TOOLCHAIN_FILE=)
 
     # ==== Build it
     _yup_message (STATUS "Building host shader bundler tool")
     _yup_execute_process_or_fail (
         "${CMAKE_COMMAND}"
             --build "${tool_build_dir}"
-            --config Release)
+            --config Release
+            --jobs ${CMAKE_BUILD_PARALLEL_LEVEL})
 
     # ==== Locate the produced executable
     set (exe_name "yup_shader_bundler")
