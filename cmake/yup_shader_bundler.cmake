@@ -41,7 +41,6 @@ function (_yup_build_shader_bundler_tool output_variable)
     _yup_message (STATUS " * tool_build_dir: ${tool_build_dir}")
     _yup_execute_process_or_fail (
         "${CMAKE_COMMAND}"
-            -G Ninja
             -S "${tool_source_dir}"
             -B "${tool_build_dir}"
             -DCMAKE_BUILD_TYPE=Release
@@ -53,7 +52,7 @@ function (_yup_build_shader_bundler_tool output_variable)
         "${CMAKE_COMMAND}"
             --build "${tool_build_dir}"
             --config Release
-            --jobs ${CMAKE_BUILD_PARALLEL_LEVEL})
+            --parallel 4)
 
     # ==== Locate the produced executable
     set (exe_name "yup_shader_bundler")
