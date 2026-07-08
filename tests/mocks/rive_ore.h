@@ -129,7 +129,7 @@ struct TestOreTextureView : public rive::ore::TextureView
 struct TestOrePipeline : public rive::ore::Pipeline
 {
     TestOrePipeline()
-        : rive::ore::Pipeline ({})
+        : rive::ore::Pipeline (rive::ore::PipelineDesc())
     {
     }
 };
