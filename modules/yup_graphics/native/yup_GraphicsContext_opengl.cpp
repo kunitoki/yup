@@ -196,6 +196,12 @@ public:
 
     void end (void*) override
     {
+        // Mid-frame GpuCanvas / ore work shares the one real GL context and unbinds the fixed texture units
+        // (endOffscreen's unbindGLInternalResources wipes units 0..N). Rive's flush assumes its internal
+        // textures (tessellation/gradient/feather/atlas) are still bound at those units, so rebind them
+        // right before flushing.
+        m_renderContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->invalidateGLState();
+
         m_renderContext->flush ({ m_offscreenRenderTarget.get() });
 
         m_renderContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->unbindGLInternalResources();
@@ -276,6 +282,10 @@ public:
 
         if (renderContext == nullptr)
             return;
+
+        // Rebind this context's internal textures right before flushing: any other context's work since beginOffscreen()
+        // (another canvas, ore passes, the main context) may have unbound the shared texture units.
+        renderContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->invalidateGLState();
 
         renderContext->flush ({ target.getRenderTarget() });
 

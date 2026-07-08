@@ -71,10 +71,10 @@ android:
   cmake -G "Unix Makefiles" -B build -DYUP_TARGET_ANDROID=ON
 
 [doc("generate and build project for WASM")]
-emscripten CONFIG="Debug":
+emscripten CONFIG="Debug" TARGET="yup_tests":
   emcc -v
   emcmake cmake -G "Ninja Multi-Config" -B build
-  @just build {{CONFIG}}
+  @just build {{CONFIG}} {{TARGET}}
 
 [doc("run tests for WASM")]
 emscripten_test CONFIG="Debug":
