@@ -46,4 +46,26 @@ namespace yup
 std::vector<uint8_t> makeShaderBindingMapBlob (const ShaderReflection& reflection,
                                                ShaderStage stage);
 
+//==============================================================================
+/** Builds an ore GL program-link fixup blob from shader reflection data.
+
+    OpenGL / OpenGL ES (GLES 3.00 / WebGL2) cannot express UBO block bindings or
+    sampler texture units via @c layout(binding=) qualifiers, so the ore GL
+    backend fixes them up by name after linking (@c glUniformBlockBinding /
+    @c glUniform1i). This helper serialises the required name→slot table for a
+    single stage into the blob format consumed by @c ShaderModuleDesc::glFixupBytes.
+
+    Uniform buffers contribute their block name + binding point; combined
+    texture+sampler uniforms (see ShaderReflection::glCombinedSamplers) contribute
+    their emitted uniform name + texture unit.
+
+    @param reflection  The reflection data for a single shader stage (glsl/essl).
+
+    @returns A binary blob suitable for GpuShaderSource::glFixup. Empty when the
+             stage declares no uniform buffers or combined samplers.
+
+    @see GpuShaderSource, GpuPipeline, ShaderReflection
+*/
+std::vector<uint8_t> makeGLFixupBlob (const ShaderReflection& reflection);
+
 } // namespace yup

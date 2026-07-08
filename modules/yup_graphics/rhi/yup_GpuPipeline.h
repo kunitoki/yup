@@ -61,6 +61,18 @@ struct GpuShaderSource
     /** Number of bytes in @c bindingMap. */
     uint32_t bindingMapSize = 0;
 
+    /** Optional GL program-link fixup blob (GLSL/ESSL only).
+
+        On the OpenGL / OpenGL ES backend, UBO block bindings and sampler
+        texture units are assigned by name after linking rather than via
+        @c layout(binding=) qualifiers (which GLES 3.00 / WebGL2 cannot use).
+        This blob carries the name→slot table; it is ignored by every non-GL
+        backend. Produced by makeGLFixupBlob(). */
+    const uint8_t* glFixup = nullptr;
+
+    /** Number of bytes in @c glFixup. */
+    uint32_t glFixupSize = 0;
+
     /** Override the stage entry-point name. nullptr → "vs_main" / "fs_main". */
     const char* entryPoint = nullptr;
 };

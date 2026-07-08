@@ -104,5 +104,11 @@ python_uninstall:
 python_test *TEST_OPTS:
   python -m pytest -s {{TEST_OPTS}}
 
+[working-directory: 'cmake/tools/shader_bundler']
+shader_bundler *COMPILE_ARGS:
+  cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=
+  cmake --build build --config Release -j4
+  build/yup_shader_bundler {{COMPILE_ARGS}}
+
 rive_update REF="runtime-v0.1.62":
   uv run python tools/rive_update.py --rive-ref {{REF}} --allow-dirty --keep-work-dir

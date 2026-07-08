@@ -300,6 +300,8 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GraphicsContext& ctx,
         desc.label = label;
         desc.bindingMapBytes = src.bindingMap;
         desc.bindingMapSize = src.bindingMapSize;
+        desc.glFixupBytes = src.glFixup;
+        desc.glFixupSize = src.glFixupSize;
 
         switch (src.language)
         {
@@ -687,6 +689,17 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (GraphicsContext& c
     auto vsSource = vsInfo->source.toRawUTF8();
     auto fsSource = fsInfo->source.toRawUTF8();
 
+    // GL / GLES bind UBO blocks and sampler units by name after linking, so
+    // build the name→slot fixup table for the GLSL/ESSL targets. Empty (and
+    // ignored) for every other backend.
+    const bool isGLTarget = (gpuLang == GpuShaderLanguage::glsl);
+    std::vector<uint8_t> vsFixup, fsFixup;
+    if (isGLTarget)
+    {
+        vsFixup = makeGLFixupBlob (vsInfo->reflection);
+        fsFixup = makeGLFixupBlob (fsInfo->reflection);
+    }
+
     // SPIRV-Cross renames the GLSL "main" entry point to "main0" in MSL.
     auto resolveEntry = [gpuLang] (const ShaderInfo& info) -> String
     {
@@ -706,6 +719,8 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (GraphicsContext& c
     vs.codeSize = (uint32_t) strlen (vsSource);
     vs.bindingMap = vsMap.data();
     vs.bindingMapSize = (uint32_t) vsMap.size();
+    vs.glFixup = vsFixup.empty() ? nullptr : vsFixup.data();
+    vs.glFixupSize = (uint32_t) vsFixup.size();
     vs.entryPoint = vsEntry;
 
     GpuShaderSource fs;
@@ -714,6 +729,8 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (GraphicsContext& c
     fs.codeSize = (uint32_t) strlen (fsSource);
     fs.bindingMap = fsMap.data();
     fs.bindingMapSize = (uint32_t) fsMap.size();
+    fs.glFixup = fsFixup.empty() ? nullptr : fsFixup.data();
+    fs.glFixupSize = (uint32_t) fsFixup.size();
     fs.entryPoint = fsEntry;
 
     return compile (ctx, vs, fs, pipelineOptions);

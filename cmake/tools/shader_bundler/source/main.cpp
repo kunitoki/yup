@@ -157,6 +157,13 @@ static void printReflectionInfo (const ShaderInfo& info)
     printBindings ("PushConstantBuffers", r.pushConstantBuffers);
     printBindings ("AccelerationStructures", r.accelerationStructures);
 
+    if (! r.glCombinedSamplers.empty())
+    {
+        log->writeToLog ("  GLCombinedSamplers:");
+        for (const auto& cs : r.glCombinedSamplers)
+            log->writeToLog ("    " + cs.name + "  textureSlot=" + String (cs.textureSlot));
+    }
+
     if (info.stage == ShaderStage::compute)
         log->writeToLog ("  WorkgroupSize: " + String (r.workgroupSize.x)
                        + "x" + String (r.workgroupSize.y)
@@ -498,5 +505,9 @@ int main (int argc, char* argv[])
     if (args.containsOption ("--inspect"))
         return runInspectMode (args);
 
-    return runCompileMode (args);
+    if (args.containsOption ("--vert") || args.containsOption ("--frag") || args.containsOption ("--output"))
+        return runCompileMode (args);
+
+    printUsage();
+    return 1;
 }

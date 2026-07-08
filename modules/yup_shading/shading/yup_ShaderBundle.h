@@ -277,6 +277,19 @@ struct SerialisationTraits<ShaderReflection::SpecializationConstant>
 };
 
 template <>
+struct SerialisationTraits<ShaderReflection::GLCombinedSampler>
+{
+    static constexpr auto marshallingVersion = std::nullopt;
+
+    template <typename Archive, typename T>
+    static void serialise (Archive& archive, T& t)
+    {
+        archive (named ("name", t.name),
+                 named ("textureSlot", t.textureSlot));
+    }
+};
+
+template <>
 struct SerialisationTraits<ShaderReflection>
 {
     static constexpr auto marshallingVersion = std::nullopt;
@@ -305,6 +318,7 @@ struct SerialisationTraits<ShaderReflection>
                  named ("specConstants", t.specConstants),
                  named ("workgroupSize", t.workgroupSize),
                  named ("positionInvariant", t.positionInvariant),
+                 named ("glCombinedSamplers", t.glCombinedSamplers),
                  named ("capabilities", t.capabilities),
                  named ("extensions", t.extensions));
     }
