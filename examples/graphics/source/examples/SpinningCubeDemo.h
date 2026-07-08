@@ -238,32 +238,40 @@ public:
 
             const float radius = (float) ceil (blurSigma * 3.0);
 
-            // Both blur passes share a single GpuFrame.
-            auto frame = yup::GpuFrame::begin (*capturedContext);
+            // Ping-pong render targets reused across frames (recreated on resize).
+            if (blurCanvasA == nullptr || blurCanvasA->getWidth() != w || blurCanvasA->getHeight() != h)
+                blurCanvasA = yup::GpuCanvas::create (*capturedContext, w, h);
 
-            auto runPass = [&] (const yup::GpuTexture::Ptr& input, float dirX, float dirY) -> yup::GpuTexture::Ptr
+            if (blurCanvasB == nullptr || blurCanvasB->getWidth() != w || blurCanvasB->getHeight() != h)
+                blurCanvasB = yup::GpuCanvas::create (*capturedContext, w, h);
+
+            if (blurCanvasA != nullptr && blurCanvasB != nullptr)
             {
-                auto passCanvas = yup::GpuCanvas::create (*capturedContext, w, h);
-                if (passCanvas == nullptr)
-                    return input;
+                // Both blur passes share a single GpuFrame.
+                auto frame = yup::GpuFrame::begin (*capturedContext);
 
-                BlurParams params { blurSigma, radius, (float) w, (float) h, dirX, dirY, 0.0f, 0.0f };
+                auto runPass = [&] (yup::GpuCanvas& passCanvas, const yup::GpuTexture::Ptr& input, float dirX, float dirY) -> yup::GpuTexture::Ptr
+                {
+                    BlurParams params { blurSigma, radius, (float) w, (float) h, dirX, dirY, 0.0f, 0.0f };
 
-                auto pass = passCanvas->beginRenderPass (frame, { true, yup::Colors::transparentBlack });
-                pass.setPipeline (*blurPipeline);
-                pass.setTexture (0, 0, input);
-                pass.setUniformBuffer (0, 2, &params, sizeof (params));
-                pass.draw (3);
-                pass.finish();
+                    auto pass = passCanvas.beginRenderPass (frame, { true, yup::Colors::transparentBlack });
+                    pass.setPipeline (*blurPipeline);
+                    pass.setTexture (0, 0, input);
+                    pass.setUniformBuffer (0, 2, &params, sizeof (params));
+                    pass.draw (3);
+                    pass.finish();
 
-                return passCanvas->asTexture();
-            };
+                    return passCanvas.asTexture();
+                };
 
-            outputTex = runPass (outputTex, 1.0f, 0.0f); // horizontal
-            outputTex = runPass (outputTex, 0.0f, 1.0f); // vertical
+                outputTex = runPass (*blurCanvasA, outputTex, 1.0f, 0.0f); // horizontal
+                outputTex = runPass (*blurCanvasB, outputTex, 0.0f, 1.0f); // vertical
 
-            frame.submit();
-            frame.waitForGPU();
+                // Submit without stalling: all contexts share one command queue,
+                // so the main frame that samples outputTex is serialised after
+                // this work on the GPU. No CPU wait is required.
+                frame.submit();
+            }
         }
 
         // 5. Composite to main view.
@@ -839,11 +847,18 @@ void main() {
         if (! lottiePlayer.getAnimation().isValid())
             return nullptr;
 
-        // A fresh canvas per frame keeps the 2D commit path simple and avoids
-        // re-committing an already-finalised offscreen target.
-        lottieCanvas = yup::GpuCanvas::create (*capturedContext, kLottieTextureSize, kLottieTextureSize);
+        // A single canvas is reused every frame: only its contents change, so
+        // the GPU target textures are allocated once instead of per frame.
         if (lottieCanvas == nullptr)
-            return nullptr;
+        {
+            lottieCanvas = yup::GpuCanvas::create (*capturedContext, kLottieTextureSize, kLottieTextureSize);
+            if (lottieCanvas == nullptr)
+                return nullptr;
+        }
+        else
+        {
+            lottieCanvas->beginNewFrame();
+        }
 
         auto& g = lottieCanvas->getGraphics();
         g.setFillColor (yup::Colors::white);
@@ -882,8 +897,10 @@ void main() {
         pass.drawIndexed (yup::numElementsInArray (kCubeIdx));
         pass.finish();
 
+        // Submit without stalling: the shared command queue serialises this
+        // work ahead of the main frame that samples the scene texture, so no
+        // CPU wait is needed here.
         frame.submit();
-        frame.waitForGPU();
     }
 
     //==============================================================================
@@ -897,6 +914,10 @@ void main() {
 
     // Blur pass (GpuPipeline fullscreen triangle).
     yup::GpuPipeline::Ptr blurPipeline;
+
+    // Ping-pong blur render targets, reused across frames (recreated on resize).
+    yup::GpuCanvas::Ptr blurCanvasA;
+    yup::GpuCanvas::Ptr blurCanvasB;
 
     // Lottie texture source sampled by the cube faces.
     static constexpr int kLottieTextureSize = 512;

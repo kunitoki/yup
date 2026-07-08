@@ -73,6 +73,19 @@ Graphics& GpuCanvas::getGraphics() noexcept
 
 //==============================================================================
 
+void GpuCanvas::beginNewFrame()
+{
+    // Drop the previous frame's Graphics so the next ensureGraphics() re-opens a
+    // fresh offscreen 2D frame on the existing (already-allocated) target. The
+    // cached sampled texture is kept: it wraps the same GPU render target, whose
+    // contents are overwritten by the new frame.
+    graphics.reset();
+    frameOpen = false;
+    committed = false;
+}
+
+//==============================================================================
+
 bool GpuCanvas::commit()
 {
     if (! frameOpen || committed || ctx == nullptr || offscreenTarget == nullptr)
