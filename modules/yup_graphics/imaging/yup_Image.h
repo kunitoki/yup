@@ -24,6 +24,7 @@ namespace yup
 
 class Color;
 class GraphicsContext;
+class GpuTexture;
 
 //==============================================================================
 /** Supported raw pixel byte formats. */
@@ -42,14 +43,14 @@ enum class PixelFormat
 
     @tags{Core}
 */
-class YUP_API BitmapData : public ReferenceCountedObject
+class YUP_API ImagePixelData : public ReferenceCountedObject
 {
 public:
-    using Ptr = ReferenceCountedObjectPtr<BitmapData>;
+    using Ptr = ReferenceCountedObjectPtr<ImagePixelData>;
 
     //==============================================================================
     /** Default constructor. Creates empty bitmap data. */
-    BitmapData() = default;
+    ImagePixelData() = default;
 
     /** Constructs bitmap data with specified dimensions and pixel format.
  
@@ -57,7 +58,7 @@ public:
         @param h        The height of the bitmap in pixels.
         @param fmt      The pixel format of the bitmap.
     */
-    BitmapData (int w, int h, PixelFormat fmt)
+    ImagePixelData (int w, int h, PixelFormat fmt)
         : width (w)
         , height (h)
         , format (fmt)
@@ -78,7 +79,7 @@ public:
         @param fmt          The pixel format of the bitmap.
         @param pixelData    The pixel data bytes.
     */
-    BitmapData (int w, int h, PixelFormat fmt, Span<const uint8> pixelData)
+    ImagePixelData (int w, int h, PixelFormat fmt, Span<const uint8> pixelData)
         : width (w)
         , height (h)
         , format (fmt)
@@ -101,7 +102,7 @@ public:
         @param fmt          The pixel format of the bitmap.
         @param pixelData    The pixel data bytes.
     */
-    BitmapData (int w, int h, PixelFormat fmt, std::unique_ptr<const uint8[]> pixelData)
+    ImagePixelData (int w, int h, PixelFormat fmt, std::unique_ptr<const uint8[]> pixelData)
         : width (w)
         , height (h)
         , format (fmt)
@@ -116,10 +117,10 @@ public:
     }
 
     /** Copy constructor. */
-    BitmapData (const BitmapData& other) = delete;
+    ImagePixelData (const ImagePixelData& other) = delete;
 
     /** Move constructor. */
-    BitmapData (BitmapData&& other) noexcept
+    ImagePixelData (ImagePixelData&& other) noexcept
         : width (std::exchange (other.width, 0))
         , height (std::exchange (other.height, 0))
         , format (other.format)
@@ -131,10 +132,10 @@ public:
     }
 
     /** Copy assignment operator. */
-    BitmapData& operator= (const BitmapData& other) = delete;
+    ImagePixelData& operator= (const ImagePixelData& other) = delete;
 
     /** Move assignment operator. */
-    BitmapData& operator= (BitmapData&& other) noexcept
+    ImagePixelData& operator= (ImagePixelData&& other) noexcept
     {
         if (this != &other)
         {
@@ -151,7 +152,7 @@ public:
     }
 
     /** Destructor. */
-    ~BitmapData() = default;
+    ~ImagePixelData() = default;
 
     //==============================================================================
     /** Returns the width of the bitmap in pixels. */
@@ -342,6 +343,20 @@ public:
         return { pixelBuffer.get(), totalSizeBytes };
     }
 
+    //==============================================================================
+    /** Converts the pixel data to RGBA format, optionally premultiplying the alpha channel.
+ 
+        Grayscale and RGB formats are expanded to RGBA with opaque alpha (255).
+        RGBA format data is copied as-is; pass @c premultiplyAlpha = true to
+        premultiply colour components by the alpha value.
+
+        @param premultiplyAlpha  If true, premultiply colour components by alpha (only
+                                 relevant for RGBA source; Grayscale and RGB always
+                                 produce opaque alpha).
+        @return                 A vector of RGBA bytes (width * height * 4 bytes).
+    */
+    std::vector<uint8> toRGBA (bool premultiplyAlpha = true) const;
+
 private:
     //==============================================================================
     /** Returns the number of bytes per pixel for the given format. */
@@ -455,9 +470,9 @@ private:
 
 //==============================================================================
 /**
-    Represents an image using BitmapData.
+    Represents an image using ImagePixelData.
 
-    Provides methods to manipulate and access pixel data through BitmapData.
+    Provides methods to manipulate and access pixel data through ImagePixelData.
 
     @tags{Core}
 */
@@ -545,11 +560,11 @@ public:
     /** Clears the image by setting all pixels to zero. */
     void clear();
 
-    /** Returns a const reference to BitmapData. */
-    const BitmapData& getBitmapData() const noexcept;
+    /** Returns a const reference to ImagePixelData. */
+    const ImagePixelData& getPixelData() const noexcept;
 
-    /** Returns a mutable reference to BitmapData. */
-    BitmapData& getBitmapData() noexcept;
+    /** Returns a mutable reference to ImagePixelData. */
+    ImagePixelData& getPixelData() noexcept;
 
     /** Returns a pointer to the raw pixel data. */
     Span<const uint8> getRawData() const noexcept;
@@ -576,6 +591,17 @@ public:
     */
     static ResultValue<Image> loadFromData (Span<const uint8> imageData);
 
+    /** Creates an Image that wraps an existing GPU Texture without allocating new ImagePixelData.
+
+        The returned Image has no CPU-side pixel data. It is suitable for passing to
+        Graphics::drawImage(); CPU pixel access (getPixel, getRawData) will jassert.
+
+        Returns an empty (invalid) Image if tex is null or invalid.
+
+        @param tex  A GPU texture obtained from GpuCanvas::asTexture().
+    */
+    static Image fromTexture (GpuTexture::Ptr tex);
+
     //==============================================================================
     /** Creates a texture on the GPU for the image if it doesn't already exist.
 
@@ -588,26 +614,21 @@ public:
     void invalidateTexture();
 
     //==============================================================================
-    /** @internal Sets the GPU texture directly, bypassing the BitmapData upload path. */
-    void adoptTexture (rive::rcp<rive::gpu::Texture> t);
+    /** Get the GPU texture associated with this image, or nullptr if no texture exists. */
+    GpuTexture::Ptr getGpuTexture() const;
 
-    /** @internal Sets the GPU render canvas directly, preserving render-to-texture resources. */
-    void adoptRenderCanvas (rive::rcp<rive::gpu::RenderCanvas> canvas);
-
-    /** @internal Returns the GPU texture associated with this image, or nullptr if no texture exists. */
-    rive::rcp<rive::gpu::Texture> getTexture() const;
-
-    /** @internal Returns the GPU render canvas associated with this image, or nullptr if none exists. */
-    rive::rcp<rive::gpu::RenderCanvas> getRenderCanvas() const;
-
-    /** @internal Returns the render image associated with this image, or nullptr if none exists. */
-    rive::RenderImage* getRenderImage() const;
+    /** Sets the GPU texture, replacing any existing GPU backing. */
+    void setGpuTexture (GpuTexture::Ptr tex);
 
 private:
+    friend class Graphics;
+
     //==============================================================================
-    BitmapData::Ptr bitmapData;
-    mutable rive::rcp<rive::gpu::Texture> texture;
-    mutable rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
+    rive::rcp<rive::gpu::Texture> getTexture() const;
+
+    //==============================================================================
+    ImagePixelData::Ptr pixelData;
+    mutable GpuTexture::Ptr gpuTexture;
 };
 
 } // namespace yup

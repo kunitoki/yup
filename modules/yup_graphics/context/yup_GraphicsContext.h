@@ -26,7 +26,7 @@ namespace yup
 /** Encapsulates a graphics context that abstracts rendering operations across various APIs.
 
     This class serves as a base for implementing specific graphics context functionalities, such as rendering and resource management,
-    across different graphics APIs like OpenGL, Direct3D, Metal, and Dawn. It offers a standardized interface for operations
+    across different graphics APIs like OpenGL, OpenGLES, Direct3D, Metal, and WebGPU. It offers a standardized interface for operations
     common to all graphics APIs.
 */
 class YUP_API GraphicsContext
@@ -41,10 +41,11 @@ public:
     enum Api
     {
         Headless, ///< Specifies the use of a headless context for rendering.
-        OpenGL,   ///< Specifies the use of OpenGL for rendering.
+        OpenGL,   ///< Specifies the use of desktop OpenGL for rendering.
+        OpenGLES, ///< Specifies the use of OpenGL ES (GLES 3.0+) for rendering (Android, WASM).
         Direct3D, ///< Specifies the use of Direct3D for rendering.
         Metal,    ///< Specifies the use of Metal for rendering.
-        Dawn      ///< Specifies the use of Dawn, a Vulkan-like API.
+        WebGPU    ///< Specifies the use of WebGPU, relying on dawn where not supported natively.
     };
 
     /** Configuration options for creating a graphics context. */
@@ -59,6 +60,7 @@ public:
         bool enableReadPixels = false;              ///< Enables reading pixels directly from the framebuffer.
         bool disableRasterOrdering = false;         ///< Disables specific raster ordering features for performance.
         bool allowHeadlessRendering = false;        ///< Allows rendering without a visible window (headless mode).
+        bool enableOreContext = true;               ///< Enables the ore GPU context for GpuPipeline shader operations.
         LoaderFunction loaderFunction = nullptr;    ///< Loader function (used by GL/Vulkan).
     };
 
@@ -75,6 +77,13 @@ public:
     GraphicsContext (GraphicsContext&& other) noexcept = default;
     GraphicsContext& operator= (const GraphicsContext& other) noexcept = delete;
     GraphicsContext& operator= (GraphicsContext&& other) noexcept = default;
+
+    //==============================================================================
+    /** Returns the graphics API used by this context.
+
+        @return The Api enum value identifying the active rendering backend.
+    */
+    virtual Api getApi() const noexcept = 0;
 
     //==============================================================================
     /** Returns the DPI scale associated with a native handle.
@@ -103,6 +112,23 @@ public:
         @return Pointer to a rive::pls::PLSRenderTarget, or nullptr if not available.
     */
     virtual rive::gpu::RenderTarget* renderTarget() = 0;
+
+    /** @internal
+
+        Returns the ore GPU context, or nullptr when enableOreContext was false or ore is unavailable on this backend.
+
+        This is the single backend bridge used by the RHI layer (GpuPipeline,
+        GpuFrame, GpuRenderPass, GpuBuffer). User code should prefer the ore-free
+        isGpuAvailable() capability probe instead.
+    */
+    virtual rive::ore::Context* gpuContext() const noexcept { return nullptr; }
+
+    /** Returns true if a GPU (ore) context is available for RHI operations.
+
+        Equivalent to gpuContext() != nullptr but without referencing any ore
+        type, so user code and examples can probe GPU capability ore-free.
+    */
+    bool isGpuAvailable() const noexcept { return gpuContext() != nullptr; }
 
     /** Creates a renderer suitable for the specified dimensions.
 
@@ -160,11 +186,22 @@ public:
         virtual rive::gpu::RenderContext* getRenderContext() noexcept { return nullptr; }
 
         /** Returns the underlying Rive render canvas, if this target is backed by one. */
-        virtual rive::rcp<rive::gpu::RenderCanvas> refRenderCanvas() noexcept { return nullptr; }
+        virtual rive::rcp<rive::gpu::RenderCanvas> getRenderCanvas() noexcept { return nullptr; }
 
         /** Returns the rendered result as a sampled Rive GPU texture suitable for use in drawImage.
             Must be called after endOffscreen(). Returns nullptr on failure. */
         virtual rive::rcp<rive::gpu::Texture> adoptAsTexture() = 0;
+
+        /** Creates (on first call) and returns the Y-flipped companion texture. Must only be
+            called by commit() — not by asTexture() — so that the mirror exists before the
+            endOffscreen flush runs blitMirrorIfRegistered. No-op on non-GL backends. */
+        virtual rive::rcp<rive::gpu::Texture> getOrCreateSampledTexture() { return nullptr; }
+
+        /** Returns the Y-flipped companion texture if it was already created by a prior call to
+            getOrCreateSampledTexture(), or nullptr if it was never created. Used by asTexture()
+            so that GPU render-pass canvases (which never call commit()) never get a stale mirror
+            attached to their GpuTexture. */
+        virtual rive::rcp<rive::gpu::Texture> getSampledTexture() const { return nullptr; }
     };
 
     /** Creates platform-specific GPU offscreen resources for the given dimensions.

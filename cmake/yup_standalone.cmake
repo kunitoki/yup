@@ -138,6 +138,8 @@ function (yup_standalone_app)
         OBJCXX_VISIBILITY_PRESET hidden
         VISIBILITY_INLINES_HIDDEN ON)
 
+    _yup_apply_binary_optimizations (${target_name})
+
     target_compile_features (${target_name} PRIVATE cxx_std_${target_cxx_standard})
     target_include_directories (${target_name} PRIVATE ${module_include_dirs})
 
@@ -210,6 +212,8 @@ function (yup_standalone_app)
             -sALLOW_MEMORY_GROWTH=1
             -sINITIAL_MEMORY=${YUP_ARG_INITIAL_MEMORY}
             -sASSERTIONS=1
+            # -sGL_ASSERTIONS=1
+            # -sGL_DEBUG=1
             -sDISABLE_EXCEPTION_CATCHING=0
             -sERROR_ON_UNDEFINED_SYMBOLS=1
             -sSTACK_OVERFLOW_CHECK=2

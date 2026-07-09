@@ -32,7 +32,7 @@ struct AnimationMarker
 };
 
 //==============================================================================
-/** An asset referenced by layers — either a precomp (nested composition) or an image. */
+/** An asset referenced by layers - either a precomp (nested composition) or an image. */
 struct AnimationAsset : public ReferenceCountedObject
 {
     using Ptr = ReferenceCountedObjectPtr<AnimationAsset>;
@@ -54,7 +54,7 @@ struct AnimationAsset : public ReferenceCountedObject
     int width = 0;
     int height = 0;
 
-    // Precomp assets — own a set of layers
+    // Precomp assets - own a set of layers
     std::vector<AnimationLayer::Ptr> layers;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AnimationAsset)
@@ -86,7 +86,7 @@ public:
     float endFrame = 60.0f;
 
     //==============================================================================
-    /** Layers in draw order — index 0 is the top-most layer in Lottie's stack
+    /** Layers in draw order - index 0 is the top-most layer in Lottie's stack
         (rendered last to appear on top). */
     std::vector<AnimationLayer::Ptr> layers;
 

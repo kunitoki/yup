@@ -45,3 +45,7 @@
 #include "upstream/glslang/Public/ShaderLang.h"
 #include "upstream/glslang/Public/ResourceLimits.h"
 #include "upstream/SPIRV/GlslangToSpv.h"
+
+#if YUP_MODULE_AVAILABLE_spirv_tools
+#include "spirv_tools/spirv_tools.h"
+#endif

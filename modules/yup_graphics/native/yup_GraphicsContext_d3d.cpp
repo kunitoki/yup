@@ -23,6 +23,7 @@
 #include "rive/renderer/rive_renderer.hpp"
 #include "rive/renderer/d3d11/render_context_d3d_impl.hpp"
 #include "rive/renderer/d3d11/d3d11.hpp"
+#include "rive/renderer/ore/ore_context_d3d11.hpp"
 #include <dxgi1_2.h>
 
 namespace yup
@@ -35,15 +36,21 @@ public:
                               ComPtr<ID3D11Device> gpu,
                               ComPtr<ID3D11DeviceContext> gpuContext,
                               bool isHeadless,
-                              const rive::gpu::D3DContextOptions& contextOptions)
+                              const rive::gpu::D3DContextOptions& contextOptions,
+                              Options options)
         : m_isHeadless (isHeadless)
+        , m_options (options)
         , m_d3dFactory (std::move (d3dFactory))
         , m_gpu (std::move (gpu))
         , m_gpuContext (std::move (gpuContext))
         , m_renderContext (rive::gpu::RenderContextD3DImpl::MakeContext (m_gpu, m_gpuContext, contextOptions))
         , m_offscreenRenderContext (rive::gpu::RenderContextD3DImpl::MakeContext (m_gpu, m_gpuContext, contextOptions))
     {
+        if (m_options.enableOreContext)
+            m_oreContext = rive::ore::ContextD3D11::Make (m_gpu.Get(), m_gpuContext.Get());
     }
+
+    Api getApi() const noexcept override { return Api::Direct3D; }
 
     float dpiScale (void*) const override { return 1.0f; }
 
@@ -52,6 +59,8 @@ public:
     rive::gpu::RenderContext* renderContext() override { return m_renderContext.get(); }
 
     rive::gpu::RenderTarget* renderTarget() override { return m_renderTarget.get(); }
+
+    rive::ore::Context* gpuContext() const noexcept override { return m_oreContext.get(); }
 
     void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
     {
@@ -185,7 +194,7 @@ public:
             return renderContext;
         }
 
-        rive::rcp<rive::gpu::RenderCanvas> refRenderCanvas() noexcept override
+        rive::rcp<rive::gpu::RenderCanvas> getRenderCanvas() noexcept override
         {
             return renderCanvas;
         }
@@ -287,6 +296,8 @@ public:
 
 private:
     const bool m_isHeadless;
+
+    Options m_options;
     ComPtr<IDXGIFactory2> m_d3dFactory;
     ComPtr<ID3D11Device> m_gpu;
     ComPtr<ID3D11DeviceContext> m_gpuContext;
@@ -295,6 +306,7 @@ private:
     ComPtr<ID3D11Texture2D> m_headlessDrawTexture;
     std::unique_ptr<rive::gpu::RenderContext> m_renderContext;
     std::unique_ptr<rive::gpu::RenderContext> m_offscreenRenderContext;
+    std::unique_ptr<rive::ore::ContextD3D11> m_oreContext;
     rive::rcp<rive::gpu::RenderTargetD3D> m_renderTarget;
 };
 
@@ -352,7 +364,8 @@ std::unique_ptr<GraphicsContext> yup_constructDirect3DGraphicsContext (GraphicsC
         std::move (gpu),
         std::move (gpuContext),
         fiddleOptions.allowHeadlessRendering,
-        contextOptions);
+        contextOptions,
+        fiddleOptions);
 }
 
 } // namespace yup

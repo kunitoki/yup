@@ -90,7 +90,7 @@ public:
         buffer so advanceToSample() can apply changes at exact sample positions.
 
         @param changes   The per-block automation buffer from AudioProcessContext::params.
-        @param paramIdx  Index of this parameter — use AudioParameter::getIndexInContainer().
+        @param paramIdx  Index of this parameter - use AudioParameter::getIndexInContainer().
     */
     forcedinline void prepareBlock (const ParameterChangeBuffer& changes, int paramIdx) noexcept
     {

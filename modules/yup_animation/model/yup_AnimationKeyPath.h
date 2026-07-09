@@ -44,7 +44,7 @@ enum class AnimationPropertyID
 };
 
 //==============================================================================
-/** Callback for property overrides — receives the frame number and returns
+/** Callback for property overrides - receives the frame number and returns
     the override value if active, or the default fallback.
 
     @tparam T The property value type (float, Color, Point<float>, Size<float>)
@@ -64,9 +64,9 @@ using AnimationPropertyOverride = std::function<std::optional<T> (float frameNo)
     - `**` matches zero or more path components (globstar)
 
     Example keypaths:
-    - `"**"` — matches everything
-    - `"*.Stroke 1.Color"` — matches "Stroke 1.Color" on any layer
-    - `"Shape Layer 1.**"` — matches everything under "Shape Layer 1"
+    - `"**"` - matches everything
+    - `"*.Stroke 1.Color"` - matches "Stroke 1.Color" on any layer
+    - `"Shape Layer 1.**"` - matches everything under "Shape Layer 1"
 */
 class YUP_API KeyPath
 {

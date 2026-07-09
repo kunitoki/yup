@@ -22,12 +22,12 @@
 namespace yup
 {
 
-class Animation; // forward declaration — defined in animation/yup_Animation.h
+class Animation; // forward declaration - defined in animation/yup_Animation.h
 
 //==============================================================================
 /** Renders an Animation to Image frames and/or exports to animated GIF.
 
-    All methods are static — this class has no per-instance state.
+    All methods are static - this class has no per-instance state.
 
     GPU-backed offscreen rendering is used via a `GraphicsContext` passed in by
     the caller. Use `GraphicsContext::createContext(GraphicsContext::Headless, {})`

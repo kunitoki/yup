@@ -19,7 +19,9 @@
   ==============================================================================
 */
 
+#define YUP_RIVE_RENDERER_NO_INCLUDES 1
 #include "rive_renderer.h"
+#undef YUP_RIVE_RENDERER_NO_INCLUDES
 
 #if YUP_RIVE_USE_METAL
 #include <TargetConditionals.h>

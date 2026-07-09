@@ -359,8 +359,11 @@ GraphicsContext::Api getGraphicsContextApi (const std::optional<GraphicsContext:
 #elif YUP_LINUX
     desiredApi = forceContextApi.value_or (GraphicsContext::OpenGL);
 
+#elif YUP_ANDROID || YUP_WASM
+    desiredApi = forceContextApi.value_or (GraphicsContext::OpenGLES);
+
 #else
-    desiredApi = forceContextApi.value_or (GraphicsContext::OpenGL);
+    desiredApi = forceContextApi.value_or (GraphicsContext::OpenGLES);
 
 #endif
 
@@ -385,9 +388,8 @@ Uint32 setContextWindowHints (GraphicsContext::Api desiredApi)
         return 0;
     }
 
-    if (desiredApi == GraphicsContext::OpenGL)
+    if (desiredApi == GraphicsContext::OpenGLES)
     {
-#if defined(ANGLE) || defined(YUP_ANDROID) || defined(YUP_EMSCRIPTEN)
         SDL_SetHint (SDL_HINT_RENDER_DRIVER, "opengles2");
 
         SDL_GL_SetAttribute (SDL_GL_CONTEXT_MAJOR_VERSION, 3);
@@ -402,7 +404,10 @@ Uint32 setContextWindowHints (GraphicsContext::Api desiredApi)
         SDL_GL_SetAttribute (SDL_GL_DOUBLEBUFFER, 1);
 
         return SDL_WINDOW_OPENGL;
-#else
+    }
+
+    if (desiredApi == GraphicsContext::OpenGL)
+    {
         SDL_SetHint (SDL_HINT_RENDER_DRIVER, "opengl");
 
         SDL_GL_SetAttribute (SDL_GL_CONTEXT_MAJOR_VERSION, YUP_RIVE_OPENGL_MAJOR);
@@ -410,7 +415,6 @@ Uint32 setContextWindowHints (GraphicsContext::Api desiredApi)
         SDL_GL_SetAttribute (SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
         return SDL_WINDOW_OPENGL;
-#endif
     }
 
     return 0;

@@ -188,7 +188,8 @@ public:
         rvalue-qualified overload when working with move-only value types.
     */
     template <class U = T>
-    auto valueOr (U&& defaultValue) const& -> std::enable_if_t<std::is_copy_constructible_v<T> && std::is_constructible_v<T, U&&>, T>
+    T valueOr (U&& defaultValue) const&
+        requires std::is_constructible_v<T, U&&>
     {
         if (valueOrErrorMessage.index() == 1)
             return std::get<1> (valueOrErrorMessage);
@@ -203,7 +204,8 @@ public:
         the ResultValue itself is an rvalue.
     */
     template <class U = T>
-    auto valueOr (U&& defaultValue) && -> std::enable_if_t<std::is_move_constructible_v<T> && std::is_constructible_v<T, U&&>, T>
+    T valueOr (U&& defaultValue) &&
+        requires std::is_constructible_v<T, U&&>
     {
         if (valueOrErrorMessage.index() == 1)
             return std::get<1> (std::move (valueOrErrorMessage));
@@ -212,7 +214,9 @@ public:
     }
 
     /** Returns a copy of the value that was set when this result was created. */
+    template <class U = T>
     T getValue() const&
+        requires std::is_constructible_v<T, U>
     {
         jassert (valueOrErrorMessage.index() == 1); // Trying to access the value of the result, when the result is holding an error instead!
 
@@ -220,7 +224,9 @@ public:
     }
 
     /** Returns a moved from value that was set when this result was created. */
+    template <class U = T>
     T getValue() &&
+        requires std::is_constructible_v<T, U&&>
     {
         jassert (valueOrErrorMessage.index() == 1); // Trying to access the value of the result, when the result is holding an error instead!
 

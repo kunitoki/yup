@@ -193,7 +193,7 @@ StyledText::VerticalAlign toVerticalAlign (Justification justification)
         return StyledText::middle;
 }
 
-rive::Factory* getOffscreenFactory (GraphicsContext& context, const std::unique_ptr<GraphicsContext::OffscreenTarget>& target) noexcept
+rive::Factory* getOffscreenFactory (GraphicsContext& context, GraphicsContext::OffscreenTarget* target) noexcept
 {
     if (target != nullptr)
         if (auto* renderContext = target->getRenderContext())
@@ -202,7 +202,7 @@ rive::Factory* getOffscreenFactory (GraphicsContext& context, const std::unique_
     return context.factory();
 }
 
-std::unique_ptr<rive::Renderer> makeOffscreenRenderer (GraphicsContext& context, const std::unique_ptr<GraphicsContext::OffscreenTarget>& target, int width, int height)
+std::unique_ptr<rive::Renderer> makeOffscreenRenderer (GraphicsContext& context, GraphicsContext::OffscreenTarget* target, int width, int height)
 {
     if (target != nullptr)
         if (auto* renderContext = target->getRenderContext())
@@ -263,7 +263,8 @@ Graphics::Graphics (GraphicsContext& context, Image& image, uint32_t clearColor)
 
 Graphics::Graphics (GraphicsContext& context, std::unique_ptr<GraphicsContext::OffscreenTarget> target, uint32_t clearColor) noexcept
     : context (context)
-    , offscreenTarget (std::move (target))
+    , ownedOffscreenTarget (std::move (target))
+    , offscreenTarget (ownedOffscreenTarget.get())
     , factory (*getOffscreenFactory (context, offscreenTarget))
     , ownedRenderer (makeOffscreenRenderer (context,
                                             offscreenTarget,
@@ -275,8 +276,30 @@ Graphics::Graphics (GraphicsContext& context, std::unique_ptr<GraphicsContext::O
     renderOptions.emplace_back();
     currentRenderOptions().scale = 1.0f;
 
-    if (! offscreenTarget)
+    if (offscreenTarget == nullptr)
         return;
+
+    rive::gpu::RenderContext::FrameDescriptor frameDesc;
+    frameDesc.renderTargetWidth = static_cast<uint32_t> (offscreenTarget->getWidth());
+    frameDesc.renderTargetHeight = static_cast<uint32_t> (offscreenTarget->getHeight());
+    frameDesc.loadAction = rive::gpu::LoadAction::clear;
+    frameDesc.clearColor = clearColor;
+
+    context.beginOffscreen (*offscreenTarget, frameDesc);
+
+    currentRenderOptions().drawingArea = { 0.0f, 0.0f, static_cast<float> (offscreenTarget->getWidth()), static_cast<float> (offscreenTarget->getHeight()) };
+}
+
+Graphics::Graphics (GraphicsContext& context, GraphicsContext::OffscreenTarget& target, uint32_t clearColor) noexcept
+    : context (context)
+    , offscreenTarget (std::addressof (target))
+    , factory (*getOffscreenFactory (context, offscreenTarget))
+    , ownedRenderer (makeOffscreenRenderer (context, offscreenTarget, target.getWidth(), target.getHeight()))
+    , renderer (*ownedRenderer)
+    , contextScale (1.0f)
+{
+    renderOptions.emplace_back();
+    currentRenderOptions().scale = 1.0f;
 
     rive::gpu::RenderContext::FrameDescriptor frameDesc;
     frameDesc.renderTargetWidth = static_cast<uint32_t> (offscreenTarget->getWidth());
@@ -298,20 +321,20 @@ bool Graphics::isOffscreen() const noexcept
 
 bool Graphics::commitToImage()
 {
-    if (! offscreenTargetImage || ! commitOffscreenTarget())
+    if (offscreenTargetImage == nullptr || ! commitOffscreenTarget())
         return false;
 
-    if (auto canvas = offscreenTarget->refRenderCanvas())
-        offscreenTargetImage->adoptRenderCanvas (std::move (canvas));
+    if (auto canvas = offscreenTarget->getRenderCanvas())
+        offscreenTargetImage->setGpuTexture (GpuTexture::fromRenderCanvas (std::move (canvas), offscreenTargetImage->getWidth(), offscreenTargetImage->getHeight()));
     else if (auto tex = offscreenTarget->adoptAsTexture())
-        offscreenTargetImage->adoptTexture (std::move (tex));
+        offscreenTargetImage->setGpuTexture (GpuTexture::fromGpuTexture (std::move (tex), offscreenTargetImage->getWidth(), offscreenTargetImage->getHeight()));
 
     return true;
 }
 
 bool Graphics::commitOffscreenTarget()
 {
-    if (! offscreenTarget || committed)
+    if (offscreenTarget == nullptr || committed)
         return false;
 
     context.endOffscreen (*offscreenTarget);
@@ -322,7 +345,7 @@ bool Graphics::commitOffscreenTarget()
 
 bool Graphics::readPixelsToImage()
 {
-    if (! offscreenTarget || ! offscreenTargetImage)
+    if (offscreenTarget == nullptr || offscreenTargetImage == nullptr)
         return false;
 
     if (! committed)
@@ -466,7 +489,7 @@ bool Graphics::TransparencyLayer::commit()
 
     auto texture = [&]() -> rive::rcp<rive::gpu::Texture>
     {
-        if (auto canvas = graphics->offscreenTarget->refRenderCanvas())
+        if (auto canvas = graphics->offscreenTarget->getRenderCanvas())
             return canvas->renderImage()->refTexture();
 
         return graphics->offscreenTarget->adoptAsTexture();
@@ -902,6 +925,15 @@ void Graphics::drawImage (const Image& image, const Rectangle<float>& targetArea
         return;
 
     renderTexture (image.getTexture(), targetArea);
+}
+
+void Graphics::drawTexture (const GpuTexture::Ptr& texture, const Rectangle<float>& targetArea)
+{
+    if (texture == nullptr)
+        return;
+
+    // Graphics is a friend of GpuTexture - may access private getOrAdoptGpuTexture()
+    renderTexture (texture->getOrAdoptGpuTexture(), targetArea);
 }
 
 bool Graphics::renderTexture (rive::rcp<rive::gpu::Texture> texture, const Rectangle<float>& targetArea)

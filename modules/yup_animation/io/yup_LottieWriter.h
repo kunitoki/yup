@@ -25,7 +25,7 @@ namespace yup
 //==============================================================================
 /** Serialises an AnimationComposition back to Lottie JSON format.
 
-    Uses yup::JSON and yup::var internally — no external JSON dependency.
+    Uses yup::JSON and yup::var internally - no external JSON dependency.
     Output is always Lottie JSON (`.json`); ZIP packaging is not supported.
 */
 class YUP_API LottieWriter

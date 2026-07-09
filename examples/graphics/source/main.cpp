@@ -67,21 +67,22 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #include "examples/CrossoverDemo.h"
 #include "examples/FileChooser.h"
 #include "examples/FilterDemo.h"
+#include "examples/Images.h"
 #include "examples/LayoutFonts.h"
+#include "examples/LottieDemo.h"
+#include "examples/OffscreenRenderDemo.h"
 #include "examples/OpaqueDemo.h"
+#include "examples/PaintProfilerDemo.h"
 #include "examples/Paths.h"
 #include "examples/PopupMenu.h"
 #include "examples/ScrollBarDemo.h"
 #include "examples/SliderDemo.h"
 #include "examples/SpectrumAnalyzer.h"
+#include "examples/SpinningCubeDemo.h"
 #include "examples/Svg.h"
 #include "examples/TextEditor.h"
 #include "examples/VariableFonts.h"
 #include "examples/Widgets.h"
-#include "examples/Images.h"
-#include "examples/PaintProfilerDemo.h"
-#include "examples/OffscreenRenderDemo.h"
-#include "examples/LottieDemo.h"
 #if YUP_MODULE_AVAILABLE_yup_python
 #include "examples/Python.h"
 #endif
@@ -157,6 +158,7 @@ public:
 
         // Setup examples
         int counter = 0;
+        registerDemo<ArtboardDemo> ("Artboard", counter++);
         registerDemo<AudioExample> ("Audio", counter++);
         registerDemo<AudioFileDemo> ("Audio File", counter++);
         registerDemo<ColorLabDemo> ("Color Lab", counter++);
@@ -164,22 +166,22 @@ public:
         registerDemo<CrossoverDemo> ("Crossover Demo", counter++);
         registerDemo<FileChooserDemo> ("File Chooser", counter++);
         registerDemo<FilterDemo> ("Filter Demo", counter++);
+        registerDemo<ImagesDemo> ("Images", counter++);
         registerDemo<LayoutFontsExample> ("Layout Fonts", counter++);
+        registerDemo<LottieDemo> ("Lottie", counter++);
+        registerDemo<OffscreenRenderDemo> ("Offscreen Render", counter++);
         registerDemo<OpaqueDemo> ("Opaque Demo", counter++);
+        registerDemo<PaintProfilerDemo> ("Paint Profiler", counter++);
         registerDemo<PathsExample> ("Paths", counter++);
         registerDemo<PopupMenuDemo> ("Popup Menu", counter++);
         registerDemo<ScrollBarDemo> ("ScrollBar", counter++);
         registerDemo<SliderDemo> ("Sliders", counter++);
         registerDemo<SpectrumAnalyzerDemo> ("FFT Analyzer", counter++);
+        registerDemo<SpinningCubeDemo> ("Spinning Cube", counter++);
+        registerDemo<SvgDemo> ("SVG", counter++);
         registerDemo<TextEditorDemo> ("Text Editor", counter++);
         registerDemo<VariableFontsExample> ("Variable Fonts", counter++);
         registerDemo<WidgetsDemo> ("Widgets", counter++);
-        registerDemo<ArtboardDemo> ("Artboard", counter++);
-        registerDemo<SvgDemo> ("SVG", counter++);
-        registerDemo<ImagesDemo> ("Images", counter++);
-        registerDemo<PaintProfilerDemo> ("Paint Profiler", counter++);
-        registerDemo<OffscreenRenderDemo> ("Offscreen Render", counter++);
-        registerDemo<LottieDemo> ("Lottie", counter++);
 #if YUP_MODULE_AVAILABLE_yup_python
         registerDemo<PythonDemo> ("Python", counter++);
 #endif

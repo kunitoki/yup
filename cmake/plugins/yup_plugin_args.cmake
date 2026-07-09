@@ -53,7 +53,7 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_audio_plugin_apply_binary_optimizations target_name)
+function (_yup_apply_binary_optimizations target_name)
     cmake_parse_arguments (YUP_ARG "" "" "EXPORTED_SYMBOLS" ${ARGN})
 
     set (release_config "$<CONFIG:Release,MinSizeRel>")
@@ -73,7 +73,8 @@ function (_yup_audio_plugin_apply_binary_optimizations target_name)
 
         if (YUP_PLATFORM_APPLE)
             target_link_options (${target_name} PRIVATE
-                $<${release_config}:LINKER:-dead_strip>)
+                $<${release_config}:LINKER:-dead_strip>
+                $<${release_config}:LINKER:-x>)
 
             foreach (exported_symbol ${YUP_ARG_EXPORTED_SYMBOLS})
                 target_link_options (${target_name} PRIVATE
@@ -98,4 +99,8 @@ function (_yup_audio_plugin_apply_binary_optimizations target_name)
             endif()
         endif()
     endif()
+endfunction()
+
+function (_yup_audio_plugin_apply_binary_optimizations target_name)
+    _yup_apply_binary_optimizations (${target_name} ${ARGN})
 endfunction()

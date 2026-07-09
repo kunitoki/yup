@@ -57,7 +57,7 @@ struct HardClipperTraits
 /**
     Nonlinear traits for a hyperbolic-tangent soft clipper.
 
-    Smooth everywhere — no fillBreakpoints needed.  A single affine segment
+    Smooth everywhere - no fillBreakpoints needed.  A single affine segment
     over [x_n, x_{n+1}] gives an accurate approximation because tanh has no
     derivative discontinuities.
 */

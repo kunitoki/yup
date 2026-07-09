@@ -51,7 +51,7 @@ void AnimationRenderer::RenderContext::buildParentTransforms()
 
             if (layer->parentId < 0)
             {
-                // No parent — local transform only
+                // No parent - local transform only
                 parentTransforms.set (layer->id, layer->transform.toAffineTransform (frameNo));
                 resolved[i] = true;
                 anyResolved = true;
@@ -677,7 +677,7 @@ void AnimationRenderer::renderGroup (Graphics& g,
         return;
 
     // Lottie draw-order: collect shapes, then when paint is encountered, apply it
-    // Children are ordered: shapes first, then paints — we gather paths then paint.
+    // Children are ordered: shapes first, then paints - we gather paths then paint.
     // Groups inside iterate recursively.
 
     // Collect trim and repeater modifiers (they affect all shapes in this scope)

@@ -133,7 +133,7 @@ ColorGradient AnimationGradient::toColorGradient (float frameNo) const
     if (stops.empty())
         return ColorGradient (Color(), start, Color(), end, gradientType == GradientType::Radial ? ColorGradient::Type::Radial : ColorGradient::Type::Linear);
 
-    // Radial gradient highlight (focal point) — adjusts the center point along the
+    // Radial gradient highlight (focal point) - adjusts the center point along the
     // start→end axis by highlightLength ratio, rotated by highlightAngle.
     Point<float> gradStart = start;
     if (gradientType == GradientType::Radial)

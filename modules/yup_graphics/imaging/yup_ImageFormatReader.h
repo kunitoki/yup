@@ -65,7 +65,7 @@ public:
         when dimensions and pixel format match (zero allocation on reuse).
 
         If dest already has the correct width, height, and PixelFormat::RGBA,
-        the implementation writes directly into dest's raw data — no allocation.
+        the implementation writes directly into dest's raw data - no allocation.
         If dest has wrong dimensions or format, it is reallocated first.
 
         The default implementation calls readFrame(frameIndex) and moves the result

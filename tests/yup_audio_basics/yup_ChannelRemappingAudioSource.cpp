@@ -28,11 +28,11 @@ using namespace yup;
 //==============================================================================
 namespace
 {
-class MockAudioSource : public AudioSource
+class ChannelRemappingMockSource : public AudioSource
 {
 public:
-    MockAudioSource() = default;
-    ~MockAudioSource() override = default;
+    ChannelRemappingMockSource() = default;
+    ~ChannelRemappingMockSource() override = default;
 
     void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override
     {
@@ -75,7 +75,7 @@ class ChannelRemappingAudioSourceTests : public ::testing::Test
 protected:
     void SetUp() override
     {
-        mockSource = new MockAudioSource();
+        mockSource = new ChannelRemappingMockSource();
         remapper = std::make_unique<ChannelRemappingAudioSource> (mockSource, true);
     }
 
@@ -84,20 +84,20 @@ protected:
         remapper.reset();
     }
 
-    MockAudioSource* mockSource; // Owned by remapper
+    ChannelRemappingMockSource* mockSource; // Owned by remapper
     std::unique_ptr<ChannelRemappingAudioSource> remapper;
 };
 
 //==============================================================================
 TEST_F (ChannelRemappingAudioSourceTests, Constructor)
 {
-    auto* source = new MockAudioSource();
+    auto* source = new ChannelRemappingMockSource();
     EXPECT_NO_THROW (ChannelRemappingAudioSource (source, true));
 }
 
 TEST_F (ChannelRemappingAudioSourceTests, Destructor)
 {
-    auto* source = new MockAudioSource();
+    auto* source = new ChannelRemappingMockSource();
     auto* temp = new ChannelRemappingAudioSource (source, true);
     EXPECT_NO_THROW (delete temp);
 }
@@ -512,7 +512,7 @@ TEST_F (ChannelRemappingAudioSourceTests, XmlRoundtrip)
     ASSERT_NE (xml, nullptr);
 
     // Create new remapper and restore
-    auto* newMockSource = new MockAudioSource();
+    auto* newMockSource = new ChannelRemappingMockSource();
     auto newRemapper = std::make_unique<ChannelRemappingAudioSource> (newMockSource, true);
 
     newRemapper->restoreFromXml (*xml);

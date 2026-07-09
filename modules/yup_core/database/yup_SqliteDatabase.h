@@ -110,7 +110,7 @@ public:
     /**
         A compiled, reusable prepared statement.
 
-        Bind-parameter indices are 1-based; column indices are 0-based — both
+        Bind-parameter indices are 1-based; column indices are 0-based - both
         follow standard SQLite conventions.
 
         The raw data pointers returned by columnBlob() and the Span returned by

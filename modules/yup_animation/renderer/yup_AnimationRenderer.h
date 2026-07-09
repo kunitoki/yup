@@ -26,7 +26,7 @@ namespace yup
 /** Stateless renderer that traverses an AnimationComposition and draws it
     using yup::Graphics primitives.
 
-    All methods are static — there is no per-instance state.
+    All methods are static - there is no per-instance state.
 
     The rendering pipeline:
     1. Build a parent-transform map from layer parentId chains.

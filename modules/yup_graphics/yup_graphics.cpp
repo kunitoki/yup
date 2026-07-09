@@ -37,6 +37,14 @@
 
 //==============================================================================
 
+#include <rive/renderer/ore/ore_context.hpp>
+#include <rive/renderer/ore/ore_binding_map.hpp>
+#include <rive/renderer/ore/ore_bind_group_layout.hpp>
+#include <rive/renderer/ore/ore_pipeline.hpp>
+#include <rive/renderer/ore/ore_bind_group.hpp>
+
+//==============================================================================
+
 #include <libclipper2/libclipper2.h>
 
 //==============================================================================
@@ -120,6 +128,7 @@
 #include "native/yup_GraphicsContext_impl.cpp"
 
 //==============================================================================
+#include "rhi/yup_GpuTexture.cpp"
 #include "primitives/yup_Path.cpp"
 #include "primitives/yup_CubicBezier.cpp"
 #include "fonts/yup_Font.cpp"
@@ -136,6 +145,13 @@
 #include "svg/yup_SVGCssParser.cpp"
 #include "svg/yup_SVGParser.cpp"
 #include "drawables/yup_Drawable.cpp"
+#include "rhi/yup_ShaderBindingMap.cpp"
+#include "rhi/yup_GpuBuffer.cpp"
+#include "rhi/yup_GpuPipeline.cpp"
+#include "rhi/yup_GpuFrame.cpp"
+#include "rhi/yup_GpuRenderPass.cpp"
+#include "rhi/yup_GpuCanvas.cpp"
+#include "rhi/yup_GpuPipelineCache.cpp"
 
 //==============================================================================
 #if YUP_IMAGE_FORMAT_BMP
@@ -163,10 +179,4 @@
 
 #if YUP_IMAGE_FORMAT_GIF
 #include "formats/yup_GifImageFormat.cpp"
-#endif
-
-//==============================================================================
-#if YUP_ENABLE_SHADER_COMPILER
-#include "shading/yup_ShaderTranspiler.cpp"
-#include "shading/yup_ShaderCache.cpp"
 #endif

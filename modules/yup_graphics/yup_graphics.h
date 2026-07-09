@@ -32,7 +32,7 @@
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_core yup_simd rive rive_renderer libclipper2
+    dependencies:       yup_core yup_simd yup_shading rive rive_renderer libclipper2
     appleFrameworks:    Metal
     searchpaths:        native
 
@@ -46,8 +46,11 @@
 
 #include <yup_core/yup_core.h>
 #include <yup_simd/yup_simd.h>
+#include <yup_shading/yup_shading.h>
 
 #include <rive_renderer/rive_renderer.h>
+#include <rive/renderer/ore/ore_context.hpp>
+#include <rive/renderer/ore/ore_binding_map.hpp>
 
 //==============================================================================
 
@@ -57,6 +60,13 @@ YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wattributes", "-Wdeprecated-declarations")
 #include <rive/text/raw_text.hpp>
 #include <rive/text/utf.hpp>
 YUP_END_IGNORE_WARNINGS_GCC_LIKE
+
+//==============================================================================
+
+namespace rive::ore
+{
+class Context;
+} // namespace rive::ore
 
 //==============================================================================
 
@@ -121,16 +131,6 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #endif
 #endif
 
-/** Config: YUP_ENABLE_SHADER_COMPILER
-
-    Enable shader compiler support.
-*/
-#ifndef YUP_ENABLE_SHADER_COMPILER
-#if YUP_MODULE_AVAILABLE_glslang && YUP_MODULE_AVAILABLE_spirv_cross
-#define YUP_ENABLE_SHADER_COMPILER 1
-#endif
-#endif
-
 //==============================================================================
 
 #if YUP_IMAGE_FORMAT_PNG && ! YUP_MODULE_AVAILABLE_libpng
@@ -167,6 +167,7 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "primitives/yup_CubicBezier.h"
 #include "fonts/yup_Font.h"
 #include "fonts/yup_StyledText.h"
+#include "rhi/yup_GpuTexture.h"
 #include "imaging/yup_Image.h"
 #include "imaging/yup_ImageFormat.h"
 #include "imaging/yup_ImageFormatReader.h"
@@ -182,6 +183,13 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "graphics/yup_FillType.h"
 #include "context/yup_GraphicsContext.h"
 #include "graphics/yup_Graphics.h"
+#include "rhi/yup_ShaderBindingMap.h"
+#include "rhi/yup_GpuBuffer.h"
+#include "rhi/yup_GpuPipeline.h"
+#include "rhi/yup_GpuFrame.h"
+#include "rhi/yup_GpuRenderPass.h"
+#include "rhi/yup_GpuCanvas.h"
+#include "rhi/yup_GpuPipelineCache.h"
 #include "svg/yup_SVGElement.h"
 #include "svg/yup_SVGGradient.h"
 #include "svg/yup_SVGClipPath.h"
@@ -219,10 +227,4 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #if YUP_IMAGE_FORMAT_GIF
 #include <libgif/libgif.h>
 #include "formats/yup_GifImageFormat.h"
-#endif
-
-//==============================================================================
-#if YUP_ENABLE_SHADER_COMPILER
-#include "shading/yup_ShaderTranspiler.h"
-#include "shading/yup_ShaderCache.h"
 #endif

@@ -37,8 +37,10 @@ def equal_images(lhs: yup.Image, rhs: yup.Image) -> bool:
     if lhs.getFormat() != rhs.getFormat():
         return False
 
-    lhs_pixels = yup.Image.BitmapData(lhs, yup.Image.BitmapData.readOnly)
-    rhs_pixels = yup.Image.BitmapData(rhs, yup.Image.BitmapData.readOnly)
+    # NOTE: Image::BitmapData was renamed to ImagePixelData (standalone class).
+    # This commented code needs updating for the new API (no ReadWriteMode enum).
+    # lhs_pixels = yup.ImagePixelData(lhs, yup.ImagePixelData.readOnly)
+    # rhs_pixels = yup.ImagePixelData(rhs, yup.ImagePixelData.readOnly)
 
     if lhs_pixels.size != rhs_pixels.size:
         return False

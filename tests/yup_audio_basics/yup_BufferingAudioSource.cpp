@@ -30,17 +30,17 @@ using namespace yup;
 //==============================================================================
 namespace
 {
-class MockPositionableAudioSource : public PositionableAudioSource
+class BufferingMockPosAudioSource : public PositionableAudioSource
 {
 public:
-    MockPositionableAudioSource()
+    BufferingMockPosAudioSource()
         : totalLength (44100 * 10) // 10 seconds at 44.1kHz
         , currentPosition (0)
         , looping (false)
     {
     }
 
-    ~MockPositionableAudioSource() override = default;
+    ~BufferingMockPosAudioSource() override = default;
 
     void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override
     {
@@ -117,10 +117,10 @@ public:
     std::atomic<bool> looping;
 };
 
-class BlockingReadMockPositionableAudioSource : public MockPositionableAudioSource
+class BlockingReadBufferingMockPosAudioSource : public BufferingMockPosAudioSource
 {
 public:
-    explicit BlockingReadMockPositionableAudioSource (int callIndexToBlock)
+    explicit BlockingReadBufferingMockPosAudioSource (int callIndexToBlock)
         : callIndexToBlock (callIndexToBlock)
     {
     }
@@ -182,7 +182,7 @@ protected:
         thread = std::make_unique<TimeSliceThread> ("BufferingTest");
         thread->startThread();
 
-        mockSource = new MockPositionableAudioSource();
+        mockSource = new BufferingMockPosAudioSource();
         buffering = std::make_unique<BufferingAudioSource> (mockSource, *thread, true, 8192, 2, false);
     }
 
@@ -194,7 +194,7 @@ protected:
     }
 
     std::unique_ptr<TimeSliceThread> thread;
-    MockPositionableAudioSource* mockSource; // Owned by buffering
+    BufferingMockPosAudioSource* mockSource; // Owned by buffering
     std::unique_ptr<BufferingAudioSource> buffering;
 };
 
@@ -204,7 +204,7 @@ TEST_F (BufferingAudioSourceTests, Constructor)
     TimeSliceThread localThread ("Test");
     localThread.startThread();
 
-    auto* source = new MockPositionableAudioSource();
+    auto* source = new BufferingMockPosAudioSource();
     EXPECT_NO_THROW (BufferingAudioSource (source, localThread, true, 8192, 2, false));
 
     localThread.stopThread (1000);
@@ -215,7 +215,7 @@ TEST_F (BufferingAudioSourceTests, ConstructorWithPrefill)
     TimeSliceThread localThread ("Test");
     localThread.startThread();
 
-    auto* source = new MockPositionableAudioSource();
+    auto* source = new BufferingMockPosAudioSource();
     EXPECT_NO_THROW (BufferingAudioSource (source, localThread, true, 8192, 2, true));
 
     localThread.stopThread (1000);
@@ -226,7 +226,7 @@ TEST_F (BufferingAudioSourceTests, Destructor)
     TimeSliceThread localThread ("Test");
     localThread.startThread();
 
-    auto* source = new MockPositionableAudioSource();
+    auto* source = new BufferingMockPosAudioSource();
     auto* temp = new BufferingAudioSource (source, localThread, true, 8192, 2, false);
 
     EXPECT_NO_THROW (delete temp);
@@ -290,7 +290,7 @@ TEST_F (BufferingAudioSourceTests, PrepareToPlayDifferentBufferSize)
 TEST_F (BufferingAudioSourceTests, PrepareToPlayWithPrefill)
 {
     // Create new buffering source with prefill enabled
-    auto* source = new MockPositionableAudioSource();
+    auto* source = new BufferingMockPosAudioSource();
     auto bufferingWithPrefill = std::make_unique<BufferingAudioSource> (source, *thread, true, 8192, 2, true);
 
     // This should block until buffer is partially filled (line 98-99)
@@ -670,7 +670,7 @@ TEST_F (BufferingAudioSourceTests, ReadNextBufferChunkLoopingChange)
 
 TEST_F (BufferingAudioSourceTests, LoopingChangeDuringReadDiscardsStaleBufferRange)
 {
-    auto* source = new BlockingReadMockPositionableAudioSource (4);
+    auto* source = new BlockingReadBufferingMockPosAudioSource (4);
     auto blockingBuffering = std::make_unique<BufferingAudioSource> (source, *thread, true, 8192, 2, false);
 
     blockingBuffering->prepareToPlay (512, 44100.0);
@@ -700,7 +700,7 @@ TEST_F (BufferingAudioSourceTests, UseTimeSlice)
 
 TEST_F (BufferingAudioSourceTests, MultipleChannels)
 {
-    auto* source = new MockPositionableAudioSource();
+    auto* source = new BufferingMockPosAudioSource();
     auto bufferingMulti = std::make_unique<BufferingAudioSource> (source, *thread, true, 8192, 8, false);
 
     bufferingMulti->prepareToPlay (512, 44100.0);

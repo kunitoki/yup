@@ -41,7 +41,7 @@ AffineTransform AnimationTransform::toAffineTransform (float frameNo) const
     {
         const float rx = degreesToRadians (rotationX.getValueAt (frameNo));
         const float ry = degreesToRadians (rotationY.getValueAt (frameNo));
-        // Approximate 3D rotation via scale — cos(angle) on the perpendicular axis
+        // Approximate 3D rotation via scale - cos(angle) on the perpendicular axis
         if (std::abs (rx) > 1e-5f)
             t = t.scaled (1.0f, std::cos (rx));
         if (std::abs (ry) > 1e-5f)
