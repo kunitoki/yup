@@ -72,6 +72,20 @@ static StringArray getAllOptionValues (const ArgumentList& args, StringRef optio
     return values;
 }
 
+// Collects the remainder of every argument that starts with the given prefix,
+// e.g. prefix "-D" over "-DFOO=1" yields "FOO=1" (used for -D and -I flags).
+static StringArray getPrefixedValues (const ArgumentList& args, const String& prefix)
+{
+    StringArray values;
+    for (int i = 0; i < args.size(); ++i)
+    {
+        const String& text = args[i].text;
+        if (text.startsWith (prefix) && text.length() > prefix.length())
+            values.add (text.substring (prefix.length()));
+    }
+    return values;
+}
+
 //==============================================================================
 static String languageToString (ShaderLanguage lang)
 {
@@ -181,31 +195,61 @@ static void printUsage()
         "Usage: yup_shader_bundler [options]\n"
         "\n"
         "Compile mode:\n"
-        "  --vert <path>         Path to vertex shader (.vert) file\n"
-        "  --frag <path>         Path to fragment shader (.frag) file\n"
-        "  --output <path>       Output .ysl bundle file path\n"
-        "  --entry <name>        Shader entry point name (default: main)\n"
-        "  --glsl-version <n>    GLSL version to target (default: 450)\n"
+        "  --stage <stage> <path>  Pipeline stage and source file (repeatable)\n"
+        "                          Stages: vertex, fragment, compute, geometry,\n"
+        "                          tesscontrol, tesseval\n"
+        "  --vert <path>           Shorthand for --stage vertex <path>\n"
+        "  --frag <path>           Shorthand for --stage fragment <path>\n"
+        "  --output <path>         Output .ysl bundle file path\n"
+        "\n"
+        "Source options:\n"
+        "  --source-lang <lang>    Source language: glsl, hlsl, essl (default: glsl)\n"
+        "  --target-langs <list>   Comma-separated target languages\n"
+        "                          (default: glsl,essl,hlsl,msl)\n"
+        "  --entry <name>          Entry point name (default: main)\n"
+        "\n"
+        "Compilation options:\n"
+        "  --glsl-version <n>      GLSL version (default: 450)\n"
+        "  --es                    Emit OpenGL ES-style GLSL\n"
+        "  --hlsl-model <n>        HLSL shader model (e.g. 50, 60; default: 50)\n"
+        "  -DNAME[=VALUE]          Preprocessor define (repeatable)\n"
+        "  -I<dir>                 Include search directory (repeatable)\n"
+        "\n"
+        "SPIR-V options:\n"
+        "  --spirv-opt <mode>      Optimization: none, size, perf (default: none)\n"
+        "  --spirv-validate        Run SPIR-V validation after compilation\n"
+        "  --spirv-debug           Emit debug info in SPIR-V binary\n"
+        "\n"
+        "MSL options:\n"
+        "  --msl-fbfetch           Enable framebuffer fetch for subpass inputs\n"
+        "  --flip-vert-y           Flip vertex Y coordinate\n"
         "\n"
         "Inspect mode:\n"
-        "  --inspect <path>      Inspect an existing .ysl bundle file\n"
-        "  --print <lang>        Print shader source for the given language\n"
-        "                        (glsl, essl, hlsl, msl, spirv, wgsl, all)\n"
-        "                        Can be repeated to print multiple languages\n"
-        "  --stage <stage>       Filter by pipeline stage (vertex, fragment,\n"
-        "                        compute, geometry, tesscontrol, tesseval, all)\n"
-        "                        Can be repeated. Default: all stages\n"
-        "  --list                List all variants with source lengths\n"
-        "  --info                Print reflection data for matched variants\n"
+        "  --inspect <path>        Inspect an existing .ysl bundle file\n"
+        "  --print <lang>          Print shader source for the given language\n"
+        "                          (glsl, essl, hlsl, msl, spirv, wgsl, all)\n"
+        "                          Can be repeated to print multiple languages\n"
+        "  --stage <stage>         Filter by pipeline stage (vertex, fragment,\n"
+        "                          compute, geometry, tesscontrol, tesseval, all)\n"
+        "                          Can be repeated. Default: all stages\n"
+        "  --list                  List all variants with source lengths\n"
+        "  --info                  Print reflection data for matched variants\n"
         "\n"
-        "  --help|-h             Print this help\n");
+        "  --help|-h               Print this help\n");
+}
+
+//==============================================================================
+static std::optional<SpvOptimizationMode> spirvOptFromString (const String& str)
+{
+    if (str.equalsIgnoreCase ("none")) return SpvOptimizationMode::none;
+    if (str.equalsIgnoreCase ("size")) return SpvOptimizationMode::size;
+    if (str.equalsIgnoreCase ("perf")) return SpvOptimizationMode::performance;
+    return {};
 }
 
 //==============================================================================
 static int runCompileMode (const ArgumentList& args)
 {
-    args.failIfOptionIsMissing ("--vert");
-    args.failIfOptionIsMissing ("--frag");
     args.failIfOptionIsMissing ("--output");
 
     const auto resolveFile = [] (const String& path) -> File
@@ -217,112 +261,163 @@ static int runCompileMode (const ArgumentList& args)
         return File::getCurrentWorkingDirectory().getChildFile (path);
     };
 
-    const auto vertPath = resolveFile (getOptionValue (args, "--vert"));
-    const auto fragPath = resolveFile (getOptionValue (args, "--frag"));
+    Logger* log = Logger::getCurrentLogger();
+
+    // -- Collect the requested pipeline stages
+    std::vector<std::pair<ShaderStage, File>> stages;
+
+    if (args.containsOption ("--vert"))
+        stages.emplace_back (ShaderStage::vertex, resolveFile (getOptionValue (args, "--vert")));
+
+    if (args.containsOption ("--frag"))
+        stages.emplace_back (ShaderStage::fragment, resolveFile (getOptionValue (args, "--frag")));
+
+    // General form: --stage <stage> <path>
+    for (int i = 0; i < args.size(); ++i)
+    {
+        if (args[i] == "--stage" && i + 2 < args.size()
+            && ! args[i + 1].isOption() && ! args[i + 2].isOption())
+        {
+            auto st = stageFromString (args[i + 1].text);
+            if (st.has_value())
+                stages.emplace_back (*st, resolveFile (args[i + 2].text));
+            else
+                log->writeToLog ("Warning: unknown stage '" + args[i + 1].text + "', skipping.");
+
+            i += 2;
+        }
+    }
+
+    if (stages.empty())
+    {
+        log->writeToLog ("No shader stages specified. Use --vert, --frag, or --stage <stage> <path>.");
+        return 1;
+    }
+
     const auto outputPath = resolveFile (getOptionValue (args, "--output"));
 
-    const auto entryPoint = getOptionValue (args, "--entry", "main");
-
-    const String glslVersionVal = getOptionValue (args, "--glsl-version", "450");
-    const int glslVersion = glslVersionVal.getIntValue();
-
-    // -- Validate input files
-    if (! vertPath.existsAsFile())
+    // -- Source language
+    ShaderLanguage sourceLanguage = ShaderLanguage::glsl;
+    if (args.containsOption ("--source-lang"))
     {
-        const String msg = "Vertex shader file not found: " + vertPath.getFullPathName();
-        Logger::getCurrentLogger()->writeToLog (msg);
-        return 1;
+        const String slVal = getOptionValue (args, "--source-lang");
+        auto sl = languageFromString (slVal);
+        if (! sl.has_value())
+        {
+            log->writeToLog ("Unknown source language: " + slVal);
+            return 1;
+        }
+        sourceLanguage = *sl;
     }
 
-    if (! fragPath.existsAsFile())
+    // -- Target languages
+    std::vector<ShaderLanguage> targetLanguages;
+    if (args.containsOption ("--target-langs"))
     {
-        const String msg = "Fragment shader file not found: " + fragPath.getFullPathName();
-        Logger::getCurrentLogger()->writeToLog (msg);
-        return 1;
+        const StringArray parts = StringArray::fromTokens (getOptionValue (args, "--target-langs"), ",", "");
+        for (const auto& p : parts)
+        {
+            const String trimmed = p.trim();
+            if (trimmed.isEmpty())
+                continue;
+
+            auto tl = languageFromString (trimmed);
+            if (tl.has_value())
+                targetLanguages.push_back (*tl);
+            else
+                log->writeToLog ("Warning: unknown target language '" + trimmed + "', skipping.");
+        }
     }
 
-    const String vertSource = vertPath.loadFileAsString();
-    const String fragSource = fragPath.loadFileAsString();
+    if (targetLanguages.empty())
+        targetLanguages = { ShaderLanguage::glsl, ShaderLanguage::essl, ShaderLanguage::hlsl, ShaderLanguage::msl };
 
-    if (vertSource.isEmpty())
+    // -- Shared transpile options
+    TranspileOptions options;
+    options.entryPoint = getOptionValue (args, "--entry", "main");
+    options.glslVersion = getOptionValue (args, "--glsl-version", "450").getIntValue();
+    options.es = args.containsOption ("--es");
+    options.mslUsesFramebufferFetch = args.containsOption ("--msl-fbfetch");
+    options.flipVertY = args.containsOption ("--flip-vert-y");
+    options.spirvValidate = args.containsOption ("--spirv-validate");
+    options.spirvDebugInfo = args.containsOption ("--spirv-debug");
+
+    if (args.containsOption ("--hlsl-model"))
+        options.hlslShaderModel = getOptionValue (args, "--hlsl-model").getIntValue();
+
+    if (args.containsOption ("--spirv-opt"))
     {
-        const String msg = "Vertex shader file is empty: " + vertPath.getFullPathName();
-        Logger::getCurrentLogger()->writeToLog (msg);
-        return 1;
+        const String optVal = getOptionValue (args, "--spirv-opt");
+        auto mode = spirvOptFromString (optVal);
+        if (! mode.has_value())
+        {
+            log->writeToLog ("Unknown SPIR-V optimization mode: " + optVal);
+            return 1;
+        }
+        options.spirvOptimization = *mode;
     }
 
-    if (fragSource.isEmpty())
+    for (const auto& d : getPrefixedValues (args, "-D"))
     {
-        const String msg = "Fragment shader file is empty: " + fragPath.getFullPathName();
-        Logger::getCurrentLogger()->writeToLog (msg);
-        return 1;
+        const int eq = d.indexOfChar ('=');
+        if (eq >= 0)
+            options.defines.set (d.substring (0, eq), d.substring (eq + 1));
+        else
+            options.defines.set (d, {});
     }
 
-    // -- Target all supported shading languages
-    const std::vector<ShaderLanguage> targetLanguages = {
-        ShaderLanguage::glsl,
-        ShaderLanguage::essl,
-        ShaderLanguage::hlsl,
-        ShaderLanguage::msl
-    };
+    for (const auto& inc : getPrefixedValues (args, "-I"))
+        options.includePaths.push_back (resolveFile (inc).getFullPathName());
 
-    auto makeEntry = [&] (ShaderStage stage)
+    // -- Compile every stage and merge into a single bundle
+    ShaderBundleCompiler compiler;
+    ShaderBundle bundle;
+
+    for (const auto& [stage, path] : stages)
     {
+        if (! path.existsAsFile())
+        {
+            log->writeToLog (stageToString (stage) + " shader file not found: " + path.getFullPathName());
+            return 1;
+        }
+
+        const String source = path.loadFileAsString();
+        if (source.isEmpty())
+        {
+            log->writeToLog (stageToString (stage) + " shader file is empty: " + path.getFullPathName());
+            return 1;
+        }
+
         ShaderBundleEntry entry;
         entry.stage = stage;
         entry.targetLanguages = targetLanguages;
-        entry.options.entryPoint = entryPoint;
-        entry.options.glslVersion = glslVersion;
-        return entry;
-    };
+        entry.options = options;
 
-    ShaderBundleCompiler compiler;
+        ShaderBundleCompileRequest request;
+        request.source = source;
+        request.sourceLanguage = sourceLanguage;
+        request.entries.push_back (entry);
 
-    // Compile vertex stage
-    ShaderBundleCompileRequest vertRequest;
-    vertRequest.source = vertSource;
-    vertRequest.sourceLanguage = ShaderLanguage::glsl;
-    vertRequest.entries.push_back (makeEntry (ShaderStage::vertex));
+        auto result = compiler.compile (request);
+        if (result.failed())
+        {
+            log->writeToLog (stageToString (stage) + " shader compilation failed: " + result.getErrorMessage());
+            return 1;
+        }
 
-    auto vsBundle = compiler.compile (vertRequest);
-    if (vsBundle.failed())
-    {
-        const String msg = "Vertex shader compilation failed: " + vsBundle.getErrorMessage();
-        Logger::getCurrentLogger()->writeToLog (msg);
-        return 1;
+        for (const auto& info : result.getReference().getShaders())
+            bundle.addShader (info);
     }
-
-    // Compile fragment stage
-    ShaderBundleCompileRequest fragRequest;
-    fragRequest.source = fragSource;
-    fragRequest.sourceLanguage = ShaderLanguage::glsl;
-    fragRequest.entries.push_back (makeEntry (ShaderStage::fragment));
-
-    auto fsBundle = compiler.compile (fragRequest);
-    if (fsBundle.failed())
-    {
-        const String msg = "Fragment shader compilation failed: " + fsBundle.getErrorMessage();
-        Logger::getCurrentLogger()->writeToLog (msg);
-        return 1;
-    }
-
-    // Merge both stages into a single bundle
-    ShaderBundle bundle;
-    for (const auto& info : vsBundle.getReference().getShaders())
-        bundle.addShader (info);
-    for (const auto& info : fsBundle.getReference().getShaders())
-        bundle.addShader (info);
 
     // Persist to file
     const auto saveResult = bundle.saveToFile (outputPath);
     if (saveResult.failed())
     {
-        const String msg = "Failed to save bundle: " + saveResult.getErrorMessage();
-        Logger::getCurrentLogger()->writeToLog (msg);
+        log->writeToLog ("Failed to save bundle: " + saveResult.getErrorMessage());
         return 1;
     }
 
-    Logger::getCurrentLogger()->writeToLog ("Shader bundle written to: " + outputPath.getFullPathName());
+    log->writeToLog ("Shader bundle written to: " + outputPath.getFullPathName());
     return 0;
 }
 
@@ -506,7 +601,8 @@ int main (int argc, char* argv[])
     if (args.containsOption ("--inspect"))
         return runInspectMode (args);
 
-    if (args.containsOption ("--vert") || args.containsOption ("--frag") || args.containsOption ("--output"))
+    if (args.containsOption ("--vert") || args.containsOption ("--frag")
+        || args.containsOption ("--stage") || args.containsOption ("--output"))
         return runCompileMode (args);
 
     printUsage();

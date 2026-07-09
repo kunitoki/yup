@@ -899,4 +899,49 @@ TEST_F (ShaderBundleCompilerTests, CompileVertexToESSL)
     EXPECT_NE (info->source, info->inputSource);
 }
 
+TEST_F (ShaderBundleCompilerTests, CompileWithSpirvOptimizationSucceeds)
+{
+    ShaderBundleCompiler compiler (transpiler);
+
+    ShaderBundleCompileRequest req;
+    req.source = kShaderBundleMinimalFragmentGLSL;
+    req.sourceLanguage = ShaderLanguage::glsl;
+
+    ShaderBundleEntry entry;
+    entry.stage = ShaderStage::fragment;
+    entry.targetLanguages = { ShaderLanguage::glsl };
+    entry.options.spirvOptimization = SpvOptimizationMode::performance;
+    req.entries.push_back (entry);
+
+    auto result = compiler.compile (req);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto* info = result.getReference().findShader (ShaderStage::fragment, ShaderLanguage::glsl);
+    ASSERT_NE (info, nullptr);
+    EXPECT_FALSE (info->source.isEmpty());
+}
+
+TEST_F (ShaderBundleCompilerTests, CompileWithSpirvDebugInfoSucceeds)
+{
+    ShaderBundleCompiler compiler (transpiler);
+
+    ShaderBundleCompileRequest req;
+    req.source = kShaderBundleMinimalFragmentGLSL;
+    req.sourceLanguage = ShaderLanguage::glsl;
+
+    ShaderBundleEntry entry;
+    entry.stage = ShaderStage::fragment;
+    entry.targetLanguages = { ShaderLanguage::glsl };
+    entry.options.spirvDebugInfo = true;
+    entry.options.spirvValidate = true;
+    req.entries.push_back (entry);
+
+    auto result = compiler.compile (req);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto* info = result.getReference().findShader (ShaderStage::fragment, ShaderLanguage::glsl);
+    ASSERT_NE (info, nullptr);
+    EXPECT_FALSE (info->source.isEmpty());
+}
+
 #endif // YUP_ENABLE_SHADER_TRANSPILER

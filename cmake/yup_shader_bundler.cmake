@@ -82,13 +82,17 @@ endfunction()
 #
 # Usage:
 #   yup_add_shader_bundle (<library_name>
-#       VERT          <path to .vert file>
-#       FRAG          <path to .frag file>
-#       [OUTPUT_NAME  <basename>]      # default: <library_name>
-#       [RESOURCE_NAME <symbol>]       # default: <library_name>
-#       [NAMESPACE    <namespace>]     # default: yup
-#       [ENTRY        <entry point>]   # default: main
-#       [GLSL_VERSION <version>])      # default: 450
+#       VERT           <path to .vert file>
+#       FRAG           <path to .frag file>
+#       [OUTPUT_NAME   <basename>]      # default: <library_name>
+#       [RESOURCE_NAME <symbol>]        # default: <library_name>
+#       [NAMESPACE     <namespace>]     # default: yup
+#       [ENTRY         <entry point>]   # default: main
+#       [GLSL_VERSION  <version>]       # default: 450
+#       [OPTIONS       <flag>...])      # extra flags forwarded to yup_shader_bundler
+#
+# OPTIONS forwards any additional yup_shader_bundler flags verbatim, e.g.
+#   OPTIONS --spirv-opt perf --target-langs msl,hlsl -DMY_DEFINE=1 -I${CMAKE_SOURCE_DIR}/shaders
 #
 # After the call, link against <library_name> and include the generated header
 # "<OUTPUT_NAME>.h", which exposes:
@@ -99,7 +103,7 @@ endfunction()
 function (yup_add_shader_bundle library_name)
     set (options "")
     set (one_value_args VERT FRAG OUTPUT_NAME RESOURCE_NAME NAMESPACE ENTRY GLSL_VERSION)
-    set (multi_value_args "")
+    set (multi_value_args OPTIONS)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
@@ -139,7 +143,8 @@ function (yup_add_shader_bundle library_name)
             --frag "${frag_path}"
             --output "${bundle_path}"
             --entry "${YUP_ARG_ENTRY}"
-            --glsl-version "${YUP_ARG_GLSL_VERSION}")
+            --glsl-version "${YUP_ARG_GLSL_VERSION}"
+            ${YUP_ARG_OPTIONS})
 
     # ==== Embed the generated bundle into an object library
     yup_add_embedded_binary_resources (
