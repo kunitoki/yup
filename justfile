@@ -71,15 +71,16 @@ android:
   cmake -G "Unix Makefiles" -B build -DYUP_TARGET_ANDROID=ON
 
 [doc("generate and build project for WASM")]
-emscripten CONFIG="Debug":
+emscripten CONFIG="Debug" TARGET="yup_tests":
   emcc -v
   emcmake cmake -G "Ninja Multi-Config" -B build
-  @just build {{CONFIG}}
+  @just build {{CONFIG}} {{TARGET}}
 
 [doc("run tests for WASM")]
-emscripten_test CONFIG="Debug":
-  @just build {{CONFIG}}
-  node build/tests/{{CONFIG}}/yup_tests.js --gtest_filter={{gtest_filter}}
+[working-directory: 'build/tests/Debug/']
+emscripten_test:
+  @just build Debug
+  node yup_tests.js --gtest_filter={{gtest_filter}}
 
 [doc("serve project for WASM")]
 emscripten_serve:
@@ -103,6 +104,12 @@ python_uninstall:
 [working-directory: 'python']
 python_test *TEST_OPTS:
   python -m pytest -s {{TEST_OPTS}}
+
+[working-directory: 'cmake/tools/shader_bundler']
+shader_bundler *COMPILE_ARGS:
+  cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=
+  cmake --build build --config Release -j4
+  build/yup_shader_bundler {{COMPILE_ARGS}}
 
 rive_update REF="runtime-v0.1.62":
   uv run python tools/rive_update.py --rive-ref {{REF}} --allow-dirty --keep-work-dir

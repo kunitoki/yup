@@ -42,13 +42,11 @@ class Image;
     auto canvas = yup::GpuCanvas::create (ctx, 256, 256);
     if (canvas != nullptr)
     {
-        auto& g = canvas->getGraphics();
+        auto& g = canvas->beginDraw();
         g.setFillColor (yup::Colors::cornflowerblue);
         g.fillAll();
 
-        canvas->commit();
-
-        // Draw it directly:
+        // asTexture() auto-commits, so no explicit commit() call is needed.
         mainGraphics.drawTexture (canvas->asTexture(), targetBounds);
 
         // Or materialise an image:
@@ -86,71 +84,6 @@ public:
     int getHeight() const noexcept;
 
     //==============================================================================
-    /** Returns the Graphics object to draw 2D YUP content into this canvas.
-
-        Lazily begins the offscreen 2D GPU frame on first call. Valid until
-        commit() is called. Drawing after commit() has undefined behaviour.
-    */
-    Graphics& getGraphics() noexcept;
-
-    //==============================================================================
-    /** Reopens a previously committed 2D canvas for a new frame of drawing.
-
-        Reuses the already-allocated GPU target textures instead of creating a
-        new canvas each frame. After this call getGraphics() begins a fresh
-        offscreen 2D frame on the same target, and commit() can be called again.
-
-        Only meaningful for canvases drawn via getGraphics()/commit(); it is a
-        no-op for canvases used purely as GpuRenderPass render targets. The
-        sampled texture returned by asTexture() remains stable across frames and
-        reflects the most recently committed content.
-    */
-    void beginNewFrame();
-
-    //==============================================================================
-    /** Finalises any open 2D GPU render pass.
-
-        Only needs to be called when 2D content was drawn via getGraphics(). For
-        canvases used purely as a render target for GpuRenderPass, committing is
-        not required. Returns false if already committed or if no 2D frame was
-        open.
-    */
-    bool commit();
-
-    //==============================================================================
-    /** Returns a GPU-texture view of the rendered result.
-
-        Valid after commit(). The GpuTexture holds a reference to the underlying GPU
-        resource; the canvas can be destroyed after this call.
-    */
-    GpuTexture::Ptr asTexture();
-
-    /** Returns an Image with both GPU texture and CPU pixel data populated.
-
-        Calls asTexture() to obtain the GPU resource, creates an Image wrapping it,
-        and then calls readPixels() to fill the CPU-side ImagePixelData so that
-        Image::getRawData() returns the rendered pixels.
-
-        Valid after commit(). Returns an empty Image on failure.
-        For GPU-only compositing without CPU readback, prefer drawTexture().
-    */
-    Image asImage();
-
-    //==============================================================================
-    /** Reads rendered pixels back to CPU memory.
-
-        Valid after commit(). The destination buffer must hold at least
-        getWidth() * getHeight() * 4 bytes (RGBA, top-to-bottom row order).
-        Returns false if readback is not available for this backend or fails.
-
-        @param dst       Pointer to the destination buffer (must be non-null).
-        @param byteSize  Size of the destination buffer in bytes (must be >= width*height*4).
-
-        @returns         True on success, false on failure.
-    */
-    bool readPixels (void* dst, size_t byteSize);
-
-    //==============================================================================
     /** Begins a render pass targeting this canvas's backing texture.
 
         The returned GpuRenderPass encodes draws into this canvas within the
@@ -165,11 +98,70 @@ public:
     */
     GpuRenderPass beginRenderPass (GpuFrame& frame, const GpuRenderOptions& options = {});
 
+    //==============================================================================
+    /** Opens (or reopens) a 2D frame and returns the Graphics context to draw into.
+
+        On the first call after create(), this opens a fresh offscreen 2D GPU frame.
+        On subsequent calls it discards the previous frame's Graphics and reopens a
+        new one on the same already-allocated GPU target, avoiding per-frame GPU
+        resource reallocation.
+
+        Not applicable to canvases used only via beginRenderPass().
+    */
+    Graphics& beginDraw();
+
+    /** Finalises any open 2D GPU render command.
+
+        Normally not needed: asTexture() and asImage() auto-commit when a 2D
+        frame is open. Call this explicitly only when you want to flush the 2D
+        GPU work without yet obtaining the texture (e.g. to pipeline the flush
+        ahead of asImage()). Returns false if already committed or if no 2D
+        frame was open.
+        
+        @note Not needed at all for canvases used only via beginRenderPass().
+    */
+    bool commit();
+
+    //==============================================================================
+    /** Returns a GPU-texture view of the rendered result.
+
+        If a 2D frame was opened via getGraphics() but not yet committed, this
+        auto-commits before returning the texture. For canvases used purely as
+        GpuRenderPass targets, no commit is needed and this returns immediately.
+
+        The GpuTexture holds a reference to the underlying GPU resource.
+    */
+    GpuTexture::Ptr asTexture();
+
+    /** Returns an Image with both GPU texture and CPU pixel data populated.
+
+        Calls asTexture() to obtain the GPU resource, creates an Image wrapping it,
+        and then calls readPixels() to fill the CPU-side ImagePixelData so that
+        Image::getRawData() returns the rendered pixels.
+
+        Auto-commits any open 2D frame (via asTexture()). Returns an empty Image on failure.
+        For GPU-only compositing without CPU readback, prefer using asTexture() and
+        Graphics::drawTexture.
+    */
+    Image asImage();
+
+    //==============================================================================
+    /** Reads rendered pixels back to CPU memory.
+
+        Auto-commits any open 2D frame. The destination buffer must hold at least
+        getWidth() * getHeight() * 4 bytes (RGBA, top-to-bottom row order).
+        Returns false if readback is not available for this backend or fails.
+
+        @param dst       Pointer to the destination buffer (must be non-null).
+        @param byteSize  Size of the destination buffer in bytes (must be >= width*height*4).
+
+        @returns         True on success, false on failure.
+    */
+    bool readPixels (void* dst, size_t byteSize);
+
 private:
     //==============================================================================
     GpuCanvas() = default;
-
-    Graphics& ensureGraphics();
 
     GraphicsContext* ctx = nullptr;
     std::unique_ptr<GraphicsContext::OffscreenTarget> offscreenTarget;

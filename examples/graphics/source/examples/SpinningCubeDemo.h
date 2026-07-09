@@ -24,6 +24,8 @@
 #include <yup_shading/yup_shading.h>
 #include <yup_animation/yup_animation.h>
 
+#include <ShaderBundle.h>
+
 //==============================================================================
 
 /**
@@ -419,7 +421,7 @@ layout(location = 0) out vec4 fragColor;
 void main() {
     vec3  light = normalize(vec3(0.503, 0.671, -0.419));
     float ndotl = clamp(dot(normalize(v_normal), light), 0.0, 1.0);
-    vec4  tex   = texture(sampler2D(u_tex, u_samp), vec2(1.0 - v_uv.x, v_uv.y));
+    vec4  tex   = texture(sampler2D(u_tex, u_samp), vec2(v_uv.x, 1.0 - v_uv.y));
     vec3  base  = mix(v_color, tex.rgb, tex.a);
     fragColor   = vec4(base * (0.35 + 0.65 * ndotl), 1.0);
 }
@@ -617,10 +619,31 @@ void main() {
 
     void initCube()
     {
+#if 1
+        auto loaded = yup::ShaderBundle::loadFromData (yup::ShaderBundleFile_data, yup::ShaderBundleFile_size);
+        if (loaded.failed())
+        {
+            yup::Logger::outputDebugString ("SpinningCubeDemo: failed to load shader bundle: " + loaded.getErrorMessage());
+            return;
+        }
+
+        const auto& bundle = loaded.getReference();
+
+        if (auto* vs = bundle.findShader (yup::ShaderStage::vertex, yup::ShaderLanguage::glsl))
+            currentVertSource = vs->inputSource.isNotEmpty() ? vs->inputSource : vs->source;
+
+        if (auto* fs = bundle.findShader (yup::ShaderStage::fragment, yup::ShaderLanguage::glsl))
+            currentFragSource = fs->inputSource.isNotEmpty() ? fs->inputSource : fs->source;
+
+        auto result = yup::GpuPipeline::compileFromBundle (*capturedContext,
+                                                           loaded.getReference(),
+                                                           cubePipelineOptions());
+#else
         auto result = yup::GpuPipeline::compileFromGlsl (*capturedContext,
                                                          currentVertSource,
                                                          currentFragSource,
                                                          cubePipelineOptions());
+#endif
 
         if (result.failed())
         {
@@ -773,20 +796,16 @@ void main() {
 
             if (auto* vs = bundle.findShader (yup::ShaderStage::vertex, yup::ShaderLanguage::glsl))
             {
-                (editingBlur ? currentBlurVertSource : currentVertSource) = vs->source;
+                (editingBlur ? currentBlurVertSource : currentVertSource) =
+                    vs->inputSource.isNotEmpty() ? vs->inputSource : vs->source;
                 loadedAny = true;
             }
 
             if (auto* fs = bundle.findShader (yup::ShaderStage::fragment, yup::ShaderLanguage::glsl))
             {
-                (editingBlur ? currentBlurFragSource : currentFragSource) = fs->source;
+                (editingBlur ? currentBlurFragSource : currentFragSource) =
+                    fs->inputSource.isNotEmpty() ? fs->inputSource : fs->source;
                 loadedAny = true;
-            }
-
-            if (! loadedAny)
-            {
-                // Legacy bundles only stored a single source blob.
-                activeStageSource() = bundle.getOriginalSource();
             }
 
             shaderEditor->setText (activeStageSource(), yup::dontSendNotification);
@@ -804,31 +823,67 @@ void main() {
         auto chooser = yup::FileChooser::create ("Save Shader Bundle",
                                                  yup::File(),
                                                  "*.ysl");
-        chooser->browseForFileToSave ([vertSource, fragSource] (bool success, const yup::Array<yup::File>& results)
+        chooser->browseForFileToSave ([this, vertSource, fragSource] (bool success, const yup::Array<yup::File>& results)
         {
             if (! success || results.isEmpty())
                 return;
 
+            const std::vector<yup::ShaderLanguage> targetLanguages = {
+                yup::ShaderLanguage::glsl,
+                yup::ShaderLanguage::essl,
+                yup::ShaderLanguage::hlsl,
+                yup::ShaderLanguage::msl
+            };
+
+            auto makeEntry = [&] (yup::ShaderStage stage)
+            {
+                yup::ShaderBundleEntry entry;
+                entry.stage = stage;
+                entry.targetLanguages = targetLanguages;
+                entry.options.entryPoint = "main";
+                return entry;
+            };
+
+            yup::ShaderBundleCompiler compiler;
+
+            yup::ShaderBundleCompileRequest vertRequest;
+            vertRequest.source = vertSource;
+            vertRequest.sourceLanguage = yup::ShaderLanguage::glsl;
+            vertRequest.entries.push_back (makeEntry (yup::ShaderStage::vertex));
+
+            auto vsBundle = compiler.compile (vertRequest);
+            if (vsBundle.failed())
+            {
+                showError ("Save .ysl: vertex compilation failed: " + vsBundle.getErrorMessage());
+                return;
+            }
+
+            yup::ShaderBundleCompileRequest fragRequest;
+            fragRequest.source = fragSource;
+            fragRequest.sourceLanguage = yup::ShaderLanguage::glsl;
+            fragRequest.entries.push_back (makeEntry (yup::ShaderStage::fragment));
+
+            auto fsBundle = compiler.compile (fragRequest);
+            if (fsBundle.failed())
+            {
+                showError ("Save .ysl: fragment compilation failed: " + fsBundle.getErrorMessage());
+                return;
+            }
+
             yup::ShaderBundle bundle;
-            bundle.setOriginalSource (vertSource);
+            for (const auto& info : vsBundle.getReference().getShaders())
+                bundle.addShader (info);
+            for (const auto& info : fsBundle.getReference().getShaders())
+                bundle.addShader (info);
 
-            yup::ShaderInfo vertInfo;
-            vertInfo.stage = yup::ShaderStage::vertex;
-            vertInfo.language = yup::ShaderLanguage::glsl;
-            vertInfo.entryPoint = "main";
-            vertInfo.source = vertSource;
-            bundle.addShader (std::move (vertInfo));
+            auto saveResult = bundle.saveToFile (results[0]);
+            if (saveResult.failed())
+            {
+                showError ("Save .ysl failed: " + saveResult.getErrorMessage());
+                return;
+            }
 
-            yup::ShaderInfo fragInfo;
-            fragInfo.stage = yup::ShaderStage::fragment;
-            fragInfo.language = yup::ShaderLanguage::glsl;
-            fragInfo.entryPoint = "main";
-            fragInfo.source = fragSource;
-            bundle.addShader (std::move (fragInfo));
-
-            auto result = bundle.saveToFile (results[0]);
-            if (result.failed())
-                yup::Logger::outputDebugString ("SpinningCubeDemo: save YSLB failed: " + result.getErrorMessage());
+            compileStatusLabel->setText ("Bundle saved.", yup::dontSendNotification);
         },
                                       true);
     }
@@ -855,18 +910,13 @@ void main() {
             if (lottieCanvas == nullptr)
                 return nullptr;
         }
-        else
-        {
-            lottieCanvas->beginNewFrame();
-        }
 
-        auto& g = lottieCanvas->getGraphics();
+        auto& g = lottieCanvas->beginDraw();
         g.setFillColor (yup::Colors::white);
         g.fillAll();
 
         lottiePlayer.render (g, yup::Rectangle<float> (0.0f, 0.0f, (float) kLottieTextureSize, (float) kLottieTextureSize), true);
 
-        lottieCanvas->commit();
         return lottieCanvas->asTexture();
     }
 

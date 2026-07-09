@@ -212,6 +212,8 @@ function (yup_standalone_app)
             -sALLOW_MEMORY_GROWTH=1
             -sINITIAL_MEMORY=${YUP_ARG_INITIAL_MEMORY}
             -sASSERTIONS=1
+            # -sGL_ASSERTIONS=1
+            # -sGL_DEBUG=1
             -sDISABLE_EXCEPTION_CATCHING=0
             -sERROR_ON_UNDEFINED_SYMBOLS=1
             -sSTACK_OVERFLOW_CHECK=2

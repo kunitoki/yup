@@ -144,7 +144,11 @@
     If you disable this then https/ssl support will not be available on Linux.
 */
 #ifndef YUP_USE_CURL
+#if __has_include(<curl/curl.h>)
 #define YUP_USE_CURL 1
+#else
+#define YUP_USE_CURL 0
+#endif
 #endif
 
 /** Config: YUP_LOAD_CURL_SYMBOLS_LAZILY

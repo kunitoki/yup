@@ -348,6 +348,23 @@ struct ShaderReflection
     };
 
     //==========================================================================
+    /** A folded texture+sampler pair emitted by the GLSL/ESSL backend.
+
+        When targeting OpenGL/OpenGL ES, separate @c texture2D / @c sampler
+        declarations are combined into a single @c sampler2D uniform (GLES has no
+        separate sampler objects). This records the emitted combined uniform name
+        and the GL texture unit it must bind to, so the runtime can fix up the
+        sampler uniform via @c glUniform1i without parsing the generated source. */
+    struct GLCombinedSampler
+    {
+        /** Emitted combined uniform name (e.g. "yup_combined_u_tex_u_samp"). */
+        String name;
+
+        /** GL texture unit the combined sampler must bind to. */
+        uint32_t textureSlot = 0;
+    };
+
+    //==========================================================================
     /** Workgroup size for compute shaders. */
     struct WorkgroupSize
     {
@@ -392,6 +409,11 @@ struct ShaderReflection
     WorkgroupSize workgroupSize;
 
     bool positionInvariant = false;
+
+    /** GL combined texture+sampler uniforms emitted for the glsl/essl targets.
+        Empty for non-GL targets. Populated by reflectFromSPIRV() when the target
+        language is glsl or essl. */
+    std::vector<GLCombinedSampler> glCombinedSamplers;
 
     /** Declared SPIR-V capabilities (e.g. "Shader", "Float64"). */
     std::vector<String> capabilities;

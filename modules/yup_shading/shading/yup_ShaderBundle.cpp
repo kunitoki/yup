@@ -41,15 +41,15 @@ constexpr uint32_t kFourCC_YSLB = makeFourCC ('Y', 'S', 'L', 'B');
 constexpr uint32_t kFourCC_RIFF = makeFourCC ('R', 'I', 'F', 'F');
 constexpr uint32_t kFourCC_LIST = makeFourCC ('L', 'I', 'S', 'T');
 constexpr uint32_t kFourCC_VERS = makeFourCC ('V', 'E', 'R', 'S');
-constexpr uint32_t kFourCC_SRCE = makeFourCC ('S', 'R', 'C', 'E');
 constexpr uint32_t kFourCC_SHAD = makeFourCC ('S', 'H', 'A', 'D');
 constexpr uint32_t kFourCC_SHDR = makeFourCC ('S', 'H', 'D', 'R');
 constexpr uint32_t kFourCC_SPVB = makeFourCC ('S', 'P', 'V', 'B');
 constexpr uint32_t kFourCC_VARS = makeFourCC ('V', 'A', 'R', 'S');
 constexpr uint32_t kFourCC_VART = makeFourCC ('V', 'A', 'R', 'T');
 constexpr uint32_t kFourCC_REFL = makeFourCC ('R', 'E', 'F', 'L');
+constexpr uint32_t kFourCC_ISRC = makeFourCC ('I', 'S', 'R', 'C');
 
-constexpr uint32_t kCurrentVersion = 1;
+constexpr uint32_t kCurrentVersion = 2;
 
 //==============================================================================
 // Write helpers
@@ -111,11 +111,6 @@ void iterateChunks (InputStream& s, Handler&& handler)
 // ShaderBundle implementation
 //==============================================================================
 
-void ShaderBundle::setOriginalSource (const String& src)
-{
-    originalSource = src;
-}
-
 void ShaderBundle::addShader (ShaderInfo info)
 {
     shaders.push_back (std::move (info));
@@ -124,11 +119,6 @@ void ShaderBundle::addShader (ShaderInfo info)
 void ShaderBundle::setSPIRV (ShaderStage stage, ShaderLanguage sourceLang, MemoryBlock spirv)
 {
     spirvBinaries[stage] = { sourceLang, std::move (spirv) };
-}
-
-const String& ShaderBundle::getOriginalSource() const
-{
-    return originalSource;
 }
 
 const std::vector<ShaderInfo>& ShaderBundle::getShaders() const
@@ -196,11 +186,6 @@ Result ShaderBundle::saveToStream (OutputStream& stream) const
             buf.writeInt (static_cast<int> (kCurrentVersion));
         });
 
-        writeChunk (kFourCC_SRCE, [&]
-        {
-            buf.write (originalSource.toRawUTF8(), originalSource.getNumBytesAsUTF8());
-        });
-
         writeList (kFourCC_SHAD, [&]
         {
             for (const auto stage : stages)
@@ -229,6 +214,12 @@ Result ShaderBundle::saveToStream (OutputStream& stream) const
                                 buf.writeInt (static_cast<int> (info.language));
                                 writeStringRaw (buf, info.entryPoint);
                                 writeStringRaw (buf, info.source);
+
+                                if (info.inputSource.isNotEmpty())
+                                    writeChunk (kFourCC_ISRC, [&]
+                                    {
+                                        buf.write (info.inputSource.toRawUTF8(), info.inputSource.getNumBytesAsUTF8());
+                                    });
 
                                 MemoryOutputStream reflBuf;
                                 BinaryOutputArchive reflArchive (reflBuf);
@@ -288,7 +279,7 @@ ResultValue<ShaderBundle> ShaderBundle::loadFromStream (InputStream& stream)
     MemoryInputStream riffStream (riffData, false);
 
     ShaderBundle bundle;
-    bool hasVersion = false, hasSrc = false;
+    bool hasVersion = false;
     String loadError;
 
     // Parses a VART sub-stream into a ShaderInfo and appends it to the bundle.
@@ -302,7 +293,14 @@ ResultValue<ShaderBundle> ShaderBundle::loadFromStream (InputStream& stream)
 
         iterateChunks (vartStream, [&] (uint32_t fourcc, MemoryInputStream& sub)
         {
-            if (fourcc == kFourCC_REFL)
+            if (fourcc == kFourCC_ISRC)
+            {
+                const auto len = static_cast<int> (sub.getNumBytesRemaining());
+                MemoryBlock srcData (static_cast<size_t> (len), false);
+                sub.read (srcData.getData(), len);
+                info.inputSource = String::fromUTF8 (static_cast<const char*> (srcData.getData()), len);
+            }
+            else if (fourcc == kFourCC_REFL)
             {
                 BinaryInputArchive archive (sub);
                 detail::doLoad (archive, info.reflection);
@@ -358,21 +356,11 @@ ResultValue<ShaderBundle> ShaderBundle::loadFromStream (InputStream& stream)
             if (chunkStream.getNumBytesRemaining() < 4)
                 return;
             const auto version = static_cast<uint32_t> (chunkStream.readInt());
-            if (version > kCurrentVersion)
-                loadError = "ShaderBundle: unsupported bundle version " + String (version);
+            if (version != kCurrentVersion)
+                loadError = "ShaderBundle: bundle version " + String (version)
+                          + " is not supported (expected " + String (kCurrentVersion) + ")";
             else
                 hasVersion = true;
-        }
-        else if (fourcc == kFourCC_SRCE)
-        {
-            const auto len = static_cast<int> (chunkStream.getNumBytesRemaining());
-            if (len > 0)
-            {
-                MemoryBlock srcData (static_cast<size_t> (len), false);
-                chunkStream.read (srcData.getData(), len);
-                bundle.originalSource = String::fromUTF8 (static_cast<const char*> (srcData.getData()), len);
-            }
-            hasSrc = true;
         }
         else if (fourcc == kFourCC_LIST && chunkStream.getNumBytesRemaining() >= 4)
         {
@@ -390,9 +378,6 @@ ResultValue<ShaderBundle> ShaderBundle::loadFromStream (InputStream& stream)
 
     if (! hasVersion)
         return makeResultValueFail ("ShaderBundle: missing VERS chunk");
-
-    if (! hasSrc)
-        return makeResultValueFail ("ShaderBundle: missing SRCE chunk");
 
     return makeResultValueOk (std::move (bundle));
 }

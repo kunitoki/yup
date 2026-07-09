@@ -191,6 +191,17 @@ public:
         /** Returns the rendered result as a sampled Rive GPU texture suitable for use in drawImage.
             Must be called after endOffscreen(). Returns nullptr on failure. */
         virtual rive::rcp<rive::gpu::Texture> adoptAsTexture() = 0;
+
+        /** Creates (on first call) and returns the Y-flipped companion texture. Must only be
+            called by commit() — not by asTexture() — so that the mirror exists before the
+            endOffscreen flush runs blitMirrorIfRegistered. No-op on non-GL backends. */
+        virtual rive::rcp<rive::gpu::Texture> getOrCreateSampledTexture() { return nullptr; }
+
+        /** Returns the Y-flipped companion texture if it was already created by a prior call to
+            getOrCreateSampledTexture(), or nullptr if it was never created. Used by asTexture()
+            so that GPU render-pass canvases (which never call commit()) never get a stale mirror
+            attached to their GpuTexture. */
+        virtual rive::rcp<rive::gpu::Texture> getSampledTexture() const { return nullptr; }
     };
 
     /** Creates platform-specific GPU offscreen resources for the given dimensions.

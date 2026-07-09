@@ -765,6 +765,39 @@ static const uint32_t* memoryBlockToSpirvWords (const MemoryBlock& block, size_t
 }
 
 //==============================================================================
+// Folds separate image + sampler pairs into combined samplers for the GL/ESSL
+// backend and assigns each combined sampler a stable, explicit name.
+//
+// build_combined_image_samplers() creates global combined-sampler variables with
+// no alias, so both the emitted GLSL and the reflection would otherwise fall
+// back to spirv-cross's synthetic "_<id>" name - and that id is not stable
+// between two separate compiler instances (decompile vs reflect). Setting an
+// explicit deterministic name derived from the paired image/sampler names keeps
+// the emitted uniform name and the reflected name in lock-step. The name is a
+// purely internal handle: the GL backend matches it via glGetUniformLocation to
+// fix up the sampler's texture unit, so any collision-free identifier works.
+//==============================================================================
+
+static void setupGLCombinedSamplers (spirv_cross::CompilerGLSL& compiler)
+{
+    compiler.build_combined_image_samplers();
+    spirv_cross_util::inherit_combined_sampler_bindings (compiler);
+
+    for (const auto& combined : compiler.get_combined_image_samplers())
+    {
+        std::string imageName = compiler.get_name (combined.image_id);
+        std::string samplerName = compiler.get_name (combined.sampler_id);
+
+        if (imageName.empty())
+            imageName = "img" + std::to_string ((uint32_t) combined.image_id);
+        if (samplerName.empty())
+            samplerName = "samp" + std::to_string ((uint32_t) combined.sampler_id);
+
+        compiler.set_name (combined.combined_id, "yup_combined_" + imageName + "_" + samplerName);
+    }
+}
+
+//==============================================================================
 // Fills MSL backend slot numbers into a ShaderReflection after CompilerMSL::compile() has run
 //==============================================================================
 
@@ -795,10 +828,22 @@ static void fillMSLBackendSlots (spirv_cross::CompilerMSL& mslCompiler, ShaderRe
 }
 
 //==============================================================================
-// Fills GLSL backend slot numbers into a ShaderReflection
+// Fills GLSL/ESSL backend slot numbers into a ShaderReflection.
+//
+// OpenGL / OpenGL ES fold each separate image + sampler into a single combined
+// sampler2D (there are no separate sampler objects). To keep the generated GLSL,
+// the binding-map sidecar and the GL uniform fixup in agreement:
+//
+//   - Uniform buffers keep their SPIR-V binding as the UBO binding point.
+//   - Separate images keep their SPIR-V binding as the GL texture unit.
+//   - Each separate sampler adopts the GL texture unit of the image it is paired
+//     with (glBindSampler binds to the same unit the combined sampler samples).
+//   - The emitted combined-sampler uniform name + texture unit are captured in
+//     ShaderReflection::glCombinedSamplers so the GL backend can bind them via
+//     glUniform1i without parsing the generated source.
 //==============================================================================
 
-static void fillGLSLBackendSlots (ShaderReflection& ref)
+static void fillGLSLBackendSlots (spirv_cross::CompilerGLSL& compiler, ShaderReflection& ref)
 {
     auto fillVec = [] (std::vector<ShaderReflection::ResourceBinding>& bindings)
     {
@@ -819,6 +864,27 @@ static void fillGLSLBackendSlots (ShaderReflection& ref)
     fillVec (ref.tensors);
     fillVec (ref.pushConstantBuffers);
     fillVec (ref.shaderRecordBuffers);
+
+    // Fold texture+sampler pairs into combined samplers, capturing the emitted
+    // uniform name and the GL texture unit (the paired image's binding).
+    ref.glCombinedSamplers.clear();
+
+    for (const auto& combined : compiler.get_combined_image_samplers())
+    {
+        const uint32_t textureUnit = getVariableDecoration (compiler, combined.image_id, spv::DecorationBinding);
+
+        ShaderReflection::GLCombinedSampler cs;
+        cs.name = compiler.get_name (combined.combined_id).c_str();
+        cs.textureSlot = textureUnit;
+        ref.glCombinedSamplers.push_back (std::move (cs));
+
+        // The paired sampler must bind to the same texture unit as its image.
+        for (auto& samp : ref.separateSamplers)
+        {
+            if (samp.resourceId == combined.sampler_id)
+                samp.backendSlot = textureUnit;
+        }
+    }
 }
 
 //==============================================================================
@@ -1047,11 +1113,19 @@ ResultValue<String> ShaderTranspiler::decompileFromSPIRV (const MemoryBlock& spi
             case ShaderLanguage::essl:
             {
                 spirv_cross::CompilerGLSL compiler (words, wordCount);
+
+                // OpenGL / OpenGL ES have no separate texture / sampler objects:
+                // fold every image + sampler pair into a single combined
+                // sampler2D, mirroring the inherited descriptor set/binding.
+                setupGLCombinedSamplers (compiler);
+
                 spirv_cross::CompilerGLSL::Options glslOpts;
-                glslOpts.version = options.glslVersion;
-                glslOpts.es = options.es || (targetLang == ShaderLanguage::essl);
-                glslOpts.vulkan_semantics = true;
-                glslOpts.vertex.flip_vert_y = options.flipVertY;
+
+                const bool es = options.es || (targetLang == ShaderLanguage::essl);
+                glslOpts.es = es;
+                glslOpts.version = es ? 300u : static_cast<uint32_t> (options.glslVersion);
+                glslOpts.vulkan_semantics = false;
+                glslOpts.vertex.flip_vert_y = ! options.flipVertY;
 
                 compiler.set_common_options (glslOpts);
 
@@ -1225,10 +1299,15 @@ ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBl
             {
                 spirv_cross::CompilerGLSL compiler (words, wordCount);
 
+                // Match decompileFromSPIRV(): fold image+sampler pairs so the
+                // reflected slots line up with the emitted combined samplers.
+                setupGLCombinedSamplers (compiler);
+
                 spirv_cross::CompilerGLSL::Options glslOpts;
-                glslOpts.version = options.glslVersion;
-                glslOpts.es = options.es || (targetLang == ShaderLanguage::essl);
-                glslOpts.vulkan_semantics = true;
+                const bool es = options.es || (targetLang == ShaderLanguage::essl);
+                glslOpts.es = es;
+                glslOpts.version = es ? 300u : static_cast<uint32_t> (options.glslVersion);
+                glslOpts.vulkan_semantics = false;
                 glslOpts.vertex.flip_vert_y = options.flipVertY;
                 compiler.set_common_options (glslOpts);
 
@@ -1243,7 +1322,7 @@ ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBl
                 compiler.compile();
 
                 auto ref = extractReflection (compiler);
-                fillGLSLBackendSlots (ref);
+                fillGLSLBackendSlots (compiler, ref);
 
                 return makeResultValueOk (std::move (ref));
             }
