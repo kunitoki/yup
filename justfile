@@ -77,9 +77,10 @@ emscripten CONFIG="Debug" TARGET="yup_tests":
   @just build {{CONFIG}} {{TARGET}}
 
 [doc("run tests for WASM")]
-emscripten_test CONFIG="Debug":
-  @just build {{CONFIG}}
-  node build/tests/{{CONFIG}}/yup_tests.js --gtest_filter={{gtest_filter}}
+[working-directory: 'build/tests/Debug/']
+emscripten_test:
+  @just build Debug
+  node yup_tests.js --gtest_filter={{gtest_filter}}
 
 [doc("serve project for WASM")]
 emscripten_serve:
