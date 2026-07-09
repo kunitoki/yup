@@ -111,9 +111,10 @@ jobs:
           "*/native/*_emscripten.*" \
           "*/native/*_ios.*" \
           "*/native/*_mac.*" \
-          "*/native/*_sdl2.*" \
           "*/native/*_wasm.*" \
           "*/native/*_windows.*" \
+          "*/native/*_sdl2.*" \
+          "*/native/*_opengl.*" \
           --output-file coverage/coverage_final.info --ignore-errors ${IGNORE_ERRORS}
         lcov --list coverage/coverage_final.info
     - name: Upload Coverage to Codecov
