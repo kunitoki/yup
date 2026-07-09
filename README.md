@@ -77,8 +77,8 @@ YUP is a C++20 framework for building native applications, audio tools, and audi
 </div>
 
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
-  <a href="./examples/graphics/source/examples/LottieDemo.h"><img src="./docs/images/yup_lottie.gif" style="height:400px;" /></a>
-  <a href="./examples/graphics/source/examples/SpinningCubeDemo.h"><img src="./docs/images/yup_rhi_cube.jpg" style="width:53%;" /></a>
+  <a href="./examples/graphics/source/examples/LottieDemo.h"><img src="./docs/images/yup_lottie.gif" style="height:340px;" /></a>
+  <a href="./examples/graphics/source/examples/SpinningCubeDemo.h"><img src="./docs/images/yup_rhi_cube.jpg" style="width:54.5%;" /></a>
 </div>
 
 Example Rive animation display: [source code](./examples/graphics/source/main.cpp), [renderer video](https://youtube.com/shorts/3XC4hyDlrVs).
