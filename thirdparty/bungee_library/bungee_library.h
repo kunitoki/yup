@@ -32,7 +32,7 @@
     website:          https://github.com/mackron/dr_libs
     license:          MPL2.0
 
-    dependencies:     pffft_library eigen
+    dependencies:     pffft_library eigen_library
     searchpaths:      upstream
     defines:          BUNGEE_USE_PFFFT=1 BUNGEE_VERSION="2.4.8"
 
