@@ -128,8 +128,8 @@
 #endif
 
 //==============================================================================
-#if YUP_MODULE_AVAILABLE_eigen
-#include <eigen/eigen.h>
+#if YUP_MODULE_AVAILABLE_eigen_library
+#include <eigen_library/eigen_library.h>
 #endif
 
 //==============================================================================
@@ -149,7 +149,7 @@ YUP_BEGIN_IGNORE_WARNINGS_MSVC (4661)
 #include "buffers/yup_AffineTransformOperations.h"
 #include "buffers/yup_ColorVectorOperations.h"
 
-#if YUP_MODULE_AVAILABLE_eigen
+#if YUP_MODULE_AVAILABLE_eigen_library
 #include "types/yup_EigenAdapters.h"
 #endif
 

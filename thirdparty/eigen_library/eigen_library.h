@@ -24,7 +24,7 @@
 
   BEGIN_YUP_MODULE_DECLARATION
 
-    ID:               eigen
+    ID:               eigen_library
     vendor:           eigen
     version:          5.0.1
     name:             Eigen C++ template library for linear algebra
