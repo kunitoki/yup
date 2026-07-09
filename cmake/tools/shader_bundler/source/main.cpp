@@ -156,6 +156,8 @@ static void printReflectionInfo (const ShaderInfo& info)
     printBindings ("GlPlainUniforms", r.glPlainUniforms);
     printBindings ("PushConstantBuffers", r.pushConstantBuffers);
     printBindings ("AccelerationStructures", r.accelerationStructures);
+    printBindings ("SeparateImages", r.separateImages);
+    printBindings ("SeparateSamplers", r.separateSamplers);
 
     if (! r.glCombinedSamplers.empty())
     {

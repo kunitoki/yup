@@ -197,8 +197,9 @@ bool GpuRenderPass::Impl::encode (uint32_t count, bool indexed)
         {
             if (layoutEntry.kind != rive::ore::BindingKind::sampler
                 && layoutEntry.kind != rive::ore::BindingKind::comparisonSampler)
+            {
                 continue;
-
+            }
             rive::ore::SamplerDesc sd;
             sd.minFilter = rive::ore::Filter::linear;
             sd.magFilter = rive::ore::Filter::linear;

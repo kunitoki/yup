@@ -318,9 +318,9 @@ struct SerialisationTraits<ShaderReflection>
                  named ("specConstants", t.specConstants),
                  named ("workgroupSize", t.workgroupSize),
                  named ("positionInvariant", t.positionInvariant),
-                 named ("glCombinedSamplers", t.glCombinedSamplers),
                  named ("capabilities", t.capabilities),
-                 named ("extensions", t.extensions));
+                 named ("extensions", t.extensions),
+                 named ("glCombinedSamplers", t.glCombinedSamplers));
     }
 };
 

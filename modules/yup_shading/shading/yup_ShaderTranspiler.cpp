@@ -1120,12 +1120,12 @@ ResultValue<String> ShaderTranspiler::decompileFromSPIRV (const MemoryBlock& spi
                 setupGLCombinedSamplers (compiler);
 
                 spirv_cross::CompilerGLSL::Options glslOpts;
+
                 const bool es = options.es || (targetLang == ShaderLanguage::essl);
                 glslOpts.es = es;
-                // WebGL2 / GLES3 is GLSL ES 3.00 - never emit "#version 450 es".
                 glslOpts.version = es ? 300u : static_cast<uint32_t> (options.glslVersion);
                 glslOpts.vulkan_semantics = false;
-                glslOpts.vertex.flip_vert_y = options.flipVertY;
+                glslOpts.vertex.flip_vert_y = ! options.flipVertY;
 
                 compiler.set_common_options (glslOpts);
 
