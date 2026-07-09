@@ -5,12 +5,12 @@ compact binary container based on the **RIFF** (Resource Interchange File Format
 chunk structure. This lets a shader be compiled once (through `glslang` /
 `SPIRV-Cross`) and reused at runtime without paying the compilation cost again.
 
-A bundle stores three kinds of payload:
+A bundle stores two kinds of payload:
 
-- The **original source** used for compilation, typically GLSL v450.
 - The **SPIR-V binary** for each pipeline stage.
-- One **`ShaderInfo`** per `(stage x target language)` combination, each holding
-  the transpiled source plus the full `ShaderReflection`.
+- One **`ShaderInfo`** per `(stage × target language)` combination, each holding
+  the transpiled source, the original Vulkan GLSL input source, and full
+  `ShaderReflection`.
 
 Reference implementation: [`shading/yup_ShaderBundle.cpp`](shading/yup_ShaderBundle.cpp)
 
@@ -66,8 +66,8 @@ Two string forms are used:
 
 - **Length-prefixed** (`writeStringRaw`): `int32` UTF-8 byte length, then the
   raw UTF-8 bytes (no NUL terminator). A length `<= 0` decodes to an empty string.
-- **Raw / chunk-sized**: the string fills the entire chunk data (`SRCE`). Its
-  length is implied by the chunk `size`.
+- **Raw / chunk-sized**: the string fills the entire chunk data (e.g. `ISRC`).
+  Its length is implied by the chunk `size`.
 
 ---
 
@@ -81,12 +81,8 @@ The whole file is a single `RIFF` chunk whose form type is `YSLB`.
 +===========================================================================+
          |                                                                  |
          |   +--------+--------+------------------+                         |
-         |   |  VERS  |   4    |  version (u32)   |    format version = 1   |
+         |   |  VERS  |   4    |  version (u32)   |    format version = 2   |
          |   +--------+--------+------------------+                         |
-         |                                                                  |
-         |   +--------+--------+------------------------------+             |
-         |   |  SRCE  |  size  |  original source (UTF-8)     |             |
-         |   +--------+--------+------------------------------+             |
          |                                                                  |
          |   +--------+--------+----------+                                 |
          |   |  LIST  |  size  |  'SHAD'  |   <-- list of shader stages     |
@@ -102,12 +98,13 @@ The whole file is a single `RIFF` chunk whose form type is `YSLB`.
 |--------|-------|-----------------------------------------------------|
 | `RIFF` | chunk | Outer container. Form type is `YSLB`.               |
 | `YSLB` | form  | Bundle magic ("YUP Shader Language Bundle").        |
-| `VERS` | chunk | Format version (currently `1`). **Required.**       |
-| `SRCE` | chunk | Original shader source, raw UTF-8. **Required.**    |
+| `VERS` | chunk | Format version (currently `2`). **Required.**       |
 | `LIST` | list  | List type `SHAD`, containing one `SHDR` per stage.  |
 
-> On load, the reader rejects the file if `VERS` is missing, if `SRCE` is
-> missing, or if the version is greater than the supported version.
+> On load, the reader rejects the file if `VERS` is missing or if the version
+> does not exactly match the supported version (`kCurrentVersion = 2`).
+> Both older and newer versions are rejected with an error message that
+> identifies the mismatch.
 
 ---
 
@@ -153,9 +150,9 @@ transpiled language variants.
 
 ## 4. Per-Variant Chunk (`VART`)
 
-Each `VART` chunk holds one transpiled `(stage x language)` variant. The stage is
+Each `VART` chunk holds one transpiled `(stage × language)` variant. The stage is
 inherited from the enclosing `SHDR`; the variant only stores its target language,
-entry point, transpiled source, and reflection.
+entry point, transpiled source, optional original input source, and reflection.
 
 ```
 +--------+--------+--------------------------------------------------------+
@@ -172,18 +169,40 @@ entry point, transpiled source, and reflection.
 |   | len (int32) | source (UTF-8 bytes)        |   length-prefixed str    |
 |   +------------------+------------------------+                          |
 |                                                                          |
+|   +--------+--------+----------------------------+   (optional)          |
+|   |  ISRC  |  size  |  input source (UTF-8)      |   raw chunk-sized str |
+|   +--------+--------+----------------------------+                       |
+|                                                                          |
 |   +--------+--------+----------------------------+                       |
 |   |  REFL  |  size  |  reflection (archive blob) |   binary chunk        |
 |   +--------+--------+----------------------------+                       |
 +--------------------------------------------------------------------------+
 ```
 
-| Field        | Type          | Meaning                                       |
-|--------------|---------------|-----------------------------------------------|
-| `language`   | `int32`       | Target `ShaderLanguage` of this variant.      |
-| `entryPoint` | prefixed str  | Entry-point function name (e.g. `"main"`).    |
-| `source`     | prefixed str  | Transpiled source code in `language`.         |
-| `REFL`       | chunk         | Serialised `ShaderReflection` (see below).    |
+| Field        | Type          | Meaning                                                |
+|--------------|---------------|--------------------------------------------------------|
+| `language`   | `int32`       | Target `ShaderLanguage` of this variant.               |
+| `entryPoint` | prefixed str  | Entry-point function name (e.g. `"main"`).             |
+| `source`     | prefixed str  | Transpiled source code in `language`.                  |
+| `ISRC`       | chunk         | Original Vulkan GLSL input source, raw UTF-8. Optional — omitted when empty. |
+| `REFL`       | chunk         | Serialised `ShaderReflection` (see below).             |
+
+### `ISRC` — Original input source
+
+The `ISRC` sub-chunk stores the original Vulkan GLSL (`#version 450`) source that
+was compiled to SPIR-V for this stage. It is populated by `ShaderBundleCompiler`
+from `ShaderBundleCompileRequest::source` and maps to `ShaderInfo::inputSource`.
+
+**Why this matters for GL/GLES recompilation.** The `source` field contains
+SPIRV-Cross decompiled output (already-combined `sampler2D` uniforms). Feeding
+that back into glslang as Vulkan GLSL produces SPIR-V with no separate
+image/sampler resources, so `build_combined_image_samplers()` returns nothing,
+`glCombinedSamplers` is empty, and the GL fixup blob is empty — causing samplers
+to default to texture unit 0 (black texture). `ISRC` preserves the original source
+so `compileFromGlsl()` round-trips correctly.
+
+When `ISRC` is absent (bundles without an input source), `ShaderInfo::inputSource`
+is empty and callers should fall back to `ShaderInfo::source`.
 
 ---
 
@@ -208,6 +227,8 @@ Serialised reflection fields include:
 - `workgroupSize`
 - `positionInvariant`
 - `capabilities`, `extensions`
+- `glCombinedSamplers` (folded combined `sampler2D` entries with texture units,
+  used by `makeGLFixupBlob` to bind samplers by name after program linking)
 
 Because reflection uses the versioned archive layer, its schema can evolve
 independently of the RIFF envelope version.
@@ -222,15 +243,22 @@ independently of the RIFF envelope version.
 | `LIST` | `kFourCC_LIST`    | Generic list container.                       |
 | `YSLB` | `kFourCC_YSLB`    | Bundle form type (magic).                     |
 | `VERS` | `kFourCC_VERS`    | Format version chunk.                         |
-| `SRCE` | `kFourCC_SRCE`    | Original source chunk.                        |
 | `SHAD` | `kFourCC_SHAD`    | List type for the stage list.                 |
 | `SHDR` | `kFourCC_SHDR`    | Per-stage chunk.                              |
 | `SPVB` | `kFourCC_SPVB`    | SPIR-V binary chunk.                          |
 | `VARS` | `kFourCC_VARS`    | List type for the variant list.               |
 | `VART` | `kFourCC_VART`    | Per-variant chunk.                            |
+| `ISRC` | `kFourCC_ISRC`    | Original input source chunk (per-variant, optional). |
 | `REFL` | `kFourCC_REFL`    | Reflection archive chunk.                     |
 
-Current format version: **`1`** (`kCurrentVersion`).
+Current format version: **`2`** (`kCurrentVersion`).
+
+### Version history
+
+| Version | Change                                                                 |
+|---------|------------------------------------------------------------------------|
+| 1       | Initial format. Top-level `SRCE` chunk held a single per-bundle source. |
+| 2       | Removed `SRCE`. Added per-variant `ISRC` sub-chunk inside `VART`.     |
 
 ---
 
@@ -267,8 +295,7 @@ Enums are serialised as their underlying `int32` ordinal (declaration order in
 
 ```
 RIFF 'YSLB'
-├── VERS                       format version (u32)
-├── SRCE                       original UTF-8 source
+├── VERS                       format version (u32) = 2
 └── LIST 'SHAD'                stage list
     ├── SHDR                   stage #0
     │   ├── stage   (i32)
@@ -279,6 +306,7 @@ RIFF 'YSLB'
     │       │   ├── language   (i32)
     │       │   ├── entryPoint (len-prefixed str)
     │       │   ├── source     (len-prefixed str)
+    │       │   ├── ISRC       original input source (optional, raw UTF-8)
     │       │   └── REFL       reflection archive blob
     │       └── VART ...
     └── SHDR ...
@@ -303,6 +331,13 @@ auto loaded = yup::ShaderBundle::loadFromFile (yup::File ("myShader.ysl"));
 if (loaded)
     if (auto* info = loaded.getReference().findShader (ShaderStage::vertex, ShaderLanguage::msl))
         useSource (info->source);
+
+// For live recompilation on GL/GLES, prefer inputSource over source:
+if (auto* info = loaded.getReference().findShader (ShaderStage::vertex, ShaderLanguage::glsl))
+{
+    const auto& src = info->inputSource.isNotEmpty() ? info->inputSource : info->source;
+    auto recompiled = GpuPipeline::compileFromGlsl (ctx, src, fragSrc, options);
+}
 ```
 
 | Save                     | Load                                     |
@@ -312,10 +347,23 @@ if (loaded)
 | `saveToMemoryBlock`      | `loadFromMemoryBlock`                    |
 |                          | `loadFromData` (raw pointer + size)      |
 
+### Version rejection
+
+The loader performs an **exact** version check: if `VERS != kCurrentVersion` (2),
+loading fails immediately with an error message of the form:
+
+```
+ShaderBundle: bundle version N is not supported (expected 2)
+```
+
+This applies to both older bundles (version 1, missing `ISRC`) and future bundles.
+Existing `.ysl` files must be regenerated with the current `yup_shader_bundler`
+tool whenever the format version changes.
+
 ### Parser robustness
 
-The loader is tolerant of unknown chunks: `iterateChunks` walks every
-`[fourcc, size, data]` triplet and simply ignores tags it does not recognise,
-consuming pad bytes between chunks. This keeps the format **forward-compatible** —
-new chunk types can be added without breaking older readers, as long as the
-`VERS` value is not bumped past what the reader supports.
+Within a given version, the loader is tolerant of unknown chunks inside `VART`:
+`iterateChunks` walks every `[fourcc, size, data]` triplet and ignores tags it
+does not recognise, consuming pad bytes between chunks. Adding new optional
+sub-chunks to `VART` in a future version is safe as long as the `VERS` value is
+bumped and old bundles are regenerated.

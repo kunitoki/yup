@@ -411,7 +411,6 @@ static int runInspectMode (const ArgumentList& args)
     if (printValues.isEmpty() && ! doList && ! doInfo)
     {
         log->writeToLog ("Bundle: " + inspectPath.getFullPathName());
-        log->writeToLog ("Original source length: " + String (bundle.getOriginalSource().length()) + " bytes");
         log->writeToLog ("Variants: " + String ((int) bundle.getShaders().size()));
         log->writeToLog ("");
 

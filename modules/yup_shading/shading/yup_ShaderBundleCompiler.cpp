@@ -33,7 +33,6 @@ ShaderBundleCompiler::~ShaderBundleCompiler() = default;
 ResultValue<ShaderBundle> ShaderBundleCompiler::compile (const ShaderBundleCompileRequest& request)
 {
     ShaderBundle bundle;
-    bundle.setOriginalSource (request.source);
 
     for (const auto& entry : request.entries)
     {
@@ -70,6 +69,7 @@ ResultValue<ShaderBundle> ShaderBundleCompiler::compile (const ShaderBundleCompi
             info.language = targetLang;
             info.entryPoint = entry.options.entryPoint;
             info.source = srcResult.getValue();
+            info.inputSource = request.source;
             info.reflection = std::move (reflResult.getValue());
 
             bundle.addShader (std::move (info));

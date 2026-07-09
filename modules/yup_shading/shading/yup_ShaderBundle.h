@@ -47,6 +47,13 @@ struct ShaderInfo
     /** Transpiled source code in @c language. */
     String source;
 
+    /** Original Vulkan GLSL source used to compile this stage to SPIR-V.
+        Populated by ShaderBundleCompiler; empty for bundles created without it.
+        Use this (not @c source) as the input to compileFromGlsl() for live
+        recompilation — @c source is already-decompiled output that breaks the
+        glslang round-trip for GL/GLES targets. */
+    String inputSource;
+
     /** Reflection data extracted for this (SPIR-V, target language) pair. */
     ShaderReflection reflection;
 };
@@ -91,9 +98,6 @@ public:
     ShaderBundle& operator= (ShaderBundle&& other) = default;
 
     //==========================================================================
-    /** Set the original source code that was compiled to produce this bundle. */
-    void setOriginalSource (const String& src);
-
     /** Add a transpiled variant (one ShaderInfo per stage × language pair). */
     void addShader (ShaderInfo info);
 
@@ -101,9 +105,6 @@ public:
     void setSPIRV (ShaderStage stage, ShaderLanguage sourceLang, MemoryBlock spirv);
 
     //==========================================================================
-    /** Returns the original source code used for compilation. */
-    const String& getOriginalSource() const;
-
     /** Returns all transpiled variants in this bundle. */
     const std::vector<ShaderInfo>& getShaders() const;
 
@@ -135,8 +136,6 @@ public:
     static ResultValue<ShaderBundle> loadFromMemoryBlock (const MemoryBlock& block);
 
 private:
-    String originalSource;
-
     struct StageSPIRV
     {
         ShaderLanguage sourceLang = ShaderLanguage::glsl;
