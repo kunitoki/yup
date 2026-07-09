@@ -26,6 +26,8 @@
 #include "rive/renderer/gl/render_context_gl_impl.hpp"
 #include "rive/renderer/gl/render_target_gl.hpp"
 #include "rive/renderer/ore/ore_context_gl.hpp"
+#include "rive/renderer/render_context_impl.hpp"
+#include "rive/renderer/rive_render_image.hpp"
 #include <vector>
 #include <cstring>
 
@@ -217,6 +219,7 @@ public:
         int height = 0;
         rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
         rive::gpu::RenderContext* renderContext = nullptr;
+        mutable rive::rcp<rive::gpu::Texture> sampledMirrorTex;
 
         int getWidth() const noexcept override { return width; }
 
@@ -244,6 +247,39 @@ public:
 
             return renderCanvas->renderImage()->refTexture();
         }
+
+        rive::rcp<rive::gpu::Texture> getOrCreateSampledTexture() override
+        {
+#if defined(ORE_BACKEND_GL) && defined(RIVE_CANVAS)
+            if (sampledMirrorTex != nullptr)
+                return sampledMirrorTex;
+
+            if (renderContext == nullptr || renderCanvas == nullptr)
+                return nullptr;
+
+            auto renderImage = renderCanvas->renderImage();
+            if (renderImage == nullptr)
+                return nullptr;
+
+            if (auto sourceTex = renderImage->refTexture())
+            {
+                auto mirrorImage = rive::getCanvasImportMirrorGL (
+                    renderContext, sourceTex.get(), (uint32_t) width, (uint32_t) height);
+
+                if (mirrorImage != nullptr)
+                    sampledMirrorTex = mirrorImage->refTexture();
+            }
+
+            return sampledMirrorTex;
+#else
+            return nullptr;
+#endif
+        }
+
+        rive::rcp<rive::gpu::Texture> getSampledTexture() const override
+        {
+            return sampledMirrorTex;
+        }
     };
 
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
@@ -251,23 +287,23 @@ public:
         if (width <= 0 || height <= 0 || m_offscreenRenderContext == nullptr)
             return nullptr;
 
+        auto renderCanvas = m_offscreenRenderContext->makeRenderCanvas (static_cast<uint32_t> (width), static_cast<uint32_t> (height));
+        if (renderCanvas == nullptr)
+            return nullptr;
+
         auto target = std::make_unique<OffscreenTargetGL>();
         target->width = width;
         target->height = height;
         target->renderContext = m_offscreenRenderContext.get();
-        target->renderCanvas = m_offscreenRenderContext->makeRenderCanvas (static_cast<uint32_t> (width),
-                                                                           static_cast<uint32_t> (height));
-        if (target->renderCanvas == nullptr)
-            return nullptr;
-
+        target->renderCanvas = std::move (renderCanvas);
         return target;
     }
 
     void beginOffscreen (OffscreenTarget& baseTarget, const rive::gpu::RenderContext::FrameDescriptor& frameDesc) override
     {
         auto& target = static_cast<OffscreenTargetGL&> (baseTarget);
-        auto* renderContext = target.getRenderContext();
 
+        auto renderContext = target.getRenderContext();
         if (renderContext == nullptr)
             return;
 
@@ -278,8 +314,8 @@ public:
     void endOffscreen (OffscreenTarget& baseTarget) override
     {
         auto& target = static_cast<OffscreenTargetGL&> (baseTarget);
-        auto* renderContext = target.getRenderContext();
 
+        auto renderContext = target.getRenderContext();
         if (renderContext == nullptr)
             return;
 

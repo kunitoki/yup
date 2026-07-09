@@ -22,8 +22,6 @@
 namespace yup
 {
 
-//==============================================================================
-
 GpuCanvas::Ptr GpuCanvas::create (GraphicsContext& ctx, int width, int height)
 {
     if (width <= 0 || height <= 0)
@@ -53,35 +51,21 @@ int GpuCanvas::getHeight() const noexcept
 
 //==============================================================================
 
-Graphics& GpuCanvas::ensureGraphics()
+Graphics& GpuCanvas::beginDraw()
 {
     jassert (ctx != nullptr && offscreenTarget != nullptr);
 
-    if (graphics == nullptr)
-    {
-        graphics = std::make_unique<Graphics> (*ctx, *offscreenTarget, 0u);
-        frameOpen = true;
-    }
-
-    return *graphics;
-}
-
-Graphics& GpuCanvas::getGraphics() noexcept
-{
-    return ensureGraphics();
-}
-
-//==============================================================================
-
-void GpuCanvas::beginNewFrame()
-{
-    // Drop the previous frame's Graphics so the next ensureGraphics() re-opens a
-    // fresh offscreen 2D frame on the existing (already-allocated) target. The
-    // cached sampled texture is kept: it wraps the same GPU render target, whose
-    // contents are overwritten by the new frame.
+    // Drop the previous frame's Graphics so a fresh offscreen 2D frame opens on
+    // the existing (already-allocated) target. cachedTexture is kept: it wraps
+    // the same GPU render target whose contents are overwritten by the new frame.
     graphics.reset();
     frameOpen = false;
     committed = false;
+
+    graphics = std::make_unique<Graphics> (*ctx, *offscreenTarget, 0u);
+    frameOpen = true;
+
+    return *graphics;
 }
 
 //==============================================================================
@@ -90,6 +74,11 @@ bool GpuCanvas::commit()
 {
     if (! frameOpen || committed || ctx == nullptr || offscreenTarget == nullptr)
         return false;
+
+    // Ensure the Y-flipped sampled mirror exists before the flush so that
+    // blitMirrorIfRegistered (called inside endOffscreen) can update it.
+    // No-op on non-GL backends and for canvases never used as sampled inputs.
+    offscreenTarget->getOrCreateSampledTexture();
 
     ctx->endOffscreen (*offscreenTarget);
     committed = true;
@@ -103,10 +92,11 @@ GpuTexture::Ptr GpuCanvas::asTexture()
     if (offscreenTarget == nullptr)
         return nullptr;
 
-    // A canvas used purely as a GpuRenderPass target has no 2D frame to commit,
-    // but one opened via getGraphics() must be committed first.
+    // Auto-commit a 2D frame opened via beginDraw() so callers don't need to
+    // call commit() explicitly. Render-pass-only canvases never set frameOpen,
+    // so this is a no-op for them.
     if (frameOpen && ! committed)
-        return nullptr;
+        commit();
 
     if (cachedTexture != nullptr)
         return cachedTexture;
@@ -116,9 +106,16 @@ GpuTexture::Ptr GpuCanvas::asTexture()
     const int h = target.getHeight();
 
     if (auto canvas = target.getRenderCanvas())
+    {
         cachedTexture = GpuTexture::fromRenderCanvas (std::move (canvas), w, h);
+        // Only attach the Y-flip mirror if commit() already created it.
+        // GPU render-pass canvases never call commit().
+        cachedTexture->sampledTexture = target.getSampledTexture();
+    }
     else if (auto tex = target.adoptAsTexture())
+    {
         cachedTexture = GpuTexture::fromGpuTexture (std::move (tex), w, h);
+    }
 
     return cachedTexture;
 }

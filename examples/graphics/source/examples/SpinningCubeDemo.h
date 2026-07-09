@@ -871,18 +871,13 @@ void main() {
             if (lottieCanvas == nullptr)
                 return nullptr;
         }
-        else
-        {
-            lottieCanvas->beginNewFrame();
-        }
 
-        auto& g = lottieCanvas->getGraphics();
+        auto& g = lottieCanvas->beginDraw();
         g.setFillColor (yup::Colors::white);
         g.fillAll();
 
         lottiePlayer.render (g, yup::Rectangle<float> (0.0f, 0.0f, (float) kLottieTextureSize, (float) kLottieTextureSize), true);
 
-        lottieCanvas->commit();
         return lottieCanvas->asTexture();
     }
 

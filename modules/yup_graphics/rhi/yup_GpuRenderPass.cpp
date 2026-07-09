@@ -104,6 +104,12 @@ struct GpuRenderPass::Impl
             return nullptr;
         }
 
+        // Prefer the Y-flipped mirror for GL/GLES canvas textures so sampled
+        // inputs present UV.y=0=top (matching Metal/D3D convention) without
+        // requiring backend-specific UV logic in user shaders.
+        if (tex.sampledTexture != nullptr)
+            return oreCtx.wrapRiveTexture (tex.sampledTexture.get(), (uint32_t) tex.getWidth(), (uint32_t) tex.getHeight());
+
         if (auto gpuTex = tex.getOrAdoptGpuTexture())
             return oreCtx.wrapRiveTexture (gpuTex.get(), (uint32_t) tex.getWidth(), (uint32_t) tex.getHeight());
 

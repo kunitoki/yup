@@ -87,6 +87,7 @@ private:
 
     mutable rive::rcp<rive::gpu::Texture> gpuTexture;
     rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
+    rive::rcp<rive::gpu::Texture> sampledTexture; // GL Y-flipped mirror; null on non-GL backends
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuTexture)
 };
