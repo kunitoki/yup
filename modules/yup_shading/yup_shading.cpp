@@ -35,6 +35,7 @@
 
 #if YUP_ENABLE_SHADER_TRANSPILER
 #include <glslang/glslang.h>
+#include <glslang/upstream/StandAlone/DirStackFileIncluder.h>
 #include <spirv_cross/spirv_cross.h>
 
 #include "shading/yup_ShaderTranspiler.cpp"

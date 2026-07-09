@@ -305,6 +305,81 @@ TEST_F (ShaderCacheTests, GenerateCacheKey_MSLOptionsChangeKey)
     EXPECT_NE (key1, key2);
 }
 
+TEST_F (ShaderCacheTests, GenerateCacheKey_SpirvOptimizationChangesKey)
+{
+    TranspileOptions optsNone;
+    optsNone.spirvOptimization = SpvOptimizationMode::none;
+
+    TranspileOptions optsSize;
+    optsSize.spirvOptimization = SpvOptimizationMode::size;
+
+    TranspileOptions optsPerf;
+    optsPerf.spirvOptimization = SpvOptimizationMode::performance;
+
+    auto keyNone = ShaderCache::generateCacheKey (
+        kTestVertex, ShaderStage::vertex, ShaderLanguage::glsl, optsNone);
+    auto keySize = ShaderCache::generateCacheKey (
+        kTestVertex, ShaderStage::vertex, ShaderLanguage::glsl, optsSize);
+    auto keyPerf = ShaderCache::generateCacheKey (
+        kTestVertex, ShaderStage::vertex, ShaderLanguage::glsl, optsPerf);
+
+    EXPECT_NE (keyNone, keySize);
+    EXPECT_NE (keyNone, keyPerf);
+    EXPECT_NE (keySize, keyPerf);
+}
+
+TEST_F (ShaderCacheTests, GenerateCacheKey_SpirvValidateAndDebugChangeKey)
+{
+    TranspileOptions base;
+
+    TranspileOptions validate;
+    validate.spirvValidate = true;
+
+    TranspileOptions debug;
+    debug.spirvDebugInfo = true;
+
+    auto keyBase = ShaderCache::generateCacheKey (
+        kTestVertex, ShaderStage::vertex, ShaderLanguage::glsl, base);
+    auto keyValidate = ShaderCache::generateCacheKey (
+        kTestVertex, ShaderStage::vertex, ShaderLanguage::glsl, validate);
+    auto keyDebug = ShaderCache::generateCacheKey (
+        kTestVertex, ShaderStage::vertex, ShaderLanguage::glsl, debug);
+
+    EXPECT_NE (keyBase, keyValidate);
+    EXPECT_NE (keyBase, keyDebug);
+}
+
+TEST_F (ShaderCacheTests, GenerateCacheKey_IncludePathsChangeKey)
+{
+    TranspileOptions base;
+
+    TranspileOptions withInc;
+    withInc.includePaths = { "/shaders/common", "/shaders/lib" };
+
+    auto keyBase = ShaderCache::generateCacheKey (
+        kTestVertex, ShaderStage::vertex, ShaderLanguage::glsl, base);
+    auto keyInc = ShaderCache::generateCacheKey (
+        kTestVertex, ShaderStage::vertex, ShaderLanguage::glsl, withInc);
+
+    EXPECT_NE (keyBase, keyInc);
+}
+
+TEST_F (ShaderCacheTests, GenerateCacheKey_IncludePathOrderIsDeterministic)
+{
+    TranspileOptions a;
+    a.includePaths = { "/shaders/common", "/shaders/lib" };
+
+    TranspileOptions b;
+    b.includePaths = { "/shaders/lib", "/shaders/common" };
+
+    auto keyA = ShaderCache::generateCacheKey (
+        kTestVertex, ShaderStage::vertex, ShaderLanguage::glsl, a);
+    auto keyB = ShaderCache::generateCacheKey (
+        kTestVertex, ShaderStage::vertex, ShaderLanguage::glsl, b);
+
+    EXPECT_EQ (keyA, keyB);
+}
+
 //==============================================================================
 // store / contains / remove / clear
 //==============================================================================

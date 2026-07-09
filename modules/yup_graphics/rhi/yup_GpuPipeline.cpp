@@ -752,7 +752,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromGlsl (GraphicsContext& ctx
         ShaderBundleEntry entry;
         entry.stage = stage;
         entry.targetLanguages = { targetLang };
-        entry.options.spirvOptimize = false;
+        entry.options.spirvOptimization = SpvOptimizationMode::none;
         return entry;
     };
 
