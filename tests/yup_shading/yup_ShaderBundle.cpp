@@ -156,7 +156,6 @@ protected:
 TEST_F (ShaderBundleTests, RoundtripEmptyBundle)
 {
     ShaderBundle original;
-    original.setOriginalSource ("");
 
     MemoryBlock mem;
     ASSERT_TRUE (original.saveToMemoryBlock (mem).wasOk());
@@ -164,16 +163,18 @@ TEST_F (ShaderBundleTests, RoundtripEmptyBundle)
     auto loaded = ShaderBundle::loadFromMemoryBlock (mem);
     ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
 
-    EXPECT_EQ (loaded.getReference().getOriginalSource(), "");
     EXPECT_TRUE (loaded.getReference().getShaders().empty());
 }
 
-TEST_F (ShaderBundleTests, RoundtripOriginalSourcePreserved)
+TEST_F (ShaderBundleTests, RoundtripInputSourcePreserved)
 {
     const String source = "void main() { gl_Position = vec4(1.0); }";
 
+    auto info = makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::glsl);
+    info.inputSource = source;
+
     ShaderBundle bundle;
-    bundle.setOriginalSource (source);
+    bundle.addShader (info);
 
     MemoryBlock mem;
     ASSERT_TRUE (bundle.saveToMemoryBlock (mem).wasOk());
@@ -181,13 +182,14 @@ TEST_F (ShaderBundleTests, RoundtripOriginalSourcePreserved)
     auto loaded = ShaderBundle::loadFromMemoryBlock (mem);
     ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
 
-    EXPECT_EQ (loaded.getReference().getOriginalSource(), source);
+    const auto* loadedInfo = loaded.getReference().findShader (ShaderStage::vertex, ShaderLanguage::glsl);
+    ASSERT_NE (loadedInfo, nullptr);
+    EXPECT_EQ (loadedInfo->inputSource, source);
 }
 
 TEST_F (ShaderBundleTests, RoundtripWithShaders)
 {
     ShaderBundle original;
-    original.setOriginalSource (kShaderBundleMinimalVertexGLSL);
 
     const auto info = makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::msl);
     original.addShader (info);
@@ -206,7 +208,6 @@ TEST_F (ShaderBundleTests, RoundtripWithShaders)
 TEST_F (ShaderBundleTests, RoundtripMultipleShaders)
 {
     ShaderBundle original;
-    original.setOriginalSource (kShaderBundleMinimalVertexGLSL);
 
     original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::msl));
     original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::hlsl));
@@ -268,7 +269,7 @@ TEST_F (ShaderBundleTests, LoadFromEmptyDataFails)
 TEST_F (ShaderBundleTests, WrongMagicRejected)
 {
     ShaderBundle original;
-    original.setOriginalSource ("test");
+    original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::msl));
 
     MemoryBlock mem;
     ASSERT_TRUE (original.saveToMemoryBlock (mem).wasOk());
@@ -289,7 +290,7 @@ TEST_F (ShaderBundleTests, WrongMagicRejected)
 TEST_F (ShaderBundleTests, WrongFormTypeRejected)
 {
     ShaderBundle original;
-    original.setOriginalSource ("test");
+    original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::msl));
 
     MemoryBlock mem;
     ASSERT_TRUE (original.saveToMemoryBlock (mem).wasOk());
@@ -313,7 +314,6 @@ TEST_F (ShaderBundleTests, SaveToFileAndLoadBack)
                              .getChildFile ("yup_shader_bundle_test.ysl");
 
     ShaderBundle original;
-    original.setOriginalSource (kShaderBundleMinimalFragmentGLSL);
     original.addShader (makeSyntheticShaderInfo (ShaderStage::fragment, ShaderLanguage::msl));
 
     ASSERT_TRUE (original.saveToFile (tmpFile).wasOk());
@@ -322,7 +322,6 @@ TEST_F (ShaderBundleTests, SaveToFileAndLoadBack)
     auto loaded = ShaderBundle::loadFromFile (tmpFile);
     ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
 
-    EXPECT_EQ (loaded.getReference().getOriginalSource(), String (kShaderBundleMinimalFragmentGLSL));
     EXPECT_EQ (loaded.getReference().getShaders().size(), 1u);
 
     tmpFile.deleteFile();
@@ -331,7 +330,6 @@ TEST_F (ShaderBundleTests, SaveToFileAndLoadBack)
 TEST_F (ShaderBundleTests, SPIRVStoredAndRecovered)
 {
     ShaderBundle original;
-    original.setOriginalSource ("dummy");
 
     MemoryBlock spirv (16, false);
     for (size_t i = 0; i < 16; ++i)
@@ -351,7 +349,6 @@ TEST_F (ShaderBundleTests, SPIRVStoredAndRecovered)
 TEST_F (ShaderBundleTests, RoundtripAllThreeLanguages)
 {
     ShaderBundle original;
-    original.setOriginalSource ("multi-lang");
     original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::glsl));
     original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::hlsl));
     original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::msl));
@@ -371,7 +368,6 @@ TEST_F (ShaderBundleTests, RoundtripAllThreeLanguages)
 TEST_F (ShaderBundleTests, RoundtripVertexAndFragmentStages)
 {
     ShaderBundle original;
-    original.setOriginalSource ("vert+frag");
     original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::glsl));
     original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::msl));
     original.addShader (makeSyntheticShaderInfo (ShaderStage::fragment, ShaderLanguage::glsl));
@@ -396,7 +392,6 @@ TEST_F (ShaderBundleTests, RoundtripExactShaderContent)
     const auto frag = makeSyntheticShaderInfo (ShaderStage::fragment, ShaderLanguage::hlsl);
 
     ShaderBundle original;
-    original.setOriginalSource ("exact-content");
     original.addShader (vert);
     original.addShader (frag);
 
@@ -418,7 +413,6 @@ TEST_F (ShaderBundleTests, RoundtripExactShaderContent)
 TEST_F (ShaderBundleTests, RoundtripShaderOrderPreserved)
 {
     ShaderBundle original;
-    original.setOriginalSource ("order-check");
     original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::glsl));
     original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::msl));
     original.addShader (makeSyntheticShaderInfo (ShaderStage::fragment, ShaderLanguage::glsl));
@@ -456,7 +450,6 @@ TEST_F (ShaderBundleTests, RoundtripStorageBuffersInReflection)
     info.reflection.storageBuffers = { sb };
 
     ShaderBundle original;
-    original.setOriginalSource ("storage-buf");
     original.addShader (info);
 
     MemoryBlock mem;
@@ -489,7 +482,6 @@ TEST_F (ShaderBundleTests, RoundtripSpecializationConstantsInReflection)
     info.reflection.specConstants = { sc };
 
     ShaderBundle original;
-    original.setOriginalSource ("spec-const");
     original.addShader (info);
 
     MemoryBlock mem;
@@ -531,7 +523,6 @@ TEST_F (ShaderBundleTests, RoundtripStageInputsAndOutputsInReflection)
     info.reflection.stageOutputs = { output };
 
     ShaderBundle original;
-    original.setOriginalSource ("io");
     original.addShader (info);
 
     MemoryBlock mem;
@@ -548,12 +539,15 @@ TEST_F (ShaderBundleTests, RoundtripStageInputsAndOutputsInReflection)
     EXPECT_EQ (loadedInfo->reflection.stageOutputs[0].name, String ("outColor"));
 }
 
-TEST_F (ShaderBundleTests, RoundtripUnicodeOriginalSource)
+TEST_F (ShaderBundleTests, RoundtripUnicodeInputSource)
 {
     const String unicodeSource = String (L"// 日本語 éàü shader\nvoid main() {}");
 
+    auto info = makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::glsl);
+    info.inputSource = unicodeSource;
+
     ShaderBundle original;
-    original.setOriginalSource (unicodeSource);
+    original.addShader (info);
 
     MemoryBlock mem;
     ASSERT_TRUE (original.saveToMemoryBlock (mem).wasOk());
@@ -561,15 +555,20 @@ TEST_F (ShaderBundleTests, RoundtripUnicodeOriginalSource)
     auto loaded = ShaderBundle::loadFromMemoryBlock (mem);
     ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
 
-    EXPECT_EQ (loaded.getReference().getOriginalSource(), unicodeSource);
+    const auto* loadedInfo = loaded.getReference().findShader (ShaderStage::vertex, ShaderLanguage::glsl);
+    ASSERT_NE (loadedInfo, nullptr);
+    EXPECT_EQ (loadedInfo->inputSource, unicodeSource);
 }
 
 TEST_F (ShaderBundleTests, RoundtripOddLengthSource)
 {
     for (const char* src : { "a", "abc", "abcde" })
     {
+        auto info = makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::glsl);
+        info.inputSource = src;
+
         ShaderBundle original;
-        original.setOriginalSource (src);
+        original.addShader (info);
 
         MemoryBlock mem;
         ASSERT_TRUE (original.saveToMemoryBlock (mem).wasOk()) << "source: " << src;
@@ -577,7 +576,9 @@ TEST_F (ShaderBundleTests, RoundtripOddLengthSource)
         auto loaded = ShaderBundle::loadFromMemoryBlock (mem);
         ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage() << " source: " << src;
 
-        EXPECT_EQ (loaded.getReference().getOriginalSource(), String (src));
+        const auto* loadedInfo = loaded.getReference().findShader (ShaderStage::vertex, ShaderLanguage::glsl);
+        ASSERT_NE (loadedInfo, nullptr) << "source: " << src;
+        EXPECT_EQ (loadedInfo->inputSource, String (src));
     }
 }
 
@@ -590,7 +591,6 @@ TEST_F (ShaderBundleTests, RoundtripEmptyShaderSourceAndEntryPoint)
     info.source = "";
 
     ShaderBundle original;
-    original.setOriginalSource ("empty-fields");
     original.addShader (info);
 
     MemoryBlock mem;
@@ -608,7 +608,6 @@ TEST_F (ShaderBundleTests, RoundtripEmptyShaderSourceAndEntryPoint)
 TEST_F (ShaderBundleTests, VersionTooHighRejected)
 {
     ShaderBundle original;
-    original.setOriginalSource ("ver-test");
 
     MemoryBlock mem;
     ASSERT_TRUE (original.saveToMemoryBlock (mem).wasOk());
@@ -627,7 +626,6 @@ TEST_F (ShaderBundleTests, VersionTooHighRejected)
 TEST_F (ShaderBundleTests, TruncatedStreamFails)
 {
     ShaderBundle original;
-    original.setOriginalSource (kShaderBundleMinimalVertexGLSL);
     original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::glsl));
 
     MemoryBlock full;
@@ -648,18 +646,15 @@ TEST_F (ShaderBundleTests, OverwriteExistingFileSucceeds)
 
     // First save
     ShaderBundle first;
-    first.setOriginalSource ("first-version");
     ASSERT_TRUE (first.saveToFile (tmpFile).wasOk());
 
     // Second save to same path
     ShaderBundle second;
-    second.setOriginalSource ("second-version");
     second.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::glsl));
     ASSERT_TRUE (second.saveToFile (tmpFile).wasOk());
 
     auto loaded = ShaderBundle::loadFromFile (tmpFile);
     ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
-    EXPECT_EQ (loaded.getReference().getOriginalSource(), String ("second-version"));
     EXPECT_EQ (loaded.getReference().getShaders().size(), 1u);
 
     tmpFile.deleteFile();
@@ -668,7 +663,6 @@ TEST_F (ShaderBundleTests, OverwriteExistingFileSucceeds)
 TEST_F (ShaderBundleTests, MultipleRoundtripsProduceSameResult)
 {
     ShaderBundle original;
-    original.setOriginalSource (kShaderBundleMinimalFragmentGLSL);
     original.addShader (makeSyntheticShaderInfo (ShaderStage::fragment, ShaderLanguage::msl));
 
     MemoryBlock mem1;
@@ -688,7 +682,6 @@ TEST_F (ShaderBundleTests, MultipleRoundtripsProduceSameResult)
 TEST_F (ShaderBundleTests, SaveAndLoadViaStreamDirectly)
 {
     ShaderBundle original;
-    original.setOriginalSource ("stream-test");
     original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::hlsl));
 
     MemoryBlock mem;
@@ -702,7 +695,6 @@ TEST_F (ShaderBundleTests, SaveAndLoadViaStreamDirectly)
         auto loaded = ShaderBundle::loadFromStream (mis);
         ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
 
-        EXPECT_EQ (loaded.getReference().getOriginalSource(), String ("stream-test"));
         ASSERT_EQ (loaded.getReference().getShaders().size(), 1u);
         EXPECT_EQ (loaded.getReference().getShaders()[0].stage, ShaderStage::vertex);
         EXPECT_EQ (loaded.getReference().getShaders()[0].language, ShaderLanguage::hlsl);
@@ -812,11 +804,11 @@ TEST_F (ShaderBundleCompilerTests, CompileRoundtrip)
     auto reloaded = ShaderBundle::loadFromMemoryBlock (mem);
     ASSERT_TRUE (reloaded.wasOk()) << reloaded.getErrorMessage();
 
-    EXPECT_EQ (reloaded.getReference().getOriginalSource(), String (kShaderBundleMinimalVertexGLSL));
     EXPECT_EQ (reloaded.getReference().getShaders().size(), 1u);
 
     const auto* info = reloaded.getReference().findShader (ShaderStage::vertex, ShaderLanguage::glsl);
     ASSERT_NE (info, nullptr);
+    EXPECT_EQ (info->inputSource, String (kShaderBundleMinimalVertexGLSL));
     EXPECT_FALSE (info->source.isEmpty());
     EXPECT_FALSE (info->reflection.entryPoints.empty());
 }
@@ -854,6 +846,57 @@ TEST_F (ShaderBundleCompilerTests, DefaultConstructorCreatesOwnTranspiler)
     auto result = compiler.compile (req);
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
     EXPECT_EQ (result.getReference().getShaders().size(), 1u);
+}
+
+TEST_F (ShaderBundleCompilerTests, CompiledSourceDiffersFromInputSource)
+{
+    ShaderBundleCompiler compiler (transpiler);
+
+    ShaderBundleCompileRequest req;
+    req.source = kShaderBundleMinimalVertexGLSL;
+    req.sourceLanguage = ShaderLanguage::glsl;
+
+    ShaderBundleEntry entry;
+    entry.stage = ShaderStage::vertex;
+    entry.targetLanguages = { ShaderLanguage::glsl, ShaderLanguage::essl, ShaderLanguage::hlsl, ShaderLanguage::msl };
+    req.entries.push_back (entry);
+
+    auto result = compiler.compile (req);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& shaders = result.getReference().getShaders();
+    ASSERT_EQ (shaders.size(), 4u);
+
+    for (const auto& info : shaders)
+    {
+        EXPECT_EQ (info.inputSource, String (kShaderBundleMinimalVertexGLSL));
+        EXPECT_FALSE (info.source.isEmpty());
+        EXPECT_NE (info.source, info.inputSource);
+    }
+}
+
+TEST_F (ShaderBundleCompilerTests, CompileVertexToESSL)
+{
+    ShaderBundleCompiler compiler (transpiler);
+
+    ShaderBundleCompileRequest req;
+    req.source = kShaderBundleMinimalVertexGLSL;
+    req.sourceLanguage = ShaderLanguage::glsl;
+
+    ShaderBundleEntry entry;
+    entry.stage = ShaderStage::vertex;
+    entry.targetLanguages = { ShaderLanguage::essl };
+    req.entries.push_back (entry);
+
+    auto result = compiler.compile (req);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto* info = result.getReference().findShader (ShaderStage::vertex, ShaderLanguage::essl);
+    ASSERT_NE (info, nullptr);
+    EXPECT_FALSE (info->source.isEmpty());
+    EXPECT_EQ (info->entryPoint, "main");
+    EXPECT_EQ (info->inputSource, String (kShaderBundleMinimalVertexGLSL));
+    EXPECT_NE (info->source, info->inputSource);
 }
 
 #endif // YUP_ENABLE_SHADER_TRANSPILER
