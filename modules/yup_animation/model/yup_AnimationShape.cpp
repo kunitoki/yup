@@ -24,6 +24,12 @@ namespace yup
 
 Path EllipseShape::buildPath (float frameNo) const
 {
+    if (isFullyStatic())
+    {
+        if (cachedPath.has_value())
+            return *cachedPath;
+    }
+
     const Point<float> c = center.getValueAt (frameNo);
     const Size<float> s = size.getValueAt (frameNo);
 
@@ -38,6 +44,9 @@ Path EllipseShape::buildPath (float frameNo) const
         // TODO: reverse path winding if needed
     }
 
+    if (isFullyStatic())
+        cachedPath = p;
+
     return p;
 }
 
@@ -46,6 +55,12 @@ Path EllipseShape::buildPath (float frameNo) const
 
 Path RectShape::buildPath (float frameNo) const
 {
+    if (isFullyStatic())
+    {
+        if (cachedPath.has_value())
+            return *cachedPath;
+    }
+
     const Point<float> pos = position.getValueAt (frameNo);
     const Size<float> sz = size.getValueAt (frameNo);
     const float r = roundness.getValueAt (frameNo);
@@ -65,6 +80,9 @@ Path RectShape::buildPath (float frameNo) const
         p.addRoundedRectangle (x, y, sz.getWidth(), sz.getHeight(), clampedR);
     }
 
+    if (isFullyStatic())
+        cachedPath = p;
+
     return p;
 }
 
@@ -73,6 +91,14 @@ Path RectShape::buildPath (float frameNo) const
 
 Path BezierPathShape::buildPath (float frameNo) const
 {
+    if (isFullyStatic())
+    {
+        if (cachedPath.has_value())
+            return *cachedPath;
+        cachedPath = pathData.getValueAt (frameNo).toPath();
+        return *cachedPath;
+    }
+
     return pathData.getValueAt (frameNo).toPath();
 }
 
@@ -81,6 +107,12 @@ Path BezierPathShape::buildPath (float frameNo) const
 
 Path PolystarShape::buildPath (float frameNo) const
 {
+    if (isFullyStatic())
+    {
+        if (cachedPath.has_value())
+            return *cachedPath;
+    }
+
     const Point<float> pos = position.getValueAt (frameNo);
     const int numPt = jmax (3, static_cast<int> (points.getValueAt (frameNo)));
     const float oR = outerRadius.getValueAt (frameNo);
@@ -185,6 +217,10 @@ Path PolystarShape::buildPath (float frameNo) const
     }
 
     p.close();
+
+    if (isFullyStatic())
+        cachedPath = p;
+
     return p;
 }
 

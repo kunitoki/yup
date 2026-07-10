@@ -61,23 +61,42 @@ private:
                                    std::optional<Color> paintOverride = std::nullopt);
 
     //==============================================================================
-    // Per-render context built once per frame
-    struct RenderContext
+    // Shared per-frame scene data (avoided per-layer deep copy)
+    struct SceneContext
     {
         const AnimationComposition& comp;
         float frameNo;
-        AffineTransform viewTransform; ///< composition-space → screen-space
-        float opacity = 1.0f;
-        std::optional<Color> paintOverride;
+        Size<float> compSize;
 
         /** Maps layer id → accumulated world-space transform (parents resolved). */
         HashMap<int, AffineTransform> parentTransforms;
 
-        void buildParentTransforms();
+        void buildParentTransforms (const std::vector<AnimationLayer::Ptr>& layers);
+    };
+
+    // Precomp texture cache — renders a precomp asset once per frame and reuses
+    // the resulting GPU texture for subsequent instances of the same asset.
+    struct PrecompCache
+    {
+        HashMap<String, GpuTexture::Ptr> textures;
+    };
+
+    // Per-layer context (cheap to copy — no heap allocations)
+    struct RenderContext
+    {
+        const SceneContext& scene;
+        AffineTransform viewTransform; ///< composition-space → screen-space
+        float opacity = 1.0f;
+        std::optional<Color> paintOverride;
+        PrecompCache* precompCache = nullptr; ///< Owned by the outermost renderComposition call.
+
         AffineTransform resolveLayerTransform (const AnimationLayer& layer) const;
     };
 
     //==============================================================================
+    static void renderLayerList (Graphics& g,
+                                 const std::vector<AnimationLayer::Ptr>& layers,
+                                 const RenderContext& ctx);
     static void renderLayer (Graphics& g,
                              const AnimationLayer& layer,
                              const RenderContext& ctx,

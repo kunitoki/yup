@@ -24,6 +24,12 @@ namespace yup
 
 AffineTransform AnimationTransform::toAffineTransform (float frameNo) const
 {
+    if (isStatic())
+    {
+        if (cachedStaticXf.has_value())
+            return *cachedStaticXf;
+    }
+
     const Point<float> a = anchor.getValueAt (frameNo);
     const Size<float> s = scale.getValueAt (frameNo);
     const float r = is3DData ? rotationZ.getValueAt (frameNo) : rotation.getValueAt (frameNo);
@@ -60,6 +66,10 @@ AffineTransform AnimationTransform::toAffineTransform (float frameNo) const
 
     t = t.rotated (degreesToRadians (r));
     t = t.translated (p.getX(), p.getY());
+
+    if (isStatic())
+        cachedStaticXf = t;
+
     return t;
 }
 
@@ -70,8 +80,12 @@ float AnimationTransform::opacityAt (float frameNo) const
 
 bool AnimationTransform::isStatic() const noexcept
 {
+    const bool posStatic = separatePosition
+                             ? (positionX.isStatic() && positionY.isStatic())
+                             : position.isStatic();
+
     return anchor.isStatic()
-        && position.isStatic()
+        && posStatic
         && scale.isStatic()
         && rotation.isStatic()
         && opacity.isStatic()
@@ -126,8 +140,22 @@ Point<float> AnimationTransform::positionAt (float frameNo) const
     const auto P3 = k0.endValue.value_or (k1.value);
     const auto P2 = P3 + k1.tangentIn;
 
+    // Precompute & cache segment lengths
+    if (cachedSegmentLengths.size() != spatialKeyframes.size())
+    {
+        cachedSegmentLengths.resize (spatialKeyframes.size(), -1.0f);
+    }
+
+    float segLen = cachedSegmentLengths[static_cast<size_t> (lo)];
+    if (segLen < 0.0f)
+    {
+        const auto bezier = CubicBezier::fromPoints (P0, P1, P2, P3);
+        segLen = bezier.length();
+        cachedSegmentLengths[static_cast<size_t> (lo)] = segLen;
+    }
+
     const auto bezier = CubicBezier::fromPoints (P0, P1, P2, P3);
-    return bezier.pointAt (bezier.tAtLength (t * bezier.length()));
+    return bezier.pointAt (bezier.tAtLength (t * segLen, segLen));
 }
 
 } // namespace yup

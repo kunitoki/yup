@@ -1206,6 +1206,8 @@ void LottieReader::parseGradient (const var& gradObj, AnimationGradient& gradien
             // Animated gradient - store all keyframes for runtime interpolation
             if (const auto* kfs = safeArray (gk["k"]))
             {
+                std::vector<float> prevEndValues;
+
                 for (const var& kf : *kfs)
                 {
                     AnimationGradient::GradientKeyframe gkf;
@@ -1216,6 +1218,22 @@ void LottieReader::parseGradient (const var& gradObj, AnimationGradient& gradien
                         for (const var& v : *sArr)
                             gkf.values.push_back (varFloat (v));
                     }
+                    else
+                    {
+                        gkf.values = prevEndValues;
+                    }
+
+                    if (const auto* eArr = safeArray (kf["e"]))
+                    {
+                        prevEndValues.clear();
+                        for (const var& v : *eArr)
+                            prevEndValues.push_back (varFloat (v));
+                    }
+                    else
+                    {
+                        prevEndValues = gkf.values;
+                    }
+
                     gradient.animatedStops.push_back (std::move (gkf));
                 }
             }

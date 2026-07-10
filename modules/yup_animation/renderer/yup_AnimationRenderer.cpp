@@ -23,26 +23,24 @@ namespace yup
 {
 
 //==============================================================================
-// RenderContext
+// SceneContext
 
-void AnimationRenderer::RenderContext::buildParentTransforms()
+void AnimationRenderer::SceneContext::buildParentTransforms (const std::vector<AnimationLayer::Ptr>& layers)
 {
     parentTransforms.clear();
 
-    // Build transforms for each layer, resolving parent chains.
-    // We iterate until all transforms are resolved or no progress is made.
-    std::vector<bool> resolved (comp.layers.size(), false);
+    std::vector<bool> resolved (layers.size(), false);
     bool anyResolved = true;
 
     while (anyResolved)
     {
         anyResolved = false;
-        for (size_t i = 0; i < comp.layers.size(); ++i)
+        for (size_t i = 0; i < layers.size(); ++i)
         {
             if (resolved[i])
                 continue;
 
-            const AnimationLayer* layer = comp.layers[i].get();
+            const AnimationLayer* layer = layers[i].get();
             if (layer == nullptr)
             {
                 resolved[i] = true;
@@ -51,37 +49,37 @@ void AnimationRenderer::RenderContext::buildParentTransforms()
 
             if (layer->parentId < 0)
             {
-                // No parent - local transform only
                 parentTransforms.set (layer->id, layer->transform.toAffineTransform (frameNo));
                 resolved[i] = true;
                 anyResolved = true;
             }
-            else if (parentTransforms.contains (layer->parentId))
+            else if (auto* parentXf = parentTransforms.getPointer (layer->parentId))
             {
-                const AffineTransform parentXf = parentTransforms[layer->parentId];
-                parentTransforms.set (layer->id, layer->transform.toAffineTransform (frameNo).followedBy (parentXf));
+                parentTransforms.set (layer->id, layer->transform.toAffineTransform (frameNo).followedBy (*parentXf));
                 resolved[i] = true;
                 anyResolved = true;
             }
         }
     }
 
-    // Any unresolved layers (circular reference) get their own local transform
-    for (size_t i = 0; i < comp.layers.size(); ++i)
+    for (size_t i = 0; i < layers.size(); ++i)
     {
-        if (! resolved[i] && comp.layers[i] != nullptr)
+        if (! resolved[i] && layers[i] != nullptr)
         {
-            const AnimationLayer* layer = comp.layers[i].get();
+            const AnimationLayer* layer = layers[i].get();
             parentTransforms.set (layer->id, layer->transform.toAffineTransform (frameNo));
         }
     }
 }
 
+//==============================================================================
+// RenderContext
+
 AffineTransform AnimationRenderer::RenderContext::resolveLayerTransform (const AnimationLayer& layer) const
 {
-    if (parentTransforms.contains (layer.id))
-        return parentTransforms[layer.id].followedBy (viewTransform);
-    return layer.transform.toAffineTransform (frameNo).followedBy (viewTransform);
+    if (auto* entry = scene.parentTransforms.getPointer (layer.id))
+        return entry->followedBy (viewTransform);
+    return layer.transform.toAffineTransform (scene.frameNo).followedBy (viewTransform);
 }
 
 //==============================================================================
@@ -143,31 +141,35 @@ void AnimationRenderer::renderComposition (Graphics& g,
     g.setClipPath (transformedViewportClip);
     g.setTransform (savedTransform);
 
-    RenderContext ctx { comp, frameNo, viewXf, opacity, std::move (paintOverride) };
-    ctx.buildParentTransforms();
+    SceneContext sceneCtx { comp, frameNo, compSize };
+    sceneCtx.buildParentTransforms (comp.layers);
 
-    // Lottie: layer 0 is topmost visually → render bottom-up (last index first).
-    // Matte pairs: a layer with isMatteSource=true (td=1) sits just ABOVE the matte
-    // target (the layer with matteType != None, tt>0). Array index i-1 is the matte
-    // source for layer i when layer i has tt>0. Matte sources must not render normally.
-    for (int i = (int) comp.layers.size() - 1; i >= 0; --i)
+    PrecompCache precompCache;
+    RenderContext ctx { sceneCtx, viewXf, opacity, std::move (paintOverride), &precompCache };
+
+    renderLayerList (g, comp.layers, ctx);
+}
+
+void AnimationRenderer::renderLayerList (Graphics& g,
+                                         const std::vector<AnimationLayer::Ptr>& layers,
+                                         const RenderContext& ctx)
+{
+    for (int i = (int) layers.size() - 1; i >= 0; --i)
     {
-        const AnimationLayer* layer = comp.layers[(size_t) i].get();
+        const AnimationLayer* layer = layers[(size_t) i].get();
         if (layer == nullptr || layer->hidden)
             continue;
 
-        // Matte source layers (td=1) are consumed by the adjacent matte target; skip.
         if (layer->isMatteSource)
             continue;
 
-        if (! layer->isVisibleAt (frameNo))
+        if (! layer->isVisibleAt (ctx.scene.frameNo))
             continue;
 
-        // If this layer is a matte target, the matte source is at array index i-1.
         const AnimationLayer* matteSource = nullptr;
         if (layer->matteType != AnimationLayer::MatteType::None && i >= 1)
         {
-            const AnimationLayer* candidate = comp.layers[(size_t) (i - 1)].get();
+            const AnimationLayer* candidate = layers[(size_t) (i - 1)].get();
             if (candidate != nullptr && candidate->isMatteSource)
                 matteSource = candidate;
         }
@@ -183,7 +185,7 @@ void AnimationRenderer::renderLayer (Graphics& g,
                                      const RenderContext& ctx,
                                      const AnimationLayer* matteSource)
 {
-    const float opacity = ctx.opacity * layer.transform.opacityAt (ctx.frameNo);
+    const float opacity = ctx.opacity * layer.transform.opacityAt (ctx.scene.frameNo);
 
     if (opacity <= 0.0f)
         return;
@@ -207,7 +209,7 @@ void AnimationRenderer::renderLayerDirect (Graphics& g,
     const AffineTransform xf = ctx.resolveLayerTransform (layer);
     g.setTransform (xf.followedBy (baseTransform));
 
-    if (! applyMasks (g, layer, ctx.frameNo, ctx.comp.size))
+    if (! applyMasks (g, layer, ctx.scene.frameNo, ctx.scene.compSize))
         return;
 
     if (matteSource != nullptr
@@ -223,9 +225,9 @@ void AnimationRenderer::renderLayerDirect (Graphics& g,
         && layer.fillEffect.has_value()
         && layer.fillEffect->enabled)
     {
-        const float fillEffectOpacity = layer.fillEffect->opacityAt (ctx.frameNo);
+        const float fillEffectOpacity = layer.fillEffect->opacityAt (ctx.scene.frameNo);
         if (fillEffectOpacity > 0.0f)
-            layerCtx.paintOverride = layer.fillEffect->colorAt (ctx.frameNo).withMultipliedAlpha (fillEffectOpacity);
+            layerCtx.paintOverride = layer.fillEffect->colorAt (ctx.scene.frameNo).withMultipliedAlpha (fillEffectOpacity);
     }
 
     if (! layerCtx.paintOverride.has_value()
@@ -247,7 +249,7 @@ bool AnimationRenderer::renderLayerIsolated (Graphics& g,
                                              const AnimationLayer* matteSource,
                                              float opacity)
 {
-    auto transparencyLayer = g.beginTransparencyLayer ({ 0.0f, 0.0f, ctx.comp.size.getWidth(), ctx.comp.size.getHeight() }, opacity);
+    auto transparencyLayer = g.beginTransparencyLayer ({ 0.0f, 0.0f, ctx.scene.compSize.getWidth(), ctx.scene.compSize.getHeight() }, opacity);
     if (! transparencyLayer.isValid())
         return false;
 
@@ -325,23 +327,90 @@ void AnimationRenderer::renderImageLayer (Graphics& g, const ImageLayer& layer, 
 
 void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& layer, const RenderContext& ctx, float opacity)
 {
-    const AnimationAsset* asset = ctx.comp.assets.contains (layer.precompRefId)
-                                    ? ctx.comp.assets[layer.precompRefId].get()
-                                    : nullptr;
-    if (asset == nullptr)
+    const auto* assetPtr = ctx.scene.comp.assets.getPointer (layer.precompRefId);
+    const AnimationAsset* asset = assetPtr ? assetPtr->get() : nullptr;
+    if (asset == nullptr || asset->layers.empty())
         return;
 
-    const float localFrame = layer.localFrame (ctx.frameNo, ctx.comp.frameRate);
+    const float localFrame = layer.localFrame (ctx.scene.frameNo, ctx.scene.comp.frameRate);
     const Rectangle<float> precompBounds (0.0f, 0.0f, layer.layerSize.getWidth(), layer.layerSize.getHeight());
 
-    // Build a temporary composition from the precomp asset and render it
-    auto tempComp = AnimationComposition::create (layer.layerSize, ctx.comp.frameRate);
-    tempComp->layers = asset->layers;
-    tempComp->assets = ctx.comp.assets;
-    tempComp->startFrame = ctx.comp.startFrame;
-    tempComp->endFrame = ctx.comp.endFrame;
+    // Apply viewport clip matching renderComposition's clip behavior
+    auto clipState = g.saveState();
+    Path viewportClip;
+    viewportClip.addRectangle (precompBounds);
 
-    renderComposition (g, *tempComp, localFrame, precompBounds, false, opacity, ctx.paintOverride);
+    const auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
+    auto transformedViewportClip = viewportClip.transformed (clipTransform);
+    const auto currentClipPath = g.getClipPath();
+    if (! transformedViewportClip.isEmpty() && ! currentClipPath.isEmpty())
+        transformedViewportClip = currentClipPath.combinedWith (transformedViewportClip, Path::BooleanOperation::Intersect);
+
+    const auto savedTransform = g.getTransform();
+    g.setTransform (AffineTransform::identity());
+    g.setClipPath (transformedViewportClip);
+    g.setTransform (savedTransform);
+
+    // Check cache first — if this precomp asset was already rendered this frame,
+    // just draw the cached texture. Skip caching when already rendering to an
+    // offscreen target (nested precomps or inside GpuCanvas).
+    if (ctx.precompCache != nullptr)
+    {
+        if (auto* cached = ctx.precompCache->textures.getPointer (layer.precompRefId))
+        {
+            g.setOpacity (g.getOpacity() * opacity);
+            g.drawTexture (*cached, precompBounds);
+            return;
+        }
+    }
+
+    // Build a scene context for the asset's layers (reuses the parent comp's assets map)
+    SceneContext precompScene { ctx.scene.comp, localFrame, layer.layerSize };
+
+    const float scaleX = precompBounds.getWidth() / layer.layerSize.getWidth();
+    const float scaleY = precompBounds.getHeight() / layer.layerSize.getHeight();
+    const AffineTransform precompViewXf = AffineTransform::scaling (scaleX, scaleY)
+                                              .followedBy (AffineTransform::translation (precompBounds.getX(), precompBounds.getY()));
+
+    if (ctx.precompCache != nullptr)
+    {
+        // Render precomp to an offscreen canvas once, then cache for reuse.
+        const int w = static_cast<int> (layer.layerSize.getWidth());
+        const int h = static_cast<int> (layer.layerSize.getHeight());
+
+        if (w > 0 && h > 0)
+        {
+            auto canvas = GpuCanvas::create (g.getGraphicsContext(), w, h);
+            if (canvas != nullptr)
+            {
+                {
+                    auto& offscreenG = canvas->beginDraw();
+
+                    SceneContext offscreenScene { ctx.scene.comp, localFrame, Size<float> (static_cast<float> (w), static_cast<float> (h)) };
+                    offscreenScene.buildParentTransforms (asset->layers);
+
+                    RenderContext offscreenCtx { offscreenScene, AffineTransform::identity(), 1.0f, ctx.paintOverride, ctx.precompCache };
+                    renderLayerList (offscreenG, asset->layers, offscreenCtx);
+                }
+
+                auto tex = canvas->asTexture();
+                if (tex != nullptr)
+                {
+                    ctx.precompCache->textures.set (layer.precompRefId, tex);
+
+                    g.setOpacity (g.getOpacity() * opacity);
+                    g.drawTexture (tex, precompBounds);
+                    return;
+                }
+            }
+        }
+    }
+
+    precompScene.buildParentTransforms (asset->layers);
+
+    RenderContext precompCtx { precompScene, precompViewXf, opacity, ctx.paintOverride };
+
+    renderLayerList (g, asset->layers, precompCtx);
 }
 
 //==============================================================================
@@ -604,18 +673,18 @@ void AnimationRenderer::renderDropShadow (Graphics& g, const AnimationLayer& lay
         return;
 
     const auto& shadow = *layer.dropShadow;
-    const float shadowOpacity = opacity * shadow.opacityAt (ctx.frameNo);
+    const float shadowOpacity = opacity * shadow.opacityAt (ctx.scene.frameNo);
     if (shadowOpacity <= 0.0f)
         return;
 
-    Path shadowPath = buildLayerAlphaPath (layer, ctx.comp, ctx.frameNo);
+    Path shadowPath = buildLayerAlphaPath (layer, ctx.scene.comp, ctx.scene.frameNo);
     if (shadowPath.isEmpty())
         return;
 
-    shadowPath = shadowPath.transformed (AffineTransform::translation (shadow.offsetAt (ctx.frameNo)));
+    shadowPath = shadowPath.transformed (AffineTransform::translation (shadow.offsetAt (ctx.scene.frameNo)));
 
     auto shadowState = g.saveState();
-    g.setFillColor (shadow.color.getValueAt (ctx.frameNo).withMultipliedAlpha (shadowOpacity));
+    g.setFillColor (shadow.color.getValueAt (ctx.scene.frameNo).withMultipliedAlpha (shadowOpacity));
     g.fillPath (shadowPath);
 }
 
@@ -625,11 +694,11 @@ void AnimationRenderer::applyMatteSourceClip (Graphics& g,
                                               const RenderContext& ctx,
                                               bool inverted)
 {
-    Path clipPath = buildLayerAlphaPath (matteSource, ctx.comp, ctx.frameNo);
+    Path clipPath = buildLayerAlphaPath (matteSource, ctx.scene.comp, ctx.scene.frameNo);
 
     if (! matteSource.masks.empty())
     {
-        const auto matteMaskPath = buildLayerMaskClipPath (matteSource, ctx.frameNo, ctx.comp.size);
+        const auto matteMaskPath = buildLayerMaskClipPath (matteSource, ctx.scene.frameNo, ctx.scene.compSize);
         if (matteMaskPath.active)
             clipPath = clipPath.combinedWith (matteMaskPath.path, Path::BooleanOperation::Intersect);
     }
@@ -646,7 +715,7 @@ void AnimationRenderer::applyMatteSourceClip (Graphics& g,
     const AffineTransform matteXf = ctx.resolveLayerTransform (matteSource);
     const auto matteToLayerXf = matteXf.followedBy (layerXf.inverted());
     const auto mattePathInLayerSpace = clipPath.transformed (matteToLayerXf);
-    const auto layerBoundsPath = createRectanglePath (getLayerContentBounds (layer, ctx.comp.size));
+    const auto layerBoundsPath = createRectanglePath (getLayerContentBounds (layer, ctx.scene.compSize));
 
     // Alpha mattes mask the target content directly. Intersecting with a derived
     // target alpha path can punch holes when child paths have mixed winding.
@@ -670,7 +739,7 @@ void AnimationRenderer::renderGroup (Graphics& g,
 
     auto saveState = g.saveState();
 
-    const float frameNo = ctx.frameNo;
+    const float frameNo = ctx.scene.frameNo;
     g.setTransform (group.transform.toAffineTransform (frameNo).followedBy (g.getTransform()));
     opacity *= group.transform.opacityAt (frameNo);
     if (opacity <= 0.0f)
@@ -695,16 +764,25 @@ void AnimationRenderer::renderGroup (Graphics& g,
             activeRoundedCorner = child.roundedCorner.get(); // local overrides parent
     }
 
-    auto preparePaths = [&] (const std::vector<Path>& sourcePaths)
-    {
-        std::vector<Path> paths = sourcePaths;
+    const bool hasRepeater = activeRepeater != nullptr && ! activeRepeater->hidden;
+    const bool hasTrim = activeTrim != nullptr && ! activeTrim->hidden;
+    const bool hasRounded = activeRoundedCorner != nullptr && ! activeRoundedCorner->hidden;
+    const bool hasModifiers = hasRounded || hasTrim || hasRepeater;
 
-        if (activeRoundedCorner != nullptr && ! activeRoundedCorner->hidden)
+    std::vector<Path> currentPaths;
+    std::vector<Path> preparedCache;
+    bool preparedValid = false;
+
+    auto computePrepared = [&]
+    {
+        preparedCache = currentPaths;
+
+        if (hasRounded)
         {
             const float radiusRatio = activeRoundedCorner->radiusAt (frameNo);
             if (radiusRatio > 1e-5f)
             {
-                for (auto& path : paths)
+                for (auto& path : preparedCache)
                 {
                     auto bounds = path.getBounds();
                     const float minDim = jmin (bounds.getWidth(), bounds.getHeight());
@@ -715,88 +793,118 @@ void AnimationRenderer::renderGroup (Graphics& g,
             }
         }
 
-        if (activeTrim != nullptr && ! activeTrim->hidden)
+        if (hasTrim)
         {
             if (activeTrim->mode == AnimationTrim::TrimMode::Simultaneously)
             {
-                for (auto& path : paths)
+                for (auto& path : preparedCache)
                     applyTrim (path, *activeTrim, frameNo);
             }
             else
             {
-                applyTrimIndividually (paths, *activeTrim, frameNo);
+                applyTrimIndividually (preparedCache, *activeTrim, frameNo);
             }
         }
 
-        if (activeRepeater == nullptr || activeRepeater->hidden)
-            return paths;
-
-        const int numCopies = activeRepeater->copiesAt (frameNo);
-
-        // The path is still in group-local coordinates here; Graphics applies the
-        // group's transform later. Keep repeater copies in that same local space.
-        const AnimationTransform& xf = activeRepeater->copyTransform;
-        const Point<float> anchor = xf.anchor.getValueAt (frameNo);
-        const Size<float> sc = xf.scale.getValueAt (frameNo);
-        const float rot = xf.rotation.getValueAt (frameNo);
-        const Point<float> pos = xf.separatePosition
-                                   ? Point<float> { xf.positionX.getValueAt (frameNo), xf.positionY.getValueAt (frameNo) }
-                                   : xf.position.getValueAt (frameNo);
-
-        auto buildCopyTransform = [&] (float multiplier) -> AffineTransform
+        if (hasRepeater)
         {
-            const float sx = std::pow (sc.getWidth() / 100.0f, multiplier);
-            const float sy = std::pow (sc.getHeight() / 100.0f, multiplier);
-            AffineTransform t;
-            t = t.translated (-anchor.getX(), -anchor.getY());
-            t = t.rotated (degreesToRadians (rot * multiplier));
-            t = t.scaled (sx, sy);
-            t = t.translated (anchor.getX(), anchor.getY());
-            t = t.translated (pos.getX() * multiplier, pos.getY() * multiplier);
-            return t;
-        };
+            const int numCopies = activeRepeater->copiesAt (frameNo);
 
-        std::vector<Path> repeatedPaths;
-        for (int copy = 0; copy < numCopies; ++copy)
-        {
-            const float t = numCopies > 0 ? static_cast<float> (copy) / static_cast<float> (numCopies) : 0.0f;
-            const float copyOpacity = activeRepeater->startOpacityAt (frameNo) * (1.0f - t)
-                                    + activeRepeater->endOpacityAt (frameNo) * t;
-            (void) copyOpacity; // TODO: per-copy opacity via Graphics state
+            const AnimationTransform& xf = activeRepeater->copyTransform;
+            const Point<float> anchor = xf.anchor.getValueAt (frameNo);
+            const Size<float> sc = xf.scale.getValueAt (frameNo);
+            const float rot = xf.rotation.getValueAt (frameNo);
+            const Point<float> pos = xf.separatePosition
+                                       ? Point<float> { xf.positionX.getValueAt (frameNo), xf.positionY.getValueAt (frameNo) }
+                                       : xf.position.getValueAt (frameNo);
 
-            const AffineTransform copyXfm = buildCopyTransform (static_cast<float> (copy) + activeRepeater->offsetAt (frameNo));
-            for (const auto& p : paths)
-                repeatedPaths.push_back (p.transformed (copyXfm));
+            auto buildCopyTransform = [&] (float multiplier) -> AffineTransform
+            {
+                const float sx = (sc.getWidth() < 99.9f || sc.getWidth() > 100.1f)
+                                   ? std::pow (sc.getWidth() / 100.0f, multiplier)
+                                   : 1.0f;
+                const float sy = (sc.getHeight() < 99.9f || sc.getHeight() > 100.1f)
+                                   ? std::pow (sc.getHeight() / 100.0f, multiplier)
+                                   : 1.0f;
+                AffineTransform t;
+                t = t.translated (-anchor.getX(), -anchor.getY());
+                t = t.rotated (degreesToRadians (rot * multiplier));
+                t = t.scaled (sx, sy);
+                t = t.translated (anchor.getX(), anchor.getY());
+                t = t.translated (pos.getX() * multiplier, pos.getY() * multiplier);
+                return t;
+            };
+
+            std::vector<Path> repeatedPaths;
+            for (int copy = 0; copy < numCopies; ++copy)
+            {
+                const float t = numCopies > 0 ? static_cast<float> (copy) / static_cast<float> (numCopies) : 0.0f;
+                const float copyOpacity = activeRepeater->startOpacityAt (frameNo) * (1.0f - t)
+                                        + activeRepeater->endOpacityAt (frameNo) * t;
+                (void) copyOpacity; // TODO: per-copy opacity via Graphics state
+
+                const AffineTransform copyXfm = buildCopyTransform (static_cast<float> (copy) + activeRepeater->offsetAt (frameNo));
+                for (const auto& p : preparedCache)
+                    repeatedPaths.push_back (p.transformed (copyXfm));
+            }
+            preparedCache = std::move (repeatedPaths);
         }
-        return repeatedPaths;
+
+        preparedValid = true;
     };
 
-    std::vector<Path> currentPaths;
     for (const auto& child : group.children)
     {
         if (child.kind == AnimationGroup::ChildKind::Shape && child.shape != nullptr)
         {
             if (! child.shape->isHidden())
+            {
                 currentPaths.push_back (child.shape->buildPath (frameNo));
+                preparedValid = false;
+            }
         }
         else if (child.kind == AnimationGroup::ChildKind::Stroke && child.stroke != nullptr)
         {
-            if (! child.stroke->hidden)
+            if (! child.stroke->hidden && ! currentPaths.empty())
             {
                 Path combinedPath;
-                for (const auto& path : preparePaths (currentPaths))
-                    combinedPath.appendPath (path);
+
+                if (hasModifiers)
+                {
+                    if (! preparedValid)
+                        computePrepared();
+
+                    for (const auto& path : preparedCache)
+                        combinedPath.appendPath (path);
+                }
+                else
+                {
+                    for (const auto& path : currentPaths)
+                        combinedPath.appendPath (path);
+                }
 
                 applyStroke (g, combinedPath, *child.stroke, ctx, opacity);
             }
         }
         else if (child.kind == AnimationGroup::ChildKind::Fill && child.fill != nullptr)
         {
-            if (! child.fill->hidden)
+            if (! child.fill->hidden && ! currentPaths.empty())
             {
                 Path combinedPath;
-                for (const auto& path : preparePaths (currentPaths))
-                    combinedPath.appendPath (path);
+
+                if (hasModifiers)
+                {
+                    if (! preparedValid)
+                        computePrepared();
+
+                    for (const auto& path : preparedCache)
+                        combinedPath.appendPath (path);
+                }
+                else
+                {
+                    for (const auto& path : currentPaths)
+                        combinedPath.appendPath (path);
+                }
 
                 applyFill (g, combinedPath, *child.fill, ctx, opacity);
             }
@@ -899,7 +1007,7 @@ void AnimationRenderer::applyFill (Graphics& g, const Path& path, const FillPain
     if (! fill.enabled)
         return;
 
-    const float frameNo = ctx.frameNo;
+    const float frameNo = ctx.scene.frameNo;
     const float finalOpacity = opacity * fill.opacityAt (frameNo);
     if (finalOpacity <= 0.0f)
         return;
@@ -929,7 +1037,7 @@ void AnimationRenderer::applyStroke (Graphics& g, const Path& path, const Stroke
     if (! stroke.enabled)
         return;
 
-    const float frameNo = ctx.frameNo;
+    const float frameNo = ctx.scene.frameNo;
     const float finalOpacity = opacity * stroke.opacityAt (frameNo);
     if (finalOpacity <= 0.0f)
         return;
@@ -954,32 +1062,12 @@ void AnimationRenderer::applyStroke (Graphics& g, const Path& path, const Stroke
     // Apply dash pattern if present
     if (! stroke.dashArray.empty())
     {
-        // Convert Lottie dash format to interleaved dash/gap array.
-        // Lottie: [dash, gap, dash, gap, ...] + optional offset.
-        // If even length, copy last dash as gap per Lottie winding spec.
-        std::vector<float> dashValues;
-        for (const auto& d : stroke.dashArray)
-            dashValues.push_back (d.value.getValueAt (frameNo));
+        const auto resolved = stroke.resolveDash (frameNo);
+        const auto& dashValues = resolved.dashValues;
+        float dashOffset = resolved.offset;
 
-        float dashOffset = 0.0f;
         if (dashValues.size() > 1)
         {
-            if ((dashValues.size() % 2) == 0)
-            {
-                // Even length: copy last dash value as gap, then move offset
-                dashOffset = dashValues.back();
-                const float lastDash = dashValues[dashValues.size() - 2];
-                dashValues.back() = lastDash;
-                dashValues.push_back (dashOffset);
-            }
-            else
-            {
-                // Odd length: last value is offset
-                dashOffset = dashValues.back();
-                dashValues.pop_back();
-            }
-
-            // Create dashed path
             Array<float> dashArray;
             for (float v : dashValues)
             {
@@ -989,7 +1077,6 @@ void AnimationRenderer::applyStroke (Graphics& g, const Path& path, const Stroke
 
             if (! dashArray.isEmpty())
             {
-                // Ensure even dash count by duplicating if odd
                 if ((dashArray.size() % 2) != 0)
                 {
                     const int originalSize = dashArray.size();
@@ -1003,7 +1090,6 @@ void AnimationRenderer::applyStroke (Graphics& g, const Path& path, const Stroke
 
                 if (totalLen > 0.0f)
                 {
-                    // Apply dash offset
                     if (dashOffset != 0.0f)
                         dashOffset = std::fmod (std::abs (dashOffset), totalLen);
 
@@ -1015,7 +1101,6 @@ void AnimationRenderer::applyStroke (Graphics& g, const Path& path, const Stroke
                         dashIdx = (dashIdx + 1) % dashArray.size();
                     }
 
-                    // Walk path and build dashed version
                     Path dashedPath;
                     Point<float> currentPt;
                     Point<float> subPathStart;

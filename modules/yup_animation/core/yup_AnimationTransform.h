@@ -87,6 +87,10 @@ public:
     /** Evaluates position with spatial bezier interpolation when spatialKeyframes
         are present, otherwise uses the position property's linear interpolation. */
     [[nodiscard]] Point<float> positionAt (float frameNo) const;
+
+private:
+    mutable std::optional<AffineTransform> cachedStaticXf;
+    mutable std::vector<float> cachedSegmentLengths;
 };
 
 } // namespace yup
