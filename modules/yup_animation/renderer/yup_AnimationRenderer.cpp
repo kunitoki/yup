@@ -314,20 +314,29 @@ bool AnimationRenderer::renderLayerIsolated (Graphics& g,
                                              const AnimationLayer* matteSource,
                                              float opacity)
 {
-    auto transparencyLayer = g.beginTransparencyLayer ({ 0.0f, 0.0f, ctx.scene.compSize.getWidth(), ctx.scene.compSize.getHeight() }, opacity);
+    // Allocate the transparency layer at the fitted (screen) resolution rather
+    // than the composition resolution. Sizing the offscreen buffer to the
+    // composition (e.g. 90x90) and then upscaling it to a larger target rasterizes
+    // the layer at the small size and blurs it. Mapping the composition rectangle
+    // through the view transform gives the on-screen size, so the layer is
+    // rasterized at native resolution and composited back 1:1.
+    const Rectangle<float> compRect (0.0f, 0.0f, ctx.scene.compSize.getWidth(), ctx.scene.compSize.getHeight());
+    const Rectangle<float> fittedRect = compRect.transformed (ctx.viewTransform);
+
+    auto transparencyLayer = g.beginTransparencyLayer (fittedRect, opacity);
     if (! transparencyLayer.isValid())
         return false;
 
+    // Inside the layer, render with the fitted scale but no translation: the
+    // layer-local origin is already the fitted rectangle's top-left corner.
     RenderContext layerCtx = ctx;
-    layerCtx.viewTransform = AffineTransform::identity();
+    layerCtx.viewTransform = AffineTransform::scaling (ctx.viewTransform.getScaleX(), ctx.viewTransform.getScaleY());
     layerCtx.opacity = 1.0f;
 
     renderLayerDirect (transparencyLayer.getGraphics(), layer, layerCtx, matteSource, 1.0f);
 
-    auto saveState = g.saveState();
-    const AffineTransform baseTransform = g.getTransform();
-    g.setTransform (ctx.viewTransform.followedBy (baseTransform));
-
+    // The target area is already in screen space, so it composites back using the
+    // parent's current transform without re-applying the view transform.
     return transparencyLayer.commit();
 }
 
@@ -855,6 +864,12 @@ void AnimationRenderer::renderGroup (Graphics& g,
     const bool hasMergePaths = activeMergePaths != nullptr
                             && ! activeMergePaths->hidden
                             && activeMergePaths->isBooleanMerge();
+    // Any merge-paths modifier (including plain "Merge") means the group's nested
+    // geometry should feed the merge/fill. Without it, nested groups are
+    // self-contained and must NOT contribute geometry to the parent's paints
+    // (otherwise paint-less construction guides get filled - e.g. the stray
+    // star shapes in pumped_up.json / mughead.json).
+    const bool mergesNestedGeometry = activeMergePaths != nullptr && ! activeMergePaths->hidden;
     const bool hasModifiers = hasRounded || hasTrim || hasRepeater || hasMergePaths;
 
     std::vector<Path> currentPaths;
@@ -1015,8 +1030,12 @@ void AnimationRenderer::renderGroup (Graphics& g,
             renderGroup (g, *child.group, ctx, opacity, activeRoundedCorner);
 
             // A nested group without its own paint acts as a geometry container
-            // (e.g. Merge Paths sub-groups). Its combined geometry must feed the
-            // parent group's subsequent fills/strokes, so collect it here.
+            // for the parent's Merge Paths. Without an active Merge Paths modifier
+            // the group is self-contained — do NOT feed its geometry into the
+            // parent's paints (avoids filling construction-guide shapes).
+            if (! mergesNestedGeometry)
+                continue;
+
             const bool hasOwnPaint = std::any_of (child.group->children.begin(),
                                                   child.group->children.end(),
                                                   [] (const AnimationGroup::ChildItem& c)

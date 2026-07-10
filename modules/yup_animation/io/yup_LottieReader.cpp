@@ -52,6 +52,17 @@ inline Array<var>* safeArray (const var& v)
     return v.getArray();
 }
 
+// A property "k" value is animated when it is an array of keyframe objects
+// (each carrying a "t" time). Some Lottie exporters omit the "a" animated flag,
+// so relying on "a" alone would treat such keyframe arrays as static values.
+inline bool isKeyframeArray (const var& k)
+{
+    if (const auto* arr = k.getArray())
+        return ! arr->isEmpty() && (*arr)[0].isObject() && ! (*arr)[0]["t"].isVoid();
+
+    return false;
+}
+
 AnimationGroup* findChildGroupByName (const AnimationGroup& group, const String& name)
 {
     for (const auto& child : group.children)
@@ -793,6 +804,36 @@ void LottieReader::parseShapeContents (const var& shapesVal, ShapeLayer& layer)
         return;
 
     AnimationGroup* implicitGroup = nullptr;
+    std::vector<AnimationGroup*> trailingGroups; // top-level groups eligible for modifier routing
+    bool lastWasPaintOrModifier = false;
+
+    const auto isModifier = [] (const String& ty)
+    {
+        return ty == "tm" || ty == "rp" || ty == "rd";
+    };
+
+    const auto isPaint = [] (const String& ty)
+    {
+        return ty == "fl" || ty == "st" || ty == "gs" || ty == "gf";
+    };
+
+    const auto groupHasOwnPaint = [] (const AnimationGroup& group)
+    {
+        for (const auto& child : group.children)
+        {
+            if (child.kind == AnimationGroup::ChildKind::Fill
+                || child.kind == AnimationGroup::ChildKind::Stroke)
+                return true;
+        }
+        return false;
+    };
+
+    const auto startNewRun = [&] (AnimationGroup* group)
+    {
+        trailingGroups.clear();
+        trailingGroups.push_back (group);
+        lastWasPaintOrModifier = false;
+    };
 
     for (const var& item : *arr)
     {
@@ -803,16 +844,75 @@ void LottieReader::parseShapeContents (const var& shapesVal, ShapeLayer& layer)
             auto* group = layer.addGroup (varString (item["nm"]));
             parseGroupItems (item["it"], *group);
             implicitGroup = nullptr;
+
+            if (lastWasPaintOrModifier)
+                startNewRun (group);
+            else
+                trailingGroups.push_back (group);
+
+            lastWasPaintOrModifier = false;
+        }
+        else if (isModifier (ty))
+        {
+            if (trailingGroups.empty())
+            {
+                // Stray modifier with no preceding group — isolate in implicit group.
+                if (implicitGroup == nullptr)
+                    implicitGroup = layer.addGroup();
+
+                parseSingleItem (item, *implicitGroup);
+            }
+            else
+            {
+                // Modifiers (trim, repeater, rounded-corner) must reach every
+                // preceding top-level group so they can operate on the group's
+                // accumulated shapes (e.g. `[gr, gr, tm]` in it's_lunch_time!).
+                for (auto* group : trailingGroups)
+                    parseSingleItem (item, *group);
+            }
+
+            lastWasPaintOrModifier = true;
+        }
+        else if (isPaint (ty) && ! trailingGroups.empty())
+        {
+            // Trailing paint (fill, stroke, gradient) applies to preceding
+            // paint-less groups only; groups with own paint are skipped.
+            bool applied = false;
+            for (auto* group : trailingGroups)
+            {
+                if (! groupHasOwnPaint (*group))
+                {
+                    parseSingleItem (item, *group);
+                    applied = true;
+                }
+            }
+
+            if (! applied)
+            {
+                // All preceding groups had their own paint — paint goes to a
+                // fresh implicit group (e.g. a standalone decorative stroke).
+                implicitGroup = layer.addGroup();
+                startNewRun (implicitGroup);
+                parseSingleItem (item, *implicitGroup);
+            }
+
+            lastWasPaintOrModifier = true;
         }
         else
         {
-            // Top-level shape items outside a group go into an implicit group.
-            // Start a new implicit group after real groups so trailing paints do
-            // not accidentally apply to the first named group.
+            // Standalone shape (or unclassified item). A shape following a
+            // paint/modifier starts a fresh implicit-group run.
+            if (lastWasPaintOrModifier)
+                implicitGroup = nullptr;
+
             if (implicitGroup == nullptr)
+            {
                 implicitGroup = layer.addGroup();
+                startNewRun (implicitGroup);
+            }
 
             parseSingleItem (item, *implicitGroup);
+            lastWasPaintOrModifier = false;
         }
     }
 
@@ -1384,7 +1484,7 @@ void LottieReader::parseTransform (const var& ksObj, AnimationTransform& t, bool
         const int animated = varInt (pObj["a"]);
         const var& k = pObj["k"];
 
-        if (animated == 0 || k.isVoid())
+        if ((animated == 0 && ! isKeyframeArray (k)) || k.isVoid())
         {
             if (k.isVoid())
                 t.position = AnimationProperty<Point<float>>::staticValue (extractPoint (pObj));
@@ -1578,7 +1678,7 @@ AnimationProperty<T> LottieReader::parseProperty (const var& propObj,
     const int animated = varInt (propObj["a"]);
     const var& k = propObj["k"];
 
-    if (animated == 0 || k.isVoid())
+    if ((animated == 0 && ! isKeyframeArray (k)) || k.isVoid())
     {
         // Static value
         if (k.isVoid())

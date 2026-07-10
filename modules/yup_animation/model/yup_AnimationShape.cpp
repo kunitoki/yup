@@ -34,15 +34,37 @@ Path EllipseShape::buildPath (float frameNo) const
     const Size<float> s = size.getValueAt (frameNo);
 
     Path p;
-    p.addEllipse (c.getX() - s.getWidth() * 0.5f,
-                  c.getY() - s.getHeight() * 0.5f,
-                  s.getWidth(),
-                  s.getHeight());
+
+    // Build the ellipse matching Lottie's convention so trims carve the arc at
+    // the expected place: the path starts at the top (12 o'clock) and, for the
+    // default direction (d == 1), proceeds clockwise. Direction 3 reverses it.
+    const float rx = s.getWidth() * 0.5f;
+    const float ry = s.getHeight() * 0.5f;
+    const float cx = c.getX();
+    const float cy = c.getY();
+    const float dx = rx * 0.5522847498f;
+    const float dy = ry * 0.5522847498f;
+
+    p.startNewSubPath (cx, cy - ry);
 
     if (direction == 3)
     {
-        // TODO: reverse path winding if needed
+        // Counter-clockwise: top -> left -> bottom -> right -> top
+        p.cubicTo (cx - dx, cy - ry, cx - rx, cy - dy, cx - rx, cy);
+        p.cubicTo (cx - rx, cy + dy, cx - dx, cy + ry, cx, cy + ry);
+        p.cubicTo (cx + dx, cy + ry, cx + rx, cy + dy, cx + rx, cy);
+        p.cubicTo (cx + rx, cy - dy, cx + dx, cy - ry, cx, cy - ry);
     }
+    else
+    {
+        // Clockwise: top -> right -> bottom -> left -> top
+        p.cubicTo (cx + dx, cy - ry, cx + rx, cy - dy, cx + rx, cy);
+        p.cubicTo (cx + rx, cy + dy, cx + dx, cy + ry, cx, cy + ry);
+        p.cubicTo (cx - dx, cy + ry, cx - rx, cy + dy, cx - rx, cy);
+        p.cubicTo (cx - rx, cy - dy, cx - dx, cy - ry, cx, cy - ry);
+    }
+
+    p.close();
 
     if (isFullyStatic())
         cachedPath = p;
