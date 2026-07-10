@@ -45,6 +45,7 @@
 #include "io/yup_LottieReader.cpp"
 #include "io/yup_LottieExpressionEvaluator.cpp"
 #include "io/yup_LottieWriter.cpp"
+#include "renderer/yup_AnimationRenderResources.cpp"
 #include "renderer/yup_AnimationRenderer.cpp"
 #include "renderer/yup_AnimationFrameExporter.cpp"
 #include "animation/yup_Animation.cpp"

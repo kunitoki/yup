@@ -48,17 +48,16 @@
 #include <yup_simd/yup_simd.h>
 #include <yup_shading/yup_shading.h>
 
-#include <rive_renderer/rive_renderer.h>
-#include <rive/renderer/ore/ore_context.hpp>
-#include <rive/renderer/ore/ore_binding_map.hpp>
-
 //==============================================================================
 
-YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wattributes", "-Wdeprecated-declarations")
+YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
 #include <rive/rive.h>
 #include <rive/factory.hpp>
 #include <rive/text/raw_text.hpp>
 #include <rive/text/utf.hpp>
+#include <rive_renderer/rive_renderer.h>
+#include <rive/renderer/ore/ore_context.hpp>
+#include <rive/renderer/ore/ore_binding_map.hpp>
 YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 //==============================================================================
@@ -181,6 +180,7 @@ class Context;
 #include "graphics/yup_StrokeCap.h"
 #include "graphics/yup_StrokeType.h"
 #include "graphics/yup_FillType.h"
+#include "context/yup_OffscreenTarget.h"
 #include "context/yup_GraphicsContext.h"
 #include "graphics/yup_Graphics.h"
 #include "rhi/yup_ShaderBindingMap.h"

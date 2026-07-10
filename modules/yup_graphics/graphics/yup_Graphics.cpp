@@ -26,13 +26,10 @@ namespace
 {
 
 //==============================================================================
-
 rive::StrokeJoin toStrokeJoin (StrokeJoin join) noexcept
 {
     return static_cast<rive::StrokeJoin> (join);
 }
-
-//==============================================================================
 
 rive::StrokeCap toStrokeCap (StrokeCap cap) noexcept
 {
@@ -40,7 +37,6 @@ rive::StrokeCap toStrokeCap (StrokeCap cap) noexcept
 }
 
 //==============================================================================
-
 rive::BlendMode toBlendMode (BlendMode blendMode) noexcept
 {
     switch (blendMode)
@@ -99,7 +95,6 @@ rive::BlendMode toBlendMode (BlendMode blendMode) noexcept
 }
 
 //==============================================================================
-
 void convertRawPathToRenderPath (const rive::RawPath& input, rive::RenderPath* output)
 {
     input.addTo (output);
@@ -119,7 +114,6 @@ void convertRawPathToRenderPath (const rive::RawPath& input, rive::RenderPath* o
 }
 
 //==============================================================================
-
 rive::rcp<rive::RenderShader> toColorGradient (rive::Factory& factory, const ColorGradient& gradient, const AffineTransform& transform)
 {
     const auto& colorStops = gradient.getStops();
@@ -193,7 +187,8 @@ StyledText::VerticalAlign toVerticalAlign (Justification justification)
         return StyledText::middle;
 }
 
-rive::Factory* getOffscreenFactory (GraphicsContext& context, GraphicsContext::OffscreenTarget* target) noexcept
+//==============================================================================
+rive::Factory* getOffscreenFactory (GraphicsContext& context, OffscreenTarget* target) noexcept
 {
     if (target != nullptr)
         if (auto* renderContext = target->getRenderContext())
@@ -202,7 +197,7 @@ rive::Factory* getOffscreenFactory (GraphicsContext& context, GraphicsContext::O
     return context.factory();
 }
 
-std::unique_ptr<rive::Renderer> makeOffscreenRenderer (GraphicsContext& context, GraphicsContext::OffscreenTarget* target, int width, int height)
+std::unique_ptr<rive::Renderer> makeOffscreenRenderer (GraphicsContext& context, OffscreenTarget* target, int width, int height)
 {
     if (target != nullptr)
         if (auto* renderContext = target->getRenderContext())
@@ -261,7 +256,7 @@ Graphics::Graphics (GraphicsContext& context, Image& image, uint32_t clearColor)
     offscreenTargetImage = std::addressof (image);
 }
 
-Graphics::Graphics (GraphicsContext& context, std::unique_ptr<GraphicsContext::OffscreenTarget> target, uint32_t clearColor) noexcept
+Graphics::Graphics (GraphicsContext& context, std::unique_ptr<OffscreenTarget> target, uint32_t clearColor) noexcept
     : context (context)
     , ownedOffscreenTarget (std::move (target))
     , offscreenTarget (ownedOffscreenTarget.get())
@@ -290,7 +285,7 @@ Graphics::Graphics (GraphicsContext& context, std::unique_ptr<GraphicsContext::O
     currentRenderOptions().drawingArea = { 0.0f, 0.0f, static_cast<float> (offscreenTarget->getWidth()), static_cast<float> (offscreenTarget->getHeight()) };
 }
 
-Graphics::Graphics (GraphicsContext& context, GraphicsContext::OffscreenTarget& target, uint32_t clearColor) noexcept
+Graphics::Graphics (GraphicsContext& context, OffscreenTarget& target, uint32_t clearColor) noexcept
     : context (context)
     , offscreenTarget (std::addressof (target))
     , factory (*getOffscreenFactory (context, offscreenTarget))

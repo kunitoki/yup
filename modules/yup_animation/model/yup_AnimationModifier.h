@@ -159,4 +159,64 @@ public:
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AnimationRoundedCorner)
 };
 
+//==============================================================================
+/** Merge paths modifier. Lottie type "mm".
+
+    Combines all preceding path geometry in the group into a single shape using
+    a boolean operation. The mode matches the Lottie "mm" values.
+*/
+class YUP_API AnimationMergePaths : public ReferenceCountedObject
+{
+public:
+    using Ptr = ReferenceCountedObjectPtr<AnimationMergePaths>;
+
+    enum class Mode
+    {
+        Merge = 1,               ///< Merge (treated as union).
+        Add = 2,                 ///< Union.
+        Subtract = 3,            ///< Subtract following paths from the first.
+        Intersect = 4,           ///< Keep only shared areas.
+        ExcludeIntersections = 5 ///< Xor.
+    };
+
+    //==============================================================================
+    AnimationMergePaths() = default;
+
+    //==============================================================================
+    String name;
+    bool hidden = false;
+    Mode mode = Mode::Merge;
+
+    //==============================================================================
+    /** Maps the merge mode to the equivalent path boolean operation. */
+    [[nodiscard]] Path::BooleanOperation toBooleanOperation() const noexcept
+    {
+        switch (mode)
+        {
+            case Mode::Subtract:
+                return Path::BooleanOperation::Subtract;
+            case Mode::Intersect:
+                return Path::BooleanOperation::Intersect;
+            case Mode::ExcludeIntersections:
+                return Path::BooleanOperation::Xor;
+            case Mode::Merge:
+            case Mode::Add:
+            default:
+                return Path::BooleanOperation::Union;
+        }
+    }
+
+    /** True when the mode is a boolean operation (Add/Subtract/Intersect/Exclude).
+
+        The plain "Merge" mode (1) simply concatenates the paths and relies on the
+        fill winding rule to form holes, so it must NOT be resolved with a boolean
+        union (which would fill counters such as the holes in "O" and "A"). */
+    [[nodiscard]] bool isBooleanMerge() const noexcept
+    {
+        return mode != Mode::Merge;
+    }
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AnimationMergePaths)
+};
+
 } // namespace yup

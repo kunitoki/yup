@@ -25,6 +25,13 @@ namespace yup
 //==============================================================================
 // AnimationFrameExporter
 
+AnimationFrameExporter::AnimationFrameExporter (GraphicsContext& ctx)
+    : context (ctx)
+{
+}
+
+AnimationFrameExporter::~AnimationFrameExporter() = default;
+
 Size<int> AnimationFrameExporter::resolveTargetSize (const Animation& anim, Size<int> requested)
 {
     if (requested.getWidth() > 0 && requested.getHeight() > 0)
@@ -34,8 +41,7 @@ Size<int> AnimationFrameExporter::resolveTargetSize (const Animation& anim, Size
     return { (int) native.getWidth(), (int) native.getHeight() };
 }
 
-Image AnimationFrameExporter::renderFrame (GraphicsContext& ctx,
-                                           const Animation& anim,
+Image AnimationFrameExporter::renderFrame (const Animation& anim,
                                            float frameNo,
                                            Size<int> targetSize)
 {
@@ -49,17 +55,15 @@ Image AnimationFrameExporter::renderFrame (GraphicsContext& ctx,
     Image img (sz.getWidth(), sz.getHeight(), PixelFormat::RGBA);
 
     {
-        Graphics g (ctx, img, 0x00000000u);
-        anim.renderFrame (g, frameNo, { 0.0f, 0.0f, (float) sz.getWidth(), (float) sz.getHeight() }, true);
+        Graphics g (context, img, 0x00000000u);
+        anim.renderFrame (g, frameNo, { 0.0f, 0.0f, (float) sz.getWidth(), (float) sz.getHeight() }, Fitting::scaleToFit, Justification::center, &renderResources);
         g.readPixelsToImage();
     }
 
     return img;
 }
 
-ResultValue<std::vector<Image>> AnimationFrameExporter::renderAllFrames (GraphicsContext& ctx,
-                                                                         const Animation& anim,
-                                                                         Size<int> targetSize)
+ResultValue<std::vector<Image>> AnimationFrameExporter::renderAllFrames (const Animation& anim, Size<int> targetSize)
 {
     if (! anim.isValid())
         return makeResultValueFail ("Animation is not valid");
@@ -76,13 +80,12 @@ ResultValue<std::vector<Image>> AnimationFrameExporter::renderAllFrames (Graphic
     frames.reserve ((size_t) totalFrames);
 
     for (float f = 0.0f; f < totalFrames; f += 1.0f)
-        frames.push_back (renderFrame (ctx, anim, f, sz));
+        frames.push_back (renderFrame (anim, f, sz));
 
     return makeResultValueOk (std::move (frames));
 }
 
-Result AnimationFrameExporter::exportToGif (GraphicsContext& ctx,
-                                            const Animation& anim,
+Result AnimationFrameExporter::exportToGif (const Animation& anim,
                                             const File& destination,
                                             Size<int> targetSize,
                                             int qualityLevel)
@@ -105,7 +108,7 @@ Result AnimationFrameExporter::exportToGif (GraphicsContext& ctx,
     std::vector<Image> frames;
     frames.reserve ((size_t) totalFrames);
     for (float f = 0.0f; f < totalFrames; f += 1.0f)
-        frames.push_back (renderFrame (ctx, anim, f, sz));
+        frames.push_back (renderFrame (anim, f, sz));
 
     return exportToGif (frames, fps, destination, qualityLevel);
 }

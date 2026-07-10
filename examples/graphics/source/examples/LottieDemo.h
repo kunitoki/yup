@@ -144,6 +144,15 @@ public:
         statusLabel->setText ("Load a .json or .lottie file to begin.", yup::dontSendNotification);
         addAndMakeVisible (statusLabel.get());
 
+        bgButton = std::make_unique<yup::TextButton> ("BG: White");
+        bgButton->onClick = [this]
+        {
+            backgroundIsWhite = ! backgroundIsWhite;
+            bgButton->setButtonText (backgroundIsWhite ? "BG: White" : "BG: Black");
+            repaint();
+        };
+        addAndMakeVisible (bgButton.get());
+
         player.setLooping (looping);
         player.setDirection (direction);
 
@@ -192,10 +201,10 @@ public:
 
         if (player.getAnimation().isValid())
         {
-            g.setFillColor (yup::Colors::white);
+            g.setFillColor (backgroundIsWhite ? yup::Colors::white : yup::Colors::black);
             g.fillRoundedRect (bounds, 6.0f);
 
-            player.render (g, bounds.reduced (4.0f), true);
+            player.render (g, bounds.reduced (4.0f));
         }
         else
         {
@@ -230,13 +239,15 @@ public:
 
         bounds.removeFromTop (rowGap);
 
-        // Row 2: Direction buttons
+        // Row 2: Direction buttons + background toggle
         auto row2 = bounds.removeFromTop (buttonH);
         fwdButton->setBounds (row2.removeFromLeft (50.0f).reduced (0.0f, 2.0f));
         row2.removeFromLeft (margin);
         revButton->setBounds (row2.removeFromLeft (50.0f).reduced (0.0f, 2.0f));
         row2.removeFromLeft (margin);
         pingPongButton->setBounds (row2.removeFromLeft (50.0f).reduced (0.0f, 2.0f));
+        row2.removeFromLeft (margin);
+        bgButton->setBounds (row2.removeFromLeft (100.0f).reduced (0.0f, 2.0f));
 
         bounds.removeFromTop (rowGap);
 
@@ -377,6 +388,7 @@ private:
 
     bool looping = true;
     bool scrubberDriven = false;
+    bool backgroundIsWhite = true;
     yup::AnimationPlayer::Direction direction = yup::AnimationPlayer::Direction::Forward;
 
     std::unique_ptr<yup::TextButton> loadButton;
@@ -386,6 +398,7 @@ private:
     std::unique_ptr<yup::TextButton> fwdButton;
     std::unique_ptr<yup::TextButton> revButton;
     std::unique_ptr<yup::TextButton> pingPongButton;
+    std::unique_ptr<yup::TextButton> bgButton;
     std::unique_ptr<yup::Slider> speedSlider;
     std::unique_ptr<yup::Label> speedLabel;
     std::unique_ptr<yup::Slider> scrubSlider;

@@ -24,6 +24,12 @@ namespace yup
 
 AffineTransform AnimationTransform::toAffineTransform (float frameNo) const
 {
+    if (isStatic())
+    {
+        if (cachedStaticXf.has_value())
+            return *cachedStaticXf;
+    }
+
     const Point<float> a = anchor.getValueAt (frameNo);
     const Size<float> s = scale.getValueAt (frameNo);
     const float r = is3DData ? rotationZ.getValueAt (frameNo) : rotation.getValueAt (frameNo);
@@ -60,6 +66,10 @@ AffineTransform AnimationTransform::toAffineTransform (float frameNo) const
 
     t = t.rotated (degreesToRadians (r));
     t = t.translated (p.getX(), p.getY());
+
+    if (isStatic())
+        cachedStaticXf = t;
+
     return t;
 }
 
@@ -70,8 +80,12 @@ float AnimationTransform::opacityAt (float frameNo) const
 
 bool AnimationTransform::isStatic() const noexcept
 {
+    const bool posStatic = separatePosition
+                             ? (positionX.isStatic() && positionY.isStatic())
+                             : position.isStatic();
+
     return anchor.isStatic()
-        && position.isStatic()
+        && posStatic
         && scale.isStatic()
         && rotation.isStatic()
         && opacity.isStatic()
@@ -89,14 +103,14 @@ Point<float> AnimationTransform::positionAt (float frameNo) const
         return { positionX.getValueAt (frameNo), positionY.getValueAt (frameNo) };
 
     if (spatialKeyframes.empty())
-        return position.getValueAt (frameNo);
+        return applyPositionBounce (position.getValueAt (frameNo), frameNo);
 
     // Spatial bezier interpolation with position tangents
     if (frameNo <= spatialKeyframes.front().frame)
         return spatialKeyframes.front().value;
 
     if (frameNo >= spatialKeyframes.back().frame)
-        return spatialKeyframes.back().endValue.value_or (spatialKeyframes.back().value);
+        return applyPositionBounce (spatialKeyframes.back().endValue.value_or (spatialKeyframes.back().value), frameNo);
 
     int lo = 0;
     int hi = static_cast<int> (spatialKeyframes.size()) - 2;
@@ -124,10 +138,54 @@ Point<float> AnimationTransform::positionAt (float frameNo) const
     const auto P0 = k0.value;
     const auto P1 = k0.value + k0.tangentOut;
     const auto P3 = k0.endValue.value_or (k1.value);
-    const auto P2 = P3 + k1.tangentIn;
+    const auto P2 = P3 + k0.tangentIn;
+
+    // Precompute & cache segment lengths
+    if (cachedSegmentLengths.size() != spatialKeyframes.size())
+    {
+        cachedSegmentLengths.resize (spatialKeyframes.size(), -1.0f);
+    }
+
+    float segLen = cachedSegmentLengths[static_cast<size_t> (lo)];
+    if (segLen < 0.0f)
+    {
+        const auto bezier = CubicBezier::fromPoints (P0, P1, P2, P3);
+        segLen = bezier.length();
+        cachedSegmentLengths[static_cast<size_t> (lo)] = segLen;
+    }
 
     const auto bezier = CubicBezier::fromPoints (P0, P1, P2, P3);
-    return bezier.pointAt (bezier.tAtLength (t * bezier.length()));
+    return bezier.pointAt (bezier.tAtLength (t * segLen, segLen));
+}
+
+Point<float> AnimationTransform::applyPositionBounce (Point<float> settledValue, float frameNo) const
+{
+    if (! positionBounce.isActive() || positionBounce.frameRate <= 0.0f)
+        return settledValue;
+
+    // Frame of the last position keyframe: the bounce oscillates around the
+    // settled value only after the animation has reached its final keyframe.
+    float lastFrame = 0.0f;
+    if (! spatialKeyframes.empty())
+        lastFrame = spatialKeyframes.back().frame;
+    else if (position.isAnimated() && ! position.getKeyframes().empty())
+        lastFrame = position.getKeyframes().back().frame;
+    else
+        return settledValue;
+
+    if (frameNo <= lastFrame)
+        return settledValue;
+
+    const float tSec = (frameNo - lastFrame) / positionBounce.frameRate;
+    if (tSec <= 0.0f || tSec >= positionBounce.timeMax)
+        return settledValue;
+
+    // value + velocity * amp * sin(freq * t * 2pi) / exp(decay * t)
+    const float factor = positionBounce.amplitude
+                       * std::sin (positionBounce.frequency * tSec * MathConstants<float>::twoPi)
+                       / std::exp (positionBounce.decay * tSec);
+
+    return settledValue + positionBounce.velocity * factor;
 }
 
 } // namespace yup

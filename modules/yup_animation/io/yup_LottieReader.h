@@ -114,6 +114,10 @@ private:
 
     void parseTransform (const var& ksObj, AnimationTransform& transform, bool ddd = false);
 
+    /** Detects an AfterEffects inertial-bounce expression on the position channel
+        and, when present, populates transform.positionBounce. */
+    void parsePositionBounce (const var& positionObj, AnimationTransform& transform);
+
     template <typename T>
     AnimationProperty<T> parseProperty (const var& propObj,
                                         std::function<T (const var&)> extractor);
@@ -144,6 +148,7 @@ private:
     LottieLoadOptions options_;
     String* errorOut_ = nullptr;
     HashMap<String, AnimationEasing> interpolatorCache;
+    float frameRate_ = 60.0f;
 };
 
 } // namespace yup

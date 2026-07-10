@@ -543,8 +543,17 @@ void handleEllipticalArc (String::CharPointerType& data, Path& path, float& curr
 
 //==============================================================================
 
-void addRoundedSubpath (Path& targetPath, const std::vector<Point<float>>& points, float cornerRadius, bool closed)
+void addRoundedSubpath (Path& targetPath, const std::vector<Point<float>>& pointsIn, float cornerRadius, bool closed)
 {
+    // A closed subpath emitted from bezier data ends with an explicit segment
+    // back to the first vertex, duplicating it. That zero-length edge makes the
+    // corner at the start vertex degenerate (it stays sharp while the rest are
+    // rounded), so drop the trailing duplicate before rounding.
+    std::vector<Point<float>> points = pointsIn;
+    if (closed && points.size() >= 2
+        && points.front().distanceTo (points.back()) < 1.0e-4f)
+        points.pop_back();
+
     if (points.size() < 3)
         return;
 
@@ -630,8 +639,15 @@ void addRoundedSubpath (Path& targetPath, const std::vector<Point<float>>& point
             targetPath.lineTo (cornerStart);
         }
 
-        // Add rounded corner using quadratic curve
-        targetPath.quadTo (cornerEnd.getX(), cornerEnd.getY(), current.getX(), current.getY());
+        // Add the rounded corner as a cubic arc. A single quadratic through the
+        // vertex is too "pointy" (it looks like a smaller radius); pulling the
+        // control handles toward the vertex by the circle kappa produces a much
+        // closer approximation of a circular arc, so a fully-rounded square
+        // becomes a proper circle.
+        constexpr float kappa = 0.5522847498f;
+        const Point<float> control1 = cornerStart + (current - cornerStart) * kappa;
+        const Point<float> control2 = cornerEnd + (current - cornerEnd) * kappa;
+        targetPath.cubicTo (control1.getX(), control1.getY(), control2.getX(), control2.getY(), cornerEnd.getX(), cornerEnd.getY());
     }
 
     if (closed)

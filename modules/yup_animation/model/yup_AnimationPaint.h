@@ -166,8 +166,21 @@ public:
     [[nodiscard]] float opacityAt (float frameNo) const; ///< Returns [0, 1]
     [[nodiscard]] float widthAt (float frameNo) const;
     [[nodiscard]] StrokeType strokeTypeAt (float frameNo) const;
+    [[nodiscard]] bool isDashArrayStatic() const noexcept;
+
+    struct CachedDash
+    {
+        std::vector<float> dashValues;
+        float offset = 0.0f;
+    };
+
+    /** Resolves the dash array values at the given frame, with lazy caching for static dashes. */
+    [[nodiscard]] CachedDash resolveDash (float frameNo) const;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StrokePaint)
+
+private:
+    mutable std::optional<CachedDash> cachedDash;
 };
 
 } // namespace yup

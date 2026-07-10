@@ -90,4 +90,14 @@ bool AnimationLayer::isVisibleAt (float compFrame) const noexcept
     return ! hidden && compFrame >= inFrame && compFrame < outFrame;
 }
 
+bool AnimationLayer::areAllMasksStatic() const noexcept
+{
+    for (const auto& mask : masks)
+    {
+        if (mask != nullptr && mask->shape.isAnimated())
+            return false;
+    }
+    return true;
+}
+
 } // namespace yup

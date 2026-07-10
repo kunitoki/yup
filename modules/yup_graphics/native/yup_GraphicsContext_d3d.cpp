@@ -213,6 +213,9 @@ public:
         if (width <= 0 || height <= 0 || m_offscreenRenderContext == nullptr)
             return nullptr;
 
+        if (m_offscreenDepth > 0)
+            return nullptr;
+
         auto target = std::make_unique<OffscreenTargetD3D>();
         target->width = width;
         target->height = height;
@@ -242,9 +245,15 @@ public:
     void beginOffscreen (OffscreenTarget& baseTarget, const rive::gpu::RenderContext::FrameDescriptor& frameDesc) override
     {
         auto& target = static_cast<OffscreenTargetD3D&> (baseTarget);
+        auto* renderContext = target.getRenderContext();
 
-        if (auto* renderContext = target.getRenderContext())
+        if (renderContext != nullptr)
+        {
             renderContext->beginFrame (frameDesc);
+
+            if (renderContext == m_offscreenRenderContext.get())
+                ++m_offscreenDepth;
+        }
     }
 
     void endOffscreen (OffscreenTarget& baseTarget) override
@@ -261,6 +270,9 @@ public:
 
         if (auto* renderTarget = static_cast<rive::gpu::RenderTargetD3D*> (target.getRenderTarget()))
             m_gpuContext->CopyResource (target.stagingTexture.Get(), renderTarget->targetTexture());
+
+        if (renderContext == m_offscreenRenderContext.get())
+            --m_offscreenDepth;
     }
 
     bool readOffscreenPixels (OffscreenTarget& baseTarget, void* dst, size_t dstSize) override
@@ -306,6 +318,7 @@ private:
     ComPtr<ID3D11Texture2D> m_headlessDrawTexture;
     std::unique_ptr<rive::gpu::RenderContext> m_renderContext;
     std::unique_ptr<rive::gpu::RenderContext> m_offscreenRenderContext;
+    int m_offscreenDepth = 0;
     std::unique_ptr<rive::ore::ContextD3D11> m_oreContext;
     rive::rcp<rive::gpu::RenderTargetD3D> m_renderTarget;
 };
