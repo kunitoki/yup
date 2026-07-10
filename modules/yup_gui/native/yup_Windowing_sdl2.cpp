@@ -1265,6 +1265,12 @@ void SDL2ComponentNative::handleTextInput (const String& textInput)
     currentTextInputComponent->internalTextInput (textInput);
 }
 
+void SDL2ComponentNative::handleItemsDropped (const Point<float>& position, const DragAndDropData& data)
+{
+    if (Component* target = findComponentForMouseEvent (position))
+        target->internalItemsDropped (data, position);
+}
+
 //==============================================================================
 
 void SDL2ComponentNative::handleMoved (int xpos, int ypos)
@@ -1739,6 +1745,61 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
             //if (event->text.windowID == SDL_GetWindowID (window))
             //    handleTextInput (String::fromUTF8 (event->text.text));
+
+            break;
+        }
+
+        case SDL_DROPBEGIN:
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_DROPBEGIN");
+
+            if (event->drop.windowID == SDL_GetWindowID (window))
+            {
+                pendingDroppedFiles.clear();
+                pendingDroppedText.clear();
+            }
+
+            break;
+        }
+
+        case SDL_DROPFILE:
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_DROPFILE " << String::fromUTF8 (event->drop.file));
+
+            if (event->drop.windowID == SDL_GetWindowID (window))
+                pendingDroppedFiles.add (File (String::fromUTF8 (event->drop.file)));
+
+            SDL_free (event->drop.file);
+            break;
+        }
+
+        case SDL_DROPTEXT:
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_DROPTEXT " << String::fromUTF8 (event->drop.file));
+
+            if (event->drop.windowID == SDL_GetWindowID (window))
+                pendingDroppedText += String::fromUTF8 (event->drop.file);
+
+            SDL_free (event->drop.file);
+            break;
+        }
+
+        case SDL_DROPCOMPLETE:
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_DROPCOMPLETE");
+
+            if (event->drop.windowID == SDL_GetWindowID (window))
+            {
+                auto data = DragAndDropData()
+                                .withFiles (pendingDroppedFiles)
+                                .withText (pendingDroppedText);
+
+                if (! data.isEmpty())
+                    handleItemsDropped (getCursorPosition(), data);
+
+                pendingDroppedFiles.clear();
+                pendingDroppedText.clear();
+            }
 
             break;
         }

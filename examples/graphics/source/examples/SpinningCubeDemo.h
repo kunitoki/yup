@@ -54,6 +54,8 @@
     The default Lottie animation is played back each frame into an offscreen
     GpuCanvas (2D path) and sampled by the cube's fragment shader, so the moving
     animation is mapped onto every cube face and blended over the per-face tint.
+    Dropping a .lottie or .json (Lottie) file onto the cube replaces the texture
+    animation with the dropped file.
 */
 class SpinningCubeDemo : public yup::Component
 {
@@ -369,6 +371,29 @@ public:
         isDragging = false;
     }
 
+    //==============================================================================
+    bool isInterestedInDrag (const yup::DragAndDropData& data) override
+    {
+        for (const auto& file : data.getFiles())
+        {
+            if (isSupportedLottieFile (file))
+                return true;
+        }
+
+        return false;
+    }
+
+    bool itemsDropped (const yup::Point<float>&, const yup::DragAndDropData& data) override
+    {
+        for (const auto& file : data.getFiles())
+        {
+            if (isSupportedLottieFile (file))
+                return loadLottieFile (file);
+        }
+
+        return false;
+    }
+
 private:
     //==============================================================================
     /** Returns the area where the cube is rendered, matching the layout used in paint(). */
@@ -596,6 +621,31 @@ void main() {
             return;
         }
 
+        applyLottieAnimation (std::move (anim));
+    }
+
+    /** Returns true for file types that can be used as the cube's Lottie texture. */
+    static bool isSupportedLottieFile (const yup::File& file)
+    {
+        return file.hasFileExtension ("json") || file.hasFileExtension ("lottie");
+    }
+
+    /** Loads a dropped Lottie file and uses it as the cube's texture animation. */
+    bool loadLottieFile (const yup::File& file)
+    {
+        auto anim = yup::Animation::loadFromFile (file);
+        if (! anim.isValid())
+        {
+            yup::Logger::outputDebugString ("SpinningCubeDemo: failed to load dropped Lottie file: " + file.getFileName());
+            return false;
+        }
+
+        applyLottieAnimation (std::move (anim));
+        return true;
+    }
+
+    void applyLottieAnimation (yup::Animation anim)
+    {
         lottiePlayer.setAnimation (std::move (anim));
         lottiePlayer.setLooping (true);
         lottiePlayer.play();

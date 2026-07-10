@@ -182,6 +182,13 @@ public:
     {
         comp.internalPaint (g, repaintArea, renderContinuous);
     }
+
+    static bool triggerItemsDropped (Component& comp,
+                                     const Point<float>& windowPosition,
+                                     const DragAndDropData& data)
+    {
+        return comp.internalItemsDropped (data, windowPosition);
+    }
 };
 
 } // namespace yup
@@ -1917,4 +1924,219 @@ TEST_F (ComponentMockTest, MetricAcceptsZeroAndNegative)
 
     ASSERT_TRUE (negative.has_value());
     EXPECT_FLOAT_EQ (negative.value(), -2.5f);
+}
+
+// =============================================================================
+
+namespace
+{
+
+class DragDropComponent : public Component
+{
+public:
+    using Component::Component;
+
+    bool isInterestedInDrag (const DragAndDropData& data) override
+    {
+        ++interestQueryCount;
+        return interested;
+    }
+
+    bool itemsDropped (const Point<float>& position, const DragAndDropData& data) override
+    {
+        ++dropCount;
+        lastDropPosition = position;
+        lastDropData = data;
+        return handlesDrop;
+    }
+
+    bool interested = false;
+    bool handlesDrop = false;
+    int interestQueryCount = 0;
+    int dropCount = 0;
+    Point<float> lastDropPosition;
+    DragAndDropData lastDropData;
+};
+
+} // namespace
+
+class ComponentDragDropTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        root = std::make_unique<DragDropComponent> ("root");
+        parent = std::make_unique<DragDropComponent> ("parent");
+        child = std::make_unique<DragDropComponent> ("child");
+
+        root->setBounds (0, 0, 400, 300);
+        parent->setBounds (50, 50, 200, 150);
+        child->setBounds (25, 25, 100, 75);
+
+        root->addChildComponent (*parent);
+        parent->addChildComponent (*child);
+
+        root->setVisible (true);
+        parent->setVisible (true);
+        child->setVisible (true);
+    }
+
+    std::unique_ptr<DragDropComponent> root;
+    std::unique_ptr<DragDropComponent> parent;
+    std::unique_ptr<DragDropComponent> child;
+};
+
+TEST_F (ComponentDragDropTest, InterestedTopmostHandlesDrop)
+{
+    child->interested = true;
+    child->handlesDrop = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    // Window position (85,85) is inside child (child screen origin = 75,75).
+    EXPECT_TRUE (ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
+    EXPECT_EQ (child->dropCount, 1);
+    EXPECT_EQ (parent->dropCount, 0);
+    EXPECT_EQ (root->dropCount, 0);
+}
+
+TEST_F (ComponentDragDropTest, InterestedButReturnsFalseBubblesToParent)
+{
+    child->interested = true;
+    child->handlesDrop = false;
+    parent->interested = true;
+    parent->handlesDrop = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    EXPECT_TRUE (ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
+    EXPECT_EQ (child->dropCount, 1);
+    EXPECT_EQ (parent->dropCount, 1);
+    EXPECT_EQ (root->dropCount, 0);
+}
+
+TEST_F (ComponentDragDropTest, UninterestedComponentSkippedEvenIfItOverridesDrop)
+{
+    child->interested = false;
+    child->handlesDrop = true;
+    parent->interested = true;
+    parent->handlesDrop = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    EXPECT_TRUE (ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
+    EXPECT_EQ (child->dropCount, 0);
+    EXPECT_EQ (parent->dropCount, 1);
+}
+
+TEST_F (ComponentDragDropTest, DropPositionIsComponentLocal)
+{
+    child->interested = true;
+    child->handlesDrop = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    // Window (85,85). Child screen origin = root(0,0)+parent(50,50)+child(25,25) = (75,75).
+    // Local position = (10,10).
+    ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
+    EXPECT_FLOAT_EQ (child->lastDropPosition.getX(), 10.0f);
+    EXPECT_FLOAT_EQ (child->lastDropPosition.getY(), 10.0f);
+}
+
+TEST_F (ComponentDragDropTest, DropPositionRecomputedPerAncestor)
+{
+    child->interested = true;
+    child->handlesDrop = false;
+    parent->interested = true;
+    parent->handlesDrop = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    // Window (85,85). Parent screen origin = (50,50). Parent-local = (35,35).
+    ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
+    EXPECT_FLOAT_EQ (parent->lastDropPosition.getX(), 35.0f);
+    EXPECT_FLOAT_EQ (parent->lastDropPosition.getY(), 35.0f);
+}
+
+TEST_F (ComponentDragDropTest, InvisibleComponentSkipped)
+{
+    child->interested = true;
+    child->handlesDrop = true;
+    child->setVisible (false);
+    parent->interested = true;
+    parent->handlesDrop = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    EXPECT_TRUE (ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
+    EXPECT_EQ (child->dropCount, 0);
+    EXPECT_EQ (parent->dropCount, 1);
+}
+
+TEST_F (ComponentDragDropTest, DisabledComponentSkipped)
+{
+    child->interested = true;
+    child->handlesDrop = true;
+    child->setEnabled (false);
+    parent->interested = true;
+    parent->handlesDrop = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    EXPECT_TRUE (ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
+    EXPECT_EQ (child->dropCount, 0);
+    EXPECT_EQ (parent->dropCount, 1);
+}
+
+TEST_F (ComponentDragDropTest, NobodyHandlesReturnsFalse)
+{
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    EXPECT_FALSE (ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
+    EXPECT_EQ (child->dropCount, 0);
+    EXPECT_EQ (parent->dropCount, 0);
+    EXPECT_EQ (root->dropCount, 0);
+}
+
+TEST_F (ComponentDragDropTest, FilesOnlyPayloadDelivered)
+{
+    child->interested = true;
+    child->handlesDrop = true;
+
+    Array<File> files;
+    files.add (File ("/tmp/one.txt"));
+    files.add (File ("/tmp/two.txt"));
+    DragAndDropData data = DragAndDropData().withFiles (files);
+
+    ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
+    EXPECT_TRUE (child->lastDropData.hasFiles());
+    EXPECT_FALSE (child->lastDropData.hasText());
+    EXPECT_EQ (child->lastDropData.getFiles().size(), 2);
+}
+
+TEST_F (ComponentDragDropTest, TextOnlyPayloadDelivered)
+{
+    child->interested = true;
+    child->handlesDrop = true;
+
+    DragAndDropData data = DragAndDropData().withText ("dropped");
+
+    ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
+    EXPECT_FALSE (child->lastDropData.hasFiles());
+    EXPECT_TRUE (child->lastDropData.hasText());
+    EXPECT_EQ (child->lastDropData.getText(), String ("dropped"));
+}
+
+TEST_F (ComponentDragDropTest, MixedPayloadDelivered)
+{
+    child->interested = true;
+    child->handlesDrop = true;
+
+    Array<File> files;
+    files.add (File ("/tmp/one.txt"));
+    DragAndDropData data = DragAndDropData().withFiles (files).withText ("dropped");
+
+    ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
+    EXPECT_TRUE (child->lastDropData.hasFiles());
+    EXPECT_TRUE (child->lastDropData.hasText());
 }

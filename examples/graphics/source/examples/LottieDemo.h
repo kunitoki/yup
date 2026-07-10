@@ -219,6 +219,31 @@ public:
         }
     }
 
+    bool isInterestedInDrag (const yup::DragAndDropData& data) override
+    {
+        for (const auto& file : data.getFiles())
+        {
+            if (isSupportedFile (file))
+                return true;
+        }
+
+        return false;
+    }
+
+    bool itemsDropped (const yup::Point<float>& position, const yup::DragAndDropData& data) override
+    {
+        for (const auto& file : data.getFiles())
+        {
+            if (isSupportedFile (file))
+            {
+                loadFile (file);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     void resized() override
     {
         constexpr float margin = 8.0f;
@@ -274,6 +299,11 @@ public:
     }
 
 private:
+    static bool isSupportedFile (const yup::File& file)
+    {
+        return file.hasFileExtension ("json") || file.hasFileExtension ("lottie");
+    }
+
     void browseForFile()
     {
         auto chooser = yup::FileChooser::create ("Open Lottie Animation",
