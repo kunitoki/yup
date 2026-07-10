@@ -411,16 +411,6 @@ bool AnimationRenderer::renderLayerWithMatte (Graphics& g,
     if (w <= 0 || h <= 0)
         return false;
 
-    // Allocate the offscreen buffers first. This fails (returns nullptr) when the
-    // context is already inside an offscreen frame (e.g. AnimationFrameExporter
-    // rendering into an Image), so we fall back to the geometric clip before doing
-    // any shader compilation work.
-    auto targetCanvas = GpuCanvas::create (context, w, h);
-    auto sourceCanvas = GpuCanvas::create (context, w, h);
-    auto resultCanvas = GpuCanvas::create (context, w, h);
-    if (targetCanvas == nullptr || sourceCanvas == nullptr || resultCanvas == nullptr)
-        return false;
-
     // Reuse a caller-provided persistent pipeline when available (avoids a
     // per-frame shader recompile during playback); otherwise compile a temporary
     // for this call. Either way the pipeline is owned by a scope that ends before
@@ -428,6 +418,10 @@ bool AnimationRenderer::renderLayerWithMatte (Graphics& g,
     // would outlive the ore context and its leak detector.
     AnimationRenderResources localResources;
     AnimationRenderResources& resources = ctx.renderResources != nullptr ? *ctx.renderResources : localResources;
+
+    auto canvases = resources.acquireMatteCanvases (context, w, h);
+    if (! canvases.isValid())
+        return false;
 
     auto pipeline = resources.getMattePipeline (context);
     if (pipeline == nullptr)
@@ -446,17 +440,17 @@ bool AnimationRenderer::renderLayerWithMatte (Graphics& g,
     // 1. Matte target (the layer being masked) into targetCanvas.
     GpuTexture::Ptr targetTex;
     {
-        auto& tg = targetCanvas->beginDraw();
+        auto& tg = canvases.getTargetCanvas().beginDraw();
         renderLayerDirect (tg, layer, offscreenCtx, nullptr, 1.0f);
-        targetTex = targetCanvas->asTexture();
+        targetTex = canvases.getTargetCanvas().asTexture();
     }
 
     // 2. Matte source (defines the mask) into sourceCanvas.
     GpuTexture::Ptr sourceTex;
     {
-        auto& sg = sourceCanvas->beginDraw();
+        auto& sg = canvases.getSourceCanvas().beginDraw();
         renderLayerDirect (sg, matteSource, offscreenCtx, nullptr, 1.0f);
-        sourceTex = sourceCanvas->asTexture();
+        sourceTex = canvases.getSourceCanvas().asTexture();
     }
 
     if (targetTex == nullptr || sourceTex == nullptr)
@@ -470,7 +464,7 @@ bool AnimationRenderer::renderLayerWithMatte (Graphics& g,
         if (! frame.isValid())
             return false;
 
-        auto pass = resultCanvas->beginRenderPass (frame, { true, Colors::transparentBlack });
+        auto pass = canvases.getResultCanvas().beginRenderPass (frame, { true, Colors::transparentBlack });
         if (! pass.isValid())
             return false;
 
@@ -484,7 +478,7 @@ bool AnimationRenderer::renderLayerWithMatte (Graphics& g,
         frame.submit();
     }
 
-    auto resultTex = resultCanvas->asTexture();
+    auto resultTex = canvases.getResultCanvas().asTexture();
     if (resultTex == nullptr)
         return false;
 
@@ -616,7 +610,9 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
 
         if (w > 0 && h > 0)
         {
-            auto canvas = GpuCanvas::create (g.getGraphicsContext(), w, h);
+            auto canvas = ctx.renderResources != nullptr
+                            ? ctx.renderResources->getPrecompCanvas (g.getGraphicsContext(), layer.precompRefId, w, h)
+                            : GpuCanvas::create (g.getGraphicsContext(), w, h);
             if (canvas != nullptr)
             {
                 {
@@ -625,7 +621,7 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
                     SceneContext offscreenScene { ctx.scene.comp, localFrame, layer.layerSize };
                     offscreenScene.buildParentTransforms (asset->layers);
 
-                    RenderContext offscreenCtx { offscreenScene, AffineTransform::scaling (deviceScale), 1.0f, ctx.paintOverride, ctx.precompCache };
+                    RenderContext offscreenCtx { offscreenScene, AffineTransform::scaling (deviceScale), 1.0f, ctx.paintOverride, ctx.precompCache, ctx.renderResources };
                     renderLayerList (offscreenG, asset->layers, offscreenCtx);
                 }
 
@@ -644,7 +640,7 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
 
     precompScene.buildParentTransforms (asset->layers);
 
-    RenderContext precompCtx { precompScene, precompViewXf, opacity, ctx.paintOverride };
+    RenderContext precompCtx { precompScene, precompViewXf, opacity, ctx.paintOverride, nullptr, ctx.renderResources };
 
     renderLayerList (g, asset->layers, precompCtx);
 }

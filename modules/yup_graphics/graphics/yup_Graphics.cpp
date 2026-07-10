@@ -307,6 +307,12 @@ Graphics::Graphics (GraphicsContext& context, OffscreenTarget& target, uint32_t 
     currentRenderOptions().drawingArea = { 0.0f, 0.0f, static_cast<float> (offscreenTarget->getWidth()), static_cast<float> (offscreenTarget->getHeight()) };
 }
 
+Graphics::~Graphics()
+{
+    if (offscreenTarget != nullptr && ! committed)
+        context.endOffscreen (*offscreenTarget);
+}
+
 //==============================================================================
 
 bool Graphics::isOffscreen() const noexcept

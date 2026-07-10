@@ -36,6 +36,8 @@
 
 #import <simd/simd.h>
 
+#include <vector>
+
 namespace yup
 {
 
@@ -80,16 +82,13 @@ public:
     LowLevelRenderContextMetal (Options fiddleOptions)
         : m_fiddleOptions (fiddleOptions)
     {
-        rive::gpu::RenderContextMetalImpl::ContextOptions metalOptions;
-
         if (m_fiddleOptions.synchronousShaderCompilations)
-            metalOptions.shaderCompilationMode = rive::gpu::ShaderCompilationMode::alwaysSynchronous;
+            m_renderContextOptions.shaderCompilationMode = rive::gpu::ShaderCompilationMode::alwaysSynchronous;
 
         if (m_fiddleOptions.disableRasterOrdering)
-            metalOptions.disableFramebufferReads = true;
+            m_renderContextOptions.disableFramebufferReads = true;
 
-        m_renderContext = rive::gpu::RenderContextMetalImpl::MakeContext (m_gpu, metalOptions);
-        m_offscreenRenderContext = rive::gpu::RenderContextMetalImpl::MakeContext (m_gpu, metalOptions);
+        m_renderContext = rive::gpu::RenderContextMetalImpl::MakeContext (m_gpu, m_renderContextOptions);
 
         if (m_fiddleOptions.enableOreContext)
             m_oreContext = rive::ore::ContextMetal::Make (m_gpu, m_queue);
@@ -286,6 +285,12 @@ public:
 
     //==============================================================================
 
+    struct OffscreenContextSlot
+    {
+        std::unique_ptr<rive::gpu::RenderContext> renderContext;
+        bool frameActive = false;
+    };
+
     struct OffscreenTargetMetal : public OffscreenTarget
     {
         int width = 0;
@@ -293,6 +298,7 @@ public:
         id<MTLTexture> stagingTexture = nil;
         rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
         rive::gpu::RenderContext* renderContext = nullptr;
+        OffscreenContextSlot* contextSlot = nullptr;
 
         int getWidth() const noexcept override { return width; }
 
@@ -335,37 +341,21 @@ public:
 
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
     {
-        if (width <= 0 || height <= 0 || m_offscreenRenderContext == nullptr)
+        if (width <= 0 || height <= 0)
             return nullptr;
 
-        // If the shared offscreen context is already in a frame, another
-        // offscreen target cannot be created on it. The caller (e.g.
-        // TransparencyLayer, GpuCanvas) must handle nullptr gracefully.
-        if (m_offscreenDepth > 0)
+        auto* contextSlot = acquireOffscreenContext();
+        if (contextSlot == nullptr)
             return nullptr;
 
         auto target = std::make_unique<OffscreenTargetMetal>();
         target->width = width;
         target->height = height;
-        target->renderContext = m_offscreenRenderContext.get();
-        target->renderCanvas = m_offscreenRenderContext->makeRenderCanvas (static_cast<uint32_t> (width),
-                                                                           static_cast<uint32_t> (height));
+        target->renderContext = contextSlot->renderContext.get();
+        target->contextSlot = contextSlot;
+        target->renderCanvas = target->renderContext->makeRenderCanvas (static_cast<uint32_t> (width),
+                                                                        static_cast<uint32_t> (height));
         if (target->renderCanvas == nullptr)
-            return nullptr;
-
-        MTLTextureDescriptor* stagingDesc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
-                                                                                               width:static_cast<NSUInteger> (width)
-                                                                                              height:static_cast<NSUInteger> (height)
-                                                                                           mipmapped:NO];
-        stagingDesc.usage = MTLTextureUsageShaderRead;
-#if YUP_IOS
-        stagingDesc.storageMode = MTLStorageModeShared;
-#else
-        stagingDesc.storageMode = MTLStorageModeManaged;
-#endif
-        target->stagingTexture = [m_gpu newTextureWithDescriptor:stagingDesc];
-
-        if (target->targetTexture() == nil || target->stagingTexture == nil)
             return nullptr;
 
         return target;
@@ -376,13 +366,11 @@ public:
         auto& target = static_cast<OffscreenTargetMetal&> (baseTarget);
         auto* renderContext = target.getRenderContext();
 
-        if (renderContext == nullptr)
+        if (renderContext == nullptr || target.contextSlot == nullptr || target.contextSlot->frameActive)
             return;
 
         renderContext->beginFrame (frameDesc);
-
-        if (renderContext == m_offscreenRenderContext.get())
-            ++m_offscreenDepth;
+        target.contextSlot->frameActive = true;
     }
 
     void endOffscreen (OffscreenTarget& baseTarget) override
@@ -390,27 +378,42 @@ public:
         auto& target = static_cast<OffscreenTargetMetal&> (baseTarget);
         auto* renderContext = target.getRenderContext();
 
-        if (renderContext == nullptr)
+        if (renderContext == nullptr || target.contextSlot == nullptr || ! target.contextSlot->frameActive)
             return;
 
         id<MTLCommandBuffer> commandBuffer = [m_queue commandBuffer];
         renderContext->flush ({ .renderTarget = target.getRenderTarget(), .externalCommandBuffer = (__bridge void*) commandBuffer });
         [commandBuffer commit];
-
-        if (renderContext == m_offscreenRenderContext.get())
-            --m_offscreenDepth;
+        target.contextSlot->frameActive = false;
     }
 
     bool readOffscreenPixels (OffscreenTarget& baseTarget, void* dst, size_t dstSize) override
     {
         auto& target = static_cast<OffscreenTargetMetal&> (baseTarget);
 
-        if (target.stagingTexture == nil || dst == nullptr)
+        if (dst == nullptr)
             return false;
 
         id<MTLTexture> srcTexture = target.targetTexture();
         if (srcTexture == nil)
             return false;
+
+        if (target.stagingTexture == nil)
+        {
+            MTLTextureDescriptor* stagingDesc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                                                                   width:static_cast<NSUInteger> (target.width)
+                                                                                                  height:static_cast<NSUInteger> (target.height)
+                                                                                               mipmapped:NO];
+            stagingDesc.usage = MTLTextureUsageShaderRead;
+#if YUP_IOS
+            stagingDesc.storageMode = MTLStorageModeShared;
+#else
+            stagingDesc.storageMode = MTLStorageModeManaged;
+#endif
+            target.stagingTexture = [m_gpu newTextureWithDescriptor:stagingDesc];
+            if (target.stagingTexture == nil)
+                return false;
+        }
 
         const auto w = static_cast<NSUInteger> (target.width);
         const auto h = static_cast<NSUInteger> (target.height);
@@ -451,10 +454,28 @@ public:
     }
 
 private:
+    OffscreenContextSlot* acquireOffscreenContext()
+    {
+        for (const auto& slot : m_offscreenContextPool)
+        {
+            if (! slot->frameActive)
+                return slot.get();
+        }
+
+        auto slot = std::make_unique<OffscreenContextSlot>();
+        slot->renderContext = rive::gpu::RenderContextMetalImpl::MakeContext (m_gpu, m_renderContextOptions);
+        if (slot->renderContext == nullptr)
+            return nullptr;
+
+        auto* result = slot.get();
+        m_offscreenContextPool.push_back (std::move (slot));
+        return result;
+    }
+
     const Options m_fiddleOptions;
+    rive::gpu::RenderContextMetalImpl::ContextOptions m_renderContextOptions;
     std::unique_ptr<rive::gpu::RenderContext> m_renderContext;
-    std::unique_ptr<rive::gpu::RenderContext> m_offscreenRenderContext;
-    int m_offscreenDepth = 0;
+    std::vector<std::unique_ptr<OffscreenContextSlot>> m_offscreenContextPool;
     std::unique_ptr<rive::ore::ContextMetal> m_oreContext;
     id<MTLDevice> m_gpu = MTLCreateSystemDefaultDevice();
     id<MTLCommandQueue> m_queue = [m_gpu newCommandQueue];

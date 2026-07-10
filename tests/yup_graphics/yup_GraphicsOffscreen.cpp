@@ -25,6 +25,77 @@
 
 using namespace yup;
 
+namespace
+{
+
+class TrackingOffscreenTarget : public OffscreenTarget
+{
+public:
+    TrackingOffscreenTarget (int targetWidth, int targetHeight)
+        : width (targetWidth)
+        , height (targetHeight)
+    {
+    }
+
+    int getWidth() const noexcept override { return width; }
+
+    int getHeight() const noexcept override { return height; }
+
+    rive::gpu::RenderTarget* getRenderTarget() noexcept override { return nullptr; }
+
+    rive::rcp<rive::gpu::Texture> adoptAsTexture() override { return nullptr; }
+
+private:
+    int width;
+    int height;
+};
+
+class TrackingGraphicsContext : public GraphicsContext
+{
+public:
+    TrackingGraphicsContext()
+        : realContext (GraphicsContext::createContext (GraphicsContext::Headless, {}))
+    {
+    }
+
+    Api getApi() const noexcept override { return realContext->getApi(); }
+
+    float dpiScale (void* nativeHandle) const override { return realContext->dpiScale (nativeHandle); }
+
+    rive::Factory* factory() override { return realContext->factory(); }
+
+    rive::gpu::RenderContext* renderContext() override { return realContext->renderContext(); }
+
+    rive::gpu::RenderTarget* renderTarget() override { return realContext->renderTarget(); }
+
+    std::unique_ptr<rive::Renderer> makeRenderer (int width, int height) override { return realContext->makeRenderer (width, height); }
+
+    void onSizeChanged (void* nativeHandle, int width, int height, uint32_t sampleCount) override
+    {
+        realContext->onSizeChanged (nativeHandle, width, height, sampleCount);
+    }
+
+    void begin (const rive::gpu::RenderContext::FrameDescriptor& frameDesc) override { realContext->begin (frameDesc); }
+
+    void end (void* nativeHandle) override { realContext->end (nativeHandle); }
+
+    std::unique_ptr<OffscreenTarget> createOffscreenTarget (int, int) override { return nullptr; }
+
+    void beginOffscreen (OffscreenTarget&, const rive::gpu::RenderContext::FrameDescriptor&) override { ++beginOffscreenCalls; }
+
+    void endOffscreen (OffscreenTarget&) override { ++endOffscreenCalls; }
+
+    bool readOffscreenPixels (OffscreenTarget&, void*, size_t) override { return false; }
+
+    int beginOffscreenCalls = 0;
+    int endOffscreenCalls = 0;
+
+private:
+    std::unique_ptr<GraphicsContext> realContext;
+};
+
+} // namespace
+
 class GraphicsOffscreenTests : public ::testing::Test
 {
 protected:
@@ -148,4 +219,33 @@ TEST_F (GraphicsOffscreenTests, RegularGraphicsContextRenderSize)
 
     EXPECT_FALSE (g.isOffscreen());
     EXPECT_FALSE (g.commitToImage());
+}
+
+TEST (GraphicsOffscreenLifecycleTests, DestroyingUncommittedGraphicsClosesFrame)
+{
+    TrackingGraphicsContext context;
+    TrackingOffscreenTarget target (64, 64);
+
+    {
+        Graphics g (context, target);
+        EXPECT_TRUE (g.isOffscreen());
+        EXPECT_EQ (1, context.beginOffscreenCalls);
+        EXPECT_EQ (0, context.endOffscreenCalls);
+    }
+
+    EXPECT_EQ (1, context.endOffscreenCalls);
+}
+
+TEST (GraphicsOffscreenLifecycleTests, CommittingGraphicsDoesNotCloseFrameTwice)
+{
+    TrackingGraphicsContext context;
+    TrackingOffscreenTarget target (64, 64);
+
+    {
+        Graphics g (context, target);
+        EXPECT_TRUE (g.commitOffscreenTarget());
+        EXPECT_EQ (1, context.endOffscreenCalls);
+    }
+
+    EXPECT_EQ (1, context.endOffscreenCalls);
 }

@@ -28,9 +28,11 @@ namespace yup
     Created by GraphicsContext::createOffscreenTarget(); passed to
     beginOffscreen/endOffscreen and readOffscreenPixels.
 
-    Each instance may own a dedicated RenderContext when nesting is detected,
-    allowing recursive offscreen rendering (TransparencyLayer inside GpuCanvas,
-    nested precomps) without re-entering beginFrame on a shared context.
+    Targets are assigned a backend-owned RenderContext. A context is reserved
+    while a target frame is active, allowing recursive offscreen rendering
+    (TransparencyLayer inside GpuCanvas, nested precomps) without re-entering
+    beginFrame and allowing sequential targets to reuse an idle context. The
+    GraphicsContext must outlive every OffscreenTarget it creates.
 */
 class YUP_API OffscreenTarget
 {

@@ -80,7 +80,9 @@ bool GpuCanvas::commit()
     // No-op on non-GL backends and for canvases never used as sampled inputs.
     offscreenTarget->getOrCreateSampledTexture();
 
-    ctx->endOffscreen (*offscreenTarget);
+    if (graphics == nullptr || ! graphics->commitOffscreenTarget())
+        return false;
+
     committed = true;
     return true;
 }

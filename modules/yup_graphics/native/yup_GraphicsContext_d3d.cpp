@@ -25,6 +25,7 @@
 #include "rive/renderer/d3d11/d3d11.hpp"
 #include "rive/renderer/ore/ore_context_d3d11.hpp"
 #include <dxgi1_2.h>
+#include <vector>
 
 namespace yup
 {
@@ -40,11 +41,11 @@ public:
                               Options options)
         : m_isHeadless (isHeadless)
         , m_options (options)
+        , m_renderContextOptions (contextOptions)
         , m_d3dFactory (std::move (d3dFactory))
         , m_gpu (std::move (gpu))
         , m_gpuContext (std::move (gpuContext))
-        , m_renderContext (rive::gpu::RenderContextD3DImpl::MakeContext (m_gpu, m_gpuContext, contextOptions))
-        , m_offscreenRenderContext (rive::gpu::RenderContextD3DImpl::MakeContext (m_gpu, m_gpuContext, contextOptions))
+        , m_renderContext (rive::gpu::RenderContextD3DImpl::MakeContext (m_gpu, m_gpuContext, m_renderContextOptions))
     {
         if (m_options.enableOreContext)
             m_oreContext = rive::ore::ContextD3D11::Make (m_gpu.Get(), m_gpuContext.Get());
@@ -172,6 +173,12 @@ public:
 
     //==============================================================================
 
+    struct OffscreenContextSlot
+    {
+        std::unique_ptr<rive::gpu::RenderContext> renderContext;
+        bool frameActive = false;
+    };
+
     struct OffscreenTargetD3D : public OffscreenTarget
     {
         int width = 0;
@@ -179,6 +186,7 @@ public:
         ComPtr<ID3D11Texture2D> stagingTexture;
         rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
         rive::gpu::RenderContext* renderContext = nullptr;
+        OffscreenContextSlot* contextSlot = nullptr;
 
         int getWidth() const noexcept override { return width; }
 
@@ -210,19 +218,21 @@ public:
 
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
     {
-        if (width <= 0 || height <= 0 || m_offscreenRenderContext == nullptr)
+        if (width <= 0 || height <= 0)
             return nullptr;
 
-        if (m_offscreenDepth > 0)
+        auto* contextSlot = acquireOffscreenContext();
+        if (contextSlot == nullptr)
             return nullptr;
 
         auto target = std::make_unique<OffscreenTargetD3D>();
         target->width = width;
         target->height = height;
-        target->renderContext = m_offscreenRenderContext.get();
+        target->renderContext = contextSlot->renderContext.get();
+        target->contextSlot = contextSlot;
 
-        target->renderCanvas = m_offscreenRenderContext->makeRenderCanvas (static_cast<uint32_t> (width),
-                                                                           static_cast<uint32_t> (height));
+        target->renderCanvas = target->renderContext->makeRenderCanvas (static_cast<uint32_t> (width),
+                                                                        static_cast<uint32_t> (height));
         if (target->renderCanvas == nullptr)
             return nullptr;
 
@@ -249,10 +259,11 @@ public:
 
         if (renderContext != nullptr)
         {
-            renderContext->beginFrame (frameDesc);
+            if (target.contextSlot == nullptr || target.contextSlot->frameActive)
+                return;
 
-            if (renderContext == m_offscreenRenderContext.get())
-                ++m_offscreenDepth;
+            renderContext->beginFrame (frameDesc);
+            target.contextSlot->frameActive = true;
         }
     }
 
@@ -261,7 +272,7 @@ public:
         auto& target = static_cast<OffscreenTargetD3D&> (baseTarget);
         auto* renderContext = target.getRenderContext();
 
-        if (renderContext == nullptr)
+        if (renderContext == nullptr || target.contextSlot == nullptr || ! target.contextSlot->frameActive)
             return;
 
         rive::gpu::RenderContext::FlushResources flushDesc;
@@ -271,8 +282,7 @@ public:
         if (auto* renderTarget = static_cast<rive::gpu::RenderTargetD3D*> (target.getRenderTarget()))
             m_gpuContext->CopyResource (target.stagingTexture.Get(), renderTarget->targetTexture());
 
-        if (renderContext == m_offscreenRenderContext.get())
-            --m_offscreenDepth;
+        target.contextSlot->frameActive = false;
     }
 
     bool readOffscreenPixels (OffscreenTarget& baseTarget, void* dst, size_t dstSize) override
@@ -307,9 +317,28 @@ public:
     }
 
 private:
+    OffscreenContextSlot* acquireOffscreenContext()
+    {
+        for (const auto& slot : m_offscreenContextPool)
+        {
+            if (! slot->frameActive)
+                return slot.get();
+        }
+
+        auto slot = std::make_unique<OffscreenContextSlot>();
+        slot->renderContext = rive::gpu::RenderContextD3DImpl::MakeContext (m_gpu, m_gpuContext, m_renderContextOptions);
+        if (slot->renderContext == nullptr)
+            return nullptr;
+
+        auto* result = slot.get();
+        m_offscreenContextPool.push_back (std::move (slot));
+        return result;
+    }
+
     const bool m_isHeadless;
 
     Options m_options;
+    rive::gpu::D3DContextOptions m_renderContextOptions;
     ComPtr<IDXGIFactory2> m_d3dFactory;
     ComPtr<ID3D11Device> m_gpu;
     ComPtr<ID3D11DeviceContext> m_gpuContext;
@@ -317,8 +346,7 @@ private:
     ComPtr<ID3D11Texture2D> m_readbackTexture;
     ComPtr<ID3D11Texture2D> m_headlessDrawTexture;
     std::unique_ptr<rive::gpu::RenderContext> m_renderContext;
-    std::unique_ptr<rive::gpu::RenderContext> m_offscreenRenderContext;
-    int m_offscreenDepth = 0;
+    std::vector<std::unique_ptr<OffscreenContextSlot>> m_offscreenContextPool;
     std::unique_ptr<rive::ore::ContextD3D11> m_oreContext;
     rive::rcp<rive::gpu::RenderTargetD3D> m_renderTarget;
 };

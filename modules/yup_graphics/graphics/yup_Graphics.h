@@ -156,6 +156,9 @@ public:
     */
     Graphics (GraphicsContext& context, OffscreenTarget& target, uint32_t clearColor = 0) noexcept;
 
+    /** Finalizes an uncommitted offscreen frame without retaining its result. */
+    ~Graphics();
+
     //==============================================================================
     /** Saves the current state of the Graphics object.
 

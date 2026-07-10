@@ -167,7 +167,11 @@ public:
     //==============================================================================
     /** Creates platform-specific GPU offscreen resources for the given dimensions.
 
-        Must NOT be called between begin() and end().
+        Supported GPU backends may create targets while another offscreen target
+        is rendering. Backends reserve a render context only while its target
+        has an active frame, allowing sequential targets to share idle contexts.
+        A target must outlive its corresponding beginOffscreen()/endOffscreen()
+        pair and the GraphicsContext must outlive every target it creates.
 
         @param width The width of the offscreen target in pixels.
         @param height The height of the offscreen target in pixels.
@@ -176,9 +180,10 @@ public:
     */
     virtual std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) = 0;
 
-    /** Begins a standalone GPU frame targeting the given offscreen surface.
+    /** Begins a GPU frame targeting the given offscreen surface.
 
-        Must NOT be called between begin() and end().
+        A target may have only one active frame. Nested frames are supported when
+        they use distinct OffscreenTarget instances.
 
         @param target The OffscreenTarget to render into.
         @param frameDesc The frame descriptor that contains frame-specific data.
