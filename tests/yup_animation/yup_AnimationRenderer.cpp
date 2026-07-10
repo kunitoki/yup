@@ -1458,6 +1458,35 @@ TEST_F (AnimationRendererTests, RenderLayerWithAlphaMatteDoesNotCrash)
     });
 }
 
+TEST_F (AnimationRendererTests, RenderLayerWithPartialOpacityMatteSourceDoesNotCrash)
+{
+    // Matte source fill at 65% opacity: a correct alpha matte multiplies the
+    // target's alpha by the source's rendered alpha. On a headless context this
+    // exercises the geometric-clip fallback path.
+    auto comp = LottieReader::parseData (kAlphaMatteJson);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 2u);
+
+    for (const auto matteType : { AnimationLayer::MatteType::Alpha,
+                                  AnimationLayer::MatteType::AlphaInv,
+                                  AnimationLayer::MatteType::Luma,
+                                  AnimationLayer::MatteType::LumaInv })
+    {
+        for (const auto& layer : comp->layers)
+        {
+            if (layer != nullptr && layer->matteType != AnimationLayer::MatteType::None)
+                layer->matteType = matteType;
+        }
+
+        auto renderer = context->makeRenderer (100, 100);
+        Graphics g (*context, *renderer);
+
+        EXPECT_NO_THROW ({
+            AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 100, 100));
+        });
+    }
+}
+
 // =============================================================================
 // Parent chain — child offset by rotated parent null
 // =============================================================================

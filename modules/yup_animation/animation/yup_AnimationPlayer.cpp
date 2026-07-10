@@ -249,7 +249,7 @@ bool AnimationPlayer::advanceTime (float deltaSeconds)
 
 void AnimationPlayer::render (Graphics& g, Rectangle<float> bounds, Fitting fitting, Justification justification) const
 {
-    animation_.renderFrame (g, currentFrame_, bounds, fitting, justification);
+    animation_.renderFrame (g, currentFrame_, bounds, fitting, justification, &renderResources_);
 }
 
 //==============================================================================

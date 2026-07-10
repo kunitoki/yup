@@ -80,11 +80,21 @@ protected:
         context = GraphicsContext::createContext (GraphicsContext::Headless, {});
         ASSERT_NE (context, nullptr);
 
+        exporter = std::make_unique<AnimationFrameExporter> (*context);
+
         anim = Animation::loadFromData (kSimpleAnimJson);
         ASSERT_TRUE (anim.isValid());
     }
 
+    void TearDown() override
+    {
+        // Exporter holds GPU resources tied to the context; destroy it first.
+        exporter.reset();
+        context.reset();
+    }
+
     std::unique_ptr<GraphicsContext> context;
+    std::unique_ptr<AnimationFrameExporter> exporter;
     Animation anim;
 };
 
@@ -95,7 +105,7 @@ protected:
 TEST_F (AnimationFrameExporterTests, RenderFrame_ReturnsInvalidImageForInvalidAnimation)
 {
     Animation invalid;
-    const Image result = AnimationFrameExporter::renderFrame (*context, invalid, 0.0f);
+    const Image result = exporter->renderFrame (invalid, 0.0f);
     EXPECT_FALSE (result.isValid());
 }
 
@@ -105,13 +115,13 @@ TEST_F (AnimationFrameExporterTests, RenderFrame_ReturnsInvalidImageForInvalidAn
 
 TEST_F (AnimationFrameExporterTests, RenderFrame_ReturnsValidImageForValidAnimation)
 {
-    const Image result = AnimationFrameExporter::renderFrame (*context, anim, 0.0f);
+    const Image result = exporter->renderFrame (anim, 0.0f);
     EXPECT_TRUE (result.isValid());
 }
 
 TEST_F (AnimationFrameExporterTests, RenderFrame_UsesNativeSizeWhenZeroTargetSize)
 {
-    const Image result = AnimationFrameExporter::renderFrame (*context, anim, 0.0f, {});
+    const Image result = exporter->renderFrame (anim, 0.0f, {});
     ASSERT_TRUE (result.isValid());
     EXPECT_EQ (result.getWidth(), (int) anim.size().getWidth());
     EXPECT_EQ (result.getHeight(), (int) anim.size().getHeight());
@@ -119,7 +129,7 @@ TEST_F (AnimationFrameExporterTests, RenderFrame_UsesNativeSizeWhenZeroTargetSiz
 
 TEST_F (AnimationFrameExporterTests, RenderFrame_UsesRequestedSizeWhenProvided)
 {
-    const Image result = AnimationFrameExporter::renderFrame (*context, anim, 0.0f, { 40, 40 });
+    const Image result = exporter->renderFrame (anim, 0.0f, { 40, 40 });
     ASSERT_TRUE (result.isValid());
     EXPECT_EQ (result.getWidth(), 40);
     EXPECT_EQ (result.getHeight(), 40);
@@ -127,8 +137,8 @@ TEST_F (AnimationFrameExporterTests, RenderFrame_UsesRequestedSizeWhenProvided)
 
 TEST_F (AnimationFrameExporterTests, RenderFrame_ReturnsDifferentResultAtDifferentFrames)
 {
-    const Image frame0 = AnimationFrameExporter::renderFrame (*context, anim, 0.0f);
-    const Image frame2 = AnimationFrameExporter::renderFrame (*context, anim, 2.0f);
+    const Image frame0 = exporter->renderFrame (anim, 0.0f);
+    const Image frame2 = exporter->renderFrame (anim, 2.0f);
 
     EXPECT_TRUE (frame0.isValid());
     EXPECT_TRUE (frame2.isValid());
@@ -138,7 +148,7 @@ TEST_F (AnimationFrameExporterTests, RenderFrame_ReturnsDifferentResultAtDiffere
 
 TEST_F (AnimationFrameExporterTests, RenderFrame_ProducesRGBAFormat)
 {
-    const Image result = AnimationFrameExporter::renderFrame (*context, anim, 0.0f);
+    const Image result = exporter->renderFrame (anim, 0.0f);
     ASSERT_TRUE (result.isValid());
     EXPECT_EQ (result.getPixelFormat(), PixelFormat::RGBA);
 }
@@ -150,7 +160,7 @@ TEST_F (AnimationFrameExporterTests, RenderFrame_ProducesRGBAFormat)
 TEST_F (AnimationFrameExporterTests, RenderAllFrames_FailsForInvalidAnimation)
 {
     Animation invalid;
-    const auto result = AnimationFrameExporter::renderAllFrames (*context, invalid);
+    const auto result = exporter->renderAllFrames (invalid);
     EXPECT_FALSE (result.wasOk());
 }
 
@@ -160,13 +170,13 @@ TEST_F (AnimationFrameExporterTests, RenderAllFrames_FailsForInvalidAnimation)
 
 TEST_F (AnimationFrameExporterTests, RenderAllFrames_SucceedsForValidAnimation)
 {
-    const auto result = AnimationFrameExporter::renderAllFrames (*context, anim);
+    const auto result = exporter->renderAllFrames (anim);
     EXPECT_TRUE (result.wasOk());
 }
 
 TEST_F (AnimationFrameExporterTests, RenderAllFrames_ReturnsOneImagePerFrame)
 {
-    const auto result = AnimationFrameExporter::renderAllFrames (*context, anim);
+    const auto result = exporter->renderAllFrames (anim);
     ASSERT_TRUE (result.wasOk());
 
     const int expectedFrames = (int) anim.totalFrames();
@@ -175,7 +185,7 @@ TEST_F (AnimationFrameExporterTests, RenderAllFrames_ReturnsOneImagePerFrame)
 
 TEST_F (AnimationFrameExporterTests, RenderAllFrames_AllImagesAreValid)
 {
-    const auto result = AnimationFrameExporter::renderAllFrames (*context, anim);
+    const auto result = exporter->renderAllFrames (anim);
     ASSERT_TRUE (result.wasOk());
 
     for (const auto& img : result.getValue())
@@ -184,7 +194,7 @@ TEST_F (AnimationFrameExporterTests, RenderAllFrames_AllImagesAreValid)
 
 TEST_F (AnimationFrameExporterTests, RenderAllFrames_AllImagesUseNativeSize)
 {
-    const auto result = AnimationFrameExporter::renderAllFrames (*context, anim);
+    const auto result = exporter->renderAllFrames (anim);
     ASSERT_TRUE (result.wasOk());
 
     for (const auto& img : result.getValue())
@@ -196,7 +206,7 @@ TEST_F (AnimationFrameExporterTests, RenderAllFrames_AllImagesUseNativeSize)
 
 TEST_F (AnimationFrameExporterTests, RenderAllFrames_RespectsRequestedSize)
 {
-    const auto result = AnimationFrameExporter::renderAllFrames (*context, anim, { 64, 32 });
+    const auto result = exporter->renderAllFrames (anim, { 64, 32 });
     ASSERT_TRUE (result.wasOk());
 
     for (const auto& img : result.getValue())
@@ -215,7 +225,7 @@ TEST_F (AnimationFrameExporterTests, ExportToGif_FailsForInvalidAnimation)
     Animation invalid;
     const File dest = File::createTempFile ("test_exporter_invalid.gif");
 
-    const Result result = AnimationFrameExporter::exportToGif (*context, invalid, dest);
+    const Result result = exporter->exportToGif (invalid, dest);
     EXPECT_FALSE (result.wasOk());
 
     dest.deleteFile();
@@ -227,7 +237,7 @@ TEST_F (AnimationFrameExporterTests, ExportToGif_CreatesFileForValidAnimation)
 {
     const File dest = File::createTempFile ("test_exporter_anim.gif");
 
-    const Result result = AnimationFrameExporter::exportToGif (*context, anim, dest);
+    const Result result = exporter->exportToGif (anim, dest);
     EXPECT_TRUE (result.wasOk()) << result.getErrorMessage().toStdString();
     EXPECT_TRUE (dest.exists());
     EXPECT_GT (dest.getSize(), 0);
@@ -239,7 +249,7 @@ TEST_F (AnimationFrameExporterTests, ExportToGif_RespectsTargetSize)
 {
     const File dest = File::createTempFile ("test_exporter_sized.gif");
 
-    const Result result = AnimationFrameExporter::exportToGif (*context, anim, dest, { 40, 30 });
+    const Result result = exporter->exportToGif (anim, dest, { 40, 30 });
     EXPECT_TRUE (result.wasOk()) << result.getErrorMessage().toStdString();
     EXPECT_TRUE (dest.exists());
 

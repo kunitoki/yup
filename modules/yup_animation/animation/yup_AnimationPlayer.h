@@ -156,6 +156,10 @@ private:
     bool playing_ = false;
     bool looping_ = false;
     bool pingPongForward_ = true; ///< Internal state for ping-pong
+
+    // Persistent GPU resources (matte pipeline) reused across frames so the
+    // matte-composite shader is compiled once, not per rendered frame.
+    mutable AnimationRenderResources renderResources_;
 };
 
 } // namespace yup

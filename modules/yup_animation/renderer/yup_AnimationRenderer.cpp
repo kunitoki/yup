@@ -90,9 +90,10 @@ void AnimationRenderer::renderComposition (Graphics& g,
                                            float frameNo,
                                            Rectangle<float> bounds,
                                            Fitting fitting,
-                                           Justification justification)
+                                           Justification justification,
+                                           AnimationRenderResources* renderResources)
 {
-    renderComposition (g, comp, frameNo, bounds, fitting, justification, 1.0f, std::nullopt);
+    renderComposition (g, comp, frameNo, bounds, fitting, justification, 1.0f, std::nullopt, renderResources);
 }
 
 AffineTransform AnimationRenderer::calculateViewTransform (Size<float> compSize,
@@ -173,7 +174,8 @@ void AnimationRenderer::renderComposition (Graphics& g,
                                            Fitting fitting,
                                            Justification justification,
                                            float opacity,
-                                           std::optional<Color> paintOverride)
+                                           std::optional<Color> paintOverride,
+                                           AnimationRenderResources* renderResources)
 {
     const Size<float> compSize = comp.size;
     if (compSize.getWidth() <= 0.0f || compSize.getHeight() <= 0.0f)
@@ -210,7 +212,7 @@ void AnimationRenderer::renderComposition (Graphics& g,
     sceneCtx.buildParentTransforms (comp.layers);
 
     PrecompCache precompCache;
-    RenderContext ctx { sceneCtx, viewXf, opacity, std::move (paintOverride), &precompCache };
+    RenderContext ctx { sceneCtx, viewXf, opacity, std::move (paintOverride), &precompCache, renderResources };
 
     renderLayerList (g, comp.layers, ctx);
 }
@@ -255,6 +257,16 @@ void AnimationRenderer::renderLayer (Graphics& g,
     if (opacity <= 0.0f)
         return;
 
+    // Track mattes need the source's *rendered alpha* (including its fill opacity,
+    // gradients, and anti-aliased edges), not just its silhouette. Composite the
+    // source and target offscreen and multiply their alphas on the GPU. Falls
+    // through to the geometric-clip path (applyMatteSourceClip) when the GPU is
+    // unavailable (e.g. headless) or an offscreen target cannot be allocated.
+    if (matteSource != nullptr
+        && layer.matteType != AnimationLayer::MatteType::None
+        && renderLayerWithMatte (g, layer, ctx, *matteSource, opacity))
+        return;
+
     if (opacity < 1.0f && renderLayerIsolated (g, layer, ctx, matteSource, opacity))
         return;
 
@@ -278,10 +290,15 @@ void AnimationRenderer::renderLayerDirect (Graphics& g,
         return;
 
     if (matteSource != nullptr
-        && (layer.matteType == AnimationLayer::MatteType::Alpha
-            || layer.matteType == AnimationLayer::MatteType::AlphaInv))
+        && layer.matteType != AnimationLayer::MatteType::None)
     {
-        applyMatteSourceClip (g, layer, *matteSource, ctx, layer.matteType == AnimationLayer::MatteType::AlphaInv);
+        // Geometric fallback (no GPU): clip the target to the matte source's
+        // silhouette. This is a hard binary mask, so it cannot reproduce the
+        // source's partial alpha / luma gradient - the GPU path in
+        // renderLayerWithMatte does that. Inverted modes subtract the silhouette.
+        const bool inverted = layer.matteType == AnimationLayer::MatteType::AlphaInv
+                           || layer.matteType == AnimationLayer::MatteType::LumaInv;
+        applyMatteSourceClip (g, layer, *matteSource, ctx, inverted);
     }
 
     RenderContext layerCtx = ctx;
@@ -338,6 +355,145 @@ bool AnimationRenderer::renderLayerIsolated (Graphics& g,
     // The target area is already in screen space, so it composites back using the
     // parent's current transform without re-applying the view transform.
     return transparencyLayer.commit();
+}
+
+//==============================================================================
+
+namespace
+{
+
+struct MatteParams
+{
+    float mode;
+    float resX;
+    float resY;
+    float pad;
+};
+
+float matteModeValue (AnimationLayer::MatteType type) noexcept
+{
+    switch (type)
+    {
+        case AnimationLayer::MatteType::Alpha:
+            return 0.0f;
+        case AnimationLayer::MatteType::AlphaInv:
+            return 1.0f;
+        case AnimationLayer::MatteType::Luma:
+            return 2.0f;
+        case AnimationLayer::MatteType::LumaInv:
+            return 3.0f;
+        case AnimationLayer::MatteType::None:
+            break;
+    }
+
+    return 0.0f;
+}
+
+} // namespace
+
+bool AnimationRenderer::renderLayerWithMatte (Graphics& g,
+                                              const AnimationLayer& layer,
+                                              const RenderContext& ctx,
+                                              const AnimationLayer& matteSource,
+                                              float opacity)
+{
+    auto& context = g.getGraphicsContext();
+    if (! context.isGpuAvailable())
+        return false;
+
+    // Rasterize at the fitted on-screen resolution so the composited result is
+    // not upscaled (mirrors the transparency-layer / precomp sizing).
+    const Rectangle<float> compRect (0.0f, 0.0f, ctx.scene.compSize.getWidth(), ctx.scene.compSize.getHeight());
+    const Rectangle<float> fittedRect = compRect.transformed (ctx.viewTransform);
+
+    const int w = static_cast<int> (std::ceil (fittedRect.getWidth()));
+    const int h = static_cast<int> (std::ceil (fittedRect.getHeight()));
+    if (w <= 0 || h <= 0)
+        return false;
+
+    // Allocate the offscreen buffers first. This fails (returns nullptr) when the
+    // context is already inside an offscreen frame (e.g. AnimationFrameExporter
+    // rendering into an Image), so we fall back to the geometric clip before doing
+    // any shader compilation work.
+    auto targetCanvas = GpuCanvas::create (context, w, h);
+    auto sourceCanvas = GpuCanvas::create (context, w, h);
+    auto resultCanvas = GpuCanvas::create (context, w, h);
+    if (targetCanvas == nullptr || sourceCanvas == nullptr || resultCanvas == nullptr)
+        return false;
+
+    // Reuse a caller-provided persistent pipeline when available (avoids a
+    // per-frame shader recompile during playback); otherwise compile a temporary
+    // for this call. Either way the pipeline is owned by a scope that ends before
+    // the GraphicsContext - never by a static, whose destruction at process exit
+    // would outlive the ore context and its leak detector.
+    AnimationRenderResources localResources;
+    AnimationRenderResources& resources = ctx.renderResources != nullptr ? *ctx.renderResources : localResources;
+
+    auto pipeline = resources.getMattePipeline (context);
+    if (pipeline == nullptr)
+        return false;
+
+    // Render offscreen in layer-local screen space: the fitted rectangle's
+    // top-left is the canvas origin, so drop the view transform's translation and
+    // keep only its scale.
+    RenderContext offscreenCtx = ctx;
+    offscreenCtx.viewTransform = AffineTransform::scaling (ctx.viewTransform.getScaleX(), ctx.viewTransform.getScaleY());
+    offscreenCtx.opacity = 1.0f;
+
+    // Only one offscreen 2D frame may be open at a time, so each canvas is fully
+    // drawn and committed (via asTexture()) before the next is opened.
+
+    // 1. Matte target (the layer being masked) into targetCanvas.
+    GpuTexture::Ptr targetTex;
+    {
+        auto& tg = targetCanvas->beginDraw();
+        renderLayerDirect (tg, layer, offscreenCtx, nullptr, 1.0f);
+        targetTex = targetCanvas->asTexture();
+    }
+
+    // 2. Matte source (defines the mask) into sourceCanvas.
+    GpuTexture::Ptr sourceTex;
+    {
+        auto& sg = sourceCanvas->beginDraw();
+        renderLayerDirect (sg, matteSource, offscreenCtx, nullptr, 1.0f);
+        sourceTex = sourceCanvas->asTexture();
+    }
+
+    if (targetTex == nullptr || sourceTex == nullptr)
+        return false;
+
+    // 3. Composite target * coverage(source) into resultCanvas.
+    {
+        MatteParams params { matteModeValue (layer.matteType), (float) w, (float) h, 0.0f };
+
+        auto frame = GpuFrame::begin (context);
+        if (! frame.isValid())
+            return false;
+
+        auto pass = resultCanvas->beginRenderPass (frame, { true, Colors::transparentBlack });
+        if (! pass.isValid())
+            return false;
+
+        pass.setPipeline (*pipeline);
+        pass.setTexture (0, 0, targetTex);
+        pass.setTexture (0, 1, sourceTex);
+        pass.setUniformBuffer (0, 3, &params, sizeof (params));
+        pass.draw (3);
+        pass.finish();
+
+        frame.submit();
+    }
+
+    auto resultTex = resultCanvas->asTexture();
+    if (resultTex == nullptr)
+        return false;
+
+    // 4. Composite the matted result back into the main graphics at layer opacity.
+    auto saveState = g.saveState();
+    g.setOpacity (g.getOpacity() * opacity);
+    g.drawTexture (resultTex, fittedRect);
+
+    return true;
 }
 
 void AnimationRenderer::renderLayerContent (Graphics& g, const AnimationLayer& layer, const RenderContext& ctx, float opacity)
@@ -895,14 +1051,17 @@ void AnimationRenderer::renderGroup (Graphics& g,
 
         if (hasRounded)
         {
+            // The Round Corners (rd) radius is scaled relative to the shape size
+            // so it reads the same way reference renderers (LottieFiles) present
+            // it; withRoundedCorners then clamps per-corner to half the edge.
             const float radiusRatio = activeRoundedCorner->radiusAt (frameNo);
             if (radiusRatio > 1e-5f)
             {
                 for (auto& path : preparedCache)
                 {
-                    auto bounds = path.getBounds();
+                    const auto bounds = path.getBounds();
                     const float minDim = jmin (bounds.getWidth(), bounds.getHeight());
-                    const float cornerRadius = minDim * radiusRatio * 0.5f;
+                    const float cornerRadius = minDim * radiusRatio;
                     if (cornerRadius > 1e-5f)
                         path = path.withRoundedCorners (cornerRadius);
                 }
