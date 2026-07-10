@@ -124,8 +124,12 @@ public:
     bool advanceTime (float deltaSeconds);
 
     //==============================================================================
-    /** Renders the current frame into @p g. */
-    void render (Graphics& g, Rectangle<float> bounds, bool keepAspectRatio = true) const;
+    /** Renders the current frame into @p g using the given @p fitting and
+        @p justification, mirroring Drawable::paint semantics. */
+    void render (Graphics& g,
+                 Rectangle<float> bounds,
+                 Fitting fitting = Fitting::scaleToFit,
+                 Justification justification = Justification::center) const;
 
     //==============================================================================
     /** Called when the displayed frame changes (may be called multiple times per tick

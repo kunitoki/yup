@@ -1221,7 +1221,7 @@ TEST_F (AnimationRendererTests, RenderAtVariousFrameNumbersDoesNotCrash)
     }
 }
 
-TEST_F (AnimationRendererTests, RenderWithKeepAspectRatioTrueAndFalseDoesNotCrash)
+TEST_F (AnimationRendererTests, RenderWithScaleToFitAndFillDoesNotCrash)
 {
     auto comp = LottieReader::parseData (kShapeLayerJson);
     ASSERT_NE (comp, nullptr);
@@ -1232,11 +1232,11 @@ TEST_F (AnimationRendererTests, RenderWithKeepAspectRatioTrueAndFalseDoesNotCras
     const Rectangle<float> bounds (0, 0, 200, 100);
 
     EXPECT_NO_THROW ({
-        AnimationRenderer::renderComposition (g, *comp, 0.0f, bounds, true);
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, bounds, Fitting::scaleToFit);
     });
 
     EXPECT_NO_THROW ({
-        AnimationRenderer::renderComposition (g, *comp, 0.0f, bounds, false);
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, bounds, Fitting::fill);
     });
 }
 

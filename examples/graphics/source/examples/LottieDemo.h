@@ -204,7 +204,7 @@ public:
             g.setFillColor (backgroundIsWhite ? yup::Colors::white : yup::Colors::black);
             g.fillRoundedRect (bounds, 6.0f);
 
-            player.render (g, bounds.reduced (4.0f), true);
+            player.render (g, bounds.reduced (4.0f));
         }
         else
         {

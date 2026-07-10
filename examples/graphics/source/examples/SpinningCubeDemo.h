@@ -915,7 +915,7 @@ void main() {
         g.setFillColor (yup::Colors::white);
         g.fillAll();
 
-        lottiePlayer.render (g, yup::Rectangle<float> (0.0f, 0.0f, (float) kLottieTextureSize, (float) kLottieTextureSize), true);
+        lottiePlayer.render (g, yup::Rectangle<float> (0.0f, 0.0f, (float) kLottieTextureSize, (float) kLottieTextureSize));
 
         return lottieCanvas->asTexture();
     }

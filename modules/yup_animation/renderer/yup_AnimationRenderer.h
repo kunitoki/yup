@@ -42,23 +42,32 @@ public:
     //==============================================================================
     /** Renders all visible layers of @p comp at @p frameNo into @p g.
 
-        The composition is scaled and positioned inside @p bounds. If
-        @p keepAspectRatio is true the composition is letterboxed/pillarboxed.
+        The composition is scaled and positioned inside @p bounds according to
+        @p fitting and @p justification, mirroring the semantics used by
+        Drawable::paint. Content that falls outside the composition viewport is
+        clipped to the fitted composition rectangle intersected with @p bounds.
     */
     static void renderComposition (Graphics& g,
                                    const AnimationComposition& comp,
                                    float frameNo,
                                    Rectangle<float> bounds,
-                                   bool keepAspectRatio = true);
+                                   Fitting fitting = Fitting::scaleToFit,
+                                   Justification justification = Justification::center);
 
 private:
     static void renderComposition (Graphics& g,
                                    const AnimationComposition& comp,
                                    float frameNo,
                                    Rectangle<float> bounds,
-                                   bool keepAspectRatio,
+                                   Fitting fitting,
+                                   Justification justification,
                                    float opacity,
                                    std::optional<Color> paintOverride = std::nullopt);
+
+    static AffineTransform calculateViewTransform (Size<float> compSize,
+                                                   Rectangle<float> targetArea,
+                                                   Fitting fitting,
+                                                   Justification justification);
 
     //==============================================================================
     // Shared per-frame scene data (avoided per-layer deep copy)

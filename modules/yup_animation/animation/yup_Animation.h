@@ -99,25 +99,29 @@ public:
     [[nodiscard]] Size<float> size() const noexcept;
 
     //==============================================================================
-    /** Renders the given frame into @p g, fitted inside @p bounds.
-        @param keepAspectRatio  When true, pillar/letter-boxes to preserve the aspect ratio.
-    */
+    /** Renders the given frame into @p g, fitted inside @p bounds using the given
+        @p fitting and @p justification, mirroring Drawable::paint semantics. */
     void renderFrame (Graphics& g,
                       float frameNo,
                       Rectangle<float> bounds,
-                      bool keepAspectRatio = true) const;
+                      Fitting fitting = Fitting::scaleToFit,
+                      Justification justification = Justification::center) const;
 
-    /** Renders the frame corresponding to @p timeInSeconds. */
+    /** Renders the frame corresponding to @p timeInSeconds using the given
+        @p fitting and @p justification. */
     void renderAtTime (Graphics& g,
                        float timeInSeconds,
                        Rectangle<float> bounds,
-                       bool keepAspectRatio = true) const;
+                       Fitting fitting = Fitting::scaleToFit,
+                       Justification justification = Justification::center) const;
 
-    /** Renders the frame at a normalised progress in [0, 1]. */
+    /** Renders the frame at a normalised progress in [0, 1] using the given
+        @p fitting and @p justification. */
     void renderAtProgress (Graphics& g,
                            float progress,
                            Rectangle<float> bounds,
-                           bool keepAspectRatio = true) const;
+                           Fitting fitting = Fitting::scaleToFit,
+                           Justification justification = Justification::center) const;
 
     //==============================================================================
     /** Serialises the composition to a Lottie JSON string. */

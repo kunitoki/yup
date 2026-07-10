@@ -118,36 +118,39 @@ Size<float> Animation::size() const noexcept
 void Animation::renderFrame (Graphics& g,
                              float frameNo,
                              Rectangle<float> bounds,
-                             bool keepAspectRatio) const
+                             Fitting fitting,
+                             Justification justification) const
 {
     if (composition_ == nullptr)
         return;
 
-    AnimationRenderer::renderComposition (g, *composition_, frameNo, bounds, keepAspectRatio);
+    AnimationRenderer::renderComposition (g, *composition_, frameNo, bounds, fitting, justification);
 }
 
 void Animation::renderAtTime (Graphics& g,
                               float timeInSeconds,
                               Rectangle<float> bounds,
-                              bool keepAspectRatio) const
+                              Fitting fitting,
+                              Justification justification) const
 {
     if (composition_ == nullptr)
         return;
 
     const float frame = composition_->frameAtTime (timeInSeconds);
-    AnimationRenderer::renderComposition (g, *composition_, frame, bounds, keepAspectRatio);
+    AnimationRenderer::renderComposition (g, *composition_, frame, bounds, fitting, justification);
 }
 
 void Animation::renderAtProgress (Graphics& g,
                                   float progress,
                                   Rectangle<float> bounds,
-                                  bool keepAspectRatio) const
+                                  Fitting fitting,
+                                  Justification justification) const
 {
     if (composition_ == nullptr)
         return;
 
     const float frame = composition_->frameAtProgress (progress);
-    AnimationRenderer::renderComposition (g, *composition_, frame, bounds, keepAspectRatio);
+    AnimationRenderer::renderComposition (g, *composition_, frame, bounds, fitting, justification);
 }
 
 //==============================================================================

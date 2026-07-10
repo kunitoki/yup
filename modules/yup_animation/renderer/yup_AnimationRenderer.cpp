@@ -89,16 +89,89 @@ void AnimationRenderer::renderComposition (Graphics& g,
                                            const AnimationComposition& comp,
                                            float frameNo,
                                            Rectangle<float> bounds,
-                                           bool keepAspectRatio)
+                                           Fitting fitting,
+                                           Justification justification)
 {
-    renderComposition (g, comp, frameNo, bounds, keepAspectRatio, 1.0f, std::nullopt);
+    renderComposition (g, comp, frameNo, bounds, fitting, justification, 1.0f, std::nullopt);
+}
+
+AffineTransform AnimationRenderer::calculateViewTransform (Size<float> compSize,
+                                                           Rectangle<float> targetArea,
+                                                           Fitting fitting,
+                                                           Justification justification)
+{
+    float scaleX = targetArea.getWidth() / compSize.getWidth();
+    float scaleY = targetArea.getHeight() / compSize.getHeight();
+
+    switch (fitting)
+    {
+        case Fitting::none:
+            scaleX = scaleY = 1.0f;
+            break;
+
+        case Fitting::scaleToFit:
+            scaleX = scaleY = jmin (scaleX, scaleY);
+            break;
+
+        case Fitting::fitWidth:
+            scaleY = scaleX;
+            break;
+
+        case Fitting::fitHeight:
+            scaleX = scaleY;
+            break;
+
+        case Fitting::scaleToFill:
+        case Fitting::centerCrop:
+            scaleX = scaleY = jmax (scaleX, scaleY);
+            break;
+
+        case Fitting::fill:
+            break;
+
+        case Fitting::centerInside:
+            scaleX = scaleY = jmin (1.0f, jmin (scaleX, scaleY));
+            break;
+
+        case Fitting::stretchWidth:
+            scaleY = 1.0f;
+            break;
+
+        case Fitting::stretchHeight:
+            scaleX = 1.0f;
+            break;
+
+        case Fitting::tile:
+            scaleX = scaleY = 1.0f;
+            break;
+    }
+
+    const float scaledWidth = compSize.getWidth() * scaleX;
+    const float scaledHeight = compSize.getHeight() * scaleY;
+
+    float offsetX = targetArea.getX();
+    float offsetY = targetArea.getY();
+
+    if (justification.testFlags (Justification::horizontalCenter))
+        offsetX += (targetArea.getWidth() - scaledWidth) * 0.5f;
+    else if (justification.testFlags (Justification::right))
+        offsetX += targetArea.getWidth() - scaledWidth;
+
+    if (justification.testFlags (Justification::verticalCenter))
+        offsetY += (targetArea.getHeight() - scaledHeight) * 0.5f;
+    else if (justification.testFlags (Justification::bottom))
+        offsetY += targetArea.getHeight() - scaledHeight;
+
+    return AffineTransform::scaling (scaleX, scaleY)
+        .followedBy (AffineTransform::translation (offsetX, offsetY));
 }
 
 void AnimationRenderer::renderComposition (Graphics& g,
                                            const AnimationComposition& comp,
                                            float frameNo,
                                            Rectangle<float> bounds,
-                                           bool keepAspectRatio,
+                                           Fitting fitting,
+                                           Justification justification,
                                            float opacity,
                                            std::optional<Color> paintOverride)
 {
@@ -107,26 +180,18 @@ void AnimationRenderer::renderComposition (Graphics& g,
         return;
 
     // Compute view transform: composition-space → screen-space
-    AffineTransform viewXf;
-    if (keepAspectRatio)
-    {
-        const float scaleX = bounds.getWidth() / compSize.getWidth();
-        const float scaleY = bounds.getHeight() / compSize.getHeight();
-        const float scale = jmin (scaleX, scaleY);
-        const float tx = bounds.getX() + (bounds.getWidth() - compSize.getWidth() * scale) * 0.5f;
-        const float ty = bounds.getY() + (bounds.getHeight() - compSize.getHeight() * scale) * 0.5f;
-        viewXf = AffineTransform::scaling (scale, scale).followedBy (AffineTransform::translation (tx, ty));
-    }
-    else
-    {
-        const float scaleX = bounds.getWidth() / compSize.getWidth();
-        const float scaleY = bounds.getHeight() / compSize.getHeight();
-        viewXf = AffineTransform::scaling (scaleX, scaleY).followedBy (AffineTransform::translation (bounds.getX(), bounds.getY()));
-    }
+    const AffineTransform viewXf = calculateViewTransform (compSize, bounds, fitting, justification);
+
+    // The composition viewport rectangle mapped to screen space. Content outside
+    // it must be clipped, so shapes extending beyond the composition bounds don't
+    // spill into the letterbox / pillarbox area of the target.
+    const Rectangle<float> compRect (0.0f, 0.0f, compSize.getWidth(), compSize.getHeight());
+    const Rectangle<float> fittedRect = compRect.transformed (viewXf);
+    const Rectangle<float> clipRect = fittedRect.intersection (bounds);
 
     auto clipState = g.saveState();
     Path viewportClip;
-    viewportClip.addRectangle (bounds);
+    viewportClip.addRectangle (clipRect);
 
     const auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
 
