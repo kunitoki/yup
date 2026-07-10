@@ -418,12 +418,6 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
 namespace
 {
 
-struct ClipPathResult
-{
-    Path path;
-    bool active = false;
-};
-
 Rectangle<float> getLayerContentBounds (const AnimationLayer& layer, Size<float> compSize)
 {
     Size<float> size = compSize;
@@ -462,8 +456,33 @@ Path createRectanglePath (Rectangle<float> bounds)
     return path;
 }
 
-ClipPathResult buildLayerMaskClipPath (const AnimationLayer& layer, float frameNo, Size<float> compSize)
+void applyClipPathInCurrentTransform (Graphics& g, const Path& clipPath, bool allowEmpty = false)
 {
+    if (clipPath.isEmpty() && ! allowEmpty)
+        return;
+
+    const auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
+    auto transformedClipPath = clipPath.transformed (clipTransform);
+    const auto currentClipPath = g.getClipPath();
+    if (! transformedClipPath.isEmpty() && ! currentClipPath.isEmpty())
+        transformedClipPath = currentClipPath.combinedWith (transformedClipPath, Path::BooleanOperation::Intersect);
+
+    const auto savedTransform = g.getTransform();
+
+    g.setTransform (AffineTransform::identity());
+    g.setClipPath (transformedClipPath);
+    g.setTransform (savedTransform);
+}
+
+} // namespace
+
+AnimationRenderer::ClipPathResult AnimationRenderer::buildLayerMaskClipPath (const AnimationLayer& layer, float frameNo, Size<float> compSize)
+{
+    if (layer.areAllMasksStatic()
+        && layer.cachedMaskClipPath.has_value()
+        && layer.cachedMaskFrameNo == frameNo)
+        return { *layer.cachedMaskClipPath, true };
+
     const auto maskBoundsPath = createRectanglePath (getLayerContentBounds (layer, compSize));
 
     Path clipPath;
@@ -510,35 +529,21 @@ ClipPathResult buildLayerMaskClipPath (const AnimationLayer& layer, float frameN
         }
     }
 
+    if (layer.areAllMasksStatic() && hasAnyMask)
+    {
+        layer.cachedMaskClipPath = clipPath;
+        layer.cachedMaskFrameNo = frameNo;
+    }
+
     return { clipPath, hasAnyMask };
 }
-
-void applyClipPathInCurrentTransform (Graphics& g, const Path& clipPath, bool allowEmpty = false)
-{
-    if (clipPath.isEmpty() && ! allowEmpty)
-        return;
-
-    const auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
-    auto transformedClipPath = clipPath.transformed (clipTransform);
-    const auto currentClipPath = g.getClipPath();
-    if (! transformedClipPath.isEmpty() && ! currentClipPath.isEmpty())
-        transformedClipPath = currentClipPath.combinedWith (transformedClipPath, Path::BooleanOperation::Intersect);
-
-    const auto savedTransform = g.getTransform();
-
-    g.setTransform (AffineTransform::identity());
-    g.setClipPath (transformedClipPath);
-    g.setTransform (savedTransform);
-}
-
-} // namespace
 
 bool AnimationRenderer::applyMasks (Graphics& g, const AnimationLayer& layer, float frameNo, Size<float> compSize)
 {
     if (layer.masks.empty())
         return true;
 
-    const auto clipPath = buildLayerMaskClipPath (layer, frameNo, compSize);
+    const auto clipPath = AnimationRenderer::buildLayerMaskClipPath (layer, frameNo, compSize);
     if (! clipPath.active)
         return true;
 
@@ -698,7 +703,7 @@ void AnimationRenderer::applyMatteSourceClip (Graphics& g,
 
     if (! matteSource.masks.empty())
     {
-        const auto matteMaskPath = buildLayerMaskClipPath (matteSource, ctx.scene.frameNo, ctx.scene.compSize);
+        const auto matteMaskPath = AnimationRenderer::buildLayerMaskClipPath (matteSource, ctx.scene.frameNo, ctx.scene.compSize);
         if (matteMaskPath.active)
             clipPath = clipPath.combinedWith (matteMaskPath.path, Path::BooleanOperation::Intersect);
     }
@@ -754,14 +759,17 @@ void AnimationRenderer::renderGroup (Graphics& g,
     const AnimationRepeater* activeRepeater = nullptr;
     const AnimationRoundedCorner* activeRoundedCorner = parentRoundedCorner;
 
-    for (const auto& child : group.children)
+    if (group.hasAnyModifier)
     {
-        if (child.kind == AnimationGroup::ChildKind::Trim && child.trim != nullptr)
-            activeTrim = child.trim.get();
-        if (child.kind == AnimationGroup::ChildKind::Repeater && child.repeater != nullptr)
-            activeRepeater = child.repeater.get();
-        if (child.kind == AnimationGroup::ChildKind::RoundedCorner && child.roundedCorner != nullptr)
-            activeRoundedCorner = child.roundedCorner.get(); // local overrides parent
+        for (const auto& child : group.children)
+        {
+            if (child.kind == AnimationGroup::ChildKind::Trim && child.trim != nullptr)
+                activeTrim = child.trim.get();
+            if (child.kind == AnimationGroup::ChildKind::Repeater && child.repeater != nullptr)
+                activeRepeater = child.repeater.get();
+            if (child.kind == AnimationGroup::ChildKind::RoundedCorner && child.roundedCorner != nullptr)
+                activeRoundedCorner = child.roundedCorner.get();
+        }
     }
 
     const bool hasRepeater = activeRepeater != nullptr && ! activeRepeater->hidden;

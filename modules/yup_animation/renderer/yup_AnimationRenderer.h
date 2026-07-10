@@ -125,6 +125,14 @@ private:
                                       const RenderContext& ctx,
                                       bool inverted);
 
+    struct ClipPathResult
+    {
+        Path path;
+        bool active = false;
+    };
+
+    static ClipPathResult buildLayerMaskClipPath (const AnimationLayer& layer, float frameNo, Size<float> compSize);
+
     static void renderGroup (Graphics& g,
                              const AnimationGroup& group,
                              const RenderContext& ctx,

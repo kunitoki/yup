@@ -152,6 +152,10 @@ public:
     std::optional<FillEffect> fillEffect;
 
     //==============================================================================
+    /** Returns true when all masks on this layer are static (not animated). */
+    [[nodiscard]] bool areAllMasksStatic() const noexcept;
+
+    //==============================================================================
     /** Maps a composition frame number to the layer's local frame, accounting
         for startFrame, timeStretch, and optional timeRemap. */
     [[nodiscard]] float localFrame (float compFrame) const noexcept;
@@ -172,6 +176,11 @@ public:
 
 protected:
     AnimationLayer() = default;
+
+private:
+    friend class AnimationRenderer;
+    mutable std::optional<Path> cachedMaskClipPath;
+    mutable float cachedMaskFrameNo = -1.0f;
 };
 
 //==============================================================================

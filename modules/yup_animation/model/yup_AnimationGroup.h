@@ -72,6 +72,9 @@ public:
     /** Children in Lottie draw order (index 0 = bottom). */
     std::vector<ChildItem> children;
 
+    /** True if any children are trim, repeater, or rounded-corner modifiers. */
+    bool hasAnyModifier = false;
+
     //==============================================================================
     /** Adds a shape child and returns a raw (non-owning) pointer to it. */
     template <typename ShapeT>

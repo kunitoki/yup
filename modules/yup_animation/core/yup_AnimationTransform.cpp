@@ -138,7 +138,7 @@ Point<float> AnimationTransform::positionAt (float frameNo) const
     const auto P0 = k0.value;
     const auto P1 = k0.value + k0.tangentOut;
     const auto P3 = k0.endValue.value_or (k1.value);
-    const auto P2 = P3 + k1.tangentIn;
+    const auto P2 = P3 + k0.tangentIn;
 
     // Precompute & cache segment lengths
     if (cachedSegmentLengths.size() != spatialKeyframes.size())
