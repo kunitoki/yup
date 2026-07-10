@@ -32,16 +32,15 @@
 
 //==============================================================================
 
+YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
 #include <rive/renderer/rive_renderer.hpp>
 #include <rive/text/font_hb.hpp>
-
-//==============================================================================
-
 #include <rive/renderer/ore/ore_context.hpp>
 #include <rive/renderer/ore/ore_binding_map.hpp>
 #include <rive/renderer/ore/ore_bind_group_layout.hpp>
 #include <rive/renderer/ore/ore_pipeline.hpp>
 #include <rive/renderer/ore/ore_bind_group.hpp>
+YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 //==============================================================================
 
